@@ -1,32 +1,10 @@
 #include "MagicaLegoGameInstance.hpp"
-
 #include <glm/gtc/quaternion.hpp>
-
 #include "Assets/Scene.hpp"
 #include "Utilities/FileHelper.hpp"
 #include "MagicaLegoUserInterface.hpp"
 #include "Runtime/Platform/PlatformCommon.h"
 #include "Vulkan/SwapChain.hpp"
-
-#define WITH_CPURAYCAST 1
-
-struct VertExtInfo
-{
-    glm::vec3 normal;
-    uint32_t instanceId;
-};
-
-#if WITH_CPURAYCAST
-// a cpu ray-cast if hardware not support
-// a cpu way to find the block location with simple bounds
-#include "ThirdParty/tinybvh/tiny_bvh.h"
-static tinybvh::BVH GCpuBvh;
-// represent every triangles verts one by one, triangle count is size / 3
-static std::vector<tinybvh::bvhvec4> GTriangles;
-// represent some info, normal, instanceId, into next buffer, for fetch from hit
-static std::vector<VertExtInfo> GExtInfos;
-
-#endif
 
 const glm::i16vec3 INVALID_POS(0, -10, 0);
 
@@ -210,11 +188,7 @@ void MagicaLegoGameInstance::OnTick(double deltaSeconds)
     // raycast request
     if (GetBuildMode() == ELegoMode::ELM_Place || bMouseLeftDown_)
     {
-#if WITH_CPURAYCAST
         CPURaycast();
-#else
-        GetEngine().GetUserSettings().RequestRayCast = true;
-#endif
     }
 
     // select edge showing
@@ -696,76 +670,11 @@ void MagicaLegoGameInstance::LoadRecord(std::string filename)
     }
     DumpReplayStep(static_cast<int>(BlockRecords.size()) - 1);
 }
-#if WITH_CPURAYCAST
 
-void AddFace(std::vector<tinybvh::bvhvec4>& triangles, std::vector<VertExtInfo>& extinfo, glm::vec3 v0, glm::vec3 v1, glm::vec3 v2, uint32_t instanceId)
-{
-    triangles.push_back({v0.x, v0.y, v0.z, 0});
-    triangles.push_back({v1.x, v1.y, v1.z, 0});
-    triangles.push_back({v2.x, v2.y, v2.z, 0});
-    
-    glm::vec3 AB = v1 - v0;
-    glm::vec3 AC = v2 - v0;
-
-    // 计算法线向量
-    glm::vec3 normal = glm::normalize(glm::cross(AC, AB));
-    extinfo.push_back({normal, instanceId});
-}
-
-void BuildBox(std::vector<tinybvh::bvhvec4>& triangles, std::vector<VertExtInfo>& extinfo, glm::vec3 min, glm::vec3 max, uint32_t instanceId)
-{
-    // min max shows a box, build the 12 triangles of it
-    glm::vec3 v0 = {min.x, min.y, min.z};
-    glm::vec3 v1 = {max.x, min.y, min.z};
-    glm::vec3 v2 = {max.x, max.y, min.z};
-    glm::vec3 v3 = {min.x, max.y, min.z};
-    glm::vec3 v4 = {min.x, min.y, max.z};
-    glm::vec3 v5 = {max.x, min.y, max.z};
-    glm::vec3 v6 = {max.x, max.y, max.z};
-    glm::vec3 v7 = {min.x, max.y, max.z};
-    
-    AddFace(triangles, extinfo, v0, v1, v2, instanceId);
-    AddFace(triangles, extinfo, v0, v2, v3, instanceId);
-
-    AddFace(triangles, extinfo, v4, v6, v5, instanceId);
-    AddFace(triangles, extinfo, v4, v7, v6, instanceId);
-    
-    AddFace(triangles, extinfo, v0, v3, v7, instanceId);
-    AddFace(triangles, extinfo, v0, v7, v4, instanceId);
-
-    AddFace(triangles, extinfo, v1, v5, v6, instanceId);
-    AddFace(triangles, extinfo, v1, v6, v2, instanceId);
-
-    AddFace(triangles, extinfo, v3, v2, v6, instanceId);
-    AddFace(triangles, extinfo, v3, v6, v7, instanceId);
-
-    AddFace(triangles, extinfo, v0, v4, v5, instanceId);
-    AddFace(triangles, extinfo, v0, v5, v1, instanceId);
-}
-#endif
 void MagicaLegoGameInstance::RebuildScene(std::unordered_map<uint32_t, FPlacedBlock>& Source, uint32_t newhash)
 {
     GetEngine().GetScene().Nodes().erase(GetEngine().GetScene().Nodes().begin() + instanceCountBeforeDynamics_, GetEngine().GetScene().Nodes().end());
 
-#if WITH_CPURAYCAST
-    GTriangles.clear();
-    GExtInfos.clear();
-    // base
-    {
-        float multiplier = 6;
-        switch (currentBaseSize_)
-        {
-            case EBasePlane::EBP_Big: multiplier = 6 * 20; break;
-            case EBasePlane::EBP_Mid: multiplier = 6 * 7; break;
-            case EBasePlane::EBP_Small: multiplier = 6; break;
-            default: break;
-        }
-        glm::vec3 min {-0.08 * multiplier,-0.08,-0.08 * multiplier};
-        glm::vec3 max {0.08 * multiplier,0,0.08 * multiplier};
-        BuildBox(GTriangles, GExtInfos, min, max, basementInstanceId_);
-    }
-#endif
-    
     for (auto& Block : Source)
     {
         if (Block.second.modelId_ >= 0)
@@ -782,28 +691,12 @@ void MagicaLegoGameInstance::RebuildScene(std::unordered_map<uint32_t, FPlacedBl
                 newNode->SetMaterial( {BasicBlock->matType} );
                 newNode->SetVisible(true);
                 GetEngine().GetScene().Nodes().push_back(newNode);
-
-#if WITH_CPURAYCAST
-                // add bounds triangles for bvh
-                glm::vec3 min = GetRenderLocationFromBlockLocation(Block.second.location) + glm::vec3(orientation * glm::vec4(std::get<0>(BasicNodeIndicatorMap[BasicBlock->type]), 1.0f));
-                glm::vec3 max = GetRenderLocationFromBlockLocation(Block.second.location) + glm::vec3(orientation * glm::vec4(std::get<1>(BasicNodeIndicatorMap[BasicBlock->type]), 1.0f));
-
-                BuildBox(GTriangles, GExtInfos, min, max, instanceId);
-#endif
             }
         }
     }
 
     GetEngine().GetScene().MarkDirty();
-
-#if WITH_CPURAYCAST
-    if (GTriangles.size() > 3)
-    {
-        GCpuBvh.Build( GTriangles.data(), static_cast<int>(GTriangles.size()) / 3 );
-        // GCpuBvh.Convert( tinybvh::BVH::WALD_32BYTE, tinybvh::BVH::VERBOSE );
-        // GCpuBvh.Refit( tinybvh::BVH::VERBOSE );
-    }
-#endif
+    GetEngine().GetScene().GetCPUAccelerationStructure().UpdateBVH(GetEngine().GetScene());
 }
 
 void MagicaLegoGameInstance::RebuildFromRecord(int timelapse)
@@ -828,31 +721,15 @@ void MagicaLegoGameInstance::CleanDynamicBlocks()
 
 void MagicaLegoGameInstance::CPURaycast()
 {
-#if WITH_CPURAYCAST
-    if (GCpuBvh.triCount > 0)
-    {
-        tinybvh::bvhvec3 O( cachedCameraPos_.x, cachedCameraPos_.y, cachedCameraPos_.z );
-        //glm::vec3 cameraTarget = cachedCameraPos_ + cachedCameraForward_ * 10.f;
-        glm::vec3 dir = GetEngine().ProjectScreenToWorld(mousePos_);
-        tinybvh::bvhvec3 D( dir.x, dir.y, dir.z );
-
-            
-        tinybvh::Ray ray( O, D );
-        int steps = GCpuBvh.Intersect(ray);
-
-        if (ray.hit.t < 100000.f)
+    glm::vec3 dir = GetEngine().ProjectScreenToWorld(mousePos_);
+    GetEngine().RayCastGPU(cachedCameraPos_, dir, [this](Assets::RayCastResult result)
         {
-            cpuHit = cachedCameraPos_ + dir * ray.hit.t;
-            Assets::RayCastResult Result;
-            Result.HitPoint = glm::vec4(cpuHit, 0);
-            Result.Normal = glm::vec4(GExtInfos[ray.hit.prim].normal, 0);
-            Result.Hitted = true;
-            Result.InstanceId = GExtInfos[ray.hit.prim].instanceId;
-            
-            this->OnRayHitResponse(Result);
-        }
-    }
-#endif
+            if (result.Hitted)
+            {
+                this->OnRayHitResponse(result);
+            }
+            return true;
+        });
 }
 
 int16_t MagicaLegoGameInstance::ConvertBrushIdxToNextType(const std::string& prefix, int idx) const

@@ -244,6 +244,7 @@ void FCPUAccelerationStructure::UpdateBVH(Scene& scene)
 
         uint32_t modelId = node->GetModel();
         if (modelId == -1) continue;
+        if (!node->IsVisible()) continue;
 
         mat4 worldTS = node->WorldTransform();
         worldTS = transpose(worldTS);
@@ -254,12 +255,13 @@ void FCPUAccelerationStructure::UpdateBVH(Scene& scene)
 
         tmpbvhInstanceList.push_back(instance);
         FCPUTLASInstanceInfo info;
+        info.nodeId = node->GetInstanceId();
         for ( int i = 0; i < node->Materials().size(); ++i )
         {
             uint32_t matId = node->Materials()[i];
             FMaterial& mat = scene.Materials()[matId];
             info.matIdxs[i] = matId;
-            info.nodeId = node->GetInstanceId();
+            
         }
         tmpbvhTLASContexts.push_back( info );
     }
@@ -282,7 +284,7 @@ void FCPUAccelerationStructure::UpdateBVH(Scene& scene)
 
 RayCastResult FCPUAccelerationStructure::RayCastInCPU(vec3 rayOrigin, vec3 rayDir)
 {
-    RayCastResult Result;
+    RayCastResult Result {};
 
     if (GCpuBvh.blasCount > 0)
     {

@@ -248,6 +248,8 @@ NextEngine::~NextEngine()
 
 void NextEngine::Start()
 {
+    PERFORMANCEAPI_INSTRUMENT_FUNCTION();
+    
     renderer_->Start();
 
     ma_result result;

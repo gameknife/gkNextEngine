@@ -90,14 +90,6 @@ struct FDelayTaskContext
 	DelayedTask task;
 };
 
-class NextComponent;
-
-class NextActor
-{
-public:
-	std::vector<NextComponent*> components;
-};
-
 class NextComponent : std::enable_shared_from_this<NextComponent>
 {
 public:
@@ -106,10 +98,15 @@ public:
 	int id_;
 };
 
+class NextActor
+{
+public:
+	std::vector<NextComponent*> components;
+};
+
 class NextEngine final
 {
 public:
-
 	VULKAN_NON_COPIABLE(NextEngine)
 
 	NextEngine(Options& options, void* userdata = nullptr);
@@ -217,22 +214,21 @@ private:
 
 	void InitJSEngine();
 	void TestJSEngine();
-
 	void InitPhysics();
 
 	// engine stuff
 	std::unique_ptr<Vulkan::Window> window_;
 	std::unique_ptr<Vulkan::VulkanBaseRenderer> renderer_;
 
+	// need remove
 	int rendererType = 0;
+
+	// settings, may move into scene
 	mutable UserSettings userSettings_{};
-	
 	mutable Assets::UniformBufferObject prevUBO_ {};
 
+	// scene, maybe multiple at a time
 	std::shared_ptr<Assets::Scene> scene_;
-
-	// integrate interface, may add from application later?
-	std::unique_ptr<class UserInterface> userInterface_;
 
 	// timing
 	uint32_t totalFrames_{};
@@ -249,6 +245,9 @@ private:
 	std::vector<TickedTask> tickedTasks_;
 	std::vector<FDelayTaskContext> delayedTasks_;
 
+	// internal ui
+	std::unique_ptr<class UserInterface> userInterface_;
+
 	// audio
 	std::unique_ptr<struct ma_engine> audioEngine_;
 	std::unordered_map<std::string, std::unique_ptr<ma_sound> > soundMaps_;
@@ -262,11 +261,11 @@ private:
 	// package
 	std::unique_ptr<Utilities::Package::FPackageFileSystem> packageFileSystem_;
 
-	// engine status
-	NextRenderer::EApplicationStatus status_{};
-
+	// quickjs
 	std::unique_ptr<qjs::Runtime> JSRuntime_;
 	std::unique_ptr<qjs::Context> JSContext_;
-
 	std::function<void(double)> JSTickCallback_;
+
+	// engine status
+	NextRenderer::EApplicationStatus status_{};
 };

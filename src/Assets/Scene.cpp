@@ -101,11 +101,24 @@ namespace Assets
     void Scene::RebuildMeshBuffer(Vulkan::CommandPool& commandPool, bool supportRayTracing)
     {
         // Rebuild the cpu bvh
-
-        // tier1: simple flatten whole scene
         cpuAccelerationStructure_.InitBVH(*this);
 
-        // tier2: top level, the aabb, bottom level, the triangles in local sapace, with 2 ray relay
+        // static mesh to jolt mesh shape
+        NextPhysics* PhysicsEngine = NextEngine::GetInstance()->GetPhysicsEngine();
+        std::vector<JPH::MeshShapeSettings*> meshShapes;
+        for (auto& model : models_)
+        {
+            meshShapes.push_back( PhysicsEngine->CreateMeshShape(model)  );
+        }
+
+        for (auto& node : nodes_)
+        {
+            // bind the mesh shape to the node
+            if (node->IsVisible() && node->GetModel() < meshShapes.size() && node->GetParent() == nullptr)
+            {
+                JPH::BodyID id = PhysicsEngine->CreateMeshBody(meshShapes[node->GetModel()], node->Translation(), node->Rotation(), node->Scale());
+            }
+        }
 
         // 重建universe mesh buffer, 这个可以比较静态
         std::vector<GPUVertex> vertices;

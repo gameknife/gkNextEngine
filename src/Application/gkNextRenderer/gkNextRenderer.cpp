@@ -30,6 +30,17 @@ void NextRendererGameInstance::OnTick(double deltaSeconds)
     modelViewController_.UpdateCamera(10.0f, deltaSeconds);
 }
 
+void NextRendererGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<Assets::Node>>& nodes,
+	std::vector<Assets::Model>& models, std::vector<Assets::FMaterial>& materials,
+	std::vector<Assets::LightObject>& lights, std::vector<Assets::AnimationTrack>& tracks)
+{
+	models.push_back(Assets::Model::CreateSphere(glm::vec3(0,0,0), 0.2f));
+	modelId_ = static_cast<uint32_t>(models.size() - 1);
+	
+	materials.push_back({"", static_cast<uint32_t>(materials.size()), Assets::Material::Lambertian(glm::vec3(1,1,1))});
+	matId_ = static_cast<uint32_t>(materials.size() - 1);
+}
+
 void NextRendererGameInstance::OnSceneLoaded()
 {
     NextGameInstanceBase::OnSceneLoaded();
@@ -136,6 +147,11 @@ bool NextRendererGameInstance::OnMouseButton(int button, int action, int mods)
 		});
 		return true;
 	}
+	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE)
+	{
+		CreateSphereAndPush();
+		return true;
+	}
 #endif
 	
     return true;
@@ -153,6 +169,23 @@ bool NextRendererGameInstance::OnGamepadInput(float leftStickX, float leftStickY
 	return modelViewController_.OnGamepadInput(leftStickX, leftStickY, rightStickX, rightStickY, leftTrigger, rightTrigger);
 }
 
+
+void NextRendererGameInstance::CreateSphereAndPush()
+{
+	glm::vec3 forward = modelViewController_.GetForward();
+	glm::vec3 center = modelViewController_.GetPosition() + forward * 1.0f;
+	uint32_t instanceId = uint32_t(GetEngine().GetScene().Nodes().size());
+	std::shared_ptr<Assets::Node> newNode = Assets::Node::CreateNode("temp", center, glm::quat(), glm::vec3(1), modelId_,
+															   instanceId, false);
+	newNode->SetMaterial( {matId_} );
+	newNode->SetVisible(true);
+	auto id = NextEngine::GetInstance()->GetPhysicsEngine()->CreateSphereBody(center, 0.2f, JPH::EMotionType::Dynamic);
+	newNode->BindPhysicsBody(id);
+
+	GetEngine().GetScene().Nodes().push_back(newNode);
+
+	GetEngine().GetPhysicsEngine()->AddForceToBody(id, forward * 50000.f);
+}
 
 void NextRendererGameInstance::DrawSettings()
 {

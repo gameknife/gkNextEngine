@@ -300,7 +300,7 @@ bool NextEngine::Tick()
     }
 
     physicsEngine_->Tick(deltaSeconds_);
-    // animationEngine_->Tick(deltaSeconds_); pause dev, wait next
+    //animationEngine_->Tick(deltaSeconds_); //pause dev, wait next
 
     if (JSTickCallback_)
     {
@@ -1088,7 +1088,8 @@ void NextEngine::LoadScene(std::string sceneFileName)
             renderer_->Device().WaitIdle();
             renderer_->DeleteSwapChain();
             renderer_->OnPreLoadScene();
-            
+
+            gameInstance_->BeforeSceneRebuild(*nodes, *models, *materials, *lights, *tracks);
             scene_->Reload(*nodes, *models, *materials, *lights, *tracks);
             scene_->RebuildMeshBuffer(renderer_->CommandPool(), renderer_->supportRayTracing_);
                     

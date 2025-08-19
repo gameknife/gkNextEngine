@@ -13,9 +13,11 @@
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
+#include <Jolt/Physics/Collision/Shape/MeshShape.h>
+#include <Jolt/Physics/Collision/PhysicsMaterialSimple.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyActivationListener.h>
-
+#include <Jolt/Physics/Collision/Shape/ScaledShape.h>
 // STL includes
 #include <iostream>
 #include <cstdarg>
@@ -429,6 +431,58 @@ JPH::BodyID NextPhysics::CreatePlaneBody(glm::vec3 position, glm::vec3 extent, J
 
 	FNextPhysicsBody body { position, glm::vec3(0.0f, 0.0f, 0.0f), ENextBodyShape::Box, body_id };
 	return AddBodyInternal(body);
+}
+
+JPH::BodyID NextPhysics::CreateMeshBody(MeshShapeSettings* meshShapeSettings, glm::vec3 position, glm::quat rotation, glm::vec3 scale)
+{
+	BodyInterface &body_interface = context_->physics_system.GetBodyInterface();
+	BodyID body_id(-1);
+	
+	const float epsilon = 0.001f;
+	bool isUniformScale = (glm::abs(scale.x - 1.0f) < epsilon && 
+						  glm::abs(scale.y - 1.0f) < epsilon && 
+						  glm::abs(scale.z - 1.0f) < epsilon);
+
+	BodyCreationSettings bodyCreation = isUniformScale ? BodyCreationSettings(meshShapeSettings,
+	Vec3(position.x, position.y, position.z),Quat(rotation.x, rotation.y, rotation.z, rotation.w),
+	EMotionType::Static, Layers::NON_MOVING): BodyCreationSettings(new ScaledShapeSettings(meshShapeSettings, Vec3(scale.x, scale.y, scale.z)),
+		Vec3(position.x, position.y, position.z), Quat(rotation.x, rotation.y, rotation.z, rotation.w),
+		EMotionType::Static, Layers::NON_MOVING);
+
+	bodyCreation.mRestitution = 0.1f;
+	bodyCreation.mFriction = 0.25f;
+	
+	body_interface.CreateAndAddBody(bodyCreation, EActivation::Activate);
+
+	FNextPhysicsBody body { glm::vec3(0,0,0), glm::vec3(0.0f, 0.0f, 0.0f), ENextBodyShape::Sphere, body_id };
+	return AddBodyInternal(body);
+}
+
+MeshShapeSettings* NextPhysics::CreateMeshShape(Assets::Model& model)
+{
+	VertexList inVertices;
+	IndexedTriangleList inTriangles;
+	for ( auto& Vertex : model.CPUVertices() )
+	{
+		inVertices.push_back( { Vertex.Position.x, Vertex.Position.y, Vertex.Position.z} );
+	}
+
+	for ( int i = 0; i < model.CPUIndices().size(); i += 3 )
+	{
+		inTriangles.push_back( { model.CPUIndices()[i], model.CPUIndices()[i+1], model.CPUIndices()[i+2], 0 } );
+	}
+
+	PhysicsMaterialList materials;
+	materials.push_back(new PhysicsMaterialSimple("Material " + ConvertToString(0), Color::sGetDistinctColor(0)));
+	
+	return new MeshShapeSettings(inVertices, inTriangles, materials);
+}
+
+void NextPhysics::AddForceToBody(JPH::BodyID bodyID, const glm::vec3& force)
+{
+	BodyInterface &body_interface = context_->physics_system.GetBodyInterface();
+
+	body_interface.AddForce(bodyID, Vec3(force.x, force.y, force.z), EActivation::Activate); // Activate the body if it is sleeping
 }
 
 FNextPhysicsBody* NextPhysics::GetBody(JPH::BodyID bodyID)

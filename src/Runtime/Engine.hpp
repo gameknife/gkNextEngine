@@ -40,6 +40,8 @@ public:
 	virtual bool OverrideRenderCamera(Assets::Camera& OutRenderCamera) const {return false;}
 
 	// scene
+	virtual void BeforeSceneRebuild(std::vector<std::shared_ptr<Assets::Node>>& nodes, std::vector<Assets::Model>& models, std::vector<Assets::FMaterial>& materials, std::vector<Assets::LightObject>& lights,
+					   std::vector<Assets::AnimationTrack>& tracks) {}
 	virtual void OnSceneLoaded() {}
 	virtual void OnSceneUnloaded() {}
 

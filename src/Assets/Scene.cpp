@@ -8,6 +8,8 @@
 #include <unordered_set>
 #include <meshoptimizer.h>
 #include <glm/detail/type_half.hpp>
+#include <Jolt/Core/Reference.h>
+#include <Jolt/Physics/Collision/Shape/MeshShape.h>
 
 #include "Runtime/Engine.hpp"
 #include "Vulkan/DescriptorSetManager.hpp"
@@ -105,10 +107,10 @@ namespace Assets
 
         // static mesh to jolt mesh shape
         NextPhysics* PhysicsEngine = NextEngine::GetInstance()->GetPhysicsEngine();
-        std::vector<JPH::MeshShapeSettings*> meshShapes;
+        std::vector<JPH::RefConst<JPH::MeshShapeSettings> > meshShapes;
         for (auto& model : models_)
         {
-            meshShapes.push_back( PhysicsEngine->CreateMeshShape(model)  );
+            meshShapes.push_back( JPH::RefConst<JPH::MeshShapeSettings>(PhysicsEngine->CreateMeshShape(model))  );
         }
 
         for (auto& node : nodes_)

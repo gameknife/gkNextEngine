@@ -116,6 +116,12 @@ bool NextRendererGameInstance::OverrideRenderCamera(Assets::Camera& OutRenderCam
 bool NextRendererGameInstance::OnKey(int key, int scancode, int action, int mods)
 {
     modelViewController_.OnKey(key, scancode, action, mods);
+
+	if (key == GLFW_KEY_SPACE && action != GLFW_RELEASE)
+	{
+		CreateSphereAndPush();
+		return true;
+	}
     return false;
 }
 
@@ -145,11 +151,6 @@ bool NextRendererGameInstance::OnMouseButton(int button, int action, int mods)
 			}
 			return true;
 		});
-		return true;
-	}
-	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE)
-	{
-		CreateSphereAndPush();
 		return true;
 	}
 #endif
@@ -184,7 +185,7 @@ void NextRendererGameInstance::CreateSphereAndPush()
 
 	GetEngine().GetScene().Nodes().push_back(newNode);
 
-	GetEngine().GetPhysicsEngine()->AddForceToBody(id, forward * 50000.f);
+	GetEngine().GetPhysicsEngine()->AddForceToBody(id, forward * 70000.f);
 }
 
 void NextRendererGameInstance::DrawSettings()

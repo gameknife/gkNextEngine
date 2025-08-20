@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 
 #include <Jolt/Jolt.h>
+#include <Jolt/Core/Reference.h>
 #include <Jolt/Physics/Body/BodyID.h>
 #include <Jolt/Physics/Body/MotionType.h>
 
@@ -57,7 +58,7 @@ public:
     
     JPH::BodyID CreateSphereBody(glm::vec3 position, float radius, JPH::EMotionType motionType);
     JPH::BodyID CreatePlaneBody(glm::vec3 position, glm::vec3 extent, JPH::EMotionType motionType);
-    JPH::BodyID CreateMeshBody(JPH::MeshShapeSettings* meshShapeSettings, glm::vec3 position, glm::quat rotation, glm::vec3 scale);
+    JPH::BodyID CreateMeshBody(JPH::RefConst<JPH::MeshShapeSettings> meshShapeSettings, glm::vec3 position, glm::quat rotation, glm::vec3 scale);
     JPH::MeshShapeSettings* CreateMeshShape(Assets::Model& model);
 
     void AddForceToBody(JPH::BodyID bodyID, const glm::vec3& force);
@@ -68,7 +69,7 @@ public:
     void OnSceneDestroyed();
 private:
 
-    JPH::BodyID AddBodyInternal(FNextPhysicsBody& body);
+    JPH::BodyID AddBodyInternal(FNextPhysicsBody& body, bool optimizeBroadPhase);
     
     std::unique_ptr<FNextPhysicsContext> context_;
     std::unordered_map<JPH::BodyID, FNextPhysicsBody> bodies_;

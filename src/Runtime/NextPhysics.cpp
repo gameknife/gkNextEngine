@@ -350,12 +350,15 @@ void NextPhysics::Tick(double DeltaSeconds)
 	
 	for (auto& body : bodies_)
 	{
-		RVec3 pos = body_interface.GetPosition(body.first);
-		RVec3 vel = body_interface.GetLinearVelocity(body.first);
-		body.second.position = glm::vec3(pos.GetX(), pos.GetY(), pos.GetZ());
-		body.second.velocity = glm::vec3(vel.GetX(), vel.GetY(), vel.GetZ());
-
-		NextEngine::GetInstance()->GetScene().MarkDirty();
+		if (body.second.motionType == EMotionType::Dynamic)
+		{
+			RVec3 pos = body_interface.GetPosition(body.first);
+			RVec3 vel = body_interface.GetLinearVelocity(body.first);
+			body.second.position = glm::vec3(pos.GetX(), pos.GetY(), pos.GetZ());
+			body.second.velocity = glm::vec3(vel.GetX(), vel.GetY(), vel.GetZ());
+			
+			NextEngine::GetInstance()->GetScene().MarkDirty(); // if changed, then dirty
+		}
 	}
 
 	// Step the world
@@ -400,7 +403,7 @@ JPH::BodyID NextPhysics::CreateSphereBody(glm::vec3 position, float radius, JPH:
 	// Now you can interact with the dynamic body, in this case we're going to give it a velocity.
 	// (note that if we had used CreateBody then we could have set the velocity straight on the body before adding it to the physics system)
 	//body_interface.SetLinearVelocity(body_id, Vec3(0.0f, -5.0f, 0.0f));
-	FNextPhysicsBody body { position, glm::vec3(0.0f, 0.0f, 0.0f), ENextBodyShape::Sphere, body_id };
+	FNextPhysicsBody body { position, glm::vec3(0.0f, 0.0f, 0.0f), ENextBodyShape::Sphere, body_id, EMotionType::Dynamic };
 	return AddBodyInternal(body, true);
 }
 
@@ -426,7 +429,7 @@ JPH::BodyID NextPhysics::CreatePlaneBody(glm::vec3 position, glm::vec3 extent, J
 	// Create the actual rigid body
 	body_id = body_interface.CreateAndAddBody(floor_settings, EActivation::DontActivate);
 
-	FNextPhysicsBody body { position, glm::vec3(0.0f, 0.0f, 0.0f), ENextBodyShape::Box, body_id };
+	FNextPhysicsBody body { position, glm::vec3(0.0f, 0.0f, 0.0f), ENextBodyShape::Box, body_id, EMotionType::Static };
 	return AddBodyInternal(body, true);
 }
 
@@ -451,7 +454,7 @@ JPH::BodyID NextPhysics::CreateMeshBody(RefConst<MeshShapeSettings> meshShapeSet
 	
 	body_id = body_interface.CreateAndAddBody(bodyCreation, EActivation::Activate);
 
-	FNextPhysicsBody body { glm::vec3(0,0,0), glm::vec3(0.0f, 0.0f, 0.0f), ENextBodyShape::Sphere, body_id };
+	FNextPhysicsBody body { glm::vec3(0,0,0), glm::vec3(0.0f, 0.0f, 0.0f), ENextBodyShape::Sphere, body_id, motionType };
 	return AddBodyInternal(body, false);
 }
 

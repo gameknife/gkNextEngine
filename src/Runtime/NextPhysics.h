@@ -43,6 +43,7 @@ struct FNextPhysicsBody
     glm::vec3 velocity;
     ENextBodyShape shape;
     JPH::BodyID bodyID;
+    JPH::EMotionType motionType;
 };
 
 namespace Layers

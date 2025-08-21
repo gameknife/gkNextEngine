@@ -44,5 +44,5 @@ private:
     ModelViewController modelViewController_;
 
     uint32_t modelId_;
-    uint32_t matId_;
+    std::vector<uint32_t> matIds_;
 };

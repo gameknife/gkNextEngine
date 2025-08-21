@@ -110,6 +110,10 @@ namespace Assets
         void RecalcLocalTransform();
         void RecalcTransform(bool full = true);
         const glm::mat4& WorldTransform() const { return transform_; }
+        glm::vec3 WorldTranslation() const;
+        glm::quat WorldRotation() const;
+        glm::vec3 WorldScale() const;
+        
         uint32_t GetModel() const { return modelId_; }
         const std::string& GetName() const {return name_; }
 

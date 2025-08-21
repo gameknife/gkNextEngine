@@ -1277,6 +1277,31 @@ namespace Assets
         }
     }
 
+    glm::vec3 Node::WorldTranslation() const
+    {
+        return glm::vec3(transform_[3]);
+    }
+    
+    glm::quat Node::WorldRotation() const
+    {
+        glm::vec3 scale, translation, skew;
+        glm::vec4 perspective;
+        glm::quat rotation;
+        
+        glm::decompose(transform_, scale, rotation, translation, skew, perspective);
+        return rotation;
+    }
+    
+    glm::vec3 Node::WorldScale() const
+    {
+        glm::vec3 scale, translation, skew;
+        glm::vec4 perspective;
+        glm::quat rotation;
+        
+        glm::decompose(transform_, scale, rotation, translation, skew, perspective);
+        return scale;
+    }
+
     bool Node::TickVelocity(glm::mat4& combinedTS)
     {
         if (!physicsBodyTemp_.IsInvalid())

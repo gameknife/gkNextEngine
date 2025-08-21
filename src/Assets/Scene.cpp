@@ -116,9 +116,9 @@ namespace Assets
         for (auto& node : nodes_)
         {
             // bind the mesh shape to the node
-            if (node->IsVisible() && node->GetModel() < meshShapes.size() && node->GetParent() == nullptr)
+            if (node->IsVisible() && node->GetModel() < meshShapes.size())// && node->GetParent() == nullptr)
             {
-                JPH::BodyID id = PhysicsEngine->CreateMeshBody(meshShapes[node->GetModel()], node->Translation(), node->Rotation(), node->Scale());
+                JPH::BodyID id = PhysicsEngine->CreateMeshBody(meshShapes[node->GetModel()], node->WorldTranslation(), node->WorldRotation(), node->WorldScale());
             }
         }
 

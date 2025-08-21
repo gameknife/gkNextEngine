@@ -7,6 +7,7 @@
 #include <Jolt/Core/Reference.h>
 #include <Jolt/Physics/Body/BodyID.h>
 #include <Jolt/Physics/Body/MotionType.h>
+#include <Jolt/Physics/Collision/ObjectLayer.h>
 
 #include "Vulkan/Vulkan.hpp"
 
@@ -44,6 +45,13 @@ struct FNextPhysicsBody
     JPH::BodyID bodyID;
 };
 
+namespace Layers
+{
+    static constexpr JPH::ObjectLayer NON_MOVING = 0;
+    static constexpr JPH::ObjectLayer MOVING = 1;
+    static constexpr JPH::ObjectLayer NUM_LAYERS = 2;
+};
+
 class NextPhysics final
 {
 public:
@@ -58,10 +66,12 @@ public:
     
     JPH::BodyID CreateSphereBody(glm::vec3 position, float radius, JPH::EMotionType motionType);
     JPH::BodyID CreatePlaneBody(glm::vec3 position, glm::vec3 extent, JPH::EMotionType motionType);
-    JPH::BodyID CreateMeshBody(JPH::RefConst<JPH::MeshShapeSettings> meshShapeSettings, glm::vec3 position, glm::quat rotation, glm::vec3 scale);
+    JPH::BodyID CreateMeshBody(JPH::RefConst<JPH::MeshShapeSettings> meshShapeSettings, glm::vec3 position, glm::quat rotation, glm::vec3 scale, JPH::EMotionType motionType, JPH::ObjectLayer layer);
     JPH::MeshShapeSettings* CreateMeshShape(Assets::Model& model);
 
     void AddForceToBody(JPH::BodyID bodyID, const glm::vec3& force);
+
+    void MoveKinematicBody(JPH::BodyID bodyID, const glm::vec3& position, const glm::quat& rotation, float deltaSeconds);
 
     FNextPhysicsBody* GetBody(JPH::BodyID bodyID);
 

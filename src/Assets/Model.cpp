@@ -1304,7 +1304,7 @@ namespace Assets
 
     bool Node::TickVelocity(glm::mat4& combinedTS)
     {
-        if (!physicsBodyTemp_.IsInvalid())
+        if (mobility_ == ENodeMobility::Dynamic)
         {
             auto body = NextEngine::GetInstance()->GetPhysicsEngine()->GetBody(physicsBodyTemp_);
             if (body != nullptr)
@@ -1370,7 +1370,7 @@ namespace Assets
     Node::Node(std::string name, glm::vec3 translation, glm::quat rotation, glm::vec3 scale, uint32_t id, uint32_t instanceId, bool replace):
     name_(name),
     translation_(translation), rotation_(rotation), scaling_(scale), 
-    modelId_(id), instanceId_(instanceId), visible_(false)
+    modelId_(id), instanceId_(instanceId), visible_(false), mobility_(ENodeMobility::Static)
     {
         RecalcLocalTransform();
         RecalcTransform();

@@ -69,12 +69,6 @@ static bool AssertFailedImpl(const char *inExpression, const char *inMessage, co
 // Typically you at least want to have 1 layer for moving bodies and 1 layer for static bodies, but you can have more
 // layers if you want. E.g. you could have a layer for high detail collision (which is not used by the physics simulation
 // but only if you do collision testing).
-namespace Layers
-{
-	static constexpr ObjectLayer NON_MOVING = 0;
-	static constexpr ObjectLayer MOVING = 1;
-	static constexpr ObjectLayer NUM_LAYERS = 2;
-};
 
 /// Class that determines if two object layers can collide
 class ObjectLayerPairFilterImpl : public ObjectLayerPairFilter
@@ -436,7 +430,7 @@ JPH::BodyID NextPhysics::CreatePlaneBody(glm::vec3 position, glm::vec3 extent, J
 	return AddBodyInternal(body, true);
 }
 
-JPH::BodyID NextPhysics::CreateMeshBody(RefConst<MeshShapeSettings> meshShapeSettings, glm::vec3 position, glm::quat rotation, glm::vec3 scale)
+JPH::BodyID NextPhysics::CreateMeshBody(RefConst<MeshShapeSettings> meshShapeSettings, glm::vec3 position, glm::quat rotation, glm::vec3 scale, EMotionType motionType, ObjectLayer layer)
 {
 	BodyInterface &body_interface = context_->physics_system.GetBodyInterface();
 	BodyID body_id(-1);
@@ -448,9 +442,9 @@ JPH::BodyID NextPhysics::CreateMeshBody(RefConst<MeshShapeSettings> meshShapeSet
 
 	BodyCreationSettings bodyCreation = isUniformScale ? BodyCreationSettings(meshShapeSettings,
 	Vec3(position.x, position.y, position.z),Quat(rotation.x, rotation.y, rotation.z, rotation.w),
-	EMotionType::Static, Layers::NON_MOVING): BodyCreationSettings(new ScaledShapeSettings(meshShapeSettings, Vec3(scale.x, scale.y, scale.z)),
+	motionType, layer): BodyCreationSettings(new ScaledShapeSettings(meshShapeSettings, Vec3(scale.x, scale.y, scale.z)),
 		Vec3(position.x, position.y, position.z), Quat(rotation.x, rotation.y, rotation.z, rotation.w),
-		EMotionType::Static, Layers::NON_MOVING);
+		motionType, layer);
 
 	//bodyCreation.mRestitution = 0.05f;
 	bodyCreation.mFriction = 0.5f;
@@ -486,6 +480,12 @@ void NextPhysics::AddForceToBody(JPH::BodyID bodyID, const glm::vec3& force)
 	BodyInterface &body_interface = context_->physics_system.GetBodyInterface();
 
 	body_interface.AddForce(bodyID, Vec3(force.x, force.y, force.z), EActivation::Activate); // Activate the body if it is sleeping
+}
+
+void NextPhysics::MoveKinematicBody(JPH::BodyID bodyID, const glm::vec3& position, const glm::quat& rotation, float deltaSeconds)
+{
+	BodyInterface &body_interface = context_->physics_system.GetBodyInterface();
+	body_interface.MoveKinematic(bodyID, RVec3(position.x, position.y, position.z), Quat(rotation.x, rotation.y, rotation.z, rotation.w), deltaSeconds);
 }
 
 FNextPhysicsBody* NextPhysics::GetBody(JPH::BodyID bodyID)

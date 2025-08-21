@@ -195,6 +195,7 @@ void NextRendererGameInstance::CreateSphereAndPush()
 	int random = std::rand() % matIds_.size();
 	newNode->SetMaterial( { matIds_[random]} );
 	newNode->SetVisible(true);
+	newNode->SetMobility(Assets::Node::ENodeMobility::Dynamic);
 	auto id = NextEngine::GetInstance()->GetPhysicsEngine()->CreateSphereBody(center, 0.2f, JPH::EMotionType::Dynamic);
 	newNode->BindPhysicsBody(id);
 

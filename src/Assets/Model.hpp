@@ -96,6 +96,13 @@ namespace Assets
     class Node : public std::enable_shared_from_this<Node>
     {
     public:
+        enum class ENodeMobility
+        {
+            Static,
+            Dynamic,
+            Kinematic
+        };
+        
         static std::shared_ptr<Node> CreateNode(std::string name, glm::vec3 translation, glm::quat rotation, glm::vec3 scale, uint32_t modelId, uint32_t instanceId, bool replace);
         Node(std::string name,  glm::vec3 translation, glm::quat rotation, glm::vec3 scale, uint32_t id, uint32_t instanceId, bool replace);
         
@@ -137,6 +144,11 @@ namespace Assets
         NodeProxy GetNodeProxy() const;
 
         void BindPhysicsBody(JPH::BodyID bodyId) { physicsBodyTemp_ = bodyId; }
+
+        void SetMobility(ENodeMobility staticType) { mobility_ = staticType; }
+        ENodeMobility GetMobility() const { return mobility_; }
+
+        const JPH::BodyID& GetPhysicsBody() const { return physicsBodyTemp_; }
         
     private:
         std::string name_;
@@ -156,6 +168,7 @@ namespace Assets
         std::set< std::shared_ptr<Node> > children_;
         std::array<uint32_t, 16> materialIdx_;
         JPH::BodyID physicsBodyTemp_;
+        ENodeMobility mobility_;
     };
 
     template <typename T>
@@ -248,8 +261,6 @@ namespace Assets
         
         std::vector<Vertex> vertices_;
         std::vector<uint32_t> indices_;
-        
-        std::vector<AnimationTrack> AnimationTracks_;
         
         glm::vec3 local_aabb_min;
         glm::vec3 local_aabb_max;

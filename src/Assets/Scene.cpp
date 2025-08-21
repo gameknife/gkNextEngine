@@ -8,6 +8,7 @@
 #include <unordered_set>
 #include <meshoptimizer.h>
 #include <glm/detail/type_half.hpp>
+#include "Runtime/NextPhysics.h"
 #include <Jolt/Core/Reference.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
 
@@ -105,6 +106,13 @@ namespace Assets
         // Rebuild the cpu bvh
         cpuAccelerationStructure_.InitBVH(*this);
 
+        // force static flag
+        for ( auto& track : tracks_ )
+        {
+            Node* node = GetNode(track.NodeName_);
+            if (node != nullptr) node->SetMobility(Node::ENodeMobility::Kinematic);
+        }
+        
         // static mesh to jolt mesh shape
         NextPhysics* PhysicsEngine = NextEngine::GetInstance()->GetPhysicsEngine();
         std::vector<JPH::RefConst<JPH::MeshShapeSettings> > meshShapes;
@@ -118,7 +126,10 @@ namespace Assets
             // bind the mesh shape to the node
             if (node->IsVisible() && node->GetModel() < meshShapes.size())// && node->GetParent() == nullptr)
             {
-                JPH::BodyID id = PhysicsEngine->CreateMeshBody(meshShapes[node->GetModel()], node->WorldTranslation(), node->WorldRotation(), node->WorldScale());
+                JPH::EMotionType motionType = node->GetMobility() == Node::ENodeMobility::Static ? JPH::EMotionType::Static : JPH::EMotionType::Kinematic;
+                JPH::ObjectLayer layer = node->GetMobility() == Node::ENodeMobility::Static ? Layers::NON_MOVING : Layers::MOVING;
+                JPH::BodyID id = PhysicsEngine->CreateMeshBody(meshShapes[node->GetModel()], node->WorldTranslation(), node->WorldRotation(), node->WorldScale(), motionType, layer);\
+                node->BindPhysicsBody(id);
             }
         }
 
@@ -331,6 +342,9 @@ namespace Assets
                 node->RecalcTransform(true);
 
                 MarkDirty();
+
+                // to physicSys
+                NextEngine::GetInstance()->GetPhysicsEngine()->MoveKinematicBody(node->GetPhysicsBody(), translation, rotation, 0.01f);
 
                 // temporal if camera node, request override
                 if (node->GetName() == "Shot.BlueCar")

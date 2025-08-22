@@ -550,7 +550,7 @@ namespace Vulkan::PipelineCommon
         VkPushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
         pushConstantRange.offset = 0;
-        pushConstantRange.size = 8;
+        pushConstantRange.size = sizeof(Assets::GPUScene);
         
         pipelineLayout_.reset(new class PipelineLayout(device, {descriptorSetManager_.get(), &scene.GetSceneBufferDescriptorSetManager(), &baseRender.GetRTDescriptorSetManager()}, static_cast<uint32_t>(uniformBuffers.size()), &pushConstantRange, 1));
         const ShaderModule denoiseShader(device, "assets/shaders/Task.GpuCull.comp.slang.spv");

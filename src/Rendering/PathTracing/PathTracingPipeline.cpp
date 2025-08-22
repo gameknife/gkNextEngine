@@ -18,7 +18,7 @@ namespace Vulkan::RayTracing
     PathTracingPipeline::PathTracingPipeline(const SwapChain& swapChain,
         const TopLevelAccelerationStructure& accelerationStructure,
         const VulkanBaseRenderer& baseRenderer,
-        const std::vector<Assets::UniformBuffer>& uniformBuffers, const Assets::Scene& scene):swapChain_(swapChain)
+        const std::vector<Assets::UniformBuffer>& uniformBuffers, const Assets::Scene& scene):PipelineBase(swapChain)
     {
          // Create descriptor pool/sets.
         const auto& device = swapChain.Device();
@@ -66,36 +66,19 @@ namespace Vulkan::RayTracing
             &scene.GetSceneBufferDescriptorSetManager()
         };
 
-        PipelineLayout_.reset(new class PipelineLayout(device, managers, static_cast<uint32_t>(uniformBuffers.size()),
+        pipelineLayout_.reset(new class PipelineLayout(device, managers, static_cast<uint32_t>(uniformBuffers.size()),
                                                        &pushConstantRange, 1));
         const ShaderModule denoiseShader(device, "assets/shaders/Core.PathTracing.comp.slang.spv");
         
         VkComputePipelineCreateInfo pipelineCreateInfo = {};
         pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
         pipelineCreateInfo.stage = denoiseShader.CreateShaderStage(VK_SHADER_STAGE_COMPUTE_BIT);
-        pipelineCreateInfo.layout = PipelineLayout_->Handle();
+        pipelineCreateInfo.layout = pipelineLayout_->Handle();
 
 
         Check(vkCreateComputePipelines(device.Handle(), VK_NULL_HANDLE,
                                        1, &pipelineCreateInfo,
                                        NULL, &pipeline_),
               "create compose pipeline");
-    }
-
-    PathTracingPipeline::~PathTracingPipeline()
-    {
-        if (pipeline_ != nullptr)
-        {
-            vkDestroyPipeline(swapChain_.Device().Handle(), pipeline_, nullptr);
-            pipeline_ = nullptr;
-        }
-
-        PipelineLayout_.reset();
-        descriptorSetManager_.reset();
-    }
-
-    VkDescriptorSet PathTracingPipeline::DescriptorSet(uint32_t index) const
-    {
-        return descriptorSetManager_->DescriptorSets().Handle(index);
     }
 }

@@ -28,15 +28,13 @@
 #include <fmt/format.h>
 #include <fmt/chrono.h>
 
-#include "Engine.hpp"
+#include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 #include "Options.hpp"
 #include "TaskCoordinator.hpp"
 #include "Assets/TextureImage.hpp"
 #include "Utilities/FileHelper.hpp"
-#include "Utilities/Localization.hpp"
 #include "Utilities/Math.hpp"
 #include "Rendering/VulkanBaseRenderer.hpp"
-#include "Editor/IconsFontAwesome6.h"
 #include "Utilities/ImGui.hpp"
 #include "Vulkan/ImageView.hpp"
 

@@ -33,7 +33,7 @@
 #include "Vulkan/ImageView.hpp"
 #include "Vulkan/RenderImage.hpp"
 #include "Rendering/VulkanBaseRenderer.hpp"
-#include "Editor/IconsFontAwesome6.h"
+#include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 
 extern std::unique_ptr<Vulkan::VulkanBaseRenderer> GApplication;
 

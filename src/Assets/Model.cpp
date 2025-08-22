@@ -9,7 +9,6 @@
 #include <glm/gtx/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include <tiny_obj_loader.h>
 #include <chrono>
 #include <filesystem>
 #include <fmt/format.h>
@@ -45,7 +44,6 @@
 #include "Runtime/Engine.hpp"
 #include "Runtime/NextPhysics.h"
 
-#define FLATTEN_VERTICE 0
 #define PROVOKING_VERTICE 1
 
 using namespace glm;
@@ -552,11 +550,6 @@ namespace Assets
 
                 vertext_offset += static_cast<uint32_t>(positionAccessor.count);
             }
-
-            #if FLATTEN_VERTICE
-                FlattenVertices(vertices, indices);
-            #endif
-
             
             models.push_back(Assets::Model(mesh.name, std::move(vertices), std::move(indices), !hasTangent));
         }
@@ -872,29 +865,6 @@ namespace Assets
         }
     }
 
-    void Model::FlattenVertices(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices)
-    {
-        // TODO: change to use povoking vertex later
-        bool doFlatten = true;//(GOption->RendererType == 1 || GOption->RendererType == 2);
-
-        if(doFlatten) {
-            std::vector<Vertex> vertices_flatten;
-            std::vector<uint32_t> indices_flatten;
-
-            uint32_t idx_counter = 0;
-            for (uint32_t index : indices)
-            {
-                if (index < 0 || index > vertices.size() - 1) continue; //fix "out of range index" error
-
-                vertices_flatten.push_back(vertices[index]);
-                indices_flatten.push_back(idx_counter++);
-            }
-
-            vertices = std::move(vertices_flatten);
-            indices = std::move(indices_flatten);
-        }
-    }
-
     Camera Model::AutoFocusCamera(Assets::EnvironmentSetting& cameraInit, std::vector<Model>& models)
     {
         //auto center camera by scene bounds
@@ -934,9 +904,7 @@ namespace Assets
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
         CornellBox::Create(scale, vertices, indices, materials, lights);
-#if FLATTEN_VERTICE
-        FlattenVertices(vertices, indices);
-#endif
+
         models.push_back(Model("cornell_box",
             std::move(vertices),
             std::move(indices),
@@ -990,11 +958,7 @@ namespace Assets
             16, 17, 18, 16, 18, 19,
             20, 21, 22, 20, 22, 23
         };
-
-#if FLATTEN_VERTICE
-        FlattenVertices(vertices, indices);
-#endif
-
+        
         return Model("pbox", std::move(vertices),std::move(indices), true);
     }
 
@@ -1072,9 +1036,6 @@ namespace Assets
                 j1 += slices1;
             }
         }
-#if FLATTEN_VERTICE
-        FlattenVertices(vertices, indices);
-#endif
 
         return Model("sphere", std::move(vertices), std::move(indices));
     }
@@ -1113,10 +1074,6 @@ namespace Assets
         light.lightMatIdx = materialIdx;
         
         lights.push_back(light);
-
-#if FLATTEN_VERTICE
-        FlattenVertices(vertices, indices);
-#endif
         
         models.push_back( Model("plight",
             std::move(vertices),

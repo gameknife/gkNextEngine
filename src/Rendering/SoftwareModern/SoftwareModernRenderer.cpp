@@ -1,6 +1,5 @@
 #include "SoftwareModernRenderer.hpp"
 #include "SoftwareModernPipeline.hpp"
-
 #include "Vulkan/PipelineLayout.hpp"
 #include "Vulkan/RenderPass.hpp"
 #include "Vulkan/SwapChain.hpp"
@@ -8,7 +7,6 @@
 #include "Vulkan/RenderImage.hpp"
 #include "Assets/Model.hpp"
 #include "Assets/Scene.hpp"
-#include "Utilities/Exception.hpp"
 
 namespace Vulkan::LegacyDeferred {
 

@@ -1,7 +1,7 @@
 #include <filesystem>
 
 #include "EditorCommand.hpp"
-#include "IconsFontAwesome6.h"
+#include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 #include "EditorGUI.h"
 #include "Utilities/FileHelper.hpp"
 #include "EditorInterface.hpp"

@@ -5,9 +5,9 @@
 #include "Vulkan/DescriptorSets.hpp"
 #include "Vulkan/Device.hpp"
 #include "Vulkan/PipelineLayout.hpp"
-#include "Vulkan/RenderPass.hpp"
 #include "Vulkan/ShaderModule.hpp"
 #include "Vulkan/SwapChain.hpp"
+#include "Vulkan/ImageView.hpp"
 #include "Assets/Scene.hpp"
 #include "Assets/TextureImage.hpp"
 #include "Assets/UniformBuffer.hpp"
@@ -15,11 +15,12 @@
 #include "Utilities/FileHelper.hpp"
 #include "Rendering/VulkanBaseRenderer.hpp"
 
+
 namespace Vulkan::LegacyDeferred {
 
 ShadingPipeline::ShadingPipeline(const SwapChain& swapChain,
 	const VulkanBaseRenderer& baseRenderer,
-	const std::vector<Assets::UniformBuffer>& uniformBuffers, const Assets::Scene& scene):swapChain_(swapChain)
+	const std::vector<Assets::UniformBuffer>& uniformBuffers, const Assets::Scene& scene):PipelineBase(swapChain)
 {
 	// Create descriptor pool/sets.
     const auto& device = swapChain.Device();
@@ -71,28 +72,12 @@ ShadingPipeline::ShadingPipeline(const SwapChain& swapChain,
           "create deferred shading pipeline");
 }
 
-ShadingPipeline::~ShadingPipeline()
-{
-	if (pipeline_ != nullptr)
-	{
-		vkDestroyPipeline(swapChain_.Device().Handle(), pipeline_, nullptr);
-		pipeline_ = nullptr;
-	}
-
-	pipelineLayout_.reset();
-	descriptorSetManager_.reset();
-}
-
-VkDescriptorSet ShadingPipeline::DescriptorSet(uint32_t index) const
-{
-	return descriptorSetManager_->DescriptorSets().Handle(index);
-}
 }
 
 namespace Vulkan::VoxelTracing
 {
 	ShadingPipeline::ShadingPipeline(const SwapChain& swapChain, const VulkanBaseRenderer& baseRenderer,
-		const std::vector<Assets::UniformBuffer>& uniformBuffers, const Assets::Scene& scene):swapChain_(swapChain)
+		const std::vector<Assets::UniformBuffer>& uniformBuffers, const Assets::Scene& scene):PipelineBase(swapChain)
 	{
 		 // Create descriptor pool/sets.
 	        const auto& device = swapChain.Device();
@@ -137,22 +122,5 @@ namespace Vulkan::VoxelTracing
 	                                       1, &pipelineCreateInfo,
 	                                       NULL, &pipeline_),
 	              "create deferred shading pipeline");
-	}
-
-	ShadingPipeline::~ShadingPipeline()
-	{
-		if (pipeline_ != nullptr)
-		{
-			vkDestroyPipeline(swapChain_.Device().Handle(), pipeline_, nullptr);
-			pipeline_ = nullptr;
-		}
-
-		pipelineLayout_.reset();
-		descriptorSetManager_.reset();
-	}
-
-	VkDescriptorSet ShadingPipeline::DescriptorSet(uint32_t index) const
-	{
-		return descriptorSetManager_->DescriptorSets().Handle(index);
 	}
 }

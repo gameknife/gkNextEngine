@@ -4,25 +4,15 @@
 #include "Vulkan/RayTracing/TopLevelAccelerationStructure.hpp"
 #include "Assets/Model.hpp"
 #include "Assets/Scene.hpp"
-#include "Utilities/Glm.hpp"
 #include "Vulkan/Buffer.hpp"
 #include "Vulkan/BufferUtil.hpp"
-#include "Vulkan/Image.hpp"
-#include "Vulkan/ImageMemoryBarrier.hpp"
-#include "Vulkan/ImageView.hpp"
 #include "Vulkan/PipelineLayout.hpp"
 #include "Vulkan/SingleTimeCommands.hpp"
-#include "Vulkan/SwapChain.hpp"
 #include <chrono>
-#include <iomanip>
 #include <numeric>
 
-#include "../Runtime/Engine.hpp"
-#include "Rendering/HardwareTracing/HardwareTracingPipeline.hpp"
-#include "Rendering/HardwareTracing/HardwareTracingRenderer.hpp"
-#include "Rendering/SoftwareModern/SoftwareModernRenderer.hpp"
-#include "Rendering/SoftwareTracing/SoftwareTracingRenderer.hpp"
-#include "Rendering/PathTracing/PathTracingRenderer.hpp"
+#include "Runtime/Engine.hpp"
+
 
 namespace Vulkan::RayTracing
 {
@@ -235,8 +225,6 @@ namespace Vulkan::RayTracing
     void RayTraceBaseRenderer::PostRender(VkCommandBuffer commandBuffer, uint32_t imageIndex)
     {
         VulkanBaseRenderer::PostRender(commandBuffer, imageIndex);
-
-        //if (NextEngine::GetInstance()->IsProgressiveRendering())  return;
 
 #if !ANDROID
         if(supportRayTracing_)// all gpu renderer use this cache && (CurrentLogicRendererType() != ERT_PathTracing || GOption->ReferenceMode))

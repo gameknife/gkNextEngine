@@ -208,8 +208,6 @@ namespace Assets
     class Model final
     {
     public:
-        static void FlattenVertices(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices);
-
         static Camera AutoFocusCamera(Assets::EnvironmentSetting& cameraInit, std::vector<Model>& models);
         
         static uint32_t CreateCornellBox(const float scale,

@@ -7,6 +7,7 @@
 #include "Vulkan/PipelineLayout.hpp"
 #include "Vulkan/ShaderModule.hpp"
 #include "Vulkan/SwapChain.hpp"
+#include "Vulkan/ImageView.hpp"
 #include "Rendering/VulkanBaseRenderer.hpp"
 #include "Assets/Scene.hpp"
 #include "Assets/TextureImage.hpp"
@@ -14,10 +15,11 @@
 #include "Utilities/FileHelper.hpp"
 
 
+
 namespace Vulkan::ModernDeferred
 {
     ShadingPipeline::ShadingPipeline(const SwapChain& swapChain, const VulkanBaseRenderer& baseRenderer,
-        const std::vector<Assets::UniformBuffer>& uniformBuffers, const Assets::Scene& scene): swapChain_(swapChain)
+        const std::vector<Assets::UniformBuffer>& uniformBuffers, const Assets::Scene& scene): PipelineBase(swapChain)
     {
         // Create descriptor pool/sets.
         const auto& device = swapChain.Device();
@@ -68,22 +70,5 @@ namespace Vulkan::ModernDeferred
                                        1, &pipelineCreateInfo,
                                        NULL, &pipeline_),
               "create deferred shading pipeline");
-    }
-
-    ShadingPipeline::~ShadingPipeline()
-    {
-        if (pipeline_ != nullptr)
-        {
-            vkDestroyPipeline(swapChain_.Device().Handle(), pipeline_, nullptr);
-            pipeline_ = nullptr;
-        }
-
-        pipelineLayout_.reset();
-        descriptorSetManager_.reset();
-    }
-
-    VkDescriptorSet ShadingPipeline::DescriptorSet(uint32_t index) const
-    {
-        return descriptorSetManager_->DescriptorSets().Handle(index);
     }
 }

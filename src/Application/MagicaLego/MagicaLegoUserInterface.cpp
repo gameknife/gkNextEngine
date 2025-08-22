@@ -5,7 +5,7 @@
 #include <imgui_stdlib.h>
 #include <fmt/chrono.h>
 
-#include "Editor/IconsFontAwesome6.h"
+#include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 #include "Utilities/FileHelper.hpp"
 #include "MagicaLegoGameInstance.hpp"
 #include "Runtime/UserInterface.hpp"

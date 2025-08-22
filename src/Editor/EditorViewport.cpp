@@ -1,5 +1,5 @@
 #include "EditorGUI.h"
-#include "IconsFontAwesome6.h"
+#include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 #include "Runtime/UserInterface.hpp"
 #include "Assets/Model.hpp"
 #include "Runtime/Engine.hpp"

@@ -253,25 +253,6 @@ namespace Vulkan
         supportRayTracing_ = !GOption->ForceNoRT && SupportRayQuery(*this);
     }
 
-    VulkanGpuTimer::VulkanGpuTimer(const Device& device, uint32_t totalCount, const VkPhysicalDeviceProperties& prop):device_(device)
-    {
-        time_stamps.resize(totalCount);
-        timeStampPeriod_ = prop.limits.timestampPeriod;
-        // Create the query pool object used to get the GPU time tamps
-        VkQueryPoolCreateInfo query_pool_info{};
-        query_pool_info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
-        // We need to specify the query type for this pool, which in our case is for time stamps
-        query_pool_info.queryType = VK_QUERY_TYPE_TIMESTAMP;
-        // Set the no. of queries in this pool
-        query_pool_info.queryCount = static_cast<uint32_t>(time_stamps.size());
-        Check(vkCreateQueryPool(device_.Handle(), &query_pool_info, nullptr, &query_pool_timestamps), "create timestamp pool");
-    }
-
-    VulkanGpuTimer::~VulkanGpuTimer()
-    {
-        vkDestroyQueryPool(device_.Handle(), query_pool_timestamps, nullptr);
-    }
-
     VulkanBaseRenderer::~VulkanBaseRenderer()
     {
         VulkanBaseRenderer::DeleteSwapChain();
@@ -315,7 +296,7 @@ namespace Vulkan
             // VK_KHR_swapchain
             VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 #if __APPLE__
-		"VK_KHR_portability_subset",
+		    "VK_KHR_portability_subset",
 #endif
         };
 
@@ -1360,9 +1341,5 @@ namespace Vulkan
         device_->WaitIdle();
         DeleteSwapChain();
         CreateSwapChain();
-    }
-
-    LogicRendererBase::LogicRendererBase(VulkanBaseRenderer& baseRender): baseRender_(baseRender)
-    {
     }
 }

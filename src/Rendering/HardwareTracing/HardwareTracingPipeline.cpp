@@ -15,7 +15,7 @@ namespace Vulkan::HybridDeferred
 {
     HardwareTracingPipeline::HardwareTracingPipeline(const SwapChain& swapChain, const RayTracing::TopLevelAccelerationStructure& accelerationStructure,
                                                 const VulkanBaseRenderer& baseRenderer,
-                                                 const std::vector<Assets::UniformBuffer>& uniformBuffers, const Assets::Scene& scene): swapChain_(swapChain)
+                                                 const std::vector<Assets::UniformBuffer>& uniformBuffers, const Assets::Scene& scene): PipelineBase(swapChain)
     {
         // Create descriptor pool/sets.
         const auto& device = swapChain.Device();
@@ -57,22 +57,5 @@ namespace Vulkan::HybridDeferred
                                        1, &pipelineCreateInfo,
                                        NULL, &pipeline_),
               "create hybird shading pipeline");
-    }
-
-    HardwareTracingPipeline::~HardwareTracingPipeline()
-    {
-        if (pipeline_ != nullptr)
-        {
-            vkDestroyPipeline(swapChain_.Device().Handle(), pipeline_, nullptr);
-            pipeline_ = nullptr;
-        }
-
-        pipelineLayout_.reset();
-        descriptorSetManager_.reset();
-    }
-
-    VkDescriptorSet HardwareTracingPipeline::DescriptorSet(uint32_t index) const
-    {
-        return descriptorSetManager_->DescriptorSets().Handle(index);
     }
 }

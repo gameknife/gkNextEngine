@@ -2,9 +2,10 @@
 
 #include "Vulkan/Vulkan.hpp"
 #include "Vulkan/ImageView.hpp"
+#include "Vulkan/PipelineBase.hpp"
+
 #include <memory>
 #include <vector>
-#include <glm/vec4.hpp>
 
 namespace Assets
 {
@@ -31,30 +32,19 @@ namespace Vulkan::RayTracing
 
 namespace Vulkan::PipelineCommon
 {
-	class AccumulatePipeline final
+	class AccumulatePipeline : public PipelineBase
 	{
 	public:
 		VULKAN_NON_COPIABLE(AccumulatePipeline)
-	
+		
 		AccumulatePipeline(
 			const SwapChain& swapChain, const VulkanBaseRenderer& baseRender,
 			const ImageView& sourceImageView, const ImageView& prevImageView, const ImageView& targetImageView,
 			const std::vector<Assets::UniformBuffer>& uniformBuffers,
 			const Assets::Scene& scene);
-		~AccumulatePipeline();
-
-		VkDescriptorSet DescriptorSet(uint32_t index) const;
-		const Vulkan::PipelineLayout& PipelineLayout() const { return *pipelineLayout_; }
-	private:
-		const SwapChain& swapChain_;
-		
-		VULKAN_HANDLE(VkPipeline, pipeline_)
-
-		std::unique_ptr<Vulkan::DescriptorSetManager> descriptorSetManager_;
-		std::unique_ptr<Vulkan::PipelineLayout> pipelineLayout_;
 	};
 	
-	class FinalComposePipeline final
+	class FinalComposePipeline : public PipelineBase
 	{
 	public:
 		VULKAN_NON_COPIABLE(FinalComposePipeline)
@@ -63,20 +53,9 @@ namespace Vulkan::PipelineCommon
 			const SwapChain& swapChain, 
 			const VulkanBaseRenderer& baseRender,
 			const std::vector<Assets::UniformBuffer>& uniformBuffers);
-		~FinalComposePipeline();
-
-		VkDescriptorSet DescriptorSet(uint32_t index) const;
-		const Vulkan::PipelineLayout& PipelineLayout() const { return *pipelineLayout_; }
-	private:
-		const SwapChain& swapChain_;
-		
-		VULKAN_HANDLE(VkPipeline, pipeline_)
-
-		std::unique_ptr<Vulkan::DescriptorSetManager> descriptorSetManager_;
-		std::unique_ptr<Vulkan::PipelineLayout> pipelineLayout_;
 	};
 
-	class SimpleComposePipeline final
+	class SimpleComposePipeline : public PipelineBase
 	{
 	public:
 		VULKAN_NON_COPIABLE(SimpleComposePipeline)
@@ -85,40 +64,18 @@ namespace Vulkan::PipelineCommon
 			const SwapChain& swapChain, 
 			const ImageView& sourceImageView,
 			const std::vector<Assets::UniformBuffer>& uniformBuffers);
-		~SimpleComposePipeline();
-
-		VkDescriptorSet DescriptorSet(uint32_t index) const;
-		const Vulkan::PipelineLayout& PipelineLayout() const { return *pipelineLayout_; }
-	private:
-		const SwapChain& swapChain_;
-		
-		VULKAN_HANDLE(VkPipeline, pipeline_)
-
-		std::unique_ptr<Vulkan::DescriptorSetManager> descriptorSetManager_;
-		std::unique_ptr<Vulkan::PipelineLayout> pipelineLayout_;
 	};
 
-	class BufferClearPipeline final
+	class BufferClearPipeline  : public PipelineBase
 	{
 	public:
 		VULKAN_NON_COPIABLE(BufferClearPipeline)
 	
 		BufferClearPipeline(
 			const SwapChain& swapChain, const VulkanBaseRenderer& baseRender);
-		~BufferClearPipeline();
-
-		VkDescriptorSet DescriptorSet(uint32_t index) const;
-		const Vulkan::PipelineLayout& PipelineLayout() const { return *pipelineLayout_; }
-	private:
-		const SwapChain& swapChain_;
-		
-		VULKAN_HANDLE(VkPipeline, pipeline_)
-
-		std::unique_ptr<Vulkan::DescriptorSetManager> descriptorSetManager_;
-		std::unique_ptr<Vulkan::PipelineLayout> pipelineLayout_;
 	};
 
-	class VisualDebuggerPipeline final
+	class VisualDebuggerPipeline : public PipelineBase
 	{
 	public:
 		VULKAN_NON_COPIABLE(VisualDebuggerPipeline)
@@ -127,20 +84,9 @@ namespace Vulkan::PipelineCommon
 			const SwapChain& swapChain,
 			const VulkanBaseRenderer& baseRender,
 			const std::vector<Assets::UniformBuffer>& uniformBuffers);
-		~VisualDebuggerPipeline();
-
-		VkDescriptorSet DescriptorSet(uint32_t index) const;
-		const Vulkan::PipelineLayout& PipelineLayout() const { return *pipelineLayout_; }
-	private:
-		const SwapChain& swapChain_;
-		
-		VULKAN_HANDLE(VkPipeline, pipeline_)
-
-		std::unique_ptr<Vulkan::DescriptorSetManager> descriptorSetManager_;
-		std::unique_ptr<Vulkan::PipelineLayout> pipelineLayout_;
 	};
 
-	class HardwareGPULightBakePipeline final
+	class HardwareGPULightBakePipeline  : public PipelineBase
 	{
 	public:
 		VULKAN_NON_COPIABLE(HardwareGPULightBakePipeline)
@@ -151,64 +97,28 @@ namespace Vulkan::PipelineCommon
 			const RayTracing::TopLevelAccelerationStructure& accelerationStructure,
 			const std::vector<Assets::UniformBuffer>& uniformBuffers,
 			const Assets::Scene& scene);
-		~HardwareGPULightBakePipeline();
-
-		VkDescriptorSet DescriptorSet(uint32_t index) const;
-		const Vulkan::PipelineLayout& PipelineLayout() const { return *pipelineLayout_; }
-	private:
-		const DeviceProcedures& deviceProcedures_;
-		
-		VULKAN_HANDLE(VkPipeline, pipeline_)
-
-		std::unique_ptr<Vulkan::DescriptorSetManager> descriptorSetManager_;
-		std::unique_ptr<Vulkan::PipelineLayout> pipelineLayout_;
 	};
 
-	class SoftwareGPULightBakePipeline final
+	class SoftwareGPULightBakePipeline  : public PipelineBase
 	{
 	public:
 		VULKAN_NON_COPIABLE(SoftwareGPULightBakePipeline)
-	
 		SoftwareGPULightBakePipeline(
 			const SwapChain& swapChain,
 			const std::vector<Assets::UniformBuffer>& uniformBuffers,
 			const Assets::Scene& scene);
-		~SoftwareGPULightBakePipeline();
-
-		VkDescriptorSet DescriptorSet(uint32_t index) const;
-		const Vulkan::PipelineLayout& PipelineLayout() const { return *pipelineLayout_; }
-	private:
-		const SwapChain& swapChain_;
-		
-		VULKAN_HANDLE(VkPipeline, pipeline_)
-
-		std::unique_ptr<Vulkan::DescriptorSetManager> descriptorSetManager_;
-		std::unique_ptr<Vulkan::PipelineLayout> pipelineLayout_;
 	};
 
-	class GPUCullPipeline final
+	class GPUCullPipeline  : public PipelineBase
 	{
 	public:
 		VULKAN_NON_COPIABLE(GPUCullPipeline)
-	
 		GPUCullPipeline(const SwapChain& swapChain, const VulkanBaseRenderer& baseRender, const std::vector<Assets::UniformBuffer>& uniformBuffers, const Assets::Scene& scene);
-		~GPUCullPipeline();
-
-		VkDescriptorSet DescriptorSet(uint32_t index) const;
-		const Vulkan::PipelineLayout& PipelineLayout() const { return *pipelineLayout_; }
-	private:
-		const SwapChain& swapChain_;
-		
-		VULKAN_HANDLE(VkPipeline, pipeline_)
-
-		std::unique_ptr<Vulkan::DescriptorSetManager> descriptorSetManager_;
-		std::unique_ptr<Vulkan::PipelineLayout> pipelineLayout_;
 	};
 
-	class VisibilityPipeline final
+	class VisibilityPipeline : public PipelineBase
 	{
 	public:
-
 		VULKAN_NON_COPIABLE(VisibilityPipeline)
 
 		VisibilityPipeline(
@@ -217,23 +127,15 @@ namespace Vulkan::PipelineCommon
 			const std::vector<Assets::UniformBuffer>& uniformBuffers,
 			const Assets::Scene& scene);
 		~VisibilityPipeline();
-
-		VkDescriptorSet DescriptorSet(uint32_t index) const;
-		const Vulkan::PipelineLayout& PipelineLayout() const { return *pipelineLayout_; }
+		
 		const Vulkan::RenderPass& RenderPass() const { return *renderPass_; }
 
 	private:
-		const SwapChain& swapChain_;
-
-		VULKAN_HANDLE(VkPipeline, pipeline_)
-
-		std::unique_ptr<Vulkan::DescriptorSetManager> descriptorSetManager_;
-		std::unique_ptr<Vulkan::PipelineLayout> pipelineLayout_;
 		std::unique_ptr<Vulkan::RenderPass> renderPass_;
 		std::unique_ptr<Vulkan::RenderPass> swapRenderPass_;
 	};
 
-	class GraphicsPipeline final
+	class GraphicsPipeline : public PipelineBase
 	{
 	public:
 
@@ -246,21 +148,10 @@ namespace Vulkan::PipelineCommon
 			const Assets::Scene& scene,
 			bool isWireFrame);
 		~GraphicsPipeline();
-
-		VkDescriptorSet DescriptorSet(uint32_t index) const;
-		bool IsWireFrame() const { return isWireFrame_; }
-		const class PipelineLayout& PipelineLayout() const { return *pipelineLayout_; }
+		
 		const class RenderPass& RenderPass() const { return *renderPass_; }
 
 	private:
-
-		const SwapChain& swapChain_;
-		const bool isWireFrame_;
-
-		VULKAN_HANDLE(VkPipeline, pipeline_)
-
-		std::unique_ptr<class DescriptorSetManager> descriptorSetManager_;
-		std::unique_ptr<class PipelineLayout> pipelineLayout_;
 		std::unique_ptr<class RenderPass> renderPass_;
 	};
 }

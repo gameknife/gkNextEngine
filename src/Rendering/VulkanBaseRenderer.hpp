@@ -239,7 +239,7 @@ namespace Vulkan
 	class LogicRendererBase
 	{
 	public:
-		LogicRendererBase( VulkanBaseRenderer& baseRender );
+		LogicRendererBase( VulkanBaseRenderer& baseRender ): baseRender_(baseRender) {}
 		virtual ~LogicRendererBase() {};
 
 		virtual void OnDeviceSet() {};

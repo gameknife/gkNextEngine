@@ -1,11 +1,7 @@
 #pragma once
 
 #include "Vulkan/Vulkan.hpp"
-#include "Vulkan/ImageView.hpp"
-#include <memory>
-#include <vector>
-
-
+#include "Vulkan/PipelineBase.hpp"
 
 namespace Assets
 {
@@ -29,11 +25,9 @@ namespace Vulkan
 	}
 }
 
-
-
 namespace Vulkan::HybridDeferred
 {
-	class HardwareTracingPipeline final
+	class HardwareTracingPipeline : public PipelineBase
 	{
 	public:
 		VULKAN_NON_COPIABLE(HardwareTracingPipeline)
@@ -43,18 +37,6 @@ namespace Vulkan::HybridDeferred
 			const VulkanBaseRenderer& baseRenderer,
 			const std::vector<Assets::UniformBuffer>& uniformBuffers,
 			const Assets::Scene& scene);
-		~HardwareTracingPipeline();
-
-		VkDescriptorSet DescriptorSet(uint32_t index) const;
-		const Vulkan::PipelineLayout& PipelineLayout() const { return *pipelineLayout_; }
-
-	private:
-		const SwapChain& swapChain_;
-		
-		VULKAN_HANDLE(VkPipeline, pipeline_)
-
-		std::unique_ptr<Vulkan::DescriptorSetManager> descriptorSetManager_;
-		std::unique_ptr<Vulkan::PipelineLayout> pipelineLayout_;
 	};
 
 }

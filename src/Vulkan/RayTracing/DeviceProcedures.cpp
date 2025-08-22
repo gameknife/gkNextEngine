@@ -1,7 +1,5 @@
 #include "DeviceProcedures.hpp"
-#include "Utilities/Exception.hpp"
 #include "Vulkan/Device.hpp"
-#include <string>
 
 namespace Vulkan
 {

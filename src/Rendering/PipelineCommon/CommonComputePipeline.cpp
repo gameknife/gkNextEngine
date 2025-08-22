@@ -22,7 +22,7 @@ namespace Vulkan::PipelineCommon
     AccumulatePipeline::AccumulatePipeline(const SwapChain& swapChain, const VulkanBaseRenderer& baseRender, 
                                            const ImageView& sourceImageView, const ImageView& prevImageView, const ImageView& targetImageView,
                                            const std::vector<Assets::UniformBuffer>& uniformBuffers,
-                                           const Assets::Scene& scene): swapChain_(swapChain)
+                                           const Assets::Scene& scene): PipelineBase(swapChain)
     {
         // Create descriptor pool/sets.
         const auto& device = swapChain.Device();
@@ -83,26 +83,9 @@ namespace Vulkan::PipelineCommon
                                        NULL, &pipeline_),
               "create deferred shading pipeline");
     }
-
-    AccumulatePipeline::~AccumulatePipeline()
-    {
-        if (pipeline_ != nullptr)
-        {
-            vkDestroyPipeline(swapChain_.Device().Handle(), pipeline_, nullptr);
-            pipeline_ = nullptr;
-        }
-
-        pipelineLayout_.reset();
-        descriptorSetManager_.reset();
-    }
-
-    VkDescriptorSet AccumulatePipeline::DescriptorSet(uint32_t index) const
-    {
-        return descriptorSetManager_->DescriptorSets().Handle(index);
-    }
 	
     FinalComposePipeline::FinalComposePipeline(const SwapChain& swapChain, const VulkanBaseRenderer& baseRender,
-        const std::vector<Assets::UniformBuffer>& uniformBuffers): swapChain_(swapChain)
+        const std::vector<Assets::UniformBuffer>& uniformBuffers): PipelineBase(swapChain)
     {
         // Create descriptor pool/sets.
         const auto& device = swapChain.Device();
@@ -154,28 +137,10 @@ namespace Vulkan::PipelineCommon
                                        NULL, &pipeline_),
               "create deferred shading pipeline");
     }
-
-    FinalComposePipeline::~FinalComposePipeline()
-    {
-        if (pipeline_ != nullptr)
-        {
-            vkDestroyPipeline(swapChain_.Device().Handle(), pipeline_, nullptr);
-            pipeline_ = nullptr;
-        }
-
-        pipelineLayout_.reset();
-        descriptorSetManager_.reset();
-    }
-
-    VkDescriptorSet FinalComposePipeline::DescriptorSet(uint32_t index) const
-    {
-        return descriptorSetManager_->DescriptorSets().Handle(index);
-    }
-
-    
+	
     SimpleComposePipeline::SimpleComposePipeline(const SwapChain& swapChain,
                                                const ImageView& sourceImageView,
-                                                const std::vector<Assets::UniformBuffer>& uniformBuffers): swapChain_(swapChain)
+                                                const std::vector<Assets::UniformBuffer>& uniformBuffers): PipelineBase(swapChain)
     {
         // Create descriptor pool/sets.
         const auto& device = swapChain.Device();
@@ -226,24 +191,7 @@ namespace Vulkan::PipelineCommon
               "create deferred shading pipeline");
     }
 
-    SimpleComposePipeline::~SimpleComposePipeline()
-    {
-        if (pipeline_ != nullptr)
-        {
-            vkDestroyPipeline(swapChain_.Device().Handle(), pipeline_, nullptr);
-            pipeline_ = nullptr;
-        }
-
-        pipelineLayout_.reset();
-        descriptorSetManager_.reset();
-    }
-
-    VkDescriptorSet SimpleComposePipeline::DescriptorSet(uint32_t index) const
-    {
-        return descriptorSetManager_->DescriptorSets().Handle(index);
-    }
-
-    BufferClearPipeline::BufferClearPipeline(const SwapChain& swapChain, const VulkanBaseRenderer& baseRender):swapChain_(swapChain)
+    BufferClearPipeline::BufferClearPipeline(const SwapChain& swapChain, const VulkanBaseRenderer& baseRender):PipelineBase(swapChain)
     {
         // Create descriptor pool/sets.
         const auto& device = swapChain.Device();
@@ -280,24 +228,7 @@ namespace Vulkan::PipelineCommon
               "create buffer clear pipeline");
     }
 
-    BufferClearPipeline::~BufferClearPipeline()
-    {
-        if (pipeline_ != nullptr)
-        {
-            vkDestroyPipeline(swapChain_.Device().Handle(), pipeline_, nullptr);
-            pipeline_ = nullptr;
-        }
-
-        pipelineLayout_.reset();
-        descriptorSetManager_.reset();
-    }
-
-    VkDescriptorSet BufferClearPipeline::DescriptorSet(uint32_t index) const
-    {
-        return descriptorSetManager_->DescriptorSets().Handle(index);
-    }
-
-    VisualDebuggerPipeline::VisualDebuggerPipeline(const SwapChain& swapChain, const VulkanBaseRenderer& baseRender, const std::vector<Assets::UniformBuffer>& uniformBuffers): swapChain_(swapChain)
+    VisualDebuggerPipeline::VisualDebuggerPipeline(const SwapChain& swapChain, const VulkanBaseRenderer& baseRender, const std::vector<Assets::UniformBuffer>& uniformBuffers): PipelineBase(swapChain)
     {
         // Create descriptor pool/sets.
         const auto& device = swapChain.Device();
@@ -339,29 +270,12 @@ namespace Vulkan::PipelineCommon
                                        NULL, &pipeline_),
               "create deferred shading pipeline");
     }
-
-    VisualDebuggerPipeline::~VisualDebuggerPipeline()
-    {
-        if (pipeline_ != nullptr)
-        {
-            vkDestroyPipeline(swapChain_.Device().Handle(), pipeline_, nullptr);
-            pipeline_ = nullptr;
-        }
-
-        pipelineLayout_.reset();
-        descriptorSetManager_.reset();
-    }
-
-    VkDescriptorSet VisualDebuggerPipeline::DescriptorSet(uint32_t index) const
-    {
-        return descriptorSetManager_->DescriptorSets().Handle(index);
-    }
-
+	
     HardwareGPULightBakePipeline::HardwareGPULightBakePipeline(const SwapChain& swapChain, const DeviceProcedures& deviceProcedures,
-        const RayTracing::TopLevelAccelerationStructure& accelerationStructure, const std::vector<Assets::UniformBuffer>& uniformBuffers, const Assets::Scene& scene):deviceProcedures_(deviceProcedures)
+        const RayTracing::TopLevelAccelerationStructure& accelerationStructure, const std::vector<Assets::UniformBuffer>& uniformBuffers, const Assets::Scene& scene):PipelineBase(swapChain)
     {
                 // Create descriptor pool/sets.
-        const auto& device = deviceProcedures_.Device();
+        const auto& device = swapChain_.Device();
         const std::vector<DescriptorBinding> descriptorBindings =
         {
             {0, 1, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_COMPUTE_BIT},
@@ -480,26 +394,8 @@ namespace Vulkan::PipelineCommon
                                        NULL, &pipeline_),
               "create direct lighting gen shading pipeline");
     }
-
-    HardwareGPULightBakePipeline::~HardwareGPULightBakePipeline()
-    {
-        if (pipeline_ != nullptr)
-        {
-            vkDestroyPipeline(deviceProcedures_.Device().Handle(), pipeline_, nullptr);
-            pipeline_ = nullptr;
-        }
-
-        pipelineLayout_.reset();
-        descriptorSetManager_.reset();
-    }
-
-    VkDescriptorSet HardwareGPULightBakePipeline::DescriptorSet(uint32_t index) const
-    {
-        return descriptorSetManager_->DescriptorSets().Handle(index);
-    }
-
     
-    SoftwareGPULightBakePipeline::SoftwareGPULightBakePipeline(const SwapChain& swapChain, const std::vector<Assets::UniformBuffer>& uniformBuffers, const Assets::Scene& scene):swapChain_(swapChain)
+    SoftwareGPULightBakePipeline::SoftwareGPULightBakePipeline(const SwapChain& swapChain, const std::vector<Assets::UniformBuffer>& uniformBuffers, const Assets::Scene& scene): PipelineBase(swapChain)
     {
                 // Create descriptor pool/sets.
         const auto& device = swapChain.Device();
@@ -616,26 +512,8 @@ namespace Vulkan::PipelineCommon
                                        NULL, &pipeline_),
               "create direct lighting gen shading pipeline");
     }
-
-    SoftwareGPULightBakePipeline::~SoftwareGPULightBakePipeline()
-    {
-        if (pipeline_ != nullptr)
-        {
-            vkDestroyPipeline(swapChain_.Device().Handle(), pipeline_, nullptr);
-            pipeline_ = nullptr;
-        }
-
-        pipelineLayout_.reset();
-        descriptorSetManager_.reset();
-    }
-
-    VkDescriptorSet SoftwareGPULightBakePipeline::DescriptorSet(uint32_t index) const
-    {
-        return descriptorSetManager_->DescriptorSets().Handle(index);
-    }
-
     
-    GPUCullPipeline::GPUCullPipeline(const SwapChain& swapChain, const VulkanBaseRenderer& baseRender, const std::vector<Assets::UniformBuffer>& uniformBuffers, const Assets::Scene& scene):swapChain_(swapChain)
+    GPUCullPipeline::GPUCullPipeline(const SwapChain& swapChain, const VulkanBaseRenderer& baseRender, const std::vector<Assets::UniformBuffer>& uniformBuffers, const Assets::Scene& scene): PipelineBase(swapChain)
     {
         // Create descriptor pool/sets.
         const auto& device = swapChain.Device();
@@ -687,30 +565,13 @@ namespace Vulkan::PipelineCommon
                                        NULL, &pipeline_),
               "create deferred shading pipeline");
     }
-
-    GPUCullPipeline::~GPUCullPipeline()
-    {
-        if (pipeline_ != nullptr)
-        {
-            vkDestroyPipeline(swapChain_.Device().Handle(), pipeline_, nullptr);
-            pipeline_ = nullptr;
-        }
-
-        pipelineLayout_.reset();
-        descriptorSetManager_.reset();
-    }
-
-    VkDescriptorSet GPUCullPipeline::DescriptorSet(uint32_t index) const
-    {
-        return descriptorSetManager_->DescriptorSets().Handle(index);
-    }
-
+	
     VisibilityPipeline::VisibilityPipeline(
         const SwapChain& swapChain,
         const DepthBuffer& depthBuffer,
         const std::vector<Assets::UniformBuffer>& uniformBuffers,
         const Assets::Scene& scene) :
-        swapChain_(swapChain)
+        PipelineBase(swapChain)
     {
         const auto& device = swapChain.Device();
         //const auto bindingDescription = Assets::GPUVertex::GetBindingDescription();
@@ -885,20 +746,7 @@ namespace Vulkan::PipelineCommon
 
     VisibilityPipeline::~VisibilityPipeline()
     {
-        if (pipeline_ != nullptr)
-        {
-            vkDestroyPipeline(swapChain_.Device().Handle(), pipeline_, nullptr);
-            pipeline_ = nullptr;
-        }
-
         renderPass_.reset();
-        pipelineLayout_.reset();
-        descriptorSetManager_.reset();
-    }
-
-    VkDescriptorSet VisibilityPipeline::DescriptorSet(const uint32_t index) const
-    {
-        return descriptorSetManager_->DescriptorSets().Handle(index);
     }
 
     GraphicsPipeline::GraphicsPipeline(
@@ -907,8 +755,7 @@ namespace Vulkan::PipelineCommon
 	const std::vector<Assets::UniformBuffer>& uniformBuffers,
 	const Assets::Scene& scene,
 	const bool isWireFrame) :
-	swapChain_(swapChain),
-	isWireFrame_(isWireFrame)
+	PipelineBase(swapChain)
 	{
 		const auto& device = swapChain.Device();
 		const auto bindingDescription = Assets::GPUVertex::GetFastBindingDescription();
@@ -1078,19 +925,6 @@ namespace Vulkan::PipelineCommon
 
 	GraphicsPipeline::~GraphicsPipeline()
 	{
-		if (pipeline_ != nullptr)
-		{
-			vkDestroyPipeline(swapChain_.Device().Handle(), pipeline_, nullptr);
-			pipeline_ = nullptr;
-		}
-    	
 		renderPass_.reset();
-		pipelineLayout_.reset();
-		descriptorSetManager_.reset();
-	}
-
-	VkDescriptorSet GraphicsPipeline::DescriptorSet(const uint32_t index) const
-	{
-		return descriptorSetManager_->DescriptorSets().Handle(index);
 	}
 }

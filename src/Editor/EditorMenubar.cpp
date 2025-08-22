@@ -1,5 +1,5 @@
 #include "EditorCommand.hpp"
-#include "IconsFontAwesome6.h"
+#include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 #include "EditorGUI.h"
 
 void Editor::GUI::ShowMenubar()

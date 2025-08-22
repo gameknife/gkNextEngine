@@ -1,7 +1,6 @@
 #include "AccelerationStructure.hpp"
 #include "DeviceProcedures.hpp"
 #include "RayTracingProperties.hpp"
-#include "Utilities/Exception.hpp"
 #include "Vulkan/Buffer.hpp"
 #include "Vulkan/Device.hpp"
 #undef MemoryBarrier

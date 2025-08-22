@@ -5,11 +5,8 @@
 #include "Vulkan/Window.hpp"
 #include "Rendering/PipelineCommon/CommonComputePipeline.hpp"
 #include "Assets/Scene.hpp"
-#include "Utilities/Exception.hpp"
 #include "Utilities/Math.hpp"
 #include "Vulkan/RenderImage.hpp"
-
-#include <array>
 
 namespace Vulkan::HybridDeferred
 {

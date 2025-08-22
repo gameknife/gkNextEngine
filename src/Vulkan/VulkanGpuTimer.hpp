@@ -21,8 +21,17 @@ namespace Vulkan
 	public:
 		DEFAULT_NON_COPIABLE(VulkanGpuTimer)
 		
-		VulkanGpuTimer(const Device& device, uint32_t totalCount, const VkPhysicalDeviceProperties& prop);
-		virtual ~VulkanGpuTimer();
+		VulkanGpuTimer(const Device& device, uint32_t totalCount, const VkPhysicalDeviceProperties& prop):device_(device)
+		{
+			time_stamps.resize(totalCount);
+			timeStampPeriod_ = prop.limits.timestampPeriod;
+			VkQueryPoolCreateInfo query_pool_info{};
+			query_pool_info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+			query_pool_info.queryType = VK_QUERY_TYPE_TIMESTAMP;
+			query_pool_info.queryCount = static_cast<uint32_t>(time_stamps.size());
+			Check(vkCreateQueryPool(device_.Handle(), &query_pool_info, nullptr, &query_pool_timestamps), "create timestamp pool");
+		}
+		virtual ~VulkanGpuTimer() {vkDestroyQueryPool(device_.Handle(), query_pool_timestamps, nullptr);}
 
 		void Reset(VkCommandBuffer commandBuffer)
 		{

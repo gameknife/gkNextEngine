@@ -1,4 +1,4 @@
-#include "IconsFontAwesome6.h"
+#include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 #include "EditorGUI.h"
 #include "Assets/Model.hpp"
 #include "Assets/Scene.hpp"

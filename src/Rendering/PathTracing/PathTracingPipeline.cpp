@@ -57,7 +57,7 @@ namespace Vulkan::RayTracing
         VkPushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
         pushConstantRange.offset = 0;
-        pushConstantRange.size = 8;
+        pushConstantRange.size = sizeof(Assets::GPUScene);
 
         std::vector<DescriptorSetManager*> managers = {
             &Assets::GlobalTexturePool::GetInstance()->GetDescriptorManager(),

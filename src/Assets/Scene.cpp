@@ -1,7 +1,6 @@
 #include "Scene.hpp"
 #include "Model.hpp"
 #include "Options.hpp"
-#include "Sphere.hpp"
 #include "Vulkan/BufferUtil.hpp"
 #include "Assets/TextureImage.hpp"
 #include <chrono>

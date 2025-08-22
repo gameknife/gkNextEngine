@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Material.hpp"
-#include "Procedural.hpp"
 #include "Vertex.hpp"
 #include "Texture.hpp"
 #include "UniformBuffer.hpp"

@@ -707,8 +707,13 @@ namespace Vulkan::PipelineCommon
             descriptorSets.UpdateDescriptors(i, descriptorWrites);
         }
 
+    	VkPushConstantRange pushConstantRange{};
+    	pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    	pushConstantRange.offset = 0;
+    	pushConstantRange.size = sizeof(Assets::GPUScene);
+
         // Create pipeline layout and render pass.
-        pipelineLayout_.reset(new class PipelineLayout(device, descriptorSetManager_->DescriptorSetLayout()));
+        pipelineLayout_.reset(new class PipelineLayout(device, descriptorSetManager_->DescriptorSetLayout(), &pushConstantRange, 1));
         renderPass_.reset(new class RenderPass(swapChain, VK_FORMAT_R32_UINT, depthBuffer, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_LOAD_OP_CLEAR));
         renderPass_->SetDebugName("Visibility Render Pass");
         // Load shaders.

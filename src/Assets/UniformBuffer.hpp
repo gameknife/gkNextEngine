@@ -29,9 +29,11 @@ namespace Assets
 #define float4 vec4
 #define float4x4 mat4
 #define uint8_t4_packed uint
+#define half4 glm::detail::hdata
 	
 	#include "../assets/shaders/common/BasicTypes.slang"
 
+#undef half4
 #undef float3
 #undef float4
 #undef float4x4

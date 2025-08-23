@@ -662,58 +662,14 @@ namespace Vulkan::PipelineCommon
         colorBlending.blendConstants[1] = 0.0f; // Optional
         colorBlending.blendConstants[2] = 0.0f; // Optional
         colorBlending.blendConstants[3] = 0.0f; // Optional
-
-        // Create descriptor pool/sets.
-        std::vector<DescriptorBinding> descriptorBindings =
-        {
-            {0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT},
-            {1, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT},
-			{2, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT},
-			{3, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT},
-        };
-
-        descriptorSetManager_.reset(new DescriptorSetManager(device, descriptorBindings, uniformBuffers.size()));
-
-        auto& descriptorSets = descriptorSetManager_->DescriptorSets();
-
-        for (uint32_t i = 0; i != swapChain.Images().size(); ++i)
-        {
-            // Uniform buffer
-            VkDescriptorBufferInfo uniformBufferInfo = {};
-            uniformBufferInfo.buffer = uniformBuffers[i].Buffer().Handle();
-            uniformBufferInfo.range = VK_WHOLE_SIZE;
-
-            // Nodes buffer
-            VkDescriptorBufferInfo nodesBufferInfo = {};
-            nodesBufferInfo.buffer = scene.NodeMatrixBuffer().Handle();
-            nodesBufferInfo.range = VK_WHOLE_SIZE;
-
-        	VkDescriptorBufferInfo reorderBufferInfo = {};
-        	reorderBufferInfo.buffer = scene.ReorderBuffer().Handle();
-        	reorderBufferInfo.range = VK_WHOLE_SIZE;
-
-        	VkDescriptorBufferInfo vertexBufferInfo = {};
-        	vertexBufferInfo.buffer = scene.SimpleVertexBuffer().Handle();
-        	vertexBufferInfo.range = VK_WHOLE_SIZE;
-        	
-            const std::vector<VkWriteDescriptorSet> descriptorWrites =
-            {
-                descriptorSets.Bind(i, 0, uniformBufferInfo),
-                descriptorSets.Bind(i, 1, nodesBufferInfo),
-            	descriptorSets.Bind(i, 2, reorderBufferInfo),
-            	descriptorSets.Bind(i, 3, vertexBufferInfo),
-            };
-
-            descriptorSets.UpdateDescriptors(i, descriptorWrites);
-        }
-
+    	
     	VkPushConstantRange pushConstantRange{};
     	pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     	pushConstantRange.offset = 0;
     	pushConstantRange.size = sizeof(Assets::GPUScene);
 
         // Create pipeline layout and render pass.
-        pipelineLayout_.reset(new class PipelineLayout(device, descriptorSetManager_->DescriptorSetLayout(), &pushConstantRange, 1));
+        pipelineLayout_.reset(new class PipelineLayout(device, &pushConstantRange, 1));
         renderPass_.reset(new class RenderPass(swapChain, VK_FORMAT_R32_UINT, depthBuffer, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_LOAD_OP_CLEAR));
         renderPass_->SetDebugName("Visibility Render Pass");
         // Load shaders.

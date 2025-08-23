@@ -843,22 +843,13 @@ namespace Vulkan
             vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
             {
                 const auto& scene = GetScene();
-
-                VkDescriptorSet descriptorSets[] = {visibilityPipeline_->DescriptorSet(imageIndex)};
                 const VkBuffer indexBuffer = scene.IndexBuffer().Handle();
 
                 vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, visibilityPipeline_->Handle());
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                        visibilityPipeline_->PipelineLayout().Handle(), 0, 1, descriptorSets, 0,
-                                        nullptr);
                 vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-
-                Assets::GPUScene gpu_scene;
-                gpu_scene.Nodes = reinterpret_cast<Assets::NodeProxy*>(GetScene().NodeMatrixBuffer().GetDeviceAddress());
                 vkCmdPushConstants(commandBuffer, visibilityPipeline_->PipelineLayout().Handle(), VK_SHADER_STAGE_VERTEX_BIT,
-                                   0, sizeof(Assets::GPUScene), &gpu_scene);
+                                   0, sizeof(Assets::GPUScene), &(scene.FetchGPUScene(imageIndex)));
                 
-                // indirect draw
                 vkCmdDrawIndexedIndirect(commandBuffer, scene.IndirectDrawBuffer().Handle(), 0,
                                          scene.GetIndirectDrawBatchCount(), sizeof(VkDrawIndexedIndirectCommand));
             }

@@ -49,6 +49,7 @@ namespace Assets
 			bool supportRayTracing);
 		//void RebuildBVH();
 
+		const Assets::GPUScene& FetchGPUScene(const uint32_t imageIndex) const;
 		std::vector<std::shared_ptr<Node>>& Nodes() { return nodes_; }
 		const std::vector<Model>& Models() const { return models_; }
 		std::vector<FMaterial>& Materials() { return materials_; }
@@ -204,5 +205,6 @@ namespace Assets
 		FCPUAccelerationStructure cpuAccelerationStructure_;
 
 		Assets::GPUDrivenStat gpuDrivenStat_;
+		mutable Assets::GPUScene gpuScene_;
 	};
 }

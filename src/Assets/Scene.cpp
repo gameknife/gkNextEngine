@@ -297,6 +297,25 @@ namespace Assets
         }
     }
 
+    const Assets::GPUScene& Scene::FetchGPUScene(const uint32_t imageIndex) const
+    {
+        // all gpu device address
+        gpuScene_.Camera = NextEngine::GetInstance()->GetRenderer().UniformBuffers()[imageIndex].Buffer().GetDeviceAddress();
+        gpuScene_.Nodes = nodeMatrixBuffer_->GetDeviceAddress();
+        gpuScene_.Materials = materialBuffer_->GetDeviceAddress();
+        gpuScene_.Offsets = offsetBuffer_->GetDeviceAddress();
+        gpuScene_.Indices = primAddressBuffer_->GetDeviceAddress();
+        gpuScene_.Vertices = vertexBuffer_->GetDeviceAddress();
+        gpuScene_.VerticesSimple = simpleVertexBuffer_->GetDeviceAddress();
+        gpuScene_.Reorders = reorderBuffer_->GetDeviceAddress();
+        gpuScene_.Lights = lightBuffer_->GetDeviceAddress();
+        gpuScene_.Cubes = ambientCubeBuffer_->GetDeviceAddress();
+        gpuScene_.Voxels = farAmbientCubeBuffer_->GetDeviceAddress();
+        gpuScene_.HDRSHs = hdrSHBuffer_->GetDeviceAddress();
+
+        return gpuScene_;
+    }
+
     void Scene::PlayAllTracks()
     {
         for (auto& track : tracks_)

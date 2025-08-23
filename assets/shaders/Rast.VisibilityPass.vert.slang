@@ -1,20 +1,7 @@
 import Common;
 
-[[vk::binding(0, 0)]]
-ConstantBuffer<UniformBufferObject> Camera;
-
-[[vk::binding(1, 0)]]
-StructuredBuffer<NodeProxy> NodeProxies;
-
-[[vk::binding(2, 0)]]
-StructuredBuffer<uint> Reorders;
-
-[[vk::binding(3, 0)]]
-StructuredBuffer<half4> Vertices;
-
 [[vk::push_constant]]
 ConstantBuffer<GPUScene> gpuScene;
-
 struct VertexOutput
 {
     float4 position : SV_Position;
@@ -27,8 +14,8 @@ VertexOutput main(uint vertexIndex: SV_VertexID, uint baseVertex: SV_StartVertex
     VertexOutput output;
     uint absouluteInstanceIdx = instanceIndex + instanceBase;
     NodeProxy proxy = gpuScene.Nodes[absouluteInstanceIdx];
-    half4 Position = Vertices[Reorders[vertexIndex]];
-    output.position = mul(mul(Camera.ViewProjection, proxy.worldTS), float4(Position.xyz, 1.0));
+    half4 Position = gpuScene.VerticesSimple[gpuScene.Reorders[vertexIndex]];
+    output.position = mul(mul(gpuScene.Camera.ViewProjection, proxy.worldTS), float4(Position.xyz, 1.0));
 
     uint instanceIdx = absouluteInstanceIdx + 1;
     uint triangleIdx = vertexIndex - baseVertex;

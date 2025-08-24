@@ -517,42 +517,15 @@ namespace Vulkan::PipelineCommon
     {
         // Create descriptor pool/sets.
         const auto& device = swapChain.Device();
-        const std::vector<DescriptorBinding> descriptorBindings =
-        {
-            {0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-            {1, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-        };
-
-        descriptorSetManager_.reset(new DescriptorSetManager(device, descriptorBindings, static_cast<uint32_t>(uniformBuffers.size())));
-        auto& descriptorSets = descriptorSetManager_->DescriptorSets();
-
-        for (uint32_t i = 0; i != swapChain.Images().size(); ++i)
-        {
-            VkDescriptorBufferInfo drawCmdBufferInfo = {};
-            drawCmdBufferInfo.buffer = scene.IndirectDrawBuffer().Handle();
-            drawCmdBufferInfo.range = VK_WHOLE_SIZE;
-            
-            // Uniform buffer
-            VkDescriptorBufferInfo uniformBufferInfo = {};
-            uniformBufferInfo.buffer = uniformBuffers[i].Buffer().Handle();
-            uniformBufferInfo.range = VK_WHOLE_SIZE;
-            
-            std::vector<VkWriteDescriptorSet> descriptorWrites =
-            {
-                descriptorSets.Bind(i, 0, drawCmdBufferInfo),
-                descriptorSets.Bind(i, 1, uniformBufferInfo),
-            };
-
-            descriptorSets.UpdateDescriptors(i, descriptorWrites);
-        }
-        
-
+    	
         VkPushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
         pushConstantRange.offset = 0;
         pushConstantRange.size = sizeof(Assets::GPUScene);
+
+    	auto& GlobalStorage = Assets::GlobalTexturePool::GetInstance()->GetStorageDescriptorManager();
         
-        pipelineLayout_.reset(new class PipelineLayout(device, {descriptorSetManager_.get(), &scene.GetSceneBufferDescriptorSetManager(), &baseRender.GetRTDescriptorSetManager()}, static_cast<uint32_t>(uniformBuffers.size()), &pushConstantRange, 1));
+        pipelineLayout_.reset(new class PipelineLayout(device, {&GlobalStorage}, static_cast<uint32_t>(uniformBuffers.size()), &pushConstantRange, 1));
         const ShaderModule denoiseShader(device, "assets/shaders/Task.GpuCull.comp.slang.spv");
 
         VkComputePipelineCreateInfo pipelineCreateInfo = {};

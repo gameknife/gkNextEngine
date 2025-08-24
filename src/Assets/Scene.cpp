@@ -312,6 +312,8 @@ namespace Assets
         gpuScene_.Cubes = ambientCubeBuffer_->GetDeviceAddress();
         gpuScene_.Voxels = farAmbientCubeBuffer_->GetDeviceAddress();
         gpuScene_.HDRSHs = hdrSHBuffer_->GetDeviceAddress();
+        gpuScene_.IndirectDrawCommands = indirectDrawBuffer_->GetDeviceAddress();
+        gpuScene_.GPUDrivenStats = gpuDrivenStatsBuffer_->GetDeviceAddress();
 
         return gpuScene_;
     }

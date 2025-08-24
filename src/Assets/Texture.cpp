@@ -319,6 +319,12 @@ namespace Assets
         };
         descriptorSetManager_.reset(new Vulkan::DescriptorSetManager(device, descriptorBindings, 1, true));
 
+        const std::vector<Vulkan::DescriptorBinding> storageDescriptorBindings =
+        {
+            {0, k_max_bindless_resources, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_ALL},
+        };
+        storageDescriptorSetManager_.reset(new Vulkan::DescriptorSetManager(device, storageDescriptorBindings, 1, true));
+
         // for hdr to bind
         hdrSphericalHarmonics_.resize(100);
         
@@ -332,6 +338,7 @@ namespace Assets
         defaultWhiteTexture_.reset();
         textureImages_.clear();
         descriptorSetManager_.reset();
+        storageDescriptorSetManager_.reset();
     }
 
     void GlobalTexturePool::BindTexture(uint32_t textureIdx, const TextureImage& textureImage)
@@ -340,6 +347,16 @@ namespace Assets
         std::vector<VkWriteDescriptorSet> descriptorWrites =
         {
             descriptorSets.Bind(0, 0, { textureImage.Sampler().Handle(), textureImage.ImageView().Handle(), VK_IMAGE_LAYOUT_GENERAL}, textureIdx, 1),
+        };
+        descriptorSets.UpdateDescriptors(0, descriptorWrites);
+    }
+
+    void GlobalTexturePool::BindStorageTexture(uint32_t textureIdx, const Vulkan::ImageView& textureImage)
+    {
+        auto& descriptorSets = storageDescriptorSetManager_->DescriptorSets();
+        std::vector<VkWriteDescriptorSet> descriptorWrites =
+        {
+            descriptorSets.Bind(0, 0, {NULL, textureImage.Handle(), VK_IMAGE_LAYOUT_GENERAL}, textureIdx, 1),
         };
         descriptorSets.UpdateDescriptors(0, descriptorWrites);
     }

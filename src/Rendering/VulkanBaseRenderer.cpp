@@ -567,6 +567,8 @@ namespace Vulkan
 
             descriptorSets.UpdateDescriptors(i, descriptorWrites);
         }
+
+        globalTexturePool_->BindStorageTexture(0, rtPrevDepth->GetImageView());
     }
 
     void VulkanBaseRenderer::CreateSwapChain()
@@ -770,10 +772,9 @@ namespace Vulkan
 
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, gpuCullPipeline_->Handle());
             gpuCullPipeline_->PipelineLayout().BindDescriptorSets(commandBuffer, imageIndex);
-
-            glm::uvec2 pushConst = {0, 0};
+            
             vkCmdPushConstants(commandBuffer, gpuCullPipeline_->PipelineLayout().Handle(), VK_SHADER_STAGE_COMPUTE_BIT,
-                               0, sizeof(glm::uvec2), &pushConst);
+                               0, sizeof(Assets::GPUScene), &(GetScene().FetchGPUScene(imageIndex)));
 
             uint32_t groupCount = GetScene().GetIndirectDrawBatchCount() / 64 + 1;
             vkCmdDispatch(commandBuffer, groupCount, 1, 1);

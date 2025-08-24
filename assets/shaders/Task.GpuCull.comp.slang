@@ -1,29 +1,9 @@
 import Common;
 
-[[vk::binding(0, 0)]] RWStructuredBuffer<VkDrawIndexedIndirectCommand> DrawCommands;
-[[vk::binding(1, 0)]] ConstantBuffer<UniformBufferObject> Camera;
+[[vk::binding(0, 0)]] RWTexture2D<float> StorageTextureArray[];
 
-[[vk::binding(0, 1)]] StructuredBuffer<GPUVertex> Vertices;
-[[vk::binding(1, 1)]] StructuredBuffer<uint> Indices;
-[[vk::binding(2, 1)]] StructuredBuffer<Material> Materials;
-[[vk::binding(3, 1)]] StructuredBuffer<ModelData> Offsets;
-[[vk::binding(4, 1)]] StructuredBuffer<NodeProxy> NodeProxies;
-[[vk::binding(5, 1)]] RWStructuredBuffer<AmbientCube> Cubes;
-[[vk::binding(6, 1)]] RWStructuredBuffer<VoxelData> Voxels;
-[[vk::binding(7, 1)]] StructuredBuffer<SphericalHarmonics> HDRSHs;
-[[vk::binding(8, 1)]] StructuredBuffer<LightObject> Lights;
-[[vk::binding(10, 1)]] RWStructuredBuffer<GPUDrivenStat> StatInfos;
-
-
-[[vk::binding(0, 2)]] RWTexture2D<float4> FinalImage;
-[[vk::binding(1, 2)]] RWTexture2D<float4> OutImage;
-[[vk::binding(2, 2)]] RWTexture2D<uint> MiniGBuffer;
-[[vk::binding(3, 2)]] RWTexture2D<uint> ObjectId0;
-[[vk::binding(4, 2)]] RWTexture2D<uint> ObjectId1;
-[[vk::binding(5, 2)]] RWTexture2D<float4> OutMotionVector;
-[[vk::binding(6, 2)]] RWTexture2D<float4> OutAlbedoBuffer;
-[[vk::binding(7, 2)]] RWTexture2D<float4> OutNormalBuffer;
-[[vk::binding(10, 2)]] RWTexture2D<float> OutDepthBuffer;
+[[vk::push_constant]]
+ConstantBuffer<GPUScene> gpuScene;
 
 bool IsOccluded(float3 min, float3 max, float4x4 wvp)
 {
@@ -39,7 +19,7 @@ bool IsOccluded(float3 min, float3 max, float4x4 wvp)
     corners[7] = float3(max.x, max.y, max.z);
     
     uint2 screenSize;
-    OutDepthBuffer.GetDimensions(screenSize.x, screenSize.y);
+    StorageTextureArray[0].GetDimensions(screenSize.x, screenSize.y);
     
     int occludedCount = 0;
     
@@ -65,7 +45,7 @@ bool IsOccluded(float3 min, float3 max, float4x4 wvp)
             return false;
         }
         
-        float previousDepth = OutDepthBuffer[pixelCoord];
+        float previousDepth = StorageTextureArray[0][pixelCoord];
         float currentDepth = ndc.z- 0.00001;
         
         // 如果当前点被遮挡
@@ -82,7 +62,7 @@ bool IsOccludedVolume(float3 min, float3 max, float4x4 wvp)
     const float GRID_SIZE_MINUS_ONE = GRID_SIZE - 1;
 
     uint2 screenSize;
-    OutDepthBuffer.GetDimensions(screenSize.x, screenSize.y);
+    StorageTextureArray[0].GetDimensions(screenSize.x, screenSize.y);
 
     // 在AABB内均匀分布4x4x4的检测点
     for (int x = 0; x < GRID_SIZE; x++)
@@ -122,7 +102,7 @@ bool IsOccludedVolume(float3 min, float3 max, float4x4 wvp)
                 }
 
                 // 深度测试
-                float previousDepth = OutDepthBuffer[pixelCoord];
+                float previousDepth = StorageTextureArray[0][pixelCoord];
                 float currentDepth = ndc.z - 0.0001; // 添加小的偏移避免Z-fighting
 
                 // 如果当前点被遮挡
@@ -226,29 +206,29 @@ bool IsAABBInFrustum(float3 min, float3 max, float4x4 wvp)
 [numthreads(64, 1, 1)]
 void main(uint3 DTid : SV_DispatchThreadID)
 {
-    NodeProxy node = NodeProxies[DTid.x];
-    ModelData model = Offsets[node.modelId];
-    float4x4 mvp = mul(Camera.ViewProjection, node.worldTS);
+    NodeProxy node = gpuScene.Nodes[DTid.x];
+    ModelData model = gpuScene.Offsets[node.modelId];
+    float4x4 mvp = mul(gpuScene.Camera.ViewProjection, node.worldTS);
 
     bool shouldDraw = (node.visible > 0) && IsAABBInFrustum(model.localAabbMin.xyz, model.localAabbMax.xyz, mvp);
 
     if (shouldDraw)
     {
-        InterlockedAdd(StatInfos[0].ProcessedCount, 1);
-        InterlockedAdd(StatInfos[0].TriangleCount, model.indexCount / 3);
+        InterlockedAdd(gpuScene.GPUDrivenStats[0].ProcessedCount, 1);
+        InterlockedAdd(gpuScene.GPUDrivenStats[0].TriangleCount, model.indexCount / 3);
 
         if (IsOccludedVolume(model.localAabbMin.xyz, model.localAabbMax.xyz, mvp))
         {
-            InterlockedAdd(StatInfos[0].CulledCount, 1);
-            InterlockedAdd(StatInfos[0].CulledTriangleCount, model.indexCount / 3);
+            InterlockedAdd(gpuScene.GPUDrivenStats[0].CulledCount, 1);
+            InterlockedAdd(gpuScene.GPUDrivenStats[0].CulledTriangleCount, model.indexCount / 3);
             shouldDraw = false;
         }
     }
 
     // cull all
-    DrawCommands[DTid.x].instanceCount = shouldDraw ? 1 : 0;
-    DrawCommands[DTid.x].firstInstance = shouldDraw ? DTid.x : 0;
-    DrawCommands[DTid.x].indexCount = shouldDraw ? model.indexCount : 0;
-    DrawCommands[DTid.x].firstIndex = shouldDraw ? model.indexOffset : 0;
-    DrawCommands[DTid.x].vertexOffset = shouldDraw ? model.reorderOffset : 0;
+    gpuScene.IndirectDrawCommands[DTid.x].instanceCount = shouldDraw ? 1 : 0;
+    gpuScene.IndirectDrawCommands[DTid.x].firstInstance = shouldDraw ? DTid.x : 0;
+    gpuScene.IndirectDrawCommands[DTid.x].indexCount = shouldDraw ? model.indexCount : 0;
+    gpuScene.IndirectDrawCommands[DTid.x].firstIndex = shouldDraw ? model.indexOffset : 0;
+    gpuScene.IndirectDrawCommands[DTid.x].vertexOffset = shouldDraw ? model.reorderOffset : 0;
 }

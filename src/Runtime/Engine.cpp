@@ -693,6 +693,17 @@ void NextEngine::SetProgressiveRendering(bool enable, bool directly)
     }
 }
 
+VkDeviceAddress NextEngine::TryGetGPUAccelerationStructureAddress() const
+{
+    Vulkan::RayTracing::RayTraceBaseRenderer* rtRender = dynamic_cast<Vulkan::RayTracing::RayTraceBaseRenderer*>(renderer_.get());
+    if (rtRender)
+    {
+        return rtRender->TLAS()[0].GetDeviceAddress();   
+    }
+
+    return -1;
+}
+
 Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D offset, const VkExtent2D extent)
 {
     Assets::UniformBufferObject ubo = {};

@@ -315,6 +315,8 @@ namespace Assets
         gpuScene_.IndirectDrawCommands = indirectDrawBuffer_->GetDeviceAddress();
         gpuScene_.GPUDrivenStats = gpuDrivenStatsBuffer_->GetDeviceAddress();
 
+        gpuScene_.TLAS = NextEngine::GetInstance()->TryGetGPUAccelerationStructureAddress();
+
         return gpuScene_;
     }
 

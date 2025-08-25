@@ -106,7 +106,7 @@ namespace Vulkan::RayTracing
         {
             SCOPED_GPU_TIMER("rt pass");
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, rayTracingPipeline_->Handle());
-            rayTracingPipeline_->PipelineLayout().BindDescriptorSets(commandBuffer, imageIndex);
+            rayTracingPipeline_->PipelineLayout().BindDescriptorSets(commandBuffer, 0);
             
             vkCmdPushConstants(commandBuffer, rayTracingPipeline_->PipelineLayout().Handle(), VK_SHADER_STAGE_COMPUTE_BIT,
                                0, sizeof(Assets::GPUScene), &(GetScene().FetchGPUScene(imageIndex)));

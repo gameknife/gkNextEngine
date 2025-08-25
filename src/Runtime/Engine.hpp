@@ -194,6 +194,8 @@ public:
 	NextPhysics* GetPhysicsEngine() { return physicsEngine_.get(); }
 
 	Assets::UniformBufferObject& GetUniformBufferObject() { return prevUBO_; }
+
+	VkDeviceAddress TryGetGPUAccelerationStructureAddress() const;
 	
 protected:
 	Assets::UniformBufferObject GetUniformBufferObject(const VkOffset2D offset, const VkExtent2D extent);

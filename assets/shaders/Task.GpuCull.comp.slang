@@ -42,7 +42,7 @@ bool IsOccluded(float3 min, float3 max, float4x4 wvp)
             return false;
         }
         
-        float previousDepth = Bindless.GetStorageTexture(Bindless.RT_PREV_DEPTHBUFFER, pixelCoord);
+        float previousDepth = Bindless.GetStorageTexture<float>(Bindless.RT_PREV_DEPTHBUFFER)[pixelCoord];
         float currentDepth = ndc.z- 0.00001;
         
         // 如果当前点被遮挡
@@ -98,7 +98,7 @@ bool IsOccludedVolume(float3 min, float3 max, float4x4 wvp)
                 }
 
                 // 深度测试
-                float previousDepth = Bindless.GetStorageTexture(Bindless.RT_PREV_DEPTHBUFFER, pixelCoord);
+                float previousDepth = Bindless.GetStorageTexture<float>(Bindless.RT_PREV_DEPTHBUFFER)[pixelCoord];
                 float currentDepth = ndc.z - 0.0001; // 添加小的偏移避免Z-fighting
 
                 // 如果当前点被遮挡

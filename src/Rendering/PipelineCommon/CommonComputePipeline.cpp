@@ -523,9 +523,9 @@ namespace Vulkan::PipelineCommon
         pushConstantRange.offset = 0;
         pushConstantRange.size = sizeof(Assets::GPUScene);
 
-    	auto& GlobalStorage = Assets::GlobalTexturePool::GetInstance()->GetStorageDescriptorManager();
+    	auto& GlobalStorage = Assets::GlobalTexturePool::GetInstance()->GetDescriptorManager();
         
-        pipelineLayout_.reset(new class PipelineLayout(device, {&GlobalStorage}, static_cast<uint32_t>(uniformBuffers.size()), &pushConstantRange, 1));
+        pipelineLayout_.reset(new class PipelineLayout(device, {&GlobalStorage}, 1, &pushConstantRange, 1));
         const ShaderModule denoiseShader(device, "assets/shaders/Task.GpuCull.comp.slang.spv");
 
         VkComputePipelineCreateInfo pipelineCreateInfo = {};

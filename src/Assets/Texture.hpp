@@ -67,7 +67,6 @@ namespace Assets
 		Vulkan::CommandPool& GetMainThreadCommandPool() { return mainThreadCommandPool_; }
 
 		Vulkan::DescriptorSetManager& GetDescriptorManager() { return *descriptorSetManager_; }
-		Vulkan::DescriptorSetManager& GetStorageDescriptorManager() { return *storageDescriptorSetManager_; }
 	private:
 		static GlobalTexturePool* instance_;
 
@@ -87,7 +86,6 @@ namespace Assets
 		std::unique_ptr<TextureImage> defaultWhiteTexture_;
 
 		std::unique_ptr<Vulkan::DescriptorSetManager> descriptorSetManager_;
-		std::unique_ptr<Vulkan::DescriptorSetManager> storageDescriptorSetManager_;
 	};
 
 }

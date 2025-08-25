@@ -60,13 +60,12 @@ namespace Vulkan::RayTracing
         pushConstantRange.size = sizeof(Assets::GPUScene);
 
         std::vector<DescriptorSetManager*> managers = {
-            &Assets::GlobalTexturePool::GetInstance()->GetStorageDescriptorManager(),
-            descriptorSetManager_.get(),
             &Assets::GlobalTexturePool::GetInstance()->GetDescriptorManager(),
+            descriptorSetManager_.get(),
             &scene.GetSceneBufferDescriptorSetManager()
         };
 
-        pipelineLayout_.reset(new class PipelineLayout(device, managers, static_cast<uint32_t>(uniformBuffers.size()),
+        pipelineLayout_.reset(new class PipelineLayout(device, managers, 1,
                                                        &pushConstantRange, 1));
         const ShaderModule denoiseShader(device, "assets/shaders/Core.PathTracing.comp.slang.spv");
         

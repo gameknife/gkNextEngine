@@ -788,7 +788,7 @@ namespace Vulkan
             );
 
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, gpuCullPipeline_->Handle());
-            gpuCullPipeline_->PipelineLayout().BindDescriptorSets(commandBuffer, imageIndex);
+            gpuCullPipeline_->PipelineLayout().BindDescriptorSets(commandBuffer, 0);
             
             vkCmdPushConstants(commandBuffer, gpuCullPipeline_->PipelineLayout().Handle(), VK_SHADER_STAGE_COMPUTE_BIT,
                                0, sizeof(Assets::GPUScene), &(GetScene().FetchGPUScene(imageIndex)));

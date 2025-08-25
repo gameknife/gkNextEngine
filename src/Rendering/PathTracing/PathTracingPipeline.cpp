@@ -39,7 +39,7 @@ namespace Vulkan::RayTracing
             structureInfo.pNext = nullptr;
             structureInfo.accelerationStructureCount = 1;
             structureInfo.pAccelerationStructures = &accelerationStructureHandle;
-            
+
             // Uniform buffer
             VkDescriptorBufferInfo uniformBufferInfo = {};
             uniformBufferInfo.buffer = uniformBuffers[i].Buffer().Handle();
@@ -60,9 +60,9 @@ namespace Vulkan::RayTracing
         pushConstantRange.size = sizeof(Assets::GPUScene);
 
         std::vector<DescriptorSetManager*> managers = {
-            &Assets::GlobalTexturePool::GetInstance()->GetDescriptorManager(),
+            &Assets::GlobalTexturePool::GetInstance()->GetStorageDescriptorManager(),
             descriptorSetManager_.get(),
-            &baseRenderer.GetRTDescriptorSetManager(),
+            &Assets::GlobalTexturePool::GetInstance()->GetDescriptorManager(),
             &scene.GetSceneBufferDescriptorSetManager()
         };
 

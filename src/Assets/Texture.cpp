@@ -321,7 +321,7 @@ namespace Assets
 
         const std::vector<Vulkan::DescriptorBinding> storageDescriptorBindings =
         {
-            {0, k_max_bindless_resources, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_ALL},
+            {0, k_max_bindless_resources, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
         };
         storageDescriptorSetManager_.reset(new Vulkan::DescriptorSetManager(device, storageDescriptorBindings, 1, true));
 

@@ -30,14 +30,14 @@ namespace Assets
 #define float4x4 mat4
 #define uint8_t4_packed uint
 #define half4 glm::detail::hdata
+#define public
+#define bool uint32_t
 	
 	#include "../assets/shaders/common/BasicTypes.slang"
+	#include "../assets/shaders/common/BindlessTexture.slang"
 
-	#define RT_ACCUMLATE_DIFFUSE 0
-	#define RT_SINGLE_DIFFUSE 1
-	#define RT_MINIGBUFFER 2
-	#define RT_PREV_DEPTHBUFFER 10
-
+#undef public
+#undef bool
 #undef half4
 #undef float3
 #undef float4

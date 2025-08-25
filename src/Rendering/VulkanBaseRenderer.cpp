@@ -404,6 +404,7 @@ namespace Vulkan
         indexingFeatures.shaderSampledImageArrayNonUniformIndexing = true;
         indexingFeatures.descriptorBindingPartiallyBound = true;
         indexingFeatures.descriptorBindingSampledImageUpdateAfterBind = true;
+        indexingFeatures.descriptorBindingStorageImageUpdateAfterBind = true;
         indexingFeatures.descriptorBindingVariableDescriptorCount = true;
 
 
@@ -568,10 +569,23 @@ namespace Vulkan
             descriptorSets.UpdateDescriptors(i, descriptorWrites);
         }
 
-        globalTexturePool_->BindStorageTexture(RT_ACCUMLATE_DIFFUSE, rtPrevDepth->GetImageView());
-        globalTexturePool_->BindStorageTexture(RT_SINGLE_DIFFUSE, rtPrevDepth->GetImageView());
-        globalTexturePool_->BindStorageTexture(RT_MINIGBUFFER, rtVisibility->GetImageView());
-        globalTexturePool_->BindStorageTexture(RT_PREV_DEPTHBUFFER, rtPrevDepth->GetImageView());
+        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_ACCUMLATE_DIFFUSE, rtAccumlatedDiffuse->GetImageView());
+        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_SINGLE_DIFFUSE, rtOutputDiffuse->GetImageView());
+        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_MINIGBUFFER, rtVisibility->GetImageView());
+        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_OBJEDCTID_0, rtObject0->GetImageView());
+        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_OBJEDCTID_1, rtObject1->GetImageView());
+        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_MOTIONVECTOR, rtMotionVector_->GetImageView());
+        
+        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_ALBEDO, rtAlbedo_->GetImageView());
+        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_NORMAL, rtNormal_->GetImageView());
+        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_SHADER_TIMER, rtShaderTimer_->GetImageView());
+        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_DENOISED, rtDenoised->GetImageView());
+        
+        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_PREV_DEPTHBUFFER, rtPrevDepth->GetImageView());
+
+        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_ACCUMLATE_SPECULAR, rtAccumlatedSpecular->GetImageView());
+        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_SINGLE_SPECULAR, rtOutputSpecular->GetImageView());
+        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_ACCUMLATE_ALBEDO, rtAccumlatedAlbedo_->GetImageView());
     }
 
     void VulkanBaseRenderer::CreateSwapChain()

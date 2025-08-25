@@ -1,7 +1,5 @@
 import Common;
 
-[[vk::binding(0, 0)]] RWTexture2D<float> StorageTextureArray[];
-
 [[vk::push_constant]]
 ConstantBuffer<GPUScene> gpuScene;
 
@@ -18,8 +16,7 @@ bool IsOccluded(float3 min, float3 max, float4x4 wvp)
     corners[6] = float3(min.x, max.y, max.z);
     corners[7] = float3(max.x, max.y, max.z);
     
-    uint2 screenSize;
-    StorageTextureArray[0].GetDimensions(screenSize.x, screenSize.y);
+    uint2 screenSize = Bindless.GetStorageTextureDimensions(Bindless.RT_PREV_DEPTHBUFFER);
     
     int occludedCount = 0;
     
@@ -45,7 +42,7 @@ bool IsOccluded(float3 min, float3 max, float4x4 wvp)
             return false;
         }
         
-        float previousDepth = StorageTextureArray[0][pixelCoord];
+        float previousDepth = Bindless.GetStorageTexture(Bindless.RT_PREV_DEPTHBUFFER, pixelCoord);
         float currentDepth = ndc.z- 0.00001;
         
         // 如果当前点被遮挡
@@ -61,8 +58,7 @@ bool IsOccludedVolume(float3 min, float3 max, float4x4 wvp)
     const int GRID_SIZE = 6;
     const float GRID_SIZE_MINUS_ONE = GRID_SIZE - 1;
 
-    uint2 screenSize;
-    StorageTextureArray[0].GetDimensions(screenSize.x, screenSize.y);
+    uint2 screenSize = Bindless.GetStorageTextureDimensions(Bindless.RT_PREV_DEPTHBUFFER);
 
     // 在AABB内均匀分布4x4x4的检测点
     for (int x = 0; x < GRID_SIZE; x++)
@@ -102,7 +98,7 @@ bool IsOccludedVolume(float3 min, float3 max, float4x4 wvp)
                 }
 
                 // 深度测试
-                float previousDepth = StorageTextureArray[0][pixelCoord];
+                float previousDepth = Bindless.GetStorageTexture(Bindless.RT_PREV_DEPTHBUFFER, pixelCoord);
                 float currentDepth = ndc.z - 0.0001; // 添加小的偏移避免Z-fighting
 
                 // 如果当前点被遮挡

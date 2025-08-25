@@ -568,7 +568,10 @@ namespace Vulkan
             descriptorSets.UpdateDescriptors(i, descriptorWrites);
         }
 
-        globalTexturePool_->BindStorageTexture(0, rtPrevDepth->GetImageView());
+        globalTexturePool_->BindStorageTexture(RT_ACCUMLATE_DIFFUSE, rtPrevDepth->GetImageView());
+        globalTexturePool_->BindStorageTexture(RT_SINGLE_DIFFUSE, rtPrevDepth->GetImageView());
+        globalTexturePool_->BindStorageTexture(RT_MINIGBUFFER, rtVisibility->GetImageView());
+        globalTexturePool_->BindStorageTexture(RT_PREV_DEPTHBUFFER, rtPrevDepth->GetImageView());
     }
 
     void VulkanBaseRenderer::CreateSwapChain()

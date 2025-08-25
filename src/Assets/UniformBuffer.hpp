@@ -33,6 +33,11 @@ namespace Assets
 	
 	#include "../assets/shaders/common/BasicTypes.slang"
 
+	#define RT_ACCUMLATE_DIFFUSE 0
+	#define RT_SINGLE_DIFFUSE 1
+	#define RT_MINIGBUFFER 2
+	#define RT_PREV_DEPTHBUFFER 10
+
 #undef half4
 #undef float3
 #undef float4

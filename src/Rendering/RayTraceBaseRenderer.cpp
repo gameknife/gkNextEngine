@@ -148,9 +148,8 @@ namespace Vulkan::RayTracing
 
     void RayTraceBaseRenderer::DeleteSwapChain()
     {
-        Vulkan::VulkanBaseRenderer::DeleteSwapChain();
-        
         directLightGenPipeline_.reset();
+        Vulkan::VulkanBaseRenderer::DeleteSwapChain();
     }
 
     void RayTraceBaseRenderer::AfterRenderCmd()

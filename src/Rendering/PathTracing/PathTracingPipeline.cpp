@@ -15,54 +15,18 @@
 
 namespace Vulkan::RayTracing
 {
-    PathTracingPipeline::PathTracingPipeline(const SwapChain& swapChain,
-        const TopLevelAccelerationStructure& accelerationStructure,
-        const VulkanBaseRenderer& baseRenderer,
-        const std::vector<Assets::UniformBuffer>& uniformBuffers, const Assets::Scene& scene):PipelineBase(swapChain)
+    PathTracingPipeline::PathTracingPipeline(const SwapChain& swapChain):PipelineBase(swapChain)
     {
          // Create descriptor pool/sets.
         const auto& device = swapChain.Device();
-        const std::vector<DescriptorBinding> descriptorBindings =
-        {
-            {0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-            {1, 1, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_COMPUTE_BIT},
-        };
-        descriptorSetManager_.reset(new DescriptorSetManager(device, descriptorBindings, uniformBuffers.size()));
-
-        auto& descriptorSets = descriptorSetManager_->DescriptorSets();
-        for (uint32_t i = 0; i != swapChain.Images().size(); ++i)
-        {
-             // Top level acceleration structure.
-            const auto accelerationStructureHandle = accelerationStructure.Handle();
-            VkWriteDescriptorSetAccelerationStructureKHR structureInfo = {};
-            structureInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
-            structureInfo.pNext = nullptr;
-            structureInfo.accelerationStructureCount = 1;
-            structureInfo.pAccelerationStructures = &accelerationStructureHandle;
-
-            // Uniform buffer
-            VkDescriptorBufferInfo uniformBufferInfo = {};
-            uniformBufferInfo.buffer = uniformBuffers[i].Buffer().Handle();
-            uniformBufferInfo.range = VK_WHOLE_SIZE;
-
-            std::vector<VkWriteDescriptorSet> descriptorWrites =
-            {
-                descriptorSets.Bind(i, 0, uniformBufferInfo),
-                descriptorSets.Bind(i, 1, structureInfo),
-            };
-
-            descriptorSets.UpdateDescriptors(i, descriptorWrites);
-        }
-
+        
         VkPushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
         pushConstantRange.offset = 0;
         pushConstantRange.size = sizeof(Assets::GPUScene);
 
         std::vector<DescriptorSetManager*> managers = {
-            &Assets::GlobalTexturePool::GetInstance()->GetDescriptorManager(),
-            descriptorSetManager_.get(),
-            &scene.GetSceneBufferDescriptorSetManager()
+            &Assets::GlobalTexturePool::GetInstance()->GetDescriptorManager()
         };
 
         pipelineLayout_.reset(new class PipelineLayout(device, managers, 1,

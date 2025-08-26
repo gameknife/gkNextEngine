@@ -66,7 +66,7 @@ namespace Vulkan::RayTracing
     void PathTracingRenderer::CreateSwapChain(const VkExtent2D& extent)
     {
         CreateOutputImage(extent);
-        rayTracingPipeline_.reset(new PathTracingPipeline(SwapChain(), GetBaseRender<RayTraceBaseRenderer>().TLAS()[0], baseRender_, UniformBuffers(), GetScene()));
+        rayTracingPipeline_.reset(new PathTracingPipeline(SwapChain()));
         accumulatePipeline_.reset(new PipelineCommon::AccumulatePipeline(SwapChain(), baseRender_, baseRender_.rtOutputDiffuse->GetImageView(), rtPingPong0->GetImageView(), baseRender_.rtAccumlatedDiffuse->GetImageView(), UniformBuffers(), GetScene()));
         accumulatePipelineSpec_.reset(new PipelineCommon::AccumulatePipeline(SwapChain(),baseRender_, baseRender_.rtOutputSpecular->GetImageView(), rtPingPong1->GetImageView(), baseRender_.rtAccumlatedSpecular->GetImageView(), UniformBuffers(), GetScene()));
         accumulatePipelineAlbedo_.reset(new PipelineCommon::AccumulatePipeline(SwapChain(), baseRender_, baseRender_.rtAlbedo_->GetImageView(), rtPingPong3->GetImageView(), baseRender_.rtAccumlatedAlbedo_->GetImageView(), UniformBuffers(), GetScene()));

@@ -30,11 +30,7 @@ namespace Vulkan::RayTracing
 	public:
 		VULKAN_NON_COPIABLE(PathTracingPipeline)
 		PathTracingPipeline(
-			const SwapChain& swapChain,
-			const TopLevelAccelerationStructure& accelerationStructure,
-			const VulkanBaseRenderer& baseRenderer,
-			const std::vector<Assets::UniformBuffer>& uniformBuffers,
-			const Assets::Scene& scene);
+			const SwapChain& swapChain);
 	};
 	
 }

@@ -22,7 +22,7 @@ SoftwareModernRenderer::~SoftwareModernRenderer()
 	
 void SoftwareModernRenderer::CreateSwapChain(const VkExtent2D& extent)
 {
-	deferredShadingPipeline_.reset(new ShadingPipeline(SwapChain(), baseRender_, UniformBuffers(), GetScene()));
+	deferredShadingPipeline_.reset(new PipelineCommon::ZeroBindPipeline(SwapChain(), "assets/shaders/Core.SwModern.comp.slang.spv"));
 	composePipeline_.reset(new Vulkan::PipelineCommon::SimpleComposePipeline(SwapChain(), baseRender_.rtAccumlatedDiffuse->GetImageView(), UniformBuffers()));
 }
 	
@@ -40,10 +40,7 @@ void SoftwareModernRenderer::Render(VkCommandBuffer commandBuffer, uint32_t imag
 		SCOPED_GPU_TIMER("shadingpass");
 		
 		// cs shading pass
-		VkDescriptorSet denoiserDescriptorSets[] = {deferredShadingPipeline_->DescriptorSet(imageIndex)};
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, deferredShadingPipeline_->Handle());
-		deferredShadingPipeline_->PipelineLayout().BindDescriptorSets(commandBuffer, imageIndex);
-		
+		deferredShadingPipeline_->BindPipeline(commandBuffer, GetScene(), imageIndex);
 		vkCmdDispatch(commandBuffer, SwapChain().RenderExtent().width / 8, SwapChain().RenderExtent().height / 8, 1);	
 
 		// copy to swap-buffer

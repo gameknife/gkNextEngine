@@ -7,6 +7,7 @@ DescriptorSetLayout::DescriptorSetLayout(const Device& device, const std::vector
 	device_(device)
 {
 	std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
+	std::vector<VkDescriptorBindingFlags> bindlessBindingFlags;
 
 	for (const auto& binding : descriptorBindings)
 	{
@@ -19,6 +20,13 @@ DescriptorSetLayout::DescriptorSetLayout(const Device& device, const std::vector
 		layoutBindings.push_back(b);
 	}
 
+	for ( int i = 0; i < layoutBindings.size() - 1; ++i )
+	{
+		bindlessBindingFlags.push_back( VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT );
+	}
+	bindlessBindingFlags.push_back(VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT |
+		VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT);
+
 	VkDescriptorSetLayoutCreateInfo layoutInfo = {};
 	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 	layoutInfo.bindingCount = static_cast<uint32_t>(layoutBindings.size());
@@ -29,10 +37,8 @@ DescriptorSetLayout::DescriptorSetLayout(const Device& device, const std::vector
 		VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT, nullptr
 	};
 	
-	VkDescriptorBindingFlags bindless_flags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT |
-		VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT;
-	extended_info.bindingCount = 1;
-	extended_info.pBindingFlags = &bindless_flags;
+	extended_info.bindingCount = layoutInfo.bindingCount;
+	extended_info.pBindingFlags = bindlessBindingFlags.data();
 	
 	if( bindless )
 	{

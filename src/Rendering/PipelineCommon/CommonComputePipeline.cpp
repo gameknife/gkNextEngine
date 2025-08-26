@@ -33,8 +33,7 @@ namespace Vulkan::PipelineCommon
 			&Assets::GlobalTexturePool::GetInstance()->GetDescriptorManager()
 		};
 
-		pipelineLayout_.reset(new class PipelineLayout(device, managers, 1,
-													   &pushConstantRange, 1));
+		pipelineLayout_.reset(new class PipelineLayout(device, managers, 1, &pushConstantRange, 1));
 		
 		const ShaderModule denoiseShader(device, shaderfile);
         
@@ -47,7 +46,15 @@ namespace Vulkan::PipelineCommon
 			&pipelineCreateInfo,NULL, &pipeline_),shaderfile);
 	}
 
-    AccumulatePipeline::AccumulatePipeline(const SwapChain& swapChain, const VulkanBaseRenderer& baseRender, 
+	void ZeroBindPipeline::BindPipeline(VkCommandBuffer commandBuffer, const Assets::Scene& scene, uint32_t imageIndex)
+	{
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, Handle());
+		PipelineLayout().BindDescriptorSets(commandBuffer, 0);
+		vkCmdPushConstants(commandBuffer, PipelineLayout().Handle(), VK_SHADER_STAGE_COMPUTE_BIT,
+						   0, sizeof(Assets::GPUScene), &(scene.FetchGPUScene(imageIndex)));
+	}
+
+	AccumulatePipeline::AccumulatePipeline(const SwapChain& swapChain, const VulkanBaseRenderer& baseRender, 
 	                                       const ImageView& sourceImageView, const ImageView& prevImageView, const ImageView& targetImageView,
 	                                       const std::vector<Assets::UniformBuffer>& uniformBuffers,
 	                                       const Assets::Scene& scene): PipelineBase(swapChain)

@@ -37,6 +37,8 @@ namespace Vulkan::PipelineCommon
 	public:
 		VULKAN_NON_COPIABLE(ZeroBindPipeline)
 		ZeroBindPipeline(const SwapChain& swapChain, const char* shaderfile);
+
+		void BindPipeline(VkCommandBuffer commandBuffer, const Assets::Scene& scene, uint32_t imageIndex);
 	};
 	
 	class AccumulatePipeline : public PipelineBase

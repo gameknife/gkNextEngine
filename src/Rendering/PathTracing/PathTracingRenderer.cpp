@@ -103,12 +103,7 @@ namespace Vulkan::RayTracing
         // Execute ray tracing shaders.
         {
             SCOPED_GPU_TIMER("rt pass");
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, rayTracingPipeline_->Handle());
-            rayTracingPipeline_->PipelineLayout().BindDescriptorSets(commandBuffer, 0);
-            
-            vkCmdPushConstants(commandBuffer, rayTracingPipeline_->PipelineLayout().Handle(), VK_SHADER_STAGE_COMPUTE_BIT,
-                               0, sizeof(Assets::GPUScene), &(GetScene().FetchGPUScene(imageIndex)));
-            
+            rayTracingPipeline_->BindPipeline(commandBuffer, GetScene(), imageIndex);
             vkCmdDispatch(commandBuffer, Utilities::Math::GetSafeDispatchCount(SwapChain().RenderExtent().width, 8),
                           Utilities::Math::GetSafeDispatchCount(SwapChain().RenderExtent().height, 8), 1);
 

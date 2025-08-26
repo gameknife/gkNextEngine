@@ -311,6 +311,7 @@ namespace Assets
         gpuScene_.Lights = lightBuffer_->GetDeviceAddress();
         gpuScene_.Cubes = ambientCubeBuffer_->GetDeviceAddress();
         gpuScene_.Voxels = farAmbientCubeBuffer_->GetDeviceAddress();
+        gpuScene_.Pages = pageIndexBuffer_->GetDeviceAddress();
         gpuScene_.HDRSHs = hdrSHBuffer_->GetDeviceAddress();
         gpuScene_.IndirectDrawCommands = indirectDrawBuffer_->GetDeviceAddress();
         gpuScene_.GPUDrivenStats = gpuDrivenStatsBuffer_->GetDeviceAddress();

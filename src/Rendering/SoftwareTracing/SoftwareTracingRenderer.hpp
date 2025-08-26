@@ -39,7 +39,7 @@ namespace Vulkan::ModernDeferred
 		void Render(VkCommandBuffer commandBuffer, uint32_t imageIndex) override;
 
 	private:
-		std::unique_ptr<class ShadingPipeline> deferredShadingPipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindPipeline> deferredShadingPipeline_;
 		std::unique_ptr<PipelineCommon::AccumulatePipeline> accumulatePipeline_;
 		std::unique_ptr<PipelineCommon::AccumulatePipeline> accumulatePipelineSpec_;
 		std::unique_ptr<PipelineCommon::AccumulatePipeline> accumulatePipelineAlbedo_;

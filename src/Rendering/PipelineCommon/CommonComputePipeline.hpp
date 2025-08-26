@@ -32,6 +32,13 @@ namespace Vulkan::RayTracing
 
 namespace Vulkan::PipelineCommon
 {
+	class ZeroBindPipeline : public PipelineBase
+	{
+	public:
+		VULKAN_NON_COPIABLE(ZeroBindPipeline)
+		ZeroBindPipeline(const SwapChain& swapChain, const char* shaderfile);
+	};
+	
 	class AccumulatePipeline : public PipelineBase
 	{
 	public:

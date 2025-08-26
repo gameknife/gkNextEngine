@@ -5,11 +5,9 @@
 #include "Vulkan/PipelineLayout.hpp"
 #include "Vulkan/SingleTimeCommands.hpp"
 #include "Vulkan/SwapChain.hpp"
-#include "Assets/Texture.hpp"
 #include "Utilities/Math.hpp"
 #include "Vulkan/RenderImage.hpp"
 #include "Rendering/PipelineCommon/CommonComputePipeline.hpp"
-#include "Rendering/PathTracing/PathTracingPipeline.hpp"
 
 #include <chrono>
 #include <numeric>
@@ -66,7 +64,7 @@ namespace Vulkan::RayTracing
     void PathTracingRenderer::CreateSwapChain(const VkExtent2D& extent)
     {
         CreateOutputImage(extent);
-        rayTracingPipeline_.reset(new PathTracingPipeline(SwapChain()));
+        rayTracingPipeline_.reset(new PipelineCommon::ZeroBindPipeline( SwapChain(), "assets/shaders/Core.PathTracing.comp.slang.spv"));
         accumulatePipeline_.reset(new PipelineCommon::AccumulatePipeline(SwapChain(), baseRender_, baseRender_.rtOutputDiffuse->GetImageView(), rtPingPong0->GetImageView(), baseRender_.rtAccumlatedDiffuse->GetImageView(), UniformBuffers(), GetScene()));
         accumulatePipelineSpec_.reset(new PipelineCommon::AccumulatePipeline(SwapChain(),baseRender_, baseRender_.rtOutputSpecular->GetImageView(), rtPingPong1->GetImageView(), baseRender_.rtAccumlatedSpecular->GetImageView(), UniformBuffers(), GetScene()));
         accumulatePipelineAlbedo_.reset(new PipelineCommon::AccumulatePipeline(SwapChain(), baseRender_, baseRender_.rtAlbedo_->GetImageView(), rtPingPong3->GetImageView(), baseRender_.rtAccumlatedAlbedo_->GetImageView(), UniformBuffers(), GetScene()));

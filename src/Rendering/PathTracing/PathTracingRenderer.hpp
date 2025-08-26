@@ -14,6 +14,7 @@ namespace Vulkan
 		class AccumulatePipeline;
 		class FinalComposePipeline;
 		class RayCastPipeline;
+		class ZeroBindPipeline;
 	}
 
 	class CommandBuffers;
@@ -54,7 +55,7 @@ namespace Vulkan::RayTracing
 		void CreateOutputImage(const VkExtent2D& extent);
 
 		// individual textures
-		std::unique_ptr<PathTracingPipeline> rayTracingPipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindPipeline> rayTracingPipeline_;
 		std::unique_ptr<PipelineCommon::FinalComposePipeline> composePipelineNonDenoiser_;
 
 		std::unique_ptr<PipelineCommon::AccumulatePipeline> accumulatePipeline_;

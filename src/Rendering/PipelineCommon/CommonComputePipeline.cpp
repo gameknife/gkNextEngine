@@ -19,10 +19,38 @@
 
 namespace Vulkan::PipelineCommon
 {
+	ZeroBindPipeline::ZeroBindPipeline(const SwapChain& swapChain, const char* shaderfile):PipelineBase(swapChain)
+	{
+		// Create descriptor pool/sets.
+		const auto& device = swapChain.Device();
+        
+		VkPushConstantRange pushConstantRange{};
+		pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+		pushConstantRange.offset = 0;
+		pushConstantRange.size = sizeof(Assets::GPUScene);
+
+		std::vector<DescriptorSetManager*> managers = {
+			&Assets::GlobalTexturePool::GetInstance()->GetDescriptorManager()
+		};
+
+		pipelineLayout_.reset(new class PipelineLayout(device, managers, 1,
+													   &pushConstantRange, 1));
+		
+		const ShaderModule denoiseShader(device, shaderfile);
+        
+		VkComputePipelineCreateInfo pipelineCreateInfo = {};
+		pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+		pipelineCreateInfo.stage = denoiseShader.CreateShaderStage(VK_SHADER_STAGE_COMPUTE_BIT);
+		pipelineCreateInfo.layout = pipelineLayout_->Handle();
+
+		Check(vkCreateComputePipelines(device.Handle(), VK_NULL_HANDLE,1,
+			&pipelineCreateInfo,NULL, &pipeline_),shaderfile);
+	}
+
     AccumulatePipeline::AccumulatePipeline(const SwapChain& swapChain, const VulkanBaseRenderer& baseRender, 
-                                           const ImageView& sourceImageView, const ImageView& prevImageView, const ImageView& targetImageView,
-                                           const std::vector<Assets::UniformBuffer>& uniformBuffers,
-                                           const Assets::Scene& scene): PipelineBase(swapChain)
+	                                       const ImageView& sourceImageView, const ImageView& prevImageView, const ImageView& targetImageView,
+	                                       const std::vector<Assets::UniformBuffer>& uniformBuffers,
+	                                       const Assets::Scene& scene): PipelineBase(swapChain)
     {
         // Create descriptor pool/sets.
         const auto& device = swapChain.Device();

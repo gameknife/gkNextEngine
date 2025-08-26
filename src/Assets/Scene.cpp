@@ -220,7 +220,7 @@ namespace Assets
             model.FreeMemory();
         }
         
-        int flags = supportRayTracing ? (VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) : VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        int flags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
         int rtxFlags = supportRayTracing ? VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR : 0;
 
         Vulkan::BufferUtil::CreateDeviceBuffer(commandPool, "Vertices", VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | rtxFlags | flags, vertices, vertexBuffer_, vertexBufferMemory_);
@@ -315,7 +315,6 @@ namespace Assets
         gpuScene_.HDRSHs = hdrSHBuffer_->GetDeviceAddress();
         gpuScene_.IndirectDrawCommands = indirectDrawBuffer_->GetDeviceAddress();
         gpuScene_.GPUDrivenStats = gpuDrivenStatsBuffer_->GetDeviceAddress();
-
         gpuScene_.TLAS = NextEngine::GetInstance()->TryGetGPUAccelerationStructureAddress();
 
         return gpuScene_;

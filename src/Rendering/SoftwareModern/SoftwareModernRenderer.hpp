@@ -9,8 +9,6 @@
 #include <vector>
 #include <memory>
 
-#include "Rendering/SoftwareTracing/SoftwareTracingPipeline.hpp"
-
 namespace Vulkan
 {
 	class RenderImage;

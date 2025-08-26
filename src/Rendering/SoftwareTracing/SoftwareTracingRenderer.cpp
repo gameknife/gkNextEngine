@@ -1,5 +1,4 @@
 #include "SoftwareTracingRenderer.hpp"
-#include "SoftwareTracingPipeline.hpp"
 
 #include "Vulkan/FrameBuffer.hpp"
 #include "Vulkan/PipelineLayout.hpp"

@@ -85,7 +85,7 @@ namespace NextRenderer
 
                     ptr->RegisterLogicRenderer(Vulkan::ERT_ModernDeferred);
                     ptr->RegisterLogicRenderer(Vulkan::ERT_LegacyDeferred);
-                    ptr->RegisterLogicRenderer(Vulkan::ERT_VoxelTracing);
+                    //ptr->RegisterLogicRenderer(Vulkan::ERT_VoxelTracing);
                     ptr->SwitchLogicRenderer(static_cast<Vulkan::ERendererType>(rendererType));
                     return ptr;    
                 }
@@ -93,12 +93,12 @@ namespace NextRenderer
         }
         // fallback renderer
         auto fallbackptr =  new Vulkan::VulkanBaseRenderer(window, presentMode, enableValidationLayers);
-        fallbackptr->RegisterLogicRenderer(Vulkan::ERT_ModernDeferred);
+        //fallbackptr->RegisterLogicRenderer(Vulkan::ERT_ModernDeferred);
         fallbackptr->RegisterLogicRenderer(Vulkan::ERT_LegacyDeferred);
-        fallbackptr->RegisterLogicRenderer(Vulkan::ERT_VoxelTracing);
-        if( rendererType != Vulkan::ERT_ModernDeferred && rendererType != Vulkan::ERT_LegacyDeferred )
+        //fallbackptr->RegisterLogicRenderer(Vulkan::ERT_VoxelTracing);
+        //if( rendererType != Vulkan::ERT_ModernDeferred && rendererType != Vulkan::ERT_LegacyDeferred )
         {
-            rendererType = Vulkan::ERT_ModernDeferred;
+            rendererType = Vulkan::ERT_LegacyDeferred;
         }
         fallbackptr->SwitchLogicRenderer(static_cast<Vulkan::ERendererType>(rendererType));
         return fallbackptr;

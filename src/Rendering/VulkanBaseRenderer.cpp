@@ -34,7 +34,6 @@
 #include <fmt/format.h>
 
 #include "Options.hpp"
-#include "HardwareTracing/HardwareTracingRenderer.hpp"
 #include "SoftwareModern/SoftwareModernRenderer.hpp"
 #include "SoftwareTracing/SoftwareTracingRenderer.hpp"
 #include "PathTracing/PathTracingRenderer.hpp"
@@ -632,7 +631,7 @@ namespace Vulkan
         simpleComposePipeline_.reset( new PipelineCommon::SimpleComposePipeline(SwapChain(), rtDenoised->GetImageView(), UniformBuffers()));
         bufferClearPipeline_.reset(new PipelineCommon::BufferClearPipeline(*swapChain_, *this));
         softAmbientCubeGenPipeline_.reset( new PipelineCommon::ZeroBindPipeline(*swapChain_, "assets/shaders/Bake.SwAmbientCube.comp.slang.spv"));
-        gpuCullPipeline_.reset(new PipelineCommon::GPUCullPipeline(*swapChain_, *this, uniformBuffers_, GetScene()));
+        gpuCullPipeline_.reset(new PipelineCommon::ZeroBindPipeline(*swapChain_, "assets/shaders/Task.GpuCull.comp.slang.spv"));
         visualDebuggerPipeline_.reset(new PipelineCommon::VisualDebuggerPipeline(*swapChain_, *this, uniformBuffers_));
 
         // 逻辑Renderer
@@ -787,11 +786,7 @@ namespace Vulkan
                 0, nullptr
             );
 
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, gpuCullPipeline_->Handle());
-            gpuCullPipeline_->PipelineLayout().BindDescriptorSets(commandBuffer, 0);
-            
-            vkCmdPushConstants(commandBuffer, gpuCullPipeline_->PipelineLayout().Handle(), VK_SHADER_STAGE_COMPUTE_BIT,
-                               0, sizeof(Assets::GPUScene), &(GetScene().FetchGPUScene(imageIndex)));
+            gpuCullPipeline_->BindPipeline(commandBuffer, GetScene(), imageIndex);
 
             uint32_t groupCount = GetScene().GetIndirectDrawBatchCount() / 64 + 1;
             vkCmdDispatch(commandBuffer, groupCount, 1, 1);
@@ -1071,9 +1066,6 @@ namespace Vulkan
         case ERendererType::ERT_PathTracing:
             logicRenderers_[type] = std::make_unique<RayTracing::PathTracingRenderer>(*this);
             break;
-        case ERendererType::ERT_Hybrid:
-            logicRenderers_[type] = std::make_unique<HybridDeferred::HardwareTracingRenderer>(*this);
-            break;
         case ERendererType::ERT_ModernDeferred:
             logicRenderers_[type] = std::make_unique<ModernDeferred::SoftwareTracingRenderer>(*this);
             break;
@@ -1112,10 +1104,6 @@ namespace Vulkan
                     rendererName = "PathTracing";
                     folderName = "PT-";
                     break;
-                case ERendererType::ERT_Hybrid:
-                    rendererName = "HybridDeferred";
-                    folderName = "HT-";
-                    break;
                 case ERendererType::ERT_ModernDeferred:
                     rendererName = "ModernDeferred";
                     folderName = "ST-";
@@ -1153,9 +1141,6 @@ namespace Vulkan
                     {
                     case ERendererType::ERT_PathTracing:
                         pushConst = glm::uvec4(SwapChain().Extent().width / 2, SwapChain().Extent().height / 2, SwapChain().Extent().width, SwapChain().Extent().height);
-                        break;
-                    case ERendererType::ERT_Hybrid:
-                        pushConst = glm::uvec4(0, SwapChain().Extent().height / 2, SwapChain().Extent().width, SwapChain().Extent().height);
                         break;
                     case ERendererType::ERT_ModernDeferred:
                         pushConst = glm::uvec4(SwapChain().Extent().width / 2, 0, SwapChain().Extent().width, SwapChain().Extent().height);

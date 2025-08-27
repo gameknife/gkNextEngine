@@ -1,5 +1,4 @@
 #include "SoftwareModernRenderer.hpp"
-#include "SoftwareModernPipeline.hpp"
 #include "Vulkan/PipelineLayout.hpp"
 #include "Vulkan/RenderPass.hpp"
 #include "Vulkan/SwapChain.hpp"
@@ -61,7 +60,7 @@ Vulkan::VoxelTracing::VoxelTracingRenderer::~VoxelTracingRenderer()
 
 void Vulkan::VoxelTracing::VoxelTracingRenderer::CreateSwapChain(const VkExtent2D& extent)
 {
-	deferredShadingPipeline_.reset(new ShadingPipeline(SwapChain(), baseRender_, UniformBuffers(), GetScene()));
+	deferredShadingPipeline_.reset(new PipelineCommon::ZeroBindPipeline(SwapChain(), "assets/shaders/Core.VoxelTracing.comp.slang.spv"));
 	composePipeline_.reset(new Vulkan::PipelineCommon::SimpleComposePipeline(SwapChain(), baseRender_.rtAccumlatedDiffuse->GetImageView(), UniformBuffers()));
 }
 
@@ -78,9 +77,8 @@ void Vulkan::VoxelTracing::VoxelTracingRenderer::Render(VkCommandBuffer commandB
 	{
 		SCOPED_GPU_TIMER("shadingpass");
 
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, deferredShadingPipeline_->Handle());
-		deferredShadingPipeline_->PipelineLayout().BindDescriptorSets(commandBuffer, imageIndex);
-		vkCmdDispatch(commandBuffer, SwapChain().RenderExtent().width / 8, SwapChain().RenderExtent().height / 8, 1);	
+		deferredShadingPipeline_->BindPipeline(commandBuffer, GetScene(), imageIndex);
+		vkCmdDispatch(commandBuffer, SwapChain().RenderExtent().width / 8, SwapChain().RenderExtent().height / 8, 1);
 
 		// copy to swap-buffer
 		baseRender_.rtDenoised->InsertBarrier(commandBuffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL,

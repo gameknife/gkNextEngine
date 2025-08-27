@@ -7,7 +7,7 @@ Options::Options(const int argc, const char* argv[])
 {	
 	cxxopts::Options options("options", "");
 	options.add_options()
-		("renderer",  "Renderer Type (0 = PathTracing, 1 = HybridTracing, 2 = SoftTracing, 3 = PureAmbient, 4 = VoxelTracing).", cxxopts::value<uint32_t>(RendererType)->default_value("0"))
+		("renderer",  "Renderer Type (0 = PathTracing, 1 = SoftTracing, 2 = PureAmbient, 3 = VoxelTracing).", cxxopts::value<uint32_t>(RendererType)->default_value("0"))
 		("samples", "The number of ray samples per pixel.", cxxopts::value<uint32_t>(Samples)->default_value("8"))
 		("bounces", "The general limit number of bounces per ray.", cxxopts::value<uint32_t>(Bounces)->default_value("5"))
 		("max-bounces", "The maximum bounces per ray.", cxxopts::value<uint32_t>(MaxBounces)->default_value("10"))

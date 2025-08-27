@@ -49,7 +49,6 @@ namespace Vulkan
 	enum ERendererType
 	{
 		ERT_PathTracing,
-		ERT_Hybrid,
 		ERT_ModernDeferred,
 		ERT_LegacyDeferred,
 		ERT_VoxelTracing,
@@ -219,7 +218,7 @@ namespace Vulkan
 		std::vector<class Fence> inFlightFences_;
 
 		std::unique_ptr<PipelineCommon::ZeroBindPipeline> softAmbientCubeGenPipeline_;
-		std::unique_ptr<PipelineCommon::GPUCullPipeline> gpuCullPipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindPipeline> gpuCullPipeline_;
 		
 		std::unique_ptr<Image> screenShotImage_;
 		std::unique_ptr<DeviceMemory> screenShotImageMemory_;

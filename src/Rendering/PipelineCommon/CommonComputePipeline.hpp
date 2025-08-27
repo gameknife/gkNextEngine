@@ -95,36 +95,6 @@ namespace Vulkan::PipelineCommon
 			const std::vector<Assets::UniformBuffer>& uniformBuffers);
 	};
 
-	class HardwareGPULightBakePipeline  : public PipelineBase
-	{
-	public:
-		VULKAN_NON_COPIABLE(HardwareGPULightBakePipeline)
-	
-		HardwareGPULightBakePipeline(
-			const SwapChain& swapChain,
-			const DeviceProcedures& deviceProcedures,
-			const RayTracing::TopLevelAccelerationStructure& accelerationStructure,
-			const std::vector<Assets::UniformBuffer>& uniformBuffers,
-			const Assets::Scene& scene);
-	};
-
-	class SoftwareGPULightBakePipeline  : public PipelineBase
-	{
-	public:
-		VULKAN_NON_COPIABLE(SoftwareGPULightBakePipeline)
-		SoftwareGPULightBakePipeline(
-			const SwapChain& swapChain,
-			const std::vector<Assets::UniformBuffer>& uniformBuffers,
-			const Assets::Scene& scene);
-	};
-
-	class GPUCullPipeline  : public PipelineBase
-	{
-	public:
-		VULKAN_NON_COPIABLE(GPUCullPipeline)
-		GPUCullPipeline(const SwapChain& swapChain, const VulkanBaseRenderer& baseRender, const std::vector<Assets::UniformBuffer>& uniformBuffers, const Assets::Scene& scene);
-	};
-
 	class VisibilityPipeline : public PipelineBase
 	{
 	public:

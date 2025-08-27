@@ -1,10 +1,17 @@
-import Common;
+public struct UniformBufferObject
+{
+    public float4x4 ModelView;
+    public float4x4 Projection;
+    public float4x4 ModelViewInverse;
+    public float4x4 ProjectionInverse;
+    public float4x4 ViewProjection;
+    public float4x4 PrevViewProjection;
+    public float4x4 ViewProjectionUnJit;
+    public float4x4 PrevViewProjectionUnJit;
+}
 
 [[vk::binding(0, 0)]]
 ConstantBuffer<UniformBufferObject> Camera;
-
-[[vk::binding(1, 0)]]
-StructuredBuffer<Material> Materials;
 
 struct PushConsts
 {

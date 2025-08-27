@@ -1,4 +1,5 @@
 import Common;
+import Bindless;
 
 [[vk::push_constant]]
 ConstantBuffer<GPUScene> gpuScene;

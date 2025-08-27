@@ -317,6 +317,8 @@ namespace Assets
         gpuScene_.GPUDrivenStats = gpuDrivenStatsBuffer_->GetDeviceAddress();
         gpuScene_.TLAS = NextEngine::GetInstance()->TryGetGPUAccelerationStructureAddress();
 
+        gpuScene_.SwapChainIndex = imageIndex;
+
         return gpuScene_;
     }
 

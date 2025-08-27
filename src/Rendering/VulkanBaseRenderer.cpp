@@ -585,6 +585,11 @@ namespace Vulkan
         globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_ACCUMLATE_SPECULAR, rtAccumlatedSpecular->GetImageView());
         globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_SINGLE_SPECULAR, rtOutputSpecular->GetImageView());
         globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_ACCUMLATE_ALBEDO, rtAccumlatedAlbedo_->GetImageView());
+
+        for (uint32_t i = 0; i != swapChain_->Images().size(); i++)
+        {
+            globalTexturePool_->BindStorageTexture( Assets::Bindless::RT_SWAPCHAIN0 + i, *swapChain_->ImageViews()[i] );
+        }
     }
 
     void VulkanBaseRenderer::CreateSwapChain()
@@ -629,10 +634,10 @@ namespace Vulkan
         visibilityPipeline_.reset(new PipelineCommon::VisibilityPipeline(SwapChain(), DepthBuffer(), UniformBuffers(), GetScene()));
         visibilityFrameBuffer_.reset(new FrameBuffer(swapChain_->RenderExtent(), rtVisibility->GetImageView(), visibilityPipeline_->RenderPass()));
         simpleComposePipeline_.reset( new PipelineCommon::SimpleComposePipeline(SwapChain(), rtDenoised->GetImageView(), UniformBuffers()));
-        bufferClearPipeline_.reset(new PipelineCommon::BufferClearPipeline(*swapChain_, *this));
+        bufferClearPipeline_.reset(new PipelineCommon::ZeroBindCustomPushConstantPipeline(*swapChain_, "assets/shaders/Util.BufferClear.comp.slang.spv", 4));
         softAmbientCubeGenPipeline_.reset( new PipelineCommon::ZeroBindPipeline(*swapChain_, "assets/shaders/Bake.SwAmbientCube.comp.slang.spv"));
         gpuCullPipeline_.reset(new PipelineCommon::ZeroBindPipeline(*swapChain_, "assets/shaders/Task.GpuCull.comp.slang.spv"));
-        visualDebuggerPipeline_.reset(new PipelineCommon::VisualDebuggerPipeline(*swapChain_, *this, uniformBuffers_));
+        visualDebuggerPipeline_.reset(new PipelineCommon::ZeroBindCustomPushConstantPipeline(*swapChain_, "assets/shaders/Util.VisualDebugger.comp.slang.spv", 20));
 
         // 逻辑Renderer
         for (auto& logicRenderer : logicRenderers_)
@@ -815,24 +820,12 @@ namespace Vulkan
         {
             SCOPED_GPU_TIMER("clear pass");
 
-            VkImageSubresourceRange subresourceRange = {};
-            subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            subresourceRange.baseMipLevel = 0;
-            subresourceRange.levelCount = 1;
-            subresourceRange.baseArrayLayer = 0;
-            subresourceRange.layerCount = 1;
+            SwapChain().InsertBarrierToWrite(commandBuffer, imageIndex);
 
-            ImageMemoryBarrier::Insert(commandBuffer, SwapChain().Images()[imageIndex], subresourceRange, 0,
-                                       VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                                       VK_IMAGE_LAYOUT_GENERAL);
-
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, bufferClearPipeline_->Handle());
-            bufferClearPipeline_->PipelineLayout().BindDescriptorSets(commandBuffer, imageIndex);
+            bufferClearPipeline_->BindPipeline(commandBuffer, &imageIndex);
             vkCmdDispatch(commandBuffer, SwapChain().Extent().width / 8, SwapChain().Extent().height / 8, 1);
 
-            ImageMemoryBarrier::Insert(commandBuffer, SwapChain().Images()[imageIndex], subresourceRange,
-                                       VK_ACCESS_TRANSFER_WRITE_BIT,
-                                       0, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+            SwapChain().InsertBarrierToPresent(commandBuffer, imageIndex);
         }
 
         {
@@ -1289,14 +1282,8 @@ namespace Vulkan
             SCOPED_GPU_TIMER("visual debugger");
             SwapChain().InsertBarrierToWrite(commandBuffer, imageIndex);
 
-            glm::uvec4 pushConst = glm::uvec4(SwapChain().OutputOffset().x, SwapChain().OutputOffset().y, SwapChain().OutputExtent().width, SwapChain().OutputExtent().height);
-
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, visualDebuggerPipeline_->Handle());
-            visualDebuggerPipeline_->PipelineLayout().BindDescriptorSets(commandBuffer, imageIndex);
-
-            vkCmdPushConstants(commandBuffer, visualDebuggerPipeline_->PipelineLayout().Handle(),
-                                 VK_SHADER_STAGE_COMPUTE_BIT,
-                                 0, sizeof(glm::uvec4), &pushConst);
+            std::array<uint32_t, 5> pushConst = { imageIndex, uint32_t(SwapChain().OutputOffset().x), uint32_t(SwapChain().OutputOffset().y), uint32_t(SwapChain().OutputExtent().width), uint32_t(SwapChain().OutputExtent().height) };
+            visualDebuggerPipeline_->BindPipeline(commandBuffer, pushConst.data());
             
             vkCmdDispatch(commandBuffer, SwapChain().Extent().width / 8, SwapChain().Extent().height / 8, 1);
 

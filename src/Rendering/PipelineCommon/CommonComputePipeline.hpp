@@ -41,6 +41,17 @@ namespace Vulkan::PipelineCommon
 		void BindPipeline(VkCommandBuffer commandBuffer, const Assets::Scene& scene, uint32_t imageIndex);
 	};
 	
+	class ZeroBindCustomPushConstantPipeline : public PipelineBase
+	{
+	public:
+		VULKAN_NON_COPIABLE(ZeroBindCustomPushConstantPipeline)
+		ZeroBindCustomPushConstantPipeline(const SwapChain& swapChain, const char* shaderfile, uint32_t pushConstantSize);
+		void BindPipeline(VkCommandBuffer commandBuffer, const void* data);
+
+	private:
+		uint32_t pushConstantSize_;
+	};
+
 	class AccumulatePipeline : public PipelineBase
 	{
 	public:
@@ -72,26 +83,6 @@ namespace Vulkan::PipelineCommon
 		SimpleComposePipeline(
 			const SwapChain& swapChain, 
 			const ImageView& sourceImageView,
-			const std::vector<Assets::UniformBuffer>& uniformBuffers);
-	};
-
-	class BufferClearPipeline  : public PipelineBase
-	{
-	public:
-		VULKAN_NON_COPIABLE(BufferClearPipeline)
-	
-		BufferClearPipeline(
-			const SwapChain& swapChain, const VulkanBaseRenderer& baseRender);
-	};
-
-	class VisualDebuggerPipeline : public PipelineBase
-	{
-	public:
-		VULKAN_NON_COPIABLE(VisualDebuggerPipeline)
-	
-		VisualDebuggerPipeline(
-			const SwapChain& swapChain,
-			const VulkanBaseRenderer& baseRender,
 			const std::vector<Assets::UniformBuffer>& uniformBuffers);
 	};
 

@@ -30,6 +30,7 @@ namespace Vulkan
 		class VisibilityPipeline;
 		class GraphicsPipeline;
 		class ZeroBindPipeline;
+		class ZeroBindCustomPushConstantPipeline;
 	}
 
 	class RenderImage;
@@ -199,9 +200,9 @@ namespace Vulkan
 		std::vector<Assets::UniformBuffer> uniformBuffers_;
 		
 		std::unique_ptr<PipelineCommon::GraphicsPipeline> wireframePipeline_;
-		std::unique_ptr<PipelineCommon::BufferClearPipeline> bufferClearPipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindCustomPushConstantPipeline> bufferClearPipeline_;
 		std::unique_ptr<PipelineCommon::SimpleComposePipeline> simpleComposePipeline_;
-		std::unique_ptr<PipelineCommon::VisualDebuggerPipeline> visualDebuggerPipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindCustomPushConstantPipeline> visualDebuggerPipeline_;
 		std::unique_ptr<PipelineCommon::VisibilityPipeline> visibilityPipeline_;
 		
 		std::unique_ptr<class DepthBuffer> depthBuffer_;

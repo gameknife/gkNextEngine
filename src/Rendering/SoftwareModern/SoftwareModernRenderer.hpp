@@ -1,12 +1,9 @@
 #pragma once
 
 #include "Vulkan/FrameBuffer.hpp"
-#include "Vulkan/WindowConfig.hpp"
-#include "Vulkan/Image.hpp"
 #include "Rendering/VulkanBaseRenderer.hpp"
 #include "Rendering/RayTraceBaseRenderer.hpp"
 
-#include <vector>
 #include <memory>
 
 namespace Vulkan

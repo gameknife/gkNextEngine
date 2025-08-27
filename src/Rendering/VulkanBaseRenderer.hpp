@@ -22,11 +22,7 @@ namespace Vulkan
 {
 	namespace PipelineCommon
 	{
-		class BufferClearPipeline;
-		class SoftwareGPULightBakePipeline;
 		class SimpleComposePipeline;
-		class GPUCullPipeline;
-		class VisualDebuggerPipeline;
 		class VisibilityPipeline;
 		class GraphicsPipeline;
 		class ZeroBindPipeline;

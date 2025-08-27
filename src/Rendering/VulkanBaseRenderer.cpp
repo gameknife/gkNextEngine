@@ -52,53 +52,53 @@ namespace StreamlineWrapper
    void Init(VkDevice device, VkInstance instance, VkPhysicalDevice physicalDevice, uint32_t computeQueueIdx, uint32_t computeQueueFamily, uint32_t graphicsQueueIdx, uint32_t graphicsQueueFamily)
    {
 #if WITH_STREAMLINE
-       sl::Preferences pref{};
-       pref.showConsole = false; // for debugging, set to false in production
-       pref.logLevel = sl::LogLevel::eOff;
-       pref.pathsToPlugins = {}; // change this if Streamline plugins are not located next to the executable
-       pref.numPathsToPlugins = 0; // change this if Streamline plugins are not located next to the executable
-       pref.pathToLogsAndData = {}; // change this to enable logging to a file
-       //pref.logMessageCallback = myLogMessageCallback; // highly recommended to track warning/error messages in your callback
-       //pref.applicationId = myId; // Provided by NVDA, required if using NGX components (DLSS 2/3)
-       //pref.engineType = myEngine; // If using UE or Unity
-       //pref.engineVersion = myEngineVersion; // Optional version
-       //pref.projectId = myProjectId; // Optional project id
-       if(SL_FAILED(res, slInit(pref)))
-       {
-           // Handle error, check the logs
-           if(res == sl::Result::eErrorDriverOutOfDate) { /* inform user */}
-           // and so on ...
-       }
-
-       sl::VulkanInfo slVulkanInfo{};
-       slVulkanInfo.device = device;
-       slVulkanInfo.instance = instance;
-       slVulkanInfo.physicalDevice = physicalDevice;
-       slVulkanInfo.computeQueueIndex = computeQueueIdx;
-       slVulkanInfo.computeQueueFamily = computeQueueFamily;
-       slVulkanInfo.graphicsQueueIndex = graphicsQueueIdx;
-       slVulkanInfo.graphicsQueueFamily = graphicsQueueFamily;
-       // slVulkanInfo.opticalFlowQueueIndex = vulkanInfo.opticalFlowQueueIndex;
-       // slVulkanInfo.opticalFlowQueueFamily = vulkanInfo.opticalFlowQueueFamily;
-       // slVulkanInfo.useNativeOpticalFlowMode = vulkanInfo.useNativeOpticalFlowMode;
-       // slVulkanInfo.computeQueueCreateFlags = vulkanInfo.computeQueueCreateFlags;
-       // slVulkanInfo.graphicsQueueCreateFlags = vulkanInfo.graphicsQueueCreateFlags;
-       // slVulkanInfo.opticalFlowQueueCreateFlags = vulkanInfo.opticalFlowQueueCreateFlags;
-
-       if(SL_FAILED(res, slSetVulkanInfo(slVulkanInfo)))
-       {
-           // Handle error, check the logs
-       }
+       // sl::Preferences pref{};
+       // pref.showConsole = false; // for debugging, set to false in production
+       // pref.logLevel = sl::LogLevel::eOff;
+       // pref.pathsToPlugins = {}; // change this if Streamline plugins are not located next to the executable
+       // pref.numPathsToPlugins = 0; // change this if Streamline plugins are not located next to the executable
+       // pref.pathToLogsAndData = {}; // change this to enable logging to a file
+       // //pref.logMessageCallback = myLogMessageCallback; // highly recommended to track warning/error messages in your callback
+       // //pref.applicationId = myId; // Provided by NVDA, required if using NGX components (DLSS 2/3)
+       // //pref.engineType = myEngine; // If using UE or Unity
+       // //pref.engineVersion = myEngineVersion; // Optional version
+       // //pref.projectId = myProjectId; // Optional project id
+       // if(SL_FAILED(res, slInit(pref)))
+       // {
+       //     // Handle error, check the logs
+       //     if(res == sl::Result::eErrorDriverOutOfDate) { /* inform user */}
+       //     // and so on ...
+       // }
+       //
+       // sl::VulkanInfo slVulkanInfo{};
+       // slVulkanInfo.device = device;
+       // slVulkanInfo.instance = instance;
+       // slVulkanInfo.physicalDevice = physicalDevice;
+       // slVulkanInfo.computeQueueIndex = computeQueueIdx;
+       // slVulkanInfo.computeQueueFamily = computeQueueFamily;
+       // slVulkanInfo.graphicsQueueIndex = graphicsQueueIdx;
+       // slVulkanInfo.graphicsQueueFamily = graphicsQueueFamily;
+       // // slVulkanInfo.opticalFlowQueueIndex = vulkanInfo.opticalFlowQueueIndex;
+       // // slVulkanInfo.opticalFlowQueueFamily = vulkanInfo.opticalFlowQueueFamily;
+       // // slVulkanInfo.useNativeOpticalFlowMode = vulkanInfo.useNativeOpticalFlowMode;
+       // // slVulkanInfo.computeQueueCreateFlags = vulkanInfo.computeQueueCreateFlags;
+       // // slVulkanInfo.graphicsQueueCreateFlags = vulkanInfo.graphicsQueueCreateFlags;
+       // // slVulkanInfo.opticalFlowQueueCreateFlags = vulkanInfo.opticalFlowQueueCreateFlags;
+       //
+       // if(SL_FAILED(res, slSetVulkanInfo(slVulkanInfo)))
+       // {
+       //     // Handle error, check the logs
+       // }
 #endif
    }
 
     void Shutdown()
    {
 #if WITH_STREAMLINE
-       if(SL_FAILED(res, slShutdown()))
-       {
-           // Handle error, check the logs
-       }
+       // if(SL_FAILED(res, slShutdown()))
+       // {
+       //     // Handle error, check the logs
+       // }
 #endif
    }
 }
@@ -109,42 +109,7 @@ namespace
     {
         fmt::print("Vulkan SDK Header Version: {}\n\n", VK_HEADER_VERSION);
     }
-
-    void PrintVulkanInstanceInformation(const Vulkan::VulkanBaseRenderer& application, const bool benchmark)
-    {
-        if (benchmark)
-        {
-            return;
-        }
-
-        puts("Vulkan Instance Extensions:");
-
-        for (const auto& extension : application.Extensions())
-        {
-            fmt::print("- {} ({})\n", extension.extensionName, to_string(Vulkan::Version(extension.specVersion)));
-        }
-
-        puts("");
-    }
-
-    void PrintVulkanLayersInformation(const Vulkan::VulkanBaseRenderer& application, const bool benchmark)
-    {
-        if (benchmark)
-        {
-            return;
-        }
-
-        puts("Vulkan Instance Layers:");
-
-        for (const auto& layer : application.Layers())
-        {
-            fmt::print("- {} ({}) : {}\n", layer.layerName, to_string(Vulkan::Version(layer.specVersion)),
-                       layer.description);
-        }
-
-        puts("");
-    }
-
+    
     void PrintVulkanDevices(const Vulkan::VulkanBaseRenderer& application)
     {
         puts("Vulkan Devices:");
@@ -175,11 +140,10 @@ namespace
             const auto extensions = Vulkan::GetEnumerateVector(device, static_cast<const char*>(nullptr),
                                                                vkEnumerateDeviceExtensionProperties);
             const auto hasRayTracing = std::any_of(extensions.begin(), extensions.end(),
-                                                   [](const VkExtensionProperties& extension)
-                                                   {
-                                                       return strcmp(extension.extensionName,
-                                                                     VK_KHR_RAY_QUERY_EXTENSION_NAME) == 0;
-                                                   });
+               [](const VkExtensionProperties& extension)
+               {
+                   return strcmp(extension.extensionName,VK_KHR_RAY_QUERY_EXTENSION_NAME) == 0;
+               });
         }
 
         puts("");
@@ -193,11 +157,10 @@ namespace
             const auto extensions = Vulkan::GetEnumerateVector(device, static_cast<const char*>(nullptr),
                                                                vkEnumerateDeviceExtensionProperties);
             const auto hasRayTracing = std::any_of(extensions.begin(), extensions.end(),
-                                                   [](const VkExtensionProperties& extension)
-                                                   {
-                                                       return strcmp(extension.extensionName,
-                                                                     VK_KHR_RAY_QUERY_EXTENSION_NAME) == 0;
-                                                   });
+               [](const VkExtensionProperties& extension)
+               {
+                   return strcmp(extension.extensionName,VK_KHR_RAY_QUERY_EXTENSION_NAME) == 0;
+               });
 
             SupportRayQuery = SupportRayQuery | hasRayTracing;
         }
@@ -327,8 +290,6 @@ namespace Vulkan
         // setup vulkan
 
         PrintVulkanSdkInformation();
-        //PrintVulkanInstanceInformation(*GApplication, options.Benchmark);
-        //PrintVulkanLayersInformation(*GApplication, options.Benchmark);
         PrintVulkanDevices(*this);
         SetVulkanDevice(*this, GOption->GpuIdx);
         PrintVulkanSwapChainInformation(*this);
@@ -378,7 +339,6 @@ namespace Vulkan
 #if WIN32
         requiredExtensions.insert(requiredExtensions.end(),
                                   {
-                                      // VK_KHR_SHADER_CLOCK is required for heatmap
                                       VK_KHR_SHADER_CLOCK_EXTENSION_NAME
                                   });
 

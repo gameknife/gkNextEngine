@@ -631,7 +631,7 @@ namespace Vulkan
         visibilityFrameBuffer_.reset(new FrameBuffer(swapChain_->RenderExtent(), rtVisibility->GetImageView(), visibilityPipeline_->RenderPass()));
         simpleComposePipeline_.reset( new PipelineCommon::SimpleComposePipeline(SwapChain(), rtDenoised->GetImageView(), UniformBuffers()));
         bufferClearPipeline_.reset(new PipelineCommon::BufferClearPipeline(*swapChain_, *this));
-        softAmbientCubeGenPipeline_.reset( new PipelineCommon::SoftwareGPULightBakePipeline(*swapChain_, uniformBuffers_, GetScene()));
+        softAmbientCubeGenPipeline_.reset( new PipelineCommon::ZeroBindPipeline(*swapChain_, "assets/shaders/Bake.SwAmbientCube.comp.slang.spv"));
         gpuCullPipeline_.reset(new PipelineCommon::GPUCullPipeline(*swapChain_, *this, uniformBuffers_, GetScene()));
         visualDebuggerPipeline_.reset(new PipelineCommon::VisualDebuggerPipeline(*swapChain_, *this, uniformBuffers_));
 
@@ -1287,25 +1287,14 @@ namespace Vulkan
                 int offsetInCubes = offset * cubesPerGroup;
 
                 
-                VkDescriptorSet DescriptorSets[] = {softAmbientCubeGenPipeline_->DescriptorSet(0)};
-                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, softAmbientCubeGenPipeline_->Handle());
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
-                                        softAmbientCubeGenPipeline_->PipelineLayout().Handle(), 0, 1, DescriptorSets, 0,
-                                        nullptr);
+                softAmbientCubeGenPipeline_->BindPipeline(commandBuffer, GetScene(), imageIndex);
 
-                // bind the global bindless set
-                static const uint32_t k_bindless_set = 1;
-                VkDescriptorSet GlobalDescriptorSets[] = {Assets::GlobalTexturePool::GetInstance()->DescriptorSet(0)};
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
-                                        softAmbientCubeGenPipeline_->PipelineLayout().Handle(), k_bindless_set,
-                                        1, GlobalDescriptorSets, 0, nullptr);
-
-                glm::uvec2 pushConst = {offsetInCubes, 0};
-
-                vkCmdPushConstants(commandBuffer, softAmbientCubeGenPipeline_->PipelineLayout().Handle(),
-                                   VK_SHADER_STAGE_COMPUTE_BIT,
-                                   0, sizeof(glm::uvec2), &pushConst);
-
+                Assets::GPUScene gpuScene = GetScene().FetchGPUScene(imageIndex);
+                gpuScene.custom_data_0 = offsetInCubes;
+                    
+                vkCmdPushConstants(commandBuffer, softAmbientCubeGenPipeline_->PipelineLayout().Handle(), VK_SHADER_STAGE_COMPUTE_BIT,
+                                   0, sizeof(Assets::GPUScene), &gpuScene);
+                
                 vkCmdDispatch(commandBuffer, groupPerFrame, 1, 1);
             }
         }

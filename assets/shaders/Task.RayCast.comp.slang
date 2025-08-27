@@ -33,7 +33,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
     RayCastContext context = RayIO[dispatchThreadId.x];
 
-    FHardwareRayTracer tracer = { Vertices, Indices, Materials, Offsets, NodeProxies, Scene };
+    FHardwareRayTracerV2 tracer;
 
     Vertex hitVertex;
     NodeProxy hitNode;

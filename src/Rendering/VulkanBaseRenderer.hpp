@@ -29,6 +29,7 @@ namespace Vulkan
 		class VisualDebuggerPipeline;
 		class VisibilityPipeline;
 		class GraphicsPipeline;
+		class ZeroBindPipeline;
 	}
 
 	class RenderImage;
@@ -217,7 +218,7 @@ namespace Vulkan
 		std::vector<class Semaphore> renderFinishedSemaphores_;
 		std::vector<class Fence> inFlightFences_;
 
-		std::unique_ptr<PipelineCommon::SoftwareGPULightBakePipeline> softAmbientCubeGenPipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindPipeline> softAmbientCubeGenPipeline_;
 		std::unique_ptr<PipelineCommon::GPUCullPipeline> gpuCullPipeline_;
 		
 		std::unique_ptr<Image> screenShotImage_;

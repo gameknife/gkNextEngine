@@ -143,7 +143,7 @@ namespace Vulkan::RayTracing
     void RayTraceBaseRenderer::CreateSwapChain()
     {
         Vulkan::VulkanBaseRenderer::CreateSwapChain();
-        directLightGenPipeline_.reset(new PipelineCommon::HardwareGPULightBakePipeline(SwapChain(), Device().GetDeviceProcedures(), topAs_[0], UniformBuffers(), GetScene()));
+        directLightGenPipeline_.reset(new PipelineCommon::ZeroBindPipeline(SwapChain(), "assets/shaders/Bake.HwAmbientCube.comp.slang.spv"));
     }
 
     void RayTraceBaseRenderer::DeleteSwapChain()
@@ -259,21 +259,13 @@ namespace Vulkan::RayTracing
                     int offset = frame * groupPerFrame;
                     int offsetInCubes = offset * cubesPerGroup;
                 
-                    VkDescriptorSet DescriptorSets[] = {directLightGenPipeline_->DescriptorSet(0)};
-                    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, directLightGenPipeline_->Handle());
-                    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
-                                            directLightGenPipeline_->PipelineLayout().Handle(), 0, 1, DescriptorSets, 0, nullptr);
+                    directLightGenPipeline_->BindPipeline(commandBuffer, GetScene(), imageIndex);
 
-                    // bind the global bindless set
-                    static const uint32_t k_bindless_set = 1;
-                    VkDescriptorSet GlobalDescriptorSets[] = { Assets::GlobalTexturePool::GetInstance()->DescriptorSet(0) };
-                    vkCmdBindDescriptorSets( commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, directLightGenPipeline_->PipelineLayout().Handle(), k_bindless_set,
-                                             1, GlobalDescriptorSets, 0, nullptr );
-                
-                    glm::uvec2 pushConst = { offsetInCubes, 0 };
-
+                    Assets::GPUScene gpuScene = GetScene().FetchGPUScene(imageIndex);
+                    gpuScene.custom_data_0 = offsetInCubes;
+                    
                     vkCmdPushConstants(commandBuffer, directLightGenPipeline_->PipelineLayout().Handle(), VK_SHADER_STAGE_COMPUTE_BIT,
-                                       0, sizeof(glm::uvec2), &pushConst);
+                                       0, sizeof(Assets::GPUScene), &gpuScene);
             
                     vkCmdDispatch(commandBuffer, groupPerFrame, 1, 1);
                 }

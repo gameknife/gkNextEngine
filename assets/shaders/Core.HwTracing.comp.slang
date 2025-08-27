@@ -32,77 +32,77 @@ import Common;
 [numthreads(8, 8, 1)]
 void main(uint3 DTid : SV_DispatchThreadID)
 {
-    START_SHADERCLOCK()
-    // compose with renderer and tracer
-    FVisibilityBufferRayCaster rayCaster = { Camera, Vertices, NodeProxies, Offsets, MiniGBuffer, Indices };
-    FHardwareRayTracer tracer = { Vertices, Indices, Materials, Offsets, NodeProxies, Scene };
-    FHardwareDirectIlluminator dIlluminator = { Camera, Scene };
-    FHybridRenderer renderer = { Camera, Vertices, Indices, Materials, Offsets, NodeProxies, Cubes, Voxels, HDRSHs };
-    FPathTracingRenderer PTRenderer = { Camera, Vertices, Indices, Materials, Offsets, NodeProxies, Cubes, Voxels, HDRSHs };
+    // START_SHADERCLOCK()
+    // // compose with renderer and tracer
+    // FVisibilityBufferRayCaster rayCaster = { Camera, Vertices, NodeProxies, Offsets, MiniGBuffer, Indices };
+    // FHardwareRayTracer tracer = { Vertices, Indices, Materials, Offsets, NodeProxies, Scene };
+    // FHardwareDirectIlluminator dIlluminator = { Camera, Scene };
+    // FHybridRenderer renderer = { Camera, Vertices, Indices, Materials, Offsets, NodeProxies, Cubes, Voxels, HDRSHs };
+    // FPathTracingRenderer PTRenderer = { Camera, Vertices, Indices, Materials, Offsets, NodeProxies, Cubes, Voxels, HDRSHs };
 
-    int2 ipos = int2(DTid.xy);
-    int2 size;
-    uint4 RandomSeed = InitRandomSeed(ipos.x, ipos.y, Camera.TotalFrames);
-    MiniGBuffer.GetDimensions(size.x, size.y);
+    // int2 ipos = int2(DTid.xy);
+    // int2 size;
+    // uint4 RandomSeed = InitRandomSeed(ipos.x, ipos.y, Camera.TotalFrames);
+    // MiniGBuffer.GetDimensions(size.x, size.y);
 
-    // 第一次Tracing
-    Vertex hitVertex;
-    NodeProxy hitNode;
-    float3 rayDir;
-    float rayLength = 0.0;
-    float2 pixelOffset = float2(0, 0);
-    if (!rayCaster.TracePrimaryRay(ipos, size, RandomSeed, hitVertex, hitNode, rayDir, rayLength, pixelOffset))
-    {
-        float4 skyColor = Camera.HasSky ? Common.SampleIBL(Camera.SkyIdx, rayDir, Camera.SkyRotation, 0, HDRSHs, TextureArray) * Camera.SkyIntensity : float4(0, 0, 0, 0);
-        OutImage[ipos] = skyColor;
-        OutMotionVector[ipos] = float4(0, 0, 0, 0);
-        OutAlbedoBuffer[ipos] = float4(1, 1, 1, 1);
-        OutNormalBuffer[ipos] = float4(0, 1, 0, 1);
-        ObjectId0[ipos] = 65535;
+    // // 第一次Tracing
+    // Vertex hitVertex;
+    // NodeProxy hitNode;
+    // float3 rayDir;
+    // float rayLength = 0.0;
+    // float2 pixelOffset = float2(0, 0);
+    // if (!rayCaster.TracePrimaryRay(ipos, size, RandomSeed, hitVertex, hitNode, rayDir, rayLength, pixelOffset))
+    // {
+    //     float4 skyColor = Camera.HasSky ? Common.SampleIBL(Camera.SkyIdx, rayDir, Camera.SkyRotation, 0, HDRSHs, TextureArray) * Camera.SkyIntensity : float4(0, 0, 0, 0);
+    //     OutImage[ipos] = skyColor;
+    //     OutMotionVector[ipos] = float4(0, 0, 0, 0);
+    //     OutAlbedoBuffer[ipos] = float4(1, 1, 1, 1);
+    //     OutNormalBuffer[ipos] = float4(0, 1, 0, 1);
+    //     ObjectId0[ipos] = 65535;
 
-        END_SHADERCLOCK(ipos)
-        return;
-    }
+    //     END_SHADERCLOCK(ipos)
+    //     return;
+    // }
 
-    // MotionVector解析
-    float2 motion = Common.CalculateMotionVector(Camera, hitNode, hitVertex);
-    OutMotionVector[ipos] = float4(motion * size, 0, 0);
+    // // MotionVector解析
+    // float2 motion = Common.CalculateMotionVector(Camera, hitNode, hitVertex);
+    // OutMotionVector[ipos] = float4(motion * size, 0, 0);
 
-    // GBuffer解析
-    float4 albedo = float4(0, 0, 0, 1);
-    float4 illuminaceColor = float4(0, 0, 0, 1);
-    float4 reflectColor = float4(0, 0, 0, 1);
-    float4 gbuffer = float4(0, 0, 0, 0);
-    Material material = Materials[hitVertex.MaterialIndex];
-    Common.FetchGBuffer(hitVertex, material, hitNode, rayDir, TextureArray, albedo, gbuffer);
-    OutAlbedoBuffer[ipos] = albedo;
-    OutNormalBuffer[ipos] = gbuffer;
+    // // GBuffer解析
+    // float4 albedo = float4(0, 0, 0, 1);
+    // float4 illuminaceColor = float4(0, 0, 0, 1);
+    // float4 reflectColor = float4(0, 0, 0, 1);
+    // float4 gbuffer = float4(0, 0, 0, 0);
+    // Material material = Materials[hitVertex.MaterialIndex];
+    // Common.FetchGBuffer(hitVertex, material, hitNode, rayDir, TextureArray, albedo, gbuffer);
+    // OutAlbedoBuffer[ipos] = albedo;
+    // OutNormalBuffer[ipos] = gbuffer;
 
-    // write to NDC depth
-    float4 clipPos = mul(Camera.ViewProjection, float4(hitVertex.Position, 1.0));
-    float ndcDepth = clipPos.z / clipPos.w;
-    OutDepthBuffer[ipos] = ndcDepth;
+    // // write to NDC depth
+    // float4 clipPos = mul(Camera.ViewProjection, float4(hitVertex.Position, 1.0));
+    // float ndcDepth = clipPos.z / clipPos.w;
+    // OutDepthBuffer[ipos] = ndcDepth;
 
-    if (material.MaterialModel == MaterialDielectric)
-    {
-        PTRenderer.Render(tracer, dIlluminator, hitVertex, albedo, gbuffer, TextureArray, RandomSeed, illuminaceColor, reflectColor);
-    }
-    else
-    {
-        hitVertex.Position = hitVertex.Position - rayDir * rayLength * 0.0005;
-        renderer.Render(tracer, dIlluminator, hitVertex, albedo, gbuffer, TextureArray, RandomSeed, illuminaceColor, reflectColor);
-    }
+    // if (material.MaterialModel == MaterialDielectric)
+    // {
+    //     PTRenderer.Render(tracer, dIlluminator, hitVertex, albedo, gbuffer, TextureArray, RandomSeed, illuminaceColor, reflectColor);
+    // }
+    // else
+    // {
+    //     hitVertex.Position = hitVertex.Position - rayDir * rayLength * 0.0005;
+    //     renderer.Render(tracer, dIlluminator, hitVertex, albedo, gbuffer, TextureArray, RandomSeed, illuminaceColor, reflectColor);
+    // }
 
-    // 合成
-    float4 outColor = float4(illuminaceColor.rgb, 1);
-    outColor.a = length(pixelOffset);
-    OutImage[ipos] = outColor;
+    // // 合成
+    // float4 outColor = float4(illuminaceColor.rgb, 1);
+    // outColor.a = length(pixelOffset);
+    // OutImage[ipos] = outColor;
 
-    float4 outSpec = float4(reflectColor.rgb, 1);
-    outSpec.a = length(pixelOffset);
-    OutImageSpec[ipos] = outSpec;
+    // float4 outSpec = float4(reflectColor.rgb, 1);
+    // outSpec.a = length(pixelOffset);
+    // OutImageSpec[ipos] = outSpec;
 
-    ObjectId0[ipos] = hitNode.instanceId;
+    // ObjectId0[ipos] = hitNode.instanceId;
 
-    END_SHADERCLOCK(ipos)
+    // END_SHADERCLOCK(ipos)
 }

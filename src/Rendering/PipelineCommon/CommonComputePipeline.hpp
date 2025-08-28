@@ -51,18 +51,6 @@ namespace Vulkan::PipelineCommon
 	private:
 		uint32_t pushConstantSize_;
 	};
-
-	// class AccumulatePipeline : public PipelineBase
-	// {
-	// public:
-	// 	VULKAN_NON_COPIABLE(AccumulatePipeline)
-	// 	
-	// 	AccumulatePipeline(
-	// 		const SwapChain& swapChain, const VulkanBaseRenderer& baseRender,
-	// 		const ImageView& sourceImageView, const ImageView& prevImageView, const ImageView& targetImageView,
-	// 		const std::vector<Assets::UniformBuffer>& uniformBuffers,
-	// 		const Assets::Scene& scene);
-	// };
 	
 	class FinalComposePipeline : public PipelineBase
 	{

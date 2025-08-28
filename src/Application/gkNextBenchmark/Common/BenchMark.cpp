@@ -26,7 +26,7 @@
 BenchMarker::BenchMarker()
 {
     std::time_t now = std::time(nullptr);
-    std::string report_filename = fmt::format("report_{:%d-%m-%Y-%H-%M-%S}.csv", fmt::localtime(now));
+    std::string report_filename = fmt::format("report_{:%d-%m-%Y-%H-%M-%S}.csv", *std::localtime(&now));
 
     benchmarkCsvReportFile.open(report_filename);
     benchmarkCsvReportFile << fmt::format("#,scene,FPS\n");

@@ -241,7 +241,8 @@ void MagicaLegoUserInterface::DrawTitleBar()
                 {
                     std::string localPath = Utilities::FileHelper::GetPlatformFilePath("screenshots");
                     Utilities::FileHelper::EnsureDirectoryExists(Utilities::FileHelper::GetAbsolutePath(localPath));
-                    std::string filename = fmt::format("shot_{:%Y-%m-%d-%H-%M-%S}", fmt::localtime(std::time(nullptr)));
+                    auto time = std::time(nullptr);
+                    std::string filename = fmt::format("shot_{:%Y-%m-%d-%H-%M-%S}", *std::localtime(&time));
                     GetGameInstance()->GetEngine().RequestScreenShot(localPath + "/" + filename);
                 }
                 return false;
@@ -527,7 +528,8 @@ void MagicaLegoUserInterface::DrawHUD()
 
     ImGui::Begin("HUD", nullptr, PANEL_FLAGS | ImGuiWindowFlags_NoBackground);
     ImGui::PushFont(bigFont_);
-    ImGui::TextUnformatted(fmt::format("{:%H:%M}", fmt::localtime(std::time(nullptr))).c_str());
+    auto time = std::time(nullptr);
+    ImGui::TextUnformatted(fmt::format("{:%H:%M}", *std::localtime(&time)).c_str());
     ImGui::PopFont();
     ImGui::Text("%s %d", ICON_FA_SHOE_PRINTS, GetGameInstance()->GetMaxStep());
     if (!GetGameInstance()->IsBGMPaused())
@@ -601,7 +603,8 @@ void MagicaLegoUserInterface::RecordTimeline(bool autoRotate)
     std::string localTempPath = Utilities::FileHelper::GetPlatformFilePath("temps");
     Utilities::FileHelper::EnsureDirectoryExists(Utilities::FileHelper::GetAbsolutePath(localPath));
     Utilities::FileHelper::EnsureDirectoryExists(Utilities::FileHelper::GetAbsolutePath(localTempPath));
-    std::string filename = fmt::format("{}/magicalLego_{:%Y-%m-%d-%H-%M-%S}", localPath, fmt::localtime(std::time(nullptr)));
+    auto time = std::time(nullptr);
+    std::string filename = fmt::format("{}/magicalLego_{:%Y-%m-%d-%H-%M-%S}", localPath, *std::localtime(&time));
     PushLayout(0x0);
     capture_ = true;
     GetGameInstance()->SetCapturing(true);

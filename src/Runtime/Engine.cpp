@@ -589,7 +589,8 @@ void NextEngine::ToggleMaximize()
 
 void NextEngine::RequestScreenShot(std::string filename)
 {
-    std::string screenshot_filename = filename.empty() ? fmt::format("screenshot_{:%Y-%m-%d-%H-%M-%S}", fmt::localtime(std::time(nullptr))) : filename;
+    auto time = std::time(nullptr);
+    std::string screenshot_filename = filename.empty() ? fmt::format("screenshot_{:%Y-%m-%d-%H-%M-%S}", *std::localtime(&time)) : filename;
     SaveScreenShot(screenshot_filename, 0, 0, 0, 0);
 }
 

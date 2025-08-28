@@ -172,6 +172,9 @@ namespace Vulkan
 		std::unique_ptr<RenderImage> rtShaderTimer_;
 		std::unique_ptr<RenderImage> rtAccumlatedSpecular;
 		std::unique_ptr<RenderImage> rtOutputSpecular;
+		std::unique_ptr<RenderImage> rtPrevSingleDiffuse;
+		std::unique_ptr<RenderImage> rtPrevSingleSpecular;
+		std::unique_ptr<RenderImage> rtPrevSingleAlbedo;
 			
 	protected:
 		Assets::UniformBufferObject lastUBO;
@@ -204,7 +207,6 @@ namespace Vulkan
 		std::unique_ptr<class DepthBuffer> depthBuffer_;
 		std::unique_ptr<FrameBuffer> visibilityFrameBuffer_;
 		std::unique_ptr<FrameBuffer> wireframeFramebuffer_;
-		
 		
 		std::unique_ptr<class CommandPool> commandPool_;
 		std::unique_ptr<class CommandPool> commandPool2_;

@@ -486,6 +486,10 @@ namespace Vulkan
         rtShaderTimer_.reset(new RenderImage(Device(), swapChain_->RenderExtent(), VK_FORMAT_R8G8B8A8_UNORM,
                                              VK_IMAGE_TILING_LINEAR, VK_IMAGE_USAGE_STORAGE_BIT, false, "shadertimer"));
 
+        rtPrevSingleDiffuse.reset(new RenderImage(Device(), swapChain_->RenderExtent(), VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT, false, "prevDiffuse"));
+        rtPrevSingleSpecular.reset(new RenderImage(Device(), swapChain_->RenderExtent(), VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT, false, "prevSpecular"));
+        rtPrevSingleAlbedo.reset(new RenderImage(Device(), swapChain_->RenderExtent(), VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, false,"prevAlbedo"));
+
         rtDescriptorSetManager_.reset(new DescriptorSetManager(*device_, {
                                                                    {0, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
                                                                    {1, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
@@ -545,6 +549,10 @@ namespace Vulkan
         globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_ACCUMLATE_SPECULAR, rtAccumlatedSpecular->GetImageView());
         globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_SINGLE_SPECULAR, rtOutputSpecular->GetImageView());
         globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_ACCUMLATE_ALBEDO, rtAccumlatedAlbedo_->GetImageView());
+
+        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_SINGLE_PREV_DIFFUSE, rtPrevSingleDiffuse->GetImageView());
+        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_SINGLE_PREV_SPECULAR, rtPrevSingleSpecular->GetImageView());
+        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_SINGLE_PREV_ALBEDO, rtPrevSingleAlbedo->GetImageView());
 
         for (uint32_t i = 0; i != swapChain_->Images().size(); i++)
         {
@@ -640,6 +648,9 @@ namespace Vulkan
         rtMotionVector_.reset();
         rtShaderTimer_.reset();
         rtPrevDepth.reset();
+        rtPrevSingleDiffuse.reset();
+        rtPrevSingleSpecular.reset();
+        rtPrevSingleAlbedo.reset();
 
         screenShotImageMemory_.reset();
         screenShotImage_.reset();
@@ -1009,6 +1020,12 @@ namespace Vulkan
         rtAccumlatedAlbedo_->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
                                    VK_IMAGE_LAYOUT_GENERAL);
         rtOutputSpecular->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+                                   VK_IMAGE_LAYOUT_GENERAL);
+        rtPrevSingleDiffuse->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+                                   VK_IMAGE_LAYOUT_GENERAL);
+        rtPrevSingleSpecular->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+                                   VK_IMAGE_LAYOUT_GENERAL);
+        rtPrevSingleAlbedo->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
                                    VK_IMAGE_LAYOUT_GENERAL);
     }
 

@@ -2,7 +2,6 @@
 #include "Vulkan/BufferUtil.hpp"
 #include "Vulkan/Image.hpp"
 #include "Vulkan/ImageMemoryBarrier.hpp"
-#include "Vulkan/PipelineLayout.hpp"
 #include "Vulkan/SingleTimeCommands.hpp"
 #include "Vulkan/SwapChain.hpp"
 #include "Utilities/Math.hpp"

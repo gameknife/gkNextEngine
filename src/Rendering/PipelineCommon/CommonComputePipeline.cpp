@@ -1,4 +1,5 @@
 #include "CommonComputePipeline.hpp"
+
 #include "Vulkan/Buffer.hpp"
 #include "Vulkan/DescriptorSetManager.hpp"
 #include "Vulkan/DescriptorPool.hpp"
@@ -7,15 +8,11 @@
 #include "Vulkan/PipelineLayout.hpp"
 #include "Vulkan/ShaderModule.hpp"
 #include "Vulkan/SwapChain.hpp"
+#include "Vulkan/RenderPass.hpp"
+
 #include "Assets/Scene.hpp"
 #include "Assets/UniformBuffer.hpp"
 #include "Assets/Vertex.hpp"
-#include "Utilities/FileHelper.hpp"
-#include "Vulkan/RenderImage.hpp"
-#include "Vulkan/RenderPass.hpp"
-#include "Rendering/VulkanBaseRenderer.hpp"
-#include "Vulkan/RayTracing/DeviceProcedures.hpp"
-#include "Vulkan/RayTracing/TopLevelAccelerationStructure.hpp"
 
 namespace Vulkan::PipelineCommon
 {
@@ -89,59 +86,6 @@ namespace Vulkan::PipelineCommon
 		vkCmdPushConstants(commandBuffer, PipelineLayout().Handle(), VK_SHADER_STAGE_COMPUTE_BIT,0, pushConstantSize_, data);
 	}
 	
-    SimpleComposePipeline::SimpleComposePipeline(const SwapChain& swapChain,
-                                               const ImageView& sourceImageView,
-                                                const std::vector<Assets::UniformBuffer>& uniformBuffers): PipelineBase(swapChain)
-    {
-        // Create descriptor pool/sets.
-        const auto& device = swapChain.Device();
-        const std::vector<DescriptorBinding> descriptorBindings =
-        {
-            {0, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
-            {1, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
-            {2, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-        };
-
-        descriptorSetManager_.reset(new DescriptorSetManager(device, descriptorBindings, swapChain.ImageViews().size()));
-
-        auto& descriptorSets = descriptorSetManager_->DescriptorSets();
-
-        for (uint32_t i = 0; i != swapChain.Images().size(); ++i)
-        {
-            VkDescriptorImageInfo Info0 = {NULL, sourceImageView.Handle(), VK_IMAGE_LAYOUT_GENERAL};
-            VkDescriptorImageInfo Info1 = {NULL, swapChain.ImageViews()[i]->Handle(), VK_IMAGE_LAYOUT_GENERAL};
-            VkDescriptorBufferInfo uniformBufferInfo = {};
-            uniformBufferInfo.buffer = uniformBuffers[i].Buffer().Handle();
-            uniformBufferInfo.range = VK_WHOLE_SIZE;
-            std::vector<VkWriteDescriptorSet> descriptorWrites =
-            {
-                descriptorSets.Bind(i, 0, Info0),
-                descriptorSets.Bind(i, 1, Info1),
-                descriptorSets.Bind(i, 2, uniformBufferInfo),
-            };
-
-            descriptorSets.UpdateDescriptors(i, descriptorWrites);
-        }
-
-        VkPushConstantRange pushConstantRange{};
-        pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-        pushConstantRange.offset = 0;
-        pushConstantRange.size = 16;
-        
-        pipelineLayout_.reset(new class PipelineLayout(device, {descriptorSetManager_.get()}, static_cast<uint32_t>(swapChain.Images().size()), &pushConstantRange, 1));
-        const ShaderModule denoiseShader(device, "assets/shaders/Process.UpScaleFSR.comp.slang.spv");
-
-        VkComputePipelineCreateInfo pipelineCreateInfo = {};
-        pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-        pipelineCreateInfo.stage = denoiseShader.CreateShaderStage(VK_SHADER_STAGE_COMPUTE_BIT);
-        pipelineCreateInfo.layout = pipelineLayout_->Handle();
-
-        Check(vkCreateComputePipelines(device.Handle(), VK_NULL_HANDLE,
-                                       1, &pipelineCreateInfo,
-                                       NULL, &pipeline_),
-              "create deferred shading pipeline");
-    }
-
     VisibilityPipeline::VisibilityPipeline(
         const SwapChain& swapChain,
         const DepthBuffer& depthBuffer,

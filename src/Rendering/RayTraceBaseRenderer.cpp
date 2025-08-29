@@ -5,7 +5,6 @@
 #include "Assets/Model.hpp"
 #include "Assets/Scene.hpp"
 #include "Vulkan/Buffer.hpp"
-#include "Vulkan/BufferUtil.hpp"
 #include "Vulkan/PipelineLayout.hpp"
 #include "Vulkan/SingleTimeCommands.hpp"
 #include <chrono>

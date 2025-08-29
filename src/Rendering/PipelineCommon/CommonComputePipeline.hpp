@@ -45,17 +45,6 @@ namespace Vulkan::PipelineCommon
 	private:
 		uint32_t pushConstantSize_;
 	};
-	
-	class SimpleComposePipeline : public PipelineBase
-	{
-	public:
-		VULKAN_NON_COPIABLE(SimpleComposePipeline)
-	
-		SimpleComposePipeline(
-			const SwapChain& swapChain, 
-			const ImageView& sourceImageView,
-			const std::vector<Assets::UniformBuffer>& uniformBuffers);
-	};
 
 	class VisibilityPipeline : public PipelineBase
 	{

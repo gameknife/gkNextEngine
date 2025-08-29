@@ -1,11 +1,7 @@
 #include "SoftwareModernRenderer.hpp"
-#include "Vulkan/PipelineLayout.hpp"
-#include "Vulkan/RenderPass.hpp"
 #include "Vulkan/SwapChain.hpp"
 #include "Vulkan/Window.hpp"
 #include "Vulkan/RenderImage.hpp"
-#include "Assets/Model.hpp"
-#include "Assets/Scene.hpp"
 
 namespace Vulkan::LegacyDeferred {
 
@@ -22,12 +18,11 @@ SoftwareModernRenderer::~SoftwareModernRenderer()
 void SoftwareModernRenderer::CreateSwapChain(const VkExtent2D& extent)
 {
 	deferredShadingPipeline_.reset(new PipelineCommon::ZeroBindPipeline(SwapChain(), "assets/shaders/Core.SwModern.comp.slang.spv"));
-	composePipeline_.reset(new Vulkan::PipelineCommon::SimpleComposePipeline(SwapChain(), baseRender_.rtAccumlatedDiffuse->GetImageView(), UniformBuffers()));
+	//composePipeline_.reset(new Vulkan::PipelineCommon::SimpleComposePipeline(SwapChain(), baseRender_.rtAccumlatedDiffuse->GetImageView(), UniformBuffers()));
 }
 	
 void SoftwareModernRenderer::DeleteSwapChain()
 {
-	composePipeline_.reset();
 	deferredShadingPipeline_.reset();
 }
 
@@ -61,13 +56,11 @@ Vulkan::VoxelTracing::VoxelTracingRenderer::~VoxelTracingRenderer()
 void Vulkan::VoxelTracing::VoxelTracingRenderer::CreateSwapChain(const VkExtent2D& extent)
 {
 	deferredShadingPipeline_.reset(new PipelineCommon::ZeroBindPipeline(SwapChain(), "assets/shaders/Core.VoxelTracing.comp.slang.spv"));
-	composePipeline_.reset(new Vulkan::PipelineCommon::SimpleComposePipeline(SwapChain(), baseRender_.rtAccumlatedDiffuse->GetImageView(), UniformBuffers()));
 }
 
 void Vulkan::VoxelTracing::VoxelTracingRenderer::DeleteSwapChain()
 {
 	deferredShadingPipeline_.reset();
-	composePipeline_.reset();
 }
 
 void Vulkan::VoxelTracing::VoxelTracingRenderer::Render(VkCommandBuffer commandBuffer, uint32_t imageIndex)

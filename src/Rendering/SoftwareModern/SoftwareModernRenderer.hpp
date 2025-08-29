@@ -34,7 +34,6 @@ namespace Vulkan::LegacyDeferred
 
 	private:
 		std::unique_ptr<Vulkan::PipelineCommon::ZeroBindPipeline> deferredShadingPipeline_;
-		std::unique_ptr<Vulkan::PipelineCommon::SimpleComposePipeline> composePipeline_;
 	};
 
 }
@@ -56,7 +55,6 @@ namespace Vulkan::VoxelTracing
 	private:
 		// just one computer pass is enough
 		std::unique_ptr<Vulkan::PipelineCommon::ZeroBindPipeline> deferredShadingPipeline_;
-		std::unique_ptr<Vulkan::PipelineCommon::SimpleComposePipeline> composePipeline_;
 	};
 
 }

@@ -14,9 +14,6 @@
 #include "Vulkan/Surface.hpp"
 #include "Vulkan/SwapChain.hpp"
 #include "Vulkan/Window.hpp"
-
-#include "Vulkan/DescriptorSetManager.hpp"
-#include "Vulkan/DescriptorSets.hpp"
 #include "Vulkan/Enumerate.hpp"
 #include "Vulkan/ImageMemoryBarrier.hpp"
 #include "Vulkan/RenderImage.hpp"
@@ -24,10 +21,10 @@
 #include "Vulkan/Strings.hpp"
 #include "Vulkan/Version.hpp"
 
-#include "Assets/Model.hpp"
 #include "Assets/Scene.hpp"
 #include "Assets/UniformBuffer.hpp"
 #include "Assets/Texture.hpp"
+
 #include "Utilities/Exception.hpp"
 #include "Utilities/Console.hpp"
 #include <array>
@@ -489,49 +486,7 @@ namespace Vulkan
         rtPrevSingleDiffuse.reset(new RenderImage(Device(), swapChain_->RenderExtent(), VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT, false, "prevDiffuse"));
         rtPrevSingleSpecular.reset(new RenderImage(Device(), swapChain_->RenderExtent(), VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT, false, "prevSpecular"));
         rtPrevSingleAlbedo.reset(new RenderImage(Device(), swapChain_->RenderExtent(), VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, false,"prevAlbedo"));
-
-        rtDescriptorSetManager_.reset(new DescriptorSetManager(*device_, {
-                                                                   {0, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
-                                                                   {1, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
-                                                                   {2, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
-                                                                   {3, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
-                                                                   {4, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
-                                                                   {5, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
-                                                                   {6, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
-                                                                   {7, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
-                                                                   {8, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
-                                                                   {9, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
-                                                                   {10, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
-                                                                    {11, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
-                                                                    {12, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
-                                                                     {13, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT},
-                                                               }, static_cast<uint32_t>(swapChain_->ImageViews().size())));
-
-        auto& descriptorSets = rtDescriptorSetManager_->DescriptorSets();
-
-        for (uint32_t i = 0; i != swapChain_->Images().size(); ++i)
-        {
-            std::vector<VkWriteDescriptorSet> descriptorWrites =
-            {
-                descriptorSets.Bind(i, 0, {NULL, rtAccumlatedDiffuse->GetImageView().Handle(), VK_IMAGE_LAYOUT_GENERAL}),
-                descriptorSets.Bind(i, 1, {NULL, rtOutputDiffuse->GetImageView().Handle(), VK_IMAGE_LAYOUT_GENERAL}),
-                descriptorSets.Bind(i, 2, {NULL, rtVisibility->GetImageView().Handle(), VK_IMAGE_LAYOUT_GENERAL}),
-                descriptorSets.Bind(i, 3, {NULL, rtObject0->GetImageView().Handle(), VK_IMAGE_LAYOUT_GENERAL}),
-                descriptorSets.Bind(i, 4, {NULL, rtObject1->GetImageView().Handle(), VK_IMAGE_LAYOUT_GENERAL}),
-                descriptorSets.Bind(i, 5, {NULL, rtMotionVector_->GetImageView().Handle(), VK_IMAGE_LAYOUT_GENERAL}),
-                descriptorSets.Bind(i, 6, {NULL, rtAlbedo_->GetImageView().Handle(), VK_IMAGE_LAYOUT_GENERAL}),
-                descriptorSets.Bind(i, 7, {NULL, rtNormal_->GetImageView().Handle(), VK_IMAGE_LAYOUT_GENERAL}),
-                descriptorSets.Bind(i, 8, {NULL, rtShaderTimer_->GetImageView().Handle(), VK_IMAGE_LAYOUT_GENERAL}),
-                descriptorSets.Bind(i, 9, {NULL, rtDenoised->GetImageView().Handle(), VK_IMAGE_LAYOUT_GENERAL}),
-                descriptorSets.Bind(i, 10, {NULL, rtPrevDepth->GetImageView().Handle(), VK_IMAGE_LAYOUT_GENERAL}),
-                descriptorSets.Bind(i, 11, {NULL, rtAccumlatedSpecular->GetImageView().Handle(), VK_IMAGE_LAYOUT_GENERAL}),
-                descriptorSets.Bind(i, 12, {NULL, rtOutputSpecular->GetImageView().Handle(), VK_IMAGE_LAYOUT_GENERAL}),
-                descriptorSets.Bind(i, 13, {NULL, rtAccumlatedAlbedo_->GetImageView().Handle(), VK_IMAGE_LAYOUT_GENERAL}),
-            };
-
-            descriptorSets.UpdateDescriptors(i, descriptorWrites);
-        }
-
+        
         globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_ACCUMLATE_DIFFUSE, rtAccumlatedDiffuse->GetImageView());
         globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_SINGLE_DIFFUSE, rtOutputDiffuse->GetImageView());
         globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_MINIGBUFFER, rtVisibility->GetImageView());
@@ -601,7 +556,7 @@ namespace Vulkan
         // 公用Pipeline
         visibilityPipeline_.reset(new PipelineCommon::VisibilityPipeline(SwapChain(), DepthBuffer(), UniformBuffers(), GetScene()));
         visibilityFrameBuffer_.reset(new FrameBuffer(swapChain_->RenderExtent(), rtVisibility->GetImageView(), visibilityPipeline_->RenderPass()));
-        simpleComposePipeline_.reset( new PipelineCommon::SimpleComposePipeline(SwapChain(), rtDenoised->GetImageView(), UniformBuffers()));
+        simpleComposePipeline_.reset( new PipelineCommon::ZeroBindCustomPushConstantPipeline(SwapChain(), "assets/shaders/Process.UpScaleFSR.comp.slang.spv", 20));
         bufferClearPipeline_.reset(new PipelineCommon::ZeroBindCustomPushConstantPipeline(*swapChain_, "assets/shaders/Util.BufferClear.comp.slang.spv", 4));
         softAmbientCubeGenPipeline_.reset( new PipelineCommon::ZeroBindPipeline(*swapChain_, "assets/shaders/Bake.SwAmbientCube.comp.slang.spv"));
         gpuCullPipeline_.reset(new PipelineCommon::ZeroBindPipeline(*swapChain_, "assets/shaders/Task.GpuCull.comp.slang.spv"));
@@ -668,8 +623,6 @@ namespace Vulkan
         imageAvailableSemaphores_.clear();
         depthBuffer_.reset();
         swapChain_.reset();
-
-        rtDescriptorSetManager_.reset();
 
         currentFence = nullptr;
     }
@@ -1058,8 +1011,6 @@ namespace Vulkan
 
     void VulkanBaseRenderer::Render(VkCommandBuffer commandBuffer, const uint32_t imageIndex)
     {
-        glm::uvec4 pushConst = glm::uvec4(SwapChain().OutputOffset().x, SwapChain().OutputOffset().y, SwapChain().OutputExtent().width, SwapChain().OutputExtent().height);
-        
         if (GOption->ReferenceMode)
         {
             // 后面渲染器会很多，这里只渲染加入reference的，并从rtDenoised Resolve到FrameBuffer
@@ -1097,39 +1048,38 @@ namespace Vulkan
                     logicRenderer.second->Render(commandBuffer, imageIndex);
                 }
 
-                {
-                    SCOPED_GPU_TIMER("resolve pass");
-                    SwapChain().InsertBarrierToWrite(commandBuffer, imageIndex);
-
-                    rtDenoised->InsertBarrier(commandBuffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-                                              VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL);
-
-                    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, simpleComposePipeline_->Handle());
-                    simpleComposePipeline_->PipelineLayout().BindDescriptorSets(commandBuffer, imageIndex);
-
-                    switch (logicRenderer.first)
-                    {
-                    case ERendererType::ERT_PathTracing:
-                        pushConst = glm::uvec4(SwapChain().Extent().width / 2, SwapChain().Extent().height / 2, SwapChain().Extent().width, SwapChain().Extent().height);
-                        break;
-                    case ERendererType::ERT_ModernDeferred:
-                        pushConst = glm::uvec4(SwapChain().Extent().width / 2, 0, SwapChain().Extent().width, SwapChain().Extent().height);
-                        break;
-                    case ERendererType::ERT_LegacyDeferred:
-                        pushConst = glm::uvec4(0, 0, SwapChain().Extent().width, SwapChain().Extent().height);
-                        break;
-                    default:
-                        pushConst = glm::uvec4(SwapChain().Extent().width ,SwapChain().Extent().height, SwapChain().Extent().width / 2, SwapChain().Extent().height / 2);
-                        break;
-                    }
-
-                    vkCmdPushConstants(commandBuffer, simpleComposePipeline_->PipelineLayout().Handle(),
-                                       VK_SHADER_STAGE_COMPUTE_BIT,
-                                       0, sizeof(glm::uvec4), &pushConst);
-                    vkCmdDispatch(commandBuffer, SwapChain().RenderExtent().width / 8,
-                                  SwapChain().RenderExtent().height / 8, 1);
-                    SwapChain().InsertBarrierToPresent(commandBuffer, imageIndex);
-                }
+                // {
+                //     SCOPED_GPU_TIMER("resolve pass");
+                //     SwapChain().InsertBarrierToWrite(commandBuffer, imageIndex);
+                //
+                //     rtDenoised->InsertBarrier(commandBuffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+                //                               VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL);
+                //
+                //     std::array<uint32_t, 5> pushConst = { imageIndex, uint32_t(SwapChain().OutputOffset().x), uint32_t(SwapChain().OutputOffset().y), uint32_t(SwapChain().OutputExtent().width), uint32_t(SwapChain().OutputExtent().height) };
+                //     
+                //
+                //     switch (logicRenderer.first)
+                //     {
+                //     case ERendererType::ERT_PathTracing:
+                //         pushConst = glm::uvec4(SwapChain().Extent().width / 2, SwapChain().Extent().height / 2, SwapChain().Extent().width, SwapChain().Extent().height);
+                //         break;
+                //     case ERendererType::ERT_ModernDeferred:
+                //         pushConst = glm::uvec4(SwapChain().Extent().width / 2, 0, SwapChain().Extent().width, SwapChain().Extent().height);
+                //         break;
+                //     case ERendererType::ERT_LegacyDeferred:
+                //         pushConst = glm::uvec4(0, 0, SwapChain().Extent().width, SwapChain().Extent().height);
+                //         break;
+                //     default:
+                //         pushConst = glm::uvec4(SwapChain().Extent().width ,SwapChain().Extent().height, SwapChain().Extent().width / 2, SwapChain().Extent().height / 2);
+                //         break;
+                //     }
+                //
+                //     simpleComposePipeline_->BindPipeline(commandBuffer, pushConst);
+                //   
+                //     vkCmdDispatch(commandBuffer, SwapChain().RenderExtent().width / 8,
+                //                   SwapChain().RenderExtent().height / 8, 1);
+                //     SwapChain().InsertBarrierToPresent(commandBuffer, imageIndex);
+                // }
             }
         }
         else
@@ -1188,14 +1138,10 @@ namespace Vulkan
                 SwapChain().InsertBarrierToWrite(commandBuffer, imageIndex);
                 rtDenoised->InsertBarrier(commandBuffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                                           VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL);
-
-                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, simpleComposePipeline_->Handle());
-                simpleComposePipeline_->PipelineLayout().BindDescriptorSets(commandBuffer, imageIndex);
                 
-                vkCmdPushConstants(commandBuffer, simpleComposePipeline_->PipelineLayout().Handle(),
-                                   VK_SHADER_STAGE_COMPUTE_BIT,
-                                   0, sizeof(glm::uvec4), &pushConst);
-
+                std::array<uint32_t, 5> pushConst = { imageIndex, uint32_t(SwapChain().OutputOffset().x), uint32_t(SwapChain().OutputOffset().y), uint32_t(SwapChain().OutputExtent().width), uint32_t(SwapChain().OutputExtent().height) };
+                simpleComposePipeline_->BindPipeline(commandBuffer, pushConst.data());
+                
                 vkCmdDispatch(commandBuffer, SwapChain().Extent().width / 8, SwapChain().Extent().height / 8, 1);
 
                 SwapChain().InsertBarrierToPresent(commandBuffer, imageIndex);

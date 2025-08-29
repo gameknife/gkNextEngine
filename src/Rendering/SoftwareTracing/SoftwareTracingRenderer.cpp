@@ -1,10 +1,7 @@
 #include "SoftwareTracingRenderer.hpp"
-
-#include "Vulkan/FrameBuffer.hpp"
-#include "Vulkan/PipelineLayout.hpp"
-#include "Vulkan/SwapChain.hpp"
-
 #include "Rendering/PipelineCommon/CommonComputePipeline.hpp"
+
+#include "Vulkan/SwapChain.hpp"
 #include "Vulkan/RenderImage.hpp"
 
 #include "Utilities/Math.hpp"

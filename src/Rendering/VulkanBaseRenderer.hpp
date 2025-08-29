@@ -131,11 +131,6 @@ namespace Vulkan
 		{
 			return currentLogicRenderer_;
 		}
-
-		DescriptorSetManager& GetRTDescriptorSetManager() const
-		{
-			return *rtDescriptorSetManager_;
-		}
 		
 		// Callbacks
 		std::function<void()> DelegateOnDeviceSet;
@@ -200,7 +195,7 @@ namespace Vulkan
 		
 		std::unique_ptr<PipelineCommon::GraphicsPipeline> wireframePipeline_;
 		std::unique_ptr<PipelineCommon::ZeroBindCustomPushConstantPipeline> bufferClearPipeline_;
-		std::unique_ptr<PipelineCommon::SimpleComposePipeline> simpleComposePipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindCustomPushConstantPipeline> simpleComposePipeline_;
 		std::unique_ptr<PipelineCommon::ZeroBindCustomPushConstantPipeline> visualDebuggerPipeline_;
 		std::unique_ptr<PipelineCommon::VisibilityPipeline> visibilityPipeline_;
 		
@@ -226,7 +221,6 @@ namespace Vulkan
 
 		std::unique_ptr<VulkanGpuTimer> gpuTimer_;
 		std::unique_ptr<Assets::GlobalTexturePool> globalTexturePool_;
-		std::unique_ptr<Vulkan::DescriptorSetManager> rtDescriptorSetManager_;
 
 		uint32_t currentImageIndex_{};
 		size_t currentFrame_{};

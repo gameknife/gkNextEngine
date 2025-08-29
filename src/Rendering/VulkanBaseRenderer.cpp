@@ -422,7 +422,19 @@ namespace Vulkan
         return bindlessStorageImages_[bindlessIdx].get();
     }
 
-    #define CREATE_STORAGE_IMAGE(idx, fmt, tiling, usage) CreateStorageImage(Assets::Bindless::idx, fmt, tiling, usage, #idx)
+    uint32_t VulkanBaseRenderer::GetTemporalStorageImage(VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
+        const char* debugName)
+    {
+        uint32_t targetIdx = Assets::Bindless::RT_TEMP_USAGE0 + tempStorageImageCreated_;
+        auto& target = bindlessStorageImages_[targetIdx];
+        assert(!target);
+        CreateStorageImage(targetIdx, format, tiling, usage, debugName);
+        tempStorageImageCreated_++;
+
+        return targetIdx;
+    }
+
+#define CREATE_STORAGE_IMAGE(idx, fmt, tiling, usage) CreateStorageImage(Assets::Bindless::idx, fmt, tiling, usage, #idx)
     
     void VulkanBaseRenderer::CreateRenderImages()
     {
@@ -538,6 +550,7 @@ namespace Vulkan
         {
             storageImage.reset();
         }
+        tempStorageImageCreated_ = 0;
 
         visibilityPipeline_.reset();
         visibilityFrameBuffer_.reset();

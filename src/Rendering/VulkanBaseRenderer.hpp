@@ -130,11 +130,6 @@ namespace Vulkan
 		{
 			return currentLogicRenderer_;
 		}
-
-		DescriptorSetManager& GetRTDescriptorSetManager() const
-		{
-			return *rtDescriptorSetManager_;
-		}
 		
 		// Callbacks
 		std::function<void()> DelegateOnDeviceSet;
@@ -158,10 +153,11 @@ namespace Vulkan
 
 		void CreateStorageImage(uint32_t bindlessIdx, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, const char* debugName);
 		const RenderImage* GetStorageImage(uint32_t bindlessIdx) const;
-			
+		uint32_t GetTemporalStorageImage(VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, const char* debugName);
 	protected:
 		Assets::UniformBufferObject lastUBO;
 		std::vector<std::unique_ptr<RenderImage> > bindlessStorageImages_;
+		uint32_t tempStorageImageCreated_ {};
 	private:
 
 		void UpdateUniformBuffer(uint32_t imageIndex);
@@ -182,10 +178,11 @@ namespace Vulkan
 		std::vector<Assets::UniformBuffer> uniformBuffers_;
 		
 		std::unique_ptr<PipelineCommon::GraphicsPipeline> wireframePipeline_;
+		std::unique_ptr<PipelineCommon::VisibilityPipeline> visibilityPipeline_;
+		
 		std::unique_ptr<PipelineCommon::ZeroBindCustomPushConstantPipeline> bufferClearPipeline_;
 		std::unique_ptr<PipelineCommon::ZeroBindCustomPushConstantPipeline> simpleComposePipeline_;
 		std::unique_ptr<PipelineCommon::ZeroBindCustomPushConstantPipeline> visualDebuggerPipeline_;
-		std::unique_ptr<PipelineCommon::VisibilityPipeline> visibilityPipeline_;
 		
 		std::unique_ptr<class DepthBuffer> depthBuffer_;
 		std::unique_ptr<FrameBuffer> visibilityFrameBuffer_;
@@ -209,7 +206,6 @@ namespace Vulkan
 
 		std::unique_ptr<VulkanGpuTimer> gpuTimer_;
 		std::unique_ptr<Assets::GlobalTexturePool> globalTexturePool_;
-		std::unique_ptr<Vulkan::DescriptorSetManager> rtDescriptorSetManager_;
 
 		uint32_t currentImageIndex_{};
 		size_t currentFrame_{};

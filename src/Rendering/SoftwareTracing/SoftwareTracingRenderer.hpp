@@ -39,8 +39,12 @@ namespace Vulkan::ModernDeferred
 
 	private:
 		std::unique_ptr<PipelineCommon::ZeroBindPipeline> deferredShadingPipeline_;
-		std::unique_ptr<PipelineCommon::ZeroBindPipeline> accumulatePipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindCustomPushConstantPipeline> accumulatePipeline_;
 		std::unique_ptr<PipelineCommon::ZeroBindPipeline> composePipeline_;
+
+		uint32_t prevSingleDiffuseId_{};
+		uint32_t prevSingleSpecularId_{};
+		uint32_t prevSingleAlbedoId_{};
 	};
 
 }

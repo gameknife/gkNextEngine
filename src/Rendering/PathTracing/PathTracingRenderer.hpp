@@ -57,7 +57,11 @@ namespace Vulkan::RayTracing
 		// individual textures
 		std::unique_ptr<PipelineCommon::ZeroBindPipeline> rayTracingPipeline_;
 		std::unique_ptr<PipelineCommon::ZeroBindPipeline> composePipelineNonDenoiser_;
-		std::unique_ptr<PipelineCommon::ZeroBindPipeline> accumulatePipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindCustomPushConstantPipeline> accumulatePipeline_;
+
+		uint32_t prevSingleDiffuseId_{};
+		uint32_t prevSingleSpecularId_{};
+		uint32_t prevSingleAlbedoId_{};
 
 #if WITH_OIDN
 		std::unique_ptr<RenderImage> rtDenoise0_;

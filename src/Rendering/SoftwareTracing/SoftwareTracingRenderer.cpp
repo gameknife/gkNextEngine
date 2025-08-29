@@ -25,7 +25,7 @@ void SoftwareTracingRenderer::CreateSwapChain(const VkExtent2D& extent)
 {
 	deferredShadingPipeline_.reset(new PipelineCommon::ZeroBindPipeline(SwapChain(), "assets/shaders/Core.SwTracing.comp.slang.spv"));
 	accumulatePipeline_.reset(new PipelineCommon::ZeroBindPipeline(SwapChain(), "assets/shaders/Process.ReProject.comp.slang.spv"));
-	composePipeline_.reset(new PipelineCommon::FinalComposePipeline(SwapChain(), baseRender_, UniformBuffers()));
+	composePipeline_.reset(new PipelineCommon::ZeroBindPipeline(SwapChain(), "assets/shaders/Process.DenoiseJBF.comp.slang.spv"));
 }
 
 void SoftwareTracingRenderer::DeleteSwapChain()
@@ -59,9 +59,8 @@ void SoftwareTracingRenderer::Render(VkCommandBuffer commandBuffer, uint32_t ima
 		SCOPED_GPU_TIMER("compose pass");
 		
 		SwapChain().InsertBarrierToWrite(commandBuffer, imageIndex);
-
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, composePipeline_->Handle());
-		composePipeline_->PipelineLayout().BindDescriptorSets(commandBuffer, imageIndex);
+		
+		composePipeline_->BindPipeline(commandBuffer, GetScene(), imageIndex);
 		vkCmdDispatch(commandBuffer, SwapChain().RenderExtent().width / 8, SwapChain().RenderExtent().height / 8, 1);
 
 		SwapChain().InsertBarrierToPresent(commandBuffer, imageIndex);

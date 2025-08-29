@@ -66,7 +66,7 @@ namespace Vulkan::RayTracing
         CreateOutputImage(extent);
         rayTracingPipeline_.reset(new PipelineCommon::ZeroBindPipeline( SwapChain(), "assets/shaders/Core.PathTracing.comp.slang.spv"));
         accumulatePipeline_.reset(new PipelineCommon::ZeroBindPipeline(SwapChain(), "assets/shaders/Process.ReProject.comp.slang.spv"));
-        composePipelineNonDenoiser_.reset(new PipelineCommon::FinalComposePipeline(SwapChain(), baseRender_, UniformBuffers()));
+        composePipelineNonDenoiser_.reset(new PipelineCommon::ZeroBindPipeline(SwapChain(), "assets/shaders/Process.DenoiseJBF.comp.slang.spv"));
 #if WITH_OIDN
         composePipelineDenoiser_.reset(new PipelineCommon::FinalComposePipeline(SwapChain(), rtDenoise1_->GetImageView(), rtAlbedo_->GetImageView(), rtNormal_->GetImageView(), rtVisibility0->GetImageView(), rtVisibility1_->GetImageView(), UniformBuffers()));
 #endif
@@ -130,8 +130,7 @@ namespace Vulkan::RayTracing
             else
 #endif
             {
-                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, composePipelineNonDenoiser_->Handle());
-                composePipelineNonDenoiser_->PipelineLayout().BindDescriptorSets(commandBuffer, imageIndex);
+                composePipelineNonDenoiser_->BindPipeline(commandBuffer, GetScene(), imageIndex);
                 vkCmdDispatch(commandBuffer, Utilities::Math::GetSafeDispatchCount(SwapChain().RenderExtent().width, 8), Utilities::Math::GetSafeDispatchCount(SwapChain().RenderExtent().height, 8), 1);
             }
             SwapChain().InsertBarrierToPresent(commandBuffer, imageIndex);

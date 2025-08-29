@@ -22,12 +22,6 @@ namespace Vulkan
 	class DescriptorSetManager;
 	class DeviceProcedures;
 	class Buffer;
-	class VulkanBaseRenderer;
-}
-
-namespace Vulkan::RayTracing
-{
-	class TopLevelAccelerationStructure;
 }
 
 namespace Vulkan::PipelineCommon
@@ -52,17 +46,6 @@ namespace Vulkan::PipelineCommon
 		uint32_t pushConstantSize_;
 	};
 	
-	class FinalComposePipeline : public PipelineBase
-	{
-	public:
-		VULKAN_NON_COPIABLE(FinalComposePipeline)
-	
-		FinalComposePipeline(
-			const SwapChain& swapChain, 
-			const VulkanBaseRenderer& baseRender,
-			const std::vector<Assets::UniformBuffer>& uniformBuffers);
-	};
-
 	class SimpleComposePipeline : public PipelineBase
 	{
 	public:

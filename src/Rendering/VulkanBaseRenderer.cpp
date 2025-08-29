@@ -410,6 +410,20 @@ namespace Vulkan
         }
     }
 
+    void VulkanBaseRenderer::CreateStorageImage(uint32_t bindlessIdx, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, const char* debugName)
+    {
+        bindlessStorageImages_[bindlessIdx].reset(new RenderImage(Device(), swapChain_->RenderExtent(), format, tiling, usage, false, debugName));
+        globalTexturePool_->BindStorageTexture(bindlessIdx, bindlessStorageImages_[bindlessIdx]->GetImageView());
+    }
+
+    const RenderImage* VulkanBaseRenderer::GetStorageImage(uint32_t bindlessIdx) const
+    {
+        assert(bindlessIdx < bindlessStorageImages_.size());
+        return bindlessStorageImages_[bindlessIdx].get();
+    }
+
+    #define CREATE_STORAGE_IMAGE(idx, fmt, tiling, usage) CreateStorageImage(Assets::Bindless::idx, fmt, tiling, usage, #idx)
+    
     void VulkanBaseRenderer::CreateRenderImages()
     {
         screenShotImage_.reset(new Image(*device_, swapChain_->Extent(), 1, swapChain_->Format(),
@@ -422,92 +436,25 @@ namespace Vulkan
                                                 VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, false,
                                                 "editor"));
 
-
-        rtAccumlatedDiffuse.reset(new RenderImage(Device(), swapChain_->RenderExtent(),
-                                       VK_FORMAT_R16G16B16A16_SFLOAT,
-                                       VK_IMAGE_TILING_OPTIMAL,
-                                       VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, false, "output"));
-
-        rtAccumlatedSpecular.reset(new RenderImage(Device(), swapChain_->RenderExtent(),
-                                       VK_FORMAT_R16G16B16A16_SFLOAT,
-                                       VK_IMAGE_TILING_OPTIMAL,
-                                       VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, false, "outputSpecular"));
+        bindlessStorageImages_.resize(Assets::Bindless::RT_COUNT);
         
-        rtDenoised.reset(new RenderImage(Device(), swapChain_->RenderExtent(),
-                                         VK_FORMAT_R16G16B16A16_SFLOAT,
-                                         VK_IMAGE_TILING_OPTIMAL,
-                                         VK_IMAGE_USAGE_STORAGE_BIT, false, "denoised"));
-        rtOutputDiffuse.reset(new RenderImage(Device(), swapChain_->RenderExtent(),
-                                            VK_FORMAT_R16G16B16A16_SFLOAT,
-                                            VK_IMAGE_TILING_OPTIMAL,
-                                            VK_IMAGE_USAGE_STORAGE_BIT, false, "renderout"));
-        rtOutputSpecular.reset(new RenderImage(Device(), swapChain_->RenderExtent(),
-                                            VK_FORMAT_R16G16B16A16_SFLOAT,
-                                            VK_IMAGE_TILING_OPTIMAL,
-                                            VK_IMAGE_USAGE_STORAGE_BIT, false, "renderoutSpecular"));
-        rtVisibility.reset(new RenderImage(Device(), swapChain_->RenderExtent(),
-                                           VK_FORMAT_R32_UINT,
-                                           VK_IMAGE_TILING_OPTIMAL,
-                                           VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, false,
-                                           "visibility"));
-
-        rtObject0.reset(new RenderImage(Device(), swapChain_->RenderExtent(),
-                                        VK_FORMAT_R32_UINT,
-                                        VK_IMAGE_TILING_OPTIMAL,
-                                        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, false,
-                                        "object0"));
-
-        rtObject1.reset(new RenderImage(Device(), swapChain_->RenderExtent(),
-                                        VK_FORMAT_R32_UINT,
-                                        VK_IMAGE_TILING_OPTIMAL,
-                                        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, false,
-                                        "object1"));
-
-        rtPrevDepth.reset(new RenderImage(Device(), swapChain_->RenderExtent(),
-                                          VK_FORMAT_R32_SFLOAT,
-                                          VK_IMAGE_TILING_OPTIMAL,
-                                          VK_IMAGE_USAGE_STORAGE_BIT, false, "prevDepth"));
-
-        rtMotionVector_.reset(new RenderImage(Device(), swapChain_->RenderExtent(),
-                                              VK_FORMAT_R32G32_SFLOAT,
-                                              VK_IMAGE_TILING_OPTIMAL,
-                                              VK_IMAGE_USAGE_STORAGE_BIT, false, "motionvector"));
-
-        rtAlbedo_.reset(new RenderImage(Device(), swapChain_->RenderExtent(), VK_FORMAT_R16G16B16A16_SFLOAT,
-                                        VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT, false, "albedo"));
-        rtAccumlatedAlbedo_.reset(new RenderImage(Device(), swapChain_->RenderExtent(), VK_FORMAT_R16G16B16A16_SFLOAT,
-                                        VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, false, "accumlatedAlbedo"));
-        rtNormal_.reset(new RenderImage(Device(), swapChain_->RenderExtent(), VK_FORMAT_R16G16B16A16_SFLOAT,
-                                        VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT, false, "normal"));
-
-        rtShaderTimer_.reset(new RenderImage(Device(), swapChain_->RenderExtent(), VK_FORMAT_R8G8B8A8_UNORM,
-                                             VK_IMAGE_TILING_LINEAR, VK_IMAGE_USAGE_STORAGE_BIT, false, "shadertimer"));
-
-        rtPrevSingleDiffuse.reset(new RenderImage(Device(), swapChain_->RenderExtent(), VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT, false, "prevDiffuse"));
-        rtPrevSingleSpecular.reset(new RenderImage(Device(), swapChain_->RenderExtent(), VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT, false, "prevSpecular"));
-        rtPrevSingleAlbedo.reset(new RenderImage(Device(), swapChain_->RenderExtent(), VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, false,"prevAlbedo"));
-        
-        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_ACCUMLATE_DIFFUSE, rtAccumlatedDiffuse->GetImageView());
-        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_SINGLE_DIFFUSE, rtOutputDiffuse->GetImageView());
-        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_MINIGBUFFER, rtVisibility->GetImageView());
-        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_OBJEDCTID_0, rtObject0->GetImageView());
-        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_OBJEDCTID_1, rtObject1->GetImageView());
-        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_MOTIONVECTOR, rtMotionVector_->GetImageView());
-        
-        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_ALBEDO, rtAlbedo_->GetImageView());
-        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_NORMAL, rtNormal_->GetImageView());
-        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_SHADER_TIMER, rtShaderTimer_->GetImageView());
-        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_DENOISED, rtDenoised->GetImageView());
-        
-        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_PREV_DEPTHBUFFER, rtPrevDepth->GetImageView());
-
-        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_ACCUMLATE_SPECULAR, rtAccumlatedSpecular->GetImageView());
-        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_SINGLE_SPECULAR, rtOutputSpecular->GetImageView());
-        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_ACCUMLATE_ALBEDO, rtAccumlatedAlbedo_->GetImageView());
-
-        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_SINGLE_PREV_DIFFUSE, rtPrevSingleDiffuse->GetImageView());
-        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_SINGLE_PREV_SPECULAR, rtPrevSingleSpecular->GetImageView());
-        globalTexturePool_->BindStorageTexture(Assets::Bindless::RT_SINGLE_PREV_ALBEDO, rtPrevSingleAlbedo->GetImageView());
+        CREATE_STORAGE_IMAGE(RT_ACCUMLATE_DIFFUSE, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT );
+        CREATE_STORAGE_IMAGE(RT_SINGLE_DIFFUSE, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT );
+        CREATE_STORAGE_IMAGE(RT_MINIGBUFFER, VK_FORMAT_R32_UINT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT );
+        CREATE_STORAGE_IMAGE(RT_OBJEDCTID_0, VK_FORMAT_R32_UINT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT );
+        CREATE_STORAGE_IMAGE(RT_OBJEDCTID_1, VK_FORMAT_R32_UINT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT );
+        CREATE_STORAGE_IMAGE(RT_MOTIONVECTOR, VK_FORMAT_R32G32_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT );
+        CREATE_STORAGE_IMAGE(RT_ALBEDO, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT );
+        CREATE_STORAGE_IMAGE(RT_NORMAL, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT );
+        CREATE_STORAGE_IMAGE(RT_SHADER_TIMER, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_LINEAR, VK_IMAGE_USAGE_STORAGE_BIT );
+        CREATE_STORAGE_IMAGE(RT_DENOISED, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT );
+        CREATE_STORAGE_IMAGE(RT_PREV_DEPTHBUFFER, VK_FORMAT_R32_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT );
+        CREATE_STORAGE_IMAGE(RT_ACCUMLATE_SPECULAR, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT );
+        CREATE_STORAGE_IMAGE(RT_SINGLE_SPECULAR, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT );
+        CREATE_STORAGE_IMAGE(RT_ACCUMLATE_ALBEDO, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT );
+        CREATE_STORAGE_IMAGE(RT_SINGLE_PREV_DIFFUSE, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT );
+        CREATE_STORAGE_IMAGE(RT_SINGLE_PREV_SPECULAR, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT );
+        CREATE_STORAGE_IMAGE(RT_SINGLE_PREV_ALBEDO, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT );
 
         for (uint32_t i = 0; i != swapChain_->Images().size(); i++)
         {
@@ -551,11 +498,11 @@ namespace Vulkan
 
         // 最简单的fallback pipeline, 也用作 wireframe pipeline
         wireframePipeline_.reset(new class PipelineCommon::GraphicsPipeline(SwapChain(), DepthBuffer(), UniformBuffers(), GetScene(), true));
-        wireframeFramebuffer_.reset(new FrameBuffer(swapChain_->RenderExtent(), rtDenoised->GetImageView(), wireframePipeline_->RenderPass()));
+        wireframeFramebuffer_.reset(new FrameBuffer(swapChain_->RenderExtent(), GetStorageImage(Assets::Bindless::RT_DENOISED)->GetImageView(), wireframePipeline_->RenderPass()));
 
         // 公用Pipeline
         visibilityPipeline_.reset(new PipelineCommon::VisibilityPipeline(SwapChain(), DepthBuffer(), UniformBuffers(), GetScene()));
-        visibilityFrameBuffer_.reset(new FrameBuffer(swapChain_->RenderExtent(), rtVisibility->GetImageView(), visibilityPipeline_->RenderPass()));
+        visibilityFrameBuffer_.reset(new FrameBuffer(swapChain_->RenderExtent(), GetStorageImage(Assets::Bindless::RT_MINIGBUFFER)->GetImageView(), visibilityPipeline_->RenderPass()));
         simpleComposePipeline_.reset( new PipelineCommon::ZeroBindCustomPushConstantPipeline(SwapChain(), "assets/shaders/Process.UpScaleFSR.comp.slang.spv", 20));
         bufferClearPipeline_.reset(new PipelineCommon::ZeroBindCustomPushConstantPipeline(*swapChain_, "assets/shaders/Util.BufferClear.comp.slang.spv", 4));
         softAmbientCubeGenPipeline_.reset( new PipelineCommon::ZeroBindPipeline(*swapChain_, "assets/shaders/Bake.SwAmbientCube.comp.slang.spv"));
@@ -587,26 +534,14 @@ namespace Vulkan
             DelegateDeleteSwapChain();
         }
 
+        for ( auto& storageImage : bindlessStorageImages_ )
+        {
+            storageImage.reset();
+        }
+
         visibilityPipeline_.reset();
         visibilityFrameBuffer_.reset();
-        rtAccumlatedDiffuse.reset();
-        rtAccumlatedSpecular.reset();
-        rtDenoised.reset();
-        rtOutputSpecular.reset();
-        rtOutputDiffuse.reset();
-        rtVisibility.reset();
-        rtObject0.reset();
-        rtObject1.reset();
-        rtNormal_.reset();
-        rtAlbedo_.reset();
-        rtAccumlatedAlbedo_.reset();
-        rtMotionVector_.reset();
-        rtShaderTimer_.reset();
-        rtPrevDepth.reset();
-        rtPrevSingleDiffuse.reset();
-        rtPrevSingleSpecular.reset();
-        rtPrevSingleAlbedo.reset();
-
+        
         screenShotImageMemory_.reset();
         screenShotImage_.reset();
         commandBuffers_.reset();
@@ -785,7 +720,7 @@ namespace Vulkan
             }
             vkCmdEndRenderPass(commandBuffer);
 
-            rtVisibility->InsertBarrier(commandBuffer, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+            GetStorageImage(Assets::Bindless::RT_MINIGBUFFER)->InsertBarrier(commandBuffer, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                                         VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_GENERAL);
         }
     }
@@ -948,38 +883,10 @@ namespace Vulkan
 
     void VulkanBaseRenderer::InitializeBarriers(VkCommandBuffer commandBuffer)
     {
-        rtDenoised->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                                  VK_IMAGE_LAYOUT_GENERAL);
-        rtAccumlatedDiffuse->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                                VK_IMAGE_LAYOUT_GENERAL);
-        rtAccumlatedSpecular->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                                VK_IMAGE_LAYOUT_GENERAL);
-        rtMotionVector_->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                                       VK_IMAGE_LAYOUT_GENERAL);
-        rtOutputDiffuse->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                                     VK_IMAGE_LAYOUT_GENERAL);
-        rtAlbedo_->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                                 VK_IMAGE_LAYOUT_GENERAL);
-        rtNormal_->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                                 VK_IMAGE_LAYOUT_GENERAL);
-        rtObject0->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                                 VK_IMAGE_LAYOUT_GENERAL);
-        rtObject1->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                                 VK_IMAGE_LAYOUT_GENERAL);
-        rtShaderTimer_->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                                      VK_IMAGE_LAYOUT_GENERAL);
-        rtPrevDepth->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                                   VK_IMAGE_LAYOUT_GENERAL);
-        rtAccumlatedAlbedo_->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                                   VK_IMAGE_LAYOUT_GENERAL);
-        rtOutputSpecular->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                                   VK_IMAGE_LAYOUT_GENERAL);
-        rtPrevSingleDiffuse->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                                   VK_IMAGE_LAYOUT_GENERAL);
-        rtPrevSingleSpecular->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                                   VK_IMAGE_LAYOUT_GENERAL);
-        rtPrevSingleAlbedo->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                                   VK_IMAGE_LAYOUT_GENERAL);
+        for ( auto& storageImage : bindlessStorageImages_ )
+        {
+            if ( storageImage ) storageImage->InsertBarrier(commandBuffer, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+        }
     }
 
     void VulkanBaseRenderer::RegisterLogicRenderer(ERendererType type)
@@ -1026,16 +933,16 @@ namespace Vulkan
                     folderName = "PT-";
                     break;
                 case ERendererType::ERT_ModernDeferred:
-                    rendererName = "ModernDeferred";
+                    rendererName = "SoftTracing";
                     folderName = "ST-";
                     break;
                 case ERendererType::ERT_LegacyDeferred:
-                    rendererName = "LegacyDeferred";
-                    folderName = "LD-";
+                    rendererName = "SoftModern";
+                    folderName = "SM-";
                     break;
                 case ERendererType::ERT_VoxelTracing:
-                    rendererName = "VoxelTracing";
-                    folderName = "VT-";
+                    rendererName = "LegacyRef";
+                    folderName = "LR-";
                     break;
                 default:
                     rendererName = "UnknownRenderer";
@@ -1048,38 +955,37 @@ namespace Vulkan
                     logicRenderer.second->Render(commandBuffer, imageIndex);
                 }
 
-                // {
-                //     SCOPED_GPU_TIMER("resolve pass");
-                //     SwapChain().InsertBarrierToWrite(commandBuffer, imageIndex);
-                //
-                //     rtDenoised->InsertBarrier(commandBuffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-                //                               VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL);
-                //
-                //     std::array<uint32_t, 5> pushConst = { imageIndex, uint32_t(SwapChain().OutputOffset().x), uint32_t(SwapChain().OutputOffset().y), uint32_t(SwapChain().OutputExtent().width), uint32_t(SwapChain().OutputExtent().height) };
-                //     
-                //
-                //     switch (logicRenderer.first)
-                //     {
-                //     case ERendererType::ERT_PathTracing:
-                //         pushConst = glm::uvec4(SwapChain().Extent().width / 2, SwapChain().Extent().height / 2, SwapChain().Extent().width, SwapChain().Extent().height);
-                //         break;
-                //     case ERendererType::ERT_ModernDeferred:
-                //         pushConst = glm::uvec4(SwapChain().Extent().width / 2, 0, SwapChain().Extent().width, SwapChain().Extent().height);
-                //         break;
-                //     case ERendererType::ERT_LegacyDeferred:
-                //         pushConst = glm::uvec4(0, 0, SwapChain().Extent().width, SwapChain().Extent().height);
-                //         break;
-                //     default:
-                //         pushConst = glm::uvec4(SwapChain().Extent().width ,SwapChain().Extent().height, SwapChain().Extent().width / 2, SwapChain().Extent().height / 2);
-                //         break;
-                //     }
-                //
-                //     simpleComposePipeline_->BindPipeline(commandBuffer, pushConst);
-                //   
-                //     vkCmdDispatch(commandBuffer, SwapChain().RenderExtent().width / 8,
-                //                   SwapChain().RenderExtent().height / 8, 1);
-                //     SwapChain().InsertBarrierToPresent(commandBuffer, imageIndex);
-                // }
+                {
+                    SCOPED_GPU_TIMER("resolve pass");
+                    SwapChain().InsertBarrierToWrite(commandBuffer, imageIndex);
+                
+                    GetStorageImage(Assets::Bindless::RT_DENOISED)->InsertBarrier(commandBuffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+                                              VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL);
+                
+                    std::array<uint32_t, 5> pushConst;
+                    
+                    switch (logicRenderer.first)
+                    {
+                    case ERendererType::ERT_PathTracing:
+                        pushConst = { imageIndex,SwapChain().Extent().width / 2, SwapChain().Extent().height / 2, SwapChain().RenderExtent().width, SwapChain().RenderExtent().height};
+                        break;
+                    case ERendererType::ERT_ModernDeferred:
+                        pushConst = { imageIndex,SwapChain().Extent().width / 2, 0, SwapChain().RenderExtent().width, SwapChain().RenderExtent().height};
+                        break;
+                    case ERendererType::ERT_LegacyDeferred:
+                        pushConst = { imageIndex,0, 0, SwapChain().RenderExtent().width, SwapChain().RenderExtent().height};
+                        break;
+                    default:
+                        pushConst = { imageIndex,SwapChain().Extent().width ,SwapChain().Extent().height, SwapChain().RenderExtent().width / 2, SwapChain().RenderExtent().height / 2};
+                        break;
+                    }
+                
+                    simpleComposePipeline_->BindPipeline(commandBuffer, pushConst.data());
+                  
+                    vkCmdDispatch(commandBuffer, SwapChain().RenderExtent().width / 8,
+                                  SwapChain().RenderExtent().height / 8, 1);
+                    SwapChain().InsertBarrierToPresent(commandBuffer, imageIndex);
+                }
             }
         }
         else
@@ -1136,7 +1042,7 @@ namespace Vulkan
                 SCOPED_GPU_TIMER("resolve pass");
 
                 SwapChain().InsertBarrierToWrite(commandBuffer, imageIndex);
-                rtDenoised->InsertBarrier(commandBuffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+                GetStorageImage(Assets::Bindless::RT_DENOISED)->InsertBarrier(commandBuffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                                           VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL);
                 
                 std::array<uint32_t, 5> pushConst = { imageIndex, uint32_t(SwapChain().OutputOffset().x), uint32_t(SwapChain().OutputOffset().y), uint32_t(SwapChain().OutputExtent().width), uint32_t(SwapChain().OutputExtent().height) };
@@ -1215,9 +1121,9 @@ namespace Vulkan
 
         {
             SCOPED_GPU_TIMER("objectid copy");
-            rtObject0->InsertBarrier(commandBuffer, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+            GetStorageImage(Assets::Bindless::RT_OBJEDCTID_0)->InsertBarrier(commandBuffer, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT,
                                      VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-            rtObject1->InsertBarrier(commandBuffer, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+            GetStorageImage(Assets::Bindless::RT_OBJEDCTID_1)->InsertBarrier(commandBuffer, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
                                      VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
             VkImageCopy copyRegion;
@@ -1225,10 +1131,10 @@ namespace Vulkan
             copyRegion.srcOffset = {0, 0, 0};
             copyRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
             copyRegion.dstOffset = {0, 0, 0};
-            copyRegion.extent = {rtObject0->GetImage().Extent().width, rtObject0->GetImage().Extent().height, 1};
+            copyRegion.extent = {GetStorageImage(Assets::Bindless::RT_OBJEDCTID_0)->GetImage().Extent().width, GetStorageImage(Assets::Bindless::RT_OBJEDCTID_0)->GetImage().Extent().height, 1};
 
-            vkCmdCopyImage(commandBuffer, rtObject0->GetImage().Handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                           rtObject1->GetImage().Handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+            vkCmdCopyImage(commandBuffer, GetStorageImage(Assets::Bindless::RT_OBJEDCTID_0)->GetImage().Handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           GetStorageImage(Assets::Bindless::RT_OBJEDCTID_1)->GetImage().Handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
         }
     }
 

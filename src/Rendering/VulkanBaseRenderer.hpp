@@ -22,7 +22,6 @@ namespace Vulkan
 {
 	namespace PipelineCommon
 	{
-		class SimpleComposePipeline;
 		class VisibilityPipeline;
 		class GraphicsPipeline;
 		class ZeroBindPipeline;
@@ -131,6 +130,11 @@ namespace Vulkan
 		{
 			return currentLogicRenderer_;
 		}
+
+		DescriptorSetManager& GetRTDescriptorSetManager() const
+		{
+			return *rtDescriptorSetManager_;
+		}
 		
 		// Callbacks
 		std::function<void()> DelegateOnDeviceSet;
@@ -152,28 +156,12 @@ namespace Vulkan
 		bool forceSDR_{};
 		bool visualDebug_{};
 
-		// this texture could pass to global scope, it may contained by base renderer
-		std::unique_ptr<RenderImage> rtDenoised;
-		std::unique_ptr<RenderImage> rtAccumlatedDiffuse;
-		std::unique_ptr<RenderImage> rtOutputDiffuse;
-		std::unique_ptr<RenderImage> rtVisibility;
-		std::unique_ptr<RenderImage> rtObject0;
-		std::unique_ptr<RenderImage> rtObject1;
-		std::unique_ptr<RenderImage> rtPrevDepth;
-		std::unique_ptr<RenderImage> rtMotionVector_;
-		std::unique_ptr<RenderImage> rtAlbedo_;
-		std::unique_ptr<RenderImage> rtAccumlatedAlbedo_;
-		std::unique_ptr<RenderImage> rtNormal_;
-		std::unique_ptr<RenderImage> rtShaderTimer_;
-		std::unique_ptr<RenderImage> rtAccumlatedSpecular;
-		std::unique_ptr<RenderImage> rtOutputSpecular;
-		std::unique_ptr<RenderImage> rtPrevSingleDiffuse;
-		std::unique_ptr<RenderImage> rtPrevSingleSpecular;
-		std::unique_ptr<RenderImage> rtPrevSingleAlbedo;
+		void CreateStorageImage(uint32_t bindlessIdx, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, const char* debugName);
+		const RenderImage* GetStorageImage(uint32_t bindlessIdx) const;
 			
 	protected:
 		Assets::UniformBufferObject lastUBO;
-	
+		std::vector<std::unique_ptr<RenderImage> > bindlessStorageImages_;
 	private:
 
 		void UpdateUniformBuffer(uint32_t imageIndex);
@@ -221,6 +209,7 @@ namespace Vulkan
 
 		std::unique_ptr<VulkanGpuTimer> gpuTimer_;
 		std::unique_ptr<Assets::GlobalTexturePool> globalTexturePool_;
+		std::unique_ptr<Vulkan::DescriptorSetManager> rtDescriptorSetManager_;
 
 		uint32_t currentImageIndex_{};
 		size_t currentFrame_{};

@@ -295,8 +295,8 @@ bool NextEngine::Tick()
         scene_->Tick(static_cast<float>(deltaSeconds_));
     }
 
-    physicsEngine_->Tick(deltaSeconds_);
-    //animationEngine_->Tick(deltaSeconds_); //pause dev, wait next
+    if (userSettings_.TickPhysics) physicsEngine_->Tick(deltaSeconds_);
+    if (userSettings_.TickAnimation) animationEngine_->Tick(deltaSeconds_); //pause dev, wait next
 
     if (JSTickCallback_)
     {

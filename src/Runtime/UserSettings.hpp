@@ -51,4 +51,6 @@ struct UserSettings final
 	float PaperWhiteNit;
 
 	bool ShowEdge;
+	bool TickPhysics = true;
+	bool TickAnimation = false;
 };

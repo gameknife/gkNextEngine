@@ -356,6 +356,7 @@ void NextRendererGameInstance::DrawSettings()
 			ImGui::Text("%s", LOCTEXT("Profiler"));
 			ImGui::Separator();
 			ImGui::Checkbox(LOCTEXT("ShowWireframe"), &GetEngine().GetRenderer().showWireframe_);
+			ImGui::Checkbox(LOCTEXT("TickPhysics"), &UserSetting.TickPhysics);
 			ImGui::Checkbox(LOCTEXT("DebugDraw"), &UserSetting.ShowVisualDebug);
 			ImGui::Checkbox(LOCTEXT("DebugDraw_Lighting"), &UserSetting.DebugDraw_Lighting);
 			ImGui::Checkbox(LOCTEXT("DisableSpatialReuse"), &UserSetting.DisableSpatialReuse);

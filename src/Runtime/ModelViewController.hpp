@@ -34,6 +34,8 @@ public:
 		modelRotY_ = y;
 	}
 
+	glm::vec3 GetRight();
+	glm::vec3 GetUp();
 	glm::vec3 GetForward();
 	glm::vec3 GetPosition();
 

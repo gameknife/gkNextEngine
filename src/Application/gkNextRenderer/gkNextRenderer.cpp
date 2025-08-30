@@ -188,7 +188,9 @@ bool NextRendererGameInstance::OnGamepadInput(float leftStickX, float leftStickY
 void NextRendererGameInstance::CreateSphereAndPush()
 {
 	glm::vec3 forward = modelViewController_.GetForward();
-	glm::vec3 center = modelViewController_.GetPosition() + forward * 1.0f;
+	glm::vec3 center = modelViewController_.GetPosition() + forward * 0.1f + modelViewController_.GetRight() * 0.5f + modelViewController_.GetUp() * -0.5f;
+	glm::vec3 farTarget = modelViewController_.GetPosition() + forward * 1000.0f + modelViewController_.GetUp() * 100.f;
+	glm::vec3 shotDir = normalize((farTarget - center));
 	uint32_t instanceId = uint32_t(GetEngine().GetScene().Nodes().size());
 	std::shared_ptr<Assets::Node> newNode = Assets::Node::CreateNode("temp", center, glm::quat(), glm::vec3(1), modelId_,
 															   instanceId, false);
@@ -201,7 +203,7 @@ void NextRendererGameInstance::CreateSphereAndPush()
 
 	GetEngine().GetScene().Nodes().push_back(newNode);
 
-	GetEngine().GetPhysicsEngine()->AddForceToBody(id, forward * 70000.f);
+	GetEngine().GetPhysicsEngine()->AddForceToBody(id, shotDir * 70000.f);
 }
 
 void NextRendererGameInstance::DrawSettings()

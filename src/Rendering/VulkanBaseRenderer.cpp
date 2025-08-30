@@ -200,23 +200,19 @@ namespace Vulkan
         window_ = window;
         instance_.reset(new Instance(*window_, validationLayers, VK_API_VERSION_1_2));
         debugUtilsMessenger_.reset(enableValidationLayers
-                                       ? new DebugUtilsMessenger(
-                                           *instance_, VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
-                                       : nullptr);
+                       ? new DebugUtilsMessenger( *instance_, VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
+                       : nullptr);
         surface_.reset(new Surface(*instance_));
         supportDenoiser_ = false;
         forceSDR_ = GOption->ForceSDR;
 
         uptime = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-
         supportRayTracing_ = !GOption->ForceNoRT && SupportRayQuery(*this);
     }
 
     VulkanBaseRenderer::~VulkanBaseRenderer()
     {
         VulkanBaseRenderer::DeleteSwapChain();
-
-        rtEditorViewport_.reset();
         gpuTimer_.reset();
         globalTexturePool_.reset();
         commandPool_.reset();
@@ -259,7 +255,6 @@ namespace Vulkan
 #endif
         };
 
-
         VkPhysicalDeviceFeatures deviceFeatures = {};
 
         deviceFeatures.multiDrawIndirect = true;
@@ -267,30 +262,23 @@ namespace Vulkan
 
         SetPhysicalDeviceImpl(physicalDevice, requiredExtensions, deviceFeatures, nullptr);
 
-        // Global Texture Pool Creation Here
         globalTexturePool_.reset(new Assets::GlobalTexturePool(*device_, *commandPool2_, *commandPool_));
 
         OnDeviceSet();
-
-        // Create swap chain and command buffers.
         CreateSwapChain();
-
         window_->Show();
 
         uptime = std::chrono::high_resolution_clock::now().time_since_epoch().count() - uptime;
-        fmt::print("\n{} renderer initialized in {:.2f}ms{}\n", CONSOLE_GREEN_COLOR, uptime * 1e-6f,
-                   CONSOLE_DEFAULT_COLOR);
+        fmt::print("\n{} renderer initialized in {:.2f}ms{}\n", CONSOLE_GREEN_COLOR, uptime * 1e-6f, CONSOLE_DEFAULT_COLOR);
     }
 
     void VulkanBaseRenderer::Start()
     {
         // setup vulkan
-
         PrintVulkanSdkInformation();
         PrintVulkanDevices(*this);
         SetVulkanDevice(*this, GOption->GpuIdx);
         PrintVulkanSwapChainInformation(*this);
-
         currentFrame_ = 0;
     }
 
@@ -443,10 +431,6 @@ namespace Vulkan
         screenShotImageMemory_.reset(new DeviceMemory(
             screenShotImage_->
             AllocateMemory(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)));
-
-        rtEditorViewport_.reset(new RenderImage(*device_, {1280, 720}, swapChain_->Format(), VK_IMAGE_TILING_OPTIMAL,
-                                                VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, false,
-                                                "editor"));
 
         bindlessStorageImages_.resize(Assets::Bindless::RT_COUNT);
         
@@ -603,38 +587,6 @@ namespace Vulkan
                                            VK_ACCESS_TRANSFER_READ_BIT, 0, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
         });
-    }
-
-    void VulkanBaseRenderer::CaptureEditorViewport(VkCommandBuffer commandBuffer, const uint32_t imageIndex)
-    {
-        const auto& image = swapChain_->Images()[imageIndex];
-
-        ImageMemoryBarrier::FullInsert(commandBuffer, image, 0, VK_ACCESS_TRANSFER_READ_BIT,
-                                       VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-        ImageMemoryBarrier::FullInsert(commandBuffer, rtEditorViewport_->GetImage().Handle(), 0,
-                                       VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-        // Copy output image into swap-chain image.
-        VkImageCopy copyRegion;
-        copyRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        copyRegion.srcOffset = {0, 0, 0};
-        copyRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        copyRegion.dstOffset = {0, 0, 0};
-        copyRegion.extent = {
-            rtEditorViewport_->GetImage().Extent().width, rtEditorViewport_->GetImage().Extent().height, 1
-        };
-
-        vkCmdCopyImage(commandBuffer,
-                       image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                       rtEditorViewport_->GetImage().Handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                       1, &copyRegion);
-
-        ImageMemoryBarrier::FullInsert(commandBuffer, SwapChain().Images()[imageIndex], VK_ACCESS_TRANSFER_READ_BIT, 0,
-                                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-        ImageMemoryBarrier::FullInsert(commandBuffer, rtEditorViewport_->GetImage().Handle(),
-                                       VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
-                                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
 
     void VulkanBaseRenderer::PreRender(VkCommandBuffer commandBuffer, const uint32_t imageIndex)

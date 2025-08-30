@@ -52,8 +52,6 @@ namespace Assets
 
     Scene::~Scene()
     {
-        sceneBufferDescriptorSetManager_.reset();
-        
         offsetBuffer_.reset();
         offsetBufferMemory_.reset(); // release memory after bound buffer has been destroyed
 
@@ -250,51 +248,6 @@ namespace Assets
             cpuAccelerationStructure_.AsyncProcessFull(*this, farAmbientCubeBufferMemory_.get(), false);
         }
 #endif
-        // no need for shadow map
-        //cpuAccelerationStructure_.GenShadowMap(*this);
-        
-        uint32_t maxSets = 2;//NextEngine::GetInstance()->GetRenderer().SwapChain().ImageViews().size();
-
-        sceneBufferDescriptorSetManager_.reset(new Vulkan::DescriptorSetManager(commandPool.Device(), {
-                // all buffer here
-                {0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {1, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {2, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {3, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {4, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {5, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {6, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {7, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {8, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {9, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {10, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {11, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {12, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-            }, maxSets));
-        
-        auto& descriptorSets = sceneBufferDescriptorSetManager_->DescriptorSets();
-
-        for (uint32_t i = 0; i != maxSets; ++i)
-        {
-            std::vector<VkWriteDescriptorSet> descriptorWrites =
-            {
-                descriptorSets.Bind(i, 0, { vertexBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 1, { indexBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 2, { materialBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 3, { offsetBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 4, { nodeMatrixBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 5, { ambientCubeBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 6, { farAmbientCubeBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 7, { hdrSHBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 8, { lightBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 9, { pageIndexBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 10, { gpuDrivenStatsBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 11, { reorderBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 12, { primAddressBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-            };
-
-            descriptorSets.UpdateDescriptors(i, descriptorWrites);
-        }
     }
 
     const Assets::GPUScene& Scene::FetchGPUScene(const uint32_t imageIndex) const
@@ -428,93 +381,6 @@ namespace Assets
             std::memcpy(data, SHData.data(), SHData.size() * sizeof(SphericalHarmonics));
             hdrSHBufferMemory_->Unmap();
         }
-    }
-
-    bool Scene::UpdateNodesLegacy()
-    {
-         // this can move to thread task
-        if (nodes_.size() > 0)
-        {
-            if (sceneDirty_)
-            {
-                sceneDirty_ = false;
-                {
-                    PERFORMANCEAPI_INSTRUMENT_COLOR("Scene::PrepareSceneNodes", PERFORMANCEAPI_MAKE_COLOR(255, 200, 200));
-                    nodeProxys.clear();
-                    indirectDrawBufferInstanced.clear();
-
-                    uint32_t indexOffset = 0;
-                    uint32_t vertexOffset = 0;
-                    uint32_t nodeOffsetBatched = 0;
-
-                    static std::unordered_map<uint32_t, std::vector<NodeProxy>> nodeProxysMapByModel;
-                    for (auto& [key, value] : nodeProxysMapByModel)
-                    {
-                        value.clear();
-                    }
-
-                    for (auto& node : nodes_)
-                    {
-                        if (node->IsVisible())
-                        {
-                            auto modelId = node->GetModel();
-                            glm::mat4 combined;
-                            if (node->TickVelocity(combined))
-                            {
-                                MarkDirty();
-                            }
-
-                            NodeProxy proxy = node->GetNodeProxy();
-                            proxy.combinedPrevTS = combined;
-                            nodeProxysMapByModel[modelId].push_back(proxy);
-                        }
-                    }
-
-                    int modelCount = static_cast<int>(models_.size());
-                    for (int i = 0; i < modelCount; i++)
-                    {
-                        if (nodeProxysMapByModel.find(i) != nodeProxysMapByModel.end())
-                        {
-                            auto& nodesOfThisModel = nodeProxysMapByModel[i];
-
-                            // draw indirect buffer, instanced, this could be generate in gpu
-                            VkDrawIndexedIndirectCommand cmd{};
-                            cmd.firstIndex = indexOffset;
-                            cmd.indexCount = models_[i].NumberOfIndices();
-                            cmd.vertexOffset = static_cast<int32_t>(vertexOffset);
-                            cmd.firstInstance = nodeOffsetBatched;
-                            cmd.instanceCount = static_cast<uint32_t>(nodesOfThisModel.size());
-
-                            indirectDrawBufferInstanced.push_back(cmd);
-                            nodeOffsetBatched += static_cast<uint32_t>(nodesOfThisModel.size());
-
-                            // fill the nodeProxy
-                            nodeProxys.insert(nodeProxys.end(), nodesOfThisModel.begin(), nodesOfThisModel.end());
-                        }
-
-                        indexOffset += models_[i].NumberOfIndices();
-                        vertexOffset += models_[i].NumberOfVertices();
-                    }
-
-                    NodeProxy* data = reinterpret_cast<NodeProxy*>(nodeMatrixBufferMemory_->Map(0, sizeof(NodeProxy) * nodeProxys.size()));
-                    std::memcpy(data, nodeProxys.data(), nodeProxys.size() * sizeof(NodeProxy));
-                    nodeMatrixBufferMemory_->Unmap();
-
-                    VkDrawIndexedIndirectCommand* diic = reinterpret_cast<VkDrawIndexedIndirectCommand*>(indirectDrawBufferMemory_->Map(
-                        0, sizeof(VkDrawIndexedIndirectCommand) * indirectDrawBufferInstanced.size()));
-                    std::memcpy(diic, indirectDrawBufferInstanced.data(), indirectDrawBufferInstanced.size() * sizeof(VkDrawIndexedIndirectCommand));
-                    indirectDrawBufferMemory_->Unmap();
-
-                    indirectDrawBatchCount_ = static_cast<uint32_t>(indirectDrawBufferInstanced.size());
-                }
-                // cpuAccelerationStructure_.RequestUpdate(glm::vec3(10,0,-2), 1.0f);
-                // cpuAccelerationStructure_.RequestUpdate(glm::vec3(-9,0,9), 2.0f);
-                // cpuAccelerationStructure_.RequestUpdate(glm::vec3(-9,0,5), 2.0f);
-                //cpuAccelerationStructure_.RequestUpdate(glm::vec3(1,0,1), 2.0f);
-                return true;
-            }
-        }
-        return false;
     }
 
     bool Scene::UpdateNodesGpuDriven()

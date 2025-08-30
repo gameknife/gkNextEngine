@@ -1,9 +1,5 @@
 #include "ShaderModule.hpp"
 #include "Device.hpp"
-#include "Utilities/Exception.hpp"
-#include <fstream>
-
-#include "Utilities/Console.hpp"
 #include "Utilities/FileHelper.hpp"
 
 namespace Vulkan {

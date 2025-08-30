@@ -82,7 +82,6 @@ namespace Assets
 		void UpdateMaterial();
 		bool UpdateNodes();
 		void UpdateHDRSH();
-		bool UpdateNodesLegacy();
 		bool UpdateNodesGpuDriven();
 
 		Node* GetNode(std::string name);
@@ -120,11 +119,6 @@ namespace Assets
 		TextureImage& ShadowMap() const { return *cpuShadowMap_; }
 
 		FCPUAccelerationStructure& GetCPUAccelerationStructure() { return cpuAccelerationStructure_; }
-
-		Vulkan::DescriptorSetManager& GetSceneBufferDescriptorSetManager() const
-		{
-			return *sceneBufferDescriptorSetManager_;
-		}
 		
 	private:
 		std::vector<FMaterial> materials_;
@@ -181,9 +175,7 @@ namespace Assets
 		std::unique_ptr<Vulkan::DeviceMemory> gpuDrivenStatsBuffer_Memory_;
 
 		std::unique_ptr<TextureImage> cpuShadowMap_;
-		
-		std::unique_ptr<Vulkan::DescriptorSetManager> sceneBufferDescriptorSetManager_;
-		
+
 		uint32_t lightCount_ {};
 		uint32_t indicesCount_ {};
 		uint32_t verticeCount_ {};

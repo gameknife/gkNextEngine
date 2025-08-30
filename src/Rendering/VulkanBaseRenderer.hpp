@@ -74,9 +74,6 @@ namespace Vulkan
 		void End();
 		
 		void CaptureScreenShot();
-		void CaptureEditorViewport(VkCommandBuffer commandBuffer, const uint32_t imageIndex);
-		
-		RenderImage& GetRenderImage() const {return *rtEditorViewport_;}
 
 		virtual void DrawFrame();
 
@@ -202,7 +199,6 @@ namespace Vulkan
 		std::unique_ptr<Image> screenShotImage_;
 		std::unique_ptr<DeviceMemory> screenShotImageMemory_;
 		std::unique_ptr<ImageView> screenShotImageView_;
-		std::unique_ptr<RenderImage> rtEditorViewport_;
 
 		std::unique_ptr<VulkanGpuTimer> gpuTimer_;
 		std::unique_ptr<Assets::GlobalTexturePool> globalTexturePool_;

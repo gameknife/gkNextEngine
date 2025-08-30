@@ -51,7 +51,4 @@ struct UserSettings final
 	float PaperWhiteNit;
 
 	bool ShowEdge;
-
-	// HitResult
-	Assets::RayCastResult HitResult;
 };

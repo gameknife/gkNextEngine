@@ -112,48 +112,57 @@ namespace Assets
         
         // static mesh to jolt mesh shape
         NextPhysics* PhysicsEngine = NextEngine::GetInstance()->GetPhysicsEngine();
-        std::vector<JPH::RefConst<JPH::MeshShapeSettings> > meshShapes;
-        for (auto& model : models_)
+        if (PhysicsEngine)
         {
-            meshShapes.push_back( JPH::RefConst<JPH::MeshShapeSettings>(PhysicsEngine->CreateMeshShape(model))  );
-        }
-
-        for (auto& node : nodes_)
-        {
-            // bind the mesh shape to the node
-            if (node->IsVisible() && node->GetModel() < meshShapes.size())// && node->GetParent() == nullptr)
+            std::vector<JPH::RefConst<JPH::MeshShapeSettings> > meshShapes;
+            for (auto& model : models_)
             {
-                JPH::EMotionType motionType = node->GetMobility() == Node::ENodeMobility::Static ? JPH::EMotionType::Static : JPH::EMotionType::Kinematic;
-                JPH::ObjectLayer layer = node->GetMobility() == Node::ENodeMobility::Static ? Layers::NON_MOVING : Layers::MOVING;
-                JPH::BodyID id = PhysicsEngine->CreateMeshBody(meshShapes[node->GetModel()], node->WorldTranslation(), node->WorldRotation(), node->WorldScale(), motionType, layer);\
-                node->BindPhysicsBody(id);
+                meshShapes.push_back( JPH::RefConst<JPH::MeshShapeSettings>(PhysicsEngine->CreateMeshShape(model))  );
             }
-        }
 
-        // calculate the scene aabb
-        sceneAABBMin_ = { FLT_MAX, FLT_MAX, FLT_MAX };
-        sceneAABBMax_ = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
-        for (auto& node : nodes_)
-        {
-            if (node->IsVisible() && node->GetModel() != -1)
+            for (auto& node : nodes_)
             {
-                glm::vec3 localaabbMin = models_[node->GetModel()].GetLocalAABBMin();
-                glm::vec3 localaabbMax = models_[node->GetModel()].GetLocalAABBMax();
-
-                auto& worldMtx = node->WorldTransform();
-
-                // TODO: need better algo
-                glm::vec3 aabbMin = glm::vec3(worldMtx * glm::vec4(localaabbMin, 1.0f));
-                glm::vec3 aabbMax = glm::vec3(worldMtx * glm::vec4(localaabbMax, 1.0f));
-                sceneAABBMin_ = glm::min(aabbMin, sceneAABBMin_);
-                sceneAABBMin_ = glm::min(aabbMax, sceneAABBMin_);
-                sceneAABBMax_ = glm::max(aabbMin, sceneAABBMax_);
-                sceneAABBMax_ = glm::max(aabbMax, sceneAABBMax_);
+                // bind the mesh shape to the node
+                if (node->IsVisible() && node->GetModel() < meshShapes.size())// && node->GetParent() == nullptr)
+                {
+                    JPH::EMotionType motionType = node->GetMobility() == Node::ENodeMobility::Static ? JPH::EMotionType::Static : JPH::EMotionType::Kinematic;
+                    JPH::ObjectLayer layer = node->GetMobility() == Node::ENodeMobility::Static ? Layers::NON_MOVING : Layers::MOVING;
+                    JPH::BodyID id = PhysicsEngine->CreateMeshBody(meshShapes[node->GetModel()], node->WorldTranslation(), node->WorldRotation(), node->WorldScale(), motionType, layer);\
+                    node->BindPhysicsBody(id);
+                }
             }
-        }
 
-        // create 6 plane bodys
-        //PhysicsEngine->
+            // calculate the scene aabb
+            sceneAABBMin_ = { FLT_MAX, FLT_MAX, FLT_MAX };
+            sceneAABBMax_ = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
+            for (auto& node : nodes_)
+            {
+                if (node->IsVisible() && node->GetModel() != -1)
+                {
+                    glm::vec3 localaabbMin = models_[node->GetModel()].GetLocalAABBMin();
+                    glm::vec3 localaabbMax = models_[node->GetModel()].GetLocalAABBMax();
+
+                    auto& worldMtx = node->WorldTransform();
+
+                    // TODO: need better algo
+                    glm::vec3 aabbMin = glm::vec3(worldMtx * glm::vec4(localaabbMin, 1.0f));
+                    glm::vec3 aabbMax = glm::vec3(worldMtx * glm::vec4(localaabbMax, 1.0f));
+                    sceneAABBMin_ = glm::min(aabbMin, sceneAABBMin_);
+                    sceneAABBMin_ = glm::min(aabbMax, sceneAABBMin_);
+                    sceneAABBMax_ = glm::max(aabbMin, sceneAABBMax_);
+                    sceneAABBMax_ = glm::max(aabbMax, sceneAABBMax_);
+                }
+            }
+
+            // create 6 plane bodys
+            PhysicsEngine->CreatePlaneBody(sceneAABBMin_, glm::vec3(1,0,0), JPH::EMotionType::Static);
+            PhysicsEngine->CreatePlaneBody(sceneAABBMax_, glm::vec3(-1,0,0), JPH::EMotionType::Static);
+            PhysicsEngine->CreatePlaneBody(sceneAABBMin_, glm::vec3(0,1,0), JPH::EMotionType::Static);
+            PhysicsEngine->CreatePlaneBody(sceneAABBMax_, glm::vec3(0,-1,0), JPH::EMotionType::Static);
+            PhysicsEngine->CreatePlaneBody(sceneAABBMin_, glm::vec3(0,0,1), JPH::EMotionType::Static);
+            PhysicsEngine->CreatePlaneBody(sceneAABBMax_, glm::vec3(0,0,-1), JPH::EMotionType::Static);
+        }
+      
 
         // 重建universe mesh buffer, 这个可以比较静态
         std::vector<GPUVertex> vertices;
@@ -365,7 +374,7 @@ namespace Assets
             cpuAccelerationStructure_.Tick(*this,  ambientCubeBufferMemory_.get(), farAmbientCubeBufferMemory_.get(), pageIndexBufferMemory_.get() );
         }
 
-        //NextEngine::GetInstance()->DrawAuxBox(sceneAABBMin_, sceneAABBMax_, glm::vec4(1, 0, 0, 1));
+        NextEngine::GetInstance()->DrawAuxBox(sceneAABBMin_, sceneAABBMax_, glm::vec4(1, 0, 0, 1));
     }
 
     void Scene::UpdateMaterial()

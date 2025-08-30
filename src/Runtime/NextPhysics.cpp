@@ -14,6 +14,7 @@
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
+#include <Jolt/Physics/Collision/Shape/PlaneShape.h>
 #include <Jolt/Physics/Collision/PhysicsMaterialSimple.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyActivationListener.h>
@@ -407,7 +408,7 @@ JPH::BodyID NextPhysics::CreateSphereBody(glm::vec3 position, float radius, JPH:
 	return AddBodyInternal(body, true);
 }
 
-JPH::BodyID NextPhysics::CreatePlaneBody(glm::vec3 position, glm::vec3 extent, JPH::EMotionType motionType)
+JPH::BodyID NextPhysics::CreateBoxBody(glm::vec3 position, glm::vec3 extent, JPH::EMotionType motionType)
 {
 	BodyInterface &body_interface = context_->physics_system.GetBodyInterface();
 	BodyID body_id(-1);
@@ -456,6 +457,32 @@ JPH::BodyID NextPhysics::CreateMeshBody(RefConst<MeshShapeSettings> meshShapeSet
 
 	FNextPhysicsBody body { glm::vec3(0,0,0), glm::vec3(0.0f, 0.0f, 0.0f), ENextBodyShape::Sphere, body_id, motionType };
 	return AddBodyInternal(body, false);
+}
+
+JPH::BodyID NextPhysics::CreatePlaneBody(glm::vec3 position, glm::vec3 normal, JPH::EMotionType motionType)
+{
+	BodyInterface &body_interface = context_->physics_system.GetBodyInterface();
+	BodyID body_id(-1);
+
+	// Next we can create a rigid body to serve as the floor, we make a large box
+	// Create the settings for the collision volume (the shape).
+	// Note that for simple shapes (like boxes) you can also directly construct a BoxShape.
+	PlaneShapeSettings plane_shape_settings(Plane::sFromPointAndNormal(Vec3(position.x, position.y, position.z), Vec3(normal.x, normal.y, normal.z)));
+	plane_shape_settings.SetEmbedded(); // A ref counted object on the stack (base class RefTarget) should be marked as such to prevent it from being freed when its reference count goes to 0.
+
+	// Create the shape
+	ShapeSettings::ShapeResult floor_shape_result = plane_shape_settings.Create();
+	ShapeRefC floor_shape = floor_shape_result.Get(); // We don't expect an error here, but you can check floor_shape_result for HasError() / GetError()
+
+	// Create the settings for the body itself. Note that here you can also set other properties like the restitution / friction.
+	BodyCreationSettings floor_settings(floor_shape, RVec3(0,0,0), Quat::sIdentity(), EMotionType::Static, Layers::NON_MOVING);
+	//floor_settings.mRestitution = 0.05f;
+	floor_settings.mFriction = 0.5f;
+	// Create the actual rigid body
+	body_id = body_interface.CreateAndAddBody(floor_settings, EActivation::DontActivate);
+
+	FNextPhysicsBody body { position, glm::vec3(0.0f, 0.0f, 0.0f), ENextBodyShape::Box, body_id, EMotionType::Static };
+	return AddBodyInternal(body, true);
 }
 
 MeshShapeSettings* NextPhysics::CreateMeshShape(Assets::Model& model)

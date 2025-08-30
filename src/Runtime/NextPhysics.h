@@ -66,8 +66,9 @@ public:
     void Stop();
     
     JPH::BodyID CreateSphereBody(glm::vec3 position, float radius, JPH::EMotionType motionType);
-    JPH::BodyID CreatePlaneBody(glm::vec3 position, glm::vec3 extent, JPH::EMotionType motionType);
+    JPH::BodyID CreateBoxBody(glm::vec3 position, glm::vec3 extent, JPH::EMotionType motionType);
     JPH::BodyID CreateMeshBody(JPH::RefConst<JPH::MeshShapeSettings> meshShapeSettings, glm::vec3 position, glm::quat rotation, glm::vec3 scale, JPH::EMotionType motionType, JPH::ObjectLayer layer);
+    JPH::BodyID CreatePlaneBody(glm::vec3 position, glm::vec3 normal, JPH::EMotionType motionType);
     JPH::MeshShapeSettings* CreateMeshShape(Assets::Model& model);
 
     void AddForceToBody(JPH::BodyID bodyID, const glm::vec3& force);

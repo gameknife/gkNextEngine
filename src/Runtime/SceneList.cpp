@@ -153,7 +153,7 @@ namespace
         nodes.back()->SetVisible(true);
         nodes.back()->SetMaterial({prev_mat_id + 0});
 
-        NextEngine::GetInstance()->GetPhysicsEngine()->CreatePlaneBody(vec3(0,-0.5,0), vec3(2000, 0.5, 2000), JPH::EMotionType::Static);
+        NextEngine::GetInstance()->GetPhysicsEngine()->CreateBoxBody(vec3(0,-0.5,0), vec3(2000, 0.5, 2000), JPH::EMotionType::Static);
         
         AddRayTracingInOneWeekendCommonScene(nodes, models, materials, tracks, random);
 
@@ -230,7 +230,7 @@ namespace
         nodes.back()->SetVisible(true);
 
         // create physical scene, later it will change to node components later
-        NextEngine::GetInstance()->GetPhysicsEngine()->CreatePlaneBody(vec3(0, -1, 0), vec3(8, 1, 8), JPH::EMotionType::Static);
+        NextEngine::GetInstance()->GetPhysicsEngine()->CreateBoxBody(vec3(0, -1, 0), vec3(8, 1, 8), JPH::EMotionType::Static);
         
         // procedural animation
         // Assets::AnimationTrack track{};

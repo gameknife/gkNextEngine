@@ -198,5 +198,8 @@ namespace Assets
 
 		Assets::GPUDrivenStat gpuDrivenStat_;
 		mutable Assets::GPUScene gpuScene_;
+
+		glm::vec3 sceneAABBMin_ {FLT_MAX, FLT_MAX, FLT_MAX};
+		glm::vec3 sceneAABBMax_ {-FLT_MAX, -FLT_MAX, -FLT_MAX};
 	};
 }

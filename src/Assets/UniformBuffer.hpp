@@ -64,7 +64,7 @@ namespace Assets
 		std::unique_ptr<Vulkan::Buffer> buffer_;
 		std::unique_ptr<Vulkan::DeviceMemory> memory_;
 	};
-	
+
 	struct RayCastResult
 	{
 		vec4 HitPoint;
@@ -73,6 +73,6 @@ namespace Assets
 		uint32_t InstanceId;
 		uint32_t MaterialId;
 		uint32_t Hitted;
-	}
+	};
 
 }

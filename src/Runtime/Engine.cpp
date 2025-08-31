@@ -289,7 +289,7 @@ bool NextEngine::Tick()
     smoothedDeltaSeconds_ = glm::mix(smoothedDeltaSeconds_, deltaSeconds_, invDelta * 100.0f);
     
     // Scene Update
-    if(scene_)
+    if(userSettings_.TickAnimation && scene_)
     {
         PERFORMANCEAPI_INSTRUMENT_DATA("Engine::TickScene", "");
         scene_->Tick(static_cast<float>(deltaSeconds_));

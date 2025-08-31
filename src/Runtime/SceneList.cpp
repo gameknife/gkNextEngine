@@ -29,7 +29,7 @@ namespace
 {
     int CreateMaterial(std::vector<Assets::FMaterial>& materials, Material mat)
     {
-        materials.push_back({"", static_cast<uint32_t>(materials.size()), mat});
+        materials.push_back({mat});
         return static_cast<int>(materials.size() - 1);
     }
 
@@ -147,7 +147,7 @@ namespace
         std::mt19937 engine(42);
         std::function<float ()> random = std::bind(std::uniform_real_distribution<float>(), engine);
 
-        materials.push_back({"", prev_mat_id + 0, Material::Lambertian(vec3(0.4f, 0.4f, 0.4f))});
+        materials.push_back({Material::Lambertian(vec3(0.4f, 0.4f, 0.4f))});
         models.push_back(Model::CreateBox(vec3(-1000, -0.5, -1000), vec3(1000, 0, 1000)));
         nodes.push_back(Assets::Node::CreateNode(Utilities::NameHelper::RandomName(6), vec3(0, 0, 0), quat(1, 0, 0, 0), vec3(1, 1, 1), 0, static_cast<uint32_t>(nodes.size()), false));
         nodes.back()->SetVisible(true);
@@ -210,8 +210,8 @@ namespace
         auto spherePos = vec3(1.30, 1.01 + 2.00 * 0.0, 0.80);
         auto boxPos = vec3(-1.30, 0, -0.80);
         
-        materials.push_back({"cbox_white", prev_mat_id + 4, Material::Lambertian(vec3(0.73f, 0.73f, 0.73f))});
-        materials.push_back({"cball_white", prev_mat_id + 5, Material::Mixture(vec3(0.73f, 0.73f, 0.73f), 0.01f)});
+        materials.push_back({Material::Lambertian(vec3(0.73f, 0.73f, 0.73f)), "cbox_white"});
+        materials.push_back({Material::Mixture(vec3(0.73f, 0.73f, 0.73f), 0.01f), "cball_white"});
         auto box0 = Model::CreateBox(vec3(-0.80, 0, -0.80), vec3(0.80, 1.60, 0.80));
         models.push_back(box0);
         auto ball0 = Model::CreateSphere(vec3(0, 0, 0), 1.0f);
@@ -288,7 +288,7 @@ bool SceneList::LoadScene(std::string filename, Assets::EnvironmentSetting& came
 {
     std::filesystem::path filepath = filename;
     std::string ext = filepath.extension().string();
-    materials.push_back({"root_default", 0, Material::Lambertian(vec3(0.73f, 0.73f, 0.73f))});
+    materials.push_back({Material::Lambertian(vec3(0.73f, 0.73f, 0.73f)), "root_default"});
     if (ext == ".glb" || ext == ".gltf")
     {
         return Model::LoadGLTFScene(filename, camera, nodes, models, materials, lights, tracks);

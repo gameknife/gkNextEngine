@@ -432,7 +432,7 @@ namespace Assets
                 m = Material::DiffuseLight(emissiveColor * power * 100.0f);
             }
 
-            materials.push_back( { mat.name, static_cast<uint32_t>(materials.size()), m } );
+            materials.push_back( { m, mat.name } );
         }
 
         // export whole scene into a big buffer, with vertice indices materials

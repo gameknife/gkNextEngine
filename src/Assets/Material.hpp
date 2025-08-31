@@ -73,10 +73,10 @@ namespace Assets
         float Reserverd2;
     };
 
+    // For upper usage
     struct FMaterial final
     {
-        std::string name_;
-        uint32_t globalId_;
         Material gpuMaterial_;
+        std::string name_;
     };
 }

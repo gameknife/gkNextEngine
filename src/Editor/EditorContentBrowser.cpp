@@ -100,7 +100,7 @@ void Editor::GUI::ShowMaterialBrowser()
             for ( uint32_t i = 0; i < AllMaterials.size(); ++i)
             {
                 auto& mat = AllMaterials[i];
-                DrawGeneralContentBrowser(true, mat.globalId_, mat.name_, ICON_FA_BOWLING_BALL, IM_COL32(132, 255, 132, 255), [this, i]()
+                DrawGeneralContentBrowser(true, i, mat.name_, ICON_FA_BOWLING_BALL, IM_COL32(132, 255, 132, 255), [this, i]()
                 {
                     selected_material = &(current_scene->Materials()[i]);
                     ed_material = true;

@@ -24,10 +24,10 @@ void CornellBox::Create(
 {
 	uint32_t prev_mat_id = static_cast<uint32_t>(materials.size());
 	
-	materials.push_back({"", prev_mat_id + 0,Material::Lambertian(vec3(0.65f, 0.05f, 0.05f))}); // red
-	materials.push_back({"", prev_mat_id + 1,Material::Lambertian(vec3(0.12f, 0.45f, 0.15f))}); // green
-	materials.push_back({"", prev_mat_id + 2,Material::Lambertian(vec3(0.73f, 0.73f, 0.73f))}); // white
-	materials.push_back({"", prev_mat_id + 3,Material::DiffuseLight(vec3(2000.0f))}); // light
+	materials.push_back({Material::Lambertian(vec3(0.65f, 0.05f, 0.05f))}); // red
+	materials.push_back({Material::Lambertian(vec3(0.12f, 0.45f, 0.15f))}); // green
+	materials.push_back({Material::Lambertian(vec3(0.73f, 0.73f, 0.73f))}); // white
+	materials.push_back({Material::DiffuseLight(vec3(2000.0f))}); // light
 
 	const float s = scale;
 

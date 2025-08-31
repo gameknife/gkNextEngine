@@ -79,7 +79,7 @@ namespace Assets
 		void SetSelectedId( uint32_t id ) const { selectedId_ = id; }
 
 		void Tick(float DeltaSeconds);
-		void UpdateMaterial();
+		void UpdateAllMaterials();
 		bool UpdateNodes();
 		void UpdateHDRSH();
 		bool UpdateNodesGpuDriven();
@@ -88,6 +88,7 @@ namespace Assets
 		Node* GetNodeByInstanceId(uint32_t id);
 		const Model* GetModel(uint32_t id) const;
 		const FMaterial* GetMaterial(uint32_t id) const;
+		const uint32_t AddMaterial(const FMaterial& material);
 
 		void MarkDirty();
 		
@@ -184,6 +185,7 @@ namespace Assets
 		mutable uint32_t selectedId_ = -1;
 
 		bool sceneDirty_ = true;
+		bool materialDirty_ = true;
 		
 		std::vector<NodeProxy> nodeProxys;
 		std::vector<VkDrawIndexedIndirectCommand> indirectDrawBufferInstanced;

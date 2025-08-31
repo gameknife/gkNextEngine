@@ -24,8 +24,8 @@ namespace Assets
         //int flags = supportRayTracing ? (VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) : VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
         int flags =  VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
         // host buffers
-        Vulkan::BufferUtil::CreateDeviceBufferLocal(commandPool, "Nodes", flags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, sizeof(NodeProxy) * 65535, nodeMatrixBuffer_, nodeMatrixBufferMemory_); // support 65535 nodes
-        Vulkan::BufferUtil::CreateDeviceBufferLocal(commandPool, "Materials", flags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,sizeof(Material) * 4096, materialBuffer_, materialBufferMemory_); // support 65535 nodes
+        Vulkan::BufferUtil::CreateDeviceBufferLocal(commandPool, "Nodes", flags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, sizeof(NodeProxy) * Assets::MAX_NODES, nodeMatrixBuffer_, nodeMatrixBufferMemory_); // support 65535 nodes
+        Vulkan::BufferUtil::CreateDeviceBufferLocal(commandPool, "Materials", flags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,sizeof(Material) * Assets::MAX_MATERIALS, materialBuffer_, materialBufferMemory_); // support 65535 nodes
 
         Vulkan::BufferUtil::CreateDeviceBufferLocal(commandPool, "VoxelDatas", flags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,Assets::CUBE_SIZE_XY * Assets::CUBE_SIZE_XY * Assets::CUBE_SIZE_Z * sizeof(Assets::VoxelData), farAmbientCubeBuffer_,
                                                     farAmbientCubeBufferMemory_);
@@ -263,15 +263,12 @@ namespace Assets
         Vulkan::BufferUtil::CreateDeviceBuffer(commandPool, "Offsets", flags, offsets_, offsetBuffer_, offsetBufferMemory_);
         Vulkan::BufferUtil::CreateDeviceBuffer(commandPool, "Lights", flags, lights_, lightBuffer_, lightBufferMemory_);
 
-        VkDeviceAddress bda = vertexBuffer_->GetDeviceAddress();
-        VkDeviceAddress nodeAddress = nodeMatrixBuffer_->GetDeviceAddress();
-
         // 一些数据
         lightCount_ = static_cast<uint32_t>(lights_.size());
         indicesCount_ = static_cast<uint32_t>(indices.size());
         verticeCount_ = static_cast<uint32_t>(vertices.size());
 
-        UpdateMaterial();
+        UpdateAllMaterials();
         MarkDirty();
 
 #if ANDROID
@@ -374,10 +371,10 @@ namespace Assets
             cpuAccelerationStructure_.Tick(*this,  ambientCubeBufferMemory_.get(), farAmbientCubeBufferMemory_.get(), pageIndexBufferMemory_.get() );
         }
 
-        NextEngine::GetInstance()->DrawAuxBox(sceneAABBMin_, sceneAABBMax_, glm::vec4(1, 0, 0, 1));
+        //NextEngine::GetInstance()->DrawAuxBox(sceneAABBMin_, sceneAABBMax_, glm::vec4(1, 0, 0, 1));
     }
 
-    void Scene::UpdateMaterial()
+    void Scene::UpdateAllMaterials()
     {
         if (materials_.empty()) return;
 
@@ -404,6 +401,15 @@ namespace Assets
         std::memcpy(&gpuDrivenStat_, gpuData, sizeof(GPUDrivenStat));
         std::memcpy(gpuData, &zero, sizeof(GPUDrivenStat)); // reset to zero
         gpuDrivenStatsBuffer_Memory_->Unmap();
+
+
+        // if mat dirty, update
+        if (materialDirty_)
+        {
+            materialDirty_ = false;
+
+            UpdateAllMaterials();
+        }
         
         return UpdateNodesGpuDriven();
     }
@@ -508,6 +514,13 @@ namespace Assets
             return &materials_[id];
         }
         return nullptr;
+    }
+
+    const uint32_t Scene::AddMaterial(const FMaterial& material)
+    {
+        materials_.push_back(material);
+        materialDirty_ = true;
+        return materials_.size() - 1;
     }
 
     void Scene::MarkDirty()

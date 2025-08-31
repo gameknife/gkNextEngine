@@ -30,6 +30,8 @@ void NextRendererGameInstance::OnTick(double deltaSeconds)
     modelViewController_.UpdateCamera(10.0f, deltaSeconds);
 }
 
+std::vector<Assets::FMaterial> matPreparedForAdd;
+
 void NextRendererGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<Assets::Node>>& nodes,
 	std::vector<Assets::Model>& models, std::vector<Assets::FMaterial>& materials,
 	std::vector<Assets::LightObject>& lights, std::vector<Assets::AnimationTrack>& tracks)
@@ -39,17 +41,17 @@ void NextRendererGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<As
 
 	matIds_.clear();
 	
-	materials.push_back({"", static_cast<uint32_t>(materials.size()), Assets::Material::Lambertian(glm::vec3(1,1,1))});
-	matIds_.push_back(static_cast<uint32_t>(materials.size() - 1));
+	matPreparedForAdd.push_back({Assets::Material::Lambertian(glm::vec3(1,1,1))});
+	//matIds_.push_back(static_cast<uint32_t>(materials.size() - 1));
 
-	materials.push_back({"", static_cast<uint32_t>(materials.size()), Assets::Material::Metallic(glm::vec3(0.5,0.5,0.5), 0.4f)});
-	matIds_.push_back(static_cast<uint32_t>(materials.size() - 1));
+	matPreparedForAdd.push_back({Assets::Material::Metallic(glm::vec3(0.5,0.5,0.5), 0.4f)});
+	//matIds_.push_back(static_cast<uint32_t>(materials.size() - 1));
 
-	materials.push_back({"", static_cast<uint32_t>(materials.size()), Assets::Material::Dielectric(1.5f, 0.0f)});
-	matIds_.push_back(static_cast<uint32_t>(materials.size() - 1));
+	matPreparedForAdd.push_back({Assets::Material::Dielectric(1.5f, 0.0f)});
+	//matIds_.push_back(static_cast<uint32_t>(materials.size() - 1));
 
-	materials.push_back({"", static_cast<uint32_t>(materials.size()), Assets::Material::Mixture(glm::vec3(1.0f, 0.3f, 0.3f), 0.01f)});
-	matIds_.push_back(static_cast<uint32_t>(materials.size() - 1));
+	matPreparedForAdd.push_back({Assets::Material::Mixture(glm::vec3(1.0f, 0.3f, 0.3f), 0.01f)});
+	//matIds_.push_back(static_cast<uint32_t>(materials.size() - 1));
 
 	// materials.push_back({"", static_cast<uint32_t>(materials.size()), Assets::Material::DiffuseLight(glm::vec3(200,200,200))});
 	// matIds_.push_back(static_cast<uint32_t>(materials.size() - 1));
@@ -194,8 +196,14 @@ void NextRendererGameInstance::CreateSphereAndPush()
 	uint32_t instanceId = uint32_t(GetEngine().GetScene().Nodes().size());
 	std::shared_ptr<Assets::Node> newNode = Assets::Node::CreateNode("temp", center, glm::quat(), glm::vec3(1), modelId_,
 															   instanceId, false);
-	int random = std::rand() % matIds_.size();
-	newNode->SetMaterial( { matIds_[random]} );
+	int random = std::rand() % matPreparedForAdd.size();
+	Assets::FMaterial instanced = matPreparedForAdd[random];
+	instanced.gpuMaterial_.Diffuse = glm::vec4(static_cast <float> (rand()) / static_cast <float> (RAND_MAX) * 0.8f + 0.2f,
+												static_cast <float> (rand()) / static_cast <float> (RAND_MAX) * 0.8f + 0.2f,
+												static_cast <float> (rand()) / static_cast <float> (RAND_MAX) * 0.8f + 0.2f, 1.0);
+	
+	uint32_t newMatId = GetEngine().GetScene().AddMaterial(instanced);
+	newNode->SetMaterial( { newMatId } );
 	newNode->SetVisible(true);
 	newNode->SetMobility(Assets::Node::ENodeMobility::Dynamic);
 	auto id = NextEngine::GetInstance()->GetPhysicsEngine()->CreateSphereBody(center, 0.2f, JPH::EMotionType::Dynamic);

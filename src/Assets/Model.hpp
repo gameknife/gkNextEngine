@@ -1,9 +1,8 @@
 #pragma once
-
 #include "Vertex.hpp"
 #include "Texture.hpp"
 #include "UniformBuffer.hpp"
-#include "Runtime/NextPhysics.h"
+#include <glm/ext.hpp>
 
 struct FNextPhysicsBody;
 

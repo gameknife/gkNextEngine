@@ -11,6 +11,7 @@
 #include <Jolt/Core/Reference.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
 
+#include "Node.h"
 #include "Runtime/Engine.hpp"
 #include "Vulkan/DescriptorSetManager.hpp"
 #include "Vulkan/DescriptorSets.hpp"
@@ -117,13 +118,20 @@ namespace Assets
             std::vector<JPH::RefConst<JPH::MeshShapeSettings> > meshShapes;
             for (auto& model : models_)
             {
-                meshShapes.push_back( JPH::RefConst<JPH::MeshShapeSettings>(PhysicsEngine->CreateMeshShape(model))  );
+                if (model.NumberOfIndices() < 65535 * 3)
+                {
+                    meshShapes.push_back( JPH::RefConst<JPH::MeshShapeSettings>(PhysicsEngine->CreateMeshShape(model))  );
+                }
+                else
+                {
+                    meshShapes.push_back( JPH::RefConst<JPH::MeshShapeSettings>(nullptr)  );
+                }
             }
 
             for (auto& node : nodes_)
             {
                 // bind the mesh shape to the node
-                if (node->IsVisible() && node->GetMobility() != Node::ENodeMobility::Dynamic && node->GetModel() < meshShapes.size())// && node->GetParent() == nullptr)
+                if (node->IsVisible() && node->GetMobility() != Node::ENodeMobility::Dynamic && node->GetModel() < meshShapes.size() && meshShapes[node->GetModel()])// && node->GetParent() == nullptr)
                 {
                     JPH::EMotionType motionType = node->GetMobility() == Node::ENodeMobility::Static ? JPH::EMotionType::Static : JPH::EMotionType::Kinematic;
                     JPH::ObjectLayer layer = node->GetMobility() == Node::ENodeMobility::Static ? Layers::NON_MOVING : Layers::MOVING;

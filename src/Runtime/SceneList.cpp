@@ -48,21 +48,6 @@ namespace
                 const vec3 center(center_x, 0.2f + 2.0f * chooseMat, center_y);
 
                 const std::string Name = Utilities::NameHelper::RandomName(6);
-
-                // Animation Sequence
-                // const float Duration = 0.3f;
-                // Assets::AnimationTrack track{};
-                // track.Duration_ = Duration;
-                // track.NodeName_ = Name;
-                // int offset = static_cast<int>(random() * 9.0f);
-                // for ( int i = 0; i < 11; ++i )
-                // {
-                //     float time = i / 10.0f;
-                //     float shifttime = ((i + offset) % 10) / 10.0f;
-                //     float mixer = glm::abs(shifttime - 0.5f) / 0.5f;
-                //     track.TranslationChannel.Keys.push_back( {time * Duration, center + vec3(0,glm::sqrt(mixer) * 0.15f,0)} );
-                // }
-                // tracks.push_back(track);
                 
                 if (length(center - vec3(4, 0.2f, 0)) > 0.9f)
                 {
@@ -115,6 +100,8 @@ namespace
                         nodes.back()->SetVisible(true);
                         nodes.back()->SetMaterial({matId});
                     }
+                    
+                    nodes.back()->SetMobility(Assets::Node::ENodeMobility::Dynamic);
                     nodes.back()->BindPhysicsBody(id);
                 }
             }
@@ -152,8 +139,6 @@ namespace
         nodes.push_back(Assets::Node::CreateNode(Utilities::NameHelper::RandomName(6), vec3(0, 0, 0), quat(1, 0, 0, 0), vec3(1, 1, 1), 0, static_cast<uint32_t>(nodes.size()), false));
         nodes.back()->SetVisible(true);
         nodes.back()->SetMaterial({prev_mat_id + 0});
-
-        NextEngine::GetInstance()->GetPhysicsEngine()->CreateBoxBody(vec3(0,-0.5,0), vec3(2000, 0.5, 2000), JPH::EMotionType::Static);
         
         AddRayTracingInOneWeekendCommonScene(nodes, models, materials, tracks, random);
 
@@ -167,18 +152,21 @@ namespace
         nodes.back()->SetVisible(true);
         nodes.back()->SetMaterial({matIdx0});
         auto body1 = NextEngine::GetInstance()->GetPhysicsEngine()->CreateSphereBody(vec3(0, 1, 0), 1.0f, JPH::EMotionType::Dynamic);
+        nodes.back()->SetMobility(Assets::Node::ENodeMobility::Dynamic);
         nodes.back()->BindPhysicsBody(body1);
         
         nodes.push_back(Assets::Node::CreateNode(Utilities::NameHelper::RandomName(6), vec3(-4, 1, 0), quat(1, 0, 0, 0), vec3(1, 1, 1), modelIdx, static_cast<uint32_t>(nodes.size()), isProc));
         nodes.back()->SetVisible(true);
         nodes.back()->SetMaterial({matIdx1});
         auto body2 = NextEngine::GetInstance()->GetPhysicsEngine()->CreateSphereBody(vec3(-4, 1, 0), 1.0f, JPH::EMotionType::Dynamic);
+        nodes.back()->SetMobility(Assets::Node::ENodeMobility::Dynamic);
         nodes.back()->BindPhysicsBody(body2);
         
         nodes.push_back(Assets::Node::CreateNode(Utilities::NameHelper::RandomName(6), vec3(4, 1, 0), quat(1, 0, 0, 0), vec3(1, 1, 1), modelIdx, static_cast<uint32_t>(nodes.size()), isProc));
         nodes.back()->SetVisible(true);
         nodes.back()->SetMaterial({matIdx2});
         auto body3 = NextEngine::GetInstance()->GetPhysicsEngine()->CreateSphereBody(vec3(4, 1, 0), 1.0f, JPH::EMotionType::Dynamic);
+        nodes.back()->SetMobility(Assets::Node::ENodeMobility::Dynamic);
         nodes.back()->BindPhysicsBody(body3);
         
     }
@@ -222,28 +210,13 @@ namespace
         nodes.back()->SetMaterial({prev_mat_id + 5});
 
         auto id = NextEngine::GetInstance()->GetPhysicsEngine()->CreateSphereBody(spherePos, 1.0f, JPH::EMotionType::Dynamic);
+        nodes.back()->SetMobility(Assets::Node::ENodeMobility::Dynamic);
         nodes.back()->BindPhysicsBody(id);
         
         nodes.push_back(Assets::Node::CreateNode("Box", boxPos, quat(vec3(0, 0.25f, 0)), vec3(1, 2, 1), cbox_model + 1, static_cast<uint32_t>(nodes.size()),
                                                  false));
         nodes.back()->SetMaterial({prev_mat_id + 4});
         nodes.back()->SetVisible(true);
-
-        // create physical scene, later it will change to node components later
-        NextEngine::GetInstance()->GetPhysicsEngine()->CreateBoxBody(vec3(0, -1, 0), vec3(8, 1, 8), JPH::EMotionType::Static);
-        
-        // procedural animation
-        // Assets::AnimationTrack track{};
-        // track.Duration_ = 1.0f;
-        // track.NodeName_ = "Sphere1";
-        // for ( int i = 0; i < 11; ++i )
-        // {
-        //     float time = i / 10.0f;
-        //     float mixer = glm::abs(time - 0.5f) / 0.5f;
-        //     track.TranslationChannel.Keys.push_back( {time, vec3(130, glm::mix(360, 101, mixer * mixer), 80)} );
-        // }
-        //
-        // tracks.push_back(track);
     }
 }
 

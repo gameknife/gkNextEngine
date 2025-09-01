@@ -118,36 +118,6 @@ void CornellBox::Create(
 		light.lightMatIdx = prev_mat_id + 3;
 		lights.push_back(light);
 	}
-
-	
-	// Second Light
-	// i = static_cast<uint32_t>(vertices.size());
-	// {
-	// 	const float x0 = s * (13.0f / 555.0f);
-	// 	const float x1 = s * (143.0f / 555.0f);
-	// 	const float z0 = s * (-555.0f + 442.0f) / 555.0f;
-	// 	const float z1 = s * (-555.0f + 312.0f) / 555.0f;
-	// 	const float y1 = s * 0.001f;
-	// 	
-	// 	materials.push_back(Material::DiffuseLight(vec3(2.0f))); // light
-	//
-	// 	vertices.push_back(Vertex{ vec3(x0, y1, z1), vec3(0, 1, 0), vec2(0, 1), 4 });
-	// 	vertices.push_back(Vertex{ vec3(x1, y1, z1), vec3(0, 1, 0), vec2(1, 1), 4 });
-	// 	vertices.push_back(Vertex{ vec3(x1, y1, z0), vec3(0, 1, 0), vec2(1, 0), 4 });
-	// 	vertices.push_back(Vertex{ vec3(x0, y1, z0), vec3(0, 1, 0), vec2(0, 0), 4 });
-	//
-	// 	AddTriangle(indices, i, 0, 2, 1);
-	// 	AddTriangle(indices, i, 0, 3, 2);
-	//
-	// 	LightObject light {};
-	// 	light.p0 = vec4(vec3(x0, y1, z1) - offset, 1);
-	// 	light.p1 = vec4(vec3(x0, y1, z0) - offset, 1);
-	// 	light.p3 = vec4(vec3(x1, y1, z1) - offset, 1);
-	// 	light.normal_area = vec4(0, -1, 0, (x1 - x0) * (z0 - z1));
-	//
-	// 	lights.push_back(light);
-	// }
-	
 }
 
 }

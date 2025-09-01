@@ -231,7 +231,7 @@ struct FNextPhysicsContext
 		physics_system.Init(cMaxBodies, cNumBodyMutexes, cMaxBodyPairs, cMaxContactConstraints, broad_phase_layer_interface, object_vs_broadphase_layer_filter, object_vs_object_layer_filter);
 
 		PhysicsSettings settings;
-		settings.mPointVelocitySleepThreshold = 0.1f;
+		settings.mPointVelocitySleepThreshold = 0.01f;
 		settings.mTimeBeforeSleep = 0.1f;
 		physics_system.SetPhysicsSettings(settings);
 		

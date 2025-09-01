@@ -123,7 +123,7 @@ namespace Assets
             for (auto& node : nodes_)
             {
                 // bind the mesh shape to the node
-                if (node->IsVisible() && node->GetModel() < meshShapes.size())// && node->GetParent() == nullptr)
+                if (node->IsVisible() && node->GetMobility() != Node::ENodeMobility::Dynamic && node->GetModel() < meshShapes.size())// && node->GetParent() == nullptr)
                 {
                     JPH::EMotionType motionType = node->GetMobility() == Node::ENodeMobility::Static ? JPH::EMotionType::Static : JPH::EMotionType::Kinematic;
                     JPH::ObjectLayer layer = node->GetMobility() == Node::ENodeMobility::Static ? Layers::NON_MOVING : Layers::MOVING;

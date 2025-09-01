@@ -1,10 +1,12 @@
 #include "MagicaLegoGameInstance.hpp"
-#include <glm/gtc/quaternion.hpp>
 #include "Assets/Scene.hpp"
+#include "Assets/Node.h"
 #include "Utilities/FileHelper.hpp"
 #include "MagicaLegoUserInterface.hpp"
 #include "Runtime/Platform/PlatformCommon.h"
 #include "Vulkan/SwapChain.hpp"
+
+#include <glm/gtc/quaternion.hpp>
 
 const glm::i16vec3 INVALID_POS(0, -10, 0);
 

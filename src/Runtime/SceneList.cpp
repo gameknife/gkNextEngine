@@ -11,6 +11,9 @@
 #include <filesystem>
 #include <algorithm>
 
+#include "Assets/FProcModel.h"
+#include "Assets/FSceneLoader.h"
+#include "Assets/Node.h"
 
 
 namespace Vulkan
@@ -36,7 +39,7 @@ namespace
     void AddRayTracingInOneWeekendCommonScene(std::vector<std::shared_ptr<Assets::Node>>& nodes, std::vector<Assets::Model>& models, std::vector<Assets::FMaterial>& materials,
                                               std::vector<Assets::AnimationTrack>& tracks, std::function<float ()>& random)
     {
-        models.push_back(Model::CreateSphere(vec3(0,0,0), 0.2f));
+        models.push_back(Assets::FProcModel::CreateSphere(vec3(0,0,0), 0.2f));
         uint32_t meshIdx = static_cast<uint32_t>(models.size() - 1);
         for (int i = -22; i < 22; ++i)
         {
@@ -135,7 +138,7 @@ namespace
         std::function<float ()> random = std::bind(std::uniform_real_distribution<float>(), engine);
 
         materials.push_back({Material::Lambertian(vec3(0.4f, 0.4f, 0.4f))});
-        models.push_back(Model::CreateBox(vec3(-1000, -0.5, -1000), vec3(1000, 0, 1000)));
+        models.push_back(Assets::FProcModel::CreateBox(vec3(-1000, -0.5, -1000), vec3(1000, 0, 1000)));
         nodes.push_back(Assets::Node::CreateNode(Utilities::NameHelper::RandomName(6), vec3(0, 0, 0), quat(1, 0, 0, 0), vec3(1, 1, 1), 0, static_cast<uint32_t>(nodes.size()), false));
         nodes.back()->SetVisible(true);
         nodes.back()->SetMaterial({prev_mat_id + 0});
@@ -145,7 +148,7 @@ namespace
         uint32_t matIdx0 = CreateMaterial(materials, Material::Dielectric(1.5f, 0.0f));
         uint32_t matIdx1 = CreateMaterial(materials, Material::Lambertian(vec3(0.4f, 0.2f, 0.1f)));
         uint32_t matIdx2 = CreateMaterial(materials, Material::Metallic(vec3(0.7f, 0.6f, 0.5f), 0.1f));
-        models.push_back(Model::CreateSphere(vec3(0, 0, 0), 1.0f));
+        models.push_back(Assets::FProcModel::CreateSphere(vec3(0, 0, 0), 1.0f));
         uint32_t modelIdx = static_cast<uint32_t>(models.size() - 1);
         
         nodes.push_back(Assets::Node::CreateNode(Utilities::NameHelper::RandomName(6), vec3(0, 1, 0), quat(1, 0, 0, 0), vec3(1, 1, 1), modelIdx, static_cast<uint32_t>(nodes.size()), isProc));
@@ -190,7 +193,7 @@ namespace
         cameraInit.HasSky = false;
         cameraInit.HasSun = false;
 
-        int cbox_model = Model::CreateCornellBox(5.55f, models, materials, lights);
+        int cbox_model = Assets::FProcModel::CreateCornellBox(5.55f, models, materials, lights);
         nodes.push_back(Assets::Node::CreateNode(Utilities::NameHelper::RandomName(6), vec3(0, 0, 0), quat(1, 0, 0, 0), vec3(1, 1, 1), cbox_model, static_cast<uint32_t>(nodes.size()), false));
         nodes.back()->SetVisible(true);
         nodes.back()->SetMaterial({prev_mat_id + 0,prev_mat_id + 1,prev_mat_id + 2,prev_mat_id + 3});
@@ -200,9 +203,9 @@ namespace
         
         materials.push_back({Material::Lambertian(vec3(0.73f, 0.73f, 0.73f)), "cbox_white"});
         materials.push_back({Material::Mixture(vec3(0.73f, 0.73f, 0.73f), 0.01f), "cball_white"});
-        auto box0 = Model::CreateBox(vec3(-0.80, 0, -0.80), vec3(0.80, 1.60, 0.80));
+        auto box0 = Assets::FProcModel::CreateBox(vec3(-0.80, 0, -0.80), vec3(0.80, 1.60, 0.80));
         models.push_back(box0);
-        auto ball0 = Model::CreateSphere(vec3(0, 0, 0), 1.0f);
+        auto ball0 = Assets::FProcModel::CreateSphere(vec3(0, 0, 0), 1.0f);
         models.push_back(ball0);
         nodes.push_back(Assets::Node::CreateNode("Sphere1", spherePos, quat(vec3(0, 0.5f, 0)), vec3(1, 1, 1), cbox_model + 2, static_cast<uint32_t>(nodes.size()),
                                                  false));
@@ -264,7 +267,7 @@ bool SceneList::LoadScene(std::string filename, Assets::EnvironmentSetting& came
     materials.push_back({Material::Lambertian(vec3(0.73f, 0.73f, 0.73f)), "root_default"});
     if (ext == ".glb" || ext == ".gltf")
     {
-        return Model::LoadGLTFScene(filename, camera, nodes, models, materials, lights, tracks);
+        return Assets::FSceneLoader::LoadGLTFScene(filename, camera, nodes, models, materials, lights, tracks);
     }
     if (ext == ".proc")
     {

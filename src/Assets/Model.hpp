@@ -1,16 +1,9 @@
 #pragma once
 
-#include "Material.hpp"
 #include "Vertex.hpp"
 #include "Texture.hpp"
 #include "UniformBuffer.hpp"
 #include "Runtime/NextPhysics.h"
-
-#include <memory>
-#include <set>
-#include <string>
-#include <vector>
-#include <glm/detail/type_quat.hpp>
 
 struct FNextPhysicsBody;
 
@@ -90,86 +83,6 @@ namespace Assets
         std::vector<Camera> cameras;
     };
 
-    // node tree to represent the scene
-    // but in rendering, it will flatten to renderproxys
-    class Node : public std::enable_shared_from_this<Node>
-    {
-    public:
-        enum class ENodeMobility
-        {
-            Static,
-            Dynamic,
-            Kinematic
-        };
-        
-        static std::shared_ptr<Node> CreateNode(std::string name, glm::vec3 translation, glm::quat rotation, glm::vec3 scale, uint32_t modelId, uint32_t instanceId, bool replace);
-        Node(std::string name,  glm::vec3 translation, glm::quat rotation, glm::vec3 scale, uint32_t id, uint32_t instanceId, bool replace);
-        
-        void SetTranslation( glm::vec3 translation );
-        void SetRotation( glm::quat rotation );
-        void SetScale( glm::vec3 scale );
-
-        glm::vec3& Translation() const { return translation_; }
-        glm::quat& Rotation() const { return rotation_; }
-        glm::vec3& Scale() const { return scaling_; }
-
-        void RecalcLocalTransform();
-        void RecalcTransform(bool full = true);
-        const glm::mat4& WorldTransform() const { return transform_; }
-        glm::vec3 WorldTranslation() const;
-        glm::quat WorldRotation() const;
-        glm::vec3 WorldScale() const;
-        
-        uint32_t GetModel() const { return modelId_; }
-        const std::string& GetName() const {return name_; }
-
-        void SetVisible(bool visible) { visible_ = visible; }
-        bool IsVisible() const { return visible_; }
-        bool IsDrawable() const { return modelId_ != -1; }
-
-        uint32_t GetInstanceId() const { return instanceId_; }
-        bool TickVelocity(glm::mat4& combinedTS);
-
-        void SetParent(std::shared_ptr<Node> parent);
-        Node* GetParent() { return parent_.get(); }
-
-        void AddChild(std::shared_ptr<Node> child);
-        void RemoveChild(std::shared_ptr<Node> child);
-
-        const std::set< std::shared_ptr<Node> >& Children() const { return children_; }
-
-        void SetMaterial(const std::array<uint32_t, 16>& materials);
-        std::array<uint32_t, 16>& Materials() { return materialIdx_; }
-        NodeProxy GetNodeProxy() const;
-
-        void BindPhysicsBody(JPH::BodyID bodyId) { physicsBodyTemp_ = bodyId; }
-
-        void SetMobility(ENodeMobility staticType) { mobility_ = staticType; }
-        ENodeMobility GetMobility() const { return mobility_; }
-
-        const JPH::BodyID& GetPhysicsBody() const { return physicsBodyTemp_; }
-        
-    private:
-        std::string name_;
-
-        mutable glm::vec3 translation_;
-        mutable glm::quat rotation_;
-        mutable glm::vec3 scaling_;
-
-        glm::mat4 localTransform_;
-        glm::mat4 transform_;
-        glm::mat4 prevTransform_;
-        uint32_t modelId_;
-        uint32_t instanceId_;
-        bool visible_;
-
-        std::shared_ptr<Node> parent_;
-        std::set< std::shared_ptr<Node> > children_;
-        std::array<uint32_t, 16> materialIdx_;
-        JPH::BodyID physicsBodyTemp_;
-        ENodeMobility mobility_;
-    };
-
     template <typename T>
     struct AnimationKey
     {
@@ -207,24 +120,6 @@ namespace Assets
     class Model final
     {
     public:
-        static Camera AutoFocusCamera(Assets::EnvironmentSetting& cameraInit, std::vector<Model>& models);
-        
-        static uint32_t CreateCornellBox(const float scale,
-                                     std::vector<Model>& models,
-                                     std::vector<FMaterial>& materials,
-                                     std::vector<LightObject>& lights);
-        static uint32_t CreateLightQuad(const glm::vec3& p0, const glm::vec3& p1, const glm::vec3& p2, const glm::vec3& p3,
-                                     const glm::vec3& dir, const glm::vec3& lightColor,
-                                     std::vector<Model>& models,
-                                     std::vector<Material>& materials,
-                                     std::vector<LightObject>& lights);
-        static bool LoadGLTFScene(const std::string& filename, Assets::EnvironmentSetting& cameraInit, std::vector< std::shared_ptr<Assets::Node> >& nodes,
-                                  std::vector<Assets::Model>& models, std::vector<Assets::FMaterial>& materials, std::vector<Assets::LightObject>& lights, std::vector<Assets::AnimationTrack>& tracks);
-
-        // basic geometry
-        static Model CreateBox(const glm::vec3& p0, const glm::vec3& p1);
-        static Model CreateSphere(const glm::vec3& center, float radius);
-
         Model& operator =(const Model&) = delete;
         Model& operator =(Model&&) = delete;
 
@@ -266,5 +161,8 @@ namespace Assets
         uint32_t indiceCount;
 
         uint32_t sectionCount;
+
+        friend class FProcModel;
+        friend class FSceneLoader;
     };
 }

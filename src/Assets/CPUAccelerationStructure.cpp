@@ -1,16 +1,17 @@
 #include "CPUAccelerationStructure.h"
 #include "Runtime/TaskCoordinator.hpp"
 #include "Vulkan/DeviceMemory.hpp"
-#include "Scene.hpp"
+#include "Assets/Node.h"
+#include "TextureImage.hpp"
+#include "Runtime/Engine.hpp"
+#include "Assets/Scene.hpp"
+
 #include <chrono>
-#include <fstream>
 #include <xxhash.h>
 
 #define TINYBVH_IMPLEMENTATION
-#include "TextureImage.hpp"
-#include "Runtime/Engine.hpp"
 #include "ThirdParty/tinybvh/tiny_bvh.h"
-#include "Utilities/Math.hpp"
+
 
 static tinybvh::BVH GCpuBvh;
 static std::vector<tinybvh::BLASInstance>* GbvhInstanceList;

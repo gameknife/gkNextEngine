@@ -22,10 +22,6 @@ namespace Vulkan
 
 namespace Vulkan::RayTracing
 {
-	class PathTracingPipeline;
-	class RayTraceBaseRenderer;
-	class LogicRendererBase;
-	
 	class RayTraceBaseRenderer : public Vulkan::VulkanBaseRenderer
 	{
 	public:

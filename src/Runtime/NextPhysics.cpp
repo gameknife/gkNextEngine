@@ -23,6 +23,7 @@
 #include <iostream>
 #include <cstdarg>
 #include <thread>
+#include <glm/ext.hpp>
 
 #include "Engine.hpp"
 

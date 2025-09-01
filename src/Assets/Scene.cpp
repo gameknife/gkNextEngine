@@ -520,7 +520,7 @@ namespace Assets
     {
         materials_.push_back(material);
         materialDirty_ = true;
-        return materials_.size() - 1;
+        return uint32_t(materials_.size() - 1);
     }
 
     void Scene::MarkDirty()

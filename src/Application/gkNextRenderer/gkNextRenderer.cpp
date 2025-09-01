@@ -2,6 +2,8 @@
 
 #include <imgui.h>
 
+#include "Assets/FProcModel.h"
+#include "Assets/Node.h"
 #include "Runtime/Engine.hpp"
 #include "Utilities/Localization.hpp"
 
@@ -36,25 +38,15 @@ void NextRendererGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<As
 	std::vector<Assets::Model>& models, std::vector<Assets::FMaterial>& materials,
 	std::vector<Assets::LightObject>& lights, std::vector<Assets::AnimationTrack>& tracks)
 {
-	models.push_back(Assets::Model::CreateSphere(glm::vec3(0,0,0), 0.2f));
+	models.push_back(Assets::FProcModel::CreateSphere(glm::vec3(0,0,0), 0.2f));
 	modelId_ = static_cast<uint32_t>(models.size() - 1);
 
 	matIds_.clear();
 	
 	matPreparedForAdd.push_back({Assets::Material::Lambertian(glm::vec3(1,1,1))});
-	//matIds_.push_back(static_cast<uint32_t>(materials.size() - 1));
-
 	matPreparedForAdd.push_back({Assets::Material::Metallic(glm::vec3(0.5,0.5,0.5), 0.4f)});
-	//matIds_.push_back(static_cast<uint32_t>(materials.size() - 1));
-
 	matPreparedForAdd.push_back({Assets::Material::Dielectric(1.5f, 0.0f)});
-	//matIds_.push_back(static_cast<uint32_t>(materials.size() - 1));
-
 	matPreparedForAdd.push_back({Assets::Material::Mixture(glm::vec3(1.0f, 0.3f, 0.3f), 0.01f)});
-	//matIds_.push_back(static_cast<uint32_t>(materials.size() - 1));
-
-	// materials.push_back({"", static_cast<uint32_t>(materials.size()), Assets::Material::DiffuseLight(glm::vec3(200,200,200))});
-	// matIds_.push_back(static_cast<uint32_t>(materials.size() - 1));
 }
 
 void NextRendererGameInstance::OnSceneLoaded()

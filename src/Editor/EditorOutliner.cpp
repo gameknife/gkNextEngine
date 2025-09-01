@@ -1,6 +1,7 @@
 #include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 #include "EditorGUI.h"
 #include "Assets/Model.hpp"
+#include "Assets/Node.h"
 #include "Assets/Scene.hpp"
 
 

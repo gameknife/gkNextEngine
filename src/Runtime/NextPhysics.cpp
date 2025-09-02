@@ -231,10 +231,10 @@ struct FNextPhysicsContext
 		
 		physics_system.Init(cMaxBodies, cNumBodyMutexes, cMaxBodyPairs, cMaxContactConstraints, broad_phase_layer_interface, object_vs_broadphase_layer_filter, object_vs_object_layer_filter);
 
-		PhysicsSettings settings;
-		settings.mPointVelocitySleepThreshold = 0.01f;
-		settings.mTimeBeforeSleep = 0.1f;
-		physics_system.SetPhysicsSettings(settings);
+		// PhysicsSettings settings;
+		// settings.mPointVelocitySleepThreshold = 0.01f;
+		// settings.mTimeBeforeSleep = 0.1f;
+		// physics_system.SetPhysicsSettings(settings);
 		
 		
 		physics_system.SetBodyActivationListener(&body_activation_listener);
@@ -363,8 +363,11 @@ void NextPhysics::Tick(double DeltaSeconds)
 			RVec3 vel = body_interface.GetLinearVelocity(body.first);
 			body.second.position = glm::vec3(pos.GetX(), pos.GetY(), pos.GetZ());
 			body.second.velocity = glm::vec3(vel.GetX(), vel.GetY(), vel.GetZ());
-			
-			NextEngine::GetInstance()->GetScene().MarkDirty(); // if changed, then dirty
+
+			if (vel.Length() > 0.1f)
+			{
+				NextEngine::GetInstance()->GetScene().MarkDirty(); // if changed, then dirty
+			}
 		}
 	}
 

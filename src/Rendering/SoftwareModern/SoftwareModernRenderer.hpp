@@ -33,7 +33,13 @@ namespace Vulkan::LegacyDeferred
 		void Render(VkCommandBuffer commandBuffer, uint32_t imageIndex) override;
 
 	private:
-		std::unique_ptr<Vulkan::PipelineCommon::ZeroBindPipeline> deferredShadingPipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindPipeline> deferredShadingPipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindPipeline> composePipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindCustomPushConstantPipeline> accumulatePipeline_;
+		
+		uint32_t prevSingleDiffuseId_{};
+		uint32_t prevSingleSpecularId_{};
+		uint32_t prevSingleAlbedoId_{};
 	};
 
 }

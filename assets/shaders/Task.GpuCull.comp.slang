@@ -218,7 +218,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
         {
             InterlockedAdd(gpuScene.GPUDrivenStats[0].CulledCount, 1);
             InterlockedAdd(gpuScene.GPUDrivenStats[0].CulledTriangleCount, model.indexCount / 3);
-            //shouldDraw = false;
+            shouldDraw = false;
         }
     }
 

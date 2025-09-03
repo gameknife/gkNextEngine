@@ -364,7 +364,7 @@ void NextPhysics::Tick(double DeltaSeconds)
 			body.second.position = glm::vec3(pos.GetX(), pos.GetY(), pos.GetZ());
 			body.second.velocity = glm::vec3(vel.GetX(), vel.GetY(), vel.GetZ());
 
-			if (vel.Length() > 0.1f)
+			if (vel.Length() > 0.001f)
 			{
 				NextEngine::GetInstance()->GetScene().MarkDirty(); // if changed, then dirty
 			}

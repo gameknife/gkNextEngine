@@ -942,7 +942,7 @@ namespace Vulkan
                         pushConst = { imageIndex,0, 0, SwapChain().RenderExtent().width, SwapChain().RenderExtent().height};
                         break;
                     default:
-                        pushConst = { imageIndex,SwapChain().Extent().width ,SwapChain().Extent().height, SwapChain().RenderExtent().width / 2, SwapChain().RenderExtent().height / 2};
+                        pushConst = { imageIndex,0,SwapChain().Extent().height / 2, SwapChain().RenderExtent().width, SwapChain().RenderExtent().height};
                         break;
                     }
                 

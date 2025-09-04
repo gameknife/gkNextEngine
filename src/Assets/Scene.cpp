@@ -282,7 +282,7 @@ namespace Assets
 #if ANDROID
         cpuAccelerationStructure_.AsyncProcessFull(*this, farAmbientCubeBufferMemory_.get(), false);
 #else
-        if ( !NextEngine::GetInstance()->GetRenderer().supportRayTracing_ )
+        // if ( !NextEngine::GetInstance()->GetRenderer().supportRayTracing_ ) this has to be done, cause voxel tracing needed
         {
             cpuAccelerationStructure_.AsyncProcessFull(*this, farAmbientCubeBufferMemory_.get(), false);
         }
@@ -330,46 +330,49 @@ namespace Assets
 
     void Scene::Tick(float DeltaSeconds)
     {
-        float DurationMax = 0;
-
-        for (auto& track : tracks_)
+        if ( NextEngine::GetInstance()->GetUserSettings().TickAnimation)
         {
-            if (!track.Playing()) continue;
-            DurationMax = glm::max(DurationMax, track.Duration_);
-        }
+            float DurationMax = 0;
 
-        for (auto& track : tracks_)
-        {
-            if (!track.Playing()) continue;
-            track.Time_ += DeltaSeconds;
-            if (track.Time_ > DurationMax)
+            for (auto& track : tracks_)
             {
-                track.Time_ = 0;
+                if (!track.Playing()) continue;
+                DurationMax = glm::max(DurationMax, track.Duration_);
             }
-            Node* node = GetNode(track.NodeName_);
-            if (node)
+
+            for (auto& track : tracks_)
             {
-                glm::vec3 translation = node->Translation();
-                glm::quat rotation = node->Rotation();
-                glm::vec3 scaling = node->Scale();
-
-                track.Sample(track.Time_, translation, rotation, scaling);
-
-                node->SetTranslation(translation);
-                node->SetRotation(rotation);
-                node->SetScale(scaling);
-                node->RecalcTransform(true);
-
-                MarkDirty();
-
-                // to physicSys
-                NextEngine::GetInstance()->GetPhysicsEngine()->MoveKinematicBody(node->GetPhysicsBody(), translation, rotation, 0.01f);
-
-                // temporal if camera node, request override
-                if (node->GetName() == "Shot.BlueCar")
+                if (!track.Playing()) continue;
+                track.Time_ += DeltaSeconds;
+                if (track.Time_ > DurationMax)
                 {
-                    requestOverrideModelView = true;
-                    overrideModelView = glm::lookAtRH(translation, translation + rotation * glm::vec3(0, 0, -1), glm::vec3(0.0f, 1.0f, 0.0f));
+                    track.Time_ = 0;
+                }
+                Node* node = GetNode(track.NodeName_);
+                if (node)
+                {
+                    glm::vec3 translation = node->Translation();
+                    glm::quat rotation = node->Rotation();
+                    glm::vec3 scaling = node->Scale();
+
+                    track.Sample(track.Time_, translation, rotation, scaling);
+
+                    node->SetTranslation(translation);
+                    node->SetRotation(rotation);
+                    node->SetScale(scaling);
+                    node->RecalcTransform(true);
+
+                    MarkDirty();
+
+                    // to physicSys
+                    NextEngine::GetInstance()->GetPhysicsEngine()->MoveKinematicBody(node->GetPhysicsBody(), translation, rotation, 0.01f);
+
+                    // temporal if camera node, request override
+                    if (node->GetName() == "Shot.BlueCar")
+                    {
+                        requestOverrideModelView = true;
+                        overrideModelView = glm::lookAtRH(translation, translation + rotation * glm::vec3(0, 0, -1), glm::vec3(0.0f, 1.0f, 0.0f));
+                    }
                 }
             }
         }
@@ -378,8 +381,6 @@ namespace Assets
         {
             cpuAccelerationStructure_.Tick(*this,  ambientCubeBufferMemory_.get(), farAmbientCubeBufferMemory_.get(), pageIndexBufferMemory_.get() );
         }
-
-        //NextEngine::GetInstance()->DrawAuxBox(sceneAABBMin_, sceneAABBMax_, glm::vec4(1, 0, 0, 1));
     }
 
     void Scene::UpdateAllMaterials()

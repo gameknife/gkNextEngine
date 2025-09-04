@@ -184,6 +184,7 @@ namespace Assets
 
 		mutable uint32_t selectedId_ = -1;
 
+		bool sceneDirtyForCpuAS_ = false;
 		bool sceneDirty_ = true;
 		bool materialDirty_ = true;
 		

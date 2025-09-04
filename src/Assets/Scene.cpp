@@ -379,6 +379,14 @@ namespace Assets
 
         if ( NextEngine::GetInstance()->GetTotalFrames() % 10 == 0 )
         {
+            // if (sceneDirtyForCpuAS_)
+            // {
+            //     if ( cpuAccelerationStructure_.AsyncProcessFull(*this, farAmbientCubeBufferMemory_.get(), true) )
+            //     {
+            //         sceneDirtyForCpuAS_ = false;
+            //     }
+            // }
+            
             cpuAccelerationStructure_.Tick(*this,  ambientCubeBufferMemory_.get(), farAmbientCubeBufferMemory_.get(), pageIndexBufferMemory_.get() );
         }
     }
@@ -535,6 +543,7 @@ namespace Assets
     void Scene::MarkDirty()
     {
         sceneDirty_ = true;
+        sceneDirtyForCpuAS_ = true;
         NextEngine::GetInstance()->SetProgressiveRendering(false, false);
     }
 

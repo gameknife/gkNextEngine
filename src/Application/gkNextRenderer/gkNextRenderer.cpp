@@ -71,7 +71,7 @@ bool NextRendererGameInstance::OnRenderUI()
 		ImGuiIO& io = ImGui::GetIO();
         
 		// 渲染器名称数组
-		const char* rendererNames[] = {"VoxelTracing", "SoftTracing", "HybridTracing" , "PathTracing"};
+		const char* rendererNames[] = {"SoftModern", "SoftTracing", "VoxelTracing" , "PathTracing"};
         
 		// 四个象限的位置
 		ImVec2 positions[] = {
@@ -246,7 +246,7 @@ void NextRendererGameInstance::DrawSettings()
 
 		if( ImGui::CollapsingHeader(LOCTEXT("Renderer"), ImGuiTreeNodeFlags_DefaultOpen) )
 		{
-			std::vector<const char*> renderers {"PathTracing", "ModernDeferred", "LegacyDeferred", "VoxelTracing"};
+			std::vector<const char*> renderers {"PathTracing", "SoftTracing", "SoftModern", "VoxelTracing"};
 			
 			ImGui::Text("%s", LOCTEXT("Renderer"));
 			

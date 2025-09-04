@@ -907,8 +907,8 @@ namespace Vulkan
                     folderName = "SM-";
                     break;
                 case ERendererType::ERT_VoxelTracing:
-                    rendererName = "LegacyRef";
-                    folderName = "LR-";
+                    rendererName = "VoxelTracing";
+                    folderName = "VT-";
                     break;
                 default:
                     rendererName = "UnknownRenderer";

@@ -337,14 +337,17 @@ void FCPUProbeBaker::UploadGPU(Vulkan::DeviceMemory& VoxelGPUMemory)
     VoxelGPUMemory.Unmap();
 }
 
-void FCPUAccelerationStructure::AsyncProcessFull(Assets::Scene& scene, Vulkan::DeviceMemory* VoxelGPUMemory, bool Incremental)
-{    
+bool FCPUAccelerationStructure::AsyncProcessFull(Assets::Scene& scene, Vulkan::DeviceMemory* VoxelGPUMemory, bool Incremental)
+{
+    if ( !TaskCoordinator::GetInstance()->IsAllParralledTaskComplete() )
+    {
+        return false;
+    }
     // clean
     while (!needUpdateGroups.empty())
         needUpdateGroups.pop();
     lastBatchTasks.clear();
-    TaskCoordinator::GetInstance()->CancelAllParralledTasks();
-    
+
     if (!Incremental)
     {
         probeBaker.ClearAmbientCubes();
@@ -383,6 +386,8 @@ void FCPUAccelerationStructure::AsyncProcessFull(Assets::Scene& scene, Vulkan::D
         // add fence
         needUpdateGroups.push({ivec3(0), ECubeProcType::ECPT_Fence, EBakerType::EBT_Probe});
     }
+
+    return true;
 }
 
 void FCPUAccelerationStructure::AsyncProcessGroup(int xInMeter, int zInMeter, Scene& scene, ECubeProcType procType, EBakerType bakerType)

@@ -44,9 +44,13 @@ void NextRendererGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<As
 	matIds_.clear();
 	
 	matPreparedForAdd.push_back({Assets::Material::Lambertian(glm::vec3(1,1,1))});
+	materials.push_back(matPreparedForAdd.back());matIds_.push_back(uint32_t(materials.size() - 1));
 	matPreparedForAdd.push_back({Assets::Material::Metallic(glm::vec3(0.5,0.5,0.5), 0.4f)});
+	materials.push_back(matPreparedForAdd.back());matIds_.push_back(uint32_t(materials.size() - 1));
 	matPreparedForAdd.push_back({Assets::Material::Dielectric(1.5f, 0.0f)});
+	materials.push_back(matPreparedForAdd.back());matIds_.push_back(uint32_t(materials.size() - 1));
 	matPreparedForAdd.push_back({Assets::Material::Mixture(glm::vec3(1.0f, 0.3f, 0.3f), 0.01f)});
+	materials.push_back(matPreparedForAdd.back());matIds_.push_back(uint32_t(materials.size() - 1));
 }
 
 void NextRendererGameInstance::OnSceneLoaded()
@@ -188,13 +192,15 @@ void NextRendererGameInstance::CreateSphereAndPush()
 	uint32_t instanceId = uint32_t(GetEngine().GetScene().Nodes().size());
 	std::shared_ptr<Assets::Node> newNode = Assets::Node::CreateNode("temp", center, glm::quat(), glm::vec3(1), modelId_,
 															   instanceId, false);
-	int random = std::rand() % matPreparedForAdd.size();
-	Assets::FMaterial instanced = matPreparedForAdd[random];
-	instanced.gpuMaterial_.Diffuse = glm::vec4(static_cast <float> (rand()) / static_cast <float> (RAND_MAX) * 0.8f + 0.2f,
-												static_cast <float> (rand()) / static_cast <float> (RAND_MAX) * 0.8f + 0.2f,
-												static_cast <float> (rand()) / static_cast <float> (RAND_MAX) * 0.8f + 0.2f, 1.0);
-	
-	uint32_t newMatId = GetEngine().GetScene().AddMaterial(instanced);
+	// int random = std::rand() % matPreparedForAdd.size();
+	// Assets::FMaterial instanced = matPreparedForAdd[random];
+	// instanced.gpuMaterial_.Diffuse = glm::vec4(static_cast <float> (rand()) / static_cast <float> (RAND_MAX) * 0.8f + 0.2f,
+	// 											static_cast <float> (rand()) / static_cast <float> (RAND_MAX) * 0.8f + 0.2f,
+	// 											static_cast <float> (rand()) / static_cast <float> (RAND_MAX) * 0.8f + 0.2f, 1.0);
+	//
+	// uint32_t newMatId = GetEngine().GetScene().AddMaterial(instanced);
+
+	uint32_t newMatId = matIds_[std::rand() % matIds_.size()];
 	newNode->SetMaterial( { newMatId } );
 	newNode->SetVisible(true);
 	newNode->SetMobility(Assets::Node::ENodeMobility::Dynamic);

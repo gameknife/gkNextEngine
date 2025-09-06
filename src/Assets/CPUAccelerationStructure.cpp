@@ -99,7 +99,7 @@ bool InsideGeometry( float3& origin, float3 rayDir, VoxelData& OutCube, float& d
             OutCube.matId = TempMaterialId;
 
             // 命中反面，识别为固体，并将lightprobe推出体外
-            if (dot(OutNormal, rayDir) > 0.0 || ((hitMaterial.gpuMaterial_.MaterialModel == Material::Enum::DiffuseLight) && OutRayDist < 0.02f))
+            if (dot(OutNormal, rayDir) > 0.0 || ((hitMaterial.gpuMaterial_.MaterialModel == Material::Enum::DiffuseLight)))// && OutRayDist < 0.02f))
             {
                 distance = 0;
                 return true;

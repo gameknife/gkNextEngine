@@ -424,7 +424,6 @@ namespace Assets
         if (materialDirty_)
         {
             materialDirty_ = false;
-
             UpdateAllMaterials();
         }
         
@@ -446,7 +445,8 @@ namespace Assets
     {
         if (nodes_.size() > 0)
         {
-            if (sceneDirty_)
+            // do always, no flicker now
+            //if (sceneDirty_)
             {
                 sceneDirty_ = false;
                 {
@@ -462,7 +462,8 @@ namespace Assets
                             glm::mat4 combined;
                             if (node->TickVelocity(combined))
                             {
-                                MarkDirty();
+                                sceneDirty_ = true;
+                                //MarkDirty();
                             }
 
                             auto model = GetModel(node->GetModel());

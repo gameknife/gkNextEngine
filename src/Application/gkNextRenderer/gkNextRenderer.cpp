@@ -208,6 +208,7 @@ void NextRendererGameInstance::CreateSphereAndPush()
 	newNode->BindPhysicsBody(id);
 
 	GetEngine().GetScene().Nodes().push_back(newNode);
+	GetEngine().GetScene().MarkDirty();
 
 	GetEngine().GetPhysicsEngine()->AddForceToBody(id, shotDir * 70000.f);
 }

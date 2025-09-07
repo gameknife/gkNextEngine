@@ -95,7 +95,14 @@ namespace Assets
         prevTransform_ = transform_;
 
         glm::vec3 newPos = combinedTS * glm::vec4(0,0,0,1);
-        return glm::length2(newPos) > 0.01;
+        bool moving = glm::length(newPos) > 0.001;
+        if (moving)
+        {
+            return true;
+        }
+
+        combinedTS = glm::mat4(1);
+        return false;
     }
 
     void Node::SetParent(std::shared_ptr<Node> parent)

@@ -82,6 +82,7 @@ void NextAnimation::Tick(double DeltaSeconds)
             continue;
         }
 
+#if WIN32
         // Selects joint matrices.
         const ozz::math::Float4x4& parent = models_[parent_id];
         const ozz::math::Float4x4& current = models_[i];
@@ -97,6 +98,7 @@ void NextAnimation::Tick(double DeltaSeconds)
 #endif
         NextEngine::GetInstance()->DrawAuxLine(from, to, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f), 1.0f);
         NextEngine::GetInstance()->DrawAuxPoint(to, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), 2.0f);
+#endif
     }
 }
 

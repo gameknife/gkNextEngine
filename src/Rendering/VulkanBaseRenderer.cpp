@@ -592,7 +592,8 @@ namespace Vulkan
             imageAvailableSemaphores_.emplace_back(*device_);
             renderFinishedSemaphores_.emplace_back(*device_);
             inFlightFences_.emplace_back(*device_, true);
-            uniformBuffers_.emplace_back(*device_);
+            uniformBuffers_.emplace_back(*device_, false);
+            uniformBuffersStorage_.emplace_back(*device_, false);
         }
 
         // commandbuffer
@@ -669,6 +670,7 @@ namespace Vulkan
         simpleComposePipeline_.reset();
         visualDebuggerPipeline_.reset();
         uniformBuffers_.clear();
+        uniformBuffersStorage_.clear();
         inFlightFences_.clear();
         renderFinishedSemaphores_.clear();
         imageAvailableSemaphores_.clear();
@@ -771,9 +773,13 @@ namespace Vulkan
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, gpuCullPipeline_->Handle());
             gpuCullPipeline_->PipelineLayout().BindDescriptorSets(commandBuffer, imageIndex);
 
-            glm::uvec2 pushConst = {0, 0};
+            Assets::GPUScene gpu_scene;
+            gpu_scene.NodesAddress = GetScene().NodeMatrixBuffer().GetDeviceAddress();
+            gpu_scene.DrawCommandsAddress = GetScene().IndirectDrawBuffer().GetDeviceAddress();
+            gpu_scene.GpuDrivenStatAddress = GetScene().GpuDrivenStatsBuffer().GetDeviceAddress();
+            gpu_scene.CameraAddress = uniformBuffersStorage_[imageIndex].Buffer().GetDeviceAddress();
             vkCmdPushConstants(commandBuffer, gpuCullPipeline_->PipelineLayout().Handle(), VK_SHADER_STAGE_COMPUTE_BIT,
-                               0, sizeof(glm::uvec2), &pushConst);
+                               0, sizeof(Assets::GPUScene), &gpu_scene);
 
             uint32_t groupCount = GetScene().GetIndirectDrawBatchCount() / 64 + 1;
             vkCmdDispatch(commandBuffer, groupCount, 1, 1);
@@ -854,7 +860,9 @@ namespace Vulkan
                 vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
                 Assets::GPUScene gpu_scene;
-                gpu_scene.Nodes = reinterpret_cast<Assets::NodeProxy*>(GetScene().NodeMatrixBuffer().GetDeviceAddress());
+                gpu_scene.NodesAddress = GetScene().NodeMatrixBuffer().GetDeviceAddress();
+                gpu_scene.GpuDrivenStatAddress = GetScene().GpuDrivenStatsBuffer().GetDeviceAddress();
+                gpu_scene.CameraAddress = uniformBuffersStorage_[imageIndex].Buffer().GetDeviceAddress();
                 vkCmdPushConstants(commandBuffer, visibilityPipeline_->PipelineLayout().Handle(), VK_SHADER_STAGE_VERTEX_BIT,
                                    0, sizeof(Assets::GPUScene), &gpu_scene);
                 
@@ -1339,6 +1347,7 @@ namespace Vulkan
     {
         lastUBO = GetUniformBufferObject(swapChain_->RenderOffset(), swapChain_->OutputExtent());
         uniformBuffers_[imageIndex].SetValue(lastUBO);
+        uniformBuffersStorage_[imageIndex].SetValue(lastUBO);
     }
 
     void VulkanBaseRenderer::RecreateSwapChain()

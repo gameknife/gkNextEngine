@@ -44,7 +44,7 @@ namespace Assets
 		UniformBuffer& operator = (const UniformBuffer&) = delete;
 		UniformBuffer& operator = (UniformBuffer&&) = delete;
 
-		explicit UniformBuffer(const Vulkan::Device& device);
+		explicit UniformBuffer(const Vulkan::Device& device, bool storage);
 		UniformBuffer(UniformBuffer&& other) noexcept;
 		~UniformBuffer();
 

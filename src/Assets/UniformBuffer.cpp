@@ -7,12 +7,21 @@
 
 namespace Assets {
 
-UniformBuffer::UniformBuffer(const Vulkan::Device& device)
+UniformBuffer::UniformBuffer(const Vulkan::Device& device, bool storage)
 {
 	const auto bufferSize = sizeof(UniformBufferObject);
 
-	buffer_.reset(new Vulkan::Buffer(device, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT));
-	memory_.reset(new Vulkan::DeviceMemory(buffer_->AllocateMemory(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)));
+	if (storage)
+	{
+		buffer_.reset(new Vulkan::Buffer(device, bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT));
+		memory_.reset(new Vulkan::DeviceMemory(buffer_->AllocateMemory(VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)));
+	}
+	else
+	{
+		buffer_.reset(new Vulkan::Buffer(device, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT));
+		memory_.reset(new Vulkan::DeviceMemory(buffer_->AllocateMemory(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)));	
+	}
+
 }
 
 UniformBuffer::UniformBuffer(UniformBuffer&& other) noexcept :

@@ -25,6 +25,9 @@ import Common;
 [[vk::binding(7, 2)]] RWTexture2D<float4> OutNormalBuffer;
 [[vk::binding(10, 2)]] RWTexture2D<float> OutDepthBuffer;
 
+[[vk::push_constant]]
+ConstantBuffer<GPUScene> gpuScene;
+
 bool IsOccluded(float3 min, float3 max, float4x4 wvp)
 {
     // 计算AABB的8个角点
@@ -226,24 +229,30 @@ bool IsAABBInFrustum(float3 min, float3 max, float4x4 wvp)
 [numthreads(64, 1, 1)]
 void main(uint3 DTid : SV_DispatchThreadID)
 {
-    NodeProxy node = NodeProxies[DTid.x];
+    NodeProxy* gpuScenePtr = (NodeProxy*)gpuScene.NodesAddress;
+
+    NodeProxy node = gpuScenePtr[DTid.x];
     ModelData model = Offsets[node.modelId];
     float4x4 mvp = mul(Camera.ViewProjection, node.worldTS);
 
     bool shouldDraw = (node.visible > 0) && IsAABBInFrustum(model.localAabbMin.xyz, model.localAabbMax.xyz, mvp);
 
+    GPUDrivenStat* StatBindless = (GPUDrivenStat*)gpuScene.GpuDrivenStatAddress;
     if (shouldDraw)
     {
-        InterlockedAdd(StatInfos[0].ProcessedCount, 1);
-        InterlockedAdd(StatInfos[0].TriangleCount, model.indexCount / 3);
+        InterlockedAdd(StatBindless[0].ProcessedCount, 1);
+        InterlockedAdd(StatBindless[0].TriangleCount, model.indexCount / 3);
 
         if (IsOccludedVolume(model.localAabbMin.xyz, model.localAabbMax.xyz, mvp))
         {
-            InterlockedAdd(StatInfos[0].CulledCount, 1);
-            InterlockedAdd(StatInfos[0].CulledTriangleCount, model.indexCount / 3);
+            InterlockedAdd(StatBindless[0].CulledCount, 1);
+            InterlockedAdd(StatBindless[0].CulledTriangleCount, model.indexCount / 3);
             shouldDraw = false;
         }
     }
+
+    // this will not work on android
+    VkDrawIndexedIndirectCommand* DrawCommandsBindless = (VkDrawIndexedIndirectCommand*)(gpuScene.DrawCommandsAddress + DTid.x * 20);
 
     // cull all
     DrawCommands[DTid.x].instanceCount = shouldDraw ? 1 : 0;

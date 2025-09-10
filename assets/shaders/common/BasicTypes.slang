@@ -73,13 +73,13 @@ public struct ALIGN_16 UniformBufferObject
  
     public float BFSigmaNormal;
     public uint BFSize;
- 
     public bool FastGather;
- 
     public bool FastInterpole;
+
     public bool DebugDraw_Lighting;
     public bool DisableSpatialReuse;
     public uint SuperResolution;
+    public uint Reserved1;
 };
 
 public struct ALIGN_16 NodeProxy
@@ -206,7 +206,10 @@ public struct ALIGN_16 RayCastContext
 
 public struct ALIGN_8 GPUScene
 {
-    public NodeProxy* Nodes;
+    public uint64_t NodesAddress;
+    public uint64_t DrawCommandsAddress;
+    public uint64_t GpuDrivenStatAddress;
+    public uint64_t CameraAddress;
 };
 
 #ifndef __cplusplus

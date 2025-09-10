@@ -107,7 +107,7 @@ namespace Vulkan::RayTracing
             rayTracingPipeline_->PipelineLayout().BindDescriptorSets(commandBuffer, imageIndex);
 
             Assets::GPUScene gpu_scene;
-            gpu_scene.Nodes = reinterpret_cast<Assets::NodeProxy*>(GetScene().NodeMatrixBuffer().GetDeviceAddress());
+            gpu_scene.NodesAddress = GetScene().NodeMatrixBuffer().GetDeviceAddress();
             vkCmdPushConstants(commandBuffer, rayTracingPipeline_->PipelineLayout().Handle(), VK_SHADER_STAGE_COMPUTE_BIT,
                                0, sizeof(Assets::GPUScene), &gpu_scene);
             

@@ -64,6 +64,7 @@ namespace Assets
 		const Vulkan::Buffer& IndirectDrawBuffer() const { return *indirectDrawBuffer_; }
 		const Vulkan::Buffer& ReorderBuffer() const { return *reorderBuffer_; }
 		const Vulkan::Buffer& PrimAddressBuffer() const { return *primAddressBuffer_; }
+		const Vulkan::Buffer& GpuDrivenStatsBuffer() const { return *gpuDrivenStatsBuffer_; }
 		const glm::vec3 GetSunDir() const { return envSettings_.SunDirection(); }
 		const bool HasSun() const { return envSettings_.HasSun; }
 
@@ -73,6 +74,7 @@ namespace Assets
 		const uint32_t GetIndirectDrawBatchCount() const {return indirectDrawBatchCount_;}
 
 		const Assets::GPUDrivenStat& GetGpuDrivenStat() const { return gpuDrivenStat_; }
+		
 		
 		uint32_t GetSelectedId() const { return selectedId_; }
 		void SetSelectedId( uint32_t id ) const { selectedId_ = id; }

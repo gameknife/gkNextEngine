@@ -197,6 +197,7 @@ namespace Vulkan
 		std::unique_ptr<class SwapChain> swapChain_;
 		
 		std::vector<Assets::UniformBuffer> uniformBuffers_;
+		std::vector<Assets::UniformBuffer> uniformBuffersStorage_;
 		
 		std::unique_ptr<PipelineCommon::GraphicsPipeline> wireframePipeline_;
 		std::unique_ptr<PipelineCommon::BufferClearPipeline> bufferClearPipeline_;

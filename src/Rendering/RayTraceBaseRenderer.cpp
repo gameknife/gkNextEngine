@@ -141,12 +141,16 @@ namespace Vulkan::RayTracing
     void RayTraceBaseRenderer::CreateSwapChain()
     {
         Vulkan::VulkanBaseRenderer::CreateSwapChain();
+#if !ANDROID
         directLightGenPipeline_.reset(new PipelineCommon::ZeroBindPipeline(SwapChain(), "assets/shaders/Bake.HwAmbientCube.comp.slang.spv"));
+#endif
     }
 
     void RayTraceBaseRenderer::DeleteSwapChain()
     {
+#if !ANDROID
         directLightGenPipeline_.reset();
+#endif
         Vulkan::VulkanBaseRenderer::DeleteSwapChain();
     }
 

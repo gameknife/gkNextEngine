@@ -1,9 +1,6 @@
 import Common;
 import Bindless;
 
-[[vk::push_constant]]
-ConstantBuffer<GPUScene> gpuScene;
-
 bool IsOccluded(float3 min, float3 max, float4x4 wvp)
 {
     // 计算AABB的8个角点
@@ -203,29 +200,29 @@ bool IsAABBInFrustum(float3 min, float3 max, float4x4 wvp)
 [numthreads(64, 1, 1)]
 void main(uint3 DTid : SV_DispatchThreadID)
 {
-    NodeProxy node = gpuScene.Nodes[DTid.x];
-    ModelData model = gpuScene.Offsets[node.modelId];
-    float4x4 mvp = mul(gpuScene.Camera.ViewProjection, node.worldTS);
+    NodeProxy node = Bindless.GetGpuscene().Nodes[DTid.x];
+    ModelData model = Bindless.GetGpuscene().Offsets[node.modelId];
+    float4x4 mvp = mul(Bindless.GetGpuscene().Camera[0].ViewProjection, node.worldTS);
 
     bool shouldDraw = (node.visible > 0) && IsAABBInFrustum(model.localAabbMin.xyz, model.localAabbMax.xyz, mvp);
 
-    if (shouldDraw)
-    {
-        InterlockedAdd(gpuScene.GPUDrivenStats[0].ProcessedCount, 1);
-        InterlockedAdd(gpuScene.GPUDrivenStats[0].TriangleCount, model.indexCount / 3);
+    // if (shouldDraw)
+    // {
+    //     InterlockedAdd(Bindless.GetGpuscene().GPUDrivenStats[0].ProcessedCount, 1);
+    //     InterlockedAdd(Bindless.GetGpuscene().GPUDrivenStats[0].TriangleCount, model.indexCount / 3);
 
-        if (IsOccludedVolume(model.localAabbMin.xyz, model.localAabbMax.xyz, mvp))
-        {
-            InterlockedAdd(gpuScene.GPUDrivenStats[0].CulledCount, 1);
-            InterlockedAdd(gpuScene.GPUDrivenStats[0].CulledTriangleCount, model.indexCount / 3);
-            shouldDraw = false;
-        }
-    }
+    //     if (IsOccludedVolume(model.localAabbMin.xyz, model.localAabbMax.xyz, mvp))
+    //     {
+    //         InterlockedAdd(Bindless.GetGpuscene().GPUDrivenStats[0].CulledCount, 1);
+    //         InterlockedAdd(Bindless.GetGpuscene().GPUDrivenStats[0].CulledTriangleCount, model.indexCount / 3);
+    //         shouldDraw = false;
+    //     }
+    // }
 
     // cull all
-    gpuScene.IndirectDrawCommands[DTid.x].instanceCount = shouldDraw ? 1 : 0;
-    gpuScene.IndirectDrawCommands[DTid.x].firstInstance = shouldDraw ? DTid.x : 0;
-    gpuScene.IndirectDrawCommands[DTid.x].indexCount = shouldDraw ? model.indexCount : 0;
-    gpuScene.IndirectDrawCommands[DTid.x].firstIndex = shouldDraw ? model.indexOffset : 0;
-    gpuScene.IndirectDrawCommands[DTid.x].vertexOffset = shouldDraw ? model.reorderOffset : 0;
+    Bindless.GetGpuscene().IndirectDrawCommands[DTid.x].instanceCount = shouldDraw ? 1 : 0;
+    Bindless.GetGpuscene().IndirectDrawCommands[DTid.x].firstInstance = shouldDraw ? DTid.x : 0;
+    Bindless.GetGpuscene().IndirectDrawCommands[DTid.x].indexCount = shouldDraw ? model.indexCount : 0;
+    Bindless.GetGpuscene().IndirectDrawCommands[DTid.x].firstIndex = shouldDraw ? model.indexOffset : 0;
+    Bindless.GetGpuscene().IndirectDrawCommands[DTid.x].vertexOffset = shouldDraw ? model.reorderOffset : 0;
 }

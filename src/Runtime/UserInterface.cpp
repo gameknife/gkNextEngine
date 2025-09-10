@@ -382,7 +382,7 @@ void UserInterface::DrawOverlay(const Statistics& statistics, Vulkan::VulkanGpuT
 	const auto& io = ImGui::GetIO();
 	const float distance = 10.0f;
 #if ANDROID
-	const ImVec2 pos = ImVec2(io.DisplaySize.x * 0.5 - distance, distance);
+	const ImVec2 pos = ImVec2(io.DisplaySize.x * 0.3333f - distance, distance);
 	const ImVec2 posPivot = ImVec2(1.0f, 0.0f);
 #else
 	const ImVec2 pos = ImVec2(io.DisplaySize.x - distance, distance);

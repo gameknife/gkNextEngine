@@ -72,32 +72,6 @@ void NextAnimation::Tick(double DeltaSeconds)
     }
     
     const ozz::span<const int16_t>& parents = skeleton_->joint_parents();
-
-    int instances = 0;
-    for (int i = 0; i < num_joints; ++i)
-    {
-        // Root isn't rendered.
-        const int16_t parent_id = parents[i];
-        if (parent_id == ozz::animation::Skeleton::kNoParent) {
-            continue;
-        }
-
-        // Selects joint matrices.
-        const ozz::math::Float4x4& parent = models_[parent_id];
-        const ozz::math::Float4x4& current = models_[i];
-
-        ozz::math::SimdFloat4 p0 = ozz::math::TransformPoint(parent, {0,0,0,1});
-        ozz::math::SimdFloat4 p1 = ozz::math::TransformPoint(current, {0,0,0,1});
-#if __APPLE__
-        glm::vec3 from = {p0.x, p0.y, p0.z};
-        glm::vec3 to = {p1.x, p1.y, p1.z};
-#else
-        glm::vec3 from = {p0.m128_f32[0], p0.m128_f32[1], p0.m128_f32[2]};
-        glm::vec3 to = {p1.m128_f32[0], p1.m128_f32[1], p1.m128_f32[2]};
-#endif
-        NextEngine::GetInstance()->DrawAuxLine(from, to, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f), 1.0f);
-        NextEngine::GetInstance()->DrawAuxPoint(to, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), 2.0f);
-    }
 }
 
 void NextAnimation::Stop()

@@ -13,7 +13,7 @@ StructuredBuffer<uint> Reorders;
 StructuredBuffer<half4> Vertices;
 
 [[vk::push_constant]]
-ConstantBuffer<GPUScene> gpuScene;
+ConstantBuffer<uint64_t> gpuScene;
 
 struct VertexOutput
 {
@@ -26,7 +26,8 @@ VertexOutput main(uint vertexIndex: SV_VertexID, uint baseVertex: SV_StartVertex
 {
     VertexOutput output;
     uint absouluteInstanceIdx = instanceIndex + instanceBase;
-    NodeProxy proxy = gpuScene.Nodes[absouluteInstanceIdx];
+    NodeProxy* gpuScenePtr = (NodeProxy*)gpuScene;
+    NodeProxy proxy = gpuScenePtr[absouluteInstanceIdx];
     half4 Position = Vertices[Reorders[vertexIndex]];
     output.position = mul(mul(Camera.ViewProjection, proxy.worldTS), float4(Position.xyz, 1.0));
 

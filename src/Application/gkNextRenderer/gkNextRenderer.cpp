@@ -131,11 +131,11 @@ bool NextRendererGameInstance::OnKey(int key, int scancode, int action, int mods
 {
     modelViewController_.OnKey(key, scancode, action, mods);
 
-	if (key == GLFW_KEY_SPACE && action != GLFW_RELEASE)
-	{
-		CreateSphereAndPush();
-		return true;
-	}
+	// if (key == GLFW_KEY_SPACE && action != GLFW_RELEASE)
+	// {
+	// 	CreateSphereAndPush();
+	// 	return true;
+	// }
     return false;
 }
 

@@ -204,7 +204,7 @@ public struct ALIGN_16 RayCastContext
     public uint Hitted;
 };
 
-public struct ALIGN_16 GPUScene
+public struct ALIGN_8 GPUScene
 {
     public NodeProxy* Nodes;
 };

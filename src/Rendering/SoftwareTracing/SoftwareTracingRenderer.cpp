@@ -22,7 +22,7 @@ SoftwareTracingRenderer::~SoftwareTracingRenderer()
 void SoftwareTracingRenderer::CreateSwapChain(const VkExtent2D& extent)
 {
 	deferredShadingPipeline_.reset(new PipelineCommon::ZeroBindPipeline(SwapChain(), "assets/shaders/Core.SwTracing.comp.slang.spv"));
-	accumulatePipeline_.reset(new PipelineCommon::ZeroBindCustomPushConstantPipeline(SwapChain(), "assets/shaders/Process.ReProject.comp.slang.spv", 20));
+	accumulatePipeline_.reset(new PipelineCommon::ZeroBindCustomPushConstantPipeline(SwapChain(), "assets/shaders/Process.ReProject.comp.slang.spv", 24));
 	composePipeline_.reset(new PipelineCommon::ZeroBindPipeline(SwapChain(), "assets/shaders/Process.DenoiseJBF.comp.slang.spv"));
 
 	if (GOption->ReferenceMode)
@@ -60,8 +60,8 @@ void SoftwareTracingRenderer::Render(VkCommandBuffer commandBuffer, uint32_t ima
 
 	{
 		SCOPED_GPU_TIMER("reproject pass");
-		std::array<uint32_t, 5> pushConst { NextEngine::GetInstance()->IsProgressiveRendering(), uint32_t(NextEngine::GetInstance()->GetUserSettings().TemporalFrames),
-			   prevSingleDiffuseId_, prevSingleSpecularId_, prevSingleAlbedoId_ };
+		std::array<uint32_t, 6> pushConst { NextEngine::GetInstance()->IsProgressiveRendering(), uint32_t(NextEngine::GetInstance()->GetUserSettings().TemporalFrames),
+					   prevSingleDiffuseId_, prevSingleSpecularId_, prevSingleAlbedoId_, 1 };
 		accumulatePipeline_->BindPipeline(commandBuffer, pushConst.data());
 		vkCmdDispatch(commandBuffer, Utilities::Math::GetSafeDispatchCount(SwapChain().RenderExtent().width, 8), Utilities::Math::GetSafeDispatchCount(SwapChain().RenderExtent().height, 8), 1);
 

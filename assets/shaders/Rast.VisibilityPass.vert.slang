@@ -31,7 +31,7 @@ VertexOutput main(uint vertexIndex: SV_VertexID, uint baseVertex: SV_StartVertex
     half4 Position = Vertices[Reorders[vertexIndex]];
 
     UniformBufferObject* CameraPtr = (UniformBufferObject*)gpuScene.CameraAddress;
-    output.position = mul(mul(Camera.ViewProjection, proxy.worldTS), float4(Position.xyz, 1.0));
+    output.position = mul(mul(CameraPtr->ViewProjection, proxy.worldTS), float4(Position.xyz, 1.0));
 
     uint instanceIdx = absouluteInstanceIdx + 1;
     uint triangleIdx = vertexIndex - baseVertex;

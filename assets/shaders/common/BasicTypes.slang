@@ -207,9 +207,13 @@ public struct ALIGN_16 RayCastContext
 public struct ALIGN_8 GPUScene
 {
     public uint64_t NodesAddress;
+    public uint64_t dummy1;
     public uint64_t DrawCommandsAddress;
+    public uint64_t dummy2;
     public uint64_t GpuDrivenStatAddress;
+    public uint64_t dummy3;
     public uint64_t CameraAddress;
+    public uint64_t dummy4;
 };
 
 #ifndef __cplusplus

@@ -206,18 +206,18 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
     bool shouldDraw = (node.visible > 0) && IsAABBInFrustum(model.localAabbMin.xyz, model.localAabbMax.xyz, mvp);
 
-    // if (shouldDraw)
-    // {
-    //     InterlockedAdd(Bindless.GetGpuscene().GPUDrivenStats[0].ProcessedCount, 1);
-    //     InterlockedAdd(Bindless.GetGpuscene().GPUDrivenStats[0].TriangleCount, model.indexCount / 3);
+    if (shouldDraw)
+    {
+        //InterlockedAdd(Bindless.GetGpuscene().GPUDrivenStats[0].ProcessedCount, 1);
+        //InterlockedAdd(Bindless.GetGpuscene().GPUDrivenStats[0].TriangleCount, model.indexCount / 3);
 
-    //     if (IsOccludedVolume(model.localAabbMin.xyz, model.localAabbMax.xyz, mvp))
-    //     {
-    //         InterlockedAdd(Bindless.GetGpuscene().GPUDrivenStats[0].CulledCount, 1);
-    //         InterlockedAdd(Bindless.GetGpuscene().GPUDrivenStats[0].CulledTriangleCount, model.indexCount / 3);
-    //         shouldDraw = false;
-    //     }
-    // }
+        if (IsOccludedVolume(model.localAabbMin.xyz, model.localAabbMax.xyz, mvp))
+        {
+            //InterlockedAdd(Bindless.GetGpuscene().GPUDrivenStats[0].CulledCount, 1);
+            //InterlockedAdd(Bindless.GetGpuscene().GPUDrivenStats[0].CulledTriangleCount, model.indexCount / 3);
+            shouldDraw = false;
+        }
+    }
 
     // cull all
     Bindless.GetGpuscene().IndirectDrawCommands[DTid.x].instanceCount = shouldDraw ? 1 : 0;

@@ -208,13 +208,13 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
     if (shouldDraw)
     {
-        //InterlockedAdd(Bindless.GetGpuscene().GPUDrivenStats[0].ProcessedCount, 1);
-        //InterlockedAdd(Bindless.GetGpuscene().GPUDrivenStats[0].TriangleCount, model.indexCount / 3);
+        InterlockedAdd(Bindless.GetGpuscene().GPUDrivenStats[0].ProcessedCount, 1);
+        InterlockedAdd(Bindless.GetGpuscene().GPUDrivenStats[0].TriangleCount, model.indexCount / 3);
 
         if (IsOccludedVolume(model.localAabbMin.xyz, model.localAabbMax.xyz, mvp))
         {
-            //InterlockedAdd(Bindless.GetGpuscene().GPUDrivenStats[0].CulledCount, 1);
-            //InterlockedAdd(Bindless.GetGpuscene().GPUDrivenStats[0].CulledTriangleCount, model.indexCount / 3);
+            InterlockedAdd(Bindless.GetGpuscene().GPUDrivenStats[0].CulledCount, 1);
+            InterlockedAdd(Bindless.GetGpuscene().GPUDrivenStats[0].CulledTriangleCount, model.indexCount / 3);
             shouldDraw = false;
         }
     }

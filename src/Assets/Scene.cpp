@@ -306,7 +306,7 @@ namespace Assets
         gpuScene_.Pages = pageIndexBuffer_->GetDeviceAddress();
         gpuScene_.HDRSHs = hdrSHBuffer_->GetDeviceAddress();
         gpuScene_.IndirectDrawCommands = indirectDrawBuffer_->GetDeviceAddress();
-        //gpuScene_.GPUDrivenStats = gpuDrivenStatsBuffer_->GetDeviceAddress();
+        gpuScene_.GPUDrivenStats = gpuDrivenStatsBuffer_->GetDeviceAddress();
         gpuScene_.TLAS = NextEngine::GetInstance()->TryGetGPUAccelerationStructureAddress();
 
         gpuScene_.SwapChainIndex = imageIndex;

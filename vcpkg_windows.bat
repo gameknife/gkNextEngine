@@ -6,6 +6,15 @@ cd build || goto :error
 IF EXIST vcpkg.windows (
 	echo "vcpkg.windows already exists."
 	cd vcpkg.windows || goto :error
+	
+	echo "Updating vcpkg..."
+	git pull origin master || goto :error
+	call bootstrap-vcpkg.bat || goto :error
+	
+	echo "Updating installed packages..."
+	.\vcpkg.exe update || goto :error
+	.\vcpkg.exe upgrade --no-dry-run || goto :error
+	
 ) ELSE (
 	git clone https://github.com/Microsoft/vcpkg.git vcpkg.windows || goto :error
 	cd vcpkg.windows || goto :error

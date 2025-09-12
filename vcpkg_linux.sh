@@ -7,12 +7,20 @@ cd build
 #if vcpkg.linux exists
 if [ -d "vcpkg.linux" ]; then
 	cd vcpkg.linux
+	
+	echo "Updating vcpkg..."
+	git pull origin master
+	./bootstrap-vcpkg.sh
+	
+	echo "Updating installed packages..."
+	./vcpkg update
+	./vcpkg upgrade --no-dry-run
+	
 else
 	git clone https://github.com/Microsoft/vcpkg.git vcpkg.linux
 	cd vcpkg.linux
+	./bootstrap-vcpkg.sh
 fi
-
-./bootstrap-vcpkg.sh
 
 ./vcpkg --recurse install \
 	cpptrace:x64-linux \

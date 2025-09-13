@@ -72,12 +72,8 @@ void SoftwareTracingRenderer::Render(VkCommandBuffer commandBuffer, uint32_t ima
 	{
 		SCOPED_GPU_TIMER("compose pass");
 		
-		SwapChain().InsertBarrierToWrite(commandBuffer, imageIndex);
-		
 		composePipeline_->BindPipeline(commandBuffer, GetScene(), imageIndex);
 		vkCmdDispatch(commandBuffer, SwapChain().RenderExtent().width / 8, SwapChain().RenderExtent().height / 8, 1);
-
-		SwapChain().InsertBarrierToPresent(commandBuffer, imageIndex);
 	}
 	
 	{

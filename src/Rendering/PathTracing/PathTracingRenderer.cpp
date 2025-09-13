@@ -136,7 +136,6 @@ namespace Vulkan::RayTracing
 
         {
             SCOPED_GPU_TIMER("compose pass");
-            SwapChain().InsertBarrierToWrite(commandBuffer, imageIndex);
 #if WITH_OIDN
             if (baseRender_.supportDenoiser_)
             {
@@ -155,7 +154,6 @@ namespace Vulkan::RayTracing
                 composePipelineNonDenoiser_->BindPipeline(commandBuffer, GetScene(), imageIndex);
                 vkCmdDispatch(commandBuffer, Utilities::Math::GetSafeDispatchCount(SwapChain().RenderExtent().width, 8), Utilities::Math::GetSafeDispatchCount(SwapChain().RenderExtent().height, 8), 1);
             }
-            SwapChain().InsertBarrierToPresent(commandBuffer, imageIndex);
         }
         
         {

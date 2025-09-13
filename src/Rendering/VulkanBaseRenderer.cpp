@@ -644,13 +644,25 @@ namespace Vulkan
 
         {
             SCOPED_GPU_TIMER("clear pass");
-
-            SwapChain().InsertBarrierToWrite(commandBuffer, imageIndex);
-
+            
             bufferClearPipeline_->BindPipeline(commandBuffer, &imageIndex);
             vkCmdDispatch(commandBuffer, SwapChain().Extent().width / 8, SwapChain().Extent().height / 8, 1);
 
-            SwapChain().InsertBarrierToPresent(commandBuffer, imageIndex);
+            VkClearColorValue clearColor = {{1.0f, 0.0f, 0.0f, 1.0f}};
+            VkImageSubresourceRange imageRange = {};
+            imageRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            imageRange.baseMipLevel = 0;
+            imageRange.levelCount = 1;
+            imageRange.baseArrayLayer = 0;
+            imageRange.layerCount = 1;
+
+            ImageMemoryBarrier::FullInsert(commandBuffer, SwapChain().Images()[imageIndex],
+                0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                
+            vkCmdClearColorImage(commandBuffer, SwapChain().Images()[imageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &imageRange);
+                
+            ImageMemoryBarrier::FullInsert(commandBuffer, SwapChain().Images()[imageIndex],
+                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
         }
 
         {

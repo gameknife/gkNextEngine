@@ -39,10 +39,12 @@ public:
 
 private:
     void DrawSettings();
+    void DrawTitleBar();
     NextEngine* engine_;
 
     ModelViewController modelViewController_;
 
     uint32_t modelId_;
     std::vector<uint32_t> matIds_;
+    class ImFont* bigFont_ {};
 };

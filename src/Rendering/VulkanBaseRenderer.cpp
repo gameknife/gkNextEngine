@@ -747,11 +747,12 @@ namespace Vulkan
                 {
                     SCOPED_GPU_TIMER("[post-render]");
                     PostRender(commandBuffer, currentImageIndex_);
-                    if (DelegatePostRender)
-                    {
-                        SCOPED_GPU_TIMER("imgui");
-                        DelegatePostRender(commandBuffer, currentImageIndex_);
-                    }
+                }
+
+                if (DelegatePostRender)
+                {
+                    SCOPED_GPU_TIMER("imgui");
+                    DelegatePostRender(commandBuffer, currentImageIndex_);
                 }
             }
             commandBuffers_->End(currentFrame_);

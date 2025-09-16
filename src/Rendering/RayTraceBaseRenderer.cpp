@@ -228,7 +228,7 @@ namespace Vulkan::RayTracing
         VulkanBaseRenderer::PostRender(commandBuffer, imageIndex);
 
 #if !ANDROID
-        if(supportRayTracing_)// all gpu renderer use this cache && (CurrentLogicRendererType() != ERT_PathTracing || GOption->ReferenceMode))
+        if(supportRayTracing_ && !GOption->ForceSoftGen)// all gpu renderer use this cache && (CurrentLogicRendererType() != ERT_PathTracing || GOption->ReferenceMode))
         {
             const int cubesPerGroup = 64;
             const int count = Assets::CUBE_SIZE_XY * Assets::CUBE_SIZE_XY * Assets::CUBE_SIZE_Z;

@@ -174,7 +174,7 @@ namespace Vulkan
 		
 		std::vector<Assets::UniformBuffer> uniformBuffers_;
 		
-		std::unique_ptr<PipelineCommon::GraphicsPipeline> wireframePipeline_;
+		//std::unique_ptr<PipelineCommon::GraphicsPipeline> wireframePipeline_;
 		std::unique_ptr<PipelineCommon::VisibilityPipeline> visibilityPipeline_;
 		
 		std::unique_ptr<PipelineCommon::ZeroBindCustomPushConstantPipeline> bufferClearPipeline_;
@@ -183,7 +183,7 @@ namespace Vulkan
 		
 		std::unique_ptr<class DepthBuffer> depthBuffer_;
 		std::unique_ptr<FrameBuffer> visibilityFrameBuffer_;
-		std::unique_ptr<FrameBuffer> wireframeFramebuffer_;
+		//std::unique_ptr<FrameBuffer> wireframeFramebuffer_;
 		
 		std::unique_ptr<class CommandPool> commandPool_;
 		std::unique_ptr<class CommandPool> commandPool2_;

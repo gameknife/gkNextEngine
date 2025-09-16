@@ -436,14 +436,15 @@ namespace Vulkan
         
         CREATE_STORAGE_IMAGE(RT_ACCUMLATE_DIFFUSE, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT );
         CREATE_STORAGE_IMAGE(RT_SINGLE_DIFFUSE, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT );
-        CREATE_STORAGE_IMAGE(RT_MINIGBUFFER, VK_FORMAT_R32_UINT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT );
+        CREATE_STORAGE_IMAGE(RT_MINIGBUFFER, VK_FORMAT_R32_UINT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT );
+        CREATE_STORAGE_IMAGE(RT_MINIGBUFFER_DRAW, VK_FORMAT_R32_UINT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT );
         CREATE_STORAGE_IMAGE(RT_OBJEDCTID_0, VK_FORMAT_R32_UINT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT );
         CREATE_STORAGE_IMAGE(RT_OBJEDCTID_1, VK_FORMAT_R32_UINT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT );
         CREATE_STORAGE_IMAGE(RT_MOTIONVECTOR, VK_FORMAT_R32G32_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT );
         CREATE_STORAGE_IMAGE(RT_ALBEDO, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT );
         CREATE_STORAGE_IMAGE(RT_NORMAL, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT );
         CREATE_STORAGE_IMAGE(RT_SHADER_TIMER, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_LINEAR, VK_IMAGE_USAGE_STORAGE_BIT );
-        CREATE_STORAGE_IMAGE(RT_DENOISED, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT );
+        CREATE_STORAGE_IMAGE(RT_DENOISED, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT );
         CREATE_STORAGE_IMAGE(RT_PREV_DEPTHBUFFER, VK_FORMAT_R32_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT );
         CREATE_STORAGE_IMAGE(RT_ACCUMLATE_SPECULAR, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT );
         CREATE_STORAGE_IMAGE(RT_SINGLE_SPECULAR, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT );
@@ -494,12 +495,12 @@ namespace Vulkan
         CreateRenderImages();
 
         // 最简单的fallback pipeline, 也用作 wireframe pipeline
-        wireframePipeline_.reset(new class PipelineCommon::GraphicsPipeline(SwapChain(), DepthBuffer(), UniformBuffers(), GetScene(), true));
-        wireframeFramebuffer_.reset(new FrameBuffer(swapChain_->RenderExtent(), GetStorageImage(Assets::Bindless::RT_DENOISED)->GetImageView(), wireframePipeline_->RenderPass()));
+        // wireframePipeline_.reset(new class PipelineCommon::GraphicsPipeline(SwapChain(), DepthBuffer(), UniformBuffers(), GetScene(), true));
+        // wireframeFramebuffer_.reset(new FrameBuffer(swapChain_->RenderExtent(), GetStorageImage(Assets::Bindless::RT_DENOISED)->GetImageView(), wireframePipeline_->RenderPass()));
 
         // 公用Pipeline
         visibilityPipeline_.reset(new PipelineCommon::VisibilityPipeline(SwapChain(), DepthBuffer(), UniformBuffers(), GetScene()));
-        visibilityFrameBuffer_.reset(new FrameBuffer(swapChain_->RenderExtent(), GetStorageImage(Assets::Bindless::RT_MINIGBUFFER)->GetImageView(), visibilityPipeline_->RenderPass()));
+        visibilityFrameBuffer_.reset(new FrameBuffer(swapChain_->RenderExtent(), GetStorageImage(Assets::Bindless::RT_MINIGBUFFER_DRAW)->GetImageView(), visibilityPipeline_->RenderPass()));
         simpleComposePipeline_.reset( new PipelineCommon::ZeroBindCustomPushConstantPipeline(SwapChain(), "assets/shaders/Process.UpScaleFSR.comp.slang.spv", 20));
         bufferClearPipeline_.reset(new PipelineCommon::ZeroBindCustomPushConstantPipeline(*swapChain_, "assets/shaders/Util.BufferClear.comp.slang.spv", 4));
         softAmbientCubeGenPipeline_.reset( new PipelineCommon::ZeroBindPipeline(*swapChain_, "assets/shaders/Bake.SwAmbientCube.comp.slang.spv"));
@@ -543,8 +544,8 @@ namespace Vulkan
         screenShotImageMemory_.reset();
         screenShotImage_.reset();
         commandBuffers_.reset();
-        wireframePipeline_.reset();
-        wireframeFramebuffer_.reset();
+        //wireframePipeline_.reset();
+        //wireframeFramebuffer_.reset();
         bufferClearPipeline_.reset();
         softAmbientCubeGenPipeline_.reset();
         gpuCullPipeline_.reset();
@@ -698,8 +699,25 @@ namespace Vulkan
             }
             vkCmdEndRenderPass(commandBuffer);
 
+            // copy draw to storage buffer
+            VkImageCopy copyRegion;
+            copyRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            copyRegion.srcOffset = {0, 0, 0};
+            copyRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            copyRegion.dstOffset = {0, 0, 0};
+            copyRegion.extent = {GetStorageImage(Assets::Bindless::RT_MINIGBUFFER)->GetImage().Extent().width, GetStorageImage(Assets::Bindless::RT_MINIGBUFFER)->GetImage().Extent().height, 1};
+
+            GetStorageImage(Assets::Bindless::RT_MINIGBUFFER_DRAW)->InsertBarrier(commandBuffer, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
+            GetStorageImage(Assets::Bindless::RT_MINIGBUFFER)->InsertBarrier(commandBuffer, 0, VK_ACCESS_TRANSFER_WRITE_BIT,
+                VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            
+            vkCmdCopyImage(commandBuffer, GetStorageImage(Assets::Bindless::RT_MINIGBUFFER_DRAW)->GetImage().Handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           GetStorageImage(Assets::Bindless::RT_MINIGBUFFER)->GetImage().Handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+            
             GetStorageImage(Assets::Bindless::RT_MINIGBUFFER)->InsertBarrier(commandBuffer, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-                                        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_GENERAL);
+                                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
         }
     }
 
@@ -977,44 +995,44 @@ namespace Vulkan
 
             if (showWireframe_)
             {
-                SCOPED_GPU_TIMER("wireframe");
-
-                VkRenderPassBeginInfo renderPassInfo = {};
-                renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-                renderPassInfo.renderPass = wireframePipeline_->RenderPass().Handle();
-                renderPassInfo.framebuffer = wireframeFramebuffer_->Handle();
-                renderPassInfo.renderArea.offset = {0, 0};
-                renderPassInfo.renderArea.extent = swapChain_->RenderExtent();
-                
-                vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-                {
-                    auto& scene = GetScene();
-
-                    VkDescriptorSet descriptorSets[] = {wireframePipeline_->DescriptorSet(imageIndex)};
-                    VkBuffer vertexBuffers[] = {scene.SimpleVertexBuffer().Handle()};
-                    const VkBuffer indexBuffer = scene.PrimAddressBuffer().Handle();
-                    VkDeviceSize offsets[] = {0};
-
-                    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, wireframePipeline_->Handle());
-                    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                            wireframePipeline_->PipelineLayout().Handle(), 0, 1, descriptorSets, 0, nullptr);
-                    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-                    vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-                    
-                    // drawcall one by one, old school pipeline only
-                    for (const auto& node : scene.GetNodeProxys())
-                    {
-                        auto& offset = scene.Offsets()[node.modelId];
-                        const auto indexCount = static_cast<uint32_t>(offset.indexCount);
-                        if (indexCount == 0) continue;
-
-                        glm::mat4 worldMatrix = node.worldTS;
-                        vkCmdPushConstants(commandBuffer, wireframePipeline_->PipelineLayout().Handle(),
-                                           VK_SHADER_STAGE_VERTEX_BIT,0, sizeof(glm::mat4), &worldMatrix);
-                        vkCmdDrawIndexed(commandBuffer, indexCount, 1, offset.indexOffset, static_cast<int>(offset.vertexOffset), 0);
-                    }
-                }
-                vkCmdEndRenderPass(commandBuffer);
+                // SCOPED_GPU_TIMER("wireframe");
+                //
+                // VkRenderPassBeginInfo renderPassInfo = {};
+                // renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+                // renderPassInfo.renderPass = wireframePipeline_->RenderPass().Handle();
+                // renderPassInfo.framebuffer = wireframeFramebuffer_->Handle();
+                // renderPassInfo.renderArea.offset = {0, 0};
+                // renderPassInfo.renderArea.extent = swapChain_->RenderExtent();
+                //
+                // vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+                // {
+                //     auto& scene = GetScene();
+                //
+                //     VkDescriptorSet descriptorSets[] = {wireframePipeline_->DescriptorSet(imageIndex)};
+                //     VkBuffer vertexBuffers[] = {scene.SimpleVertexBuffer().Handle()};
+                //     const VkBuffer indexBuffer = scene.PrimAddressBuffer().Handle();
+                //     VkDeviceSize offsets[] = {0};
+                //
+                //     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, wireframePipeline_->Handle());
+                //     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                //                             wireframePipeline_->PipelineLayout().Handle(), 0, 1, descriptorSets, 0, nullptr);
+                //     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+                //     vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+                //     
+                //     // drawcall one by one, old school pipeline only
+                //     for (const auto& node : scene.GetNodeProxys())
+                //     {
+                //         auto& offset = scene.Offsets()[node.modelId];
+                //         const auto indexCount = static_cast<uint32_t>(offset.indexCount);
+                //         if (indexCount == 0) continue;
+                //
+                //         glm::mat4 worldMatrix = node.worldTS;
+                //         vkCmdPushConstants(commandBuffer, wireframePipeline_->PipelineLayout().Handle(),
+                //                            VK_SHADER_STAGE_VERTEX_BIT,0, sizeof(glm::mat4), &worldMatrix);
+                //         vkCmdDrawIndexed(commandBuffer, indexCount, 1, offset.indexOffset, static_cast<int>(offset.vertexOffset), 0);
+                //     }
+                // }
+                // vkCmdEndRenderPass(commandBuffer);
             }
             
             {
@@ -1024,7 +1042,7 @@ namespace Vulkan
                 GetStorageImage(Assets::Bindless::RT_DENOISED)->InsertBarrier(commandBuffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                                           VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL);
 
-#if WIN32
+#if false
                 std::array<uint32_t, 5> pushConst = { imageIndex, uint32_t(SwapChain().OutputOffset().x), uint32_t(SwapChain().OutputOffset().y), uint32_t(SwapChain().OutputExtent().width), uint32_t(SwapChain().OutputExtent().height) };
                 simpleComposePipeline_->BindPipeline(commandBuffer, pushConst.data());
 
@@ -1055,7 +1073,7 @@ namespace Vulkan
         //if (NextEngine::GetInstance()->IsProgressiveRendering())  return;
         // soft ambient cube generation
 #if !ANDROID
-        if (!supportRayTracing_)
+        if (!supportRayTracing_ || GOption->ForceSoftGen)
 #endif
         {
             const int cubesPerGroup = 64;

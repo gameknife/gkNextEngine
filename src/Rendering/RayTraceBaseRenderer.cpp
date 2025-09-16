@@ -206,6 +206,7 @@ namespace Vulkan::RayTracing
 
     void RayTraceBaseRenderer::PreRender(VkCommandBuffer commandBuffer, const uint32_t imageIndex)
     {
+        if ( GOption->ReferenceMode || !GOption->ForceSoftGen || CurrentLogicRendererType() == ERT_PathTracing )
         {
             SCOPED_GPU_TIMER("TLAS Update");
             if (tlasUpdateRequest_ > 0)
@@ -226,9 +227,8 @@ namespace Vulkan::RayTracing
     void RayTraceBaseRenderer::PostRender(VkCommandBuffer commandBuffer, uint32_t imageIndex)
     {
         VulkanBaseRenderer::PostRender(commandBuffer, imageIndex);
-
-#if !ANDROID
-        if(supportRayTracing_ && !GOption->ForceSoftGen)// all gpu renderer use this cache && (CurrentLogicRendererType() != ERT_PathTracing || GOption->ReferenceMode))
+        
+        if(supportRayTracing_ && !GOption->ForceSoftGen)
         {
             const int cubesPerGroup = 64;
             const int count = Assets::CUBE_SIZE_XY * Assets::CUBE_SIZE_XY * Assets::CUBE_SIZE_Z;
@@ -273,7 +273,6 @@ namespace Vulkan::RayTracing
                 }
             }
         }
-#endif
     }
 
     void RayTraceBaseRenderer::CreateBottomLevelStructures(VkCommandBuffer commandBuffer)

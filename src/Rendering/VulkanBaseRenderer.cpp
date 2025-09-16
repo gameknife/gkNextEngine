@@ -1072,9 +1072,7 @@ namespace Vulkan
     {
         //if (NextEngine::GetInstance()->IsProgressiveRendering())  return;
         // soft ambient cube generation
-#if !ANDROID
         if (!supportRayTracing_ || GOption->ForceSoftGen)
-#endif
         {
             const int cubesPerGroup = 64;
             const int count = Assets::CUBE_SIZE_XY * Assets::CUBE_SIZE_XY * Assets::CUBE_SIZE_Z;

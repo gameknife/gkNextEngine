@@ -493,6 +493,18 @@ void NextRendererGameInstance::DrawTitleBar()
     }
     BUTTON_TOOLTIP(LOCTEXT("Take a Screenshot into the screenshots folder"))
 	ImGui::SameLine();
+	if (ImGui::Button(ICON_FA_LIST_CHECK, ImVec2(TITLEBAR_SIZE, TITLEBAR_SIZE)))
+	{
+		GetEngine().GetUserSettings().ShowSettings = !GetEngine().GetUserSettings().ShowSettings;
+	}
+	BUTTON_TOOLTIP(LOCTEXT("Take a Screenshot into the screenshots folder"))
+	ImGui::SameLine();
+	if (ImGui::Button(ICON_FA_GAUGE_SIMPLE_HIGH, ImVec2(TITLEBAR_SIZE, TITLEBAR_SIZE)))
+	{
+		GetEngine().GetUserSettings().ShowOverlay = !GetEngine().GetUserSettings().ShowOverlay;
+	}
+	BUTTON_TOOLTIP(LOCTEXT("Take a Screenshot into the screenshots folder"))
+	ImGui::SameLine();
     ImGui::GetForegroundDrawList()->AddLine(ImGui::GetCursorPos() + ImVec2(4, TITLEBAR_SIZE / 2 - 5), ImGui::GetCursorPos() + ImVec2(4, TITLEBAR_SIZE / 2 + 5), IM_COL32(255, 255, 255, 160), 2.0f);
     ImGui::Dummy(ImVec2(10, 10));
     ImGui::SameLine();

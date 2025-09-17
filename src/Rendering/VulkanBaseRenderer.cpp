@@ -401,7 +401,10 @@ namespace Vulkan
     void VulkanBaseRenderer::CreateStorageImage(uint32_t bindlessIdx, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, const char* debugName)
     {
         bindlessStorageImages_[bindlessIdx].reset(new RenderImage(Device(), swapChain_->RenderExtent(), format, tiling, usage, false, debugName));
-        globalTexturePool_->BindStorageTexture(bindlessIdx, bindlessStorageImages_[bindlessIdx]->GetImageView());
+        if (!(usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
+        {
+            globalTexturePool_->BindStorageTexture(bindlessIdx, bindlessStorageImages_[bindlessIdx]->GetImageView());
+        }
     }
 
     const RenderImage* VulkanBaseRenderer::GetStorageImage(uint32_t bindlessIdx) const

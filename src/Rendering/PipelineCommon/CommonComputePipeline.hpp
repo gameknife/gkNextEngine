@@ -26,6 +26,15 @@ namespace Vulkan
 
 namespace Vulkan::PipelineCommon
 {
+	class ZeroBindWithTLASPipeline : public PipelineBase
+	{
+	public:
+		VULKAN_NON_COPIABLE(ZeroBindWithTLASPipeline)
+		ZeroBindWithTLASPipeline(const SwapChain& swapChain, const char* shaderfile);
+
+		void BindPipeline(VkCommandBuffer commandBuffer, const Assets::Scene& scene, uint32_t imageIndex);
+	};
+	
 	class ZeroBindPipeline : public PipelineBase
 	{
 	public:

@@ -196,6 +196,7 @@ public:
 	Assets::UniformBufferObject& GetUniformBufferObject() { return prevUBO_; }
 
 	VkDeviceAddress TryGetGPUAccelerationStructureAddress() const;
+	VkAccelerationStructureKHR TryGetGPUAccelerationStructureHandle() const;
 	
 protected:
 	Assets::UniformBufferObject GetUniformBufferObject(const VkOffset2D offset, const VkExtent2D extent);

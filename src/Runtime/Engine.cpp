@@ -78,9 +78,7 @@ namespace NextRenderer
                     if(!ptr->supportRayTracing_) {
                         break;
                     }
-#if !ANDROID
                     ptr->RegisterLogicRenderer(Vulkan::ERT_PathTracing);
-#endif
                     ptr->RegisterLogicRenderer(Vulkan::ERT_ModernDeferred);
                     ptr->RegisterLogicRenderer(Vulkan::ERT_LegacyDeferred);
                     ptr->RegisterLogicRenderer(Vulkan::ERT_VoxelTracing);
@@ -701,6 +699,17 @@ VkDeviceAddress NextEngine::TryGetGPUAccelerationStructureAddress() const
     }
 
     return -1;
+}
+
+VkAccelerationStructureKHR NextEngine::TryGetGPUAccelerationStructureHandle() const
+{
+    Vulkan::RayTracing::RayTraceBaseRenderer* rtRender = dynamic_cast<Vulkan::RayTracing::RayTraceBaseRenderer*>(renderer_.get());
+    if (rtRender)
+    {
+        return rtRender->TLAS()[0].Handle();   
+    }
+
+    return nullptr;
 }
 
 Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D offset, const VkExtent2D extent)

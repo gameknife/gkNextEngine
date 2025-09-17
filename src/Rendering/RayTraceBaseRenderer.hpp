@@ -10,7 +10,7 @@ namespace Vulkan
 {
 	namespace PipelineCommon
 	{
-		class AccumulatePipeline;
+		class ZeroBindWithTLASPipeline;
 	}
 
 	class CommandBuffers;
@@ -75,7 +75,7 @@ namespace Vulkan::RayTracing
 		std::unique_ptr<Buffer> instancesBuffer_;
 		std::unique_ptr<DeviceMemory> instancesBufferMemory_;
 		
-		std::unique_ptr<PipelineCommon::ZeroBindPipeline> directLightGenPipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindWithTLASPipeline> directLightGenPipeline_;
 
 		int tlasUpdateRequest_ {};
 	};

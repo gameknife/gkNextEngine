@@ -1,5 +1,7 @@
 #include "CommonComputePipeline.hpp"
 
+#include "Runtime/Engine.hpp"
+
 #include "Vulkan/Buffer.hpp"
 #include "Vulkan/DescriptorSetManager.hpp"
 #include "Vulkan/DescriptorPool.hpp"
@@ -16,6 +18,68 @@
 
 namespace Vulkan::PipelineCommon
 {
+	ZeroBindWithTLASPipeline::ZeroBindWithTLASPipeline(const SwapChain& swapChain, const char* shaderfile):PipelineBase(swapChain)
+	{
+		// Create descriptor pool/sets.
+		const auto& device = swapChain.Device();
+        
+		VkPushConstantRange pushConstantRange{};
+		pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+		pushConstantRange.offset = 0;
+		pushConstantRange.size = sizeof(Assets::GPUScene);
+
+#if ANDROID
+		std::vector<DescriptorBinding> descriptorBindings =
+		{
+			{0, 1, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_COMPUTE_BIT},
+		};
+
+		descriptorSetManager_.reset(new DescriptorSetManager(device, descriptorBindings, 1));
+		auto& descriptorSets = descriptorSetManager_->DescriptorSets();
+
+		const auto accelerationStructureHandle = NextEngine::GetInstance()->TryGetGPUAccelerationStructureHandle();
+		VkWriteDescriptorSetAccelerationStructureKHR structureInfo = {};
+		structureInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+		structureInfo.pNext = nullptr;
+		structureInfo.accelerationStructureCount = 1;
+		structureInfo.pAccelerationStructures = &accelerationStructureHandle;
+
+		const std::vector<VkWriteDescriptorSet> descriptorWrites =
+		{
+			descriptorSets.Bind(0, 0, structureInfo),
+		};
+		descriptorSets.UpdateDescriptors(0, descriptorWrites);
+#endif
+		
+		std::vector<DescriptorSetManager*> managers = {
+			&Assets::GlobalTexturePool::GetInstance()->GetDescriptorManager(),
+#if ANDROID
+			descriptorSetManager_.get()
+#endif
+		};
+
+		pipelineLayout_.reset(new class PipelineLayout(device, managers, 1, &pushConstantRange, 1));
+		
+		const ShaderModule denoiseShader(device, shaderfile);
+        
+		VkComputePipelineCreateInfo pipelineCreateInfo = {};
+		pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+		pipelineCreateInfo.stage = denoiseShader.CreateShaderStage(VK_SHADER_STAGE_COMPUTE_BIT);
+		pipelineCreateInfo.layout = pipelineLayout_->Handle();
+
+		Check(vkCreateComputePipelines(device.Handle(), VK_NULL_HANDLE,1,
+			&pipelineCreateInfo,NULL, &pipeline_),shaderfile);
+	}
+
+	void ZeroBindWithTLASPipeline::BindPipeline(VkCommandBuffer commandBuffer, const Assets::Scene& scene,
+		uint32_t imageIndex)
+	{
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, Handle());
+		PipelineLayout().BindDescriptorSets(commandBuffer, 0);
+		vkCmdPushConstants(commandBuffer, PipelineLayout().Handle(), VK_SHADER_STAGE_COMPUTE_BIT,
+						   0, sizeof(Assets::GPUScene), &(scene.FetchGPUScene(imageIndex)));
+	}
+
 	ZeroBindPipeline::ZeroBindPipeline(const SwapChain& swapChain, const char* shaderfile):PipelineBase(swapChain)
 	{
 		// Create descriptor pool/sets.

@@ -21,7 +21,7 @@ jobs:
 
     runs-on: macos-latest
     env: 
-      SDK_VERSION: 1.4.309
+      SDK_VERSION: 1.4.313.1
     steps:
     - uses: actions/checkout@v4
     - name: Install macOS dependencies
@@ -31,13 +31,6 @@ jobs:
       run: |
         brew install molten-vk
         brew install glslang
-    - name: Download and setup slangc
-      run: |
-        curl -L https://github.com/shader-slang/slang/releases/download/vulkan-sdk-1.4.304.1/slang-ulkan-sdk-1.4.304.1-macos-aarch64.zip -o slang.zip
-        mkdir -p slang
-        unzip slang.zip -d slang
-        echo "$PWD/slang/bin" >> $GITHUB_PATH
-        echo "Downloaded and added slangc to PATH"
     - name: Restore cached Primes
       id: cache-primes-restore
       uses: actions/cache/restore@v4

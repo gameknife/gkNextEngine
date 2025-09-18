@@ -1,15 +1,10 @@
 #pragma once
 
 #include "Vulkan/FrameBuffer.hpp"
-#include "Vulkan/WindowConfig.hpp"
-#include "Vulkan/Image.hpp"
 #include "Rendering/VulkanBaseRenderer.hpp"
 #include "Rendering/RayTraceBaseRenderer.hpp"
 
-#include <vector>
 #include <memory>
-
-#include "Rendering/SoftwareTracing/SoftwareTracingPipeline.hpp"
 
 namespace Vulkan
 {
@@ -38,8 +33,13 @@ namespace Vulkan::LegacyDeferred
 		void Render(VkCommandBuffer commandBuffer, uint32_t imageIndex) override;
 
 	private:
-		std::unique_ptr<class ShadingPipeline> deferredShadingPipeline_;
-		std::unique_ptr<Vulkan::PipelineCommon::SimpleComposePipeline> composePipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindPipeline> deferredShadingPipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindPipeline> composePipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindCustomPushConstantPipeline> accumulatePipeline_;
+		
+		uint32_t prevSingleDiffuseId_{};
+		uint32_t prevSingleSpecularId_{};
+		uint32_t prevSingleAlbedoId_{};
 	};
 
 }
@@ -60,8 +60,7 @@ namespace Vulkan::VoxelTracing
 
 	private:
 		// just one computer pass is enough
-		std::unique_ptr<class ShadingPipeline> deferredShadingPipeline_;
-		std::unique_ptr<Vulkan::PipelineCommon::SimpleComposePipeline> composePipeline_;
+		std::unique_ptr<Vulkan::PipelineCommon::ZeroBindPipeline> deferredShadingPipeline_;
 	};
 
 }

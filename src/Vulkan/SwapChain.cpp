@@ -272,12 +272,12 @@ uint32_t SwapChain::ChooseImageCount(const VkSurfaceCapabilitiesKHR& capabilitie
 void SwapChain::InsertBarrierToWrite(VkCommandBuffer commandBuffer, uint32_t imageIndex) const
 {
 	ImageMemoryBarrier::FullInsert(commandBuffer, Images()[imageIndex], 0,
-	VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_GENERAL);
+	VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_GENERAL);
 }
 void SwapChain::InsertBarrierToPresent(VkCommandBuffer commandBuffer, uint32_t imageIndex) const
 {
 	ImageMemoryBarrier::FullInsert(commandBuffer, Images()[imageIndex],
-	VK_ACCESS_TRANSFER_WRITE_BIT, 0, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+	VK_ACCESS_SHADER_WRITE_BIT, 0, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 }
 	
 }

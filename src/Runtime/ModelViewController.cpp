@@ -16,6 +16,7 @@
 #define GLFW_MOUSE_BUTTON_LEFT      GLFW_MOUSE_BUTTON_1
 #define GLFW_MOUSE_BUTTON_RIGHT     GLFW_MOUSE_BUTTON_2
 #define GLFW_MOUSE_BUTTON_MIDDLE    GLFW_MOUSE_BUTTON_3
+#define GLFW_KEY_SPACE              32
 
 #define GLFW_RELEASE                0
 #define GLFW_PRESS                  1
@@ -244,6 +245,34 @@ bool ModelViewController::UpdateCamera(const double speed, const double timeDelt
     movedByEvent_ = false;
     
     return updated;
+}
+
+glm::vec3 ModelViewController::GetRight()
+{
+    glm::mat4 mvi = inverse(ModelView());
+    glm::vec4 origin = mvi * glm::vec4(1, 0, 0,0);
+    return origin;
+}
+
+glm::vec3 ModelViewController::GetUp()
+{
+    glm::mat4 mvi = inverse(ModelView());
+    glm::vec4 origin = mvi * glm::vec4(0, 1, 0,0);
+    return origin;
+}
+
+glm::vec3 ModelViewController::GetForward()
+{
+    glm::mat4 mvi = inverse(ModelView());
+    glm::vec4 origin = mvi * glm::vec4(0, 0, -1, 0);
+    return origin;
+}
+
+glm::vec3 ModelViewController::GetPosition()
+{
+    glm::mat4 mvi = inverse(ModelView());
+    glm::vec4 origin = mvi * glm::vec4(0, 0, 0, 1);
+    return origin;
 }
 
 void ModelViewController::MoveForward(const float d)

@@ -32,6 +32,7 @@
 
 #define BUILDVER(X) std::string buildver(#X);
 #include "build.version"
+#include "NextAnimation.h"
 #include "NextPhysics.h"
 
 #if ANDROID
@@ -77,11 +78,7 @@ namespace NextRenderer
                     if(!ptr->supportRayTracing_) {
                         break;
                     }
-#if !ANDROID
                     ptr->RegisterLogicRenderer(Vulkan::ERT_PathTracing);
-#endif
-                    ptr->RegisterLogicRenderer(Vulkan::ERT_Hybrid);
-
                     ptr->RegisterLogicRenderer(Vulkan::ERT_ModernDeferred);
                     ptr->RegisterLogicRenderer(Vulkan::ERT_LegacyDeferred);
                     ptr->RegisterLogicRenderer(Vulkan::ERT_VoxelTracing);
@@ -247,6 +244,8 @@ NextEngine::~NextEngine()
 
 void NextEngine::Start()
 {
+    PERFORMANCEAPI_INSTRUMENT_FUNCTION();
+    
     renderer_->Start();
 
     ma_result result;
@@ -261,6 +260,9 @@ void NextEngine::Start()
     physicsEngine_->Start();
     
     gameInstance_->OnInit();
+
+    animationEngine_ = std::make_unique<NextAnimation>();
+    animationEngine_->Start();
     
     // init js engine
     InitJSEngine();
@@ -293,7 +295,8 @@ bool NextEngine::Tick()
         scene_->Tick(static_cast<float>(deltaSeconds_));
     }
 
-    physicsEngine_->Tick(deltaSeconds_);
+    if (userSettings_.TickPhysics) physicsEngine_->Tick(deltaSeconds_);
+    if (userSettings_.TickAnimation) animationEngine_->Tick(deltaSeconds_); //pause dev, wait next
 
     if (JSTickCallback_)
     {
@@ -359,6 +362,17 @@ bool NextEngine::Tick()
         renderer_->DrawFrame();
     }
     totalFrames_ = renderer_->FrameCount();
+
+
+    if (progressivePreFrames_ > 0)
+    {
+        progressivePreFrames_--;
+        if (progressivePreFrames_ == 0)
+        {
+            progressiveRendering_ = true;
+        }
+    }
+
 #if ANDROID
     return false;
 #else
@@ -373,6 +387,7 @@ void NextEngine::End()
     TaskCoordinator::GetInstance()->WaitForAllParralledTask();
     
     physicsEngine_->Stop();
+    animationEngine_->Stop();
     ma_engine_uninit(audioEngine_.get());
     gameInstance_->OnDestroy();
     renderer_->End();
@@ -574,7 +589,8 @@ void NextEngine::ToggleMaximize()
 
 void NextEngine::RequestScreenShot(std::string filename)
 {
-    std::string screenshot_filename = filename.empty() ? fmt::format("screenshot_{:%Y-%m-%d-%H-%M-%S}", fmt::localtime(std::time(nullptr))) : filename;
+    auto time = std::time(nullptr);
+    std::string screenshot_filename = filename.empty() ? fmt::format("screenshot_{:%Y-%m-%d-%H-%M-%S}", *std::localtime(&time)) : filename;
     SaveScreenShot(screenshot_filename, 0, 0, 0, 0);
 }
 
@@ -652,9 +668,48 @@ void NextEngine::RayCastGPU(glm::vec3 rayOrigin, glm::vec3 rayDir,
     callback(result);
 }
 
-void NextEngine::SetProgressiveRendering(bool enable)
+void NextEngine::SetProgressiveRendering(bool enable, bool directly)
 {
-    progressiveRendering_ = enable;
+    if (directly)
+    {
+        progressiveRendering_ = enable;
+        return;
+    }
+    
+    if (enable)
+    {
+        if (progressivePreFrames_ == 0)
+        {
+            progressivePreFrames_ = userSettings_.TemporalFrames * 2;
+        }
+    }
+    else
+    {
+        progressivePreFrames_ = 0;
+        progressiveRendering_ = false;
+    }
+}
+
+VkDeviceAddress NextEngine::TryGetGPUAccelerationStructureAddress() const
+{
+    Vulkan::RayTracing::RayTraceBaseRenderer* rtRender = dynamic_cast<Vulkan::RayTracing::RayTraceBaseRenderer*>(renderer_.get());
+    if (rtRender)
+    {
+        return rtRender->TLAS()[0].GetDeviceAddress();   
+    }
+
+    return -1;
+}
+
+VkAccelerationStructureKHR NextEngine::TryGetGPUAccelerationStructureHandle() const
+{
+    Vulkan::RayTracing::RayTraceBaseRenderer* rtRender = dynamic_cast<Vulkan::RayTracing::RayTraceBaseRenderer*>(renderer_.get());
+    if (rtRender)
+    {
+        return rtRender->TLAS()[0].Handle();   
+    }
+
+    return nullptr;
 }
 
 Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D offset, const VkExtent2D extent)
@@ -668,7 +723,7 @@ Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D 
     
     scene_->OverrideModelView(ubo.ModelView);
     ubo.Projection = glm::perspective(glm::radians(renderCam.FieldOfView),
-                                      extent.width / static_cast<float>(extent.height), 0.1f, 10000.0f);
+                                      extent.width / static_cast<float>(extent.height), 0.2f, 2000.0f);
     
     ubo.FastGather = userSettings_.FastGather;
     ubo.FastInterpole = userSettings_.FastInterpole;
@@ -747,7 +802,7 @@ Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D 
     ubo.ShowHeatmap = userSettings_.ShowVisualDebug;
     ubo.HeatmapScale = userSettings_.HeatmapScale;
     ubo.UseCheckerBoard = userSettings_.UseCheckerBoardRendering;
-    ubo.TemporalFrames = progressiveRendering_ ? (1024 / userSettings_.TemporalFrames) : userSettings_.TemporalFrames;
+    ubo.TemporalFrames = progressiveRendering_ ? 256 : userSettings_.TemporalFrames;
     ubo.HDR = renderer_->SwapChain().IsHDR();
     
     ubo.PaperWhiteNit = userSettings_.PaperWhiteNit;
@@ -1052,7 +1107,8 @@ void NextEngine::LoadScene(std::string sceneFileName)
             renderer_->Device().WaitIdle();
             renderer_->DeleteSwapChain();
             renderer_->OnPreLoadScene();
-            
+
+            gameInstance_->BeforeSceneRebuild(*nodes, *models, *materials, *lights, *tracks);
             scene_->Reload(*nodes, *models, *materials, *lights, *tracks);
             scene_->RebuildMeshBuffer(renderer_->CommandPool(), renderer_->supportRayTracing_);
                     

@@ -40,6 +40,8 @@ namespace Vulkan::RayTracing
 			uint32_t instanceId,
 			bool visible);
 
+		VkDeviceAddress GetDeviceAddress() const;
+
 	private:
 
 		uint32_t instancesCount_;

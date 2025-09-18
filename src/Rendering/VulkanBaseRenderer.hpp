@@ -22,13 +22,10 @@ namespace Vulkan
 {
 	namespace PipelineCommon
 	{
-		class BufferClearPipeline;
-		class SoftwareGPULightBakePipeline;
-		class SimpleComposePipeline;
-		class GPUCullPipeline;
-		class VisualDebuggerPipeline;
 		class VisibilityPipeline;
 		class GraphicsPipeline;
+		class ZeroBindPipeline;
+		class ZeroBindCustomPushConstantPipeline;
 	}
 
 	class RenderImage;
@@ -48,7 +45,6 @@ namespace Vulkan
 	enum ERendererType
 	{
 		ERT_PathTracing,
-		ERT_Hybrid,
 		ERT_ModernDeferred,
 		ERT_LegacyDeferred,
 		ERT_VoxelTracing,
@@ -78,9 +74,6 @@ namespace Vulkan
 		void End();
 		
 		void CaptureScreenShot();
-		void CaptureEditorViewport(VkCommandBuffer commandBuffer, const uint32_t imageIndex);
-		
-		RenderImage& GetRenderImage() const {return *rtEditorViewport_;}
 
 		virtual void DrawFrame();
 
@@ -134,11 +127,6 @@ namespace Vulkan
 		{
 			return currentLogicRenderer_;
 		}
-
-		DescriptorSetManager& GetRTDescriptorSetManager() const
-		{
-			return *rtDescriptorSetManager_;
-		}
 		
 		// Callbacks
 		std::function<void()> DelegateOnDeviceSet;
@@ -160,25 +148,13 @@ namespace Vulkan
 		bool forceSDR_{};
 		bool visualDebug_{};
 
-		// this texture could pass to global scope, it may contained by base renderer
-		std::unique_ptr<RenderImage> rtDenoised;
-		std::unique_ptr<RenderImage> rtAccumlatedDiffuse;
-		std::unique_ptr<RenderImage> rtOutputDiffuse;
-		std::unique_ptr<RenderImage> rtVisibility;
-		std::unique_ptr<RenderImage> rtObject0;
-		std::unique_ptr<RenderImage> rtObject1;
-		std::unique_ptr<RenderImage> rtPrevDepth;
-		std::unique_ptr<RenderImage> rtMotionVector_;
-		std::unique_ptr<RenderImage> rtAlbedo_;
-		std::unique_ptr<RenderImage> rtAccumlatedAlbedo_;
-		std::unique_ptr<RenderImage> rtNormal_;
-		std::unique_ptr<RenderImage> rtShaderTimer_;
-		std::unique_ptr<RenderImage> rtAccumlatedSpecular;
-		std::unique_ptr<RenderImage> rtOutputSpecular;
-			
+		void CreateStorageImage(uint32_t bindlessIdx, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, const char* debugName);
+		const RenderImage* GetStorageImage(uint32_t bindlessIdx) const;
+		uint32_t GetTemporalStorageImage(VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, const char* debugName);
 	protected:
 		Assets::UniformBufferObject lastUBO;
-	
+		std::vector<std::unique_ptr<RenderImage> > bindlessStorageImages_;
+		uint32_t tempStorageImageCreated_ {};
 	private:
 
 		void UpdateUniformBuffer(uint32_t imageIndex);
@@ -198,16 +174,16 @@ namespace Vulkan
 		
 		std::vector<Assets::UniformBuffer> uniformBuffers_;
 		
-		std::unique_ptr<PipelineCommon::GraphicsPipeline> wireframePipeline_;
-		std::unique_ptr<PipelineCommon::BufferClearPipeline> bufferClearPipeline_;
-		std::unique_ptr<PipelineCommon::SimpleComposePipeline> simpleComposePipeline_;
-		std::unique_ptr<PipelineCommon::VisualDebuggerPipeline> visualDebuggerPipeline_;
+		//std::unique_ptr<PipelineCommon::GraphicsPipeline> wireframePipeline_;
 		std::unique_ptr<PipelineCommon::VisibilityPipeline> visibilityPipeline_;
+		
+		std::unique_ptr<PipelineCommon::ZeroBindCustomPushConstantPipeline> bufferClearPipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindCustomPushConstantPipeline> simpleComposePipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindCustomPushConstantPipeline> visualDebuggerPipeline_;
 		
 		std::unique_ptr<class DepthBuffer> depthBuffer_;
 		std::unique_ptr<FrameBuffer> visibilityFrameBuffer_;
-		std::vector<FrameBuffer> swapChainFramebuffers_;
-		
+		//std::unique_ptr<FrameBuffer> wireframeFramebuffer_;
 		
 		std::unique_ptr<class CommandPool> commandPool_;
 		std::unique_ptr<class CommandPool> commandPool2_;
@@ -217,17 +193,15 @@ namespace Vulkan
 		std::vector<class Semaphore> renderFinishedSemaphores_;
 		std::vector<class Fence> inFlightFences_;
 
-		std::unique_ptr<PipelineCommon::SoftwareGPULightBakePipeline> softAmbientCubeGenPipeline_;
-		std::unique_ptr<PipelineCommon::GPUCullPipeline> gpuCullPipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindPipeline> softAmbientCubeGenPipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindPipeline> gpuCullPipeline_;
 		
 		std::unique_ptr<Image> screenShotImage_;
 		std::unique_ptr<DeviceMemory> screenShotImageMemory_;
 		std::unique_ptr<ImageView> screenShotImageView_;
-		std::unique_ptr<RenderImage> rtEditorViewport_;
 
 		std::unique_ptr<VulkanGpuTimer> gpuTimer_;
 		std::unique_ptr<Assets::GlobalTexturePool> globalTexturePool_;
-		std::unique_ptr<Vulkan::DescriptorSetManager> rtDescriptorSetManager_;
 
 		uint32_t currentImageIndex_{};
 		size_t currentFrame_{};
@@ -239,7 +213,7 @@ namespace Vulkan
 	class LogicRendererBase
 	{
 	public:
-		LogicRendererBase( VulkanBaseRenderer& baseRender );
+		LogicRendererBase( VulkanBaseRenderer& baseRender ): baseRender_(baseRender) {}
 		virtual ~LogicRendererBase() {};
 
 		virtual void OnDeviceSet() {};

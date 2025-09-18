@@ -10,6 +10,7 @@
 #include <memory>
 #include <functional>
 #include <fstream>
+#include <set>
 #include <fmt/printf.h>
 
 #if WIN32 && !defined(__MINGW32__)

@@ -1,9 +1,45 @@
 #include "gkNextRenderer.hpp"
 
 #include <imgui.h>
+#include <ThirdParty/fontawesome/IconsFontAwesome6.h>
 
+#include "Assets/FProcModel.h"
+#include "Assets/Node.h"
 #include "Runtime/Engine.hpp"
 #include "Utilities/Localization.hpp"
+#include "Utilities/ImGui.hpp"
+#include "Runtime/Platform/PlatformCommon.h"
+
+#if ANDROID
+
+#define GLFW_MOUSE_BUTTON_1         0
+#define GLFW_MOUSE_BUTTON_2         1
+#define GLFW_MOUSE_BUTTON_3         2
+#define GLFW_MOUSE_BUTTON_4         3
+#define GLFW_MOUSE_BUTTON_5         4
+#define GLFW_MOUSE_BUTTON_6         5
+#define GLFW_MOUSE_BUTTON_7         6
+#define GLFW_MOUSE_BUTTON_8         7
+#define GLFW_MOUSE_BUTTON_LAST      GLFW_MOUSE_BUTTON_8
+#define GLFW_MOUSE_BUTTON_LEFT      GLFW_MOUSE_BUTTON_1
+#define GLFW_MOUSE_BUTTON_RIGHT     GLFW_MOUSE_BUTTON_2
+#define GLFW_MOUSE_BUTTON_MIDDLE    GLFW_MOUSE_BUTTON_3
+#define GLFW_KEY_SPACE              32
+
+#define GLFW_RELEASE                0
+#define GLFW_PRESS                  1
+#define GLFW_REPEAT                 2
+
+#endif
+
+constexpr float TITLEBAR_SIZE = 40;
+constexpr float TITLEBAR_CONTROL_SIZE = TITLEBAR_SIZE * 3;
+constexpr float ICON_SIZE = 64;
+constexpr float PALATE_SIZE = 46;
+constexpr float BUTTON_SIZE = 36;
+constexpr float BUILD_BAR_WIDTH = 240;
+constexpr float SIDE_BAR_WIDTH = 300;
+constexpr float SHORTCUT_SIZE = 10;
 
 std::unique_ptr<NextGameInstanceBase> CreateGameInstance(Vulkan::WindowConfig& config, Options& options, NextEngine* engine)
 {
@@ -12,7 +48,7 @@ std::unique_ptr<NextGameInstanceBase> CreateGameInstance(Vulkan::WindowConfig& c
 
 NextRendererGameInstance::NextRendererGameInstance(Vulkan::WindowConfig& config, Options& options, NextEngine* engine):NextGameInstanceBase(config,options,engine),engine_(engine)
 {
-    
+	config.HideTitleBar = true;
 }
 
 void NextRendererGameInstance::OnInit()
@@ -30,6 +66,27 @@ void NextRendererGameInstance::OnTick(double deltaSeconds)
     modelViewController_.UpdateCamera(10.0f, deltaSeconds);
 }
 
+std::vector<Assets::FMaterial> matPreparedForAdd;
+
+void NextRendererGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<Assets::Node>>& nodes,
+	std::vector<Assets::Model>& models, std::vector<Assets::FMaterial>& materials,
+	std::vector<Assets::LightObject>& lights, std::vector<Assets::AnimationTrack>& tracks)
+{
+	models.push_back(Assets::FProcModel::CreateSphere(glm::vec3(0,0,0), 0.2f));
+	modelId_ = static_cast<uint32_t>(models.size() - 1);
+
+	matIds_.clear();
+	
+	matPreparedForAdd.push_back({Assets::Material::Lambertian(glm::vec3(1,1,1))});
+	materials.push_back(matPreparedForAdd.back());matIds_.push_back(uint32_t(materials.size() - 1));
+	matPreparedForAdd.push_back({Assets::Material::Metallic(glm::vec3(0.5,0.5,0.5), 0.4f)});
+	materials.push_back(matPreparedForAdd.back());matIds_.push_back(uint32_t(materials.size() - 1));
+	matPreparedForAdd.push_back({Assets::Material::Dielectric(1.5f, 0.0f)});
+	materials.push_back(matPreparedForAdd.back());matIds_.push_back(uint32_t(materials.size() - 1));
+	matPreparedForAdd.push_back({Assets::Material::Mixture(glm::vec3(1.0f, 0.3f, 0.3f), 0.01f)});
+	materials.push_back(matPreparedForAdd.back());matIds_.push_back(uint32_t(materials.size() - 1));
+}
+
 void NextRendererGameInstance::OnSceneLoaded()
 {
     NextGameInstanceBase::OnSceneLoaded();
@@ -45,6 +102,7 @@ void NextRendererGameInstance::OnPreConfigUI()
 
 bool NextRendererGameInstance::OnRenderUI()
 {
+	DrawTitleBar();
 	DrawSettings();
 	if (GOption->ReferenceMode)
 	{
@@ -52,7 +110,7 @@ bool NextRendererGameInstance::OnRenderUI()
 		ImGuiIO& io = ImGui::GetIO();
         
 		// 渲染器名称数组
-		const char* rendererNames[] = {"VoxelTracing", "SoftTracing", "HybridTracing" , "PathTracing"};
+		const char* rendererNames[] = {"SoftModern", "SoftTracing", "VoxelTracing" , "PathTracing"};
         
 		// 四个象限的位置
 		ImVec2 positions[] = {
@@ -93,6 +151,14 @@ bool NextRendererGameInstance::OnRenderUI()
 void NextRendererGameInstance::OnInitUI()
 {
     NextGameInstanceBase::OnInitUI();
+
+	if (bigFont_ == nullptr)
+	{
+		ImFontGlyphRangesBuilder builder;
+		builder.AddText("gkNextRenderer");
+		const ImWchar* glyphRange = ImGui::GetIO().Fonts->GetGlyphRangesDefault();
+		bigFont_ = ImGui::GetIO().Fonts->AddFontFromFileTTF(Utilities::FileHelper::GetPlatformFilePath("assets/fonts/Roboto-BoldCondensed.ttf").c_str(), 24, nullptr, glyphRange);
+	}
 }
 
 bool NextRendererGameInstance::OverrideRenderCamera(Assets::Camera& OutRenderCamera) const
@@ -105,6 +171,12 @@ bool NextRendererGameInstance::OverrideRenderCamera(Assets::Camera& OutRenderCam
 bool NextRendererGameInstance::OnKey(int key, int scancode, int action, int mods)
 {
     modelViewController_.OnKey(key, scancode, action, mods);
+
+	if (key == GLFW_KEY_SPACE && action != GLFW_RELEASE)
+	{
+		CreateSphereAndPush();
+		return true;
+	}
     return false;
 }
 
@@ -154,6 +226,36 @@ bool NextRendererGameInstance::OnGamepadInput(float leftStickX, float leftStickY
 }
 
 
+void NextRendererGameInstance::CreateSphereAndPush()
+{
+	glm::vec3 forward = modelViewController_.GetForward();
+	glm::vec3 center = modelViewController_.GetPosition() + forward * 0.1f + modelViewController_.GetRight() * 0.5f + modelViewController_.GetUp() * -0.5f;
+	glm::vec3 farTarget = modelViewController_.GetPosition() + forward * 1000.0f + modelViewController_.GetUp() * 100.f;
+	glm::vec3 shotDir = normalize((farTarget - center));
+	uint32_t instanceId = uint32_t(GetEngine().GetScene().Nodes().size());
+	std::shared_ptr<Assets::Node> newNode = Assets::Node::CreateNode("temp", center, glm::quat(), glm::vec3(1), modelId_,
+															   instanceId, false);
+	// int random = std::rand() % matPreparedForAdd.size();
+	// Assets::FMaterial instanced = matPreparedForAdd[random];
+	// instanced.gpuMaterial_.Diffuse = glm::vec4(static_cast <float> (rand()) / static_cast <float> (RAND_MAX) * 0.8f + 0.2f,
+	// 											static_cast <float> (rand()) / static_cast <float> (RAND_MAX) * 0.8f + 0.2f,
+	// 											static_cast <float> (rand()) / static_cast <float> (RAND_MAX) * 0.8f + 0.2f, 1.0);
+	//
+	// uint32_t newMatId = GetEngine().GetScene().AddMaterial(instanced);
+
+	uint32_t newMatId = matIds_[std::rand() % matIds_.size()];
+	newNode->SetMaterial( { newMatId } );
+	newNode->SetVisible(true);
+	newNode->SetMobility(Assets::Node::ENodeMobility::Dynamic);
+	auto id = NextEngine::GetInstance()->GetPhysicsEngine()->CreateSphereBody(center, 0.2f, JPH::EMotionType::Dynamic);
+	newNode->BindPhysicsBody(id);
+
+	GetEngine().GetScene().Nodes().push_back(newNode);
+	GetEngine().GetScene().MarkDirty();
+
+	GetEngine().GetPhysicsEngine()->AddForceToBody(id, shotDir * 70000.f);
+}
+
 void NextRendererGameInstance::DrawSettings()
 {
 	UserSettings& UserSetting = GetEngine().GetUserSettings();
@@ -164,7 +266,7 @@ void NextRendererGameInstance::DrawSettings()
 	}
 
 	const float distance = 10.0f;
-	const ImVec2 pos = ImVec2(distance, distance);
+	const ImVec2 pos = ImVec2(distance, TITLEBAR_SIZE + distance);
 	const ImVec2 posPivot = ImVec2(0.0f, 0.0f);
 	ImGui::SetNextWindowPos(pos, ImGuiCond_Always, posPivot);
 #if ANDROID
@@ -194,7 +296,7 @@ void NextRendererGameInstance::DrawSettings()
 
 		if( ImGui::CollapsingHeader(LOCTEXT("Renderer"), ImGuiTreeNodeFlags_DefaultOpen) )
 		{
-			std::vector<const char*> renderers {"PathTracing", "Hybrid", "ModernDeferred", "LegacyDeferred", "VoxelTracing"};
+			std::vector<const char*> renderers {"PathTracing", "SoftTracing", "SoftModern", "VoxelTracing"};
 			
 			ImGui::Text("%s", LOCTEXT("Renderer"));
 			
@@ -306,6 +408,7 @@ void NextRendererGameInstance::DrawSettings()
 			ImGui::Text("%s", LOCTEXT("Profiler"));
 			ImGui::Separator();
 			ImGui::Checkbox(LOCTEXT("ShowWireframe"), &GetEngine().GetRenderer().showWireframe_);
+			ImGui::Checkbox(LOCTEXT("TickPhysics"), &UserSetting.TickPhysics);
 			ImGui::Checkbox(LOCTEXT("DebugDraw"), &UserSetting.ShowVisualDebug);
 			ImGui::Checkbox(LOCTEXT("DebugDraw_Lighting"), &UserSetting.DebugDraw_Lighting);
 			ImGui::Checkbox(LOCTEXT("DisableSpatialReuse"), &UserSetting.DisableSpatialReuse);
@@ -321,3 +424,97 @@ void NextRendererGameInstance::DrawSettings()
 	}
 	ImGui::End();
 }
+
+
+void NextRendererGameInstance::DrawTitleBar()
+{
+    // 获取窗口的大小
+    ImVec2 windowSize = ImGui::GetMainViewport()->Size;
+    auto bgColor = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
+    bgColor.w = 0.9f;
+    ImGui::GetBackgroundDrawList()->AddRectFilled(ImVec2(0, 0), ImVec2(windowSize.x, TITLEBAR_SIZE), ImGui::ColorConvertFloat4ToU32(bgColor));
+
+    ImGui::PushFont(bigFont_);
+
+    auto textSize = ImGui::CalcTextSize("gkNextRenderer");
+    ImGui::GetForegroundDrawList()->AddText(ImVec2((windowSize.x - textSize.x) * 0.5f, (TITLEBAR_SIZE - textSize.y) * 0.5f), IM_COL32(255, 255, 255, 255), "gkNextRenderer");
+
+    ImGui::PopFont();
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0);
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+
+    ImGui::SetNextWindowPos(ImVec2(windowSize.x - TITLEBAR_CONTROL_SIZE, 0), ImGuiCond_Always, ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImVec2(TITLEBAR_CONTROL_SIZE, TITLEBAR_SIZE));
+
+    ImGui::Begin("TitleBarRight", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground);
+
+    if (ImGui::Button(ICON_FA_MINUS, ImVec2(TITLEBAR_SIZE, TITLEBAR_SIZE)))
+    {
+        GetEngine().RequestMinimize();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(GetEngine().IsMaximumed() ? ICON_FA_WINDOW_RESTORE : ICON_FA_SQUARE, ImVec2(TITLEBAR_SIZE, TITLEBAR_SIZE)))
+    {
+        GetEngine().ToggleMaximize();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(ICON_FA_XMARK, ImVec2(TITLEBAR_SIZE, TITLEBAR_SIZE)))
+    {
+        GetEngine().RequestClose();
+    }
+    ImGui::End();
+
+    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always, ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImVec2(TITLEBAR_SIZE * 18, TITLEBAR_SIZE));
+
+    ImGui::Begin("TitleBarLeft", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground);
+    if (ImGui::Button(ICON_FA_GITHUB, ImVec2(TITLEBAR_SIZE, TITLEBAR_SIZE)))
+    {
+        NextRenderer::OSCommand("https://github.com/gameknife/gkNextRenderer");
+    }
+    BUTTON_TOOLTIP(LOCTEXT("Open Project Page in OS Browser"))
+    ImGui::SameLine();
+    if (ImGui::Button(ICON_FA_TWITTER, ImVec2(TITLEBAR_SIZE, TITLEBAR_SIZE)))
+    {
+        NextRenderer::OSCommand("https://x.com/gKNIFE_");
+    }
+    BUTTON_TOOLTIP(LOCTEXT("Open Twitter Page in OS Browser"))
+    ImGui::SameLine();
+    ImGui::GetForegroundDrawList()->AddLine(ImGui::GetCursorPos() + ImVec2(4, TITLEBAR_SIZE / 2 - 5), ImGui::GetCursorPos() + ImVec2(4, TITLEBAR_SIZE / 2 + 5), IM_COL32(255, 255, 255, 160), 2.0f);
+    ImGui::Dummy(ImVec2(10, 10));
+    ImGui::SameLine();
+    if (ImGui::Button(ICON_FA_CAMERA, ImVec2(TITLEBAR_SIZE, TITLEBAR_SIZE)))
+    {
+
+    }
+    BUTTON_TOOLTIP(LOCTEXT("Take a Screenshot into the screenshots folder"))
+	ImGui::SameLine();
+	if (ImGui::Button(ICON_FA_LIST_CHECK, ImVec2(TITLEBAR_SIZE, TITLEBAR_SIZE)))
+	{
+		GetEngine().GetUserSettings().ShowSettings = !GetEngine().GetUserSettings().ShowSettings;
+	}
+	BUTTON_TOOLTIP(LOCTEXT("Take a Screenshot into the screenshots folder"))
+	ImGui::SameLine();
+	if (ImGui::Button(ICON_FA_GAUGE_SIMPLE_HIGH, ImVec2(TITLEBAR_SIZE, TITLEBAR_SIZE)))
+	{
+		GetEngine().GetUserSettings().ShowOverlay = !GetEngine().GetUserSettings().ShowOverlay;
+	}
+	BUTTON_TOOLTIP(LOCTEXT("Take a Screenshot into the screenshots folder"))
+	ImGui::SameLine();
+    ImGui::GetForegroundDrawList()->AddLine(ImGui::GetCursorPos() + ImVec2(4, TITLEBAR_SIZE / 2 - 5), ImGui::GetCursorPos() + ImVec2(4, TITLEBAR_SIZE / 2 + 5), IM_COL32(255, 255, 255, 160), 2.0f);
+    ImGui::Dummy(ImVec2(10, 10));
+    ImGui::SameLine();
+    float deltaSeconds = GetEngine().GetSmoothDeltaSeconds();
+    ImGui::SameLine();
+    ImGui::SetCursorPosY((TITLEBAR_SIZE - ImGui::GetTextLineHeight()) / 2);
+    ImGui::TextUnformatted(fmt::format("{:.0f}fps", 1.0f / deltaSeconds).c_str());
+    ImGui::End();
+
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(4);
+}
+

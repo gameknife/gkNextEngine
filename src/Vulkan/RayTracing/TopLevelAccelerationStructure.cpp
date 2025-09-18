@@ -110,4 +110,11 @@ VkAccelerationStructureInstanceKHR TopLevelAccelerationStructure::CreateInstance
 	return instance;
 }
 
+VkDeviceAddress TopLevelAccelerationStructure::GetDeviceAddress() const
+{
+	VkAccelerationStructureDeviceAddressInfoKHR addressInfo = {};
+	addressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
+	addressInfo.accelerationStructure = Handle();
+	return deviceProcedures_.vkGetAccelerationStructureDeviceAddressKHR(Device().Handle(), &addressInfo);
+}
 }

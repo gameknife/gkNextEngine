@@ -21,6 +21,7 @@ namespace qjs
 }
 
 class NextEngine;
+class NextAnimation;
 
 class NextGameInstanceBase
 {
@@ -39,13 +40,15 @@ public:
 	virtual bool OverrideRenderCamera(Assets::Camera& OutRenderCamera) const {return false;}
 
 	// scene
+	virtual void BeforeSceneRebuild(std::vector<std::shared_ptr<Assets::Node>>& nodes, std::vector<Assets::Model>& models, std::vector<Assets::FMaterial>& materials, std::vector<Assets::LightObject>& lights,
+					   std::vector<Assets::AnimationTrack>& tracks) {}
 	virtual void OnSceneLoaded() {}
 	virtual void OnSceneUnloaded() {}
 
 	// input
-	virtual bool OnKey(int key, int scancode, int action, int mods) =0;
-	virtual bool OnCursorPosition(double xpos, double ypos) =0;
-	virtual bool OnMouseButton(int button, int action, int mods) =0;
+	virtual bool OnKey(int key, int scancode, int action, int mods) {return false;}
+	virtual bool OnCursorPosition(double xpos, double ypos) {return false;}
+	virtual bool OnMouseButton(int button, int action, int mods) {return false;}
 	virtual bool OnScroll(double xoffset, double yoffset) {return false;}
 	virtual bool OnGamepadInput(float leftStickX, float leftStickY,
 						float rightStickX, float rightStickY,
@@ -62,11 +65,6 @@ public:
 	void OnTick(double deltaSeconds) override {}
 	void OnDestroy() override {}
 	bool OnRenderUI() override {return false;}
-	void OnRayHitResponse(Assets::RayCastResult& result) override {}
-	
-	bool OnKey(int key, int scancode, int action, int mods) override {return false;}
-	bool OnCursorPosition(double xpos, double ypos) override {return false;}
-	bool OnMouseButton(int button, int action, int mods) override {return false;}
 };
 
 extern std::unique_ptr<NextGameInstanceBase> CreateGameInstance(Vulkan::WindowConfig& config, Options& options, NextEngine* engine);
@@ -94,14 +92,6 @@ struct FDelayTaskContext
 	DelayedTask task;
 };
 
-class NextComponent;
-
-class NextActor
-{
-public:
-	std::vector<NextComponent*> components;
-};
-
 class NextComponent : std::enable_shared_from_this<NextComponent>
 {
 public:
@@ -110,10 +100,15 @@ public:
 	int id_;
 };
 
+class NextActor
+{
+public:
+	std::vector<NextComponent*> components;
+};
+
 class NextEngine final
 {
 public:
-
 	VULKAN_NON_COPIABLE(NextEngine)
 
 	NextEngine(Options& options, void* userdata = nullptr);
@@ -191,7 +186,7 @@ public:
 	// gpu raycast
 	void RayCastGPU(glm::vec3 rayOrigin, glm::vec3 rayDir, std::function<bool (Assets::RayCastResult rayResult)> callback );
 
-	void SetProgressiveRendering(bool enable);
+	void SetProgressiveRendering(bool enable, bool directly);
 	bool IsProgressiveRendering() const { return progressiveRendering_; }
 
 	NextRenderer::EApplicationStatus GetEngineStatus() const { return status_; }
@@ -199,6 +194,9 @@ public:
 	NextPhysics* GetPhysicsEngine() { return physicsEngine_.get(); }
 
 	Assets::UniformBufferObject& GetUniformBufferObject() { return prevUBO_; }
+
+	VkDeviceAddress TryGetGPUAccelerationStructureAddress() const;
+	VkAccelerationStructureKHR TryGetGPUAccelerationStructureHandle() const;
 	
 protected:
 	Assets::UniformBufferObject GetUniformBufferObject(const VkOffset2D offset, const VkExtent2D extent);
@@ -221,22 +219,21 @@ private:
 
 	void InitJSEngine();
 	void TestJSEngine();
-
 	void InitPhysics();
 
 	// engine stuff
 	std::unique_ptr<Vulkan::Window> window_;
 	std::unique_ptr<Vulkan::VulkanBaseRenderer> renderer_;
 
+	// need remove
 	int rendererType = 0;
+
+	// settings, may move into scene
 	mutable UserSettings userSettings_{};
-	
 	mutable Assets::UniformBufferObject prevUBO_ {};
 
+	// scene, maybe multiple at a time
 	std::shared_ptr<Assets::Scene> scene_;
-
-	// integrate interface, may add from application later?
-	std::unique_ptr<class UserInterface> userInterface_;
 
 	// timing
 	uint32_t totalFrames_{};
@@ -244,6 +241,7 @@ private:
 	double deltaSeconds_{};
 	double smoothedDeltaSeconds_{};
 	bool progressiveRendering_{};
+	int progressivePreFrames_{};
 
 	// game instance
 	std::unique_ptr<NextGameInstanceBase> gameInstance_;
@@ -252,6 +250,9 @@ private:
 	std::vector<TickedTask> tickedTasks_;
 	std::vector<FDelayTaskContext> delayedTasks_;
 
+	// internal ui
+	std::unique_ptr<class UserInterface> userInterface_;
+
 	// audio
 	std::unique_ptr<struct ma_engine> audioEngine_;
 	std::unordered_map<std::string, std::unique_ptr<ma_sound> > soundMaps_;
@@ -259,14 +260,17 @@ private:
 	// physics
 	std::unique_ptr<NextPhysics> physicsEngine_;
 
+	// animation
+	std::unique_ptr<NextAnimation> animationEngine_;
+
 	// package
 	std::unique_ptr<Utilities::Package::FPackageFileSystem> packageFileSystem_;
 
-	// engine status
-	NextRenderer::EApplicationStatus status_{};
-
+	// quickjs
 	std::unique_ptr<qjs::Runtime> JSRuntime_;
 	std::unique_ptr<qjs::Context> JSContext_;
-
 	std::function<void(double)> JSTickCallback_;
+
+	// engine status
+	NextRenderer::EApplicationStatus status_{};
 };

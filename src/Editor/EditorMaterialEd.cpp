@@ -72,7 +72,7 @@ void Editor::GUI::ApplyMaterial()
         selected_material->gpuMaterial_.Metalness = mat->getInVal<float>("Metalness");
         selected_material->gpuMaterial_.RefractionIndex = mat->getInVal<float>("IOR");
         
-        current_scene->UpdateMaterial();
+        current_scene->UpdateAllMaterials();
     }
 }
 

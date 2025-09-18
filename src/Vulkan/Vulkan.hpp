@@ -33,7 +33,7 @@ ClassName& operator = (ClassName&&) = delete; \
 #define VULKAN_HANDLE(VulkanHandleType, name) \
 public: \
 	VulkanHandleType Handle() const { return name; } \
-private: \
+protected: \
 	VulkanHandleType name{};
 
 namespace Vulkan

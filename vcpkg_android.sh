@@ -4,15 +4,23 @@ set -e
 mkdir -p build
 cd build
 
-#if vcpkg.linux exists
+#if vcpkg.android exists
 if [ -d "vcpkg.android" ]; then
 	cd vcpkg.android
+	
+	echo "Updating vcpkg..."
+	git pull origin master
+	./bootstrap-vcpkg.sh
+	
+	echo "Updating installed packages..."
+	./vcpkg update
+	./vcpkg upgrade --no-dry-run
+	
 else
 	git clone https://github.com/Microsoft/vcpkg.git vcpkg.android
 	cd vcpkg.android
+	./bootstrap-vcpkg.sh
 fi
-
-./bootstrap-vcpkg.sh
 
 #replace the triplets/arm64-android.cmake file with ours
 cp -f ../../android/custom-triplets/arm64-android.cmake ./triplets/arm64-android.cmake

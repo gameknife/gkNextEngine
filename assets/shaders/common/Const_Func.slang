@@ -353,6 +353,20 @@ public Vertex UnpackVertex(uint index, in StructuredBuffer<GPUVertex> Vertices)
     return v;
 }
 
+public Vertex UnpackVertexV2(in GPUVertex Vert)
+{
+    Vertex v;
+    v.Position = Vert.Position_Tx.xyz;
+    v.Normal = Vert.Normal_Ty.xyz;
+    v.Tangent = Vert.Tangent;
+    v.TexCoord = float2(Vert.Position_Tx.w, Vert.Normal_Ty.w);
+    uint16_t TangentWMatIdx = asuint16(Vert.Tangent.w);
+    v.Tangent.w = (TangentWMatIdx >> 8) & 0xFF;
+    v.MaterialIndex = TangentWMatIdx & 0xFF;
+
+    return v;
+}
+
 public uint FetchMaterialId(in NodeProxy node, uint offset)
 {
     uint materialIndex = 0;

@@ -1,10 +1,9 @@
 #include "EditorGUI.h"
-#include "Assets/Model.hpp"
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/matrix_decompose.hpp>
-
-#include "IconsFontAwesome6.h"
+#include "Assets/Node.h"
 #include "Assets/Scene.hpp"
+
+#include "ThirdParty/fontawesome/IconsFontAwesome6.h"
+
 
 void Editor::GUI::ShowProperties()
 {
@@ -92,7 +91,6 @@ void Editor::GUI::ShowProperties()
                     
                     ImGui::SameLine();
                     
-                    
                     if( ImGui::Button(ICON_FA_CIRCLE_LEFT) )
                     {
                         if (selectedItemId != -1)
@@ -100,7 +98,6 @@ void Editor::GUI::ShowProperties()
                             mat = selectedItemId;
                         }
                     }
-                    
                     
                     ImGui::SameLine();
                     if( ImGui::Button(ICON_FA_PEN_TO_SQUARE) )

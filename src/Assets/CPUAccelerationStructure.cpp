@@ -1,16 +1,17 @@
 #include "CPUAccelerationStructure.h"
 #include "Runtime/TaskCoordinator.hpp"
 #include "Vulkan/DeviceMemory.hpp"
-#include "Scene.hpp"
+#include "Assets/Node.h"
+#include "TextureImage.hpp"
+#include "Runtime/Engine.hpp"
+#include "Assets/Scene.hpp"
+
 #include <chrono>
-#include <fstream>
 #include <xxhash.h>
 
 #define TINYBVH_IMPLEMENTATION
-#include "TextureImage.hpp"
-#include "Runtime/Engine.hpp"
 #include "ThirdParty/tinybvh/tiny_bvh.h"
-#include "Utilities/Math.hpp"
+
 
 static tinybvh::BVH GCpuBvh;
 static std::vector<tinybvh::BLASInstance>* GbvhInstanceList;
@@ -98,7 +99,7 @@ bool InsideGeometry( float3& origin, float3 rayDir, VoxelData& OutCube, float& d
             OutCube.matId = TempMaterialId;
 
             // 命中反面，识别为固体，并将lightprobe推出体外
-            if (dot(OutNormal, rayDir) > 0.0 || ((hitMaterial.gpuMaterial_.MaterialModel == Material::Enum::DiffuseLight) && OutRayDist < 0.02f))
+            if (dot(OutNormal, rayDir) > 0.0 || ((hitMaterial.gpuMaterial_.MaterialModel == Material::Enum::DiffuseLight)))// && OutRayDist < 0.02f))
             {
                 distance = 0;
                 return true;
@@ -244,6 +245,7 @@ void FCPUAccelerationStructure::UpdateBVH(Scene& scene)
 
         uint32_t modelId = node->GetModel();
         if (modelId == -1) continue;
+        if (!node->IsVisible()) continue;
 
         mat4 worldTS = node->WorldTransform();
         worldTS = transpose(worldTS);
@@ -254,12 +256,13 @@ void FCPUAccelerationStructure::UpdateBVH(Scene& scene)
 
         tmpbvhInstanceList.push_back(instance);
         FCPUTLASInstanceInfo info;
+        info.nodeId = node->GetInstanceId();
         for ( int i = 0; i < node->Materials().size(); ++i )
         {
             uint32_t matId = node->Materials()[i];
             FMaterial& mat = scene.Materials()[matId];
             info.matIdxs[i] = matId;
-            info.nodeId = node->GetInstanceId();
+            
         }
         tmpbvhTLASContexts.push_back( info );
     }
@@ -282,25 +285,28 @@ void FCPUAccelerationStructure::UpdateBVH(Scene& scene)
 
 RayCastResult FCPUAccelerationStructure::RayCastInCPU(vec3 rayOrigin, vec3 rayDir)
 {
-    RayCastResult Result;
+    RayCastResult Result {};
 
-    tinybvh::Ray ray(tinybvh::bvhvec3(rayOrigin.x, rayOrigin.y, rayOrigin.z), tinybvh::bvhvec3(rayDir.x, rayDir.y, rayDir.z), 2000.0f);
-    GCpuBvh.Intersect(ray);
-    
-    if (ray.hit.t < 2000.f)
+    if (GCpuBvh.blasCount > 0)
     {
-        vec3 hitPos = rayOrigin + rayDir * ray.hit.t;
-        uint32_t primIdx = ray.hit.prim;
-        tinybvh::BLASInstance& instance = (*GbvhInstanceList)[ray.hit.inst];
-        FCPUTLASInstanceInfo& instContext = (*GbvhTLASContexts)[ray.hit.inst];
-        FCPUBLASContext& context = (*GbvhBLASContexts)[instance.blasIdx];
-        mat4* worldTS = (mat4*)instance.transform;
-        vec4 normalWS = vec4( context.extinfos[primIdx].normal, 0.0f) * *worldTS;
-        Result.HitPoint = vec4(hitPos, 0);
-        Result.Normal = normalWS;
-        Result.Hitted = true;
-        Result.T = ray.hit.t;
-        Result.InstanceId = instContext.nodeId;
+        tinybvh::Ray ray(tinybvh::bvhvec3(rayOrigin.x, rayOrigin.y, rayOrigin.z), tinybvh::bvhvec3(rayDir.x, rayDir.y, rayDir.z), 2000.0f);
+        GCpuBvh.Intersect(ray);
+    
+        if (ray.hit.t < 2000.f)
+        {
+            vec3 hitPos = rayOrigin + rayDir * ray.hit.t;
+            uint32_t primIdx = ray.hit.prim;
+            tinybvh::BLASInstance& instance = (*GbvhInstanceList)[ray.hit.inst];
+            FCPUTLASInstanceInfo& instContext = (*GbvhTLASContexts)[ray.hit.inst];
+            FCPUBLASContext& context = (*GbvhBLASContexts)[instance.blasIdx];
+            mat4* worldTS = (mat4*)instance.transform;
+            vec4 normalWS = vec4( context.extinfos[primIdx].normal, 0.0f) * *worldTS;
+            Result.HitPoint = vec4(hitPos, 0);
+            Result.Normal = normalWS;
+            Result.Hitted = true;
+            Result.T = ray.hit.t;
+            Result.InstanceId = instContext.nodeId;
+        }
     }
 
     return Result;
@@ -331,14 +337,17 @@ void FCPUProbeBaker::UploadGPU(Vulkan::DeviceMemory& VoxelGPUMemory)
     VoxelGPUMemory.Unmap();
 }
 
-void FCPUAccelerationStructure::AsyncProcessFull(Assets::Scene& scene, Vulkan::DeviceMemory* VoxelGPUMemory, bool Incremental)
-{    
+bool FCPUAccelerationStructure::AsyncProcessFull(Assets::Scene& scene, Vulkan::DeviceMemory* VoxelGPUMemory, bool Incremental)
+{
+    if ( !TaskCoordinator::GetInstance()->IsAllParralledTaskComplete() )
+    {
+        return false;
+    }
     // clean
     while (!needUpdateGroups.empty())
         needUpdateGroups.pop();
     lastBatchTasks.clear();
-    TaskCoordinator::GetInstance()->CancelAllParralledTasks();
-    
+
     if (!Incremental)
     {
         probeBaker.ClearAmbientCubes();
@@ -377,6 +386,8 @@ void FCPUAccelerationStructure::AsyncProcessFull(Assets::Scene& scene, Vulkan::D
         // add fence
         needUpdateGroups.push({ivec3(0), ECubeProcType::ECPT_Fence, EBakerType::EBT_Probe});
     }
+
+    return true;
 }
 
 void FCPUAccelerationStructure::AsyncProcessGroup(int xInMeter, int zInMeter, Scene& scene, ECubeProcType procType, EBakerType bakerType)

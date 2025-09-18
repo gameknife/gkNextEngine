@@ -28,6 +28,17 @@ public:
 	                    float leftTrigger, float rightTrigger);
 	 bool UpdateCamera(double speed, double timeDelta);
 
+	void SetModelRotation(double x, double y)
+	{
+		modelRotX_ = x;
+		modelRotY_ = y;
+	}
+
+	glm::vec3 GetRight();
+	glm::vec3 GetUp();
+	glm::vec3 GetForward();
+	glm::vec3 GetPosition();
+
 private:
 
 	void MoveForward(float d);

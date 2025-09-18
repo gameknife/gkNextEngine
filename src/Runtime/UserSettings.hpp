@@ -51,7 +51,6 @@ struct UserSettings final
 	float PaperWhiteNit;
 
 	bool ShowEdge;
-
-	// HitResult
-	Assets::RayCastResult HitResult;
+	bool TickPhysics = true;
+	bool TickAnimation = false;
 };

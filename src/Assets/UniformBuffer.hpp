@@ -29,9 +29,16 @@ namespace Assets
 #define float4 vec4
 #define float4x4 mat4
 #define uint8_t4_packed uint
+#define half4 glm::detail::hdata
+#define public
+#define bool uint32_t
 	
 	#include "../assets/shaders/common/BasicTypes.slang"
+	#include "../assets/shaders/common/BindlessTexture.slang"
 
+#undef public
+#undef bool
+#undef half4
 #undef float3
 #undef float4
 #undef float4x4
@@ -58,16 +65,6 @@ namespace Assets
 		std::unique_ptr<Vulkan::DeviceMemory> memory_;
 	};
 
-	struct RayCastIn
-	{
-		vec4 Origin;
-		vec4 Direction;
-		float TMin;
-		float TMax;
-		float Reversed0;
-		float Reversed1;
-	};
-
 	struct RayCastResult
 	{
 		vec4 HitPoint;
@@ -76,41 +73,6 @@ namespace Assets
 		uint32_t InstanceId;
 		uint32_t MaterialId;
 		uint32_t Hitted;
-	};
-
-	struct RayCastIO
-	{
-		RayCastIn Context;
-		RayCastResult Result;
-	};
-
-	struct RayCastRequest
-	{
-		RayCastIn context;
-		std::function<bool(RayCastResult)> callback;
-	};
-
-	class RayCastBuffer
-	{
-	public:
-
-		RayCastBuffer(const RayCastBuffer&) = delete;
-		RayCastBuffer& operator = (const RayCastBuffer&) = delete;
-		RayCastBuffer& operator = (RayCastBuffer&&) = delete;
-
-		explicit RayCastBuffer(Vulkan::CommandPool& commandPool);
-		~RayCastBuffer();
-
-		const Vulkan::Buffer& Buffer() const { return *buffer_; }
-		
-		void SyncWithGPU();
-
-		std::vector<RayCastIO> rayCastIO;
-		std::vector<RayCastIO> rayCastIOTemp;
-	private:
-		
-		std::unique_ptr<Vulkan::Buffer> buffer_;
-		std::unique_ptr<Vulkan::DeviceMemory> memory_;
 	};
 
 }

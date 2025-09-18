@@ -4,12 +4,24 @@
 #include <glm/glm.hpp>
 
 #include <Jolt/Jolt.h>
+#include <Jolt/Core/Reference.h>
 #include <Jolt/Physics/Body/BodyID.h>
 #include <Jolt/Physics/Body/MotionType.h>
+#include <Jolt/Physics/Collision/ObjectLayer.h>
 
 #include "Vulkan/Vulkan.hpp"
 
 struct FNextPhysicsContext;
+
+namespace Assets
+{
+    class Model;
+}
+
+namespace JPH
+{
+    class MeshShapeSettings;
+}
 
 enum class ENextBodyShape
 {
@@ -31,6 +43,14 @@ struct FNextPhysicsBody
     glm::vec3 velocity;
     ENextBodyShape shape;
     JPH::BodyID bodyID;
+    JPH::EMotionType motionType;
+};
+
+namespace Layers
+{
+    static constexpr JPH::ObjectLayer NON_MOVING = 0;
+    static constexpr JPH::ObjectLayer MOVING = 1;
+    static constexpr JPH::ObjectLayer NUM_LAYERS = 2;
 };
 
 class NextPhysics final
@@ -46,7 +66,14 @@ public:
     void Stop();
     
     JPH::BodyID CreateSphereBody(glm::vec3 position, float radius, JPH::EMotionType motionType);
-    JPH::BodyID CreatePlaneBody(glm::vec3 position, glm::vec3 extent, JPH::EMotionType motionType);
+    JPH::BodyID CreateBoxBody(glm::vec3 position, glm::vec3 extent, JPH::EMotionType motionType);
+    JPH::BodyID CreateMeshBody(JPH::RefConst<JPH::MeshShapeSettings> meshShapeSettings, glm::vec3 position, glm::quat rotation, glm::vec3 scale, JPH::EMotionType motionType, JPH::ObjectLayer layer);
+    JPH::BodyID CreatePlaneBody(glm::vec3 position, glm::vec3 normal, JPH::EMotionType motionType);
+    JPH::MeshShapeSettings* CreateMeshShape(Assets::Model& model);
+
+    void AddForceToBody(JPH::BodyID bodyID, const glm::vec3& force);
+
+    void MoveKinematicBody(JPH::BodyID bodyID, const glm::vec3& position, const glm::quat& rotation, float deltaSeconds);
 
     FNextPhysicsBody* GetBody(JPH::BodyID bodyID);
 
@@ -54,7 +81,7 @@ public:
     void OnSceneDestroyed();
 private:
 
-    JPH::BodyID AddBodyInternal(FNextPhysicsBody& body);
+    JPH::BodyID AddBodyInternal(FNextPhysicsBody& body, bool optimizeBroadPhase);
     
     std::unique_ptr<FNextPhysicsContext> context_;
     std::unordered_map<JPH::BodyID, FNextPhysicsBody> bodies_;

@@ -50,6 +50,20 @@ PipelineLayout::PipelineLayout(const Device & device, const DescriptorSetLayout&
 		"create pipeline layout");
 }
 
+PipelineLayout::PipelineLayout(const Device& device, const VkPushConstantRange* pushConstantRanges,
+	uint32_t pushConstantRangeCount) : device_(device)
+{
+	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
+	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	pipelineLayoutInfo.setLayoutCount = 0;
+	pipelineLayoutInfo.pSetLayouts = nullptr;
+	pipelineLayoutInfo.pushConstantRangeCount = pushConstantRangeCount;
+	pipelineLayoutInfo.pPushConstantRanges = pushConstantRanges;
+	
+	Check(vkCreatePipelineLayout(device_.Handle(), &pipelineLayoutInfo, nullptr, &pipelineLayout_),
+		"create pipeline layout");
+}
+
 PipelineLayout::~PipelineLayout()
 {
 	if (pipelineLayout_ != nullptr)

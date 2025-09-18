@@ -4,25 +4,14 @@
 #include "Vulkan/RayTracing/TopLevelAccelerationStructure.hpp"
 #include "Assets/Model.hpp"
 #include "Assets/Scene.hpp"
-#include "Utilities/Glm.hpp"
 #include "Vulkan/Buffer.hpp"
-#include "Vulkan/BufferUtil.hpp"
-#include "Vulkan/Image.hpp"
-#include "Vulkan/ImageMemoryBarrier.hpp"
-#include "Vulkan/ImageView.hpp"
 #include "Vulkan/PipelineLayout.hpp"
 #include "Vulkan/SingleTimeCommands.hpp"
-#include "Vulkan/SwapChain.hpp"
 #include <chrono>
-#include <iomanip>
 #include <numeric>
 
-#include "../Runtime/Engine.hpp"
-#include "Rendering/HardwareTracing/HardwareTracingPipeline.hpp"
-#include "Rendering/HardwareTracing/HardwareTracingRenderer.hpp"
-#include "Rendering/SoftwareModern/SoftwareModernRenderer.hpp"
-#include "Rendering/SoftwareTracing/SoftwareTracingRenderer.hpp"
-#include "Rendering/PathTracing/PathTracingRenderer.hpp"
+#include "Runtime/Engine.hpp"
+
 
 namespace Vulkan::RayTracing
 {
@@ -65,16 +54,19 @@ namespace Vulkan::RayTracing
         VkPhysicalDeviceFeatures& deviceFeatures,
         void* nextDeviceFeatures)
     {
+        bool fakeRequireRayTracingPipeline = !GOption->RenderDoc;
+#if ANDROID
+        fakeRequireRayTracingPipeline = false;
+#endif
         // Required extensions.
         requiredExtensions.insert(requiredExtensions.end(),
                                   {
                                       VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
                                       VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
                                       VK_KHR_RAY_QUERY_EXTENSION_NAME,
-#if !ANDROID
-                                      //VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
-#endif
                                   });
+
+        if (fakeRequireRayTracingPipeline) requiredExtensions.insert(requiredExtensions.end(), {VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME});
 
 #if WITH_OIDN
         // Required extensions.
@@ -99,12 +91,8 @@ namespace Vulkan::RayTracing
         rayTracingPipelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
         rayTracingPipelineFeatures.pNext = &rayQueryFeatures;
         rayTracingPipelineFeatures.rayTracingPipeline = true;
-#if !ANDROID
-        Vulkan::VulkanBaseRenderer::SetPhysicalDeviceImpl(physicalDevice, requiredExtensions, deviceFeatures, &rayQueryFeatures);
-#else
-        Vulkan::VulkanBaseRenderer::SetPhysicalDeviceImpl(physicalDevice, requiredExtensions, deviceFeatures, &rayQueryFeatures);
-#endif
-        
+
+        Vulkan::VulkanBaseRenderer::SetPhysicalDeviceImpl(physicalDevice, requiredExtensions, deviceFeatures, fakeRequireRayTracingPipeline ? (void*)&rayTracingPipelineFeatures : (void*)&rayQueryFeatures);
     }
 
     void RayTraceBaseRenderer::OnDeviceSet()
@@ -153,14 +141,13 @@ namespace Vulkan::RayTracing
     void RayTraceBaseRenderer::CreateSwapChain()
     {
         Vulkan::VulkanBaseRenderer::CreateSwapChain();
-        directLightGenPipeline_.reset(new PipelineCommon::HardwareGPULightBakePipeline(SwapChain(), Device().GetDeviceProcedures(), topAs_[0], UniformBuffers(), GetScene()));
+        directLightGenPipeline_.reset(new PipelineCommon::ZeroBindWithTLASPipeline(SwapChain(), "assets/shaders/Bake.HwAmbientCube.comp.slang.spv"));
     }
 
     void RayTraceBaseRenderer::DeleteSwapChain()
     {
-        Vulkan::VulkanBaseRenderer::DeleteSwapChain();
-        
         directLightGenPipeline_.reset();
+        Vulkan::VulkanBaseRenderer::DeleteSwapChain();
     }
 
     void RayTraceBaseRenderer::AfterRenderCmd()
@@ -215,6 +202,7 @@ namespace Vulkan::RayTracing
 
     void RayTraceBaseRenderer::PreRender(VkCommandBuffer commandBuffer, const uint32_t imageIndex)
     {
+        if ( GOption->ReferenceMode || !GOption->ForceSoftGen || CurrentLogicRendererType() == ERT_PathTracing )
         {
             SCOPED_GPU_TIMER("TLAS Update");
             if (tlasUpdateRequest_ > 0)
@@ -235,11 +223,8 @@ namespace Vulkan::RayTracing
     void RayTraceBaseRenderer::PostRender(VkCommandBuffer commandBuffer, uint32_t imageIndex)
     {
         VulkanBaseRenderer::PostRender(commandBuffer, imageIndex);
-
-        if (NextEngine::GetInstance()->IsProgressiveRendering())  return;
-
-#if !ANDROID
-        if(supportRayTracing_)// all gpu renderer use this cache && (CurrentLogicRendererType() != ERT_PathTracing || GOption->ReferenceMode))
+        
+        if(supportRayTracing_ && !GOption->ForceSoftGen)
         {
             const int cubesPerGroup = 64;
             const int count = Assets::CUBE_SIZE_XY * Assets::CUBE_SIZE_XY * Assets::CUBE_SIZE_Z;
@@ -272,27 +257,18 @@ namespace Vulkan::RayTracing
                     int offset = frame * groupPerFrame;
                     int offsetInCubes = offset * cubesPerGroup;
                 
-                    VkDescriptorSet DescriptorSets[] = {directLightGenPipeline_->DescriptorSet(0)};
-                    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, directLightGenPipeline_->Handle());
-                    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
-                                            directLightGenPipeline_->PipelineLayout().Handle(), 0, 1, DescriptorSets, 0, nullptr);
+                    directLightGenPipeline_->BindPipeline(commandBuffer, GetScene(), imageIndex);
 
-                    // bind the global bindless set
-                    static const uint32_t k_bindless_set = 1;
-                    VkDescriptorSet GlobalDescriptorSets[] = { Assets::GlobalTexturePool::GetInstance()->DescriptorSet(0) };
-                    vkCmdBindDescriptorSets( commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, directLightGenPipeline_->PipelineLayout().Handle(), k_bindless_set,
-                                             1, GlobalDescriptorSets, 0, nullptr );
-                
-                    glm::uvec2 pushConst = { offsetInCubes, 0 };
-
+                    Assets::GPUScene gpuScene = GetScene().FetchGPUScene(imageIndex);
+                    gpuScene.custom_data_0 = offsetInCubes;
+                    
                     vkCmdPushConstants(commandBuffer, directLightGenPipeline_->PipelineLayout().Handle(), VK_SHADER_STAGE_COMPUTE_BIT,
-                                       0, sizeof(glm::uvec2), &pushConst);
+                                       0, sizeof(Assets::GPUScene), &gpuScene);
             
                     vkCmdDispatch(commandBuffer, groupPerFrame, 1, 1);
                 }
             }
         }
-#endif
     }
 
     void RayTraceBaseRenderer::CreateBottomLevelStructures(VkCommandBuffer commandBuffer)
@@ -383,8 +359,8 @@ namespace Vulkan::RayTracing
         const auto total = GetTotalRequirements(topAs_);
 
         topBuffer_.reset(new Buffer(Device(), total.accelerationStructureSize,
-                                    VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR));
-        topBufferMemory_.reset(new DeviceMemory(topBuffer_->AllocateMemory(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)));
+                                    VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT));
+        topBufferMemory_.reset(new DeviceMemory(topBuffer_->AllocateMemory(VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)));
 
         topScratchBuffer_.reset(new Buffer(Device(), total.buildScratchSize,
                                            VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR |

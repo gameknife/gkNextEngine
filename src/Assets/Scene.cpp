@@ -1,14 +1,17 @@
 #include "Scene.hpp"
 #include "Model.hpp"
 #include "Options.hpp"
-#include "Sphere.hpp"
 #include "Vulkan/BufferUtil.hpp"
 #include "Assets/TextureImage.hpp"
 #include <chrono>
 #include <unordered_set>
 #include <meshoptimizer.h>
 #include <glm/detail/type_half.hpp>
+#include "Runtime/NextPhysics.h"
+#include <Jolt/Core/Reference.h>
+#include <Jolt/Physics/Collision/Shape/MeshShape.h>
 
+#include "Node.h"
 #include "Runtime/Engine.hpp"
 #include "Vulkan/DescriptorSetManager.hpp"
 #include "Vulkan/DescriptorSets.hpp"
@@ -19,12 +22,9 @@ namespace Assets
     Scene::Scene(Vulkan::CommandPool& commandPool,
                  bool supportRayTracing)
     {
-        int flags = supportRayTracing ? (VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) : VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-        
+        //int flags = supportRayTracing ? (VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) : VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        int flags =  VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
         // host buffers
-        Vulkan::BufferUtil::CreateDeviceBufferLocal(commandPool, "Nodes", flags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, sizeof(NodeProxy) * 65535, nodeMatrixBuffer_, nodeMatrixBufferMemory_); // support 65535 nodes
-        Vulkan::BufferUtil::CreateDeviceBufferLocal(commandPool, "Materials", flags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,sizeof(Material) * 4096, materialBuffer_, materialBufferMemory_); // support 65535 nodes
-
         Vulkan::BufferUtil::CreateDeviceBufferLocal(commandPool, "VoxelDatas", flags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,Assets::CUBE_SIZE_XY * Assets::CUBE_SIZE_XY * Assets::CUBE_SIZE_Z * sizeof(Assets::VoxelData), farAmbientCubeBuffer_,
                                                     farAmbientCubeBufferMemory_);
         Vulkan::BufferUtil::CreateDeviceBufferLocal(commandPool, "PageIndex", flags,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, ACGI_PAGE_COUNT * ACGI_PAGE_COUNT * sizeof(Assets::PageIndex), pageIndexBuffer_,
@@ -50,8 +50,6 @@ namespace Assets
 
     Scene::~Scene()
     {
-        sceneBufferDescriptorSetManager_.reset();
-        
         offsetBuffer_.reset();
         offsetBufferMemory_.reset(); // release memory after bound buffer has been destroyed
 
@@ -101,11 +99,75 @@ namespace Assets
     void Scene::RebuildMeshBuffer(Vulkan::CommandPool& commandPool, bool supportRayTracing)
     {
         // Rebuild the cpu bvh
-
-        // tier1: simple flatten whole scene
         cpuAccelerationStructure_.InitBVH(*this);
 
-        // tier2: top level, the aabb, bottom level, the triangles in local sapace, with 2 ray relay
+        // force static flag
+        for ( auto& track : tracks_ )
+        {
+            Node* node = GetNode(track.NodeName_);
+            if (node != nullptr) node->SetMobility(Node::ENodeMobility::Kinematic);
+        }
+        
+        // static mesh to jolt mesh shape
+        NextPhysics* PhysicsEngine = NextEngine::GetInstance()->GetPhysicsEngine();
+        if (PhysicsEngine)
+        {
+            std::vector<JPH::RefConst<JPH::MeshShapeSettings> > meshShapes;
+            for (auto& model : models_)
+            {
+                if (model.NumberOfIndices() < 65535 * 3)
+                {
+                    meshShapes.push_back( JPH::RefConst<JPH::MeshShapeSettings>(PhysicsEngine->CreateMeshShape(model))  );
+                }
+                else
+                {
+                    meshShapes.push_back( JPH::RefConst<JPH::MeshShapeSettings>(nullptr)  );
+                }
+            }
+
+            for (auto& node : nodes_)
+            {
+                // bind the mesh shape to the node
+                if (node->IsVisible() && node->GetMobility() != Node::ENodeMobility::Dynamic && node->GetModel() < meshShapes.size() && meshShapes[node->GetModel()])// && node->GetParent() == nullptr)
+                {
+                    JPH::EMotionType motionType = node->GetMobility() == Node::ENodeMobility::Static ? JPH::EMotionType::Static : JPH::EMotionType::Kinematic;
+                    JPH::ObjectLayer layer = node->GetMobility() == Node::ENodeMobility::Static ? Layers::NON_MOVING : Layers::MOVING;
+                    JPH::BodyID id = PhysicsEngine->CreateMeshBody(meshShapes[node->GetModel()], node->WorldTranslation(), node->WorldRotation(), node->WorldScale(), motionType, layer);\
+                    node->BindPhysicsBody(id);
+                }
+            }
+
+            // calculate the scene aabb
+            sceneAABBMin_ = { FLT_MAX, FLT_MAX, FLT_MAX };
+            sceneAABBMax_ = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
+            for (auto& node : nodes_)
+            {
+                if (node->IsVisible() && node->GetModel() != -1)
+                {
+                    glm::vec3 localaabbMin = models_[node->GetModel()].GetLocalAABBMin();
+                    glm::vec3 localaabbMax = models_[node->GetModel()].GetLocalAABBMax();
+
+                    auto& worldMtx = node->WorldTransform();
+
+                    // TODO: need better algo
+                    glm::vec3 aabbMin = glm::vec3(worldMtx * glm::vec4(localaabbMin, 1.0f));
+                    glm::vec3 aabbMax = glm::vec3(worldMtx * glm::vec4(localaabbMax, 1.0f));
+                    sceneAABBMin_ = glm::min(aabbMin, sceneAABBMin_);
+                    sceneAABBMin_ = glm::min(aabbMax, sceneAABBMin_);
+                    sceneAABBMax_ = glm::max(aabbMin, sceneAABBMax_);
+                    sceneAABBMax_ = glm::max(aabbMax, sceneAABBMax_);
+                }
+            }
+
+            // create 6 plane bodys
+            PhysicsEngine->CreatePlaneBody(sceneAABBMin_, glm::vec3(1,0,0), JPH::EMotionType::Static);
+            PhysicsEngine->CreatePlaneBody(sceneAABBMax_, glm::vec3(-1,0,0), JPH::EMotionType::Static);
+            PhysicsEngine->CreatePlaneBody(sceneAABBMin_, glm::vec3(0,1,0), JPH::EMotionType::Static);
+            PhysicsEngine->CreatePlaneBody(sceneAABBMax_, glm::vec3(0,-1,0), JPH::EMotionType::Static);
+            PhysicsEngine->CreatePlaneBody(sceneAABBMin_, glm::vec3(0,0,1), JPH::EMotionType::Static);
+            PhysicsEngine->CreatePlaneBody(sceneAABBMax_, glm::vec3(0,0,-1), JPH::EMotionType::Static);
+        }
+      
 
         // 重建universe mesh buffer, 这个可以比较静态
         std::vector<GPUVertex> vertices;
@@ -195,9 +257,14 @@ namespace Assets
             model.FreeMemory();
         }
         
-        int flags = supportRayTracing ? (VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) : VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        int flags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
         int rtxFlags = supportRayTracing ? VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR : 0;
 
+        // this two buffer may change violate, reverse to MAX_NODES and  MAX_MATERIALS
+        Vulkan::BufferUtil::CreateDeviceBufferLocal(commandPool, "Nodes", flags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, sizeof(NodeProxy) * Assets::MAX_NODES, nodeMatrixBuffer_, nodeMatrixBufferMemory_);
+        Vulkan::BufferUtil::CreateDeviceBufferLocal(commandPool, "Materials", flags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,sizeof(Material) * Assets::MAX_MATERIALS, materialBuffer_, materialBufferMemory_);
+
+        // this buffer now, no support extended
         Vulkan::BufferUtil::CreateDeviceBuffer(commandPool, "Vertices", VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | rtxFlags | flags, vertices, vertexBuffer_, vertexBufferMemory_);
         Vulkan::BufferUtil::CreateDeviceBuffer(commandPool, "SimpleVertices", VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | rtxFlags | flags, simpleVertices, simpleVertexBuffer_, simpleVertexBufferMemory_);
         Vulkan::BufferUtil::CreateDeviceBuffer(commandPool, "Indices", VK_BUFFER_USAGE_INDEX_BUFFER_BIT | flags, indices, indexBuffer_, indexBufferMemory_);
@@ -211,62 +278,43 @@ namespace Assets
         indicesCount_ = static_cast<uint32_t>(indices.size());
         verticeCount_ = static_cast<uint32_t>(vertices.size());
 
-        UpdateMaterial();
+        UpdateAllMaterials();
+        UpdateNodesGpuDriven();
         MarkDirty();
 
 #if ANDROID
         cpuAccelerationStructure_.AsyncProcessFull(*this, farAmbientCubeBufferMemory_.get(), false);
 #else
-        if ( !NextEngine::GetInstance()->GetRenderer().supportRayTracing_ )
+        // if ( !NextEngine::GetInstance()->GetRenderer().supportRayTracing_ ) this has to be done, cause voxel tracing needed
         {
             cpuAccelerationStructure_.AsyncProcessFull(*this, farAmbientCubeBufferMemory_.get(), false);
         }
 #endif
-        // no need for shadow map
-        //cpuAccelerationStructure_.GenShadowMap(*this);
-        
-        uint32_t maxSets = 2;//NextEngine::GetInstance()->GetRenderer().SwapChain().ImageViews().size();
+    }
 
-        sceneBufferDescriptorSetManager_.reset(new Vulkan::DescriptorSetManager(commandPool.Device(), {
-                // all buffer here
-                {0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {1, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {2, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {3, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {4, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {5, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {6, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {7, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {8, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {9, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {10, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {11, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-                {12, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT},
-            }, maxSets));
-        
-        auto& descriptorSets = sceneBufferDescriptorSetManager_->DescriptorSets();
+    const Assets::GPUScene& Scene::FetchGPUScene(const uint32_t imageIndex) const
+    {
+        // all gpu device address
+        gpuScene_.Camera = NextEngine::GetInstance()->GetRenderer().UniformBuffers()[imageIndex].Buffer().GetDeviceAddress();
+        gpuScene_.Nodes = nodeMatrixBuffer_->GetDeviceAddress();
+        gpuScene_.Materials = materialBuffer_->GetDeviceAddress();
+        gpuScene_.Offsets = offsetBuffer_->GetDeviceAddress();
+        gpuScene_.Indices = primAddressBuffer_->GetDeviceAddress();
+        gpuScene_.Vertices = vertexBuffer_->GetDeviceAddress();
+        gpuScene_.VerticesSimple = simpleVertexBuffer_->GetDeviceAddress();
+        gpuScene_.Reorders = reorderBuffer_->GetDeviceAddress();
+        gpuScene_.Lights = lightBuffer_->GetDeviceAddress();
+        gpuScene_.Cubes = ambientCubeBuffer_->GetDeviceAddress();
+        gpuScene_.Voxels = farAmbientCubeBuffer_->GetDeviceAddress();
+        gpuScene_.Pages = pageIndexBuffer_->GetDeviceAddress();
+        gpuScene_.HDRSHs = hdrSHBuffer_->GetDeviceAddress();
+        gpuScene_.IndirectDrawCommands = indirectDrawBuffer_->GetDeviceAddress();
+        gpuScene_.GPUDrivenStats = gpuDrivenStatsBuffer_->GetDeviceAddress();
+        gpuScene_.TLAS = NextEngine::GetInstance()->TryGetGPUAccelerationStructureAddress();
 
-        for (uint32_t i = 0; i != maxSets; ++i)
-        {
-            std::vector<VkWriteDescriptorSet> descriptorWrites =
-            {
-                descriptorSets.Bind(i, 0, { vertexBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 1, { indexBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 2, { materialBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 3, { offsetBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 4, { nodeMatrixBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 5, { ambientCubeBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 6, { farAmbientCubeBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 7, { hdrSHBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 8, { lightBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 9, { pageIndexBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 10, { gpuDrivenStatsBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 11, { reorderBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-                descriptorSets.Bind(i, 12, { primAddressBuffer_->Handle(), 0, VK_WHOLE_SIZE}),
-            };
+        gpuScene_.SwapChainIndex = imageIndex;
 
-            descriptorSets.UpdateDescriptors(i, descriptorWrites);
-        }
+        return gpuScene_;
     }
 
     void Scene::PlayAllTracks()
@@ -285,54 +333,68 @@ namespace Assets
 
     void Scene::Tick(float DeltaSeconds)
     {
-        float DurationMax = 0;
-
-        for (auto& track : tracks_)
+        if ( NextEngine::GetInstance()->GetUserSettings().TickAnimation)
         {
-            if (!track.Playing()) continue;
-            DurationMax = glm::max(DurationMax, track.Duration_);
-        }
+            float DurationMax = 0;
 
-        for (auto& track : tracks_)
-        {
-            if (!track.Playing()) continue;
-            track.Time_ += DeltaSeconds;
-            if (track.Time_ > DurationMax)
+            for (auto& track : tracks_)
             {
-                track.Time_ = 0;
+                if (!track.Playing()) continue;
+                DurationMax = glm::max(DurationMax, track.Duration_);
             }
-            Node* node = GetNode(track.NodeName_);
-            if (node)
+
+            for (auto& track : tracks_)
             {
-                glm::vec3 translation = node->Translation();
-                glm::quat rotation = node->Rotation();
-                glm::vec3 scaling = node->Scale();
-
-                track.Sample(track.Time_, translation, rotation, scaling);
-
-                node->SetTranslation(translation);
-                node->SetRotation(rotation);
-                node->SetScale(scaling);
-                node->RecalcTransform(true);
-
-                MarkDirty();
-
-                // temporal if camera node, request override
-                if (node->GetName() == "Shot.BlueCar")
+                if (!track.Playing()) continue;
+                track.Time_ += DeltaSeconds;
+                if (track.Time_ > DurationMax)
                 {
-                    requestOverrideModelView = true;
-                    overrideModelView = glm::lookAtRH(translation, translation + rotation * glm::vec3(0, 0, -1), glm::vec3(0.0f, 1.0f, 0.0f));
+                    track.Time_ = 0;
+                }
+                Node* node = GetNode(track.NodeName_);
+                if (node)
+                {
+                    glm::vec3 translation = node->Translation();
+                    glm::quat rotation = node->Rotation();
+                    glm::vec3 scaling = node->Scale();
+
+                    track.Sample(track.Time_, translation, rotation, scaling);
+
+                    node->SetTranslation(translation);
+                    node->SetRotation(rotation);
+                    node->SetScale(scaling);
+                    node->RecalcTransform(true);
+
+                    MarkDirty();
+
+                    // to physicSys
+                    NextEngine::GetInstance()->GetPhysicsEngine()->MoveKinematicBody(node->GetPhysicsBody(), translation, rotation, 0.01f);
+
+                    // temporal if camera node, request override
+                    if (node->GetName() == "Shot.BlueCar")
+                    {
+                        requestOverrideModelView = true;
+                        overrideModelView = glm::lookAtRH(translation, translation + rotation * glm::vec3(0, 0, -1), glm::vec3(0.0f, 1.0f, 0.0f));
+                    }
                 }
             }
         }
 
         if ( NextEngine::GetInstance()->GetTotalFrames() % 10 == 0 )
         {
+            // if (sceneDirtyForCpuAS_)
+            // {
+            //     if ( cpuAccelerationStructure_.AsyncProcessFull(*this, farAmbientCubeBufferMemory_.get(), true) )
+            //     {
+            //         sceneDirtyForCpuAS_ = false;
+            //     }
+            // }
+            
             cpuAccelerationStructure_.Tick(*this,  ambientCubeBufferMemory_.get(), farAmbientCubeBufferMemory_.get(), pageIndexBufferMemory_.get() );
         }
     }
 
-    void Scene::UpdateMaterial()
+    void Scene::UpdateAllMaterials()
     {
         if (materials_.empty()) return;
 
@@ -346,7 +408,7 @@ namespace Assets
         std::memcpy(data, gpuMaterials_.data(), gpuMaterials_.size() * sizeof(Material));
         materialBufferMemory_->Unmap();
 
-        NextEngine::GetInstance()->SetProgressiveRendering(false);
+        NextEngine::GetInstance()->SetProgressiveRendering(false, false);
     }
         
     bool Scene::UpdateNodes()
@@ -359,6 +421,14 @@ namespace Assets
         std::memcpy(&gpuDrivenStat_, gpuData, sizeof(GPUDrivenStat));
         std::memcpy(gpuData, &zero, sizeof(GPUDrivenStat)); // reset to zero
         gpuDrivenStatsBuffer_Memory_->Unmap();
+
+
+        // if mat dirty, update
+        if (materialDirty_)
+        {
+            materialDirty_ = false;
+            UpdateAllMaterials();
+        }
         
         return UpdateNodesGpuDriven();
     }
@@ -374,98 +444,12 @@ namespace Assets
         }
     }
 
-    bool Scene::UpdateNodesLegacy()
-    {
-         // this can move to thread task
-        if (nodes_.size() > 0)
-        {
-            if (sceneDirty_)
-            {
-                sceneDirty_ = false;
-                {
-                    PERFORMANCEAPI_INSTRUMENT_COLOR("Scene::PrepareSceneNodes", PERFORMANCEAPI_MAKE_COLOR(255, 200, 200));
-                    nodeProxys.clear();
-                    indirectDrawBufferInstanced.clear();
-
-                    uint32_t indexOffset = 0;
-                    uint32_t vertexOffset = 0;
-                    uint32_t nodeOffsetBatched = 0;
-
-                    static std::unordered_map<uint32_t, std::vector<NodeProxy>> nodeProxysMapByModel;
-                    for (auto& [key, value] : nodeProxysMapByModel)
-                    {
-                        value.clear();
-                    }
-
-                    for (auto& node : nodes_)
-                    {
-                        if (node->IsVisible())
-                        {
-                            auto modelId = node->GetModel();
-                            glm::mat4 combined;
-                            if (node->TickVelocity(combined))
-                            {
-                                MarkDirty();
-                            }
-
-                            NodeProxy proxy = node->GetNodeProxy();
-                            proxy.combinedPrevTS = combined;
-                            nodeProxysMapByModel[modelId].push_back(proxy);
-                        }
-                    }
-
-                    int modelCount = static_cast<int>(models_.size());
-                    for (int i = 0; i < modelCount; i++)
-                    {
-                        if (nodeProxysMapByModel.find(i) != nodeProxysMapByModel.end())
-                        {
-                            auto& nodesOfThisModel = nodeProxysMapByModel[i];
-
-                            // draw indirect buffer, instanced, this could be generate in gpu
-                            VkDrawIndexedIndirectCommand cmd{};
-                            cmd.firstIndex = indexOffset;
-                            cmd.indexCount = models_[i].NumberOfIndices();
-                            cmd.vertexOffset = static_cast<int32_t>(vertexOffset);
-                            cmd.firstInstance = nodeOffsetBatched;
-                            cmd.instanceCount = static_cast<uint32_t>(nodesOfThisModel.size());
-
-                            indirectDrawBufferInstanced.push_back(cmd);
-                            nodeOffsetBatched += static_cast<uint32_t>(nodesOfThisModel.size());
-
-                            // fill the nodeProxy
-                            nodeProxys.insert(nodeProxys.end(), nodesOfThisModel.begin(), nodesOfThisModel.end());
-                        }
-
-                        indexOffset += models_[i].NumberOfIndices();
-                        vertexOffset += models_[i].NumberOfVertices();
-                    }
-
-                    NodeProxy* data = reinterpret_cast<NodeProxy*>(nodeMatrixBufferMemory_->Map(0, sizeof(NodeProxy) * nodeProxys.size()));
-                    std::memcpy(data, nodeProxys.data(), nodeProxys.size() * sizeof(NodeProxy));
-                    nodeMatrixBufferMemory_->Unmap();
-
-                    VkDrawIndexedIndirectCommand* diic = reinterpret_cast<VkDrawIndexedIndirectCommand*>(indirectDrawBufferMemory_->Map(
-                        0, sizeof(VkDrawIndexedIndirectCommand) * indirectDrawBufferInstanced.size()));
-                    std::memcpy(diic, indirectDrawBufferInstanced.data(), indirectDrawBufferInstanced.size() * sizeof(VkDrawIndexedIndirectCommand));
-                    indirectDrawBufferMemory_->Unmap();
-
-                    indirectDrawBatchCount_ = static_cast<uint32_t>(indirectDrawBufferInstanced.size());
-                }
-                // cpuAccelerationStructure_.RequestUpdate(glm::vec3(10,0,-2), 1.0f);
-                // cpuAccelerationStructure_.RequestUpdate(glm::vec3(-9,0,9), 2.0f);
-                // cpuAccelerationStructure_.RequestUpdate(glm::vec3(-9,0,5), 2.0f);
-                //cpuAccelerationStructure_.RequestUpdate(glm::vec3(1,0,1), 2.0f);
-                return true;
-            }
-        }
-        return false;
-    }
-
     bool Scene::UpdateNodesGpuDriven()
     {
         if (nodes_.size() > 0)
         {
-            if (sceneDirty_)
+            // do always, no flicker now
+            //if (sceneDirty_)
             {
                 sceneDirty_ = false;
                 {
@@ -481,7 +465,8 @@ namespace Assets
                             glm::mat4 combined;
                             if (node->TickVelocity(combined))
                             {
-                                MarkDirty();
+                                sceneDirty_ = true;
+                                //MarkDirty();
                             }
 
                             auto model = GetModel(node->GetModel());
@@ -552,10 +537,18 @@ namespace Assets
         return nullptr;
     }
 
+    const uint32_t Scene::AddMaterial(const FMaterial& material)
+    {
+        materials_.push_back(material);
+        materialDirty_ = true;
+        return uint32_t(materials_.size() - 1);
+    }
+
     void Scene::MarkDirty()
     {
         sceneDirty_ = true;
-        NextEngine::GetInstance()->SetProgressiveRendering(false);
+        sceneDirtyForCpuAS_ = true;
+        NextEngine::GetInstance()->SetProgressiveRendering(false, false);
     }
 
     void Scene::OverrideModelView(glm::mat4& OutMatrix)

@@ -49,6 +49,7 @@ namespace Assets
 			bool supportRayTracing);
 		//void RebuildBVH();
 
+		const Assets::GPUScene& FetchGPUScene(const uint32_t imageIndex) const;
 		std::vector<std::shared_ptr<Node>>& Nodes() { return nodes_; }
 		const std::vector<Model>& Models() const { return models_; }
 		std::vector<FMaterial>& Materials() { return materials_; }
@@ -78,16 +79,16 @@ namespace Assets
 		void SetSelectedId( uint32_t id ) const { selectedId_ = id; }
 
 		void Tick(float DeltaSeconds);
-		void UpdateMaterial();
+		void UpdateAllMaterials();
 		bool UpdateNodes();
 		void UpdateHDRSH();
-		bool UpdateNodesLegacy();
 		bool UpdateNodesGpuDriven();
 
 		Node* GetNode(std::string name);
 		Node* GetNodeByInstanceId(uint32_t id);
 		const Model* GetModel(uint32_t id) const;
 		const FMaterial* GetMaterial(uint32_t id) const;
+		const uint32_t AddMaterial(const FMaterial& material);
 
 		void MarkDirty();
 		
@@ -119,11 +120,6 @@ namespace Assets
 		TextureImage& ShadowMap() const { return *cpuShadowMap_; }
 
 		FCPUAccelerationStructure& GetCPUAccelerationStructure() { return cpuAccelerationStructure_; }
-
-		Vulkan::DescriptorSetManager& GetSceneBufferDescriptorSetManager() const
-		{
-			return *sceneBufferDescriptorSetManager_;
-		}
 		
 	private:
 		std::vector<FMaterial> materials_;
@@ -180,9 +176,7 @@ namespace Assets
 		std::unique_ptr<Vulkan::DeviceMemory> gpuDrivenStatsBuffer_Memory_;
 
 		std::unique_ptr<TextureImage> cpuShadowMap_;
-		
-		std::unique_ptr<Vulkan::DescriptorSetManager> sceneBufferDescriptorSetManager_;
-		
+
 		uint32_t lightCount_ {};
 		uint32_t indicesCount_ {};
 		uint32_t verticeCount_ {};
@@ -190,7 +184,9 @@ namespace Assets
 
 		mutable uint32_t selectedId_ = -1;
 
+		bool sceneDirtyForCpuAS_ = false;
 		bool sceneDirty_ = true;
+		bool materialDirty_ = true;
 		
 		std::vector<NodeProxy> nodeProxys;
 		std::vector<VkDrawIndexedIndirectCommand> indirectDrawBufferInstanced;
@@ -204,5 +200,9 @@ namespace Assets
 		FCPUAccelerationStructure cpuAccelerationStructure_;
 
 		Assets::GPUDrivenStat gpuDrivenStat_;
+		mutable Assets::GPUScene gpuScene_;
+
+		glm::vec3 sceneAABBMin_ {FLT_MAX, FLT_MAX, FLT_MAX};
+		glm::vec3 sceneAABBMax_ {-FLT_MAX, -FLT_MAX, -FLT_MAX};
 	};
 }

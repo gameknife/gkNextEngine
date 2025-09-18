@@ -3,7 +3,6 @@
 #include "Rendering/VulkanBaseRenderer.hpp"
 #include "Rendering/RayTraceBaseRenderer.hpp"
 
-#include <vector>
 #include <memory>
 
 namespace Vulkan
@@ -39,14 +38,13 @@ namespace Vulkan::ModernDeferred
 		void Render(VkCommandBuffer commandBuffer, uint32_t imageIndex) override;
 
 	private:
-		std::unique_ptr<class ShadingPipeline> deferredShadingPipeline_;
-		std::unique_ptr<PipelineCommon::AccumulatePipeline> accumulatePipeline_;
-		std::unique_ptr<PipelineCommon::AccumulatePipeline> accumulatePipelineSpec_;
-		std::unique_ptr<PipelineCommon::AccumulatePipeline> accumulatePipelineAlbedo_;
-		std::unique_ptr<PipelineCommon::FinalComposePipeline> composePipeline_;
-		std::unique_ptr<RenderImage> rtPingPong0;
-		std::unique_ptr<RenderImage> rtPingPong1;
-		std::unique_ptr<RenderImage> rtPingPong3;
+		std::unique_ptr<PipelineCommon::ZeroBindPipeline> deferredShadingPipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindCustomPushConstantPipeline> accumulatePipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindPipeline> composePipeline_;
+
+		uint32_t prevSingleDiffuseId_{};
+		uint32_t prevSingleSpecularId_{};
+		uint32_t prevSingleAlbedoId_{};
 	};
 
 }

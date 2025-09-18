@@ -1,10 +1,17 @@
-import Common;
+public struct UniformBufferObject
+{
+    public float4x4 ModelView;
+    public float4x4 Projection;
+    public float4x4 ModelViewInverse;
+    public float4x4 ProjectionInverse;
+    public float4x4 ViewProjection;
+    public float4x4 PrevViewProjection;
+    public float4x4 ViewProjectionUnJit;
+    public float4x4 PrevViewProjectionUnJit;
+}
 
 [[vk::binding(0, 0)]]
 ConstantBuffer<UniformBufferObject> Camera;
-
-[[vk::binding(1, 0)]]
-StructuredBuffer<Material> Materials;
 
 struct PushConsts
 {
@@ -28,8 +35,7 @@ struct VertexOutput
 VertexOutput main(VertexInput input)
 {
     VertexOutput output;
-    
-    output.position = mul(Camera.Projection, mul(Camera.ModelView, mul(pushConsts.worldMatrix, float4(input.InPosition, 1.0))));
-    
+    output.position = mul(mul(Camera.ViewProjection, pushConsts.worldMatrix), float4(input.InPosition, 1.0));
+    output.position.z -= 0.000001f * output.position.w;
     return output;
 }

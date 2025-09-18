@@ -11,9 +11,8 @@ namespace Vulkan
 {
 	namespace PipelineCommon
 	{
-		class AccumulatePipeline;
-		class FinalComposePipeline;
-		class RayCastPipeline;
+		class ZeroBindPipeline;
+		class ZeroBindWithTLASPipeline;
 	}
 
 	class CommandBuffers;
@@ -54,15 +53,13 @@ namespace Vulkan::RayTracing
 		void CreateOutputImage(const VkExtent2D& extent);
 
 		// individual textures
-		std::unique_ptr<PathTracingPipeline> rayTracingPipeline_;
-		std::unique_ptr<PipelineCommon::FinalComposePipeline> composePipelineNonDenoiser_;
+		std::unique_ptr<PipelineCommon::ZeroBindWithTLASPipeline> rayTracingPipeline_;
+		std::unique_ptr<PipelineCommon::ZeroBindPipeline> composePipelineNonDenoiser_;
+		std::unique_ptr<PipelineCommon::ZeroBindCustomPushConstantPipeline> accumulatePipeline_;
 
-		std::unique_ptr<PipelineCommon::AccumulatePipeline> accumulatePipeline_;
-		std::unique_ptr<PipelineCommon::AccumulatePipeline> accumulatePipelineSpec_;
-		std::unique_ptr<PipelineCommon::AccumulatePipeline> accumulatePipelineAlbedo_;
-		std::unique_ptr<RenderImage> rtPingPong0;
-		std::unique_ptr<RenderImage> rtPingPong1;
-		std::unique_ptr<RenderImage> rtPingPong3;
+		uint32_t prevSingleDiffuseId_{};
+		uint32_t prevSingleSpecularId_{};
+		uint32_t prevSingleAlbedoId_{};
 
 #if WITH_OIDN
 		std::unique_ptr<RenderImage> rtDenoise0_;

@@ -33,7 +33,7 @@
 #include "Vulkan/ImageView.hpp"
 #include "Vulkan/RenderImage.hpp"
 #include "Rendering/VulkanBaseRenderer.hpp"
-#include "Editor/IconsFontAwesome6.h"
+#include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 
 extern std::unique_ptr<Vulkan::VulkanBaseRenderer> GApplication;
 
@@ -268,6 +268,7 @@ void EditorInterface::MainWindowGUI(Editor::GUI & gui_r, Assets::Scene& scene, I
 		ImGui::DockBuilderDockWindow("Content Browser", dock3);
 		ImGui::DockBuilderDockWindow("Material Browser", dock3);
 		ImGui::DockBuilderDockWindow("Texture Browser", dock3);
+		ImGui::DockBuilderDockWindow("Mesh Browser", dock3);
 
 		ImGui::DockBuilderFinish(id);
 	}
@@ -289,6 +290,9 @@ void EditorInterface::MainWindowGUI(Editor::GUI & gui_r, Assets::Scene& scene, I
 
 		// texture browser
 		if (gui.textureBrowser) gui.ShowTextureBrowser();
+
+		// mesh browser
+		if (gui.meshBrowser) gui.ShowMeshBrowser();
 
 		// create-viewport
 		if (gui.viewport) gui.ShowViewport(id);

@@ -31,6 +31,7 @@ Instance::Instance(const class Window& window, const std::vector<const char*>& v
 #endif	
 #if __APPLE__
 	extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+	extensions.push_back("VK_EXT_swapchain_colorspace");
 #endif
 
 #if ANDROID

@@ -4,13 +4,22 @@ set -e
 mkdir -p build
 cd build
 
-#if vcpkg.linux exists
+#if vcpkg.macos exists
 if [ -d "vcpkg.macos" ]; then
 	cd vcpkg.macos
+	
+	echo "Updating vcpkg..."
+	git pull origin master
+	./bootstrap-vcpkg.sh
+	
+	echo "Updating installed packages..."
+	./vcpkg update
+	./vcpkg upgrade --no-dry-run
+	
 else
 	git clone https://github.com/Microsoft/vcpkg.git vcpkg.macos
 	cd vcpkg.macos
-  ./bootstrap-vcpkg.sh
+	./bootstrap-vcpkg.sh
 fi
 
 ./vcpkg --recurse install \

@@ -28,15 +28,13 @@
 #include <fmt/format.h>
 #include <fmt/chrono.h>
 
-#include "Engine.hpp"
+#include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 #include "Options.hpp"
 #include "TaskCoordinator.hpp"
 #include "Assets/TextureImage.hpp"
 #include "Utilities/FileHelper.hpp"
-#include "Utilities/Localization.hpp"
 #include "Utilities/Math.hpp"
 #include "Rendering/VulkanBaseRenderer.hpp"
-#include "Editor/IconsFontAwesome6.h"
 #include "Utilities/ImGui.hpp"
 #include "Vulkan/ImageView.hpp"
 
@@ -200,6 +198,11 @@ void UserInterface::OnDestroySurface()
 {
 	renderPass_.reset();
 	uiFrameBuffers_.clear();
+	for ( auto image : imTextureIdMap_)
+	{
+		ImGui_ImplVulkan_RemoveTexture(image.second);
+	}
+	imTextureIdMap_.clear();
 }
 
 VkDescriptorSet UserInterface::RequestImTextureId(uint32_t globalTextureId)
@@ -379,10 +382,10 @@ void UserInterface::DrawOverlay(const Statistics& statistics, Vulkan::VulkanGpuT
 	const auto& io = ImGui::GetIO();
 	const float distance = 10.0f;
 #if ANDROID
-	const ImVec2 pos = ImVec2(io.DisplaySize.x * 0.5 - distance, distance);
+	const ImVec2 pos = ImVec2(io.DisplaySize.x * 0.3333f - distance, distance);
 	const ImVec2 posPivot = ImVec2(1.0f, 0.0f);
 #else
-	const ImVec2 pos = ImVec2(io.DisplaySize.x - distance, distance);
+	const ImVec2 pos = ImVec2(io.DisplaySize.x - distance, distance + 40);
 	const ImVec2 posPivot = ImVec2(1.0f, 0.0f);
 #endif
 	ImGui::SetNextWindowPos(pos, ImGuiCond_Always, posPivot);

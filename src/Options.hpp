@@ -29,6 +29,7 @@ public:
 	bool ReferenceMode{};
 	uint32_t SuperResolution{};
 	bool ForceNoRT{};
+	bool ForceSoftGen{};
 	bool HardwareQuery{};
 	std::string locale{};
 

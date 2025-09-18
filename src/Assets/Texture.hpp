@@ -43,6 +43,7 @@ namespace Assets
 		VkDescriptorSet DescriptorSet(uint32_t index) const { return descriptorSetManager_->DescriptorSets().Handle(0); }
 
 		void BindTexture(uint32_t textureIdx, const TextureImage& textureImage);
+		void BindStorageTexture(uint32_t textureIdx, const Vulkan::ImageView& textureImage);
 		uint32_t TryGetTexureIndex(const std::string& textureName) const;
 		uint32_t RequestNewTextureFileAsync(const std::string& filename, bool hdr);
 		uint32_t RequestNewTextureMemAsync(const std::string& texname, const std::string& mime, bool hdr, const unsigned char* data, size_t bytelength, bool srgb);
@@ -72,10 +73,6 @@ namespace Assets
 		const class Vulkan::Device& device_;
 		Vulkan::CommandPool& commandPool_;
 		Vulkan::CommandPool& mainThreadCommandPool_;
-		
-		//VkDescriptorPool descriptorPool_{};
-		//VkDescriptorSetLayout layout_{};
-		//std::vector<VkDescriptorSet> descriptorSets_;
 
 		std::vector<std::unique_ptr<TextureImage>> textureImages_;
 		std::unordered_map<std::string, FTextureBindingGroup> textureNameMap_;

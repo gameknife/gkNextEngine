@@ -47,7 +47,7 @@ jobs:
         key: ${{ runner.os }}-primes
 
     - name: Compile vcpkg dependencies
-      run: ./vcpkg_macos.sh
+      run: ./vcpkg.sh macos
 
     - name: Save Primes
       id: cache-primes-save
@@ -60,4 +60,4 @@ jobs:
     - name: Compile gkNextRenderer
       run: |
         slangc -v
-        ./build_macos.sh
+        ./build.sh macos

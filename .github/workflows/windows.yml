@@ -41,7 +41,7 @@ jobs:
     - name: Compile vcpkg dependencies
       run: |
         set VULKAN_SDK=C:\VulkanSDK\%SDK_VERSION%
-        vcpkg_windows.bat
+        vcpkg.bat windows
       shell: cmd
 
     - name: Save Primes
@@ -57,5 +57,5 @@ jobs:
     - name: Compile gkNextRenderer
       run: |
         set VULKAN_SDK=C:\VulkanSDK\%SDK_VERSION%
-        build_windows.bat
+        build.bat windows
       shell: cmd

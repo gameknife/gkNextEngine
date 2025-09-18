@@ -43,7 +43,7 @@ jobs:
         key: ${{ runner.os }}-primes
 
     - name: Compile vcpkg dependencies
-      run: ./vcpkg_linux.sh
+      run: ./vcpkg.sh linux
 
     - name: Save Primes
       id: cache-primes-save
@@ -54,4 +54,4 @@ jobs:
         key: ${{ steps.cache-primes-restore.outputs.cache-primary-key }}
 
     - name: Compile gkNextRenderer
-      run: ./build_linux.sh
+      run: ./build.sh linux

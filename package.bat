@@ -42,6 +42,11 @@ call ./build.bat windows
 pushd %CD%
 cd build/windows
 
+echo Cleaning up debug files and unnecessary assets...
+del /Q /S *.pdb 2>nul
+del /Q /S *d.exe 2>nul
+del /Q /S *d.lib 2>nul
+
 echo Copying package scripts...
 copy /Y ..\..\package\*.bat %CD% >nul 2>&1
 
@@ -70,7 +75,7 @@ pushd %CD%
 cd build/windows/bin
 
 echo Creating lego asset package...
-Packager --out ../assets/paks/lego.pak --src assets --regex ".*.hdr|.*.png|.*.spv"
+.\bin\Packager.exe --out ../assets/paks/lego.pak --src ../assets --regex ".*.hdr|.*.png|.*.spv"
 
 popd
 
@@ -78,7 +83,7 @@ pushd %CD%
 cd build/windows
 
 echo Creating MagicaLego package...
-zip -r "MagicaLego_win64_%VERSION%.zip" ./bin/MagicaLego.exe ./bin/ffmpeg.exe ./bin/vulkan-1.dll ./assets/legos ./assets/sfx ./assets/paks ./assets/locale ./assets/fonts ./assets/models/legobricks.glb
+tar -a -cf "MagicaLego_win64_%VERSION%.zip" ./bin/MagicaLego.exe ./bin/ffmpeg.exe ./bin/vulkan-1.dll ./assets/legos ./assets/sfx ./assets/paks ./assets/locale ./assets/fonts ./assets/models/legobricks.glb
 
 move /Y "MagicaLego_win64_%VERSION%.zip" ..\..\ >nul 2>&1
 popd

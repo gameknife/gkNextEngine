@@ -1,4 +1,5 @@
 #include "RayTraceBaseRenderer.hpp"
+#include "Common/CoreMinimal.hpp"
 #include "Vulkan/RayTracing/BottomLevelAccelerationStructure.hpp"
 #include "Vulkan/RayTracing/DeviceProcedures.hpp"
 #include "Vulkan/RayTracing/TopLevelAccelerationStructure.hpp"
@@ -118,7 +119,7 @@ namespace Vulkan::RayTracing
 
         const auto elapsed = std::chrono::duration<float, std::chrono::seconds::period>(
             std::chrono::high_resolution_clock::now() - timer).count();
-        fmt::print("- built acceleration structures in {:.2f}ms\n", elapsed * 1000.f);
+        SPDLOG_INFO("- built acceleration structures in {:.2f}ms", elapsed * 1000.f);
     }
 
     void RayTraceBaseRenderer::DeleteAccelerationStructures()

@@ -1,4 +1,5 @@
 #include "Scene.hpp"
+#include "Common/CoreMinimal.hpp"
 #include "Model.hpp"
 #include "Options.hpp"
 #include "Vulkan/BufferUtil.hpp"
@@ -245,7 +246,7 @@ namespace Assets
 
             if (emptySection < 0)
             {
-                fmt::print("more than 10 sections in model. \n");
+                SPDLOG_WARN("more than 10 sections in model");
             }
             for ( int slice = 0; slice < emptySection; ++slice )
             {

@@ -1,10 +1,9 @@
 #include "Window.hpp"
 #include "Utilities/Exception.hpp"
 #include "Utilities/StbImage.hpp"
-#include <fmt/format.h>
+#include "Common/CoreMinimal.hpp"
 
 #include "Options.hpp"
-#include "Utilities/Console.hpp"
 #include "Utilities/FileHelper.hpp"
 
 #if ANDROID
@@ -25,7 +24,7 @@ namespace
 #if !ANDROID
 	void GlfwErrorCallback(const int error, const char* const description)
 	{
-		fmt::print(stderr, "ERROR: GLFW: {} (code: {})\n", description, error);
+		SPDLOG_ERROR("ERROR: GLFW: {} (code: {})", description, error);
 	}
 
 	void GlfwKeyCallback(GLFWwindow* window, const int key, const int scancode, const int action, const int mods)
@@ -112,7 +111,7 @@ Window::Window(const WindowConfig& config) :
 		}
 		
 		if (glfwJoystickIsGamepad(0)) {
-			fmt::print("Gamepad: {}", glfwGetGamepadName(0));
+			SPDLOG_INFO("Gamepad: {}", glfwGetGamepadName(0));
 		}
 	}
 

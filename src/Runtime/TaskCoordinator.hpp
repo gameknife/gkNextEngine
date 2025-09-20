@@ -5,7 +5,7 @@
 #include <queue>
 #include <thread>
 #include <atomic>
-#include <fmt/format.h>
+#include "Common/CoreMinimal.hpp"
 #include <cstring>
 #include <unordered_set>
 
@@ -274,12 +274,12 @@ public:
             lowThreads_.push_back(std::make_unique<TaskThread>());
         }
 
-        fmt::print("low parrallel thread count: {}\n", lowThreadCount);
+        SPDLOG_INFO("low parallel thread count: {}", lowThreadCount);
     }
 
     ~TaskCoordinator()
     {
-        fmt::print("TaskCoordinator request shutting down, wait for TaskThread. remain: {}\n", threads_.size());
+        SPDLOG_INFO("TaskCoordinator request shutting down, wait for TaskThread. remain: {}", threads_.size());
         for (auto& thread : threads_)
         {
             thread.reset();

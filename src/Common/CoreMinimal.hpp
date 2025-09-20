@@ -1,5 +1,9 @@
 #pragma once
 
+// Core minimal includes for gkNextRenderer project
+// This file should be included in all source files that need common functionality
+
+// Standard library includes
 #include <cstring>
 #include <string>
 #include <vector>
@@ -11,7 +15,20 @@
 #include <functional>
 #include <fstream>
 #include <set>
+#include <iostream>
+#include <filesystem>
+#include <chrono>
+
+// fmt library (still needed for formatting)
 #include <fmt/printf.h>
+#include <fmt/format.h>
+#include <fmt/chrono.h>
+
+// spdlog logging
+#include <spdlog/spdlog.h>
+#if ANDROID
+#include <spdlog/sinks/android_sink.h>
+#endif
 
 #if WIN32 && !defined(__MINGW32__)
 #define DISABLE_OPTIMIZATION __pragma(optimize("", off))

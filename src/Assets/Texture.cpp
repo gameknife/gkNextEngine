@@ -1,9 +1,8 @@
 #include "Texture.hpp"
 #include "Utilities/StbImage.hpp"
 #include "Utilities/Exception.hpp"
-#include <chrono>
 #include <imgui_impl_vulkan.h>
-#include <fmt/format.h>
+#include "Common/CoreMinimal.hpp"
 #include <ktx.h>
 
 #include "Options.hpp"
@@ -684,7 +683,7 @@ namespace Assets
                 TextureTaskContext taskContext{};
                 task.GetContext(taskContext);
                 textureImages_[taskContext.textureId]->MainThreadPostLoading(mainThreadCommandPool_);
-                fmt::print("{}\n", taskContext.outputInfo.data());
+                SPDLOG_INFO("{}", taskContext.outputInfo.data());
                 delete[] copyedData;
 
                 if (taskContext.needFlushHDRSH)

@@ -26,9 +26,8 @@
 #include "Assets/Texture.hpp"
 
 #include "Utilities/Exception.hpp"
-#include "Utilities/Console.hpp"
 #include <array>
-#include <fmt/format.h>
+#include "Common/CoreMinimal.hpp"
 
 #include "Options.hpp"
 #include "SoftwareModern/SoftwareModernRenderer.hpp"
@@ -104,7 +103,7 @@ namespace
 {
     void PrintVulkanSdkInformation()
     {
-        fmt::print("Vulkan SDK Header Version: {}\n\n", VK_HEADER_VERSION);
+        SPDLOG_INFO("Vulkan SDK Header Version: {}", VK_HEADER_VERSION);
     }
     
     void PrintVulkanDevices(const Vulkan::VulkanBaseRenderer& application)
@@ -128,7 +127,7 @@ namespace
             const Vulkan::Version vulkanVersion(prop.apiVersion);
             const Vulkan::Version driverVersion(prop.driverVersion, prop.vendorID);
 
-            fmt::print("- [{}] {} '{}' ({}: vulkan {} driver {} {} - {})\n",
+            SPDLOG_INFO("- [{}] {} '{}' ({}: vulkan {} driver {} {} - {})",
                        prop.deviceID, Vulkan::Strings::VendorId(prop.vendorID), prop.deviceName,
                        Vulkan::Strings::DeviceType(prop.deviceType),
                        to_string(vulkanVersion), driverProp.driverName, driverProp.driverInfo,
@@ -168,7 +167,7 @@ namespace
     {
         const auto& swapChain = application.SwapChain();
 
-        fmt::print("Swap Chain:\n- image count: {}\n- present mode: {}\n\n", swapChain.Images().size(),
+        SPDLOG_INFO("Swap Chain: image count: {}, present mode: {}", swapChain.Images().size(),
                    static_cast<int>(swapChain.PresentMode()));
     }
 
@@ -180,7 +179,7 @@ namespace
         deviceProp.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
         vkGetPhysicalDeviceProperties2(pDevice, &deviceProp);
 
-        fmt::print("Setting Device [{}]\n", deviceProp.properties.deviceName);
+        SPDLOG_INFO("Setting Device [{}]", deviceProp.properties.deviceName);
         application.SetPhysicalDevice(pDevice);
 
         puts("");
@@ -269,7 +268,7 @@ namespace Vulkan
         window_->Show();
 
         uptime = std::chrono::high_resolution_clock::now().time_since_epoch().count() - uptime;
-        fmt::print("\n{} renderer initialized in {:.2f}ms{}\n", CONSOLE_GREEN_COLOR, uptime * 1e-6f, CONSOLE_DEFAULT_COLOR);
+        SPDLOG_INFO("renderer initialized in {:.2f}ms", uptime * 1e-6f);
     }
 
     void VulkanBaseRenderer::Start()

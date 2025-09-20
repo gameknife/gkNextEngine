@@ -1,5 +1,4 @@
 #include "ScreenShot.hpp"
-#include "Utilities/Console.hpp"
 #include "Rendering/VulkanBaseRenderer.hpp"
 
 #include "curl/curl.h"

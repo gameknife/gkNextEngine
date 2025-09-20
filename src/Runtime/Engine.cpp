@@ -5,7 +5,6 @@
 #include "Assets/Scene.hpp"
 #include "Assets/Texture.hpp"
 #include "Assets/UniformBuffer.hpp"
-#include "Utilities/Console.hpp"
 #include "Vulkan/Window.hpp"
 #include "Vulkan/SwapChain.hpp"
 #include "Vulkan/Device.hpp"
@@ -37,10 +36,7 @@
 #include "Platform/PlatformCommon.h"
 #include "Utilities/Exception.hpp"
 
-#include <spdlog/spdlog.h>
-#if ANDROID
-#include <spdlog/sinks/android_sink.h>
-#endif
+#include "Common/CoreMinimal.hpp"
 
 ENGINE_API Options* GOption = nullptr;
 
@@ -176,7 +172,7 @@ NextEngine::NextEngine(Options& options, void* userdata)
     spdlog::set_default_logger(android_logger);
 #endif
     
-    spdlog::info("Next Engine Initilizaing...");
+    SPDLOG_INFO("Next Engine Initilizaing...");
     instance_ = this;
 
     status_ = NextRenderer::EApplicationStatus::Starting;
@@ -1096,7 +1092,7 @@ void NextEngine::LoadScene(std::string sceneFileName)
         task.GetContext( taskContext );
         if (taskContext.success )
         {
-            fmt::print("{} {}{}\n", CONSOLE_GREEN_COLOR, taskContext.outputInfo.data(), CONSOLE_DEFAULT_COLOR);
+            SPDLOG_INFO("{}", taskContext.outputInfo.data());
             const auto timer = std::chrono::high_resolution_clock::now();
             scene_->GetEnvSettings().Reset();
             scene_->SetEnvSettings(*cameraState);
@@ -1126,11 +1122,11 @@ void NextEngine::LoadScene(std::string sceneFileName)
             gameInstance_->OnSceneLoaded();
 
             float elapsed = std::chrono::duration<float, std::chrono::seconds::period>(std::chrono::high_resolution_clock::now() - timer).count();
-            fmt::print("{} uploaded scene [{}] to gpu in {:.2f}ms{}\n", CONSOLE_GREEN_COLOR, std::filesystem::path(sceneFileName).filename().string(), elapsed * 1000.f, CONSOLE_DEFAULT_COLOR);
+            SPDLOG_INFO("uploaded scene [{}] to gpu in {:.2f}ms", std::filesystem::path(sceneFileName).filename().string(), elapsed * 1000.f);
         }
         else
         {
-            fmt::print("{} failed to load scene [{}]{}\n", CONSOLE_RED_COLOR, std::filesystem::path(sceneFileName).filename().string(), CONSOLE_DEFAULT_COLOR);
+            SPDLOG_ERROR("failed to load scene [{}]", std::filesystem::path(sceneFileName).filename().string());
         }
 
         status_ = NextRenderer::EApplicationStatus::Running;
@@ -1150,7 +1146,7 @@ public:
 };
 
 void println(qjs::rest<std::string> args) {
-    for (auto const & arg : args) { fmt::printf(arg); fmt::printf("\n"); }
+    for (auto const & arg : args) { SPDLOG_INFO("{}", arg); }
 }
 
 NextEngine* GetEngine() {
@@ -1188,7 +1184,7 @@ void NextEngine::InitJSEngine() {
         }
         else
         {
-            fmt::print("Failed to load script\n");
+            SPDLOG_WARN("Failed to load script");
         }
     }
     catch(qjs::exception)

@@ -1,4 +1,5 @@
 #include "SceneList.hpp"
+#include "Common/CoreMinimal.hpp"
 #include "Utilities/FileHelper.hpp"
 #include "Assets/Material.hpp"
 #include "Assets/Model.hpp"
@@ -230,7 +231,7 @@ void SceneList::ScanScenes()
     // add relative path
     std::string modelPath = "assets/models/";
     std::string path = Utilities::FileHelper::GetPlatformFilePath(modelPath.c_str());
-    fmt::print("Scaning dir: {}\n", path);
+    SPDLOG_INFO("Scanning dir: {}", path);
     for (const auto& entry : std::filesystem::directory_iterator(path))
     {
         std::filesystem::path filename = entry.path().filename();
@@ -245,7 +246,7 @@ void SceneList::ScanScenes()
     AllScenes.insert(AllScenes.begin(), "RTIO.proc");
     AllScenes.insert(AllScenes.begin(), "CornellBox.proc");
     
-    fmt::print("Scene found: {}\n", AllScenes.size());
+    SPDLOG_INFO("Scene found: {}", AllScenes.size());
 }
 
 int32_t SceneList::AddExternalScene(std::string absPath)

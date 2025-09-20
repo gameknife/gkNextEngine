@@ -1,7 +1,6 @@
 #pragma once
 #include <stdexcept>
-#include <fmt/printf.h>
-#include "Console.hpp"
+#include "Common/CoreMinimal.hpp"
 
 namespace NextStackWalk
 {
@@ -11,7 +10,7 @@ namespace NextStackWalk
 template <class E>
 [[noreturn]] void Throw(const E& e) noexcept(false)
 {
-    fmt::print("\n{}Exception: {}{}\n------------------\n", CONSOLE_RED_COLOR, e.what(), CONSOLE_DEFAULT_COLOR);
+    SPDLOG_ERROR("\nException: {}\n------------------", e.what());
     NextStackWalk::PrintStack();
     throw e;
 }

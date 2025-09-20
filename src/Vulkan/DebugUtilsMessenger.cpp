@@ -1,9 +1,8 @@
 #include "DebugUtilsMessenger.hpp"
 
 #include "Instance.hpp"
-#include "Utilities/Console.hpp"
 #include "Utilities/Exception.hpp"
-#include <fmt/format.h>
+#include "Common/CoreMinimal.hpp"
 
 namespace Vulkan {
 
@@ -67,60 +66,89 @@ namespace Vulkan {
 		{
 			(void)pUserData;
 
-			const auto attributes = Utilities::Console::SetColorBySeverity(static_cast<Utilities::Severity>(messageSeverity));
+			// Build complete message in one go
+			std::string message;
 
-			FILE* outDevice = stdout;
+			// Add severity prefix
 			switch (messageSeverity)
 			{
 			case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
-				fmt::print(outDevice, "VERBOSE: ");
+				message += "VERBOSE: ";
 				break;
 			case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-				fmt::print(outDevice, "INFO: ");
+				message += "INFO: ";
 				break;
 			case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-				fmt::print(outDevice, "WARNING: ");
+				message += "WARNING: ";
 				break;
 			case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-				outDevice = stderr;
-				fmt::print(outDevice, "ERROR: ");
+				message += "ERROR: ";
 				break;
-			default:;
-				fmt::print(outDevice, "UNKNOWN: ");
+			default:
+				message += "UNKNOWN: ";
 			}
 
+			// Add message type
 			switch (messageType)
 			{
 			case VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT:
-				fmt::print(outDevice, "GENERAL: ");
+				message += "GENERAL: ";
 				break;
 			case VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT:
-				fmt::print(outDevice, "VALIDATION: ");
+				message += "VALIDATION: ";
 				break;
 			case VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT:
-				fmt::print(outDevice, "PERFORMANCE: ");
+				message += "PERFORMANCE: ";
 				break;
 			default:
-				fmt::print(outDevice, "UNKNOWN: ");
+				message += "UNKNOWN: ";
 			}
 
-			fmt::print(outDevice, "{}", pCallbackData->pMessage);
+			// Add main message
+			message += pCallbackData->pMessage;
 
+			// Add object information if present and severity is high enough
 			if (pCallbackData->objectCount > 0 && messageSeverity > VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
 			{
-				fmt::print(outDevice, "\n\n  Objects ({}):\n", pCallbackData->objectCount);
+				message += "\n\n  Objects (";
+				message += std::to_string(pCallbackData->objectCount);
+				message += "):";
 
 				for (uint32_t i = 0; i != pCallbackData->objectCount; ++i)
 				{
 					const auto object = pCallbackData->pObjects[i];
-					fmt::print(outDevice, "  - Object: Type: {}, Handle: {}, Name: '{}'\n",
-										ObjectTypeToString(object.objectType), reinterpret_cast<void*>(object.objectHandle), (object.pObjectName ? object.pObjectName : "")
-							 );
+					message += "\n  - Object: Type: ";
+					message += ObjectTypeToString(object.objectType);
+					message += ", Handle: ";
+					// Convert handle to hex string for better readability
+					char handleStr[20];
+					snprintf(handleStr, sizeof(handleStr), "%p", reinterpret_cast<void*>(object.objectHandle));
+					message += handleStr;
+					message += ", Name: '";
+					message += (object.pObjectName ? object.pObjectName : "");
+					message += "'";
 				}
 			}
-			fmt::print(outDevice, "\n");
 
-			Utilities::Console::SetColorByAttributes(attributes);
+			// Log the complete message based on severity
+			switch (messageSeverity)
+			{
+			case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+				SPDLOG_TRACE("{}", message);
+				break;
+			case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+				SPDLOG_INFO("{}", message);
+				break;
+			case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+				SPDLOG_WARN("{}", message);
+				break;
+			case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+				SPDLOG_ERROR("{}", message);
+				break;
+			default:
+				SPDLOG_WARN("{}", message);
+			}
+
 
 			return VK_FALSE;
 		}

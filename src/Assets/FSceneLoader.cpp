@@ -1,4 +1,5 @@
 #include "FSceneLoader.h"
+#include "Common/CoreMinimal.hpp"
 
 #include "ThirdParty/mikktspace/mikktspace.h"
 
@@ -241,12 +242,12 @@ namespace Assets
             std::vector<uint8_t> data;
             if ( !Utilities::Package::FPackageFileSystem::GetInstance().LoadFile(filename, data) )
             {
-                fmt::print("failed to load file: {}\n", filename);
+                SPDLOG_ERROR("failed to load file: {}", filename);
                 return false;
             }
             if(!gltfLoader.LoadBinaryFromMemory(&model, &err, &warn, data.data(), data.size()) )
             {
-                fmt::print("failed to parse glb file: {}\n", filename);
+                SPDLOG_ERROR("failed to parse glb file: {}", filename);
                 return false;
             }
         }
@@ -259,7 +260,7 @@ namespace Assets
             }
             if(!gltfLoader.LoadASCIIFromFile(&model, &err, &warn, gltfFile.string()) )
             {
-                fmt::print("failed to parse glb file: {}\n", filename);
+                SPDLOG_ERROR("failed to parse glb file: {}", filename);
                 return false;
             }
         }

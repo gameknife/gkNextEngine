@@ -1,9 +1,7 @@
 #include "BenchMark.hpp"
 #include "Options.hpp"
-#include "Utilities/Console.hpp"
 #include "Rendering/VulkanBaseRenderer.hpp"
-#include <fmt/format.h>
-#include <fmt/chrono.h>
+#include "Common/CoreMinimal.hpp"
 
 #include "curl/curl.h"
 #include "cpp-base64/base64.cpp"
@@ -63,7 +61,7 @@ bool BenchMarker::OnTick( double nowInSeconds, Vulkan::VulkanBaseRenderer* rende
         if (periodTotalFrames_ != 0 && static_cast<uint64_t>(prevTotalTime / period) != static_cast<uint64_t>(totalTime
             / period))
         {
-            fmt::print("\t[Benchmarking] fps: {:.0f}\n", float(periodTotalFrames_) / float(totalTime));
+            SPDLOG_INFO("\t[Benchmarking] fps: {:.0f}", float(periodTotalFrames_) / float(totalTime));
             periodInitialTime_ = time_;
             periodTotalFrames_ = 0;
         }
@@ -88,7 +86,7 @@ void BenchMarker::OnReport(Vulkan::VulkanBaseRenderer* renderer, const std::stri
     const double totalTime = time_ - sceneInitialTime_;
     
     double fps = benchmarkTotalFrames_ / totalTime;
-    fmt::print("{} totalTime {:%H:%M:%S} fps {:.3f}{}\n", CONSOLE_GOLD_COLOR, std::chrono::seconds(static_cast<long long>(totalTime)), fps, CONSOLE_DEFAULT_COLOR);
+    SPDLOG_INFO("totalTime {:%H:%M:%S} fps {:.3f}", std::chrono::seconds(static_cast<long long>(totalTime)), fps);
     Report(renderer, static_cast<int>(floor(fps)), std::filesystem::path(SceneName).filename().replace_extension().string(), false, GOption->SaveFile);
 }
 
@@ -126,7 +124,7 @@ void BenchMarker::Report(Vulkan::VulkanBaseRenderer* renderer_, int fps, const s
         };
         std::string json_str = my_json.dump();
 
-        fmt::print("Sending benchmark to perf server...\n");
+        SPDLOG_INFO("Sending benchmark to perf server...");
         // upload from curl
         CURL* curl;
         CURLcode res;
@@ -148,7 +146,7 @@ void BenchMarker::Report(Vulkan::VulkanBaseRenderer* renderer_, int fps, const s
             res = curl_easy_perform(curl);
             /* Check for errors */
             if (res != CURLE_OK)
-                fmt::print(stderr, "curl_easy_perform() failed: {}\n", curl_easy_strerror(res));
+                SPDLOG_ERROR("curl_easy_perform() failed: {}", curl_easy_strerror(res));
 
             /* always cleanup */
             curl_easy_cleanup(curl);

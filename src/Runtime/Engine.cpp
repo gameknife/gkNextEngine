@@ -37,6 +37,11 @@
 #include "Platform/PlatformCommon.h"
 #include "Utilities/Exception.hpp"
 
+#include <spdlog/spdlog.h>
+#if ANDROID
+#include <spdlog/sinks/android_sink.h>
+#endif
+
 ENGINE_API Options* GOption = nullptr;
 
 namespace NextRenderer
@@ -158,6 +163,20 @@ NextEngine* NextEngine::instance_ = nullptr;
 
 NextEngine::NextEngine(Options& options, void* userdata)
 {
+    spdlog::set_level(spdlog::level::info);
+    spdlog::flush_on(spdlog::level::debug);
+    spdlog::flush_every(std::chrono::seconds(1));
+    
+#if ANDROID
+    std::string tag = "vknext";
+    auto android_logger = spdlog::android_logger_mt("android", tag);
+    android_logger->critical("Use \"adb shell logcat\" to view this message.");
+
+   
+    spdlog::set_default_logger(android_logger);
+#endif
+    
+    spdlog::info("Next Engine Initilizaing...");
     instance_ = this;
 
     status_ = NextRenderer::EApplicationStatus::Starting;

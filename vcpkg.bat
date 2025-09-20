@@ -40,8 +40,8 @@ IF EXIST %VCPKG_DIR% (
     call bootstrap-vcpkg.bat || goto :error
 
     echo "Updating installed packages..."
-    .\vcpkg.exe update || goto :error
-    .\vcpkg.exe upgrade --no-dry-run || goto :error
+    .\vcpkg.exe update
+    .\vcpkg.exe upgrade --no-dry-run
 
 ) ELSE (
     git clone https://github.com/Microsoft/vcpkg.git %VCPKG_DIR% || goto :error
@@ -49,11 +49,7 @@ IF EXIST %VCPKG_DIR% (
     call bootstrap-vcpkg.bat || goto :error
 )
 
-if "%1" == "forceinstall" (
-    call bootstrap-vcpkg.bat || goto :error
-)
-
-vcpkg.exe install --recurse ^
+.\vcpkg.exe install --recurse ^
     cpptrace:x64-windows-static ^
     cxxopts:x64-windows-static ^
     glfw3:x64-windows-static ^
@@ -70,6 +66,7 @@ vcpkg.exe install --recurse ^
     ktx:x64-windows-static ^
     joltphysics:x64-windows-static ^
     xxhash:x64-windows-static ^
+    spdlog:x64-windows-static ^
     cpp-base64:x64-windows-static || goto :error
 
 if "%1" == "avif" (
@@ -91,8 +88,8 @@ IF EXIST %VCPKG_DIR% (
     call bootstrap-vcpkg.bat || goto :error
 
     echo "Updating installed packages..."
-    .\vcpkg.exe update || goto :error
-    .\vcpkg.exe upgrade --no-dry-run || goto :error
+    .\vcpkg.exe update
+    .\vcpkg.exe upgrade --no-dry-run
 
 ) ELSE (
     git clone https://github.com/Microsoft/vcpkg.git %VCPKG_DIR% || goto :error
@@ -102,7 +99,7 @@ IF EXIST %VCPKG_DIR% (
 
 copy /Y "%PROJROOT%\android\custom-triplets\arm64-android.cmake" "%CD%\triplets\arm64-android.cmake" || goto :error
 
-vcpkg.exe --recurse install ^
+.\vcpkg.exe --recurse install ^
     cxxopts:arm64-android ^
     glm:arm64-android ^
     hlslpp:arm64-android ^
@@ -117,6 +114,7 @@ vcpkg.exe --recurse install ^
     ktx:arm64-android ^
     joltphysics:arm64-android ^
     xxhash:arm64-android ^
+    spdlog:arm64-android ^
     cpp-base64:arm64-android || goto :error
 
 cd ..

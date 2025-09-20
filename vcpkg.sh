@@ -57,6 +57,7 @@ install_macos() {
         ktx:"$triplet" \
         joltphysics:"$triplet" \
         xxhash:"$triplet" \
+        spdlog:"$triplet" \
         cpp-base64:"$triplet"
 }
 
@@ -94,6 +95,7 @@ install_linux() {
         ktx:x64-linux \
         joltphysics:x64-linux \
         xxhash:x64-linux \
+        spdlog:x64-linux \
         cpp-base64:x64-linux
 }
 
@@ -130,6 +132,7 @@ install_android() {
         ktx:arm64-android \
         joltphysics:arm64-android \
         xxhash:arm64-android \
+        spdlog:arm64-android \
         cpp-base64:arm64-android
 }
 
@@ -167,6 +170,7 @@ install_mingw() {
         ktx:x64-mingw-static \
         joltphysics:x64-mingw-static \
         xxhash:x64-mingw-static \
+        spdlog:x64-mingw-static \
         cpp-base64:x64-mingw-static
 }
 

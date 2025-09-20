@@ -35,7 +35,7 @@ build_macos() {
         -D VCPKG_TARGET_TRIPLET="$triplet" \
         -D CMAKE_TOOLCHAIN_FILE="../vcpkg.macos/scripts/buildsystems/vcpkg.cmake" \
         ../..
-    cmake --build . --config Release
+    cmake --build . --config RelWithDebInfo
 
     end_time=$(date +%s)
     elapsed_time=$((end_time - start_time))

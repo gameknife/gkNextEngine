@@ -64,7 +64,7 @@ exit /b
 
 :build_android
 cd android || goto :error
-./gradlew.bat build || goto :error
+gradlew.bat build || goto :error
 
 cd ..
 exit /b

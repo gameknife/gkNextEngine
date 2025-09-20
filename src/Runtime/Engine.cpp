@@ -35,6 +35,7 @@
 #include "NextAnimation.h"
 #include "NextPhysics.h"
 #include "Platform/PlatformCommon.h"
+#include "Utilities/Exception.hpp"
 
 ENGINE_API Options* GOption = nullptr;
 
@@ -228,14 +229,6 @@ void NextEngine::Start()
     
     renderer_->Start();
 
-    ma_result result;
-    audioEngine_.reset( new ma_engine() );
-
-    result = ma_engine_init(NULL, audioEngine_.get());
-    if (result != MA_SUCCESS) {
-        return;
-    }
-
     physicsEngine_.reset(new NextPhysics());
     physicsEngine_->Start();
     
@@ -243,6 +236,14 @@ void NextEngine::Start()
 
     animationEngine_ = std::make_unique<NextAnimation>();
     animationEngine_->Start();
+
+    ma_result result;
+    audioEngine_.reset( new ma_engine() );
+
+    result = ma_engine_init(NULL, audioEngine_.get());
+    if (result != MA_SUCCESS) {
+        Throw(std::runtime_error(std::string("failed to init audio engine.")));
+    }
     
     // init js engine
     InitJSEngine();
@@ -275,8 +276,8 @@ bool NextEngine::Tick()
         scene_->Tick(static_cast<float>(deltaSeconds_));
     }
 
-    if (userSettings_.TickPhysics) physicsEngine_->Tick(deltaSeconds_);
-    if (userSettings_.TickAnimation) animationEngine_->Tick(deltaSeconds_); //pause dev, wait next
+    if (userSettings_.TickPhysics && physicsEngine_) physicsEngine_->Tick(deltaSeconds_);
+    if (userSettings_.TickAnimation && animationEngine_) animationEngine_->Tick(deltaSeconds_); //pause dev, wait next
 
     if (JSTickCallback_)
     {

@@ -301,7 +301,8 @@ bool NextEngine::Tick()
     
     // Renderer Tick
 #if !ANDROID
-    glfwPollEvents();
+    //glfwPollEvents();
+    SDL_PollEvent(nullptr);
     window_->PollGamepadInput();
 #endif
     // tick
@@ -373,7 +374,8 @@ bool NextEngine::Tick()
     return false;
 #else
     window_->attemptDragWindow();
-    return glfwWindowShouldClose( window_->Handle() ) != 0;
+    //return glfwWindowShouldClose( window_->Handle() ) != 0;
+    return false;
 #endif
 }
 
@@ -551,7 +553,7 @@ glm::dvec2 NextEngine::GetMousePos()
 {
     double x{},y{};
 #if !ANDROID
-    glfwGetCursorPos( window_->Handle(), &x, &y );
+    //glfwGetCursorPos( window_->Handle(), &x, &y );
 #endif
     return glm::dvec2(x,y);
 }
@@ -651,7 +653,7 @@ glm::ivec2 NextEngine::GetMonitorSize(int monitorIndex) const
     glm::ivec2 pos{0,0};
     glm::ivec2 size{1920,1080};
 #if !ANDROID
-    glfwGetMonitorWorkarea(glfwGetPrimaryMonitor(), &pos.x, &pos.y, &size.x, &size.y);
+    //glfwGetMonitorWorkarea(glfwGetPrimaryMonitor(), &pos.x, &pos.y, &size.x, &size.y);
 #endif
     return size;
 }
@@ -939,31 +941,31 @@ void NextEngine::OnKey(int key, int scancode, int action, int mods)
     }
     
 #if !ANDROID
-    if (action == GLFW_PRESS)
-    {
-        switch (key)
-        {
-        case GLFW_KEY_ESCAPE: scene_->SetSelectedId(-1);
-            break;
-        default: break;
-        }
-
-        // Settings (toggle switches)
-        switch (key)
-        {
-        case GLFW_KEY_F1: userSettings_.ShowSettings = !userSettings_.ShowSettings;
-            break;
-        case GLFW_KEY_F2: userSettings_.ShowOverlay = !userSettings_.ShowOverlay;
-            break;
-        default: break;
-        }
-    }
+    // if (action == GLFW_PRESS)
+    // {
+    //     switch (key)
+    //     {
+    //     case GLFW_KEY_ESCAPE: scene_->SetSelectedId(-1);
+    //         break;
+    //     default: break;
+    //     }
+    //
+    //     // Settings (toggle switches)
+    //     switch (key)
+    //     {
+    //     case GLFW_KEY_F1: userSettings_.ShowSettings = !userSettings_.ShowSettings;
+    //         break;
+    //     case GLFW_KEY_F2: userSettings_.ShowOverlay = !userSettings_.ShowOverlay;
+    //         break;
+    //     default: break;
+    //     }
+    // }
 #endif
 }
 
 void NextEngine::OnTouch(bool down, double xpos, double ypos)
 {
-    OnMouseButton(GLFW_MOUSE_BUTTON_RIGHT, down ? GLFW_PRESS : GLFW_RELEASE, 0);
+    //OnMouseButton(GLFW_MOUSE_BUTTON_RIGHT, down ? GLFW_PRESS : GLFW_RELEASE, 0);
 }
 
 void NextEngine::OnTouchMove(double xpos, double ypos)

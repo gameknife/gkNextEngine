@@ -8,8 +8,7 @@ Surface::Surface(const class Instance& instance) :
 	instance_(instance)
 {
 #if !ANDROID
-	Check(glfwCreateWindowSurface(instance.Handle(), instance.Window().Handle(), nullptr, &surface_),
-		"create window surface");
+	SDL_Vulkan_CreateSurface(instance.Window().Handle(), instance.Handle(), nullptr, &surface_);
 #else
 	VkAndroidSurfaceCreateInfoKHR createInfo{
 		.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,

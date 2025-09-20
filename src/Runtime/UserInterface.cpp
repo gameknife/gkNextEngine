@@ -16,7 +16,7 @@
 #include <imgui.h>
 #include <imgui_freetype.h>
 #if !ANDROID
-#include <imgui_impl_glfw.h>
+#include <imgui_impl_sdl3.h>
 #else
 #include <imgui_impl_android.h>
 #endif
@@ -76,7 +76,7 @@ UserInterface::UserInterface(
 	
 	// Initialise ImGui GLFW adapter
 #if !ANDROID
-	if (!ImGui_ImplGlfw_InitForVulkan(window.Handle(), true))
+	if (!ImGui_ImplSDL3_InitForVulkan(window.Handle()))
 	{
 		Throw(std::runtime_error("failed to initialise ImGui GLFW adapter"));
 	}
@@ -176,7 +176,7 @@ UserInterface::~UserInterface()
 	
 	ImGui_ImplVulkan_Shutdown();
 #if !ANDROID
-	ImGui_ImplGlfw_Shutdown();
+	ImGui_ImplSDL3_Shutdown();
 #else
 	ImGui_ImplAndroid_Shutdown();
 #endif
@@ -309,7 +309,7 @@ void UserInterface::PreRender()
 {
 	ImGui_ImplVulkan_NewFrame();
 #if !ANDROID
-	ImGui_ImplGlfw_NewFrame();
+	ImGui_ImplSDL3_NewFrame();
 #else
 	ImGui_ImplAndroid_NewFrame();
 #endif

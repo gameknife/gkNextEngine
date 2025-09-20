@@ -43,9 +43,9 @@ install_macos() {
     ./vcpkg --recurse install \
         cpptrace:"$triplet" \
         cxxopts:"$triplet" \
-        glfw3:"$triplet" \
+        sdl3:"$triplet" \
         glm:"$triplet" \
-        imgui[core,freetype,glfw-binding,vulkan-binding,docking-experimental]:"$triplet" \
+        imgui[core,freetype,sdl3-binding,vulkan-binding,docking-experimental]:"$triplet" \
         stb:"$triplet" \
         tinyobjloader:"$triplet" \
         curl:"$triplet" \
@@ -83,7 +83,7 @@ install_linux() {
         cxxopts:x64-linux \
         glfw3:x64-linux \
         glm:x64-linux \
-        imgui[core,freetype,glfw-binding,vulkan-binding,docking-experimental]:x64-linux \
+        imgui[core,freetype,sdl3-binding,vulkan-binding,docking-experimental]:x64-linux \
         stb:x64-linux \
         tinyobjloader:x64-linux \
         curl:x64-linux \

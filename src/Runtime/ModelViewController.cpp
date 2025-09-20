@@ -46,18 +46,18 @@ bool ModelViewController::OnKey(const int key, const int scancode, const int act
 #if !ANDROID
     switch (key)
     {
-    case GLFW_KEY_S: cameraMovingBackward_ = action != GLFW_RELEASE;
-        return true;
-    case GLFW_KEY_W: cameraMovingForward_ = action != GLFW_RELEASE;
-        return true;
-    case GLFW_KEY_A: cameraMovingLeft_ = action != GLFW_RELEASE;
-        return true;
-    case GLFW_KEY_D: cameraMovingRight_ = action != GLFW_RELEASE;
-        return true;
-    case GLFW_KEY_Q: cameraMovingDown_ = action != GLFW_RELEASE;
-        return true;
-    case GLFW_KEY_E: cameraMovingUp_ = action != GLFW_RELEASE;
-        return true;
+    // case GLFW_KEY_S: cameraMovingBackward_ = action != GLFW_RELEASE;
+    //     return true;
+    // case GLFW_KEY_W: cameraMovingForward_ = action != GLFW_RELEASE;
+    //     return true;
+    // case GLFW_KEY_A: cameraMovingLeft_ = action != GLFW_RELEASE;
+    //     return true;
+    // case GLFW_KEY_D: cameraMovingRight_ = action != GLFW_RELEASE;
+    //     return true;
+    // case GLFW_KEY_Q: cameraMovingDown_ = action != GLFW_RELEASE;
+    //     return true;
+    // case GLFW_KEY_E: cameraMovingUp_ = action != GLFW_RELEASE;
+    //     return true;
     default: return false;
     }
 #else
@@ -153,23 +153,23 @@ bool ModelViewController::OnCursorPosition(const double xpos, const double ypos)
 
 bool ModelViewController::OnMouseButton(const int button, const int action, const int mods)
 {
-    if (button == GLFW_MOUSE_BUTTON_LEFT)
-    {
-        mouseLeftPressed_ = action == GLFW_PRESS;
-        if (mouseLeftPressed_)
-        {
-            resetMousePos_ = true;
-        }
-    }
-
-    if (button == GLFW_MOUSE_BUTTON_RIGHT)
-    {
-        mouseRightPressed_ = action == GLFW_PRESS;
-        if (mouseRightPressed_)
-        {
-            resetMousePos_ = true;
-        }
-    }
+    // if (button == GLFW_MOUSE_BUTTON_LEFT)
+    // {
+    //     mouseLeftPressed_ = action == GLFW_PRESS;
+    //     if (mouseLeftPressed_)
+    //     {
+    //         resetMousePos_ = true;
+    //     }
+    // }
+    //
+    // if (button == GLFW_MOUSE_BUTTON_RIGHT)
+    // {
+    //     mouseRightPressed_ = action == GLFW_PRESS;
+    //     if (mouseRightPressed_)
+    //     {
+    //         resetMousePos_ = true;
+    //     }
+    // }
     return true;
 }
 

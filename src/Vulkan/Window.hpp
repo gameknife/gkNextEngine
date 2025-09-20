@@ -20,7 +20,7 @@ namespace Vulkan
 		// Window instance properties.
 		const WindowConfig& Config() const { return config_; }
 
-		GLFWwindow* Handle() const { return window_; }
+		SDL_Window* Handle() const { return window_; }
 
 		float ContentScale() const;
 		VkExtent2D FramebufferSize() const;
@@ -37,7 +37,7 @@ namespace Vulkan
 		std::function<void(int button, int action, int mods)> OnMouseButton;
 		std::function<void(double xoffset, double yoffset)> OnScroll;
 		std::function<void(int path_count, const char* paths[])> OnDropFile;
-		std::function<void(GLFWwindow* window, int focused)> OnFocus;
+		std::function<void(SDL_Window* window, int focused)> OnFocus;
 
 		// 添加手柄相关回调
 		std::function<void(int jid, int event)> OnJoystickConnection;
@@ -67,7 +67,7 @@ namespace Vulkan
 	private:
 
 		const WindowConfig config_;
-		GLFWwindow* window_{};
+		SDL_Window* window_{};
 
 		double s_xpos = 0, s_ypos = 0;
 		int w_xsiz = 0, w_ysiz = 0;

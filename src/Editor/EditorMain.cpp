@@ -98,10 +98,10 @@ void EditorGameInstance::OnInitUI()
 bool EditorGameInstance::OnKey(int key, int scancode, int action, int mods)
 {
     modelViewController_.OnKey(key, scancode, action, mods);
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-    {
-        GetEngine().GetScene().SetSelectedId(-1);
-    }
+    // if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+    // {
+    //     GetEngine().GetScene().SetSelectedId(-1);
+    // }
     return true;
 }
 
@@ -114,30 +114,30 @@ bool EditorGameInstance::OnCursorPosition(double xpos, double ypos)
 bool EditorGameInstance::OnMouseButton(int button, int action, int mods)
 {
     modelViewController_.OnMouseButton(button, action, mods);
-    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
-    {
-        auto mousePos = GetEngine().GetMousePos();
-        glm::vec3 org;
-        glm::vec3 dir;
-        GetEngine().GetScreenToWorldRay(mousePos, org, dir);
-        GetEngine().RayCastGPU(org, dir, [this](Assets::RayCastResult result)
-        {
-            if (result.Hitted)
-            {
-                GetEngine().GetScene().GetRenderCamera().FocalDistance = result.T;
-                GetEngine().DrawAuxPoint(result.HitPoint, glm::vec4(0.2, 1, 0.2, 1), 2, 30);
-                // selection
-                GetEngine().GetScene().SetSelectedId(result.InstanceId);
-            }
-            else
-            {
-                GetEngine().GetScene().SetSelectedId(-1);
-            }
-
-            return true;
-        });
-        return true;
-    }
+    // if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
+    // {
+    //     auto mousePos = GetEngine().GetMousePos();
+    //     glm::vec3 org;
+    //     glm::vec3 dir;
+    //     GetEngine().GetScreenToWorldRay(mousePos, org, dir);
+    //     GetEngine().RayCastGPU(org, dir, [this](Assets::RayCastResult result)
+    //     {
+    //         if (result.Hitted)
+    //         {
+    //             GetEngine().GetScene().GetRenderCamera().FocalDistance = result.T;
+    //             GetEngine().DrawAuxPoint(result.HitPoint, glm::vec4(0.2, 1, 0.2, 1), 2, 30);
+    //             // selection
+    //             GetEngine().GetScene().SetSelectedId(result.InstanceId);
+    //         }
+    //         else
+    //         {
+    //             GetEngine().GetScene().SetSelectedId(-1);
+    //         }
+    //
+    //         return true;
+    //     });
+    //     return true;
+    // }
     return true;
 }
 

@@ -38,6 +38,13 @@
 
 #include "Common/CoreMinimal.hpp"
 
+// spdlog logging
+#include <spdlog/spdlog.h>
+
+#if ANDROID
+#include <spdlog/sinks/android_sink.h>
+#endif
+
 ENGINE_API Options* GOption = nullptr;
 
 namespace NextRenderer
@@ -302,7 +309,19 @@ bool NextEngine::Tick()
     // Renderer Tick
 #if !ANDROID
     //glfwPollEvents();
-    SDL_PollEvent(nullptr);
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {  // poll until all events are handled!
+     // decide what to do with this event.
+        userInterface_->HandleEvent(&event);
+
+        switch ( event.type )
+        {
+            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+                return true;
+            default:
+                break;
+        }
+    }
     window_->PollGamepadInput();
 #endif
     // tick
@@ -374,7 +393,6 @@ bool NextEngine::Tick()
     return false;
 #else
     window_->attemptDragWindow();
-    //return glfwWindowShouldClose( window_->Handle() ) != 0;
     return false;
 #endif
 }

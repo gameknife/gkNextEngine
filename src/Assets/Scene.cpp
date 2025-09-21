@@ -18,6 +18,8 @@
 #include "Vulkan/DescriptorSets.hpp"
 #include "Vulkan/SwapChain.hpp"
 
+#include <spdlog/spdlog.h>
+
 namespace Assets
 {
     Scene::Scene(Vulkan::CommandPool& commandPool,

@@ -35,6 +35,7 @@
 #include "PathTracing/PathTracingRenderer.hpp"
 #include "Runtime/Engine.hpp"
 #include "Rendering/PipelineCommon/CommonComputePipeline.hpp"
+#include <spdlog/spdlog.h>
 
 #if WITH_STREAMLINE
 #include "ThirdParty/streamline/include/sl.h"

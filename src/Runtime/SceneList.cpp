@@ -16,6 +16,7 @@
 #include "Assets/FSceneLoader.h"
 #include "Assets/Node.h"
 
+#include <spdlog/spdlog.h>
 
 namespace Vulkan
 {

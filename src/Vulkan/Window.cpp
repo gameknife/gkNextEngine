@@ -6,6 +6,8 @@
 #include "Options.hpp"
 #include "Utilities/FileHelper.hpp"
 
+#include <spdlog/spdlog.h>
+
 #if ANDROID
 #include <time.h>
 
@@ -94,11 +96,12 @@ namespace
 Window::Window(const WindowConfig& config) :
 	config_(config)
 {
-	window_ = SDL_CreateWindow(config.Title.c_str(), config.Width, config.Height, SDL_WINDOW_VULKAN);
+	window_ = SDL_CreateWindow(config.Title.c_str(), config.Width, config.Height, SDL_WINDOW_BORDERLESS | SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN);
 	if( !window_ )
 	{
 		Throw(std::runtime_error("failed to init SDL Window."));
 	}
+	
 #if !ANDROID
 	// if ( !glfwJoystickIsGamepad(0) ) {
 	// 	std::ifstream file(Utilities::FileHelper::GetNormalizedFilePath("assets/locale/gamecontrollerdb.txt"));
@@ -276,25 +279,31 @@ double Window::GetTime() const
 	return now_ms() / 1000.0;
 #endif
 }
-
+	
 void Window::Close()
 {
 #if !ANDROID
-	//glfwSetWindowShouldClose(window_, 1);
+    SDL_Event e{};
+    e.type = SDL_EventType::SDL_EVENT_WINDOW_CLOSE_REQUESTED;
+	e.window.windowID = SDL_GetWindowID(window_);
+    SDL_PushEvent(&e);
 #endif
 }
-
+	
 bool Window::IsMinimized() const
 {
-	const auto size = FramebufferSize();
-	return size.height == 0 && size.width == 0;
+#if !ANDROID
+	return SDL_GetWindowFlags(window_) & SDL_WINDOW_MINIMIZED;
+#else
+	return false;
+#endif
 }
 
 bool Window::IsMaximumed() const
 {
 #if !ANDROID
 	//return glfwGetWindowAttrib(window_, GLFW_MAXIMIZED);
-	return false;
+	return SDL_GetWindowFlags(window_) & SDL_WINDOW_MAXIMIZED;
 #endif
 	return false;
 }
@@ -303,7 +312,11 @@ void Window::WaitForEvents() const
 {
 #if !ANDROID
 	//glfwWaitEvents();
-	SDL_WaitEvent(nullptr);
+	SDL_Event event;
+	while (SDL_WaitEvent(&event))
+	{
+		
+	}
 #endif
 }
 
@@ -318,12 +331,14 @@ void Window::Minimize() {
 #if !ANDROID
 	//glfwSetWindowSize(window_, 0,0);
 	//glfwIconifyWindow(window_);
+	SDL_MinimizeWindow(window_);
 #endif
 }
 
 void Window::Maximum() {
 #if !ANDROID
 	//glfwMaximizeWindow(window_);
+	SDL_MaximizeWindow(window_);
 #endif
 }
 
@@ -331,6 +346,7 @@ void Window::Restore()
 {
 #if !ANDROID
 	//glfwRestoreWindow(window_);
+	SDL_RestoreWindow(window_);
 #endif
 }
 
@@ -338,30 +354,39 @@ constexpr double CLOSE_AREA_WIDTH = 0;
 constexpr double TITLE_AREA_HEIGHT = 55;	
 void Window::attemptDragWindow() {
 #if !ANDROID
-	// if (glfwGetMouseButton(window_, 0) == GLFW_PRESS && dragState == 0) {
-	// 	glfwGetCursorPos(window_, &s_xpos, &s_ypos);
-	// 	glfwGetWindowSize(window_, &w_xsiz, &w_ysiz);
-	// 	dragState = 1;
-	// }
-	// if (glfwGetMouseButton(window_, 0) == GLFW_PRESS && dragState == 1) {
-	// 	double c_xpos, c_ypos;
-	// 	int w_xpos, w_ypos;
-	// 	glfwGetCursorPos(window_, &c_xpos, &c_ypos);
-	// 	glfwGetWindowPos(window_, &w_xpos, &w_ypos);
-	// 	if (
-	// 		s_xpos >= 0 && s_xpos <= (static_cast<double>(w_xsiz) - CLOSE_AREA_WIDTH) &&
-	// 		s_ypos >= 0 && s_ypos <= TITLE_AREA_HEIGHT) {
-	// 		glfwSetWindowPos(window_, w_xpos + static_cast<int>(c_xpos - s_xpos), w_ypos + static_cast<int>(c_ypos - s_ypos));
-	// 		}
-	// 	if (
-	// 		s_xpos >= (static_cast<double>(w_xsiz) - 15) && s_xpos <= (static_cast<double>(w_xsiz)) &&
-	// 		s_ypos >= (static_cast<double>(w_ysiz) - 15) && s_ypos <= (static_cast<double>(w_ysiz))) {
-	// 		glfwSetWindowSize(window_, w_xsiz + static_cast<int>(c_xpos - s_xpos), w_ysiz + static_cast<int>(c_ypos - s_ypos));
-	// 		}
-	// }
-	// if (glfwGetMouseButton(window_, 0) == GLFW_RELEASE && dragState == 1) {
-	// 	dragState = 0;
-	// }
+	float x {};
+	float y {};
+	SDL_MouseButtonFlags flag = SDL_GetMouseState(&x, &y);
+	
+	if (flag == SDL_BUTTON_LEFT && dragState == 0) {
+		SDL_GetWindowSize(window_, &w_xsiz, &w_ysiz);
+
+		s_xpos = x;
+		s_ypos = y;
+		dragState = 1;
+	}
+	if (flag == SDL_BUTTON_LEFT && dragState == 1) {
+		double c_xpos, c_ypos;
+		int w_xpos, w_ypos;
+		SDL_GetWindowPosition(window_, &w_xpos, &w_ypos);
+
+		c_xpos = x;
+		c_ypos = y;
+		
+		if (
+			s_xpos >= 0 && s_xpos <= (static_cast<double>(w_xsiz) - CLOSE_AREA_WIDTH) &&
+			s_ypos >= 0 && s_ypos <= TITLE_AREA_HEIGHT) {
+			SDL_SetWindowPosition(window_, w_xpos + static_cast<int>(c_xpos - s_xpos), w_ypos + static_cast<int>(c_ypos - s_ypos));
+			}
+		if (
+			s_xpos >= (static_cast<double>(w_xsiz) - 15) && s_xpos <= (static_cast<double>(w_xsiz)) &&
+			s_ypos >= (static_cast<double>(w_ysiz) - 15) && s_ypos <= (static_cast<double>(w_ysiz))) {
+			SDL_SetWindowSize(window_, w_xsiz + static_cast<int>(c_xpos - s_xpos), w_ysiz + static_cast<int>(c_ypos - s_ypos));
+			}
+	}
+	if (flag != SDL_BUTTON_LEFT && dragState == 1) {
+		dragState = 0;
+	}
 #endif
 }
 
@@ -422,7 +447,7 @@ void Window::InitGLFW()
 	}
 	if( !SDL_Vulkan_LoadLibrary(nullptr) )
 	{
-		Throw(std::runtime_error("failed to init SDL Vulkan."));
+		//Throw(std::runtime_error("failed to init SDL Vulkan."));
 	}
 #endif
 }

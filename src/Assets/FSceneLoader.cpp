@@ -2,6 +2,7 @@
 #include "Common/CoreMinimal.hpp"
 
 #include "ThirdParty/mikktspace/mikktspace.h"
+#include <spdlog/spdlog.h>
 
 #define _USE_MATH_DEFINES
 #include <math.h>

@@ -44,22 +44,23 @@ glm::mat4 ModelViewController::ModelView() const
 bool ModelViewController::OnKey(const int key, const int scancode, const int action, const int mods)
 {
 #if !ANDROID
-    switch (key)
-    {
-    // case GLFW_KEY_S: cameraMovingBackward_ = action != GLFW_RELEASE;
-    //     return true;
-    // case GLFW_KEY_W: cameraMovingForward_ = action != GLFW_RELEASE;
-    //     return true;
-    // case GLFW_KEY_A: cameraMovingLeft_ = action != GLFW_RELEASE;
-    //     return true;
-    // case GLFW_KEY_D: cameraMovingRight_ = action != GLFW_RELEASE;
-    //     return true;
-    // case GLFW_KEY_Q: cameraMovingDown_ = action != GLFW_RELEASE;
-    //     return true;
-    // case GLFW_KEY_E: cameraMovingUp_ = action != GLFW_RELEASE;
-    //     return true;
-    default: return false;
-    }
+    // switch (key)
+    // {
+    // // case GLFW_KEY_S: cameraMovingBackward_ = action != GLFW_RELEASE;
+    // //     return true;
+    // // case GLFW_KEY_W: cameraMovingForward_ = action != GLFW_RELEASE;
+    // //     return true;
+    // // case GLFW_KEY_A: cameraMovingLeft_ = action != GLFW_RELEASE;
+    // //     return true;
+    // // case GLFW_KEY_D: cameraMovingRight_ = action != GLFW_RELEASE;
+    // //     return true;
+    // // case GLFW_KEY_Q: cameraMovingDown_ = action != GLFW_RELEASE;
+    // //     return true;
+    // // case GLFW_KEY_E: cameraMovingUp_ = action != GLFW_RELEASE;
+    // //     return true;
+    // default: return false;
+    // }
+    return false;
 #else
     return false;
 #endif

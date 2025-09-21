@@ -362,6 +362,11 @@ void UserInterface::PostRender(VkCommandBuffer commandBuffer, const Vulkan::Swap
 	}
 }
 
+void UserInterface::HandleEvent(const SDL_Event* event)
+{
+	ImGui_ImplSDL3_ProcessEvent(event);
+}
+
 bool UserInterface::WantsToCaptureKeyboard() const
 {
 	return ImGui::GetIO().WantCaptureKeyboard;

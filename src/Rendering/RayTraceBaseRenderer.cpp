@@ -10,6 +10,7 @@
 #include "Vulkan/SingleTimeCommands.hpp"
 #include <chrono>
 #include <numeric>
+#include <spdlog/spdlog.h>
 
 #include "Runtime/Engine.hpp"
 

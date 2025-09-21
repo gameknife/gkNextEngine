@@ -274,12 +274,12 @@ public:
             lowThreads_.push_back(std::make_unique<TaskThread>());
         }
 
-        SPDLOG_INFO("low parallel thread count: {}", lowThreadCount);
+        //SPDLOG_INFO("low parallel thread count: {}", lowThreadCount);
     }
 
     ~TaskCoordinator()
     {
-        SPDLOG_INFO("TaskCoordinator request shutting down, wait for TaskThread. remain: {}", threads_.size());
+        //SPDLOG_INFO("TaskCoordinator request shutting down, wait for TaskThread. remain: {}", threads_.size());
         for (auto& thread : threads_)
         {
             thread.reset();

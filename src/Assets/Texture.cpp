@@ -17,6 +17,8 @@
 #include "Vulkan/DescriptorSets.hpp"
 #include "ThirdParty/lzav/lzav.h"
 
+#include <spdlog/spdlog.h>
+
 #define M_NEXT_PI 3.14159265358979323846f
 
 namespace Assets
@@ -27,7 +29,7 @@ namespace Assets
         TextureImage* transferPtr;
         float elapsed;
         bool needFlushHDRSH;
-        std::array<char, 256> outputInfo;
+        std::array<char, 1024> outputInfo;
     };
     
     void PrefilterEnvironmentMapLevel(const float* sourcePixels, int sourceWidth, int sourceHeight,
@@ -683,7 +685,7 @@ namespace Assets
                 TextureTaskContext taskContext{};
                 task.GetContext(taskContext);
                 textureImages_[taskContext.textureId]->MainThreadPostLoading(mainThreadCommandPool_);
-                SPDLOG_INFO("{}", taskContext.outputInfo.data());
+                //SPDLOG_INFO("{}", taskContext.outputInfo.data());
                 delete[] copyedData;
 
                 if (taskContext.needFlushHDRSH)

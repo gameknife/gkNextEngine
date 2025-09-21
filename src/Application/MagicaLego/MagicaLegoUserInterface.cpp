@@ -416,7 +416,7 @@ void MagicaLegoUserInterface::OnRenderUI()
             openingTimer_ = openingTimer_ - GetGameInstance()->GetEngine().GetDeltaSeconds();
             auto screenSize = ImGui::GetMainViewport()->Size;
             auto lerpedPos = glm::mix(glm::vec2(screenSize.x * 0.5, screenSize.y * 0.5), glm::vec2(screenSize.x * 0.6, screenSize.y * 0.75), openingTimer_);
-            glfwSetCursorPos(GetGameInstance()->GetEngine().GetRenderer().Window().Handle(), lerpedPos.x, lerpedPos.y);
+           // glfwSetCursorPos(GetGameInstance()->GetEngine().GetRenderer().Window().Handle(), lerpedPos.x, lerpedPos.y);
         }
         break;
     case EIS_Finish:

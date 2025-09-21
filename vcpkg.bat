@@ -37,37 +37,37 @@ IF EXIST %VCPKG_DIR% (
 
     echo "Updating vcpkg..."
     git pull origin master || goto :error
-    call bootstrap-vcpkg.bat || goto :error
 
     echo "Updating installed packages..."
-    .\vcpkg.exe update
-    .\vcpkg.exe upgrade --no-dry-run
+    rem .\vcpkg.exe update
+    rem .\vcpkg.exe upgrade --no-dry-run
+
+    echo "installing..."
+    vcpkg.exe install --recurse ^
+        cpptrace:x64-windows-static ^
+        cxxopts:x64-windows-static ^
+        sdl3[vulkan]:x64-windows-static ^
+        glm:x64-windows-static ^
+        imgui[core,freetype,sdl3-binding,vulkan-binding,docking-experimental]:x64-windows-static ^
+        stb:x64-windows-static ^
+        tinyobjloader:x64-windows-static ^
+        curl:x64-windows-static ^
+        tinygltf:x64-windows-static ^
+        draco:x64-windows-static ^
+        rapidjson:x64-windows-static ^
+        fmt:x64-windows-static ^
+        meshoptimizer:x64-windows-static ^
+        ktx:x64-windows-static ^
+        joltphysics:x64-windows-static ^
+        xxhash:x64-windows-static ^
+        spdlog:x64-windows-static ^
+        cpp-base64:x64-windows-static || goto :error
 
 ) ELSE (
     git clone https://github.com/Microsoft/vcpkg.git %VCPKG_DIR% || goto :error
     cd %VCPKG_DIR% || goto :error
     call bootstrap-vcpkg.bat || goto :error
 )
-
-.\vcpkg.exe install --recurse ^
-    cpptrace:x64-windows-static ^
-    cxxopts:x64-windows-static ^
-    glfw3:x64-windows-static ^
-    glm:x64-windows-static ^
-    imgui[core,freetype,glfw-binding,vulkan-binding,docking-experimental]:x64-windows-static ^
-    stb:x64-windows-static ^
-    tinyobjloader:x64-windows-static ^
-    curl:x64-windows-static ^
-    tinygltf:x64-windows-static ^
-    draco:x64-windows-static ^
-    rapidjson:x64-windows-static ^
-    fmt:x64-windows-static ^
-    meshoptimizer:x64-windows-static ^
-    ktx:x64-windows-static ^
-    joltphysics:x64-windows-static ^
-    xxhash:x64-windows-static ^
-    spdlog:x64-windows-static ^
-    cpp-base64:x64-windows-static || goto :error
 
 if "%1" == "avif" (
     vcpkg.exe install --recurse libavif[aom]:x64-windows-static || goto :error

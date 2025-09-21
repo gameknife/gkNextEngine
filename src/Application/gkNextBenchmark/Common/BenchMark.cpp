@@ -17,6 +17,8 @@
 #include "Vulkan/Device.hpp"
 #include "Runtime/ScreenShot.hpp"
 
+//#include <spdlog/spdlog.h>
+
 #if WITH_AVIF
 #include "avif/avif.h"
 #endif
@@ -61,7 +63,7 @@ bool BenchMarker::OnTick( double nowInSeconds, Vulkan::VulkanBaseRenderer* rende
         if (periodTotalFrames_ != 0 && static_cast<uint64_t>(prevTotalTime / period) != static_cast<uint64_t>(totalTime
             / period))
         {
-            SPDLOG_INFO("\t[Benchmarking] fps: {:.0f}", float(periodTotalFrames_) / float(totalTime));
+            //SPDLOG_INFO("\t[Benchmarking] fps: {:.0f}", float(periodTotalFrames_) / float(totalTime));
             periodInitialTime_ = time_;
             periodTotalFrames_ = 0;
         }
@@ -86,7 +88,7 @@ void BenchMarker::OnReport(Vulkan::VulkanBaseRenderer* renderer, const std::stri
     const double totalTime = time_ - sceneInitialTime_;
     
     double fps = benchmarkTotalFrames_ / totalTime;
-    SPDLOG_INFO("totalTime {:%H:%M:%S} fps {:.3f}", std::chrono::seconds(static_cast<long long>(totalTime)), fps);
+    //SPDLOG_INFO("totalTime {:%H:%M:%S} fps {:.3f}", std::chrono::seconds(static_cast<long long>(totalTime)), fps);
     Report(renderer, static_cast<int>(floor(fps)), std::filesystem::path(SceneName).filename().replace_extension().string(), false, GOption->SaveFile);
 }
 
@@ -124,7 +126,7 @@ void BenchMarker::Report(Vulkan::VulkanBaseRenderer* renderer_, int fps, const s
         };
         std::string json_str = my_json.dump();
 
-        SPDLOG_INFO("Sending benchmark to perf server...");
+        //SPDLOG_INFO("Sending benchmark to perf server...");
         // upload from curl
         CURL* curl;
         CURLcode res;
@@ -145,8 +147,8 @@ void BenchMarker::Report(Vulkan::VulkanBaseRenderer* renderer_, int fps, const s
             /* Perform the request, res gets the return code */
             res = curl_easy_perform(curl);
             /* Check for errors */
-            if (res != CURLE_OK)
-                SPDLOG_ERROR("curl_easy_perform() failed: {}", curl_easy_strerror(res));
+            //if (res != CURLE_OK)
+                //SPDLOG_ERROR("curl_easy_perform() failed: {}", curl_easy_strerror(res));
 
             /* always cleanup */
             curl_easy_cleanup(curl);

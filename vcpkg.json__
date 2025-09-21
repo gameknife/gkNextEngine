@@ -1,0 +1,47 @@
+{
+  "name": "gknextrenderer",
+  "version-string": "1.0.0",
+  "description": "Next generation renderer with Vulkan support",
+  "homepage": "https://github.com/yourusername/gkNextRenderer",
+  "license": null,
+  "dependencies": [
+    "cpptrace",
+    "cxxopts",
+    "glfw3",
+    "glm",
+    {
+      "name": "imgui",
+      "features": [
+        "freetype",
+        "glfw-binding",
+        "vulkan-binding",
+        "docking-experimental"
+      ]
+    },
+    "stb",
+    "tinyobjloader",
+    "curl",
+    "tinygltf",
+    "draco",
+    "rapidjson",
+    "fmt",
+    "meshoptimizer",
+    "ktx",
+    "joltphysics",
+    "xxhash",
+    "spdlog",
+    "cpp-base64"
+  ],
+  "features": {
+    "avif": {
+      "description": "AVIF image format support",
+      "dependencies": [
+        {
+          "name": "libavif",
+          "features": ["aom"]
+        }
+      ]
+    }
+  },
+  "overrides": []
+}

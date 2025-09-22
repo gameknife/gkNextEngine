@@ -303,36 +303,36 @@ void MagicaLegoGameInstance::OnSceneUnloaded()
     CleanUp();
 }
 
-bool MagicaLegoGameInstance::OnKey(int key, int scancode, int action, int mods)
+bool MagicaLegoGameInstance::OnKey(SDL_Event& event)
 {
-    if (action == GLFW_PRESS)
+    if (event.key.type == SDL_EVENT_KEY_DOWN)
     {
-        switch (key)
+        switch (event.key.key)
         {
-        case GLFW_KEY_Q: SetBuildMode(ELegoMode::ELM_Dig);
+        case SDLK_Q: SetBuildMode(ELegoMode::ELM_Dig);
             break;
-        case GLFW_KEY_W: SetBuildMode(ELegoMode::ELM_Place);
+        case SDLK_W: SetBuildMode(ELegoMode::ELM_Place);
             break;
-        case GLFW_KEY_E: SetBuildMode(ELegoMode::ELM_Select);
+        case SDLK_E: SetBuildMode(ELegoMode::ELM_Select);
             break;
-        case GLFW_KEY_A: SetCameraMode(ECamMode::ECM_Pan);
+        case SDLK_A: SetCameraMode(ECamMode::ECM_Pan);
             break;
-        case GLFW_KEY_S: SetCameraMode(ECamMode::ECM_Orbit);
+        case SDLK_S: SetCameraMode(ECamMode::ECM_Orbit);
             break;
-        case GLFW_KEY_D: SetCameraMode(ECamMode::ECM_AutoFocus);
+        case SDLK_D: SetCameraMode(ECamMode::ECM_AutoFocus);
             break;
-        case GLFW_KEY_R: ChangeOrientation();
+        case SDLK_R: ChangeOrientation();
             break;
-        case GLFW_KEY_1: SwitchBasePlane(EBasePlane::EBP_Big);
+        case SDLK_1: SwitchBasePlane(EBasePlane::EBP_Big);
             break;
-        case GLFW_KEY_2: SwitchBasePlane(EBasePlane::EBP_Mid);
+        case SDLK_2: SwitchBasePlane(EBasePlane::EBP_Mid);
             break;
-        case GLFW_KEY_3: SwitchBasePlane(EBasePlane::EBP_Small);
+        case SDLK_3: SwitchBasePlane(EBasePlane::EBP_Small);
             break;
         default: break;
         }
     }
-    else if (action == GLFW_RELEASE)
+    else if (event.key.type == SDL_EVENT_KEY_UP)
     {
     }
     return true;
@@ -365,15 +365,15 @@ bool MagicaLegoGameInstance::OnCursorPosition(double xpos, double ypos)
     return true;
 }
 
-bool MagicaLegoGameInstance::OnMouseButton(int button, int action, int mods)
+bool MagicaLegoGameInstance::OnMouseButton(SDL_Event& event)
 {
-    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
+    if (event.button.button == SDL_BUTTON_LEFT && event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
     {
         bMouseLeftDown_ = true;
         lastDownFrameNum_ = GetEngine().GetRenderer().FrameCount();
         return true;
     }
-    else if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE)
+    else if (event.button.button == SDL_BUTTON_LEFT && event.type == SDL_EVENT_MOUSE_BUTTON_UP)
     {
         bMouseLeftDown_ = false;
         oneLinePlacedInstance_.clear();
@@ -381,11 +381,11 @@ bool MagicaLegoGameInstance::OnMouseButton(int button, int action, int mods)
             cameraCenter_ = GetRenderLocationFromBlockLocation(lastPlacedLocation_);
         return true;
     }
-    else if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
+    else if (event.button.button == SDL_BUTTON_RIGHT && event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
     {
         cameraMultiplier_ = 0.1f;
     }
-    else if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE)
+    else if (event.button.button == SDL_BUTTON_RIGHT && event.type == SDL_EVENT_MOUSE_BUTTON_UP)
     {
         cameraMultiplier_ = 0.0f;
     }

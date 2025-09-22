@@ -364,7 +364,9 @@ void UserInterface::PostRender(VkCommandBuffer commandBuffer, const Vulkan::Swap
 
 void UserInterface::HandleEvent(const SDL_Event* event)
 {
+#if !ANDROID
 	ImGui_ImplSDL3_ProcessEvent(event);
+#endif
 }
 
 bool UserInterface::WantsToCaptureKeyboard() const

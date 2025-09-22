@@ -46,9 +46,9 @@ public:
 	virtual void OnSceneUnloaded() {}
 
 	// input
-	virtual bool OnKey(int key, int scancode, int action, int mods) {return false;}
+	virtual bool OnKey(SDL_Event& event) {return false;}
 	virtual bool OnCursorPosition(double xpos, double ypos) {return false;}
-	virtual bool OnMouseButton(int button, int action, int mods) {return false;}
+	virtual bool OnMouseButton(SDL_Event& event) {return false;}
 	virtual bool OnScroll(double xoffset, double yoffset) {return false;}
 	virtual bool OnGamepadInput(float leftStickX, float leftStickY,
 						float rightStickX, float rightStickY,
@@ -176,12 +176,12 @@ public:
 	// scene loading
 	void RequestLoadScene(std::string sceneFileName);
 
-	Vulkan::Window& GetWindow() {return *window_;}
+	Vulkan::Window& GetWindow() const {return *window_;}
 	
 	class UserInterface* GetUserInterface() {return userInterface_.get();}
 
 	// monitor info
-	glm::ivec2 GetMonitorSize(int monitorIndex = 0) const;
+	glm::ivec2 GetMonitorSize() const;
 
 	// gpu raycast
 	void RayCastGPU(glm::vec3 rayOrigin, glm::vec3 rayDir, std::function<bool (Assets::RayCastResult rayResult)> callback );
@@ -208,9 +208,9 @@ protected:
 
 	const Assets::Scene& GetScene() const { return *scene_; }
 	
-	void OnKey(int key, int scancode, int action, int mods);
+	void OnKey(SDL_Event& event);
 	void OnCursorPosition(double xpos, double ypos);
-	void OnMouseButton(int button, int action, int mods);
+	void OnMouseButton(SDL_Event& event);
 	void OnScroll(double xoffset, double yoffset);
 	void OnDropFile(int path_count, const char* paths[]);
 	

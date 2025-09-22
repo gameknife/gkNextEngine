@@ -4,17 +4,17 @@
 #define NOMINMAX
 #endif
 
-// #define GLFW_INCLUDE_NONE
-// #define GLFW_INCLUDE_VULKAN
 #if !ANDROID
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
+typedef SDL_Window Next_Window;
 #include <vulkan/vulkan.h>
 #else
+#include <SDL3/SDL.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_android.h>
 #include <android/native_window.h>
-typedef ANativeWindow GLFWwindow;
+typedef ANativeWindow Next_Window;
 #endif
 #undef APIENTRY
 

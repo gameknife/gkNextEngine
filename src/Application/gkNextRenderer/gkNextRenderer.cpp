@@ -10,28 +10,6 @@
 #include "Utilities/ImGui.hpp"
 #include "Runtime/Platform/PlatformCommon.h"
 
-#if ANDROID
-
-#define GLFW_MOUSE_BUTTON_1         0
-#define GLFW_MOUSE_BUTTON_2         1
-#define GLFW_MOUSE_BUTTON_3         2
-#define GLFW_MOUSE_BUTTON_4         3
-#define GLFW_MOUSE_BUTTON_5         4
-#define GLFW_MOUSE_BUTTON_6         5
-#define GLFW_MOUSE_BUTTON_7         6
-#define GLFW_MOUSE_BUTTON_8         7
-#define GLFW_MOUSE_BUTTON_LAST      GLFW_MOUSE_BUTTON_8
-#define GLFW_MOUSE_BUTTON_LEFT      GLFW_MOUSE_BUTTON_1
-#define GLFW_MOUSE_BUTTON_RIGHT     GLFW_MOUSE_BUTTON_2
-#define GLFW_MOUSE_BUTTON_MIDDLE    GLFW_MOUSE_BUTTON_3
-#define GLFW_KEY_SPACE              32
-
-#define GLFW_RELEASE                0
-#define GLFW_PRESS                  1
-#define GLFW_REPEAT                 2
-
-#endif
-
 constexpr float TITLEBAR_SIZE = 40;
 constexpr float TITLEBAR_CONTROL_SIZE = TITLEBAR_SIZE * 3;
 constexpr float ICON_SIZE = 64;
@@ -168,15 +146,25 @@ bool NextRendererGameInstance::OverrideRenderCamera(Assets::Camera& OutRenderCam
     return true;
 }
 
-bool NextRendererGameInstance::OnKey(int key, int scancode, int action, int mods)
+bool NextRendererGameInstance::OnKey(SDL_Event& event)
 {
-    modelViewController_.OnKey(key, scancode, action, mods);
+    modelViewController_.OnKey(event);
 
-	// if (key == GLFW_KEY_SPACE && action != GLFW_RELEASE)
-	// {
-	// 	CreateSphereAndPush();
-	// 	return true;
-	// }
+	if (event.key.type == SDL_EVENT_KEY_DOWN)
+	{
+		switch (event.key.key)
+		{
+		case SDLK_ESCAPE: GetEngine().GetScene().SetSelectedId(-1); return true;
+			break;
+		case SDLK_F1: GetEngine().GetUserSettings().ShowSettings = !GetEngine().GetUserSettings().ShowSettings; return true;
+			break;
+		case SDLK_F2: GetEngine().GetUserSettings().ShowOverlay = !GetEngine().GetUserSettings().ShowOverlay; return true;
+			break;
+		case SDLK_SPACE: CreateSphereAndPush(); return true;
+			break;
+		default: break;
+		}
+	}
     return false;
 }
 
@@ -186,28 +174,28 @@ bool NextRendererGameInstance::OnCursorPosition(double xpos, double ypos)
     return true;
 }
 
-bool NextRendererGameInstance::OnMouseButton(int button, int action, int mods)
+bool NextRendererGameInstance::OnMouseButton(SDL_Event& event)
 {
-    modelViewController_.OnMouseButton( button,  action,  mods);
+    modelViewController_.OnMouseButton(event);
 
 #if !ANDROID
-	// if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
-	// {
-	// 	auto mousePos = GetEngine().GetMousePos();
-	// 	glm::vec3 org;
-	// 	glm::vec3 dir;
-	// 	GetEngine().GetScreenToWorldRay(mousePos, org, dir);
-	// 	GetEngine().RayCastGPU( org, dir, [this](Assets::RayCastResult result)
-	// 	{
-	// 		if (result.Hitted)
-	// 		{
-	// 			GetEngine().GetScene().GetRenderCamera().FocalDistance = result.T;
-	// 			GetEngine().DrawAuxPoint( result.HitPoint, glm::vec4(0.2, 1, 0.2, 1), 2, 60 );
-	// 		}
-	// 		return true;
-	// 	});
-	// 	return true;
-	// }
+	if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT)
+	{
+		auto mousePos = GetEngine().GetMousePos();
+		glm::vec3 org;
+		glm::vec3 dir;
+		GetEngine().GetScreenToWorldRay(mousePos, org, dir);
+		GetEngine().RayCastGPU( org, dir, [this](Assets::RayCastResult result)
+		{
+			if (result.Hitted)
+			{
+				GetEngine().GetScene().GetRenderCamera().FocalDistance = result.T;
+				GetEngine().DrawAuxPoint( result.HitPoint, glm::vec4(0.2, 1, 0.2, 1), 2, 60 );
+			}
+			return true;
+		});
+		return true;
+	}
 #endif
 	
     return true;

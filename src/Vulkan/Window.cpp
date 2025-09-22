@@ -20,89 +20,18 @@ static double now_ms(void) {
 #endif
 
 namespace Vulkan {
-
-namespace
-{
-#if !ANDROID
-	void GlfwErrorCallback(const int error, const char* const description)
-	{
-		SPDLOG_ERROR("ERROR: GLFW: {} (code: {})", description, error);
-	}
-
-	void GlfwKeyCallback(SDL_Window* window, const int key, const int scancode, const int action, const int mods)
-	{
-		// auto* const this_ = static_cast<Window*>(glfwGetWindowUserPointer(window));
-		// if (this_->OnKey)
-		// {
-		// 	this_->OnKey(key, scancode, action, mods);
-		// }
-	}
-
-	void GlfwCursorPositionCallback(SDL_Window* window, const double xpos, const double ypos)
-	{
-		// auto* const this_ = static_cast<Window*>(glfwGetWindowUserPointer(window));
-		// if (this_->OnCursorPosition)
-		// {
-		// 	this_->OnCursorPosition(xpos, ypos);
-		// }
-	}
-
-	void GlfwMouseButtonCallback(SDL_Window* window, const int button, const int action, const int mods)
-	{
-		// auto* const this_ = static_cast<Window*>(glfwGetWindowUserPointer(window));
-		// if (this_->OnMouseButton)
-		// {
-		// 	this_->OnMouseButton(button, action, mods);
-		// }
-	}
-
-	void GlfwScrollCallback(SDL_Window* window, const double xoffset, const double yoffset)
-	{
-		// auto* const this_ = static_cast<Window*>(glfwGetWindowUserPointer(window));
-		// if (this_->OnScroll)
-		// {
-		// 	this_->OnScroll(xoffset, yoffset);
-		// }
-	}
-	void GlfwSetDropCallback(SDL_Window* window, int path_count, const char* paths[])
-	{
-		// auto* const this_ = static_cast<Window*>(glfwGetWindowUserPointer(window));
-		// if (this_->OnDropFile)
-		// {
-		// 	this_->OnDropFile(path_count, paths);
-		// }
-	}
-	void GlfwOnFocusCallback(SDL_Window* window, int focus)
-	{
-		// auto* const this_ = static_cast<Window*>(glfwGetWindowUserPointer(window));
-		// if (this_->OnFocus)
-		// {
-		// 	this_->OnFocus(window, focus);
-		// }
-	}
-	// 添加手柄输入回调函数
-	void GlfwJoystickCallback(int jid, int event)
-	{
-		// 当手柄连接或断开时触发
-		// auto* const this_ = static_cast<Window*>(glfwGetWindowUserPointer(glfwGetCurrentContext()));
-		// if (this_->OnJoystickConnection)
-		// {
-		// 	this_->OnJoystickConnection(jid, event);
-		// }
-	}
-#endif
-}
-
+	
 Window::Window(const WindowConfig& config) :
 	config_(config)
 {
+#if !ANDROID
 	window_ = SDL_CreateWindow(config.Title.c_str(), config.Width, config.Height, SDL_WINDOW_BORDERLESS | SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN);
 	if( !window_ )
 	{
 		Throw(std::runtime_error("failed to init SDL Window."));
 	}
 	
-#if !ANDROID
+
 	// if ( !glfwJoystickIsGamepad(0) ) {
 	// 	std::ifstream file(Utilities::FileHelper::GetNormalizedFilePath("assets/locale/gamecontrollerdb.txt"));
 	// 	if(file.is_open())
@@ -196,7 +125,7 @@ Window::Window(const WindowConfig& config) :
 	// glfwSetJoystickCallback(GlfwJoystickCallback);
 	
 #else
-	window_ = static_cast<GLFWwindow*>(config.AndroidNativeWindow);
+	window_ = static_cast<Next_Window*>(config.AndroidNativeWindow);
 #endif
 }
 
@@ -215,8 +144,7 @@ float Window::ContentScale() const
 {
 #if !ANDROID
 	float xscale = 1;
-	float yscale = 1;
-	//glfwGetWindowContentScale(window_, &xscale, &yscale);
+	xscale = SDL_GetWindowDisplayScale(window_);
 #else
 	float xscale = 1;
 #endif
@@ -258,13 +186,8 @@ const char* Window::GetKeyName(const int key, const int scancode) const
 std::vector<const char*> Window::GetRequiredInstanceExtensions() const
 {
 #if !ANDROID
-	//uint32_t glfwExtensionCount = 0;
-	//const char** glfwExtensions = SDL_Getexten(&glfwExtensionCount);
-	//return std::vector<const char*>(glfwExtensions, glfwExtensions + glfwExtensionCount);
-
 	uint32_t extensionCount = 0;
 	auto extensionNames = SDL_Vulkan_GetInstanceExtensions(&extensionCount);
-
 	return std::vector<const char*>(extensionNames, extensionNames + extensionCount);
 #else
 	return std::vector<const char*>();
@@ -323,21 +246,18 @@ void Window::WaitForEvents() const
 void Window::Show() const
 {
 #if !ANDROID
-	//glfwShowWindow(window_);
+	SDL_ShowWindow(window_);
 #endif
 }
 
 void Window::Minimize() {
 #if !ANDROID
-	//glfwSetWindowSize(window_, 0,0);
-	//glfwIconifyWindow(window_);
 	SDL_MinimizeWindow(window_);
 #endif
 }
 
 void Window::Maximum() {
 #if !ANDROID
-	//glfwMaximizeWindow(window_);
 	SDL_MaximizeWindow(window_);
 #endif
 }
@@ -345,7 +265,6 @@ void Window::Maximum() {
 void Window::Restore()
 {
 #if !ANDROID
-	//glfwRestoreWindow(window_);
 	SDL_RestoreWindow(window_);
 #endif
 }
@@ -431,23 +350,13 @@ void Window::PollGamepadInput()
 void Window::InitGLFW()
 {
 #if !ANDROID
-	// glfwSetErrorCallback(GlfwErrorCallback);
-	// if (!glfwInit())
-	// {
-	// 	Throw(std::runtime_error("glfwInit() failed"));
-	// }
-	//
-	// if (!glfwVulkanSupported())
-	// {
-	// 	Throw(std::runtime_error("glfwVulkanSupported() failed"));
-	// }
 	if( !SDL_Init(SDL_INIT_VIDEO) )
 	{
 		Throw(std::runtime_error("failed to init SDL."));
 	}
 	if( !SDL_Vulkan_LoadLibrary(nullptr) )
 	{
-		//Throw(std::runtime_error("failed to init SDL Vulkan."));
+		Throw(std::runtime_error("failed to init SDL Vulkan."));
 	}
 #endif
 }
@@ -455,8 +364,6 @@ void Window::InitGLFW()
 void Window::TerminateGLFW()
 {
 #if !ANDROID
-	// glfwTerminate();
-	// glfwSetErrorCallback(nullptr);
 	SDL_Vulkan_UnloadLibrary();
 	SDL_Quit();
 #endif

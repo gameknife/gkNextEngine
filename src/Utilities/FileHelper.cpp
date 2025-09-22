@@ -1,5 +1,5 @@
 #include "FileHelper.hpp"
-#include "Common/CoreMinimal.hpp"
+#include <spdlog/spdlog.h>
 
 namespace Utilities
 {

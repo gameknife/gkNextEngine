@@ -91,31 +91,32 @@ IF EXIST %VCPKG_DIR% (
     .\vcpkg.exe update
     .\vcpkg.exe upgrade --no-dry-run
 
+    
+    .\vcpkg.exe --recurse install ^
+        cxxopts:arm64-android ^
+        glm:arm64-android ^
+        hlslpp:arm64-android ^
+        sdl3[vulkan]:arm64-android ^
+        imgui[core,freetype,sdl3-binding,android-binding,vulkan-binding,docking-experimental]:arm64-android ^
+        stb:arm64-android ^
+        tinyobjloader:arm64-android ^
+        tinygltf:arm64-android ^
+        curl:arm64-android ^
+        draco:arm64-android ^
+        fmt:arm64-android ^
+        meshoptimizer:arm64-android ^
+        ktx:arm64-android ^
+        joltphysics:arm64-android ^
+        xxhash:arm64-android ^
+        spdlog:arm64-android ^
+        cpp-base64:arm64-android || goto :error
+
 ) ELSE (
     git clone https://github.com/Microsoft/vcpkg.git %VCPKG_DIR% || goto :error
     cd %VCPKG_DIR% || goto :error
     call bootstrap-vcpkg.bat || goto :error
+    copy /Y "%PROJROOT%\android\custom-triplets\arm64-android.cmake" "%CD%\triplets\arm64-android.cmake" || goto :error
 )
-
-copy /Y "%PROJROOT%\android\custom-triplets\arm64-android.cmake" "%CD%\triplets\arm64-android.cmake" || goto :error
-
-.\vcpkg.exe --recurse install ^
-    cxxopts:arm64-android ^
-    glm:arm64-android ^
-    hlslpp:arm64-android ^
-    imgui[core,freetype,android-binding,vulkan-binding,docking-experimental]:arm64-android ^
-    stb:arm64-android ^
-    tinyobjloader:arm64-android ^
-    tinygltf:arm64-android ^
-    curl:arm64-android ^
-    draco:arm64-android ^
-    fmt:arm64-android ^
-    meshoptimizer:arm64-android ^
-    ktx:arm64-android ^
-    joltphysics:arm64-android ^
-    xxhash:arm64-android ^
-    spdlog:arm64-android ^
-    cpp-base64:arm64-android || goto :error
 
 cd ..
 exit /b

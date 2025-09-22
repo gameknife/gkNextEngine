@@ -216,9 +216,9 @@ NextEngine::NextEngine(Options& options, void* userdata)
     renderer_->DelegatePostRender = [this](VkCommandBuffer commandBuffer, uint32_t imageIndex)->void{OnRendererPostRender(commandBuffer, imageIndex);};
 
     // Initialize IO
-    window_->OnKey = [this](const int key, const int scancode, const int action, const int mods) { OnKey(key, scancode, action, mods); };
+    //window_->OnKey = [this](const int key, const int scancode, const int action, const int mods) { OnKey(key, scancode, action, mods); };
     window_->OnCursorPosition = [this](const double xpos, const double ypos) { OnCursorPosition(xpos, ypos); };
-    window_->OnMouseButton = [this](const int button, const int action, const int mods) { OnMouseButton(button, action, mods); };
+    //window_->OnMouseButton = [this](const int button, const int action, const int mods) { OnMouseButton(button, action, mods); };
     window_->OnScroll = [this](const double xoffset, const double yoffset) { OnScroll(xoffset, yoffset); };
     window_->OnDropFile = [this](int path_count, const char* paths[]) { OnDropFile(path_count, paths); };
     window_->OnGamepadInput = [this](float leftStickX, float leftStickY,float rightStickX, float rightStickY,float leftTrigger, float rightTrigger) {
@@ -318,6 +318,17 @@ bool NextEngine::Tick()
         {
             case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
                 return true;
+            case SDL_EVENT_KEY_DOWN:
+            case SDL_EVENT_KEY_UP:
+                OnKey(event);
+                break;
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            case SDL_EVENT_MOUSE_BUTTON_UP:
+                OnMouseButton(event);
+                break;
+        case SDL_EVENT_MOUSE_MOTION:
+                OnCursorPosition(event.motion.x, event.motion.y);
+                break;
             default:
                 break;
         }
@@ -572,6 +583,8 @@ glm::dvec2 NextEngine::GetMousePos()
     double x{},y{};
 #if !ANDROID
     //glfwGetCursorPos( window_->Handle(), &x, &y );
+    float fx{}, fy{};
+    SDL_GetMouseState(&fx,&fy);
 #endif
     return glm::dvec2(x,y);
 }
@@ -666,12 +679,16 @@ glm::mat4 HaltonJitterProjectionMatrix(const glm::mat4& projectionMatrix, float 
     return jitterMatrix * projectionMatrix;
 }
 
-glm::ivec2 NextEngine::GetMonitorSize(int monitorIndex) const
+glm::ivec2 NextEngine::GetMonitorSize() const
 {
     glm::ivec2 pos{0,0};
     glm::ivec2 size{1920,1080};
 #if !ANDROID
-    //glfwGetMonitorWorkarea(glfwGetPrimaryMonitor(), &pos.x, &pos.y, &size.x, &size.y);
+    SDL_Rect rect;
+    SDL_DisplayID id = SDL_GetPrimaryDisplay();
+    SDL_GetDisplayBounds(id, &rect);
+    size.x = rect.w;
+    size.y = rect.h;
 #endif
     return size;
 }
@@ -946,39 +963,17 @@ void NextEngine::OnRendererPostRender(VkCommandBuffer commandBuffer, uint32_t im
     userInterface_->PostRender(commandBuffer, renderer_->SwapChain(), imageIndex);
 }
 
-void NextEngine::OnKey(int key, int scancode, int action, int mods)
+void NextEngine::OnKey(SDL_Event& event)
 {
     if (userInterface_->WantsToCaptureKeyboard())
     {
         return;
     }
 
-    if( gameInstance_->OnKey(key, scancode, action, mods) )
+    if( gameInstance_->OnKey(event) )
     {
         return;
     }
-    
-#if !ANDROID
-    // if (action == GLFW_PRESS)
-    // {
-    //     switch (key)
-    //     {
-    //     case GLFW_KEY_ESCAPE: scene_->SetSelectedId(-1);
-    //         break;
-    //     default: break;
-    //     }
-    //
-    //     // Settings (toggle switches)
-    //     switch (key)
-    //     {
-    //     case GLFW_KEY_F1: userSettings_.ShowSettings = !userSettings_.ShowSettings;
-    //         break;
-    //     case GLFW_KEY_F2: userSettings_.ShowOverlay = !userSettings_.ShowOverlay;
-    //         break;
-    //     default: break;
-    //     }
-    // }
-#endif
 }
 
 void NextEngine::OnTouch(bool down, double xpos, double ypos)
@@ -1007,7 +1002,7 @@ void NextEngine::OnCursorPosition(const double xpos, const double ypos)
     }
 }
 
-void NextEngine::OnMouseButton(const int button, const int action, const int mods)
+void NextEngine::OnMouseButton(SDL_Event& event)
 {
     if (!renderer_->HasSwapChain() ||
         userInterface_->WantsToCaptureMouse())
@@ -1015,7 +1010,7 @@ void NextEngine::OnMouseButton(const int button, const int action, const int mod
         return;
     }
 
-    if(gameInstance_->OnMouseButton(button, action, mods))
+    if(gameInstance_->OnMouseButton(event))
     {
         return;
     }

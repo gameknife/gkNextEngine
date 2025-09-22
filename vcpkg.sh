@@ -81,7 +81,8 @@ install_linux() {
     ./vcpkg --recurse install \
         cpptrace:x64-linux \
         cxxopts:x64-linux \
-        glfw3:x64-linux \
+        vulkan-loader[wayland,xcb,xlib]:x64-linux \
+        sdl3:x64-linux \
         glm:x64-linux \
         imgui[core,freetype,sdl3-binding,vulkan-binding,docking-experimental]:x64-linux \
         stb:x64-linux \
@@ -121,7 +122,8 @@ install_android() {
     ./vcpkg --recurse install \
         cxxopts:arm64-android \
         glm:arm64-android \
-        imgui[core,freetype,android-binding,vulkan-binding,docking-experimental]:arm64-android \
+        sdl3[vulkan]:arm64-android \
+        imgui[core,freetype,sdl3-binding,android-binding,vulkan-binding,docking-experimental]:arm64-android \
         stb:arm64-android \
         tinyobjloader:arm64-android \
         curl:arm64-android \
@@ -156,9 +158,9 @@ install_mingw() {
     ./vcpkg --recurse install \
         cpptrace:x64-mingw-static \
         cxxopts:x64-mingw-static \
-        glfw3:x64-mingw-static \
+        sdl3:x64-mingw-static \
         glm:x64-mingw-static \
-        imgui[core,freetype,glfw-binding,vulkan-binding,docking-experimental]:x64-mingw-static \
+        imgui[core,freetype,sdl3-binding,vulkan-binding,docking-experimental]:x64-mingw-static \
         stb:x64-mingw-static \
         tinyobjloader:x64-mingw-static \
         curl:x64-mingw-static \

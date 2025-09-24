@@ -120,6 +120,7 @@ public:
 	Vulkan::VulkanBaseRenderer& GetRenderer() { return *renderer_; }
 
 	void Start();
+	bool HandleEvent(SDL_Event& event);
 	bool Tick();
 	void End();
 	

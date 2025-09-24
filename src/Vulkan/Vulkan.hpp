@@ -4,17 +4,13 @@
 #define NOMINMAX
 #endif
 
-#if !ANDROID
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 typedef SDL_Window Next_Window;
 #include <vulkan/vulkan.h>
-#else
-#include <SDL3/SDL.h>
-#include <vulkan/vulkan.h>
+#if ANDROID
 #include <vulkan/vulkan_android.h>
 #include <android/native_window.h>
-typedef ANativeWindow Next_Window;
 #endif
 #undef APIENTRY
 

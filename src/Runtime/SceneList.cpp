@@ -17,6 +17,7 @@
 #include "Assets/Node.h"
 
 #include <spdlog/spdlog.h>
+#include <SDL3/SDL_filesystem.h>
 
 namespace Vulkan
 {
@@ -229,6 +230,14 @@ std::vector<std::string> SceneList::AllScenes;
 
 void SceneList::ScanScenes()
 {
+#if ANDROID
+    const char* internalPath = SDL_GetAndroidInternalStoragePath();
+    const char* externalPath = SDL_GetAndroidExternalStoragePath();
+    SPDLOG_INFO("android internal dir: {}", internalPath);
+    SPDLOG_INFO("android extenal dir: {}", externalPath);
+
+    return;
+#endif
     // add relative path
     std::string modelPath = "assets/models/";
     std::string path = Utilities::FileHelper::GetPlatformFilePath(modelPath.c_str());

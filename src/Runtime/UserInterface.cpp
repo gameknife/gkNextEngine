@@ -81,7 +81,7 @@ UserInterface::UserInterface(
 		Throw(std::runtime_error("failed to initialise ImGui GLFW adapter"));
 	}
 #else
-	ImGui_ImplAndroid_Init(window.Handle());
+	//ImGui_ImplAndroid_Init(window.Handle());
 #endif
 
 	// Initialise ImGui Vulkan adapter
@@ -178,7 +178,7 @@ UserInterface::~UserInterface()
 #if !ANDROID
 	ImGui_ImplSDL3_Shutdown();
 #else
-	ImGui_ImplAndroid_Shutdown();
+	//ImGui_ImplAndroid_Shutdown();
 #endif
 	ImGui::DestroyContext();
 }
@@ -311,7 +311,7 @@ void UserInterface::PreRender()
 #if !ANDROID
 	ImGui_ImplSDL3_NewFrame();
 #else
-	ImGui_ImplAndroid_NewFrame();
+	//ImGui_ImplAndroid_NewFrame();
 #endif
 	ImGui::NewFrame();
 

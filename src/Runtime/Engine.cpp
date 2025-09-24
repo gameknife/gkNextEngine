@@ -271,6 +271,33 @@ void NextEngine::Start()
     InitJSEngine();
 }
 
+bool NextEngine::HandleEvent(SDL_Event& event)
+{
+    userInterface_->HandleEvent(&event);
+
+    switch ( event.type )
+    {
+    case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+        {
+            return true;
+        }
+    case SDL_EVENT_KEY_DOWN:
+    case SDL_EVENT_KEY_UP:
+        OnKey(event);
+        break;
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    case SDL_EVENT_MOUSE_BUTTON_UP:
+        OnMouseButton(event);
+        break;
+    case SDL_EVENT_MOUSE_MOTION:
+        OnCursorPosition(event.motion.x, event.motion.y);
+        break;
+    default:
+        break;
+    }
+    return false;
+}
+
 bool NextEngine::Tick()
 {
     PERFORMANCEAPI_INSTRUMENT_FUNCTION();
@@ -309,30 +336,14 @@ bool NextEngine::Tick()
     // Renderer Tick
 #if !ANDROID
     //glfwPollEvents();
-    SDL_Event event;
-    while (SDL_PollEvent(&event)) {  // poll until all events are handled!
-     // decide what to do with this event.
-        userInterface_->HandleEvent(&event);
-
-        switch ( event.type )
-        {
-            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-                return true;
-            case SDL_EVENT_KEY_DOWN:
-            case SDL_EVENT_KEY_UP:
-                OnKey(event);
-                break;
-            case SDL_EVENT_MOUSE_BUTTON_DOWN:
-            case SDL_EVENT_MOUSE_BUTTON_UP:
-                OnMouseButton(event);
-                break;
-        case SDL_EVENT_MOUSE_MOTION:
-                OnCursorPosition(event.motion.x, event.motion.y);
-                break;
-            default:
-                break;
-        }
-    }
+    // SDL_Event event;
+    // while (SDL_PollEvent(&event))
+    // {
+    //     // poll until all events are handled!
+    //     // decide what to do with this event.
+    //     bool value1;
+    //     if (HandleEvent(event, value1)) return value1;
+    // }
     window_->PollGamepadInput();
 #endif
     // tick

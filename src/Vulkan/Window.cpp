@@ -24,249 +24,105 @@ namespace Vulkan {
 Window::Window(const WindowConfig& config) :
 	config_(config)
 {
-#if !ANDROID
 	window_ = SDL_CreateWindow(config.Title.c_str(), config.Width, config.Height, SDL_WINDOW_BORDERLESS | SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN);
 	if( !window_ )
 	{
 		Throw(std::runtime_error("failed to init SDL Window."));
 	}
-	
-
-	// if ( !glfwJoystickIsGamepad(0) ) {
-	// 	std::ifstream file(Utilities::FileHelper::GetNormalizedFilePath("assets/locale/gamecontrollerdb.txt"));
-	// 	if(file.is_open())
-	// 	{
-	// 	    file.seekg(0, std::ios::end);
-	// 	    size_t fileSize = file.tellg();
-	// 	    file.seekg(0, std::ios::beg);
-	//
-	// 	    std::string mappings(fileSize, '\0');
-	// 	    file.read(mappings.data(), fileSize);
-	// 	    file.close();
-	//
-	// 	    glfwUpdateGamepadMappings(mappings.c_str());
-	// 	}
-	//
-	// 	if (glfwJoystickIsGamepad(0)) {
-	// 		SPDLOG_INFO("Gamepad: {}", glfwGetGamepadName(0));
-	// 	}
-	// }
-	//
-	// // hide title bar, handle in ImGUI Later
-	// if (config.HideTitleBar)
-	// {
-	// 	glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
-	// }
-	//
-	// glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	// glfwWindowHint(GLFW_RESIZABLE, config.Resizable ? GLFW_TRUE : GLFW_FALSE);
-	//
-	// auto* const monitor = config.Fullscreen ? glfwGetPrimaryMonitor() : nullptr;
-	//
-	// // Get the primary monitor scale
-	// float xscale = 1.0f, yscale = 1.0f;
-	//
-	// // if (monitor) {
-	// // 	glfwGetMonitorContentScale(monitor, &xscale, &yscale);
-	// // } else {
-	// // 	// Get content scale for windowed mode too
-	// // 	GLFWmonitor* primaryMonitor = glfwGetPrimaryMonitor();
-	// // 	if (primaryMonitor) {
-	// // 		glfwGetMonitorContentScale(primaryMonitor, &xscale, &yscale);
-	// // 	}
-	// // }
-	//
-	// // indow dimensions based on DPI
-	// int scaledWidth = static_cast<int>(config.Width * xscale);
-	// int scaledHeight = static_cast<int>(config.Height * yscale);
-	//
-	// // create with hidden window
-	// glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-	// window_ = glfwCreateWindow(scaledWidth, scaledHeight, config.Title.c_str(), monitor, nullptr);
-	// if (window_ == nullptr)
-	// {
-	// 	Throw(std::runtime_error("failed to create window"));
-	// }
-	//
-	// // Center window position considering DPI
-	// if (!config.Fullscreen) {
-	// 	const GLFWvidmode* mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
-	// 	if (mode) {
-	// 		int windowPosX = (mode->width - scaledWidth) / 2;
-	// 		int windowPosY = (mode->height - scaledHeight) / 2;
-	// 		glfwSetWindowPos(window_, windowPosX, windowPosY);
-	// 	}
-	// }
-	//
-	// GLFWimage icon;
-	// std::vector<uint8_t> data;
-	// Utilities::Package::FPackageFileSystem::GetInstance().LoadFile("assets/textures/Vulkan.png", data);
-	// icon.pixels = stbi_load_from_memory(data.data(), static_cast<int>(data.size()), &icon.width, &icon.height, nullptr, 4);
-	// if (icon.pixels == nullptr)
-	// {
-	// 	Throw(std::runtime_error("failed to load icon"));
-	// }
-	//
-	// glfwSetWindowIcon(window_, 1, &icon);
-	// stbi_image_free(icon.pixels);
-	//
-	// if (config.CursorDisabled)
-	// {
-	// 	glfwSetInputMode(window_, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-	// }
-	//
-	// glfwSetWindowUserPointer(window_, this);
-	// glfwSetKeyCallback(window_, GlfwKeyCallback);
-	// glfwSetCursorPosCallback(window_, GlfwCursorPositionCallback);
-	// glfwSetMouseButtonCallback(window_, GlfwMouseButtonCallback);
-	// glfwSetScrollCallback(window_, GlfwScrollCallback);
-	// glfwSetDropCallback(window_, GlfwSetDropCallback);
-	// glfwSetWindowFocusCallback(window_, GlfwOnFocusCallback);
-	// glfwSetJoystickCallback(GlfwJoystickCallback);
-	
-#else
-	window_ = static_cast<Next_Window*>(config.AndroidNativeWindow);
-#endif
 }
 
 Window::~Window()
 {
-#if !ANDROID
 	if (window_ != nullptr)
 	{
 		SDL_DestroyWindow(window_);
 		window_ = nullptr;
 	}
-#endif
 }
 
 float Window::ContentScale() const
 {
-#if !ANDROID
 	float xscale = 1;
 	xscale = SDL_GetWindowDisplayScale(window_);
-#else
-	float xscale = 1;
-#endif
 	return xscale;
 }
 
 VkExtent2D Window::FramebufferSize() const
 {
-#if !ANDROID
 	int width, height;
 	SDL_GetWindowSize(window_, &width, &height);
 	return VkExtent2D{ static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
-#else
-	float aspect = ANativeWindow_getWidth(window_) / static_cast<float>(ANativeWindow_getHeight(window_));
-	return VkExtent2D{ static_cast<uint32_t>(floorf(1280 * aspect)), 1280 };
-#endif
 }
 
 VkExtent2D Window::WindowSize() const
 {
-#if !ANDROID
 	int width, height;
 	SDL_GetWindowSize(window_, &width, &height);
 	return VkExtent2D{ static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
-#else
-    return VkExtent2D{ (uint32_t)ANativeWindow_getWidth(window_), (uint32_t)ANativeWindow_getHeight(window_) };
-#endif
 }
 
 const char* Window::GetKeyName(const int key, const int scancode) const
 {
-#if !ANDROID
 	return "A";//glfwGetKeyName(key, scancode);
-#else
-	return "A";
-#endif
 }
 
 std::vector<const char*> Window::GetRequiredInstanceExtensions() const
 {
-#if !ANDROID
 	uint32_t extensionCount = 0;
 	auto extensionNames = SDL_Vulkan_GetInstanceExtensions(&extensionCount);
 	return std::vector<const char*>(extensionNames, extensionNames + extensionCount);
-#else
-	return std::vector<const char*>();
-#endif
 }
 
 double Window::GetTime() const
 {
-#if !ANDROID
 	return SDL_GetTicks() / 1000.0;
-#else
-	return now_ms() / 1000.0;
-#endif
 }
 	
 void Window::Close()
 {
-#if !ANDROID
     SDL_Event e{};
     e.type = SDL_EventType::SDL_EVENT_WINDOW_CLOSE_REQUESTED;
 	e.window.windowID = SDL_GetWindowID(window_);
     SDL_PushEvent(&e);
-#endif
 }
 	
 bool Window::IsMinimized() const
 {
-#if !ANDROID
 	return SDL_GetWindowFlags(window_) & SDL_WINDOW_MINIMIZED;
-#else
-	return false;
-#endif
 }
 
 bool Window::IsMaximumed() const
 {
-#if !ANDROID
 	//return glfwGetWindowAttrib(window_, GLFW_MAXIMIZED);
 	return SDL_GetWindowFlags(window_) & SDL_WINDOW_MAXIMIZED;
-#endif
-	return false;
 }
 
 void Window::WaitForEvents() const
 {
-#if !ANDROID
 	//glfwWaitEvents();
 	SDL_Event event;
 	while (SDL_WaitEvent(&event))
 	{
 		
 	}
-#endif
 }
 
 void Window::Show() const
 {
-#if !ANDROID
 	SDL_ShowWindow(window_);
-#endif
 }
 
 void Window::Minimize() {
-#if !ANDROID
 	SDL_MinimizeWindow(window_);
-#endif
 }
 
 void Window::Maximum() {
-#if !ANDROID
 	SDL_MaximizeWindow(window_);
-#endif
 }
 
 void Window::Restore()
 {
-#if !ANDROID
 	SDL_RestoreWindow(window_);
-#endif
 }
 
 constexpr double CLOSE_AREA_WIDTH = 0;
@@ -349,7 +205,6 @@ void Window::PollGamepadInput()
 	
 void Window::InitGLFW()
 {
-#if !ANDROID
 	if( !SDL_Init(SDL_INIT_VIDEO) )
 	{
 		Throw(std::runtime_error("failed to init SDL."));
@@ -358,14 +213,11 @@ void Window::InitGLFW()
 	{
 		Throw(std::runtime_error("failed to init SDL Vulkan."));
 	}
-#endif
 }
 
 void Window::TerminateGLFW()
 {
-#if !ANDROID
 	SDL_Vulkan_UnloadLibrary();
 	SDL_Quit();
-#endif
 }
 }

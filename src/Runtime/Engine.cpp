@@ -171,7 +171,7 @@ NextEngine::NextEngine(Options& options, void* userdata)
     spdlog::flush_every(std::chrono::seconds(1));
     
 #if ANDROID
-    std::string tag = "vknext";
+    std::string tag = "gknext";
     auto android_logger = spdlog::android_logger_mt("android", tag);
     android_logger->critical("Use \"adb shell logcat\" to view this message.");
 

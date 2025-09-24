@@ -43,7 +43,7 @@ install_macos() {
     ./vcpkg --recurse install \
         cpptrace:"$triplet" \
         cxxopts:"$triplet" \
-        sdl3:"$triplet" \
+        sdl3[vulkan]:"$triplet" \
         glm:"$triplet" \
         imgui[core,freetype,sdl3-binding,vulkan-binding,docking-experimental]:"$triplet" \
         stb:"$triplet" \

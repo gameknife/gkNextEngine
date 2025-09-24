@@ -29,7 +29,7 @@ namespace Assets
         TextureImage* transferPtr;
         float elapsed;
         bool needFlushHDRSH;
-        std::array<char, 1024> outputInfo;
+        std::array<char, 256> outputInfo;
     };
     
     void PrefilterEnvironmentMapLevel(const float* sourcePixels, int sourceWidth, int sourceHeight,

@@ -46,5 +46,5 @@ private:
 
     uint32_t modelId_;
     std::vector<uint32_t> matIds_;
-    class ImFont* bigFont_ {};
+    struct ImFont* bigFont_ {};
 };

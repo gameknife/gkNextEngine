@@ -95,9 +95,8 @@ IF EXIST %VCPKG_DIR% (
     .\vcpkg.exe --recurse install ^
         cxxopts:arm64-android ^
         glm:arm64-android ^
-        sdl3[vulkan]:arm64-android ^
-        imgui[core,freetype,sdl3-binding,android-binding,vulkan-binding,docking-experimental]:arm64-android ^
         stb:arm64-android ^
+        imgui[core,freetype,vulkan-binding,docking-experimental]:arm64-android ^
         tinyobjloader:arm64-android ^
         tinygltf:arm64-android ^
         curl:arm64-android ^

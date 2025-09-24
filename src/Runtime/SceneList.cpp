@@ -235,9 +235,8 @@ void SceneList::ScanScenes()
     const char* externalPath = SDL_GetAndroidExternalStoragePath();
     SPDLOG_INFO("android internal dir: {}", internalPath);
     SPDLOG_INFO("android extenal dir: {}", externalPath);
-
-    return;
 #endif
+
     // add relative path
     std::string modelPath = "assets/models/";
     std::string path = Utilities::FileHelper::GetPlatformFilePath(modelPath.c_str());

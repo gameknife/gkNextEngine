@@ -502,13 +502,14 @@ namespace Vulkan
         // wireframeFramebuffer_.reset(new FrameBuffer(swapChain_->RenderExtent(), GetStorageImage(Assets::Bindless::RT_DENOISED)->GetImageView(), wireframePipeline_->RenderPass()));
 
         // 公用Pipeline
-        visibilityPipeline_.reset(new PipelineCommon::VisibilityPipeline(SwapChain(), DepthBuffer(), UniformBuffers(), GetScene()));
-        visibilityFrameBuffer_.reset(new FrameBuffer(swapChain_->RenderExtent(), GetStorageImage(Assets::Bindless::RT_MINIGBUFFER_DRAW)->GetImageView(), visibilityPipeline_->RenderPass()));
         simpleComposePipeline_.reset( new PipelineCommon::ZeroBindCustomPushConstantPipeline(SwapChain(), "assets/shaders/Process.UpScaleFSR.comp.slang.spv", 20));
         bufferClearPipeline_.reset(new PipelineCommon::ZeroBindCustomPushConstantPipeline(*swapChain_, "assets/shaders/Util.BufferClear.comp.slang.spv", 4));
         softAmbientCubeGenPipeline_.reset( new PipelineCommon::ZeroBindPipeline(*swapChain_, "assets/shaders/Bake.SwAmbientCube.comp.slang.spv"));
         gpuCullPipeline_.reset(new PipelineCommon::ZeroBindPipeline(*swapChain_, "assets/shaders/Task.GpuCull.comp.slang.spv"));
         visualDebuggerPipeline_.reset(new PipelineCommon::ZeroBindCustomPushConstantPipeline(*swapChain_, "assets/shaders/Util.VisualDebugger.comp.slang.spv", 20));
+
+        visibilityPipeline_.reset(new PipelineCommon::VisibilityPipeline(SwapChain(), DepthBuffer(), UniformBuffers(), GetScene()));
+        visibilityFrameBuffer_.reset(new FrameBuffer(swapChain_->RenderExtent(), GetStorageImage(Assets::Bindless::RT_MINIGBUFFER_DRAW)->GetImageView(), visibilityPipeline_->RenderPass()));
 
         // 逻辑Renderer
         for (auto& logicRenderer : logicRenderers_)

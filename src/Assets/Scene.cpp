@@ -285,14 +285,7 @@ namespace Assets
         UpdateNodesGpuDriven();
         MarkDirty();
 
-#if ANDROID
         cpuAccelerationStructure_.AsyncProcessFull(*this, farAmbientCubeBufferMemory_.get(), false);
-#else
-        // if ( !NextEngine::GetInstance()->GetRenderer().supportRayTracing_ ) this has to be done, cause voxel tracing needed
-        {
-            cpuAccelerationStructure_.AsyncProcessFull(*this, farAmbientCubeBufferMemory_.get(), false);
-        }
-#endif
     }
 
     const Assets::GPUScene& Scene::FetchGPUScene(const uint32_t imageIndex) const

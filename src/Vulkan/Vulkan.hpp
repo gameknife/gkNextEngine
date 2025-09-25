@@ -10,7 +10,7 @@ typedef SDL_Window Next_Window;
 #include <vulkan/vulkan.h>
 #if ANDROID
 #include <vulkan/vulkan_android.h>
-#include <android/native_window.h>
+//#include <android/native_window.h>
 #endif
 #undef APIENTRY
 

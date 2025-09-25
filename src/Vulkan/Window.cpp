@@ -2,22 +2,10 @@
 #include "Utilities/Exception.hpp"
 #include "Utilities/StbImage.hpp"
 #include "Common/CoreMinimal.hpp"
-
 #include "Options.hpp"
 #include "Utilities/FileHelper.hpp"
-
 #include <spdlog/spdlog.h>
 
-#if ANDROID
-#include <time.h>
-
-static double now_ms(void) {
-
-    struct timespec res;
-    clock_gettime(CLOCK_REALTIME, &res);
-    return 1000.0 * res.tv_sec + (double) res.tv_nsec / 1e6;
-}
-#endif
 
 namespace Vulkan {
 	

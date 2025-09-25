@@ -66,6 +66,7 @@ Device::Device(
 	const auto transferFamily = graphicsFamily;
 #else
 #if ANDROID
+    //const auto transferFamily = graphicsFamily;
 	const auto transferFamily = FindQueue(queueFamilies, "transfer", VK_QUEUE_SPARSE_BINDING_BIT, VK_QUEUE_GRAPHICS_BIT, 1);
 #else
 	const auto transferFamily = FindQueue(queueFamilies, "transfer", VK_QUEUE_TRANSFER_BIT, VK_QUEUE_GRAPHICS_BIT, 1);

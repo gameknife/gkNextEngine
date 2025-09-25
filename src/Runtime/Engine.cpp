@@ -72,7 +72,7 @@ namespace NextRenderer
                     ptr->RegisterLogicRenderer(Vulkan::ERT_LegacyDeferred);
                     ptr->RegisterLogicRenderer(Vulkan::ERT_VoxelTracing);
                     ptr->SwitchLogicRenderer(static_cast<Vulkan::ERendererType>(rendererType));
-                    return ptr;    
+                    return ptr;
                 }
             default: break;
         }
@@ -174,8 +174,6 @@ NextEngine::NextEngine(Options& options, void* userdata)
     std::string tag = "gknext";
     auto android_logger = spdlog::android_logger_mt("android", tag);
     android_logger->critical("Use \"adb shell logcat\" to view this message.");
-
-   
     spdlog::set_default_logger(android_logger);
 #endif
     
@@ -264,7 +262,7 @@ void NextEngine::Start()
 
     result = ma_engine_init(NULL, audioEngine_.get());
     if (result != MA_SUCCESS) {
-        Throw(std::runtime_error(std::string("failed to init audio engine.")));
+        //Throw(std::runtime_error(std::string("failed to init audio engine.")));
     }
     
     // init js engine
@@ -411,12 +409,8 @@ bool NextEngine::Tick()
         }
     }
 
-#if ANDROID
-    return false;
-#else
     window_->attemptDragWindow();
     return false;
-#endif
 }
 
 void NextEngine::End()

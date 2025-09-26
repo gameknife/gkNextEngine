@@ -86,7 +86,7 @@ uint32_t TaskCoordinator::GetMainTaskCount()
 {
     uint32_t count = 0;
 #if __APPLE__
-    count = mainthreadTaskQueue_.size();
+    count = uint32_t(mainthreadTaskQueue_.size());
 #else
     for ( auto& thread : threads_ )
     {

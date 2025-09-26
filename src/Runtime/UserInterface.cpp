@@ -15,7 +15,7 @@
 
 #include <imgui.h>
 #include <imgui_freetype.h>
-#if !ANDROID
+#if 0//!ANDROID
 #include <imgui_impl_sdl3.h>
 #else
 #include <ThirdParty/imgui-custom/imgui_impl_sdl3_custom.h>

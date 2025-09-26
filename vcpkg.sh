@@ -175,6 +175,43 @@ install_mingw() {
         cpp-base64:x64-mingw-static
 }
 
+install_ios() {
+    local vcpkg_dir="vcpkg.ios"
+
+    if [ -d "$vcpkg_dir" ]; then
+        cd "$vcpkg_dir"
+        echo "Updating vcpkg..."
+        git pull origin master
+        ./bootstrap-vcpkg.sh
+        echo "Updating installed packages..."
+        ./vcpkg update
+        ./vcpkg upgrade --no-dry-run
+    else
+        git clone https://github.com/Microsoft/vcpkg.git "$vcpkg_dir"
+        cd "$vcpkg_dir"
+        ./bootstrap-vcpkg.sh
+    fi
+
+    cp -f ../../android/custom-triplets/community/arm64-ios.cmake ./triplets/arm64-ios.cmake
+
+    ./vcpkg --recurse install \
+        cxxopts:arm64-ios \
+        glm:arm64-ios \
+        imgui[core,freetype,vulkan-binding,docking-experimental]:arm64-ios \
+        stb:arm64-ios \
+        tinyobjloader:arm64-ios \
+        curl:arm64-ios \
+        tinygltf:arm64-ios \
+        draco:arm64-ios \
+        fmt:arm64-ios \
+        meshoptimizer:arm64-ios \
+        ktx:arm64-ios \
+        joltphysics:arm64-ios \
+        xxhash:arm64-ios \
+        spdlog:arm64-ios \
+        cpp-base64:arm64-ios
+}
+
 main() {
     mkdir -p build
     cd build
@@ -201,13 +238,17 @@ main() {
             echo "Installing dependencies for Android..."
             install_android
             ;;
+        ios)
+            echo "Installing dependencies for iOS..."
+            install_ios
+            ;;
         mingw)
             echo "Installing dependencies for MinGW..."
             install_mingw
             ;;
         *)
             echo "Error: Unsupported platform '$platform'"
-            echo "Supported platforms: macos, macos_x64, linux, android, mingw"
+            echo "Supported platforms: macos, macos_x64, linux, android, ios, mingw"
             exit 1
             ;;
     esac

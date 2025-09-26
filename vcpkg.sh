@@ -197,7 +197,8 @@ install_ios() {
     ./vcpkg --recurse install \
         cxxopts:arm64-ios \
         glm:arm64-ios \
-        imgui[core,freetype,vulkan-binding,docking-experimental]:arm64-ios \
+        sdl3[vulkan]:arm64-ios \
+        imgui[core,freetype,sdl3-binding,vulkan-binding,docking-experimental]:arm64-ios \
         stb:arm64-ios \
         tinyobjloader:arm64-ios \
         curl:arm64-ios \

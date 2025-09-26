@@ -54,7 +54,6 @@ build_ios() {
     cmake -Wno-dev -G Xcode \
         -D CMAKE_BUILD_TYPE=Release \
         -D CMAKE_SYSTEM_NAME=iOS \
-        -D SDL3_DIR="/Users/gameknife/github/gkNextRenderer/lib/share/cmake/SDL3" \
         -D VCPKG_TARGET_TRIPLET="$triplet" \
         -D CMAKE_TOOLCHAIN_FILE="../vcpkg.ios/scripts/buildsystems/vcpkg.cmake" \
         ../..

@@ -461,6 +461,8 @@ JPH::BodyID NextPhysics::CreateMeshBody(RefConst<MeshShapeSettings> meshShapeSet
 
 	//bodyCreation.mRestitution = 0.05f;
 	bodyCreation.mFriction = 0.5f;
+	bodyCreation.mOverrideMassProperties = EOverrideMassProperties::MassAndInertiaProvided;
+	bodyCreation.mMassPropertiesOverride = MassProperties(1.0);
 	
 	body_id = body_interface.CreateAndAddBody(bodyCreation, EActivation::Activate);
 

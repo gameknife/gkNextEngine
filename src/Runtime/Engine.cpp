@@ -94,7 +94,7 @@ namespace NextRenderer
 namespace
 {
     const bool EnableValidationLayers =
-#if defined(NDEBUG) ||  defined(ANDROID)
+#if defined(NDEBUG) ||  defined(ANDROID) || IOS
         false;
 #else
         true;

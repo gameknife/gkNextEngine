@@ -31,7 +31,6 @@ build_macos() {
     mkdir -p "$build_dir"
     cd "$build_dir"
     cmake -Wno-dev -G Ninja \
-        -D CMAKE_BUILD_TYPE=Release \
         -D VCPKG_TARGET_TRIPLET="$triplet" \
         -D CMAKE_TOOLCHAIN_FILE="../vcpkg.macos/scripts/buildsystems/vcpkg.cmake" \
         ../..
@@ -52,9 +51,7 @@ build_ios() {
     mkdir -p "$build_dir"
     cd "$build_dir"
     cmake -Wno-dev -G Xcode \
-        -D CMAKE_BUILD_TYPE=Release \
         -D CMAKE_SYSTEM_NAME=iOS \
-        -D SDL3_DIR="/Users/gameknife/github/gkNextRenderer/lib/share/cmake/SDL3" \
         -D VCPKG_TARGET_TRIPLET="$triplet" \
         -D CMAKE_TOOLCHAIN_FILE="../vcpkg.ios/scripts/buildsystems/vcpkg.cmake" \
         ../..
@@ -106,7 +103,6 @@ build_mingw() {
     mkdir --parents "$build_dir"
     cd "$build_dir"
     cmake -G Ninja \
-        -D CMAKE_BUILD_TYPE=Release \
         -D VCPKG_TARGET_TRIPLET=x64-mingw-static \
         -D CMAKE_TOOLCHAIN_FILE="../vcpkg.mingw/scripts/buildsystems/vcpkg.cmake" \
         ../..

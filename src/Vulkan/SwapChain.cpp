@@ -10,6 +10,8 @@
 #include <limits>
 #include "ImageMemoryBarrier.hpp"
 
+float GAndroidMagicScale = 1.0f;
+
 namespace Vulkan {
 
 SwapChain::SwapChain(const class Device& device, const VkPresentModeKHR presentMode, bool forceSDR) :
@@ -31,6 +33,8 @@ SwapChain::SwapChain(const class Device& device, const VkPresentModeKHR presentM
 	const auto imageCount = ChooseImageCount(details.Capabilities);
 
 #if ANDROID
+    GAndroidMagicScale = 1280.f / float(extent.height);
+
 	float aspect = extent.width / static_cast<float>(extent.height);
 	extent.height = 1280;
 	extent.width = floorf(1280 * aspect);

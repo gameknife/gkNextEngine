@@ -255,7 +255,7 @@ void NextRendererGameInstance::DrawSettings()
 	const ImVec2 pos = ImVec2(distance, TITLEBAR_SIZE + distance);
 	const ImVec2 posPivot = ImVec2(0.0f, 0.0f);
 	ImGui::SetNextWindowPos(pos, ImGuiCond_Always, posPivot);
-	ImGui::SetNextWindowSize(ImVec2(400,-1));
+	ImGui::SetNextWindowSize(ImVec2(ImGui::GetFontSize() * 30,-1));
 	ImGui::SetNextWindowBgAlpha(0.9f);
 	
 	const auto flags =

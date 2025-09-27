@@ -15,7 +15,7 @@
 
 #include <imgui.h>
 #include <imgui_freetype.h>
-#if 0//!ANDROID
+#if !ANDROID
 #include <imgui_impl_sdl3.h>
 #else
 #include <ThirdParty/imgui-custom/imgui_impl_sdl3_custom.h>
@@ -38,8 +38,8 @@
 #include "Utilities/ImGui.hpp"
 #include "Vulkan/ImageView.hpp"
 
+extern float GAndroidMagicScale;
 extern std::unique_ptr<Vulkan::VulkanBaseRenderer> GApplication;
-
 
 UserInterface::UserInterface(
 	NextEngine* engine,
@@ -100,7 +100,11 @@ UserInterface::UserInterface(
 	}
 	
 	// Window scaling and style.
+#if ANDROID
+    const auto scaleFactor = 0.75 / GAndroidMagicScale;
+#else
     const auto scaleFactor = 1.0;
+#endif
 	const auto fontSize = 16;
 
 	UserInterface::SetStyle();
@@ -365,13 +369,9 @@ void UserInterface::DrawOverlay(const Statistics& statistics, Vulkan::VulkanGpuT
 
 	const auto& io = ImGui::GetIO();
 	const float distance = 10.0f;
-#if ANDROID
-	const ImVec2 pos = ImVec2(io.DisplaySize.x * 0.3333f - distance, distance + 40);
-	const ImVec2 posPivot = ImVec2(1.0f, 0.0f);
-#else
 	const ImVec2 pos = ImVec2(io.DisplaySize.x - distance, distance + 40);
 	const ImVec2 posPivot = ImVec2(1.0f, 0.0f);
-#endif
+
 	ImGui::SetNextWindowPos(pos, ImGuiCond_Always, posPivot);
 	ImGui::SetNextWindowBgAlpha(0.3f); // Transparent background
 

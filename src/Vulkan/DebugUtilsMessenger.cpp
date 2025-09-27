@@ -3,6 +3,7 @@
 #include "Instance.hpp"
 #include "Utilities/Exception.hpp"
 #include "Common/CoreMinimal.hpp"
+#include <spdlog/spdlog.h>
 
 namespace Vulkan {
 

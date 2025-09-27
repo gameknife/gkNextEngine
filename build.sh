@@ -31,9 +31,29 @@ build_macos() {
     mkdir -p "$build_dir"
     cd "$build_dir"
     cmake -Wno-dev -G Ninja \
-        -D CMAKE_BUILD_TYPE=Release \
         -D VCPKG_TARGET_TRIPLET="$triplet" \
         -D CMAKE_TOOLCHAIN_FILE="../vcpkg.macos/scripts/buildsystems/vcpkg.cmake" \
+        ../..
+    cmake --build . --config RelWithDebInfo
+
+    end_time=$(date +%s)
+    elapsed_time=$((end_time - start_time))
+
+    echo "Build completed in $elapsed_time seconds."
+}
+
+build_ios() {
+    local triplet="$1"
+    local build_dir="build/ios"
+
+    start_time=$(date +%s)
+
+    mkdir -p "$build_dir"
+    cd "$build_dir"
+    cmake -Wno-dev -G Xcode \
+        -D CMAKE_SYSTEM_NAME=iOS \
+        -D VCPKG_TARGET_TRIPLET="$triplet" \
+        -D CMAKE_TOOLCHAIN_FILE="../vcpkg.ios/scripts/buildsystems/vcpkg.cmake" \
         ../..
     cmake --build . --config RelWithDebInfo
 
@@ -83,7 +103,6 @@ build_mingw() {
     mkdir --parents "$build_dir"
     cd "$build_dir"
     cmake -G Ninja \
-        -D CMAKE_BUILD_TYPE=Release \
         -D VCPKG_TARGET_TRIPLET=x64-mingw-static \
         -D CMAKE_TOOLCHAIN_FILE="../vcpkg.mingw/scripts/buildsystems/vcpkg.cmake" \
         ../..
@@ -109,6 +128,10 @@ main() {
         macos_x64)
             echo "Building for macOS (x64)..."
             build_macos "x64-osx"
+            ;;
+        ios)
+            echo "Building for iOS (ARM64)..."
+            build_ios "arm64-ios"
             ;;
         linux)
             echo "Building for Linux..."

@@ -8,6 +8,8 @@
 #include "ThirdParty/lzav/lzav.h"
 #include <assert.h>
 #include <regex>
+#include <SDL3/SDL.h>
+#include <spdlog/spdlog.h>
 
 namespace Utilities
 {
@@ -26,7 +28,10 @@ namespace Utilities
         static std::string GetPlatformFilePath( const char* srcPath )
         {
 #if ANDROID
-            return std::filesystem::path("/sdcard/Android/data/com.gknextrenderer/files").append(srcPath).string();
+            const char* AndroidExtPath = SDL_GetAndroidExternalStoragePath();
+            return std::filesystem::path(AndroidExtPath).append(srcPath).string();
+#elif IOS
+            return std::filesystem::path(SDL_GetBasePath()).append(srcPath).string();
 #else
             return std::filesystem::path("..").append(srcPath).string();
 #endif
@@ -36,7 +41,10 @@ namespace Utilities
         {
             std::string normlizedPath {};
 #if ANDROID
-            normlizedPath = std::string("/sdcard/Android/data/com.gknextrenderer/files/") + srcPath;
+            const char* AndroidExtPath = SDL_GetAndroidExternalStoragePath();
+            normlizedPath = std::filesystem::path(AndroidExtPath).append(srcPath).string();
+#elif IOS
+            normlizedPath = std::filesystem::path(SDL_GetBasePath()).append(srcPath).string();
 #else
             normlizedPath = std::string("../") + srcPath;
 #endif
@@ -79,7 +87,9 @@ namespace Utilities
         {
             std::string normlizedPath {};
             #if ANDROID
-                        normlizedPath = std::string("/sdcard/Android/data/com.gknextrenderer/files/");
+                        normlizedPath = std::string(SDL_GetAndroidExternalStoragePath());
+            #elif IOS
+                        normlizedPath = std::string(SDL_GetPrefPath("gknext", "renderer"));
             #else
                         normlizedPath = std::string("../");
             #endif

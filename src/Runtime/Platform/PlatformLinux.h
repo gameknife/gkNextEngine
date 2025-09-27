@@ -16,7 +16,7 @@ namespace NextRenderer
     {
         std::string commandline{"xdg-open "};
         commandline += command;
-        system(commandline.c_str());
+        //system(commandline.c_str());
     }
 
     inline void OSProcess(const char* exe)

@@ -95,12 +95,17 @@ void EditorGameInstance::OnInitUI()
     editorUserInterface_->Init();
 }
 
-bool EditorGameInstance::OnKey(int key, int scancode, int action, int mods)
+bool EditorGameInstance::OnKey(SDL_Event& event)
 {
-    modelViewController_.OnKey(key, scancode, action, mods);
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+    modelViewController_.OnKey(event);
+    if (event.key.type == SDL_EVENT_KEY_DOWN)
     {
-        GetEngine().GetScene().SetSelectedId(-1);
+        switch (event.key.key)
+        {
+        case SDLK_ESCAPE: GetEngine().GetScene().SetSelectedId(-1);
+            break;
+        default: break;
+        }
     }
     return true;
 }
@@ -111,10 +116,10 @@ bool EditorGameInstance::OnCursorPosition(double xpos, double ypos)
     return true;
 }
 
-bool EditorGameInstance::OnMouseButton(int button, int action, int mods)
+bool EditorGameInstance::OnMouseButton(SDL_Event& event)
 {
-    modelViewController_.OnMouseButton(button, action, mods);
-    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
+    modelViewController_.OnMouseButton(event);
+    if (event.button.button == SDL_BUTTON_LEFT && event.button.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
     {
         auto mousePos = GetEngine().GetMousePos();
         glm::vec3 org;
@@ -133,7 +138,7 @@ bool EditorGameInstance::OnMouseButton(int button, int action, int mods)
             {
                 GetEngine().GetScene().SetSelectedId(-1);
             }
-
+    
             return true;
         });
         return true;

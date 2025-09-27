@@ -218,12 +218,12 @@ struct ResTask
     template<typename T>
     void SetContext(T& context)
     {
-        std::memcpy( task_context_1k, &context, sizeof(T) );
+        std::memcpy( task_context_1k, &context, std::min(size_t(1024), sizeof(T)) );
     }
     template<typename T>
     void GetContext(T& context)
     {
-        std::memcpy( &context, task_context_1k,  sizeof(T) );
+        std::memcpy( &context, task_context_1k, std::min(size_t(1024), sizeof(T)) );
     }
     
 };
@@ -274,12 +274,12 @@ public:
             lowThreads_.push_back(std::make_unique<TaskThread>());
         }
 
-        SPDLOG_INFO("low parallel thread count: {}", lowThreadCount);
+        //SPDLOG_INFO("low parallel thread count: {}", lowThreadCount);
     }
 
     ~TaskCoordinator()
     {
-        SPDLOG_INFO("TaskCoordinator request shutting down, wait for TaskThread. remain: {}", threads_.size());
+        //SPDLOG_INFO("TaskCoordinator request shutting down, wait for TaskThread. remain: {}", threads_.size());
         for (auto& thread : threads_)
         {
             thread.reset();

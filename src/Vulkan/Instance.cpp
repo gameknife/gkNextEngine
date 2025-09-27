@@ -30,15 +30,12 @@ Instance::Instance(const class Window& window, const std::vector<const char*>& v
 	extensions.push_back(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME);
 #endif	
 #if __APPLE__
+#if !IOS
 	extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+#endif
 	extensions.push_back("VK_EXT_swapchain_colorspace");
 #endif
 
-#if ANDROID
-  	extensions.push_back("VK_KHR_surface");
-  	extensions.push_back("VK_KHR_android_surface");
-	extensions.push_back("VK_EXT_swapchain_colorspace");
-#endif
 	// Create the Vulkan instance.
 	VkApplicationInfo appInfo = {};
 	appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;

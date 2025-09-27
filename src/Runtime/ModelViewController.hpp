@@ -7,6 +7,8 @@ namespace Assets
  struct Camera;
 }
 
+union SDL_Event;
+
 class ModelViewController final
 {
 public:
@@ -17,9 +19,9 @@ public:
 	 float FieldOfView() const { return fieldOfView_; }
 	 glm::vec4 Position() const { return position_; }
 
-	 bool OnKey(int key, int scancode, int action, int mods);
+	 bool OnKey(SDL_Event& event);
 	 bool OnCursorPosition(double xpos, double ypos);
-	 bool OnMouseButton(int button, int action, int mods);
+	 bool OnMouseButton(SDL_Event& event);
 	 bool OnTouch(bool down, double xpos, double ypos);
 	 void OnScroll(double xoffset, double yoffset);
 

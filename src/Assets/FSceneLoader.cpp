@@ -2,6 +2,7 @@
 #include "Common/CoreMinimal.hpp"
 
 #include "ThirdParty/mikktspace/mikktspace.h"
+#include <spdlog/spdlog.h>
 
 #define _USE_MATH_DEFINES
 #include <math.h>
@@ -15,16 +16,6 @@
 
 #define TINYGLTF_IMPLEMENTATION
 #define TINYGLTF_ENABLE_DRACO
-
-#if !ANDROID
-#define TINYGLTF_USE_RAPIDJSON
-#include <rapidjson/document.h>
-#include <rapidjson/prettywriter.h>
-#include <rapidjson/rapidjson.h>
-#include <rapidjson/stringbuffer.h>
-#include <rapidjson/writer.h>
-#define TINYGLTF_NO_INCLUDE_RAPIDJSON
-#endif
 
 #define TINYGLTF_NO_STB_IMAGE
 //#define TINYGLTF_NO_STB_IMAGE_WRITE
@@ -149,7 +140,7 @@ namespace Assets
         }
 
         uint32_t primaryMatIdx = 0;
-        std::shared_ptr<Node> sceneNode = Node::CreateNode(node.name, translation, rotation, scale, meshId, out_nodes.size(), false);
+        std::shared_ptr<Node> sceneNode = Node::CreateNode(node.name, translation, rotation, scale, meshId, uint32_t(out_nodes.size()), false);
         if (meshId != -1)
         {
             sceneNode->SetVisible(true);
@@ -245,7 +236,7 @@ namespace Assets
                 SPDLOG_ERROR("failed to load file: {}", filename);
                 return false;
             }
-            if(!gltfLoader.LoadBinaryFromMemory(&model, &err, &warn, data.data(), data.size()) )
+            if(!gltfLoader.LoadBinaryFromMemory(&model, &err, &warn, data.data(), uint32_t(data.size())) )
             {
                 SPDLOG_ERROR("failed to parse glb file: {}", filename);
                 return false;

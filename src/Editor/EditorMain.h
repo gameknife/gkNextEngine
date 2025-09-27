@@ -28,9 +28,9 @@ public:
     bool OnRenderUI() override;
     void OnInitUI() override;
 
-    bool OnKey(int key, int scancode, int action, int mods) override;
+    bool OnKey(SDL_Event& event) override;
     bool OnCursorPosition(double xpos, double ypos) override;
-    bool OnMouseButton(int button, int action, int mods) override;
+    bool OnMouseButton(SDL_Event& event) override;
     bool OnScroll(double xoffset, double yoffset) override;
 
     bool OverrideRenderCamera(Assets::Camera& OutRenderCamera) const override;

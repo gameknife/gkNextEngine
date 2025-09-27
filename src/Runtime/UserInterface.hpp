@@ -70,6 +70,7 @@ public:
 	void PreRender();
 	void Render(const Statistics& statistics, Vulkan::VulkanGpuTimer* gpuTimer, Assets::Scene* scene);
 	void PostRender(VkCommandBuffer commandBuffer, const Vulkan::SwapChain& swapChain, uint32_t imageIdx);
+	void HandleEvent(const SDL_Event* event);
 
 	bool WantsToCaptureKeyboard() const;
 	bool WantsToCaptureMouse() const;

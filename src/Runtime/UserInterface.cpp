@@ -15,10 +15,10 @@
 
 #include <imgui.h>
 #include <imgui_freetype.h>
-#if !ANDROID
-#include <imgui_impl_glfw.h>
+#if 0//!ANDROID
+#include <imgui_impl_sdl3.h>
 #else
-#include <imgui_impl_android.h>
+#include <ThirdParty/imgui-custom/imgui_impl_sdl3_custom.h>
 #endif
 #include <imgui_impl_vulkan.h>
 
@@ -75,14 +75,10 @@ UserInterface::UserInterface(
 	funcPreConfig();
 	
 	// Initialise ImGui GLFW adapter
-#if !ANDROID
-	if (!ImGui_ImplGlfw_InitForVulkan(window.Handle(), true))
+	if (!ImGui_ImplSDL3_InitForVulkan(window.Handle()))
 	{
 		Throw(std::runtime_error("failed to initialise ImGui GLFW adapter"));
 	}
-#else
-	ImGui_ImplAndroid_Init(window.Handle());
-#endif
 
 	// Initialise ImGui Vulkan adapter
 	ImGui_ImplVulkan_InitInfo vulkanInit = {};
@@ -104,14 +100,7 @@ UserInterface::UserInterface(
 	}
 	
 	// Window scaling and style.
-#if ANDROID
     const auto scaleFactor = 1.0;
-#elif __APPLE__
-	const auto scaleFactor = 1.0;
-#else
-    const auto scaleFactor = 1.0f;
-#endif
-
 	const auto fontSize = 16;
 
 	UserInterface::SetStyle();
@@ -147,14 +136,13 @@ UserInterface::UserInterface(
 	{
 		
 	}
-#if !ANDROID
+
 	ImFontConfig configLocale;
 	configLocale.MergeMode = true;
 	if (!io.Fonts->AddFontFromFileTTF(Utilities::FileHelper::GetPlatformFilePath("assets/fonts/DroidSansFallback.ttf").c_str(), (fontSize + 2) * scaleFactor, &configLocale, glyphRange ))
 	{
 		Throw(std::runtime_error("failed to load locale ImGui Text font"));
 	}
-#endif
 
 	if(funcInit != nullptr)
 	{
@@ -175,11 +163,7 @@ UserInterface::~UserInterface()
 	uiFrameBuffers_.clear();
 	
 	ImGui_ImplVulkan_Shutdown();
-#if !ANDROID
-	ImGui_ImplGlfw_Shutdown();
-#else
-	ImGui_ImplAndroid_Shutdown();
-#endif
+	ImGui_ImplSDL3_Shutdown();
 	ImGui::DestroyContext();
 }
 
@@ -308,13 +292,8 @@ void UserInterface::DrawLine(float fromx, float fromy, float tox, float toy, flo
 void UserInterface::PreRender()
 {
 	ImGui_ImplVulkan_NewFrame();
-#if !ANDROID
-	ImGui_ImplGlfw_NewFrame();
-#else
-	ImGui_ImplAndroid_NewFrame();
-#endif
+	ImGui_ImplSDL3_NewFrame();
 	ImGui::NewFrame();
-
 
 	// update texture to ui
 	uint32_t maxId = Assets::GlobalTexturePool::GetInstance()->TotalTextures();
@@ -362,6 +341,11 @@ void UserInterface::PostRender(VkCommandBuffer commandBuffer, const Vulkan::Swap
 	}
 }
 
+void UserInterface::HandleEvent(const SDL_Event* event)
+{
+	ImGui_ImplSDL3_ProcessEvent(event);
+}
+
 bool UserInterface::WantsToCaptureKeyboard() const
 {
 	return ImGui::GetIO().WantCaptureKeyboard;
@@ -382,7 +366,7 @@ void UserInterface::DrawOverlay(const Statistics& statistics, Vulkan::VulkanGpuT
 	const auto& io = ImGui::GetIO();
 	const float distance = 10.0f;
 #if ANDROID
-	const ImVec2 pos = ImVec2(io.DisplaySize.x * 0.3333f - distance, distance);
+	const ImVec2 pos = ImVec2(io.DisplaySize.x * 0.3333f - distance, distance + 40);
 	const ImVec2 posPivot = ImVec2(1.0f, 0.0f);
 #else
 	const ImVec2 pos = ImVec2(io.DisplaySize.x - distance, distance + 40);

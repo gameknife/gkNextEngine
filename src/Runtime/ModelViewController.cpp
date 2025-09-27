@@ -41,28 +41,25 @@ glm::mat4 ModelViewController::ModelView() const
     return view * model;
 }
 
-bool ModelViewController::OnKey(const int key, const int scancode, const int action, const int mods)
+bool ModelViewController::OnKey(SDL_Event& event)
 {
-#if !ANDROID
-    switch (key)
+    switch (event.key.key)
     {
-    case GLFW_KEY_S: cameraMovingBackward_ = action != GLFW_RELEASE;
+    case SDLK_S: cameraMovingBackward_ = event.key.type != SDL_EVENT_KEY_UP;
         return true;
-    case GLFW_KEY_W: cameraMovingForward_ = action != GLFW_RELEASE;
+    case SDLK_W: cameraMovingForward_ =event.key.type != SDL_EVENT_KEY_UP;
         return true;
-    case GLFW_KEY_A: cameraMovingLeft_ = action != GLFW_RELEASE;
+    case SDLK_A: cameraMovingLeft_ = event.key.type != SDL_EVENT_KEY_UP;
         return true;
-    case GLFW_KEY_D: cameraMovingRight_ = action != GLFW_RELEASE;
+    case SDLK_D: cameraMovingRight_ = event.key.type != SDL_EVENT_KEY_UP;
         return true;
-    case GLFW_KEY_Q: cameraMovingDown_ = action != GLFW_RELEASE;
+    case SDLK_Q: cameraMovingDown_ = event.key.type != SDL_EVENT_KEY_UP;
         return true;
-    case GLFW_KEY_E: cameraMovingUp_ = action != GLFW_RELEASE;
+    case SDLK_E: cameraMovingUp_ = event.key.type != SDL_EVENT_KEY_UP;
         return true;
     default: return false;
     }
-#else
     return false;
-#endif
 }
 
 // 新增手柄输入处理函数
@@ -151,20 +148,20 @@ bool ModelViewController::OnCursorPosition(const double xpos, const double ypos)
     return mouseLeftPressed_ || mouseRightPressed_;
 }
 
-bool ModelViewController::OnMouseButton(const int button, const int action, const int mods)
+bool ModelViewController::OnMouseButton(SDL_Event& event)
 {
-    if (button == GLFW_MOUSE_BUTTON_LEFT)
+    if (event.button.button == SDL_BUTTON_LEFT)
     {
-        mouseLeftPressed_ = action == GLFW_PRESS;
+        mouseLeftPressed_ = event.button.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
         if (mouseLeftPressed_)
         {
             resetMousePos_ = true;
         }
     }
-
-    if (button == GLFW_MOUSE_BUTTON_RIGHT)
+    
+    if (event.button.button == SDL_BUTTON_RIGHT)
     {
-        mouseRightPressed_ = action == GLFW_PRESS;
+        mouseRightPressed_ = event.button.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
         if (mouseRightPressed_)
         {
             resetMousePos_ = true;

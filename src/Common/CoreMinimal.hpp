@@ -24,12 +24,6 @@
 #include <fmt/format.h>
 #include <fmt/chrono.h>
 
-// spdlog logging
-#include <spdlog/spdlog.h>
-#if ANDROID
-#include <spdlog/sinks/android_sink.h>
-#endif
-
 #if WIN32 && !defined(__MINGW32__)
 #define DISABLE_OPTIMIZATION __pragma(optimize("", off))
 #define ENABLE_OPTIMIZATION __pragma(optimize("", on))

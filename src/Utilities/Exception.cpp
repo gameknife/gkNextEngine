@@ -1,5 +1,6 @@
 #include "Exception.hpp"
-#if !ANDROID
+#include <spdlog/spdlog.h>
+#if !ANDROID && !IOS
 #include <cpptrace/cpptrace.hpp>
 #endif
 
@@ -9,7 +10,7 @@ namespace NextStackWalk
 {
     void PrintStack()
     {
-#if !ANDROID
+#if !ANDROID && !IOS
         cpptrace::generate_trace().print();
 #endif
     }

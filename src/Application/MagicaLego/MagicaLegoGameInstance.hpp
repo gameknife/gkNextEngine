@@ -123,9 +123,9 @@ public:
     bool OverrideRenderCamera(Assets::Camera& OutRenderCamera) const override;
     void OnSceneLoaded() override;
     void OnSceneUnloaded() override;
-    bool OnKey(int key, int scancode, int action, int mods) override;
+    bool OnKey(SDL_Event& event) override;
     bool OnCursorPosition(double xpos, double ypos) override;
-    bool OnMouseButton(int button, int action, int mods) override;
+    bool OnMouseButton(SDL_Event& event) override;
     bool OnScroll(double xoffset, double yoffset) override;
 
     // quick access engine

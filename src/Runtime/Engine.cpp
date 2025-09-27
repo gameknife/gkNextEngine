@@ -38,6 +38,13 @@
 
 #include "Common/CoreMinimal.hpp"
 
+// spdlog logging
+#include <spdlog/spdlog.h>
+
+#if ANDROID
+#include <spdlog/sinks/android_sink.h>
+#endif
+
 ENGINE_API Options* GOption = nullptr;
 
 namespace NextRenderer
@@ -65,7 +72,7 @@ namespace NextRenderer
                     ptr->RegisterLogicRenderer(Vulkan::ERT_LegacyDeferred);
                     ptr->RegisterLogicRenderer(Vulkan::ERT_VoxelTracing);
                     ptr->SwitchLogicRenderer(static_cast<Vulkan::ERendererType>(rendererType));
-                    return ptr;    
+                    return ptr;
                 }
             default: break;
         }
@@ -87,7 +94,7 @@ namespace NextRenderer
 namespace
 {
     const bool EnableValidationLayers =
-#if defined(NDEBUG) ||  defined(ANDROID)
+#if defined(NDEBUG) || ANDROID || IOS
         false;
 #else
         true;
@@ -146,7 +153,7 @@ UserSettings CreateUserSettings(const Options& options)
 
     userSettings.SuperResolution = options.SuperResolution;
     
-#if ANDROID
+#if ANDROID || IOS
     userSettings.NumberOfSamples = 1;
     userSettings.Denoiser = false;
     userSettings.FastGather = true;
@@ -164,11 +171,9 @@ NextEngine::NextEngine(Options& options, void* userdata)
     spdlog::flush_every(std::chrono::seconds(1));
     
 #if ANDROID
-    std::string tag = "vknext";
+    std::string tag = "gknext";
     auto android_logger = spdlog::android_logger_mt("android", tag);
     android_logger->critical("Use \"adb shell logcat\" to view this message.");
-
-   
     spdlog::set_default_logger(android_logger);
 #endif
     
@@ -209,9 +214,9 @@ NextEngine::NextEngine(Options& options, void* userdata)
     renderer_->DelegatePostRender = [this](VkCommandBuffer commandBuffer, uint32_t imageIndex)->void{OnRendererPostRender(commandBuffer, imageIndex);};
 
     // Initialize IO
-    window_->OnKey = [this](const int key, const int scancode, const int action, const int mods) { OnKey(key, scancode, action, mods); };
+    //window_->OnKey = [this](const int key, const int scancode, const int action, const int mods) { OnKey(key, scancode, action, mods); };
     window_->OnCursorPosition = [this](const double xpos, const double ypos) { OnCursorPosition(xpos, ypos); };
-    window_->OnMouseButton = [this](const int button, const int action, const int mods) { OnMouseButton(button, action, mods); };
+    //window_->OnMouseButton = [this](const int button, const int action, const int mods) { OnMouseButton(button, action, mods); };
     window_->OnScroll = [this](const double xoffset, const double yoffset) { OnScroll(xoffset, yoffset); };
     window_->OnDropFile = [this](int path_count, const char* paths[]) { OnDropFile(path_count, paths); };
     window_->OnGamepadInput = [this](float leftStickX, float leftStickY,float rightStickX, float rightStickY,float leftTrigger, float rightTrigger) {
@@ -257,11 +262,38 @@ void NextEngine::Start()
 
     result = ma_engine_init(NULL, audioEngine_.get());
     if (result != MA_SUCCESS) {
-        Throw(std::runtime_error(std::string("failed to init audio engine.")));
+        //Throw(std::runtime_error(std::string("failed to init audio engine.")));
     }
     
     // init js engine
     InitJSEngine();
+}
+
+bool NextEngine::HandleEvent(SDL_Event& event)
+{
+    userInterface_->HandleEvent(&event);
+
+    switch ( event.type )
+    {
+    case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+        {
+            return true;
+        }
+    case SDL_EVENT_KEY_DOWN:
+    case SDL_EVENT_KEY_UP:
+        OnKey(event);
+        break;
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    case SDL_EVENT_MOUSE_BUTTON_UP:
+        OnMouseButton(event);
+        break;
+    case SDL_EVENT_MOUSE_MOTION:
+        OnCursorPosition(event.motion.x, event.motion.y);
+        break;
+    default:
+        break;
+    }
+    return false;
 }
 
 bool NextEngine::Tick()
@@ -298,12 +330,7 @@ bool NextEngine::Tick()
     {
         JSTickCallback_(deltaSeconds_);
     }
-    
-    // Renderer Tick
-#if !ANDROID
-    glfwPollEvents();
-    window_->PollGamepadInput();
-#endif
+
     // tick
     if (status_ == NextRenderer::EApplicationStatus::Running)
     {
@@ -369,12 +396,8 @@ bool NextEngine::Tick()
         }
     }
 
-#if ANDROID
-    return false;
-#else
     window_->attemptDragWindow();
-    return glfwWindowShouldClose( window_->Handle() ) != 0;
-#endif
+    return false;
 }
 
 void NextEngine::End()
@@ -549,11 +572,9 @@ void NextEngine::DrawAuxPoint(glm::vec3 location, glm::vec4 color, float size, i
 
 glm::dvec2 NextEngine::GetMousePos()
 {
-    double x{},y{};
-#if !ANDROID
-    glfwGetCursorPos( window_->Handle(), &x, &y );
-#endif
-    return glm::dvec2(x,y);
+    float fx{}, fy{};
+    SDL_GetMouseState(&fx,&fy);
+    return glm::dvec2(fx,fy);
 }
 
 void NextEngine::RequestClose()
@@ -646,13 +667,17 @@ glm::mat4 HaltonJitterProjectionMatrix(const glm::mat4& projectionMatrix, float 
     return jitterMatrix * projectionMatrix;
 }
 
-glm::ivec2 NextEngine::GetMonitorSize(int monitorIndex) const
+glm::ivec2 NextEngine::GetMonitorSize() const
 {
     glm::ivec2 pos{0,0};
     glm::ivec2 size{1920,1080};
-#if !ANDROID
-    glfwGetMonitorWorkarea(glfwGetPrimaryMonitor(), &pos.x, &pos.y, &size.x, &size.y);
-#endif
+
+    SDL_Rect rect;
+    SDL_DisplayID id = SDL_GetPrimaryDisplay();
+    SDL_GetDisplayBounds(id, &rect);
+    size.x = rect.w;
+    size.y = rect.h;
+
     return size;
 }
 
@@ -926,44 +951,22 @@ void NextEngine::OnRendererPostRender(VkCommandBuffer commandBuffer, uint32_t im
     userInterface_->PostRender(commandBuffer, renderer_->SwapChain(), imageIndex);
 }
 
-void NextEngine::OnKey(int key, int scancode, int action, int mods)
+void NextEngine::OnKey(SDL_Event& event)
 {
     if (userInterface_->WantsToCaptureKeyboard())
     {
         return;
     }
 
-    if( gameInstance_->OnKey(key, scancode, action, mods) )
+    if( gameInstance_->OnKey(event) )
     {
         return;
     }
-    
-#if !ANDROID
-    if (action == GLFW_PRESS)
-    {
-        switch (key)
-        {
-        case GLFW_KEY_ESCAPE: scene_->SetSelectedId(-1);
-            break;
-        default: break;
-        }
-
-        // Settings (toggle switches)
-        switch (key)
-        {
-        case GLFW_KEY_F1: userSettings_.ShowSettings = !userSettings_.ShowSettings;
-            break;
-        case GLFW_KEY_F2: userSettings_.ShowOverlay = !userSettings_.ShowOverlay;
-            break;
-        default: break;
-        }
-    }
-#endif
 }
 
 void NextEngine::OnTouch(bool down, double xpos, double ypos)
 {
-    OnMouseButton(GLFW_MOUSE_BUTTON_RIGHT, down ? GLFW_PRESS : GLFW_RELEASE, 0);
+    //OnMouseButton(GLFW_MOUSE_BUTTON_RIGHT, down ? GLFW_PRESS : GLFW_RELEASE, 0);
 }
 
 void NextEngine::OnTouchMove(double xpos, double ypos)
@@ -987,7 +990,7 @@ void NextEngine::OnCursorPosition(const double xpos, const double ypos)
     }
 }
 
-void NextEngine::OnMouseButton(const int button, const int action, const int mods)
+void NextEngine::OnMouseButton(SDL_Event& event)
 {
     if (!renderer_->HasSwapChain() ||
         userInterface_->WantsToCaptureMouse())
@@ -995,7 +998,7 @@ void NextEngine::OnMouseButton(const int button, const int action, const int mod
         return;
     }
 
-    if(gameInstance_->OnMouseButton(button, action, mods))
+    if(gameInstance_->OnMouseButton(event))
     {
         return;
     }
@@ -1184,7 +1187,8 @@ void NextEngine::InitJSEngine() {
         }
         else
         {
-            SPDLOG_WARN("Failed to load script");
+            //Throw(std::runtime_error(std::string("failed to load script.")));
+            //SPDLOG_WARN("Failed to load script");
         }
     }
     catch(qjs::exception)

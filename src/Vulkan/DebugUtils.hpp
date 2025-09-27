@@ -51,7 +51,7 @@ namespace Vulkan
 		{
 #if !ANDROID
 			vkCmdEndDebugUtilsLabelEXT_(commandBuffer);
-#endif	
+#endif
 		}
 		
 	private:

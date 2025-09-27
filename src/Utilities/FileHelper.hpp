@@ -27,7 +27,6 @@ namespace Utilities
         
         static std::string GetPlatformFilePath( const char* srcPath )
         {
-            SPDLOG_INFO( SDL_GetBasePath() );
 #if ANDROID
             const char* AndroidExtPath = SDL_GetAndroidExternalStoragePath();
             return std::filesystem::path(AndroidExtPath).append(srcPath).string();

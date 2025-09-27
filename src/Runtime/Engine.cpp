@@ -94,7 +94,7 @@ namespace NextRenderer
 namespace
 {
     const bool EnableValidationLayers =
-#if defined(NDEBUG) ||  defined(ANDROID) || IOS
+#if defined(NDEBUG) || ANDROID || IOS
         false;
 #else
         true;
@@ -1204,7 +1204,8 @@ void NextEngine::InitJSEngine() {
         }
         else
         {
-            SPDLOG_WARN("Failed to load script");
+            //Throw(std::runtime_error(std::string("failed to load script.")));
+            //SPDLOG_WARN("Failed to load script");
         }
     }
     catch(qjs::exception)

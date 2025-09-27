@@ -51,7 +51,6 @@ install_macos() {
         curl:"$triplet" \
         tinygltf:"$triplet" \
         draco:"$triplet" \
-        rapidjson:"$triplet" \
         fmt:"$triplet" \
         meshoptimizer:"$triplet" \
         ktx:"$triplet" \
@@ -90,7 +89,6 @@ install_linux() {
         curl:x64-linux \
         tinygltf:x64-linux \
         draco:x64-linux \
-        rapidjson:x64-linux \
         fmt:x64-linux \
         meshoptimizer:x64-linux \
         ktx:x64-linux \
@@ -165,7 +163,6 @@ install_mingw() {
         curl:x64-mingw-static \
         tinygltf:x64-mingw-static \
         draco:x64-mingw-static \
-        rapidjson:x64-mingw-static \
         fmt:x64-mingw-static \
         meshoptimizer:x64-mingw-static \
         ktx:x64-mingw-static \

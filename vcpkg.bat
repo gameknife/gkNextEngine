@@ -54,7 +54,6 @@ IF EXIST %VCPKG_DIR% (
         curl:x64-windows-static ^
         tinygltf:x64-windows-static ^
         draco:x64-windows-static ^
-        rapidjson:x64-windows-static ^
         fmt:x64-windows-static ^
         meshoptimizer:x64-windows-static ^
         ktx:x64-windows-static ^

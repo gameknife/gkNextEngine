@@ -17,16 +17,6 @@
 #define TINYGLTF_IMPLEMENTATION
 #define TINYGLTF_ENABLE_DRACO
 
-//#if !ANDROID
-//#define TINYGLTF_USE_RAPIDJSON
-//#include <rapidjson/document.h>
-//#include <rapidjson/prettywriter.h>
-//#include <rapidjson/rapidjson.h>
-//#include <rapidjson/stringbuffer.h>
-//#include <rapidjson/writer.h>
-//#define TINYGLTF_NO_INCLUDE_RAPIDJSON
-//#endif
-
 #define TINYGLTF_NO_STB_IMAGE
 //#define TINYGLTF_NO_STB_IMAGE_WRITE
 #define STB_IMAGE_WRITE_IMPLEMENTATION

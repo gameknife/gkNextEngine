@@ -43,7 +43,6 @@ glm::mat4 ModelViewController::ModelView() const
 
 bool ModelViewController::OnKey(SDL_Event& event)
 {
-#if !ANDROID
     switch (event.key.key)
     {
     case SDLK_S: cameraMovingBackward_ = event.key.type != SDL_EVENT_KEY_UP;
@@ -61,9 +60,6 @@ bool ModelViewController::OnKey(SDL_Event& event)
     default: return false;
     }
     return false;
-#else
-    return false;
-#endif
 }
 
 // 新增手柄输入处理函数

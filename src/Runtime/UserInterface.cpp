@@ -100,11 +100,7 @@ UserInterface::UserInterface(
 	}
 	
 	// Window scaling and style.
-#if ANDROID
     const auto scaleFactor = 1.0;
-#else
-    const auto scaleFactor = 1.0;
-#endif
 	const auto fontSize = 16;
 
 	UserInterface::SetStyle();

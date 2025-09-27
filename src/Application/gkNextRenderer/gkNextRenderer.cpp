@@ -178,7 +178,6 @@ bool NextRendererGameInstance::OnMouseButton(SDL_Event& event)
 {
     modelViewController_.OnMouseButton(event);
 
-#if !ANDROID
 	if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT)
 	{
 		auto mousePos = GetEngine().GetMousePos();
@@ -196,8 +195,7 @@ bool NextRendererGameInstance::OnMouseButton(SDL_Event& event)
 		});
 		return true;
 	}
-#endif
-	
+
     return true;
 }
 

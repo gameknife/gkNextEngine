@@ -44,10 +44,7 @@ namespace Vulkan
 		std::function<void(float leftStickX, float leftStickY,
 						  float rightStickX, float rightStickY,
 						  float leftTrigger, float rightTrigger)> OnGamepadInput;
-  
-		// 添加轮询手柄输入的方法
-		void PollGamepadInput();
-		
+
 		// Methods
 		void Close();
 		bool IsMinimized() const;

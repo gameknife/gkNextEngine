@@ -153,7 +153,7 @@ UserSettings CreateUserSettings(const Options& options)
 
     userSettings.SuperResolution = options.SuperResolution;
     
-#if ANDROID
+#if ANDROID || IOS
     userSettings.NumberOfSamples = 1;
     userSettings.Denoiser = false;
     userSettings.FastGather = true;
@@ -330,20 +330,7 @@ bool NextEngine::Tick()
     {
         JSTickCallback_(deltaSeconds_);
     }
-    
-    // Renderer Tick
-#if !ANDROID
-    //glfwPollEvents();
-    // SDL_Event event;
-    // while (SDL_PollEvent(&event))
-    // {
-    //     // poll until all events are handled!
-    //     // decide what to do with this event.
-    //     bool value1;
-    //     if (HandleEvent(event, value1)) return value1;
-    // }
-    window_->PollGamepadInput();
-#endif
+
     // tick
     if (status_ == NextRenderer::EApplicationStatus::Running)
     {
@@ -585,13 +572,9 @@ void NextEngine::DrawAuxPoint(glm::vec3 location, glm::vec4 color, float size, i
 
 glm::dvec2 NextEngine::GetMousePos()
 {
-    double x{},y{};
-#if !ANDROID
-    //glfwGetCursorPos( window_->Handle(), &x, &y );
     float fx{}, fy{};
     SDL_GetMouseState(&fx,&fy);
-#endif
-    return glm::dvec2(x,y);
+    return glm::dvec2(fx,fy);
 }
 
 void NextEngine::RequestClose()
@@ -688,13 +671,13 @@ glm::ivec2 NextEngine::GetMonitorSize() const
 {
     glm::ivec2 pos{0,0};
     glm::ivec2 size{1920,1080};
-#if !ANDROID
+
     SDL_Rect rect;
     SDL_DisplayID id = SDL_GetPrimaryDisplay();
     SDL_GetDisplayBounds(id, &rect);
     size.x = rect.w;
     size.y = rect.h;
-#endif
+
     return size;
 }
 

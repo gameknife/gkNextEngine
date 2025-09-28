@@ -10,14 +10,15 @@
 #include "Utilities/ImGui.hpp"
 #include "Runtime/Platform/PlatformCommon.h"
 
-constexpr float TITLEBAR_SIZE = 40;
-constexpr float TITLEBAR_CONTROL_SIZE = TITLEBAR_SIZE * 3;
-constexpr float ICON_SIZE = 64;
-constexpr float PALATE_SIZE = 46;
-constexpr float BUTTON_SIZE = 36;
-constexpr float BUILD_BAR_WIDTH = 240;
-constexpr float SIDE_BAR_WIDTH = 300;
-constexpr float SHORTCUT_SIZE = 10;
+// should use 1em instead of 1px
+float TITLEBAR_SIZE = 40;
+float TITLEBAR_CONTROL_SIZE = TITLEBAR_SIZE * 3;
+float ICON_SIZE = 64;
+float PALATE_SIZE = 46;
+float BUTTON_SIZE = 36;
+float BUILD_BAR_WIDTH = 240;
+float SIDE_BAR_WIDTH = 300;
+float SHORTCUT_SIZE = 10;
 
 std::unique_ptr<NextGameInstanceBase> CreateGameInstance(Vulkan::WindowConfig& config, Options& options, NextEngine* engine)
 {
@@ -73,9 +74,20 @@ void NextRendererGameInstance::OnSceneLoaded()
 	GetEngine().GetScene().PlayAllTracks();
 }
 
+extern float GAndroidMagicScale;
+
 void NextRendererGameInstance::OnPreConfigUI()
 {
     NextGameInstanceBase::OnPreConfigUI();
+
+	TITLEBAR_SIZE = 40 * 0.75 / GAndroidMagicScale;
+	TITLEBAR_CONTROL_SIZE = 120 * 0.75 / GAndroidMagicScale;
+	ICON_SIZE = 64 * 0.75 / GAndroidMagicScale;
+	PALATE_SIZE = 46 * 0.75 / GAndroidMagicScale;
+	BUTTON_SIZE = 36 * 0.75 / GAndroidMagicScale;
+	BUILD_BAR_WIDTH = BUILD_BAR_WIDTH * ImGui::GetFontSize() / 16.0f;
+	SIDE_BAR_WIDTH = SIDE_BAR_WIDTH * ImGui::GetFontSize() / 16.0f;
+	SHORTCUT_SIZE = SHORTCUT_SIZE * ImGui::GetFontSize() / 16.0f;
 }
 
 bool NextRendererGameInstance::OnRenderUI()

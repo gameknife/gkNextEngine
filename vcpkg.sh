@@ -1,257 +1,95 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-detect_platform() {
-    case "$(uname -s)" in
-        Darwin*)
-            if [ "$(uname -m)" = "arm64" ]; then
-                echo "macos"
-            else
-                echo "macos_x64"
-            fi
-            ;;
-        Linux*)
-            echo "linux"
-            ;;
-        MINGW*|MSYS*|CYGWIN*)
-            echo "mingw"
-            ;;
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR"
+DEFAULT_VCPKG_ROOT="$PROJECT_ROOT/.vcpkg"
+VCPKG_ROOT="${VCPKG_ROOT:-$DEFAULT_VCPKG_ROOT}"
+VCPKG_EXE="$VCPKG_ROOT/vcpkg"
+
+log()  { printf '[vcpkg] %s\n' "$*"; }
+warn() { printf '[vcpkg] Warning: %s\n' "$*" >&2; }
+
+usage() {
+    cat <<USAGE
+Usage: ./vcpkg.sh <platform> [manifest-features]
+
+Platforms:
+  macos        (arm64-osx)
+  macos_x64    (x64-osx)
+  linux        (x64-linux)
+  android      (arm64-android)
+  ios          (arm64-ios)
+  mingw        (x64-mingw-static)
+  windows      (x64-windows-static)
+
+Examples:
+  ./vcpkg.sh macos
+  ./vcpkg.sh linux avif
+USAGE
+}
+
+select_triplet() {
+    case "$1" in
+        macos) echo "arm64-osx" ;;
+        macos_x64) echo "x64-osx" ;;
+        linux) echo "x64-linux" ;;
+        android) echo "arm64-android" ;;
+        ios) echo "arm64-ios" ;;
+        mingw) echo "x64-mingw-static" ;;
+        windows) echo "x64-windows-static" ;;
         *)
-            echo "unknown"
-            ;;
-    esac
-}
-
-install_macos() {
-    local triplet="$1"
-    local vcpkg_dir="vcpkg.macos"
-
-    if [ -d "$vcpkg_dir" ]; then
-        cd "$vcpkg_dir"
-        echo "Updating vcpkg..."
-        git pull origin master
-        ./bootstrap-vcpkg.sh
-        echo "Updating installed packages..."
-        ./vcpkg update
-        ./vcpkg upgrade --no-dry-run
-    else
-        git clone https://github.com/Microsoft/vcpkg.git "$vcpkg_dir"
-        cd "$vcpkg_dir"
-        ./bootstrap-vcpkg.sh
-    fi
-
-    ./vcpkg --recurse install \
-        cpptrace:"$triplet" \
-        cxxopts:"$triplet" \
-        sdl3[vulkan]:"$triplet" \
-        glm:"$triplet" \
-        imgui[core,freetype,sdl3-binding,vulkan-binding,docking-experimental]:"$triplet" \
-        stb:"$triplet" \
-        tinyobjloader:"$triplet" \
-        curl:"$triplet" \
-        tinygltf:"$triplet" \
-        draco:"$triplet" \
-        fmt:"$triplet" \
-        meshoptimizer:"$triplet" \
-        ktx:"$triplet" \
-        joltphysics:"$triplet" \
-        xxhash:"$triplet" \
-        spdlog:"$triplet" \
-        cpp-base64:"$triplet"
-}
-
-install_linux() {
-    local vcpkg_dir="vcpkg.linux"
-
-    if [ -d "$vcpkg_dir" ]; then
-        cd "$vcpkg_dir"
-        echo "Updating vcpkg..."
-        git pull origin master
-        ./bootstrap-vcpkg.sh
-        echo "Updating installed packages..."
-        ./vcpkg update
-        ./vcpkg upgrade --no-dry-run
-    else
-        git clone https://github.com/Microsoft/vcpkg.git "$vcpkg_dir"
-        cd "$vcpkg_dir"
-        ./bootstrap-vcpkg.sh
-    fi
-
-    ./vcpkg --recurse install \
-        cpptrace:x64-linux \
-        cxxopts:x64-linux \
-        vulkan-loader[wayland,xcb,xlib]:x64-linux \
-        sdl3:x64-linux \
-        glm:x64-linux \
-        imgui[core,freetype,sdl3-binding,vulkan-binding,docking-experimental]:x64-linux \
-        stb:x64-linux \
-        tinyobjloader:x64-linux \
-        curl:x64-linux \
-        tinygltf:x64-linux \
-        draco:x64-linux \
-        fmt:x64-linux \
-        meshoptimizer:x64-linux \
-        ktx:x64-linux \
-        joltphysics:x64-linux \
-        xxhash:x64-linux \
-        spdlog:x64-linux \
-        cpp-base64:x64-linux
-}
-
-install_android() {
-    local vcpkg_dir="vcpkg.android"
-
-    if [ -d "$vcpkg_dir" ]; then
-        cd "$vcpkg_dir"
-        echo "Updating vcpkg..."
-        git pull origin master
-        ./bootstrap-vcpkg.sh
-        echo "Updating installed packages..."
-        ./vcpkg update
-        ./vcpkg upgrade --no-dry-run
-    else
-        git clone https://github.com/Microsoft/vcpkg.git "$vcpkg_dir"
-        cd "$vcpkg_dir"
-        ./bootstrap-vcpkg.sh
-    fi
-
-    cp -f ../../android/custom-triplets/arm64-android.cmake ./triplets/arm64-android.cmake
-
-    ./vcpkg --recurse install \
-        cxxopts:arm64-android \
-        glm:arm64-android \
-        imgui[core,freetype,vulkan-binding,docking-experimental]:arm64-android \
-        stb:arm64-android \
-        tinyobjloader:arm64-android \
-        curl:arm64-android \
-        tinygltf:arm64-android \
-        draco:arm64-android \
-        fmt:arm64-android \
-        meshoptimizer:arm64-android \
-        ktx:arm64-android \
-        joltphysics:arm64-android \
-        xxhash:arm64-android \
-        spdlog:arm64-android \
-        cpp-base64:arm64-android
-}
-
-install_mingw() {
-    local vcpkg_dir="vcpkg.mingw"
-
-    if [ -d "$vcpkg_dir" ]; then
-        cd "$vcpkg_dir"
-        echo "Updating vcpkg..."
-        git pull origin master
-        ./bootstrap-vcpkg.sh
-        echo "Updating installed packages..."
-        ./vcpkg update
-        ./vcpkg upgrade --no-dry-run
-    else
-        git clone https://github.com/Microsoft/vcpkg.git "$vcpkg_dir"
-        cd "$vcpkg_dir"
-        ./bootstrap-vcpkg.sh
-    fi
-
-    ./vcpkg --recurse install \
-        cpptrace:x64-mingw-static \
-        cxxopts:x64-mingw-static \
-        sdl3:x64-mingw-static \
-        glm:x64-mingw-static \
-        imgui[core,freetype,sdl3-binding,vulkan-binding,docking-experimental]:x64-mingw-static \
-        stb:x64-mingw-static \
-        tinyobjloader:x64-mingw-static \
-        curl:x64-mingw-static \
-        tinygltf:x64-mingw-static \
-        draco:x64-mingw-static \
-        fmt:x64-mingw-static \
-        meshoptimizer:x64-mingw-static \
-        ktx:x64-mingw-static \
-        joltphysics:x64-mingw-static \
-        xxhash:x64-mingw-static \
-        spdlog:x64-mingw-static \
-        cpp-base64:x64-mingw-static
-}
-
-install_ios() {
-    local vcpkg_dir="vcpkg.ios"
-
-    if [ -d "$vcpkg_dir" ]; then
-        cd "$vcpkg_dir"
-        echo "Updating vcpkg..."
-        git pull origin master
-        ./bootstrap-vcpkg.sh
-        echo "Updating installed packages..."
-        ./vcpkg update
-        ./vcpkg upgrade --no-dry-run
-    else
-        git clone https://github.com/Microsoft/vcpkg.git "$vcpkg_dir"
-        cd "$vcpkg_dir"
-        ./bootstrap-vcpkg.sh
-    fi
-
-    cp -f ../../android/custom-triplets/community/arm64-ios.cmake ./triplets/arm64-ios.cmake
-
-    ./vcpkg --recurse install \
-        cxxopts:arm64-ios \
-        glm:arm64-ios \
-        sdl3[vulkan]:arm64-ios \
-        imgui[core,freetype,sdl3-binding,vulkan-binding,docking-experimental]:arm64-ios \
-        stb:arm64-ios \
-        tinyobjloader:arm64-ios \
-        curl:arm64-ios \
-        tinygltf:arm64-ios \
-        draco:arm64-ios \
-        fmt:arm64-ios \
-        meshoptimizer:arm64-ios \
-        ktx:arm64-ios \
-        joltphysics:arm64-ios \
-        xxhash:arm64-ios \
-        spdlog:arm64-ios \
-        cpp-base64:arm64-ios
-}
-
-main() {
-    mkdir -p build
-    cd build
-
-    local platform="$1"
-    if [ -z "$platform" ]; then
-        platform=$(detect_platform)
-    fi
-
-    case "$platform" in
-        macos)
-            echo "Installing dependencies for macOS (ARM64)..."
-            install_macos "arm64-osx"
-            ;;
-        macos_x64)
-            echo "Installing dependencies for macOS (x64)..."
-            install_macos "x64-osx"
-            ;;
-        linux)
-            echo "Installing dependencies for Linux..."
-            install_linux
-            ;;
-        android)
-            echo "Installing dependencies for Android..."
-            install_android
-            ;;
-        ios)
-            echo "Installing dependencies for iOS..."
-            install_ios
-            ;;
-        mingw)
-            echo "Installing dependencies for MinGW..."
-            install_mingw
-            ;;
-        *)
-            echo "Error: Unsupported platform '$platform'"
-            echo "Supported platforms: macos, macos_x64, linux, android, ios, mingw"
+            usage >&2
             exit 1
             ;;
     esac
+}
 
-    echo "Vcpkg installation completed successfully!"
+ensure_repo() {
+    if [ ! -d "$VCPKG_ROOT/.git" ]; then
+        log "Cloning vcpkg into $VCPKG_ROOT..."
+        git clone https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
+    else
+        log "Updating vcpkg in $VCPKG_ROOT..."
+        if ! git -C "$VCPKG_ROOT" pull --ff-only; then
+            warn "无法访问远程仓库，继续使用现有 vcpkg 副本。"
+        fi
+    fi
+
+    if [ ! -x "$VCPKG_EXE" ]; then
+        log "Bootstrapping vcpkg..."
+        (cd "$VCPKG_ROOT" && ./bootstrap-vcpkg.sh -disableMetrics)
+    fi
+}
+
+install_manifest() {
+    local triplet="$1"
+    log "Installing manifest dependencies for triplet '$triplet'..."
+    pushd "$PROJECT_ROOT" >/dev/null
+    "$VCPKG_EXE" install --triplet "$triplet" --feature-flags=manifests
+    popd >/dev/null
+}
+
+main() {
+    local platform="${1:-}"
+    if [ -z "$platform" ]; then
+        usage
+        exit 1
+    fi
+
+    local features="${2:-}"
+    if [ -n "$features" ]; then
+        export VCPKG_MANIFEST_FEATURES="$features"
+    else
+        unset VCPKG_MANIFEST_FEATURES || true
+    fi
+
+    ensure_repo
+    local triplet
+    triplet=$(select_triplet "$platform")
+    install_manifest "$triplet"
+
+    log "Done. 如果使用自定义路径，记得复用 VCPKG_ROOT=$VCPKG_ROOT。"
 }
 
 main "$@"

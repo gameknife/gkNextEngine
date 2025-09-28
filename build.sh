@@ -20,15 +20,42 @@ require_toolchain() {
     fi
 }
 
+normalize_path() {
+    local path="$1"
+    if [ -d "$path" ]; then
+        (cd "$path" && pwd -P)
+    else
+        local dir
+        dir=$(dirname "$path")
+        local base
+        base=$(basename "$path")
+        if [ -d "$dir" ]; then
+            (cd "$dir" && printf '%s/%s\n' "$(pwd -P)" "$base")
+        else
+            printf '%s\n' "$path"
+        fi
+    fi
+}
+
 prepare_build_dir() {
     local dir="$1"
+    local should_clean=0
     if [ -f "$dir/CMakeCache.txt" ]; then
         local cached_toolchain
         cached_toolchain=$(grep -E '^CMAKE_TOOLCHAIN_FILE:FILEPATH=' "$dir/CMakeCache.txt" | head -n1 | cut -d= -f2- || true)
-        if [ "${cached_toolchain:-}" != "$TOOLCHAIN_FILE" ]; then
-            log "检测到旧的 vcpkg 工具链路径，清理 ${dir}。"
-            rm -rf "$dir"
+        if [ -n "${cached_toolchain:-}" ]; then
+            local normalized_cached
+            local normalized_toolchain
+            normalized_cached=$(normalize_path "$cached_toolchain")
+            normalized_toolchain=$(normalize_path "$TOOLCHAIN_FILE")
+            if [ "$normalized_cached" != "$normalized_toolchain" ]; then
+                should_clean=1
+            fi
         fi
+    fi
+    if [ $should_clean -eq 1 ]; then
+        log "检测到旧的 vcpkg 工具链路径，清理 ${dir}。"
+        rm -rf "$dir"
     fi
     mkdir -p "$dir"
 }

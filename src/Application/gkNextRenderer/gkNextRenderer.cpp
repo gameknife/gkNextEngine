@@ -3,6 +3,8 @@
 #include <imgui.h>
 #include <ThirdParty/fontawesome/IconsFontAwesome6.h>
 
+#include <array>
+
 #include "Assets/FProcModel.h"
 #include "Assets/Node.h"
 #include "Runtime/Engine.hpp"
@@ -10,15 +12,55 @@
 #include "Utilities/ImGui.hpp"
 #include "Runtime/Platform/PlatformCommon.h"
 
+extern float GAndroidMagicScale;
+
 // should use 1em instead of 1px
-float TITLEBAR_SIZE = 40;
-float TITLEBAR_CONTROL_SIZE = TITLEBAR_SIZE * 3;
-float ICON_SIZE = 64;
-float PALATE_SIZE = 46;
-float BUTTON_SIZE = 36;
-float BUILD_BAR_WIDTH = 240;
-float SIDE_BAR_WIDTH = 300;
-float SHORTCUT_SIZE = 10;
+constexpr float CONST_TITLEBAR_SIZE = 40;
+constexpr float CONST_TITLEBAR_CONTROL_SIZE = CONST_TITLEBAR_SIZE * 3;
+constexpr float CONST_ICON_SIZE = 64;
+constexpr float CONST_PALATE_SIZE = 46;
+constexpr float CONST_BUTTON_SIZE = 36;
+constexpr float CONST_BUILD_BAR_WIDTH = 240;
+constexpr float CONST_SIDE_BAR_WIDTH = 300;
+constexpr float CONST_SHORTCUT_SIZE = 10;
+
+float TITLEBAR_SIZE = CONST_TITLEBAR_SIZE;
+float TITLEBAR_CONTROL_SIZE = CONST_TITLEBAR_CONTROL_SIZE;
+float ICON_SIZE = CONST_ICON_SIZE;
+float PALATE_SIZE = CONST_PALATE_SIZE;
+float BUTTON_SIZE = CONST_BUTTON_SIZE;
+float BUILD_BAR_WIDTH = CONST_BUILD_BAR_WIDTH;
+float SIDE_BAR_WIDTH = CONST_SIDE_BAR_WIDTH;
+float SHORTCUT_SIZE = CONST_SHORTCUT_SIZE;
+
+static void UpdateUiScaledMetrics()
+{
+    float scale = 1.0f;
+
+    if (GAndroidMagicScale > 0.0f)
+    {
+        scale *= 0.75f / GAndroidMagicScale;
+    }
+
+    if (ImGui::GetCurrentContext() != nullptr)
+    {
+        const float fontSize = ImGui::GetFontSize();
+        if (fontSize > 0.0f)
+        {
+            constexpr float referenceFontSize = 16.0f;
+            scale *= fontSize / referenceFontSize;
+        }
+    }
+
+    TITLEBAR_SIZE = CONST_TITLEBAR_SIZE * scale;
+    TITLEBAR_CONTROL_SIZE = CONST_TITLEBAR_CONTROL_SIZE * scale;
+    ICON_SIZE = CONST_ICON_SIZE * scale;
+    PALATE_SIZE = CONST_PALATE_SIZE * scale;
+    BUTTON_SIZE = CONST_BUTTON_SIZE * scale;
+    BUILD_BAR_WIDTH = CONST_BUILD_BAR_WIDTH * scale;
+    SIDE_BAR_WIDTH = CONST_SIDE_BAR_WIDTH * scale;
+    SHORTCUT_SIZE = CONST_SHORTCUT_SIZE * scale;
+}
 
 std::unique_ptr<NextGameInstanceBase> CreateGameInstance(Vulkan::WindowConfig& config, Options& options, NextEngine* engine)
 {
@@ -74,63 +116,44 @@ void NextRendererGameInstance::OnSceneLoaded()
 	GetEngine().GetScene().PlayAllTracks();
 }
 
-extern float GAndroidMagicScale;
-
 void NextRendererGameInstance::OnPreConfigUI()
 {
     NextGameInstanceBase::OnPreConfigUI();
-
-	TITLEBAR_SIZE = 40 * 0.75 / GAndroidMagicScale;
-	TITLEBAR_CONTROL_SIZE = 120 * 0.75 / GAndroidMagicScale;
-	ICON_SIZE = 64 * 0.75 / GAndroidMagicScale;
-	PALATE_SIZE = 46 * 0.75 / GAndroidMagicScale;
-	BUTTON_SIZE = 36 * 0.75 / GAndroidMagicScale;
-	BUILD_BAR_WIDTH = BUILD_BAR_WIDTH * ImGui::GetFontSize() / 16.0f;
-	SIDE_BAR_WIDTH = SIDE_BAR_WIDTH * ImGui::GetFontSize() / 16.0f;
-	SHORTCUT_SIZE = SHORTCUT_SIZE * ImGui::GetFontSize() / 16.0f;
 }
 
 bool NextRendererGameInstance::OnRenderUI()
 {
+	UpdateUiScaledMetrics();
+
 	DrawTitleBar();
 	DrawSettings();
 	if (GOption->ReferenceMode)
 	{
-		// 获取屏幕尺寸
 		ImGuiIO& io = ImGui::GetIO();
-        
-		// 渲染器名称数组
-		const char* rendererNames[] = {"SoftModern", "SoftTracing", "VoxelTracing" , "PathTracing"};
-        
-		// 四个象限的位置
-		ImVec2 positions[] = {
-			ImVec2(io.DisplaySize.x * 0.25f, io.DisplaySize.y * 0.45f),  // 左上
-			ImVec2(io.DisplaySize.x * 0.75f, io.DisplaySize.y * 0.45f),  // 右上
-			ImVec2(io.DisplaySize.x * 0.25f, io.DisplaySize.y * 0.95f),  // 左下
-			ImVec2(io.DisplaySize.x * 0.75f, io.DisplaySize.y * 0.95f)   // 右下
+		const auto viewport = io.DisplaySize;
+		static constexpr std::array<const char*, 4> rendererNames{"SoftModern", "SoftTracing", "VoxelTracing", "PathTracing"};
+		const std::array<ImVec2, rendererNames.size()> labelPositions{
+			ImVec2(viewport.x * 0.25f, viewport.y * 0.45f),
+			ImVec2(viewport.x * 0.75f, viewport.y * 0.45f),
+			ImVec2(viewport.x * 0.25f, viewport.y * 0.95f),
+			ImVec2(viewport.x * 0.75f, viewport.y * 0.95f)
 		};
-        
-		// 为每个象限添加渲染器名称标签
-		for (int i = 0; i < 4; i++)
+		const ImGuiWindowFlags windowFlags =
+			ImGuiWindowFlags_NoDecoration |
+			ImGuiWindowFlags_AlwaysAutoResize |
+			ImGuiWindowFlags_NoSavedSettings |
+			ImGuiWindowFlags_NoMove |
+			ImGuiWindowFlags_NoFocusOnAppearing;
+
+		for (size_t index = 0; index < rendererNames.size(); ++index)
 		{
-			ImGui::SetNextWindowPos(positions[i], ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+			ImGui::SetNextWindowPos(labelPositions[index], ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 			ImGui::SetNextWindowBgAlpha(0.5f);
-            
-			char windowName[32];
-			snprintf(windowName, sizeof(windowName), "RendererName%d", i);
-            
-			if (ImGui::Begin(windowName, nullptr, 
-				ImGuiWindowFlags_NoDecoration | 
-				ImGuiWindowFlags_AlwaysAutoResize | 
-				ImGuiWindowFlags_NoSavedSettings |
-				ImGuiWindowFlags_NoMove |
-				ImGuiWindowFlags_NoFocusOnAppearing))
+
+			auto windowName = fmt::format("RendererName{}", index);
+			if (ImGui::Begin(windowName.c_str(), nullptr, windowFlags))
 			{
-				// 如果i小于渲染器数量，则显示对应渲染器名称
-				if (i < sizeof(rendererNames)/sizeof(rendererNames[0]))
-				{
-					ImGui::Text("%s", rendererNames[i]);
-				}
+				ImGui::TextUnformatted(rendererNames[index]);
 			}
 			ImGui::End();
 		}
@@ -511,4 +534,3 @@ void NextRendererGameInstance::DrawTitleBar()
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(4);
 }
-

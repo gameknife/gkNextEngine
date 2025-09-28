@@ -10,10 +10,6 @@ android {
     }
     def ndkPath = ndkPathRaw.replace('\\', '/')
 
-    def compileSdkVersion = Integer.parseInt(project.findProperty("android.compileSdk")?.toString() ?: "35")
-    def targetSdkVersion = Integer.parseInt(project.findProperty("android.targetSdk")?.toString() ?: "35")
-    def minSdkVersion = Integer.parseInt(project.findProperty("android.minSdk")?.toString() ?: "21")
-
     signingConfigs {
         debug {
             storeFile file('../keystore/public.jks')
@@ -29,12 +25,12 @@ android {
         }
     }
     namespace "org.libsdl.helloworld"
-    compileSdk compileSdkVersion
+    compileSdk 35
 
     defaultConfig {
         applicationId 'com.gknext.renderer'
-        minSdk minSdkVersion
-        targetSdk targetSdkVersion
+        minSdk 21
+        targetSdk 35
         versionCode 1
         versionName '1.0'
 
@@ -72,7 +68,6 @@ android {
     buildFeatures {
         prefab true
     }
-    ndkVersion '27.0.12077973'
 }
 
 dependencies {

@@ -48,12 +48,7 @@
     "cpp-base64",
     {
       "name": "vulkan-loader",
-      "platform": "linux",
-      "features": [
-        "xcb",
-        "xlib",
-        "wayland"
-      ]
+      "platform": "linux"
     }
   ],
   "features": {

@@ -46,6 +46,28 @@ build_target() {
     (cd "$dir" && cmake --build . "$@")
 }
 
+find_slangc() {
+    find "$PROJECT_ROOT/external" -maxdepth 3 -type f -name slangc 2>/dev/null | head -n1 || true
+}
+
+ensure_slang_linux() {
+    if [ "$(detect_platform)" != "linux" ]; then
+        return
+    fi
+
+    if [ -n "$(find_slangc)" ]; then
+        return
+    fi
+
+    log "slangc 未找到，自动下载..."
+    "$PROJECT_ROOT/tools/fetch_slang_linux.sh"
+
+    if [ -z "$(find_slangc)" ]; then
+        warn "无法获取 Slang 编译器，请检查网络或 tools/fetch_slang_linux.sh"
+        exit 1
+    fi
+}
+
 ensure_moltenvk_ios() {
     local ios_root="$MOLTENVK_CACHE_ROOT/ios"
     local lib_path="$ios_root/lib/libMoltenVK.a"
@@ -114,6 +136,7 @@ build_ios() {
 
 build_linux() {
     require_toolchain
+    ensure_slang_linux
     local dir="$BUILD_ROOT/linux"
     SECONDS=0
     configure "$dir" -G Ninja \
@@ -146,10 +169,9 @@ build_android() {
 }
 
 main() {
-    local platform="${1:-}"
-    if [ -z "$platform" ]; then
-        platform=$(detect_platform)
-    fi
+    local host_platform
+    host_platform=$(detect_platform)
+    local platform="${1:-$host_platform}"
 
     case "$platform" in
         macos)

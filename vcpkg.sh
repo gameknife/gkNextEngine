@@ -89,7 +89,7 @@ main() {
     triplet=$(select_triplet "$platform")
     install_manifest "$triplet"
 
-    log "Done. 如果使用自定义路径，记得复用 VCPKG_ROOT=$VCPKG_ROOT。"
+    log "Done. 如果使用自定义路径，记得复用 VCPKG_ROOT=${VCPKG_ROOT}."
 }
 
 main "$@"

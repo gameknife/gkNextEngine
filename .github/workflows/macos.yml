@@ -38,24 +38,25 @@ jobs:
         unzip slang.zip -d slang
         echo "$PWD/slang/bin" >> $GITHUB_PATH
         echo "Downloaded and added slangc to PATH"
-    - name: Restore cached Primes
-      id: cache-primes-restore
-      uses: actions/cache/restore@v4
-      with:
-        path: |
-          build/vcpkg.macos
-        key: ${{ runner.os }}-primes
+        
+    # - name: Restore cached Primes
+    #   id: cache-primes-restore
+    #   uses: actions/cache/restore@v4
+    #   with:
+    #     path: |
+    #       build/vcpkg.macos
+    #     key: ${{ runner.os }}-primes
 
     - name: Compile vcpkg dependencies
       run: ./vcpkg.sh macos
 
-    - name: Save Primes
-      id: cache-primes-save
-      uses: actions/cache/save@v4
-      with:
-        path: |
-          build/vcpkg.macos
-        key: ${{ steps.cache-primes-restore.outputs.cache-primary-key }}
+    # - name: Save Primes
+    #   id: cache-primes-save
+    #   uses: actions/cache/save@v4
+    #   with:
+    #     path: |
+    #       build/vcpkg.macos
+    #     key: ${{ steps.cache-primes-restore.outputs.cache-primary-key }}
 
     - name: Compile gkNextRenderer
       run: |

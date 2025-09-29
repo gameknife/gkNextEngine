@@ -113,8 +113,8 @@ void Window::Restore()
 	SDL_RestoreWindow(window_);
 }
 
-constexpr double CLOSE_AREA_WIDTH = 0;
-constexpr double TITLE_AREA_HEIGHT = 55;	
+constexpr double closeAreaWidth = 0;
+constexpr double titleAreaHeight = 55;	
 void Window::attemptDragWindow() {
 #if !ANDROID
 	float x {};
@@ -129,22 +129,22 @@ void Window::attemptDragWindow() {
 		dragState = 1;
 	}
 	if (flag == SDL_BUTTON_LEFT && dragState == 1) {
-		double c_xpos, c_ypos;
-		int w_xpos, w_ypos;
-		SDL_GetWindowPosition(window_, &w_xpos, &w_ypos);
+		double cXpos, cYpos;
+		int wXpos, wYpos;
+		SDL_GetWindowPosition(window_, &wXpos, &wYpos);
 
-		c_xpos = x;
-		c_ypos = y;
+		cXpos = x;
+		cYpos = y;
 		
 		if (
-			s_xpos >= 0 && s_xpos <= (static_cast<double>(w_xsiz) - CLOSE_AREA_WIDTH) &&
-			s_ypos >= 0 && s_ypos <= TITLE_AREA_HEIGHT) {
-			SDL_SetWindowPosition(window_, w_xpos + static_cast<int>(c_xpos - s_xpos), w_ypos + static_cast<int>(c_ypos - s_ypos));
+			s_xpos >= 0 && s_xpos <= (static_cast<double>(w_xsiz) - closeAreaWidth) &&
+			s_ypos >= 0 && s_ypos <= titleAreaHeight) {
+			SDL_SetWindowPosition(window_, wXpos + static_cast<int>(cXpos - s_xpos), wYpos + static_cast<int>(cYpos - s_ypos));
 			}
 		if (
 			s_xpos >= (static_cast<double>(w_xsiz) - 15) && s_xpos <= (static_cast<double>(w_xsiz)) &&
 			s_ypos >= (static_cast<double>(w_ysiz) - 15) && s_ypos <= (static_cast<double>(w_ysiz))) {
-			SDL_SetWindowSize(window_, w_xsiz + static_cast<int>(c_xpos - s_xpos), w_ysiz + static_cast<int>(c_ypos - s_ypos));
+			SDL_SetWindowSize(window_, w_xsiz + static_cast<int>(cXpos - s_xpos), w_ysiz + static_cast<int>(cYpos - s_ypos));
 			}
 	}
 	if (flag != SDL_BUTTON_LEFT && dragState == 1) {

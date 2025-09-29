@@ -173,9 +173,9 @@ namespace Vulkan::RayTracing
         auto& nodeTrans = scene.GetNodeProxys();
         for ( size_t i = 0; i < nodeTrans.size(); i++)
         {
-            auto& Node = nodeTrans[i];
+            auto& node = nodeTrans[i];
             instances.push_back(TopLevelAccelerationStructure::CreateInstance(
-                bottomAs_[Node.modelId / 10], glm::transpose(Node.worldTS), Node.instanceId, Node.visible && !Node.nort));
+                bottomAs_[node.modelId / 10], glm::transpose(node.worldTS), node.instanceId, node.visible && !node.nort));
         }
 
         // upload to gpu

@@ -15,10 +15,10 @@
 
 namespace ScreenShot
 {
-    void SaveSwapChainToFileFast(Vulkan::VulkanBaseRenderer* renderer_, const std::string& filePathWithoutExtension, int inX, int inY, int inWidth, int inHeight)
+    void SaveSwapChainToFileFast(Vulkan::VulkanBaseRenderer* renderer, const std::string& filePathWithoutExtension, int inX, int inY, int inWidth, int inHeight)
     {
         // screenshot stuffs
-        const Vulkan::SwapChain& swapChain = renderer_->SwapChain();
+        const Vulkan::SwapChain& swapChain = renderer->SwapChain();
         auto orgExtent = swapChain.Extent();
         auto extent = swapChain.Extent();
 
@@ -29,7 +29,7 @@ namespace ScreenShot
         }
 
         // capture and export
-        renderer_->CaptureScreenShot();
+        renderer->CaptureScreenShot();
     
         uint32_t dataBytes = 0;
         uint32_t rowBytes = 0;
@@ -38,7 +38,7 @@ namespace ScreenShot
         uint32_t rawDataBytes = extent.width * extent.height * 4;
         rowBytes = extent.width * 3 * sizeof(uint8_t);
     
-        Vulkan::DeviceMemory* vkMemory = renderer_->GetScreenShotMemory();
+        Vulkan::DeviceMemory* vkMemory = renderer->GetScreenShotMemory();
         uint8_t* mappedGPUData = (uint8_t*)vkMemory->Map(0, VK_WHOLE_SIZE);
         uint8_t* mappedData = (uint8_t*)malloc(rawDataBytes);
         memcpy(mappedData, mappedGPUData, rawDataBytes);
@@ -88,10 +88,10 @@ namespace ScreenShot
         },1);
     }
 
-    void SaveSwapChainToFile(Vulkan::VulkanBaseRenderer* renderer_, const std::string& filePathWithoutExtension, int inX, int inY, int inWidth, int inHeight)
+    void SaveSwapChainToFile(Vulkan::VulkanBaseRenderer* renderer, const std::string& filePathWithoutExtension, int inX, int inY, int inWidth, int inHeight)
     {
         // screenshot stuffs
-        const Vulkan::SwapChain& swapChain = renderer_->SwapChain();
+        const Vulkan::SwapChain& swapChain = renderer->SwapChain();
 
         auto orgExtent = swapChain.Extent();
         auto extent = swapChain.Extent();
@@ -103,7 +103,7 @@ namespace ScreenShot
         }
 
         // capture and export
-        renderer_->CaptureScreenShot();
+        renderer->CaptureScreenShot();
 
         // too slow on main thread, copy out buffer and use thread to save
     
@@ -121,7 +121,7 @@ namespace ScreenShot
             
             uint16_t* dataview = (uint16_t*)data;
             {
-                Vulkan::DeviceMemory* vkMemory = renderer_->GetScreenShotMemory();
+                Vulkan::DeviceMemory* vkMemory = renderer->GetScreenShotMemory();
                 uint8_t* mappedData = (uint8_t*)vkMemory->Map(0, VK_WHOLE_SIZE);
 
                 uint32_t srcYDelta = orgExtent.width * 4;
@@ -163,7 +163,7 @@ namespace ScreenShot
             
             uint8_t* dataview = (uint8_t*)data;
             {
-                Vulkan::DeviceMemory* vkMemory = renderer_->GetScreenShotMemory();
+                Vulkan::DeviceMemory* vkMemory = renderer->GetScreenShotMemory();
                 uint8_t* mappedData = (uint8_t*)vkMemory->Map(0, VK_WHOLE_SIZE);
                 uint32_t yDelta = extent.width * kCompCnt;
                 uint32_t xDelta = kCompCnt;

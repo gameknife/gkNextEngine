@@ -6,14 +6,14 @@
 #include "Assets/Material.hpp"
 #include "Assets/Scene.hpp"
 
-static std::unique_ptr<ImFlow::ImNodeFlow> myNode;
-static std::weak_ptr<Nodes::NodeMaterial> matNode;
-static bool init_nodes = true;
+static std::unique_ptr<ImFlow::ImNodeFlow> MyNode;
+static std::weak_ptr<Nodes::NodeMaterial> MatNode;
+static bool InitNodes = true;
 
 void Editor::GUI::OpenMaterialEditor()
 {
-    myNode.reset( new ImFlow::ImNodeFlow() );
-    init_nodes = true;
+    MyNode.reset( new ImFlow::ImNodeFlow() );
+    InitNodes = true;
     
     if(selected_material != nullptr)
     {
@@ -21,17 +21,17 @@ void Editor::GUI::OpenMaterialEditor()
         float seprateY = 100.0f;
         float seprateX = 600.0f;
         // from material to node
-        auto nodeIOR = myNode->placeNodeAt<Nodes::NodeSetFloat>(ImVec2(30,baseY), "IOR", selected_material->gpuMaterial_.RefractionIndex);
-        auto nodeShadingMode = myNode->placeNodeAt<Nodes::NodeSetInt>(ImVec2(30,baseY += seprateY), "ShadingMode", (int)selected_material->gpuMaterial_.MaterialModel);
+        auto nodeIOR = MyNode->placeNodeAt<Nodes::NodeSetFloat>(ImVec2(30,baseY), "IOR", selected_material->gpuMaterial_.RefractionIndex);
+        auto nodeShadingMode = MyNode->placeNodeAt<Nodes::NodeSetInt>(ImVec2(30,baseY += seprateY), "ShadingMode", (int)selected_material->gpuMaterial_.MaterialModel);
         
-        auto nodeAlbedo = myNode->placeNodeAt<Nodes::NodeSetColor>(ImVec2(30, baseY += seprateY), "Albedo", glm::vec3(selected_material->gpuMaterial_.Diffuse));
-        auto nodeRoughness  = myNode->placeNodeAt<Nodes::NodeSetFloat>(ImVec2(30, baseY += seprateY), "Roughness", selected_material->gpuMaterial_.Fuzziness);
-        auto nodeMetalness  = myNode->placeNodeAt<Nodes::NodeSetFloat>(ImVec2(30, baseY += seprateY), "Metalness", selected_material->gpuMaterial_.Metalness);
+        auto nodeAlbedo = MyNode->placeNodeAt<Nodes::NodeSetColor>(ImVec2(30, baseY += seprateY), "Albedo", glm::vec3(selected_material->gpuMaterial_.Diffuse));
+        auto nodeRoughness  = MyNode->placeNodeAt<Nodes::NodeSetFloat>(ImVec2(30, baseY += seprateY), "Roughness", selected_material->gpuMaterial_.Fuzziness);
+        auto nodeMetalness  = MyNode->placeNodeAt<Nodes::NodeSetFloat>(ImVec2(30, baseY += seprateY), "Metalness", selected_material->gpuMaterial_.Metalness);
 
 
         
-        auto nodeMat  = myNode->placeNodeAt<Nodes::NodeMaterial>(ImVec2(seprateX, baseY * 0.5f - seprateY));
-        matNode = nodeMat;
+        auto nodeMat  = MyNode->placeNodeAt<Nodes::NodeMaterial>(ImVec2(seprateX, baseY * 0.5f - seprateY));
+        MatNode = nodeMat;
 
         nodeIOR->outPin("Out")->createLink(nodeMat->inPin("IOR"));
         nodeShadingMode->outPin("Out")->createLink(nodeMat->inPin("ShadingMode"));
@@ -43,19 +43,19 @@ void Editor::GUI::OpenMaterialEditor()
         seprateY = 200.0f;
         if(selected_material->gpuMaterial_.DiffuseTextureId != -1)
         {
-            auto nodeTexture = myNode->placeNodeAt<Nodes::NodeSetTexture>(ImVec2(30,baseY += seprateY), "AlbedoTexture", selected_material->gpuMaterial_.DiffuseTextureId);
+            auto nodeTexture = MyNode->placeNodeAt<Nodes::NodeSetTexture>(ImVec2(30,baseY += seprateY), "AlbedoTexture", selected_material->gpuMaterial_.DiffuseTextureId);
             nodeTexture->outPin("Out")->createLink(nodeMat->inPin("AlbedoTexture"));
         }
 
         if(selected_material->gpuMaterial_.NormalTextureId != -1)
         {
-            auto nodeTexture = myNode->placeNodeAt<Nodes::NodeSetTexture>(ImVec2(30,baseY += seprateY), "NormalTexture", selected_material->gpuMaterial_.NormalTextureId);
+            auto nodeTexture = MyNode->placeNodeAt<Nodes::NodeSetTexture>(ImVec2(30,baseY += seprateY), "NormalTexture", selected_material->gpuMaterial_.NormalTextureId);
             nodeTexture->outPin("Out")->createLink(nodeMat->inPin("NormalTexture"));
         }
 
         if(selected_material->gpuMaterial_.MRATextureId != -1)
         {
-            auto nodeTexture = myNode->placeNodeAt<Nodes::NodeSetTexture>(ImVec2(30,baseY += seprateY), "MRATexture", selected_material->gpuMaterial_.MRATextureId);
+            auto nodeTexture = MyNode->placeNodeAt<Nodes::NodeSetTexture>(ImVec2(30,baseY += seprateY), "MRATexture", selected_material->gpuMaterial_.MRATextureId);
             nodeTexture->outPin("Out")->createLink(nodeMat->inPin("MRATexture"));
         }
     }
@@ -63,7 +63,7 @@ void Editor::GUI::OpenMaterialEditor()
 
 void Editor::GUI::ApplyMaterial()
 {
-    if(std::shared_ptr<Nodes::NodeMaterial> mat = matNode.lock())
+    if(std::shared_ptr<Nodes::NodeMaterial> mat = MatNode.lock())
     {
         const glm::vec3& color = mat->getInVal<glm::vec3>("Albedo");
         
@@ -78,24 +78,24 @@ void Editor::GUI::ApplyMaterial()
 
 void Editor::GUI::ShowMaterialEditor()
 {
-    if(init_nodes)
+    if(InitNodes)
     {
         ImGui::SetNextWindowSize(ImVec2(1280,800));
         ImGui::SetWindowFocus("Material Editor");
         
-        ImGuiWindowClass window_class1;
-        window_class1.ClassId = ImGui::GetID("Material Editor");
-        window_class1.ViewportFlagsOverrideSet = ImGuiViewportFlags_TopMost | ImGuiViewportFlags_NoAutoMerge;
+        ImGuiWindowClass windowClass1;
+        windowClass1.ClassId = ImGui::GetID("Material Editor");
+        windowClass1.ViewportFlagsOverrideSet = ImGuiViewportFlags_TopMost | ImGuiViewportFlags_NoAutoMerge;
         
-        ImGui::SetNextWindowClass(&window_class1);
-        init_nodes = false;
+        ImGui::SetNextWindowClass(&windowClass1);
+        InitNodes = false;
     }
 
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8,16));
     ImGui::Begin("Material Editor", &ed_material, ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoCollapse);
     ImGui::PopStyleVar();
     
-    myNode->rightClickPopUpContent([](ImFlow::BaseNode *node)
+    MyNode->rightClickPopUpContent([](ImFlow::BaseNode *node)
                                       {
             if (node != nullptr)
             {
@@ -116,15 +116,15 @@ void Editor::GUI::ShowMaterialEditor()
                 if (ImGui::Button("Add Node"))
                 {
                     ImVec2 pos = ImGui::GetMousePos();
-                    myNode->placeNodeAt<Nodes::NodeSetFloat>(pos, "Test", 1.0f);
+                    MyNode->placeNodeAt<Nodes::NodeSetFloat>(pos, "Test", 1.0f);
                     ImGui::CloseCurrentPopup();
                 }
             } });
 
-    myNode->droppedLinkPopUpContent([](ImFlow::Pin *dragged)
+    MyNode->droppedLinkPopUpContent([](ImFlow::Pin *dragged)
                                    { dragged->deleteLink(); });
 
-    std::vector<std::weak_ptr<ImFlow::Link>> myLinks = myNode->getLinks();
+    std::vector<std::weak_ptr<ImFlow::Link>> myLinks = MyNode->getLinks();
 
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8,8));
     if ( ImGui::Button("Apply Material") )
@@ -152,7 +152,7 @@ void Editor::GUI::ShowMaterialEditor()
         }
     }
 
-    myNode->update();
+    MyNode->update();
     ImGui::End();
 }
 

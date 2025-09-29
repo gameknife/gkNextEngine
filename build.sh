@@ -70,7 +70,12 @@ configure() {
 build_target() {
     local dir="$1"
     shift
-    (cd "$dir" && cmake --build . "$@")
+    local config_arg=()
+    if [ $# -gt 1 ] && [ "$1" = "--config" ]; then
+        config_arg=("--config" "$2")
+        shift 2
+    fi
+    (cd "$dir" && cmake --build . "${config_arg[@]}" "$@")
 }
 
 find_slangc() {
@@ -138,7 +143,8 @@ build_macos() {
         -D VCPKG_TARGET_TRIPLET="$triplet" \
         -D VCPKG_MANIFEST_MODE=ON \
         -D VCPKG_MANIFEST_DIR="$PROJECT_ROOT" \
-        -D CMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_FILE"
+        -D CMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_FILE" \
+        -D CMAKE_BUILD_TYPE=RelWithDebInfo
     build_target "$dir" --config RelWithDebInfo
     log "macOS 构建耗时 ${SECONDS}s"
 }

@@ -154,7 +154,7 @@ namespace Vulkan {
 			return VK_FALSE;
 		}
 
-		VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pCallback)
+		VkResult CreateDebugUtilsMessengerExt(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pCallback)
 		{
 			const auto func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT"));
 			return func != nullptr
@@ -162,7 +162,7 @@ namespace Vulkan {
 				: VK_ERROR_EXTENSION_NOT_PRESENT;
 		}
 
-		void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT callback, const VkAllocationCallbacks* pAllocator)
+		void DestroyDebugUtilsMessengerExt(VkInstance instance, VkDebugUtilsMessengerEXT callback, const VkAllocationCallbacks* pAllocator)
 		{
 			const auto func = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT"));
 			if (func != nullptr) {
@@ -204,7 +204,7 @@ DebugUtilsMessenger::DebugUtilsMessenger(const Instance& instance, VkDebugUtilsM
 	createInfo.pfnUserCallback = VulkanDebugCallback;
 	createInfo.pUserData = nullptr;
 
-	Check(CreateDebugUtilsMessengerEXT(instance_.Handle(), &createInfo, nullptr, &messenger_),
+	Check(CreateDebugUtilsMessengerExt(instance_.Handle(), &createInfo, nullptr, &messenger_),
 		"set up Vulkan debug callback");
 }
 
@@ -212,7 +212,7 @@ DebugUtilsMessenger::~DebugUtilsMessenger()
 {
 	if (messenger_ != nullptr)
 	{
-		DestroyDebugUtilsMessengerEXT(instance_.Handle(), messenger_, nullptr);
+		DestroyDebugUtilsMessengerExt(instance_.Handle(), messenger_, nullptr);
 		messenger_ = nullptr;
 	}
 }

@@ -3,12 +3,12 @@
 #include "Vulkan/Vulkan.hpp"
 #include "Platform/PlatformCommon.h"
 
-void ModelViewController::Reset(const Assets::Camera& RenderCamera)
+void ModelViewController::Reset(const Assets::Camera& renderCamera)
 {
-    const auto inverse = glm::inverse(RenderCamera.ModelView);
+    const auto inverse = glm::inverse(renderCamera.ModelView);
 
     position_ = inverse * glm::vec4(0, 0, 0, 1);
-    orientation_ = glm::mat4(glm::mat3(RenderCamera.ModelView));
+    orientation_ = glm::mat4(glm::mat3(renderCamera.ModelView));
 
     cameraRotX_ = 0;
     cameraRotY_ = 0;
@@ -24,7 +24,7 @@ void ModelViewController::Reset(const Assets::Camera& RenderCamera)
 
     mouseSensitive_ = 0.5;
 
-    fieldOfView_ = RenderCamera.FieldOfView;
+    fieldOfView_ = renderCamera.FieldOfView;
 
     UpdateVectors();
 }

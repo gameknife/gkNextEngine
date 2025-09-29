@@ -7,7 +7,7 @@ namespace Utilities
     {
         FPackageFileSystem* FPackageFileSystem::instance_ = nullptr;
 
-        FPackageFileSystem::FPackageFileSystem(EPackageRunMode RunMode): runMode_(RunMode)
+        FPackageFileSystem::FPackageFileSystem(EPackageRunMode runMode): runMode_(runMode)
         {
             instance_ = this;
         }
@@ -51,14 +51,14 @@ namespace Utilities
                 return false;
             }
 
-            void* comp_buf = malloc( pakEntry.size );
+            void* compBuf = malloc( pakEntry.size );
             reader.seekg(pakEntry.offset, std::ios::beg);
-            reader.read(reinterpret_cast<char*>(comp_buf), pakEntry.size);
+            reader.read(reinterpret_cast<char*>(compBuf), pakEntry.size);
             reader.close();
 
             outData.resize(pakEntry.uncompressSize);
-            int l = lzav_decompress( comp_buf, outData.data(), pakEntry.size, pakEntry.uncompressSize );
-            free(comp_buf);
+            int l = lzav_decompress( compBuf, outData.data(), pakEntry.size, pakEntry.uncompressSize );
+            free(compBuf);
 
             return true;
         }
@@ -131,14 +131,14 @@ namespace Utilities
                 reader.read(reinterpret_cast<char*>(buffer.data()), fileSize);
                 reader.close();
                                 
-                int max_len = lzav_compress_bound_hi( static_cast<int>(buffer.size()) );
-                void* comp_buf = malloc( max_len );
-                int comp_len = lzav_compress_hi( buffer.data(), comp_buf, static_cast<int>(buffer.size()), max_len );
+                int maxLen = lzav_compress_bound_hi( static_cast<int>(buffer.size()) );
+                void* compBuf = malloc( maxLen );
+                int compLen = lzav_compress_hi( buffer.data(), compBuf, static_cast<int>(buffer.size()), maxLen );
 
-                writer.write(reinterpret_cast<const char*>(comp_buf), comp_len);
-                value.size = comp_len;
+                writer.write(reinterpret_cast<const char*>(compBuf), compLen);
+                value.size = compLen;
 
-                free(comp_buf);
+                free(compBuf);
             }
 
             // rewrite offset and size

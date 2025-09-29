@@ -13,30 +13,30 @@ void Editor::GUI::ShowProperties()
     {
         if (selected_obj_id != -1)
         {
-            Assets::Node* selected_obj = current_scene->GetNodeByInstanceId(selected_obj_id);
-            if (selected_obj == nullptr)
+            Assets::Node* selectedObj = current_scene->GetNodeByInstanceId(selected_obj_id);
+            if (selectedObj == nullptr)
             {
                 ImGui::End();
                 return;
             }
             
             ImGui::PushFont(fontIcon_);
-            ImGui::TextUnformatted(selected_obj->GetName().c_str());
+            ImGui::TextUnformatted(selectedObj->GetName().c_str());
             ImGui::PopFont();
             ImGui::Separator();
             ImGui::NewLine();
 
             ImGui::Text(ICON_FA_LOCATION_ARROW " Transform");
             ImGui::Separator();
-            auto mat4 = selected_obj->WorldTransform();
+            auto mat4 = selectedObj->WorldTransform();
             
             ImGui::BeginGroup();
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
             ImGui::Button("L"); ImGui::SameLine();
             ImGui::PopStyleColor();
-            if ( ImGui::DragFloat3("##Location", &selected_obj->Translation().x, 0.1f) )
+            if ( ImGui::DragFloat3("##Location", &selectedObj->Translation().x, 0.1f) )
             {
-                selected_obj->RecalcTransform(true);
+                selectedObj->RecalcTransform(true);
                 current_scene->MarkDirty();
             }
             ImGui::EndGroup();
@@ -45,11 +45,11 @@ void Editor::GUI::ShowProperties()
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
             ImGui::Button("R"); ImGui::SameLine();
             ImGui::PopStyleColor();
-            static glm::vec3 eular = glm::eulerAngles(selected_obj->Rotation());
+            static glm::vec3 eular = glm::eulerAngles(selectedObj->Rotation());
             if ( ImGui::DragFloat3("##Rotation", &eular.x, 0.1f) )
             {
-                selected_obj->SetRotation( glm::quat(eular));
-                selected_obj->RecalcTransform(true);
+                selectedObj->SetRotation( glm::quat(eular));
+                selectedObj->RecalcTransform(true);
                 current_scene->MarkDirty();
             }
             ImGui::EndGroup();
@@ -58,9 +58,9 @@ void Editor::GUI::ShowProperties()
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.8f, 1.0f));
             ImGui::Button("S"); ImGui::SameLine();
             ImGui::PopStyleColor();
-            if ( ImGui::DragFloat3("##Scale", &selected_obj->Scale().x, 0.1f) )
+            if ( ImGui::DragFloat3("##Scale", &selectedObj->Scale().x, 0.1f) )
             {
-                selected_obj->RecalcTransform(true);
+                selectedObj->RecalcTransform(true);
                 current_scene->MarkDirty();
             }
             ImGui::EndGroup();
@@ -68,7 +68,7 @@ void Editor::GUI::ShowProperties()
             ImGui::NewLine();
             ImGui::Text(ICON_FA_CUBE " Mesh");
             ImGui::Separator();
-            int modelId = selected_obj->GetModel();
+            int modelId = selectedObj->GetModel();
             ImGui::InputInt("##ModelId", &modelId, 1, 1, ImGuiInputTextFlags_ReadOnly);
 
             ImGui::NewLine();
@@ -78,7 +78,7 @@ void Editor::GUI::ShowProperties()
             if(current_scene != nullptr && modelId != -1)
             {
                 auto& model = current_scene->Models()[modelId];
-                auto& mats = selected_obj->Materials();
+                auto& mats = selectedObj->Materials();
                 for ( auto& mat : mats)
                 {
                     int matIdx = mat;

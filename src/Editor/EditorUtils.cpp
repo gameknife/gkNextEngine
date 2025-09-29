@@ -79,10 +79,10 @@ void utils::DrawGrid()
     }
 }
 
-void utils::ShowStyleEditorWindow(bool *child_sty)
+void utils::ShowStyleEditorWindow(bool *childSty)
 {
     ImGui::SetNextWindowSize(ImVec2(500,700), ImGuiCond_Once);
-    if (ImGui::Begin("Style Editor", child_sty, ImGuiWindowFlags_NoCollapse))
+    if (ImGui::Begin("Style Editor", childSty, ImGuiWindowFlags_NoCollapse))
     {
         ImGui::ShowStyleEditor();
         ImGui::End();
@@ -90,74 +90,74 @@ void utils::ShowStyleEditorWindow(bool *child_sty)
     
 }
 
-void utils::ShowColorExportWindow(bool *child_colexp)
+void utils::ShowColorExportWindow(bool *childColexp)
 {
-    if (ImGui::Begin("Color Export", child_colexp, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse))
+    if (ImGui::Begin("Color Export", childColexp, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse))
     {
         static ImVec4 color = ImVec4(114.0f / 255.0f, 144.0f / 255.0f, 154.0f / 255.0f, 200.0f / 255.0f);
 
-        static bool         alpha_preview      = true;
-        static bool         alpha_half_preview = true;
-        static bool         drag_and_drop      = true;
-        static bool         options_menu       = true;
+        static bool         alphaPreview      = true;
+        static bool         alphaHalfPreview = true;
+        static bool         dragAndDrop      = true;
+        static bool         optionsMenu       = true;
         static bool         hdr                = false;
-        ImGuiColorEditFlags misc_flags         = (hdr ? ImGuiColorEditFlags_HDR : 0) |
-                                         (drag_and_drop ? 0 : ImGuiColorEditFlags_NoDragDrop) |
-                                         (alpha_half_preview ? ImGuiColorEditFlags_AlphaPreviewHalf
-                                                             : (alpha_preview ? ImGuiColorEditFlags_AlphaPreview : 0)) |
-                                         (options_menu ? 0 : ImGuiColorEditFlags_NoOptions);
+        ImGuiColorEditFlags miscFlags         = (hdr ? ImGuiColorEditFlags_HDR : 0) |
+                                         (dragAndDrop ? 0 : ImGuiColorEditFlags_NoDragDrop) |
+                                         (alphaHalfPreview ? ImGuiColorEditFlags_AlphaPreviewHalf
+                                                             : (alphaPreview ? ImGuiColorEditFlags_AlphaPreview : 0)) |
+                                         (optionsMenu ? 0 : ImGuiColorEditFlags_NoOptions);
 
         ImGui::Text("Color widget:");
         ImGui::SameLine();
         HelpMarker("Click on the color square to open a color picker.\n"
                    "CTRL+click on individual component to input value.\n");
-        ImGui::ColorEdit3("MyColor##1", (float *)&color, misc_flags);
+        ImGui::ColorEdit3("MyColor##1", (float *)&color, miscFlags);
         ImGui::SameLine();
         HelpMarker("Right click me to export colors with your preferred format.");
 
         ImGui::Text("Color widget HSV with Alpha:");
-        ImGui::ColorEdit4("MyColor##2", (float *)&color, ImGuiColorEditFlags_DisplayHSV | misc_flags);
+        ImGui::ColorEdit4("MyColor##2", (float *)&color, ImGuiColorEditFlags_DisplayHSV | miscFlags);
 
         ImGui::Text("Color widget with Float Display:");
-        ImGui::ColorEdit4("MyColor##2f", (float *)&color, ImGuiColorEditFlags_Float | misc_flags);
+        ImGui::ColorEdit4("MyColor##2f", (float *)&color, ImGuiColorEditFlags_Float | miscFlags);
 
         ImGui::Text("Color picker:");
         static bool   alpha        = true;
-        static bool   alpha_bar    = true;
-        static bool   side_preview = true;
-        static bool   ref_color    = false;
-        static ImVec4 ref_color_v(1.0f, 0.0f, 1.0f, 0.5f);
-        static int    display_mode = 0;
-        static int    picker_mode  = 2;
-        ImGui::Combo("Display Mode", &display_mode, "Auto/Current\0None\0RGB Only\0HSV Only\0Hex Only\0");
+        static bool   alphaBar    = true;
+        static bool   sidePreview = true;
+        static bool   refColor    = false;
+        static ImVec4 refColorV(1.0f, 0.0f, 1.0f, 0.5f);
+        static int    displayMode = 0;
+        static int    pickerMode  = 2;
+        ImGui::Combo("Display Mode", &displayMode, "Auto/Current\0None\0RGB Only\0HSV Only\0Hex Only\0");
         ImGui::SameLine();
         HelpMarker("ColorEdit defaults to displaying RGB inputs if you don't specify a display mode, "
                    "but the user can change it with a right-click.\n\nColorPicker defaults to displaying RGB+HSV+Hex "
                    "if you don't specify a display mode.\n\nYou can change the defaults using SetColorEditOptions().");
-        ImGui::Combo("Picker Mode", &picker_mode, "Auto/Current\0Hue bar + SV rect\0Hue wheel + SV triangle\0");
+        ImGui::Combo("Picker Mode", &pickerMode, "Auto/Current\0Hue bar + SV rect\0Hue wheel + SV triangle\0");
         ImGui::SameLine();
         HelpMarker("User can right-click the picker to change mode.");
-        ImGuiColorEditFlags flags = misc_flags;
+        ImGuiColorEditFlags flags = miscFlags;
         if (!alpha)
             flags |=
                 ImGuiColorEditFlags_NoAlpha; // This is by default if you call ColorPicker3() instead of ColorPicker4()
-        if (alpha_bar)
+        if (alphaBar)
             flags |= ImGuiColorEditFlags_AlphaBar;
-        if (!side_preview)
+        if (!sidePreview)
             flags |= ImGuiColorEditFlags_NoSidePreview;
-        if (picker_mode == 1)
+        if (pickerMode == 1)
             flags |= ImGuiColorEditFlags_PickerHueBar;
-        if (picker_mode == 2)
+        if (pickerMode == 2)
             flags |= ImGuiColorEditFlags_PickerHueWheel;
-        if (display_mode == 1)
+        if (displayMode == 1)
             flags |= ImGuiColorEditFlags_NoInputs; // Disable all RGB/HSV/Hex displays
-        if (display_mode == 2)
+        if (displayMode == 2)
             flags |= ImGuiColorEditFlags_DisplayRGB; // Override display mode
-        if (display_mode == 3)
+        if (displayMode == 3)
             flags |= ImGuiColorEditFlags_DisplayHSV;
-        if (display_mode == 4)
+        if (displayMode == 4)
             flags |= ImGuiColorEditFlags_DisplayHex;
-        ImGui::ColorPicker4("MyColor##4", (float *)&color, flags, ref_color ? &ref_color_v.x : NULL);
+        ImGui::ColorPicker4("MyColor##4", (float *)&color, flags, refColor ? &refColorV.x : NULL);
 
         ImGui::Text("Set defaults in code:");
         ImGui::SameLine();
@@ -173,7 +173,7 @@ void utils::ShowColorExportWindow(bool *child_colexp)
                                        ImGuiColorEditFlags_PickerHueWheel);
 
         // HSV encoded support (to avoid RGB<>HSV round trips and singularities when S==0 or V==0)
-        static ImVec4 color_hsv(0.23f, 1.0f, 1.0f, 1.0f); // Stored as HSV!
+        static ImVec4 colorHsv(0.23f, 1.0f, 1.0f, 1.0f); // Stored as HSV!
         ImGui::Spacing();
         ImGui::Text("HSV encoded colors");
         ImGui::SameLine();
@@ -182,16 +182,16 @@ void utils::ShowColorExportWindow(bool *child_colexp)
             "allows you to store colors as HSV and pass them to ColorEdit and ColorPicker as HSV. This comes with the"
             "added benefit that you can manipulate hue values with the picker even when saturation or value are zero.");
         ImGui::Text("Color widget with InputHSV:");
-        ImGui::ColorEdit4("HSV shown as RGB##1", (float *)&color_hsv,
+        ImGui::ColorEdit4("HSV shown as RGB##1", (float *)&colorHsv,
                           ImGuiColorEditFlags_DisplayRGB | ImGuiColorEditFlags_InputHSV | ImGuiColorEditFlags_Float);
-        ImGui::ColorEdit4("HSV shown as HSV##1", (float *)&color_hsv,
+        ImGui::ColorEdit4("HSV shown as HSV##1", (float *)&colorHsv,
                           ImGuiColorEditFlags_DisplayHSV | ImGuiColorEditFlags_InputHSV | ImGuiColorEditFlags_Float);
-        ImGui::DragFloat4("Raw HSV values", (float *)&color_hsv, 0.01f, 0.0f, 1.0f);
+        ImGui::DragFloat4("Raw HSV values", (float *)&colorHsv, 0.01f, 0.0f, 1.0f);
         ImGui::End();
     }
 }
 
-void utils::ShowResourcesWindow(bool *child_resources)
+void utils::ShowResourcesWindow(bool *childResources)
 {
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.84f, 0.00f, 1.00f, 1.00f));
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.12f, 0.12f, 0.12f, 1.00f));
@@ -252,7 +252,7 @@ void utils::ShowResourcesWindow(bool *child_resources)
         ImGui::End();
     }
 #else
-    if (ImGui::Begin("Resources", child_resources, ImGuiWindowFlags_NoCollapse))
+    if (ImGui::Begin("Resources", childResources, ImGuiWindowFlags_NoCollapse))
     {
         ImGui::TextWrapped("Some useful resources for developers using Dear ImGui.");
         ImGui::TextWrapped("Keep in mind that the most helpful resource will always be the Dear ImGui Demo (Tools > Demo Window) and imgui/imgui_demo.cpp.");
@@ -304,7 +304,7 @@ void utils::ShowResourcesWindow(bool *child_resources)
     ImGui::PopStyleColor(10);
 }
 
-void utils::ShowAboutWindow(bool *child_about)
+void utils::ShowAboutWindow(bool *childAbout)
 {
     std::string ver = NextRenderer::GetBuildVersion();
     std::string imguiver = IMGUI_VERSION;
@@ -322,7 +322,7 @@ void utils::ShowAboutWindow(bool *child_about)
             ImGui::Text("Fmt: %s", fmtver.c_str());
             ImGui::Separator();
 
-            if (ImGui::Button("Back")) { ImGui::CloseCurrentPopup(); *child_about = false; }
+            if (ImGui::Button("Back")) { ImGui::CloseCurrentPopup(); *childAbout = false; }
             ImGui::EndPopup();
         }
 
@@ -339,14 +339,14 @@ bool utils::IsItemActiveAlt(ImVec2 pos, int id)
     return active;
 }
 
-bool utils::GrabButton(ImVec2 pos, int random_int)
+bool utils::GrabButton(ImVec2 pos, int randomInt)
 {
     bool active = false;
     ImGui::SetCursorPos(pos);
-    ImGui::PushID(random_int);
+    ImGui::PushID(randomInt);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.00f, 0.00f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0);
-    ImGui::BeginChild(random_int + 9, ImVec2(20, 20));
+    ImGui::BeginChild(randomInt + 9, ImVec2(20, 20));
     ImGui::Button("  ");
     active = ImGui::IsItemActive();
     ImGui::EndChild();
@@ -374,6 +374,6 @@ float utils::CenterHorizontal()
 {
     auto windowWidth = ImGui::GetWindowSize().x;
     auto itemWidth   = ImGui::GetItemRectSize().x;
-    float PosX = ((windowWidth - itemWidth) * 0.5f);
-    return PosX;
+    float posX = ((windowWidth - itemWidth) * 0.5f);
+    return posX;
 }

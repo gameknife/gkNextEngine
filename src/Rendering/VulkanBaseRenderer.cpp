@@ -148,7 +148,7 @@ namespace
 
     bool SupportRayQuery(const Vulkan::VulkanBaseRenderer& application)
     {
-        bool SupportRayQuery = false;
+        bool supportRayQuery = false;
         for (const auto& device : application.PhysicalDevices())
         {
             const auto extensions = Vulkan::GetEnumerateVector(device, static_cast<const char*>(nullptr),
@@ -159,9 +159,9 @@ namespace
                    return strcmp(extension.extensionName,VK_KHR_RAY_QUERY_EXTENSION_NAME) == 0;
                });
 
-            SupportRayQuery = SupportRayQuery | hasRayTracing;
+            supportRayQuery = supportRayQuery | hasRayTracing;
         }
-        return SupportRayQuery;
+        return supportRayQuery;
     }
 
     void PrintVulkanSwapChainInformation(const Vulkan::VulkanBaseRenderer& application)
@@ -472,9 +472,9 @@ namespace Vulkan
         }
 
         // SwapChaine
-        int Divider = 4 - ( GOption->ReferenceMode ? 0 : GOption->SuperResolution );
+        int divider = 4 - ( GOption->ReferenceMode ? 0 : GOption->SuperResolution );
         swapChain_.reset(new class SwapChain(*device_, presentMode_, forceSDR_));
-        swapChain_->UpdateRenderViewport(0, 0, swapChain_->Extent().width * 2 / Divider,swapChain_->Extent().height * 2 / Divider);
+        swapChain_->UpdateRenderViewport(0, 0, swapChain_->Extent().width * 2 / divider,swapChain_->Extent().height * 2 / divider);
         swapChain_->UpdateOutputViewport( 0, 0, swapChain_->Extent().width, swapChain_->Extent().height);
 
         // depthBuffer

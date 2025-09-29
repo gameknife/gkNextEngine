@@ -26,13 +26,13 @@ DescriptorSets::DescriptorSets(
 	allocInfo.pSetLayouts = layouts.data();
 
 	// bindless stuff
-	VkDescriptorSetVariableDescriptorCountAllocateInfoEXT count_info{
+	VkDescriptorSetVariableDescriptorCountAllocateInfoEXT countInfo{
 		VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO_EXT
 	};
-	uint32_t max_binding = 65535u - 1;
-	count_info.descriptorSetCount = static_cast<uint32_t>(size);
-	count_info.pDescriptorCounts = &max_binding;
-	if (bindless) allocInfo.pNext = &count_info;
+	uint32_t maxBinding = 65535u - 1;
+	countInfo.descriptorSetCount = static_cast<uint32_t>(size);
+	countInfo.pDescriptorCounts = &maxBinding;
+	if (bindless) allocInfo.pNext = &countInfo;
 	
 	descriptorSets_.resize(size);
 

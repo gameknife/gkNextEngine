@@ -26,7 +26,7 @@ Options::Options(const int argc, const char* argv[])
 		("fullscreen", "Toggle fullscreen vs windowed (default: windowed).", cxxopts::value<bool>(Fullscreen)->default_value("false"))
 
 		("savefile", "Save screenshot every benchmark finish.", cxxopts::value<bool>(SaveFile)->default_value("false"))
-		("renderdoc", "Attach renderdoc if avaliable.", cxxopts::value<bool>(RenderDoc)->default_value("false"))
+		("renderdoc", "Attach renderdoc if available.", cxxopts::value<bool>(RenderDoc)->default_value("false"))
 		("forcesdr", "Force use SDR Display even supported.", cxxopts::value<bool>(ForceSDR)->default_value("false"))
 		("locale", "Locale: en, zhCN, RU.", cxxopts::value<std::string>(locale)->default_value("en"))
 		("reference", "Reference Renderer Compare Mode.", cxxopts::value<bool>(ReferenceMode)->default_value("false"))
@@ -57,4 +57,3 @@ Options::Options(const int argc, const char* argv[])
 		exit(0);
 	}
 }
-

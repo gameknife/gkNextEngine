@@ -93,7 +93,7 @@ namespace NextRenderer
 
 namespace
 {
-    const bool EnableValidationLayers =
+    const bool enableValidationLayers =
 #if defined(NDEBUG) || ANDROID || IOS
         false;
 #else
@@ -203,7 +203,7 @@ NextEngine::NextEngine(Options& options, void* userdata)
     window_.reset( new Vulkan::Window(windowConfig));
         
     // Initialize Renderer
-    renderer_.reset( NextRenderer::CreateRenderer(options.RendererType, window_.get(), static_cast<VkPresentModeKHR>(options.PresentMode), EnableValidationLayers) );
+    renderer_.reset( NextRenderer::CreateRenderer(options.RendererType, window_.get(), static_cast<VkPresentModeKHR>(options.PresentMode), enableValidationLayers) );
     rendererType = options.RendererType;
     
     renderer_->DelegateOnDeviceSet = [this]()->void{OnRendererDeviceSet();};
@@ -218,7 +218,7 @@ NextEngine::NextEngine(Options& options, void* userdata)
     window_->OnCursorPosition = [this](const double xpos, const double ypos) { OnCursorPosition(xpos, ypos); };
     //window_->OnMouseButton = [this](const int button, const int action, const int mods) { OnMouseButton(button, action, mods); };
     window_->OnScroll = [this](const double xoffset, const double yoffset) { OnScroll(xoffset, yoffset); };
-    window_->OnDropFile = [this](int path_count, const char* paths[]) { OnDropFile(path_count, paths); };
+    window_->OnDropFile = [this](int pathCount, const char* paths[]) { OnDropFile(pathCount, paths); };
     window_->OnGamepadInput = [this](float leftStickX, float leftStickY,float rightStickX, float rightStickY,float leftTrigger, float rightTrigger) {
         if (gameInstance_) return gameInstance_->OnGamepadInput(leftStickX, leftStickY,rightStickX, rightStickY,leftTrigger, rightTrigger);
         return false;
@@ -543,13 +543,13 @@ void NextEngine::DrawAuxBox(glm::vec3 min, glm::vec3 max, glm::vec4 color, float
     DrawAuxLine(glm::vec3(min.x, max.y, min.z), glm::vec3(min.x, max.y, max.z), color, size);
 }
 
-static std::vector<int32_t> auxCounter;
+static std::vector<int32_t> AuxCounter;
 void NextEngine::DrawAuxPoint(glm::vec3 location, glm::vec4 color, float size, int32_t durationInTick)
 {
     if (durationInTick > 0)
     {
-        auxCounter.push_back(durationInTick);
-        int32_t id = static_cast<int32_t>(auxCounter.size()) - 1;
+        AuxCounter.push_back(durationInTick);
+        int32_t id = static_cast<int32_t>(AuxCounter.size()) - 1;
         AddTickedTask( [this, location, color, size, id](double deltaSeconds)->bool
         {
             auto transformed = ProjectWorldToScreen(location);
@@ -557,7 +557,7 @@ void NextEngine::DrawAuxPoint(glm::vec3 location, glm::vec4 color, float size, i
             {
                 userInterface_->DrawPoint(transformed.x, transformed.y, size, color);
             }
-            return (auxCounter[id] -= 1) <= 0;
+            return (AuxCounter[id] -= 1) <= 0;
         });
     }
     else
@@ -607,8 +607,8 @@ void NextEngine::ToggleMaximize()
 void NextEngine::RequestScreenShot(std::string filename)
 {
     auto time = std::time(nullptr);
-    std::string screenshot_filename = filename.empty() ? fmt::format("screenshot_{:%Y-%m-%d-%H-%M-%S}", *std::localtime(&time)) : filename;
-    SaveScreenShot(screenshot_filename, 0, 0, 0, 0);
+    std::string screenshotFilename = filename.empty() ? fmt::format("screenshot_{:%Y-%m-%d-%H-%M-%S}", *std::localtime(&time)) : filename;
+    SaveScreenShot(screenshotFilename, 0, 0, 0, 0);
 }
 
 // 生成一个随机抖动偏移
@@ -753,7 +753,7 @@ Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D 
     ubo.SuperResolution = GOption->ReferenceMode ? 2 : userSettings_.SuperResolution;
     ubo.Projection[1][1] *= -1;
 
-    glm::mat4x4 ProjectionUnJit = ubo.Projection;    
+    glm::mat4x4 projectionUnJit = ubo.Projection;    
     // handle android vulkan pre rotation
 #if ANDROID
     glm::mat4 pre_rotate_mat = glm::mat4(1.0f);
@@ -765,7 +765,7 @@ Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D 
     ubo.Projection[1][1] *= -1;
     ubo.Projection = pre_rotate_mat * ubo.Projection;
 
-    ProjectionUnJit = ubo.Projection;
+    projectionUnJit = ubo.Projection;
 #endif
 
     if (userSettings_.TAA)
@@ -781,7 +781,7 @@ Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D 
     ubo.ModelViewInverse = glm::inverse(ubo.ModelView);
     ubo.ProjectionInverse = glm::inverse(ubo.Projection);
     ubo.ViewProjection = ubo.Projection * ubo.ModelView;
-    ubo.ViewProjectionUnJit = ProjectionUnJit * ubo.ModelView;
+    ubo.ViewProjectionUnJit = projectionUnJit * ubo.ModelView;
     
     ubo.PrevViewProjection = prevUBO_.TotalFrames != 0 ? prevUBO_.ViewProjection : ubo.ViewProjection;
     ubo.PrevViewProjectionUnJit = prevUBO_.TotalFrames != 0 ? prevUBO_.ViewProjectionUnJit : ubo.ViewProjectionUnJit;
@@ -1015,12 +1015,12 @@ void NextEngine::OnScroll(const double xoffset, const double yoffset)
     gameInstance_->OnScroll(xoffset, yoffset);
 }
 
-void NextEngine::OnDropFile(int path_count, const char* paths[])
+void NextEngine::OnDropFile(int pathCount, const char* paths[])
 {
     // add glb to the last, and loaded
-    if (path_count > 0)
+    if (pathCount > 0)
     {
-        std::string path = paths[path_count - 1];
+        std::string path = paths[pathCount - 1];
         std::string ext = path.substr(path.find_last_of(".") + 1);
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
@@ -1045,7 +1045,7 @@ void NextEngine::OnRendererBeforeNextFrame()
 
 void NextEngine::RequestLoadScene(std::string sceneFileName)
 {
-    AddTickedTask([this, sceneFileName](double DeltaSeconds)->bool
+    AddTickedTask([this, sceneFileName](double deltaSeconds)->bool
     {
         if ( status_ != NextRenderer::EApplicationStatus::Running )
         {
@@ -1144,15 +1144,15 @@ public:
     MyClass() {}
     MyClass(std::vector<int>) {}
 
-    double member_variable = 5.5;
-    std::string member_function(const std::string& s) { return "Hello, " + s; }
+    double memberVariable = 5.5;
+    std::string MemberFunction(const std::string& s) { return "Hello, " + s; }
 };
 
-void println(qjs::rest<std::string> args) {
+void Println(qjs::rest<std::string> args) {
     for (auto const & arg : args) { SPDLOG_INFO("{}", arg); }
 }
 
-NextEngine* GetEngine() {
+NextEngine* getEngine() {
     return NextEngine::GetInstance();
 }
 
@@ -1161,8 +1161,8 @@ void NextEngine::InitJSEngine() {
     {
         // export classes as a module
         auto& module = JSContext_->addModule("Engine");
-        module.function<&println>("println");
-        module.function<&GetEngine>("GetEngine");
+        module.function<&Println>("println");
+        module.function<&getEngine>("GetEngine");
 
         module.class_<NextEngine>("NextEngine")
                 .fun<&NextEngine::GetTotalFrames>("GetTotalFrames")
@@ -1206,12 +1206,12 @@ void NextEngine::TestJSEngine()
     {
         // export classes as a module
         auto& module = JSContext_->addModule("MyModule");
-        module.function<&println>("println");
+        module.function<&Println>("println");
         module.class_<MyClass>("MyClass")
                 .constructor<>()
                 .constructor<std::vector<int>>("MyClassA")
-                .fun<&MyClass::member_variable>("member_variable")
-                .fun<&MyClass::member_function>("member_function");
+                .fun<&MyClass::memberVariable>("member_variable")
+                .fun<&MyClass::MemberFunction>("member_function");
         // import module
         JSContext_->eval(R"xxx(
             import * as my from 'MyModule';

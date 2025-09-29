@@ -36,8 +36,8 @@ PipelineLayout::PipelineLayout(const Device & device, const DescriptorSetLayout&
 	device_(device)
 {
 	// add the global texture set with set = 1, currently an ugly impl
-	Assets::GlobalTexturePool* GPool = Assets::GlobalTexturePool::GetInstance();
-	cachedDescriptorSetLayouts_ = { descriptorSetLayout.Handle(), GPool->Layout() };
+	Assets::GlobalTexturePool* gPool = Assets::GlobalTexturePool::GetInstance();
+	cachedDescriptorSetLayouts_ = { descriptorSetLayout.Handle(), gPool->Layout() };
 
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;

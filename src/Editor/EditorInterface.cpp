@@ -122,16 +122,16 @@ const float toolbarIconWidth = 32;
 const float toolbarIconHeight = 32;
 const float titleBarHeight = 55;
 const float footBarHeight = 40;
-float menuBarHeight = 0;
+float MenuBarHeight = 0;
 
 ImGuiID EditorInterface::DockSpaceUI()
 {
 	ImGuiViewport* viewport = ImGui::GetMainViewport();
-	ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y + toolbarSize + titleBarHeight - menuBarHeight));
-	ImGui::SetNextWindowSize(ImVec2(viewport->Size.x, viewport->Size.y - toolbarSize - titleBarHeight + menuBarHeight - footBarHeight));
+	ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y + toolbarSize + titleBarHeight - MenuBarHeight));
+	ImGui::SetNextWindowSize(ImVec2(viewport->Size.x, viewport->Size.y - toolbarSize - titleBarHeight + MenuBarHeight - footBarHeight));
 	ImGui::SetNextWindowViewport(viewport->ID);
 	ImGui::SetNextWindowBgAlpha(0);
-	ImGuiWindowFlags window_flags = 0
+	ImGuiWindowFlags windowFlags = 0
 		| ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking
 		| ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse
 		| ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove
@@ -140,11 +140,11 @@ ImGuiID EditorInterface::DockSpaceUI()
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-	ImGui::Begin("Master DockSpace", NULL, window_flags);
+	ImGui::Begin("Master DockSpace", NULL, windowFlags);
 	ImGuiID dockMain = ImGui::GetID("MyDockspace");
 	
 	// Save off menu bar height for later.
-	menuBarHeight = ImGui::GetCurrentWindow()->MenuBarHeight;
+	MenuBarHeight = ImGui::GetCurrentWindow()->MenuBarHeight;
 
 	ImGui::DockSpace(dockMain, ImVec2(0,0), ImGuiDockNodeFlags_NoDockingInCentralNode | ImGuiDockNodeFlags_PassthruCentralNode);
 	ImGui::End();
@@ -160,7 +160,7 @@ void EditorInterface::ToolbarUI()
 	ImGui::SetNextWindowSize(ImVec2(viewport->Size.x, toolbarSize));
 	ImGui::SetNextWindowViewport(viewport->ID);
 
-	ImGuiWindowFlags window_flags = 0
+	ImGuiWindowFlags windowFlags = 0
 		| ImGuiWindowFlags_NoDocking 
 		| ImGuiWindowFlags_NoTitleBar 
 		| ImGuiWindowFlags_NoResize 
@@ -171,7 +171,7 @@ void EditorInterface::ToolbarUI()
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 
-	ImGui::Begin("TOOLBAR", NULL, window_flags);
+	ImGui::Begin("TOOLBAR", NULL, windowFlags);
 	ImGui::PopStyleVar();
 	ImGui::PopStyleVar();
 	
@@ -249,10 +249,10 @@ void EditorInterface::DrawIndicator(uint32_t frameCount)
 }
 
 
-void EditorInterface::MainWindowGUI(Editor::GUI & gui_r, Assets::Scene& scene, ImGuiID id, bool firstRun)
+void EditorInterface::MainWindowGUI(Editor::GUI & guiR, Assets::Scene& scene, ImGuiID id, bool firstRun)
 {
 	//////////////////////////////////
-	Editor::GUI &gui = gui_r;
+	Editor::GUI &gui = guiR;
 
 	gui.current_scene = &scene;
 	gui.engine = &(editor_->GetEngine());

@@ -170,7 +170,7 @@ public:
     EBasePlane GetCurrentBasePlane() const { return currentBaseSize_; }
 
     // Thumbnail
-    void GeneratingThmubnail();
+    void GenerateThumbnail();
 
     // Orientation
     EOrientation GetCurrentOrientation() const { return currentOrientation_; }

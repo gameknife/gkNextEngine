@@ -26,9 +26,9 @@
 BenchMarker::BenchMarker()
 {
     std::time_t now = std::time(nullptr);
-    std::string report_filename = fmt::format("report_{:%d-%m-%Y-%H-%M-%S}.csv", *std::localtime(&now));
+    std::string reportFilename = fmt::format("report_{:%d-%m-%Y-%H-%M-%S}.csv", *std::localtime(&now));
 
-    benchmarkCsvReportFile.open(report_filename);
+    benchmarkCsvReportFile.open(reportFilename);
     benchmarkCsvReportFile << fmt::format("#,scene,FPS\n");
 }
 
@@ -83,48 +83,48 @@ bool BenchMarker::OnTick( double nowInSeconds, Vulkan::VulkanBaseRenderer* rende
     return false;
 }
 
-void BenchMarker::OnReport(Vulkan::VulkanBaseRenderer* renderer, const std::string& SceneName)
+void BenchMarker::OnReport(Vulkan::VulkanBaseRenderer* renderer, const std::string& sceneName)
 {
     const double totalTime = time_ - sceneInitialTime_;
     
     double fps = benchmarkTotalFrames_ / totalTime;
     //SPDLOG_INFO("totalTime {:%H:%M:%S} fps {:.3f}", std::chrono::seconds(static_cast<long long>(totalTime)), fps);
-    Report(renderer, static_cast<int>(floor(fps)), std::filesystem::path(SceneName).filename().replace_extension().string(), false, GOption->SaveFile);
+    Report(renderer, static_cast<int>(floor(fps)), std::filesystem::path(sceneName).filename().replace_extension().string(), false, GOption->SaveFile);
 }
 
-inline const std::string versionToString(const uint32_t version)
+inline const std::string VersionToString(const uint32_t version)
 {
     return fmt::format("{}.{}.{}", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
 }
 
-void BenchMarker::Report(Vulkan::VulkanBaseRenderer* renderer_, int fps, const std::string& sceneName, bool upload_screen, bool save_screen)
+void BenchMarker::Report(Vulkan::VulkanBaseRenderer* renderer, int fps, const std::string& sceneName, bool uploadScreen, bool saveScreen)
 {
     // report file
     benchmarkCsvReportFile << fmt::format("{},{},{}\n", benchUnit_++, sceneName, fps);
     benchmarkCsvReportFile.flush();
     // screenshot
     VkPhysicalDeviceProperties deviceProp1{};
-    vkGetPhysicalDeviceProperties(renderer_->Device().PhysicalDevice(), &deviceProp1);
+    vkGetPhysicalDeviceProperties(renderer->Device().PhysicalDevice(), &deviceProp1);
 
-    std::string img_encoded {};
-    if (upload_screen || save_screen)
+    std::string imgEncoded {};
+    if (uploadScreen || saveScreen)
     {
-        ScreenShot::SaveSwapChainToFile(renderer_, sceneName, 0, 0, 0, 0);
+        ScreenShot::SaveSwapChainToFile(renderer, sceneName, 0, 0, 0, 0);
     }
 
     // perf server upload
     if( NextRenderer::GetBuildVersion() != "v0.0.0.0" )
     {
-        json11::Json my_json = json11::Json::object{
-            {"renderer", renderer_->StaticClass()},
+        json11::Json myJson = json11::Json::object{
+            {"renderer", renderer->StaticClass()},
             {"scene", sceneName},
             {"gpu", std::string(deviceProp1.deviceName)},
-            {"driver", versionToString(deviceProp1.driverVersion)},
+            {"driver", VersionToString(deviceProp1.driverVersion)},
             {"fps", fps},
             {"version", NextRenderer::GetBuildVersion()},
-            {"screenshot", img_encoded}
+            {"screenshot", imgEncoded}
         };
-        std::string json_str = my_json.dump();
+        std::string jsonStr = myJson.dump();
 
         //SPDLOG_INFO("Sending benchmark to perf server...");
         // upload from curl
@@ -141,7 +141,7 @@ void BenchMarker::Report(Vulkan::VulkanBaseRenderer* renderer_, int fps, const s
             /* set custom headers */
             curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist1);
             curl_easy_setopt(curl, CURLOPT_URL, "http://gameknife.site:60010/rt_benchmark");
-            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_str.c_str());
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, jsonStr.c_str());
             curl_easy_setopt(curl, CURLOPT_TIMEOUT, 2L);
         
             /* Perform the request, res gets the return code */

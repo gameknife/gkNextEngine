@@ -14,7 +14,7 @@ bool IsOccluded(float3 min, float3 max, float4x4 wvp)
     corners[6] = float3(min.x, max.y, max.z);
     corners[7] = float3(max.x, max.y, max.z);
     
-    uint2 screenSize = Bindless.GetStorageTextureDimensions(Bindless.RT_PREV_DEPTHBUFFER);
+    uint2 screenSize = Bindless.GetStorageTextureDimensions<float>(Bindless.RT_PREV_DEPTHBUFFER);
     
     int occludedCount = 0;
     
@@ -56,7 +56,7 @@ bool IsOccludedVolume(float3 min, float3 max, float4x4 wvp)
     const int GRID_SIZE = 6;
     const float GRID_SIZE_MINUS_ONE = GRID_SIZE - 1;
 
-    uint2 screenSize = Bindless.GetStorageTextureDimensions(Bindless.RT_PREV_DEPTHBUFFER);
+    uint2 screenSize = Bindless.GetStorageTextureDimensions<float>(Bindless.RT_PREV_DEPTHBUFFER);
 
     // 在AABB内均匀分布4x4x4的检测点
     for (int x = 0; x < GRID_SIZE; x++)

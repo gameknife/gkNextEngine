@@ -319,6 +319,7 @@ namespace Vulkan
         deviceFeatures.shaderStorageImageReadWithoutFormat = true;
         deviceFeatures.shaderStorageImageWriteWithoutFormat = true;
         deviceFeatures.shaderInt16 = true;
+        deviceFeatures.shaderInt64 = true;
 
         // Required extensions. windows only
 #if WIN32
@@ -332,8 +333,6 @@ namespace Vulkan
         shaderClockFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR;
         shaderClockFeatures.pNext = nextDeviceFeatures;
         shaderClockFeatures.shaderSubgroupClock = true;
-
-        deviceFeatures.shaderInt64 = true;
 #endif
         
         // support bindless material

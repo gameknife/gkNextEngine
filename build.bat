@@ -70,11 +70,19 @@ exit /b 0
 :prepare_build_dir
 set "TARGET_DIR=%~1"
 set "CACHED_TOOLCHAIN="
+set "NORMALIZED_TOOLCHAIN="
+set "NORMALIZED_CACHED="
 if exist "%TARGET_DIR%\CMakeCache.txt" (
     for /f "usebackq tokens=2 delims==" %%A in (`findstr /b "CMAKE_TOOLCHAIN_FILE:FILEPATH=" "%TARGET_DIR%\CMakeCache.txt"`) do set "CACHED_TOOLCHAIN=%%A"
 )
+for %%A in ("%TOOLCHAIN_FILE%") do set "NORMALIZED_TOOLCHAIN=%%~fA"
 if defined CACHED_TOOLCHAIN (
-    if /i not "%CACHED_TOOLCHAIN%"=="%TOOLCHAIN_FILE%" (
+    for %%A in ("%CACHED_TOOLCHAIN%") do set "NORMALIZED_CACHED=%%~fA"
+    if not defined NORMALIZED_CACHED set "NORMALIZED_CACHED=%CACHED_TOOLCHAIN%"
+)
+if not defined NORMALIZED_TOOLCHAIN set "NORMALIZED_TOOLCHAIN=%TOOLCHAIN_FILE%"
+if defined NORMALIZED_CACHED (
+    if /i not "%NORMALIZED_CACHED%"=="%NORMALIZED_TOOLCHAIN%" (
         call :log "Detected outdated vcpkg toolchain, cleaning %TARGET_DIR%"
         rmdir /s /q "%TARGET_DIR%"
     )

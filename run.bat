@@ -49,14 +49,14 @@ goto passthrough
 
 :resolve
 
-if /i "%platform%"=="android" ( 
+if /i "%platform%"=="android" (
     call :run_android
 ) else (
-    call :run_windows
+    call :run_native
 )
 exit /b 0
 
-:run_windows
+:run_native
 if not defined bin_dir set "bin_dir=%root_dir%build\%platform%\bin"
 if not exist "%bin_dir%" (
     echo Bin directory not found: %bin_dir% 1>&2
@@ -109,14 +109,14 @@ if "%list_only%"=="1" (
 if not "%args%"=="" (
     echo Ignoring extra arguments for android platform: %args% 1>&2
 )
- 
-set "cmd_install=gradlew.bat installAndLaunch"
+
+set "cmd=gradlew.bat installAndLaunch"
 echo Working dir: %android_dir%
-echo Command: %cmd_install%
- 
+echo Command: %cmd%
+
 if "%dry_run%"=="1" exit /b 0
 pushd "%android_dir%" >nul
-call %cmd_install%
+call %cmd%
 set "ec=%errorlevel%"
 popd >nul
 exit /b %ec%

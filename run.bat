@@ -48,42 +48,38 @@ shift
 goto passthrough
 
 :resolve
-if not defined bin_dir set "bin_dir=%root_dir%build\%platform%\bin"
-if not exist "%bin_dir%" (
-    echo Bin directory not found: %bin_dir% 1>&2
-    exit /b 1
-)
-
-if "%list_only%"=="1" (
-    echo Entries in %bin_dir%:
-    dir /b "%bin_dir%"
-    exit /b 0
-)
-
-set "exe=%bin_dir%\%target%"
-if not exist "%exe%" (
-    if exist "%exe%.exe" (
-        set "exe=%exe%.exe"
-    ) else (
-        echo Executable not found: %exe% 1>&2
-        exit /b 1
-    )
-)
-
-for %%F in ("%exe%") do set "exe_name=%%~nxF"
-set "cmd=.\!exe_name!!args!"
-
-echo Working dir: %bin_dir%
-echo Command: !cmd!
-
-if "%dry_run%"=="1" exit /b 0
-
-pushd "%bin_dir%" >nul
-call !cmd!
-set "ec=%errorlevel%"
-popd >nul
-exit /b %ec%
-
+if /i "%platform%"=="android" (
+    call :run_android
+set "android_dir=%root_dir%android"
+if not exist "%android_dir%" (
+    echo Android project directory not found: %android_dir% 1>&2
+    exit /b 1
+)
+if "%list_only%"=="1" (
+    echo --list is not supported for android platform 1>&2
+    exit /b 1
+)
+if not "%args%"=="" (
+    echo Ignoring extra arguments for android platform: %args% 1>&2
+)
+set "cmd_install=gradlew.bat installAndLaunch"
+set "cmd_push=gradlew.bat pushAssetsToDevice"
+echo Working dir: %android_dir%
+echo Command: %cmd_install%
+echo Command: %cmd_push%
+if "%dry_run%"=="1" exit /b 0
+pushd "%android_dir%" >nul
+call %cmd_install%
+set "ec=%errorlevel%"
+if not "%ec%"=="0" (
+    popd >nul
+    exit /b %ec%
+)
+call %cmd_push%
+set "ec=%errorlevel%"
+popd >nul
+exit /b %ec%
+
 :help
 echo Usage: run.bat [options] [-- extra args]
 echo   --target NAME         Executable to launch ^(default: gkNextRenderer.exe^)

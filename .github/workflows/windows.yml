@@ -30,13 +30,13 @@ jobs:
       run: .\vulkan_sdk.exe --accept-licenses --default-answer --confirm-command install
       shell: cmd
 
-    - name: Restore cached Primes
-      id: cache-primes-restore
+    - name: Restore cached vcpkg
+      id: cache-vcpkg-restore
       uses: actions/cache/restore@v4
       with:
         path: |
-          vcpkg_installed
-        key: ${{ runner.os }}-primes
+          .vcpkg
+        key: ${{ runner.os }}-desktop-vcpkg
 
     - name: Compile vcpkg dependencies
       run: |
@@ -44,13 +44,13 @@ jobs:
         vcpkg.bat windows
       shell: cmd
 
-    - name: Save Primes
-      id: cache-primes-save
+    - name: Save vcpkg
+      id: cache-vcpkg-save
       uses: actions/cache/save@v4
       with:
         path: |
-          vcpkg_installed
-        key: ${{ steps.cache-primes-restore.outputs.cache-primary-key }}
+          .vcpkg
+        key: ${{ steps.cache-vcpkg-restore.outputs.cache-primary-key }}
 
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2

@@ -34,24 +34,24 @@ jobs:
         sudo apt-get update
         sudo apt-get install vulkan-sdk
 
-    - name: Restore cached Primes
-      id: cache-primes-restore
+    - name: Restore cached vcpkg
+      id: cache-vcpkg-restore
       uses: actions/cache/restore@v4
       with:
         path: |
-          vcpkg_installed
-        key: ${{ runner.os }}-desktop-primes
+          .vcpkg
+        key: ${{ runner.os }}-desktop-vcpkg
 
     - name: Compile vcpkg dependencies
       run: ./vcpkg.sh linux
 
-    - name: Save Primes
-      id: cache-primes-save
+    - name: Save vcpkg
+      id: cache-vcpkg-save
       uses: actions/cache/save@v4
       with:
         path: |
-          vcpkg_installed
-        key: ${{ steps.cache-primes-restore.outputs.cache-primary-key }}
+          .vcpkg
+        key: ${{ steps.cache-vcpkg-restore.outputs.cache-primary-key }}
 
     - name: Compile gkNextRenderer
       run: ./build.sh linux

@@ -1,4 +1,5 @@
 #include "FileHelper.hpp"
+#include <spdlog/spdlog.h>
 
 namespace Utilities
 {
@@ -6,7 +7,7 @@ namespace Utilities
     {
         FPackageFileSystem* FPackageFileSystem::instance_ = nullptr;
 
-        FPackageFileSystem::FPackageFileSystem(EPackageRunMode RunMode): runMode_(RunMode)
+        FPackageFileSystem::FPackageFileSystem(EPackageRunMode runMode): runMode_(runMode)
         {
             instance_ = this;
         }
@@ -25,7 +26,7 @@ namespace Utilities
 
                 std::ifstream reader(absEntry, std::ios::binary);
                 if (!reader.is_open()) {
-                    fmt::print("LoadFile: Failed to open file: {}\n", entry);
+                    SPDLOG_ERROR("LoadFile: Failed to open file: {}", entry);
                     return false;
                 }
                 
@@ -46,18 +47,18 @@ namespace Utilities
             
             std::ifstream reader(pakFile, std::ios::binary);
             if (!reader.is_open()) {
-                fmt::print("LoadFile: Failed to open pak file: {}\n", "pakfile");
+                SPDLOG_ERROR("LoadFile: Failed to open pak file: {}", "pakfile");
                 return false;
             }
 
-            void* comp_buf = malloc( pakEntry.size );
+            void* compBuf = malloc( pakEntry.size );
             reader.seekg(pakEntry.offset, std::ios::beg);
-            reader.read(reinterpret_cast<char*>(comp_buf), pakEntry.size);
+            reader.read(reinterpret_cast<char*>(compBuf), pakEntry.size);
             reader.close();
 
             outData.resize(pakEntry.uncompressSize);
-            int l = lzav_decompress( comp_buf, outData.data(), pakEntry.size, pakEntry.uncompressSize );
-            free(comp_buf);
+            int l = lzav_decompress( compBuf, outData.data(), pakEntry.size, pakEntry.uncompressSize );
+            free(compBuf);
 
             return true;
         }
@@ -81,7 +82,7 @@ namespace Utilities
                     
                     std::ifstream reader(entryPath, std::ios::binary);
                     if (!reader.is_open()) {
-                        fmt::print("PakAll: Failed to open file: {}\n", entryPath);
+                        SPDLOG_ERROR("PakAll: Failed to open file: {}", entryPath);
                         continue;
                     }
                     reader.seekg(0, std::ios::end);
@@ -89,13 +90,13 @@ namespace Utilities
                     reader.close();
                                         
                     filemaps[entryRelativePath] = {entryRelativePath, 0, 0, static_cast<uint32_t>(fileSize), static_cast<uint32_t>(fileSize)};
-                    fmt::print("entry: {} <- {}\n", entryRelativePath, entryPath);
+                    SPDLOG_INFO("entry: {} <- {}", entryRelativePath, entryPath);
                 }
             }
 
             std::ofstream writer(pakFile, std::ios::binary);
             if (!writer.is_open()) {
-                fmt::print("PakAll: Failed to open pak file: {}\n", pakFile);
+                SPDLOG_ERROR("PakAll: Failed to open pak file: {}", pakFile);
                 return;
             }
 
@@ -118,7 +119,7 @@ namespace Utilities
             for (auto& [key, value] : filemaps) {
                 std::ifstream reader(absRootPath + value.name, std::ios::binary);
                 if (!reader.is_open()) {
-                    fmt::print("PakAll: Failed to open file: {}\n", absRootPath + value.name);
+                    SPDLOG_ERROR("PakAll: Failed to open file: {}", absRootPath + value.name);
                     continue;
                 }
                 
@@ -130,14 +131,14 @@ namespace Utilities
                 reader.read(reinterpret_cast<char*>(buffer.data()), fileSize);
                 reader.close();
                                 
-                int max_len = lzav_compress_bound_hi( static_cast<int>(buffer.size()) );
-                void* comp_buf = malloc( max_len );
-                int comp_len = lzav_compress_hi( buffer.data(), comp_buf, static_cast<int>(buffer.size()), max_len );
+                int maxLen = lzav_compress_bound_hi( static_cast<int>(buffer.size()) );
+                void* compBuf = malloc( maxLen );
+                int compLen = lzav_compress_hi( buffer.data(), compBuf, static_cast<int>(buffer.size()), maxLen );
 
-                writer.write(reinterpret_cast<const char*>(comp_buf), comp_len);
-                value.size = comp_len;
+                writer.write(reinterpret_cast<const char*>(compBuf), compLen);
+                value.size = compLen;
 
-                free(comp_buf);
+                free(compBuf);
             }
 
             // rewrite offset and size
@@ -162,7 +163,7 @@ namespace Utilities
         {
             std::ifstream reader(pakFile, std::ios::binary);
             if (!reader.is_open()) {
-                fmt::print("MountPak: Failed to open pak file: {}\n", pakFile);
+                SPDLOG_ERROR("MountPak: Failed to open pak file: {}", pakFile);
                 return;
             }
 
@@ -174,7 +175,7 @@ namespace Utilities
             reader.read(header, 3);
             header[3] = '\0';
             if (std::string(header) != "GNP") {
-                fmt::print("MountPak: Invalid pak file: {}\n", pakFile);
+                SPDLOG_ERROR("MountPak: Invalid pak file: {}", pakFile);
                 return;
             }
 
@@ -205,7 +206,7 @@ namespace Utilities
 
             reader.close();
 
-            fmt::printf("Pak: mount %s with %d entries\n", pakFile.c_str(), entryCount);
+            SPDLOG_INFO("Pak: mount {} with {} entries", pakFile.c_str(), entryCount);
         }
     }
 }

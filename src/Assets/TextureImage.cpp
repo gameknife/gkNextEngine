@@ -6,7 +6,6 @@
 #include "Vulkan/Sampler.hpp"
 #include <cstring>
 
-#include "Utilities/Console.hpp"
 #include "Vulkan/SingleTimeCommands.hpp"
 
 namespace Assets {

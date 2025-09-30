@@ -5,7 +5,7 @@
 #include <queue>
 #include <thread>
 #include <atomic>
-#include <fmt/format.h>
+#include "Common/CoreMinimal.hpp"
 #include <cstring>
 #include <unordered_set>
 
@@ -218,12 +218,12 @@ struct ResTask
     template<typename T>
     void SetContext(T& context)
     {
-        std::memcpy( task_context_1k, &context, sizeof(T) );
+        std::memcpy( task_context_1k, &context, std::min(size_t(1024), sizeof(T)) );
     }
     template<typename T>
     void GetContext(T& context)
     {
-        std::memcpy( &context, task_context_1k,  sizeof(T) );
+        std::memcpy( &context, task_context_1k, std::min(size_t(1024), sizeof(T)) );
     }
     
 };
@@ -274,12 +274,12 @@ public:
             lowThreads_.push_back(std::make_unique<TaskThread>());
         }
 
-        fmt::print("low parrallel thread count: {}\n", lowThreadCount);
+        //SPDLOG_INFO("low parallel thread count: {}", lowThreadCount);
     }
 
     ~TaskCoordinator()
     {
-        fmt::print("TaskCoordinator request shutting down, wait for TaskThread. remain: {}\n", threads_.size());
+        //SPDLOG_INFO("TaskCoordinator request shutting down, wait for TaskThread. remain: {}", threads_.size());
         for (auto& thread : threads_)
         {
             thread.reset();

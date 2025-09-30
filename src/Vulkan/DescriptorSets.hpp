@@ -29,7 +29,7 @@ namespace Vulkan
 
 		VkDescriptorSet Handle(uint32_t index) const
 		{
-			// always return avaliable
+			// always return available
 			index = glm::min(index, static_cast<uint32_t>(descriptorSets_.size() - 1));
 			return descriptorSets_[index];
 		}

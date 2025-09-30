@@ -9,7 +9,7 @@
 
 namespace Assets {
 
-    bool LoadSkeleton(const char* filename, ozz::animation::Skeleton* _skeleton)
+    bool LoadSkeleton(const char* filename, ozz::animation::Skeleton* skeleton)
     {
         ozz::io::File file(filename, "rb");
         if (!file.opened()) {
@@ -20,13 +20,13 @@ namespace Assets {
             return false;
         }
         
-        archive >> *_skeleton;
+        archive >> *skeleton;
         return true;
     }
 
-    bool LoadAnimation(const char* _filename, ozz::animation::Animation* _animation)
+    bool LoadAnimation(const char* filename, ozz::animation::Animation* animation)
     {
-        ozz::io::File file(_filename, "rb");
+        ozz::io::File file(filename, "rb");
         if (!file.opened()) {
             return false;
         }
@@ -36,7 +36,7 @@ namespace Assets {
         }
 
         // Once the tag is validated, reading cannot fail.
-        archive >> *_animation;
+        archive >> *animation;
         return true;
     }
 }

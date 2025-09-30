@@ -8,36 +8,36 @@
 
 #include <glm/gtc/quaternion.hpp>
 
-const glm::i16vec3 INVALID_POS(0, -10, 0);
+const glm::i16vec3 invalidPos(0, -10, 0);
 
 std::unique_ptr<NextGameInstanceBase> CreateGameInstance(Vulkan::WindowConfig& config, Options& options, NextEngine* engine)
 {
     return std::make_unique<MagicaLegoGameInstance>(config, options, engine);
 }
 
-glm::vec3 GetRenderLocationFromBlockLocation(glm::i16vec3 BlockLocation)
+glm::vec3 GetRenderLocationFromBlockLocation(glm::i16vec3 blockLocation)
 {
     glm::vec3 newLocation;
-    newLocation.x = static_cast<float>(BlockLocation.x) * 0.08f;
-    newLocation.y = static_cast<float>(BlockLocation.y) * 0.095f;
-    newLocation.z = static_cast<float>(BlockLocation.z) * 0.08f;
+    newLocation.x = static_cast<float>(blockLocation.x) * 0.08f;
+    newLocation.y = static_cast<float>(blockLocation.y) * 0.095f;
+    newLocation.z = static_cast<float>(blockLocation.z) * 0.08f;
     return newLocation;
 }
 
-glm::i16vec3 GetBlockLocationFromRenderLocation(glm::vec3 RenderLocation)
+glm::i16vec3 GetBlockLocationFromRenderLocation(glm::vec3 renderLocation)
 {
     glm::i16vec3 newLocation;
-    newLocation.x = static_cast<int16_t>(round(RenderLocation.x / 0.08f));
-    newLocation.y = static_cast<int16_t>(round((RenderLocation.y - 0.0475f) / 0.095f));
-    newLocation.z = static_cast<int16_t>(round(RenderLocation.z / 0.08f));
+    newLocation.x = static_cast<int16_t>(round(renderLocation.x / 0.08f));
+    newLocation.y = static_cast<int16_t>(round((renderLocation.y - 0.0475f) / 0.095f));
+    newLocation.z = static_cast<int16_t>(round(renderLocation.z / 0.08f));
     return newLocation;
 }
 
-uint32_t GetHashFromBlockLocation(const glm::i16vec3& BlockLocation)
+uint32_t GetHashFromBlockLocation(const glm::i16vec3& blockLocation)
 {
-    uint32_t x = static_cast<uint32_t>(BlockLocation.x) & 0xFFFF;
-    uint32_t y = static_cast<uint32_t>(BlockLocation.y) & 0xFFFF;
-    uint32_t z = static_cast<uint32_t>(BlockLocation.z) & 0xFFFF;
+    uint32_t x = static_cast<uint32_t>(blockLocation.x) & 0xFFFF;
+    uint32_t y = static_cast<uint32_t>(blockLocation.y) & 0xFFFF;
+    uint32_t z = static_cast<uint32_t>(blockLocation.z) & 0xFFFF;
 
     uint32_t hash = x;
     hash = hash * 31 + y;
@@ -79,8 +79,8 @@ MagicaLegoGameInstance::MagicaLegoGameInstance(Vulkan::WindowConfig& config, Opt
     // ui
     UserInterface_ = std::make_unique<MagicaLegoUserInterface>(this);
 
-    lastSelectLocation_ = INVALID_POS;
-    lastPlacedLocation_ = INVALID_POS;
+    lastSelectLocation_ = invalidPos;
+    lastPlacedLocation_ = invalidPos;
 
     GetEngine().GetPakSystem().SetRunMode(Utilities::Package::EPM_PakFile);
     GetEngine().GetPakSystem().Reset();
@@ -113,17 +113,17 @@ void MagicaLegoGameInstance::OnRayHitResponse(Assets::RayCastResult& rayResult)
         return;
     }
 
-    auto* Node = GetEngine().GetScene().GetNodeByInstanceId(instanceId);
-    if (Node == nullptr) return;
+    auto* node = GetEngine().GetScene().GetNodeByInstanceId(instanceId);
+    if (node == nullptr) return;
 
     switch (currentMode_)
     {
     case ELegoMode::ELM_Dig:
         if (lastDownFrameNum_ + 1 == GetEngine().GetRenderer().FrameCount())
         {
-            if (Node->GetName() == "blockInst")
+            if (node->GetName() == "blockInst")
             {
-                glm::i16vec3 digBlockLocation = GetBlockLocationFromRenderLocation(glm::vec3((Node->WorldTransform() * glm::vec4(0, 0.0475f, 0, 1))));
+                glm::i16vec3 digBlockLocation = GetBlockLocationFromRenderLocation(glm::vec3((node->WorldTransform() * glm::vec4(0, 0.0475f, 0, 1))));
                 FPlacedBlock block{digBlockLocation, EOrientation::EO_North, 0, -1, 0, 0};
                 PlaceDynamicBlock(block);
             }
@@ -141,13 +141,13 @@ void MagicaLegoGameInstance::OnRayHitResponse(Assets::RayCastResult& rayResult)
         }
         break;
     case ELegoMode::ELM_Select:
-        lastSelectLocation_ = Node->GetName() == "blockInst" ? GetBlockLocationFromRenderLocation(glm::vec3((Node->WorldTransform() * glm::vec4(0, 0.0475f, 0, 1)))) : INVALID_POS;
-        if (currentCamMode_ == ECamMode::ECM_AutoFocus && lastSelectLocation_ != INVALID_POS) cameraCenter_ = GetRenderLocationFromBlockLocation(lastSelectLocation_);
+        lastSelectLocation_ = node->GetName() == "blockInst" ? GetBlockLocationFromRenderLocation(glm::vec3((node->WorldTransform() * glm::vec4(0, 0.0475f, 0, 1)))) : invalidPos;
+        if (currentCamMode_ == ECamMode::ECM_AutoFocus && lastSelectLocation_ != invalidPos) cameraCenter_ = GetRenderLocationFromBlockLocation(lastSelectLocation_);
         break;
     }
 }
 
-bool MagicaLegoGameInstance::OverrideRenderCamera(Assets::Camera& OutRenderCamera) const
+bool MagicaLegoGameInstance::OverrideRenderCamera(Assets::Camera& outRenderCamera) const
 {
     float xRotation = cameraRotX_; // 例如绕X轴旋转45度
     float yRotation = cameraRotY_; // 例如上下偏转30度
@@ -168,8 +168,8 @@ bool MagicaLegoGameInstance::OverrideRenderCamera(Assets::Camera& OutRenderCamer
     panForward_ = glm::normalize(forward);
     panLeft_ = glm::normalize(left);
 
-    OutRenderCamera.ModelView = glm::lookAtRH(cameraPos, realCameraCenter_, glm::vec3(0.0f, 1.0f, 0.0f));
-    OutRenderCamera.FieldOfView = cameraFOV_;
+    outRenderCamera.ModelView = glm::lookAtRH(cameraPos, realCameraCenter_, glm::vec3(0.0f, 1.0f, 0.0f));
+    outRenderCamera.FieldOfView = cameraFOV_;
     
     
     return true;
@@ -194,7 +194,7 @@ void MagicaLegoGameInstance::OnTick(double deltaSeconds)
     }
 
     // select edge showing
-    GetEngine().GetUserSettings().ShowEdge = currentMode_ == ELegoMode::ELM_Select && lastSelectLocation_ != INVALID_POS;
+    GetEngine().GetUserSettings().ShowEdge = currentMode_ == ELegoMode::ELM_Select && lastSelectLocation_ != invalidPos;
 
     // camera center lerping
     realCameraCenter_ = glm::mix(realCameraCenter_, cameraCenter_, 0.1f);
@@ -226,8 +226,8 @@ void MagicaLegoGameInstance::OnInitUI()
 void MagicaLegoGameInstance::SetBuildMode(ELegoMode mode)
 {
     currentMode_ = mode;
-    lastSelectLocation_ = INVALID_POS;
-    lastPlacedLocation_ = INVALID_POS;
+    lastSelectLocation_ = invalidPos;
+    lastPlacedLocation_ = invalidPos;
 }
 
 void MagicaLegoGameInstance::SetCameraMode(ECamMode mode)
@@ -240,28 +240,28 @@ void MagicaLegoGameInstance::OnSceneLoaded()
     NextGameInstanceBase::OnSceneLoaded();
 
     // BasePlane Root
-    Assets::Node* Base = GetEngine().GetScene().GetNode("BasePlane12x12");
-    Base->SetVisible(false);
-    uint32_t modelId = Base->GetModel();
-    auto& matId = Base->Materials();
-    basementInstanceId_ = Base->GetInstanceId();
+    Assets::Node* base = GetEngine().GetScene().GetNode("BasePlane12x12");
+    base->SetVisible(false);
+    uint32_t modelId = base->GetModel();
+    auto& matId = base->Materials();
+    basementInstanceId_ = base->GetInstanceId();
 
     // one is 12 x 12, we support 252 x 252 (21 x 21), so duplicate and create
     for (int x = 0; x < 21; x++)
     {
         for (int z = 0; z < 21; z++)
         {
-            std::string NodeName = "BigBase";
+            std::string nodeName = "BigBase";
             if (x >= 7 && x <= 13 && z >= 7 && z <= 13)
             {
-                NodeName = "MidBase";
+                nodeName = "MidBase";
             }
             if (x == 10 && z == 10)
             {
-                NodeName = "SmallBase";
+                nodeName = "SmallBase";
             }
             glm::vec3 location = glm::vec3((x - 10.25) * 0.96f, 0.0f, (z - 9.5) * 0.96f);
-            auto newNode = Assets::Node::CreateNode(NodeName, location, glm::quat(1,0,0,0), glm::vec3(1), modelId, basementInstanceId_, false);
+            auto newNode = Assets::Node::CreateNode(nodeName, location, glm::quat(1,0,0,0), glm::vec3(1), modelId, basementInstanceId_, false);
             newNode->SetMaterial( matId );
             GetEngine().GetScene().Nodes().push_back(newNode);
         }
@@ -289,7 +289,7 @@ void MagicaLegoGameInstance::OnSceneLoaded()
     instanceCountBeforeDynamics_ = static_cast<int>(GetEngine().GetScene().Nodes().size());
     SwitchBasePlane(EBasePlane::EBP_Small);
 
-    //GeneratingThmubnail();
+    //GenerateThumbnail();
 
     UserInterface_->OnSceneLoaded();
 
@@ -303,36 +303,36 @@ void MagicaLegoGameInstance::OnSceneUnloaded()
     CleanUp();
 }
 
-bool MagicaLegoGameInstance::OnKey(int key, int scancode, int action, int mods)
+bool MagicaLegoGameInstance::OnKey(SDL_Event& event)
 {
-    if (action == GLFW_PRESS)
+    if (event.key.type == SDL_EVENT_KEY_DOWN)
     {
-        switch (key)
+        switch (event.key.key)
         {
-        case GLFW_KEY_Q: SetBuildMode(ELegoMode::ELM_Dig);
+        case SDLK_Q: SetBuildMode(ELegoMode::ELM_Dig);
             break;
-        case GLFW_KEY_W: SetBuildMode(ELegoMode::ELM_Place);
+        case SDLK_W: SetBuildMode(ELegoMode::ELM_Place);
             break;
-        case GLFW_KEY_E: SetBuildMode(ELegoMode::ELM_Select);
+        case SDLK_E: SetBuildMode(ELegoMode::ELM_Select);
             break;
-        case GLFW_KEY_A: SetCameraMode(ECamMode::ECM_Pan);
+        case SDLK_A: SetCameraMode(ECamMode::ECM_Pan);
             break;
-        case GLFW_KEY_S: SetCameraMode(ECamMode::ECM_Orbit);
+        case SDLK_S: SetCameraMode(ECamMode::ECM_Orbit);
             break;
-        case GLFW_KEY_D: SetCameraMode(ECamMode::ECM_AutoFocus);
+        case SDLK_D: SetCameraMode(ECamMode::ECM_AutoFocus);
             break;
-        case GLFW_KEY_R: ChangeOrientation();
+        case SDLK_R: ChangeOrientation();
             break;
-        case GLFW_KEY_1: SwitchBasePlane(EBasePlane::EBP_Big);
+        case SDLK_1: SwitchBasePlane(EBasePlane::EBP_Big);
             break;
-        case GLFW_KEY_2: SwitchBasePlane(EBasePlane::EBP_Mid);
+        case SDLK_2: SwitchBasePlane(EBasePlane::EBP_Mid);
             break;
-        case GLFW_KEY_3: SwitchBasePlane(EBasePlane::EBP_Small);
+        case SDLK_3: SwitchBasePlane(EBasePlane::EBP_Small);
             break;
         default: break;
         }
     }
-    else if (action == GLFW_RELEASE)
+    else if (event.key.type == SDL_EVENT_KEY_UP)
     {
     }
     return true;
@@ -365,27 +365,27 @@ bool MagicaLegoGameInstance::OnCursorPosition(double xpos, double ypos)
     return true;
 }
 
-bool MagicaLegoGameInstance::OnMouseButton(int button, int action, int mods)
+bool MagicaLegoGameInstance::OnMouseButton(SDL_Event& event)
 {
-    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
+    if (event.button.button == SDL_BUTTON_LEFT && event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
     {
         bMouseLeftDown_ = true;
         lastDownFrameNum_ = GetEngine().GetRenderer().FrameCount();
         return true;
     }
-    else if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE)
+    else if (event.button.button == SDL_BUTTON_LEFT && event.type == SDL_EVENT_MOUSE_BUTTON_UP)
     {
         bMouseLeftDown_ = false;
         oneLinePlacedInstance_.clear();
-        if (currentCamMode_ == ECamMode::ECM_AutoFocus && currentMode_ == ELegoMode::ELM_Place && lastPlacedLocation_ != INVALID_POS)
+        if (currentCamMode_ == ECamMode::ECM_AutoFocus && currentMode_ == ELegoMode::ELM_Place && lastPlacedLocation_ != invalidPos)
             cameraCenter_ = GetRenderLocationFromBlockLocation(lastPlacedLocation_);
         return true;
     }
-    else if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
+    else if (event.button.button == SDL_BUTTON_RIGHT && event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
     {
         cameraMultiplier_ = 0.1f;
     }
-    else if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE)
+    else if (event.button.button == SDL_BUTTON_RIGHT && event.type == SDL_EVENT_MOUSE_BUTTON_UP)
     {
         cameraMultiplier_ = 0.0f;
     }
@@ -403,7 +403,7 @@ void MagicaLegoGameInstance::TryChangeSelectionBrushIdx(int16_t idx)
 {
     if (currentMode_ == ELegoMode::ELM_Select)
     {
-        if (lastSelectLocation_ != INVALID_POS)
+        if (lastSelectLocation_ != invalidPos)
         {
             uint32_t currentHash = GetHashFromBlockLocation(lastSelectLocation_);
             FPlacedBlock currentBlock = BlocksDynamics[currentHash];
@@ -429,9 +429,9 @@ void MagicaLegoGameInstance::DumpReplayStep(int step)
         BlockRecords.erase(BlockRecords.begin() + step, BlockRecords.end());
 
         CleanDynamicBlocks();
-        for (auto& Block : BlockRecords)
+        for (auto& block : BlockRecords)
         {
-            BlocksDynamics[GetHashFromBlockLocation(Block.location)] = Block;
+            BlocksDynamics[GetHashFromBlockLocation(block.location)] = block;
         }
         RebuildScene(BlocksDynamics, -1);
     }
@@ -440,11 +440,11 @@ void MagicaLegoGameInstance::DumpReplayStep(int step)
 void MagicaLegoGameInstance::AddBlockGroup(std::string typeName)
 {
     auto& allNodes = GetEngine().GetScene().Nodes();
-    for (auto& Node : allNodes)
+    for (auto& node : allNodes)
     {
-        if (Node->GetName().find(typeName, 0) == 0)
+        if (node->GetName().find(typeName, 0) == 0)
         {
-            AddBasicBlock(Node->GetName(), typeName);
+            AddBasicBlock(node->GetName(), typeName);
         }
     }
 
@@ -453,9 +453,9 @@ void MagicaLegoGameInstance::AddBlockGroup(std::string typeName)
 
 void MagicaLegoGameInstance::AddBasicBlock(std::string blockName, std::string typeName)
 {
-    auto& Scene = GetEngine().GetScene();
-    auto Node = Scene.GetNode(blockName);
-    if (Node)
+    auto& scene = GetEngine().GetScene();
+    auto node = scene.GetNode(blockName);
+    if (node)
     {
         FBasicBlock newBlock;
         std::string name = "#" + blockName.substr(strlen(typeName.c_str()) + 1);
@@ -464,18 +464,18 @@ void MagicaLegoGameInstance::AddBasicBlock(std::string blockName, std::string ty
         std::string type = typeName;
         std::strcpy(newBlock.type, type.c_str());
         newBlock.type[127] = 0;
-        newBlock.modelId_ = Node->GetModel();
+        newBlock.modelId_ = node->GetModel();
         newBlock.brushId_ = static_cast<int16_t>(BasicNodes.size());
-        uint32_t mat_id = Node->Materials()[0];
-        auto mat = Scene.GetMaterial(mat_id);
+        uint32_t matId = node->Materials()[0];
+        auto mat = scene.GetMaterial(matId);
         if (mat)
         {
-            newBlock.matType = mat_id;
+            newBlock.matType = matId;
             newBlock.color = mat->gpuMaterial_.Diffuse;
         }
         BasicNodes.push_back(newBlock);
         BasicBlockTypeMap[typeName].push_back(newBlock);
-        Node->SetVisible(false);
+        node->SetVisible(false);
 
 #ifdef __APPLE__
 
@@ -488,33 +488,33 @@ void MagicaLegoGameInstance::AddBasicBlock(std::string blockName, std::string ty
     }
 }
 
-FBasicBlock* MagicaLegoGameInstance::GetBasicBlock(uint32_t BlockIdx)
+FBasicBlock* MagicaLegoGameInstance::GetBasicBlock(uint32_t blockIdx)
 {
-    if (BlockIdx < BasicNodes.size())
+    if (blockIdx < BasicNodes.size())
     {
-        return &BasicNodes[BlockIdx];
+        return &BasicNodes[blockIdx];
     }
     return nullptr;
 }
 
-bool MagicaLegoGameInstance::PlaceDynamicBlock(FPlacedBlock Block)
+bool MagicaLegoGameInstance::PlaceDynamicBlock(FPlacedBlock block)
 {
-    if (Block.location.y < 0)
+    if (block.location.y < 0)
     {
         return false;
     }
 
-    uint32_t blockHash = GetHashFromBlockLocation(Block.location);
+    uint32_t blockHash = GetHashFromBlockLocation(block.location);
 
     // Place it
-    BlocksDynamics[blockHash] = Block;
-    BlockRecords.push_back(Block);
+    BlocksDynamics[blockHash] = block;
+    BlockRecords.push_back(block);
     currentPreviewStep = static_cast<int>(BlockRecords.size());
     RebuildScene(BlocksDynamics, blockHash);
-    lastPlacedLocation_ = Block.location;
+    lastPlacedLocation_ = block.location;
 
     // random put1 or put2
-    if (Block.modelId_ >= 0)
+    if (block.modelId_ >= 0)
     {
         int random = rand();
         if (random % 3 == 0)
@@ -528,44 +528,44 @@ bool MagicaLegoGameInstance::PlaceDynamicBlock(FPlacedBlock Block)
     return true;
 }
 
-void MagicaLegoGameInstance::SwitchBasePlane(EBasePlane Type)
+void MagicaLegoGameInstance::SwitchBasePlane(EBasePlane type)
 {
-    currentBaseSize_ = Type;
+    currentBaseSize_ = type;
     auto& allNodes = GetEngine().GetScene().Nodes();
-    for (auto& Node : allNodes)
+    for (auto& node : allNodes)
     {
-        if (Node->GetName() == "BigBase" || Node->GetName() == "MidBase" || Node->GetName() == "SmallBase")
+        if (node->GetName() == "BigBase" || node->GetName() == "MidBase" || node->GetName() == "SmallBase")
         {
-            Node->SetVisible(false);
+            node->SetVisible(false);
         }
     }
 
-    switch (Type)
+    switch (type)
     {
     case EBasePlane::EBP_Big:
-        for (auto& Node : allNodes)
+        for (auto& node : allNodes)
         {
-            if (Node->GetName() == "BigBase" || Node->GetName() == "MidBase" || Node->GetName() == "SmallBase")
+            if (node->GetName() == "BigBase" || node->GetName() == "MidBase" || node->GetName() == "SmallBase")
             {
-                Node->SetVisible(true);
+                node->SetVisible(true);
             }
         }
         break;
     case EBasePlane::EBP_Mid:
-        for (auto& Node : allNodes)
+        for (auto& node : allNodes)
         {
-            if (Node->GetName() == "MidBase" || Node->GetName() == "SmallBase")
+            if (node->GetName() == "MidBase" || node->GetName() == "SmallBase")
             {
-                Node->SetVisible(true);
+                node->SetVisible(true);
             }
         }
         break;
     case EBasePlane::EBP_Small:
-        for (auto& Node : allNodes)
+        for (auto& node : allNodes)
         {
-            if (Node->GetName() == "SmallBase")
+            if (node->GetName() == "SmallBase")
             {
-                Node->SetVisible(true);
+                node->SetVisible(true);
             }
         }
         break;
@@ -613,13 +613,13 @@ void FMagicaLegoSave::Load(std::string filename)
             inFile.read(reinterpret_cast<char*>(&version), sizeof(version));
             size_t size;
             inFile.read(reinterpret_cast<char*>(&size), sizeof(size));
-            std::vector<FBasicBlock> TempVector(size);
-            inFile.read(reinterpret_cast<char*>(TempVector.data()), size * sizeof(FBasicBlock));
-            brushs = TempVector;
+            std::vector<FBasicBlock> tempVector(size);
+            inFile.read(reinterpret_cast<char*>(tempVector.data()), size * sizeof(FBasicBlock));
+            brushs = tempVector;
             inFile.read(reinterpret_cast<char*>(&size), sizeof(size));
-            std::vector<FPlacedBlock> TempRecord(size);
-            inFile.read(reinterpret_cast<char*>(TempRecord.data()), size * sizeof(FPlacedBlock));
-            records = TempRecord;
+            std::vector<FPlacedBlock> tempRecord(size);
+            inFile.read(reinterpret_cast<char*>(tempRecord.data()), size * sizeof(FPlacedBlock));
+            records = tempRecord;
         }
         else
         {
@@ -646,51 +646,51 @@ void MagicaLegoGameInstance::LoadRecord(std::string filename)
 
     if (save.version != 0)
     {
-        std::map<int16_t, int16_t> BrushMapping;
+        std::map<int16_t, int16_t> brushMapping;
         for (auto& brush : save.brushs)
         {
             for (auto& newbrush : BasicNodes)
             {
                 if (strcmp(brush.name, newbrush.name) == 0 && strcmp(brush.type, newbrush.type) == 0)
                 {
-                    BrushMapping[brush.brushId_] = newbrush.brushId_;
+                    brushMapping[brush.brushId_] = newbrush.brushId_;
                     break;
                 }
             }
         }
 
-        for (auto& Record : BlockRecords)
+        for (auto& record : BlockRecords)
         {
-            if (Record.modelId_ >= 0)
+            if (record.modelId_ >= 0)
             {
-                if (BrushMapping.find(Record.modelId_) != BrushMapping.end())
-                    Record.modelId_ = BrushMapping[Record.modelId_];
+                if (brushMapping.find(record.modelId_) != brushMapping.end())
+                    record.modelId_ = brushMapping[record.modelId_];
                 else
-                    Record.modelId_ = -1;
+                    record.modelId_ = -1;
             }
         }
     }
     DumpReplayStep(static_cast<int>(BlockRecords.size()) - 1);
 }
 
-void MagicaLegoGameInstance::RebuildScene(std::unordered_map<uint32_t, FPlacedBlock>& Source, uint32_t newhash)
+void MagicaLegoGameInstance::RebuildScene(std::unordered_map<uint32_t, FPlacedBlock>& source, uint32_t newhash)
 {
     GetEngine().GetScene().Nodes().erase(GetEngine().GetScene().Nodes().begin() + instanceCountBeforeDynamics_, GetEngine().GetScene().Nodes().end());
 
-    for (auto& Block : Source)
+    for (auto& block : source)
     {
-        if (Block.second.modelId_ >= 0)
+        if (block.second.modelId_ >= 0)
         {
-            auto BasicBlock = GetBasicBlock(Block.second.modelId_);
-            if (BasicBlock)
+            auto basicBlock = GetBasicBlock(block.second.modelId_);
+            if (basicBlock)
             {
                 // 这里要区分一下，因为目前rebuild流程是清理后重建，因此所有node都会被认为是首次放置，都会有一个单帧的velocity
                 // 所以如果没有modelid的改变的话，采用原位替换
-                glm::mat4 orientation = GetOrientationMatrix(Block.second.orientation);
-                uint32_t instanceId = instanceCountBeforeDynamics_ + GetHashFromBlockLocation(Block.second.location);
-                std::shared_ptr<Assets::Node> newNode = Assets::Node::CreateNode("blockInst", GetRenderLocationFromBlockLocation(Block.second.location), glm::quat(orientation), glm::vec3(1), BasicBlock->modelId_,
-                                                                instanceId, newhash != Block.first);
-                newNode->SetMaterial( {BasicBlock->matType} );
+                glm::mat4 orientation = GetOrientationMatrix(block.second.orientation);
+                uint32_t instanceId = instanceCountBeforeDynamics_ + GetHashFromBlockLocation(block.second.location);
+                std::shared_ptr<Assets::Node> newNode = Assets::Node::CreateNode("blockInst", GetRenderLocationFromBlockLocation(block.second.location), glm::quat(orientation), glm::vec3(1), basicBlock->modelId_,
+                                                                instanceId, newhash != block.first);
+                newNode->SetMaterial( {basicBlock->matType} );
                 newNode->SetVisible(true);
                 GetEngine().GetScene().Nodes().push_back(newNode);
             }
@@ -704,16 +704,16 @@ void MagicaLegoGameInstance::RebuildScene(std::unordered_map<uint32_t, FPlacedBl
 void MagicaLegoGameInstance::RebuildFromRecord(int timelapse)
 {
     // 从record中临时重建出一个Dynamics然后用来重建scene
-    std::unordered_map<uint32_t, FPlacedBlock> TempBlocksDynamics;
+    std::unordered_map<uint32_t, FPlacedBlock> tempBlocksDynamics;
     for (int i = 0; i < timelapse; i++)
     {
-        auto& Block = BlockRecords[i];
-        TempBlocksDynamics[GetHashFromBlockLocation(Block.location)] = Block;
+        auto& block = BlockRecords[i];
+        tempBlocksDynamics[GetHashFromBlockLocation(block.location)] = block;
 
         if (currentCamMode_ == ECamMode::ECM_AutoFocus)
-            cameraCenter_ = GetRenderLocationFromBlockLocation(Block.location);
+            cameraCenter_ = GetRenderLocationFromBlockLocation(block.location);
     }
-    RebuildScene(TempBlocksDynamics, -1);
+    RebuildScene(tempBlocksDynamics, -1);
 }
 
 void MagicaLegoGameInstance::CleanDynamicBlocks()
@@ -772,9 +772,9 @@ std::string MagicaLegoGameInstance::GetCurrentBGMName()
     return std::get<0>(bgmArray_[currentBGM_]);
 }
 
-void MagicaLegoGameInstance::SetPlayReview(bool Enable)
+void MagicaLegoGameInstance::SetPlayReview(bool enable)
 {
-    playReview_ = Enable;
+    playReview_ = enable;
     // add tick task to play review
     if (playReview_ == true)
     {
@@ -801,9 +801,9 @@ void MagicaLegoGameInstance::SetPlayReview(bool Enable)
 }
 
 
-const int THUMB_SIZE = 92;
+const int thumbSize = 92;
 
-void MagicaLegoGameInstance::GeneratingThmubnail()
+void MagicaLegoGameInstance::GenerateThumbnail()
 {
     cameraArm_ = 0.7f;
     cameraCenter_ = glm::vec3(0, 0.045f, 0);
@@ -811,7 +811,7 @@ void MagicaLegoGameInstance::GeneratingThmubnail()
     GetEngine().GetUserSettings().TemporalFrames = 8;
     GetEngine().GetUserSettings().NumberOfSamples = 256;
     GetEngine().GetUserSettings().Denoiser = false;
-    GetEngine().GetRenderer().SwapChain().UpdateRenderViewport(1920 / 2 - THUMB_SIZE / 2, 960 / 2 - THUMB_SIZE / 2, THUMB_SIZE, THUMB_SIZE);
+    GetEngine().GetRenderer().SwapChain().UpdateRenderViewport(1920 / 2 - thumbSize / 2, 960 / 2 - thumbSize / 2, thumbSize, thumbSize);
     PlaceDynamicBlock({{0, 0, 0}, EOrientation::EO_North, 0, BasicNodes[0].brushId_, 0, 0});
 
     int totalTask = static_cast<int>(BasicNodes.size());
@@ -828,8 +828,8 @@ void MagicaLegoGameInstance::GeneratingThmubnail()
         {
             cameraArm_ = 0.7f;
         }
-        GetEngine().SaveScreenShot(fmt::format("../../../assets/textures/thumb/thumb_{}_{}", BasicNodes[currTask].type, BasicNodes[currTask].name), 1920 / 2 - THUMB_SIZE / 2, 960 / 2 - THUMB_SIZE / 2,
-                                   THUMB_SIZE, THUMB_SIZE);
+        GetEngine().SaveScreenShot(fmt::format("../../../assets/textures/thumb/thumb_{}_{}", BasicNodes[currTask].type, BasicNodes[currTask].name), 1920 / 2 - thumbSize / 2, 960 / 2 - thumbSize / 2,
+                                   thumbSize, thumbSize);
         currTask = currTask + 1;
 
         if (currTask >= totalTask)

@@ -16,9 +16,9 @@
 #include <imgui.h>
 #include <imgui_freetype.h>
 #if !ANDROID
-#include <imgui_impl_glfw.h>
+#include <imgui_impl_sdl3.h>
 #else
-#include <imgui_impl_android.h>
+#include <ThirdParty/imgui-custom/imgui_impl_sdl3_custom.h>
 #endif
 #include <imgui_impl_vulkan.h>
 
@@ -38,8 +38,8 @@
 #include "Utilities/ImGui.hpp"
 #include "Vulkan/ImageView.hpp"
 
+extern float GAndroidMagicScale;
 extern std::unique_ptr<Vulkan::VulkanBaseRenderer> GApplication;
-
 
 UserInterface::UserInterface(
 	NextEngine* engine,
@@ -75,14 +75,10 @@ UserInterface::UserInterface(
 	funcPreConfig();
 	
 	// Initialise ImGui GLFW adapter
-#if !ANDROID
-	if (!ImGui_ImplGlfw_InitForVulkan(window.Handle(), true))
+	if (!ImGui_ImplSDL3_InitForVulkan(window.Handle()))
 	{
 		Throw(std::runtime_error("failed to initialise ImGui GLFW adapter"));
 	}
-#else
-	ImGui_ImplAndroid_Init(window.Handle());
-#endif
 
 	// Initialise ImGui Vulkan adapter
 	ImGui_ImplVulkan_InitInfo vulkanInit = {};
@@ -105,13 +101,10 @@ UserInterface::UserInterface(
 	
 	// Window scaling and style.
 #if ANDROID
-    const auto scaleFactor = 1.0;
-#elif __APPLE__
-	const auto scaleFactor = 1.0;
+    const auto scaleFactor = 0.75 / GAndroidMagicScale;
 #else
-    const auto scaleFactor = 1.0f;
+    const auto scaleFactor = 1.0;
 #endif
-
 	const auto fontSize = 16;
 
 	UserInterface::SetStyle();
@@ -147,14 +140,13 @@ UserInterface::UserInterface(
 	{
 		
 	}
-#if !ANDROID
+
 	ImFontConfig configLocale;
 	configLocale.MergeMode = true;
 	if (!io.Fonts->AddFontFromFileTTF(Utilities::FileHelper::GetPlatformFilePath("assets/fonts/DroidSansFallback.ttf").c_str(), (fontSize + 2) * scaleFactor, &configLocale, glyphRange ))
 	{
 		Throw(std::runtime_error("failed to load locale ImGui Text font"));
 	}
-#endif
 
 	if(funcInit != nullptr)
 	{
@@ -175,11 +167,7 @@ UserInterface::~UserInterface()
 	uiFrameBuffers_.clear();
 	
 	ImGui_ImplVulkan_Shutdown();
-#if !ANDROID
-	ImGui_ImplGlfw_Shutdown();
-#else
-	ImGui_ImplAndroid_Shutdown();
-#endif
+	ImGui_ImplSDL3_Shutdown();
 	ImGui::DestroyContext();
 }
 
@@ -234,7 +222,7 @@ void UserInterface::SetStyle()
 
     io.IniFilename              = NULL;
 
-	ImVec4 ActiveColor = true ? ImVec4(0.42f, 0.45f, 0.5f, 1.00f) : ImVec4(0.28f, 0.45f, 0.70f, 1.00f);
+	ImVec4 activeColor = true ? ImVec4(0.42f, 0.45f, 0.5f, 1.00f) : ImVec4(0.28f, 0.45f, 0.70f, 1.00f);
 
     ImGuiStyle* style = &ImGui::GetStyle();
     ImVec4* colors = style->Colors;
@@ -254,28 +242,28 @@ void UserInterface::SetStyle()
     colors[ImGuiCol_ScrollbarGrab]          = ImVec4(0.33f, 0.33f, 0.33f, 1.00f);
     colors[ImGuiCol_ScrollbarGrabHovered]   = ImVec4(0.33f, 0.33f, 0.33f, 1.00f);
     colors[ImGuiCol_ScrollbarGrabActive]    = ImVec4(0.35f, 0.35f, 0.35f, 1.00f);
-    colors[ImGuiCol_CheckMark]              = ActiveColor;
-    colors[ImGuiCol_SliderGrab]             = ActiveColor;
-    colors[ImGuiCol_SliderGrabActive]       = ActiveColor;
+    colors[ImGuiCol_CheckMark]              = activeColor;
+    colors[ImGuiCol_SliderGrab]             = activeColor;
+    colors[ImGuiCol_SliderGrabActive]       = activeColor;
     colors[ImGuiCol_Button]                 = ImVec4(0.33f, 0.33f, 0.33f, 1.00f);
     colors[ImGuiCol_ButtonHovered]          = ImVec4(0.40f, 0.40f, 0.40f, 1.00f);
-    colors[ImGuiCol_ButtonActive]           = ActiveColor;
+    colors[ImGuiCol_ButtonActive]           = activeColor;
     colors[ImGuiCol_Header]                 = ImVec4(0.15f, 0.15f, 0.15f, 1.00f);
-    colors[ImGuiCol_HeaderHovered]          = ActiveColor;
+    colors[ImGuiCol_HeaderHovered]          = activeColor;
     colors[ImGuiCol_HeaderActive]           = ImVec4(0.15f, 0.15f, 0.15f, 1.00f);
     colors[ImGuiCol_Separator]              = ImVec4(0.18f, 0.18f, 0.18f, 1.00f);
-    colors[ImGuiCol_SeparatorHovered]       = ActiveColor;
-    colors[ImGuiCol_SeparatorActive]        = ActiveColor;
+    colors[ImGuiCol_SeparatorHovered]       = activeColor;
+    colors[ImGuiCol_SeparatorActive]        = activeColor;
     colors[ImGuiCol_ResizeGrip]             = ImVec4(0.54f, 0.54f, 0.54f, 1.00f);
-    colors[ImGuiCol_ResizeGripHovered]      = ActiveColor;
+    colors[ImGuiCol_ResizeGripHovered]      = activeColor;
     colors[ImGuiCol_ResizeGripActive]       = ImVec4(0.19f, 0.39f, 0.69f, 1.00f);
     colors[ImGuiCol_Tab]                    = ImVec4(0.11f, 0.11f, 0.11f, 1.00f);
     colors[ImGuiCol_TabHovered]             = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
     colors[ImGuiCol_TabActive]              = ImVec4(0.19f, 0.19f, 0.19f, 1.00f);
-    colors[ImGuiCol_PlotHistogram]          = ActiveColor;
+    colors[ImGuiCol_PlotHistogram]          = activeColor;
     colors[ImGuiCol_PlotHistogramHovered]   = ImVec4(0.20f, 0.39f, 0.69f, 1.00f);
-    colors[ImGuiCol_TextSelectedBg]         = ActiveColor;
-    colors[ImGuiCol_NavHighlight]           = ActiveColor;
+    colors[ImGuiCol_TextSelectedBg]         = activeColor;
+    colors[ImGuiCol_NavHighlight]           = activeColor;
 	colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.5f);
 	
     style->WindowPadding                    = ImVec2(12.00f, 8.00f);
@@ -292,29 +280,24 @@ void UserInterface::DrawPoint(float x, float y, float size, glm::vec4 color)
 {
 	// in viewport mode, the start from the display
 	auxDrawRequest_.push_back( [=]() {
-		ImVec2 StartPos = ImGui::GetMainViewport()->Pos;
-		ImGui::GetForegroundDrawList()->AddRectFilled(StartPos + ImVec2{x - size, y - size}, StartPos + ImVec2{x + size, y + size}, Utilities::UI::Vec4ToImU32(color));
+		ImVec2 startPos = ImGui::GetMainViewport()->Pos;
+		ImGui::GetForegroundDrawList()->AddRectFilled(startPos + ImVec2{x - size, y - size}, startPos + ImVec2{x + size, y + size}, Utilities::UI::Vec4ToImU32(color));
 	});
 }
 
 void UserInterface::DrawLine(float fromx, float fromy, float tox, float toy, float size, glm::vec4 color)
 {
 	auxDrawRequest_.push_back( [=]() {
-		ImVec2 StartPos = ImGui::GetMainViewport()->Pos;
-		ImGui::GetForegroundDrawList()->AddLine( StartPos + ImVec2(fromx, fromy), StartPos + ImVec2(tox, toy), Utilities::UI::Vec4ToImU32(color), size);
+		ImVec2 startPos = ImGui::GetMainViewport()->Pos;
+		ImGui::GetForegroundDrawList()->AddLine( startPos + ImVec2(fromx, fromy), startPos + ImVec2(tox, toy), Utilities::UI::Vec4ToImU32(color), size);
 	});
 }
 
 void UserInterface::PreRender()
 {
 	ImGui_ImplVulkan_NewFrame();
-#if !ANDROID
-	ImGui_ImplGlfw_NewFrame();
-#else
-	ImGui_ImplAndroid_NewFrame();
-#endif
+	ImGui_ImplSDL3_NewFrame();
 	ImGui::NewFrame();
-
 
 	// update texture to ui
 	uint32_t maxId = Assets::GlobalTexturePool::GetInstance()->TotalTextures();
@@ -362,6 +345,11 @@ void UserInterface::PostRender(VkCommandBuffer commandBuffer, const Vulkan::Swap
 	}
 }
 
+void UserInterface::HandleEvent(const SDL_Event* event)
+{
+	ImGui_ImplSDL3_ProcessEvent(event);
+}
+
 bool UserInterface::WantsToCaptureKeyboard() const
 {
 	return ImGui::GetIO().WantCaptureKeyboard;
@@ -381,13 +369,9 @@ void UserInterface::DrawOverlay(const Statistics& statistics, Vulkan::VulkanGpuT
 
 	const auto& io = ImGui::GetIO();
 	const float distance = 10.0f;
-#if ANDROID
-	const ImVec2 pos = ImVec2(io.DisplaySize.x * 0.3333f - distance, distance);
-	const ImVec2 posPivot = ImVec2(1.0f, 0.0f);
-#else
 	const ImVec2 pos = ImVec2(io.DisplaySize.x - distance, distance + 40);
 	const ImVec2 posPivot = ImVec2(1.0f, 0.0f);
-#endif
+
 	ImGui::SetNextWindowPos(pos, ImGuiCond_Always, posPivot);
 	ImGui::SetNextWindowBgAlpha(0.3f); // Transparent background
 

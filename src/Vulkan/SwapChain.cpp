@@ -8,12 +8,9 @@
 #include "Utilities/Exception.hpp"
 #include <algorithm>
 #include <limits>
-
 #include "ImageMemoryBarrier.hpp"
 
-#if ANDROID
-#include <android/log.h>
-#endif
+float GAndroidMagicScale = 1.0f;
 
 namespace Vulkan {
 
@@ -36,9 +33,13 @@ SwapChain::SwapChain(const class Device& device, const VkPresentModeKHR presentM
 	const auto imageCount = ChooseImageCount(details.Capabilities);
 
 #if ANDROID
+    GAndroidMagicScale = 1280.f / float(extent.height);
+
 	float aspect = extent.width / static_cast<float>(extent.height);
 	extent.height = 1280;
 	extent.width = floorf(1280 * aspect);
+
+    SDL_SetWindowFullscreen(window.Handle(), true);
 #endif
 	
 	VkSwapchainCreateInfoKHR createInfo = {};

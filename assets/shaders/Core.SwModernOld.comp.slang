@@ -30,7 +30,7 @@ void main(uint3 DTid: SV_DispatchThreadID) {
     FVisibilityBufferRayCasterV2 rayCaster = {};
  
     int2 ipos = int2(DTid.xy);
-    int2 size = Bindless.GetStorageTextureDimensions(Bindless.RT_MINIGBUFFER);
+    int2 size = Bindless.GetStorageTextureDimensions<uint>(Bindless.RT_MINIGBUFFER);
     uint4 RandomSeed = InitRandomSeed(ipos.x, ipos.y, Camera.TotalFrames);
 
     // 第一次Tracing

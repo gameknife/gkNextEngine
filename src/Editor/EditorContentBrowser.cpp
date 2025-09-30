@@ -7,10 +7,10 @@
 #include "EditorInterface.hpp"
 #include "Assets/Scene.hpp"
 
-const int ICON_SIZE = 96;
-const int ICON_PADDING = 20;
+const int iconSize = 96;
+const int iconPadding = 20;
 
-void Editor::GUI::DrawGeneralContentBrowser(bool iconOrTex, uint32_t globalId, const std::string& name, const char* icon, ImU32 color, std::function<void ()> doubleclick_action)
+void Editor::GUI::DrawGeneralContentBrowser(bool iconOrTex, uint32_t globalId, const std::string& name, const char* icon, ImU32 color, std::function<void ()> doubleclickAction)
 {
     ImGui::BeginGroup();
     ImGui::PushFont(bigIcon_); // use the font awesome font
@@ -19,11 +19,11 @@ void Editor::GUI::DrawGeneralContentBrowser(bool iconOrTex, uint32_t globalId, c
 
     if ( iconOrTex || (VK_NULL_HANDLE == GUserInterface->RequestImTextureId(globalId)))
     {
-        ImGui::Button(icon, ImVec2(ICON_SIZE, ICON_SIZE));
+        ImGui::Button(icon, ImVec2(iconSize, iconSize));
     }
     else
     {
-        ImGui::Image((ImTextureID)(intptr_t)GUserInterface->RequestImTextureId(globalId), ImVec2(ICON_SIZE, ICON_SIZE));
+        ImGui::Image((ImTextureID)(intptr_t)GUserInterface->RequestImTextureId(globalId), ImVec2(iconSize, iconSize));
     }
     
     ImGui::PopID();
@@ -35,7 +35,7 @@ void Editor::GUI::DrawGeneralContentBrowser(bool iconOrTex, uint32_t globalId, c
         if( ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
         {
             selectedItemId = -1;
-            doubleclick_action();
+            doubleclickAction();
         }
         if( ImGui::IsMouseClicked(ImGuiMouseButton_Left))
         {
@@ -43,19 +43,19 @@ void Editor::GUI::DrawGeneralContentBrowser(bool iconOrTex, uint32_t globalId, c
         }
     }
     
-    auto CursorPos = ImGui::GetCursorPos() + ImGui::GetWindowPos() - ImVec2(0, 4 + ImGui::GetScrollY());
+    auto cursorPos = ImGui::GetCursorPos() + ImGui::GetWindowPos() - ImVec2(0, 4 + ImGui::GetScrollY());
     bool selected = selectedItemId == globalId;
-    ImGui::GetWindowDrawList()->AddRectFilled(CursorPos, CursorPos + ImVec2(ICON_SIZE, ICON_SIZE / 5 * 3),selected ? Editor::ActiveColor : IM_COL32(64, 64, 64, 255), 4);
-    ImGui::GetWindowDrawList()->AddLine(CursorPos, CursorPos + ImVec2(ICON_SIZE, 0), color, 2);
+    ImGui::GetWindowDrawList()->AddRectFilled(cursorPos, cursorPos + ImVec2(iconSize, iconSize / 5 * 3),selected ? Editor::ActiveColor : IM_COL32(64, 64, 64, 255), 4);
+    ImGui::GetWindowDrawList()->AddLine(cursorPos, cursorPos + ImVec2(iconSize, 0), color, 2);
 
-    ImGui::PushItemWidth(ICON_SIZE);
-    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ICON_SIZE);
+    ImGui::PushItemWidth(iconSize);
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + iconSize);
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 5);
     ImGui::Text("%s", name.c_str());
     ImGui::PopTextWrapPos();
     ImGui::PopItemWidth();
 
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ICON_PADDING);
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + iconPadding);
     ImGui::EndGroup();
 }
 
@@ -65,14 +65,14 @@ void Editor::GUI::ShowMeshBrowser()
     {
         if (current_scene)
         {
-            auto& AllModels = current_scene->Models();
+            auto& allModels = current_scene->Models();
             
             float windowWidth = ImGui::GetContentRegionAvail().x;
-            int itemsPerRow = std::max(1, (int)(windowWidth / (ICON_SIZE + ImGui::GetStyle().ItemSpacing.x)));
+            int itemsPerRow = std::max(1, (int)(windowWidth / (iconSize + ImGui::GetStyle().ItemSpacing.x)));
 
-            for ( uint32_t i = 0; i < AllModels.size(); ++i)
+            for ( uint32_t i = 0; i < allModels.size(); ++i)
             {
-                auto& model = AllModels[i];
+                auto& model = allModels[i];
                 std::string name = fmt::format("{}_#{}", model.Name(), i);
                 DrawGeneralContentBrowser(true, i, name, ICON_FA_BOXES_PACKING, IM_COL32(132, 182, 255, 255), [this, i]()
                 {
@@ -92,14 +92,14 @@ void Editor::GUI::ShowMaterialBrowser()
     {
         if (current_scene)
         {
-            auto& AllMaterials = current_scene->Materials();
+            auto& allMaterials = current_scene->Materials();
             
             float windowWidth = ImGui::GetContentRegionAvail().x;
-            int itemsPerRow = std::max(1, (int)(windowWidth / (ICON_SIZE + ImGui::GetStyle().ItemSpacing.x)));
+            int itemsPerRow = std::max(1, (int)(windowWidth / (iconSize + ImGui::GetStyle().ItemSpacing.x)));
 
-            for ( uint32_t i = 0; i < AllMaterials.size(); ++i)
+            for ( uint32_t i = 0; i < allMaterials.size(); ++i)
             {
-                auto& mat = AllMaterials[i];
+                auto& mat = allMaterials[i];
                 DrawGeneralContentBrowser(true, i, mat.name_, ICON_FA_BOWLING_BALL, IM_COL32(132, 255, 132, 255), [this, i]()
                 {
                     selected_material = &(current_scene->Materials()[i]);
@@ -125,7 +125,7 @@ void Editor::GUI::ShowTextureBrowser()
             auto& totalTextureMap = Assets::GlobalTexturePool::GetInstance()->TotalTextureMap();
             
             float windowWidth = ImGui::GetContentRegionAvail().x;
-            int itemsPerRow = std::max(1, (int)(windowWidth / (ICON_SIZE + ImGui::GetStyle().ItemSpacing.x)));
+            int itemsPerRow = std::max(1, (int)(windowWidth / (iconSize + ImGui::GetStyle().ItemSpacing.x)));
             
             int itemIndex = 0;
             for ( auto& textureGroup : totalTextureMap )
@@ -184,10 +184,10 @@ void Editor::GUI::ShowContentBrowser()
         ImGui::PopStyleVar();
         ImGui::PopFont();
         
-        auto CursorPos = ImGui::GetWindowPos() + ImVec2(0, ImGui::GetCursorPos().y + 2);
+        auto cursorPos = ImGui::GetWindowPos() + ImVec2(0, ImGui::GetCursorPos().y + 2);
         ImGui::NewLine();
-        ImGui::GetWindowDrawList()->AddLine(CursorPos + ImVec2(0,1), CursorPos + ImVec2(ImGui::GetWindowSize().x,1), IM_COL32(20,20,20,128), 1);
-        ImGui::GetWindowDrawList()->AddLine(CursorPos, CursorPos + ImVec2(ImGui::GetWindowSize().x,0), IM_COL32(20,20,20,255), 1);
+        ImGui::GetWindowDrawList()->AddLine(cursorPos + ImVec2(0,1), cursorPos + ImVec2(ImGui::GetWindowSize().x,1), IM_COL32(20,20,20,128), 1);
+        ImGui::GetWindowDrawList()->AddLine(cursorPos, cursorPos + ImVec2(ImGui::GetWindowSize().x,0), IM_COL32(20,20,20,255), 1);
 
         ImGui::BeginChild("Content Items");
 
@@ -202,7 +202,7 @@ void Editor::GUI::ShowContentBrowser()
         
         std::filesystem::directory_iterator it(path);
         float windowWidth = ImGui::GetContentRegionAvail().x;
-        int itemsPerRow = std::max(1, (int)(windowWidth / (ICON_SIZE + ImGui::GetStyle().ItemSpacing.x)));
+        int itemsPerRow = std::max(1, (int)(windowWidth / (iconSize + ImGui::GetStyle().ItemSpacing.x)));
         
         uint32_t elementIdx = 0;
         for (auto& entry : it)

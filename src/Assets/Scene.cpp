@@ -1,4 +1,5 @@
 #include "Scene.hpp"
+#include "Common/CoreMinimal.hpp"
 #include "Model.hpp"
 #include "Options.hpp"
 #include "Vulkan/BufferUtil.hpp"
@@ -16,6 +17,8 @@
 #include "Vulkan/DescriptorSetManager.hpp"
 #include "Vulkan/DescriptorSets.hpp"
 #include "Vulkan/SwapChain.hpp"
+
+#include <spdlog/spdlog.h>
 
 namespace Assets
 {
@@ -109,15 +112,15 @@ namespace Assets
         }
         
         // static mesh to jolt mesh shape
-        NextPhysics* PhysicsEngine = NextEngine::GetInstance()->GetPhysicsEngine();
-        if (PhysicsEngine)
+        NextPhysics* physicsEngine = NextEngine::GetInstance()->GetPhysicsEngine();
+        if (physicsEngine)
         {
             std::vector<JPH::RefConst<JPH::MeshShapeSettings> > meshShapes;
             for (auto& model : models_)
             {
                 if (model.NumberOfIndices() < 65535 * 3)
                 {
-                    meshShapes.push_back( JPH::RefConst<JPH::MeshShapeSettings>(PhysicsEngine->CreateMeshShape(model))  );
+                    meshShapes.push_back( JPH::RefConst<JPH::MeshShapeSettings>(physicsEngine->CreateMeshShape(model))  );
                 }
                 else
                 {
@@ -132,7 +135,7 @@ namespace Assets
                 {
                     JPH::EMotionType motionType = node->GetMobility() == Node::ENodeMobility::Static ? JPH::EMotionType::Static : JPH::EMotionType::Kinematic;
                     JPH::ObjectLayer layer = node->GetMobility() == Node::ENodeMobility::Static ? Layers::NON_MOVING : Layers::MOVING;
-                    JPH::BodyID id = PhysicsEngine->CreateMeshBody(meshShapes[node->GetModel()], node->WorldTranslation(), node->WorldRotation(), node->WorldScale(), motionType, layer);\
+                    JPH::BodyID id = physicsEngine->CreateMeshBody(meshShapes[node->GetModel()], node->WorldTranslation(), node->WorldRotation(), node->WorldScale(), motionType, layer);\
                     node->BindPhysicsBody(id);
                 }
             }
@@ -160,12 +163,12 @@ namespace Assets
             }
 
             // create 6 plane bodys
-            PhysicsEngine->CreatePlaneBody(sceneAABBMin_, glm::vec3(1,0,0), JPH::EMotionType::Static);
-            PhysicsEngine->CreatePlaneBody(sceneAABBMax_, glm::vec3(-1,0,0), JPH::EMotionType::Static);
-            PhysicsEngine->CreatePlaneBody(sceneAABBMin_, glm::vec3(0,1,0), JPH::EMotionType::Static);
-            PhysicsEngine->CreatePlaneBody(sceneAABBMax_, glm::vec3(0,-1,0), JPH::EMotionType::Static);
-            PhysicsEngine->CreatePlaneBody(sceneAABBMin_, glm::vec3(0,0,1), JPH::EMotionType::Static);
-            PhysicsEngine->CreatePlaneBody(sceneAABBMax_, glm::vec3(0,0,-1), JPH::EMotionType::Static);
+            physicsEngine->CreatePlaneBody(sceneAABBMin_, glm::vec3(1,0,0), JPH::EMotionType::Static);
+            physicsEngine->CreatePlaneBody(sceneAABBMax_, glm::vec3(-1,0,0), JPH::EMotionType::Static);
+            physicsEngine->CreatePlaneBody(sceneAABBMin_, glm::vec3(0,1,0), JPH::EMotionType::Static);
+            physicsEngine->CreatePlaneBody(sceneAABBMax_, glm::vec3(0,-1,0), JPH::EMotionType::Static);
+            physicsEngine->CreatePlaneBody(sceneAABBMin_, glm::vec3(0,0,1), JPH::EMotionType::Static);
+            physicsEngine->CreatePlaneBody(sceneAABBMax_, glm::vec3(0,0,-1), JPH::EMotionType::Static);
         }
       
 
@@ -245,7 +248,7 @@ namespace Assets
 
             if (emptySection < 0)
             {
-                fmt::print("more than 10 sections in model. \n");
+                SPDLOG_WARN("more than 10 sections in model");
             }
             for ( int slice = 0; slice < emptySection; ++slice )
             {
@@ -282,14 +285,7 @@ namespace Assets
         UpdateNodesGpuDriven();
         MarkDirty();
 
-#if ANDROID
         cpuAccelerationStructure_.AsyncProcessFull(*this, farAmbientCubeBufferMemory_.get(), false);
-#else
-        // if ( !NextEngine::GetInstance()->GetRenderer().supportRayTracing_ ) this has to be done, cause voxel tracing needed
-        {
-            cpuAccelerationStructure_.AsyncProcessFull(*this, farAmbientCubeBufferMemory_.get(), false);
-        }
-#endif
     }
 
     const Assets::GPUScene& Scene::FetchGPUScene(const uint32_t imageIndex) const
@@ -331,23 +327,23 @@ namespace Assets
         //cpuAccelerationStructure_.GenShadowMap(*this);
     }
 
-    void Scene::Tick(float DeltaSeconds)
+    void Scene::Tick(float deltaSeconds)
     {
         if ( NextEngine::GetInstance()->GetUserSettings().TickAnimation)
         {
-            float DurationMax = 0;
+            float durationMax = 0;
 
             for (auto& track : tracks_)
             {
                 if (!track.Playing()) continue;
-                DurationMax = glm::max(DurationMax, track.Duration_);
+                durationMax = glm::max(durationMax, track.Duration_);
             }
 
             for (auto& track : tracks_)
             {
                 if (!track.Playing()) continue;
-                track.Time_ += DeltaSeconds;
-                if (track.Time_ > DurationMax)
+                track.Time_ += deltaSeconds;
+                if (track.Time_ > durationMax)
                 {
                     track.Time_ = 0;
                 }
@@ -435,11 +431,11 @@ namespace Assets
 
     void Scene::UpdateHDRSH()
     {
-        auto& SHData = GlobalTexturePool::GetInstance()->GetHDRSphericalHarmonics();
-        if (SHData.size() > 0)
+        auto& shData = GlobalTexturePool::GetInstance()->GetHDRSphericalHarmonics();
+        if (shData.size() > 0)
         {
-            SphericalHarmonics* data = reinterpret_cast<SphericalHarmonics*>(hdrSHBufferMemory_->Map(0, sizeof(SphericalHarmonics) * SHData.size()));
-            std::memcpy(data, SHData.data(), SHData.size() * sizeof(SphericalHarmonics));
+            SphericalHarmonics* data = reinterpret_cast<SphericalHarmonics*>(hdrSHBufferMemory_->Map(0, sizeof(SphericalHarmonics) * shData.size()));
+            std::memcpy(data, shData.data(), shData.size() * sizeof(SphericalHarmonics));
             hdrSHBufferMemory_->Unmap();
         }
     }
@@ -551,12 +547,12 @@ namespace Assets
         NextEngine::GetInstance()->SetProgressiveRendering(false, false);
     }
 
-    void Scene::OverrideModelView(glm::mat4& OutMatrix)
+    void Scene::OverrideModelView(glm::mat4& outMatrix)
     {
         if (requestOverrideModelView)
         {
             requestOverrideModelView = false;
-            OutMatrix = overrideModelView;
+            outMatrix = overrideModelView;
         }
     }
 }

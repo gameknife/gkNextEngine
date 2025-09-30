@@ -43,18 +43,18 @@ Image::Image(
 	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 	imageInfo.flags = 0; // Optional
 
-	VkExternalMemoryImageCreateInfo external_memory_image_info{};
-	external_memory_image_info.sType       = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
+	VkExternalMemoryImageCreateInfo externalMemoryImageInfo{};
+	externalMemoryImageInfo.sType       = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
 #if WIN32 && !defined(__MINGW32__)
 	external_memory_image_info.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT;
 #else
-	external_memory_image_info.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+	externalMemoryImageInfo.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
 #endif
 
 #if !ANDROID
 	if(external_)
 	{
-		imageInfo.pNext = &external_memory_image_info;
+		imageInfo.pNext = &externalMemoryImageInfo;
 	}
 #endif
 

@@ -26,9 +26,8 @@
 #include "Assets/Texture.hpp"
 
 #include "Utilities/Exception.hpp"
-#include "Utilities/Console.hpp"
 #include <array>
-#include <fmt/format.h>
+#include "Common/CoreMinimal.hpp"
 
 #include "Options.hpp"
 #include "SoftwareModern/SoftwareModernRenderer.hpp"
@@ -36,6 +35,7 @@
 #include "PathTracing/PathTracingRenderer.hpp"
 #include "Runtime/Engine.hpp"
 #include "Rendering/PipelineCommon/CommonComputePipeline.hpp"
+#include <spdlog/spdlog.h>
 
 #if WITH_STREAMLINE
 #include "ThirdParty/streamline/include/sl.h"
@@ -104,7 +104,7 @@ namespace
 {
     void PrintVulkanSdkInformation()
     {
-        fmt::print("Vulkan SDK Header Version: {}\n\n", VK_HEADER_VERSION);
+        SPDLOG_INFO("Vulkan SDK Header Version: {}", VK_HEADER_VERSION);
     }
     
     void PrintVulkanDevices(const Vulkan::VulkanBaseRenderer& application)
@@ -128,7 +128,7 @@ namespace
             const Vulkan::Version vulkanVersion(prop.apiVersion);
             const Vulkan::Version driverVersion(prop.driverVersion, prop.vendorID);
 
-            fmt::print("- [{}] {} '{}' ({}: vulkan {} driver {} {} - {})\n",
+            SPDLOG_INFO("- [{}] {} '{}' ({}: vulkan {} driver {} {} - {})",
                        prop.deviceID, Vulkan::Strings::VendorId(prop.vendorID), prop.deviceName,
                        Vulkan::Strings::DeviceType(prop.deviceType),
                        to_string(vulkanVersion), driverProp.driverName, driverProp.driverInfo,
@@ -148,7 +148,7 @@ namespace
 
     bool SupportRayQuery(const Vulkan::VulkanBaseRenderer& application)
     {
-        bool SupportRayQuery = false;
+        bool supportRayQuery = false;
         for (const auto& device : application.PhysicalDevices())
         {
             const auto extensions = Vulkan::GetEnumerateVector(device, static_cast<const char*>(nullptr),
@@ -159,16 +159,16 @@ namespace
                    return strcmp(extension.extensionName,VK_KHR_RAY_QUERY_EXTENSION_NAME) == 0;
                });
 
-            SupportRayQuery = SupportRayQuery | hasRayTracing;
+            supportRayQuery = supportRayQuery | hasRayTracing;
         }
-        return SupportRayQuery;
+        return supportRayQuery;
     }
 
     void PrintVulkanSwapChainInformation(const Vulkan::VulkanBaseRenderer& application)
     {
         const auto& swapChain = application.SwapChain();
 
-        fmt::print("Swap Chain:\n- image count: {}\n- present mode: {}\n\n", swapChain.Images().size(),
+        SPDLOG_INFO("Swap Chain: image count: {}, present mode: {}", swapChain.Images().size(),
                    static_cast<int>(swapChain.PresentMode()));
     }
 
@@ -180,7 +180,7 @@ namespace
         deviceProp.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
         vkGetPhysicalDeviceProperties2(pDevice, &deviceProp);
 
-        fmt::print("Setting Device [{}]\n", deviceProp.properties.deviceName);
+        SPDLOG_INFO("Setting Device [{}]", deviceProp.properties.deviceName);
         application.SetPhysicalDevice(pDevice);
 
         puts("");
@@ -269,7 +269,7 @@ namespace Vulkan
         window_->Show();
 
         uptime = std::chrono::high_resolution_clock::now().time_since_epoch().count() - uptime;
-        fmt::print("\n{} renderer initialized in {:.2f}ms{}\n", CONSOLE_GREEN_COLOR, uptime * 1e-6f, CONSOLE_DEFAULT_COLOR);
+        SPDLOG_INFO("renderer initialized in {:.2f}ms", uptime * 1e-6f);
     }
 
     void VulkanBaseRenderer::Start()
@@ -319,6 +319,7 @@ namespace Vulkan
         deviceFeatures.shaderStorageImageReadWithoutFormat = true;
         deviceFeatures.shaderStorageImageWriteWithoutFormat = true;
         deviceFeatures.shaderInt16 = true;
+        deviceFeatures.shaderInt64 = true;
 
         // Required extensions. windows only
 #if WIN32
@@ -332,8 +333,6 @@ namespace Vulkan
         shaderClockFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR;
         shaderClockFeatures.pNext = nextDeviceFeatures;
         shaderClockFeatures.shaderSubgroupClock = true;
-
-        deviceFeatures.shaderInt64 = true;
 #endif
         
         // support bindless material
@@ -472,9 +471,9 @@ namespace Vulkan
         }
 
         // SwapChaine
-        int Divider = 4 - ( GOption->ReferenceMode ? 0 : GOption->SuperResolution );
+        int divider = 4 - ( GOption->ReferenceMode ? 0 : GOption->SuperResolution );
         swapChain_.reset(new class SwapChain(*device_, presentMode_, forceSDR_));
-        swapChain_->UpdateRenderViewport(0, 0, swapChain_->Extent().width * 2 / Divider,swapChain_->Extent().height * 2 / Divider);
+        swapChain_->UpdateRenderViewport(0, 0, swapChain_->Extent().width * 2 / divider,swapChain_->Extent().height * 2 / divider);
         swapChain_->UpdateOutputViewport( 0, 0, swapChain_->Extent().width, swapChain_->Extent().height);
 
         // depthBuffer
@@ -502,13 +501,14 @@ namespace Vulkan
         // wireframeFramebuffer_.reset(new FrameBuffer(swapChain_->RenderExtent(), GetStorageImage(Assets::Bindless::RT_DENOISED)->GetImageView(), wireframePipeline_->RenderPass()));
 
         // 公用Pipeline
-        visibilityPipeline_.reset(new PipelineCommon::VisibilityPipeline(SwapChain(), DepthBuffer(), UniformBuffers(), GetScene()));
-        visibilityFrameBuffer_.reset(new FrameBuffer(swapChain_->RenderExtent(), GetStorageImage(Assets::Bindless::RT_MINIGBUFFER_DRAW)->GetImageView(), visibilityPipeline_->RenderPass()));
         simpleComposePipeline_.reset( new PipelineCommon::ZeroBindCustomPushConstantPipeline(SwapChain(), "assets/shaders/Process.UpScaleFSR.comp.slang.spv", 20));
         bufferClearPipeline_.reset(new PipelineCommon::ZeroBindCustomPushConstantPipeline(*swapChain_, "assets/shaders/Util.BufferClear.comp.slang.spv", 4));
         softAmbientCubeGenPipeline_.reset( new PipelineCommon::ZeroBindPipeline(*swapChain_, "assets/shaders/Bake.SwAmbientCube.comp.slang.spv"));
         gpuCullPipeline_.reset(new PipelineCommon::ZeroBindPipeline(*swapChain_, "assets/shaders/Task.GpuCull.comp.slang.spv"));
         visualDebuggerPipeline_.reset(new PipelineCommon::ZeroBindCustomPushConstantPipeline(*swapChain_, "assets/shaders/Util.VisualDebugger.comp.slang.spv", 20));
+
+        visibilityPipeline_.reset(new PipelineCommon::VisibilityPipeline(SwapChain(), DepthBuffer(), UniformBuffers(), GetScene()));
+        visibilityFrameBuffer_.reset(new FrameBuffer(swapChain_->RenderExtent(), GetStorageImage(Assets::Bindless::RT_MINIGBUFFER_DRAW)->GetImageView(), visibilityPipeline_->RenderPass()));
 
         // 逻辑Renderer
         for (auto& logicRenderer : logicRenderers_)

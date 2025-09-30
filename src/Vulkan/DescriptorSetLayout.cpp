@@ -33,17 +33,17 @@ DescriptorSetLayout::DescriptorSetLayout(const Device& device, const std::vector
 	layoutInfo.pBindings = layoutBindings.data();
 
 	// bindless stuff
-	VkDescriptorSetLayoutBindingFlagsCreateInfoEXT extended_info{
+	VkDescriptorSetLayoutBindingFlagsCreateInfoEXT extendedInfo{
 		VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT, nullptr
 	};
 	
-	extended_info.bindingCount = layoutInfo.bindingCount;
-	extended_info.pBindingFlags = bindlessBindingFlags.data();
+	extendedInfo.bindingCount = layoutInfo.bindingCount;
+	extendedInfo.pBindingFlags = bindlessBindingFlags.data();
 	
 	if( bindless )
 	{
 		layoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT;
-		layoutInfo.pNext = &extended_info;
+		layoutInfo.pNext = &extendedInfo;
 	}
 
 	Check(vkCreateDescriptorSetLayout(device.Handle(), &layoutInfo, nullptr, &layout_),

@@ -59,10 +59,10 @@ void BenchmarkGameInstance::OnSceneLoaded()
     totalTime_ = 0;
 }
 
-bool BenchmarkGameInstance::OverrideRenderCamera(Assets::Camera& OutRenderCamera) const
+bool BenchmarkGameInstance::OverrideRenderCamera(Assets::Camera& outRenderCamera) const
 {
-    OutRenderCamera.ModelView = modelViewController_.ModelView();
-    OutRenderCamera.FieldOfView = modelViewController_.FieldOfView();
+    outRenderCamera.ModelView = modelViewController_.ModelView();
+    outRenderCamera.FieldOfView = modelViewController_.FieldOfView();
     return true;
 }
 

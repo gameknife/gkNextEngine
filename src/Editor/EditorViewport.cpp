@@ -21,7 +21,7 @@ void Editor::GUI::ShowViewport(ImGuiID id)
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.5f));
 
-    ImGuiWindowFlags window_flags = 0
+    ImGuiWindowFlags windowFlags = 0
         | ImGuiWindowFlags_NoDocking
         | ImGuiWindowFlags_NoTitleBar
         | ImGuiWindowFlags_NoResize
@@ -30,7 +30,7 @@ void Editor::GUI::ShowViewport(ImGuiID id)
         | ImGuiWindowFlags_NoSavedSettings
         ;
 
-    ImGui::Begin("ViewportStat", nullptr, window_flags);
+    ImGui::Begin("ViewportStat", nullptr, windowFlags);
 
     ImGui::Text("Reatime Statstics: ");
     ImGui::Text("Frame rate: %.0f fps", 1.0f / engine->GetSmoothDeltaSeconds());
@@ -49,7 +49,7 @@ void Editor::GUI::ShowViewport(ImGuiID id)
     ImGui::SetNextWindowViewport(viewport->ID);
     ImGui::SetNextWindowBgAlpha(0);
     
-    ImGui::Begin("ViewportTool", nullptr, window_flags);
+    ImGui::Begin("ViewportTool", nullptr, windowFlags);
 
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.5f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);

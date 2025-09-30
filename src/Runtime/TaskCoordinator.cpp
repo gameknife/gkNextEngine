@@ -36,14 +36,14 @@ void TaskCoordinator::TestCase()
     TaskCoordinator taskCoordinator;
 }
 
-uint32_t TaskCoordinator::AddTask( ResTask::TaskFunc task_func, ResTask::TaskFunc complete_func, uint8_t priority)
+uint32_t TaskCoordinator::AddTask( ResTask::TaskFunc taskFunc, ResTask::TaskFunc completeFunc, uint8_t priority)
 {
-    static uint32_t task_id = 0;
+    static uint32_t taskId = 0;
     ResTask task;
-    task.task_id = task_id++;
+    task.task_id = taskId++;
     task.priority = priority;
-    task.task_func = std::move(task_func);
-    task.complete_func = std::move(complete_func);
+    task.task_func = std::move(taskFunc);
+    task.complete_func = std::move(completeFunc);
 #if __APPLE__
     mainthreadTaskQueue_.enqueue(task);
     return task.task_id;
@@ -52,14 +52,14 @@ uint32_t TaskCoordinator::AddTask( ResTask::TaskFunc task_func, ResTask::TaskFun
     return task.task_id;
 }
 
-uint32_t TaskCoordinator::AddParralledTask(ResTask::TaskFunc task_func, ResTask::TaskFunc complete_func)
+uint32_t TaskCoordinator::AddParralledTask(ResTask::TaskFunc taskFunc, ResTask::TaskFunc completeFunc)
 {
-    static uint32_t task_id = 0;
+    static uint32_t taskId = 0;
     ResTask task;
-    task.task_id = task_id++;
+    task.task_id = taskId++;
     task.priority = 3;
-    task.task_func = std::move(task_func);
-    task.complete_func = std::move(complete_func);
+    task.task_func = std::move(taskFunc);
+    task.complete_func = std::move(completeFunc);
 
     parralledTaskQueue_.enqueue(task);
 
@@ -86,7 +86,7 @@ uint32_t TaskCoordinator::GetMainTaskCount()
 {
     uint32_t count = 0;
 #if __APPLE__
-    count = mainthreadTaskQueue_.size();
+    count = uint32_t(mainthreadTaskQueue_.size());
 #else
     for ( auto& thread : threads_ )
     {
@@ -98,9 +98,9 @@ uint32_t TaskCoordinator::GetMainTaskCount()
 
 bool TaskCoordinator::IsAllTaskComplete(std::vector<uint32_t>& tasks)
 {
-    for (uint32_t task_id : tasks)
+    for (uint32_t taskId : tasks)
     {
-        if ( !completedTaskIds_.contains(task_id) )
+        if ( !completedTaskIds_.contains(taskId) )
         {
             return false;
         }

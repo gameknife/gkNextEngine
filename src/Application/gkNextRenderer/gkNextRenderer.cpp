@@ -3,6 +3,8 @@
 #include <imgui.h>
 #include <ThirdParty/fontawesome/IconsFontAwesome6.h>
 
+#include <array>
+
 #include "Assets/FProcModel.h"
 #include "Assets/Node.h"
 #include "Runtime/Engine.hpp"
@@ -10,36 +12,55 @@
 #include "Utilities/ImGui.hpp"
 #include "Runtime/Platform/PlatformCommon.h"
 
-#if ANDROID
+extern float GAndroidMagicScale;
 
-#define GLFW_MOUSE_BUTTON_1         0
-#define GLFW_MOUSE_BUTTON_2         1
-#define GLFW_MOUSE_BUTTON_3         2
-#define GLFW_MOUSE_BUTTON_4         3
-#define GLFW_MOUSE_BUTTON_5         4
-#define GLFW_MOUSE_BUTTON_6         5
-#define GLFW_MOUSE_BUTTON_7         6
-#define GLFW_MOUSE_BUTTON_8         7
-#define GLFW_MOUSE_BUTTON_LAST      GLFW_MOUSE_BUTTON_8
-#define GLFW_MOUSE_BUTTON_LEFT      GLFW_MOUSE_BUTTON_1
-#define GLFW_MOUSE_BUTTON_RIGHT     GLFW_MOUSE_BUTTON_2
-#define GLFW_MOUSE_BUTTON_MIDDLE    GLFW_MOUSE_BUTTON_3
-#define GLFW_KEY_SPACE              32
+// should use 1em instead of 1px
+constexpr float constTitlebarSize = 40;
+constexpr float constTitlebarControlSize = constTitlebarSize * 3;
+constexpr float constIconSize = 64;
+constexpr float constPaletteSize = 46;
+constexpr float constButtonSize = 36;
+constexpr float constBuildBarWidth = 240;
+constexpr float constSideBarWidth = 300;
+constexpr float constShortcutSize = 10;
 
-#define GLFW_RELEASE                0
-#define GLFW_PRESS                  1
-#define GLFW_REPEAT                 2
+float TitlebarSize = constTitlebarSize;
+float TitlebarControlSize = constTitlebarControlSize;
+float IconSize = constIconSize;
+float PaletteSize = constPaletteSize;
+float ButtonSize = constButtonSize;
+float BuildBarWidth = constBuildBarWidth;
+float SideBarWidth = constSideBarWidth;
+float ShortcutSize = constShortcutSize;
 
-#endif
+static void UpdateUiScaledMetrics()
+{
+    float scale = 1.0f;
 
-constexpr float TITLEBAR_SIZE = 40;
-constexpr float TITLEBAR_CONTROL_SIZE = TITLEBAR_SIZE * 3;
-constexpr float ICON_SIZE = 64;
-constexpr float PALATE_SIZE = 46;
-constexpr float BUTTON_SIZE = 36;
-constexpr float BUILD_BAR_WIDTH = 240;
-constexpr float SIDE_BAR_WIDTH = 300;
-constexpr float SHORTCUT_SIZE = 10;
+    if (GAndroidMagicScale > 0.0f)
+    {
+        scale *= 0.75f / GAndroidMagicScale;
+    }
+
+    if (ImGui::GetCurrentContext() != nullptr)
+    {
+        const float fontSize = ImGui::GetFontSize();
+        if (fontSize > 0.0f)
+        {
+            constexpr float referenceFontSize = 16.0f;
+            scale *= fontSize / referenceFontSize;
+        }
+    }
+
+    TitlebarSize = constTitlebarSize * scale;
+    TitlebarControlSize = constTitlebarControlSize * scale;
+    IconSize = constIconSize * scale;
+    PaletteSize = constPaletteSize * scale;
+    ButtonSize = constButtonSize * scale;
+    BuildBarWidth = constBuildBarWidth * scale;
+    SideBarWidth = constSideBarWidth * scale;
+    ShortcutSize = constShortcutSize * scale;
+}
 
 std::unique_ptr<NextGameInstanceBase> CreateGameInstance(Vulkan::WindowConfig& config, Options& options, NextEngine* engine)
 {
@@ -66,7 +87,7 @@ void NextRendererGameInstance::OnTick(double deltaSeconds)
     modelViewController_.UpdateCamera(10.0f, deltaSeconds);
 }
 
-std::vector<Assets::FMaterial> matPreparedForAdd;
+std::vector<Assets::FMaterial> MatPreparedForAdd;
 
 void NextRendererGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<Assets::Node>>& nodes,
 	std::vector<Assets::Model>& models, std::vector<Assets::FMaterial>& materials,
@@ -77,14 +98,14 @@ void NextRendererGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<As
 
 	matIds_.clear();
 	
-	matPreparedForAdd.push_back({Assets::Material::Lambertian(glm::vec3(1,1,1))});
-	materials.push_back(matPreparedForAdd.back());matIds_.push_back(uint32_t(materials.size() - 1));
-	matPreparedForAdd.push_back({Assets::Material::Metallic(glm::vec3(0.5,0.5,0.5), 0.4f)});
-	materials.push_back(matPreparedForAdd.back());matIds_.push_back(uint32_t(materials.size() - 1));
-	matPreparedForAdd.push_back({Assets::Material::Dielectric(1.5f, 0.0f)});
-	materials.push_back(matPreparedForAdd.back());matIds_.push_back(uint32_t(materials.size() - 1));
-	matPreparedForAdd.push_back({Assets::Material::Mixture(glm::vec3(1.0f, 0.3f, 0.3f), 0.01f)});
-	materials.push_back(matPreparedForAdd.back());matIds_.push_back(uint32_t(materials.size() - 1));
+	MatPreparedForAdd.push_back({Assets::Material::Lambertian(glm::vec3(1,1,1))});
+	materials.push_back(MatPreparedForAdd.back());matIds_.push_back(uint32_t(materials.size() - 1));
+	MatPreparedForAdd.push_back({Assets::Material::Metallic(glm::vec3(0.5,0.5,0.5), 0.4f)});
+	materials.push_back(MatPreparedForAdd.back());matIds_.push_back(uint32_t(materials.size() - 1));
+	MatPreparedForAdd.push_back({Assets::Material::Dielectric(1.5f, 0.0f)});
+	materials.push_back(MatPreparedForAdd.back());matIds_.push_back(uint32_t(materials.size() - 1));
+	MatPreparedForAdd.push_back({Assets::Material::Mixture(glm::vec3(1.0f, 0.3f, 0.3f), 0.01f)});
+	materials.push_back(MatPreparedForAdd.back());matIds_.push_back(uint32_t(materials.size() - 1));
 }
 
 void NextRendererGameInstance::OnSceneLoaded()
@@ -102,45 +123,37 @@ void NextRendererGameInstance::OnPreConfigUI()
 
 bool NextRendererGameInstance::OnRenderUI()
 {
+	UpdateUiScaledMetrics();
+
 	DrawTitleBar();
 	DrawSettings();
 	if (GOption->ReferenceMode)
 	{
-		// 获取屏幕尺寸
 		ImGuiIO& io = ImGui::GetIO();
-        
-		// 渲染器名称数组
-		const char* rendererNames[] = {"SoftModern", "SoftTracing", "VoxelTracing" , "PathTracing"};
-        
-		// 四个象限的位置
-		ImVec2 positions[] = {
-			ImVec2(io.DisplaySize.x * 0.25f, io.DisplaySize.y * 0.45f),  // 左上
-			ImVec2(io.DisplaySize.x * 0.75f, io.DisplaySize.y * 0.45f),  // 右上
-			ImVec2(io.DisplaySize.x * 0.25f, io.DisplaySize.y * 0.95f),  // 左下
-			ImVec2(io.DisplaySize.x * 0.75f, io.DisplaySize.y * 0.95f)   // 右下
+		const auto viewport = io.DisplaySize;
+		static constexpr std::array<const char*, 4> rendererNames{"SoftModern", "SoftTracing", "VoxelTracing", "PathTracing"};
+		const std::array<ImVec2, rendererNames.size()> labelPositions{
+			ImVec2(viewport.x * 0.25f, viewport.y * 0.45f),
+			ImVec2(viewport.x * 0.75f, viewport.y * 0.45f),
+			ImVec2(viewport.x * 0.25f, viewport.y * 0.95f),
+			ImVec2(viewport.x * 0.75f, viewport.y * 0.95f)
 		};
-        
-		// 为每个象限添加渲染器名称标签
-		for (int i = 0; i < 4; i++)
+		const ImGuiWindowFlags windowFlags =
+			ImGuiWindowFlags_NoDecoration |
+			ImGuiWindowFlags_AlwaysAutoResize |
+			ImGuiWindowFlags_NoSavedSettings |
+			ImGuiWindowFlags_NoMove |
+			ImGuiWindowFlags_NoFocusOnAppearing;
+
+		for (size_t index = 0; index < rendererNames.size(); ++index)
 		{
-			ImGui::SetNextWindowPos(positions[i], ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+			ImGui::SetNextWindowPos(labelPositions[index], ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 			ImGui::SetNextWindowBgAlpha(0.5f);
-            
-			char windowName[32];
-			snprintf(windowName, sizeof(windowName), "RendererName%d", i);
-            
-			if (ImGui::Begin(windowName, nullptr, 
-				ImGuiWindowFlags_NoDecoration | 
-				ImGuiWindowFlags_AlwaysAutoResize | 
-				ImGuiWindowFlags_NoSavedSettings |
-				ImGuiWindowFlags_NoMove |
-				ImGuiWindowFlags_NoFocusOnAppearing))
+
+			auto windowName = fmt::format("RendererName{}", index);
+			if (ImGui::Begin(windowName.c_str(), nullptr, windowFlags))
 			{
-				// 如果i小于渲染器数量，则显示对应渲染器名称
-				if (i < sizeof(rendererNames)/sizeof(rendererNames[0]))
-				{
-					ImGui::Text("%s", rendererNames[i]);
-				}
+				ImGui::TextUnformatted(rendererNames[index]);
 			}
 			ImGui::End();
 		}
@@ -161,21 +174,31 @@ void NextRendererGameInstance::OnInitUI()
 	}
 }
 
-bool NextRendererGameInstance::OverrideRenderCamera(Assets::Camera& OutRenderCamera) const
+bool NextRendererGameInstance::OverrideRenderCamera(Assets::Camera& outRenderCamera) const
 {
-    OutRenderCamera.ModelView = modelViewController_.ModelView();
-	OutRenderCamera.FieldOfView = modelViewController_.FieldOfView();
+    outRenderCamera.ModelView = modelViewController_.ModelView();
+	outRenderCamera.FieldOfView = modelViewController_.FieldOfView();
     return true;
 }
 
-bool NextRendererGameInstance::OnKey(int key, int scancode, int action, int mods)
+bool NextRendererGameInstance::OnKey(SDL_Event& event)
 {
-    modelViewController_.OnKey(key, scancode, action, mods);
+    modelViewController_.OnKey(event);
 
-	if (key == GLFW_KEY_SPACE && action != GLFW_RELEASE)
+	if (event.key.type == SDL_EVENT_KEY_DOWN)
 	{
-		CreateSphereAndPush();
-		return true;
+		switch (event.key.key)
+		{
+		case SDLK_ESCAPE: GetEngine().GetScene().SetSelectedId(-1); return true;
+			break;
+		case SDLK_F1: GetEngine().GetUserSettings().ShowSettings = !GetEngine().GetUserSettings().ShowSettings; return true;
+			break;
+		case SDLK_F2: GetEngine().GetUserSettings().ShowOverlay = !GetEngine().GetUserSettings().ShowOverlay; return true;
+			break;
+		case SDLK_SPACE: CreateSphereAndPush(); return true;
+			break;
+		default: break;
+		}
 	}
     return false;
 }
@@ -186,12 +209,11 @@ bool NextRendererGameInstance::OnCursorPosition(double xpos, double ypos)
     return true;
 }
 
-bool NextRendererGameInstance::OnMouseButton(int button, int action, int mods)
+bool NextRendererGameInstance::OnMouseButton(SDL_Event& event)
 {
-    modelViewController_.OnMouseButton( button,  action,  mods);
+    modelViewController_.OnMouseButton(event);
 
-#if !ANDROID
-	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
+	if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT)
 	{
 		auto mousePos = GetEngine().GetMousePos();
 		glm::vec3 org;
@@ -208,8 +230,7 @@ bool NextRendererGameInstance::OnMouseButton(int button, int action, int mods)
 		});
 		return true;
 	}
-#endif
-	
+
     return true;
 }
 
@@ -258,22 +279,18 @@ void NextRendererGameInstance::CreateSphereAndPush()
 
 void NextRendererGameInstance::DrawSettings()
 {
-	UserSettings& UserSetting = GetEngine().GetUserSettings();
+	UserSettings& userSetting = GetEngine().GetUserSettings();
 	
-	if (!UserSetting.ShowSettings)
+	if (!userSetting.ShowSettings)
 	{
 		return;
 	}
 
 	const float distance = 10.0f;
-	const ImVec2 pos = ImVec2(distance, TITLEBAR_SIZE + distance);
+	const ImVec2 pos = ImVec2(distance, TitlebarSize + distance);
 	const ImVec2 posPivot = ImVec2(0.0f, 0.0f);
 	ImGui::SetNextWindowPos(pos, ImGuiCond_Always, posPivot);
-#if ANDROID
-	ImGui::SetNextWindowSize(ImVec2(300,-1));
-#else
-	ImGui::SetNextWindowSize(ImVec2(400,-1));
-#endif
+	ImGui::SetNextWindowSize(ImVec2(ImGui::GetFontSize() * 30,-1));
 	ImGui::SetNextWindowBgAlpha(0.9f);
 	
 	const auto flags =
@@ -282,7 +299,7 @@ void NextRendererGameInstance::DrawSettings()
 		ImGuiWindowFlags_NoResize |
 		ImGuiWindowFlags_NoSavedSettings;
 
-	if (ImGui::Begin("Settings", &UserSetting.ShowSettings, flags))
+	if (ImGui::Begin("Settings", &userSetting.ShowSettings, flags))
 	{
 		// if( ImGui::CollapsingHeader(LOCTEXT("Help"), ImGuiTreeNodeFlags_None) )
 		// {
@@ -301,7 +318,7 @@ void NextRendererGameInstance::DrawSettings()
 			ImGui::Text("%s", LOCTEXT("Renderer"));
 			
 			ImGui::PushItemWidth(-1);
-			ImGui::Combo("##RendererList", &UserSetting.RendererType, renderers.data(), static_cast<int>(renderers.size()));
+			ImGui::Combo("##RendererList", &userSetting.RendererType, renderers.data(), static_cast<int>(renderers.size()));
 			ImGui::PopItemWidth();
 			ImGui::NewLine();
 		}
@@ -330,37 +347,37 @@ void NextRendererGameInstance::DrawSettings()
 			ImGui::Text("%s", LOCTEXT("Scene"));
 			
 			ImGui::PushItemWidth(-1);
-			if (ImGui::Combo("##SceneList", &UserSetting.SceneIndex, scenes.data(), static_cast<int>(scenes.size())) )
+			if (ImGui::Combo("##SceneList", &userSetting.SceneIndex, scenes.data(), static_cast<int>(scenes.size())) )
 			{
 				// Request Scene Load
-				GetEngine().RequestLoadScene(SceneList::AllScenes[UserSetting.SceneIndex]);
+				GetEngine().RequestLoadScene(SceneList::AllScenes[userSetting.SceneIndex]);
 			}
 			ImGui::PopItemWidth();
 
-			int prevCameraIdx = UserSetting.CameraIdx;
+			int prevCameraIdx = userSetting.CameraIdx;
 			ImGui::Text("%s", LOCTEXT("Camera"));
 			ImGui::PushItemWidth(-1);
-			ImGui::Combo("##CameraList", &UserSetting.CameraIdx, camerasList.data(), static_cast<int>(camerasList.size()));
+			ImGui::Combo("##CameraList", &userSetting.CameraIdx, camerasList.data(), static_cast<int>(camerasList.size()));
 			ImGui::PopItemWidth();
-			if(prevCameraIdx != UserSetting.CameraIdx)
+			if(prevCameraIdx != userSetting.CameraIdx)
 			{
-				GetEngine().GetScene().SetRenderCamera( GetEngine().GetScene().GetCameras()[UserSetting.CameraIdx] );
+				GetEngine().GetScene().SetRenderCamera( GetEngine().GetScene().GetCameras()[userSetting.CameraIdx] );
 				modelViewController_.Reset(GetEngine().GetScene().GetRenderCamera());
 			}
 
-			auto& Camera = GetEngine().GetScene().GetRenderCamera();
-			ImGui::SliderFloat(LOCTEXT("Aperture"), &Camera.Aperture, 0.0f, 1.0f, "%.2f");
-			ImGui::SliderFloat(LOCTEXT("Focus(cm)"), &Camera.FocalDistance, 0.001f, 1000.0f, "%.3f");
+			auto& camera = GetEngine().GetScene().GetRenderCamera();
+			ImGui::SliderFloat(LOCTEXT("Aperture"), &camera.Aperture, 0.0f, 1.0f, "%.2f");
+			ImGui::SliderFloat(LOCTEXT("Focus(cm)"), &camera.FocalDistance, 0.001f, 1000.0f, "%.3f");
 			ImGui::NewLine();
 		}
 
 		if( ImGui::CollapsingHeader(LOCTEXT("Ray Tracing"), ImGuiTreeNodeFlags_DefaultOpen) )
 		{
-			ImGui::Checkbox(LOCTEXT("AntiAlias"), &UserSetting.TAA);
-			ImGui::SliderInt(LOCTEXT("Samples"), &UserSetting.NumberOfSamples, 1, 16);
-			ImGui::SliderInt(LOCTEXT("TemporalSteps"), &UserSetting.AdaptiveSteps, 2, 64);
-			ImGui::Checkbox(LOCTEXT("FastGather"), &UserSetting.FastGather);
-			ImGui::SliderInt(LOCTEXT("AmbientSpeed"), &UserSetting.BakeSpeedLevel, 0, 2);
+			ImGui::Checkbox(LOCTEXT("AntiAlias"), &userSetting.TAA);
+			ImGui::SliderInt(LOCTEXT("Samples"), &userSetting.NumberOfSamples, 1, 16);
+			ImGui::SliderInt(LOCTEXT("TemporalSteps"), &userSetting.AdaptiveSteps, 2, 64);
+			ImGui::Checkbox(LOCTEXT("FastGather"), &userSetting.FastGather);
+			ImGui::SliderInt(LOCTEXT("AmbientSpeed"), &userSetting.BakeSpeedLevel, 0, 2);
 
 			
 			
@@ -372,11 +389,11 @@ void NextRendererGameInstance::DrawSettings()
 #if WITH_OIDN
 			ImGui::Checkbox("Use OIDN", &UserSetting.Denoiser);
 #else
-			ImGui::Checkbox(LOCTEXT("Use JBF"), &UserSetting.Denoiser);
-			ImGui::SliderFloat(LOCTEXT("DenoiseSigma"), &UserSetting.DenoiseSigma, 0.01f, 2.0f, "%.2f");
-			ImGui::SliderFloat(LOCTEXT("DenoiseSigmaLum"), &UserSetting.DenoiseSigmaLum, 0.01f, 50.0f, "%.2f");
-			ImGui::SliderFloat(LOCTEXT("DenoiseSigmaNormal"), &UserSetting.DenoiseSigmaNormal, 0.001f, 0.2f, "%.3f");
-			ImGui::SliderInt(LOCTEXT("DenoiseSize"), &UserSetting.DenoiseSize, 1, 10);
+			ImGui::Checkbox(LOCTEXT("Use JBF"), &userSetting.Denoiser);
+			ImGui::SliderFloat(LOCTEXT("DenoiseSigma"), &userSetting.DenoiseSigma, 0.01f, 2.0f, "%.2f");
+			ImGui::SliderFloat(LOCTEXT("DenoiseSigmaLum"), &userSetting.DenoiseSigmaLum, 0.01f, 50.0f, "%.2f");
+			ImGui::SliderFloat(LOCTEXT("DenoiseSigmaNormal"), &userSetting.DenoiseSigmaNormal, 0.001f, 0.2f, "%.3f");
+			ImGui::SliderInt(LOCTEXT("DenoiseSize"), &userSetting.DenoiseSize, 1, 10);
 #endif
 			ImGui::NewLine();
 		}
@@ -399,7 +416,7 @@ void NextRendererGameInstance::DrawSettings()
 				ImGui::SliderFloat(LOCTEXT("SunLum"), &GetEngine().GetScene().GetEnvSettings().SunIntensity, 0.0f, 2000.0f, "%.0f");
 			}
 
-			ImGui::SliderFloat(LOCTEXT("PaperWhitNit"), &UserSetting.PaperWhiteNit, 100.0f, 1600.0f, "%.1f");
+			ImGui::SliderFloat(LOCTEXT("PaperWhitNit"), &userSetting.PaperWhiteNit, 100.0f, 1600.0f, "%.1f");
 			ImGui::NewLine();
 		}
 
@@ -408,18 +425,18 @@ void NextRendererGameInstance::DrawSettings()
 			ImGui::Text("%s", LOCTEXT("Profiler"));
 			ImGui::Separator();
 			ImGui::Checkbox(LOCTEXT("ShowWireframe"), &GetEngine().GetRenderer().showWireframe_);
-			ImGui::Checkbox(LOCTEXT("TickPhysics"), &UserSetting.TickPhysics);
-			ImGui::Checkbox(LOCTEXT("DebugDraw"), &UserSetting.ShowVisualDebug);
-			ImGui::Checkbox(LOCTEXT("DebugDraw_Lighting"), &UserSetting.DebugDraw_Lighting);
-			ImGui::Checkbox(LOCTEXT("DisableSpatialReuse"), &UserSetting.DisableSpatialReuse);
+			ImGui::Checkbox(LOCTEXT("TickPhysics"), &userSetting.TickPhysics);
+			ImGui::Checkbox(LOCTEXT("DebugDraw"), &userSetting.ShowVisualDebug);
+			ImGui::Checkbox(LOCTEXT("DebugDraw_Lighting"), &userSetting.DebugDraw_Lighting);
+			ImGui::Checkbox(LOCTEXT("DisableSpatialReuse"), &userSetting.DisableSpatialReuse);
 			
-			ImGui::SliderFloat(LOCTEXT("Time Scaling"), &UserSetting.HeatmapScale, 0.10f, 2.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+			ImGui::SliderFloat(LOCTEXT("Time Scaling"), &userSetting.HeatmapScale, 0.10f, 2.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
 			ImGui::NewLine();
 
 			ImGui::Text("%s", LOCTEXT("Performance"));
 			ImGui::Separator();
 			uint32_t min = 8, max = 32;
-			ImGui::SliderScalar(LOCTEXT("Temporal Frames"), ImGuiDataType_U32, &UserSetting.TemporalFrames, &min, &max);		
+			ImGui::SliderScalar(LOCTEXT("Temporal Frames"), ImGuiDataType_U32, &userSetting.TemporalFrames, &min, &max);		
 		}
 	}
 	ImGui::End();
@@ -432,12 +449,12 @@ void NextRendererGameInstance::DrawTitleBar()
     ImVec2 windowSize = ImGui::GetMainViewport()->Size;
     auto bgColor = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
     bgColor.w = 0.9f;
-    ImGui::GetBackgroundDrawList()->AddRectFilled(ImVec2(0, 0), ImVec2(windowSize.x, TITLEBAR_SIZE), ImGui::ColorConvertFloat4ToU32(bgColor));
+    ImGui::GetBackgroundDrawList()->AddRectFilled(ImVec2(0, 0), ImVec2(windowSize.x, TitlebarSize), ImGui::ColorConvertFloat4ToU32(bgColor));
 
     ImGui::PushFont(bigFont_);
 
     auto textSize = ImGui::CalcTextSize("gkNextRenderer");
-    ImGui::GetForegroundDrawList()->AddText(ImVec2((windowSize.x - textSize.x) * 0.5f, (TITLEBAR_SIZE - textSize.y) * 0.5f), IM_COL32(255, 255, 255, 255), "gkNextRenderer");
+    ImGui::GetForegroundDrawList()->AddText(ImVec2((windowSize.x - textSize.x) * 0.5f, (TitlebarSize - textSize.y) * 0.5f), IM_COL32(255, 255, 255, 255), "gkNextRenderer");
 
     ImGui::PopFont();
 
@@ -447,74 +464,73 @@ void NextRendererGameInstance::DrawTitleBar()
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
 
-    ImGui::SetNextWindowPos(ImVec2(windowSize.x - TITLEBAR_CONTROL_SIZE, 0), ImGuiCond_Always, ImVec2(0, 0));
-    ImGui::SetNextWindowSize(ImVec2(TITLEBAR_CONTROL_SIZE, TITLEBAR_SIZE));
+    ImGui::SetNextWindowPos(ImVec2(windowSize.x - TitlebarControlSize, 0), ImGuiCond_Always, ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImVec2(TitlebarControlSize, TitlebarSize));
 
     ImGui::Begin("TitleBarRight", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground);
 
-    if (ImGui::Button(ICON_FA_MINUS, ImVec2(TITLEBAR_SIZE, TITLEBAR_SIZE)))
+    if (ImGui::Button(ICON_FA_MINUS, ImVec2(TitlebarSize, TitlebarSize)))
     {
         GetEngine().RequestMinimize();
     }
     ImGui::SameLine();
-    if (ImGui::Button(GetEngine().IsMaximumed() ? ICON_FA_WINDOW_RESTORE : ICON_FA_SQUARE, ImVec2(TITLEBAR_SIZE, TITLEBAR_SIZE)))
+    if (ImGui::Button(GetEngine().IsMaximumed() ? ICON_FA_WINDOW_RESTORE : ICON_FA_SQUARE, ImVec2(TitlebarSize, TitlebarSize)))
     {
         GetEngine().ToggleMaximize();
     }
     ImGui::SameLine();
-    if (ImGui::Button(ICON_FA_XMARK, ImVec2(TITLEBAR_SIZE, TITLEBAR_SIZE)))
+    if (ImGui::Button(ICON_FA_XMARK, ImVec2(TitlebarSize, TitlebarSize)))
     {
         GetEngine().RequestClose();
     }
     ImGui::End();
 
     ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always, ImVec2(0, 0));
-    ImGui::SetNextWindowSize(ImVec2(TITLEBAR_SIZE * 18, TITLEBAR_SIZE));
+    ImGui::SetNextWindowSize(ImVec2(TitlebarSize * 18, TitlebarSize));
 
     ImGui::Begin("TitleBarLeft", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground);
-    if (ImGui::Button(ICON_FA_GITHUB, ImVec2(TITLEBAR_SIZE, TITLEBAR_SIZE)))
+    if (ImGui::Button(ICON_FA_GITHUB, ImVec2(TitlebarSize, TitlebarSize)))
     {
         NextRenderer::OSCommand("https://github.com/gameknife/gkNextRenderer");
     }
     BUTTON_TOOLTIP(LOCTEXT("Open Project Page in OS Browser"))
     ImGui::SameLine();
-    if (ImGui::Button(ICON_FA_TWITTER, ImVec2(TITLEBAR_SIZE, TITLEBAR_SIZE)))
+    if (ImGui::Button(ICON_FA_TWITTER, ImVec2(TitlebarSize, TitlebarSize)))
     {
         NextRenderer::OSCommand("https://x.com/gKNIFE_");
     }
     BUTTON_TOOLTIP(LOCTEXT("Open Twitter Page in OS Browser"))
     ImGui::SameLine();
-    ImGui::GetForegroundDrawList()->AddLine(ImGui::GetCursorPos() + ImVec2(4, TITLEBAR_SIZE / 2 - 5), ImGui::GetCursorPos() + ImVec2(4, TITLEBAR_SIZE / 2 + 5), IM_COL32(255, 255, 255, 160), 2.0f);
+    ImGui::GetForegroundDrawList()->AddLine(ImGui::GetCursorPos() + ImVec2(4, TitlebarSize / 2 - 5), ImGui::GetCursorPos() + ImVec2(4, TitlebarSize / 2 + 5), IM_COL32(255, 255, 255, 160), 2.0f);
     ImGui::Dummy(ImVec2(10, 10));
     ImGui::SameLine();
-    if (ImGui::Button(ICON_FA_CAMERA, ImVec2(TITLEBAR_SIZE, TITLEBAR_SIZE)))
+    if (ImGui::Button(ICON_FA_CAMERA, ImVec2(TitlebarSize, TitlebarSize)))
     {
 
     }
     BUTTON_TOOLTIP(LOCTEXT("Take a Screenshot into the screenshots folder"))
 	ImGui::SameLine();
-	if (ImGui::Button(ICON_FA_LIST_CHECK, ImVec2(TITLEBAR_SIZE, TITLEBAR_SIZE)))
+	if (ImGui::Button(ICON_FA_LIST_CHECK, ImVec2(TitlebarSize, TitlebarSize)))
 	{
 		GetEngine().GetUserSettings().ShowSettings = !GetEngine().GetUserSettings().ShowSettings;
 	}
 	BUTTON_TOOLTIP(LOCTEXT("Take a Screenshot into the screenshots folder"))
 	ImGui::SameLine();
-	if (ImGui::Button(ICON_FA_GAUGE_SIMPLE_HIGH, ImVec2(TITLEBAR_SIZE, TITLEBAR_SIZE)))
+	if (ImGui::Button(ICON_FA_GAUGE_SIMPLE_HIGH, ImVec2(TitlebarSize, TitlebarSize)))
 	{
 		GetEngine().GetUserSettings().ShowOverlay = !GetEngine().GetUserSettings().ShowOverlay;
 	}
 	BUTTON_TOOLTIP(LOCTEXT("Take a Screenshot into the screenshots folder"))
 	ImGui::SameLine();
-    ImGui::GetForegroundDrawList()->AddLine(ImGui::GetCursorPos() + ImVec2(4, TITLEBAR_SIZE / 2 - 5), ImGui::GetCursorPos() + ImVec2(4, TITLEBAR_SIZE / 2 + 5), IM_COL32(255, 255, 255, 160), 2.0f);
+    ImGui::GetForegroundDrawList()->AddLine(ImGui::GetCursorPos() + ImVec2(4, TitlebarSize / 2 - 5), ImGui::GetCursorPos() + ImVec2(4, TitlebarSize / 2 + 5), IM_COL32(255, 255, 255, 160), 2.0f);
     ImGui::Dummy(ImVec2(10, 10));
     ImGui::SameLine();
     float deltaSeconds = GetEngine().GetSmoothDeltaSeconds();
     ImGui::SameLine();
-    ImGui::SetCursorPosY((TITLEBAR_SIZE - ImGui::GetTextLineHeight()) / 2);
+    ImGui::SetCursorPosY((TitlebarSize - ImGui::GetTextLineHeight()) / 2);
     ImGui::TextUnformatted(fmt::format("{:.0f}fps", 1.0f / deltaSeconds).c_str());
     ImGui::End();
 
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(4);
 }
-

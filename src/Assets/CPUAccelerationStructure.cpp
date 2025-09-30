@@ -15,14 +15,14 @@
 
 static tinybvh::BVH GCpuBvh;
 static std::vector<tinybvh::BLASInstance>* GbvhInstanceList;
-static std::vector<FCPUTLASInstanceInfo>* GbvhTLASContexts;
-static std::vector<FCPUBLASContext>* GbvhBLASContexts;
+static std::vector<FCPUTLASInstanceInfo>* GbvhTlasContexts;
+static std::vector<FCPUBLASContext>* GbvhBlasContexts;
 
-Assets::SphericalHarmonics HDRSHs[100];
+Assets::SphericalHarmonics HdrsHs[100];
 
 using namespace Assets;
 
-uint pack_bytes(glm::u32vec4 values)
+uint PackBytes(glm::u32vec4 values)
 {
     return (values.x & 0xFF) |
            ((values.y & 0xFF) << 8) |
@@ -36,70 +36,70 @@ FMaterial& FetchMaterial(uint matId)
     return materials[matId];
 }
 
-uint FetchMaterialId(uint MaterialIdx, uint InstanceId)
+uint FetchMaterialId(uint materialIdx, uint instanceId)
 {
-    return (*GbvhTLASContexts)[InstanceId].matIdxs[MaterialIdx];
+    return (*GbvhTlasContexts)[instanceId].matIdxs[materialIdx];
 }
 
-bool TraceRay(vec3 origin, vec3 rayDir, float Dist, vec3& OutNormal, uint& OutMaterialId, float& OutRayDist, uint& OutInstanceId )
+bool TraceRay(vec3 origin, vec3 rayDir, float dist, vec3& outNormal, uint& outMaterialId, float& outRayDist, uint& outInstanceId )
 {
-    tinybvh::Ray ray(tinybvh::bvhvec3(origin.x, origin.y, origin.z), tinybvh::bvhvec3(rayDir.x, rayDir.y, rayDir.z), Dist);
+    tinybvh::Ray ray(tinybvh::bvhvec3(origin.x, origin.y, origin.z), tinybvh::bvhvec3(rayDir.x, rayDir.y, rayDir.z), dist);
     GCpuBvh.Intersect(ray);
 
-    if (ray.hit.t < Dist)
+    if (ray.hit.t < dist)
     {
         uint32_t primIdx = ray.hit.prim;
         tinybvh::BLASInstance& instance = (*GbvhInstanceList)[ray.hit.inst];
-        FCPUTLASInstanceInfo& instContext = (*GbvhTLASContexts)[ray.hit.inst];
-        FCPUBLASContext& context = (*GbvhBLASContexts)[instance.blasIdx];
+        FCPUTLASInstanceInfo& instContext = (*GbvhTlasContexts)[ray.hit.inst];
+        FCPUBLASContext& context = (*GbvhBlasContexts)[instance.blasIdx];
         mat4* worldTS = (mat4*)instance.transform;
         vec4 normalWS = vec4( context.extinfos[primIdx].normal, 0.0f) * *worldTS;
 
-        OutRayDist = ray.hit.t;
-        OutNormal = vec3(normalWS.x, normalWS.y, normalWS.z);
-        OutMaterialId =  FetchMaterialId( context.extinfos[primIdx].matIdx, ray.hit.inst );
-        OutInstanceId = instContext.nodeId;
+        outRayDist = ray.hit.t;
+        outNormal = vec3(normalWS.x, normalWS.y, normalWS.z);
+        outMaterialId =  FetchMaterialId( context.extinfos[primIdx].matIdx, ray.hit.inst );
+        outInstanceId = instContext.nodeId;
         return true;
     }
     
     return false;
 }
 
-#define float2 vec2
-#define float3 vec3
-#define float4 vec4
+#define FLOAT2 vec2
+#define FLOAT3 vec3
+#define FLOAT4 vec4
 
-float DetectDistance( float3 origin, float3 rayDir)
+float DetectDistance( FLOAT3 origin, FLOAT3 rayDir)
 {
-    vec3 OutNormal;
-    float OutRayDist;
-    uint TempMaterialId;
-    uint TempInstanceId;
-    if( TraceRay(origin, rayDir, CUBE_UNIT * 64, OutNormal, TempMaterialId, OutRayDist, TempInstanceId))
+    vec3 outNormal;
+    float outRayDist;
+    uint tempMaterialId;
+    uint tempInstanceId;
+    if( TraceRay(origin, rayDir, CUBE_UNIT * 64, outNormal, tempMaterialId, outRayDist, tempInstanceId))
     {
-        return OutRayDist;
+        return outRayDist;
     }
     return 255;
 }
 
-bool InsideGeometry( float3& origin, float3 rayDir, VoxelData& OutCube, float& distance)
+bool InsideGeometry( FLOAT3& origin, FLOAT3 rayDir, VoxelData& outCube, float& distance)
 {
     // 求交测试
-    vec3 OutNormal;
-    float OutRayDist;
-    uint TempMaterialId;
-    uint TempInstanceId;
+    vec3 outNormal;
+    float outRayDist;
+    uint tempMaterialId;
+    uint tempInstanceId;
 
-    if (TraceRay(origin, rayDir, CUBE_UNIT * 64, OutNormal, TempMaterialId, OutRayDist, TempInstanceId))
+    if (TraceRay(origin, rayDir, CUBE_UNIT * 64, outNormal, tempMaterialId, outRayDist, tempInstanceId))
     {
-        distance = OutRayDist;
+        distance = outRayDist;
         if( distance <= CUBE_UNIT)
         {
-            FMaterial hitMaterial = FetchMaterial(TempMaterialId);
-            OutCube.matId = TempMaterialId;
+            FMaterial hitMaterial = FetchMaterial(tempMaterialId);
+            outCube.matId = tempMaterialId;
 
             // 命中反面，识别为固体，并将lightprobe推出体外
-            if (dot(OutNormal, rayDir) > 0.0 || ((hitMaterial.gpuMaterial_.MaterialModel == Material::Enum::DiffuseLight)))// && OutRayDist < 0.02f))
+            if (dot(outNormal, rayDir) > 0.0 || ((hitMaterial.gpuMaterial_.MaterialModel == Material::Enum::DiffuseLight)))// && OutRayDist < 0.02f))
             {
                 distance = 0;
                 return true;
@@ -109,11 +109,11 @@ bool InsideGeometry( float3& origin, float3 rayDir, VoxelData& OutCube, float& d
     return false;
 }
 
-void VoxelizeCube(VoxelData& Cube, float3 origin)
+void VoxelizeCube(VoxelData& cube, FLOAT3 origin)
 {
     // just write matid and solid status
-    Cube.age = 0;
-    Cube.matId = 0;
+    cube.age = 0;
+    cube.matId = 0;
 
     float distPY = 255.0f;
     float distNY = 255.0f;
@@ -123,25 +123,25 @@ void VoxelizeCube(VoxelData& Cube, float3 origin)
     float distNZ = 255.0f;
 
     // 现在是向轴向上发射了6根光线，记录下距离，并用于后续采样判断
-    InsideGeometry(origin, float3(0, 1, 0), Cube, distPY);
-    InsideGeometry(origin, float3(0, -1, 0), Cube, distNY);
-    InsideGeometry(origin, float3(1, 0, 0), Cube, distPX);
-    InsideGeometry(origin, float3(-1, 0, 0), Cube, distNX);
-    InsideGeometry(origin, float3(0, 0, 1), Cube, distPZ);
-    InsideGeometry(origin, float3(0, 0, -1), Cube, distNZ);
+    InsideGeometry(origin, FLOAT3(0, 1, 0), cube, distPY);
+    InsideGeometry(origin, FLOAT3(0, -1, 0), cube, distNY);
+    InsideGeometry(origin, FLOAT3(1, 0, 0), cube, distPX);
+    InsideGeometry(origin, FLOAT3(-1, 0, 0), cube, distNX);
+    InsideGeometry(origin, FLOAT3(0, 0, 1), cube, distPZ);
+    InsideGeometry(origin, FLOAT3(0, 0, -1), cube, distNZ);
 
     // get the min dist of each direction
     float minDist = std::min({distPY, distNY, distPX, distNX, distPZ, distNZ});
     if( minDist > 254.0f )
     {
-        minDist = std::min( { minDist, DetectDistance(origin, float3(1, 1, 1))});
-        minDist = std::min( { minDist, DetectDistance(origin, float3(-1, 1, 1))});
-        minDist = std::min( { minDist, DetectDistance(origin, float3(-1, -1, 1))});
-        minDist = std::min( { minDist, DetectDistance(origin, float3(-1, 1, 1))});
-        minDist = std::min( { minDist, DetectDistance(origin, float3(1, 1, -1))});
-        minDist = std::min( { minDist, DetectDistance(origin, float3(-1, 1, -1))});
-        minDist = std::min( { minDist, DetectDistance(origin, float3(-1, -1, -1))});
-        minDist = std::min( { minDist, DetectDistance(origin, float3(-1, 1, -1))});
+        minDist = std::min( { minDist, DetectDistance(origin, FLOAT3(1, 1, 1))});
+        minDist = std::min( { minDist, DetectDistance(origin, FLOAT3(-1, 1, 1))});
+        minDist = std::min( { minDist, DetectDistance(origin, FLOAT3(-1, -1, 1))});
+        minDist = std::min( { minDist, DetectDistance(origin, FLOAT3(-1, 1, 1))});
+        minDist = std::min( { minDist, DetectDistance(origin, FLOAT3(1, 1, -1))});
+        minDist = std::min( { minDist, DetectDistance(origin, FLOAT3(-1, 1, -1))});
+        minDist = std::min( { minDist, DetectDistance(origin, FLOAT3(-1, -1, -1))});
+        minDist = std::min( { minDist, DetectDistance(origin, FLOAT3(-1, 1, -1))});
     }
 
     // 现在，相当于每一个体素，都有了一个距离场，通过判断这个，可以快速跳过？
@@ -154,25 +154,25 @@ void VoxelizeCube(VoxelData& Cube, float3 origin)
 
     float inside = distPY * distNY * distPX * distNX * distPZ * distNZ;
 
-    Cube.distanceToSolid_gg_z01 = pack_bytes(glm::u32vec4(minDist / CUBE_UNIT, uint(inside * 255.0f), uint(distPZ * 255.0f), uint(distNZ * 255.0f)));
-    Cube.distanceToSolid_x01_y01 = pack_bytes(glm::u32vec4(uint(distPX * 255.0f), uint(distNX * 255.0f), uint(distPY * 255.0f), uint(distNY * 255.0f)));
+    cube.distanceToSolid_gg_z01 = PackBytes(glm::u32vec4(minDist / CUBE_UNIT, uint(inside * 255.0f), uint(distPZ * 255.0f), uint(distNZ * 255.0f)));
+    cube.distanceToSolid_x01_y01 = PackBytes(glm::u32vec4(uint(distPX * 255.0f), uint(distNX * 255.0f), uint(distPY * 255.0f), uint(distNY * 255.0f)));
 }
 
 #undef float2
 #undef float3
 #undef float4
 
-void FCPUProbeBaker::Init(float unit_size, vec3 offset)
+void FCPUProbeBaker::Init(float unitSize, vec3 offset)
 {
-    UNIT_SIZE = unit_size;
+    UNIT_SIZE = unitSize;
     CUBE_OFFSET = offset;
     voxels.resize( CUBE_SIZE_XY * CUBE_SIZE_XY * CUBE_SIZE_Z );
 }
 
 void FCPUAccelerationStructure::InitBVH(Scene& scene)
 {
-    auto& HDR = GlobalTexturePool::GetInstance()->GetHDRSphericalHarmonics();
-    std::memcpy(HDRSHs, HDR.data(), HDR.size() * sizeof(SphericalHarmonics));
+    auto& hdr = GlobalTexturePool::GetInstance()->GetHDRSphericalHarmonics();
+    std::memcpy(HdrsHs, hdr.data(), hdr.size() * sizeof(SphericalHarmonics));
     
     const auto timer = std::chrono::high_resolution_clock::now();
 
@@ -279,13 +279,13 @@ void FCPUAccelerationStructure::UpdateBVH(Scene& scene)
     
     // rebind with new address
     GbvhInstanceList = &bvhInstanceList;
-    GbvhTLASContexts = &bvhTLASContexts;
-    GbvhBLASContexts = &bvhBLASContexts;
+    GbvhTlasContexts = &bvhTLASContexts;
+    GbvhBlasContexts = &bvhBLASContexts;
 }
 
 RayCastResult FCPUAccelerationStructure::RayCastInCPU(vec3 rayOrigin, vec3 rayDir)
 {
-    RayCastResult Result {};
+    RayCastResult result {};
 
     if (GCpuBvh.blasCount > 0)
     {
@@ -297,19 +297,19 @@ RayCastResult FCPUAccelerationStructure::RayCastInCPU(vec3 rayOrigin, vec3 rayDi
             vec3 hitPos = rayOrigin + rayDir * ray.hit.t;
             uint32_t primIdx = ray.hit.prim;
             tinybvh::BLASInstance& instance = (*GbvhInstanceList)[ray.hit.inst];
-            FCPUTLASInstanceInfo& instContext = (*GbvhTLASContexts)[ray.hit.inst];
-            FCPUBLASContext& context = (*GbvhBLASContexts)[instance.blasIdx];
+            FCPUTLASInstanceInfo& instContext = (*GbvhTlasContexts)[ray.hit.inst];
+            FCPUBLASContext& context = (*GbvhBlasContexts)[instance.blasIdx];
             mat4* worldTS = (mat4*)instance.transform;
             vec4 normalWS = vec4( context.extinfos[primIdx].normal, 0.0f) * *worldTS;
-            Result.HitPoint = vec4(hitPos, 0);
-            Result.Normal = normalWS;
-            Result.Hitted = true;
-            Result.T = ray.hit.t;
-            Result.InstanceId = instContext.nodeId;
+            result.HitPoint = vec4(hitPos, 0);
+            result.Normal = normalWS;
+            result.Hitted = true;
+            result.T = ray.hit.t;
+            result.InstanceId = instContext.nodeId;
         }
     }
 
-    return Result;
+    return result;
 }
 
 void FCPUProbeBaker::ProcessCube(int x, int y, int z, ECubeProcType procType)
@@ -330,14 +330,14 @@ void FCPUProbeBaker::ProcessCube(int x, int y, int z, ECubeProcType procType)
     }
 }
 
-void FCPUProbeBaker::UploadGPU(Vulkan::DeviceMemory& VoxelGPUMemory)
+void FCPUProbeBaker::UploadGPU(Vulkan::DeviceMemory& voxelGpuMemory)
 {
-    VoxelData* data = reinterpret_cast<VoxelData*>(VoxelGPUMemory.Map(0, sizeof(VoxelData) * voxels.size()));
+    VoxelData* data = reinterpret_cast<VoxelData*>(voxelGpuMemory.Map(0, sizeof(VoxelData) * voxels.size()));
     std::memcpy(data, voxels.data(), voxels.size() * sizeof(VoxelData));
-    VoxelGPUMemory.Unmap();
+    voxelGpuMemory.Unmap();
 }
 
-bool FCPUAccelerationStructure::AsyncProcessFull(Assets::Scene& scene, Vulkan::DeviceMemory* VoxelGPUMemory, bool Incremental)
+bool FCPUAccelerationStructure::AsyncProcessFull(Assets::Scene& scene, Vulkan::DeviceMemory* voxelGpuMemory, bool incremental)
 {
     if ( !TaskCoordinator::GetInstance()->IsAllParralledTaskComplete() )
     {
@@ -348,10 +348,10 @@ bool FCPUAccelerationStructure::AsyncProcessFull(Assets::Scene& scene, Vulkan::D
         needUpdateGroups.pop();
     lastBatchTasks.clear();
 
-    if (!Incremental)
+    if (!incremental)
     {
         probeBaker.ClearAmbientCubes();
-        probeBaker.UploadGPU(*VoxelGPUMemory);
+        probeBaker.UploadGPU(*voxelGpuMemory);
     }
     else
     {
@@ -434,14 +434,14 @@ void FCPUAccelerationStructure::AsyncProcessGroup(int xInMeter, int zInMeter, Sc
     lastBatchTasks.push_back(taskId);
 }
 
-void FCPUAccelerationStructure::Tick(Scene& scene, Vulkan::DeviceMemory* GPUMemory, Vulkan::DeviceMemory* VoxelGPUMemory, Vulkan::DeviceMemory* PageIndexMemory)
+void FCPUAccelerationStructure::Tick(Scene& scene, Vulkan::DeviceMemory* gpuMemory, Vulkan::DeviceMemory* voxelGpuMemory, Vulkan::DeviceMemory* pageIndexMemory)
 {
     if (needFlush)
     {
         // Upload to GPU, now entire range, optimize to partial upload later
-        probeBaker.UploadGPU(*VoxelGPUMemory);
+        probeBaker.UploadGPU(*voxelGpuMemory);
         cpuPageIndex.UpdateData(probeBaker);
-        cpuPageIndex.UploadGPU(*PageIndexMemory);
+        cpuPageIndex.UploadGPU(*pageIndexMemory);
         needFlush = false;
     }
 
@@ -552,11 +552,11 @@ Assets::PageIndex& FCPUPageIndex::GetPage(glm::vec3 worldpos)
     return pageIndex[index];
 }
 
-void FCPUPageIndex::UploadGPU(Vulkan::DeviceMemory& GPUMemory)
+void FCPUPageIndex::UploadGPU(Vulkan::DeviceMemory& gpuMemory)
 {
-    PageIndex* data = reinterpret_cast<PageIndex*>(GPUMemory.Map(0, sizeof(PageIndex) * pageIndex.size()));
+    PageIndex* data = reinterpret_cast<PageIndex*>(gpuMemory.Map(0, sizeof(PageIndex) * pageIndex.size()));
     std::memcpy(data, pageIndex.data(), pageIndex.size() * sizeof(PageIndex));
-    GPUMemory.Unmap();
+    gpuMemory.Unmap();
 }
 
 void FCPUAccelerationStructure::GenShadowMap(Scene& scene)

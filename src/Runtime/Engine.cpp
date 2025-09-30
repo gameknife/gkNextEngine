@@ -5,7 +5,6 @@
 #include "Assets/Scene.hpp"
 #include "Assets/Texture.hpp"
 #include "Assets/UniformBuffer.hpp"
-#include "Utilities/Console.hpp"
 #include "Vulkan/Window.hpp"
 #include "Vulkan/SwapChain.hpp"
 #include "Vulkan/Device.hpp"
@@ -34,26 +33,16 @@
 #include "build.version"
 #include "NextAnimation.h"
 #include "NextPhysics.h"
+#include "Platform/PlatformCommon.h"
+#include "Utilities/Exception.hpp"
+
+#include "Common/CoreMinimal.hpp"
+
+// spdlog logging
+#include <spdlog/spdlog.h>
 
 #if ANDROID
-
-#define GLFW_MOUSE_BUTTON_1         0
-#define GLFW_MOUSE_BUTTON_2         1
-#define GLFW_MOUSE_BUTTON_3         2
-#define GLFW_MOUSE_BUTTON_4         3
-#define GLFW_MOUSE_BUTTON_5         4
-#define GLFW_MOUSE_BUTTON_6         5
-#define GLFW_MOUSE_BUTTON_7         6
-#define GLFW_MOUSE_BUTTON_8         7
-#define GLFW_MOUSE_BUTTON_LAST      GLFW_MOUSE_BUTTON_8
-#define GLFW_MOUSE_BUTTON_LEFT      GLFW_MOUSE_BUTTON_1
-#define GLFW_MOUSE_BUTTON_RIGHT     GLFW_MOUSE_BUTTON_2
-#define GLFW_MOUSE_BUTTON_MIDDLE    GLFW_MOUSE_BUTTON_3
-
-#define GLFW_RELEASE                0
-#define GLFW_PRESS                  1
-#define GLFW_REPEAT                 2
-
+#include <spdlog/sinks/android_sink.h>
 #endif
 
 ENGINE_API Options* GOption = nullptr;
@@ -83,7 +72,7 @@ namespace NextRenderer
                     ptr->RegisterLogicRenderer(Vulkan::ERT_LegacyDeferred);
                     ptr->RegisterLogicRenderer(Vulkan::ERT_VoxelTracing);
                     ptr->SwitchLogicRenderer(static_cast<Vulkan::ERendererType>(rendererType));
-                    return ptr;    
+                    return ptr;
                 }
             default: break;
         }
@@ -104,8 +93,8 @@ namespace NextRenderer
 
 namespace
 {
-    const bool EnableValidationLayers =
-#if defined(NDEBUG) ||  defined(ANDROID)
+    const bool enableValidationLayers =
+#if defined(NDEBUG) || ANDROID || IOS
         false;
 #else
         true;
@@ -164,8 +153,8 @@ UserSettings CreateUserSettings(const Options& options)
 
     userSettings.SuperResolution = options.SuperResolution;
     
-#if ANDROID
-    userSettings.NumberOfSamples = 1;
+#if ANDROID || IOS
+    userSettings.NumberOfSamples = 2;
     userSettings.Denoiser = false;
     userSettings.FastGather = true;
 #endif
@@ -177,6 +166,18 @@ NextEngine* NextEngine::instance_ = nullptr;
 
 NextEngine::NextEngine(Options& options, void* userdata)
 {
+    spdlog::set_level(spdlog::level::info);
+    spdlog::flush_on(spdlog::level::debug);
+    spdlog::flush_every(std::chrono::seconds(1));
+    
+#if ANDROID
+    std::string tag = "gknext";
+    auto android_logger = spdlog::android_logger_mt("android", tag);
+    android_logger->critical("Use \"adb shell logcat\" to view this message.");
+    spdlog::set_default_logger(android_logger);
+#endif
+    
+    SPDLOG_INFO("Next Engine Initilizaing...");
     instance_ = this;
 
     status_ = NextRenderer::EApplicationStatus::Starting;
@@ -202,7 +203,7 @@ NextEngine::NextEngine(Options& options, void* userdata)
     window_.reset( new Vulkan::Window(windowConfig));
         
     // Initialize Renderer
-    renderer_.reset( NextRenderer::CreateRenderer(options.RendererType, window_.get(), static_cast<VkPresentModeKHR>(options.PresentMode), EnableValidationLayers) );
+    renderer_.reset( NextRenderer::CreateRenderer(options.RendererType, window_.get(), static_cast<VkPresentModeKHR>(options.PresentMode), enableValidationLayers) );
     rendererType = options.RendererType;
     
     renderer_->DelegateOnDeviceSet = [this]()->void{OnRendererDeviceSet();};
@@ -213,11 +214,11 @@ NextEngine::NextEngine(Options& options, void* userdata)
     renderer_->DelegatePostRender = [this](VkCommandBuffer commandBuffer, uint32_t imageIndex)->void{OnRendererPostRender(commandBuffer, imageIndex);};
 
     // Initialize IO
-    window_->OnKey = [this](const int key, const int scancode, const int action, const int mods) { OnKey(key, scancode, action, mods); };
+    //window_->OnKey = [this](const int key, const int scancode, const int action, const int mods) { OnKey(key, scancode, action, mods); };
     window_->OnCursorPosition = [this](const double xpos, const double ypos) { OnCursorPosition(xpos, ypos); };
-    window_->OnMouseButton = [this](const int button, const int action, const int mods) { OnMouseButton(button, action, mods); };
+    //window_->OnMouseButton = [this](const int button, const int action, const int mods) { OnMouseButton(button, action, mods); };
     window_->OnScroll = [this](const double xoffset, const double yoffset) { OnScroll(xoffset, yoffset); };
-    window_->OnDropFile = [this](int path_count, const char* paths[]) { OnDropFile(path_count, paths); };
+    window_->OnDropFile = [this](int pathCount, const char* paths[]) { OnDropFile(pathCount, paths); };
     window_->OnGamepadInput = [this](float leftStickX, float leftStickY,float rightStickX, float rightStickY,float leftTrigger, float rightTrigger) {
         if (gameInstance_) return gameInstance_->OnGamepadInput(leftStickX, leftStickY,rightStickX, rightStickY,leftTrigger, rightTrigger);
         return false;
@@ -248,14 +249,6 @@ void NextEngine::Start()
     
     renderer_->Start();
 
-    ma_result result;
-    audioEngine_.reset( new ma_engine() );
-
-    result = ma_engine_init(NULL, audioEngine_.get());
-    if (result != MA_SUCCESS) {
-        return;
-    }
-
     physicsEngine_.reset(new NextPhysics());
     physicsEngine_->Start();
     
@@ -263,9 +256,44 @@ void NextEngine::Start()
 
     animationEngine_ = std::make_unique<NextAnimation>();
     animationEngine_->Start();
+
+    ma_result result;
+    audioEngine_.reset( new ma_engine() );
+
+    result = ma_engine_init(NULL, audioEngine_.get());
+    if (result != MA_SUCCESS) {
+        //Throw(std::runtime_error(std::string("failed to init audio engine.")));
+    }
     
     // init js engine
     InitJSEngine();
+}
+
+bool NextEngine::HandleEvent(SDL_Event& event)
+{
+    userInterface_->HandleEvent(&event);
+
+    switch ( event.type )
+    {
+    case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+        {
+            return true;
+        }
+    case SDL_EVENT_KEY_DOWN:
+    case SDL_EVENT_KEY_UP:
+        OnKey(event);
+        break;
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    case SDL_EVENT_MOUSE_BUTTON_UP:
+        OnMouseButton(event);
+        break;
+    case SDL_EVENT_MOUSE_MOTION:
+        OnCursorPosition(event.motion.x, event.motion.y);
+        break;
+    default:
+        break;
+    }
+    return false;
 }
 
 bool NextEngine::Tick()
@@ -295,19 +323,14 @@ bool NextEngine::Tick()
         scene_->Tick(static_cast<float>(deltaSeconds_));
     }
 
-    if (userSettings_.TickPhysics) physicsEngine_->Tick(deltaSeconds_);
-    if (userSettings_.TickAnimation) animationEngine_->Tick(deltaSeconds_); //pause dev, wait next
+    if (userSettings_.TickPhysics && physicsEngine_) physicsEngine_->Tick(deltaSeconds_);
+    if (userSettings_.TickAnimation && animationEngine_) animationEngine_->Tick(deltaSeconds_); //pause dev, wait next
 
     if (JSTickCallback_)
     {
         JSTickCallback_(deltaSeconds_);
     }
-    
-    // Renderer Tick
-#if !ANDROID
-    glfwPollEvents();
-    window_->PollGamepadInput();
-#endif
+
     // tick
     if (status_ == NextRenderer::EApplicationStatus::Running)
     {
@@ -373,12 +396,8 @@ bool NextEngine::Tick()
         }
     }
 
-#if ANDROID
-    return false;
-#else
     window_->attemptDragWindow();
-    return glfwWindowShouldClose( window_->Handle() ) != 0;
-#endif
+    return false;
 }
 
 void NextEngine::End()
@@ -524,13 +543,13 @@ void NextEngine::DrawAuxBox(glm::vec3 min, glm::vec3 max, glm::vec4 color, float
     DrawAuxLine(glm::vec3(min.x, max.y, min.z), glm::vec3(min.x, max.y, max.z), color, size);
 }
 
-static std::vector<int32_t> auxCounter;
+static std::vector<int32_t> AuxCounter;
 void NextEngine::DrawAuxPoint(glm::vec3 location, glm::vec4 color, float size, int32_t durationInTick)
 {
     if (durationInTick > 0)
     {
-        auxCounter.push_back(durationInTick);
-        int32_t id = static_cast<int32_t>(auxCounter.size()) - 1;
+        AuxCounter.push_back(durationInTick);
+        int32_t id = static_cast<int32_t>(AuxCounter.size()) - 1;
         AddTickedTask( [this, location, color, size, id](double deltaSeconds)->bool
         {
             auto transformed = ProjectWorldToScreen(location);
@@ -538,7 +557,7 @@ void NextEngine::DrawAuxPoint(glm::vec3 location, glm::vec4 color, float size, i
             {
                 userInterface_->DrawPoint(transformed.x, transformed.y, size, color);
             }
-            return (auxCounter[id] -= 1) <= 0;
+            return (AuxCounter[id] -= 1) <= 0;
         });
     }
     else
@@ -553,11 +572,9 @@ void NextEngine::DrawAuxPoint(glm::vec3 location, glm::vec4 color, float size, i
 
 glm::dvec2 NextEngine::GetMousePos()
 {
-    double x{},y{};
-#if !ANDROID
-    glfwGetCursorPos( window_->Handle(), &x, &y );
-#endif
-    return glm::dvec2(x,y);
+    float fx{}, fy{};
+    SDL_GetMouseState(&fx,&fy);
+    return glm::dvec2(fx,fy);
 }
 
 void NextEngine::RequestClose()
@@ -590,8 +607,8 @@ void NextEngine::ToggleMaximize()
 void NextEngine::RequestScreenShot(std::string filename)
 {
     auto time = std::time(nullptr);
-    std::string screenshot_filename = filename.empty() ? fmt::format("screenshot_{:%Y-%m-%d-%H-%M-%S}", *std::localtime(&time)) : filename;
-    SaveScreenShot(screenshot_filename, 0, 0, 0, 0);
+    std::string screenshotFilename = filename.empty() ? fmt::format("screenshot_{:%Y-%m-%d-%H-%M-%S}", *std::localtime(&time)) : filename;
+    SaveScreenShot(screenshotFilename, 0, 0, 0, 0);
 }
 
 // 生成一个随机抖动偏移
@@ -650,13 +667,17 @@ glm::mat4 HaltonJitterProjectionMatrix(const glm::mat4& projectionMatrix, float 
     return jitterMatrix * projectionMatrix;
 }
 
-glm::ivec2 NextEngine::GetMonitorSize(int monitorIndex) const
+glm::ivec2 NextEngine::GetMonitorSize() const
 {
     glm::ivec2 pos{0,0};
     glm::ivec2 size{1920,1080};
-#if !ANDROID
-    glfwGetMonitorWorkarea(glfwGetPrimaryMonitor(), &pos.x, &pos.y, &size.x, &size.y);
-#endif
+
+    SDL_Rect rect;
+    SDL_DisplayID id = SDL_GetPrimaryDisplay();
+    SDL_GetDisplayBounds(id, &rect);
+    size.x = rect.w;
+    size.y = rect.h;
+
     return size;
 }
 
@@ -732,7 +753,7 @@ Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D 
     ubo.SuperResolution = GOption->ReferenceMode ? 2 : userSettings_.SuperResolution;
     ubo.Projection[1][1] *= -1;
 
-    glm::mat4x4 ProjectionUnJit = ubo.Projection;    
+    glm::mat4x4 projectionUnJit = ubo.Projection;    
     // handle android vulkan pre rotation
 #if ANDROID
     glm::mat4 pre_rotate_mat = glm::mat4(1.0f);
@@ -744,7 +765,7 @@ Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D 
     ubo.Projection[1][1] *= -1;
     ubo.Projection = pre_rotate_mat * ubo.Projection;
 
-    ProjectionUnJit = ubo.Projection;
+    projectionUnJit = ubo.Projection;
 #endif
 
     if (userSettings_.TAA)
@@ -760,7 +781,7 @@ Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D 
     ubo.ModelViewInverse = glm::inverse(ubo.ModelView);
     ubo.ProjectionInverse = glm::inverse(ubo.Projection);
     ubo.ViewProjection = ubo.Projection * ubo.ModelView;
-    ubo.ViewProjectionUnJit = ProjectionUnJit * ubo.ModelView;
+    ubo.ViewProjectionUnJit = projectionUnJit * ubo.ModelView;
     
     ubo.PrevViewProjection = prevUBO_.TotalFrames != 0 ? prevUBO_.ViewProjection : ubo.ViewProjection;
     ubo.PrevViewProjectionUnJit = prevUBO_.TotalFrames != 0 ? prevUBO_.ViewProjectionUnJit : ubo.ViewProjectionUnJit;
@@ -930,44 +951,22 @@ void NextEngine::OnRendererPostRender(VkCommandBuffer commandBuffer, uint32_t im
     userInterface_->PostRender(commandBuffer, renderer_->SwapChain(), imageIndex);
 }
 
-void NextEngine::OnKey(int key, int scancode, int action, int mods)
+void NextEngine::OnKey(SDL_Event& event)
 {
     if (userInterface_->WantsToCaptureKeyboard())
     {
         return;
     }
 
-    if( gameInstance_->OnKey(key, scancode, action, mods) )
+    if( gameInstance_->OnKey(event) )
     {
         return;
     }
-    
-#if !ANDROID
-    if (action == GLFW_PRESS)
-    {
-        switch (key)
-        {
-        case GLFW_KEY_ESCAPE: scene_->SetSelectedId(-1);
-            break;
-        default: break;
-        }
-
-        // Settings (toggle switches)
-        switch (key)
-        {
-        case GLFW_KEY_F1: userSettings_.ShowSettings = !userSettings_.ShowSettings;
-            break;
-        case GLFW_KEY_F2: userSettings_.ShowOverlay = !userSettings_.ShowOverlay;
-            break;
-        default: break;
-        }
-    }
-#endif
 }
 
 void NextEngine::OnTouch(bool down, double xpos, double ypos)
 {
-    OnMouseButton(GLFW_MOUSE_BUTTON_RIGHT, down ? GLFW_PRESS : GLFW_RELEASE, 0);
+    //OnMouseButton(GLFW_MOUSE_BUTTON_RIGHT, down ? GLFW_PRESS : GLFW_RELEASE, 0);
 }
 
 void NextEngine::OnTouchMove(double xpos, double ypos)
@@ -991,7 +990,7 @@ void NextEngine::OnCursorPosition(const double xpos, const double ypos)
     }
 }
 
-void NextEngine::OnMouseButton(const int button, const int action, const int mods)
+void NextEngine::OnMouseButton(SDL_Event& event)
 {
     if (!renderer_->HasSwapChain() ||
         userInterface_->WantsToCaptureMouse())
@@ -999,7 +998,7 @@ void NextEngine::OnMouseButton(const int button, const int action, const int mod
         return;
     }
 
-    if(gameInstance_->OnMouseButton(button, action, mods))
+    if(gameInstance_->OnMouseButton(event))
     {
         return;
     }
@@ -1016,12 +1015,12 @@ void NextEngine::OnScroll(const double xoffset, const double yoffset)
     gameInstance_->OnScroll(xoffset, yoffset);
 }
 
-void NextEngine::OnDropFile(int path_count, const char* paths[])
+void NextEngine::OnDropFile(int pathCount, const char* paths[])
 {
     // add glb to the last, and loaded
-    if (path_count > 0)
+    if (pathCount > 0)
     {
-        std::string path = paths[path_count - 1];
+        std::string path = paths[pathCount - 1];
         std::string ext = path.substr(path.find_last_of(".") + 1);
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
@@ -1046,7 +1045,7 @@ void NextEngine::OnRendererBeforeNextFrame()
 
 void NextEngine::RequestLoadScene(std::string sceneFileName)
 {
-    AddTickedTask([this, sceneFileName](double DeltaSeconds)->bool
+    AddTickedTask([this, sceneFileName](double deltaSeconds)->bool
     {
         if ( status_ != NextRenderer::EApplicationStatus::Running )
         {
@@ -1096,7 +1095,7 @@ void NextEngine::LoadScene(std::string sceneFileName)
         task.GetContext( taskContext );
         if (taskContext.success )
         {
-            fmt::print("{} {}{}\n", CONSOLE_GREEN_COLOR, taskContext.outputInfo.data(), CONSOLE_DEFAULT_COLOR);
+            SPDLOG_INFO("{}", taskContext.outputInfo.data());
             const auto timer = std::chrono::high_resolution_clock::now();
             scene_->GetEnvSettings().Reset();
             scene_->SetEnvSettings(*cameraState);
@@ -1126,11 +1125,11 @@ void NextEngine::LoadScene(std::string sceneFileName)
             gameInstance_->OnSceneLoaded();
 
             float elapsed = std::chrono::duration<float, std::chrono::seconds::period>(std::chrono::high_resolution_clock::now() - timer).count();
-            fmt::print("{} uploaded scene [{}] to gpu in {:.2f}ms{}\n", CONSOLE_GREEN_COLOR, std::filesystem::path(sceneFileName).filename().string(), elapsed * 1000.f, CONSOLE_DEFAULT_COLOR);
+            SPDLOG_INFO("uploaded scene [{}] to gpu in {:.2f}ms", std::filesystem::path(sceneFileName).filename().string(), elapsed * 1000.f);
         }
         else
         {
-            fmt::print("{} failed to load scene [{}]{}\n", CONSOLE_RED_COLOR, std::filesystem::path(sceneFileName).filename().string(), CONSOLE_DEFAULT_COLOR);
+            SPDLOG_ERROR("failed to load scene [{}]", std::filesystem::path(sceneFileName).filename().string());
         }
 
         status_ = NextRenderer::EApplicationStatus::Running;
@@ -1145,15 +1144,15 @@ public:
     MyClass() {}
     MyClass(std::vector<int>) {}
 
-    double member_variable = 5.5;
-    std::string member_function(const std::string& s) { return "Hello, " + s; }
+    double memberVariable = 5.5;
+    std::string MemberFunction(const std::string& s) { return "Hello, " + s; }
 };
 
-void println(qjs::rest<std::string> args) {
-    for (auto const & arg : args) { fmt::printf(arg); fmt::printf("\n"); }
+void Println(qjs::rest<std::string> args) {
+    for (auto const & arg : args) { SPDLOG_INFO("{}", arg); }
 }
 
-NextEngine* GetEngine() {
+NextEngine* getEngine() {
     return NextEngine::GetInstance();
 }
 
@@ -1162,8 +1161,8 @@ void NextEngine::InitJSEngine() {
     {
         // export classes as a module
         auto& module = JSContext_->addModule("Engine");
-        module.function<&println>("println");
-        module.function<&GetEngine>("GetEngine");
+        module.function<&Println>("println");
+        module.function<&getEngine>("GetEngine");
 
         module.class_<NextEngine>("NextEngine")
                 .fun<&NextEngine::GetTotalFrames>("GetTotalFrames")
@@ -1188,7 +1187,8 @@ void NextEngine::InitJSEngine() {
         }
         else
         {
-            fmt::print("Failed to load script\n");
+            //Throw(std::runtime_error(std::string("failed to load script.")));
+            //SPDLOG_WARN("Failed to load script");
         }
     }
     catch(qjs::exception)
@@ -1206,12 +1206,12 @@ void NextEngine::TestJSEngine()
     {
         // export classes as a module
         auto& module = JSContext_->addModule("MyModule");
-        module.function<&println>("println");
+        module.function<&Println>("println");
         module.class_<MyClass>("MyClass")
                 .constructor<>()
                 .constructor<std::vector<int>>("MyClassA")
-                .fun<&MyClass::member_variable>("member_variable")
-                .fun<&MyClass::member_function>("member_function");
+                .fun<&MyClass::memberVariable>("member_variable")
+                .fun<&MyClass::MemberFunction>("member_function");
         // import module
         JSContext_->eval(R"xxx(
             import * as my from 'MyModule';

@@ -21,7 +21,7 @@ namespace Assets
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
 
-        uint32_t prev_mat_id = static_cast<uint32_t>(materials.size());
+        uint32_t prevMatId = static_cast<uint32_t>(materials.size());
 	
 		materials.push_back({Material::Lambertian(vec3(0.65f, 0.05f, 0.05f))}); // red
 		materials.push_back({Material::Lambertian(vec3(0.12f, 0.45f, 0.15f))}); // green
@@ -114,7 +114,7 @@ namespace Assets
 			light.p1 = vec4(vec3(x0, y1, z0) - offset, 1);
 			light.p3 = vec4(vec3(x1, y1, z1) - offset, 1);
 			light.normal_area = vec4(0, -1, 0, (x1 - x0) * (z0 - z1));
-			light.lightMatIdx = prev_mat_id + 3;
+			light.lightMatIdx = prevMatId + 3;
 			lights.push_back(light);
 		}
 
@@ -183,10 +183,10 @@ namespace Assets
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
 
-        const float j0_delta = float(M_PI) / static_cast<float>(stacks);
+        const float j0Delta = float(M_PI) / static_cast<float>(stacks);
         float j0 = 0.f;
 
-        const float i0_delta = (float(M_PI) + float(M_PI)) / static_cast<float>(slices);
+        const float i0Delta = (float(M_PI) + float(M_PI)) / static_cast<float>(slices);
         float i0;
 
         for (int j = 0; j <= stacks; ++j)
@@ -219,10 +219,10 @@ namespace Assets
 
                 vertices.push_back(Vertex{position, normal, vec4(1,0,0,0), texCoord, 0});
 
-                i0 += i0_delta;
+                i0 += i0Delta;
             }
 
-            j0 += j0_delta;
+            j0 += j0Delta;
         }
 
         {

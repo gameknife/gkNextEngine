@@ -49,22 +49,22 @@ namespace Assets
     {
         for ( int i = 0; i < Keys.size() - 1; i++ )
         {
-            auto& Key = Keys[i];
-            auto& KeyNext = Keys[i + 1];
-            if (time >= Key.Time && time < KeyNext.Time)
+            auto& key = Keys[i];
+            auto& keyNext = Keys[i + 1];
+            if (time >= key.Time && time < keyNext.Time)
             {
-                float t = (time - Key.Time) / (KeyNext.Time - Key.Time);
-                return glm::mix(Key.Value, KeyNext.Value, t);
+                float t = (time - key.Time) / (keyNext.Time - key.Time);
+                return glm::mix(key.Value, keyNext.Value, t);
             }
 
-            if ( i == 0 && time < Key.Time )
+            if ( i == 0 && time < key.Time )
             {
-                return Key.Value;
+                return key.Value;
             }
 
             if ( i == Keys.size() - 2)
             {
-                return KeyNext.Value;
+                return keyNext.Value;
             }
         }
         return T{};
@@ -76,22 +76,22 @@ namespace Assets
     {
         for ( int i = 0; i < Keys.size() - 1; i++ )
         {
-            auto& Key = Keys[i];
-            auto& KeyNext = Keys[i + 1];
-            if (time >= Key.Time && time < KeyNext.Time)
+            auto& key = Keys[i];
+            auto& keyNext = Keys[i + 1];
+            if (time >= key.Time && time < keyNext.Time)
             {
-                float t = (time - Key.Time) / (KeyNext.Time - Key.Time);
-                return glm::slerp(Key.Value, KeyNext.Value, t);
+                float t = (time - key.Time) / (keyNext.Time - key.Time);
+                return glm::slerp(key.Value, keyNext.Value, t);
             }
 
-            if ( i == 0 && time < Key.Time )
+            if ( i == 0 && time < key.Time )
             {
-                return Key.Value;
+                return key.Value;
             }
 
             if ( i == Keys.size() - 2)
             {
-                return KeyNext.Value;
+                return keyNext.Value;
             }
         }
         return {};
@@ -99,15 +99,15 @@ namespace Assets
     
     void AnimationTrack::Sample(float time, glm::vec3& translation, glm::quat& rotation, glm::vec3& scaling)
     {
-        if (TranslationChannel.Keys.size() > 0)
+        if (!TranslationChannel.Keys.empty())
         {
             translation = TranslationChannel.Sample(time);
         }
-        if (RotationChannel.Keys.size() > 0)
+        if (!RotationChannel.Keys.empty())
         {
             rotation = RotationChannel.Sample(time);
         }
-        if (ScaleChannel.Keys.size() > 0)
+        if (!ScaleChannel.Keys.empty())
         {
             scaling = ScaleChannel.Sample(time);
         }

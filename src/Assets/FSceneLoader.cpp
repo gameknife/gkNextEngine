@@ -1,6 +1,8 @@
 #include "FSceneLoader.h"
+#include "Common/CoreMinimal.hpp"
 
 #include "ThirdParty/mikktspace/mikktspace.h"
+#include <spdlog/spdlog.h>
 
 #define _USE_MATH_DEFINES
 #include <math.h>
@@ -15,16 +17,6 @@
 #define TINYGLTF_IMPLEMENTATION
 #define TINYGLTF_ENABLE_DRACO
 
-#if !ANDROID
-#define TINYGLTF_USE_RAPIDJSON
-#include <rapidjson/document.h>
-#include <rapidjson/prettywriter.h>
-#include <rapidjson/rapidjson.h>
-#include <rapidjson/stringbuffer.h>
-#include <rapidjson/writer.h>
-#define TINYGLTF_NO_INCLUDE_RAPIDJSON
-#endif
-
 #define TINYGLTF_NO_STB_IMAGE
 //#define TINYGLTF_NO_STB_IMAGE_WRITE
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -38,20 +30,20 @@ namespace Assets
 {
 
     /* Functions to allow mikktspace library to interface with our mesh representation */
-    static int mikktspace_get_num_faces(const SMikkTSpaceContext *pContext)
+    static int MikktspaceGetNumFaces(const SMikkTSpaceContext *pContext)
     {
 	    Assets::Model *m = reinterpret_cast<Assets::Model*>(pContext->m_pUserData);
 	    return m->NumberOfIndices() / 3;
     }
 
-    static int mikktspace_get_num_vertices_of_face(
+    static int MikktspaceGetNumVerticesOfFace(
 		    const SMikkTSpaceContext *pContext,
 		    const int iFace)
     {
 	    return 3;
     }
 
-    static void mikktspace_get_position(const SMikkTSpaceContext *pContext, float fvPosOut[],
+    static void MikktspaceGetPosition(const SMikkTSpaceContext *pContext, float fvPosOut[],
 					    const int iFace, const int iVert)
     {
         Assets::Model *m = reinterpret_cast<Assets::Model*>(pContext->m_pUserData);
@@ -62,7 +54,7 @@ namespace Assets
 	    fvPosOut[2] = m->CPUVertices()[v1].Position.z;
     }
 
-    static void mikktspace_get_normal(const SMikkTSpaceContext *pContext, float fvNormOut[],
+    static void MikktspaceGetNormal(const SMikkTSpaceContext *pContext, float fvNormOut[],
 					    const int iFace, const int iVert)
     {
         Assets::Model *m = reinterpret_cast<Assets::Model*>(pContext->m_pUserData);
@@ -73,7 +65,7 @@ namespace Assets
 	    fvNormOut[2] = m->CPUVertices()[v1].Normal.z;
     }
 
-    static void mikktspace_get_tex_coord(const SMikkTSpaceContext *pContext, float fvTexcOut[],
+    static void MikktspaceGetTexCoord(const SMikkTSpaceContext *pContext, float fvTexcOut[],
 					    const int iFace, const int iVert)
     {
         Assets::Model *m = reinterpret_cast<Assets::Model*>(pContext->m_pUserData);
@@ -83,7 +75,7 @@ namespace Assets
 	    fvTexcOut[1] = m->CPUVertices()[v1].TexCoord.y;
     }
 
-    static void mikktspace_set_t_space_basic(const SMikkTSpaceContext *pContext, const float fvTangent[],
+    static void MikktspaceSetTSpaceBasic(const SMikkTSpaceContext *pContext, const float fvTangent[],
 				    const float fSign, const int iFace, const int iVert)
     {
         Assets::Model *m = reinterpret_cast<Assets::Model*>(pContext->m_pUserData);
@@ -92,13 +84,13 @@ namespace Assets
         m->CPUVertices()[v1].Tangent = glm::vec4(fvTangent[0], fvTangent[1], fvTangent[2], fSign);
     }
 
-    static SMikkTSpaceInterface mikktspace_interface = {
-        .m_getNumFaces			= mikktspace_get_num_faces,
-        .m_getNumVerticesOfFace		= mikktspace_get_num_vertices_of_face,
-        .m_getPosition			= mikktspace_get_position,
-        .m_getNormal			= mikktspace_get_normal,
-        .m_getTexCoord			= mikktspace_get_tex_coord,
-        .m_setTSpaceBasic		= mikktspace_set_t_space_basic,
+    static SMikkTSpaceInterface MikktspaceInterface = {
+        .m_getNumFaces			= MikktspaceGetNumFaces,
+        .m_getNumVerticesOfFace		= MikktspaceGetNumVerticesOfFace,
+        .m_getPosition			= MikktspaceGetPosition,
+        .m_getNormal			= MikktspaceGetNormal,
+        .m_getTexCoord			= MikktspaceGetTexCoord,
+        .m_setTSpaceBasic		= MikktspaceSetTSpaceBasic,
     #if 0
         /* TODO: fill this in if needed */
         .m_setTSpace			= mikktspace_set_t_space,
@@ -107,10 +99,10 @@ namespace Assets
     #endif
     };
     
-    void ParseGltfNode(std::vector<std::shared_ptr<Assets::Node>>& out_nodes, std::map<int, std::shared_ptr<Node> >& nodeMap, Assets::EnvironmentSetting& out_camera, std::vector<Assets::LightObject>& out_lights,
-        tinygltf::Model& model, int node_idx, int modelIdx, int materialOffset)
+    void ParseGltfNode(std::vector<std::shared_ptr<Assets::Node>>& outNodes, std::map<int, std::shared_ptr<Node> >& nodeMap, Assets::EnvironmentSetting& outCamera, std::vector<Assets::LightObject>& outLights,
+        tinygltf::Model& model, int nodeIdx, int modelIdx, int materialOffset)
     {
-        tinygltf::Node& node = model.nodes[node_idx];
+        tinygltf::Node& node = model.nodes[nodeIdx];
         
         glm::vec3 translation = node.translation.empty()
                            ? glm::vec3(0)
@@ -142,13 +134,13 @@ namespace Assets
                 
                 vec4 camEye = transform * glm::vec4(0,0,0,1);
                 vec4 camFwd = transform * glm::vec4(0,0,-1,0);
-                glm::mat4 ModelView = lookAt(vec3(camEye), vec3(camEye) + vec3(camFwd.x, camFwd.y, camFwd.z), glm::vec3(0, 1, 0));
-                out_camera.cameras.push_back({ std::to_string(node.camera) + " " + node.name, ModelView, 40});
+                glm::mat4 modelView = lookAt(vec3(camEye), vec3(camEye) + vec3(camFwd.x, camFwd.y, camFwd.z), glm::vec3(0, 1, 0));
+                outCamera.cameras.push_back({ std::to_string(node.camera) + " " + node.name, modelView, 40});
             }
         }
 
         uint32_t primaryMatIdx = 0;
-        std::shared_ptr<Node> sceneNode = Node::CreateNode(node.name, translation, rotation, scale, meshId, out_nodes.size(), false);
+        std::shared_ptr<Node> sceneNode = Node::CreateNode(node.name, translation, rotation, scale, meshId, uint32_t(outNodes.size()), false);
         if (meshId != -1)
         {
             sceneNode->SetVisible(true);
@@ -162,43 +154,43 @@ namespace Assets
             }
             sceneNode->SetMaterial(materialIdx);
         }
-        out_nodes.push_back(sceneNode);
+        outNodes.push_back(sceneNode);
 
-        nodeMap[node_idx] = sceneNode;
+        nodeMap[nodeIdx] = sceneNode;
 
         if( node.extras.Has("arealight") )
         {
             // use the aabb to build a light, using the average normals and area
             // the basic of lightquad from blender is a 2 x 2 quad ,from -1 to 1
-            glm::vec4 local_p0 = glm::vec4(-1,0,-1, 1);
-            glm::vec4 local_p1 = glm::vec4(-1,0,1, 1);
-            glm::vec4 local_p3 = glm::vec4(1,0,-1, 1);
+            glm::vec4 localP0 = glm::vec4(-1,0,-1, 1);
+            glm::vec4 localP1 = glm::vec4(-1,0,1, 1);
+            glm::vec4 localP3 = glm::vec4(1,0,-1, 1);
 
             auto transform = sceneNode->WorldTransform();
                 
             LightObject light;
-            light.p0 = transform * local_p0;
-            light.p1 = transform * local_p1;
-            light.p3 = transform * local_p3;
+            light.p0 = transform * localP0;
+            light.p1 = transform * localP1;
+            light.p3 = transform * localP3;
             vec3 dir = vec3(transform * glm::vec4(0,1,0,0));
             light.normal_area = glm::vec4(glm::normalize(dir),0);
             light.normal_area.w = glm::length(glm::cross(glm::vec3(light.p1 - light.p0), glm::vec3(light.p3 - light.p0))) / 2.0f;
             light.lightMatIdx = primaryMatIdx;
             
-            out_lights.push_back(light);
+            outLights.push_back(light);
         }
         
         // for each child node
         for (int child : node.children)
         {
-            ParseGltfNode(out_nodes, nodeMap, out_camera, out_lights, model, child, modelIdx, materialOffset);
+            ParseGltfNode(outNodes, nodeMap, outCamera, outLights, model, child, modelIdx, materialOffset);
             nodeMap[child]->SetParent(sceneNode);
         }
     }
     
-    bool LoadImageData(tinygltf::Image * image, const int image_idx, std::string * err,
-                   std::string * warn, int req_width, int req_height,
-                   const unsigned char * bytes, int size, void * user_data )
+    bool LoadImageData(tinygltf::Image * image, const int imageIdx, std::string * err,
+                   std::string * warn, int reqWidth, int reqHeight,
+                   const unsigned char * bytes, int size, void * userData )
     {
         image->as_is = true;
         return true;
@@ -208,11 +200,11 @@ namespace Assets
 
     void FSceneLoader::GenerateMikkTSpace(Assets::Model *m)
     {
-        SMikkTSpaceContext mikktspace_context;
+        SMikkTSpaceContext mikktspaceContext;
 
-        mikktspace_context.m_pInterface = &mikktspace_interface;
-        mikktspace_context.m_pUserData = m;
-        genTangSpaceDefault(&mikktspace_context);
+        mikktspaceContext.m_pInterface = &MikktspaceInterface;
+        mikktspaceContext.m_pUserData = m;
+        genTangSpaceDefault(&mikktspaceContext);
     }
     
     bool FSceneLoader::LoadGLTFScene(const std::string& filename, Assets::EnvironmentSetting& cameraInit, std::vector< std::shared_ptr<Assets::Node> >& nodes,
@@ -241,12 +233,12 @@ namespace Assets
             std::vector<uint8_t> data;
             if ( !Utilities::Package::FPackageFileSystem::GetInstance().LoadFile(filename, data) )
             {
-                fmt::print("failed to load file: {}\n", filename);
+                SPDLOG_ERROR("failed to load file: {}", filename);
                 return false;
             }
-            if(!gltfLoader.LoadBinaryFromMemory(&model, &err, &warn, data.data(), data.size()) )
+            if(!gltfLoader.LoadBinaryFromMemory(&model, &err, &warn, data.data(), uint32_t(data.size())) )
             {
-                fmt::print("failed to parse glb file: {}\n", filename);
+                SPDLOG_ERROR("failed to parse glb file: {}", filename);
                 return false;
             }
         }
@@ -259,7 +251,7 @@ namespace Assets
             }
             if(!gltfLoader.LoadASCIIFromFile(&model, &err, &warn, gltfFile.string()) )
             {
-                fmt::print("failed to parse glb file: {}\n", filename);
+                SPDLOG_ERROR("failed to parse glb file: {}", filename);
                 return false;
             }
         }
@@ -406,7 +398,7 @@ namespace Assets
             std::vector<Vertex> vertices;
             std::vector<uint32_t> indices;
 
-            uint32_t vertext_offset = 0;
+            uint32_t vertextOffset = 0;
             uint32_t sectionIdx = 0;
             for (tinygltf::Primitive& primtive : mesh.primitives)
             {
@@ -494,17 +486,17 @@ namespace Assets
                     if( indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT )
                     {
                         uint16* data = reinterpret_cast<uint16*>(&model.buffers[indexView.buffer].data[indexView.byteOffset + indexAccessor.byteOffset + i * strideIndex]);
-                        indices.push_back(*data + vertext_offset);
+                        indices.push_back(*data + vertextOffset);
                     }
                     else if( indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT )
                     {
                         uint32* data = reinterpret_cast<uint32*>(&model.buffers[indexView.buffer].data[indexView.byteOffset + indexAccessor.byteOffset + i * strideIndex]);
-                        indices.push_back(*data + vertext_offset);
+                        indices.push_back(*data + vertextOffset);
                     }
                     else if( indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_INT )
                     {
                         int32* data = reinterpret_cast<int32*>(&model.buffers[indexView.buffer].data[indexView.byteOffset + indexAccessor.byteOffset + i * strideIndex]);
-                        indices.push_back(*data + vertext_offset);
+                        indices.push_back(*data + vertextOffset);
                     }
                     else
                     {
@@ -512,7 +504,7 @@ namespace Assets
                     }
                 }
 
-                vertext_offset += static_cast<uint32_t>(positionAccessor.count);
+                vertextOffset += static_cast<uint32_t>(positionAccessor.count);
             }
             
             models.push_back(Assets::Model(mesh.name, std::move(vertices), std::move(indices), !hasTangent));
@@ -594,10 +586,10 @@ namespace Assets
                     tinygltf::BufferView outputView = model.bufferViews[outputAccessor.bufferView];
 
                     std::string nodeName = model.nodes[track.target_node].name;
-                    AnimationTrack& CreateTrack = trackMaps[nodeName];
+                    AnimationTrack& createTrack = trackMaps[nodeName];
 
-                    CreateTrack.NodeName_ = nodeName;
-                    CreateTrack.Time_ = 0;
+                    createTrack.NodeName_ = nodeName;
+                    createTrack.Time_ = 0;
 
                     int inputStride = inputAccessor.ByteStride(inputView);
                     int outputStride = outputAccessor.ByteStride(outputView);
@@ -625,12 +617,12 @@ namespace Assets
                             );
                         }
 
-                        AnimationKey<glm::vec3> Key;
-                        Key.Time = time;
-                        Key.Value = translation;
+                        AnimationKey<glm::vec3> key;
+                        key.Time = time;
+                        key.Value = translation;
 
-                        CreateTrack.ScaleChannel.Keys.push_back(Key);
-                        CreateTrack.Duration_ = max(time, CreateTrack.Duration_);
+                        createTrack.ScaleChannel.Keys.push_back(key);
+                        createTrack.Duration_ = max(time, createTrack.Duration_);
                     }
                 }
                 if (track.target_path == "rotation")
@@ -642,10 +634,10 @@ namespace Assets
                     tinygltf::BufferView outputView = model.bufferViews[outputAccessor.bufferView];
                     
                     std::string nodeName = model.nodes[track.target_node].name;
-                    AnimationTrack& CreateTrack = trackMaps[nodeName];
+                    AnimationTrack& createTrack = trackMaps[nodeName];
 
-                    CreateTrack.NodeName_ = nodeName;
-                    CreateTrack.Time_ = 0;
+                    createTrack.NodeName_ = nodeName;
+                    createTrack.Time_ = 0;
 
                     int inputStride = inputAccessor.ByteStride(inputView);
                     int outputStride = outputAccessor.ByteStride(outputView);
@@ -674,12 +666,12 @@ namespace Assets
                             );
                         }
 
-                        AnimationKey<glm::quat> Key;
-                        Key.Time = time;
-                        Key.Value = rotation;
+                        AnimationKey<glm::quat> key;
+                        key.Time = time;
+                        key.Value = rotation;
                         
-                        CreateTrack.RotationChannel.Keys.push_back(Key);
-                        CreateTrack.Duration_ = max(time, CreateTrack.Duration_);
+                        createTrack.RotationChannel.Keys.push_back(key);
+                        createTrack.Duration_ = max(time, createTrack.Duration_);
                     }
                 }
                 if (track.target_path == "translation")
@@ -691,10 +683,10 @@ namespace Assets
                     tinygltf::BufferView outputView = model.bufferViews[outputAccessor.bufferView];
                     
                     std::string nodeName = model.nodes[track.target_node].name;
-                    AnimationTrack& CreateTrack = trackMaps[nodeName];
+                    AnimationTrack& createTrack = trackMaps[nodeName];
                     
-                    CreateTrack.NodeName_ = nodeName;
-                    CreateTrack.Time_ = 0;
+                    createTrack.NodeName_ = nodeName;
+                    createTrack.Time_ = 0;
 
                     int inputStride = inputAccessor.ByteStride(inputView);
                     int outputStride = outputAccessor.ByteStride(outputView);
@@ -722,12 +714,12 @@ namespace Assets
                             );
                         }
 
-                        AnimationKey<glm::vec3> Key;
-                        Key.Time = time;
-                        Key.Value = translation;
+                        AnimationKey<glm::vec3> key;
+                        key.Time = time;
+                        key.Value = translation;
 
-                        CreateTrack.TranslationChannel.Keys.push_back(Key);
-                        CreateTrack.Duration_ = max(time, CreateTrack.Duration_);
+                        createTrack.TranslationChannel.Keys.push_back(key);
+                        createTrack.Duration_ = max(time, createTrack.Duration_);
                     }
                 }
             }
@@ -767,17 +759,17 @@ namespace Assets
         for (int i = 0; i < models.size(); i++)
         {
             auto& model = models[i];
-            glm::vec3 AABBMin = model.GetLocalAABBMin();
-            glm::vec3 AABBMax = model.GetLocalAABBMax();
+            glm::vec3 aabbMin = model.GetLocalAABBMin();
+            glm::vec3 aabbMax = model.GetLocalAABBMax();
             if (i == 0)
             {
-                boundsMin = AABBMin;
-                boundsMax = AABBMax;
+                boundsMin = aabbMin;
+                boundsMax = aabbMax;
             }
             else
             {
-                boundsMin = glm::min(AABBMin, boundsMin);
-                boundsMax = glm::max(AABBMax, boundsMax);
+                boundsMin = glm::min(aabbMin, boundsMin);
+                boundsMax = glm::max(aabbMax, boundsMax);
             }
         }
 

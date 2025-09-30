@@ -1,4 +1,5 @@
 #include "SceneList.hpp"
+#include "Common/CoreMinimal.hpp"
 #include "Utilities/FileHelper.hpp"
 #include "Assets/Material.hpp"
 #include "Assets/Model.hpp"
@@ -15,6 +16,8 @@
 #include "Assets/FSceneLoader.h"
 #include "Assets/Node.h"
 
+#include <spdlog/spdlog.h>
+#include <SDL3/SDL_filesystem.h>
 
 namespace Vulkan
 {
@@ -46,11 +49,11 @@ namespace
             for (int j = -22; j < 22; ++j)
             {
                 const float chooseMat = random();
-                const float center_y = static_cast<float>(j) + 0.9f * random();
-                const float center_x = static_cast<float>(i) + 0.9f * random();
-                const vec3 center(center_x, 0.2f + 2.0f * chooseMat, center_y);
+                const float centerY = static_cast<float>(j) + 0.9f * random();
+                const float centerX = static_cast<float>(i) + 0.9f * random();
+                const vec3 center(centerX, 0.2f + 2.0f * chooseMat, centerY);
 
-                const std::string Name = Utilities::NameHelper::RandomName(6);
+                const std::string name = Utilities::NameHelper::RandomName(6);
                 
                 if (length(center - vec3(4, 0.2f, 0)) > 0.9f)
                 {
@@ -62,7 +65,7 @@ namespace
                         const float g = random() * random();
                         const float r = random() * random();
                         uint32_t matId = CreateMaterial(materials, Material::Lambertian(vec3(r,g,b)));
-                        nodes.push_back(Assets::Node::CreateNode(Name,
+                        nodes.push_back(Assets::Node::CreateNode(name,
                                                                  center,
                                                                  quat(1, 0, 0, 0),
                                                                  vec3(1, 1, 1),
@@ -79,7 +82,7 @@ namespace
                         const float g = 0.5f * (1 + random());
                         const float r = 0.5f * (1 + random());
                         uint32_t matId = CreateMaterial(materials, Material::Metallic(vec3(r,g,b), fuzziness));
-                        nodes.push_back(Assets::Node::CreateNode(Name,
+                        nodes.push_back(Assets::Node::CreateNode(name,
                                                                  center,
                                                                  quat(1, 0, 0, 0),
                                                                  vec3(1, 1, 1),
@@ -93,7 +96,7 @@ namespace
                     {
                         const float fuzziness = 0.5f * random();
                         uint32_t matId = CreateMaterial(materials, Material::Dielectric(1.5f, fuzziness));
-                        nodes.push_back(Assets::Node::CreateNode(Name,
+                        nodes.push_back(Assets::Node::CreateNode(name,
                                                                  center,
                                                                  quat(1, 0, 0, 0),
                                                                  vec3(1, 1, 1),
@@ -115,7 +118,7 @@ namespace
                                 std::vector<Assets::Model>& models,
                                 std::vector<Assets::FMaterial>& materials, std::vector<Assets::LightObject>& lights, std::vector<Assets::AnimationTrack>& tracks)
     {
-        uint32_t prev_mat_id = static_cast<uint32_t>(materials.size());
+        uint32_t prevMatId = static_cast<uint32_t>(materials.size());
         
         Assets::Camera defaultCam;
         defaultCam.name = "Cam";
@@ -141,7 +144,7 @@ namespace
         models.push_back(Assets::FProcModel::CreateBox(vec3(-1000, -0.5, -1000), vec3(1000, 0, 1000)));
         nodes.push_back(Assets::Node::CreateNode(Utilities::NameHelper::RandomName(6), vec3(0, 0, 0), quat(1, 0, 0, 0), vec3(1, 1, 1), 0, static_cast<uint32_t>(nodes.size()), false));
         nodes.back()->SetVisible(true);
-        nodes.back()->SetMaterial({prev_mat_id + 0});
+        nodes.back()->SetMaterial({prevMatId + 0});
         
         AddRayTracingInOneWeekendCommonScene(nodes, models, materials, tracks, random);
 
@@ -178,7 +181,7 @@ namespace
                     std::vector<Assets::Model>& models,
                     std::vector<Assets::FMaterial>& materials, std::vector<Assets::LightObject>& lights, std::vector<Assets::AnimationTrack>& tracks)
     {
-        uint32_t prev_mat_id = static_cast<uint32_t>(materials.size());
+        uint32_t prevMatId = static_cast<uint32_t>(materials.size());
         
         Assets::Camera defaultCam;
         defaultCam.name = "Cam";
@@ -193,10 +196,10 @@ namespace
         cameraInit.HasSky = false;
         cameraInit.HasSun = false;
 
-        int cbox_model = Assets::FProcModel::CreateCornellBox(5.55f, models, materials, lights);
-        nodes.push_back(Assets::Node::CreateNode(Utilities::NameHelper::RandomName(6), vec3(0, 0, 0), quat(1, 0, 0, 0), vec3(1, 1, 1), cbox_model, static_cast<uint32_t>(nodes.size()), false));
+        int cboxModel = Assets::FProcModel::CreateCornellBox(5.55f, models, materials, lights);
+        nodes.push_back(Assets::Node::CreateNode(Utilities::NameHelper::RandomName(6), vec3(0, 0, 0), quat(1, 0, 0, 0), vec3(1, 1, 1), cboxModel, static_cast<uint32_t>(nodes.size()), false));
         nodes.back()->SetVisible(true);
-        nodes.back()->SetMaterial({prev_mat_id + 0,prev_mat_id + 1,prev_mat_id + 2,prev_mat_id + 3});
+        nodes.back()->SetMaterial({prevMatId + 0,prevMatId + 1,prevMatId + 2,prevMatId + 3});
 
         auto spherePos = vec3(1.30, 1.01 + 2.00 * 0.0, 0.80);
         auto boxPos = vec3(-1.30, 0, -0.80);
@@ -207,18 +210,18 @@ namespace
         models.push_back(box0);
         auto ball0 = Assets::FProcModel::CreateSphere(vec3(0, 0, 0), 1.0f);
         models.push_back(ball0);
-        nodes.push_back(Assets::Node::CreateNode("Sphere1", spherePos, quat(vec3(0, 0.5f, 0)), vec3(1, 1, 1), cbox_model + 2, static_cast<uint32_t>(nodes.size()),
+        nodes.push_back(Assets::Node::CreateNode("Sphere1", spherePos, quat(vec3(0, 0.5f, 0)), vec3(1, 1, 1), cboxModel + 2, static_cast<uint32_t>(nodes.size()),
                                                  false));
         nodes.back()->SetVisible(true);
-        nodes.back()->SetMaterial({prev_mat_id + 5});
+        nodes.back()->SetMaterial({prevMatId + 5});
 
         auto id = NextEngine::GetInstance()->GetPhysicsEngine()->CreateSphereBody(spherePos, 1.0f, JPH::EMotionType::Dynamic);
         nodes.back()->SetMobility(Assets::Node::ENodeMobility::Dynamic);
         nodes.back()->BindPhysicsBody(id);
         
-        nodes.push_back(Assets::Node::CreateNode("Box", boxPos, quat(vec3(0, 0.25f, 0)), vec3(1, 2, 1), cbox_model + 1, static_cast<uint32_t>(nodes.size()),
+        nodes.push_back(Assets::Node::CreateNode("Box", boxPos, quat(vec3(0, 0.25f, 0)), vec3(1, 2, 1), cboxModel + 1, static_cast<uint32_t>(nodes.size()),
                                                  false));
-        nodes.back()->SetMaterial({prev_mat_id + 4});
+        nodes.back()->SetMaterial({prevMatId + 4});
         nodes.back()->SetVisible(true);
     }
 }
@@ -230,7 +233,7 @@ void SceneList::ScanScenes()
     // add relative path
     std::string modelPath = "assets/models/";
     std::string path = Utilities::FileHelper::GetPlatformFilePath(modelPath.c_str());
-    fmt::print("Scaning dir: {}\n", path);
+    SPDLOG_INFO("Scanning dir: {}", path);
     for (const auto& entry : std::filesystem::directory_iterator(path))
     {
         std::filesystem::path filename = entry.path().filename();
@@ -245,7 +248,7 @@ void SceneList::ScanScenes()
     AllScenes.insert(AllScenes.begin(), "RTIO.proc");
     AllScenes.insert(AllScenes.begin(), "CornellBox.proc");
     
-    fmt::print("Scene found: {}\n", AllScenes.size());
+    SPDLOG_INFO("Scene found: {}", AllScenes.size());
 }
 
 int32_t SceneList::AddExternalScene(std::string absPath)

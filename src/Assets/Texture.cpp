@@ -1,9 +1,8 @@
 #include "Texture.hpp"
 #include "Utilities/StbImage.hpp"
 #include "Utilities/Exception.hpp"
-#include <chrono>
 #include <imgui_impl_vulkan.h>
-#include <fmt/format.h>
+#include "Common/CoreMinimal.hpp"
 #include <ktx.h>
 
 #include "Options.hpp"
@@ -17,6 +16,8 @@
 #include "Vulkan/DescriptorSetManager.hpp"
 #include "Vulkan/DescriptorSets.hpp"
 #include "ThirdParty/lzav/lzav.h"
+
+#include <spdlog/spdlog.h>
 
 #define M_NEXT_PI 3.14159265358979323846f
 
@@ -144,11 +145,11 @@ namespace Assets
         }
     }
 
-    void PrefilterHDREnvironmentMap(const float* hdrPixels, int width, int height, 
+    void PrefilterHdrEnvironmentMap(const float* hdrPixels, int width, int height, 
                              std::vector<std::vector<float>>& mipLevels,
                              std::vector<std::pair<int, int>>& mipDimensions)
     {
-        constexpr int MAX_MIP_LEVELS = 8; // Typically 5-8 levels for environment maps
+        constexpr int maxMipLevels = 8; // Typically 5-8 levels for environment maps
         mipLevels.clear();
         mipDimensions.clear();
         
@@ -156,7 +157,7 @@ namespace Assets
         int currentWidth = width;
         int currentHeight = height;
         
-        for (int mipLevel = 0; mipLevel < MAX_MIP_LEVELS; ++mipLevel)
+        for (int mipLevel = 0; mipLevel < maxMipLevels; ++mipLevel)
         {
             if (currentWidth < 4 || currentHeight < 4) break;
             
@@ -165,7 +166,7 @@ namespace Assets
 
             if (mipLevel > 0)
             {
-                float roughness = static_cast<float>(mipLevel) / (MAX_MIP_LEVELS - 1);
+                float roughness = static_cast<float>(mipLevel) / (maxMipLevels - 1);
                 PrefilterEnvironmentMapLevel(hdrPixels, width, height, 
                                            mipLevels[mipLevel].data(), 
                                            currentWidth, currentHeight, roughness);
@@ -176,7 +177,7 @@ namespace Assets
         }
     }
 
-    SphericalHarmonics ProjectHDRToSH(const float* hdrPixels, int width, int height)
+    SphericalHarmonics ProjectHdrToSh(const float* hdrPixels, int width, int height)
     {
         SphericalHarmonics result{};
         
@@ -186,11 +187,11 @@ namespace Assets
                 result.coefficients[i][j] = 0.0f;
         
         // SH basis function evaluation constants
-        constexpr float SH_C0 = 0.282095f; // 1/(2*sqrt(π))
-        constexpr float SH_C1 = 0.488603f; // sqrt(3)/(2*sqrt(π))
-        constexpr float SH_C2 = 1.092548f; // sqrt(15)/(2*sqrt(π))
-        constexpr float SH_C3 = 0.315392f; // sqrt(5)/(4*sqrt(π))
-        constexpr float SH_C4 = 0.546274f; // sqrt(15)/(4*sqrt(π))
+        constexpr float shC0 = 0.282095f; // 1/(2*sqrt(π))
+        constexpr float shC1 = 0.488603f; // sqrt(3)/(2*sqrt(π))
+        constexpr float shC2 = 1.092548f; // sqrt(15)/(2*sqrt(π))
+        constexpr float shC3 = 0.315392f; // sqrt(5)/(4*sqrt(π))
+        constexpr float shC4 = 0.546274f; // sqrt(15)/(4*sqrt(π))
         
         float weightSum = 0.0f;
         
@@ -221,19 +222,19 @@ namespace Assets
                 // Evaluate SH basis functions
                 float basis[9];
                 // Band 0 (1 coefficient)
-                basis[0] = SH_C0;
+                basis[0] = shC0;
                 
                 // Band 1 (3 coefficients)
-                basis[1] = -SH_C1 * dy;
-                basis[2] = SH_C1 * dz;
-                basis[3] = -SH_C1 * dx;
+                basis[1] = -shC1 * dy;
+                basis[2] = shC1 * dz;
+                basis[3] = -shC1 * dx;
                 
                 // Band 2 (5 coefficients)
-                basis[4] = SH_C2 * dx * dy;
-                basis[5] = -SH_C2 * dy * dz;
-                basis[6] = SH_C3 * (3.0f * dy * dy - 1.0f);
-                basis[7] = -SH_C2 * dx * dz;
-                basis[8] = SH_C4 * (dx * dx - dz * dz);
+                basis[4] = shC2 * dx * dy;
+                basis[5] = -shC2 * dy * dz;
+                basis[6] = shC3 * (3.0f * dy * dy - 1.0f);
+                basis[7] = -shC2 * dx * dz;
+                basis[8] = shC4 * (dx * dx - dz * dz);
                 
                 // Get pixel color (RGBA format, we want RGB)
                 int pixelIndex = (y * width + x) * 4;
@@ -306,17 +307,17 @@ namespace Assets
         return -1;
     }
 
-    GlobalTexturePool::GlobalTexturePool(const Vulkan::Device& device, Vulkan::CommandPool& command_pool,
-                                         Vulkan::CommandPool& command_pool_mt) :
+    GlobalTexturePool::GlobalTexturePool(const Vulkan::Device& device, Vulkan::CommandPool& commandPool,
+                                         Vulkan::CommandPool& commandPoolMt) :
         device_(device),
-        commandPool_(command_pool),
-        mainThreadCommandPool_(command_pool_mt)
+        commandPool_(commandPool),
+        mainThreadCommandPool_(commandPoolMt)
     {
-        static const uint32_t k_max_bindless_resources = 65535u;// moltenVK returns a invalid value. std::min(65535u, device.DeviceProperties().limits.maxPerStageDescriptorSamplers);
+        static const uint32_t kMaxBindlessResources = 65535u;// moltenVK returns a invalid value. std::min(65535u, device.DeviceProperties().limits.maxPerStageDescriptorSamplers);
         const std::vector<Vulkan::DescriptorBinding> descriptorBindings =
         {
-            {0, k_max_bindless_resources, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_ALL},
-            {1, k_max_bindless_resources, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_ALL},
+            {0, kMaxBindlessResources, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_ALL},
+            {1, kMaxBindlessResources, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_ALL},
         };
         descriptorSetManager_.reset(new Vulkan::DescriptorSetManager(device, descriptorBindings, 1, true));
         
@@ -444,13 +445,13 @@ namespace Assets
                             size = width * height * 4 * sizeof(float);
                         
                             // Extract spherical harmonics from the base level
-                            SphericalHarmonics sh = ProjectHDRToSH((float*)pixels, width, height);
+                            SphericalHarmonics sh = ProjectHdrToSh((float*)pixels, width, height);
                             hdrSphericalHarmonics_[newTextureIdx] = sh;
                         
                             // Prefilter environment map for different roughness levels
                             std::vector<std::vector<float>> mipLevels;
                             std::vector<std::pair<int, int>> mipDimensions;
-                            PrefilterHDREnvironmentMap((float*)pixels, width, height, mipLevels, mipDimensions);
+                            PrefilterHdrEnvironmentMap((float*)pixels, width, height, mipLevels, mipDimensions);
                         
                             miplevel = static_cast<uint32_t>(mipLevels.size());
                             
@@ -684,7 +685,7 @@ namespace Assets
                 TextureTaskContext taskContext{};
                 task.GetContext(taskContext);
                 textureImages_[taskContext.textureId]->MainThreadPostLoading(mainThreadCommandPool_);
-                fmt::print("{}\n", taskContext.outputInfo.data());
+                //SPDLOG_INFO("{}", taskContext.outputInfo.data());
                 delete[] copyedData;
 
                 if (taskContext.needFlushHDRSH)

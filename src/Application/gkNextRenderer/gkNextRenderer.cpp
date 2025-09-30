@@ -37,7 +37,7 @@ static void UpdateUiScaledMetrics()
 {
     float scale = 1.0f;
 
-    if (GAndroidMagicScale > 0.0f)
+    if (GAndroidMagicScale < 1.0f)
     {
         scale *= 0.75f / GAndroidMagicScale;
     }

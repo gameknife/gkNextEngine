@@ -67,10 +67,10 @@ namespace
 
         ImGui::BeginGroup();
         ImGui::PushID(static_cast<int>(block.modelId_));
-        #ifdef __APPLE__
-bool result = ImGui::Button("##Block", ImVec2(palateSize, palateSize));
-        #else
-bool result = ImGui::ImageButton("##Block", texId, ImVec2(PALATE_SIZE, PALATE_SIZE));
+#ifdef __APPLE__
+        bool result = ImGui::Button("##Block", ImVec2(palateSize, palateSize));
+#else
+        bool result = ImGui::ImageButton("##Block", texId, ImVec2(palateSize, palateSize));
         #endif
         
         ImGui::PopID();

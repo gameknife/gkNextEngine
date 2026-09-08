@@ -205,11 +205,17 @@ UserInterface::UserInterface(NextEngine* engine, Vulkan::CommandPool& commandPoo
     const float scaleFactor = std::max(1.0f, window.ContentScale());
 #elif IOS
     // SDL hands Dear ImGui a point-sized DisplaySize with a DisplayFramebufferScale equal to the
-    // window's pixel density, so the UI arrives magnified by that density alone - 3x on most
-    // iPhones, ~2.61x on an iPhone 7 Plus - which reads as oversized on a phone-sized panel.
-    // Halve it: PreRender doubles the logical space and folds the difference back into
-    // DisplayFramebufferScale, landing the net magnification near 1.5x.
-    constexpr float iosUiScale = 0.5f;
+    // window's pixel density.
+    // On iPhones (phones, min dimension < 600pt), 3x/2.61x magnification makes panels oversized.
+    // We target ~1.5x net magnification so the UI layout fits comfortably.
+    // On iPads (tablets, min dimension >= 600pt), the screen is already large (>= 744pt) and
+    // uses @2x density (2.0). Halving it drops DisplayFramebufferScale to 1.0 (microscopic 1:1 pixels).
+    // Keep full native density (2.0) on tablets so UI elements and touch targets retain proper physical sizing.
+    const float density = window.PixelDensity();
+    const VkExtent2D pointSize = window.WindowSize();
+    const bool isTablet = (std::min(pointSize.width, pointSize.height) >= 600);
+    const float targetMagnification = isTablet ? density : 1.5f;
+    const float iosUiScale = density > 0.0f ? (targetMagnification / density) : 1.0f;
     const float scaleFactor = iosUiScale;
 #else
     const float scaleFactor = 1.0f;

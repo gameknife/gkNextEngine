@@ -302,6 +302,14 @@ function(gk_dotnet_managed_game target)
             set(nativeBinary "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${nativeName}.dll")
             set(stagedLib "${stageDir}/${nativeName}.lib")
             set(stagedBinary "${stageDir}/${nativeName}.dll")
+        elseif(APPLE)
+            # NativeAOT's macOS shared-library output has a .dylib suffix but, unlike ELF,
+            # does not add a lib prefix. Treating macOS as generic Unix made the publish itself
+            # succeed, then tried to stage a nonexistent lib*.so.
+            set(nativeLib "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${nativeName}.dylib")
+            set(nativeBinary "${nativeLib}")
+            set(stagedLib "${stageDir}/${nativeName}.dylib")
+            set(stagedBinary "${stagedLib}")
         else()
             set(nativeLib "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/lib${nativeName}.so")
             set(nativeBinary "${nativeLib}")

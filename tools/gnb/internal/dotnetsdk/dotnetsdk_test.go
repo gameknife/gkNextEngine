@@ -98,3 +98,27 @@ func TestSortedVersionDirsOrdersNumerically(t *testing.T) {
 		t.Fatalf("newest = %q, want 10.0.300", newest)
 	}
 }
+
+func TestNativeBootstrapLibraryUsesPlatformNaming(t *testing.T) {
+	publishDir := t.TempDir()
+	name := BootstrapAssembly + ".lib"
+	if runtime.GOOS == "darwin" {
+		// NativeAOT emits GkNext.Bootstrap.dylib, without the Unix lib prefix.
+		name = BootstrapAssembly + ".dylib"
+	} else if runtime.GOOS != "windows" {
+		name = "lib" + BootstrapAssembly + ".so"
+	}
+
+	want := filepath.Join(publishDir, name)
+	if err := os.WriteFile(want, nil, 0o644); err != nil {
+		t.Fatalf("write native library: %v", err)
+	}
+
+	got, err := NativeBootstrapLibrary(publishDir)
+	if err != nil {
+		t.Fatalf("NativeBootstrapLibrary: %v", err)
+	}
+	if got != want {
+		t.Errorf("NativeBootstrapLibrary = %q, want %q", got, want)
+	}
+}

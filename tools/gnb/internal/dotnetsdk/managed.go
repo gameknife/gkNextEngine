@@ -94,7 +94,9 @@ func NativeBootstrapLibrary(publishDir string) (string, error) {
 	case "windows":
 		candidates = []string{BootstrapAssembly + ".lib"}
 	case "darwin":
-		candidates = []string{"lib" + BootstrapAssembly + ".dylib", "lib" + BootstrapAssembly + ".a"}
+		// NativeAOT names the macOS shared library after the assembly directly;
+		// unlike ELF output it does not prepend "lib".
+		candidates = []string{BootstrapAssembly + ".dylib", BootstrapAssembly + ".a"}
 	default:
 		candidates = []string{"lib" + BootstrapAssembly + ".so", "lib" + BootstrapAssembly + ".a"}
 	}

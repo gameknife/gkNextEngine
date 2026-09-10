@@ -44,6 +44,26 @@ namespace Modules::NextDotNet
             return {};
 #endif
         }
+
+        /// The launcher is commonly started by Finder/LaunchServices, whose PATH does not include
+        /// Homebrew or the SDK installed by `gnb dotnet setup`.  Use the SDK root CMake resolved
+        /// for the native host instead of relying on a shell lookup of `dotnet`.
+        std::filesystem::path ResolveDotNetExecutable()
+        {
+            const std::filesystem::path root = ResolveDotNetRoot();
+            if (root.empty())
+            {
+                return {};
+            }
+
+#if WIN32
+            const std::filesystem::path executable = root / "dotnet.exe";
+#else
+            const std::filesystem::path executable = root / "dotnet";
+#endif
+            std::error_code ec;
+            return std::filesystem::is_regular_file(executable, ec) ? executable : std::filesystem::path{};
+        }
     }
 
     /// The engine's C# sources, for everything that compiles rather than loads: the start-up
@@ -101,11 +121,19 @@ namespace Modules::NextDotNet
             return false;
         }
 
+        const std::filesystem::path dotnet = ResolveDotNetExecutable();
+        if (dotnet.empty())
+        {
+            outError = "dotnet SDK executable not found under " + ResolveDotNetRoot().string();
+            return false;
+        }
+
         // Same command CMake's gk_dotnet_managed_game runs. Deliberately the same output layout
         // too: a rebuild from inside the launcher must land where the next load will look, or it
         // would appear to succeed and change nothing.
-        const std::string command = "dotnet publish \"" + project.string() + "\" -c Release -o \"" +
-                                    (ManagedRoot() / outputSubdirectory).string() + "\" --nologo";
+        const std::string command = "\"" + dotnet.string() + "\" publish \"" + project.string() +
+                                    "\" -c Release -o \"" + (ManagedRoot() / outputSubdirectory).string() +
+                                    "\" --nologo";
         SPDLOG_INFO("[dotnet] republishing {}", project.string());
 
         const int exitCode = NextRenderer::OSProcess(command.c_str());
@@ -605,8 +633,16 @@ namespace Modules::NextDotNet
             }
         }
 
+        const std::filesystem::path dotnet = ResolveDotNetExecutable();
+        if (dotnet.empty())
+        {
+            SPDLOG_WARN("[dotnet] managed rebuild skipped: SDK executable not found under {}", ResolveDotNetRoot().string());
+            return false;
+        }
+
         SPDLOG_INFO("[dotnet] managed sources changed; rebuilding assets/csharp");
-        const std::string command = "dotnet publish \"" + (sourceRoot / "GkNext.Game" / "GkNext.Game.csproj").string() +
+        const std::string command = "\"" + dotnet.string() + "\" publish \"" +
+                                    (sourceRoot / "GkNext.Game" / "GkNext.Game.csproj").string() +
                                     "\" -c Release -o \"" + (ResolveManagedRoot() / "game").string() + "\" --nologo";
         const int exitCode = NextRenderer::OSProcess(command.c_str());
         if (exitCode != 0)

@@ -657,14 +657,14 @@ namespace
             pref.pathsToPlugins = {};
             pref.numPathsToPlugins = 0;
             pref.pathToLogsAndData = {};
-            pref.logLevel = sl::LogLevel::eDefault;
+            pref.logLevel = sl::LogLevel::eOff;
             pref.logMessageCallback = OnStreamlineLog;
             pref.applicationId = 12345678;
             pref.engine = sl::EngineType::eCustom;
             pref.engineVersion = "1.0.0";
             pref.projectId = "36cf6361-1044-4603-9ef3-066606660666";
             pref.renderAPI = sl::RenderAPI::eVulkan;
-            pref.flags = sl::PreferenceFlags::eUseFrameBasedResourceTagging;
+            pref.flags =  sl::PreferenceFlags::eDisableCLStateTracking | sl::PreferenceFlags::eDisableDebugText | sl::PreferenceFlags::eUseFrameBasedResourceTagging;
 
             static constexpr sl::Feature kFeatures[] = {
                 sl::kFeatureDLSS,

@@ -18,11 +18,13 @@
 
 namespace
 {
-    constexpr const char* gameplayConfigPath = "assets/configs/flappy/gameplay.json";
-    constexpr const char* replayConfigPath = "assets/configs/flappy/replay.json";
-    constexpr const char* flapSfx = "assets/sounds/flappy_flap.wav";
-    constexpr const char* scoreSfx = "assets/sounds/flappy_score.wav";
-    constexpr const char* hitSfx = "assets/sounds/flappy_hit.wav";
+    // The Flappy game project (projects/Flappy) owns this data; FlappyCSharp is its C# half and
+    // reads the very same files, which is what makes the replay parity comparison meaningful.
+    constexpr const char* gameplayConfigPath = "assets/projects/Flappy/Content/configs/gameplay.json";
+    constexpr const char* replayConfigPath = "assets/projects/Flappy/Content/configs/replay.json";
+    constexpr const char* flapSfx = "assets/projects/Flappy/Content/sounds/flap.wav";
+    constexpr const char* scoreSfx = "assets/projects/Flappy/Content/sounds/score.wav";
+    constexpr const char* hitSfx = "assets/projects/Flappy/Content/sounds/hit.wav";
 
     std::shared_ptr<Assets::Node> CreateNode(std::vector<std::shared_ptr<Assets::Node>>& nodes,
                                              std::string_view name,

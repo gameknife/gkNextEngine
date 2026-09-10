@@ -108,6 +108,14 @@ namespace Modules::NextDotNet
     extern FInputState GInputState;
     extern FUiCanvas GUiCanvas;
 
+    /// The running game project's Content/ directory as a runtime asset path
+    /// ("assets/projects/Flappy/Content"), which is what Assets.GetGameContentRoot() returns and
+    /// GameContent.Path() prefixes. Set by ManagedGameSession before the game's assembly is loaded
+    /// and cleared when it is unloaded, so a game that reads its content from a constructor or a
+    /// static initialiser already sees it, and a game swapped in by the launcher never sees the
+    /// previous game's.
+    extern std::string GGameContentRoot;
+
     /// Builds the table handed to managed code. Every def entry is filled; a binding declared
     /// without an implementation fails to compile.
     FEngineApi BuildEngineApi();

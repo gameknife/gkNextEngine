@@ -1,6 +1,6 @@
 # 用 C# 开发 gkNextEngine 应用
 
-面向有 Unity 经验的开发者。示例贯穿 `FlappyCSharp`（`assets/csharp/Flappy/FlappyCSharp/`），它是
+面向有 Unity 经验的开发者。示例贯穿 `FlappyCSharp`（工程目录 `projects/Flappy/`），它是
 `FlappyCpp` 的逐行 C# 对照实现，两者通过确定性 replay 逐帧比对，所以它里面的每种写法都是被验证过的。
 
 想给引擎**加**新的 C# 能力（新绑定函数、新暴露属性）看 [.NET Bindings](DotNetBindings.md)；
@@ -43,7 +43,8 @@ public sealed class MyGame : NextGameInstance
 
 **没有 Editor 拖场景，没有 prefab。** 场景要么在 `BeforeSceneRebuild` 里**用代码建**，要么加载一个
 glTF 文件。没有"把 prefab 拖到 Hierarchy"这一步，也没有 Inspector 上填的字段——所有可调参数走
-JSON 配置文件（`FlappyCSharp` 用 `assets/configs/flappy/gameplay.json`）。
+JSON 配置文件，放在工程自己的 `Content/` 里（`FlappyCSharp` 用 `projects/Flappy/Content/configs/gameplay.json`，
+代码里写 `GameContent.ReadFile("configs/gameplay.json")`）。
 
 **节点用 id 引用，不是对象引用。** `NodeRef` 是一个只装 `uint` 的 `readonly struct`，不是 GameObject。
 它不持有节点、不保证节点还活着、也没有 `Destroy` 之后变 null 的魔法。你自己记住这些 id。
@@ -56,12 +57,19 @@ JSON 配置文件（`FlappyCSharp` 用 `assets/configs/flappy/gameplay.json`）�
 - **编辑器**：**File > New Game Project...**，或 play 工具栏游戏下拉里的最后一项。
 
 填工程名（PascalCase，同时是目录名、程序集名、命名空间和类名），显示名和 id 会自动跟着推导，
-勾上 "Publish" 就顺带编译一次。产物是两样东西：
+勾上 "Publish" 就顺带编译一次。产物是**一个目录**，这个游戏拥有的一切都在里面：
 
 ```
-assets/csharp/<ProjectName>/          # csproj + 游戏类 + README（下一节那些文件）
-assets/configs/games/<id>.game.json   # manifest
+projects/<ProjectName>/
+├── <id>.game.json         # manifest
+├── README.md
+├── Content/               # 这个游戏的配置、音效、贴图、场景（Blank 模板带一份 configs/tuning.json）
+└── Scripts/               # <ProjectName>.csproj + 游戏类（下一节那些文件）
 ```
+
+构建（或 launcher / 编辑器的 **Rebuild C#**）会把 manifest 和 `Content/` 拷到运行时资产树的
+`assets/projects/<ProjectName>/`；`Scripts/` 不拷，跑的是发布出来的程序集。布局约定见
+[projects/README.md](../../projects/README.md)。
 
 **没有 CMake target，也不需要。** manifest 就是声明来源，launcher 和编辑器都从它加载运行——生成完
 立刻能玩。想要独立 exe 时再照下一节补 `src/Application/Game/<Name>/`。
@@ -80,10 +88,12 @@ assets/configs/games/<id>.game.json   # manifest
 
 1. `gnb dotnet sln` —— 让新工程进 `assets/csharp/GkNextManaged.sln`。**打开 solution，不要单开
    csproj**，否则 IDE 不会加载 `GkNext.Engine` 和源生成器，你的代码会退化成没有高亮的纯文本。
-2. 改 C#，在 launcher 或编辑器里点 **Rebuild C#**。开着热重载时正在跑的游戏会直接接手新程序集。
+2. 改 C# 或 `Content/` 里的东西，在 launcher 或编辑器里点 **Rebuild C#**：重新发布程序集，并把
+   `Content/` 同步到运行时副本。开着热重载时正在跑的游戏会直接接手新程序集。
 
 新增一个模板同样不需要改代码：`assets/templates/games/` 下建一个目录，放 `template.json` 和
-`files/` 文件树，文件名和内容里的 `__ProjectName__` / `{{Namespace}}` 等 token 会被替换。
+`files/` 文件树（按生成出来的工程布局：C# 放 `files/Scripts/`，内容放 `files/Content/`），文件名和
+内容里的 `__ProjectName__` / `{{Namespace}}` 等 token 会被替换。
 
 改完模板（或改了 `GkNext.Engine` 里模板用到的东西）跑一次：
 
@@ -102,11 +112,13 @@ gnb dotnet templates
 
 | 文件 | 作用 | 抄谁 |
 |---|---|---|
-| `assets/configs/games/<id>.game.json` | **游戏清单**：窗口、程序集、模块、初始场景、热重载 | `flappy.game.json` |
+| `projects/<Name>/<id>.game.json` | **游戏清单**：窗口、程序集、模块、初始场景、热重载 | `projects/Flappy/flappy.game.json` |
 | `src/Application/Game/<Name>/CMakeLists.txt` | 声明目标，绑定 csproj | `Flappy/FlappyCSharp/CMakeLists.txt` |
 | `src/Application/Game/<Name>/<Name>Main.cpp` | 15 行：注册 loader + 指向 manifest | `FlappyCSharpMain.cpp` |
-| `assets/csharp/<Name>/<Name>.csproj` | 托管工程 | `Flappy/FlappyCSharp/FlappyCSharp.csproj` |
-| `assets/csharp/<Name>/*.cs` | **你的游戏** | `FlappyCSharpGameInstance.cs` |
+| `projects/<Name>/Scripts/<Name>.csproj` | 托管工程 | `projects/Flappy/Scripts/FlappyCSharp.csproj` |
+| `projects/<Name>/Scripts/*.cs` | **你的游戏** | `FlappyCSharpGameInstance.cs` |
+
+游戏自己的配置、音效、场景放 `projects/<Name>/Content/`，不需要登记在任何地方。
 
 manifest 是这个游戏唯一的声明来源——它自己的 exe 和 `gkNextLauncher` 读同一份：
 
@@ -115,7 +127,7 @@ manifest 是这个游戏唯一的声明来源——它自己的 exe 和 `gkNextL
   "id": "mygame",
   "displayName": "My Game",
   "assembly": "mygame/MyGame.dll",
-  "project": "MyGame/MyGame.csproj",
+  "project": "Scripts/MyGame.csproj",
   "window": { "title": "My Game", "width": 1280, "height": 720, "forceSDR": true },
   "requiredModules": ["NextAudio"],
   "initialScene": "Empty.proc",
@@ -124,7 +136,8 @@ manifest 是这个游戏唯一的声明来源——它自己的 exe 和 `gkNextL
 }
 ```
 
-`initialScene` 留空表示你自己在 `OnInit` 里调 `Engine.RequestLoadScene`。`requiredModules` 是
+`project` 相对工程目录。`initialScene`（和 `icon`）以 `Content/` 开头时指本工程的内容，否则是引擎资产
+路径或内置场景名；留空表示你自己在 `OnInit` 里调 `Engine.RequestLoadScene`。`requiredModules` 是
 **校验**：原生模块是链接期决定的，宿主没有的模块会让这个游戏在菜单里直接标灰并说明原因，而不是加载
 到一半才发现没有 loader。
 
@@ -136,7 +149,7 @@ gk_add_application(MyGame
     MODULES ${GK_STANDARD_RUNTIME_MODULES} NextDotNet)
 
 gk_dotnet_managed_game(MyGame
-    PROJECT "${GK_DOTNET_MANAGED_ROOT}/MyGame/MyGame.csproj"
+    PROJECT "${GK_GAME_PROJECTS_ROOT}/MyGame/Scripts/MyGame.csproj"
     DIR mygame)          # 托管产物落到 bin/csharp/mygame/，与 manifest 的 assembly 前缀一致
 ```
 
@@ -152,7 +165,7 @@ std::unique_ptr<NextGameInstanceBase> CreateGameInstance(Vulkan::WindowConfig& c
     return std::make_unique<Modules::NextDotNet::ManagedGameHostInstance>(
         config, options, engine,
         Modules::NextDotNet::FManagedGameHostOptions{
-            .manifestPath = "assets/configs/games/mygame.game.json",
+            .manifestPath = "assets/projects/MyGame/mygame.game.json",   // 运行时副本的路径
             .linkedModules = {"NextAudio", "NextPhysics", "GltfLoader"},
         });
 }
@@ -461,14 +474,24 @@ protected override bool OnOverrideCamera(ref CameraOverride camera)
     return true;     // 返回 false 则用场景自带相机
 }
 
-Audio.PlaySfx("assets/sounds/flap.wav");        // volume 默认 1.0
-Audio.PlayMusic("assets/music/bgm.ogg", 0.6f);
+// 游戏自己的资源在工程的 Content/ 下，用 GameContent 拼出引擎认得的资产路径
+private readonly string flapSfx = GameContent.Path("sounds/flap.wav");   // 解析一次，别每帧拼
+Audio.PlaySfx(flapSfx);                           // volume 默认 1.0
+Audio.PlayMusic(GameContent.Path("music/bgm.ogg"), 0.6f);
 Audio.StopMusic();
+Audio.PlaySfx("assets/sounds/ui/click.wav");      // 引擎资产照旧写完整路径
 ```
 
-**读资源用 `Assets.ReadFile(path)`**（返回 `byte[]`），它走引擎的包文件系统，所以 `.pak` 里的资源也读得到；
-直接用 `File.ReadAllBytes` 打包后会失效。**写文件用 BCL**（`File.WriteAllBytes` 等）——引擎不提供写接口，
-只提供它独有的信息：`Paths.GetProjectRoot()` 和 `Paths.GetOutputDir()`。
+**游戏自己的内容放 `projects/<Game>/Content/`，用 `GameContent` 引用。** `GameContent.Path("x")` 返回
+`assets/projects/<Game>/Content/x`——构建时 `Content/` 被拷到运行时资产树的这个位置，所以每个接收路径的
+API（`Audio.*`、`Assets.ReadFile`、`Engine.RequestLoadScene`、`UI.RequestTexture`）都能直接用；
+`GameContent.ReadFile("x")` 是读文件的简写。它问的是当前加载的游戏（`Assets.GetGameContentRoot()`），
+所以游戏代码里不出现自己装在哪。字段初始化器里就能用：session 在构造游戏实例之前就设好了根目录。
+
+**读资源用 `Assets.ReadFile(path)` / `GameContent.ReadFile(path)`**（返回 `byte[]`），它走引擎的包文件系统，
+所以 `.pak` 里的资源也读得到；直接用 `File.ReadAllBytes` 打包后会失效。**写文件用 BCL**
+（`File.WriteAllBytes` 等）——引擎不提供写接口，只提供它独有的信息：`Paths.GetProjectRoot()` 和
+`Paths.GetOutputDir()`。
 
 配置解析要用 `JsonDocument` 手写读取，**不要用 `JsonSerializer.Deserialize<T>()`**：后者基于反射，
 NativeAOT 下会失效。`FlappyConfig.cs` 是可以直接抄的模板，包含默认值 + 逐字段覆盖的写法。
@@ -489,8 +512,12 @@ C# 的编辑入口是 **`assets/csharp/GkNextManaged.sln`**，Rider / Visual Stu
 gnb dotnet sln          # 重新生成；--check 只校验，gnb dotnet ci 会跑这一步
 ```
 
-它扫描 `assets/csharp` 下所有 csproj，带 `[GameInstance]` 的归到 `Games` 组，其余归到 `Engine` 组；
-GUID 由路径推导，所以在任何机器上重新生成都是同样的字节，不会产生噪声 diff。
+它扫描 `assets/csharp` 和 `projects/` 下所有 csproj，带 `[GameInstance]` 的归到 `Games` 组，其余归到
+`Engine` 组；GUID 由路径推导，所以在任何机器上重新生成都是同样的字节，不会产生噪声 diff。
+
+游戏工程的 csproj 不在 `assets/csharp` 下，它的公共设置来自 `projects/Directory.Build.props`——那个文件
+只是转接到 `assets/csharp/Directory.Build.props`，并提供 `$(GkEngineManagedRoot)` 供
+`<ProjectReference Include="$(GkEngineManagedRoot)GkNext.Engine\GkNext.Engine.csproj">` 使用。
 
 `assets/csharp/global.json` 把 SDK 下限钉在 .NET 10，让 IDE 和 CMake 用同一个 SDK：缺 SDK 时报的是
 "需要 10.0.100 以上"，而不是"不认识 net10.0"。
@@ -505,10 +532,11 @@ gnb run FlappyCSharp          # 运行它自己的 exe
 gnb run gkNextLauncher        # 或：一个进程里选任意 C# 游戏
 ```
 
-**Launcher 是更快的循环。** `gkNextLauncher` 读 `assets/configs/games/*.game.json`，菜单里列出所有
-C# 游戏（Up/Down 选，Enter 开，游戏里 Esc 回菜单）。每个条目旁边的 **Rebuild** 会就地重新发布那个游戏的
-C#——**改 C# → 点一下 → 玩**，不需要 C++ 构建，也不需要重启进程。切换游戏时引擎会把世界（场景、物理、
-cvar、ShowFlags、音频、窗口标题）恢复到中性状态，所以上一个游戏不会污染下一个。
+**Launcher 是更快的循环。** `gkNextLauncher` 扫描 `assets/projects/*/*.game.json`（即每个工程 manifest
+的运行时副本），菜单里列出所有 C# 游戏（Up/Down 选，Enter 开，游戏里 Esc 回菜单）。每个条目旁边的
+**Rebuild** 会就地重新发布那个游戏的 C#，并把它的 `Content/` 同步到运行时副本——**改 C# 或改配置 →
+点一下 → 玩**，不需要 C++ 构建，也不需要重启进程（控制台 / 脚本里是 `game.rebuild <id>`）。切换游戏时
+引擎会把世界（场景、物理、cvar、ShowFlags、音频、窗口标题）恢复到中性状态，所以上一个游戏不会污染下一个。
 
 **编辑器里也能跑（play-in-editor）。** `gnb editor` 的工具栏有游戏下拉 + Play（**F5**）。游戏跑起来后按
 **F8** eject：游戏继续跑，但相机和输入回到编辑器，于是可以在 Outliner 里选中它的节点、在 Properties 里
@@ -529,7 +557,7 @@ Launcher 只在 CoreCLR 后端下构建。NativeAOT 把游戏静态链进 exe，
 不用重启应用。触发方式是在应用运行着的时候重新发布托管工程：
 
 ```bash
-dotnet publish assets/csharp/Flappy/FlappyCSharp/FlappyCSharp.csproj -c Release -o out/build/windows/bin/csharp/flappy
+dotnet publish projects/Flappy/Scripts/FlappyCSharp.csproj -c Release -o out/build/windows/bin/csharp/flappy
 ```
 
 程序集是**读进内存**加载的（`File.ReadAllBytes` + `LoadFromStream`），文件不被进程占用，所以直接
@@ -545,9 +573,11 @@ dotnet publish assets/csharp/Flappy/FlappyCSharp/FlappyCSharp.csproj -c Release 
 Esc 回菜单、Rebuild、再进游戏，全程不重启进程。
 
 > 注意：引擎启动时的"C# 源码变了就自动重编"（manifest 的 `compileManagedSources`）只对 sandbox 工程
-> `GkNext.Game` 生效，它硬编码了那个 csproj。改 `FlappyCSharp` 的 `.cs` 会让它误以为需要重编并去编
-> `GkNext.Game`，你的改动不会生效。用上面的 `dotnet publish`、`gnb build <目标>`，或 launcher 里那个
-> 游戏自己的 Rebuild 按钮。
+> `GkNext.Game` 生效，它只看 `assets/csharp`、只编那个 csproj。游戏工程在 `projects/` 下，不在它的
+> 视野里；用上面的 `dotnet publish`、`gnb build <目标>`，或 launcher / 编辑器里那个游戏的 Rebuild。
+>
+> `dotnet publish` 只发布程序集。改了 `Content/` 的话要么点 Rebuild（它会同步内容），要么 `gnb build`
+> 任意一个目标让 CMake 的 Assets 拷贝跑一遍。
 
 **截图验证**（不弹窗、自动退出，适合快速看一眼）：
 
@@ -601,20 +631,21 @@ GK_DOTNET_ALLOC_BUDGET=8192    # 可调
 |---|---|
 | **开一个新项目** | launcher / 编辑器的 New Game Project（§2）；模板本身在 `assets/templates/games/` |
 | 角色（骨骼 + 动作） | `assets/templates/games/tps/`；接口见 [ScadRig](ScadRig.md#从-c-驱动rig-绑定) |
-| 完整的应用骨架 | `assets/csharp/Flappy/FlappyCSharp/FlappyCSharpGameInstance.cs` |
-| 完整 C# 玩法纵切 | `assets/csharp/Brotato3D/Brotato3DCSharp/` |
+| 完整的应用骨架 | `projects/Flappy/Scripts/FlappyCSharpGameInstance.cs` |
+| 完整 C# 玩法纵切 | `projects/Brotato3D/`（`Scripts/` + `Content/configs/`） |
 | 程序化建场景 | 同上，`BeforeSceneRebuild` |
 | HUD | 同上，`OnRenderUI` |
 | HUD / C# drawlist 控件 | `assets/csharp/GkNext.Engine/ManagedImGui.cs` |
-| 固定物理池 / kinematic 推挤 | `assets/csharp/Brotato3D/Brotato3DCSharp/BrotatoPhysicsSystem.cs` |
+| 固定物理池 / kinematic 推挤 | `projects/Brotato3D/Scripts/BrotatoPhysicsSystem.cs` |
 | 定步长模拟 | 同上，`OnTick` + `FixedStep` |
-| AOT 安全的 JSON 配置 | `assets/csharp/Flappy/FlappyCSharp/FlappyConfig.cs` |
+| AOT 安全的 JSON 配置 | `projects/Flappy/Scripts/FlappyConfig.cs`（读的是 `projects/Flappy/Content/configs/`） |
+| 工程目录布局 / 引用自己的内容 | [projects/README.md](../../projects/README.md)、`GameContent`（`assets/csharp/GkNext.Engine/GameContent.cs`） |
 | 确定性随机 | `Rng`（`assets/csharp/GkNext.Engine/Gameplay/Rng.cs`）；`Flappy` 自带一份是因为要逐位复刻 C++ 的序列 |
 | 移动输入 / 定步长 / 对象池 | `assets/templates/games/arcade2d/`、`topdown3d/` |
 | gameplay 工具层 | `assets/csharp/GkNext.Engine/Gameplay/`（`Rng` / `Mathx` / `Quat` / `MoveAxis` / `Sky` / `HudPalette`）|
 | 纯逻辑对象 | `FlappyBird.cs` / `FlappyPipes.cs` / `FlappyParallax.cs` |
 | C++ 壳（15 行的全部） | `src/Application/Game/Flappy/FlappyCSharp/FlappyCSharpMain.cpp` |
-| 游戏清单 | `assets/configs/games/flappy.game.json` |
+| 游戏清单 | `projects/Flappy/flappy.game.json` |
 | 钩子转发的唯一实现 | `src/Modules/NextDotNet/ManagedGameHostInstance.cpp` |
 | 最小 ABI 探针 | `assets/csharp/GkNext.Game/ProbeGame.cs` |
 | 可调用的全部 API | `assets/csharp/GkNext.Engine/Engine.g.cs`（生成，别手改） |

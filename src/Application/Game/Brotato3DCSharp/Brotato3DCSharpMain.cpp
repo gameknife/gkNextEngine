@@ -12,7 +12,7 @@ std::unique_ptr<NextGameInstanceBase> CreateGameInstance(Vulkan::WindowConfig& c
     return std::make_unique<Modules::NextDotNet::ManagedGameHostInstance>(
         config, options, engine,
         Modules::NextDotNet::FManagedGameHostOptions{
-            .manifestPath = "assets/configs/games/brotato3d.game.json",
+            .manifestPath = "assets/projects/Brotato3D/brotato3d.game.json",
             .linkedModules = {"ScadLoader", "NextPhysics", "NextAudio", "GltfLoader"},
         });
 }

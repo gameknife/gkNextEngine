@@ -9,7 +9,7 @@ std::unique_ptr<NextGameInstanceBase> CreateGameInstance(Vulkan::WindowConfig& c
     return std::make_unique<Modules::NextDotNet::ManagedGameHostInstance>(
         config, options, engine,
         Modules::NextDotNet::FManagedGameHostOptions{
-            .manifestPath = "assets/configs/games/sandbox.game.json",
+            .manifestPath = "assets/projects/Sandbox/sandbox.game.json",
             .linkedModules = {"NextAudio", "NextPhysics", "GltfLoader"},
         });
 }

@@ -4,6 +4,9 @@ plugins {
 
 def releaseSigningPropertiesPath = '@GK_ANDROID_SIGNING_PROPERTIES@'
 def gkNextSourceAssetRoot = file('@GK_REPO_ROOT@/assets')
+// Game projects (manifest + Content/ + C# Scripts/) live beside assets/ and are copied into the
+// generated asset tree under assets/projects, so they are just as much an input of the native build.
+def gkNextSourceProjectRoot = file('@GK_REPO_ROOT@/projects')
 def releaseSigningPropertiesFile = releaseSigningPropertiesPath ? file(releaseSigningPropertiesPath) : null
 def releaseSigningProperties = new Properties()
 def releaseSigningEnabled = releaseSigningPropertiesFile != null && releaseSigningPropertiesFile.isFile()
@@ -137,6 +140,7 @@ afterEvaluate {
             // invalidates the external native build task. This includes untracked
             // files in the current working tree; Git commits are not build inputs.
             inputs.dir(gkNextSourceAssetRoot)
+            inputs.dir(gkNextSourceProjectRoot)
         }
         tasks.named("merge${variantName}Assets").configure {
             dependsOn nativeBuildTask

@@ -69,7 +69,7 @@ namespace Editor
 
         void RefreshGames()
         {
-            manifests = ScanManagedGameManifests(kManagedGameManifestDirectory);
+            manifests = ScanManagedGameManifests(kManagedGameProjectsDirectory);
             games.clear();
             games.reserve(manifests.size());
 

@@ -8,8 +8,8 @@
 //
 // A template is instantiated the way ManagedGameTemplate.cpp instantiates it — the same {{Token}}
 // and __Token__ replacement, applied to file contents and file names alike — into a scratch project
-// under assets/csharp. It has to live there because the generated csproj reaches its two references
-// by relative path; anywhere else would be checking a csproj no user will ever have.
+// under projects/. It has to live there because the generated csproj reaches GkNext.Engine through
+// projects/Directory.Build.props; anywhere else would be checking a csproj no user will ever have.
 package csharptemplates
 
 import (
@@ -25,10 +25,14 @@ import (
 // TemplateRoot is where the shipped templates live, relative to the repository root.
 const TemplateRoot = "assets/templates/games"
 
-// ScratchPrefix marks the throwaway project directories this package writes into assets/csharp.
-// csharpsln.Discover skips anything carrying it, so a check interrupted half way through cannot
-// leave a phantom project in the IDE solution.
+// ScratchPrefix marks the throwaway project directories this package writes into projects/.
+// csharpsln.Discover and the CMake asset copy skip anything carrying it, so a check interrupted half
+// way through cannot leave a phantom project in the IDE solution or the runtime tree.
 const ScratchPrefix = "_templatecheck_"
+
+// scriptsDir is where a project's C# lives, relative to the project directory. Must match
+// kManagedGameScriptsDirectory in ManagedGameManifest.hpp.
+const scriptsDir = "Scripts"
 
 // Result is the outcome for one template.
 type Result struct {
@@ -55,7 +59,7 @@ func Discover(repoRoot string) ([]string, error) {
 		if !fileExists(filepath.Join(root, entry.Name(), "template.json")) {
 			continue
 		}
-		if !dirExists(filepath.Join(root, entry.Name(), "files")) {
+		if !dirExists(filepath.Join(root, entry.Name(), "files", scriptsDir)) {
 			continue
 		}
 		ids = append(ids, entry.Name())
@@ -69,20 +73,22 @@ func Discover(repoRoot string) ([]string, error) {
 
 // CleanScratch removes scratch projects left behind by an interrupted run. Called before a check
 // as well as after one, because the directory a crash leaves behind would otherwise fail the next
-// instantiation with "already exists".
+// instantiation with "already exists". assets/csharp is swept too: that is where scratch projects
+// went before game projects moved to projects/, and one left there would still reach the solution.
 func CleanScratch(repoRoot string) error {
-	managed := dotnetsdk.SourceDir(repoRoot)
-	entries, err := os.ReadDir(managed)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
+	for _, root := range []string{dotnetsdk.ProjectsDir(repoRoot), dotnetsdk.SourceDir(repoRoot)} {
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return err
 		}
-		return err
-	}
-	for _, entry := range entries {
-		if entry.IsDir() && strings.HasPrefix(entry.Name(), ScratchPrefix) {
-			if err := os.RemoveAll(filepath.Join(managed, entry.Name())); err != nil {
-				return err
+		for _, entry := range entries {
+			if entry.IsDir() && strings.HasPrefix(entry.Name(), ScratchPrefix) {
+				if err := os.RemoveAll(filepath.Join(root, entry.Name())); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -120,7 +126,7 @@ func checkOne(repoRoot string, toolchain dotnetsdk.Toolchain, id string, configu
 	// A C# identifier: the project name becomes a namespace and a type name, so it cannot carry the
 	// hyphens or digits-first shapes a directory name is allowed to have.
 	project := ScratchPrefix + sanitizeIdentifier(id)
-	projectDir := filepath.Join(dotnetsdk.SourceDir(repoRoot), project)
+	projectDir := filepath.Join(dotnetsdk.ProjectsDir(repoRoot), project)
 	sourceDir := filepath.Join(repoRoot, filepath.FromSlash(TemplateRoot), id, "files")
 
 	if err := os.RemoveAll(projectDir); err != nil {
@@ -139,12 +145,12 @@ func checkOne(repoRoot string, toolchain dotnetsdk.Toolchain, id string, configu
 		return "", err
 	}
 
-	csproj := filepath.Join(projectDir, project+".csproj")
+	csproj := filepath.Join(projectDir, scriptsDir, project+".csproj")
 	if !fileExists(csproj) {
-		return "", fmt.Errorf("template %q produced no %s.csproj", id, project)
+		return "", fmt.Errorf("template %q produced no %s/%s.csproj", id, scriptsDir, project)
 	}
 
-	command := toolchain.Command(projectDir, "build", csproj, "-c", configuration, "--nologo", "-v", "q")
+	command := toolchain.Command(filepath.Dir(csproj), "build", csproj, "-c", configuration, "--nologo", "-v", "q")
 	output, err := command.CombinedOutput()
 	if err != nil {
 		return string(output), fmt.Errorf("template %q does not compile: %w", id, err)

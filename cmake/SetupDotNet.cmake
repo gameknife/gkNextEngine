@@ -218,11 +218,19 @@ message(STATUS ".NET scripting enabled (${GK_DOTNET_BACKEND}) rid=${gkTargetRid}
 
 # Managed sources shared by every publish rule. obj/ and bin/ hold generated files whose timestamps
 # would make the stamps permanently dirty.
+#
+# Two trees: the engine's own managed layer (GkNext.Engine, the bootstrap, the source generator) and
+# the game projects, each of which keeps its C# in projects/<Game>/Scripts next to its manifest and
+# Content/. Every publish depends on both, because a game build compiles the engine assemblies too.
 set(GK_DOTNET_MANAGED_ROOT "${CMAKE_SOURCE_DIR}/assets/csharp")
+set(GK_GAME_PROJECTS_ROOT "${CMAKE_SOURCE_DIR}/projects")
 file(GLOB_RECURSE GK_DOTNET_MANAGED_SOURCES CONFIGURE_DEPENDS
     "${GK_DOTNET_MANAGED_ROOT}/*.cs"
     "${GK_DOTNET_MANAGED_ROOT}/*.csproj"
     "${GK_DOTNET_MANAGED_ROOT}/*.props"
+    "${GK_GAME_PROJECTS_ROOT}/*.cs"
+    "${GK_GAME_PROJECTS_ROOT}/*.csproj"
+    "${GK_GAME_PROJECTS_ROOT}/*.props"
 )
 list(FILTER GK_DOTNET_MANAGED_SOURCES EXCLUDE REGEX "/(obj|bin)/")
 

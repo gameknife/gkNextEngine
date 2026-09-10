@@ -4,7 +4,7 @@
 launcher 内重建、gkNextEditor 的 play-in-editor）。PIE 的边界见 §7。
 
 `Brotato3DCSharp`、`FlappyCSharp`、`DotNetSandbox` 不再各自携带一份原生 shell；它们和
-`gkNextLauncher` 共用同一个宿主，差异全部由 `assets/configs/games/*.game.json` 描述。Launcher 在
+`gkNextLauncher` 共用同一个宿主，差异全部由各自工程里的 `projects/<Game>/<id>.game.json` 描述。Launcher 在
 **同一个进程内**选择、加载、运行、卸载任意托管游戏；`gkNextEditor` 用同一套机制实现 Play/Stop，
 并且可以在游戏运行时"弹出"（eject）回编辑器去检视和编辑它的场景——即 Unity Editor 的 Play 模型。
 
@@ -65,17 +65,37 @@ gkNextLauncher          Brotato3DCSharp / FlappyCSharp     gkNextEditor
 温床：`FlappyCSharp` 漏转发了手柄输入，而 `Brotato3DCSharp` 没漏——通用宿主无条件转发，这类漏转发不
 可能再发生。
 
-## 3. manifest 契约
+## 3. 工程与 manifest 契约
 
-`assets/configs/games/<id>.game.json`，是一个托管游戏**唯一**的声明来源：per-game exe 和 launcher 读
-同一份文件，所以一个游戏不会因为启动方式不同而行为不同。
+一个托管游戏是 `projects/` 下的一个**工程目录**，游戏自己拥有的一切都在里面：
+
+```
+projects/<Game>/
+├── <id>.game.json   # manifest
+├── Content/         # 这个游戏的配置、音效、贴图、场景
+└── Scripts/         # C# 工程（<Name>.csproj + *.cs）
+```
+
+`projects/Directory.Build.props` 把 `Scripts/*.csproj` 接到引擎的 `assets/csharp/Directory.Build.props`
+并提供 `$(GkEngineManagedRoot)`，game csproj 用它引用 `GkNext.Engine` 与 source generator，不依赖自己
+在目录树里有多深。
+
+**运行时是资产树的一棵子树。** 构建时 `assets/cmake/RuntimeAssets.cmake` 把每个工程的 manifest 和
+`Content/` 拷到 `<运行时根>/assets/projects/<Game>/`，`Scripts/` 不拷（跑的是 `<bin>/csharp/<id>/` 里的
+发布产物）。放在 `assets/` 之下而不是运行时根的 `projects/`，是因为 pak、asset trace（`gnb package
+--asset-trace` 只记 `assets/` 下的路径）、Android APK 的 asset 树、iOS bundle 全都以 `assets/` 为资产
+命名空间——工程内容挂在这里，这些管线一行都不用改就能带上它。宿主扫描 `assets/projects/*/*.game.json`
+列出游戏，只看工程目录这一层：`Content/` 深处恰好叫 `*.game.json` 的文件是内容，不是另一个游戏。
+
+manifest 是一个托管游戏**唯一**的声明来源：per-game exe 和 launcher 读同一份文件，所以一个游戏不会因为
+启动方式不同而行为不同。
 
 ```json
 {
   "id": "flappy",
   "displayName": "Flappy (C#)",
   "assembly": "flappy/FlappyCSharp.dll",
-  "project": "Flappy/FlappyCSharp/FlappyCSharp.csproj",
+  "project": "Scripts/FlappyCSharp.csproj",
   "window":     { "title": "FlappyCSharp", "width": 1280, "height": 720, "forceSDR": true },
   "requiredModules": ["NextAudio"],
   "initialScene": "Empty.proc",
@@ -87,10 +107,34 @@ gkNextLauncher          Brotato3DCSharp / FlappyCSharp     gkNextEditor
 
 - `assembly` 相对 `<bin>/csharp`，与 `gk_dotnet_managed_game(... DIR ...)` 的发布位置一致。
   publish 子目录由它的第一段推导（`flappy/...` → `csharp/flappy`），manifest 不重复描述。
-- `project` 相对 `assets/csharp`，可选，只在源码树里有意义：它让宿主能重建这个游戏（§6）。
+- `project` 相对**工程目录**（源码树里的 `projects/<Game>/`），可选，只在源码树里有意义：它让宿主能重建
+  这个游戏（§6）。宿主读的是运行时副本，那里没有 `Scripts/`，所以重建时按目录名映射回源码树
+  （`ResolveProjectSourceDirectory`，烘焙的 `GK_GAME_PROJECTS_SOURCE_ROOT`，可用环境变量
+  `GK_GAME_PROJECTS_SOURCES` 覆盖）。
+- `icon`、`initialScene` 以 `Content/` 开头时解析到本工程内容；否则原样当作引擎资产路径或内置场景名
+  （`Empty.proc`）。
 - `initialScene` 为空表示游戏自己在 `OnInit` 里请求场景（Brotato3D 的做法）。
 - `showFlags` 用 optional 语义：只覆盖 manifest 写了的项，未提及的保持引擎默认。
 - 以 `_comment` 开头的键是注释，解析时忽略。
+
+**托管代码怎么找到自己的内容。** session 在加载程序集**之前**把 `<工程目录>/Content` 写进
+`GGameContentRoot`，卸载时清空；绑定 `Assets.GetGameContentRoot()` 返回它，`GameContent.Path("x")` 拼成
+完整资产路径，`GameContent.ReadFile("x")` 直接读。之所以在加载之前设：加载会构造游戏实例，字段初始化器
+里就可以解析内容路径（FlappyCSharp 的音效路径就是这么做的）。`GameContent` 不缓存根目录——
+`GkNext.Engine` 永不卸载，而 launcher 会在它下面换游戏。
+
+**C++ 孪生版读同一份内容。** `FlappyCpp` 与 `Brotato3D`（C++）和各自的 C# 版是同一个游戏的两种实现，
+直接读 `assets/projects/Flappy/Content/...` / `assets/projects/Brotato3D/Content/configs/...`——Flappy 的
+replay parity 本来就要求两端读同一份配置。
+
+**哪些没有进工程。** Brotato3D 的音效和 UI 图标仍在 `assets/sounds/brotato3d/` 与
+`assets/textures/brotato3d/`：它们以 `assets/paks/brotato3d.pak` 分发，pak 条目名固定是这两个路径
+（`tools/brotato3d-pak`），挪位置意味着重新发布 pak。竞技场 SCAD（`assets/scad/source/brotato3d/`）用
+`use <../../lib/kit_deadly.scad>` 按相对路径引用 kit 库，而 SCAD loader 没有库搜索路径；源码树的
+`projects/` 与运行时的 `assets/projects/` 深度差一层，同一条相对路径不可能两边都对，所以它们留在
+SCAD 资产树里，由 `arenas.json` 按引擎资产路径引用。`Sandbox` 的代码 `GkNext.Game` 是引擎的绑定探针
+（NativeAOT 下 `GkNext.Bootstrap` 默认静态链接它，`gnb dotnet probe` 也构建它），留在 `assets/csharp`，
+它的 manifest 用 `../../assets/csharp/GkNext.Game/GkNext.Game.csproj` 指过去。
 
 ## 4. 会话生命周期
 
@@ -160,7 +204,7 @@ Idle ──Load──> Loading ──ok──> Playing ──Stop/RequestClose�
 | `flappy-csharp-smoke` / `brotato3d-csharp-smoke` | per-game exe 行为不变（Phase 1 的验收） |
 | `launcher-game-switch` | 菜单 → flappy → 菜单 → brotato3d → 菜单 → flappy，逐步断言 |
 | `launcher-swap-stress` | 7 轮切换 + 键盘路径（Down/Enter/Esc），每次卸载后断言 `game.unloadPending == 0` |
-| `launcher-rebuild` | 在 launcher 里点 Rebuild 重新发布 C#，然后加载运行 |
+| `launcher-rebuild` | 在 launcher 里 Rebuild（经 `game.rebuild` cvar，与卡片上的按钮是同一个请求）重新发布 C# 并同步 `Content/`，然后加载运行 |
 | `editor-play-in-editor` | 编辑器里 Play brotato3d → eject → 点 Outliner 选中运行中游戏的节点 → resume → Stop 回到原场景 → 再 Play/Stop 一轮 flappy |
 | `launcher-new-project` / `editor-new-project` | 新建项目对话框在两个宿主里都能打开、能列出模板、Esc 能关掉（§8）。**不**脚本化"创建"这一步——它要往源码树里写文件，validation run 不该做这种事，那一半由 `Test_ManagedGameTemplate` 覆盖 |
 
@@ -188,9 +232,10 @@ ImGui 点击的注意事项（写进脚本注释了）：`mouse-move` 与 `mouse
 ## 6. Launcher 内重建 C#
 
 菜单每个条目旁边有 Rebuild 按钮（仅当 manifest 有 `project` 时出现），执行与 CMake 同样的
-`dotnet publish` 到同样的输出目录，完成后重新扫描条目。这就是这套设计存在的意义所在的循环：
-**改 C# → 点一下 → 玩**，不需要 C++ 构建，不需要重启进程。若被重建的正是当前正在跑且开了热重载的游戏，
-新程序集会在轮询间隔内被热重载接手。
+`dotnet publish` 到同样的输出目录，然后把工程的 manifest 与 `Content/` 从源码树同步到运行时副本
+（`SyncProjectContentToRuntime`，与 CMake 的拷贝规则等价），完成后重新扫描条目。这就是这套设计存在的
+意义所在的循环：**改 C# 或改配置 → 点一下 → 玩**，不需要 C++ 构建，不需要重启进程。若被重建的正是当前
+正在跑且开了热重载的游戏，新程序集会在轮询间隔内被热重载接手。
 
 publish 是同步的、要几秒，所以点击只记录请求，让菜单先画一帧 "rebuilding ..." 再执行。
 
@@ -266,11 +311,17 @@ Project...** 和 play 工具栏的游戏下拉里各有一个入口。三处打�
 ```
 assets/templates/games/blank/
 ├── template.json          # 元数据：显示名、描述、要点、窗口、requiredModules、initialScene
-└── files/                 # 原样拷贝的文件树
-    ├── __ProjectName__.csproj
-    ├── __ProjectName__Game.cs
-    └── README.md
+└── files/                 # 原样拷贝的文件树，布局就是生成出来的工程（§3）
+    ├── README.md
+    ├── Content/
+    │   └── configs/tuning.json
+    └── Scripts/
+        ├── __ProjectName__.csproj
+        └── __ProjectName__Game.cs
 ```
+
+`blank` 的 `Content/configs/tuning.json` 是给新工程的一个活例子：游戏在 `OnInit` 里用
+`GameContent.ReadFile` 读它。其余模板没有内容，但生成的工程总会有一个空的 `Content/`。
 
 文件名和文件内容里的 `__Token__` / `{{Token}}` 会被替换：`ProjectName`、`Namespace`、
 `AssemblyName`、`DisplayName`、`GameId`、`TemplateId`。引擎、launcher、编辑器里没有任何地方枚举
@@ -290,11 +341,10 @@ launcher 和编辑器都从它加载。想要独立 exe 时再补 `src/Applicati
 
 | 产物 | 位置 | 理由 |
 |---|---|---|
-| C# 工程 | `<源码树>/assets/csharp/<ProjectName>/` | `dotnet publish` 只能从源码树构建；`DotNetRuntime::ManagedSourceRoot()` 是唯一知道它在哪的东西 |
-| manifest | `<源码树>/assets/configs/games/<id>.game.json` | 它要能被提交进版本库 |
-| manifest 副本 | `<运行时根>/assets/configs/games/` | 构建树里的 assets 是**拷贝**，而运行中的宿主扫的是那份拷贝。只写源码树的话，新游戏要等下次构建才出现；只写运行时的话，下次 configure 就丢了 |
+| 工程 | `<源码树>/projects/<ProjectName>/`（manifest + `Content/` + `Scripts/`） | 一个游戏拥有的东西放在一处；`dotnet publish` 只能从源码树构建，`GameProjectsSourceRoot()` 是唯一知道它在哪的东西 |
+| 运行时副本 | `<运行时根>/assets/projects/<ProjectName>/`（manifest + `Content/`） | 构建树里的 assets 是**拷贝**，而运行中的宿主扫的是那份拷贝。只写源码树的话，新游戏要等下次构建才出现；只写运行时的话，下次 configure 就丢了。拷贝走的是和 Rebuild 同一个 `SyncProjectContentToRuntime` |
 
-因此 installed build 里这个功能整体不可用（没有 C# 源码可写），对话框会直接说明原因而不是画一个
+因此 installed build 里这个功能整体不可用（没有源码树可写），对话框会直接说明原因而不是画一个
 点不动的表单。
 
 创建**不**顺带构建：工程写出来是否正确与本机有没有 .NET SDK 无关，为了 `dotnet` 缺失而回滚一个好
@@ -314,10 +364,15 @@ CI 用 `--check` 守着。对话框完成后会把这条提示写在结果面板
 - **Launcher 放 `Application/Game/`**，不是 `Util/`：它是玩家入口，不是工具。
 - **不做"最近游玩/收藏"持久化**：没有需求支撑复杂度。
 - **`GkNext.Game`（ProbeGame）登记为 `sandbox` manifest**：作为绑定层的最小可运行样本，
-  既是 `DotNetSandbox` 的游戏，也是 launcher 菜单里最小的那条。
-- **控制通道用 cvar 而不是新命令机制**：launcher 的 `game.select`（设为 id 即运行，设为空即回菜单）
-  和 `game.newProject`，编辑器的 `ed.play` / `ed.playEject` / `ed.newProject`。它们同时是控制台
-  入口和 agent 脚本入口，不需要第二套机制。代价是必须把它们排除在世界 baseline 之外，见 §4.1。
+  既是 `DotNetSandbox` 的游戏，也是 launcher 菜单里最小的那条。它的工程目录 `projects/Sandbox/` 只有
+  manifest，代码留在 `assets/csharp`（§3 末尾说明了原因）。
+- **一个游戏一个工程目录**：manifest、内容、C# 以前分散在 `assets/configs/games/`、`assets/configs/<game>/`、
+  `assets/sounds/`、`assets/csharp/<Game>/`，改一个游戏要在四棵树里跳；现在都在 `projects/<Game>/`。
+  运行时仍是资产树的一部分（`assets/projects/`），这样一行打包/pak/移动端代码都不用改。
+- **控制通道用 cvar 而不是新命令机制**：launcher 的 `game.select`（设为 id 即运行，设为空即回菜单）、
+  `game.newProject` 和 `game.rebuild`（设为 id 即重建），编辑器的 `ed.play` / `ed.playEject` /
+  `ed.newProject`。它们同时是控制台入口和 agent 脚本入口，不需要第二套机制——也不需要按像素点按钮，
+  菜单布局一改那种脚本就失效。代价是必须把它们排除在世界 baseline 之外，见 §4.1。
 - **模板用文件树 + token 替换，不用代码生成器**：模板的价值在于它是一份**读得懂、跑得起来**的样例
   代码，而能被直接打开和修改的文件树本身就是那份样例；生成器会让"模板长什么样"这个问题只能靠运行
   它来回答。

@@ -1,4 +1,5 @@
-// Package csharpsln generates the solution file that makes assets/csharp openable in an IDE.
+// Package csharpsln generates the solution file that makes the managed code openable in an IDE:
+// the engine's assemblies under assets/csharp and every game project's Scripts/ under projects/.
 //
 // Everything the managed layer needs to *build* already lives in the csproj files, and CMake drives
 // them one project at a time. An IDE works the other way round: with no solution it has no reason
@@ -18,9 +19,11 @@ import (
 	"strings"
 )
 
-// ManagedRoot holds every managed project; SolutionPath is the generated entry point.
+// ManagedRoot holds the engine's managed projects and the generated solution; ProjectsRoot holds the
+// game projects, each keeping its C# in <Game>/Scripts beside its manifest and Content/.
 const (
 	ManagedRoot  = "assets/csharp"
+	ProjectsRoot = "projects"
 	SolutionPath = "assets/csharp/GkNextManaged.sln"
 )
 
@@ -69,7 +72,7 @@ func Run(repoRoot string, check bool) (Result, error) {
 		return Result{}, err
 	}
 	if len(projects) == 0 {
-		return Result{}, fmt.Errorf("no csproj found under %s", ManagedRoot)
+		return Result{}, fmt.Errorf("no csproj found under %s or %s", ManagedRoot, ProjectsRoot)
 	}
 
 	content := Render(projects)
@@ -96,45 +99,53 @@ func Run(repoRoot string, check bool) (Result, error) {
 
 // Discover finds every managed project, ordered the way the solution lists them.
 func Discover(repoRoot string) ([]Project, error) {
-	root := filepath.Join(repoRoot, filepath.FromSlash(ManagedRoot))
+	// Paths in the solution are relative to the directory it sits in, so a game project comes out as
+	// ..\..\projects\<Game>\Scripts\<Name>.csproj.
+	solutionDir := filepath.Join(repoRoot, filepath.FromSlash(ManagedRoot))
 	var projects []Project
 
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	for _, rootRel := range []string{ManagedRoot, ProjectsRoot} {
+		root := filepath.Join(repoRoot, filepath.FromSlash(rootRel))
+		if info, statErr := os.Stat(root); statErr != nil || !info.IsDir() {
+			continue
 		}
-		if entry.IsDir() {
-			if isBuildDir(entry.Name()) || isScratchDir(entry.Name()) {
-				return fs.SkipDir
+		err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+			if err != nil {
+				return err
 			}
+			if entry.IsDir() {
+				if isBuildDir(entry.Name()) || isScratchDir(entry.Name()) {
+					return fs.SkipDir
+				}
+				return nil
+			}
+			if filepath.Ext(entry.Name()) != ".csproj" {
+				return nil
+			}
+			relative, relErr := filepath.Rel(solutionDir, path)
+			if relErr != nil {
+				return relErr
+			}
+			slashed := filepath.ToSlash(relative)
+			isGame, gameErr := declaresGameInstance(filepath.Dir(path))
+			if gameErr != nil {
+				return gameErr
+			}
+			folder := engineFolder
+			if isGame {
+				folder = gamesFolder
+			}
+			projects = append(projects, Project{
+				Name:    strings.TrimSuffix(entry.Name(), ".csproj"),
+				RelPath: filepath.FromSlash(slashed),
+				Folder:  folder,
+				GUID:    deterministicGUID(slashed),
+			})
 			return nil
-		}
-		if filepath.Ext(entry.Name()) != ".csproj" {
-			return nil
-		}
-		relative, relErr := filepath.Rel(root, path)
-		if relErr != nil {
-			return relErr
-		}
-		slashed := filepath.ToSlash(relative)
-		isGame, gameErr := declaresGameInstance(filepath.Dir(path))
-		if gameErr != nil {
-			return gameErr
-		}
-		folder := engineFolder
-		if isGame {
-			folder = gamesFolder
-		}
-		projects = append(projects, Project{
-			Name:    strings.TrimSuffix(entry.Name(), ".csproj"),
-			RelPath: filepath.FromSlash(slashed),
-			Folder:  folder,
-			GUID:    deterministicGUID(slashed),
 		})
-		return nil
-	})
-	if err != nil {
-		return nil, err
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	sort.Slice(projects, func(i, j int) bool {
@@ -180,9 +191,10 @@ func declaresGameInstance(projectDir string) (bool, error) {
 }
 
 // isScratchDir reports the throwaway projects `gnb dotnet templates` instantiates to check that
-// the shipped game templates still compile. They live under assets/csharp because the generated
-// csproj reaches GkNext.Engine by relative path, and they are deleted as soon as the check is
-// done — but an interrupted run must not leave a phantom project in the IDE solution.
+// the shipped game templates still compile. They live under projects/ because that is where the
+// generated csproj finds the Directory.Build.props that points it at GkNext.Engine, and they are
+// deleted as soon as the check is done — but an interrupted run must not leave a phantom project in
+// the IDE solution.
 func isScratchDir(name string) bool {
 	return strings.HasPrefix(name, "_templatecheck_")
 }

@@ -33,7 +33,7 @@ public class MyAwesomeGame : NextGameInstance
 
 ## ⚡ Core Patterns
 
-- **Game Manifest**: Declare window attributes, scenes, and reload policies in `assets/configs/games/<id>.game.json`.
+- **One Project Directory per Game**: Each C# game is `projects/<Game>/` — `<id>.game.json` declares window attributes, scenes, and reload policies, `Content/` holds the game's own configs and assets (reached from C# through `GameContent.Path(...)`), and `Scripts/` holds the C# project.
 - **Node & Component Access**:
   ```csharp
   var player = Scene.FindNode("Player");

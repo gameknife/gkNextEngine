@@ -7,10 +7,11 @@ import (
 	"testing"
 )
 
-// writeProject lays out one managed project the way the repository does.
-func writeProject(t *testing.T, repoRoot, relDir, name, source string) {
+// writeProject lays out one managed project the way the repository does: root is ManagedRoot for
+// the engine's assemblies, ProjectsRoot for a game project's Scripts/.
+func writeProject(t *testing.T, repoRoot, root, relDir, name, source string) {
 	t.Helper()
-	dir := filepath.Join(repoRoot, filepath.FromSlash(ManagedRoot), filepath.FromSlash(relDir))
+	dir := filepath.Join(repoRoot, filepath.FromSlash(root), filepath.FromSlash(relDir))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("create %s: %v", dir, err)
 	}
@@ -22,11 +23,13 @@ func writeProject(t *testing.T, repoRoot, relDir, name, source string) {
 	}
 }
 
+const gameSource = "[GameInstance]\npublic sealed class Game { }\n"
+
 func newFixture(t *testing.T) string {
 	t.Helper()
 	repoRoot := t.TempDir()
-	writeProject(t, repoRoot, "GkNext.Engine", "GkNext.Engine", "namespace GkNext;\n")
-	writeProject(t, repoRoot, "Flappy/FlappyCSharp", "FlappyCSharp", "[GameInstance]\npublic sealed class Game { }\n")
+	writeProject(t, repoRoot, ManagedRoot, "GkNext.Engine", "GkNext.Engine", "namespace GkNext;\n")
+	writeProject(t, repoRoot, ProjectsRoot, "Flappy/Scripts", "FlappyCSharp", gameSource)
 	return repoRoot
 }
 
@@ -46,10 +49,13 @@ func TestDiscoverSplitsEngineFromGames(t *testing.T) {
 	}
 }
 
-// A restore copy of the project file lives in obj/; listing it would add a phantom project.
-func TestDiscoverSkipsBuildDirectories(t *testing.T) {
+// A restore copy of the project file lives in obj/; listing it would add a phantom project. The
+// same goes for a template check that was interrupted before it cleaned up.
+func TestDiscoverSkipsBuildAndScratchDirectories(t *testing.T) {
 	repoRoot := newFixture(t)
-	writeProject(t, repoRoot, "GkNext.Engine/obj/Debug", "GkNext.Engine", "namespace GkNext;\n")
+	writeProject(t, repoRoot, ManagedRoot, "GkNext.Engine/obj/Debug", "GkNext.Engine", "namespace GkNext;\n")
+	writeProject(t, repoRoot, ProjectsRoot, "Flappy/Scripts/obj/Debug", "FlappyCSharp", gameSource)
+	writeProject(t, repoRoot, ProjectsRoot, "_templatecheck_blank/Scripts", "_templatecheck_blank", gameSource)
 
 	projects, err := Discover(repoRoot)
 	if err != nil {
@@ -57,6 +63,20 @@ func TestDiscoverSkipsBuildDirectories(t *testing.T) {
 	}
 	if len(projects) != 2 {
 		t.Fatalf("Discover() returned %d projects, want 2", len(projects))
+	}
+}
+
+// A repository with no game projects yet is still a valid solution: the engine alone.
+func TestDiscoverWithoutProjectsDirectory(t *testing.T) {
+	repoRoot := t.TempDir()
+	writeProject(t, repoRoot, ManagedRoot, "GkNext.Engine", "GkNext.Engine", "namespace GkNext;\n")
+
+	projects, err := Discover(repoRoot)
+	if err != nil {
+		t.Fatalf("Discover() failed: %v", err)
+	}
+	if len(projects) != 1 || projects[0].Name != "GkNext.Engine" {
+		t.Fatalf("Discover() = %+v, want only GkNext.Engine", projects)
 	}
 }
 
@@ -88,7 +108,7 @@ func TestRunCheckReportsStaleSolution(t *testing.T) {
 	if _, err := Run(repoRoot, false); err != nil {
 		t.Fatalf("Run() failed: %v", err)
 	}
-	writeProject(t, repoRoot, "Brotato3D/Brotato3DCSharp", "Brotato3DCSharp", "[GameInstance]\npublic sealed class Game { }\n")
+	writeProject(t, repoRoot, ProjectsRoot, "Brotato3D/Scripts", "Brotato3DCSharp", gameSource)
 
 	if _, err := Run(repoRoot, true); err == nil {
 		t.Fatal("Run(check) accepted a solution missing a project")
@@ -107,9 +127,11 @@ func TestRenderShape(t *testing.T) {
 	if !strings.HasPrefix(content, byteOrderMark+"\r\nMicrosoft Visual Studio Solution File, Format Version 12.00\r\n") {
 		t.Fatalf("solution header is malformed: %q", content[:64])
 	}
-	want := `"Flappy\FlappyCSharp\FlappyCSharp.csproj"`
-	if !strings.Contains(content, want) {
-		t.Fatalf("solution does not contain %s", want)
+	// Relative to the solution in assets/csharp, so a game project is two levels up.
+	for _, want := range []string{`"GkNext.Engine\GkNext.Engine.csproj"`, `"..\..\projects\Flappy\Scripts\FlappyCSharp.csproj"`} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("solution does not contain %s", want)
+		}
 	}
 	if strings.Contains(content, `\\`) {
 		t.Fatal("solution contains escaped separators")
@@ -128,7 +150,7 @@ func TestDeterministicGUIDIsStable(t *testing.T) {
 	if len(first) != 38 || first[0] != '{' || first[37] != '}' {
 		t.Fatalf("GUID %q is not in solution format", first)
 	}
-	if first == deterministicGUID("Flappy/FlappyCSharp/FlappyCSharp.csproj") {
+	if first == deterministicGUID("../../projects/Flappy/Scripts/FlappyCSharp.csproj") {
 		t.Fatal("two projects share a GUID")
 	}
 }

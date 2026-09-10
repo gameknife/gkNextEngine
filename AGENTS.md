@@ -26,10 +26,10 @@ gkNextRenderer is a cross-platform 3D game engine built with modern C++20 and Vu
   CharacterDemo, FlappyCpp/FlappyCSharp (`Game/Flappy/`), Brotato3DCSharp, DotNetSandbox, gkNextLauncher,
   TruckerDemo, StudioSim, AirportSim, CitySolSim, NextWorldTravel, Voyage3D
   - `gkNextLauncher` 在同一个进程内加载/卸载任意 C# 游戏（Unity 的 Play 模型）；三个 C# 目标
-    与它共用 `ManagedGameHostInstance`，差异全部在 `assets/configs/games/*.game.json`。
+    与它共用 `ManagedGameHostInstance`，差异全部在各自工程的 `projects/<Game>/<id>.game.json`。
     `gkNextEditor` 用同一个 `ManagedGameSession` 实现 play-in-editor。两者都能从模板**新建**
-    C# 游戏项目（launcher 的 New Project 卡片 / 编辑器的 File > New Game Project），模板是
-    `assets/templates/games/` 下的内容目录，加模板不用改代码。CoreCLR 专属——
+    C# 游戏项目（launcher 的 New Project 卡片 / 编辑器的 File > New Game Project），写到
+    `projects/<Name>/`；模板是 `assets/templates/games/` 下的内容目录，加模板不用改代码。CoreCLR 专属——
     launcher 在 AOT 配置下不构建，编辑器的 PIE 在 AOT 下报告不可用。见
     [托管游戏 Launcher](docs/designs/managed-game-launcher-design.md)
 - Util: Packager (asset paking), ScadCatalog
@@ -241,7 +241,10 @@ assets/
 ├── geo/<tile>/              # Generated real-world city tiles (.scad + .hmap + poi.json);
 │                           # gitignored, shipped as assets/paks/geo.pak (`gnb geo pak`)
 ├── scripts/                 # Hand-maintained MagicaLego .mlscript files
-└── csharp/                  # Managed scripting sources (GkNext.Engine / .Bootstrap / .Game)
+└── csharp/                  # The engine's managed sources (GkNext.Engine / .Bootstrap / .Game)
+
+projects/                    # C# game projects, one per game: <id>.game.json + Content/ + Scripts/
+                             # (runtime copy: assets/projects/<Game>/; see projects/README.md)
 
 tools/gnb/                   # Project CLI (Go) — see "gnb" section below
 ```
@@ -276,10 +279,18 @@ tools/gnb/                   # Project CLI (Go) — see "gnb" section below
 - Changing a reflection registration means `gnb csharpgen --refresh` (re-dumps the committed
   manifest and regenerates the C# wrappers). A stale manifest fails `Test_ReflectionManifest.cpp`.
 
-**C# Scripting (`Modules/NextDotNet` + `assets/csharp/`):**
-- Managed sources live in `assets/csharp/`: `GkNext.Engine` (contract + generated bindings),
-  `GkNext.Bootstrap` (never-unloaded entry, owns the `[UnmanagedCallersOnly]` export),
-  `GkNext.Game` (reloadable game code)
+**C# Scripting (`Modules/NextDotNet` + `assets/csharp/` + `projects/`):**
+- The engine's managed sources live in `assets/csharp/`: `GkNext.Engine` (contract + generated
+  bindings), `GkNext.Bootstrap` (never-unloaded entry, owns the `[UnmanagedCallersOnly]` export),
+  `GkNext.Game` (the binding probe, run as the `sandbox` game)
+- **Games live in `projects/<Game>/`, one directory per game**: `<id>.game.json` (manifest),
+  `Content/` (its configs/sounds/scenes) and `Scripts/` (its csproj + C#). Nothing a game owns goes
+  under `assets/`. At runtime CMake copies each manifest + `Content/` to `assets/projects/<Game>/`
+  (so paks/Android/iOS/asset trace carry it unchanged); C# reaches its own content with
+  `GameContent.Path("configs/x.json")` / `GameContent.ReadFile(...)`, engine assets keep their
+  `assets/...` path. The launcher's/editor's Rebuild republishes the C# *and* re-syncs `Content/`.
+  `FlappyCpp` and C++ `Brotato3D` read their C# twin's project content directly. See
+  `projects/README.md`
 - **Adding a binding is one line in `src/Modules/NextDotNet/EngineApi.def.h` plus one implementation
   function in `EngineApi.cpp`**, then `gnb csharpgen`. Never hand-edit `Engine.g.cs`.
   See `docs/AGENT_GUIDE/DotNetBindings.md`.
@@ -312,8 +323,9 @@ tools/gnb/                   # Project CLI (Go) — see "gnb" section below
   generator emits the entry point, and a missing/duplicate/invalid one is a compile error.
   `docs/AGENT_GUIDE/CSharpGameDevelopment.md` is the getting-started guide; `FlappyCSharp` is its
   worked example.
-- **A C# game is a manifest plus a CMake target.** `assets/configs/games/<id>.game.json` declares the
-  window, assembly, required modules, initial scene and hot-reload policy;
+- **A C# game is a project directory plus (optionally) a CMake target.** `projects/<Game>/<id>.game.json`
+  declares the window, assembly, required modules, initial scene and hot-reload policy (its `project`
+  field is relative to the project directory, e.g. `Scripts/FlappyCSharp.csproj`);
   `Modules::NextDotNet::ManagedGameHostInstance` is the single shell that forwards every lifecycle
   hook, so the per-game `CreateGameInstance` is ~15 lines. Never hand-write hook forwarding again —
   that is how `FlappyCSharp` silently lost gamepad input.
@@ -322,8 +334,9 @@ tools/gnb/                   # Project CLI (Go) — see "gnb" section below
   back to the editor so the running game's scene can be inspected and edited through the Outliner
   and Properties panels. Editor Stop reloads the scene that was open before Play and keeps no edits
   made during it. See `docs/designs/managed-game-launcher-design.md`.
-- An application gets its C# through `gk_dotnet_managed_game(<target> PROJECT <csproj> DIR <dir>)`;
-  a target that links the module without hosting C# calls `gk_dotnet_stub_game(<target>)` instead
+- An application gets its C# through `gk_dotnet_managed_game(<target> PROJECT <csproj> DIR <dir>)`
+  (`PROJECT "${GK_GAME_PROJECTS_ROOT}/<Game>/Scripts/<Name>.csproj"`); a target that links the module
+  without hosting C# calls `gk_dotnet_stub_game(<target>)` instead
 - `FlappyCpp` vs `FlappyCSharp` replay parity is the binding regression — see
   `docs/projects/flappy-bird-parity/introduction.md`
 - Per-frame allocation is the realistic way this layer degrades frame time: set

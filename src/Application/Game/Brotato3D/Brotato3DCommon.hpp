@@ -6,13 +6,15 @@
 
 namespace Brotato3DUtil
 {
-    inline constexpr const char* EnemiesConfigPath = "assets/configs/brotato3d/enemies.json";
-    inline constexpr const char* WeaponsConfigPath = "assets/configs/brotato3d/weapons.json";
-    inline constexpr const char* UpgradesConfigPath = "assets/configs/brotato3d/upgrades.json";
-    inline constexpr const char* WavesConfigPath = "assets/configs/brotato3d/waves.json";
-    inline constexpr const char* ShopItemsConfigPath = "assets/configs/brotato3d/shop_items.json";
-    inline constexpr const char* ItemsConfigPath = "assets/configs/brotato3d/items.json";
-    inline constexpr const char* CharactersConfigPath = "assets/configs/brotato3d/characters.json";
+    // Game data lives in the Brotato3D game project (projects/Brotato3D/Content/configs), shared
+    // with its C# port Brotato3DCSharp. The runtime copy sits under assets/projects.
+    inline constexpr const char* EnemiesConfigPath = "assets/projects/Brotato3D/Content/configs/enemies.json";
+    inline constexpr const char* WeaponsConfigPath = "assets/projects/Brotato3D/Content/configs/weapons.json";
+    inline constexpr const char* UpgradesConfigPath = "assets/projects/Brotato3D/Content/configs/upgrades.json";
+    inline constexpr const char* WavesConfigPath = "assets/projects/Brotato3D/Content/configs/waves.json";
+    inline constexpr const char* ShopItemsConfigPath = "assets/projects/Brotato3D/Content/configs/shop_items.json";
+    inline constexpr const char* ItemsConfigPath = "assets/projects/Brotato3D/Content/configs/items.json";
+    inline constexpr const char* CharactersConfigPath = "assets/projects/Brotato3D/Content/configs/characters.json";
     inline constexpr float PlayerBaseSpeed = 5.0f;
     inline constexpr float PickupBaseRadius = 1.6f;
     inline constexpr float PickupXpRadius = 0.12f;

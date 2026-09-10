@@ -69,8 +69,9 @@ TEST_CASE("the tps template only plays clips its rigs actually have", "[Unit][Do
     const std::string playerRigPath = "assets/scad/characters/nextdayz_survivor.scad";
     const std::string enemyRigPath = "assets/scad/characters/nextdayz_infected.scad";
 
-    const std::string gameSource = ReadTemplateFile(tps->directory / "files" / "__ProjectName__Game.cs");
-    const std::string squadSource = ReadTemplateFile(tps->directory / "files" / "EnemySquad.cs");
+    const std::filesystem::path scripts = tps->directory / "files" / "Scripts";
+    const std::string gameSource = ReadTemplateFile(scripts / "__ProjectName__Game.cs");
+    const std::string squadSource = ReadTemplateFile(scripts / "EnemySquad.cs");
     REQUIRE_FALSE(gameSource.empty());
     REQUIRE_FALSE(squadSource.empty());
     CHECK(gameSource.find(playerRigPath) != std::string::npos);

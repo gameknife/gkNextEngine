@@ -10,7 +10,7 @@ std::unique_ptr<NextGameInstanceBase> CreateGameInstance(Vulkan::WindowConfig& c
     return std::make_unique<Modules::NextDotNet::ManagedGameHostInstance>(
         config, options, engine,
         Modules::NextDotNet::FManagedGameHostOptions{
-            .manifestPath = "assets/configs/games/flappy.game.json",
+            .manifestPath = "assets/projects/Flappy/flappy.game.json",
             .linkedModules = {"NextAudio", "NextPhysics", "GltfLoader"},
         });
 }

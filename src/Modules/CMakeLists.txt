@@ -130,6 +130,10 @@ if(TARGET NextDotNet)
         # source tree, not the runtime root: only the published assemblies are copied next to the
         # executable, and resolving "assets/csharp" against the runtime root finds nothing.
         GK_DOTNET_MANAGED_SOURCE_ROOT="${GK_DOTNET_MANAGED_ROOT}"
+        # Where game projects live in the source tree (projects/<Game>/). A manifest is read from
+        # its runtime copy under assets/projects, which holds no C#; rebuilding a game or creating
+        # a new one needs the real directory.
+        GK_GAME_PROJECTS_SOURCE_ROOT="${GK_GAME_PROJECTS_ROOT}"
     )
     target_link_libraries(NextDotNet PRIVATE SDL3::SDL3 imgui::imgui NextUI)
 

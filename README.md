@@ -184,7 +184,7 @@ Windows 上若存在 `C:/Program Files/RenderDoc/renderdoc_app.h`，构建会自
 
 - **双后端、同一份托管代码**：开发用 CoreCLR 换热重载与调试，发布 / 移动端用 NativeAOT 换体积与启动速度，切换只改一个 CMake option，C# 一行不动；`gnb dotnet ci` 强制校验双后端 ABI
 - **绑定面只声明一次**：引擎函数在 `EngineApi.def.h` 加一行，组件属性复用 `entt::meta` 反射，`gnb csharpgen` 生成 C# 封装
-- **一个游戏 = 一份 manifest**：`assets/configs/games/<id>.game.json` 声明窗口、程序集、依赖模块、初始场景与热重载策略；per-game 的原生壳只有 15 行，8 个引擎 hook 共用唯一一份转发实现
+- **一个游戏 = 一个工程目录**：`projects/<Game>/` 里放 manifest（`<id>.game.json`，声明窗口、程序集、依赖模块、初始场景与热重载策略）、`Content/`（游戏自己的配置 / 音效 / 场景，C# 里用 `GameContent.Path(...)` 引用）和 `Scripts/`（C# 工程），不散落在引擎的 `assets/` 里；per-game 的原生壳只有 15 行，8 个引擎 hook 共用唯一一份转发实现
 - **从模板新建**：launcher 的 New Project 卡片或编辑器的 File > New Game Project，五个模板覆盖常见起点（空白 / 2D 街机 / 俯视角生存 / 第一人称漫游 / 第三人称射击）；加模板只要往 `assets/templates/games/` 放一个目录，不改代码
 - **进程内装卸**：`gkNextLauncher` 用可回收 `AssemblyLoadContext` 在同一个进程里选择、加载、卸载任意托管游戏，菜单里就能 Rebuild C#；卸载走全量世界重置（场景 / 物理 / 音频 / cvar / showflags / 窗口标题），连续未回收会被判定为泄漏并要求重启
 - **parity 作为回归**：`FlappyCpp` 与 `FlappyCSharp` 是逐行对照实现，用确定性 replay 逐帧比对，绑定回归会立刻暴露
@@ -356,8 +356,8 @@ Windows 上若存在 `C:/Program Files/RenderDoc/renderdoc_app.h`，构建会自
 
 1. 启动 `gnb run gkNextLauncher`，点网格末尾的 **New Project** 卡片（或在编辑器里 **File > New Game Project...**）
 2. 填工程名，从五个模板里挑一个（空白 / 2D 街机 / 俯视角生存 / 第一人称漫游 / 第三人称射击），勾上 Publish
-3. 生成两样东西并立刻可玩：`assets/csharp/<ProjectName>/` 与 `assets/configs/games/<id>.game.json`
-4. `gnb dotnet sln` 让新工程进 `assets/csharp/GkNextManaged.sln`；改完 C# 在 launcher 或编辑器里点 **Rebuild C#**，开着热重载时正在跑的游戏会直接接手新程序集
+3. 生成一个工程目录 `projects/<ProjectName>/`（manifest + `Content/` + `Scripts/`），立刻可玩
+4. `gnb dotnet sln` 让新工程进 `assets/csharp/GkNextManaged.sln`；改完 C# 或 `Content/` 在 launcher 或编辑器里点 **Rebuild C#**，开着热重载时正在跑的游戏会直接接手新程序集
 
 详见 [用 C# 开发 gkNextEngine 应用](docs/AGENT_GUIDE/CSharpGameDevelopment.md)。
 

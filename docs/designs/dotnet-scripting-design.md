@@ -342,7 +342,9 @@ assets/csharp/                     托管侧，对标已删除的 assets/typescr
     NextGameInstance.cs            游戏基类
   GkNext.Game/                     可热重载的游戏程序集（AOT 下静态链接进 Bootstrap）
   GkNext.SourceGen/                [GameInstance] 注册表生成器
-  Flappy/FlappyCSharp/             验收载体
+
+projects/<Game>/                   游戏工程：<id>.game.json + Content/ + Scripts/（见 projects/README.md）
+  Flappy/Scripts/                  验收载体 FlappyCSharp
 
 external/dotnet/                   gnb dotnet setup 拉取的 pinned SDK/runtime
 ```

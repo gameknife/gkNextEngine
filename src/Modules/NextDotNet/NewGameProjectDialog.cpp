@@ -107,9 +107,9 @@ namespace Modules::NextDotNet
 
     std::string FNewGameProjectDialog::UnavailableReason()
     {
-        if (DotNetRuntime::ManagedSourceRoot().empty())
+        if (GameProjectsSourceRoot().empty() || DotNetRuntime::ManagedSourceRoot().empty())
         {
-            return "This build has no C# sources to write into (an installed build never does).";
+            return "This build has no source tree to write a project into (an installed build never does).";
         }
         if (GameTemplateRoot().empty())
         {
@@ -449,14 +449,15 @@ namespace Modules::NextDotNet
             ImGui::SetCursorPosX(24.0f);
 
             // Guidance Inset Panel
-            if (NextUI::Theme::BeginInsetPanel("##DoneGuidance", ImVec2(contentWidth, 110.0f), false, 0,
+            if (NextUI::Theme::BeginInsetPanel("##DoneGuidance", ImVec2(contentWidth, 128.0f), false, 0,
                                                ImVec2(16.0f, 12.0f), 0.20f))
             {
                 ImGui::TextColored(Color(EColor::AccentHover), ICON_FA_LIGHTBULB "  Next Steps");
                 ImGui::Spacing();
                 ImGui::PushStyleColor(ImGuiCol_Text, Color(EColor::TextMuted));
                 ImGui::TextWrapped(
-                    "1. Run 'gnb dotnet sln' to include the new project into 'assets/csharp/GkNextManaged.sln'.\n"
+                    "1. Run 'gnb dotnet sln' to include the new project's Scripts/ into "
+                    "'assets/csharp/GkNextManaged.sln'. Configs, sounds and scenes go in its Content/.\n"
                     "2. Open the solution in your IDE (VS / Rider / VS Code) to get full intellisense and GkNext.Engine "
                     "support.\n"
                     "3. Launch or Play-In-Editor from gkNextLauncher or gkNextEditor.");
@@ -644,7 +645,7 @@ namespace Modules::NextDotNet
                 }
                 ImGui::PopStyleVar(2);
                 ImGui::TextColored(Color(EColor::TextDim),
-                                   "Sets directory assets/csharp/<Name>/, namespace and class name.");
+                                   "Sets directory projects/<Name>/, namespace and class name.");
 
                 ImGui::Spacing();
 

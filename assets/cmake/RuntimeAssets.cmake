@@ -38,6 +38,14 @@ set(ASSET_DIRS
     textures
 )
 
+# Game projects live outside this directory, in <repo>/projects/<Game>/, each one holding its
+# manifest, its Content/ and its C# Scripts/. At runtime they are one more subtree of the asset
+# namespace — assets/projects/<Game>/ — so paks, the asset trace, the Android APK and the iOS bundle
+# all carry them without knowing they exist. Only the manifest and Content/ are copied: Scripts/
+# reaches the runtime as the published assembly in <bin>/csharp, never as source.
+set(game_projects_src_dir "${CMAKE_SOURCE_DIR}/projects")
+set(game_projects_out_dir "${output_base_dir}/projects")
+
 # Android packages the generated asset tree directly through Gradle. Keep that
 # tree exact across CMake regenerations so removed source assets cannot survive
 # in a later APK. The stamps are removed together with their destinations so the
@@ -47,6 +55,11 @@ if(ANDROID)
         file(REMOVE_RECURSE "${output_base_dir}/${dir}")
         file(REMOVE "${CMAKE_CURRENT_BINARY_DIR}/${dir}.stamp")
     endforeach()
+    file(REMOVE_RECURSE "${game_projects_out_dir}")
+    file(GLOB stale_project_stamps "${CMAKE_CURRENT_BINARY_DIR}/project-*.stamp")
+    if(stale_project_stamps)
+        file(REMOVE ${stale_project_stamps})
+    endif()
 endif()
 
 set(all_asset_files "")
@@ -72,6 +85,47 @@ foreach(dir IN LISTS ASSET_DIRS)
         COMMAND ${CMAKE_COMMAND} -E touch ${${dir}_stamp}
         DEPENDS ${${dir}_files}
         COMMENT "Copying ${dir}..."
+    )
+endforeach()
+
+# One copy rule per project, so editing one game's content does not recopy every other game's.
+# The directory listing is CONFIGURE_DEPENDS: a project created after configure (the launcher's New
+# Project writes one) is picked up by the next build instead of waiting for a manual reconfigure.
+# Directories starting with '_' are scratch — `gnb dotnet templates` instantiates its throwaway
+# projects there and deletes them again.
+file(GLOB game_project_dirs CONFIGURE_DEPENDS LIST_DIRECTORIES true "${game_projects_src_dir}/*")
+foreach(project_dir IN LISTS game_project_dirs)
+    get_filename_component(project_name "${project_dir}" NAME)
+    if(NOT IS_DIRECTORY "${project_dir}" OR project_name MATCHES "^_")
+        continue()
+    endif()
+
+    file(GLOB project_manifests CONFIGURE_DEPENDS "${project_dir}/*.game.json")
+    if(NOT project_manifests)
+        continue()
+    endif()
+    file(GLOB_RECURSE project_content CONFIGURE_DEPENDS "${project_dir}/Content/*")
+    list(APPEND all_asset_files ${project_manifests} ${project_content})
+
+    set(project_out_dir "${game_projects_out_dir}/${project_name}")
+    set(project_commands
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${project_out_dir}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${project_manifests} "${project_out_dir}")
+    if(IS_DIRECTORY "${project_dir}/Content")
+        list(APPEND project_commands
+            COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
+                "${project_dir}/Content" "${project_out_dir}/Content")
+    endif()
+
+    set(project_stamp "${CMAKE_CURRENT_BINARY_DIR}/project-${project_name}.stamp")
+    list(APPEND all_asset_stamps ${project_stamp})
+    add_custom_command(
+        OUTPUT ${project_stamp}
+        ${project_commands}
+        COMMAND ${CMAKE_COMMAND} -E touch ${project_stamp}
+        DEPENDS ${project_manifests} ${project_content}
+        COMMENT "Copying game project ${project_name}..."
+        VERBATIM
     )
 endforeach()
 

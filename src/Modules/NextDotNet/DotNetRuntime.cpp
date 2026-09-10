@@ -45,8 +45,10 @@ namespace Modules::NextDotNet
         }
     }
 
-    /// The C# sources, for everything that compiles or writes rather than loads: the start-up
-    /// rebuild, a host-initiated republish, and scaffolding a new game from a template.
+    /// The engine's C# sources, for everything that compiles rather than loads: the start-up
+    /// rebuild of GkNext.Game, and the templates a new game project is scaffolded from (they sit
+    /// beside it in the source assets tree). Game projects themselves live in projects/ and are
+    /// found through GameProjectsSourceRoot().
     ///
     /// Not resolved through the asset path: assets/csharp is not copied next to the executable
     /// — only its published output is — so resolving it against the runtime root silently finds
@@ -80,26 +82,19 @@ namespace Modules::NextDotNet
         return NextRenderer::GetExecutableDirectory() / "csharp";
     }
 
-    bool DotNetRuntime::PublishProject(const std::string& projectRelativeToManagedSources,
+    bool DotNetRuntime::PublishProject(const std::filesystem::path& projectFile,
                                        const std::string& outputSubdirectory,
                                        std::string& outError)
     {
 #if GK_DOTNET_USE_AOT
-        (void)projectRelativeToManagedSources;
+        (void)projectFile;
         (void)outputSubdirectory;
         outError = "the managed game is linked into this binary; rebuild the executable instead";
         return false;
 #else
-        const std::filesystem::path sourceRoot = ManagedSourceRoot();
-        if (sourceRoot.empty())
-        {
-            outError = "no C# sources are reachable from this build";
-            return false;
-        }
-
-        const std::filesystem::path project = sourceRoot / projectRelativeToManagedSources;
+        const std::filesystem::path project = projectFile.lexically_normal();
         std::error_code ec;
-        if (!std::filesystem::exists(project, ec))
+        if (project.empty() || !std::filesystem::exists(project, ec))
         {
             outError = "project not found: " + project.string();
             return false;

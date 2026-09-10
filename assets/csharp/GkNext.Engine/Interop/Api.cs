@@ -10,7 +10,7 @@ namespace GkNext.Interop;
 public static unsafe class Api
 {
     /// <summary>ABI version negotiated at bootstrap. Must match GK_DOTNET_ABI_VERSION.</summary>
-    public const uint AbiVersion = 5;
+    public const uint AbiVersion = 6;
 
     public static FEngineApi* Table { get; private set; }
 

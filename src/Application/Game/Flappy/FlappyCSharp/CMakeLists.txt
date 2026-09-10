@@ -8,6 +8,6 @@ gk_add_application(FlappyCSharp
 )
 
 gk_dotnet_managed_game(FlappyCSharp
-    PROJECT "${GK_DOTNET_MANAGED_ROOT}/Flappy/FlappyCSharp/FlappyCSharp.csproj"
+    PROJECT "${GK_GAME_PROJECTS_ROOT}/Flappy/Scripts/FlappyCSharp.csproj"
     DIR flappy
 )

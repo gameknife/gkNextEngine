@@ -2,12 +2,19 @@
 
 Generated from the gkNextEngine `{{TemplateId}}` game template.
 
+Everything this game owns lives in this directory, `projects/{{ProjectName}}/`:
+
 | | |
 |---|---|
-| Game id | `{{GameId}}` |
-| Manifest | `assets/configs/games/{{GameId}}.game.json` |
-| Sources | `assets/csharp/{{ProjectName}}/` |
+| `{{GameId}}.game.json` | The manifest: window, assembly, required modules, initial scene, hot reload. |
+| `Content/` | The game's own configs, sounds, textures and scenes. Reach them with `GameContent.Path("...")` / `GameContent.ReadFile("...")`. |
+| `Scripts/` | The C# project, `{{ProjectName}}.csproj`. |
 | Assembly | `{{ProjectName}}.dll`, published into `<bin>/csharp/{{GameId}}/` |
+
+At runtime the manifest and `Content/` are copied to `assets/projects/{{ProjectName}}/`, beside every
+other asset, so they are paked and packaged like the rest. `Scripts/` never is: the published
+assembly is what runs. Engine assets (`assets/scad/...`, `assets/models/...`) are still named by
+their own path.
 
 ## Run it
 
@@ -19,8 +26,9 @@ Generated from the gkNextEngine `{{TemplateId}}` game template.
 
 1. `gnb dotnet sln` once, so this project joins `assets/csharp/GkNextManaged.sln` — open the
    *solution*, never the bare csproj, or the IDE will not load `GkNext.Engine` alongside it.
-2. Edit the C#, then press **Rebuild C#** in the launcher or the editor. With `hotReload` on (it is,
-   in the manifest) a running game picks the new assembly up without restarting.
+2. Edit the C# or anything in `Content/`, then press **Rebuild C#** in the launcher or the editor:
+   it republishes the assembly and refreshes the runtime copy of `Content/`. With `hotReload` on (it
+   is, in the manifest) a running game picks the new assembly up without restarting.
 
 ## Give it its own executable (optional)
 
@@ -40,6 +48,7 @@ per game meant writing the same bug per game:
 | `Mathx` / `Quat` | `Clamp`, `Lerp`, `TurnTowards` (shortest way round an angle), `Quat.AroundY`, `Quat.LookAlong`. |
 | `Sky.Apply(...)` | Sky and sun for a procedurally built scene, which starts with neither. |
 | `ManagedImGui` + `HudPalette` | Panels, buttons, progress bars, shadowed text — one draw list per frame. |
+| `GameContent` | This project's `Content/`, as paths every engine API accepts. |
 | `SceneReady` | On `NextGameInstance`. False until the scene is committed and node ids resolve. |
 
 ## Where to look next
@@ -47,4 +56,4 @@ per game meant writing the same bug per game:
 - `docs/AGENT_GUIDE/CSharpGameDevelopment.md` — the whole managed game surface, written for people
   arriving from Unity.
 - `docs/AGENT_GUIDE/DotNetBindings.md` — when the engine call you want does not exist yet.
-- `assets/csharp/Flappy/FlappyCSharp/` — a complete worked example.
+- `projects/Flappy/` — a complete worked example, content and all.

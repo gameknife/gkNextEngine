@@ -75,9 +75,11 @@ namespace Modules::NextDotNet
         void SetUiCanvas(float offsetX, float offsetY, float width, float height);
         void ClearUiCanvas();
 
-        /// Rebuilds a game from its C# sources and publishes it where the next load will find it.
-        /// If that game is the one currently running and it has hot reload on, the new assembly is
-        /// picked up within the poll interval; otherwise it takes effect at the next load.
+        /// Rebuilds a game from its C# sources and publishes it where the next load will find it,
+        /// then refreshes the runtime copy of the project's manifest and Content/ from the source
+        /// tree. If that game is the one currently running and it has hot reload on, the new
+        /// assembly is picked up within the poll interval; otherwise it takes effect at the next
+        /// load.
         ///
         /// Synchronous, and a publish takes seconds: the caller is expected to have drawn a frame
         /// saying so first. Returns false with outError set on any failure, having changed nothing.

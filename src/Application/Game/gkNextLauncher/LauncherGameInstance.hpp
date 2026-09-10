@@ -62,6 +62,9 @@ private:
     /// frame saying what it is doing before the process stops responding.
     int pendingRebuildIndex_ = -1;
     std::string rebuildStatus_;
+    /// Backing store for the game.rebuild cvar: the same request a card's Rebuild button makes, by
+    /// game id, for the console and for scripts that should not depend on where a card is drawn.
+    std::string rebuildRequest_;
 
     /// Scaffolding a new game from a template. The dialog owns the form and the file writing; the
     /// launcher only opens it and reacts to what it created.

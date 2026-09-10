@@ -10,6 +10,6 @@ gk_add_application(Brotato3DCSharp
 )
 
 gk_dotnet_managed_game(Brotato3DCSharp
-    PROJECT "${GK_DOTNET_MANAGED_ROOT}/Brotato3D/Brotato3DCSharp/Brotato3DCSharp.csproj"
+    PROJECT "${GK_GAME_PROJECTS_ROOT}/Brotato3D/Scripts/Brotato3DCSharp.csproj"
     DIR brotato3d
 )

@@ -119,7 +119,7 @@ void LauncherGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
 {
     cvars.RegisterString(
         "game.select", "", &selectedGameId_, NextCVar::ECVarFlags::None,
-        "Managed game to run: a game id from assets/configs/games, or empty to return to the menu",
+        "Managed game to run: a game id from assets/projects, or empty to return to the menu",
         [this]()
         {
             pendingSelection_ = selectedGameId_;
@@ -140,6 +140,27 @@ void LauncherGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
                                  newProjectDialog_.Open();
                              }
                          });
+
+    // Same request as a card's Rebuild button, addressed by id rather than by where the card is
+    // drawn: a script that clicked a pixel broke every time the menu layout changed.
+    cvars.RegisterString("game.rebuild", "", &rebuildRequest_, NextCVar::ECVarFlags::None,
+                         "Game id to rebuild: republish its C# and refresh its Content/ (as the Rebuild button)",
+                         [this]()
+                         {
+                             const auto it = std::find_if(entries_.begin(), entries_.end(),
+                                                          [this](const FEntry& entry)
+                                                          { return entry.manifest.id == rebuildRequest_; });
+                             if (it == entries_.end())
+                             {
+                                 if (!rebuildRequest_.empty())
+                                 {
+                                     SPDLOG_ERROR("[launcher] no managed game with id '{}'", rebuildRequest_);
+                                 }
+                                 return;
+                             }
+                             pendingRebuildIndex_ = static_cast<int>(std::distance(entries_.begin(), it));
+                             rebuildStatus_ = "Rebuilding " + it->manifest.id + "...";
+                         });
 }
 
 void LauncherGameInstance::OnInit()
@@ -149,7 +170,7 @@ void LauncherGameInstance::OnInit()
     GetEngine().GetShowFlags().DebugGraphicsPanel = false;
     GetEngine().GetUserSettings().ShowOverlay = false;
 
-    GetSession().SetBaselineExcludedCVars({"game.select", "game.newProject"});
+    GetSession().SetBaselineExcludedCVars({"game.select", "game.newProject", "game.rebuild"});
 
     RefreshEntries();
 
@@ -168,7 +189,7 @@ void LauncherGameInstance::RefreshEntries()
     entries_.clear();
 
     for (FManagedGameManifest& manifest :
-         Modules::NextDotNet::ScanManagedGameManifests(Modules::NextDotNet::kManagedGameManifestDirectory))
+         Modules::NextDotNet::ScanManagedGameManifests(Modules::NextDotNet::kManagedGameProjectsDirectory))
     {
         FEntry entry;
         entry.manifest = std::move(manifest);
@@ -490,7 +511,7 @@ void LauncherGameInstance::DrawMenu()
         ImGui::Spacing();
         ImGui::TextColored(Color(EColor::TextMuted),
                            ICON_FA_TRIANGLE_EXCLAMATION " No managed games found under %s. Start one below.",
-                           Modules::NextDotNet::kManagedGameManifestDirectory);
+                           Modules::NextDotNet::kManagedGameProjectsDirectory);
         ImGui::Spacing();
     }
 

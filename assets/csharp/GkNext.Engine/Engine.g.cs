@@ -107,6 +107,7 @@ namespace GkNext.Interop
         public delegate* unmanaged<byte*, int, int> Paths_GetProjectRoot;
         public delegate* unmanaged<byte*, int, int> Paths_GetOutputDir;
         public delegate* unmanaged<GkStr, byte*, int, int> Assets_ReadFile;
+        public delegate* unmanaged<byte*, int, int> Assets_GetGameContentRoot;
         public delegate* unmanaged<uint, uint, int> Component_Has;
         public delegate* unmanaged<uint, uint, uint, int> Component_GetBool;
         public delegate* unmanaged<uint, uint, uint, int, void> Component_SetBool;
@@ -133,7 +134,7 @@ namespace GkNext.Interop
     /// <summary>Number of bindings in the table, checked against the native side.</summary>
     public static class EngineApiInfo
     {
-        public const int EntryCount = 110;
+        public const int EntryCount = 111;
     }
 }
 
@@ -936,6 +937,21 @@ namespace GkNext
             finally
             {
                 Utf8Arena.Release(mark);
+            }
+        }
+
+        public static string GetGameContentRoot()
+        {
+            int required = Api.Table->Assets_GetGameContentRoot(null, 0);
+            if (required <= 0)
+            {
+                return string.Empty;
+            }
+            byte[] buffer = new byte[required];
+            fixed (byte* bufferPtr = buffer)
+            {
+                int written = Api.Table->Assets_GetGameContentRoot(bufferPtr, required);
+                return written <= 0 ? string.Empty : System.Text.Encoding.UTF8.GetString(bufferPtr, written);
             }
         }
     }

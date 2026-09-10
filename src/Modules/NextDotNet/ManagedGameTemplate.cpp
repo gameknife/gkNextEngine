@@ -109,32 +109,22 @@ namespace Modules::NextDotNet
             return true;
         }
 
-        /// Manifest ids already taken, from wherever a host would find them: the loose source tree
-        /// and whatever the running process has mounted. Both matter — a build tree can hold a
-        /// manifest the source tree does not, and reusing its id would make two games collide in
-        /// the menu.
+        /// Manifest ids already taken, from wherever a host would find them: the source tree's
+        /// projects and whatever the running process has in its runtime copy or has mounted. Both
+        /// matter — a build tree can hold a project the source tree does not, and reusing its id
+        /// would make two games collide in the menu.
         std::vector<std::string> ExistingGameIds()
         {
             std::vector<std::string> ids;
-            for (const FManagedGameManifest& manifest : ScanManagedGameManifests(kManagedGameManifestDirectory))
+            for (const FManagedGameManifest& manifest : ScanManagedGameManifests(kManagedGameProjectsDirectory))
             {
                 ids.push_back(manifest.id);
             }
-
-            const std::filesystem::path sourceAssets = SourceAssetsRoot();
-            if (!sourceAssets.empty())
+            if (const std::filesystem::path sourceProjects = GameProjectsSourceRoot(); !sourceProjects.empty())
             {
-                std::error_code ec;
-                const std::filesystem::path directory = sourceAssets / "configs" / "games";
-                for (const auto& entry : std::filesystem::directory_iterator(directory, ec))
+                for (const FManagedGameManifest& manifest : ScanManagedGameManifests(sourceProjects.string()))
                 {
-                    const std::string filename = entry.path().filename().string();
-                    const std::string suffix = ".game.json";
-                    if (filename.size() > suffix.size() &&
-                        filename.compare(filename.size() - suffix.size(), suffix.size(), suffix) == 0)
-                    {
-                        ids.push_back(filename.substr(0, filename.size() - suffix.size()));
-                    }
+                    ids.push_back(manifest.id);
                 }
             }
 
@@ -384,18 +374,24 @@ namespace Modules::NextDotNet
             return false;
         }
 
-        const std::filesystem::path managedSources = DotNetRuntime::ManagedSourceRoot();
-        if (managedSources.empty())
+        const std::filesystem::path projectsRoot = GameProjectsSourceRoot();
+        if (projectsRoot.empty())
         {
-            outError = "this build cannot reach the C# sources, so it cannot create a project";
+            outError = "this build cannot reach the source tree's projects/, so it cannot create a project";
             return false;
         }
 
+        // Case-insensitively, because the directory is created on whatever filesystem the source
+        // tree is on: "MyGame" beside an existing "mygame" collides on Windows and macOS.
         std::error_code ec;
-        if (std::filesystem::exists(managedSources / projectName, ec))
+        for (const auto& entry : std::filesystem::directory_iterator(projectsRoot, ec))
         {
-            outError = "assets/csharp/" + projectName + " already exists";
-            return false;
+            const std::string existing = entry.path().filename().string();
+            if (existing.size() == projectName.size() && StartsWithIgnoreCase(existing, projectName))
+            {
+                outError = "projects/" + existing + " already exists";
+                return false;
+            }
         }
 
         const std::vector<std::string> takenIds = ExistingGameIds();
@@ -425,9 +421,7 @@ namespace Modules::NextDotNet
             return result;
         }
 
-        const std::filesystem::path managedSources = DotNetRuntime::ManagedSourceRoot();
-        const std::filesystem::path sourceAssets = SourceAssetsRoot();
-        const std::filesystem::path projectDirectory = managedSources / normalized.projectName;
+        const std::filesystem::path projectDirectory = GameProjectsSourceRoot() / normalized.projectName;
         const std::filesystem::path templateFiles = gameTemplate.directory / kTemplateFilesDirectory;
 
         std::error_code ec;
@@ -504,6 +498,18 @@ namespace Modules::NextDotNet
             result.writtenFiles.push_back(destination);
         }
 
+        // Every project has a Content/ even when its template ships nothing there: it is where the
+        // game's own configs, sounds and scenes go, and an empty folder says so better than a
+        // paragraph in a README that nobody opens.
+        std::filesystem::create_directories(projectDirectory / kManagedGameContentDirectory, ec);
+
+        const std::string csprojRelative =
+            std::string(kManagedGameScriptsDirectory) + "/" + normalized.projectName + ".csproj";
+        if (!std::filesystem::exists(projectDirectory / csprojRelative, ec))
+        {
+            return fail("template '" + gameTemplate.id + "' produced no " + csprojRelative);
+        }
+
         // --- the manifest, which is what actually makes this a game ---------------------------
         FManagedGameManifest& manifest = result.manifest;
         manifest.id = normalized.gameId;
@@ -511,7 +517,10 @@ namespace Modules::NextDotNet
         // The publish subdirectory is the assembly path's parent, which is how a host derives where
         // to publish (ManagedGameSession::RebuildGame). Keep the two in step by construction.
         manifest.assembly = normalized.gameId + "/" + normalized.projectName + ".dll";
-        manifest.project = normalized.projectName + "/" + normalized.projectName + ".csproj";
+        manifest.project = csprojRelative;
+        // Where a host will read it from: the runtime copy, mirrored below. RebuildGame maps this
+        // back to projectDirectory by name.
+        manifest.directory = std::string(kManagedGameProjectsDirectory) + "/" + normalized.projectName;
         manifest.window = gameTemplate.window;
         if (manifest.window.title.empty())
         {
@@ -554,11 +563,8 @@ namespace Modules::NextDotNet
         manifestJson["compileManagedSources"] = manifest.compileManagedSources;
 
         const std::string manifestText = manifestJson.dump(2) + "\n";
-        const std::string manifestFilename = manifest.id + ".game.json";
-        const std::filesystem::path manifestSourcePath =
-            sourceAssets / "configs" / "games" / manifestFilename;
+        const std::filesystem::path manifestSourcePath = projectDirectory / (manifest.id + ".game.json");
 
-        std::filesystem::create_directories(manifestSourcePath.parent_path(), ec);
         if (!WriteWholeFile(manifestSourcePath, manifestText))
         {
             return fail("could not write " + manifestSourcePath.string());
@@ -566,29 +572,28 @@ namespace Modules::NextDotNet
         result.writtenFiles.push_back(manifestSourcePath);
         manifest.sourcePath = manifestSourcePath.string();
 
-        // The build tree holds a *copy* of assets, and that copy is what a running host scans. Only
-        // writing the source tree would mean the new game appeared after the next build rather than
-        // straight away; only writing the runtime copy would lose it at the next configure.
-        const std::filesystem::path manifestRuntimePath = Utilities::FileHelper::GetRuntimeFilePath(
-            std::string(kManagedGameManifestDirectory) + "/" + manifestFilename);
-        if (manifestRuntimePath != manifestSourcePath &&
-            std::filesystem::exists(manifestRuntimePath.parent_path(), ec))
+        // The build tree holds a *copy* of each project's manifest and Content/, and that copy is
+        // what a running host scans. Only writing the source tree would mean the new game appeared
+        // after the next build rather than straight away; only writing the runtime copy would lose
+        // it at the next configure. Skipped when there is no runtime asset tree to mirror into.
+        const std::filesystem::path runtimeProjects =
+            Utilities::FileHelper::GetRuntimeFilePath(kManagedGameProjectsDirectory);
+        if (std::filesystem::exists(runtimeProjects.parent_path(), ec))
         {
-            if (WriteWholeFile(manifestRuntimePath, manifestText))
+            std::string syncError;
+            if (SyncProjectContentToRuntime(manifest, syncError))
             {
-                result.writtenFiles.push_back(manifestRuntimePath);
+                result.runtimeProjectDirectory = runtimeProjects / normalized.projectName;
             }
             else
             {
-                SPDLOG_WARN("[template] could not mirror the manifest to {}; the new game will only "
-                            "appear after the next build",
-                            manifestRuntimePath.string());
+                SPDLOG_WARN("[template] {}; the new game will only appear after the next build", syncError);
             }
         }
 
         result.created = true;
         result.projectDirectory = projectDirectory;
-        result.projectFile = projectDirectory / (normalized.projectName + ".csproj");
+        result.projectFile = projectDirectory / csprojRelative;
         result.manifestFile = manifestSourcePath;
         SPDLOG_INFO("[template] created '{}' from '{}' at {}", manifest.id, gameTemplate.id,
                     projectDirectory.string());

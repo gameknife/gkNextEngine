@@ -457,7 +457,7 @@ void EditorInterface::ToolbarUI(EditorContext& ctx, Editor::EditorUiState& uiSta
             }
             if (play.Games().empty())
             {
-                ImGui::TextDisabled("no games under assets/configs/games");
+                ImGui::TextDisabled("no games under assets/projects");
             }
 
             ImGui::Separator();

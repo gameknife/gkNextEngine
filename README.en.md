@@ -187,7 +187,7 @@ The only implementation of `Runtime::IScriptRuntime` is `Modules/NextDotNet`; th
 
 - **Two backends, one set of managed code**: CoreCLR for hot reload and debugging during development, NativeAOT for release and mobile where size and startup matter. Switching is one CMake option and not a single line of C# changes; `gnb dotnet ci` is the enforcement point for the two-backend ABI
 - **The binding surface is declared once**: an engine function is one line in `EngineApi.def.h`, a component property reuses the `entt::meta` reflection, and `gnb csharpgen` emits the C# wrappers
-- **One game = one manifest**: `assets/configs/games/<id>.game.json` declares the window, assembly, required modules, initial scene, and hot-reload policy; the per-game native shell is 15 lines, and the eight engine hooks share one forwarding implementation
+- **One game = one project directory**: `projects/<Game>/` holds the manifest (`<id>.game.json`: window, assembly, required modules, initial scene, and hot-reload policy), `Content/` (the game's own configs, sounds, and scenes, reached from C# through `GameContent.Path(...)`), and `Scripts/` (the C# project) — nothing a game owns is scattered through the engine's `assets/`; the per-game native shell is 15 lines, and the eight engine hooks share one forwarding implementation
 - **Scaffold from a template**: the launcher's New Project card or the editor's File > New Game Project, with five templates (blank, 2D arcade, top-down survivor, first-person explorer, third-person shooter) covering the usual starting points. Adding a template means dropping a directory into `assets/templates/games/` — no code changes
 - **In-process load and unload**: `gkNextLauncher` uses a collectible `AssemblyLoadContext` to select, load, and unload any managed game in a single process, and can rebuild the C# from its menu. Unloading runs a full world reset (scene, physics, audio, cvars, show flags, window title), and repeated failures to collect are treated as a leak that demands a restart
 - **Parity as the regression**: `FlappyCpp` and `FlappyCSharp` are line-for-line counterparts compared frame by frame through deterministic replay, so binding regressions surface immediately
@@ -360,8 +360,8 @@ No C++, and no new CMake target:
 
 1. Run `gnb run gkNextLauncher` and click the **New Project** card at the end of the grid (or **File > New Game Project...** in the editor)
 2. Enter a project name, pick one of the five templates (blank, 2D arcade, top-down survivor, first-person explorer, third-person shooter), and tick Publish
-3. Two things are generated and immediately playable: `assets/csharp/<ProjectName>/` and `assets/configs/games/<id>.game.json`
-4. Run `gnb dotnet sln` so the new project joins `assets/csharp/GkNextManaged.sln`; after editing C#, hit **Rebuild C#** in the launcher or the editor — with hot reload on, the running game picks up the new assembly directly
+3. One project directory is generated and immediately playable: `projects/<ProjectName>/` (manifest + `Content/` + `Scripts/`)
+4. Run `gnb dotnet sln` so the new project joins `assets/csharp/GkNextManaged.sln`; after editing C# or `Content/`, hit **Rebuild C#** in the launcher or the editor — with hot reload on, the running game picks up the new assembly directly
 
 See [Developing gkNextEngine Applications in C#](docs/AGENT_GUIDE/CSharpGameDevelopment.md).
 

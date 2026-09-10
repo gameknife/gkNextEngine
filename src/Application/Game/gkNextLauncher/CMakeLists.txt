@@ -1,6 +1,6 @@
 file(GLOB_RECURSE gkNextLauncherSources CONFIGURE_DEPENDS "*.cpp" "*.hpp" "*.h")
 
-# The union of what the games in assets/configs/games need. Native modules are static libraries
+# The union of what the games under projects/ need. Native modules are static libraries
 # picked at link time, so a launcher can only run a game whose modules it already carries; the
 # manifest's requiredModules list is checked against this set at startup.
 #

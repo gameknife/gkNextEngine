@@ -181,6 +181,10 @@ GK_API(SceneBuild, BindPhysicsBody,          GkBool,   (uint32_t nodeId, uint32_
 GK_API(Paths,  GetProjectRoot, int32_t, (char* buffer, int32_t capacity))
 GK_API(Paths,  GetOutputDir,   int32_t, (char* buffer, int32_t capacity))
 GK_API(Assets, ReadFile,       int32_t, (GkStr path, uint8_t* buffer, int32_t capacity))
+// The running game project's Content/ directory as an asset path ("assets/projects/Flappy/Content"),
+// or empty when no game project is loaded. Prefix it onto a project-relative path to reach the
+// game's own content through every path-taking binding; GameContent.Path() does exactly that.
+GK_API(Assets, GetGameContentRoot, int32_t, (char* buffer, int32_t capacity))
 
 // --- Component and node property access --------------------------------------------------------
 // Reflected properties, addressed by (nodeId, typeId, propId).

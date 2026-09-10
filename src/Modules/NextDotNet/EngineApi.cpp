@@ -38,6 +38,7 @@ namespace Modules::NextDotNet
     FSceneBuildContext GSceneBuildContext;
     FInputState GInputState;
     FUiCanvas GUiCanvas;
+    std::string GGameContentRoot;
 
     namespace
     {
@@ -1636,6 +1637,11 @@ namespace Modules::NextDotNet
         {
             std::error_code ec;
             return WriteString((std::filesystem::current_path(ec) / "out").string(), buffer, capacity);
+        }
+
+        int32_t Assets_GetGameContentRoot(char* buffer, int32_t capacity)
+        {
+            return WriteString(GGameContentRoot, buffer, capacity);
         }
 
         int32_t Assets_ReadFile(GkStr path, uint8_t* buffer, int32_t capacity)

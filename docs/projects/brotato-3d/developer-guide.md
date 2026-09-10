@@ -21,7 +21,7 @@ Brotato3D 是一款 **C++ 原生** 子应用（不是脚本游戏），位于：
 | 路径 | 内容 |
 | --- | --- |
 | [src/Application/Game/Brotato3D/](../../../src/Application/Game/Brotato3D) | 全部 C++ 源码（32 个 cpp/hpp） |
-| [assets/configs/brotato3d/](../../../assets/configs/brotato3d) | 9 个 JSON 配置（敌人/武器/角色/波次/物品/商店/升级/场景/i18n） |
+| [projects/Brotato3D/Content/configs/](../../../projects/Brotato3D/Content/configs) | 9 个 JSON 配置（敌人/武器/角色/波次/物品/商店/升级/场景/i18n）。属于 Brotato3D 游戏工程（`projects/Brotato3D/`，C# 版 `Brotato3DCSharp` 读同一份），运行时副本在 `assets/projects/Brotato3D/Content/configs/` |
 | `assets/sounds/brotato3d/` · `assets/textures/brotato3d/` | 官方 SFX 与 UI 图标，打包进 `assets/paks/brotato3d.pak` 运行时挂载 |
 | `assets/_placeholder/brotato/` | 仍待替换的占位 BGM / 字体 / HUD·菜单图（Brotato 参考素材，**不可分发**） |
 
@@ -127,7 +127,7 @@ crit   = round(damage * critMultiplier) when rng < (critChancePct + weapon.critC
 
 ### 3.1 新增 / 调整一个敌人
 
-文件：[assets/configs/brotato3d/enemies.json](../../../assets/configs/brotato3d/enemies.json)
+文件：[projects/Brotato3D/Content/configs/enemies.json](../../../projects/Brotato3D/Content/configs/enemies.json)
 
 **最小化模板（追击型）**：
 
@@ -173,7 +173,7 @@ crit   = round(damage * critMultiplier) when rng < (critChancePct + weapon.critC
 }
 ```
 
-**让新敌人出场**：在 [waves.json](../../../assets/configs/brotato3d/waves.json) 对应波次的 `spawns` 数组里加 `{"enemyId":"slime","count":N,"intervalMs":M}`。
+**让新敌人出场**：在 [waves.json](../../../projects/Brotato3D/Content/configs/waves.json) 对应波次的 `spawns` 数组里加 `{"enemyId":"slime","count":N,"intervalMs":M}`。
 
 **视觉**：当前所有敌人都是程序化盒子，模型是按 `size` 自动生成的（[Brotato3DEffectSystem.cpp:239](../../../src/Application/Game/Brotato3D/Brotato3DEffectSystem.cpp)）。颜色取自 `color`，并自动派生 4 个材质：基础 / 暗化 / 命中白闪 / 红色警告 / Boss 二阶段红。**不需要**自己写材质代码。
 
@@ -181,7 +181,7 @@ crit   = round(damage * critMultiplier) when rng < (critChancePct + weapon.critC
 
 ### 3.2 新增 / 调整一把武器
 
-文件：[assets/configs/brotato3d/weapons.json](../../../assets/configs/brotato3d/weapons.json)
+文件：[projects/Brotato3D/Content/configs/weapons.json](../../../projects/Brotato3D/Content/configs/weapons.json)
 
 **字段速查**：
 
@@ -232,7 +232,7 @@ crit   = round(damage * critMultiplier) when rng < (critChancePct + weapon.critC
 
 ### 3.3 新增 / 调整一个角色
 
-文件：[assets/configs/brotato3d/characters.json](../../../assets/configs/brotato3d/characters.json)
+文件：[projects/Brotato3D/Content/configs/characters.json](../../../projects/Brotato3D/Content/configs/characters.json)
 
 ```json
 {
@@ -256,7 +256,7 @@ crit   = round(damage * critMultiplier) when rng < (critChancePct + weapon.critC
 
 ### 3.4 新增升级卡（每级 3 选 1）
 
-文件：[assets/configs/brotato3d/upgrades.json](../../../assets/configs/brotato3d/upgrades.json)
+文件：[projects/Brotato3D/Content/configs/upgrades.json](../../../projects/Brotato3D/Content/configs/upgrades.json)
 
 ```json
 {"id":"crit_chance","name":"+8% Crit Chance","stat":"critChancePct","delta":0.08,"weight":2}
@@ -268,11 +268,11 @@ crit   = round(damage * critMultiplier) when rng < (critChancePct + weapon.critC
 
 ### 3.5 新增商店属性卡（数值类）
 
-文件：[shop_items.json](../../../assets/configs/brotato3d/shop_items.json)。结构和升级卡几乎相同，多了 `cost`（材料价）。同样必须使用 `ApplyShopItem` 列表里的 stat 字段。
+文件：[shop_items.json](../../../projects/Brotato3D/Content/configs/shop_items.json)。结构和升级卡几乎相同，多了 `cost`（材料价）。同样必须使用 `ApplyShopItem` 列表里的 stat 字段。
 
 ### 3.6 新增商店被动 Item（最多持有 6 个）
 
-文件：[items.json](../../../assets/configs/brotato3d/items.json)
+文件：[items.json](../../../projects/Brotato3D/Content/configs/items.json)
 
 **触发器/效果（trigger / effect）**当前**白名单**——必须二者都在表里，否则 item 不生效：
 
@@ -307,7 +307,7 @@ crit   = round(damage * critMultiplier) when rng < (critChancePct + weapon.critC
 
 ### 3.7 新增 / 调整波次
 
-文件：[waves.json](../../../assets/configs/brotato3d/waves.json)
+文件：[waves.json](../../../projects/Brotato3D/Content/configs/waves.json)
 
 ```json
 {
@@ -330,7 +330,7 @@ crit   = round(damage * critMultiplier) when rng < (critChancePct + weapon.critC
 
 ### 3.8 新增 / 调整竞技场
 
-文件：[arenas.json](../../../assets/configs/brotato3d/arenas.json)
+文件：[arenas.json](../../../projects/Brotato3D/Content/configs/arenas.json)
 
 `scene`: 固定 SCAD 场景路径，当前场景位于 `assets/scad/source/brotato3d/`，统一复用 `kit_deadly.scad` 末日素材。
 `halfExtent`: `[halfX, halfZ]`，玩家和敌人的活动范围；SCAD 布景可以延伸到范围外作为远景。

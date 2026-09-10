@@ -16,7 +16,7 @@ Brotato3D 是 gkNextEngine 内置的俯视角 3D 生存射击子项目。它参�
 
 - 入口目标：`Brotato3D`
 - 源码目录：`src/Application/Game/Brotato3D/`
-- 配置目录：`assets/configs/brotato3d/`
+- 配置目录：`projects/Brotato3D/Content/configs/`（Brotato3D 游戏工程的内容，C# 版 `Brotato3DCSharp` 读同一份）
 - 运行方式：macOS/Linux 使用 `./gnb.sh run Brotato3D`，Windows 使用 `gnb.bat run Brotato3D`
 - 主要文档：`docs/projects/brotato-3d/developer-guide.md`
 
@@ -33,7 +33,7 @@ Brotato3D 当前已经超过最初 MVP，核心系统包括：
 - 构筑：升级卡、商店属性卡、武器购买与合并、被动 Item、低血触发、击杀触发、Dash 结束触发等。
 - 存档：记录总胜场、总击杀、最快通关时间和角色胜场。
 
-这些系统大多由 `assets/configs/brotato3d/*.json` 驱动。新增常规敌人、武器、角色、波次或数值平衡，通常只需要改配置；新增全新机制才需要改 C++。
+这些系统大多由 `projects/Brotato3D/Content/configs/*.json` 驱动。新增常规敌人、武器、角色、波次或数值平衡，通常只需要改配置；新增全新机制才需要改 C++。
 
 ## 引擎验证价值
 

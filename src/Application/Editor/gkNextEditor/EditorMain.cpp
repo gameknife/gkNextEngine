@@ -124,7 +124,7 @@ void EditorGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
     // a preference. Both callbacks only record the request — starting a game reloads the world,
     // which must not happen inside a cvar write.
     cvars.RegisterString("ed.play", "", &playCVarValue_, NextCVar::ECVarFlags::None,
-                         "Managed game to run in the editor: a game id from assets/configs/games, "
+                         "Managed game to run in the editor: a game id from assets/projects, "
                          "or empty to stop",
                          [this]()
                          {

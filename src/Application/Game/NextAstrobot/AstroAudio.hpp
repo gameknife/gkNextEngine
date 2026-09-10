@@ -2,8 +2,10 @@
 
 // ============================================================================
 // AstroAudio.hpp - The one place NextAstrobot talks to NextAudio. Sounds are
-// placeholders borrowed from the Flappy set until the game gets its own; keep
-// every call site going through here so swapping them is a one-file change.
+// placeholders (copies of the Flappy set, kept under assets/sounds/astrobot so
+// this game does not reach into another game's project) until the game gets
+// its own; keep every call site going through here so swapping them is a
+// one-file change.
 // ============================================================================
 
 #include <string>
@@ -13,9 +15,9 @@
 
 namespace NextAstrobot::Audio
 {
-    inline constexpr const char* kCoinSfx = "assets/sounds/flappy_score.wav";
-    inline constexpr const char* kJumpSfx = "assets/sounds/flappy_flap.wav";
-    inline constexpr const char* kHitSfx = "assets/sounds/flappy_hit.wav";
+    inline constexpr const char* kCoinSfx = "assets/sounds/astrobot/coin.wav";
+    inline constexpr const char* kJumpSfx = "assets/sounds/astrobot/jump.wav";
+    inline constexpr const char* kHitSfx = "assets/sounds/astrobot/hit.wav";
 
     inline void Play(NextEngine& engine, const char* path, float volume = 1.0f)
     {

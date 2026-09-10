@@ -20,8 +20,9 @@ C# 侧存在的意义是回归**脚本绑定层**——生命周期时序、调�
 - 共享 C++ 配置/类型：`src/Application/Game/Flappy/`
 - C++ 实现：`src/Application/Game/Flappy/FlappyCpp/`
 - C# host（约 90 行，无玩法）：`src/Application/Game/Flappy/FlappyCSharp/`
-- C# 实现：`assets/csharp/Flappy/FlappyCSharp/`
-- 玩法/replay 配置（两端共享同一份）：`assets/configs/flappy/gameplay.json`、`replay.json`
+- C# 实现：`projects/Flappy/Scripts/`（Flappy 游戏工程，manifest 是 `projects/Flappy/flappy.game.json`）
+- 玩法/replay 配置与音效（两端共享同一份）：`projects/Flappy/Content/configs/gameplay.json`、`replay.json`、
+  `Content/sounds/`。C# 经 `GameContent` 读，C++ 读运行时副本 `assets/projects/Flappy/Content/...`
 - 比较器：`tools/flappy/diff_traces.py`
 
 两端以 `gameplay.json` 的 fixed step 和 RNG seed 运行，以 `replay.json` 的 flap frame 序列输入，

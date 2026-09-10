@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cstdlib>
 #include <fstream>
 #include <set>
 
@@ -14,7 +15,14 @@ namespace Modules::NextDotNet
     {
         using json = nlohmann::json;
 
-        constexpr const char* kManifestExtension = ".game.json";
+        constexpr std::string_view kManifestExtension = ".game.json";
+
+        bool IsManifestFilename(std::string_view filename)
+        {
+            return filename.size() > kManifestExtension.size() &&
+                   filename.compare(filename.size() - kManifestExtension.size(), kManifestExtension.size(),
+                                    kManifestExtension) == 0;
+        }
 
         /// Reads an asset-relative or absolute path through the pak system when one is mounted,
         /// falling back to a loose file. Mirrors CVarSystem's config reader: manifests are shipped
@@ -50,14 +58,30 @@ namespace Modules::NextDotNet
         std::string StemOf(const std::string& path)
         {
             const std::string filename = std::filesystem::path(path).filename().string();
-            const std::string suffix = kManifestExtension;
-            if (filename.size() > suffix.size() &&
-                filename.compare(filename.size() - suffix.size(), suffix.size(), suffix) == 0)
+            if (IsManifestFilename(filename))
             {
-                return filename.substr(0, filename.size() - suffix.size());
+                return filename.substr(0, filename.size() - kManifestExtension.size());
             }
             return std::filesystem::path(filename).stem().string();
         }
+
+        /// A manifest path that starts with Content/ names the project's own content, and becomes a
+        /// runtime asset path under the project directory. Anything else — an engine asset such as
+        /// assets/icons/x.png, or a built-in scene name such as Empty.proc — passes through as is.
+        std::string ResolveContentPath(const FManagedGameManifest& manifest, const std::string& path)
+        {
+            const std::string prefix = std::string(kManagedGameContentDirectory) + "/";
+            if (manifest.directory.empty() || path.rfind(prefix, 0) != 0)
+            {
+                return path;
+            }
+            return manifest.directory + "/" + path;
+        }
+    }
+
+    std::string FManagedGameManifest::ContentRoot() const
+    {
+        return directory.empty() ? std::string() : directory + "/" + kManagedGameContentDirectory;
     }
 
     std::optional<FManagedGameManifest> LoadManagedGameManifest(const std::string& path)
@@ -72,6 +96,7 @@ namespace Modules::NextDotNet
         FManagedGameManifest manifest;
         manifest.sourcePath = path;
         manifest.id = StemOf(path);
+        manifest.directory = Utilities::FileHelper::NormalizePathString(std::filesystem::path(path).parent_path());
 
         try
         {
@@ -82,10 +107,10 @@ namespace Modules::NextDotNet
                 manifest.id = it->get<std::string>();
             }
             manifest.displayName = root.value("displayName", manifest.id);
-            manifest.icon = root.value("icon", std::string());
+            manifest.icon = ResolveContentPath(manifest, root.value("icon", std::string()));
             manifest.assembly = root.value("assembly", std::string());
             manifest.project = root.value("project", std::string());
-            manifest.initialScene = root.value("initialScene", std::string());
+            manifest.initialScene = ResolveContentPath(manifest, root.value("initialScene", std::string()));
             manifest.hotReload = root.value("hotReload", true);
             manifest.compileManagedSources = root.value("compileManagedSources", false);
 
@@ -135,45 +160,55 @@ namespace Modules::NextDotNet
         return manifest;
     }
 
-    std::vector<FManagedGameManifest> ScanManagedGameManifests(const std::string& directory)
+    std::vector<FManagedGameManifest> ScanManagedGameManifests(const std::string& root)
     {
         // A paked build and a loose tree can both be present; collect names first so a manifest
         // shipped in a pak and also sitting on disk is only loaded once.
-        std::set<std::string> relativePaths;
+        std::set<std::string> manifestPaths;
 
+        // One level of projects, and manifests only directly inside each: a file that happens to
+        // be named *.game.json somewhere in a project's Content/ is content, not another game.
         std::error_code ec;
-        const std::filesystem::path looseDirectory = Utilities::FileHelper::GetRuntimeFilePath(directory);
-        if (std::filesystem::exists(looseDirectory, ec))
+        const std::filesystem::path looseRoot = Utilities::FileHelper::GetRuntimeFilePath(root);
+        for (const auto& projectEntry : std::filesystem::directory_iterator(looseRoot, ec))
         {
-            for (const auto& entry : std::filesystem::directory_iterator(looseDirectory, ec))
+            if (!projectEntry.is_directory(ec))
             {
-                if (ec)
+                continue;
+            }
+            const std::string projectName = projectEntry.path().filename().string();
+            std::error_code fileError;
+            for (const auto& fileEntry : std::filesystem::directory_iterator(projectEntry.path(), fileError))
+            {
+                const std::string filename = fileEntry.path().filename().string();
+                if (fileEntry.is_regular_file(fileError) && IsManifestFilename(filename))
                 {
-                    break;
-                }
-                const std::string filename = entry.path().filename().string();
-                if (filename.size() > std::strlen(kManifestExtension) &&
-                    filename.find(kManifestExtension) == filename.size() - std::strlen(kManifestExtension))
-                {
-                    relativePaths.insert(directory + "/" + filename);
+                    manifestPaths.insert(root + "/" + projectName + "/" + filename);
                 }
             }
         }
 
         if (auto* package = Utilities::Package::FPackageFileSystem::TryGetInstance())
         {
-            for (const std::string& entry : package->ListMountedEntries(directory))
+            const std::string prefix = Utilities::FileHelper::NormalizePathString(root) + "/";
+            for (const std::string& entry : package->ListMountedEntries(prefix))
             {
-                if (entry.find(kManifestExtension) != std::string::npos)
+                const std::string_view rest = std::string_view(entry).substr(prefix.size());
+                const size_t slash = rest.find('/');
+                if (slash == std::string_view::npos || rest.find('/', slash + 1) != std::string_view::npos)
                 {
-                    relativePaths.insert(entry);
+                    continue;
+                }
+                if (IsManifestFilename(rest.substr(slash + 1)))
+                {
+                    manifestPaths.insert(entry);
                 }
             }
         }
 
         std::vector<FManagedGameManifest> manifests;
-        manifests.reserve(relativePaths.size());
-        for (const std::string& path : relativePaths)
+        manifests.reserve(manifestPaths.size());
+        for (const std::string& path : manifestPaths)
         {
             if (auto manifest = LoadManagedGameManifest(path))
             {
@@ -187,5 +222,112 @@ namespace Modules::NextDotNet
                       return lhs.id < rhs.id;
                   });
         return manifests;
+    }
+
+    /// Not resolved through the asset path, for the same reason DotNetRuntime::ManagedSourceRoot()
+    /// is not: the runtime tree holds a copy of each project's manifest and Content/ but never its
+    /// Scripts/, so resolving projects/ against the runtime root finds nothing to rebuild. The
+    /// baked source path is the only thing that knows where the real projects are.
+    std::filesystem::path GameProjectsSourceRoot()
+    {
+        if (const char* fromEnv = std::getenv("GK_GAME_PROJECTS_SOURCES"); fromEnv != nullptr && *fromEnv != '\0')
+        {
+            return std::filesystem::path(fromEnv);
+        }
+#if defined(GK_GAME_PROJECTS_SOURCE_ROOT)
+        std::error_code ec;
+        const std::filesystem::path baked(GK_GAME_PROJECTS_SOURCE_ROOT);
+        if (std::filesystem::exists(baked, ec))
+        {
+            return baked;
+        }
+#endif
+        return {};
+    }
+
+    std::filesystem::path ResolveProjectSourceDirectory(const FManagedGameManifest& manifest)
+    {
+        if (manifest.directory.empty())
+        {
+            return {};
+        }
+
+        std::error_code ec;
+        const std::filesystem::path directory(manifest.directory);
+
+        // The usual case: read from assets/projects/<Game>, whose source is projects/<Game>.
+        if (const std::filesystem::path sourceRoot = GameProjectsSourceRoot(); !sourceRoot.empty())
+        {
+            const std::filesystem::path candidate = sourceRoot / directory.filename();
+            if (std::filesystem::is_directory(candidate, ec))
+            {
+                return candidate;
+            }
+        }
+
+        // Read straight from a project directory somewhere else on disk: that directory is the
+        // source. The runtime copy never qualifies, because it has no Scripts/ to build from.
+        if (directory.is_absolute() && std::filesystem::is_directory(directory, ec) &&
+            (manifest.project.empty() || std::filesystem::exists(directory / manifest.project, ec)))
+        {
+            return directory;
+        }
+        return {};
+    }
+
+    bool SyncProjectContentToRuntime(const FManagedGameManifest& manifest, std::string& outError)
+    {
+        const std::filesystem::path source = ResolveProjectSourceDirectory(manifest);
+        if (source.empty())
+        {
+            outError = "'" + manifest.id + "' has no project directory in the source tree";
+            return false;
+        }
+
+        const std::filesystem::path runtime =
+            Utilities::FileHelper::GetRuntimeFilePath(kManagedGameProjectsDirectory) / source.filename();
+
+        std::error_code ec;
+        if (std::filesystem::exists(runtime, ec) && std::filesystem::equivalent(source, runtime, ec))
+        {
+            return true;
+        }
+
+        std::filesystem::create_directories(runtime, ec);
+        if (ec)
+        {
+            outError = "could not create " + runtime.string() + ": " + ec.message();
+            return false;
+        }
+
+        for (const auto& entry : std::filesystem::directory_iterator(source, ec))
+        {
+            if (entry.is_regular_file() && IsManifestFilename(entry.path().filename().string()))
+            {
+                std::error_code copyError;
+                std::filesystem::copy_file(entry.path(), runtime / entry.path().filename(),
+                                           std::filesystem::copy_options::overwrite_existing, copyError);
+                if (copyError)
+                {
+                    outError = "could not copy " + entry.path().string() + ": " + copyError.message();
+                    return false;
+                }
+            }
+        }
+
+        const std::filesystem::path content = source / kManagedGameContentDirectory;
+        if (std::filesystem::is_directory(content, ec))
+        {
+            std::filesystem::copy(content, runtime / kManagedGameContentDirectory,
+                                  std::filesystem::copy_options::recursive |
+                                      std::filesystem::copy_options::overwrite_existing,
+                                  ec);
+            if (ec)
+            {
+                outError = "could not copy " + content.string() + ": " + ec.message();
+                return false;
+            }
+        }
+        return true;
     }
 }

@@ -37,11 +37,12 @@ func newDotNetSlnCommand(ctx appContext) *cobra.Command {
 	var check bool
 	cmd := &cobra.Command{
 		Use:   "sln",
-		Short: "Regenerate the IDE solution for assets/csharp",
-		Long: "Writes assets/csharp/GkNextManaged.sln from the csproj files on disk. The solution is\n" +
-			"what an IDE needs to load GkNext.Engine and the source generator alongside a game, which\n" +
-			"is what gives the game's C# working navigation and completion; the build itself never\n" +
-			"reads it. Run this after adding a managed project. --check fails instead of writing.",
+		Short: "Regenerate the IDE solution for assets/csharp and projects/",
+		Long: "Writes assets/csharp/GkNextManaged.sln from the csproj files on disk: the engine's\n" +
+			"assemblies under assets/csharp and every game project's Scripts/ under projects/. The\n" +
+			"solution is what an IDE needs to load GkNext.Engine and the source generator alongside a\n" +
+			"game, which is what gives the game's C# working navigation and completion; the build itself\n" +
+			"never reads it. Run this after adding a managed project. --check fails instead of writing.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			result, err := csharpsln.Run(ctx.repoRoot, check)
@@ -214,8 +215,8 @@ func newDotNetTemplatesCommand(ctx appContext) *cobra.Command {
 		Use:   "templates [id...]",
 		Short: "Build the shipped C# game templates",
 		Long: "Instantiates each template under assets/templates/games the way the New Game Project " +
-			"dialog does, builds the result, and deletes it again. With no arguments every template " +
-			"is checked; naming one or more ids checks only those.",
+			"dialog does — into a scratch directory under projects/ — builds the result, and deletes it " +
+			"again. With no arguments every template is checked; naming one or more ids checks only those.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			toolchain, err := dotnetsdk.Resolve(ctx.repoRoot, ctx.cfg.External.DotNet)
 			if err != nil {

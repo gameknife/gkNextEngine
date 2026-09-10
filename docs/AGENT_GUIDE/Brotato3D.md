@@ -186,7 +186,8 @@ glm::vec3 Brotato3DGameInstance::ResolveEnemyGroundedPosition(
 
 ## 6.5 竞技场地图（`assets/scad/source/brotato3d/*.scad`）
 
-三张固定地图由 `assets/configs/brotato3d/arenas.json` 绑定，改地图前先记住这几条硬约束：
+三张固定地图由 `projects/Brotato3D/Content/configs/arenas.json` 绑定（Brotato3D 游戏工程的内容，C++ 与
+C# 两版共用；地图本身仍在 SCAD 资产树里，因为它们按相对路径 `use` kit 库），改地图前先记住这几条硬约束：
 
 | 事实 | 出处 | 对地图的意义 |
 |---|---|---|

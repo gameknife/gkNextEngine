@@ -23,8 +23,8 @@ using namespace Brotato3DUtil;
 
 namespace
 {
-    constexpr const char* ArenasConfigPath = "assets/configs/brotato3d/arenas.json";
-    constexpr const char* I18nConfigPath = "assets/configs/brotato3d/i18n.json";
+    constexpr const char* ArenasConfigPath = "assets/projects/Brotato3D/Content/configs/arenas.json";
+    constexpr const char* I18nConfigPath = "assets/projects/Brotato3D/Content/configs/i18n.json";
     constexpr float CameraFollowSharpness = 8.0f;
     constexpr float CameraClampHalfViewX = 32.0f;
     constexpr float CameraClampHalfViewZ = 38.0f;

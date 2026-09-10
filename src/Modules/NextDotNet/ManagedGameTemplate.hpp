@@ -10,6 +10,10 @@ namespace Modules::NextDotNet
     /// A template is content, not code: adding one is a directory with a metadata file and a tree
     /// of files to copy. Nothing in the engine, the launcher or the editor enumerates template ids,
     /// so a new template appears in every host that scans the directory without a rebuild.
+    ///
+    /// The files/ tree is laid out as the project it becomes: C# under Scripts/ (with a
+    /// __ProjectName__.csproj), runtime content under Content/, anything else at the root. The
+    /// manifest is not in it — that is generated from this metadata and the user's names.
     struct FGameTemplate
     {
         std::string id;
@@ -77,15 +81,22 @@ namespace Modules::NextDotNet
         /// new project, and to RequestLoad to run it.
         FManagedGameManifest manifest;
 
+        /// projects/<ProjectName>/ in the source tree.
         std::filesystem::path projectDirectory;
+        /// projects/<ProjectName>/Scripts/<ProjectName>.csproj.
         std::filesystem::path projectFile;
+        /// projects/<ProjectName>/<id>.game.json.
         std::filesystem::path manifestFile;
-        /// Every file written, project tree and manifest alike. Diagnostics and tests.
+        /// The copy under the runtime tree's assets/projects that the running host scans. Empty
+        /// when there was no runtime tree to mirror into.
+        std::filesystem::path runtimeProjectDirectory;
+        /// Every file written into the source tree, project and manifest alike. Diagnostics and
+        /// tests.
         std::vector<std::filesystem::path> writtenFiles;
     };
 
-    /// Writes a new managed game: the C# project under assets/csharp/<ProjectName>/ and its
-    /// manifest under assets/configs/games/. Does not build it — publishing takes seconds and the
+    /// Writes a new game project at projects/<ProjectName>/: its manifest, a Content/ directory,
+    /// and the template's C# under Scripts/. Does not build it — publishing takes seconds and the
     /// caller is expected to have drawn a frame saying so. ManagedGameSession::RebuildGame is the
     /// build, and it works on the returned manifest with no extra bookkeeping.
     ///

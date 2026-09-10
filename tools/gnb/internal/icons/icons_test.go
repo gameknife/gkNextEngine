@@ -83,3 +83,50 @@ func TestResolveAppIcon(t *testing.T) {
 		t.Errorf("expected gkNextEngine.png for unconfigured app, got %s", defaultIcon)
 	}
 }
+
+func TestGenerateIOSIcons(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	realPng := "../../../../assets/icons/gkNextRenderer.png"
+	if _, err := os.Stat(realPng); err == nil {
+		outDir := filepath.Join(tmpDir, "ios_icons")
+		if err := GenerateIOSIcons(realPng, outDir); err != nil {
+			t.Fatalf("GenerateIOSIcons failed: %v", err)
+		}
+		for fileName := range IOSIconSizes {
+			target := filepath.Join(outDir, fileName)
+			if _, err := os.Stat(target); err != nil {
+				t.Errorf("missing iOS icon %s: %v", target, err)
+			}
+		}
+	}
+}
+
+func TestGenerateIOSAppIcons(t *testing.T) {
+	tmpDir := t.TempDir()
+	repoRoot := "../../../.."
+
+	outDir := filepath.Join(tmpDir, "ios_app_icons")
+	if err := GenerateIOSAppIcons(repoRoot, "gkNextRenderer", outDir); err != nil {
+		t.Fatalf("GenerateIOSAppIcons failed: %v", err)
+	}
+
+	required := []string{
+		"AppIcon.png",
+		"AppIcon@2x.png",
+		"AppIcon@3x.png",
+		"AppIcon~ipad.png",
+		"AppIcon@2x~ipad.png",
+		"AppIcon60x60@2x.png",
+		"AppIcon60x60@3x.png",
+		"AppIcon76x76@2x~ipad.png",
+		"AppIcon83.5x83.5@2x~ipad.png",
+	}
+	for _, req := range required {
+		target := filepath.Join(outDir, req)
+		if _, err := os.Stat(target); err != nil {
+			t.Errorf("expected %s in output: %v", req, err)
+		}
+	}
+}
+

@@ -26,6 +26,36 @@ var AndroidMipmapSizes = map[string]int{
 	"mipmap-xxxhdpi": 192,
 }
 
+var IOSIconSizes = map[string]int{
+	"AppIcon.png":                 120,
+	"AppIcon@2x.png":              120,
+	"AppIcon@3x.png":              180,
+	"AppIcon~ipad.png":            76,
+	"AppIcon@2x~ipad.png":         152,
+	"AppIcon60x60@2x.png":         120,
+	"AppIcon60x60@3x.png":         180,
+	"AppIcon76x76~ipad.png":       76,
+	"AppIcon76x76@2x~ipad.png":    152,
+	"AppIcon83.5x83.5@2x~ipad.png": 167,
+	"AppIcon40x40.png":            40,
+	"AppIcon40x40@2x.png":         80,
+	"AppIcon40x40@3x.png":         120,
+	"AppIcon40x40~ipad.png":       40,
+	"AppIcon40x40@2x~ipad.png":    80,
+	"AppIcon29x29.png":            29,
+	"AppIcon29x29@2x.png":         58,
+	"AppIcon29x29@3x.png":         87,
+	"AppIcon29x29~ipad.png":       29,
+	"AppIcon29x29@2x~ipad.png":    58,
+	"AppIcon20x20.png":            20,
+	"AppIcon20x20@2x.png":         40,
+	"AppIcon20x20@3x.png":         60,
+	"AppIcon20x20~ipad.png":       20,
+	"AppIcon20x20@2x~ipad.png":    40,
+	"AppIcon512.png":              512,
+	"AppIcon1024.png":             1024,
+}
+
 func clamp(v, min, max float64) float64 {
 	if v < min {
 		return min
@@ -267,6 +297,40 @@ func GenerateAndroidIcons(inputPng, outputResDir string) error {
 	return nil
 }
 
+// GenerateIOSIcons generates all standard iOS AppIcon*.png files from inputPng into outputDir.
+func GenerateIOSIcons(inputPng, outputDir string) error {
+	f, err := os.Open(inputPng)
+	if err != nil {
+		return fmt.Errorf("open input png %s: %w", inputPng, err)
+	}
+	defer f.Close()
+
+	img, err := png.Decode(f)
+	if err != nil {
+		return fmt.Errorf("decode png %s: %w", inputPng, err)
+	}
+
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		return fmt.Errorf("create dir %s: %w", outputDir, err)
+	}
+
+	for fileName, size := range IOSIconSizes {
+		resized := ResizeAreaAverage(img, size, size)
+		targetFile := filepath.Join(outputDir, fileName)
+		outF, err := os.Create(targetFile)
+		if err != nil {
+			return fmt.Errorf("create %s: %w", targetFile, err)
+		}
+		if err := png.Encode(outF, resized); err != nil {
+			outF.Close()
+			return fmt.Errorf("encode %s: %w", targetFile, err)
+		}
+		outF.Close()
+	}
+
+	return nil
+}
+
 type Manifest struct {
 	Style string         `json:"style"`
 	Icons []ManifestIcon `json:"icons"`
@@ -322,11 +386,32 @@ func ResolveAppIcon(repoRoot, app string) string {
 	return filepath.Join(repoRoot, "assets", "icons", "gkNextRenderer.png")
 }
 
+// ResolveAppMasterIcon resolves the highest-resolution icon source for app,
+// preferring design/icons/<icon>.png (1024x1024) before assets/icons/<icon>.png.
+func ResolveAppMasterIcon(repoRoot, app string) string {
+	iconPng := ResolveAppIcon(repoRoot, app)
+	base := filepath.Base(iconPng)
+	designPng := filepath.Join(repoRoot, "design", "icons", base)
+	if _, err := os.Stat(designPng); err == nil {
+		return designPng
+	}
+	return iconPng
+}
+
 // GenerateAndroidAppIcons resolves the app icon and generates Android mipmaps into outputResDir.
 func GenerateAndroidAppIcons(repoRoot, app, outputResDir string) error {
-	iconPng := ResolveAppIcon(repoRoot, app)
+	iconPng := ResolveAppMasterIcon(repoRoot, app)
 	if _, err := os.Stat(iconPng); err != nil {
 		return fmt.Errorf("app icon not found: %s", iconPng)
 	}
 	return GenerateAndroidIcons(iconPng, outputResDir)
+}
+
+// GenerateIOSAppIcons resolves the app icon and generates all standard iOS icons into outputDir.
+func GenerateIOSAppIcons(repoRoot, app, outputDir string) error {
+	iconPng := ResolveAppMasterIcon(repoRoot, app)
+	if _, err := os.Stat(iconPng); err != nil {
+		return fmt.Errorf("app icon not found: %s", iconPng)
+	}
+	return GenerateIOSIcons(iconPng, outputDir)
 }

@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.26)
 
 project(gkNextRenderer LANGUAGES CXX C)
 
+set(GK_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
+set(GK_ASSET_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/assets")
+
 if(IOS)
     enable_language(OBJCXX)
 endif()

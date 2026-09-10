@@ -509,12 +509,66 @@ function(gk_configure_ios_application target)
     if(NOT EXISTS "${iosIconSource}")
         set(iosIconSource "${GK_REPO_ROOT}/assets/icons/gkNextEngine.png")
     endif()
-    if(EXISTS "${iosIconSource}")
+
+    set(iosIconDir "${CMAKE_BINARY_DIR}/ios_icons/${target}")
+    find_program(GNB_EXECUTABLE NAMES gnb gnb.exe PATHS "${GK_REPO_ROOT}" "${GK_REPO_ROOT}/tools/gnb-bin" NO_DEFAULT_PATH)
+    if(GNB_EXECUTABLE)
+        execute_process(
+            COMMAND "${GNB_EXECUTABLE}" icons ios --app "${target}" --out "${iosIconDir}"
+            WORKING_DIRECTORY "${GK_REPO_ROOT}"
+        )
+    endif()
+
+    if(NOT EXISTS "${iosIconDir}/AppIcon.png" AND EXISTS "${iosIconSource}")
+        file(MAKE_DIRECTORY "${iosIconDir}")
+        set(iosStandardIconNames
+            AppIcon.png
+            AppIcon@2x.png
+            AppIcon@3x.png
+            AppIcon~ipad.png
+            AppIcon@2x~ipad.png
+            AppIcon60x60@2x.png
+            AppIcon60x60@3x.png
+            AppIcon76x76~ipad.png
+            AppIcon76x76@2x~ipad.png
+            AppIcon83.5x83.5@2x~ipad.png
+            AppIcon40x40.png
+            AppIcon40x40@2x.png
+            AppIcon40x40@3x.png
+            AppIcon40x40~ipad.png
+            AppIcon40x40@2x~ipad.png
+            AppIcon29x29.png
+            AppIcon29x29@2x.png
+            AppIcon29x29@3x.png
+            AppIcon29x29~ipad.png
+            AppIcon29x29@2x~ipad.png
+            AppIcon20x20.png
+            AppIcon20x20@2x.png
+            AppIcon20x20@3x.png
+            AppIcon20x20~ipad.png
+            AppIcon20x20@2x~ipad.png
+            AppIcon512.png
+            AppIcon1024.png
+        )
+        foreach(iconName IN LISTS iosStandardIconNames)
+            configure_file("${iosIconSource}" "${iosIconDir}/${iconName}" COPYONLY)
+        endforeach()
+    endif()
+
+    file(GLOB iosIconFiles "${iosIconDir}/*.png")
+    if(iosIconFiles)
+        set_source_files_properties(${iosIconFiles} PROPERTIES
+            MACOSX_PACKAGE_LOCATION "Resources"
+        )
+        target_sources(${target} PRIVATE ${iosIconFiles})
+    endif()
+
+    if(EXISTS "${iosIconDir}")
         add_custom_command(TARGET ${target} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${iosIconSource}"
-                "$<TARGET_BUNDLE_DIR:${target}>/AppIcon.png"
-            COMMENT "Copying app icon to iOS bundle for ${target}"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${iosIconDir}"
+                "$<TARGET_BUNDLE_DIR:${target}>"
+            COMMENT "Ensuring app icons in iOS bundle for ${target}"
         )
     endif()
 

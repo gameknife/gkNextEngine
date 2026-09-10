@@ -1,6 +1,12 @@
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 set(GK_SOURCE_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
+if(NOT GK_REPO_ROOT)
+    get_filename_component(GK_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+endif()
+if(NOT GK_ASSET_ROOT)
+    set(GK_ASSET_ROOT "${GK_REPO_ROOT}/assets")
+endif()
 
 include(cmake/SourceFiles.cmake)
 include(cmake/MobileApplications.cmake)

@@ -17,6 +17,8 @@ import (
 	"text/tabwriter"
 
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/cmakerun"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/console"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/icons"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/mobileapps"
 )
 
@@ -76,6 +78,10 @@ func Build(repoRoot, cmakePath, teamID, app string, quiet bool, opts cmakerun.Bu
 	resolved, err := mobileapps.Resolve(repoRoot, mobileapps.IOS, app)
 	if err != nil {
 		return StagedApp{}, err
+	}
+	iconDir := filepath.Join(repoRoot, "out", "build", preset, "ios_icons", resolved.Target)
+	if err := icons.GenerateIOSAppIcons(repoRoot, resolved.Target, iconDir); err != nil {
+		console.Warn("failed to generate iOS icons for %s: %v", resolved.Target, err)
 	}
 	opts.Targets = []string{resolved.Target}
 	if quiet {

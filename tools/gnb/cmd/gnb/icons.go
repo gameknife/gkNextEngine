@@ -68,5 +68,25 @@ func newIconsCommand(ctx appContext) *cobra.Command {
 	androidCmd.Flags().StringVar(&outputRes, "out", "", "target Android res directory")
 	cmd.AddCommand(androidCmd)
 
+	iosApp := ""
+	iosOut := ""
+	iosCmd := &cobra.Command{
+		Use:   "ios",
+		Short: "Generate iOS AppIcon files for an application",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if iosOut == "" {
+				return fmt.Errorf("--out is required (path to output directory)")
+			}
+			if err := icons.GenerateIOSAppIcons(ctx.repoRoot, iosApp, iosOut); err != nil {
+				return err
+			}
+			console.Success("generated iOS app icons for %q into %s", iosApp, iosOut)
+			return nil
+		},
+	}
+	iosCmd.Flags().StringVar(&iosApp, "app", "", "application name (e.g. gkNextRenderer, ScadLibrary)")
+	iosCmd.Flags().StringVar(&iosOut, "out", "", "target output directory for iOS AppIcon*.png files")
+	cmd.AddCommand(iosCmd)
+
 	return cmd
 }

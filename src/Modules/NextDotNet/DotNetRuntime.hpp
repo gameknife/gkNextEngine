@@ -74,6 +74,12 @@ namespace Modules::NextDotNet
         void SetInputEnabled(bool enabled);
         bool IsInputEnabled() const { return inputEnabled_; }
 
+        /// Pointer lock requested by the running game. The OS capture is applied only while input
+        /// is enabled: ejecting a Play session must free the cursor so the editor can be used,
+        /// without the game having to know it was ejected. Unloading always clears the request.
+        void SetRelativeMouseRequested(bool enabled);
+        bool IsRelativeMouseRequested() const { return relativeMouseRequested_; }
+
         /// Pauses or resumes game tick execution. While paused, the managed game's Tick is skipped,
         /// freezing entity movement, physics updates and gameplay logic.
         void SetPaused(bool paused);
@@ -126,6 +132,9 @@ namespace Modules::NextDotNet
         bool hotReloadEnabled_ = false;
         bool inputEnabled_ = true;
         bool isPaused_ = false;
+        bool relativeMouseRequested_ = false;
+
+        void ApplyRelativeMouseMode();
         uint32_t unloadPendingStreak_ = 0;
     };
 }

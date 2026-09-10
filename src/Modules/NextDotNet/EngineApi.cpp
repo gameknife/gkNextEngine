@@ -1,6 +1,9 @@
 #include "Modules/NextDotNet/EngineApi.hpp"
+#include "Modules/NextDotNet/DotNetRuntime.hpp"
+#include "Modules/NextDotNet/NextDotNetModule.hpp"
 
 #include "Engine/Assets/Core/Node.hpp"
+#include "Engine/Options.hpp"
 #include "Engine/Assets/Core/Scene.hpp"
 #include "Engine/Assets/Loaders/FProcModel.hpp"
 #include "Engine/Runtime/Engine.hpp"
@@ -407,6 +410,34 @@ namespace Modules::NextDotNet
                 return;
             }
             StoreVec2(outPosition, 0.0f, 0.0f);
+        }
+
+        void Input_GetMouseDelta(FVec2* outDelta)
+        {
+            StoreVec2(outDelta, GInputState.mouseDelta.x, GInputState.mouseDelta.y);
+        }
+
+        void Input_SetRelativeMouseMode(GkBool enabled)
+        {
+            auto* engine = NextEngine::GetInstance();
+            if (engine == nullptr)
+            {
+                return;
+            }
+            if (DotNetRuntime* runtime = Get(*engine))
+            {
+                runtime->SetRelativeMouseRequested(enabled != 0);
+            }
+        }
+
+        GkBool Input_IsRelativeMouseMode()
+        {
+            auto* engine = NextEngine::GetInstance();
+            if (engine == nullptr || engine->GetWindow().Handle() == nullptr)
+            {
+                return 0;
+            }
+            return SDL_GetWindowRelativeMouseMode(engine->GetWindow().Handle()) ? 1 : 0;
         }
 
         float Input_GetGamepadAxis(int32_t axis)

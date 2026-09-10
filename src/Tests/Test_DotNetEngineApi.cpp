@@ -1,6 +1,7 @@
 #include "Modules/NextDotNet/EngineApi.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <glm/glm.hpp>
 
 #include <cstring>
 #include <vector>
@@ -107,6 +108,15 @@ TEST_CASE("input bindings are safe without an engine", "[Unit][DotNet]")
 
     GInputState.Reset();
     CHECK(api.Input_IsKeyDown(space) == 0);
+
+    // Mouse delta and pointer lock are safe without a window: no capture, no crash.
+    GInputState.mouseDelta = glm::vec2(3.0f, -4.0f);
+    FVec2 delta{};
+    api.Input_GetMouseDelta(&delta);
+    CHECK(delta.X == 3.0f);
+    CHECK(delta.Y == -4.0f);
+    api.Input_SetRelativeMouseMode(1);
+    CHECK(api.Input_IsRelativeMouseMode() == 0);
 }
 
 TEST_CASE("managed pressed input survives only its engine frame", "[Unit][DotNet]")

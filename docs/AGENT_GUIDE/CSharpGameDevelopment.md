@@ -81,8 +81,8 @@ projects/<ProjectName>/
 | **Blank Game** | 地面 + 旋转方块 + HUD，每个生命周期钩子都在且都有注释 | 玩法完全自己写 |
 | **2D Arcade Runner** | 固定步长循环、种子化 RNG、障碍物对象池、Ready/Playing/Dead 状态机 | 街机、跑酷、任何要可复现的东西 |
 | **3D Top-Down Survivor** | WASD 移动、跟随相机、敌人对象池、spawn director、血量与重开 | 俯视角动作、arena survivor |
-| **First-Person Explorer** | yaw/pitch 相机（右键拖拽看）、WASD + Shift、程序化街区 | 场景漫游、白盒关卡、看图工具 |
-| **Third-Person Shooter** | **ScadRig 角色**（玩家 + 敌人池）、越肩相机、瞄准/射击/换弹、命中判定 | 任何有角色的游戏——这是唯一展示 `Rig.*` 的模板 |
+| **First-Person Shooter** | 鼠标锁定视角、WASD、hitscan 射击、ScadRig 敌人 | FPS 射击、白盒关卡 |
+| **Third-Person Shooter** | **ScadRig 角色**（玩家 + 敌人池）、鼠标锁定越肩相机、瞄准/射击/换弹、命中判定 | 任何有角色的游戏——这是唯一展示玩家 `Rig.*` 的模板 |
 
 生成之后：
 

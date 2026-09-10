@@ -18,8 +18,11 @@ namespace {{Namespace}};
 /// scene's transforms dirty. Unlike a game that moves plain render nodes, this one never calls
 /// Scene.MarkTransformDirty for its characters — only the tracer, which is an ordinary node.
 ///
-/// Controls: WASD moves relative to the camera, Shift runs, hold the right mouse button to aim and
-/// steer, left mouse fires, R reloads, Space restarts after a death, Escape leaves.
+/// Pointer lock is on from the first frame so look works at the screen edge and inside the editor
+/// viewport. F8 ejects Play and the host frees the cursor; clicking recaptures it.
+///
+/// Controls: WASD moves relative to the camera, Shift runs, mouse looks, hold the right mouse
+/// button to aim, left mouse fires, R reloads, Space restarts after a death, Escape leaves.
 /// </remarks>
 [GameInstance]
 public sealed class {{ProjectName}}Game : NextGameInstance
@@ -35,7 +38,7 @@ public sealed class {{ProjectName}}Game : NextGameInstance
     private const float RunSpeed = 6.4f;
     private const float AimSpeed = 2.0f;
     private const float TurnRate = 12.0f;
-    private const float LookSensitivity = 0.0045f;
+    private const float LookSensitivity = 0.0030f;
     private const int EnemyCapacity = 20;
     private const float EnemySpeed = 2.6f;
     private const float EnemyHealth = 60.0f;
@@ -58,6 +61,7 @@ public sealed class {{ProjectName}}Game : NextGameInstance
 
     // --- SDL button numbering, which is what the input bindings carry ---------------------------
     private const int LeftMouseButton = 1;
+    private const int RightMouseButton = 3;
 
     private readonly Rng rng = new(RngSeed);
     private readonly ManagedImGui gui = new();
@@ -86,6 +90,8 @@ public sealed class {{ProjectName}}Game : NextGameInstance
     /// <summary>Last frame's reload state, so the reload clip is played on the edge, once.</summary>
     private bool wasReloading;
 
+    private bool mouseJustCaptured;
+
     private string currentClip = string.Empty;
 
     protected override void OnInit()
@@ -96,6 +102,13 @@ public sealed class {{ProjectName}}Game : NextGameInstance
             // game in its menu, so reaching this means something else went wrong.
             Log.Error("[{{ProjectName}}] no rig subsystem — the characters will not appear");
         }
+
+        CaptureMouse();
+    }
+
+    protected override void OnDestroy()
+    {
+        Input.SetRelativeMouseMode(false);
     }
 
     protected override void BeforeSceneRebuild()
@@ -167,6 +180,7 @@ public sealed class {{ProjectName}}Game : NextGameInstance
             Log.Error($"[{{ProjectName}}] could not acquire the player rig from {PlayerRig}");
         }
 
+        CaptureMouse();
         ResetRun();
     }
 
@@ -176,6 +190,8 @@ public sealed class {{ProjectName}}Game : NextGameInstance
         {
             return;
         }
+
+        RecaptureMouseIfClicked();
 
         float delta = MathF.Min((float)deltaSeconds, 0.1f);
         camera.Update(delta);
@@ -236,6 +252,11 @@ public sealed class {{ProjectName}}Game : NextGameInstance
 
     private void UpdateWeapon()
     {
+        if (mouseJustCaptured)
+        {
+            return;
+        }
+
         if (Input.IsKeyPressed("r"))
         {
             rifle.BeginReload();
@@ -396,7 +417,7 @@ public sealed class {{ProjectName}}Game : NextGameInstance
         gui.DrawText($"kills {kills}    infected {enemies.AliveCount}    {survivedSeconds:F0}s",
                      36.0f, 84.0f, HudPalette.Muted);
 
-        gui.DrawTextCenteredX("WASD move   SHIFT run   RMB aim   LMB fire   R reload",
+        gui.DrawTextCenteredX("WASD move   SHIFT run   MOUSE look   RMB aim   LMB fire   R reload",
                               gui.ScreenSize.Y - 38.0f, HudPalette.Muted, 1.0f, shadow: true);
 
         if (!alive)
@@ -490,5 +511,29 @@ public sealed class {{ProjectName}}Game : NextGameInstance
         currentClip = string.Empty;
         PlayPlayerClip("stand_idle", 0.0f);
         Rig.SetTransform(playerRig, Vector3.Zero, 0.0f);
+    }
+
+    private void CaptureMouse()
+    {
+        Input.SetRelativeMouseMode(true);
+        camera.SuppressNextDelta();
+    }
+
+    /// <summary>
+    /// Pointer lock can drop — Alt-Tab, the editor ejecting then resuming — and a click is the
+    /// obvious way to take it back. Ignored while already locked, so firing does not re-issue it.
+    /// </summary>
+    private void RecaptureMouseIfClicked()
+    {
+        mouseJustCaptured = false;
+        if (Input.IsRelativeMouseMode())
+        {
+            return;
+        }
+        if (Input.IsMouseButtonPressed(LeftMouseButton) || Input.IsMouseButtonPressed(RightMouseButton))
+        {
+            CaptureMouse();
+            mouseJustCaptured = true;
+        }
     }
 }

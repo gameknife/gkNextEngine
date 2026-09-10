@@ -7,12 +7,10 @@ namespace {{Namespace}};
 /// The camera that orbits the player, and the basis every movement decision is made in.
 /// </summary>
 /// <remarks>
-/// Look is drag-based: hold the right mouse button and move. There is no relative mouse mode on
-/// this side of the boundary, and a game that grabbed the pointer would be unusable inside the
-/// editor viewport, where this same code runs when you press F5.
-///
-/// That constraint shapes the controls rather than fighting them: holding the right button is
-/// "aim", which is where a third-person shooter wants the camera tight behind the shoulder anyway.
+/// Look reads <see cref="Input.GetMouseDelta"/> under pointer lock, so the view turns at the
+/// screen edge and inside the editor viewport. Holding the right button is still "aim": the
+/// camera closes in over the shoulder. When the pointer is not locked, the same button both
+/// aims and looks, which is what F8 eject and a host that refused capture fall back to.
 /// </remarks>
 internal sealed class TpsCamera(float sensitivity)
 {
@@ -27,8 +25,7 @@ internal sealed class TpsCamera(float sensitivity)
     private const float AimShoulder = 0.85f;
     private const float FocusHeight = 1.5f;
 
-    private bool dragging;
-    private Vector2 lastMousePosition;
+    private bool ignoreNextDelta;
     private float distance = HipDistance;
     private float shoulder = HipShoulder;
 
@@ -58,37 +55,31 @@ internal sealed class TpsCamera(float sensitivity)
     {
         Yaw = yaw;
         Pitch = 0.25f;
-        dragging = false;
+        ignoreNextDelta = true;
         Aiming = false;
         distance = HipDistance;
         shoulder = HipShoulder;
     }
 
+    /// <summary>Drops the next motion sample. Pointer lock warps the cursor; without this the
+    /// view snaps by however far the pointer was from the window centre.</summary>
+    public void SuppressNextDelta() => ignoreNextDelta = true;
+
     /// <summary>Call once per frame, before anything reads the basis.</summary>
     public void Update(float deltaSeconds)
     {
-        Vector2 mouse = Input.GetMousePosition();
+        Vector2 delta = Input.GetMouseDelta();
         Aiming = Input.IsMouseButtonDown(RightMouseButton);
+        bool looking = Input.IsRelativeMouseMode() || Aiming;
 
-        // The frame the drag starts contributes no rotation: without this the first frame uses a
-        // stale anchor and the view snaps by however far the pointer travelled since the last drag.
-        if (Aiming && !dragging)
+        if (ignoreNextDelta)
         {
-            dragging = true;
-            lastMousePosition = mouse;
+            ignoreNextDelta = false;
         }
-        else if (!Aiming)
+        else if (looking)
         {
-            dragging = false;
-        }
-        else
-        {
-            float deltaX = mouse.X - lastMousePosition.X;
-            float deltaY = mouse.Y - lastMousePosition.Y;
-            lastMousePosition = mouse;
-
-            Yaw += deltaX * sensitivity;
-            Pitch = Mathx.Clamp(Pitch + deltaY * sensitivity, PitchMin, PitchMax);
+            Yaw += delta.X * sensitivity;
+            Pitch = Mathx.Clamp(Pitch + delta.Y * sensitivity, PitchMin, PitchMax);
         }
 
         // Eased rather than snapped: the camera moving in is the feedback that says "you are

@@ -7,9 +7,13 @@ namespace {{Namespace}};
 /// Yaw and pitch, turned into a camera basis.
 /// </summary>
 /// <remarks>
-/// Look is drag-based: hold the right mouse button and move. That is deliberate rather than a
-/// stopgap — there is no relative mouse mode on this side of the boundary, and a game that grabbed
-/// the pointer would be unusable inside the editor viewport, where the same code has to run.
+/// Look reads <see cref="Input.GetMouseDelta"/>, not cursor position. Pointer lock
+/// (<see cref="Input.SetRelativeMouseMode"/>) is what makes that usable at the screen edge and
+/// inside the editor viewport: without it the cursor would stop at the window border and F5 Play
+/// would be a drag-to-look toy.
+///
+/// When the pointer is not locked — ejected Play, or a host that refused capture — holding the
+/// right mouse button still looks, so the same code is playable without a grabbed cursor.
 ///
 /// Angles are stored, not a matrix. Everything else is derived, which keeps the one piece of state
 /// that can drift down to two floats.
@@ -24,8 +28,7 @@ internal sealed class LookController(float sensitivity)
     /// world up and the camera basis collapses.</summary>
     private const float PitchLimit = 1.55f;
 
-    private bool dragging;
-    private Vector2 lastMousePosition;
+    private bool ignoreNextDelta;
 
     public float Yaw { get; private set; }
     public float Pitch { get; private set; } = -0.15f;
@@ -51,33 +54,30 @@ internal sealed class LookController(float sensitivity)
     {
         Yaw = yaw;
         Pitch = pitch;
-        dragging = false;
+        ignoreNextDelta = true;
     }
+
+    /// <summary>Drops the next motion sample. Pointer lock warps the cursor; without this the
+    /// view snaps by however far the pointer was from the window centre.</summary>
+    public void SuppressNextDelta() => ignoreNextDelta = true;
 
     /// <summary>Call once per frame, before the camera is read.</summary>
     public void Update()
     {
-        Vector2 mouse = Input.GetMousePosition();
-        bool held = Input.IsMouseButtonDown(RightMouseButton);
-
-        if (!held)
+        Vector2 delta = Input.GetMouseDelta();
+        bool looking = Input.IsRelativeMouseMode() || Input.IsMouseButtonDown(RightMouseButton);
+        if (ignoreNextDelta)
         {
-            dragging = false;
+            ignoreNextDelta = false;
             return;
         }
 
-        // The frame the drag starts contributes no rotation: without this the first frame uses a
-        // stale anchor and the view snaps by however far the pointer travelled since the last drag.
-        if (!dragging)
+        if (!looking)
         {
-            dragging = true;
-            lastMousePosition = mouse;
             return;
         }
 
-        Yaw += (mouse.X - lastMousePosition.X) * sensitivity;
-        Pitch = Mathx.Clamp(Pitch - (mouse.Y - lastMousePosition.Y) * sensitivity,
-                            -PitchLimit, PitchLimit);
-        lastMousePosition = mouse;
+        Yaw += delta.X * sensitivity;
+        Pitch = Mathx.Clamp(Pitch - delta.Y * sensitivity, -PitchLimit, PitchLimit);
     }
 }

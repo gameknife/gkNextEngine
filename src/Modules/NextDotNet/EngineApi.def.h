@@ -49,6 +49,15 @@ GK_API(Input, IsMouseButtonDown,     GkBool, (int32_t button))
 GK_API(Input, IsMouseButtonPressed,  GkBool, (int32_t button))
 GK_API(Input, IsGamepadButtonDown,   GkBool, (GkStr name))
 GK_API(Input, GetMousePosition,      void,   (FVec2* outPosition))
+// Accumulated SDL xrel/yrel since the previous Tick. First-person look reads this rather than
+// differencing cursor position, which is what makes pointer lock usable: the cursor no longer has
+// to travel across the window.
+GK_API(Input, GetMouseDelta,         void,   (FVec2* outDelta))
+// Pointer lock. The editor's eject switch (and a host that mutes input) releases the OS capture
+// without forgetting the request, so resuming Play locks the mouse again. Agent-validation
+// sessions never capture, so gnb shot / gnb validate keep a free cursor.
+GK_API(Input, SetRelativeMouseMode,  void,   (GkBool enabled))
+GK_API(Input, IsRelativeMouseMode,   GkBool, ())
 // SDL_GamepadAxis values: left X/Y, right X/Y, left/right trigger are 0..5. The returned value is
 // normalised to [-1, 1]; games own their dead-zone policy.
 GK_API(Input, GetGamepadAxis,        float,  (int32_t axis))

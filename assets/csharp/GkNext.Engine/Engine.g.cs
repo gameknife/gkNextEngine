@@ -34,6 +34,9 @@ namespace GkNext.Interop
         public delegate* unmanaged<int, int> Input_IsMouseButtonPressed;
         public delegate* unmanaged<GkStr, int> Input_IsGamepadButtonDown;
         public delegate* unmanaged<Vector2*, void> Input_GetMousePosition;
+        public delegate* unmanaged<Vector2*, void> Input_GetMouseDelta;
+        public delegate* unmanaged<int, void> Input_SetRelativeMouseMode;
+        public delegate* unmanaged<int> Input_IsRelativeMouseMode;
         public delegate* unmanaged<int, float> Input_GetGamepadAxis;
         public delegate* unmanaged<GkStr, float, void> Audio_PlaySfx;
         public delegate* unmanaged<GkStr, float, uint, void> Audio_PlaySfxEx;
@@ -134,7 +137,7 @@ namespace GkNext.Interop
     /// <summary>Number of bindings in the table, checked against the native side.</summary>
     public static class EngineApiInfo
     {
-        public const int EntryCount = 111;
+        public const int EntryCount = 114;
     }
 }
 
@@ -284,6 +287,23 @@ namespace GkNext
             Vector2 result = default;
             Api.Table->Input_GetMousePosition(&result);
             return result;
+        }
+
+        public static Vector2 GetMouseDelta()
+        {
+            Vector2 result = default;
+            Api.Table->Input_GetMouseDelta(&result);
+            return result;
+        }
+
+        public static void SetRelativeMouseMode(bool enabled)
+        {
+            Api.Table->Input_SetRelativeMouseMode(enabled ? 1 : 0);
+        }
+
+        public static bool IsRelativeMouseMode()
+        {
+            return Api.Table->Input_IsRelativeMouseMode() != 0;
         }
 
         public static float GetGamepadAxis(int axis)

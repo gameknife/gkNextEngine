@@ -32,6 +32,9 @@ namespace Modules::NextDotNet
         std::unordered_set<uint8_t> gamepadButtonsPressed;
         std::array<int16_t, 6> gamepadAxes{};
         uint32_t pressedFrame = invalidPressedFrame;
+        /// SDL xrel/yrel accumulated this frame. Cleared at the end of Tick so look and HUD see
+        /// the same motion and a skipped UI hook cannot leak it into the next frame.
+        glm::vec2 mouseDelta{0.0f, 0.0f};
 
         void ClearPressed()
         {
@@ -64,6 +67,7 @@ namespace Modules::NextDotNet
             mouseButtonsDown.clear();
             gamepadButtonsDown.clear();
             gamepadAxes.fill(0);
+            mouseDelta = {};
             ClearPressed();
         }
     };

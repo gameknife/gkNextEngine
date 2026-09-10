@@ -4,6 +4,7 @@
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/Platform/PlatformCommon.hpp"
 #include "Engine/Utilities/FileHelper.hpp"
+#include "Engine/Options.hpp"
 
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -262,6 +263,8 @@ namespace Modules::NextDotNet
         gameLoaded_ = false;
         gameAssemblyPath_.clear();
         isPaused_ = false;
+        relativeMouseRequested_ = false;
+        ApplyRelativeMouseMode();
 
         switch (static_cast<EGameStatus>(status))
         {
@@ -291,6 +294,10 @@ namespace Modules::NextDotNet
         {
             managed_->Tick(deltaSeconds);
         }
+        // Look reads the delta during Tick. Clearing afterwards (rather than on read) lets a
+        // second consumer in the same Tick see the same motion, and a skipped UI hook cannot
+        // leak last frame's travel into the next one.
+        GInputState.mouseDelta = {};
 
         TickHotReload(deltaSeconds);
     }
@@ -316,12 +323,40 @@ namespace Modules::NextDotNet
             return;
         }
         inputEnabled_ = enabled;
+        ApplyRelativeMouseMode();
         if (!enabled)
         {
             // Whatever was held when input was cut never gets its key-up, so release it here.
             // Otherwise a game ejected out of mid-stride keeps walking for as long as it runs.
             GInputState.Reset();
         }
+    }
+
+    void DotNetRuntime::SetRelativeMouseRequested(bool enabled)
+    {
+        relativeMouseRequested_ = enabled;
+        ApplyRelativeMouseMode();
+    }
+
+    void DotNetRuntime::ApplyRelativeMouseMode()
+    {
+        SDL_Window* window = engine_.GetWindow().Handle();
+        if (window == nullptr)
+        {
+            return;
+        }
+
+        const bool capture = inputEnabled_ && relativeMouseRequested_ &&
+                             (GOption == nullptr || !GOption->AgentValidation);
+        if (static_cast<bool>(SDL_GetWindowRelativeMouseMode(window)) == capture)
+        {
+            return;
+        }
+
+        SDL_SetWindowRelativeMouseMode(window, capture);
+        // Enabling pointer lock warps the cursor; drop that motion so the first look frame
+        // does not snap by however far the pointer was from the window centre.
+        GInputState.mouseDelta = {};
     }
 
     void DotNetRuntime::HandleEvent(const SDL_Event& event)
@@ -387,6 +422,11 @@ namespace Modules::NextDotNet
             forwarded.Type = static_cast<int32_t>(EInputEventType::GamepadButtonUp);
             forwarded.GamepadButton = event.gbutton.button;
             forward = true;
+            break;
+
+        case SDL_EVENT_MOUSE_MOTION:
+            GInputState.mouseDelta.x += event.motion.xrel;
+            GInputState.mouseDelta.y += event.motion.yrel;
             break;
 
         default:

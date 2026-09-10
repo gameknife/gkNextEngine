@@ -739,6 +739,16 @@ bool NextEngine::HandleEvent(SDL_Event& event)
                 scriptRuntime_->HandleEvent(event);
             }
             break;
+        case SDL_EVENT_MOUSE_MOTION:
+            // Motion is accumulated as a delta for pointer-locked look. It is forwarded even
+            // when ImGui consumed the event: the editor's panels sit around the play viewport,
+            // and a grabbed cursor would otherwise stop turning the view the moment it is
+            // reported over a docked window.
+            if (!rmlUiConsumed)
+            {
+                scriptRuntime_->HandleEvent(event);
+            }
+            break;
         default:
             break;
         }

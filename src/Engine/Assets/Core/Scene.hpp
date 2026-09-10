@@ -279,6 +279,16 @@ namespace Assets
         uint32_t AmbientPoolBricksPerCascade() const { return poolBricksPerCascade_; }
         uint32_t AmbientActiveBrickCount(uint32_t cascade) const;
         void SetAmbientActiveBrickCounts(const std::vector<uint32_t>& counts);
+        // Set when the ambient bake was restored from the disk cache during RebuildMeshBuffer.
+        // SetScene() runs after that and would otherwise clear the freshly restored cube pool, so it
+        // consumes this flag to skip the clear pass exactly once.
+        void MarkAmbientCacheRestored() { ambientCacheRestored_ = true; }
+        bool ConsumeAmbientCacheRestored()
+        {
+            const bool restored = ambientCacheRestored_;
+            ambientCacheRestored_ = false;
+            return restored;
+        }
 
         TextureImage& ShadowMap() const;
         TextureImage& EnsureCpuShadowMap(Vulkan::CommandPool& commandPool);
@@ -419,6 +429,7 @@ namespace Assets
         // Set only by Reload(), i.e. a full level transition. Appending content or
         // ordinary scene edits must not schedule another full probe bake.
         bool levelVoxelBakePending_ = false;
+        bool ambientCacheRestored_ = false;
         bool sceneDirty_ = true;
         bool materialDirty_ = true;
         SceneRebuildProfile lastRebuildProfile_{};

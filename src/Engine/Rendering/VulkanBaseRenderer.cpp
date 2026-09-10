@@ -851,7 +851,16 @@ namespace Vulkan
         {
             renderViewServices_->OnMainSceneChanged();
         }
-        RequestClearAmbientCubeCache();
+        // A scene that restored its bake from the disk cache already holds valid ambient cubes; the
+        // clear pass would wipe them on the first frame and re-open a bake that never needs to run.
+        if (scene && scene->ConsumeAmbientCacheRestored())
+        {
+            ambient_.requestClearCache = false;
+        }
+        else
+        {
+            RequestClearAmbientCubeCache();
+        }
         resetUpscalerHistory_ = true;
     }
 

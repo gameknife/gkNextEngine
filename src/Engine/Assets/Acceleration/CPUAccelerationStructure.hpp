@@ -241,6 +241,9 @@ enum class EProbeBakeStage : uint8_t
     Idle,
     VoxelData,
     DistanceField,
+    // The GPU lighting has converged and the result is on its way to the disk cache. Off the game
+    // thread, but the bake is not finished until it lands, so the UI keeps showing progress.
+    CacheSave,
 };
 
 struct FProbeBakeProgress
@@ -307,6 +310,12 @@ private:
     void QueueFullProbeBake();
     bool HasProbeVoxelizationWork() const;
 
+    // Ambient bake disk cache. The key is computed once per full bake from the scene's initial
+    // structure; a hit replaces the whole bake, a miss arms the write that happens after the GPU
+    // bake converges. See AmbientBakeCache.hpp.
+    bool TryRestoreAmbientBakeCache(Assets::Scene& scene, Vulkan::DeviceMemory* arenaMemory, uint64_t key);
+    void FlushPendingAmbientBakeCacheSave(Assets::Scene& scene, Vulkan::DeviceMemory* arenaMemory);
+
 #if defined(__cpp_lib_atomic_shared_ptr) && __cpp_lib_atomic_shared_ptr >= 201711L
     std::atomic<SnapshotPtr> activeSnapshot_;
 #else
@@ -334,6 +343,15 @@ private:
     std::vector<double> buildToPublishSamples_;
     bool fullProbeBakePending_ = true;
     bool ambientBakeIdle_ = false;
+    uint64_t ambientCacheKey_ = 0;
+    // Earliest frame the save may run: the converging frame's dispatches must have retired first,
+    // which is what lets the whole readback happen on a worker with no device wait.
+    uint32_t ambientCacheSaveFrame_ = 0;
+    bool ambientCacheWriteArmed_ = false;
+    bool ambientCachePendingSave_ = false;
+    // Set on the game thread when the write task is dispatched, cleared by that task. Atomic only
+    // because GetProbeBakeProgress() reads it while the worker is running.
+    std::atomic<bool> ambientCacheSaveInFlight_{false};
     uint32_t totalVoxelGroups_ = 0;
     std::atomic<uint32_t> completedVoxelGroups_{0};
         

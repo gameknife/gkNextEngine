@@ -211,6 +211,16 @@ namespace Runtime::DevToolsUI
                 return;
             }
 
+            // The lighting is already usable here; the readback and write run on a worker. It still
+            // shows as progress because the bake is not reusable on the next launch until the cache
+            // file lands, and a scene switch during this window waits for it.
+            if (probeProgress.stage == Assets::CPU::EProbeBakeStage::CacheSave)
+            {
+                DrawActivity("Bake", "Saving", 0.0f, true, EBakeStatus::Progress,
+                             "Bake progress: writing the bake cache to disk");
+                return;
+            }
+
             const Vulkan::FAmbientBakeProgress ambientProgress = renderer.GetAmbientBakeProgress();
             if (ambientProgress.active)
             {

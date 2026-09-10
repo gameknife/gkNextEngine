@@ -65,6 +65,7 @@ set(unitTestSources
     Test_NextAstrobot.cpp
     Test_CPUAccelerationSnapshot.cpp
     Test_AmbientBakeScheduler.cpp
+    Test_AmbientBakeCache.cpp
     ${GK_SOURCE_ROOT}/Application/Editor/ScadStudio/ScadOutline.cpp
     ${GK_SOURCE_ROOT}/Application/Editor/ScadStudio/ScadPromptContext.cpp
     ${GK_SOURCE_ROOT}/Application/Editor/ScadStudio/ScadSessionStore.cpp

@@ -49,6 +49,7 @@
 - [大气散射与高度雾](designs/atmosphere-and-height-fog-design.md)
 - [GI 缓存与体素资源](designs/gi-cache-architecture.md)
 - [AmbientCube 命中驱动驻留](designs/ambientcube-hit-driven-residency-design.md)
+- [AmbientCube Bake 磁盘缓存](designs/ambientcube-bake-cache-design.md)
 - [CPU TLAS 快照与后台重建](designs/cpu-tlas-snapshot-architecture.md)
 - [RenderView 多视图](designs/multi-viewport-renderview-design.md)
 - [Gaussian Splat / SOG v2](designs/gaussian-splatting-sog-design.md)
@@ -112,7 +113,6 @@
 
 ## 剩余计划
 
-- [GI Bake 磁盘缓存](plans/gi-bake-disk-cache-plan.md)（待实施）
 - [PathTracing 材质模型统一](plans/shader-material-model-unification-plan.md)（待审阅）
 - [地理城市生成剩余项](plans/geo-city-generation-plan.md)（P0–P5 已完成；只保留未完成项）
 - [ScadLibrary AI 创作收口](plans/scadlibrary-ai-authoring-plan.md)（M0–M4 已完成；只剩 ScadStudio 退役门槛）

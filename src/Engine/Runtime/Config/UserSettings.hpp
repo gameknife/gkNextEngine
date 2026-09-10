@@ -117,6 +117,7 @@ struct UserSettings final
     uint32_t AmbientCubeGraceFrames = 30;
     float AmbientCubeHitMarkTileRatio = 0.25f;
     int AmbientCubeResidencyDebug = 0;
+    bool AmbientCubeDiskCache = true;
     // Multiplier on the indirect term only (SHARC cache hit + ambient-cube path terminal).
     // 1 = physically accumulated GI; raise it to lift bounce light without touching direct/sky.
     float IndirectIntensity = 1.0f;

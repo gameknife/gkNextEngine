@@ -55,6 +55,33 @@ namespace Modules::NextDotNet
             }
         }
 
+        EMobileControls ReadMobileControls(const json& source)
+        {
+            const auto it = source.find("mobileControls");
+            if (it == source.end())
+            {
+                return EMobileControls::None;
+            }
+            if (!it->is_string())
+            {
+                SPDLOG_WARN("[game] manifest 'mobileControls' must be a string; disabling touch controls");
+                return EMobileControls::None;
+            }
+
+            const std::string value = it->get<std::string>();
+            if (value == "dualStick")
+            {
+                return EMobileControls::DualStick;
+            }
+            if (value == "none")
+            {
+                return EMobileControls::None;
+            }
+
+            SPDLOG_WARN("[game] unknown mobileControls '{}'; disabling touch controls", value);
+            return EMobileControls::None;
+        }
+
         std::string StemOf(const std::string& path)
         {
             const std::string filename = std::filesystem::path(path).filename().string();
@@ -111,6 +138,7 @@ namespace Modules::NextDotNet
             manifest.assembly = root.value("assembly", std::string());
             manifest.project = root.value("project", std::string());
             manifest.initialScene = ResolveContentPath(manifest, root.value("initialScene", std::string()));
+            manifest.mobileControls = ReadMobileControls(root);
             manifest.hotReload = root.value("hotReload", true);
             manifest.compileManagedSources = root.value("compileManagedSources", false);
 

@@ -29,12 +29,13 @@ func ManifestPath(repoRoot string) string {
 // App is one entry of the registry. Only the fields the CLI needs are decoded; CMake owns the
 // rest (directory, scene, .NET requirement).
 type App struct {
-	Target      string   `json:"target"`
-	Label       string   `json:"label"`
-	Icon        string   `json:"icon"`
-	Platforms   []string `json:"platforms"`
-	AndroidID   string   `json:"androidId"`
-	IOSBundleID string   `json:"iosBundleId"`
+	Target         string   `json:"target"`
+	Label          string   `json:"label"`
+	Icon           string   `json:"icon"`
+	Platforms      []string `json:"platforms"`
+	AndroidID      string   `json:"androidId"`
+	IOSBundleID    string   `json:"iosBundleId"`
+	RequiresDotNet bool     `json:"requiresDotNet"`
 }
 
 // SupportsPlatform reports whether the application can be packaged for platform.

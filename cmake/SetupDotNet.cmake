@@ -38,10 +38,41 @@ endif()
 set(gkTargetRid "${gkHostRid}")
 
 if(IOS)
-    # iOS needs a static NativeAOT library linked into the app bundle and a signing story to go with
-    # it; neither is done yet, so the module is simply absent there.
-    message(${gkDotNetOffLevel} ".NET scripting disabled on this platform")
-    return()
+    # iOS has no CoreCLR host. Each application statically links exactly one NativeAOT game into
+    # its executable, which is then signed as part of the ordinary application bundle. The runtime
+    # pack is restored by `dotnet publish`; NativeAOT does not need hostfxr headers.
+    if(NOT CMAKE_HOST_APPLE OR NOT CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "arm64")
+        message(FATAL_ERROR
+            "iOS NativeAOT requires an Apple Silicon macOS host (got ${CMAKE_HOST_SYSTEM_NAME} "
+            "${CMAKE_HOST_SYSTEM_PROCESSOR}).")
+    endif()
+    if(NOT CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
+        message(FATAL_ERROR
+            "iOS NativeAOT supports arm64 devices only; set CMAKE_OSX_ARCHITECTURES=arm64.")
+    endif()
+    if(NOT CMAKE_OSX_SYSROOT MATCHES "iphoneos")
+        message(FATAL_ERROR
+            "iOS NativeAOT requires the iphoneos SDK, got CMAKE_OSX_SYSROOT='${CMAKE_OSX_SYSROOT}'.")
+    endif()
+    if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+        message(FATAL_ERROR "iOS NativeAOT requires CMAKE_OSX_DEPLOYMENT_TARGET to be set.")
+    endif()
+
+    set(GK_DOTNET_BACKEND "AOT" CACHE STRING "Managed scripting backend: CoreCLR or AOT" FORCE)
+    set(gkTargetRid "ios-arm64")
+    # CMake accepts the symbolic sysroot `iphoneos`, but ILCompiler needs the concrete SDK path.
+    execute_process(
+        COMMAND xcrun --sdk iphoneos --show-sdk-path
+        RESULT_VARIABLE gkIosSdkResult
+        OUTPUT_VARIABLE gkIosSdkPath
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_VARIABLE gkIosSdkError)
+    if(NOT gkIosSdkResult EQUAL 0 OR NOT EXISTS "${gkIosSdkPath}")
+        message(FATAL_ERROR
+            "iOS NativeAOT could not resolve the iphoneos SDK with xcrun: ${gkIosSdkError}")
+    endif()
+    set(GK_DOTNET_IOS_SDK "${gkIosSdkPath}")
+    set(GK_DOTNET_IOS_DEPLOYMENT_TARGET "${CMAKE_OSX_DEPLOYMENT_TARGET}")
 endif()
 
 if(ANDROID)
@@ -302,6 +333,40 @@ function(gk_dotnet_managed_game target)
             set(nativeBinary "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${nativeName}.dll")
             set(stagedLib "${stageDir}/${nativeName}.lib")
             set(stagedBinary "${stageDir}/${nativeName}.dll")
+        elseif(IOS)
+            # iOS NativeAOT is deliberately a static archive. It is linked into the executable,
+            # never copied into bundle resources, so C++ and managed code share one signature.
+            # NativeAOT's iOS static output has no `lib` prefix (unlike its Android .so output).
+            set(nativeLib "${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}/${nativeName}.a")
+            set(nativeBinary "${nativeLib}")
+            set(stagedLib "${stageDir}/${nativeName}.a")
+            set(stagedBinary "${stagedLib}")
+            set(aotRuntimeLibraries
+                "${stageDir}/libSystem.Native.a"
+                "${stageDir}/libSystem.IO.Compression.Native.a"
+                "${stageDir}/libSystem.Net.Security.Native.a"
+                "${stageDir}/libSystem.Security.Cryptography.Native.Apple.a"
+                "${stageDir}/libRuntime.WorkstationGC.a"
+                "${stageDir}/libeventpipe-disabled.a"
+                "${stageDir}/libstandalonegc-disabled.a"
+                "${stageDir}/libaotminipal.a"
+                "${stageDir}/libstdc++compat.a"
+                "${stageDir}/libbootstrapperdll.o")
+            list(APPEND publishArgs
+                -p:GkNativeLib=Static
+                -p:PublishAotUsingRuntimePack=true
+                "-p:AppleSdkPath=${GK_DOTNET_IOS_SDK}"
+                "-p:TargetOSVersion=${GK_DOTNET_IOS_DEPLOYMENT_TARGET}"
+                # Xcode may have previously run the same ProjectReferences with a different
+                # environment. ArtifactsOutput keeps each app/RID publish isolated from source
+                # tree bin/obj caches and from every other mobile target.
+                -p:UseArtifactsOutput=true
+                "-p:ArtifactsPath=${stageDir}/artifacts")
+            # Xcode exports TARGET_NAME / PRODUCT_NAME to every shell script. MSBuild imports
+            # environment variables as properties, so those values otherwise leak into TargetName
+            # for all ProjectReferences and make GkNext.Engine appear as TestFPSManagedGame.dll.
+            set(publishLauncher ${CMAKE_COMMAND} -E env
+                "--unset=TARGET_NAME" "--unset=PRODUCT_NAME" "--")
         elseif(APPLE)
             # NativeAOT's macOS shared-library output has a .dylib suffix but, unlike ELF,
             # does not add a lib prefix. Treating macOS as generic Unix made the publish itself
@@ -340,6 +405,14 @@ function(gk_dotnet_managed_game target)
         add_custom_target(${target}ManagedGame DEPENDS ${stamp})
         add_dependencies(${target} ${target}ManagedGame)
         target_link_libraries(${target} PRIVATE "${nativeLib}")
+        if(IOS)
+            # Metadata-rooted NativeAOT code must survive ld64 dead stripping. Force-load only the
+            # managed archive: -all_load would also pull every engine archive and duplicate symbols.
+            target_link_options(${target} PRIVATE "-Wl,-force_load,${nativeLib}")
+            target_link_libraries(${target} PRIVATE ${aotRuntimeLibraries})
+            find_library(gkDotNetObjcLibrary objc REQUIRED)
+            target_link_libraries(${target} PRIVATE "${gkDotNetObjcLibrary}")
+        endif()
         if(MSVC)
             # Incremental linking keeps a .ilk/.pdb pair describing the previous link. Switching
             # backend changes the inputs enough that the linker rejects them (LNK1207), and there

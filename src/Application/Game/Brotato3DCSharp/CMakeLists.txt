@@ -1,15 +1,11 @@
-file(GLOB_RECURSE brotato3DCSharpSources CONFIGURE_DEPENDS "*.cpp" "*.hpp" "*.h")
-
-gk_add_application(Brotato3DCSharp
+gk_add_managed_game_application(Brotato3DCSharp
     ICON Brotato3D
-    SOURCES ${brotato3DCSharpSources}
+    MANIFEST "assets/projects/Brotato3D/brotato3d.game.json"
+    PROJECT "${GK_GAME_PROJECTS_ROOT}/Brotato3D/Scripts/Brotato3DCSharp.csproj"
+    DIR brotato3d
     MODULES
         ${GK_STANDARD_RUNTIME_MODULES}
         ScadLoader
         NextDotNet
-)
-
-gk_dotnet_managed_game(Brotato3DCSharp
-    PROJECT "${GK_GAME_PROJECTS_ROOT}/Brotato3D/Scripts/Brotato3DCSharp.csproj"
-    DIR brotato3d
+    REGISTER_SCAD_LOADER
 )

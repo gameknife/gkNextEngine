@@ -477,10 +477,13 @@ function(gk_configure_ios_application target)
         AVFoundation
         CoreAudio
         CoreFoundation
+        CryptoKit
         Foundation
+        GSS
         AudioToolbox
         ImageIO
         Metal
+        Network
         QuartzCore
         CoreGraphics
         IOSurface

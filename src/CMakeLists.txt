@@ -11,6 +11,7 @@ endif()
 include(cmake/SourceFiles.cmake)
 include(cmake/MobileApplications.cmake)
 include(cmake/TargetHelpers.cmake)
+include(cmake/ManagedGameApplication.cmake)
 include(cmake/RuntimeFeatures.cmake)
 
 if(UNIX AND NOT APPLE AND NOT ANDROID)

@@ -116,16 +116,17 @@ func TestResolveIsCaseInsensitiveAndRejectsUnknown(t *testing.T) {
 	}
 }
 
-// A C# game has no iOS bundle to build: the managed scripting layer is disabled there.
-func TestManagedGamesAreAndroidOnly(t *testing.T) {
+func TestIOSManagedGamesDeclareTheirRuntimeRequirement(t *testing.T) {
 	root := repoRoot(t)
 	apps, err := ForPlatform(root, IOS)
 	if err != nil {
 		t.Fatalf("ForPlatform(ios) error = %v", err)
 	}
 	for _, app := range apps {
-		if strings.Contains(app.Target, "CSharp") || app.Target == "DotNetSandbox" {
-			t.Errorf("%s hosts C# and cannot be packaged for iOS", app.Target)
+		if strings.Contains(app.Target, "CSharp") || app.Target == "DotNetSandbox" || app.Target == "TestFPS" {
+			if !app.RequiresDotNet {
+				t.Errorf("%s hosts C# and must set requiresDotNet", app.Target)
+			}
 		}
 	}
 }

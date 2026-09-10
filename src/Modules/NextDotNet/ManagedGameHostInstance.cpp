@@ -89,6 +89,85 @@ namespace Modules::NextDotNet
         return false;
     }
 
+    bool ManagedGameHostInstance::OnTouch(SDL_Event& event)
+    {
+#if IOS || ANDROID
+        if (!UsesDualStickTouch())
+        {
+            return false;
+        }
+
+        const SDL_TouchFingerEvent& touch = event.tfinger;
+        if (event.type == SDL_EVENT_FINGER_DOWN)
+        {
+            uint64_t& activeFinger = touch.x < 0.5f ? moveFinger_ : lookFinger_;
+            if (activeFinger == 0)
+            {
+                activeFinger = touch.fingerID;
+                if (touch.x < 0.5f)
+                {
+                    moveCenter_ = {touch.x, touch.y};
+                    touchLeftX_ = 0;
+                    touchLeftY_ = 0;
+                }
+                else
+                {
+                    lookCenter_ = {touch.x, touch.y};
+                    touchRightX_ = 0;
+                    touchRightY_ = 0;
+                }
+                PublishGamepadInput();
+            }
+            return true;
+        }
+
+        if (event.type == SDL_EVENT_FINGER_UP || event.type == SDL_EVENT_FINGER_CANCELED)
+        {
+            if (moveFinger_ == touch.fingerID)
+            {
+                moveFinger_ = 0;
+                touchLeftX_ = 0;
+                touchLeftY_ = 0;
+            }
+            if (lookFinger_ == touch.fingerID)
+            {
+                lookFinger_ = 0;
+                touchRightX_ = 0;
+                touchRightY_ = 0;
+            }
+            PublishGamepadInput();
+            return true;
+        }
+
+        if (event.type != SDL_EVENT_FINGER_MOTION)
+        {
+            return true;
+        }
+
+        const VkExtent2D windowSize = GetEngine().GetWindow().WindowSize();
+        const float width = static_cast<float>(std::max(1u, windowSize.width));
+        const float height = static_cast<float>(std::max(1u, windowSize.height));
+        if (moveFinger_ == touch.fingerID)
+        {
+            SetTouchStick((touch.x - static_cast<float>(moveCenter_.x)) * width,
+                          (touch.y - static_cast<float>(moveCenter_.y)) * height,
+                          touchLeftX_, touchLeftY_);
+            PublishGamepadInput();
+        }
+        else if (lookFinger_ == touch.fingerID)
+        {
+            SetTouchStick((touch.x - static_cast<float>(lookCenter_.x)) * width,
+                          (touch.y - static_cast<float>(lookCenter_.y)) * height,
+                          touchRightX_, touchRightY_);
+            PublishGamepadInput();
+        }
+        return true;
+#else
+        (void)event;
+        return false;
+#endif
+    }
+
     bool ManagedGameHostInstance::OnGamepadInput(int16_t leftStickX,
                                                  int16_t leftStickY,
                                                  int16_t rightStickX,
@@ -96,8 +175,68 @@ namespace Modules::NextDotNet
                                                  int16_t leftTrigger,
                                                  int16_t rightTrigger)
     {
-        session_.SetGamepadInput(leftStickX, leftStickY, rightStickX, rightStickY, leftTrigger, rightTrigger);
+        if (!UsesDualStickTouch())
+        {
+            session_.SetGamepadInput(leftStickX, leftStickY, rightStickX, rightStickY,
+                                     leftTrigger, rightTrigger);
+            return false;
+        }
+
+        physicalLeftX_ = leftStickX;
+        physicalLeftY_ = leftStickY;
+        physicalRightX_ = rightStickX;
+        physicalRightY_ = rightStickY;
+        physicalLeftTrigger_ = leftTrigger;
+        physicalRightTrigger_ = rightTrigger;
+        PublishGamepadInput();
         return false;
+    }
+
+    int16_t ManagedGameHostInstance::ToGamepadAxis(float value)
+    {
+        constexpr float axisMax = 32767.0f;
+        return static_cast<int16_t>(std::lround(std::clamp(value, -1.0f, 1.0f) * axisMax));
+    }
+
+    int16_t ManagedGameHostInstance::CombineGamepadAxes(int16_t physical, int16_t touch)
+    {
+        return static_cast<int16_t>(std::clamp(static_cast<int32_t>(physical) + touch, -32767, 32767));
+    }
+
+    bool ManagedGameHostInstance::UsesDualStickTouch() const
+    {
+        return bootManifest_ && bootManifest_->mobileControls == EMobileControls::DualStick;
+    }
+
+    void ManagedGameHostInstance::SetTouchStick(float deltaX, float deltaY,
+                                                int16_t& outX, int16_t& outY) const
+    {
+        constexpr float joystickRadiusFraction = 0.20f;
+        const VkExtent2D windowSize = GetEngine().GetWindow().WindowSize();
+        const float radius = std::min(static_cast<float>(std::max(1u, windowSize.width)),
+                                      static_cast<float>(std::max(1u, windowSize.height))) *
+                             joystickRadiusFraction;
+        const float distance = std::sqrt(deltaX * deltaX + deltaY * deltaY);
+        if (distance <= 0.0001f || radius <= 0.0f)
+        {
+            outX = 0;
+            outY = 0;
+            return;
+        }
+
+        const float magnitude = std::min(distance / radius, 1.0f);
+        outX = ToGamepadAxis((deltaX / distance) * magnitude);
+        // SDL gamepad Y points down; MoveAxis.Poll() converts it to forward-positive.
+        outY = ToGamepadAxis((deltaY / distance) * magnitude);
+    }
+
+    void ManagedGameHostInstance::PublishGamepadInput()
+    {
+        session_.SetGamepadInput(CombineGamepadAxes(physicalLeftX_, touchLeftX_),
+                                 CombineGamepadAxes(physicalLeftY_, touchLeftY_),
+                                 CombineGamepadAxes(physicalRightX_, touchRightX_),
+                                 CombineGamepadAxes(physicalRightY_, touchRightY_),
+                                 physicalLeftTrigger_, physicalRightTrigger_);
     }
 
     void ManagedGameHostInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<Assets::Node>>& nodes,

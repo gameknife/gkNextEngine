@@ -8,6 +8,8 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>GkNext.SourceGen</AssemblyName>
+    <TargetName>GkNext.SourceGen</TargetName>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>false</ImplicitUsings>

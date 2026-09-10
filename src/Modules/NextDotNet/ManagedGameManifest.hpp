@@ -6,6 +6,14 @@
 
 namespace Modules::NextDotNet
 {
+    /// Touch layout a managed game opts into on mobile devices. The default deliberately has no
+    /// synthesized input: a platformer or UI-centric game should not inherit FPS controls.
+    enum class EMobileControls
+    {
+        None,
+        DualStick,
+    };
+
     /// Everything that used to differ between one C# game's native shell and another's, expressed
     /// as data. See docs/designs/managed-game-launcher-design.md section 3.
     ///
@@ -66,6 +74,10 @@ namespace Modules::NextDotNet
         std::string initialScene;
 
         FShowFlagOverrides showFlags;
+
+        /// Optional mobile input layout. "dualStick" divides the screen into movement and look
+        /// sticks; it is translated to the existing gamepad ABI by ManagedGameHostInstance.
+        EMobileControls mobileControls = EMobileControls::None;
 
         bool hotReload = true;
         bool compileManagedSources = false;

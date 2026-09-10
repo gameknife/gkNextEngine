@@ -14,6 +14,9 @@
          global property on every referenced project too, and restore fails with an ambiguous
          project name. -->
     <AssemblyName Condition="'$(GkNativeName)' != ''">$(GkNativeName)</AssemblyName>
+    <!-- Xcode exports TARGET_NAME to custom build phases. Pin the MSBuild output name after the
+         per-app AssemblyName override so that environment property cannot rename references. -->
+    <TargetName>$(AssemblyName)</TargetName>
     <OutputType>Library</OutputType>
     <EnableDynamicLoading>true</EnableDynamicLoading>
   </PropertyGroup>
@@ -39,6 +42,18 @@
          the prefix has to be asked for, and the ELF soname is set for Apple platforms only. -->
     <NativeBinaryPrefix>lib</NativeBinaryPrefix>
   </PropertyGroup>
+
+  <!-- iOS NativeAOT is consumed by the C++ application linker, not by dyld. The runtime pack
+       supplies iOS code while ILCompiler itself continues to execute on the macOS build host. -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'ios-arm64'">
+    <PublishAotUsingRuntimePack>true</PublishAotUsingRuntimePack>
+    <DisableUnsupportedError>true</DisableUnsupportedError>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'ios-arm64'">
+    <PackageReference Include="runtime.$(NETCoreSdkPortableRuntimeIdentifier).Microsoft.DotNet.ILCompiler"
+                      Version="$(BundledNETCoreAppPackageVersion)" />
+  </ItemGroup>
 
   <ItemGroup Condition="$(RuntimeIdentifier.StartsWith('linux-bionic')) and '$(NativeLib)' == 'Shared'">
     <LinkerArg Include="-Wl,-soname,lib$(TargetName).so" />
@@ -82,6 +97,19 @@
     </PropertyGroup>
     <Copy SourceFiles="$(GkNativeImportLibrary)" DestinationFolder="$(PublishDir)"
           Condition="Exists('$(GkNativeImportLibrary)')" />
+  </Target>
+
+  <!-- NativeLib=Static intentionally leaves the runtime archives out of the published archive:
+       normally the SDK's native linker consumes them itself. Our C++ iOS application is that
+       linker, so stage its exact link inputs beside the managed archive for CMake to consume. -->
+  <Target Name="GkPublishIosStaticLinkInputs" AfterTargets="CopyNativeBinary"
+          Condition="'$(RuntimeIdentifier)' == 'ios-arm64' and '$(NativeLib)' == 'Static'">
+    <ItemGroup>
+      <GkIosStaticLinkInput Include="@(NativeLibrary)" />
+      <GkIosStaticLinkInput Include="$(IlcSdkPath)libbootstrapperdll.o" />
+    </ItemGroup>
+    <Copy SourceFiles="@(GkIosStaticLinkInput)" DestinationFolder="$(PublishDir)"
+          SkipUnchangedFiles="true" />
   </Target>
 
 </Project>

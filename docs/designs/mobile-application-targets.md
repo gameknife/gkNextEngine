@@ -102,9 +102,10 @@ Android 与 iOS 都没有命令行，只有 application identity 会编进启动
 
 ## 4. 已知边界
 
-- **iOS 没有 C#**：`cmake/SetupDotNet.cmake` 在 iOS 上直接关掉托管层，所以 `FlappyCSharp`、
-  `Brotato3DCSharp`、`DotNetSandbox` 只登记 `android`。选中一个 `requiresDotNet` 的 application 而
-  托管层不可用时，configure 会带着原因直接失败，而不是打出一个没有游戏逻辑的包。
+- **iOS C# 使用 NativeAOT**：iOS device build 强制 `GK_DOTNET_BACKEND=AOT`，将每个游戏的
+  `GkNext.Bootstrap.<target>.a` 静态链接进 app executable；没有 CoreCLR、动态托管程序集或热重载。
+  `requiresDotNet` 的 app 会在 .NET SDK、Apple Silicon host、iphoneos SDK 或 arm64 条件不满足时
+  于 configure 阶段失败，而不是打出一个没有游戏逻辑的包。更新 C# 或 Content 后需重新 build、签名、安装。
 - **登记 ≠ 已验证**：注册表说的是"这个 application 可以被移动端配置"。桌面代码里用到的桌面专有 API
   会在真正构建它时暴露出来——那是需要修的可移植性问题，不是注册表的问题。
 - **Android 每个 app 一个 build 目录**（`out/build/android-<variant>[-<app>]`）：整份引擎都编进

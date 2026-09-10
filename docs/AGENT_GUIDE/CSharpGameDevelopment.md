@@ -108,13 +108,14 @@ gnb dotnet templates
 
 **C# 游戏不是纯 C#**，但 C++ 的部分已经收敛到不能再少：所有 C# 游戏共用同一个原生壳
 `Modules::NextDotNet::ManagedGameHostInstance`，它负责建窗口、装 NextDotNet、把**每一个**生命周期钩子
-转发给托管侧。你要写的 C++ 只有一个约 15 行的 `CreateGameInstance`，其中不含任何游戏逻辑。
+转发给托管侧。独立目标同样共用 `ManagedGameAppMain.cpp`；游戏不再需要自己的
+`CreateGameInstance` 或 `*Main.cpp`。
 
 | 文件 | 作用 | 抄谁 |
 |---|---|---|
 | `projects/<Name>/<id>.game.json` | **游戏清单**：窗口、程序集、模块、初始场景、热重载 | `projects/Flappy/flappy.game.json` |
-| `src/Application/Game/<Name>/CMakeLists.txt` | 声明目标，绑定 csproj | `Flappy/FlappyCSharp/CMakeLists.txt` |
-| `src/Application/Game/<Name>/<Name>Main.cpp` | 15 行：注册 loader + 指向 manifest | `FlappyCSharpMain.cpp` |
+| `src/Application/Game/<Name>/CMakeLists.txt` | 声明目标、manifest、csproj 和原生 loader | `Flappy/FlappyCSharp/CMakeLists.txt` |
+| `src/Application/Game/ManagedGameAppMain.cpp` | 所有独立托管目标共用的原生入口 | 不复制 |
 | `projects/<Name>/Scripts/<Name>.csproj` | 托管工程 | `projects/Flappy/Scripts/FlappyCSharp.csproj` |
 | `projects/<Name>/Scripts/*.cs` | **你的游戏** | `FlappyCSharpGameInstance.cs` |
 
@@ -132,6 +133,7 @@ manifest 是这个游戏唯一的声明来源——它自己的 exe 和 `gkNextL
   "requiredModules": ["NextAudio"],
   "initialScene": "Empty.proc",
   "showFlags": { "debugGraphicsPanel": false, "overlay": false },
+  "mobileControls": "dualStick",
   "hotReload": true
 }
 ```
@@ -141,38 +143,24 @@ manifest 是这个游戏唯一的声明来源——它自己的 exe 和 `gkNextL
 **校验**：原生模块是链接期决定的，宿主没有的模块会让这个游戏在菜单里直接标灰并说明原因，而不是加载
 到一半才发现没有 loader。
 
-CMake 侧只有两处是你要填的：
+`mobileControls` 可省略（默认 `none`）。移动端 FPS / 第三人称游戏可设为 `dualStick`：
+通用托管宿主把屏幕左、右半边分别映射到现有游戏手柄的移动和视角摇杆；C# 继续通过
+`Input.GetGamepadAxis()` 读取，不需要平台专用脚本。
+
+CMake 侧只需调用一次通用声明：
 
 ```cmake
-gk_add_application(MyGame
-    SOURCES ${myGameSources}
-    MODULES ${GK_STANDARD_RUNTIME_MODULES} NextDotNet)
-
-gk_dotnet_managed_game(MyGame
+gk_add_managed_game_application(MyGame
+    MANIFEST "assets/projects/MyGame/mygame.game.json"
     PROJECT "${GK_GAME_PROJECTS_ROOT}/MyGame/Scripts/MyGame.csproj"
-    DIR mygame)          # 托管产物落到 bin/csharp/mygame/，与 manifest 的 assembly 前缀一致
+    DIR mygame            # 托管产物落到 bin/csharp/mygame/，与 manifest 的 assembly 前缀一致
+    MODULES ${GK_STANDARD_RUNTIME_MODULES} NextDotNet
+    # 若需要，声明式开启原生注册：REGISTER_SCAD_LOADER / REGISTER_LDRAW_LOADER
+)
 ```
 
-C++ 全文：
-
-```cpp
-#include "Modules/NextDotNet/ManagedGameHostInstance.hpp"
-
-std::unique_ptr<NextGameInstanceBase> CreateGameInstance(Vulkan::WindowConfig& config,
-                                                        Runtime::Config::Options& options,
-                                                        NextEngine* engine)
-{
-    return std::make_unique<Modules::NextDotNet::ManagedGameHostInstance>(
-        config, options, engine,
-        Modules::NextDotNet::FManagedGameHostOptions{
-            .manifestPath = "assets/projects/MyGame/mygame.game.json",   // 运行时副本的路径
-            .linkedModules = {"NextAudio", "NextPhysics", "GltfLoader"},
-        });
-}
-```
-
-需要额外的 native loader（比如 SCAD 资产）就在这里 `Modules::Scad::Register();`，并把模块名加进
-`linkedModules`。
+这些值在 CMake 配置期固定：CoreCLR 独立目标发布对应 DLL；Android / iOS NativeAOT 则把同一
+`PROJECT` 的静态产物链接进该 app。NativeAOT 不会在运行时从 launcher 选择另一个工程。
 
 > 早期每个应用各自抄一份约 90 行的钩子转发壳。那样漏转发一个钩子就是静默失效——`FlappyCSharp` 曾经
 > 因此收不到手柄输入。现在转发只有一份实现，这类问题不会再出现；**不要**再手写钩子转发。

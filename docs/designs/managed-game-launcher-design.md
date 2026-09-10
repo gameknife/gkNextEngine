@@ -60,10 +60,10 @@ gkNextLauncher          Brotato3DCSharp / FlappyCSharp     gkNextEditor
 额外的 CMake 改动；而 `ManagedGameSession` 不派生 `NextGameInstanceBase`，所以 `gkNextEditor` 能在自己的
 `EditorGameInstance` 里直接持有一个 session，不必继承 launcher 的宿主——PIE 落地时这一条兑现了。
 
-收敛掉的重复：三个 per-game shell 原本共 375 行，其中 8 个 hook 的转发逐字相同，只有 5 处差异，且
-**全部是数据**。现在每个 per-game 目标只剩一个 15 行的 `CreateGameInstance`。这份重复本身就是 bug 的
-温床：`FlappyCSharp` 漏转发了手柄输入，而 `Brotato3DCSharp` 没漏——通用宿主无条件转发，这类漏转发不
-可能再发生。
+收敛掉的重复：per-game shell 原本共 375 行，其中 8 个 hook 的转发逐字相同，只有 5 处差异，且
+**全部是数据**。现在独立托管目标共用 `ManagedGameAppMain.cpp`，每个游戏只在 CMake 声明 manifest、
+csproj、静态模块和 loader 注册。这样 CoreCLR 与 NativeAOT 都由同一份 target 配置选择项目；不会再出现
+`FlappyCSharp` 漏转发手柄输入、而 `Brotato3DCSharp` 没漏的分叉。
 
 ## 3. 工程与 manifest 契约
 
@@ -100,6 +100,7 @@ manifest 是一个托管游戏**唯一**的声明来源：per-game exe 和 launc
   "requiredModules": ["NextAudio"],
   "initialScene": "Empty.proc",
   "showFlags":  { "debugGraphicsPanel": false, "debugPhysicsOverlay": false, "overlay": false },
+  "mobileControls": "none",
   "hotReload": true,
   "compileManagedSources": false
 }
@@ -115,6 +116,9 @@ manifest 是一个托管游戏**唯一**的声明来源：per-game exe 和 launc
   （`Empty.proc`）。
 - `initialScene` 为空表示游戏自己在 `OnInit` 里请求场景（Brotato3D 的做法）。
 - `showFlags` 用 optional 语义：只覆盖 manifest 写了的项，未提及的保持引擎默认。
+- `mobileControls` 默认 `none`；写为 `dualStick` 时，移动端的通用
+  `ManagedGameHostInstance` 把左、右半屏分别映射为移动和视角摇杆，并沿用既有 gamepad ABI。
+  它是 per-game manifest 能力，不会让 NativeAOT launcher 在运行时切换程序集。
 - 以 `_comment` 开头的键是注释，解析时忽略。
 
 **托管代码怎么找到自己的内容。** session 在加载程序集**之前**把 `<工程目录>/Content` 写进

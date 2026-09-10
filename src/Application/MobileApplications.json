@@ -20,7 +20,7 @@
         "                  see the note in gk_configure_ios_application about never reusing an",
         "                  identifier another Apple team has already shipped.",
         "  requiresDotNet  The application hosts C#, so it can only be configured where the managed",
-        "                  scripting layer exists (Android NativeAOT; never iOS)."
+        "                  scripting layer exists (NativeAOT on Android and iOS)."
     ],
     "applications": [
         {
@@ -110,7 +110,7 @@
             "directory": "Game/Brotato3DCSharp",
             "label": "Brotato3D C#",
             "icon": "Brotato3D",
-            "platforms": ["android"],
+            "platforms": ["android", "ios"],
             "androidId": "com.gknext.brotato3dcsharp",
             "iosBundleId": "gknext.brotato3dcsharp",
             "requiresDotNet": true
@@ -135,7 +135,7 @@
             "target": "FlappyCSharp",
             "directory": "Game/Flappy/FlappyCSharp",
             "label": "FlappyCSharp",
-            "platforms": ["android"],
+            "platforms": ["android", "ios"],
             "androidId": "com.gknext.flappycsharp",
             "iosBundleId": "gknext.flappycsharp",
             "requiresDotNet": true
@@ -230,10 +230,19 @@
             "iosBundleId": "gknext.nexttotalwar"
         },
         {
+            "target": "TestFPS",
+            "directory": "Game/TestFPS",
+            "label": "TestFPS",
+            "platforms": ["ios"],
+            "androidId": "com.gknext.testfps",
+            "iosBundleId": "gknext.testfps",
+            "requiresDotNet": true
+        },
+        {
             "target": "DotNetSandbox",
             "directory": "Game/DotNetSandbox",
             "label": "DotNetSandbox",
-            "platforms": ["android"],
+            "platforms": ["android", "ios"],
             "androidId": "com.gknext.dotnetsandbox",
             "iosBundleId": "gknext.dotnetsandbox",
             "requiresDotNet": true

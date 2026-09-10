@@ -246,6 +246,7 @@ TEST_CASE("a game project's manifest resolves its own content", "[Unit][DotNet][
         "id": "alpha",
         "assembly": "alpha/Alpha.dll",
         "project": "Scripts/Alpha.csproj",
+        "mobileControls": "dualStick",
         "icon": "Content/icon.png",
         "initialScene": "Content/scenes/arena.scad"
     })");
@@ -274,6 +275,7 @@ TEST_CASE("a game project's manifest resolves its own content", "[Unit][DotNet][
     CHECK(alpha.ContentRoot() == alphaDirectory + "/Content");
     CHECK(alpha.icon == alphaDirectory + "/Content/icon.png");
     CHECK(alpha.initialScene == alphaDirectory + "/Content/scenes/arena.scad");
+    CHECK(alpha.mobileControls == EMobileControls::DualStick);
     // Read straight from a project directory with Scripts/ in it: that directory is the source.
     CHECK(Generic(ResolveProjectSourceDirectory(alpha)) == alphaDirectory);
 

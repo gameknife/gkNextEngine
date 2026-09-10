@@ -113,6 +113,7 @@
 
 ## 剩余计划
 
+- [iOS NativeAOT C# 真机支持](plans/ios-nativeaot-plan.md)（P0–P2 已完成；待真机验收）
 - [PathTracing 材质模型统一](plans/shader-material-model-unification-plan.md)（待审阅）
 - [地理城市生成剩余项](plans/geo-city-generation-plan.md)（P0–P5 已完成；只保留未完成项）
 - [ScadLibrary AI 创作收口](plans/scadlibrary-ai-authoring-plan.md)（M0–M4 已完成；只剩 ScadStudio 退役门槛）

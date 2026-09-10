@@ -607,10 +607,14 @@ void FUiDevPanels::DrawOverlay(const NextUI::Statistics& statistics)
         return;
     }
 
+    const Vulkan::FGpuFrameTiming gpuFrameTiming = Engine().GetRenderer().GetGpuFrameTiming();
     if (overlaySampleStrideCounter_ == 0)
     {
         frameRateSamples_[overlaySampleCursor_] = statistics.FrameRate;
         frameTimeSamples_[overlaySampleCursor_] = statistics.FrameTime;
+        gpuTimeSamples_[overlaySampleCursor_] = gpuFrameTiming.valid
+            ? static_cast<float>(gpuFrameTiming.milliseconds)
+            : 0.0f;
         overlaySampleCursor_ = (overlaySampleCursor_ + 1) % kOverlaySparklineSampleCount;
         overlaySampleFilled_ = std::min(overlaySampleFilled_ + 1, kOverlaySparklineSampleCount);
     }
@@ -640,6 +644,13 @@ void FUiDevPanels::DrawOverlay(const NextUI::Statistics& statistics)
         return;
     }
 
+    // The stats overlay has many dense, live values. Scale the existing ImGui font for this
+    // window instead of creating another font atlas entry; narrow cards then retain enough width
+    // for byte counts and draw statistics.
+    constexpr float panelFontScale = 0.88f;
+    constexpr float statLabelFontScale = panelFontScale * 0.82f;
+    ImGui::SetWindowFontScale(panelFontScale);
+
     constexpr float cardHorizontalInset = 4.0f;
     auto BeginCard = [&](const char* id, float height = 0.0f, ImGuiWindowFlags extraFlags = 0)
     {
@@ -659,10 +670,12 @@ void FUiDevPanels::DrawOverlay(const NextUI::Statistics& statistics)
         {
             ImGui::BeginChild(id, ImVec2(cardWidth, 0.0f), ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY, extraFlags);
         }
+        ImGui::SetWindowFontScale(panelFontScale);
     };
 
     auto EndCard = [&]()
     {
+        ImGui::SetWindowFontScale(1.0f);
         ImGui::EndChild();
         ImGui::PopStyleColor(2);
         ImGui::PopStyleVar(3);
@@ -691,9 +704,11 @@ void FUiDevPanels::DrawOverlay(const NextUI::Statistics& statistics)
 
     std::array<float, kOverlaySparklineSampleCount> orderedFps{};
     std::array<float, kOverlaySparklineSampleCount> orderedFt{};
+    std::array<float, kOverlaySparklineSampleCount> orderedGpu{};
     int orderedCount = 0;
     BuildOrdered(frameRateSamples_, orderedFps, orderedCount);
     BuildOrdered(frameTimeSamples_, orderedFt, orderedCount);
+    BuildOrdered(gpuTimeSamples_, orderedGpu, orderedCount);
 
     const ImVec4 colHeader = NextUI::Theme::Color(NextUI::Theme::EColor::Blue);
     const ImVec4 colLabel = NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted);
@@ -704,8 +719,20 @@ void FUiDevPanels::DrawOverlay(const NextUI::Statistics& statistics)
 
     auto CompactStat = [&](const char* label, const std::string& value)
     {
+        ImGui::SetWindowFontScale(statLabelFontScale);
         ImGui::TextColored(colLabel, "%s", label);
+        ImGui::SetWindowFontScale(panelFontScale);
         ImGui::SameLine(0.0f, 4.0f);
+        ImGui::TextColored(colVal, "%s", value.c_str());
+    };
+
+    // Long labels and values must not compete for the same line. This is used for the groups
+    // whose values are intrinsically wide (memory sizes and draw/cull totals).
+    auto StackedStat = [&](const char* label, const std::string& value)
+    {
+        ImGui::SetWindowFontScale(statLabelFontScale);
+        ImGui::TextColored(colLabel, "%s", label);
+        ImGui::SetWindowFontScale(panelFontScale);
         ImGui::TextColored(colVal, "%s", value.c_str());
     };
 
@@ -716,7 +743,8 @@ void FUiDevPanels::DrawOverlay(const NextUI::Statistics& statistics)
 
     // 1. Performance & Device
     {
-        const Vulkan::Device& device = NextEngine::GetInstance()->GetRenderer().Device();
+        Vulkan::VulkanBaseRenderer& renderer = NextEngine::GetInstance()->GetRenderer();
+        const Vulkan::Device& device = renderer.Device();
         const VkPhysicalDeviceProperties deviceProperties = device.DeviceProperties();
         const std::string driverName = GetPhysicalDeviceDriverInfo(device.PhysicalDevice(), deviceProperties);
 
@@ -724,6 +752,9 @@ void FUiDevPanels::DrawOverlay(const NextUI::Statistics& statistics)
             : (statistics.FrameRate > 30.0f ? colWarn : colBad);
         const std::string fpsText = fmt::format("{:.0f}  FPS", statistics.FrameRate);
         const std::string ftText = fmt::format("{:.2f}  ms", statistics.FrameTime);
+        const std::string gpuText = gpuFrameTiming.valid
+            ? fmt::format("{:.2f}  ms", gpuFrameTiming.milliseconds)
+            : "collecting...";
 
         BeginCard("##ProfilerDeviceCard", 0.0f);
         if (ImGui::BeginTable("##ProfilerDeviceHeader", 2, ImGuiTableFlags_SizingStretchSame))
@@ -746,17 +777,23 @@ void FUiDevPanels::DrawOverlay(const NextUI::Statistics& statistics)
         }
 
         ImGui::Dummy(ImVec2(0.0f, 6.0f));
+        ImGui::TextColored(colHeader, "Frame Rate");
+        ImGui::TextColored(fpsColor, "%s", fpsText.c_str());
+        NextUI::Theme::Sparkline(orderedFps.data(), orderedCount,
+                                 ImVec2(ImGui::GetContentRegionAvail().x, 26.0f), colGood, FLT_MAX, FLT_MAX, true);
+
+        ImGui::Dummy(ImVec2(0.0f, 4.0f));
         if (ImGui::BeginTable("##ProfilerSparklineTable", 2, ImGuiTableFlags_SizingStretchSame))
         {
-            ImGui::TableSetupColumn("Frame Rate", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("GPU Time", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Frame Time", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableNextRow();
 
             ImGui::TableSetColumnIndex(0);
-            ImGui::TextColored(colHeader, "Frame Rate");
-            ImGui::TextColored(fpsColor, "%s", fpsText.c_str());
-            NextUI::Theme::Sparkline(orderedFps.data(), orderedCount,
-                                     ImVec2(ImGui::GetContentRegionAvail().x, 26.0f), colGood, FLT_MAX, FLT_MAX, true);
+            ImGui::TextColored(colHeader, "GPU Time");
+            ImGui::TextColored(colVal, "%s", gpuText.c_str());
+            NextUI::Theme::Sparkline(orderedGpu.data(), orderedCount,
+                                     ImVec2(ImGui::GetContentRegionAvail().x, 26.0f), colWarn, FLT_MAX, FLT_MAX, true);
 
             ImGui::TableSetColumnIndex(1);
             ImGui::TextColored(colHeader, "Frame Time");
@@ -822,21 +859,21 @@ void FUiDevPanels::DrawOverlay(const NextUI::Statistics& statistics)
     {
         ImGui::TableNextRow();
         ImGui::TableSetColumnIndex(0);
-        CompactStat("Draws", FormatVisibleOverTotal(visibleDrawCount, gpuDrivenStat.ProcessedCount));
+        StackedStat("Draws", FormatVisibleOverTotal(visibleDrawCount, gpuDrivenStat.ProcessedCount));
         ImGui::TableSetColumnIndex(1);
-        CompactStat("Culled draws", FormatCount(gpuDrivenStat.CulledCount));
+        StackedStat("Culled draws", FormatCount(gpuDrivenStat.CulledCount));
 
         ImGui::TableNextRow();
         ImGui::TableSetColumnIndex(0);
-        CompactStat("Triangles", FormatVisibleOverTotal(visibleTriangleCount, gpuDrivenStat.TriangleCount));
+        StackedStat("Triangles", FormatVisibleOverTotal(visibleTriangleCount, gpuDrivenStat.TriangleCount));
         ImGui::TableSetColumnIndex(1);
-        CompactStat("Culled tris", FormatCount(gpuDrivenStat.CulledTriangleCount));
+        StackedStat("Culled tris", FormatCount(gpuDrivenStat.CulledTriangleCount));
 
         ImGui::TableNextRow();
         ImGui::TableSetColumnIndex(0);
-        CompactStat("LOD saved", FormatLodSavings(gpuDrivenStat));
+        StackedStat("LOD saved", FormatLodSavings(gpuDrivenStat));
         ImGui::TableSetColumnIndex(1);
-        CompactStat("Batches", FormatCount(scene.GetIndirectDrawBatchCount()));
+        StackedStat("Batches", FormatCount(scene.GetIndirectDrawBatchCount()));
         ImGui::EndTable();
     }
     EndCard();
@@ -906,29 +943,34 @@ void FUiDevPanels::DrawOverlay(const NextUI::Statistics& statistics)
     BeginCard("##ProfilerMemoryCard", 0.0f);
     ImGui::TextColored(colHeader, "Memory");
     ImGui::Dummy(ImVec2(0.0f, 2.0f));
-    if (ImGui::BeginTable("##MemoryCompactTable", 2, ImGuiTableFlags_SizingStretchProp))
+    if (ImGui::BeginTable("##MemoryCompactTable", 1, ImGuiTableFlags_SizingStretchProp))
     {
         ImGui::TableNextRow();
         ImGui::TableSetColumnIndex(0);
-        CompactStat("VRAM used", fmt::format("{} / {}",
-                                            Utilities::FormatBytes(memoryStats.deviceLocalUsageBytes),
-                                            Utilities::FormatBytes(memoryStats.deviceLocalBudgetBytes)));
-        ImGui::TableSetColumnIndex(1);
-        CompactStat("VMA alloc", fmt::format("{} / {}",
-                                            Utilities::FormatBytes(memoryStats.deviceLocalAllocationBytes),
-                                            Utilities::FormatBytes(memoryStats.deviceLocalBlockBytes)));
+        StackedStat("VRAM used / budget", fmt::format("{} / {}",
+                                                        Utilities::FormatBytes(memoryStats.deviceLocalUsageBytes),
+                                                        Utilities::FormatBytes(memoryStats.deviceLocalBudgetBytes)));
 
         ImGui::TableNextRow();
         ImGui::TableSetColumnIndex(0);
-        CompactStat("Total heaps", fmt::format("{} / {}",
-                                              Utilities::FormatBytes(memoryStats.totalAllocationBytes),
-                                              Utilities::FormatBytes(memoryStats.totalBlockBytes)));
-        ImGui::TableSetColumnIndex(1);
-        CompactStat("Heaps", FormatCount(memoryStats.heaps.size()));
+        StackedStat("VMA alloc / blocks", fmt::format("{} / {}",
+                                                        Utilities::FormatBytes(memoryStats.deviceLocalAllocationBytes),
+                                                        Utilities::FormatBytes(memoryStats.deviceLocalBlockBytes)));
+
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        StackedStat("Total heaps / blocks", fmt::format("{} / {}",
+                                                         Utilities::FormatBytes(memoryStats.totalAllocationBytes),
+                                                         Utilities::FormatBytes(memoryStats.totalBlockBytes)));
+
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        StackedStat("Heap count", FormatCount(memoryStats.heaps.size()));
         ImGui::EndTable();
     }
     EndCard();
 
+    ImGui::SetWindowFontScale(1.0f);
     NextUI::Theme::EndDetailPanel();
     Engine().GetShowFlags().DebugProfileOverlay = Engine().GetUserSettings().ShowOverlay;
     lastDebugProfileOverlay = Engine().GetShowFlags().DebugProfileOverlay;

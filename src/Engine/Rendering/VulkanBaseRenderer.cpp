@@ -2061,6 +2061,8 @@ namespace Vulkan
         overlay_.bufferClearPipeline.reset();
         overlay_.checkerboardResolvePipeline.reset();
         frame_.inFlightFenceSubmitSerials.clear();
+        DeleteGpuFrameTiming();
+        DeleteAmbientBakeFrameTiming();
         ambient_.softBake.reset();
         ambient_.clearCache.reset();
         if (rt_)
@@ -2479,6 +2481,8 @@ namespace Vulkan
 #if GK_TRACY_ENABLED
         GkProfiling::BeginGpuFrame(commandBuffer);
 #endif
+        BeginGpuFrameTiming(commandBuffer);
+        BeginAmbientBakeFrameTiming(commandBuffer);
 
         {
             SCOPED_GPU_TIMER("[gpu]");
@@ -2597,6 +2601,8 @@ namespace Vulkan
                 screenshot_.captureSubmitSerial = frame_.recordingSubmitSerial;
             }
         }
+        EndAmbientBakeFrameTiming(commandBuffer);
+        EndGpuFrameTiming(commandBuffer);
         frame_.commandBuffers->End(frame_.currentFrame);
 
         if (upscaler_ && frame_.streamlineFrameToken)

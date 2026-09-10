@@ -89,6 +89,7 @@ namespace DevTools
         static constexpr int kOverlaySparklineSampleStride = 2;
         std::array<float, kOverlaySparklineSampleCount> frameRateSamples_{};
         std::array<float, kOverlaySparklineSampleCount> frameTimeSamples_{};
+        std::array<float, kOverlaySparklineSampleCount> gpuTimeSamples_{};
         int overlaySampleCursor_ = 0;
         int overlaySampleFilled_ = 0;
         int overlaySampleStrideCounter_ = 0;

@@ -59,6 +59,12 @@ namespace Vulkan
         uint32_t progressiveTargetFrames = 1;
     };
 
+    struct FGpuFrameTiming
+    {
+        double milliseconds = 0.0;
+        bool valid = false;
+    };
+
     struct FAmbientBakeProgress
     {
         bool active = false;
@@ -353,6 +359,7 @@ namespace Vulkan
         FRendererRequirements RegisteredRendererRequirements() const;
         bool ShouldSkipAmbientCubeUpdates() const;
         FAmbientBakeProgress GetAmbientBakeProgress();
+        FGpuFrameTiming GetGpuFrameTiming() const;
         // Drop the baked cube radiance. The scene calls this whenever the probe grid moves under it,
         // because radiance baked for the previous grid would otherwise persist at the new positions.
         void RequestClearAmbientCubeCache() { ambient_.requestClearCache = true; }
@@ -545,7 +552,26 @@ namespace Vulkan
             std::array<uint32_t, Assets::CUBE_CASCADE_MAX> completedPasses{};
             uint32_t nextCascade = 0;
             uint32_t groupsPerFrame = 1;
-            double smoothedFrameTimeSeconds = 0.0;
+            VkQueryPool timingQueryPool = VK_NULL_HANDLE;
+            uint32_t timestampValidBits = 0;
+            double timestampPeriodNanoseconds = 0.0;
+            uint32_t lastDispatchedGroups = 0;
+            double lastBakeMilliseconds = 0.0;
+            double smoothedMillisecondsPerGroup = 0.0;
+            double smoothedNonBakeMilliseconds = 0.0;
+            bool timingFrameActive = false;
+            bool timingBakeDispatched = false;
+            bool timingPending = false;
+        };
+
+        struct GpuFrameTimingState
+        {
+            VkQueryPool queryPool = VK_NULL_HANDLE;
+            uint32_t timestampValidBits = 0;
+            double timestampPeriodNanoseconds = 0.0;
+            double lastMilliseconds = 0.0;
+            bool frameActive = false;
+            bool pending = false;
         };
 
         struct SkinnedMeshResources
@@ -706,6 +732,7 @@ namespace Vulkan
         std::unique_ptr<AmbientCubeBaker> ambientCubeBaker_;
         std::unique_ptr<GpuDrivenPasses> gpuDrivenPasses_;
         std::unique_ptr<LightGridBuilder> lightGridBuilder_;
+        GpuFrameTimingState gpuFrameTiming_;
         ScreenshotResources screenshot_;
         FrameGenerationResources frameGeneration_;
         TemporalPostFilterResources temporalPostFilter_;
@@ -845,6 +872,12 @@ namespace Vulkan
         void UpdateAccelerationStructuresTop(VkCommandBuffer commandBuffer);
         void UpdateAccelerationStructuresBottom(VkCommandBuffer commandBuffer);
         void HandleAmbientCubeCacheInvalidation(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+        void BeginGpuFrameTiming(VkCommandBuffer commandBuffer);
+        void EndGpuFrameTiming(VkCommandBuffer commandBuffer);
+        void DeleteGpuFrameTiming();
+        void BeginAmbientBakeFrameTiming(VkCommandBuffer commandBuffer);
+        void EndAmbientBakeFrameTiming(VkCommandBuffer commandBuffer);
+        void DeleteAmbientBakeFrameTiming();
         void DispatchSkinning(VkCommandBuffer commandBuffer, uint32_t imageIndex);
         void DispatchGpuCulling(VkCommandBuffer commandBuffer, uint32_t imageIndex);
         void DispatchLightGridBuild(VkCommandBuffer commandBuffer, uint32_t imageIndex);

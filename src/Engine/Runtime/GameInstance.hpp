@@ -125,12 +125,17 @@ protected:
                                 std::string_view title,
                                 int width,
                                 int height,
-                                bool forceSDR)
+                                bool forceSDR,
+                                std::string_view iconPath = {})
     {
         config.Title = std::string(title);
         config.Width = width;
         config.Height = height;
         config.ForceSDR = forceSDR;
+        if (!iconPath.empty())
+        {
+            config.IconPath = std::string(iconPath);
+        }
         options.Width = width;
         options.Height = height;
         options.ForceSDR = forceSDR;

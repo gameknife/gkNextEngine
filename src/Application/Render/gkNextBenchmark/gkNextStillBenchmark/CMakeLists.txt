@@ -11,6 +11,7 @@ file(GLOB_RECURSE gkNextBenchmarkCommonSources CONFIGURE_DEPENDS
 
 # Intentionally mirrors the minimal renderer module footprint. DemoScenes need no asset loaders.
 gk_add_application(gkNextStillBenchmark MINIMAL_LINK
+    ICON gkNextMotionBenchmark
     SOURCES
         ${gkNextStillBenchmarkSources}
         ${gkNextBenchmarkCommonSources}

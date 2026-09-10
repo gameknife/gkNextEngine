@@ -255,6 +255,27 @@ foreach(templatePath IN ITEMS
 endforeach()
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/templates/app/src" DESTINATION "${GK_GRADLE_DIR}/app")
 
+# Resolve and dynamically generate the application-specific launcher icon for Gradle
+set(appIconName "${GK_MOBILE_APP_${GK_ANDROID_APP}_ICON}")
+if(NOT appIconName)
+    if(EXISTS "${GK_REPO_ROOT}/assets/icons/${GK_ANDROID_APP}.png")
+        set(appIconName "${GK_ANDROID_APP}")
+    else()
+        set(appIconName "gkNextEngine")
+    endif()
+endif()
+find_program(GNB_EXECUTABLE NAMES gnb gnb.exe PATHS "${GK_REPO_ROOT}" "${GK_REPO_ROOT}/tools/gnb-bin" NO_DEFAULT_PATH)
+if(GNB_EXECUTABLE)
+    execute_process(
+        COMMAND "${GNB_EXECUTABLE}" icons android --app "${appIconName}" --out "${GK_GRADLE_DIR}/app/src/main/res"
+        WORKING_DIRECTORY "${GK_REPO_ROOT}"
+        RESULT_VARIABLE iconGenResult
+    )
+    if(iconGenResult EQUAL 0)
+        message(STATUS "Configured Android launcher icons for ${GK_ANDROID_APP} (icon: ${appIconName})")
+    endif()
+endif()
+
 set(GK_SDL_VERSION "3.4.10")
 set(GK_SDL_ARCHIVE_SHA256 "f676e29b1b4eb990e24862b6af5f327379dc496c9f5f3e3f48ab75837f95844e")
 set(GK_SDL_AAR_SHA256 "e80e8ab1bc969bed28192d34c2029f223ce06cf106aa3d1167220334b581ddb0")

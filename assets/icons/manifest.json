@@ -1,0 +1,70 @@
+{
+    "style": "Modern minimalist vector squircle with subtle depth and glow",
+    "icons": [
+        {
+            "target": "gkNextEngine",
+            "file": "gkNextEngine.png",
+            "description": "基于官方品牌几何符号与低饱和深蓝底板的扁平现代通用图标"
+        },
+        {
+            "target": "gkNextRenderer",
+            "file": "gkNextRenderer.png",
+            "description": "极简几何棱镜与焦散光谱折射"
+        },
+        {
+            "target": "gkNextEditor",
+            "file": "gkNextEditor.png",
+            "description": "等距等角RGB三轴发光线框立方体"
+        },
+        {
+            "target": "gkNextLauncher",
+            "file": "gkNextLauncher.png",
+            "description": "极简发光游戏手柄与起飞火箭"
+        },
+        {
+            "target": "gkNextMotionBenchmark",
+            "file": "gkNextMotionBenchmark.png",
+            "description": "赛博霓虹数字仪表盘与高性能转速表"
+        },
+        {
+            "target": "gkNextStillBenchmark",
+            "file": "gkNextMotionBenchmark.png",
+            "description": "赛博霓虹数字仪表盘与高性能转速表"
+        },
+        {
+            "target": "ScadStudio",
+            "file": "ScadStudio.png",
+            "description": "工程蓝图圆规卡尺与几何多面体网格"
+        },
+        {
+            "target": "ScadLibrary",
+            "file": "ScadStudio.png",
+            "description": "工程蓝图圆规卡尺与几何多面体网格"
+        },
+        {
+            "target": "MagicaLego",
+            "file": "MagicaLego.png",
+            "description": "经典高饱和红黄2x2积木符号"
+        },
+        {
+            "target": "BrickPlayer",
+            "file": "MagicaLego.png",
+            "description": "经典高饱和红黄2x2积木符号"
+        },
+        {
+            "target": "Brotato3D",
+            "file": "Brotato3D.png",
+            "description": "红头带萌趣土豆战士与双持射线枪徽章"
+        },
+        {
+            "target": "Brotato3DCSharp",
+            "file": "Brotato3D.png",
+            "description": "红头带萌趣土豆战士与双持射线枪徽章"
+        },
+        {
+            "target": "KongLie3D",
+            "file": "KongLie3D.png",
+            "description": "极简暮色低多边形隐形超音速战斗机"
+        }
+    ]
+}

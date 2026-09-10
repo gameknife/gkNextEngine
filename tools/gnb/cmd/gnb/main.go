@@ -18,6 +18,7 @@ import (
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/config"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/console"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/fetcher"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/icons"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/ios"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/mobileapps"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/loc"
@@ -143,6 +144,7 @@ func main() {
 	root.AddCommand(newWebsiteCommand(ctx))
 	root.AddCommand(newLegacyAgentCommand(ctx))
 	root.AddCommand(newInitCommand())
+	root.AddCommand(newIconsCommand(ctx))
 
 	if err := root.Execute(); err != nil {
 		fatal(err)
@@ -406,6 +408,9 @@ func newBuildCommand(ctx appContext) *cobra.Command {
 					return err
 				}
 				opts.MakeProgram = ninjaPath
+			}
+			if _, err := icons.EnsureIco(ctx.repoRoot, false); err != nil {
+				console.Warn("failed to synchronize icons: %v", err)
 			}
 			buildErr := cmakerun.BuildWithCMake(ctx.repoRoot, cmakePath, ctx.preset, opts)
 			if !opts.PrintCmd {

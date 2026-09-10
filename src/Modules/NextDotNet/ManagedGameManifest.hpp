@@ -35,6 +35,7 @@ namespace Modules::NextDotNet
         /// Stable identifier, also the menu sort key. Defaults to the file stem.
         std::string id;
         std::string displayName;
+        std::string icon;
 
         /// Managed assembly, relative to <bin>/csharp — the same path shape FConfig::gameAssembly
         /// takes, and the same subdirectory gk_dotnet_managed_game(... DIR ...) publishes into.

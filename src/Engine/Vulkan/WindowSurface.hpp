@@ -38,6 +38,8 @@ struct WindowConfig final
     // Use VK_EXT_headless_surface instead of creating an SDL window. This is intended for
     // unattended Vulkan captures on Linux hosts with no X11 or Wayland display server.
     bool HeadlessSurface {};
+    // Optional path to the window icon. If empty, the engine infers it from the application identity.
+    std::string IconPath;
 };
 
 // ============================================================================

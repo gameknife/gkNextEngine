@@ -43,6 +43,7 @@
             "target": "gkNextStillBenchmark",
             "directory": "Render/gkNextBenchmark/gkNextStillBenchmark",
             "label": "Still Benchmark",
+            "icon": "gkNextMotionBenchmark",
             "platforms": ["android", "ios"],
             "androidId": "com.gknext.stillbenchmark",
             "iosBundleId": "gknext.stillbenchmark"
@@ -75,6 +76,7 @@
             "target": "ScadLibrary",
             "directory": "Editor/ScadLibrary",
             "label": "ScadLibrary",
+            "icon": "ScadStudio",
             "platforms": ["android", "ios"],
             "androidId": "com.gknext.scadlibrary",
             "iosBundleId": "gknext.scadlibrary"
@@ -107,6 +109,7 @@
             "target": "Brotato3DCSharp",
             "directory": "Game/Brotato3DCSharp",
             "label": "Brotato3D C#",
+            "icon": "Brotato3D",
             "platforms": ["android"],
             "androidId": "com.gknext.brotato3dcsharp",
             "iosBundleId": "gknext.brotato3dcsharp",
@@ -141,6 +144,7 @@
             "target": "BrickPlayer",
             "directory": "Game/BrickPlayer",
             "label": "BrickPlayer",
+            "icon": "MagicaLego",
             "platforms": ["android", "ios"],
             "androidId": "com.gknext.brickplayer",
             "iosBundleId": "gknext.brickplayer"

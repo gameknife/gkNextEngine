@@ -19,6 +19,7 @@ set(scadLibraryRuntimeModules ${GK_STANDARD_RUNTIME_MODULES})
 list(REMOVE_ITEM scadLibraryRuntimeModules NextPhysics)
 
 gk_add_application(ScadLibrary
+    ICON ScadStudio
     SOURCES ${scadLibrarySources}
     MODULES
         ${scadLibraryRuntimeModules}

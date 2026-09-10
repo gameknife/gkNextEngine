@@ -451,3 +451,7 @@ assets/omr/outer
 website/node_modules/
 website/.vitepress/dist/
 website/.vitepress/cache/
+
+# Application icon design master files (1024x1024) and generated Windows ICO files
+design/
+assets/icons/ico/

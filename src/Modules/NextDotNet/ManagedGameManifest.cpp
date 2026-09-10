@@ -82,6 +82,7 @@ namespace Modules::NextDotNet
                 manifest.id = it->get<std::string>();
             }
             manifest.displayName = root.value("displayName", manifest.id);
+            manifest.icon = root.value("icon", std::string());
             manifest.assembly = root.value("assembly", std::string());
             manifest.project = root.value("project", std::string());
             manifest.initialScene = root.value("initialScene", std::string());

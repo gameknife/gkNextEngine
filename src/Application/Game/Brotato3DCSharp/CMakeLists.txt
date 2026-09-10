@@ -1,6 +1,7 @@
 file(GLOB_RECURSE brotato3DCSharpSources CONFIGURE_DEPENDS "*.cpp" "*.hpp" "*.h")
 
 gk_add_application(Brotato3DCSharp
+    ICON Brotato3D
     SOURCES ${brotato3DCSharpSources}
     MODULES
         ${GK_STANDARD_RUNTIME_MODULES}

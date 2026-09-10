@@ -31,6 +31,7 @@ func ManifestPath(repoRoot string) string {
 type App struct {
 	Target      string   `json:"target"`
 	Label       string   `json:"label"`
+	Icon        string   `json:"icon"`
 	Platforms   []string `json:"platforms"`
 	AndroidID   string   `json:"androidId"`
 	IOSBundleID string   `json:"iosBundleId"`

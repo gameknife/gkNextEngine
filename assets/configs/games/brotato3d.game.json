@@ -1,6 +1,7 @@
 {
   "id": "brotato3d",
   "displayName": "Brotato 3D",
+  "icon": "assets/icons/Brotato3D.png",
   "assembly": "brotato3d/Brotato3DCSharp.dll",
   "project": "Brotato3D/Brotato3DCSharp/Brotato3DCSharp.csproj",
   "window": {

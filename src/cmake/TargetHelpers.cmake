@@ -497,6 +497,27 @@ function(gk_configure_ios_application target)
         COMMENT "Copying assets to iOS bundle"
     )
 
+    set(iosIconName "${GK_MOBILE_APP_${target}_ICON}")
+    if(NOT iosIconName)
+        if(EXISTS "${GK_REPO_ROOT}/assets/icons/${target}.png")
+            set(iosIconName "${target}")
+        else()
+            set(iosIconName "gkNextEngine")
+        endif()
+    endif()
+    set(iosIconSource "${GK_REPO_ROOT}/assets/icons/${iosIconName}.png")
+    if(NOT EXISTS "${iosIconSource}")
+        set(iosIconSource "${GK_REPO_ROOT}/assets/icons/gkNextEngine.png")
+    endif()
+    if(EXISTS "${iosIconSource}")
+        add_custom_command(TARGET ${target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${iosIconSource}"
+                "$<TARGET_BUNDLE_DIR:${target}>/AppIcon.png"
+            COMMENT "Copying app icon to iOS bundle for ${target}"
+        )
+    endif()
+
     # What `gnb ios run` installs and launches. Exactly one application is configured per iOS build
     # tree, so this manifest names it without any further selection.
     file(GENERATE
@@ -540,12 +561,24 @@ endfunction()
 function(gk_add_application target)
     cmake_parse_arguments(ARG
         "CORE_ONLY;NO_UNITY;NO_FAST_LINK;MINIMAL_LINK;NO_DEFAULT_MAIN"
-        ""
+        "ICON"
         "SOURCES;MODULES;LINK;DEFINES;INCLUDES"
         ${ARGN})
 
     if(NOT ARG_SOURCES)
         message(FATAL_ERROR "gk_add_application(${target}) requires SOURCES")
+    endif()
+
+    set(appIconName "${ARG_ICON}")
+    if(NOT appIconName AND GK_MOBILE_APP_${target}_ICON)
+        set(appIconName "${GK_MOBILE_APP_${target}_ICON}")
+    endif()
+    if(NOT appIconName)
+        if(EXISTS "${GK_ASSET_ROOT}/icons/${target}.png")
+            set(appIconName "${target}")
+        else()
+            set(appIconName "gkNextEngine")
+        endif()
     endif()
 
     set(entryPoint "")
@@ -577,6 +610,30 @@ function(gk_add_application target)
             endif()
         endforeach()
         gk_configure_application(${target} ${configureOptions} MODULES ${ARG_MODULES})
+
+        if(WIN32)
+            set(appIcoFile "${GK_ASSET_ROOT}/icons/ico/${appIconName}.ico")
+            if(NOT EXISTS "${appIcoFile}")
+                find_program(GNB_EXECUTABLE NAMES gnb gnb.exe PATHS "${GK_REPO_ROOT}" "${GK_REPO_ROOT}/tools/gnb-bin" NO_DEFAULT_PATH)
+                if(GNB_EXECUTABLE)
+                    execute_process(COMMAND "${GNB_EXECUTABLE}" icons sync WORKING_DIRECTORY "${GK_REPO_ROOT}")
+                endif()
+            endif()
+            if(NOT EXISTS "${appIcoFile}")
+                set(appIcoFile "${GK_ASSET_ROOT}/icons/ico/gkNextEngine.ico")
+            endif()
+            if(NOT EXISTS "${appIcoFile}")
+                set(appIcoFile "${GK_ASSET_ROOT}/icons/ico/gkNextRenderer.ico")
+            endif()
+            if(EXISTS "${appIcoFile}")
+                file(TO_NATIVE_PATH "${appIcoFile}" appIcoNativePath)
+                string(REPLACE "\\" "\\\\" appIcoEscapedPath "${appIcoNativePath}")
+                set(rcContent "IDI_ICON1 ICON \"${appIcoEscapedPath}\"\n")
+                set(rcFilePath "${CMAKE_CURRENT_BINARY_DIR}/${target}_icon.rc")
+                file(WRITE "${rcFilePath}" "${rcContent}")
+                target_sources(${target} PRIVATE "${rcFilePath}")
+            endif()
+        endif()
     endif()
 
     # Engine libraries only exist where the engine is a library. Android compiles the same sources
@@ -589,6 +646,8 @@ function(gk_add_application target)
                 "gk_add_application(${target}) links '${library}', which is not a target here")
         endif()
     endforeach()
+
+    target_compile_definitions(${target} PRIVATE GK_APP_ICON_NAME="${appIconName}")
 
     if(ARG_DEFINES)
         target_compile_definitions(${target} PRIVATE ${ARG_DEFINES})

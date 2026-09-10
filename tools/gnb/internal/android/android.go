@@ -13,6 +13,7 @@ import (
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/config"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/console"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/fetcher"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/icons"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/mobileapps"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/vcpkg"
 )
@@ -162,6 +163,10 @@ func Build(repoRoot string, cfg config.Config, variant, app string) (Artifact, e
 	}
 	if err := runCommand(repoRoot, androidEnvironment(sdkRoot), cmakePath, configureArgs...); err != nil {
 		return Artifact{}, err
+	}
+	gradleResDir := filepath.Join(buildDir, "gradle", "app", "src", "main", "res")
+	if err := icons.GenerateAndroidAppIcons(repoRoot, app, gradleResDir); err != nil {
+		console.Warn("failed to generate Android icons for %s: %v", app, err)
 	}
 	if err := runCommand(repoRoot, androidEnvironment(sdkRoot), cmakePath, "--build", buildDir, "--target", "android-apk"); err != nil {
 		return Artifact{}, err

@@ -34,7 +34,8 @@ namespace Modules::NextDotNet
             }
         }
 
-        ConfigureWindow(config, options, window.title, window.width, window.height, window.forceSDR);
+        const std::string manifestIcon = bootManifest_ ? bootManifest_->icon : "";
+        ConfigureWindow(config, options, window.title, window.width, window.height, window.forceSDR, manifestIcon);
 
         // The runtime starts idle on purpose. Which assembly is loaded, and whether it hot reloads,
         // is the session's decision — the same decision whether this host runs one game forever or

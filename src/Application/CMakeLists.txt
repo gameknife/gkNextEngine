@@ -32,9 +32,27 @@ if(ANDROID OR IOS)
             "configure. See the earlier '.NET scripting disabled' message for the reason.")
     endif()
 
-    message(STATUS "Mobile application: ${gkMobileSelectedApp} "
-        "(${GK_MOBILE_APP_${gkMobileSelectedApp}_DIRECTORY})")
-    add_subdirectory("${GK_MOBILE_APP_${gkMobileSelectedApp}_DIRECTORY}")
+    if(GK_MOBILE_APP_${gkMobileSelectedApp}_AUTO_MANAGED)
+        message(STATUS "Mobile C# project application: ${gkMobileSelectedApp} "
+            "(${GK_MOBILE_APP_${gkMobileSelectedApp}_MANAGED_PROJECT})")
+        # Automatic C# applications need a capable default native shell because there is no
+        # handwritten CMake target to declare a narrower static-module set.
+        gk_add_managed_game_application(${gkMobileSelectedApp}
+            GAME_ID "${GK_MOBILE_APP_${gkMobileSelectedApp}_MANAGED_GAME_ID}"
+            PROJECT "${GK_MOBILE_APP_${gkMobileSelectedApp}_MANAGED_PROJECT}"
+            DIR "${GK_MOBILE_APP_${gkMobileSelectedApp}_MANAGED_GAME_ID}"
+            MODULES
+                ${GK_STANDARD_RUNTIME_MODULES}
+                ScadLoader
+                NextDotNet
+            LINK NextGameplay
+            REGISTER_SCAD_LOADER
+        )
+    else()
+        message(STATUS "Mobile application: ${gkMobileSelectedApp} "
+            "(${GK_MOBILE_APP_${gkMobileSelectedApp}_DIRECTORY})")
+        add_subdirectory("${GK_MOBILE_APP_${gkMobileSelectedApp}_DIRECTORY}")
+    endif()
 else()
     add_subdirectory(Render)
     add_subdirectory(Editor)

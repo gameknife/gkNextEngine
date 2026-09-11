@@ -17,21 +17,11 @@ namespace Modules::NextDotNet
         FManagedGameManifest::FWindow window = hostOptions_.window;
         bool compileManagedSources = false;
 
-        if (!hostOptions_.manifestPath.empty())
+        bootManifest_ = LoadBootManifest();
+        if (bootManifest_)
         {
-            bootManifest_ = LoadManagedGameManifest(hostOptions_.manifestPath);
-            if (bootManifest_)
-            {
-                window = bootManifest_->window;
-                compileManagedSources = bootManifest_->compileManagedSources;
-            }
-            else
-            {
-                // Keep going with the fallback window: an engine that starts and says the manifest
-                // is broken is more useful than one that dies before it can log anything.
-                SPDLOG_ERROR("[game] starting without a game: {} could not be loaded",
-                             hostOptions_.manifestPath);
-            }
+            window = bootManifest_->window;
+            compileManagedSources = bootManifest_->compileManagedSources;
         }
 
         const std::string manifestIcon = bootManifest_ ? bootManifest_->icon : "";
@@ -51,6 +41,40 @@ namespace Modules::NextDotNet
     }
 
     ManagedGameHostInstance::~ManagedGameHostInstance() = default;
+
+    std::optional<FManagedGameManifest> ManagedGameHostInstance::LoadBootManifest() const
+    {
+        if (!hostOptions_.gameId.empty())
+        {
+            const std::vector<FManagedGameManifest> manifests = ScanManagedGameManifests();
+            const auto it = std::find_if(manifests.begin(), manifests.end(),
+                                         [this](const FManagedGameManifest& manifest)
+                                         {
+                                             return manifest.id == hostOptions_.gameId;
+                                         });
+            if (it != manifests.end())
+            {
+                return *it;
+            }
+
+            SPDLOG_ERROR("[game] starting without a game: no manifest with id '{}' was found",
+                         hostOptions_.gameId);
+            return std::nullopt;
+        }
+
+        if (!hostOptions_.manifestPath.empty())
+        {
+            if (auto manifest = LoadManagedGameManifest(hostOptions_.manifestPath))
+            {
+                return manifest;
+            }
+            // Keep going with the fallback window: an engine that starts and says the manifest
+            // is broken is more useful than one that dies before it can log anything.
+            SPDLOG_ERROR("[game] starting without a game: {} could not be loaded",
+                         hostOptions_.manifestPath);
+        }
+        return std::nullopt;
+    }
 
     void ManagedGameHostInstance::OnInit()
     {

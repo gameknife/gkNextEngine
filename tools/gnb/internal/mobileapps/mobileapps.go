@@ -103,8 +103,65 @@ func Resolve(repoRoot, platform, name string) (App, error) {
 			return app, nil
 		}
 	}
+	if project, found, err := managedProjectApp(repoRoot, name); err != nil {
+		return App{}, err
+	} else if found {
+		return project, nil
+	}
 	return App{}, fmt.Errorf("unsupported %s app %q (expected one of %s)",
 		platform, name, strings.Join(Names(candidates), ", "))
+}
+
+// managedProjectApp turns a discovered projects/<Game>/Scripts/<Name>.csproj into the conventional
+// mobile application that CMake creates on demand. It intentionally does not read a .game.json:
+// project compilation and NativeAOT selection are build concerns, while manifests remain runtime
+// game data.
+func managedProjectApp(repoRoot, name string) (App, bool, error) {
+	pattern := filepath.Join(repoRoot, "projects", "*", "Scripts", "*.csproj")
+	projects, err := filepath.Glob(pattern)
+	if err != nil {
+		return App{}, false, fmt.Errorf("scan C# projects %s: %w", pattern, err)
+	}
+
+	var match string
+	for _, project := range projects {
+		target := strings.TrimSuffix(filepath.Base(project), filepath.Ext(project))
+		if !strings.EqualFold(target, name) {
+			continue
+		}
+		if match != "" {
+			return App{}, false, fmt.Errorf("C# project name %q is ambiguous: %s and %s",
+				name, match, project)
+		}
+		match = project
+	}
+	if match == "" {
+		return App{}, false, nil
+	}
+
+	target := strings.TrimSuffix(filepath.Base(match), filepath.Ext(match))
+	identitySuffix := mobileIdentitySuffix(target)
+	if identitySuffix == "" {
+		return App{}, false, fmt.Errorf("C# project %s has no usable mobile identity", match)
+	}
+	return App{
+		Target:         target,
+		Label:          target,
+		Platforms:      []string{Android, IOS},
+		AndroidID:      "com.gknext." + identitySuffix,
+		IOSBundleID:    "gknext." + identitySuffix,
+		RequiresDotNet: true,
+	}, true, nil
+}
+
+func mobileIdentitySuffix(value string) string {
+	var builder strings.Builder
+	for _, character := range strings.ToLower(value) {
+		if (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') {
+			builder.WriteRune(character)
+		}
+	}
+	return builder.String()
 }
 
 // Names lists the target names of apps, in the order given.

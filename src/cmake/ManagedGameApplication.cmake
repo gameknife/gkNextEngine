@@ -5,7 +5,7 @@ include_guard(GLOBAL)
 # project, linked-module set, and any loader registration are CMake data rather than source code.
 #
 # gk_add_managed_game_application(<target>
-#     MANIFEST <runtime manifest path>
+#     GAME_ID <runtime manifest id>
 #     PROJECT <csproj>
 #     DIR <managed publish directory>
 #     MODULES <runtime modules...>
@@ -15,11 +15,11 @@ include_guard(GLOBAL)
 function(gk_add_managed_game_application target)
     cmake_parse_arguments(ARG
         "REGISTER_SCAD_LOADER;REGISTER_LDRAW_LOADER;REGISTER_GLTF_LOADER"
-        "MANIFEST;PROJECT;DIR;ICON"
+        "GAME_ID;PROJECT;DIR;ICON"
         "MODULES;LINK;SOURCES"
         ${ARGN})
 
-    foreach(required IN ITEMS MANIFEST PROJECT DIR)
+    foreach(required IN ITEMS GAME_ID PROJECT DIR)
         if(NOT ARG_${required})
             message(FATAL_ERROR
                 "gk_add_managed_game_application(${target}) requires ${required}")
@@ -39,7 +39,7 @@ function(gk_add_managed_game_application target)
         MODULES ${ARG_MODULES}
         LINK ${ARG_LINK}
         DEFINES
-            "GK_MANAGED_GAME_MANIFEST_PATH=\"${ARG_MANIFEST}\""
+            "GK_MANAGED_GAME_ID=\"${ARG_GAME_ID}\""
             "GK_MANAGED_GAME_LINKED_MODULES=\"${linkedModulesDefinition}\""
             "GK_MANAGED_GAME_REGISTER_SCAD_LOADER=$<BOOL:${ARG_REGISTER_SCAD_LOADER}>"
             "GK_MANAGED_GAME_REGISTER_LDRAW_LOADER=$<BOOL:${ARG_REGISTER_LDRAW_LOADER}>"

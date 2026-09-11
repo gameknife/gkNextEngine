@@ -12,8 +12,8 @@
 #include "Modules/GltfLoader/GltfModule.hpp"
 #endif
 
-#ifndef GK_MANAGED_GAME_MANIFEST_PATH
-#error "Managed game application requires GK_MANAGED_GAME_MANIFEST_PATH"
+#ifndef GK_MANAGED_GAME_ID
+#error "Managed game application requires GK_MANAGED_GAME_ID"
 #endif
 
 #ifndef GK_MANAGED_GAME_LINKED_MODULES
@@ -67,7 +67,7 @@ std::unique_ptr<NextGameInstanceBase> CreateGameInstance(Vulkan::WindowConfig& c
     return std::make_unique<Modules::NextDotNet::ManagedGameHostInstance>(
         config, options, engine,
         Modules::NextDotNet::FManagedGameHostOptions{
-            .manifestPath = GK_MANAGED_GAME_MANIFEST_PATH,
+            .gameId = GK_MANAGED_GAME_ID,
             .linkedModules = ParseLinkedModules(),
         });
 }

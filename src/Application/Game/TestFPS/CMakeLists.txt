@@ -1,5 +1,5 @@
 gk_add_managed_game_application(TestFPS
-    MANIFEST "assets/projects/TestFPS/testfps.game.json"
+    GAME_ID testfps
     PROJECT "${GK_GAME_PROJECTS_ROOT}/TestFPS/Scripts/TestFPS.csproj"
     DIR testfps
     MODULES

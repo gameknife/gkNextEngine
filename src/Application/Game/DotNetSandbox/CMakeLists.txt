@@ -1,5 +1,5 @@
 gk_add_managed_game_application(DotNetSandbox
-    MANIFEST "assets/projects/Sandbox/sandbox.game.json"
+    GAME_ID sandbox
     PROJECT "${GK_DOTNET_MANAGED_ROOT}/GkNext.Game/GkNext.Game.csproj"
     DIR game
     MODULES

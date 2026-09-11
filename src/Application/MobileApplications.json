@@ -106,16 +106,6 @@
             "iosBundleId": "gknext.brotato3d"
         },
         {
-            "target": "Brotato3DCSharp",
-            "directory": "Game/Brotato3DCSharp",
-            "label": "Brotato3D C#",
-            "icon": "Brotato3D",
-            "platforms": ["android", "ios"],
-            "androidId": "com.gknext.brotato3dcsharp",
-            "iosBundleId": "gknext.brotato3dcsharp",
-            "requiresDotNet": true
-        },
-        {
             "target": "NextRA",
             "directory": "Game/NextRA",
             "label": "NextRA",
@@ -130,15 +120,6 @@
             "platforms": ["android", "ios"],
             "androidId": "com.gknext.flappycpp",
             "iosBundleId": "gknext.flappycpp"
-        },
-        {
-            "target": "FlappyCSharp",
-            "directory": "Game/Flappy/FlappyCSharp",
-            "label": "FlappyCSharp",
-            "platforms": ["android", "ios"],
-            "androidId": "com.gknext.flappycsharp",
-            "iosBundleId": "gknext.flappycsharp",
-            "requiresDotNet": true
         },
         {
             "target": "BrickPlayer",
@@ -228,15 +209,6 @@
             "platforms": ["android", "ios"],
             "androidId": "com.gknext.nexttotalwar",
             "iosBundleId": "gknext.nexttotalwar"
-        },
-        {
-            "target": "TestFPS",
-            "directory": "Game/TestFPS",
-            "label": "TestFPS",
-            "platforms": ["ios"],
-            "androidId": "com.gknext.testfps",
-            "iosBundleId": "gknext.testfps",
-            "requiresDotNet": true
         },
         {
             "target": "DotNetSandbox",

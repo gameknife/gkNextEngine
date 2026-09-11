@@ -86,6 +86,11 @@ endforeach()
 # Resolves a possibly-empty, possibly-differently-cased application name against the registry for
 # one platform ("android" or "ios"). An empty name selects the first application the manifest lists
 # for that platform, which is what makes gkNextRenderer the default without naming it here.
+#
+# A non-registry name can be a C# project under projects/<Game>/Scripts/. Those projects get a
+# generated NativeAOT application with a conventional identity; no MobileApplications.json entry
+# or handwritten C++ target is needed. The registry remains the only authority for native C++
+# applications, whose identity and source directory cannot be inferred safely.
 function(gk_resolve_mobile_application platform requestedName outputVariable)
     if(platform STREQUAL "android")
         set(candidates ${GK_ANDROID_APPLICATIONS})
@@ -110,9 +115,63 @@ function(gk_resolve_mobile_application platform requestedName outputVariable)
         endif()
     endforeach()
 
+    file(GLOB_RECURSE gkManagedProjectFiles CONFIGURE_DEPENDS
+        "${GK_REPO_ROOT}/projects/*/Scripts/*.csproj")
+    set(gkManagedMatch "")
+    foreach(gkManagedProject IN LISTS gkManagedProjectFiles)
+        get_filename_component(gkManagedTarget "${gkManagedProject}" NAME_WE)
+        string(TOLOWER "${gkManagedTarget}" gkManagedTargetLower)
+        string(TOLOWER "${requestedName}" requestedLower)
+        if(NOT gkManagedTargetLower STREQUAL requestedLower)
+            continue()
+        endif()
+
+        if(gkManagedMatch)
+            message(FATAL_ERROR
+                "C# project name '${requestedName}' is ambiguous: '${gkManagedMatch}' and "
+                "'${gkManagedProject}'")
+        endif()
+        set(gkManagedMatch "${gkManagedProject}")
+    endforeach()
+
+    if(gkManagedMatch)
+        set(gkManagedProject "${gkManagedMatch}")
+        get_filename_component(gkManagedTarget "${gkManagedProject}" NAME_WE)
+
+        get_filename_component(gkManagedScriptsDirectory "${gkManagedProject}" DIRECTORY)
+        get_filename_component(gkManagedProjectDirectory "${gkManagedScriptsDirectory}" DIRECTORY)
+        get_filename_component(gkManagedProjectDirectoryName "${gkManagedProjectDirectory}" NAME)
+        string(TOLOWER "${gkManagedProjectDirectoryName}" gkManagedGameId)
+        string(TOLOWER "${gkManagedTarget}" gkManagedTargetLower)
+        string(REGEX REPLACE "[^a-z0-9]" "" gkManagedIdentitySuffix "${gkManagedTargetLower}")
+        if(gkManagedIdentitySuffix STREQUAL "")
+            message(FATAL_ERROR "C# project '${gkManagedProject}' has no usable mobile identity")
+        endif()
+
+        set(GK_MOBILE_APP_${gkManagedTarget}_DIRECTORY "")
+        set(GK_MOBILE_APP_${gkManagedTarget}_LABEL "${gkManagedTarget}")
+        set(GK_MOBILE_APP_${gkManagedTarget}_ANDROID_ID "com.gknext.${gkManagedIdentitySuffix}")
+        set(GK_MOBILE_APP_${gkManagedTarget}_IOS_BUNDLE_ID "gknext.${gkManagedIdentitySuffix}")
+        set(GK_MOBILE_APP_${gkManagedTarget}_ICON "gkNextEngine")
+        set(GK_MOBILE_APP_${gkManagedTarget}_REQUIRES_DOTNET ON)
+        set(GK_MOBILE_APP_${gkManagedTarget}_AUTO_MANAGED ON)
+        set(GK_MOBILE_APP_${gkManagedTarget}_MANAGED_PROJECT "${gkManagedProject}")
+        set(GK_MOBILE_APP_${gkManagedTarget}_MANAGED_GAME_ID "${gkManagedGameId}")
+
+        foreach(gkManagedField IN ITEMS
+            DIRECTORY LABEL ANDROID_ID IOS_BUNDLE_ID ICON REQUIRES_DOTNET AUTO_MANAGED
+            MANAGED_PROJECT MANAGED_GAME_ID)
+            set(GK_MOBILE_APP_${gkManagedTarget}_${gkManagedField}
+                "${GK_MOBILE_APP_${gkManagedTarget}_${gkManagedField}}" PARENT_SCOPE)
+        endforeach()
+        set(${outputVariable} "${gkManagedTarget}" PARENT_SCOPE)
+        return()
+    endif()
+
     string(REPLACE ";" ", " availableText "${candidates}")
     message(FATAL_ERROR
         "'${requestedName}' is not a ${platform} application.\n"
         "Available: ${availableText}\n"
-        "Add it to ${GK_MOBILE_APPLICATIONS_MANIFEST} to package it for ${platform}.")
+        "Use a C# project name from projects/*/Scripts/, or add a native application to "
+        "${GK_MOBILE_APPLICATIONS_MANIFEST}.")
 endfunction()

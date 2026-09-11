@@ -8,9 +8,13 @@ namespace Modules::NextDotNet
 {
     struct FManagedGameHostOptions
     {
-        /// Manifest of the single game this host runs. Empty starts the host idle, which is what
-        /// gkNextLauncher does before the player picks something.
+        /// Manifest of the single game this host runs. Retained for hosts that explicitly load a
+        /// file; standalone applications normally select by gameId instead.
         std::string manifestPath;
+
+        /// Stable manifest id of the game linked into this application. This keeps CMake's NativeAOT
+        /// project selection independent from a manifest filename or project-directory convention.
+        std::string gameId;
 
         /// Window used when there is no manifest to take one from.
         FManagedGameManifest::FWindow window;
@@ -76,6 +80,8 @@ namespace Modules::NextDotNet
         const std::optional<FManagedGameManifest>& GetBootManifest() const { return bootManifest_; }
 
     private:
+        std::optional<FManagedGameManifest> LoadBootManifest() const;
+
         static int16_t ToGamepadAxis(float value);
         static int16_t CombineGamepadAxes(int16_t physical, int16_t touch);
         bool UsesDualStickTouch() const;

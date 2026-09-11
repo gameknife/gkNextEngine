@@ -586,9 +586,11 @@ endfunction()
 # Applies the parts of a mobile application that are the same on both platforms. It has no command
 # line, so its identity is compiled in; its initial scene remains application-owned.
 function(gk_configure_mobile_application target)
-    if(NOT target IN_LIST GK_MOBILE_APPLICATIONS)
+    if(NOT target IN_LIST GK_MOBILE_APPLICATIONS AND
+       NOT GK_MOBILE_APP_${target}_AUTO_MANAGED)
         message(FATAL_ERROR
-            "${target} is not a mobile application. Add it to ${GK_MOBILE_APPLICATIONS_MANIFEST}.")
+            "${target} is not a mobile application. Add a native application to "
+            "${GK_MOBILE_APPLICATIONS_MANIFEST}, or select a C# project under projects/*/Scripts/.")
     endif()
 
     target_compile_definitions(${target} PRIVATE GK_APPLICATION_NAME="${target}")

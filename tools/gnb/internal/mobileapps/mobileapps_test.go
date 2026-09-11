@@ -116,17 +116,66 @@ func TestResolveIsCaseInsensitiveAndRejectsUnknown(t *testing.T) {
 	}
 }
 
-func TestIOSManagedGamesDeclareTheirRuntimeRequirement(t *testing.T) {
-	root := repoRoot(t)
-	apps, err := ForPlatform(root, IOS)
-	if err != nil {
-		t.Fatalf("ForPlatform(ios) error = %v", err)
+func TestResolveDiscoveredCSharpProject(t *testing.T) {
+	root := t.TempDir()
+	manifestPath := filepath.Join(root, "src", "Application", "MobileApplications.json")
+	projectPath := filepath.Join(root, "projects", "TestTPS", "Scripts", "TestTPS.csproj")
+	if err := os.MkdirAll(filepath.Dir(projectPath), 0o755); err != nil {
+		t.Fatalf("create test C# project directory: %v", err)
 	}
+	if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
+		t.Fatalf("create test registry directory: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, []byte(`{"applications":[{"target":"NativeApp","label":"Native App","platforms":["android","ios"],"androidId":"com.gknext.native","iosBundleId":"gknext.native"}]}`), 0o644); err != nil {
+		t.Fatalf("write test registry: %v", err)
+	}
+	if err := os.WriteFile(projectPath, []byte("<Project />"), 0o644); err != nil {
+		t.Fatalf("write test C# project: %v", err)
+	}
+
+	for _, platform := range []string{Android, IOS} {
+		resolved, err := Resolve(root, platform, "testtps")
+		if err != nil {
+			t.Fatalf("Resolve(%s, TestTPS) error = %v", platform, err)
+		}
+		if resolved.Target != "TestTPS" {
+			t.Errorf("Resolve(%s, TestTPS) target = %q, want TestTPS", platform, resolved.Target)
+		}
+		if !resolved.RequiresDotNet || resolved.AndroidID != "com.gknext.testtps" ||
+			resolved.IOSBundleID != "gknext.testtps" {
+			t.Errorf("Resolve(%s, TestTPS) = %+v, want generated managed application", platform, resolved)
+		}
+	}
+}
+
+func TestProjectManagedGamesAreNotRegisteredMobileApplications(t *testing.T) {
+	root := repoRoot(t)
+	apps, err := Load(root)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	registered := make(map[string]bool, len(apps))
 	for _, app := range apps {
-		if strings.Contains(app.Target, "CSharp") || app.Target == "DotNetSandbox" || app.Target == "TestFPS" {
-			if !app.RequiresDotNet {
-				t.Errorf("%s hosts C# and must set requiresDotNet", app.Target)
-			}
+		registered[app.Target] = true
+	}
+	for _, target := range []string{"Brotato3DCSharp", "FlappyCSharp"} {
+		if registered[target] {
+			t.Errorf("%s is a projects/ C# game and must be discovered, not registered", target)
+		}
+	}
+}
+
+func TestResolveProjectManagedGame(t *testing.T) {
+	root := repoRoot(t)
+	for _, platform := range []string{Android, IOS} {
+		resolved, err := Resolve(root, platform, "FlappyCSharp")
+		if err != nil {
+			t.Fatalf("Resolve(%s, FlappyCSharp) error = %v", platform, err)
+		}
+		if resolved.Target != "FlappyCSharp" || !resolved.RequiresDotNet ||
+			resolved.AndroidID != "com.gknext.flappycsharp" ||
+			resolved.IOSBundleID != "gknext.flappycsharp" {
+			t.Errorf("Resolve(%s, FlappyCSharp) = %+v, want automatic managed application", platform, resolved)
 		}
 	}
 }

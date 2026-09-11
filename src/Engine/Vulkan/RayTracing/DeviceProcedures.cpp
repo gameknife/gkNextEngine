@@ -18,6 +18,26 @@ namespace
 
         return func;
     }
+
+    PFN_vkGetBufferDeviceAddress GetBufferDeviceAddressProcedure(const Device& device)
+    {
+        if (const auto func = GetProcedure<PFN_vkGetBufferDeviceAddress>(device, "vkGetBufferDeviceAddress"))
+        {
+            return func;
+        }
+
+        if (const auto func = GetProcedure<PFN_vkGetBufferDeviceAddressKHR>(device, "vkGetBufferDeviceAddressKHR"))
+        {
+            return reinterpret_cast<PFN_vkGetBufferDeviceAddress>(func);
+        }
+
+        if (const auto func = GetProcedure<PFN_vkGetBufferDeviceAddressEXT>(device, "vkGetBufferDeviceAddressEXT"))
+        {
+            return reinterpret_cast<PFN_vkGetBufferDeviceAddress>(func);
+        }
+
+        return nullptr;
+    }
 }
 
 
@@ -31,6 +51,7 @@ DeviceProcedures::DeviceProcedures(const class Device& device, bool raytracing, 
     vkCreateRayTracingPipelinesKHR(raytracing ? GetProcedure<PFN_vkCreateRayTracingPipelinesKHR>(device, "vkCreateRayTracingPipelinesKHR"): nullptr),
     vkGetRayTracingShaderGroupHandlesKHR(raytracing ? GetProcedure<PFN_vkGetRayTracingShaderGroupHandlesKHR>(device, "vkGetRayTracingShaderGroupHandlesKHR"): nullptr),
     vkGetAccelerationStructureDeviceAddressKHR(GetProcedure<PFN_vkGetAccelerationStructureDeviceAddressKHR>(device, "vkGetAccelerationStructureDeviceAddressKHR")),
+    vkGetBufferDeviceAddress(GetBufferDeviceAddressProcedure(device)),
     vkCmdWriteAccelerationStructuresPropertiesKHR(GetProcedure<PFN_vkCmdWriteAccelerationStructuresPropertiesKHR>(device, "vkCmdWriteAccelerationStructuresPropertiesKHR")),
 #if WIN32
     vkGetMemoryWin32HandleKHR(GetProcedure<PFN_vkGetMemoryWin32HandleKHR>(device, "vkGetMemoryWin32HandleKHR")),

@@ -22,6 +22,7 @@ import (
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/config"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/gitops"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/spec"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/validationstore"
 )
 
 //go:embed templates/*.html
@@ -35,6 +36,7 @@ type Options struct {
 	Version  string        // gnb version string for display
 	Preset   string        // CMake preset string for display
 	Config   config.Config // loaded gnb.toml — provides targets list
+	GNBPath  string        // optional executable path used by validation reruns
 }
 
 // Server holds runtime state for the dashboard.
@@ -43,6 +45,7 @@ type Server struct {
 	tpl           *template.Template
 	jobs          *JobManager
 	chats         *ChatStore
+	validation    validationstore.Store
 	streamBaseURL string
 }
 
@@ -66,7 +69,7 @@ func New(opts Options) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
-	return &Server{opts: opts, tpl: tpl, jobs: NewJobManager(), chats: NewChatStore(chatStorePath(opts))}, nil
+	return &Server{opts: opts, tpl: tpl, jobs: NewJobManager(), chats: NewChatStore(chatStorePath(opts)), validation: validationstore.New(opts.RepoRoot, opts.Preset)}, nil
 }
 
 // Start binds the configured port and starts serving in the background.
@@ -179,6 +182,7 @@ func templateFuncs() template.FuncMap {
 		"tokenK": func(n int) string {
 			return fmt.Sprintf("%.1f k", float64(n)/1000.0)
 		},
+		"add":      func(a, b int) int { return a + b },
 		"safeHTML": func(s string) template.HTML { return template.HTML(s) },
 		"userInitial": func() string {
 			if u, err := user.Current(); err == nil && u.Username != "" {

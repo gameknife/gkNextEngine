@@ -25,6 +25,12 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /docs/save", s.handleDocsSave)
 	mux.HandleFunc("GET /docs/source", s.handleDocsSource)
 	mux.HandleFunc("GET /graph/data", s.handleGraphData)
+	mux.HandleFunc("GET /validation/{id}/artifact/{path...}", s.handleValidationArtifact)
+	mux.HandleFunc("GET /validation/{id}/log", s.handleValidationLog)
+	mux.HandleFunc("GET /validation/{id}/steps", s.handleValidationSteps)
+	mux.HandleFunc("POST /validation/run-script", s.handleValidationRunScript)
+	mux.HandleFunc("POST /validation/{id}/review", s.handleValidationReview)
+	mux.HandleFunc("POST /validation/{id}/rerun", s.handleValidationRerun)
 	mux.HandleFunc("GET /task/{id}", s.handleTaskDetail)
 	mux.HandleFunc("POST /task/add", s.handleTaskAdd)
 	mux.HandleFunc("POST /task/{id}/done", s.handleTaskDone)
@@ -85,26 +91,27 @@ type sectionVM struct {
 }
 
 type indexVM struct {
-	RepoRoot   string
-	StreamBase string
-	Milestone  string
-	Status     string
-	Sections   []sectionVM
-	Journals   []journalSummary
-	Version    string
-	Preset     string
-	OS         string
-	RecentSize int
-	ActiveTab  string // "todo" | "docs" | "build" | "remote" | "test" | "git" | "chat" | "loc" | "paks" | "graph" | "settings"
-	BuildVM    buildRunVM
-	RemoteVM   remoteVM
-	TestVM     testVM
-	GitVM      gitVM
-	ChatVM     chatVM
-	LocVM      locVM
-	PaksVM     paksVM
-	DocsVM     docsVM
-	GraphVM    graphVM
+	RepoRoot     string
+	StreamBase   string
+	Milestone    string
+	Status       string
+	Sections     []sectionVM
+	Journals     []journalSummary
+	Version      string
+	Preset       string
+	OS           string
+	RecentSize   int
+	ActiveTab    string // "todo" | "docs" | "build" | "remote" | "test" | "git" | "chat" | "loc" | "paks" | "graph" | "validation" | "settings"
+	BuildVM      buildRunVM
+	RemoteVM     remoteVM
+	TestVM       testVM
+	GitVM        gitVM
+	ChatVM       chatVM
+	LocVM        locVM
+	PaksVM       paksVM
+	DocsVM       docsVM
+	GraphVM      graphVM
+	ValidationVM validationVM
 }
 
 type locVM struct {
@@ -701,6 +708,12 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		s.render(w, "layout.html", vm)
 		return
 	}
+	if r.URL.Query().Get("tab") == "validation" {
+		vm := s.buildHeader("validation")
+		vm.ValidationVM = s.buildValidationVM(r.URL.Query())
+		s.render(w, "layout.html", vm)
+		return
+	}
 	vm, err := s.buildIndex()
 	if err != nil {
 		httpError(w, err)
@@ -794,6 +807,10 @@ func (s *Server) handleTab(w http.ResponseWriter, r *http.Request) {
 		vm := s.buildHeader("graph")
 		vm.GraphVM = s.buildGraphVM()
 		s.render(w, "tab_graph", vm)
+	case "validation":
+		vm := s.buildHeader("validation")
+		vm.ValidationVM = s.buildValidationVM(r.URL.Query())
+		s.render(w, "tab_validation", vm)
 	case "settings":
 		vm := s.buildHeader("settings")
 		s.render(w, "tab_settings", vm)

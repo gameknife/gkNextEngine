@@ -34,11 +34,14 @@ last_updated: 2026-08-31
 ./gnb.sh visual
 ./gnb.sh shot --scene assets/models/playground.glb
 ./gnb.sh validate --script assets/agentscripts/smoke.agentscript.json
+./gnb.sh validation note <runId> --issue --message "角色穿过台阶，见第二张截图"
 ./gnb.sh tui --scene assets/models/playground.glb
 ./gnb.sh remote --scene assets/models/playground.glb
 ```
 
-`shot` 是快速肉眼验证；`validate` 用输入脚本驱动并断言；`visual` 才是多场景 baseline 回归。Remote Play 的安全与能力边界见 [当前设计](../designs/webrtc-remoteplay-design.md)。
+`shot` 是快速肉眼验证；`validate` 用输入脚本驱动并断言；`visual` 才是多场景 baseline 回归。每次 `shot`/`validate` 会先在 `out/build/<preset>/validation_runs/<runId>/` 登记运行，Dashboard 未启动也不会丢失记录；CLI 会打印 `runId` 与证据目录。`gnb validation note` 只写入独立的 `review.json`，不会把人工结论伪装成机器通过。Remote Play 的安全与能力边界见 [当前设计](../designs/webrtc-remoteplay-design.md)。
+
+打开 Dashboard 的“验证”页后，会自动发现 `assets/agentscripts/*.agentscript.json`，并列出脚本的 target、场景和步骤数。已构建 target 的脚本可以直接点击“后台验证”或“可见验证”启动，不必另开终端；未构建的 target 会保留在列表中并明确标记原因。
 
 ## 项目工具
 
@@ -72,7 +75,7 @@ package preset 配置在 `gnb.toml` 的 `[package.presets.<name>]`，可独立�
 同时使用。Release CI 在 Linux/Lavapipe 上生成这两个 preset 的资产包，再由 Windows 与 macOS
 直接装配到各自的归档中。
 
-裸 `gnb` 启动 Dashboard。Windows/macOS 使用 Wails 原生窗口；Linux build 回退浏览器，`dashboard --no-open` 为 server-only。
+裸 `gnb` 启动 Dashboard。Windows/macOS 使用 Wails 原生窗口；Linux build 回退浏览器，`dashboard --no-open` 为 server-only。Dashboard 的「验证」页会轮询运行目录，展示运行中/历史、失败步骤、日志尾部和已完成截图；终态运行可以后台重跑或可见重跑。可见重跑是按脚本快照使用当前构建创建的新运行，不是历史录像；截图也不是直播。可在「待处理」筛选中集中查看机器失败、待审阅和已记录问题。
 
 ## AI、LLM 与 SCAD
 

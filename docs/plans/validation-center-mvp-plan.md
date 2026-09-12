@@ -1,7 +1,7 @@
 ---
 title: "验证中心 MVP 开发计划"
 category: plan
-status: 待实施
+status: 已完成
 owner: tools
 created: 2026-09-12
 last_updated: 2026-09-12
@@ -102,28 +102,28 @@ gnb validation note <runId> --issue --message "角色穿过台阶，见第二张
 
 ### M1：一条 smoke 从终端进入页面
 
-- [ ] 实现最小 store、runId、run.json/script.json/runner.log，统一终态收尾。
-- [ ] 接入 validate 和 shot，独立归档截图，保存旧路径兼容副本。
-- [ ] Dashboard 增加「验证」tab：运行列表、详情、状态轮询、步骤、日志、截图。
-- [ ] CLI 打印运行身份和证据目录；可选 `--reason` 为列表提供一句验证目的，未传时显示脚本名。
+- [x] 实现最小 store、runId、run.json/script.json/runner.log，统一终态收尾。
+- [x] 接入 validate 和 shot，独立归档截图，保存旧路径兼容副本。
+- [x] Dashboard 增加「验证」tab：运行列表、详情、状态轮询、步骤、日志、截图。
+- [x] CLI 打印运行身份和证据目录；可选 `--reason` 为列表提供一句验证目的，未传时显示脚本名。
 
 **演示门槛：** 打开 Dashboard，在另一个终端运行现有 editor smoke；页面自动出现记录，结束后看到截图。关闭再打开 Dashboard 记录仍在，连续两次运行有两个独立条目。很短的脚本可以直接显示完成；运行中展示用有有限等待的演示脚本验证。
 
 ### M2：失败可信，问题有地方留下
 
-- [ ] 补齐坏脚本、缺程序、连接失败、断言失败、退出异常、截图缺失、Ctrl+C 的记录与诊断。
-- [ ] 加入低频心跳、失联展示与 interrupted 恢复识别；避免永远显示运行中。
-- [ ] 失败详情优先显示 query/op/expected/actual 与日志，尽力补一张失败截图。
-- [ ] 加入审阅状态、问题备注、`validation note` 与“待处理”筛选。
+- [x] 补齐坏脚本、缺程序、连接失败、断言失败、退出异常、截图缺失、Ctrl+C 的记录与诊断。
+- [x] 加入低频心跳、失联展示与 interrupted 恢复识别；避免永远显示运行中。
+- [x] 失败详情优先显示 query/op/expected/actual 与日志，尽力补一张失败截图。
+- [x] 加入审阅状态、问题备注、`validation note` 与“待处理”筛选。
 
 **演示门槛：** 用临时脚本制造确定的断言失败；页面能指出哪一步、期望和实际分别是什么，CLI 非零退出。agent 给截图记一条问题，刷新/重启 Dashboard 后仍能看到。下一次成功不会隐藏旧失败。
 
 ### M3：点击即可观察，完成 MVP
 
-- [ ] 后台重跑与可见重跑，复用脚本快照和有效参数，创建 `rerunOf` 关联。
-- [ ] shot 支持 `--visible`；按钮展示当前可用性，运行中不重复启动同 target。
-- [ ] 完善空态、筛选、日志尾部/下载和详情深链接。
-- [ ] 更新 `docs/guides/gnb-cli.md`、现行验证设计文档和 AGENTS 验证说明：运行前可填目的、结果引用 runId、视觉问题写入审阅记录。
+- [x] 后台重跑与可见重跑，复用脚本快照和有效参数，创建 `rerunOf` 关联。
+- [x] shot 支持 `--visible`；按钮展示当前可用性，运行中不重复启动同 target。
+- [x] 完善空态、筛选、日志尾部/下载和详情深链接。
+- [x] 更新 `docs/guides/gnb-cli.md`、现行验证设计文档和 AGENTS 验证说明：运行前可填目的、结果引用 runId、视觉问题写入审阅记录。
 
 **演示门槛：** 在已结束 smoke 详情点击“可见重跑”，窗口实际出现，新记录展示进度并关联旧运行。用户能浏览截图、标记问题，再从待处理列表找到它。
 

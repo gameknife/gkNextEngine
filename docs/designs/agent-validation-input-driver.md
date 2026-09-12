@@ -14,6 +14,7 @@ last_updated: 2026-07-22
 ## 组成
 
 - `tools/gnb/internal/validate/validate.go`：解析 `.agentscript.json`，启动目标，执行等待/断言，写 JSON report，并监管进程退出。
+- `tools/gnb/internal/validationstore/`：独立持久化验证运行、脚本快照、步骤、心跳、runner 日志、截图索引和 `review.json`。
 - `src/Engine/Runtime/AgentControlServer.*`：只监听 gnb 分配的 loopback TCP 端点，按行处理带一次性 token 的 JSON 请求。
 - `src/Engine/Runtime/Engine.cpp` 的 `HandleAgentControlCommand`：提供 input、query、cvar、exec、screenshot、quit 原语。
 - `src/Engine/Runtime/Input/SyntheticInput.*`：向 SDL 事件队列注入键鼠事件；鼠标移动不会移动系统光标。
@@ -53,6 +54,8 @@ gnb 先占用一个随机 `127.0.0.1` 端口并生成一次性随机 token，再
 ```
 
 `shot` 复用同一控制通道，固定执行 wait-running → wait-frames → screenshot → quit。默认截图为 `out/build/<preset>/screenshots/agent_validation.jpg`；`validate` 默认报告在 `out/build/<preset>/agent_reports/`。
+
+每次 `shot`/`validate` 还会创建 `out/build/<preset>/validation_runs/<runId>/`。`run.json` 的机器状态使用 `running/passed/failed/canceled/interrupted`；有截图的 `passed` 运行在 Dashboard 中显示为“采集完成、待审阅”，不等同于画面正确。`script.json` 保存本次解析输入，`runner.log` 保存目标 stdout/stderr 与执行器诊断，截图存放在该运行的 `screenshots/` 下。`review.json` 只保存最后一次 `pending/accepted/issue` 结论，CLI 可用 `gnb validation note <runId>` 写入。Dashboard 关闭期间 CLI 仍照常运行，重新打开后从目录轮询发现记录。
 
 `screenshot` 步骤可选 `"accumulateFrames": N`。大于零时 Engine 暂时进入显式 offline progressive rendering，累计 N 帧后保存，并恢复此前 progressive 状态；这适合用两个独立进程做随机估计器的收敛/偏差对照。普通截图省略该字段，保持单帧当前样本语义。
 

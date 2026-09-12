@@ -95,7 +95,7 @@ because concurrent Windows builds can lock `.obj`, executables, or vcpkg state f
 - .NET verification: `./gnb.sh dotnet probe` (two-backend ABI) / `./gnb.sh dotnet ci` (full)
 - Managed IDE solution: `./gnb.sh dotnet sln` (regenerate) / `./gnb.sh dotnet sln --check` (CI guard)
 - Game templates: `./gnb.sh dotnet templates` (instantiate every `assets/templates/games/` template and build it)
-- Dashboard: `./gnb.sh dashboard` (Wails window on Windows/macOS, browser fallback on Linux; todo/build/run/test/git/chat/LOC tabs)
+- Dashboard: `./gnb.sh dashboard` (Wails window on Windows/macOS, browser fallback on Linux; todo/build/run/test/验证/git/chat/LOC tabs)
 
 Desktop binaries can be launched from any working directory; no `cd out/build/<preset>/bin` is required.
 
@@ -166,6 +166,7 @@ gnb validate --script assets/agentscripts/smoke.agentscript.json --visible  # �
 机制：
 - `gnb validate` 读取并解释脚本里的 `target` / `scene` / `viewport` 和步骤，命令行参数可覆盖；报告也由 gnb 写出。
 - gnb 用 `--agent-validation` 启动引擎以获得隐藏窗口、Immediate present、禁用 Streamline 等确定性语义，并通过原子控制端点驱动。需要显示窗口时传 `gnb validate --visible`。
+- 每次 `gnb validate` / `gnb shot` 都会登记到 `out/build/<preset>/validation_runs/<runId>/`，即使 Dashboard 没有启动也会保留 `run.json`、`script.json`、`runner.log` 和独立截图。CLI 会打印 runId 与证据目录；有截图的机器通过在 Dashboard 中仍显示为“待审阅”。可用 `gnb validation note <runId> --issue --message "…"` 记录视觉问题，审阅不会改写机器状态。
 - Agent 脚本鼠标移动只推送合成 `SDL_EVENT_MOUSE_MOTION`，不会 `SDL_WarpMouseInWindow` 移动系统光标；按键/鼠标按钮也只走 SDL 事件队列。
 - 支持步骤：`key` / `text` / `mouse-move` / `mouse-button` / `click` / `drag` / `scroll` / `wait-frames` / `wait-ms` / `wait-until` / `cvar` / `exec` / `assert` / `screenshot` / `log` / `quit`。
 - 内建查询：`engine.totalFrames`、`engine.frameRate`、`engine.time`、`engine.status`、`scene.nodeCount`、`scene.selectedId`、`scene.selectedCount`、`cvar.<name>`；游戏可通过 `RegisterAgentQueries` 暴露 `game.<name>`。

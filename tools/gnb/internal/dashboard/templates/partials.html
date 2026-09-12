@@ -2060,6 +2060,289 @@
 {{end}}
 
 
+{{define "tab_validation"}}
+<div class="validation-page">
+  <div class="validation-head">
+    <div>
+      <h1>验证中心</h1>
+      <p>观察步骤与已完成截图；截图不是直播，也不代表画面已经被人工判定正确。</p>
+    </div>
+    <div class="validation-stats">
+      <div class="validation-stat"><span>运行中</span><strong>{{.ValidationVM.RunningCount}}</strong></div>
+      <div class="validation-stat danger"><span>失败</span><strong>{{.ValidationVM.FailedCount}}</strong></div>
+      <div class="validation-stat warning"><span>待审阅</span><strong>{{.ValidationVM.PendingCount}}</strong></div>
+      <div class="validation-stat issue"><span>发现问题</span><strong>{{.ValidationVM.IssueCount}}</strong></div>
+    </div>
+  </div>
+
+  {{if .ValidationVM.Flash}}<div class="validation-flash">{{.ValidationVM.Flash}}</div>{{end}}
+  {{if .ValidationVM.Error}}<div class="validation-error">验证记录读取失败：{{.ValidationVM.Error}}</div>{{end}}
+
+  <div class="validation-layout">
+    <section class="validation-script-col">
+      <div class="card validation-scripts-card">
+        <div class="validation-card-title"><h2 class="card-title">验证脚本</h2><span class="tag-mini">{{len .ValidationVM.Scripts}}</span></div>
+        <div class="validation-script-hint">直接从这里启动仓库里的 <code>assets/agentscripts/*.json</code>。</div>
+        <form class="validation-script-filter" hx-get="/tab/validation" hx-target="#tab-content" hx-swap="innerHTML">
+          <input type="hidden" name="target" value="{{.ValidationVM.Target}}">
+          <input type="hidden" name="status" value="{{.ValidationVM.Status}}">
+          <label>按 target
+            <select class="select" name="script-target" onchange="this.form.requestSubmit()">
+              <option value="">全部 target</option>
+              {{range .ValidationVM.ScriptTargets}}<option value="{{.}}" {{if eq . $.ValidationVM.ScriptTarget}}selected{{end}}>{{.}}</option>{{end}}
+            </select>
+          </label>
+        </form>
+        {{if .ValidationVM.ScriptsError}}
+        <div class="validation-error">脚本读取失败：{{.ValidationVM.ScriptsError}}</div>
+        {{else if .ValidationVM.Scripts}}
+        <div class="validation-script-list">
+          {{range .ValidationVM.Scripts}}
+          <div class="validation-script {{if not .Runnable}}disabled{{end}}">
+            <div class="validation-script-head"><strong title="{{.Path}}">{{.Name}}</strong><span class="validation-badge">{{.Target}}</span></div>
+            <div class="validation-script-meta"><code>{{.Path}}</code>{{if .Scene}}<span title="{{.Scene}}">{{.Scene}}</span>{{end}}{{if .StepCount}}<span>{{.StepCount}} 步</span>{{end}}</div>
+            {{if .Runnable}}
+            <div class="validation-script-actions">
+              <form hx-post="/validation/run-script" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="script" value="{{.Path}}"><input type="hidden" name="target" value="{{$.ValidationVM.Target}}"><input type="hidden" name="status" value="{{$.ValidationVM.Status}}"><input type="hidden" name="script-target" value="{{$.ValidationVM.ScriptTarget}}"><button class="btn-secondary small" type="submit">后台验证</button></form>
+              <form hx-post="/validation/run-script" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="script" value="{{.Path}}"><input type="hidden" name="visible" value="1"><input type="hidden" name="target" value="{{$.ValidationVM.Target}}"><input type="hidden" name="status" value="{{$.ValidationVM.Status}}"><input type="hidden" name="script-target" value="{{$.ValidationVM.ScriptTarget}}"><button class="btn-primary small" type="submit">可见验证</button></form>
+            </div>
+            {{else}}
+            <div class="validation-script-error">{{or .Error "当前不可运行"}}</div>
+            {{end}}
+          </div>
+          {{end}}
+        </div>
+        {{else}}
+        <div class="validation-muted">尚未找到 agentscript。</div>
+        {{end}}
+      </div>
+    </section>
+
+    <section class="validation-list-col">
+      <div class="card validation-filter-card">
+        <form class="validation-filters" hx-get="/tab/validation" hx-target="#tab-content" hx-swap="innerHTML">
+          <input type="hidden" name="script-target" value="{{.ValidationVM.ScriptTarget}}">
+          <label>target <input class="input" name="target" value="{{.ValidationVM.Target}}" placeholder="全部 target"></label>
+          <label>状态
+            <select class="select" name="status">
+              <option value="">全部</option>
+              <option value="running" {{if eq .ValidationVM.Status "running"}}selected{{end}}>运行中</option>
+              <option value="passed" {{if eq .ValidationVM.Status "passed"}}selected{{end}}>采集完成</option>
+              <option value="failed" {{if eq .ValidationVM.Status "failed"}}selected{{end}}>失败</option>
+              <option value="canceled" {{if eq .ValidationVM.Status "canceled"}}selected{{end}}>已取消</option>
+              <option value="interrupted" {{if eq .ValidationVM.Status "interrupted"}}selected{{end}}>失联待确认</option>
+              <option value="actionable" {{if eq .ValidationVM.Status "actionable"}}selected{{end}}>待处理</option>
+            </select>
+          </label>
+          <button class="btn-secondary small" type="submit">筛选</button>
+        </form>
+      </div>
+
+      <div class="card validation-runs-card">
+        <div class="validation-card-title"><h2 class="card-title">运行记录</h2><span class="tag-mini">{{len .ValidationVM.Runs}}</span></div>
+        {{if .ValidationVM.Runs}}
+        <div class="validation-run-list">
+          {{range .ValidationVM.Runs}}
+          <a class="validation-run {{if eq .Record.RunID $.ValidationVM.SelectedID}}selected{{end}} status-{{.Record.Status}}"
+             href="/?tab=validation&run={{.Record.RunID}}&target={{$.ValidationVM.Target}}&status={{$.ValidationVM.Status}}&script-target={{$.ValidationVM.ScriptTarget}}"
+             hx-get="/tab/validation?run={{.Record.RunID}}&target={{$.ValidationVM.Target}}&status={{$.ValidationVM.Status}}&script-target={{$.ValidationVM.ScriptTarget}}"
+             hx-target="#tab-content" hx-swap="innerHTML">
+            <div class="validation-run-top"><strong>{{.Record.Name}}</strong><span class="validation-badge">{{.StatusLabel}}</span></div>
+            <div class="validation-run-meta"><span>{{.Record.Target}}</span><span>{{.Duration}}</span><span>{{.StartedLabel}}</span></div>
+            <div class="validation-run-reason">{{or .Record.Reason "—"}}</div>
+            {{if .CurrentStepText}}<div class="validation-run-step">{{.CurrentStepText}}</div>{{end}}
+            {{if .FailureSummary}}<div class="validation-run-failure">{{.FailureSummary}}</div>{{end}}
+          </a>
+          {{end}}
+        </div>
+        {{else}}
+        <div class="validation-empty">
+          <strong>还没有验证记录</strong>
+          <span>先运行 <code>gnb validate --script assets/agentscripts/smoke.agentscript.json</code>，记录会自动出现在这里。</span>
+        </div>
+        {{end}}
+        {{if .ValidationVM.HasMore}}
+        <a class="btn-secondary validation-more" href="/?tab=validation&target={{.ValidationVM.Target}}&status={{.ValidationVM.Status}}&script-target={{.ValidationVM.ScriptTarget}}&offset={{add .ValidationVM.Offset 50}}">加载更早的 50 条</a>
+        {{end}}
+        {{if gt .ValidationVM.UnreadableCount 0}}<div class="validation-unreadable">另有 {{.ValidationVM.UnreadableCount}} 条记录不可读，未影响其余记录展示。</div>{{end}}
+      </div>
+    </section>
+
+    <section class="validation-detail-col">
+      {{if .ValidationVM.Selected}}
+      <div class="card validation-detail-card">
+        <div class="validation-detail-head">
+          <div><div class="validation-kicker">{{.ValidationVM.Selected.Record.Kind}} · {{.ValidationVM.Selected.Record.RunID}}</div><h2>{{.ValidationVM.Selected.Record.Name}}</h2></div>
+          <span class="validation-badge large status-{{.ValidationVM.Selected.Record.Status}}">{{.ValidationVM.Selected.StatusLabel}}</span>
+        </div>
+        <div class="validation-detail-meta"><span>target <code>{{.ValidationVM.Selected.Record.Target}}</code></span><span>开始 {{.ValidationVM.Selected.StartedLabel}}</span><span>耗时 {{.ValidationVM.Selected.Duration}}</span></div>
+
+        {{if .ValidationVM.Selected.FailureSummary}}
+        <div class="validation-failure-box"><div class="validation-section-label">失败原因 · {{.ValidationVM.Selected.Record.Phase}}</div><pre>{{.ValidationVM.Selected.FailureSummary}}</pre></div>
+        {{end}}
+
+        {{if .ValidationVM.Selected.Review.Message}}
+        <div class="validation-review-box {{if .ValidationVM.Selected.HasIssue}}issue{{end}}"><div class="validation-section-label">问题备注 · {{.ValidationVM.Selected.ReviewLabel}}</div><p>{{.ValidationVM.Selected.Review.Message}}</p><small>{{.ValidationVM.Selected.Review.Author}} · {{.ValidationVM.Selected.Review.UpdatedAt.Local.Format "2006-01-02 15:04"}}</small></div>
+        {{end}}
+
+        {{if ne .ValidationVM.Selected.Record.Status "running"}}
+        <div class="validation-actions">
+          <form hx-post="/validation/{{.ValidationVM.Selected.Record.RunID}}/rerun" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="target" value="{{.ValidationVM.Target}}"><input type="hidden" name="status" value="{{.ValidationVM.Status}}"><input type="hidden" name="script-target" value="{{.ValidationVM.ScriptTarget}}"><button class="btn-secondary" type="submit">后台重跑</button></form>
+          <form hx-post="/validation/{{.ValidationVM.Selected.Record.RunID}}/rerun" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="visible" value="1"><input type="hidden" name="target" value="{{.ValidationVM.Target}}"><input type="hidden" name="status" value="{{.ValidationVM.Status}}"><input type="hidden" name="script-target" value="{{.ValidationVM.ScriptTarget}}"><button class="btn-primary" type="submit">可见重跑</button></form>
+        </div>
+        {{end}}
+
+        <div class="validation-review-panel">
+          <div class="validation-section-label">审阅：{{.ValidationVM.Selected.ReviewLabel}}</div>
+          <div class="validation-review-actions">
+            <form hx-post="/validation/{{.ValidationVM.Selected.Record.RunID}}/review" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="status" value="accepted"><button class="btn-secondary small" type="submit">已看过，无问题</button></form>
+            <form class="validation-issue-form" hx-post="/validation/{{.ValidationVM.Selected.Record.RunID}}/review" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="status" value="issue">{{if .ValidationVM.Selected.Screenshots}}<select class="select" name="screenshot"><option value="">关联截图</option>{{range .ValidationVM.Selected.Screenshots}}<option value="{{.Path}}">{{.Name}}</option>{{end}}</select>{{end}}<input class="input" name="message" value="" placeholder="记录视觉或行为问题"><button class="btn-secondary small danger" type="submit">记录问题</button></form>
+          </div>
+        </div>
+
+        {{template "validation_steps_panel" .ValidationVM.Selected}}
+
+        {{if .ValidationVM.Selected.Screenshots}}
+        <div class="validation-section-label">截图（已完成产物）</div>
+        <div class="validation-screenshots">{{range .ValidationVM.Selected.Screenshots}}<a href="{{.URL}}" target="_blank"><img src="{{.URL}}" alt="{{.Name}}"><span>{{.Name}}</span></a>{{end}}</div>
+        {{end}}
+
+        <details class="validation-log"><summary>日志尾部（{{if .ValidationVM.Selected.LogError}}不可读{{else}}只读尾部{{end}}）</summary>{{if .ValidationVM.Selected.LogError}}<div class="validation-muted">{{.ValidationVM.Selected.LogError}}</div>{{else}}<pre>{{.ValidationVM.Selected.LogTail}}</pre>{{end}}<a href="/validation/{{.ValidationVM.Selected.Record.RunID}}/log">下载完整日志</a></details>
+        <details class="validation-technical"><summary>执行参数与证据目录</summary><div class="validation-code-block"><div>evidence: {{.ValidationVM.Selected.EvidenceDir}}</div>{{range .ValidationVM.Selected.Record.Parameters}}<code>{{.}}</code> {{end}}</div></details>
+      </div>
+      {{else}}
+      <div class="card validation-empty validation-detail-empty"><strong>选择一条运行记录</strong><span>终态运行可后台重跑或可见重跑；有截图的运行默认需要人工审阅。</span></div>
+      {{end}}
+    </section>
+  </div>
+</div>
+
+<style>
+  .validation-page { height: 100%; min-height: 0; overflow: hidden; padding: 20px; display: flex; flex-direction: column; }
+  .validation-head { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; margin-bottom: 16px; }
+  .validation-head h1 { margin: 0 0 4px; font-size: 21px; }
+  .validation-head p { margin: 0; color: var(--fg-mute); font-size: 12px; }
+  .validation-stats { display: grid; grid-template-columns: repeat(4, minmax(76px, 1fr)); gap: 8px; }
+  .validation-stat { min-width: 82px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-card); }
+  .validation-stat span { display: block; color: var(--fg-mute); font-size: 10px; }
+  .validation-stat strong { display: block; margin-top: 2px; font: 600 19px var(--font-mono); }
+  .validation-stat.danger strong, .validation-run-failure, .validation-failure-box { color: var(--red); }
+  .validation-stat.warning strong { color: var(--yellow); }
+  .validation-stat.issue strong { color: #f97316; }
+  .validation-flash, .validation-error { margin-bottom: 12px; padding: 9px 12px; border: 1px solid rgba(34,197,94,.35); border-radius: 6px; background: var(--green-soft); color: var(--green); font-size: 12px; }
+  .validation-error { border-color: rgba(239,68,68,.35); background: rgba(239,68,68,.1); color: var(--red); }
+  .validation-layout { display: grid; grid-template-columns: minmax(250px, .78fr) minmax(280px, .82fr) minmax(0, 1.6fr); gap: 16px; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+  .validation-script-col, .validation-list-col, .validation-detail-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; overflow: hidden; }
+  .validation-scripts-card { height: 100%; flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+  .validation-script-hint { margin: -4px 0 8px; color: var(--fg-dim); font-size: 10px; }
+  .validation-script-filter { display: flex; align-items: end; gap: 7px; margin-bottom: 8px; }
+  .validation-script-filter label { min-width: 0; flex: 1; color: var(--fg-dim); font-size: 10px; }
+  .validation-script-filter .select { display: block; width: 100%; margin-top: 3px; padding: 6px 8px; font-size: 11px; }
+  .validation-script-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 3px; }
+  .validation-script { padding: 8px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+  .validation-script + .validation-script { margin-top: 5px; }
+  .validation-script.disabled { opacity: .62; }
+  .validation-script-head, .validation-script-meta, .validation-script-actions { display: flex; align-items: center; gap: 6px; }
+  .validation-script-head strong { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+  .validation-script-meta { margin-top: 3px; color: var(--fg-dim); font: 9px var(--font-mono); }
+  .validation-script-meta code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .validation-script-meta span { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .validation-script-actions { margin-top: 7px; }
+  .validation-script-actions form { margin: 0; }
+  .validation-script-error { margin-top: 5px; color: var(--yellow); font-size: 10px; }
+  .validation-filter-card { padding: 10px; }
+  .validation-filters { display: flex; gap: 8px; align-items: end; }
+  .validation-filters label { flex: 1; color: var(--fg-dim); font-size: 10px; }
+  .validation-filters .input, .validation-filters .select { display: block; width: 100%; margin-top: 3px; padding: 6px 8px; font-size: 11px; }
+  .validation-runs-card, .validation-detail-card { min-height: 0; }
+  .validation-runs-card { flex: 1 1 auto; overflow: hidden; display: flex; flex-direction: column; }
+  .validation-card-title { display: flex; align-items: center; justify-content: space-between; }
+  .validation-card-title .card-title { margin-bottom: 10px; }
+  .validation-run-list { display: flex; flex-direction: column; gap: 5px; min-height: 0; overflow-y: auto; }
+  .validation-run { display: block; padding: 10px 11px; border: 1px solid var(--border); border-radius: 6px; color: var(--fg); text-decoration: none; background: var(--bg); }
+  .validation-run:hover, .validation-run.selected { border-color: var(--accent-ring); background: var(--bg-card-hover); }
+  .validation-run-top, .validation-run-meta, .validation-detail-head, .validation-detail-meta, .validation-actions, .validation-review-actions { display: flex; align-items: center; gap: 8px; }
+  .validation-run-top strong { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+  .validation-run-meta { margin-top: 3px; color: var(--fg-dim); font: 10px var(--font-mono); }
+  .validation-run-reason { margin-top: 5px; color: var(--fg-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+  .validation-run-step { margin-top: 4px; color: var(--accent); font-size: 10px; }
+  .validation-run-failure { margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+  .validation-badge { padding: 2px 6px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--fg-mute); font-size: 10px; white-space: nowrap; }
+  .validation-badge.large { padding: 4px 8px; }
+  .status-running .validation-badge { color: var(--accent); border-color: var(--accent-ring); }
+  .status-failed .validation-badge, .status-interrupted .validation-badge { color: var(--red); border-color: rgba(239,68,68,.4); }
+  .status-passed .validation-badge { color: var(--green); border-color: rgba(34,197,94,.4); }
+  .validation-more { display: block; margin-top: 10px; text-align: center; text-decoration: none; }
+  .validation-unreadable { margin-top: 8px; color: var(--yellow); font-size: 10px; }
+  .validation-empty { display: flex; flex-direction: column; gap: 7px; align-items: center; justify-content: center; min-height: 170px; color: var(--fg-mute); text-align: center; font-size: 12px; }
+  .validation-empty strong { color: var(--fg); font-size: 14px; }
+  .validation-detail-empty { min-height: 350px; }
+  .validation-detail-card { height: 100%; overflow: hidden; display: flex; flex-direction: column; }
+  .validation-steps-card { display: flex; flex: 1 1 260px; flex-direction: column; min-width: 0; min-height: 120px; overflow: hidden; }
+  .validation-detail-head { justify-content: space-between; align-items: flex-start; }
+  .validation-detail-head h2 { margin: 2px 0 0; font-size: 18px; }
+  .validation-kicker { color: var(--fg-dim); font: 10px var(--font-mono); word-break: break-all; }
+  .validation-detail-meta { flex-wrap: wrap; margin: 9px 0 14px; color: var(--fg-mute); font-size: 11px; }
+  .validation-failure-box, .validation-review-box { margin-bottom: 13px; padding: 10px 11px; border: 1px solid rgba(239,68,68,.35); border-radius: 6px; background: rgba(239,68,68,.08); }
+  .validation-failure-box pre, .validation-log pre { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .validation-section-label { margin: 13px 0 7px; color: var(--fg-mute); font-size: 11px; font-weight: 600; }
+  .validation-review-box { border-color: rgba(234,179,8,.35); background: rgba(234,179,8,.08); color: var(--fg); }
+  .validation-review-box.issue { border-color: rgba(249,115,22,.4); background: rgba(249,115,22,.08); }
+  .validation-review-box p { margin: 5px 0; white-space: pre-wrap; }
+  .validation-review-box small { color: var(--fg-dim); }
+  .validation-actions { padding: 9px 0 11px; border-bottom: 1px solid var(--border); }
+  .validation-actions form, .validation-review-actions form { margin: 0; }
+  .validation-review-panel { margin-top: 2px; }
+  .validation-review-actions { align-items: stretch; flex-wrap: wrap; }
+  .validation-issue-form { display: flex; flex: 1; min-width: 230px; gap: 6px; }
+  .validation-issue-form .select { flex: 0 0 110px; min-width: 0; padding: 5px 7px; }
+  .validation-issue-form .input { min-width: 0; flex: 1; padding: 5px 7px; }
+  .validation-step { display: flex; align-items: flex-start; gap: 8px; padding: 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); }
+  .validation-step + .validation-step { margin-top: 4px; }
+  .validation-step-icon { width: 16px; height: 16px; flex: 0 0 auto; border-radius: 50%; background: var(--green-soft); color: var(--green); text-align: center; font-size: 10px; line-height: 16px; }
+  .validation-step.failed .validation-step-icon { background: rgba(239,68,68,.15); color: var(--red); }
+  .validation-step-body { flex: 1; min-width: 0; font-size: 11px; }
+  .validation-step-description { margin-left: 8px; color: var(--fg-mute); }
+  .validation-assert, .validation-step-message { margin-top: 4px; color: var(--fg-mute); overflow-wrap: anywhere; }
+  .validation-step-message { color: var(--red); }
+  .validation-step-time { color: var(--fg-dim); font: 10px var(--font-mono); white-space: nowrap; }
+  .validation-steps { flex: 1 1 260px; min-height: 120px; overflow-y: auto; padding: 1px 5px 4px 0; overscroll-behavior: contain; }
+  .validation-screenshots { display: flex; gap: 8px; overflow-x: auto; }
+  .validation-screenshots a { display: flex; flex-direction: column; gap: 3px; min-width: 130px; color: var(--fg-mute); text-decoration: none; font-size: 10px; }
+  .validation-screenshots img { width: 130px; height: 78px; object-fit: cover; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); }
+  .validation-log, .validation-technical { margin-top: 13px; padding-top: 9px; border-top: 1px solid var(--border); color: var(--fg-mute); font-size: 11px; }
+  .validation-log summary, .validation-technical summary { cursor: pointer; }
+  .validation-log pre { max-height: 260px; overflow: auto; padding: 8px; color: var(--fg-mute); background: var(--bg-code); }
+  .validation-log a { display: inline-block; margin-top: 7px; color: var(--accent); }
+  .validation-code-block { margin-top: 7px; padding: 8px; overflow-wrap: anywhere; color: var(--fg-mute); background: var(--bg-code); }
+  .validation-muted { color: var(--fg-dim); font-size: 11px; }
+  @media (max-width: 1250px) { .validation-layout { grid-template-columns: minmax(220px, .72fr) minmax(260px, .82fr) minmax(0, 1.35fr); } }
+  @media (max-width: 1050px) { .validation-head { flex-direction: column; } .validation-page { overflow: hidden; } .validation-layout { display: flex; flex-direction: column; overflow-y: auto; } .validation-script-col, .validation-list-col, .validation-detail-col { flex: 0 0 auto; overflow: visible; } .validation-scripts-card { height: 360px; } .validation-list-col { min-height: 500px; } .validation-detail-col { min-height: 500px; } }
+</style>
+{{end}}
+
+
+{{define "validation_steps_panel"}}
+<div id="validation-steps-card" class="validation-steps-card"
+     {{if eq .Record.Status "running"}}hx-get="/validation/{{.Record.RunID}}/steps" hx-trigger="every 1s" hx-target="this" hx-swap="outerHTML"{{end}}>
+  <div class="validation-section-label">步骤{{if .Record.CurrentStage}} · {{.Record.CurrentStage}}{{end}}</div>
+  {{if .Record.Steps}}
+  <div class="validation-steps">
+    {{range .Record.Steps}}
+    <div class="validation-step {{if .Passed}}passed{{else}}failed{{end}}">
+      <span class="validation-step-icon">{{if .Passed}}✓{{else}}!{{end}}</span>
+      <div class="validation-step-body"><div><strong>#{{add .Index 1}} {{.Type}}</strong>{{if .Description}}<span class="validation-step-description">{{.Description}}</span>{{end}}</div>
+        {{if .Query}}<div class="validation-assert"><code>{{.Query}}</code> <code>{{.Op}}</code> expected <code>{{printf "%v" .Expected}}</code> actual <code>{{printf "%v" .Actual}}</code></div>{{end}}
+        {{if .Message}}<div class="validation-step-message">{{.Message}}</div>{{end}}
+      </div><span class="validation-step-time">{{.DurationMs}} ms</span>
+    </div>
+    {{end}}
+  </div>
+  {{else}}<div class="validation-muted">尚未完成任何步骤。</div>{{end}}
+</div>
+{{end}}
+
+
 {{define "tab_chat"}}
 <div class="tab-chat">
   {{template "chat_panel" .ChatVM}}

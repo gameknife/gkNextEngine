@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -20,8 +19,8 @@ import (
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/fetcher"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/icons"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/ios"
-	"github.com/gameknife/gknextrenderer/tools/gnb/internal/mobileapps"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/loc"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/mobileapps"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/packager"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/paks"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/platform"
@@ -120,6 +119,7 @@ func main() {
 	root.AddCommand(newScadCommand(ctx))
 	root.AddCommand(newGeoCommand(ctx))
 	root.AddCommand(newValidateCommand(ctx))
+	root.AddCommand(newValidationCommand(ctx))
 	root.AddCommand(newTuiCommand(ctx))
 	root.AddCommand(newEditorCommand(ctx))
 	root.AddCommand(newAndroidCommand(ctx))
@@ -615,9 +615,12 @@ func newShotCommand(ctx appContext) *cobra.Command {
 	var target string
 	var frames int
 	var includeUI bool
+	var visible bool
 	var headless bool
+	var reason string
+	var rerunOf string
 	cmd := &cobra.Command{
-		Use:   "shot [--scene <path>] [--target <name>] [--frames N] [--ui] [--headless]",
+		Use:   "shot [--scene <path>] [--target <name>] [--frames N] [--ui] [--visible] [--headless]",
 		Short: "Capture one validation screenshot, then auto-exit (no focus-stealing window)",
 		Long: "Render a scene to a stable frame, capture a single screenshot to a fixed path, then exit.\n\n" +
 			"The window is hidden so it never pops to the foreground or steals focus during an agent\n" +
@@ -632,11 +635,24 @@ func newShotCommand(ctx appContext) *cobra.Command {
 			if headless {
 				args = append(args, "--headless-surface")
 			}
-			opts := validatepkg.Options{RepoRoot: ctx.repoRoot, Preset: ctx.preset, Target: target, Scene: scene, Args: args}
-			if err := validatepkg.Shot(context.Background(), opts, frames, includeUI, out); err != nil {
+			opts := validatepkg.Options{RepoRoot: ctx.repoRoot, Preset: ctx.preset, Target: target, Scene: scene, Visible: visible, Reason: reason, RerunOf: rerunOf, Args: args}
+			result, err := validatepkg.ShotWithResult(cmd.Context(), opts, frames, includeUI, out)
+			if result.RunID != "" {
+				console.Info("validation run: " + result.RunID)
+				console.Info("validation evidence: " + result.EvidenceDir)
+			}
+			if err != nil {
 				return err
 			}
 			shot := out + ".jpg"
+			if result.Screenshot != "" {
+				if ext := filepath.Ext(result.Screenshot); ext != "" {
+					shot = out + ext
+				}
+				if copyErr := copyValidationScreenshot(result.Screenshot, shot); copyErr != nil {
+					return fmt.Errorf("copy compatibility screenshot: %w", copyErr)
+				}
+			}
 			console.Info("screenshot: " + shot)
 			return nil
 		},
@@ -645,7 +661,10 @@ func newShotCommand(ctx appContext) *cobra.Command {
 	cmd.Flags().StringVar(&target, "target", "gkNextRenderer", "target executable to run")
 	cmd.Flags().IntVar(&frames, "frames", 0, "frames to render before capture (0 = engine default)")
 	cmd.Flags().BoolVar(&includeUI, "ui", false, "include ImGui UI in the screenshot")
+	cmd.Flags().BoolVar(&visible, "visible", false, "show the desktop window while capturing")
 	cmd.Flags().BoolVar(&headless, "headless", false, "force VK_EXT_headless_surface (including on macOS)")
+	cmd.Flags().StringVar(&reason, "reason", "", "short description of why this screenshot is being captured")
+	cmd.Flags().StringVar(&rerunOf, "rerun-of", "", "associate this new run with an earlier validation run")
 	return cmd
 }
 
@@ -679,6 +698,8 @@ func newValidateCommand(ctx appContext) *cobra.Command {
 	var height int
 	var visible bool
 	var syncValidation bool
+	var reason string
+	var rerunOf string
 	cmd := &cobra.Command{
 		Use:   "validate --script <path> [--target <name>] [--scene <path>]",
 		Short: "Run an agent input validation script and write a JSON report",
@@ -722,8 +743,12 @@ func newValidateCommand(ctx appContext) *cobra.Command {
 				reportPath = filepath.Join(filepath.Dir(platform.BinDir(ctx.repoRoot, ctx.preset)), reportPath)
 			}
 			opts := validatepkg.Options{RepoRoot: ctx.repoRoot, Preset: ctx.preset, Target: target, Scene: scene,
-				Script: scriptPath, Report: reportPath, Width: width, Height: height, Visible: visible, SyncValidation: syncValidation, Args: args}
-			err := validatepkg.Run(context.Background(), opts)
+				Script: scriptPath, Report: reportPath, Width: width, Height: height, Visible: visible, SyncValidation: syncValidation, Reason: reason, RerunOf: rerunOf, Args: args}
+			result, err := validatepkg.RunWithResult(cmd.Context(), opts)
+			if result.RunID != "" {
+				console.Info("validation run: " + result.RunID)
+				console.Info("validation evidence: " + result.EvidenceDir)
+			}
 			console.Info("agent report: " + reportPath)
 			return err
 		},
@@ -736,6 +761,8 @@ func newValidateCommand(ctx appContext) *cobra.Command {
 	cmd.Flags().IntVar(&height, "height", 0, "window height (overrides script viewport.height)")
 	cmd.Flags().BoolVar(&visible, "visible", false, "show the desktop window while replaying the agent script")
 	cmd.Flags().BoolVar(&syncValidation, "sync-validation", false, "enable Vulkan core and synchronization validation")
+	cmd.Flags().StringVar(&reason, "reason", "", "short description of why this validation is being run")
+	cmd.Flags().StringVar(&rerunOf, "rerun-of", "", "associate this new run with an earlier validation run")
 	return cmd
 }
 

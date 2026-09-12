@@ -1,6 +1,15 @@
 package validate
 
-import "testing"
+import (
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/validationstore"
+)
 
 func TestCompare(t *testing.T) {
 	tests := []struct {
@@ -29,5 +38,60 @@ func TestNormalizePoints(t *testing.T) {
 	at := p["at"].([]any)
 	if at[0] != 12.0 || at[1] != 34.0 {
 		t.Fatalf("at=%v", at)
+	}
+}
+
+func TestRunCreatesFailureRecordBeforeReadingScript(t *testing.T) {
+	root := t.TempDir()
+	storeRoot := filepath.Join(root, "validation-runs")
+	script := filepath.Join(root, "bad.agentscript.json")
+	if err := os.WriteFile(script, []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := RunWithResult(context.Background(), Options{
+		RepoRoot: root, Preset: "test", Script: script, ValidationRoot: storeRoot,
+	})
+	if err == nil || !strings.Contains(err.Error(), "unexpected end") {
+		t.Fatalf("err = %v, want parse error", err)
+	}
+	if result.RunID == "" {
+		t.Fatal("missing run id for parse failure")
+	}
+	run, loadErr := validationstore.NewAt(storeRoot).Load(result.RunID)
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	if run.Status != validationstore.StatusFailed || run.Phase != "parse" {
+		t.Fatalf("run = %+v", run)
+	}
+	var snapshot map[string]any
+	data, readErr := os.ReadFile(filepath.Join(storeRoot, result.RunID, "script.json"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if json.Unmarshal(data, &snapshot) == nil {
+		t.Fatal("invalid script unexpectedly became valid snapshot")
+	}
+}
+
+func TestRunMissingExecutableCreatesLaunchFailureRecord(t *testing.T) {
+	root := t.TempDir()
+	storeRoot := filepath.Join(root, "validation-runs")
+	script := filepath.Join(root, "smoke.json")
+	if err := os.WriteFile(script, []byte(`{"name":"smoke","steps":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := RunWithResult(context.Background(), Options{
+		RepoRoot: root, Preset: "test", Script: script, ValidationRoot: storeRoot,
+	})
+	if err == nil || !strings.Contains(err.Error(), "executable not found") {
+		t.Fatalf("err = %v, want missing executable", err)
+	}
+	run, loadErr := validationstore.NewAt(storeRoot).Load(result.RunID)
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	if run.Status != validationstore.StatusFailed || run.Phase != "launch" {
+		t.Fatalf("run = %+v", run)
 	}
 }

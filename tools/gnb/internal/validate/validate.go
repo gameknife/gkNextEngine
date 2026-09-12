@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -16,13 +17,22 @@ import (
 	"time"
 
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/console"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/gitops"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/platform"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/validationstore"
 )
 
 type Options struct {
 	RepoRoot, Preset, Target, Scene, Script, Report string
 	Width, Height                                   int
 	Visible, SyncValidation                         bool
+	Reason                                          string
+	ValidationRoot                                  string
+	DisableStore                                    bool
+	Frames                                          int
+	IncludeUI                                       bool
+	ArtifactDir                                     string
+	RerunOf                                         string
 	Args                                            []string
 	Env                                             []string
 }
@@ -44,6 +54,16 @@ type Report struct {
 	Steps       []map[string]any `json:"steps"`
 	Screenshots []string         `json:"screenshots"`
 }
+
+// Result identifies the durable evidence created by RunWithResult or
+// ShotWithResult. The legacy Run/Shot helpers remain available for callers
+// that only need an error.
+type Result struct {
+	RunID       string
+	EvidenceDir string
+	ReportPath  string
+	Screenshot  string
+}
 type client struct {
 	conn  net.Conn
 	rw    *bufio.ReadWriter
@@ -52,18 +72,32 @@ type client struct {
 }
 
 func Run(ctx context.Context, o Options) error {
-	data, err := os.ReadFile(o.Script)
-	if err != nil {
-		return err
-	}
+	_, err := RunWithResult(ctx, o)
+	return err
+}
+
+func RunWithResult(ctx context.Context, o Options) (Result, error) {
+	data, readErr := os.ReadFile(o.Script)
 	var s Script
-	if err = json.Unmarshal(data, &s); err != nil {
-		return err
+	if readErr == nil {
+		readErr = json.Unmarshal(data, &s)
 	}
-	return run(ctx, o, s)
+	if s.Name == "" {
+		if o.Script != "" {
+			s.Name = strings.TrimSuffix(filepath.Base(o.Script), filepath.Ext(o.Script))
+		} else {
+			s.Name = "validation"
+		}
+	}
+	return run(ctx, o, s, data, readErr, "validate")
 }
 
 func Shot(ctx context.Context, o Options, frames int, ui bool, out string) error {
+	_, err := ShotWithResult(ctx, o, frames, ui, out)
+	return err
+}
+
+func ShotWithResult(ctx context.Context, o Options, frames int, ui bool, out string) (Result, error) {
 	if frames <= 0 {
 		frames = 90
 	}
@@ -89,7 +123,10 @@ func Shot(ctx context.Context, o Options, frames int, ui bool, out string) error
 		// A separate quit control request can race with the server teardown that
 		// follows a synchronous screenshot on a headless host.
 		map[string]any{"type": "screenshot", "out": out, "ui": ui, "quitAfterCapture": true})
-	return run(ctx, o, s)
+	script, _ := json.MarshalIndent(s, "", "  ")
+	o.Frames = frames
+	o.IncludeUI = ui
+	return run(ctx, o, s, script, nil, "shot")
 }
 
 // Trace runs a target to a stable frame without creating a screenshot. Callers
@@ -101,10 +138,12 @@ func Trace(ctx context.Context, o Options, frames int) error {
 	s := Script{Name: "asset_trace"}
 	s.Defaults.StepTimeoutMs = 30000
 	s.Steps = []map[string]any{{"type": "wait-until", "query": "engine.status", "op": "eq", "value": "Running", "timeoutMs": 30000}, {"type": "wait-frames", "n": frames}, {"type": "quit"}}
-	return run(ctx, o, s)
+	o.DisableStore = true
+	_, err := run(ctx, o, s, nil, nil, "trace")
+	return err
 }
 
-func run(ctx context.Context, o Options, s Script) (retErr error) {
+func run(ctx context.Context, o Options, s Script, scriptData []byte, loadErr error, kind string) (result Result, retErr error) {
 	if o.Target == "" {
 		o.Target = s.Target
 	}
@@ -120,14 +159,114 @@ func run(ctx context.Context, o Options, s Script) (retErr error) {
 	if o.Height == 0 {
 		o.Height = s.Viewport.Height
 	}
+	if o.Reason == "" {
+		o.Reason = s.Name
+	}
+	if o.Script != "" {
+		o.Script, _ = filepath.Abs(o.Script)
+	}
+	var store validationstore.Store
+	var record validationstore.Record
+	var recording bool
+	if !o.DisableStore {
+		if o.ValidationRoot != "" {
+			store = validationstore.NewAt(o.ValidationRoot)
+		} else {
+			store = validationstore.New(o.RepoRoot, o.Preset)
+		}
+		if scriptData == nil {
+			scriptData = []byte("{}\n")
+		}
+		record = validationstore.Record{
+			Kind:           kind,
+			Name:           s.Name,
+			Target:         o.Target,
+			Preset:         o.Preset,
+			Reason:         o.Reason,
+			ScriptSource:   o.Script,
+			ScriptSnapshot: "script.json",
+			Parameters:     launchParameters(o, s),
+			ExtraArgs:      append(append([]string{}, s.Args...), o.Args...),
+			Scene:          o.Scene,
+			Width:          o.Width,
+			Height:         o.Height,
+			Visible:        o.Visible,
+			SyncValidation: o.SyncValidation,
+			Frames:         o.Frames,
+			IncludeUI:      o.IncludeUI,
+			RerunOf:        o.RerunOf,
+			Status:         validationstore.StatusRunning,
+			Phase:          "prepare",
+			CurrentStage:   "准备验证",
+			RunnerPID:      os.Getpid(),
+		}
+		if status, err := gitops.GetStatus(o.RepoRoot); err == nil {
+			record.GitHead = status.Head
+			record.GitDirty = status.Dirty
+		}
+		var err error
+		record, err = store.Create(record, scriptData)
+		if err != nil {
+			return Result{}, fmt.Errorf("create validation record: %w", err)
+		}
+		recording = true
+		result.RunID = record.RunID
+		result.EvidenceDir, _ = store.RunDir(record.RunID)
+		o.ArtifactDir = filepath.Join(result.EvidenceDir, "screenshots")
+	}
+	finish := func(status validationstore.Status, phase string, cause error, exitCode *int) {
+		if !recording {
+			return
+		}
+		_ = store.Update(record.RunID, func(r *validationstore.Record) error {
+			r.Status = status
+			r.Phase = phase
+			r.CurrentStage = phase
+			r.FinishedAt = time.Now().UTC()
+			r.HeartbeatAt = r.FinishedAt
+			r.ExitCode = exitCode
+			if cause != nil {
+				r.Error = cause.Error()
+			}
+			return nil
+		})
+		recording = false
+	}
+	defer func() {
+		if recording {
+			status := validationstore.StatusFailed
+			phase := "runner"
+			if errorsIsContext(ctx) {
+				status = validationstore.StatusCanceled
+				phase = "canceled"
+			}
+			finish(status, phase, retErr, nil)
+		}
+	}()
+	if loadErr != nil {
+		writeFailureReport(o.Report, s.Name, loadErr)
+		finish(validationstore.StatusFailed, "parse", loadErr, nil)
+		return result, loadErr
+	}
 	bin := platform.BinDir(o.RepoRoot, o.Preset)
 	exe := platform.ExecutablePath(bin, o.Target)
 	if _, err := os.Stat(exe); err != nil {
-		return fmt.Errorf("executable not found: %s\n请先运行 `gnb build %s`", exe, o.Target)
+		err = fmt.Errorf("executable not found: %s\n请先运行 `gnb build %s`", exe, o.Target)
+		writeFailureReport(o.Report, s.Name, err)
+		finish(validationstore.StatusFailed, "launch", err, nil)
+		return result, err
+	}
+	if recording {
+		_ = store.Update(record.RunID, func(r *validationstore.Record) error {
+			r.Phase = "launch"
+			r.CurrentStage = "启动目标"
+			return nil
+		})
 	}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return err
+		finish(validationstore.StatusFailed, "launch", err, nil)
+		return result, err
 	}
 	endpoint := ln.Addr().String()
 	_ = ln.Close()
@@ -152,13 +291,57 @@ func run(ctx context.Context, o Options, s Script) (retErr error) {
 	}
 	args = append(args, s.Args...)
 	args = append(args, o.Args...)
-	console.CommandLine(exe + " " + strings.Join(args, " "))
+	displayArgs := append([]string(nil), args...)
+	for i, arg := range displayArgs {
+		if strings.HasPrefix(arg, "--agent-control-token=") {
+			displayArgs[i] = "--agent-control-token=<redacted>"
+		}
+	}
+	console.CommandLine(exe + " " + strings.Join(displayArgs, " "))
 	cmd := exec.CommandContext(ctx, exe, args...)
 	cmd.Dir = filepath.Dir(exe)
 	cmd.Env = append(os.Environ(), o.Env...)
-	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	var logFile *os.File
+	if recording {
+		logPath, logErr := store.LogPath(record.RunID)
+		if logErr != nil {
+			finish(validationstore.StatusFailed, "launch", logErr, nil)
+			return result, logErr
+		}
+		logFile, err = os.OpenFile(logPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
+		if err != nil {
+			finish(validationstore.StatusFailed, "launch", err, nil)
+			return result, err
+		}
+		defer logFile.Close()
+		_, _ = logFile.WriteString("command: " + exe + " " + strings.Join(displayArgs, " ") + "\n")
+		cmd.Stdout = io.MultiWriter(os.Stdout, logFile)
+		cmd.Stderr = io.MultiWriter(os.Stderr, logFile)
+	} else {
+		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	}
 	if err = cmd.Start(); err != nil {
-		return err
+		if recording {
+			_ = store.AppendLog(record.RunID, []byte(fmt.Sprintf("runner start failed: %v\n", err)))
+		}
+		status := validationstore.StatusFailed
+		phase := "launch"
+		if errorsIsContext(ctx) {
+			status = validationstore.StatusCanceled
+			phase = "canceled"
+		}
+		finish(status, phase, err, nil)
+		return result, err
+	}
+	if recording {
+		_ = store.Update(record.RunID, func(r *validationstore.Record) error {
+			r.Phase = "connect"
+			r.CurrentStage = "连接控制通道"
+			return nil
+		})
+		heartbeatCtx, stopHeartbeat := context.WithCancel(ctx)
+		defer stopHeartbeat()
+		go heartbeat(heartbeatCtx, store, record.RunID)
 	}
 	processWaited := false
 	defer func() {
@@ -179,41 +362,133 @@ func run(ctx context.Context, o Options, s Script) (retErr error) {
 		if cmd.ProcessState != nil && cmd.ProcessState.Exited() {
 			break
 		}
-		time.Sleep(50 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			finish(validationstore.StatusCanceled, "canceled", ctx.Err(), nil)
+			return result, ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
 	}
 	if err != nil {
-		return fmt.Errorf("connect engine control %s: %w", endpoint, err)
+		err = fmt.Errorf("connect engine control %s: %w", endpoint, err)
+		if errorsIsContext(ctx) {
+			finish(validationstore.StatusCanceled, "canceled", ctx.Err(), processExitCode(cmd))
+		} else {
+			finish(validationstore.StatusFailed, "connect", err, processExitCode(cmd))
+		}
+		return result, err
 	}
 	c := &client{conn: conn, rw: bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn)), token: token}
 	defer conn.Close()
 	if _, err = c.call("handshake", map[string]any{}); err != nil {
-		return err
+		if errorsIsContext(ctx) {
+			finish(validationstore.StatusCanceled, "canceled", ctx.Err(), processExitCode(cmd))
+		} else {
+			finish(validationstore.StatusFailed, "connect", err, processExitCode(cmd))
+		}
+		return result, err
 	}
 	rep := Report{Name: s.Name, Passed: true, StartedAt: time.Now().Format(time.RFC3339), Steps: []map[string]any{}, Screenshots: []string{}}
+	var compatibilityCopies []screenshotCopy
+	failureStepIndex := -1
 	for i, step := range s.Steps {
-		entry, e := execute(c, step, s, o)
+		startedAt := time.Now().UTC()
+		if recording {
+			_ = store.Update(record.RunID, func(r *validationstore.Record) error {
+				r.CurrentStep = i
+				r.CurrentStage = fmt.Sprintf("步骤 %d/%d: %s", i+1, len(s.Steps), str(step, "type", ""))
+				return nil
+			})
+		}
+		entry, e := execute(ctx, c, step, s, o, i)
 		entry["idx"] = i
 		if e != nil {
+			if failureStepIndex < 0 {
+				failureStepIndex = i
+			}
 			entry["passed"] = false
 			entry["message"] = e.Error()
 			rep.Passed = false
 		}
 		rep.Steps = append(rep.Steps, entry)
+		if recording {
+			stepRecord := stepRecord(i, step, entry, startedAt, time.Now().UTC())
+			if stepRecord.Screenshot != "" {
+				if rel, relErr := filepath.Rel(result.EvidenceDir, filepath.FromSlash(stepRecord.Screenshot)); relErr == nil {
+					stepRecord.Screenshot = filepath.ToSlash(rel)
+				}
+			}
+			_ = store.Update(record.RunID, func(r *validationstore.Record) error {
+				r.Steps = append(r.Steps, stepRecord)
+				if stepRecord.Screenshot != "" {
+					r.Screenshots = append(r.Screenshots, stepRecord.Screenshot)
+				}
+				return nil
+			})
+		}
 		if p, ok := entry["out"].(string); ok && entry["passed"] == true {
 			rep.Screenshots = append(rep.Screenshots, p)
+			if requested, ok := entry["requestedOut"].(string); ok && requested != "" {
+				compatibilityCopies = append(compatibilityCopies, screenshotCopy{source: p, requested: requested})
+			}
 		}
 		if e != nil && boolv(step, "fatal", false) {
 			break
 		}
 	}
 	rep.FinishedAt = time.Now().Format(time.RFC3339)
-	if o.Report != "" {
-		if err = writeReport(o.Report, rep); err != nil {
-			return err
-		}
-	}
 	if !rep.Passed {
-		return fmt.Errorf("agent validation failed")
+		err = fmt.Errorf("agent validation failed")
+		// Keep one best-effort capture of the failed state while the control
+		// channel is still available. This is evidence, not a replacement for
+		// the original assertion/connection error.
+		if failureStepIndex >= 0 && !errorsIsContext(ctx) {
+			captureEntry, captureErr := execute(ctx, c, map[string]any{
+				"type": "screenshot",
+				"out":  fmt.Sprintf("failure_%03d", failureStepIndex),
+			}, s, o, len(s.Steps))
+			if captureErr == nil {
+				if path, ok := captureEntry["out"].(string); ok && path != "" {
+					rep.Screenshots = append(rep.Screenshots, path)
+					if recording {
+						rel := filepath.ToSlash(path)
+						if relative, relErr := filepath.Rel(result.EvidenceDir, filepath.FromSlash(path)); relErr == nil {
+							rel = filepath.ToSlash(relative)
+						}
+						_ = store.Update(record.RunID, func(r *validationstore.Record) error {
+							r.Screenshots = append(r.Screenshots, rel)
+							if failureStepIndex < len(r.Steps) && r.Steps[failureStepIndex].Screenshot == "" {
+								r.Steps[failureStepIndex].Screenshot = rel
+							}
+							return nil
+						})
+					}
+				}
+			}
+		}
+		if cmd.Process != nil && !processWaited {
+			_ = cmd.Process.Kill()
+			exitErr := cmd.Wait()
+			processWaited = true
+			if exitErr != nil {
+				err = fmt.Errorf("%w: %v", err, exitErr)
+			}
+		}
+		copyScreenshotCompatibility(cmd.Dir, compatibilityCopies)
+		if o.Report != "" {
+			rep.Passed = false
+			if reportErr := writeReport(o.Report, rep); reportErr != nil {
+				finish(validationstore.StatusFailed, "artifact", reportErr, processExitCode(cmd))
+				return result, reportErr
+			}
+			result.ReportPath = o.Report
+		}
+		if errorsIsContext(ctx) {
+			finish(validationstore.StatusCanceled, "canceled", ctx.Err(), processExitCode(cmd))
+		} else {
+			finish(validationstore.StatusFailed, "step", err, processExitCode(cmd))
+		}
+		return result, err
 	}
 
 	// The quit command is acknowledged before the next engine tick observes the
@@ -223,17 +498,47 @@ func run(ctx context.Context, o Options, s Script) (retErr error) {
 	err = waitForProcessExit(ctx, cmd, 30*time.Second)
 	processWaited = true
 	if err != nil {
-		return fmt.Errorf("agent process exit: %w", err)
+		err = fmt.Errorf("agent process exit: %w", err)
+		rep.Passed = false
+		if o.Report != "" {
+			_ = writeReport(o.Report, rep)
+			result.ReportPath = o.Report
+		}
+		if errorsIsContext(ctx) {
+			finish(validationstore.StatusCanceled, "canceled", ctx.Err(), processExitCode(cmd))
+		} else {
+			finish(validationstore.StatusFailed, "exit", err, processExitCode(cmd))
+		}
+		return result, err
 	}
 	for _, screenshot := range rep.Screenshots {
-		if err = poll(5*time.Second, func() (bool, error) {
+		if err = pollContext(ctx, 5*time.Second, func() (bool, error) {
 			_, statErr := os.Stat(screenshot)
 			return statErr == nil, nil
 		}); err != nil {
-			return fmt.Errorf("agent screenshot %s: %w", screenshot, err)
+			err = fmt.Errorf("agent screenshot %s: %w", screenshot, err)
+			rep.Passed = false
+			if o.Report != "" {
+				_ = writeReport(o.Report, rep)
+				result.ReportPath = o.Report
+			}
+			finish(validationstore.StatusFailed, "artifact", err, processExitCode(cmd))
+			return result, err
 		}
 	}
-	return nil
+	copyScreenshotCompatibility(cmd.Dir, compatibilityCopies)
+	if o.Report != "" {
+		if err = writeReport(o.Report, rep); err != nil {
+			finish(validationstore.StatusFailed, "artifact", err, processExitCode(cmd))
+			return result, err
+		}
+		result.ReportPath = o.Report
+	}
+	if len(rep.Screenshots) > 0 {
+		result.Screenshot = rep.Screenshots[0]
+	}
+	finish(validationstore.StatusPassed, "complete", nil, processExitCode(cmd))
+	return result, nil
 }
 
 func waitForProcessExit(ctx context.Context, cmd *exec.Cmd, timeout time.Duration) error {
@@ -285,7 +590,7 @@ func (c *client) call(method string, params any) (any, error) {
 	}
 	return r.Result, nil
 }
-func execute(c *client, st map[string]any, s Script, o Options) (map[string]any, error) {
+func execute(ctx context.Context, c *client, st map[string]any, s Script, o Options, stepIndex int) (map[string]any, error) {
 	typ := str(st, "type", "")
 	e := map[string]any{"type": typ, "passed": true}
 	timeout := duration(st, s)
@@ -296,28 +601,39 @@ func execute(c *client, st map[string]any, s Script, o Options) (map[string]any,
 			return e, er
 		}
 		target := num(start) + numv(st, "n", float64(max(1, s.Defaults.WaitFrames)))
-		return e, poll(timeout, func() (bool, error) { v, x := query(c, "engine.totalFrames"); return num(v) >= target, x })
+		return e, pollContext(ctx, timeout, func() (bool, error) { v, x := query(c, "engine.totalFrames"); return num(v) >= target, x })
 	case "wait-ms":
-		time.Sleep(time.Duration(numv(st, "ms", 0)) * time.Millisecond)
-		return e, nil
+		timer := time.NewTimer(time.Duration(numv(st, "ms", 0)) * time.Millisecond)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+			return e, nil
+		case <-ctx.Done():
+			return e, ctx.Err()
+		}
 	case "wait-until", "assert":
 		v, er := query(c, str(st, "query", ""))
+		e["actual"] = v
+		e["expected"] = st["value"]
 		if er == nil && compare(v, str(st, "op", "eq"), st["value"]) {
-			e["actual"] = v
-			e["expected"] = st["value"]
 			return e, nil
 		}
 		if typ == "assert" {
 			return e, fmt.Errorf("assertion failed: actual=%v", v)
 		}
-		er = poll(timeout, func() (bool, error) {
+		er = pollContext(ctx, timeout, func() (bool, error) {
 			v, x := query(c, str(st, "query", ""))
 			e["actual"] = v
 			return compare(v, str(st, "op", "eq"), st["value"]), x
 		})
 		return e, er
 	case "screenshot":
-		p := str(st, "out", fmt.Sprintf("screenshots/%s_step", s.Name))
+		requested := str(st, "out", fmt.Sprintf("screenshots/%s_step", s.Name))
+		p := requested
+		if o.ArtifactDir != "" {
+			name := sanitizeArtifactName(filepath.Base(filepath.Clean(requested)))
+			p = filepath.Join(o.ArtifactDir, fmt.Sprintf("%03d_%s", stepIndex, name))
+		}
 		r, er := c.call(typ, map[string]any{
 			"out":              p,
 			"ui":               boolv(st, "ui", false),
@@ -330,12 +646,13 @@ func execute(c *client, st map[string]any, s Script, o Options) (map[string]any,
 		m, _ := r.(map[string]any)
 		path, _ := m["path"].(string)
 		e["out"] = path
+		e["requestedOut"] = requested
 		if boolv(st, "quitAfterCapture", false) {
 			// The engine will exit when the synchronous capture is complete.
 			// Verify the output after its process has reaped in run().
 			return e, nil
 		}
-		er = poll(timeout, func() (bool, error) { _, x := os.Stat(path); return x == nil, nil })
+		er = pollContext(ctx, timeout, func() (bool, error) { _, x := os.Stat(path); return x == nil, nil })
 		return e, er
 	case "log":
 		e["message"] = str(st, "message", str(st, "text", ""))
@@ -368,8 +685,144 @@ func execute(c *client, st map[string]any, s Script, o Options) (map[string]any,
 		return e, fmt.Errorf("unknown step type %q", typ)
 	}
 }
+
+func launchParameters(o Options, s Script) []string {
+	args := []string{"--agent-validation"}
+	if o.Visible {
+		args = append(args, "--agent-visible-window")
+	}
+	if o.SyncValidation {
+		args = append(args, "--sync-validation")
+	}
+	if o.Width > 0 {
+		args = append(args, fmt.Sprintf("--width=%d", o.Width))
+	}
+	if o.Height > 0 {
+		args = append(args, fmt.Sprintf("--height=%d", o.Height))
+	}
+	if o.Scene != "" {
+		args = append(args, "--load-scene="+o.Scene)
+	}
+	if o.Frames > 0 {
+		args = append(args, fmt.Sprintf("--frames=%d", o.Frames))
+	}
+	if o.IncludeUI {
+		args = append(args, "--ui")
+	}
+	args = append(args, s.Args...)
+	args = append(args, o.Args...)
+	return args
+}
+
+func stepRecord(index int, raw map[string]any, entry map[string]any, started, finished time.Time) validationstore.Step {
+	step := validationstore.Step{
+		Index:       index,
+		Type:        str(raw, "type", ""),
+		Description: str(raw, "description", str(raw, "comment", "")),
+		Query:       str(raw, "query", ""),
+		Op:          str(raw, "op", ""),
+		Expected:    raw["value"],
+		Actual:      entry["actual"],
+		StartedAt:   started,
+		FinishedAt:  finished,
+		DurationMs:  finished.Sub(started).Milliseconds(),
+		Passed:      boolv(entry, "passed", false),
+		Message:     str(entry, "message", ""),
+	}
+	if path, ok := entry["out"].(string); ok && path != "" {
+		step.Screenshot = filepath.ToSlash(path)
+	}
+	return step
+}
+
+func sanitizeArtifactName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || name == "." || name == string(filepath.Separator) {
+		return "screenshot"
+	}
+	var b strings.Builder
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	if b.Len() == 0 {
+		return "screenshot"
+	}
+	return b.String()
+}
+
+func heartbeat(ctx context.Context, store validationstore.Store, runID string) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			_ = store.Touch(runID)
+		}
+	}
+}
+
+func writeFailureReport(path, name string, cause error) {
+	if path == "" {
+		return
+	}
+	_ = writeReport(path, Report{
+		Name:       name,
+		Passed:     false,
+		StartedAt:  time.Now().UTC().Format(time.RFC3339),
+		FinishedAt: time.Now().UTC().Format(time.RFC3339),
+		Steps:      []map[string]any{{"passed": false, "message": cause.Error()}},
+	})
+}
+
+func processExitCode(cmd *exec.Cmd) *int {
+	if cmd == nil || cmd.ProcessState == nil || !cmd.ProcessState.Exited() {
+		return nil
+	}
+	code := cmd.ProcessState.ExitCode()
+	return &code
+}
+
+type screenshotCopy struct {
+	source    string
+	requested string
+}
+
+func copyScreenshotCompatibility(workDir string, copies []screenshotCopy) {
+	for _, copy := range copies {
+		target := copy.requested
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(workDir, target)
+		}
+		if filepath.Ext(target) == "" {
+			target += filepath.Ext(copy.source)
+		}
+		data, err := os.ReadFile(copy.source)
+		if err != nil {
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			continue
+		}
+		_ = os.WriteFile(target, data, 0o644)
+	}
+}
+
+func errorsIsContext(ctx context.Context) bool {
+	return ctx != nil && ctx.Err() != nil
+}
+
 func query(c *client, q string) (any, error) { return c.call("query", map[string]any{"query": q}) }
 func poll(d time.Duration, f func() (bool, error)) error {
+	return pollContext(context.Background(), d, f)
+}
+
+func pollContext(ctx context.Context, d time.Duration, f func() (bool, error)) error {
 	end := time.Now().Add(d)
 	for {
 		ok, e := f()
@@ -382,7 +835,13 @@ func poll(d time.Duration, f func() (bool, error)) error {
 		if time.Now().After(end) {
 			return fmt.Errorf("timed out after %s", d)
 		}
-		time.Sleep(16 * time.Millisecond)
+		timer := time.NewTimer(16 * time.Millisecond)
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		}
 	}
 }
 func compare(a any, op string, b any) bool {

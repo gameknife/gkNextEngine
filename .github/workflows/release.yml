@@ -5,36 +5,55 @@ on:
     tags:
       - 'v*'
 
+# Never publish partial builds or drafts containing the pending Brotato asset refresh.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_TAG: ${{ github.ref_name }}
+
 jobs:
   make-release:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
+      - name: Create draft release
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
-          draft: false
+          draft: true
           prerelease: false
+          body_path: docs/releases/next-release.md
+          generate_release_notes: true
 
   linux-build:
     needs: make-release
     runs-on: ubuntu-24.04
     permissions:
       contents: write
-      actions: write
+      actions: read
     env:
       # GitHub runners have no hardware Vulkan device.  Lavapipe plus Xvfb
       # drives the hidden trace runs and produces platform-neutral runtime paks.
       LIBGL_ALWAYS_SOFTWARE: '1'
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - uses: actions/setup-go@v6
         with:
           go-version: '1.23.x'
+      - name: Test packaging tools
+        working-directory: tools/gnb
+        run: go test ./internal/packager ./internal/config
       - name: Cache key
         id: gnb
         shell: pwsh
@@ -67,28 +86,33 @@ jobs:
             vulkaninfo | grep --fixed-strings --quiet VK_EXT_headless_surface
       - name: Build release targets
         run: |
-          echo "BUILDVER(${{ github.ref_name }})" > src/build.version
+          echo "BUILDVER($RELEASE_TAG)" > src/build.version
           ./gnb.sh setup
-            ./gnb.sh build --tracy=off gkNextRenderer gkNextEditor gkNextMotionBenchmark Packager
+          ./gnb.sh build --tracy=off gkNextRenderer gkNextEditor ScadLibrary NextAstrobot Brotato3D Packager
       - name: Trace runtime assets with Lavapipe and package Linux
         run: |
-          xvfb-run --auto-servernum ./gnb.sh package linux --package-preset default --trace-assets --version ${{ github.ref_name }}
+          xvfb-run --auto-servernum ./gnb.sh package linux --package-preset default --trace-assets --version "$RELEASE_TAG"
           mkdir -p release-paks/default
           cp out/build/linux/assets/paks/runtime.pak release-paks/default/runtime.pak
+          cp assets/paks/brotato3d.pak release-paks/default/brotato3d.pak
           cp out/build/linux/asset-traces/default-assets.txt release-paks/default/runtime-assets.txt
           cp out/build/linux/assets/paks/runtime.manifest.json release-paks/default/runtime.manifest.json
       - name: Smoke test package
-        run: ./gnb.sh smoke ./gknextrenderer_linux64_${{ github.ref_name }}.7z
+        run: ./gnb.sh smoke "./gknextrenderer_linux64_${RELEASE_TAG}.7z" --keep --staging release-smoke
+      - name: Verify targets and loose authoring files
+        run: python tools/release/verify-package.py release-smoke
       - name: Share precise runtime paks
         uses: actions/upload-artifact@v4
         with:
           name: release-runtime-paks
           path: release-paks
           if-no-files-found: error
-          retention-days: 1
-      - uses: softprops/action-gh-release@v2
+          retention-days: 7
+      - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
+          draft: true
+          fail_on_unmatched_files: true
           files: ./gknextrenderer_linux64_${{ github.ref_name }}.7z
 
       - uses: actions/cache/save@v6
@@ -107,9 +131,15 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - uses: actions/setup-go@v6
         with:
           go-version: '1.23.x'
+      - name: Test packaging tools
+        working-directory: tools/gnb
+        run: go test ./internal/packager ./internal/config
       - name: Cache key
         id: gnb
         shell: pwsh
@@ -126,10 +156,10 @@ jobs:
       - name: Build release targets
         shell: pwsh
         run: |
-          "BUILDVER(${{ github.ref_name }})" | Set-Content src/build.version -NoNewline
+          "BUILDVER($env:RELEASE_TAG)" | Set-Content src/build.version -NoNewline
           .\gnb.bat setup
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            .\gnb.bat build --tracy=off gkNextRenderer gkNextEditor gkNextMotionBenchmark
+          .\gnb.bat build --tracy=off gkNextRenderer gkNextEditor ScadLibrary NextAstrobot Brotato3D
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Download precise runtime paks
         uses: actions/download-artifact@v4
@@ -139,15 +169,22 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
-          .\gnb.bat package windows --package-preset default --runtime-pak release-paks/default --version ${{ github.ref_name }}
+          Copy-Item release-paks/default/brotato3d.pak assets/paks/brotato3d.pak
+          Copy-Item release-paks/default/brotato3d.pak out/build/windows/assets/paks/brotato3d.pak
+          .\gnb.bat package windows --package-preset default --runtime-pak release-paks/default --version "$env:RELEASE_TAG"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Smoke test package
         run: |
-          .\gnb.bat smoke gknextrenderer_win64_${{ github.ref_name }}.7z
-        shell: cmd
-      - uses: softprops/action-gh-release@v2
+          .\gnb.bat smoke "gknextrenderer_win64_$env:RELEASE_TAG.7z" --keep --staging release-smoke
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        shell: pwsh
+      - name: Verify targets and loose authoring files
+        run: python tools/release/verify-package.py release-smoke
+      - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
+          draft: true
+          fail_on_unmatched_files: true
           files: ./gknextrenderer_win64_${{ github.ref_name }}.7z
 
       - uses: actions/cache/save@v6
@@ -166,9 +203,15 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - uses: actions/setup-go@v6
         with:
           go-version: '1.23.x'
+      - name: Test packaging tools
+        working-directory: tools/gnb
+        run: go test ./internal/packager ./internal/config
       - name: Cache key
         id: gnb
         shell: pwsh
@@ -185,21 +228,28 @@ jobs:
         run: brew install sevenzip
       - name: Build release targets
         run: |
-          echo "BUILDVER(${{ github.ref_name }})" > src/build.version
+          echo "BUILDVER($RELEASE_TAG)" > src/build.version
           ./gnb.sh setup
-            ./gnb.sh build --tracy=off gkNextRenderer gkNextEditor gkNextMotionBenchmark
+          ./gnb.sh build --tracy=off gkNextRenderer gkNextEditor ScadLibrary NextAstrobot Brotato3D
       - name: Download precise runtime paks
         uses: actions/download-artifact@v4
         with:
           name: release-runtime-paks
           path: release-paks
       - name: Package
-        run: ./gnb.sh package macos --package-preset default --runtime-pak release-paks/default --version ${{ github.ref_name }}
+        run: |
+          cp release-paks/default/brotato3d.pak assets/paks/brotato3d.pak
+          cp release-paks/default/brotato3d.pak out/build/macos-arm64/assets/paks/brotato3d.pak
+          ./gnb.sh package macos --package-preset default --runtime-pak release-paks/default --version "$RELEASE_TAG"
       - name: Smoke test package
-        run: ./gnb.sh smoke ./gknextrenderer_macos_${{ github.ref_name }}.7z
-      - uses: softprops/action-gh-release@v2
+        run: ./gnb.sh smoke "./gknextrenderer_macos_${RELEASE_TAG}.7z" --keep --staging release-smoke
+      - name: Verify targets and loose authoring files
+        run: python tools/release/verify-package.py release-smoke
+      - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
+          draft: true
+          fail_on_unmatched_files: true
           files: ./gknextrenderer_macos_${{ github.ref_name }}.7z
       - uses: actions/cache/save@v6
         if: steps.cache-vcpkg-restore.outputs.cache-hit != 'true'
@@ -208,3 +258,16 @@ jobs:
             .vcpkg
             .vcpkg_bincache
           key: ${{ steps.gnb.outputs.key }}
+
+  draft-ready:
+    needs: [linux-build, windows-build, macos-build]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Record release handoff
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'NOTES'
+          All three desktop archives passed package smoke tests and loose-source verification.
+          The release remains a **draft**. Replace the proprietary Brotato reference assets,
+          rebuild all archives from the replacement commit, then complete clean-machine
+          acceptance in docs/guides/release-process.md before publishing manually.
+          NOTES

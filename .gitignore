@@ -17,6 +17,12 @@
 [Dd]ebugPublic/
 [Rr]elease/
 [Rr]eleases/
+!/tools/release/
+/tools/release/*
+!/tools/release/verify-package.py
+!/docs/releases/
+/docs/releases/*
+!/docs/releases/next-release.md
 ./[Bb]in/
 [Oo]bj/
 [Ll]og/

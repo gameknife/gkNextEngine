@@ -123,12 +123,23 @@ release_tag = "paks-latest"
 default_preset = "default"
 
 [package.presets.default]
-targets = ["gkNextRenderer", "gkNextEditor", "gkNextMotionBenchmark"]
+targets = ["gkNextRenderer", "gkNextEditor", "ScadLibrary", "NextAstrobot", "Brotato3D"]
 archive_name = "gknextrenderer_{platform}_{version}.7z"
 always_include_assets = [
   "assets/models/conf_room.glb",
   "assets/models/pbr.glb",
   "assets/models/playground.glb",
+]
+
+# Loose authoring files and complete game data are needed beyond the startup trace.
+# Keep the whole SCAD tree, including catalog.json, libraries and every level.
+extra_files = [
+  "assets/scad",
+  "assets/configs/nextastrobot",
+  "assets/sounds/astrobot",
+  "assets/projects/Brotato3D/Content",
+  # Drafts only until the proprietary reference content is replaced; see release-process.md.
+  "assets/paks/brotato3d.pak",
 ]
 
 [package.presets.magicalego]

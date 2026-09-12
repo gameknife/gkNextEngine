@@ -235,6 +235,26 @@ Start with [CSharpGameDevelopment](docs/AGENT_GUIDE/CSharpGameDevelopment.md); t
 
 <p align="center">✦</p>
 
+## 📦 Desktop release package
+
+The upcoming release is prepared as `.7z` archives for Windows x64, Linux x86_64, and macOS arm64. Each archive contains five applications:
+
+| Application / build target | Purpose |
+|---|---|
+| `ScadLibrary` | SCAD kit browsing, scene composition, terrain and character animation authoring with live previews |
+| `NextAstrobot` | A 3D platformer prototype with SCAD-authored levels and moving mechanisms |
+| `Brotato3D` | A top-down survival shooter with characters, weapons, waves, and a shop |
+| `gkNextRenderer` | Rendering demos, scene browsing, and renderer comparisons |
+| `gkNextEditor` | Scene, property, and material node editing |
+
+**All SCAD authoring files ship as editable plain text.** The complete `assets/scad/` tree is preserved, including `lib/` and `catalog.json`, `characters/`, `source/`, `proc/`, and `evaluated/`, plus the SCAD levels for NextAstrobot and Brotato3D. Open and edit these files directly in ScadLibrary or a text editor without extracting `runtime.pak`. Other runtime assets remain under `assets/paks/`; keep `bin/` and `assets/` side by side.
+
+Download the matching archive from [Releases](https://github.com/gameknife/gkNextEngine/releases), extract it completely, and launch `bin/<target>` (`.exe` on Windows). This five-application release will remain a **draft** until the proprietary Brotato reference sounds and icons are replaced and clean-machine acceptance is complete. Benchmarks, other games, and C# development tools remain available as source build targets.
+
+See the [release process](docs/guides/release-process.md) for rehearsal commands and acceptance steps, and the [draft release notes](docs/releases/next-release.md) for this release.
+
+<p align="center">✦</p>
+
 ## 🚀 Quick Start
 
 > **Network prerequisite**: the build downloads dependencies, external toolchains and optional asset
@@ -457,6 +477,7 @@ See [Developing gkNextEngine Applications in C#](docs/AGENT_GUIDE/CSharpGameDeve
 - **`StudioSim`**: Studio-management simulation for local LLM events, employee goals, SCAD offices, and ScadRig character roles.
 - **`MagicaLego`**: Voxel / LEGO-style gameplay prototype and physics building playground.
 - **`BrickPlayer`**: Digital LEGO brick interaction and assembly prototype based on LDraw standard.
+- **`NextAstrobot`**: A SCAD-driven 3D platformer with moving platforms, mechanisms, and a ScadRig character.
 - **`Brotato3D`**: Top-down 3D survival shooter prototype validating wave spawns, monster AI, object pooling, and Jolt Physics.
 - **`KongLie3D`**: Auto-chess / synergy / round-based combat simulation prototype.
 - **`NextRA`**: Deterministic RTS simulation prototype validating lockstep synchronization and replay.

@@ -25,7 +25,7 @@
 ## 操作指南
 
 - 构建与工具：[CMake 结构](guides/cmake-structure.md) · [gnb CLI](guides/gnb-cli.md) ·
-  [gnb 架构](guides/gnb-architecture.md) · [发布流程](guides/release-process.md)
+  [gnb 架构](guides/gnb-architecture.md) · [发布流程](guides/release-process.md) · [下一版 Release 草稿](releases/next-release.md)
 - 平台与显示：[SDR/HDR10/EDR](guides/display-output-modes.md) ·
   [macOS/MoltenVK FIFO 排障](guides/macos-moltenvk-fifo-present-troubleshooting.md) ·
   [Windows Dozen 排障](guides/dozen-vulkan-backend-troubleshooting.md) ·
@@ -113,6 +113,7 @@
 
 ## 剩余计划
 
+- [验证中心 MVP](plans/validation-center-mvp-plan.md)（待实施；CLI 自动留档、Dashboard 查看问题与可见重跑）
 - [iOS NativeAOT C# 真机支持](plans/ios-nativeaot-plan.md)（P0–P2 已完成；待真机验收）
 - [PathTracing 材质模型统一](plans/shader-material-model-unification-plan.md)（待审阅）
 - [地理城市生成剩余项](plans/geo-city-generation-plan.md)（P0–P5 已完成；只保留未完成项）

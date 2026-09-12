@@ -232,6 +232,26 @@ Windows 上若存在 `C:/Program Files/RenderDoc/renderdoc_app.h`，构建会自
 
 <p align="center">✦</p>
 
+## 📦 桌面发布包
+
+本次 release 准备提供 Windows x64、Linux x86_64、macOS arm64 三个平台的 `.7z` 归档，每包包含五个程序：
+
+| 程序 / 构建 target | 用途 |
+|---|---|
+| `ScadLibrary` | SCAD 零件库、场景拼装、地形与角色动画编辑，支持实时预览 |
+| `NextAstrobot` | 3D 平台跳跃原型，关卡与机关由 SCAD 描述 |
+| `Brotato3D` | 俯视角生存射击原型，包含角色、武器、波次与商店 |
+| `gkNextRenderer` | 渲染演示、场景浏览与多渲染器对比 |
+| `gkNextEditor` | 场景、属性与节点材质编辑器 |
+
+**SCAD 全部明文提供。** 解压后 `assets/scad/` 保留完整目录结构：`lib/` 与 `catalog.json`、`characters/`、`source/`、`proc/`、`evaluated/` 等文件随包分发，包含 NextAstrobot 和 Brotato3D 的 SCAD 关卡。可直接用 ScadLibrary 或文本编辑器打开、修改，无需解开 `runtime.pak`。其他运行资源保留在 `assets/paks/`；`bin/` 与 `assets/` 必须并列保留。
+
+从 [Releases](https://github.com/gameknife/gkNextEngine/releases) 下载对应平台的包，完整解压后启动 `bin/<target>`（Windows 为 `.exe`）。本次五程序包会先生成 **draft**，待 Brotato 商业参考音效 / 图标替换并完成干净机器验收后正式发布。源码中的 benchmark、其他游戏与 C# 开发工具仍可按需自行构建。
+
+发布步骤、预演命令与验收清单见 [发布流程](docs/guides/release-process.md)，本次草稿说明见 [Release Notes](docs/releases/next-release.md)。
+
+<p align="center">✦</p>
+
 ## 🚀 快速开始
 
 > **网络前置条件**：构建过程需要稳定访问 GitHub 与 vcpkg 上游（下载依赖库、外部工具链与可选资源包）。
@@ -453,6 +473,7 @@ Windows 上若存在 `C:/Program Files/RenderDoc/renderdoc_app.h`，构建会自
 - **`StudioSim`**：工作室经营模拟，验证本地 LLM 事件、员工目标、SCAD 办公室与 ScadRig 职业配色。
 - **`MagicaLego`**：体素 / 乐高风格玩法原型与场景物理搭建。
 - **`BrickPlayer`**：基于 LDraw 标准的数字乐高交互与搭建原型。
+- **`NextAstrobot`**：SCAD 关卡驱动的 3D 平台跳跃，包含移动平台、机关与 ScadRig 角色。
 - **`Brotato3D`**：俯视角 3D 生存射击原型，验证技能波次、怪物 AI、对象池与 Jolt 物理。
 - **`KongLie3D`**：自走棋 / 羁绊 / 战斗回合模拟原型。
 - **`NextRA`**：确定性 RTS 模拟原型，验证 Lockstep 帧同步与 Replay 回放。

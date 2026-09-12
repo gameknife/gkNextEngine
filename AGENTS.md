@@ -34,8 +34,9 @@ gkNextRenderer is a cross-platform 3D game engine built with modern C++20 and Vu
     [托管游戏 Launcher](docs/designs/managed-game-launcher-design.md)
 - Util: Packager (asset paking), ScadCatalog
 
-**Release targets:** the desktop release ships exactly three of these —
-`gkNextRenderer`, `gkNextEditor`, `gkNextMotionBenchmark`. See `docs/guides/release-process.md`.
+**Release targets:** the desktop release ships exactly five of these —
+`gkNextRenderer`, `gkNextEditor`, `ScadLibrary`, `NextAstrobot`, `Brotato3D`.
+The complete `assets/scad/` authoring tree is shipped as loose, editable files. See `docs/guides/release-process.md`.
 
 ## Build Commands
 

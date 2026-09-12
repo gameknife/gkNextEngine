@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/platform"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/validationstore"
 )
 
@@ -102,7 +103,7 @@ func TestBuildValidationScriptsDiscoversRunnableAndUnbuiltScripts(t *testing.T) 
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(binDir, "FakeRenderer"), []byte("fake"), 0o755); err != nil {
+	if err := os.WriteFile(platform.ExecutablePath(binDir, "FakeRenderer"), []byte("fake"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -144,7 +145,7 @@ func TestValidationRunScriptHandlerStartsGNB(t *testing.T) {
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(binDir, "FakeRenderer"), []byte("fake"), 0o755); err != nil {
+	if err := os.WriteFile(platform.ExecutablePath(binDir, "FakeRenderer"), []byte("fake"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	req := httptest.NewRequest("POST", "/validation/run-script", strings.NewReader("script=assets%2Fagentscripts%2Fsmoke.agentscript.json&visible=1"))

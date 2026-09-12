@@ -21,6 +21,7 @@ import (
 
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/config"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/gitops"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/i18n"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/spec"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/validationstore"
 )
@@ -37,6 +38,7 @@ type Options struct {
 	Preset   string        // CMake preset string for display
 	Config   config.Config // loaded gnb.toml — provides targets list
 	GNBPath  string        // optional executable path used by validation reruns
+	Lang     i18n.Lang     // process default (CLI --lang / GNB_LANG / gnb.toml / OS)
 }
 
 // Server holds runtime state for the dashboard.
@@ -83,7 +85,7 @@ func (s *Server) start(ctx context.Context, port int) (*RunningServer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("bind %s: %w", addr, err)
 	}
-	mux := s.routes()
+	mux := s.withLang(s.routes())
 	httpSrv := &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
@@ -118,7 +120,7 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("dashboard listening on %s\n", running.URL)
+	fmt.Printf("dashboard listening on %s (%s)\n", running.URL, s.resolveLang(nil))
 	if !s.opts.NoOpen {
 		go openBrowser(running.URL)
 	}
@@ -141,9 +143,55 @@ func openBrowser(url string) {
 	_ = cmd.Start()
 }
 
+func langFuncs(lang i18n.Lang) template.FuncMap {
+	if lang == "" {
+		lang = i18n.LangZh
+	}
+	return template.FuncMap{
+		"T": func(key string, args ...any) string {
+			return i18n.Translate(lang, key, args...)
+		},
+		"Lang":     func() string { return string(lang) },
+		"HTMLLang": func() string { return lang.HTML() },
+		"I18nJSON": func() template.JS { return i18n.JSON(lang) },
+		"emptyHint": func(k spec.SectionKind) string {
+			switch k {
+			case spec.SectionNext:
+				return i18n.Translate(lang, "todo.empty.next")
+			case spec.SectionBacklog:
+				return i18n.Translate(lang, "todo.empty.backlog")
+			case spec.SectionRecent:
+				return i18n.Translate(lang, "todo.empty.recent")
+			}
+			return i18n.Translate(lang, "todo.empty.next")
+		},
+		"dirtySummary": func(files []gitops.DirtyFile) string {
+			return dirtySummaryLang(lang, files)
+		},
+		"jobStatusBadge": func(s JobSnapshot) template.HTML {
+			return template.HTML(statusBadgeHTML(s.Status, s.ExitNote, lang))
+		},
+	}
+}
+
+func (s *Server) resolveLang(r *http.Request) i18n.Lang {
+	if r != nil {
+		if lang := i18n.Parse(r.URL.Query().Get("lang")); lang != "" {
+			return lang
+		}
+		if lang := i18n.Parse(i18n.CookieValue(r)); lang != "" {
+			return lang
+		}
+	}
+	if s.opts.Lang != "" {
+		return s.opts.Lang
+	}
+	return i18n.Resolve(i18n.Input{Config: s.opts.Config.GNB.Lang})
+}
+
 // templateFuncs exposes the small set of helpers the templates need.
 func templateFuncs() template.FuncMap {
-	return template.FuncMap{
+	funcs := template.FuncMap{
 		"statusIcon": func(s string) string {
 			switch s {
 			case " ":
@@ -240,9 +288,6 @@ func templateFuncs() template.FuncMap {
 			}
 			return template.HTML(sb.String())
 		},
-		"jobStatusBadge": func(s JobSnapshot) template.HTML {
-			return template.HTML(statusBadgeHTML(s.Status, s.ExitNote))
-		},
 		"jobIsRunning": func(s JobSnapshot) bool { return s.Status == StatusRunning },
 		"jobIsTerminal": func(s JobSnapshot) bool {
 			return s.Status == StatusSuccess || s.Status == StatusFailed || s.Status == StatusCanceled
@@ -296,31 +341,7 @@ func templateFuncs() template.FuncMap {
 			return "other"
 		},
 		"dirtySummary": func(files []gitops.DirtyFile) string {
-			var modified, added, deleted int
-			for _, f := range files {
-				switch dirtyPrimaryCode(f.Code) {
-				case 'M', 'R', 'C', 'U':
-					modified++
-				case 'A', '?':
-					added++
-				case 'D':
-					deleted++
-				}
-			}
-			parts := []string{}
-			if modified > 0 {
-				parts = append(parts, fmt.Sprintf("%d modified", modified))
-			}
-			if added > 0 {
-				parts = append(parts, fmt.Sprintf("%d add", added))
-			}
-			if deleted > 0 {
-				parts = append(parts, fmt.Sprintf("%d delete", deleted))
-			}
-			if len(parts) == 0 {
-				return "0 files"
-			}
-			return strings.Join(parts, ", ")
+			return dirtySummaryLang(i18n.LangZh, files)
 		},
 		"dirtyIsStaged": func(code string) bool {
 			return len(code) == 2 && code[0] != '.' && code[0] != '?'
@@ -372,18 +393,39 @@ func templateFuncs() template.FuncMap {
 			}
 			return fmt.Sprintf("%.1f", float64(size)*100/float64(total))
 		},
-		"emptyHint": func(k spec.SectionKind) string {
-			switch k {
-			case spec.SectionNext:
-				return "暂无任务（在左侧表单添加 →）"
-			case spec.SectionBacklog:
-				return "暂无最近完成的任务"
-			case spec.SectionRecent:
-				return "暂无最近完成的任务"
-			}
-			return "(暂无)"
-		},
 	}
+	for k, v := range langFuncs(i18n.LangZh) {
+		funcs[k] = v
+	}
+	return funcs
+}
+
+func dirtySummaryLang(lang i18n.Lang, files []gitops.DirtyFile) string {
+	var modified, added, deleted int
+	for _, f := range files {
+		switch dirtyPrimaryCode(f.Code) {
+		case 'M', 'R', 'C', 'U':
+			modified++
+		case 'A', '?':
+			added++
+		case 'D':
+			deleted++
+		}
+	}
+	parts := []string{}
+	if modified > 0 {
+		parts = append(parts, i18n.Translate(lang, "git.dirty.modified", modified))
+	}
+	if added > 0 {
+		parts = append(parts, i18n.Translate(lang, "git.dirty.added", added))
+	}
+	if deleted > 0 {
+		parts = append(parts, i18n.Translate(lang, "git.dirty.deleted", deleted))
+	}
+	if len(parts) == 0 {
+		return i18n.Translate(lang, "git.dirty.none")
+	}
+	return strings.Join(parts, ", ")
 }
 
 func formatByteSize(size uint64) string {

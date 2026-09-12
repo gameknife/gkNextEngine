@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/config"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/i18n"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/platform"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/remoteplay"
 )
@@ -23,7 +24,7 @@ func setupRemoteServer(t *testing.T, repoRoot string, cfg config.Config) *Server
 		t.Fatal(err)
 	}
 	return &Server{
-		opts:  Options{RepoRoot: repoRoot, Preset: "windows", Config: cfg},
+		opts:  Options{RepoRoot: repoRoot, Preset: "windows", Config: cfg, Lang: i18n.LangZh},
 		tpl:   tpl,
 		jobs:  NewJobManager(),
 		chats: NewChatStore(),

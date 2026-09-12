@@ -21,7 +21,7 @@ import (
 func newTodoCommand(ctx appContext) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "todo",
-		Short: "Manage .spec/ interactive workflow tasks",
+		Short: tr("cli.todo.short"),
 		Long: "Manage .spec/TODO.md, the interactive workflow task list.\n\n" +
 			"Format: see .spec/README.md\n" +
 			"With no subcommand, prints pending tasks in \"下一步\" and a subcommand hint.",
@@ -74,7 +74,7 @@ func newTodoListCommand(ctx appContext) *cobra.Command {
 	var sectionFlag string
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List tasks in .spec/TODO.md",
+		Short: tr("cli.todo.list.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			switch strings.ToLower(sectionFlag) {
 			case "", "all":
@@ -191,7 +191,7 @@ func dimIf(cond bool, s string) string {
 func newTodoShowCommand(ctx appContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "show <id>",
-		Short: "Show a task plus its spec/journal/blocker if present",
+		Short: tr("cli.todo.show.short"),
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := parseID(args[0])
@@ -277,7 +277,7 @@ func newTodoNextCommand(ctx appContext) *cobra.Command {
 	opts := todoNextOptions{timeout: 590 * time.Second, poll: 2 * time.Second}
 	cmd := &cobra.Command{
 		Use:   "next",
-		Short: "Print the next pending task in 下一步, optionally waiting for TODO.md updates",
+		Short: tr("cli.todo.next.short"),
 		Long: "Print the next pending task in 下一步 (intended for AGENT/orchestrator use).\n\n" +
 			"With --wait, the command returns immediately if a task exists. If no task exists,\n" +
 			"it watches TODO.md and returns when a task appears or --timeout elapses.\n" +
@@ -530,7 +530,7 @@ func newTodoAddCommand(ctx appContext) *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "add <title>",
-		Short: "Add a new task to .spec/TODO.md",
+		Short: tr("cli.todo.add.short"),
 		Long: "Add a new task. --type is required.\n\n" +
 			"Recommended types: BUG, FEAT, IDEA, SPIKE, REFACTOR, DOC (others allowed with a warning).\n" +
 			"Examples:\n" +
@@ -669,7 +669,7 @@ func newTodoMoveCommand(ctx appContext) *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "move <id>",
-		Short: "Move a task within or between 下一步 and 待规划",
+		Short: tr("cli.todo.move.short"),
 		Long: "Move a task line as if dragging it in the TODO list.\n\n" +
 			"Examples:\n" +
 			"  gnb todo move 00021 --to next\n" +
@@ -723,7 +723,7 @@ func newTodoMoveCommand(ctx appContext) *cobra.Command {
 func newTodoSwapCommand(ctx appContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "swap <id-a> <id-b>",
-		Short: "Swap two tasks in 下一步/待规划",
+		Short: tr("cli.todo.swap.short"),
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			aID, err := parseID(args[0])
@@ -778,7 +778,7 @@ func newTodoDoneCommand(ctx appContext) *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "done <id>",
-		Short: "Mark a task [x] and create a journal stub",
+		Short: tr("cli.todo.done.short"),
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := parseID(args[0])
@@ -836,7 +836,7 @@ func newTodoDeleteCommand(ctx appContext) *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "delete <id>",
-		Short: "Permanently remove a task (and its specs/<id>.md by default)",
+		Short: tr("cli.todo.delete.short"),
 		Long: "Delete a task line from TODO.md and remove its specs/<id>.md.\n\n" +
 			"Pass --keep-spec to leave specs/<id>.md alone.\n" +
 			"Pass --also-files to also drop journal/<id>.md and blockers/<id>.md.\n" +
@@ -916,7 +916,7 @@ func newTodoBlockCommand(ctx appContext) *cobra.Command {
 	var reason string
 	cmd := &cobra.Command{
 		Use:   "block <id>",
-		Short: "Mark a task [!] and create a blocker stub",
+		Short: tr("cli.todo.block.short"),
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := parseID(args[0])
@@ -967,7 +967,7 @@ func newTodoArchiveCommand(ctx appContext) *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "archive",
-		Short: "Move tasks from 最近完成 into .spec/ARCHIVE.md",
+		Short: tr("cli.todo.archive.short"),
 		Long:  "By default archives every task in 最近完成. Use --older N to archive entries older than N days, or --keep N to retain only the most recent N.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if older > 0 && keep > 0 {

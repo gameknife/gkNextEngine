@@ -19,7 +19,7 @@ import (
 func newLLMCommand(ctx appContext) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "llm",
-		Short: "Local LLM (llama.cpp + Gemma) lifecycle and chat",
+		Short: tr("cli.llm.short"),
 	}
 	root.AddCommand(newLLMSetupCommand(ctx))
 	root.AddCommand(newLLMServeCommand(ctx))
@@ -43,7 +43,7 @@ func newLLMSetupCommand(ctx appContext) *cobra.Command {
 	var allModels bool
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "Download llama.cpp binaries and the GGUF model(s)",
+		Short: tr("cli.llm.setup.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := selectLLMModel(ctx.cfg.External.LLM, modelID)
 			if err != nil {
@@ -77,7 +77,7 @@ func newLLMServeCommand(ctx appContext) *cobra.Command {
 	var modelID string
 	cmd := &cobra.Command{
 		Use:   "serve",
-		Short: "Start llama-server (detached) and wait for /health",
+		Short: tr("cli.llm.serve.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := selectLLMModel(ctx.cfg.External.LLM, modelID)
 			if err != nil {
@@ -101,7 +101,7 @@ func newLLMServeCommand(ctx appContext) *cobra.Command {
 func newLLMStopCommand(ctx appContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "stop",
-		Short: "Stop the background llama-server",
+		Short: tr("cli.llm.stop.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			srv := llm.NewServer(ctx.repoRoot, ctx.cfg.External.LLM)
 			if err := srv.Stop(); err != nil {
@@ -116,7 +116,7 @@ func newLLMStopCommand(ctx appContext) *cobra.Command {
 func newLLMStatusCommand(ctx appContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Show llama-server status",
+		Short: tr("cli.llm.status.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			srv := llm.NewServer(ctx.repoRoot, ctx.cfg.External.LLM)
 			info := srv.Status()
@@ -149,7 +149,7 @@ func newLLMChatCommand(ctx appContext) *cobra.Command {
 	profileID := ""
 	cmd := &cobra.Command{
 		Use:   "chat <prompt>",
-		Short: "Send a one-shot prompt through the configured AI provider",
+		Short: tr("cli.llm.chat.short"),
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cancel := context.WithTimeout(cmd.Context(), 5*time.Minute)
@@ -179,7 +179,7 @@ func newLLMChatCommand(ctx appContext) *cobra.Command {
 }
 
 func newLLMProvidersCommand(ctx appContext) *cobra.Command {
-	return &cobra.Command{Use: "providers", Short: "List configured AI providers and capabilities", RunE: func(cmd *cobra.Command, args []string) error {
+	return &cobra.Command{Use: "providers", Short: tr("cli.llm.providers.short"), RunE: func(cmd *cobra.Command, args []string) error {
 		runtime, err := ai.NewRuntime(ctx.repoRoot, ctx.cfg)
 		if err != nil {
 			return err
@@ -199,7 +199,7 @@ func newLLMModelsCommand(ctx appContext) *cobra.Command {
 	var providerID string
 	cmd := &cobra.Command{
 		Use:   "models",
-		Short: "List configured LLM models and mark the active one",
+		Short: tr("cli.llm.models.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if providerID != "" && providerID != "localllm" {
 				runtime, err := ai.NewRuntime(ctx.repoRoot, ctx.cfg)

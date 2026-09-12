@@ -15,7 +15,7 @@ func newTracyCommand(ctx appContext) *cobra.Command {
 	port := 8086
 	root := &cobra.Command{
 		Use:   "tracy",
-		Short: "Fetch and launch the matching Tracy Profiler GUI",
+		Short: tr("cli.tracy.short"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if androidMode {
@@ -37,7 +37,7 @@ func newTracyCommand(ctx appContext) *cobra.Command {
 	}
 	fetch := &cobra.Command{
 		Use:   "fetch",
-		Short: "Download the official Tracy GUI matching the vcpkg client",
+		Short: tr("cli.tracy.setup.short"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			profiler, err := tracy.Ensure(ctx.repoRoot, ctx.cfg)

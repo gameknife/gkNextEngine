@@ -4,7 +4,7 @@ category: guide
 status: 现行
 owner: tools
 created: 2026-06-24
-last_updated: 2026-07-17
+last_updated: 2026-09-12
 ---
 
 # gnb 架构与代码导览
@@ -29,6 +29,7 @@ last_updated: 2026-07-17
 | `ai` | provider、profile、router、session、Bridge v2 与命名 workflow |
 | `llm` | llama.cpp/Gemma 下载、server 生命周期与兼容 client |
 | `gitops`, `loc`, `targetgraph` | Git、LOC 和 target graph 功能 |
+| `i18n` | Dashboard 与 CLI 帮助的中/英词表；语言来自 `--lang` / `GNB_LANG` / `gnb.toml [gnb].lang` / OS，Dashboard 可用 cookie 覆盖 |
 
 ## Dashboard
 

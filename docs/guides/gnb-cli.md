@@ -4,12 +4,22 @@ category: guide
 status: 现行
 owner: tools
 created: 2026-06-24
-last_updated: 2026-08-31
+last_updated: 2026-09-12
 ---
 
 # gnb CLI 速查
 
 以下只描述稳定入口；完整参数始终以当前源码的 `./gnb.sh <command> --help`（Windows 为 `gnb.bat`）为准。开发 gnb 自身时不要依赖可能过期的仓库根二进制。
+
+## 语言
+
+Dashboard 与 `gnb --help` 支持中/英切换。解析顺序：`--lang zh|en|auto`，环境变量 `GNB_LANG`，`gnb.toml` 的 `[gnb].lang`，最后是操作系统 UI 语言。Dashboard 标题栏的「中 / EN」会写入 cookie `gnb_lang` 并立即生效，不必重启。日志和错误输出仍为英文，方便脚本抓取。
+
+```bash
+./gnb.sh --lang en help
+./gnb.sh --lang zh dashboard
+GNB_LANG=en ./gnb.sh doctor
+```
 
 ## 环境与构建
 

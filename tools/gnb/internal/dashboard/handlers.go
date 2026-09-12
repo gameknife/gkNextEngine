@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/gitops"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/i18n"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/llm"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/loc"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/platform"
@@ -43,6 +44,8 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /task/{id}/spec/save", s.handleTaskSpecSave)
 	mux.HandleFunc("POST /task/{id}/delete", s.handleTaskDelete)
 	mux.HandleFunc("GET /tab/{kind}", s.handleTab)
+	mux.HandleFunc("GET /settings/lang", s.handleSetLang)
+	mux.HandleFunc("POST /settings/lang", s.handleSetLang)
 	mux.HandleFunc("POST /jobs/{kind}", s.handleJobStart)
 	mux.HandleFunc("POST /jobs/{id}/cancel", s.handleJobCancel)
 	mux.HandleFunc("OPTIONS /jobs/{id}/stream", s.handleJobStreamOptions)
@@ -705,13 +708,13 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("tab") == "paks" {
 		vm := s.buildHeader("paks")
 		vm.PaksVM = s.buildPaksVM(r.URL.Query().Get("file"))
-		s.render(w, "layout.html", vm)
+		s.render(w, r, "layout.html", vm)
 		return
 	}
 	if r.URL.Query().Get("tab") == "validation" {
 		vm := s.buildHeader("validation")
 		vm.ValidationVM = s.buildValidationVM(r.URL.Query())
-		s.render(w, "layout.html", vm)
+		s.render(w, r, "layout.html", vm)
 		return
 	}
 	vm, err := s.buildIndex()
@@ -719,24 +722,54 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		httpError(w, err)
 		return
 	}
-	s.render(w, "layout.html", vm)
+	s.render(w, r, "layout.html", vm)
 }
 
 // ----- helpers --------------------------------------------------------
 
-func (s *Server) render(w http.ResponseWriter, name string, data any) {
+func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, data any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	var err error
-	if strings.HasSuffix(name, ".html") {
-		err = s.tpl.ExecuteTemplate(w, name, data)
-	} else {
-		err = s.tpl.ExecuteTemplate(w, name, data)
-	}
+	lang := s.resolveLang(r)
+	tpl, err := s.tpl.Clone()
 	if err != nil {
-		// Headers may already be flushed; best we can do is log.
+		fmt.Printf("template clone error: %v\n", err)
+		return
+	}
+	tpl.Funcs(langFuncs(lang))
+	if err := tpl.ExecuteTemplate(w, name, data); err != nil {
 		fmt.Printf("template %s error: %v\n", name, err)
 	}
+}
+
+func (s *Server) withLang(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if lang := i18n.Parse(r.URL.Query().Get("lang")); lang != "" {
+			i18n.SetCookie(w, lang)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) handleSetLang(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	lang := i18n.Parse(r.FormValue("lang"))
+	if lang == "" {
+		lang = i18n.Parse(r.URL.Query().Get("lang"))
+	}
+	if lang == "" {
+		http.Error(w, "invalid lang", http.StatusBadRequest)
+		return
+	}
+	i18n.SetCookie(w, lang)
+	loc := r.Header.Get("Referer")
+	if loc == "" {
+		loc = "/"
+	}
+	http.Redirect(w, r, loc, http.StatusSeeOther)
 }
 
 func parsePathID(r *http.Request) (int, error) {
@@ -766,54 +799,54 @@ func (s *Server) handleTab(w http.ResponseWriter, r *http.Request) {
 			httpError(w, err)
 			return
 		}
-		s.render(w, "tab_todo", vm)
+		s.render(w, r, "tab_todo", vm)
 	case "build":
 		vm := s.buildHeader("build")
 		vm.BuildVM = s.buildBuildRunVM()
-		s.render(w, "tab_build", vm)
+		s.render(w, r, "tab_build", vm)
 	case "remote":
 		vm := s.buildHeader("remote")
 		vm.RemoteVM = s.buildRemoteVM()
-		s.render(w, "tab_remote", vm)
+		s.render(w, r, "tab_remote", vm)
 	case "docs":
 		vm := s.buildHeader("docs")
 		vm.DocsVM = s.buildDocsVM(r.URL.Query().Get("file"), r.URL.Query().Get("edit") == "1", "", "")
-		s.render(w, "tab_docs", vm)
+		s.render(w, r, "tab_docs", vm)
 	case "run":
 		vm := s.buildHeader("build")
 		vm.BuildVM = s.buildBuildRunVM()
-		s.render(w, "tab_build", vm)
+		s.render(w, r, "tab_build", vm)
 	case "test":
 		vm := s.buildHeader("test")
 		vm.TestVM = s.buildTestVM()
-		s.render(w, "tab_test", vm)
+		s.render(w, r, "tab_test", vm)
 	case "git":
 		vm := s.buildHeader("git")
 		vm.GitVM = s.buildGitVM("")
-		s.render(w, "tab_git", vm)
+		s.render(w, r, "tab_git", vm)
 	case "chat":
 		vm := s.buildHeader("chat")
 		vm.ChatVM = s.buildChatVM("", "", "", "")
-		s.render(w, "tab_chat", vm)
+		s.render(w, r, "tab_chat", vm)
 	case "loc":
 		vm := s.buildHeader("loc")
 		vm.LocVM = s.buildLocVM(r.URL.Query().Get("thirdparty") != "", r.URL.Query().Get("depth"))
-		s.render(w, "tab_loc", vm)
+		s.render(w, r, "tab_loc", vm)
 	case "paks":
 		vm := s.buildHeader("paks")
 		vm.PaksVM = s.buildPaksVM(r.URL.Query().Get("file"))
-		s.render(w, "tab_paks", vm)
+		s.render(w, r, "tab_paks", vm)
 	case "graph":
 		vm := s.buildHeader("graph")
 		vm.GraphVM = s.buildGraphVM()
-		s.render(w, "tab_graph", vm)
+		s.render(w, r, "tab_graph", vm)
 	case "validation":
 		vm := s.buildHeader("validation")
 		vm.ValidationVM = s.buildValidationVM(r.URL.Query())
-		s.render(w, "tab_validation", vm)
+		s.render(w, r, "tab_validation", vm)
 	case "settings":
 		vm := s.buildHeader("settings")
-		s.render(w, "tab_settings", vm)
+		s.render(w, r, "tab_settings", vm)
 	default:
 		http.Error(w, "unknown tab "+kind, http.StatusNotFound)
 	}

@@ -18,7 +18,7 @@ import (
 func newGitCommand(ctx appContext) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "git",
-		Short: "Common git operations (status / branch / switch / pull / log)",
+		Short: tr("cli.git.short"),
 	}
 	root.AddCommand(newGitStatusCommand(ctx))
 	root.AddCommand(newGitBranchCommand(ctx))
@@ -49,7 +49,7 @@ func newGitCommitMsgCommand(ctx appContext) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "commit-msg",
 		Aliases: []string{"ai-commit"},
-		Short:   "Generate a commit message from local changes using an AI provider",
+		Short:   tr("cli.git.commit-msg.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if stageAll {
 				if err := gitops.AddAll(ctx.repoRoot); err != nil {
@@ -123,7 +123,7 @@ func newGitCommitMsgCommand(ctx appContext) *cobra.Command {
 func newGitStatusCommand(ctx appContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Show current branch, head, and dirty/upstream summary",
+		Short: tr("cli.git.status.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			st, err := gitops.GetStatus(ctx.repoRoot)
 			if err != nil {
@@ -149,7 +149,7 @@ func newGitBranchCommand(ctx appContext) *cobra.Command {
 	showRemote := false
 	cmd := &cobra.Command{
 		Use:   "branch",
-		Short: "List local (and optionally remote) branches",
+		Short: tr("cli.git.branch.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			branches, err := gitops.Branches(ctx.repoRoot)
 			if err != nil {
@@ -200,7 +200,7 @@ func newGitSwitchCommand(ctx appContext) *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "switch [-c|--create] [--track] <branch>",
-		Short: "Switch branches; with -c create a new branch; with --track create a local branch tracking a remote ref",
+		Short: tr("cli.git.switch.short"),
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
@@ -243,7 +243,7 @@ func newGitSwitchCommand(ctx appContext) *cobra.Command {
 func newGitPullCommand(ctx appContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "pull",
-		Short: "Fast-forward pull current branch (refuses if working tree is dirty)",
+		Short: tr("cli.git.pull.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out, err := gitops.Pull(ctx.repoRoot)
 			if err != nil {
@@ -264,7 +264,7 @@ func newGitPullCommand(ctx appContext) *cobra.Command {
 func newGitFetchCommand(ctx appContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "fetch",
-		Short: "Fetch all remotes with prune",
+		Short: tr("cli.git.fetch.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out, err := gitops.Fetch(ctx.repoRoot)
 			if err != nil {
@@ -283,7 +283,7 @@ func newGitLogCommand(ctx appContext) *cobra.Command {
 	limit := 30
 	cmd := &cobra.Command{
 		Use:   "log",
-		Short: "Show recent commits (oneline)",
+		Short: tr("cli.git.log.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			commits, err := gitops.Log(ctx.repoRoot, limit)
 			if err != nil {
@@ -303,7 +303,7 @@ func newGitResetCommand(ctx appContext) *cobra.Command {
 	hard := false
 	cmd := &cobra.Command{
 		Use:   "reset <ref> --hard",
-		Short: "Reset current branch to <ref> (destructive: requires --hard)",
+		Short: tr("cli.git.reset.short"),
 		Long: "Move the current branch pointer to <ref> and discard all local " +
 			"changes. This permanently drops uncommitted work and any commits not " +
 			"reachable elsewhere. --hard must be passed explicitly so it isn't " +
@@ -328,7 +328,7 @@ func newGitResetCommand(ctx appContext) *cobra.Command {
 func newGitStashCommand(ctx appContext) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "stash",
-		Short: "Wrap git stash (push / pop / apply / list / drop)",
+		Short: tr("cli.git.stash.short"),
 	}
 	var (
 		message          string
@@ -336,7 +336,7 @@ func newGitStashCommand(ctx appContext) *cobra.Command {
 	)
 	push := &cobra.Command{
 		Use:   "push",
-		Short: "Stash uncommitted changes",
+		Short: tr("cli.git.stash.push.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out, err := gitops.StashPush(ctx.repoRoot, message, includeUntracked)
 			if err != nil {
@@ -354,7 +354,7 @@ func newGitStashCommand(ctx appContext) *cobra.Command {
 
 	list := &cobra.Command{
 		Use:   "list",
-		Short: "List stash entries",
+		Short: tr("cli.git.stash.list.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			stashes, err := gitops.StashList(ctx.repoRoot)
 			if err != nil {

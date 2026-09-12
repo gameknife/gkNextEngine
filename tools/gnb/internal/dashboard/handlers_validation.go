@@ -439,7 +439,7 @@ func (s *Server) handleValidationRunScript(w http.ResponseWriter, r *http.Reques
 	vm := s.buildHeader("validation")
 	vm.ValidationVM = s.buildValidationVM(query)
 	w.WriteHeader(http.StatusAccepted)
-	s.render(w, "tab_validation", vm)
+	s.render(w, r, "tab_validation", vm)
 }
 
 func (s *Server) findValidationScript(path string) (validationScriptVM, error) {
@@ -484,7 +484,7 @@ func (s *Server) handleValidationSteps(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	s.render(w, "validation_steps_panel", s.makeValidationRunVM(store, record))
+	s.render(w, r, "validation_steps_panel", s.makeValidationRunVM(store, record))
 }
 
 func (s *Server) handleValidationArtifact(w http.ResponseWriter, r *http.Request) {
@@ -574,7 +574,7 @@ func (s *Server) handleValidationReview(w http.ResponseWriter, r *http.Request) 
 	query := url.Values{"tab": {"validation"}, "run": {runID}, "flash": {"审阅已保存"}}
 	vm := s.buildHeader("validation")
 	vm.ValidationVM = s.buildValidationVM(query)
-	s.render(w, "tab_validation", vm)
+	s.render(w, r, "tab_validation", vm)
 }
 
 func (s *Server) handleValidationRerun(w http.ResponseWriter, r *http.Request) {
@@ -637,7 +637,7 @@ func (s *Server) handleValidationRerun(w http.ResponseWriter, r *http.Request) {
 	vm := s.buildHeader("validation")
 	vm.ValidationVM = s.buildValidationVM(query)
 	w.WriteHeader(http.StatusAccepted)
-	s.render(w, "tab_validation", vm)
+	s.render(w, r, "tab_validation", vm)
 }
 
 func waitForValidationRun(ctx context.Context, store validationstore.Store, target string, runnerPID int, after time.Time) (validationstore.Record, bool) {

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/i18n"
 )
 
 // JobKind tags a job so the UI can pick the right "latest" entry per tab.
@@ -132,16 +134,17 @@ func (j *Job) finalize(status JobStatus, note string) {
 	j.mu.Unlock()
 
 	// Append a completion summary line so the user doesn't miss the result.
+	lang := i18n.Current()
 	switch status {
 	case StatusSuccess:
-		j.appendLine(`<span style="color:#22c55e;font-weight:600">✓ 完成 (` + note + `)</span>`)
+		j.appendLine(`<span style="color:#22c55e;font-weight:600">` + escapeHTML(i18n.Translate(lang, "job.log.success", note)) + `</span>`)
 	case StatusFailed:
-		j.appendLine(`<span style="color:#ef4444;font-weight:600">✗ 失败 (` + note + `)</span>`)
+		j.appendLine(`<span style="color:#ef4444;font-weight:600">` + escapeHTML(i18n.Translate(lang, "job.log.failed", note)) + `</span>`)
 	case StatusCanceled:
-		j.appendLine(`<span style="color:#9aa3b2">⊘ 已取消</span>`)
+		j.appendLine(`<span style="color:#9aa3b2">` + escapeHTML(i18n.Translate(lang, "job.log.canceled")) + `</span>`)
 	}
 
-	statusPayload := statusBadgeHTML(status, note)
+	statusPayload := statusBadgeHTML(status, note, lang)
 	for _, ch := range subs {
 		// Send status & done events synchronously where possible; we
 		// don't want to drop the terminal signal.
@@ -373,17 +376,17 @@ func pumpLines(r io.Reader, job *Job, wg *sync.WaitGroup, isStderr bool) {
 
 // statusBadgeHTML renders the status pill HTML used by the SSE "status" event
 // and by the initial server-side render of the log header.
-func statusBadgeHTML(status JobStatus, note string) string {
+func statusBadgeHTML(status JobStatus, note string, lang i18n.Lang) string {
 	var label, color string
 	switch status {
 	case StatusRunning:
-		label, color = "运行中", "#eab308"
+		label, color = i18n.Translate(lang, "job.running"), "#eab308"
 	case StatusSuccess:
-		label, color = "成功", "#22c55e"
+		label, color = i18n.Translate(lang, "job.success"), "#22c55e"
 	case StatusFailed:
-		label, color = "失败", "#ef4444"
+		label, color = i18n.Translate(lang, "job.failed"), "#ef4444"
 	case StatusCanceled:
-		label, color = "已取消", "#9aa3b2"
+		label, color = i18n.Translate(lang, "job.canceled"), "#9aa3b2"
 	default:
 		label, color = string(status), "#9aa3b2"
 	}

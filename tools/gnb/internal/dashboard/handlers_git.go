@@ -66,14 +66,14 @@ func (s *Server) buildGitVM(flash string) gitVM {
 // renderGitBody re-renders the whole git tab body (left column + commits +
 // stash). All destructive actions go through this so both columns stay in
 // sync (e.g. reset moves HEAD which changes the log).
-func (s *Server) renderGitBody(w http.ResponseWriter, flash string) {
+func (s *Server) renderGitBody(w http.ResponseWriter, r *http.Request, flash string) {
 	vm := s.buildHeader("git")
 	vm.GitVM = s.buildGitVM(flash)
-	s.render(w, "git_body", vm)
+	s.render(w, r, "git_body", vm)
 }
 
 func (s *Server) handleGitPanel(w http.ResponseWriter, r *http.Request) {
-	s.renderGitBody(w, r.URL.Query().Get("flash"))
+	s.renderGitBody(w, r, r.URL.Query().Get("flash"))
 }
 
 func (s *Server) handleGitSwitch(w http.ResponseWriter, r *http.Request) {
@@ -87,31 +87,31 @@ func (s *Server) handleGitSwitch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := gitops.Checkout(s.opts.RepoRoot, branch, false); err != nil {
-		s.renderGitBody(w, "切换分支失败: "+err.Error())
+		s.renderGitBody(w, r, "切换分支失败: "+err.Error())
 		return
 	}
-	s.renderGitBody(w, "已切换到 "+branch)
+	s.renderGitBody(w, r, "已切换到 "+branch)
 }
 
 func (s *Server) handleGitPull(w http.ResponseWriter, r *http.Request) {
 	out, err := gitops.Pull(s.opts.RepoRoot)
 	if err != nil {
-		s.renderGitBody(w, "Pull 失败: "+err.Error())
+		s.renderGitBody(w, r, "Pull 失败: "+err.Error())
 		return
 	}
 	flash := "Pull 完成"
 	if first := firstLine(out); first != "" {
 		flash = flash + " (" + first + ")"
 	}
-	s.renderGitBody(w, flash)
+	s.renderGitBody(w, r, flash)
 }
 
 func (s *Server) handleGitFetch(w http.ResponseWriter, r *http.Request) {
 	if _, err := gitops.Fetch(s.opts.RepoRoot); err != nil {
-		s.renderGitBody(w, "Fetch 失败: "+err.Error())
+		s.renderGitBody(w, r, "Fetch 失败: "+err.Error())
 		return
 	}
-	s.renderGitBody(w, "Fetch 完成")
+	s.renderGitBody(w, r, "Fetch 完成")
 }
 
 func (s *Server) handleGitSwitchRemote(w http.ResponseWriter, r *http.Request) {
@@ -125,10 +125,10 @@ func (s *Server) handleGitSwitchRemote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := gitops.CheckoutRemote(s.opts.RepoRoot, ref, false); err != nil {
-		s.renderGitBody(w, "切换远程分支失败: "+err.Error())
+		s.renderGitBody(w, r, "切换远程分支失败: "+err.Error())
 		return
 	}
-	s.renderGitBody(w, "已基于 "+ref+" 创建本地跟踪分支")
+	s.renderGitBody(w, r, "已基于 "+ref+" 创建本地跟踪分支")
 }
 
 func (s *Server) handleGitCreateBranch(w http.ResponseWriter, r *http.Request) {
@@ -143,10 +143,10 @@ func (s *Server) handleGitCreateBranch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := gitops.CreateBranch(s.opts.RepoRoot, name, startPoint, false); err != nil {
-		s.renderGitBody(w, "创建分支失败: "+err.Error())
+		s.renderGitBody(w, r, "创建分支失败: "+err.Error())
 		return
 	}
-	s.renderGitBody(w, "已创建并切换到 "+name)
+	s.renderGitBody(w, r, "已创建并切换到 "+name)
 }
 
 func (s *Server) handleGitReset(w http.ResponseWriter, r *http.Request) {
@@ -160,10 +160,10 @@ func (s *Server) handleGitReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := gitops.ResetHard(s.opts.RepoRoot, ref); err != nil {
-		s.renderGitBody(w, "Reset 失败: "+err.Error())
+		s.renderGitBody(w, r, "Reset 失败: "+err.Error())
 		return
 	}
-	s.renderGitBody(w, "已 reset --hard 到 "+ref)
+	s.renderGitBody(w, r, "已 reset --hard 到 "+ref)
 }
 
 func (s *Server) handleGitStashPush(w http.ResponseWriter, r *http.Request) {
@@ -175,14 +175,14 @@ func (s *Server) handleGitStashPush(w http.ResponseWriter, r *http.Request) {
 	includeUntracked := r.FormValue("untracked") == "1"
 	out, err := gitops.StashPush(s.opts.RepoRoot, msg, includeUntracked)
 	if err != nil {
-		s.renderGitBody(w, "Stash 失败: "+err.Error())
+		s.renderGitBody(w, r, "Stash 失败: "+err.Error())
 		return
 	}
 	flash := "已 stash"
 	if first := firstLine(out); first != "" {
 		flash = flash + " (" + first + ")"
 	}
-	s.renderGitBody(w, flash)
+	s.renderGitBody(w, r, flash)
 }
 
 func (s *Server) handleGitStashAction(w http.ResponseWriter, r *http.Request) {
@@ -194,14 +194,14 @@ func (s *Server) handleGitStashAction(w http.ResponseWriter, r *http.Request) {
 	ref := strings.TrimSpace(r.FormValue("ref"))
 	out, err := gitops.StashAction(s.opts.RepoRoot, action, ref)
 	if err != nil {
-		s.renderGitBody(w, "stash "+action+" 失败: "+err.Error())
+		s.renderGitBody(w, r, "stash "+action+" 失败: "+err.Error())
 		return
 	}
 	flash := "stash " + action + " 完成"
 	if first := firstLine(out); first != "" {
 		flash = flash + " (" + first + ")"
 	}
-	s.renderGitBody(w, flash)
+	s.renderGitBody(w, r, flash)
 }
 
 func (s *Server) handleGitCommit(w http.ResponseWriter, r *http.Request) {
@@ -215,13 +215,13 @@ func (s *Server) handleGitCommit(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	s.render(w, "git_commit_detail", c)
+	s.render(w, r, "git_commit_detail", c)
 }
 
 func (s *Server) handleGitLocalChanges(w http.ResponseWriter, r *http.Request) {
 	vm := s.buildHeader("git")
 	vm.GitVM = s.buildGitVM(r.URL.Query().Get("flash"))
-	s.render(w, "git_commit_card", vm)
+	s.render(w, r, "git_commit_card", vm)
 }
 
 func (s *Server) handleGitStage(w http.ResponseWriter, r *http.Request) {
@@ -232,17 +232,17 @@ func (s *Server) handleGitStage(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimSpace(r.FormValue("path"))
 	if path == "" {
 		if err := gitops.AddAll(s.opts.RepoRoot); err != nil {
-			s.renderGitBody(w, "Stage 失败: "+err.Error())
+			s.renderGitBody(w, r, "Stage 失败: "+err.Error())
 			return
 		}
-		s.renderGitBody(w, "已 stage 全部改动")
+		s.renderGitBody(w, r, "已 stage 全部改动")
 		return
 	}
 	if err := gitops.AddPath(s.opts.RepoRoot, path); err != nil {
-		s.renderGitBody(w, "Stage 失败: "+err.Error())
+		s.renderGitBody(w, r, "Stage 失败: "+err.Error())
 		return
 	}
-	s.renderGitBody(w, "已 stage: "+path)
+	s.renderGitBody(w, r, "已 stage: "+path)
 }
 
 func (s *Server) handleGitUnstage(w http.ResponseWriter, r *http.Request) {
@@ -253,17 +253,17 @@ func (s *Server) handleGitUnstage(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimSpace(r.FormValue("path"))
 	if path == "" {
 		if err := gitops.UnstageAll(s.opts.RepoRoot); err != nil {
-			s.renderGitBody(w, "Unstage 失败: "+err.Error())
+			s.renderGitBody(w, r, "Unstage 失败: "+err.Error())
 			return
 		}
-		s.renderGitBody(w, "已 unstage 全部改动")
+		s.renderGitBody(w, r, "已 unstage 全部改动")
 		return
 	}
 	if err := gitops.UnstagePath(s.opts.RepoRoot, path); err != nil {
-		s.renderGitBody(w, "Unstage 失败: "+err.Error())
+		s.renderGitBody(w, r, "Unstage 失败: "+err.Error())
 		return
 	}
-	s.renderGitBody(w, "已 unstage: "+path)
+	s.renderGitBody(w, r, "已 unstage: "+path)
 }
 
 func firstLine(s string) string {
@@ -311,24 +311,24 @@ func (s *Server) handleGitCommitCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	message := strings.TrimSpace(r.FormValue("message"))
 	if message == "" {
-		s.renderGitBody(w, "Commit 失败: 提交消息为空")
+		s.renderGitBody(w, r, "Commit 失败: 提交消息为空")
 		return
 	}
 	if r.FormValue("stage_all") == "1" {
 		if err := gitops.AddAll(s.opts.RepoRoot); err != nil {
-			s.renderGitBody(w, "git add -A 失败: "+err.Error())
+			s.renderGitBody(w, r, "git add -A 失败: "+err.Error())
 			return
 		}
 	}
 	if _, err := gitops.CreateCommit(s.opts.RepoRoot, message); err != nil {
-		s.renderGitBody(w, "Commit 失败: "+err.Error())
+		s.renderGitBody(w, r, "Commit 失败: "+err.Error())
 		return
 	}
 	subject := firstLine(message)
 	if len(subject) > 60 {
 		subject = subject[:60] + "..."
 	}
-	s.renderGitBody(w, "已提交: "+subject)
+	s.renderGitBody(w, r, "已提交: "+subject)
 }
 
 // writeCommitTextarea emits the textarea HTML fragment used as the htmx swap

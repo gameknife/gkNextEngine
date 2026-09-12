@@ -134,20 +134,20 @@ func (s *Server) handleDocsSave(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		vm := s.buildHeader("docs")
 		vm.DocsVM = s.buildDocsVM(selectedPath, true, err.Error(), body)
-		s.render(w, "tab_docs", vm)
+		s.render(w, r, "tab_docs", vm)
 		return
 	}
 	info, err := os.Stat(fullPath)
 	if err != nil {
 		vm := s.buildHeader("docs")
 		vm.DocsVM = s.buildDocsVM(normalizedRel, true, err.Error(), body)
-		s.render(w, "tab_docs", vm)
+		s.render(w, r, "tab_docs", vm)
 		return
 	}
 	if !info.Mode().IsRegular() {
 		vm := s.buildHeader("docs")
 		vm.DocsVM = s.buildDocsVM(normalizedRel, true, "只能保存普通 markdown 文件", body)
-		s.render(w, "tab_docs", vm)
+		s.render(w, r, "tab_docs", vm)
 		return
 	}
 	if body != "" && !strings.HasSuffix(body, "\n") {
@@ -156,17 +156,17 @@ func (s *Server) handleDocsSave(w http.ResponseWriter, r *http.Request) {
 	if err := os.WriteFile(fullPath, []byte(body), 0644); err != nil {
 		vm := s.buildHeader("docs")
 		vm.DocsVM = s.buildDocsVM(normalizedRel, true, err.Error(), body)
-		s.render(w, "tab_docs", vm)
+		s.render(w, r, "tab_docs", vm)
 		return
 	}
 	vm := s.buildHeader("docs")
 	vm.DocsVM = s.buildDocsVM(normalizedRel, false, "", "")
-	s.render(w, "tab_docs", vm)
+	s.render(w, r, "tab_docs", vm)
 }
 
 func (s *Server) handleDocsSource(w http.ResponseWriter, r *http.Request) {
 	vm := buildDocsSourceVM(s.opts.RepoRoot, r.URL.Query().Get("path"), r.URL.Query().Get("line"))
-	s.render(w, "docs_source_panel", vm)
+	s.render(w, r, "docs_source_panel", vm)
 }
 
 func buildDocsSourceVM(repoRoot string, rel string, lineText string) docsSourceVM {

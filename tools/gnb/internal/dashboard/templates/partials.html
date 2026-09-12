@@ -8,13 +8,13 @@
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
           </svg>
         </span>
-        项目信息
+        {{T "todo.project_info"}}
       </h2>
       <div class="info-row">
         <span class="k">repo</span>
         <span class="v" title="{{.RepoRoot}}">
           {{.RepoRoot}}
-          <button class="copy-btn" type="button" onclick="navigator.clipboard.writeText('{{.RepoRoot}}')" title="copy">
+          <button class="copy-btn" type="button" onclick="navigator.clipboard.writeText('{{.RepoRoot}}')" title="{{T "common.copy"}}">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           </button>
         </span>
@@ -24,12 +24,12 @@
         <span class="k">git</span>
         <span class="v">
           {{shortHash .Version}}
-          <button class="copy-btn" type="button" onclick="navigator.clipboard.writeText('{{.Version}}')" title="copy">
+          <button class="copy-btn" type="button" onclick="navigator.clipboard.writeText('{{.Version}}')" title="{{T "common.copy"}}">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           </button>
         </span>
       </div>
-      <div class="info-row"><span class="k">最近完成</span><span class="v">{{.RecentSize}} 条</span></div>
+      <div class="info-row"><span class="k">{{T "todo.recent_done"}}</span><span class="v">{{T "todo.recent_count" .RecentSize}}</span></div>
     </div>
 
     <div class="card">
@@ -39,31 +39,31 @@
             <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
         </span>
-        添加任务
+        {{T "todo.add_task"}}
       </h2>
       <form hx-post="/task/add" hx-target="#todo-panel" hx-swap="innerHTML" hx-on::after-request="this.reset()">
         <div class="form-field">
-          <label>标题</label>
-          <input class="input" name="title" placeholder="请输入任务标题" required>
+          <label>{{T "todo.title"}}</label>
+          <input class="input" name="title" placeholder="{{T "todo.title_placeholder"}}" required>
         </div>
         <div class="form-row">
           <div class="form-field" style="margin: 0;">
-            <label>type</label>
+            <label>{{T "todo.type"}}</label>
             <div class="select-with-dot">
               <select class="select" name="type" required>
-                <option value="IDEA">IDEA 想法</option>
-                <option value="BUG">BUG 缺陷</option>
-                <option value="FEAT">FEAT 功能</option>
-                <option value="SPIKE">SPIKE 探针</option>
-                <option value="REFACTOR">REFACTOR 重构</option>
-                <option value="DOC">DOC 文档</option>
+                <option value="IDEA">{{T "todo.type.idea"}}</option>
+                <option value="BUG">{{T "todo.type.bug"}}</option>
+                <option value="FEAT">{{T "todo.type.feat"}}</option>
+                <option value="SPIKE">{{T "todo.type.spike"}}</option>
+                <option value="REFACTOR">{{T "todo.type.refactor"}}</option>
+                <option value="DOC">{{T "todo.type.doc"}}</option>
               </select>
             </div>
           </div>
           <div class="form-field" style="margin: 0;">
-            <label>priority</label>
+            <label>{{T "todo.priority"}}</label>
             <select class="select" name="priority">
-              <option value="">priority</option>
+              <option value="">{{T "todo.priority"}}</option>
               <option>P0</option>
               <option>P1</option>
               <option>P2</option>
@@ -71,13 +71,13 @@
           </div>
         </div>
         <div class="form-field">
-          <label>section</label>
+          <label>{{T "todo.section"}}</label>
           <select class="select" name="section">
-            <option value="next">下一步</option>
-            <option value="backlog">待规划</option>
+            <option value="next">{{T "section.next"}}</option>
+            <option value="backlog">{{T "section.backlog"}}</option>
           </select>
         </div>
-        <button class="btn-primary" type="submit">添加任务</button>
+        <button class="btn-primary" type="submit">{{T "todo.add"}}</button>
       </form>
     </div>
 
@@ -92,7 +92,7 @@
   </section>
 
   <section class="col" id="detail-panel">
-    <div class="card detail-empty">点击任意任务查看详情（spec / journal / blocker）。</div>
+    <div class="card detail-empty">{{T "todo.empty_detail"}}</div>
   </section>
 </div>
 {{end}}
@@ -101,7 +101,7 @@
 {{define "todo_panel"}}
 {{if gt .RecentSize 10}}
 <div class="archive-hint">
-  最近完成 已有 {{.RecentSize}} 条，建议在终端运行 <code>gnb todo archive</code> 归档。
+  {{T "todo.archive_hint" .RecentSize "<code>gnb todo archive</code>" | safeHTML}}
 </div>
 {{end}}
 
@@ -117,13 +117,12 @@
     </h2>
     <form hx-post="/todo/cleanup" hx-target="#todo-panel" hx-swap="innerHTML" style="margin: 0;">
       <button class="btn-secondary" type="submit" style="width: auto; padding: 7px 12px;">
-        整理已完成
+        {{T "todo.cleanup"}}
       </button>
     </form>
   </div>
 
   {{range .Sections}}
-  {{$secHeading := .Heading}}
   {{$secSlug := sectionSlug .Kind}}
   {{$draggable := or (eq $secSlug "next") (eq $secSlug "backlog")}}
   <div style="margin-bottom: 18px;">
@@ -131,7 +130,7 @@
       <span class="ico" style="background: {{sectionTint .Kind}}; color: {{sectionColor .Kind}};">
         {{sectionIcon .Kind | safeHTML}}
       </span>
-      {{.Heading}}
+      {{T (printf "section.%s" $secSlug)}}
       <span class="count">{{len .Tasks}}</span>
     </h2>
     {{if .Tasks}}
@@ -144,7 +143,7 @@
                hx-get="/task/{{printf "%05d" .ID}}"
                hx-target="#detail-panel"
                hx-swap="innerHTML">
-            <span class="dot {{if eq $secHeading "待规划"}}backlog-dot{{end}}"></span>
+            <span class="dot {{if eq $secSlug "backlog"}}backlog-dot{{end}}"></span>
             <div class="body">
               <div class="head">
                 <span class="tid">#{{printf "%05d" .ID}}</span>
@@ -154,31 +153,31 @@
               </div>
             </div>
             <div class="menu" onclick="event.stopPropagation()">
-              <button class="menu-btn" type="button" title="操作">
+              <button class="menu-btn" type="button" title="{{T "todo.actions"}}">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
               </button>
               <div class="menu-dropdown">
                 {{if eq (printf "%s" .Status) " "}}
                   <button type="button"
                           hx-get="/task/{{printf "%05d" .ID}}/edit"
-                          hx-target="closest .task" hx-swap="outerHTML">编辑</button>
+                          hx-target="closest .task" hx-swap="outerHTML">{{T "common.edit"}}</button>
                 {{end}}
                 {{if ne (printf "%s" .Status) "x"}}
                   <button type="button"
                           hx-post="/task/{{printf "%05d" .ID}}/done"
                           hx-target="#todo-panel" hx-swap="innerHTML"
-                          hx-confirm="标 #{{printf "%05d" .ID}} 为完成？">标为完成</button>
+                          hx-confirm="{{T "todo.confirm_done" (printf "%05d" .ID)}}">{{T "todo.mark_done"}}</button>
                 {{end}}
                 {{if and (ne (printf "%s" .Status) "!") (ne (printf "%s" .Status) "x")}}
                   <button type="button" class="danger"
                           hx-post="/task/{{printf "%05d" .ID}}/block"
                           hx-target="#todo-panel" hx-swap="innerHTML"
-                          hx-confirm="标 #{{printf "%05d" .ID}} 为卡住？">标为卡住</button>
+                          hx-confirm="{{T "todo.confirm_blocked" (printf "%05d" .ID)}}">{{T "todo.mark_blocked"}}</button>
                 {{end}}
                 <button type="button" class="danger"
                         hx-post="/task/{{printf "%05d" .ID}}/delete"
                         hx-target="#todo-panel" hx-swap="innerHTML"
-                        hx-confirm="确认删除 #{{printf "%05d" .ID}} ？同时会删除 specs/{{printf "%05d" .ID}}.md（如存在）">删除任务</button>
+                        hx-confirm="{{T "todo.confirm_delete" (printf "%05d" .ID) (printf "%05d" .ID)}}">{{T "todo.delete_task"}}</button>
               </div>
             </div>
           </div>
@@ -195,7 +194,7 @@
       <span class="ico">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4V4z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/></svg>
       </span>
-      最新 JOURNAL
+      {{T "todo.latest_journal"}}
     </h2>
     {{if .Journals}}
       <div class="journal-list">
@@ -218,7 +217,7 @@
         {{end}}
       </div>
     {{else}}
-      <div class="empty-row">尚无最近完成的任务</div>
+      <div class="empty-row">{{T "todo.no_recent_journals"}}</div>
     {{end}}
   </div>
 </div>
@@ -228,7 +227,7 @@
 {{define "task_detail"}}
 <div class="card detail-card" data-selected-id="{{printf "%05d" .Task.ID}}">
   <div class="detail-head">
-    <button class="back" type="button" onclick="document.getElementById('detail-panel').innerHTML='<div class=\'card detail-empty\'>点击任意任务查看详情（spec / journal / blocker）。</div>'; document.querySelectorAll('.task.selected').forEach(t=>t.classList.remove('selected'));" title="返回">
+    <button class="back" type="button" data-empty="{{T "todo.empty_detail"}}" onclick="document.getElementById('detail-panel').innerHTML='<div class=\'card detail-empty\'>'+this.dataset.empty+'</div>'; document.querySelectorAll('.task.selected').forEach(t=>t.classList.remove('selected'));" title="{{T "common.back"}}">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
     </button>
     <div class="head-body">
@@ -246,10 +245,10 @@
       </div>
     </div>
     <div class="actions">
-      <button class="action-btn danger" type="button" title="删除任务"
+      <button class="action-btn danger" type="button" title="{{T "todo.delete_task"}}"
               hx-post="/task/{{printf "%05d" .Task.ID}}/delete"
               hx-target="#todo-panel" hx-swap="innerHTML"
-              hx-confirm="确认删除 #{{printf "%05d" .Task.ID}} ？同时会删除 specs/{{printf "%05d" .Task.ID}}.md（如存在）">
+              hx-confirm="{{T "todo.confirm_delete" (printf "%05d" .Task.ID) (printf "%05d" .Task.ID)}}">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
       </button>
     </div>
@@ -278,11 +277,11 @@
         {{if .EditingSpec}}
         <button class="btn-secondary small" type="button"
                 hx-get="/task/{{printf "%05d" .Task.ID}}"
-                hx-target="#detail-panel" hx-swap="innerHTML">取消</button>
+                hx-target="#detail-panel" hx-swap="innerHTML">{{T "common.cancel"}}</button>
         {{else}}
         <button class="btn-secondary small" type="button"
                 hx-get="/task/{{printf "%05d" .Task.ID}}/spec/edit"
-                hx-target="#detail-panel" hx-swap="innerHTML">编辑</button>
+                hx-target="#detail-panel" hx-swap="innerHTML">{{T "common.edit"}}</button>
         {{end}}
       </span>
     </div>
@@ -292,8 +291,8 @@
           hx-target="#detail-panel" hx-swap="innerHTML">
       <textarea name="body" rows="18" spellcheck="false">{{.SpecBody}}</textarea>
       <div class="spec-form-actions">
-        <span class="muted">直接编辑 `.spec/specs/{{printf "%05d" .Task.ID}}.md` 原文。</span>
-        <button type="submit" class="btn-primary small">保存 spec</button>
+        <span class="muted">{{T "todo.spec_edit_hint" (printf "%05d" .Task.ID)}}</span>
+        <button type="submit" class="btn-primary small">{{T "todo.save_spec"}}</button>
       </div>
     </form>
     {{else}}
@@ -321,23 +320,23 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
       </span>
       <span class="label">spec</span>
-      <span class="hint">这个任务还没有 spec，写点背景信息把它创建出来 →</span>
+      <span class="hint">{{T "todo.spec_hint"}}</span>
     </div>
     <form class="spec-form"
           hx-post="/task/{{printf "%05d" .Task.ID}}/spec"
           hx-target="#detail-panel" hx-swap="innerHTML">
-      <textarea name="body" rows="6" placeholder="## 背景&#10;&#10;…&#10;&#10;## 目标&#10;&#10;- …"></textarea>
+      <textarea name="body" rows="6" placeholder="{{T "todo.spec_placeholder"}}"></textarea>
       <div class="spec-form-actions">
-        <span class="muted">留空则使用默认模板（背景/目标/执行细节/验收）</span>
-        <button type="submit" class="btn-primary small">创建 spec</button>
+        <span class="muted">{{T "todo.spec_empty_hint"}}</span>
+        <button type="submit" class="btn-primary small">{{T "todo.create_spec"}}</button>
       </div>
     </form>
   </div>
   {{end}}
 
   <div class="detail-foot">
-    <span>创建于 {{or .Task.Paren "—"}}</span>
-    <span>更新时间 {{or .Task.Paren "—"}}</span>
+    <span>{{T "todo.created" (or .Task.Paren "—")}}</span>
+    <span>{{T "todo.updated" (or .Task.Paren "—")}}</span>
   </div>
 </div>
 {{end}}
@@ -352,7 +351,7 @@
     </div>
     <label class="docs-search">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-      <input type="search" placeholder="Search docs..." data-docs-search autocomplete="off">
+      <input type="search" placeholder="{{T "docs.search"}}" data-docs-search autocomplete="off">
       <kbd>Ctrl K</kbd>
     </label>
       {{if .DocsVM.Files}}
@@ -379,7 +378,7 @@
                     hx-target="#tab-content"
                     hx-swap="innerHTML"
                     title="{{.RelPath}}"
-                    {{if $.DocsVM.Editing}}hx-confirm="当前编辑未保存，切换文档将丢失修改，确定继续？"{{end}}>
+                    {{if $.DocsVM.Editing}}hx-confirm="{{T "docs.unsaved"}}"{{end}}>
               <span class="docs-file-icon">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               </span>
@@ -391,7 +390,7 @@
         {{end}}
       </div>
       {{else}}
-      <div class="empty-row">docs/ 下暂无 markdown 文档</div>
+      <div class="empty-row">{{T "docs.empty"}}</div>
       {{end}}
   </aside>
 
@@ -419,14 +418,14 @@
                   hx-get="/tab/docs?file={{urlquery .DocsVM.Selected.RelPath}}"
                   hx-target="#tab-content"
                   hx-swap="innerHTML">
-            取消
+            {{T "common.cancel"}}
           </button>
           {{else}}
           <button class="btn-secondary" type="button"
                   hx-get="/tab/docs?file={{urlquery .DocsVM.Selected.RelPath}}&edit=1"
                   hx-target="#tab-content"
                   hx-swap="innerHTML">
-            编辑
+            {{T "common.edit"}}
           </button>
           {{end}}
         </div>
@@ -440,15 +439,15 @@
         <input type="hidden" name="path" value="{{.DocsVM.Selected.RelPath}}">
         <textarea name="body">{{.DocsVM.EditorBody}}</textarea>
         <div class="spec-form-actions">
-          <span class="muted">保存后会直接回到预览模式。</span>
-          <button type="submit" class="btn-primary small">保存文档</button>
+          <span class="muted">{{T "docs.save_hint"}}</span>
+          <button type="submit" class="btn-primary small">{{T "docs.save"}}</button>
         </div>
       </form>
       {{else}}
       <div class="md-content docs-preview" data-md data-doc-path="{{.DocsVM.Selected.RelPath}}">{{.DocsVM.Content}}</div>
       {{end}}
       {{else}}
-      <div class="empty-row" style="height: 100%;">选择左侧文档开始阅读或编辑。</div>
+      <div class="empty-row" style="height: 100%;">{{T "docs.pick"}}</div>
       {{end}}
     </div>
   </section>
@@ -1013,10 +1012,10 @@
 <div class="docs-source-panel" data-docs-source-panel data-focus-line="{{.Line}}">
   <div class="docs-source-head">
     <div class="docs-source-title">
-      <strong>{{if .Name}}{{.Name}}{{else}}文件预览{{end}}</strong>
-      <span>{{if .RelPath}}{{.RelPath}}{{if .Line}}:{{.Line}}{{end}}{{else}}无法打开文件{{end}}</span>
+      <strong>{{if .Name}}{{.Name}}{{else}}{{T "docs.preview"}}{{end}}</strong>
+      <span>{{if .RelPath}}{{.RelPath}}{{if .Line}}:{{.Line}}{{end}}{{else}}{{T "docs.cannot_open"}}{{end}}</span>
     </div>
-    <button class="docs-source-close" type="button" data-docs-source-close title="关闭">×</button>
+    <button class="docs-source-close" type="button" data-docs-source-close title="{{T "common.close"}}">×</button>
   </div>
   {{if .Error}}
   <div class="chat-error docs-source-error">{{.Error}}</div>
@@ -1054,23 +1053,23 @@
         {{range .BuildVM.Targets}}
         <div class="target-item" data-target="{{.Name}}" data-runnable="{{.Runnable}}">
           <span class="name">{{.Name}}</span>
-          {{if .Built}}<span class="target-built" title="已构建">ready</span>{{end}}
+          {{if .Built}}<span class="target-built" title="{{T "build.built"}}">ready</span>{{end}}
         </div>
         {{end}}
       </div>
       <div class="build-run-controls">
         <form data-build-run-form hx-post="/jobs/build" hx-target="#log-panel-host" hx-swap="innerHTML">
           <input type="hidden" name="target" value="all">
-          <label class="build-opt compact" title="构建前重新运行 CMake configure">
+          <label class="build-opt compact" title="{{T "build.reconfigure"}}">
             <input type="checkbox" name="reconfigure" value="1">
             <span>Reconfigure</span>
           </label>
-          <button class="btn-secondary build-run-button" type="submit">构建</button>
+          <button class="btn-secondary build-run-button" type="submit">{{T "build.build"}}</button>
         </form>
         <form data-build-run-form hx-post="/jobs/run" hx-target="#log-panel-host" hx-swap="innerHTML">
           <input type="hidden" name="target" value="all">
           <input type="hidden" name="extraArgs" value="" id="run-extra-args">
-          <button class="btn-primary build-run-button" type="submit" data-run-button disabled>运行</button>
+          <button class="btn-primary build-run-button" type="submit" data-run-button disabled>{{T "build.run"}}</button>
         </form>
       </div>
     </div>
@@ -1082,10 +1081,10 @@
         <span class="ico">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
         </span>
-        命令行参数
+        {{T "build.args"}}
       </h2>
       <div id="run-args-list">
-        <div class="run-args-empty">选择可运行的 target 后显示参数</div>
+        <div class="run-args-empty">{{T "build.args_empty"}}</div>
       </div>
     </div>
   </aside>
@@ -1095,7 +1094,7 @@
       {{if .BuildVM.HasJob}}
         {{template "log_panel" .BuildVM.Latest}}
       {{else}}
-        {{template "log_panel_empty" "build / run"}}
+        {{template "log_panel_empty" "job.kind.build_run"}}
       {{end}}
     </div>
   </section>
@@ -1193,28 +1192,28 @@
   // Actual args from src/Options.cpp (cxxopts definitions).
   // Common args shared by gkNextRenderer, gkNextEditor, MagicaLego, gkNextBenchmark, gkNextVisualTest.
   const COMMON_ARGS = [
-    { flag: '--width',                    desc: '帧缓冲宽度',                           hasVal: true,  valDefault: '1920' },
-    { flag: '--height',                   desc: '帧缓冲高度',                           hasVal: true,  valDefault: '1080' },
-    { flag: '--load-scene',               desc: '加载场景（绝对路径或相对项目根目录）', hasVal: true,  valDefault: ''     },
-    { flag: '--hdri',                     desc: '加载 HDRI 文件路径',                   hasVal: true,  valDefault: ''     },
-    { flag: '--gpu',                      desc: '指定 GPU 索引',                        hasVal: true,  valDefault: '0'    },
-    { flag: '--present-mode',             desc: '呈现模式 (0=Immediate 1=Mailbox 2=FIFO 3=FIFORelaxed)', hasVal: true, valDefault: '3' },
-    { flag: '--locale',                   desc: '区域设置 (en / zhCN / RU)',            hasVal: true,  valDefault: 'en'   },
-    { flag: '--fullscreen',               desc: '切换全屏模式',                         hasVal: false                     },
-    { flag: '--savefile',                 desc: '基准测试完成后保存截图',               hasVal: false                     },
-    { flag: '--renderdoc',                desc: '抓取首个稳定场景帧并打开 RenderDoc（如可用）', hasVal: false                     },
-    { flag: '--forcesdr',                 desc: '即使支持 HDR 也强制使用 SDR',          hasVal: false                     },
-    { flag: '--reference',                desc: '开启参考渲染器对比模式',              hasVal: false                     },
-    { flag: '--forcenort',                desc: '强制不使用硬件光追',                   hasVal: false                     },
-    { flag: '--forcesoftgen',             desc: '强制环境立方体使用软件光追',           hasVal: false                     },
-    { flag: '--validation',               desc: '开启 Vulkan 校验层',                  hasVal: false                     },
-    { flag: '--no-shader-hotreload',      desc: '关闭 Slang 着色器热重载',             hasVal: false                     },
-    { flag: '--shader-hotreload-interval',desc: '着色器热重载轮询间隔（秒）',          hasVal: true,  valDefault: '0.5'  },
-    { flag: '--agent-validation',         desc: '开启 Agent 校验（自动截图）',         hasVal: false                     },
-    { flag: '--flappy-replay',            desc: '运行 Flappy 确定性回放',              hasVal: false                     },
-    { flag: '--test-gltf',                desc: '运行 glTF 健壮性测试',               hasVal: false                     },
-    { flag: '--test-gltf-filter',         desc: 'glTF 测试过滤器（部分名称匹配）',    hasVal: true,  valDefault: ''     },
-    { flag: '--update-baseline',          desc: '更新视觉测试基准图片',               hasVal: false                     },
+    { flag: '--width',                    hasVal: true,  valDefault: '1920' },
+    { flag: '--height',                   hasVal: true,  valDefault: '1080' },
+    { flag: '--load-scene',               hasVal: true,  valDefault: ''     },
+    { flag: '--hdri',                     hasVal: true,  valDefault: ''     },
+    { flag: '--gpu',                      hasVal: true,  valDefault: '0'    },
+    { flag: '--present-mode',             hasVal: true,  valDefault: '3'    },
+    { flag: '--locale',                   hasVal: true,  valDefault: 'en'   },
+    { flag: '--fullscreen',               hasVal: false                     },
+    { flag: '--savefile',                 hasVal: false                     },
+    { flag: '--renderdoc',                hasVal: false                     },
+    { flag: '--forcesdr',                 hasVal: false                     },
+    { flag: '--reference',                hasVal: false                     },
+    { flag: '--forcenort',                hasVal: false                     },
+    { flag: '--forcesoftgen',             hasVal: false                     },
+    { flag: '--validation',               hasVal: false                     },
+    { flag: '--no-shader-hotreload',      hasVal: false                     },
+    { flag: '--shader-hotreload-interval',hasVal: true,  valDefault: '0.5'  },
+    { flag: '--agent-validation',         hasVal: false                     },
+    { flag: '--flappy-replay',            hasVal: false                     },
+    { flag: '--test-gltf',                hasVal: false                     },
+    { flag: '--test-gltf-filter',         hasVal: true,  valDefault: ''     },
+    { flag: '--update-baseline',          hasVal: false                     },
   ];
 
   function lsKey(target) { return 'gnb-run-args-' + target; }
@@ -1255,7 +1254,7 @@
       ? COMMON_ARGS
       : null;
     if (!defs || defs.length === 0) {
-      list.innerHTML = '<div class="run-args-empty" style="color:var(--fg-dim);font-size:12px;font-style:italic;">该 target 无可配置参数</div>';
+      list.innerHTML = '<div class="run-args-empty" style="color:var(--fg-dim);font-size:12px;font-style:italic;">' + t('build.args_none') + '</div>';
       return;
     }
     const saved = loadSaved(target);
@@ -1268,13 +1267,13 @@
       item.className = 'arg-item';
       item.dataset.flag = def.flag;
       const valHtml = def.hasVal
-        ? '<div class="arg-val"><input type="text" value="' + val.replace(/&/g,'&amp;').replace(/"/g,'&quot;') + '" placeholder="值"></div>'
+        ? '<div class="arg-val"><input type="text" value="' + val.replace(/&/g,'&amp;').replace(/"/g,'&quot;') + '" placeholder="' + t('common.value') + '"></div>'
         : '';
       item.innerHTML =
         '<input type="checkbox"' + (checked ? ' checked' : '') + '>' +
         '<div class="arg-body">' +
           '<span class="arg-flag">' + def.flag + '</span>' +
-          '<span class="arg-desc">' + def.desc + '</span>' +
+          '<span class="arg-desc">' + t('runflag.' + def.flag) + '</span>' +
           valHtml +
         '</div>';
       item.querySelector('input[type="checkbox"]').addEventListener('change', () => saveCurrent(target));
@@ -1329,12 +1328,12 @@
         <div class="target-item {{if eq $target.Name $.RemoteVM.DefaultTarget}}selected{{else if and (eq $.RemoteVM.DefaultTarget "") (eq $index 0)}}selected{{end}}"
              data-target="{{$target.Name}}" data-runnable="true">
           <span class="name">{{$target.Name}}</span>
-          {{if $target.Built}}<span class="target-built" title="已构建">ready</span>{{end}}
+          {{if $target.Built}}<span class="target-built" title="{{T "build.built"}}">ready</span>{{end}}
         </div>
         {{end}}
       </div>
       <div class="archive-hint" style="margin-top: 10px;">
-        仅支持 Vulkan Video 硬件编码设备；不再回退 OpenH264。
+        {{T "remote.hw_hint"}}
       </div>
     </div>
   </aside>
@@ -1345,7 +1344,7 @@
         <span class="ico">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M7 19h10"/><path d="M12 17v2"/></svg>
         </span>
-        Remote 启动
+        {{T "remote.launch"}}
       </h2>
       <form class="remote-form" hx-post="/jobs/remote" hx-target="#log-panel-host" hx-swap="innerHTML">
         <input type="hidden" name="target" value="{{.RemoteVM.DefaultTarget}}">
@@ -1392,7 +1391,7 @@
             </select>
           </div>
           <div class="form-field remote-toggle-wrap">
-            <label class="build-opt compact remote-toggle" title="调试时保留本地窗口可见">
+            <label class="build-opt compact remote-toggle" title="{{T "remote.show_window"}}">
               <input type="checkbox" name="showWindow" value="1">
               <span>show window</span>
             </label>
@@ -1403,17 +1402,17 @@
           <input id="remote-extra-args" class="input" type="text" name="extraArgs" value="" placeholder="--validation --gpu 1">
         </div>
         <div class="archive-hint remote-note">
-          远端浏览器只连接 dashboard 启动出来的 target；主机需要让 <code>{{.RemoteVM.HTTPPort}}</code> / <code>{{.RemoteVM.SignalingPort}}</code> 端口在局域网内可达。
+          {{T "remote.lan_hint" (printf "%d" .RemoteVM.HTTPPort) (printf "%d" .RemoteVM.SignalingPort)}}
         </div>
         <div class="remote-preview" data-local-hosts="{{range $index, $host := .RemoteVM.LocalHosts}}{{if $index}},{{end}}{{$host}}{{end}}">
-          <div class="remote-preview-head">访问地址</div>
+          <div class="remote-preview-head">{{T "remote.access"}}</div>
           <div class="remote-preview-list" data-remote-url-preview>
             {{range .RemoteVM.URLPreview}}
             <code>{{.}}</code>
             {{end}}
           </div>
         </div>
-        <button class="btn-primary" type="submit">启动 Remote</button>
+        <button class="btn-primary" type="submit">{{T "remote.start"}}</button>
       </form>
     </div>
   </aside>
@@ -1425,26 +1424,26 @@
           <span class="ico">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M7 19h10"/><path d="M12 17v2"/></svg>
           </span>
-          内嵌串流
+          {{T "remote.embed"}}
         </div>
         <div class="remote-surface-actions">
-          <button class="btn-secondary remote-embed-btn" type="button" data-remote-action="connect">连接</button>
-          <button class="btn-secondary remote-embed-btn" type="button" data-remote-action="refresh">刷新</button>
-          <button class="btn-secondary remote-embed-btn" type="button" data-remote-action="clear">清空</button>
+          <button class="btn-secondary remote-embed-btn" type="button" data-remote-action="connect">{{T "remote.connect"}}</button>
+          <button class="btn-secondary remote-embed-btn" type="button" data-remote-action="refresh">{{T "remote.refresh"}}</button>
+          <button class="btn-secondary remote-embed-btn" type="button" data-remote-action="clear">{{T "remote.clear"}}</button>
         </div>
       </div>
       <div class="remote-surface-note">
-        在 dashboard 内直接操作 remote client。先点击画面获取焦点，键盘、鼠标和右键 pointer-lock 都会发到远端。
+        {{T "remote.embed_hint"}}
       </div>
       <div class="remote-diag" data-remote-diag>
         <div class="remote-diag-row"><span class="k">mode</span><span class="v" data-remote-diag-mode>dashboard proxy client</span></div>
-        <div class="remote-diag-row"><span class="k">target</span><span class="v" data-remote-diag-url>尚未连接</span></div>
+        <div class="remote-diag-row"><span class="k">target</span><span class="v" data-remote-diag-url>{{T "remote.not_connected"}}</span></div>
         <div class="remote-diag-row"><span class="k">client</span><span class="v" data-remote-diag-client>idle</span></div>
         <div class="remote-diag-row"><span class="k">config</span><span class="v" data-remote-diag-config>idle</span></div>
       </div>
       <div class="remote-frame-shell">
         <div class="remote-frame-placeholder" data-remote-placeholder>
-          启动 Remote 后，会在这里自动嵌入串流页面。
+          {{T "remote.placeholder"}}
         </div>
         <iframe
           class="remote-frame"
@@ -1462,7 +1461,7 @@
         {{if .RemoteVM.HasJob}}
           {{template "log_panel" .RemoteVM.Latest}}
         {{else}}
-          {{template "log_panel_empty" "remote"}}
+          {{template "log_panel_empty" "job.kind.remote"}}
         {{end}}
       </div>
     </div>
@@ -1832,8 +1831,8 @@
       delete shell.dataset.remoteUrl;
     }
     if (frame) frame.removeAttribute('src');
-    setRemotePlaceholder(page, '启动 Remote 后，会在这里自动嵌入串流页面。');
-    setRemoteDiag(page, 'url', '尚未连接');
+    setRemotePlaceholder(page, t('remote.placeholder'));
+    setRemoteDiag(page, 'url', t('remote.not_connected'));
     setRemoteDiag(page, 'client', 'idle');
     setRemoteDiag(page, 'config', 'idle');
     if (removeStorage) localStorage.removeItem(REMOTE_URL_STORAGE_KEY);
@@ -1861,7 +1860,7 @@
     const url = options.url || currentRemoteUrl(page);
     if (!url) return;
     stopRemoteRetry(page);
-    setRemotePlaceholder(page, '正在等待 remote host 就绪并嵌入到 dashboard ...');
+    setRemotePlaceholder(page, t('remote.waiting'));
     setRemoteDiag(page, 'client', 'waiting for iframe load');
     loadRemoteFrame(page, url, options.persist !== false);
     probeRemoteConfig(page, url);
@@ -1875,7 +1874,7 @@
       attempts += 1;
       if (attempts > 16) {
         stopRemoteRetry(page);
-        setRemotePlaceholder(page, `未等到 remote host 响应，可点“刷新”重试：${url}`);
+        setRemotePlaceholder(page, t('remote.timeout', url));
         setRemoteDiag(page, 'client', 'timeout waiting for iframe/client ready');
         return;
       }
@@ -1926,7 +1925,7 @@
     bindRemoteActions(page);
     const storedUrl = normalizeEmbedUrl(localStorage.getItem(REMOTE_URL_STORAGE_KEY));
     if (storedUrl) {
-      setRemotePlaceholder(page, '正在恢复上一次的 remote 串流页 ...');
+      setRemotePlaceholder(page, t('remote.restoring'));
       connectRemoteFrame(page, { url: storedUrl, persist: false });
     }
   }
@@ -1969,7 +1968,7 @@
       </h2>
       {{if not .TestVM.BinExists}}
         <div class="archive-hint" style="margin-bottom: 10px;">
-          未找到 <code>gkNextUnitTests</code>，请先在 Build 页构建该 target。
+          {{T "test.missing"}}
           {{if .TestVM.ListErr}}<br><span style="opacity:0.7; font-size: 11px;">{{.TestVM.ListErr}}</span>{{end}}
         </div>
       {{end}}
@@ -1987,7 +1986,7 @@
           </div>
           {{end}}
         </div>
-        <button class="btn-primary" type="submit" {{if not .TestVM.BinExists}}disabled style="opacity:0.5; cursor:not-allowed"{{end}}>运行测试</button>
+        <button class="btn-primary" type="submit" {{if not .TestVM.BinExists}}disabled style="opacity:0.5; cursor:not-allowed"{{end}}>{{T "test.run"}}</button>
       </form>
     </div>
   </aside>
@@ -1997,7 +1996,7 @@
       {{if .TestVM.HasJob}}
         {{template "log_panel" .TestVM.Latest}}
       {{else}}
-        {{template "log_panel_empty" "test"}}
+        {{template "log_panel_empty" "job.kind.test"}}
       {{end}}
     </div>
   </section>
@@ -2028,12 +2027,12 @@
       <button class="action-btn danger" type="button"
               hx-post="/jobs/{{.ID}}/cancel"
               hx-target="#log-panel-host" hx-swap="innerHTML"
-              hx-confirm="终止当前任务？"
-              title="终止">
+              hx-confirm="{{T "job.cancel_confirm"}}"
+              title="{{T "job.cancel"}}">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
       </button>
       {{end}}
-      <button class="action-btn" type="button" title="清空显示" onclick="this.closest('.log-panel').querySelector('.log-body').innerHTML='';">
+      <button class="action-btn" type="button" title="{{T "job.clear"}}" onclick="this.closest('.log-panel').querySelector('.log-body').innerHTML='';">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
       </button>
     </div>
@@ -2050,12 +2049,12 @@
       <span class="ico">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
       </span>
-      {{.}}
+      {{T .}}
     </div>
     <span class="spacer"></span>
-    <div class="meta"><span>暂无任务</span></div>
+    <div class="meta"><span>{{T "job.none"}}</span></div>
   </div>
-  <div class="log-empty">选择左侧 target 后点击按钮开始 —— 日志会在这里实时显示（带 ANSI 颜色）。</div>
+  <div class="log-empty">{{T "job.log_empty"}}</div>
 </div>
 {{end}}
 
@@ -2064,56 +2063,56 @@
 <div class="validation-page">
   <div class="validation-head">
     <div>
-      <h1>验证中心</h1>
-      <p>观察步骤与已完成截图；截图不是直播，也不代表画面已经被人工判定正确。</p>
+      <h1>{{T "validation.title"}}</h1>
+      <p>{{T "validation.blurb"}}</p>
     </div>
     <div class="validation-stats">
-      <div class="validation-stat"><span>运行中</span><strong>{{.ValidationVM.RunningCount}}</strong></div>
-      <div class="validation-stat danger"><span>失败</span><strong>{{.ValidationVM.FailedCount}}</strong></div>
-      <div class="validation-stat warning"><span>待审阅</span><strong>{{.ValidationVM.PendingCount}}</strong></div>
-      <div class="validation-stat issue"><span>发现问题</span><strong>{{.ValidationVM.IssueCount}}</strong></div>
+      <div class="validation-stat"><span>{{T "validation.running"}}</span><strong>{{.ValidationVM.RunningCount}}</strong></div>
+      <div class="validation-stat danger"><span>{{T "validation.failed"}}</span><strong>{{.ValidationVM.FailedCount}}</strong></div>
+      <div class="validation-stat warning"><span>{{T "validation.pending"}}</span><strong>{{.ValidationVM.PendingCount}}</strong></div>
+      <div class="validation-stat issue"><span>{{T "validation.issue"}}</span><strong>{{.ValidationVM.IssueCount}}</strong></div>
     </div>
   </div>
 
   {{if .ValidationVM.Flash}}<div class="validation-flash">{{.ValidationVM.Flash}}</div>{{end}}
-  {{if .ValidationVM.Error}}<div class="validation-error">验证记录读取失败：{{.ValidationVM.Error}}</div>{{end}}
+  {{if .ValidationVM.Error}}<div class="validation-error">{{T "validation.read_error" .ValidationVM.Error}}</div>{{end}}
 
   <div class="validation-layout">
     <section class="validation-script-col">
       <div class="card validation-scripts-card">
-        <div class="validation-card-title"><h2 class="card-title">验证脚本</h2><span class="tag-mini">{{len .ValidationVM.Scripts}}</span></div>
-        <div class="validation-script-hint">直接从这里启动仓库里的 <code>assets/agentscripts/*.json</code>。</div>
+        <div class="validation-card-title"><h2 class="card-title">{{T "validation.scripts"}}</h2><span class="tag-mini">{{len .ValidationVM.Scripts}}</span></div>
+        <div class="validation-script-hint">{{T "validation.script_hint"}}</div>
         <form class="validation-script-filter" hx-get="/tab/validation" hx-target="#tab-content" hx-swap="innerHTML">
           <input type="hidden" name="target" value="{{.ValidationVM.Target}}">
           <input type="hidden" name="status" value="{{.ValidationVM.Status}}">
-          <label>按 target
+          <label>{{T "validation.by_target"}}
             <select class="select" name="script-target" onchange="this.form.requestSubmit()">
-              <option value="">全部 target</option>
+              <option value="">{{T "validation.all_targets"}}</option>
               {{range .ValidationVM.ScriptTargets}}<option value="{{.}}" {{if eq . $.ValidationVM.ScriptTarget}}selected{{end}}>{{.}}</option>{{end}}
             </select>
           </label>
         </form>
         {{if .ValidationVM.ScriptsError}}
-        <div class="validation-error">脚本读取失败：{{.ValidationVM.ScriptsError}}</div>
+        <div class="validation-error">{{T "validation.scripts_error" .ValidationVM.ScriptsError}}</div>
         {{else if .ValidationVM.Scripts}}
         <div class="validation-script-list">
           {{range .ValidationVM.Scripts}}
           <div class="validation-script {{if not .Runnable}}disabled{{end}}">
             <div class="validation-script-head"><strong title="{{.Path}}">{{.Name}}</strong><span class="validation-badge">{{.Target}}</span></div>
-            <div class="validation-script-meta"><code>{{.Path}}</code>{{if .Scene}}<span title="{{.Scene}}">{{.Scene}}</span>{{end}}{{if .StepCount}}<span>{{.StepCount}} 步</span>{{end}}</div>
+            <div class="validation-script-meta"><code>{{.Path}}</code>{{if .Scene}}<span title="{{.Scene}}">{{.Scene}}</span>{{end}}{{if .StepCount}}<span>{{T "validation.steps" .StepCount}}</span>{{end}}</div>
             {{if .Runnable}}
             <div class="validation-script-actions">
-              <form hx-post="/validation/run-script" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="script" value="{{.Path}}"><input type="hidden" name="target" value="{{$.ValidationVM.Target}}"><input type="hidden" name="status" value="{{$.ValidationVM.Status}}"><input type="hidden" name="script-target" value="{{$.ValidationVM.ScriptTarget}}"><button class="btn-secondary small" type="submit">后台验证</button></form>
-              <form hx-post="/validation/run-script" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="script" value="{{.Path}}"><input type="hidden" name="visible" value="1"><input type="hidden" name="target" value="{{$.ValidationVM.Target}}"><input type="hidden" name="status" value="{{$.ValidationVM.Status}}"><input type="hidden" name="script-target" value="{{$.ValidationVM.ScriptTarget}}"><button class="btn-primary small" type="submit">可见验证</button></form>
+              <form hx-post="/validation/run-script" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="script" value="{{.Path}}"><input type="hidden" name="target" value="{{$.ValidationVM.Target}}"><input type="hidden" name="status" value="{{$.ValidationVM.Status}}"><input type="hidden" name="script-target" value="{{$.ValidationVM.ScriptTarget}}"><button class="btn-secondary small" type="submit">{{T "validation.bg"}}</button></form>
+              <form hx-post="/validation/run-script" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="script" value="{{.Path}}"><input type="hidden" name="visible" value="1"><input type="hidden" name="target" value="{{$.ValidationVM.Target}}"><input type="hidden" name="status" value="{{$.ValidationVM.Status}}"><input type="hidden" name="script-target" value="{{$.ValidationVM.ScriptTarget}}"><button class="btn-primary small" type="submit">{{T "validation.visible"}}</button></form>
             </div>
             {{else}}
-            <div class="validation-script-error">{{or .Error "当前不可运行"}}</div>
+            <div class="validation-script-error">{{or .Error (T "validation.unavailable")}}</div>
             {{end}}
           </div>
           {{end}}
         </div>
         {{else}}
-        <div class="validation-muted">尚未找到 agentscript。</div>
+        <div class="validation-muted">{{T "validation.no_scripts"}}</div>
         {{end}}
       </div>
     </section>
@@ -2122,24 +2121,24 @@
       <div class="card validation-filter-card">
         <form class="validation-filters" hx-get="/tab/validation" hx-target="#tab-content" hx-swap="innerHTML">
           <input type="hidden" name="script-target" value="{{.ValidationVM.ScriptTarget}}">
-          <label>target <input class="input" name="target" value="{{.ValidationVM.Target}}" placeholder="全部 target"></label>
-          <label>状态
+          <label>target <input class="input" name="target" value="{{.ValidationVM.Target}}" placeholder="{{T "validation.all_targets"}}"></label>
+          <label>{{T "validation.status"}}
             <select class="select" name="status">
-              <option value="">全部</option>
-              <option value="running" {{if eq .ValidationVM.Status "running"}}selected{{end}}>运行中</option>
-              <option value="passed" {{if eq .ValidationVM.Status "passed"}}selected{{end}}>采集完成</option>
-              <option value="failed" {{if eq .ValidationVM.Status "failed"}}selected{{end}}>失败</option>
-              <option value="canceled" {{if eq .ValidationVM.Status "canceled"}}selected{{end}}>已取消</option>
-              <option value="interrupted" {{if eq .ValidationVM.Status "interrupted"}}selected{{end}}>失联待确认</option>
-              <option value="actionable" {{if eq .ValidationVM.Status "actionable"}}selected{{end}}>待处理</option>
+              <option value="">{{T "validation.status.all"}}</option>
+              <option value="running" {{if eq .ValidationVM.Status "running"}}selected{{end}}>{{T "validation.status.running"}}</option>
+              <option value="passed" {{if eq .ValidationVM.Status "passed"}}selected{{end}}>{{T "validation.status.passed"}}</option>
+              <option value="failed" {{if eq .ValidationVM.Status "failed"}}selected{{end}}>{{T "validation.status.failed"}}</option>
+              <option value="canceled" {{if eq .ValidationVM.Status "canceled"}}selected{{end}}>{{T "validation.status.canceled"}}</option>
+              <option value="interrupted" {{if eq .ValidationVM.Status "interrupted"}}selected{{end}}>{{T "validation.status.interrupted"}}</option>
+              <option value="actionable" {{if eq .ValidationVM.Status "actionable"}}selected{{end}}>{{T "validation.status.actionable"}}</option>
             </select>
           </label>
-          <button class="btn-secondary small" type="submit">筛选</button>
+          <button class="btn-secondary small" type="submit">{{T "validation.filter"}}</button>
         </form>
       </div>
 
       <div class="card validation-runs-card">
-        <div class="validation-card-title"><h2 class="card-title">运行记录</h2><span class="tag-mini">{{len .ValidationVM.Runs}}</span></div>
+        <div class="validation-card-title"><h2 class="card-title">{{T "validation.runs"}}</h2><span class="tag-mini">{{len .ValidationVM.Runs}}</span></div>
         {{if .ValidationVM.Runs}}
         <div class="validation-run-list">
           {{range .ValidationVM.Runs}}
@@ -2157,14 +2156,14 @@
         </div>
         {{else}}
         <div class="validation-empty">
-          <strong>还没有验证记录</strong>
-          <span>先运行 <code>gnb validate --script assets/agentscripts/smoke.agentscript.json</code>，记录会自动出现在这里。</span>
+          <strong>{{T "validation.empty"}}</strong>
+          <span>{{T "validation.empty_hint" "<code>gnb validate --script assets/agentscripts/smoke.agentscript.json</code>" | safeHTML}}</span>
         </div>
         {{end}}
         {{if .ValidationVM.HasMore}}
-        <a class="btn-secondary validation-more" href="/?tab=validation&target={{.ValidationVM.Target}}&status={{.ValidationVM.Status}}&script-target={{.ValidationVM.ScriptTarget}}&offset={{add .ValidationVM.Offset 50}}">加载更早的 50 条</a>
+        <a class="btn-secondary validation-more" href="/?tab=validation&target={{.ValidationVM.Target}}&status={{.ValidationVM.Status}}&script-target={{.ValidationVM.ScriptTarget}}&offset={{add .ValidationVM.Offset 50}}">{{T "validation.more"}}</a>
         {{end}}
-        {{if gt .ValidationVM.UnreadableCount 0}}<div class="validation-unreadable">另有 {{.ValidationVM.UnreadableCount}} 条记录不可读，未影响其余记录展示。</div>{{end}}
+        {{if gt .ValidationVM.UnreadableCount 0}}<div class="validation-unreadable">{{T "validation.unreadable" .ValidationVM.UnreadableCount}}</div>{{end}}
       </div>
     </section>
 
@@ -2175,43 +2174,43 @@
           <div><div class="validation-kicker">{{.ValidationVM.Selected.Record.Kind}} · {{.ValidationVM.Selected.Record.RunID}}</div><h2>{{.ValidationVM.Selected.Record.Name}}</h2></div>
           <span class="validation-badge large status-{{.ValidationVM.Selected.Record.Status}}">{{.ValidationVM.Selected.StatusLabel}}</span>
         </div>
-        <div class="validation-detail-meta"><span>target <code>{{.ValidationVM.Selected.Record.Target}}</code></span><span>开始 {{.ValidationVM.Selected.StartedLabel}}</span><span>耗时 {{.ValidationVM.Selected.Duration}}</span></div>
+        <div class="validation-detail-meta"><span>target <code>{{.ValidationVM.Selected.Record.Target}}</code></span><span>{{T "validation.started"}} {{.ValidationVM.Selected.StartedLabel}}</span><span>{{T "validation.duration"}} {{.ValidationVM.Selected.Duration}}</span></div>
 
         {{if .ValidationVM.Selected.FailureSummary}}
-        <div class="validation-failure-box"><div class="validation-section-label">失败原因 · {{.ValidationVM.Selected.Record.Phase}}</div><pre>{{.ValidationVM.Selected.FailureSummary}}</pre></div>
+        <div class="validation-failure-box"><div class="validation-section-label">{{T "validation.failure" .ValidationVM.Selected.Record.Phase}}</div><pre>{{.ValidationVM.Selected.FailureSummary}}</pre></div>
         {{end}}
 
         {{if .ValidationVM.Selected.Review.Message}}
-        <div class="validation-review-box {{if .ValidationVM.Selected.HasIssue}}issue{{end}}"><div class="validation-section-label">问题备注 · {{.ValidationVM.Selected.ReviewLabel}}</div><p>{{.ValidationVM.Selected.Review.Message}}</p><small>{{.ValidationVM.Selected.Review.Author}} · {{.ValidationVM.Selected.Review.UpdatedAt.Local.Format "2006-01-02 15:04"}}</small></div>
+        <div class="validation-review-box {{if .ValidationVM.Selected.HasIssue}}issue{{end}}"><div class="validation-section-label">{{T "validation.review_notes" .ValidationVM.Selected.ReviewLabel}}</div><p>{{.ValidationVM.Selected.Review.Message}}</p><small>{{.ValidationVM.Selected.Review.Author}} · {{.ValidationVM.Selected.Review.UpdatedAt.Local.Format "2006-01-02 15:04"}}</small></div>
         {{end}}
 
         {{if ne .ValidationVM.Selected.Record.Status "running"}}
         <div class="validation-actions">
-          <form hx-post="/validation/{{.ValidationVM.Selected.Record.RunID}}/rerun" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="target" value="{{.ValidationVM.Target}}"><input type="hidden" name="status" value="{{.ValidationVM.Status}}"><input type="hidden" name="script-target" value="{{.ValidationVM.ScriptTarget}}"><button class="btn-secondary" type="submit">后台重跑</button></form>
-          <form hx-post="/validation/{{.ValidationVM.Selected.Record.RunID}}/rerun" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="visible" value="1"><input type="hidden" name="target" value="{{.ValidationVM.Target}}"><input type="hidden" name="status" value="{{.ValidationVM.Status}}"><input type="hidden" name="script-target" value="{{.ValidationVM.ScriptTarget}}"><button class="btn-primary" type="submit">可见重跑</button></form>
+          <form hx-post="/validation/{{.ValidationVM.Selected.Record.RunID}}/rerun" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="target" value="{{.ValidationVM.Target}}"><input type="hidden" name="status" value="{{.ValidationVM.Status}}"><input type="hidden" name="script-target" value="{{.ValidationVM.ScriptTarget}}"><button class="btn-secondary" type="submit">{{T "validation.rerun_bg"}}</button></form>
+          <form hx-post="/validation/{{.ValidationVM.Selected.Record.RunID}}/rerun" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="visible" value="1"><input type="hidden" name="target" value="{{.ValidationVM.Target}}"><input type="hidden" name="status" value="{{.ValidationVM.Status}}"><input type="hidden" name="script-target" value="{{.ValidationVM.ScriptTarget}}"><button class="btn-primary" type="submit">{{T "validation.rerun_vis"}}</button></form>
         </div>
         {{end}}
 
         <div class="validation-review-panel">
-          <div class="validation-section-label">审阅：{{.ValidationVM.Selected.ReviewLabel}}</div>
+          <div class="validation-section-label">{{T "validation.review" .ValidationVM.Selected.ReviewLabel}}</div>
           <div class="validation-review-actions">
-            <form hx-post="/validation/{{.ValidationVM.Selected.Record.RunID}}/review" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="status" value="accepted"><button class="btn-secondary small" type="submit">已看过，无问题</button></form>
-            <form class="validation-issue-form" hx-post="/validation/{{.ValidationVM.Selected.Record.RunID}}/review" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="status" value="issue">{{if .ValidationVM.Selected.Screenshots}}<select class="select" name="screenshot"><option value="">关联截图</option>{{range .ValidationVM.Selected.Screenshots}}<option value="{{.Path}}">{{.Name}}</option>{{end}}</select>{{end}}<input class="input" name="message" value="" placeholder="记录视觉或行为问题"><button class="btn-secondary small danger" type="submit">记录问题</button></form>
+            <form hx-post="/validation/{{.ValidationVM.Selected.Record.RunID}}/review" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="status" value="accepted"><button class="btn-secondary small" type="submit">{{T "validation.accept"}}</button></form>
+            <form class="validation-issue-form" hx-post="/validation/{{.ValidationVM.Selected.Record.RunID}}/review" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="status" value="issue">{{if .ValidationVM.Selected.Screenshots}}<select class="select" name="screenshot"><option value="">{{T "validation.link_shot"}}</option>{{range .ValidationVM.Selected.Screenshots}}<option value="{{.Path}}">{{.Name}}</option>{{end}}</select>{{end}}<input class="input" name="message" value="" placeholder="{{T "validation.issue_ph"}}"><button class="btn-secondary small danger" type="submit">{{T "validation.record_issue"}}</button></form>
           </div>
         </div>
 
         {{template "validation_steps_panel" .ValidationVM.Selected}}
 
         {{if .ValidationVM.Selected.Screenshots}}
-        <div class="validation-section-label">截图（已完成产物）</div>
+        <div class="validation-section-label">{{T "validation.shots"}}</div>
         <div class="validation-screenshots">{{range .ValidationVM.Selected.Screenshots}}<a href="{{.URL}}" target="_blank"><img src="{{.URL}}" alt="{{.Name}}"><span>{{.Name}}</span></a>{{end}}</div>
         {{end}}
 
-        <details class="validation-log"><summary>日志尾部（{{if .ValidationVM.Selected.LogError}}不可读{{else}}只读尾部{{end}}）</summary>{{if .ValidationVM.Selected.LogError}}<div class="validation-muted">{{.ValidationVM.Selected.LogError}}</div>{{else}}<pre>{{.ValidationVM.Selected.LogTail}}</pre>{{end}}<a href="/validation/{{.ValidationVM.Selected.Record.RunID}}/log">下载完整日志</a></details>
-        <details class="validation-technical"><summary>执行参数与证据目录</summary><div class="validation-code-block"><div>evidence: {{.ValidationVM.Selected.EvidenceDir}}</div>{{range .ValidationVM.Selected.Record.Parameters}}<code>{{.}}</code> {{end}}</div></details>
+        <details class="validation-log"><summary>{{T "validation.log" (or (and .ValidationVM.Selected.LogError (T "validation.log.unreadable")) (T "validation.log.readonly"))}}</summary>{{if .ValidationVM.Selected.LogError}}<div class="validation-muted">{{.ValidationVM.Selected.LogError}}</div>{{else}}<pre>{{.ValidationVM.Selected.LogTail}}</pre>{{end}}<a href="/validation/{{.ValidationVM.Selected.Record.RunID}}/log">{{T "validation.log_download"}}</a></details>
+        <details class="validation-technical"><summary>{{T "validation.tech"}}</summary><div class="validation-code-block"><div>evidence: {{.ValidationVM.Selected.EvidenceDir}}</div>{{range .ValidationVM.Selected.Record.Parameters}}<code>{{.}}</code> {{end}}</div></details>
       </div>
       {{else}}
-      <div class="card validation-empty validation-detail-empty"><strong>选择一条运行记录</strong><span>终态运行可后台重跑或可见重跑；有截图的运行默认需要人工审阅。</span></div>
+      <div class="card validation-empty validation-detail-empty"><strong>{{T "validation.pick"}}</strong><span>{{T "validation.pick_hint"}}</span></div>
       {{end}}
     </section>
   </div>
@@ -2325,7 +2324,7 @@
 {{define "validation_steps_panel"}}
 <div id="validation-steps-card" class="validation-steps-card"
      {{if eq .Record.Status "running"}}hx-get="/validation/{{.Record.RunID}}/steps" hx-trigger="every 1s" hx-target="this" hx-swap="outerHTML"{{end}}>
-  <div class="validation-section-label">步骤{{if .Record.CurrentStage}} · {{.Record.CurrentStage}}{{end}}</div>
+  <div class="validation-section-label">{{T "validation.steps_label"}}{{if .Record.CurrentStage}} · {{.Record.CurrentStage}}{{end}}</div>
   {{if .Record.Steps}}
   <div class="validation-steps">
     {{range .Record.Steps}}
@@ -2338,7 +2337,7 @@
     </div>
     {{end}}
   </div>
-  {{else}}<div class="validation-muted">尚未完成任何步骤。</div>{{end}}
+  {{else}}<div class="validation-muted">{{T "validation.no_steps"}}</div>{{end}}
 </div>
 {{end}}
 
@@ -2388,13 +2387,13 @@
                 hx-include="#chat-provider,#chat-profile,#chat-model,#chat-session-id"
                 hx-target="#chat-panel"
                 hx-swap="outerHTML">
-            <button class="btn-secondary" type="submit" title="启动或切换到当前选择的模型">Serve</button>
+            <button class="btn-secondary" type="submit" title="{{T "chat.serve"}}">Serve</button>
           </form>
           <form hx-post="/chat/stop"
                 hx-include="#chat-provider,#chat-profile,#chat-model,#chat-session-id"
                 hx-target="#chat-panel"
                 hx-swap="outerHTML">
-            <button class="btn-secondary danger" type="submit" title="停止后台 llama-server" {{if not .ServerRunning}}disabled{{end}}>Stop</button>
+            <button class="btn-secondary danger" type="submit" title="{{T "chat.stop"}}" {{if not .ServerRunning}}disabled{{end}}>Stop</button>
           </form>
         </div>
 
@@ -2422,7 +2421,7 @@
                 hx-include="#chat-provider,#chat-profile,#chat-model"
                 hx-target="#chat-panel"
                 hx-swap="outerHTML">
-            <button class="icon-btn" type="submit" title="新建对话" aria-label="新建对话">+</button>
+            <button class="icon-btn" type="submit" title="{{T "chat.new"}}" aria-label="{{T "chat.new"}}">+</button>
           </form>
         </h2>
         <div class="chat-session-list">
@@ -2445,14 +2444,14 @@
                 <input type="hidden" name="model" value="{{$.SelectedModel}}">
 				<input type="hidden" name="provider" value="{{$.SelectedProvider}}">
 				<input type="hidden" name="profile" value="{{$.SelectedProfile}}">
-                <button class="icon-btn" type="submit" title="归档对话" aria-label="归档对话">
+                <button class="icon-btn" type="submit" title="{{T "chat.archive"}}" aria-label="{{T "chat.archive"}}">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
                 </button>
               </form>
             </div>
             {{end}}
           {{else}}
-            <div class="chat-session-empty">暂无历史对话</div>
+            <div class="chat-session-empty">{{T "chat.empty_sessions"}}</div>
           {{end}}
         </div>
       </div>
@@ -2483,7 +2482,7 @@
             </div>
           {{end}}
         {{else}}
-          <div class="chat-empty">选择 provider 和模型后直接提问；LocalLlama 会按需启动。</div>
+          <div class="chat-empty">{{T "chat.empty"}}</div>
         {{end}}
       </div>
 
@@ -2498,22 +2497,22 @@
             class="chat-composer"
             data-chat-form>
         <input id="chat-session-id" type="hidden" name="session_id" value="{{.SessionID}}">
-        <textarea id="chat-input" class="input" name="message" placeholder="输入消息" required></textarea>
+        <textarea id="chat-input" class="input" name="message" placeholder="{{T "chat.placeholder"}}" required></textarea>
         <div class="chat-actions">
-          <button class="btn-primary" type="submit">发送</button>
+          <button class="btn-primary" type="submit">{{T "chat.send"}}</button>
           <label class="chat-thinking-opt">
             <input id="chat-thinking" type="checkbox" name="thinking" value="1">
-            <span>思考模式</span>
+            <span>{{T "chat.thinking"}}</span>
           </label>
-          <label class="chat-thinking-opt" title="仅调用固定内存诊断工具，不访问仓库、Shell、网络或场景">
+          <label class="chat-thinking-opt" title="{{T "chat.tool_probe"}}">
             <input id="chat-tool-probe" type="checkbox" name="tool_probe" value="1">
             <span>Tool Call Smoke</span>
           </label>
           <label class="chat-token-opt">
-            <span>输出上限</span>
+            <span>{{T "chat.max_tokens"}}</span>
             <input id="chat-max-tokens" type="number" name="max_tokens" min="256" max="32768" step="256" value="4096">
           </label>
-          <div class="chat-context-compact" data-chat-context title="包含 AGENTS.md 标准上下文的估算 token 用量">
+          <div class="chat-context-compact" data-chat-context title="{{T "chat.context"}}">
             <div class="chat-context-ring" data-chat-context-fill style="--ctx-pct: {{.Context.Percent}}%;">
               <span>{{.Context.Percent}}%</span>
             </div>
@@ -2546,16 +2545,16 @@
         <span class="ico">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4V4z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/></svg>
         </span>
-        最近提交
+        {{T "git.recent"}}
         <span class="count">{{len .GitVM.Commits}}</span>
         {{if .GitVM.RemoteCommits}}
-          <span class="remote-commit-count">远端 +{{len .GitVM.RemoteCommits}}</span>
+          <span class="remote-commit-count">{{T "git.remote_ahead" (len .GitVM.RemoteCommits)}}</span>
         {{end}}
       </h2>
       {{if or .GitVM.RemoteCommits .GitVM.Status.Dirty .GitVM.Commits}}
         <div class="commit-list">
           {{if .GitVM.RemoteCommits}}
-          <div class="commit-list-label">远端未拉取 · {{.GitVM.Status.Upstream}}</div>
+          <div class="commit-list-label">{{T "git.remote_unpulled" .GitVM.Status.Upstream}}</div>
           {{range .GitVM.RemoteCommits}}
           <div class="commit-row remote-commit-row"
                data-git-selectable
@@ -2568,12 +2567,12 @@
             <span class="author">{{.Author}}</span>
             <span class="subject">{{.Subject}}</span>
             <button class="commit-reset" type="button"
-                    title="reset --hard 到此远端提交"
-                    aria-label="reset --hard 到提交 {{.Hash}}"
+                    title="{{T "git.reset_remote"}}"
+                    aria-label="{{T "git.reset_remote_aria" .Hash}}"
                     hx-post="/git/reset"
                     hx-vals='{"ref":"{{.Full}}"}'
                     hx-target="#git-tab-body" hx-swap="innerHTML"
-                    hx-confirm="⚠️ 执行 git reset --hard {{.Hash}}？这会让当前分支直接指向这个远端提交，并丢弃当前未提交改动。">
+                    hx-confirm="{{T "git.reset_remote_confirm" .Hash}}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
@@ -2585,7 +2584,7 @@
           {{end}}
 
           {{if .GitVM.Status.Dirty}}
-          <div class="commit-list-label">本地工作区</div>
+          <div class="commit-list-label">{{T "git.local_worktree"}}</div>
           <div class="commit-row local-change-row selected"
                data-git-selectable
                hx-get="/git/local-changes"
@@ -2594,13 +2593,13 @@
             <span class="hash">LOCAL</span>
             <span class="date">{{if .GitVM.Status.Branch}}{{.GitVM.Status.Branch}}{{else}}detached{{end}}</span>
             <span class="author">working tree</span>
-            <span class="subject">本地修改 · {{len .GitVM.Status.DirtyFiles}} files · {{dirtySummary .GitVM.Status.DirtyFiles}}</span>
+            <span class="subject">{{T "git.local_changes" (len .GitVM.Status.DirtyFiles) (dirtySummary .GitVM.Status.DirtyFiles)}}</span>
             <span class="commit-row-spacer"></span>
           </div>
           {{end}}
 
           {{if .GitVM.Commits}}
-          <div class="commit-list-label">本地提交</div>
+          <div class="commit-list-label">{{T "git.local_commits"}}</div>
           {{range .GitVM.Commits}}
           <div class="commit-row"
                data-git-selectable
@@ -2613,12 +2612,12 @@
             <span class="author">{{.Author}}</span>
             <span class="subject">{{.Subject}}</span>
             <button class="commit-reset" type="button"
-                    title="reset --hard 到此提交"
-                    aria-label="reset --hard 到提交 {{.Hash}}"
+                    title="{{T "git.reset_local"}}"
+                    aria-label="{{T "git.reset_local_aria" .Hash}}"
                     hx-post="/git/reset"
                     hx-vals='{"ref":"{{.Full}}"}'
                     hx-target="#git-tab-body" hx-swap="innerHTML"
-                    hx-confirm="⚠️ 执行 git reset --hard {{.Hash}}？这会丢弃当前分支所有未提交改动以及 HEAD 之后到此 commit 之间的所有提交。">
+                    hx-confirm="{{T "git.reset_local_confirm" .Hash}}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
@@ -2630,7 +2629,7 @@
           {{end}}
         </div>
       {{else}}
-        <div class="empty-row">暂无提交</div>
+        <div class="empty-row">{{T "git.no_commits"}}</div>
       {{end}}
     </div>
   </section>
@@ -2640,7 +2639,7 @@
       {{if .GitVM.Status.Dirty}}
         {{template "git_commit_card" .}}
       {{else}}
-      <div class="card detail-empty">点击 hash 或 subject 查看完整 message；点击 ⤺ 重置 HEAD。</div>
+      <div class="card detail-empty">{{T "git.commit_hint"}}</div>
       {{end}}
     </div>
   </section>
@@ -2654,22 +2653,22 @@
     <span class="ico" style="background: rgba(99, 102, 241, 0.12); color: var(--accent);">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><line x1="2" y1="12" x2="8" y2="12"/><line x1="16" y1="12" x2="22" y2="12"/></svg>
     </span>
-    新提交
+    {{T "git.new_commit"}}
     {{if .GitVM.Status.Dirty}}
       <span class="count">{{len .GitVM.Status.DirtyFiles}}</span>
     {{end}}
   </h2>
 
   {{if .GitVM.Status.Dirty}}
-    <div class="commit-card-hint">分支 <code>{{if .GitVM.Status.Branch}}{{.GitVM.Status.Branch}}{{else}}(detached){{end}}</code> · 工作区 <span class="dirty">dirty</span>（{{.GitVM.Status.DirtyHint}}）</div>
+    <div class="commit-card-hint">{{T "git.branch"}} <code>{{if .GitVM.Status.Branch}}{{.GitVM.Status.Branch}}{{else}}(detached){{end}}</code> · {{T "git.worktree"}} <span class="dirty">dirty</span>（{{.GitVM.Status.DirtyHint}}）</div>
   {{else}}
-    <div class="commit-card-hint">分支 <code>{{if .GitVM.Status.Branch}}{{.GitVM.Status.Branch}}{{else}}(detached){{end}}</code> · 工作区 <span class="clean">clean</span></div>
+    <div class="commit-card-hint">{{T "git.branch"}} <code>{{if .GitVM.Status.Branch}}{{.GitVM.Status.Branch}}{{else}}(detached){{end}}</code> · {{T "git.worktree"}} <span class="clean">clean</span></div>
   {{end}}
 
   {{if .GitVM.Status.Dirty}}
   <div class="stage-panel">
     <div class="stage-panel-head">
-      <span>文件 stage</span>
+      <span>{{T "git.stage_files"}}</span>
       <span>{{dirtySummary .GitVM.Status.DirtyFiles}}</span>
     </div>
     <div class="stage-actions">
@@ -2706,11 +2705,11 @@
   {{end}}
 
   <form class="commit-card-form" onsubmit="return false;">
-    <textarea id="commit-msg-textarea" name="message" class="input commit-msg-textarea" rows="10" placeholder="点击 AI 补全让本地 LLM 根据 diff 生成；也可手动编辑"></textarea>
+    <textarea id="commit-msg-textarea" name="message" class="input commit-msg-textarea" rows="10" placeholder="{{T "git.msg_placeholder"}}"></textarea>
 
     <label class="build-opt commit-card-opt">
       <input type="checkbox" name="stage_all" value="1">
-      <span>提交前 <code>git add -A</code></span>
+      <span>{{T "git.stage_all"}}</span>
     </label>
 
     <div class="commit-card-actions">
@@ -2720,16 +2719,16 @@
               hx-swap="outerHTML"
               hx-disabled-elt="this"
               hx-indicator=".commit-ai-indicator"
-              title="调用本地 LLM 根据 diff 生成 commit message（首次会加载模型）">
-        <span class="ai-btn-label">✨ AI 补全</span>
-        <span class="commit-ai-indicator htmx-indicator">生成中…</span>
+              title="{{T "git.ai"}}">
+        <span class="ai-btn-label">{{T "git.ai"}}</span>
+        <span class="commit-ai-indicator htmx-indicator">{{T "git.ai_working"}}</span>
       </button>
       <button class="btn-primary small" type="button"
               hx-post="/git/commit"
               hx-include="closest form"
               hx-target="#git-tab-body" hx-swap="innerHTML"
-              hx-confirm="使用当前 commit message 创建提交？"
-              {{if not .GitVM.Status.Dirty}}disabled title="工作区无改动"{{end}}>
+              hx-confirm="{{T "git.commit_confirm"}}"
+              {{if not .GitVM.Status.Dirty}}disabled title="{{T "git.clean_title"}}"{{end}}>
         Commit
       </button>
     </div>
@@ -2751,16 +2750,16 @@
     <span class="ico">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M6 15V9a6 6 0 0 1 6-6"/><path d="M18 9v3a6 6 0 0 1-6 6"/></svg>
     </span>
-    当前状态
+    {{T "git.status"}}
   </h2>
-  <div class="git-status-row"><span class="k">分支</span><span class="v">{{if .GitVM.Status.Branch}}{{.GitVM.Status.Branch}}{{else}}(detached){{end}}</span></div>
+  <div class="git-status-row"><span class="k">{{T "git.branch"}}</span><span class="v">{{if .GitVM.Status.Branch}}{{.GitVM.Status.Branch}}{{else}}(detached){{end}}</span></div>
   <div class="git-status-row"><span class="k">HEAD</span><span class="v">{{.GitVM.Status.Head}}</span></div>
   {{if .GitVM.Status.Upstream}}
   <div class="git-status-row"><span class="k">upstream</span><span class="v">{{.GitVM.Status.Upstream}}</span></div>
   <div class="git-status-row"><span class="k">ahead / behind</span><span class="v">+{{.GitVM.Status.Ahead}} / -{{.GitVM.Status.Behind}}</span></div>
   {{end}}
   <div class="git-status-row">
-    <span class="k">工作区</span>
+    <span class="k">{{T "git.worktree"}}</span>
     {{if .GitVM.Status.Dirty}}
       <span class="v dirty">dirty ({{.GitVM.Status.DirtyHint}})</span>
     {{else}}
@@ -2772,7 +2771,7 @@
     <button class="btn-primary small" type="button"
             hx-post="/git/pull"
             hx-target="#git-tab-body" hx-swap="innerHTML"
-            hx-confirm="对当前分支执行 git pull --ff-only？">Pull (--ff-only)</button>
+            hx-confirm="{{T "git.pull_confirm"}}">Pull (--ff-only)</button>
     <button class="btn-secondary" type="button"
             hx-post="/git/fetch"
             hx-target="#git-tab-body" hx-swap="innerHTML">Fetch</button>
@@ -2784,7 +2783,7 @@
     <span class="ico">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="6" y1="9" x2="6" y2="15"/><path d="M9 6h7a3 3 0 0 1 3 3v3"/><path d="M19 21l3-3-3-3"/></svg>
     </span>
-    本地分支
+    {{T "git.local_branches"}}
     <span class="count">{{len .GitVM.Branches}}</span>
   </h2>
   {{range .GitVM.Branches}}
@@ -2797,7 +2796,7 @@
             hx-post="/git/switch"
             hx-vals='{"branch":"{{.Name}}"}'
             hx-target="#git-tab-body" hx-swap="innerHTML"
-            hx-confirm="切换到分支 {{.Name}}？（脏工作区会被拒绝）">switch</button>
+            hx-confirm="{{T "git.switch_confirm" .Name}}">switch</button>
     {{end}}
   </div>
   {{end}}
@@ -2805,7 +2804,7 @@
         hx-post="/git/create-branch"
         hx-target="#git-tab-body" hx-swap="innerHTML"
         hx-on::after-request="this.reset()">
-    <input class="input" type="text" name="name" placeholder="新分支名" required style="flex: 1; min-width: 0; padding: 6px 8px; font-size: 12px;">
+    <input class="input" type="text" name="name" placeholder="{{T "git.new_branch_ph"}}" required style="flex: 1; min-width: 0; padding: 6px 8px; font-size: 12px;">
     <button class="btn-secondary" type="submit" style="padding: 6px 10px;">new</button>
   </form>
 </div>
@@ -2816,7 +2815,7 @@
     <span class="ico">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12a10 10 0 1 0 20 0 10 10 0 0 0-20 0z"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
     </span>
-    远程分支
+    {{T "git.remote_branches"}}
     <span class="count">{{len .GitVM.RemoteBranches}}</span>
   </h2>
   {{range .GitVM.RemoteBranches}}
@@ -2824,13 +2823,13 @@
     <span style="width:8px;"></span>
     <span class="name"><code>{{.FullName}}</code></span>
     {{if .HasLocal}}
-      <span class="remote">本地已存在</span>
+      <span class="remote">{{T "git.exists_local"}}</span>
     {{else}}
     <button type="button"
             hx-post="/git/switch-remote"
             hx-vals='{"ref":"{{.FullName}}"}'
             hx-target="#git-tab-body" hx-swap="innerHTML"
-            hx-confirm="基于 {{.FullName}} 创建本地分支 {{.ShortName}} 并切换？（脏工作区会被拒绝）">track</button>
+            hx-confirm="{{T "git.track_confirm" .ShortName .FullName}}">track</button>
     {{end}}
   </div>
   {{end}}
@@ -2847,7 +2846,7 @@
   </h2>
   {{if .GitVM.Status.Dirty}}
   <div class="dirty-files">
-    <div class="dirty-files-head">工作区改动 <span class="count">{{len .GitVM.Status.DirtyFiles}}</span></div>
+    <div class="dirty-files-head">{{T "git.dirty_files"}} <span class="count">{{len .GitVM.Status.DirtyFiles}}</span></div>
     <div class="dirty-files-list">
       {{range .GitVM.Status.DirtyFiles}}
       <div class="dirty-file" title="{{.Code}} {{.Path}}">
@@ -2862,11 +2861,11 @@
   <div class="branch-row stash-row">
     <span class="name" title="{{.Message}}"><code>{{.Ref}}</code> {{.Message}}</span>
     <div class="stash-actions">
-      <button type="button" title="Pop：应用并移除 {{.Ref}}" aria-label="应用并移除 {{.Ref}}"
+      <button type="button" title="{{T "git.stash_pop" .Ref}}" aria-label="{{T "git.stash_pop_aria" .Ref}}"
               hx-post="/git/stash/pop"
               hx-vals='{"ref":"{{.Ref}}"}'
               hx-target="#git-tab-body" hx-swap="innerHTML"
-              hx-confirm="弹出并应用 {{.Ref}}？">
+              hx-confirm="{{T "git.stash_pop_confirm" .Ref}}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -2874,11 +2873,11 @@
           <path d="M12 15V3"/>
         </svg>
       </button>
-      <button type="button" title="Apply：应用并保留 {{.Ref}}" aria-label="应用并保留 {{.Ref}}"
+      <button type="button" title="{{T "git.stash_apply" .Ref}}" aria-label="{{T "git.stash_apply_aria" .Ref}}"
               hx-post="/git/stash/apply"
               hx-vals='{"ref":"{{.Ref}}"}'
               hx-target="#git-tab-body" hx-swap="innerHTML"
-              hx-confirm="仅应用 {{.Ref}}（保留 stash）？">
+              hx-confirm="{{T "git.stash_apply_confirm" .Ref}}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M12 3v12"/>
@@ -2886,11 +2885,11 @@
           <path d="M5 21h14"/>
         </svg>
       </button>
-      <button type="button" title="Drop：删除 {{.Ref}}" aria-label="删除 {{.Ref}}"
+      <button type="button" title="{{T "git.stash_drop" .Ref}}" aria-label="{{T "git.stash_drop_aria" .Ref}}"
               hx-post="/git/stash/drop"
               hx-vals='{"ref":"{{.Ref}}"}'
               hx-target="#git-tab-body" hx-swap="innerHTML"
-              hx-confirm="删除 {{.Ref}}？此操作不可恢复。">
+              hx-confirm="{{T "git.stash_drop_confirm" .Ref}}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M3 6h18"/>
@@ -2906,10 +2905,10 @@
         hx-post="/git/stash/push"
         hx-target="#git-tab-body" hx-swap="innerHTML"
         hx-on::after-request="this.reset()">
-    <input class="input" type="text" name="message" placeholder="stash 说明（可选）" style="margin-bottom: 6px; padding: 6px 8px; font-size: 12px;">
+    <input class="input" type="text" name="message" placeholder="{{T "git.stash_msg"}}" style="margin-bottom: 6px; padding: 6px 8px; font-size: 12px;">
     <label class="build-opt" style="margin-bottom: 6px;">
       <input type="checkbox" name="untracked" value="1">
-      <span>包含未跟踪文件 (<code>-u</code>)</span>
+      <span>{{T "git.stash_untracked"}}</span>
     </label>
     <button class="btn-secondary" type="submit" style="width: 100%;">stash push</button>
   </form>
@@ -2934,7 +2933,7 @@
       hx-target="#todo-panel" hx-swap="innerHTML"
       onclick="event.stopPropagation()">
   <div class="form-field">
-    <label>标题 · #{{printf "%05d" .ID}}</label>
+    <label>{{T "todo.title"}} · #{{printf "%05d" .ID}}</label>
     <input class="input" name="title" value="{{.Title}}" required autofocus>
   </div>
   <div class="row">
@@ -2956,8 +2955,8 @@
   </div>
   <div class="actions">
     <button type="button" class="btn-secondary"
-            hx-get="/todo-panel" hx-target="#todo-panel" hx-swap="innerHTML">取消</button>
-    <button type="submit" class="btn-primary small">保存</button>
+            hx-get="/todo-panel" hx-target="#todo-panel" hx-swap="innerHTML">{{T "common.cancel"}}</button>
+    <button type="submit" class="btn-primary small">{{T "common.save"}}</button>
   </div>
 </form>
 {{end}}
@@ -2966,20 +2965,29 @@
 {{define "tab_settings"}}
 <div class="settings-tab" data-display-settings>
   <aside class="settings-nav">
-    <div class="settings-kicker">Preferences</div>
-    <h1>显示设置</h1>
-    <p>调整 dashboard 的阅读尺寸和信息密度。设置保存在当前浏览器中，并会即时应用到所有页面。</p>
+    <div class="settings-kicker">{{T "settings.kicker"}}</div>
+    <h1>{{T "settings.title"}}</h1>
+    <p>{{T "settings.blurb"}}</p>
   </aside>
 
   <section class="settings-main">
     <div class="settings-group">
-      <h2>Typography</h2>
-      <p>控制普通界面与代码区域的字号。</p>
+      <h2>{{T "settings.language"}}</h2>
+      <p>{{T "settings.language_help"}}</p>
+      <form class="lang-switch" method="post" action="/settings/lang" style="width:max-content;margin-top:8px;">
+        <button class="lang-btn {{if eq (Lang) "zh"}}active{{end}}" type="submit" name="lang" value="zh">{{T "lang.zh"}}</button>
+        <button class="lang-btn {{if eq (Lang) "en"}}active{{end}}" type="submit" name="lang" value="en">{{T "lang.en"}}</button>
+      </form>
+    </div>
+
+    <div class="settings-group">
+      <h2>{{T "settings.typography"}}</h2>
+      <p>{{T "settings.typography_help"}}</p>
 
       <label class="setting-row">
         <span class="setting-label">
-          <strong>界面字号</strong>
-          <span>导航、按钮、表格和正文的基础字号。</span>
+          <strong>{{T "settings.ui_font"}}</strong>
+          <span>{{T "settings.ui_font_help"}}</span>
         </span>
         <span class="setting-control">
           <input type="range" min="13" max="18" step="0.5" data-display-setting="uiFontSize">
@@ -2989,8 +2997,8 @@
 
       <label class="setting-row">
         <span class="setting-label">
-          <strong>代码字号</strong>
-          <span>源码预览、日志与 Markdown 代码框。</span>
+          <strong>{{T "settings.code_font"}}</strong>
+          <span>{{T "settings.code_font_help"}}</span>
         </span>
         <span class="setting-control">
           <input type="range" min="11" max="17" step="0.5" data-display-setting="codeFontSize">
@@ -3000,13 +3008,13 @@
     </div>
 
     <div class="settings-group">
-      <h2>Layout</h2>
-      <p>调整导航宽度和页面留白。</p>
+      <h2>{{T "settings.layout"}}</h2>
+      <p>{{T "settings.layout_help"}}</p>
 
       <label class="setting-row">
         <span class="setting-label">
-          <strong>导航宽度</strong>
-          <span>左侧主导航的占用空间。</span>
+          <strong>{{T "settings.nav_width"}}</strong>
+          <span>{{T "settings.nav_width_help"}}</span>
         </span>
         <span class="setting-control">
           <input type="range" min="104" max="168" step="4" data-display-setting="navWidth">
@@ -3016,30 +3024,30 @@
 
       <label class="setting-row">
         <span class="setting-label">
-          <strong>信息密度</strong>
-          <span>控制面板内边距和表单间距。</span>
+          <strong>{{T "settings.density"}}</strong>
+          <span>{{T "settings.density_help"}}</span>
         </span>
         <span class="setting-control">
           <select class="select" data-display-setting="density">
-            <option value="compact">紧凑</option>
-            <option value="comfortable">舒适</option>
-            <option value="spacious">宽松</option>
+            <option value="compact">{{T "settings.density.compact"}}</option>
+            <option value="comfortable">{{T "settings.density.comfortable"}}</option>
+            <option value="spacious">{{T "settings.density.spacious"}}</option>
           </select>
         </span>
       </label>
     </div>
 
     <div class="settings-actions">
-      <button class="btn-secondary" type="button" data-display-reset>恢复默认</button>
+      <button class="btn-secondary" type="button" data-display-reset>{{T "settings.reset"}}</button>
     </div>
   </section>
 
   <aside class="settings-preview">
     <div class="settings-preview-box">
-      <div class="settings-preview-head">实时预览</div>
+      <div class="settings-preview-head">{{T "settings.preview"}}</div>
       <div class="settings-preview-body">
         <h3>gkNextEngine Dashboard</h3>
-        <p>界面字号会影响正文和操作控件，代码字号独立控制等宽内容。</p>
+        <p>{{T "settings.preview_body"}}</p>
         <pre><code class="language-cpp">struct RenderSettings
 {
     float exposure = 1.0f; // 中文注释
@@ -3209,7 +3217,7 @@
       text-align: right;
     }
     .hourly-y-axis::after {
-      content: '提交数';
+      content: attr(data-label);
       position: absolute;
       top: 50%;
       left: -2px;
@@ -3345,7 +3353,7 @@
 
   {{with .LocVM}}
     {{if .Error}}
-      <div class="loc-col"><div class="loc-error">LOC 扫描失败：{{.Error}}</div></div>
+      <div class="loc-col"><div class="loc-error">{{T "loc.scan_failed" .Error}}</div></div>
     {{else}}
       <div class="loc-activity">
         <div class="loc-contributions">
@@ -3404,15 +3412,15 @@
 
         <div class="loc-hourly">
           <div class="hourly-head">
-            <h2>每日提交时段热度</h2>
-            <span>过去一年 · 当地时间</span>
+            <h2>{{T "loc.hourly_title"}}</h2>
+            <span>{{T "loc.hourly_sub"}}</span>
           </div>
           {{if .HourlyCommits.Error}}
             <div class="hourly-error">Unable to load hourly git history: {{.HourlyCommits.Error}}</div>
           {{else}}
             {{$hourlyMax := .HourlyCommits.Max}}
-            <div class="hourly-chart" aria-label="按当地时间统计的每小时提交数量">
-              <div class="hourly-y-axis">
+            <div class="hourly-chart" aria-label="{{T "loc.hourly_aria"}}">
+              <div class="hourly-y-axis" data-label="{{T "loc.commits"}}">
                 <span>{{intCommas .HourlyCommits.Max}}</span>
                 <span>{{intCommas .HourlyCommits.Mid}}</span>
                 <span>0</span>
@@ -3425,7 +3433,7 @@
                 </div>
                 <div class="hourly-bars">
                   {{range .HourlyCommits.Hours}}
-                    <span class="hourly-bar{{if eq .Count 0}} zero{{end}}" style="height: {{locBarPct .Count $hourlyMax}}%;" title="{{.RangeLabel}}（当地时间）：{{.Count}} 次提交"></span>
+                    <span class="hourly-bar{{if eq .Count 0}} zero{{end}}" style="height: {{locBarPct .Count $hourlyMax}}%;" title="{{T "loc.hourly_bar" .RangeLabel .Count}}"></span>
                   {{end}}
                 </div>
                 <div class="hourly-labels" aria-hidden="true">
@@ -3435,15 +3443,15 @@
                 </div>
               </div>
             </div>
-            <div class="hourly-foot">{{intCommas .HourlyCommits.Total}} 次提交 · 06:00 → 次日 06:00</div>
+            <div class="hourly-foot">{{T "loc.hourly_foot" (intCommas .HourlyCommits.Total)}}</div>
           {{end}}
         </div>
       </div>
 
       <section class="loc-col">
         <div class="loc-summary">
-          <div class="loc-stat"><div class="k">文件数</div><div class="v">{{intCommas .Snapshot.TotalFiles}}</div></div>
-          <div class="loc-stat"><div class="k">代码行</div><div class="v">{{intCommas .Snapshot.TotalLines}}</div></div>
+          <div class="loc-stat"><div class="k">{{T "loc.files"}}</div><div class="v">{{intCommas .Snapshot.TotalFiles}}</div></div>
+          <div class="loc-stat"><div class="k">{{T "loc.lines"}}</div><div class="v">{{intCommas .Snapshot.TotalLines}}</div></div>
         </div>
 
         <div class="card">
@@ -3451,17 +3459,17 @@
             <span class="ico">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="20" x2="4" y2="10"/><line x1="10" y1="20" x2="10" y2="4"/><line x1="16" y1="20" x2="16" y2="14"/></svg>
             </span>
-            类别行数对比
+            {{T "loc.category_compare"}}
             <span style="margin-left:auto; display:inline-flex; gap:12px; align-items:center;">
               <form class="loc-toolbar" hx-get="/tab/loc" hx-target="#tab-content" hx-swap="innerHTML" hx-trigger="change">
-                <select name="depth" aria-label="LOC 目录深度">
+                <select name="depth" aria-label="{{T "loc.depth_aria"}}">
                   {{range .DepthOptions}}
-                    <option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>
+                    <option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{T "loc.depth" .Value}}</option>
                   {{end}}
                 </select>
                 <label class="tp-opt" style="display:inline-flex;align-items:center;gap:6px;color:var(--fg-mute);font-size:12px;cursor:pointer;">
                   <input type="checkbox" name="thirdparty" value="1" {{if .IncludeThirdParty}}checked{{end}}>
-                  <span>包含 ThirdParty</span>
+                  <span>{{T "loc.third_party"}}</span>
                 </label>
               </form>
             </span>
@@ -3492,15 +3500,15 @@
             <span class="ico">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
             </span>
-            分类明细
+            {{T "loc.breakdown"}}
           </h2>
           <table class="loc-table">
             <thead>
               <tr>
-                <th>目录</th>
-                <th class="num" style="text-align:right;">文件</th>
-                <th class="num" style="text-align:right;">行数</th>
-                <th class="num" style="text-align:right;">占比</th>
+                <th>{{T "loc.col.dir"}}</th>
+                <th class="num" style="text-align:right;">{{T "loc.col.files"}}</th>
+                <th class="num" style="text-align:right;">{{T "loc.col.lines"}}</th>
+                <th class="num" style="text-align:right;">{{T "loc.col.share"}}</th>
               </tr>
             </thead>
             <tbody>
@@ -3617,7 +3625,7 @@
   {{with .PaksVM}}
   <aside class="pak-sidebar">
     <div class="pak-sidebar-head">
-      <h2>Pak 文件</h2>
+      <h2>{{T "paks.files"}}</h2>
       <span class="tag-mini">{{len .Files}}</span>
     </div>
     {{if .Files}}
@@ -3633,7 +3641,7 @@
     </div>
     {{if .SelectedPath}}<span class="pak-file-path">{{.SelectedPath}}</span>{{end}}
     {{else}}
-    <div class="pak-empty">未找到 Pak。<br>扫描范围：<code>assets/paks</code> 与当前 preset 的构建输出。</div>
+    <div class="pak-empty">{{T "paks.empty"}}<br>{{T "paks.empty_hint"}} <code>assets/paks</code></div>
     {{end}}
   </aside>
 
@@ -3648,22 +3656,22 @@
         </div>
       </div>
       <div class="pak-summary">
-        <div class="pak-stat"><div class="k">文件数</div><div class="v">{{intCommas (len .Archive.Entries)}}</div><div class="sub">{{.CompressedFiles}} 个有效压缩</div></div>
-        <div class="pak-stat"><div class="k">Pak 尺寸</div><div class="v">{{byteSize .Archive.FileSize}}</div><div class="sub">含索引与数据</div></div>
-        <div class="pak-stat"><div class="k">存储尺寸</div><div class="v">{{byteSize .Archive.StoredSize}}</div><div class="sub">压缩后 payload</div></div>
-        <div class="pak-stat"><div class="k">原始尺寸</div><div class="v">{{byteSize .UncompressedSize}}</div><div class="sub">解压后的文件总量</div></div>
-        <div class="pak-stat"><div class="k">节省空间</div><div class="v">{{printf "%.1f%%" .CompressionSavings}}</div><div class="sub">相对原始尺寸</div></div>
+        <div class="pak-stat"><div class="k">{{T "paks.file_count"}}</div><div class="v">{{intCommas (len .Archive.Entries)}}</div><div class="sub">{{T "paks.compressed" .CompressedFiles}}</div></div>
+        <div class="pak-stat"><div class="k">{{T "paks.pak_size"}}</div><div class="v">{{byteSize .Archive.FileSize}}</div><div class="sub">{{T "paks.pak_size_sub"}}</div></div>
+        <div class="pak-stat"><div class="k">{{T "paks.stored"}}</div><div class="v">{{byteSize .Archive.StoredSize}}</div><div class="sub">{{T "paks.stored_sub"}}</div></div>
+        <div class="pak-stat"><div class="k">{{T "paks.raw"}}</div><div class="v">{{byteSize .UncompressedSize}}</div><div class="sub">{{T "paks.raw_sub"}}</div></div>
+        <div class="pak-stat"><div class="k">{{T "paks.saved"}}</div><div class="v">{{printf "%.1f%%" .CompressionSavings}}</div><div class="sub">{{T "paks.saved_sub"}}</div></div>
       </div>
 
       <div class="pak-analysis">
         <section class="card pak-card">
           <div class="pak-card-head">
-            <h3>文件组织结构</h3>
-            <input class="pak-search" type="search" placeholder="按路径筛选…" data-pak-filter>
+            <h3>{{T "paks.tree"}}</h3>
+            <input class="pak-search" type="search" placeholder="{{T "paks.filter"}}" data-pak-filter>
           </div>
           <div class="pak-table-wrap">
             <table class="pak-table">
-              <thead><tr><th>路径</th><th>文件</th><th>存储</th><th>原始</th><th>占比</th></tr></thead>
+              <thead><tr><th>{{T "paks.col.path"}}</th><th>{{T "paks.col.files"}}</th><th>{{T "paks.col.stored"}}</th><th>{{T "paks.col.raw"}}</th><th>{{T "paks.col.share"}}</th></tr></thead>
               <tbody data-pak-rows>
                 {{$total := .Archive.StoredSize}}
                 {{range .Rows}}
@@ -3690,14 +3698,14 @@
         </section>
 
         <section class="card pak-card">
-          <div class="pak-card-head"><h3>文件类型</h3><span class="tag-mini" style="margin-left:auto">{{len .Types}}</span></div>
+          <div class="pak-card-head"><h3>{{T "paks.types"}}</h3><span class="tag-mini" style="margin-left:auto">{{len .Types}}</span></div>
           <div class="pak-type-list">
             {{$total := .Archive.StoredSize}}
             {{range .Types}}
             <div class="pak-type-row">
               <div><span class="pak-type-ext">{{.Extension}}</span> <span class="pak-type-count">× {{intCommas .FileCount}}</span></div>
               <div class="pak-type-size">{{byteSize .StoredSize}}</div>
-              <div class="pak-type-meta">原始 {{byteSize .UncompressedSize}}</div>
+              <div class="pak-type-meta">{{T "paks.type_raw" (byteSize .UncompressedSize)}}</div>
               <div class="pak-type-meta" style="text-align:right">{{sizeShare .StoredSize $total}}%</div>
               <div class="pak-type-track"><div class="pak-type-fill" style="width:{{sizeShare .StoredSize $total}}%"></div></div>
             </div>
@@ -3706,7 +3714,7 @@
         </section>
       </div>
     {{else}}
-      <div class="pak-empty">选择左侧 Pak 查看文件组织与尺寸分析。</div>
+      <div class="pak-empty">{{T "paks.pick"}}</div>
     {{end}}
   </section>
   {{end}}
@@ -3882,44 +3890,44 @@
   <aside class="graph-sidebar">
     <div class="graph-panel-head">
       <div>
-        <div class="graph-panel-title">Target Graph</div>
-        <div class="graph-muted">Preset: {{.GraphVM.Preset}}</div>
+        <div class="graph-panel-title">{{T "graph.title"}}</div>
+        <div class="graph-muted">{{T "graph.preset" .GraphVM.Preset}}</div>
       </div>
-      <input class="graph-search" type="search" placeholder="Filter targets" data-graph-search>
+      <input class="graph-search" type="search" placeholder="{{T "graph.filter"}}" data-graph-search>
     </div>
     <div class="graph-target-list" data-graph-target-list></div>
   </aside>
   <section class="graph-main">
     <div class="graph-toolbar">
-      <button class="btn" type="button" data-graph-refresh>Refresh</button>
-      <button class="btn secondary" type="button" data-graph-fit>Fit</button>
-      <button class="btn secondary" type="button" data-graph-depth="1">1-hop</button>
-      <button class="btn secondary" type="button" data-graph-depth="2">2-hop</button>
-      <button class="btn secondary" type="button" data-graph-depth="99">All</button>
+      <button class="btn" type="button" data-graph-refresh>{{T "graph.refresh"}}</button>
+      <button class="btn secondary" type="button" data-graph-fit>{{T "graph.fit"}}</button>
+      <button class="btn secondary" type="button" data-graph-depth="1">{{T "graph.hop1"}}</button>
+      <button class="btn secondary" type="button" data-graph-depth="2">{{T "graph.hop2"}}</button>
+      <button class="btn secondary" type="button" data-graph-depth="99">{{T "graph.all"}}</button>
       <span class="spacer"></span>
-      <span class="graph-muted" data-graph-status>Loading graph...</span>
+      <span class="graph-muted" data-graph-status>{{T "graph.loading"}}</span>
     </div>
     <div class="graph-canvas" data-graph-canvas>
-      <svg class="graph-svg" data-graph-svg role="img" aria-label="Target dependency graph"></svg>
-      <div class="graph-empty" data-graph-empty>Loading graph...</div>
+      <svg class="graph-svg" data-graph-svg role="img" aria-label="{{T "graph.aria"}}"></svg>
+      <div class="graph-empty" data-graph-empty>{{T "graph.loading"}}</div>
     </div>
   </section>
   <aside class="graph-inspector">
     <div class="graph-panel-head">
-      <div class="graph-panel-title" data-graph-selected-title>No target selected</div>
-      <div class="graph-muted" data-graph-selected-kind>Select a node or target.</div>
+      <div class="graph-panel-title" data-graph-selected-title>{{T "graph.none"}}</div>
+      <div class="graph-muted" data-graph-selected-kind>{{T "graph.pick"}}</div>
     </div>
     <div class="graph-inspector-body">
       <div class="graph-stat-grid">
-        <div class="graph-stat"><b data-graph-dep-count>0</b><span class="graph-muted">Dependencies</span></div>
-        <div class="graph-stat"><b data-graph-user-count>0</b><span class="graph-muted">Dependers</span></div>
+        <div class="graph-stat"><b data-graph-dep-count>0</b><span class="graph-muted">{{T "graph.deps"}}</span></div>
+        <div class="graph-stat"><b data-graph-user-count>0</b><span class="graph-muted">{{T "graph.users"}}</span></div>
       </div>
       <div class="graph-section">
-        <h3>Direct Dependencies</h3>
+        <h3>{{T "graph.direct_deps"}}</h3>
         <div class="graph-link-list" data-graph-deps></div>
       </div>
       <div class="graph-section">
-        <h3>Direct Dependers</h3>
+        <h3>{{T "graph.direct_users"}}</h3>
         <div class="graph-link-list" data-graph-users></div>
       </div>
     </div>

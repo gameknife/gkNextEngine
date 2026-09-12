@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/i18n"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/loc"
 )
 
@@ -223,7 +224,7 @@ func setupLocRepo(t *testing.T) *Server {
 		t.Fatal(err)
 	}
 	return &Server{
-		opts:  Options{RepoRoot: dir},
+		opts:  Options{RepoRoot: dir, Lang: i18n.LangZh},
 		tpl:   tpl,
 		jobs:  NewJobManager(),
 		chats: NewChatStore(),

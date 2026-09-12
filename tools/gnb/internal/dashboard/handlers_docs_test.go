@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/i18n"
 )
 
 func setupDocsRepo(t *testing.T) *Server {
@@ -39,7 +41,7 @@ func setupDocsRepo(t *testing.T) *Server {
 		t.Fatal(err)
 	}
 	return &Server{
-		opts:  Options{RepoRoot: dir},
+		opts:  Options{RepoRoot: dir, Lang: i18n.LangZh},
 		tpl:   tpl,
 		jobs:  NewJobManager(),
 		chats: NewChatStore(),

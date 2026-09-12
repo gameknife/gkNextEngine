@@ -19,7 +19,7 @@ func newValidationCommand(ctx appContext) *cobra.Command {
 	var screenshot string
 	note := &cobra.Command{
 		Use:   "note <runId>",
-		Short: "Record a validation review note",
+		Short: tr("cli.validation.note.short"),
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if issue && accepted || (issue && status != "") || (accepted && status != "") {
@@ -73,7 +73,7 @@ func newValidationCommand(ctx appContext) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "validation",
-		Short: "Manage validation run records",
+		Short: tr("cli.validation.short"),
 	}
 	cmd.AddCommand(note)
 	return cmd

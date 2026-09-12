@@ -23,6 +23,8 @@ type Config struct {
 
 type GNBConfig struct {
 	MinVersion string `toml:"min_version"`
+	// Lang is the default UI language: "zh", "en", or "auto"/empty for OS detect.
+	Lang string `toml:"lang"`
 }
 
 type VcpkgConfig struct {

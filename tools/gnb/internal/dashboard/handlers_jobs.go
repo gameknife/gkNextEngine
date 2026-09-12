@@ -69,7 +69,7 @@ func (s *Server) handleJobStart(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.render(w, "log_panel", s.jobSnapshot(job))
+	s.render(w, r, "log_panel", s.jobSnapshot(job))
 }
 
 func (s *Server) handleJobCancel(w http.ResponseWriter, r *http.Request) {
@@ -83,7 +83,7 @@ func (s *Server) handleJobCancel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "job not found", http.StatusNotFound)
 		return
 	}
-	s.render(w, "log_panel", s.jobSnapshot(job))
+	s.render(w, r, "log_panel", s.jobSnapshot(job))
 }
 
 func (s *Server) jobSnapshot(job *Job) JobSnapshot {
@@ -146,6 +146,7 @@ func (s *Server) handleJobStream(w http.ResponseWriter, r *http.Request) {
 	if from > len(snap.Lines) {
 		from = len(snap.Lines)
 	}
+	lang := s.resolveLang(r)
 	if snap.Status != StatusRunning && from >= len(snap.Lines) {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -180,11 +181,11 @@ func (s *Server) handleJobStream(w http.ResponseWriter, r *http.Request) {
 		emit("line", line)
 	}
 	if snap.Status != StatusRunning {
-		emit("status", statusBadgeHTML(snap.Status, snap.ExitNote))
+		emit("status", statusBadgeHTML(snap.Status, snap.ExitNote, lang))
 		emit("done", fmt.Sprintf("%d", snap.FinishedAt.Unix()))
 		return
 	}
-	emit("status", statusBadgeHTML(snap.Status, snap.ExitNote))
+	emit("status", statusBadgeHTML(snap.Status, snap.ExitNote, lang))
 
 	ctx := r.Context()
 	for {

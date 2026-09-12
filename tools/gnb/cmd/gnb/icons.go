@@ -12,7 +12,7 @@ func newIconsCommand(ctx appContext) *cobra.Command {
 	var force bool
 	cmd := &cobra.Command{
 		Use:   "icons",
-		Short: "Manage application icons and generate platform assets (ICO, Android mipmaps)",
+		Short: tr("cli.icons.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			count, err := icons.EnsureIco(ctx.repoRoot, force)
 			if err != nil {
@@ -31,7 +31,7 @@ func newIconsCommand(ctx appContext) *cobra.Command {
 
 	syncCmd := &cobra.Command{
 		Use:   "sync",
-		Short: "Synchronize Windows .ico files from assets/icons/*.png",
+		Short: tr("cli.icons.sync.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			count, err := icons.EnsureIco(ctx.repoRoot, force)
 			if err != nil {
@@ -52,7 +52,7 @@ func newIconsCommand(ctx appContext) *cobra.Command {
 	outputRes := ""
 	androidCmd := &cobra.Command{
 		Use:   "android",
-		Short: "Generate Android mipmap launcher icons for an application",
+		Short: tr("cli.icons.android.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if outputRes == "" {
 				return fmt.Errorf("--out is required (path to res directory)")
@@ -72,7 +72,7 @@ func newIconsCommand(ctx appContext) *cobra.Command {
 	iosOut := ""
 	iosCmd := &cobra.Command{
 		Use:   "ios",
-		Short: "Generate iOS AppIcon files for an application",
+		Short: tr("cli.icons.ios.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if iosOut == "" {
 				return fmt.Errorf("--out is required (path to output directory)")

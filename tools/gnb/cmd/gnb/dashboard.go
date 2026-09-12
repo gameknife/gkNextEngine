@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/dashboard"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/i18n"
 	"github.com/spf13/cobra"
 )
 
@@ -30,6 +31,7 @@ func runDashboard(ctx appContext, opts dashboardCmdOpts) error {
 		Version:  resolvedVersion(),
 		Preset:   ctx.preset,
 		Config:   ctx.cfg,
+		Lang:     i18n.Current(),
 	})
 	if err != nil {
 		return err
@@ -46,7 +48,7 @@ func newDashboardCommand(ctx appContext) *cobra.Command {
 	opts := dashboardCmdOpts{}
 	cmd := &cobra.Command{
 		Use:   "dashboard",
-		Short: "Launch the native desktop dashboard for .spec/ workflow",
+		Short: tr("cli.dashboard.short"),
 		Long: "Launch a Wails desktop window backed by the local dashboard server.\n" +
 			"It visualizes .spec/TODO.md, task journals, blocker reports, and persisted gnb validation runs.\n" +
 			"Supports adding tasks, marking done/blocked, reviewing validation screenshots, and rerunning terminal validations.\n" +

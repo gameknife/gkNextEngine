@@ -24,7 +24,7 @@ func newInitCommand() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "init [dir]",
-		Short: "Clone gkNextEngine into a fresh directory and print next steps",
+		Short: tr("cli.init.short"),
 		Long: "Clone https://github.com/gameknife/gkNextEngine into <dir> (default: ./gkNextEngine).\n" +
 			"Designed to be invoked by the bootstrap script users download from the paks-latest release.",
 		Args: cobra.MaximumNArgs(1),

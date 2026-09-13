@@ -82,6 +82,11 @@ namespace Editor
         /// disk, and the next Play picks it up.
         bool Rebuild(const std::string& gameId, std::string& outError);
 
+        /// Asynchronously rebuilds a game with progress presentation.
+        bool StartRebuild(const std::string& gameId, std::string& outError);
+        bool DrawBuildProgress();
+        bool IsRebuilding() const;
+
         // --- new project from a template -------------------------------------------------------
 
         /// False when this build cannot scaffold a C# game: no managed runtime, no C# sources (an

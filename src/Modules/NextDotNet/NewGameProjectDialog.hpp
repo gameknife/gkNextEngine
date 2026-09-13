@@ -2,6 +2,7 @@
 
 #include "Engine/Common/CoreMinimal.hpp"
 #include "Modules/NextDotNet/ManagedGameTemplate.hpp"
+#include "Modules/NextDotNet/ManagedProjectBuilder.hpp"
 
 #include <array>
 
@@ -84,5 +85,6 @@ namespace Modules::NextDotNet
         FNewGameResult result_;
         std::string buildError_;
         bool built_ = false;
+        FManagedProjectBuilder builder_;
     };
 }

@@ -1,4 +1,5 @@
 #include "Modules/NextDotNet/ManagedGameTemplate.hpp"
+#include "Modules/NextDotNet/ManagedProjectBuilder.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -294,4 +295,44 @@ TEST_CASE("a game project's manifest resolves its own content", "[Unit][DotNet][
         CHECK(it->directory.rfind(kManagedGameProjectsDirectory, 0) == 0);
         CHECK_FALSE(it->project.empty());
     }
+}
+
+TEST_CASE("ManagedProjectBuilder Lifecycle and Queries", "[Unit][DotNet]")
+{
+    FManagedProjectBuilder builder;
+    CHECK(builder.GetState() == EManagedBuildState::Idle);
+    CHECK_FALSE(builder.IsBusy());
+    CHECK_FALSE(builder.HasFinished());
+    CHECK_FALSE(builder.IsSuccess());
+    CHECK(builder.GetTargetName().empty());
+    CHECK(builder.GetErrorMessage().empty());
+    CHECK(builder.GetElapsedSeconds() == 0.0);
+
+    FManagedGameManifest manifest;
+    manifest.id = "testgame";
+    manifest.displayName = "Test Game";
+
+    // Starting with null session handles error gracefully without crashing
+    const bool started = builder.StartBuild(nullptr, manifest, "Test Game");
+    CHECK(started);
+    CHECK(builder.GetTargetName() == "Test Game");
+
+    // Wait for the background thread to finish the null session build
+    while (!builder.HasFinished())
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    CHECK(builder.HasFinished());
+    CHECK_FALSE(builder.IsSuccess());
+    CHECK(builder.GetState() == EManagedBuildState::Failed);
+    CHECK_FALSE(builder.GetErrorMessage().empty());
+    CHECK(builder.GetElapsedSeconds() >= 0.0);
+
+    // Reset clears state back to Idle
+    builder.Reset();
+    CHECK(builder.GetState() == EManagedBuildState::Idle);
+    CHECK_FALSE(builder.IsBusy());
+    CHECK_FALSE(builder.HasFinished());
+    CHECK(builder.GetErrorMessage().empty());
 }

@@ -59,6 +59,7 @@ namespace Editor
         /// The same dialog gkNextLauncher uses. Scaffolding a project is identical work in both
         /// hosts, so it is the same code and not a second implementation that can disagree.
         FNewGameProjectDialog newProjectDialog;
+        FManagedProjectBuilder projectBuilder;
 
         const FManagedGameManifest* FindManifest(const std::string& id) const
         {
@@ -258,6 +259,35 @@ namespace Editor
         return true;
     }
 
+    bool FPlaySession::StartRebuild(const std::string& gameId, std::string& outError)
+    {
+        const FManagedGameManifest* manifest = impl_->FindManifest(gameId);
+        if (manifest == nullptr)
+        {
+            outError = "no managed game with id '" + gameId + "'";
+            return false;
+        }
+        return impl_->projectBuilder.StartBuild(&impl_->session, *manifest, manifest->displayName);
+    }
+
+    bool FPlaySession::DrawBuildProgress()
+    {
+        if (impl_->projectBuilder.DrawModalProgress())
+        {
+            if (impl_->projectBuilder.IsSuccess())
+            {
+                impl_->RefreshGames();
+            }
+            return true;
+        }
+        return false;
+    }
+
+    bool FPlaySession::IsRebuilding() const
+    {
+        return impl_->projectBuilder.IsBusy();
+    }
+
     bool FPlaySession::CanCreateProject() const
     {
         return impl_->available && FNewGameProjectDialog::UnavailableReason().empty();
@@ -406,6 +436,13 @@ namespace Editor
         outError = impl_->unavailableReason;
         return false;
     }
+    bool FPlaySession::StartRebuild(const std::string&, std::string& outError)
+    {
+        outError = impl_->unavailableReason;
+        return false;
+    }
+    bool FPlaySession::DrawBuildProgress() { return false; }
+    bool FPlaySession::IsRebuilding() const { return false; }
     bool FPlaySession::CanCreateProject() const { return false; }
     std::string FPlaySession::NewProjectUnavailableReason() const { return impl_->unavailableReason; }
     void FPlaySession::OpenNewProjectDialog() {}

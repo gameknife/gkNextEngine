@@ -69,6 +69,7 @@ private:
     /// Scaffolding a new game from a template. The dialog owns the form and the file writing; the
     /// launcher only opens it and reacts to what it created.
     Modules::NextDotNet::FNewGameProjectDialog newProjectDialog_;
+    Modules::NextDotNet::FManagedProjectBuilder projectBuilder_;
     /// Backing store for the game.newProject cvar, which is how a script opens the dialog.
     std::string newProjectRequest_;
 };

@@ -488,9 +488,9 @@ void EditorInterface::ToolbarUI(EditorContext& ctx, Editor::EditorUiState& uiSta
             if (ImGui::Button(ICON_FA_HAMMER " Rebuild C#", ImVec2(rebuildButtonWidth, kControlHeight)))
             {
                 std::string error;
-                if (play.Rebuild(uiState.lastPlayedGameId, error))
+                if (play.StartRebuild(uiState.lastPlayedGameId, error))
                 {
-                    SPDLOG_INFO("[pie] rebuilt {}", uiState.lastPlayedGameId);
+                    SPDLOG_INFO("[pie] rebuilding {}", uiState.lastPlayedGameId);
                 }
                 else
                 {
@@ -597,6 +597,8 @@ void EditorInterface::ToolbarUI(EditorContext& ctx, Editor::EditorUiState& uiSta
     {
         uiState.lastPlayedGameId = createdGameId;
     }
+
+    play.DrawBuildProgress();
 }
 
 void EditorInterface::Render()

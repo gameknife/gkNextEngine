@@ -281,17 +281,7 @@ void LauncherGameInstance::ApplyPendingRebuild()
     const FEntry& entry = entries_[static_cast<size_t>(pendingRebuildIndex_)];
     pendingRebuildIndex_ = -1;
 
-    std::string error;
-    if (GetSession().RebuildGame(entry.manifest, error))
-    {
-        rebuildStatus_ = "rebuilt " + entry.manifest.id;
-        RefreshEntries();
-    }
-    else
-    {
-        rebuildStatus_ = "rebuild failed: " + error;
-        SPDLOG_ERROR("[launcher] {}", rebuildStatus_);
-    }
+    projectBuilder_.StartBuild(&GetSession(), entry.manifest, entry.manifest.displayName);
 }
 
 void LauncherGameInstance::LoadEntry(size_t index)
@@ -727,6 +717,20 @@ void LauncherGameInstance::DrawMenu()
     // After the menu window is closed and its style is popped: a modal drawn inside it would
     // inherit that window's padding and clipping rectangle rather than standing on its own.
     DrawNewProjectDialog();
+
+    if (projectBuilder_.DrawModalProgress())
+    {
+        if (projectBuilder_.IsSuccess())
+        {
+            rebuildStatus_ = "rebuilt " + projectBuilder_.GetTargetName();
+            RefreshEntries();
+        }
+        else
+        {
+            rebuildStatus_ = "rebuild failed: " + projectBuilder_.GetErrorMessage();
+            SPDLOG_ERROR("[launcher] {}", rebuildStatus_);
+        }
+    }
 }
 
 bool LauncherGameInstance::DrawNewProjectCard(float cardWidth, float cardHeight, bool highlighted)

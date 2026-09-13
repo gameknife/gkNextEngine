@@ -34,7 +34,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/languages/powershell.min.js"></script>
 <script>
   (() => {
-    const defaults = { uiFontSize: 14.5, codeFontSize: 13, navWidth: 120, density: 'comfortable' };
+    const defaults = { uiFontSize: 14.5, codeFontSize: 13, navWidth: 106, density: 'comfortable' };
     try {
       const saved = Object.assign(defaults, JSON.parse(localStorage.getItem('gnb-display-settings') || '{}'));
       const root = document.documentElement;
@@ -47,32 +47,35 @@
 </script>
 <style>
   :root {
-    --bg: #0a0d14;
-    --bg-panel: #11151d;
-    --bg-card: #161b25;
-    --bg-card-hover: #1c2230;
-    --bg-input: #0f131b;
-    --bg-code: #0d1119;
+    --bg: #0e1013;
+    --bg-panel: #14171c;
+    --bg-card: #181c22;
+    --bg-card-hover: #20252e;
+    --bg-input: #101317;
+    --bg-code: #0b0d10;
     --fg: #e6e9ef;
     --fg-mute: #9aa3b2;
-    --fg-dim: #6b7384;
+    --fg-dim: #656d7d;
     --accent: #3b82f6;
     --accent-soft: rgba(59, 130, 246, 0.12);
-    --accent-ring: rgba(59, 130, 246, 0.45);
+    --accent-ring: rgba(59, 130, 246, 0.42);
     --green: #22c55e;
     --green-soft: rgba(34, 197, 94, 0.14);
-    --yellow: #eab308;
+    --yellow: #f59e0b;
     --red: #ef4444;
-    --border: #20283a;
-    --border-strong: #2a3447;
-    --radius-lg: 12px;
+    --border: #232832;
+    --border-strong: #2e3543;
+    --radius-xl: 14px;
+    --radius-lg: 10px;
     --radius-md: 8px;
     --radius-sm: 6px;
+    --radius-xs: 4px;
     --font-sans: "Inter", "Noto Sans SC", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
     --font-mono: "JetBrains Mono", "Cascadia Mono", "Cascadia Code", Consolas, "Microsoft YaHei UI", "Microsoft YaHei", ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, "DejaVu Sans Mono", "Liberation Mono", "Ubuntu Mono", monospace;
     --ui-font-size: 14.5px;
     --code-font-size: 13px;
-    --nav-width: 120px;
+    --nav-width: 106px;
+    --shell-header-height: 50px;
     --density-scale: 1;
   }
   * {
@@ -89,53 +92,103 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    user-select: none;
+    -webkit-user-select: none;
   }
+
+  /* Whitelist selectable text containers for copying code, docs, logs, diffs, inputs */
+  input,
+  textarea,
+  [contenteditable="true"],
+  pre,
+  code,
+  kbd,
+  samp,
+  .selectable,
+  [data-selectable],
+  .docs-preview,
+  .docs-preview *,
+  .docs-source-panel-host,
+  .docs-source-panel-host *,
+  .log-panel,
+  .log-panel *,
+  .log-line,
+  .log-stream,
+  .chat-bubble,
+  .chat-bubble *,
+  .chat-text,
+  .chat-msg,
+  .chat-content,
+  .git-diff,
+  .git-diff *,
+  .diff-view,
+  .diff-view *,
+  .diff-container,
+  .diff-container *,
+  .diff-body,
+  .diff-body *,
+  .git-commit-detail,
+  .git-commit-msg,
+  .step-err-detail,
+  .step-err-detail *,
+  .remote-preview-list,
+  .remote-preview-list *,
+  .validation-evidence-shell,
+  .validation-evidence-shell * {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
   button, input, select, textarea, pre, code, kbd, samp { font-family: var(--font-sans); }
   pre, code, kbd, samp, .mono,
   pre *, code *, kbd *, samp *, .mono * { font-family: var(--font-mono); }
   pre, code, kbd, samp, .mono { font-size: var(--code-font-size); }
   html[data-density="compact"] { --density-scale: 0.84; }
   html[data-density="spacious"] { --density-scale: 1.16; }
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar { width: 7px; height: 7px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: var(--radius-sm); }
   ::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
 
   /* ----- Header ----- */
   header {
-    height: 56px;
-    padding: 0 24px;
+    height: var(--shell-header-height);
+    padding: 0 18px;
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
-    gap: 18px;
+    gap: 16px;
     background: var(--bg-panel);
     position: relative;
     user-select: none;
     --wails-draggable: drag;
   }
-  .brand { display: flex; align-items: center; gap: 10px; }
+  html.wails-desktop header { padding-right: 140px; }
+  .brand { display: flex; align-items: center; gap: 9px; cursor: default; }
   .brand .logo {
-    width: 30px; height: 30px;
-    border-radius: 8px;
+    width: 26px; height: 26px;
+    border-radius: var(--radius-sm);
     background: linear-gradient(135deg, var(--accent), #6366f1);
     display: flex; align-items: center; justify-content: center;
     color: white;
+    flex: 0 0 26px;
+    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.25);
   }
-  .brand .name { font-size: 15px; font-weight: 600; letter-spacing: 0.2px; }
+  .brand .logo svg { width: 15px; height: 15px; }
+  .brand .name { font-size: 13.5px; font-weight: 650; letter-spacing: 0.2px; }
+  .brand .chevron { color: var(--fg-dim); display: inline-flex; }
   .header-tab {
-    display: flex; align-items: center; gap: 8px;
-    padding: 6px 12px;
-    border-radius: var(--radius-md);
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    font-size: 12.5px;
+    display: flex; align-items: center; gap: 7px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-size: 12px;
     color: var(--fg-mute);
   }
   .header-tab .pill {
-    padding: 1px 8px;
+    padding: 2.5px 9px;
     border-radius: 999px;
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 600;
     background: var(--green-soft);
     color: var(--green);
@@ -143,41 +196,60 @@
     text-transform: lowercase;
   }
   .header-tab .pill.done { background: rgba(107, 115, 132, 0.12); color: var(--fg-mute); border-color: var(--border); }
+  .header-workspace {
+    color: var(--fg-dim);
+    font-size: 11.5px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .header-workspace strong { color: var(--fg-mute); font-weight: 500; }
   .header-meta {
     margin-left: auto;
-    display: flex; align-items: center; gap: 18px;
+    display: flex; align-items: center; gap: 16px;
     color: var(--fg-mute);
-    font-size: 12px;
+    font-size: 11.5px;
     font-family: var(--font-mono);
   }
   .header-meta .item { display: flex; align-items: center; gap: 6px; }
   .header-meta .item .icon-os { width: 14px; height: 14px; opacity: 0.7; }
   .header-meta .avatar {
-    width: 32px; height: 32px;
+    width: 26px; height: 26px;
     border-radius: 50%;
     background: linear-gradient(135deg, #6366f1, #ec4899);
     display: flex; align-items: center; justify-content: center;
-    color: white; font-weight: 600; font-size: 12px;
+    color: white; font-weight: 600; font-size: 11px;
     cursor: pointer;
+    box-shadow: 0 2px 6px rgba(99, 102, 241, 0.25);
   }
   .lang-switch {
     display: flex;
     align-items: center;
     border: 1px solid var(--border);
     border-radius: 999px;
+    padding: 2px;
+    gap: 2px;
+    background: rgba(0, 0, 0, 0.15);
     overflow: hidden;
     --wails-draggable: none;
   }
   .lang-switch .lang-btn {
     appearance: none;
     border: 0;
+    border-radius: 999px;
     background: transparent;
     color: var(--fg-mute);
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 600;
-    padding: 3px 9px;
+    padding: 2.5px 8px;
     cursor: pointer;
     font-family: var(--font-sans);
+    transition: background 0.14s ease, color 0.14s ease;
+  }
+  .lang-switch .lang-btn:hover {
+    color: var(--fg);
+    background: rgba(255, 255, 255, 0.06);
   }
   .lang-switch .lang-btn.active {
     background: var(--accent-soft);
@@ -193,7 +265,7 @@
   }
   html.wails-desktop .window-controls { display: flex; }
   .window-control {
-    width: 46px;
+    width: 44px;
     height: 100%;
     padding: 0;
     border: 0;
@@ -214,8 +286,8 @@
     background: #c42b1c;
   }
   .window-control svg {
-    width: 11px;
-    height: 11px;
+    width: 10px;
+    height: 10px;
     pointer-events: none;
   }
   .window-control .restore-icon { display: none; }
@@ -225,30 +297,233 @@
   /* ----- Main layout ----- */
   main {
     display: flex;
-    height: calc(100vh - 56px);
+    height: calc(100vh - var(--shell-header-height));
     overflow: hidden;
+    background: var(--bg);
   }
+  .tab-strip {
+    width: var(--nav-width);
+    padding: 8px 6px;
+    gap: 3px;
+    background: var(--bg-panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 0 0 var(--nav-width);
+    user-select: none;
+  }
+  .tab-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 34px;
+    padding: 6px 9px;
+    border-radius: var(--radius-md);
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--fg-mute);
+    font-size: 11.5px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+                color 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.16s ease,
+                transform 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+  }
+  .tab-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.06);
+    color: var(--fg);
+  }
+  .tab-item:active {
+    transform: scale(0.96);
+  }
+  .tab-item.active {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.18) 0%, rgba(99, 102, 241, 0.14) 100%);
+    border-color: rgba(59, 130, 246, 0.32);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    font-weight: 600;
+  }
+  .tab-item.active:hover {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.24) 0%, rgba(99, 102, 241, 0.18) 100%);
+    border-color: rgba(59, 130, 246, 0.42);
+    color: #ffffff;
+  }
+  .tab-item svg {
+    width: 15px;
+    height: 15px;
+    flex: 0 0 15px;
+    opacity: 0.85;
+    transition: transform 0.16s ease, color 0.16s ease, filter 0.16s ease;
+  }
+  .tab-item.active svg {
+    opacity: 1;
+    color: var(--accent);
+    filter: drop-shadow(0 0 5px rgba(59, 130, 246, 0.5));
+  }
+  .tab-item.loading svg {
+    animation: tabIconPulse 1.2s ease-in-out infinite;
+  }
+  @keyframes tabIconPulse {
+    0%, 100% { transform: scale(1); opacity: 0.85; }
+    50% { transform: scale(1.15); opacity: 1; filter: drop-shadow(0 0 5px var(--accent)); }
+  }
+  .tab-item span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   #tab-content {
     flex: 1;
     min-width: 0;
     height: 100%;
     overflow: hidden;
+    position: relative;
   }
-  /* TODO tab uses the original 3-column grid. */
+  .tab-pane {
+    display: none;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    position: relative;
+  }
+  .tab-pane.active {
+    display: flex;
+    flex-direction: column;
+    animation: tabPaneFadeSlide 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes tabPaneFadeSlide {
+    0% {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* ----- Tab Loading Bar & Shimmer Skeleton Loading ----- */
+  .tab-loading-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2.5px;
+    z-index: 100;
+    pointer-events: none;
+    opacity: 0;
+    background: linear-gradient(90deg, var(--accent), #8b5cf6, #ec4899, #38bdf8, var(--accent));
+    background-size: 250% 100%;
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.15s ease;
+  }
+  .tab-loading-bar.loading {
+    opacity: 1;
+    transform: scaleX(0.7);
+    animation: loadingGlowFlow 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+  .tab-loading-bar.done {
+    opacity: 1;
+    transform: scaleX(1);
+    transition: transform 0.15s ease-out, opacity 0.25s ease-out 0.1s;
+  }
+  @keyframes loadingGlowFlow {
+    0% { background-position: 0% 0; }
+    100% { background-position: 250% 0; }
+  }
+
+  .tab-skeleton-layout {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    background: var(--bg);
+  }
+  .tab-skeleton-col {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .tab-skeleton-side {
+    width: 270px;
+    border-right: 1px solid var(--border);
+    background: var(--bg-panel);
+    padding: 16px 14px;
+    gap: 8px;
+    flex: 0 0 270px;
+  }
+  .tab-skeleton-mid {
+    width: 320px;
+    border-right: 1px solid var(--border);
+    background: var(--bg-panel);
+    padding: 16px 14px;
+    gap: 10px;
+    flex: 0 0 320px;
+  }
+  .tab-skeleton-main {
+    flex: 1;
+    padding: 18px 22px;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .skeleton-shimmer {
+    position: relative;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: var(--radius-md);
+  }
+  .skeleton-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.04) 30%,
+      rgba(255, 255, 255, 0.11) 50%,
+      rgba(255, 255, 255, 0.04) 70%,
+      transparent 100%
+    );
+    animation: shimmerSlide 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+  @keyframes shimmerSlide {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  .skeleton-pill {
+    border-radius: 999px;
+  }
+  .skeleton-circle {
+    border-radius: 50%;
+  }
+
+  /* Base column & grid structures */
   .tab-todo {
     display: grid;
     grid-template-columns: 280px minmax(0, 1fr) minmax(0, 1.1fr);
-    gap: 16px;
-    padding: 16px;
+    gap: 0;
+    padding: 0;
     height: 100%;
     overflow: hidden;
   }
-  /* Test uses the standard 2-column job layout. */
   .tab-jobs {
     display: grid;
-    grid-template-columns: 300px minmax(0, 1fr);
-    gap: 16px;
-    padding: 16px;
+    grid-template-columns: 290px minmax(0, 1fr);
+    gap: 0;
+    padding: 0;
     height: 100%;
     overflow: hidden;
   }
@@ -984,16 +1259,28 @@
   }
   .log-actions { display: flex; gap: 6px; }
   .log-actions .action-btn {
-    width: 30px; height: 30px;
-    border-radius: 6px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
+    width: 28px; height: 28px;
+    border-radius: var(--radius-md);
+    background: transparent;
+    border: 1px solid transparent;
     color: var(--fg-mute);
     display: inline-flex; align-items: center; justify-content: center;
     cursor: pointer;
+    transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease, transform 0.1s ease;
   }
-  .log-actions .action-btn:hover { color: var(--fg); }
-  .log-actions .action-btn.danger:hover { color: var(--red); border-color: rgba(239, 68, 68, 0.4); }
+  .log-actions .action-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.08);
+    color: var(--fg);
+  }
+  .log-actions .action-btn:active {
+    transform: scale(0.96);
+  }
+  .log-actions .action-btn.danger:hover {
+    color: var(--red);
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.3);
+  }
 
   /* ----- Card primitive ----- */
   .card {
@@ -1073,7 +1360,7 @@
     background: var(--bg-input);
     color: var(--fg);
     border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-md);
     padding: 8px 10px;
     font-size: 13px;
     outline: none;
@@ -1853,6 +2140,22 @@
   [data-md] pre code.hljs * {
     font-family: inherit;
   }
+  /* Built-in fallback syntax highlighting rules (GitHub Dark Dimmed) */
+  .hljs { color: #adbac7; background: transparent; }
+  .hljs-doctag, .hljs-keyword, .hljs-meta .hljs-keyword, .hljs-template-tag, .hljs-template-variable, .hljs-type, .hljs-variable.language_ { color: #f47067; font-weight: 600; }
+  .hljs-title, .hljs-title.class_, .hljs-title.class_.inherited__, .hljs-title.function_ { color: #dcbdfb; }
+  .hljs-attr, .hljs-attribute, .hljs-literal, .hljs-meta, .hljs-number, .hljs-operator, .hljs-selector-attr, .hljs-selector-class, .hljs-selector-id, .hljs-variable { color: #6cb6ff; }
+  .hljs-meta .hljs-string, .hljs-regexp, .hljs-string { color: #96d0ff; }
+  .hljs-built_in, .hljs-symbol { color: #f69d50; }
+  .hljs-code, .hljs-comment, .hljs-formula { color: #768390; font-style: italic; }
+  .hljs-name, .hljs-quote, .hljs-selector-pseudo, .hljs-selector-tag { color: #8ddb8c; }
+  .hljs-subst { color: #adbac7; }
+  .hljs-section { color: #316dca; font-weight: 700; }
+  .hljs-bullet { color: #eac55f; }
+  .hljs-emphasis { color: #adbac7; font-style: italic; }
+  .hljs-strong { color: #adbac7; font-weight: 700; }
+  .hljs-addition { color: #b4f1b4; background-color: #1b4721; }
+  .hljs-deletion { color: #ffd8d3; background-color: #78191b; }
   [data-md] blockquote {
     border-left: 3px solid var(--accent);
     background: var(--accent-soft);
@@ -1888,7 +2191,7 @@
     background: var(--bg-card-hover);
     color: var(--fg);
     border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-md);
     padding: 7px 14px;
     font-size: 12.5px;
     font-weight: 650;
@@ -1898,6 +2201,70 @@
   .btn-secondary:hover { color: white; border-color: var(--accent); background: rgba(99, 102, 241, 0.22); }
   .btn-primary.small { width: auto; padding: 7px 14px; font-size: 12.5px; }
 
+  /* ----- Ghost button primitive ----- */
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: var(--radius-md);
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--fg-mute);
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+    line-height: 1.2;
+    transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease, transform 0.1s ease;
+  }
+  .btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.08);
+    color: var(--fg);
+  }
+  .btn-ghost:active {
+    background: rgba(255, 255, 255, 0.1);
+    transform: scale(0.97);
+  }
+  .btn-ghost.active {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--fg);
+    border-color: var(--border-strong);
+  }
+  .btn-ghost.primary {
+    color: var(--accent);
+  }
+  .btn-ghost.primary:hover {
+    background: var(--accent-soft);
+    border-color: rgba(59, 130, 246, 0.3);
+    color: #60a5fa;
+  }
+  .btn-ghost.danger {
+    color: var(--red);
+  }
+  .btn-ghost.danger:hover {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #f87171;
+  }
+  .btn-ghost.small {
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .btn-ghost.icon-only {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    flex: 0 0 28px;
+  }
+  .btn-ghost.icon-only svg {
+    width: 14px;
+    height: 14px;
+  }
+
   /* Drag-and-drop for tasks in 下一步 / 待规划. */
   .task[draggable="true"] { cursor: grab; }
   .task[draggable="true"]:active { cursor: grabbing; }
@@ -1906,11 +2273,11 @@
   .task.drop-after  { box-shadow: 0 2px 0 0 var(--accent) inset, 0 2px 0 0 var(--accent); }
   .task-list-droppable.drop-target {
     background: rgba(99, 102, 241, 0.06);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-md);
     outline: 1px dashed rgba(99, 102, 241, 0.4);
     outline-offset: 2px;
   }
-  .empty-row.drop-target { color: var(--accent); border: 1px dashed var(--accent); border-radius: var(--radius-sm); }
+  .empty-row.drop-target { color: var(--accent); border: 1px dashed var(--accent); border-radius: var(--radius-md); }
 
   /* Spec creation form on the detail panel. */
   .spec-create .file-card-head .hint {
@@ -1926,7 +2293,7 @@
     min-height: 110px;
     padding: 10px;
     border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-md);
     background: var(--bg-input, var(--bg));
     color: var(--fg);
     font-family: 'JetBrains Mono', ui-monospace, monospace;
@@ -1946,174 +2313,108 @@
   .action-btn.danger { color: var(--red); }
   .action-btn.danger:hover { background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.4); }
 
-  /* ----- Compact desktop shell ----- */
-  :root {
-    --bg: #101112;
-    --bg-panel: #141516;
-    --bg-card: #191a1c;
-    --bg-card-hover: #202224;
-    --bg-input: #171819;
-    --bg-code: #111213;
-    --fg: #e4e4e5;
-    --fg-mute: #a2a4a8;
-    --fg-dim: #6d7075;
-    --accent: #4f8cff;
-    --accent-soft: rgba(79, 140, 255, 0.13);
-    --accent-ring: rgba(79, 140, 255, 0.42);
-    --border: #292b2e;
-    --border-strong: #383b40;
-    --radius-lg: 8px;
-    --radius-md: 6px;
-    --radius-sm: 5px;
-    --shell-header-height: 50px;
-  }
-  header {
-    height: var(--shell-header-height);
-    padding: 0 20px;
-    gap: 20px;
-    background: #151617;
-  }
-  html.wails-desktop header { padding-right: 150px; }
-  .brand .logo { width: 26px; height: 26px; border-radius: 6px; }
-  .brand .name { font-size: 13px; font-weight: 650; letter-spacing: 0.1px; }
-  .brand .chevron { color: var(--fg-dim); display: inline-flex; }
-  .header-tab {
-    padding: 0;
-    border: 0;
-    background: transparent;
-    font-size: 11.5px;
-  }
-  .header-tab > svg, .header-tab > span:not(.pill) { display: none; }
-  .header-tab .pill { padding: 3px 10px; }
-  .header-workspace { color: var(--fg-dim); font-size: 10.5px; }
-  .header-workspace {
-    min-width: 0;
+  /* ----- Unified Workspace Flat Layout (All Tabs) ----- */
+  #tab-content > .tab-pane,
+  #tab-content .tab-todo,
+  #tab-content .tab-jobs,
+  #tab-content .tab-build-run,
+  #tab-content .tab-chat,
+  #tab-content .tab-git,
+  #tab-content .tab-loc,
+  #tab-content .tab-remote,
+  #tab-content .validation-page,
+  #tab-content .paks-tab,
+  #tab-content .graph-tab,
+  #tab-content .docs-tab,
+  #tab-content .settings-tab,
+  #tab-content #git-tab-body,
+  #tab-content #git-tab-body .tab-git {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .header-workspace strong { color: var(--fg-mute); font-weight: 500; }
-  .header-meta { gap: 20px; font-size: 10.5px; }
-  .header-meta .avatar { width: 24px; height: 24px; }
-  main { height: calc(100vh - var(--shell-header-height)); }
-  .tab-strip {
-    width: var(--nav-width);
-    padding: 10px 7px;
-    gap: 4px;
-    background: #131415;
-  }
-  .tab-item {
-    min-height: 38px;
-    flex-direction: row;
-    justify-content: flex-start;
-    gap: 10px;
-    padding: 8px 10px;
-    font-size: 12px;
-  }
-  .tab-item svg { width: 16px; height: 16px; flex: 0 0 auto; }
-  .card { border-radius: var(--radius-md); padding: 14px; }
-
-  /* ----- Flat workspace layout ----- */
-  #tab-content > .tab-todo,
-  #tab-content > .tab-jobs,
-  #tab-content > .tab-build-run,
-  #tab-content > .tab-chat,
-  #tab-content > #git-tab-body,
-  #tab-content > .tab-loc {
     padding: 0;
+    margin: 0;
     gap: 0;
     background: var(--bg);
   }
+
+  /* All sidebars / column 1 in multi-column layouts */
   .tab-todo > aside,
-  .tab-todo > section,
   .tab-jobs > aside,
-  .tab-jobs > section,
   .tab-build-run > aside,
-  .tab-build-run > section,
   .chat-layout > aside,
-  .chat-layout > section,
   .tab-git > aside,
-  .tab-git > section,
-  .tab-loc > section {
-    padding: calc(14px * var(--density-scale));
-    border-right: 1px solid var(--border);
+  .docs-sidebar,
+  .validation-script-col,
+  .paks-sidebar,
+  .graph-sidebar,
+  .settings-nav {
     background: var(--bg-panel);
+    border-right: 1px solid var(--border);
+    padding: calc(14px * var(--density-scale));
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
+
+  /* All middle columns in 3-column layouts */
+  .tab-todo > section:first-of-type,
+  .tab-git .git-commits-col,
+  .validation-list-col,
+  .docs-center,
+  .paks-col-list,
+  .settings-main {
+    border-right: 1px solid var(--border);
+    padding: calc(14px * var(--density-scale));
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  /* All main/detail content areas */
   .tab-todo > :last-child,
   .tab-jobs > :last-child,
   .tab-build-run > :last-child,
   .chat-layout > :last-child,
   .tab-git > :last-child,
-  .tab-loc > :last-child {
+  .tab-loc > :last-child,
+  .validation-detail-col,
+  .docs-preview,
+  .paks-col-preview,
+  .graph-main,
+  .settings-preview {
     border-right: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
-  #tab-content > :not(.docs-tab):not(.settings-tab) .card {
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-  }
-  #tab-content > :not(.docs-tab):not(.settings-tab) .card + .card {
-    margin-top: 1px;
-    border-top: 1px solid var(--border);
-  }
-  #tab-content > :not(.docs-tab):not(.settings-tab) .file-card {
-    border: 0;
-    border-top: 1px solid var(--border);
-    border-radius: 0;
-    background: transparent;
-    padding: calc(14px * var(--density-scale)) 0;
-  }
-  #tab-content > :not(.docs-tab):not(.settings-tab) .log-panel {
-    border: 0;
-    border-radius: 0;
-  }
-  #tab-content > .tab-chat { padding: 0; }
-  #tab-content > .tab-chat .chat-layout { gap: 0; }
-  #tab-content > #git-tab-body,
-  #tab-content > #git-tab-body .tab-git { height: 100%; }
-  #tab-content > .tab-loc .loc-col { gap: 0; }
-  .target-item,
-  .task,
-  .journal-item,
-  .branch-row,
-  .arg-item {
-    border: 0;
-    border-bottom: 1px solid var(--border);
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-  }
-  .target-item:hover,
-  .task:hover,
-  .journal-item:hover,
-  .branch-row:hover,
-  .arg-item:hover {
-    border-color: var(--border);
+
+  /* Rounded Cards inside workspace columns */
+  .tab-pane .card,
+  #tab-content .card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
     background: var(--bg-card);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    padding: calc(12px * var(--density-scale));
+    margin-bottom: calc(10px * var(--density-scale));
   }
-  .target-item.selected,
-  .task.selected,
-  .branch-row.current {
-    border-color: var(--border);
-    box-shadow: inset 2px 0 0 var(--accent);
-    background: var(--accent-soft);
+  .tab-pane .card + .card,
+  #tab-content .card + .card {
+    margin-top: calc(10px * var(--density-scale));
   }
-  #tab-content .target-item.selected {
-    border-color: transparent;
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.065);
-    box-shadow: none;
+  .tab-pane .log-panel,
+  #tab-content .log-panel {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    height: 100%;
+    overflow: hidden;
   }
-  #tab-content .target-item.selected:hover {
-    background: rgba(255, 255, 255, 0.085);
-  }
-  #tab-content .target-item.selected .name {
-    color: #f2f3f4;
-    font-weight: 550;
-  }
-  /* Unified selection treatment: neutral raised row, no outlines or dividers. */
-  .tab-item,
+
+  #tab-content .chat-layout { gap: 0; }
+  #tab-content .loc-col { gap: 0; }
+  /* Unified selection treatment: neutral raised row, rounded aesthetic. */
   #tab-content .target-item,
   #tab-content .task,
   #tab-content .journal-item,
@@ -2123,8 +2424,9 @@
   #tab-content .commit-row,
   #tab-content .local-changes-card {
     border: 0;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     box-shadow: none;
+    transition: background 0.14s ease, color 0.14s ease;
   }
   #tab-content .target-item,
   #tab-content .task,
@@ -2133,9 +2435,8 @@
   #tab-content .chat-session-item,
   #tab-content .docs-file-item,
   #tab-content .commit-row {
-    margin: 1px 0;
+    margin: 2px 0;
   }
-  .tab-item.active,
   #tab-content .target-item.selected,
   #tab-content .task.selected,
   #tab-content .branch-row.current,
@@ -2146,12 +2447,11 @@
   #tab-content .commit-row.local-change-row.selected,
   #tab-content .local-changes-card.selected {
     border: 0;
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.065);
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.075);
     box-shadow: none;
     color: #f2f3f4;
   }
-  .tab-item.active:hover,
   #tab-content .target-item.selected:hover,
   #tab-content .task.selected:hover,
   #tab-content .branch-row.current:hover,
@@ -2159,10 +2459,7 @@
   #tab-content .docs-file-item.active:hover,
   #tab-content .commit-row.selected:hover,
   #tab-content .local-changes-card.selected:hover {
-    background: rgba(255, 255, 255, 0.085);
-  }
-  .tab-item.active {
-    color: var(--fg);
+    background: rgba(255, 255, 255, 0.095);
   }
   #tab-content .target-item .radio {
     display: none;
@@ -2347,69 +2644,59 @@
 <main>
 
   <nav class="tab-strip">
-    <button class="tab-item {{if eq .ActiveTab "todo"}}active{{end}}" type="button" data-tab="todo"
-            hx-get="/tab/todo" hx-target="#tab-content" hx-swap="innerHTML">
+    <button class="tab-item {{if eq .ActiveTab "todo"}}active{{end}}" type="button" data-tab="todo">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
       <span>{{T "nav.todo"}}</span>
     </button>
-    <button class="tab-item {{if eq .ActiveTab "docs"}}active{{end}}" type="button" data-tab="docs"
-            hx-get="/tab/docs" hx-target="#tab-content" hx-swap="innerHTML">
+    <button class="tab-item {{if eq .ActiveTab "docs"}}active{{end}}" type="button" data-tab="docs">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg>
       <span>{{T "nav.docs"}}</span>
     </button>
-    <button class="tab-item {{if eq .ActiveTab "build"}}active{{end}}" type="button" data-tab="build"
-            hx-get="/tab/build" hx-target="#tab-content" hx-swap="innerHTML">
+    <button class="tab-item {{if eq .ActiveTab "build"}}active{{end}}" type="button" data-tab="build">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h10v6H4z"/><path d="M4 15h7v4H4z"/><polygon points="15 13 21 17 15 21 15 13" fill="currentColor" stroke="none"/></svg>
       <span>{{T "nav.build"}}</span>
     </button>
-    <button class="tab-item {{if eq .ActiveTab "remote"}}active{{end}}" type="button" data-tab="remote"
-            hx-get="/tab/remote" hx-target="#tab-content" hx-swap="innerHTML">
+    <button class="tab-item {{if eq .ActiveTab "remote"}}active{{end}}" type="button" data-tab="remote">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M7 19h10"/><path d="M12 17v2"/><path d="M8 9h8"/><path d="M10 12h4"/></svg>
       <span>{{T "nav.remote"}}</span>
     </button>
-    <button class="tab-item {{if eq .ActiveTab "test"}}active{{end}}" type="button" data-tab="test"
-            hx-get="/tab/test" hx-target="#tab-content" hx-swap="innerHTML">
+    <button class="tab-item {{if eq .ActiveTab "test"}}active{{end}}" type="button" data-tab="test">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 2v8L4 20a2 2 0 0 0 1.7 3h12.6A2 2 0 0 0 20 20l-5-10V2"/><line x1="9" y1="2" x2="15" y2="2"/><line x1="7" y1="14" x2="17" y2="14"/></svg>
       <span>{{T "nav.test"}}</span>
     </button>
-    <button class="tab-item {{if eq .ActiveTab "validation"}}active{{end}}" type="button" data-tab="validation"
-            hx-get="/tab/validation" hx-target="#tab-content" hx-swap="innerHTML">
+    <button class="tab-item {{if eq .ActiveTab "validation"}}active{{end}}" type="button" data-tab="validation">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 4 6v5c0 5 3.4 8.7 8 10 4.6-1.3 8-5 8-10V6l-8-3z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg>
       <span>{{T "nav.validation"}}</span>
     </button>
-    <button class="tab-item {{if eq .ActiveTab "git"}}active{{end}}" type="button" data-tab="git"
-            hx-get="/tab/git" hx-target="#tab-content" hx-swap="innerHTML">
+    <button class="tab-item {{if eq .ActiveTab "git"}}active{{end}}" type="button" data-tab="git">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M6 15V9a6 6 0 0 1 6-6"/><path d="M18 9v3a6 6 0 0 1-6 6"/></svg>
       <span>{{T "nav.git"}}</span>
     </button>
-    <button class="tab-item {{if eq .ActiveTab "chat"}}active{{end}}" type="button" data-tab="chat"
-            hx-get="/tab/chat" hx-target="#tab-content" hx-swap="innerHTML">
+    <button class="tab-item {{if eq .ActiveTab "chat"}}active{{end}}" type="button" data-tab="chat">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 9h8M8 13h5"/></svg>
       <span>{{T "nav.chat"}}</span>
     </button>
-    <button class="tab-item {{if eq .ActiveTab "loc"}}active{{end}}" type="button" data-tab="loc"
-            hx-get="/tab/loc" hx-target="#tab-content" hx-swap="innerHTML">
+    <button class="tab-item {{if eq .ActiveTab "loc"}}active{{end}}" type="button" data-tab="loc">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="20" x2="4" y2="10"/><line x1="10" y1="20" x2="10" y2="4"/><line x1="16" y1="20" x2="16" y2="14"/><line x1="22" y1="20" x2="22" y2="8"/></svg>
       <span>{{T "nav.loc"}}</span>
     </button>
-    <button class="tab-item {{if eq .ActiveTab "paks"}}active{{end}}" type="button" data-tab="paks"
-            hx-get="/tab/paks" hx-target="#tab-content" hx-swap="innerHTML">
+    <button class="tab-item {{if eq .ActiveTab "paks"}}active{{end}}" type="button" data-tab="paks">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16v13H4z"/><path d="M7 4h10l3 3H4z"/><path d="M9 11h6M9 15h6"/></svg>
       <span>{{T "nav.paks"}}</span>
     </button>
-    <button class="tab-item {{if eq .ActiveTab "graph"}}active{{end}}" type="button" data-tab="graph"
-            hx-get="/tab/graph" hx-target="#tab-content" hx-swap="innerHTML">
+    <button class="tab-item {{if eq .ActiveTab "graph"}}active{{end}}" type="button" data-tab="graph">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="12" cy="18" r="3"/><path d="M9 6h6"/><path d="M7.5 8.5 11 15"/><path d="M16.5 8.5 13 15"/></svg>
       <span>{{T "nav.graph"}}</span>
     </button>
-    <button class="tab-item {{if eq .ActiveTab "settings"}}active{{end}}" type="button" data-tab="settings"
-            hx-get="/tab/settings" hx-target="#tab-content" hx-swap="innerHTML">
+    <button class="tab-item {{if eq .ActiveTab "settings"}}active{{end}}" type="button" data-tab="settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.6v-.1A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3V9.6h.1A1.7 1.7 0 0 0 4.6 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.1A1.7 1.7 0 0 0 15.5 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.15.37.36.7.6 1 .3.34.7.5 1.1.5h.1v4h-.1a1.7 1.7 0 0 0-1.7.5z"/></svg>
       <span>{{T "nav.settings"}}</span>
     </button>
   </nav>
 
   <div id="tab-content">
+    <div id="tab-loading-bar" class="tab-loading-bar"></div>
+    <div class="tab-pane active" data-tab-pane="{{.ActiveTab}}">
     {{if eq .ActiveTab "docs"}}
       {{template "tab_docs" .}}
     {{else if eq .ActiveTab "build"}}
@@ -2435,6 +2722,7 @@
     {{else}}
       {{template "tab_todo" .}}
     {{end}}
+    </div>
   </div>
 
 </main>
@@ -2489,24 +2777,163 @@
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     }[ch]));
   }
+  const HLJS_ALIAS_MAP = {
+    'scad': 'openscad',
+    'slang': 'cpp',
+    'hlsl': 'cpp',
+    'glsl': 'glsl',
+    'c++': 'cpp',
+    'cxx': 'cpp',
+    'cc': 'cpp',
+    'h': 'cpp',
+    'hpp': 'cpp',
+    'c#': 'csharp',
+    'cs': 'csharp',
+    'dotnet': 'csharp',
+    'sh': 'bash',
+    'shell': 'bash',
+    'zsh': 'bash',
+    'cmd': 'dos',
+    'bat': 'dos',
+    'ps1': 'powershell',
+    'js': 'javascript',
+    'ts': 'typescript',
+    'py': 'python',
+    'yml': 'yaml',
+    'jsonc': 'json',
+    'json5': 'json',
+    'docker': 'dockerfile',
+    'rb': 'ruby',
+    'rs': 'rust',
+    'mlscript': 'cpp',
+  };
+
+  function enhanceCliHighlighting(html) {
+    if (!html) return html;
+    const lines = html.split('\n');
+    const processed = lines.map(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return line;
+      if (trimmed.startsWith('<span class="hljs-comment">') && trimmed.endsWith('</span>')) return line;
+
+      let mainPart = line;
+      let commentPart = '';
+      const commentIdx = line.indexOf('<span class="hljs-comment">');
+      if (commentIdx !== -1) {
+        mainPart = line.slice(0, commentIdx);
+        commentPart = line.slice(commentIdx);
+      }
+
+      // Flags and options: e.g. --scene, --lang, -v, -DENABLE_AVIF=ON, --preset
+      mainPart = mainPart.replace(/(^|[\s=])(--[a-zA-Z0-9_-]+|-[a-zA-Z0-9](?:[a-zA-Z0-9_=-]*))(?=[\s="']|$)/g,
+        '$1<span class="hljs-attr">$2</span>');
+
+      // CLI command at start of line
+      mainPart = mainPart.replace(/^(\s*)([a-zA-Z0-9_.-]*(?:\/|\\)[a-zA-Z0-9_.-]+|[a-zA-Z0-9_.-]+\.(?:sh|bat|exe|py)|gnb|cmake|git|ninja|python3|curl|node|npm|dotnet|cargo)(?=\s|$|<)/g,
+        '$1<span class="hljs-keyword">$2</span>');
+
+      // CLI command after environment variables (e.g. GNB_LANG=en ./gnb.sh doctor)
+      mainPart = mainPart.replace(/^(\s*[a-zA-Z0-9_]+=[^\s]+\s+)([a-zA-Z0-9_.-]*(?:\/|\\)[a-zA-Z0-9_.-]+|[a-zA-Z0-9_.-]+\.(?:sh|bat|exe|py)|gnb|cmake|git|ninja|python3|curl|node|npm|dotnet|cargo)(?=\s|$|<)/g,
+        '$1<span class="hljs-keyword">$2</span>');
+
+      // Subcommand right after the keyword command
+      mainPart = mainPart.replace(/(<span class="hljs-keyword">[^<]+<\/span>\s+)([a-zA-Z0-9_-]+)(?=[\s]|$)/g, (match, prefix, sub) => {
+        if (sub.startsWith('-')) return match;
+        return prefix + `<span class="hljs-title function_">${sub}</span>`;
+      });
+
+      // File/folder path arguments
+      mainPart = mainPart.replace(/(^|[\s="'])((?:assets|docs|src|tools|out|projects|tests)\/[a-zA-Z0-9_.\/-]+)(?=[\s="']|$)/g,
+        '$1<span class="hljs-string">$2</span>');
+
+      return mainPart + commentPart;
+    });
+    return processed.join('\n');
+  }
+
+  function enhanceCmakeHighlighting(html) {
+    if (!html) return html;
+    let res = html.replace(/(^|[\s\n])([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g, (match, prefix, fn) => {
+      return prefix + `<span class="hljs-keyword">${fn}</span>(`;
+    });
+    res = res.replace(/(^|[\s])([A-Z][A-Z0-9_]{2,})(?=[\s]|$)/g, (match, prefix, kw) => {
+      return prefix + `<span class="hljs-attr">${kw}</span>`;
+    });
+    return res;
+  }
+
+  function fallbackHighlight(text, lang) {
+    let escaped = escapeHTML(text);
+    if (!escaped) return '';
+    escaped = escaped.replace(/(&quot;[\s\S]*?&quot;|&#39;[\s\S]*?&#39;)/g, '<span class="hljs-string">$1</span>');
+    escaped = escaped.replace(/(\/\/[^\n]*|#[^\n]*|\/\*[\s\S]*?\*\/)/g, '<span class="hljs-comment">$1</span>');
+    escaped = escaped.replace(/\b(\d+(?:\.\d+)?(?:f|u|l)?)\b/g, '<span class="hljs-number">$1</span>');
+    escaped = escaped.replace(/\b(void|int|float|double|bool|char|class|struct|enum|public|private|protected|virtual|override|return|if|else|for|while|do|switch|case|break|continue|default|new|delete|auto|const|constexpr|static|template|typename|using|namespace|import|true|false|nullptr|null|async|await|var|let|function|fn|def|package|type)\b/g, '<span class="hljs-keyword">$1</span>');
+    return escaped;
+  }
+
   function highlightCodeBlocks(root) {
-    if (!window.hljs) return;
     const scope = root || document;
     const blocks = [];
     if (scope.matches?.('pre code')) blocks.push(scope);
-    scope.querySelectorAll?.('pre code:not([data-highlighted])').forEach(code => blocks.push(code));
+    scope.querySelectorAll?.('pre code').forEach(code => {
+      if (!code.dataset.highlighted) blocks.push(code);
+    });
+
     blocks.forEach(code => {
       if (code.dataset.highlighted) return;
+      code.classList.add('hljs');
+
       const languageClass = Array.from(code.classList).find(name => name.startsWith('language-'));
-      const language = languageClass ? languageClass.slice('language-'.length).toLowerCase() : '';
-      if (language && !hljs.getLanguage(language)) {
-        const result = hljs.highlightAuto(code.textContent || '');
-        code.innerHTML = result.value;
-        code.classList.add('hljs');
-        code.dataset.highlighted = 'yes';
-        return;
+      const rawLang = languageClass ? languageClass.slice('language-'.length).toLowerCase() : '';
+      const normLang = HLJS_ALIAS_MAP[rawLang] || rawLang;
+
+      let highlighted = false;
+
+      if (window.hljs) {
+        if (normLang && normLang !== 'text' && normLang !== 'plaintext' && hljs.getLanguage(normLang)) {
+          try {
+            if (normLang !== rawLang) {
+              code.classList.remove(languageClass);
+              code.classList.add('language-' + normLang);
+            }
+            // IMPORTANT: Highlight.js v11 checks code.dataset.highlighted internally.
+            // Do NOT set dataset.highlighted before calling highlightElement!
+            hljs.highlightElement(code);
+            highlighted = true;
+          } catch (_) {}
+        } else {
+          // 未标注语言或常见脚本/配置块，在安全长度限制（5000 字符）内自动探测高亮
+          const text = (code.textContent || '').trim();
+          if (text && text.length < 5000 && (!normLang || (normLang !== 'text' && normLang !== 'plaintext'))) {
+            try {
+              const result = hljs.highlightAuto(text);
+              if (result && result.value) {
+                code.innerHTML = result.value;
+                highlighted = true;
+              }
+            } catch (_) {}
+          }
+        }
       }
-      hljs.highlightElement(code);
+
+      // If hljs was unavailable or did not run, use fallback highlighter
+      if (!highlighted && normLang && normLang !== 'text' && normLang !== 'plaintext') {
+        const text = code.textContent || '';
+        if (text) {
+          code.innerHTML = fallbackHighlight(text, normLang);
+          highlighted = true;
+        }
+      }
+
+      // Post-processing enhancements for CLI commands & CMake
+      if (normLang === 'bash' || normLang === 'sh' || normLang === 'shell' || normLang === 'zsh') {
+        code.innerHTML = enhanceCliHighlighting(code.innerHTML);
+      } else if (normLang === 'cmake') {
+        code.innerHTML = enhanceCmakeHighlighting(code.innerHTML);
+      }
+
+      code.dataset.highlighted = 'yes';
     });
   }
   function renderMarkdownText(el, source) {
@@ -2542,13 +2969,19 @@
     });
   }
   function normalizeDocsMarkdownLink(basePath, href) {
-    const raw = String(href || '').trim();
-    if (!basePath || !raw || raw.startsWith('#') || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw)) {
+    let raw = String(href || '').trim();
+    if (!raw || raw.startsWith('#')) return '';
+    if (/^file:\/\//i.test(raw)) {
+      const match = /\/(docs\/[^#?]+\.md)(?:[#?].*)?$/i.exec(raw);
+      if (match) return match[1];
       return '';
     }
-    const pathOnly = raw.split('#', 1)[0];
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw)) {
+      return '';
+    }
+    const pathOnly = raw.split(/[#?]/, 1)[0];
     if (!pathOnly) return '';
-    const baseParts = String(basePath).split('/').slice(0, -1);
+    const baseParts = String(basePath || '').split('/').slice(0, -1);
     const targetParts = pathOnly.startsWith('/') ? pathOnly.replace(/^\/+/, '').split('/') : baseParts.concat(pathOnly.split('/'));
     const normalized = [];
     for (const part of targetParts) {
@@ -2566,38 +2999,62 @@
     return rel;
   }
   function normalizeRepoDocumentLink(basePath, href, label) {
-    const raw = String(href || '').trim();
+    let raw = String(href || '').trim();
     if (!basePath || !raw || raw.startsWith('#')) return null;
 
-    let url;
-    try {
-      url = new URL(raw, window.location.href);
-    } catch (_) {
-      return null;
-    }
-    if (url.origin !== window.location.origin) return null;
-
-    let line = Number(url.searchParams.get('line') || 0);
-    if (!line) {
-      const hashMatch = /^#(?:L)?(\d+)(?:C\d+)?$/i.exec(url.hash);
-      if (hashMatch) line = Number(hashMatch[1]);
-    }
-    if (!line) {
+    let line = 0;
+    const hashMatch = /#(?:L)?(\d+)(?:C\d+)?$/i.exec(raw);
+    if (hashMatch) {
+      line = Number(hashMatch[1]);
+    } else {
       const labelMatch = /:(\d+)(?::\d+)?\s*$/.exec(String(label || '').trim());
       if (labelMatch) line = Number(labelMatch[1]);
     }
 
-    const rawIsAbsolute = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw);
-    let pathOnly;
-    try {
-      pathOnly = decodeURIComponent(
-        rawIsAbsolute ? url.pathname : raw.split(/[?#]/, 1)[0]
-      ).replace(/^\/+/, '');
-    } catch (_) {
-      return null;
+    let pathOnly = '';
+    if (/^file:\/\//i.test(raw)) {
+      try {
+        const u = new URL(raw);
+        pathOnly = decodeURIComponent(u.pathname);
+      } catch (_) {
+        return null;
+      }
+      const repoMarkers = ['/src/', '/assets/', '/tools/', '/docs/', '/projects/', '/tests/', '/cmake/'];
+      let foundIdx = -1;
+      for (const m of repoMarkers) {
+        const idx = pathOnly.indexOf(m);
+        if (idx !== -1 && (foundIdx === -1 || idx < foundIdx)) {
+          foundIdx = idx + 1;
+        }
+      }
+      if (foundIdx !== -1) {
+        pathOnly = pathOnly.slice(foundIdx);
+      } else {
+        pathOnly = pathOnly.replace(/^\/+/, '');
+      }
+    } else {
+      let url;
+      try {
+        url = new URL(raw, window.location.href);
+      } catch (_) {
+        return null;
+      }
+      if (url.origin !== window.location.origin) return null;
+      if (!line) {
+        line = Number(url.searchParams.get('line') || 0);
+      }
+      const rawIsAbsolute = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw);
+      try {
+        pathOnly = decodeURIComponent(
+          rawIsAbsolute ? url.pathname : raw.split(/[?#]/, 1)[0]
+        ).replace(/^\/+/, '');
+      } catch (_) {
+        return null;
+      }
     }
-    const rawIsRootRelative = raw.startsWith('/') || rawIsAbsolute;
-    const baseParts = String(basePath).split('/').slice(0, -1);
+
+    const rawIsRootRelative = raw.startsWith('/') || /^file:\/\//i.test(raw);
+    const baseParts = String(basePath || '').split('/').slice(0, -1);
     const targetParts = rawIsRootRelative ? pathOnly.split('/') : baseParts.concat(pathOnly.split('/'));
     const normalized = [];
     for (const part of targetParts) {
@@ -2610,7 +3067,7 @@
       normalized.push(part);
     }
     const path = normalized.join('/');
-    if (!path || path.startsWith('docs/') && path.toLowerCase().endsWith('.md')) return null;
+    if (!path || (path.startsWith('docs/') && path.toLowerCase().endsWith('.md'))) return null;
     return { path, line: Number.isFinite(line) && line > 0 ? Math.floor(line) : 0 };
   }
   function initDocsSourcePanel(root) {
@@ -3105,21 +3562,14 @@
       validationStepsRefreshPending = false;
     }
     const root = currentSwapRoot(e.detail.target);
-    renderMarkdown(root);
+    initAllLogPanels(root);
+    initPaneComponents(root, getTabKind());
     const sel = document.querySelector('[data-selected-id]')?.dataset?.selectedId;
     if (sel) {
       document.querySelectorAll('.task').forEach(t => {
         if (t.dataset.id === sel) t.classList.add('selected');
       });
     }
-    restoreTargetSelection(root);
-    restoreGitSelection(root);
-    initDocsFolders(root);
-    initDocsSearch(root);
-    initDisplaySettings(root);
-    initDocsSourcePanel(root);
-    initTargetGraph(root);
-    scrollChatToBottom(root);
   });
   // Initial pass for any server-rendered markdown on first load.
   document.addEventListener('DOMContentLoaded', () => {
@@ -3432,36 +3882,220 @@
     }
     document.querySelectorAll('.menu.open').forEach(m => m.classList.remove('open'));
   });
-  // Tab strip: toggle active class on click. The server doesn't re-render the
-  // strip, so the buttons need to track which one is current themselves.
+  function initPaneComponents(pane, kind) {
+    if (!pane) return;
+    initAllLogPanels(pane);
+    renderMarkdown(pane);
+    if (kind === 'docs') {
+      initDocsFolders(pane);
+      initDocsSearch(pane);
+      initDocsSourcePanel(pane);
+    } else if (kind === 'git') {
+      restoreGitSelection(pane);
+    } else if (kind === 'build') {
+      initBuildPane(pane);
+    } else if (kind === 'test') {
+      restoreTargetSelection(pane);
+    } else if (kind === 'graph') {
+      initTargetGraph(pane);
+    } else if (kind === 'settings') {
+      initDisplaySettings(pane);
+    } else if (kind === 'chat') {
+      scrollChatToBottom(pane);
+    }
+  }
+
+  function switchTab(kind, pushHistory = true) {
+    if (!kind) return;
+    const tabBtn = document.querySelector(`.tab-strip [data-tab="${kind}"]`);
+    document.querySelectorAll('.tab-strip [data-tab]').forEach(b => b.classList.toggle('active', b === tabBtn));
+
+    const container = document.getElementById('tab-content');
+    if (!container) return;
+
+    const loadingBar = document.getElementById('tab-loading-bar');
+
+    let targetPane = container.querySelector(`.tab-pane[data-tab-pane="${kind}"]`);
+    if (targetPane) {
+      if (loadingBar) {
+        loadingBar.className = 'tab-loading-bar done';
+        setTimeout(() => { loadingBar.className = 'tab-loading-bar'; }, 280);
+      }
+      container.querySelectorAll('.tab-pane').forEach(p => {
+        if (p === targetPane) {
+          p.classList.remove('active');
+          void p.offsetWidth; // Force reflow to trigger smooth entrance transition
+          p.classList.add('active');
+        } else {
+          p.classList.remove('active');
+        }
+      });
+      initPaneComponents(targetPane, kind);
+      if (pushHistory) {
+        try { history.replaceState(null, '', '/?tab=' + encodeURIComponent(kind)); } catch (_) {}
+      }
+      return;
+    }
+
+    if (loadingBar) {
+      loadingBar.className = 'tab-loading-bar loading';
+    }
+    if (tabBtn) {
+      tabBtn.classList.add('loading');
+    }
+
+    container.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    const pane = document.createElement('div');
+    pane.className = 'tab-pane active tab-loading-pane';
+    pane.dataset.tabPane = kind;
+    pane.innerHTML = `
+      <div class="tab-skeleton-layout">
+        <div class="tab-skeleton-col tab-skeleton-side">
+          <div class="skeleton-shimmer skeleton-pill" style="width: 76px; height: 16px; margin-bottom: 16px;"></div>
+          <div class="skeleton-shimmer skeleton-card" style="height: 36px; margin-bottom: 8px;"></div>
+          <div class="skeleton-shimmer skeleton-card" style="height: 36px; margin-bottom: 8px; animation-delay: 0.08s;"></div>
+          <div class="skeleton-shimmer skeleton-card" style="height: 36px; margin-bottom: 8px; animation-delay: 0.16s;"></div>
+          <div class="skeleton-shimmer skeleton-card" style="height: 36px; margin-bottom: 8px; animation-delay: 0.24s;"></div>
+          <div class="skeleton-shimmer skeleton-card" style="height: 36px; animation-delay: 0.32s;"></div>
+        </div>
+        <div class="tab-skeleton-col tab-skeleton-mid">
+          <div class="skeleton-shimmer skeleton-line" style="width: 100%; height: 32px; margin-bottom: 14px; border-radius: var(--radius-md);"></div>
+          <div class="skeleton-shimmer skeleton-card" style="height: 60px; margin-bottom: 10px; animation-delay: 0.1s;"></div>
+          <div class="skeleton-shimmer skeleton-card" style="height: 60px; margin-bottom: 10px; animation-delay: 0.18s;"></div>
+          <div class="skeleton-shimmer skeleton-card" style="height: 60px; margin-bottom: 10px; animation-delay: 0.26s;"></div>
+          <div class="skeleton-shimmer skeleton-card" style="height: 60px; animation-delay: 0.34s;"></div>
+        </div>
+        <div class="tab-skeleton-col tab-skeleton-main">
+          <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 18px;">
+            <div class="skeleton-shimmer skeleton-circle" style="width: 28px; height: 28px; border-radius: 50%;"></div>
+            <div class="skeleton-shimmer skeleton-line" style="width: 180px; height: 20px;"></div>
+            <div class="skeleton-shimmer skeleton-pill" style="width: 60px; height: 20px; margin-left: auto;"></div>
+          </div>
+          <div class="skeleton-shimmer skeleton-line" style="width: 80%; height: 16px; margin-bottom: 10px; animation-delay: 0.12s;"></div>
+          <div class="skeleton-shimmer skeleton-line" style="width: 65%; height: 16px; margin-bottom: 20px; animation-delay: 0.18s;"></div>
+          <div class="skeleton-shimmer skeleton-box" style="flex: 1; width: 100%; border-radius: var(--radius-lg); animation-delay: 0.25s;"></div>
+        </div>
+      </div>
+    `;
+    container.appendChild(pane);
+    if (pushHistory) {
+      try { history.replaceState(null, '', '/?tab=' + encodeURIComponent(kind)); } catch (_) {}
+    }
+
+    fetch('/tab/' + encodeURIComponent(kind))
+      .then(res => {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.text();
+      })
+      .then(html => {
+        pane.innerHTML = html;
+        pane.classList.remove('tab-loading-pane');
+        if (tabBtn) tabBtn.classList.remove('loading');
+        if (loadingBar) {
+          loadingBar.className = 'tab-loading-bar done';
+          setTimeout(() => { loadingBar.className = 'tab-loading-bar'; }, 300);
+        }
+        initPaneComponents(pane, kind);
+        if (window.htmx) htmx.process(pane);
+      })
+      .catch(err => {
+        if (tabBtn) tabBtn.classList.remove('loading');
+        if (loadingBar) loadingBar.className = 'tab-loading-bar';
+        pane.innerHTML = `<div class="card error" style="margin: 20px; padding: 16px; border: 1px solid var(--red); border-radius: var(--radius-lg); color: var(--red);">加载失败: ${escapeHTML(err.message)}</div>`;
+      });
+  }
+
+  // Intercept tab strip clicks for instant tab switching (0ms Keep-Alive)
   document.body.addEventListener('click', (e) => {
-    const tab = e.target.closest('[data-tab]');
+    const tab = e.target.closest('.tab-strip [data-tab]');
     if (!tab) return;
-    document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('active', b === tab));
+    e.preventDefault();
+    e.stopPropagation();
+    const kind = tab.dataset.tab;
+    if (kind) switchTab(kind);
   });
+
+  // Ensure HTMX swaps targeting #tab-content are redirected to the current active pane
+  document.body.addEventListener('htmx:beforeSwap', (e) => {
+    if (e.detail.target && e.detail.target.id === 'tab-content') {
+      const activePane = document.querySelector('#tab-content > .tab-pane.active');
+      if (activePane) {
+        e.detail.target = activePane;
+      }
+    }
+  });
+  function openExternalUrl(url) {
+    if (!url) return;
+    const wailsRuntime = window.runtime;
+    if (wailsRuntime && typeof wailsRuntime.BrowserOpenURL === 'function') {
+      try {
+        wailsRuntime.BrowserOpenURL(url);
+        return;
+      } catch (_) {}
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
   document.body.addEventListener('click', (e) => {
     const link = e.target.closest('.docs-preview a');
     if (!link) return;
-    const basePath = link.closest('.docs-preview')?.dataset?.docPath;
-    const href = link.getAttribute('href');
-    const rel = normalizeDocsMarkdownLink(basePath, href);
+    const href = link.getAttribute('href') || '';
+    const trimmedHref = href.trim();
+    if (!trimmedHref) return;
+
+    if (/^https?:\/\//i.test(trimmedHref)) {
+      e.preventDefault();
+      openExternalUrl(trimmedHref);
+      return;
+    }
+
+    const preview = link.closest('.docs-preview');
+    const basePath = preview?.dataset?.docPath;
+
+    if (trimmedHref.startsWith('#')) {
+      e.preventDefault();
+      const targetId = decodeURIComponent(trimmedHref.slice(1)).toLowerCase();
+      if (preview && targetId) {
+        let targetEl = preview.querySelector('#' + CSS.escape(targetId));
+        if (!targetEl) {
+          const headings = preview.querySelectorAll('h1, h2, h3, h4, h5, h6');
+          for (const h of headings) {
+            const cleanText = (h.textContent || '').trim().toLowerCase();
+            const slug = cleanText.replace(/[\s\-_]+/g, '-');
+            if (h.id === targetId || slug === targetId || cleanText === targetId) {
+              targetEl = h;
+              break;
+            }
+          }
+        }
+        if (targetEl) {
+          targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+      return;
+    }
+
+    const rel = normalizeDocsMarkdownLink(basePath, trimmedHref);
     if (rel) {
       e.preventDefault();
+      if (preview) preview.style.opacity = '0.6';
       htmx.ajax('GET', '/tab/docs?file=' + encodeURIComponent(rel), {
         target: '#tab-content',
         swap: 'innerHTML',
       });
       return;
     }
-    const source = normalizeRepoDocumentLink(basePath, href, link.textContent);
-    if (!source) return;
-    e.preventDefault();
-    const query = new URLSearchParams({ path: source.path });
-    if (source.line) query.set('line', String(source.line));
-    htmx.ajax('GET', '/docs/source?' + query.toString(), {
-      target: '#docs-source-panel-host',
-      swap: 'innerHTML',
-    });
+
+    const source = normalizeRepoDocumentLink(basePath, trimmedHref, link.textContent);
+    if (source) {
+      e.preventDefault();
+      const query = new URLSearchParams({ path: source.path });
+      if (source.line) query.set('line', String(source.line));
+      htmx.ajax('GET', '/docs/source?' + query.toString(), {
+        target: '#docs-source-panel-host',
+        swap: 'innerHTML',
+      });
+      return;
+    }
   });
   document.body.addEventListener('click', (e) => {
     if (!e.target.closest('[data-docs-source-close]')) return;
@@ -3490,9 +4124,323 @@
     if (!item) return;
     selectGitItem(item);
   });
-  // Target list (build / run / test): radio-style single selection. The hidden
-  // input named "target" inside the form is updated so the next submit posts it.
-  // Selection is also persisted to localStorage so it survives tab switches.
+  // ----- Build & Run Tab Management -----------------------------------
+  const BUILD_RUN_ARGS = [
+    { flag: '--width', category: '显示与窗口', desc: '窗口宽度 (像素)', hasVal: true, valDefault: '1920', placeholder: '1920' },
+    { flag: '--height', category: '显示与窗口', desc: '窗口高度 (像素)', hasVal: true, valDefault: '1080', placeholder: '1080' },
+    { flag: '--fullscreen', category: '显示与窗口', desc: '无边框全屏启动', hasVal: false },
+    { flag: '--present-mode', category: '显示与窗口', desc: '呈现模式 (0:Immediate, 1:MailBox, 2:FIFO, 3:FIFORelaxed)', hasVal: true, valDefault: '2', placeholder: '2' },
+    { flag: '--forcesdr', category: '显示与窗口', desc: '强制以 SDR 色域输出', hasVal: false },
+
+    { flag: '--load-scene', category: '场景与渲染', desc: '启动加载场景路径 (相对或绝对路径)', hasVal: true, valDefault: '', placeholder: 'assets/models/playground.glb' },
+    { flag: '--hdri', category: '场景与渲染', desc: '加载 HDR 环境贴图路径', hasVal: true, valDefault: '', placeholder: 'assets/textures/hdr.hdr' },
+    { flag: '--gpu', category: '场景与渲染', desc: '选择运行的 GPU 索引编号', hasVal: true, valDefault: '0', placeholder: '0' },
+    { flag: '--forcenort', category: '场景与渲染', desc: '禁用硬件光追，使用软件光追/光栅化', hasVal: false },
+    { flag: '--forcesoftgen', category: '场景与渲染', desc: '强制使用软件光追生成环境光立方体', hasVal: false },
+    { flag: '--no-shader-hotreload', category: '场景与渲染', desc: '禁用 Slang 着色器热重载', hasVal: false },
+    { flag: '--shader-hotreload-interval', category: '场景与渲染', desc: '着色器热重载轮询间隔 (秒)', hasVal: true, valDefault: '0.5', placeholder: '0.5' },
+    { flag: '--disable-streamline', category: '场景与渲染', desc: '禁用 NVIDIA Streamline (DLSS)', hasVal: false },
+    { flag: '--disable-fidelityfx', category: '场景与渲染', desc: '禁用 AMD FidelityFX (FSR)', hasVal: false },
+
+    { flag: '--validation', category: '调试与诊断', desc: '启用 Vulkan 校验层 (Validation Layers)', hasVal: false },
+    { flag: '--sync-validation', category: '调试与诊断', desc: '启用 Vulkan 同步资源校验', hasVal: false },
+    { flag: '--renderdoc', category: '调试与诊断', desc: '捕获首帧并调用 RenderDoc', hasVal: false },
+    { flag: '--hidden-window', category: '调试与诊断', desc: '隐藏主窗口运行 (用于测试/不抢焦点)', hasVal: false },
+    { flag: '--reference', category: '调试与诊断', desc: '参考渲染器对比模式', hasVal: false },
+    { flag: '--savefile', category: '调试与诊断', desc: '基准测试后自动保存截图', hasVal: false },
+    { flag: '--locale', category: '调试与诊断', desc: '界面语言 (en 或 zhCN)', hasVal: true, valDefault: 'zhCN', placeholder: 'zhCN' }
+  ];
+
+  function getBuildArgsStorageKey(target) {
+    return 'gnb-run-args-v2-' + target;
+  }
+
+  function loadBuildSavedArgs(target) {
+    try {
+      return JSON.parse(localStorage.getItem(getBuildArgsStorageKey(target)) || '{}');
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function saveBuildCurrentArgs(target) {
+    if (!target || target === 'all') return;
+    const page = document.querySelector('.tab-build-run');
+    if (!page) return;
+    const saved = { flags: {}, customArgs: '' };
+    page.querySelectorAll('#run-args-list .arg-item').forEach(item => {
+      const flag = item.dataset.flag;
+      const cb = item.querySelector('input[type="checkbox"]');
+      const valInput = item.querySelector('.arg-val input');
+      saved.flags[flag] = {
+        checked: cb ? cb.checked : false,
+        val: valInput ? valInput.value : ''
+      };
+    });
+    const customInput = page.querySelector('#custom-run-args-input');
+    if (customInput) {
+      saved.customArgs = customInput.value;
+    }
+    localStorage.setItem(getBuildArgsStorageKey(target), JSON.stringify(saved));
+    rebuildBuildExtraArgs(target);
+  }
+
+  function rebuildBuildExtraArgs(target) {
+    const page = document.querySelector('.tab-build-run');
+    if (!page) return;
+    const parts = [];
+    page.querySelectorAll('#run-args-list .arg-item').forEach(item => {
+      const cb = item.querySelector('input[type="checkbox"]');
+      if (!cb || !cb.checked) return;
+      const flag = item.dataset.flag;
+      parts.push(flag);
+      const valInput = item.querySelector('.arg-val input');
+      if (valInput && valInput.value.trim()) {
+        parts.push(valInput.value.trim());
+      }
+    });
+    const customInput = page.querySelector('#custom-run-args-input');
+    if (customInput && customInput.value.trim()) {
+      parts.push(customInput.value.trim());
+    }
+    const extraArgsStr = parts.join(' ');
+    const hiddenInput = page.querySelector('#run-extra-args');
+    if (hiddenInput) {
+      hiddenInput.value = extraArgsStr;
+    }
+    const previewBox = page.querySelector('#run-cmd-preview-code');
+    if (previewBox) {
+      if (!target || target === 'all') {
+        previewBox.textContent = 'gnb run (请先在左侧选择目标)';
+      } else {
+        previewBox.textContent = './' + target + (extraArgsStr ? ' ' + extraArgsStr : '');
+      }
+    }
+  }
+
+  function renderBuildArgsPanel(target) {
+    const page = document.querySelector('.tab-build-run');
+    if (!page) return;
+    const list = page.querySelector('#run-args-list');
+    const customInput = page.querySelector('#custom-run-args-input');
+    if (!list) return;
+
+    if (!target || target === 'all' || target === 'Packager' || target === 'gkNextUnitTests') {
+      list.innerHTML = '<div class="run-args-empty">' + (target === 'all' ? '请在左侧选择单个具体目标以配置启动参数' : '该目标不可直接作为可交互应用运行') + '</div>';
+      if (customInput) {
+        customInput.value = '';
+        customInput.disabled = true;
+      }
+      rebuildBuildExtraArgs(target);
+      return;
+    }
+
+    if (customInput) {
+      customInput.disabled = false;
+    }
+
+    const saved = loadBuildSavedArgs(target);
+    if (customInput) {
+      customInput.value = saved.customArgs || '';
+    }
+
+    const categories = [];
+    const catMap = new Map();
+    BUILD_RUN_ARGS.forEach(def => {
+      if (!catMap.has(def.category)) {
+        catMap.set(def.category, []);
+        categories.push(def.category);
+      }
+      catMap.get(def.category).push(def);
+    });
+
+    list.innerHTML = '';
+    categories.forEach(catName => {
+      const defs = catMap.get(catName);
+      const isCollapsed = localStorage.getItem('gnb-arg-category-collapsed-' + catName) === '1';
+
+      const groupEl = document.createElement('div');
+      groupEl.className = 'arg-category-group' + (isCollapsed ? ' collapsed' : '');
+      groupEl.dataset.argCategory = catName;
+
+      const headEl = document.createElement('div');
+      headEl.className = 'arg-category-header';
+      headEl.dataset.toggleArgCategory = catName;
+      headEl.innerHTML =
+        '<span class="collapse-arrow">▼</span>' +
+        '<span class="cat-title">' + escapeHTML(catName) + '</span>' +
+        '<span class="cat-count tag-mini">' + defs.length + '</span>';
+      groupEl.appendChild(headEl);
+
+      const itemsEl = document.createElement('div');
+      itemsEl.className = 'arg-category-items';
+
+      defs.forEach(def => {
+        const s = (saved.flags && saved.flags[def.flag]) || {};
+        const checked = s.checked || false;
+        const val = s.val !== undefined ? s.val : (def.valDefault || '');
+        const item = document.createElement('div');
+        item.className = 'arg-item';
+        item.dataset.flag = def.flag;
+
+        const valHtml = def.hasVal
+          ? '<div class="arg-val"><input type="text" value="' + escapeHTML(val) + '" placeholder="' + escapeHTML(def.placeholder || '') + '"></div>'
+          : '';
+
+        const inputId = 'arg-cb-' + def.flag.replace(/[^a-zA-Z0-9]/g, '-');
+        item.innerHTML =
+          '<input type="checkbox"' + (checked ? ' checked' : '') + ' id="' + inputId + '">' +
+          '<div class="arg-body">' +
+            '<label class="arg-flag" for="' + inputId + '">' + def.flag + '</label>' +
+            '<span class="arg-desc">' + escapeHTML(def.desc) + '</span>' +
+            valHtml +
+          '</div>';
+
+        const cb = item.querySelector('input[type="checkbox"]');
+        cb.addEventListener('change', () => saveBuildCurrentArgs(target));
+
+        if (def.hasVal) {
+          const valInput = item.querySelector('.arg-val input');
+          valInput.addEventListener('input', () => {
+            if (!cb.checked) {
+              cb.checked = true;
+            }
+            saveBuildCurrentArgs(target);
+          });
+        }
+        itemsEl.appendChild(item);
+      });
+
+      groupEl.appendChild(itemsEl);
+      list.appendChild(groupEl);
+    });
+
+    rebuildBuildExtraArgs(target);
+  }
+
+  function syncBuildRunTarget(item) {
+    const page = item?.closest('.tab-build-run') || document.querySelector('.tab-build-run');
+    if (!page) return;
+    const target = item?.dataset?.target || 'all';
+    const runnable = (item?.dataset?.runnable === 'true') && target !== 'all';
+    const built = item?.dataset?.built === '1';
+
+    page.querySelectorAll('input[name="target"]').forEach(input => {
+      input.value = target;
+    });
+
+    // 更新当前选中 Target 状态条
+    const nameEl = page.querySelector('#selected-target-name');
+    if (nameEl) {
+      nameEl.textContent = target === 'all' ? 'all targets' : target;
+      nameEl.setAttribute('title', target);
+    }
+    const statusEl = page.querySelector('#selected-target-status');
+    if (statusEl) {
+      statusEl.className = 'bar-status-badge';
+      if (target === 'all') {
+        statusEl.textContent = 'build all';
+        statusEl.classList.add('all');
+      } else if (built) {
+        statusEl.textContent = 'ready';
+        statusEl.classList.add('ready');
+      } else {
+        statusEl.textContent = 'unbuilt';
+        statusEl.classList.add('unbuilt');
+      }
+    }
+
+    // 按钮文字固定保持简短，避免长 target 导致省略号
+    const buildButton = page.querySelector('[data-build-button]');
+    if (buildButton) {
+      buildButton.textContent = '构建';
+      buildButton.setAttribute('title', target === 'all' ? '构建全部目标' : '构建 ' + target);
+    }
+
+    const runButton = page.querySelector('[data-run-button]');
+    if (runButton) {
+      runButton.disabled = !runnable;
+      runButton.textContent = '运行';
+      if (runnable) {
+        runButton.setAttribute('title', '运行 ' + target);
+      } else {
+        runButton.setAttribute('title', target === 'all' ? '运行前请在左侧选择具体目标' : '该目标不可直接运行');
+      }
+    }
+
+    renderBuildArgsPanel(runnable ? target : '');
+  }
+
+  function initBuildPane(root) {
+    const scope = root || document;
+    const page = scope.matches?.('.tab-build-run') ? scope : scope.querySelector?.('.tab-build-run');
+    if (!page) return;
+
+    // 恢复各个 target-group 的折叠状态
+    page.querySelectorAll('.target-group').forEach(group => {
+      const groupName = group.dataset.targetGroup;
+      if (groupName) {
+        const isCollapsed = localStorage.getItem('gnb-target-group-collapsed-' + groupName) === '1';
+        group.classList.toggle('collapsed', isCollapsed);
+      }
+    });
+
+    let selected = page.querySelector('.target-item.selected');
+    const saved = localStorage.getItem('gnb-target-build');
+    if (saved) {
+      const match = page.querySelector('.target-item[data-target="' + saved + '"]');
+      if (match) {
+        page.querySelectorAll('.target-item').forEach(t => t.classList.toggle('selected', t === match));
+        selected = match;
+      }
+    }
+    if (!selected) {
+      selected = page.querySelector('.target-item[data-runnable="true"]') || page.querySelector('.target-item');
+      if (selected) {
+        selected.classList.add('selected');
+      }
+    }
+    if (selected) {
+      // 若当前选中的 target 所在的 group 处于折叠状态，则自动展开该 group
+      const parentGroup = selected.closest('.target-group');
+      if (parentGroup && parentGroup.classList.contains('collapsed')) {
+        parentGroup.classList.remove('collapsed');
+      }
+      syncBuildRunTarget(selected);
+    }
+
+    // 同步 Reconfigure 复选框与隐藏 input
+    const reconfigCheckbox = page.querySelector('#build-reconfigure-checkbox');
+    const reconfigHidden = page.querySelector('#build-reconfigure-hidden');
+    if (reconfigCheckbox && reconfigHidden) {
+      reconfigHidden.value = reconfigCheckbox.checked ? '1' : '0';
+    }
+
+    const resetBtn = page.querySelector('#reset-run-args-btn');
+    if (resetBtn && !resetBtn.dataset.bound) {
+      resetBtn.dataset.bound = '1';
+      resetBtn.addEventListener('click', () => {
+        const curTarget = page.querySelector('.target-item.selected')?.dataset?.target;
+        if (curTarget && curTarget !== 'all') {
+          localStorage.removeItem(getBuildArgsStorageKey(curTarget));
+          renderBuildArgsPanel(curTarget);
+        }
+      });
+    }
+
+    const customInput = page.querySelector('#custom-run-args-input');
+    if (customInput && !customInput.dataset.bound) {
+      customInput.dataset.bound = '1';
+      customInput.addEventListener('input', () => {
+        const curTarget = page.querySelector('.target-item.selected')?.dataset?.target;
+        if (curTarget) {
+          saveBuildCurrentArgs(curTarget);
+        }
+      });
+    }
+  }
+
+  // Target list (build / run / test): radio-style single selection.
   function getTabKind() {
     const active = document.querySelector('[data-tab].active');
     return active ? active.dataset.tab : null;
@@ -3503,6 +4451,10 @@
   function restoreTargetSelection(root) {
     const tab = getTabKind();
     if (!tab) return;
+    if (tab === 'build') {
+      initBuildPane(root);
+      return;
+    }
     const saved = localStorage.getItem('gnb-target-' + tab);
     if (!saved) return;
     const list = (root || document).querySelector('.target-list');
@@ -3510,24 +4462,63 @@
     const match = list.querySelector('[data-target="' + saved + '"]');
     if (!match) return;
     list.querySelectorAll('.target-item').forEach(t => t.classList.toggle('selected', t === match));
-    const page = list.closest('.tab-build-run');
-    const inputs = page
-      ? page.querySelectorAll('input[name="target"]')
-      : list.closest('.tab-side')?.querySelectorAll('form[data-job-form] input[name="target"]');
+    const inputs = list.closest('.tab-side')?.querySelectorAll('form[data-job-form] input[name="target"]');
     inputs?.forEach(hidden => { hidden.value = saved; });
   }
   document.body.addEventListener('click', (e) => {
+    // Target 组折叠/展开
+    const groupHead = e.target.closest('[data-toggle-target-group]');
+    if (groupHead) {
+      const group = groupHead.closest('.target-group');
+      if (group) {
+        group.classList.toggle('collapsed');
+        const name = groupHead.dataset.toggleTargetGroup;
+        if (name) {
+          localStorage.setItem('gnb-target-group-collapsed-' + name, group.classList.contains('collapsed') ? '1' : '0');
+        }
+      }
+      return;
+    }
+
+    // Command 参数 Category 折叠/展开
+    const argCatHead = e.target.closest('[data-toggle-arg-category]');
+    if (argCatHead) {
+      const group = argCatHead.closest('.arg-category-group');
+      if (group) {
+        group.classList.toggle('collapsed');
+        const name = argCatHead.dataset.toggleArgCategory;
+        if (name) {
+          localStorage.setItem('gnb-arg-category-collapsed-' + name, group.classList.contains('collapsed') ? '1' : '0');
+        }
+      }
+      return;
+    }
+
+    // Target 项目点击选择
     const item = e.target.closest('.target-item');
     if (!item || !item.dataset.target) return;
     const list = item.closest('.target-list');
     if (!list) return;
     list.querySelectorAll('.target-item').forEach(t => t.classList.toggle('selected', t === item));
     const page = list.closest('.tab-build-run');
-    const inputs = page
-      ? page.querySelectorAll('input[name="target"]')
-      : list.closest('.tab-side')?.querySelectorAll('form[data-job-form] input[name="target"]');
+    if (page) {
+      syncBuildRunTarget(item);
+      saveTargetSelection('build', item.dataset.target);
+      return;
+    }
+    const inputs = list.closest('.tab-side')?.querySelectorAll('form[data-job-form] input[name="target"]');
     inputs?.forEach(hidden => { hidden.value = item.dataset.target; });
     saveTargetSelection(getTabKind(), item.dataset.target);
+  });
+
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'build-reconfigure-checkbox') {
+      const page = e.target.closest('.tab-build-run') || document;
+      const hidden = page.querySelector('#build-reconfigure-hidden');
+      if (hidden) {
+        hidden.value = e.target.checked ? '1' : '0';
+      }
+    }
   });
   // ----- Log panel streaming ------------------------------------------
   // We manage the EventSource ourselves instead of using htmx-ext-sse: the
@@ -3635,8 +4626,11 @@
     }));
   }).observe(document.body, { childList: true, subtree: true });
 
-  document.body.addEventListener('htmx:afterSwap', (e) => initAllLogPanels(currentSwapRoot(e.detail.target)));
-  document.addEventListener('DOMContentLoaded', () => initAllLogPanels(document));
+  document.addEventListener('DOMContentLoaded', () => {
+    initAllLogPanels(document);
+    const activePane = document.querySelector('.tab-pane.active');
+    if (activePane) initPaneComponents(activePane, activePane.dataset.tabPane);
+  });
 
   // When a delete reply comes back the server sends HX-Trigger: clear-detail
   // so the right-hand detail panel doesn't keep rendering a now-gone task.

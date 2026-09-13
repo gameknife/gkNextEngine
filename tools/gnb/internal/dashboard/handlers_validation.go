@@ -96,6 +96,18 @@ func (s *Server) validationStore() validationstore.Store {
 }
 
 func (s *Server) buildValidationVM(query url.Values) validationVM {
+	qKey := query.Encode()
+	flash := query.Get("flash")
+	if flash == "" {
+		s.cacheMu.RLock()
+		if s.validationCache != nil && s.validationCache.queryKey == qKey && time.Since(s.validationCache.cachedAt) < 3*time.Second {
+			cached := s.validationCache.vm
+			s.cacheMu.RUnlock()
+			return cached
+		}
+		s.cacheMu.RUnlock()
+	}
+
 	store := s.validationStore()
 	// A short grace period prevents a slow runner from being called interrupted
 	// merely because the Dashboard happened to poll between heartbeats.
@@ -197,6 +209,15 @@ func (s *Server) buildValidationVM(query url.Values) validationVM {
 			run := s.makeValidationRunVM(store, record)
 			vm.Selected = &run
 		}
+	}
+	if flash == "" {
+		s.cacheMu.Lock()
+		s.validationCache = &validationCacheEntry{
+			vm:       vm,
+			cachedAt: time.Now(),
+			queryKey: qKey,
+		}
+		s.cacheMu.Unlock()
 	}
 	return vm
 }
@@ -378,6 +399,7 @@ func validationDuration(record validationstore.Record) string {
 }
 
 func (s *Server) handleValidationRunScript(w http.ResponseWriter, r *http.Request) {
+	s.invalidateValidationCache()
 	if err := r.ParseForm(); err != nil {
 		httpError(w, err)
 		return
@@ -542,6 +564,7 @@ func (s *Server) handleValidationLog(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleValidationReview(w http.ResponseWriter, r *http.Request) {
+	s.invalidateValidationCache()
 	if err := r.ParseForm(); err != nil {
 		httpError(w, err)
 		return
@@ -578,6 +601,7 @@ func (s *Server) handleValidationReview(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleValidationRerun(w http.ResponseWriter, r *http.Request) {
+	s.invalidateValidationCache()
 	store := s.validationStore()
 	_ = store.ReconcileStale(5 * time.Second)
 	runID := r.PathValue("id")

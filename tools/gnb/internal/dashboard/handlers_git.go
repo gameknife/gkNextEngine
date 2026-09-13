@@ -18,6 +18,16 @@ import (
 )
 
 func (s *Server) buildGitVM(flash string) gitVM {
+	if flash == "" {
+		s.cacheMu.RLock()
+		if s.gitCache != nil && time.Since(s.gitCache.cachedAt) < 5*time.Second {
+			cached := s.gitCache.vm
+			s.cacheMu.RUnlock()
+			return cached
+		}
+		s.cacheMu.RUnlock()
+	}
+
 	vm := gitVM{Flash: flash}
 	st, err := gitops.GetStatus(s.opts.RepoRoot)
 	if err != nil {
@@ -60,6 +70,16 @@ func (s *Server) buildGitVM(flash string) gitVM {
 	} else {
 		vm.Stashes = stashes
 	}
+
+	if flash == "" {
+		s.cacheMu.Lock()
+		s.gitCache = &gitCacheEntry{
+			vm:       vm,
+			cachedAt: time.Now(),
+		}
+		s.cacheMu.Unlock()
+	}
+
 	return vm
 }
 
@@ -67,6 +87,7 @@ func (s *Server) buildGitVM(flash string) gitVM {
 // stash). All destructive actions go through this so both columns stay in
 // sync (e.g. reset moves HEAD which changes the log).
 func (s *Server) renderGitBody(w http.ResponseWriter, r *http.Request, flash string) {
+	s.invalidateGitCache()
 	vm := s.buildHeader("git")
 	vm.GitVM = s.buildGitVM(flash)
 	s.render(w, r, "git_body", vm)

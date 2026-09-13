@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"fmt"
+	"html/template"
 	"net/http"
 	"runtime"
 	"strconv"
@@ -195,9 +196,10 @@ type gitVM struct {
 }
 
 type buildRunVM struct {
-	Targets []targetVM
-	Latest  JobSnapshot
-	HasJob  bool
+	Targets      []targetVM
+	TargetGroups []TargetGroupVM
+	Latest       JobSnapshot
+	HasJob       bool
 }
 
 type remoteVM struct {
@@ -354,8 +356,10 @@ func (s *Server) buildHeader(activeTab string) indexVM {
 }
 
 func (s *Server) buildBuildRunVM() buildRunVM {
+	targets := discoverTargets(s.opts.RepoRoot, s.opts.Preset, s.opts.Config.Targets.All)
 	vm := buildRunVM{
-		Targets: discoverTargets(s.opts.RepoRoot, s.opts.Preset, s.opts.Config.Targets.All),
+		Targets:      targets,
+		TargetGroups: groupTargets(targets),
 	}
 	build, hasBuild := s.jobs.LatestSnapshot(JobBuild)
 	run, hasRun := s.jobs.LatestSnapshot(JobRun)
@@ -435,6 +439,17 @@ func (s *Server) buildRemoteVM() remoteVM {
 }
 
 func (s *Server) buildLocVM(includeThirdParty bool, selectedDepth string) locVM {
+	s.cacheMu.RLock()
+	if s.locCache != nil &&
+		time.Since(s.locCache.cachedAt) < 60*time.Second &&
+		s.locCache.thirdParty == includeThirdParty &&
+		s.locCache.depth == selectedDepth {
+		cached := s.locCache.vm
+		s.cacheMu.RUnlock()
+		return cached
+	}
+	s.cacheMu.RUnlock()
+
 	snap, err := loc.Scan(loc.Options{
 		Root:              s.opts.RepoRoot,
 		IncludeThirdParty: includeThirdParty,
@@ -468,6 +483,16 @@ func (s *Server) buildLocVM(includeThirdParty bool, selectedDepth string) locVM 
 	} else {
 		vm.HourlyCommits = buildHourlyCommitGraph(hourlyCounts)
 	}
+
+	s.cacheMu.Lock()
+	s.locCache = &locCacheEntry{
+		vm:         vm,
+		cachedAt:   time.Now(),
+		thirdParty: includeThirdParty,
+		depth:      selectedDepth,
+	}
+	s.cacheMu.Unlock()
+
 	return vm
 }
 
@@ -705,15 +730,60 @@ func collectJournals(repoRoot string, doc *spec.Document, limit int) []journalSu
 // ----- handlers -------------------------------------------------------
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("tab") == "paks" {
+	tab := r.URL.Query().Get("tab")
+	switch tab {
+	case "docs":
+		vm := s.buildHeader("docs")
+		vm.DocsVM = s.buildDocsVM(r.URL.Query().Get("file"), r.URL.Query().Get("edit") == "1", "", "")
+		s.render(w, r, "layout.html", vm)
+		return
+	case "build", "run":
+		vm := s.buildHeader("build")
+		vm.BuildVM = s.buildBuildRunVM()
+		s.render(w, r, "layout.html", vm)
+		return
+	case "remote":
+		vm := s.buildHeader("remote")
+		vm.RemoteVM = s.buildRemoteVM()
+		s.render(w, r, "layout.html", vm)
+		return
+	case "test":
+		vm := s.buildHeader("test")
+		vm.TestVM = s.buildTestVM()
+		s.render(w, r, "layout.html", vm)
+		return
+	case "git":
+		vm := s.buildHeader("git")
+		vm.GitVM = s.buildGitVM("")
+		s.render(w, r, "layout.html", vm)
+		return
+	case "chat":
+		vm := s.buildHeader("chat")
+		vm.ChatVM = s.buildChatVM("", "", "", "")
+		s.render(w, r, "layout.html", vm)
+		return
+	case "loc":
+		vm := s.buildHeader("loc")
+		vm.LocVM = s.buildLocVM(r.URL.Query().Get("thirdparty") != "", r.URL.Query().Get("depth"))
+		s.render(w, r, "layout.html", vm)
+		return
+	case "paks":
 		vm := s.buildHeader("paks")
 		vm.PaksVM = s.buildPaksVM(r.URL.Query().Get("file"))
 		s.render(w, r, "layout.html", vm)
 		return
-	}
-	if r.URL.Query().Get("tab") == "validation" {
+	case "graph":
+		vm := s.buildHeader("graph")
+		vm.GraphVM = s.buildGraphVM()
+		s.render(w, r, "layout.html", vm)
+		return
+	case "validation":
 		vm := s.buildHeader("validation")
 		vm.ValidationVM = s.buildValidationVM(r.URL.Query())
+		s.render(w, r, "layout.html", vm)
+		return
+	case "settings":
+		vm := s.buildHeader("settings")
 		s.render(w, r, "layout.html", vm)
 		return
 	}
@@ -731,12 +801,27 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, dat
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	lang := s.resolveLang(r)
-	tpl, err := s.tpl.Clone()
-	if err != nil {
-		fmt.Printf("template clone error: %v\n", err)
+	var tpl *template.Template
+	if s.tplByLang != nil {
+		tpl = s.tplByLang[lang]
+		if tpl == nil {
+			tpl = s.tplByLang[i18n.LangZh]
+		}
+	}
+	if tpl == nil && s.tpl != nil {
+		// Fallback for tests that constructed Server directly without New():
+		cloned, err := s.tpl.Clone()
+		if err == nil {
+			cloned.Funcs(langFuncs(lang))
+			tpl = cloned
+		} else {
+			tpl = s.tpl
+		}
+	}
+	if tpl == nil {
+		http.Error(w, "template not initialized", http.StatusInternalServerError)
 		return
 	}
-	tpl.Funcs(langFuncs(lang))
 	if err := tpl.ExecuteTemplate(w, name, data); err != nil {
 		fmt.Printf("template %s error: %v\n", name, err)
 	}

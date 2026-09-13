@@ -15,16 +15,17 @@ func setupDocsRepo(t *testing.T) *Server {
 	t.Helper()
 	dir := t.TempDir()
 	for path, body := range map[string]string{
-		"docs/zeta.md":                  "# Zeta\n\n根目录末尾文档。\n",
-		"docs/alpha.md":                 "# Alpha\n\n第一篇文档。\n",
-		"docs/architecture/overview.md": "# Overview\n\n架构文档。\n",
-		"docs/projects/zeta.md":         "# Project Zeta\n\n项目末尾文档。\n",
-		"docs/projects/guide.md":        "# Guide\n\n项目文档。\n",
-		"docs/gallery/ignore.avif":      "not-markdown",
-		"docs/projects/ignore.txt":      "ignore me",
-		"src/example.hpp":               "#pragma once\n\nstruct Example\n{\n    int value;\n};\n",
-		"assets/binary.dat":             "binary\x00data",
-		".spec/TODO.md":                 "# TODO\n\n## Milestone: 测试  <!-- status: active -->\n\n### 下一步\n\n(暂无)\n\n### 待规划\n\n(暂无)\n\n### 最近完成\n\n(暂无)\n",
+		"docs/zeta.md":                         "# Zeta\n\n根目录末尾文档。\n",
+		"docs/alpha.md":                        "---\ntitle: \"Alpha 标题\"\ncategory: guide\nstatus: 现行\nowner: NextTest\n---\n\n# Alpha\n\n第一篇文档。\n",
+		"docs/architecture/overview.md":        "# Overview\n\n架构文档。\n",
+		"docs/projects/zeta.md":                "# Project Zeta\n\n项目末尾文档。\n",
+		"docs/projects/guide.md":               "# Guide\n\n项目文档。\n",
+		"docs/projects/brotato-3d/index.md":    "# Brotato\n\n子目录文档。\n",
+		"docs/gallery/ignore.avif":             "not-markdown",
+		"docs/projects/ignore.txt":             "ignore me",
+		"src/example.hpp":                      "#pragma once\n\nstruct Example\n{\n    int value;\n};\n",
+		"assets/binary.dat":                    "binary\x00data",
+		".spec/TODO.md":                        "# TODO\n\n## Milestone: 测试  <!-- status: active -->\n\n### 下一步\n\n(暂无)\n\n### 待规划\n\n(暂无)\n\n### 最近完成\n\n(暂无)\n",
 	} {
 		full := filepath.Join(dir, filepath.FromSlash(path))
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
@@ -53,8 +54,8 @@ func TestBuildDocsVMListsMarkdownFilesOnly(t *testing.T) {
 
 	vm := s.buildDocsVM("", false, "", "")
 
-	if len(vm.Files) != 5 {
-		t.Fatalf("len(files) = %d, want 5", len(vm.Files))
+	if len(vm.Files) != 6 {
+		t.Fatalf("len(files) = %d, want 6", len(vm.Files))
 	}
 	wantFiles := []string{
 		"docs/alpha.md",
@@ -62,29 +63,42 @@ func TestBuildDocsVMListsMarkdownFilesOnly(t *testing.T) {
 		"docs/architecture/overview.md",
 		"docs/projects/guide.md",
 		"docs/projects/zeta.md",
+		"docs/projects/brotato-3d/index.md",
 	}
 	for i, want := range wantFiles {
 		if vm.Files[i].RelPath != want {
 			t.Fatalf("files[%d] = %q, want %q; files = %+v", i, vm.Files[i].RelPath, want, vm.Files)
 		}
 	}
-	if len(vm.Folders) != 3 {
-		t.Fatalf("len(folders) = %d, want 3", len(vm.Folders))
+	if len(vm.Folders) != 4 {
+		t.Fatalf("len(folders) = %d, want 4", len(vm.Folders))
 	}
-	wantFolders := []string{"docs", "docs/architecture", "docs/projects"}
+	wantFolders := []string{"docs", "docs/architecture", "docs/projects", "docs/projects/brotato-3d"}
 	for i, want := range wantFolders {
 		if vm.Folders[i].Dir != want {
 			t.Fatalf("folders[%d] = %q, want %q; folders = %+v", i, vm.Folders[i].Dir, want, vm.Folders)
 		}
 	}
+	if vm.Folders[3].DisplayName != "docs/.../brotato-3d" {
+		t.Fatalf("folders[3].DisplayName = %q, want docs/.../brotato-3d", vm.Folders[3].DisplayName)
+	}
 	if !vm.HasDoc || vm.Selected.RelPath != "docs/alpha.md" {
 		t.Fatalf("selected = %+v, want docs/alpha.md", vm.Selected)
 	}
-	if !vm.Folders[0].Active || vm.Folders[1].Active || vm.Folders[2].Active {
+	if !vm.Folders[0].Active || vm.Folders[1].Active || vm.Folders[2].Active || vm.Folders[3].Active {
 		t.Fatalf("folder active states = %+v, want only docs active", vm.Folders)
 	}
 	if !strings.Contains(vm.Content, "第一篇文档") {
 		t.Fatalf("content = %q, want alpha markdown", vm.Content)
+	}
+	if strings.Contains(vm.Content, "title: \"Alpha 标题\"") {
+		t.Fatalf("content should have frontmatter stripped, got %q", vm.Content)
+	}
+	if !vm.Meta.HasMeta || vm.Meta.Title != "Alpha 标题" || vm.Meta.Category != "guide" || vm.Meta.Status != "现行" || vm.Meta.Owner != "NextTest" {
+		t.Fatalf("vm.Meta = %+v, want parsed frontmatter", vm.Meta)
+	}
+	if !strings.Contains(vm.EditorBody, "title: \"Alpha 标题\"") {
+		t.Fatalf("editorBody should retain full frontmatter, got %q", vm.EditorBody)
 	}
 }
 
@@ -261,3 +275,147 @@ func TestHandleTabSettingsRendersDisplayControls(t *testing.T) {
 		}
 	}
 }
+
+func TestParseDocFrontmatter(t *testing.T) {
+	raw := "---\ntitle: \"测试文档标题\"\ncategory: guide\nstatus: 现行\nowner: engine\ncreated: 2026-07-01\nlast_updated: 2026-08-01\n---\n\n# 真正的正文\n\n正文内容"
+	meta, body := parseDocFrontmatter(raw)
+
+	if !meta.HasMeta {
+		t.Fatal("expected HasMeta = true")
+	}
+	if meta.Title != "测试文档标题" {
+		t.Errorf("Title = %q, want 测试文档标题", meta.Title)
+	}
+	if meta.Category != "guide" {
+		t.Errorf("Category = %q, want guide", meta.Category)
+	}
+	if meta.Status != "现行" {
+		t.Errorf("Status = %q, want 现行", meta.Status)
+	}
+	if meta.Owner != "engine" {
+		t.Errorf("Owner = %q, want engine", meta.Owner)
+	}
+	if meta.Created != "2026-07-01" {
+		t.Errorf("Created = %q, want 2026-07-01", meta.Created)
+	}
+	if meta.LastUpdated != "2026-08-01" {
+		t.Errorf("LastUpdated = %q, want 2026-08-01", meta.LastUpdated)
+	}
+	if strings.Contains(body, "title:") || strings.Contains(body, "---") {
+		t.Errorf("body still contains frontmatter:\n%s", body)
+	}
+	if !strings.HasPrefix(body, "# 真正的正文") {
+		t.Errorf("body missing heading:\n%s", body)
+	}
+}
+
+func TestFormatDocFolderDisplay(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"docs", "docs"},
+		{"docs/guides", "docs/guides"},
+		{"docs/designs", "docs/designs"},
+		{"docs/projects", "docs/projects"},
+		{"docs/projects/brotato-3d", "docs/.../brotato-3d"},
+		{"docs/projects/flappy-bird-parity", "docs/.../flappy-bird-parity"},
+		{"docs/projects/airport-sim", "docs/.../airport-sim"},
+		{"docs/a/b/c", "docs/.../c"},
+	}
+
+	for _, tc := range cases {
+		if got := formatDocFolderDisplay(tc.in); got != tc.want {
+			t.Errorf("formatDocFolderDisplay(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestDocsViewRendersMetaBarAndNotRawTitle(t *testing.T) {
+	s := setupDocsRepo(t)
+	req := httptest.NewRequest("GET", "/tab/docs?file=docs/alpha.md", nil)
+	req.SetPathValue("kind", "docs")
+	rec := httptest.NewRecorder()
+
+	s.handleTab(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d (%s), want 200", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+
+	// 验证包含 meta bar 和标签
+	if !strings.Contains(body, `class="docs-meta-bar"`) {
+		t.Fatalf("rendered body missing docs-meta-bar:\n%s", body)
+	}
+	if !strings.Contains(body, "现行") || !strings.Contains(body, "NextTest") || !strings.Contains(body, "guide") {
+		t.Fatalf("rendered body missing meta tags:\n%s", body)
+	}
+	// 验证在 preview 区域没有 raw title: "Alpha 标题"
+	if strings.Contains(body, `title: "Alpha 标题"`) {
+		t.Fatalf("rendered body exposes raw title frontmatter in preview:\n%s", body)
+	}
+	// 验证子文件夹显示收敛
+	if !strings.Contains(body, "docs/.../brotato-3d") {
+		t.Fatalf("rendered body missing converged folder display docs/.../brotato-3d:\n%s", body)
+	}
+}
+
+func TestDocsCacheInvalidationOnSave(t *testing.T) {
+	s := setupDocsRepo(t)
+
+	// 首次读取，建立缓存
+	files1, err := s.listDocsFilesCached()
+	if err != nil || len(files1) != 6 {
+		t.Fatalf("initial cache read = %d files, err = %v", len(files1), err)
+	}
+
+	// 再次读取，应命中缓存（指针相同）
+	files2, err := s.listDocsFilesCached()
+	if err != nil || len(files2) != 6 {
+		t.Fatalf("cached read = %d files, err = %v", len(files2), err)
+	}
+
+	// 写入新文档
+	newDocPath := filepath.Join(s.opts.RepoRoot, "docs", "new_doc.md")
+	if err := os.WriteFile(newDocPath, []byte("# New Doc\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// 在缓存有效期内直接读依然是 6 个
+	filesCached, _ := s.listDocsFilesCached()
+	if len(filesCached) != 6 {
+		t.Fatalf("expected cache hit with 6 files, got %d", len(filesCached))
+	}
+
+	// 调用 invalidateDocsCache 后应读出 7 个
+	s.invalidateDocsCache()
+	filesAfter, err := s.listDocsFilesCached()
+	if err != nil || len(filesAfter) != 7 {
+		t.Fatalf("after invalidation = %d files, want 7, err = %v", len(filesAfter), err)
+	}
+}
+
+func TestHandleIndexDirectDocsTab(t *testing.T) {
+	s := setupDocsRepo(t)
+
+	req := httptest.NewRequest("GET", "/?tab=docs&file=docs/alpha.md", nil)
+	rec := httptest.NewRecorder()
+
+	s.handleIndex(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d (%s), want 200", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `data-tab-pane="docs"`) {
+		t.Fatalf("handleIndex with tab=docs should render docs pane active:\n%s", body)
+	}
+	if !strings.Contains(body, "第一篇文档。") {
+		t.Fatalf("handleIndex with tab=docs should contain selected doc content:\n%s", body)
+	}
+	if !strings.Contains(body, `class="docs-meta-chip status active"`) {
+		t.Fatalf("handleIndex with tab=docs should render meta bar:\n%s", body)
+	}
+}
+

@@ -17,6 +17,7 @@ import (
 	"os/user"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/config"
@@ -41,14 +42,68 @@ type Options struct {
 	Lang     i18n.Lang     // process default (CLI --lang / GNB_LANG / gnb.toml / OS)
 }
 
+type locCacheEntry struct {
+	vm         locVM
+	cachedAt   time.Time
+	thirdParty bool
+	depth      string
+}
+
+type gitCacheEntry struct {
+	vm       gitVM
+	cachedAt time.Time
+}
+
+type validationCacheEntry struct {
+	vm       validationVM
+	cachedAt time.Time
+	queryKey string
+}
+
+type docsCacheEntry struct {
+	files    []docFileVM
+	cachedAt time.Time
+}
+
 // Server holds runtime state for the dashboard.
 type Server struct {
-	opts          Options
-	tpl           *template.Template
-	jobs          *JobManager
-	chats         *ChatStore
-	validation    validationstore.Store
-	streamBaseURL string
+	opts            Options
+	tpl             *template.Template
+	tplByLang       map[i18n.Lang]*template.Template
+	jobs            *JobManager
+	chats           *ChatStore
+	validation      validationstore.Store
+	streamBaseURL   string
+
+	cacheMu         sync.RWMutex
+	locCache        *locCacheEntry
+	gitCache        *gitCacheEntry
+	validationCache *validationCacheEntry
+	docsCache       *docsCacheEntry
+}
+
+func (s *Server) invalidateGitCache() {
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	s.gitCache = nil
+}
+
+func (s *Server) invalidateLocCache() {
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	s.locCache = nil
+}
+
+func (s *Server) invalidateValidationCache() {
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	s.validationCache = nil
+}
+
+func (s *Server) invalidateDocsCache() {
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	s.docsCache = nil
 }
 
 // RunningServer is a started dashboard HTTP server.
@@ -62,16 +117,39 @@ func (s *RunningServer) Wait() error {
 	return <-s.done
 }
 
+func parseTemplateForLang(lang i18n.Lang) (*template.Template, error) {
+	funcs := templateFuncs()
+	for k, v := range langFuncs(lang) {
+		funcs[k] = v
+	}
+	return template.New("dashboard").
+		Funcs(funcs).
+		ParseFS(templateFS, "templates/*.html")
+}
+
 // New constructs a Server. Template parsing happens eagerly so problems surface
 // before binding the port.
 func New(opts Options) (*Server, error) {
-	tpl, err := template.New("dashboard").
-		Funcs(templateFuncs()).
-		ParseFS(templateFS, "templates/*.html")
+	tplZh, err := parseTemplateForLang(i18n.LangZh)
 	if err != nil {
-		return nil, fmt.Errorf("parse templates: %w", err)
+		return nil, fmt.Errorf("parse zh templates: %w", err)
 	}
-	return &Server{opts: opts, tpl: tpl, jobs: NewJobManager(), chats: NewChatStore(chatStorePath(opts)), validation: validationstore.New(opts.RepoRoot, opts.Preset)}, nil
+	tplEn, err := parseTemplateForLang(i18n.LangEn)
+	if err != nil {
+		return nil, fmt.Errorf("parse en templates: %w", err)
+	}
+	tplByLang := map[i18n.Lang]*template.Template{
+		i18n.LangZh: tplZh,
+		i18n.LangEn: tplEn,
+	}
+	return &Server{
+		opts:       opts,
+		tpl:        tplZh,
+		tplByLang:  tplByLang,
+		jobs:       NewJobManager(),
+		chats:      NewChatStore(chatStorePath(opts)),
+		validation: validationstore.New(opts.RepoRoot, opts.Preset),
+	}, nil
 }
 
 // Start binds the configured port and starts serving in the background.

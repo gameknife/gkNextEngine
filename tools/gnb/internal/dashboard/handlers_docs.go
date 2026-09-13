@@ -23,9 +23,20 @@ type docFileVM struct {
 }
 
 type docFolderVM struct {
-	Dir    string
-	Files  []docFileVM
-	Active bool
+	Dir         string
+	DisplayName string
+	Files       []docFileVM
+	Active      bool
+}
+
+type docMetaVM struct {
+	HasMeta     bool
+	Title       string
+	Category    string
+	Status      string
+	Owner       string
+	Created     string
+	LastUpdated string
 }
 
 type docsVM struct {
@@ -37,6 +48,7 @@ type docsVM struct {
 	Error      string
 	Content    string
 	EditorBody string
+	Meta       docMetaVM
 }
 
 type docsSourceLineVM struct {
@@ -56,8 +68,101 @@ type docsSourceVM struct {
 	Error     string
 }
 
-func (s *Server) buildDocsVM(selectedRel string, editing bool, errText string, draftBody string) docsVM {
+func (s *Server) listDocsFilesCached() ([]docFileVM, error) {
+	s.cacheMu.RLock()
+	entry := s.docsCache
+	s.cacheMu.RUnlock()
+
+	if entry != nil && time.Since(entry.cachedAt) < 10*time.Second {
+		copied := make([]docFileVM, len(entry.files))
+		copy(copied, entry.files)
+		return copied, nil
+	}
+
 	files, err := listDocsMarkdownFiles(s.opts.RepoRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	s.cacheMu.Lock()
+	s.docsCache = &docsCacheEntry{
+		files:    files,
+		cachedAt: time.Now(),
+	}
+	s.cacheMu.Unlock()
+
+	copied := make([]docFileVM, len(files))
+	copy(copied, files)
+	return copied, nil
+}
+
+func parseDocFrontmatter(rawContent string) (docMetaVM, string) {
+	norm := strings.ReplaceAll(rawContent, "\r\n", "\n")
+	trimmed := strings.TrimLeft(norm, " \t\n")
+	if !strings.HasPrefix(trimmed, "---\n") {
+		return docMetaVM{}, norm
+	}
+
+	rest := trimmed[4:]
+	endIdx := -1
+	searchPos := 0
+	for {
+		idx := strings.Index(rest[searchPos:], "\n---")
+		if idx == -1 {
+			break
+		}
+		actualIdx := searchPos + idx
+		after := rest[actualIdx+4:]
+		if len(after) == 0 || after[0] == '\n' || after[0] == '\r' || after[0] == ' ' || after[0] == '\t' {
+			endIdx = actualIdx
+			break
+		}
+		searchPos = actualIdx + 4
+	}
+
+	if endIdx == -1 {
+		return docMetaVM{}, norm
+	}
+
+	fmContent := trimmed[4 : 4+endIdx]
+	body := strings.TrimLeft(trimmed[4+endIdx+4:], " \t\r\n")
+
+	meta := docMetaVM{HasMeta: true}
+	lines := strings.Split(fmContent, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(parts[0]))
+		val := strings.TrimSpace(parts[1])
+		val = strings.Trim(val, `"'`)
+
+		switch key {
+		case "title":
+			meta.Title = val
+		case "category":
+			meta.Category = val
+		case "status":
+			meta.Status = val
+		case "owner":
+			meta.Owner = val
+		case "created":
+			meta.Created = val
+		case "last_updated", "lastupdated":
+			meta.LastUpdated = val
+		}
+	}
+
+	return meta, body
+}
+
+func (s *Server) buildDocsVM(selectedRel string, editing bool, errText string, draftBody string) docsVM {
+	files, err := s.listDocsFilesCached()
 	vm := docsVM{
 		Files:   files,
 		Editing: editing,
@@ -114,11 +219,14 @@ func (s *Server) buildDocsVM(selectedRel string, editing bool, errText string, d
 		vm.Error = joinDocsError(vm.Error, err.Error())
 		return vm
 	}
-	vm.Content = strings.ReplaceAll(string(data), "\r\n", "\n")
+	rawContent := strings.ReplaceAll(string(data), "\r\n", "\n")
+	meta, body := parseDocFrontmatter(rawContent)
+	vm.Meta = meta
+	vm.Content = body
 	if editing && draftBody != "" {
 		vm.EditorBody = strings.ReplaceAll(draftBody, "\r\n", "\n")
 	} else {
-		vm.EditorBody = vm.Content
+		vm.EditorBody = rawContent
 	}
 	return vm
 }
@@ -159,6 +267,7 @@ func (s *Server) handleDocsSave(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, "tab_docs", vm)
 		return
 	}
+	s.invalidateDocsCache()
 	vm := s.buildHeader("docs")
 	vm.DocsVM = s.buildDocsVM(normalizedRel, false, "", "")
 	s.render(w, r, "tab_docs", vm)
@@ -403,11 +512,23 @@ func listDocsMarkdownFiles(repoRoot string) ([]docFileVM, error) {
 	return files, nil
 }
 
+func formatDocFolderDisplay(dir string) string {
+	clean := filepath.ToSlash(filepath.Clean(dir))
+	parts := strings.Split(clean, "/")
+	if len(parts) > 2 && parts[0] == "docs" {
+		return "docs/.../" + parts[len(parts)-1]
+	}
+	return dir
+}
+
 func groupDocsFiles(files []docFileVM) []docFolderVM {
 	folders := make([]docFolderVM, 0)
 	for _, file := range files {
 		if len(folders) == 0 || folders[len(folders)-1].Dir != file.Dir {
-			folders = append(folders, docFolderVM{Dir: file.Dir})
+			folders = append(folders, docFolderVM{
+				Dir:         file.Dir,
+				DisplayName: formatDocFolderDisplay(file.Dir),
+			})
 		}
 		folder := &folders[len(folders)-1]
 		folder.Files = append(folder.Files, file)

@@ -3230,6 +3230,13 @@ namespace Vulkan
                 inputs.depth.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
             }
             resolvedByUpscaler = upscaler_->Evaluate(inputs);
+            if (resolvedByUpscaler)
+            {
+                // Only acknowledge the generation after the provider has consumed the reset.
+                // In particular, a renderer without an active temporal resolve must not erase
+                // a pending reset left by the renderer that preceded it.
+                upscalerHistoryGeneration_ = PrimaryView().State().historyGeneration;
+            }
             if (typeInfo.leavesInputsShaderRead && resolvedByUpscaler)
             {
                 // FidelityFX registers external inputs only for this dispatch (the same
@@ -3674,7 +3681,13 @@ namespace Vulkan
         inputs.frameToken = frame_.streamlineFrameToken;
         inputs.frameIndex = static_cast<uint32_t>(frame_.frameCount);
         inputs.imageIndex = imageIndex;
-        inputs.reset = resetUpscalerHistory_ || frame_.frameCount < 2;
+        // A renderer switch invalidates the primary view and bumps this generation.  Do not
+        // rely solely on resetUpscalerHistory_: it is cleared after submission, including
+        // submissions that bypass temporal resolve.  Until a successful resolve records this
+        // generation, every provider must reject all reprojected colour history.
+        inputs.reset = resetUpscalerHistory_ ||
+            PrimaryView().State().historyGeneration != upscalerHistoryGeneration_ ||
+            frame_.frameCount < 2;
         inputs.upscalerType = temporalSuperResolutionActive_
             ? activeUpscalerType_
             : Rendering::Upscaler::EUpscalerType::None;

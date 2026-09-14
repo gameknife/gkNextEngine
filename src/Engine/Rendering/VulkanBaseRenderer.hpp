@@ -759,6 +759,10 @@ namespace Vulkan
         bool surfaceLost_ = false;
         bool deferSceneChainForStartup_ = true;
         bool resetUpscalerHistory_ = true;
+        // The temporal provider's history belongs to the primary RenderView.  Keep the
+        // generation that was last consumed by a successful resolve so a renderer switch
+        // cannot lose its reset request when a frame is submitted without resolving.
+        uint64_t upscalerHistoryGeneration_ = 0;
         Rendering::Upscaler::EUpscalerType activeUpscalerType_ =
             Rendering::Upscaler::EUpscalerType::None;
         bool temporalSuperResolutionActive_ = false;

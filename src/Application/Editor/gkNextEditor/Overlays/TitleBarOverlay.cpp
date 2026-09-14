@@ -103,7 +103,8 @@ namespace Editor
         config.DrawMenuBar = [&]() -> float
         {
             float menuRight = ImGui::GetCursorScreenPos().x;
-            bool fileMenuOpen = ImGui::BeginMenu("File");
+            NextUI::Theme::FMainMenuGhostScope mainMenuStyle;
+            bool fileMenuOpen = mainMenuStyle.BeginMenu("File");
             menuRight = std::max(menuRight, ImGui::GetItemRectMax().x);
             if (fileMenuOpen)
             {
@@ -226,7 +227,7 @@ namespace Editor
                 ImGui::EndMenu();
             }
 
-            bool editMenuOpen = ImGui::BeginMenu("Edit");
+            bool editMenuOpen = mainMenuStyle.BeginMenu("Edit");
             menuRight = std::max(menuRight, ImGui::GetItemRectMax().x);
             if (editMenuOpen)
             {
@@ -261,7 +262,7 @@ namespace Editor
                 ImGui::EndMenu();
             }
 
-            bool viewMenuOpen = ImGui::BeginMenu("View");
+            bool viewMenuOpen = mainMenuStyle.BeginMenu("View");
             menuRight = std::max(menuRight, ImGui::GetItemRectMax().x);
             if (viewMenuOpen)
             {
@@ -311,7 +312,7 @@ namespace Editor
                 ImGui::EndMenu();
             }
 
-            bool toolsMenuOpen = ImGui::BeginMenu("Tools");
+            bool toolsMenuOpen = mainMenuStyle.BeginMenu("Tools");
             menuRight = std::max(menuRight, ImGui::GetItemRectMax().x);
             if (toolsMenuOpen)
             {
@@ -344,7 +345,7 @@ namespace Editor
             // `gnb`, and "Launch Renderer" is the Play button in the toolbar. A menu of
             // permanently greyed items reads as a broken feature.
 
-            bool windowsMenuOpen = ImGui::BeginMenu("Windows");
+            bool windowsMenuOpen = mainMenuStyle.BeginMenu("Windows");
             menuRight = std::max(menuRight, ImGui::GetItemRectMax().x);
             if (windowsMenuOpen)
             {
@@ -376,7 +377,7 @@ namespace Editor
                 ImGui::EndMenu();
             }
 
-            bool helpMenuOpen = ImGui::BeginMenu("Help");
+            bool helpMenuOpen = mainMenuStyle.BeginMenu("Help");
             menuRight = std::max(menuRight, ImGui::GetItemRectMax().x);
             if (helpMenuOpen)
             {

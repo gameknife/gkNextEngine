@@ -172,6 +172,54 @@ namespace NextUI::Theme
         drawList->AddLine(ImVec2(min.x + size - pad, min.y + size - pad), ImVec2(min.x + size - pad, min.y + pad), lineColor, stroke);
     }
 
+    FMainMenuGhostScope::FMainMenuGhostScope() : drawList_(ImGui::GetWindowDrawList())
+    {
+        if (drawList_ != nullptr)
+        {
+            // ImGui renders menu Selectables as square frames. Keep their text
+            // on a foreground channel so the rounded ghost surface can be
+            // emitted afterwards while still appearing behind it.
+            drawList_->ChannelsSplit(2);
+            drawList_->ChannelsSetCurrent(1);
+            channelsSplit_ = true;
+        }
+    }
+
+    FMainMenuGhostScope::~FMainMenuGhostScope()
+    {
+        if (channelsSplit_)
+        {
+            drawList_->ChannelsMerge();
+        }
+    }
+
+    bool FMainMenuGhostScope::BeginMenu(const char* label, const bool enabled)
+    {
+        if (!channelsSplit_)
+        {
+            return ImGui::BeginMenu(label, enabled);
+        }
+
+        drawList_->ChannelsSetCurrent(1);
+        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+        const bool menuOpen = ImGui::BeginMenu(label, enabled);
+        ImGui::PopStyleColor(3);
+
+        const bool menuHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup);
+        if (menuHovered || menuOpen)
+        {
+            const ImVec2 inset(1.0f, 1.0f);
+            const ImVec2 itemMin = ImGui::GetItemRectMin() + inset;
+            const ImVec2 itemMax = ImGui::GetItemRectMax() - inset;
+            drawList_->ChannelsSetCurrent(0);
+            drawList_->AddRectFilled(itemMin, itemMax, ColorU32(EColor::SurfaceHover), 5.0f);
+        }
+        drawList_->ChannelsSetCurrent(1);
+        return menuOpen;
+    }
+
     void DrawAppTitleBar(NextEngine& engine, const FAppTitleBarConfig& config)
     {
         Foundation::FUiContext context;

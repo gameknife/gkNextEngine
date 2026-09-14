@@ -2124,7 +2124,8 @@ namespace ScadLibrary
         config.DrawMenuBar = [&]() -> float
         {
             float menuRight = ImGui::GetCursorScreenPos().x;
-            if (ImGui::BeginMenu("File"))
+            NextUI::Theme::FMainMenuGhostScope mainMenuStyle;
+            if (mainMenuStyle.BeginMenu("File"))
             {
                 if (ImGui::MenuItem("重新扫描场景与 Kit", "F5"))
                 {
@@ -2148,7 +2149,7 @@ namespace ScadLibrary
             }
             menuRight = std::max(menuRight, ImGui::GetItemRectMax().x);
 
-            if (ImGui::BeginMenu("View"))
+            if (mainMenuStyle.BeginMenu("View"))
             {
                 if (workspaceMode_ == EWorkspaceMode::SceneAssembly)
                 {

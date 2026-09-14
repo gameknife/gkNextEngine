@@ -92,6 +92,24 @@ namespace NextUI::Theme
 
     void ApplyProfessionalTheme();
     void DrawBrandMark(ImDrawList* drawList, ImVec2 min, float size);
+
+    // Styles the top-level entries of an app menu bar as ghost buttons. The
+    // scope only affects menus opened through BeginMenu(), not popup entries.
+    class FMainMenuGhostScope final
+    {
+    public:
+        FMainMenuGhostScope();
+        ~FMainMenuGhostScope();
+
+        GK_NON_COPIABLE(FMainMenuGhostScope)
+
+        bool BeginMenu(const char* label, bool enabled = true);
+
+    private:
+        ImDrawList* drawList_ = nullptr;
+        bool channelsSplit_ = false;
+    };
+
     void DrawAppTitleBar(NextEngine& engine, const FAppTitleBarConfig& config);
     void DrawBottomBar(const FBottomBarConfig& config);
     void DrawTooltip(const char* text);

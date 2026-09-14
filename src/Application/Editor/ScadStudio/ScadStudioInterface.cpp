@@ -584,7 +584,8 @@ namespace ScadStudio
         config.DrawMenuBar = [&]() -> float
         {
             float menuRight = ImGui::GetCursorScreenPos().x;
-            if (ImGui::BeginMenu("File"))
+            NextUI::Theme::FMainMenuGhostScope mainMenuStyle;
+            if (mainMenuStyle.BeginMenu("File"))
             {
                 if (ImGui::MenuItem("New Model", "Ctrl+N"))
                 {
@@ -603,7 +604,7 @@ namespace ScadStudio
             }
             menuRight = std::max(menuRight, ImGui::GetItemRectMax().x);
 
-            if (ImGui::BeginMenu("View"))
+            if (mainMenuStyle.BeginMenu("View"))
             {
                 bool sessionsOpen = !sessionsCollapsed_;
                 bool chatOpen = !chatCollapsed_;

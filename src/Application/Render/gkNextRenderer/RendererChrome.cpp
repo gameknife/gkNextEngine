@@ -61,13 +61,14 @@ void NextRendererGameInstance::DrawTitleBar(const FGameUiFrameContext& context, 
     config.DrawMenuBar = [&]() -> float
     {
         float menuRight = ImGui::GetCursorScreenPos().x;
+        NextUI::Theme::FMainMenuGhostScope mainMenuStyle;
 
         const auto UpdateMenuRight = [&menuRight]()
         {
             menuRight = std::max(menuRight, ImGui::GetItemRectMax().x);
         };
 
-        if (ImGui::BeginMenu("File"))
+        if (mainMenuStyle.BeginMenu("File"))
         {
             UpdateMenuRight();
             if (ImGui::MenuItem("Project Page"))
@@ -87,7 +88,7 @@ void NextRendererGameInstance::DrawTitleBar(const FGameUiFrameContext& context, 
             UpdateMenuRight();
         }
 
-        if (ImGui::BeginMenu("View"))
+        if (mainMenuStyle.BeginMenu("View"))
         {
             UpdateMenuRight();
             auto& showFlags = GetEngine().GetShowFlags();
@@ -109,7 +110,7 @@ void NextRendererGameInstance::DrawTitleBar(const FGameUiFrameContext& context, 
             UpdateMenuRight();
         }
 
-        if (ImGui::BeginMenu("Screenshot"))
+        if (mainMenuStyle.BeginMenu("Screenshot"))
         {
             UpdateMenuRight();
             if (ImGui::MenuItem("Screenshot"))
@@ -129,7 +130,7 @@ void NextRendererGameInstance::DrawTitleBar(const FGameUiFrameContext& context, 
             UpdateMenuRight();
         }
 
-        if (ImGui::BeginMenu("Renderer"))
+        if (mainMenuStyle.BeginMenu("Renderer"))
         {
             UpdateMenuRight();
             Runtime::GraphicsDebugPanel::DrawRendererSelector(GetEngine(), GetEngine().GetUserSettings(),
@@ -146,7 +147,7 @@ void NextRendererGameInstance::DrawTitleBar(const FGameUiFrameContext& context, 
             UpdateMenuRight();
         }
 
-        if (ImGui::BeginMenu("Settings"))
+        if (mainMenuStyle.BeginMenu("Settings"))
         {
             UpdateMenuRight();
             ImGui::MenuItem("Render Settings", nullptr, &uiState.showSettings);
@@ -161,7 +162,7 @@ void NextRendererGameInstance::DrawTitleBar(const FGameUiFrameContext& context, 
             UpdateMenuRight();
         }
 
-        if (ImGui::BeginMenu("Help"))
+        if (mainMenuStyle.BeginMenu("Help"))
         {
             UpdateMenuRight();
             if (ImGui::MenuItem("Keyboard & Mouse"))

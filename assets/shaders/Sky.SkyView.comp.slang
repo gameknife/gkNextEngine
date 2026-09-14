@@ -24,8 +24,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     const float elevation = sign(mappedElevation) * mappedElevation * mappedElevation;
     const float horizontal = sqrt(max(1.0f - elevation * elevation, 0.0f));
     const float3 sunDirection = normalize(camera.SunDirection.xyz);
-    const float3 sunHorizontal =
-        normalize(float3(sunDirection.x, 0.0f, sunDirection.z) + float3(1.0e-6f, 0, 0));
+    const float3 sunHorizontal = Atmosphere.HorizontalDirection(sunDirection);
     const float3 sunRight = float3(-sunHorizontal.z, 0.0f, sunHorizontal.x);
     const float azimuthSin = sqrt(max(1.0f - azimuthCos * azimuthCos, 0.0f));
     const float3 viewDirection =
@@ -44,7 +43,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         distance = min(distance, groundDistance);
     }
 
-    const uint stepCount = 32;
+    const uint stepCount = Atmosphere.STEPS_SKY_VIEW;
     const float stepLength = max(distance, 0.0f) / float(stepCount);
     float3 transmittance = float3(1.0f);
     float3 radiance = float3(0.0f);
@@ -60,7 +59,8 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         const float mieDensity = exp(-altitude / max(params.MieDensityH, 1.0e-3f));
         const float sunDistance = Atmosphere.RaySphereNearest(samplePosition, sunDirection, params.TopRadius);
         const float3 sunTransmittance = sunDistance > 0.0f
-            ? Atmosphere.IntegrateTransmittance(params, samplePosition, sunDirection, sunDistance, 12)
+            ? Atmosphere.IntegrateTransmittance(
+                params, samplePosition, sunDirection, sunDistance, Atmosphere.STEPS_SKY_VIEW_SUN)
             : float3(0.0f);
         const float3 source =
             params.RayleighScattering * rayleighDensity * rayleighPhase +

@@ -3,7 +3,7 @@ title: "Dozen Vulkan 后端排障"
 category: guide
 status: 现行
 owner: rendering
-last_updated: 2026-08-31
+last_updated: 2026-09-14
 ---
 
 # Dozen Vulkan 后端排障
@@ -42,5 +42,27 @@ manifest 中引用的 DLL 必须与 manifest 保持相对路径关系。启动�
 4. 若 instance 创建失败，先移除外部 `VK_LAYER_PATH`、`VK_INSTANCE_LAYERS` 等注入环境后重试。
 5. 若 device 创建失败，以日志中的缺失 feature/extension 为准；不要通过伪报能力绕过检查。
 6. 若画面提交失败，检查 swapchain usage、格式和 copy/blit 路径，而不是假定 present image 可直接作为 storage image。
+
+## 怀疑程序化大气时
+
+程序化大气（sky-view / transmittance / multi-scatter / aerial-perspective LUT）是最依赖 bindless
+采样与 buffer device address 的一条路径，在软件 ICD 和移动驱动上最先出问题。**不要再靠注释
+`Sky.slang` 来排除它**，用运行时开关：
+
+```
+r.atmosphere.enable 0
+```
+
+关掉后 `AtmosphereSubsystem::Enabled()` 返回 false，`FAtmosphereParams` 地址变成 0——这正是每个大气
+shader 已经在测的那个条件，所有消费者（天空背景、ambient cube bake、aerial perspective、height fog）
+在同一帧统一回落到旧的 IBL 天空路径，LUT 计算 pass 也不再 dispatch。设置面板 Environment >
+Atmosphere & Fog 的 "Atmosphere Supported" 是同一个开关。
+
+如果关掉它画面就正常，问题在大气路径，从 `r.atmosphere.debugMode`（1=in-scatter，2=transmittance，
+3=sky LUT）逐段确认是哪张 LUT 不对。契约与不变量见
+[大气散射与高度雾架构](../designs/atmosphere-and-height-fog-design.md)。
+
+> 历史：2026-08-05 曾因 lavapipe 上的异常直接把 `Sky.slang` 的大气分支注释掉，代价是此后一个多月
+> 里所有开大气的场景都是纯黑天空，而且症状完全不指向起因。上面的开关就是为了不再发生这件事。
 
 相关实现：[`Options.cpp`](../../src/Engine/Options.cpp)、[`WindowSurface.cpp`](../../src/Engine/Vulkan/WindowSurface.cpp) 和 [`VulkanLoaderBypass.cpp`](../../src/Engine/Vulkan/VulkanLoaderBypass.cpp)。

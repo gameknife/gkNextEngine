@@ -4,13 +4,13 @@ category: design
 status: 现行
 owner: engine/rendering
 created: 2026-07-29
-last_updated: 2026-08-31
+last_updated: 2026-09-14
 ---
 
 # 大气散射与高度雾架构
 
 本文定义 gkNextEngine 的程序化大气（sky atmosphere）与高度雾（height fog）架构。
-核心约束是**与五条现有渲染路径解耦**：大气子系统只做"生产者"，渲染器通过既有抽象消费，
+核心约束是**与现有渲染路径解耦**：大气子系统只做"生产者"，渲染器通过既有抽象消费，
 不在任何 logic renderer 内部出现大气代码。
 
 实现入口：`src/Engine/Rendering/Atmosphere/`、`assets/shaders/Sky.*.comp.slang`、
@@ -18,6 +18,12 @@ last_updated: 2026-08-31
 
 M0–M3 已于 2026-07-29 实现并验收。体积雾光轴与真正的介质散射是按需候选方向，不属于当前
 实现承诺。
+
+> **2026-08-05 至 2026-09-14 期间本功能处于关闭状态。** `Common.SampleSkyRadiance` 的大气分支
+> 连同它的 `if (!AtmosphereEnabled(camera))` 一起被整段注释掉（commit `b40f1d00`，起因是
+> lavapipe 软件 ICD 上的异常），结果是 LUT 照常计算、composite 照常跑，但天空本身永远取 IBL
+> 回落值——开了大气的场景表现为纯黑天空。2026-09-14 已恢复并在 Android 真机确认正常。
+> **不要再用注释 shader 的方式排除大气**，用下面的 `r.atmosphere.enable`。
 
 ## 当前实现与验证入口
 
@@ -29,7 +35,9 @@ M0–M3 已于 2026-07-29 实现并验收。体积雾光轴与真正的介质散
   大气、空中透视和高度雾放在同一处调整。
 - `FogStartDistance` 是**相对相机的射线距离**：介质积分从
   `cameraPosition + rayDirection * FogStartDistance` 开始，不依赖世界原点。
-- M4 的 froxel 体积雾光轴、PathTracing 真正介质散射和移动端降级留待明确需求后另行设计。
+- `r.atmosphere.enable` 是渲染器级总开关，独立于场景的 `EnvironmentSetting::AtmosphereEnabled`，
+  见下面"参数所有权与编辑器集成"。
+- M4 的 froxel 体积雾光轴与 PathTracing 真正介质散射留待明确需求后另行设计。
 
 ## 目标与非目标
 
@@ -39,7 +47,13 @@ M0–M3 已于 2026-07-29 实现并验收。体积雾光轴与真正的介质散
 - 大气透视（aerial perspective）：远处几何按距离与高度产生消光与内散射。
 - 指数高度雾：可独立于大气开关的美术向雾，含起始距离、最大不透明度、雾色。
 - 太阳直射色随大气透射率变化（日落变红），且**不改动任何直接光照 / CSM / ReSTIR 代码**。
-- 五个渲染器（PathTracing / SoftwareTracing / SoftwareModern / VoxelTracing / SoftwareModernNoAmbient）表现一致。
+- **所有会采样天空的渲染器表现一致**：PathTracing、PathTracingLite、SoftwareTracing、
+  SoftwareModern、SoftwareModernNoAmbient。这个约束是"对所有已注册且消费天空的渲染器成立"，
+  不是对某个固定清单成立——`ERT_PathTracingLite` 就是成文之后加进来的。
+  **VoxelTracing 例外且不在此约束内**：`Core.VoxelTracing.comp.slang` 只在
+  `BACKGROUND_MODE_STUDIO` 下调 `SampleVisibleBackground`，其余情况背景是写死的
+  `float4(10,10,10,0)` 常量，因此它既看不到 IBL 天空也看不到大气天空。这是它自身的取舍，
+  与大气无关，不要当成大气回归。
 - GI（AmbientCube 烘焙）与天空保持一致，不出现"天空变了但间接光没变"。
 
 **明确的非目标**（本设计不覆盖，后续里程碑另行授权）
@@ -47,7 +61,8 @@ M0–M3 已于 2026-07-29 实现并验收。体积雾光轴与真正的介质散
 - froxel 体积雾与体积阴影（god rays / 光轴）。当前设计留出接口但不实现。
 - PathTracing 的真正介质散射（光线在雾中多次散射）。PT 与光栅渲染器一样走屏幕空间大气透视。
 - 云层、天气系统、降水。
-- Android / iOS 降级路径。目标平台为 Windows / Linux 桌面。
+- **跳过 AP volume、按机型分档、运行时自适应质量**。移动端目前是一套固定的减半档位（见下面
+  "移动端档位"），不随设备性能变化，也不会在低端机上进一步退化。
 
 ## 现状与约束
 
@@ -99,10 +114,13 @@ M0–M3 已于 2026-07-29 实现并验收。体积雾光轴与真正的介质散
 ```slang
 namespace Common
 {
-    public bool   AtmosphereEnabled();
+    public bool   AtmosphereEnabled(UniformBufferObject camera);
     // 世界空间方向的天空辐射亮度。roughness 只用于 IBL 回落路径的 mip 选择。
     public float4 SampleSkyRadiance(float3 dir, float roughness);
-    // Lambert cosine 卷积后的天空辐照度（供 diffuse 着色与 GI 使用）。
+    // 可见背景（Studio 灰底 / ForceBlackBackground 优先，否则转 SampleSkyRadiance）。
+    public float4 SampleVisibleBackground(float3 dir);
+    // Lambert cosine 卷积后的天空辐照度。目前**没有调用方**——diffuse 与 GI 都直接用
+    // SampleSkyRadiance(n, 1.0) 或 HDR SH 路径。保留为公开入口，删除前先确认。
     public float4 SampleSkyIrradiance(float3 normal);
 }
 ```
@@ -111,12 +129,20 @@ namespace Common
 
 ```
 SampleSkyRadiance(dir, roughness):
-    if (!AtmosphereEnabled())
+    if (!AtmosphereEnabled(camera))
         return Camera.HasSky ? SampleIBL(SkyIdx, dir, SkyRotation, roughness)
                                * SkyColor * SkyIntensity
                              : 0;
-    return SampleSkyViewLut(dir) * Camera.SunColor.rgb * SkyColor.rgb * SkyLuminanceScale;
+    lutRadiance   = SkyViewLut.SampleLevel(SkyViewUv(dir, sunDir))
+    // 解析单次散射兜底：LUT 尚未收敛、或某个方向在 LUT 参数化下天然取不到值时接管。
+    // 地平线以下的半球主要由它供光——SkyView LUT 那里被地面截断，近似为 0。
+    analytic      = (1 - T_view) * (scattering / extinction) * T_sun * (rayleighPhase + miePhase)
+    unitRadiance  = max(lutRadiance, analytic)
+    return unitRadiance * Camera.SunColor.rgb * SkyColor.rgb * SkyLuminanceScale;
 ```
+
+`max(lutRadiance, analytic)` 是有意为之，不是冗余：去掉它地平线以下会塌成纯黑。改动这一行前
+先用 `r.atmosphere.debugMode 3` 看一眼 LUT 本身长什么样。
 
 7 个采样点各改一行。**五个渲染器的着色逻辑、AmbientCube 烘焙、GTAO compose 均无需其它改动。**
 
@@ -154,8 +180,9 @@ VoxelTracing 因此自动豁免。
 
 两件事都在 CPU 完成，因此下游代码完全不知道大气存在：
 
-1. **天空 SH**：`SkyIrradianceProjector` 用同一套大气模型做低成本方向积分（默认 128 方向 × 16 步
-   raymarch），投影成 3 阶 SH，写入 `GlobalTexturePool::GetHDRSphericalHarmonics()` 的保留槽位。
+1. **天空 SH**：`SkyIrradianceProjector` 用同一套大气模型做低成本方向积分（128 方向 × 16 步
+   raymarch，移动端步数减半为 8；**方向数两端都是 128**，减半的只有 raymarch），投影成 3 阶 SH，
+   写入 `GlobalTexturePool::GetHDRSphericalHarmonics()` 的保留槽位。
    既有的 `Scene::UpdateHDRSH()` 上传路径原样复用，`AmbientCubeBaker` / `SampleIBLDiffuse` 无改动。
 2. **太阳透射率**：CPU 求 `TransmittanceToSun(cameraAltitude, sunZenith)`，直接乘进
    `Engine.CameraUbo.cpp` 里填的 `ubo.SunColor`。于是 CSM 直接光、ReSTIR DI、
@@ -223,6 +250,42 @@ public uint64_t AtmosphereReserved0; // 保持 16 字节尾对齐
 
 显存合计 < 1 MB。
 
+### 移动端档位
+
+Android 与 iOS 跑同一套 shader 和同一条管线，只是**每根轴的分辨率和每条 raymarch 的步数都取桌面的
+一半**。没有第二套代码路径，也没有运行时分档。
+
+| | 桌面 | 移动端 |
+|---|---|---|
+| Transmittance LUT | 256 × 64 | 128 × 32 |
+| MultiScattering LUT | 32 × 32 | 16 × 16 |
+| SkyView LUT（基准） | 192 × 108 | 96 × 54 |
+| AerialPerspective volume | 32³ | 16³（体素数降到 1/8） |
+| Transmittance 积分步数 | 40 | 20 |
+| SkyView 主步数 / 太阳透射 | 32 / 12 | 16 / 6 |
+| AerialPerspective 主步数 / 太阳透射 | 16 / 8 | 8 / 4 |
+| CPU SH 投影积分步数 | 16 | 8 |
+
+两处开关必须同时成立，否则分辨率和步数会各走各的：
+
+- C++ 侧（LUT 尺寸、CPU SH 投影）用 `#if IOS || ANDROID`，与仓库其它地方的移动端判断一致。
+- Shader 侧用 `PLATFORM_MOBILE`，由 `assets/cmake/SlangShaders.cmake` 在 `ANDROID OR IOS` 时定义。
+  **不要用 `PLATFORM_APPLE` 代替**——CMake 的 `APPLE` 在 macOS 和 iOS 上都为真，它回答不了
+  "是不是手机"。
+
+步数常量集中在 `Atmosphere.slang` 的 `Atmosphere.STEPS_*`，四个 pass 都从那里取；不要在各自文件里
+写字面量，SkyView 和 AerialPerspective 的步数必须保持同一量级，否则两者共享的地平线会对不上。
+
+`r.atmosphere.skyViewLutScale` 在移动端仍然可用，但它是相对**移动端基准**（96×54）缩放的，
+所以手机上设 2.0 得到的是 192×108，正好是桌面基准，而不是桌面的两倍。
+
+AP volume 的 dispatch 由 `aerialPerspectiveExtent` 推导（`GetSafeDispatchCount(w, 8), ..., depth`），
+不是手写的组数——shader 只按图像自身尺寸做边界检查，手写组数一旦覆盖不全，LUT 尾部会留着上一帧的
+旧值，不会报错。
+
+启动时会打印一行 `Atmosphere LUTs (<mobile|desktop> profile): ...`，真机上用它确认档位生效，
+不要靠"应该编进去了"推断。
+
 **辐射单位约定（关键）**：LUT 以"太阳辐照度 = 1"的无量纲单位计算，输出的天空辐射亮度单位为 `1/sr`。
 运行时乘 `Camera.SunColor.rgb`（引擎已把它当辐照度用）即得引擎单位。这样天空与
 `EvaluateAnalyticSunDisk` 的 `SunColor / SunSolidAngle` **自动同尺度，不引入任何魔法常数**。
@@ -273,8 +336,16 @@ PropertyPanel 编辑 UI、undo/redo、脚本绑定、场景序列化。
 
 三个功能开关默认均关闭。以下性能/诊断选项仍是运行时 cvar：
 
+- `r.atmosphere.enable` — **渲染器级总开关，默认开**。它压在场景开关之上：关掉后
+  `AtmosphereSubsystem::Enabled()` 返回 false，`ParamsAddress()` 与 `FAtmosphereParams::Flags`
+  同时归零，LUT pass 不再 dispatch，全部消费者在同一帧统一回落 IBL 路径。
+  这是驱动出问题时的正确排除手段——它取代了历史上"注释掉 `Sky.slang`"的做法。
+  设置面板 Environment > Atmosphere & Fog 顶部的 "Atmosphere Supported" 是同一个开关。
 - `r.atmosphere.skyViewLutScale` — SkyView LUT 分辨率倍率（性能调试用）
 - `r.atmosphere.debugMode` — 0 关 / 1 只看 inScatter / 2 只看 transmittance / 3 只看 SkyView LUT
+
+两级开关分工明确：`AtmosphereEnabled` 回答"这个场景想不想要大气"（场景数据，随 glb/scad 走），
+`r.atmosphere.enable` 回答"这台机器能不能跑大气"（本机设置，Archive 到 cvar 用户配置）。
 
 `AtmosphereSetting` 及其三个功能开关都是**场景数据**（存进 glb/scad）。主程序的
 Renderer Settings 直接编辑当前 Environment，因此切换场景时会恢复各场景自己的环境状态。
@@ -290,7 +361,22 @@ Renderer Settings 直接编辑当前 Environment，因此切换场景时会恢�
 5. `sceneColor.a` 的 `noSkyBackground` 语义不得被修改。
 6. LUT 辐射单位是"太阳辐照度 = 1"，与 `EvaluateAnalyticSunDisk` 共尺度；不得引入独立的亮度魔法数。
 7. 太阳透射率在 CPU 侧折进 `ubo.SunColor`，不得在着色器里重复施加。
-8. 大气关闭时，全部代码路径必须与改动前逐位一致（`gnb shot` 可验证）。
+8. 大气关闭时，全部代码路径必须与改动前等价。
+   **注意 `gnb shot` 验证不了这一点**：PathTracing 下它不可复现——AmbientCube 烘焙按
+   `r.ambientCube.bakeTargetFps` 推进，取决于墙钟时间，因此代码一字未改的两次连拍在 1080p 下
+   也会有 max≈166 / mean≈0.8 的逐像素差（2026-09-14 实测）。要证明"没改变桌面行为"，
+   用 shader 的 SPIR-V 逐字节对比；截图只能用来判断"看起来还对"。
+9. **求方位角基准一律走 `Atmosphere.HorizontalDirection()`，不得手写
+   `normalize(float3(x,0,z) + epsilon)`。** 正上/正下方向的水平分量恰好为零，epsilon 平方后
+   在做降精度或 flush-to-zero 的驱动上会归零，`normalize` 随即产出 NaN；而
+   `Bake.ClearAmbientCubeCache` 正好采样 `(0,±1,0)`，这不是边角情况是必然情况。
+   更重要的是 SkyView LUT 的正向映射（`Sky.slang`）与反向映射（`Sky.SkyView.comp.slang`）
+   必须对同一个兜底轴达成一致，各写各的 epsilon 会让两端错开。
+10. 关闭大气的唯一受支持方式是 `r.atmosphere.enable`。不得再通过注释 shader 代码来屏蔽
+    ——那样 LUT pass 仍在跑，画面症状（纯黑天空）也不指向真正的原因。
+11. 移动端档位的两个条件必须成对改：C++ 的 `#if IOS || ANDROID` 与 shader 的 `PLATFORM_MOBILE`
+    （由 `SlangShaders.cmake` 的 `ANDROID OR IOS` 定义）。只改一边会让 LUT 分辨率和 raymarch
+    步数在某个平台上错配，而这不会报错，只是画质与开销对不上。
 
 ## 已知限制与取舍
 
@@ -314,10 +400,18 @@ Renderer Settings 直接编辑当前 Environment，因此切换场景时会恢�
 
 新增或修改大气相关代码时至少核对：
 
-- 大气开 / 关两种状态下，五个渲染器都跑过一遍。
-- 关闭时画面与基线逐位一致。
+- 大气开 / 关两种状态下，**当前注册的每个采样天空的渲染器**都跑过一遍（写这条时是五个：
+  PathTracing / PathTracingLite / SoftwareTracing / SoftwareModern / SoftwareModernNoAmbient；
+  以 `ERendererType` 为准，不要照抄旧清单）。VoxelTracing 背景是常量，跑它只能验证没崩，
+  验证不了天空。`gnb validate` 脚本里用 `r.rendererType` cvar 逐个切换，比每个渲染器开一次
+  进程快得多。
+- 两条关闭路径都要核：场景 `AtmosphereEnabled=false`，以及 `r.atmosphere.enable 0`。判据是
+  "回落到 IBL 天空且不崩"，不是"与基线逐位一致"——见不变量 8。
 - 太阳在地平线以下（夜间）、贴地平线（日落）、天顶（正午）三种角度都不出 NaN / 负值。
+  天顶那一档专门覆盖不变量 9 的退化方向，不要跳过。
 - 编辑器透明背景（`noSkyBackground`）未被雾污染。
 - DLSS / FSR 开启与关闭下，摄像机快速移动不产生 ghosting 或雾闪烁。
 - 至少两个不同相机的多视图场景（缩略图 + 主视图）渲染正常。
-- GPU timer 中大气相关 pass 合计 < 0.5 ms @1080p。
+- GPU timer 中大气相关 pass 合计 < 0.5 ms @1080p（桌面预算）。移动端档位尚无实测预算：
+  减半是按"桌面的一半"定的，不是从设备 profile 反推的，真机 GPU timer 数据仍然欠着。
+- 改了移动端档位后，确认启动日志里 `Atmosphere LUTs (mobile profile)` 的数字是你预期的。

@@ -7,7 +7,15 @@ namespace Rendering::Atmosphere
     {
         constexpr float pi = glm::pi<float>();
         constexpr float goldenAngle = 2.39996322972865332f;
+        // Halved on mobile like every other atmosphere raymarch. This one runs on the CPU main
+        // thread whenever the sun moves more than half a degree, so on a phone it is a frame
+        // hitch rather than GPU time -- SH L0..L2 is low-frequency enough that the shorter
+        // integration is not visible in the ambient term.
+#if IOS || ANDROID
+        constexpr uint32_t integrationStepCount = 8;
+#else
         constexpr uint32_t integrationStepCount = 16;
+#endif
 
         float RayleighPhase(float cosine)
         {

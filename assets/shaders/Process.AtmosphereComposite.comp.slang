@@ -120,10 +120,9 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         const float3 viewDirection = normalize(viewTarget.xyz / max(abs(viewTarget.w), 1.0e-6f));
         const float3 worldDirection =
             normalize(mul(camera.ModelViewInverse, float4(viewDirection, 0.0f)).xyz);
-        const float3 directionHorizontal =
-            normalize(float3(worldDirection.x, 0.0f, worldDirection.z) + float3(1.0e-6f, 0, 0));
+        const float3 directionHorizontal = Atmosphere.HorizontalDirection(worldDirection);
         const float3 sunHorizontal =
-            normalize(float3(camera.SunDirection.x, 0.0f, camera.SunDirection.z) + float3(1.0e-6f, 0, 0));
+            Atmosphere.HorizontalDirection(normalize(camera.SunDirection.xyz));
         const float2 skyUv = float2(
             dot(directionHorizontal, sunHorizontal) * 0.5f + 0.5f,
             sign(worldDirection.y) * sqrt(abs(worldDirection.y)) * 0.5f + 0.5f);

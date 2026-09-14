@@ -4,7 +4,7 @@ category: design
 status: 现行
 owner: engine/tools
 created: 2026-06-09
-last_updated: 2026-07-22
+last_updated: 2026-09-14
 ---
 
 # Agent 输入驱动验证架构
@@ -15,14 +15,20 @@ last_updated: 2026-07-22
 
 - `tools/gnb/internal/validate/validate.go`：解析 `.agentscript.json`，启动目标，执行等待/断言，写 JSON report，并监管进程退出。
 - `tools/gnb/internal/validationstore/`：独立持久化验证运行、脚本快照、步骤、心跳、runner 日志、截图索引和 `review.json`。
-- `src/Engine/Runtime/AgentControlServer.*`：只监听 gnb 分配的 loopback TCP 端点，按行处理带一次性 token 的 JSON 请求。
-- `src/Engine/Runtime/Engine.cpp` 的 `HandleAgentControlCommand`：提供 input、query、cvar、exec、screenshot、quit 原语。
-- `src/Engine/Runtime/Input/SyntheticInput.*`：向 SDL 事件队列注入键鼠事件；鼠标移动不会移动系统光标。
+- `src/Modules/NextValidation/AgentControlServer.*`：只监听 gnb 分配的 loopback TCP 端点，按行处理带一次性 token 的 JSON 请求。
+- `src/Modules/NextValidation/NextValidationModule.cpp` 的 `FAgentControlService::HandleCommand`：提供
+  input、query、cvar、exec、screenshot、quit 原语；同类的 `Query` 是内建查询表。
+- `src/Modules/NextValidation/SyntheticInput.*`：向 SDL 事件队列注入键鼠事件；鼠标移动不会移动系统光标。
 - `src/Engine/Runtime/Interface/AgentQueries.*` 与 `GameInstance::RegisterAgentQueries`：注册 `game.*` 业务查询。
+- `src/Engine/Runtime/Interface/AgentControl.hpp`：引擎侧的服务接口，模块通过
+  `NextEngine::SetAgentControlService` 安装——整套验证能力是 `NextValidation` 模块，不在 Engine 核心内。
 
 `--agent-validation` 会启用隐藏窗口、确定性 pacing、Immediate present，并禁用 Streamline。`gnb validate --visible` 只改变窗口可见性，不改变脚本语义。
 
 ## 脚本与查询
+
+**逐字段的完整表在 [agentscript 脚本字段参考](../guides/agentscript-reference.md)**，写脚本查那一页；
+本节只给分类，不重复字段清单——清单散成两份必然有一份先过期。
 
 支持的步骤以 `validate.go` 的 `execute` switch 为准：
 
@@ -30,9 +36,14 @@ last_updated: 2026-07-22
 - 等待/判定：`wait-frames`、`wait-ms`、`wait-until`、`assert`
 - 控制：`cvar`、`exec`、`screenshot`、`log`、`quit`
 
-内建查询：`engine.totalFrames`、`engine.frameRate`、`engine.time`、`engine.status`、`engine.rendererType`、`scene.nodeCount`、`scene.selectedId`、`scene.selectedCount`、`cvar.<name>`。游戏查询使用 `game.<name>`，注册表内部名称不带 `game.` 前缀。
+查询表在 `NextValidationModule.cpp` 的 `Query`，分 `engine.*`、`scene.*`（含 GPU-driven 统计）、
+`cvar.<name>` 和 `game.<name>` 四类；游戏查询注册时不带 `game.` 前缀。
 
 比较操作为 `eq/ne/gt/ge/lt/le/contains`。坐标可写像素值，也可在 `norm` 中写 0..1 归一化坐标；归一化换算依赖脚本或命令行提供的 viewport。
+
+脚本**没有 schema 校验**，而且输入步骤是由 gnb 整体透传给引擎的：引擎按 `params.value(key, default)`
+取值，拼错的可选字段静默变默认值而不报错。这是字段参考页存在的理由，不是可以顺手改掉的小毛病——
+真要加校验，得先决定这套协议要不要承担版本兼容承诺（见"约束"）。
 
 ## 控制协议与线程模型
 

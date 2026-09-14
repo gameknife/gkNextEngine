@@ -95,6 +95,12 @@ struct UserSettings final
     float LightGridBaseCellSize = 2.0f;
     float LightGridCullThreshold = 1.0e-4f;
 
+    // Master switch for the procedural atmosphere, independent of the per-scene
+    // EnvironmentSetting::AtmosphereEnabled. Turning it off makes the params address zero, which is
+    // the one condition every atmosphere shader already tests, so every consumer falls back to the
+    // legacy IBL sky in the same frame. It exists so a driver that mishandles the LUT path can be
+    // worked around at runtime instead of by commenting the shader out again.
+    bool AtmosphereEnable = true;
     float AtmosphereSkyViewLutScale = 1.0f;
     int AtmosphereDebugMode = 0;
 

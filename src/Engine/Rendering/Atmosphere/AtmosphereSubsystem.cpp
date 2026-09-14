@@ -27,10 +27,26 @@ namespace Rendering::Atmosphere
         constexpr uint32_t aerialPerspectiveSlot =
             static_cast<uint32_t>(Assets::Bindless::RES_ATMOSPHERE_AERIAL_PERSPECTIVE);
 
+        // Mobile runs every LUT at exactly half the desktop resolution per axis, matching the
+        // halved raymarch budgets in Atmosphere.slang (STEPS_*). Both sides key off the same
+        // `IOS || ANDROID` condition -- the shader's PLATFORM_MOBILE is defined from it in
+        // SlangShaders.cmake -- so resolution and step count cannot drift apart per platform.
+        // The aerial-perspective volume drops 8x the voxels, which is why the dispatch below is
+        // derived from this extent rather than written out.
+#if IOS || ANDROID
+        constexpr VkExtent2D transmittanceExtent{128, 32};
+        constexpr VkExtent2D multiScatterExtent{16, 16};
+        constexpr VkExtent2D baseSkyViewExtent{96, 54};
+        constexpr VkExtent3D aerialPerspectiveExtent{16, 16, 16};
+#else
         constexpr VkExtent2D transmittanceExtent{256, 64};
         constexpr VkExtent2D multiScatterExtent{32, 32};
         constexpr VkExtent2D baseSkyViewExtent{192, 108};
         constexpr VkExtent3D aerialPerspectiveExtent{32, 32, 32};
+#endif
+
+        // Must match [numthreads(8, 8, 1)] in Sky.AerialPerspective.comp.slang.
+        constexpr uint32_t aerialPerspectiveGroupSize = 8;
 
         VkExtent2D ScaledSkyViewExtent(float scale)
         {
@@ -99,6 +115,23 @@ namespace Rendering::Atmosphere
         aerialPerspectiveReady_ = false;
         haveLastParams_ = false;
         WriteParams(BuildParams());
+
+        // Printed so the mobile profile is confirmable from a device log rather than inferred from
+        // the build. Desktop and mobile differ only in these numbers and the STEPS_* budgets that
+        // are compiled into the shaders from the same condition.
+        SPDLOG_INFO(
+            "Atmosphere LUTs ({} profile): transmittance {}x{}, multi-scatter {}x{}, "
+            "sky-view {}x{}, aerial perspective {}x{}x{}",
+#if IOS || ANDROID
+            "mobile",
+#else
+            "desktop",
+#endif
+            transmittanceExtent.width, transmittanceExtent.height,
+            multiScatterExtent.width, multiScatterExtent.height,
+            skyViewExtent_.width, skyViewExtent_.height,
+            aerialPerspectiveExtent.width, aerialPerspectiveExtent.height,
+            aerialPerspectiveExtent.depth);
     }
 
     void AtmosphereSubsystem::CreateSkyViewLut(VkExtent2D extent)
@@ -192,6 +225,10 @@ namespace Rendering::Atmosphere
 
     bool AtmosphereSubsystem::Enabled() const
     {
+        if (!renderer_.FrameSettings().userSettings.AtmosphereEnable)
+        {
+            return false;
+        }
         const auto& environment = renderer_.GetScene().GetEnvSettings();
         return environment.AtmosphereEnabled || environment.HeightFogEnabled;
     }
@@ -227,7 +264,10 @@ namespace Rendering::Atmosphere
         params.AerialPerspectiveMaxDistance = std::max(source.AerialPerspectiveMaxDistance, 1.0f);
         params.SkyLuminanceScale = std::max(source.SkyLuminanceScale, 0.0f);
         params.Flags = 0;
-        if (environment.AtmosphereEnabled)
+        // Flags and the params address must agree: ParamsAddress() already reports zero when the
+        // master switch is off, and a pass that still saw ATMOSPHERE_FLAG_SKY here would dispatch
+        // LUT work whose shader then bails on the null address.
+        if (environment.AtmosphereEnabled && Enabled())
         {
             params.Flags |= Assets::ATMOSPHERE_FLAG_SKY;
             if (environment.AerialPerspectiveEnabled)
@@ -235,7 +275,7 @@ namespace Rendering::Atmosphere
                 params.Flags |= Assets::ATMOSPHERE_FLAG_AERIAL_PERSPECTIVE;
             }
         }
-        if (environment.HeightFogEnabled)
+        if (environment.HeightFogEnabled && Enabled())
         {
             params.Flags |= Assets::ATMOSPHERE_FLAG_HEIGHT_FOG;
         }
@@ -389,7 +429,14 @@ namespace Rendering::Atmosphere
                         VK_IMAGE_LAYOUT_GENERAL, true, "Atmosphere Aerial Perspective");
         aerialPerspectivePipeline_->BindPipeline(
             commandBuffer, renderer_.GetScene(), imageIndex, renderer_.ActiveViewBankBase(), 0, 0);
-        vkCmdDispatch(commandBuffer, 4, 4, 32);
+        // Derived from the extent, not written out: the shader bounds-checks against the image's
+        // own dimensions, so a hand-computed group count that no longer covers the volume leaves
+        // the tail of the LUT stale instead of failing.
+        vkCmdDispatch(
+            commandBuffer,
+            Utilities::Math::GetSafeDispatchCount(aerialPerspectiveExtent.width, aerialPerspectiveGroupSize),
+            Utilities::Math::GetSafeDispatchCount(aerialPerspectiveExtent.height, aerialPerspectiveGroupSize),
+            aerialPerspectiveExtent.depth);
         TransitionImage(commandBuffer, *volume, aerialPerspectiveSlot,
                         Vulkan::PipelineCommon::ERenderStage::Compute,
                         Vulkan::PipelineCommon::EResourceAccess::ShaderRead,

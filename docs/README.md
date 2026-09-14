@@ -35,6 +35,7 @@
   [Soft Mesh Shader](guides/soft-mesh-shader-gpu-driven-submit.md)
 - 内容与交互：[SCAD 场景创作](guides/scad-scene-authoring-guide.md) ·
   [TUI 模式](guides/tui-mode.md) · [VITURE Carina AR](guides/viture-ar.md)
+- 验证：[agentscript 脚本字段参考](guides/agentscript-reference.md)（写 `gnb validate` 脚本前先查这页）
 
 ## 当前架构
 
@@ -46,6 +47,7 @@
 - [直接样本后处理与 Upscaler 输入链](designs/direct-sample-post-chain.md)
 - [Tracing Direct Lighting 与 ReSTIR DI](designs/pathtracing-restir-design.md)
 - [SoftwareModernNoAmbient 与 GTAO](designs/software-modern-noambient-rendering.md)
+- [SoftwareModern / SoftwareTracing 性能分析与优化方案](designs/software-modern-performance-analysis.md)（代码审计完成；优化待实施）
 - [大气散射与高度雾](designs/atmosphere-and-height-fog-design.md)
 - [GI 缓存与体素资源](designs/gi-cache-architecture.md)
 - [AmbientCube 命中驱动驻留](designs/ambientcube-hit-driven-residency-design.md)

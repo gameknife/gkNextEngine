@@ -608,6 +608,9 @@ void NextRendererGameInstance::DrawSettings(FRendererUiState& uiState)
         // Card 3: Atmosphere & Height Fog
         BeginCard("##EnvAtmosphereCard");
         DrawCardHeader(ICON_FA_SMOG, "Atmosphere & Fog");
+        // Renderer-wide kill switch (r.atmosphere.enable), above the per-scene toggle: turning it
+        // off drops the whole subsystem back to the IBL sky without editing the scene.
+        environmentChanged |= DrawSettingCheckboxRow("Atmosphere Supported", &userSetting.AtmosphereEnable);
         environmentChanged |= DrawSettingCheckboxRow("Atmosphere Enabled", &environment.AtmosphereEnabled);
         if (environment.AtmosphereEnabled)
         {

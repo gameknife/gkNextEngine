@@ -44,6 +44,25 @@ public struct ATMOS_ALIGN_16 FAtmosphereParams
 #ifndef __cplusplus
 namespace Atmosphere
 {
+    // Raymarch budgets. Mobile runs every count at exactly half the desktop value; the LUT
+    // resolutions in AtmosphereSubsystem.cpp are halved by the same `IOS || ANDROID` condition.
+    // Keep them here rather than as literals in each pass: the sky-view and aerial-perspective
+    // passes must stay in the same ballpark or their shared horizon stops matching, and a
+    // per-file literal is how that drifts.
+#ifdef PLATFORM_MOBILE
+    public static const uint STEPS_TRANSMITTANCE = 20;
+    public static const uint STEPS_SKY_VIEW = 16;
+    public static const uint STEPS_SKY_VIEW_SUN = 6;
+    public static const uint STEPS_AERIAL = 8;
+    public static const uint STEPS_AERIAL_SUN = 4;
+#else
+    public static const uint STEPS_TRANSMITTANCE = 40;
+    public static const uint STEPS_SKY_VIEW = 32;
+    public static const uint STEPS_SKY_VIEW_SUN = 12;
+    public static const uint STEPS_AERIAL = 16;
+    public static const uint STEPS_AERIAL_SUN = 8;
+#endif
+
     public float SafeSqrt(float value)
     {
         return sqrt(max(value, 0.0f));
@@ -87,6 +106,24 @@ namespace Atmosphere
             opticalDepth += MediumExtinction(params, altitude) * stepLength;
         }
         return exp(-opticalDepth);
+    }
+
+    // Azimuth basis for the sky-view LUT parameterisation. A direction pointing straight up or
+    // down has no horizontal component at all, and the obvious `normalize(xz + tiny_epsilon)`
+    // returns NaN on any driver that flushes the *squared* epsilon to zero -- which is what mobile
+    // relaxed-precision arithmetic does. Bake.ClearAmbientCubeCache samples exactly (0,+-1,0), so
+    // that is not a corner case here, it is a guaranteed one. Pick the fallback axis explicitly.
+    // Every producer and consumer of the LUT must call this so the forward and inverse azimuth
+    // mappings agree on the fallback.
+    public float3 HorizontalDirection(float3 direction)
+    {
+        const float2 horizontal = float2(direction.x, direction.z);
+        const float lengthSquared = dot(horizontal, horizontal);
+        if (!(lengthSquared > 1.0e-6f))
+        {
+            return float3(1.0f, 0.0f, 0.0f);
+        }
+        return float3(horizontal.x, 0.0f, horizontal.y) * rsqrt(lengthSquared);
     }
 
     public float RayleighPhase(float cosTheta)

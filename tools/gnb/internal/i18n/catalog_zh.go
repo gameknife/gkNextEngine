@@ -154,8 +154,12 @@ var zh = map[string]string{
 	"remote.lan_hint":      "远端浏览器只连接 dashboard 启动出来的 target；主机需要让 %s / %s 端口在局域网内可达。",
 	"remote.show_window":   "调试时保留本地窗口可见",
 
-	"test.missing": "未找到 gkNextUnitTests，请先在 Build 页构建该 target。",
-	"test.run":     "运行测试",
+	"test.missing":            "未找到 gkNextUnitTests，请先在 Build 页构建该 target。",
+	"test.run":                "运行测试",
+	"test.all_categories":     "所有类别",
+	"test.search_placeholder": "搜索测试用例名称...",
+	"test.run_all":            "运行全部测试",
+	"test.run_category":       "所有 [%s] 测试",
 
 	"validation.title":              "验证中心",
 	"validation.blurb":              "观察步骤与已完成截图；截图不是直播，也不代表画面已经被人工判定正确。",
@@ -352,6 +356,11 @@ var zh = map[string]string{
 	"paks.types":        "文件类型",
 	"paks.type_raw":     "原始 %s",
 	"paks.pick":         "选择左侧 Pak 查看文件组织与尺寸分析。",
+	"paks.loading":      "正在解析 Pak 结构与索引…",
+	"paks.truncated":    "已展示前 %d 项（共 %s 项）。条目较多，建议使用上方搜索框快速过滤定位。",
+	"paks.load_more":    "加载更多 (+%d 项)",
+	"paks.load_all":     "加载全部 (%s 项)",
+	"paks.no_match":     "未找到匹配项",
 
 	"graph.title":        "Target Graph",
 	"graph.preset":       "Preset: %s",

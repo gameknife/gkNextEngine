@@ -365,7 +365,10 @@ func (s *Server) remoteJobSpec(target string, opts remoteplay.Options, extraArgs
 func (s *Server) testJobSpec(name string) (JobSpec, error) {
 	binDir := platform.BinDir(s.opts.RepoRoot, s.opts.Preset)
 	exe := platform.ExecutablePath(binDir, "gkNextUnitTests")
-	args := []string{"--use-colour", "yes"}
+	if _, err := os.Stat(exe); err != nil {
+		return JobSpec{}, fmt.Errorf("测试程序尚未生成: %s\n请先在 Build 选项卡编译 gkNextUnitTests 目标", exe)
+	}
+	args := []string{"--colour-mode", "ansi"}
 	label := name
 	if name == "" || name == "all" {
 		label = "all"

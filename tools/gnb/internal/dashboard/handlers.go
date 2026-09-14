@@ -220,12 +220,13 @@ type remoteVM struct {
 }
 
 type testVM struct {
-	Tests     []TestCase
-	ListErr   string
-	BinPath   string
-	BinExists bool
-	Latest    JobSnapshot
-	HasJob    bool
+	Tests      []TestCase
+	Categories []CategoryCount
+	ListErr    string
+	BinPath    string
+	BinExists  bool
+	Latest     JobSnapshot
+	HasJob     bool
 }
 
 type chatVM struct {
@@ -387,11 +388,12 @@ func (s *Server) buildTestVM() testVM {
 	binDir := platform.BinDir(s.opts.RepoRoot, s.opts.Preset)
 	binPath := platform.ExecutablePath(binDir, "gkNextUnitTests")
 	vm := testVM{BinPath: binPath}
-	cases, err := ListCatch2Tests(binPath)
+	cases, categories, err := ListCatch2Tests(binPath)
 	if err != nil {
 		vm.ListErr = err.Error()
 	} else {
 		vm.Tests = cases
+		vm.Categories = categories
 		vm.BinExists = true
 	}
 	if snap, ok := s.jobs.LatestSnapshot(JobTest); ok {
@@ -769,7 +771,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	case "paks":
 		vm := s.buildHeader("paks")
-		vm.PaksVM = s.buildPaksVM(r.URL.Query().Get("file"))
+		vm.PaksVM = s.buildPaksVM(r.URL.Query().Get("file"), r.URL.Query().Get("q"), parsePakLimit(r.URL.Query().Get("limit")))
 		s.render(w, r, "layout.html", vm)
 		return
 	case "graph":
@@ -919,7 +921,7 @@ func (s *Server) handleTab(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, "tab_loc", vm)
 	case "paks":
 		vm := s.buildHeader("paks")
-		vm.PaksVM = s.buildPaksVM(r.URL.Query().Get("file"))
+		vm.PaksVM = s.buildPaksVM(r.URL.Query().Get("file"), r.URL.Query().Get("q"), parsePakLimit(r.URL.Query().Get("limit")))
 		s.render(w, r, "tab_paks", vm)
 	case "graph":
 		vm := s.buildHeader("graph")

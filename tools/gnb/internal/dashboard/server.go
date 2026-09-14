@@ -80,6 +80,7 @@ type Server struct {
 	gitCache        *gitCacheEntry
 	validationCache *validationCacheEntry
 	docsCache       *docsCacheEntry
+	paksCache       map[string]*cachedPakData
 }
 
 func (s *Server) invalidateGitCache() {
@@ -149,6 +150,7 @@ func New(opts Options) (*Server, error) {
 		jobs:       NewJobManager(),
 		chats:      NewChatStore(chatStorePath(opts)),
 		validation: validationstore.New(opts.RepoRoot, opts.Preset),
+		paksCache:  make(map[string]*cachedPakData),
 	}, nil
 }
 

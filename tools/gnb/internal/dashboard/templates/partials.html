@@ -1158,12 +1158,12 @@
           </label>
         </div>
         <div class="build-run-actions">
-          <form data-build-run-form hx-post="/jobs/build" hx-target="#log-panel-host" hx-swap="innerHTML">
+          <form data-build-run-form hx-post="/jobs/build" hx-target="#build-log-panel-host" hx-swap="innerHTML">
             <input type="hidden" name="target" value="all">
             <input type="hidden" name="reconfigure" value="0" id="build-reconfigure-hidden">
             <button class="btn-secondary build-run-button" type="submit" data-build-button title="编译选中目标">{{T "build.build"}}</button>
           </form>
-          <form data-build-run-form hx-post="/jobs/run" hx-target="#log-panel-host" hx-swap="innerHTML">
+          <form data-build-run-form hx-post="/jobs/run" hx-target="#build-log-panel-host" hx-swap="innerHTML">
             <input type="hidden" name="target" value="all">
             <input type="hidden" name="extraArgs" value="" id="run-extra-args">
             <button class="btn-primary build-run-button" type="submit" data-run-button disabled title="运行选中目标">{{T "build.run"}}</button>
@@ -1202,7 +1202,7 @@
   </aside>
 
   <section class="tab-main">
-    <div id="log-panel-host" style="display: contents;">
+    <div id="build-log-panel-host" style="display: contents;">
       {{if .BuildVM.HasJob}}
         {{template "log_panel" .BuildVM.Latest}}
       {{else}}
@@ -1651,7 +1651,7 @@
         </span>
         {{T "remote.launch"}}
       </h2>
-      <form class="remote-form" hx-post="/jobs/remote" hx-target="#log-panel-host" hx-swap="innerHTML">
+      <form class="remote-form" hx-post="/jobs/remote" hx-target="#remote-log-panel-host" hx-swap="innerHTML">
         <input type="hidden" name="target" value="{{.RemoteVM.DefaultTarget}}">
         <div class="form-field">
           <label for="remote-scene">scene</label>
@@ -1762,7 +1762,7 @@
     </div>
 
     <div class="remote-log-host">
-      <div id="log-panel-host" style="display: contents;">
+      <div id="remote-log-panel-host" style="display: contents;">
         {{if .RemoteVM.HasJob}}
           {{template "log_panel" .RemoteVM.Latest}}
         {{else}}
@@ -2263,32 +2263,49 @@
 
 
 {{define "tab_test"}}
-<div class="tab-jobs">
-  <aside class="tab-side">
+<div class="tab-jobs test-page">
+  <aside class="tab-side test-side">
     <div class="card">
-      <h2 class="card-title">
-        <span class="ico">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 2v8L4 20a2 2 0 0 0 1.7 3h12.6A2 2 0 0 0 20 20l-5-10V2"/><line x1="9" y1="2" x2="15" y2="2"/></svg>
-        </span>
-        Test case
-      </h2>
+      <div class="test-header">
+        <h2 class="card-title" style="margin-bottom: 0;">
+          <span class="ico">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 2v8L4 20a2 2 0 0 0 1.7 3h12.6A2 2 0 0 0 20 20l-5-10V2"/><line x1="9" y1="2" x2="15" y2="2"/></svg>
+          </span>
+          Test case
+        </h2>
+        <span class="test-count-badge" id="test-count-badge" title="当前显示的测试用例数量">{{len .TestVM.Tests}}</span>
+      </div>
       {{if not .TestVM.BinExists}}
-        <div class="archive-hint" style="margin-bottom: 10px;">
+        <div class="archive-hint" style="margin-top: 8px; margin-bottom: 10px;">
           {{T "test.missing"}}
           {{if .TestVM.ListErr}}<br><span style="opacity:0.7; font-size: 11px;">{{.TestVM.ListErr}}</span>{{end}}
         </div>
       {{end}}
-      <form data-job-form hx-post="/jobs/test" hx-target="#log-panel-host" hx-swap="innerHTML">
+
+      <div class="test-filter-box" style="margin-top: 10px; margin-bottom: 10px;">
+        <div class="test-filter-row">
+          <select class="select test-category-select" id="test-category-filter" title="按分类筛选">
+            <option value="">{{T "test.all_categories"}} ({{len .TestVM.Tests}})</option>
+            {{range .TestVM.Categories}}
+            <option value="{{.Name}}">{{.Name}} ({{.Count}})</option>
+            {{end}}
+          </select>
+        </div>
+        <div class="test-filter-row" style="margin-top: 6px;">
+          <input type="text" class="input test-search-input" id="test-search-filter" placeholder="{{T "test.search_placeholder"}}" autocomplete="off">
+        </div>
+      </div>
+
+      <form data-job-form hx-post="/jobs/test" hx-target="#test-log-panel-host" hx-swap="innerHTML">
         <input type="hidden" name="target" value="all">
-        <div class="target-list" style="margin-bottom: 12px;">
-          <div class="target-item selected" data-target="all">
-            <span class="name">all tests</span>
-            <span class="tag-mini">run all</span>
+        <div class="target-list test-target-list" style="margin-bottom: 12px;">
+          <div class="target-item selected" data-target="all" id="test-target-all-item">
+            <span class="name">{{T "test.run_all"}}</span>
+            <span class="tag-mini">all</span>
           </div>
           {{range .TestVM.Tests}}
-          <div class="target-item" data-target="{{.Name}}" title="{{.Tags}}">
+          <div class="target-item test-target-item" data-target="{{.Name}}" data-categories="{{range .Categories}}{{.}} {{end}}" title="{{.Name}}{{if .Tags}} ({{.Tags}}){{end}}">
             <span class="name">{{.Name}}</span>
-            {{if .Tags}}<span class="tag-mini">{{.Tags}}</span>{{end}}
           </div>
           {{end}}
         </div>
@@ -2298,7 +2315,7 @@
   </aside>
 
   <section class="tab-main">
-    <div id="log-panel-host" style="display: contents;">
+    <div id="test-log-panel-host" style="display: contents;">
       {{if .TestVM.HasJob}}
         {{template "log_panel" .TestVM.Latest}}
       {{else}}
@@ -2332,7 +2349,7 @@
       {{if jobIsRunning .}}
       <button class="action-btn danger" type="button"
               hx-post="/jobs/{{.ID}}/cancel"
-              hx-target="#log-panel-host" hx-swap="innerHTML"
+              hx-target="closest .log-panel" hx-swap="outerHTML"
               hx-confirm="{{T "job.cancel_confirm"}}"
               title="{{T "job.cancel"}}">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
@@ -3862,32 +3879,115 @@
     .pak-sidebar-head { display: flex; align-items: center; gap: 8px; padding: 0 3px 12px; }
     .pak-sidebar-head h2 { margin: 0; font-size: 13px; font-weight: 650; }
     .pak-sidebar-head .tag-mini { margin-left: auto; }
-    .pak-file-list { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
+    .pak-file-list { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
     .pak-file-item {
       width: 100%;
       min-width: 0;
-      display: grid;
-      grid-template-columns: 18px minmax(0, 1fr) auto;
+      display: flex;
       align-items: center;
-      gap: 7px;
-      padding: 8px 8px;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 7px 10px;
       border: 1px solid transparent;
-      border-radius: 5px;
+      border-radius: 4px;
       background: transparent;
       color: var(--fg-mute);
       text-align: left;
       cursor: pointer;
+      font-size: 11.5px;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
     }
     .pak-file-item:hover { background: var(--bg-card); color: var(--fg); }
-    .pak-file-item.selected { border-color: rgba(79,140,255,.7); background: rgba(79,140,255,.14); color: var(--fg); }
-    .pak-file-icon { color: #d1a827; }
-    .pak-file-label { min-width: 0; display: flex; align-items: baseline; gap: 6px; }
-    .pak-file-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
-    .pak-file-location { color: var(--fg-dim); font: 8px var(--font-mono); text-transform: uppercase; }
-    .pak-file-size { color: var(--fg-dim); font: 9.5px var(--font-mono); white-space: nowrap; }
+    .pak-file-item.selected {
+      border-color: transparent;
+      border-left: 3px solid var(--accent);
+      background: rgba(79,140,255,.12);
+      color: var(--fg);
+      font-weight: 500;
+    }
+    .pak-file-item.htmx-request {
+      opacity: 0.7;
+      pointer-events: none;
+    }
+    .pak-file-main {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow: hidden;
+    }
+    .pak-file-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+    }
+    .pak-file-badge {
+      font-size: 8.5px;
+      padding: 1px 4px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--fg-dim);
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .pak-file-size {
+      color: var(--fg-dim);
+      font: 9.5px var(--font-mono);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
     .pak-file-path { display: block; padding: 10px 3px 0; color: var(--fg-dim); font: 9px/1.5 var(--font-mono); overflow-wrap: anywhere; }
     .pak-empty { margin: 4px 2px; padding: 12px; border: 1px dashed var(--border); border-radius: 6px; color: var(--fg-dim); font-size: 11px; line-height: 1.6; }
-    .pak-main { min-width: 0; min-height: 0; overflow-y: auto; padding: 16px; }
+    .pak-main {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 16px;
+    }
+    .pak-loading-overlay {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 17, 21, 0.72);
+      z-index: 50;
+      align-items: center;
+      justify-content: center;
+    }
+    .pak-loading-overlay.htmx-request {
+      display: flex;
+    }
+    .pak-loading-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 22px 32px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg, 8px);
+      box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+    }
+    .pak-spinner {
+      width: 28px;
+      height: 28px;
+      border: 2.5px solid rgba(79, 140, 255, 0.2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: pakSpin 0.7s linear infinite;
+    }
+    @keyframes pakSpin {
+      to { transform: rotate(360deg); }
+    }
+    .pak-loading-text {
+      font-size: 12px;
+      color: var(--fg);
+      font-weight: 500;
+      letter-spacing: 0.2px;
+    }
     .pak-error { padding: 12px 14px; border: 1px solid rgba(239,68,68,.32); border-radius: 6px; background: rgba(239,68,68,.08); color: var(--red); font-size: 12px; }
     .pak-heading { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 14px; }
     .pak-heading h2 { margin: 0; color: var(--fg); font: 600 16px/1.3 var(--font-sans); }
@@ -3903,20 +4003,56 @@
     .pak-card-head h3 { margin: 0; font-size: 12px; font-weight: 600; }
     .pak-search { margin-left: auto; width: min(260px, 42%); padding: 6px 9px; border: 1px solid var(--border); border-radius: 5px; outline: 0; background: var(--bg-input); color: var(--fg); font-size: 10.5px; }
     .pak-search:focus { border-color: var(--accent); }
-    .pak-table-wrap { overflow: auto; max-height: calc(100vh - 245px); }
+    .pak-search.htmx-request { opacity: 0.7; }
+    .pak-table-wrap { overflow: auto; max-height: calc(100vh - 245px); contain: content; }
+    .pak-table-wrap.htmx-request { opacity: 0.6; pointer-events: none; }
     .pak-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .pak-table tr { contain: layout style; }
     .pak-table th { position: sticky; top: 0; z-index: 1; padding: 7px 10px; border-bottom: 1px solid var(--border); background: #191a1c; color: var(--fg-mute); font-size: 9.5px; font-weight: 500; text-align: right; }
     .pak-table th:first-child { width: 48%; text-align: left; }
     .pak-table td { padding: 6px 10px; border-bottom: 1px solid rgba(53,57,62,.65); color: var(--fg-mute); font: 10.5px var(--font-mono); text-align: right; }
     .pak-table td:first-child { text-align: left; }
     .pak-tree-name { min-width: 0; display: flex; align-items: center; gap: 6px; padding-left: calc(var(--depth) * 16px); }
-    .pak-tree-name svg { width: 13px; height: 13px; flex: 0 0 13px; color: var(--fg-dim); }
-    .pak-tree-name.dir { color: var(--fg); font-weight: 600; }
-    .pak-tree-name.dir svg { color: #d1a827; }
+    .pak-tree-icon { width: 13px; height: 13px; flex: 0 0 13px; color: var(--fg-dim); }
+    .pak-tree-icon.dir { color: #d1a827; }
     .pak-tree-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .pak-size-cell { position: relative; }
     .pak-size-bar { position: absolute; inset: 4px auto 4px 0; max-width: 100%; border-radius: 2px; background: rgba(79,140,255,.10); pointer-events: none; }
     .pak-size-value { position: relative; }
+    .pak-tree-truncated-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+      background: var(--bg-card);
+      font-size: 11px;
+    }
+    .pak-truncated-hint {
+      color: var(--fg-dim);
+    }
+    .pak-truncated-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .pak-load-btn {
+      padding: 4px 10px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg-input);
+      color: var(--fg);
+      font-size: 10.5px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .pak-load-btn:hover {
+      background: rgba(79,140,255,0.15);
+      border-color: var(--accent);
+      color: var(--fg);
+    }
     .pak-type-list { max-height: calc(100vh - 245px); overflow-y: auto; }
     .pak-type-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px 12px; padding: 9px 12px; border-bottom: 1px solid rgba(53,57,62,.65); }
     .pak-type-ext { color: var(--fg); font: 600 11px var(--font-mono); }
@@ -3931,6 +4067,15 @@
     }
   </style>
 
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+    <symbol id="pak-icon-dir" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 6h7l2 2h9v11H3z"/>
+    </symbol>
+    <symbol id="pak-icon-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5"/>
+    </symbol>
+  </svg>
+
   {{with .PaksVM}}
   <aside class="pak-sidebar">
     <div class="pak-sidebar-head">
@@ -3941,9 +4086,14 @@
     <div class="pak-file-list">
       {{range .Files}}
       <button class="pak-file-item {{if .Selected}}selected{{end}}" type="button" title="{{.RelPath}}"
-              hx-get="/tab/paks?file={{urlquery .RelPath}}" hx-target="#tab-content" hx-swap="innerHTML">
-        <svg class="pak-file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16v13H4z"/><path d="M7 4h10l3 3H4z"/></svg>
-        <span class="pak-file-label"><span class="pak-file-name">{{.Name}}</span><span class="pak-file-location">{{.Location}}</span></span>
+              hx-get="/tab/paks?file={{urlquery .RelPath}}"
+              hx-target="closest .tab-paks"
+              hx-swap="outerHTML"
+              hx-indicator="#pak-loading-overlay">
+        <div class="pak-file-main">
+          <span class="pak-file-name">{{.Name}}</span>
+          <span class="pak-file-badge">{{.Location}}</span>
+        </div>
         <span class="pak-file-size">{{byteSize .Size}}</span>
       </button>
       {{end}}
@@ -3955,6 +4105,13 @@
   </aside>
 
   <section class="pak-main">
+    <div id="pak-loading-overlay" class="pak-loading-overlay">
+      <div class="pak-loading-box">
+        <div class="pak-spinner"></div>
+        <div class="pak-loading-text">{{T "paks.loading"}}</div>
+      </div>
+    </div>
+
     {{if .Error}}
       <div class="pak-error">{{.Error}}</div>
     {{else if .Archive}}
@@ -3976,33 +4133,56 @@
         <section class="card pak-card">
           <div class="pak-card-head">
             <h3>{{T "paks.tree"}}</h3>
-            <input class="pak-search" type="search" placeholder="{{T "paks.filter"}}" data-pak-filter>
+            <input class="pak-search" type="search" placeholder="{{T "paks.filter"}}" value="{{.FilterQuery}}"
+                   name="q"
+                   hx-get="/tab/paks?file={{urlquery $.PaksVM.SelectedPath}}"
+                   hx-trigger="input changed delay:200ms, search"
+                   hx-target="#pak-table-wrap"
+                   hx-select="#pak-table-wrap"
+                   hx-swap="outerHTML">
           </div>
-          <div class="pak-table-wrap">
-            <table class="pak-table">
-              <thead><tr><th>{{T "paks.col.path"}}</th><th>{{T "paks.col.files"}}</th><th>{{T "paks.col.stored"}}</th><th>{{T "paks.col.raw"}}</th><th>{{T "paks.col.share"}}</th></tr></thead>
-              <tbody data-pak-rows>
-                {{$total := .Archive.StoredSize}}
-                {{range .Rows}}
-                <tr data-pak-row data-path="{{.Path}}">
-                  <td title="{{.Path}}">
-                    <div class="pak-tree-name {{if .Directory}}dir{{end}}" style="--depth:{{.Depth}}">
-                      {{if .Directory}}
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h7l2 2h9v11H3z"/></svg>
-                      {{else}}
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5"/></svg>
-                      {{end}}
-                      <span class="pak-tree-label">{{.Name}}</span>
-                    </div>
-                  </td>
-                  <td>{{if .Directory}}{{intCommas .FileCount}}{{else}}—{{end}}</td>
-                  <td class="pak-size-cell"><span class="pak-size-bar" style="width:{{sizeShare .StoredSize $total}}%"></span><span class="pak-size-value">{{byteSize .StoredSize}}</span></td>
-                  <td>{{byteSize .UncompressedSize}}</td>
-                  <td>{{sizeShare .StoredSize $total}}%</td>
-                </tr>
-                {{end}}
-              </tbody>
-            </table>
+          <div id="pak-table-wrap" class="pak-table-wrap">
+            {{if eq (len .Rows) 0}}
+              <div class="pak-empty" style="margin: 20px;">{{T "paks.no_match"}}</div>
+            {{else}}
+              <table class="pak-table">
+                <thead><tr><th>{{T "paks.col.path"}}</th><th>{{T "paks.col.files"}}</th><th>{{T "paks.col.stored"}}</th><th>{{T "paks.col.raw"}}</th><th>{{T "paks.col.share"}}</th></tr></thead>
+                <tbody data-pak-rows>
+                  {{$total := .Archive.StoredSize}}
+                  {{range .Rows}}
+                  <tr data-pak-row data-path="{{.Path}}">
+                    <td title="{{.Path}}">
+                      <div class="pak-tree-name {{if .Directory}}dir{{end}}" style="--depth:{{.Depth}}">
+                        <svg class="pak-tree-icon {{if .Directory}}dir{{end}}"><use href="{{if .Directory}}#pak-icon-dir{{else}}#pak-icon-file{{end}}"/></svg>
+                        <span class="pak-tree-label">{{.Name}}</span>
+                      </div>
+                    </td>
+                    <td>{{if .Directory}}{{intCommas .FileCount}}{{else}}—{{end}}</td>
+                    <td class="pak-size-cell"><span class="pak-size-bar" style="width:{{sizeShare .StoredSize $total}}%"></span><span class="pak-size-value">{{byteSize .StoredSize}}</span></td>
+                    <td>{{byteSize .UncompressedSize}}</td>
+                    <td>{{sizeShare .StoredSize $total}}%</td>
+                  </tr>
+                  {{end}}
+                </tbody>
+              </table>
+              {{if .Truncated}}
+              <div class="pak-tree-truncated-banner">
+                <span class="pak-truncated-hint">{{T "paks.truncated" .DisplayedRows (intCommas .TotalRows)}}</span>
+                <div class="pak-truncated-actions">
+                  <button type="button" class="pak-load-btn"
+                          hx-get="/tab/paks?file={{urlquery $.PaksVM.SelectedPath}}&q={{urlquery $.PaksVM.FilterQuery}}&limit={{.NextLimit}}"
+                          hx-target="#pak-table-wrap" hx-select="#pak-table-wrap" hx-swap="outerHTML">
+                    {{T "paks.load_more" 100}}
+                  </button>
+                  <button type="button" class="pak-load-btn"
+                          hx-get="/tab/paks?file={{urlquery $.PaksVM.SelectedPath}}&q={{urlquery $.PaksVM.FilterQuery}}&limit=-1"
+                          hx-target="#pak-table-wrap" hx-select="#pak-table-wrap" hx-swap="outerHTML">
+                    {{T "paks.load_all" (intCommas .TotalRows)}}
+                  </button>
+                </div>
+              </div>
+              {{end}}
+            {{end}}
           </div>
         </section>
 
@@ -4030,14 +4210,13 @@
 </div>
 <script>
 (function () {
-  const input = document.querySelector('.tab-paks [data-pak-filter]');
+  const input = document.querySelector('.tab-paks [name="q"]');
   if (!input) return;
-  input.addEventListener('input', function () {
-    const query = this.value.trim().toLowerCase();
-    document.querySelectorAll('.tab-paks [data-pak-row]').forEach(row => {
-      row.hidden = query !== '' && !row.dataset.path.toLowerCase().includes(query);
-    });
-  });
+  if (input.value) {
+    input.focus();
+    const len = input.value.length;
+    try { input.setSelectionRange(len, len); } catch (_) {}
+  }
 })();
 </script>
 {{end}}

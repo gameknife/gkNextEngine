@@ -527,6 +527,47 @@
     height: 100%;
     overflow: hidden;
   }
+  .tab-jobs.test-page {
+    grid-template-columns: 380px minmax(0, 1fr);
+  }
+  .test-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex: 0 0 auto;
+  }
+  .test-count-badge {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--fg-mute);
+    background: var(--bg-hover);
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+  }
+  .test-filter-box {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 0 0 auto;
+  }
+  .test-filter-box .select,
+  .test-filter-box .input {
+    width: 100%;
+    font-size: 12px;
+  }
+  .test-target-item {
+    height: auto !important;
+    min-height: 38px;
+    padding: 8px 12px;
+  }
+  .test-target-item .name {
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.35;
+    font-size: 12.5px;
+  }
   aside, section.col, .tab-side, .tab-main {
     overflow-y: auto;
     display: flex;
@@ -3895,6 +3936,7 @@
     } else if (kind === 'build') {
       initBuildPane(pane);
     } else if (kind === 'test') {
+      initTestTab(pane);
       restoreTargetSelection(pane);
     } else if (kind === 'graph') {
       initTargetGraph(pane);
@@ -4448,6 +4490,88 @@
   function saveTargetSelection(tab, target) {
     if (tab && target) localStorage.setItem('gnb-target-' + tab, target);
   }
+  function initTestTab(root) {
+    const scope = root || document;
+    const catSelect = scope.querySelector('#test-category-filter');
+    const searchInput = scope.querySelector('#test-search-filter');
+    const targetList = scope.querySelector('.test-target-list');
+    const countBadge = scope.querySelector('#test-count-badge');
+    const allItem = scope.querySelector('#test-target-all-item');
+
+    if (!catSelect || !targetList) return;
+    if (catSelect.dataset.ready === '1') return;
+    catSelect.dataset.ready = '1';
+
+    const savedCategory = localStorage.getItem('gnb-test-category') || '';
+    if (savedCategory) {
+      catSelect.value = savedCategory;
+    }
+
+    function applyFilter() {
+      const selectedCat = (catSelect.value || '').trim();
+      const query = (searchInput ? searchInput.value : '').trim().toLowerCase();
+      const items = targetList.querySelectorAll('.test-target-item');
+      let visibleCount = 0;
+      const totalCount = items.length;
+
+      items.forEach(item => {
+        const itemCategories = (item.dataset.categories || '').trim().split(/\s+/);
+        const itemName = (item.dataset.target || '').toLowerCase();
+
+        const matchCat = !selectedCat || itemCategories.includes(selectedCat);
+        const matchText = !query || itemName.includes(query);
+        const show = matchCat && matchText;
+
+        item.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+      });
+
+      if (countBadge) {
+        countBadge.textContent = (selectedCat || query) ? `${visibleCount} / ${totalCount}` : `${totalCount}`;
+      }
+
+      if (allItem) {
+        const nameEl = allItem.querySelector('.name');
+        const tagMiniEl = allItem.querySelector('.tag-mini');
+        if (selectedCat) {
+          allItem.dataset.target = '[' + selectedCat + ']';
+          if (nameEl) nameEl.textContent = t('test.run_category', selectedCat) || ('所有 [' + selectedCat + '] 测试');
+          if (tagMiniEl) tagMiniEl.textContent = '[' + selectedCat + ']';
+        } else {
+          allItem.dataset.target = 'all';
+          if (nameEl) nameEl.textContent = t('test.run_all') || '运行全部测试';
+          if (tagMiniEl) tagMiniEl.textContent = 'all';
+        }
+      }
+
+      // If the currently selected target is now hidden, reset selection to allItem
+      const hiddenTargetInput = targetList.closest('.tab-side')?.querySelector('form[data-job-form] input[name="target"]');
+      const currentSelected = targetList.querySelector('.target-item.selected');
+      if (currentSelected && currentSelected !== allItem && currentSelected.style.display === 'none') {
+        items.forEach(it => it.classList.toggle('selected', false));
+        if (allItem) {
+          allItem.classList.add('selected');
+          if (hiddenTargetInput) hiddenTargetInput.value = allItem.dataset.target;
+          saveTargetSelection('test', allItem.dataset.target);
+        }
+      } else if (currentSelected && currentSelected === allItem && allItem) {
+        if (hiddenTargetInput) hiddenTargetInput.value = allItem.dataset.target;
+        saveTargetSelection('test', allItem.dataset.target);
+      }
+    }
+
+    catSelect.addEventListener('change', () => {
+      localStorage.setItem('gnb-test-category', catSelect.value);
+      applyFilter();
+    });
+
+    if (searchInput) {
+      searchInput.addEventListener('input', applyFilter);
+    }
+
+    applyFilter();
+  }
+
   function restoreTargetSelection(root) {
     const tab = getTabKind();
     if (!tab) return;
@@ -4459,7 +4583,10 @@
     if (!saved) return;
     const list = (root || document).querySelector('.target-list');
     if (!list) return;
-    const match = list.querySelector('[data-target="' + saved + '"]');
+    let match = null;
+    list.querySelectorAll('.target-item').forEach(t => {
+      if (t.dataset.target === saved) match = t;
+    });
     if (!match) return;
     list.querySelectorAll('.target-item').forEach(t => t.classList.toggle('selected', t === match));
     const inputs = list.closest('.tab-side')?.querySelectorAll('form[data-job-form] input[name="target"]');

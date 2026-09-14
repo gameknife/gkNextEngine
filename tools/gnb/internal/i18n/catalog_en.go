@@ -160,8 +160,12 @@ var en = map[string]string{
 	"remote.show_window":   "Keep a local window visible while debugging",
 
 	// test
-	"test.missing": "gkNextUnitTests was not found. Build that target on the Build page first.",
-	"test.run":     "Run tests",
+	"test.missing":            "gkNextUnitTests was not found. Build that target on the Build page first.",
+	"test.run":                "Run tests",
+	"test.all_categories":     "All categories",
+	"test.search_placeholder": "Search test cases...",
+	"test.run_all":            "Run all tests",
+	"test.run_category":       "All [%s] tests",
 
 	// validation
 	"validation.title":              "Validation",
@@ -364,6 +368,11 @@ var en = map[string]string{
 	"paks.types":        "File types",
 	"paks.type_raw":     "Raw %s",
 	"paks.pick":         "Select a Pak on the left to inspect layout and size.",
+	"paks.loading":      "Parsing Pak structure and index…",
+	"paks.truncated":    "Showing first %d of %s items. Filter above to narrow down.",
+	"paks.load_more":    "Load more (+%d items)",
+	"paks.load_all":     "Load all (%s items)",
+	"paks.no_match":     "No matching items",
 
 	// graph
 	"graph.title":        "Target Graph",

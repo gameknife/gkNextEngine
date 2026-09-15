@@ -65,14 +65,85 @@ func TestHandleTabRemoteRendersRemoteLauncher(t *testing.T) {
 	if !strings.Contains(body, `name="bind" value="0.0.0.0"`) {
 		t.Fatalf("rendered body missing bind default:\n%s", body)
 	}
-	if !strings.Contains(body, "http://127.0.0.1:8088") {
-		t.Fatalf("rendered body missing loopback preview:\n%s", body)
+	visibleBody := strings.SplitN(body, `<script type="application/x-gnb-remote-legacy">`, 2)[0]
+	if !strings.Contains(visibleBody, `data-remote-diag-client`) {
+		t.Fatalf("rendered body missing compact connection status:\n%s", body)
+	}
+	if strings.Contains(visibleBody, `data-remote-url-preview`) || strings.Contains(visibleBody, `data-remote-diag-url`) {
+		t.Fatalf("rendered body should not include redundant remote diagnostics:\n%s", body)
+	}
+	if strings.Contains(visibleBody, `<aside class="tab-side">`) || !strings.Contains(visibleBody, `class="remote-dock remote-bottom-grid"`) {
+		t.Fatalf("rendered body should use the full-width preview with a bottom control dock:\n%s", body)
+	}
+	for _, card := range []string{"remote-source-card", "remote-settings-card", "remote-controls-card"} {
+		if !strings.Contains(visibleBody, card) {
+			t.Fatalf("rendered body missing remote dock card %q:\n%s", card, body)
+		}
+	}
+	if !strings.Contains(visibleBody, `class="remote-log-drawer"`) || strings.Contains(visibleBody, `remote-dock-card remote-log-host`) {
+		t.Fatalf("rendered body should expose logs through the compact drawer:\n%s", body)
+	}
+	if !strings.Contains(visibleBody, `name="target"`) || !strings.Contains(visibleBody, `<details class="remote-advanced">`) {
+		t.Fatalf("rendered body missing compact launcher controls:\n%s", body)
 	}
 	if !strings.Contains(body, "gkNextRenderer") || !strings.Contains(body, "gkNextEditor") {
 		t.Fatalf("rendered body missing runnable targets:\n%s", body)
 	}
 	if strings.Contains(body, "Packager") || strings.Contains(body, "gkNextUnitTests") {
 		t.Fatalf("rendered body should exclude non-remote targets:\n%s", body)
+	}
+}
+
+func TestRemoteTabUsesPersistentDirectHostController(t *testing.T) {
+	layout, err := templateFS.ReadFile("templates/layout.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(layout)
+
+	if !strings.Contains(content, "function initRemoteTab(root)") ||
+		!strings.Contains(content, "function remoteHostUrl(page)") {
+		t.Fatal("remote controls must be owned by the persistent dashboard document")
+	}
+	if !strings.Contains(content, "'127.0.0.1'") ||
+		!strings.Contains(content, "frame.dataset.remoteOrigin = frameUrl.origin;") {
+		t.Fatal("remote iframe must use the verified loopback host and track its origin")
+	}
+	if !strings.Contains(content, "else if (kind === 'remote')") {
+		t.Fatal("remote controls must initialise through initPaneComponents after an HTMX swap")
+	}
+	for _, marker := range []string{
+		"function remoteStartConnectionAfterLaunch(page)",
+		"function remoteStopJob(page)",
+		"form?.addEventListener('htmx:afterRequest'",
+		"function remoteFitFrame(page)",
+		"data.type === 'video-size'",
+	} {
+		if !strings.Contains(content, marker) {
+			t.Fatalf("persistent remote controller missing %q", marker)
+		}
+	}
+
+	partial, err := templateFS.ReadFile("templates/partials.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(partial), `type="application/x-gnb-remote-legacy"`) {
+		t.Fatal("swapped remote partial must not install a second controller")
+	}
+	if !strings.Contains(string(partial), `data-remote-start`) {
+		t.Fatal("remote dock must expose the start/stop control")
+	}
+
+	client, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "assets", "remote", "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(client), `postToParent("video-size"`) {
+		t.Fatal("remote client must report its video dimensions to the dashboard")
+	}
+	if strings.Contains(string(client), "requestPointerLock") || strings.Contains(string(partial), "pointer-lock") {
+		t.Fatal("remote input must not request browser pointer lock")
 	}
 }
 

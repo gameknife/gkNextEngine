@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -251,63 +250,39 @@ func (s *Server) buildJobSpec(target string, reconfigure bool) JobSpec {
 	if target == "" || target == "all" {
 		label = "all"
 	}
-	buildDir := filepath.Join(s.opts.RepoRoot, "out", "build", s.opts.Preset)
-	args := []string{"--build", buildDir}
-	if target != "" && target != "all" {
-		args = append(args, "--target", target)
+	// A dashboard build must use the same orchestration as `gnb build`, rather
+	// than invoking whichever cmake happens to be on PATH. Besides choosing the
+	// bundled CMake/Ninja, gnb prepares the MSVC environment on Windows. Skipping
+	// that setup can leave compiler include paths unavailable despite a successful
+	// build from the command line.
+	args := []string{"--repo-root", s.opts.RepoRoot, "--preset", s.opts.Preset, "build"}
+	if target == "" || target == "all" {
+		args = append(args, "--all")
+	} else {
+		args = append(args, target)
+	}
+	if reconfigure {
+		args = append(args, "--reconfigure")
 	}
 	env := []string{"CLICOLOR_FORCE=1", "FORCE_COLOR=1"}
-	if !reconfigure {
-		return JobSpec{
-			Kind:    JobBuild,
-			Target:  label,
-			Name:    "cmake",
-			Args:    args,
-			WorkDir: s.opts.RepoRoot,
-			Env:     env,
-		}
-	}
-	// Two-step run: configure first, then build. We model that as a shell
-	// invocation so the user gets one combined log stream. On Windows we
-	// fall back to PowerShell because cmd.exe lacks `&&` in CommandContext
-	// without a /c wrapper.
-	configureArgs := []string{"--preset", s.opts.Preset}
-	if runtime.GOOS == "windows" {
-		ps := fmt.Sprintf("cmake %s; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; cmake %s",
-			joinShell(configureArgs), joinShell(args))
-		return JobSpec{
-			Kind:    JobBuild,
-			Target:  label,
-			Name:    "powershell",
-			Args:    []string{"-NoProfile", "-Command", ps},
-			WorkDir: s.opts.RepoRoot,
-			Env:     env,
-		}
-	}
-	sh := fmt.Sprintf("cmake %s && cmake %s",
-		joinShell(configureArgs), joinShell(args))
 	return JobSpec{
 		Kind:    JobBuild,
 		Target:  label,
-		Name:    "sh",
-		Args:    []string{"-c", sh},
+		Name:    s.gnbPath(),
+		Args:    args,
 		WorkDir: s.opts.RepoRoot,
 		Env:     env,
 	}
 }
 
-// joinShell quotes args naively for human-readable shell strings. Inputs come
-// from preset name + target name, neither of which contains shell metacharacters
-// in this project, so we keep it simple.
-func joinShell(args []string) string {
-	out := ""
-	for i, a := range args {
-		if i > 0 {
-			out += " "
-		}
-		out += a
+func (s *Server) gnbPath() string {
+	if s.opts.GNBPath != "" {
+		return s.opts.GNBPath
 	}
-	return out
+	if executable, err := os.Executable(); err == nil {
+		return executable
+	}
+	return "gnb"
 }
 
 func (s *Server) runJobSpec(target string, extraArgs []string) (JobSpec, error) {

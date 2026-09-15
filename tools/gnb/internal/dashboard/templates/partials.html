@@ -1619,109 +1619,6 @@
 
 {{define "tab_remote"}}
 <div class="tab-build-run tab-remote">
-  <aside class="tab-side">
-    <div class="card build-run-target-card">
-      <h2 class="card-title">
-        <span class="ico">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-        </span>
-        Target
-        <span class="tag-mini" style="margin-left:auto;">{{len .RemoteVM.Targets}}</span>
-      </h2>
-      <div class="target-list build-run-targets">
-        {{range $index, $target := .RemoteVM.Targets}}
-        <div class="target-item {{if eq $target.Name $.RemoteVM.DefaultTarget}}selected{{else if and (eq $.RemoteVM.DefaultTarget "") (eq $index 0)}}selected{{end}}"
-             data-target="{{$target.Name}}" data-runnable="true">
-          <span class="name">{{$target.Name}}</span>
-          {{if $target.Built}}<span class="target-built" title="{{T "build.built"}}">ready</span>{{end}}
-        </div>
-        {{end}}
-      </div>
-      <div class="archive-hint" style="margin-top: 10px;">
-        {{T "remote.hw_hint"}}
-      </div>
-    </div>
-  </aside>
-
-  <aside class="tab-side run-args-col">
-    <div class="card remote-config-card">
-      <h2 class="card-title">
-        <span class="ico">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M7 19h10"/><path d="M12 17v2"/></svg>
-        </span>
-        {{T "remote.launch"}}
-      </h2>
-      <form class="remote-form" hx-post="/jobs/remote" hx-target="#remote-log-panel-host" hx-swap="innerHTML">
-        <input type="hidden" name="target" value="{{.RemoteVM.DefaultTarget}}">
-        <div class="form-field">
-          <label for="remote-scene">scene</label>
-          <input id="remote-scene" class="input" type="text" name="scene" value="{{.RemoteVM.DefaultScene}}" placeholder="assets/models/playground.glb">
-        </div>
-        <div class="remote-grid two">
-          <div class="form-field">
-            <label for="remote-bind">bind</label>
-            <input id="remote-bind" class="input" type="text" name="bind" value="{{.RemoteVM.DefaultBind}}" placeholder="0.0.0.0">
-          </div>
-          <div class="form-field">
-            <label for="remote-http-port">http port</label>
-            <input id="remote-http-port" class="input" type="number" min="1" max="65535" name="httpPort" value="{{.RemoteVM.HTTPPort}}">
-          </div>
-        </div>
-        <div class="remote-grid two">
-          <div class="form-field">
-            <label for="remote-signal-port">signal port</label>
-            <input id="remote-signal-port" class="input" type="number" min="1" max="65535" name="signalingPort" value="{{.RemoteVM.SignalingPort}}">
-          </div>
-          <div class="form-field">
-            <label for="remote-fps">fps</label>
-            <input id="remote-fps" class="input" type="number" min="1" max="240" name="fps" value="{{.RemoteVM.Fps}}">
-          </div>
-        </div>
-        <div class="remote-grid two">
-          <div class="form-field">
-            <label for="remote-res">encode res</label>
-            <input id="remote-res" class="input" type="text" name="resolution" value="{{.RemoteVM.DefaultRes}}" placeholder="1280x720">
-          </div>
-          <div class="form-field">
-            <label for="remote-bitrate">bitrate kbps</label>
-            <input id="remote-bitrate" class="input" type="number" min="0" step="500" name="bitrateKbps" value="{{.RemoteVM.BitrateKbps}}" placeholder="0 = auto">
-          </div>
-        </div>
-        <div class="remote-grid two">
-          <div class="form-field">
-            <label for="remote-encoder">encoder</label>
-            <select id="remote-encoder" class="select" name="encoder">
-              <option value="auto" {{if eq .RemoteVM.DefaultEncoder "auto"}}selected{{end}}>auto</option>
-              <option value="vulkan" {{if eq .RemoteVM.DefaultEncoder "vulkan"}}selected{{end}}>vulkan</option>
-            </select>
-          </div>
-          <div class="form-field remote-toggle-wrap">
-            <label class="build-opt compact remote-toggle" title="{{T "remote.show_window"}}">
-              <input type="checkbox" name="showWindow" value="1">
-              <span>show window</span>
-            </label>
-          </div>
-        </div>
-        <div class="form-field">
-          <label for="remote-extra-args">extra args</label>
-          <input id="remote-extra-args" class="input" type="text" name="extraArgs" value="" placeholder="--validation --gpu 1">
-        </div>
-        <div class="archive-hint remote-note">
-          {{T "remote.lan_hint" (printf "%d" .RemoteVM.HTTPPort) (printf "%d" .RemoteVM.SignalingPort)}}
-        </div>
-        <div class="remote-preview" data-local-hosts="{{range $index, $host := .RemoteVM.LocalHosts}}{{if $index}},{{end}}{{$host}}{{end}}">
-          <div class="remote-preview-head">{{T "remote.access"}}</div>
-          <div class="remote-preview-list" data-remote-url-preview>
-            {{range .RemoteVM.URLPreview}}
-            <code>{{.}}</code>
-            {{end}}
-          </div>
-        </div>
-        <button class="btn-primary" type="submit">{{T "remote.start"}}</button>
-      </form>
-    </div>
-  </aside>
-
   <section class="tab-main remote-main">
     <div class="remote-surface-card">
       <div class="remote-surface-head">
@@ -1730,21 +1627,8 @@
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M7 19h10"/><path d="M12 17v2"/></svg>
           </span>
           {{T "remote.embed"}}
+          <span class="remote-connection-state" data-remote-diag-client>{{T "remote.not_connected"}}</span>
         </div>
-        <div class="remote-surface-actions">
-          <button class="btn-ghost remote-embed-btn" type="button" data-remote-action="connect">{{T "remote.connect"}}</button>
-          <button class="btn-ghost remote-embed-btn" type="button" data-remote-action="refresh">{{T "remote.refresh"}}</button>
-          <button class="btn-ghost remote-embed-btn danger" type="button" data-remote-action="clear">{{T "remote.clear"}}</button>
-        </div>
-      </div>
-      <div class="remote-surface-note">
-        {{T "remote.embed_hint"}}
-      </div>
-      <div class="remote-diag" data-remote-diag>
-        <div class="remote-diag-row"><span class="k">mode</span><span class="v" data-remote-diag-mode>dashboard proxy client</span></div>
-        <div class="remote-diag-row"><span class="k">target</span><span class="v" data-remote-diag-url>{{T "remote.not_connected"}}</span></div>
-        <div class="remote-diag-row"><span class="k">client</span><span class="v" data-remote-diag-client>idle</span></div>
-        <div class="remote-diag-row"><span class="k">config</span><span class="v" data-remote-diag-config>idle</span></div>
       </div>
       <div class="remote-frame-shell">
         <div class="remote-frame-placeholder" data-remote-placeholder>
@@ -1756,126 +1640,99 @@
           title="gkNext Remote Play"
           loading="eager"
           referrerpolicy="no-referrer"
-          allow="autoplay; fullscreen; pointer-lock; gamepad"
+          allow="autoplay; fullscreen; gamepad"
           allowfullscreen></iframe>
       </div>
     </div>
 
-    <div class="remote-log-host">
-      <div id="remote-log-panel-host" style="display: contents;">
-        {{if .RemoteVM.HasJob}}
-          {{template "log_panel" .RemoteVM.Latest}}
-        {{else}}
-          {{template "log_panel_empty" "job.kind.remote"}}
-        {{end}}
-      </div>
+    <div class="remote-dock remote-bottom-grid">
+      <form class="remote-form" hx-post="/jobs/remote" hx-target="#remote-log-panel-host" hx-swap="innerHTML">
+        <section class="remote-dock-card remote-source-card">
+          <h3>运行目标</h3>
+          <label class="remote-compact-field" for="remote-target">
+            <span>target</span>
+            <select id="remote-target" class="select" name="target">
+              {{range $index, $target := .RemoteVM.Targets}}
+              <option value="{{$target.Name}}" {{if or (eq $target.Name $.RemoteVM.DefaultTarget) (and (eq $.RemoteVM.DefaultTarget "") (eq $index 0))}}selected{{end}}>{{$target.Name}}</option>
+              {{end}}
+            </select>
+          </label>
+          <label class="remote-compact-field remote-scene-field" for="remote-scene">
+            <span>scene</span>
+            <input id="remote-scene" class="input" type="text" name="scene" value="{{.RemoteVM.DefaultScene}}" placeholder="assets/models/playground.glb">
+          </label>
+        </section>
+        <section class="remote-dock-card remote-settings-card">
+          <h3>串流参数</h3>
+          <div class="remote-settings-primary">
+            <label class="remote-compact-field" for="remote-fps"><span>fps</span><input id="remote-fps" class="input" type="number" min="1" max="240" name="fps" value="{{.RemoteVM.Fps}}"></label>
+            <label class="remote-compact-field" for="remote-res"><span>encode res</span><input id="remote-res" class="input" type="text" name="resolution" value="{{.RemoteVM.DefaultRes}}" placeholder="1280x720"></label>
+            <label class="remote-compact-field" for="remote-bitrate"><span>bitrate</span><input id="remote-bitrate" class="input" type="number" min="0" step="500" name="bitrateKbps" value="{{.RemoteVM.BitrateKbps}}" placeholder="auto"></label>
+            <label class="remote-compact-field" for="remote-encoder"><span>encoder</span><select id="remote-encoder" class="select" name="encoder"><option value="auto" {{if eq .RemoteVM.DefaultEncoder "auto"}}selected{{end}}>auto</option><option value="vulkan" {{if eq .RemoteVM.DefaultEncoder "vulkan"}}selected{{end}}>vulkan</option></select></label>
+          </div>
+          <details class="remote-advanced">
+            <summary>网络与调试</summary>
+            <div class="remote-advanced-grid">
+              <label class="remote-compact-field" for="remote-bind"><span>bind</span><input id="remote-bind" class="input" type="text" name="bind" value="{{.RemoteVM.DefaultBind}}" placeholder="0.0.0.0"></label>
+              <label class="remote-compact-field" for="remote-http-port"><span>http</span><input id="remote-http-port" class="input" type="number" min="1" max="65535" name="httpPort" value="{{.RemoteVM.HTTPPort}}"></label>
+              <label class="remote-compact-field" for="remote-signal-port"><span>signal</span><input id="remote-signal-port" class="input" type="number" min="1" max="65535" name="signalingPort" value="{{.RemoteVM.SignalingPort}}"></label>
+              <label class="remote-toggle" title="{{T "remote.show_window"}}"><input type="checkbox" name="showWindow" value="1"><span>show window</span></label>
+              <label class="remote-compact-field remote-extra-field" for="remote-extra-args"><span>extra args</span><input id="remote-extra-args" class="input" type="text" name="extraArgs" value="" placeholder="--validation --gpu 1"></label>
+            </div>
+          </details>
+        </section>
+        <section class="remote-dock-card remote-controls-card">
+          <h3>控制</h3>
+          <button class="btn-primary remote-start-btn" type="submit" data-remote-start>{{T "remote.start"}}</button>
+          <div class="remote-control-actions">
+            <button class="btn-ghost remote-embed-btn" type="button" data-remote-action="connect">{{T "remote.connect"}}</button>
+            <button class="btn-ghost remote-embed-btn" type="button" data-remote-action="refresh">{{T "remote.refresh"}}</button>
+            <button class="btn-ghost remote-embed-btn danger" type="button" data-remote-action="clear">{{T "remote.clear"}}</button>
+          </div>
+        </section>
+      </form>
     </div>
+    <details class="remote-log-drawer">
+      <summary title="调试日志" aria-label="调试日志">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      </summary>
+      <section class="remote-log-popover">
+        <div class="remote-log-popover-head">调试日志</div>
+        <div id="remote-log-panel-host" class="remote-log-host">
+          {{if .RemoteVM.HasJob}}
+            {{template "log_panel" .RemoteVM.Latest}}
+          {{else}}
+            {{template "log_panel_empty" "job.kind.remote"}}
+          {{end}}
+        </div>
+      </section>
+    </details>
   </section>
 </div>
 
 <style>
   .tab-remote {
-    display: grid;
-    grid-template-columns: 270px 380px minmax(0, 1fr);
-    gap: 0;
-    padding: 0;
+    display: block;
+    padding: 8px;
     height: 100%;
     overflow: hidden;
   }
-  .tab-remote > aside,
   .tab-remote > section,
-  .tab-remote .tab-side,
   .tab-remote .tab-main {
     min-height: 0;
     overflow: hidden;
   }
-  .tab-remote .build-run-target-card,
-  .tab-remote .remote-config-card {
+  .tab-remote .remote-main {
+    position: relative;
     display: flex;
     flex-direction: column;
-    flex: 1 1 auto;
     min-height: 0;
+    height: 100%;
     overflow: hidden;
-  }
-  .tab-remote .build-run-target-card {
-    padding-bottom: 10px;
-  }
-  .tab-remote .build-run-targets {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    gap: 1px;
-    padding-right: 3px;
-  }
-  #tab-content .tab-remote .build-run-targets .target-item {
-    height: 36px;
-    min-height: 36px;
-    margin: 0;
-    padding: 0 9px;
     gap: 6px;
   }
-  .tab-remote .build-run-targets .target-item .name {
-    font-size: 12.5px;
-  }
-  .tab-remote .target-built {
-    color: var(--green);
-    font-family: var(--font-mono);
-    font-size: 9.5px;
-    opacity: .75;
-  }
-  .tab-remote .run-args-col {
-    overflow: hidden;
-    gap: 0;
-  }
-  .tab-remote .remote-main {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
-    gap: calc(12px * var(--density-scale));
-    padding: calc(14px * var(--density-scale));
-  }
   .tab-remote .remote-form {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    padding-right: 4px;
-  }
-  .tab-remote .remote-grid {
-    display: grid;
-    gap: 10px;
-  }
-  .tab-remote .remote-grid.two {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-  .tab-remote .remote-toggle-wrap {
-    justify-content: flex-end;
-    margin-bottom: 0;
-  }
-  .tab-remote .remote-toggle {
-    display: flex;
-    gap: 8px;
-    width: 100%;
-    min-height: 38px;
-    justify-content: flex-start;
-    align-items: center;
-    padding: 8px 10px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--bg-input);
-  }
-  .tab-remote .remote-toggle input[type="checkbox"] {
-    accent-color: var(--accent);
-  }
-  .tab-remote .remote-note {
-    margin-bottom: 12px;
-  }
-  .tab-remote .btn-primary[type="submit"] {
-    margin-top: auto;
-    flex: 0 0 auto;
+    display: contents;
   }
   .tab-remote .remote-surface-card {
     display: flex;
@@ -1884,12 +1741,106 @@
     overflow: hidden;
     flex: 1 1 auto;
   }
+  .tab-remote .remote-dock {
+    display: grid;
+    grid-template-columns: minmax(220px, 1.15fr) minmax(280px, 1.45fr) minmax(180px, .75fr);
+    flex: 0 0 122px;
+    min-height: 0;
+    gap: 6px;
+  }
+  .tab-remote .remote-dock-card {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    gap: 6px;
+    padding: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-card);
+  }
+  .tab-remote .remote-dock-card h3 {
+    margin: 0;
+    color: var(--fg-dim);
+    font: 10px var(--font-mono);
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .tab-remote .remote-compact-field {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: var(--fg-dim);
+    font: 10px var(--font-mono);
+  }
+  .tab-remote .remote-compact-field .input,
+  .tab-remote .remote-compact-field .select {
+    min-width: 0;
+    height: 30px;
+    padding: 4px 7px;
+  }
+  .tab-remote .remote-source-card .remote-compact-field {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+  .tab-remote .remote-settings-primary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 5px 8px;
+  }
+  .tab-remote .remote-start-btn {
+    width: 100%;
+    min-height: 30px;
+    padding: 5px 14px;
+  }
+  .tab-remote .remote-advanced {
+    color: var(--fg-dim);
+    font-size: 11px;
+  }
+  .tab-remote .remote-advanced summary {
+    width: max-content;
+    margin-top: 0;
+    cursor: pointer;
+    user-select: none;
+  }
+  .tab-remote .remote-advanced-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 5px 8px;
+    margin-top: 6px;
+  }
+  .tab-remote .remote-advanced-grid .remote-extra-field {
+    grid-column: span 2;
+  }
+  .tab-remote .remote-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 30px;
+    color: var(--fg);
+    font-size: 11px;
+  }
+  .tab-remote .remote-toggle input[type="checkbox"] {
+    accent-color: var(--accent);
+  }
+  .tab-remote .remote-control-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+  }
+  .tab-remote .remote-control-actions .danger {
+    grid-column: 1 / -1;
+  }
   .tab-remote .remote-surface-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    margin-bottom: 8px;
+    min-height: 30px;
+    margin-bottom: 0;
   }
   .tab-remote .remote-surface-head .title {
     display: inline-flex;
@@ -1899,54 +1850,38 @@
     font-weight: 600;
     color: var(--fg);
   }
-  .tab-remote .remote-surface-actions {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
+  .tab-remote .remote-connection-state {
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 2px 7px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--fg-mute);
+    font: 10px var(--font-mono);
+    font-weight: 400;
   }
   .tab-remote .remote-embed-btn {
     width: auto;
-    padding: 6px 10px;
-    font-size: 12px;
-  }
-  .tab-remote .remote-surface-note {
-    margin-bottom: 10px;
-    color: var(--fg-dim);
+    min-height: 26px;
+    padding: 4px 7px;
     font-size: 11px;
-  }
-  .tab-remote .remote-diag {
-    margin-bottom: 10px;
-    padding: 8px 10px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.02);
-  }
-  .tab-remote .remote-diag-row {
-    display: grid;
-    grid-template-columns: 56px minmax(0, 1fr);
-    gap: 10px;
-    padding: 3px 0;
-    font-size: 11px;
-  }
-  .tab-remote .remote-diag-row .k {
-    color: var(--fg-mute);
-    text-transform: lowercase;
-  }
-  .tab-remote .remote-diag-row .v {
-    color: var(--fg);
-    overflow-wrap: anywhere;
   }
   .tab-remote .remote-frame-shell {
     position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     flex: 1 1 auto;
-    min-height: 320px;
+    min-height: 0;
     overflow: hidden;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: #05070a;
   }
   .tab-remote .remote-frame {
+    display: block;
     width: 100%;
     height: 100%;
     border: 0;
@@ -1969,66 +1904,86 @@
   .tab-remote .remote-frame-shell.ready .remote-frame-placeholder {
     display: none;
   }
-  .tab-remote .remote-log-host {
-    flex: 0 0 230px;
-    min-height: 0;
-    overflow: hidden;
-    border-top: 1px solid var(--border);
-  }
   .tab-remote .remote-log-host .log-panel,
   .tab-remote .remote-log-host .log-empty {
-    height: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
   }
-  .tab-remote .remote-preview {
-    margin-bottom: 12px;
-    padding: 10px;
+  .tab-remote .remote-settings-card {
+    overflow-y: auto;
+  }
+  .tab-remote .remote-log-drawer {
+    position: absolute;
+    z-index: 5;
+    top: 42px;
+    right: 12px;
+  }
+  .tab-remote .remote-log-drawer > summary {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    list-style: none;
+    cursor: pointer;
+    color: var(--fg-dim);
     border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--bg-card);
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--bg-card) 88%, transparent);
   }
-  .tab-remote .remote-preview-head {
-    margin-bottom: 8px;
-    font-size: 11px;
-    color: var(--fg-mute);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+  .tab-remote .remote-log-drawer > summary::-webkit-details-marker {
+    display: none;
   }
-  .tab-remote .remote-preview-list {
+  .tab-remote .remote-log-drawer[open] > summary,
+  .tab-remote .remote-log-drawer > summary:hover {
+    color: var(--fg);
+    border-color: var(--accent);
+  }
+  .tab-remote .remote-log-popover {
+    position: absolute;
+    top: 38px;
+    right: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    width: min(560px, calc(100vw - 64px));
+    height: 270px;
+    padding: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--bg-card);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, .38);
   }
-  .tab-remote .remote-preview-list code {
-    display: block;
-    padding: 6px 8px;
-    border-radius: 4px;
-    background: rgba(255, 255, 255, 0.03);
-    color: var(--fg);
-    overflow-x: auto;
-    white-space: nowrap;
+  .tab-remote .remote-log-popover-head {
+    flex: 0 0 auto;
+    padding: 0 2px 6px;
+    color: var(--fg-dim);
+    font: 10px var(--font-mono);
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
   }
-  @media (max-width: 1380px) {
-    .tab-remote {
-      grid-template-columns: 270px minmax(320px, 1fr) minmax(0, 1fr);
-    }
-    .tab-remote .remote-grid.two {
-      grid-template-columns: minmax(0, 1fr);
-    }
+  .tab-remote .remote-log-host {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
   }
   @media (max-width: 1120px) {
-    .tab-remote {
-      grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+    .tab-remote .remote-dock {
+      grid-template-columns: minmax(220px, 1fr) minmax(260px, 1.25fr) minmax(180px, .8fr);
+      flex-basis: 122px;
     }
-    .tab-remote .tab-main {
-      grid-column: 1 / -1;
-    }
-    .tab-remote .remote-log-host {
-      flex-basis: 210px;
+  }
+  @media (max-width: 720px) {
+    .tab-remote .remote-dock {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      flex-basis: 178px;
     }
   }
 </style>
 
-<script>
+<!-- Remote controls live in layout.html so HTMX tab swaps and Wails share one lifecycle. -->
+<script type="application/x-gnb-remote-legacy">
 (function() {
   const REMOTE_URL_STORAGE_KEY = 'gnb-remote-embed-url';
   const remoteRetryTimers = new WeakMap();
@@ -2112,7 +2067,16 @@
   function remoteFrameUrl(url) {
     url = normalizeEmbedUrl(url);
     if (!url) return '';
-    return `/remote/client?remoteBase=${encodeURIComponent(url)}&_ts=${Date.now()}`;
+    // Load the client from the remote host itself.  The dashboard runs under
+    // Wails' virtual origin, while the remote HTTP and signaling services are
+    // ordinary loopback/LAN origins.  Serving a copy through the dashboard
+    // turns /config and the WebSocket handshake into cross-origin requests;
+    // WebView2 can reject those even though opening the host page directly
+    // works.  A direct frame keeps the page, /config and ws:// service in one
+    // origin, just like the standalone browser flow.
+    const remoteURL = new URL(url);
+    remoteURL.searchParams.set('_ts', String(Date.now()));
+    return remoteURL.toString();
   }
 
   function loadRemoteFrame(page, url, persist) {
@@ -2219,7 +2183,8 @@
 
   function initRemoteTab(root) {
     const page = root?.querySelector?.('.tab-remote') || (root?.matches?.('.tab-remote') ? root : null);
-    if (!page) return;
+    if (!page || page.dataset.remoteInitialized === 'true') return;
+    page.dataset.remoteInitialized = 'true';
     const selected = page.querySelector('.target-item.selected');
     const hiddenTarget = page.querySelector('input[name="target"]');
     if (selected && hiddenTarget) hiddenTarget.value = selected.dataset.target || '';
@@ -2255,8 +2220,16 @@
     });
   });
 
-  document.body.addEventListener('htmx:afterSwap', event => initRemoteTab(event.detail.target));
-  document.addEventListener('DOMContentLoaded', () => initRemoteTab(document));
+  // tab_remote is normally inserted through an HTMX swap.  Registering an
+  // htmx:afterSwap listener here is too late: that swap has already completed,
+  // leaving Connect and Refresh without handlers.  Initialise immediately for
+  // dynamic insertion, while retaining the DOM-ready path for a direct page
+  // load.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => initRemoteTab(document), { once: true });
+  } else {
+    initRemoteTab(document);
+  }
 })();
 </script>
 {{end}}

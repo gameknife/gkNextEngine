@@ -183,3 +183,33 @@ func TestHandleJobBuildWithReconfigure(t *testing.T) {
 	}
 }
 
+func TestBuildJobSpecUsesGnbBuildWorkflow(t *testing.T) {
+	root := t.TempDir()
+	srv := newTestBuildServer(t, root, "windows")
+	srv.opts.GNBPath = "C:/tools/gnb.exe"
+
+	spec := srv.buildJobSpec("gkNextRenderer", true)
+
+	if spec.Name != srv.opts.GNBPath {
+		t.Fatalf("build executable = %q, want %q", spec.Name, srv.opts.GNBPath)
+	}
+	if spec.WorkDir != root {
+		t.Fatalf("build work dir = %q, want %q", spec.WorkDir, root)
+	}
+	want := []string{"--repo-root", root, "--preset", "windows", "build", "gkNextRenderer", "--reconfigure"}
+	if strings.Join(spec.Args, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("build args = %q, want %q", spec.Args, want)
+	}
+}
+
+func TestBuildJobSpecUsesAllFlagForAllTargets(t *testing.T) {
+	root := t.TempDir()
+	srv := newTestBuildServer(t, root, "windows")
+	srv.opts.GNBPath = "C:/tools/gnb.exe"
+
+	spec := srv.buildJobSpec("all", false)
+
+	if !strings.Contains(strings.Join(spec.Args, " "), "build --all") {
+		t.Fatalf("all-target build args = %q, want build --all", spec.Args)
+	}
+}

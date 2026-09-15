@@ -2584,6 +2584,13 @@
   #tab-content .docs-folder-name {
     font-size: calc(var(--ui-font-size) - 1px);
   }
+  /* The icon-rail labels are an optical caption, not normal body text. Keep
+     them at the 100% reference size instead of enlarging them with the
+     dashboard-wide font preference (which looks oversized on high-DPI Wails). */
+  .tab-strip .tab-item {
+    font-size: 11px;
+    line-height: 1.2;
+  }
   #tab-content .breadcrumb,
   #tab-content .docs-updated,
   #tab-content .target-item .tag-mini,
@@ -3923,6 +3930,263 @@
     }
     document.querySelectorAll('.menu.open').forEach(m => m.classList.remove('open'));
   });
+
+  // Remote is a real, independently hosted WebRTC client. Keep all dashboard
+  // control code in the persistent document instead of a script returned by an
+  // HTMX tab swap: scripts in swapped fragments are not a reliable lifecycle
+  // boundary in either a normal browser or Wails' WebView2.
+  const remoteConnectTimers = new WeakMap();
+  const remoteFrameObservers = new WeakMap();
+  const remoteEmbedStorageKey = 'gnb-remote-embed-url';
+
+  function remotePageFromRoot(root) {
+    return root?.querySelector?.('.tab-remote') || (root?.matches?.('.tab-remote') ? root : null);
+  }
+
+  function remoteSetText(page, selector, text) {
+    const element = page?.querySelector(selector);
+    if (element) element.textContent = text;
+  }
+
+  function remoteStopConnect(page) {
+    const timer = remoteConnectTimers.get(page);
+    if (timer) {
+      window.clearInterval(timer);
+      remoteConnectTimers.delete(page);
+    }
+  }
+
+  function remoteFitFrame(page) {
+    const shell = page?.querySelector('.remote-frame-shell');
+    const frame = page?.querySelector('[data-remote-frame]');
+    if (!shell || !frame) return;
+    const aspect = Number.parseFloat(shell.dataset.remoteAspect || '1.7777778');
+    const width = shell.clientWidth;
+    const height = shell.clientHeight;
+    if (!Number.isFinite(aspect) || aspect <= 0 || width <= 0 || height <= 0) return;
+    let fittedWidth = width;
+    let fittedHeight = fittedWidth / aspect;
+    if (fittedHeight > height) {
+      fittedHeight = height;
+      fittedWidth = fittedHeight * aspect;
+    }
+    frame.style.width = Math.max(1, Math.floor(fittedWidth)) + 'px';
+    frame.style.height = Math.max(1, Math.floor(fittedHeight)) + 'px';
+  }
+
+  function remoteObserveFrame(page) {
+    const shell = page?.querySelector('.remote-frame-shell');
+    if (!shell || remoteFrameObservers.has(page) || !window.ResizeObserver) return;
+    const observer = new ResizeObserver(() => remoteFitFrame(page));
+    observer.observe(shell);
+    remoteFrameObservers.set(page, observer);
+    remoteFitFrame(page);
+  }
+
+  function remoteRunningJobID(page) {
+    const stream = page?.querySelector('#remote-log-panel-host .log-panel[data-stream]')?.dataset.stream;
+    if (!stream) return '';
+    try {
+      const path = new URL(stream, window.location.href).pathname;
+      return path.match(/\/jobs\/([^/]+)\/stream$/)?.[1] || '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function remoteSetRunning(page, running) {
+    const button = page?.querySelector('[data-remote-start]');
+    if (!button) return;
+    button.dataset.remoteRunning = running ? 'true' : 'false';
+    button.type = running ? 'button' : 'submit';
+    button.disabled = false;
+    button.textContent = running ? '停止 Remote' : t('remote.start');
+  }
+
+  function remoteHostUrl(page) {
+    const bind = page.querySelector('input[name="bind"]')?.value.trim() || '';
+    const portValue = Number.parseInt(page.querySelector('input[name="httpPort"]')?.value || '', 10);
+    const port = Number.isFinite(portValue) && portValue > 0 ? portValue : 8088;
+    // The target's wildcard listener is always reachable at the loopback
+    // address. Prefer the exact URL that is known to work as a top-level page;
+    // do not substitute localhost or a discovered LAN adapter.
+    const host = !bind || bind === '0.0.0.0' || bind === '::' ? '127.0.0.1' : bind;
+    const formattedHost = host.includes(':') && !host.startsWith('[') ? '[' + host + ']' : host;
+    return 'http://' + formattedHost + ':' + port + '/';
+  }
+
+  function remoteRenderUrlPreview(page) {
+    const preview = page.querySelector('[data-remote-url-preview]');
+    if (!preview) return;
+    const url = remoteHostUrl(page);
+    preview.replaceChildren();
+    const code = document.createElement('code');
+    code.textContent = url;
+    preview.appendChild(code);
+  }
+
+  function remoteLoadFrame(page, url) {
+    const frame = page.querySelector('[data-remote-frame]');
+    const shell = page.querySelector('.remote-frame-shell');
+    if (!frame || !shell || !url) return;
+    const frameUrl = new URL(url);
+    frameUrl.searchParams.set('_gnb', String(Date.now()));
+    shell.classList.remove('ready');
+    shell.dataset.remoteAspect = '1.7777778';
+    shell.dataset.remoteUrl = url;
+    frame.dataset.remoteOrigin = frameUrl.origin;
+    remoteSetText(page, '[data-remote-diag-url]', url);
+    remoteSetText(page, '[data-remote-diag-client]', 'loading remote client');
+    frame.src = frameUrl.toString();
+    remoteFitFrame(page);
+  }
+
+  function remoteConnect(page, persist, retry = true) {
+    const url = remoteHostUrl(page);
+    if (persist) localStorage.setItem(remoteEmbedStorageKey, url);
+    remoteStopConnect(page);
+    remoteSetText(page, '[data-remote-placeholder]', t('remote.waiting'));
+    remoteLoadFrame(page, url);
+
+    if (!retry) return;
+
+    let attempts = 0;
+    const timer = window.setInterval(() => {
+      const shell = page.querySelector('.remote-frame-shell');
+      if (!page.isConnected || shell?.classList.contains('ready')) {
+        remoteStopConnect(page);
+        return;
+      }
+      attempts += 1;
+      if (attempts >= 20) {
+        remoteStopConnect(page);
+        remoteSetText(page, '[data-remote-placeholder]', t('remote.timeout', url));
+        remoteSetText(page, '[data-remote-diag-client]', 'remote page did not report ready');
+        return;
+      }
+      remoteLoadFrame(page, url);
+    }, 1000);
+    remoteConnectTimers.set(page, timer);
+  }
+
+  function remoteClear(page) {
+    remoteStopConnect(page);
+    const frame = page.querySelector('[data-remote-frame]');
+    const shell = page.querySelector('.remote-frame-shell');
+    frame?.removeAttribute('src');
+    if (shell) {
+      shell.classList.remove('ready');
+      delete shell.dataset.remoteUrl;
+    }
+    localStorage.removeItem(remoteEmbedStorageKey);
+    remoteSetText(page, '[data-remote-placeholder]', t('remote.placeholder'));
+    remoteSetText(page, '[data-remote-diag-url]', t('remote.not_connected'));
+    remoteSetText(page, '[data-remote-diag-client]', 'idle');
+    remoteSetText(page, '[data-remote-diag-config]', 'direct remote-host iframe');
+  }
+
+  function remoteStartConnectionAfterLaunch(page) {
+    if (!remoteRunningJobID(page)) return;
+    remoteSetRunning(page, true);
+    remoteConnect(page, true, true);
+  }
+
+  async function remoteStopJob(page) {
+    const jobID = remoteRunningJobID(page);
+    if (!jobID) {
+      remoteSetRunning(page, false);
+      return;
+    }
+    const button = page.querySelector('[data-remote-start]');
+    if (button) {
+      button.disabled = true;
+      button.textContent = '停止中…';
+    }
+    remoteStopConnect(page);
+    try {
+      const response = await fetch('/jobs/' + encodeURIComponent(jobID) + '/cancel', {
+        method: 'POST',
+        headers: { 'HX-Request': 'true' },
+      });
+      if (!response.ok) throw new Error('http ' + response.status);
+      const host = page.querySelector('#remote-log-panel-host');
+      if (host) {
+        host.innerHTML = await response.text();
+        initAllLogPanels(host);
+      }
+      remoteClear(page);
+      remoteSetRunning(page, false);
+    } catch (error) {
+      remoteSetText(page, '[data-remote-diag-client]', 'failed to stop remote: ' + (error?.message || String(error)));
+      remoteSetRunning(page, true);
+    }
+  }
+
+  function initRemoteTab(root) {
+    const page = remotePageFromRoot(root);
+    if (!page || page.dataset.remoteInitialized === 'true') return;
+    page.dataset.remoteInitialized = 'true';
+    remoteSetText(page, '[data-remote-diag-mode]', 'direct remote-host iframe');
+    remoteRenderUrlPreview(page);
+    page.querySelector('input[name="bind"]')?.addEventListener('input', () => remoteRenderUrlPreview(page));
+    page.querySelector('input[name="httpPort"]')?.addEventListener('input', () => remoteRenderUrlPreview(page));
+    remoteObserveFrame(page);
+    page.querySelectorAll('[data-remote-action]').forEach(button => {
+      button.addEventListener('click', () => {
+        if (button.dataset.remoteAction === 'clear') remoteClear(page);
+        else remoteConnect(page, true, false);
+      });
+    });
+    const form = page.querySelector('.remote-form');
+    form?.addEventListener('htmx:afterRequest', event => {
+      if (!event.detail.successful) return;
+      // The dashboard only starts retrying once POST /jobs/remote has accepted
+      // the process. This avoids probe traffic before a Remote job exists.
+      window.requestAnimationFrame(() => remoteStartConnectionAfterLaunch(page));
+    });
+    page.querySelector('[data-remote-start]')?.addEventListener('click', () => {
+      if (page.querySelector('[data-remote-start]')?.dataset.remoteRunning === 'true') {
+        remoteStopJob(page);
+      }
+    });
+    page.querySelector('[data-remote-frame]')?.addEventListener('load', () => {
+      remoteSetText(page, '[data-remote-diag-client]', 'remote page loaded; waiting for WebRTC');
+    });
+    page.querySelector('[data-remote-frame]')?.addEventListener('error', () => {
+      remoteSetText(page, '[data-remote-diag-client]', 'failed to load remote page');
+    });
+
+    // A tab opened while an existing Remote process is running may reconnect;
+    // otherwise do not start a background polling loop merely from a saved URL.
+    remoteStartConnectionAfterLaunch(page);
+  }
+
+  window.addEventListener('message', event => {
+    const data = event.data;
+    if (!data || data.source !== 'gkNextRemote') return;
+    document.querySelectorAll('.tab-remote').forEach(page => {
+      const frame = page.querySelector('[data-remote-frame]');
+      const shell = page.querySelector('.remote-frame-shell');
+      if (!frame || !shell || event.origin !== frame.dataset.remoteOrigin) return;
+      if (data.type === 'video-size') {
+        const width = Number(data.width);
+        const height = Number(data.height);
+        if (width > 0 && height > 0) {
+          shell.dataset.remoteAspect = String(width / height);
+          remoteFitFrame(page);
+        }
+        return;
+      }
+      shell.classList.add('ready');
+      remoteStopConnect(page);
+      if (data.type === 'loaded') {
+        remoteSetText(page, '[data-remote-diag-client]', 'remote client loaded');
+      } else if (data.type === 'status' && data.text) {
+        remoteSetText(page, '[data-remote-diag-client]', data.text);
+      }
+    });
+  });
+
   function initPaneComponents(pane, kind) {
     if (!pane) return;
     initAllLogPanels(pane);
@@ -3944,6 +4208,8 @@
       initDisplaySettings(pane);
     } else if (kind === 'chat') {
       scrollChatToBottom(pane);
+    } else if (kind === 'remote') {
+      initRemoteTab(pane);
     }
   }
 

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -24,6 +25,10 @@ func runDashboard(ctx appContext, opts dashboardCmdOpts) error {
 	if opts.NoOpen && opts.Browser {
 		return fmt.Errorf("--browser and --no-open cannot be used together")
 	}
+	gnbPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolve gnb executable: %w", err)
+	}
 	srv, err := dashboard.New(dashboard.Options{
 		RepoRoot: ctx.repoRoot,
 		Port:     opts.Port,
@@ -31,6 +36,7 @@ func runDashboard(ctx appContext, opts dashboardCmdOpts) error {
 		Version:  resolvedVersion(),
 		Preset:   ctx.preset,
 		Config:   ctx.cfg,
+		GNBPath:  gnbPath,
 		Lang:     i18n.Current(),
 	})
 	if err != nil {

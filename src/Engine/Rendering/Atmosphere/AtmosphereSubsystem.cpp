@@ -119,14 +119,15 @@ namespace Rendering::Atmosphere
         // Printed so the mobile profile is confirmable from a device log rather than inferred from
         // the build. Desktop and mobile differ only in these numbers and the STEPS_* budgets that
         // are compiled into the shaders from the same condition.
+#if IOS || ANDROID
+        constexpr const char* profileName = "mobile";
+#else
+        constexpr const char* profileName = "desktop";
+#endif
         SPDLOG_INFO(
             "Atmosphere LUTs ({} profile): transmittance {}x{}, multi-scatter {}x{}, "
             "sky-view {}x{}, aerial perspective {}x{}x{}",
-#if IOS || ANDROID
-            "mobile",
-#else
-            "desktop",
-#endif
+            profileName,
             transmittanceExtent.width, transmittanceExtent.height,
             multiScatterExtent.width, multiScatterExtent.height,
             skyViewExtent_.width, skyViewExtent_.height,

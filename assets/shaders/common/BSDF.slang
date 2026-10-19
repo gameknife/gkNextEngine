@@ -98,10 +98,47 @@ public float BSDFGeometrySmithG1(float NoX, float perceptualRoughness)
            max(NoX + sqrt(alpha2 + (1.0f - alpha2) * NoX * NoX), 1e-7f);
 }
 
+// Height-correlated Smith G2 shadowing-masking function (Heitz 2014)
+public float BSDFGeometrySmithCorrelated(float NoV, float NoL, float perceptualRoughness)
+{
+    if (NoV <= 0.0f || NoL <= 0.0f)
+    {
+        return 0.0f;
+    }
+    const float alpha = max(perceptualRoughness * perceptualRoughness,
+                            BSDF_MIN_ROUGHNESS * BSDF_MIN_ROUGHNESS);
+    const float alpha2 = alpha * alpha;
+    const float lambdaV = NoL * sqrt(alpha2 + (1.0f - alpha2) * NoV * NoV);
+    const float lambdaL = NoV * sqrt(alpha2 + (1.0f - alpha2) * NoL * NoL);
+    return (2.0f * NoV * NoL) / max(lambdaV + lambdaL, 1e-7f);
+}
+
 public float BSDFGeometrySmith(float NoV, float NoL, float perceptualRoughness)
 {
-    return BSDFGeometrySmithG1(NoV, perceptualRoughness) *
-           BSDFGeometrySmithG1(NoL, perceptualRoughness);
+    return BSDFGeometrySmithCorrelated(NoV, NoL, perceptualRoughness);
+}
+
+// Generalized Schlick with automatic F82 conductor edge tint (Gulbrandsen / Kulla-Conty)
+// For dielectrics (metalness == 0), evaluates exact Schlick with roughness attenuation.
+// For conductors (metalness > 0), blends in the Gulbrandsen F82 edge tint (F82 = sqrt(F0)).
+public float3 BSDFFresnelConductorF82(float cosTheta, float3 f0, float metalness, float perceptualRoughness)
+{
+    const float mu = clamp(cosTheta, 0.0f, 1.0f);
+    const float m = 1.0f - mu;
+    const float m2 = m * m;
+    const float m5 = m2 * m2 * m;
+    const float3 f90 = lerp(float3(1.0f), f0, perceptualRoughness * perceptualRoughness);
+    const float3 schlick = f0 + (f90 - f0) * m5;
+
+    if (metalness <= 0.0f)
+    {
+        return saturate(schlick);
+    }
+
+    const float3 autoF82 = sqrt(max(f0, 0.0f));
+    const float3 a = (autoF82 - f0 - (f90 - f0) * 0.46518f) / max(0.07635f, 1e-5f);
+    const float3 conductorF = schlick + a * mu * (m2 * m2);
+    return saturate(lerp(schlick, conductorF, metalness));
 }
 
 public FBSDFContext BuildBSDFContext(Vertex vertex, Material material, float3 incomingRayDirection)
@@ -208,9 +245,9 @@ public FBSDFEval EvaluateSurfaceBSDF(FBSDFContext context, float3 wi)
     const float3 H = normalize(V + L);
     const float NoH = max(dot(N, H), 0.0f);
     const float VoH = max(dot(V, H), 0.0f);
-    const float3 F = BSDFFresnelSchlick(VoH, BSDFMaterialF0(context));
+    const float3 F = BSDFFresnelConductorF82(VoH, BSDFMaterialF0(context), context.Metalness, context.PerceptualRoughness);
     const float D = BSDFDistributionGGX(NoH, context.PerceptualRoughness);
-    const float G = BSDFGeometrySmith(NoV, NoL, context.PerceptualRoughness);
+    const float G = BSDFGeometrySmithCorrelated(NoV, NoL, context.PerceptualRoughness);
 
     result.Specular = (D * G * F) / max(4.0f * NoV * NoL, 1e-7f);
     result.SpecularPdf = D * NoH / max(4.0f * VoH, 1e-7f);
@@ -237,38 +274,97 @@ public float PowerHeuristic(float pdfA, float pdfB)
     return a2 / max(a2 + b2, 1e-12f);
 }
 
-// A normalized Phong-like proposal around the ideal reflection direction. The evaluated
-// BSDF remains GGX; this proposal is used only for direct-light MIS and has an exact PDF.
-public float BSDFGlossyProposalExponent(float perceptualRoughness)
+/*
+public float MIS(float pdfA, float pdfB)
 {
-    const float r2 = max(perceptualRoughness * perceptualRoughness, 1e-5f);
-    return min(max(2.0f / r2 - 2.0f, 0.0f), 10000.0f);
+    return PowerHeuristic(pdfA, pdfB);
+}
+*/
+
+static const float M_LOG_1EM6 = 13.815510558f; // -ln(1e-6), scale matched to the natural log()
+static const float M_INV_LOG_1EM6 = 1.0f / M_LOG_1EM6;
+
+// Generalized power heuristic with a variable exponent β, rather than a
+// blend of two different formulas. β moves smoothly between 2 (divergent pdfs --
+// Veach's classic power heuristic, suppresses fireflies from a rarely
+// hitting technique) and 1 (comparable pdfs -- balance heuristic, proven to be
+// minimum-variance in exactly this regime). The sum MIS(a,b)+MIS(b,a)=1 holds
+// automatically for any β -- it is the same property as in the original
+// power heuristic, just generalized, not a separate proof for a hybrid.
+public float MIS(float a, float b)
+{
+    float maxVal = max(a, b);
+    if(maxVal <= 1e-10f) 
+        return 0.5f; // Return 0.5f instead of 0.0f to keep rare events unbiased
+
+    float minVal = min(a, b);
+    float ratio  = minVal / maxVal;              // 0 -- strongly divergent pdfs; 1 -- identical
+
+    // t approaches 0 linearly in log(ratio), not in ratio itself --
+    // pdfs that differ by orders of magnitude (the typical path tracing case)
+    // now get a smooth, rather than abrupt, transition to β=2
+    float logRatio  = log(max(ratio, 1e-6f));
+    float t         = saturate(1.0f + logRatio * M_INV_LOG_1EM6);
+    float beta      = lerp(2.0f, 1.0f, t);
+
+    float weightedRatio = pow(ratio, beta);
+
+    return (a >= b) ? (rcp(1.0f + weightedRatio)) : (weightedRatio / (1.0f + weightedRatio));
 }
 
+// GGX VNDF directional probability density function for MIS (Heitz 2018)
 public float EvaluateGlossyProposalPdf(FBSDFContext context, float3 wi)
 {
     if (context.PerceptualRoughness <= BSDF_DELTA_ROUGHNESS)
     {
         return 0.0f;
     }
-    const float3 reflected = normalize(reflect(-context.Wo, context.Normal));
-    const float cosTheta = max(dot(reflected, normalize(wi)), 0.0f);
-    const float exponent = BSDFGlossyProposalExponent(context.PerceptualRoughness);
-    return (exponent + 1.0f) * M_1_OVER_TWO_PI * pow(cosTheta, exponent);
+    const float3 N = context.Normal;
+    const float3 V = normalize(context.Wo);
+    const float3 L = normalize(wi);
+    const float NoV = max(dot(N, V), 0.0f);
+    const float NoL = dot(N, L);
+    if (NoV <= 0.0f || NoL <= 0.0f)
+    {
+        return 0.0f;
+    }
+    const float3 H = normalize(V + L);
+    const float NoH = max(dot(N, H), 0.0f);
+    const float VoH = max(dot(V, H), 0.0f);
+    if (NoH <= 0.0f || VoH <= 0.0f)
+    {
+        return 0.0f;
+    }
+    const float alpha = max(context.PerceptualRoughness * context.PerceptualRoughness,
+                            BSDF_MIN_ROUGHNESS * BSDF_MIN_ROUGHNESS);
+    const float alpha2 = alpha * alpha;
+    const float D = BSDFDistributionGGX(NoH, context.PerceptualRoughness);
+    // Stable VNDF PDF: G1(NoV) / (4 * NoV) = 0.5 / (NoV + sqrt(alpha2 + (1 - alpha2) * NoV^2))
+    const float denom = NoV + sqrt(alpha2 + (1.0f - alpha2) * NoV * NoV);
+    return (0.5f * D) / max(denom, 1e-7f);
 }
 
 public float3 SampleGlossyProposal(inout uint4 randomSeed, FBSDFContext context, out float pdf)
 {
-    const float exponent = BSDFGlossyProposalExponent(context.PerceptualRoughness);
-    const float2 u = RandomFloat2(randomSeed);
-    const float cosTheta = pow(max(u.x, 1e-7f), 1.0f / (exponent + 1.0f));
-    const float sinTheta = sqrt(max(1.0f - cosTheta * cosTheta, 0.0f));
-    const float phi = M_TWO_PI * u.y;
-    const float3 localDirection =
-        float3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
-    const float3 reflected = normalize(reflect(-context.Wo, context.Normal));
-    const float3 wi = normalize(AlignWithNormal(localDirection, reflected));
-    pdf = (exponent + 1.0f) * M_1_OVER_TWO_PI * pow(cosTheta, exponent);
+    pdf = 0.0f;
+    const float3 V = normalize(context.Wo);
+    const float3 N = context.Normal;
+    if (context.PerceptualRoughness <= BSDF_DELTA_ROUGHNESS)
+    {
+        return normalize(reflect(-V, N));
+    }
+    float3 tangent, bitangent;
+    ONB(N, tangent, bitangent);
+    const float alpha = max(context.PerceptualRoughness * context.PerceptualRoughness, BSDF_MIN_ROUGHNESS * BSDF_MIN_ROUGHNESS);
+    const float3 localV = to_local(V, tangent, bitangent, N);
+    const float3 localH = ggx_sample_vndf(float2(alpha), localV, RandomFloat2(randomSeed));
+    const float3 H = normalize(to_world(localH, tangent, bitangent, N));
+    const float3 wi = normalize(reflect(-V, H));
+    if (dot(N, wi) <= 0.0f)
+    {
+        return float3(0, 0, 0);
+    }
+    pdf = EvaluateGlossyProposalPdf(context, wi);
     return wi;
 }
 

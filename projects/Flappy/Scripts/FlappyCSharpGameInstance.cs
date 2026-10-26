@@ -31,6 +31,7 @@ public sealed class FlappyCSharpGameInstance : NextGameInstance
     private readonly XorShift32 rng = new();
     private readonly FlappyBird bird = new();
     private readonly FlappyPipes pipes = new();
+    private readonly ManagedImGui gui = new();
     private ParallaxLayer mountains = new(0.0f, 1.0f, 0.0f);
     private ParallaxLayer vegetation = new(0.0f, 1.0f, 0.0f);
     private ParallaxLayer clouds = new(0.0f, 1.0f, 0.0f);
@@ -296,66 +297,38 @@ public sealed class FlappyCSharpGameInstance : NextGameInstance
 
     protected override bool OnRenderUI()
     {
-        // Ported from FlappyCppGameInstance::OnRenderUI, panel for panel. The engine has no HUD
-        // layer of its own, so this exercises the UI bindings the same way the C++ exercises ImGui.
-        Vector2 screen = UI.GetScreenSize();
-        float centerX = screen.X * 0.5f;
+        gui.BeginFrame();
+        Vector2 screen = gui.ScreenSize;
         float centerY = screen.Y * 0.5f;
 
         float scoreWidth = 136.0f + Math.Max(0, score / 10) * 18.0f;
-        float scoreX = centerX - scoreWidth * 0.5f;
-        UI.DrawRectFilled(scoreX + 3.0f, 27.0f, scoreWidth, 56.0f, Rgba(10, 24, 34, 80), 16.0f);
-        UI.DrawRectFilled(scoreX, 24.0f, scoreWidth, 56.0f, Rgba(24, 40, 52, 210), 16.0f);
-        UI.DrawRect(scoreX, 24.0f, scoreWidth, 56.0f, Rgba(255, 255, 255, 40), 16.0f, 1.0f);
-        DrawCenteredText($"{score}", 31.0f, 2.05f, Color.White, in screen);
+        gui.PanelCenteredX(scoreWidth, 24.0f, 56.0f);
+        gui.DrawTextCenteredX($"{score}", 31.0f, HudPalette.Text, 2.05f, shadow: true);
 
         if (state == GameState.Ready)
         {
             float panelWidth = Math.Max(280.0f, Math.Min(520.0f, screen.X - 48.0f));
             float panelY = centerY - 96.0f;
-            DrawPanel(panelWidth, 178.0f, panelY, in screen);
-            DrawCenteredText("FLAPPY", panelY + 26.0f, 2.0f, Rgb(255, 230, 102), in screen);
-            DrawCenteredText("Thread the gap. Keep the rhythm.", panelY + 76.0f, 1.0f,
-                             Rgb(211, 231, 236), in screen);
-            DrawCenteredText("SPACE / CLICK / GAMEPAD A", panelY + 121.0f, 1.1f,
-                             Rgb(124, 230, 168), in screen);
+            gui.PanelCenteredX(panelWidth, panelY, 178.0f);
+            gui.DrawTextCenteredX("FLAPPY", panelY + 26.0f, HudPalette.Highlight, 2.0f, shadow: true);
+            gui.DrawTextCenteredX("Thread the gap. Keep the rhythm.", panelY + 76.0f,
+                                  HudPalette.Muted, 1.0f, shadow: true);
+            gui.DrawTextCenteredX("SPACE / CLICK / GAMEPAD A", panelY + 121.0f,
+                                  HudPalette.Success, 1.1f, shadow: true);
         }
         else if (state == GameState.Dead)
         {
             float panelWidth = Math.Max(280.0f, Math.Min(500.0f, screen.X - 48.0f));
             float panelY = centerY - 88.0f;
-            DrawPanel(panelWidth, 166.0f, panelY, in screen);
-            DrawCenteredText("GAME OVER", panelY + 24.0f, 1.75f, Rgb(255, 134, 122), in screen);
-            DrawCenteredText($"Score {score}", panelY + 73.0f, 1.25f, Color.White, in screen);
-            DrawCenteredText("PRESS ANY KEY TO RESTART", panelY + 116.0f, 1.0f,
-                             Rgb(124, 230, 168), in screen);
+            gui.PanelCenteredX(panelWidth, panelY, 166.0f);
+            gui.DrawTextCenteredX("GAME OVER", panelY + 24.0f, HudPalette.Danger, 1.75f, shadow: true);
+            gui.DrawTextCenteredX($"Score {score}", panelY + 73.0f, HudPalette.Text, 1.25f, shadow: true);
+            gui.DrawTextCenteredX("PRESS ANY KEY TO RESTART", panelY + 116.0f,
+                                  HudPalette.Success, 1.0f, shadow: true);
         }
 
+        gui.EndFrame();
         return false;
-    }
-
-    private static Color Rgb(byte r, byte g, byte b) => Color.FromBytes(r, g, b);
-
-    private static Color Rgba(byte r, byte g, byte b, byte a) => Color.FromBytes(r, g, b, a);
-
-    private static void DrawPanel(float width, float height, float y, in Vector2 screen)
-    {
-        float x = screen.X * 0.5f - width * 0.5f;
-        UI.DrawRectFilled(x + 6.0f, y + 8.0f, width, height, Rgba(16, 28, 38, 80), 18.0f);
-        UI.DrawRectFilled(x, y, width, height, Rgba(18, 32, 43, 210), 18.0f);
-        UI.DrawRect(x, y, width, height, Rgba(255, 255, 255, 46), 18.0f, 1.5f);
-    }
-
-    /// <summary>
-    /// Centred, with the same drop shadow the C++ HUD draws — the sky is bright enough that plain
-    /// white text would be unreadable against it.
-    /// </summary>
-    private static void DrawCenteredText(string text, float y, float scale, Color color, in Vector2 screen)
-    {
-        Vector2 size = UI.CalcTextSize(text, scale);
-        float x = (screen.X - size.X) * 0.5f;
-        UI.DrawText(text, x + 2.0f, y + 2.0f, Rgba(20, 28, 35, 110), scale);
-        UI.DrawText(text, x, y, color, scale);
     }
 
     protected override bool OnOverrideCamera(ref CameraOverride camera)

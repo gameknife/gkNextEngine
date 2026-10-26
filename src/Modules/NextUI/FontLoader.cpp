@@ -1,7 +1,9 @@
 #include "Modules/NextUI/FontLoader.hpp"
 
 #include "Engine/Utilities/FileHelper.hpp"
+#include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fmt/format.h>
 #include <cstring>
@@ -38,6 +40,45 @@ namespace
 
 namespace NextUI::FontLoader
 {
+    const ImWchar* GetFontAwesomeGlyphRanges()
+    {
+        static const ImWchar iconRange[] = {
+            ICON_MIN_FA,
+            ICON_MAX_FA,
+            0,
+        };
+        return iconRange;
+    }
+
+    void MergeFontAwesomeIcons(const float basePixelSize, const float rasterizerDensity)
+    {
+        ImFontConfig iconConfig;
+        iconConfig.MergeMode = true;
+        iconConfig.GlyphMinAdvanceX = basePixelSize;
+        iconConfig.GlyphOffset = ImVec2(0.0f, 0.0f);
+
+        const float iconPixelSize = std::max(10.0f, basePixelSize - 2.0f);
+        const ImWchar* iconRange = GetFontAwesomeGlyphRanges();
+        constexpr const char* kIconFonts[] = {
+            "assets/fonts/fa-regular-400.ttf",
+            "assets/fonts/fa-solid-900.ttf",
+            "assets/fonts/fa-brands-400.ttf",
+        };
+
+        for (const char* iconFontPath : kIconFonts)
+        {
+            Load(FFontRequest{
+                .filePath = iconFontPath,
+                .pixelSize = iconPixelSize,
+                .includeChineseFull = false,
+                .glyphRanges = iconRange,
+                .fontConfig = &iconConfig,
+                .rasterizerDensity = rasterizerDensity,
+                .warnOnFailure = false,
+            });
+        }
+    }
+
     ImFont* Load(const FFontRequest& request)
     {
         if (request.filePath.empty() || request.pixelSize <= 0.0f)
@@ -97,13 +138,50 @@ namespace NextUI::FontLoader
         return font;
     }
 
-    ImFont* LoadDefaultUiFont(std::string_view fontPath, float pixelSize)
+    ImFont* LoadDefaultUiFont(std::string_view fontPath, const float pixelSize, const float rasterizerDensity,
+                              const bool mergeIconsAndFallback)
     {
-        return Load(FFontRequest{
+        ImFont* font = Load(FFontRequest{
             .filePath = std::string(fontPath),
             .pixelSize = pixelSize,
             .includeChineseFull = true,
+            .rasterizerDensity = rasterizerDensity,
+            .warnOnFailure = false,
             .setAsDefault = true,
         });
+
+        constexpr std::string_view kFallbackFontPath = "assets/fonts/DroidSansFallback.ttf";
+        if (font == nullptr && fontPath != kFallbackFontPath)
+        {
+            font = Load(FFontRequest{
+                .filePath = std::string(kFallbackFontPath),
+                .pixelSize = pixelSize,
+                .includeChineseFull = true,
+                .rasterizerDensity = rasterizerDensity,
+                .warnOnFailure = true,
+                .setAsDefault = true,
+            });
+            fontPath = kFallbackFontPath;
+        }
+
+        if (font != nullptr && mergeIconsAndFallback)
+        {
+            MergeFontAwesomeIcons(pixelSize, rasterizerDensity);
+
+            if (fontPath != kFallbackFontPath)
+            {
+                ImFontConfig fallbackConfig;
+                fallbackConfig.MergeMode = true;
+                Load(FFontRequest{
+                    .filePath = std::string(kFallbackFontPath),
+                    .pixelSize = pixelSize,
+                    .glyphRanges = ImGui::GetIO().Fonts->GetGlyphRangesChineseSimplifiedCommon(),
+                    .fontConfig = &fallbackConfig,
+                    .rasterizerDensity = rasterizerDensity,
+                    .warnOnFailure = false,
+                });
+            }
+        }
+        return font;
     }
 }

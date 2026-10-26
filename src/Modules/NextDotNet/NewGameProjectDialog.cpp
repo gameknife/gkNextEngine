@@ -89,26 +89,10 @@ namespace Modules::NextDotNet
 
         void DrawBadge(const char* icon, const char* label, ImVec4 bgCol, ImVec4 textCol, ImVec4 borderCol)
         {
-            const std::string text =
-                icon != nullptr && icon[0] != '\0' ? fmt::format("{} {}", icon, label) : std::string(label);
-            const ImVec2 textSize = ImGui::CalcTextSize(text.c_str());
-            constexpr ImVec2 padding(8.0f, 4.0f);
-            const ImVec2 size(textSize.x + padding.x * 2.0f, textSize.y + padding.y * 2.0f);
-
-            const ImVec2 pos = ImGui::GetCursorScreenPos();
-            ImDrawList* drawList = ImGui::GetWindowDrawList();
-            drawList->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), ImGui::GetColorU32(bgCol), 5.0f);
-            drawList->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), ImGui::GetColorU32(borderCol), 5.0f, 0, 1.0f);
-            drawList->AddText(ImVec2(pos.x + padding.x, pos.y + padding.y), ImGui::GetColorU32(textCol), text.c_str());
-
-            ImGui::Dummy(size);
+            NextUI::Foundation::DrawPillBadge(icon, label, bgCol, textCol, borderCol, 5.0f, ImVec2(8.0f, 4.0f));
         }
 
-        void DrawCodeBadge(const char* code)
-        {
-            DrawBadge(nullptr, code, Color(EColor::Background, 0.70f), Color(EColor::AccentHover),
-                      Color(EColor::Border, 0.60f));
-        }
+        using NextUI::Foundation::DrawCodeBadge;
     }
 
     std::string FNewGameProjectDialog::UnavailableReason()
@@ -255,30 +239,18 @@ namespace Modules::NextDotNet
             ImGui::OpenPopup(kPopupTitle);
         }
 
-        const ImGuiViewport* viewport = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(ImVec2(viewport->GetCenter().x, viewport->GetCenter().y), ImGuiCond_Appearing,
-                                ImVec2(0.5f, 0.5f));
-
-        const float targetWidth = std::min(880.0f, viewport->WorkSize.x - 32.0f);
-        const float targetHeight = std::min(620.0f, viewport->WorkSize.y - 32.0f);
-        ImGui::SetNextWindowSize(ImVec2(targetWidth, targetHeight), ImGuiCond_Appearing);
-
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, Color(EColor::Surface, 0.98f));
-        ImGui::PushStyleColor(ImGuiCol_Border, Color(EColor::Border, 0.85f));
-        ImGui::PushStyleColor(ImGuiCol_PopupBg, Color(EColor::Surface, 0.98f));
-
-        const ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar;
-
         bool stayOpen = true;
-        if (!ImGui::BeginPopupModal(kPopupTitle, &stayOpen, windowFlags))
+        NextUI::Theme::FModernModalConfig modalConfig{};
+        modalConfig.PopupId = kPopupTitle;
+        modalConfig.TargetSize = ImVec2(880.0f, 620.0f);
+        modalConfig.Padding = ImVec2(0.0f, 0.0f);
+        modalConfig.Rounding = 8.0f;
+        modalConfig.Open = &stayOpen;
+
+        if (!NextUI::Theme::BeginModernModal(modalConfig))
         {
             open_ = false;
             builder_.Reset();
-            ImGui::PopStyleColor(3);
-            ImGui::PopStyleVar(3);
             return outcome;
         }
 
@@ -287,9 +259,7 @@ namespace Modules::NextDotNet
             ImGui::CloseCurrentPopup();
             open_ = false;
             builder_.Reset();
-            ImGui::EndPopup();
-            ImGui::PopStyleColor(3);
-            ImGui::PopStyleVar(3);
+            NextUI::Theme::EndModernModal();
             return outcome;
         }
 
@@ -316,62 +286,16 @@ namespace Modules::NextDotNet
         // 1. Header Bar
         // ==========================================
         constexpr float kHeaderHeight = 56.0f;
-        const ImVec2 headerMin = dialogPos;
-        const ImVec2 headerMax(dialogPos.x + dialogSize.x, dialogPos.y + kHeaderHeight);
-
-        drawList->AddRectFilled(headerMin, headerMax, ColorU32(EColor::Background, 0.65f), 8.0f,
-                                ImDrawFlags_RoundCornersTop);
-        drawList->AddLine(ImVec2(headerMin.x, headerMax.y), headerMax, ColorU32(EColor::Border, 0.50f), 1.0f);
-
-        // Header Title and Icon
-        constexpr float headerPadX = 18.0f;
-        constexpr float iconBoxSize = 34.0f;
-        const float iconBoxPosY = dialogPos.y + (kHeaderHeight - iconBoxSize) * 0.5f;
-        const ImVec2 iconBoxMin(dialogPos.x + headerPadX, iconBoxPosY);
-        const ImVec2 iconBoxMax(iconBoxMin.x + iconBoxSize, iconBoxMin.y + iconBoxSize);
-
-        drawList->AddRectFilled(iconBoxMin, iconBoxMax, ColorU32(EColor::Accent, 0.16f), 6.0f);
-        drawList->AddRect(iconBoxMin, iconBoxMax, ColorU32(EColor::AccentHover, 0.45f), 6.0f);
-
-        const ImVec2 headerIconSize = ImGui::CalcTextSize(ICON_FA_FOLDER_PLUS);
-        drawList->AddText(
-            ImVec2(iconBoxMin.x + (iconBoxSize - headerIconSize.x) * 0.5f,
-                   iconBoxMin.y + (iconBoxSize - headerIconSize.y) * 0.5f),
-            ColorU32(EColor::AccentHover), ICON_FA_FOLDER_PLUS);
-
-        // Title text
-        const float titleX = iconBoxMax.x + 12.0f;
-        ImGui::PushFont(titleFont);
-        drawList->AddText(ImVec2(titleX, dialogPos.y + 9.0f), ColorU32(EColor::Text), "Create New Game Project");
-        ImGui::PopFont();
-
-        // Subtitle text
-        drawList->AddText(ImVec2(titleX, dialogPos.y + 32.0f), ColorU32(EColor::TextDim),
-                          "Initialize a new .NET 9 managed C# gameplay project from a template");
-
-        // Close X Button (Comfortable Ghost button with padding)
-        constexpr float closeBtnSize = 28.0f;
-        const ImVec2 closeBtnPos(dialogPos.x + dialogSize.x - closeBtnSize - 16.0f,
-                                 dialogPos.y + (kHeaderHeight - closeBtnSize) * 0.5f);
-        ImGui::SetCursorScreenPos(closeBtnPos);
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Color(EColor::SurfaceHover, 0.85f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, Color(EColor::SurfaceElevated));
-        ImGui::PushStyleColor(ImGuiCol_Text, Color(EColor::TextMuted));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 4.0f));
-        if (ImGui::Button(ICON_FA_XMARK "##CloseDialog", ImVec2(closeBtnSize, closeBtnSize)) &&
+        if (NextUI::Theme::DrawModalHeader(
+                ICON_FA_FOLDER_PLUS, "Create New Game Project",
+                "Initialize a new .NET 9 managed C# gameplay project from a template",
+                titleFont, true) &&
             phase_ != EPhase::Working)
         {
             ImGui::CloseCurrentPopup();
             open_ = false;
             builder_.Reset();
         }
-        ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor(4);
-
-        // Set cursor below Header
-        ImGui::SetCursorScreenPos(ImVec2(dialogPos.x, dialogPos.y + kHeaderHeight));
 
         // ==========================================
         // 2. Body Area
@@ -552,36 +476,20 @@ namespace Modules::NextDotNet
 
                 ImGui::PushID(static_cast<int>(i));
 
-                const ImVec2 cardPos = ImGui::GetCursorScreenPos();
-                const float cardWidth = ImGui::GetContentRegionAvail().x;
                 constexpr float kCardHeight = 54.0f;
-                const ImVec2 cardMax(cardPos.x + cardWidth, cardPos.y + kCardHeight);
-
-                ImGui::InvisibleButton("##TemplateCard", ImVec2(cardWidth, kCardHeight));
-                const bool isHovered = ImGui::IsItemHovered();
-                if (ImGui::IsItemClicked())
+                const NextUI::Theme::FInteractiveCardState cardState =
+                    NextUI::Theme::DrawInteractiveCard(NextUI::Theme::FInteractiveCardConfig{
+                        .Id = "##TemplateCard",
+                        .Size = ImVec2(0.0f, kCardHeight),
+                        .Selected = isSelected,
+                        .Rounding = 6.0f,
+                        .ShowSelectionStrip = true,
+                    });
+                if (cardState.Clicked)
                 {
                     selectedTemplate_ = static_cast<int>(i);
                 }
-
-                // Card background and border
-                const ImU32 cardBg = isSelected ? ColorU32(EColor::SurfaceHover, 0.92f)
-                                                : (isHovered ? ColorU32(EColor::SurfaceElevated, 0.70f)
-                                                             : ColorU32(EColor::Surface, 0.35f));
-                const ImU32 cardBorder = isSelected ? ColorU32(EColor::AccentHover, 0.85f)
-                                                    : (isHovered ? ColorU32(EColor::BorderStrong, 0.60f)
-                                                                 : ColorU32(EColor::Border, 0.30f));
-
-                drawList->AddRectFilled(cardPos, cardMax, cardBg, 6.0f);
-                drawList->AddRect(cardPos, cardMax, cardBorder, 6.0f, 0, isSelected ? 1.5f : 1.0f);
-
-                // Left Accent Indicator Strip for selected item
-                if (isSelected)
-                {
-                    drawList->AddRectFilled(ImVec2(cardPos.x + 2.0f, cardPos.y + 8.0f),
-                                            ImVec2(cardPos.x + 5.0f, cardMax.y - 8.0f),
-                                            ColorU32(EColor::AccentHover), 2.0f);
-                }
+                const ImVec2 cardPos = cardState.Min;
 
                 // Icon Box
                 constexpr float itemIconSize = 34.0f;
@@ -888,9 +796,7 @@ namespace Modules::NextDotNet
         ImGui::EndChild();
         ImGui::PopStyleVar();
 
-        ImGui::EndPopup();
-        ImGui::PopStyleColor(3);
-        ImGui::PopStyleVar(3);
+        NextUI::Theme::EndModernModal();
 
         return outcome;
     }

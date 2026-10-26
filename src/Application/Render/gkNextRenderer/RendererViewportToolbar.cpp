@@ -45,10 +45,6 @@
 #include "Application/Common/DemoScenes.hpp"
 
 
-extern float TitlebarSize;
-extern float ModeRailWidth;
-extern float ModeRailButtonSize;
-
 namespace RendererViewportDetail
 {
 using NextUI::Theme::DrawFlatViewportButton;
@@ -57,50 +53,6 @@ using NextUI::Theme::PopViewportPopupStyle;
 using NextUI::Theme::PopViewportToolbarStyle;
 using NextUI::Theme::PushViewportPopupStyle;
 using NextUI::Theme::PushViewportToolbarStyle;
-
-enum class ESceneListGroup : uint8_t
-{
-    Procedural = 0,
-    Gltf = 1,
-    LDraw = 2,
-    Other = 3,
-};
-
-ESceneListGroup GetSceneListGroup(std::string_view scenePath)
-{
-    const std::string extension = std::filesystem::path(scenePath).extension().string();
-    if (extension == ".proc")
-    {
-        return ESceneListGroup::Procedural;
-    }
-    if (extension == ".glb" || extension == ".gltf")
-    {
-        return ESceneListGroup::Gltf;
-    }
-    if (extension == ".ldr" || extension == ".mpd")
-    {
-        return ESceneListGroup::LDraw;
-    }
-    return ESceneListGroup::Other;
-}
-
-const char* GetSceneListGroupLabel(ESceneListGroup group)
-{
-    switch (group)
-    {
-    case ESceneListGroup::Procedural:
-        return "Procedural";
-    case ESceneListGroup::Gltf:
-        return "glTF";
-    case ESceneListGroup::LDraw:
-        return "OMR/LDraw";
-    case ESceneListGroup::Other:
-    default:
-        return "Other";
-    }
-}
-
-
 } // namespace RendererViewportDetail
 
 void NextRendererGameInstance::DrawModeRail(FRendererUiState& uiState)

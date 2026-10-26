@@ -216,12 +216,6 @@ public sealed class ManagedDrawList
 /// </summary>
 public sealed class ManagedImGui
 {
-    private static readonly Color panelColor = Color.FromBytes(18, 25, 34, 226);
-    private static readonly Color panelBorder = Color.FromBytes(120, 150, 170, 120);
-    private static readonly Color buttonColor = Color.FromBytes(42, 58, 72, 245);
-    private static readonly Color buttonHotColor = Color.FromBytes(62, 91, 112, 250);
-    private static readonly Color buttonDisabledColor = Color.FromBytes(36, 40, 45, 190);
-
     private readonly ManagedDrawList drawList = new();
     private Vector2 mousePosition;
     private bool mouseDown;
@@ -250,12 +244,12 @@ public sealed class ManagedImGui
 
     public void EndFrame() => drawList.Submit();
 
-    public void Panel(UiRect rect, float rounding = 12.0f)
+    public void Panel(UiRect rect, float rounding = 7.0f)
     {
-        drawList.AddRectFilled(new UiRect(rect.X + 5.0f, rect.Y + 7.0f, rect.Width, rect.Height),
-                               Color.FromBytes(0, 0, 0, 80), rounding);
-        drawList.AddRectFilled(rect, panelColor, rounding);
-        drawList.AddRect(rect, panelBorder, rounding, 1.5f);
+        drawList.AddRectFilled(new UiRect(rect.X + 4.0f, rect.Y + 6.0f, rect.Width, rect.Height),
+                               Color.FromBytes(0, 0, 0, 72), rounding);
+        drawList.AddRectFilled(rect, HudPalette.PanelBg, rounding);
+        drawList.AddRect(rect, HudPalette.Border, rounding, 1.0f);
     }
 
     public bool Button(int id, UiRect rect, string label, bool enabled = true,
@@ -266,15 +260,15 @@ public sealed class ManagedImGui
         {
             hotId = id;
         }
-        Color fill = !enabled ? buttonDisabledColor : hovered ? buttonHotColor : buttonColor;
+        Color fill = !enabled ? HudPalette.ButtonDisabled : hovered ? HudPalette.ButtonHover : HudPalette.ButtonBg;
         if (hovered && mouseDown)
         {
-            fill = Color.FromBytes(78, 117, 139, 255);
+            fill = HudPalette.ButtonActive;
         }
-        drawList.AddRectFilled(rect, fill, 8.0f);
-        drawList.AddRect(rect, enabled ? Color.FromBytes(184, 218, 230, 155) : Color.FromBytes(90, 95, 100, 110),
-                         8.0f, 1.2f);
-        DrawTextCentered(label, rect, enabled ? Color.White : Color.FromBytes(145, 150, 155), textScale);
+        drawList.AddRectFilled(rect, fill, 5.0f);
+        drawList.AddRect(rect, enabled ? (hovered ? HudPalette.Accent : HudPalette.Border) : Color.FromBytes(56, 60, 66, 110),
+                         5.0f, 1.0f);
+        DrawTextCentered(label, rect, enabled ? HudPalette.Text : HudPalette.TextDim, textScale);
         return hovered && mousePressed;
     }
 
@@ -286,7 +280,7 @@ public sealed class ManagedImGui
         {
             value = !value;
         }
-        drawList.AddText(label, new Vector2(rect.X + 31.0f, rect.Y + (rect.Height - 16.0f) * 0.5f), Color.White);
+        drawList.AddText(label, new Vector2(rect.X + 31.0f, rect.Y + (rect.Height - 16.0f) * 0.5f), HudPalette.Text);
         return clicked;
     }
 
@@ -305,27 +299,28 @@ public sealed class ManagedImGui
             value = next;
         }
         float ratio = max > min ? Math.Clamp((value - min) / (max - min), 0.0f, 1.0f) : 0.0f;
-        drawList.AddRectFilled(rect, Color.FromBytes(20, 27, 34, 235), rect.Height * 0.5f);
+        drawList.AddRectFilled(rect, Color.FromBytes(20, 22, 25, 235), rect.Height * 0.5f);
         drawList.AddRectFilled(new UiRect(rect.X, rect.Y, rect.Width * ratio, rect.Height),
-                               Color.FromBytes(73, 174, 214, 245), rect.Height * 0.5f);
+                               HudPalette.Accent, rect.Height * 0.5f);
         drawList.AddCircleFilled(new Vector2(rect.X + rect.Width * ratio, rect.Y + rect.Height * 0.5f),
-                                 rect.Height * 0.65f, hovered ? Color.White : Color.FromBytes(205, 225, 232));
+                                 rect.Height * 0.65f, hovered ? Color.White : HudPalette.Text);
         return changed;
     }
 
     public void ProgressBar(UiRect rect, float ratio, Color fill, string? label = null)
     {
         ratio = Math.Clamp(ratio, 0.0f, 1.0f);
-        drawList.AddRectFilled(rect, Color.FromBytes(10, 15, 20, 225), rect.Height * 0.35f);
+        float rounding = Math.Min(4.0f, rect.Height * 0.35f);
+        drawList.AddRectFilled(rect, Color.FromBytes(18, 20, 23, 225), rounding);
         if (ratio > 0.0f)
         {
             drawList.AddRectFilled(new UiRect(rect.X, rect.Y, rect.Width * ratio, rect.Height),
-                                   fill, rect.Height * 0.35f);
+                                   fill, rounding);
         }
-        drawList.AddRect(rect, Color.FromBytes(230, 240, 245, 95), rect.Height * 0.35f, 1.0f);
+        drawList.AddRect(rect, HudPalette.Border, rounding, 1.0f);
         if (!string.IsNullOrEmpty(label))
         {
-            DrawTextCentered(label, rect, Color.White, 0.9f);
+            DrawTextCentered(label, rect, HudPalette.Text, 0.9f);
         }
     }
 
@@ -377,11 +372,64 @@ public sealed class ManagedImGui
     /// A panel centred horizontally, returning the rectangle it occupies so its contents can be
     /// laid out against it.
     /// </summary>
-    public UiRect PanelCenteredX(float width, float y, float height, float rounding = 14.0f)
+    public UiRect PanelCenteredX(float width, float y, float height, float rounding = 7.0f)
     {
         UiRect rect = new((ScreenSize.X - width) * 0.5f, y, width, height);
         Panel(rect, rounding);
         return rect;
+    }
+
+    /// <summary>
+    /// Draws a full-screen dim backdrop and a centered modal card, returning the card's rectangle.
+    /// </summary>
+    public UiRect ModalCardCentered(float width, float height, float rounding = 7.0f, byte dimAlpha = 155)
+    {
+        if (dimAlpha > 0)
+        {
+            drawList.AddRectFilled(new UiRect(0.0f, 0.0f, ScreenSize.X, ScreenSize.Y),
+                                   Color.FromBytes(4, 6, 9, dimAlpha), 0.0f, UiDrawLayer.Background);
+        }
+        UiRect rect = new((ScreenSize.X - width) * 0.5f, (ScreenSize.Y - height) * 0.5f, width, height);
+        Panel(rect, rounding);
+        return rect;
+    }
+
+    /// <summary>
+    /// Draws a 4-way tactical crosshair with a center dot.
+    /// </summary>
+    public void DrawCrosshair(Vector2 center, float gap = 5.0f, float length = 8.0f,
+                              float thickness = 1.5f, Color? color = null)
+    {
+        Color stroke = color ?? HudPalette.Text;
+        drawList.AddLine(new Vector2(center.X - gap - length, center.Y), new Vector2(center.X - gap, center.Y), stroke, thickness);
+        drawList.AddLine(new Vector2(center.X + gap, center.Y), new Vector2(center.X + gap + length, center.Y), stroke, thickness);
+        drawList.AddLine(new Vector2(center.X, center.Y - gap - length), new Vector2(center.X, center.Y - gap), stroke, thickness);
+        drawList.AddLine(new Vector2(center.X, center.Y + gap), new Vector2(center.X, center.Y + gap + length), stroke, thickness);
+        drawList.AddCircleFilled(center, 1.5f, stroke);
+    }
+
+    /// <summary>
+    /// Draws a key-cap pill badge followed by an action label, returning the total width advanced.
+    /// </summary>
+    public float DrawKeyHintPill(Vector2 pos, string keyLabel, string actionText, float scale = 1.0f)
+    {
+        Vector2 keySize = UI.CalcTextSize(keyLabel, scale);
+        float padX = 7.0f * scale;
+        float padY = 3.0f * scale;
+        UiRect pillRect = new(pos.X, pos.Y, keySize.X + padX * 2.0f, keySize.Y + padY * 2.0f);
+        drawList.AddRectFilled(pillRect, HudPalette.SurfaceElevated, 4.0f);
+        drawList.AddRect(pillRect, HudPalette.Border, 4.0f, 1.0f);
+        drawList.AddText(keyLabel, new Vector2(pos.X + padX, pos.Y + padY), HudPalette.Highlight, scale);
+
+        if (string.IsNullOrEmpty(actionText))
+        {
+            return pillRect.Width;
+        }
+
+        float gap = 6.0f * scale;
+        Vector2 actionSize = UI.CalcTextSize(actionText, scale);
+        DrawText(actionText, pillRect.Right + gap, pos.Y + padY, HudPalette.Muted, scale, shadow: true);
+        return pillRect.Width + gap + actionSize.X;
     }
 }
 

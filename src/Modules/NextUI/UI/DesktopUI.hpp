@@ -1,12 +1,19 @@
 #pragma once
 
 #include "Engine/Common/CoreMinimal.hpp"
+#include "Modules/NextUI/UI/AppChrome.hpp"
+#include "Modules/NextUI/UI/UiContainers.hpp"
 #include "Modules/NextUI/UI/UiTheme.hpp"
+#include "Modules/NextUI/UI/UiWidgets.hpp"
 #include "Engine/Runtime/RuntimeFwd.hpp"
 
 #include <functional>
+#include <glm/vec3.hpp>
 #include <span>
 #include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 #include <imgui.h>
 
 namespace NextUI::Theme
@@ -14,6 +21,25 @@ namespace NextUI::Theme
     using EColor = Foundation::EColor;
     using Foundation::Color;
     using Foundation::ColorU32;
+    using Foundation::DrawBrandMark;
+    using Foundation::FPillBadgeOptions;
+    using Foundation::DrawPillBadge;
+    using Foundation::DrawPillBadgeU32;
+    using Foundation::DrawCodeBadge;
+    using Foundation::CompactStat;
+    using Foundation::DrawSmoothSpinner;
+    using Foundation::DrawAnimatedProgressBar;
+    using Foundation::BeginInsetPanel;
+    using Foundation::EndInsetPanel;
+    using Foundation::BeginCard;
+    using Foundation::EndCard;
+    using Foundation::BeginSection;
+    using Foundation::EndSection;
+    using Foundation::FScopedCard;
+    using Foundation::FScopedInsetPanel;
+    using Foundation::FScopedOverlayPanel;
+    using Foundation::FScopedSection;
+
     ImFont* GetDefaultFont(NextEngine& engine);
     ImFont* GetTitleFont(NextEngine& engine);
 
@@ -90,8 +116,47 @@ namespace NextUI::Theme
         ImGuiWindowFlags ContentFlags = 0;
     };
 
+    struct FCollapsibleSidePanelConfig
+    {
+        const char* WindowId = "##SidePanel";
+        ImVec2 Position = ImVec2(0.0f, 0.0f);
+        ImVec2 Size = ImVec2(0.0f, 0.0f);
+        bool Collapsed = false;
+        float BackgroundAlpha = 0.96f;
+        ImVec2 CollapsedPadding = ImVec2(7.0f, 8.0f);
+        ImVec2 ExpandedPadding = ImVec2(12.0f, 12.0f);
+        ImGuiWindowFlags ExtraFlags = 0;
+    };
+
+    struct FModernModalConfig
+    {
+        const char* PopupId = "##ModernModal";
+        ImVec2 TargetSize = ImVec2(640.0f, 440.0f);
+        ImVec2 Padding = ImVec2(0.0f, 0.0f);
+        float Rounding = 8.0f;
+        float ViewportMargin = 32.0f;
+        bool* Open = nullptr;
+        ImGuiWindowFlags ExtraFlags = 0;
+    };
+
+    struct FInteractiveCardConfig
+    {
+        const char* Id = "##InteractiveCard";
+        ImVec2 Size = ImVec2(0.0f, 54.0f);
+        bool Selected = false;
+        float Rounding = 6.0f;
+        bool ShowSelectionStrip = true;
+    };
+
+    struct FInteractiveCardState
+    {
+        bool Clicked = false;
+        bool Hovered = false;
+        ImVec2 Min{};
+        ImVec2 Max{};
+    };
+
     void ApplyProfessionalTheme();
-    void DrawBrandMark(ImDrawList* drawList, ImVec2 min, float size);
 
     // Styles the top-level entries of an app menu bar as ghost buttons. The
     // scope only affects menus opened through BeginMenu(), not popup entries.
@@ -128,21 +193,7 @@ namespace NextUI::Theme
     void PushToolWindowContentStyle();
     void PopToolWindowContentStyle();
     bool ModeRailButton(const char* icon, const char* tooltip, bool active, float buttonSize);
-    bool BeginSection(const char* icon, const char* label, bool defaultOpen = true);
-    void EndSection();
     void BeginFormRow(const char* label, float ratio = 0.40f, float minLabelWidth = 96.0f, float maxLabelWidth = 140.0f);
-    // Recessed panel: a darker child that reads as carved into the surface. Flat by default --
-    // the theme draws children borderless (ChildBorderSize is 0), and separation comes from the
-    // background step, not an outline. Pass border = true to opt an individual panel back in;
-    // that now restores the border size too, where previously it silently drew nothing.
-    bool BeginInsetPanel(const char* id, ImVec2 size = ImVec2(0.0f, 0.0f), bool border = false,
-                         ImGuiWindowFlags flags = 0, ImVec2 padding = ImVec2(10.0f, 10.0f),
-                         float backgroundAlpha = 0.30f);
-    void EndInsetPanel();
-    // Elevated card: rounded SurfaceElevated child with a visible border, sized to its content when
-    // height <= 0. Adds a small vertical gap before and after so stacked cards breathe.
-    void BeginCard(const char* id, float height = 0.0f, ImGuiWindowFlags flags = 0);
-    void EndCard();
     bool BeginOverlayPanel(const FOverlayPanelConfig& config);
     void EndOverlayPanel();
 
@@ -164,6 +215,138 @@ namespace NextUI::Theme
     bool SegmentedPills(const char* id, std::span<const FPillOption> options, int& value,
                         float totalWidth = -1.0f, float itemHeight = 22.0f);
 
+    bool SegmentedPillsIndexed(const char* id, std::span<const char* const> labels, int& selectedIndex,
+                               float totalWidth = -1.0f, float itemHeight = 22.0f);
+
+    template <typename T, typename LabelT>
+    bool SegmentedPills(const char* id, const std::vector<std::pair<T, LabelT>>& options, T& value,
+                        float totalWidth = -1.0f, float itemHeight = 22.0f)
+    {
+        if (options.empty())
+        {
+            return false;
+        }
+        std::vector<const char*> labels;
+        labels.reserve(options.size());
+        int selectedIndex = -1;
+        for (size_t i = 0; i < options.size(); ++i)
+        {
+            if constexpr (std::is_same_v<std::decay_t<LabelT>, std::string>)
+            {
+                labels.push_back(options[i].second.c_str());
+            }
+            else
+            {
+                labels.push_back(options[i].second);
+            }
+            if (options[i].first == value)
+            {
+                selectedIndex = static_cast<int>(i);
+            }
+        }
+        if (SegmentedPillsIndexed(id, labels, selectedIndex, totalWidth, itemHeight) &&
+            selectedIndex >= 0 && static_cast<size_t>(selectedIndex) < options.size())
+        {
+            value = options[static_cast<size_t>(selectedIndex)].first;
+            return true;
+        }
+        return false;
+    }
+
+    template <typename T, typename LabelT>
+    bool SegmentedPills(const char* id, const std::vector<std::pair<T, LabelT>>& options, T* value,
+                        float totalWidth = -1.0f, float itemHeight = 24.0f)
+    {
+        return value != nullptr && SegmentedPills(id, options, *value, totalWidth, itemHeight);
+    }
+
+    struct FPresetPill
+    {
+        const char* Label = "";
+        bool Selected = false;
+    };
+    // Renders a row of equal-width rounded preset buttons. Returns the clicked index, or -1 if none.
+    int PresetPills(const char* id, std::span<const FPresetPill> pills, float totalWidth = -1.0f,
+                    float itemHeight = 0.0f);
+
+    template <typename T>
+    bool PresetPills(const char* id, std::span<const std::pair<T, const char*>> presets, T* outValue,
+                     float itemHeight = 20.0f, float totalWidth = -1.0f)
+    {
+        if (presets.empty() || outValue == nullptr)
+        {
+            return false;
+        }
+        std::vector<FPresetPill> pills;
+        pills.reserve(presets.size());
+        for (const auto& [val, label] : presets)
+        {
+            pills.push_back(FPresetPill{label, false});
+        }
+        const int clicked = PresetPills(id, pills, totalWidth, itemHeight);
+        if (clicked >= 0 && static_cast<size_t>(clicked) < presets.size())
+        {
+            *outValue = presets[static_cast<size_t>(clicked)].first;
+            return true;
+        }
+        return false;
+    }
+
+    // DCC-style X/Y/Z 3-axis float drag with color-coded scrubbing tags, double-click per-axis reset,
+    // and right-aligned full reset button.
+    bool Draw3AxisFloatDrag(const char* label, float value[3], float speed = 0.1f,
+                            float min = 0.0f, float max = 0.0f, float resetValue = 0.0f,
+                            float labelWidth = 70.0f, const char* format = "%.3f");
+    inline bool Draw3AxisFloatDrag(const char* label, float value[3], float speed,
+                                   float min, float max, const char* format)
+    {
+        return Draw3AxisFloatDrag(label, value, speed, min, max, 0.0f, 70.0f, format);
+    }
+    inline bool Draw3AxisFloatDrag(const char* label, glm::vec3& value, float speed = 0.1f,
+                                   float min = 0.0f, float max = 0.0f, float resetValue = 0.0f,
+                                   float labelWidth = 70.0f, const char* format = "%.3f")
+    {
+        return Draw3AxisFloatDrag(label, &value.x, speed, min, max, resetValue, labelWidth, format);
+    }
+
+    // Standard form rows (left muted label + right control).
+    bool DrawSettingSliderRow(const char* label, ImGuiDataType dataType, void* value,
+                              const void* minValue, const void* maxValue, const char* format,
+                              float dragSpeed, float valueWidth = 84.0f);
+    bool DrawFloatSettingRow(const char* label, float* value, float minValue, float maxValue,
+                             const char* format = "%.2f", float dragSpeed = 0.01f, float valueWidth = 84.0f);
+    bool DrawIntSettingRow(const char* label, int* value, int minValue, int maxValue,
+                           const char* format = "%d", float valueWidth = 84.0f);
+    bool DrawCheckboxSettingRow(const char* label, bool* value);
+
+    template <typename DrawControl>
+    bool DrawSettingRow(const char* label, DrawControl&& drawControl)
+    {
+        ImGui::PushID(label);
+        BeginFormRow(label);
+        const bool changed = drawControl();
+        ImGui::PopID();
+        return changed;
+    }
+
+    template <typename DrawComboBody>
+    bool DrawComboSettingRow(const char* label, const char* preview, DrawComboBody&& drawComboBody)
+    {
+        bool changed = false;
+        DrawSettingRow(label,
+                       [&]()
+                       {
+                           ImGui::SetNextItemWidth(-FLT_MIN);
+                           if (ImGui::BeginCombo("##Value", preview))
+                           {
+                               changed = drawComboBody();
+                               ImGui::EndCombo();
+                           }
+                           return changed;
+                       });
+        return changed;
+    }
+
     // Places the next item on the same line, right-aligned to the window content edge.
     // Falls back to a plain SameLine() when the row is too narrow to hold the group.
     void SameLineRightAligned(float groupWidth, float minLeadingGap = 30.0f);
@@ -181,6 +364,17 @@ namespace NextUI::Theme
     bool BeginDetailPanel(const FDetailPanelConfig& config);
     void EndDetailPanel();
 
+    bool BeginCollapsibleSidePanel(const FCollapsibleSidePanelConfig& config);
+    void EndCollapsibleSidePanel();
+
+    bool BeginModernModal(const FModernModalConfig& config);
+    void EndModernModal();
+    // Renders the 56px flat header bar at the top of a borderless modal. Returns true if the close X button was pressed.
+    bool DrawModalHeader(const char* icon, const char* title, const char* subtitle = nullptr,
+                         ImFont* titleFont = nullptr, bool allowClose = true);
+
+    FInteractiveCardState DrawInteractiveCard(const FInteractiveCardConfig& config);
+
     // Collapsible section inside a floating panel: chevron + title row, no border background.
     bool BeginPanelSection(const char* label, bool defaultOpen = true);
     void EndPanelSection();
@@ -194,7 +388,8 @@ namespace NextUI::Theme
                    float scaleMin = FLT_MAX, float scaleMax = FLT_MAX,
                    bool baselineAtZero = false);
 
-    void DrawPanelHeader(const char* icon, const char* title, const char* subtitle = nullptr);
+    void DrawPanelHeader(const char* icon, const char* title, const char* subtitle = nullptr,
+                         const char* badgeText = nullptr, ImVec4 badgeColor = ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
     void DrawThinSeparator(float alpha = 1.0f);
     void DrawVerticalSeparator(float height = 18.0f, float spacing = 12.0f, float alpha = 0.9f);
     void DrawProgressBar(float fraction, ImVec4 color, ImVec2 size);

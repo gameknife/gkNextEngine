@@ -17,66 +17,14 @@ namespace Modules::NextDotNet
 {
     using NextUI::Foundation::Color;
     using NextUI::Foundation::ColorU32;
+    using NextUI::Foundation::DrawAnimatedProgressBar;
+    using NextUI::Foundation::DrawSmoothSpinner;
     using NextUI::Foundation::EColor;
 
     namespace
     {
         constexpr float kModalWidth = 500.0f;
         constexpr float kModalHeight = 270.0f;
-
-        void DrawSmoothSpinner(ImDrawList* drawList, ImVec2 center, float radius, float thickness, ImU32 color)
-        {
-            constexpr int numSegments = 36;
-            const float startAngle = static_cast<float>(ImGui::GetTime() * 6.0);
-            constexpr float sweepAngle = 1.6f * 3.14159265f;
-
-            // Background subtle track
-            drawList->AddCircle(center, radius, ColorU32(EColor::Border, 0.35f), numSegments, thickness);
-
-            // Rotating active arc
-            const int arcSegments = static_cast<int>(numSegments * (sweepAngle / (2.0f * 3.14159265f)));
-            const float angleStep = sweepAngle / static_cast<float>(arcSegments);
-
-            for (int i = 0; i < arcSegments; ++i)
-            {
-                const float a0 = startAngle + static_cast<float>(i) * angleStep;
-                const float a1 = startAngle + static_cast<float>(i + 1) * angleStep;
-                const float alpha = static_cast<float>(i + 1) / static_cast<float>(arcSegments);
-
-                // Fade in along the arc tail
-                const ImVec4 baseCol = ImGui::ColorConvertU32ToFloat4(color);
-                const ImU32 segCol = ImGui::ColorConvertFloat4ToU32(
-                    ImVec4(baseCol.x, baseCol.y, baseCol.z, baseCol.w * (0.2f + 0.8f * alpha)));
-
-                drawList->AddLine(
-                    ImVec2(center.x + std::cos(a0) * radius, center.y + std::sin(a0) * radius),
-                    ImVec2(center.x + std::cos(a1) * radius, center.y + std::sin(a1) * radius),
-                    segCol, thickness);
-            }
-        }
-
-        void DrawAnimatedProgressBar(ImDrawList* drawList, ImVec2 barMin, ImVec2 barMax, ImU32 fillCol)
-        {
-            const float width = barMax.x - barMin.x;
-            const float height = barMax.y - barMin.y;
-            const float rounding = height * 0.5f;
-
-            // Background trough
-            drawList->AddRectFilled(barMin, barMax, ColorU32(EColor::Background, 0.75f), rounding);
-            drawList->AddRect(barMin, barMax, ColorU32(EColor::Border, 0.40f), rounding, 0, 1.0f);
-
-            // Pulsing / moving highlight segment
-            constexpr float pulseWidthRatio = 0.38f;
-            const float pulseWidth = width * pulseWidthRatio;
-            const float travelDist = width - pulseWidth;
-            const float t = 0.5f + 0.5f * std::sin(static_cast<float>(ImGui::GetTime() * 3.2));
-            const float pulseLeft = barMin.x + travelDist * t;
-            const float pulseRight = pulseLeft + pulseWidth;
-
-            drawList->PushClipRect(barMin, barMax, true);
-            drawList->AddRectFilled(ImVec2(pulseLeft, barMin.y), ImVec2(pulseRight, barMax.y), fillCol, rounding);
-            drawList->PopClipRect();
-        }
     }
 
     FManagedProjectBuilder::FManagedProjectBuilder() = default;
@@ -369,25 +317,18 @@ namespace Modules::NextDotNet
             ImGui::OpenPopup(popupId);
         }
 
-        const ImGuiViewport* viewport = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(ImVec2(viewport->GetCenter().x, viewport->GetCenter().y), ImGuiCond_Appearing,
-                                ImVec2(0.5f, 0.5f));
-        ImGui::SetNextWindowSize(ImVec2(kModalWidth, kModalHeight), ImGuiCond_Always);
-
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20.0f, 18.0f));
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, Color(EColor::Surface, 0.98f));
-        ImGui::PushStyleColor(ImGuiCol_Border, Color(EColor::Border, 0.85f));
-        ImGui::PushStyleColor(ImGuiCol_PopupBg, Color(EColor::Surface, 0.98f));
-
-        const ImGuiWindowFlags flags = ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar |
-                                       ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
-
         bool stayOpen = true;
         bool dismissed = false;
 
-        if (ImGui::BeginPopupModal(popupId, &stayOpen, flags))
+        NextUI::Theme::FModernModalConfig modalConfig{};
+        modalConfig.PopupId = popupId;
+        modalConfig.TargetSize = ImVec2(kModalWidth, kModalHeight);
+        modalConfig.Padding = ImVec2(20.0f, 18.0f);
+        modalConfig.Rounding = 8.0f;
+        modalConfig.Open = &stayOpen;
+        modalConfig.ExtraFlags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+
+        if (NextUI::Theme::BeginModernModal(modalConfig))
         {
             const float availWidth = ImGui::GetContentRegionAvail().x;
             DrawProgressCore(availWidth, false);
@@ -437,11 +378,8 @@ namespace Modules::NextDotNet
                 ImGui::TextColored(Color(EColor::TextDim), ICON_FA_ROTATE "  Compiling in background...");
             }
 
-            ImGui::EndPopup();
+            NextUI::Theme::EndModernModal();
         }
-
-        ImGui::PopStyleColor(3);
-        ImGui::PopStyleVar(3);
 
         return dismissed;
     }

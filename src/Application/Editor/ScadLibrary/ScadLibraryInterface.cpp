@@ -24,6 +24,7 @@
 #include "Engine/Utilities/Math.hpp"
 #include "Engine/Vulkan/SwapChain.hpp"
 #include "Modules/DevTools/UiDevPanels.hpp"
+#include "Modules/NextUI/FontLoader.hpp"
 #include "Modules/NextUI/UI/DesktopUI.hpp"
 #include "Modules/ScadLoader/FScadEvaluator.h"
 #include "Modules/ScadLoader/FScadLexer.h"
@@ -35,7 +36,6 @@
 
 #include <SDL3/SDL_dialog.h>
 #include <imgui.h>
-#include <imgui_freetype.h>
 #include <imgui_stdlib.h>
 
 #include <algorithm>
@@ -79,32 +79,9 @@ namespace ScadLibrary
         constexpr float kBenchGridStep = 14.0f;
         constexpr const char* kScadKitDragDropPayload = "SCAD_LIBRARY_KIT_MODULE";
 
-        void BeginCard(const char* id, float height = 0.0f, ImGuiWindowFlags extraFlags = 0)
-        {
-            ImGui::Dummy(ImVec2(0.0f, 2.0f));
-            const float cardWidth = std::max(0.0f, ImGui::GetContentRegionAvail().x - 2.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 8.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceElevated, 0.38f));
-            ImGui::PushStyleColor(ImGuiCol_Border, NextUI::Theme::Color(NextUI::Theme::EColor::Border, 0.75f));
-            if (height > 0.0f)
-            {
-                ImGui::BeginChild(id, ImVec2(cardWidth, height), ImGuiChildFlags_Borders, extraFlags);
-            }
-            else
-            {
-                ImGui::BeginChild(id, ImVec2(cardWidth, 0.0f), ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY, extraFlags);
-            }
-            ImGui::PopStyleColor(2);
-            ImGui::PopStyleVar(3);
-        }
-
-        void EndCard()
-        {
-            ImGui::EndChild();
-            ImGui::Dummy(ImVec2(0.0f, 4.0f));
-        }
+        using NextUI::Theme::BeginCard;
+        using NextUI::Theme::EndCard;
+        using NextUI::Theme::Draw3AxisFloatDrag;
 
         void DrawCardHeader(const char* icon, const char* title, const char* badge = nullptr)
         {
@@ -121,122 +98,12 @@ namespace ScadLibrary
         bool DrawSegmentedPills(const char* id, const std::vector<std::pair<T, std::string>>& options,
                                 T* currentValue, float totalWidth = -1.0f, float itemHeight = 26.0f)
         {
-            if (options.empty() || currentValue == nullptr) return false;
-
-            ImGui::PushID(id);
-            const float availWidth = totalWidth > 0.0f ? totalWidth : ImGui::GetContentRegionAvail().x;
-            constexpr float spacing = 4.0f;
-            const float itemWidth = std::max(24.0f, (availWidth - spacing * static_cast<float>(options.size() - 1)) / static_cast<float>(options.size()));
-
-            bool changed = false;
-            for (size_t i = 0; i < options.size(); ++i)
-            {
-                if (i > 0)
-                {
-                    ImGui::SameLine(0.0f, spacing);
-                }
-                const bool isSelected = (*currentValue == options[i].first);
-
-                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
-                if (isSelected)
-                {
-                    ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::Accent, 0.85f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Theme::Color(NextUI::Theme::EColor::Accent));
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-                }
-                else
-                {
-                    ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceElevated, 0.45f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceHover, 0.70f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceHover));
-                    ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted));
-                }
-
-                if (ImGui::Button(options[i].second.c_str(), ImVec2(itemWidth, itemHeight)))
-                {
-                    if (!isSelected)
-                    {
-                        *currentValue = options[i].first;
-                        changed = true;
-                    }
-                }
-                ImGui::PopStyleColor(4);
-                ImGui::PopStyleVar();
-            }
-            ImGui::PopID();
-            return changed;
-        }
-
-        bool Draw3AxisFloatDrag(const char* label, float values[3], float speed = 0.1f,
-                                float min = 0.0f, float max = 0.0f, const char* format = "%.2f")
-        {
-            ImGui::PushID(label);
-            const float availWidth = ImGui::GetContentRegionAvail().x;
-            const float labelWidth = 52.0f;
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextUnformatted(label);
-            ImGui::SameLine(labelWidth);
-
-            const float inputAreaWidth = availWidth - labelWidth;
-            constexpr float tagWidth = 18.0f;
-            constexpr float spacing = 3.0f;
-            const float itemWidth = std::max(20.0f, (inputAreaWidth - (tagWidth + spacing) * 3 - spacing * 2) / 3.0f);
-
-            bool changed = false;
-            struct FAxisDef {
-                const char* name;
-                ImVec4 tagBg;
-                ImVec4 tagText;
-            };
-            const FAxisDef axes[3] = {
-                {"X", ImVec4(0.55f, 0.18f, 0.18f, 0.85f), ImVec4(1.0f, 0.75f, 0.75f, 1.0f)},
-                {"Y", ImVec4(0.18f, 0.50f, 0.22f, 0.85f), ImVec4(0.75f, 1.0f, 0.75f, 1.0f)},
-                {"Z", ImVec4(0.18f, 0.32f, 0.65f, 0.85f), ImVec4(0.75f, 0.88f, 1.0f, 1.0f)}
-            };
-
-            for (int i = 0; i < 3; ++i)
-            {
-                if (i > 0)
-                {
-                    ImGui::SameLine(0.0f, spacing);
-                }
-                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
-                ImGui::PushStyleColor(ImGuiCol_Button, axes[i].tagBg);
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, axes[i].tagBg);
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, axes[i].tagBg);
-                ImGui::PushStyleColor(ImGuiCol_Text, axes[i].tagText);
-                ImGui::Button(axes[i].name, ImVec2(tagWidth, ImGui::GetFrameHeight()));
-                ImGui::PopStyleColor(4);
-                ImGui::PopStyleVar();
-
-                ImGui::SameLine(0.0f, 1.0f);
-                ImGui::SetNextItemWidth(itemWidth);
-                const std::string inputId = fmt::format("##axis_{}", axes[i].name);
-                if (ImGui::DragFloat(inputId.c_str(), &values[i], speed, min, max, format))
-                {
-                    changed = true;
-                }
-            }
-            ImGui::PopID();
-            return changed;
+            return NextUI::Theme::SegmentedPills(id, options, currentValue, totalWidth, itemHeight);
         }
 
         void DrawTagChip(const char* label, const ImVec4& color, const char* tooltip = nullptr)
         {
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(5.0f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(color.x, color.y, color.z, 0.18f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(color.x, color.y, color.z, 0.28f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(color.x, color.y, color.z, 0.35f));
-            ImGui::PushStyleColor(ImGuiCol_Text, color);
-            ImGui::SmallButton(label);
-            if (tooltip && ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("%s", tooltip);
-            }
-            ImGui::PopStyleColor(4);
-            ImGui::PopStyleVar(2);
+            NextUI::Theme::TagChip(label, color, tooltip);
         }
 
         struct FScadKitDragPayload
@@ -1829,38 +1696,7 @@ namespace ScadLibrary
     void ScadLibraryInterface::Init()
     {
         NextUI::Theme::ApplyProfessionalTheme();
-        // ScadLibrary uses a deliberately flatter editor treatment than the
-        // general-purpose engine UI: restrained rounding, quiet borders and
-        // denser controls keep the scene itself visually dominant.
-        ImGuiStyle& style = ImGui::GetStyle();
-        style.WindowRounding = 0.0f;
-        style.ChildRounding = 3.0f;
-        style.FrameRounding = 3.0f;
-        style.PopupRounding = 4.0f;
-        style.ScrollbarRounding = 3.0f;
-        style.GrabRounding = 3.0f;
-        style.TabRounding = 3.0f;
-        style.FrameBorderSize = 0.0f;
-        style.ChildBorderSize = 1.0f;
-        style.ItemSpacing = ImVec2(7.0f, 6.0f);
-        style.FramePadding = ImVec2(8.0f, 5.0f);
-        style.Colors[ImGuiCol_WindowBg] = ImVec4(0.075f, 0.083f, 0.094f, 0.985f);
-        style.Colors[ImGuiCol_ChildBg] = ImVec4(0.045f, 0.050f, 0.058f, 0.52f);
-        style.Colors[ImGuiCol_FrameBg] = ImVec4(0.045f, 0.050f, 0.058f, 0.96f);
-        style.Colors[ImGuiCol_Border] = ImVec4(0.20f, 0.22f, 0.25f, 0.72f);
-        ImGuiIO& io = ImGui::GetIO();
-        // The vcpkg imgui is built with the FreeType feature, so the font atlas must
-        // use the FreeType builder (matches ScadStudio/gkNextEditor).
-        io.Fonts->SetFontLoader(ImGuiFreeType::GetFontLoader());
-        io.Fonts->FontLoaderFlags = ImGuiFreeTypeLoaderFlags_NoHinting;
-
-        const std::string fontPath = Utilities::FileHelper::GetPlatformFilePath("assets/fonts/DroidSansFallback.ttf");
-        ImFont* font =
-            io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 18.0f, nullptr, io.Fonts->GetGlyphRangesChineseFull());
-        if (font == nullptr)
-        {
-            io.Fonts->AddFontDefault();
-        }
+        NextUI::FontLoader::LoadDefaultUiFont("assets/fonts/Roboto-Regular.ttf", 18.0f);
     }
 
     void ScadLibraryInterface::SetWorkspaceMode(EWorkspaceMode mode)
@@ -1971,13 +1807,7 @@ namespace ScadLibrary
             viewportSize_ = {kitBrowserViewportSize.x, kitBrowserViewportSize.y};
             sceneToolbarVisible_ = false;
             DrawViewportAxis(kitBrowserViewportPos, kitBrowserViewportSize);
-            const NextUI::Scaling::FViewportRect framebufferViewport =
-                NextUI::Scaling::ImGuiToMainFramebufferViewport(kitBrowserViewportPos, kitBrowserViewportSize);
-            engine_.GetRenderer().SwapChain().UpdateOutputViewport(
-                Utilities::Math::floorToInt(framebufferViewport.Position.x),
-                Utilities::Math::floorToInt(framebufferViewport.Position.y),
-                Utilities::Math::ceilToInt(framebufferViewport.Size.x),
-                Utilities::Math::ceilToInt(framebufferViewport.Size.y));
+            NextUI::Scaling::SyncImGuiViewportToSwapChain(engine_, kitBrowserViewportPos, kitBrowserViewportSize);
             return;
         }
 
@@ -2076,16 +1906,11 @@ namespace ScadLibrary
             ReloadDesigner();
         }
 
-        const NextUI::Scaling::FViewportRect framebufferViewport =
-            NextUI::Scaling::ImGuiToMainFramebufferViewport(
-                ImVec2(viewport->Pos.x + leftWidth, viewport->Pos.y + kTitleBarHeight),
-                ImVec2(std::max(1.0f, viewport->Size.x - leftWidth - rightWidth),
-                       std::max(1.0f, panelHeight - timelineHeight)));
-        engine_.GetRenderer().SwapChain().UpdateOutputViewport(
-            Utilities::Math::floorToInt(framebufferViewport.Position.x),
-            Utilities::Math::floorToInt(framebufferViewport.Position.y),
-            Utilities::Math::ceilToInt(framebufferViewport.Size.x),
-            Utilities::Math::ceilToInt(framebufferViewport.Size.y));
+        NextUI::Scaling::SyncImGuiViewportToSwapChain(
+            engine_,
+            ImVec2(viewport->Pos.x + leftWidth, viewport->Pos.y + kTitleBarHeight),
+            ImVec2(std::max(1.0f, viewport->Size.x - leftWidth - rightWidth),
+                   std::max(1.0f, panelHeight - timelineHeight)));
     }
 
     bool ScadLibraryInterface::ConsumeFocusSelectedRequest()
@@ -2926,22 +2751,16 @@ namespace ScadLibrary
 
     void ScadLibraryInterface::DrawBrowserPanel(const ImVec2& pos, const ImVec2& size)
     {
-        ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
-        ImGui::SetNextWindowSize(size, ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(0.96f);
-        const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking;
-
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, browserCollapsed_ ? ImVec2(7.0f, 8.0f) : ImVec2(12.0f, 12.0f));
-        if (!ImGui::Begin("##ScadLibraryBrowser", nullptr, flags))
+        NextUI::Theme::FCollapsibleSidePanelConfig sideConfig{};
+        sideConfig.WindowId = "##ScadLibraryBrowser";
+        sideConfig.Position = pos;
+        sideConfig.Size = size;
+        sideConfig.Collapsed = browserCollapsed_;
+        if (!NextUI::Theme::BeginCollapsibleSidePanel(sideConfig))
         {
-            ImGui::End();
-            ImGui::PopStyleVar(3);
+            NextUI::Theme::EndCollapsibleSidePanel();
             return;
         }
-        ImGui::PopStyleVar(3);
 
         if (browserCollapsed_)
         {
@@ -2949,7 +2768,7 @@ namespace ScadLibrary
             {
                 browserCollapsed_ = false;
             }
-            ImGui::End();
+            NextUI::Theme::EndCollapsibleSidePanel();
             return;
         }
 
@@ -3347,7 +3166,7 @@ namespace ScadLibrary
         {
             DrawStructureOutliner();
         }
-        ImGui::End();
+        NextUI::Theme::EndCollapsibleSidePanel();
     }
 
     void ScadLibraryInterface::DrawBoneHierarchyPanel(const ImVec2& pos, const ImVec2& size)
@@ -3494,22 +3313,16 @@ namespace ScadLibrary
 
     void ScadLibraryInterface::DrawModePanel(const ImVec2& pos, const ImVec2& size)
     {
-        ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
-        ImGui::SetNextWindowSize(size, ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(0.96f);
-        const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking;
-
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, benchCollapsed_ ? ImVec2(7.0f, 8.0f) : ImVec2(12.0f, 12.0f));
-        if (!ImGui::Begin("##ScadLibraryBench", nullptr, flags))
+        NextUI::Theme::FCollapsibleSidePanelConfig sideConfig{};
+        sideConfig.WindowId = "##ScadLibraryBench";
+        sideConfig.Position = pos;
+        sideConfig.Size = size;
+        sideConfig.Collapsed = benchCollapsed_;
+        if (!NextUI::Theme::BeginCollapsibleSidePanel(sideConfig))
         {
-            ImGui::End();
-            ImGui::PopStyleVar(3);
+            NextUI::Theme::EndCollapsibleSidePanel();
             return;
         }
-        ImGui::PopStyleVar(3);
 
         if (benchCollapsed_)
         {
@@ -3517,7 +3330,7 @@ namespace ScadLibrary
             {
                 benchCollapsed_ = false;
             }
-            ImGui::End();
+            NextUI::Theme::EndCollapsibleSidePanel();
             return;
         }
 
@@ -3583,7 +3396,7 @@ namespace ScadLibrary
         {
             DrawAIContent();
         }
-        ImGui::End();
+        NextUI::Theme::EndCollapsibleSidePanel();
     }
 
     AI::FScadAIEditTarget ScadLibraryInterface::ResolveAITarget() const

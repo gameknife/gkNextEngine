@@ -5,6 +5,8 @@
 #include "CityTimeSystem.h"
 #include "TrafficSystem.h"
 #include "Gameplay/Sim/AnchorDebugOverlay.h"
+#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Modules/NextUI/UI/UiHud.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -23,21 +25,7 @@ namespace CitySolSim
         bool ProjectCityPoint(const glm::mat4& viewProjection, const ImGuiViewport& viewport,
                               const glm::vec3& world, ImVec2& outScreen)
         {
-            const glm::vec4 clip = viewProjection * glm::vec4(world, 1.0f);
-            if (clip.w <= 0.0f)
-            {
-                return false;
-            }
-            const glm::vec3 ndc = glm::vec3(clip) / clip.w;
-            if (std::abs(ndc.x) > 1.0f || std::abs(ndc.y) > 1.0f)
-            {
-                return false;
-            }
-            outScreen = {
-                viewport.Pos.x + (ndc.x * 0.5f + 0.5f) * viewport.Size.x,
-                viewport.Pos.y + (-ndc.y * 0.5f + 0.5f) * viewport.Size.y,
-            };
-            return true;
+            return NextUI::Hud::TryProjectWorldToScreen(viewProjection, viewport.Pos, viewport.Size, world, outScreen, 1.0f);
         }
 
         const std::vector<NextGameplay::Sim::FAnchorDebugPoint>& CityDebugPoints()
@@ -106,26 +94,24 @@ namespace CitySolSim
         {
             time.PausedRef() = !time.PausedRef();
         }
+        ImGui::SameLine();
         const float speeds[] = {Config::kDefaultTimeScale, Config::kDefaultTimeScale * 4.0f,
                                 Config::kDefaultTimeScale * 16.0f};
-        const char* speedLabels[] = {"1x", "4x", "16x"};
+        static constexpr std::array<const char*, 3> speedLabels = {"1x", "4x", "16x"};
+        int selectedSpeedIndex = -1;
         for (int i = 0; i < 3; ++i)
         {
-            ImGui::SameLine();
-            const bool active = std::abs(time.TimeScaleRef() - speeds[i]) < 0.1f;
-            if (active)
+            if (std::abs(time.TimeScaleRef() - speeds[i]) < 0.1f)
             {
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.48f, 0.72f, 1.0f));
+                selectedSpeedIndex = i;
+                break;
             }
-            if (ImGui::Button(speedLabels[i]))
-            {
-                time.TimeScaleRef() = speeds[i];
-                time.PausedRef() = false;
-            }
-            if (active)
-            {
-                ImGui::PopStyleColor();
-            }
+        }
+        if (NextUI::Theme::SegmentedPillsIndexed("##CitySpeedPills", speedLabels, selectedSpeedIndex, 130.0f, 24.0f) &&
+            selectedSpeedIndex >= 0)
+        {
+            time.TimeScaleRef() = speeds[selectedSpeedIndex];
+            time.PausedRef() = false;
         }
         ImGui::SameLine();
         if (ImGui::Button("+1 小时"))

@@ -83,22 +83,6 @@ namespace
         }
         return "Managed .NET 9 Game Module";
     }
-
-    void DrawPillBadge(const char* icon, const char* label, ImVec4 bgCol, ImVec4 textCol, ImVec4 borderCol)
-    {
-        const std::string text = icon != nullptr && icon[0] != '\0' ? fmt::format("{} {}", icon, label) : std::string(label);
-        const ImVec2 textSize = ImGui::CalcTextSize(text.c_str());
-        const ImVec2 padding(8.0f, 3.0f);
-        const ImVec2 size(textSize.x + padding.x * 2.0f, textSize.y + padding.y * 2.0f);
-
-        const ImVec2 pos = ImGui::GetCursorScreenPos();
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        drawList->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), ImGui::GetColorU32(bgCol), 4.0f);
-        drawList->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), ImGui::GetColorU32(borderCol), 4.0f, 0, 1.0f);
-        drawList->AddText(ImVec2(pos.x + padding.x, pos.y + padding.y), ImGui::GetColorU32(textCol), text.c_str());
-
-        ImGui::Dummy(size);
-    }
 }
 
 LauncherGameInstance::LauncherGameInstance(Vulkan::WindowConfig& config,

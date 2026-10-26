@@ -1,13 +1,11 @@
 #include "Engine/Common/CoreMinimal.hpp"
 
 #include "Modules/NextUI/UI/DesktopUI.hpp"
-#include "Modules/NextUI/UI/AppChrome.hpp"
-#include "Modules/NextUI/UI/UiContainers.hpp"
-#include "Modules/NextUI/UI/UiWidgets.hpp"
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/Interface/UserInterface.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <imgui_internal.h>
 #include <fmt/format.h>
 #include <ThirdParty/fontawesome/IconsFontAwesome6.h>
@@ -16,9 +14,6 @@ namespace NextUI::Theme
 {
     namespace
     {
-        constexpr float kTitleBarControlButtonWidth = 46.0f;
-        constexpr float kTitleBarControlButtonCount = 3.0f;
-        constexpr float kTitleBarControlsWidth = kTitleBarControlButtonWidth * kTitleBarControlButtonCount;
         constexpr const char* kBrandIconAssetPath = "assets/brand/gknext_logo_icon.png";
         constexpr const char* kBrandIconAssetPath125 = "assets/brand/gknext_logo_icon_125.png";
         constexpr const char* kBrandIconAssetPath150 = "assets/brand/gknext_logo_icon_150.png";
@@ -47,32 +42,6 @@ namespace NextUI::Theme
                 return kBrandIconAssetPath125;
             }
             return kBrandIconAssetPath;
-        }
-
-        float CalcFontTextWidth(ImFont* font, const char* text)
-        {
-            if (text == nullptr || text[0] == '\0')
-            {
-                return 0.0f;
-            }
-
-            ImFont* activeFont = font != nullptr ? font : ImGui::GetFont();
-            return activeFont->CalcTextSizeA(activeFont->LegacySize, FLT_MAX, 0.0f, text).x;
-        }
-
-        bool DrawWindowControlButton(const char* label, const char* tooltip, ImVec2 size, ImVec4 hoverColor,
-                                     ImVec4 activeColor)
-        {
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverColor);
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, activeColor);
-            const bool pressed = ImGui::Button(label, size);
-            ImGui::PopStyleColor(3);
-            ImGui::PopStyleVar(2);
-            DrawTooltip(tooltip);
-            return pressed;
         }
 
         void DrawBrandIcon(NextEngine& engine, ImDrawList* drawList, ImVec2 min, float size)
@@ -114,17 +83,6 @@ namespace NextUI::Theme
             drawList->AddImage(texture.textureId, drawMin, drawMax, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f),
                                ImGui::GetColorU32(ImGuiCol_Text));
         }
-
-        float CalcFormLabelWidth(float contentWidth, float ratio, float minLabelWidth, float maxLabelWidth)
-        {
-            return std::clamp(contentWidth * ratio, minLabelWidth, maxLabelWidth);
-        }
-
-        float CalcBadgeWidth(const char* label)
-        {
-            const float textWidth = ImGui::CalcTextSize(label != nullptr ? label : "").x;
-            return textWidth + 14.0f;
-        }
     } // namespace
 
     ImFont* GetDefaultFont(NextEngine& engine)
@@ -148,28 +106,6 @@ namespace NextUI::Theme
     void ApplyProfessionalTheme()
     {
         Foundation::ApplyTheme();
-    }
-
-    void DrawBrandMark(ImDrawList* drawList, ImVec2 min, float size)
-    {
-        if (drawList == nullptr)
-        {
-            return;
-        }
-
-        const ImVec2 max(min.x + size, min.y + size);
-        const float rounding = std::max(3.0f, size * 0.18f);
-        drawList->AddRectFilled(min, max, ColorU32(EColor::Brand, 0.16f), rounding);
-        drawList->AddRect(min, max, ColorU32(EColor::Brand, 0.92f), rounding, 0, 1.5f);
-
-        const float pad = size * 0.24f;
-        const float stroke = std::max(2.0f, size * 0.10f);
-        const ImU32 lineColor = ColorU32(EColor::Brand);
-        drawList->AddLine(ImVec2(min.x + pad, min.y + size - pad), ImVec2(min.x + pad, min.y + pad), lineColor, stroke);
-        drawList->AddLine(ImVec2(min.x + pad, min.y + pad), ImVec2(min.x + size * 0.52f, min.y + pad), lineColor, stroke);
-        drawList->AddLine(ImVec2(min.x + size * 0.52f, min.y + pad), ImVec2(min.x + size * 0.52f, min.y + size - pad), lineColor, stroke);
-        drawList->AddLine(ImVec2(min.x + size * 0.52f, min.y + size - pad), ImVec2(min.x + size - pad, min.y + size - pad), lineColor, stroke);
-        drawList->AddLine(ImVec2(min.x + size - pad, min.y + size - pad), ImVec2(min.x + size - pad, min.y + pad), lineColor, stroke);
     }
 
     FMainMenuGhostScope::FMainMenuGhostScope() : drawList_(ImGui::GetWindowDrawList())
@@ -414,52 +350,26 @@ namespace NextUI::Theme
         Foundation::LabeledRow(label, ratio, minLabelWidth, maxLabelWidth);
     }
 
-    bool BeginInsetPanel(const char* id, ImVec2 size, bool border, ImGuiWindowFlags flags, ImVec2 padding,
-                         float backgroundAlpha)
+    bool BeginOverlayPanel(const FOverlayPanelConfig& config)
     {
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, Color(EColor::Background, backgroundAlpha));
-        ImGui::PushStyleColor(ImGuiCol_Border, Color(EColor::Border, 0.82f));
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, padding);
-        // ChildBorderSize is 0 in this theme, so ImGuiChildFlags_Borders alone would draw nothing;
-        // a caller that asks for a border gets the size restored with it. The padding is requested
-        // explicitly either way -- ImGui otherwise ties it to the border flag, so dropping the
-        // border would silently drop the inset padding and shift every child's contents.
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, border ? 1.0f : 0.0f);
-        const ImGuiChildFlags childFlags = ImGuiChildFlags_AlwaysUseWindowPadding |
-            (border ? ImGuiChildFlags_Borders : ImGuiChildFlags_None);
-        const bool visible = ImGui::BeginChild(id, size, childFlags, flags);
-        ImGui::PopStyleVar();
-        return visible;
+        Foundation::FOverlayPanelOptions options;
+        options.windowId = config.WindowId;
+        options.position = config.Position;
+        options.size = config.Size;
+        options.padding = config.Padding;
+        options.itemSpacing = config.ItemSpacing;
+        options.rounding = config.Rounding;
+        options.borderSize = config.BorderSize;
+        options.borderAlpha = config.BorderAlpha;
+        options.backgroundAlpha = config.BackgroundAlpha;
+        options.backgroundColor = config.BackgroundColor;
+        options.extraFlags = config.ExtraFlags;
+        return Foundation::BeginOverlayPanel(options);
     }
 
-    void EndInsetPanel()
+    void EndOverlayPanel()
     {
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor(2);
-    }
-
-    void BeginCard(const char* id, float height, ImGuiWindowFlags flags)
-    {
-        ImGui::Dummy(ImVec2(0.0f, 2.0f));
-        const float width = std::max(0.0f, ImGui::GetContentRegionAvail().x - 2.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 8.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, Color(EColor::SurfaceElevated, 0.40f));
-        ImGui::PushStyleColor(ImGuiCol_Border, Color(EColor::Border, 0.70f));
-        const ImGuiChildFlags childFlags = height > 0.0f
-            ? ImGuiChildFlags_Borders
-            : ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY;
-        ImGui::BeginChild(id, ImVec2(width, std::max(0.0f, height)), childFlags, flags);
-        ImGui::PopStyleColor(2);
-        ImGui::PopStyleVar(3);
-    }
-
-    void EndCard()
-    {
-        ImGui::EndChild();
-        ImGui::Dummy(ImVec2(0.0f, 3.0f));
+        Foundation::EndOverlayPanel();
     }
 
     void DrawSelectionAccentStrip(ImVec2 itemMin, ImVec2 itemMax, float verticalPadding,
@@ -489,10 +399,10 @@ namespace NextUI::Theme
         ImGui::PopStyleVar(2);
     }
 
-    bool SegmentedPills(const char* id, std::span<const FPillOption> options, int& value, float totalWidth,
-                        float itemHeight)
+    bool SegmentedPillsIndexed(const char* id, std::span<const char* const> labels, int& selectedIndex,
+                               float totalWidth, float itemHeight)
     {
-        if (options.empty())
+        if (labels.empty())
         {
             return false;
         }
@@ -500,17 +410,17 @@ namespace NextUI::Theme
         ImGui::PushID(id);
         const float available = totalWidth > 0.0f ? totalWidth : ImGui::GetContentRegionAvail().x;
         constexpr float spacing = 3.0f;
-        const float count = static_cast<float>(options.size());
+        const float count = static_cast<float>(labels.size());
         const float itemWidth = std::max(20.0f, (available - spacing * (count - 1.0f)) / count);
 
         bool changed = false;
-        for (size_t i = 0; i < options.size(); ++i)
+        for (size_t i = 0; i < labels.size(); ++i)
         {
             if (i > 0)
             {
                 ImGui::SameLine(0.0f, spacing);
             }
-            const bool selected = value == options[i].Value;
+            const bool selected = selectedIndex == static_cast<int>(i);
 
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
             if (selected)
@@ -528,9 +438,10 @@ namespace NextUI::Theme
                 ImGui::PushStyleColor(ImGuiCol_Text, Color(EColor::TextMuted));
             }
 
-            if (ImGui::Button(options[i].Label, ImVec2(itemWidth, itemHeight)) && !selected)
+            const char* label = labels[i] != nullptr ? labels[i] : "";
+            if (ImGui::Button(label, ImVec2(itemWidth, itemHeight)) && !selected)
             {
-                value = options[i].Value;
+                selectedIndex = static_cast<int>(i);
                 changed = true;
             }
             ImGui::PopStyleColor(4);
@@ -538,6 +449,278 @@ namespace NextUI::Theme
         }
         ImGui::PopID();
         return changed;
+    }
+
+    bool SegmentedPills(const char* id, std::span<const FPillOption> options, int& value, float totalWidth,
+                        float itemHeight)
+    {
+        if (options.empty())
+        {
+            return false;
+        }
+        std::vector<const char*> labels;
+        labels.reserve(options.size());
+        int selectedIndex = -1;
+        for (size_t i = 0; i < options.size(); ++i)
+        {
+            labels.push_back(options[i].Label);
+            if (options[i].Value == value)
+            {
+                selectedIndex = static_cast<int>(i);
+            }
+        }
+        if (SegmentedPillsIndexed(id, labels, selectedIndex, totalWidth, itemHeight) &&
+            selectedIndex >= 0 && static_cast<size_t>(selectedIndex) < options.size())
+        {
+            value = options[static_cast<size_t>(selectedIndex)].Value;
+            return true;
+        }
+        return false;
+    }
+
+    int PresetPills(const char* id, std::span<const FPresetPill> pills, float totalWidth, float itemHeight)
+    {
+        if (pills.empty())
+        {
+            return -1;
+        }
+
+        ImGui::PushID(id);
+        const float available = totalWidth > 0.0f ? totalWidth : ImGui::GetContentRegionAvail().x;
+        constexpr float spacing = 4.0f;
+        const float count = static_cast<float>(pills.size());
+        const float itemWidth = std::max(20.0f, (available - spacing * (count - 1.0f)) / count);
+
+        int clickedIndex = -1;
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+        for (size_t i = 0; i < pills.size(); ++i)
+        {
+            if (i > 0)
+            {
+                ImGui::SameLine(0.0f, spacing);
+            }
+            const bool selected = pills[i].Selected;
+            if (selected)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Button, Color(EColor::Accent, 0.78f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Color(EColor::AccentHover));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, Color(EColor::Accent));
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+            }
+            if (ImGui::Button(pills[i].Label ? pills[i].Label : "", ImVec2(itemWidth, itemHeight)))
+            {
+                clickedIndex = static_cast<int>(i);
+            }
+            if (selected)
+            {
+                ImGui::PopStyleColor(4);
+            }
+        }
+        ImGui::PopStyleVar();
+        ImGui::PopID();
+        return clickedIndex;
+    }
+
+    bool Draw3AxisFloatDrag(const char* label, float value[3], float speed,
+                            float min, float max, float resetValue, float labelWidth, const char* format)
+    {
+        if (value == nullptr)
+        {
+            return false;
+        }
+        const char* resolvedFormat = (format != nullptr && format[0] != '\0') ? format : "%.3f";
+
+        ImGui::PushID(label);
+        const float availWidth = ImGui::GetContentRegionAvail().x;
+        constexpr float resetBtnWidth = 22.0f;
+        const float frameHeight = ImGui::GetFrameHeight();
+        ImFont* font = ImGui::GetFont();
+        const float textSize = ImGui::GetFontSize();
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+        if (label != nullptr && label[0] != '\0' && labelWidth > 0.0f)
+        {
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(Color(EColor::TextMuted), "%s", label);
+            ImGui::SameLine(labelWidth);
+        }
+        else
+        {
+            labelWidth = 0.0f;
+        }
+
+        constexpr float axisGap = 6.0f;
+        const float inputAreaWidth = std::max(120.0f, availWidth - labelWidth - resetBtnWidth - 6.0f);
+        const float axisWidth = std::floor((inputAreaWidth - axisGap * 2.0f) / 3.0f);
+        constexpr float tagWidth = 19.0f;
+        const float dragWidth = std::max(26.0f, axisWidth - tagWidth);
+
+        bool changed = false;
+        struct FAxisDef
+        {
+            const char* name;
+            const char* tagId;
+            const char* inputId;
+            ImU32 tagCol;
+            ImU32 tagHoverCol;
+            ImU32 tagActiveCol;
+        };
+        static constexpr FAxisDef axes[3] = {
+            {"X", "##tag_X", "##axis_X",
+             IM_COL32(208, 52, 58, 235), IM_COL32(232, 68, 74, 255), IM_COL32(180, 38, 44, 255)},
+            {"Y", "##tag_Y", "##axis_Y",
+             IM_COL32(46, 160, 67, 235), IM_COL32(56, 185, 78, 255), IM_COL32(35, 135, 52, 255)},
+            {"Z", "##tag_Z", "##axis_Z",
+             IM_COL32(38, 115, 222, 235), IM_COL32(52, 138, 245, 255), IM_COL32(28, 92, 185, 255)},
+        };
+
+        for (int i = 0; i < 3; ++i)
+        {
+            if (i > 0)
+            {
+                ImGui::SameLine(0.0f, axisGap);
+            }
+
+            const ImVec2 tagMin = ImGui::GetCursorScreenPos();
+            const ImVec2 tagMax(tagMin.x + tagWidth, tagMin.y + frameHeight);
+            const ImVec2 dragMin(tagMax.x, tagMin.y);
+            const ImVec2 dragMax(dragMin.x + dragWidth, tagMin.y + frameHeight);
+            const ImVec2 axisTotalMin = tagMin;
+            const ImVec2 axisTotalMax = dragMax;
+
+            ImGui::InvisibleButton(axes[i].tagId, ImVec2(tagWidth, frameHeight));
+            const bool tagHovered = ImGui::IsItemHovered();
+            const bool tagActive = ImGui::IsItemActive();
+
+            if (tagHovered)
+            {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+                ImGui::SetTooltip("%s Axis (Drag to scrub, double-click to reset)", axes[i].name);
+            }
+
+            if (tagActive && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+            {
+                value[i] += ImGui::GetIO().MouseDelta.x * speed;
+                if (min < max)
+                {
+                    value[i] = std::clamp(value[i], min, max);
+                }
+                changed = true;
+            }
+            if (tagHovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+            {
+                value[i] = resetValue;
+                changed = true;
+            }
+
+            const ImU32 tagColor = tagActive ? axes[i].tagActiveCol : (tagHovered ? axes[i].tagHoverCol : axes[i].tagCol);
+            drawList->AddRectFilled(tagMin, tagMax, tagColor, 4.0f, ImDrawFlags_RoundCornersLeft);
+
+            const ImVec2 charSize = font->CalcTextSizeA(textSize, FLT_MAX, 0.0f, axes[i].name);
+            const ImVec2 charPos(tagMin.x + (tagWidth - charSize.x) * 0.5f,
+                                 tagMin.y + (frameHeight - charSize.y) * 0.5f);
+            drawList->AddText(font, textSize, charPos, IM_COL32(255, 255, 255, 245), axes[i].name);
+
+            ImGui::SameLine(0.0f, 0.0f);
+
+            const bool isDragAreaHovered = ImGui::IsMouseHoveringRect(dragMin, dragMax);
+            const ImU32 dragBgCol = ColorU32(
+                isDragAreaHovered ? EColor::SurfaceHover : EColor::SurfaceElevated,
+                isDragAreaHovered ? 0.90f : 0.65f);
+            drawList->AddRectFilled(dragMin, dragMax, dragBgCol, 4.0f, ImDrawFlags_RoundCornersRight);
+
+            ImGui::SetNextItemWidth(dragWidth);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0, 0, 0, 0));
+
+            if (ImGui::DragFloat(axes[i].inputId, &value[i], speed, min, max, resolvedFormat))
+            {
+                changed = true;
+            }
+            const bool dragActive = ImGui::IsItemActive();
+            ImGui::PopStyleColor(3);
+            ImGui::PopStyleVar();
+
+            if (dragActive)
+            {
+                drawList->AddRect(axisTotalMin, axisTotalMax, ColorU32(EColor::Accent, 0.70f), 4.0f, 0, 1.0f);
+            }
+        }
+
+        ImGui::SameLine(0.0f, 6.0f);
+        const bool isModified = (std::abs(value[0] - resetValue) > 0.0001f ||
+                                 std::abs(value[1] - resetValue) > 0.0001f ||
+                                 std::abs(value[2] - resetValue) > 0.0001f);
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Color(EColor::SurfaceHover, 0.75f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, Color(EColor::SurfaceHover, 0.95f));
+        ImGui::PushStyleColor(ImGuiCol_Text, Color(
+            isModified ? EColor::Accent : EColor::TextDim,
+            isModified ? 0.95f : 0.40f));
+
+        if (ImGui::Button(ICON_FA_ROTATE_LEFT, ImVec2(resetBtnWidth, frameHeight)))
+        {
+            value[0] = resetValue;
+            value[1] = resetValue;
+            value[2] = resetValue;
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            const std::string tooltip = isModified
+                ? fmt::format("Reset {} to default ({:.1f})", label ? label : "value", resetValue)
+                : fmt::format("{} is at default value ({:.1f})", label ? label : "Value", resetValue);
+            ImGui::SetTooltip("%s", tooltip.c_str());
+        }
+        ImGui::PopStyleColor(4);
+        ImGui::PopStyleVar();
+
+        ImGui::PopID();
+        return changed;
+    }
+
+    bool DrawSettingSliderRow(const char* label, ImGuiDataType dataType, void* value,
+                              const void* minValue, const void* maxValue, const char* format,
+                              float dragSpeed, float valueWidth)
+    {
+        ImGui::PushID(label);
+        BeginFormRow(label);
+
+        const float sliderWidth = std::max(40.0f, ImGui::GetContentRegionAvail().x - valueWidth - 6.0f);
+        bool changed = false;
+
+        ImGui::SetNextItemWidth(sliderWidth);
+        changed |= ImGui::SliderScalar("##Slider", dataType, value, minValue, maxValue, format);
+
+        ImGui::SameLine(0.0f, 6.0f);
+        ImGui::SetNextItemWidth(valueWidth);
+        changed |= ImGui::DragScalar("##Value", dataType, value, dragSpeed, minValue, maxValue, format);
+
+        ImGui::PopID();
+        return changed;
+    }
+
+    bool DrawFloatSettingRow(const char* label, float* value, float minValue, float maxValue,
+                             const char* format, float dragSpeed, float valueWidth)
+    {
+        return DrawSettingSliderRow(label, ImGuiDataType_Float, value, &minValue, &maxValue,
+                                    format, dragSpeed, valueWidth);
+    }
+
+    bool DrawIntSettingRow(const char* label, int* value, int minValue, int maxValue,
+                           const char* format, float valueWidth)
+    {
+        return DrawSettingSliderRow(label, ImGuiDataType_S32, value, &minValue, &maxValue,
+                                    format, 1.0f, valueWidth);
+    }
+
+    bool DrawCheckboxSettingRow(const char* label, bool* value)
+    {
+        return DrawSettingRow(label, [value]() { return ImGui::Checkbox("##Value", value); });
     }
 
     void SameLineRightAligned(float groupWidth, float minLeadingGap)
@@ -567,8 +750,6 @@ namespace NextUI::Theme
             return kEllipsis;
         }
 
-        // ImFont measures up to a width budget in one pass and reports where it stopped, which beats
-        // probing one character at a time for every card, every frame.
         const char* begin = text.c_str();
         const char* end = begin + text.size();
         const char* remaining = begin;
@@ -577,72 +758,25 @@ namespace NextUI::Theme
         return std::string(begin, remaining) + kEllipsis;
     }
 
-    bool BeginOverlayPanel(const FOverlayPanelConfig& config)
-    {
-        ImGui::SetNextWindowPos(config.Position, ImGuiCond_Always);
-        ImGui::SetNextWindowSize(config.Size, ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(config.BackgroundAlpha);
-
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, config.Padding);
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, config.ItemSpacing);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, config.Rounding);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, config.BorderSize);
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, Color(config.BackgroundColor, config.BackgroundAlpha));
-        ImGui::PushStyleColor(ImGuiCol_Border, Color(EColor::BorderStrong, config.BorderAlpha));
-
-        const ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar |
-            ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | config.ExtraFlags;
-        return ImGui::Begin(config.WindowId, nullptr, flags);
-    }
-
-    void EndOverlayPanel()
-    {
-        ImGui::End();
-        ImGui::PopStyleColor(2);
-        ImGui::PopStyleVar(4);
-    }
-
-    bool BeginSection(const char* icon, const char* label, bool defaultOpen)
-    {
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 4.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
-        ImGui::PushStyleColor(ImGuiCol_Header, Color(EColor::Background, 0.5f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, Color(EColor::SurfaceHover, 0.5f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive, Color(EColor::Accent, 0.5f));
-        ImGui::PushStyleColor(ImGuiCol_Border, Color(EColor::Border, 0.84f));
-
-        const std::string header = fmt::format("{} {}", icon ? icon : "", label ? label : "");
-        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_Framed;
-        if (defaultOpen)
-        {
-            flags |= ImGuiTreeNodeFlags_DefaultOpen;
-        }
-        const bool open = ImGui::CollapsingHeader(header.c_str(), flags);
-
-        ImGui::PopStyleColor(4);
-        ImGui::PopStyleVar(2);
-
-        if (open)
-        {
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, 5.0f));
-            ImGui::Indent(5.0f);
-        }
-        return open;
-    }
-
-    void EndSection()
-    {
-        ImGui::Unindent(5.0f);
-        ImGui::PopStyleVar();
-        ImGui::Spacing();
-    }
-
-    void DrawPanelHeader(const char* icon, const char* title, const char* subtitle)
+    void DrawPanelHeader(const char* icon, const char* title, const char* subtitle,
+                         const char* badgeText, ImVec4 badgeColor)
     {
         ImGui::PushStyleColor(ImGuiCol_Text, Color(EColor::Text));
-        ImGui::Text("%s %s", icon ? icon : "", title ? title : "");
+        if (icon != nullptr && icon[0] != '\0')
+        {
+            ImGui::TextColored(Color(EColor::AccentHover), "%s", icon);
+            ImGui::SameLine(0.0f, 6.0f);
+        }
+        ImGui::TextUnformatted(title ? title : "");
         ImGui::PopStyleColor();
+
+        if (badgeText != nullptr && badgeText[0] != '\0')
+        {
+            const float badgeWidth = ImGui::CalcTextSize(badgeText).x + 14.0f;
+            SameLineRightAligned(badgeWidth, 8.0f);
+            const ImVec4 resolvedBadgeColor = badgeColor.w > 0.0f ? badgeColor : Color(EColor::AccentHover);
+            TagChip(badgeText, resolvedBadgeColor);
+        }
 
         if (subtitle != nullptr && subtitle[0] != '\0')
         {
@@ -738,8 +872,6 @@ namespace NextUI::Theme
             ImGui::SetNextWindowPos(position, ImGuiCond_Always, pivot);
             ImGui::SetNextWindowSize(size, ImGuiCond_Always);
         }
-        // Detail panels share the viewport toolbar's dark, lightly translucent
-        // surface instead of reading as an opaque application window.
         ImGui::SetNextWindowBgAlpha(kDetailPanelBackgroundAlpha);
 
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
@@ -764,7 +896,6 @@ namespace NextUI::Theme
             return false;
         }
 
-        // Header strip
         constexpr float headerHeight = 38.0f;
         const ImVec2 winPos = ImGui::GetWindowPos();
         const ImVec2 winSize = ImGui::GetWindowSize();
@@ -777,7 +908,6 @@ namespace NextUI::Theme
             ImVec2(winPos.x + winSize.x, winPos.y + headerHeight),
             ColorU32(EColor::Border, kDetailPanelBorderAlpha));
 
-        // Title text
         const float textY = winPos.y + (headerHeight - ImGui::GetTextLineHeight()) * 0.5f;
         const float textX = winPos.x + 14.0f;
         const ImU32 iconCol = ColorU32(EColor::AccentHover);
@@ -793,7 +923,6 @@ namespace NextUI::Theme
             drawList->AddText(ImVec2(textX, textY), titleCol, title ? title : "");
         }
 
-        // Optional close X
         if (pOpen != nullptr)
         {
             const float closeSize = 20.0f;
@@ -812,7 +941,6 @@ namespace NextUI::Theme
             ImGui::PopStyleColor(4);
         }
 
-        // Move cursor below header & start a child for the body so padding works as expected.
         ImGui::SetCursorScreenPos(ImVec2(winPos.x, winPos.y + headerHeight));
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 14.0f));
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
@@ -839,9 +967,6 @@ namespace NextUI::Theme
             return false;
         }
 
-        // BeginChild must always be paired with EndChild, even if it returns
-        // false. The wrapper therefore reports the floating shell's visibility
-        // and owns the inset pair in EndDetailPanel().
         BeginInsetPanel(config.ContentWindowId, ImVec2(0.0f, 0.0f), config.ContentBorder,
                         config.ContentFlags, config.ContentPadding, config.ContentBackgroundAlpha);
         return true;
@@ -851,6 +976,185 @@ namespace NextUI::Theme
     {
         EndInsetPanel();
         EndFloatingPanel();
+    }
+
+    bool BeginCollapsibleSidePanel(const FCollapsibleSidePanelConfig& config)
+    {
+        ImGui::SetNextWindowPos(config.Position, ImGuiCond_Always);
+        ImGui::SetNextWindowSize(config.Size, ImGuiCond_Always);
+        ImGui::SetNextWindowBgAlpha(config.BackgroundAlpha);
+
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking |
+            config.ExtraFlags;
+        if (config.Collapsed)
+        {
+            flags |= ImGuiWindowFlags_NoScrollbar;
+        }
+
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
+                            config.Collapsed ? config.CollapsedPadding : config.ExpandedPadding);
+        const bool visible = ImGui::Begin(config.WindowId, nullptr, flags);
+        ImGui::PopStyleVar(3);
+        if (!visible)
+        {
+            ImGui::End();
+            return false;
+        }
+        return true;
+    }
+
+    void EndCollapsibleSidePanel()
+    {
+        ImGui::End();
+    }
+
+    bool BeginModernModal(const FModernModalConfig& config)
+    {
+        const ImGuiViewport* viewport = ImGui::GetMainViewport();
+        if (viewport != nullptr)
+        {
+            ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+            const float width = std::min(config.TargetSize.x, std::max(240.0f, viewport->WorkSize.x - config.ViewportMargin));
+            const float height = std::min(config.TargetSize.y, std::max(180.0f, viewport->WorkSize.y - config.ViewportMargin));
+            ImGui::SetNextWindowSize(ImVec2(width, height), ImGuiCond_Appearing);
+        }
+
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, config.Rounding);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, config.Padding);
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, Color(EColor::Surface, 0.98f));
+        ImGui::PushStyleColor(ImGuiCol_Border, Color(EColor::Border, 0.85f));
+        ImGui::PushStyleColor(ImGuiCol_PopupBg, Color(EColor::Surface, 0.98f));
+
+        const ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar |
+            config.ExtraFlags;
+        if (!ImGui::BeginPopupModal(config.PopupId, config.Open, windowFlags))
+        {
+            ImGui::PopStyleColor(3);
+            ImGui::PopStyleVar(3);
+            return false;
+        }
+        return true;
+    }
+
+    void EndModernModal()
+    {
+        ImGui::EndPopup();
+        ImGui::PopStyleColor(3);
+        ImGui::PopStyleVar(3);
+    }
+
+    bool DrawModalHeader(const char* icon, const char* title, const char* subtitle,
+                         ImFont* titleFont, const bool allowClose)
+    {
+        constexpr float kHeaderHeight = 56.0f;
+        const ImVec2 dialogPos = ImGui::GetWindowPos();
+        const ImVec2 dialogSize = ImGui::GetWindowSize();
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+        const ImVec2 headerMin = dialogPos;
+        const ImVec2 headerMax(dialogPos.x + dialogSize.x, dialogPos.y + kHeaderHeight);
+
+        drawList->AddRectFilled(headerMin, headerMax, ColorU32(EColor::Background, 0.65f), 8.0f,
+                                ImDrawFlags_RoundCornersTop);
+        drawList->AddLine(ImVec2(headerMin.x, headerMax.y), headerMax, ColorU32(EColor::Border, 0.50f), 1.0f);
+
+        constexpr float headerPadX = 18.0f;
+        float titleX = dialogPos.x + headerPadX;
+        if (icon != nullptr && icon[0] != '\0')
+        {
+            constexpr float iconBoxSize = 34.0f;
+            const float iconBoxPosY = dialogPos.y + (kHeaderHeight - iconBoxSize) * 0.5f;
+            const ImVec2 iconBoxMin(dialogPos.x + headerPadX, iconBoxPosY);
+            const ImVec2 iconBoxMax(iconBoxMin.x + iconBoxSize, iconBoxMin.y + iconBoxSize);
+
+            drawList->AddRectFilled(iconBoxMin, iconBoxMax, ColorU32(EColor::Accent, 0.16f), 6.0f);
+            drawList->AddRect(iconBoxMin, iconBoxMax, ColorU32(EColor::AccentHover, 0.45f), 6.0f);
+
+            const ImVec2 headerIconSize = ImGui::CalcTextSize(icon);
+            drawList->AddText(
+                ImVec2(iconBoxMin.x + (iconBoxSize - headerIconSize.x) * 0.5f,
+                       iconBoxMin.y + (iconBoxSize - headerIconSize.y) * 0.5f),
+                ColorU32(EColor::AccentHover), icon);
+            titleX = iconBoxMax.x + 12.0f;
+        }
+
+        if (titleFont != nullptr)
+        {
+            ImGui::PushFont(titleFont);
+        }
+        const float titleY = subtitle != nullptr && subtitle[0] != '\0'
+            ? dialogPos.y + 9.0f
+            : dialogPos.y + (kHeaderHeight - ImGui::GetTextLineHeight()) * 0.5f;
+        drawList->AddText(ImVec2(titleX, titleY), ColorU32(EColor::Text), title ? title : "");
+        if (titleFont != nullptr)
+        {
+            ImGui::PopFont();
+        }
+
+        if (subtitle != nullptr && subtitle[0] != '\0')
+        {
+            drawList->AddText(ImVec2(titleX, dialogPos.y + 32.0f), ColorU32(EColor::TextDim), subtitle);
+        }
+
+        bool closeClicked = false;
+        if (allowClose)
+        {
+            constexpr float closeBtnSize = 28.0f;
+            const ImVec2 closeBtnPos(dialogPos.x + dialogSize.x - closeBtnSize - 16.0f,
+                                     dialogPos.y + (kHeaderHeight - closeBtnSize) * 0.5f);
+            ImGui::SetCursorScreenPos(closeBtnPos);
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Color(EColor::SurfaceHover, 0.85f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, Color(EColor::SurfaceElevated));
+            ImGui::PushStyleColor(ImGuiCol_Text, Color(EColor::TextMuted));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 4.0f));
+            if (ImGui::Button(ICON_FA_XMARK "##CloseModal", ImVec2(closeBtnSize, closeBtnSize)))
+            {
+                closeClicked = true;
+            }
+            ImGui::PopStyleVar(2);
+            ImGui::PopStyleColor(4);
+        }
+
+        ImGui::SetCursorScreenPos(ImVec2(dialogPos.x, dialogPos.y + kHeaderHeight));
+        return closeClicked;
+    }
+
+    FInteractiveCardState DrawInteractiveCard(const FInteractiveCardConfig& config)
+    {
+        FInteractiveCardState state;
+        state.Min = ImGui::GetCursorScreenPos();
+        const float width = config.Size.x > 0.0f ? config.Size.x : ImGui::GetContentRegionAvail().x;
+        const float height = config.Size.y > 0.0f ? config.Size.y : 54.0f;
+        state.Max = ImVec2(state.Min.x + width, state.Min.y + height);
+
+        ImGui::InvisibleButton(config.Id ? config.Id : "##InteractiveCard", ImVec2(width, height));
+        state.Hovered = ImGui::IsItemHovered();
+        state.Clicked = ImGui::IsItemClicked();
+
+        const ImU32 cardBg = config.Selected ? ColorU32(EColor::SurfaceHover, 0.92f)
+                                             : (state.Hovered ? ColorU32(EColor::SurfaceElevated, 0.70f)
+                                                              : ColorU32(EColor::Surface, 0.35f));
+        const ImU32 cardBorder = config.Selected ? ColorU32(EColor::AccentHover, 0.85f)
+                                                 : (state.Hovered ? ColorU32(EColor::BorderStrong, 0.60f)
+                                                                  : ColorU32(EColor::Border, 0.30f));
+
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->AddRectFilled(state.Min, state.Max, cardBg, config.Rounding);
+        drawList->AddRect(state.Min, state.Max, cardBorder, config.Rounding, 0, config.Selected ? 1.5f : 1.0f);
+
+        if (config.Selected && config.ShowSelectionStrip)
+        {
+            drawList->AddRectFilled(ImVec2(state.Min.x + 2.0f, state.Min.y + 8.0f),
+                                    ImVec2(state.Min.x + 5.0f, state.Max.y - 8.0f),
+                                    ColorU32(EColor::AccentHover), 2.0f);
+        }
+        return state;
     }
 
     bool BeginPanelSection(const char* label, bool defaultOpen)
@@ -907,9 +1211,6 @@ namespace NextUI::Theme
 
         if (scaleMin == FLT_MAX || scaleMax == FLT_MAX)
         {
-            // Auto-fit mode. For timing-style data (always >= 0) pin the baseline
-            // at 0 and only fit the top — fitting both ends amplifies noise because
-            // the min keeps jittering frame to frame.
             float lo = baselineAtZero ? 0.0f : values[0];
             float hi = values[0];
             for (int i = 1; i < count; ++i)
@@ -933,7 +1234,6 @@ namespace NextUI::Theme
         ImU32 lineCol = ImGui::GetColorU32(color);
         ImU32 fillCol = ImGui::GetColorU32(ImVec4(color.x, color.y, color.z, color.w * 0.18f));
 
-        // Build polyline
         std::vector<ImVec2> pts;
         pts.reserve(count);
         for (int i = 0; i < count; ++i)
@@ -944,9 +1244,6 @@ namespace NextUI::Theme
             pts.emplace_back(x, y);
         }
 
-        // Fill underneath
-        const ImVec2 baseRight(pts.back().x, origin.y + size.y);
-        const ImVec2 baseLeft(pts.front().x, origin.y + size.y);
         for (int i = 0; i + 1 < count; ++i)
         {
             ImVec2 quad[4] = {pts[i], pts[i + 1],
@@ -954,7 +1251,6 @@ namespace NextUI::Theme
                               ImVec2(pts[i].x, origin.y + size.y)};
             drawList->AddConvexPolyFilled(quad, 4, fillCol);
         }
-        (void)baseRight; (void)baseLeft;
 
         drawList->AddPolyline(pts.data(), count, lineCol, ImDrawFlags_None, 1.5f);
         ImGui::Dummy(size);

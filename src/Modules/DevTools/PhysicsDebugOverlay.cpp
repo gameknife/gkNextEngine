@@ -121,43 +121,23 @@ namespace
             return;
         }
 
-        constexpr float cardHorizontalInset = 4.0f;
-        auto BeginCard = [&](const char* id, float height = 0.0f, ImGuiWindowFlags extraFlags = 0)
+        auto BeginCard = [](const char* id, float height = 0.0f, ImGuiWindowFlags extraFlags = 0)
         {
-            ImGui::Dummy(ImVec2(0.0f, 2.0f));
-            const float cardWidth = std::max(0.0f, ImGui::GetContentRegionAvail().x - cardHorizontalInset * 2.0f);
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + cardHorizontalInset);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f, 10.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceElevated, 0.38f));
-            ImGui::PushStyleColor(ImGuiCol_Border, NextUI::Theme::Color(NextUI::Theme::EColor::Border, 0.84f));
-            if (height > 0.0f)
-            {
-                ImGui::BeginChild(id, ImVec2(cardWidth, height), ImGuiChildFlags_Borders, extraFlags);
-            }
-            else
-            {
-                ImGui::BeginChild(id, ImVec2(cardWidth, 0.0f), ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY, extraFlags);
-            }
+            NextUI::Theme::BeginCard(id, height, extraFlags, 4.0f);
         };
 
-        auto EndCard = [&]()
+        auto EndCard = []()
         {
-            ImGui::EndChild();
-            ImGui::PopStyleColor(2);
-            ImGui::PopStyleVar(3);
+            NextUI::Theme::EndCard();
         };
 
         const ImVec4 colHeader = NextUI::Theme::Color(NextUI::Theme::EColor::Blue);
         const ImVec4 colLabel = NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted);
         const ImVec4 colVal = NextUI::Theme::Color(NextUI::Theme::EColor::Text);
 
-        auto CompactStat = [&](const char* label, const std::string& value)
+        auto CompactStat = [](const char* label, const std::string& value)
         {
-            ImGui::TextColored(colLabel, "%s", label);
-            ImGui::SameLine(0.0f, 4.0f);
-            ImGui::TextColored(colVal, "%s", value.c_str());
+            NextUI::Theme::CompactStat(label, value.c_str());
         };
 
         // 1. Bodies & Layers Card

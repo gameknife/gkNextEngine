@@ -23,6 +23,23 @@ namespace NextUI::Foundation
         ImGuiWindowFlags extraFlags = 0;
     };
 
+    bool BeginOverlayPanel(const FOverlayPanelOptions& options);
+    void EndOverlayPanel();
+
+    bool BeginInsetPanel(const char* id,
+                         ImVec2 size = {},
+                         bool border = false,
+                         ImGuiWindowFlags flags = 0,
+                         ImVec2 padding = ImVec2(10.0f, 10.0f),
+                         float backgroundAlpha = 0.30f);
+    void EndInsetPanel();
+
+    void BeginCard(const char* id, float height = 0.0f, ImGuiWindowFlags flags = 0, float horizontalInset = 1.0f);
+    void EndCard();
+
+    bool BeginSection(const char* icon, const char* label, bool defaultOpen = true);
+    void EndSection();
+
     class FScopedOverlayPanel final
     {
     public:
@@ -54,6 +71,14 @@ namespace NextUI::Foundation
         std::unique_ptr<FScopedChild> child_;
     };
 
+    class FScopedCard final
+    {
+    public:
+        explicit FScopedCard(const char* id, float height = 0.0f, ImGuiWindowFlags flags = 0);
+        ~FScopedCard();
+        GK_NON_COPIABLE(FScopedCard)
+    };
+
     class FScopedSection final
     {
     public:
@@ -64,7 +89,6 @@ namespace NextUI::Foundation
 
     private:
         bool open_ = false;
-        std::unique_ptr<FScopedStyle> bodyStyle_;
     };
 
     class FScopedToolbar final

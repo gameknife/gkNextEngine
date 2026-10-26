@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Engine/Runtime/RuntimeFwd.hpp"
+
 #include <imgui.h>
 
 namespace NextUI::Scaling
@@ -10,6 +12,7 @@ namespace NextUI::Scaling
         ImVec2 Size;
     };
 
+    float GetUiScale(float baseFontSize = 16.0f);
     float GetViewportUiScale(const ImGuiViewport* viewport, float baseWidth = 1280.0f, float baseHeight = 720.0f);
 
     // Vulkan viewport rectangles use framebuffer pixels, while ImGui and ImGuizmo use
@@ -19,4 +22,6 @@ namespace NextUI::Scaling
     ImVec2 ImGuiToMainFramebufferPoint(const ImVec2& position);
     FViewportRect MainFramebufferToImGuiViewport(const ImVec2& position, const ImVec2& size);
     FViewportRect ImGuiToMainFramebufferViewport(const ImVec2& position, const ImVec2& size);
+
+    void SyncImGuiViewportToSwapChain(NextEngine& engine, const ImVec2& position, const ImVec2& size);
 }

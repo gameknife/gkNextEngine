@@ -20,6 +20,11 @@ namespace NextUI::FontLoader
         bool setAsDefault = false;
     };
 
+    const ImWchar* GetFontAwesomeGlyphRanges();
+    void MergeFontAwesomeIcons(float basePixelSize, float rasterizerDensity = 1.0f);
     ImFont* Load(const FFontRequest& request);
-    ImFont* LoadDefaultUiFont(std::string_view fontPath = "assets/fonts/DroidSansFallback.ttf", float pixelSize = 16.0f);
+    ImFont* LoadDefaultUiFont(std::string_view fontPath = "assets/fonts/Roboto-Regular.ttf",
+                              float pixelSize = 16.0f,
+                              float rasterizerDensity = 1.0f,
+                              bool mergeIconsAndFallback = true);
 }

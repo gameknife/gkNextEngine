@@ -123,6 +123,7 @@
 - [PathTracing 材质模型统一](plans/shader-material-model-unification-plan.md)（待审阅）
 - [地理城市生成剩余项](plans/geo-city-generation-plan.md)（P0–P5 已完成；只保留未完成项）
 - [ScadLibrary AI 创作收口](plans/scadlibrary-ai-authoring-plan.md)（M0–M4 已完成；只剩 ScadStudio 退役门槛）
+- [全局 UI 收敛与现代扁平化重构](plans/ui-unification-and-refactoring-plan.md)（待实施；统一 `NextUI` 底座、下沉 HUD 原语、清理编辑器与 C++/C# 游戏示例冗余）
 
 未在本页重复列出的具体 loader、游戏代码入口和验证命令，以对应 `AGENT_GUIDE/`、代码旁注释与
 `gnb <command> --help` 为准。

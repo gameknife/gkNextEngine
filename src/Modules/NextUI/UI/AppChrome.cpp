@@ -12,19 +12,6 @@ namespace NextUI::Foundation
     {
         constexpr float controlWidth = 46.0f;
 
-        void DrawBrandMark(ImDrawList* drawList, const ImVec2 min, const float size)
-        {
-            const ImU32 accent = ColorU32(EColor::Accent);
-            const ImU32 brand = ColorU32(EColor::Brand);
-            const ImVec2 center(min.x + size * 0.5f, min.y + size * 0.5f);
-            drawList->AddCircleFilled(center, size * 0.34f, ColorU32(EColor::SurfaceElevated), 16);
-            drawList->AddTriangleFilled(
-                ImVec2(center.x - size * 0.18f, center.y + size * 0.16f),
-                ImVec2(center.x, center.y - size * 0.20f),
-                ImVec2(center.x + size * 0.18f, center.y + size * 0.16f), brand);
-            drawList->AddCircleFilled(center, size * 0.07f, accent, 10);
-        }
-
         float CalcFontTextWidth(ImFont* font, const char* text)
         {
             if (text == nullptr || text[0] == '\0')
@@ -52,6 +39,28 @@ namespace NextUI::Foundation
             }
             return pressed;
         }
+    }
+
+    void DrawBrandMark(ImDrawList* drawList, const ImVec2 min, const float size)
+    {
+        if (drawList == nullptr)
+        {
+            return;
+        }
+
+        const ImVec2 max(min.x + size, min.y + size);
+        const float rounding = std::max(3.0f, size * 0.18f);
+        drawList->AddRectFilled(min, max, ColorU32(EColor::Brand, 0.16f), rounding);
+        drawList->AddRect(min, max, ColorU32(EColor::Brand, 0.92f), rounding, 0, 1.5f);
+
+        const float pad = size * 0.24f;
+        const float stroke = std::max(2.0f, size * 0.10f);
+        const ImU32 lineColor = ColorU32(EColor::Brand);
+        drawList->AddLine(ImVec2(min.x + pad, min.y + size - pad), ImVec2(min.x + pad, min.y + pad), lineColor, stroke);
+        drawList->AddLine(ImVec2(min.x + pad, min.y + pad), ImVec2(min.x + size * 0.52f, min.y + pad), lineColor, stroke);
+        drawList->AddLine(ImVec2(min.x + size * 0.52f, min.y + pad), ImVec2(min.x + size * 0.52f, min.y + size - pad), lineColor, stroke);
+        drawList->AddLine(ImVec2(min.x + size * 0.52f, min.y + size - pad), ImVec2(min.x + size - pad, min.y + size - pad), lineColor, stroke);
+        drawList->AddLine(ImVec2(min.x + size - pad, min.y + size - pad), ImVec2(min.x + size - pad, min.y + pad), lineColor, stroke);
     }
 
     FAppChromeResult DrawAppTitleBar(const FUiContext& context, const FAppTitleBarOptions& options)

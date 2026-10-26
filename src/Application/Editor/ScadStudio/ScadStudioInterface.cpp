@@ -2,6 +2,7 @@
 
 #include "Engine/Assets/Core/Scene.hpp"
 #include "Engine/Rendering/VulkanBaseRenderer.hpp"
+#include "Modules/NextUI/FontLoader.hpp"
 #include "Modules/NextUI/UI/DesktopUI.hpp"
 #include "Modules/NextUI/ImGuiScaling.hpp"
 #include "Engine/Runtime/Interface/UserInterface.hpp"
@@ -13,7 +14,6 @@
 #include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 
 #include <imgui.h>
-#include <imgui_freetype.h>
 #include <imgui_internal.h>
 
 #include <algorithm>
@@ -488,20 +488,7 @@ namespace ScadStudio
     void ScadStudioInterface::Init()
     {
         NextUI::Theme::ApplyProfessionalTheme();
-        ImGuiIO& io = ImGui::GetIO();
-        // The vcpkg imgui is built with the FreeType feature, so the font atlas must use
-        // the FreeType builder (matches gkNextEditor); otherwise atlas build crashes.
-        io.Fonts->SetFontLoader(ImGuiFreeType::GetFontLoader());
-        io.Fonts->FontLoaderFlags = ImGuiFreeTypeLoaderFlags_NoHinting;
-
-        const std::string fontPath =
-            Utilities::FileHelper::GetPlatformFilePath("assets/fonts/DroidSansFallback.ttf");
-        ImFont* font = io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 18.0f, nullptr,
-                                                    io.Fonts->GetGlyphRangesChineseFull());
-        if (font == nullptr)
-        {
-            io.Fonts->AddFontDefault();
-        }
+        NextUI::FontLoader::LoadDefaultUiFont("assets/fonts/Roboto-Regular.ttf", 18.0f);
     }
 
     void ScadStudioInterface::Render()
@@ -562,14 +549,7 @@ namespace ScadStudio
         const float viewportY = panelY;
         const float viewportW = std::max(1.0f, viewport->Size.x - leftWidth - rightWidth);
         const float viewportH = panelHeight;
-        const NextUI::Scaling::FViewportRect framebufferViewport =
-            NextUI::Scaling::ImGuiToMainFramebufferViewport(
-                ImVec2(viewportX, viewportY), ImVec2(viewportW, viewportH));
-        engine_.GetRenderer().SwapChain().UpdateOutputViewport(
-            Utilities::Math::floorToInt(framebufferViewport.Position.x),
-            Utilities::Math::floorToInt(framebufferViewport.Position.y),
-            Utilities::Math::ceilToInt(framebufferViewport.Size.x),
-            Utilities::Math::ceilToInt(framebufferViewport.Size.y));
+        NextUI::Scaling::SyncImGuiViewportToSwapChain(engine_, ImVec2(viewportX, viewportY), ImVec2(viewportW, viewportH));
     }
 
     void ScadStudioInterface::DrawTitleBar()
@@ -879,22 +859,16 @@ namespace ScadStudio
 
     void ScadStudioInterface::DrawSessionPanel(const ImVec2& pos, const ImVec2& size)
     {
-        ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
-        ImGui::SetNextWindowSize(size, ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(0.96f);
-        const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking;
-
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, sessionsCollapsed_ ? ImVec2(7.0f, 8.0f) : ImVec2(12.0f, 12.0f));
-        if (!ImGui::Begin("##ScadStudioSessions", nullptr, flags))
+        NextUI::Theme::FCollapsibleSidePanelConfig sideConfig{};
+        sideConfig.WindowId = "##ScadStudioSessions";
+        sideConfig.Position = pos;
+        sideConfig.Size = size;
+        sideConfig.Collapsed = sessionsCollapsed_;
+        if (!NextUI::Theme::BeginCollapsibleSidePanel(sideConfig))
         {
-            ImGui::End();
-            ImGui::PopStyleVar(3);
+            NextUI::Theme::EndCollapsibleSidePanel();
             return;
         }
-        ImGui::PopStyleVar(3);
 
         if (sessionsCollapsed_)
         {
@@ -916,7 +890,7 @@ namespace ScadStudio
             {
                 ImGui::SetTooltip("New model");
             }
-            ImGui::End();
+            NextUI::Theme::EndCollapsibleSidePanel();
             return;
         }
 
@@ -1106,27 +1080,21 @@ namespace ScadStudio
             ImGui::TextWrapped("No model yet. Click \"+ New Model\" and describe what you want.");
         }
 
-        ImGui::End();
+        NextUI::Theme::EndCollapsibleSidePanel();
     }
 
     void ScadStudioInterface::DrawChatPanel(const ImVec2& pos, const ImVec2& size)
     {
-        ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
-        ImGui::SetNextWindowSize(size, ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(0.96f);
-        const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking;
-
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, chatCollapsed_ ? ImVec2(7.0f, 8.0f) : ImVec2(12.0f, 12.0f));
-        if (!ImGui::Begin("##ScadStudioChat", nullptr, flags))
+        NextUI::Theme::FCollapsibleSidePanelConfig sideConfig{};
+        sideConfig.WindowId = "##ScadStudioChat";
+        sideConfig.Position = pos;
+        sideConfig.Size = size;
+        sideConfig.Collapsed = chatCollapsed_;
+        if (!NextUI::Theme::BeginCollapsibleSidePanel(sideConfig))
         {
-            ImGui::End();
-            ImGui::PopStyleVar(3);
+            NextUI::Theme::EndCollapsibleSidePanel();
             return;
         }
-        ImGui::PopStyleVar(3);
 
         if (chatCollapsed_)
         {
@@ -1140,7 +1108,7 @@ namespace ScadStudio
             }
             ImGui::Spacing();
             ImGui::TextUnformatted(ICON_FA_COMMENTS);
-            ImGui::End();
+            NextUI::Theme::EndCollapsibleSidePanel();
             return;
         }
 
@@ -1452,7 +1420,7 @@ namespace ScadStudio
             SubmitCurrentInput();
         }
 
-        ImGui::End();
+        NextUI::Theme::EndCollapsibleSidePanel();
     }
 
     void ScadStudioInterface::SubmitCurrentInput()

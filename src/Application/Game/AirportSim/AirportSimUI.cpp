@@ -9,6 +9,10 @@
 #include "QueueSystem.h"
 #include "TimeSystem.h"
 #include "Gameplay/Sim/AnchorDebugOverlay.h"
+#include "Modules/NextUI/ImGuiScaling.hpp"
+#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Modules/NextUI/UI/UiHud.hpp"
+#include "Modules/NextUI/UI/UiTheme.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -28,43 +32,42 @@ namespace AirportSim
                                                ImGuiWindowFlags_NoSavedSettings |
                                                ImGuiWindowFlags_NoFocusOnAppearing;
 
-        constexpr ImVec4 kPanelBg{0.035f, 0.105f, 0.145f, 0.94f};
-        constexpr ImVec4 kBorder{0.18f, 0.39f, 0.50f, 0.72f};
-        constexpr ImVec4 kText{0.91f, 0.96f, 0.98f, 1.0f};
-        constexpr ImVec4 kMuted{0.55f, 0.67f, 0.73f, 1.0f};
-        constexpr ImVec4 kBlue{0.22f, 0.70f, 0.96f, 1.0f};
-        constexpr ImVec4 kGreen{0.31f, 0.85f, 0.57f, 1.0f};
-        constexpr ImVec4 kYellow{1.00f, 0.76f, 0.26f, 1.0f};
+        constexpr ImVec4 kPanelBg{0.118f, 0.125f, 0.137f, 0.94f};
+        constexpr ImVec4 kBorder{0.220f, 0.235f, 0.259f, 0.85f};
+        constexpr ImVec4 kText{0.91f, 0.93f, 0.96f, 1.0f};
+        constexpr ImVec4 kMuted{0.58f, 0.61f, 0.66f, 1.0f};
+        constexpr ImVec4 kBlue{0.24f, 0.56f, 0.96f, 1.0f};
+        constexpr ImVec4 kGreen{0.22f, 0.78f, 0.42f, 1.0f};
+        constexpr ImVec4 kYellow{0.94f, 0.67f, 0.18f, 1.0f};
         constexpr ImVec4 kPurple{0.65f, 0.48f, 0.96f, 1.0f};
 
         float UiScale()
         {
-            const ImVec2 size = ImGui::GetMainViewport()->Size;
-            return std::clamp(std::min(size.x / 1920.0f, size.y / 1080.0f), 0.72f, 1.25f);
+            return NextUI::Scaling::GetUiScale();
         }
 
         void PushProductTheme()
         {
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 13.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 9.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 7.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
             ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f, 12.0f));
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 7.0f));
             ImGui::PushStyleColor(ImGuiCol_WindowBg, kPanelBg);
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.04f, 0.12f, 0.16f, 0.74f));
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, NextUI::Theme::Color(NextUI::Foundation::EColor::Surface, 0.82f));
             ImGui::PushStyleColor(ImGuiCol_Border, kBorder);
             ImGui::PushStyleColor(ImGuiCol_Text, kText);
             ImGui::PushStyleColor(ImGuiCol_TextDisabled, kMuted);
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.06f, 0.18f, 0.25f, 0.96f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.09f, 0.31f, 0.43f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.08f, 0.43f, 0.62f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.08f, 0.35f, 0.52f, 0.90f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.10f, 0.44f, 0.64f, 0.95f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.12f, 0.50f, 0.72f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_TableRowBgAlt, ImVec4(0.11f, 0.22f, 0.28f, 0.40f));
-            ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.20f, 0.39f, 0.48f, 0.66f));
+            ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Foundation::EColor::SurfaceElevated));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Foundation::EColor::SurfaceHover));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Theme::Color(NextUI::Foundation::EColor::AccentHover));
+            ImGui::PushStyleColor(ImGuiCol_Header, NextUI::Theme::Color(NextUI::Foundation::EColor::Accent, 0.45f));
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, NextUI::Theme::Color(NextUI::Foundation::EColor::AccentHover, 0.72f));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, NextUI::Theme::Color(NextUI::Foundation::EColor::Accent, 0.90f));
+            ImGui::PushStyleColor(ImGuiCol_TableRowBgAlt, NextUI::Theme::Color(NextUI::Foundation::EColor::SurfaceElevated, 0.35f));
+            ImGui::PushStyleColor(ImGuiCol_Separator, kBorder);
         }
 
         void PopProductTheme()
@@ -115,8 +118,7 @@ namespace AirportSim
 
         ImU32 ColorToImU32(const glm::vec3& c)
         {
-            return IM_COL32(static_cast<int>(c.r * 255.0f), static_cast<int>(c.g * 255.0f),
-                            static_cast<int>(c.b * 255.0f), 255);
+            return NextUI::Hud::ToImU32(c);
         }
 
         ImVec4 FlightStateColor(EFlightState state)
@@ -134,19 +136,7 @@ namespace AirportSim
         bool ProjectWorld(const glm::mat4& viewProjection, const ImVec2& vpPos, const ImVec2& vpSize,
                           const glm::vec3& world, ImVec2& outScreen)
         {
-            const glm::vec4 clip = viewProjection * glm::vec4(world, 1.0f);
-            if (clip.w <= 0.0f)
-            {
-                return false;
-            }
-            const glm::vec3 ndc = glm::vec3(clip) / clip.w;
-            if (ndc.x < -1.1f || ndc.x > 1.1f || ndc.y < -1.1f || ndc.y > 1.1f)
-            {
-                return false;
-            }
-            outScreen =
-                ImVec2(vpPos.x + (ndc.x * 0.5f + 0.5f) * vpSize.x, vpPos.y + (-ndc.y * 0.5f + 0.5f) * vpSize.y);
-            return true;
+            return NextUI::Hud::TryProjectWorldToScreen(viewProjection, vpPos, vpSize, world, outScreen, 1.1f);
         }
 
         void SwitchFollowAgent(AgentSystem& agents, int& followAgentId, int direction)
@@ -264,18 +254,29 @@ namespace AirportSim
         {
             time.PausedRef() = !time.PausedRef();
         }
+        ImGui::SameLine();
         const float speeds[] = {Config::kDefaultTimeScale, Config::kDefaultTimeScale * 2.0f,
                                 Config::kDefaultTimeScale * 4.0f};
-        const char* labels[] = {"1x", "2x", "4x"};
-        for (int i = 0; i < 3; ++i)
+        static constexpr std::array<const char*, 3> labels = {"1x", "2x", "4x"};
+        int selectedSpeedIndex = -1;
+        if (!time.PausedRef())
         {
-            ImGui::SameLine();
-            const bool active = !time.PausedRef() && std::abs(time.TimeScaleRef() - speeds[i]) < 0.1f;
-            if (AccentButton(labels[i], ImVec2(controlWidth, 32.0f * scale), active))
+            for (int i = 0; i < 3; ++i)
             {
-                time.TimeScaleRef() = speeds[i];
-                time.PausedRef() = false;
+                if (std::abs(time.TimeScaleRef() - speeds[i]) < 0.1f)
+                {
+                    selectedSpeedIndex = i;
+                    break;
+                }
             }
+        }
+        if (NextUI::Theme::SegmentedPillsIndexed("##AirportSpeedPills", labels, selectedSpeedIndex,
+                                                 controlWidth * 3.0f + ImGui::GetStyle().ItemSpacing.x * 2.0f,
+                                                 32.0f * scale) &&
+            selectedSpeedIndex >= 0)
+        {
+            time.TimeScaleRef() = speeds[selectedSpeedIndex];
+            time.PausedRef() = false;
         }
 
         ImGui::Separator();

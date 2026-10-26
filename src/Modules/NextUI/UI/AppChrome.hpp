@@ -57,6 +57,7 @@ namespace NextUI::Foundation
         std::function<void()> drawRightContent;
     };
 
+    void DrawBrandMark(ImDrawList* drawList, ImVec2 min, float size);
     FAppChromeResult DrawAppTitleBar(const FUiContext& context, const FAppTitleBarOptions& options);
     void DrawBottomBar(const FBottomBarOptions& options);
 }

@@ -45,53 +45,20 @@
 #include "Application/Common/DemoScenes.hpp"
 
 
-extern float TitlebarSize;
-extern float ModeRailWidth;
 constexpr float SettingsPanelWidth = 380.0f;
 
 namespace RendererSettingsDetail
 {
-enum class ESceneListGroup : uint8_t
-{
-    Procedural = 0,
-    Gltf = 1,
-    LDraw = 2,
-    Other = 3,
-};
-
-ESceneListGroup GetSceneListGroup(std::string_view scenePath)
-{
-    const std::string extension = std::filesystem::path(scenePath).extension().string();
-    if (extension == ".proc")
-    {
-        return ESceneListGroup::Procedural;
-    }
-    if (extension == ".glb" || extension == ".gltf")
-    {
-        return ESceneListGroup::Gltf;
-    }
-    if (extension == ".ldr" || extension == ".mpd")
-    {
-        return ESceneListGroup::LDraw;
-    }
-    return ESceneListGroup::Other;
-}
-
-const char* GetSceneListGroupLabel(ESceneListGroup group)
-{
-    switch (group)
-    {
-    case ESceneListGroup::Procedural:
-        return "Procedural";
-    case ESceneListGroup::Gltf:
-        return "glTF";
-    case ESceneListGroup::LDraw:
-        return "OMR/LDraw";
-    case ESceneListGroup::Other:
-    default:
-        return "Other";
-    }
-}
+using NextUI::Theme::BeginCard;
+using NextUI::Theme::DrawCheckboxSettingRow;
+using NextUI::Theme::DrawComboSettingRow;
+using NextUI::Theme::DrawFloatSettingRow;
+using NextUI::Theme::DrawIntSettingRow;
+using NextUI::Theme::DrawSettingRow;
+using NextUI::Theme::DrawSettingSliderRow;
+using NextUI::Theme::EndCard;
+using NextUI::Theme::PresetPills;
+using NextUI::Theme::SegmentedPills;
 
 const char* GetPresentModeLabel(VkPresentModeKHR presentMode)
 {
@@ -143,33 +110,6 @@ FCategoryMeta GetCategoryMeta(NextRendererGameInstance::ESettingsCategory catego
     }
 }
 
-void BeginCard(const char* id, float height = 0.0f, ImGuiWindowFlags extraFlags = 0)
-{
-    ImGui::Dummy(ImVec2(0.0f, 2.0f));
-    const float cardWidth = std::max(0.0f, ImGui::GetContentRegionAvail().x - 2.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 8.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceElevated, 0.35f));
-    ImGui::PushStyleColor(ImGuiCol_Border, NextUI::Theme::Color(NextUI::Theme::EColor::Border, 0.80f));
-    if (height > 0.0f)
-    {
-        ImGui::BeginChild(id, ImVec2(cardWidth, height), ImGuiChildFlags_Borders, extraFlags);
-    }
-    else
-    {
-        ImGui::BeginChild(id, ImVec2(cardWidth, 0.0f), ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY, extraFlags);
-    }
-    ImGui::PopStyleColor(2);
-    ImGui::PopStyleVar(3);
-}
-
-void EndCard()
-{
-    ImGui::EndChild();
-    ImGui::Dummy(ImVec2(0.0f, 4.0f));
-}
-
 void DrawCardHeader(const char* icon, const char* title)
 {
     ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover), "%s  %s", icon ? icon : "", title);
@@ -180,124 +120,24 @@ template <typename T>
 bool DrawSegmentedPills(const char* id, const std::vector<std::pair<T, const char*>>& options,
                         T* currentValue, float totalWidth = -1.0f)
 {
-    if (options.empty() || currentValue == nullptr) return false;
-
-    ImGui::PushID(id);
-    const float availWidth = totalWidth > 0.0f ? totalWidth : ImGui::GetContentRegionAvail().x;
-    constexpr float spacing = 4.0f;
-    const float itemWidth = std::max(20.0f, (availWidth - spacing * static_cast<float>(options.size() - 1)) / static_cast<float>(options.size()));
-    constexpr float itemHeight = 24.0f;
-
-    bool changed = false;
-    for (size_t i = 0; i < options.size(); ++i)
-    {
-        if (i > 0)
-        {
-            ImGui::SameLine(0.0f, spacing);
-        }
-        const bool isSelected = (*currentValue == options[i].first);
-
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-        if (isSelected)
-        {
-            ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::Accent, 0.75f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Theme::Color(NextUI::Theme::EColor::Accent));
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-        }
-        else
-        {
-            ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceElevated, 0.45f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceHover, 0.70f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceHover));
-            ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted));
-        }
-
-        if (ImGui::Button(options[i].second, ImVec2(itemWidth, itemHeight)))
-        {
-            if (!isSelected)
-            {
-                *currentValue = options[i].first;
-                changed = true;
-            }
-        }
-        ImGui::PopStyleColor(4);
-        ImGui::PopStyleVar();
-    }
-    ImGui::PopID();
-    return changed;
-}
-
-template <typename T>
-bool DrawSettingSliderRow(const char* label, ImGuiDataType dataType, T* value,
-                          T minValue, T maxValue, const char* format, float dragSpeed,
-                          float valueWidth = 84.0f)
-{
-    ImGui::PushID(label);
-    NextUI::Theme::BeginFormRow(label);
-
-    const float sliderWidth = std::max(40.0f, ImGui::GetContentRegionAvail().x - valueWidth - 6.0f);
-    bool changed = false;
-
-    ImGui::SetNextItemWidth(sliderWidth);
-    changed |= ImGui::SliderScalar("##Slider", dataType, value, &minValue, &maxValue, format);
-
-    ImGui::SameLine(0.0f, 6.0f);
-    ImGui::SetNextItemWidth(valueWidth);
-    changed |= ImGui::DragScalar("##Value", dataType, value, dragSpeed, &minValue, &maxValue, format);
-
-    ImGui::PopID();
-    return changed;
-}
-
-template <typename DrawControl>
-bool DrawSettingRow(const char* label, DrawControl&& drawControl)
-{
-    ImGui::PushID(label);
-    NextUI::Theme::BeginFormRow(label);
-
-    const bool changed = drawControl();
-    ImGui::PopID();
-    return changed;
+    return SegmentedPills(id, options, currentValue, totalWidth);
 }
 
 bool DrawSettingCheckboxRow(const char* label, bool* value)
 {
-    return DrawSettingRow(label,
-                          [value]()
-                          {
-                              return ImGui::Checkbox("##Value", value);
-                          });
-}
-
-template <typename DrawComboBody>
-bool DrawSettingComboRow(const char* label, const char* preview, DrawComboBody&& drawComboBody)
-{
-    bool changed = false;
-    DrawSettingRow(label,
-                   [&]()
-                   {
-                       ImGui::SetNextItemWidth(-FLT_MIN);
-                       if (ImGui::BeginCombo("##Value", preview))
-                       {
-                           changed = drawComboBody();
-                           ImGui::EndCombo();
-                       }
-                       return changed;
-                   });
-    return changed;
+    return DrawCheckboxSettingRow(label, value);
 }
 
 bool DrawFloatSetting(const char* label, float* value, float minValue, float maxValue,
                      const char* format, float dragSpeed)
 {
-    return DrawSettingSliderRow(label, ImGuiDataType_Float, value, minValue, maxValue, format, dragSpeed);
+    return DrawFloatSettingRow(label, value, minValue, maxValue, format, dragSpeed);
 }
 
 bool DrawIntSetting(const char* label, int* value, int minValue, int maxValue,
                    const char* format = "%d")
 {
-    return DrawSettingSliderRow(label, ImGuiDataType_S32, value, minValue, maxValue, format, 1.0f);
+    return DrawIntSettingRow(label, value, minValue, maxValue, format);
 }
 
 bool DrawFloat3Setting(const char* label, const char* id, glm::vec3* value,
@@ -517,67 +357,35 @@ void NextRendererGameInstance::DrawSettings(FRendererUiState& uiState)
             }
 
             // Quick Elevation Pills
-            struct ElevPreset { float deg; const char* name; };
-            const ElevPreset elevPresets[] = {
+            static constexpr std::pair<float, const char*> elevPresets[] = {
                 {5.0f, "Dawn"}, {25.0f, "Morning"}, {65.0f, "Noon"}, {2.0f, "Sunset"}, {-12.0f, "Night"}
             };
-            const float pillAvail = ImGui::GetContentRegionAvail().x;
-            const float pillWidth = std::max(20.0f, (pillAvail - 4.0f * 4.0f) / 5.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-            for (size_t p = 0; p < IM_ARRAYSIZE(elevPresets); ++p)
+            float pickedElev = 0.0f;
+            if (PresetPills("##ElevPresets", std::span<const std::pair<float, const char*>>(elevPresets), &pickedElev))
             {
-                if (p > 0) ImGui::SameLine(0.0f, 4.0f);
-                if (ImGui::Button(elevPresets[p].name, ImVec2(pillWidth, 20.0f)))
-                {
-                    environment.SunElevation = glm::radians(elevPresets[p].deg);
-                    environmentChanged = true;
-                }
+                environment.SunElevation = glm::radians(pickedElev);
+                environmentChanged = true;
             }
-            ImGui::PopStyleVar();
 
             // Rotation / Azimuth
             environmentChanged |= DrawFloatSetting("Sun Azimuth", &environment.SunRotation, 0.0f, 2.0f, "%.2f", 0.01f);
             // Compass Presets
-            struct CompassPreset { float rot; const char* label; };
-            const CompassPreset compassPresets[] = {
+            static constexpr std::pair<float, const char*> compassPresets[] = {
                 {0.0f, "North"}, {0.5f, "East"}, {1.0f, "South"}, {1.5f, "West"}
             };
-            const float compWidth = std::max(20.0f, (pillAvail - 4.0f * 3.0f) / 4.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-            for (size_t c = 0; c < IM_ARRAYSIZE(compassPresets); ++c)
-            {
-                if (c > 0) ImGui::SameLine(0.0f, 4.0f);
-                if (ImGui::Button(compassPresets[c].label, ImVec2(compWidth, 20.0f)))
-                {
-                    environment.SunRotation = compassPresets[c].rot;
-                    environmentChanged = true;
-                }
-            }
-            ImGui::PopStyleVar();
+            environmentChanged |= PresetPills("##CompassPresets", std::span<const std::pair<float, const char*>>(compassPresets), &environment.SunRotation);
 
             environmentChanged |= DrawFloatSetting("Sun Luminance", &environment.SunIntensity, 0.0f, 2000.0f, "%.0f", 1.0f);
             environmentChanged |= DrawColorSetting("Sun Color", "##EnvironmentSunColor", &environment.SunColor);
 
             // Color Presets
-            struct ColorPreset { glm::vec3 col; const char* name; };
-            const ColorPreset colorPresets[] = {
+            const std::pair<glm::vec3, const char*> colorPresets[] = {
                 {glm::vec3(1.0f, 0.85f, 0.65f), "Warm 3000K"},
                 {glm::vec3(1.0f, 0.98f, 0.95f), "Noon 5500K"},
                 {glm::vec3(1.0f, 0.65f, 0.35f), "Golden Hour"},
                 {glm::vec3(0.85f, 0.92f, 1.0f), "Cool 6500K"},
             };
-            const float colBtnWidth = std::max(20.0f, (pillAvail - 4.0f * 3.0f) / 4.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-            for (size_t cp = 0; cp < IM_ARRAYSIZE(colorPresets); ++cp)
-            {
-                if (cp > 0) ImGui::SameLine(0.0f, 4.0f);
-                if (ImGui::Button(colorPresets[cp].name, ImVec2(colBtnWidth, 20.0f)))
-                {
-                    environment.SunColor = colorPresets[cp].col;
-                    environmentChanged = true;
-                }
-            }
-            ImGui::PopStyleVar();
+            environmentChanged |= PresetPills("##SunColorPresets", std::span<const std::pair<glm::vec3, const char*>>(colorPresets), &environment.SunColor);
         }
         EndCard();
 
@@ -691,23 +499,14 @@ void NextRendererGameInstance::DrawSettings(FRendererUiState& uiState)
         }
 
         // Lens Focal Length Presets
-        struct LensPreset { float fov; const char* name; };
-        const LensPreset lensPresets[] = {
+        static constexpr std::pair<float, const char*> lensPresets[] = {
             {84.0f, "24mm"}, {63.0f, "35mm"}, {46.0f, "50mm"}, {28.0f, "85mm"}, {18.0f, "135mm"}
         };
-        const float pillAvail = ImGui::GetContentRegionAvail().x;
-        const float pillWidth = std::max(20.0f, (pillAvail - 4.0f * 4.0f) / 5.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-        for (size_t l = 0; l < IM_ARRAYSIZE(lensPresets); ++l)
+        float pickedFov = 0.0f;
+        if (PresetPills("##LensPresets", std::span<const std::pair<float, const char*>>(lensPresets), &pickedFov, 22.0f))
         {
-            if (l > 0) ImGui::SameLine(0.0f, 4.0f);
-            if (ImGui::Button(lensPresets[l].name, ImVec2(pillWidth, 22.0f)))
-            {
-                modelViewController_.SetFieldOfView(lensPresets[l].fov);
-            }
-            NextUI::Theme::DrawTooltip(lensPresets[l].name);
+            modelViewController_.SetFieldOfView(pickedFov);
         }
-        ImGui::PopStyleVar();
         EndCard();
 
         // Card 2: Depth of Field
@@ -716,20 +515,10 @@ void NextRendererGameInstance::DrawSettings(FRendererUiState& uiState)
         DrawFloatSetting("Aperture", &camera.Aperture, 0.0f, 1.0f, "%.2f", 0.01f);
 
         // Aperture Presets
-        struct AperturePreset { float ap; const char* name; };
-        const AperturePreset apPresets[] = {
+        static constexpr std::pair<float, const char*> apPresets[] = {
             {0.0f, "Off"}, {0.70f, "f/1.4"}, {0.35f, "f/2.8"}, {0.18f, "f/5.6"}, {0.09f, "f/11"}
         };
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-        for (size_t a = 0; a < IM_ARRAYSIZE(apPresets); ++a)
-        {
-            if (a > 0) ImGui::SameLine(0.0f, 4.0f);
-            if (ImGui::Button(apPresets[a].name, ImVec2(pillWidth, 20.0f)))
-            {
-                camera.Aperture = apPresets[a].ap;
-            }
-        }
-        ImGui::PopStyleVar();
+        PresetPills("##AperturePresets", std::span<const std::pair<float, const char*>>(apPresets), &camera.Aperture);
 
         DrawFloatSetting("Focus (cm)", &camera.FocalDistance, 0.001f, 1000.0f, "%.3f", 0.05f);
         EndCard();
@@ -1035,22 +824,14 @@ void NextRendererGameInstance::DrawSettings(FRendererUiState& uiState)
                     }
 
                     // Speed pills
-                    struct SpeedPreset { float s; const char* label; };
-                    const SpeedPreset spPresets[] = {
+                    static constexpr std::pair<float, const char*> spPresets[] = {
                         {-1.0f, "-1x"}, {0.5f, "0.5x"}, {1.0f, "1.0x"}, {2.0f, "2.0x"}
                     };
-                    const float spAvail = ImGui::GetContentRegionAvail().x;
-                    const float spWidth = std::max(20.0f, (spAvail - 4.0f * 3.0f) / 4.0f);
-                    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-                    for (size_t sp = 0; sp < IM_ARRAYSIZE(spPresets); ++sp)
+                    float pickedSpeed = 0.0f;
+                    if (PresetPills("##SpeedPresets", std::span<const std::pair<float, const char*>>(spPresets), &pickedSpeed))
                     {
-                        if (sp > 0) ImGui::SameLine(0.0f, 4.0f);
-                        if (ImGui::Button(spPresets[sp].label, ImVec2(spWidth, 20.0f)))
-                        {
-                            skinnedMesh->SetPlaySpeed(spPresets[sp].s);
-                        }
+                        skinnedMesh->SetPlaySpeed(pickedSpeed);
                     }
-                    ImGui::PopStyleVar();
                 }
                 else
                 {
@@ -1106,24 +887,17 @@ void NextRendererGameInstance::DrawSettings(FRendererUiState& uiState)
 
         ImGui::Dummy(ImVec2(0.0f, 2.0f));
         ImGui::TextDisabled("Record 3s Benchmark Video:");
-        const float btnAvail = ImGui::GetContentRegionAvail().x;
-        const float btnW = std::max(20.0f, (btnAvail - 4.0f * 2.0f) / 3.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-        if (ImGui::Button("100% Scale", ImVec2(btnW, 22.0f)))
+        using EScale = Runtime::IScreenShotService::EVideoOutputScale;
+        static constexpr std::pair<EScale, const char*> videoScalePresets[] = {
+            {EScale::Full, "100% Scale"},
+            {EScale::Half, "50% Scale"},
+            {EScale::Quarter, "25% Scale"},
+        };
+        EScale pickedScale = EScale::Half;
+        if (PresetPills("##VideoScalePresets", std::span<const std::pair<EScale, const char*>>(videoScalePresets), &pickedScale, 22.0f))
         {
-            RequestThreeSecondVideo(Runtime::IScreenShotService::EVideoOutputScale::Full);
+            RequestThreeSecondVideo(pickedScale);
         }
-        ImGui::SameLine(0.0f, 4.0f);
-        if (ImGui::Button("50% Scale", ImVec2(btnW, 22.0f)))
-        {
-            RequestThreeSecondVideo(Runtime::IScreenShotService::EVideoOutputScale::Half);
-        }
-        ImGui::SameLine(0.0f, 4.0f);
-        if (ImGui::Button("25% Scale", ImVec2(btnW, 22.0f)))
-        {
-            RequestThreeSecondVideo(Runtime::IScreenShotService::EVideoOutputScale::Quarter);
-        }
-        ImGui::PopStyleVar();
         EndCard();
         break;
     }

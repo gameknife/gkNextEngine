@@ -251,108 +251,23 @@ UserInterface::UserInterface(NextEngine* engine, Vulkan::CommandPool& commandPoo
     //     : GOption->locale == "zhCN"                     ? io.Fonts->GetGlyphRangesChineseFull()
     //                                                     : io.Fonts->GetGlyphRangesDefault();
 
-    defaultFont_ = NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
-            .filePath = "assets/fonts/Roboto-Regular.ttf",
-            .pixelSize = fontSize,
-            .includeChineseFull = true,
-            .rasterizerDensity = fontRasterizerDensity,
-        });
+    defaultFont_ = NextUI::FontLoader::LoadDefaultUiFont(
+        "assets/fonts/Roboto-Regular.ttf", fontSize, fontRasterizerDensity, true);
     if (defaultFont_ == nullptr)
     {
         Throw(std::runtime_error("failed to load basic ImGui Text font"));
     }
-    io.FontDefault = defaultFont_;
-
-    static const ImWchar iconRange[] = {
-        ICON_MIN_FA,
-        ICON_MAX_FA, // Basic Latin + Latin Supplement
-        0,
-    };
-    ImFontConfig config;
-    config.MergeMode = true;
-    config.GlyphMinAdvanceX = fontSize;
-    config.GlyphOffset = ImVec2(0, 0);
-
-    NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
-        .filePath = "assets/fonts/fa-regular-400.ttf",
-        .pixelSize = fontSize - 2,
-        .includeChineseFull = false,
-        .glyphRanges = iconRange,
-        .fontConfig = &config,
-        .rasterizerDensity = fontRasterizerDensity,
-        .warnOnFailure = false,
-    });
-    NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
-        .filePath = "assets/fonts/fa-solid-900.ttf",
-        .pixelSize = fontSize - 2,
-        .includeChineseFull = false,
-        .glyphRanges = iconRange,
-        .fontConfig = &config,
-        .rasterizerDensity = fontRasterizerDensity,
-        .warnOnFailure = false,
-    });
-    NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
-        .filePath = "assets/fonts/fa-brands-400.ttf",
-        .pixelSize = fontSize - 2,
-        .includeChineseFull = false,
-        .glyphRanges = iconRange,
-        .fontConfig = &config,
-        .rasterizerDensity = fontRasterizerDensity,
-        .warnOnFailure = false,
-    });
-
-    ImFontConfig configLocale;
-    configLocale.MergeMode = true;
-    NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
-        .filePath = "assets/fonts/DroidSansFallback.ttf",
-        .pixelSize = fontSize,
-        .glyphRanges = io.Fonts->GetGlyphRangesChineseSimplifiedCommon(),
-        .fontConfig = &configLocale,
-        .rasterizerDensity = fontRasterizerDensity,
-        .warnOnFailure = false,
-    });
 
     constexpr float titleFontSize = 18.0f;
     titleBarFont_ = NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
         .filePath = "assets/fonts/Roboto-BoldCondensed.ttf",
         .pixelSize = titleFontSize,
         .includeChineseFull = false,
-        .extraGlyphsUtf8 = "gkNextRenderer gkNextEditor SCAD Studio SCAD Library",
+        .rasterizerDensity = fontRasterizerDensity,
     });
     if (titleBarFont_ != nullptr)
     {
-        ImFontConfig titleIconConfig;
-        titleIconConfig.MergeMode = true;
-        titleIconConfig.GlyphMinAdvanceX = titleFontSize;
-        titleIconConfig.GlyphOffset = ImVec2(0, 0);
-
-        NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
-            .filePath = "assets/fonts/fa-regular-400.ttf",
-            .pixelSize = titleFontSize - 2.0f,
-            .includeChineseFull = false,
-            .glyphRanges = iconRange,
-            .fontConfig = &titleIconConfig,
-            .rasterizerDensity = fontRasterizerDensity,
-            .warnOnFailure = false,
-        });
-        NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
-            .filePath = "assets/fonts/fa-solid-900.ttf",
-            .pixelSize = titleFontSize - 2.0f,
-            .includeChineseFull = false,
-            .glyphRanges = iconRange,
-            .fontConfig = &titleIconConfig,
-            .rasterizerDensity = fontRasterizerDensity,
-            .warnOnFailure = false,
-        });
-        NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
-            .filePath = "assets/fonts/fa-brands-400.ttf",
-            .pixelSize = titleFontSize - 2.0f,
-            .includeChineseFull = false,
-            .glyphRanges = iconRange,
-            .fontConfig = &titleIconConfig,
-            .rasterizerDensity = fontRasterizerDensity,
-            .warnOnFailure = false,
-        });
+        NextUI::FontLoader::MergeFontAwesomeIcons(titleFontSize, fontRasterizerDensity);
     }
 
     if (funcInit != nullptr)

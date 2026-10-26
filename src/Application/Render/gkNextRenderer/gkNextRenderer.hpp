@@ -8,6 +8,56 @@
 #include "Modules/NextViture/VitureModule.hpp"
 #endif
 
+#define GK_NEXT_RENDERER_SHARED_UI_HELPERS
+#include <filesystem>
+
+extern float TitlebarSize;
+extern float TitlebarRightInfoWidth;
+extern float ModeRailWidth;
+extern float ModeRailButtonSize;
+
+enum class ESceneListGroup : uint8_t
+{
+    Procedural = 0,
+    Gltf = 1,
+    LDraw = 2,
+    Other = 3,
+};
+
+inline ESceneListGroup GetSceneListGroup(std::string_view scenePath)
+{
+    const std::string extension = std::filesystem::path(scenePath).extension().string();
+    if (extension == ".proc")
+    {
+        return ESceneListGroup::Procedural;
+    }
+    if (extension == ".glb" || extension == ".gltf")
+    {
+        return ESceneListGroup::Gltf;
+    }
+    if (extension == ".ldr" || extension == ".mpd")
+    {
+        return ESceneListGroup::LDraw;
+    }
+    return ESceneListGroup::Other;
+}
+
+inline const char* GetSceneListGroupLabel(ESceneListGroup group)
+{
+    switch (group)
+    {
+    case ESceneListGroup::Procedural:
+        return "Procedural";
+    case ESceneListGroup::Gltf:
+        return "glTF";
+    case ESceneListGroup::LDraw:
+        return "OMR/LDraw";
+    case ESceneListGroup::Other:
+    default:
+        return "Other";
+    }
+}
+
 class NextRendererGameInstance : public NextGameInstanceBase
 {
 public:

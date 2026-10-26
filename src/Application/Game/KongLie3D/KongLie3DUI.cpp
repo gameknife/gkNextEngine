@@ -7,6 +7,8 @@
 #include "KongLie3DGameInstance.hpp"
 #include "KongLie3DStyle.hpp"
 #include "Engine/Runtime/Utilities/NextEngineHelper.hpp"
+#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Modules/NextUI/UI/UiHud.hpp"
 
 namespace
 {
@@ -48,39 +50,11 @@ namespace
 
     ImU32 ToImColor(const glm::vec3& color)
     {
-        return IM_COL32(static_cast<int>(std::clamp(color.r, 0.0f, 1.0f) * 255.0f),
-                        static_cast<int>(std::clamp(color.g, 0.0f, 1.0f) * 255.0f),
-                        static_cast<int>(std::clamp(color.b, 0.0f, 1.0f) * 255.0f),
-                        255);
+        return NextUI::Hud::ToImU32(color);
     }
 
-    ImVec4 ToImVec4(const glm::vec3& color, float alpha = 1.0f)
-    {
-        return ImVec4(color.r, color.g, color.b, alpha);
-    }
-
-    ImVec4 GetHealthColor(float ratio)
-    {
-        const ImVec4 red(0.85f, 0.22f, 0.20f, 1.0f);
-        const ImVec4 yellow(0.93f, 0.76f, 0.22f, 1.0f);
-        const ImVec4 green(0.24f, 0.80f, 0.33f, 1.0f);
-        const auto lerpColor = [](const ImVec4& lhs, const ImVec4& rhs, float t)
-        {
-            return ImVec4(lhs.x + (rhs.x - lhs.x) * t,
-                          lhs.y + (rhs.y - lhs.y) * t,
-                          lhs.z + (rhs.z - lhs.z) * t,
-                          lhs.w + (rhs.w - lhs.w) * t);
-        };
-
-        if (ratio <= 0.5f)
-        {
-            const float t = std::clamp(ratio / 0.5f, 0.0f, 1.0f);
-            return lerpColor(red, yellow, t);
-        }
-
-        const float t = std::clamp((ratio - 0.5f) / 0.5f, 0.0f, 1.0f);
-        return lerpColor(yellow, green, t);
-    }
+    using NextUI::Hud::ToImVec4;
+    using NextUI::Hud::GetHealthColor;
 
     bool PushFontIfAvailable(ImFont* font)
     {
@@ -124,7 +98,7 @@ namespace
 
     ImU32 ToImColor(const ImVec4& color)
     {
-        return ImGui::ColorConvertFloat4ToU32(color);
+        return NextUI::Hud::ToImU32(color);
     }
 
     struct FAliveCounts
@@ -535,23 +509,16 @@ namespace
                 continue;
             }
 
-            ImVec2 screenPos{};
             const float headOffset = piece.dimensions.y * piece.visualScale + 0.28f;
-            if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(gameInstance, piece.node->WorldTranslation() + glm::vec3(0.0f, headOffset, 0.0f), screenPos))
-            {
-                continue;
-            }
-
             const float healthRatio = std::clamp(static_cast<float>(piece.currentHp) / static_cast<float>(piece.def.hp), 0.0f, 1.0f);
-            const float width = Ui(38.0f);
-            const float height = Ui(5.0f);
-            const ImVec2 min(screenPos.x - width * 0.5f, screenPos.y - height * 0.5f);
-            const ImVec2 max(screenPos.x + width * 0.5f, screenPos.y + height * 0.5f);
-            const ImVec2 fillMax(min.x + width * healthRatio, max.y);
-
-            drawList->AddRectFilled(min, max, IM_COL32(18, 18, 18, 180), Ui(2.0f));
-            drawList->AddRectFilled(min, fillMax, ImGui::ColorConvertFloat4ToU32(GetHealthColor(healthRatio)), Ui(2.0f));
-            drawList->AddRect(min, max, IM_COL32(255, 255, 255, 120), Ui(2.0f));
+            NextUI::Hud::DrawWorldHealthBar(
+                drawList,
+                piece.node->WorldTranslation() + glm::vec3(0.0f, headOffset, 0.0f),
+                healthRatio,
+                ImVec2(38.0f, 5.0f),
+                ImVec2(0.0f, 0.0f),
+                0,
+                &gameInstance);
         }
     }
 
@@ -591,20 +558,16 @@ namespace
 
         for (const auto& popup : gameInstance.GetBattleSystem().GetDamagePopups())
         {
-            ImVec2 screenPos{};
-            if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(gameInstance, popup.worldPos, screenPos))
-            {
-                continue;
-            }
-
             const float progress = 1.0f - std::clamp(popup.remainingMs / std::max(popup.durationMs, 1.0f), 0.0f, 1.0f);
-            screenPos.y -= Ui(22.0f) * progress;
-            drawList->AddText(ImVec2(screenPos.x - Ui(10.0f), screenPos.y),
-                              ImGui::ColorConvertFloat4ToU32(ImVec4(popup.color.r,
-                                                                    popup.color.g,
-                                                                    popup.color.b,
-                                                                    1.0f - progress * 0.8f)),
-                              popup.text.c_str());
+            NextUI::Hud::DrawWorldFloatingText(
+                drawList,
+                popup.worldPos,
+                popup.text,
+                progress,
+                ToImColor(popup.color),
+                22.0f,
+                0.0f,
+                &gameInstance);
         }
     }
 
@@ -1278,38 +1241,25 @@ namespace
             return;
         }
 
-        const auto drawThreeButtons = [&](const std::array<const char*, 3>& labels,
+        const auto drawThreeButtons = [&](const char* id,
+                                          const std::array<const char*, 3>& labels,
                                           const std::array<bool, 3>& selectedStates,
                                           const std::function<void(size_t)>& onClick)
         {
-            const float spacing = ImGui::GetStyle().ItemSpacing.x;
-            const float buttonWidth = (ImGui::GetContentRegionAvail().x - spacing * 2.0f) / 3.0f;
-            for (size_t index = 0; index < labels.size(); ++index)
+            int selectedIndex = -1;
+            for (size_t i = 0; i < selectedStates.size(); ++i)
             {
-                if (selectedStates[index])
+                if (selectedStates[i])
                 {
-                    ImGui::PushStyleColor(ImGuiCol_Button, KongLie3D::Style::Highlight);
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.88f, 0.42f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.89f, 0.74f, 0.24f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_Border, KongLie3D::Style::Highlight);
-                    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+                    selectedIndex = static_cast<int>(i);
+                    break;
                 }
-
-                if (ButtonWithClick(labels[index], ImVec2(buttonWidth, Ui(28.0f))))
-                {
-                    onClick(index);
-                }
-
-                if (selectedStates[index])
-                {
-                    ImGui::PopStyleVar();
-                    ImGui::PopStyleColor(4);
-                }
-
-                if (index + 1 < labels.size())
-                {
-                    ImGui::SameLine();
-                }
+            }
+            if (NextUI::Theme::SegmentedPillsIndexed(id, labels, selectedIndex, -1.0f, Ui(28.0f)) &&
+                selectedIndex >= 0)
+            {
+                KongLie3D::PlayUiClickSfx();
+                onClick(static_cast<size_t>(selectedIndex));
             }
         };
 
@@ -1331,7 +1281,7 @@ namespace
                 labels[index] = levels[index].name.c_str();
                 selectedStates[index] = index == gameInstance.GetCurrentLevelIndex();
             }
-            drawThreeButtons(labels, selectedStates, [&](size_t index)
+            drawThreeButtons("##KongLie3DLevelPills", labels, selectedStates, [&](size_t index)
             {
                 if (index < levels.size())
                 {
@@ -1361,7 +1311,8 @@ namespace
             const std::array<bool, 3> speedStates = {currentSpeed < 1.5f,
                                                      currentSpeed >= 1.5f && currentSpeed < 3.0f,
                                                      currentSpeed >= 3.0f};
-            drawThreeButtons(speedLabels,
+            drawThreeButtons("##KongLie3DSpeedPills",
+                             speedLabels,
                              speedStates,
                               [&](size_t index)
                               {

@@ -1,0 +1,190 @@
+{
+  "_comment": "NextRaiden P1 战斗核心冒烟：按住开火飞完前 40 秒，验证波次出怪、子弹命中、计分、物理碎片产生并被回收。玩家开 nr.invincible，所以这条脚本测的是进攻侧，不是躲弹能力。",
+  "_comment_timing": "等待一律用 game.stageTime，不用 wait-frames（见 nextraiden-smoke 里的说明）。关卡秒数就是墙钟秒数，所以跑满这条脚本要 40 秒出头，timeoutMs 必须给够。",
+  "name": "nextraiden-combat",
+  "target": "NextRaiden",
+  "viewport": {
+    "width": 1600,
+    "height": 900
+  },
+  "defaults": {
+    "waitFrames": 2,
+    "stepTimeoutMs": 60000
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "engine.status",
+      "op": "eq",
+      "value": "Running"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.state",
+      "op": "eq",
+      "value": "playing"
+    },
+    {
+      "type": "log",
+      "message": "波次表必须全部解析出来：29 条。少一条就是 stage1_waves.json 里有被严格解析拒掉的波次"
+    },
+    {
+      "type": "assert",
+      "query": "game.wavesTotal",
+      "op": "eq",
+      "value": 29
+    },
+    {
+      "type": "cvar",
+      "name": "nr.invincible",
+      "set": "true"
+    },
+    {
+      "type": "key",
+      "code": "Z",
+      "action": "down"
+    },
+    {
+      "type": "log",
+      "message": "12 秒：前两波 scout 应该已经进场并被打掉一些"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.stageTime",
+      "op": "gt",
+      "value": 12.0
+    },
+    {
+      "type": "assert",
+      "query": "game.wavesFired",
+      "op": "ge",
+      "value": 2
+    },
+    {
+      "type": "assert",
+      "query": "game.kills",
+      "op": "gt",
+      "value": 0
+    },
+    {
+      "type": "assert",
+      "query": "game.score",
+      "op": "gt",
+      "value": 0
+    },
+    {
+      "type": "log",
+      "message": "打死东西就该有物理碎块在飞或在地上躺着"
+    },
+    {
+      "type": "assert",
+      "query": "game.debrisAlive",
+      "op": "gt",
+      "value": 0
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/combat_early",
+      "ui": true
+    },
+    {
+      "type": "log",
+      "message": "26 秒：interceptor 弧线波，敌弹应该在场上"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.stageTime",
+      "op": "gt",
+      "value": 26.0
+    },
+    {
+      "type": "assert",
+      "query": "game.wavesFired",
+      "op": "ge",
+      "value": 5
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/combat_mid",
+      "ui": true
+    },
+    {
+      "type": "log",
+      "message": "48 秒：前 11 波已放完（t=45 那波是第 10 条）；无敌下不该掉命"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.stageTime",
+      "op": "gt",
+      "value": 48.0
+    },
+    {
+      "type": "assert",
+      "query": "game.wavesFired",
+      "op": "ge",
+      "value": 10
+    },
+    {
+      "type": "assert",
+      "query": "game.kills",
+      "op": "ge",
+      "value": 8
+    },
+    {
+      "type": "assert",
+      "query": "game.lives",
+      "op": "ge",
+      "value": 3,
+      "_comment": "无敌下命数只会涨不会跌：P2 的波次密度加上地面目标会越过 10 万的加命线，所以断言是'没掉命'而不是'正好 3 条'"
+    },
+    {
+      "type": "log",
+      "message": "地面目标：35 个摆在 .scad 里，打完前 48 秒至少该拆掉几个"
+    },
+    {
+      "type": "assert",
+      "query": "game.groundTotal",
+      "op": "eq",
+      "value": 35
+    },
+    {
+      "type": "assert",
+      "query": "game.groundDestroyed",
+      "op": "gt",
+      "value": 0
+    },
+    {
+      "type": "log",
+      "message": "掉落：前面几波带 power/medal，拾取后火力必然 >1"
+    },
+    {
+      "type": "assert",
+      "query": "game.power",
+      "op": "gt",
+      "value": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/combat_late",
+      "ui": true
+    },
+    {
+      "type": "log",
+      "message": "碎片预算是硬上限，超了说明回收没生效"
+    },
+    {
+      "type": "assert",
+      "query": "game.debrisAlive",
+      "op": "le",
+      "value": 64
+    },
+    {
+      "type": "key",
+      "code": "Z",
+      "action": "up"
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

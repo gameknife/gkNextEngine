@@ -63,6 +63,7 @@ set(unitTestSources
     Test_PhysicsComponent.cpp
     Test_CharacterGroundVelocity.cpp
     Test_NextAstrobot.cpp
+    Test_NextRaiden.cpp
     Test_CPUAccelerationSnapshot.cpp
     Test_AmbientBakeScheduler.cpp
     Test_AmbientBakeCache.cpp
@@ -107,6 +108,21 @@ set(unitTestSources
     ${GK_SOURCE_ROOT}/Application/Game/NextTotalwar/Data/BattleData.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextTotalwar/Render/BattleCamera.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextAstrobot/Level/LevelFlow.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/NextRaidenTypes.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/NextRaidenConfig.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Combat/BulletPattern.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Level/WaveDirector.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Level/PatternJson.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Level/StageFlow.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Level/StageIndex.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/World/BossSystem.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/World/GroundTargetSystem.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/World/ItemSystem.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Combat/DebrisSystem.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Level/PrefabRack.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Combat/BulletPool.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/World/EnemyPool.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Player/ScrollCamera.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Data/ItemDefs.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Inventory/Inventory.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Player/PlayerActionController.cpp

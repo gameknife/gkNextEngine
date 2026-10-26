@@ -103,6 +103,8 @@
   现行契约见 [AGENT_GUIDE/NextAstrobot.md](AGENT_GUIDE/NextAstrobot.md)，设计文末 §11 列剩余打磨项）
 - NextDayz：[3C 与 ScadRig](projects/nextdayz/nextdayz-3c-scadrig-design.md) ·
   [PVE 生存循环](projects/nextdayz/nextdayz-productization-design.md)
+- NextRaiden：[竖版街机射击 MVP 设计](projects/nextraiden/nextraiden-mvp-design.md) ·
+  [开发计划](projects/nextraiden/nextraiden-mvp-plan.md)（实施中：P0–P2 已完成，关卡 1 可通关）
 - NextRA：[架构不变量](projects/nextra/architecture.md) ·
   [经济与建造设计](projects/nextra/economy-build-design.md) ·
   [剩余计划](projects/nextra/economy-build-plan.md)
@@ -115,6 +117,7 @@
 
 ## 剩余计划
 
+- [NextRaiden MVP](projects/nextraiden/nextraiden-mvp-plan.md)（实施中；P0–P2 已完成，P3/P4 待做）
 - [验证中心 MVP](plans/validation-center-mvp-plan.md)（待实施；CLI 自动留档、Dashboard 查看问题与可见重跑）
 - [iOS NativeAOT C# 真机支持](plans/ios-nativeaot-plan.md)（P0–P2 已完成；待真机验收）
 - [PathTracing 材质模型统一](plans/shader-material-model-unification-plan.md)（待审阅）

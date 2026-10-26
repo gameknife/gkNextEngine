@@ -1,4 +1,5 @@
-// NextRaiden complete kit catalogue. All 56 public modules appear here.
+// NextRaiden combat kit catalogue. Ground variants and the 20 new scenery modules
+// have a dedicated inspection scene in facilities.scad.
 // Aircraft at rest for inspection, NOT a playable level. Tile tops are z=0.
 use <../../lib/kit_raiden.scad>
 use <../../lib/raiden_parts.scad>

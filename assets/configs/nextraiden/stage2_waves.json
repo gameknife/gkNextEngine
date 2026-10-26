@@ -1,0 +1,817 @@
+{
+  "_comment": "关卡 2「军港破袭」波次表。t 是关卡秒数（只在 Playing 状态推进，BOSS 战不计）。滚动 12 m/s 和关卡 1 一样，所以 .scad 里地面目标的 (y-22)/12 就是它出现的秒数。相对关卡 1 的三处升级：弹速整体高约一成、编队更大、引入 spiral 与 sweep 两种走位型弹幕。解析是严格的：未知字段或未知枚举名会被拒绝并记一行错误，不会静默走默认值。",
+  "waves": [
+    {
+      "_comment": "开场四架。关卡 1 是三架，这里不再有教学段",
+      "t": 4.0,
+      "kind": "scout",
+      "count": 4,
+      "formation": "line",
+      "x": 0.0,
+      "spacing": 9.6,
+      "path": "straight",
+      "speed": 25.6,
+      "fire": {
+        "pattern": "aimed",
+        "interval": 1.4,
+        "bullet": "boltHostile",
+        "speed": 36.8,
+        "lead": 0.12
+      }
+    },
+    {
+      "t": 8.0,
+      "kind": "scout",
+      "count": 4,
+      "formation": "vee",
+      "x": -12.0,
+      "spacing": 7.2,
+      "path": "sine",
+      "speed": 24.0,
+      "amplitude": 9.6,
+      "period": 2.2,
+      "fire": {
+        "pattern": "aimed",
+        "interval": 1.3,
+        "bullet": "boltHostile",
+        "speed": 36.8,
+        "lead": 0.12
+      },
+      "drop": "power"
+    },
+    {
+      "t": 12.0,
+      "kind": "scout",
+      "count": 4,
+      "formation": "vee",
+      "x": 12.0,
+      "spacing": 7.2,
+      "path": "sine",
+      "speed": 24.0,
+      "amplitude": 9.6,
+      "period": 2.2,
+      "fire": {
+        "pattern": "aimed",
+        "interval": 1.3,
+        "bullet": "boltHostile",
+        "speed": 36.8,
+        "lead": 0.12
+      }
+    },
+    {
+      "t": 16.0,
+      "kind": "interceptor",
+      "count": 3,
+      "formation": "line",
+      "x": -16.0,
+      "spacing": 8.0,
+      "path": "arcInOut",
+      "speed": 20.8,
+      "amplitude": 16.0,
+      "period": 3.0,
+      "fire": {
+        "pattern": "spread",
+        "count": 3,
+        "arcDegrees": 28,
+        "interval": 1.5,
+        "bullet": "boltHostile",
+        "speed": 32.0,
+        "lead": 0.1
+      }
+    },
+    {
+      "t": 19.0,
+      "kind": "interceptor",
+      "count": 3,
+      "formation": "line",
+      "x": 16.0,
+      "spacing": 8.0,
+      "path": "arcInOut",
+      "speed": 20.8,
+      "amplitude": 16.0,
+      "period": 3.0,
+      "fire": {
+        "pattern": "spread",
+        "count": 3,
+        "arcDegrees": 28,
+        "interval": 1.5,
+        "bullet": "boltHostile",
+        "speed": 32.0,
+        "lead": 0.1
+      },
+      "drop": "power"
+    },
+    {
+      "t": 24.0,
+      "kind": "scout",
+      "count": 5,
+      "formation": "column",
+      "x": -8.0,
+      "spacing": 11.2,
+      "path": "straight",
+      "speed": 27.2,
+      "fire": {
+        "pattern": "stream",
+        "burst": 3,
+        "burstGap": 0.1,
+        "interval": 1.6,
+        "bullet": "boltHostile",
+        "speed": 40.0,
+        "lead": 0.12
+      }
+    },
+    {
+      "t": 27.0,
+      "kind": "scout",
+      "count": 5,
+      "formation": "column",
+      "x": 8.0,
+      "spacing": 11.2,
+      "path": "straight",
+      "speed": 27.2,
+      "fire": {
+        "pattern": "stream",
+        "burst": 3,
+        "burstGap": 0.1,
+        "interval": 1.6,
+        "bullet": "boltHostile",
+        "speed": 40.0,
+        "lead": 0.12
+      },
+      "drop": "medal"
+    },
+    {
+      "_comment": "本关第一条螺旋弹幕。旋转的弹幕不能靠站着躲，只能顺着转",
+      "t": 32.0,
+      "kind": "bomber",
+      "count": 1,
+      "formation": "line",
+      "x": 0.0,
+      "spacing": 7.2,
+      "path": "hover",
+      "speed": 14.4,
+      "hoverDepth": 16.0,
+      "hoverSeconds": 5.0,
+      "fire": {
+        "pattern": "spiral",
+        "count": 3,
+        "rateDegreesPerSec": 170,
+        "interval": 0.22,
+        "bullet": "orb",
+        "speed": 22.4
+      }
+    },
+    {
+      "t": 37.0,
+      "kind": "scout",
+      "count": 4,
+      "formation": "line",
+      "x": -28.8,
+      "spacing": 8.0,
+      "path": "strafe",
+      "speed": 30.4,
+      "fire": {
+        "pattern": "aimed",
+        "interval": 1.1,
+        "bullet": "needle",
+        "speed": 52.0,
+        "lead": 0.2
+      }
+    },
+    {
+      "t": 40.0,
+      "kind": "scout",
+      "count": 4,
+      "formation": "line",
+      "x": 28.8,
+      "spacing": 8.0,
+      "path": "strafe",
+      "speed": 30.4,
+      "fire": {
+        "pattern": "aimed",
+        "interval": 1.1,
+        "bullet": "needle",
+        "speed": 52.0,
+        "lead": 0.2
+      },
+      "drop": "medal"
+    },
+    {
+      "_comment": "扫射：一次一发，但角度来回扫，站桩会被扫到",
+      "t": 44.0,
+      "kind": "interceptor",
+      "count": 3,
+      "formation": "arc",
+      "x": 0.0,
+      "spacing": 9.6,
+      "path": "sine",
+      "speed": 20.8,
+      "amplitude": 12.8,
+      "period": 2.6,
+      "fire": {
+        "pattern": "sweep",
+        "rateDegreesPerSec": 130,
+        "sweepDegrees": 40,
+        "interval": 0.3,
+        "bullet": "boltHostile",
+        "speed": 33.6,
+        "lead": 0.05
+      }
+    },
+    {
+      "t": 49.0,
+      "kind": "scout",
+      "count": 6,
+      "formation": "line",
+      "x": 0.0,
+      "spacing": 8.0,
+      "path": "dive",
+      "speed": 22.4,
+      "fire": {
+        "pattern": "aimed",
+        "interval": 1.5,
+        "bullet": "boltHostile",
+        "speed": 40.0,
+        "lead": 0.12
+      },
+      "drop": "bomb"
+    },
+    {
+      "t": 53.0,
+      "kind": "interceptor",
+      "count": 2,
+      "formation": "line",
+      "x": -19.2,
+      "spacing": 8.0,
+      "path": "strafe",
+      "speed": 25.6,
+      "fire": {
+        "pattern": "spread",
+        "count": 5,
+        "arcDegrees": 42,
+        "interval": 1.4,
+        "bullet": "boltHostile",
+        "speed": 33.6,
+        "lead": 0.1
+      }
+    },
+    {
+      "t": 55.0,
+      "kind": "interceptor",
+      "count": 2,
+      "formation": "line",
+      "x": 19.2,
+      "spacing": 8.0,
+      "path": "strafe",
+      "speed": 25.6,
+      "fire": {
+        "pattern": "spread",
+        "count": 5,
+        "arcDegrees": 42,
+        "interval": 1.4,
+        "bullet": "boltHostile",
+        "speed": 33.6,
+        "lead": 0.1
+      }
+    },
+    {
+      "t": 59.0,
+      "kind": "scout",
+      "count": 5,
+      "formation": "vee",
+      "x": 0.0,
+      "spacing": 8.0,
+      "path": "sine",
+      "speed": 27.2,
+      "amplitude": 14.4,
+      "period": 2.0,
+      "fire": {
+        "pattern": "stream",
+        "burst": 4,
+        "burstGap": 0.09,
+        "interval": 1.4,
+        "bullet": "boltHostile",
+        "speed": 41.6,
+        "lead": 0.12
+      }
+    },
+    {
+      "t": 63.0,
+      "kind": "bomber",
+      "count": 2,
+      "formation": "line",
+      "x": 0.0,
+      "spacing": 19.2,
+      "path": "hover",
+      "speed": 12.8,
+      "hoverDepth": 17.6,
+      "hoverSeconds": 6.0,
+      "fire": {
+        "pattern": "ring",
+        "count": 12,
+        "spinDegrees": 13,
+        "interval": 1.2,
+        "bullet": "orb",
+        "speed": 22.4
+      },
+      "drop": "power"
+    },
+    {
+      "t": 68.0,
+      "kind": "scout",
+      "count": 6,
+      "formation": "column",
+      "x": -9.6,
+      "spacing": 8.0,
+      "path": "dive",
+      "speed": 30.4,
+      "fire": {
+        "pattern": "aimed",
+        "interval": 1.1,
+        "bullet": "boltHostile",
+        "speed": 41.6,
+        "lead": 0.12
+      }
+    },
+    {
+      "t": 71.0,
+      "kind": "scout",
+      "count": 6,
+      "formation": "column",
+      "x": 9.6,
+      "spacing": 8.0,
+      "path": "dive",
+      "speed": 30.4,
+      "fire": {
+        "pattern": "aimed",
+        "interval": 1.1,
+        "bullet": "boltHostile",
+        "speed": 41.6,
+        "lead": 0.12
+      },
+      "drop": "medal"
+    },
+    {
+      "_comment": "中BOSS 前的守门人",
+      "t": 75.0,
+      "kind": "interceptor",
+      "count": 3,
+      "formation": "line",
+      "x": 0.0,
+      "spacing": 14.4,
+      "path": "hover",
+      "speed": 19.2,
+      "hoverDepth": 22.4,
+      "hoverSeconds": 4.0,
+      "fire": {
+        "pattern": "spread",
+        "count": 7,
+        "arcDegrees": 52,
+        "interval": 1.3,
+        "bullet": "boltHostile",
+        "speed": 33.6,
+        "lead": 0.1
+      },
+      "drop": "bomb"
+    },
+    {
+      "_comment": "中BOSS 之后的补给波",
+      "t": 86.0,
+      "kind": "scout",
+      "count": 4,
+      "formation": "column",
+      "x": -9.6,
+      "spacing": 9.6,
+      "path": "straight",
+      "speed": 25.6,
+      "fire": {
+        "pattern": "aimed",
+        "interval": 1.2,
+        "bullet": "boltHostile",
+        "speed": 36.8,
+        "lead": 0.12
+      },
+      "drop": "repair"
+    },
+    {
+      "t": 90.0,
+      "kind": "scout",
+      "count": 4,
+      "formation": "column",
+      "x": 9.6,
+      "spacing": 9.6,
+      "path": "straight",
+      "speed": 25.6,
+      "fire": {
+        "pattern": "aimed",
+        "interval": 1.2,
+        "bullet": "boltHostile",
+        "speed": 36.8,
+        "lead": 0.12
+      }
+    },
+    {
+      "t": 95.0,
+      "kind": "interceptor",
+      "count": 3,
+      "formation": "arc",
+      "x": 0.0,
+      "spacing": 10.4,
+      "path": "arcInOut",
+      "speed": 22.4,
+      "amplitude": 17.6,
+      "period": 3.0,
+      "fire": {
+        "pattern": "sweep",
+        "rateDegreesPerSec": 150,
+        "sweepDegrees": 46,
+        "interval": 0.28,
+        "bullet": "boltHostile",
+        "speed": 35.2,
+        "lead": 0.05
+      },
+      "drop": "power"
+    },
+    {
+      "t": 100.0,
+      "kind": "bomber",
+      "count": 1,
+      "formation": "line",
+      "x": -12.8,
+      "spacing": 7.2,
+      "path": "hover",
+      "speed": 14.4,
+      "hoverDepth": 16.0,
+      "hoverSeconds": 6.0,
+      "fire": {
+        "pattern": "spiral",
+        "count": 4,
+        "rateDegreesPerSec": 190,
+        "interval": 0.2,
+        "bullet": "orb",
+        "speed": 23.2
+      }
+    },
+    {
+      "t": 103.0,
+      "kind": "scout",
+      "count": 6,
+      "formation": "vee",
+      "x": 0.0,
+      "spacing": 8.0,
+      "path": "sine",
+      "speed": 27.2,
+      "amplitude": 14.4,
+      "period": 1.9,
+      "fire": {
+        "pattern": "stream",
+        "burst": 4,
+        "burstGap": 0.09,
+        "interval": 1.3,
+        "bullet": "boltHostile",
+        "speed": 41.6,
+        "lead": 0.12
+      }
+    },
+    {
+      "t": 108.0,
+      "kind": "interceptor",
+      "count": 2,
+      "formation": "line",
+      "x": -17.6,
+      "spacing": 8.0,
+      "path": "sine",
+      "speed": 22.4,
+      "amplitude": 14.4,
+      "period": 2.2,
+      "fire": {
+        "pattern": "spread",
+        "count": 5,
+        "arcDegrees": 32,
+        "interval": 1.2,
+        "bullet": "boltHostile",
+        "speed": 33.6,
+        "lead": 0.1
+      }
+    },
+    {
+      "t": 110.0,
+      "kind": "interceptor",
+      "count": 2,
+      "formation": "line",
+      "x": 17.6,
+      "spacing": 8.0,
+      "path": "sine",
+      "speed": 22.4,
+      "amplitude": 14.4,
+      "period": 2.2,
+      "fire": {
+        "pattern": "spread",
+        "count": 5,
+        "arcDegrees": 32,
+        "interval": 1.2,
+        "bullet": "boltHostile",
+        "speed": 33.6,
+        "lead": 0.1
+      },
+      "drop": "option"
+    },
+    {
+      "t": 115.0,
+      "kind": "scout",
+      "count": 5,
+      "formation": "line",
+      "x": -30.4,
+      "spacing": 9.6,
+      "path": "strafe",
+      "speed": 32.0,
+      "fire": {
+        "pattern": "aimed",
+        "interval": 1.0,
+        "bullet": "needle",
+        "speed": 52.0,
+        "lead": 0.2
+      }
+    },
+    {
+      "t": 118.0,
+      "kind": "scout",
+      "count": 5,
+      "formation": "line",
+      "x": 30.4,
+      "spacing": 9.6,
+      "path": "strafe",
+      "speed": 32.0,
+      "fire": {
+        "pattern": "aimed",
+        "interval": 1.0,
+        "bullet": "needle",
+        "speed": 52.0,
+        "lead": 0.2
+      },
+      "drop": "medal"
+    },
+    {
+      "t": 123.0,
+      "kind": "bomber",
+      "count": 2,
+      "formation": "line",
+      "x": 0.0,
+      "spacing": 20.8,
+      "path": "hover",
+      "speed": 12.8,
+      "hoverDepth": 17.6,
+      "hoverSeconds": 7.0,
+      "fire": {
+        "pattern": "ring",
+        "count": 14,
+        "spinDegrees": 15,
+        "interval": 1.1,
+        "bullet": "orb",
+        "speed": 23.2
+      },
+      "drop": "bomb"
+    },
+    {
+      "t": 128.0,
+      "kind": "scout",
+      "count": 6,
+      "formation": "column",
+      "x": -8.0,
+      "spacing": 8.0,
+      "path": "dive",
+      "speed": 30.4,
+      "fire": {
+        "pattern": "aimed",
+        "interval": 1.1,
+        "bullet": "boltHostile",
+        "speed": 43.2,
+        "lead": 0.12
+      }
+    },
+    {
+      "t": 131.0,
+      "kind": "scout",
+      "count": 6,
+      "formation": "column",
+      "x": 8.0,
+      "spacing": 8.0,
+      "path": "dive",
+      "speed": 30.4,
+      "fire": {
+        "pattern": "aimed",
+        "interval": 1.1,
+        "bullet": "boltHostile",
+        "speed": 43.2,
+        "lead": 0.12
+      }
+    },
+    {
+      "t": 136.0,
+      "kind": "interceptor",
+      "count": 4,
+      "formation": "arc",
+      "x": 0.0,
+      "spacing": 10.4,
+      "path": "arcInOut",
+      "speed": 22.4,
+      "amplitude": 18.0,
+      "period": 3.2,
+      "fire": {
+        "pattern": "spread",
+        "count": 5,
+        "arcDegrees": 46,
+        "interval": 1.2,
+        "bullet": "boltHostile",
+        "speed": 34.4,
+        "lead": 0.1
+      },
+      "drop": "power"
+    },
+    {
+      "_comment": "五臂螺旋：这条是关卡 2 弹幕密度的峰值，性能基线看这里",
+      "t": 141.0,
+      "kind": "bomber",
+      "count": 1,
+      "formation": "line",
+      "x": 12.8,
+      "spacing": 7.2,
+      "path": "hover",
+      "speed": 14.4,
+      "hoverDepth": 17.6,
+      "hoverSeconds": 6.0,
+      "fire": {
+        "pattern": "spiral",
+        "count": 5,
+        "rateDegreesPerSec": 210,
+        "interval": 0.18,
+        "bullet": "orb",
+        "speed": 24.0
+      }
+    },
+    {
+      "t": 145.0,
+      "kind": "scout",
+      "count": 6,
+      "formation": "vee",
+      "x": -11.2,
+      "spacing": 8.0,
+      "path": "sine",
+      "speed": 28.8,
+      "amplitude": 12.8,
+      "period": 1.8,
+      "fire": {
+        "pattern": "stream",
+        "burst": 5,
+        "burstGap": 0.08,
+        "interval": 1.2,
+        "bullet": "boltHostile",
+        "speed": 42.4,
+        "lead": 0.12
+      }
+    },
+    {
+      "t": 148.0,
+      "kind": "scout",
+      "count": 6,
+      "formation": "vee",
+      "x": 11.2,
+      "spacing": 8.0,
+      "path": "sine",
+      "speed": 28.8,
+      "amplitude": 12.8,
+      "period": 1.8,
+      "fire": {
+        "pattern": "stream",
+        "burst": 5,
+        "burstGap": 0.08,
+        "interval": 1.2,
+        "bullet": "boltHostile",
+        "speed": 42.4,
+        "lead": 0.12
+      },
+      "drop": "medal"
+    },
+    {
+      "t": 153.0,
+      "kind": "interceptor",
+      "count": 3,
+      "formation": "line",
+      "x": 0.0,
+      "spacing": 12.8,
+      "path": "hover",
+      "speed": 19.2,
+      "hoverDepth": 20.8,
+      "hoverSeconds": 5.0,
+      "fire": {
+        "pattern": "sweep",
+        "rateDegreesPerSec": 170,
+        "sweepDegrees": 50,
+        "interval": 0.26,
+        "bullet": "boltHostile",
+        "speed": 36.0,
+        "lead": 0.05
+      }
+    },
+    {
+      "t": 158.0,
+      "kind": "scout",
+      "count": 8,
+      "formation": "column",
+      "x": 0.0,
+      "spacing": 8.0,
+      "path": "dive",
+      "speed": 32.0,
+      "fire": {
+        "pattern": "aimed",
+        "interval": 1.0,
+        "bullet": "needle",
+        "speed": 54.4,
+        "lead": 0.22
+      },
+      "drop": "repair"
+    },
+    {
+      "t": 163.0,
+      "kind": "bomber",
+      "count": 2,
+      "formation": "line",
+      "x": 0.0,
+      "spacing": 22.4,
+      "path": "hover",
+      "speed": 12.8,
+      "hoverDepth": 19.2,
+      "hoverSeconds": 7.0,
+      "fire": {
+        "pattern": "ring",
+        "count": 16,
+        "spinDegrees": 17,
+        "interval": 1.0,
+        "bullet": "orb",
+        "speed": 24.0
+      }
+    },
+    {
+      "t": 168.0,
+      "kind": "interceptor",
+      "count": 4,
+      "formation": "line",
+      "x": -19.2,
+      "spacing": 8.0,
+      "path": "strafe",
+      "speed": 27.2,
+      "fire": {
+        "pattern": "spread",
+        "count": 7,
+        "arcDegrees": 50,
+        "interval": 1.2,
+        "bullet": "boltHostile",
+        "speed": 35.2,
+        "lead": 0.1
+      }
+    },
+    {
+      "t": 170.0,
+      "kind": "interceptor",
+      "count": 4,
+      "formation": "line",
+      "x": 19.2,
+      "spacing": 8.0,
+      "path": "strafe",
+      "speed": 27.2,
+      "fire": {
+        "pattern": "spread",
+        "count": 7,
+        "arcDegrees": 50,
+        "interval": 1.2,
+        "bullet": "boltHostile",
+        "speed": 35.2,
+        "lead": 0.1
+      },
+      "drop": "power"
+    },
+    {
+      "_comment": "关底 BOSS 前的最后一道门，掉炸弹是给 BOSS 战留的",
+      "t": 175.0,
+      "kind": "scout",
+      "count": 6,
+      "formation": "line",
+      "x": 0.0,
+      "spacing": 9.6,
+      "path": "hover",
+      "speed": 20.8,
+      "hoverDepth": 24.0,
+      "hoverSeconds": 4.0,
+      "fire": {
+        "pattern": "spread",
+        "count": 5,
+        "arcDegrees": 44,
+        "interval": 1.2,
+        "bullet": "needle",
+        "speed": 52.0,
+        "lead": 0.18
+      },
+      "drop": "bomb"
+    }
+  ]
+}

@@ -1,0 +1,237 @@
+{
+  "_comment": "NextRaiden P2 关底验证：用 nr.spawnBoss 跳过前面的波次直接打 BOSS，断言中BOSS 两阶段、关底 BOSS 三阶段依次跨过血量阈值，最后进入 stageClear。这条脚本存在的理由是打一次 BOSS 要等两分半——没有它，调 BOSS 就是每次两分半。",
+  "_comment_phases": "bossPhase 是 0 基的阶段序号。中BOSS 两段（0/1），关底 BOSS 三段（0/1/2）。阈值写在 stages.json 的 hpFraction 上。",
+  "name": "nextraiden-boss",
+  "target": "NextRaiden",
+  "viewport": {
+    "width": 1600,
+    "height": 900
+  },
+  "defaults": {
+    "waitFrames": 2,
+    "stepTimeoutMs": 90000
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "engine.status",
+      "op": "eq",
+      "value": "Running"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.state",
+      "op": "eq",
+      "value": "playing"
+    },
+    {
+      "type": "log",
+      "message": "关卡 1 必须解析出 29 条波次、2 个 BOSS、35 个地面目标"
+    },
+    {
+      "type": "assert",
+      "query": "game.wavesTotal",
+      "op": "eq",
+      "value": 29
+    },
+    {
+      "type": "assert",
+      "query": "game.bossesTotal",
+      "op": "eq",
+      "value": 2
+    },
+    {
+      "type": "assert",
+      "query": "game.groundTotal",
+      "op": "eq",
+      "value": 35
+    },
+    {
+      "type": "cvar",
+      "name": "nr.invincible",
+      "set": "true"
+    },
+    {
+      "type": "cvar",
+      "name": "nr.power",
+      "set": "4"
+    },
+    {
+      "type": "key",
+      "code": "Z",
+      "action": "down"
+    },
+    {
+      "type": "log",
+      "message": "跳到中BOSS：rotorcraft。rig 载入失败会让它直接被跳过，所以 bossActive 是真正的验收点"
+    },
+    {
+      "type": "cvar",
+      "name": "nr.spawnBoss",
+      "set": "true"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossActive",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "wait-until",
+      "query": "game.state",
+      "op": "eq",
+      "value": "boss"
+    },
+    {
+      "type": "assert",
+      "query": "game.bossPhase",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/boss_mid_phase0",
+      "ui": true
+    },
+    {
+      "type": "log",
+      "message": "打到 50% 以下进第二阶段，并甩掉两侧挂架（摘真块 → 物理碎片）"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossPhase",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "assert",
+      "query": "game.bossHpFraction",
+      "op": "le",
+      "value": 0.51
+    },
+    {
+      "type": "assert",
+      "query": "game.debrisAlive",
+      "op": "gt",
+      "value": 0
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/boss_mid_phase1",
+      "ui": true
+    },
+    {
+      "type": "log",
+      "message": "中BOSS 被打掉后把关卡还回去，不结束关卡"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossesFought",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "wait-until",
+      "query": "game.state",
+      "op": "eq",
+      "value": "playing"
+    },
+    {
+      "type": "assert",
+      "query": "game.bossActive",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "log",
+      "message": "跳到关底 BOSS：gunship，三阶段"
+    },
+    {
+      "type": "cvar",
+      "name": "nr.spawnBoss",
+      "set": "true"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossActive",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "wait-until",
+      "query": "game.state",
+      "op": "eq",
+      "value": "boss"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/boss_final_phase0",
+      "ui": true
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossPhase",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossPhase",
+      "op": "eq",
+      "value": 2
+    },
+    {
+      "type": "assert",
+      "query": "game.bossHpFraction",
+      "op": "le",
+      "value": 0.31
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/boss_final_phase2",
+      "ui": true
+    },
+    {
+      "type": "log",
+      "message": "关底 BOSS 倒下 = 过关"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.state",
+      "op": "eq",
+      "value": "stageClear"
+    },
+    {
+      "type": "assert",
+      "query": "game.bossesFought",
+      "op": "eq",
+      "value": 2
+    },
+    {
+      "type": "assert",
+      "query": "game.lives",
+      "op": "ge",
+      "value": 3,
+      "_comment": "两个 BOSS 加起来 7 万分，加上杂兵会越过 10 万的加命线，所以是 >=3 不是 ==3"
+    },
+    {
+      "type": "assert",
+      "query": "game.score",
+      "op": "gt",
+      "value": 50000
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/stage_clear",
+      "ui": true
+    },
+    {
+      "type": "key",
+      "code": "Z",
+      "action": "up"
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

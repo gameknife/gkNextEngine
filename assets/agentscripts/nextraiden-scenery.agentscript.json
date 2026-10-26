@@ -1,0 +1,56 @@
+{
+  "name": "nextraiden-scenery",
+  "target": "NextRaiden",
+  "scene": "assets/scad/source/next_raiden/stage1_airfield.scad",
+  "viewport": { "width": 1600, "height": 900 },
+  "defaults": { "waitFrames": 2, "stepTimeoutMs": 20000 },
+  "steps": [
+    { "type": "wait-until", "query": "engine.status", "op": "eq", "value": "Running" },
+    { "type": "wait-until", "query": "game.state", "op": "eq", "value": "playing" },
+    { "type": "cvar", "name": "nr.invincible", "set": "true" },
+    { "type": "cvar", "name": "nr.autoFire", "set": "false" },
+    { "type": "cvar", "name": "nr.freeze", "set": "true" },
+    { "type": "assert", "query": "game.sceneryRows", "op": "eq", "value": 131 },
+    { "type": "assert", "query": "game.groundTotal", "op": "eq", "value": 35 },
+    { "type": "assert", "query": "game.prefabs", "op": "eq", "value": 28 },
+    { "type": "wait-frames", "n": 60 },
+    { "type": "screenshot", "out": "screenshots/nextraiden_scenery_airfield", "ui": true },
+
+    { "type": "cvar", "name": "nr.scrollSpeed", "set": "60" },
+    { "type": "cvar", "name": "nr.freeze", "set": "false" },
+    { "type": "wait-until", "query": "game.cameraZ", "op": "lt", "value": -460 },
+    { "type": "cvar", "name": "nr.freeze", "set": "true" },
+    { "type": "wait-frames", "n": 60 },
+    { "type": "screenshot", "out": "screenshots/nextraiden_scenery_farmland", "ui": true },
+
+    { "type": "cvar", "name": "nr.freeze", "set": "false" },
+    { "type": "wait-until", "query": "game.cameraZ", "op": "lt", "value": -990 },
+    { "type": "cvar", "name": "nr.freeze", "set": "true" },
+    { "type": "wait-frames", "n": 60 },
+    { "type": "screenshot", "out": "screenshots/nextraiden_scenery_maintenance", "ui": true },
+
+    { "type": "cvar", "name": "nr.stage", "set": "harbor" },
+    { "type": "wait-until", "query": "game.stage", "op": "eq", "value": "harbor" },
+    { "type": "wait-until", "query": "game.sceneryRows", "op": "eq", "value": 146 },
+    { "type": "wait-until", "query": "game.state", "op": "eq", "value": "playing" },
+    { "type": "cvar", "name": "nr.invincible", "set": "true" },
+    { "type": "assert", "query": "game.sceneryRows", "op": "eq", "value": 146 },
+    { "type": "assert", "query": "game.groundTotal", "op": "eq", "value": 76 },
+    { "type": "assert", "query": "game.prefabs", "op": "eq", "value": 28 },
+    { "type": "wait-frames", "n": 60 },
+    { "type": "screenshot", "out": "screenshots/nextraiden_scenery_harbor", "ui": true },
+
+    { "type": "cvar", "name": "nr.freeze", "set": "false" },
+    { "type": "wait-until", "query": "game.cameraZ", "op": "lt", "value": -640 },
+    { "type": "cvar", "name": "nr.freeze", "set": "true" },
+    { "type": "wait-frames", "n": 60 },
+    { "type": "screenshot", "out": "screenshots/nextraiden_scenery_container_wharf", "ui": true },
+
+    { "type": "cvar", "name": "nr.freeze", "set": "false" },
+    { "type": "wait-until", "query": "game.cameraZ", "op": "lt", "value": -1015 },
+    { "type": "cvar", "name": "nr.freeze", "set": "true" },
+    { "type": "wait-frames", "n": 60 },
+    { "type": "screenshot", "out": "screenshots/nextraiden_scenery_repair_wharf", "ui": true },
+    { "type": "quit" }
+  ]
+}

@@ -22049,6 +22049,32 @@
       "scaleClass": "mid",
       "modules": [
         {
+          "name": "nr_bldg_barracks",
+          "category": "bldg",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 392,
+          "footprint": [
+            7.0,
+            8.0
+          ],
+          "height": 2.58,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 112,
+          "colors": 8,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "nr_bldg_bunker",
           "category": "bldg",
           "params": "damage = 0",
@@ -22058,7 +22084,7 @@
               "default": "0"
             }
           ],
-          "line": 193,
+          "line": 250,
           "footprint": [
             4.8,
             4.3
@@ -22079,7 +22105,7 @@
           "category": "bldg",
           "params": "",
           "paramList": [],
-          "line": 180,
+          "line": 237,
           "footprint": [
             3.4,
             3.4
@@ -22100,7 +22126,7 @@
           "category": "bldg",
           "params": "",
           "paramList": [],
-          "line": 201,
+          "line": 258,
           "footprint": [
             6.4,
             7.03
@@ -22121,7 +22147,7 @@
           "category": "bldg",
           "params": "",
           "paramList": [],
-          "line": 215,
+          "line": 272,
           "footprint": [
             6.5,
             5.0
@@ -22138,6 +22164,32 @@
           "ok": true
         },
         {
+          "name": "nr_bldg_greenhouse",
+          "category": "bldg",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 478,
+          "footprint": [
+            7.6,
+            8.6
+          ],
+          "height": 1.98,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 172,
+          "colors": 12,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "nr_bldg_hangar",
           "category": "bldg",
           "params": "paint = 2",
@@ -22147,7 +22199,7 @@
               "default": "2"
             }
           ],
-          "line": 168,
+          "line": 225,
           "footprint": [
             7.0,
             7.2
@@ -22164,11 +22216,193 @@
           "ok": true
         },
         {
+          "name": "nr_bldg_pumpstation",
+          "category": "bldg",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 445,
+          "footprint": [
+            7.4,
+            6.6
+          ],
+          "height": 2.7,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 228,
+          "colors": 12,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nr_bldg_shelter",
+          "category": "bldg",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 357,
+          "footprint": [
+            8.2,
+            9.0
+          ],
+          "height": 3.99,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 120,
+          "colors": 6,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nr_bldg_silos",
+          "category": "bldg",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 462,
+          "footprint": [
+            7.5,
+            6.0
+          ],
+          "height": 3.85,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 600,
+          "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nr_bldg_substation",
+          "category": "bldg",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 425,
+          "footprint": [
+            7.0,
+            6.6
+          ],
+          "height": 2.23,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 424,
+          "colors": 11,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nr_bldg_warehouse",
+          "category": "bldg",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 407,
+          "footprint": [
+            9.6,
+            10.6
+          ],
+          "height": 4.01,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 116,
+          "colors": 9,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nr_bldg_watertower",
+          "category": "bldg",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 494,
+          "footprint": [
+            4.6,
+            4.6
+          ],
+          "height": 5.4,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 252,
+          "colors": 15,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nr_bldg_workshop",
+          "category": "bldg",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 375,
+          "footprint": [
+            7.4,
+            7.2
+          ],
+          "height": 3.29,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 112,
+          "colors": 8,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "nr_fx_blast",
           "category": "fx",
           "params": "",
           "paramList": [],
-          "line": 410,
+          "line": 781,
           "footprint": [
             1.94,
             1.8
@@ -22189,7 +22423,7 @@
           "category": "fx",
           "params": "",
           "paramList": [],
-          "line": 419,
+          "line": 790,
           "footprint": [
             2.58,
             2.58
@@ -22210,7 +22444,7 @@
           "category": "fx",
           "params": "",
           "paramList": [],
-          "line": 387,
+          "line": 758,
           "footprint": [
             0.44,
             1.25
@@ -22231,7 +22465,7 @@
           "category": "fx",
           "params": "",
           "paramList": [],
-          "line": 396,
+          "line": 767,
           "footprint": [
             1.21,
             1.4
@@ -22257,7 +22491,7 @@
               "default": "0"
             }
           ],
-          "line": 401,
+          "line": 772,
           "footprint": [
             1.4,
             1.19
@@ -22274,23 +22508,70 @@
           "ok": true
         },
         {
-          "name": "nr_ground_farmland",
+          "name": "nr_ground_apron",
           "category": "ground",
-          "params": "",
-          "paramList": [],
-          "line": 158,
+          "params": "seed = 0, width = 16, variant = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "width",
+              "default": "16"
+            },
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 142,
           "footprint": [
             16.0,
             16.0
           ],
-          "height": 0.2,
+          "height": 0.04,
           "zMin": -0.4,
           "center": [
             0.0,
             0.0
           ],
-          "triangles": 172,
-          "colors": 9,
+          "triangles": 48,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nr_ground_farmland",
+          "category": "ground",
+          "params": "seed = 0, variant = 0, direction = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "variant",
+              "default": "0"
+            },
+            {
+              "name": "direction",
+              "default": "0"
+            }
+          ],
+          "line": 201,
+          "footprint": [
+            16.0,
+            16.0
+          ],
+          "height": 0.18,
+          "zMin": -0.4,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 84,
+          "colors": 7,
           "warnings": 0,
           "ok": true
         },
@@ -22315,38 +22596,26 @@
             0.0,
             0.0
           ],
-          "triangles": 108,
-          "colors": 9,
+          "triangles": 168,
+          "colors": 4,
           "warnings": 0,
           "ok": true
         },
         {
           "name": "nr_ground_quay",
           "category": "ground",
-          "params": "",
-          "paramList": [],
-          "line": 149,
-          "footprint": [
-            16.0,
-            16.0
+          "params": "seed = 0, edge = 2",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "edge",
+              "default": "2"
+            }
           ],
-          "height": 0.03,
-          "zMin": -0.4,
-          "center": [
-            0.0,
-            0.0
-          ],
-          "triangles": 60,
-          "colors": 5,
-          "warnings": 0,
-          "ok": true
-        },
-        {
-          "name": "nr_ground_road",
-          "category": "ground",
-          "params": "",
-          "paramList": [],
-          "line": 130,
+          "line": 185,
           "footprint": [
             16.0,
             16.0
@@ -22357,17 +22626,56 @@
             0.0,
             0.0
           ],
-          "triangles": 96,
-          "colors": 8,
+          "triangles": 72,
+          "colors": 6,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nr_ground_road",
+          "category": "ground",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 160,
+          "footprint": [
+            16.0,
+            16.0
+          ],
+          "height": 0.1,
+          "zMin": -0.4,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 108,
+          "colors": 9,
           "warnings": 0,
           "ok": true
         },
         {
           "name": "nr_ground_runway",
           "category": "ground",
-          "params": "",
-          "paramList": [],
-          "line": 119,
+          "params": "seed = 0, width = 16, marking = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "width",
+              "default": "16"
+            },
+            {
+              "name": "marking",
+              "default": "0"
+            }
+          ],
+          "line": 122,
           "footprint": [
             16.0,
             16.0
@@ -22378,17 +22686,22 @@
             0.0,
             0.0
           ],
-          "triangles": 180,
-          "colors": 15,
+          "triangles": 108,
+          "colors": 9,
           "warnings": 0,
           "ok": true
         },
         {
           "name": "nr_ground_water",
           "category": "ground",
-          "params": "",
-          "paramList": [],
-          "line": 140,
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 172,
           "footprint": [
             16.0,
             16.0
@@ -22399,8 +22712,8 @@
             0.0,
             0.0
           ],
-          "triangles": 96,
-          "colors": 8,
+          "triangles": 76,
+          "colors": 3,
           "warnings": 0,
           "ok": true
         },
@@ -22409,7 +22722,7 @@
           "category": "item",
           "params": "",
           "paramList": [],
-          "line": 368,
+          "line": 739,
           "footprint": [
             1.1,
             1.12
@@ -22430,7 +22743,7 @@
           "category": "item",
           "params": "",
           "paramList": [],
-          "line": 350,
+          "line": 721,
           "footprint": [
             1.04,
             1.04
@@ -22451,7 +22764,7 @@
           "category": "item",
           "params": "",
           "paramList": [],
-          "line": 376,
+          "line": 747,
           "footprint": [
             1.1,
             1.1
@@ -22472,7 +22785,7 @@
           "category": "item",
           "params": "",
           "paramList": [],
-          "line": 341,
+          "line": 712,
           "footprint": [
             0.95,
             0.95
@@ -22493,7 +22806,7 @@
           "category": "item",
           "params": "",
           "paramList": [],
-          "line": 359,
+          "line": 730,
           "footprint": [
             0.95,
             0.95
@@ -22510,6 +22823,36 @@
           "ok": true
         },
         {
+          "name": "nr_nature_grove",
+          "category": "nature",
+          "params": "seed = 0, variant = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 643,
+          "footprint": [
+            6.62,
+            8.01
+          ],
+          "height": 5.17,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.12
+          ],
+          "triangles": 624,
+          "colors": 16,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "nr_nature_rock",
           "category": "nature",
           "params": "seed = 0",
@@ -22519,7 +22862,7 @@
               "default": "0"
             }
           ],
-          "line": 285,
+          "line": 345,
           "footprint": [
             2.13,
             2.46
@@ -22545,7 +22888,7 @@
               "default": "0"
             }
           ],
-          "line": 276,
+          "line": 336,
           "footprint": [
             2.39,
             2.39
@@ -22775,7 +23118,7 @@
           "category": "prop",
           "params": "",
           "paramList": [],
-          "line": 259,
+          "line": 319,
           "footprint": [
             3.4,
             0.67
@@ -22792,16 +23135,50 @@
           "ok": true
         },
         {
+          "name": "nr_prop_buoy",
+          "category": "prop",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 618,
+          "footprint": [
+            1.8,
+            1.8
+          ],
+          "height": 1.95,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 192,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "nr_prop_container",
           "category": "prop",
-          "params": "paint = 1",
+          "params": "paint = 1, variant = 0, civilian = false",
           "paramList": [
             {
               "name": "paint",
               "default": "1"
+            },
+            {
+              "name": "variant",
+              "default": "0"
+            },
+            {
+              "name": "civilian",
+              "default": "false"
             }
           ],
-          "line": 238,
+          "line": 295,
           "footprint": [
             2.4,
             5.03
@@ -22818,11 +23195,41 @@
           "ok": true
         },
         {
+          "name": "nr_prop_containerstack",
+          "category": "prop",
+          "params": "seed = 0, variant = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 563,
+          "footprint": [
+            5.2,
+            6.13
+          ],
+          "height": 4.68,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.02
+          ],
+          "triangles": 384,
+          "colors": 30,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "nr_prop_crane",
           "category": "prop",
           "params": "",
           "paramList": [],
-          "line": 247,
+          "line": 307,
           "footprint": [
             4.2,
             6.5
@@ -22843,7 +23250,7 @@
           "category": "prop",
           "params": "",
           "paramList": [],
-          "line": 268,
+          "line": 328,
           "footprint": [
             1.2,
             1.2
@@ -22860,11 +23267,141 @@
           "ok": true
         },
         {
+          "name": "nr_prop_dockfender",
+          "category": "prop",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 629,
+          "footprint": [
+            0.8,
+            3.6
+          ],
+          "height": 0.81,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 132,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nr_prop_gantry",
+          "category": "prop",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 574,
+          "footprint": [
+            6.8,
+            7.0
+          ],
+          "height": 5.35,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 132,
+          "colors": 11,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nr_prop_helipad",
+          "category": "prop",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 510,
+          "footprint": [
+            8.6,
+            8.6
+          ],
+          "height": 0.15,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 180,
+          "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nr_prop_loadingdock",
+          "category": "prop",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 606,
+          "footprint": [
+            7.8,
+            6.9
+          ],
+          "height": 3.55,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.55
+          ],
+          "triangles": 120,
+          "colors": 10,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nr_prop_pipeyard",
+          "category": "prop",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 591,
+          "footprint": [
+            6.8,
+            7.2
+          ],
+          "height": 1.47,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 420,
+          "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "nr_prop_radar",
           "category": "prop",
           "params": "",
           "paramList": [],
-          "line": 228,
+          "line": 285,
           "footprint": [
             3.0,
             2.6
@@ -22877,6 +23414,58 @@
           ],
           "triangles": 88,
           "colors": 6,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nr_prop_servicecart",
+          "category": "prop",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 529,
+          "footprint": [
+            2.28,
+            4.2
+          ],
+          "height": 2.2,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 284,
+          "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nr_prop_supplyyard",
+          "category": "prop",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 544,
+          "footprint": [
+            6.6,
+            6.2
+          ],
+          "height": 1.91,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 236,
+          "colors": 17,
           "warnings": 0,
           "ok": true
         },
@@ -23308,7 +23897,7 @@
               "default": "false"
             }
           ],
-          "line": 292,
+          "line": 663,
           "footprint": [
             0.2,
             0.95
@@ -23329,7 +23918,7 @@
           "category": "wpn",
           "params": "",
           "paramList": [],
-          "line": 322,
+          "line": 693,
           "footprint": [
             0.86,
             1.42
@@ -23355,7 +23944,7 @@
               "default": "5"
             }
           ],
-          "line": 331,
+          "line": 702,
           "footprint": [
             0.3,
             5.0
@@ -23381,7 +23970,7 @@
               "default": "0"
             }
           ],
-          "line": 313,
+          "line": 684,
           "footprint": [
             0.68,
             1.44
@@ -23402,7 +23991,7 @@
           "category": "wpn",
           "params": "",
           "paramList": [],
-          "line": 308,
+          "line": 679,
           "footprint": [
             0.32,
             1.06
@@ -23423,7 +24012,7 @@
           "category": "wpn",
           "params": "",
           "paramList": [],
-          "line": 300,
+          "line": 671,
           "footprint": [
             0.48,
             0.48
@@ -23436,6 +24025,990 @@
           ],
           "triangles": 140,
           "colors": 2,
+          "warnings": 0,
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "kit_raiden_frontier",
+      "file": "kit_raiden_frontier.scad",
+      "prefix": "rf_",
+      "scaleClass": "mid",
+      "modules": [
+        {
+          "name": "rf_bldg_cityblock",
+          "category": "bldg",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 339,
+          "footprint": [
+            11.0,
+            10.0
+          ],
+          "height": 5.49,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 144,
+          "colors": 12,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_bldg_coolingplant",
+          "category": "bldg",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 80,
+          "footprint": [
+            10.0,
+            7.0
+          ],
+          "height": 5.98,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 252,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_bldg_desertcompound",
+          "category": "bldg",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 185,
+          "footprint": [
+            10.0,
+            9.0
+          ],
+          "height": 3.58,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 120,
+          "colors": 7,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_bldg_drillsite",
+          "category": "bldg",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 98,
+          "footprint": [
+            8.0,
+            7.0
+          ],
+          "height": 5.7,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 800,
+          "colors": 38,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_bldg_freightterminal",
+          "category": "bldg",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 300,
+          "footprint": [
+            11.0,
+            8.0
+          ],
+          "height": 3.5,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 92,
+          "colors": 7,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_bldg_generatorbank",
+          "category": "bldg",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 562,
+          "footprint": [
+            8.0,
+            6.0
+          ],
+          "height": 2.7,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 196,
+          "colors": 8,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_bldg_machinehall",
+          "category": "bldg",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 317,
+          "footprint": [
+            10.0,
+            9.0
+          ],
+          "height": 4.8,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 180,
+          "colors": 10,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_bldg_polarstation",
+          "category": "bldg",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 512,
+          "footprint": [
+            8.25,
+            6.17
+          ],
+          "height": 3.42,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.36
+          ],
+          "triangles": 304,
+          "colors": 24,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_bldg_radome",
+          "category": "bldg",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 530,
+          "footprint": [
+            7.0,
+            7.0
+          ],
+          "height": 4.48,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 142,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_bldg_refinery",
+          "category": "bldg",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 58,
+          "footprint": [
+            9.0,
+            7.0
+          ],
+          "height": 5.88,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 596,
+          "colors": 11,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_bldg_roundhouse",
+          "category": "bldg",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 281,
+          "footprint": [
+            17.0,
+            11.0
+          ],
+          "height": 3.6,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 172,
+          "colors": 13,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_bldg_weatherlab",
+          "category": "bldg",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 578,
+          "footprint": [
+            7.5,
+            7.0
+          ],
+          "height": 5.68,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 288,
+          "colors": 8,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_ground_desert",
+          "category": "ground",
+          "params": "seed = 0, variant = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 14,
+          "footprint": [
+            16.0,
+            16.0
+          ],
+          "height": 0.01,
+          "zMin": -0.4,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 204,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_ground_frozenroad",
+          "category": "ground",
+          "params": "seed = 0, variant = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 499,
+          "footprint": [
+            16.0,
+            16.0
+          ],
+          "height": 0.18,
+          "zMin": -0.4,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 240,
+          "colors": 6,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_ground_ice",
+          "category": "ground",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 483,
+          "footprint": [
+            16.0,
+            16.0
+          ],
+          "height": 0.02,
+          "zMin": -0.4,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 84,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_ground_industrial",
+          "category": "ground",
+          "params": "seed = 0, variant = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 263,
+          "footprint": [
+            16.0,
+            16.0
+          ],
+          "height": 0.01,
+          "zMin": -0.4,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 36,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_ground_rail",
+          "category": "ground",
+          "params": "seed = 0, variant = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 246,
+          "footprint": [
+            16.0,
+            16.0
+          ],
+          "height": 0.18,
+          "zMin": -0.4,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 252,
+          "colors": 21,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_ground_saltflat",
+          "category": "ground",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 33,
+          "footprint": [
+            16.0,
+            16.0
+          ],
+          "height": 0.02,
+          "zMin": -0.4,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 252,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_ground_serviceway",
+          "category": "ground",
+          "params": "seed = 0, variant = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 45,
+          "footprint": [
+            16.0,
+            16.0
+          ],
+          "height": 0.08,
+          "zMin": -0.4,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 240,
+          "colors": 6,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_ground_snow",
+          "category": "ground",
+          "params": "seed = 0, variant = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 467,
+          "footprint": [
+            16.0,
+            16.0
+          ],
+          "height": 0.02,
+          "zMin": -0.4,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 204,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_nature_iceberg",
+          "category": "nature",
+          "params": "seed = 0, variant = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 640,
+          "footprint": [
+            9.52,
+            5.78
+          ],
+          "height": 4.1,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 184,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_nature_mesa",
+          "category": "nature",
+          "params": "seed = 0, variant = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 208,
+          "footprint": [
+            8.45,
+            5.75
+          ],
+          "height": 4.52,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 144,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_nature_snowpines",
+          "category": "nature",
+          "params": "seed = 0, variant = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 656,
+          "footprint": [
+            5.51,
+            5.22
+          ],
+          "height": 3.73,
+          "zMin": 0.0,
+          "center": [
+            -0.01,
+            -0.16
+          ],
+          "triangles": 576,
+          "colors": 9,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_prop_cableyard",
+          "category": "prop",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 441,
+          "footprint": [
+            5.4,
+            5.2
+          ],
+          "height": 1.48,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 348,
+          "colors": 9,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_prop_disharray",
+          "category": "prop",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 551,
+          "footprint": [
+            5.0,
+            5.0
+          ],
+          "height": 4.27,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 256,
+          "colors": 7,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_prop_pipeline",
+          "category": "prop",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 162,
+          "footprint": [
+            1.0,
+            16.0
+          ],
+          "height": 2.04,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 252,
+          "colors": 7,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_prop_pumpjack",
+          "category": "prop",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 114,
+          "footprint": [
+            3.6,
+            6.0
+          ],
+          "height": 4.6,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 260,
+          "colors": 9,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_prop_railbuffer",
+          "category": "prop",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 380,
+          "footprint": [
+            2.7,
+            2.4
+          ],
+          "height": 1.36,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 172,
+          "colors": 6,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_prop_scrapyard",
+          "category": "prop",
+          "params": "seed = 0, variant = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 452,
+          "footprint": [
+            7.6,
+            6.4
+          ],
+          "height": 1.18,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 148,
+          "colors": 9,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_prop_signalbridge",
+          "category": "prop",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 359,
+          "footprint": [
+            5.8,
+            1.13
+          ],
+          "height": 5.1,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.07
+          ],
+          "triangles": 176,
+          "colors": 7,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_prop_solararray",
+          "category": "prop",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 142,
+          "footprint": [
+            8.0,
+            2.64
+          ],
+          "height": 1.74,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.02
+          ],
+          "triangles": 180,
+          "colors": 15,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_prop_supplycache",
+          "category": "prop",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 596,
+          "footprint": [
+            5.4,
+            4.8
+          ],
+          "height": 1.38,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 84,
+          "colors": 7,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_veh_freightcar",
+          "category": "veh",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 415,
+          "footprint": [
+            2.65,
+            7.92
+          ],
+          "height": 3.47,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 284,
+          "colors": 8,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_veh_haultruck",
+          "category": "veh",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 223,
+          "footprint": [
+            3.32,
+            5.44
+          ],
+          "height": 2.7,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.02
+          ],
+          "triangles": 308,
+          "colors": 10,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_veh_locomotive",
+          "category": "veh",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 397,
+          "footprint": [
+            2.6,
+            8.72
+          ],
+          "height": 3.4,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 436,
+          "colors": 13,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "rf_veh_snowcat",
+          "category": "veh",
+          "params": "variant = 0",
+          "paramList": [
+            {
+              "name": "variant",
+              "default": "0"
+            }
+          ],
+          "line": 618,
+          "footprint": [
+            3.27,
+            4.6
+          ],
+          "height": 2.55,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 224,
+          "colors": 16,
           "warnings": 0,
           "ok": true
         }

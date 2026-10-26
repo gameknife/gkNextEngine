@@ -1,0 +1,217 @@
+{
+  "_comment": "NextRaiden P0 骨架冒烟：关卡滚动 + 玩家在播放列内飞。断言的是空间契约本身（前进方向 -Z、+X 是屏幕右方、玩家被夹在播放列里），改相机或改 playfield 数值时这条脚本会先叫。",
+  "_comment_timing": "等待一律用 game.stageTime，不用 wait-frames：船是按秒走的，而这台机器一帧只有 2~3 毫秒，40 帧只够飞两米——写成帧数的断言换台机器就是另一个结果。",
+  "name": "nextraiden-smoke",
+  "target": "NextRaiden",
+  "viewport": {
+    "width": 1600,
+    "height": 900
+  },
+  "defaults": {
+    "waitFrames": 2,
+    "stepTimeoutMs": 20000
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "engine.status",
+      "op": "eq",
+      "value": "Running"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.state",
+      "op": "eq",
+      "value": "playing"
+    },
+    {
+      "type": "log",
+      "message": "料架：28 个 nr_pf_* 预制件必须都在，少一个就是 .scad 和 PrefabRack 的名字对不上"
+    },
+    {
+      "type": "assert",
+      "query": "game.prefabs",
+      "op": "eq",
+      "value": 28
+    },
+    {
+      "type": "log",
+      "message": "滚动：相机中心朝 -Z 单调减小（12 m/s，Ready 1.6s + 1.5s 至少 37 米）"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.stageTime",
+      "op": "gt",
+      "value": 1.5
+    },
+    {
+      "type": "assert",
+      "query": "game.cameraZ",
+      "op": "lt",
+      "value": -50.0
+    },
+    {
+      "type": "log",
+      "message": "取景：地面可见范围跨过相机中心，远端在 -Z 一侧"
+    },
+    {
+      "type": "assert",
+      "query": "game.groundFarLead",
+      "op": "lt",
+      "value": -30.0
+    },
+    {
+      "type": "assert",
+      "query": "game.groundNearLead",
+      "op": "gt",
+      "value": 10.0
+    },
+    {
+      "type": "log",
+      "message": "不给输入时，玩家被相机推到播放列后缘 behindLimit=24"
+    },
+    {
+      "type": "assert",
+      "query": "game.playerLeadZ",
+      "op": "gt",
+      "value": 23.5
+    },
+    {
+      "type": "assert",
+      "query": "game.playerLeadZ",
+      "op": "le",
+      "value": 24.01
+    },
+    {
+      "type": "log",
+      "message": "输入：D 是屏幕右方，也就是世界 +X"
+    },
+    {
+      "type": "key",
+      "code": "D",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.stageTime",
+      "op": "gt",
+      "value": 2.2
+    },
+    {
+      "type": "key",
+      "code": "D",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.playerX",
+      "op": "gt",
+      "value": 3.0
+    },
+    {
+      "type": "log",
+      "message": "夹取：一直按右也不能飞出播放列（halfWidth 21）"
+    },
+    {
+      "type": "key",
+      "code": "D",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.stageTime",
+      "op": "gt",
+      "value": 3.6
+    },
+    {
+      "type": "key",
+      "code": "D",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.playerX",
+      "op": "le",
+      "value": 21.01
+    },
+    {
+      "type": "assert",
+      "query": "game.playerX",
+      "op": "gt",
+      "value": 20.9
+    },
+    {
+      "type": "log",
+      "message": "A 是反方向，同样被对侧夹住"
+    },
+    {
+      "type": "key",
+      "code": "A",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.stageTime",
+      "op": "gt",
+      "value": 5.6
+    },
+    {
+      "type": "key",
+      "code": "A",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.playerX",
+      "op": "lt",
+      "value": -20.9
+    },
+    {
+      "type": "assert",
+      "query": "game.playerX",
+      "op": "ge",
+      "value": -21.01
+    },
+    {
+      "type": "log",
+      "message": "W 往屏幕上方飞，被前缘 aheadLimit=16 夹住。净速度是 34-12=22 m/s，从后缘 +24 走到前缘 -16 要 1.8 秒，别给少了"
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.stageTime",
+      "op": "gt",
+      "value": 8.8
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.playerLeadZ",
+      "op": "lt",
+      "value": -15.5
+    },
+    {
+      "type": "assert",
+      "query": "game.playerLeadZ",
+      "op": "ge",
+      "value": -16.01
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextraiden_smoke",
+      "ui": true
+    },
+    {
+      "type": "quit"
+    }
+  ],
+  "_comment_scale": "播放列尺寸和速度都跟着 gameplay.json 的 cameraHeight 走（见那里的 screen._comment）。改尺度时这条脚本里的边界数字必须一起改——它断言的就是那些边界。"
+}

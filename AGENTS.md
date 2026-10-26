@@ -22,7 +22,7 @@ gkNextRenderer is a cross-platform 3D game engine built with modern C++20 and Vu
   gkNextStillBenchmark and gkNextMotionBenchmark (both under the `Render/gkNextBenchmark/` directory)
 - Editor: gkNextEditor (ImGui editor + node-based material editor + play-in-editor for C# games),
   ScadStudio, ScadLibrary
-- Game: MagicaLego, Brotato3D, KongLie3D, NextRA, NextDayz, NextAstrobot, NextTotalwar, BrickPlayer,
+- Game: MagicaLego, Brotato3D, KongLie3D, NextRA, NextDayz, NextAstrobot, NextRaiden, NextTotalwar, BrickPlayer,
   CharacterDemo, FlappyCpp/FlappyCSharp (`Game/Flappy/`), Brotato3DCSharp, DotNetSandbox, gkNextLauncher,
   TruckerDemo, StudioSim, AirportSim, CitySolSim, NextWorldTravel, Voyage3D
   - `gkNextLauncher` 在同一个进程内加载/卸载任意 C# 游戏（Unity 的 Play 模型）；三个 C# 目标

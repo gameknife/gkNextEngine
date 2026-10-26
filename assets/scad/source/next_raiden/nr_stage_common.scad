@@ -19,18 +19,16 @@ use <../../lib/raiden_parts.scad>
 function nr_rack_y() = -240;
 
 // ================= 景观行（一行 = 一个 Node）=================
-// 五列地块：x = -32 -16 0 16 32。center 决定中间那列，两侧固定是地貌。
-
-module nr_row_runway(y = 0, seed = 0)
+// Keep the 80m coverage / 16m row pitch, but do not repeat lane markings across X.
+// The 24m runway and two 12m service aprons share exact, non-overlapping edges.
+module nr_row_runway(y = 0, seed = 0, marking = 0)
 {
     gk_flatten()
     {
-        translate([0, y, 0]) nr_ground_runway();
-        for (s = [-1, 1])
-        {
-            translate([s * 16, y, 0]) nr_ground_grass(seed = seed + s * 13);
-            translate([s * 32, y, 0]) nr_ground_grass(seed = seed + s * 29);
-        }
+        translate([0, y, 0]) nr_ground_runway(seed = seed, width = 24, marking = marking);
+        for (s = [-1, 1]) translate([s * 18, y, 0]) rotate([0,0,s<0?180:0])
+            nr_ground_apron(seed = seed + s * 23, width = 12, variant = nr_rnd(seed+s*7,3));
+        for (s = [-1, 1]) translate([s * 32, y, 0]) nr_ground_grass(seed = seed + s * 29);
     }
 }
 
@@ -43,43 +41,71 @@ module nr_row_grass(y = 0, seed = 0, props = 0)
             for (s = [-1, 1])
                 translate([s * (21 + nr_rnd(seed + s * 5, 9)), y - 5 + nr_rnd(seed + s * 3, 10), 0.02])
                     nr_nature_tree(seed = seed + s);
+        if (props > 0 && nr_rnd(seed+71,3) == 0)
+            translate([nr_rnd(seed+5,2)==0?-25:25,y+2,0.02])
+                nr_nature_grove(seed = seed, variant = nr_rnd(seed+17,2));
     }
 }
 
-module nr_row_road(y = 0, seed = 0)
+module nr_row_road(y = 0, seed = 0, parcel = 0)
 {
     gk_flatten()
     {
-        translate([0, y, 0]) nr_ground_road();
+        translate([0, y, 0]) nr_ground_road(seed = seed);
         for (s = [-1, 1])
         {
-            translate([s * 16, y, 0]) nr_ground_farmland();
+            translate([s * 16, y, 0]) nr_ground_farmland(seed = seed+s*17,
+                variant = nr_rnd(parcel+s*31,4), direction = nr_rnd(parcel+s*13,2));
             translate([s * 32, y, 0]) nr_ground_grass(seed = seed + s * 23);
         }
     }
 }
 
-module nr_row_farm(y = 0, seed = 0)
+module nr_row_farm(y = 0, seed = 0, parcel = 0, row = 0)
 {
     gk_flatten()
     {
-        for (i = [-1 : 1]) translate([i * 16, y, 0]) nr_ground_farmland();
+        for (i = [-1 : 1])
+            let (field = parcel + i*29 + floor((row+i+3)/3)*71)
+                translate([i * 16, y, 0]) nr_ground_farmland(seed = seed+i*19,
+                    variant = nr_rnd(field,4), direction = nr_rnd(field+43,2));
         for (s = [-1, 1]) translate([s * 32, y, 0]) nr_ground_grass(seed = seed + s * 31);
     }
 }
 
 module nr_row_water(y = 0, seed = 0)
 {
-    gk_flatten() for (i = [-2 : 2]) translate([i * 16, y, 0]) nr_ground_water();
+    gk_flatten()
+    {
+        for (i = [-2 : 2]) translate([i * 16, y, 0]) nr_ground_water(seed = seed+i*37);
+        if (nr_rnd(seed+11,5) == 0) translate([nr_rnd(seed,2)==0?-22:22,y,0.02])
+            nr_prop_buoy(variant = nr_rnd(seed+3,2));
+    }
 }
 
-// 码头：左岸 quay，其余水面。关卡 2 用。
-module nr_row_quay(y = 0, seed = 0)
+// 码头：一侧是岸，另一侧是水。side = -1 岸在左（屏幕左），+1 在右。
+// 岸的内缘落在 |x| = 8，所以 42 m 的播放列里有 13 m 是码头、其余是水——地面目标摆在
+// 岸这一侧 |x| = 10~18，船摆在水这一侧。左右交替铺就是逼玩家换边。
+module nr_row_quay(y = 0, seed = 0, side = -1)
 {
     gk_flatten()
     {
-        for (i = [-2 : -1]) translate([i * 16, y, 0]) nr_ground_quay();
-        for (i = [0 : 2]) translate([i * 16, y, 0]) nr_ground_water();
+        for (i = [1 : 2]) translate([i * side * 16, y, 0])
+            nr_ground_quay(seed = seed+i*23, edge = i==1?-side:0);
+        for (i = [0 : 2]) translate([-i * side * 16, y, 0]) nr_ground_water(seed = seed+i*37);
+        if (nr_rnd(seed+7,3) == 0) translate([side*8.7,y-3,0.02]) nr_prop_dockfender();
+    }
+}
+
+// 水道：两岸都在播放列外（|x| >= 24），中间三列全是水。
+// 用来做"开阔港区"：只放船，不放岸上目标——岸上那两列有一大半被 HUD 立柱盖着，
+// 摆在那儿的东西玩家看不见也打不着。
+module nr_row_channel(y = 0, seed = 0)
+{
+    gk_flatten()
+    {
+        for (s = [-1, 1]) translate([s * 32, y, 0]) nr_ground_quay(seed = seed+s*23, edge = -s);
+        for (i = [-1 : 1]) translate([i * 16, y, 0]) nr_ground_water(seed = seed+i*37);
     }
 }
 
@@ -87,7 +113,8 @@ module nr_row_quay(y = 0, seed = 0)
 
 module nr_band_runway(y0 = 0, rows = 4, seed = 0)
 {
-    for (i = [0 : rows - 1]) nr_row_runway(y = y0 + i * 16, seed = seed + i * 31);
+    for (i = [0 : rows - 1]) nr_row_runway(y = y0 + i * 16, seed = seed + i * 31,
+        marking = i==0 || i==rows-1 ? 1 : i==3 ? 2 : 0);
 }
 module nr_band_grass(y0 = 0, rows = 4, seed = 0, props = 0)
 {
@@ -95,19 +122,25 @@ module nr_band_grass(y0 = 0, rows = 4, seed = 0, props = 0)
 }
 module nr_band_road(y0 = 0, rows = 4, seed = 0)
 {
-    for (i = [0 : rows - 1]) nr_row_road(y = y0 + i * 16, seed = seed + i * 41);
+    for (i = [0 : rows - 1]) nr_row_road(y = y0 + i * 16, seed = seed + i * 41,
+        parcel = seed + floor(i/4)*67);
 }
 module nr_band_farm(y0 = 0, rows = 4, seed = 0)
 {
-    for (i = [0 : rows - 1]) nr_row_farm(y = y0 + i * 16, seed = seed + i * 43);
+    for (i = [0 : rows - 1]) nr_row_farm(y = y0 + i * 16, seed = seed + i * 43,
+        parcel = seed, row = i);
 }
 module nr_band_water(y0 = 0, rows = 4, seed = 0)
 {
     for (i = [0 : rows - 1]) nr_row_water(y = y0 + i * 16, seed = seed + i * 47);
 }
-module nr_band_quay(y0 = 0, rows = 4, seed = 0)
+module nr_band_quay(y0 = 0, rows = 4, seed = 0, side = -1)
 {
-    for (i = [0 : rows - 1]) nr_row_quay(y = y0 + i * 16, seed = seed + i * 53);
+    for (i = [0 : rows - 1]) nr_row_quay(y = y0 + i * 16, seed = seed + i * 53, side = side);
+}
+module nr_band_channel(y0 = 0, rows = 4, seed = 0)
+{
+    for (i = [0 : rows - 1]) nr_row_channel(y = y0 + i * 16, seed = seed + i * 59);
 }
 
 // ================= 预制件（nr_pf_*，运行时克隆成对象池）=================

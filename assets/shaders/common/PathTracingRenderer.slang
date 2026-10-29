@@ -237,7 +237,7 @@ public struct FPathTracingRenderer{
 
         const float3 incoming = -context.Wo;
         const float NoV = max(dot(context.Normal, context.Wo), 0.0f);
-        const float3 fresnel = BSDFFresnelSchlick(NoV, BSDFMaterialF0(context));
+        const float3 fresnel = BSDFFresnelConductorF82(NoV, BSDFMaterialF0(context), context.Metalness, context.PerceptualRoughness);
         float3 result = float3(0, 0, 0);
 
         const bool isDelta = context.PerceptualRoughness <= BSDF_DELTA_ROUGHNESS;
@@ -269,7 +269,7 @@ public struct FPathTracingRenderer{
                 {
                     FBSDFEval bsdf = EvaluateSurfaceBSDF(context, reflected);
                     const float NoL = max(dot(context.Normal, reflected), 0.0f);
-                    const float mis = PowerHeuristic(proposalPdf, lightPdf);
+                    const float mis = MIS(proposalPdf, lightPdf);
                     result += FetchEmitterRadiance(reflectedHit) * bsdf.Specular *
                               (NoL * mis / proposalPdf);
                 }
@@ -286,7 +286,7 @@ public struct FPathTracingRenderer{
             {
                 FBSDFEval bsdf = EvaluateSurfaceBSDF(context, reflected);
                 const float NoL = max(dot(context.Normal, reflected), 0.0f);
-                const float mis = PowerHeuristic(proposalPdf, Common.SunSamplePdf());
+                const float mis = MIS(proposalPdf, Common.SunSamplePdf());
                 result += sunRadiance * bsdf.Specular * (NoL * mis / proposalPdf);
             }
         }
@@ -367,9 +367,26 @@ public struct FPathTracingRenderer{
         const float sinTheta = sqrt(max(0.0f, 1.0f - cosTheta * cosTheta));
         const bool cannotRefract = niOverNt * sinTheta > 1.0f;
 
-        const bool chanceReflect = RandomFloat(randomSeed) < reflectProb;
-        const bool chanceMetal = RandomFloat(randomSeed) < metalness;
-        const bool chanceGGX = chanceReflect || chanceMetal;
+        // Partition lobe selection using unified specular probability (Fresnel + metalness)
+        float specProb = lerp(reflectProb, 1.0f, metalness);
+        if (mat.MaterialModel == MaterialDielectric)
+        {
+            specProb = reflectProb;
+        }
+        else if (mat.MaterialModel == MaterialMetallic)
+        {
+            specProb = 1.0f;
+        }
+        else if (mat.MaterialModel == MaterialLambertian)
+        {
+            specProb = 0.0f;
+        }
+        specProb = clamp(specProb, 0.0f, 1.0f);
+
+        const float rndLobe = RandomFloat(randomSeed);
+        const bool chanceGGX = (rndLobe < specProb) || (mat.MaterialModel == MaterialMetallic);
+        const bool chanceMetal = chanceGGX && (metalness > 0.0f);
+        const bool chanceReflect = chanceGGX;
         const float3 traceNext = chanceGGX ? reflect(rayDir, outwardNormal) : outwardNormal;
         float3 traceDir = chanceGGX ? ggxSampling(randomSeed, sqrt(roughness), traceNext)
                                     : AlignWithNormal(RandomInHemiSphere1(randomSeed), traceNext);

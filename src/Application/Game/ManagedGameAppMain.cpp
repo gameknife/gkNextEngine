@@ -12,6 +12,10 @@
 #include "Modules/GltfLoader/GltfModule.hpp"
 #endif
 
+#if GK_MANAGED_GAME_INSTALL_RIG
+#include "Gameplay/Rig/RigSubsystem.h"
+#endif
+
 #ifndef GK_MANAGED_GAME_ID
 #error "Managed game application requires GK_MANAGED_GAME_ID"
 #endif
@@ -63,6 +67,15 @@ std::unique_ptr<NextGameInstanceBase> CreateGameInstance(Vulkan::WindowConfig& c
                                                         NextEngine* engine)
 {
     RegisterConfiguredLoaders();
+
+#if GK_MANAGED_GAME_INSTALL_RIG
+    // Like the loaders, a subsystem has to exist before the game asks for it: Rig pools are
+    // declared from the first scene build.
+    if (engine != nullptr)
+    {
+        NextGameplay::Rig::Install(*engine);
+    }
+#endif
 
     return std::make_unique<Modules::NextDotNet::ManagedGameHostInstance>(
         config, options, engine,

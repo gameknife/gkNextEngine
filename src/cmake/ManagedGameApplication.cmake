@@ -11,10 +11,14 @@ include_guard(GLOBAL)
 #     MODULES <runtime modules...>
 #     [LINK <engine libraries...>]
 #     [ICON <icon>]
-#     [REGISTER_SCAD_LOADER] [REGISTER_LDRAW_LOADER] [REGISTER_GLTF_LOADER])
+#     [REGISTER_SCAD_LOADER] [REGISTER_LDRAW_LOADER] [REGISTER_GLTF_LOADER]
+#     [INSTALL_RIG])
+#
+# INSTALL_RIG installs the ScadRig character subsystem (Rig.* in C#). It needs NextGameplay in
+# LINK; without it Rig.IsAvailable() is false and a game's characters never appear.
 function(gk_add_managed_game_application target)
     cmake_parse_arguments(ARG
-        "REGISTER_SCAD_LOADER;REGISTER_LDRAW_LOADER;REGISTER_GLTF_LOADER"
+        "REGISTER_SCAD_LOADER;REGISTER_LDRAW_LOADER;REGISTER_GLTF_LOADER;INSTALL_RIG"
         "GAME_ID;PROJECT;DIR;ICON"
         "MODULES;LINK;SOURCES"
         ${ARGN})
@@ -43,7 +47,8 @@ function(gk_add_managed_game_application target)
             "GK_MANAGED_GAME_LINKED_MODULES=\"${linkedModulesDefinition}\""
             "GK_MANAGED_GAME_REGISTER_SCAD_LOADER=$<BOOL:${ARG_REGISTER_SCAD_LOADER}>"
             "GK_MANAGED_GAME_REGISTER_LDRAW_LOADER=$<BOOL:${ARG_REGISTER_LDRAW_LOADER}>"
-            "GK_MANAGED_GAME_REGISTER_GLTF_LOADER=$<BOOL:${ARG_REGISTER_GLTF_LOADER}>")
+            "GK_MANAGED_GAME_REGISTER_GLTF_LOADER=$<BOOL:${ARG_REGISTER_GLTF_LOADER}>"
+            "GK_MANAGED_GAME_INSTALL_RIG=$<BOOL:${ARG_INSTALL_RIG}>")
     if(ARG_ICON)
         list(APPEND applicationArguments ICON "${ARG_ICON}")
     endif()

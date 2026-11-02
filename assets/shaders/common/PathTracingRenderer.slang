@@ -373,10 +373,6 @@ public struct FPathTracingRenderer{
         {
             specProb = reflectProb;
         }
-        else if (mat.MaterialModel == MaterialMetallic)
-        {
-            specProb = 1.0f;
-        }
         else if (mat.MaterialModel == MaterialLambertian)
         {
             specProb = 0.0f;

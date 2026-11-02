@@ -55,6 +55,11 @@ namespace GkNext.Interop
         public delegate* unmanaged<uint, Vector3*, Vector3*, void> Physics_SetBodyVelocity;
         public delegate* unmanaged<uint, Vector3*, void> Physics_AddForceToBody;
         public delegate* unmanaged<uint, PhysicsBodyState*, void> Physics_GetBodyState;
+        public delegate* unmanaged<CharacterSpec*, uint> Character_Create;
+        public delegate* unmanaged<uint, void> Character_Destroy;
+        public delegate* unmanaged<uint, Vector3*, int, float, void> Character_Move;
+        public delegate* unmanaged<uint, Vector3*, void> Character_SetPosition;
+        public delegate* unmanaged<uint, CharacterState*, void> Character_GetState;
         public delegate* unmanaged<int> Rig_IsAvailable;
         public delegate* unmanaged<GkStr, int, uint> Rig_DeclarePool;
         public delegate* unmanaged<uint, GkStr, int> Rig_HasClip;
@@ -93,6 +98,7 @@ namespace GkNext.Interop
         public delegate* unmanaged<NodeTransform*, int, void> Scene_SetNodeTransforms;
         public delegate* unmanaged<uint, int, void> Scene_SetNodeVisible;
         public delegate* unmanaged<uint, int, void> Scene_SetNodeVisibleRecursive;
+        public delegate* unmanaged<uint, int, void> Scene_SetNodeRayCastVisibleRecursive;
         public delegate* unmanaged<uint, uint, int> Scene_SetNodeParent;
         public delegate* unmanaged<uint, uint, void> Scene_SetNodePrimaryMaterial;
         public delegate* unmanaged<uint, uint, void> Scene_SetNodeMaterialRecursive;
@@ -100,6 +106,11 @@ namespace GkNext.Interop
         public delegate* unmanaged<Vector3*, uint> Scene_AddLambertianMaterial;
         public delegate* unmanaged<Vector3*, float, uint> Scene_AddDiffuseLightMaterial;
         public delegate* unmanaged<uint, uint, NodeMobility, int> Scene_BindPhysicsBody;
+        public delegate* unmanaged<uint, uint> Scene_MakeNodeKinematic;
+        public delegate* unmanaged<GkStr, byte*, int, int> Scene_DescribeNodes;
+        public delegate* unmanaged<uint, NodeTransform*, void> Scene_GetNodeWorldTransform;
+        public delegate* unmanaged<uint, int, Bounds*, void> Scene_GetNodeBounds;
+        public delegate* unmanaged<Vector3*, Vector3*, float, RayHit*, void> Scene_RayCast;
         public delegate* unmanaged<uint> Scene_GetEnvironmentNodeId;
         public delegate* unmanaged<Vector3*, Vector3*, uint> SceneBuild_AddBoxModel;
         public delegate* unmanaged<Vector3*, float, uint> SceneBuild_AddSphereModel;
@@ -111,6 +122,9 @@ namespace GkNext.Interop
         public delegate* unmanaged<byte*, int, int> Paths_GetOutputDir;
         public delegate* unmanaged<GkStr, byte*, int, int> Assets_ReadFile;
         public delegate* unmanaged<byte*, int, int> Assets_GetGameContentRoot;
+        public delegate* unmanaged<GkStr, int> Assets_CheckSceneSource;
+        public delegate* unmanaged<byte*, int, int> Assets_GetSceneCheckReport;
+        public delegate* unmanaged<GkStr, byte*, int, int> Assets_GetSceneLoadReport;
         public delegate* unmanaged<uint, uint, int> Component_Has;
         public delegate* unmanaged<uint, uint, uint, int> Component_GetBool;
         public delegate* unmanaged<uint, uint, uint, int, void> Component_SetBool;
@@ -137,7 +151,7 @@ namespace GkNext.Interop
     /// <summary>Number of bindings in the table, checked against the native side.</summary>
     public static class EngineApiInfo
     {
-        public const int EntryCount = 114;
+        public const int EntryCount = 128;
     }
 }
 
@@ -458,6 +472,45 @@ namespace GkNext
         {
             PhysicsBodyState result = default;
             Api.Table->Physics_GetBodyState(bodyId, &result);
+            return result;
+        }
+    }
+
+    public static unsafe class Character
+    {
+        public static uint Create(in CharacterSpec spec)
+        {
+            fixed (CharacterSpec* p_spec = &spec)
+            {
+                return Api.Table->Character_Create(p_spec);
+            }
+        }
+
+        public static void Destroy(uint characterId)
+        {
+            Api.Table->Character_Destroy(characterId);
+        }
+
+        public static void Move(uint characterId, in Vector3 velocity, bool inheritGround, float deltaSeconds)
+        {
+            fixed (Vector3* p_velocity = &velocity)
+            {
+                Api.Table->Character_Move(characterId, p_velocity, inheritGround ? 1 : 0, deltaSeconds);
+            }
+        }
+
+        public static void SetPosition(uint characterId, in Vector3 footPosition)
+        {
+            fixed (Vector3* p_footPosition = &footPosition)
+            {
+                Api.Table->Character_SetPosition(characterId, p_footPosition);
+            }
+        }
+
+        public static CharacterState GetState(uint characterId)
+        {
+            CharacterState result = default;
+            Api.Table->Character_GetState(characterId, &result);
             return result;
         }
     }
@@ -792,6 +845,11 @@ namespace GkNext
             Api.Table->Scene_SetNodeVisibleRecursive(nodeId, visible ? 1 : 0);
         }
 
+        public static void SetNodeRayCastVisibleRecursive(uint nodeId, bool visible)
+        {
+            Api.Table->Scene_SetNodeRayCastVisibleRecursive(nodeId, visible ? 1 : 0);
+        }
+
         public static bool SetNodeParent(uint childId, uint parentId)
         {
             return Api.Table->Scene_SetNodeParent(childId, parentId) != 0;
@@ -831,6 +889,61 @@ namespace GkNext
         public static bool BindPhysicsBody(uint nodeId, uint bodyId, NodeMobility mobility)
         {
             return Api.Table->Scene_BindPhysicsBody(nodeId, bodyId, mobility) != 0;
+        }
+
+        public static uint MakeNodeKinematic(uint nodeId)
+        {
+            return Api.Table->Scene_MakeNodeKinematic(nodeId);
+        }
+
+        public static string DescribeNodes(string namePrefix)
+        {
+            var mark = Utf8Arena.Mark();
+            try
+            {
+                int required = Api.Table->Scene_DescribeNodes(Utf8Arena.Encode(namePrefix), null, 0);
+                if (required <= 0)
+                {
+                    return string.Empty;
+                }
+                byte[] buffer = new byte[required];
+                fixed (byte* bufferPtr = buffer)
+                {
+                    int written = Api.Table->Scene_DescribeNodes(Utf8Arena.Encode(namePrefix), bufferPtr, required);
+                    return written <= 0 ? string.Empty : System.Text.Encoding.UTF8.GetString(bufferPtr, written);
+                }
+            }
+            finally
+            {
+                Utf8Arena.Release(mark);
+            }
+        }
+
+        public static NodeTransform GetNodeWorldTransform(uint nodeId)
+        {
+            NodeTransform result = default;
+            Api.Table->Scene_GetNodeWorldTransform(nodeId, &result);
+            return result;
+        }
+
+        public static Bounds GetNodeBounds(uint nodeId, bool local)
+        {
+            Bounds result = default;
+            Api.Table->Scene_GetNodeBounds(nodeId, local ? 1 : 0, &result);
+            return result;
+        }
+
+        public static RayHit RayCast(in Vector3 origin, in Vector3 direction, float maxDistance)
+        {
+            fixed (Vector3* p_origin = &origin)
+            {
+                fixed (Vector3* p_direction = &direction)
+                {
+                    RayHit result = default;
+                    Api.Table->Scene_RayCast(p_origin, p_direction, maxDistance, &result);
+                    return result;
+                }
+            }
         }
 
         public static uint GetEnvironmentNodeId()
@@ -972,6 +1085,57 @@ namespace GkNext
             {
                 int written = Api.Table->Assets_GetGameContentRoot(bufferPtr, required);
                 return written <= 0 ? string.Empty : System.Text.Encoding.UTF8.GetString(bufferPtr, written);
+            }
+        }
+
+        public static bool CheckSceneSource(string path)
+        {
+            var mark = Utf8Arena.Mark();
+            try
+            {
+                return Api.Table->Assets_CheckSceneSource(Utf8Arena.Encode(path)) != 0;
+            }
+            finally
+            {
+                Utf8Arena.Release(mark);
+            }
+        }
+
+        public static string GetSceneCheckReport()
+        {
+            int required = Api.Table->Assets_GetSceneCheckReport(null, 0);
+            if (required <= 0)
+            {
+                return string.Empty;
+            }
+            byte[] buffer = new byte[required];
+            fixed (byte* bufferPtr = buffer)
+            {
+                int written = Api.Table->Assets_GetSceneCheckReport(bufferPtr, required);
+                return written <= 0 ? string.Empty : System.Text.Encoding.UTF8.GetString(bufferPtr, written);
+            }
+        }
+
+        public static string GetSceneLoadReport(string path)
+        {
+            var mark = Utf8Arena.Mark();
+            try
+            {
+                int required = Api.Table->Assets_GetSceneLoadReport(Utf8Arena.Encode(path), null, 0);
+                if (required <= 0)
+                {
+                    return string.Empty;
+                }
+                byte[] buffer = new byte[required];
+                fixed (byte* bufferPtr = buffer)
+                {
+                    int written = Api.Table->Assets_GetSceneLoadReport(Utf8Arena.Encode(path), bufferPtr, required);
+                    return written <= 0 ? string.Empty : System.Text.Encoding.UTF8.GetString(bufferPtr, written);
+                }
+            }
+            finally
+            {
+                Utf8Arena.Release(mark);
             }
         }
     }

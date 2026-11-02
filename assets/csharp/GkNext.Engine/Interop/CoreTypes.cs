@@ -180,6 +180,76 @@ public static class PhysicsBodyIds
     public static bool IsValid(uint bodyId) => bodyId != Invalid;
 }
 
+/// <summary>An axis-aligned box; <see cref="IsValid"/> is false when nothing was measured.</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct Bounds
+{
+    public Vector3 Min;
+    public Vector3 Max;
+    public int Valid;
+
+    public readonly bool IsValid => Valid != 0;
+    public readonly Vector3 Center => new((Min.X + Max.X) * 0.5f, (Min.Y + Max.Y) * 0.5f, (Min.Z + Max.Z) * 0.5f);
+    public readonly Vector3 Size => new(Max.X - Min.X, Max.Y - Min.Y, Max.Z - Min.Z);
+
+    public readonly bool Contains(in Vector3 point, float margin = 0.0f) =>
+        point.X >= Min.X - margin && point.X <= Max.X + margin &&
+        point.Y >= Min.Y - margin && point.Y <= Max.Y + margin &&
+        point.Z >= Min.Z - margin && point.Z <= Max.Z + margin;
+}
+
+/// <summary>Closest hit of <c>Scene.RayCast</c>.</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct RayHit
+{
+    public Vector3 Position;
+    public Vector3 Normal;
+    public float Distance;
+    public uint NodeId;
+    public int Hit;
+
+    public readonly bool IsHit => Hit != 0;
+}
+
+/// <summary>
+/// A capsule character standing on <see cref="FootPosition"/>. Zero for slope or step keeps the
+/// engine default.
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct CharacterSpec(Vector3 footPosition, float height, float radius)
+{
+    public Vector3 FootPosition = footPosition;
+    public float Height = height;
+    public float Radius = radius;
+    public float MaxSlopeDegrees = 0.0f;
+    public float MaxStepHeight = 0.0f;
+}
+
+/// <summary>How a character is supported, mirroring the native ground state.</summary>
+public enum CharacterGround : int
+{
+    OnGround = 0,
+    OnSteepGround = 1,
+    NotSupported = 2,
+    InAir = 3,
+}
+
+/// <summary>State of a character controller after its last move.</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct CharacterState
+{
+    public Vector3 FootPosition;
+    public Vector3 Velocity;
+    public Vector3 GroundNormal;
+    public Vector3 GroundVelocity;
+    public uint GroundBodyId;
+    public CharacterGround GroundState;
+    public int Valid;
+
+    public readonly bool IsValid => Valid != 0;
+    public readonly bool IsOnGround => GroundState == CharacterGround.OnGround;
+}
+
 /// <summary>An opaque native UI texture plus its source pixel size.</summary>
 [StructLayout(LayoutKind.Sequential)]
 public struct UiTexture

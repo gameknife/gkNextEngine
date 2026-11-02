@@ -601,11 +601,16 @@ GK_DOTNET_ALLOC_BUDGET=8192    # 可调
 写之前先确认你要的东西在不在这个列表里：
 
 - **自定义 component**：不能从 C# 定义组件类型挂到节点上
-- **按名字找节点**：只有 `NodeRef.WithComponent<T>()` 和你自己记的 id
+- **按名字找节点**：加载出来的场景（SCAD 关卡、glTF）用 `Scene.DescribeNodes(namePrefix)` 一次拿到
+  `id / 父 id / 名字 / tag / metadata` 列表（SCAD 节点名 = module 名，metadata = 调用参数），再配合
+  `Scene.GetNodeWorldTransform` / `GetNodeBounds`；它按需构建，加载后调一次，不要每帧调。`ScadPlay` 的
+  `Level/LevelIndex.cs` 是完整用例
 - **通用加/删组件**：仍没有任意 component 的增删 API；显式 body 可通过
   `Scene{Build}.BindPhysicsBody` 安装 / 复用 `PhysicsComponent`
 - **物理查询与事件**：已有 primitive body 生命周期、kinematic、速度 / 施力、状态和 world pause，
-  但没有 raycast / shape cast、接触查询或碰撞回调
+  `Scene.RayCast`（CPU，对射线可见的几何）、`Scene.MakeNodeKinematic`（把加载出来的节点的网格碰撞换成
+  可移动的运动学体）和角色控制器 `Character.*`（Jolt CharacterVirtual，`ScadPlay/Player/Player.cs` 是用例）；
+  仍没有 shape cast、接触查询或碰撞回调
 - **数组 / 反射 Enum / Mat4 / AssetRef 属性**：反射里有，但还没通用绑定（生成的
   `Components.g.cs` 会在每个组件末尾列出跳过了哪些、为什么）
 - **协程**：没有；用状态机或计时器字段

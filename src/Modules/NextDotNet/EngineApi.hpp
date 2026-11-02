@@ -120,6 +120,12 @@ namespace Modules::NextDotNet
     /// previous game's.
     extern std::string GGameContentRoot;
 
+    /// Destroys every character controller managed code created through Character.Create. A game's
+    /// characters do not survive the game: the session calls this when it unloads the assembly and
+    /// the runtime when it hot reloads it, because the new instance has no ids for the old ones and
+    /// they would stand in the world as invisible obstacles.
+    void ReleaseManagedCharacters();
+
     /// Builds the table handed to managed code. Every def entry is filled; a binding declared
     /// without an implementation fails to compile.
     FEngineApi BuildEngineApi();

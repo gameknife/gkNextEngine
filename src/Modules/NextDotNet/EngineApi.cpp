@@ -5,7 +5,9 @@
 #include "Engine/Assets/Core/Node.hpp"
 #include "Engine/Options.hpp"
 #include "Engine/Assets/Core/Scene.hpp"
+#include "Engine/Assets/Acceleration/CPUAccelerationStructure.hpp"
 #include "Engine/Assets/Loaders/FProcModel.hpp"
+#include "Engine/Assets/Loaders/LoaderRegistry.hpp"
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/GameInstance.hpp"
 #include "Engine/Runtime/Components/PhysicsComponent.hpp"
@@ -20,15 +22,18 @@
 #include "Engine/Utilities/FileHelper.hpp"
 
 #include <imgui.h>
+#include <nlohmann/json.hpp>
 
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <unordered_set>
 #include <cstring>
 #include <filesystem>
 #include <string>
+#include <unordered_map>
 
 // Implementations behind EngineApi.def.h. Every function here is reachable from managed code, so
 // each one has to survive being called with whatever a script passes: a missing engine, an empty
@@ -632,6 +637,125 @@ namespace Modules::NextDotNet
             outState->Valid = 1;
         }
 
+        // --- character controllers ----------------------------------------------------------------
+
+        /// Owned here rather than by the scene: a character outlives scene swaps (the game decides
+        /// when to drop it), but not the game -- ReleaseManagedCharacters() clears the table when
+        /// the assembly is unloaded or hot reloaded, so a reloaded game never inherits a capsule
+        /// it has no id for.
+        std::unordered_map<uint32_t, std::unique_ptr<INextCharacterControllerBackend>> GCharacters;
+        uint32_t GNextCharacterId = 1;
+
+        INextCharacterControllerBackend* FindCharacter(uint32_t characterId)
+        {
+            const auto found = GCharacters.find(characterId);
+            if (found == GCharacters.end() || !found->second)
+            {
+                return nullptr;
+            }
+            // Characters are stepped by the async physics tick; every access waits for it, the
+            // same contract NextCharacterController keeps for C++ gameplay.
+            if (NextPhysics* physics = GetPhysicsEngine())
+            {
+                physics->CompleteTick();
+            }
+            return found->second.get();
+        }
+
+        uint32_t Character_Create(const FCharacterSpec* spec)
+        {
+            NextPhysics* physics = GetPhysicsEngine();
+            if (physics == nullptr || spec == nullptr)
+            {
+                SPDLOG_WARN("[dotnet] Character.Create: no physics engine in this host");
+                return 0;
+            }
+            FCharacterControllerSettings settings;
+            settings.initialPosition = ToGlm(&spec->FootPosition);
+            if (!IsFinite(settings.initialPosition))
+            {
+                return 0;
+            }
+            if (spec->Height > 0.0f)
+            {
+                settings.height = spec->Height;
+            }
+            if (spec->Radius > 0.0f)
+            {
+                settings.radius = spec->Radius;
+            }
+            if (spec->MaxSlopeDegrees > 0.0f)
+            {
+                settings.maxSlopeAngle = spec->MaxSlopeDegrees;
+            }
+            if (spec->MaxStepHeight > 0.0f)
+            {
+                settings.maxStepHeight = spec->MaxStepHeight;
+            }
+
+            physics->CompleteTick();
+            std::unique_ptr<INextCharacterControllerBackend> backend = physics->CreateCharacterController(settings);
+            if (!backend || !backend->IsValid())
+            {
+                SPDLOG_WARN("[dotnet] Character.Create: the physics backend refused the character");
+                return 0;
+            }
+            const uint32_t id = GNextCharacterId++;
+            GCharacters.emplace(id, std::move(backend));
+            return id;
+        }
+
+        void Character_Destroy(uint32_t characterId)
+        {
+            if (FindCharacter(characterId) != nullptr)
+            {
+                GCharacters.erase(characterId);
+            }
+        }
+
+        void Character_Move(uint32_t characterId, const FVec3* velocity, GkBool inheritGround, float deltaSeconds)
+        {
+            INextCharacterControllerBackend* character = FindCharacter(characterId);
+            const glm::vec3 nativeVelocity = ToGlm(velocity);
+            if (character == nullptr || velocity == nullptr || !IsFinite(nativeVelocity) || !(deltaSeconds > 0.0f))
+            {
+                return;
+            }
+            character->UpdateWithVelocity(nativeVelocity, inheritGround != 0, deltaSeconds);
+        }
+
+        void Character_SetPosition(uint32_t characterId, const FVec3* footPosition)
+        {
+            INextCharacterControllerBackend* character = FindCharacter(characterId);
+            const glm::vec3 position = ToGlm(footPosition);
+            if (character != nullptr && footPosition != nullptr && IsFinite(position))
+            {
+                character->SetPosition(position);
+            }
+        }
+
+        void Character_GetState(uint32_t characterId, FCharacterState* outState)
+        {
+            if (outState == nullptr)
+            {
+                return;
+            }
+            *outState = {};
+            outState->GroundState = static_cast<int32_t>(ECharacterGroundState::InAir);
+            INextCharacterControllerBackend* character = FindCharacter(characterId);
+            if (character == nullptr)
+            {
+                return;
+            }
+            StoreVec3(outState->FootPosition, character->GetPosition());
+            StoreVec3(outState->Velocity, character->GetLinearVelocity());
+            StoreVec3(outState->GroundNormal, character->GetGroundNormal());
+            StoreVec3(outState->GroundVelocity, character->GetGroundVelocity());
+            outState->GroundBodyId = character->GetGroundBodyID().Value();
+            outState->GroundState = static_cast<int32_t>(character->GetGroundState());
+            outState->Valid = 1;
+        }
+
         // --- character rigs -----------------------------------------------------------------------
 
         NextRig* GetRigSubsystem()
@@ -1166,6 +1290,18 @@ namespace Modules::NextDotNet
             }
         }
 
+        void Scene_SetNodeRayCastVisibleRecursive(uint32_t nodeId, GkBool visible)
+        {
+            if (Assets::Node* node = FindNodeOrWarn(nodeId, "Scene.SetNodeRayCastVisibleRecursive"))
+            {
+                Assets::NodeUtils::SetRayCastVisibleRecursive(node, visible != 0);
+                if (auto* engine = NextEngine::GetInstance())
+                {
+                    engine->GetScene().MarkDirty();
+                }
+            }
+        }
+
         GkBool Scene_SetNodeParent(uint32_t childId, uint32_t parentId)
         {
             auto* engine = NextEngine::GetInstance();
@@ -1271,6 +1407,200 @@ namespace Modules::NextDotNet
 
             const int32_t found = scene.FindNodeIdWithComponent("EnvironmentComponent");
             return found < 0 ? GK_INVALID_NODE_ID : static_cast<uint32_t>(found);
+        }
+
+        uint32_t Scene_MakeNodeKinematic(uint32_t nodeId)
+        {
+            constexpr uint32_t invalidBody = NextBodyID::invalidValue;
+            auto* engine = NextEngine::GetInstance();
+            Assets::Node* node = FindNodeOrWarn(nodeId, "Scene.MakeNodeKinematic");
+            if (engine == nullptr || node == nullptr || GetPhysicsEngine() == nullptr)
+            {
+                return invalidBody;
+            }
+            const auto* render = node->GetComponent<Runtime::RenderComponent>();
+            if (render == nullptr || !render->GetRayCastVisible())
+            {
+                return invalidBody;
+            }
+
+            auto* physics = node->GetComponent<Runtime::PhysicsComponent>();
+            if (physics != nullptr && physics->GetMobility() == Runtime::ENodeMobility::Kinematic &&
+                !physics->GetPhysicsBody().IsInvalid())
+            {
+                return physics->GetPhysicsBody().Value();
+            }
+            if (physics == nullptr)
+            {
+                auto component = std::make_shared<Runtime::PhysicsComponent>();
+                physics = component.get();
+                node->AddComponent(std::move(component));
+            }
+            physics->SetMobility(Runtime::ENodeMobility::Kinematic);
+            // Rebuilds the node's mesh body for its new mobility: the static one is removed and a
+            // kinematic one of the same cooked shape takes its place on the moving layer.
+            engine->GetScene().EnsureNodePhysicsBody(node);
+            const NextBodyID body = physics->GetPhysicsBody();
+            return body.IsInvalid() ? invalidBody : body.Value();
+        }
+
+        // --- scene inspection -----------------------------------------------------------------------
+
+        /// Tabs and newlines are the record's own separators; a name or a string parameter that
+        /// contains one is flattened rather than allowed to split the line.
+        void AppendSanitized(std::string& out, const std::string& text)
+        {
+            for (const char c : text)
+            {
+                out.push_back(c == '\t' || c == '\n' || c == '\r' ? ' ' : c);
+            }
+        }
+
+        int32_t Scene_DescribeNodes(GkStr namePrefix, char* buffer, int32_t capacity)
+        {
+            auto* engine = NextEngine::GetInstance();
+            if (engine == nullptr)
+            {
+                return WriteString({}, buffer, capacity);
+            }
+            const std::string prefix = ToString(namePrefix);
+            std::string out;
+            for (const std::shared_ptr<Assets::Node>& node : engine->GetScene().Nodes())
+            {
+                if (!node || node->GetName().compare(0, prefix.size(), prefix) != 0)
+                {
+                    continue;
+                }
+                const Assets::Node* parent = node->GetParent();
+                out.append(std::to_string(node->GetInstanceId()));
+                out.push_back('\t');
+                out.append(std::to_string(parent != nullptr ? parent->GetInstanceId() : GK_INVALID_NODE_ID));
+                out.push_back('\t');
+                AppendSanitized(out, node->GetName());
+                out.push_back('\t');
+                AppendSanitized(out, node->GetTag());
+                out.push_back('\t');
+                AppendSanitized(out, node->GetMetadata());
+                out.push_back('\n');
+            }
+            return WriteString(out, buffer, capacity);
+        }
+
+        void Scene_GetNodeWorldTransform(uint32_t nodeId, FNodeTransform* outTransform)
+        {
+            if (outTransform == nullptr)
+            {
+                return;
+            }
+            *outTransform = {};
+            outTransform->NodeId = GK_INVALID_NODE_ID;
+            outTransform->Rotation.W = 1.0f;
+            Assets::Node* node = FindNodeOrWarn(nodeId, "Scene.GetNodeWorldTransform");
+            if (node == nullptr)
+            {
+                return;
+            }
+            outTransform->NodeId = nodeId;
+            StoreVec3(outTransform->Translation, node->WorldTranslation());
+            StoreQuat(outTransform->Rotation, node->WorldRotation());
+            StoreVec3(outTransform->Scale, node->WorldScale());
+        }
+
+        /// Folds every drawn model of the subtree into a box expressed in `frame`'s inverse, i.e.
+        /// in the space `frame` maps from. Identity gives world bounds.
+        void GatherSubtreeBounds(const Assets::Scene& scene, const Assets::Node& node, const glm::mat4& toFrame,
+                                 glm::vec3& outMin, glm::vec3& outMax, bool& outAny)
+        {
+            if (const auto* render = node.GetComponent<Runtime::RenderComponent>())
+            {
+                const Assets::Model* model = scene.GetModel(render->GetModelId());
+                if (model != nullptr)
+                {
+                    const glm::vec3 localMin = model->GetLocalAABBMin();
+                    const glm::vec3 localMax = model->GetLocalAABBMax();
+                    if (!glm::any(glm::greaterThan(localMin, localMax)))
+                    {
+                        const glm::mat4 toTarget = toFrame * node.WorldTransform();
+                        for (int corner = 0; corner < 8; ++corner)
+                        {
+                            const glm::vec3 local((corner & 1) ? localMax.x : localMin.x,
+                                                  (corner & 2) ? localMax.y : localMin.y,
+                                                  (corner & 4) ? localMax.z : localMin.z);
+                            const glm::vec3 point(toTarget * glm::vec4(local, 1.0f));
+                            outMin = glm::min(outMin, point);
+                            outMax = glm::max(outMax, point);
+                        }
+                        outAny = true;
+                    }
+                }
+            }
+            for (const std::shared_ptr<Assets::Node>& child : node.Children())
+            {
+                if (child)
+                {
+                    GatherSubtreeBounds(scene, *child, toFrame, outMin, outMax, outAny);
+                }
+            }
+        }
+
+        void Scene_GetNodeBounds(uint32_t nodeId, GkBool local, FBounds* outBounds)
+        {
+            if (outBounds == nullptr)
+            {
+                return;
+            }
+            *outBounds = {};
+            auto* engine = NextEngine::GetInstance();
+            Assets::Node* node = FindNodeOrWarn(nodeId, "Scene.GetNodeBounds");
+            if (engine == nullptr || node == nullptr)
+            {
+                return;
+            }
+            const glm::mat4 toFrame = local != 0 ? glm::inverse(node->WorldTransform()) : glm::mat4(1.0f);
+            glm::vec3 boundsMin(std::numeric_limits<float>::max());
+            glm::vec3 boundsMax(std::numeric_limits<float>::lowest());
+            bool any = false;
+            GatherSubtreeBounds(engine->GetScene(), *node, toFrame, boundsMin, boundsMax, any);
+            if (!any)
+            {
+                return;
+            }
+            StoreVec3(outBounds->Min, boundsMin);
+            StoreVec3(outBounds->Max, boundsMax);
+            outBounds->Valid = 1;
+        }
+
+        void Scene_RayCast(const FVec3* origin, const FVec3* direction, float maxDistance, FRayHit* outHit)
+        {
+            if (outHit == nullptr)
+            {
+                return;
+            }
+            *outHit = {};
+            outHit->NodeId = GK_INVALID_NODE_ID;
+            auto* engine = NextEngine::GetInstance();
+            const glm::vec3 rayOrigin = ToGlm(origin);
+            glm::vec3 rayDirection = ToGlm(direction);
+            const float length = glm::length(rayDirection);
+            if (engine == nullptr || origin == nullptr || direction == nullptr || !IsFinite(rayOrigin) ||
+                !IsFinite(rayDirection) || !(length > 1e-6f) || !(maxDistance > 0.0f))
+            {
+                return;
+            }
+            rayDirection /= length;
+            const Assets::RayCastResult result =
+                engine->GetScene().GetCPUAccelerationStructure().RayCastInCPU(rayOrigin, rayDirection);
+            if (!result.Hit || result.T > maxDistance)
+            {
+                return;
+            }
+            StoreVec3(outHit->Position, glm::vec3(result.HitPoint));
+            glm::vec3 normal(result.Normal);
+            const float normalLength = glm::length(normal);
+            StoreVec3(outHit->Normal, normalLength > 1e-6f ? normal / normalLength : glm::vec3(0.0f, 1.0f, 0.0f));
+            outHit->Distance = result.T;
+            outHit->NodeId = result.InstanceId;
+            outHit->Hit = 1;
         }
 
         // --- scene construction ---------------------------------------------------------------------
@@ -1661,6 +1991,15 @@ namespace Modules::NextDotNet
                 }
                 cursor = cursor.parent_path();
             }
+#if defined(GK_GAME_PROJECTS_SOURCE_ROOT)
+            // Launched from somewhere outside the tree (a Finder double-click, an IDE with its own
+            // working directory): the checkout that built this binary is still the project.
+            const std::filesystem::path bakedRoot = std::filesystem::path(GK_GAME_PROJECTS_SOURCE_ROOT).parent_path();
+            if (std::filesystem::exists(bakedRoot / "AGENTS.md", ec) && std::filesystem::exists(bakedRoot / "assets", ec))
+            {
+                return WriteString(bakedRoot.string(), buffer, capacity);
+            }
+#endif
             return WriteString(std::filesystem::current_path(ec).string(), buffer, capacity);
         }
 
@@ -1692,6 +2031,76 @@ namespace Modules::NextDotNet
             std::memcpy(buffer, contents.data(), static_cast<size_t>(copied));
             return copied;
         }
+
+        std::string SceneSourceReportJson(const Assets::FSceneSourceReport& report)
+        {
+            nlohmann::json json;
+            json["ok"] = report.ok;
+            json["error"] = report.error;
+            json["warnings"] = report.warnings;
+            json["warning_count"] = report.warningCount;
+            json["dependencies"] = report.dependencies;
+            json["nodes"] = report.nodeCount;
+            json["triangles"] = report.triangleCount;
+            json["ms"] = report.milliseconds;
+            json["serial"] = report.serial;
+            // Replace, not throw: an evaluation warning can quote a non-UTF-8 byte from the source.
+            return json.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+        }
+
+        /// The last CheckSceneSource result, kept for the report getter (which the generated
+        /// wrapper calls twice: once to size the buffer, once to fill it).
+        std::string GLastSceneCheckJson;
+
+        GkBool Assets_CheckSceneSource(GkStr path)
+        {
+            const std::string filename = ToString(path);
+            std::string extension = std::filesystem::path(filename).extension().string();
+            std::transform(extension.begin(), extension.end(), extension.begin(),
+                           [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+
+            Assets::FSceneSourceReport report;
+            if (const Assets::FSceneSourceCheckFn* check =
+                    Assets::FLoaderRegistry::Get().FindSceneSourceCheck(extension))
+            {
+                (*check)(filename, report);
+            }
+            else
+            {
+                report.error = "no source check is registered for '" + extension + "' scenes";
+            }
+            GLastSceneCheckJson = SceneSourceReportJson(report);
+            return report.ok ? 1 : 0;
+        }
+
+        int32_t Assets_GetSceneCheckReport(char* buffer, int32_t capacity)
+        {
+            return WriteString(GLastSceneCheckJson, buffer, capacity);
+        }
+
+        int32_t Assets_GetSceneLoadReport(GkStr path, char* buffer, int32_t capacity)
+        {
+            Assets::FSceneSourceReport report;
+            if (!Assets::FLoaderRegistry::Get().FindLoadReport(ToString(path), report))
+            {
+                return WriteString({}, buffer, capacity);
+            }
+            return WriteString(SceneSourceReportJson(report), buffer, capacity);
+        }
+    }
+
+    void ReleaseManagedCharacters()
+    {
+        if (GCharacters.empty())
+        {
+            return;
+        }
+        if (NextPhysics* physics = GetPhysicsEngine())
+        {
+            physics->CompleteTick();
+        }
+        SPDLOG_INFO("[dotnet] released {} character controller(s) left by the game", GCharacters.size());
+        GCharacters.clear();
     }
 
     FEngineApi BuildEngineApi()

@@ -1,4 +1,5 @@
 #include "Modules/NextDotNet/DotNetRuntime.hpp"
+#include "Modules/NextDotNet/EngineApi.hpp"
 #include "Engine/Runtime/Profiling/TracyIntegration.hpp"
 
 #include "Engine/Runtime/Engine.hpp"
@@ -288,6 +289,7 @@ namespace Modules::NextDotNet
         }
 
         const int32_t status = managed_->UnloadGame();
+        ReleaseManagedCharacters();
         gameLoaded_ = false;
         gameAssemblyPath_.clear();
         isPaused_ = false;
@@ -684,6 +686,9 @@ namespace Modules::NextDotNet
         gameAssemblyTimestamp_ = timestamp;
 
         const std::string path = gameAssemblyPath_.string();
+        // The outgoing instance is unloaded first whatever happens next, and the incoming one has
+        // no ids for what it left behind.
+        ReleaseManagedCharacters();
         const int32_t status = managed_->ReloadGame(MakeStr(path));
         switch (static_cast<EGameStatus>(status))
         {

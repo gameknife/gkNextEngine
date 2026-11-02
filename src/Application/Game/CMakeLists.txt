@@ -20,7 +20,11 @@ add_subdirectory(Voyage3D)
 add_subdirectory(NextTotalwar)
 if(GK_DOTNET_ENABLED)
     add_subdirectory(DotNetSandbox)
-    add_subdirectory(TestFPS)
+    # TestFPS is a scratch game generated from a template; its project is not in the repository.
+    # Managed publishes are chained, so a target whose csproj is missing breaks every game after it.
+    if(EXISTS "${GK_GAME_PROJECTS_ROOT}/TestFPS/Scripts/TestFPS.csproj")
+        add_subdirectory(TestFPS)
+    endif()
 endif()
 # CoreCLR only: NativeAOT links one game into the binary, so a launcher there would have nothing
 # to choose between. Declared last so the managed publish targets it depends on already exist.

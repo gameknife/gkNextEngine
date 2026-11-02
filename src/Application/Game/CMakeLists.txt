@@ -25,6 +25,7 @@ if(GK_DOTNET_ENABLED)
     if(EXISTS "${GK_GAME_PROJECTS_ROOT}/TestFPS/Scripts/TestFPS.csproj")
         add_subdirectory(TestFPS)
     endif()
+    add_subdirectory(ScadPlay)
 endif()
 # CoreCLR only: NativeAOT links one game into the binary, so a launcher there would have nothing
 # to choose between. Declared last so the managed publish targets it depends on already exist.

@@ -19,6 +19,7 @@ projects/
 | `Flappy/` | `flappy` | Flappy 对照组。`Content/` 同时被 C++ 版 `FlappyCpp` 读取——replay parity 靠的就是两端读同一份配置 |
 | `Brotato3D/` | `brotato3d` | Brotato3D 的 C# 版。`Content/configs` 同时被 C++ 版 `Brotato3D` 读取 |
 | `Sandbox/` | `sandbox` | 绑定层的最小可运行样本。唯一没有 `Scripts/` 的工程：它的代码是引擎的 `GkNext.Game` 探针，留在 `assets/csharp` |
+| `ScadPlay/` | `scadplay` | 边玩边改的第三人称游戏：关卡是 `assets/scad/source/scadplay/*.scad`（共享 SCAD 资产树，便于 `use` 各个 kit），玩法是 `Scripts/` 的 C#，两者都在运行中热重建。见 [docs/AGENT_GUIDE/ScadPlay.md](../docs/AGENT_GUIDE/ScadPlay.md) |
 
 新工程由 launcher 的 **New Project** 或编辑器的 **File > New Game Project** 从
 `assets/templates/games/` 下的模板生成，落在 `projects/<Name>/`。

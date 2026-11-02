@@ -24,7 +24,10 @@ gkNextRenderer is a cross-platform 3D game engine built with modern C++20 and Vu
   ScadStudio, ScadLibrary
 - Game: MagicaLego, Brotato3D, KongLie3D, NextRA, NextDayz, NextAstrobot, NextRaiden, NextTotalwar, BrickPlayer,
   CharacterDemo, FlappyCpp/FlappyCSharp (`Game/Flappy/`), Brotato3DCSharp, DotNetSandbox, gkNextLauncher,
-  TruckerDemo, StudioSim, AirportSim, CitySolSim, NextWorldTravel, Voyage3D
+  TruckerDemo, StudioSim, AirportSim, CitySolSim, NextWorldTravel, Voyage3D, ScadPlay
+  - `ScadPlay`（C#）是"边玩边让 agent 用自然语言搭关卡、改玩法"的游戏：关卡是 `.scad`，保存即原地重建；
+    玩法是 `projects/ScadPlay/Scripts` 的 C#（kit module 名 = C# 类），重新发布即热重载；两者都保留玩家和
+    机关状态。agent 读 `out/scadplay/context.json`、走 `scadplay` skill。见 [ScadPlay](docs/AGENT_GUIDE/ScadPlay.md)
   - `gkNextLauncher` 在同一个进程内加载/卸载任意 C# 游戏（Unity 的 Play 模型）；三个 C# 目标
     与它共用 `ManagedGameHostInstance`，差异全部在各自工程的 `projects/<Game>/<id>.game.json`。
     `gkNextEditor` 用同一个 `ManagedGameSession` 实现 play-in-editor。两者都能从模板**新建**
@@ -413,6 +416,9 @@ tools/gnb/                   # Project CLI (Go) — see "gnb" section below
   - `NextAstrobot.md` - AstroBot 风格 3D 平台跳跃：`.scad` 关卡即运行时对象、kit_astro 活动件契约
     （`ab_part_*` + `gk_flatten` 静态壳 + `Node::metadata` 玩法参数）、机关碰撞策略、帧顺序、
     `UpdateWithVelocity` 地面速度继承、加一关的零代码路径
+  - `ScadPlay.md` - 边玩边改的 C# 游戏：`context.json` 协议、"前面/左边"怎么算、追加编辑规则、
+    kit_scadplay 玩法件契约（`id`/`on`/`any` 接线、`sp_part_*` 活动件）、加一种机关的三步、
+    关卡热重建与 C# 热重载的状态保留、为此加的引擎接口（源文件预检、加载报告、角色控制器绑定）
 - **README.en.md** - Project overview and quick start
 - **.clang-tidy** - Naming conventions (source of truth)
 

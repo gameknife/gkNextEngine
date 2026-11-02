@@ -88,7 +88,7 @@
 - Gameplay：[CharacterDemo](AGENT_GUIDE/CharacterDemo.md) · [SimKit](AGENT_GUIDE/SimKit.md) ·
   [Brotato3D](AGENT_GUIDE/Brotato3D.md) · [MagicaLego](AGENT_GUIDE/MagicaLego.md) ·
   [NextTotalwar](AGENT_GUIDE/NextTotalwar.md) · [NextWorldTravel](AGENT_GUIDE/NextWorldTravel.md) ·
-  [NextAstrobot](AGENT_GUIDE/NextAstrobot.md)
+  [NextAstrobot](AGENT_GUIDE/NextAstrobot.md) · [ScadPlay（边玩边改 + agent 协议）](AGENT_GUIDE/ScadPlay.md)
 - 通用代码审查：[编码规范](AGENT_GUIDE/coding-standards.md)
 
 ## 项目文档

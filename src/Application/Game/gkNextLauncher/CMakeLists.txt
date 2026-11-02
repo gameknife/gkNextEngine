@@ -21,7 +21,8 @@ gk_add_application(gkNextLauncher
 # launcher itself brings no C# of its own: it loads assemblies chosen at runtime, which is exactly
 # what gk_dotnet_stub_game exists to say.
 gk_dotnet_stub_game(gkNextLauncher)
-foreach(managedGame Brotato3DCSharpManagedGame FlappyCSharpManagedGame DotNetSandboxManagedGame)
+foreach(managedGame Brotato3DCSharpManagedGame FlappyCSharpManagedGame DotNetSandboxManagedGame
+                    ScadPlayManagedGame)
     if(TARGET ${managedGame})
         add_dependencies(gkNextLauncher ${managedGame})
     endif()

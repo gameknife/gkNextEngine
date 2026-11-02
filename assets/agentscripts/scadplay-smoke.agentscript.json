@@ -1,0 +1,106 @@
+{
+  "name": "scadplay-smoke",
+  "target": "ScadPlay",
+  "viewport": {
+    "width": 1600,
+    "height": 900
+  },
+  "defaults": {
+    "waitFrames": 2,
+    "stepTimeoutMs": 20000
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "engine.status",
+      "op": "eq",
+      "value": "Running",
+      "timeoutMs": 20000
+    },
+    {
+      "type": "wait-until",
+      "query": "scene.nodeCount",
+      "op": "ge",
+      "value": 40,
+      "timeoutMs": 20000,
+      "comment": "playground.scad is built and the astro_bot rig is in the scene."
+    },
+    {
+      "type": "wait-frames",
+      "n": 30
+    },
+    {
+      "type": "key",
+      "code": "L",
+      "action": "press",
+      "comment": "Labels over every mechanism: id, state, and a line from each piece it listens to."
+    },
+    {
+      "type": "wait-frames",
+      "n": 10
+    },
+    {
+      "type": "screenshot",
+      "ui": true,
+      "out": "screenshots/scadplay_labels"
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-ms",
+      "ms": 1300,
+      "comment": "Run east along the coin row (coins at x 3..7.8) towards the closed door at x 12."
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "wait-frames",
+      "n": 20
+    },
+    {
+      "type": "screenshot",
+      "ui": true,
+      "out": "screenshots/scadplay_coins"
+    },
+    {
+      "type": "key",
+      "code": "D",
+      "action": "down"
+    },
+    {
+      "type": "wait-ms",
+      "ms": 650,
+      "comment": "Step right (SCAD -y) onto plate_a at (8, -4): door_a listens to it and sinks."
+    },
+    {
+      "type": "key",
+      "code": "D",
+      "action": "up"
+    },
+    {
+      "type": "wait-ms",
+      "ms": 2000
+    },
+    {
+      "type": "screenshot",
+      "ui": true,
+      "out": "screenshots/scadplay_door",
+      "comment": "door_a has sunk: plate_a is latched."
+    },
+    {
+      "type": "assert",
+      "query": "engine.status",
+      "op": "eq",
+      "value": "Running"
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

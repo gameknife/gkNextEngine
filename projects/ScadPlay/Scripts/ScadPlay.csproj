@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    ScadPlay: a third-person game whose levels are .scad files and whose gameplay is this
+    assembly. Both are rewritten while the game runs: the level by saving the file and the rules by
+    republishing this project (hot reload); see docs/AGENT_GUIDE/ScadPlay.md.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>ScadPlay</RootNamespace>
+    <AssemblyName>ScadPlay</AssemblyName>
+    <!-- Required: the host loads this assembly into a collectible AssemblyLoadContext. -->
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(GkEngineManagedRoot)GkNext.SourceGen\GkNext.SourceGen.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="$(GkEngineManagedRoot)GkNext.Engine\GkNext.Engine.csproj">
+      <!-- Do not change these two: GkNext.Engine must resolve from the host's load context. -->
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
+  </ItemGroup>
+
+</Project>

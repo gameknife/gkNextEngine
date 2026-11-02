@@ -384,9 +384,16 @@ public struct FPathTracingRenderer{
         specProb = clamp(specProb, 0.0f, 1.0f);
 
         const float rndLobe = RandomFloat(randomSeed);
-        const bool chanceGGX = (rndLobe < specProb) || (mat.MaterialModel == MaterialMetallic);
-        const bool chanceMetal = chanceGGX && (metalness > 0.0f);
-        const bool chanceReflect = chanceGGX;
+        
+        const bool chanceGGX = rndLobe < specProb;
+
+        const float metalTintProb = (mat.MaterialModel == MaterialMetallic)
+            ? 1.0f
+            : clamp(metalness / max(specProb, 1e-7f), 0.0f, 1.0f);
+
+        const bool chanceMetal = chanceGGX && (RandomFloat(randomSeed) < metalTintProb);
+        const bool chanceReflect = chanceGGX && !chanceMetal;
+
         const float3 traceNext = chanceGGX ? reflect(rayDir, outwardNormal) : outwardNormal;
         float3 traceDir = chanceGGX ? ggxSampling(randomSeed, sqrt(roughness), traceNext)
                                     : AlignWithNormal(RandomInHemiSphere1(randomSeed), traceNext);

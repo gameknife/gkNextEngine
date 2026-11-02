@@ -312,36 +312,47 @@ public float MIS(float a, float b)
     return (a >= b) ? (rcp(1.0f + weightedRatio)) : (weightedRatio / (1.0f + weightedRatio));
 }
 
-// GGX VNDF directional probability density function for MIS (Heitz 2018)
+// Bounded VNDF PDF: matches ggx_sample_vndf() in ConstFunc.slang
 public float EvaluateGlossyProposalPdf(FBSDFContext context, float3 wi)
 {
     if (context.PerceptualRoughness <= BSDF_DELTA_ROUGHNESS)
     {
         return 0.0f;
     }
+
     const float3 N = context.Normal;
     const float3 V = normalize(context.Wo);
     const float3 L = normalize(wi);
     const float NoV = max(dot(N, V), 0.0f);
-    const float NoL = dot(N, L);
+    const float NoL = max(dot(N, L), 0.0f);
+
     if (NoV <= 0.0f || NoL <= 0.0f)
     {
         return 0.0f;
     }
+
     const float3 H = normalize(V + L);
     const float NoH = max(dot(N, H), 0.0f);
     const float VoH = max(dot(V, H), 0.0f);
+
     if (NoH <= 0.0f || VoH <= 0.0f)
     {
         return 0.0f;
     }
+
     const float alpha = max(context.PerceptualRoughness * context.PerceptualRoughness,
                             BSDF_MIN_ROUGHNESS * BSDF_MIN_ROUGHNESS);
     const float alpha2 = alpha * alpha;
     const float D = BSDFDistributionGGX(NoH, context.PerceptualRoughness);
-    // Stable VNDF PDF: G1(NoV) / (4 * NoV) = 0.5 / (NoV + sqrt(alpha2 + (1 - alpha2) * NoV^2))
-    const float denom = NoV + sqrt(alpha2 + (1.0f - alpha2) * NoV * NoV);
-    return (0.5f * D) / max(denom, 1e-7f);
+
+    const float t = sqrt(alpha2 + (1.0f - alpha2) * NoV * NoV);
+    const float a = saturate(alpha);
+    const float a2 = a * a;
+    const float s = 1.0f + sqrt(max(1.0f - NoV * NoV, 0.0f));
+    const float s2 = s * s;
+    const float k = (1.0f - a2) * s2 / max(s2 + a2 * NoV * NoV, 1e-7f);
+
+    return (0.5f * D) / max(k * NoV + t, 1e-7f);
 }
 
 public float3 SampleGlossyProposal(inout uint4 randomSeed, FBSDFContext context, out float pdf)

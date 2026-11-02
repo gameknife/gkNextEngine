@@ -122,6 +122,11 @@ namespace Assets::Scad
         std::vector<SceneTerrain> terrains;
         int warningCount = 0;
         size_t triangleCount = 0;
+        // The text of the warnings that were also logged (each kind is logged a few
+        // times at most), capped at kMaxRecordedWarnings, so a host can show an author
+        // *which* module was unknown instead of only how many warnings there were.
+        std::vector<std::string> warnings;
+        static constexpr size_t kMaxRecordedWarnings = 32;
     };
 
     class ScadEvaluator

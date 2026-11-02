@@ -32,7 +32,12 @@ namespace Assets::Scad
 
     // Resolves filename (platform-relative or absolute), reads the file and its
     // use/include closure, and lexes/parses everything into outProgram.
-    bool LoadScadProgram(const std::string& filename, ScadProgram& outProgram, std::string& outError);
+    //
+    // outFiles, when given, receives every file the closure touched as an absolute
+    // path, main file first -- including the one that failed to read or parse, so a
+    // live editor watching these paths sees the fix for a broken include too.
+    bool LoadScadProgram(const std::string& filename, ScadProgram& outProgram, std::string& outError,
+                         std::vector<std::string>* outFiles = nullptr);
 
     // Reads a runtime-root-relative asset as raw bytes through the package file
     // system (with a loose-file fallback). Same resolution the use/include

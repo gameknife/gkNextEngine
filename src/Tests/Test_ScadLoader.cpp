@@ -1227,9 +1227,9 @@ TEST_CASE("Scad user-module named parameters land in Node metadata", "[Unit][Sca
         }
     }
     REQUIRE(metadata.size() == 2);
-    // Vectors have no single-token spelling, so `v` is dropped by design.
-    CHECK(metadata[0] == "a=1;b=true;c=x");
-    CHECK(metadata[1] == "a=2.5;b=false;c=x");
+    // A flat vector is spelled as its elements joined with ','.
+    CHECK(metadata[0] == "a=1;b=true;c=x;v=1,2");
+    CHECK(metadata[1] == "a=2.5;b=false;c=x;v=1,2");
 
     const FMetadata parsed = ParseScadMetadata(metadata[1]);
     CHECK(MetadataNumber(parsed, "a", 0.0) == Catch::Approx(2.5));

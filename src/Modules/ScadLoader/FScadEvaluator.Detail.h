@@ -352,6 +352,17 @@ namespace Assets::Scad
                     }
                     sceneResult_->warningCount += partial.warningCount;
                     sceneResult_->triangleCount += partial.triangleCount;
+                    // Each worker warns once per kind on its own, so the same text can
+                    // arrive from several of them.
+                    for (std::string& warning : partial.warnings)
+                    {
+                        std::vector<std::string>& merged = sceneResult_->warnings;
+                        if (merged.size() < SceneEvalResult::kMaxRecordedWarnings &&
+                            std::find(merged.begin(), merged.end(), warning) == merged.end())
+                        {
+                            merged.push_back(std::move(warning));
+                        }
+                    }
                 }
             }
 
@@ -443,6 +454,10 @@ namespace Assets::Scad
                 {
                     SPDLOG_WARN("SCAD: {}", msg);
                     ++count;
+                    if (sceneResult_ && sceneResult_->warnings.size() < SceneEvalResult::kMaxRecordedWarnings)
+                    {
+                        sceneResult_->warnings.push_back(msg);
+                    }
                 }
             }
 

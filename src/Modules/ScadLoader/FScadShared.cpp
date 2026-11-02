@@ -199,7 +199,8 @@ namespace Assets::Scad
         return ScadReadBytes(fs::path(path).lexically_normal(), out);
     }
 
-    bool LoadScadProgram(const std::string& filename, ScadProgram& outProgram, std::string& outError)
+    bool LoadScadProgram(const std::string& filename, ScadProgram& outProgram, std::string& outError,
+                         std::vector<std::string>* outFiles)
     {
         fs::path mainPath = filename;
         if (mainPath.is_absolute())
@@ -247,6 +248,17 @@ namespace Assets::Scad
             else if (parsedDefinitions.count(key) != 0)
             {
                 continue;
+            }
+
+            if (outFiles)
+            {
+                const fs::path absolute =
+                    item.path.is_absolute() ? item.path : Utilities::FileHelper::GetRuntimeFilePath(item.path);
+                const std::string absoluteKey = absolute.lexically_normal().string();
+                if (std::find(outFiles->begin(), outFiles->end(), absoluteKey) == outFiles->end())
+                {
+                    outFiles->push_back(absoluteKey);
+                }
             }
 
             std::string source;
@@ -476,9 +488,12 @@ namespace Assets::Scad
         {
             return fallback;
         }
+        // The whole value must be the number: a vector parameter is spelled "1,2,3", and reading
+        // its first element as if it were a scalar would hide the authoring mistake.
         char* parseEnd = nullptr;
         const double parsed = std::strtod(value->c_str(), &parseEnd);
-        return (parseEnd && parseEnd != value->c_str() && std::isfinite(parsed)) ? parsed : fallback;
+        return (parseEnd && parseEnd != value->c_str() && *parseEnd == '\0' && std::isfinite(parsed)) ? parsed
+                                                                                                    : fallback;
     }
 
     bool MetadataBool(const FMetadata& metadata, std::string_view key, bool fallback)

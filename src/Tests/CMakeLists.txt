@@ -52,6 +52,7 @@ set(unitTestSources
     Test_ScadAIController.cpp
     Test_ScadAIAdapters.cpp
     Test_ScadSourceIndex.cpp
+    Test_ScadLiveSource.cpp
     Test_ScadStudioSessionImporter.cpp
     Test_CharacterWorkbenchAI.cpp
     Test_Rgb9e5Pack.cpp

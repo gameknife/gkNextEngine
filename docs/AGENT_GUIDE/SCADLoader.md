@@ -47,6 +47,23 @@ user module 调用都另开一个子 Node 带走自己的几何。库里的材�
 不加是 7683 个 Node、物理 shape cooking 1.2 秒；加上后 90 个 Node、34 毫秒。
 分块粒度仍由调用方控制，每块要留在 65535 三角的 Model 上限之下。
 
+**每个 user module 调用的具名参数写进 `Node::metadata`**（`"k=v;k=v"`，`ParseScadMetadata` 读回）：
+数字、布尔、字符串照原样；扁平向量写成逗号连接的元素（`travel=0,0,3`、`on=plate_a,plate_b`），
+嵌套向量、range、含分隔符的字符串被丢弃。`MetadataNumber` 要求整个值都是数字，向量不会被当成它的第一个元素。
+
+**`collision = "none"`**：module 带这个参数时，整棵子树的网格以射线不可见方式构建——不生成隐式静态碰撞体，
+CPU 射线（镜头吊臂、拾取、NavGrid）也穿过它。收集物、触发区、纯装饰用；默认参与碰撞。
+
+**引擎节点 instance id = 节点在加载输出里的序号**，同一次加载内唯一。不要拿它去匹配求值器的
+`instanceId`（64 位，并行求值时每条顶层语句从 `(k + 1) << 40` 起编号）；要回到源码用根节点的
+`scad-placement:<字节偏移>` tag。
+
+**给"边编辑边运行"的宿主**：`Modules::Scad::Register()` 同时注册了 `.scad` 的源文件预检
+（`FLoaderRegistry::FindSceneSourceCheck`：只解析 use/include 闭包、不求值，返回首个错误和全部依赖文件），
+每次加载也会发布加载报告（`FindLoadReport`：成败、警告原文、依赖、节点数、三角数、耗时、递增 serial）。
+引擎在解析新文件**之前**就丢弃当前场景，所以一个运行中重建关卡的宿主必须先预检；C# 侧是
+`Assets.CheckSceneSource` / `GetSceneCheckReport` / `GetSceneLoadReport`，用例见 [ScadPlay](ScadPlay.md)。
+
 `SceneEvalResult::SceneNode` 同时保留 module 调用的源行、求值后的具名参数、调用点颜色和
 局部变换。ScadLibrary 使用这些作者元数据沿 module 调用树提取 Kit 实例；它不改变
 运行时 Node/Model 的装配语义。

@@ -2,6 +2,7 @@
 
 #include "Engine/Assets/Core/Node.hpp"
 #include "Engine/Assets/Core/Scene.hpp"
+#include "Engine/Runtime/Components/PhysicsComponent.hpp"
 #include "Engine/Runtime/Scene/SceneBuilder.hpp"
 
 #include <algorithm>
@@ -62,6 +63,13 @@ namespace NextGameplay
                 scene.GenerateInstanceId(),
                 desc.partModelIds[partIndex],
                 materials);
+            // Parts are animated, so the implicit static collision body the scene gives every
+            // render node would be left behind where the part was created -- typically at the
+            // origin, where it traps whoever spawns there. Dynamic mobility opts the part out,
+            // the same way the rig's root opts out; characters are not level geometry.
+            auto partPhysics = std::make_shared<Runtime::PhysicsComponent>();
+            partPhysics->SetMobility(Runtime::ENodeMobility::Dynamic);
+            renderNode->AddComponent(std::move(partPhysics));
             renderNode->SetParent(boneNodes[part.bone]);
             scene.AddNode(renderNode);
         }

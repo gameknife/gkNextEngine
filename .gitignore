@@ -412,8 +412,9 @@ tools/magicalego-pak/output/
 # third party libraries
 # ffmpeg binaries are fetched locally and never committed; release packages ship without them.
 src/ThirdParty/*/bin/
-# AI assistant local files
-.claude/
+# AI assistant local files (shared skills under .claude/skills are tracked)
+.claude/*
+!.claude/skills/
 .mimocode/
 .skills/
 /lib/

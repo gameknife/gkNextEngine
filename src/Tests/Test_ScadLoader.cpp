@@ -1140,6 +1140,44 @@ TEST_CASE("Scad scene eval retains module call metadata for authoring", "[Unit][
     CHECK(node.localTransform[3].z == Catch::Approx(7.0));
 }
 
+TEST_CASE("Scad vector arithmetic and equality follow OpenSCAD for nested vectors and undef", "[Unit][Scad]")
+{
+    // [pos, euler] frames and matrices: + - * / and unary minus act per element.
+    const SceneEvalResult result =
+        EvalSceneProgram("a = [[1, 2, 3], [10, 20, 30]];\n"
+                         "b = [[3, 4, 5], [30, 40, 50]];\n"
+                         "mixed = a + (b - a) * 0.5;\n"
+                         "neg = -a;\n"
+                         "half = b / 2;\n"
+                         "undefEqual = undef == undef;\n"
+                         "missing = undef != undef;\n"
+                         "vecEqual = [1, [2, 3]] == [1, [2, 3]];\n"
+                         "vecDiffer = [1, 2] == [1, 3];\n"
+                         "cube(1);\n");
+    const auto row = [&](const char* name, size_t index)
+    {
+        glm::dvec3 v(0.0);
+        REQUIRE(result.topLevelVariables.count(name) == 1);
+        REQUIRE(result.topLevelVariables.at(name).vec.size() == 2);
+        REQUIRE(result.topLevelVariables.at(name).vec[index].AsVec3(v));
+        return v;
+    };
+    CHECK(row("mixed", 0) == glm::dvec3(2.0, 3.0, 4.0));
+    CHECK(row("mixed", 1) == glm::dvec3(20.0, 30.0, 40.0));
+    CHECK(row("neg", 1) == glm::dvec3(-10.0, -20.0, -30.0));
+    CHECK(row("half", 1) == glm::dvec3(15.0, 20.0, 25.0));
+    // ... and equality: undef equals undef, vectors compare element-wise.
+    const auto truth = [&](const char* name)
+    {
+        REQUIRE(result.topLevelVariables.count(name) == 1);
+        return result.topLevelVariables.at(name).IsTruthy();
+    };
+    CHECK(truth("undefEqual"));
+    CHECK_FALSE(truth("missing"));
+    CHECK(truth("vecEqual"));
+    CHECK_FALSE(truth("vecDiffer"));
+}
+
 TEST_CASE("Scad scene eval exports nested lists and generated keys", "[Unit][Scad]")
 {
     const SceneEvalResult result =

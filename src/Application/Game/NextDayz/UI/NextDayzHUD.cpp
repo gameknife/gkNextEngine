@@ -1,6 +1,7 @@
 #include "NextDayzHUD.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 
 #include <imgui.h>
@@ -44,6 +45,67 @@ namespace NextDayz::NextDayzHUD
             line(ImVec2(center.x, center.y + gap), ImVec2(center.x, center.y + gap + len));
             draw->AddCircleFilled(center, 2.4f, outline);
             draw->AddCircleFilled(center, 1.2f, color);
+
+            // Hit marker: four ticks that pop out and settle. White for a hit,
+            // amber for the head, red and larger for a kill.
+            if (context.hitMarker > 0.0f)
+            {
+                const float t = std::clamp(context.hitMarker, 0.0f, 1.0f);
+                const int alpha = static_cast<int>(255.0f * std::min(1.0f, t * 1.6f));
+                const ImU32 tick = context.hitMarkerKill ? IM_COL32(235, 45, 40, alpha)
+                    : context.hitMarkerHead              ? IM_COL32(255, 196, 60, alpha)
+                                                         : IM_COL32(245, 245, 245, alpha);
+                const ImU32 shadow = IM_COL32(15, 10, 10, alpha * 3 / 4);
+                const float inner = 5.0f + 3.0f * t;
+                const float outer = inner + (context.hitMarkerKill ? 9.0f : 6.0f) + 3.0f * t;
+                const float width = context.hitMarkerKill || context.hitMarkerHead ? 2.6f : 2.0f;
+                constexpr float diagonal = 0.70710678f;
+                for (const ImVec2 axis : {ImVec2(diagonal, diagonal), ImVec2(-diagonal, diagonal),
+                                          ImVec2(diagonal, -diagonal), ImVec2(-diagonal, -diagonal)})
+                {
+                    const ImVec2 a(center.x + axis.x * inner, center.y + axis.y * inner);
+                    const ImVec2 b(center.x + axis.x * outer, center.y + axis.y * outer);
+                    draw->AddLine(a, b, shadow, width + 2.0f);
+                    draw->AddLine(a, b, tick, width);
+                }
+            }
+        }
+
+        // Red edge vignette when struck (and pulsing at low health), plus an arc
+        // around the crosshair pointing at whoever hit you.
+        void DrawDamageFeedback(const FHudContext& context)
+        {
+            const ImGuiViewport* viewport = ImGui::GetMainViewport();
+            ImDrawList* draw = ImGui::GetBackgroundDrawList();
+            const float lowHealth = std::clamp((35.0f - context.survival.health) / 35.0f, 0.0f, 1.0f);
+            const float pulse = 0.5f + 0.5f * std::sin(static_cast<float>(ImGui::GetTime()) * 4.5f);
+            const float intensity = std::clamp(std::max(context.hurt * 0.75f, lowHealth * (0.25f + 0.2f * pulse)),
+                                               0.0f, 1.0f);
+            if (intensity > 0.01f && context.survival.lifeState == EPlayerLifeState::Alive)
+            {
+                const ImVec2 min = viewport->Pos;
+                const ImVec2 max(viewport->Pos.x + viewport->Size.x, viewport->Pos.y + viewport->Size.y);
+                const float band = std::min(viewport->Size.x, viewport->Size.y) * 0.22f;
+                const ImU32 edge = IM_COL32(150, 10, 8, static_cast<int>(210.0f * intensity));
+                const ImU32 clear = IM_COL32(150, 10, 8, 0);
+                draw->AddRectFilledMultiColor(min, ImVec2(max.x, min.y + band), edge, edge, clear, clear);
+                draw->AddRectFilledMultiColor(ImVec2(min.x, max.y - band), max, clear, clear, edge, edge);
+                draw->AddRectFilledMultiColor(min, ImVec2(min.x + band, max.y), edge, clear, clear, edge);
+                draw->AddRectFilledMultiColor(ImVec2(max.x - band, min.y), max, clear, edge, edge, clear);
+            }
+            if (context.hurt > 0.01f)
+            {
+                const ImVec2 center = viewport->GetCenter();
+                const float radius = std::min(viewport->Size.x, viewport->Size.y) * 0.16f;
+                // Up the screen is ahead; + yaw (attacker on the left) lands left.
+                const float angle = std::atan2(-std::cos(context.hurtYawRadians), -std::sin(context.hurtYawRadians));
+                const int alpha = static_cast<int>(235.0f * std::clamp(context.hurt, 0.0f, 1.0f));
+                ImDrawList* front = ImGui::GetForegroundDrawList();
+                front->PathArcTo(center, radius, angle - 0.38f, angle + 0.38f, 16);
+                front->PathStroke(IM_COL32(20, 0, 0, alpha / 2), 0, 11.0f);
+                front->PathArcTo(center, radius, angle - 0.36f, angle + 0.36f, 16);
+                front->PathStroke(IM_COL32(225, 30, 22, alpha), 0, 7.0f);
+            }
         }
 
         void DrawClock(const FHudContext& context)
@@ -271,12 +333,13 @@ namespace NextDayz::NextDayzHUD
                 ImGui::Text("Active/alerted  %d / %d", debug.activeZombies, debug.alertedZombies);
                 ImGui::Text("Kills           %d", debug.zombieKills);
                 ImGui::Text("Path segments   %d", debug.zombiePathSegments);
-                ImGui::Text("Hit proxies     %d registered / %d CPU-AS eligible",
-                            debug.hitProxyRegistered, debug.hitProxyCpuEligible);
-                if (debug.hitProxyRegistered > debug.hitProxyCpuEligible)
+                ImGui::Text("Hit bodies      %d infected / %d capsules", debug.hitBodies, debug.hitCapsules);
+                ImGui::Text("Headshots       %d", debug.headshots);
+                ImGui::Text("Staggers        %d", debug.zombieStaggers);
+                if (debug.activeZombies > debug.hitBodies)
                 {
                     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.28f, 0.20f, 1.0f));
-                    ImGui::TextWrapped("WARNING: proxy render state excludes it from CPU raycast AS");
+                    ImGui::TextWrapped("WARNING: an active infected has no hitboxes and cannot be shot");
                     ImGui::PopStyleColor();
                 }
             }
@@ -447,6 +510,7 @@ namespace NextDayz::NextDayzHUD
 
     void Draw(const FHudContext& context)
     {
+        DrawDamageFeedback(context);
         if (context.hasWeapon)
         {
             DrawCrosshair(context);

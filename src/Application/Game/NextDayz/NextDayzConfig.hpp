@@ -215,6 +215,89 @@ namespace NextDayz
         float DamageProtectionSeconds = 0.35f;
     };
 
+    // Infected behaviour and body language. Clip timings must match
+    // assets/scad/characters/nextdayz_infected.scad.
+    struct FZombieConfig
+    {
+        // Steering: they turn and get up to speed like bodies, not cursors.
+        float WanderTurnDegreesPerSecond = 100.0f;
+        float InvestigateTurnDegreesPerSecond = 140.0f;
+        float ChaseTurnDegreesPerSecond = 220.0f;    // a charging infected overshoots a sidestep
+        float AttackTurnDegreesPerSecond = 260.0f;
+        float AlertTurnDegreesPerSecond = 420.0f;
+        float Acceleration = 7.0f;
+        float Deceleration = 10.0f;
+        float SeparationRadius = 0.70f;
+        float PlayerPersonalSpace = 1.0f;            // arms' length: grabbing hands, not overlapping bodies
+        float RoamRadius = 4.0f;
+        float RoamMinSeconds = 4.0f;
+        float RoamMaxSeconds = 9.0f;
+        float LameChance = 0.18f;
+        // Noticing the player: a scream that tells you it is coming. Skipped
+        // when it is already close enough to bite.
+        float AlertSeconds = 0.80f;
+        float AlertSkipDistance = 3.0f;
+        float LostSightSeconds = 0.6f;
+        // Attacks. Damage lands on the strike frame; the infected stops
+        // tracking just before it, so a late sidestep makes it miss.
+        float LungeSeconds = 1.0f;
+        float LungeStrikeSeconds = 0.45f;
+        float SwipeSeconds = 0.9f;
+        float SwipeStrikeSeconds = 0.42f;
+        float TrackingLockLeadSeconds = 0.12f;
+        float StrikeDistance = 1.2f;                 // closes in to this during the wind-up
+        float StrikeReachBonus = 0.15f;
+        float StrikeFacingDot = 0.45f;
+        float AttackCooldownSeconds = 0.55f;
+        // Hit reactions. Every hit flinches (procedural, the legs keep going)
+        // and slows it briefly; impact builds poise damage, and breaking poise
+        // staggers it back. A stagger grants a short immunity so automatic fire
+        // cannot stun-lock.
+        float PoiseMax = 60.0f;
+        float PoiseRecoverPerSecond = 40.0f;
+        float StaggerSeconds = 0.90f;
+        float StaggerPushback = 0.45f;
+        float StaggerImmunitySeconds = 1.6f;
+        float FlinchSeconds = 0.25f;
+        float FlinchSpeedScale = 0.45f;
+        // Legs: enough leg damage lames it for good (hobble instead of run).
+        float CrippleLegDamage = 45.0f;
+        float CrippledSpeedScale = 0.55f;
+        float LameWanderScale = 0.85f;
+        float HeadMultiplier = 3.0f;
+        float TorsoMultiplier = 1.0f;
+        float LimbMultiplier = 0.6f;
+        float LegMultiplier = 0.7f;
+        float HeadImpactScale = 1.5f;
+        float LegImpactScale = 1.3f;
+        // Death: momentum carries the body a little as it falls.
+        float DeathMomentumKeep = 0.7f;
+        float DeathImpulsePerImpact = 0.025f;
+        float DeathMaxImpulse = 2.5f;
+        float DeathSlideSeconds = 0.5f;
+        float CorpseSeconds = 25.0f;
+        // Presentation (ZombieRigVisual).
+        float WalkAuthoredSpeed = 0.95f;             // nextdayz_infected.scad gaits
+        float RunAuthoredSpeed = 3.2f;
+        float LimpAuthoredSpeed = 0.8f;
+        float HobbleAuthoredSpeed = 1.7f;
+        float MinPlayRate = 0.7f;
+        float MaxPlayRate = 1.4f;
+        float ActionFadeSeconds = 0.08f;
+        float ReachDistance = 6.0f;                  // arms come up inside this
+        float LookYawLimitDegrees = 75.0f;
+        float LookPitchLimitDegrees = 50.0f;
+        float LookTorsoShare = 0.35f;
+        float FlinchSpring = 160.0f;
+        float FlinchDamping = 14.0f;
+        float FlinchPerImpact = 0.2f;                // rad/s of torso kick per point of impact
+        float FlinchMaxSpeed = 7.0f;
+        float HeadFlinchScale = 2.5f;
+        float LegBuckleSpeed = 0.9f;                 // m/s pelvis drop on a leg hit
+        float TurnLeanPerRadPerMps = 0.06f;
+        float TurnLeanMaxDegrees = 10.0f;
+    };
+
     struct FTimeConfig
     {
         double StartHour = 8.0;         // 08:00 first frame -> daytime
@@ -236,6 +319,7 @@ namespace NextDayz
         FLootConfig Loot{};
         FActionConfig Action{};
         FSurvivalConfig Survival{};
+        FZombieConfig Zombie{};
         FTimeConfig Time{};
 
         // Default spawn: bridge-west gas station (map centre, flat, stocked).

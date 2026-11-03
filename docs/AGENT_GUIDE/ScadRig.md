@@ -157,6 +157,13 @@ NextDayz 是完整参考：18-clip locomotion 混合空间（姿态 × 速度 ×
 recoil Additive → action FullBody，之后是程序化阶段（倾斜、瞄准分摊、武器晃动、双臂 IK）。资产和运行时
 契约见 `docs/projects/nextdayz/nextdayz-3c-scadrig-design.md`。
 
+NextDayz 感染者（`Zombies/ZombieRigVisual.*`）是"不拿武器"的参考：base（idle / walk / run 或跛行
+那一对，按模拟速度混合、按步频匹配播放速率）→ reach（只罩双臂，追近时抬手）→ action（alert / 两种
+攻击 / stagger，用**模拟自己的计时器**手动采样，所以出手帧就是结算伤害的那一帧）→ death（按致命一击
+选择倒地方式，停在最后一帧）。程序化阶段叠加每只个体的驼背/歪头、头和胸口追踪玩家、转弯倾斜，以及
+受击 flinch：每次命中按方向、命中点和冲击量踢一下阻尼弹簧，所以中弹可叠加、可按伤害缩放、并且不打断
+腿部动作。它同时按骨骼输出胶囊命中盒，子弹打的是动画后的骨架而不是渲染网格。
+
 ## 程序化 clip 作者库 rig_humanoid（推荐给复杂人形）
 
 `assets/scad/lib/rig_humanoid.scad`（前缀 `rh_`）在 SCAD 里从"意图"生成 clip，输出仍是普通 `anim_*`
@@ -174,9 +181,23 @@ recoil Additive → action FullBody，之后是程序化阶段（倾斜、瞄准
   向量（字典查找是线性扫描，生成器会调用数千次）。
 - 约定：角色面朝 −Y、左侧 +X、**右侧 −X**（`_r` 骨骼放 −X）。刚体靴子的滚动支点 `ball` 要放在靴尖附近，
   否则脚尖蹬地时靴尖会扎进地面。
+- **跛行** gait 参数 `limp`（0..1，右腿）：拖行的脚抬得低、脚尖下垂擦地，承重时骨盆下沉、躯干向伤腿
+  侧倾。只改抬脚与姿态，不改步幅，所以两只脚的支撑速度仍一致、不会滑步。
+- **徒手上身** `rh_free_upper_clip` / `rh_free_body_clip`：没有武器的角色每只手臂要么写 FK 角度
+  （`arm_l: [upperarm, forearm(, hand)]`），要么写躯干空间腕部目标 `wrist_l: [pos, euler]` 由两骨 IK
+  解向 `pole_l`；全身版本同样用 `pelvis` / `foot_l/r` 描述下半身。
+- **稠密 key** `rh_dense_keys(keys, step)`：关节角在两个 IK 解之间插值时，接地的脚和够取的手会漂走
+  （摔倒、扑咬时脚会穿地）；它按 `step` 秒把"意图"（目标位置、角度、接地点）线性插值后逐帧求解。
+  同时存在于两个 key 的值线性混合，其余（例如 FK 手臂 ↔ 腕部目标）在中点切换。
 - 回归：`gkNextUnitTests "NextDayz survivor gaits plant the boots and holds keep both hands on the rifle"`
-  采样每个步态检查"不穿地、每只靴子按 duty 比例贴地"，并检查持枪 clip 里武器在右手、左手在护木上。
+  采样每个步态检查"不穿地、每只靴子按 duty 比例贴地"，并检查持枪 clip 里武器在右手、左手在护木上；
+  `"NextDayz infected gaits plant the feet and actions stay on the ground"` 对感染者做同样的步态检查，
+  另外检查全身动作不穿地、三种死亡最终躺在地上、两种攻击出手帧的手在胸口高度够到前方。
 - 代价：生成在加载时运行，`nextdayz_survivor.scad` 约 0.7 s。
+- 依赖 OpenSCAD 语义的两处 evaluator 行为（2026-11 修正前都是错的，库里的写法依赖修正后的行为）：
+  嵌套向量的 `+ - * /` 与一元负号逐元素递归（`[pos, euler]` 帧可以直接插值），`undef == undef` 为真、
+  向量逐元素比较相等。回归在 `Test_ScadLoader.cpp` 的
+  `"Scad vector arithmetic and equality follow OpenSCAD for nested vectors and undef"`。
 
 - 关键帧容器复用 `Model.hpp` 的 `AnimationChannel<T>`（单 key 直接返回该 key；`Sample` 为 const）。
 - evaluator 侧唯一改动：`SceneEvalResult.topLevelVariables` 顶层变量快照（`anim_*` 由此读取）。
@@ -223,8 +244,9 @@ protected override void OnTick(double dt)
 - **clip 名写错不报错**，角色会退回绑定姿态；名字来自数据时先问 `Rig.HasClip(pool, name)`。
   回归测试 `Test_TemplateRigClips.cpp` 用这条契约守住 `tps` 模板与两个资产的耦合。
 - **句柄不复用**：released 实例的 id 永远读作 dead，不会变成接手该槽位的那个角色。
-- `tint` 只影响资产标了可染色（`ROLECOLOR` / `ch_TINT()` 占位）的 section；`nextdayz_survivor` 和
-  `nextdayz_infected` 都是显式配色的，传什么颜色都不变。
+- `tint` 只影响资产标了可染色（`ROLECOLOR` / `ch_TINT()` 占位）的 section；`nextdayz_survivor` 是
+  显式配色的，传什么颜色都不变；`nextdayz_infected` 的衬衫（含袖子和下摆碎布）是 `ROLECOLOR`，tint 就是
+  衬衫颜色。
 - **宿主必须链接** `NextGameplay` + `ScadLoader` 并调用 `Install`。`gkNextLauncher` 和
   `gkNextEditor` 都做了，所以 manifest 里写 `"requiredModules": ["ScadLoader", "NextGameplay"]`
   的游戏在两边都能跑；别的宿主会在菜单里标灰。`Rig.IsAvailable()` 是运行时的同一个问题。

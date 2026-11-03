@@ -1,6 +1,12 @@
 #include "Engine/Common/CoreMinimal.hpp"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+
+#include <array>
+#include <span>
+
+#include <glm/glm.hpp>
 
 #include "Data/DeterministicRng.hpp"
 #include "Inventory/Inventory.hpp"
@@ -271,6 +277,14 @@ TEST_CASE("NextDayz zombie navigation caches paths and replans after target move
         return std::vector<glm::vec3>{from, to};
     };
     glm::vec3 player(0.0f, 0.0f, 10.0f);
+    // Spotted at 10 m it screams first; the chase (and the route) starts after.
+    for (int tick = 0; tick < 20 && zombies.Resolve(handle)->state != EZombieState::Chase; ++tick)
+    {
+        zombies.Update(0.1f, player, {0.0f, 0.0f, -1.0f}, true,
+                       [](const glm::vec3&, const glm::vec3&) { return true; }, {}, resolvePath);
+    }
+    REQUIRE(zombies.Resolve(handle)->state == EZombieState::Chase);
+    pathRequests = 0;
     for (int tick = 0; tick < 5; ++tick)
     {
         zombies.Update(0.1f, player, {0.0f, 0.0f, -1.0f}, true,
@@ -283,6 +297,243 @@ TEST_CASE("NextDayz zombie navigation caches paths and replans after target move
     zombies.Update(0.1f, player, {0.0f, 0.0f, -1.0f}, true,
                    [](const glm::vec3&, const glm::vec3&) { return true; }, {}, resolvePath);
     CHECK(pathRequests == 2);
+}
+
+namespace
+{
+    bool AlwaysVisible(const glm::vec3&, const glm::vec3&)
+    {
+        return true;
+    }
+
+    NextDayz::FZombieDamage Round(float amount, NextDayz::EHitZone zone, const glm::vec3& direction,
+                                  float impact)
+    {
+        NextDayz::FZombieDamage damage;
+        damage.amount = amount;
+        damage.zone = zone;
+        damage.direction = direction;
+        damage.source = -direction * 10.0f;
+        damage.impact = impact;
+        return damage;
+    }
+}
+
+TEST_CASE("NextDayz infected steer like bodies: limited turn rate and acceleration",
+          "[NextDayz][Productization][Zombie]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(1);
+    const FZombieHandle handle = zombies.Spawn(EZombieProfile::Civilian, {});
+    FZombieRuntime& zombie = *zombies.Resolve(handle);
+    zombie.forward = {0.0f, 0.0f, 1.0f};
+    zombie.state = EZombieState::Chase;
+    zombie.aware = true;
+    // Prey directly behind: one 0.1 s tick cannot turn it around.
+    const glm::vec3 player(0.0f, 0.0f, -8.0f);
+    zombies.Update(0.1f, player, {}, true, AlwaysVisible, {});
+    const float turned = glm::degrees(std::acos(glm::clamp(glm::dot(zombie.forward, glm::vec3(0, 0, 1)), -1.0f, 1.0f)));
+    CHECK(turned > 5.0f);
+    CHECK(turned <= zombies.Config().ChaseTurnDegreesPerSecond * 0.1f + 0.5f);
+    CHECK(zombie.Speed() < 1.0f);
+    for (int tick = 0; tick < 30; ++tick)
+    {
+        zombies.Update(0.05f, player, {}, true, AlwaysVisible, {});
+    }
+    CHECK(glm::dot(zombie.forward, glm::vec3(0, 0, -1)) > 0.95f);
+    CHECK(zombie.Speed() > 2.0f);
+    CHECK(zombie.Speed() <= ZombieDef(EZombieProfile::Civilian).chaseSpeed * 1.2f);
+}
+
+TEST_CASE("NextDayz infected scream before a distant chase but bite at once up close",
+          "[NextDayz][Productization][Zombie]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(2);
+    const FZombieHandle far = zombies.Spawn(EZombieProfile::Civilian, {0.0f, 0.0f, 0.0f});
+    zombies.Resolve(far)->forward = {0.0f, 0.0f, 1.0f};
+    zombies.Update(0.05f, {0.0f, 0.0f, 12.0f}, {}, true, AlwaysVisible, {});
+    REQUIRE(zombies.Resolve(far)->state == EZombieState::Alert);
+    CHECK(zombies.AlertedCount() == 1);
+    for (int tick = 0; tick < 20; ++tick)
+    {
+        zombies.Update(0.05f, {0.0f, 0.0f, 12.0f}, {}, true, AlwaysVisible, {});
+    }
+    CHECK(zombies.Resolve(far)->state == EZombieState::Chase);
+
+    zombies.Reset();
+    const FZombieHandle near = zombies.Spawn(EZombieProfile::Civilian, {});
+    zombies.Resolve(near)->forward = {0.0f, 0.0f, 1.0f};
+    zombies.Update(0.05f, {0.0f, 0.0f, 1.0f}, {}, true, AlwaysVisible, {});
+    CHECK(zombies.Resolve(near)->state == EZombieState::Attack);
+}
+
+TEST_CASE("NextDayz infected attacks commit on the strike frame and whiff a late sidestep",
+          "[NextDayz][Productization][Zombie]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(1);
+    const FZombieHandle handle = zombies.Spawn(EZombieProfile::Civilian, {});
+    FZombieRuntime& zombie = *zombies.Resolve(handle);
+    zombie.forward = {0.0f, 0.0f, 1.0f};
+    glm::vec3 player(0.0f, 0.0f, 1.0f);
+    zombies.Update(0.05f, player, {}, true, AlwaysVisible, {});
+    REQUIRE(zombie.state == EZombieState::Attack);
+    const float strike = zombies.AttackStrikeTime(zombie.attack);
+    // Tracking is locked just before the strike: step out of reach behind it.
+    while (zombie.attackTimer < strike - zombies.Config().TrackingLockLeadSeconds + 0.01f)
+    {
+        zombies.Update(0.02f, player, {}, true, AlwaysVisible, {});
+    }
+    player = {2.5f, 0.0f, -1.0f};
+    for (int tick = 0; tick < 20; ++tick)
+    {
+        zombies.Update(0.02f, player, {}, true, AlwaysVisible, {});
+    }
+    CHECK(zombie.attackCommitted);
+    CHECK(zombies.ConsumePlayerDamageRequests().empty());
+}
+
+TEST_CASE("NextDayz infected flinch under fire, stagger on broken poise, and cannot be stun-locked",
+          "[NextDayz][Productization][Zombie][Combat]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(1);
+    const FZombieHandle handle = zombies.Spawn(EZombieProfile::Military, {});
+    FZombieRuntime& zombie = *zombies.Resolve(handle);
+    zombie.forward = {0.0f, 0.0f, 1.0f};
+    const glm::vec3 fromFront(0.0f, 0.0f, -1.0f);
+
+    // One rifle round: a flinch, a brief slow-down, no stagger.
+    FZombieDamageResult result = zombies.ApplyDamage(handle, Round(34.0f, EHitZone::Torso, fromFront, 17.0f));
+    CHECK(result.applied);
+    CHECK_FALSE(result.staggered);
+    CHECK(zombie.flinchSeconds > 0.0f);
+    CHECK(zombie.state == EZombieState::Chase);   // being shot wakes it
+    CHECK(zombie.aware);
+
+    // A heavy round breaks poise and knocks it back along the shot.
+    result = zombies.ApplyDamage(handle, Round(60.0f, EHitZone::Torso, fromFront, 70.0f));
+    REQUIRE(result.staggered);
+    CHECK(zombie.state == EZombieState::Stagger);
+    const float before = zombie.position.z;
+    zombies.Update(0.2f, {0.0f, 0.0f, 10.0f}, {}, true, AlwaysVisible, {});
+    CHECK(zombie.position.z < before);
+
+    // Immunity: another heavy hit right away does not restart the stagger.
+    zombies.Update(0.8f, {0.0f, 0.0f, 10.0f}, {}, true, AlwaysVisible, {});
+    REQUIRE(zombie.state != EZombieState::Stagger);
+    result = zombies.ApplyDamage(handle, Round(1.0f, EHitZone::Torso, fromFront, 90.0f));
+    CHECK_FALSE(result.staggered);
+    CHECK(zombies.StaggerCount() == 1);
+}
+
+TEST_CASE("NextDayz infected legs cripple and the fall reads the killing hit",
+          "[NextDayz][Productization][Zombie][Combat]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(3);
+    const FZombieHandle legged = zombies.Spawn(EZombieProfile::Military, {});
+    zombies.Resolve(legged)->variant.lame = false;
+    const glm::vec3 fromFront(0.0f, 0.0f, -1.0f);
+    FZombieDamageResult result = zombies.ApplyDamage(legged, Round(40.0f, EHitZone::Leg, fromFront, 10.0f));
+    CHECK_FALSE(result.crippled);
+    result = zombies.ApplyDamage(legged, Round(40.0f, EHitZone::Leg, fromFront, 10.0f));
+    CHECK(result.crippled);
+    CHECK(zombies.Resolve(legged)->Lame());
+
+    // Headshot on a standing body: it drops where it stands.
+    const FZombieHandle head = zombies.Spawn(EZombieProfile::Civilian, {5.0f, 0.0f, 0.0f});
+    zombies.Resolve(head)->forward = {0.0f, 0.0f, 1.0f};
+    result = zombies.ApplyDamage(head, Round(34.0f, EHitZone::Head, fromFront, 17.0f));
+    CHECK(result.killed);   // x3 on the head: one rifle round
+    CHECK(zombies.Resolve(head)->death == EZombieDeath::Crumple);
+
+    // Shot in the chest while charging: momentum pitches it forward and carries it.
+    const FZombieHandle runner = zombies.Spawn(EZombieProfile::Civilian, {-5.0f, 0.0f, 0.0f});
+    FZombieRuntime& charging = *zombies.Resolve(runner);
+    charging.forward = {0.0f, 0.0f, 1.0f};
+    charging.velocity = {0.0f, 0.0f, 3.0f};
+    result = zombies.ApplyDamage(runner, Round(200.0f, EHitZone::Torso, fromFront, 34.0f));
+    REQUIRE(result.killed);
+    CHECK(charging.death == EZombieDeath::Forward);
+    const float fallStart = charging.position.z;
+    zombies.Update(0.3f, {0.0f, 0.0f, 30.0f}, {}, true, AlwaysVisible, {});
+    CHECK(charging.position.z > fallStart);
+    CHECK(zombies.KillCount() == 2);
+}
+
+TEST_CASE("NextDayz infected keep apart and out of the player's capsule",
+          "[NextDayz][Productization][Zombie]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(2);
+    const FZombieHandle a = zombies.Spawn(EZombieProfile::Civilian, {0.0f, 0.0f, 0.0f});
+    const FZombieHandle b = zombies.Spawn(EZombieProfile::Civilian, {0.05f, 0.0f, 0.0f});
+    for (int tick = 0; tick < 30; ++tick)
+    {
+        zombies.Update(0.05f, {0.0f, 0.0f, 0.4f}, {}, false, {}, {});
+    }
+    const glm::vec3 pa = zombies.Resolve(a)->position;
+    const glm::vec3 pb = zombies.Resolve(b)->position;
+    CHECK(glm::length(glm::vec2(pa.x - pb.x, pa.z - pb.z)) > zombies.Config().SeparationRadius * 0.9f);
+    for (const glm::vec3& p : {pa, pb})
+    {
+        CHECK(glm::length(glm::vec2(p.x, p.z - 0.4f)) > zombies.Config().PlayerPersonalSpace * 0.9f);
+    }
+}
+
+TEST_CASE("NextDayz hitbox traces pick the nearest capsule and its zone",
+          "[NextDayz][Productization][Combat]")
+{
+    using namespace NextDayz;
+    FHitCapsule head{{0.0f, 1.6f, 5.0f}, {0.0f, 1.75f, 5.0f}, 0.12f, EHitZone::Head};
+    FHitCapsule torso{{0.0f, 1.0f, 5.0f}, {0.0f, 1.4f, 5.0f}, 0.18f, EHitZone::Torso};
+    const glm::vec3 forward(0.0f, 0.0f, 1.0f);
+    REQUIRE(RayCapsuleDistance({0.0f, 1.2f, 0.0f}, forward, torso).has_value());
+    CHECK(*RayCapsuleDistance({0.0f, 1.2f, 0.0f}, forward, torso) == Catch::Approx(5.0f - 0.18f).margin(1e-3));
+    CHECK_FALSE(RayCapsuleDistance({0.5f, 1.2f, 0.0f}, forward, torso).has_value());
+    // End caps count, and a ray straight down the axis hits the near cap.
+    CHECK(RayCapsuleDistance({0.0f, 1.86f, 0.0f}, forward, head).has_value());
+    CHECK(RayCapsuleDistance({0.0f, 3.0f, 5.0f}, {0.0f, -1.0f, 0.0f}, head).has_value());
+
+    ZombieSystem zombies(2);
+    CombatSystem combat(zombies);
+    const FZombieHandle front = zombies.Spawn(EZombieProfile::Civilian, {0.0f, 0.0f, 5.0f});
+    const FZombieHandle behind = zombies.Spawn(EZombieProfile::Civilian, {0.0f, 0.0f, 9.0f});
+    const std::array<FHitCapsule, 2> frontBody = {head, torso};
+    FHitCapsule farTorso = torso;
+    farTorso.a.z = farTorso.b.z = 9.0f;
+    combat.SetHitboxes(front, frontBody);
+    combat.SetHitboxes(behind, std::span<const FHitCapsule>(&farTorso, 1));
+
+    const std::optional<FHitboxHit> headshot = combat.TraceHitboxes({0.0f, 1.68f, 0.0f}, forward, 100.0f);
+    REQUIRE(headshot.has_value());
+    CHECK(headshot->zombie == front);
+    CHECK(headshot->zone == EHitZone::Head);
+    CHECK(headshot->normal.z < -0.9f);
+    // A wall at 3 m stops the round before any body.
+    CHECK_FALSE(combat.TraceHitboxes({0.0f, 1.2f, 0.0f}, forward, 3.0f).has_value());
+
+    FWeaponHitEvent event;
+    event.sequence = 7;
+    event.origin = {0.0f, 1.68f, 0.0f};
+    event.direction = forward;
+    event.hitPoint = headshot->point;
+    event.baseDamage = 34.0f;
+    event.impactScale = 0.5f;
+    event.zombie = headshot->zombie;
+    event.zone = headshot->zone;
+    REQUIRE(combat.ProcessHit(event, 110.0f));
+    const std::vector<FDamageEvent> damage = combat.ConsumeDamageEvents();
+    REQUIRE(damage.size() == 1);
+    CHECK(damage.front().hitZone == EHitZone::Head);
+    CHECK(damage.front().killed);
+    CHECK(combat.HeadshotCount() == 1);
+    // The dead no longer catch rounds: the next one reaches the body behind.
+    const std::optional<FHitboxHit> through = combat.TraceHitboxes({0.0f, 1.2f, 0.0f}, forward, 100.0f);
+    REQUIRE(through.has_value());
+    CHECK(through->zombie == behind);
 }
 
 TEST_CASE("NextDayz spawn director filters safe distance visibility navigation and cap",

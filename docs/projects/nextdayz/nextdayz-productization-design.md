@@ -4,12 +4,12 @@ category: project
 status: 现行
 owner: NextDayz
 created: 2026-07-31
-last_updated: 2026-08-02
+last_updated: 2026-11-03
 ---
 
 # NextDayz PVE 生存循环产品化设计
 
-本文记录 `NextDayz` 单人 PVE 生存纵切的现行产品边界、运行时架构和验收契约。2026-08-02 已完成配套开发计划：容量化库存、生存代谢与水源、语义刷新点、感染者 AI/战斗/噪声、物资刷新、产品 HUD、死亡与同进程重开均已接入。复杂移动、ScadRig 分层动画的现行约束仍以 [复杂 3C 与 ScadRig 分层动画设计](nextdayz-3c-scadrig-design.md) 为准。
+本文记录 `NextDayz` 单人 PVE 生存纵切的现行产品边界、运行时架构和验收契约。2026-08-02 已完成配套开发计划：容量化库存、生存代谢与水源、语义刷新点、感染者 AI/战斗/噪声、物资刷新、产品 HUD、死亡与同进程重开均已接入。复杂移动、ScadRig 分层动画的现行约束仍以 [复杂 3C 与 ScadRig 分层动画设计](nextdayz-3c-scadrig-design.md) 为准。2026-11-03 以士兵战术动作为质量基线重做了感染者与枪战：程序化生成的感染者骨架与动作、带转向/加速/警觉/硬直/打腿/扑击的 AI、跟随骨架的胶囊命中盒与分部位伤害、准星命中标记与受伤反馈、枪口焰/曳光/血雾等特效和程序化音效（§8、§9.4）。
 
 ## 1. 决策摘要
 
@@ -270,26 +270,34 @@ nd_spawn_loot_industrial
 
 ### 8.1 运行时状态
 
-每个感染者使用带 generation 的稳定 handle，保存 pool slot、profile、生命、位置、状态、目标最后可见位置、路径、攻击/受击计时和所属刷新点。建议状态：
+每个感染者使用带 generation 的稳定 handle，保存 pool slot、profile、生命、位置、**速度与朝向**、状态、目标最后可见位置、路径、攻击/受击计时、poise、腿部伤害和所属刷新点。另有一份由 handle 哈希出的个体差异（`FZombieVariant`：速度系数、驼背、歪头、抬手积极度、步态相位、先天跛脚），同一次重放看起来完全一样。
 
 ```text
-Dormant → Wander → Investigate → Chase → Attack
-                    ↑              ↓       ↓
-                    └──── Lost ────┘    Stagger
-                                          ↓
-                                         Dead → Recycle
+Dormant → Wander ──→ Investigate ──→ Alert ──→ Chase ──→ Attack
+            ↑  （噪声）    ↑    （远处首次看见：嘶吼）  ↓  ↑      ↓
+            └── 搜索结束 ──┴──── 丢失视线 ──────────┘  └ 冷却 ┘
+            任意存活状态 ── poise 被打破 / 打残 ──→ Stagger ──→ Chase / Investigate
+            任意存活状态 ── 生命归零 ──→ Dead（Back / Forward / Crumple）→ Recycle
 ```
 
 ### 8.2 感知与行为
 
-- 视觉：35 m 基准距离、约 110° 水平视野，并通过 CPU raycast 验证无遮挡；
-- 听觉：冲刺脚步、小型近战、手枪、步枪/霰弹枪产生不同半径的 `FNoiseEvent`；
-- 追击：目标移动超过 2 m 或 0.6 秒后才重算路径，不能每帧 A*；
-- 丢失：失去视线后前往最后已知位置，搜索 6～10 秒后返回巡逻；
-- 攻击：进入约 1.25 m，0.45 秒前摇，命中时再次校验距离和朝向，随后约 1.1 秒冷却；
-- 群体：只做局部软分离，不做队形和群体寻路。
+数值全部在 `FZombieConfig`（`NextDayzConfig.hpp`），出手时机与 `nextdayz_infected.scad` 的 clip 对齐。
 
-感染者移动使用 NextGameplay `FNavGrid/FPathFollower` 思路，但不能直接用 `FCharacterPool` 的默认 0.45 m 全场网格；1 km² 地图首版使用约 1.5～2.0 m cell，并按玩家附近 active bubble 更新。河流需通过 `TerrainComponent::IsWater` 或等价语义屏蔽，桥面保持可走。
+- 视觉：35 m 基准距离、约 110° 水平视野，并通过 CPU raycast 验证无遮挡。玩家 rig 对射线不可见（它只负责表现，碰撞体是 Jolt 胶囊），否则玩家自己的步枪会挡住感染者视线；
+- 听觉：冲刺脚步、小型近战、手枪、步枪/霰弹枪产生不同半径的 `FNoiseEvent`；
+- 警觉：未察觉的感染者在 3 m 外第一次看到玩家时原地转身嘶吼 0.8 秒再追；贴脸时直接扑；被子弹打中会直接察觉射手位置；
+- 转向与速度：按转向角速度（游荡 100°/s、追击 220°/s）转身，按加速度起步/刹车，急转弯会掉速——冲过来的感染者被侧闪后会冲过头；
+- 追击：目标移动超过 2 m 或 0.6 秒后才重算路径，不能每帧 A*；2.5 m 内直接朝玩家转向；不会进入玩家 1 m 的个人空间；
+- 游荡：在出生点 4 m 内按个体节奏散步，不再原地站桩；
+- 丢失：失去视线后前往最后已知位置，搜索约 6 秒后回到游荡；
+- 攻击：进入攻击距离后交替使用扑咬（1.0 s，0.45 s 出手）与横扫（0.9 s，0.42 s 出手）；前摇中追踪并补近到 1.2 m，出手前 0.12 s 锁定朝向，出手帧再校验距离与正面——这时侧闪能让它扑空；
+- 受击：每发命中都触发表现层 flinch 和 0.25 s 减速；冲击量（伤害 × 武器 `impactScale` × 部位系数）累积成 poise 伤害，超过 60 进入 0.9 s 硬直并沿弹道后退，随后 1.6 s 内不能再被硬直（自动武器不能把它控死）；硬直会打断正在前摇的攻击；
+- 打腿：腿部累计 45 伤害后永久跛行（追击速度 × 0.55，表现切换为跛行步态），打残那一下触发硬直；
+- 死亡：爆头且未在奔跑 → 原地瘫倒；被从背后打中或奔跑中被击杀 → 向前扑倒并带着动量滑行；其余 → 向后倒；
+- 群体：只做局部软分离（0.7 m），不做队形和群体寻路。
+
+感染者移动使用 NextGameplay `FNavGrid/FPathFollower` 思路，但不能直接用 `FCharacterPool` 的默认 0.45 m 全场网格；1 km² 地图首版使用约 1.5～2.0 m cell，并按玩家附近 active bubble 更新。河流需通过 `TerrainComponent::IsWater` 或等价语义屏蔽，桥面保持可走。沿路径移动时高度在相邻路点之间插值，不再按格子跳变。
 
 ### 8.3 刷新规则
 
@@ -300,19 +308,21 @@ Dormant → Wander → Investigate → Chase → Attack
 - 同一刷新槽死亡后冷却 8～15 分钟，且玩家离开该 POI 后才可重生；
 - 军事/工业/平民 profile 先只改变生命、速度、感知和外观色，不引入特殊技能。
 
-### 8.4 视觉与命中代理
+### 8.4 视觉与命中盒
 
-新增 `nextdayz_infected.scad`，最少提供 idle、walk、run、attack、hit、die 六个 clip，并遵守现有 ScadRig 部件预算。视觉对象池启动时一次创建，运行中只 Acquire/Release。
+`nextdayz_infected.scad` 由 `rig_humanoid.scad` 程序化生成：17 根骨骼（与士兵同一套骨架约定，去掉武器骨骼，加一根下颌），蹒跚步 / 跛行步 / 冲刺 / 跛行冲刺四种步态（脚 IK 贴地），idle、只罩手臂的 reach、alert、扑咬、横扫、stagger 和三种死亡（停在最后一帧）。衬衫是 `ROLECOLOR`，每个视觉槽位穿一种调色板颜色。旧 C# 模板用到的 `walk / attack / hit / die` 名字保留。
 
-枪械命中不能依赖字符串猜测。感染者实例化时把所有可命中的 render node instance ID 注册到 `FHitProxyRegistry`，映射为 `{zombieHandle, hitZone}`。若动态 ScadRig 在 CPU acceleration structure 中的射线更新不能稳定通过技术尖刀，则退化为每只感染者一个跟随身体的低成本 kinematic capsule 命中代理；这项验证必须在开发第一阶段完成。
+`ZombieRigVisual` 是每只感染者的表现（分层图见 [ScadRig 指南](../../AGENT_GUIDE/ScadRig.md) 的运行时管线一节）。视觉对象池启动时一次创建，运行中只 Acquire/Release。
+
+命中不再走渲染节点：`ZombieRigVisual` 每帧从动画后的骨架输出 12 个世界空间胶囊（头、躯干、骨盆、上臂/前臂、大腿/小腿），`CombatSystem::SetHitboxes` 保存，武器在世界射线命中距离之内对胶囊做射线求交（`TraceHitboxes`，带包围球预剔除）。所以打到的就是屏幕上看到的那一帧姿态，跑动、扑咬、硬直时的头和腿都能单独命中；死者不再挡子弹。没有 rig 时退化为站立姿态的胶囊。`FHitProxyRegistry`（instance ID → zone）保留给以渲染节点注册的目标。
 
 ## 9. 战斗、噪声与伤害
 
 ### 9.1 统一命中事件
 
-`WeaponSystem` 继续负责射击手感和弹药，只产出 `FWeaponHitEvent`：武器 ID、射手、射线起点/方向、命中 instance ID、命中点、基础伤害、序号。`CombatSystem` 解析命中代理、距离衰减和 hit zone，并调用 `ZombieSystem::ApplyDamage`。
+`WeaponSystem` 继续负责射击手感和弹药，只产出 `FWeaponHitEvent`：武器 ID、射线起点/方向、命中 instance ID 或命中的感染者 handle 与部位、命中点与法线、基础伤害、冲击系数、序号。准星射线与每颗弹丸都先求世界命中，再把该距离作为上限追踪感染者命中盒。`CombatSystem` 计算距离衰减、调用 `ZombieSystem::ApplyDamage`，并为每次生效的伤害发出 `FDamageEvent`（部位、伤害、冲击、方向、是否击杀/硬直/打残），表现层只消费这个事件。
 
-推荐初始伤害语义：头部 2.0 倍、躯干 1.0 倍、四肢 0.65 倍；具体枪械伤害写入 `FWeaponDef`，不能散落在系统代码中。霰弹枪产生固定数量 pellet trace，并限制同一目标单发最大伤害，保证可调试。
+伤害语义：头部 3.0 倍（步枪一枪爆头）、躯干 1.0 倍、手臂 0.6 倍、腿 0.7 倍；头和腿的冲击另乘 1.5 / 1.3。具体枪械伤害与 `impactScale`（AK 0.5、手枪 0.6、SVD/莫辛/霰弹枪 1.0）写入 `FWeaponDef`，不能散落在系统代码中。霰弹枪产生固定数量 pellet trace，并限制同一目标单发最大伤害，保证可调试。
 
 ### 9.2 近战
 
@@ -321,6 +331,12 @@ Dormant → Wander → Investigate → Chase → Attack
 ### 9.3 噪声总线
 
 噪声是瞬时数据，不进入场景 ECS。每个事件包含位置、半径、强度、类型和序号；ZombieAI 在感知 tick 消费当前/最近事件。枪械半径示例：手枪 55 m、步枪 110 m、霰弹枪 130 m；数值由调参决定，不绑定渲染音效。
+
+### 9.4 命中反馈、特效与音效
+
+- HUD：准星命中标记（白色命中、琥珀色爆头、红色放大的击杀，一串连射合并成一个标记）；被抓伤时屏幕边缘红色晕影、准星周围指向攻击者的红色弧，镜头朝远离攻击方向抖一下；低血量时晕影脉动；
+- `CombatEffects`：枪口焰（第一/第三人称各自从看到的枪口出发）、曳光（340 m/s，霰弹枪每 3 颗弹丸显示 1 条）、命中感染者时入口血雾 + 沿弹道从背面喷出的血滴（爆头和击杀更多）、命中地面的尘土与火星、尸体下按地面法线铺开的不规则血泊。所有节点在 `BeforeSceneRebuild` 注入网格、加载场景时一次建好，空闲时停在地图下方，开火不分配、不重建场景。自发光材质的辐射亮度与太阳同量级（百级），个位数会显示成暗灰；
+- `NextDayzAudio`：枪声（步枪 / 狙击 / 霰弹 / 手枪各自多版本轮换）、空仓、换弹、切枪、肉体命中 / 爆头 / 击杀确认、地面弹着、玩家受伤，以及感染者游荡/追击的低吼、发现时的嘶吼、扑咬、死亡与倒地声。NextAudio 是 2D、一文件一声道，所以变体轮换避免连发打断自己的尾音，距离只表现为音量衰减。所有音效由 `tools/audio/nextdayz_sfx.py` 用 numpy 程序化合成（无第三方采样，结果按种子固定）。生成的 `.wav` 不入库（`assets/sounds/nextdayz/` 在 `.gitignore` 中），每个 checkout 先运行一次 `python tools/audio/nextdayz_sfx.py`；缺文件时游戏照常运行、只是没有声音，NextAudio 每个缺失文件警告一次。
 
 ## 10. 玩家界面
 
@@ -349,6 +365,9 @@ game.runState
 game.health / hunger / hydration
 game.inventoryUsed / inventoryCapacity
 game.activeZombies / alertedZombies / zombieKills
+game.zombieState / zombieHealth / zombieSpeed / zombieCrippled / zombieDeath（焦点感染者）
+game.zombieBaseClip / zombieActionClip / zombieFlinch / zombieStaggers / headshots / lastHitZone
+game.hitMarker / hitMarkerKill / hurt / fxParticles / fxTracers / fxMuzzleFlash / audioPlayed
 game.lastDamageSource / lastHitZombie
 game.lootAvailable / lootCooldown
 game.currentObjective

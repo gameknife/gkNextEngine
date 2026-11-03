@@ -174,10 +174,7 @@ namespace Assets::Scad::EvalDetail
         {
             if (v.type == Value::Type::Vec)
             {
-                std::vector<Value> out;
-                out.reserve(v.vec.size());
-                for (const Value& c : v.vec) out.push_back(Value::MakeNumber(-c.AsNumber(0.0)));
-                return MakeVector(std::move(out));
+                return NegateVec(v);
             }
             return Value::MakeNumber(-v.AsNumber(0.0));
         }
@@ -208,15 +205,7 @@ namespace Assets::Scad::EvalDetail
         {
             if (aVec && bVec)
             {
-                std::vector<Value> out;
-                const size_t n = std::min(a.vec.size(), b.vec.size());
-                for (size_t i = 0; i < n; ++i)
-                {
-                    const double x = a.vec[i].AsNumber(0.0);
-                    const double y = b.vec[i].AsNumber(0.0);
-                    out.push_back(Value::MakeNumber(op == "+" ? x + y : x - y));
-                }
-                return MakeVector(std::move(out));
+                return AddVec(a, b, op == "+" ? 1.0 : -1.0);
             }
             const double x = a.AsNumber(0.0);
             const double y = b.AsNumber(0.0);
@@ -252,7 +241,42 @@ namespace Assets::Scad::EvalDetail
     {
         std::vector<Value> out;
         out.reserve(v.vec.size());
-        for (const Value& c : v.vec) out.push_back(Value::MakeNumber(c.AsNumber(0.0) * s));
+        for (const Value& c : v.vec)
+        {
+            out.push_back(c.type == Value::Type::Vec ? ScaleVec(c, s) : Value::MakeNumber(c.AsNumber(0.0) * s));
+        }
+        return MakeVector(std::move(out));
+    }
+
+    Value Evaluator::AddVec(const Value& a, const Value& b, double sign)
+    {
+        std::vector<Value> out;
+        const size_t n = std::min(a.vec.size(), b.vec.size());
+        out.reserve(n);
+        for (size_t i = 0; i < n; ++i)
+        {
+            const Value& x = a.vec[i];
+            const Value& y = b.vec[i];
+            if (x.type == Value::Type::Vec && y.type == Value::Type::Vec)
+            {
+                out.push_back(AddVec(x, y, sign));
+            }
+            else
+            {
+                out.push_back(Value::MakeNumber(x.AsNumber(0.0) + sign * y.AsNumber(0.0)));
+            }
+        }
+        return MakeVector(std::move(out));
+    }
+
+    Value Evaluator::NegateVec(const Value& v)
+    {
+        std::vector<Value> out;
+        out.reserve(v.vec.size());
+        for (const Value& c : v.vec)
+        {
+            out.push_back(c.type == Value::Type::Vec ? NegateVec(c) : Value::MakeNumber(-c.AsNumber(0.0)));
+        }
         return MakeVector(std::move(out));
     }
 
@@ -299,17 +323,34 @@ namespace Assets::Scad::EvalDetail
             if ((a.type == Value::Type::Number || a.type == Value::Type::Bool) &&
                 (b.type == Value::Type::Number || b.type == Value::Type::Bool))
             {
-                return a.AsNumber(0.0) == b.AsNumber(1.0);
+                return a.AsNumber(0.0) == b.AsNumber(0.0);
             }
             return false;
         }
+        // OpenSCAD semantics: undef == undef, vectors compare element-wise.
         switch (a.type)
         {
+        case Value::Type::Undef: return true;
         case Value::Type::Number: return a.num == b.num;
         case Value::Type::Bool: return a.boolean == b.boolean;
         case Value::Type::Str: return a.str == b.str;
-        default: return false;
+        case Value::Type::Vec:
+            if (a.vec.size() != b.vec.size())
+            {
+                return false;
+            }
+            for (size_t i = 0; i < a.vec.size(); ++i)
+            {
+                if (!ValuesEqual(a.vec[i], b.vec[i]))
+                {
+                    return false;
+                }
+            }
+            return true;
+        case Value::Type::Range:
+            return a.rangeBegin == b.rangeBegin && a.rangeStep == b.rangeStep && a.rangeEnd == b.rangeEnd;
         }
+        return false;
     }
 
     Value Evaluator::EvalCall(const ExprPtr& e)

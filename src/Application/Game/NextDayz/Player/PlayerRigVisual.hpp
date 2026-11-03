@@ -78,6 +78,8 @@ namespace NextDayz
         float LeanRollDegrees() const { return lean_.x; }
         bool TurningInPlace() const { return turningInPlace_; }
         bool RecoilActive() const;
+        // World-space barrel tip and direction of the held weapon; false when none.
+        bool WeaponMuzzle(glm::vec3& outPosition, glm::vec3& outForward) const;
         // Distance from the right hand to its grip target (m); 0 when no weapon.
         float GripError() const { return gripError_; }
 

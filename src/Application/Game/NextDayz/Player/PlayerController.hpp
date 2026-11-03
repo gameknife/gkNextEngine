@@ -42,6 +42,7 @@ namespace NextDayz
         void SetAimFov(float fov) { aimFov_ = fov; } // absolute FOV target while ADS
         void ApplyCameraRecoil(const glm::vec2& impulseRadians);
         void SetYaw(float yawRadians) { yaw_ = yawRadians; }
+        void SetPitch(float pitchRadians) { pitch_ = pitchRadians; }
         void SetFirstPerson(bool firstPerson) { firstPerson_ = firstPerson; }
         void ToggleView();
         void AdjustCameraDistance(float scrollY);

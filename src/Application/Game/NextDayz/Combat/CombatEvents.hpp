@@ -12,7 +12,8 @@ namespace NextDayz
     {
         Head,
         Torso,
-        Limb,
+        Limb,   // arms
+        Leg,
     };
 
     struct FZombieHandle
@@ -24,6 +25,24 @@ namespace NextDayz
         auto operator<=>(const FZombieHandle&) const = default;
     };
 
+    // One capsule of an infected's hit body, in world space.
+    struct FHitCapsule
+    {
+        glm::vec3 a{};
+        glm::vec3 b{};
+        float radius = 0.0f;
+        EHitZone zone = EHitZone::Torso;
+    };
+
+    struct FHitboxHit
+    {
+        FZombieHandle zombie{};
+        EHitZone zone = EHitZone::Torso;
+        float distance = 0.0f;
+        glm::vec3 point{};
+        glm::vec3 normal{};
+    };
+
     struct FWeaponHitEvent
     {
         uint64_t sequence = 0;
@@ -33,6 +52,11 @@ namespace NextDayz
         uint32_t hitInstanceId = 0;
         glm::vec3 hitPoint{};
         float baseDamage = 0.0f;
+        float impactScale = 1.0f;
+        // Set when the round hit an infected's hitbox rather than the world.
+        FZombieHandle zombie{};
+        EHitZone zone = EHitZone::Torso;
+        glm::vec3 normal{};
     };
 
     struct FWeaponTraceEvent
@@ -44,6 +68,8 @@ namespace NextDayz
         glm::vec3 endPoint{};
         uint32_t hitInstanceId = 0;
         bool hit = false;
+        bool hitZombie = false;
+        glm::vec3 normal{};
     };
 
     struct FDamageEvent
@@ -52,6 +78,11 @@ namespace NextDayz
         FZombieHandle target{};
         EHitZone hitZone = EHitZone::Torso;
         float amount = 0.0f;
+        float impact = 0.0f;
         glm::vec3 worldPoint{};
+        glm::vec3 direction{};
+        bool killed = false;
+        bool staggered = false;
+        bool crippled = false;
     };
 }

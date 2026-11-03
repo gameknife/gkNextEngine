@@ -9,7 +9,9 @@
 //     on the ground with 2-bone leg IK, heel-strike / toe-off rolling;
 //   - weapon holds from a weapon frame in chest space, both arms solved onto
 //     the grip and handguard with 2-bone arm IK;
-//   - full-body keys (jump, vault, loot) from pelvis / foot / weapon targets.
+//   - full-body keys (jump, vault, loot) from pelvis / foot / weapon targets;
+//   - unarmed upper bodies (rh_free_*) with each arm either FK angles or a
+//     wrist target IK-solved toward an elbow pole, for characters with no gun.
 // The output is ordinary anim_* data, so the loader, ScadLibrary's clip editor
 // and every runtime keep working unchanged.
 //
@@ -109,7 +111,7 @@ function rh_gait_keys() = ["keys", "cycle", "speed", "duty", "stride_bias", "ste
     "swing_out", "heel_strike", "heel_until", "toe_off", "toe_from", "swing_pitch", "width", "pelvis",
     "bob", "bob_sign", "sway", "hip_pitch", "hip_yaw", "hip_roll", "strafe_turn", "torso_lean",
     "torso_bounce", "torso_counter", "strafe_lean", "head_level", "gaze_pitch", "arm_base", "arm_swing", "arm_out",
-    "elbow_base", "elbow_swing"];
+    "elbow_base", "elbow_swing", "limp"];
 function rh_gait_params(d) =
     [for (k = rh_gait_keys()) rh_get(d, k, k == "keys" ? 16 : (k == "pelvis" ? [0, 0, 0] : 0))];
 function rg_keys(g) = g[0];
@@ -146,6 +148,9 @@ function rg_arm_swing(g) = g[30];
 function rg_arm_out(g) = g[31];
 function rg_elbow_base(g) = g[32];
 function rg_elbow_swing(g) = g[33];
+// 0..1: the right leg is lame. It is dragged through the swing with little
+// lift, and the body drops and lurches onto it while it bears weight.
+function rg_limp(g) = g[34];
 
 // --- skeleton accessors -----------------------------------------------------
 
@@ -246,11 +251,16 @@ function rh_gait_foot(sk, g, dir, side, phase) =
               ur = rev ? 1 - u : u,
               m = -S * (1 - duty) / duty * rg_swing_tangent(g),
               along = rh_hermite(-S / 2, S / 2, m, m, u),
-              th = rh_swing_pitch(g, ur),
+              lame = side < 0 ? rg_limp(g) : 0,
+              th0 = rh_swing_pitch(g, ur),
+              // A lame foot is dragged: the toe stays down and scuffs forward.
+              th = lame > 0 ? rh_mix(th0, to * 0.6, lame * 0.8 * sin(180 * u)) : th0,
               // Carry the toe-off / heel-strike roll through the swing so the
-              // ankle path stays continuous at both contacts.
-              roll = rh_mix(rh_roll(sk, to, back), rh_roll(sk, -hs, back), rh_smooth(ur)),
-              lift = rg_step_height(g) * sin(180 * pow(ur, rg_lift_skew(g))),
+              // ankle path stays continuous at both contacts. The dragged foot
+              // rolls about whatever touches the ground at its own pitch.
+              roll = lame > 0 ? rh_roll(sk, th, back)
+                              : rh_mix(rh_roll(sk, to, back), rh_roll(sk, -hs, back), rh_smooth(ur)),
+              lift = rg_step_height(g) * (1 - 0.75 * lame) * sin(180 * pow(ur, rg_lift_skew(g))),
               out = outward * (rg_swing_out(g) * sin(180 * u)))
           [base + D * along + roll + [0, 0, lift] + out, rh_mm(ym, rh_rx(th))];
 
@@ -267,11 +277,14 @@ function rh_gait_pose(sk, g, dir, phase) =
         lat = sin(dir),
         turn = rh_strafe_turn(dir, rg_strafe_turn(g)),
         pb = rg_pelvis(g),
+        lame = rg_limp(g),
+        // 1 at the middle of the right (lame) leg's stance, 0 off it.
+        lameLoad = lame * max(0, cos(360 * (phase - 0.5 - mid))),
         pelvisPos = [pb[0] + rg_sway(g) * cos(360 * (phase - mid)),
                      pb[1],
-                     pb[2] + rg_bob_sign(g) * rg_bob(g) * cos(720 * (phase - mid))],
+                     pb[2] + rg_bob_sign(g) * rg_bob(g) * cos(720 * (phase - mid)) - 0.035 * lameLoad],
         yawOsc = -rg_hip_yaw(g) * cos(360 * phase) * fwd,
-        roll = -rg_hip_roll(g) * cos(360 * (phase - mid)),
+        roll = -rg_hip_roll(g) * cos(360 * (phase - mid)) - 8 * lameLoad,
         pelvisRot = [rg_hip_pitch(g), roll, turn + yawOsc],
         pf = rh_pelvis_frame(sk, pelvisPos, pelvisRot),
         footL = rh_gait_foot(sk, g, dir, 1, phase),
@@ -279,7 +292,7 @@ function rh_gait_pose(sk, g, dir, phase) =
         legL = rh_leg_ik(sk, rh_fx(pf, [rh_hip(sk, 1), pf[1]])[0], footL[0], pf[1], footL[1]),
         legR = rh_leg_ik(sk, rh_fx(pf, [rh_hip(sk, -1), pf[1]])[0], footR[0], pf[1], footR[1]),
         torsoRot = [rg_torso_lean(g) + rg_torso_bounce(g) * cos(720 * (phase - mid)),
-                    -roll * 0.7 + rg_strafe_lean(g) * lat,
+                    -roll * 0.7 + rg_strafe_lean(g) * lat - 14 * lameLoad,
                     -turn - yawOsc * rg_torso_counter(g)],
         lvl = rg_head_level(g),
         headRot = [rg_gaze_pitch(g) - (pelvisRot[0] + torsoRot[0]) * lvl,
@@ -305,6 +318,33 @@ function rh_clip_from_poses(channels, times, poses, loop) =
     concat([["loop", loop]],
            [for (c = [0 : len(channels) - 1])
                [channels[c][0], channels[c][1], [for (i = [0 : len(times) - 1]) [times[i], poses[i][c]]]]]);
+
+// --- dense keys -------------------------------------------------------------
+// Joint angles interpolated between two IK solutions do not keep a planted foot
+// on the ground or a hand on its target; interpolating the intent does.
+// rh_dense_keys resamples a key list every `step` seconds by mixing the keys'
+// targets, so each sample is solved rather than slerped. Values present in both
+// keys are mixed linearly; anything else (FK arm vs wrist target) switches
+// halfway.
+
+function rh_key_norm(name, v) =
+    v == undef ? v
+  : (name == "foot_l" || name == "foot_r") && len(v) == 4 ? concat(v, [0])
+  : (name == "arm_l" || name == "arm_r") && len(v) == 2 ? concat(v, [[0, 0, 0]])
+  : v;
+
+function rh_key_mix(a, b, t) =
+    concat([for (kv = a)
+               let(name = kv[0], va = rh_key_norm(name, kv[1]), vb = rh_key_norm(name, rh_get(b, name, undef)))
+               [name, va == undef || vb == undef ? (t < 0.5 ? va : vb) : va + (vb - va) * t]],
+           t < 0.5 ? [] : [for (kv = b) if (len([for (ka = a) if (ka[0] == kv[0]) 1]) == 0) kv]);
+
+function rh_dense_keys(keys, step) =
+    let(n = len(keys))
+    concat([for (i = [0 : n - 2])
+               let(t0 = keys[i][0], t1 = keys[i + 1][0], m = max(1, ceil((t1 - t0) / step - 1e-6)))
+               for (j = [0 : m - 1]) [t0 + (t1 - t0) * j / m, rh_key_mix(keys[i][1], keys[i + 1][1], j / m)]],
+           [keys[n - 1]]);
 
 // --- full-body and upper-body keys ------------------------------------------
 // rig: weapon-hold constants
@@ -377,3 +417,38 @@ function rh_body_clip(sk, rig, keys, loop) =
                                                    rh_get(key, "pelvis_rot", [0, 0, 0]),
                                                    rh_get(key, "torso", [0, 0, 0])))
                            concat(rh_lower_pose(sk, key), rh_upper_pose(sk, rig, key, tr))], loop);
+
+// --- unarmed upper body -----------------------------------------------------
+// For characters with nothing in their hands. Per key, each arm is either
+//   "arm_l" / "arm_r": [upperarm, forearm(, hand)] local euler angles (FK), or
+//   "wrist_l" / "wrist_r": [pos, euler] wrist frame in torso space, solved with
+//                          2-bone IK toward "pole_l" / "pole_r" (torso space).
+// An arm with neither hangs at bind.
+
+function rh_free_arm(sk, side, key) =
+    let(name = side > 0 ? "l" : "r",
+        wrist = rh_get(key, str("wrist_", name), undef),
+        fk = rh_get(key, str("arm_", name), undef))
+    wrist != undef
+        ? rh_arm_ik(sk, rh_shoulder(sk, side), rh_frame(wrist[0], wrist[1]),
+                    rh_get(key, str("pole_", name), [0.45 * side, 0.30, -0.10]))
+        : fk != undef ? [fk[0], fk[1], len(fk) > 2 ? fk[2] : [0, 0, 0]]
+                      : [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+
+function rh_free_upper_bones() = [
+    ["bone_torso", "rot"], ["bone_head", "rot"],
+    ["bone_upperarm_l", "rot"], ["bone_forearm_l", "rot"], ["bone_hand_l", "rot"],
+    ["bone_upperarm_r", "rot"], ["bone_forearm_r", "rot"], ["bone_hand_r", "rot"]];
+
+function rh_free_upper_pose(sk, key) =
+    let(l = rh_free_arm(sk, 1, key), r = rh_free_arm(sk, -1, key))
+    [rh_get(key, "torso", [0, 0, 0]), rh_get(key, "head", [0, 0, 0]), l[0], l[1], l[2], r[0], r[1], r[2]];
+
+function rh_free_upper_clip(sk, keys, loop) =
+    rh_clip_from_poses(rh_free_upper_bones(), [for (k = keys) k[0]],
+                       [for (k = keys) rh_free_upper_pose(sk, k[1])], loop);
+
+// Full body: rh_lower_pose keys (pelvis, pelvis_rot, foot_l/r) plus the above.
+function rh_free_body_clip(sk, keys, loop) =
+    rh_clip_from_poses(concat(rh_lower_bones(), rh_free_upper_bones()), [for (k = keys) k[0]],
+                       [for (k = keys) concat(rh_lower_pose(sk, k[1]), rh_free_upper_pose(sk, k[1]))], loop);

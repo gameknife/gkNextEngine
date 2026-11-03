@@ -1,0 +1,75 @@
+#pragma once
+
+// ============================================================================
+// NextDayzAudio.hpp - The one place NextDayz talks to NextAudio. Every sound
+// is procedural and generated per checkout, not committed: run
+// `python tools/audio/nextdayz_sfx.py` (writes assets/sounds/nextdayz); a
+// missing file is skipped with one warning. This file only names them.
+// NextAudio plays 2D one-shots with one voice per file, so variants are cycled
+// round-robin (automatic fire never cuts off its own tail) and distance is a
+// squared volume falloff.
+// ============================================================================
+
+#include <array>
+#include <cstdint>
+#include <string_view>
+
+#include <glm/glm.hpp>
+
+#include "Application/Game/NextDayz/Combat/CombatEvents.hpp"
+
+class NextEngine;
+
+namespace NextDayz
+{
+    class NextDayzAudio
+    {
+    public:
+        void SetEngine(NextEngine* engine) { engine_ = engine; }
+        void SetListener(const glm::vec3& position) { listener_ = position; }
+        uint64_t PlayedCount() const { return played_; }
+
+        // Player weapon.
+        void Shot(std::string_view weaponId);
+        void DryFire();
+        void Reload();
+        void Switch();
+        // Rounds landing.
+        void Hit(EHitZone zone, bool killed);
+        void Impact(const glm::vec3& at);
+        void PlayerHurt();
+        // Infected.
+        void ZombieGroan(const glm::vec3& at);
+        void ZombieAlert(const glm::vec3& at);
+        void ZombieAttack(const glm::vec3& at);
+        void ZombieDeath(const glm::vec3& at);
+        void BodyFall(const glm::vec3& at);
+
+    private:
+        enum ECue : size_t
+        {
+            Rifle,
+            Sniper,
+            Shotgun,
+            Pistol,
+            Flesh,
+            Head,
+            Dirt,
+            Hurt,
+            Groan,
+            Alert,
+            Attack,
+            Death,
+            CueCount,
+        };
+
+        void Play(ECue cue, float volume, uint64_t minIntervalMs = 30);
+        void PlayOne(const char* path, float volume, uint64_t minIntervalMs = 30);
+        float Falloff(const glm::vec3& at, float range) const;
+
+        NextEngine* engine_ = nullptr;
+        glm::vec3 listener_{0.0f};
+        std::array<uint32_t, CueCount> cursors_{};
+        uint64_t played_ = 0;
+    };
+}

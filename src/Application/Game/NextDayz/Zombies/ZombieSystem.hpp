@@ -1,11 +1,20 @@
 #pragma once
 
+// ============================================================================
+// ZombieSystem.hpp - Infected simulation: perception (sight + noise), a small
+// state machine, steering with turn-rate and acceleration limits, separation,
+// attacks timed to their clips, and hit reactions (flinch, poise stagger, leg
+// crippling, directional deaths with momentum). Pure data + rules: rendering
+// reads FZombieRuntime (ZombieRigVisual), damage comes in through ApplyDamage.
+// ============================================================================
+
 #include "Engine/Common/CoreMinimal.hpp"
 
 #include <glm/vec3.hpp>
 
 #include <span>
 
+#include "Application/Game/NextDayz/NextDayzConfig.hpp"
 #include "Application/Game/NextDayz/Combat/CombatEvents.hpp"
 #include "Application/Game/NextDayz/Combat/NoiseSystem.hpp"
 #include "Application/Game/NextDayz/Data/ZombieDefs.hpp"
@@ -17,10 +26,54 @@ namespace NextDayz
         Dormant,
         Wander,
         Investigate,
+        Alert,
         Chase,
         Attack,
         Stagger,
         Dead,
+    };
+
+    enum class EZombieAttack : uint8_t
+    {
+        Lunge,
+        Swipe,
+    };
+
+    enum class EZombieDeath : uint8_t
+    {
+        Back,
+        Forward,
+        Crumple,
+    };
+
+    // Per-spawn body language, hashed from the handle so a replay looks the same.
+    struct FZombieVariant
+    {
+        float speedScale = 1.0f;
+        float hunchDegrees = 0.0f;
+        float headTiltDegrees = 0.0f;
+        float reach = 0.5f;          // how eagerly the arms come up in a chase
+        float phase = 0.0f;          // gait phase offset
+        bool lame = false;           // born with a dragging leg
+    };
+
+    struct FZombieDamage
+    {
+        float amount = 0.0f;                   // before the zone multiplier
+        EHitZone zone = EHitZone::Torso;
+        glm::vec3 direction{0.0f, 0.0f, 1.0f}; // travel direction of the round
+        glm::vec3 point{};
+        glm::vec3 source{};                    // where the attacker stands
+        float impact = 0.0f;                   // poise damage
+    };
+
+    struct FZombieDamageResult
+    {
+        bool applied = false;
+        bool killed = false;
+        bool staggered = false;
+        bool crippled = false;                 // this hit lamed it
+        float dealt = 0.0f;
     };
 
     struct FZombieRuntime
@@ -30,8 +83,10 @@ namespace NextDayz
         EZombieState state = EZombieState::Dormant;
         glm::vec3 position{};
         glm::vec3 forward{0.0f, 0.0f, 1.0f};
+        glm::vec3 velocity{};
         glm::vec3 spawnPosition{};
         glm::vec3 lastKnownPlayerPosition{};
+        FZombieVariant variant{};
         float health = 100.0f;
         float stateSeconds = 0.0f;
         float attackTimer = 0.0f;
@@ -40,19 +95,37 @@ namespace NextDayz
         float corpseSeconds = 0.0f;
         float repathSeconds = 0.0f;
         float stuckSeconds = 0.0f;
+        float poise = 0.0f;
+        float staggerImmunity = 0.0f;
+        float flinchSeconds = 0.0f;
+        float legDamage = 0.0f;
+        float roamSeconds = 0.0f;
+        uint32_t roamCount = 0;
+        uint32_t attackCount = 0;
+        EZombieAttack attack = EZombieAttack::Lunge;
+        EZombieDeath death = EZombieDeath::Back;
+        glm::vec3 staggerDirection{0.0f, 0.0f, -1.0f};
+        glm::vec3 deathVelocity{};
+        glm::vec3 roamTarget{};
         glm::vec3 pathTarget{};
         glm::vec3 progressPosition{};
         std::vector<glm::vec3> path;
         size_t pathWaypoint = 0;
         uint64_t lastNoiseSequence = 0;
         bool attackCommitted = false;
+        bool crippled = false;
+        bool aware = false;          // has seen or been shot by the player since spawning
         bool active = false;
+
+        bool Lame() const { return crippled || variant.lame; }
+        float Speed() const;
     };
 
     struct FPlayerDamageRequest
     {
         FZombieHandle source{};
         float amount = 0.0f;
+        glm::vec3 sourcePosition{};
     };
 
     class ZombieSystem
@@ -62,10 +135,13 @@ namespace NextDayz
 
         explicit ZombieSystem(size_t capacity = 32);
 
+        void Configure(const FZombieConfig& config) { config_ = config; }
+        const FZombieConfig& Config() const { return config_; }
+
         void Reset();
         FZombieHandle Spawn(EZombieProfile profile, const glm::vec3& position);
         bool Recycle(FZombieHandle handle);
-        bool ApplyDamage(FZombieHandle handle, float damage, EHitZone hitZone);
+        FZombieDamageResult ApplyDamage(FZombieHandle handle, const FZombieDamage& damage);
 
         void Update(float deltaSeconds, const glm::vec3& playerPosition, const glm::vec3& playerForward,
                     bool playerAlive, const std::function<bool(const glm::vec3&, const glm::vec3&)>& hasLineOfSight,
@@ -75,22 +151,40 @@ namespace NextDayz
         FZombieRuntime* Resolve(FZombieHandle handle);
         std::vector<FPlayerDamageRequest> ConsumePlayerDamageRequests();
 
+        // Attack timing for the current attack (seconds).
+        float AttackDuration(EZombieAttack attack) const;
+        float AttackStrikeTime(EZombieAttack attack) const;
+
         int ActiveCount() const;
         int AlertedCount() const;
         int KillCount() const { return killCount_; }
+        int StaggerCount() const { return staggerCount_; }
         size_t Capacity() const { return slots_.size(); }
         const std::vector<FZombieRuntime>& Slots() const { return slots_; }
 
     private:
-        static void MoveToward(FZombieRuntime& zombie, const glm::vec3& target, float speed, float deltaSeconds);
-        static bool NavigateToward(FZombieRuntime& zombie, const glm::vec3& target, float speed,
-                                   float deltaSeconds, const FPathResolver& resolvePath);
+        // Turns toward `direction` at `turnDegrees`/s and accelerates along the
+        // facing toward `speed` (slower while still turning).
+        void Steer(FZombieRuntime& zombie, const glm::vec3& direction, float speed, float turnDegrees,
+                   float deltaSeconds) const;
+        void Face(FZombieRuntime& zombie, const glm::vec3& target, float turnDegrees, float deltaSeconds) const;
+        // Returns false when no route exists; outDirection points at the current
+        // waypoint (zero once there).
+        bool NavigateToward(FZombieRuntime& zombie, const glm::vec3& target, float deltaSeconds,
+                            const FPathResolver& resolvePath, glm::vec3& outDirection) const;
         bool CanSeePlayer(const FZombieRuntime& zombie, const glm::vec3& playerPosition,
                           const std::function<bool(const glm::vec3&, const glm::vec3&)>& hasLineOfSight) const;
+        void UpdateAttack(FZombieRuntime& zombie, const glm::vec3& playerPosition, bool playerAlive,
+                          float deltaSeconds);
+        void Separate(float deltaSeconds, const glm::vec3& playerPosition);
+        FZombieVariant MakeVariant(FZombieHandle handle) const;
+        glm::vec3 NextRoamTarget(FZombieRuntime& zombie) const;
 
+        FZombieConfig config_{};
         std::vector<FZombieRuntime> slots_;
         std::vector<uint32_t> generations_;
         std::vector<FPlayerDamageRequest> damageRequests_;
         int killCount_ = 0;
+        int staggerCount_ = 0;
     };
 }

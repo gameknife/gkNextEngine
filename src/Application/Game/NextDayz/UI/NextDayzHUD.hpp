@@ -1,8 +1,9 @@
 #pragma once
 
 // ============================================================================
-// NextDayzHUD.hpp - Minimal ImGui HUD: crosshair, weapon/ammo readout, clock,
-// interaction prompt and the (toggleable) inventory panel. Pure presentation:
+// NextDayzHUD.hpp - Minimal ImGui HUD: crosshair and hit markers, damage
+// direction and vignette, weapon/ammo readout, clock, interaction prompt and
+// the (toggleable) inventory panel. Pure presentation:
 // the GameInstance packs a context each frame and receives equip/wear requests
 // back through callbacks.
 // ============================================================================
@@ -65,8 +66,10 @@ namespace NextDayz
         int alertedZombies = 0;
         int zombieKills = 0;
         int zombiePathSegments = 0;
-        int hitProxyRegistered = 0;
-        int hitProxyCpuEligible = 0;
+        int hitBodies = 0;          // infected with live skeleton hitboxes
+        int hitCapsules = 0;
+        int headshots = 0;
+        int zombieStaggers = 0;
         int lootAvailable = 0;
         int lootReserved = 0;
         int lootCooldown = 0;
@@ -111,6 +114,12 @@ namespace NextDayz
         bool paused = false;
         double survivalSeconds = 0.0;
         std::string objective;
+        // Combat feedback, each 1 on the event and fading to 0.
+        float hitMarker = 0.0f;
+        bool hitMarkerKill = false;
+        bool hitMarkerHead = false;
+        float hurt = 0.0f;
+        float hurtYawRadians = 0.0f;   // attacker bearing relative to the view, + = left
         FDebugHudState debug;
 
         std::function<void(const std::string& weaponId, int slot)> equipWeapon;

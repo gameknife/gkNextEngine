@@ -13,7 +13,6 @@
 #include "Engine/Runtime/Components/PhysicsComponent.hpp"
 #include "Engine/Runtime/Components/RenderComponent.hpp"
 #include "Engine/Runtime/Engine.hpp"
-#include "Engine/Runtime/Interface/DebugDraw.hpp"
 #include "Engine/Runtime/Scene/SceneBuilder.hpp"
 
 #include "Application/Game/NextDayz/Inventory/Inventory.hpp"
@@ -234,6 +233,18 @@ namespace NextDayz
         return std::abs(viewModelRecoil_) > 0.0001f || std::abs(viewModelRecoilVelocity_) > 0.001f;
     }
 
+    bool WeaponSystem::ViewModelMuzzle(glm::vec3& outPosition, glm::vec3& outForward) const
+    {
+        if (!viewModelNode_ || !viewModelVisible_ || !HasActiveWeapon())
+        {
+            return false;
+        }
+        const glm::mat4& world = viewModelNode_->WorldTransform();
+        outPosition = glm::vec3(world * glm::vec4(0.0f, 0.0f, WeaponMuzzleDistance(ActiveWeaponId()), 1.0f));
+        outForward = glm::normalize(glm::vec3(world[2]));
+        return outPosition.y > -900.0f;
+    }
+
     EWeaponPresentationAction WeaponSystem::PresentationAction() const
     {
         if (switching_)
@@ -286,13 +297,22 @@ namespace NextDayz
         // render-camera origin. In TPS this is the offset shoulder camera, not
         // the character eye position.
         glm::vec3 aimPoint = cameraOrigin + cameraDirection * kHitscanRange;
+        float aimDistance = kHitscanRange;
         engine.RayCast(cameraOrigin, cameraDirection, [&](Assets::RayCastResult result) {
             if (result.Hit && result.T <= kHitscanRange)
             {
                 aimPoint = glm::vec3(result.HitPoint);
+                aimDistance = result.T;
             }
             return true;
         });
+        if (targetTracer_)
+        {
+            if (const std::optional<FHitboxHit> target = targetTracer_(cameraOrigin, cameraDirection, aimDistance))
+            {
+                aimPoint = target->point;
+            }
+        }
 
         const glm::vec3 playerUp =
             glm::normalize(glm::cross(player.Right(), cameraDirection));
@@ -325,31 +345,44 @@ namespace NextDayz
                                                  up * std::tan(pelletSpread(rng_) * spread));
             }
             glm::vec3 hitPoint = muzzle + pelletDirection * kHitscanRange;
+            glm::vec3 hitNormal = -pelletDirection;
+            float hitDistance = kHitscanRange;
             uint32_t hitInstanceId = 0;
             bool hit = false;
             engine.RayCast(muzzle, pelletDirection, [&](Assets::RayCastResult result) {
                 if (result.Hit && result.T <= kHitscanRange)
                 {
                     hitPoint = glm::vec3(result.HitPoint);
+                    hitNormal = glm::vec3(result.Normal);
+                    hitDistance = result.T;
                     hitInstanceId = result.InstanceId;
                     hit = true;
                 }
                 return true;
             });
-            if (hit)
+            FWeaponHitEvent hitEvent{sequence, std::string(def->id), muzzle, pelletDirection, hitInstanceId,
+                                     hitPoint, def->baseDamage, def->impactScale};
+            if (targetTracer_)
             {
-                hitEvents_.push_back({sequence, std::string(def->id), muzzle, pelletDirection, hitInstanceId,
-                                      hitPoint, def->baseDamage});
-            }
-            traceEvents_.push_back({sequence, pellet, muzzle, pelletDirection, hitPoint, hitInstanceId, hit});
-            if (Runtime::IDebugDraw* draw = engine.GetDebugDraw())
-            {
-                draw->AddLine(muzzle, hitPoint, glm::vec4(1.0f, 0.85f, 0.3f, 1.0f), 2.0f, true);
-                if (hit)
+                if (const std::optional<FHitboxHit> target = targetTracer_(muzzle, pelletDirection, hitDistance))
                 {
-                    draw->AddPoint(hitPoint, glm::vec4(1.0f, 0.6f, 0.15f, 1.0f), 6.0f, 40, true);
+                    hitPoint = target->point;
+                    hitNormal = target->normal;
+                    hitInstanceId = 0;
+                    hit = true;
+                    hitEvent.hitInstanceId = 0;
+                    hitEvent.hitPoint = hitPoint;
+                    hitEvent.zombie = target->zombie;
+                    hitEvent.zone = target->zone;
                 }
             }
+            hitEvent.normal = hitNormal;
+            if (hit)
+            {
+                hitEvents_.push_back(hitEvent);
+            }
+            traceEvents_.push_back({sequence, pellet, muzzle, pelletDirection, hitPoint, hitInstanceId, hit,
+                                    hitEvent.zombie.IsValid(), hitNormal});
         }
 
         std::uniform_real_distribution<float> yawDist(-def->cameraYawDegrees, def->cameraYawDegrees);
@@ -424,6 +457,10 @@ namespace NextDayz
                     slots_[activeSlot_].ammoInMag -= 1;
                     fireCooldown_ = def->fireInterval;
                     ++shotsThisFrame;
+                }
+                else
+                {
+                    dryFire_ = true;
                 }
                 triggerConsumed_ = true;
             }

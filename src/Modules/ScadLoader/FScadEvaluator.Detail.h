@@ -1370,6 +1370,9 @@ namespace Assets::Scad
             Value EvalBinary(const ExprPtr& e);
 
             Value ScaleVec(const Value& v, double s);
+            // Element-wise +/-; nested vectors (matrices, [pos, euler] frames) recurse.
+            Value AddVec(const Value& a, const Value& b, double sign);
+            Value NegateVec(const Value& v);
 
             static std::string NumToStr(double v);
 

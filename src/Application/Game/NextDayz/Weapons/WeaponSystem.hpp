@@ -2,13 +2,16 @@
 
 // ============================================================================
 // WeaponSystem.hpp - Two-slot weapon runtime for NextDayz: equip / switch /
-// hitscan fire / reload / ADS. Fire is an engine RayCast (no damage in MVP,
-// only visual feedback). A single FPS view-model node tracks the camera and
-// lerps toward centre while aiming. Ammo reserves live in the Inventory.
+// hitscan fire / reload / ADS. Fire is an engine RayCast for the world plus a
+// hitbox trace for the infected; hits leave as FWeaponHitEvent for the
+// CombatSystem. A single FPS view-model node tracks the camera and lerps
+// toward centre while aiming. Ammo reserves live in the Inventory.
 // ============================================================================
 
 #include <array>
+#include <functional>
 #include <memory>
+#include <optional>
 #include <random>
 #include <string>
 #include <vector>
@@ -59,6 +62,12 @@ namespace NextDayz
         void SwitchSlot(int slot);
         void SwitchPrevious();
 
+        // Rounds are traced against the infected hitboxes up to the first
+        // world surface; the world raycast alone never sees an infected.
+        using FTargetTracer = std::function<std::optional<FHitboxHit>(const glm::vec3& origin,
+                                                                      const glm::vec3& direction, float maxDistance)>;
+        void SetTargetTracer(FTargetTracer tracer) { targetTracer_ = std::move(tracer); }
+
         void SetTriggerDown(bool down) { triggerDown_ = down; }
         bool TriggerDown() const { return triggerDown_; }
         void SetPresentationSuppressed(bool suppressed) { presentationSuppressed_ = suppressed; }
@@ -86,7 +95,17 @@ namespace NextDayz
         std::vector<FWeaponHitEvent> ConsumeHitEvents();
         std::vector<FWeaponTraceEvent> ConsumeTraceEvents();
         uint64_t LastShotSequence() const { return shotSequence_; }
+        // True once after a trigger pull on an empty magazine.
+        bool ConsumeDryFire()
+        {
+            const bool fired = dryFire_;
+            dryFire_ = false;
+            return fired;
+        }
         bool ViewModelRecoilActive() const;
+        // World-space barrel tip and direction of the first-person view model;
+        // false while it is hidden.
+        bool ViewModelMuzzle(glm::vec3& outPosition, glm::vec3& outForward) const;
 
     private:
         struct FSlot
@@ -103,6 +122,7 @@ namespace NextDayz
                                    glm::vec3& outEuler);
 
         FWeaponFeelConfig config_{};
+        FTargetTracer targetTracer_;
         std::array<FSlot, 2> slots_{};
         int activeSlot_ = 0;
         int previousSlot_ = 1;
@@ -110,6 +130,7 @@ namespace NextDayz
         bool triggerDown_ = false;
         bool presentationSuppressed_ = false;
         bool triggerConsumed_ = false; // semi-auto: needs a release between shots
+        bool dryFire_ = false;
         float fireCooldown_ = 0.0f;
         bool reloading_ = false;
         float reloadTimer_ = 0.0f;

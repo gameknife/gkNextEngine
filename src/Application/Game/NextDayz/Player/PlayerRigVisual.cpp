@@ -14,6 +14,7 @@
 #include "Engine/Assets/Loaders/FProcModel.hpp"
 #include "Engine/Runtime/Components/PhysicsComponent.hpp"
 #include "Engine/Runtime/Components/RenderComponent.hpp"
+#include "Engine/Runtime/Scene/NodeUtils.hpp"
 #include "Engine/Runtime/Scene/SceneBuilder.hpp"
 #include "Gameplay/Rig/RigInstance.h"
 #include "Gameplay/Rig/RigPoseOps.h"
@@ -308,6 +309,10 @@ namespace NextDayz
             }
         }
 
+        // Presentation only: the controller capsule is the player's body. A
+        // raycast-visible rig blocks the infected's line of sight with its own
+        // rifle and catches the player's own aim ray.
+        Assets::NodeUtils::SetRayCastVisibleRecursive(worldNode_, false);
         worldNode_->RecalcTransform(true);
         animator_.Bind(&asset_, boneNodes_, worldNode_.get());
         using NextGameplay::ERigLayerBlendMode;
@@ -437,6 +442,20 @@ namespace NextDayz
         animator_.SetLayerWeight(recoilLayer_, glm::clamp(scale, 0.0f, 1.0f));
         animator_.PlayOneShot(recoilLayer_, clips_.recoil, 1.0f, 0.0f, animationConfig_.RecoilFadeOutSeconds, true);
         recoilActive_ = true;
+    }
+
+    bool PlayerRigVisual::WeaponMuzzle(glm::vec3& outPosition, glm::vec3& outForward) const
+    {
+        if (!weaponNode_ || !weaponVisible_ || weaponVisualIndex_ < 0 ||
+            weaponVisualIndex_ >= static_cast<int>(kWeapons.size()))
+        {
+            return false;
+        }
+        const glm::mat4& world = weaponNode_->WorldTransform();
+        outPosition = glm::vec3(
+            world * glm::vec4(0.0f, 0.0f, WeaponMuzzleDistance(kWeapons[weaponVisualIndex_].id), 1.0f));
+        outForward = glm::normalize(glm::vec3(world[2]));
+        return true;
     }
 
     bool PlayerRigVisual::RecoilActive() const

@@ -606,11 +606,12 @@ namespace
     }
 
     // Lowest boot-sole corner in rig space (engine Y up, ground at 0).
-    float SoleHeight(const std::vector<glm::mat4>& transforms, int32_t foot)
+    float SoleHeight(const std::vector<glm::mat4>& transforms, int32_t foot, float halfWidth = 0.085f,
+                     float toe = 0.225f, float heel = 0.085f)
     {
         float lowest = 1.0e9f;
-        for (const glm::vec3& corner : {glm::vec3(0.085f, 0.0f, 0.225f), glm::vec3(-0.085f, 0.0f, 0.225f),
-                                        glm::vec3(0.085f, 0.0f, -0.085f), glm::vec3(-0.085f, 0.0f, -0.085f)})
+        for (const glm::vec3& corner : {glm::vec3(halfWidth, 0.0f, toe), glm::vec3(-halfWidth, 0.0f, toe),
+                                        glm::vec3(halfWidth, 0.0f, -heel), glm::vec3(-halfWidth, 0.0f, -heel)})
         {
             lowest = std::min(lowest, glm::vec3(transforms[foot] * glm::vec4(corner, 1.0f)).y);
         }
@@ -685,6 +686,142 @@ TEST_CASE("NextDayz survivor gaits plant the boots and holds keep both hands on 
         CHECK(weaponTwist > 0.995f);
         CHECK(supportGap < 0.04f);
     }
+}
+
+TEST_CASE("NextDayz infected gaits plant the feet and actions stay on the ground", "[Unit][ScadRig][NextDayz]")
+{
+    FRigAsset asset;
+    std::string err;
+    std::vector<std::string> warnings;
+    REQUIRE(FScadRigLoader::LoadRig("assets/scad/characters/nextdayz_infected.scad", ScadRigLoadOptions{}, asset,
+                                    err, &warnings));
+    CHECK(warnings.empty());
+    CHECK(asset.bones.size() == 17);
+    for (const char* bone : {"bone_root", "bone_pelvis", "bone_torso", "bone_head", "bone_jaw", "bone_upperarm_l",
+                             "bone_forearm_l", "bone_hand_l", "bone_upperarm_r", "bone_forearm_r", "bone_hand_r",
+                             "bone_thigh_l", "bone_calf_l", "bone_foot_l", "bone_thigh_r", "bone_calf_r",
+                             "bone_foot_r"})
+    {
+        INFO(bone);
+        CHECK(asset.FindBone(bone) >= 0);
+    }
+    CHECK(asset.bones[asset.FindBone("bone_jaw")].parent == asset.FindBone("bone_head"));
+    // Right side at -X, like the survivor.
+    CHECK(asset.bones[asset.FindBone("bone_thigh_r")].bindT.x < 0.0f);
+    CHECK(asset.bones[asset.FindBone("bone_upperarm_r")].bindT.x < 0.0f);
+    for (const char* name : {"idle", "walk", "walk_limp", "run", "hobble", "reach", "alert", "attack_lunge",
+                             "attack_swipe", "stagger", "death_back", "death_forward", "death_crumple", "attack",
+                             "hit", "die"})
+    {
+        INFO(name);
+        CHECK(asset.FindClip(name) != nullptr);
+    }
+
+    const int32_t footL = asset.FindBone("bone_foot_l");
+    const int32_t footR = asset.FindBone("bone_foot_r");
+    const auto sole = [&](const std::vector<glm::mat4>& transforms, int32_t foot)
+    {
+        return SoleHeight(transforms, foot, 0.075f, 0.21f, 0.08f);
+    };
+    std::vector<glm::mat4> transforms;
+    const std::vector<std::pair<std::string, float>> gaits = {
+        {"walk", 0.68f}, {"walk_limp", 0.70f}, {"run", 0.38f}, {"hobble", 0.52f}};
+    for (const auto& [name, duty] : gaits)
+    {
+        const FRigClip* clip = asset.FindClip(name);
+        REQUIRE(clip != nullptr);
+        CHECK(clip->loop);
+        constexpr int samples = 64;
+        float lowest = 1.0e9f;
+        int plantedL = 0;
+        int plantedR = 0;
+        for (int i = 0; i < samples; ++i)
+        {
+            const NextGameplay::FRigPose pose =
+                SampleSurvivorClip(asset, *clip, clip->duration * static_cast<float>(i) / samples);
+            NextGameplay::ComputeRigComponentTransforms(asset, pose, transforms);
+            const float soleL = sole(transforms, footL);
+            const float soleR = sole(transforms, footR);
+            lowest = std::min({lowest, soleL, soleR});
+            plantedL += soleL < 0.02f ? 1 : 0;
+            plantedR += soleR < 0.02f ? 1 : 0;
+        }
+        INFO(name << ": lowest sole " << lowest << ", planted L " << plantedL << " R " << plantedR);
+        CHECK(lowest > -0.02f);
+        CHECK(lowest < 0.02f);
+        CHECK(plantedL >= static_cast<int>(samples * duty * 0.7f));
+        CHECK(plantedR >= static_cast<int>(samples * duty * 0.7f));
+    }
+
+    // Full-body actions never push a foot through the ground.
+    for (const char* name : {"idle", "alert", "attack_lunge", "attack_swipe", "stagger", "death_back",
+                             "death_forward", "death_crumple"})
+    {
+        const FRigClip* clip = asset.FindClip(name);
+        REQUIRE(clip != nullptr);
+        float lowest = 1.0e9f;
+        float lowestTime = 0.0f;
+        for (int i = 0; i <= 48; ++i)
+        {
+            const float time = clip->duration * i / 48.0f;
+            const NextGameplay::FRigPose pose = SampleSurvivorClip(asset, *clip, time);
+            NextGameplay::ComputeRigComponentTransforms(asset, pose, transforms);
+            const float height = std::min(sole(transforms, footL), sole(transforms, footR));
+            if (height < lowest)
+            {
+                lowest = height;
+                lowestTime = time;
+            }
+        }
+        INFO(name << ": lowest sole " << lowest << " at " << lowestTime << " s");
+        CHECK(lowest > -0.03f);
+    }
+
+    // Deaths end lying down: pelvis and head on the ground, not floating.
+    const int32_t pelvis = asset.FindBone("bone_pelvis");
+    const int32_t head = asset.FindBone("bone_head");
+    for (const char* name : {"death_back", "death_forward", "death_crumple"})
+    {
+        const FRigClip* clip = asset.FindClip(name);
+        REQUIRE(clip != nullptr);
+        CHECK_FALSE(clip->loop);
+        const NextGameplay::FRigPose pose = SampleSurvivorClip(asset, *clip, clip->duration);
+        NextGameplay::ComputeRigComponentTransforms(asset, pose, transforms);
+        const glm::vec3 pelvisPosition = NextGameplay::RigBonePosition(transforms, pelvis);
+        const glm::vec3 headPosition = NextGameplay::RigBonePosition(transforms, head);
+        INFO(name << ": pelvis y " << pelvisPosition.y << ", head y " << headPosition.y);
+        CHECK(pelvisPosition.y > 0.05f);
+        CHECK(pelvisPosition.y < 0.25f);
+        CHECK(headPosition.y > 0.0f);
+        CHECK(headPosition.y < 0.30f);
+    }
+
+    // Both attacks put a hand well in front of the body on the strike frame.
+    const int32_t handL = asset.FindBone("bone_hand_l");
+    const int32_t handR = asset.FindBone("bone_hand_r");
+    for (const auto& [name, strike] : std::vector<std::pair<std::string, float>>{{"attack_lunge", 0.45f},
+                                                                                  {"attack_swipe", 0.42f}})
+    {
+        const FRigClip* clip = asset.FindClip(name);
+        REQUIRE(clip != nullptr);
+        const NextGameplay::FRigPose pose = SampleSurvivorClip(asset, *clip, strike);
+        NextGameplay::ComputeRigComponentTransforms(asset, pose, transforms);
+        const glm::vec3 left = NextGameplay::RigBonePosition(transforms, handL);
+        const glm::vec3 right = NextGameplay::RigBonePosition(transforms, handR);
+        const glm::vec3 lead = left.z > right.z ? left : right;
+        INFO(name << ": hand reach " << lead.z << " at height " << lead.y);
+        CHECK(lead.z > 0.55f);
+        // Chest height of the player it is grabbing for, not its knees.
+        CHECK(lead.y > 0.85f);
+    }
+
+    size_t triangles = 0;
+    for (const Model& model : asset.partModels)
+    {
+        triangles += model.NumberOfIndices() / 3;
+    }
+    INFO("NextDayz infected triangles: " << triangles);
+    CHECK(triangles < 1500);
 }
 
 // kit_char 组装角色：use <../lib/kit_char.scad> 闭包 + 库函数 clip 的完整链路。

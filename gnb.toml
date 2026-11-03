@@ -47,7 +47,9 @@ root = ".vcpkg"
 
 [external.streamline]
 when = "windows"
-url = "https://github.com/NVIDIA-RTX/Streamline/releases/download/v2.10.0/streamline-sdk-v2.10.0.zip"
+# Keep in sync with GK_STREAMLINE_VERSION in cmake/SetupExternalLibs.cmake.
+version = "2.14.16"
+url = "https://github.com/NVIDIA-RTX/Streamline/releases/download/v2.14.16/streamline-sdk-v2.14.16.zip"
 
 [external.fidelityfx]
 when = "windows"

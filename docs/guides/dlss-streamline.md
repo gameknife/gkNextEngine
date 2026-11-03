@@ -4,12 +4,37 @@ category: guide
 status: 现行
 owner: NextStreamline
 created: 2026-06-18
-last_updated: 2026-07-21
+last_updated: 2026-11-03
 ---
 
 # NVIDIA Streamline / DLSS / DLSS-G 指南
 
 gkNextEngine 只在 Windows x86_64 上集成 NVIDIA Streamline。非 Windows 构建会编译相同的 renderer 路径，但 Streamline 处于禁用状态。
+
+## SDK 版本与模型预设
+
+当前随附 Streamline SDK **2.14.16**。版本在两处锁定，升级时一起改：
+
+- `gnb.toml` 的 `[external.streamline]`：`version` 与 `url`，决定 `gnb setup` / `gnb deps fetch streamline`
+  解压到 `external/streamline-<version>/`。
+- `cmake/SetupExternalLibs.cmake` 的 `GK_STREAMLINE_VERSION`：CMake 只认这个目录，`external/` 下残留的旧版 SDK
+  不会被选中；目录缺失时配置直接报错并提示先 fetch。
+
+升级流程：改上面两处 → `gnb deps fetch streamline` → `gnb build --reconfigure`（配置阶段会把新 SDK 的
+`bin/x64` 拷到输出目录）。
+
+模型预设在 `StreamlineIntegration.cpp` 的 `SetSuperResolutionOptions` 里显式指定：
+
+| 功能 | DLAA / Quality / Balanced | Performance | Ultra Performance |
+|---|---|---|---|
+| DLSS-SR | K | M | L |
+| DLSS-RR | F | F | F |
+
+M / L 是 DLSS 4.5 的第二代 transformer，只在低输入分辨率档位上用；K 在高档位上质量余量够、开销更低。
+RR 的 F 是 2.14 新增的 transformer，也是 SDK 默认值。
+
+DLSS 5（3D-Guided Neural Rendering，`sl.dlss_nr`）尚不可用：2.14 的公开头文件只预留了
+`kFeatureDLSS_NR` 和 `kBufferTypeUplift*` buffer 类型，公开包里没有该 plugin、options 头文件和编程指南。
 
 ## 运行时 CVar
 

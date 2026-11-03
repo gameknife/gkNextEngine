@@ -1,25 +1,14 @@
 # External downloads are prepared by `gnb setup`. CMake only validates paths.
 
-function(gk_require_path output_var glob_pattern sentinel message_text)
-    file(GLOB _candidate_dirs "${glob_pattern}")
-    list(SORT _candidate_dirs)
-    foreach(_candidate_dir IN LISTS _candidate_dirs)
-        if(EXISTS "${_candidate_dir}/${sentinel}")
-            set(${output_var} "${_candidate_dir}" PARENT_SCOPE)
-            return()
-        endif()
-    endforeach()
-    message(FATAL_ERROR "${message_text}")
-endfunction()
-
 # --- NVIDIA Streamline ---
+# Pinned rather than globbed: an older SDK left under external/ must not be picked up silently.
+# Keep in sync with [external.streamline].version in gnb.toml.
+set(GK_STREAMLINE_VERSION "2.14.16")
 if(WITH_STREAMLINE)
-    gk_require_path(
-        STREAMLINE_ROOT
-        "${CMAKE_SOURCE_DIR}/external/streamline-*"
-        "include/sl.h"
-        "Streamline SDK missing under external/. Run `gnb setup` first."
-    )
+    set(STREAMLINE_ROOT "${CMAKE_SOURCE_DIR}/external/streamline-${GK_STREAMLINE_VERSION}")
+    if(NOT EXISTS "${STREAMLINE_ROOT}/include/sl.h")
+        message(FATAL_ERROR "Streamline SDK v${GK_STREAMLINE_VERSION} missing under external/. Run `gnb deps fetch streamline` (or `gnb setup`) first.")
+    endif()
     set(STREAMLINE_INCLUDE_DIR "${STREAMLINE_ROOT}/include")
     set(STREAMLINE_LIB_DIR "${STREAMLINE_ROOT}/lib/x64")
     set(STREAMLINE_BIN_DIR "${STREAMLINE_ROOT}/bin/x64")

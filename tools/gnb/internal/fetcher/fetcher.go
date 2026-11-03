@@ -46,7 +46,12 @@ func EnsureNamedExternal(repoRoot string, cfg config.Config, names []string) err
 			}
 		case "streamline":
 			if runtime.GOOS == "windows" {
-				if err := ensureArchive(repoRoot, cfg.External.Streamline.URL, filepath.Join(repoRoot, "external", "streamline-2.10.0"), "include/sl.h"); err != nil {
+				version := cfg.External.Streamline.Version
+				if version == "" {
+					version = "2.14.16"
+				}
+				dstDir := filepath.Join(repoRoot, "external", "streamline-"+version)
+				if err := ensureArchive(repoRoot, cfg.External.Streamline.URL, dstDir, "include/sl.h"); err != nil {
 					return err
 				}
 			}

@@ -1585,11 +1585,12 @@ namespace
             {
                 sl::DLSSDOptions options{};
                 options.mode = ToDLSSMode(inputs.superResolutionMode);
-                options.dlaaPreset = sl::DLSSDPreset::ePresetE;
-                options.qualityPreset = sl::DLSSDPreset::ePresetE;
-                options.balancedPreset = sl::DLSSDPreset::ePresetE;
-                options.performancePreset = sl::DLSSDPreset::ePresetE;
-                options.ultraPerformancePreset = sl::DLSSDPreset::ePresetE;
+                // Preset F is the Streamline 2.14 Ray Reconstruction transformer (DLSS 4.5).
+                options.dlaaPreset = sl::DLSSDPreset::ePresetF;
+                options.qualityPreset = sl::DLSSDPreset::ePresetF;
+                options.balancedPreset = sl::DLSSDPreset::ePresetF;
+                options.performancePreset = sl::DLSSDPreset::ePresetF;
+                options.ultraPerformancePreset = sl::DLSSDPreset::ePresetF;
                 options.outputWidth = inputs.outputExtent.width;
                 options.outputHeight = inputs.outputExtent.height;
                 options.colorBuffersHDR = (inputs.inputColorIsLinear || inputs.hdrOutput)
@@ -1611,11 +1612,13 @@ namespace
             options.outputHeight = inputs.outputExtent.height;
             options.colorBuffersHDR = (inputs.inputColorIsLinear || inputs.hdrOutput)
                 ? sl::Boolean::eTrue : sl::Boolean::eFalse;
+            // NVIDIA's per-mode recommendation since DLSS 4.5: K where quality headroom exists,
+            // the second-generation transformer presets where the input resolution is low.
             options.dlaaPreset = sl::DLSSPreset::ePresetK;
             options.qualityPreset = sl::DLSSPreset::ePresetK;
             options.balancedPreset = sl::DLSSPreset::ePresetK;
-            options.performancePreset = sl::DLSSPreset::ePresetK;
-            options.ultraPerformancePreset = sl::DLSSPreset::ePresetK;
+            options.performancePreset = sl::DLSSPreset::ePresetM;
+            options.ultraPerformancePreset = sl::DLSSPreset::ePresetL;
 
             const sl::Result result = slDLSSSetOptions(viewport, options);
             if (result != sl::Result::eOk)

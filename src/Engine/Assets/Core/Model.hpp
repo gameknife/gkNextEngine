@@ -261,6 +261,8 @@ namespace Assets
         // vertex range as CPUIndices(), so a level needs no vertex offset of its own. Empty when
         // the mesh was too small to simplify or simplification hit a topological floor.
         const std::vector<std::vector<uint32_t>>& CPULodIndices() const { return lodIndices_; }
+        // Object-space deviation of each CPULodIndices() level from the full mesh, parallel to it.
+        const std::vector<float>& CPULodErrors() const { return lodErrors_; }
 
         const std::vector<glm::vec4>& CPUWeights() const { return weights_; }
         std::vector<glm::vec4>& CPUWeights() { return weights_; }
@@ -301,6 +303,7 @@ namespace Assets
         std::vector<Vertex> vertices_;
         std::vector<uint32_t> indices_;
         std::vector<std::vector<uint32_t>> lodIndices_;
+        std::vector<float> lodErrors_;
         std::vector<glm::vec4> weights_;
         std::vector<glm::uvec4> joints_;
         

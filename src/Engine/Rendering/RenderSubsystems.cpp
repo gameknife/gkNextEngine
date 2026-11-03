@@ -10,7 +10,7 @@ namespace Vulkan
     {
         renderer_.DispatchSkinning(commandBuffer, imageIndex);
         renderer_.UpdateAccelerationStructuresBottom(commandBuffer);
-        renderer_.UpdateAccelerationStructuresTop(commandBuffer);
+        renderer_.UpdateAccelerationStructuresTop(commandBuffer, imageIndex);
     }
 
     void AmbientCubeBaker::PrepareSceneFrame(

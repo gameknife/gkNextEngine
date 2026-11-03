@@ -1653,6 +1653,11 @@ namespace Vulkan
                     SwapChain(), "assets/shaders/Bake.HwAmbientCube.comp.slang.spv", GetScene(), ActiveTLASHandle()));
             }
         }
+        if (caps_.supportRayTracing)
+        {
+            rt_->lodSelectPipeline.reset(new PipelineCommon::ZeroBindPipeline(
+                *frame_.swapChain, "assets/shaders/Task.RayTracingLodSelect.comp.slang.spv", GetScene()));
+        }
         // Pick the subgroup (wave) fast-path of the GPU cull when the device supports it; otherwise the LDS variant.
         const char* gpuCullSpv = caps_.supportSubgroupCull
             ? "assets/shaders/Task.SoftMeshShaderGpuCullCompactWave.comp.slang.spv"
@@ -1972,6 +1977,7 @@ namespace Vulkan
         if (rt_)
         {
             rt_->directLightGenPipeline.reset();
+            rt_->lodSelectPipeline.reset();
         }
         overlay_.gpuCullCompactPipeline.reset();
         overlay_.softMeshShaderFinalizePipeline.reset();
@@ -2068,6 +2074,7 @@ namespace Vulkan
         if (rt_)
         {
             rt_->directLightGenPipeline.reset();
+            rt_->lodSelectPipeline.reset();
         }
         overlay_.gpuCullCompactPipeline.reset();
         overlay_.softMeshShaderFinalizePipeline.reset();
@@ -3812,11 +3819,14 @@ namespace Vulkan
         for (size_t i = 0; i < nodeTrans.size(); i++)
         {
             auto& node = nodeTrans[i];
-            const size_t blasIndex = Assets::Scene::DecodeModelIndex(node.modelId);
-            if (blasIndex >= rt_->blas.size())
+            const size_t modelIndex = Assets::Scene::DecodeModelIndex(node.modelId);
+            if (modelIndex >= rt_->blasLodBase.size())
             {
-                SPDLOG_WARN("Skipping TLAS instance with stale model index {} (BLAS count {})", blasIndex,
-                            rt_->blas.size());
+                // Instance i must stay node i: ray hits resolve their NodeProxy and per-proxy LOD
+                // through the instance index. A null BLAS reference makes the slot inactive.
+                SPDLOG_WARN("Disabling TLAS instance with stale model index {} (model count {})", modelIndex,
+                            rt_->blasLodBase.size());
+                instances.push_back(VkAccelerationStructureInstanceKHR{});
                 continue;
             }
             const bool includeInGpuAs =
@@ -3830,8 +3840,9 @@ namespace Vulkan
                        ? rayMaskAll
                        : rayMaskNonShadowCaster)
                 : 0u;
+            // LOD0 here; Task.RayTracingLodSelect repoints the instance at this frame's level.
             instances.push_back(RayTracing::TopLevelAccelerationStructure::CreateInstance(
-                rt_->blas[blasIndex], glm::transpose(node.worldTS), node.instanceId, rayMask));
+                rt_->blas[rt_->blasLodBase[modelIndex]], glm::transpose(node.worldTS), node.instanceId, rayMask));
         }
 
         if (instances.size() > rt_->properties->MaxInstanceCount())

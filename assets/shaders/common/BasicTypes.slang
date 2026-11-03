@@ -18,6 +18,10 @@ public static const int MAX_HDR_SH = 100;
 // consecutive ModelLod entries so a shader can index by level without a per-model table offset.
 public static const int MAX_MODEL_LOD_COUNT = 4;
 
+// ModelData entries reserved per model: NodeProxy::modelId is modelIndex * MODEL_SECTION_STRIDE +
+// section. Shared so a shader can recover the model index without a side table.
+public static const int MODEL_SECTION_STRIDE = 10;
+
 // Per-cascade sun shadow map edge. Shared so the shadow cull pass can size a proxy's projected
 // extent in shadow-map pixels using the same number the pass actually renders at.
 public static const int SUN_SHADOW_RESOLUTION = 1024;
@@ -155,6 +159,22 @@ public struct ALIGN_16 SoftMeshShaderResources
     public uint64_t Counters;
     public uint64_t Lights;
     public uint64_t LightGrid;
+    // uint per proxy: the LOD level its TLAS instance holds this frame, written by
+    // Task.RayTracingLodSelect. Hardware ray hits decode their triangle through it, and a
+    // visibility-buffer origin compares its own level against it before tracing.
+    public uint64_t RayTracingLods;
+    public uint64_t Reserved0;
+};
+
+// Task.RayTracingLodSelect's resource table, reached through GPUScene.ReservedAddress0. Owned by
+// the renderer and rebuilt with the acceleration structures.
+public struct ALIGN_16 FRayTracingLodResources
+{
+    public uint64_t TemplateInstances; // VkAccelerationStructureInstanceKHR[], CPU-written, LOD0 BLAS
+    public uint64_t Instances;         // VkAccelerationStructureInstanceKHR[], what the TLAS builds from
+    public uint64_t BlasAddresses;     // uint64_t[ModelCount * MAX_MODEL_LOD_COUNT]
+    public uint ModelCount;
+    public uint Reserved0;
 };
 
 public struct ALIGN_16 UniformBufferObject
@@ -318,6 +338,10 @@ public struct ALIGN_16 ModelData
     // indexOffset/indexCount above so a shader can index by level without branching.
     public uint lodIndexOffset[MAX_MODEL_LOD_COUNT];
     public uint lodIndexCount[MAX_MODEL_LOD_COUNT];
+    // Object-space bound on how far each level strays from LOD0 (0 for LOD0 itself), so two
+    // levels of one section are at most lodError[a] + lodError[b] apart. That is the window a ray
+    // tracer searches when it reconciles a surface drawn at one level with a proxy traced at another.
+    public float lodError[MAX_MODEL_LOD_COUNT];
 };
 
 // size = 10 x 4 bytes, 40 bytes
@@ -705,6 +729,10 @@ public struct ALIGN_8 GPUScene
     {
         get { return (LightObject*)SoftMeshShader.Lights; }
     }
+    public property uint* RayTracingLods
+    {
+        get { return (uint*)SoftMeshShader.RayTracingLods; }
+    }
 
     public RaytracingAccelerationStructure GetTLAS() {
 		return RaytracingAccelerationStructure(TLAS);
@@ -868,6 +896,10 @@ public struct ALIGN_8 GPUScene
     public property LightObject* Lights
     {
         get { return (LightObject*)SoftMeshShader.Lights; }
+    }
+    public property uint* RayTracingLods
+    {
+        get { return (uint*)SoftMeshShader.RayTracingLods; }
     }
 
     public RaytracingAccelerationStructure GetTLAS() {

@@ -73,7 +73,11 @@ public void RestirSpatialShade(uint3 dispatchThreadId, IRayTracer tracer)
         RestirReconstructViewPosition(camera, pixel, size, centerDepth);
     float3 position = mul(camera.ModelViewInverse, float4(centerView, 1.0f)).xyz;
     const float3 eye = mul(camera.ModelViewInverse, float4(0, 0, 0, 1)).xyz;
-    position -= normalize(position - eye) * camera.SceneEpsilonScale * 0.01f;
+    const float3 viewDirection = normalize(position - eye);
+    const float surfaceOffset = camera.SceneEpsilonScale * 0.01f;
+    position -= viewDirection * surfaceOffset;
+    // Same origin the path tracer verified its own samples from (FPathTracingRenderer.Render).
+    position = tracer.ResolvePrimaryOrigin(pixel, position, normal, viewDirection, surfaceOffset);
 
     const uint2 packedBsdf = bsdfDataBuffer[pixel];
     if (packedBsdf.x == Surface.kInvalidMaterialId)

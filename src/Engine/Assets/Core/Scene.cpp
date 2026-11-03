@@ -98,7 +98,9 @@ namespace Assets
         static_assert(sizeof(Assets::GPUDrivenStat) == Assets::GPU_SCENE_GPU_DRIVEN_STAT_SIZE);
         static_assert(sizeof(Assets::VisibilityId) == 8);
         static_assert(sizeof(Assets::SoftMeshShaderVisibleItem) == 16);
-        static_assert(sizeof(Assets::SoftMeshShaderResources) == 64);
+        static_assert(sizeof(Assets::SoftMeshShaderResources) == 80);
+        static_assert(sizeof(Assets::FRayTracingLodResources) == 32);
+        static_assert(sizeof(Assets::ModelData) == 112);
         static_assert(sizeof(Assets::SphericalHarmonics) == Assets::GPU_SCENE_SPHERICAL_HARMONICS_SIZE);
         static_assert(sizeof(Assets::AmbientCube) == Assets::GPU_SCENE_AMBIENT_CUBE_SIZE);
         static_assert(sizeof(Assets::AmbientBrickResidency) == 16);
@@ -471,6 +473,8 @@ namespace Assets
         softMeshShaderCounterBufferMemory_.reset();
         softMeshShaderResourcesBuffer_.reset();
         softMeshShaderResourcesBufferMemory_.reset();
+        rayTracingLodBuffer_.reset();
+        rayTracingLodBufferMemory_.reset();
 
         sceneDynamicBuffer_.reset();
         sceneDynamicBufferMemory_.reset();

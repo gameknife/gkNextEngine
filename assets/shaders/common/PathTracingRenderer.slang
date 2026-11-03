@@ -536,6 +536,11 @@ public struct FPathTracingRenderer{
             return;
         }
 
+        // Every ray below leaves the primary vertex, which lies on the level the raster drew. Move
+        // it onto the geometry this tracer actually holds before the first one is cast.
+        hitPrimaryVertex_.Position = tracer.ResolvePrimaryOrigin(
+            pixel_, hitPrimaryVertex_.Position, hitPrimaryVertex_.Normal, primaryRayDir_, primarySurfaceOffset_);
+
         float4 FinalColor = float4(0, 0, 0, 0);
         float4 FinalReflection = float4(0, 0, 0, 0);
         float FinalDiffuseHitDist = 0;
@@ -849,10 +854,8 @@ public struct FPathTracingRenderer{
             OutSpecularAlbedo.Store(pixel_, specAlbedo);
         }
 
-        if (material.MaterialModel != MaterialDielectric)
-        {
-            hitPrimaryVertex_.Position = hitPrimaryVertex_.Position - primaryRayDir_ * Camera.SceneEpsilonScale * 0.01f;// - rayDir * rayLength * 0.005;
-        }
+        primarySurfaceOffset_ = material.MaterialModel != MaterialDielectric ? Camera.SceneEpsilonScale * 0.01f : 0.0f;
+        hitPrimaryVertex_.Position = hitPrimaryVertex_.Position - primaryRayDir_ * primarySurfaceOffset_;
 
         return true;
     }
@@ -921,6 +924,7 @@ public struct FPathTracingRenderer{
         hitPrimaryNode_ = {};
         primaryRayDir_ = float3(0, 1, 0);
         primaryRayLength_ = 0;
+        primarySurfaceOffset_ = 0.0f;
         primaryPixelOffset_ = float2(0, 0);
         primaryMotionPixels_ = float2(0, 0);
         primaryAlbedo_ = float4(0, 0, 0, 0);
@@ -949,6 +953,8 @@ public struct FPathTracingRenderer{
     NodeProxy hitPrimaryNode_;
     float3 primaryRayDir_;
     float primaryRayLength_;
+    // How far PrimaryHit pulled the primary vertex back toward the eye off the drawn surface.
+    float primarySurfaceOffset_;
     float2 primaryPixelOffset_;
     float2 primaryMotionPixels_;
     float4 primaryAlbedo_;

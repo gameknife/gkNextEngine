@@ -79,6 +79,8 @@ namespace Assets
                 softMeshShaderCounterBuffer_->GetDeviceAddress(),
                 lightBuffer_ ? lightBuffer_->GetDeviceAddress() : 0,
                 lightGridBuffer_ ? lightGridBuffer_->GetDeviceAddress() : 0,
+                rayTracingLodBuffer_ ? rayTracingLodBuffer_->GetDeviceAddress() : 0,
+                0,
             },
         };
         Vulkan::BufferUtil::CreateDeviceBuffer(
@@ -646,6 +648,7 @@ namespace Assets
                 }
 
                 uint32_t lodCount = 1;
+                const std::vector<float>& lodErrors = model.CPULodErrors();
                 for (const std::vector<uint32_t>& lodIndices : model.CPULodIndices())
                 {
                     if (lodCount >= static_cast<uint32_t>(MAX_MODEL_LOD_COUNT) || lodIndices.empty())
@@ -657,6 +660,7 @@ namespace Assets
                     ModelData& section = offsets_[encodedModelSection];
                     section.lodIndexOffset[lodCount] = static_cast<uint32_t>(primitiveIndices.size());
                     section.lodIndexCount[lodCount] = static_cast<uint32_t>(lodIndices.size());
+                    section.lodError[lodCount] = lodCount - 1 < lodErrors.size() ? lodErrors[lodCount - 1] : 0.0f;
                     primitiveIndices.insert(primitiveIndices.end(), lodIndices.begin(), lodIndices.end());
                     ++lodCount;
                     ++simplifiedLevelCount;
@@ -764,6 +768,12 @@ namespace Assets
             commandPool, "SoftMeshShaderCounters", softMeshShaderFlags | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, sizeof(uint32_t) * kSoftMeshShaderDrawSlotCount * 2u,
             softMeshShaderCounterBuffer_, softMeshShaderCounterBufferMemory_);
+        // Zero means LOD0, which is also what every TLAS instance holds until the renderer's first
+        // LOD select pass, so a hit decoded before that pass still resolves the right triangle.
+        Vulkan::BufferUtil::CreateDeviceBuffer(
+            commandPool, "RayTracingLods", softMeshShaderFlags,
+            std::vector<uint32_t>(supportRayTracing ? kRenderProxyCapacity : 1u, 0u),
+            rayTracingLodBuffer_, rayTracingLodBufferMemory_);
 
         const std::vector<Assets::SoftMeshShaderResources> softMeshShaderResources = {
             {
@@ -775,6 +785,8 @@ namespace Assets
                 softMeshShaderCounterBuffer_->GetDeviceAddress(),
                 lightBuffer_->GetDeviceAddress(),
                 lightGridBuffer_->GetDeviceAddress(),
+                rayTracingLodBuffer_->GetDeviceAddress(),
+                0,
             },
         };
         Vulkan::BufferUtil::CreateDeviceBuffer(commandPool, "SoftMeshShaderResources", softMeshShaderFlags, softMeshShaderResources,

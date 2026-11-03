@@ -40,7 +40,7 @@ namespace Assets
         static constexpr uint32_t kRenderProxyCapacity = MAX_RENDER_PROXIES;
         static constexpr uint32_t kMaxTrianglesPerSection = 65535;
         static constexpr uint32_t kMaxLightCount = 1024;
-        static constexpr uint32_t kModelSectionStride = 10;
+        static constexpr uint32_t kModelSectionStride = MODEL_SECTION_STRIDE;
         static constexpr uint32_t kSoftMeshShaderDrawSlotCount = 1 + kSunShadowCascadeCount;
         static constexpr uint32_t kSunShadowCascadeMask = (1u << kSunShadowCascadeCount) - 1u;
         static constexpr uint32_t DecodeModelIndex(uint32_t encodedModelSection)
@@ -370,6 +370,11 @@ namespace Assets
 
         std::unique_ptr<Vulkan::Buffer> softMeshShaderResourcesBuffer_;
         std::unique_ptr<Vulkan::DeviceMemory> softMeshShaderResourcesBufferMemory_;
+
+        // Per-proxy LOD of its TLAS instance (SoftMeshShaderResources::RayTracingLods). Scene-owned
+        // so it shares the proxy capacity and lifetime; the renderer's LOD select pass fills it.
+        std::unique_ptr<Vulkan::Buffer> rayTracingLodBuffer_;
+        std::unique_ptr<Vulkan::DeviceMemory> rayTracingLodBufferMemory_;
 
         std::unique_ptr<Vulkan::Buffer> ambientArenaBuffer_;
         std::unique_ptr<Vulkan::DeviceMemory> ambientArenaBufferMemory_;

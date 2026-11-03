@@ -146,6 +146,12 @@ public struct FHiVoxelDDARayTracer : IRayTracer
         float hitDist = 0;
         return TraceRay(rayOrigin, (rayTarget - rayOrigin) / rayLength, rayLength - epsilon, outVertex, outNode, tempColor, hitDist);
     }
+    // Voxel / probe / screen-space tracing never sees triangles, so there is no LOD to reconcile.
+    public float3 ResolvePrimaryOrigin(int2 pixel, float3 position, float3 normal,
+                                       float3 viewDirection, float surfaceOffset)
+    {
+        return position;
+    }
     public float3 GetAreaLightShadowOrigin(float3 position, float3 normal, float3 lightPosition,
                                            float minimumNormalOffset)
     {
@@ -409,6 +415,12 @@ public struct FAmbientCubeRayTracer : IRayTracer
     {
         return false;
     }
+    // Voxel / probe / screen-space tracing never sees triangles, so there is no LOD to reconcile.
+    public float3 ResolvePrimaryOrigin(int2 pixel, float3 position, float3 normal,
+                                       float3 viewDirection, float surfaceOffset)
+    {
+        return position;
+    }
     public float3 GetAreaLightShadowOrigin(float3 position, float3 normal, float3 lightPosition,
                                            float minimumNormalOffset)
     {
@@ -441,6 +453,12 @@ public struct FAmbientCubeRayTracerIndirect : IRayTracer
     public bool TraceSegment(float3 rayOrigin, float3 rayTarget, float epsilon)
     {
         return false;
+    }
+    // Voxel / probe / screen-space tracing never sees triangles, so there is no LOD to reconcile.
+    public float3 ResolvePrimaryOrigin(int2 pixel, float3 position, float3 normal,
+                                       float3 viewDirection, float surfaceOffset)
+    {
+        return position;
     }
     public float3 GetAreaLightShadowOrigin(float3 position, float3 normal, float3 lightPosition,
                                            float minimumNormalOffset)
@@ -574,6 +592,69 @@ public struct FHardwareRayTracer : IRayTracer
         return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
     }
 
+    // The primary vertex comes from the visibility buffer, so it lies on the LOD level the raster
+    // drew, while the proxy's TLAS instance holds the level Task.RayTracingLodSelect picked. For the
+    // main view the two are the same level unless r.lod.rayTracingBias asks for a coarser proxy;
+    // other views draw at their own levels. Where they differ, rays leaving the drawn surface start
+    // inside or just above the traced proxy and shadow themselves, so the origin moves onto the
+    // proxy. Only that proxy's triangles are searched, from the visible side down the surface
+    // normal and only as far as the two levels' simplification error allows. The search runs along
+    // the normal, not the view ray, because that is the direction the error bounds: along a
+    // grazing view ray the gap between two levels grows without limit, which is exactly where the
+    // silhouettes of a coarser level sit.
+    public float3 ResolvePrimaryOrigin(int2 pixel, float3 position, float3 normal,
+                                       float3 viewDirection, float surfaceOffset)
+    {
+        let scene = Bindless.GetGpuscene();
+        const uint2 visibilityId = Visibility.Load(pixel, scene.CustomData0);
+        if (!Visibility.IsValid(visibilityId))
+        {
+            return position;
+        }
+        const uint proxyIndex = Visibility.ProxyIndex(visibilityId);
+        const uint drawnLod = min(Visibility.LodLevel(visibilityId), uint(MAX_MODEL_LOD_COUNT) - 1u);
+        const uint tracedLod = min(scene.RayTracingLods[proxyIndex], uint(MAX_MODEL_LOD_COUNT) - 1u);
+        if (drawnLod == tracedLod)
+        {
+            return position;
+        }
+
+        const NodeProxy node = scene.Nodes[proxyIndex];
+        const ModelData model = scene.Offsets[node.modelId];
+        const float worldScale = max(max(length(mul(node.worldTS, float4(1, 0, 0, 0)).xyz),
+                                         length(mul(node.worldTS, float4(0, 1, 0, 0)).xyz)),
+                                     length(mul(node.worldTS, float4(0, 0, 1, 0)).xyz));
+        // meshopt reports the quadric error of its collapses, which tracks but does not bound how
+        // far a face can bulge from the original: keep a generous margin.
+        const float window = (model.lodError[drawnLod] + model.lodError[tracedLod]) * worldScale * 4.0f + EPS2;
+        const float3 drawnSurface = position + viewDirection * surfaceOffset;
+        const float3 visibleNormal = dot(normal, viewDirection) < 0.0f ? normalize(normal) : -normalize(normal);
+
+        RayDesc ray;
+        ray.Origin = drawnSurface + visibleNormal * window;
+        ray.Direction = -visibleNormal;
+        ray.TMin = 0.0f;
+        ray.TMax = window * 2.0f;
+
+        RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_FORCE_NON_OPAQUE> q;
+        let rayFlags = RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_FORCE_NON_OPAQUE;
+        q.TraceRayInline(scene.GetTLAS(), rayFlags, 0xff, ray);
+        while (q.Proceed())
+        {
+            // Instance i is NodeProxy i; any other instance in the window is a different object.
+            if (q.CandidateInstanceIndex() == proxyIndex)
+            {
+                q.CommitNonOpaqueTriangleHit();
+            }
+        }
+        if (q.CommittedStatus() != COMMITTED_TRIANGLE_HIT)
+        {
+            return position;
+        }
+        // The topmost proxy surface over the drawn point, with the caller's standoff kept.
+        return ray.Origin + ray.Direction * q.CommittedRayT() - viewDirection * surfaceOffset;
+    }
+
     public bool TraceRay(float3 rayOrigin, float3 rayDir, float maxDistance, inout Vertex outVertex, inout NodeProxy outNode, inout float4 inoutRayColor, out float outHitDist)
     {
         RayDesc ray;
@@ -602,10 +683,15 @@ public struct FHardwareRayTracer : IRayTracer
 
             float4x3 WorldToObject = q.CommittedRayWorldToObject();
 
-            outNode = Bindless.GetGpuscene().Nodes[q.CommittedRayInstanceId()];
+            const uint instanceIndex = q.CommittedRayInstanceId();
+            outNode = Bindless.GetGpuscene().Nodes[instanceIndex];
             outNode.instanceId = q.CommittedRayInstanceCustomIndex();
             const ModelData offsets = Bindless.GetGpuscene().Offsets[outNode.modelId];
-            const uint indexOffset = offsets.indexOffset + q.CommittedPrimitiveIndex() * 3;
+            // The primitive index counts within the BLAS this instance was pointed at this frame,
+            // which is the LOD level Task.RayTracingLodSelect recorded for it -- not always LOD0.
+            const uint tracedLod = min(Bindless.GetGpuscene().RayTracingLods[instanceIndex],
+                                       uint(MAX_MODEL_LOD_COUNT) - 1u);
+            const uint indexOffset = offsets.lodIndexOffset[tracedLod] + q.CommittedPrimitiveIndex() * 3;
             const uint vertexOffset = offsets.vertexOffset;
             const Vertex v0 = UnpackVertex(Bindless.GetGpuscene().Vertices[vertexOffset + Bindless.GetGpuscene().Indices[indexOffset]]);
             const Vertex v1 = UnpackVertex(Bindless.GetGpuscene().Vertices[vertexOffset + Bindless.GetGpuscene().Indices[indexOffset + 1]]);
@@ -636,6 +722,12 @@ public struct FSoftwareRayTracer : IRayTracer
     public bool TraceSegment(float3 rayOrigin, float3 rayTarget, float epsilon)
     {
         return DDARayTracer.TraceSegment(rayOrigin, rayTarget, epsilon);
+    }
+    // Voxel / probe / screen-space tracing never sees triangles, so there is no LOD to reconcile.
+    public float3 ResolvePrimaryOrigin(int2 pixel, float3 position, float3 normal,
+                                       float3 viewDirection, float surfaceOffset)
+    {
+        return position;
     }
     public float3 GetAreaLightShadowOrigin(float3 position, float3 normal, float3 lightPosition,
                                            float minimumNormalOffset)

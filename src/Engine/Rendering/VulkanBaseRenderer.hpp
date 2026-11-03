@@ -520,11 +520,19 @@ namespace Vulkan
         {
             std::unique_ptr<RayTracing::RayTracingProperties> properties;
 
+            // One BLAS per populated LOD level of every model, levels of a model contiguous:
+            // model m's level l is blas[blasLodBase[m] + min(l, blasLodCount[m] - 1)].
             std::vector<RayTracing::BottomLevelAccelerationStructure> blas;
+            std::vector<uint32_t> blasLodBase;
+            std::vector<uint32_t> blasLodCount;
             std::unique_ptr<Buffer> blasBuffer;
             std::unique_ptr<DeviceMemory> blasMemory;
             std::unique_ptr<Buffer> blasScratch;
             std::unique_ptr<DeviceMemory> blasScratchMemory;
+            // The same mapping as device addresses, MAX_MODEL_LOD_COUNT slots per model.
+            std::unique_ptr<Buffer> blasAddressBuffer;
+            std::unique_ptr<DeviceMemory> blasAddressMemory;
+            bool hasSimplifiedBlas = false;
 
             std::vector<RayTracing::TopLevelAccelerationStructure> tlas;
             std::unique_ptr<Buffer> tlasBuffer;
@@ -532,13 +540,35 @@ namespace Vulkan
             std::unique_ptr<Buffer> tlasScratch;
             std::unique_ptr<DeviceMemory> tlasScratchMemory;
 
+            // CPU-written instance template (LOD0 BLAS in every slot). The TLAS never reads it
+            // directly: the LOD select pass copies it into lodInstancesBuffer with each instance
+            // pointed at the level chosen for this frame.
             std::unique_ptr<Buffer> instancesBuffer;
             std::unique_ptr<DeviceMemory> instancesMemory;
+            std::unique_ptr<Buffer> lodInstancesBuffer;
+            std::unique_ptr<DeviceMemory> lodInstancesMemory;
+            std::unique_ptr<Buffer> lodResourcesBuffer;
+            std::unique_ptr<DeviceMemory> lodResourcesMemory;
 
             std::unique_ptr<PipelineCommon::ZeroBindWithTLASPipeline> directLightGenPipeline;
+            std::unique_ptr<PipelineCommon::ZeroBindPipeline> lodSelectPipeline;
 
             int tlasUpdateRequest = 0;
+            uint32_t tlasInstanceCount = 0;
             uint32_t tlasInstanceCapacity = 0;
+
+            // Inputs the LOD select pass resolved its levels from. The TLAS is rebuilt when they
+            // change even if no node did, because a moving camera moves proxies across levels.
+            struct FLodSelectionKey
+            {
+                glm::mat4 viewProjection{0.0f};
+                glm::vec2 viewportSize{0.0f};
+                float baseThreshold = -1.0f;
+                uint32_t settings = ~0u;
+
+                bool operator==(const FLodSelectionKey&) const = default;
+            };
+            FLodSelectionKey lodSelectionKey;
         };
 
         struct AmbientCubePipelines
@@ -873,8 +903,9 @@ namespace Vulkan
             VkImageLayout swapchainLayout);
 
         // Pre-render passes
-        void UpdateAccelerationStructuresTop(VkCommandBuffer commandBuffer);
+        void UpdateAccelerationStructuresTop(VkCommandBuffer commandBuffer, uint32_t imageIndex);
         void UpdateAccelerationStructuresBottom(VkCommandBuffer commandBuffer);
+        void DispatchRayTracingLodSelect(VkCommandBuffer commandBuffer, uint32_t imageIndex, uint32_t lodSettings);
         void HandleAmbientCubeCacheInvalidation(VkCommandBuffer commandBuffer, uint32_t imageIndex);
         void BeginGpuFrameTiming(VkCommandBuffer commandBuffer);
         void EndGpuFrameTiming(VkCommandBuffer commandBuffer);
@@ -901,6 +932,7 @@ namespace Vulkan
         void DeleteAccelerationStructures();
         void CreateBottomLevelStructures(VkCommandBuffer commandBuffer);
         void CreateTopLevelStructures(VkCommandBuffer commandBuffer);
+        void CreateRayTracingLodResources();
     };
     
     class LogicRendererBase

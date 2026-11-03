@@ -91,6 +91,11 @@ namespace NextCVar
                             ECVarFlags::Archive,
                             "Multiplier on r.lod.baseThreshold for sun shadow cascades (1 = same as the main view)",
                             0.0, 64.0);
+        GK_CVAR_BOOL("r.lod.rayTracing", settings, RayTracingLod, true, ECVarFlags::Archive,
+                     "Hardware ray tracing uses the LOD the main view picked per instance (0 = always trace LOD0)");
+        GK_CVAR_UINT_RANGE("r.lod.rayTracingBias", settings, RayTracingLodBias, 0, ECVarFlags::Archive,
+                           "Extra LOD levels the ray-traced proxy drops below the raster choice (0 = trace what is drawn)",
+                           0, Assets::MAX_MODEL_LOD_COUNT - 1);
         GK_CVAR_FLOAT("r.gtao.radius", settings, GTAORadius, 1.0f, ECVarFlags::Archive, "GTAO world-space sampling radius");
         GK_CVAR_FLOAT("r.gtao.strength", settings, GTAOStrength, 5.0f, ECVarFlags::Archive, "Master sky-occlusion strength: scales GTAO sky darkening (1=natural, lower=lighter)");
         GK_CVAR_FLOAT("r.gtao.thickness", settings, GTAOThickness, 0.5f, ECVarFlags::Archive, "GTAO depth-discontinuity thickness heuristic in world units");

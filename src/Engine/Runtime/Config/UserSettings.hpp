@@ -82,6 +82,14 @@ struct UserSettings final
     // so raising this changes nothing. It is a knob for content that is not represented yet -- high
     // poly assets shadowed at close range, where a cascade would otherwise hold LOD0.
     float LodShadowThresholdScale = 1.0f;
+    // Hardware ray tracing traces each instance at the level the main view picked for it, so a
+    // primary hit from the visibility buffer lies exactly on the traced surface. Off pins every
+    // TLAS instance to LOD0 (the reference for what traced LOD costs or saves).
+    bool RayTracingLod = true;
+    // Extra levels the traced proxy drops below that choice: a coarser "RT proxy" for shadows, GI
+    // and reflections. 0 keeps traced and rasterised geometry identical in the main view; above
+    // that, primary origins are reconciled onto the coarser proxy before any ray leaves them.
+    uint32_t RayTracingLodBias = 0;
     float GTAOThickness = 0.5f;
     int GTAODebugMode = 0;
     bool LightObjectScreenSpaceShadow = false;

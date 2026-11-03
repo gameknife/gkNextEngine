@@ -312,6 +312,8 @@ namespace Assets
         // levels get freshly synthesised vertices carrying the recomputed face normal instead.
         // A smooth mesh keeps sharing its original vertices, which costs no extra memory.
         const bool synthesizeVertices = weldedCount * 2 < vertices_.size();
+        // meshopt reports error relative to the mesh extent; this turns it into object-space units.
+        const float errorScale = meshopt_simplifyScale(&weldedPositions[0].x, weldedCount, sizeof(glm::vec3));
 
         size_t previousIndexCount = indexCount;
         for (uint32_t level = 1; level < static_cast<uint32_t>(MAX_MODEL_LOD_COUNT); ++level)
@@ -319,9 +321,10 @@ namespace Assets
             const float ratio = std::pow(0.5f, static_cast<float>(level));
             const size_t targetIndexCount = static_cast<size_t>(static_cast<double>(indexCount) * ratio) / 3 * 3;
             std::vector<uint32_t> simplified(indexCount);
+            float relativeError = 0.0f;
             const size_t resultCount = meshopt_simplify(
                 simplified.data(), weldedIndices.data(), indexCount, &weldedPositions[0].x, weldedCount,
-                sizeof(glm::vec3), targetIndexCount, 1.0f, 0, nullptr);
+                sizeof(glm::vec3), targetIndexCount, 1.0f, 0, &relativeError);
 
             // Simplification stops short when topology runs out. A level that saved nothing over
             // the previous one would only add a table entry and a pop, so end the chain there.
@@ -368,6 +371,7 @@ namespace Assets
 
             previousIndexCount = resultCount;
             lodIndices_.push_back(std::move(simplified));
+            lodErrors_.push_back(relativeError * errorScale);
         }
 
         // Synthesised levels grew the vertex buffer; the AABB is unchanged because every new
@@ -380,6 +384,7 @@ namespace Assets
         vertices_ = std::vector<Vertex>();
         indices_ = std::vector<uint32_t>();
         lodIndices_ = std::vector<std::vector<uint32_t>>();
+        lodErrors_ = std::vector<float>();
     }
 
     Model::Model(const std::string& name, std::vector<Vertex>&& vertices, std::vector<uint32_t>&& indices, bool needGenTSpace) :

@@ -49,7 +49,18 @@ namespace NextDayz
         cameraRecoilVelocity_ = glm::vec2(0.0f);
         locomotion_ = {};
         jumpPhaseElapsed_ = 0.0f;
-        airborneHorizontalVelocity_ = glm::vec3(0.0f);
+        planarVelocity_ = glm::vec3(0.0f);
+        verticalVelocity_ = 0.0f;
+        smoothedVelocity_ = glm::vec3(0.0f);
+        lookDeltaAccum_ = glm::vec2(0.0f);
+        lookDelta_ = glm::vec2(0.0f);
+        stridePhase_ = 0.0f;
+        sprintAlpha_ = 0.0f;
+        landingSpeed_ = 0.0f;
+        bobWeight_ = 0.0f;
+        strafeRoll_ = 0.0f;
+        eyeDip_ = 0.0f;
+        eyeDipVelocity_ = 0.0f;
         traversalAction_ = EPlayerTraversalAction::None;
         traversalElapsed_ = 0.0f;
         traversalDuration_ = 0.0f;
@@ -57,6 +68,7 @@ namespace NextDayz
         traversalProbeResult_ = "not_tested";
         walkModifier_ = false;
         sprintModifier_ = false;
+        sprintBlocked_ = false;
         movementLocked_ = false;
         jumpQueued_ = false;
         crouchToggleQueued_ = false;
@@ -80,10 +92,12 @@ namespace NextDayz
 
     void PlayerController::OnLook(float dxPixels, float dyPixels)
     {
+        const float previousPitch = pitch_;
         yaw_ -= dxPixels * config_.Camera.MouseSensitivity;
         pitch_ += dyPixels * config_.Camera.MouseSensitivity;
         const float maxPitch = glm::radians(config_.Camera.MaxPitchDegrees);
         pitch_ = glm::clamp(pitch_, -maxPitch, maxPitch);
+        lookDeltaAccum_ += glm::vec2(-dxPixels * config_.Camera.MouseSensitivity, pitch_ - previousPitch);
     }
 
     void PlayerController::SetMoveKey(int dir, bool pressed)
@@ -139,22 +153,51 @@ namespace NextDayz
     {
         if (firstPerson_)
         {
-            return EyePosition();
+            return EyePosition() + headBob_ + glm::vec3(0.0f, eyeDip_, 0.0f);
         }
 
         const glm::vec3 forward = Forward();
         constexpr glm::vec3 worldUp(0.0f, 1.0f, 0.0f);
         const glm::vec3 cameraRight = glm::normalize(glm::cross(forward, worldUp));
         const glm::vec3 characterFocus =
-            controller_.GetPosition() + glm::vec3(0.0f, currentEyeHeight_ * 0.88f, 0.0f);
+            controller_.GetPosition() + glm::vec3(0.0f, currentEyeHeight_ * 0.88f + eyeDip_ * 0.5f, 0.0f);
         return characterFocus - forward * camDistance_ +
                cameraRight * config_.Camera.TpsShoulderOffset;
     }
 
-    float PlayerController::HorizontalSpeed() const
+    glm::vec2 PlayerController::LocalVelocity() const
     {
-        const glm::vec3 v = controller_.GetLinearVelocity();
-        return glm::length(glm::vec2(v.x, v.z));
+        const glm::vec3& v = locomotion_.worldVelocity;
+        return glm::vec2(glm::dot(v, Right()), glm::dot(v, MoveForward()));
+    }
+
+    float PlayerController::CrouchAlpha() const
+    {
+        const float range = config_.Player.StandingEyeHeight - config_.Player.CrouchedEyeHeight;
+        return range > 0.0f
+                   ? glm::clamp((config_.Player.StandingEyeHeight - currentEyeHeight_) / range, 0.0f, 1.0f)
+                   : 0.0f;
+    }
+
+    float PlayerController::StrideLength(float speed) const
+    {
+        const FCameraConfig& camera = config_.Camera;
+        if (locomotion_.actualStance == EPlayerStance::Crouched)
+        {
+            return camera.StrideCrouch;
+        }
+        const FAnimationConfig& anim = config_.Animation;
+        if (speed <= anim.StandRunAuthoredSpeed)
+        {
+            const float t = glm::clamp((speed - anim.StandWalkAuthoredSpeed) /
+                                           (anim.StandRunAuthoredSpeed - anim.StandWalkAuthoredSpeed),
+                                       0.0f, 1.0f);
+            return glm::mix(camera.StrideWalk, camera.StrideRun, t);
+        }
+        const float t = glm::clamp((speed - anim.StandRunAuthoredSpeed) /
+                                       (anim.StandSprintAuthoredSpeed - anim.StandRunAuthoredSpeed),
+                                   0.0f, 1.0f);
+        return glm::mix(camera.StrideRun, camera.StrideSprint, t);
     }
 
     void PlayerController::ApplyCameraRecoil(const glm::vec2& impulseRadians)
@@ -413,25 +456,62 @@ namespace NextDayz
 
         if (time01 >= 1.0f)
         {
+            // planarVelocity_ was left untouched through the vault, so a running
+            // vault comes out still running.
             traversalAction_ = EPlayerTraversalAction::None;
             traversalElapsed_ = 0.0f;
-            airborneHorizontalVelocity_ = glm::vec3(0.0f);
         }
     }
 
     void PlayerController::UpdateView(float deltaSeconds)
     {
+        const float dt = std::max(0.0f, deltaSeconds);
+        const FCameraConfig& camera = config_.Camera;
         const float eyeTarget = locomotion_.actualStance == EPlayerStance::Crouched
                                     ? config_.Player.CrouchedEyeHeight
                                     : config_.Player.StandingEyeHeight;
-        const float eyeT = 1.0f - std::exp(-config_.Player.EyeHeightLerpSpeed *
-                                           std::max(0.0f, deltaSeconds));
+        const float eyeT = 1.0f - std::exp(-config_.Player.EyeHeightLerpSpeed * dt);
         currentEyeHeight_ = glm::mix(currentEyeHeight_, eyeTarget, eyeT);
 
-        const float targetFov = aiming_ ? aimFov_ : config_.Camera.BaseFov;
-        const float t = 1.0f - std::exp(-config_.Camera.FovLerpSpeed *
-                                        std::max(0.0f, deltaSeconds));
+        const bool sprinting = locomotion_.gait == EPlayerGait::Sprint;
+        const float sprintRate = 1.0f / std::max(sprinting ? config_.Player.SprintRaiseSeconds
+                                                            : config_.Player.SprintRecoverSeconds,
+                                                 0.01f);
+        sprintAlpha_ = glm::clamp(sprintAlpha_ + (sprinting ? 1.0f : -1.0f) * sprintRate * dt, 0.0f, 1.0f);
+
+        const float targetFov = (aiming_ ? aimFov_ : camera.BaseFov) + camera.SprintFovBoost * sprintAlpha_;
+        const float t = 1.0f - std::exp(-camera.FovLerpSpeed * dt);
         currentFov_ = glm::mix(currentFov_, targetFov, t);
+
+        // Landing dip: an impulse into a damped spring so the eye sinks and
+        // recovers instead of stepping.
+        if (landingSpeed_ > 0.0f)
+        {
+            eyeDipVelocity_ -= landingSpeed_ * camera.LandingDipPerMps;
+        }
+        eyeDipVelocity_ += (-camera.LandingSpring * eyeDip_ - camera.LandingDamping * eyeDipVelocity_) * dt;
+        eyeDip_ = glm::clamp(eyeDip_ + eyeDipVelocity_ * dt, -0.18f, 0.06f);
+
+        // Head bob in step with the stride: two dips and one roll sway per cycle.
+        const float speed = locomotion_.horizontalSpeed;
+        const float bobTarget = locomotion_.onGround && !IsTraversing()
+                                    ? glm::clamp(speed / config_.Animation.StandRunAuthoredSpeed, 0.0f, 1.0f) *
+                                          (sprinting ? camera.HeadBobSprintScale : 1.0f) *
+                                          (aiming_ ? camera.HeadBobAimScale : 1.0f)
+                                    : 0.0f;
+        bobWeight_ = glm::mix(bobWeight_, bobTarget, 1.0f - std::exp(-10.0f * dt));
+        const float theta = glm::two_pi<float>() * stridePhase_;
+        const float dip = 0.5f - 0.5f * std::cos(2.0f * theta);
+        headBob_ = glm::vec3(0.0f, -camera.HeadBobHeight * bobWeight_ * dip, 0.0f) +
+                   Right() * (camera.HeadBobHeight * 0.35f * bobWeight_ * std::sin(theta));
+
+        // Lean the view slightly into a strafe.
+        const float rollTarget =
+            glm::clamp(LocalVelocity().x * camera.StrafeRollDegreesPerMps, -camera.StrafeRollMaxDegrees,
+                       camera.StrafeRollMaxDegrees) *
+            (aiming_ ? 0.4f : 1.0f);
+        strafeRoll_ = glm::mix(strafeRoll_, rollTarget, 1.0f - std::exp(-8.0f * dt));
+        viewRoll_ = glm::radians(strafeRoll_ + camera.HeadBobRollDegrees * bobWeight_ * std::sin(theta));
 
         const float recoilDt = std::max(0.0f, deltaSeconds);
         cameraRecoilVelocity_ +=
@@ -441,11 +521,38 @@ namespace NextDayz
         cameraRecoil_ += cameraRecoilVelocity_ * recoilDt;
     }
 
+    glm::vec3 PlayerController::UpdateMotion(float deltaSeconds, const glm::vec3& previousPosition)
+    {
+        const float dt = std::max(deltaSeconds, 0.0f);
+        const glm::vec3 measured =
+            dt > 0.0f ? (controller_.GetPosition() - previousPosition) / dt : glm::vec3(0.0f);
+        const float smoothing = config_.Player.VelocitySmoothingSeconds;
+        smoothedVelocity_ = smoothing > 0.0f
+                                ? glm::mix(smoothedVelocity_, measured, 1.0f - std::exp(-dt / smoothing))
+                                : measured;
+        locomotion_.worldVelocity = smoothedVelocity_;
+        locomotion_.horizontalSpeed = glm::length(glm::vec2(smoothedVelocity_.x, smoothedVelocity_.z));
+
+        // The bob phase advances with distance travelled, so cadence follows speed.
+        if (locomotion_.onGround)
+        {
+            stridePhase_ += locomotion_.horizontalSpeed * dt /
+                            std::max(StrideLength(locomotion_.horizontalSpeed), 0.1f);
+            stridePhase_ -= std::floor(stridePhase_);
+        }
+        return measured;
+    }
+
     void PlayerController::Update(float deltaSeconds)
     {
+        lookDelta_ = lookDeltaAccum_;
+        lookDeltaAccum_ = glm::vec2(0.0f);
+        landingSpeed_ = 0.0f;
         if (IsTraversing())
         {
+            const glm::vec3 previousPosition = controller_.GetPosition();
             UpdateTraversal(deltaSeconds);
+            UpdateMotion(deltaSeconds, previousPosition);
             UpdateView(deltaSeconds);
             return;
         }
@@ -497,12 +604,11 @@ namespace NextDayz
         locomotion_.localMove = localMove;
 
         const bool moving = glm::length(localMove) > 0.001f;
-        const bool wantsSprint = moving && sprintModifier_ &&
-                                 locomotion_.actualStance == EPlayerStance::Standing;
-        if (wantsSprint)
-        {
-            aiming_ = false;
-        }
+        // CoD rules: sprinting is forward-led, and aiming or holding the
+        // trigger takes priority over it.
+        const bool wantsSprint = moving && sprintModifier_ && !aiming_ && !sprintBlocked_ &&
+                                 locomotion_.actualStance == EPlayerStance::Standing &&
+                                 localMove.y >= config_.Player.SprintMinForwardInput;
 
         if (!moving)
         {
@@ -565,39 +671,67 @@ namespace NextDayz
         const bool wasOnGround = locomotion_.onGround;
         const bool jump = jumpQueued_ && !movementLocked_ && wasOnGround &&
                           locomotion_.actualStance == EPlayerStance::Standing;
+
+        // Integrate velocity toward the input target. Accelerating, braking and
+        // turning all take time; in the air only a little steering is allowed
+        // and releasing the keys keeps the momentum.
+        const float dt = std::max(deltaSeconds, 0.0f);
+        const glm::vec3 targetVelocity = moveDir * speed;
+        const auto moveTowards = [](const glm::vec3& from, const glm::vec3& to, float maxStep)
+        {
+            const glm::vec3 delta = to - from;
+            const float distance = glm::length(delta);
+            return distance <= maxStep || distance < 1.0e-5f ? to : from + delta * (maxStep / distance);
+        };
+        if (wasOnGround)
+        {
+            const float currentSpeed = glm::length(planarVelocity_);
+            const bool braking = speed < currentSpeed - 0.01f || glm::dot(targetVelocity, planarVelocity_) < 0.0f;
+            const float rate = braking ? config_.Player.GroundDeceleration
+                               : currentSpeed > config_.Player.StandRunSpeed
+                                   ? config_.Player.SprintAcceleration
+                                   : config_.Player.GroundAcceleration;
+            planarVelocity_ = moveTowards(planarVelocity_, targetVelocity, rate * dt);
+        }
+        else if (speed > 0.0f)
+        {
+            planarVelocity_ = moveTowards(planarVelocity_, targetVelocity, config_.Player.AirAcceleration * dt);
+        }
+
+        const float fallSpeed = -verticalVelocity_;
         if (jump)
         {
-            airborneHorizontalVelocity_ = moveDir * speed;
+            verticalVelocity_ = config_.Player.JumpSpeed;
         }
-
-        glm::vec3 physicsMoveDir = moveDir;
-        float physicsSpeed = speed;
-        if (!wasOnGround)
+        else if (wasOnGround)
         {
-            physicsSpeed = glm::length(glm::vec2(airborneHorizontalVelocity_.x,
-                                                 airborneHorizontalVelocity_.z));
-            physicsMoveDir = physicsSpeed > 0.001f
-                                 ? airborneHorizontalVelocity_ / physicsSpeed
-                                 : glm::vec3(0.0f);
+            verticalVelocity_ = 0.0f;
+        }
+        else
+        {
+            verticalVelocity_ += config_.Player.Gravity * dt;
         }
 
-        controller_.Update(physicsMoveDir, physicsSpeed, jump, deltaSeconds);
+        const glm::vec3 previousPosition = controller_.GetPosition();
+        controller_.UpdateWithVelocity(planarVelocity_ + glm::vec3(0.0f, verticalVelocity_, 0.0f), true, dt);
         jumpQueued_ = false;
 
-        locomotion_.worldVelocity = controller_.GetLinearVelocity();
-        locomotion_.horizontalSpeed =
-            glm::length(glm::vec2(locomotion_.worldVelocity.x, locomotion_.worldVelocity.z));
         locomotion_.onGround = controller_.IsOnGround();
-        if (wasOnGround && !locomotion_.onGround && !jump)
+        if (locomotion_.onGround && !wasOnGround && !jump)
         {
-            // Walking off an edge keeps the velocity from the final grounded
-            // physics step, just like an explicit jump.
-            airborneHorizontalVelocity_ =
-                glm::vec3(locomotion_.worldVelocity.x, 0.0f, locomotion_.worldVelocity.z);
+            landingSpeed_ = std::max(fallSpeed, 0.0f);
+            verticalVelocity_ = 0.0f;
         }
-        else if (locomotion_.onGround)
+        const glm::vec3 achieved = UpdateMotion(deltaSeconds, previousPosition);
+
+        // Running into a wall eats the speed: keep only what the body actually
+        // achieved, or it bursts off the end of the wall at full speed. Glancing
+        // contacts slide on, they keep well over the threshold.
+        const float achievedSpeed = glm::length(glm::vec2(achieved.x, achieved.z));
+        const float commandedSpeed = glm::length(planarVelocity_);
+        if (locomotion_.onGround && commandedSpeed > 0.5f && achievedSpeed < commandedSpeed * 0.35f)
         {
-            airborneHorizontalVelocity_ = glm::vec3(0.0f);
+            planarVelocity_ = glm::vec3(achieved.x, 0.0f, achieved.z);
         }
 
         const float jumpDt = std::max(deltaSeconds, 0.0f);
@@ -618,7 +752,7 @@ namespace NextDayz
             case EPlayerJumpPhase::None:
                 if (!locomotion_.onGround)
                 {
-                    beginJumpPhase(locomotion_.worldVelocity.y > 0.15f
+                    beginJumpPhase(verticalVelocity_ > 0.15f
                                        ? EPlayerJumpPhase::Up
                                        : EPlayerJumpPhase::AirLoop);
                 }
@@ -633,7 +767,7 @@ namespace NextDayz
                     beginJumpPhase(EPlayerJumpPhase::Down);
                 }
                 else if (jumpPhaseElapsed_ >= config_.Animation.JumpUpSeconds ||
-                         locomotion_.worldVelocity.y <= 0.0f)
+                         verticalVelocity_ <= 0.0f)
                 {
                     beginJumpPhase(EPlayerJumpPhase::AirLoop);
                 }
@@ -672,7 +806,11 @@ namespace NextDayz
         const glm::vec3 forward = Forward();
         constexpr glm::vec3 worldUp(0.0f, 1.0f, 0.0f);
         const glm::vec3 eye = CameraPosition();
-        outModelView = glm::lookAt(eye, eye + forward, worldUp);
+        // First-person strafe lean and step sway roll the view about its axis.
+        const glm::vec3 up = firstPerson_ ? glm::vec3(glm::rotate(glm::mat4(1.0f), viewRoll_, forward) *
+                                                      glm::vec4(worldUp, 0.0f))
+                                          : worldUp;
+        outModelView = glm::lookAt(eye, eye + forward, up);
         outFov = currentFov_;
     }
 }

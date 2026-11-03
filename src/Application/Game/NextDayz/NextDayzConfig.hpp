@@ -31,6 +31,20 @@ namespace NextDayz
         // Bound to nextdayz.player.maxStepHeight in ConfigureCVars().
         float MaxStepHeight = 0.25f;
         float MaxSlopeAngle = 52.0f;
+        // Velocity is integrated, never set: weight comes from how fast the
+        // body gets up to speed and how hard it brakes (m/s^2).
+        float GroundAcceleration = 26.0f;
+        float SprintAcceleration = 14.0f;   // run -> sprint takes ~0.25 s
+        float GroundDeceleration = 30.0f;
+        float AirAcceleration = 4.0f;
+        float Gravity = -15.0f;
+        float JumpSpeed = 6.0f;
+        float VelocitySmoothingSeconds = 0.05f; // measured velocity filter for animation
+        // Sprint needs a forward-led input (CoD rule); strafing degrades it to a run.
+        float SprintMinForwardInput = 0.5f;
+        float SprintRaiseSeconds = 0.22f;    // weapon dropping into the sprint carry
+        float SprintRecoverSeconds = 0.16f;  // weapon coming back up; no fire until ready
+        float WeaponReadyThreshold = 0.3f;
     };
 
     struct FCameraConfig
@@ -46,6 +60,23 @@ namespace NextDayz
         float TpsMinDistance = 1.5f;
         float TpsMaxDistance = 9.0f;
         float ScrollStep = 0.6f;
+        // First-person head motion, driven by the stride phase.
+        float HeadBobHeight = 0.016f;        // m, at run speed
+        float HeadBobRollDegrees = 0.45f;
+        float HeadBobSprintScale = 1.5f;
+        float HeadBobAimScale = 0.2f;
+        float StrafeRollDegreesPerMps = 0.35f;
+        float StrafeRollMaxDegrees = 1.6f;
+        float LandingDipPerMps = 0.12f;      // eye dip velocity per m/s of landing speed
+        float LandingSpring = 140.0f;
+        float LandingDamping = 15.0f;
+        float SprintFovBoost = 7.0f;
+        // Stride length (m) per cycle at the authored gait speeds; the bob phase
+        // advances by distance so cadence follows speed.
+        float StrideWalk = 1.51f;
+        float StrideRun = 2.86f;
+        float StrideSprint = 4.41f;
+        float StrideCrouch = 1.24f;
     };
 
     struct FWeaponFeelConfig
@@ -63,18 +94,38 @@ namespace NextDayz
         float FireAnimSeconds = 0.22f;  // TPS fire clip hold
         float ReloadSeconds = 2.2f;
         float SwitchSeconds = 0.9f;
+        // View-model motion (camera space: x right, y up, z forward).
+        glm::vec3 ViewModelBob{0.011f, 0.009f, 0.0f};   // m, at run speed
+        float ViewModelBobRollDegrees = 1.4f;
+        float ViewModelBobSprintScale = 2.2f;
+        float ViewModelBobAimScale = 0.1f;
+        float ViewModelSwayLagSeconds = 0.03f;          // angular velocity -> lag angle
+        float ViewModelSwayMaxDegrees = 6.0f;
+        float ViewModelSwaySpring = 170.0f;
+        float ViewModelSwayDamping = 19.0f;
+        float ViewModelMoveRollDegreesPerMps = 1.1f;
+        float ViewModelMoveOffsetPerMps = 0.005f;
+        float ViewModelMoveSmoothingSeconds = 0.12f;
+        glm::vec3 ViewModelSprintOffset{0.02f, -0.075f, -0.07f};
+        glm::vec3 ViewModelSprintEulerDegrees{10.0f, 35.0f, -25.0f}; // pitch (+muzzle down), yaw (+left), roll (+clockwise)
+        float ViewModelBreathHeight = 0.0022f;
+        float ViewModelBreathSeconds = 3.4f;
+        float ViewModelLandingKick = 0.018f;
+        float ViewModelRecoilPitchDegrees = 4.0f;       // muzzle climb per cm of view-model kick
+        float TpsWeaponScale = 0.9f;
     };
 
     struct FAnimationConfig
     {
         float LocomotionFadeSeconds = 0.14f;
         float MoveThreshold = 0.15f;
-        float StandWalkAuthoredSpeed = 2.0f;
+        // Speeds the generated gait clips were authored at (nextdayz_survivor.scad).
+        float StandWalkAuthoredSpeed = 1.8f;
         float StandRunAuthoredSpeed = 4.2f;
         float StandSprintAuthoredSpeed = 7.6f;
         float CrouchWalkAuthoredSpeed = 1.55f;
-        float MinPlayRate = 0.75f;
-        float MaxPlayRate = 1.35f;
+        float MinPlayRate = 0.7f;
+        float MaxPlayRate = 1.3f;
         float WeaponReadyPoseWeight = 1.0f;
         float AimFadeSeconds = 0.12f;
         float AimPitchLimitDegrees = 80.0f;
@@ -82,6 +133,38 @@ namespace NextDayz
         float JumpUpSeconds = 0.24f;
         float JumpDownSeconds = 0.32f;
         float JumpFadeSeconds = 0.08f;
+        // Blend space smoothing.
+        float StanceBlendSeconds = 0.18f;
+        float DirectionSmoothingSeconds = 0.08f;
+        float HoldFadeSeconds = 0.15f;
+        float SprintHoldFadeSeconds = 0.18f;
+        // Aim offsets: the camera pitch/yaw left over after the body is split
+        // across torso and head; the rest rotates the weapon about the shoulder
+        // so the muzzle stays exactly on the crosshair.
+        float AimPitchTorsoShare = 0.45f;
+        float AimPitchHeadShare = 0.4f;
+        float TwistTorsoShare = 0.55f;
+        float TwistHeadShare = 0.3f;
+        // Lower body follows the camera: quickly while moving, in a turn-in-place
+        // step once the upper body has twisted past the threshold.
+        float BodyYawFollowSeconds = 0.08f;
+        float TurnInPlaceThresholdDegrees = 55.0f;
+        float TurnInPlaceRateDegrees = 380.0f;
+        // Whole-body lean into acceleration (banking into turns, rocking back
+        // when braking), on a damped spring so it overshoots and settles.
+        float LeanRollPerMps2 = 0.9f;
+        float LeanPitchPerMps2 = 0.55f;
+        float LeanMaxRollDegrees = 9.0f;
+        float LeanMaxPitchDegrees = 7.0f;
+        float LeanSpring = 70.0f;
+        float LeanDamping = 12.0f;
+        // Weapon frame motion on top of the torso.
+        float WeaponBobHeight = 0.010f;
+        float WeaponBobSide = 0.007f;
+        float SprintPumpHeight = 0.045f;
+        float SprintPumpRollDegrees = 9.0f;
+        float TurnSwayDegreesPerRadPerSecond = 2.5f;
+        float TurnSwayMaxDegrees = 8.0f;
     };
 
     struct FTraversalConfig

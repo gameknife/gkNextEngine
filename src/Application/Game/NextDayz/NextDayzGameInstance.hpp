@@ -137,6 +137,13 @@ private:
     bool validationUseWater_ = false;
     bool validationFinishZombie_ = false;
     bool validationRestart_ = false;
+    // Debug orbit camera around the third-person rig (agent screenshots, tuning).
+    float validationLookYaw_ = 0.0f;
+    bool validationThirdPerson_ = false;
+    bool debugOrbit_ = false;
+    float debugOrbitYaw_ = 90.0f;      // degrees from behind the body, + = toward its right
+    float debugOrbitDistance_ = 3.0f;
+    float debugOrbitHeight_ = 1.05f;
     float validationDamagePlayer_ = 0.0f;
     float validationHunger_ = -1.0f;
     float validationHydration_ = -1.0f;

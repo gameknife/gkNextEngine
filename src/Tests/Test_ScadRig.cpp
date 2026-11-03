@@ -5,6 +5,8 @@
 #include "Modules/ScadLoader/FScadLexer.h"
 #include "Modules/ScadLoader/FScadParser.h"
 #include "Modules/ScadLoader/FScadRig.h"
+#include "Gameplay/Rig/RigPoseOps.h"
+#include <algorithm>
 
 #include <cmath>
 #include <string>
@@ -458,13 +460,17 @@ TEST_CASE("ScadRig loads the articulated NextDayz survivor contract", "[Unit][Sc
     REQUIRE(FScadRigLoader::LoadRig("assets/scad/characters/nextdayz_survivor.scad",
                                     ScadRigLoadOptions{}, asset, err, &warnings));
 
-    INFO("warnings: " << warnings.size());
+    for (const std::string& warning : warnings)
+    {
+        UNSCOPED_INFO("warning: " << warning);
+    }
     CHECK(warnings.empty());
-    REQUIRE(asset.bones.size() == 17);
+    REQUIRE(asset.bones.size() == 20);
     for (const char* bone : {
              "bone_root", "bone_pelvis", "bone_torso", "bone_head",
              "bone_upperarm_l", "bone_forearm_l", "bone_hand_l",
              "bone_upperarm_r", "bone_forearm_r", "bone_hand_r", "bone_weapon_socket",
+             "bone_ik_weapon", "bone_ik_hand_r", "bone_ik_hand_l",
              "bone_thigh_l", "bone_calf_l", "bone_foot_l",
              "bone_thigh_r", "bone_calf_r", "bone_foot_r"})
     {
@@ -472,14 +478,24 @@ TEST_CASE("ScadRig loads the articulated NextDayz survivor contract", "[Unit][Sc
     }
 
     const int32_t socket = asset.FindBone("bone_weapon_socket");
+    const int32_t ikWeapon = asset.FindBone("bone_ik_weapon");
     REQUIRE(socket >= 0);
+    REQUIRE(ikWeapon >= 0);
     CHECK(asset.bones[socket].parent == asset.FindBone("bone_hand_r"));
-    bool socketHasPart = false;
+    CHECK(asset.bones[ikWeapon].parent == asset.FindBone("bone_torso"));
+    CHECK(asset.bones[asset.FindBone("bone_ik_hand_r")].parent == ikWeapon);
+    CHECK(asset.bones[asset.FindBone("bone_ik_hand_l")].parent == ikWeapon);
     for (const FRigPart& part : asset.parts)
     {
-        socketHasPart = socketHasPart || part.bone == socket;
+        const std::string& owner = asset.bones[part.bone].name;
+        CHECK(owner != "bone_weapon_socket");
+        CHECK(owner.rfind("bone_ik_", 0) != 0);
     }
-    CHECK_FALSE(socketHasPart);
+
+    // The firing side is the character's right: engine -X when facing +Z, the
+    // side the over-the-shoulder camera sits on.
+    CHECK(asset.bones[asset.FindBone("bone_upperarm_r")].bindT.x < 0.0f);
+    CHECK(asset.bones[asset.FindBone("bone_thigh_r")].bindT.x < 0.0f);
 
     const std::vector<std::string> loopClips = {
         "stand_idle",
@@ -488,7 +504,7 @@ TEST_CASE("ScadRig loads the articulated NextDayz survivor contract", "[Unit][Sc
         "stand_sprint_f", "stand_sprint_b", "stand_sprint_l", "stand_sprint_r",
         "crouch_idle", "crouch_walk_f", "crouch_walk_b", "crouch_walk_l", "crouch_walk_r",
         "jump_air_loop",
-        "weapon_ready", "aim_rifle_down", "aim_rifle_center", "aim_rifle_up"};
+        "weapon_ready", "weapon_sprint", "weapon_low", "aim_rifle_down", "aim_rifle_center", "aim_rifle_up"};
     for (const std::string& clipName : loopClips)
     {
         const FRigClip* clip = asset.FindClip(clipName);
@@ -561,6 +577,114 @@ TEST_CASE("ScadRig loads the articulated NextDayz survivor contract", "[Unit][Sc
     INFO("NextDayz survivor triangles: " << triangles);
     CHECK(triangles > 0);
     CHECK(triangles < 1500);
+}
+
+namespace
+{
+    // Samples one clip at `time` into bind-relative offsets (same rules as the animators).
+    NextGameplay::FRigPose SampleSurvivorClip(const FRigAsset& asset, const FRigClip& clip, float time)
+    {
+        NextGameplay::FRigPose pose;
+        pose.Reset(asset.bones.size());
+        for (const FRigChannel& channel : clip.channels)
+        {
+            NextGameplay::FRigBonePose& bone = pose.bones[channel.bone];
+            if (!channel.position.Keys.empty())
+            {
+                bone.t = channel.position.Sample(time);
+            }
+            if (!channel.rotation.Keys.empty())
+            {
+                bone.r = glm::normalize(channel.rotation.Sample(time));
+            }
+            if (!channel.scale.Keys.empty())
+            {
+                bone.s = channel.scale.Sample(time);
+            }
+        }
+        return pose;
+    }
+
+    // Lowest boot-sole corner in rig space (engine Y up, ground at 0).
+    float SoleHeight(const std::vector<glm::mat4>& transforms, int32_t foot)
+    {
+        float lowest = 1.0e9f;
+        for (const glm::vec3& corner : {glm::vec3(0.085f, 0.0f, 0.225f), glm::vec3(-0.085f, 0.0f, 0.225f),
+                                        glm::vec3(0.085f, 0.0f, -0.085f), glm::vec3(-0.085f, 0.0f, -0.085f)})
+        {
+            lowest = std::min(lowest, glm::vec3(transforms[foot] * glm::vec4(corner, 1.0f)).y);
+        }
+        return lowest;
+    }
+}
+
+TEST_CASE("NextDayz survivor gaits plant the boots and holds keep both hands on the rifle",
+          "[Unit][ScadRig][NextDayz]")
+{
+    FRigAsset asset;
+    std::string err;
+    REQUIRE(FScadRigLoader::LoadRig("assets/scad/characters/nextdayz_survivor.scad", ScadRigLoadOptions{}, asset,
+                                    err));
+    const int32_t footL = asset.FindBone("bone_foot_l");
+    const int32_t footR = asset.FindBone("bone_foot_r");
+    std::vector<glm::mat4> transforms;
+
+    const std::vector<std::pair<std::string, float>> gaits = {
+        {"stand_walk", 0.60f}, {"stand_run", 0.33f}, {"stand_sprint", 0.24f}, {"crouch_walk", 0.62f}};
+    for (const auto& [prefix, duty] : gaits)
+    {
+        for (const char* direction : {"_f", "_b", "_l", "_r"})
+        {
+            const std::string name = prefix + direction;
+            const FRigClip* clip = asset.FindClip(name);
+            REQUIRE(clip != nullptr);
+            constexpr int samples = 64;
+            float lowest = 1.0e9f;
+            int plantedL = 0;
+            int plantedR = 0;
+            for (int i = 0; i < samples; ++i)
+            {
+                const NextGameplay::FRigPose pose =
+                    SampleSurvivorClip(asset, *clip, clip->duration * static_cast<float>(i) / samples);
+                NextGameplay::ComputeRigComponentTransforms(asset, pose, transforms);
+                const float soleL = SoleHeight(transforms, footL);
+                const float soleR = SoleHeight(transforms, footR);
+                lowest = std::min({lowest, soleL, soleR});
+                plantedL += soleL < 0.02f ? 1 : 0;
+                plantedR += soleR < 0.02f ? 1 : 0;
+            }
+            INFO(name << ": lowest sole " << lowest << ", planted L " << plantedL << " R " << plantedR << " of "
+                      << samples);
+            CHECK(lowest > -0.02f);
+            CHECK(lowest < 0.02f);
+            // A boot that floats through part of its stance reads as skating.
+            CHECK(plantedL >= static_cast<int>(samples * duty * 0.7f));
+            CHECK(plantedR >= static_cast<int>(samples * duty * 0.7f));
+        }
+    }
+
+    const int32_t socket = asset.FindBone("bone_weapon_socket");
+    const int32_t ikWeapon = asset.FindBone("bone_ik_weapon");
+    const int32_t handL = asset.FindBone("bone_hand_l");
+    const int32_t ikHandL = asset.FindBone("bone_ik_hand_l");
+    for (const char* name : {"weapon_ready", "aim_rifle_center", "aim_rifle_up", "aim_rifle_down", "weapon_sprint"})
+    {
+        const FRigClip* clip = asset.FindClip(name);
+        REQUIRE(clip != nullptr);
+        const NextGameplay::FRigPose pose = SampleSurvivorClip(asset, *clip, 0.0f);
+        NextGameplay::ComputeRigComponentTransforms(asset, pose, transforms);
+        const float weaponGap = glm::length(NextGameplay::RigBonePosition(transforms, socket) -
+                                            NextGameplay::RigBonePosition(transforms, ikWeapon));
+        const float weaponTwist = std::abs(glm::dot(NextGameplay::RigBoneRotation(transforms, socket),
+                                                    NextGameplay::RigBoneRotation(transforms, ikWeapon)));
+        const float supportGap = glm::length(NextGameplay::RigBonePosition(transforms, handL) -
+                                             NextGameplay::RigBonePosition(transforms, ikHandL));
+        INFO(name << ": weapon gap " << weaponGap << ", twist dot " << weaponTwist << ", support gap "
+                  << supportGap);
+        CHECK(weaponGap < 0.02f);
+        CHECK(weaponTwist > 0.995f);
+        CHECK(supportGap < 0.04f);
+    }
 }
 
 // kit_char 组装角色：use <../lib/kit_char.scad> 闭包 + 库函数 clip 的完整链路。

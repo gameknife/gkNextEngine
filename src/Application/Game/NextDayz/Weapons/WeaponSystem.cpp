@@ -46,6 +46,12 @@ namespace NextDayz
         viewModelOffset_ = config_.ViewModelHipOffset;
         viewModelRecoil_ = 0.0f;
         viewModelRecoilVelocity_ = 0.0f;
+        swayAngle_ = glm::vec2(0.0f);
+        swayVelocity_ = glm::vec2(0.0f);
+        moveVelocity_ = glm::vec2(0.0f);
+        landingOffset_ = 0.0f;
+        landingVelocity_ = 0.0f;
+        aimAlpha_ = 0.0f;
         viewModelVisible_ = false;
         viewModelInScene_ = false;
         viewModelWeaponIndex_ = -1;
@@ -403,7 +409,9 @@ namespace NextDayz
         // Feed ADS target FOV to the camera controller.
         player.SetAimFov(def ? def->adsFov : player.CurrentFov());
 
-        if (def && !reloading_ && !switching_ && triggerDown_)
+        // Coming out of a sprint the weapon has to be up before it fires; a
+        // held trigger fires the moment it is.
+        if (def && !reloading_ && !switching_ && triggerDown_ && player.WeaponReady())
         {
             constexpr int kMaxShotsPerFrame = 8;
             int shotsThisFrame = 0;
@@ -496,23 +504,30 @@ namespace NextDayz
                 }
                 engine.GetScene().MarkDirty();
             }
+            glm::vec3 motionOffset(0.0f);
+            glm::vec3 motionEuler(0.0f);
+            UpdateViewModelMotion(player, deltaSeconds, motionOffset, motionEuler);
             if (show)
             {
-                const glm::vec3 eye = player.EyePosition();
+                const glm::vec3 eye = player.CameraPosition();
                 const glm::vec3 forward = player.Forward();
                 const glm::vec3 right = player.Right();
                 const glm::vec3 up = glm::normalize(glm::cross(right, forward));
                 // Proper (det +1) rotation basis: object +Z -> forward, +Y -> up,
                 // +X = up x forward (right() is left-handed w.r.t. forward/up).
                 const glm::vec3 xAxis = glm::normalize(glm::cross(up, forward));
+                const glm::vec3 offset = viewModelOffset_ + motionOffset;
                 const glm::vec3 pos =
-                    eye + right * viewModelOffset_.x + up * viewModelOffset_.y +
-                    forward * (viewModelOffset_.z - viewModelRecoil_);
+                    eye + right * offset.x + up * offset.y + forward * (offset.z - viewModelRecoil_ * 2.5f);
                 viewModelNode_->Translation() = pos;
                 viewModelNode_->Rotation() =
                     glm::quat_cast(glm::mat3(xAxis, up, forward)) *
+                    glm::angleAxis(motionEuler.y, glm::vec3(0.0f, 1.0f, 0.0f)) *
+                    glm::angleAxis(motionEuler.x, glm::vec3(1.0f, 0.0f, 0.0f)) *
+                    glm::angleAxis(motionEuler.z, glm::vec3(0.0f, 0.0f, 1.0f)) *
                     glm::angleAxis(reloading_ ? actionArc * 0.45f : 0.0f, glm::vec3(0.0f, 0.0f, 1.0f)) *
-                    glm::angleAxis(-viewModelRecoil_ * 0.8f, glm::vec3(1.0f, 0.0f, 0.0f));
+                    glm::angleAxis(-viewModelRecoil_ * 100.0f * glm::radians(config_.ViewModelRecoilPitchDegrees),
+                                   glm::vec3(1.0f, 0.0f, 0.0f));
                 viewModelNode_->RecalcTransform(true);
             }
             else
@@ -522,5 +537,68 @@ namespace NextDayz
             }
             engine.GetScene().MarkTransformDirty();
         }
+    }
+
+    void WeaponSystem::UpdateViewModelMotion(const PlayerController& player, float deltaSeconds, glm::vec3& outOffset,
+                                             glm::vec3& outEuler)
+    {
+        const float dt = std::max(deltaSeconds, 0.0f);
+        const FWeaponFeelConfig& feel = config_;
+        aimAlpha_ = glm::mix(aimAlpha_, player.IsAiming() ? 1.0f : 0.0f, 1.0f - std::exp(-14.0f * dt));
+        const float hipAlpha = 1.0f - aimAlpha_;
+        const float sprint = glm::smoothstep(0.0f, 1.0f, player.SprintAlpha());
+        const FPlayerLocomotionState& locomotion = player.LocomotionState();
+
+        // Look inertia: the weapon lags the camera's angular velocity and
+        // springs back past centre when the mouse stops.
+        const glm::vec2 angularVelocity = dt > 0.0f ? player.LookDelta() / dt : glm::vec2(0.0f);
+        const float swayLimit = glm::radians(feel.ViewModelSwayMaxDegrees);
+        const glm::vec2 swayTarget =
+            glm::clamp(-angularVelocity * feel.ViewModelSwayLagSeconds, glm::vec2(-swayLimit), glm::vec2(swayLimit)) *
+            glm::mix(1.0f, 0.3f, aimAlpha_);
+        const float springDt = std::min(dt, 0.05f);
+        swayVelocity_ += (feel.ViewModelSwaySpring * (swayTarget - swayAngle_) -
+                          feel.ViewModelSwayDamping * swayVelocity_) *
+                         springDt;
+        swayAngle_ += swayVelocity_ * springDt;
+
+        // Movement: tilt into a strafe, drift against the motion.
+        const glm::vec2 velocity = player.LocalVelocity();
+        moveVelocity_ = glm::mix(moveVelocity_, velocity,
+                                 1.0f - std::exp(-dt / std::max(feel.ViewModelMoveSmoothingSeconds, 1.0e-3f)));
+
+        // Stride bob, a figure eight: one sway and two dips per stride.
+        const float speedScale =
+            locomotion.onGround ? glm::clamp(locomotion.horizontalSpeed / 4.2f, 0.0f, 1.6f) : 0.0f;
+        const float bobScale = speedScale * glm::mix(1.0f, feel.ViewModelBobSprintScale, sprint) *
+                               glm::mix(1.0f, feel.ViewModelBobAimScale, aimAlpha_);
+        const float theta = glm::two_pi<float>() * player.StridePhase();
+        const float dip = 0.5f - 0.5f * std::cos(2.0f * theta);
+
+        // Idle breathing.
+        breathTime_ += dt;
+        const float breath = std::sin(glm::two_pi<float>() * breathTime_ / std::max(feel.ViewModelBreathSeconds, 0.1f)) *
+                             (1.0f - glm::clamp(speedScale * 2.0f, 0.0f, 1.0f)) * glm::mix(1.0f, 0.35f, aimAlpha_);
+
+        // Landing: a kick into a spring.
+        if (player.LandingSpeed() > 0.0f)
+        {
+            landingVelocity_ -= player.LandingSpeed() * feel.ViewModelLandingKick * 10.0f;
+        }
+        landingVelocity_ += (-160.0f * landingOffset_ - 16.0f * landingVelocity_) * springDt;
+        landingOffset_ = glm::clamp(landingOffset_ + landingVelocity_ * springDt, -0.08f, 0.04f);
+
+        outOffset = glm::vec3(feel.ViewModelBob.x * std::sin(theta) * bobScale - swayAngle_.x * 0.05f * hipAlpha -
+                                  moveVelocity_.x * feel.ViewModelMoveOffsetPerMps * hipAlpha,
+                              -feel.ViewModelBob.y * dip * bobScale + swayAngle_.y * 0.03f * hipAlpha +
+                                  feel.ViewModelBreathHeight * breath + landingOffset_,
+                              -std::max(moveVelocity_.y, 0.0f) * feel.ViewModelMoveOffsetPerMps * 0.6f * hipAlpha) +
+                    feel.ViewModelSprintOffset * sprint;
+        outEuler = glm::vec3(swayAngle_.y + glm::radians(feel.ViewModelSprintEulerDegrees.x) * sprint,
+                             swayAngle_.x + glm::radians(feel.ViewModelSprintEulerDegrees.y) * sprint,
+                             glm::radians(feel.ViewModelBobRollDegrees) * std::sin(theta) * bobScale +
+                                 glm::radians(feel.ViewModelMoveRollDegreesPerMps) * moveVelocity_.x *
+                                     glm::mix(1.0f, 0.25f, aimAlpha_) +
+                                 glm::radians(feel.ViewModelSprintEulerDegrees.z) * sprint);
     }
 }

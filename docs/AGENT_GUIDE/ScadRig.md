@@ -97,7 +97,7 @@ ScadLibrary 顶栏把作者工具组织成三个应用级模式，每个模式�
   `pos` / `rot` / `scale` 关键帧；
 - **安全回写**：保存时把加载器求值后的全部 clip 展开到原文件末尾
   `SCADLIBRARY_RIG_EDITOR_BEGIN/END` 标记区。后续保存只替换该区域，不改骨架、几何和
-  helper function；因此 `nd_stand_cycle()` 一类函数生成的动作也可编辑；
+  helper function；因此 `rh_gait_clip()` 一类函数生成的动作也可编辑；
 - **装备预览/修改**：任意 catalog kit 模块可挂到任意骨架，支持模块参数、启用状态及
   SCAD 本地位置/旋转/缩放的实时调整。预览仍走真实的 model/material 注入和 bone parent，
   不是独立摆在角色旁边的静态模型；
@@ -133,10 +133,50 @@ FRigAnimator                              // 每实例：Bind / Play(clip, fade)
 - `SetStaticBlend` 用于 aim pose，`SetManualBlend` 用权威 gameplay 时间采样交互动作。
 - `PlayOneShot(..., restartIfSame=true)` 用于逐发 recoil；`IsOneShotComplete` 可查询收尾。
 - 采样只覆盖 clip 实际 authored 的 position/rotation/scale 分量；未 authored 分量不会错误覆盖底层 pose。
+- `Update` = `Evaluate` + `Apply`。需要在 clip 混合之后再做程序化处理时拆开调用：`Evaluate(dt)` 只把各层
+  混进 `MutablePose()`，不写 Node；处理完再 `Apply()`（一次 root `RecalcTransform`）。
 
-NextDayz 是完整参考：Locomotion FullBody Override → Aim UpperBody Override → Recoil UpperBody
-Additive → Action FullBody Override。资产和运行时契约见
-`docs/projects/nextdayz/nextdayz-3c-scadrig-design.md`。
+**姿态后处理**（`src/Gameplay/Rig/RigPoseOps.*`，作用于 `FRigPose`，与格式无关）：
+
+- `ComputeRigComponentTransforms` / `RefreshRigComponentTransforms`：组件空间（rig root 的父空间，即
+  角色世界节点）的正向运动学；骨骼按父先序存储，所以刷新"从某骨骼起的所有后续骨骼"即可覆盖其子树。
+- `SetRigBoneComponentRotation` / `RotateRigBoneInComponentSpace` / `SetRigBoneComponentPosition`：
+  用组件空间的目标改写 bind 相对的 pose 分量（带权重），用于瞄准俯仰分摊、整体倾斜等。
+- `SolveRigTwoBoneIK(upper, lower, end, target, poleTarget, weight)`：两骨 IK，关节朝极点弯曲；
+  只改 upper/lower 的旋转，末端朝向需要时再用 `SetRigBoneComponentRotation` 设置。
+- 这些编辑假设链路无缩放（bind scale 只参与正向运动学）。单测：`gkNextUnitTests "[PoseOps]"`。
+
+**IK 目标骨骼约定**：空的 `bone_ik_*` 骨骼（无 part）把"手该在哪里"作为普通 clip 数据表达——clip 动画
+目标帧，运行时把手臂解算上去。目标帧之间的混合是位置插值 + 旋转 slerp，远比混合关节角稳定（混合关节角
+会让手脱离武器）。NextDayz 士兵：`bone_ik_weapon`（武器帧，躯干子骨骼）→ `bone_ik_hand_r/l`（握把 /
+护木上的腕部帧）；`bone_weapon_socket` 的 bind 是右手握把帧的逆，所以右手解到 `bone_ik_hand_r` 时武器
+正好落在 `bone_ik_weapon` 上。
+
+NextDayz 是完整参考：18-clip locomotion 混合空间（姿态 × 速度 × 方向，单一 sync group）→ hold
+（手臂 + IK 骨骼 Override）+ hold_body（躯干/头 Additive：侧身与转头）→ weapon_action 同样拆两层 →
+recoil Additive → action FullBody，之后是程序化阶段（倾斜、瞄准分摊、武器晃动、双臂 IK）。资产和运行时
+契约见 `docs/projects/nextdayz/nextdayz-3c-scadrig-design.md`。
+
+## 程序化 clip 作者库 rig_humanoid（推荐给复杂人形）
+
+`assets/scad/lib/rig_humanoid.scad`（前缀 `rh_`）在 SCAD 里从"意图"生成 clip，输出仍是普通 `anim_*`
+数据，loader、ScadLibrary 时间轴编辑器和所有运行时都不需要改：
+
+- **步态** `rh_gait_clip(skel, gait, dir)`：步频 / 速度 / 支撑比例 / 步幅后偏 / 抬脚 / 起伏 / 重心
+  左右转移 / 髋部扭转与侧倾 / 躯干前倾与反向扭转 / 手臂摆动。靴子用两骨腿 IK 钉在 z=0，支撑相做
+  脚跟着地 → 平放 → 脚尖蹬离的滚动；后退是时间反转的前进步态；侧移时髋部转向移动方向、躯干反向扭回。
+  所有方向和步态都以"相位 0 = 左脚跟着地"对齐，可以在同一个 normalized phase 上混合。
+- **持枪** `rh_upper_clip(skel, rig, keys, loop)`：每个 key 给出武器帧（躯干空间）和可选的左手目标，
+  双臂用两骨臂 IK 解算到握把/护木，同时写出 `bone_ik_*` 通道。
+- **全身** `rh_body_clip(...)`：跳跃、翻越、拾取这类 key 用骨盆 / 双脚接地点 / 武器帧 / 左手（可用
+  世界空间 `hand_l_root`）描述。
+- 骨架与步态参数以字典书写，入口处用 `rh_skeleton([...])` / `rh_gait_params([...])` 解析为定长
+  向量（字典查找是线性扫描，生成器会调用数千次）。
+- 约定：角色面朝 −Y、左侧 +X、**右侧 −X**（`_r` 骨骼放 −X）。刚体靴子的滚动支点 `ball` 要放在靴尖附近，
+  否则脚尖蹬地时靴尖会扎进地面。
+- 回归：`gkNextUnitTests "NextDayz survivor gaits plant the boots and holds keep both hands on the rifle"`
+  采样每个步态检查"不穿地、每只靴子按 duty 比例贴地"，并检查持枪 clip 里武器在右手、左手在护木上。
+- 代价：生成在加载时运行，`nextdayz_survivor.scad` 约 0.7 s。
 
 - 关键帧容器复用 `Model.hpp` 的 `AnimationChannel<T>`（单 key 直接返回该 key；`Sample` 为 const）。
 - evaluator 侧唯一改动：`SceneEvalResult.topLevelVariables` 顶层变量快照（`anim_*` 由此读取）。

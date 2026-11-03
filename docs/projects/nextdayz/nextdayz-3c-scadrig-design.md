@@ -4,7 +4,7 @@ category: project
 status: 现行架构
 owner: NextDayz
 created: 2026-07-26
-last_updated: 2026-07-26
+last_updated: 2026-11-03
 ---
 
 # NextDayz 复杂 3C 与 ScadRig 分层动画设计
@@ -12,10 +12,11 @@ last_updated: 2026-07-26
 > 本文记录 NextDayz 的蹲姿、四方向移动、步行/跑步/冲刺、举枪瞄准、开火后坐力和 loot 动作。
 > 生存、背包、昼夜与 HUD 的现行边界见 [PVE 生存循环产品化设计](nextdayz-productization-design.md)。
 >
-> **实现状态（2026-07-26）**：P0～P7 已落地。本文中的状态模型、动态胶囊、四层动画图、
-> shot event 和 loot 两阶段提交均为现行实现；NextDayz 专用资产为
-> `assets/scad/characters/nextdayz_survivor.scad`。应用内没有另设
-> `PlayerAnimationController`，动画图职责由 `PlayerRigVisual` 承担。
+> **实现状态（2026-11-03）**：P0～P7 已落地；随后做了"战术手感"重构（§15），其中的移动积分、
+> CoD 式冲刺规则、20 骨骼资产、程序化生成的 clip、混合空间 + 武器驱动 IK 的动画图、第一人称视图模型
+> 运动**取代**了 §3、§6.3、§8、§9 里与之冲突的描述。状态模型、动态胶囊、shot event 和 loot 两阶段
+> 提交保持不变。资产为 `assets/scad/characters/nextdayz_survivor.scad`（由
+> `assets/scad/lib/rig_humanoid.scad` 生成 clip）；动画图职责仍由 `PlayerRigVisual` 承担。
 
 ## 1. 目标与边界
 
@@ -580,3 +581,72 @@ FPS 验收覆盖 ADS FOV、view-model 对齐、每发 kick 和平滑回正。
 5. 首期是否只做 rifle aim profile，还是同时制作 pistol/shotgun profile。
 
 若没有额外产品决定，按 §3 的默认值和 rifle-first profile 开发。
+
+## 15. 战术手感重构（2026-11-03）
+
+### 15.1 为什么
+
+旧实现"假、机械"的根因不在单个 clip，而在链路：速度每帧直接设成目标值（无加减速），动画读指令速度
+（撞墙原地跑）；四方向权重直接取 WASD 数字输入（换向一帧跳变）；walk/run/sprint 的骨盆高度是常量
+（没有起伏和重心转移）；上身被静态 `weapon_ready` 以权重 1 覆盖（跑动时上身僵死），手臂角度离线算好
+后在 clip 间混合，手会脱离武器；且 `_r` 骨骼实际在角色左侧，士兵是左手持枪而相机在右肩。
+
+### 15.2 移动（`PlayerController`）
+
+- 速度按加速度积分（`GroundAcceleration` / `SprintAcceleration` / `GroundDeceleration` /
+  `AirAcceleration`），自行积分重力后走 `UpdateWithVelocity`；空中松键保留动量。
+- 动画与相机读**实测**速度（位移 / dt，0.05 s 平滑）；正面撞墙时把指令速度收敛到实测速度。
+- 冲刺（取代 §3 的四方向冲刺默认值）：需要 `localMove.y >= SprintMinForwardInput`；瞄准或按住扳机
+  打断冲刺；`SprintAlpha` 是武器从冲刺姿势回到可射击的过渡，`WeaponReady()` 之前 `WeaponSystem` 不开火
+  （按住扳机会在就绪瞬间开第一枪）。
+- 第一人称相机：按距离推进的步幅相位驱动头部起伏和侧倾，平移时视角向移动方向轻微侧倾，落地下沉弹簧，
+  冲刺 FOV 增加。玩法用的 `EyePosition()` 不含这些偏移，射线不受影响。
+
+### 15.3 资产（取代 §9）
+
+- 20 根骨骼：§9.1 的 17 根 + `bone_ik_weapon`（躯干子骨骼）→ `bone_ik_hand_r` / `bone_ik_hand_l`。
+  `_r` 骨骼在 SCAD −X（角色右侧）；`bone_weapon_socket` 的 bind 是右手握把帧的逆。
+- 比例：腿 0.44 + 0.42、手臂 0.31 + 0.29，躯干相应缩短，总高不变。
+- 所有 clip 由 `rig_humanoid.scad` 生成（见 `docs/AGENT_GUIDE/ScadRig.md`）。新增 `weapon_sprint`
+  （步枪斜挎胸前、枪口朝支撑侧上方）与 `weapon_low`（枪口朝下）。持枪 clip 的躯干/头通道是侧身与转头，
+  运行时以 Additive 叠加。
+
+### 15.4 动画图（取代 §8）
+
+```text
+locomotion      FullBody  Override  18 clip：stand idle、walk/run/sprint × F/B/L/R、crouch idle、crouch walk × 4
+hold            手臂+IK    Override  weapon_ready / aim_rifle_center / weapon_sprint 静态混合
+hold_body       躯干+头    Additive  同一组样本（侧身、转头）
+weapon_action   手臂+IK    Override  reload / switch（权威时间手动采样）
+weapon_action_body 躯干+头 Additive  同上
+recoil          上身       Additive  每发重触发
+action          FullBody  Override  loot
+→ 程序化阶段 → Apply
+```
+
+- 混合空间：速度按 idle/walk/run/sprint 锚点（clip 作者速度）分段线性加权，方向取**躯干坐标系**下的
+  实测速度方向并平滑；蹲姿权重平滑过渡。所有样本固定在一个集合里只改权重，因此永不交叉淡入、相位连续。
+  播放速率由混合后的步频换算到主导 clip，超过最后一个锚点才加速。
+- 下半身朝向：移动时快速跟随相机 yaw；静止时扭转超过 `TurnInPlaceThresholdDegrees` 才原地转身。
+- 程序化阶段：整体倾斜（加速度驱动的阻尼弹簧，转弯侧倾、急停后仰）；相机俯仰/扭转按比例分给躯干和头，
+  剩余部分绕射击侧肩部旋转 `bone_ik_weapon`，枪口始终对准准星；步伐相位驱动武器起伏，冲刺时摆臂；
+  最后两骨 IK 把右手解到 `bone_ik_hand_r`、左手解到 `bone_ik_hand_l`（拾取与翻越时左手放开交给 clip）。
+- 手枪等非步枪握持通过 `HoldFor()` 调整模型偏移和左手目标；第三人称武器缩放 `TpsWeaponScale`。
+
+### 15.5 第一人称视图模型（`WeaponSystem::UpdateViewModelMotion`）
+
+8 字步伐晃动（冲刺放大、瞄准压到 10%）、视角角速度驱动的惯性摆动弹簧、平移倾斜与反向漂移、冲刺持枪
+姿势（压低、枪口左转、倾斜）、静止呼吸、落地冲击，以及以厘米计的后坐力抬枪。参数在
+`FWeaponFeelConfig`。
+
+### 15.6 观察与验证
+
+- 新增查询：`game.sceneReady`、`horizontalSpeed`、`sprintAlpha`、`weaponReady`、`bodyYawLag`、
+  `turningInPlace`、`leanRoll`、`gripError`（右手到握把目标的距离）、`recoilCamera` /
+  `recoilViewModel` / `recoilRig`。
+- 验证 cvar：`nextdayz.validation.lookYaw`（度）、`nextdayz.validation.thirdPerson`；调试环绕相机
+  `nextdayz.debug.orbit` / `orbitYaw` / `orbitDistance` / `orbitHeight`（从侧面、正面检查动作，开启时
+  隐藏第一人称视图模型）。
+- 验证模式帧率很高，按帧等待不再代表时间：NextDayz 脚本开头等待 `game.sceneReady`，locomotion 脚本
+  用 `wait-until game.baseAnim` 等待混合空间到位。
+

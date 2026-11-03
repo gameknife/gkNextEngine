@@ -99,9 +99,18 @@ namespace NextGameplay
 
         bool IsOneShotComplete(FRigLayerHandle layer) const;
         const Assets::FRigClip* DominantClip(FRigLayerHandle layer) const;
+        float NormalizedTime(FRigLayerHandle layer) const;
         bool IsBound() const { return asset_ != nullptr && !boneNodes_.empty(); }
+        const Assets::FRigAsset* Asset() const { return asset_; }
 
+        // Update = Evaluate + Apply. Split them to run procedural steps (IK,
+        // aim offsets, see RigPoseOps.h) on the blended pose before it reaches
+        // the bone nodes.
         void Update(float deltaSeconds);
+        void Evaluate(float deltaSeconds);
+        FRigPose& MutablePose() { return workingPose_; }
+        const FRigPose& Pose() const { return workingPose_; }
+        void Apply();
 
     private:
         enum class EPlaybackMode

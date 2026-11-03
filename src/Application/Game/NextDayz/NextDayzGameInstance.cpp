@@ -224,7 +224,7 @@ void NextDayzGameInstance::OnInit()
     weapons_.Configure(config_.Weapon);
     loot_.Configure(config_.Loot);
     loot_.SetSeed(config_.Seed);
-    rig_.Configure(config_.Animation);
+    rig_.Configure(config_.Animation, config_.Weapon.TpsWeaponScale);
     actions_.Configure(config_.Action);
     survival_.Configure(config_.Survival);
 
@@ -357,6 +357,22 @@ void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
                                 survival_.SetNeeds(state.health, state.hunger, validationHydration_);
                             }
                         }, -1.0, 100.0);
+    cvars.RegisterFloat("nextdayz.validation.lookYaw", 0.0f, &validationLookYaw_, NextCVar::ECVarFlags::None,
+                        "Agent-only: set the camera yaw (degrees)",
+                        [this]() { player_.SetYaw(glm::radians(validationLookYaw_)); }, -360.0, 360.0);
+    cvars.RegisterBool("nextdayz.validation.thirdPerson", false, &validationThirdPerson_,
+                       NextCVar::ECVarFlags::None, "Agent-only: force third (true) or first (false) person",
+                       [this]() { player_.SetFirstPerson(!validationThirdPerson_); });
+    cvars.RegisterBool("nextdayz.debug.orbit", false, &debugOrbit_, NextCVar::ECVarFlags::None,
+                       "Orbit camera around the player rig instead of the gameplay camera");
+    cvars.RegisterFloat("nextdayz.debug.orbitYaw", debugOrbitYaw_, &debugOrbitYaw_, NextCVar::ECVarFlags::None,
+                        "Orbit camera angle in degrees from behind the body (+ toward its right)", nullptr,
+                        -360.0, 360.0);
+    cvars.RegisterFloat("nextdayz.debug.orbitDistance", debugOrbitDistance_, &debugOrbitDistance_,
+                        NextCVar::ECVarFlags::None, "Orbit camera distance (m)", nullptr, 0.5, 20.0);
+    cvars.RegisterFloat("nextdayz.debug.orbitHeight", debugOrbitHeight_, &debugOrbitHeight_,
+                        NextCVar::ECVarFlags::None, "Orbit camera look-at height above the feet (m)", nullptr, 0.0,
+                        3.0);
     cvars.RegisterBool("nextdayz.validation.restart", false, &validationRestart_, NextCVar::ECVarFlags::None,
                        "Agent-only in-process restart", [this, validationReady]()
                        {
@@ -565,12 +581,13 @@ void NextDayzGameInstance::OnTick(double deltaSeconds)
     const bool traversalLocked = player_.IsTraversing();
     const bool dead = !survival_.IsAlive();
     player_.SetMovementLocked(actionLocked || traversalLocked || showInventory_ || dead);
-    weapons_.SetPresentationSuppressed(actionLocked || traversalLocked || dead);
+    weapons_.SetPresentationSuppressed(actionLocked || traversalLocked || dead || debugOrbit_);
     if (actionLocked || traversalLocked || dead)
     {
         player_.SetAiming(false);
         weapons_.SetTriggerDown(false);
     }
+    player_.SetSprintBlocked(weapons_.TriggerDown() && weapons_.HasActiveWeapon());
     player_.Update(dt);
     survival_.Update(dt, player_.LocomotionState().gait == NextDayz::EPlayerGait::Sprint);
     weapons_.Update(dt, player_, inventory_, GetEngine());
@@ -685,11 +702,13 @@ void NextDayzGameInstance::OnTick(double deltaSeconds)
     }
     time_.Tick(deltaSeconds, GetEngine().GetScene());
 
-    rig_.SetVisible(!player_.IsFirstPerson());
+    rig_.SetVisible(!player_.IsFirstPerson() || debugOrbit_);
     NextDayz::FPlayerPresentationState presentation;
     presentation.locomotion = player_.LocomotionState();
     presentation.aimWeight = player_.IsAiming() ? 1.0f : 0.0f;
     presentation.aimPitchRadians = player_.Pitch();
+    presentation.aimYawRadians = player_.Yaw();
+    presentation.sprintAlpha = player_.SprintAlpha();
     presentation.hasWeapon = weapons_.HasActiveWeapon();
     presentation.weaponId = weapons_.ActiveWeaponId();
     presentation.weaponAction = weapons_.PresentationAction();
@@ -701,7 +720,7 @@ void NextDayzGameInstance::OnTick(double deltaSeconds)
     };
     presentation.action = actions_.Action();
     presentation.actionTime01 = actions_.NormalizedTime();
-    rig_.Update(player_.Position(), player_.Yaw(), presentation, dt);
+    rig_.Update(player_.Position(), presentation, dt);
 }
 
 bool NextDayzGameInstance::OverrideRenderCamera(Assets::Camera& outRenderCamera) const
@@ -712,6 +731,17 @@ bool NextDayzGameInstance::OverrideRenderCamera(Assets::Camera& outRenderCamera)
     }
     float fov = config_.Camera.BaseFov;
     player_.FillCamera(outRenderCamera.ModelView, fov);
+    if (debugOrbit_)
+    {
+        const float yaw = rig_.BodyYaw();
+        const glm::vec3 behind(-std::sin(yaw), 0.0f, -std::cos(yaw));
+        const glm::vec3 toEye =
+            glm::angleAxis(glm::radians(-debugOrbitYaw_), glm::vec3(0.0f, 1.0f, 0.0f)) * behind;
+        const glm::vec3 center = player_.Position() + glm::vec3(0.0f, debugOrbitHeight_, 0.0f);
+        const glm::vec3 eye = center + glm::normalize(toEye + glm::vec3(0.0f, 0.12f, 0.0f)) * debugOrbitDistance_;
+        outRenderCamera.ModelView = glm::lookAt(eye, center, glm::vec3(0.0f, 1.0f, 0.0f));
+        fov = config_.Camera.BaseFov;
+    }
     outRenderCamera.FieldOfView = fov;
     outRenderCamera.NearPlane = 0.1f;
     outRenderCamera.FarPlane = 1500.f;
@@ -1681,6 +1711,7 @@ bool NextDayzGameInstance::OnScroll(double /*xoffset*/, double yoffset)
 
 void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegistry& reg)
 {
+    reg.Add("sceneReady", [this]() -> Runtime::Agent::FAgentQueryValue { return sceneReady_; });
     reg.Add("ammoInMag", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<int64_t>(weapons_.AmmoInMag()); });
     reg.Add("ammoReserve",
             [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<int64_t>(weapons_.AmmoReserve(inventory_)); });
@@ -1813,12 +1844,29 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
             [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.CurrentBaseClipName(); });
     reg.Add("aimWeight",
             [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(rig_.AimWeight()); });
+    reg.Add("horizontalSpeed",
+            [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(player_.HorizontalSpeed()); });
+    reg.Add("sprintAlpha",
+            [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(player_.SprintAlpha()); });
+    reg.Add("weaponReady", [this]() -> Runtime::Agent::FAgentQueryValue { return player_.WeaponReady(); });
+    reg.Add("bodyYawLag", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(std::remainder(player_.Yaw() - rig_.BodyYaw(), glm::two_pi<float>()));
+    });
+    reg.Add("turningInPlace", [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.TurningInPlace(); });
+    reg.Add("leanRoll",
+            [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(rig_.LeanRollDegrees()); });
+    reg.Add("gripError",
+            [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(rig_.GripError()); });
     reg.Add("shotSequence", [this]() -> Runtime::Agent::FAgentQueryValue {
         return static_cast<int64_t>(weapons_.LastShotSequence());
     });
     reg.Add("recoilActive", [this]() -> Runtime::Agent::FAgentQueryValue {
         return player_.RecoilActive() || weapons_.ViewModelRecoilActive() || rig_.RecoilActive();
     });
+    reg.Add("recoilCamera", [this]() -> Runtime::Agent::FAgentQueryValue { return player_.RecoilActive(); });
+    reg.Add("recoilViewModel",
+            [this]() -> Runtime::Agent::FAgentQueryValue { return weapons_.ViewModelRecoilActive(); });
+    reg.Add("recoilRig", [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.RecoilActive(); });
     reg.Add("cameraRecoilPitch", [this]() -> Runtime::Agent::FAgentQueryValue {
         return static_cast<double>(player_.CameraRecoil().y);
     });

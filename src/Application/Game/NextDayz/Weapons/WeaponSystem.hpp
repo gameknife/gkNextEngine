@@ -60,6 +60,7 @@ namespace NextDayz
         void SwitchPrevious();
 
         void SetTriggerDown(bool down) { triggerDown_ = down; }
+        bool TriggerDown() const { return triggerDown_; }
         void SetPresentationSuppressed(bool suppressed) { presentationSuppressed_ = suppressed; }
         void RequestReload(Inventory& inventory);
 
@@ -96,6 +97,10 @@ namespace NextDayz
 
         void FireOneShot(PlayerController& player, NextEngine& engine);
         void RefreshViewModelVisibility();
+        // Camera-space offset (x right, y up, z forward) and local rotation
+        // (pitch, yaw, roll in radians) the view model carries this frame.
+        void UpdateViewModelMotion(const PlayerController& player, float deltaSeconds, glm::vec3& outOffset,
+                                   glm::vec3& outEuler);
 
         FWeaponFeelConfig config_{};
         std::array<FSlot, 2> slots_{};
@@ -128,6 +133,13 @@ namespace NextDayz
         glm::vec3 viewModelOffset_{0.16f, -0.19f, 0.55f};
         float viewModelRecoil_ = 0.0f;
         float viewModelRecoilVelocity_ = 0.0f;
+        glm::vec2 swayAngle_{0.0f};          // radians: x yaw (+left), y pitch (+muzzle down)
+        glm::vec2 swayVelocity_{0.0f};
+        glm::vec2 moveVelocity_{0.0f};       // smoothed camera-relative velocity
+        float landingOffset_ = 0.0f;
+        float landingVelocity_ = 0.0f;
+        float breathTime_ = 0.0f;
+        float aimAlpha_ = 0.0f;
 
         std::mt19937 rng_{0xD00Du};
     };

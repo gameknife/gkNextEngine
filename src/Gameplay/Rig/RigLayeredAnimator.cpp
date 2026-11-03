@@ -609,7 +609,31 @@ namespace NextGameplay
         }
     }
 
+    float FRigLayeredAnimator::NormalizedTime(FRigLayerHandle handle) const
+    {
+        const FLayer* layer = Layer(handle);
+        return layer && layer->hasCurrent ? layer->current.normalizedTime : 0.0f;
+    }
+
     void FRigLayeredAnimator::Update(float deltaSeconds)
+    {
+        if (!IsBound())
+        {
+            return;
+        }
+        Evaluate(deltaSeconds);
+        Apply();
+    }
+
+    void FRigLayeredAnimator::Apply()
+    {
+        if (IsBound())
+        {
+            ApplyPose();
+        }
+    }
+
+    void FRigLayeredAnimator::Evaluate(float deltaSeconds)
     {
         if (!IsBound())
         {
@@ -656,6 +680,5 @@ namespace NextGameplay
             const float effectiveWeight = layer.weight * EnvelopeWeight(layer.current);
             ApplyLayer(layer, *poseToApply, effectiveWeight);
         }
-        ApplyPose();
     }
 } // namespace NextGameplay

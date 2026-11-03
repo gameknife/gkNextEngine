@@ -5,6 +5,7 @@
   "defaults": { "waitFrames": 2, "stepTimeoutMs": 20000 },
   "steps": [
     { "type": "wait-until", "query": "engine.status", "op": "eq", "value": "Running", "timeoutMs": 20000 },
+    { "type": "wait-until", "query": "game.sceneReady", "op": "eq", "value": true, "timeoutMs": 30000 },
     { "type": "cvar", "name": "nextdayz.validation.loadout", "set": true },
     { "type": "cvar", "name": "nextdayz.validation.spawnZombie", "set": true },
     { "type": "wait-frames", "n": 2 },

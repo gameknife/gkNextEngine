@@ -30,6 +30,7 @@ set(unitTestSources
     Test_SimKit.cpp
     Test_ScadRig.cpp
     Test_RigAnimator.cpp
+    Test_RigPoseOps.cpp
     Test_RenderComponent.cpp
     Test_ImAnimIntegration.cpp
     Test_BrickPlayerSnapLogic.cpp

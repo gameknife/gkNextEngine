@@ -84,6 +84,8 @@ namespace NextDayz
         float actionTime01 = 0.0f;
         float aimWeight = 0.0f;
         float aimPitchRadians = 0.0f;
+        float aimYawRadians = 0.0f;   // camera yaw; the rig's lower body follows it with lag
+        float sprintAlpha = 0.0f;     // 0 = weapon up, 1 = sprint carry
         bool hasWeapon = false;
         std::string weaponId;
         EWeaponPresentationAction weaponAction = EWeaponPresentationAction::None;

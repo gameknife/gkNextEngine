@@ -16,6 +16,7 @@
 #include "Engine/Runtime/Components/RenderComponent.hpp"
 #include "Engine/Runtime/Scene/SceneBuilder.hpp"
 #include "Gameplay/Rig/RigInstance.h"
+#include "Gameplay/Rig/RigPoseOps.h"
 #include "Modules/ScadLoader/FScadRig.h"
 
 namespace NextDayz
@@ -23,6 +24,68 @@ namespace NextDayz
     namespace
     {
         constexpr float kParkedY = -1000.0f;
+        const glm::vec3 kAxisX(1.0f, 0.0f, 0.0f);
+        const glm::vec3 kAxisY(0.0f, 1.0f, 0.0f);
+        const glm::vec3 kAxisZ(0.0f, 0.0f, 1.0f);
+
+        // Elbow pole points in torso space (engine axes: +Z forward, -X right):
+        // firing elbow down and out, support elbow down under the handguard.
+        const glm::vec3 kPoleRight(-0.50f, 0.12f, -0.08f);
+        const glm::vec3 kPoleLeft(0.45f, 0.08f, 0.15f);
+
+        // Weapons that are not held like the rifle the rig's grips were built for.
+        struct FWeaponRigHold
+        {
+            glm::vec3 modelOffset{0.0f};   // weapon model under the socket
+            bool overrideSupport = false;
+            glm::vec3 supportWrist{0.0f};  // left wrist in bone_ik_weapon space
+            float extend = 0.0f;           // push the frame along the muzzle (m)
+        };
+
+        FWeaponRigHold HoldFor(std::string_view weaponId)
+        {
+            if (weaponId == "pistol")
+            {
+                // Grip into the palm, support hand cupping the firing hand, arms extended.
+                return {glm::vec3(0.0f, 0.10f, -0.065f), true, glm::vec3(0.07f, -0.03f, -0.02f), 0.12f};
+            }
+            return {};
+        }
+
+        float Approach(float current, float target, float seconds, float dt)
+        {
+            return seconds > 0.0f ? glm::mix(current, target, 1.0f - std::exp(-dt / seconds)) : target;
+        }
+
+        float WrapAngle(float radians)
+        {
+            return std::remainder(radians, glm::two_pi<float>());
+        }
+
+        // Weights for {idle, a, b, c} anchors along speed.
+        std::array<float, 4> SpeedWeights(float speed, float a, float b, float c)
+        {
+            if (speed <= 0.0f)
+            {
+                return {1.0f, 0.0f, 0.0f, 0.0f};
+            }
+            if (speed < a)
+            {
+                const float t = speed / a;
+                return {1.0f - t, t, 0.0f, 0.0f};
+            }
+            if (speed < b)
+            {
+                const float t = (speed - a) / (b - a);
+                return {0.0f, 1.0f - t, t, 0.0f};
+            }
+            if (speed < c)
+            {
+                const float t = (speed - b) / (c - b);
+                return {0.0f, 0.0f, 1.0f - t, t};
+            }
+            return {0.0f, 0.0f, 0.0f, 1.0f};
+        }
     }
 
     bool PlayerRigVisual::LoadRig(const std::string& scadPath)
@@ -38,7 +101,60 @@ namespace NextDayz
         {
             SPDLOG_WARN("[NextDayz] rig: {}", warning);
         }
+        if (hasRig_)
+        {
+            ResolveRig();
+        }
         return hasRig_;
+    }
+
+    void PlayerRigVisual::ResolveRig()
+    {
+        bones_.root = asset_.FindBone("bone_root");
+        bones_.pelvis = asset_.FindBone("bone_pelvis");
+        bones_.torso = asset_.FindBone("bone_torso");
+        bones_.head = asset_.FindBone("bone_head");
+        bones_.upperArmL = asset_.FindBone("bone_upperarm_l");
+        bones_.foreArmL = asset_.FindBone("bone_forearm_l");
+        bones_.handL = asset_.FindBone("bone_hand_l");
+        bones_.upperArmR = asset_.FindBone("bone_upperarm_r");
+        bones_.foreArmR = asset_.FindBone("bone_forearm_r");
+        bones_.handR = asset_.FindBone("bone_hand_r");
+        bones_.ikWeapon = asset_.FindBone("bone_ik_weapon");
+        bones_.ikHandL = asset_.FindBone("bone_ik_hand_l");
+        bones_.ikHandR = asset_.FindBone("bone_ik_hand_r");
+
+        clips_ = {};
+        const auto clip = [this](const std::string& name)
+        {
+            const Assets::FRigClip* found = asset_.FindClip(name);
+            if (!found)
+            {
+                SPDLOG_WARN("[NextDayz] rig is missing clip '{}'", name);
+            }
+            return found;
+        };
+        clips_.locomotion.push_back(clip("stand_idle"));
+        for (const char* gait : {"stand_walk", "stand_run", "stand_sprint"})
+        {
+            for (const char* direction : {"_f", "_b", "_l", "_r"})
+            {
+                clips_.locomotion.push_back(clip(fmt::format("{}{}", gait, direction)));
+            }
+        }
+        clips_.locomotion.push_back(clip("crouch_idle"));
+        for (const char* direction : {"_f", "_b", "_l", "_r"})
+        {
+            clips_.locomotion.push_back(clip(fmt::format("crouch_walk{}", direction)));
+        }
+        clips_.ready = clip("weapon_ready");
+        clips_.aim = clip("aim_rifle_center");
+        clips_.sprint = clip("weapon_sprint");
+        clips_.recoil = clip("recoil_rifle");
+        if (bones_.ikWeapon < 0 || bones_.ikHandL < 0 || bones_.ikHandR < 0)
+        {
+            SPDLOG_WARN("[NextDayz] rig has no bone_ik_* targets; arms follow the clips only");
+        }
     }
 
     void PlayerRigVisual::SetWeaponAssets(const std::array<uint32_t, kWeapons.size()>& modelIds,
@@ -152,7 +268,7 @@ namespace NextDayz
         }
         if (Assets::Node* torso = BoneNode("bone_torso"))
         {
-            backpackNode_ = Assets::SceneBuilder::CreateRenderNode("nd_player/backpack", glm::vec3(0.0f, 0.30f, -0.12f),
+            backpackNode_ = Assets::SceneBuilder::CreateRenderNode("nd_player/backpack", glm::vec3(0.0f, 0.28f, -0.12f),
                                                                    glm::vec3(1.0f), scene.GenerateInstanceId(),
                                                                    backpackModelId_, clothingMats, false);
             backpackNode_->SetParent(torso->shared_from_this());
@@ -164,7 +280,7 @@ namespace NextDayz
                 std::array<uint32_t, 16> weaponMats = {0};
                 weaponMats[0] = weaponMaterialIds_[0];
                 weaponNode_ = Assets::SceneBuilder::CreateRenderNode(
-                    "nd_player/weapon", glm::vec3(0.0f), glm::vec3(1.0f), scene.GenerateInstanceId(),
+                    "nd_player/weapon", glm::vec3(0.0f), glm::vec3(weaponScale_), scene.GenerateInstanceId(),
                     weaponModelIds_[0], weaponMats, true, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), false);
                 weaponNode_->SetParent(socket->shared_from_this());
                 scene.AddNode(weaponNode_);
@@ -184,7 +300,7 @@ namespace NextDayz
                     holsteredWeaponNodes_[slot] = Assets::SceneBuilder::CreateRenderNode(
                         fmt::format("nd_player/weapon_back_{}", slot),
                         glm::vec3(side * 0.11f, 0.24f, -0.22f - slot * 0.025f),
-                        glm::vec3(1.0f), scene.GenerateInstanceId(), weaponModelIds_[0],
+                        glm::vec3(weaponScale_), scene.GenerateInstanceId(), weaponModelIds_[0],
                         weaponMats, false, rotation, false);
                     holsteredWeaponNodes_[slot]->SetParent(torso->shared_from_this());
                     scene.AddNode(holsteredWeaponNodes_[slot]);
@@ -194,37 +310,57 @@ namespace NextDayz
 
         worldNode_->RecalcTransform(true);
         animator_.Bind(&asset_, boneNodes_, worldNode_.get());
-        locomotionLayer_ = animator_.CreateLayer("locomotion", NextGameplay::ERigLayerBlendMode::Override,
-                                                  NextGameplay::FRigBoneMask::FullBody(asset_));
+        using NextGameplay::ERigLayerBlendMode;
+        using NextGameplay::FRigBoneMask;
+        locomotionLayer_ =
+            animator_.CreateLayer("locomotion", ERigLayerBlendMode::Override, FRigBoneMask::FullBody(asset_));
 
-        NextGameplay::FRigBoneMask upperBody = NextGameplay::FRigBoneMask::FromSubtree(asset_, "bone_torso");
-        upperBody.SetBoneWeight(asset_, "bone_torso", 0.65f);
-        upperBody.SetBoneWeight(asset_, "bone_head", 0.25f);
-        aimLayer_ = animator_.CreateLayer("aim", NextGameplay::ERigLayerBlendMode::Override, upperBody);
-        weaponActionLayer_ =
-            animator_.CreateLayer("weapon_action", NextGameplay::ERigLayerBlendMode::Override, upperBody);
-
-        NextGameplay::FRigBoneMask recoilMask = upperBody;
-        recoilMask.SetBoneWeight(asset_, "bone_head", 0.0f);
-        recoilLayer_ = animator_.CreateLayer("recoil", NextGameplay::ERigLayerBlendMode::Additive, recoilMask);
-        actionLayer_ = animator_.CreateLayer("action", NextGameplay::ERigLayerBlendMode::Override,
-                                             NextGameplay::FRigBoneMask::FullBody(asset_));
-
-        animator_.SetLayerWeight(aimLayer_, 0.0f);
-        animator_.SetLayerWeight(weaponActionLayer_, 0.0f);
-        animator_.SetLayerWeight(recoilLayer_, 0.0f);
-        animator_.SetLayerWeight(actionLayer_, 0.0f);
-        if (const Assets::FRigClip* idle = asset_.FindClip("stand_idle"))
+        // Holds own the arms and the IK frames; their torso/head channels (the
+        // blade) are added on top of the gait so the walk keeps its swing.
+        FRigBoneMask armsMask = FRigBoneMask::FromSubtree(asset_, "bone_ik_weapon");
+        for (const char* bone : {"bone_upperarm_l", "bone_forearm_l", "bone_hand_l", "bone_upperarm_r",
+                                 "bone_forearm_r", "bone_hand_r", "bone_weapon_socket"})
         {
-            animator_.SetLoopBlend(locomotionLayer_, {{idle, 1.0f}}, "locomotion", 1.0f, 0.0f);
-            baseClipName_ = idle->name;
+            armsMask.SetBoneWeight(asset_, bone, 1.0f);
+        }
+        FRigBoneMask bodyMask = FRigBoneMask::FromSubtree(asset_, "bone_head");
+        bodyMask.SetBoneWeight(asset_, "bone_torso", 1.0f);
+
+        holdLayer_ = animator_.CreateLayer("hold", ERigLayerBlendMode::Override, armsMask);
+        holdBodyLayer_ = animator_.CreateLayer("hold_body", ERigLayerBlendMode::Additive, bodyMask);
+        weaponActionLayer_ = animator_.CreateLayer("weapon_action", ERigLayerBlendMode::Override, armsMask);
+        weaponActionBodyLayer_ = animator_.CreateLayer("weapon_action_body", ERigLayerBlendMode::Additive, bodyMask);
+
+        FRigBoneMask recoilMask = FRigBoneMask::FromSubtree(asset_, "bone_torso");
+        recoilMask.SetBoneWeight(asset_, "bone_head", 0.0f);
+        recoilLayer_ = animator_.CreateLayer("recoil", ERigLayerBlendMode::Additive, recoilMask);
+        actionLayer_ = animator_.CreateLayer("action", ERigLayerBlendMode::Override, FRigBoneMask::FullBody(asset_));
+
+        for (const NextGameplay::FRigLayerHandle layer :
+             {holdLayer_, holdBodyLayer_, weaponActionLayer_, weaponActionBodyLayer_, recoilLayer_, actionLayer_})
+        {
+            animator_.SetLayerWeight(layer, 0.0f);
+        }
+        if (clips_.locomotion.front())
+        {
+            animator_.SetLoopBlend(locomotionLayer_, {{clips_.locomotion.front(), 1.0f}}, "locomotion", 1.0f, 0.0f);
+            baseClipName_ = clips_.locomotion.front()->name;
         }
         animator_.Update(0.0f);
         bound_ = true;
+        yawInitialized_ = false;
         aimWeight_ = 0.0f;
+        sprintHoldWeight_ = 0.0f;
+        holdWeight_ = 0.0f;
+        weaponWeight_ = 0.0f;
+        freeHandWeight_ = 0.0f;
         weaponActionWeight_ = 0.0f;
         weaponActionClipName_.clear();
         actionWeight_ = 0.0f;
+        movingWeight_ = 0.0f;
+        lean_ = glm::vec2(0.0f);
+        leanVelocity_ = glm::vec2(0.0f);
+        turnSway_ = 0.0f;
         recoilActive_ = false;
         scene.MarkDirty();
     }
@@ -235,8 +371,10 @@ namespace NextDayz
         // the incoming scene rebuild and must survive (the AirportSim lesson).
         animator_ = NextGameplay::FRigLayeredAnimator{};
         locomotionLayer_ = NextGameplay::invalidRigLayerHandle;
-        aimLayer_ = NextGameplay::invalidRigLayerHandle;
+        holdLayer_ = NextGameplay::invalidRigLayerHandle;
+        holdBodyLayer_ = NextGameplay::invalidRigLayerHandle;
         weaponActionLayer_ = NextGameplay::invalidRigLayerHandle;
+        weaponActionBodyLayer_ = NextGameplay::invalidRigLayerHandle;
         recoilLayer_ = NextGameplay::invalidRigLayerHandle;
         actionLayer_ = NextGameplay::invalidRigLayerHandle;
         bound_ = false;
@@ -253,6 +391,7 @@ namespace NextDayz
         weaponVisible_ = false;
         holsteredWeaponVisible_ = {{false, false}};
         boneNodes_.clear();
+        transforms_.clear();
         aimWeight_ = 0.0f;
         weaponActionWeight_ = 0.0f;
         actionWeight_ = 0.0f;
@@ -296,8 +435,7 @@ namespace NextDayz
             return;
         }
         animator_.SetLayerWeight(recoilLayer_, glm::clamp(scale, 0.0f, 1.0f));
-        animator_.PlayOneShot(recoilLayer_, asset_.FindClip("recoil_rifle"), 1.0f, 0.0f,
-                              animationConfig_.RecoilFadeOutSeconds, true);
+        animator_.PlayOneShot(recoilLayer_, clips_.recoil, 1.0f, 0.0f, animationConfig_.RecoilFadeOutSeconds, true);
         recoilActive_ = true;
     }
 
@@ -306,85 +444,242 @@ namespace NextDayz
         return recoilActive_;
     }
 
-    void PlayerRigVisual::Update(const glm::vec3& feetPosition, float yaw, const FPlayerPresentationState& state,
-                                 float deltaSeconds)
+    void PlayerRigVisual::UpdateLocomotion(const FPlayerPresentationState& state, float dt)
     {
-        if (!bound_ || !worldNode_)
+        const FPlayerLocomotionState& locomotion = state.locomotion;
+        const FAnimationConfig& anim = animationConfig_;
+
+        if (locomotion.traversalAction != EPlayerTraversalAction::None)
+        {
+            const char* name = locomotion.traversalAction == EPlayerTraversalAction::Vault ? "vault" : "climb_up";
+            animator_.SetManualBlend(locomotionLayer_, {{asset_.FindClip(name), 1.0f}}, locomotion.traversalTime01,
+                                     anim.JumpFadeSeconds);
+            baseClipName_ = name;
+            return;
+        }
+        if (locomotion.jumpPhase == EPlayerJumpPhase::Up || locomotion.jumpPhase == EPlayerJumpPhase::Down)
+        {
+            const char* name = locomotion.jumpPhase == EPlayerJumpPhase::Up ? "jump_up" : "jump_down";
+            animator_.SetManualBlend(locomotionLayer_, {{asset_.FindClip(name), 1.0f}}, locomotion.jumpPhaseTime01,
+                                     anim.JumpFadeSeconds);
+            baseClipName_ = name;
+            return;
+        }
+        if (locomotion.jumpPhase == EPlayerJumpPhase::AirLoop)
+        {
+            animator_.SetLoopBlend(locomotionLayer_, {{asset_.FindClip("jump_air_loop"), 1.0f}}, "jump_air", 1.0f,
+                                   anim.JumpFadeSeconds);
+            baseClipName_ = "jump_air_loop";
+            return;
+        }
+
+        // Blend space. Velocity is measured, so walls, acceleration and stops
+        // all show up in the legs; it is read in the body frame because the
+        // lower body is what the clips move.
+        const glm::vec3 bodyForward(std::sin(bodyYaw_), 0.0f, std::cos(bodyYaw_));
+        const glm::vec3 bodyRight(-std::cos(bodyYaw_), 0.0f, std::sin(bodyYaw_));
+        const glm::vec2 local(glm::dot(locomotion.worldVelocity, bodyRight),
+                              glm::dot(locomotion.worldVelocity, bodyForward));
+        float speed = glm::length(local);
+        if (speed < anim.MoveThreshold)
+        {
+            speed = 0.0f;
+        }
+        else
+        {
+            const glm::vec2 target = local / glm::length(local);
+            const glm::vec2 blended = glm::mix(moveDirection_, target,
+                                               1.0f - std::exp(-dt / std::max(anim.DirectionSmoothingSeconds, 1e-3f)));
+            moveDirection_ = glm::length(blended) > 1.0e-3f ? glm::normalize(blended) : target;
+        }
+
+        const float right = std::max(moveDirection_.x, 0.0f);
+        const float left = std::max(-moveDirection_.x, 0.0f);
+        const float forward = std::max(moveDirection_.y, 0.0f);
+        const float backward = std::max(-moveDirection_.y, 0.0f);
+        const float directionSum = std::max(right + left + forward + backward, 1.0e-3f);
+        const std::array<float, 4> direction = {forward / directionSum, backward / directionSum, left / directionSum,
+                                                right / directionSum};
+
+        const std::array<float, 4> stand = SpeedWeights(speed, anim.StandWalkAuthoredSpeed,
+                                                        anim.StandRunAuthoredSpeed, anim.StandSprintAuthoredSpeed);
+        const std::array<float, 4> crouch = SpeedWeights(speed, anim.CrouchWalkAuthoredSpeed,
+                                                         anim.CrouchWalkAuthoredSpeed * 2.0f,
+                                                         anim.CrouchWalkAuthoredSpeed * 3.0f);
+        const float standing = 1.0f - crouchWeight_;
+
+        std::vector<NextGameplay::FRigClipBlendSample> samples;
+        samples.reserve(clips_.locomotion.size());
+        const auto clipAt = [this](size_t index)
+        {
+            return index < clips_.locomotion.size() ? clips_.locomotion[index] : nullptr;
+        };
+        samples.push_back({clipAt(0), standing * stand[0]});
+        float cadence = 0.0f;
+        float cadenceWeight = 0.0f;
+        for (size_t gait = 0; gait < 3; ++gait)
+        {
+            const float gaitWeight = standing * stand[gait + 1];
+            for (size_t dir = 0; dir < 4; ++dir)
+            {
+                samples.push_back({clipAt(1 + gait * 4 + dir), gaitWeight * direction[dir]});
+            }
+            if (const Assets::FRigClip* clip = clipAt(1 + gait * 4); clip && clip->duration > 0.0f && gaitWeight > 0.0f)
+            {
+                cadence += gaitWeight / clip->duration;
+                cadenceWeight += gaitWeight;
+            }
+        }
+        samples.push_back({clipAt(13), crouchWeight_ * crouch[0]});
+        const float crouchWalk = crouchWeight_ * (1.0f - crouch[0]);
+        for (size_t dir = 0; dir < 4; ++dir)
+        {
+            samples.push_back({clipAt(14 + dir), crouchWalk * direction[dir]});
+        }
+        if (const Assets::FRigClip* clip = clipAt(14); clip && clip->duration > 0.0f && crouchWalk > 0.0f)
+        {
+            cadence += crouchWalk / clip->duration;
+            cadenceWeight += crouchWalk;
+        }
+
+        // Past the last anchor the clips are sped up, not stretched.
+        float overspeed = 1.0f;
+        if (crouchWeight_ < 0.5f && speed > anim.StandSprintAuthoredSpeed)
+        {
+            overspeed = speed / anim.StandSprintAuthoredSpeed;
+        }
+        else if (crouchWeight_ >= 0.5f && speed > anim.CrouchWalkAuthoredSpeed)
+        {
+            overspeed = speed / anim.CrouchWalkAuthoredSpeed;
+        }
+        overspeed = glm::clamp(overspeed, anim.MinPlayRate, anim.MaxPlayRate);
+
+        // The animator advances phase by the dominant clip's duration; convert
+        // the blended cadence (cycles/s) into its play rate.
+        const NextGameplay::FRigClipBlendSample* dominant = nullptr;
+        for (const NextGameplay::FRigClipBlendSample& sample : samples)
+        {
+            if (sample.clip && (!dominant || sample.weight > dominant->weight))
+            {
+                dominant = &sample;
+            }
+        }
+        float playRate = 1.0f;
+        if (dominant && dominant->clip->duration > 0.0f && cadenceWeight > 1.0e-3f)
+        {
+            playRate = cadence / cadenceWeight * overspeed * dominant->clip->duration;
+        }
+        movingWeight_ = Approach(movingWeight_, glm::clamp(speed / anim.StandRunAuthoredSpeed, 0.0f, 1.0f), 0.1f, dt);
+
+        animator_.SetLoopBlend(locomotionLayer_, std::move(samples), "locomotion", playRate,
+                               anim.LocomotionFadeSeconds);
+        if (const Assets::FRigClip* clip = animator_.DominantClip(locomotionLayer_))
+        {
+            baseClipName_ = clip->name;
+        }
+    }
+
+    void PlayerRigVisual::UpdateProcedural(const FPlayerPresentationState& state, float dt)
+    {
+        using namespace NextGameplay;
+        const FAnimationConfig& anim = animationConfig_;
+        FRigPose& pose = animator_.MutablePose();
+        ComputeRigComponentTransforms(asset_, pose, transforms_);
+        const auto valid = [this](int32_t bone) { return bone >= 0 && bone < static_cast<int32_t>(transforms_.size()); };
+
+        // Whole-body lean, pivoting at the feet.
+        if (valid(bones_.root) && (lean_.x != 0.0f || lean_.y != 0.0f))
+        {
+            RotateRigBoneInComponentSpace(asset_, pose, transforms_, bones_.root,
+                                          glm::angleAxis(glm::radians(lean_.x), kAxisZ) *
+                                              glm::angleAxis(glm::radians(lean_.y), kAxisX));
+        }
+
+        // Aim offsets: torso and head take a share of the camera pitch and of
+        // the twist between camera and lower body.
+        const float busy = std::max(actionWeight_, state.locomotion.traversalAction != EPlayerTraversalAction::None
+                                                       ? 1.0f
+                                                       : 0.0f);
+        const float pitchLimit = glm::radians(std::max(anim.AimPitchLimitDegrees, 1.0f));
+        const float pitch = glm::clamp(state.aimPitchRadians, -pitchLimit, pitchLimit) * (1.0f - busy) *
+                            (1.0f - 0.5f * sprintHoldWeight_);
+        const float twist = WrapAngle(state.aimYawRadians - bodyYaw_);
+        const auto offset = [](float yaw, float pitchAmount)
+        {
+            return glm::angleAxis(yaw, kAxisY) * glm::angleAxis(pitchAmount, kAxisX);
+        };
+        if (valid(bones_.torso))
+        {
+            RotateRigBoneInComponentSpace(asset_, pose, transforms_, bones_.torso,
+                                          offset(twist * anim.TwistTorsoShare, pitch * anim.AimPitchTorsoShare));
+        }
+        if (valid(bones_.head))
+        {
+            RotateRigBoneInComponentSpace(asset_, pose, transforms_, bones_.head,
+                                          offset(twist * anim.TwistHeadShare, pitch * anim.AimPitchHeadShare));
+        }
+
+        gripError_ = 0.0f;
+        if (weaponWeight_ <= 1.0e-3f || !valid(bones_.ikWeapon) || !valid(bones_.ikHandR) || !valid(bones_.ikHandL))
         {
             return;
         }
 
-        const glm::vec3 pos = visible_ ? feetPosition : glm::vec3(feetPosition.x, kParkedY, feetPosition.z);
-        worldNode_->Translation() = pos;
-        worldNode_->Rotation() = glm::angleAxis(yaw, glm::vec3(0.0f, 1.0f, 0.0f));
-        worldNode_->RecalcTransform(true);
+        // The weapon takes the rest of the aim about the firing shoulder, so
+        // the muzzle lands on the crosshair however the body is turned.
+        const FWeaponRigHold hold = HoldFor(state.weaponId);
+        const float carry = 1.0f - sprintHoldWeight_;
+        const float aimAmount = holdWeight_ * (1.0f - busy);
+        const glm::quat aim = glm::angleAxis((twist * (1.0f - anim.TwistTorsoShare) - turnSway_) * aimAmount, kAxisY) *
+                              glm::angleAxis(pitch * (1.0f - anim.AimPitchTorsoShare) * carry * aimAmount, kAxisX);
+        const glm::vec3 pivot = RigBonePosition(transforms_, bones_.upperArmR);
+        glm::vec3 weaponPosition = pivot + aim * (RigBonePosition(transforms_, bones_.ikWeapon) - pivot);
+        glm::quat weaponRotation = aim * RigBoneRotation(transforms_, bones_.ikWeapon);
 
-        const float aimTarget =
-            state.hasWeapon && state.action == EPlayerAction::None &&
-                    state.locomotion.traversalAction == EPlayerTraversalAction::None &&
-                    state.weaponAction == EWeaponPresentationAction::None
-                ? glm::clamp(state.aimWeight, 0.0f, 1.0f)
-                : 0.0f;
-        const float aimRate = animationConfig_.AimFadeSeconds > 0.0f ? 4.0f / animationConfig_.AimFadeSeconds : 1000.0f;
-        const float aimT = 1.0f - std::exp(-aimRate * std::max(deltaSeconds, 0.0f));
-        aimWeight_ = glm::mix(aimWeight_, aimTarget, aimT);
-        const float readyPoseWeight =
-            state.hasWeapon && state.action == EPlayerAction::None &&
-                    state.locomotion.traversalAction == EPlayerTraversalAction::None
-                ? glm::mix(glm::clamp(animationConfig_.WeaponReadyPoseWeight, 0.0f, 1.0f), 1.0f, aimWeight_)
-                : 0.0f;
-        animator_.SetLayerWeight(aimLayer_, readyPoseWeight);
-        const float pitchLimit = glm::radians(std::max(animationConfig_.AimPitchLimitDegrees, 1.0f));
-        const float pitch = glm::clamp(state.aimPitchRadians / pitchLimit, -1.0f, 1.0f);
-        const float downWeight = std::max(pitch, 0.0f);
-        const float upWeight = std::max(-pitch, 0.0f);
-        animator_.SetStaticBlend(
-            aimLayer_,
-            {
-                {asset_.FindClip("weapon_ready"), 1.0f - aimWeight_},
-                {asset_.FindClip("aim_rifle_down"), aimWeight_ * downWeight},
-                {asset_.FindClip("aim_rifle_center"), aimWeight_ * (1.0f - std::abs(pitch))},
-                {asset_.FindClip("aim_rifle_up"), aimWeight_ * upWeight},
-            });
-
-        const float weaponActionTarget =
-            state.action == EPlayerAction::None &&
-                    state.locomotion.traversalAction == EPlayerTraversalAction::None &&
-                    state.weaponAction != EWeaponPresentationAction::None
-                ? 1.0f
-                : 0.0f;
-        weaponActionWeight_ = glm::mix(weaponActionWeight_, weaponActionTarget, aimT);
-        animator_.SetLayerWeight(weaponActionLayer_, weaponActionWeight_);
-        if (state.weaponAction != EWeaponPresentationAction::None)
+        // Gait bob on top of the torso's own motion: a dip per step and a sway
+        // per stride; at a sprint the arms pump the carried rifle instead.
+        const float phase = animator_.NormalizedTime(locomotionLayer_);
+        const float stepDip = 0.5f - 0.5f * std::cos(2.0f * glm::two_pi<float>() * phase);
+        const float strideSway = std::sin(glm::two_pi<float>() * phase);
+        const float bob = movingWeight_ * holdWeight_;
+        weaponPosition += glm::vec3(-anim.WeaponBobSide * strideSway * carry * bob,
+                                    -anim.WeaponBobHeight * stepDip * carry * bob +
+                                        anim.SprintPumpHeight * std::sin(2.0f * glm::two_pi<float>() * phase) *
+                                            sprintHoldWeight_ * bob,
+                                    0.0f);
+        weaponRotation = weaponRotation * glm::angleAxis(glm::radians(anim.SprintPumpRollDegrees) * strideSway *
+                                                             sprintHoldWeight_ * bob,
+                                                         kAxisZ);
+        weaponPosition += weaponRotation * glm::vec3(0.0f, 0.0f, hold.extend * aimWeight_);
+        SetRigBoneComponentRotation(asset_, pose, transforms_, bones_.ikWeapon, weaponRotation);
+        SetRigBoneComponentPosition(asset_, pose, transforms_, bones_.ikWeapon, weaponPosition);
+        if (hold.overrideSupport)
         {
-            const char* clipName = state.weaponAction == EWeaponPresentationAction::Reload
-                                       ? "reload_rifle"
-                                       : "switch_weapon";
-            weaponActionClipName_ = clipName;
-            animator_.SetManualBlend(
-                weaponActionLayer_, {{asset_.FindClip(clipName), 1.0f}},
-                glm::clamp(state.weaponActionTime01, 0.0f, 1.0f));
-            animator_.SetLayerWeight(recoilLayer_, 0.0f);
-            recoilActive_ = false;
-        }
-        else if (weaponActionWeight_ < 0.001f)
-        {
-            weaponActionClipName_.clear();
+            SetRigBoneComponentPosition(asset_, pose, transforms_, bones_.ikHandL,
+                                        glm::vec3(transforms_[bones_.ikWeapon] * glm::vec4(hold.supportWrist, 1.0f)));
         }
 
-        const float actionTarget = state.action == EPlayerAction::LootGround ? 1.0f : 0.0f;
-        const float actionRate =
-            animationConfig_.LocomotionFadeSeconds > 0.0f ? 4.0f / animationConfig_.LocomotionFadeSeconds : 1000.0f;
-        const float actionT = 1.0f - std::exp(-actionRate * std::max(deltaSeconds, 0.0f));
-        actionWeight_ = glm::mix(actionWeight_, actionTarget, actionT);
-        animator_.SetLayerWeight(actionLayer_, actionWeight_);
-        if (state.action == EPlayerAction::LootGround)
-        {
-            animator_.SetManualBlend(actionLayer_, {{asset_.FindClip("loot_ground"), 1.0f}}, state.actionTime01);
-            animator_.SetLayerWeight(recoilLayer_, 0.0f);
-            recoilActive_ = false;
-        }
+        // Both hands onto the weapon frame. The socket's bind is the inverse
+        // of the right grip, so a solved right hand carries the weapon exactly.
+        const glm::mat4 torso = valid(bones_.torso) ? transforms_[bones_.torso] : glm::mat4(1.0f);
+        const glm::vec3 gripR = RigBonePosition(transforms_, bones_.ikHandR);
+        const glm::quat gripRotationR = RigBoneRotation(transforms_, bones_.ikHandR);
+        const glm::vec3 gripL = RigBonePosition(transforms_, bones_.ikHandL);
+        const glm::quat gripRotationL = RigBoneRotation(transforms_, bones_.ikHandL);
 
+        SolveRigTwoBoneIK(asset_, pose, transforms_, bones_.upperArmR, bones_.foreArmR, bones_.handR, gripR,
+                          glm::vec3(torso * glm::vec4(kPoleRight, 1.0f)), weaponWeight_);
+        SetRigBoneComponentRotation(asset_, pose, transforms_, bones_.handR, gripRotationR, weaponWeight_);
+        gripError_ = glm::length(RigBonePosition(transforms_, bones_.handR) - gripR);
+
+        const float support = weaponWeight_ * (1.0f - freeHandWeight_);
+        SolveRigTwoBoneIK(asset_, pose, transforms_, bones_.upperArmL, bones_.foreArmL, bones_.handL, gripL,
+                          glm::vec3(torso * glm::vec4(kPoleLeft, 1.0f)), support);
+        SetRigBoneComponentRotation(asset_, pose, transforms_, bones_.handL, gripRotationL, support);
+    }
+
+    void PlayerRigVisual::UpdateAttachments(const FPlayerPresentationState& state)
+    {
         if (weaponNode_)
         {
             const int weaponIndex = WeaponIndex(state.weaponId);
@@ -398,6 +693,7 @@ namespace NextDayz
                     materials[0] = weaponMaterialIds_[weaponIndex];
                     render->SetMaterials(materials);
                 }
+                weaponNode_->Translation() = HoldFor(state.weaponId).modelOffset;
                 if (scene_)
                 {
                     scene_->MarkDirty();
@@ -441,8 +737,7 @@ namespace NextDayz
                     scene_->MarkDirty();
                 }
             }
-            const bool showHolstered =
-                visible_ && weaponIndex >= 0 && slot != state.activeWeaponSlot;
+            const bool showHolstered = visible_ && weaponIndex >= 0 && slot != state.activeWeaponSlot;
             if (showHolstered != holsteredWeaponVisible_[slot])
             {
                 holsteredWeaponVisible_[slot] = showHolstered;
@@ -456,97 +751,144 @@ namespace NextDayz
                 }
             }
         }
+    }
 
+    void PlayerRigVisual::Update(const glm::vec3& feetPosition, const FPlayerPresentationState& state,
+                                 float deltaSeconds)
+    {
+        if (!bound_ || !worldNode_)
+        {
+            return;
+        }
+        const float dt = std::max(deltaSeconds, 0.0f);
+        const FAnimationConfig& anim = animationConfig_;
         const FPlayerLocomotionState& locomotion = state.locomotion;
-        const bool moving = locomotion.horizontalSpeed >= animationConfig_.MoveThreshold &&
-                            glm::dot(locomotion.localMove, locomotion.localMove) > 0.001f;
+        const bool traversing = locomotion.traversalAction != EPlayerTraversalAction::None;
+        const bool looting = state.action == EPlayerAction::LootGround;
 
-        if (locomotion.traversalAction != EPlayerTraversalAction::None)
+        // Lower body follows the camera: quickly while moving, by a
+        // turn-in-place step once the upper body has twisted too far.
+        if (!yawInitialized_)
         {
-            const char* traversalClipName =
-                locomotion.traversalAction == EPlayerTraversalAction::Vault
-                    ? "vault"
-                    : "climb_up";
-            animator_.SetManualBlend(
-                locomotionLayer_, {{asset_.FindClip(traversalClipName), 1.0f}},
-                locomotion.traversalTime01, animationConfig_.JumpFadeSeconds);
-            baseClipName_ = traversalClipName;
+            bodyYaw_ = state.aimYawRadians;
+            previousAimYaw_ = state.aimYawRadians;
+            yawInitialized_ = true;
         }
-        else if (locomotion.jumpPhase == EPlayerJumpPhase::Up ||
-            locomotion.jumpPhase == EPlayerJumpPhase::Down)
+        const float yawDiff = WrapAngle(state.aimYawRadians - bodyYaw_);
+        const bool moving = locomotion.horizontalSpeed > anim.MoveThreshold;
+        if (moving || traversing || looting || !locomotion.onGround)
         {
-            const char* jumpClipName =
-                locomotion.jumpPhase == EPlayerJumpPhase::Up ? "jump_up" : "jump_down";
-            animator_.SetManualBlend(
-                locomotionLayer_, {{asset_.FindClip(jumpClipName), 1.0f}},
-                locomotion.jumpPhaseTime01, animationConfig_.JumpFadeSeconds);
-            baseClipName_ = jumpClipName;
-        }
-        else if (locomotion.jumpPhase == EPlayerJumpPhase::AirLoop)
-        {
-            animator_.SetLoopBlend(
-                locomotionLayer_, {{asset_.FindClip("jump_air_loop"), 1.0f}},
-                "jump_air", 1.0f, animationConfig_.JumpFadeSeconds);
-            baseClipName_ = "jump_air_loop";
+            bodyYaw_ += yawDiff * (1.0f - std::exp(-dt / std::max(anim.BodyYawFollowSeconds, 1.0e-3f)));
+            turningInPlace_ = false;
         }
         else
         {
-            std::vector<NextGameplay::FRigClipBlendSample> samples;
-            float authoredSpeed = 1.0f;
-            if (!moving)
+            if (std::abs(yawDiff) > glm::radians(anim.TurnInPlaceThresholdDegrees))
             {
-                const char* idleName =
-                    locomotion.actualStance == EPlayerStance::Crouched ? "crouch_idle" : "stand_idle";
-                samples.push_back({asset_.FindClip(idleName), 1.0f});
+                turningInPlace_ = true;
             }
-            else
+            if (turningInPlace_)
             {
-                const char* prefix = "stand_run";
-                if (locomotion.actualStance == EPlayerStance::Crouched)
-                {
-                    prefix = "crouch_walk";
-                    authoredSpeed = animationConfig_.CrouchWalkAuthoredSpeed;
-                }
-                else if (locomotion.gait == EPlayerGait::Walk)
-                {
-                    prefix = "stand_walk";
-                    authoredSpeed = animationConfig_.StandWalkAuthoredSpeed;
-                }
-                else if (locomotion.gait == EPlayerGait::Sprint)
-                {
-                    prefix = "stand_sprint";
-                    authoredSpeed = animationConfig_.StandSprintAuthoredSpeed;
-                }
-                else
-                {
-                    authoredSpeed = animationConfig_.StandRunAuthoredSpeed;
-                }
-
-                const float right = std::max(locomotion.localMove.x, 0.0f);
-                const float left = std::max(-locomotion.localMove.x, 0.0f);
-                const float forward = std::max(locomotion.localMove.y, 0.0f);
-                const float backward = std::max(-locomotion.localMove.y, 0.0f);
-                const float sum = std::max(right + left + forward + backward, 0.001f);
-                samples = {
-                    {asset_.FindClip(fmt::format("{}_f", prefix)), forward / sum},
-                    {asset_.FindClip(fmt::format("{}_b", prefix)), backward / sum},
-                    {asset_.FindClip(fmt::format("{}_l", prefix)), left / sum},
-                    {asset_.FindClip(fmt::format("{}_r", prefix)), right / sum},
-                };
-            }
-
-            const float playRate = moving
-                                       ? glm::clamp(locomotion.horizontalSpeed / std::max(authoredSpeed, 0.01f),
-                                                    animationConfig_.MinPlayRate, animationConfig_.MaxPlayRate)
-                                       : 1.0f;
-            animator_.SetLoopBlend(locomotionLayer_, std::move(samples), "locomotion", playRate,
-                                   animationConfig_.LocomotionFadeSeconds);
-            if (const Assets::FRigClip* clip = animator_.DominantClip(locomotionLayer_))
-            {
-                baseClipName_ = clip->name;
+                const float step = glm::radians(anim.TurnInPlaceRateDegrees) * dt;
+                bodyYaw_ += glm::clamp(yawDiff, -step, step);
+                turningInPlace_ = std::abs(WrapAngle(state.aimYawRadians - bodyYaw_)) > glm::radians(4.0f);
             }
         }
-        animator_.Update(deltaSeconds);
+        bodyYaw_ = WrapAngle(bodyYaw_);
+
+        const float yawRate = dt > 0.0f ? WrapAngle(state.aimYawRadians - previousAimYaw_) / dt : 0.0f;
+        previousAimYaw_ = state.aimYawRadians;
+        const float swayLimit = glm::radians(anim.TurnSwayMaxDegrees);
+        turnSway_ = Approach(turnSway_,
+                             glm::clamp(yawRate * glm::radians(anim.TurnSwayDegreesPerRadPerSecond), -swayLimit,
+                                        swayLimit) *
+                                 (1.0f - 0.7f * aimWeight_),
+                             0.08f, dt);
+
+        // Lean into acceleration on a damped spring: bank into turns, rock back
+        // on a hard stop, settle with a little overshoot.
+        const glm::vec3 velocity(locomotion.worldVelocity.x, 0.0f, locomotion.worldVelocity.z);
+        const glm::vec3 acceleration = dt > 0.0f ? (velocity - previousVelocity_) / dt : glm::vec3(0.0f);
+        previousVelocity_ = velocity;
+        const glm::vec3 bodyForward(std::sin(bodyYaw_), 0.0f, std::cos(bodyYaw_));
+        const glm::vec3 bodyRight(-std::cos(bodyYaw_), 0.0f, std::sin(bodyYaw_));
+        glm::vec2 leanTarget(0.0f);
+        if (locomotion.onGround && !traversing && !looting)
+        {
+            const float scale = 1.0f - 0.5f * aimWeight_;
+            leanTarget.x = glm::clamp(glm::dot(acceleration, bodyRight) * anim.LeanRollPerMps2, -anim.LeanMaxRollDegrees,
+                                      anim.LeanMaxRollDegrees) * scale;
+            leanTarget.y = glm::clamp(glm::dot(acceleration, bodyForward) * anim.LeanPitchPerMps2,
+                                      -anim.LeanMaxPitchDegrees, anim.LeanMaxPitchDegrees) * scale;
+        }
+        const float springDt = std::min(dt, 0.05f);
+        leanVelocity_ += (anim.LeanSpring * (leanTarget - lean_) - anim.LeanDamping * leanVelocity_) * springDt;
+        lean_ += leanVelocity_ * springDt;
+
+        const glm::vec3 pos = visible_ ? feetPosition : glm::vec3(feetPosition.x, kParkedY, feetPosition.z);
+        worldNode_->Translation() = pos;
+        worldNode_->Rotation() = glm::angleAxis(bodyYaw_, kAxisY);
+        worldNode_->RecalcTransform(true);
+
+        // Layer weights.
+        crouchWeight_ = Approach(crouchWeight_, locomotion.actualStance == EPlayerStance::Crouched ? 1.0f : 0.0f,
+                                 anim.StanceBlendSeconds * 0.5f, dt);
+        const bool holding = state.hasWeapon && !looting && !traversing;
+        weaponWeight_ = Approach(weaponWeight_, state.hasWeapon ? 1.0f : 0.0f, 0.06f, dt);
+        holdWeight_ = Approach(holdWeight_, holding ? 1.0f : 0.0f, anim.HoldFadeSeconds * 0.5f, dt);
+        freeHandWeight_ = Approach(freeHandWeight_, looting || traversing ? 1.0f : 0.0f, 0.05f, dt);
+        const bool weaponActionActive = holding && state.weaponAction != EWeaponPresentationAction::None;
+        aimWeight_ = Approach(aimWeight_, holding && !weaponActionActive ? glm::clamp(state.aimWeight, 0.0f, 1.0f) : 0.0f,
+                              anim.AimFadeSeconds * 0.5f, dt);
+        sprintHoldWeight_ = Approach(sprintHoldWeight_, glm::clamp(state.sprintAlpha, 0.0f, 1.0f),
+                                     anim.SprintHoldFadeSeconds * 0.3f, dt) ;
+        weaponActionWeight_ = Approach(weaponActionWeight_, weaponActionActive ? 1.0f : 0.0f,
+                                       anim.HoldFadeSeconds * 0.5f, dt);
+        actionWeight_ = Approach(actionWeight_, looting ? 1.0f : 0.0f, anim.LocomotionFadeSeconds * 0.5f, dt);
+
+        const float sprint = sprintHoldWeight_ * (1.0f - aimWeight_);
+        std::vector<NextGameplay::FRigClipBlendSample> holdSamples = {
+            {clips_.ready, std::max(0.0f, 1.0f - aimWeight_ - sprint)},
+            {clips_.aim, aimWeight_},
+            {clips_.sprint, sprint},
+        };
+        animator_.SetStaticBlend(holdLayer_, holdSamples, 0.0f);
+        animator_.SetStaticBlend(holdBodyLayer_, std::move(holdSamples), 0.0f);
+        animator_.SetLayerWeight(holdLayer_, holdWeight_);
+        animator_.SetLayerWeight(holdBodyLayer_, holdWeight_ * (1.0f - weaponActionWeight_));
+
+        if (weaponActionActive)
+        {
+            const char* clipName =
+                state.weaponAction == EWeaponPresentationAction::Reload ? "reload_rifle" : "switch_weapon";
+            weaponActionClipName_ = clipName;
+            const float time = glm::clamp(state.weaponActionTime01, 0.0f, 1.0f);
+            animator_.SetManualBlend(weaponActionLayer_, {{asset_.FindClip(clipName), 1.0f}}, time);
+            animator_.SetManualBlend(weaponActionBodyLayer_, {{asset_.FindClip(clipName), 1.0f}}, time);
+            animator_.SetLayerWeight(recoilLayer_, 0.0f);
+            recoilActive_ = false;
+        }
+        else if (weaponActionWeight_ < 0.001f)
+        {
+            weaponActionClipName_.clear();
+        }
+        animator_.SetLayerWeight(weaponActionLayer_, weaponActionWeight_);
+        animator_.SetLayerWeight(weaponActionBodyLayer_, weaponActionWeight_);
+
+        animator_.SetLayerWeight(actionLayer_, actionWeight_);
+        if (looting)
+        {
+            animator_.SetManualBlend(actionLayer_, {{asset_.FindClip("loot_ground"), 1.0f}}, state.actionTime01);
+            animator_.SetLayerWeight(recoilLayer_, 0.0f);
+            recoilActive_ = false;
+        }
+
+        UpdateAttachments(state);
+        UpdateLocomotion(state, dt);
+
+        animator_.Evaluate(dt);
+        UpdateProcedural(state, dt);
+        animator_.Apply();
         if (recoilActive_ && animator_.IsOneShotComplete(recoilLayer_))
         {
             recoilActive_ = false;

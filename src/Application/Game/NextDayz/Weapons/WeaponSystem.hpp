@@ -2,10 +2,13 @@
 
 // ============================================================================
 // WeaponSystem.hpp - Two-slot weapon runtime for NextDayz: equip / switch /
-// hitscan fire / reload / ADS. Fire is an engine RayCast for the world plus a
-// hitbox trace for the infected; hits leave as FWeaponHitEvent for the
-// CombatSystem. A single FPS view-model node tracks the camera and lerps
-// toward centre while aiming. Ammo reserves live in the Inventory.
+// hitscan fire / melee swings / reload / ADS. Fire is an engine RayCast for
+// the world plus a hitbox trace for the infected; hits leave as
+// FWeaponHitEvent for the CombatSystem. A single FPS view-model node tracks
+// the camera and lerps toward centre while aiming. Each slot holds an
+// inventory item instance: the magazine belongs to that gun (it survives
+// switching, dropping and picking up again) and ammo reserves live in the
+// Inventory.
 // ============================================================================
 
 #include <array>
@@ -20,6 +23,7 @@
 
 #include "Application/Game/NextDayz/NextDayzConfig.hpp"
 #include "Application/Game/NextDayz/Combat/CombatEvents.hpp"
+#include "Application/Game/NextDayz/Inventory/Inventory.hpp"
 #include "Application/Game/NextDayz/Player/PlayerState.hpp"
 #include "Application/Game/NextDayz/Weapons/WeaponDefs.hpp"
 
@@ -39,10 +43,10 @@ namespace NextDayz
         glm::vec2 cameraImpulseRadians{0.0f}; // x=yaw, y=pitch
         float viewModelImpulse = 0.0f;
         float rigRecoilScale = 1.0f;
+        bool melee = false;
     };
 
     class PlayerController;
-    class Inventory;
 
     class WeaponSystem
     {
@@ -57,8 +61,14 @@ namespace NextDayz
         void OnSceneUnloaded();
         void ResetRuntime();
 
-        // Loads a weapon into a slot with a fresh magazine. Returns false if id unknown.
+        // Loads a weapon into a slot with a fresh magazine, not bound to any
+        // inventory item (validation loadouts). Returns false if id unknown.
         bool Equip(int slot, const std::string& weaponId);
+        // Puts an inventory weapon (firearm or melee) in a slot; its magazine
+        // is whatever that gun holds. Taking it from the other slot empties that.
+        bool EquipInstance(int slot, const Inventory& inventory, FItemInstanceId instanceId);
+        void Unequip(int slot);
+        FItemInstanceId SlotInstance(int slot) const;
         void SwitchSlot(int slot);
         void SwitchPrevious();
 
@@ -84,6 +94,8 @@ namespace NextDayz
         int AmmoReserve(const Inventory& inventory) const;
         bool IsReloading() const { return reloading_; }
         bool IsSwitching() const { return switching_; }
+        bool IsSwinging() const { return swingTimer_ > 0.0f; }
+        bool ActiveIsMelee() const { return ActiveWeapon() && ActiveWeapon()->IsMelee(); }
         EWeaponPresentationAction PresentationAction() const;
         float PresentationActionTime() const;
         int ActiveSlot() const { return activeSlot_; }
@@ -112,9 +124,14 @@ namespace NextDayz
         {
             std::string weaponId;   // empty = empty slot
             int ammoInMag = 0;
+            FItemInstanceId instanceId = 0;   // 0 = not bound to an inventory item
         };
 
         void FireOneShot(PlayerController& player, NextEngine& engine);
+        void Swing(PlayerController& player, NextEngine& engine);
+        // Keeps slots in step with the inventory: a dropped gun leaves its slot,
+        // the magazine is written back to the gun.
+        void SyncInventory(Inventory& inventory);
         void RefreshViewModelVisibility();
         // Camera-space offset (x right, y up, z forward) and local rotation
         // (pitch, yaw, roll in radians) the view model carries this frame.
@@ -138,6 +155,9 @@ namespace NextDayz
         bool switchCommitted_ = false;
         int switchTargetSlot_ = -1;
         float switchTimer_ = 0.0f;
+        float swingTimer_ = 0.0f;
+        float swingDuration_ = 0.0f;
+        int swingSide_ = 1;
         uint64_t shotSequence_ = 0;
         std::vector<FShotEvent> shotEvents_;
         std::vector<FWeaponHitEvent> hitEvents_;

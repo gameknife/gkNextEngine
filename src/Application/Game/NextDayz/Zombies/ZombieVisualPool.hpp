@@ -19,7 +19,7 @@ namespace NextDayz
     class ZombieVisualPool
     {
     public:
-        explicit ZombieVisualPool(size_t capacity = 32) : slots_(capacity) {}
+        explicit ZombieVisualPool(size_t capacity = 56) : slots_(capacity) {}
 
         FZombieVisualSlot* Acquire(FZombieHandle owner);
         bool Release(FZombieHandle owner);

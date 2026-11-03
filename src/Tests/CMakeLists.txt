@@ -126,6 +126,7 @@ set(unitTestSources
     ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/World/EnemyPool.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Player/ScrollCamera.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Data/ItemDefs.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Data/LootTables.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Inventory/Inventory.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Player/PlayerActionController.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Player/SurvivalSystem.cpp

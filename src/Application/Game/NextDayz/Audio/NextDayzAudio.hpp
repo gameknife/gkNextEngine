@@ -44,6 +44,20 @@ namespace NextDayz
         void ZombieAttack(const glm::vec3& at);
         void ZombieDeath(const glm::vec3& at);
         void BodyFall(const glm::vec3& at);
+        // Melee and survival actions.
+        void MeleeSwing();
+        void MeleeImpact();
+        void Firecracker(const glm::vec3& at);
+        void Pickup();
+        void Drop();
+        void Eat();
+        void Drink();
+        void Bandage();
+        void RadioStatic();
+        void Lantern();
+        // The world around: wind always, crows by day, distant gunfire, screams
+        // at night. `daylight` 0..1, `storm` 0..1 (overcast/rain strength).
+        void UpdateAmbience(float deltaSeconds, float daylight, float storm);
 
     private:
         enum ECue : size_t
@@ -60,6 +74,10 @@ namespace NextDayz
             Alert,
             Attack,
             Death,
+            Swing,
+            Wind,
+            Crow,
+            DistantShot,
             CueCount,
         };
 
@@ -71,5 +89,13 @@ namespace NextDayz
         glm::vec3 listener_{0.0f};
         std::array<uint32_t, CueCount> cursors_{};
         uint64_t played_ = 0;
+        // Ambience timers (seconds until the next one) and a tiny LCG so the
+        // soundscape does not depend on any gameplay random stream.
+        float windSeconds_ = 0.5f;
+        float crowSeconds_ = 12.0f;
+        float shotSeconds_ = 40.0f;
+        float screamSeconds_ = 25.0f;
+        uint32_t ambienceState_ = 0x2545F491u;
+        float AmbienceRandom(float lo, float hi);
     };
 }

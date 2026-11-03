@@ -6,6 +6,8 @@
 #include <array>
 #include <cmath>
 #include <queue>
+#include <thread>
+#include <vector>
 
 #include <spdlog/spdlog.h>
 
@@ -106,7 +108,8 @@ void FNavGrid::RebuildDirtyRegion(Assets::CPU::FCPUAccelerationStructure& bvh, c
                  walkableRect.minGx, walkableRect.minGz, walkableRect.maxGx, walkableRect.maxGz);
 }
 
-std::vector<glm::vec3> FNavGrid::FindPath(const glm::vec3& from, const glm::vec3& to, float referenceHeight) const
+std::vector<glm::vec3> FNavGrid::FindPath(const glm::vec3& from, const glm::vec3& to, float referenceHeight,
+                                          int maxExpansions) const
 {
     if (cells_.empty())
     {
@@ -137,9 +140,25 @@ std::vector<glm::vec3> FNavGrid::FindPath(const glm::vec3& from, const glm::vec3
         return {GridToWorld(startGrid.x, startGrid.y)};
     }
 
+    // Scratch reused across searches on this thread: a 1 km grid is ~260k
+    // cells, too much to allocate and clear per query. Only the cells the
+    // previous search touched are reset.
     const int totalCells = width_ * height_;
-    std::vector<float> gCost(totalCells, std::numeric_limits<float>::max());
-    std::vector<int> parent(totalCells, -1);
+    thread_local std::vector<float> gCost;
+    thread_local std::vector<int> parent;
+    thread_local std::vector<int> touched;
+    if (static_cast<int>(gCost.size()) != totalCells)
+    {
+        gCost.assign(totalCells, std::numeric_limits<float>::max());
+        parent.assign(totalCells, -1);
+        touched.clear();
+    }
+    for (const int idx : touched)
+    {
+        gCost[idx] = std::numeric_limits<float>::max();
+        parent[idx] = -1;
+    }
+    touched.clear();
 
     struct FOpenNode
     {
@@ -154,9 +173,13 @@ std::vector<glm::vec3> FNavGrid::FindPath(const glm::vec3& from, const glm::vec3
     const int goalIdx = CellIndex(goalGrid.x, goalGrid.y);
     const glm::vec3 goalWorld = GridToWorld(goalGrid.x, goalGrid.y);
     gCost[startIdx] = 0.0f;
+    touched.push_back(startIdx);
     openList.push({glm::distance(GridToWorld(startGrid.x, startGrid.y), goalWorld), startIdx});
 
     bool found = false;
+    int expansions = 0;
+    int closestIdx = startIdx;
+    float closestHeuristic = std::numeric_limits<float>::max();
 
     while (!openList.empty())
     {
@@ -175,6 +198,15 @@ std::vector<glm::vec3> FNavGrid::FindPath(const glm::vec3& from, const glm::vec3
         if (current.fCost > gCost[current.index] + currentHeuristic + 0.001f)
         {
             continue;
+        }
+        if (currentHeuristic < closestHeuristic)
+        {
+            closestHeuristic = currentHeuristic;
+            closestIdx = current.index;
+        }
+        if (maxExpansions > 0 && ++expansions > maxExpansions)
+        {
+            break;
         }
 
         for (int d = 0; d < 8; ++d)
@@ -214,6 +246,10 @@ std::vector<glm::vec3> FNavGrid::FindPath(const glm::vec3& from, const glm::vec3
 
             if (newG < gCost[nIdx])
             {
+                if (gCost[nIdx] == std::numeric_limits<float>::max())
+                {
+                    touched.push_back(nIdx);
+                }
                 gCost[nIdx] = newG;
                 parent[nIdx] = current.index;
                 const float h = glm::distance(GridToWorld(nx, nz), goalWorld);
@@ -222,14 +258,19 @@ std::vector<glm::vec3> FNavGrid::FindPath(const glm::vec3& from, const glm::vec3
         }
     }
 
+    int endIdx = goalIdx;
     if (!found)
     {
-        return {};
+        if (maxExpansions <= 0 || closestIdx == startIdx)
+        {
+            return {};
+        }
+        endIdx = closestIdx;   // bounded search: get as close as the budget allowed
     }
 
     // Reconstruct grid path
     std::vector<glm::ivec2> gridPath;
-    for (int idx = goalIdx; idx != -1; idx = parent[idx])
+    for (int idx = endIdx; idx != -1; idx = parent[idx])
     {
         gridPath.push_back({idx % width_, idx / width_});
     }
@@ -601,14 +642,37 @@ void FNavGrid::SampleBaseWalkability(Assets::CPU::FCPUAccelerationStructure& bvh
         return;
     }
 
-    for (int gz = rect.minGz; gz <= rect.maxGz; ++gz)
+    // Every cell is an independent set of rays against the immutable BVH
+    // snapshot, so rows are sampled in parallel; a 1 km map is ~260k cells.
+    const auto sampleRows = [this, &bvh, &rect](int firstRow, int rowStep)
     {
-        for (int gx = rect.minGx; gx <= rect.maxGx; ++gx)
+        for (int gz = rect.minGz + firstRow; gz <= rect.maxGz; gz += rowStep)
         {
-            FNavCell sampledCell;
-            SampleBaseCell(bvh, gx, gz, sampledCell);
-            cells_[CellIndex(gx, gz)] = sampledCell;
+            for (int gx = rect.minGx; gx <= rect.maxGx; ++gx)
+            {
+                FNavCell sampledCell;
+                SampleBaseCell(bvh, gx, gz, sampledCell);
+                cells_[CellIndex(gx, gz)] = sampledCell;
+            }
         }
+    };
+    const int rows = rect.maxGz - rect.minGz + 1;
+    const int workers = std::clamp(static_cast<int>(std::thread::hardware_concurrency()), 1, std::min(rows / 8 + 1, 32));
+    if (workers <= 1)
+    {
+        sampleRows(0, 1);
+        return;
+    }
+    std::vector<std::thread> threads;
+    threads.reserve(static_cast<size_t>(workers - 1));
+    for (int worker = 1; worker < workers; ++worker)
+    {
+        threads.emplace_back(sampleRows, worker, workers);
+    }
+    sampleRows(0, workers);
+    for (std::thread& thread : threads)
+    {
+        thread.join();
     }
 }
 

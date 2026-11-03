@@ -1,7 +1,9 @@
 #include "NextDayzGameInstance.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <unordered_map>
 
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_keycode.h>
@@ -37,6 +39,26 @@ namespace
     constexpr const char* kDefaultScene = "assets/scad/proc/coldwar/riverland_1km.scad";
     constexpr const char* kSoldierRig = "assets/scad/characters/nextdayz_survivor.scad";
     constexpr const char* kInfectedRig = "assets/scad/characters/nextdayz_infected.scad";
+    constexpr const char* kLootCatalogRig = "assets/scad/characters/nextdayz_loot_items.scad";
+    constexpr float kNotificationSeconds = 7.0f;
+    constexpr float kLanternFuelSeconds = 15.0f * 60.0f;
+    constexpr float kCacheMarkerSeconds = 20.0f * 60.0f;
+
+    std::string ItemDisplayName(std::string_view itemId)
+    {
+        const NextDayz::FItemDef* definition = NextDayz::FindItemDef(itemId);
+        return definition ? std::string(definition->displayName) : std::string(itemId);
+    }
+
+    // Compass words for a horizontal offset (engine +Z is south).
+    std::string CompassWord(const glm::vec3& delta)
+    {
+        static constexpr std::array<const char*, 8> words = {"north", "north-east", "east", "south-east",
+                                                             "south", "south-west", "west", "north-west"};
+        float bearing = glm::degrees(std::atan2(delta.x, -delta.z));
+        bearing = bearing < 0.0f ? bearing + 360.0f : bearing;
+        return words[static_cast<size_t>((bearing + 22.5f) / 45.0f) % 8];
+    }
 
     void AppendWeaponBox(std::vector<Assets::Vertex>& vertices, std::vector<uint32_t>& indices,
                          const glm::vec3& min, const glm::vec3& max)
@@ -97,6 +119,24 @@ namespace
             box({-0.022f, 0.102f, -0.02f}, {0.022f, 0.115f, 0.25f});
             box({-0.035f, -0.18f, -0.02f}, {0.035f, -0.045f, 0.10f});
         }
+        else if (weaponId == "knife")
+        {
+            box({-0.016f, -0.022f, -0.12f}, {0.016f, 0.022f, 0.0f});   // grip
+            box({-0.040f, -0.026f, 0.0f}, {0.040f, 0.026f, 0.015f});   // guard
+            box({-0.004f, -0.016f, 0.015f}, {0.004f, 0.020f, 0.24f});  // blade
+        }
+        else if (weaponId == "crowbar")
+        {
+            box({-0.013f, -0.013f, -0.30f}, {0.013f, 0.013f, 0.50f});
+            box({-0.013f, 0.013f, 0.46f}, {0.013f, 0.09f, 0.50f});      // hooked end
+            box({-0.013f, 0.09f, 0.50f}, {0.013f, 0.11f, 0.62f});
+        }
+        else if (weaponId == "axe")
+        {
+            box({-0.016f, -0.016f, -0.30f}, {0.016f, 0.016f, 0.55f});   // haft
+            box({-0.012f, -0.02f, 0.44f}, {0.012f, 0.16f, 0.58f});      // blade
+            box({-0.016f, -0.07f, 0.47f}, {0.016f, -0.02f, 0.55f});     // back spike
+        }
         else // AK-74
         {
             box({-0.055f, -0.045f, -0.38f}, {0.055f, 0.045f, -0.12f});
@@ -118,6 +158,9 @@ namespace
         if (weaponId == "svd") return {0.24f, 0.15f, 0.08f};
         if (weaponId == "mosin") return {0.31f, 0.20f, 0.10f};
         if (weaponId == "shotgun") return {0.14f, 0.12f, 0.10f};
+        if (weaponId == "knife") return {0.30f, 0.30f, 0.32f};
+        if (weaponId == "crowbar") return {0.45f, 0.10f, 0.08f};
+        if (weaponId == "axe") return {0.50f, 0.13f, 0.08f};
         return {0.10f, 0.11f, 0.12f};
     }
 
@@ -240,6 +283,7 @@ void NextDayzGameInstance::OnInit()
     GOption->KeepCPUMeshData = true;
     sessionRng_.Reset(config_.Seed);
 
+    survivalRng_.Reset(sessionRng_.Derive(0x53555256ULL).Seed());
     weapons_.Configure(config_.Weapon);
     loot_.Configure(config_.Loot);
     loot_.SetSeed(config_.Seed);
@@ -273,6 +317,15 @@ void NextDayzGameInstance::OnInit()
         if (zombieRigLoaded_)
         {
             zombieRigClips_ = NextDayz::ZombieRigVisual::FClips::Resolve(zombieRigAsset_);
+        }
+    }
+    {
+        std::string error;
+        std::vector<std::string> warnings;
+        lootCatalogLoaded_ = Assets::FScadRigLoader::LoadRig(kLootCatalogRig, {}, lootCatalogAsset_, error, &warnings);
+        if (!lootCatalogLoaded_)
+        {
+            SPDLOG_WARN("[NextDayz] loot catalog unavailable; loot spots are invisible: {}", error);
         }
     }
 
@@ -423,6 +476,25 @@ void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
     cvars.RegisterFloat("nextdayz.debug.fxTimeScale", 1.0f, &debugFxTimeScale_, NextCVar::ECVarFlags::None,
                         "Slow-motion for combat effects (0 freezes flashes, tracers and blood in place)", nullptr,
                         0.0, 2.0);
+    cvars.RegisterFloat("nextdayz.debug.hour", -1.0f, &debugHour_, NextCVar::ECVarFlags::None,
+                        "Jump the clock to this hour (0..24)", [this]()
+                        {
+                            if (debugHour_ >= 0.0f) time_.SetHour(debugHour_);
+                        }, -1.0, 24.0);
+    cvars.RegisterInt("nextdayz.debug.weather", -1, &debugWeather_, NextCVar::ECVarFlags::None,
+                      "Force the weather: 0 clear, 1 overcast, 2 fog", [this]()
+                      {
+                          if (debugWeather_ >= 0) time_.SetWeather(static_cast<NextDayz::EWeather>(debugWeather_));
+                      }, -1, 2);
+    const auto applyFog = [this]()
+    {
+        time_.SetFogTuning(debugFogRadiance_ >= 0.0f ? debugFogRadiance_ : config_.Time.FogDayRadiance,
+                           debugFogDensityScale_);
+    };
+    cvars.RegisterFloat("nextdayz.debug.fogRadiance", -1.0f, &debugFogRadiance_, NextCVar::ECVarFlags::None,
+                        "Override the daytime fog colour radiance (-1 = tuned default)", applyFog, -1.0, 500.0);
+    cvars.RegisterFloat("nextdayz.debug.fogDensityScale", 1.0f, &debugFogDensityScale_, NextCVar::ECVarFlags::None,
+                        "Multiply the height fog density", applyFog, 0.0, 10.0);
     cvars.RegisterFloat("nextdayz.validation.zombieDistance", 2.2f, &validationZombieDistance_,
                         NextCVar::ECVarFlags::None, "Agent-only: distance spawnZombie places the infected ahead",
                         nullptr, 0.5, 60.0);
@@ -439,6 +511,66 @@ void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
     cvars.RegisterBool("nextdayz.validation.invulnerable", false, &validationInvulnerable_,
                        NextCVar::ECVarFlags::None,
                        "Agent-only: infected blows still land (feedback) but do no damage");
+    cvars.RegisterInt("nextdayz.validation.bleed", 0, &validationBleed_, NextCVar::ECVarFlags::None,
+                      "Agent-only: open this many bleeding wounds", [this, validationReady]()
+                      {
+                          if (validationReady()) survival_.SetBleeding(validationBleed_);
+                      }, 0, 3);
+    cvars.RegisterString("nextdayz.validation.give", "", &validationGive_, NextCVar::ECVarFlags::None,
+                         "Agent-only: add an item by id (\"id\" or \"id:count\")", [this, validationReady]()
+                         {
+                             if (validationGive_.empty() || !validationReady()) return;
+                             std::string id = validationGive_;
+                             int count = 1;
+                             if (const size_t colon = id.find(':'); colon != std::string::npos)
+                             {
+                                 count = std::max(1, std::atoi(id.c_str() + colon + 1));
+                                 id.resize(colon);
+                             }
+                             if (const NextDayz::FItemDef* definition = NextDayz::FindItemDef(id))
+                             {
+                                 inventory_.TryAdd(id, std::string(definition->displayName), definition->kind, count);
+                             }
+                         });
+    cvars.RegisterString("nextdayz.validation.use", "", &validationUse_, NextCVar::ECVarFlags::None,
+                         "Agent-only: use (eat, wear, equip, tune in...) the first item with this id",
+                         [this, validationReady]()
+                         {
+                             if (validationUse_.empty() || !validationReady()) return;
+                             if (const NextDayz::FItemInstance* instance = inventory_.FindFirst(validationUse_))
+                             {
+                                 UseInventoryItem(instance->instanceId);
+                             }
+                         });
+    cvars.RegisterString("nextdayz.validation.teleport", "", &validationTeleport_, NextCVar::ECVarFlags::None,
+                         "Agent-only: move the player to map coordinates \"x,y\" (SCAD space: +y north)",
+                         [this, validationReady]()
+                         {
+                             if (validationTeleport_.empty() || !validationReady()) return;
+                             const size_t comma = validationTeleport_.find(',');
+                             if (comma == std::string::npos) return;
+                             const float x = static_cast<float>(std::atof(validationTeleport_.c_str()));
+                             const float z = -static_cast<float>(std::atof(validationTeleport_.c_str() + comma + 1));
+                             float groundY = 0.0f;
+                             GetEngine().RayCast(glm::vec3(x, config_.Loot.SpawnRayHeight, z), glm::vec3(0.0f, -1.0f, 0.0f),
+                                                 [&](Assets::RayCastResult result)
+                                                 {
+                                                     if (result.Hit) groundY = static_cast<float>(result.HitPoint.y);
+                                                     return true;
+                                                 });
+                             player_.Destroy();
+                             player_.Create(GetEngine().GetPhysicsEngine(), glm::vec3(x, groundY + 1.0f, z), config_);
+                         });
+    cvars.RegisterString("nextdayz.validation.drop", "", &validationDrop_, NextCVar::ECVarFlags::None,
+                         "Agent-only: drop the first item with this id at the player's feet",
+                         [this, validationReady]()
+                         {
+                             if (validationDrop_.empty() || !validationReady()) return;
+                             if (const NextDayz::FItemInstance* instance = inventory_.FindFirst(validationDrop_))
+                             {
+                                 DropItem(instance->instanceId, -1);
+                             }
+                         });
     cvars.RegisterBool("nextdayz.validation.restart", false, &validationRestart_, NextCVar::ECVarFlags::None,
                        "Agent-only in-process restart", [this, validationReady]()
                        {
@@ -454,6 +586,7 @@ void NextDayzGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<Assets
 {
     rig_.InjectAssets(models, materials);
     effects_.InjectAssets(models, materials);
+    InjectLootCatalog(models, materials);
 
     zombieRigPartModelIds_.clear();
     zombieRigPartMaterialIds_.clear();
@@ -532,7 +665,7 @@ void NextDayzGameInstance::OnSceneLoaded()
     zombieSpawns_.Reset(sessionRng_.Derive(0x5A4F4D42ULL).Seed());
     ConfigureZombieSpawnPoints();
     // Loot scan first so the spawn can be derived from real supply ground height.
-    loot_.OnSceneLoaded(GetEngine().GetScene());
+    loot_.OnSceneLoaded(GetEngine().GetScene(), CollectLootSpots());
 
     const glm::vec3 spawn = ResolveSpawnPosition();
     player_.Create(GetEngine().GetPhysicsEngine(), spawn, config_);
@@ -541,7 +674,7 @@ void NextDayzGameInstance::OnSceneLoaded()
     weapons_.OnSceneLoaded(GetEngine());
     effects_.OnSceneLoaded(GetEngine().GetScene());
     CreateZombieVisuals();
-    time_.Reset(config_.Time);
+    time_.Reset(config_.Time, sessionRng_.Derive(0x57454154ULL).Seed());
     time_.Tick(0.0, GetEngine().GetScene());
 
     // Product start: pockets, one emergency bandage, and an empty bottle. Weapon
@@ -552,6 +685,7 @@ void NextDayzGameInstance::OnSceneLoaded()
     recentWeaponTraces_.clear();
     inventory_.TryAdd("bandage", "Bandage", NextDayz::EItemKind::Consumable, 1);
     inventory_.TryAdd("water_bottle_empty", "Empty Bottle", NextDayz::EItemKind::Misc, 1);
+    StartNewLife();
     if (validationLoadout_ && GOption->AgentValidation)
     {
         ApplyValidationLoadout();
@@ -589,6 +723,8 @@ void NextDayzGameInstance::OnSceneUnloaded()
     zombieRigVisuals_.clear();
     zombieAudio_.clear();
     recentWeaponTraces_.clear();
+    notifications_.clear();
+    firecrackers_.clear();
 }
 
 void NextDayzGameInstance::OnDestroy()
@@ -615,6 +751,11 @@ void NextDayzGameInstance::OnTick(double deltaSeconds)
     audio_.SetListener(player_.EyePosition());
     hitMarkerSeconds_ = std::max(0.0f, hitMarkerSeconds_ - dt);
     hurtSeconds_ = std::max(0.0f, hurtSeconds_ - dt);
+    for (NextDayz::FHudNotification& note : notifications_)
+    {
+        note.age += dt;
+    }
+    std::erase_if(notifications_, [](const NextDayz::FHudNotification& note) { return note.age > kNotificationSeconds; });
     for (FRecentWeaponTrace& trace : recentWeaponTraces_)
     {
         trace.remainingSeconds -= dt;
@@ -631,36 +772,84 @@ void NextDayzGameInstance::OnTick(double deltaSeconds)
     }
     if (const std::optional<NextDayz::FLootHandle> commit = actions_.ConsumeCommitRequest())
     {
-        loot_.Commit(*commit, inventory_, GetEngine());
+        const NextDayz::FLootCommitResult result = loot_.Commit(*commit, inventory_, GetEngine());
+        if (result.taken)
+        {
+            audio_.Pickup();
+            for (const NextDayz::FLootStack& stack : result.stacks)
+            {
+                Notify(stack.count > 1 ? fmt::format("Picked up {} x{}", ItemDisplayName(stack.itemId), stack.count)
+                                       : fmt::format("Picked up {}", ItemDisplayName(stack.itemId)));
+            }
+            if (result.partial)
+            {
+                Notify("No room for the rest - it stays here", 1);
+            }
+        }
+        else
+        {
+            Notify("Not enough space - drop something or find a bigger bag", 1);
+        }
     }
     if (const std::optional<NextDayz::FItemActionCommit> commit = actions_.ConsumeItemCommitRequest())
     {
         if (commit->action == NextDayz::EPlayerAction::DrinkFromWell)
         {
             survival_.DrinkFromWell();
+            audio_.Drink();
         }
         else if (commit->action == NextDayz::EPlayerAction::FillBottle)
         {
-            survival_.FillBottle(inventory_, commit->instanceId);
+            if (survival_.FillBottle(inventory_, commit->instanceId))
+            {
+                Notify("Bottle filled with water", 3);
+            }
+        }
+        else if (commit->action == NextDayz::EPlayerAction::Rest)
+        {
+            if (survival_.Rest())
+            {
+                Notify("You rest for a while and feel better", 3);
+            }
+            else
+            {
+                Notify("You cannot rest while bleeding", 1);
+            }
         }
         else
         {
-            survival_.TryUseItem(inventory_, commit->instanceId);
+            const NextDayz::FItemInstance* instance = inventory_.FindInstance(commit->instanceId);
+            const NextDayz::FItemDef* definition = instance ? NextDayz::FindItemDef(instance->defId) : nullptr;
+            const NextDayz::EItemUse use = definition ? definition->use : NextDayz::EItemUse::None;
+            std::string message;
+            if (survival_.TryUseItem(inventory_, commit->instanceId, &message))
+            {
+                if (use == NextDayz::EItemUse::Eat) audio_.Eat();
+                else if (use == NextDayz::EItemUse::Drink) audio_.Drink();
+                else audio_.Bandage();
+                if (!message.empty())
+                {
+                    const bool good = use == NextDayz::EItemUse::Bandage || use == NextDayz::EItemUse::FirstAid;
+                    Notify(message, good ? 3 : 1);
+                }
+            }
         }
     }
 
     const bool actionLocked = actions_.IsActive();
     const bool traversalLocked = player_.IsTraversing();
     const bool dead = !survival_.IsAlive();
-    player_.SetMovementLocked(actionLocked || traversalLocked || showInventory_ || dead);
+    player_.SetMovementLocked(actionLocked || traversalLocked || showInventory_ || showMap_ || dead);
     weapons_.SetPresentationSuppressed(actionLocked || traversalLocked || dead || debugOrbit_);
     if (actionLocked || traversalLocked || dead)
     {
         player_.SetAiming(false);
         weapons_.SetTriggerDown(false);
     }
-    player_.SetSprintBlocked(weapons_.TriggerDown() && weapons_.HasActiveWeapon());
+    player_.SetSprintBlocked((weapons_.TriggerDown() && weapons_.HasActiveWeapon()) || survival_.IsWeak());
     player_.Update(dt);
+    // Cold: night and bad weather against whatever the player is wearing.
+    survival_.SetCold(std::clamp(time_.Chill() - inventory_.Warmth() * 0.8f, 0.0f, 1.0f));
     survival_.Update(dt, player_.LocomotionState().gait == NextDayz::EPlayerGait::Sprint);
     weapons_.Update(dt, player_, inventory_, GetEngine());
     if (weapons_.ConsumeDryFire())
@@ -695,7 +884,7 @@ void NextDayzGameInstance::OnTick(double deltaSeconds)
     for (NextDayz::FWeaponTraceEvent& trace : weapons_.ConsumeTraceEvents())
     {
         // Every round of a burst gets a streak; a shotgun shows a few of its pellets.
-        if (trace.pellet % 3 == 0)
+        if (!trace.melee && trace.pellet % 3 == 0)
         {
             effects_.Tracer(hasVisualMuzzle ? visualMuzzle : trace.origin, trace.endPoint);
         }
@@ -714,6 +903,19 @@ void NextDayzGameInstance::OnTick(double deltaSeconds)
     }
     for (const NextDayz::FShotEvent& shot : weapons_.ConsumeShotEvents())
     {
+        lastShotMelee_ = shot.melee;
+        if (shot.melee)
+        {
+            // A swing: the view sweeps with it, close infected hear it.
+            audio_.MeleeSwing();
+            player_.ApplyCameraRecoil(shot.cameraImpulseRadians);
+            rig_.TriggerRecoil(shot.rigRecoilScale);
+            if (const NextDayz::FWeaponDef* definition = NextDayz::FindWeaponDef(shot.weaponId))
+            {
+                noise_.Emit(player_.Position(), definition->noiseRadius, 0.5f, NextDayz::ENoiseType::Melee);
+            }
+            continue;
+        }
         if (hasVisualMuzzle)
         {
             const float flash = shot.weaponId == "pistol" ? 0.6f : shot.weaponId == "shotgun" ? 1.25f : 1.0f;
@@ -766,15 +968,34 @@ void NextDayzGameInstance::OnTick(double deltaSeconds)
         {
             return std::vector<glm::vec3>{to};
         }
-        return zombieNavGrid_.FindPath(from, to, from.y);
+        return zombieNavGrid_.FindPath(from, to, from.y, config_.Zombie.MaxPathExpansions);
     };
     const float zombieDt = dt * debugZombieTimeScale_;
     zombies_.Update(zombieDt, player_.Position(), player_.Forward(), survival_.IsAlive(),
                     lineOfSight, noise_.Events(), resolvePath);
+    // Keep the infected on whatever floor they are over (under a canopy, inside
+    // a house) rather than the grid's single top surface.
+    for (const NextDayz::FZombieRuntime& slot : zombies_.Slots())
+    {
+        NextDayz::FZombieRuntime* zombie = slot.active ? zombies_.Resolve(slot.handle) : nullptr;
+        if (!zombie)
+        {
+            continue;
+        }
+        GetEngine().RayCast(zombie->position + glm::vec3(0.0f, 1.2f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f),
+                            [zombie](Assets::RayCastResult result)
+                            {
+                                if (result.Hit && result.T < 3.5f)
+                                {
+                                    zombie->position.y = static_cast<float>(result.HitPoint.y);
+                                }
+                                return true;
+                            });
+    }
     for (const NextDayz::FPlayerDamageRequest& damage : zombies_.ConsumePlayerDamageRequests())
     {
         const bool invulnerable = validationInvulnerable_ && GOption->AgentValidation;
-        if (invulnerable || survival_.ApplyDamage(damage.amount, "infected"))
+        if (invulnerable || survival_.ApplyInfectedHit(damage.amount, inventory_.Armor(), survivalRng_.UnitFloat()))
         {
             actions_.RequestCancel();
             // Struck: the view snaps away from the blow and the HUD shows where it came from.
@@ -818,6 +1039,34 @@ void NextDayzGameInstance::OnTick(double deltaSeconds)
         }
     }
     time_.Tick(deltaSeconds, GetEngine().GetScene());
+    UpdateWorldPressure();
+    UpdateFirecrackers(dt);
+    UpdateSurvivalFeedback(dt);
+    audio_.UpdateAmbience(dt, time_.Daylight(), time_.Storm());
+    if (lanternLit_)
+    {
+        lanternSeconds_ -= dt;
+        if (lanternSeconds_ <= 0.0f || inventory_.CountOf("lantern") == 0)
+        {
+            lanternLit_ = false;
+            lanternSeconds_ = std::max(lanternSeconds_, 0.0f);
+            Notify("The lantern went out", 1);
+        }
+    }
+    if (cacheMarker_)
+    {
+        cacheSeconds_ -= dt;
+        if (glm::distance(*cacheMarker_, player_.Position()) < 4.0f)
+        {
+            Notify("This is the supply cache", 3);
+            cacheMarker_.reset();
+        }
+        else if (cacheSeconds_ <= 0.0f)
+        {
+            Notify("The broadcast has gone silent - the cache marker is lost", 1);
+            cacheMarker_.reset();
+        }
+    }
 
     rig_.SetVisible(!player_.IsFirstPerson() || debugOrbit_);
     NextDayz::FPlayerPresentationState presentation;
@@ -885,6 +1134,7 @@ bool NextDayzGameInstance::OnRenderUI()
     ctx.aiming = player_.IsAiming();
     ctx.firstPerson = player_.IsFirstPerson();
     ctx.hasWeapon = weapons_.HasActiveWeapon();
+    ctx.melee = weapons_.ActiveIsMelee();
     ctx.weaponName = weapons_.ActiveDisplayName();
     ctx.ammoInMag = weapons_.AmmoInMag();
     ctx.ammoReserve = weapons_.AmmoReserve(inventory_);
@@ -892,20 +1142,54 @@ bool NextDayzGameInstance::OnRenderUI()
     ctx.activeSlot = weapons_.ActiveSlot();
     if (actions_.IsActive())
     {
-        ctx.interactionPrompt = fmt::format("{}...", NextDayz::ActionName(actions_.Action()));
+        ctx.interactionPrompt = fmt::format("{}...", NextDayz::ActionLabel(actions_.Action()));
     }
     else if (loot_.HasHovered())
     {
-        ctx.interactionPrompt = fmt::format("[E] Pick up {}", loot_.HoveredPrompt());
+        ctx.interactionPrompt = fmt::format("[E] Take {}", loot_.HoveredPrompt());
     }
     else if (hoveredWell_.IsValid())
     {
-        ctx.interactionPrompt = "[E] Drink from well   [F] Fill bottle";
+        ctx.interactionPrompt = inventory_.CountOf("water_bottle_empty") > 0 ? "[E] Drink   [F] Fill bottle"
+                                                                              : "[E] Drink from the well";
     }
     ctx.hour = time_.HourInt();
     ctx.minute = time_.MinuteInt();
     ctx.overcast = time_.Overcast();
+    ctx.weather = NextDayz::WeatherName(time_.Weather());
     ctx.showInventory = showInventory_;
+    ctx.showMap = showMap_;
+    ctx.armor = inventory_.Armor();
+    ctx.warmth = inventory_.Warmth();
+    ctx.weak = survival_.IsWeak();
+    ctx.lanternLit = lanternLit_;
+    ctx.lanternMinutes = lanternSeconds_ / 60.0f;
+    ctx.kills = zombies_.KillCount();
+    ctx.hasCompass = inventory_.HasTool(NextDayz::EItemTool::Compass);
+    ctx.hasMap = inventory_.HasTool(NextDayz::EItemTool::Map);
+    ctx.yawRadians = player_.Yaw();
+    ctx.playerPosition = player_.Position();
+    ctx.cacheMarker = cacheMarker_;
+    ctx.quickSlots = quickSlots_;
+    ctx.notifications = notifications_;
+    if (showMap_)
+    {
+        for (const NextDayz::FWorldAnchor& anchor : worldAnchors_.All())
+        {
+            if (anchor.type == NextDayz::EWorldAnchorType::Poi)
+            {
+                ctx.pois.push_back({anchor.label, anchor.profile, glm::vec2(anchor.worldPos.x, anchor.worldPos.z)});
+            }
+        }
+    }
+    if (showInventory_)
+    {
+        for (const int index : loot_.Nearby(player_.EyePosition(), config_.Loot.ReachMeters))
+        {
+            const NextDayz::FLootEntry& entry = loot_.Entries()[index];
+            ctx.nearby.push_back({index, entry.displayName, glm::distance(entry.worldPos, player_.EyePosition())});
+        }
+    }
     ctx.showDebugPanel = showDebugPanel_;
     ctx.inventory = &inventory_;
     ctx.weapons = &weapons_;
@@ -958,6 +1242,10 @@ bool NextDayzGameInstance::OnRenderUI()
     ctx.debug.switchTargetSlot = weapons_.SwitchTargetSlot();
     ctx.debug.switchCommitted = weapons_.SwitchCommitted();
     ctx.debug.activeZombies = zombies_.ActiveCount();
+    ctx.debug.zombieCap = zombieSpawns_.GlobalCap();
+    ctx.debug.lootSpots = loot_.SpotCount();
+    ctx.debug.lootPiles = loot_.PileCount();
+    ctx.debug.lootZones = static_cast<int>(loot_.Zones().size());
     ctx.debug.alertedZombies = zombies_.AlertedCount();
     ctx.debug.zombieKills = zombies_.KillCount();
     ctx.debug.headshots = combat_.HeadshotCount();
@@ -980,9 +1268,8 @@ bool NextDayzGameInstance::OnRenderUI()
     }
     for (const NextDayz::FLootEntry& entry : loot_.Entries())
     {
-        const NextDayz::FLootSlot* slot = loot_.ResolveSlot(entry.directorHandle);
-        if (!slot) continue;
-        const size_t category = static_cast<size_t>(slot->category);
+        if (entry.state == NextDayz::FLootEntry::EState::Empty) continue;
+        const size_t category = static_cast<size_t>(entry.category);
         if (category < ctx.debug.lootTotalByCategory.size())
         {
             ++ctx.debug.lootTotalByCategory[category];
@@ -1003,15 +1290,17 @@ bool NextDayzGameInstance::OnRenderUI()
         {
             ++ctx.debug.lootCooldown;
         }
-        if (!entry.def) continue;
-        for (const NextDayz::FLootGrant& grant : entry.def->grants)
+        if (entry.state != NextDayz::FLootEntry::EState::Available) continue;
+        for (const NextDayz::FLootStack& stack : entry.contents)
         {
-            if (grant.id == "food_can") ctx.debug.criticalFood += grant.count;
-            if (grant.id == "bandage" || grant.id == "medkit") ctx.debug.criticalMedical += grant.count;
-            if (grant.id == "backpack") ctx.debug.criticalBackpack += grant.count;
-            if (grant.kind == NextDayz::EItemKind::Weapon || grant.kind == NextDayz::EItemKind::Melee)
-                ctx.debug.criticalWeapons += grant.count;
-            if (grant.kind == NextDayz::EItemKind::Ammo) ctx.debug.criticalAmmo += grant.count;
+            const NextDayz::FItemDef* item = NextDayz::FindItemDef(stack.itemId);
+            if (!item) continue;
+            if (item->use == NextDayz::EItemUse::Eat) ctx.debug.criticalFood += stack.count;
+            if (item->use == NextDayz::EItemUse::Bandage || item->use == NextDayz::EItemUse::FirstAid)
+                ctx.debug.criticalMedical += stack.count;
+            if (item->equipSlot == NextDayz::EEquipSlot::Back) ctx.debug.criticalBackpack += stack.count;
+            if (NextDayz::IsWieldable(*item)) ctx.debug.criticalWeapons += stack.count;
+            if (item->kind == NextDayz::EItemKind::Ammo) ctx.debug.criticalAmmo += stack.count;
         }
     }
     ctx.debug.criticalWaterSources = static_cast<int>(
@@ -1034,18 +1323,23 @@ bool NextDayzGameInstance::OnRenderUI()
             ctx.debug.lastTraceResult = "WORLD/BLOCKER";
         }
     }
-    ctx.equipWeapon = [this](const std::string& weaponId, int slot) {
-        const_cast<NextDayzGameInstance*>(this)->EquipFromInventory(weaponId, slot);
+    ctx.equipWeapon = [this](NextDayz::FItemInstanceId id, int slot) { EquipWeaponInstance(id, slot); };
+    ctx.unequipWeapon = [this](int slot) { weapons_.Unequip(slot); };
+    ctx.wear = [this](NextDayz::FItemInstanceId id) { WearItem(id); };
+    ctx.takeOff = [this](NextDayz::FItemInstanceId id) { TakeOffItem(id); };
+    ctx.useItem = [this](NextDayz::FItemInstanceId id) { UseInventoryItem(id); };
+    ctx.dropItem = [this](NextDayz::FItemInstanceId id, int count) { DropItem(id, count); };
+    ctx.moveItem = [this](NextDayz::FItemInstanceId id, NextDayz::FContainerId container) { MoveItem(id, container); };
+    ctx.splitItem = [this](NextDayz::FItemInstanceId id) { SplitItem(id); };
+    ctx.takeLoot = [this](int index) { TakeLoot(index); };
+    ctx.bindQuick = [this](int slot, const std::string& itemId)
+    {
+        if (slot >= 0 && slot < static_cast<int>(quickSlots_.size()))
+        {
+            quickSlots_[slot] = itemId;
+        }
     };
-    ctx.toggleClothing = [this](const std::string& clothingId, bool on) {
-        const_cast<NextDayzGameInstance*>(this)->ToggleClothing(clothingId, on);
-    };
-    ctx.useItem = [this](NextDayz::FItemInstanceId instanceId) {
-        const_cast<NextDayzGameInstance*>(this)->UseInventoryItem(instanceId);
-    };
-    ctx.restartSession = [this]() {
-        const_cast<NextDayzGameInstance*>(this)->ResetSession();
-    };
+    ctx.restartSession = [this]() { ResetSession(); };
     if (showDebugPanel_)
     {
         DrawDebugWorldOverlay();
@@ -1054,15 +1348,222 @@ bool NextDayzGameInstance::OnRenderUI()
     return true;
 }
 
-void NextDayzGameInstance::EquipFromInventory(const std::string& weaponId, int slot)
+void NextDayzGameInstance::Notify(std::string text, int severity)
 {
-    weapons_.Equip(slot, weaponId);
+    // The same complaint twice in a row only refreshes the first one.
+    if (!notifications_.empty() && notifications_.back().text == text)
+    {
+        notifications_.back().age = 0.0f;
+        return;
+    }
+    notifications_.push_back({std::move(text), 0.0f, severity});
+    if (notifications_.size() > 6)
+    {
+        notifications_.erase(notifications_.begin());
+    }
 }
 
-void NextDayzGameInstance::ToggleClothing(const std::string& clothingId, bool on)
+void NextDayzGameInstance::StartNewLife()
 {
-    inventory_.SetClothingEquipped(clothingId, on);
-    rig_.SetClothing(clothingId, on);
+    quickSlots_ = {"bandage", "water_bottle", "food_can", ""};
+    notifications_.clear();
+    firecrackers_.clear();
+    lanternLit_ = false;
+    lanternSeconds_ = 0.0f;
+    cacheMarker_.reset();
+    cacheSeconds_ = 0.0f;
+    lastWounds_ = 0;
+    warnedHunger_ = warnedThirst_ = warnedCold_ = warnedWeak_ = false;
+    showMap_ = false;
+    Notify("You wake up by the road. Find water, food and something to fight with.", 0);
+}
+
+void NextDayzGameInstance::InjectLootCatalog(std::vector<Assets::Model>& models, std::vector<Assets::FMaterial>& materials)
+{
+    std::unordered_map<std::string, NextDayz::FLootVisual> catalog;
+    NextDayz::FLootVisual fallback;
+    if (lootCatalogLoaded_)
+    {
+        constexpr std::string_view prefix = "bone_item_";
+        for (const Assets::FRigPart& part : lootCatalogAsset_.parts)
+        {
+            if (part.bone < 0 || part.bone >= static_cast<int32_t>(lootCatalogAsset_.bones.size()) || part.modelIndex < 0 ||
+                part.modelIndex >= static_cast<int32_t>(lootCatalogAsset_.partModels.size()))
+            {
+                continue;
+            }
+            const std::string& bone = lootCatalogAsset_.bones[part.bone].name;
+            if (!bone.starts_with(prefix))
+            {
+                continue;
+            }
+            const std::string itemId = bone.substr(prefix.size());
+            if (catalog.contains(itemId))
+            {
+                continue;
+            }
+            NextDayz::FLootVisual visual;
+            models.push_back(lootCatalogAsset_.partModels[part.modelIndex]);
+            visual.modelId = static_cast<uint32_t>(models.size() - 1);
+            for (size_t section = 0; section < part.sectionColors.size() && section < visual.materials.size(); ++section)
+            {
+                visual.materials[section] =
+                    Assets::SceneBuilder::AddLambertianMaterial(materials, glm::vec3(part.sectionColors[section]));
+            }
+            visual.valid = true;
+            if (itemId == "unknown")
+            {
+                fallback = visual;
+            }
+            else
+            {
+                catalog.emplace(itemId, visual);
+            }
+        }
+        for (const NextDayz::FItemDef& definition : NextDayz::AllItemDefs())
+        {
+            if (!catalog.contains(std::string(definition.id)))
+            {
+                SPDLOG_WARN("[NextDayz] loot catalog has no model for '{}'", definition.id);
+            }
+        }
+    }
+    loot_.SetVisualCatalog(std::move(catalog), fallback);
+}
+
+std::vector<NextDayz::FLootSpotSeed> NextDayzGameInstance::CollectLootSpots() const
+{
+    std::vector<NextDayz::FLootSpotSeed> spots;
+    for (const NextDayz::FWorldAnchorHandle handle : worldAnchors_.Find(NextDayz::EWorldAnchorType::Loot))
+    {
+        if (const NextDayz::FWorldAnchor* anchor = worldAnchors_.Resolve(handle))
+        {
+            const std::optional<NextDayz::ELootProfile> profile = NextDayz::ParseLootProfile(anchor->profile);
+            spots.push_back({anchor->worldPos, profile.value_or(NextDayz::ELootProfile::Residential)});
+        }
+    }
+    return spots;
+}
+
+void NextDayzGameInstance::SyncClothingVisuals()
+{
+    // The rig has a helmet and a backpack attachment; any worn head/back item shows them.
+    const NextDayz::FItemInstance* head = inventory_.FindInstance(inventory_.WornInSlot(NextDayz::EEquipSlot::Head));
+    rig_.SetClothing("helmet", head && head->defId == "helmet");
+    rig_.SetClothing("backpack", inventory_.WornInSlot(NextDayz::EEquipSlot::Back) != 0);
+}
+
+void NextDayzGameInstance::EquipWeaponInstance(NextDayz::FItemInstanceId instanceId, int slot)
+{
+    const NextDayz::FItemInstance* instance = inventory_.FindInstance(instanceId);
+    if (!instance || !weapons_.EquipInstance(slot, inventory_, instanceId))
+    {
+        Notify("That is not something you can hold", 1);
+        return;
+    }
+    Notify(fmt::format("{} in hand ({})", ItemDisplayName(instance->defId), slot == 0 ? "1" : "2"));
+}
+
+void NextDayzGameInstance::WearItem(NextDayz::FItemInstanceId instanceId)
+{
+    const NextDayz::FItemInstance* instance = inventory_.FindInstance(instanceId);
+    if (!instance)
+    {
+        return;
+    }
+    const std::string name = ItemDisplayName(instance->defId);
+    if (inventory_.TryEquip(instanceId))
+    {
+        SyncClothingVisuals();
+        audio_.Pickup();
+        Notify(fmt::format("Wearing {}", name));
+    }
+    else
+    {
+        Notify("No room for what you are wearing in that slot", 1);
+    }
+}
+
+void NextDayzGameInstance::TakeOffItem(NextDayz::FItemInstanceId instanceId)
+{
+    if (inventory_.TryUnequip(instanceId))
+    {
+        SyncClothingVisuals();
+        audio_.Pickup();
+    }
+    else
+    {
+        Notify("No room to take it off - drop it instead", 1);
+    }
+}
+
+void NextDayzGameInstance::DropItem(NextDayz::FItemInstanceId instanceId, int count)
+{
+    const std::optional<NextDayz::FItemInstance> removed = inventory_.TryRemove(instanceId, count);
+    if (!removed)
+    {
+        Notify("Empty it first: there is no room for what is inside", 1);
+        return;
+    }
+    glm::vec3 forward = player_.Forward();
+    forward.y = 0.0f;
+    forward = glm::length(forward) > 1.0e-3f ? glm::normalize(forward) : glm::vec3(0.0f, 0.0f, 1.0f);
+    glm::vec3 at = player_.Position() + forward * 0.8f;
+    GetEngine().RayCast(at + glm::vec3(0.0f, 1.2f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f), [&](Assets::RayCastResult result)
+    {
+        if (result.Hit && result.T < 4.0f)
+        {
+            at.y = static_cast<float>(result.HitPoint.y);
+        }
+        return true;
+    });
+    loot_.SpawnPile({{removed->defId, removed->count, removed->loadedAmmo}}, at, survivalRng_.UnitFloat() * 6.28f,
+                    GetEngine());
+    SyncClothingVisuals();
+    audio_.Drop();
+    Notify(removed->count > 1 ? fmt::format("Dropped {} x{}", ItemDisplayName(removed->defId), removed->count)
+                              : fmt::format("Dropped {}", ItemDisplayName(removed->defId)));
+}
+
+void NextDayzGameInstance::MoveItem(NextDayz::FItemInstanceId instanceId, NextDayz::FContainerId containerId)
+{
+    if (!inventory_.TryMove(instanceId, containerId))
+    {
+        Notify("It does not fit there", 1);
+    }
+}
+
+void NextDayzGameInstance::SplitItem(NextDayz::FItemInstanceId instanceId)
+{
+    const NextDayz::FItemInstance* instance = inventory_.FindInstance(instanceId);
+    NextDayz::FItemInstanceId split = 0;
+    if (!instance || instance->count < 2 || !inventory_.TrySplit(instanceId, instance->count / 2, split))
+    {
+        Notify("Cannot split that here", 1);
+    }
+}
+
+void NextDayzGameInstance::TakeLoot(int lootIndex)
+{
+    if (actions_.IsActive() || player_.IsTraversing() || !survival_.IsAlive())
+    {
+        return;
+    }
+    const std::optional<NextDayz::FLootHandle> handle = loot_.ReserveEntry(lootIndex);
+    if (!handle)
+    {
+        return;
+    }
+    if (actions_.BeginLoot(*handle))
+    {
+        player_.SetAiming(false);
+        weapons_.SetTriggerDown(false);
+        weapons_.SetPresentationSuppressed(true);
+    }
+    else
+    {
+        loot_.Cancel(*handle);
+    }
 }
 
 void NextDayzGameInstance::UseInventoryItem(NextDayz::FItemInstanceId instanceId)
@@ -1073,14 +1574,262 @@ void NextDayzGameInstance::UseInventoryItem(NextDayz::FItemInstanceId instanceId
     }
     const NextDayz::FItemInstance* instance = inventory_.FindInstance(instanceId);
     const NextDayz::FItemDef* definition = instance ? NextDayz::FindItemDef(instance->defId) : nullptr;
-    if (!definition || definition->kind != NextDayz::EItemKind::Consumable)
+    if (!definition)
     {
         return;
     }
-    const NextDayz::EPlayerAction action = definition->hydrationDelta > 0.0f
-        ? NextDayz::EPlayerAction::Drink
-        : definition->hungerDelta > 0.0f ? NextDayz::EPlayerAction::Eat : NextDayz::EPlayerAction::Heal;
-    actions_.BeginUse(action, instanceId);
+    using NextDayz::EItemUse;
+    using NextDayz::EPlayerAction;
+    switch (definition->use)
+    {
+    case EItemUse::Eat:
+        actions_.BeginUse(EPlayerAction::Eat, instanceId);
+        return;
+    case EItemUse::Drink:
+        actions_.BeginUse(EPlayerAction::Drink, instanceId);
+        return;
+    case EItemUse::Bandage:
+    case EItemUse::FirstAid:
+    case EItemUse::Painkillers:
+        actions_.BeginUse(EPlayerAction::Heal, instanceId);
+        return;
+    case EItemUse::Rest:
+        if (survival_.IsBleeding())
+        {
+            Notify("You cannot rest while bleeding", 1);
+        }
+        else
+        {
+            actions_.BeginUse(EPlayerAction::Rest);
+        }
+        return;
+    case EItemUse::Radio:
+        UseRadio();
+        return;
+    case EItemUse::Lantern:
+        ToggleLantern();
+        return;
+    case EItemUse::Firecrackers:
+        ThrowFirecrackers(instanceId);
+        return;
+    case EItemUse::None:
+        break;
+    }
+    if (NextDayz::IsWieldable(*definition))
+    {
+        EquipWeaponInstance(instanceId, definition->equipSlot == NextDayz::EEquipSlot::PrimaryWeapon ? 0 : 1);
+    }
+    else if (definition->kind == NextDayz::EItemKind::Clothing)
+    {
+        inventory_.IsWorn(instanceId) ? TakeOffItem(instanceId) : WearItem(instanceId);
+    }
+    else if (!definition->description.empty())
+    {
+        Notify(std::string(definition->description));
+    }
+}
+
+void NextDayzGameInstance::UseQuickSlot(int slot)
+{
+    if (slot < 0 || slot >= static_cast<int>(quickSlots_.size()) || quickSlots_[slot].empty())
+    {
+        return;
+    }
+    const std::string& itemId = quickSlots_[slot];
+    const NextDayz::FItemInstance* chosen = nullptr;
+    for (const NextDayz::FItemInstance& instance : inventory_.Instances())
+    {
+        if (instance.defId == itemId && !inventory_.IsWorn(instance.instanceId))
+        {
+            chosen = &instance;
+            break;
+        }
+    }
+    if (!chosen)
+    {
+        Notify(fmt::format("No {} left", ItemDisplayName(itemId)), 1);
+        return;
+    }
+    UseInventoryItem(chosen->instanceId);
+}
+
+void NextDayzGameInstance::QuickBandage()
+{
+    const NextDayz::FSurvivalSnapshot& state = survival_.Snapshot();
+    if (state.bleedingWounds == 0 && state.health >= 99.5f)
+    {
+        Notify("You are not hurt");
+        return;
+    }
+    for (const char* itemId : {"bandage", "rag", "medkit"})
+    {
+        if (const NextDayz::FItemInstance* instance = inventory_.FindFirst(itemId))
+        {
+            UseInventoryItem(instance->instanceId);
+            return;
+        }
+    }
+    Notify("Nothing to dress the wound with: find bandages or rags", 2);
+}
+
+void NextDayzGameInstance::ToggleLantern()
+{
+    if (lanternLit_)
+    {
+        lanternLit_ = false;
+        audio_.Lantern();
+        Notify("Lantern out");
+        return;
+    }
+    if (inventory_.CountOf("lantern") == 0)
+    {
+        Notify("You have no lantern", 1);
+        return;
+    }
+    if (lanternSeconds_ <= 0.0f)
+    {
+        if (inventory_.Consume("fuel", 1) == 0)
+        {
+            Notify("The lantern needs a fuel canister", 1);
+            return;
+        }
+        lanternSeconds_ = kLanternFuelSeconds;
+    }
+    lanternLit_ = true;
+    audio_.Lantern();
+    Notify("Lantern lit - and the infected can see it too", 1);
+}
+
+void NextDayzGameInstance::UseRadio()
+{
+    if (inventory_.CountOf("radio") == 0)
+    {
+        return;
+    }
+    if (inventory_.Consume("battery", 1) == 0)
+    {
+        Notify("The radio is dead. It needs a battery", 1);
+        return;
+    }
+    audio_.RadioStatic();
+    const std::optional<glm::vec3> cache = loot_.PlantCache(player_.Position(), 120.0f, GetEngine());
+    if (!cache)
+    {
+        Notify("Only static on the military band...", 1);
+        return;
+    }
+    cacheMarker_ = *cache;
+    cacheSeconds_ = kCacheMarkerSeconds;
+    const glm::vec3 delta = *cache - player_.Position();
+    Notify(fmt::format("Broadcast: supply cache {:.0f} m to the {} (marked on map and compass)",
+                       glm::length(glm::vec2(delta.x, delta.z)), CompassWord(delta)), 3);
+}
+
+void NextDayzGameInstance::ThrowFirecrackers(NextDayz::FItemInstanceId instanceId)
+{
+    if (!inventory_.TryConsumeInstance(instanceId))
+    {
+        return;
+    }
+    // Lob it along the view; it lands on whatever is in the way, or ~18 m out.
+    const glm::vec3 eye = player_.EyePosition();
+    const glm::vec3 forward = player_.Forward();
+    float distance = 18.0f;
+    GetEngine().RayCast(eye, forward, [&](Assets::RayCastResult result)
+    {
+        if (result.Hit && result.T < distance)
+        {
+            distance = std::max(0.5f, result.T - 0.3f);
+        }
+        return true;
+    });
+    glm::vec3 landing = eye + forward * distance;
+    GetEngine().RayCast(landing + glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f), [&](Assets::RayCastResult result)
+    {
+        if (result.Hit && result.T < 30.0f)
+        {
+            landing.y = static_cast<float>(result.HitPoint.y);
+        }
+        return true;
+    });
+    firecrackers_.push_back({landing, 1.2f, 0});
+    audio_.Drop();
+    Notify("Firecrackers thrown - the infected will come to the noise");
+}
+
+void NextDayzGameInstance::UpdateFirecrackers(float deltaSeconds)
+{
+    for (FFirecracker& cracker : firecrackers_)
+    {
+        cracker.timer -= deltaSeconds;
+        if (cracker.timer <= 0.0f)
+        {
+            noise_.Emit(cracker.position, 75.0f, 1.3f, NextDayz::ENoiseType::Rifle, 2.0f);
+            audio_.Firecracker(cracker.position);
+            effects_.WorldImpact(cracker.position + glm::vec3(0.0f, 0.1f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+            ++cracker.bangs;
+            cracker.timer = 0.7f;
+        }
+    }
+    std::erase_if(firecrackers_, [](const FFirecracker& cracker) { return cracker.bangs >= 4; });
+}
+
+void NextDayzGameInstance::UpdateWorldPressure()
+{
+    const NextDayz::FSurvivalSnapshot& state = survival_.Snapshot();
+    const int dressings = inventory_.CountOf("bandage") + inventory_.CountOf("rag") + inventory_.CountOf("medkit");
+    loot_.SetScarcity(state.hunger < 30.0f || state.hydration < 30.0f, state.bleedingWounds > 0 && dressings == 0);
+
+    // Darkness hides you, a crouch hides you more, fog hides everything; a lit
+    // lantern at night is a beacon.
+    const float night = 1.0f - time_.Daylight();
+    float sight = glm::mix(1.0f, 0.55f, night);
+    if (lanternLit_)
+    {
+        sight = std::max(sight, glm::mix(1.0f, 1.4f, night));
+    }
+    if (player_.LocomotionState().actualStance == NextDayz::EPlayerStance::Crouched)
+    {
+        sight *= 0.7f;
+    }
+    if (time_.Weather() == NextDayz::EWeather::Fog)
+    {
+        sight *= 0.7f;
+    }
+    zombies_.SetSightScale(sight);
+    // More of them walk the night.
+    zombieSpawns_.SetGlobalCap(night > 0.6f ? 48 : 40);
+    time_.SetLanternLight(lanternLit_ ? 1.0f : 0.0f);
+}
+
+void NextDayzGameInstance::UpdateSurvivalFeedback(float /*deltaSeconds*/)
+{
+    const NextDayz::FSurvivalSnapshot& state = survival_.Snapshot();
+    if (!survival_.IsAlive())
+    {
+        return;
+    }
+    if (state.bleedingWounds > lastWounds_)
+    {
+        Notify("You are bleeding! Bandage it [H]", 2);
+    }
+    lastWounds_ = state.bleedingWounds;
+    const auto warn = [this](bool condition, bool clear, bool& latch, const char* text, int severity)
+    {
+        if (condition && !latch)
+        {
+            Notify(text, severity);
+            latch = true;
+        }
+        else if (clear)
+        {
+            latch = false;
+        }
+    };
+    warn(state.hunger < 25.0f, state.hunger > 35.0f, warnedHunger_, "You are hungry", 1);
+    warn(state.hydration < 25.0f, state.hydration > 35.0f, warnedThirst_, "You are thirsty", 1);
+    warn(state.cold > 0.45f, state.cold < 0.25f, warnedCold_, "You are cold: find warmer clothes", 1);
+    warn(survival_.IsWeak(), !survival_.IsWeak(), warnedWeak_, "You feel weak - too hungry or thirsty to run", 2);
 }
 
 void NextDayzGameInstance::ApplyValidationLoadout()
@@ -1094,16 +1843,29 @@ void NextDayzGameInstance::ApplyValidationLoadout()
             rig_.SetClothing("backpack", true);
         }
     }
-    if (inventory_.CountOf("ak") == 0)
+    NextDayz::FItemInstanceId akId = 0;
+    if (const NextDayz::FItemInstance* existing = inventory_.FindFirst("ak"))
     {
-        inventory_.TryAdd("ak", "AK-74", NextDayz::EItemKind::Weapon, 1);
+        akId = existing->instanceId;
+    }
+    else
+    {
+        inventory_.TryAdd("ak", "AK-74", NextDayz::EItemKind::Weapon, 1, &akId);
     }
     if (inventory_.CountOf("ammo_545") < 60)
     {
         inventory_.TryAdd("ammo_545", "5.45x39", NextDayz::EItemKind::Ammo,
                           60 - inventory_.CountOf("ammo_545"));
     }
-    weapons_.Equip(0, "ak");
+    if (akId != 0)
+    {
+        inventory_.SetLoadedAmmo(akId, 30);
+        weapons_.EquipInstance(0, inventory_, akId);
+    }
+    else
+    {
+        weapons_.Equip(0, "ak");
+    }
 }
 
 void NextDayzGameInstance::BuildZombieNavigation()
@@ -1119,7 +1881,9 @@ void NextDayzGameInstance::BuildZombieNavigation()
     settings.floorHeightTolerance = 2.0f;
     settings.worldMin = {-510.0f, 0.0f, -510.0f};
     settings.worldMax = {510.0f, 0.0f, 510.0f};
+    const auto buildStart = std::chrono::steady_clock::now();
     zombieNavGrid_.Build(scene.GetCPUAccelerationStructure(), settings);
+    const double buildMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - buildStart).count();
 
     Runtime::TerrainComponent* terrain = nullptr;
     for (Runtime::TerrainComponent* candidate : scene.Components<Runtime::TerrainComponent>())
@@ -1129,14 +1893,19 @@ void NextDayzGameInstance::BuildZombieNavigation()
     }
     if (terrain)
     {
+        // The grid keeps one surface per cell, the highest. Water is out, and
+        // so is anything well above the terrain: roofs, canopies and wall tops
+        // would otherwise be walked on. The infected go round buildings and
+        // only close the last metres to a player inside one directly.
         zombieNavGrid_.MaskUnwalkable([terrain](const glm::vec3& point)
         {
-            return terrain->IsWater(point.x, point.z) &&
-                   point.y < terrain->WaterSurface(point.x, point.z) + 0.05f;
+            const bool water = terrain->IsWater(point.x, point.z) &&
+                               point.y < terrain->WaterSurface(point.x, point.z) + 0.05f;
+            return water || point.y > terrain->SampleHeight(point.x, point.z) + 1.2f;
         });
     }
-    SPDLOG_INFO("[NextDayz] infected navigation ready: {}x{} cells at {:.1f} m",
-                zombieNavGrid_.GetWidth(), zombieNavGrid_.GetHeight(), zombieNavGrid_.GetCellSize());
+    SPDLOG_INFO("[NextDayz] infected navigation ready: {}x{} cells at {:.1f} m in {:.0f} ms",
+                zombieNavGrid_.GetWidth(), zombieNavGrid_.GetHeight(), zombieNavGrid_.GetCellSize(), buildMs);
 }
 
 void NextDayzGameInstance::ConfigureZombieSpawnPoints()
@@ -1153,7 +1922,9 @@ void NextDayzGameInstance::ConfigureZombieSpawnPoints()
         if (anchor->profile == "military") profile = NextDayz::EZombieProfile::Military;
         else if (anchor->profile == "industrial") profile = NextDayz::EZombieProfile::Industrial;
         else if (anchor->profile == "wilderness") profile = NextDayz::EZombieProfile::Wilderness;
-        zombiePoints.push_back({anchor->worldPos, profile});
+        NextDayz::FZombieSpawnPoint point{anchor->worldPos, profile};
+        point.groupSize = anchor->group;
+        zombiePoints.push_back(point);
     }
     zombieSpawns_.SetPoints(std::move(zombiePoints));
 }
@@ -1169,6 +1940,7 @@ void NextDayzGameInstance::ResetSession()
     inventory_.TryAdd("bandage", "Bandage", NextDayz::EItemKind::Consumable, 1);
     inventory_.TryAdd("water_bottle_empty", "Empty Bottle", NextDayz::EItemKind::Misc, 1);
     survival_.Reset();
+    StartNewLife();
     weapons_.ResetRuntime();
     zombies_.Reset();
     combat_.Reset();
@@ -1179,7 +1951,7 @@ void NextDayzGameInstance::ResetSession()
     recentWeaponTraces_.clear();
     effects_.Reset();
     loot_.ResetSession(GetEngine());
-    time_.Reset(config_.Time);
+    time_.Reset(config_.Time, sessionRng_.Derive(0x57454154ULL).Seed());
     player_.Destroy();
     player_.Create(GetEngine().GetPhysicsEngine(), ResolveSpawnPosition(), config_);
     if (validationLoadout_ && GOption->AgentValidation)
@@ -1187,32 +1959,49 @@ void NextDayzGameInstance::ResetSession()
         ApplyValidationLoadout();
     }
     showInventory_ = false;
+    showMap_ = false;
     paused_ = false;
     survivalSeconds_ = 0.0;
     hoveredWell_ = {};
+    SyncClothingVisuals();
     SyncZombieVisuals();
     SetMouseCaptured(true);
 }
 
 std::string NextDayzGameInstance::CurrentObjective() const
 {
-    if (inventory_.CountOf("water_bottle") == 0)
+    const NextDayz::FSurvivalSnapshot& state = survival_.Snapshot();
+    if (state.bleedingWounds > 0)
     {
-        return "Find drinking water or a well";
+        return "Stop the bleeding: bandage or rags [H]";
     }
-    if (inventory_.CountOf("food_can") == 0)
+    if (inventory_.CountOf("water_bottle") == 0 && inventory_.CountOf("drink_soda") == 0)
     {
-        return "Find food";
+        return "Find water: a bottle, a soda, or a well or pump in a village";
+    }
+    bool hasFood = false;
+    for (const NextDayz::FItemInstance& instance : inventory_.Instances())
+    {
+        const NextDayz::FItemDef* definition = NextDayz::FindItemDef(instance.defId);
+        hasFood = hasFood || (definition && definition->use == NextDayz::EItemUse::Eat);
+    }
+    if (!hasFood)
+    {
+        return "Find food: houses, shops and the supermarket";
     }
     if (inventory_.TotalCapacity() <= 10)
     {
-        return "Find a backpack or larger clothing";
+        return "Find a backpack or clothes with pockets";
     }
     if (!weapons_.HasActiveWeapon())
     {
-        return "Find a melee weapon or firearm";
+        return "Find something to fight with: a knife, crowbar, axe or a gun";
     }
-    return "Travel to a high-risk POI for advanced supplies";
+    if (!inventory_.HasTool(NextDayz::EItemTool::Map) && !inventory_.HasTool(NextDayz::EItemTool::Compass))
+    {
+        return "Find a map or compass to navigate";
+    }
+    return "Raid a fortress or the military base for better gear";
 }
 
 void NextDayzGameInstance::CreateZombieVisuals()
@@ -1322,6 +2111,10 @@ void NextDayzGameInstance::HandleDamageEvents()
         }
         effects_.BloodHit(damage.worldPoint, damage.direction, -damage.direction, damage.hitZone, damage.killed);
         audio_.Hit(damage.hitZone, damage.killed);
+        if (weapons_.ActiveIsMelee())
+        {
+            audio_.MeleeImpact();
+        }
         if (damage.killed)
         {
             if (const NextDayz::FZombieRuntime* zombie = zombies_.Resolve(damage.target))
@@ -1343,6 +2136,20 @@ void NextDayzGameInstance::HandleDamageEvents()
                                         return true;
                                     });
                 effects_.BloodPool(ground, groundNormal, 0.8f);
+                // Some of them were still carrying something.
+                if (survivalRng_.UnitFloat() < 0.35f)
+                {
+                    using NextDayz::ELootProfile;
+                    using NextDayz::EZombieProfile;
+                    const ELootProfile profile = zombie->profile == EZombieProfile::Military ? ELootProfile::Military
+                        : zombie->profile == EZombieProfile::Industrial                     ? ELootProfile::Industrial
+                        : zombie->profile == EZombieProfile::Wilderness                     ? ELootProfile::Wilderness
+                                                                                            : ELootProfile::Residential;
+                    NextDayz::FLootStack stack = NextDayz::RollLoot(profile, survivalRng_.NextU32());
+                    const glm::vec3 side(zombie->forward.z, 0.0f, -zombie->forward.x);
+                    loot_.SpawnPile({std::move(stack)}, ground + side * 0.5f, survivalRng_.UnitFloat() * 6.28f,
+                                    GetEngine());
+                }
             }
         }
         // One marker per burst: a kill or headshot anywhere in it colours it.
@@ -1612,8 +2419,9 @@ void NextDayzGameInstance::DrawDebugWorldOverlay() const
         {
             const NextDayz::FLootEntry& entry = loot_.Entries()[index];
             const NextDayz::FLootSlot* slot = loot_.ResolveSlot(entry.directorHandle);
-            if (!slot || glm::distance(entry.worldPos, player_.Position()) > 220.0f) continue;
-            ImU32 color = LootCategoryColor(slot->category);
+            if (entry.state == NextDayz::FLootEntry::EState::Empty ||
+                glm::distance(entry.worldPos, player_.Position()) > 220.0f) continue;
+            ImU32 color = LootCategoryColor(entry.category);
             const char* state = "Available";
             double cooldownRemaining = 0.0;
             if (entry.state == NextDayz::FLootEntry::EState::Reserved)
@@ -1625,7 +2433,7 @@ void NextDayzGameInstance::DrawDebugWorldOverlay() const
             {
                 color = IM_COL32(130, 140, 150, 210);
                 state = "Cooldown";
-                cooldownRemaining = std::max(0.0, slot->cooldownUntil - loot_.WorldSeconds());
+                cooldownRemaining = slot ? std::max(0.0, slot->cooldownUntil - loot_.WorldSeconds()) : 0.0;
             }
             ImVec2 ground;
             ImVec2 marker;
@@ -1639,10 +2447,10 @@ void NextDayzGameInstance::DrawDebugWorldOverlay() const
                 const std::string suffix = entry.state == NextDayz::FLootEntry::EState::Cooldown
                     ? fmt::format(" {:.0f}s", cooldownRemaining) : std::string();
                 label({marker.x + 9.0f, marker.y - 8.0f}, color,
-                      fmt::format("L{} {} | {} | {}{} | node #{}", index,
-                                  entry.def ? entry.def->displayName : "Unknown",
-                                  LootCategoryName(slot->category), state, suffix,
-                                  entry.nodeInstanceId));
+                      fmt::format("L{} {} | {} {} | {}{} | node #{}", index,
+                                  entry.displayName.empty() ? "(empty)" : entry.displayName,
+                                  NextDayz::LootProfileName(entry.profile), LootCategoryName(entry.category), state,
+                                  suffix, entry.nodeInstanceId));
             }
         }
     }
@@ -1763,6 +2571,34 @@ bool NextDayzGameInstance::OnKey(SDL_Event& event)
     case SDLK_Q:
         if (pressed && !player_.IsTraversing()) weapons_.SwitchPrevious();
         return true;
+    case SDLK_3:
+    case SDLK_4:
+    case SDLK_5:
+    case SDLK_6:
+        if (pressed && !player_.IsTraversing())
+        {
+            UseQuickSlot(static_cast<int>(event.key.key - SDLK_3));
+        }
+        return true;
+    case SDLK_H:
+        if (pressed && !player_.IsTraversing()) QuickBandage();
+        return true;
+    case SDLK_L:
+        if (pressed) ToggleLantern();
+        return true;
+    case SDLK_M:
+        if (pressed)
+        {
+            showMap_ = !showMap_;
+            if (showMap_)
+            {
+                SetInventoryOpen(false);
+                player_.SetAiming(false);
+                weapons_.SetTriggerDown(false);
+            }
+            SetMouseCaptured(!showMap_);
+        }
+        return true;
     case SDLK_E:
         if (pressed && !actions_.IsActive() && !player_.IsTraversing())
         {
@@ -1820,12 +2656,21 @@ bool NextDayzGameInstance::OnKey(SDL_Event& event)
         return true;
     case SDLK_TAB:
     case SDLK_I:
-        if (pressed && !player_.IsTraversing()) SetInventoryOpen(!showInventory_);
+        if (pressed && !player_.IsTraversing())
+        {
+            showMap_ = false;
+            SetInventoryOpen(!showInventory_);
+        }
         return true;
     case SDLK_ESCAPE:
         if (pressed)
         {
-            if (showInventory_)
+            if (showMap_)
+            {
+                showMap_ = false;
+                SetMouseCaptured(true);
+            }
+            else if (showInventory_)
             {
                 SetInventoryOpen(false);
             }
@@ -1843,7 +2688,7 @@ bool NextDayzGameInstance::OnKey(SDL_Event& event)
 
 bool NextDayzGameInstance::OnCursorPosition(double xpos, double ypos)
 {
-    if (!mouseCaptured_ || showInventory_)
+    if (!mouseCaptured_ || showInventory_ || showMap_)
     {
         return false;
     }
@@ -1869,7 +2714,7 @@ bool NextDayzGameInstance::OnCursorPosition(double xpos, double ypos)
 
 bool NextDayzGameInstance::OnMouseButton(SDL_Event& event)
 {
-    if (showInventory_)
+    if (showInventory_ || showMap_)
     {
         return false; // let ImGui handle panel interaction
     }
@@ -1981,6 +2826,37 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
             [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<int64_t>(loot_.RemainingCount()); });
     reg.Add("lootCooldown",
             [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<int64_t>(loot_.CooldownCount()); });
+    reg.Add("lootSpots", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<int64_t>(loot_.SpotCount()); });
+    reg.Add("lootPiles", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<int64_t>(loot_.PileCount()); });
+    reg.Add("lootZones", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<int64_t>(loot_.Zones().size());
+    });
+    reg.Add("poiCount", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<int64_t>(worldAnchors_.Count(NextDayz::EWorldAnchorType::Poi));
+    });
+    reg.Add("zombieCap", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<int64_t>(zombieSpawns_.GlobalCap());
+    });
+    reg.Add("zombieSpawnPoints", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<int64_t>(zombieSpawns_.Points().size());
+    });
+    reg.Add("bleeding", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<int64_t>(survival_.Snapshot().bleedingWounds);
+    });
+    reg.Add("cold", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(survival_.Snapshot().cold); });
+    reg.Add("armor", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(inventory_.Armor()); });
+    reg.Add("weather", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return std::string(NextDayz::WeatherName(time_.Weather()));
+    });
+    reg.Add("lanternLit", [this]() -> Runtime::Agent::FAgentQueryValue { return lanternLit_; });
+    reg.Add("cacheMarked", [this]() -> Runtime::Agent::FAgentQueryValue { return cacheMarker_.has_value(); });
+    reg.Add("showMap", [this]() -> Runtime::Agent::FAgentQueryValue { return showMap_; });
+    reg.Add("lastNotification", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return notifications_.empty() ? std::string() : notifications_.back().text;
+    });
+    reg.Add("itemCount", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<int64_t>(inventory_.Instances().size());
+    });
     reg.Add("worldZombieAnchors", [this]() -> Runtime::Agent::FAgentQueryValue {
         return static_cast<int64_t>(worldAnchors_.Count(NextDayz::EWorldAnchorType::Zombie));
     });
@@ -2185,13 +3061,27 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
         for (const NextDayz::FLootEntry& entry : loot_.Entries())
         {
             if (entry.state != NextDayz::FLootEntry::EState::Available) continue;
-            if (const NextDayz::FLootSlot* slot = loot_.ResolveSlot(entry.directorHandle))
-                present[static_cast<size_t>(slot->category)] = true;
+            present[static_cast<size_t>(entry.category)] = true;
         }
         return static_cast<int64_t>(std::count(present.begin(), present.end(), false));
     });
     reg.Add("recentWeaponTraces", [this]() -> Runtime::Agent::FAgentQueryValue {
         return static_cast<int64_t>(recentWeaponTraces_.size());
+    });
+    reg.Add("zombieOffset", [this]() -> Runtime::Agent::FAgentQueryValue {
+        const NextDayz::FZombieRuntime* zombie = FocusZombie();
+        if (!zombie) return std::string("none");
+        const glm::vec3 delta = zombie->position - player_.Position();
+        return fmt::format("{:.2f} {:.2f} {:.2f} hitboxes {}", delta.x, delta.y, delta.z,
+                           combat_.Hitboxes(zombie->handle).size());
+    });
+    reg.Add("lastTraceNode", [this]() -> Runtime::Agent::FAgentQueryValue {
+        if (recentWeaponTraces_.empty()) return std::string("none");
+        const NextDayz::FWeaponTraceEvent& trace = recentWeaponTraces_.back().trace;
+        const Assets::Node* node = trace.hitInstanceId ? GetEngine().GetScene().GetNodeByInstanceId(trace.hitInstanceId)
+                                                       : nullptr;
+        return fmt::format("{} @ {:.2f} m", node ? node->GetName() : std::string("-"),
+                           glm::distance(trace.origin, trace.endPoint));
     });
     reg.Add("lastTraceResult", [this]() -> Runtime::Agent::FAgentQueryValue {
         if (recentWeaponTraces_.empty()) return std::string("none");

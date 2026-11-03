@@ -55,9 +55,53 @@ namespace NextDayz
             return false;
         }
         slot->state = ELootSlotState::Cooldown;
+        slot->committedAt = worldSeconds;
         slot->cooldownUntil = worldSeconds + RespawnCooldown(slot->category, tuning_);
         slot->offscreenSince = -1.0;
         return true;
+    }
+
+    bool LootDirector::StartCooldown(FLootSlotHandle handle, double worldSeconds, double seconds)
+    {
+        FLootSlot* slot = ResolveMutable(handle);
+        if (!slot || slot->state == ELootSlotState::Reserved)
+        {
+            return false;
+        }
+        slot->state = ELootSlotState::Cooldown;
+        slot->committedAt = worldSeconds;
+        slot->cooldownUntil = worldSeconds + seconds;
+        slot->offscreenSince = -1.0;
+        return true;
+    }
+
+    void LootDirector::SetCooldownScale(ELootCategory category, float scale)
+    {
+        if (category < ELootCategory::Count)
+        {
+            cooldownScale_[static_cast<size_t>(category)] = std::max(scale, 0.0f);
+        }
+    }
+
+    bool LootDirector::ForceAvailable(FLootSlotHandle handle)
+    {
+        FLootSlot* slot = ResolveMutable(handle);
+        if (!slot || slot->state == ELootSlotState::Reserved)
+        {
+            return false;
+        }
+        slot->state = ELootSlotState::Available;
+        slot->cooldownUntil = 0.0;
+        slot->offscreenSince = -1.0;
+        return true;
+    }
+
+    void LootDirector::SetCategory(FLootSlotHandle handle, ELootCategory category)
+    {
+        if (FLootSlot* slot = ResolveMutable(handle))
+        {
+            slot->category = category;
+        }
     }
 
     bool LootDirector::Cancel(FLootSlotHandle handle)
@@ -88,7 +132,10 @@ namespace NextDayz
         {
             slot->offscreenSince = worldSeconds;
         }
-        if (worldSeconds < slot->cooldownUntil || worldSeconds - slot->offscreenSince < tuning_.minimumOffscreenSeconds ||
+        const double scale = slot->category < ELootCategory::Count
+            ? static_cast<double>(cooldownScale_[static_cast<size_t>(slot->category)]) : 1.0;
+        const double readyAt = slot->committedAt + (slot->cooldownUntil - slot->committedAt) * scale;
+        if (worldSeconds < readyAt || worldSeconds - slot->offscreenSince < tuning_.minimumOffscreenSeconds ||
             categoryAvailable >= categoryCap)
         {
             return false;

@@ -1,19 +1,31 @@
 #pragma once
 
 // ============================================================================
-// LootSystem.hpp - Derives pickups directly from the map's scene nodes. On scene
-// load it scans scene.Nodes() for names in the map-item -> game-item table and
-// registers one entry per matching node (so loot always follows what the artist
-// placed). Each frame it finds the entry the player is near and aiming at; E
-// grants its items to the Inventory and hides the source node.
+// LootSystem.hpp - Everything lying in the world that can be picked up.
+//
+//  * Authored loot: map nodes whose module name is in the authored table
+//    (cw_wpn_ak, cw_item_medkit, ...). The artist's placement is the visual.
+//  * Spots: nd_spawn_loot_<profile> anchors. Each rolls an item from its
+//    profile's table (LootTables) and shows it with a pooled node whose model
+//    is swapped to the rolled item's catalog visual.
+//  * Piles: what the player drops and what the infected leave behind; pooled
+//    nodes, gone once picked up.
+//
+// Restocking (LootDirector): a taken spot cools down per category, and only
+// restocks when the player has left its area (spots are clustered into POI
+// zones) and has not been looking at it. Restocked spots re-roll, under
+// per-category stock caps so guns stay rare; food restocks faster while the
+// player is starving. Picking up takes whatever fits; the rest stays.
 // ============================================================================
 
 #include <string>
 #include <optional>
+#include <unordered_map>
 #include <vector>
 
 #include <glm/glm.hpp>
 
+#include "Application/Game/NextDayz/Data/LootTables.hpp"
 #include "Application/Game/NextDayz/Inventory/Inventory.hpp"
 #include "Application/Game/NextDayz/NextDayzConfig.hpp"
 #include "Application/Game/NextDayz/World/LootDirector.hpp"
@@ -28,18 +40,26 @@ namespace Assets
 
 namespace NextDayz
 {
-    struct FLootGrant
+    // A catalog item model (nextdayz_loot_items.scad) injected into the scene.
+    struct FLootVisual
     {
-        std::string id;
-        std::string displayName;
-        EItemKind kind;
-        int count;
+        uint32_t modelId = 0;
+        std::array<uint32_t, 16> materials{};
+        bool valid = false;
     };
 
-    struct FLootDef
+    // Map anchor that becomes a loot spot.
+    struct FLootSpotSeed
     {
-        std::string displayName;          // shown in the interaction prompt
-        std::vector<FLootGrant> grants;
+        glm::vec3 position{};
+        ELootProfile profile = ELootProfile::Residential;
+    };
+
+    enum class ELootSource : uint8_t
+    {
+        Authored,
+        Spot,
+        Pile,
     };
 
     struct FLootEntry
@@ -49,13 +69,29 @@ namespace NextDayz
             Available,
             Reserved,
             Cooldown,
+            Empty,      // a pile that was picked up; never restocks
         };
 
-        uint32_t nodeInstanceId = 0;
+        ELootSource source = ELootSource::Authored;
+        uint32_t nodeInstanceId = 0;   // the map node (authored) or the pooled visual
         glm::vec3 worldPos{0.0f};
-        const FLootDef* def = nullptr;
+        float yaw = 0.0f;
+        std::string displayName;
+        std::vector<FLootStack> contents;
+        ELootProfile profile = ELootProfile::Residential;
+        ELootCategory category = ELootCategory::Misc;
         EState state = EState::Available;
         FLootSlotHandle directorHandle{};
+        int zone = -1;
+        int authoredIndex = -1;
+        double pileTime = 0.0;
+    };
+
+    struct FLootZone
+    {
+        glm::vec3 center{0.0f};
+        float radius = 0.0f;
+        int entries = 0;
     };
 
     struct FLootHandle
@@ -67,49 +103,95 @@ namespace NextDayz
         bool IsValid() const { return generation != 0; }
     };
 
+    struct FLootCommitResult
+    {
+        bool taken = false;
+        bool partial = false;        // something did not fit and was left behind
+        std::vector<FLootStack> stacks;
+    };
+
     class LootSystem
     {
     public:
         void Configure(const FLootConfig& config) { config_ = config; }
+        void ConfigureRespawn(const FLootRespawnTuning& tuning) { director_.Configure(tuning); }
         void SetSeed(uint64_t seed) { seed_ = seed; }
+        void SetVisualCatalog(std::unordered_map<std::string, FLootVisual> catalog, FLootVisual fallback);
 
-        void OnSceneLoaded(Assets::Scene& scene);
+        void OnSceneLoaded(Assets::Scene& scene, std::span<const FLootSpotSeed> spots = {});
         void OnSceneUnloaded();
         void ResetSession(NextEngine& engine);
 
-        // Recomputes the hovered entry from player position + view direction.
+        // Recomputes the hovered entry from player position + view direction and
+        // runs restocking.
         void Update(float deltaSeconds, const glm::vec3& eyePosition, const glm::vec3& viewForward,
                     NextEngine& engine);
+        // Starving or out of bandages: food / medical restock sooner and spots
+        // lean toward them.
+        void SetScarcity(bool foodScarce, bool medicalScarce);
 
-        // Nearest registered loot to an approximate XZ (used to derive a safe
+        // Nearest authored loot to an approximate XZ (used to derive a safe
         // spawn on real ground next to supplies). Returns false if no loot.
         bool NearestLootPos(const glm::vec2& approxXZ, glm::vec3& outWorldPos) const;
 
         bool HasHovered() const { return hoveredIndex_ >= 0; }
         const FLootEntry* Hovered() const;
+        int HoveredIndex() const { return hoveredIndex_; }
         std::string HoveredPrompt() const; // "AK-74" (empty if none)
+        // Available entries within `radius` of the eye, nearest first.
+        std::vector<int> Nearby(const glm::vec3& eyePosition, float radius) const;
 
         std::optional<FLootHandle> ReserveHovered();
-        const FLootDef* Commit(const FLootHandle& handle, Inventory& inventory, NextEngine& engine);
+        std::optional<FLootHandle> ReserveEntry(int index);
+        FLootCommitResult Commit(const FLootHandle& handle, Inventory& inventory, NextEngine& engine);
         bool Cancel(const FLootHandle& handle);
         bool IsReservedHandleValid(const FLootHandle& handle) const;
 
+        // Puts a pile on the ground (player drop, infected remains). Recycles the
+        // oldest pile when the pool is full.
+        bool SpawnPile(std::vector<FLootStack> contents, const glm::vec3& position, float yaw, NextEngine& engine);
+        // Restocks one military spot far from `from` right now with a rifle and
+        // ammo (radio supply cache). Returns its position.
+        std::optional<glm::vec3> PlantCache(const glm::vec3& from, float minDistance, NextEngine& engine);
+
         int RemainingCount() const;
         int CooldownCount() const;
+        int SpotCount() const;
+        int PileCount() const;
 
         // Read-only diagnostics used by the F5 world overlay. Gameplay code
         // still mutates slots exclusively through LootSystem transactions.
         const std::vector<FLootEntry>& Entries() const { return entries_; }
+        const std::vector<FLootZone>& Zones() const { return zones_; }
         const FLootSlot* ResolveSlot(FLootSlotHandle handle) const { return director_.Resolve(handle); }
         double WorldSeconds() const { return worldSeconds_; }
 
     private:
+        void Rebuild(Assets::Scene& scene, std::span<const FLootSpotSeed> spots, std::span<const uint32_t> reuseNodes);
+        void BuildZones();
+        void RollContents(FLootEntry& entry, uint32_t roll, bool restock);
+        void ShowEntry(FLootEntry& entry, Assets::Scene& scene, NextEngine* engine);
+        void HideEntry(FLootEntry& entry, Assets::Scene& scene, NextEngine* engine);
+        void UpdateRestock(const glm::vec3& eyePosition, const glm::vec3& viewForward, NextEngine& engine);
+        const FLootVisual& VisualFor(const FLootEntry& entry) const;
+        void CreatePoolNodes(Assets::Scene& scene, std::span<const uint32_t> reuse);
+        static std::string DescribeContents(const std::vector<FLootStack>& contents);
+
         FLootConfig config_{};
         std::vector<FLootEntry> entries_;
+        std::vector<FLootZone> zones_;
+        std::vector<uint32_t> pileNodeIds_;   // pooled pile visuals
         int hoveredIndex_ = -1;
         uint32_t generation_ = 0;
         uint64_t seed_ = 1337;
         double worldSeconds_ = 0.0;
+        float restockAccumulator_ = 0.0f;
+        bool foodScarce_ = false;
+        bool medicalScarce_ = false;
+        uint32_t pileSerial_ = 0;
+        std::unordered_map<std::string, FLootVisual> catalog_;
+        FLootVisual fallbackVisual_{};
         LootDirector director_;
+        FDeterministicRng rollRng_;
     };
 }

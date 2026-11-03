@@ -8,7 +8,7 @@
     { "type": "wait-until", "query": "game.sceneReady", "op": "eq", "value": true, "timeoutMs": 30000 },
     { "type": "cvar", "name": "nextdayz.validation.loadout", "set": true },
     { "type": "wait-frames", "n": 60 },
-    { "type": "assert", "query": "game.lootRemaining", "op": "eq", "value": 59 },
+    { "type": "assert", "query": "game.lootRemaining", "op": "eq", "value": 253 },
     { "type": "key", "code": "W", "action": "down" },
     { "type": "wait-ms", "ms": 650 },
     { "type": "key", "code": "W", "action": "up" },
@@ -19,7 +19,7 @@
     { "type": "key", "code": "E", "action": "press" },
     { "type": "wait-ms", "ms": 1100 },
     { "type": "assert", "query": "game.lootCooldown", "op": "ge", "value": 1 },
-    { "type": "assert", "query": "game.lootRemaining", "op": "lt", "value": 59 },
+    { "type": "assert", "query": "game.lootRemaining", "op": "lt", "value": 253 },
     { "type": "quit" }
   ]
 }

@@ -43,11 +43,31 @@ namespace NextDayz
         constexpr const char* kSwitch = "assets/sounds/nextdayz/switch_weapon.wav";
         constexpr const char* kKill = "assets/sounds/nextdayz/kill_confirm.wav";
         constexpr const char* kBodyFall = "assets/sounds/nextdayz/body_fall.wav";
+        constexpr const char* kSwing[] = {"assets/sounds/nextdayz/melee_swing_1.wav",
+                                          "assets/sounds/nextdayz/melee_swing_2.wav"};
+        constexpr const char* kWind[] = {"assets/sounds/nextdayz/ambient_wind_1.wav",
+                                         "assets/sounds/nextdayz/ambient_wind_2.wav",
+                                         "assets/sounds/nextdayz/ambient_wind_3.wav"};
+        constexpr const char* kCrow[] = {"assets/sounds/nextdayz/ambient_crow_1.wav",
+                                         "assets/sounds/nextdayz/ambient_crow_2.wav"};
+        constexpr const char* kDistantShot[] = {"assets/sounds/nextdayz/distant_shot_1.wav",
+                                                "assets/sounds/nextdayz/distant_shot_2.wav"};
+        constexpr const char* kMeleeImpact = "assets/sounds/nextdayz/melee_impact.wav";
+        constexpr const char* kFirecracker = "assets/sounds/nextdayz/firecracker.wav";
+        constexpr const char* kDistantScream = "assets/sounds/nextdayz/distant_scream.wav";
+        constexpr const char* kPickup = "assets/sounds/nextdayz/pickup.wav";
+        constexpr const char* kDrop = "assets/sounds/nextdayz/item_drop.wav";
+        constexpr const char* kEat = "assets/sounds/nextdayz/eat.wav";
+        constexpr const char* kDrink = "assets/sounds/nextdayz/drink.wav";
+        constexpr const char* kBandage = "assets/sounds/nextdayz/bandage.wav";
+        constexpr const char* kRadio = "assets/sounds/nextdayz/radio_static.wav";
+        constexpr const char* kLantern = "assets/sounds/nextdayz/lantern.wav";
 
         std::span<const char* const> Variants(size_t cue)
         {
             static constexpr std::span<const char* const> table[] = {
                 kRifle, kSniper, kShotgun, kPistol, kFlesh, kHead, kDirt, kHurt, kGroan, kAlert, kAttack, kDeath,
+                kSwing, kWind, kCrow, kDistantShot,
             };
             return table[cue];
         }
@@ -122,4 +142,53 @@ namespace NextDayz
     void NextDayzAudio::ZombieAttack(const glm::vec3& at) { Play(Attack, 0.85f * Falloff(at, 20.0f), 100); }
     void NextDayzAudio::ZombieDeath(const glm::vec3& at) { Play(Death, 0.8f * Falloff(at, 35.0f), 100); }
     void NextDayzAudio::BodyFall(const glm::vec3& at) { PlayOne(kBodyFall, 0.7f * Falloff(at, 25.0f), 60); }
+
+    void NextDayzAudio::MeleeSwing() { Play(Swing, 0.6f, 120); }
+    void NextDayzAudio::MeleeImpact() { PlayOne(kMeleeImpact, 0.75f, 80); }
+    void NextDayzAudio::Firecracker(const glm::vec3& at) { PlayOne(kFirecracker, 0.9f * Falloff(at, 90.0f), 200); }
+    void NextDayzAudio::Pickup() { PlayOne(kPickup, 0.5f, 150); }
+    void NextDayzAudio::Drop() { PlayOne(kDrop, 0.5f, 150); }
+    void NextDayzAudio::Eat() { PlayOne(kEat, 0.6f, 500); }
+    void NextDayzAudio::Drink() { PlayOne(kDrink, 0.6f, 500); }
+    void NextDayzAudio::Bandage() { PlayOne(kBandage, 0.6f, 500); }
+    void NextDayzAudio::RadioStatic() { PlayOne(kRadio, 0.6f, 1000); }
+    void NextDayzAudio::Lantern() { PlayOne(kLantern, 0.5f, 300); }
+
+    float NextDayzAudio::AmbienceRandom(float lo, float hi)
+    {
+        ambienceState_ = ambienceState_ * 1664525u + 1013904223u;
+        return lo + (hi - lo) * static_cast<float>(ambienceState_ >> 8) / 16777216.0f;
+    }
+
+    void NextDayzAudio::UpdateAmbience(float deltaSeconds, float daylight, float storm)
+    {
+        const float dt = std::max(deltaSeconds, 0.0f);
+        // Wind clips are ~7-9 s long and overlap a little, so it never stops.
+        if ((windSeconds_ -= dt) <= 0.0f)
+        {
+            Play(Wind, 0.16f + 0.22f * storm + 0.06f * (1.0f - daylight), 1000);
+            windSeconds_ = AmbienceRandom(5.5f, 6.5f);
+        }
+        if ((crowSeconds_ -= dt) <= 0.0f)
+        {
+            if (daylight > 0.4f)
+            {
+                Play(Crow, AmbienceRandom(0.12f, 0.3f), 2000);
+            }
+            crowSeconds_ = AmbienceRandom(18.0f, 55.0f);
+        }
+        if ((shotSeconds_ -= dt) <= 0.0f)
+        {
+            Play(DistantShot, AmbienceRandom(0.15f, 0.4f), 3000);
+            shotSeconds_ = AmbienceRandom(45.0f, 140.0f);
+        }
+        if ((screamSeconds_ -= dt) <= 0.0f)
+        {
+            if (daylight < 0.5f)
+            {
+                PlayOne(kDistantScream, AmbienceRandom(0.15f, 0.35f), 3000);
+            }
+            screamSeconds_ = AmbienceRandom(30.0f, 90.0f);
+        }
+    }
 }

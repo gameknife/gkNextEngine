@@ -133,9 +133,13 @@ namespace NextDayz
     public:
         using FPathResolver = std::function<std::vector<glm::vec3>(const glm::vec3&, const glm::vec3&)>;
 
-        explicit ZombieSystem(size_t capacity = 32);
+        explicit ZombieSystem(size_t capacity = 56);
 
         void Configure(const FZombieConfig& config) { config_ = config; }
+        // How far the infected see the player relative to their profile's
+        // sight: darkness, a crouch and a lit lantern all change it.
+        void SetSightScale(float scale) { sightScale_ = std::max(scale, 0.05f); }
+        float SightScale() const { return sightScale_; }
         const FZombieConfig& Config() const { return config_; }
 
         void Reset();
@@ -186,5 +190,7 @@ namespace NextDayz
         std::vector<FPlayerDamageRequest> damageRequests_;
         int killCount_ = 0;
         int staggerCount_ = 0;
+        float sightScale_ = 1.0f;
+        mutable int pathBudget_ = 0;   // path solves left this update
     };
 }

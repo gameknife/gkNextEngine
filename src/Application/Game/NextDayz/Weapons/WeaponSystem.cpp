@@ -101,11 +101,72 @@ namespace NextDayz
         switchCommitted_ = false;
         switchTargetSlot_ = -1;
         switchTimer_ = 0.0f;
+        swingTimer_ = 0.0f;
         shotSequence_ = 0;
         shotEvents_.clear();
         hitEvents_.clear();
         traceEvents_.clear();
         RefreshViewModelVisibility();
+    }
+
+    bool WeaponSystem::EquipInstance(int slot, const Inventory& inventory, FItemInstanceId instanceId)
+    {
+        const FItemInstance* instance = inventory.FindInstance(instanceId);
+        const FItemDef* item = instance ? FindItemDef(instance->defId) : nullptr;
+        if (!item || !IsWieldable(*item) || !Equip(slot, std::string(item->weaponDefId)))
+        {
+            return false;
+        }
+        for (size_t other = 0; other < slots_.size(); ++other)
+        {
+            if (static_cast<int>(other) != slot && slots_[other].instanceId == instanceId)
+            {
+                slots_[other] = {};
+            }
+        }
+        slots_[slot].instanceId = instanceId;
+        const FWeaponDef* def = FindWeaponDef(item->weaponDefId);
+        slots_[slot].ammoInMag = def ? std::clamp(instance->loadedAmmo, 0, def->magSize) : 0;
+        RefreshViewModelVisibility();
+        return true;
+    }
+
+    void WeaponSystem::Unequip(int slot)
+    {
+        if (slot < 0 || slot >= static_cast<int>(slots_.size()))
+        {
+            return;
+        }
+        slots_[slot] = {};
+        if (slot == activeSlot_)
+        {
+            reloading_ = false;
+            swingTimer_ = 0.0f;
+        }
+        RefreshViewModelVisibility();
+    }
+
+    FItemInstanceId WeaponSystem::SlotInstance(int slot) const
+    {
+        return slot >= 0 && slot < static_cast<int>(slots_.size()) ? slots_[slot].instanceId : 0;
+    }
+
+    void WeaponSystem::SyncInventory(Inventory& inventory)
+    {
+        for (size_t slot = 0; slot < slots_.size(); ++slot)
+        {
+            FSlot& current = slots_[slot];
+            if (current.instanceId == 0)
+            {
+                continue;
+            }
+            if (!inventory.FindInstance(current.instanceId))
+            {
+                Unequip(static_cast<int>(slot));
+                continue;
+            }
+            inventory.SetLoadedAmmo(current.instanceId, current.ammoInMag);
+        }
     }
 
     bool WeaponSystem::Equip(int slot, const std::string& weaponId)
@@ -122,6 +183,8 @@ namespace NextDayz
         previousSlot_ = activeSlot_;
         slots_[slot].weaponId = weaponId;
         slots_[slot].ammoInMag = def->magSize; // fresh magazine on equip
+        slots_[slot].instanceId = 0;
+        swingTimer_ = 0.0f;
         activeSlot_ = slot;
         reloading_ = false;
         reloadTimer_ = 0.0f;
@@ -155,7 +218,7 @@ namespace NextDayz
     void WeaponSystem::RequestReload(Inventory& inventory)
     {
         const FWeaponDef* def = ActiveWeapon();
-        if (!def || reloading_ || switching_)
+        if (!def || def->IsMelee() || reloading_ || switching_)
         {
             return;
         }
@@ -397,10 +460,97 @@ namespace NextDayz
         viewModelRecoilVelocity_ += event.viewModelImpulse;
     }
 
+    void WeaponSystem::Swing(PlayerController& player, NextEngine& engine)
+    {
+        const FWeaponDef* def = ActiveWeapon();
+        if (!def)
+        {
+            return;
+        }
+        // From the eye even in third person: the blade is where the body is.
+        const glm::vec3 origin = player.EyePosition();
+        const glm::vec3 forward = player.Forward();
+        const glm::vec3 right = player.Right();
+        const uint64_t sequence = ++shotSequence_;
+        FWeaponHitEvent hitEvent{sequence, std::string(def->id), origin, forward, 0, origin + forward * def->meleeRange,
+                                 def->baseDamage, def->impactScale};
+        bool hit = false;
+        glm::vec3 hitNormal = -forward;
+        const glm::vec3 up = glm::normalize(glm::cross(right, forward));
+        // The swing sweeps a fan in front of the chest: centre first, then
+        // lower (the infected stoop) and out to either side.
+        constexpr std::array<glm::vec2, 12> kSweep = {{
+            {0.0f, 0.0f}, {0.0f, -0.2f}, {0.0f, -0.4f}, {0.14f, -0.2f}, {-0.14f, -0.2f}, {0.14f, 0.0f},
+            {-0.14f, 0.0f}, {0.26f, -0.2f}, {-0.26f, -0.2f}, {0.14f, -0.4f}, {-0.14f, -0.4f}, {0.0f, 0.15f},
+        }};
+        for (const glm::vec2& sweep : kSweep)
+        {
+            const glm::vec3 direction = glm::normalize(forward + right * sweep.x + up * sweep.y);
+            float worldDistance = def->meleeRange;
+            uint32_t worldInstance = 0;
+            glm::vec3 worldPoint{};
+            glm::vec3 worldNormal{};
+            engine.RayCast(origin, direction, [&](Assets::RayCastResult result) {
+                if (result.Hit && result.T <= worldDistance)
+                {
+                    worldDistance = result.T;
+                    worldInstance = result.InstanceId;
+                    worldPoint = glm::vec3(result.HitPoint);
+                    worldNormal = glm::vec3(result.Normal);
+                }
+                return true;
+            });
+            if (targetTracer_)
+            {
+                if (const std::optional<FHitboxHit> target = targetTracer_(origin, direction, worldDistance))
+                {
+                    hitEvent.direction = direction;
+                    hitEvent.zombie = target->zombie;
+                    hitEvent.zone = target->zone;
+                    hitEvent.hitPoint = target->point;
+                    hitNormal = target->normal;
+                    hit = true;
+                    break;
+                }
+            }
+            if (sweep == glm::vec2(0.0f) && worldInstance != 0)
+            {
+                hitEvent.hitInstanceId = worldInstance;
+                hitEvent.hitPoint = worldPoint;
+                hitNormal = worldNormal;
+                hit = true;
+            }
+        }
+        hitEvent.normal = hitNormal;
+        if (hit)
+        {
+            hitEvents_.push_back(hitEvent);
+            FWeaponTraceEvent trace{sequence, 0, origin, hitEvent.direction, hitEvent.hitPoint, hitEvent.hitInstanceId,
+                                    true, hitEvent.zombie.IsValid(), hitNormal};
+            trace.melee = true;
+            traceEvents_.push_back(trace);
+        }
+
+        swingSide_ = -swingSide_;
+        swingDuration_ = def->fireInterval;
+        swingTimer_ = def->fireInterval;
+        FShotEvent event;
+        event.sequence = sequence;
+        event.weaponId = std::string(def->id);
+        event.cameraImpulseRadians = glm::radians(glm::vec2(def->cameraYawDegrees * static_cast<float>(swingSide_),
+                                                            -def->cameraKickDegrees * 0.5f));
+        event.viewModelImpulse = def->viewModelKick;
+        event.rigRecoilScale = def->rigRecoilScale;
+        event.melee = true;
+        shotEvents_.push_back(event);
+    }
+
     void WeaponSystem::Update(float deltaSeconds, PlayerController& player, Inventory& inventory, NextEngine& engine)
     {
         const float dt = std::max(0.0f, deltaSeconds);
         fireCooldown_ -= dt;
+        swingTimer_ = std::max(0.0f, swingTimer_ - dt);
+        SyncInventory(inventory);
 
         if (reloading_)
         {
@@ -449,7 +599,17 @@ namespace NextDayz
             constexpr int kMaxShotsPerFrame = 8;
             int shotsThisFrame = 0;
             const bool newPull = !triggerConsumed_;
-            if (newPull && fireCooldown_ <= 0.0f)
+            if (def->IsMelee())
+            {
+                // Holding the button keeps swinging, one blow per swing time.
+                if (fireCooldown_ <= 0.0f)
+                {
+                    Swing(player, engine);
+                    fireCooldown_ = def->fireInterval;
+                }
+                triggerConsumed_ = true;
+            }
+            else if (newPull && fireCooldown_ <= 0.0f)
             {
                 if (slots_[activeSlot_].ammoInMag > 0)
                 {
@@ -464,7 +624,7 @@ namespace NextDayz
                 }
                 triggerConsumed_ = true;
             }
-            while (def->fullAuto && triggerConsumed_ && fireCooldown_ <= 0.0f &&
+            while (def->fullAuto && !def->IsMelee() && triggerConsumed_ && fireCooldown_ <= 0.0f &&
                    shotsThisFrame < kMaxShotsPerFrame && slots_[activeSlot_].ammoInMag > 0)
             {
                 FireOneShot(player, engine);
@@ -516,6 +676,10 @@ namespace NextDayz
                 targetOffset.y -= actionArc * 0.42f;
                 targetOffset.z -= actionArc * 0.18f;
             }
+            // Melee: a diagonal chop across the view, alternating sides.
+            const float swing01 = swingDuration_ > 0.0f ? 1.0f - swingTimer_ / swingDuration_ : 1.0f;
+            const float swingArc = swingTimer_ > 0.0f ? std::sin(glm::pi<float>() * std::min(swing01 * 1.6f, 1.0f)) : 0.0f;
+            const float side = static_cast<float>(swingSide_);
             const float t = 1.0f - std::exp(-config_.ViewModelLerpSpeed * std::max(0.0f, deltaSeconds));
             viewModelOffset_ = glm::mix(viewModelOffset_, targetOffset, t);
 
@@ -553,7 +717,8 @@ namespace NextDayz
                 // Proper (det +1) rotation basis: object +Z -> forward, +Y -> up,
                 // +X = up x forward (right() is left-handed w.r.t. forward/up).
                 const glm::vec3 xAxis = glm::normalize(glm::cross(up, forward));
-                const glm::vec3 offset = viewModelOffset_ + motionOffset;
+                const glm::vec3 offset = viewModelOffset_ + motionOffset +
+                                         glm::vec3(-0.22f * side * swingArc, 0.08f * swingArc, 0.12f * swingArc);
                 const glm::vec3 pos =
                     eye + right * offset.x + up * offset.y + forward * (offset.z - viewModelRecoil_ * 2.5f);
                 viewModelNode_->Translation() = pos;
@@ -563,6 +728,8 @@ namespace NextDayz
                     glm::angleAxis(motionEuler.x, glm::vec3(1.0f, 0.0f, 0.0f)) *
                     glm::angleAxis(motionEuler.z, glm::vec3(0.0f, 0.0f, 1.0f)) *
                     glm::angleAxis(reloading_ ? actionArc * 0.45f : 0.0f, glm::vec3(0.0f, 0.0f, 1.0f)) *
+                    glm::angleAxis(side * swingArc * 1.1f, glm::vec3(0.0f, 1.0f, 0.0f)) *
+                    glm::angleAxis(-swingArc * 0.9f, glm::vec3(1.0f, 0.0f, 0.0f)) *
                     glm::angleAxis(-viewModelRecoil_ * 100.0f * glm::radians(config_.ViewModelRecoilPitchDegrees),
                                    glm::vec3(1.0f, 0.0f, 0.0f));
                 viewModelNode_->RecalcTransform(true);

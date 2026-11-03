@@ -9,6 +9,8 @@
 #include <glm/glm.hpp>
 
 #include "Data/DeterministicRng.hpp"
+#include "Data/LootTables.hpp"
+#include "Weapons/WeaponDefs.hpp"
 #include "Inventory/Inventory.hpp"
 #include "Player/PlayerActionController.hpp"
 #include "Player/SurvivalSystem.hpp"
@@ -569,4 +571,207 @@ TEST_CASE("NextDayz zombie visual pool is fixed capacity and reusable",
     REQUIRE(pool.Release(first));
     REQUIRE(pool.Acquire(second) != nullptr);
     REQUIRE(pool.Capacity() == 1);
+}
+
+TEST_CASE("NextDayz loot tables roll known items deterministically and respect category filters",
+          "[NextDayz][Productization][Loot]")
+{
+    using namespace NextDayz;
+    for (uint8_t index = 0; index < static_cast<uint8_t>(ELootProfile::Count); ++index)
+    {
+        const ELootProfile profile = static_cast<ELootProfile>(index);
+        REQUIRE(ParseLootProfile(LootProfileName(profile)) == profile);
+        for (const FLootTableEntry& entry : LootTable(profile))
+        {
+            INFO(LootProfileName(profile) << " / " << entry.itemId);
+            REQUIRE(FindItemDef(entry.itemId) != nullptr);
+            REQUIRE(entry.minCount <= entry.maxCount);
+        }
+        for (uint32_t roll = 0; roll < 64; ++roll)
+        {
+            const FLootStack a = RollLoot(profile, roll * 7919u);
+            const FLootStack b = RollLoot(profile, roll * 7919u);
+            REQUIRE(a.itemId == b.itemId);
+            REQUIRE(a.count == b.count);
+            REQUIRE(a.count >= 1);
+        }
+    }
+    // Restricted rolls stay in the category when the table has one.
+    for (uint32_t roll = 0; roll < 64; ++roll)
+    {
+        REQUIRE(CategoryOfItem(RollLoot(ELootProfile::Military, roll * 31u, ELootCategory::Ammo).itemId) ==
+                ELootCategory::Ammo);
+        REQUIRE(CategoryOfItem(RollLoot(ELootProfile::Residential, roll * 31u, ELootCategory::FoodWater).itemId) ==
+                ELootCategory::FoodWater);
+    }
+    // Guns come part-loaded, never over a full magazine.
+    bool sawPartial = false;
+    for (uint32_t roll = 0; roll < 400; ++roll)
+    {
+        const FLootStack stack = RollLoot(ELootProfile::Military, roll * 104729u, ELootCategory::Weapon);
+        const FItemDef* item = FindItemDef(stack.itemId);
+        REQUIRE(item != nullptr);
+        if (const FWeaponDef* weapon = FindWeaponDef(item->weaponDefId); weapon && weapon->magSize > 0)
+        {
+            REQUIRE(stack.loadedAmmo >= 0);
+            REQUIRE(stack.loadedAmmo <= weapon->magSize);
+            sawPartial = sawPartial || (stack.loadedAmmo > 0 && stack.loadedAmmo < weapon->magSize);
+        }
+    }
+    REQUIRE(sawPartial);
+}
+
+TEST_CASE("NextDayz worn clothing frees cargo, swaps by slot and drops without its contents",
+          "[NextDayz][Productization][Inventory]")
+{
+    using namespace NextDayz;
+    Inventory inventory;
+    FItemInstanceId jacketId = 0;
+    REQUIRE(inventory.TryAdd("jacket", "Field Jacket", EItemKind::Clothing, 1, &jacketId));
+    REQUIRE(inventory.UsedCapacity() == 3);
+    REQUIRE(inventory.TryEquip(jacketId));
+    REQUIRE(inventory.UsedCapacity() == 0);             // worn items take no cargo space
+    REQUIRE(inventory.TotalCapacity() == 22);           // pockets 10 + jacket 12
+    REQUIRE(inventory.Warmth() > 0.5f);
+
+    // Wearing a hoodie takes the jacket off into cargo (a swap).
+    FItemInstanceId hoodieId = 0;
+    REQUIRE(inventory.TryAdd("hoodie", "Hoodie", EItemKind::Clothing, 1, &hoodieId));
+    REQUIRE(inventory.TryEquip(hoodieId));
+    REQUIRE(inventory.IsWorn(hoodieId));
+    REQUIRE_FALSE(inventory.IsWorn(jacketId));
+    REQUIRE(inventory.WornInSlot(EEquipSlot::Torso) == hoodieId);
+
+    // Dropping worn armour hands it back; what was in its pouches stays.
+    FItemInstanceId vestId = 0;
+    REQUIRE(inventory.TryAdd("vest_military", "Military Vest", EItemKind::Clothing, 1, &vestId));
+    REQUIRE(inventory.TryEquip(vestId));
+    REQUIRE(inventory.Armor() == Catch::Approx(0.3f));
+    FItemInstanceId bandageId = 0;
+    REQUIRE(inventory.TryAdd("bandage", "Bandage", EItemKind::Consumable, 2, &bandageId));
+    REQUIRE(inventory.TryMove(bandageId, inventory.ContainerOwnedBy(vestId)->containerId));
+    const std::optional<FItemInstance> dropped = inventory.TryRemove(vestId);
+    REQUIRE(dropped.has_value());
+    REQUIRE(dropped->defId == "vest_military");
+    REQUIRE(inventory.CountOf("bandage") == 2);
+    REQUIRE(inventory.Armor() == Catch::Approx(0.0f));
+
+    // Melee weapons ride in the weapon slings like guns, and a blade opens cans.
+    FItemInstanceId axeId = 0;
+    REQUIRE_FALSE(inventory.CanOpenCans());
+    REQUIRE(inventory.TryAdd("axe", "Fire Axe", EItemKind::Melee, 1, &axeId));
+    REQUIRE(inventory.FindContainer(inventory.FindInstance(axeId)->containerId)->weaponOnly);
+    REQUIRE(inventory.CanOpenCans());
+}
+
+TEST_CASE("NextDayz infected wounds bleed until dressed; armour, painkillers and cans behave",
+          "[NextDayz][Productization][Survival]")
+{
+    using namespace NextDayz;
+    FSurvivalConfig tuning;
+    SurvivalSystem survival;
+    survival.Configure(tuning);
+    survival.Reset();
+    survival.SetNeeds(100.0f, 50.0f, 50.0f);
+
+    // A low roll opens a wound; armour absorbs part of the blow.
+    REQUIRE(survival.ApplyInfectedHit(20.0f, 0.3f, 0.0f));
+    REQUIRE(survival.Snapshot().health == Catch::Approx(86.0f));
+    REQUIRE(survival.Snapshot().bleedingWounds == 1);
+    survival.Update(10.0f, false);
+    REQUIRE(survival.Snapshot().health < 86.0f);
+    REQUIRE(survival.Snapshot().lastDamageSource == "blood loss");
+
+    Inventory inventory;
+    FItemInstanceId ragId = 0;
+    REQUIRE(inventory.TryAdd("rag", "Rags", EItemKind::Consumable, 1, &ragId));
+    std::string message;
+    REQUIRE(survival.TryUseItem(inventory, ragId, &message));
+    REQUIRE(survival.Snapshot().bleedingWounds == 0);
+    REQUIRE_FALSE(message.empty());
+
+    // Painkillers heal over their duration, not at once.
+    survival.SetNeeds(50.0f, 50.0f, 50.0f);
+    FItemInstanceId pillsId = 0;
+    REQUIRE(inventory.TryAdd("painkillers", "Painkillers", EItemKind::Consumable, 1, &pillsId));
+    REQUIRE(survival.TryUseItem(inventory, pillsId));
+    REQUIRE(survival.Snapshot().health == Catch::Approx(50.0f));
+    survival.Update(tuning.PainkillerSeconds, false);
+    REQUIRE(survival.Snapshot().health == Catch::Approx(50.0f + tuning.PainkillerHeal).margin(0.5f));
+
+    // A can without an opener spills; with one it does not.
+    survival.SetNeeds(100.0f, 20.0f, 100.0f);
+    FItemInstanceId canId = 0;
+    REQUIRE(inventory.TryAdd("food_can", "Canned Beans", EItemKind::Consumable, 2, &canId));
+    REQUIRE(survival.TryUseItem(inventory, canId, &message));
+    REQUIRE(survival.Snapshot().hunger == Catch::Approx(20.0f + 32.0f * tuning.UnopenedCanShare));
+    REQUIRE(inventory.TryAdd("can_opener", "Can Opener", EItemKind::Misc, 1));
+    survival.SetNeeds(100.0f, 20.0f, 100.0f);
+    REQUIRE(survival.TryUseItem(inventory, inventory.FindFirst("food_can")->instanceId));
+    REQUIRE(survival.Snapshot().hunger == Catch::Approx(52.0f));
+
+    // Drinking leaves the bottle to refill.
+    FItemInstanceId bottleId = 0;
+    REQUIRE(inventory.TryAdd("water_bottle", "Water Bottle", EItemKind::Consumable, 1, &bottleId));
+    REQUIRE(survival.TryUseItem(inventory, bottleId));
+    REQUIRE(inventory.CountOf("water_bottle_empty") == 1);
+
+    // Starved: too weak to sprint. Resting needs closed wounds.
+    survival.SetNeeds(60.0f, 5.0f, 50.0f);
+    REQUIRE(survival.IsWeak());
+    survival.SetBleeding(1);
+    REQUIRE_FALSE(survival.Rest());
+    survival.SetBleeding(0);
+    REQUIRE(survival.Rest());
+}
+
+TEST_CASE("NextDayz cold burns food faster", "[NextDayz][Productization][Survival]")
+{
+    using namespace NextDayz;
+    FSurvivalConfig tuning;
+    tuning.StartingHunger = 100.0f;
+    SurvivalSystem warm;
+    SurvivalSystem cold;
+    warm.Configure(tuning);
+    cold.Configure(tuning);
+    warm.Reset();
+    cold.Reset();
+    cold.SetCold(1.0f);
+    warm.Update(120.0f, false);
+    cold.Update(120.0f, false);
+    REQUIRE(cold.Snapshot().hunger < warm.Snapshot().hunger);
+}
+
+TEST_CASE("NextDayz loot director shortens a scarce category cooldown", "[NextDayz][Productization][Loot]")
+{
+    using namespace NextDayz;
+    FLootRespawnTuning tuning;
+    tuning.foodWaterSeconds = 100.0;
+    tuning.minimumOffscreenSeconds = 1.0;
+    LootDirector director;
+    director.Configure(tuning);
+    director.Reset(1, 5);
+    const FLootSlotHandle handle = director.AddSlot({}, ELootProfile::Residential, ELootCategory::FoodWater);
+    REQUIRE(director.Reserve(handle));
+    REQUIRE(director.Commit(handle, 0.0));
+    REQUIRE_FALSE(director.EvaluateRespawn(handle, 40.0, 200.0f, false, 0, 10));
+    director.SetCooldownScale(ELootCategory::FoodWater, 0.35f);
+    REQUIRE(director.EvaluateRespawn(handle, 41.5, 200.0f, false, 0, 10));
+}
+
+TEST_CASE("NextDayz spawn director brings groups and respects the cap", "[NextDayz][Productization][Zombie]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(8);
+    ZombieSpawnDirector director;
+    director.Reset(7);
+    director.SetGlobalCap(4);
+    FZombieSpawnPoint horde{{60.0f, 0.0f, 0.0f}, EZombieProfile::Civilian};
+    horde.groupSize = 3;
+    FZombieSpawnPoint pair{{0.0f, 0.0f, 70.0f}, EZombieProfile::Military};
+    pair.groupSize = 2;
+    director.SetPoints({horde, pair});
+    director.Update(1.0f, {}, zombies, {}, {});
+    REQUIRE(zombies.ActiveCount() == 4);
+    REQUIRE(director.SpawnCount() == 4);
 }

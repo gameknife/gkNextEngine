@@ -12,7 +12,7 @@ namespace NextDayz
             {
                 return false;
             }
-            return !container.weaponOnly || definition.kind == EItemKind::Weapon;
+            return !container.weaponOnly || definition.kind == EItemKind::Weapon || definition.kind == EItemKind::Melee;
         }
     }
 
@@ -83,6 +83,20 @@ namespace NextDayz
         return it == containers_.end() ? nullptr : &*it;
     }
 
+    const FItemInstance* Inventory::FindFirst(std::string_view defId) const
+    {
+        const auto it = std::find_if(instances_.begin(), instances_.end(),
+            [defId](const FItemInstance& item) { return item.defId == defId; });
+        return it == instances_.end() ? nullptr : &*it;
+    }
+
+    const FInventoryContainer* Inventory::ContainerOwnedBy(FItemInstanceId instanceId) const
+    {
+        const auto it = std::find_if(containers_.begin(), containers_.end(),
+            [instanceId](const FInventoryContainer& container) { return container.ownerItemInstanceId == instanceId; });
+        return it == containers_.end() ? nullptr : &*it;
+    }
+
     int Inventory::ContainerUsed(FContainerId containerId) const
     {
         int used = 0;
@@ -149,6 +163,18 @@ namespace NextDayz
         }
         Inventory copy = *this;
         return copy.TryAdd(id, std::string(definition->displayName), definition->kind, count);
+    }
+
+    int Inventory::FitCount(const std::string& id, int count) const
+    {
+        for (int fit = count; fit > 0; --fit)
+        {
+            if (CanAdd(id, fit))
+            {
+                return fit;
+            }
+        }
+        return 0;
     }
 
     bool Inventory::TryAdd(const std::string& id, const std::string& displayName, EItemKind kind, int count,
@@ -237,7 +263,8 @@ namespace NextDayz
     {
         FItemInstance* source = FindInstance(instanceId);
         const FInventoryContainer* target = FindContainer(destination);
-        if (!source || !target || !target->active)
+        if (!source || !target || !target->active || source->containerId == kWornContainer ||
+            target->ownerItemInstanceId == instanceId)
         {
             return false;
         }
@@ -303,62 +330,45 @@ namespace NextDayz
 
     bool Inventory::TryEquip(FItemInstanceId instanceId)
     {
-        FItemInstance* instance = FindInstance(instanceId);
-        if (!instance)
+        const FItemInstance* instance = FindInstance(instanceId);
+        const FItemDef* definition = instance ? FindItemDef(instance->defId) : nullptr;
+        if (!definition || definition->kind != EItemKind::Clothing || definition->equipSlot == EEquipSlot::None ||
+            IsWorn(instanceId))
         {
             return false;
         }
-        const FItemDef* definition = FindItemDef(instance->defId);
-        if (!definition || definition->equipSlot == EEquipSlot::None)
+        Inventory transaction = *this;
+        if (const FItemInstanceId current = transaction.WornInSlot(definition->equipSlot);
+            current != 0 && !transaction.TryUnequip(current))
         {
             return false;
         }
-        for (const std::string& equippedId : equippedClothing_)
+        FItemInstance* item = transaction.FindInstance(instanceId);
+        if (!item || item->count != 1)
         {
-            const FItemDef* equippedDef = FindItemDef(equippedId);
-            if (equippedDef && equippedDef->equipSlot == definition->equipSlot)
-            {
-                return false;
-            }
+            return false;
         }
-        if (definition->kind == EItemKind::Clothing)
-        {
-            equippedClothing_.push_back(instance->defId);
-        }
+        item->containerId = kWornContainer;
+        transaction.equippedClothing_.push_back(item->defId);
         if (definition->containerCapacity > 0)
         {
-            containers_.push_back({nextContainerId_++, instanceId, std::string(definition->displayName),
-                                   definition->containerCapacity, true, false});
+            transaction.containers_.push_back({transaction.nextContainerId_++, instanceId,
+                                               std::string(definition->displayName), definition->containerCapacity,
+                                               true, false});
         }
-        RebuildLegacyItems();
+        transaction.RebuildLegacyItems();
+        *this = std::move(transaction);
         return true;
     }
 
-    bool Inventory::TryUnequip(FItemInstanceId instanceId)
+    namespace
     {
-        FItemInstance* instance = FindInstance(instanceId);
-        if (!instance)
+        // Moves everything out of `removedId` into the other containers.
+        bool EvacuateContainer(Inventory& inventory, FContainerId removedId,
+                               const std::function<FContainerId(const FItemDef&, int)>& findSpace)
         {
-            return false;
-        }
-        const FItemDef* definition = FindItemDef(instance->defId);
-        if (!definition)
-        {
-            return false;
-        }
-        const auto equippedIt = std::find(equippedClothing_.begin(), equippedClothing_.end(), instance->defId);
-        if (equippedIt == equippedClothing_.end())
-        {
-            return false;
-        }
-        const auto containerIt = std::find_if(containers_.begin(), containers_.end(),
-            [instanceId](const FInventoryContainer& container) { return container.ownerItemInstanceId == instanceId; });
-        Inventory transaction = *this;
-        if (containerIt != containers_.end())
-        {
-            const FContainerId removedId = containerIt->containerId;
             std::vector<FItemInstanceId> contents;
-            for (const FItemInstance& item : transaction.instances_)
+            for (const FItemInstance& item : inventory.Instances())
             {
                 if (item.containerId == removedId)
                 {
@@ -367,53 +377,107 @@ namespace NextDayz
             }
             for (FItemInstanceId contentId : contents)
             {
-                FItemInstance* content = transaction.FindInstance(contentId);
+                const FItemInstance* content = inventory.FindInstance(contentId);
                 const FItemDef* contentDef = content ? FindItemDef(content->defId) : nullptr;
-                const FContainerId destination = contentDef
-                    ? transaction.FindContainerWithSpace(*contentDef, content->count, removedId) : 0;
-                if (destination == 0 || !transaction.TryMove(contentId, destination))
+                const FContainerId destination = contentDef ? findSpace(*contentDef, content->count) : 0;
+                if (destination == 0 || !inventory.TryMove(contentId, destination))
                 {
                     return false;
                 }
             }
-            transaction.containers_.erase(std::remove_if(transaction.containers_.begin(), transaction.containers_.end(),
-                [removedId](const FInventoryContainer& container) { return container.containerId == removedId; }),
-                transaction.containers_.end());
+            return true;
         }
-        transaction.equippedClothing_.erase(std::remove(transaction.equippedClothing_.begin(),
-            transaction.equippedClothing_.end(), instance->defId), transaction.equippedClothing_.end());
+    }
+
+    bool Inventory::TakeOff(FItemInstanceId instanceId, bool intoCargo)
+    {
+        if (!IsWorn(instanceId))
+        {
+            return false;
+        }
+        Inventory transaction = *this;
+        const FItemDef* definition = FindItemDef(transaction.FindInstance(instanceId)->defId);
+        if (!definition)
+        {
+            return false;
+        }
+        FContainerId removedId = 0;
+        if (const FInventoryContainer* owned = transaction.ContainerOwnedBy(instanceId))
+        {
+            removedId = owned->containerId;
+            const auto findSpace = [&transaction, removedId](const FItemDef& itemDef, int count)
+            {
+                return transaction.FindContainerWithSpace(itemDef, count, removedId);
+            };
+            if (!EvacuateContainer(transaction, removedId, findSpace))
+            {
+                return false;
+            }
+            std::erase_if(transaction.containers_,
+                [removedId](const FInventoryContainer& container) { return container.containerId == removedId; });
+        }
+        if (intoCargo)
+        {
+            const FContainerId destination = transaction.FindContainerWithSpace(*definition, 1, removedId);
+            if (destination == 0)
+            {
+                return false;
+            }
+            transaction.FindInstance(instanceId)->containerId = destination;
+        }
+        const auto worn = std::find(transaction.equippedClothing_.begin(), transaction.equippedClothing_.end(),
+                                    std::string(definition->id));
+        if (worn != transaction.equippedClothing_.end())
+        {
+            transaction.equippedClothing_.erase(worn);
+        }
         transaction.RebuildLegacyItems();
         *this = std::move(transaction);
         return true;
     }
 
-    bool Inventory::TryDrop(FItemInstanceId instanceId, int count)
+    bool Inventory::TryUnequip(FItemInstanceId instanceId)
     {
-        FItemInstance* instance = FindInstance(instanceId);
+        return TakeOff(instanceId, true);
+    }
+
+    std::optional<FItemInstance> Inventory::TryRemove(FItemInstanceId instanceId, int count)
+    {
+        const FItemInstance* instance = FindInstance(instanceId);
         if (!instance)
         {
-            return false;
+            return std::nullopt;
         }
-        if (IsClothingEquipped(instance->defId) && !TryUnequip(instanceId))
+        const int removeCount = count < 0 ? instance->count : count;
+        if (removeCount <= 0 || removeCount > instance->count)
         {
-            return false;
+            return std::nullopt;
         }
-        instance = FindInstance(instanceId);
-        const int dropCount = count < 0 ? instance->count : count;
-        if (dropCount <= 0 || dropCount > instance->count)
+        Inventory transaction = *this;
+        // Worn: off the body and out of the inventory; its contents stay behind.
+        if (transaction.IsWorn(instanceId) && !transaction.TakeOff(instanceId, false))
         {
-            return false;
+            return std::nullopt;
         }
-        instance->count -= dropCount;
-        RemoveEmptyInstances();
-        RebuildLegacyItems();
-        return true;
+        FItemInstance* item = transaction.FindInstance(instanceId);
+        FItemInstance removed = *item;
+        removed.count = removeCount;
+        item->count -= removeCount;
+        transaction.RemoveEmptyInstances();
+        transaction.RebuildLegacyItems();
+        *this = std::move(transaction);
+        return removed;
+    }
+
+    bool Inventory::TryDrop(FItemInstanceId instanceId, int count)
+    {
+        return TryRemove(instanceId, count).has_value();
     }
 
     bool Inventory::TryConsumeInstance(FItemInstanceId instanceId, int count)
     {
         FItemInstance* instance = FindInstance(instanceId);
-        if (!instance || count <= 0 || instance->count < count || IsClothingEquipped(instance->defId))
+        if (!instance || count <= 0 || instance->count < count || IsWorn(instanceId))
         {
             return false;
         }
@@ -453,6 +517,66 @@ namespace NextDayz
         return count - remaining;
     }
 
+    bool Inventory::IsWorn(FItemInstanceId instanceId) const
+    {
+        const FItemInstance* instance = FindInstance(instanceId);
+        return instance && instance->containerId == kWornContainer;
+    }
+
+    FItemInstanceId Inventory::WornInSlot(EEquipSlot slot) const
+    {
+        for (const FItemInstance& instance : instances_)
+        {
+            const FItemDef* definition = instance.containerId == kWornContainer ? FindItemDef(instance.defId) : nullptr;
+            if (definition && definition->equipSlot == slot)
+            {
+                return instance.instanceId;
+            }
+        }
+        return 0;
+    }
+
+    float Inventory::Armor() const
+    {
+        float armor = 0.0f;
+        for (const FItemInstance& instance : instances_)
+        {
+            const FItemDef* definition = instance.containerId == kWornContainer ? FindItemDef(instance.defId) : nullptr;
+            armor += definition ? definition->armor : 0.0f;
+        }
+        return std::min(armor, 0.6f);
+    }
+
+    float Inventory::Warmth() const
+    {
+        float warmth = 0.0f;
+        for (const FItemInstance& instance : instances_)
+        {
+            const FItemDef* definition = instance.containerId == kWornContainer ? FindItemDef(instance.defId) : nullptr;
+            warmth += definition ? definition->warmth : 0.0f;
+        }
+        return std::min(warmth, 1.0f);
+    }
+
+    bool Inventory::HasTool(EItemTool tool) const
+    {
+        return std::any_of(instances_.begin(), instances_.end(), [tool](const FItemInstance& instance)
+        {
+            const FItemDef* definition = FindItemDef(instance.defId);
+            return definition && definition->tool == tool;
+        });
+    }
+
+    bool Inventory::CanOpenCans() const
+    {
+        return HasTool(EItemTool::CanOpener) ||
+               std::any_of(instances_.begin(), instances_.end(), [](const FItemInstance& instance)
+               {
+                   const FItemDef* definition = FindItemDef(instance.defId);
+                   return definition && definition->toolCanOpener;
+               });
+    }
+
     bool Inventory::IsClothingEquipped(const std::string& id) const
     {
         return std::find(equippedClothing_.begin(), equippedClothing_.end(), id) != equippedClothing_.end();
@@ -461,7 +585,10 @@ namespace NextDayz
     void Inventory::SetClothingEquipped(const std::string& id, bool equipped)
     {
         const auto it = std::find_if(instances_.begin(), instances_.end(),
-            [&id](const FItemInstance& instance) { return instance.defId == id; });
+            [&id, equipped](const FItemInstance& instance)
+            {
+                return instance.defId == id && (instance.containerId == kWornContainer) != equipped;
+            });
         if (it == instances_.end())
         {
             return;

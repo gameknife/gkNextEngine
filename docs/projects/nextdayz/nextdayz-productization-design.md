@@ -4,12 +4,12 @@ category: project
 status: 现行
 owner: NextDayz
 created: 2026-07-31
-last_updated: 2026-11-03
+last_updated: 2026-11-04
 ---
 
 # NextDayz PVE 生存循环产品化设计
 
-本文记录 `NextDayz` 单人 PVE 生存纵切的现行产品边界、运行时架构和验收契约。2026-08-02 已完成配套开发计划：容量化库存、生存代谢与水源、语义刷新点、感染者 AI/战斗/噪声、物资刷新、产品 HUD、死亡与同进程重开均已接入。复杂移动、ScadRig 分层动画的现行约束仍以 [复杂 3C 与 ScadRig 分层动画设计](nextdayz-3c-scadrig-design.md) 为准。2026-11-03 以士兵战术动作为质量基线重做了感染者与枪战：程序化生成的感染者骨架与动作、带转向/加速/警觉/硬直/打腿/扑击的 AI、跟随骨架的胶囊命中盒与分部位伤害、准星命中标记与受伤反馈、枪口焰/曳光/血雾等特效和程序化音效（§8、§9.4）。
+本文记录 `NextDayz` 单人 PVE 生存纵切的现行产品边界、运行时架构和验收契约。2026-08-02 已完成配套开发计划：容量化库存、生存代谢与水源、语义刷新点、感染者 AI/战斗/噪声、物资刷新、产品 HUD、死亡与同进程重开均已接入。复杂移动、ScadRig 分层动画的现行约束仍以 [复杂 3C 与 ScadRig 分层动画设计](nextdayz-3c-scadrig-design.md) 为准。2026-11-03 以士兵战术动作为质量基线重做了感染者与枪战：程序化生成的感染者骨架与动作、带转向/加速/警觉/硬直/打腿/扑击的 AI、跟随骨架的胶囊命中盒与分部位伤害、准星命中标记与受伤反馈、枪口焰/曳光/血雾等特效和程序化音效（§8、§9.4）。2026-11-04 做了一轮"末日生存感"深化：地图扩到 22 个据点、相邻 60～120 m，每栋可进入建筑带家具和 loot 刷新点；loot 改为按 profile 抽表的刷新点 + 地图手摆物资 + 掉落堆三类来源，按 POI 区域聚类补货；42 种物品都有具体功能（开罐、止血、护甲、保暖、近战、指南针、地图、电台补给、提灯、鞭炮诱饵、休息）；背包重做为附近/装备/容器三栏；感染者上限 40（夜间 48）并成组刷新；加入天气循环、高度雾和环境音（§15）。
 
 ## 1. 决策摘要
 
@@ -222,49 +222,64 @@ hydration   0..100（100 为充分饮水）
 
 ### 7.1 地图标记契约
 
-现有拾取物节点继续作为首轮物资点。为感染者和可随机化物资增加只表达类别的 SCAD 标记模块；模块名携带 profile，世界变换携带位置，不依赖解析 SCAD 参数：
+地图手摆的 `cw_wpn_*` / `cw_item_*` 节点是"手摆物资"（首轮必有，补货时固定物品 + 可选按表抽取）。其余语义由地图里定义的极小标记模块表达，世界变换携带位置，具名参数经 `Node::metadata` 读取（`ParseScadMetadata`）：
 
 ```text
-nd_spawn_player_safe
-nd_spawn_zombie_civilian
-nd_spawn_zombie_military
-nd_spawn_zombie_industrial
-nd_spawn_zombie_wilderness
-nd_spawn_loot_residential
-nd_spawn_loot_medical
-nd_spawn_loot_military
-nd_spawn_loot_industrial
+nd_loot(p = "<profile>")              物资刷新点：residential / commercial / medical / military /
+                                      police / industrial / farm / wilderness
+nd_zed(p = "<profile>", group = n)    感染者刷新点：civilian / military / industrial / wilderness，n 只一组
+nd_poi(name = "...", kind = "...")    地图上的地名（M 键地图）
+nd_spawn_player_safe                  玩家安全出生点
+cw_prop_well / cw_prop_water_pump     水源（可饮用、可装瓶）
 ```
 
-标记可使用极小的调试几何，运行时扫描后必须隐藏、关闭 raycast，并只在 F5 世界调试中显示。不要把 POI 坐标硬编码进 C++。
+旧的 `nd_spawn_zombie_<profile>` / `nd_spawn_loot_<profile>` 名字仍被识别。标记运行时扫描后隐藏、关闭 raycast（不挡子弹和导航探测）。调用一律写具名参数。不要把 POI 坐标硬编码进 C++。
+
+地图用一组"建筑 + 家具 + 刷新点"组合件（`nd_house_rural`、`nd_house_two`、`nd_supermarket`、`nd_barracks` ……，定义在 `riverland_1km.scad` 顶部）：建筑与家具几何包在 `gk_flatten()` 里合成一个节点（控制节点数与碰撞体数量），刷新点和手摆物资**必须留在 `gk_flatten` 外面**，否则会被折进父节点、运行时找不到。家具靠后墙/侧墙，门洞一侧留通道；刷新点放在桌面、床面、货架层板或地面（翻倒的桌子由 `nd_table_top(seed)` 与 `cw_prop_table` 同一判定落到地面）。
 
 ### 7.2 POI 配置
 
-| POI | 物资侧重 | 感染者 profile | 风险/回报 |
+22 个据点，相邻 60～120 m（地图坐标为 SCAD 空间，+y 北）：
+
+| 区域 | 据点 | 物资侧重（刷新点 profile） | 感染者 |
 | --- | --- | --- | --- |
-| 西部村庄 | 食物、水井、基础衣物、猎枪 | civilian | 新手区，低密度 |
-| 桥西加油站 | 医疗、燃油、杂物 | civilian / industrial | 交通节点，中低风险 |
-| 桥东碉堡 | 弹药、头盔、步枪 | military | 小范围高风险 |
-| 军事基地 | 自动步枪、狙击枪、弹药、背包、医疗 | military | 最高密度与最长刷新 |
-| 东南小镇 | 食物、水、衣物、手枪、医疗 | civilian | 高密度但补给全面 |
-| 河畔工厂 | 工具、近战武器、猎枪、杂物 | industrial | 中风险 |
-| 通信站/坠机点 | 无线电、高级枪械、医疗 | military | 少量强感染者 |
-| 湖畔营地 | 食物、饮水、基础猎枪 | wilderness | 低密度、路程长 |
+| 主公路带 | 斯塔里萨德村（教堂、谷仓、水井+水泵） | residential / farm | civilian，新手区 |
+| | 曙光农场（谷仓、筒仓、农舍） | farm | civilian |
+| | 公路旅馆 + 餐馆 | residential / commercial | civilian |
+| | 波戈列洛夫卡（路边小村） | residential | civilian |
+| | 桥西加油站（便利店、修车库） | commercial / industrial | civilian / industrial |
+| | 桥头前哨（检疫关卡、医疗帐篷、营房） | military / medical | military |
+| | 新德沃尔（警察局小镇） | police / residential | civilian |
+| | 卡车站 / 修理厂 | industrial | industrial |
+| | 东/西公路口（军车残队、路障） | military / residential | military / civilian |
+| 南部 | 戈尔卡镇（板楼、超市、医院与失败的撤离点） | commercial / medical / residential / military | civilian 密集 + military |
+| | 戈尔卡火车站（铁路、货车车厢） | commercial / industrial | civilian |
+| | 红锻工厂 | industrial | industrial |
+| | 湖畔营地（木屋） | wilderness | wilderness |
+| 西北 | 老墓地（教堂、坟场、尸袋） | residential / medical | civilian 成群 |
+| | 锯木场 | industrial | industrial / wilderness |
+| | 西山电台 | military | military |
+| 北部 | 护林站、猎人小屋 | wilderness | wilderness |
+| | 坠机点（军方帐篷） | military / medical | military |
+| | 祖布尔要塞（棱堡城墙、营房、指挥所） | military | military 驻军 |
+| | 7 号检查站、军事基地 | military | military，最高密度 |
 
-### 7.3 LootDirector
+### 7.3 LootSystem / LootDirector
 
-每个刷新槽具有 `Available / Reserved / Cooldown` 三态、profile、最近一次消费时间和稳定 seed。首轮可沿用场景中 59 个物品；后续刷新从所在 profile 的加权表选择。
+物资有三类来源（`LootSystem.hpp`）：
 
-刷新约束：
+- **手摆物资**：地图节点按模块名对应固定物品（`cw_wpn_ak` → AK，`cw_item_crate_supply` → 按 commercial 表抽 3 件……），外观就是美术摆的模型；
+- **刷新点**：`nd_loot` 锚点，每次按 profile 加权表（`Data/LootTables.cpp`）抽一叠物品；外观是池化节点，换成该物品在 `characters/nextdayz_loot_items.scad`（ScadRig 格式，每根 `bone_item_<itemId>` 一件模型）里的模型；开局约 78% 的刷新点有货，其余错开 1～5 分钟补上；
+- **掉落堆**：玩家丢弃和感染者尸体（35% 概率按 profile 掉一件）留下的东西；32 个池化节点，满了回收最旧的，捡走后不补货。
 
-- 玩家距槽位至少 60 m，且槽位离开相机视锥/视线至少 20 秒；
-- 同一 POI 和全图都受 category 上限控制；
-- 食物/饮水基准 8～15 分钟，医疗 12～20 分钟，弹药 15～25 分钟，枪械 30～45 分钟；
-- 时间使用独立 world simulation clock，不因昼夜快进被批量刷新；
-- 读取稳定 seed，在 agent-validation 下同一局产生同一序列；
-- 场景重载和重开必须使旧 `FLootHandle` 失效。
+每个有补货的条目有 `Available / Reserved / Cooldown` 三态和稳定 roll。补货约束：
 
-若首期随机世界模型成本过高，可让槽位只重生原类别与原外观，但状态机和 profile 接口必须一次建对。
+- 条目按 28 m 单链接聚类成区域（≈POI），玩家要**离开整个区域**至少 60 m（而不只是离开那个货架），且 20 秒没看它；
+- 冷却按类别：食物/饮水 6 分钟、医疗 9、杂物 10、弹药 12、衣物 14、枪械 24；
+- 补货重新抽表，并受类别库存上限约束（同时有货的武器 ≤ 8%、弹药 ≤ 14% ……），超了改抽食物；
+- 保底：饥渴 < 30 时食物冷却 ×0.35、补货 60% 倾向食物；流血且身上没有包扎物时医疗冷却 ×0.5、40% 倾向医疗；
+- 拾取先放进能放下的部分（`Inventory::FitCount`），放不下的留在原地；枪械带着抽到的弹匣存量（25% 空仓，其余部分装填）；
+- 时间使用独立 world simulation clock，不因昼夜快进被批量刷新；读取稳定 seed，同一局产生同一序列；场景重载和重开使旧 `FLootHandle` 失效。
 
 ## 8. 感染者系统
 
@@ -301,12 +316,14 @@ Dormant → Wander ──→ Investigate ──→ Alert ──→ Chase ──�
 
 ### 8.3 刷新规则
 
-- `ZombieSpawnDirector` 每 2 秒评估一次，不在每帧扫描所有点；
-- 全图活跃上限 24，压力测试上限 32；每个 POI 通常 2～6；
-- 生成点距玩家 35～140 m、不可在视线内、必须可导航到所在 POI；
-- 玩家 180 m 外、未警觉且持续 30 秒的感染者可回收；尸体展示 20～30 秒后回收；
-- 同一刷新槽死亡后冷却 8～15 分钟，且玩家离开该 POI 后才可重生；
-- 军事/工业/平民 profile 先只改变生命、速度、感知和外观色，不引入特殊技能。
+- `ZombieSpawnDirector` 每 1 秒评估一次；锚点 `group` 决定一次刷几只（1～4，组员散在 2.5 m 内）；
+- 全图活跃上限白天 40、夜间 48（`ZombieSystem` 与视觉池容量 56）；
+- 生成点距玩家 30～160 m、不可在视线内、必须可导航；
+- 玩家 200 m 外、整组未警觉且持续 30 秒的感染者回收；
+- 整组死光后冷却 3～6 分钟；
+- 视距随环境缩放：夜里 ×0.55、蹲下 ×0.7、雾天 ×0.7；夜里点着提灯反而 ×1.4；
+- 寻路网格每格只存最高表面，所以高出地形 1.2 m 以上的格子（屋顶、雨棚、墙顶）被屏蔽，感染者绕开建筑；每帧向下射线把它们贴回实际地面（室内、雨棚下）；
+- 一声枪响会同时惊动一群：每帧最多解 4 条路径，A* 最多扩展 6000 格，超出时走到离目标最近处（`FNavGrid::FindPath` 的 `maxExpansions`）；网格采样按行多线程。
 
 ### 8.4 视觉与命中盒
 
@@ -326,7 +343,7 @@ Dormant → Wander ──→ Investigate ──→ Alert ──→ Chase ──�
 
 ### 9.2 近战
 
-首版至少加入刀/斧或撬棍之一，使无枪开局可完成战斗。近战使用相机前方短距离 sweep/ray、攻击前摇、明确冷却和一次命中集合；一次挥击不能在多帧重复伤害同一目标。近战噪声远小于枪声，但会吸引近处感染者。
+猎刀（快、38 伤害、1.7 m）、撬棍（52、2.0 m、冲击大）、消防斧（85、2.1 m、慢）是 `kWeapons` 里 `meleeRange > 0` 的武器，走同一套槽位/视图模型：按住左键按挥击间隔连续挥砍，每次从眼睛向前扫一个扇面（水平 ±15°、向下约 22°——感染者驼背，眼平的射线会从头顶掠过），命中最近的命中盒；视图模型左右交替斜劈。噪声 6～9 m，只惊动近处。
 
 ### 9.3 噪声总线
 
@@ -350,7 +367,11 @@ Dormant → Wander ──→ Investigate ──→ Alert ──→ Chase ──�
 
 ### 10.2 库存界面
 
-库存打开时显示 Nearby、角色装备和各容器三列。每个容器显示 `已用/总容量`；支持点击移动和 ImGui drag/drop，操作最终都调用同一事务 API。世界继续渲染但暂停玩家移动和攻击；单人首版可选择暂停感染者仿真，默认建议不暂停以保留风险，并在 UI 上明确提示。
+Tab 打开三栏：**附近**（伸手可及的物资，Take 或拖进背包；把物品拖到这一栏就是丢在地上）、**装备**（头/躯干/背心/腿/背 + 主副武器，护甲、保暖、载重汇总、携带的工具）、**容器**（每个口袋/背包一段，标题显示 `已用/总容量`）。双击执行默认动作（用/穿/装备），右键菜单有使用、穿戴、脱下、装备到 1/2、拆分、移动到某容器、绑定快捷栏、丢一个/全部；拖放到容器 = 移动，拖到装备槽 = 穿戴/装备。所有操作都走同一套库存事务。世界不暂停。
+
+穿戴的衣物不占容器容量；穿同一槽位的新衣服会先脱下旧的（需要地方放）；脱下/丢弃背包时里面的东西先转移到其他容器，放不下就拒绝。枪械的弹匣属于那把枪（切换、丢弃、捡回都保留）。
+
+快捷栏 3～6（默认绑定绷带/水/罐头），H 快速包扎，M 地图（需要地图），L 提灯，背包里右键可重新绑定。
 
 ### 10.3 局外状态
 
@@ -416,3 +437,35 @@ game.currentObjective
 | 物资经济失控 | 食物永久过剩或软锁死 | profile 上下限、保底计时和 director 统计；不通过全图统一随机率硬调 |
 | 库存迁移破坏现有枪械逻辑 | 换弹丢弹或枪械复制 | 先建事务单测与兼容适配层，再迁移 WeaponSystem |
 | UI 范围膨胀 | drag/drop 阻塞核心循环 | 先交付点击移动与容量反馈；拖拽是同一事务 API 的第二表现入口 |
+
+## 15. 2026-11-04 末日生存深化
+
+### 15.1 物品与功能
+
+42 种物品（`Data/ItemDefs.cpp`）每种都有用途：
+
+| 类别 | 物品 | 作用 |
+| --- | --- | --- |
+| 食物 | 罐头豆、金枪鱼、饼干、苹果、巧克力 | 饱食；罐头没有开罐器/刀/斧只吃到一半；饼干口渴 |
+| 饮水 | 水瓶、空瓶、汽水 | 喝完剩空瓶，可在水井/水泵装满（F） |
+| 医疗 | 绷带、碎布、急救包、止痛药 | 止血；急救包 +45；止痛药 30 秒内回 25 |
+| 衣物 | 头盔、夹克、卫衣、军用背心、工装裤、军裤、三种背包 | 护甲（头盔 15%、背心 30%）、保暖、容量 |
+| 武器 | 5 把枪 + 刀/撬棍/斧，4 种弹药 | 弹药按口径找，枪带随机存弹 |
+| 工具 | 开罐器、指南针、地图、电台+电池、提灯+燃料、铺盖、鞭炮 | 指南针显示顶部方位条；地图开 M；电台耗电池在 120 m 外一个军用刷新点刷出补给（步枪+弹药+急救包）并标在地图和指南针上 20 分钟；提灯每罐燃料烧 15 分钟、夜里提亮但让感染者看得更远；铺盖休息 +20 生命（流血时不行）；鞭炮扔出约 18 m，炸 4 声把感染者引过去 |
+
+### 15.2 身体状态
+
+`SurvivalSystem`：感染者每次命中先被护甲吸收一部分，再按 45%×(1−1.5×护甲) 的概率开一道伤口（最多 3 道），每道每秒掉 0.45 生命直到包扎；饥饿和口渴都 ≥70、没有流血、不冷时缓慢回血；夜晚与坏天气减去穿着保暖得到寒冷值，寒冷让饥饿最多加倍消耗；饥饿或口渴低于 12 时无法冲刺。死亡原因区分 blood loss / starvation / dehydration / infected。
+
+### 15.3 氛围
+
+- 天气：`TimeSystem` 按种子每 2.5～5.5 游戏小时在晴/阴/雾之间切换，G 键手动轮换；阴天压暗和去饱和，雾天能见度约百米；清晨有薄雾；高度雾的颜色辐射亮度按白天 4、夜间 0.15 调（远景与天空亮度衔接，见 `FTimeConfig`）；
+- 声音：`tools/audio/nextdayz_sfx.py` 新增风声（3 段交替、阴天更大）、白天乌鸦、远处枪声、夜间远处尖叫、近战挥击与钝击、鞭炮、拾取/丢弃/进食/饮水/包扎/电台/提灯；`NextDayzAudio::UpdateAmbience` 调度；
+- 末日痕迹 kit：尸袋、血迹、垃圾堆、木板路障与钉死的窗、新泽西护栏、检疫告示牌、墙面涂鸦（"HELP" 等，`text()` 生成）、医疗帐篷、烧毁的车、货运车厢；
+- HUD：DayZ 式消息流（拾取、饥渴、流血、寒冷、电台播报……）、状态提示（流血闪烁、寒冷/冻僵、虚弱、回血、提灯剩余）、死亡总结（死因、存活时间、击杀数）。
+
+### 15.4 验证入口
+
+只在 `--agent-validation` 下生效的 cvar：`nextdayz.validation.give`（`id` 或 `id:count`）、`.use`（按 id 使用/穿戴/装备第一件）、`.drop`、`.bleed`、`.teleport`（`"x,y"` 地图坐标）；调试 cvar：`nextdayz.debug.hour`、`.weather`（0/1/2）、`.fogRadiance`、`.fogDensityScale`。新增查询：`game.lootSpots / lootPiles / lootZones / poiCount / zombieCap / zombieSpawnPoints / bleeding / cold / armor / weather / lanternLit / cacheMarked / showMap / lastNotification / itemCount / zombieOffset / lastTraceNode`。
+
+`assets/agentscripts/nextdayz-survival-depth.agentscript.json` 覆盖：据点/刷新点/感染者锚点规模、流血与 H 包扎、地图与电台补给、背心护甲、斧头近战击杀、丢弃成堆、背包界面、夜间提灯、雾天；并截图地图、背包、夜晚、雾天。开局有货数为 253（种子 1337），smoke / 3c-loot / loot-respawn / product-loop 断言随之更新。单测新增 loot 表、物品目录完整性（`[ScadRig][NextDayz]`）、穿戴/换装/丢弃、流血/护甲/止痛药/开罐器/休息、寒冷、补货冷却缩放、成组刷新。

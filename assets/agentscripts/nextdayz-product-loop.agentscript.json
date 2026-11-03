@@ -32,7 +32,7 @@
     { "type": "cvar", "name": "nextdayz.validation.restart", "set": true },
     { "type": "wait-frames", "n": 5 },
     { "type": "assert", "query": "game.runState", "op": "eq", "value": "playing" },
-    { "type": "assert", "query": "game.lootRemaining", "op": "eq", "value": 59 },
+    { "type": "assert", "query": "game.lootRemaining", "op": "eq", "value": 253 },
     { "type": "quit" }
   ]
 }

@@ -83,6 +83,7 @@ namespace NextDayz
             }
         }
         const float duration = action_ == EPlayerAction::LootGround ? config_.LootDurationSeconds
+            : action_ == EPlayerAction::Rest ? config_.RestDurationSeconds
             : (action_ == EPlayerAction::DrinkFromWell || action_ == EPlayerAction::FillBottle)
                 ? config_.WellDurationSeconds : config_.UseDurationSeconds;
         if (elapsed_ >= std::max(duration, 0.01f))
@@ -107,6 +108,7 @@ namespace NextDayz
     float PlayerActionController::NormalizedTime() const
     {
         const float duration = action_ == EPlayerAction::LootGround ? config_.LootDurationSeconds
+            : action_ == EPlayerAction::Rest ? config_.RestDurationSeconds
             : (action_ == EPlayerAction::DrinkFromWell || action_ == EPlayerAction::FillBottle)
                 ? config_.WellDurationSeconds : config_.UseDurationSeconds;
         return glm::clamp(elapsed_ / std::max(duration, 0.01f), 0.0f, 1.0f);

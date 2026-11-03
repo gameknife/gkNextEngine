@@ -45,7 +45,7 @@ namespace NextDayz
 
         FWeaponRigHold HoldFor(std::string_view weaponId)
         {
-            if (weaponId == "pistol")
+            if (weaponId == "pistol" || weaponId == "knife")
             {
                 // Grip into the palm, support hand cupping the firing hand, arms extended.
                 return {glm::vec3(0.0f, 0.10f, -0.065f), true, glm::vec3(0.07f, -0.03f, -0.02f), 0.12f};

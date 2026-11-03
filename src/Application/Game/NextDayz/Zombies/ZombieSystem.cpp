@@ -279,7 +279,7 @@ namespace NextDayz
         const FZombieDef& definition = ZombieDef(zombie.profile);
         const glm::vec3 delta = Flat(playerPosition - zombie.position);
         const float distance = glm::length(delta);
-        if (distance <= 0.01f || distance > definition.sightDistance)
+        if (distance <= 0.01f || distance > definition.sightDistance * sightScale_)
         {
             return false;
         }
@@ -331,8 +331,9 @@ namespace NextDayz
         zombie.repathSeconds = std::max(0.0f, zombie.repathSeconds - deltaSeconds);
         const bool targetMoved = glm::length(Flat(target - zombie.pathTarget)) >= 2.0f;
         const bool pathFinished = zombie.pathWaypoint >= zombie.path.size();
-        if (resolvePath && (zombie.repathSeconds <= 0.0f || targetMoved || pathFinished))
+        if (resolvePath && (zombie.repathSeconds <= 0.0f || targetMoved || pathFinished) && pathBudget_ > 0)
         {
+            --pathBudget_;
             zombie.path = resolvePath(zombie.position, target);
             zombie.pathWaypoint = zombie.path.size() > 1 ? 1 : 0;
             zombie.pathTarget = target;
@@ -481,6 +482,9 @@ namespace NextDayz
     {
         const float dt = std::max(deltaSeconds, 0.0f);
         const FZombieConfig& c = config_;
+        // A gunshot can wake a crowd at once: spread their route planning over
+        // a few frames instead of solving every path in one.
+        pathBudget_ = c.MaxPathSolvesPerUpdate;
         for (FZombieRuntime& zombie : slots_)
         {
             if (!zombie.active)

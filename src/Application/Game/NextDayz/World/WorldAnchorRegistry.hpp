@@ -14,6 +14,7 @@ namespace NextDayz
         Zombie,
         Loot,
         Well,
+        Poi,        // a named place for the map (nd_poi(name, kind))
     };
 
     struct FWorldAnchorHandle
@@ -26,9 +27,11 @@ namespace NextDayz
     struct FWorldAnchor
     {
         EWorldAnchorType type = EWorldAnchorType::Loot;
-        std::string profile;
+        std::string profile;        // spawn/loot profile, or the POI kind
+        std::string label;          // POI name
         glm::vec3 worldPos{};
         uint32_t nodeInstanceId = 0;
+        int group = 1;              // infected anchors: how many spawn together
     };
 
     class WorldAnchorRegistry
@@ -40,6 +43,7 @@ namespace NextDayz
         const FWorldAnchor* Resolve(FWorldAnchorHandle handle) const;
         std::vector<FWorldAnchorHandle> Find(EWorldAnchorType type) const;
         size_t Count(EWorldAnchorType type) const;
+        const std::vector<FWorldAnchor>& All() const { return anchors_; }
         uint32_t Generation() const { return generation_; }
 
     private:

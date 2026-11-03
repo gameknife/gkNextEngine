@@ -1,17 +1,20 @@
 #pragma once
 
 // ============================================================================
-// NextDayzHUD.hpp - Minimal ImGui HUD: crosshair and hit markers, damage
-// direction and vignette, weapon/ammo readout, clock, interaction prompt and
-// the (toggleable) inventory panel. Pure presentation:
-// the GameInstance packs a context each frame and receives equip/wear requests
-// back through callbacks.
+// NextDayzHUD.hpp - ImGui HUD: crosshair and hit markers, damage direction and
+// vignette, survival status (bleeding, cold, weak, healing), a message feed,
+// the compass strip and map screen (only with those items), weapon/ammo
+// readout, quickbar, and the inventory screen (vicinity / equipment / cargo
+// with drag and drop). Pure presentation: the GameInstance packs a context
+// each frame and receives requests back through callbacks.
 // ============================================================================
 
 #include <functional>
 #include <cstdint>
 #include <array>
+#include <optional>
 #include <string>
+#include <vector>
 
 #include <glm/glm.hpp>
 
@@ -65,6 +68,7 @@ namespace NextDayz
         int activeZombies = 0;
         int alertedZombies = 0;
         int zombieKills = 0;
+        int zombieCap = 0;
         int zombiePathSegments = 0;
         int hitBodies = 0;          // infected with live skeleton hitboxes
         int hitCapsules = 0;
@@ -73,6 +77,9 @@ namespace NextDayz
         int lootAvailable = 0;
         int lootReserved = 0;
         int lootCooldown = 0;
+        int lootSpots = 0;
+        int lootPiles = 0;
+        int lootZones = 0;
         std::array<int, 6> lootAvailableByCategory{};
         std::array<int, 6> lootTotalByCategory{};
         int criticalFood = 0;
@@ -89,12 +96,35 @@ namespace NextDayz
         bool hitProxyOverlay = true;
     };
 
+    // Loot within reach, for the inventory's vicinity column.
+    struct FHudNearbyLoot
+    {
+        int index = -1;
+        std::string name;
+        float distance = 0.0f;
+    };
+
+    struct FHudNotification
+    {
+        std::string text;
+        float age = 0.0f;
+        int severity = 0;   // 0 info, 1 warning, 2 danger, 3 good news
+    };
+
+    struct FHudPoi
+    {
+        std::string name;
+        std::string kind;
+        glm::vec2 xz{0.0f};
+    };
+
     struct FHudContext
     {
         bool aiming = false;
         bool firstPerson = true;
 
         bool hasWeapon = false;
+        bool melee = false;
         std::string weaponName;
         int ammoInMag = 0;
         int ammoReserve = 0;
@@ -105,14 +135,22 @@ namespace NextDayz
         int hour = 8;
         int minute = 0;
         bool overcast = false;
+        std::string weather;
 
         bool showInventory = false;
         bool showDebugPanel = false;
+        bool showMap = false;
         const Inventory* inventory = nullptr;
         const WeaponSystem* weapons = nullptr;
         FSurvivalSnapshot survival;
+        float armor = 0.0f;
+        float warmth = 0.0f;
+        bool weak = false;
+        bool lanternLit = false;
+        float lanternMinutes = 0.0f;
         bool paused = false;
         double survivalSeconds = 0.0;
+        int kills = 0;
         std::string objective;
         // Combat feedback, each 1 on the event and fading to 0.
         float hitMarker = 0.0f;
@@ -120,11 +158,29 @@ namespace NextDayz
         bool hitMarkerHead = false;
         float hurt = 0.0f;
         float hurtYawRadians = 0.0f;   // attacker bearing relative to the view, + = left
+        // Navigation (the compass and map only show with those items).
+        bool hasCompass = false;
+        bool hasMap = false;
+        float yawRadians = 0.0f;       // camera yaw: 0 looks along +Z (south on the map)
+        glm::vec3 playerPosition{0.0f};
+        std::vector<FHudPoi> pois;
+        std::optional<glm::vec3> cacheMarker;
+        // Inventory screen and quickbar.
+        std::vector<FHudNearbyLoot> nearby;
+        std::array<std::string, 4> quickSlots;   // item ids bound to keys 3..6
+        std::vector<FHudNotification> notifications;
         FDebugHudState debug;
 
-        std::function<void(const std::string& weaponId, int slot)> equipWeapon;
-        std::function<void(const std::string& clothingId, bool on)> toggleClothing;
+        std::function<void(FItemInstanceId instanceId, int slot)> equipWeapon;
+        std::function<void(FItemInstanceId instanceId)> wear;
+        std::function<void(FItemInstanceId instanceId)> takeOff;
         std::function<void(FItemInstanceId instanceId)> useItem;
+        std::function<void(FItemInstanceId instanceId, int count)> dropItem;
+        std::function<void(FItemInstanceId instanceId, FContainerId containerId)> moveItem;
+        std::function<void(FItemInstanceId instanceId)> splitItem;
+        std::function<void(int lootIndex)> takeLoot;
+        std::function<void(int slot, const std::string& itemId)> bindQuick;
+        std::function<void(int slot)> unequipWeapon;
         std::function<void()> restartSession;
     };
 

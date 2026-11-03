@@ -1,10 +1,11 @@
 #pragma once
 
 // ============================================================================
-// NextDayzGameInstance.hpp - Orchestrates the NextDayz MVP: loads the coldwar
-// map, owns the player/weapon/inventory/loot/time systems and routes input,
-// camera and HUD. Business state lives in the sub-systems; this class only
-// wires them together (see docs/projects/nextdayz/nextdayz-mvp-design.md).
+// NextDayzGameInstance.hpp - Orchestrates NextDayz: loads the riverland map,
+// owns the player/weapon/inventory/loot/survival/infected/time systems and
+// routes input, camera and HUD. Business state lives in the sub-systems; this
+// class only wires them together and turns their events into feedback (see
+// docs/projects/nextdayz/nextdayz-productization-design.md).
 // ============================================================================
 
 #include "Engine/Runtime/GameInstance.hpp"
@@ -18,6 +19,7 @@
 #include "Application/Game/NextDayz/Combat/CombatEffects.hpp"
 #include "Application/Game/NextDayz/Combat/CombatSystem.hpp"
 #include "Application/Game/NextDayz/Combat/NoiseSystem.hpp"
+#include "Application/Game/NextDayz/Data/LootTables.hpp"
 #include "Application/Game/NextDayz/Inventory/Inventory.hpp"
 #include "Application/Game/NextDayz/Inventory/LootSystem.hpp"
 #include "Application/Game/NextDayz/Player/PlayerController.hpp"
@@ -30,6 +32,7 @@
 #include "Application/Game/NextDayz/World/ZombieSpawnDirector.hpp"
 #include "Application/Game/NextDayz/Zombies/ZombieRigVisual.hpp"
 #include "Application/Game/NextDayz/Zombies/ZombieVisualPool.hpp"
+#include "Application/Game/NextDayz/UI/NextDayzHUD.hpp"
 #include "Gameplay/AI/NavGrid.h"
 #include "Gameplay/Rig/RigInstance.h"
 
@@ -66,9 +69,29 @@ public:
 
 private:
     glm::vec3 ResolveSpawnPosition() const;
-    void EquipFromInventory(const std::string& weaponId, int slot);
-    void ToggleClothing(const std::string& clothingId, bool on);
+    // Inventory requests (HUD, quickbar, keys). Each runs one inventory
+    // transaction and reports the outcome in the message feed.
+    void EquipWeaponInstance(NextDayz::FItemInstanceId instanceId, int slot);
+    void WearItem(NextDayz::FItemInstanceId instanceId);
+    void TakeOffItem(NextDayz::FItemInstanceId instanceId);
+    void DropItem(NextDayz::FItemInstanceId instanceId, int count);
+    void MoveItem(NextDayz::FItemInstanceId instanceId, NextDayz::FContainerId containerId);
+    void SplitItem(NextDayz::FItemInstanceId instanceId);
+    void TakeLoot(int lootIndex);
     void UseInventoryItem(NextDayz::FItemInstanceId instanceId);
+    void UseQuickSlot(int slot);
+    void QuickBandage();
+    void ToggleLantern();
+    void UseRadio();
+    void ThrowFirecrackers(NextDayz::FItemInstanceId instanceId);
+    void SyncClothingVisuals();
+    void Notify(std::string text, int severity = 0);
+    void UpdateSurvivalFeedback(float deltaSeconds);
+    void UpdateWorldPressure();
+    void UpdateFirecrackers(float deltaSeconds);
+    void InjectLootCatalog(std::vector<Assets::Model>& models, std::vector<Assets::FMaterial>& materials);
+    std::vector<NextDayz::FLootSpotSeed> CollectLootSpots() const;
+    void StartNewLife();
     void ApplyValidationLoadout();
     void CreateZombieVisuals();
     void SyncZombieVisuals(float deltaSeconds = 0.0f);
@@ -88,6 +111,7 @@ private:
 
     NextDayz::FConfig config_{};
     NextDayz::FDeterministicRng sessionRng_;
+    NextDayz::FDeterministicRng survivalRng_;   // wounds, corpse loot, firecracker throws
 
     NextDayz::PlayerController player_;
     NextDayz::PlayerActionController actions_;
@@ -117,6 +141,9 @@ private:
     std::array<uint32_t, 8> zombieTintMaterialIds_{};   // shirt colours, one per body slot
     bool zombieRigLoaded_ = false;
     std::vector<NextDayz::ZombieRigVisual> zombieRigVisuals_;
+    // Item models for loot spots and piles (nextdayz_loot_items.scad).
+    Assets::FRigAsset lootCatalogAsset_{};
+    bool lootCatalogLoaded_ = false;
 
     struct FRecentWeaponTrace
     {
@@ -144,6 +171,28 @@ private:
     bool hitMarkerHead_ = false;
     float hurtSeconds_ = 0.0f;
     float hurtYawRadians_ = 0.0f;
+
+    // Survival feedback: messages, quickbar, map, lantern, radio cache, thrown firecrackers.
+    std::vector<NextDayz::FHudNotification> notifications_;
+    std::array<std::string, 4> quickSlots_{};
+    bool showMap_ = false;
+    bool lanternLit_ = false;
+    float lanternSeconds_ = 0.0f;
+    std::optional<glm::vec3> cacheMarker_;
+    float cacheSeconds_ = 0.0f;
+    struct FFirecracker
+    {
+        glm::vec3 position{0.0f};
+        float timer = 0.0f;
+        int bangs = 0;
+    };
+    std::vector<FFirecracker> firecrackers_;
+    int lastWounds_ = 0;
+    bool warnedHunger_ = false;
+    bool warnedThirst_ = false;
+    bool warnedCold_ = false;
+    bool warnedWeak_ = false;
+    bool lastShotMelee_ = false;
 
     bool sceneReady_ = false;
     bool showInventory_ = false;
@@ -176,6 +225,15 @@ private:
     float validationDamagePlayer_ = 0.0f;
     float validationHunger_ = -1.0f;
     float validationHydration_ = -1.0f;
+    int32_t validationBleed_ = 0;
+    float debugHour_ = -1.0f;
+    int32_t debugWeather_ = -1;
+    float debugFogRadiance_ = -1.0f;
+    float debugFogDensityScale_ = 1.0f;
+    std::string validationGive_;
+    std::string validationUse_;
+    std::string validationDrop_;
+    std::string validationTeleport_;
     uint64_t validationAttackSequence_ = 0;
     bool paused_ = false;
     double survivalSeconds_ = 0.0;

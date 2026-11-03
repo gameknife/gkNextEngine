@@ -287,6 +287,135 @@ def player_hurt(rng, f0, kind):
     return finish(place(voice * 0.8, punch, 0.0), peak=0.8)
 
 
+# --- survival and atmosphere ------------------------------------------------------
+
+def melee_swing(rng, pitch=1.0):
+    """A blade or bar cutting air: band-passed noise sweeping up then down."""
+    seconds = 0.32
+    t = t_axis(seconds)
+    noise = rng.standard_normal(len(t))
+    out = np.zeros(len(t))
+    centers = 700.0 * pitch + 1400.0 * pitch * np.sin(np.pi * t / seconds)
+    for k in range(6):
+        a, b = k * len(t) // 6, (k + 1) * len(t) // 6
+        out[a:b] = bandpass(noise, float(np.mean(centers[a:b])), 450.0)[a:b]
+    env = np.sin(np.pi * np.clip(t / seconds, 0, 1)) ** 2
+    return finish(out * env, peak=0.55)
+
+
+def melee_impact(rng):
+    """Blunt metal into a body: a heavy thud with a short crunch."""
+    base = flesh_hit(rng, wet=0.6, thump_hz=70.0)
+    t = t_axis(len(base) / RATE)
+    crunch = bandpass(rng.standard_normal(len(t)), 2200.0, 900.0) * np.exp(-t / 0.018) * 0.7
+    return finish(base + crunch, peak=0.8)
+
+
+def firecracker(rng):
+    """Three sharp pops with an outdoor slap."""
+    out = np.zeros(int(0.9 * RATE))
+    for at, gain in ((0.0, 1.0), (0.13 + rng.random() * 0.05, 0.8), (0.31 + rng.random() * 0.06, 0.9)):
+        n = int(0.05 * RATE)
+        pop = highpass(rng.standard_normal(n), 900.0) * env_exp(0.05, 0.006, attack=0.0003)
+        out = place(out, pop * gain, at)
+    return finish(reverb(out, 0.9, 0.2, 0.5, rng), peak=0.8)
+
+
+def wind(rng, seconds=7.0, gust=1.0):
+    """Wind over open ground: brown-ish noise breathing through a moving low-pass."""
+    n = int(seconds * RATE)
+    noise = np.cumsum(rng.standard_normal(n))
+    noise = highpass(noise - np.mean(noise), 40.0)
+    noise /= np.max(np.abs(noise)) + 1e-9
+    t = t_axis(seconds)
+    swell = 0.55 + 0.45 * np.sin(2 * np.pi * t / seconds * (1.0 + gust) + rng.random() * 6.0)
+    whistle = bandpass(rng.standard_normal(n), 520.0 + 180.0 * gust, 60.0) * 0.25
+    body = lowpass(noise, 380.0) + whistle
+    env = np.clip(t / 1.5, 0, 1) * np.clip((seconds - t) / 1.5, 0, 1)
+    return finish(body * swell * env, peak=0.6, fade=0.2)
+
+
+def crow(rng):
+    """Two or three harsh caws drifting over the fields."""
+    out = np.zeros(int(1.6 * RATE))
+    at = 0.0
+    for _ in range(2 + int(rng.random() * 2)):
+        caw = zombie_voice(rng, 0.28, [620, 700, 560], "aa", rasp=0.9, growl_hz=70.0, breath=0.5, attack=0.01,
+                           release=0.1)
+        out = place(out, highpass(caw, 400.0), at)
+        at += 0.36 + rng.random() * 0.12
+    return finish(reverb(lowpass(out, 3500.0), 0.8, 0.18, 0.45, rng), peak=0.5)
+
+
+def distant_shot(rng, body_hz):
+    """Someone else's fight, far away: a dull crack and a long rolling echo."""
+    shot = gunshot(rng, body_hz, 1.0, 0.4, 2.0, 1.2, pitch=0.85, mech=0.0)
+    return finish(reverb(lowpass(shot, 700.0), 2.5, 0.6, 1.4, rng, damp=600.0), peak=0.45, fade=0.3)
+
+
+def distant_scream(rng):
+    voice = zombie_voice(rng, 1.4, [180, 300, 280, 200, 150], "aa", rasp=0.8, growl_hz=28.0, breath=0.7,
+                         attack=0.05, release=0.5)
+    return finish(reverb(lowpass(voice, 1400.0), 2.0, 0.5, 1.2, rng, damp=900.0), peak=0.4, fade=0.3)
+
+
+def rustle(rng, seconds=0.45, center=2600.0):
+    """Cloth and gear being handled (picking up, packing)."""
+    t = t_axis(seconds)
+    noise = rng.standard_normal(len(t))
+    grains = np.abs(lowpass(rng.standard_normal(len(t)), 25.0)) * 3.0
+    out = bandpass(noise, center, 1400.0) * grains * np.sin(np.pi * t / seconds)
+    return finish(out, peak=0.45)
+
+
+def eat(rng):
+    out = np.zeros(int(1.0 * RATE))
+    for k in range(4):
+        n = int(0.12 * RATE)
+        crunch = bandpass(rng.standard_normal(n), 1800.0 + rng.random() * 800.0, 900.0) * env_exp(0.12, 0.03)
+        out = place(out, crunch * (0.7 + 0.3 * rng.random()), 0.05 + k * 0.22)
+    return finish(out, peak=0.45)
+
+
+def drink(rng):
+    out = np.zeros(int(1.0 * RATE))
+    for k in range(3):
+        t = t_axis(0.18)
+        gulp = np.sin(2 * np.pi * (180.0 + 260.0 * np.exp(-t / 0.04)) * t) * np.exp(-t / 0.05)
+        out = place(out, gulp, 0.1 + k * 0.28)
+    return finish(lowpass(out, 1200.0), peak=0.5)
+
+
+def bandage(rng):
+    """Fabric tearing, then wrapping."""
+    seconds = 0.9
+    t = t_axis(seconds)
+    tear = highpass(rng.standard_normal(len(t)), 1500.0) * (np.abs(lowpass(rng.standard_normal(len(t)), 60.0)) * 4.0)
+    env = np.clip(t / 0.02, 0, 1) * np.exp(-t / 0.25)
+    return finish(tear * env + rustle(rng, seconds, 2000.0) * 0.5, peak=0.5)
+
+
+def radio_static(rng):
+    """Tuning across the band: hiss, whistles, a broken voice-like burst and three beeps."""
+    seconds = 2.2
+    t = t_axis(seconds)
+    hiss = bandpass(rng.standard_normal(len(t)), 2400.0, 1600.0) * (0.6 + 0.4 * np.sin(2 * np.pi * 3.0 * t))
+    whistle = np.sin(2 * np.pi * (900.0 + 700.0 * np.sin(2 * np.pi * 0.6 * t)) * t) * 0.15
+    voice = zombie_voice(rng, 0.7, [150, 170, 140], "ah", rasp=0.3, growl_hz=12.0, breath=0.2)
+    out = place(hiss * 0.5 + whistle, bandpass(voice, 1200.0, 600.0) * 0.8, 0.6)
+    for k in range(3):
+        bt = t_axis(0.12)
+        out = place(out, np.sin(2 * np.pi * 1000.0 * bt) * 0.5, 1.6 + k * 0.18)
+    return finish(out, peak=0.5)
+
+
+def lantern(rng):
+    t = t_axis(0.5)
+    click = highpass(rng.standard_normal(len(t)), 3000.0) * np.exp(-t / 0.004)
+    whoosh = lowpass(rng.standard_normal(len(t)), 900.0) * np.clip(t / 0.05, 0, 1) * np.exp(-t / 0.15) * 0.6
+    return finish(click + whoosh, peak=0.45)
+
+
 # --- the set ---------------------------------------------------------------------
 
 def build(out_dir):
@@ -325,6 +454,23 @@ def build(out_dir):
         add(f"zombie_death_{i + 1}", 200 + i, zombie_death)
     add("player_hurt_1", 210, lambda r: player_hurt(r, 125.0, "uh"))
     add("player_hurt_2", 211, lambda r: player_hurt(r, 110.0, "ah"))
+    for i in range(2):
+        add(f"melee_swing_{i + 1}", 220 + i, lambda r, i=i: melee_swing(r, 1.0 + i * 0.15))
+    add("melee_impact", 222, melee_impact)
+    add("firecracker", 223, firecracker)
+    for i in range(3):
+        add(f"ambient_wind_{i + 1}", 230 + i, lambda r, i=i: wind(r, 7.0 + i, 0.6 + i * 0.4))
+    for i in range(2):
+        add(f"ambient_crow_{i + 1}", 235 + i, crow)
+        add(f"distant_shot_{i + 1}", 237 + i, lambda r, i=i: distant_shot(r, 90.0 - i * 25.0))
+    add("distant_scream", 239, distant_scream)
+    add("pickup", 240, lambda r: rustle(r))
+    add("item_drop", 241, lambda r: rustle(r, 0.3, 900.0))
+    add("eat", 242, eat)
+    add("drink", 243, drink)
+    add("bandage", 244, bandage)
+    add("radio_static", 245, radio_static)
+    add("lantern", 246, lantern)
 
     for name, signal in sounds.items():
         write(os.path.join(out_dir, name + ".wav"), signal)

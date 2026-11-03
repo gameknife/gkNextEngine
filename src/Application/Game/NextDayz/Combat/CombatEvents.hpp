@@ -70,6 +70,7 @@ namespace NextDayz
         bool hit = false;
         bool hitZombie = false;
         glm::vec3 normal{};
+        bool melee = false;     // a swing: no tracer, no muzzle
     };
 
     struct FDamageEvent

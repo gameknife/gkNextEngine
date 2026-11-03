@@ -8,6 +8,7 @@
 #include "Engine/Runtime/Components/RenderComponent.hpp"
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/Subsystems/NextPhysics.hpp"
+#include "Modules/ScadLoader/FScadShared.h"
 
 namespace NextDayz
 {
@@ -22,6 +23,7 @@ namespace NextDayz
             if (auto render = node->GetComponent<Runtime::RenderComponent>())
             {
                 render->SetVisible(false);
+                render->SetRayCastVisible(false);   // hidden markers must not stop bullets or the nav probes
             }
             if (auto component = node->GetComponent<Runtime::PhysicsComponent>(); component && physics)
             {
@@ -35,9 +37,22 @@ namespace NextDayz
 
         std::optional<std::pair<EWorldAnchorType, std::string>> Parse(std::string_view name)
         {
-            if (name == "cw_prop_well")
+            if (name == "cw_prop_well" || name == "cw_prop_water_pump")
             {
                 return std::pair{EWorldAnchorType::Well, std::string("water")};
+            }
+            if (name == "nd_poi")
+            {
+                return std::pair{EWorldAnchorType::Poi, std::string("poi")};
+            }
+            // Map shorthand: the profile comes from the call's metadata (p = ...).
+            if (name == "nd_loot")
+            {
+                return std::pair{EWorldAnchorType::Loot, std::string("residential")};
+            }
+            if (name == "nd_zed")
+            {
+                return std::pair{EWorldAnchorType::Zombie, std::string("civilian")};
             }
             constexpr std::string_view prefix = "nd_spawn_";
             if (!name.starts_with(prefix))
@@ -81,7 +96,22 @@ namespace NextDayz
                 continue;
             }
             node->RecalcTransform(true);
-            anchors_.push_back({parsed->first, parsed->second, node->WorldTranslation(), node->GetInstanceId()});
+            FWorldAnchor anchor{parsed->first, parsed->second, {}, node->WorldTranslation(), node->GetInstanceId()};
+            if (!node->GetMetadata().empty())
+            {
+                const Assets::Scad::FMetadata metadata = Assets::Scad::ParseScadMetadata(node->GetMetadata());
+                anchor.group = std::max(1, static_cast<int>(Assets::Scad::MetadataNumber(metadata, "group", 1.0)));
+                if (anchor.type == EWorldAnchorType::Loot || anchor.type == EWorldAnchorType::Zombie)
+                {
+                    anchor.profile = Assets::Scad::MetadataString(metadata, "p", anchor.profile);
+                }
+                if (anchor.type == EWorldAnchorType::Poi)
+                {
+                    anchor.label = Assets::Scad::MetadataString(metadata, "name", "Unknown");
+                    anchor.profile = Assets::Scad::MetadataString(metadata, "kind", "village");
+                }
+            }
+            anchors_.push_back(std::move(anchor));
             if (parsed->first != EWorldAnchorType::Well)
             {
                 DisableMarker(node.get(), engine.GetPhysicsEngine());

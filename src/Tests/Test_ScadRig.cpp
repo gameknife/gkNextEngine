@@ -6,6 +6,7 @@
 #include "Modules/ScadLoader/FScadParser.h"
 #include "Modules/ScadLoader/FScadRig.h"
 #include "Gameplay/Rig/RigPoseOps.h"
+#include "Data/ItemDefs.hpp"
 #include <algorithm>
 
 #include <cmath>
@@ -884,4 +885,22 @@ TEST_CASE("ScadRig loads the kit_char worker character", "[Unit][ScadRig][KitCha
 TEST_CASE("ScadRig loads the kit_char citizen character", "[Unit][ScadRig][KitChar]")
 {
     CheckKitCharacter("assets/scad/characters/citizen.scad", 3); // 连衣裙 + 双袖
+}
+
+TEST_CASE("NextDayz loot catalog has a world model for every item", "[Unit][ScadRig][NextDayz]")
+{
+    using namespace NextDayz;
+    FRigAsset asset;
+    std::string error;
+    std::vector<std::string> warnings;
+    REQUIRE(FScadRigLoader::LoadRig("assets/scad/characters/nextdayz_loot_items.scad", {}, asset, error,
+                                            &warnings));
+    for (const FItemDef& definition : AllItemDefs())
+    {
+        INFO(definition.id);
+        const int32_t bone = asset.FindBone("bone_item_" + std::string(definition.id));
+        REQUIRE(bone >= 0);
+        REQUIRE(std::any_of(asset.parts.begin(), asset.parts.end(),
+                            [bone](const FRigPart& part) { return part.bone == bone; }));
+    }
 }

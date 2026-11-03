@@ -45,6 +45,7 @@ namespace NextDayz
         Heal,
         DrinkFromWell,
         FillBottle,
+        Rest,
     };
 
     enum class EPlayerLifeState
@@ -144,8 +145,26 @@ namespace NextDayz
         case EPlayerAction::Heal: return "heal";
         case EPlayerAction::DrinkFromWell: return "drink_from_well";
         case EPlayerAction::FillBottle: return "fill_bottle";
+        case EPlayerAction::Rest: return "rest";
         case EPlayerAction::None:
         default: return "none";
+        }
+    }
+
+    // What the player is doing, for the HUD.
+    inline const char* ActionLabel(EPlayerAction action)
+    {
+        switch (action)
+        {
+        case EPlayerAction::LootGround: return "Taking";
+        case EPlayerAction::Eat: return "Eating";
+        case EPlayerAction::Drink: return "Drinking";
+        case EPlayerAction::Heal: return "Treating wounds";
+        case EPlayerAction::DrinkFromWell: return "Drinking from the well";
+        case EPlayerAction::FillBottle: return "Filling the bottle";
+        case EPlayerAction::Rest: return "Resting";
+        case EPlayerAction::None:
+        default: return "";
         }
     }
 

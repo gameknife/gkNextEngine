@@ -47,7 +47,11 @@ namespace NextGameplay
         // RebuildDirtyRegion() re-samples geometry only, so re-apply after it.
         void MaskUnwalkable(const std::function<bool(const glm::vec3&)>& predicate);
 
-        std::vector<glm::vec3> FindPath(const glm::vec3& from, const glm::vec3& to, float referenceHeight) const;
+        // maxExpansions > 0 bounds the search: when it runs out (or the goal is
+        // unreachable) the path leads to the explored cell closest to the goal
+        // instead of failing. 0 = unbounded, empty when unreachable.
+        std::vector<glm::vec3> FindPath(const glm::vec3& from, const glm::vec3& to, float referenceHeight,
+                                        int maxExpansions = 0) const;
 
         bool IsWalkable(const glm::vec3& worldPos) const;
         // Ground height under worldPos, as sampled when the grid was built.

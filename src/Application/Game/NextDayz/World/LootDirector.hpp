@@ -29,6 +29,7 @@ namespace NextDayz
         ELootProfile profile = ELootProfile::Residential;
         ELootCategory category = ELootCategory::Misc;
         ELootSlotState state = ELootSlotState::Available;
+        double committedAt = 0.0;
         double cooldownUntil = 0.0;
         double offscreenSince = -1.0;
         uint32_t roll = 0;
@@ -38,6 +39,16 @@ namespace NextDayz
     {
     public:
         void Configure(const FLootRespawnTuning& tuning) { tuning_ = tuning; }
+        const FLootRespawnTuning& Tuning() const { return tuning_; }
+        // Shortens (or stretches) the cooldown of every spot of a category
+        // already waiting, e.g. food comes back sooner while the player starves.
+        void SetCooldownScale(ELootCategory category, float scale);
+        // Starts a spot in cooldown (a spot that rolled empty at world start).
+        bool StartCooldown(FLootSlotHandle handle, double worldSeconds, double seconds);
+        // Restocks a spot right now, whatever its cooldown (radio supply cache).
+        bool ForceAvailable(FLootSlotHandle handle);
+        // Re-labels a spot after it rolled different contents.
+        void SetCategory(FLootSlotHandle handle, ELootCategory category);
         void Reset(uint32_t generation, uint64_t seed);
         FLootSlotHandle AddSlot(const glm::vec3& position, ELootProfile profile, ELootCategory category);
 
@@ -55,6 +66,7 @@ namespace NextDayz
         FLootSlot* ResolveMutable(FLootSlotHandle handle);
 
         FLootRespawnTuning tuning_{};
+        std::array<float, static_cast<size_t>(ELootCategory::Count)> cooldownScale_{1, 1, 1, 1, 1, 1};
         std::vector<FLootSlot> slots_;
         FDeterministicRng rng_;
         uint32_t generation_ = 0;

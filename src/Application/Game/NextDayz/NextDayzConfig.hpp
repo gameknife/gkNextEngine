@@ -199,6 +199,7 @@ namespace NextDayz
         float WellDurationSeconds = 2.0f;
         float UseCommitNormalizedTime = 0.65f;
         float ActionFadeSeconds = 0.10f;
+        float RestDurationSeconds = 6.0f;
     };
 
     struct FSurvivalConfig
@@ -213,6 +214,24 @@ namespace NextDayz
         float StarvationDamagePerSecond = 1.25f;
         float DehydrationDamagePerSecond = 2.0f;
         float DamageProtectionSeconds = 0.35f;
+        // Bleeding: infected hits can open a wound; each one drains health
+        // until a bandage, rags or a first aid kit closes them all.
+        float BleedChance = 0.45f;
+        int MaxWounds = 3;
+        float BleedDamagePerSecondPerWound = 0.45f;
+        // Well fed and watered (and warm, and not bleeding) the body heals.
+        float WellFedThreshold = 70.0f;
+        float WellFedRegenPerSecond = 0.06f;
+        // Below this hunger or hydration the body is too weak to sprint.
+        float WeakThreshold = 12.0f;
+        // Cold (night, rain, too few clothes) burns food faster.
+        float ColdHungerMultiplier = 1.0f;
+        float PainkillerHeal = 25.0f;
+        float PainkillerSeconds = 30.0f;
+        float RestHeal = 20.0f;
+        float RestHungerCost = 6.0f;
+        float RestHydrationCost = 6.0f;
+        float UnopenedCanShare = 0.5f;    // eaten without a can opener or blade
     };
 
     // Infected behaviour and body language. Clip timings must match
@@ -229,7 +248,9 @@ namespace NextDayz
         float Deceleration = 10.0f;
         float SeparationRadius = 0.70f;
         float PlayerPersonalSpace = 1.0f;            // arms' length: grabbing hands, not overlapping bodies
-        float RoamRadius = 4.0f;
+        float RoamRadius = 7.0f;
+        int MaxPathSolvesPerUpdate = 4;
+        int MaxPathExpansions = 6000;   // A* nodes per route; beyond that, get as close as it got
         float RoamMinSeconds = 4.0f;
         float RoamMaxSeconds = 9.0f;
         float LameChance = 0.18f;
@@ -304,8 +325,23 @@ namespace NextDayz
         double TimeScale = 1.0;         // 1 real second = 1 game minute (24 real-min day)
         float DaySunIntensity = 480.0f;
         float DaySkyIntensity = 120.0f;
-        float NightSkyFraction = 0.12f; // sky never goes fully black
+        float NightSkyFraction = 0.08f; // sky never goes fully black
         float OvercastFactor = 0.55f;   // sun/sky multiplier while overcast
+        // Weather cycle (game hours between changes).
+        double WeatherMinHours = 2.5;
+        double WeatherMaxHours = 5.5;
+        // Height fog: density per weather, a morning mist on top, and the fog
+        // colour's radiance (same scale as the sun: ~50 reads as daylight haze).
+        float ClearFogDensity = 0.0035f;
+        float OvercastFogDensity = 0.0075f;
+        float FogWeatherDensity = 0.028f;
+        float DawnMistDensity = 0.008f;
+        float NightFogDensity = 0.004f;
+        float FogHeightFalloff = 0.05f;
+        glm::vec3 FogColor{0.60f, 0.63f, 0.66f};
+        float FogDayRadiance = 4.0f;
+        float FogNightRadiance = 0.15f;
+        float LanternNightLift = 0.10f; // extra night sky fraction while a lantern burns
     };
 
     struct FConfig

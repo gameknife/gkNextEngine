@@ -9,6 +9,7 @@
 #endif
 
 #define GK_NEXT_RENDERER_SHARED_UI_HELPERS
+#include <array>
 #include <filesystem>
 
 extern float TitlebarSize;
@@ -143,10 +144,21 @@ private:
         glm::vec3 right{1.0f, 0.0f, 0.0f};
         glm::vec3 up{0.0f, 1.0f, 0.0f};
         std::string debugName{"tempBox"};
-        bool useMuzzleTail = false;
+        bool useMuzzle = false;
+    };
+
+    // One piece of the camera-relative weapon. The offset is in the muzzle frame and in
+    // reference units (x right, y up, z towards the camera); the rig's world scale multiplies it.
+    struct FViewWeaponPart
+    {
+        std::shared_ptr<Assets::Node> node;
+        glm::vec3 localOffset{0.0f};
     };
 
     void CreateBoxAndPushFromView(const FLaunchView& view);
+    void EnsurePhysicsTicking(const char* what);
+    glm::vec3 MuzzleMouthPosition() const;
+    glm::vec3 MuzzleDirection() const;
 
     bool DrawRendererUi(const FGameUiFrameContext& context, FRendererUiState& uiState);
     FRendererUiState& GetRemoteUiState(std::string_view sessionId);
@@ -184,8 +196,12 @@ private:
 
     uint32_t modelId_;
     uint32_t boxModelId_;
-    uint32_t muzzleModelId_ = 0;
-    float launchCubeScale_ = 1.0f;
+    uint32_t viewBarrelWallHModelId_ = 0;
+    uint32_t viewBarrelWallVModelId_ = 0;
+    uint32_t viewReceiverModelId_ = 0;
+    uint32_t viewWeaponMatId_ = 0;
+    float launchSceneScale_ = 1.0f;
+    std::array<FViewWeaponPart, 5> viewWeaponParts_{};
     std::shared_ptr<Assets::Node> muzzleNode_;
     std::vector<uint32_t> matIds_;
     std::vector<uint32_t> dropSphereMatIds_;
@@ -199,6 +215,11 @@ private:
     bool stepRequested_ = false;
     float shootHintRemainingSeconds_ = 0.0f;
     float muzzleFieldOfView_ = -1.0f;
+    // Last frame used to place the weapon. The launch path reads these instead of the node's
+    // world transform, which the scene only publishes a frame later.
+    glm::vec3 muzzleOrigin_{0.0f};
+    glm::quat muzzleRotation_{1.0f, 0.0f, 0.0f, 0.0f};
+    float muzzleRigScale_ = 1.0f;
     float muzzlePitchOffsetDegrees_ = 0.0f;
     float muzzleYawOffsetDegrees_ = 0.0f;
 };

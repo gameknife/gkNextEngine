@@ -281,6 +281,8 @@ namespace Assets
         // Builds CPULodIndices(). Runs after tangents exist so a level that has to synthesise
         // vertices inherits a valid tangent frame. Safe to call twice; the second call is a no-op.
         void BuildLods();
+        // Small procedural pose libraries must retain their topology/root anchors.
+        void SetGenerateLods(bool enabled) { generateLods_ = enabled; }
 
         void FreeMemory();
 
@@ -304,6 +306,7 @@ namespace Assets
         std::vector<uint32_t> indices_;
         std::vector<std::vector<uint32_t>> lodIndices_;
         std::vector<float> lodErrors_;
+        bool generateLods_ = true;
         std::vector<glm::vec4> weights_;
         std::vector<glm::uvec4> joints_;
         

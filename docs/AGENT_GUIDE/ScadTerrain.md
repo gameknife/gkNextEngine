@@ -143,6 +143,9 @@ gnb validate --script assets/agentscripts/scadlibrary-terrain-process.agentscrip
 - **TerrainComponent**（`src/Engine/Runtime/Components/TerrainComponent.hpp`，loader 自动挂在
   地形节点）：`SampleHeight/SampleNormal/SampleSlopeDegrees/IsWater/WaterSurface/IsWalkable/BiomeId`
   （引擎世界空间 XZ）。数据与渲染网格/物理网格来自同一份三角化结果，永不漂移。
+- **运行时草地**：`Runtime::FTerrainGrassSystem` 按 biome / 水域 / 道路 / pad 生长实体草，
+  近/中/远三档各共享 9 个风姿态 mesh/BLAS，风只改实例。NextDayz 默认覆盖到 192 m，不需要往 SCAD 写草。
+  接入方式与预算见 [运行时草地](../designs/runtime-terrain-grass.md)。
 - **物理**：地形自动获得静态 MeshBody；水面节点 rayCast 不可见 → **无碰撞体**（落水物沉底）。
   限制：单 Model 索引 ≥65535×3（约 6.5 万三角形 / 180² cells）时引擎跳过 MeshShape。
 - **寻路**（`src/Gameplay/AI/NavGrid.h`）：Build 后必须补水域语义否决（缓坡河岸挡不住涉水）：

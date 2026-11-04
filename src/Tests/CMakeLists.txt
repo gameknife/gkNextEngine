@@ -23,6 +23,7 @@ set(unitTestSources
     Test_SceneReference.cpp
     Test_ScadLoader.cpp
     Test_ScadTerrain.cpp
+    Test_TerrainGrass.cpp
     Test_ScadLibraryTerrainProcess.cpp
     Test_ScadSceneDocument.cpp
     Test_TerrainWalkable.cpp

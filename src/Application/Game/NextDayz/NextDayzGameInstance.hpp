@@ -10,6 +10,7 @@
 
 #include "Engine/Runtime/GameInstance.hpp"
 #include "Engine/Assets/Data/RigAsset.hpp"
+#include "Engine/Runtime/Scene/TerrainGrass.hpp"
 
 #include <glm/vec2.hpp>
 
@@ -141,6 +142,7 @@ private:
     NextDayz::ZombieVisualPool zombieVisuals_;
     NextGameplay::FNavGrid zombieNavGrid_;
     NextDayz::TimeSystem time_;
+    Runtime::FTerrainGrassSystem grass_;
 
     // Injected weapon silhouettes shared by FPS view model and TPS attachment.
     std::array<uint32_t, NextDayz::kWeapons.size()> weaponModelIds_{};

@@ -264,6 +264,22 @@ void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
     cvars.SetDefaultFromString("r.exposure.auto", "true", &error);
     cvars.SetDefaultFromString("r.exposure.maxEV", "3", &error);
 
+    cvars.RegisterBool("nextdayz.grass.enabled", true, &grass_.settings.enabled, NextCVar::ECVarFlags::None,
+                       "Grow runtime grass on grassland terrain biomes");
+    cvars.RegisterFloat("nextdayz.grass.radius", 192.0f, &grass_.settings.radius, NextCVar::ECVarFlags::None,
+                        "Grass coverage radius in metres; large patches cover the distant rings", nullptr, 8.0, 192.0);
+    cvars.RegisterFloat("nextdayz.grass.density", 1.0f, &grass_.settings.density, NextCVar::ECVarFlags::None,
+                        "Deterministic grass coverage", nullptr, 0.0, 1.0);
+    cvars.RegisterFloat("nextdayz.grass.edgeWidth", 4.0f, &grass_.settings.edgeWidth, NextCVar::ECVarFlags::None,
+                        "Metres of density/height falloff beside excluded terrain; zero disables feathering",
+                        nullptr, 0.0, 12.0);
+    cvars.RegisterFloat("nextdayz.grass.windStrength", 0.65f, &grass_.settings.windStrength, NextCVar::ECVarFlags::None,
+                        "Wind bending strength", nullptr, 0.0, 1.0);
+    cvars.RegisterFloat("nextdayz.grass.windYaw", 0.7f, &grass_.settings.windYaw, NextCVar::ECVarFlags::None,
+                        "Wind heading in radians: +X toward -Z");
+    cvars.RegisterFloat("nextdayz.grass.windSpeed", 1.0f, &grass_.settings.windSpeed, NextCVar::ECVarFlags::None,
+                        "Wind animation speed; zero freezes the field", nullptr, 0.0, 4.0);
+
     cvars.RegisterFloat("nextdayz.player.maxStepHeight", config_.Player.MaxStepHeight,
                         &config_.Player.MaxStepHeight, NextCVar::ECVarFlags::Archive,
                         "Maximum obstacle height the player can step over; applied when the controller is created",
@@ -540,12 +556,13 @@ void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
                        });
 }
 
-void NextDayzGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<Assets::Node>>& /*nodes*/,
+void NextDayzGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<Assets::Node>>& nodes,
                                               std::vector<Assets::Model>& models,
                                               std::vector<Assets::FMaterial>& materials,
                                               std::vector<Assets::LightObject>& /*lights*/,
                                               std::vector<Assets::AnimationTrack>& /*tracks*/)
 {
+    grass_.Prepare(nodes, models, materials);
     rig_.InjectAssets(models, materials);
     effects_.InjectAssets(models, materials);
     InjectLootCatalog(models, materials);
@@ -658,12 +675,15 @@ void NextDayzGameInstance::OnSceneLoaded()
     survivalSeconds_ = 0.0;
     SetMouseCaptured(true);
     sceneReady_ = true;
+    grass_.Bind(GetEngine().GetScene());
+    grass_.Tick(GetEngine().GetScene(), 0.0f, player_.Position(), time_.Storm());
     SPDLOG_INFO("[NextDayz] scene loaded ({} nodes)", GetEngine().GetScene().Nodes().size());
 }
 
 void NextDayzGameInstance::OnSceneUnloaded()
 {
     sceneReady_ = false;
+    grass_.Clear();
     player_.Destroy();
     rig_.OnSceneUnloaded();
     weapons_.OnSceneUnloaded();
@@ -1030,6 +1050,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
         }
     }
     time_.Tick(static_cast<double>(dt), GetEngine().GetScene());
+    grass_.Tick(GetEngine().GetScene(), dt, player_.Position(), time_.Storm());
     UpdateWorldPressure();
     UpdateFirecrackers(dt);
     UpdateSurvivalFeedback(dt);
@@ -2694,6 +2715,16 @@ bool NextDayzGameInstance::OnScroll(double /*xoffset*/, double yoffset)
 void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegistry& reg)
 {
     reg.Add("sceneReady", [this]() -> Runtime::Agent::FAgentQueryValue { return sceneReady_; });
+    reg.Add("grassInstances", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.ActiveCount()); });
+    reg.Add("grassNearInstances", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.ActiveCount(0)); });
+    reg.Add("grassMidInstances", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.ActiveCount(1)); });
+    reg.Add("grassFarInstances", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.ActiveCount(2)); });
+    reg.Add("grassFarthestDistance", [this]() -> Runtime::Agent::FAgentQueryValue { return double(grass_.MaxActiveDistance()); });
+    reg.Add("grassEdgeInstances", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.EdgeCount()); });
+    reg.Add("grassPoolSize", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.PoolSize()); });
+    reg.Add("grassMeshes", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.MeshCount()); });
+    reg.Add("grassPoseChanges", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.PoseChanges()); });
+    reg.Add("grassTileBuilds", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.TileBuilds()); });
     reg.Add("ammoInMag", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<int64_t>(weapons_.AmmoInMag()); });
     reg.Add("ammoReserve",
             [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<int64_t>(weapons_.AmmoReserve(inventory_)); });

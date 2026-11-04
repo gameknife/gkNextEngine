@@ -74,6 +74,7 @@
   [Terrain](designs/scad-terrain-design.md) ·
   [ScadLibrary AI 创作实现](projects/scadlibrary/ai-authoring.md)
 - [真实地理数据生成城市关卡](designs/geo-city-generation-design.md)
+- [运行时 biome 草地与共享 BLAS 风动](designs/runtime-terrain-grass.md)
 - [场景导出 glTF/GLB 契约](designs/scene-export-gltf-contract.md)
 
 ## AGENT 专题指南

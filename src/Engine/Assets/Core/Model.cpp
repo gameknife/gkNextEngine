@@ -256,7 +256,7 @@ namespace Assets
 
     void Model::BuildLods()
     {
-        if (!lodIndices_.empty() || indices_.empty() || vertices_.empty())
+        if (!generateLods_ || !lodIndices_.empty() || indices_.empty() || vertices_.empty())
         {
             return;
         }

@@ -234,6 +234,7 @@ uint64_t ComputeAmbientBakeKey(const Assets::Scene& scene, const FAmbientBakeKey
         {
             continue;
         }
+        if (!render->GetRayCastVisible() && !render->GetReceiveGI()) continue;
 
         ++instanceCount;
         stream.Add(modelId);

@@ -299,6 +299,23 @@ TEST_CASE_METHOD(EngineTestFixture, "Ambient bake key tracks the scene's initial
         CHECK(ComputeAmbientBakeKey(scene, inputs) == baseline);
     }
 
+    SECTION("GPU-only decoration does not change the bake key")
+    {
+        auto decoration = Assets::Node::CreateNode("gpu_grass", {}, glm::quat(1, 0, 0, 0), glm::vec3(1),
+                                                    scene.GenerateInstanceId());
+        auto render = std::make_shared<Runtime::RenderComponent>();
+        render->SetModelId(bakedNode->GetComponent<Runtime::RenderComponent>()->GetModelId());
+        render->SetRayCastVisible(false);
+        render->SetReceiveGI(false);
+        decoration->AddComponent(render);
+        scene.AddNode(decoration);
+        CHECK(ComputeAmbientBakeKey(scene, inputs) == baseline);
+        decoration->SetTranslation(glm::vec3(3, 4, 5));
+        CHECK(ComputeAmbientBakeKey(scene, inputs) == baseline);
+        render->SetVisible(false);
+        CHECK(ComputeAmbientBakeKey(scene, inputs) == baseline);
+    }
+
     SECTION("Moving the sun changes the key")
     {
         Assets::EnvironmentSetting& env = scene.GetEnvSettings();

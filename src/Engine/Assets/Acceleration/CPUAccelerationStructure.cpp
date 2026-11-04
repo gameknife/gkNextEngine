@@ -261,6 +261,8 @@ std::shared_ptr<FCPUTLASBuildInput> FCPUAccelerationStructure::CaptureBuildInput
         {
             continue;
         }
+        // GPU-only decorations (wind grass, camera presentation) have no CPU ray/nav/bake role.
+        if (!render->GetRayCastVisible() && !render->GetReceiveGI()) continue;
 
         //node->RecalcTransform(true);
         const glm::mat4 nodeWorldTransform = node->WorldTransform();

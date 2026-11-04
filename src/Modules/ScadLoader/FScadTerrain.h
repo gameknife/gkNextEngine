@@ -49,24 +49,12 @@
 
 #include "Modules/ScadLoader/FScadGeometry.h"
 #include "Modules/ScadLoader/FScadTypes.h"
+#include "Engine/Runtime/Components/TerrainBiome.hpp"
 
 namespace Assets::Scad
 {
     // Stable biome ids (returned by gk_terrain_info and stored per cell).
-    enum class ETerrainBiome : uint8_t
-    {
-        Grass = 0,
-        GrassDark = 1,
-        DryGrass = 2,
-        Sand = 3,
-        Rock = 4,
-        RockHigh = 5,
-        Snow = 6,
-        Bed = 7,  // river/lake bed (under water)
-        Road = 8,
-        Pad = 9,
-        Count
-    };
+    using ETerrainBiome = Runtime::ETerrainBiome;
 
     // Sampled heightfield backing an ["hmap", ...] feature. Either decoded from
     // a .hmap side-car asset or built from an inline TERR literal. Immutable and

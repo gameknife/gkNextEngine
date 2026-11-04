@@ -60,6 +60,10 @@ namespace NextDayz
         float TpsMinDistance = 1.5f;
         float TpsMaxDistance = 9.0f;
         float ScrollStep = 0.6f;
+        float TpsCollisionRadius = 0.20f; // near-plane clearance around the camera arm
+        float TpsCollisionPadding = 0.05f;
+        float TpsArmReturnSpeed = 5.0f;   // m/s; obstruction retracts the arm immediately
+        float TpsHideRigDistance = 1.5f;  // avoid the player's body filling a retracted view
         // First-person head motion, driven by the stride phase.
         float HeadBobHeight = 0.016f;        // m, at run speed
         float HeadBobRollDegrees = 0.45f;

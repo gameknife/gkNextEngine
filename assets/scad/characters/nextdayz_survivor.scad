@@ -376,6 +376,58 @@ anim_weapon_sprint    = rh_upper_clip(SKEL, RIG, [[0, [["weapon", HOLD_SPRINT], 
 anim_weapon_low       = rh_upper_clip(SKEL, RIG, [[0, [["weapon", HOLD_LOW], ["torso", [0, 0, -6]],
                                                        ["head", [0, 0, 5]]]]], true);
 
+// Melee has its own relaxed carry, raised guard and committed attack. The
+// support hand guards the chest for one-handed weapons; the axe uses both
+// hands on its haft. Contact times are normalized (WeaponDefs.hpp).
+function nd_melee_key(weapon, body = [0, 0, 0], twoHands = false) =
+    let(guard = [[0.20, -0.23, 0.34], [-25, 0, -15]],
+        guardLocal = rh_fx(rh_finv(rh_frame(weapon[0], weapon[1])), rh_frame(guard[0], guard[1])),
+        support = twoHands ? [[0, -0.035, 0.015], [-160, 0, 0]] : [guardLocal[0], rh_e(guardLocal[1])])
+    [["weapon", weapon], ["torso", body],
+     ["head", [-body[0] * 0.6, -body[1] * 0.6, -body[2] * 0.8]],
+     ["hand_l", support]];
+
+KNIFE_LOW = [[-0.28, -0.18, 0.12], [55, 0, -12]];
+KNIFE_GUARD = [[-0.27, -0.28, 0.34], [-12, 0, -15]];
+BAR_LOW = [[-0.29, -0.18, 0.15], [60, 0, -12]];
+BAR_GUARD = [[-0.28, -0.26, 0.34], [-65, 0, -25]];
+AXE_LOW = [[-0.22, -0.26, 0.17], [45, 0, -12]];
+AXE_GUARD = [[-0.22, -0.29, 0.36], [-55, 0, -15]];
+
+anim_melee_knife_low = rh_upper_clip(SKEL, RIG, [[0, nd_melee_key(KNIFE_LOW)]], true);
+anim_melee_knife_ready = rh_upper_clip(SKEL, RIG, [[0, nd_melee_key(KNIFE_GUARD, [0, 0, -12])]], true);
+anim_melee_crowbar_low = rh_upper_clip(SKEL, RIG, [[0, nd_melee_key(BAR_LOW)]], true);
+anim_melee_crowbar_ready = rh_upper_clip(SKEL, RIG, [[0, nd_melee_key(BAR_GUARD, [0, 0, -16])]], true);
+anim_melee_axe_low = rh_upper_clip(SKEL, RIG, [[0, nd_melee_key(AXE_LOW, [0, 0, 0], true)]], true);
+anim_melee_axe_ready = rh_upper_clip(SKEL, RIG, [[0, nd_melee_key(AXE_GUARD, [0, 0, -12], true)]], true);
+
+// Knife: pull the elbow back, thrust forward, withdraw to guard.
+anim_melee_knife_attack = rh_upper_clip(SKEL, RIG, [
+    [0.00, nd_melee_key(KNIFE_GUARD, [0, 0, -12])],
+    [0.23, nd_melee_key([[-0.32, -0.16, 0.34], [-5, 0, -28]], [-3, 0, -22])],
+    [0.38, nd_melee_key([[-0.15, -0.50, 0.35], [0, 0, 8]], [8, 0, 12])],
+    [0.54, nd_melee_key([[-0.12, -0.45, 0.28], [10, 0, 12]], [6, 0, 8])],
+    [1.00, nd_melee_key(KNIFE_GUARD, [0, 0, -12])]
+], false);
+
+// Crowbar: shoulder-led horizontal sweep, with a visible follow-through.
+anim_melee_crowbar_attack = rh_upper_clip(SKEL, RIG, [
+    [0.00, nd_melee_key(BAR_GUARD, [0, 0, -16])],
+    [0.25, nd_melee_key([[-0.34, -0.14, 0.40], [-85, 0, -55]], [-5, 0, -30])],
+    [0.42, nd_melee_key([[-0.08, -0.43, 0.34], [-5, 0, 12]], [6, 0, 16])],
+    [0.58, nd_melee_key([[0.06, -0.32, 0.25], [18, 0, 65]], [10, 0, 28])],
+    [1.00, nd_melee_key(BAR_GUARD, [0, 0, -16])]
+], false);
+
+// Axe: lift above the shoulder, drive down, recover the heavy head.
+anim_melee_axe_attack = rh_upper_clip(SKEL, RIG, [
+    [0.00, nd_melee_key(AXE_GUARD, [0, 0, -12], true)],
+    [0.26, nd_melee_key([[-0.24, -0.17, 0.51], [-115, 0, -25]], [-10, 0, -24], true)],
+    [0.43, nd_melee_key([[-0.13, -0.45, 0.29], [15, 0, 10]], [12, 0, 12], true)],
+    [0.59, nd_melee_key([[-0.04, -0.35, 0.16], [60, 0, 30]], [18, 0, 22], true)],
+    [1.00, nd_melee_key(AXE_GUARD, [0, 0, -12], true)]
+], false);
+
 // Reload: cant the rifle, strip the magazine, fetch a fresh one from the
 // support-side pouch, seat it, rack the bolt. Left wrist targets are in weapon
 // space so the hand rides the rifle as it moves.

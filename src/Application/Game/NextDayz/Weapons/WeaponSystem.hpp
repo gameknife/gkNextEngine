@@ -4,8 +4,9 @@
 // WeaponSystem.hpp - Two-slot weapon runtime for NextDayz: equip / switch /
 // hitscan fire / melee swings / reload / ADS. Fire is an engine RayCast for
 // the world plus a hitbox trace for the infected; hits leave as
-// FWeaponHitEvent for the CombatSystem. A single FPS view-model node tracks
-// the camera and lerps toward centre while aiming. Each slot holds an
+// FWeaponHitEvent for the CombatSystem. Melee owns a wind-up/contact/recovery
+// timeline, with one strike per click and a short recovery input buffer.
+// The FPS view-model tracks the camera with separate ADS and melee guard poses. Each slot holds an
 // inventory item instance: the magazine belongs to that gun (it survives
 // switching, dropping and picking up again) and ammo reserves live in the
 // Inventory.
@@ -78,8 +79,14 @@ namespace NextDayz
                                                                       const glm::vec3& direction, float maxDistance)>;
         void SetTargetTracer(FTargetTracer tracer) { targetTracer_ = std::move(tracer); }
 
-        void SetTriggerDown(bool down) { triggerDown_ = down; }
+        void SetTriggerDown(bool down)
+        {
+            triggerPressed_ = triggerPressed_ || (down && !triggerDown_);
+            triggerDown_ = down;
+        }
+        void CancelMelee();
         bool TriggerDown() const { return triggerDown_; }
+        bool MeleeInputPending() const { return ActiveIsMelee() && (triggerPressed_ || meleeInputTimer_ > 0.0f); }
         void SetPresentationSuppressed(bool suppressed) { presentationSuppressed_ = suppressed; }
         void RequestReload(Inventory& inventory);
 
@@ -95,6 +102,7 @@ namespace NextDayz
         bool IsReloading() const { return reloading_; }
         bool IsSwitching() const { return switching_; }
         bool IsSwinging() const { return swingTimer_ > 0.0f; }
+        bool MeleeStrikeResolved() const { return swingStrikeResolved_; }
         bool ActiveIsMelee() const { return ActiveWeapon() && ActiveWeapon()->IsMelee(); }
         EWeaponPresentationAction PresentationAction() const;
         float PresentationActionTime() const;
@@ -128,7 +136,8 @@ namespace NextDayz
         };
 
         void FireOneShot(PlayerController& player, NextEngine& engine);
-        void Swing(PlayerController& player, NextEngine& engine);
+        void BeginSwing();
+        void ResolveMeleeStrike(PlayerController& player, NextEngine& engine);
         // Keeps slots in step with the inventory: a dropped gun leaves its slot,
         // the magazine is written back to the gun.
         void SyncInventory(Inventory& inventory);
@@ -145,6 +154,7 @@ namespace NextDayz
         int previousSlot_ = 1;
 
         bool triggerDown_ = false;
+        bool triggerPressed_ = false;
         bool presentationSuppressed_ = false;
         bool triggerConsumed_ = false; // semi-auto: needs a release between shots
         bool dryFire_ = false;
@@ -157,7 +167,9 @@ namespace NextDayz
         float switchTimer_ = 0.0f;
         float swingTimer_ = 0.0f;
         float swingDuration_ = 0.0f;
-        int swingSide_ = 1;
+        bool swingStrikeResolved_ = false;
+        uint64_t swingSequence_ = 0;
+        float meleeInputTimer_ = 0.0f;
         uint64_t shotSequence_ = 0;
         std::vector<FShotEvent> shotEvents_;
         std::vector<FWeaponHitEvent> hitEvents_;
@@ -172,6 +184,7 @@ namespace NextDayz
         bool viewModelVisible_ = false;
         bool viewModelInScene_ = false;
         glm::vec3 viewModelOffset_{0.16f, -0.19f, 0.55f};
+        glm::vec3 viewModelMeleeEuler_{0.0f};
         float viewModelRecoil_ = 0.0f;
         float viewModelRecoilVelocity_ = 0.0f;
         glm::vec2 swayAngle_{0.0f};          // radians: x yaw (+left), y pitch (+muzzle down)

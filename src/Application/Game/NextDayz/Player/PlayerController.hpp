@@ -36,6 +36,7 @@ namespace NextDayz
         void QueueContextualJump(NextEngine& engine);
         void QueueCrouchToggle() { crouchToggleQueued_ = true; }
         void SetAiming(bool aiming) { aiming_ = aiming; }
+        void SetMeleeEquipped(bool melee) { meleeEquipped_ = melee; }
         void SetMovementLocked(bool locked) { movementLocked_ = locked; }
         // Holding the trigger ends a sprint (the weapon has to come up first).
         void SetSprintBlocked(bool blocked) { sprintBlocked_ = blocked; }
@@ -48,12 +49,14 @@ namespace NextDayz
         void AdjustCameraDistance(float scrollY);
 
         // --- per-frame update ---
-        void Update(float deltaSeconds);
+        void Update(float deltaSeconds, NextEngine& engine);
 
         // --- queries ---
         glm::vec3 Position() const { return controller_.GetPosition(); }
         glm::vec3 EyePosition() const;
         glm::vec3 CameraPosition() const;
+        float CameraArmLength() const;
+        float CameraArmFraction() const;
         glm::vec3 Forward() const;   // full 3D view direction (yaw+pitch)
         glm::vec3 Right() const;     // horizontal right
         glm::vec3 Up() const;
@@ -89,6 +92,9 @@ namespace NextDayz
         void UpdateTraversal(float deltaSeconds);
         glm::vec3 UpdateMotion(float deltaSeconds, const glm::vec3& previousPosition); // returns raw measured velocity
         void UpdateView(float deltaSeconds);
+        void UpdateCameraArm(float deltaSeconds, NextEngine& engine);
+        glm::vec3 ThirdPersonFocus() const;
+        glm::vec3 ThirdPersonOffset() const;
         float StrideLength(float speed) const;
 
         NextCharacterController controller_;
@@ -101,6 +107,7 @@ namespace NextDayz
         bool sprintModifier_ = false;
         bool sprintBlocked_ = false;
         bool aiming_ = false;
+        bool meleeEquipped_ = false;
         bool movementLocked_ = false;
         bool jumpQueued_ = false;
         bool crouchToggleQueued_ = false;
@@ -109,6 +116,7 @@ namespace NextDayz
         float currentFov_ = 75.0f;
         float aimFov_ = 55.0f;
         float camDistance_ = 4.5f;
+        float cameraArmLength_ = 0.0f; // resolved length, including the shoulder offset
         float currentEyeHeight_ = 1.65f;
         glm::vec2 cameraRecoil_{0.0f};
         glm::vec2 cameraRecoilVelocity_{0.0f};

@@ -1,3 +1,4 @@
+#include "Engine/Common/CoreMinimal.hpp"
 #include "NextDayzHUD.hpp"
 
 #include <algorithm>
@@ -47,10 +48,25 @@ namespace NextDayz::NextDayzHUD
                 draw->AddLine(a, b, outline, 4.0f);
                 draw->AddLine(a, b, color, 1.8f);
             };
-            line(ImVec2(center.x - gap - len, center.y), ImVec2(center.x - gap, center.y));
-            line(ImVec2(center.x + gap, center.y), ImVec2(center.x + gap + len, center.y));
-            line(ImVec2(center.x, center.y - gap - len), ImVec2(center.x, center.y - gap));
-            line(ImVec2(center.x, center.y + gap), ImVec2(center.x, center.y + gap + len));
+            if (context.melee)
+            {
+                // A small guard ring replaces the firearm sight; the arc shows recovery.
+                const float radius = context.aiming ? 10.0f : 5.0f;
+                draw->AddCircle(center, radius, outline, 24, 3.5f);
+                draw->AddCircle(center, radius, color, 24, 1.2f);
+                if (context.swinging)
+                {
+                    draw->PathArcTo(center, 15.0f, -1.5708f, -1.5708f + 6.2832f * context.swingProgress, 32);
+                    draw->PathStroke(UITheme::Colors::AccentAmber, 0, 2.0f);
+                }
+            }
+            else
+            {
+                line(ImVec2(center.x - gap - len, center.y), ImVec2(center.x - gap, center.y));
+                line(ImVec2(center.x + gap, center.y), ImVec2(center.x + gap + len, center.y));
+                line(ImVec2(center.x, center.y - gap - len), ImVec2(center.x, center.y - gap));
+                line(ImVec2(center.x, center.y + gap), ImVec2(center.x, center.y + gap + len));
+            }
             draw->AddCircleFilled(center, 2.4f, outline);
             draw->AddCircleFilled(center, 1.2f, color);
 
@@ -476,7 +492,9 @@ namespace NextDayz::NextDayzHUD
             }
             else if (context.melee)
             {
-                draw->AddText(ImVec2(cardPos.x + 14.0f, cardPos.y + 34.0f), UITheme::Colors::TextSecondary, "MELEE WEAPON");
+                draw->AddText(ImVec2(cardPos.x + 14.0f, cardPos.y + 30.0f), UITheme::Colors::TextSecondary,
+                              context.swinging ? "STRIKING..." : context.aiming ? "GUARD READY" : "RMB  READY");
+                draw->AddText(ImVec2(cardPos.x + 14.0f, cardPos.y + 47.0f), UITheme::Colors::TextMuted, "LMB  STRIKE");
             }
             else
             {

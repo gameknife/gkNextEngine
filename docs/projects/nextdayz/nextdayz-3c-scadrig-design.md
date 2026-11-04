@@ -4,7 +4,7 @@ category: project
 status: 现行架构
 owner: NextDayz
 created: 2026-07-26
-last_updated: 2026-11-03
+last_updated: 2026-11-04
 ---
 
 # NextDayz 复杂 3C 与 ScadRig 分层动画设计
@@ -650,3 +650,25 @@ action          FullBody  Override  loot
 - 验证模式帧率很高，按帧等待不再代表时间：NextDayz 脚本开头等待 `game.sceneReady`，locomotion 脚本
   用 `wait-until game.baseAnim` 等待混合空间到位。
 
+### 15.7 第三人称相机防穿墙
+
+`PlayerController` 在移动、翻越与视角更新之后，用场景 CPU raycast 检查从角色焦点到相机的整条臂，
+包含肩部偏移。中心与周围八个采样覆盖镜头边缘；探测范围超过目标镜头位置，预留
+`TpsCollisionRadius`（0.20 m）与 `TpsCollisionPadding`（0.05 m）的安全距离。
+
+遇障碍当帧收缩，离开障碍以 `TpsArmReturnSpeed`（5 m/s）伸回。滚轮设置的距离独立保留，
+碰撞允许缩到 `TpsMinDistance` 以下；肩部偏移随臂长一起缩短。臂长不足 `TpsHideRigDistance`
+（1.5 m）时隐藏自身角色与挂载武器，避免近距离模型挡住视野，拉远后恢复；调试环绕相机保持可见。
+
+查询 `game.cameraArmLength` / `cameraArmFraction`、`cameraPosX/Y/Z`、`playerRigVisible` 可观察结果。
+`assets/agentscripts/nextdayz-camera-arm.agentscript.json` 使用独立几何 fixture 验证墙面、侧墙、细柱、
+目标位置外的安全间距、地面、缩放记忆、平滑恢复和视角切换。
+
+## 16. 近战动作（2026-11-04）
+
+- 右键为近战戒备：抬刀、举撬棍或双手举斧，保留正常 FOV，移动使用瞄准时的步行规则。
+- 左键每次点击执行一次完整攻击，按住不自动连挥。收招末尾 0.20 秒内的点击可以缓存下一击；冲刺中的点击先退出冲刺，武器就绪后起手。
+- 刀为刺击（0.42 秒），撬棍为横扫（0.78 秒），斧头为双手劈砍（1.05 秒）。伤害分别在动作的 38%、42%、43% 时结算一次，使用当前玩家位置和朝向，仍检查世界遮挡。刀的判定较窄，撬棍较宽。
+- `WeaponSystem` 是权威计时来源；`weaponAction = melee` 和归一化时间驱动第三人称 `melee_<id>_attack` clip，第一人称也按相同接触帧采样起手、攻击与收招。两种视角都不触发枪械后坐力。
+- 每种武器各有 `melee_<id>_low` / `ready` 姿势；刀和撬棍的空闲手护胸，斧头双手握柄。打开背包、开始其他动作、翻越、死亡、换武器或丢弃武器会取消未完成的近战和缓存输入。
+- 验证：`gnb validate --script assets/agentscripts/nextdayz-melee.agentscript.json` 使用调试冻结与固定步进验证延迟命中、单击单次攻击、收招缓存、中断与枪械回归，同时保存 FPS/TPS 戒备和攻击截图。资产握持测试标签为 `[ScadRig][NextDayz][Melee]`。

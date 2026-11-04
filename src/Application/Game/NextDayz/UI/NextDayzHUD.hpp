@@ -54,6 +54,8 @@ namespace NextDayz
 
         bool hasWeapon = false;
         bool melee = false;
+        bool swinging = false;
+        float swingProgress = 0.0f;
         std::string weaponName;
         int ammoInMag = 0;
         int ammoReserve = 0;

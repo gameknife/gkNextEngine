@@ -1,3 +1,5 @@
+#include "Engine/Common/CoreMinimal.hpp"
+
 #include <catch2/catch_all.hpp>
 
 #include "Engine/Assets/Data/RigAsset.hpp"
@@ -7,6 +9,7 @@
 #include "Modules/ScadLoader/FScadRig.h"
 #include "Gameplay/Rig/RigPoseOps.h"
 #include "Data/ItemDefs.hpp"
+#include "Weapons/WeaponDefs.hpp"
 #include <algorithm>
 
 #include <cmath>
@@ -686,6 +689,52 @@ TEST_CASE("NextDayz survivor gaits plant the boots and holds keep both hands on 
         CHECK(weaponGap < 0.02f);
         CHECK(weaponTwist > 0.995f);
         CHECK(supportGap < 0.04f);
+    }
+}
+
+TEST_CASE("NextDayz melee clips keep grips attached through wind-up contact and recovery", "[Unit][ScadRig][NextDayz][Melee]")
+{
+    FRigAsset asset;
+    std::string error;
+    std::vector<std::string> warnings;
+    REQUIRE(FScadRigLoader::LoadRig("assets/scad/characters/nextdayz_survivor.scad", {}, asset, error, &warnings));
+    REQUIRE(warnings.empty());
+    const int32_t socket = asset.FindBone("bone_weapon_socket");
+    const int32_t weapon = asset.FindBone("bone_ik_weapon");
+    const int32_t handL = asset.FindBone("bone_hand_l");
+    const int32_t targetL = asset.FindBone("bone_ik_hand_l");
+    std::vector<glm::mat4> transforms;
+    for (const char* id : {"knife", "crowbar", "axe"})
+    {
+        INFO(id);
+        const NextDayz::FWeaponDef* definition = NextDayz::FindWeaponDef(id);
+        REQUIRE(definition);
+        const float contact = definition->meleeStrikeTime01;
+        const std::string prefix = std::string("melee_") + id;
+        const FRigClip* guard = asset.FindClip(prefix + "_ready");
+        const FRigClip* low = asset.FindClip(prefix + "_low");
+        const FRigClip* attack = asset.FindClip(prefix + "_attack");
+        REQUIRE(guard);
+        REQUIRE(low);
+        REQUIRE(attack);
+        CHECK(guard->loop);
+        CHECK(low->loop);
+        CHECK_FALSE(attack->loop);
+        CHECK(attack->duration == Catch::Approx(1.0f));
+        glm::vec3 start{};
+        for (float time : {0.0f, contact * 0.6f, contact, contact + 0.16f, 1.0f})
+        {
+            INFO(time);
+            const auto pose = SampleSurvivorClip(asset, *attack, time);
+            NextGameplay::ComputeRigComponentTransforms(asset, pose, transforms);
+            const glm::vec3 position = NextGameplay::RigBonePosition(transforms, weapon);
+            CHECK(glm::length(NextGameplay::RigBonePosition(transforms, socket) - position) < 0.025f);
+            CHECK(glm::length(NextGameplay::RigBonePosition(transforms, handL) -
+                              NextGameplay::RigBonePosition(transforms, targetL)) < 0.04f);
+            if (time == 0.0f) start = position;
+            if (time == contact) CHECK(glm::length(position - start) > 0.15f);
+            if (time == 1.0f) CHECK(glm::length(position - start) < 0.01f);
+        }
     }
 }
 

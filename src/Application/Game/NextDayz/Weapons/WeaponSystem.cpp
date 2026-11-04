@@ -1,3 +1,4 @@
+#include "Engine/Common/CoreMinimal.hpp"
 #include "WeaponSystem.hpp"
 
 #include <algorithm>
@@ -24,6 +25,48 @@ namespace NextDayz
     {
         constexpr float kHitscanRange = 400.0f;
         const std::string kEmptyId;
+
+        struct FMeleeViewPose
+        {
+            glm::vec3 offset{0.0f};
+            glm::vec3 euler{0.0f}; // degrees
+        };
+
+        FMeleeViewPose MeleeReadyPose(const FWeaponDef& def)
+        {
+            return {{0.26f, -0.22f, 0.48f},
+                    {def.id == "knife" ? -15.0f : -52.0f, -12.0f, -12.0f}};
+        }
+
+        // The same contact times drive first-person motion, TPS clips and damage.
+        FMeleeViewPose SampleMeleeSwing(const FWeaponDef& def, float time)
+        {
+            const FMeleeViewPose ready = MeleeReadyPose(def);
+            const bool knife = def.id == "knife";
+            const bool axe = def.id == "axe";
+            const std::array<FMeleeViewPose, 5> poses = {{
+                ready,
+                {{knife ? 0.34f : 0.40f, axe ? -0.02f : -0.16f, 0.38f},
+                 {knife ? -10.0f : -105.0f, knife ? 12.0f : 45.0f, -28.0f}},
+                {{knife ? 0.03f : -0.03f, axe ? -0.24f : -0.18f, knife ? 0.78f : 0.60f},
+                 {axe ? 18.0f : -8.0f, knife ? -5.0f : -38.0f, -12.0f}},
+                {{knife ? 0.01f : -0.20f, axe ? -0.40f : -0.25f, 0.52f},
+                 {axe ? 58.0f : 10.0f, knife ? -8.0f : -65.0f, axe ? 18.0f : 22.0f}},
+                ready,
+            }};
+            const std::array<float, 5> times = {0.0f, def.meleeStrikeTime01 * 0.60f,
+                                                def.meleeStrikeTime01, def.meleeStrikeTime01 + 0.16f, 1.0f};
+            for (size_t key = 1; key < poses.size(); ++key)
+            {
+                if (time <= times[key])
+                {
+                    const float t = glm::smoothstep(times[key - 1], times[key], time);
+                    return {glm::mix(poses[key - 1].offset, poses[key].offset, t),
+                            glm::mix(poses[key - 1].euler, poses[key].euler, t)};
+                }
+            }
+            return ready;
+        }
     }
 
     void WeaponSystem::SetViewModelAssets(const std::array<uint32_t, kWeapons.size()>& modelIds,
@@ -42,7 +85,9 @@ namespace NextDayz
         reloading_ = false;
         switching_ = false;
         shotSequence_ = 0;
+        CancelMelee();
         viewModelOffset_ = config_.ViewModelHipOffset;
+        viewModelMeleeEuler_ = glm::vec3(0.0f);
         viewModelRecoil_ = 0.0f;
         viewModelRecoilVelocity_ = 0.0f;
         swayAngle_ = glm::vec2(0.0f);
@@ -77,6 +122,7 @@ namespace NextDayz
 
     void WeaponSystem::OnSceneUnloaded()
     {
+        CancelMelee();
         viewModelNode_.reset();
         viewModelVisible_ = false;
         viewModelInScene_ = false;
@@ -92,6 +138,7 @@ namespace NextDayz
         activeSlot_ = 0;
         previousSlot_ = 1;
         triggerDown_ = false;
+        triggerPressed_ = false;
         presentationSuppressed_ = false;
         triggerConsumed_ = false;
         fireCooldown_ = 0.0f;
@@ -101,7 +148,7 @@ namespace NextDayz
         switchCommitted_ = false;
         switchTargetSlot_ = -1;
         switchTimer_ = 0.0f;
-        swingTimer_ = 0.0f;
+        CancelMelee();
         shotSequence_ = 0;
         shotEvents_.clear();
         hitEvents_.clear();
@@ -141,7 +188,7 @@ namespace NextDayz
         if (slot == activeSlot_)
         {
             reloading_ = false;
-            swingTimer_ = 0.0f;
+            CancelMelee();
         }
         RefreshViewModelVisibility();
     }
@@ -184,7 +231,7 @@ namespace NextDayz
         slots_[slot].weaponId = weaponId;
         slots_[slot].ammoInMag = def->magSize; // fresh magazine on equip
         slots_[slot].instanceId = 0;
-        swingTimer_ = 0.0f;
+        CancelMelee();
         activeSlot_ = slot;
         reloading_ = false;
         reloadTimer_ = 0.0f;
@@ -192,6 +239,12 @@ namespace NextDayz
         switchCommitted_ = false;
         switchTargetSlot_ = -1;
         switchTimer_ = 0.0f;
+        viewModelMeleeEuler_ = glm::vec3(0.0f);
+        if (def->IsMelee())
+        {
+            viewModelRecoil_ = 0.0f;
+            viewModelRecoilVelocity_ = 0.0f;
+        }
         RefreshViewModelVisibility();
         return true;
     }
@@ -204,6 +257,7 @@ namespace NextDayz
         }
         reloading_ = false;
         reloadTimer_ = 0.0f;
+        CancelMelee();
         switching_ = true;
         switchCommitted_ = false;
         switchTargetSlot_ = slot;
@@ -318,6 +372,10 @@ namespace NextDayz
         {
             return EWeaponPresentationAction::Reload;
         }
+        if (IsSwinging())
+        {
+            return EWeaponPresentationAction::Melee;
+        }
         return EWeaponPresentationAction::None;
     }
 
@@ -330,6 +388,10 @@ namespace NextDayz
         if (reloading_)
         {
             return glm::clamp(1.0f - reloadTimer_ / std::max(config_.ReloadSeconds, 0.01f), 0.0f, 1.0f);
+        }
+        if (IsSwinging())
+        {
+            return glm::clamp(1.0f - swingTimer_ / swingDuration_, 0.0f, 1.0f);
         }
         return 0.0f;
     }
@@ -460,7 +522,35 @@ namespace NextDayz
         viewModelRecoilVelocity_ += event.viewModelImpulse;
     }
 
-    void WeaponSystem::Swing(PlayerController& player, NextEngine& engine)
+    void WeaponSystem::CancelMelee()
+    {
+        swingTimer_ = 0.0f;
+        swingDuration_ = 0.0f;
+        swingStrikeResolved_ = false;
+        meleeInputTimer_ = 0.0f;
+        triggerPressed_ = false;
+    }
+
+    void WeaponSystem::BeginSwing()
+    {
+        const FWeaponDef* def = ActiveWeapon();
+        if (!def || !def->IsMelee())
+        {
+            return;
+        }
+        swingDuration_ = def->fireInterval;
+        swingTimer_ = swingDuration_;
+        swingStrikeResolved_ = false;
+        swingSequence_ = ++shotSequence_;
+        meleeInputTimer_ = 0.0f;
+        FShotEvent event;
+        event.sequence = swingSequence_;
+        event.weaponId = std::string(def->id);
+        event.melee = true;
+        shotEvents_.push_back(event);
+    }
+
+    void WeaponSystem::ResolveMeleeStrike(PlayerController& player, NextEngine& engine)
     {
         const FWeaponDef* def = ActiveWeapon();
         if (!def)
@@ -471,7 +561,7 @@ namespace NextDayz
         const glm::vec3 origin = player.EyePosition();
         const glm::vec3 forward = player.Forward();
         const glm::vec3 right = player.Right();
-        const uint64_t sequence = ++shotSequence_;
+        const uint64_t sequence = swingSequence_;
         FWeaponHitEvent hitEvent{sequence, std::string(def->id), origin, forward, 0, origin + forward * def->meleeRange,
                                  def->baseDamage, def->impactScale};
         bool hit = false;
@@ -485,7 +575,8 @@ namespace NextDayz
         }};
         for (const glm::vec2& sweep : kSweep)
         {
-            const glm::vec3 direction = glm::normalize(forward + right * sweep.x + up * sweep.y);
+            const float sweepWidth = def->id == "knife" ? 0.5f : def->id == "crowbar" ? 1.6f : 1.0f;
+            const glm::vec3 direction = glm::normalize(forward + right * sweep.x * sweepWidth + up * sweep.y);
             float worldDistance = def->meleeRange;
             uint32_t worldInstance = 0;
             glm::vec3 worldPoint{};
@@ -505,6 +596,7 @@ namespace NextDayz
                 if (const std::optional<FHitboxHit> target = targetTracer_(origin, direction, worldDistance))
                 {
                     hitEvent.direction = direction;
+                    hitEvent.hitInstanceId = 0;
                     hitEvent.zombie = target->zombie;
                     hitEvent.zone = target->zone;
                     hitEvent.hitPoint = target->point;
@@ -530,27 +622,41 @@ namespace NextDayz
             trace.melee = true;
             traceEvents_.push_back(trace);
         }
-
-        swingSide_ = -swingSide_;
-        swingDuration_ = def->fireInterval;
-        swingTimer_ = def->fireInterval;
-        FShotEvent event;
-        event.sequence = sequence;
-        event.weaponId = std::string(def->id);
-        event.cameraImpulseRadians = glm::radians(glm::vec2(def->cameraYawDegrees * static_cast<float>(swingSide_),
-                                                            -def->cameraKickDegrees * 0.5f));
-        event.viewModelImpulse = def->viewModelKick;
-        event.rigRecoilScale = def->rigRecoilScale;
-        event.melee = true;
-        shotEvents_.push_back(event);
     }
 
     void WeaponSystem::Update(float deltaSeconds, PlayerController& player, Inventory& inventory, NextEngine& engine)
     {
         const float dt = std::max(0.0f, deltaSeconds);
         fireCooldown_ -= dt;
-        swingTimer_ = std::max(0.0f, swingTimer_ - dt);
         SyncInventory(inventory);
+        if (const FWeaponDef* melee = ActiveWeapon(); melee && melee->IsMelee())
+        {
+            if (IsSwinging())
+            {
+                swingTimer_ = std::max(0.0f, swingTimer_ - dt);
+                // Crossing the contact frame resolves once, even on a long frame.
+                if (!swingStrikeResolved_ && 1.0f - swingTimer_ / swingDuration_ >= melee->meleeStrikeTime01)
+                {
+                    swingStrikeResolved_ = true;
+                    ResolveMeleeStrike(player, engine);
+                }
+            }
+            // A quick click also brings a sprinting character into the attack.
+            // Only recovery clicks expire; lowering the sprint carry must not eat input.
+            if (IsSwinging() || player.WeaponReady())
+            {
+                meleeInputTimer_ = std::max(0.0f, meleeInputTimer_ - dt);
+            }
+            if (triggerPressed_ && !switching_)
+            {
+                meleeInputTimer_ = 0.20f;
+            }
+            if (!IsSwinging() && !switching_ && player.WeaponReady() && meleeInputTimer_ > 0.0f)
+            {
+                BeginSwing();
+            }
+        }
+        triggerPressed_ = false;
 
         if (reloading_)
         {
@@ -594,22 +700,12 @@ namespace NextDayz
 
         // Coming out of a sprint the weapon has to be up before it fires; a
         // held trigger fires the moment it is.
-        if (def && !reloading_ && !switching_ && triggerDown_ && player.WeaponReady())
+        if (def && !def->IsMelee() && !reloading_ && !switching_ && triggerDown_ && player.WeaponReady())
         {
             constexpr int kMaxShotsPerFrame = 8;
             int shotsThisFrame = 0;
             const bool newPull = !triggerConsumed_;
-            if (def->IsMelee())
-            {
-                // Holding the button keeps swinging, one blow per swing time.
-                if (fireCooldown_ <= 0.0f)
-                {
-                    Swing(player, engine);
-                    fireCooldown_ = def->fireInterval;
-                }
-                triggerConsumed_ = true;
-            }
-            else if (newPull && fireCooldown_ <= 0.0f)
+            if (newPull && fireCooldown_ <= 0.0f)
             {
                 if (slots_[activeSlot_].ammoInMag > 0)
                 {
@@ -664,6 +760,13 @@ namespace NextDayz
             viewModelRecoil_ += viewModelRecoilVelocity_ * recoilDt;
 
             glm::vec3 targetOffset = player.IsAiming() ? config_.ViewModelAdsOffset : config_.ViewModelHipOffset;
+            glm::vec3 meleeEuler(0.0f);
+            if (def && def->IsMelee())
+            {
+                const FMeleeViewPose ready = MeleeReadyPose(*def);
+                targetOffset = player.IsAiming() || IsSwinging() ? ready.offset : glm::vec3(0.28f, -0.36f, 0.48f);
+                meleeEuler = glm::radians(player.IsAiming() || IsSwinging() ? ready.euler : glm::vec3(38.0f, -8.0f, -12.0f));
+            }
             const float actionTime = PresentationActionTime();
             const float actionArc = std::sin(glm::pi<float>() * actionTime);
             if (reloading_)
@@ -676,12 +779,14 @@ namespace NextDayz
                 targetOffset.y -= actionArc * 0.42f;
                 targetOffset.z -= actionArc * 0.18f;
             }
-            // Melee: a diagonal chop across the view, alternating sides.
-            const float swing01 = swingDuration_ > 0.0f ? 1.0f - swingTimer_ / swingDuration_ : 1.0f;
-            const float swingArc = swingTimer_ > 0.0f ? std::sin(glm::pi<float>() * std::min(swing01 * 1.6f, 1.0f)) : 0.0f;
-            const float side = static_cast<float>(swingSide_);
             const float t = 1.0f - std::exp(-config_.ViewModelLerpSpeed * std::max(0.0f, deltaSeconds));
             viewModelOffset_ = glm::mix(viewModelOffset_, targetOffset, t);
+            if (def && def->IsMelee() && IsSwinging())
+            {
+                const FMeleeViewPose pose = SampleMeleeSwing(*def, PresentationActionTime());
+                viewModelOffset_ = pose.offset;
+                meleeEuler = glm::radians(pose.euler);
+            }
 
             const bool show = HasActiveWeapon() && player.IsFirstPerson() && !presentationSuppressed_;
             if (show != viewModelVisible_)
@@ -708,6 +813,8 @@ namespace NextDayz
             glm::vec3 motionOffset(0.0f);
             glm::vec3 motionEuler(0.0f);
             UpdateViewModelMotion(player, deltaSeconds, motionOffset, motionEuler);
+            viewModelMeleeEuler_ = IsSwinging() ? meleeEuler : glm::mix(viewModelMeleeEuler_, meleeEuler, t);
+            motionEuler += viewModelMeleeEuler_;
             if (show)
             {
                 const glm::vec3 eye = player.CameraPosition();
@@ -717,8 +824,7 @@ namespace NextDayz
                 // Proper (det +1) rotation basis: object +Z -> forward, +Y -> up,
                 // +X = up x forward (right() is left-handed w.r.t. forward/up).
                 const glm::vec3 xAxis = glm::normalize(glm::cross(up, forward));
-                const glm::vec3 offset = viewModelOffset_ + motionOffset +
-                                         glm::vec3(-0.22f * side * swingArc, 0.08f * swingArc, 0.12f * swingArc);
+                const glm::vec3 offset = viewModelOffset_ + motionOffset;
                 const glm::vec3 pos =
                     eye + right * offset.x + up * offset.y + forward * (offset.z - viewModelRecoil_ * 2.5f);
                 viewModelNode_->Translation() = pos;
@@ -728,8 +834,6 @@ namespace NextDayz
                     glm::angleAxis(motionEuler.x, glm::vec3(1.0f, 0.0f, 0.0f)) *
                     glm::angleAxis(motionEuler.z, glm::vec3(0.0f, 0.0f, 1.0f)) *
                     glm::angleAxis(reloading_ ? actionArc * 0.45f : 0.0f, glm::vec3(0.0f, 0.0f, 1.0f)) *
-                    glm::angleAxis(side * swingArc * 1.1f, glm::vec3(0.0f, 1.0f, 0.0f)) *
-                    glm::angleAxis(-swingArc * 0.9f, glm::vec3(1.0f, 0.0f, 0.0f)) *
                     glm::angleAxis(-viewModelRecoil_ * 100.0f * glm::radians(config_.ViewModelRecoilPitchDegrees),
                                    glm::vec3(1.0f, 0.0f, 0.0f));
                 viewModelNode_->RecalcTransform(true);

@@ -1,3 +1,4 @@
+#include "Engine/Common/CoreMinimal.hpp"
 #include "PlayerController.hpp"
 
 #include <algorithm>
@@ -44,6 +45,7 @@ namespace NextDayz
         currentFov_ = config_.Camera.BaseFov;
         aimFov_ = config_.Camera.BaseFov;
         camDistance_ = config_.Camera.TpsDistance;
+        cameraArmLength_ = glm::length(ThirdPersonOffset());
         currentEyeHeight_ = config_.Player.StandingEyeHeight;
         cameraRecoil_ = glm::vec2(0.0f);
         cameraRecoilVelocity_ = glm::vec2(0.0f);
@@ -156,13 +158,70 @@ namespace NextDayz
             return EyePosition() + headBob_ + glm::vec3(0.0f, eyeDip_, 0.0f);
         }
 
+        return ThirdPersonFocus() + ThirdPersonOffset() * CameraArmFraction();
+    }
+
+    glm::vec3 PlayerController::ThirdPersonFocus() const
+    {
+        return controller_.GetPosition() +
+               glm::vec3(0.0f, currentEyeHeight_ * 0.88f + eyeDip_ * 0.5f, 0.0f);
+    }
+
+    glm::vec3 PlayerController::ThirdPersonOffset() const
+    {
         const glm::vec3 forward = Forward();
-        constexpr glm::vec3 worldUp(0.0f, 1.0f, 0.0f);
-        const glm::vec3 cameraRight = glm::normalize(glm::cross(forward, worldUp));
-        const glm::vec3 characterFocus =
-            controller_.GetPosition() + glm::vec3(0.0f, currentEyeHeight_ * 0.88f + eyeDip_ * 0.5f, 0.0f);
-        return characterFocus - forward * camDistance_ +
-               cameraRight * config_.Camera.TpsShoulderOffset;
+        const glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
+        return -forward * camDistance_ + right * config_.Camera.TpsShoulderOffset;
+    }
+
+    float PlayerController::CameraArmLength() const
+    {
+        return firstPerson_ ? 0.0f : std::min(cameraArmLength_, glm::length(ThirdPersonOffset()));
+    }
+
+    float PlayerController::CameraArmFraction() const
+    {
+        const float desiredLength = glm::length(ThirdPersonOffset());
+        return desiredLength > 0.0f ? CameraArmLength() / desiredLength : 0.0f;
+    }
+
+    void PlayerController::UpdateCameraArm(float deltaSeconds, NextEngine& engine)
+    {
+        const glm::vec3 offset = ThirdPersonOffset();
+        const float desiredLength = glm::length(offset);
+        if (firstPerson_ || desiredLength <= 0.0f)
+        {
+            cameraArmLength_ = desiredLength;
+            return;
+        }
+
+        const FCameraConfig& camera = config_.Camera;
+        const glm::vec3 direction = offset / desiredLength;
+        const glm::vec3 right = glm::normalize(glm::cross(direction, glm::vec3(0.0f, 1.0f, 0.0f)));
+        const glm::vec3 up = glm::normalize(glm::cross(right, direction));
+        const glm::vec3 focus = ThirdPersonFocus();
+        const float clearance = camera.TpsCollisionRadius + camera.TpsCollisionPadding;
+        float clearLength = desiredLength;
+        // Probe the centre and near-plane edges, including corners. A centre ray
+        // alone lets the lens clip a wall while orbiting beside it. Include the
+        // shoulder in the arm, so pulling in also brings it out of side walls.
+        for (float x : {-1.0f, 0.0f, 1.0f})
+        {
+            for (float y : {-1.0f, 0.0f, 1.0f})
+            {
+                const glm::vec3 origin = focus + (right * x + up * y) * camera.TpsCollisionRadius;
+                const auto hit = RaycastWithin(engine, origin, direction, desiredLength + clearance);
+                if (hit)
+                {
+                    clearLength = std::min(clearLength, std::max(0.0f, hit->T - clearance));
+                }
+            }
+        }
+
+        // Collision always wins over the user's minimum zoom distance. Never
+        // smooth inward: even one interpolated frame could put the lens in a wall.
+        const float returnStep = camera.TpsArmReturnSpeed * std::max(0.0f, deltaSeconds);
+        cameraArmLength_ = std::min(clearLength, cameraArmLength_ + returnStep);
     }
 
     glm::vec2 PlayerController::LocalVelocity() const
@@ -479,7 +538,7 @@ namespace NextDayz
                                                  0.01f);
         sprintAlpha_ = glm::clamp(sprintAlpha_ + (sprinting ? 1.0f : -1.0f) * sprintRate * dt, 0.0f, 1.0f);
 
-        const float targetFov = (aiming_ ? aimFov_ : camera.BaseFov) + camera.SprintFovBoost * sprintAlpha_;
+        const float targetFov = (aiming_ && !meleeEquipped_ ? aimFov_ : camera.BaseFov) + camera.SprintFovBoost * sprintAlpha_;
         const float t = 1.0f - std::exp(-camera.FovLerpSpeed * dt);
         currentFov_ = glm::mix(currentFov_, targetFov, t);
 
@@ -543,7 +602,7 @@ namespace NextDayz
         return measured;
     }
 
-    void PlayerController::Update(float deltaSeconds)
+    void PlayerController::Update(float deltaSeconds, NextEngine& engine)
     {
         lookDelta_ = lookDeltaAccum_;
         lookDeltaAccum_ = glm::vec2(0.0f);
@@ -554,6 +613,7 @@ namespace NextDayz
             UpdateTraversal(deltaSeconds);
             UpdateMotion(deltaSeconds, previousPosition);
             UpdateView(deltaSeconds);
+            UpdateCameraArm(deltaSeconds, engine);
             return;
         }
         locomotion_.traversalAction = EPlayerTraversalAction::None;
@@ -799,6 +859,7 @@ namespace NextDayz
         }
 
         UpdateView(deltaSeconds);
+        UpdateCameraArm(deltaSeconds, engine);
     }
 
     void PlayerController::FillCamera(glm::mat4& outModelView, float& outFov) const

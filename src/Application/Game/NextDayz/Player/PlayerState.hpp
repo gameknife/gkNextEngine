@@ -59,6 +59,7 @@ namespace NextDayz
         None,
         Reload,
         Switch,
+        Melee,
     };
 
     struct FPlayerLocomotionState
@@ -174,6 +175,7 @@ namespace NextDayz
         {
         case EWeaponPresentationAction::Reload: return "reload";
         case EWeaponPresentationAction::Switch: return "switch";
+        case EWeaponPresentationAction::Melee: return "melee";
         case EWeaponPresentationAction::None:
         default: return "none";
         }

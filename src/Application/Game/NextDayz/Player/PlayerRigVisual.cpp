@@ -1,3 +1,4 @@
+#include "Engine/Common/CoreMinimal.hpp"
 #include "PlayerRigVisual.hpp"
 
 #include <algorithm>
@@ -45,7 +46,7 @@ namespace NextDayz
 
         FWeaponRigHold HoldFor(std::string_view weaponId)
         {
-            if (weaponId == "pistol" || weaponId == "knife")
+            if (weaponId == "pistol")
             {
                 // Grip into the palm, support hand cupping the firing hand, arms extended.
                 return {glm::vec3(0.0f, 0.10f, -0.065f), true, glm::vec3(0.07f, -0.03f, -0.02f), 0.12f};
@@ -152,6 +153,13 @@ namespace NextDayz
         clips_.aim = clip("aim_rifle_center");
         clips_.sprint = clip("weapon_sprint");
         clips_.recoil = clip("recoil_rifle");
+        for (const char* weapon : {"knife", "crowbar", "axe"})
+        {
+            for (const char* action : {"low", "ready", "attack"})
+            {
+                clip(fmt::format("melee_{}_{}", weapon, action));
+            }
+        }
         if (bones_.ikWeapon < 0 || bones_.ikHandL < 0 || bones_.ikHandR < 0)
         {
             SPDLOG_WARN("[NextDayz] rig has no bone_ik_* targets; arms follow the clips only");
@@ -865,12 +873,21 @@ namespace NextDayz
                                        anim.HoldFadeSeconds * 0.5f, dt);
         actionWeight_ = Approach(actionWeight_, looting ? 1.0f : 0.0f, anim.LocomotionFadeSeconds * 0.5f, dt);
 
+        const FWeaponDef* weapon = FindWeaponDef(state.weaponId);
+        const bool melee = weapon && weapon->IsMelee();
         const float sprint = sprintHoldWeight_ * (1.0f - aimWeight_);
         std::vector<NextGameplay::FRigClipBlendSample> holdSamples = {
             {clips_.ready, std::max(0.0f, 1.0f - aimWeight_ - sprint)},
             {clips_.aim, aimWeight_},
             {clips_.sprint, sprint},
         };
+        if (melee)
+        {
+            holdSamples = {
+                {asset_.FindClip(fmt::format("melee_{}_low", state.weaponId)), 1.0f - aimWeight_},
+                {asset_.FindClip(fmt::format("melee_{}_ready", state.weaponId)), aimWeight_},
+            };
+        }
         animator_.SetStaticBlend(holdLayer_, holdSamples, 0.0f);
         animator_.SetStaticBlend(holdBodyLayer_, std::move(holdSamples), 0.0f);
         animator_.SetLayerWeight(holdLayer_, holdWeight_);
@@ -878,8 +895,9 @@ namespace NextDayz
 
         if (weaponActionActive)
         {
-            const char* clipName =
-                state.weaponAction == EWeaponPresentationAction::Reload ? "reload_rifle" : "switch_weapon";
+            const std::string clipName = state.weaponAction == EWeaponPresentationAction::Melee
+                ? fmt::format("melee_{}_attack", state.weaponId)
+                : state.weaponAction == EWeaponPresentationAction::Reload ? "reload_rifle" : "switch_weapon";
             weaponActionClipName_ = clipName;
             const float time = glm::clamp(state.weaponActionTime01, 0.0f, 1.0f);
             animator_.SetManualBlend(weaponActionLayer_, {{asset_.FindClip(clipName), 1.0f}}, time);

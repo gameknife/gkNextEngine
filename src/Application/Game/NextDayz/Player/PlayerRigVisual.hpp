@@ -70,6 +70,7 @@ namespace NextDayz
         void TriggerRecoil(float scale);
 
         bool HasRig() const { return hasRig_; }
+        bool IsVisible() const { return visible_; }
         const std::string& CurrentBaseClipName() const { return baseClipName_; }
         const std::string& CurrentWeaponActionClipName() const { return weaponActionClipName_; }
         float AimWeight() const { return aimWeight_; }

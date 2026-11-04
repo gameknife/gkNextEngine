@@ -813,14 +813,17 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     const bool dead = !survival_.IsAlive();
     section.emplace(timers, ETimer::Player);
     player_.SetMovementLocked(actionLocked || traversalLocked || showInventory_ || showMap_ || dead);
+    player_.SetMeleeEquipped(weapons_.ActiveIsMelee());
     weapons_.SetPresentationSuppressed(actionLocked || traversalLocked || dead || knobs.orbit);
-    if (actionLocked || traversalLocked || dead)
+    if (actionLocked || traversalLocked || showInventory_ || showMap_ || dead)
     {
         player_.SetAiming(false);
         weapons_.SetTriggerDown(false);
+        weapons_.CancelMelee();
     }
-    player_.SetSprintBlocked((weapons_.TriggerDown() && weapons_.HasActiveWeapon()) || survival_.IsWeak());
-    player_.Update(dt);
+    player_.SetSprintBlocked((weapons_.TriggerDown() && weapons_.HasActiveWeapon()) || weapons_.IsSwinging() ||
+                             weapons_.MeleeInputPending() || survival_.IsWeak());
+    player_.Update(dt, GetEngine());
     section.emplace(timers, ETimer::Survival);
     // Cold: night and bad weather against whatever the player is wearing.
     survival_.SetCold(std::clamp(time_.Chill() - inventory_.Warmth() * 0.8f, 0.0f, 1.0f));
@@ -841,7 +844,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
         if (action == NextDayz::EWeaponPresentationAction::Switch) audio_.Switch();
         lastWeaponAction_ = action;
     }
-    if (weapons_.PresentationAction() != NextDayz::EWeaponPresentationAction::None)
+    if (weapons_.IsReloading() || weapons_.IsSwitching())
     {
         player_.SetAiming(false);
     }
@@ -881,10 +884,8 @@ void NextDayzGameInstance::SimulateFrame(float dt)
                       fmt::format("{} {}", shot.melee ? "Swung" : "Fired", shot.weaponId));
         if (shot.melee)
         {
-            // A swing: the view sweeps with it, close infected hear it.
+            // Dedicated melee clips own the body and weapon; no firearm recoil.
             audio_.MeleeSwing();
-            player_.ApplyCameraRecoil(shot.cameraImpulseRadians);
-            rig_.TriggerRecoil(shot.rigRecoilScale);
             if (const NextDayz::FWeaponDef* definition = NextDayz::FindWeaponDef(shot.weaponId))
             {
                 noise_.Emit(player_.Position(), definition->noiseRadius, 0.5f, NextDayz::ENoiseType::Melee);
@@ -1057,7 +1058,9 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     }
 
     section.emplace(timers, ETimer::Presentation);
-    rig_.SetVisible(!player_.IsFirstPerson() || knobs.orbit);
+    const bool showPlayerRig = !player_.IsFirstPerson() &&
+                               player_.CameraArmLength() > config_.Camera.TpsHideRigDistance;
+    rig_.SetVisible(showPlayerRig || knobs.orbit);
     NextDayz::FPlayerPresentationState presentation;
     presentation.locomotion = player_.LocomotionState();
     presentation.aimWeight = player_.IsAiming() ? 1.0f : 0.0f;
@@ -1125,6 +1128,8 @@ bool NextDayzGameInstance::OnRenderUI()
     ctx.firstPerson = player_.IsFirstPerson();
     ctx.hasWeapon = weapons_.HasActiveWeapon();
     ctx.melee = weapons_.ActiveIsMelee();
+    ctx.swinging = weapons_.IsSwinging();
+    ctx.swingProgress = ctx.swinging ? weapons_.PresentationActionTime() : 0.0f;
     ctx.weaponName = weapons_.ActiveDisplayName();
     ctx.ammoInMag = weapons_.AmmoInMag();
     ctx.ammoReserve = weapons_.AmmoReserve(inventory_);
@@ -2725,6 +2730,9 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
             [this]() -> Runtime::Agent::FAgentQueryValue { return weapons_.ActiveWeaponId(); });
     reg.Add("isReloading", [this]() -> Runtime::Agent::FAgentQueryValue { return weapons_.IsReloading(); });
     reg.Add("isSwitching", [this]() -> Runtime::Agent::FAgentQueryValue { return weapons_.IsSwitching(); });
+    reg.Add("isSwinging", [this]() -> Runtime::Agent::FAgentQueryValue { return weapons_.IsSwinging(); });
+    reg.Add("meleeStrikeResolved", [this]() -> Runtime::Agent::FAgentQueryValue { return weapons_.MeleeStrikeResolved(); });
+    reg.Add("weaponActionClip", [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.CurrentWeaponActionClipName(); });
     reg.Add("weaponAction", [this]() -> Runtime::Agent::FAgentQueryValue {
         return std::string(NextDayz::WeaponActionName(weapons_.PresentationAction()));
     });
@@ -2735,7 +2743,24 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
         return static_cast<int64_t>(weapons_.ActiveSlot());
     });
     reg.Add("isAiming", [this]() -> Runtime::Agent::FAgentQueryValue { return player_.IsAiming(); });
+    reg.Add("cameraFov", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(player_.CurrentFov()); });
     reg.Add("firstPerson", [this]() -> Runtime::Agent::FAgentQueryValue { return player_.IsFirstPerson(); });
+    reg.Add("cameraArmLength", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(player_.CameraArmLength());
+    });
+    reg.Add("cameraArmFraction", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(player_.CameraArmFraction());
+    });
+    reg.Add("cameraPosX", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(player_.CameraPosition().x);
+    });
+    reg.Add("cameraPosY", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(player_.CameraPosition().y);
+    });
+    reg.Add("cameraPosZ", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(player_.CameraPosition().z);
+    });
+    reg.Add("playerRigVisible", [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.IsVisible(); });
     reg.Add("hoveredLoot", [this]() -> Runtime::Agent::FAgentQueryValue { return loot_.HoveredPrompt(); });
     reg.Add("lootRemaining",
             [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<int64_t>(loot_.RemainingCount()); });

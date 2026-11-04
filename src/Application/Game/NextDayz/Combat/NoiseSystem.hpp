@@ -16,6 +16,20 @@ namespace NextDayz
         Impact,
     };
 
+    inline const char* NoiseTypeName(ENoiseType type)
+    {
+        switch (type)
+        {
+        case ENoiseType::Footstep: return "footstep";
+        case ENoiseType::Melee: return "melee";
+        case ENoiseType::Pistol: return "pistol";
+        case ENoiseType::Rifle: return "rifle";
+        case ENoiseType::Shotgun: return "shotgun";
+        case ENoiseType::Impact: return "impact";
+        }
+        return "noise";
+    }
+
     struct FNoiseEvent
     {
         uint64_t sequence = 0;

@@ -29,6 +29,21 @@ namespace NextDayz
         Count,
     };
 
+    inline const char* LootCategoryName(ELootCategory category)
+    {
+        switch (category)
+        {
+        case ELootCategory::FoodWater: return "Food/Water";
+        case ELootCategory::Medical: return "Medical";
+        case ELootCategory::Ammo: return "Ammo";
+        case ELootCategory::Weapon: return "Weapon";
+        case ELootCategory::Clothing: return "Clothing";
+        case ELootCategory::Misc: return "Misc";
+        case ELootCategory::Count: break;
+        }
+        return "Unknown";
+    }
+
     struct FLootRespawnTuning
     {
         double foodWaterSeconds = 6.0 * 60.0;

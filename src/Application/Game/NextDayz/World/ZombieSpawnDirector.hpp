@@ -30,6 +30,40 @@ namespace NextDayz
         float groupSpread = 2.5f;
     };
 
+    // Why a spawn point did or did not spawn at its last evaluation. Read by
+    // the debugger to answer "why is nobody spawning here"; never by the rules.
+    enum class ESpawnVerdict : uint8_t
+    {
+        Unevaluated,
+        Populated,      // its group is still out
+        Cooldown,       // the group died or was recycled; waiting to come back
+        TooClose,       // inside the safe distance
+        TooFar,         // beyond the activation distance
+        Visible,        // the player is looking at it
+        NotNavigable,   // the anchor is off the infected navigation
+        CapReached,     // the global cap is full
+        Spawned,        // spawned its group at this evaluation
+        Recycled,       // calm and far for long enough: taken back
+    };
+
+    inline const char* SpawnVerdictName(ESpawnVerdict verdict)
+    {
+        switch (verdict)
+        {
+        case ESpawnVerdict::Unevaluated: return "Unevaluated";
+        case ESpawnVerdict::Populated: return "Populated";
+        case ESpawnVerdict::Cooldown: return "Cooldown";
+        case ESpawnVerdict::TooClose: return "TooClose";
+        case ESpawnVerdict::TooFar: return "TooFar";
+        case ESpawnVerdict::Visible: return "Visible";
+        case ESpawnVerdict::NotNavigable: return "NotNavigable";
+        case ESpawnVerdict::CapReached: return "CapReached";
+        case ESpawnVerdict::Spawned: return "Spawned";
+        case ESpawnVerdict::Recycled: return "Recycled";
+        }
+        return "Unknown";
+    }
+
     struct FZombieSpawnPoint
     {
         static constexpr size_t kMaxGroup = 4;
@@ -40,6 +74,9 @@ namespace NextDayz
         std::array<FZombieHandle, kMaxGroup> active{};
         double cooldownUntil = 0.0;
         float farCalmSeconds = 0.0f;
+        // Diagnostics from the last evaluation.
+        ESpawnVerdict verdict = ESpawnVerdict::Unevaluated;
+        float playerDistance = 0.0f;
     };
 
     class ZombieSpawnDirector
@@ -56,7 +93,15 @@ namespace NextDayz
 
         int SpawnCount() const { return spawnCount_; }
         int RejectedVisible() const { return rejectedVisible_; }
+        int RecycledCount() const { return recycledCount_; }
         const std::vector<FZombieSpawnPoint>& Points() const { return points_; }
+        const FZombieSpawnTuning& Tuning() const { return tuning_; }
+        double WorldSeconds() const { return worldSeconds_; }
+        // Seconds until the next evaluation pass.
+        float NextEvaluationSeconds() const
+        {
+            return std::max(0.0f, std::max(tuning_.evaluationSeconds, 0.05f) - evaluationAccumulator_);
+        }
 
     private:
         FZombieSpawnTuning tuning_{};
@@ -66,6 +111,7 @@ namespace NextDayz
         float evaluationAccumulator_ = 0.0f;
         int spawnCount_ = 0;
         int rejectedVisible_ = 0;
+        int recycledCount_ = 0;
         int globalCap_ = 40;
     };
 }

@@ -25,77 +25,6 @@ namespace NextDayz
 {
     class WeaponSystem;
 
-    struct FDebugHudState
-    {
-        glm::vec3 position{0.0f};
-        glm::vec3 eyePosition{0.0f};
-        glm::vec3 velocity{0.0f};
-        glm::vec2 localMove{0.0f};
-        glm::vec2 cameraRecoilRadians{0.0f};
-        float yawRadians = 0.0f;
-        float pitchRadians = 0.0f;
-        float fovDegrees = 0.0f;
-        float horizontalSpeed = 0.0f;
-        float controllerHeight = 0.0f;
-        float aimWeight = 0.0f;
-        float actionTime = 0.0f;
-        std::string stance;
-        std::string desiredStance;
-        std::string gait;
-        std::string jumpPhase;
-        std::string traversalAction;
-        std::string traversalProbeResult;
-        std::string baseAnimation;
-        std::string action;
-        std::string weaponAction;
-        std::string weaponActionClip;
-        float weaponActionTime = 0.0f;
-        float weaponActionWeight = 0.0f;
-        float jumpPhaseTime = 0.0f;
-        float traversalTime = 0.0f;
-        float traversalHeight = 0.0f;
-        int switchTargetSlot = -1;
-        bool onGround = false;
-        bool standBlocked = false;
-        bool sprinting = false;
-        bool actionCommitted = false;
-        bool cameraRecoilActive = false;
-        bool rigRecoilActive = false;
-        bool viewModelRecoilActive = false;
-        bool switchingWeapon = false;
-        bool switchCommitted = false;
-        uint64_t shotSequence = 0;
-        int activeZombies = 0;
-        int alertedZombies = 0;
-        int zombieKills = 0;
-        int zombieCap = 0;
-        int zombiePathSegments = 0;
-        int hitBodies = 0;          // infected with live skeleton hitboxes
-        int hitCapsules = 0;
-        int headshots = 0;
-        int zombieStaggers = 0;
-        int lootAvailable = 0;
-        int lootReserved = 0;
-        int lootCooldown = 0;
-        int lootSpots = 0;
-        int lootPiles = 0;
-        int lootZones = 0;
-        std::array<int, 6> lootAvailableByCategory{};
-        std::array<int, 6> lootTotalByCategory{};
-        int criticalFood = 0;
-        int criticalMedical = 0;
-        int criticalBackpack = 0;
-        int criticalWeapons = 0;
-        int criticalAmmo = 0;
-        int criticalWaterSources = 0;
-        int recentWeaponTraces = 0;
-        uint32_t lastTraceInstanceId = 0;
-        std::string lastTraceResult;
-        bool zombieOverlay = true;
-        bool lootOverlay = true;
-        bool hitProxyOverlay = true;
-    };
-
     // Loot within reach, for the inventory's vicinity column.
     struct FHudNearbyLoot
     {
@@ -138,7 +67,6 @@ namespace NextDayz
         std::string weather;
 
         bool showInventory = false;
-        bool showDebugPanel = false;
         bool showMap = false;
         const Inventory* inventory = nullptr;
         const WeaponSystem* weapons = nullptr;
@@ -169,7 +97,6 @@ namespace NextDayz
         std::vector<FHudNearbyLoot> nearby;
         std::array<std::string, 4> quickSlots;   // item ids bound to keys 3..6
         std::vector<FHudNotification> notifications;
-        FDebugHudState debug;
 
         std::function<void(FItemInstanceId instanceId, int slot)> equipWeapon;
         std::function<void(FItemInstanceId instanceId)> wear;

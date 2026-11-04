@@ -14,6 +14,7 @@ namespace NextDayz
         evaluationAccumulator_ = 0.0f;
         spawnCount_ = 0;
         rejectedVisible_ = 0;
+        recycledCount_ = 0;
     }
 
     void ZombieSpawnDirector::SetPoints(std::vector<FZombieSpawnPoint> points)
@@ -41,6 +42,7 @@ namespace NextDayz
 
         for (FZombieSpawnPoint& point : points_)
         {
+            point.playerDistance = glm::distance(point.position, playerPosition);
             bool anyActive = false;
             bool allCalmAndFar = true;
             bool lostMember = false;
@@ -71,12 +73,17 @@ namespace NextDayz
                 const uint32_t jitter = static_cast<uint32_t>(std::max(1.0, tuning_.respawnJitterSeconds));
                 point.cooldownUntil = worldSeconds_ + tuning_.respawnMinSeconds + static_cast<double>(rng_.Range(jitter));
                 point.farCalmSeconds = 0.0f;
+                point.verdict = ESpawnVerdict::Cooldown;
                 continue;
             }
             if (!anyActive)
             {
+                // Empty: the spawn pass below says why it stays that way. A
+                // point it never reaches is either cooling down or waiting on the cap.
+                point.verdict = worldSeconds_ < point.cooldownUntil ? ESpawnVerdict::Cooldown : ESpawnVerdict::CapReached;
                 continue;
             }
+            point.verdict = ESpawnVerdict::Populated;
             point.farCalmSeconds = allCalmAndFar ? point.farCalmSeconds + interval : 0.0f;
             if (point.farCalmSeconds >= tuning_.recycleCalmSeconds)
             {
@@ -86,10 +93,12 @@ namespace NextDayz
                     {
                         zombies.Recycle(handle);
                         handle = {};
+                        ++recycledCount_;
                     }
                 }
                 point.cooldownUntil = worldSeconds_ + 15.0;
                 point.farCalmSeconds = 0.0f;
+                point.verdict = ESpawnVerdict::Recycled;
             }
         }
         if (zombies.ActiveCount() >= globalCap_ || points_.empty())
@@ -107,20 +116,24 @@ namespace NextDayz
             {
                 continue;
             }
-            const float distance = glm::distance(point.position, playerPosition);
+            const float distance = point.playerDistance;
             if (distance < tuning_.minimumDistance || distance > tuning_.maximumDistance)
             {
+                point.verdict = distance < tuning_.minimumDistance ? ESpawnVerdict::TooClose : ESpawnVerdict::TooFar;
                 continue;
             }
             if (isVisible && isVisible(point.position))
             {
                 ++rejectedVisible_;
+                point.verdict = ESpawnVerdict::Visible;
                 continue;
             }
             if (isNavigable && !isNavigable(point.position))
             {
+                point.verdict = ESpawnVerdict::NotNavigable;
                 continue;
             }
+            point.verdict = ESpawnVerdict::Spawned;
             for (int member = 0; member < point.groupSize && zombies.ActiveCount() < globalCap_; ++member)
             {
                 glm::vec3 position = point.position;

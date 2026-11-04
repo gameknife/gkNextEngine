@@ -164,7 +164,17 @@ namespace NextDayz
         const std::vector<FLootEntry>& Entries() const { return entries_; }
         const std::vector<FLootZone>& Zones() const { return zones_; }
         const FLootSlot* ResolveSlot(FLootSlotHandle handle) const { return director_.Resolve(handle); }
+        const LootDirector& Director() const { return director_; }
         double WorldSeconds() const { return worldSeconds_; }
+        bool FoodScarce() const { return foodScarce_; }
+        bool MedicalScarce() const { return medicalScarce_; }
+        // How many entries of a category restocking may keep stocked at once.
+        int CategoryCap(ELootCategory category) const;
+
+        // Debugger only: restock a cooling spot (or every one) right now with a
+        // fresh roll, ignoring cooldown, distance and visibility.
+        bool DebugRestock(int index, NextEngine& engine);
+        int DebugRestockAll(NextEngine& engine);
 
     private:
         void Rebuild(Assets::Scene& scene, std::span<const FLootSpotSeed> spots, std::span<const uint32_t> reuseNodes);

@@ -20,6 +20,7 @@
 #include "Application/Game/NextDayz/Combat/CombatSystem.hpp"
 #include "Application/Game/NextDayz/Combat/NoiseSystem.hpp"
 #include "Application/Game/NextDayz/Data/LootTables.hpp"
+#include "Application/Game/NextDayz/Debugger/NextDayzDebugger.hpp"
 #include "Application/Game/NextDayz/Inventory/Inventory.hpp"
 #include "Application/Game/NextDayz/Inventory/LootSystem.hpp"
 #include "Application/Game/NextDayz/Player/PlayerController.hpp"
@@ -68,6 +69,8 @@ public:
     bool OnScroll(double xoffset, double yoffset) override;
 
 private:
+    // One simulation frame (OnTick wraps it with the debugger's freeze/step/timers).
+    void SimulateFrame(float dt);
     glm::vec3 ResolveSpawnPosition() const;
     // Inventory requests (HUD, quickbar, keys). Each runs one inventory
     // transaction and reports the outcome in the message feed.
@@ -97,7 +100,6 @@ private:
     void SyncZombieVisuals(float deltaSeconds = 0.0f);
     void ConfigureZombieSpawnPoints();
     void BuildZombieNavigation();
-    void DrawDebugWorldOverlay() const;
     void HandleDamageEvents();
     void UpdateZombieAudio(float deltaSeconds);
     void ValidationHitZombie(NextDayz::EHitZone zone);
@@ -108,6 +110,15 @@ private:
     std::string CurrentObjective() const;
     void SetInventoryOpen(bool open);
     void SetMouseCaptured(bool captured);
+    // Debugger plumbing (Debug/NextDayzDebugger): its view of the systems,
+    // the per-frame facts only this class holds, and what it asks us to do.
+    void BindDebugger();
+    NextDayz::Debug::FGameFacts DebugFacts() const;
+    void TeleportPlayer(const glm::vec3& feet);
+    NextDayz::FZombieHandle SpawnZombieAt(NextDayz::EZombieProfile profile, const glm::vec3& feet);
+    void KillZombie(NextDayz::FZombieHandle zombie);
+    void GiveItem(const std::string& itemId, int count);
+    void ApplyDebugSelection(const std::string& selection);
 
     NextDayz::FConfig config_{};
     NextDayz::FDeterministicRng sessionRng_;
@@ -145,12 +156,6 @@ private:
     Assets::FRigAsset lootCatalogAsset_{};
     bool lootCatalogLoaded_ = false;
 
-    struct FRecentWeaponTrace
-    {
-        NextDayz::FWeaponTraceEvent trace;
-        float remainingSeconds = 0.0f;
-    };
-    std::vector<FRecentWeaponTrace> recentWeaponTraces_;
     std::vector<NextDayz::FZombieHandle> zombieVisualOwners_;
 
     // What each infected last sounded like, so state changes cue their voice once.
@@ -194,12 +199,17 @@ private:
     bool warnedWeak_ = false;
     bool lastShotMelee_ = false;
 
+    // In-game debugger (F5). Owns the debug knobs: time scales, god mode, orbit camera.
+    NextDayz::Debug::NextDayzDebugger debugger_;
+    bool debugPanelCvar_ = false;
+    bool debugDumpCvar_ = false;
+    int32_t debugStepCvar_ = 0;
+    std::string debugLayersCvar_;
+    std::string debugTabCvar_;
+    std::string debugSelectCvar_;
+
     bool sceneReady_ = false;
     bool showInventory_ = false;
-    bool showDebugPanel_ = false;
-    bool debugZombieOverlay_ = true;
-    bool debugLootOverlay_ = true;
-    bool debugHitProxyOverlay_ = true;
     bool validationLoadout_ = false;
     bool validationAddBackpack_ = false;
     bool validationAddSupplies_ = false;
@@ -207,17 +217,9 @@ private:
     bool validationUseWater_ = false;
     bool validationFinishZombie_ = false;
     bool validationRestart_ = false;
-    // Debug orbit camera around the third-person rig (agent screenshots, tuning).
     float validationLookYaw_ = 0.0f;
     float validationLookPitch_ = 0.0f;
     bool validationThirdPerson_ = false;
-    bool debugOrbit_ = false;
-    float debugOrbitYaw_ = 90.0f;      // degrees from behind the body, + = toward its right
-    float debugOrbitDistance_ = 3.0f;
-    float debugOrbitHeight_ = 1.05f;
-    bool debugOrbitZombie_ = false;    // orbit the nearest infected instead
-    float debugZombieTimeScale_ = 1.0f;
-    float debugFxTimeScale_ = 1.0f;
     float validationZombieDistance_ = 2.2f;
     int32_t validationHitZombieZone_ = 0;
     bool validationInvulnerable_ = false;

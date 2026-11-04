@@ -16,6 +16,18 @@ namespace NextDayz
         Leg,
     };
 
+    inline const char* HitZoneName(EHitZone zone)
+    {
+        switch (zone)
+        {
+        case EHitZone::Head: return "head";
+        case EHitZone::Torso: return "torso";
+        case EHitZone::Limb: return "limb";
+        case EHitZone::Leg: return "leg";
+        }
+        return "unknown";
+    }
+
     struct FZombieHandle
     {
         uint32_t index = 0;

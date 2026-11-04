@@ -9,6 +9,8 @@
 #include <glm/glm.hpp>
 
 #include "Data/DeterministicRng.hpp"
+#include "Debugger/DebugEventLog.hpp"
+#include "Debugger/DebugHistory.hpp"
 #include "Data/LootTables.hpp"
 #include "Weapons/WeaponDefs.hpp"
 #include "Inventory/Inventory.hpp"
@@ -774,4 +776,180 @@ TEST_CASE("NextDayz spawn director brings groups and respects the cap", "[NextDa
     director.Update(1.0f, {}, zombies, {}, {});
     REQUIRE(zombies.ActiveCount() == 4);
     REQUIRE(director.SpawnCount() == 4);
+}
+
+TEST_CASE("NextDayz spawn director records why each point did or did not spawn", "[NextDayz][Productization][Debug]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(8);
+    ZombieSpawnDirector director;
+    director.Reset(42);
+    director.SetPoints({
+        {{10.0f, 0.0f, 0.0f}, EZombieProfile::Civilian},     // inside the safe distance
+        {{300.0f, 0.0f, 0.0f}, EZombieProfile::Civilian},    // beyond activation
+        {{50.0f, 0.0f, 0.0f}, EZombieProfile::Military},     // in view
+        {{70.0f, 0.0f, 0.0f}, EZombieProfile::Industrial},   // off the nav grid
+        {{0.0f, 0.0f, 90.0f}, EZombieProfile::Wilderness},   // fine
+    });
+    const auto visible = [](const glm::vec3& position) { return position.x == 50.0f; };
+    const auto navigable = [](const glm::vec3& position) { return position.x != 70.0f; };
+    director.Update(2.0f, {}, zombies, visible, navigable);
+    const auto& points = director.Points();
+    CHECK(points[0].verdict == ESpawnVerdict::TooClose);
+    CHECK(points[1].verdict == ESpawnVerdict::TooFar);
+    CHECK(points[2].verdict == ESpawnVerdict::Visible);
+    CHECK(points[3].verdict == ESpawnVerdict::NotNavigable);
+    REQUIRE(points[4].verdict == ESpawnVerdict::Spawned);
+    CHECK(points[4].playerDistance == Catch::Approx(90.0f));
+
+    director.Update(1.0f, {}, zombies, visible, navigable);
+    CHECK(points[4].verdict == ESpawnVerdict::Populated);
+
+    // A full cap stops the pass before any distance check.
+    director.SetGlobalCap(1);
+    director.Update(1.0f, {}, zombies, visible, navigable);
+    CHECK(points[0].verdict == ESpawnVerdict::CapReached);
+
+    // The group is gone: the point cools down.
+    REQUIRE(zombies.Recycle(points[4].active[0]));
+    director.Update(1.0f, {}, zombies, visible, navigable);
+    CHECK(points[4].verdict == ESpawnVerdict::Cooldown);
+    CHECK(std::string_view(SpawnVerdictName(points[4].verdict)) == "Cooldown");
+}
+
+TEST_CASE("NextDayz loot director records what holds a restock back", "[NextDayz][Productization][Debug]")
+{
+    using namespace NextDayz;
+    FLootRespawnTuning tuning;
+    tuning.foodWaterSeconds = 10.0;
+    tuning.minimumOffscreenSeconds = 5.0;
+    LootDirector director;
+    director.Configure(tuning);
+    director.Reset(1, 77);
+    const FLootSlotHandle handle = director.AddSlot({}, ELootProfile::Residential, ELootCategory::FoodWater);
+    REQUIRE(director.Reserve(handle));
+    REQUIRE(director.Commit(handle, 0.0));
+    CHECK(director.ReadyAt(handle) == Catch::Approx(10.0));
+    director.SetCooldownScale(ELootCategory::FoodWater, 0.5f);
+    CHECK(director.ReadyAt(handle) == Catch::Approx(5.0));
+    director.SetCooldownScale(ELootCategory::FoodWater, 1.0f);
+
+    const auto block = [&] { return director.Resolve(handle)->block; };
+    REQUIRE_FALSE(director.EvaluateRespawn(handle, 12.0, 80.0f, true, 0, 4));
+    CHECK(block() == ELootRespawnBlock::Watched);
+    REQUIRE_FALSE(director.EvaluateRespawn(handle, 12.0, 20.0f, false, 0, 4));
+    CHECK(block() == ELootRespawnBlock::PlayerNear);
+    REQUIRE_FALSE(director.EvaluateRespawn(handle, 6.0, 80.0f, false, 0, 4));
+    CHECK(block() == ELootRespawnBlock::Cooling);
+    REQUIRE_FALSE(director.EvaluateRespawn(handle, 12.0, 20.0f, false, 0, 4));
+    REQUIRE_FALSE(director.EvaluateRespawn(handle, 12.0, 80.0f, false, 0, 4));
+    CHECK(block() == ELootRespawnBlock::Offscreen);
+    REQUIRE_FALSE(director.EvaluateRespawn(handle, 18.0, 80.0f, false, 4, 4));
+    CHECK(block() == ELootRespawnBlock::CategoryFull);
+    REQUIRE(director.EvaluateRespawn(handle, 18.0, 80.0f, false, 3, 4));
+    CHECK(block() == ELootRespawnBlock::None);
+    CHECK(director.ReadyAt(handle) == Catch::Approx(0.0));
+}
+
+TEST_CASE("NextDayz infected report perception and route budget for the debugger", "[NextDayz][Productization][Debug]")
+{
+    using namespace NextDayz;
+    FZombieConfig config;
+    config.MaxPathSolvesPerUpdate = 1;
+    ZombieSystem zombies(2);
+    zombies.Configure(config);
+    const FZombieHandle first = zombies.Spawn(EZombieProfile::Civilian, {0.0f, 0.0f, 0.0f});
+    const FZombieHandle second = zombies.Spawn(EZombieProfile::Civilian, {1.0f, 0.0f, 0.0f});
+    zombies.Resolve(first)->forward = {0.0f, 0.0f, 1.0f};
+    zombies.Resolve(second)->forward = {0.0f, 0.0f, 1.0f};
+    const ZombieSystem::FPathResolver route = [](const glm::vec3& from, const glm::vec3& to)
+    {
+        return std::vector<glm::vec3>{from, to};
+    };
+    const glm::vec3 player(0.0f, 0.0f, 10.0f);
+    const auto clear = [](const glm::vec3&, const glm::vec3&) { return true; };
+
+    zombies.Update(0.1f, player, {0.0f, 0.0f, -1.0f}, true, clear, {}, route);
+    CHECK(zombies.Resolve(first)->seesPlayer);
+    for (int tick = 0; tick < 20 && (zombies.Resolve(first)->state != EZombieState::Chase ||
+                                     zombies.Resolve(second)->state != EZombieState::Chase); ++tick)
+    {
+        zombies.Update(0.1f, player, {0.0f, 0.0f, -1.0f}, true, clear, {}, route);
+    }
+    REQUIRE(zombies.Resolve(first)->state == EZombieState::Chase);
+    REQUIRE(zombies.Resolve(second)->state == EZombieState::Chase);
+    // Both want a route on their first chase update; the budget plans one.
+    zombies.Update(0.1f, player, {0.0f, 0.0f, -1.0f}, true, clear, {}, route);
+    CHECK(zombies.PathSolvesLastUpdate() == 1);
+    CHECK(zombies.PathDeferredLastUpdate() == 1);
+    zombies.Update(0.1f, player, {0.0f, 0.0f, -1.0f}, true, clear, {}, route);
+    CHECK(zombies.PathSolvesLastUpdate() == 1);
+    CHECK(zombies.PathDeferredLastUpdate() == 0);
+    CHECK(zombies.Resolve(first)->pathSolves == 1);
+    CHECK(zombies.Resolve(second)->pathSolves == 1);
+    CHECK_FALSE(zombies.Resolve(first)->pathFailed);
+
+    // Out of sight it no longer sees; a fresh noise in range is heard once.
+    const auto blocked = [](const glm::vec3&, const glm::vec3&) { return false; };
+    FNoiseEvent shot;
+    shot.sequence = 7;
+    shot.position = {0.0f, 0.0f, 5.0f};
+    shot.radius = 20.0f;
+    shot.strength = 1.0f;
+    shot.type = ENoiseType::Rifle;
+    shot.remainingSeconds = 1.0f;
+    const std::array<FNoiseEvent, 1> noise = {shot};
+    zombies.Update(0.1f, player, {0.0f, 0.0f, -1.0f}, true, blocked, noise, route);
+    CHECK_FALSE(zombies.Resolve(first)->seesPlayer);
+    CHECK(zombies.Resolve(first)->heardNoise > 0.0f);
+    zombies.Update(0.1f, player, {0.0f, 0.0f, -1.0f}, true, blocked, noise, route);
+    CHECK(zombies.Resolve(first)->heardNoise == 0.0f);
+}
+
+TEST_CASE("NextDayz debug event log folds repeats and keeps the newest", "[NextDayz][Productization][Debug]")
+{
+    using namespace NextDayz::Debug;
+    EventLog log(3);
+    log.SetClock(1, 0.5);
+    log.Push(EChannel::Weapon, 0, "Fired ak");
+    log.Push(EChannel::Weapon, 0, "Fired ak");
+    REQUIRE(log.Size() == 1);
+    CHECK(log.At(0).repeats == 2);
+    CHECK(log.TotalPushed() == 1);
+    CHECK(log.ChannelCount(EChannel::Weapon) == 2);
+
+    log.Push(EChannel::Infected, 1, "a");
+    log.Push(EChannel::Loot, 0, "b");
+    log.SetClock(9, 4.0);
+    log.Push(EChannel::Noise, 0, "c");
+    REQUIRE(log.Size() == 3);
+    CHECK(log.At(0).text == "a");
+    CHECK(log.Newest()->text == "c");
+    CHECK(log.Newest()->frame == 9);
+    CHECK(log.TotalPushed() == 4);
+
+    const glm::vec3 where(1.0f, 2.0f, 3.0f);
+    log.Push(EChannel::Noise, 2, "c", &where);
+    CHECK(log.Size() == 3);
+    CHECK(log.Newest()->repeats == 2);
+    CHECK(log.Newest()->severity == 2);
+    CHECK(log.Newest()->hasPosition);
+
+    log.Clear();
+    CHECK(log.Size() == 0);
+    CHECK(log.ChannelCount(EChannel::Noise) == 0);
+    CHECK(log.TotalPushed() == 4);   // serials stay unique across a clear
+
+    TSeries<4> series;
+    for (int value = 1; value <= 5; ++value)
+    {
+        series.Push(static_cast<float>(value));
+    }
+    CHECK(series.Count() == 4);
+    CHECK(series.At(0) == 2.0f);
+    CHECK(series.Latest() == 5.0f);
+    CHECK(series.Back(2) == 3.0f);
+    CHECK(series.Min() == 2.0f);
+    CHECK(series.Max() == 5.0f);
+    CHECK(series.PlotValues()[series.PlotOffset()] == 2.0f);
 }

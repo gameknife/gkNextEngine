@@ -102,7 +102,8 @@
 - NextAstrobot：[3D 平台跳跃设计](projects/nextastrobot/nextastrobot-design.md)（已实施；
   现行契约见 [AGENT_GUIDE/NextAstrobot.md](AGENT_GUIDE/NextAstrobot.md)，设计文末 §11 列剩余打磨项）
 - NextDayz：[3C 与 ScadRig](projects/nextdayz/nextdayz-3c-scadrig-design.md) ·
-  [PVE 生存循环](projects/nextdayz/nextdayz-productization-design.md)
+  [PVE 生存循环](projects/nextdayz/nextdayz-productization-design.md) ·
+  [游戏内调试器](projects/nextdayz/nextdayz-debugger.md)
 - NextRaiden：[竖版街机射击 MVP 设计](projects/nextraiden/nextraiden-mvp-design.md) ·
   [开发计划](projects/nextraiden/nextraiden-mvp-plan.md)（实施中：P0–P2 已完成，关卡 1 可通关）
 - NextRA：[架构不变量](projects/nextra/architecture.md) ·

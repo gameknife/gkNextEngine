@@ -331,15 +331,23 @@ namespace NextDayz
         zombie.repathSeconds = std::max(0.0f, zombie.repathSeconds - deltaSeconds);
         const bool targetMoved = glm::length(Flat(target - zombie.pathTarget)) >= 2.0f;
         const bool pathFinished = zombie.pathWaypoint >= zombie.path.size();
-        if (resolvePath && (zombie.repathSeconds <= 0.0f || targetMoved || pathFinished) && pathBudget_ > 0)
+        const bool wantsRoute = resolvePath && (zombie.repathSeconds <= 0.0f || targetMoved || pathFinished);
+        if (wantsRoute && pathBudget_ <= 0)
+        {
+            ++pathDeferred_;
+        }
+        if (wantsRoute && pathBudget_ > 0)
         {
             --pathBudget_;
+            ++pathSolves_;
             zombie.path = resolvePath(zombie.position, target);
             zombie.pathWaypoint = zombie.path.size() > 1 ? 1 : 0;
             zombie.pathTarget = target;
             zombie.repathSeconds = repathInterval;
             zombie.stuckSeconds = 0.0f;
             zombie.progressPosition = zombie.position;
+            ++zombie.pathSolves;
+            zombie.pathFailed = zombie.path.empty();
             if (zombie.path.empty())
             {
                 return false;
@@ -485,12 +493,16 @@ namespace NextDayz
         // A gunshot can wake a crowd at once: spread their route planning over
         // a few frames instead of solving every path in one.
         pathBudget_ = c.MaxPathSolvesPerUpdate;
+        pathSolves_ = 0;
+        pathDeferred_ = 0;
         for (FZombieRuntime& zombie : slots_)
         {
             if (!zombie.active)
             {
                 continue;
             }
+            zombie.seesPlayer = false;
+            zombie.heardNoise = 0.0f;
             zombie.stateSeconds += dt;
             zombie.attackCooldown = std::max(0.0f, zombie.attackCooldown - dt);
             zombie.flinchSeconds = std::max(0.0f, zombie.flinchSeconds - dt);
@@ -527,6 +539,7 @@ namespace NextDayz
 
             // --- perception ---
             const bool seesPlayer = playerAlive && CanSeePlayer(zombie, playerPosition, hasLineOfSight);
+            zombie.seesPlayer = seesPlayer;
             if (seesPlayer)
             {
                 zombie.lastKnownPlayerPosition = playerPosition;
@@ -572,6 +585,7 @@ namespace NextDayz
                     }
                 }
             }
+            zombie.heardNoise = bestNoiseScore;
             if (bestNoiseScore > 0.0f &&
                 (zombie.state == EZombieState::Wander || zombie.state == EZombieState::Investigate))
             {

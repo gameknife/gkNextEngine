@@ -32,6 +32,23 @@ namespace NextDayz
         Stagger,
         Dead,
     };
+    inline constexpr size_t kZombieStateCount = static_cast<size_t>(EZombieState::Dead) + 1;
+
+    inline const char* ZombieStateName(EZombieState state)
+    {
+        switch (state)
+        {
+        case EZombieState::Dormant: return "Dormant";
+        case EZombieState::Wander: return "Wander";
+        case EZombieState::Investigate: return "Investigate";
+        case EZombieState::Alert: return "Alert";
+        case EZombieState::Chase: return "Chase";
+        case EZombieState::Attack: return "Attack";
+        case EZombieState::Stagger: return "Stagger";
+        case EZombieState::Dead: return "Dead";
+        }
+        return "Unknown";
+    }
 
     enum class EZombieAttack : uint8_t
     {
@@ -45,6 +62,17 @@ namespace NextDayz
         Forward,
         Crumple,
     };
+
+    inline const char* ZombieDeathName(EZombieDeath death)
+    {
+        switch (death)
+        {
+        case EZombieDeath::Forward: return "forward";
+        case EZombieDeath::Crumple: return "crumple";
+        case EZombieDeath::Back: break;
+        }
+        return "back";
+    }
 
     // Per-spawn body language, hashed from the handle so a replay looks the same.
     struct FZombieVariant
@@ -116,6 +144,11 @@ namespace NextDayz
         bool crippled = false;
         bool aware = false;          // has seen or been shot by the player since spawning
         bool active = false;
+        // Diagnostics for the debugger: written by Update, never read by the rules.
+        bool seesPlayer = false;     // the last perception pass saw the player
+        float heardNoise = 0.0f;     // loudest new noise heard in the last update (0 = none)
+        uint32_t pathSolves = 0;     // routes planned since it spawned
+        bool pathFailed = false;     // the last route came back empty
 
         bool Lame() const { return crippled || variant.lame; }
         float Speed() const;
@@ -163,6 +196,10 @@ namespace NextDayz
         int AlertedCount() const;
         int KillCount() const { return killCount_; }
         int StaggerCount() const { return staggerCount_; }
+        // Route planning in the last Update: solves run, and re-plans that had
+        // to wait for a later frame because the per-update budget was spent.
+        int PathSolvesLastUpdate() const { return pathSolves_; }
+        int PathDeferredLastUpdate() const { return pathDeferred_; }
         size_t Capacity() const { return slots_.size(); }
         const std::vector<FZombieRuntime>& Slots() const { return slots_; }
 
@@ -192,5 +229,7 @@ namespace NextDayz
         int staggerCount_ = 0;
         float sightScale_ = 1.0f;
         mutable int pathBudget_ = 0;   // path solves left this update
+        mutable int pathSolves_ = 0;
+        mutable int pathDeferred_ = 0;
     };
 }

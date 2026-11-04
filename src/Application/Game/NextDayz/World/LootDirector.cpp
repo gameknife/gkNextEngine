@@ -126,25 +126,46 @@ namespace NextDayz
         if (visible || playerDistance < tuning_.minimumPlayerDistance)
         {
             slot->offscreenSince = -1.0;
+            slot->block = visible ? ELootRespawnBlock::Watched : ELootRespawnBlock::PlayerNear;
             return false;
         }
         if (slot->offscreenSince < 0.0)
         {
             slot->offscreenSince = worldSeconds;
         }
-        const double scale = slot->category < ELootCategory::Count
-            ? static_cast<double>(cooldownScale_[static_cast<size_t>(slot->category)]) : 1.0;
-        const double readyAt = slot->committedAt + (slot->cooldownUntil - slot->committedAt) * scale;
-        if (worldSeconds < readyAt || worldSeconds - slot->offscreenSince < tuning_.minimumOffscreenSeconds ||
-            categoryAvailable >= categoryCap)
+        const double readyAt = ReadyAt(handle);
+        if (worldSeconds < readyAt)
         {
+            slot->block = ELootRespawnBlock::Cooling;
             return false;
         }
+        if (worldSeconds - slot->offscreenSince < tuning_.minimumOffscreenSeconds)
+        {
+            slot->block = ELootRespawnBlock::Offscreen;
+            return false;
+        }
+        if (categoryAvailable >= categoryCap)
+        {
+            slot->block = ELootRespawnBlock::CategoryFull;
+            return false;
+        }
+        slot->block = ELootRespawnBlock::None;
         slot->state = ELootSlotState::Available;
         slot->roll = rng_.NextU32();
         slot->cooldownUntil = 0.0;
         slot->offscreenSince = -1.0;
         return true;
+    }
+
+    double LootDirector::ReadyAt(FLootSlotHandle handle) const
+    {
+        const FLootSlot* slot = Resolve(handle);
+        if (!slot || slot->state != ELootSlotState::Cooldown)
+        {
+            return 0.0;
+        }
+        const double scale = static_cast<double>(CooldownScale(slot->category));
+        return slot->committedAt + (slot->cooldownUntil - slot->committedAt) * scale;
     }
 
     int LootDirector::Count(ELootSlotState state) const

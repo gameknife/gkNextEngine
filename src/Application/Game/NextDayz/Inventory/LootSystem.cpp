@@ -880,6 +880,39 @@ namespace NextDayz
         return best->worldPos;
     }
 
+    int LootSystem::CategoryCap(ELootCategory category) const
+    {
+        const size_t index = std::min(static_cast<size_t>(category), kCategoryStockCap.size() - 1);
+        return std::max(1, static_cast<int>(kCategoryStockCap[index] * static_cast<float>(entries_.size())));
+    }
+
+    bool LootSystem::DebugRestock(int index, NextEngine& engine)
+    {
+        if (index < 0 || index >= static_cast<int>(entries_.size()))
+        {
+            return false;
+        }
+        FLootEntry& entry = entries_[index];
+        if (entry.state != FLootEntry::EState::Cooldown || !director_.ForceAvailable(entry.directorHandle))
+        {
+            return false;
+        }
+        RollContents(entry, rollRng_.NextU32(), true);
+        entry.state = FLootEntry::EState::Available;
+        ShowEntry(entry, engine.GetScene(), &engine);
+        return true;
+    }
+
+    int LootSystem::DebugRestockAll(NextEngine& engine)
+    {
+        int restocked = 0;
+        for (int index = 0; index < static_cast<int>(entries_.size()); ++index)
+        {
+            restocked += DebugRestock(index, engine) ? 1 : 0;
+        }
+        return restocked;
+    }
+
     int LootSystem::RemainingCount() const
     {
         return static_cast<int>(std::count_if(entries_.begin(), entries_.end(), [](const FLootEntry& entry)

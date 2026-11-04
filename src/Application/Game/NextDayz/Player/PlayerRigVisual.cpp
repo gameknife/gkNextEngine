@@ -367,6 +367,7 @@ namespace NextDayz
         holdWeight_ = 0.0f;
         weaponWeight_ = 0.0f;
         freeHandWeight_ = 0.0f;
+        traverseWeight_ = 0.0f;
         weaponActionWeight_ = 0.0f;
         weaponActionClipName_.clear();
         actionWeight_ = 0.0f;
@@ -498,7 +499,8 @@ namespace NextDayz
 
         if (locomotion.traversalAction != EPlayerTraversalAction::None)
         {
-            const char* name = locomotion.traversalAction == EPlayerTraversalAction::Vault ? "vault" : "climb_up";
+            // TraversalActionName matches the clip names one to one.
+            const char* name = TraversalActionName(locomotion.traversalAction);
             animator_.SetManualBlend(locomotionLayer_, {{asset_.FindClip(name), 1.0f}}, locomotion.traversalTime01,
                                      anim.JumpFadeSeconds);
             baseClipName_ = name;
@@ -650,7 +652,9 @@ namespace NextDayz
         const float pitchLimit = glm::radians(std::max(anim.AimPitchLimitDegrees, 1.0f));
         const float pitch = glm::clamp(state.aimPitchRadians, -pitchLimit, pitchLimit) * (1.0f - busy) *
                             (1.0f - 0.5f * sprintHoldWeight_);
-        const float twist = WrapAngle(state.aimYawRadians - bodyYaw_);
+        // In a traversal the body is squared to the obstacle; the torso stops
+        // turning after the camera so the hands meet the lip.
+        const float twist = WrapAngle(state.aimYawRadians - bodyYaw_) * (1.0f - traverseWeight_);
         const auto offset = [](float yaw, float pitchAmount)
         {
             return glm::angleAxis(yaw, kAxisY) * glm::angleAxis(pitchAmount, kAxisX);
@@ -667,8 +671,53 @@ namespace NextDayz
         }
 
         gripError_ = 0.0f;
+        // Traversal hand plants, world -> component space. The clip already
+        // places the hands near the lip; this pins them onto the real top
+        // whatever its height, so palms never float or sink into the wall.
+        const FPlayerLocomotionState& locomotion = state.locomotion;
+        const bool planting = locomotion.traversalAction != EPlayerTraversalAction::None;
+        const glm::mat4 toComponent = glm::inverse(worldNode_->WorldTransform());
+        const std::array<float, 2> plantWeight = {planting ? locomotion.traversalHandWeight[0] : 0.0f,
+                                                  planting ? locomotion.traversalHandWeight[1] : 0.0f};
+        const std::array<glm::vec3, 2> plantTarget = {
+            glm::vec3(toComponent * glm::vec4(locomotion.traversalHand[0], 1.0f)),
+            glm::vec3(toComponent * glm::vec4(locomotion.traversalHand[1], 1.0f))};
+        const auto plantHand = [&](int32_t upper, int32_t lower, int32_t hand, int side)
+        {
+            const float weight = plantWeight[side];
+            if (weight <= 1.0e-3f || !valid(upper) || !valid(lower) || !valid(hand))
+            {
+                return;
+            }
+            // Elbows out and back, like pushing down on a wall top.
+            const glm::mat4 torsoFrame = valid(bones_.torso) ? transforms_[bones_.torso] : glm::mat4(1.0f);
+            const glm::vec3 pole(torsoFrame * glm::vec4(side == 0 ? 0.60f : -0.60f, 0.05f, -0.40f, 1.0f));
+            const glm::quat rotation = RigBoneRotation(transforms_, hand);
+            const glm::vec3 goal = glm::mix(RigBonePosition(transforms_, hand), plantTarget[side], weight);
+            SolveRigTwoBoneIK(asset_, pose, transforms_, upper, lower, hand, goal, pole, 1.0f);
+            SetRigBoneComponentRotation(asset_, pose, transforms_, hand, rotation, 1.0f);
+        };
+        // Measured after every solve, so a planted hand that cannot reach shows up.
+        const auto measurePlants = [&]()
+        {
+            plantError_ = 0.0f;
+            const std::array<int32_t, 2> hands = {bones_.handL, bones_.handR};
+            for (int side = 0; side < 2; ++side)
+            {
+                if (plantWeight[side] > 0.98f && valid(hands[side]))
+                {
+                    plantError_ = std::max(plantError_,
+                                           glm::length(RigBonePosition(transforms_, hands[side]) - plantTarget[side]));
+                }
+            }
+        };
+
         if (weaponWeight_ <= 1.0e-3f || !valid(bones_.ikWeapon) || !valid(bones_.ikHandR) || !valid(bones_.ikHandL))
         {
+            // Empty hands: both plant directly.
+            plantHand(bones_.upperArmL, bones_.foreArmL, bones_.handL, 0);
+            plantHand(bones_.upperArmR, bones_.foreArmR, bones_.handR, 1);
+            measurePlants();
             return;
         }
 
@@ -698,6 +747,15 @@ namespace NextDayz
                                                              sprintHoldWeight_ * bob,
                                                          kAxisZ);
         weaponPosition += weaponRotation * glm::vec3(0.0f, 0.0f, hold.extend * aimWeight_);
+        // The firing hand plants with the weapon in it: slide the weapon frame
+        // so its grip lands on the plant, the hand IK below follows the grip.
+        if (plantWeight[1] > 1.0e-3f)
+        {
+            const glm::vec3 gripLocal = glm::vec3(glm::inverse(transforms_[bones_.ikWeapon]) *
+                                                  glm::vec4(RigBonePosition(transforms_, bones_.ikHandR), 1.0f));
+            const glm::vec3 grip = weaponPosition + weaponRotation * gripLocal;
+            weaponPosition += (plantTarget[1] - grip) * plantWeight[1];
+        }
         SetRigBoneComponentRotation(asset_, pose, transforms_, bones_.ikWeapon, weaponRotation);
         SetRigBoneComponentPosition(asset_, pose, transforms_, bones_.ikWeapon, weaponPosition);
         if (hold.overrideSupport)
@@ -723,6 +781,8 @@ namespace NextDayz
         SolveRigTwoBoneIK(asset_, pose, transforms_, bones_.upperArmL, bones_.foreArmL, bones_.handL, gripL,
                           glm::vec3(torso * glm::vec4(kPoleLeft, 1.0f)), support);
         SetRigBoneComponentRotation(asset_, pose, transforms_, bones_.handL, gripRotationL, support);
+        plantHand(bones_.upperArmL, bones_.foreArmL, bones_.handL, 0);
+        measurePlants();
     }
 
     void PlayerRigVisual::UpdateAttachments(const FPlayerPresentationState& state)
@@ -823,7 +883,13 @@ namespace NextDayz
         }
         const float yawDiff = WrapAngle(state.aimYawRadians - bodyYaw_);
         const bool moving = locomotion.horizontalSpeed > anim.MoveThreshold;
-        if (moving || traversing || looting || !locomotion.onGround)
+        if (traversing)
+        {
+            // Square up to the obstacle for the whole move, whatever the camera does.
+            bodyYaw_ += WrapAngle(locomotion.traversalYaw - bodyYaw_) * (1.0f - std::exp(-dt / 0.06f));
+            turningInPlace_ = false;
+        }
+        else if (moving || looting || !locomotion.onGround)
         {
             bodyYaw_ += yawDiff * (1.0f - std::exp(-dt / std::max(anim.BodyYawFollowSeconds, 1.0e-3f)));
             turningInPlace_ = false;
@@ -884,6 +950,7 @@ namespace NextDayz
         weaponWeight_ = Approach(weaponWeight_, state.hasWeapon ? 1.0f : 0.0f, 0.06f, dt);
         holdWeight_ = Approach(holdWeight_, holding ? 1.0f : 0.0f, anim.HoldFadeSeconds * 0.5f, dt);
         freeHandWeight_ = Approach(freeHandWeight_, looting || traversing ? 1.0f : 0.0f, 0.05f, dt);
+        traverseWeight_ = Approach(traverseWeight_, traversing ? 1.0f : 0.0f, traversing ? 0.04f : 0.12f, dt);
         const bool weaponActionActive = holding && state.weaponAction != EWeaponPresentationAction::None;
         aimWeight_ = Approach(aimWeight_, holding && !weaponActionActive ? glm::clamp(state.aimWeight, 0.0f, 1.0f) : 0.0f,
                               anim.AimFadeSeconds * 0.5f, dt);

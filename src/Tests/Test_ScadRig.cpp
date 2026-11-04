@@ -517,7 +517,7 @@ TEST_CASE("ScadRig loads the articulated NextDayz survivor contract", "[Unit][Sc
         CHECK_FALSE(clip->channels.empty());
     }
     for (const char* clipName : {
-             "jump_up", "jump_down", "vault", "climb_up",
+             "jump_up", "jump_down", "vault", "mantle", "climb", "climb_over",
              "reload_rifle", "switch_weapon", "recoil_rifle", "loot_ground"})
     {
         const FRigClip* clip = asset.FindClip(clipName);

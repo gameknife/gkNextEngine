@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <string>
 
 // ============================================================================
@@ -33,7 +34,11 @@ namespace NextDayz
         void SetMoveKey(int dir, bool pressed); // 0=fwd 1=back 2=left 3=right
         void SetWalkModifier(bool pressed) { walkModifier_ = pressed; }
         void SetSprintModifier(bool pressed) { sprintModifier_ = pressed; }
+        // Jump key: vault / mantle / climb when an obstacle is in reach,
+        // otherwise a jump that keeps looking for a ledge to catch while the
+        // key is held (or for AirCatchWindowSeconds after the press).
         void QueueContextualJump(NextEngine& engine);
+        void SetJumpHeld(bool held) { jumpHeld_ = held; }
         void QueueCrouchToggle() { crouchToggleQueued_ = true; }
         void SetAiming(bool aiming) { aiming_ = aiming; }
         void SetMeleeEquipped(bool melee) { meleeEquipped_ = melee; }
@@ -58,6 +63,9 @@ namespace NextDayz
         float CameraArmLength() const;
         float CameraArmFraction() const;
         glm::vec3 Forward() const;   // full 3D view direction (yaw+pitch)
+        // Render view direction: Forward() plus the first-person traversal
+        // head motion (looking down at the lip, leaning into a vault).
+        glm::vec3 CameraForward() const;
         glm::vec3 Right() const;     // horizontal right
         glm::vec3 Up() const;
         float Yaw() const { return yaw_; }
@@ -87,9 +95,47 @@ namespace NextDayz
         void FillCamera(glm::mat4& outModelView, float& outFov) const;
 
     private:
-        glm::vec3 MoveForward() const; // horizontal (yaw only)
-        bool TryBeginTraversal(NextEngine& engine);
+        // One vertex of the traversal path. The controller is moved along a
+        // monotone cubic through these; the clip phase is warped linearly in
+        // between, so the authored contact poses land on the real geometry.
+        struct FTraversalKey
+        {
+            float time = 0.0f;           // seconds from the start of the move
+            glm::vec3 position{0.0f};    // feet
+            float clip = 0.0f;           // clip phase at this key
+            float eye = 1.65f;           // eye height above the feet
+        };
+        static constexpr int kMaxTraversalKeys = 10;
+
+        struct FTraversalPlan
+        {
+            EPlayerTraversalAction action = EPlayerTraversalAction::None;
+            bool airborne = false;              // started mid-air (caught a ledge)
+            glm::vec3 dir{0.0f, 0.0f, 1.0f};    // horizontal, squared up to the face
+            glm::vec3 edge{0.0f};               // lip point, at the top height
+            float topY = 0.0f;
+            float height = 0.0f;                // top above the start feet
+            float thickness = 0.0f;             // lip -> far side, for vault / over
+            glm::vec3 landing{0.0f};            // vault / over: far-side ground
+            glm::vec3 stand{0.0f};              // mantle / climb: feet on the top
+            std::array<glm::vec3, 2> hands{};   // world plant points (support, firing)
+            std::array<FTraversalKey, kMaxTraversalKeys> keys{};
+            std::array<glm::vec4, kMaxTraversalKeys> tangents{}; // d(position, eye)/dt
+            int keyCount = 0;
+            glm::vec3 exitVelocity{0.0f};       // handed to the controller when the path ends
+            int impactKey = -1;                 // landing dip when this key is passed
+            float impactSpeed = 0.0f;
+            bool endCrouched = false;
+            bool endAirborne = false;           // path ends above the landing; gravity finishes it
+        };
+
+        bool TryBeginTraversal(NextEngine& engine, bool airborne);
+        bool BuildTraversalPath(NextEngine& engine, FTraversalPlan& plan, const glm::vec3& feet,
+                                const glm::vec3& velocity) const;
+        void BeginTraversal(const FTraversalPlan& plan);
         void UpdateTraversal(float deltaSeconds);
+        bool WantsAirCatch() const;
+        glm::vec3 MoveForward() const; // horizontal (yaw only)
         glm::vec3 UpdateMotion(float deltaSeconds, const glm::vec3& previousPosition); // returns raw measured velocity
         void UpdateView(float deltaSeconds);
         void UpdateCameraArm(float deltaSeconds, NextEngine& engine);
@@ -110,6 +156,8 @@ namespace NextDayz
         bool meleeEquipped_ = false;
         bool movementLocked_ = false;
         bool jumpQueued_ = false;
+        bool jumpHeld_ = false;
+        float jumpBufferSeconds_ = 0.0f;   // airborne ledge catch window after a jump press
         bool crouchToggleQueued_ = false;
         bool keyMove_[4] = {false, false, false, false};
 
@@ -138,11 +186,11 @@ namespace NextDayz
         glm::vec3 headBob_{0.0f};          // first-person eye offset (world)
         float viewRoll_ = 0.0f;            // radians, first person only
         EPlayerTraversalAction traversalAction_ = EPlayerTraversalAction::None;
+        FTraversalPlan traversal_{};
         float traversalElapsed_ = 0.0f;
-        float traversalDuration_ = 0.0f;
-        float traversalTopY_ = 0.0f;
-        glm::vec3 traversalStart_{0.0f};
-        glm::vec3 traversalEnd_{0.0f};
+        bool traversalImpactDone_ = false;
+        float traversalViewPitch_ = 0.0f;   // radians, + looks down (first person only)
+        float traversalViewRoll_ = 0.0f;    // radians
         std::string traversalProbeResult_{"not_tested"};
     };
 }

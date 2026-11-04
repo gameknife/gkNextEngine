@@ -679,3 +679,72 @@ Bayer 图案 discard，角色各部件与正反面共用像素阈值。被丢弃
 - `WeaponSystem` 是权威计时来源；`weaponAction = melee` 和归一化时间驱动第三人称 `melee_<id>_attack` clip，第一人称也按相同接触帧采样起手、攻击与收招。两种视角都不触发枪械后坐力。
 - 每种武器各有 `melee_<id>_low` / `ready` 姿势；刀和撬棍的空闲手护胸，斧头双手握柄。打开背包、开始其他动作、翻越、死亡、换武器或丢弃武器会取消未完成的近战和缓存输入。
 - 验证：`gnb validate --script assets/agentscripts/nextdayz-melee.agentscript.json` 使用调试冻结与固定步进验证延迟命中、单击单次攻击、收招缓存、中断与枪械回归，同时保存 FPS/TPS 戒备和攻击截图。资产握持测试标签为 `[ScadRig][NextDayz][Melee]`。
+
+## 17. 战术翻越与攀爬（2026-11-04）
+
+跳跃键是情境动作：`QueueContextualJump` 先跑 `TryBeginTraversal`，没有可用动作才普通起跳；按下的同时开启
+空中抓沿窗口。四个动作（`EPlayerTraversalAction`，clip 名一一对应）：
+
+| 动作 | 适用 | 表现 |
+|---|---|---|
+| `vault` | 薄顶（≤ `MaxWallThickness` 1.0 m）且 ≤ `VaultMaxHeight` 1.15 m | 支撑手按顶，腿从射击侧横扫过去，落地继续跑（保留速度） |
+| `mantle` | 可站立顶面 ≤ `MantleMaxHeight` 1.60 m | 掌+握枪拳上顶（步枪横放在顶面），撑直手臂，右膝上顶，站起 |
+| `climb` | 可站立顶面 ≤ `ClimbMaxHeight` 2.70 m | 蓄力、脚蹬墙、双手抓沿、悬挂收脚、引体到胸、撑起、跪上、站起 |
+| `climb_over` | 薄墙 > 1.15 m | 抓沿或直接起撑，臀部坐上墙顶双腿从射击侧翻过，扶顶滑下落地 |
+
+### 17.1 探测（`TryBeginTraversal`）
+
+所有数字相对当前脚底，参数在 `FTraversalConfig`：
+
+1. **正面**：膝盖到头顶每 0.28 m 一条水平射线，距离 `ProbeDistance` 1.35 m + 速度 × `ProbeSpeedLookahead`
+   0.16 s（冲刺时约 2.4 m）。取最近的非地面/非底面命中；与朝向夹角超过 `MaxApproachDegrees` 55° 拒绝，
+   动作方向对齐墙面法线（身体正对墙）。
+2. **沿口**：从墙面前 `EaveMaxOverhang` 0.8 m（屋檐可能伸出墙外）到墙后 0.45 m 逐列向下探测，第一个
+   `SurfaceNormalMinY` 0.60 以上的面就是顶，在最后一个低列与它之间二分出沿口。CPU 射线会命中背面，因此
+   扫描原点必须在自由空间：头顶有遮挡就压到遮挡下方，同高度水平射线进入实体之后的列视为"更高的墙"。
+   **站在屋檐下**时列原点在檐下看不到屋面，改为沿 -dir 向后逐列向上探测，天空重新出现的位置就是檐口。
+3. **沿口净空**：沿口内 0.10 m 处先找到真实表面（坡屋顶会继续升高）再向上留 0.95 m。
+4. **墙后**：从 `topY + 0.9` 往下探测（不受檐下扫描原点限制）。`MaxWallThickness` 内顶面结束且后方有
+   落脚点（≤ `MaxDropBehind` 3.2 m、`LandingHeadroom` 1.25 m）为"薄"；沿口后 `radius + 0.14` 处三点
+   等高（`StandFlatness`）且坡度可站（`StandNormalMinY`）为"可站"，净空够站立就站立结束，只够蹲姿就
+   **以蹲姿结束**。净空射线每条都从自己的表面起算，坡屋顶不会从屋面内部起射。
+5. 手的落点：左掌在沿口内 `HandInset`、侧移 `HandSpread`，右拳（握枪）略高略深，各自向下探测真实顶面。
+
+**空中抓沿**（解决"离墙稍远就变成普通跳"和"小跳能上的高墙"）：起跳后在 `AirCatchWindowSeconds`
+0.4 s 内或一直按住跳跃且有前进输入时，每帧以空中参数重新探测：墙面进入 `AirCatchReach` 0.95 m 才抓
+（身体自己飞到墙边，不会隔空扑过去），沿口在脚上 `AirCatchMinHeight`..`AirCatchMaxHeight`（0.25..2.05 m）。
+低于 `AirMantleMaxHeight` 直接撑上（mantle/vault），否则进入悬挂（climb/climb_over）。跳跃顶点脚离地
+1.2 m，所以空中可抓到约 3.2 m 的沿口；更高的墙保持普通跳。原有的踢墙动作已移除。
+
+### 17.2 路径扭曲（`BuildTraversalPath`）
+
+控制器沿一组关键帧移动：每个关键帧是 (时间, 脚底位置, clip 相位, 眼高)。接触类关键帧放在**沿口坐标系**
+的固定位置（u 沿动作方向、v 相对顶面，如 mantle 撑起 (-0.30, -0.92)、climb 抓沿 (-0.32, -1.75)、
+跪上 (0.12, 0)），所以 clip 里手脚的位置对任何高度都落在真实几何上；只有接近与起跳段随高度伸缩。
+位置用逐轴单调三次插值（Fritsch–Butland，不会过冲进墙），端点切线取进入/退出速度，跑着进入、跑着出去；
+clip 相位在关键帧间线性推进。眼高同样插值：一人称镜头跟随身体折过沿口，而不是脚底 + 1.65 m 硬抬。
+坡屋顶上双手高于沿口时悬挂段整体抬高。`MoveTimeScale` 统一缩放所有分段时长。
+结束时：vault 把速度交还控制器继续跑，mantle/climb 静止站好（或蹲下），落差大的 vault/climb_over
+在半空结束交给重力，走正常的滞空 → 落地。
+
+### 17.3 表现
+
+- clip（`nextdayz_survivor.scad` 的 Traversal 段）由 `nd_tk` 关键帧经 Catmull-Rom 重采样（每 clip 24 个
+  求解键）再 IK 求解，四肢连续穿过接触点；文件头注释列出各动作的接触相位，与 `PlantWindow`
+  （`PlayerController.cpp`）一致。步枪始终在射击手：低位携行，或双手上顶时横放在顶面、拳头压在握把上。
+- `PlayerRigVisual`：动作期间身体朝向锁定 `traversalYaw`，躯干不再跟随相机扭转（平滑过渡）；
+  `traversalHand[]` 是世界坐标的手部落点，左手直接两骨 IK，右手通过平移武器框让握把落在落点上，
+  武器随手。`game.plantError` 报告完全按住时手到落点的最大误差。
+- 一人称：镜头按相位低头看沿口、抓沿时抬头、vault 向支撑手侧倾；武器不再隐藏，压低收向射击侧。
+- 调试：`game.traversalProbe` 给出 `accepted:*` / `rejected:*`，空中探测带 `air:` 前缀。
+
+### 17.4 验证
+
+`gnb validate --script assets/agentscripts/nextdayz-3c-traversal.agentscript.json`，fixture
+`assets/agentscripts/fixtures/nextdayz-traversal.scad`：1.0 m 薄墙 vault（落地仍在跑）、1.25 m 平台
+mantle、2.2 m 平台 climb、2.0 m 围墙与 1.4 m 院墙 climb_over、带 0.5 m 出檐的 2.5 m 农舍（檐外起跳与
+贴墙站在檐下两种）、3.6 m 墙保持普通跳、离 1.9 m 台子 3 m 起跳空中抓沿、头顶 1.5 m 的夹层 mantle 后
+蹲姿，以及一人称 mantle 截图；关键相位冻结后用调试环绕相机拍侧面图，并断言 `plantError < 0.05`。
+fixture 目录不在资产自动复制规则里，改完要手动拷到 `out/build/<preset>/assets/agentscripts/fixtures/`。
+teleport cvar 的 `"x,y"` 中 y 是 SCAD 北向，引擎 `z = -y`，lookYaw 0 朝 SCAD -y 走；同一个值连续设置
+不会触发回调。

@@ -779,6 +779,13 @@ namespace NextDayz
                 targetOffset.y -= actionArc * 0.42f;
                 targetOffset.z -= actionArc * 0.18f;
             }
+            // Traversal: the weapon swings down and out to the firing side while
+            // the hands are on the obstacle, and comes back up as the body stands.
+            if (player.IsTraversing() && !IsSwinging())
+            {
+                targetOffset += glm::vec3(0.06f, -0.11f, -0.08f);
+                meleeEuler += glm::radians(glm::vec3(28.0f, -16.0f, 20.0f));
+            }
             const float t = 1.0f - std::exp(-config_.ViewModelLerpSpeed * std::max(0.0f, deltaSeconds));
             viewModelOffset_ = glm::mix(viewModelOffset_, targetOffset, t);
             if (def && def->IsMelee() && IsSwinging())
@@ -818,7 +825,7 @@ namespace NextDayz
             if (show)
             {
                 const glm::vec3 eye = player.CameraPosition();
-                const glm::vec3 forward = player.Forward();
+                const glm::vec3 forward = player.CameraForward();
                 const glm::vec3 right = player.Right();
                 const glm::vec3 up = glm::normalize(glm::cross(right, forward));
                 // Proper (det +1) rotation basis: object +Z -> forward, +Y -> up,

@@ -85,6 +85,8 @@ namespace NextDayz
         bool WeaponMuzzle(glm::vec3& outPosition, glm::vec3& outForward) const;
         // Distance from the right hand to its grip target (m); 0 when no weapon.
         float GripError() const { return gripError_; }
+        // Worst distance (m) of a fully planted traversal hand from its lip target; 0 when none is planted.
+        float PlantError() const { return plantError_; }
 
     private:
         struct FBones
@@ -179,6 +181,7 @@ namespace NextDayz
         float holdWeight_ = 0.0f;
         float weaponWeight_ = 0.0f;              // weapon in hand at all
         float freeHandWeight_ = 0.0f;            // support hand off the weapon (loot, traversal)
+        float traverseWeight_ = 0.0f;            // smoothed "in a traversal": torso stops tracking the camera
         float weaponActionWeight_ = 0.0f;
         float actionWeight_ = 0.0f;
         float movingWeight_ = 0.0f;
@@ -188,5 +191,6 @@ namespace NextDayz
         float turnSway_ = 0.0f;                  // radians the weapon lags behind a turn
         bool recoilActive_ = false;
         float gripError_ = 0.0f;
+        float plantError_ = 0.0f;
     };
 }

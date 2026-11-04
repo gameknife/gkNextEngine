@@ -29,11 +29,15 @@ namespace NextDayz
         Down,
     };
 
+    // Contextual traversal (jump key, or a held jump while airborne). Clip names
+    // match TraversalActionName one to one.
     enum class EPlayerTraversalAction
     {
         None,
-        Vault,
-        ClimbUp,
+        Vault,     // thin top up to the waist: support hand plants, legs sweep over, the run continues
+        Mantle,    // top up to the chest: both hands on top, press up, knee over, stand
+        Climb,     // top above the chest: jump, catch the lip, haul up, stand on top
+        ClimbOver, // thin wall above the waist: catch or press, swing the legs over, drop behind
     };
 
     enum class EPlayerAction
@@ -73,8 +77,13 @@ namespace NextDayz
         EPlayerJumpPhase jumpPhase = EPlayerJumpPhase::None;
         float jumpPhaseTime01 = 0.0f;
         EPlayerTraversalAction traversalAction = EPlayerTraversalAction::None;
-        float traversalTime01 = 0.0f;
-        float traversalHeight = 0.0f;
+        float traversalTime01 = 0.0f;   // clip phase, warped onto the geometry by the controller
+        float traversalHeight = 0.0f;   // obstacle top above the take-off feet
+        float traversalYaw = 0.0f;      // the body squares up to the obstacle for the whole move
+        // World-space hand plants on the obstacle top: [0] support (left) hand,
+        // [1] firing (right) hand with the weapon laid on the top. Weight 0 = free.
+        std::array<glm::vec3, 2> traversalHand{glm::vec3(0.0f), glm::vec3(0.0f)};
+        std::array<float, 2> traversalHandWeight{0.0f, 0.0f};
         bool onGround = false;
         bool standBlocked = false;
     };
@@ -130,7 +139,9 @@ namespace NextDayz
         switch (action)
         {
         case EPlayerTraversalAction::Vault: return "vault";
-        case EPlayerTraversalAction::ClimbUp: return "climb_up";
+        case EPlayerTraversalAction::Mantle: return "mantle";
+        case EPlayerTraversalAction::Climb: return "climb";
+        case EPlayerTraversalAction::ClimbOver: return "climb_over";
         case EPlayerTraversalAction::None:
         default: return "none";
         }

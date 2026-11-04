@@ -498,36 +498,181 @@ anim_jump_down = rh_body_clip(SKEL, RIG, [
 ], false);
 
 // --- Traversal -----------------------------------------------------------------
-// Support hand plants on the obstacle top while the rifle stays low in the
-// firing hand; the runtime releases the support arm from the rifle here.
+// Tactical moves, one clip each, phase-normalised (0..1). PlayerController
+// moves the controller along a path whose contact keys sit at fixed spots
+// relative to the lip and plays these at matching phases:
+//   vault       0.20 take-off, 0.50 hips over the top, 0.78 touchdown, 1.0 stride out
+//   mantle      0.22 hands on top, 0.48 press, 0.72 knee on top, 1.0 stand
+//   climb       0.12 load, 0.24 boot on the wall, 0.36 catch, 0.44 hang,
+//               0.62 pull, 0.74 press, 0.86 knee on top, 1.0 stand
+//   climb_over  climb up to 0.44, 0.60 press, 0.76 hips on the top with the
+//               legs swinging over, 0.90 slide down the far side, 1.0 land
+// At a contact key the root sits at (u, v) from the lip (u along the move, v
+// up), so the lip is at local [0, u, -v] whatever the obstacle height. Hands
+// are authored there and the runtime pins them onto the real top
+// (PlantWindow in PlayerController.cpp gives the same contact phases).
+// The rifle never leaves the firing hand: carried low, or laid across the top
+// under the fist while both hands work. Keys are resampled with a Catmull-Rom
+// over the intent (pelvis, feet, wrists, weapon frame) before solving, so the
+// limbs flow through the contacts instead of stopping at each key.
 
+// Plain single-hand key, still used by anim_loot_ground below.
 function nd_trav_key(pelvis, pelvisRot, torso, footL, footR, handRoot) =
     concat([["pelvis", pelvis], ["pelvis_rot", pelvisRot], ["torso", torso],
             ["head", nd_level_head(pelvisRot, torso, [-6, 0, 0])], ["foot_l", footL], ["foot_r", footR],
             ["weapon", HOLD_LOW]],
            handRoot == undef ? [] : [["hand_l_root", handRoot]]);
 
-anim_vault = rh_body_clip(SKEL, RIG, [
-    [0.00, nd_trav_key([0, 0.02, -0.06], [3, 0, -10], [5, 0, 8], [0.13, -0.08, 12, 0], [-0.15, 0.17, -28, 0],
-                       [[0.20, -0.30, 0.55], [-90, 0, 0]])],
-    [0.16, nd_trav_key([0.02, 0.04, -0.14], [14, -8, -20], [30, 0, 10], [0.16, -0.10, 16, 10, 0.34],
-                       [-0.10, 0.14, -20, 30, 0.10], [[0.18, -0.50, 0.85], [-80, 0, 0]])],
-    [0.32, nd_trav_key([-0.03, 0.0, 0.06], [-6, 10, 10], [14, 6, 4], [0.20, -0.24, 20, -10, 0.42],
-                       [-0.02, -0.06, -10, 20, 0.48], [[0.16, -0.12, 0.90], [-60, 0, 0]])],
-    [0.52, nd_trav_key([0, 0.02, -0.07], [3, 0, -10], [6, 0, 8], [0.13, -0.08, 12, 0], [-0.15, 0.17, -28, 0],
-                       undef)]
-], false);
+// Low carry for traversal: rifle down at the firing side, muzzle forward-down.
+HOLD_TRAV = [[-0.22, -0.20, 0.10], [55, 0, -12]];
+// Weapon turn when it is laid on the top under the fist: muzzle forward and
+// toward the support side, level.
+LAID = [0, 0, 25];
 
-anim_climb_up = rh_body_clip(SKEL, RIG, [
-    [0.00, nd_trav_key([0, 0.02, -0.06], [3, 0, -10], [5, 0, 8], [0.13, -0.08, 12, 0], [-0.15, 0.17, -28, 0],
-                       [[0.18, -0.35, 1.10], [-150, 0, 0]])],
-    [0.22, nd_trav_key([0, 0.06, -0.10], [10, 0, -12], [24, 0, 8], [0.15, -0.20, 14, 20, 0.40],
-                       [-0.14, 0.18, -24, 20, 0.04], [[0.18, -0.36, 1.25], [-140, 0, 0]])],
-    [0.52, nd_trav_key([0, 0.08, -0.28], [20, 0, -10], [36, 0, 6], [0.14, -0.22, 14, 0, 0.0],
-                       [-0.13, 0.06, -20, 30, 0.30], [[0.16, -0.30, 0.60], [-110, 0, 0]])],
-    [0.86, nd_trav_key([0, 0.02, -0.06], [3, 0, -10], [5, 0, 8], [0.13, -0.08, 12, 0], [-0.15, 0.17, -28, 0],
-                       undef)]
-], false);
+// Weapon frame (torso space) that puts the firing wrist at root-space `wrist`
+// with the weapon turned by `euler` in root space.
+function nd_weapon_at_wrist(tr, wrist, euler) =
+    let(wm = rh_m(euler),
+        wt = rh_fx(rh_finv(tr), [wrist - rh_mv(wm, GRIP_R[0]), wm]))
+    [wt[0], rh_e(wt[1])];
+
+// Root-space support wrist on the handguard of `weapon` (torso space).
+function nd_support_on_gun(tr, weapon) =
+    rh_fx(rh_fx(tr, rh_frame(weapon[0], weapon[1])), rh_frame(GRIP_L[0], GRIP_L[1]))[0];
+
+// One traversal key; every key carries every entry so they can be blended.
+//   weapon: ["carry", frame]        torso-space weapon frame
+//           ["plant", wrist]        firing fist on the top at root-space `wrist`
+//   handL:  root-space support wrist position, or "gun" (on the handguard)
+//   gaze:   head pitch target (+ looks down)
+function nd_tk(pelvis, pelvisRot, torso, footL, footR, weapon, handL, handRot = [-100, 0, 0], gaze = 0) =
+    let(tr = rh_torso_frame(SKEL, pelvis, pelvisRot, torso),
+        wf = weapon[0] == "carry" ? weapon[1] : nd_weapon_at_wrist(tr, weapon[1], LAID),
+        hl = handL == "gun" ? nd_support_on_gun(tr, wf) : handL)
+    [["pelvis", pelvis], ["pelvis_rot", pelvisRot], ["torso", torso],
+     ["head", nd_level_head(pelvisRot, torso, [gaze, 0, 0])], ["foot_l", footL], ["foot_r", footR],
+     ["weapon", wf], ["hand_l_root", [hl, handRot]]];
+
+// Catmull-Rom resample of [[time, key], ...] every `step`, mixing whole keys.
+function nd_kmix4(a, b, c, d, w) =
+    [for (i = [0 : len(a) - 1]) [a[i][0], a[i][1] * w[0] + b[i][1] * w[1] + c[i][1] * w[2] + d[i][1] * w[3]]];
+function nd_cr_weights(u) =
+    let(u2 = u * u, u3 = u2 * u)
+    [(-u3 + 2 * u2 - u) / 2, (3 * u3 - 5 * u2 + 2) / 2, (-3 * u3 + 4 * u2 + u) / 2, (u3 - u2) / 2];
+function nd_smooth_keys(keys, step) =
+    let(n = len(keys))
+    concat([for (i = [0 : n - 2])
+               let(t0 = keys[i][0], t1 = keys[i + 1][0],
+                   m = max(1, ceil((t1 - t0) / step - 1e-6)),
+                   k0 = keys[max(i - 1, 0)][1], k1 = keys[i][1],
+                   k2 = keys[i + 1][1], k3 = keys[min(i + 2, n - 1)][1])
+               for (j = [0 : m - 1]) [t0 + (t1 - t0) * j / m, nd_kmix4(k0, k1, k2, k3, nd_cr_weights(j / m))]],
+           [keys[n - 1]]);
+function nd_trav_clip(keys) = rh_body_clip(SKEL, RIG, nd_smooth_keys(keys, 1 / 24), false);
+
+// Hand plants at a contact key whose root is (u, v) from the lip; they mirror
+// the world plants in PlayerController (support palm flat, firing fist higher).
+function nd_plant_l(u, v) = [0.22, u - 0.09, -v + 0.055];
+function nd_plant_r(u, v) = [-0.20, u - 0.12, -v + 0.09];
+function nd_vault_plant(u, v) = [0.15, u - 0.11, -v + 0.055];
+
+// Shared end poses: the fighting stance with the rifle square (the hold
+// layers add the blade back once the move ends).
+TK_STAND = nd_tk([0, 0.02, -0.06], [3, 0, -10], [5, 0, 8], [0.13, -0.08, 12, 0, 0], [-0.15, 0.17, -28, 0, 0],
+                 ["carry", HOLD_SQUARE], "gun", [-100, 0, 0], -2);
+TK_STEP_IN = nd_tk([0, 0.02, -0.08], [4, 0, -8], [8, 0, 6], [0.12, -0.14, 10, 0, 0], [-0.14, 0.18, -22, 15, 0.02],
+                   ["carry", HOLD_SQUARE], "gun", [-100, 0, 0], 4);
+// Knee on the top just past the lip (root at u = 0.12, v = 0): firing shin
+// along the top, support leg still hanging on the face, rifle coming off it.
+TK_KNEE = nd_tk([0, -0.12, -0.46], [18, 0, -2], [14, 0, 2], [0.12, 0.22, 0, 20, -0.42], [-0.12, 0.10, -4, 80, 0.06],
+                ["carry", [[-0.24, -0.26, 0.16], [40, 0, -10]]], [0.24, -0.20, 0.42], [-90, 0, -8], 14);
+TK_RISE = nd_tk([0, 0.04, -0.24], [10, 0, -6], [12, 0, 4], [0.13, -0.06, 8, 0, 0.14], [-0.13, 0.12, -14, 20, 0],
+                ["carry", [[-0.20, -0.22, 0.20], [30, 0, -8]]], [0.24, -0.26, 0.85], [-100, 0, 0], 2);
+
+// Speed vault: last stride, support palm on the top, hips over it with the
+// legs swept through on the firing side, touch down on the lead foot and run
+// on. Nominal top 0.95 m, 0.30 m deep, take-off 0.58 m short of the lip.
+anim_vault = nd_trav_clip([
+    [0.00, nd_tk([0, 0.0, -0.10], [6, 0, -6], [10, 0, 6], [0.12, -0.22, 8, -8, 0], [-0.12, 0.28, -12, 35, 0.04],
+                 ["carry", HOLD_SQUARE], "gun", [-100, 0, 0], 6)],
+    [0.20, nd_tk([0, -0.02, -0.16], [14, 0, -4], [20, -4, 6], [0.10, -0.08, 6, 0, 0], [-0.12, 0.30, -12, 45, 0.10],
+                 ["carry", HOLD_TRAV], nd_vault_plant(-0.58, -0.95) + [0, 0.03, 0.04], [-95, 0, 0], 14)],
+    [0.35, nd_tk([-0.04, 0.02, -0.38], [4, 12, -28], [18, 16, 24], [-0.06, -0.06, -24, 20, 0.36],
+                 [-0.24, 0.10, -34, 30, 0.42], ["carry", [[-0.30, -0.08, 0.18], [40, 0, -30]]],
+                 nd_vault_plant(-0.20, -0.40), [-90, 0, 0], 16)],
+    [0.50, nd_tk([-0.08, 0.08, -0.70], [-14, 18, -45], [26, 18, 38], [-0.24, -0.30, -45, 10, 0.14],
+                 [-0.42, -0.14, -50, 10, 0.10], ["carry", [[-0.34, -0.04, 0.22], [30, 0, -40]]],
+                 nd_vault_plant(0.15, 0.06), [-90, 0, 0], 10)],
+    [0.64, nd_tk([-0.04, 0.04, -0.42], [-6, 8, -20], [14, 8, 18], [-0.04, -0.24, -10, -6, 0.10],
+                 [-0.22, -0.10, -24, 6, 0.16], ["carry", HOLD_TRAV], [0.20, 0.30, 0.62], [-80, 0, 0], 6)],
+    [0.78, nd_tk([0, 0.02, -0.20], [10, 0, -10], [16, 0, 8], [0.12, -0.16, 8, -8, 0], [-0.12, 0.24, -14, 30, 0.12],
+                 ["carry", HOLD_TRAV], [0.22, -0.20, 0.80], [-100, 0, 0], 4)],
+    [1.00, nd_tk([0, 0.0, -0.10], [6, 0, -4], [10, 0, 6], [0.11, 0.16, 8, 30, 0.05], [-0.12, -0.22, -10, -8, 0],
+                 ["carry", HOLD_SQUARE], "gun", [-100, 0, 0], -2)]
+]);
+
+// Mantle: palm and fist (rifle laid across) onto a chest-high top, hop to
+// locked arms, firing knee onto the top, stand up into the fighting stance.
+// Nominal top 1.20 m; contact 0.46 m short of the lip, press at (-0.30, -0.92).
+anim_mantle = nd_trav_clip([
+    [0.00, TK_STEP_IN],
+    [0.12, nd_tk([0, 0.03, -0.10], [8, 0, -4], [12, 0, 4], [0.12, -0.12, 8, 0, 0], [-0.13, 0.14, -14, 20, 0.04],
+                 ["carry", [[-0.20, -0.32, 0.36], [-10, 0, 10]]], [0.22, -0.48, 1.20], [-100, 0, 0], -6)],
+    [0.22, nd_tk([0, 0.04, -0.16], [12, 0, -2], [18, 0, 2], [0.12, -0.10, 6, 0, 0], [-0.13, 0.10, -10, 20, 0],
+                 ["plant", nd_plant_r(-0.46, -1.20)], nd_plant_l(-0.46, -1.20), [-95, 0, -8], 8)],
+    [0.36, nd_tk([0, 0.0, -0.06], [14, 0, 0], [20, 0, 0], [0.12, 0.04, 4, 30, 0.10], [-0.12, 0.0, -6, 20, 0.30],
+                 ["plant", nd_plant_r(-0.37, -1.05)], nd_plant_l(-0.37, -1.05), [-95, 0, -8], 14)],
+    [0.48, nd_tk([0, 0.0, 0.04], [14, 0, 0], [18, 0, 0], [0.11, 0.10, 4, 30, 0.02], [-0.12, 0.02, -4, 30, 0.40],
+                 ["plant", nd_plant_r(-0.30, -0.92)], nd_plant_l(-0.30, -0.92), [-95, 0, -8], 22)],
+    [0.60, nd_tk([0, -0.04, -0.26], [16, 0, 0], [18, 0, 0], [0.12, 0.18, 4, 20, -0.10], [-0.12, 0.06, -4, 55, 0.30],
+                 ["plant", nd_plant_r(-0.10, -0.42)], nd_plant_l(-0.10, -0.42), [-95, 0, -8], 20)],
+    [0.72, TK_KNEE],
+    [0.86, TK_RISE],
+    [1.00, TK_STAND]
+]);
+
+// Climb: load, boot on the face, catch the lip with palm and fist, settle
+// into the hang, pull the chest to the lip, press to locked arms, knee over,
+// stand. Nominal top 2.20 m; catch at (-0.32, -1.75).
+CLIMB_START = [
+    [0.00, TK_STEP_IN],
+    [0.12, nd_tk([0, 0.12, -0.24], [8, 0, -4], [8, 0, 2], [0.11, -0.08, 4, 0, 0], [-0.13, 0.14, -10, 10, 0],
+                 ["carry", [[-0.20, -0.30, 0.30], [0, 0, 15]]], [0.24, -0.36, 1.10], [-150, 0, 0], -24)],
+    [0.24, nd_tk([0, 0.06, -0.06], [6, 0, 0], [6, 0, 0], [0.12, 0.14, 6, 40, 0.18], [-0.12, -0.28, 0, -55, 0.48],
+                 ["carry", [[-0.18, -0.30, 0.52], [-30, 0, 20]]], [0.24, -0.44, 1.80], [-165, 0, 0], -26)],
+    [0.36, nd_tk([0, -0.06, 0.02], [-4, 0, 0], [6, 0, 0], [0.12, -0.14, 4, -30, 0.40], [-0.12, -0.12, -4, -20, 0.22],
+                 ["plant", nd_plant_r(-0.32, -1.75)], nd_plant_l(-0.32, -1.75), [-100, 0, -8], -14)],
+    [0.44, nd_tk([0, -0.05, 0.0], [-2, 0, 0], [4, 0, 0], [0.12, -0.16, 4, -35, 0.46], [-0.12, -0.14, -4, -30, 0.30],
+                 ["plant", nd_plant_r(-0.34, -1.79)], nd_plant_l(-0.34, -1.79), [-100, 0, -8], -10)]
+];
+
+anim_climb = nd_trav_clip(concat(CLIMB_START, [
+    [0.62, nd_tk([0, -0.04, 0.0], [4, 0, 0], [10, 0, 0], [0.12, 0.02, 4, 30, 0.16], [-0.12, -0.10, -4, 10, 0.55],
+                 ["plant", nd_plant_r(-0.30, -1.15)], nd_plant_l(-0.30, -1.15), [-95, 0, -8], 6)],
+    [0.74, nd_tk([0, -0.02, 0.02], [16, 0, 0], [22, 0, 0], [0.12, 0.10, 4, 20, 0.04], [-0.12, 0.02, -4, 40, 0.42],
+                 ["plant", nd_plant_r(-0.22, -0.72)], nd_plant_l(-0.22, -0.72), [-95, 0, -8], 22)],
+    [0.86, TK_KNEE],
+    [0.94, TK_RISE],
+    [1.00, TK_STAND]
+]));
+
+// Climb over a thin wall: as the climb up to the hang, press to the lip,
+// sit the hips on the top and swing both legs over on the firing side, slide
+// down the far side on the support palm and land in the fighting stance.
+anim_climb_over = nd_trav_clip(concat(CLIMB_START, [
+    [0.60, nd_tk([0, -0.02, 0.02], [16, 0, -6], [22, 0, 4], [0.12, 0.10, 4, 20, 0.04], [-0.26, 0.0, -30, 20, 0.40],
+                 ["plant", nd_plant_r(-0.24, -0.70)], nd_plant_l(-0.24, -0.70), [-95, 0, -8], 20)],
+    [0.68, nd_tk([-0.02, 0.02, -0.34], [2, 10, -32], [22, 14, 24], [-0.04, 0.02, -30, 20, 0.30],
+                 [-0.34, -0.06, -45, 10, 0.40], ["carry", [[-0.32, -0.06, 0.22], [30, 0, -40]]],
+                 nd_plant_l(-0.05, -0.30), [-95, 0, -8], 14)],
+    [0.76, nd_tk([-0.06, 0.06, -0.70], [-10, 18, -55], [22, 20, 42], [-0.28, -0.26, -55, 10, 0.12],
+                 [-0.46, -0.10, -60, 10, 0.08], ["carry", [[-0.34, -0.04, 0.22], [30, 0, -40]]],
+                 nd_plant_l(0.10, 0.04), [-95, 0, -8], 10)],
+    [0.90, nd_tk([0, -0.02, -0.26], [6, 4, -14], [10, 6, 8], [0.10, -0.12, 0, -10, 0.02], [-0.14, 0.10, -10, 10, 0.12],
+                 ["carry", HOLD_TRAV], [0.22, 0.30, 0.62], [-80, 0, 0], 8)],
+    [1.00, nd_tk([0, 0.04, -0.24], [10, 0, -6], [16, 0, 4], [0.13, -0.10, 10, 0, 0], [-0.15, 0.16, -26, 0, 0],
+                 ["carry", HOLD_SQUARE], "gun", [-100, 0, 0], 2)]
+]));
 
 // --- Interaction ---------------------------------------------------------------
 // Drop to a knee, reach the ground with the support hand, rifle held low.

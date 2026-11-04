@@ -172,21 +172,44 @@ namespace NextDayz
         float TurnSwayMaxDegrees = 8.0f;
     };
 
+    // Contextual traversal (PlayerController::TryBeginTraversal). Heights are
+    // the obstacle top above the take-off feet; distances are from the capsule
+    // axis. See docs/projects/nextdayz/nextdayz-3c-scadrig-design.md section 17.
     struct FTraversalConfig
     {
-        float ProbeDistance = 1.15f;
-        float ProbeHeight = 0.52f;
-        float MinObstacleHeight = 0.32f;
-        float VaultMaxHeight = 0.88f;
-        float ClimbMaxHeight = 1.48f;
-        float TopProbeInset = 0.12f;
-        float MaxVaultDepth = 0.95f;
-        float PlatformStandDepth = 0.32f;
-        float SurfaceNormalMinY = 0.70f;
-        float StandingClearance = 0.10f;
-        float ArcClearance = 0.14f;
-        float VaultDurationSeconds = 0.52f;
-        float ClimbDurationSeconds = 0.86f;
+        // --- detection ---
+        float ProbeDistance = 1.35f;          // face search reach standing still (~1 m from the capsule)
+        float ProbeSpeedLookahead = 0.16f;    // + this many seconds of travel at the current speed
+        float ProbeMaxDistance = 2.40f;
+        float MaxApproachDegrees = 55.0f;     // wall normal vs heading; snapped square for the move
+        float MinObstacleHeight = 0.32f;      // below this the controller just steps
+        float VaultMaxHeight = 1.15f;         // thin top up to the waist: speed vault
+        float MantleMaxHeight = 1.60f;        // top up to the chest: hands on top, press up
+        float ClimbMaxHeight = 2.70f;         // jump-catch reach from the ground (walls, eaves)
+        float EaveMaxOverhang = 0.80f;        // the top scan starts this far in front of the face
+        float ScanStep = 0.07f;
+        float SurfaceNormalMinY = 0.60f;      // a lip/top surface, ~53 deg (pitched roofs, car hoods)
+        float StandNormalMinY = 0.62f;        // a place to stand after the move (controller slope)
+        float StandFlatness = 0.22f;          // centre/side stand samples agree within this
+        float MaxWallThickness = 1.00f;       // a top this thin is vaulted / climbed over
+        float MaxDropBehind = 3.20f;          // far landing may sit this far below the top
+        float StandingClearance = 0.05f;
+        float LandingHeadroom = 1.25f;        // vault/over landings touch down hunched
+        float HandInset = 0.09f;              // hands plant this far past the lip
+        float HandSpread = 0.22f;             // each hand this far either side of the body line
+        // --- airborne catch (jump pressed too far out, or a wall too tall to start from the ground) ---
+        float AirCatchWindowSeconds = 0.40f;  // after a jump press, or while jump is held
+        float AirCatchReach = 0.95f;          // face this close to the capsule axis: the body is there, grab
+        float AirCatchMinHeight = 0.25f;      // ledge above the current feet
+        float AirCatchMaxHeight = 2.05f;      // hands overhead
+        float AirMantleMaxHeight = 1.25f;     // below this an airborne catch presses straight up
+        // --- motion ---
+        float ApproachMinSpeed = 3.0f;        // closing the gap to the take-off point
+        float ApproachMaxSeconds = 0.40f;
+        // Segment timings live with the key layout in BuildTraversalPath
+        // (vault ~0.6 s, mantle ~0.8 s, climb ~1.3 s, climb over ~1.2 s);
+        // this stretches all of them.
+        float MoveTimeScale = 1.0f;
     };
 
     struct FLootConfig

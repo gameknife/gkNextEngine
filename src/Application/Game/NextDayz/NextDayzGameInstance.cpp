@@ -814,7 +814,9 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     section.emplace(timers, ETimer::Player);
     player_.SetMovementLocked(actionLocked || traversalLocked || showInventory_ || showMap_ || dead);
     player_.SetMeleeEquipped(weapons_.ActiveIsMelee());
-    weapons_.SetPresentationSuppressed(actionLocked || traversalLocked || dead || knobs.orbit);
+    // Traversal keeps the first-person weapon: WeaponSystem tucks it down and
+    // out of the way while the hands are on the obstacle.
+    weapons_.SetPresentationSuppressed(actionLocked || dead || knobs.orbit);
     if (actionLocked || traversalLocked || showInventory_ || showMap_ || dead)
     {
         player_.SetAiming(false);
@@ -2464,7 +2466,9 @@ bool NextDayzGameInstance::OnKey(SDL_Event& event)
         if (pressed && !actions_.IsActive() && !player_.IsTraversing()) player_.QueueCrouchToggle();
         return true;
     case SDLK_SPACE:
-        if (pressed && !actions_.IsActive() &&
+        // Held jump keeps the airborne ledge catch armed (PlayerController::WantsAirCatch).
+        player_.SetJumpHeld(pressed);
+        if (pressed && !event.key.repeat && !actions_.IsActive() &&
             weapons_.PresentationAction() == NextDayz::EWeaponPresentationAction::None)
         {
             player_.QueueContextualJump(GetEngine());
@@ -2889,6 +2893,8 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
             [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(rig_.LeanRollDegrees()); });
     reg.Add("gripError",
             [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(rig_.GripError()); });
+    reg.Add("plantError",
+            [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(rig_.PlantError()); });
     reg.Add("shotSequence", [this]() -> Runtime::Agent::FAgentQueryValue {
         return static_cast<int64_t>(weapons_.LastShotSequence());
     });

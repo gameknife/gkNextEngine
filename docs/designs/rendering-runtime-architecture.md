@@ -4,7 +4,7 @@ category: design
 status: 现行
 owner: engine/rendering
 created: 2026-07-17
-last_updated: 2026-07-17
+last_updated: 2026-11-04
 ---
 
 # 渲染运行时架构与契约
@@ -50,6 +50,25 @@ NoAmbient 的光照拆分、GTAO 与无 history 语义见 [SoftwareModernNoAmbie
 7. scene post/debug、UI/frame consumers、截图，然后 submit/present。
 
 `EExternalPassInsertionPoint::BeforeSwapchainResolve` 和 `EExternalPassScope::EveryView/Scene` 虽已定义，当前执行器并未开放对应路径。不要仅因 enum 存在就声称支持；扩展时必须补调度、资源状态和多视图验证。
+
+## 自动曝光
+
+`Exposure/AutoExposurePass` 在 upscale / 可选后滤波之后、最终 tone mapping 之前测光。
+一个 16×16 compute workgroup 采样固定 64×64 网格，建立 128 档对数亮度直方图；中心加权，
+裁去两端各 10% 的样本权重，再把几何平均亮度映射到目标中灰。HUD/UI 在测光之后绘制。
+
+曝光 EV 只乘到最终显示编码的输入，不修改 GI、线性 scene color 或送入 temporal upscaler 的历史。
+每个 RenderView bank 保存独立 GPU 状态；view 复用或场景更换时重新初始化，普通相机移动/进出室内
+继续平滑适应。资源在 swapchain 重建时保留，device 销毁前释放，不做 CPU 亮度回读。
+
+配置入口是 `r.exposure.auto`、`target`、`minEV`、`maxEV`、`speedToDark`、`speedToLight` 与
+`compensationEV`（后六项同属 `r.exposure.` 前缀）。进入暗处默认 1/s，回到亮处默认 3/s，
+EV 按真实帧间隔指数平滑。全黑/非有限输入保持已有曝光，最大增益由 EV 限制。
+HDR 测光去除现有 pre-exposure，并按场景白点归一化；SDR 按当前 tone mapping 的线性输入测光。
+
+引擎默认关闭，NextDayz 默认开启并把最大提亮设为 +3 EV（8 倍）；Studio 背景、调试视图与离线
+progressive reference 不自动曝光。关闭时沿用固定曝光路径。`Test_AutoExposure.cpp` 在实际 GPU
+上验证明暗适应、限幅、黑帧保持、HDR 归一化与亮点过滤。
 
 ## 资源状态规则
 

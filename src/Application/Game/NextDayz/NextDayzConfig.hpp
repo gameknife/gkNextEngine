@@ -325,8 +325,10 @@ namespace NextDayz
         double TimeScale = 1.0;         // 1 real second = 1 game minute (24 real-min day)
         float DaySunIntensity = 480.0f;
         float DaySkyIntensity = 120.0f;
+        float DaySkyLuminanceScale = 4.0f; // procedural sky and GI, independent of HDR intensity
         float NightSkyFraction = 0.08f; // sky never goes fully black
-        float OvercastFactor = 0.55f;   // sun/sky multiplier while overcast
+        float OvercastFactor = 0.55f;   // sun multiplier while overcast
+        float OvercastSkyFactor = 0.85f; // diffuse daylight remains when the direct sun is hidden
         // Weather cycle (game hours between changes).
         double WeatherMinHours = 2.5;
         double WeatherMaxHours = 5.5;
@@ -339,7 +341,7 @@ namespace NextDayz
         float NightFogDensity = 0.004f;
         float FogHeightFalloff = 0.05f;
         glm::vec3 FogColor{0.60f, 0.63f, 0.66f};
-        float FogDayRadiance = 4.0f;
+        float FogDayRadiance = 50.0f;
         float FogNightRadiance = 0.15f;
         float LanternNightLift = 0.10f; // extra night sky fraction while a lantern burns
     };

@@ -50,6 +50,8 @@ namespace Vulkan::PipelineCommon
 
 namespace Vulkan
 {
+    class AutoExposurePass;
+
     struct FFrameRenderSettings
     {
         Runtime::Config::UserSettings userSettings{};
@@ -767,6 +769,7 @@ namespace Vulkan
         FrameGenerationResources frameGeneration_;
         TemporalPostFilterResources temporalPostFilter_;
         LateToneMappingResources lateToneMapping_;
+        std::unique_ptr<AutoExposurePass> autoExposure_;
         AmbientCubePipelines ambient_;
         OverlayPipelines overlay_;
         ShadowCameraFamilyCache shadowCameraFamilyCache_;

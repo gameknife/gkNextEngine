@@ -131,6 +131,13 @@ namespace NextCVar
         GK_CVAR_BOOL("r.tracing.exitAfterFirst", settings, ExitAfterFirst, false, ECVarFlags::Archive, "Terminate tracing after the first non-dielectric surface hit");
         GK_CVAR_FLOAT("r.heatmapScale", settings, HeatmapScale, 1.0f, ECVarFlags::Archive, "Profiler heatmap scale");
         GK_CVAR_FLOAT("r.paperWhiteNit", settings, PaperWhiteNit, 600.0f, ECVarFlags::Archive, "Paper white nit");
+        GK_CVAR_BOOL("r.exposure.auto", settings, AutoExposure, false, ECVarFlags::Archive, "Adapt display exposure to scene luminance");
+        GK_CVAR_FLOAT_RANGE("r.exposure.target", settings, AutoExposureTargetLuminance, 0.18f, ECVarFlags::Archive, "Auto exposure middle-gray luminance", 0.01, 0.8);
+        GK_CVAR_FLOAT_RANGE("r.exposure.minEV", settings, AutoExposureMinEV, -2.0f, ECVarFlags::Archive, "Minimum auto exposure adjustment in stops", -8.0, 8.0);
+        GK_CVAR_FLOAT_RANGE("r.exposure.maxEV", settings, AutoExposureMaxEV, 4.0f, ECVarFlags::Archive, "Maximum auto exposure adjustment in stops", -8.0, 8.0);
+        GK_CVAR_FLOAT_RANGE("r.exposure.speedToDark", settings, AutoExposureSpeedToDark, 1.0f, ECVarFlags::Archive, "Adaptation rate when entering darkness (1/s)", 0.05, 20.0);
+        GK_CVAR_FLOAT_RANGE("r.exposure.speedToLight", settings, AutoExposureSpeedToLight, 3.0f, ECVarFlags::Archive, "Adaptation rate when entering light (1/s)", 0.05, 20.0);
+        GK_CVAR_FLOAT_RANGE("r.exposure.compensationEV", settings, AutoExposureCompensationEV, 0.0f, ECVarFlags::Archive, "Auto exposure brightness bias in stops", -4.0, 4.0);
         GK_CVAR_BOOL("ui.showOverlay", settings, ShowOverlay, true, ECVarFlags::Archive, "Show overlay");
         GK_CVAR_BOOL("sys.tickPhysics", settings, TickPhysics, true, ECVarFlags::Archive, "Tick physics system");
         GK_CVAR_BOOL("sys.tickAnimation", settings, TickAnimation, true, ECVarFlags::Archive, "Tick animation system");

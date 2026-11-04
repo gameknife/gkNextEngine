@@ -4,7 +4,7 @@ category: design
 status: 现行
 owner: engine/rendering
 created: 2026-07-29
-last_updated: 2026-09-14
+last_updated: 2026-11-04
 ---
 
 # 大气散射与高度雾架构
@@ -35,8 +35,16 @@ M0–M3 已于 2026-07-29 实现并验收。体积雾光轴与真正的介质散
   大气、空中透视和高度雾放在同一处调整。
 - `FogStartDistance` 是**相对相机的射线距离**：介质积分从
   `cameraPosition + rayDirection * FogStartDistance` 开始，不依赖世界原点。
+- 高度雾同时覆盖表面和环境天空；天空射线积分到无穷远，向上逐渐离开雾层，地平线达到
+  `FogMaxOpacity`。Studio 背景、强制黑底和关闭的天空不参与，天空不重复叠加 AP volume。
+- `RT_SCENE_COLOR` 在 Compose / GTAOCompose 后已经乘过 `PaperWhiteNit / 40000`；
+  composite 必须对 AP 与高度雾的内散射应用同样曝光，不能直接混入未曝光辐射亮度。
 - `r.atmosphere.enable` 是渲染器级总开关，独立于场景的 `EnvironmentSetting::AtmosphereEnabled`，
   见下面"参数所有权与编辑器集成"。
+- NextDayz 的过程天光用 `FTimeConfig::DaySkyLuminanceScale` 标定可见天空与 GI 的共同光源；
+  `OvercastSkyFactor` 独立控制阴天漫射天光，不能沿用关闭直射太阳时的衰减来压暗整个天空。
+- CPU 天空 SH 除太阳方向与大气参数外，也跟踪入射辐照度和相机海拔；太阳不动时修改颜色或
+  强度同样会刷新。`Test_Atmosphere.cpp` 用真实引擎帧验证这一点。
 - M4 的 froxel 体积雾光轴与 PathTracing 真正介质散射留待明确需求后另行设计。
 
 ## 目标与非目标
@@ -299,13 +307,15 @@ AP volume 的 dispatch 由 `aerialPerspectiveExtent` 推导（`GetSafeDispatchCo
 对一个表面像素：
 
 ```
-L_surface                                  logic renderer 输出
-L1 = inScatter_AP + L_surface * T_AP       大气透视
-L2 = fogColor * (1-T_fog) + L1 * T_fog     指数高度雾
+E = max(PaperWhiteNit / 40000, 1e-6)         与 Compose 相同的曝光
+L_surface                                  logic renderer 输出（已曝光）
+L1 = E * inScatter_AP + L_surface * T_AP    大气透视
+L2 = E * fogColor * (1-T_fog) + L1 * T_fog  指数高度雾
 sceneColor.rgb = L2                        alpha 不变
 ```
 
-高度雾在大气透视之后，因为它在语义上是"更近的局部介质"。天空像素两者都不施加。
+高度雾在大气透视之后，因为它在语义上是"更近的局部介质"。天空不再叠加 AP volume，
+但仍沿可见射线积分高度雾，使地平线与被雾遮挡的几何衔接。
 
 ## Pass 调度与资源状态
 
@@ -357,7 +367,7 @@ Renderer Settings 直接编辑当前 Environment，因此切换场景时会恢�
 1. 大气代码不得出现在任何 `LogicRendererBase` 子类内部。渲染器只通过 `common/Sky.slang` 消费。
 2. UBO 只持有 `AtmosphereParams` 地址，不得展开字段。
 3. composite pass 只按 `FRendererContract` 位门控，不得引入 renderer-type 判断。
-4. 天空像素不施加大气透视与高度雾（会双重计数）。
+4. 天空像素不叠加 AP volume（大气散射已由天空 LUT 计算），高度雾仍覆盖环境天空。
 5. `sceneColor.a` 的 `noSkyBackground` 语义不得被修改。
 6. LUT 辐射单位是"太阳辐照度 = 1"，与 `EvaluateAnalyticSunDisk` 共尺度；不得引入独立的亮度魔法数。
 7. 太阳透射率在 CPU 侧折进 `ubo.SunColor`，不得在着色器里重复施加。

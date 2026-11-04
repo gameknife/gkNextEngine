@@ -867,6 +867,16 @@ void NextRendererGameInstance::DrawSettings(FRendererUiState& uiState)
         BeginCard("##PostColorCard");
         DrawCardHeader(ICON_FA_PALETTE, "Color & Luminance");
         DrawFloatSetting("Paper White Nit", &userSetting.PaperWhiteNit, 100.0f, 1600.0f, "%.1f Nit", 1.0f);
+        DrawSettingCheckboxRow("Auto Exposure", &userSetting.AutoExposure);
+        if (userSetting.AutoExposure)
+        {
+            DrawFloatSetting("Middle Gray", &userSetting.AutoExposureTargetLuminance, 0.01f, 0.8f, "%.2f", 0.01f);
+            DrawFloatSetting("Minimum Exposure", &userSetting.AutoExposureMinEV, -8.0f, 8.0f, "%.1f EV", 0.1f);
+            DrawFloatSetting("Maximum Exposure", &userSetting.AutoExposureMaxEV, -8.0f, 8.0f, "%.1f EV", 0.1f);
+            DrawFloatSetting("Adapt to Dark", &userSetting.AutoExposureSpeedToDark, 0.05f, 20.0f, "%.2f /s", 0.05f);
+            DrawFloatSetting("Adapt to Light", &userSetting.AutoExposureSpeedToLight, 0.05f, 20.0f, "%.2f /s", 0.05f);
+            DrawFloatSetting("Exposure Compensation", &userSetting.AutoExposureCompensationEV, -4.0f, 4.0f, "%.1f EV", 0.1f);
+        }
         DrawFloatSetting("Time Scaling", &userSetting.HeatmapScale, 0.10f, 2.0f, "%.2f", 0.05f);
 
         uint32_t tmin = 8, tmax = 32;

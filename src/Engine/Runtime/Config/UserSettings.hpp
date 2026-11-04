@@ -113,6 +113,13 @@ struct UserSettings final
     int AtmosphereDebugMode = 0;
 
     float PaperWhiteNit;
+    bool AutoExposure = false;
+    float AutoExposureTargetLuminance = 0.18f;
+    float AutoExposureMinEV = -2.0f;
+    float AutoExposureMaxEV = 4.0f;
+    float AutoExposureSpeedToDark = 1.0f;
+    float AutoExposureSpeedToLight = 3.0f;
+    float AutoExposureCompensationEV = 0.0f;
 
     bool TickPhysics = true;
     bool TickAnimation = true;

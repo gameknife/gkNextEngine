@@ -46,6 +46,7 @@
 #include "Engine/Rendering/Interface/IAtmosphereSubsystem.hpp"
 #include "Engine/Rendering/Upscaler/IUpscaler.hpp"
 #include "Engine/Rendering/Upscaler/UpscalerRegistry.hpp"
+#include "Engine/Rendering/Exposure/AutoExposurePass.hpp"
 
 #include <algorithm>
 #include <limits>
@@ -489,6 +490,7 @@ namespace Vulkan
         logicRenderers_.renderers.clear();
         logicRenderers_.swapChainCreatedTypes.clear();
         restirDI_.reset();
+        autoExposure_.reset();
         renderViews_.reset();
         upscaler_.reset();
         ctx_.tracyGpuProfiler.reset();
@@ -1636,7 +1638,12 @@ namespace Vulkan
                 SwapChain(), "assets/shaders/Process.TemporalPostFilter.comp.slang.spv", 64));
         }
         overlay_.toneMappingPipeline.reset(new PipelineCommon::ZeroBindCustomPushConstantPipeline(
-            SwapChain(), "assets/shaders/Process.TonemapAfterUpscaler.comp.slang.spv", 52));
+            SwapChain(), "assets/shaders/Process.TonemapAfterUpscaler.comp.slang.spv", 64));
+        if (!autoExposure_)
+        {
+            autoExposure_ = std::make_unique<AutoExposurePass>(Device());
+        }
+        autoExposure_->CreatePipeline(SwapChain());
         overlay_.bufferClearPipeline.reset(new PipelineCommon::ZeroBindCustomPushConstantPipeline(*frame_.swapChain, "assets/shaders/Util.BufferClear.comp.slang.spv", 4));
         overlay_.checkerboardResolvePipeline.reset(new PipelineCommon::ZeroBindPipeline(
             *frame_.swapChain, "assets/shaders/Process.CheckerboardResolve.comp.slang.spv", GetScene()));
@@ -2009,6 +2016,10 @@ namespace Vulkan
         if (atmosphere_)
         {
             atmosphere_->DestroySwapChainPipelines();
+        }
+        if (autoExposure_)
+        {
+            autoExposure_->DestroyPipeline();
         }
 
         if (upscaler_)
@@ -3059,6 +3070,26 @@ namespace Vulkan
                 VK_IMAGE_LAYOUT_GENERAL);
         }
 
+        RenderView* exposureView = &PrimaryView();
+        for (const auto& view : renderViews_->AdditionalViews())
+        {
+            if (view->RtBankBase() == sourceViewBankBase)
+            {
+                exposureView = view.get();
+                break;
+            }
+        }
+        const bool exposureEnabled = frameSettings_.userSettings.AutoExposure &&
+            !frameSettings_.offlineProgressivePathTracing && !outputUbo.ShowHeatmap &&
+            outputUbo.GTAODebugMode == 0 &&
+            outputUbo.BackgroundMode != static_cast<uint32_t>(Assets::EBackgroundMode::Studio);
+        const VkDeviceAddress exposureAddress = autoExposure_ ? autoExposure_->Update(
+            commandBuffer, exposureView->Handle(), SceneGeneration(),
+            sourceIsUpscaled ? inputIndex : sourceViewBankBase + inputIndex, inputExtent,
+            outputUbo.PaperWhiteNit, outputUbo.HDR != 0,
+            static_cast<float>(NextEngine::GetInstance()->GetDeltaSeconds()),
+            frameSettings_.userSettings, exposureEnabled) : 0;
+
         constexpr uint32_t outputIndex = Assets::Bindless::RT_TONEMAP_OUTPUT;
         RenderImage* offscreenOutput = lateToneMapping_.outputImage.get();
         const bool initialized = lateToneMapping_.outputInitialized;
@@ -3097,8 +3128,10 @@ namespace Vulkan
             uint32_t hdrOutputMode;
             uint32_t hdr;
             uint32_t hasSky;
+            uint32_t exposurePadding;
+            VkDeviceAddress exposureAddress;
         };
-        static_assert(sizeof(FPushConstants) == 52);
+        static_assert(sizeof(FPushConstants) == 64);
 
         const FPushConstants pushConstants{
             inputIndex,
@@ -3114,6 +3147,8 @@ namespace Vulkan
             outputUbo.HDROutputMode,
             outputUbo.HDR,
             outputUbo.HasSky,
+            0u,
+            exposureAddress,
         };
         overlay_.toneMappingPipeline->BindPipeline(commandBuffer, &pushConstants, sourceViewBankBase);
         vkCmdDispatch(

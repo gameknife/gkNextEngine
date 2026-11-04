@@ -114,6 +114,7 @@ namespace Rendering::Atmosphere
         staticLutsDirty_ = true;
         aerialPerspectiveReady_ = false;
         haveLastParams_ = false;
+        haveProjectedSky_ = false;
         WriteParams(BuildParams());
 
         // Printed so the mobile profile is confirmable from a device log rather than inferred from
@@ -373,25 +374,31 @@ namespace Rendering::Atmosphere
         }
         const auto& environment = renderer_.GetScene().GetEnvSettings();
         const glm::vec3 sunDirection = environment.SunDirection();
+        const glm::vec3 cameraWorld = glm::vec3(renderer_.LastUniformBufferObject().ModelViewInverse[3]);
+        const float cameraAltitudeKm =
+            params.WorldOriginAltitude + cameraWorld.y / std::max(params.WorldUnitsPerKm, 0.001f);
+        const glm::vec3 sunIrradiance = environment.SunColor * environment.SunIntensity *
+            TransmittanceToSun(cameraAltitudeKm, sunDirection.y);
         const bool sunMoved = !haveProjectedSky_ ||
             glm::dot(glm::normalize(lastProjectedSunDirection_), glm::normalize(sunDirection)) <
                 std::cos(glm::radians(0.5f));
-        if (staticLutsDirty_ || sunMoved)
+        // Direction alone misses weather/colour/intensity changes at a stationary
+        // sun. Compare against the last projection so gradual changes accumulate.
+        const float irradianceScale = std::max(glm::length(lastProjectedSunIrradiance_), 0.001f);
+        const bool irradianceChanged =
+            glm::length(sunIrradiance - lastProjectedSunIrradiance_) > irradianceScale * 0.005f;
+        const bool altitudeChanged = std::abs(cameraAltitudeKm - lastProjectedCameraAltitudeKm_) > 0.01f;
+        if (staticLutsDirty_ || sunMoved || irradianceChanged || altitudeChanged)
         {
             constexpr uint32_t atmosphereShSlot = Assets::MAX_HDR_SH - 1;
             auto* texturePool = Assets::GlobalTexturePool::GetInstance();
             auto& sh = texturePool->GetHDRSphericalHarmonics();
-            const glm::vec3 cameraWorld = glm::vec3(renderer_.LastUniformBufferObject().ModelViewInverse[3]);
-            const float cameraAltitudeKm =
-                params.WorldOriginAltitude + cameraWorld.y / std::max(params.WorldUnitsPerKm, 0.001f);
-            const glm::vec3 sunTransmittance =
-                TransmittanceToSun(cameraAltitudeKm, sunDirection.y);
             sh[atmosphereShSlot] = SkyIrradianceProjector::Project(
-                params, sunDirection,
-                environment.SunColor * environment.SunIntensity * sunTransmittance,
-                cameraAltitudeKm);
+                params, sunDirection, sunIrradiance, cameraAltitudeKm);
             renderer_.GetScene().UpdateHDRSH();
             lastProjectedSunDirection_ = sunDirection;
+            lastProjectedSunIrradiance_ = sunIrradiance;
+            lastProjectedCameraAltitudeKm_ = cameraAltitudeKm;
             haveProjectedSky_ = true;
         }
         if (staticLutsDirty_)

@@ -3,6 +3,7 @@ set(unitTestSources
     Test_PhysicsSync.cpp
     Test_Bindless3DTexture.cpp
     Test_Atmosphere.cpp
+    Test_AutoExposure.cpp
     Test_BindlessSlotRegistry.cpp
     Test_GltfSkinning.cpp
     Test_FileHelperTrace.cpp

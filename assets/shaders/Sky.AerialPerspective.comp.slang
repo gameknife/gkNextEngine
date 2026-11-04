@@ -20,7 +20,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     const float2 uv = (float2(dispatchThreadId.xy) + 0.5f) / float2(size.xy);
     const float2 ndc = uv * 2.0f - 1.0f;
-    const float4 viewTarget = mul(camera.ProjectionInverseUnJit, float4(ndc, 1.0f, 1.0f));
+    const float4 viewTarget = mul(camera.ProjectionInverse, float4(ndc, 1.0f, 1.0f));
     const float3 viewDirection = normalize(viewTarget.xyz / max(abs(viewTarget.w), 1.0e-6f));
     const float3 worldDirection = normalize(mul(camera.ModelViewInverse, float4(viewDirection, 0.0f)).xyz);
     const float3 cameraWorld =

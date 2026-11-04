@@ -117,14 +117,25 @@ namespace NextDayz
 
         const float gloom = std::clamp(weatherBlend_ / 0.6f, 0.0f, 1.0f);
         const float dim = glm::mix(1.0f, config_.OvercastFactor, gloom);
+        const float skyDim = glm::mix(1.0f, config_.OvercastSkyFactor, gloom);
+        const float nightFloor = config_.NightSkyFraction + config_.LanternNightLift * lanternLight_;
+        const float skyLight = nightFloor + (1.0f - nightFloor) * daylight_;
 
         auto& env = scene.GetEnvSettings();
+        env.AtmosphereEnabled = true;
+        env.AerialPerspectiveEnabled = true;
         // 06:00 -> 18:00 sweeps half a turn (east rise, west set).
         env.SunRotation = std::clamp((hour - 6.0f) / 12.0f, 0.0f, 1.0f);
         env.HasSun = daylight_ > 0.02f && gloom < 0.5f;
-        env.SunIntensity = config_.DaySunIntensity * daylight_ * dim;
-        const float nightFloor = config_.NightSkyFraction + config_.LanternNightLift * lanternLight_;
-        env.SkyIntensity = config_.DaySkyIntensity * (nightFloor + (1.0f - nightFloor) * daylight_) * dim;
+        // Procedural sky is driven by sun irradiance, not SkyIntensity. Keep the
+        // night/lantern floor in that source; HasSun still gates direct sunlight.
+        const float sunLight = std::max(daylight_, nightFloor);
+        env.SunIntensity = config_.DaySunIntensity * sunLight * dim;
+        env.SkyIntensity = config_.DaySkyIntensity * skyLight * skyDim;
+        // The procedural source shares SunIntensity, so cancel its weather dimming
+        // here before applying the independently tuned diffuse sky intensity.
+        env.Atmosphere.SkyLuminanceScale = config_.DaySkyLuminanceScale * skyLight * skyDim /
+            std::max(sunLight * dim, 0.001f);
         // Low sun burns orange; bad weather drains the colour out of everything.
         const float noon = std::sin(glm::pi<float>() * std::clamp((hour - 6.0f) / 12.0f, 0.0f, 1.0f));
         const float warm = 1.0f - std::clamp(noon * 2.2f, 0.0f, 1.0f);

@@ -257,9 +257,12 @@ void NextDayzGameInstance::OnInit()
 void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
 {
     std::string error;
-    // SoftwareModern rasteriser + software GI: lightest path for a 1km POI map.
+    // Path tracing with DLSS Ray Reconstruction at Quality by default.
     cvars.SetDefaultFromString("r.rendererType", "0", &error);
     cvars.SetDefaultFromString("r.upscaler.type", "2", &error);
+    cvars.SetDefaultFromString("r.upscaler.qualityMode", "0", &error);
+    cvars.SetDefaultFromString("r.exposure.auto", "true", &error);
+    cvars.SetDefaultFromString("r.exposure.maxEV", "3", &error);
 
     cvars.RegisterFloat("nextdayz.player.maxStepHeight", config_.Player.MaxStepHeight,
                         &config_.Player.MaxStepHeight, NextCVar::ECVarFlags::Archive,
@@ -649,8 +652,6 @@ void NextDayzGameInstance::OnSceneLoaded()
     {
         ApplyValidationLoadout();
     }
-
-    GetEngine().GetScene().GetEnvSettings().SkyIdx = 2;
 
     showInventory_ = false;
     paused_ = false;

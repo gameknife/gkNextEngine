@@ -76,6 +76,8 @@ namespace Rendering::Atmosphere
         bool aerialPerspectiveReady_ = false;
         VkExtent2D skyViewExtent_{};
         glm::vec3 lastProjectedSunDirection_{};
+        glm::vec3 lastProjectedSunIrradiance_{};
+        float lastProjectedCameraAltitudeKm_ = 0.0f;
         bool haveProjectedSky_ = false;
     };
 }

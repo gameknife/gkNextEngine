@@ -20,6 +20,7 @@ namespace Runtime
         float radius = 192.0f;
         float density = 1.0f;
         float edgeWidth = 4.0f; // metres beyond the patch's exclusion clearance
+        float transmission = 1.0f;
         float windStrength = 0.65f;
         float windYaw = 0.7f; // radians, +X toward -Z
         float windSpeed = 1.0f;
@@ -97,6 +98,7 @@ namespace Runtime
         float lastDensity_ = -1.0f;
         float lastRadius_ = -1.0f;
         float lastEdgeWidth_ = -1.0f;
+        float lastTransmission_ = -1.0f;
         float windYaw_ = 0.0f;
         double time_ = 0.0;
         float updateClock_ = 0.0f;

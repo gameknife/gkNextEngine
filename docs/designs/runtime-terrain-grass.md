@@ -17,7 +17,9 @@ NextDayz 默认启用，入口为 `NextDayzGameInstance` 的 Prepare / Bind / Ti
   256 个三角形。中远景的每片草简化为 4 个三角形的封闭四面体，稍加宽而不拉高，保持低模实体
   草的颜色和体积。大簇的草根覆盖更宽区域，避免将近景的小簇直接放大成巨草。
 - 草簇按稳定随机数改变宽高、朝向偏差与风相位。grass / grass_dark / dry_grass 各有一套根暗梢亮
-  的四色材质。dry_grass 更矮、更稀疏，使用枯黄颜色。
+  的四色材质，分别采用低饱和橄榄绿、灰绿和枯卡其色，贴合地面与场景的灰绿基调。
+  根/尖明度倍率为 0.82/1.12，第二组变体乘 0.90，保留层次并减轻草簇的色块感。
+  dry_grass 更矮、更稀疏，使用枯草颜色。
 - 风场由缓慢转动的主风向、空间行进波、局部不同相位组成，NextDayz 天气增加阵风强度。20 Hz
   更新实例，带滞回地选择最近的弯曲档位；剩余弯曲量用小幅根部旋转近似。方向缓动与不同相位
   避免整片草同帧跳档。mesh 顶点与 BLAS 内容始终不变。
@@ -66,6 +68,7 @@ NextDayz 的控制台变量（不写入个人 Archive 配置）：
 | `nextdayz.grass.radius` | 192 | 8–192 m，近中远分档覆盖 |
 | `nextdayz.grass.density` | 1.0 | 0–1，稳定子集 |
 | `nextdayz.grass.edgeWidth` | 4 | 0–12 m，边缘密度/高度过渡宽度；0 恢复硬剔除 |
+| `nextdayz.grass.transmission` | 1.0 | 0–1，主表面直接光透光强度；0 恢复原不透明光照 |
 | `nextdayz.grass.windStrength` | 0.65 | 0–1，叠加天气影响 |
 | `nextdayz.grass.windYaw` | 0.7 | 弧度，+X 朝 -Z |
 | `nextdayz.grass.windSpeed` | 1 | 0–4，0 冻结风场时间 |
@@ -77,6 +80,29 @@ NextDayz 的控制台变量（不写入个人 Archive 配置）：
 后者等场景真正 ready 后取景，检查草量、风姿态变化、开关恢复和远距离流送预算，并留存开/关截图。
 同时验证最远可见草根超过 185 m、远景档确实产生实例，以及 48 m / 192 m 的同机位截图。
 最后在主公路拍摄 `edgeWidth=0` 和 `edgeWidth=4` 的同机位对照，检查稀疏、缩矮和无草路面的过渡。
+
+## 草叶透光
+
+`Material::Foliage(color, transmission, thickness, textureId)` 仍是 Lambertian，复用材质的
+`Reserved2`（透光强度）与 `Reserved3`（有效厚度，米），不增加 GPU 数据布局或材质枚举。
+编辑器 Material 面板的 Lambertian 属性下提供 `Foliage Translucency`、`Transmission`、
+`Thickness (m)`，支持现有撤销流程。运行时草根强度为草尖的 40%，根/尖厚度为 0.14/0.08 m，
+枯草强度再乘 0.65；修改控制台强度只上传 12 个共享材质，不改 mesh/BLAS。
+
+SoftwareModern、SoftwareTracing、SoftwareModernNoAmbient、PathTracing、PathTracingLite
+只在首命中表面的直接光中补充背面漫透射：
+`transmission * exp(-8 * thickness) * max(-N·L, 0) / pi`，再乘草色、光强和可见度。
+软件路径的太阳沿用 CSM，有限灯沿用相应渲染器的屏幕空间或体素遮挡；硬件光追路径的太阳与
+有限灯均使用原有硬件阴影射线。正面光照、后续反弹、反射、天光、间接光和 GI 缓存均保持原处理。
+透光补光只从 `DirectIlluminatePrimary` 进入，不改变次级命中的 `DirectIlluminate` 或 BSDF，
+不写入 ReSTIR reservoir，并使用独立随机数副本以保留原有反射和间接光采样序列。
+
+封闭 low-poly 草叶会遮挡自身的背面入射光，因此透光阴影查询沿入射方向跨过局部草叶厚度，
+最多偏移 0.35 m。草仍投射普通阴影，建筑和地形仍能阻挡透光；这是复用现有阴影资源的局部近似，
+无法准确表达逐叶厚度或多层散射，在紧邻薄遮挡物处可能有少量漏光。没有新增阴影贴图或 pass。
+本次不扩展 glTF 导出格式；这些预留参数不会随现有 glTF 导出保存，运行时草由工厂重新创建。
+
+同机位光照对照：`gnb validate --script assets/agentscripts/nextdayz-grass-lighting.agentscript.json`。
 
 ## 当前边界
 

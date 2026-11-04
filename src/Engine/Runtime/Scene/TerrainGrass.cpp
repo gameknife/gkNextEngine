@@ -17,6 +17,12 @@ namespace Runtime
         constexpr std::array<float, 3> grassPatchRadius = {0.45f, 1.35f, 2.5f};
         constexpr std::array<float, 3> grassClearance = {0.85f, 1.95f, 3.5f};
 
+        float GrassTransmission(float strength, uint32_t biome, uint32_t slot)
+        {
+            return std::clamp(strength, 0.0f, 1.0f) * (slot % 2 == 0 ? 0.4f : 1.0f) *
+                   (biome == 2 ? 0.65f : 1.0f);
+        }
+
         uint32_t GrassHash(uint32_t value)
         {
             value ^= value >> 16;
@@ -284,15 +290,18 @@ namespace Runtime
                 models.push_back(CreatePose(pose, lod));
             }
         }
+        // Muted olive / grey-green / dry khaki, with similar luminance to the old palette.
         const std::array<glm::vec3, 3> colors = {
-            glm::vec3(0.18f, 0.30f, 0.055f), {0.10f, 0.22f, 0.04f}, {0.38f, 0.31f, 0.10f}};
+            glm::vec3(0.23f, 0.275f, 0.185f), {0.155f, 0.205f, 0.145f}, {0.34f, 0.31f, 0.235f}};
         for (uint32_t biome = 0; biome < colors.size(); ++biome)
         {
             for (uint32_t slot = 0; slot < 4; ++slot)
             {
                 materials_[biome][slot] = static_cast<uint32_t>(materials.size());
-                const float shade = (slot % 2 == 0 ? 0.78f : 1.16f) * (slot < 2 ? 1.0f : 0.83f);
-                materials.push_back({Assets::Material::Lambertian(colors[biome] * shade),
+                const float shade = (slot % 2 == 0 ? 0.82f : 1.12f) * (slot < 2 ? 1.0f : 0.90f);
+                materials.push_back({Assets::Material::Foliage(colors[biome] * shade,
+                                         GrassTransmission(settings.transmission, biome, slot),
+                                         slot % 2 == 0 ? 0.14f : 0.08f),
                                      fmt::format("terrain_grass_{}_{}", biome, slot)});
             }
         }
@@ -316,6 +325,7 @@ namespace Runtime
         lastFocus_ = glm::vec3(1.0e20f);
         lastDensity_ = lastRadius_ = -1.0f;
         lastEdgeWidth_ = -1.0f;
+        lastTransmission_ = -1.0f;
         lastEnabled_ = settings.enabled;
     }
 
@@ -424,6 +434,16 @@ namespace Runtime
     void FTerrainGrassSystem::Tick(Assets::Scene& scene, float dt, const glm::vec3& focus, float weather)
     {
         if (!prepared_ || terrains_.empty()) return;
+        const float transmission = std::clamp(settings.transmission, 0.0f, 1.0f);
+        if (transmission != lastTransmission_)
+        {
+            for (uint32_t biome = 0; biome < materials_.size(); ++biome)
+                for (uint32_t slot = 0; slot < 4; ++slot)
+                    scene.Materials()[materials_[biome][slot]].gpuMaterial_.Reserved2 =
+                        GrassTransmission(transmission, biome, slot);
+            scene.MarkMaterialsDirty();
+            lastTransmission_ = transmission;
+        }
         const float radius = std::clamp(settings.radius, 8.0f, maxRadius);
         time_ += std::max(0.0f, dt) * std::clamp(settings.windSpeed, 0.0f, 4.0f);
         updateClock_ += std::max(0.0f, dt);

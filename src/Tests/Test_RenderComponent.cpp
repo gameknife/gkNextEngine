@@ -8,6 +8,7 @@
 #include "Engine/Runtime/Components/RenderComponent.hpp"
 #include <memory>
 #include <array>
+#include <cstring>
 
 TEST_CASE("Visibility buffer capacity contract", "[Unit][Rendering][Visibility]")
 {
@@ -22,6 +23,24 @@ TEST_CASE("Mixture material keeps a valid dielectric IOR", "[Unit][Material]")
     const Assets::Material material = Assets::Material::Mixture(glm::vec3(0.5f), 0.1f);
     CHECK(material.RefractionIndex == Catch::Approx(1.45f));
     CHECK(material.RefractionIndex2 == Catch::Approx(material.RefractionIndex));
+}
+
+TEST_CASE("Foliage material preserves Lambertian layout and secondary shading", "[Unit][Material]")
+{
+    STATIC_REQUIRE(sizeof(Assets::Material) == 64);
+    const auto opaque = Assets::Material::Lambertian(glm::vec3(0.3f), 7);
+    auto foliage = Assets::Material::Foliage(glm::vec3(0.3f), 0.7f, 0.08f, 7);
+    CHECK_FALSE(opaque.IsFoliage());
+    CHECK(foliage.IsFoliage());
+    CHECK(foliage.Reserved2 == Catch::Approx(0.7f));
+    CHECK(foliage.Reserved3 == Catch::Approx(0.08f));
+    // Only the two reserved slots change; all existing BSDF inputs stay identical.
+    foliage.Reserved2 = foliage.Reserved3 = 0.0f;
+    CHECK(std::memcmp(&opaque, &foliage, sizeof(opaque)) == 0);
+    CHECK(Assets::Material::Foliage(glm::vec3(1), -1.0f).Reserved2 == 0.0f);
+    const auto clamped = Assets::Material::Foliage(glm::vec3(1), 2.0f, 1.0f);
+    CHECK(clamped.Reserved2 == 1.0f);
+    CHECK(clamped.Reserved3 == Catch::Approx(0.3f));
 }
 
 TEST_CASE("RenderComponent Usage", "[Unit][RenderComponent]") {

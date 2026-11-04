@@ -273,6 +273,8 @@ void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
     cvars.RegisterFloat("nextdayz.grass.edgeWidth", 4.0f, &grass_.settings.edgeWidth, NextCVar::ECVarFlags::None,
                         "Metres of density/height falloff beside excluded terrain; zero disables feathering",
                         nullptr, 0.0, 12.0);
+    cvars.RegisterFloat("nextdayz.grass.transmission", 1.0f, &grass_.settings.transmission, NextCVar::ECVarFlags::None,
+                        "Grass direct-light translucency; zero restores opaque lighting", nullptr, 0.0, 1.0);
     cvars.RegisterFloat("nextdayz.grass.windStrength", 0.65f, &grass_.settings.windStrength, NextCVar::ECVarFlags::None,
                         "Wind bending strength", nullptr, 0.0, 1.0);
     cvars.RegisterFloat("nextdayz.grass.windYaw", 0.7f, &grass_.settings.windYaw, NextCVar::ECVarFlags::None,

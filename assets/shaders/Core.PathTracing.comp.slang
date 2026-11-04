@@ -46,6 +46,8 @@ void main(uint3 DTid : SV_DispatchThreadID)
     // from reading back the just-written G-buffer (not coherent within the invocation).
     dIlluminator.PrimaryInstanceId = renderer.GetPrimaryInstanceId();
     dIlluminator.PrimaryMotionPixels = renderer.GetPrimaryMotionPixels();
+    dIlluminator.EnableFoliageDirect = true;
+    dIlluminator.FoliageMaterialId = renderer.GetPrimaryVertex().MaterialIndex;
     if (restirActive)
     {
         // Emitter primaries early-out of Render before the gather step runs, so their

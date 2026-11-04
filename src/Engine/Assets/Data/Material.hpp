@@ -12,6 +12,18 @@ namespace Assets
             return Material{glm::vec4(diffuse, 1), textureId, -1, -1, -1, 1.0f, 1.f, Enum::Lambertian, 0};
         }
 
+        // Opt into primary-surface foliage lighting without changing the BSDF or GPU layout.
+        static Material Foliage(const glm::vec3& diffuse, float transmission = 0.7f,
+                                float thickness = 0.08f, int32_t textureId = -1)
+        {
+            auto material = Lambertian(diffuse, textureId);
+            material.Reserved2 = std::clamp(transmission, 0.0f, 1.0f);
+            material.Reserved3 = std::clamp(thickness, 0.0f, 0.3f);
+            return material;
+        }
+
+        bool IsFoliage() const { return MaterialModel == Enum::Lambertian && Reserved2 > 0.0f; }
+
         static Material Metallic(const glm::vec3& diffuse, const float fuzziness, const int32_t textureId = -1)
         {
             return Material{glm::vec4(diffuse, 1), textureId, -1, -1, -1, fuzziness, 1.45f, Enum::Metallic, 1};
@@ -72,8 +84,8 @@ namespace Assets
         // Second IOR for calculating refraction
         float RefractionIndex2;
         float NormalTextureScale;
-        float Reserved2;
-        float Reserved3;
+        float Reserved2; // Lambertian foliage transmission [0,1]; zero keeps ordinary shading
+        float Reserved3; // foliage effective thickness in metres [0,0.3]
     };
 
     // For upper usage

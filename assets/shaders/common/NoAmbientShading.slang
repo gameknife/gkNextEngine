@@ -241,7 +241,8 @@ FNoAmbientShadingOutput ShadeNoAmbientStandard(FNoAmbientShadingInput surface, i
                                                      surface.Position, probeL,
                                                      probeIncident, probePosition))
                     {
-                        probeIrradiance += probeIncident * max(dot(N, probeL), 0.0f) /
+                        probeIrradiance += probeIncident * (max(dot(N, probeL), 0.0f) +
+                                           Common.FoliageDirectWeight(material, N, probeL)) /
                                            float(probeSampleCount);
                     }
                 }
@@ -267,6 +268,7 @@ FNoAmbientShadingOutput ShadeNoAmbientStandard(FNoAmbientShadingInput surface, i
             const uint lightSampleCount =
                 Common.GetLightQuadratureSampleCount(lightIndex);
             float lightVisibility = 1.0f;
+            float foliageVisibility = 1.0f;
             if (traceShadow &&
                 (lightIndex == shadowLight0 ||
                  (Camera.LightObjectMaxShadowedLights > 1u && lightIndex == shadowLight1)))
@@ -285,6 +287,14 @@ FNoAmbientShadingOutput ShadeNoAmbientStandard(FNoAmbientShadingInput surface, i
                     lightVisibility = Common.ScreenSpaceShadowVisibility(
                         surface.Position, N, shadowPosition, shadowDistance,
                         uint2(pixel), Camera.PrimaryRayJitter);
+                    if (Common.FoliageDirectWeight(material, N, shadowL) > 0.0f)
+                    {
+                        const float3 origin = Common.FoliageShadowOrigin(
+                            surface.Position, N, shadowL, material.Reserved3);
+                        foliageVisibility = Common.ScreenSpaceShadowVisibility(
+                            origin, -N, shadowPosition, shadowDistance,
+                            uint2(pixel), Camera.PrimaryRayJitter);
+                    }
                 }
             }
 
@@ -303,7 +313,8 @@ FNoAmbientShadingOutput ShadeNoAmbientStandard(FNoAmbientShadingInput surface, i
                 }
 
                 const float NoL = max(dot(N, L), 0.0f);
-                const float contribution = LightContribution(incident, NoL);
+                const float transmission = Common.FoliageDirectWeight(material, N, L);
+                const float contribution = LightContribution(incident, NoL + transmission);
                 if (contribution < 1e-4f)
                 {
                     continue;
@@ -313,7 +324,9 @@ FNoAmbientShadingOutput ShadeNoAmbientStandard(FNoAmbientShadingInput surface, i
                     incident * (NoL * lightVisibility / float(lightSampleCount));
 
                 direct += kD * albedo * radiance * M_1_PI;
-                if (lightSampleCount == 1u)
+                direct += kD * albedo * incident *
+                          (transmission * foliageVisibility * M_1_PI / float(lightSampleCount));
+                if (lightSampleCount == 1u && NoL > 0.0f)
                 {
                     specularColor.rgb +=
                         SpecularBRDF(N, V, L, NoV, NoL, roughness, f0) * radiance;
@@ -361,6 +374,13 @@ FNoAmbientShadingOutput ShadeNoAmbientStandard(FNoAmbientShadingInput surface, i
 
         direct += kD * albedo * sunRadiance * M_1_PI;
         specularColor.rgb += SpecularBRDF(N, V, L, NoV, NoL, roughness, f0) * sunRadiance;
+        const float transmission = Common.FoliageDirectWeight(material, N, L);
+        if (transmission > 0.0f)
+        {
+            const float3 origin = Common.FoliageShadowOrigin(surface.Position, N, L, material.Reserved3);
+            const float visibility = Common.SampleSunShadowCSM(origin, -N, viewDist);
+            direct += kD * albedo * Camera.SunColor.rgb * (transmission * visibility * M_1_PI);
+        }
     }
 
     // GTAO is applied only to the sky term in Process.GTAOCompose. Direct sun,

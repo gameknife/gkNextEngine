@@ -62,6 +62,9 @@ void main(uint3 DTid : SV_DispatchThreadID)
     // Primary-hit data for the ReSTIR temporal gates (see Core.PathTracing.comp.slang).
     dIlluminator.PrimaryInstanceId = renderer.GetPrimaryInstanceId();
     dIlluminator.PrimaryMotionPixels = renderer.GetPrimaryMotionPixels();
+    // View-visible foliage transmission stays out of the SHARC update/cache path.
+    dIlluminator.EnableFoliageDirect = true;
+    dIlluminator.FoliageMaterialId = renderer.GetPrimaryVertex().MaterialIndex;
     if (restirActive)
     {
         // Emitter primaries early-out of Render before the gather step (see Core.PathTracing).

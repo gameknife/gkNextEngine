@@ -409,6 +409,26 @@ namespace Common
         }
         return shadow * 0.125f;
     }
+
+    // Primary-surface diffuse transmission only. Ordinary Lambertian materials have zero
+    // Reserved2; the BSDF, secondary rays and cached indirect lighting never consume it.
+    public float FoliageDirectWeight(Material material, float3 normal, float3 lightDirection)
+    {
+        if (material.MaterialModel != MaterialLambertian || material.Reserved2 <= 0.0f)
+            return 0.0f;
+        return saturate(material.Reserved2) * exp(-8.0f * max(material.Reserved3, 0.0f)) *
+               max(-dot(normal, lightDirection), 0.0f);
+    }
+
+    public float3 FoliageShadowOrigin(float3 position, float3 normal, float3 lightDirection,
+                                     float thickness)
+    {
+        // Cross the local closed stalk, not the whole clump. Keep the offset bounded so
+        // surrounding terrain/buildings still occlude transmission in the existing shadow path.
+        const float travel = min(2.0f * max(thickness, 0.0f) /
+                                 max(-dot(normal, lightDirection), 0.25f), 0.35f);
+        return position + lightDirection * travel;
+    }
 }
 
 public struct FShadowMapDirectIlluminator : IDirectIlluminator
@@ -481,6 +501,8 @@ public struct FTracingDirectIlluminator<TTracer : IRayTracer, TSun : ISunShadowP
     // emitter fallback below. Other renderers keep this disabled to preserve their existing
     // glossy/MIS policy.
     public bool EnableAnalyticDeltaLightReflection;
+    public bool EnableFoliageDirect;
+    public uint FoliageMaterialId;
     // Set on the primary view when ReSTIR is active (see DirectIlluminatePrimary).
     public bool RestirPrimary;
     // Primary-hit state for the ReSTIR temporal gates, set by the entry shader after
@@ -495,6 +517,8 @@ public struct FTracingDirectIlluminator<TTracer : IRayTracer, TSun : ISunShadowP
     public __init()
     {
         EnableAnalyticDeltaLightReflection = false;
+        EnableFoliageDirect = false;
+        FoliageMaterialId = 0;
         RestirPrimary = false;
         PrimaryInstanceId = 0;
         PrimaryMotionPixels = float2(0, 0);
@@ -561,6 +585,50 @@ public struct FTracingDirectIlluminator<TTracer : IRayTracer, TSun : ISunShadowP
             }
             directLighting.SpecularRadiance += sampleDirect.SpecularRadiance;
         }
+    }
+
+    // Use a private RNG copy so the extra light sample cannot change secondary-ray sampling.
+    void FoliageIlluminate(uint4 randomSeed, FBSDFContext context,
+                           inout FDirectLighting directLighting)
+    {
+        if (!EnableFoliageDirect) return;
+        GPUScene scene = Bindless.GetGpuscene();
+        const Material material = scene.GetMaterial(FoliageMaterialId);
+        if (material.MaterialModel != MaterialLambertian || material.Reserved2 <= 0.0f) return;
+        const UniformBufferObject camera = scene.Camera[0];
+        if (camera.HasSun)
+        {
+            const float3 L = normalize(camera.SunDirection.xyz);
+            const float weight = Common.FoliageDirectWeight(material, context.Normal, L);
+            if (weight > 0.0f)
+            {
+                const float3 origin = Common.FoliageShadowOrigin(
+                    context.Position, context.Normal, L, material.Reserved3);
+                FBSDFContext shadowContext = context;
+                shadowContext.Position = origin;
+                shadowContext.Normal = -context.Normal;
+                const float visibility = sunShadow.SunShadow(shadowContext, L);
+                directLighting.DiffuseDemodulated += camera.SunColor.rgb * (weight * visibility * M_1_PI);
+            }
+        }
+
+        if (camera.LightCount == 0 || scene.SoftMeshShader.Lights == 0) return;
+        uint lightIndex;
+        float lightPdf;
+        if (!Common.SelectLightAt(context.Position, RandomFloat(randomSeed), lightIndex, lightPdf)) return;
+        const float2 uv = Common.CanonicalizeLightUV(scene.Lights[lightIndex], RandomFloat2(randomSeed));
+        float3 L;
+        float3 incident;
+        float3 lightPosition;
+        if (!Common.EvaluateLightIncident(lightIndex, uv, context.Position, L, incident, lightPosition)) return;
+        const float weight = Common.FoliageDirectWeight(material, context.Normal, L);
+        if (weight <= 0.0f) return;
+        const float3 origin = Common.FoliageShadowOrigin(
+            context.Position, context.Normal, L, material.Reserved3);
+        const float3 shadowOrigin = tracer.GetAreaLightShadowOrigin(origin, -context.Normal, lightPosition, EPS2);
+        const float3 target = Common.GetLightVisibilityTarget(lightIndex, shadowOrigin, lightPosition);
+        if (!tracer.TraceAreaLightSegment(shadowOrigin, target, EPS, lightIndex))
+            directLighting.DiffuseDemodulated += incident * (weight * M_1_PI / lightPdf);
     }
 
     void AnalyticDeltaLightIlluminate(FBSDFContext context,
@@ -658,6 +726,7 @@ public struct FTracingDirectIlluminator<TTracer : IRayTracer, TSun : ISunShadowP
             LightIlluminate(randomSeed, context, true, directLighting);
         }
         AnalyticDeltaLightIlluminate(context, directLighting);
+        FoliageIlluminate(randomSeed, context, directLighting);
     }
 }
 

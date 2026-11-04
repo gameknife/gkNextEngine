@@ -642,6 +642,27 @@ namespace Editor
                         DrawFloatField(ctx, ui, materialId, "Opacity", material.Diffuse.a, 0.0f, 1.0f, "opacity");
                     }
 
+                    if (material.MaterialModel == Assets::Material::Enum::Lambertian)
+                    {
+                        const Assets::FMaterial before = fMaterial;
+                        bool foliage = material.IsFoliage();
+                        BeginPropertyRow("Foliage Translucency");
+                        if (ImGui::Checkbox("##foliage", &foliage))
+                        {
+                            material.Reserved2 = foliage ? 0.7f : 0.0f;
+                            if (foliage && material.Reserved3 <= 0.0f) material.Reserved3 = 0.08f;
+                            MarkMaterialEdited(ctx);
+                            CommitMaterialEdit(ctx, materialId, before, fMaterial, "foliage translucency");
+                        }
+                        if (foliage)
+                        {
+                            DrawFloatField(ctx, ui, materialId, "Transmission", material.Reserved2,
+                                           0.0f, 1.0f, "foliage transmission");
+                            DrawFloatField(ctx, ui, materialId, "Thickness (m)", material.Reserved3,
+                                           0.0f, 0.3f, "foliage thickness");
+                        }
+                    }
+
                     if (material.MaterialModel == Assets::Material::Enum::Mixture ||
                         material.MaterialModel == Assets::Material::Enum::Metallic)
                     {

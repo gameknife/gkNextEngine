@@ -292,6 +292,11 @@ public struct ALIGN_16 UniformBufferObject
     public float LodShadowThreshold;
 };
 
+// reserved2's low bits are outline state; the upper UNORM16 stores 1 - main opacity.
+// Zero-initialized proxies remain opaque without changing the shared GPU layout.
+public static const uint NODE_PROXY_MAIN_TRANSPARENCY_SHIFT = 16u;
+public static const uint NODE_PROXY_MAIN_TRANSPARENCY_MAX = 65535u;
+
 public struct ALIGN_16 NodeProxy
 {
     public uint instanceId;
@@ -308,7 +313,7 @@ public struct ALIGN_16 NodeProxy
     public uint excludeFromAS;  // 1 for non-first sections of multi-section models: only
                                 // section 0 becomes a TLAS instance (its BLAS covers the model)
     public uint reserved1;
-    public uint reserved2;
+    public uint reserved2;      // outline flags [0:2], visibility transparency [16:31]
 };
 
 public struct ALIGN_16 ModelData

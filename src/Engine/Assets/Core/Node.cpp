@@ -329,6 +329,9 @@ namespace Assets
         {
             proxy.modelId = renderComponent_->GetModelId();
             proxy.visible = renderComponent_->GetRenderParticipationMask();
+            const uint32_t transparency = static_cast<uint32_t>(
+                (1.0f - renderComponent_->GetMainOpacity()) * NODE_PROXY_MAIN_TRANSPARENCY_MAX + 0.5f);
+            proxy.reserved2 = transparency << NODE_PROXY_MAIN_TRANSPARENCY_SHIFT;
             const auto& mats = renderComponent_->GetMaterials();
             for ( int i = 0; i < 16; i++ )
             {

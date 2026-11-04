@@ -657,10 +657,17 @@ action          FullBody  Override  loot
 `TpsCollisionRadius`（0.20 m）与 `TpsCollisionPadding`（0.05 m）的安全距离。
 
 遇障碍当帧收缩，离开障碍以 `TpsArmReturnSpeed`（5 m/s）伸回。滚轮设置的距离独立保留，
-碰撞允许缩到 `TpsMinDistance` 以下；肩部偏移随臂长一起缩短。臂长不足 `TpsHideRigDistance`
-（1.5 m）时隐藏自身角色与挂载武器，避免近距离模型挡住视野，拉远后恢复；调试环绕相机保持可见。
+碰撞允许缩到 `TpsMinDistance` 以下；肩部偏移随臂长一起缩短。角色部件与挂载物按各自世界位置到相机的
+距离渐隐：`TpsFadeFarDistance`（1.5 m）之外完全不透明，进入后 smoothstep 降低覆盖率，到
+`TpsFadeNearDistance`（0.35 m）完全淡出。较远的腿部仍保留；拉远后自然恢复，调试环绕关闭渐隐。
 
-查询 `game.cameraArmLength` / `cameraArmFraction`、`cameraPosX/Y/Z`、`playerRigVisible` 可观察结果。
+覆盖率通过 `RenderComponent::SetMainOpacity` 传到 `NodeProxy.reserved2` 的高 16 位（反向 UNORM16，
+零值为不透明），不改变 GPU 布局；低位仍供 outline 使用。visibility fragment 使用固定屏幕空间 8×8
+Bayer 图案 discard，角色各部件与正反面共用像素阈值。被丢弃的片元不写深度或 visibility ID，后方表面
+直接成为后续 SurfaceBuild/光追的 primary hit。只改变 visibility 覆盖率，阴影与光追加速结构保留完整几何。
+
+查询 `game.cameraArmLength` / `cameraArmFraction`、`cameraPosX/Y/Z`、`playerRigVisible`、
+`playerRigOpacity`（可见部件最低覆盖率）可观察结果。
 `assets/agentscripts/nextdayz-camera-arm.agentscript.json` 使用独立几何 fixture 验证墙面、侧墙、细柱、
 目标位置外的安全间距、地面、缩放记忆、平滑恢复和视角切换。
 

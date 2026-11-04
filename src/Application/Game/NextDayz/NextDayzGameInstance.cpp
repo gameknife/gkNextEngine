@@ -1058,9 +1058,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     }
 
     section.emplace(timers, ETimer::Presentation);
-    const bool showPlayerRig = !player_.IsFirstPerson() &&
-                               player_.CameraArmLength() > config_.Camera.TpsHideRigDistance;
-    rig_.SetVisible(showPlayerRig || knobs.orbit);
+    rig_.SetVisible(!player_.IsFirstPerson() || knobs.orbit);
     NextDayz::FPlayerPresentationState presentation;
     presentation.locomotion = player_.LocomotionState();
     presentation.aimWeight = player_.IsAiming() ? 1.0f : 0.0f;
@@ -1079,6 +1077,8 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     presentation.action = actions_.Action();
     presentation.actionTime01 = actions_.NormalizedTime();
     rig_.Update(player_.Position(), presentation, dt);
+    rig_.UpdateCameraFade(player_.CameraPosition(), config_.Camera.TpsFadeNearDistance,
+                          config_.Camera.TpsFadeFarDistance, !player_.IsFirstPerson() && !knobs.orbit);
 }
 
 bool NextDayzGameInstance::OverrideRenderCamera(Assets::Camera& outRenderCamera) const
@@ -2761,6 +2761,9 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
         return static_cast<double>(player_.CameraPosition().z);
     });
     reg.Add("playerRigVisible", [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.IsVisible(); });
+    reg.Add("playerRigOpacity", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(rig_.CameraOpacity());
+    });
     reg.Add("hoveredLoot", [this]() -> Runtime::Agent::FAgentQueryValue { return loot_.HoveredPrompt(); });
     reg.Add("lootRemaining",
             [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<int64_t>(loot_.RemainingCount()); });

@@ -416,6 +416,26 @@ namespace NextDayz
         visible_ = visible;
     }
 
+    void PlayerRigVisual::UpdateCameraFade(const glm::vec3& cameraPosition, float nearDistance,
+                                          float farDistance, bool enabled)
+    {
+        cameraOpacity_ = 1.0f;
+        const auto fade = [&](auto&& self, Assets::Node* node) -> void
+        {
+            if (!node) return;
+            if (auto render = node->GetComponent<Runtime::RenderComponent>())
+            {
+                const float distance = glm::distance(cameraPosition, node->WorldTranslation());
+                const float opacity = enabled ? glm::smoothstep(nearDistance, farDistance, distance) : 1.0f;
+                render->SetMainOpacity(opacity);
+                if (render->GetVisible()) cameraOpacity_ = std::min(cameraOpacity_, opacity);
+            }
+            for (const auto& child : node->Children()) self(self, child.get());
+        };
+        fade(fade, worldNode_.get());
+        // Update already marks the animated scene dirty; opacity travels with its proxies.
+    }
+
     void PlayerRigVisual::SetClothing(const std::string& clothingId, bool on)
     {
         std::shared_ptr<Assets::Node> node;

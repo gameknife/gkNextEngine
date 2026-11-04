@@ -84,6 +84,31 @@ TEST_CASE("Node provides one cached component lookup path", "[Unit][RenderCompon
     CHECK(node->GetComponent<Runtime::RenderComponent>() == nullptr);
 }
 
+TEST_CASE("Visibility opacity leaves shadow and ray participation intact", "[Unit][RenderComponent][Visibility]")
+{
+    STATIC_REQUIRE(sizeof(Assets::NodeProxy) == 224);
+    auto node = Assets::Node::CreateNode(
+        "FadingNode", glm::vec3(0), glm::quat(1, 0, 0, 0), glm::vec3(1), 0);
+    auto render = std::make_shared<Runtime::RenderComponent>();
+    node->AddComponent(render);
+    Assets::NodeProxy proxy{};
+    node->GetNodeProxy(proxy);
+    CHECK(proxy.reserved2 == 0u); // default opaque, including zero-initialized GPU data
+
+    for (float opacity : {0.0f, 0.25f, 0.5f, 1.0f})
+    {
+        render->SetMainOpacity(opacity);
+        node->GetNodeProxy(proxy);
+        CHECK(proxy.visible == Runtime::RenderParticipation::defaultMask);
+        CHECK(proxy.reserved1 == 0u);
+        CHECK((proxy.reserved2 & 0xffffu) == 0u); // outline bits stay available
+        const float decodedOpacity = 1.0f -
+            static_cast<float>(proxy.reserved2 >> Assets::NODE_PROXY_MAIN_TRANSPARENCY_SHIFT) /
+                Assets::NODE_PROXY_MAIN_TRANSPARENCY_MAX;
+        CHECK(decodedOpacity == Catch::Approx(opacity).margin(1.0f / 65535.0f));
+    }
+}
+
 TEST_CASE("Scene model section encoding is bounds checked", "[Unit][Scene]")
 {
     uint32_t encoded = 0;

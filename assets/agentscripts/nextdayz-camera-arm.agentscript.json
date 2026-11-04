@@ -15,7 +15,9 @@
     { "type": "assert", "query": "game.firstPerson", "op": "eq", "value": false },
     { "type": "assert", "query": "game.cameraArmLength", "op": "lt", "value": 1.0 },
     { "type": "assert", "query": "game.cameraPosZ", "op": "gt", "value": -0.8 },
-    { "type": "assert", "query": "game.playerRigVisible", "op": "eq", "value": false },
+    { "type": "assert", "query": "game.playerRigVisible", "op": "eq", "value": true },
+    { "type": "assert", "query": "game.playerRigOpacity", "op": "gt", "value": 0.0 },
+    { "type": "assert", "query": "game.playerRigOpacity", "op": "lt", "value": 0.9 },
     { "type": "screenshot", "out": "screenshots/nextdayz_camera_wall" },
 
     { "type": "log", "message": "Zoom preference survives collision, and clear space restores the arm gradually" },
@@ -31,6 +33,7 @@
     { "type": "wait-ms", "ms": 500 },
     { "type": "assert", "query": "game.cameraArmLength", "op": "gt", "value": 3.9 },
     { "type": "assert", "query": "game.playerRigVisible", "op": "eq", "value": true },
+    { "type": "assert", "query": "game.playerRigOpacity", "op": "eq", "value": 1.0 },
     { "type": "screenshot", "out": "screenshots/nextdayz_camera_clear" },
 
     { "type": "log", "message": "Rotating into the wall and toggling view retract immediately" },
@@ -38,6 +41,7 @@
     { "type": "assert", "query": "game.cameraArmLength", "op": "lt", "value": 1.0 },
     { "type": "cvar", "name": "nextdayz.validation.thirdPerson", "set": false },
     { "type": "assert", "query": "game.cameraArmLength", "op": "eq", "value": 0.0 },
+    { "type": "assert", "query": "game.playerRigVisible", "op": "eq", "value": false },
     { "type": "cvar", "name": "nextdayz.validation.thirdPerson", "set": true },
     { "type": "assert", "query": "game.cameraArmLength", "op": "lt", "value": 1.0 },
 
@@ -65,7 +69,8 @@
     { "type": "cvar", "name": "nextdayz.validation.lookPitch", "set": -60 },
     { "type": "assert", "query": "game.cameraArmFraction", "op": "lt", "value": 0.5 },
     { "type": "assert", "query": "game.cameraPosY", "op": "gt", "value": 0.2 },
-    { "type": "assert", "query": "game.playerRigVisible", "op": "eq", "value": false },
+    { "type": "assert", "query": "game.playerRigVisible", "op": "eq", "value": true },
+    { "type": "assert", "query": "game.playerRigOpacity", "op": "lt", "value": 1.0 },
     { "type": "screenshot", "out": "screenshots/nextdayz_camera_ground" },
     { "type": "quit" }
   ]

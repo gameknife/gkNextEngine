@@ -942,7 +942,7 @@ namespace Assets
                                     proxy.modelId = encodedModelSection;
                                     proxy.excludeFromAS = section == 0 ? 0 : 1;
                                     proxy.reserved1 = selectedBit;
-                                    proxy.reserved2 = stateBits;
+                                    proxy.reserved2 |= stateBits;
                                     proxy.jointMatrixOffset = nodeJointOffset;
                                     nodeProxies[outputIndex++] = std::move(proxy);
                                     localExpandedTriangleCount +=

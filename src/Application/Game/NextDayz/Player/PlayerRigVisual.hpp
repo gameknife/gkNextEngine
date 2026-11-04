@@ -62,6 +62,7 @@ namespace NextDayz
         void OnSceneUnloaded();
 
         void SetVisible(bool visible);
+        void UpdateCameraFade(const glm::vec3& cameraPosition, float nearDistance, float farDistance, bool enabled);
         void SetClothing(const std::string& clothingId, bool on);
 
         // Drives world transform + animation for the frame. The body yaw lags
@@ -71,6 +72,7 @@ namespace NextDayz
 
         bool HasRig() const { return hasRig_; }
         bool IsVisible() const { return visible_; }
+        float CameraOpacity() const { return cameraOpacity_; }
         const std::string& CurrentBaseClipName() const { return baseClipName_; }
         const std::string& CurrentWeaponActionClipName() const { return weaponActionClipName_; }
         float AimWeight() const { return aimWeight_; }
@@ -152,6 +154,7 @@ namespace NextDayz
         std::vector<glm::mat4> transforms_;
 
         bool visible_ = true;
+        float cameraOpacity_ = 1.0f;
         FAnimationConfig animationConfig_{};
         float weaponScale_ = 1.0f;
         std::string baseClipName_;

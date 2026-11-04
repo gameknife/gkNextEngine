@@ -1,6 +1,7 @@
 #pragma once
 #include "Engine/Assets/Core/Component.hpp"
 #include "Engine/Runtime/Reflection/ReflectionMacros.hpp"
+#include <algorithm>
 #include <array>
 #include <cstdint>
 
@@ -43,6 +44,10 @@ namespace Runtime
 
         void SetMainVisible(bool visible) { mainVisible_ = visible; }
         bool GetMainVisible() const { return mainVisible_; }
+
+        // Coverage in the visibility pass; lighting rays and shadows keep the full geometry.
+        void SetMainOpacity(float opacity) { mainOpacity_ = std::clamp(opacity, 0.0f, 1.0f); }
+        float GetMainOpacity() const { return mainOpacity_; }
 
         void SetRayCastVisible(bool visible) { rayCastVisible_ = visible; }
         bool GetRayCastVisible() const { return rayCastVisible_; }
@@ -97,6 +102,7 @@ namespace Runtime
         std::array<uint32_t, 16> materialIdx_ = {0}; // Initialize with defaults
         bool visible_ = true;
         bool mainVisible_ = true;
+        float mainOpacity_ = 1.0f;
         bool rayCastVisible_ = true;
         bool rayTraceVisible_ = true;
         bool castShadows_ = true;

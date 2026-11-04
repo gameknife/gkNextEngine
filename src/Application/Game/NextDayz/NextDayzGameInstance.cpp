@@ -1130,9 +1130,12 @@ bool NextDayzGameInstance::OnRenderUI()
     ctx.ammoReserve = weapons_.AmmoReserve(inventory_);
     ctx.reloading = weapons_.IsReloading();
     ctx.activeSlot = weapons_.ActiveSlot();
+    ctx.actionActive = actions_.IsActive();
     if (actions_.IsActive())
     {
-        ctx.interactionPrompt = fmt::format("{}...", NextDayz::ActionLabel(actions_.Action()));
+        ctx.actionLabel = std::string(NextDayz::ActionLabel(actions_.Action()));
+        ctx.actionProgress = static_cast<float>(actions_.NormalizedTime());
+        ctx.interactionPrompt = fmt::format("{}...", ctx.actionLabel);
     }
     else if (loot_.HasHovered())
     {

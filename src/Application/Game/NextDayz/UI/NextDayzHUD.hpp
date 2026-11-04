@@ -61,6 +61,9 @@ namespace NextDayz
         int activeSlot = 0;
 
         std::string interactionPrompt; // empty = nothing hovered
+        bool actionActive = false;
+        std::string actionLabel;
+        float actionProgress = 0.0f;
         int hour = 8;
         int minute = 0;
         bool overcast = false;

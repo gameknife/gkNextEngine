@@ -113,6 +113,101 @@ TEST_CASE("NextDayz weapon instance retains magazine state through moves",
     REQUIRE(inventory.LoadedAmmo(pistolId) == 7);
 }
 
+TEST_CASE("NextDayz targeted pickup respects container capacity and restrictions", "[NextDayz][Inventory]")
+{
+    using namespace NextDayz;
+    Inventory inventory;
+    const FContainerId shirt = inventory.Containers()[0].containerId;
+    const FContainerId trousers = inventory.Containers()[1].containerId;
+    const FContainerId sling = inventory.Containers()[2].containerId;
+    FItemInstanceId bandage = 0;
+    REQUIRE(inventory.TryAdd("bandage", "Bandage", EItemKind::Consumable, 3, &bandage, trousers));
+    REQUIRE(inventory.FindInstance(bandage)->containerId == trousers);
+    REQUIRE(inventory.TryAdd("bandage", "Bandage", EItemKind::Consumable, 1, nullptr, trousers));
+    REQUIRE(inventory.FindInstance(bandage)->count == 4);
+    REQUIRE(inventory.TryAdd("medkit", "Medkit", EItemKind::Consumable, 1, nullptr, trousers));
+    REQUIRE(inventory.ContainerUsed(trousers) == 4);
+    REQUIRE(inventory.FitCount("bandage", 1, trousers) == 0);
+    REQUIRE_FALSE(inventory.TryAdd("bandage", "Bandage", EItemKind::Consumable, 1, nullptr, trousers));
+    REQUIRE_FALSE(inventory.TryAdd("bandage", "Bandage", EItemKind::Consumable, 1, nullptr, sling));
+    REQUIRE_FALSE(inventory.TryAdd("bandage", "Bandage", EItemKind::Consumable, 1, nullptr, 12345));
+    REQUIRE(inventory.CountOf("bandage") == 4);
+
+    // Moving onto the current full container is a harmless no-op, not a capacity failure.
+    REQUIRE(inventory.TryMove(bandage, trousers));
+    REQUIRE(inventory.TryMove(bandage, shirt));
+    REQUIRE(inventory.FindInstance(bandage)->containerId == shirt);
+    REQUIRE(inventory.TryMove(bandage, trousers));
+    REQUIRE(inventory.FindInstance(bandage)->containerId == trousers);
+}
+
+TEST_CASE("NextDayz ground clothing equips with full pockets and failed swaps roll back", "[NextDayz][Inventory]")
+{
+    using namespace NextDayz;
+    Inventory inventory;
+    REQUIRE(inventory.TryAdd("medkit", "Medkit", EItemKind::Consumable, 1));
+    REQUIRE(inventory.TryAdd("fuel", "Fuel", EItemKind::Misc, 1));
+    REQUIRE(inventory.TryAdd("radio", "Radio", EItemKind::Misc, 1));
+    REQUIRE(inventory.TryAdd("bandage", "Bandage", EItemKind::Consumable, 1));
+    REQUIRE(inventory.FreeCapacity() == 0);
+    REQUIRE_FALSE(inventory.CanAdd("backpack"));
+    FItemInstanceId backpack = 0;
+    REQUIRE(inventory.TryAdd("backpack", "Backpack", EItemKind::Clothing, 1, &backpack, kWornContainer));
+    REQUIRE(inventory.IsWorn(backpack));
+    REQUIRE(inventory.TotalCapacity() == 38);
+    const FContainerId cargo = inventory.ContainerOwnedBy(backpack)->containerId;
+    REQUIRE_FALSE(inventory.TryMove(backpack, cargo));
+    // Fill the pack with seven non-weapon 4-volume items (slings cannot hold them).
+    REQUIRE(inventory.TryAdd("fuel", "Fuel", EItemKind::Misc, 7, nullptr, cargo));
+    REQUIRE(inventory.FreeCapacity() == 0);
+    REQUIRE_FALSE(inventory.TryAdd("backpack_small", "Small Backpack", EItemKind::Clothing,
+                                    1, nullptr, kWornContainer));
+    REQUIRE(inventory.WornInSlot(EEquipSlot::Back) == backpack);
+    REQUIRE(inventory.CountOf("backpack_small") == 0);
+    REQUIRE(inventory.CountOf("fuel") == 8);
+    REQUIRE(inventory.ContainerUsed(cargo) == 28);
+    REQUIRE_FALSE(inventory.TryMove(backpack, inventory.Containers()[0].containerId));
+    REQUIRE(inventory.IsWorn(backpack));
+
+    // A larger replacement can hold both the old bag and its contents.
+    FItemInstanceId replacement = 0;
+    REQUIRE(inventory.TryAdd("backpack_military", "Assault Pack", EItemKind::Clothing,
+                             1, &replacement, kWornContainer));
+    REQUIRE(inventory.IsWorn(replacement));
+    REQUIRE_FALSE(inventory.IsWorn(backpack));
+    REQUIRE(inventory.ContainerOwnedBy(backpack) == nullptr);
+    REQUIRE(inventory.CountOf("fuel") == 8);
+    REQUIRE(inventory.TotalCapacity() == 50);
+}
+
+TEST_CASE("NextDayz cargo clothing swaps use the space freed by equipping", "[NextDayz][Inventory]")
+{
+    using namespace NextDayz;
+    Inventory inventory;
+    FItemInstanceId hoodie = 0;
+    REQUIRE(inventory.TryAdd("hoodie", "Hoodie", EItemKind::Clothing, 1, &hoodie, kWornContainer));
+    FItemInstanceId jacket = 0;
+    const FContainerId shirt = inventory.Containers()[0].containerId;
+    const FContainerId trousers = inventory.Containers()[1].containerId;
+    REQUIRE(inventory.TryAdd("jacket", "Field Jacket", EItemKind::Clothing, 1, &jacket, shirt));
+    REQUIRE(inventory.TryAdd("medkit", "Medkit", EItemKind::Consumable, 1, nullptr, shirt));
+    REQUIRE(inventory.TryAdd("fuel", "Fuel", EItemKind::Misc, 1, nullptr, trousers));
+    REQUIRE(inventory.TryAdd("fuel", "Fuel", EItemKind::Misc,
+                             2, nullptr, inventory.ContainerOwnedBy(hoodie)->containerId));
+    REQUIRE(inventory.TryEquip(jacket));
+    REQUIRE(inventory.IsWorn(jacket));
+    REQUIRE_FALSE(inventory.IsWorn(hoodie));
+    REQUIRE(inventory.CountOf("fuel") == 3);
+    REQUIRE(inventory.TotalCapacity() == 22);
+
+    // Worn gear can also be dragged straight into a chosen cargo container.
+    REQUIRE(inventory.Consume("fuel", 3) == 3);
+    REQUIRE(inventory.TryMove(jacket, trousers));
+    REQUIRE_FALSE(inventory.IsWorn(jacket));
+    REQUIRE(inventory.FindInstance(jacket)->containerId == trousers);
+    REQUIRE(inventory.ContainerOwnedBy(jacket) == nullptr);
+}
+
 TEST_CASE("NextDayz survival metabolism uses simulation seconds and sprint multipliers",
           "[NextDayz][Productization][Survival]")
 {

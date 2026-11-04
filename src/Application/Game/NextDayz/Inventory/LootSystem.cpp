@@ -725,7 +725,8 @@ namespace NextDayz
         return slot && slot->state == ELootSlotState::Reserved;
     }
 
-    FLootCommitResult LootSystem::Commit(const FLootHandle& handle, Inventory& inventory, NextEngine& engine)
+    FLootCommitResult LootSystem::Commit(const FLootHandle& handle, Inventory& inventory, NextEngine& engine,
+                                        FContainerId destination, EEquipSlot equipSlot)
     {
         FLootCommitResult result;
         if (!IsReservedHandleValid(handle))
@@ -737,18 +738,24 @@ namespace NextDayz
         for (const FLootStack& stack : entry.contents)
         {
             const FItemDef* definition = FindItemDef(stack.itemId);
-            const int fit = definition ? inventory.FitCount(stack.itemId, stack.count) : 0;
+            const bool matchesSlot = destination != kWornContainer ||
+                (definition && definition->kind == EItemKind::Clothing && definition->equipSlot == equipSlot);
+            int fit = definition && matchesSlot ? inventory.FitCount(stack.itemId, stack.count, destination) : 0;
             if (fit > 0)
             {
                 FItemInstanceId instanceId = 0;
                 if (inventory.TryAdd(stack.itemId, std::string(definition->displayName), definition->kind, fit,
-                                     &instanceId))
+                                     &instanceId, destination))
                 {
                     if (definition->kind == EItemKind::Weapon)
                     {
                         inventory.SetLoadedAmmo(instanceId, stack.loadedAmmo);
                     }
                     result.stacks.push_back({stack.itemId, fit, stack.loadedAmmo});
+                }
+                else
+                {
+                    fit = 0;
                 }
             }
             if (fit < stack.count)

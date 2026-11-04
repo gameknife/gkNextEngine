@@ -726,12 +726,16 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     if (const std::optional<NextDayz::FLootHandle> cancel = actions_.ConsumeCancelRequest())
     {
         loot_.Cancel(*cancel);
+        lootDestination_ = 0;
+        lootEquipSlot_ = NextDayz::EEquipSlot::None;
     }
     if (const std::optional<NextDayz::FLootHandle> commit = actions_.ConsumeCommitRequest())
     {
-        const NextDayz::FLootCommitResult result = loot_.Commit(*commit, inventory_, GetEngine());
+        const NextDayz::FLootCommitResult result = loot_.Commit(*commit, inventory_, GetEngine(),
+            std::exchange(lootDestination_, 0), std::exchange(lootEquipSlot_, NextDayz::EEquipSlot::None));
         if (result.taken)
         {
+            SyncClothingVisuals();
             audio_.Pickup();
             for (const NextDayz::FLootStack& stack : result.stacks)
             {
@@ -1174,6 +1178,15 @@ bool NextDayzGameInstance::OnRenderUI()
         {
             const NextDayz::FLootEntry& entry = loot_.Entries()[index];
             ctx.nearby.push_back({index, entry.displayName, glm::distance(entry.worldPos, player_.EyePosition())});
+            for (const NextDayz::FLootStack& stack : entry.contents)
+            {
+                const NextDayz::FItemDef* definition = NextDayz::FindItemDef(stack.itemId);
+                if (definition && definition->kind == NextDayz::EItemKind::Clothing)
+                {
+                    ctx.nearby.back().equipSlot = definition->equipSlot;
+                    break;
+                }
+            }
         }
     }
     ctx.inventory = &inventory_;
@@ -1187,15 +1200,42 @@ bool NextDayzGameInstance::OnRenderUI()
     ctx.hitMarkerHead = hitMarkerHead_;
     ctx.hurt = hurtSeconds_ / kHurtSeconds;
     ctx.hurtYawRadians = hurtYawRadians_;
-    ctx.equipWeapon = [this](NextDayz::FItemInstanceId id, int slot) { EquipWeaponInstance(id, slot); };
+    // Run inventory mutations after drawing: their transactions replace vectors
+    // that the HUD is currently iterating and holding item references into.
+    std::vector<std::function<void()>> hudRequests;
+    ctx.equipWeapon = [this, &hudRequests](NextDayz::FItemInstanceId id, int slot)
+    {
+        hudRequests.emplace_back([this, id, slot]() { EquipWeaponInstance(id, slot); });
+    };
     ctx.unequipWeapon = [this](int slot) { weapons_.Unequip(slot); };
-    ctx.wear = [this](NextDayz::FItemInstanceId id) { WearItem(id); };
-    ctx.takeOff = [this](NextDayz::FItemInstanceId id) { TakeOffItem(id); };
-    ctx.useItem = [this](NextDayz::FItemInstanceId id) { UseInventoryItem(id); };
-    ctx.dropItem = [this](NextDayz::FItemInstanceId id, int count) { DropItem(id, count); };
-    ctx.moveItem = [this](NextDayz::FItemInstanceId id, NextDayz::FContainerId container) { MoveItem(id, container); };
-    ctx.splitItem = [this](NextDayz::FItemInstanceId id) { SplitItem(id); };
-    ctx.takeLoot = [this](int index) { TakeLoot(index); };
+    ctx.wear = [this, &hudRequests](NextDayz::FItemInstanceId id)
+    {
+        hudRequests.emplace_back([this, id]() { WearItem(id); });
+    };
+    ctx.takeOff = [this, &hudRequests](NextDayz::FItemInstanceId id)
+    {
+        hudRequests.emplace_back([this, id]() { TakeOffItem(id); });
+    };
+    ctx.useItem = [this, &hudRequests](NextDayz::FItemInstanceId id)
+    {
+        hudRequests.emplace_back([this, id]() { UseInventoryItem(id); });
+    };
+    ctx.dropItem = [this, &hudRequests](NextDayz::FItemInstanceId id, int count)
+    {
+        hudRequests.emplace_back([this, id, count]() { DropItem(id, count); });
+    };
+    ctx.moveItem = [this, &hudRequests](NextDayz::FItemInstanceId id, NextDayz::FContainerId container)
+    {
+        hudRequests.emplace_back([this, id, container]() { MoveItem(id, container); });
+    };
+    ctx.splitItem = [this, &hudRequests](NextDayz::FItemInstanceId id)
+    {
+        hudRequests.emplace_back([this, id]() { SplitItem(id); });
+    };
+    ctx.takeLoot = [this, &hudRequests](int index, NextDayz::FContainerId destination, NextDayz::EEquipSlot slot)
+    {
+        hudRequests.emplace_back([this, index, destination, slot]() { TakeLoot(index, destination, slot); });
+    };
     ctx.bindQuick = [this](int slot, const std::string& itemId)
     {
         if (slot >= 0 && slot < static_cast<int>(quickSlots_.size()))
@@ -1203,10 +1243,14 @@ bool NextDayzGameInstance::OnRenderUI()
             quickSlots_[slot] = itemId;
         }
     };
-    ctx.restartSession = [this]() { ResetSession(); };
+    ctx.restartSession = [this, &hudRequests]() { hudRequests.emplace_back([this]() { ResetSession(); }); };
     {
         NextDayz::Debug::ScopedTimer timer(debugger_.Timers(), NextDayz::Debug::ETimer::Hud);
         NextDayz::NextDayzHUD::Draw(ctx);
+    }
+    for (const auto& request : hudRequests)
+    {
+        request();
     }
     debugger_.Draw(DebugFacts());
     return true;
@@ -1364,7 +1408,8 @@ void NextDayzGameInstance::TakeOffItem(NextDayz::FItemInstanceId instanceId)
 
 void NextDayzGameInstance::DropItem(NextDayz::FItemInstanceId instanceId, int count)
 {
-    const std::optional<NextDayz::FItemInstance> removed = inventory_.TryRemove(instanceId, count);
+    NextDayz::Inventory transaction = inventory_;
+    const std::optional<NextDayz::FItemInstance> removed = transaction.TryRemove(instanceId, count);
     if (!removed)
     {
         Notify("Empty it first: there is no room for what is inside", 1);
@@ -1382,8 +1427,13 @@ void NextDayzGameInstance::DropItem(NextDayz::FItemInstanceId instanceId, int co
         }
         return true;
     });
-    loot_.SpawnPile({{removed->defId, removed->count, removed->loadedAmmo}}, at, survivalRng_.UnitFloat() * 6.28f,
-                    GetEngine());
+    if (!loot_.SpawnPile({{removed->defId, removed->count, removed->loadedAmmo}}, at,
+                         survivalRng_.UnitFloat() * 6.28f, GetEngine()))
+    {
+        Notify("Cannot drop it here", 1);
+        return;
+    }
+    inventory_ = std::move(transaction);
     SyncClothingVisuals();
     audio_.Drop();
     Notify(removed->count > 1 ? fmt::format("Dropped {} x{}", ItemDisplayName(removed->defId), removed->count)
@@ -1395,6 +1445,10 @@ void NextDayzGameInstance::MoveItem(NextDayz::FItemInstanceId instanceId, NextDa
     if (!inventory_.TryMove(instanceId, containerId))
     {
         Notify("It does not fit there", 1);
+    }
+    else
+    {
+        SyncClothingVisuals();
     }
 }
 
@@ -1408,9 +1462,14 @@ void NextDayzGameInstance::SplitItem(NextDayz::FItemInstanceId instanceId)
     }
 }
 
-void NextDayzGameInstance::TakeLoot(int lootIndex)
+void NextDayzGameInstance::TakeLoot(int lootIndex, NextDayz::FContainerId destination, NextDayz::EEquipSlot equipSlot)
 {
     if (actions_.IsActive() || player_.IsTraversing() || !survival_.IsAlive())
+    {
+        return;
+    }
+    const auto nearby = loot_.Nearby(player_.EyePosition(), config_.Loot.ReachMeters);
+    if (std::find(nearby.begin(), nearby.end(), lootIndex) == nearby.end())
     {
         return;
     }
@@ -1421,6 +1480,8 @@ void NextDayzGameInstance::TakeLoot(int lootIndex)
     }
     if (actions_.BeginLoot(*handle))
     {
+        lootDestination_ = destination;
+        lootEquipSlot_ = equipSlot;
         player_.SetAiming(false);
         weapons_.SetTriggerDown(false);
         weapons_.SetPresentationSuppressed(true);
@@ -2518,6 +2579,8 @@ bool NextDayzGameInstance::OnKey(SDL_Event& event)
             {
                 if (actions_.BeginLoot(*handle))
                 {
+                    lootDestination_ = 0;
+                    lootEquipSlot_ = NextDayz::EEquipSlot::None;
                     player_.SetAiming(false);
                     player_.SetMovementLocked(true);
                     weapons_.SetTriggerDown(false);
@@ -2723,6 +2786,16 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     });
     reg.Add("inventoryCapacity", [this]() -> Runtime::Agent::FAgentQueryValue {
         return static_cast<int64_t>(inventory_.TotalCapacity());
+    });
+    reg.Add("inventoryContents", [this]() -> Runtime::Agent::FAgentQueryValue {
+        std::string contents;
+        for (const NextDayz::FItemInstance& item : inventory_.Instances())
+        {
+            const NextDayz::FInventoryContainer* container = inventory_.FindContainer(item.containerId);
+            contents += fmt::format("{}@{}:{};", item.defId,
+                inventory_.IsWorn(item.instanceId) ? "worn" : container ? container->displayName : "missing", item.count);
+        }
+        return contents;
     });
     reg.Add("seed", [this]() -> Runtime::Agent::FAgentQueryValue {
         return static_cast<int64_t>(config_.Seed);

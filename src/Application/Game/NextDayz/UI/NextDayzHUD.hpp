@@ -31,6 +31,7 @@ namespace NextDayz
         int index = -1;
         std::string name;
         float distance = 0.0f;
+        EEquipSlot equipSlot = EEquipSlot::None;
     };
 
     struct FHudNotification
@@ -110,7 +111,7 @@ namespace NextDayz
         std::function<void(FItemInstanceId instanceId, int count)> dropItem;
         std::function<void(FItemInstanceId instanceId, FContainerId containerId)> moveItem;
         std::function<void(FItemInstanceId instanceId)> splitItem;
-        std::function<void(int lootIndex)> takeLoot;
+        std::function<void(int lootIndex, FContainerId destination, EEquipSlot equipSlot)> takeLoot;
         std::function<void(int slot, const std::string& itemId)> bindQuick;
         std::function<void(int slot)> unequipWeapon;
         std::function<void()> restartSession;

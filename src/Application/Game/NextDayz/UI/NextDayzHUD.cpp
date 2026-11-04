@@ -20,6 +20,28 @@ namespace NextDayz::NextDayzHUD
         constexpr const char* kItemPayload = "ND_ITEM";
         constexpr const char* kLootPayload = "ND_LOOT";
 
+        void AcceptContainerDrop(const FHudContext& context, FContainerId containerId)
+        {
+            if (ImGui::BeginDragDropTarget())
+            {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kItemPayload))
+                {
+                    if (context.moveItem)
+                    {
+                        context.moveItem(*static_cast<const FItemInstanceId*>(payload->Data), containerId);
+                    }
+                }
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kLootPayload))
+                {
+                    if (context.takeLoot)
+                    {
+                        context.takeLoot(*static_cast<const int*>(payload->Data), containerId, EEquipSlot::None);
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+        }
+
         std::string ItemName(std::string_view itemId)
         {
             const FItemDef* definition = FindItemDef(itemId);
@@ -971,14 +993,27 @@ namespace NextDayz::NextDayzHUD
             // Drag Drop Target: Dropping clothing on this slot wears it
             if (ImGui::BeginDragDropTarget())
             {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kItemPayload))
+                const ImGuiPayload* draggedPayload = ImGui::GetDragDropPayload();
+                if (draggedPayload && draggedPayload->IsDataType(kItemPayload))
                 {
-                    const FItemInstanceId id = *static_cast<const FItemInstanceId*>(payload->Data);
+                    const FItemInstanceId id = *static_cast<const FItemInstanceId*>(draggedPayload->Data);
                     const FItemInstance* dragged = inventory.FindInstance(id);
                     const FItemDef* draggedDef = dragged ? FindItemDef(dragged->defId) : nullptr;
-                    if (draggedDef && draggedDef->equipSlot == slot && context.wear)
+                    if (draggedDef && draggedDef->kind == EItemKind::Clothing && draggedDef->equipSlot == slot &&
+                        context.wear && ImGui::AcceptDragDropPayload(kItemPayload))
                     {
                         context.wear(id);
+                    }
+                }
+                if (draggedPayload && draggedPayload->IsDataType(kLootPayload))
+                {
+                    const int index = *static_cast<const int*>(draggedPayload->Data);
+                    const auto loot = std::find_if(context.nearby.begin(), context.nearby.end(),
+                        [index](const FHudNearbyLoot& nearby) { return nearby.index == index; });
+                    if (loot != context.nearby.end() && loot->equipSlot == slot && context.takeLoot &&
+                        ImGui::AcceptDragDropPayload(kLootPayload))
+                    {
+                        context.takeLoot(index, kWornContainer, slot);
                     }
                 }
                 ImGui::EndDragDropTarget();
@@ -1002,7 +1037,8 @@ namespace NextDayz::NextDayzHUD
             ImDrawList* draw = ImGui::GetWindowDrawList();
 
             ImGui::PushID(slot + 2000);
-            ImGui::InvisibleButton("##wp_slot_btn", ImVec2(slotW, slotH));
+            // Leave the Holster button outside the card's hit area.
+            ImGui::InvisibleButton("##wp_slot_btn", ImVec2(instance ? slotW - 70.0f : slotW, slotH));
             const bool hovered = ImGui::IsItemHovered();
 
             UIWidgets::DrawSlotFrame(draw, pos, max, instance != nullptr, hovered, false, false, 4.0f);
@@ -1022,13 +1058,6 @@ namespace NextDayz::NextDayzHUD
                 {
                     ItemTooltip(*def, *instance);
                 }
-
-                // Holster Button on the right
-                ImGui::SetCursorScreenPos(ImVec2(max.x - 62.0f, pos.y + 12.0f));
-                if (ImGui::SmallButton("Holster") && context.unequipWeapon)
-                {
-                    context.unequipWeapon(slot);
-                }
             }
             else
             {
@@ -1045,6 +1074,18 @@ namespace NextDayz::NextDayzHUD
                     }
                 }
                 ImGui::EndDragDropTarget();
+            }
+
+            // Keep the weapon card body as the target; the nested button must
+            // not replace ImGui's last item before BeginDragDropTarget().
+            if (instance)
+            {
+                ImGui::SetCursorScreenPos(ImVec2(max.x - 62.0f, pos.y + 12.0f));
+                if (ImGui::SmallButton("Holster") && context.unequipWeapon)
+                {
+                    context.unequipWeapon(slot);
+                }
+                ImGui::SetCursorScreenPos(ImVec2(pos.x, max.y + ImGui::GetStyle().ItemSpacing.y));
             }
 
             ImGui::PopID();
@@ -1084,11 +1125,13 @@ namespace NextDayz::NextDayzHUD
                 ImGui::TableSetupColumn("CARGO CONTAINERS", ImGuiTableColumnFlags_WidthStretch, 0.42f);
                 ImGui::TableHeadersRow();
                 ImGui::TableNextRow();
+                const float columnHeight = std::max(100.0f, ImGui::GetContentRegionAvail().y);
 
                 // ------------------------------------------------------------
                 // COLUMN 0: VICINITY & DROP ZONE
                 // ------------------------------------------------------------
                 ImGui::TableSetColumnIndex(0);
+                ImGui::BeginChild("##vicinity", ImVec2(0.0f, columnHeight));
                 ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), "NEARBY LOOT (%d)", static_cast<int>(context.nearby.size()));
                 ImGui::Spacing();
 
@@ -1105,8 +1148,19 @@ namespace NextDayz::NextDayzHUD
                     const float cardH = 38.0f;
                     ImDrawList* draw = ImGui::GetWindowDrawList();
 
-                    ImGui::InvisibleButton("##loot_card", ImVec2(cardW, cardH));
+                    // The Take button needs its own hit area. Overlapping it with
+                    // the card's InvisibleButton would steal its mouse press.
+                    ImGui::SetCursorScreenPos(ImVec2(lootPos.x + 56.0f, lootPos.y));
+                    ImGui::InvisibleButton("##loot_card", ImVec2(cardW - 56.0f, cardH));
                     const bool hovered = ImGui::IsItemHovered();
+
+                    // Bind the source to the card before submitting its Take button.
+                    if (ImGui::BeginDragDropSource())
+                    {
+                        ImGui::SetDragDropPayload(kLootPayload, &loot.index, sizeof(loot.index));
+                        ImGui::TextUnformatted(loot.name.c_str());
+                        ImGui::EndDragDropSource();
+                    }
 
                     UIWidgets::DrawSlotFrame(draw, lootPos, ImVec2(lootPos.x + cardW, lootPos.y + cardH),
                                              true, hovered, false, false, 4.0f);
@@ -1115,7 +1169,7 @@ namespace NextDayz::NextDayzHUD
                     ImGui::SetCursorScreenPos(ImVec2(lootPos.x + 6.0f, lootPos.y + 7.0f));
                     if (ImGui::SmallButton("Take") && context.takeLoot)
                     {
-                        context.takeLoot(loot.index);
+                        context.takeLoot(loot.index, 0, EEquipSlot::None);
                     }
 
                     // Loot Name & Distance
@@ -1127,13 +1181,7 @@ namespace NextDayz::NextDayzHUD
                     draw->AddText(ImVec2(lootPos.x + cardW - dSize.x - 8.0f, lootPos.y + 10.0f),
                                   UITheme::Colors::TextMuted, distText);
 
-                    // Drag loot into inventory containers
-                    if (ImGui::BeginDragDropSource())
-                    {
-                        ImGui::SetDragDropPayload(kLootPayload, &loot.index, sizeof(loot.index));
-                        ImGui::TextUnformatted(loot.name.c_str());
-                        ImGui::EndDragDropSource();
-                    }
+                    ImGui::SetCursorScreenPos(ImVec2(lootPos.x, lootPos.y + cardH + ImGui::GetStyle().ItemSpacing.y));
 
                     ImGui::PopID();
                     ImGui::Spacing();
@@ -1176,7 +1224,9 @@ namespace NextDayz::NextDayzHUD
                 // ------------------------------------------------------------
                 // COLUMN 1: EQUIPMENT & GEAR (PAPERDOLL SLOTS)
                 // ------------------------------------------------------------
+                ImGui::EndChild();
                 ImGui::TableSetColumnIndex(1);
+                ImGui::BeginChild("##equipment", ImVec2(0.0f, columnHeight));
                 ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), "GEAR & WEAPONS");
                 ImGui::Spacing();
 
@@ -1211,7 +1261,9 @@ namespace NextDayz::NextDayzHUD
                 // ------------------------------------------------------------
                 // COLUMN 2: CARGO CONTAINERS (GRID SLOTS MATRIX)
                 // ------------------------------------------------------------
+                ImGui::EndChild();
                 ImGui::TableSetColumnIndex(2);
+                ImGui::BeginChild("##cargo", ImVec2(0.0f, columnHeight));
                 ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), "CARGO CAPACITY: %d / %d SLOTS",
                                    inventory.UsedCapacity(), inventory.TotalCapacity());
                 ImGui::Spacing();
@@ -1225,6 +1277,7 @@ namespace NextDayz::NextDayzHUD
                     const int used = inventory.ContainerUsed(container.containerId);
                     const int capacity = container.capacity;
                     ImGui::PushID(static_cast<int>(container.containerId));
+                    ImGui::BeginGroup();
 
                     // Container Header Banner
                     const ImVec2 bannerPos = ImGui::GetCursorScreenPos();
@@ -1272,65 +1325,52 @@ namespace NextDayz::NextDayzHUD
                         }
                     }
 
-                    int currentSlot = 0;
-                    // Render occupied item slots
-                    for (const FItemInstance* item : containerItems)
+                    // A nested table owns row heights and wrapping. SameLine
+                    // cursor state from card buttons/popups must not size the grid.
+                    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(slotPadding * 0.5f, slotPadding * 0.5f));
+                    if (ImGui::BeginTable("##cargo_grid", cols,
+                        ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoPadOuterX))
                     {
-                        if (currentSlot % cols != 0)
+                        int currentSlot = 0;
+                        // Render occupied item slots
+                        for (const FItemInstance* item : containerItems)
                         {
-                            ImGui::SameLine(0.0f, slotPadding);
+                            ImGui::TableNextColumn();
+                            DrawGridItemSlot(context, *item, slotSize, false);
+                            currentSlot++;
                         }
-                        DrawGridItemSlot(context, *item, slotSize, false);
-                        currentSlot++;
+
+                        // Show actual free volume; a full container has no fake empty cell.
+                        const int emptySlotsToShow = std::max(0, capacity - used);
+                        const int totalSlotsToDraw = currentSlot + emptySlotsToShow;
+
+                        while (currentSlot < totalSlotsToDraw)
+                        {
+                            ImGui::TableNextColumn();
+
+                            const ImVec2 ePos = ImGui::GetCursorScreenPos();
+                            ImGui::PushID(currentSlot + 10000);
+                            ImGui::InvisibleButton("##empty_slot", slotSize);
+                            const bool eHovered = ImGui::IsItemHovered();
+
+                            UIWidgets::DrawSlotFrame(cDraw, ePos, ImVec2(ePos.x + slotW, ePos.y + slotH),
+                                                     false, eHovered, false, false, 4.0f);
+
+                            // Plus sign in center of empty slot
+                            cDraw->AddText(ImVec2(ePos.x + slotW * 0.5f - 4.0f, ePos.y + slotH * 0.5f - 7.0f),
+                                           UITheme::Colors::SlotEmptyBorder, "+");
+
+                            ImGui::PopID();
+                            currentSlot++;
+                        }
+                        ImGui::EndTable();
                     }
+                    ImGui::PopStyleVar();
 
-                    // Render remaining empty slots up to capacity (or at least 1 row of empty slots if empty)
-                    const int emptySlotsToShow = std::max(0, capacity - used);
-                    const int totalSlotsToDraw = std::max(currentSlot + 1, std::min(capacity, currentSlot + emptySlotsToShow));
-
-                    while (currentSlot < totalSlotsToDraw)
-                    {
-                        if (currentSlot % cols != 0)
-                        {
-                            ImGui::SameLine(0.0f, slotPadding);
-                        }
-
-                        const ImVec2 ePos = ImGui::GetCursorScreenPos();
-                        ImGui::PushID(currentSlot + 10000);
-                        ImGui::InvisibleButton("##empty_slot", slotSize);
-                        const bool eHovered = ImGui::IsItemHovered();
-
-                        UIWidgets::DrawSlotFrame(cDraw, ePos, ImVec2(ePos.x + slotW, ePos.y + slotH),
-                                                 false, eHovered, false, false, 4.0f);
-
-                        // Plus sign in center of empty slot
-                        cDraw->AddText(ImVec2(ePos.x + slotW * 0.5f - 4.0f, ePos.y + slotH * 0.5f - 7.0f),
-                                       UITheme::Colors::SlotEmptyBorder, "+");
-
-                        ImGui::PopID();
-                        currentSlot++;
-                    }
-
-                    // Explicit Container Drop Target: Hovering dragged items over this container accepts them
-                    if (ImGui::BeginDragDropTarget())
-                    {
-                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kItemPayload))
-                        {
-                            const FItemInstanceId id = *static_cast<const FItemInstanceId*>(payload->Data);
-                            if (context.moveItem)
-                            {
-                                context.moveItem(id, container.containerId);
-                            }
-                        }
-                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kLootPayload))
-                        {
-                            if (context.takeLoot)
-                            {
-                                context.takeLoot(*static_cast<const int*>(payload->Data));
-                            }
-                        }
-                        ImGui::EndDragDropTarget();
-                    }
+                    // EndGroup exposes the complete banner + grid as one target,
+                    // including occupied cells, gaps and containers with no free cells.
+                    ImGui::EndGroup();
+                    AcceptContainerDrop(context, container.containerId);
 
                     ImGui::Spacing();
                     ImGui::Separator();
@@ -1338,6 +1378,7 @@ namespace NextDayz::NextDayzHUD
                     ImGui::PopID();
                 }
 
+                ImGui::EndChild();
                 ImGui::EndTable();
             }
 

@@ -154,7 +154,7 @@ namespace NextDayz
         return 0;
     }
 
-    bool Inventory::CanAdd(const std::string& id, int count) const
+    bool Inventory::CanAdd(const std::string& id, int count, FContainerId destination) const
     {
         const FItemDef* definition = FindItemDef(id);
         if (!definition || count <= 0)
@@ -162,14 +162,14 @@ namespace NextDayz
             return false;
         }
         Inventory copy = *this;
-        return copy.TryAdd(id, std::string(definition->displayName), definition->kind, count);
+        return copy.TryAdd(id, std::string(definition->displayName), definition->kind, count, nullptr, destination);
     }
 
-    int Inventory::FitCount(const std::string& id, int count) const
+    int Inventory::FitCount(const std::string& id, int count, FContainerId destination) const
     {
         for (int fit = count; fit > 0; --fit)
         {
-            if (CanAdd(id, fit))
+            if (CanAdd(id, fit, destination))
             {
                 return fit;
             }
@@ -178,14 +178,39 @@ namespace NextDayz
     }
 
     bool Inventory::TryAdd(const std::string& id, const std::string& displayName, EItemKind kind, int count,
-                           FItemInstanceId* outInstanceId)
+                           FItemInstanceId* outInstanceId, FContainerId destination)
     {
-        if (count <= 0 || instances_.size() >= kMaxSlots)
+        if (count <= 0)
         {
             return false;
         }
         Inventory rollback = *this;
         const FItemDef& definition = ResolveItemDef(id, displayName, kind);
+        if (destination == kWornContainer)
+        {
+            if (count != 1 || definition.kind != EItemKind::Clothing || definition.equipSlot == EEquipSlot::None ||
+                instances_.size() >= kMaxSlots)
+            {
+                return false;
+            }
+            const FItemInstanceId instanceId = nextInstanceId_++;
+            instances_.push_back({instanceId, id, 1, 0, 0});
+            if (!TryEquip(instanceId))
+            {
+                *this = std::move(rollback);
+                return false;
+            }
+            if (outInstanceId)
+            {
+                *outInstanceId = instanceId;
+            }
+            return true;
+        }
+        const FInventoryContainer* target = destination ? FindContainer(destination) : nullptr;
+        if (destination && (!target || !Accepts(*target, definition)))
+        {
+            return false;
+        }
         int remaining = count;
         FItemInstanceId firstInstanceId = 0;
 
@@ -193,7 +218,8 @@ namespace NextDayz
         {
             for (FItemInstance& instance : instances_)
             {
-                if (instance.defId != id || instance.count >= definition.maxStack)
+                if (instance.defId != id || instance.count >= definition.maxStack ||
+                    (destination && instance.containerId != destination))
                 {
                     continue;
                 }
@@ -220,8 +246,13 @@ namespace NextDayz
         while (remaining > 0)
         {
             const int stackCount = std::min(remaining, definition.maxStack);
-            const FContainerId containerId = FindContainerWithSpace(definition, stackCount);
+            const FContainerId containerId = destination ? destination : FindContainerWithSpace(definition, stackCount);
             if (containerId == 0 || instances_.size() >= kMaxSlots)
+            {
+                *this = std::move(rollback);
+                return false;
+            }
+            if (destination && ContainerUsed(destination) + InstanceVolume({0, id, stackCount}) > target->capacity)
             {
                 *this = std::move(rollback);
                 return false;
@@ -263,8 +294,7 @@ namespace NextDayz
     {
         FItemInstance* source = FindInstance(instanceId);
         const FInventoryContainer* target = FindContainer(destination);
-        if (!source || !target || !target->active || source->containerId == kWornContainer ||
-            target->ownerItemInstanceId == instanceId)
+        if (!source || !target || !target->active || target->ownerItemInstanceId == instanceId)
         {
             return false;
         }
@@ -275,6 +305,18 @@ namespace NextDayz
         }
         const int moveCount = count < 0 ? source->count : count;
         if (moveCount <= 0 || moveCount > source->count)
+        {
+            return false;
+        }
+        if (source->containerId == destination)
+        {
+            return true;
+        }
+        if (IsWorn(instanceId))
+        {
+            return TakeOff(instanceId, true, destination);
+        }
+        if (moveCount < source->count && instances_.size() >= kMaxSlots)
         {
             return false;
         }
@@ -338,11 +380,7 @@ namespace NextDayz
             return false;
         }
         Inventory transaction = *this;
-        if (const FItemInstanceId current = transaction.WornInSlot(definition->equipSlot);
-            current != 0 && !transaction.TryUnequip(current))
-        {
-            return false;
-        }
+        const FItemInstanceId current = transaction.WornInSlot(definition->equipSlot);
         FItemInstance* item = transaction.FindInstance(instanceId);
         if (!item || item->count != 1)
         {
@@ -355,6 +393,12 @@ namespace NextDayz
             transaction.containers_.push_back({transaction.nextContainerId_++, instanceId,
                                                std::string(definition->displayName), definition->containerCapacity,
                                                true, false});
+        }
+        // Free the incoming item's cargo space and provide its new container
+        // before evacuating the old gear, so a full inventory can still swap.
+        if (current != 0 && !transaction.TryUnequip(current))
+        {
+            return false;
         }
         transaction.RebuildLegacyItems();
         *this = std::move(transaction);
@@ -389,7 +433,7 @@ namespace NextDayz
         }
     }
 
-    bool Inventory::TakeOff(FItemInstanceId instanceId, bool intoCargo)
+    bool Inventory::TakeOff(FItemInstanceId instanceId, bool intoCargo, FContainerId destination)
     {
         if (!IsWorn(instanceId))
         {
@@ -400,6 +444,18 @@ namespace NextDayz
         if (!definition)
         {
             return false;
+        }
+        if (destination)
+        {
+            const FInventoryContainer* target = transaction.FindContainer(destination);
+            if (!intoCargo || !target || target->ownerItemInstanceId == instanceId || !Accepts(*target, *definition) ||
+                transaction.ContainerUsed(destination) + InstanceVolume(*transaction.FindInstance(instanceId)) >
+                    target->capacity)
+            {
+                return false;
+            }
+            // Reserve the selected cargo space before evacuating the item's contents.
+            transaction.FindInstance(instanceId)->containerId = destination;
         }
         FContainerId removedId = 0;
         if (const FInventoryContainer* owned = transaction.ContainerOwnedBy(instanceId))
@@ -416,7 +472,7 @@ namespace NextDayz
             std::erase_if(transaction.containers_,
                 [removedId](const FInventoryContainer& container) { return container.containerId == removedId; });
         }
-        if (intoCargo)
+        if (intoCargo && destination == 0)
         {
             const FContainerId destination = transaction.FindContainerWithSpace(*definition, 1, removedId);
             if (destination == 0)

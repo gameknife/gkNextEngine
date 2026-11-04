@@ -67,12 +67,13 @@ namespace NextDayz
         Inventory();
         void Clear();
 
-        bool CanAdd(const std::string& id, int count = 1) const;
+        // 0 auto-stows; kWornContainer equips directly without temporary cargo space.
+        bool CanAdd(const std::string& id, int count = 1, FContainerId destination = 0) const;
         bool TryAdd(const std::string& id, const std::string& displayName, EItemKind kind, int count,
-                    FItemInstanceId* outInstanceId = nullptr);
+                    FItemInstanceId* outInstanceId = nullptr, FContainerId destination = 0);
         bool TryAddBatch(std::span<const FInventoryAddRequest> requests);
         // How many of `count` would fit right now (0..count).
-        int FitCount(const std::string& id, int count) const;
+        int FitCount(const std::string& id, int count, FContainerId destination = 0) const;
 
         // Compatibility entry point for the pre-productization callers. New code
         // should use TryAdd/TryAddBatch so capacity rejection is observable.
@@ -129,7 +130,7 @@ namespace NextDayz
     private:
         // Takes a worn item off: its container's contents move to the other
         // containers; the item itself goes to cargo (or leaves, for a drop).
-        bool TakeOff(FItemInstanceId instanceId, bool intoCargo);
+        bool TakeOff(FItemInstanceId instanceId, bool intoCargo, FContainerId destination = 0);
         FContainerId FindContainerWithSpace(const FItemDef& definition, int count,
                                             FContainerId excluded = 0) const;
         void RebuildLegacyItems();

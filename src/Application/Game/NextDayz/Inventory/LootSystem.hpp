@@ -143,7 +143,8 @@ namespace NextDayz
 
         std::optional<FLootHandle> ReserveHovered();
         std::optional<FLootHandle> ReserveEntry(int index);
-        FLootCommitResult Commit(const FLootHandle& handle, Inventory& inventory, NextEngine& engine);
+        FLootCommitResult Commit(const FLootHandle& handle, Inventory& inventory, NextEngine& engine,
+                                 FContainerId destination = 0, EEquipSlot equipSlot = EEquipSlot::None);
         bool Cancel(const FLootHandle& handle);
         bool IsReservedHandleValid(const FLootHandle& handle) const;
 

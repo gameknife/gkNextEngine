@@ -681,8 +681,6 @@ public struct FHardwareRayTracer : IRayTracer
             float2 TwoBaryCoords = q.CommittedRayBarycentrics();
             float3 BaryCoords = float3(1.0 - TwoBaryCoords.x - TwoBaryCoords.y, TwoBaryCoords.x, TwoBaryCoords.y);
 
-            float4x3 WorldToObject = q.CommittedRayWorldToObject();
-
             const uint instanceIndex = q.CommittedRayInstanceId();
             outNode = Bindless.GetGpuscene().Nodes[instanceIndex];
             outNode.instanceId = q.CommittedRayInstanceCustomIndex();
@@ -697,10 +695,10 @@ public struct FHardwareRayTracer : IRayTracer
             const Vertex v1 = UnpackVertex(Bindless.GetGpuscene().Vertices[vertexOffset + Bindless.GetGpuscene().Indices[indexOffset + 1]]);
             const Vertex v2 = UnpackVertex(Bindless.GetGpuscene().Vertices[vertexOffset + Bindless.GetGpuscene().Indices[indexOffset + 2]]);
             outVertex.MaterialIndex = FetchMaterialId(outNode, v0.MaterialIndex);
-            outVertex.Normal = normalize(mul(WorldToObject, Mix(v0.Normal, v1.Normal, v2.Normal, BaryCoords)).xyz);
+            outVertex.Normal = normalize(TransformAffineNormal(
+                outNode.worldTS, Mix(v0.Normal, v1.Normal, v2.Normal, BaryCoords)));
             outVertex.TexCoord = Mix(v0.TexCoord, v1.TexCoord, v2.TexCoord, BaryCoords);
             outVertex.Position = rayOrigin + rayDir * t;// * (t - EPS2);
-            //outVertex.Tangent = normalize(mul(WorldToObject, Mix(v0.Tangent, v1.Tangent, v2.Tangent, BaryCoords)).xyz);
             return true;
         }
         return false;

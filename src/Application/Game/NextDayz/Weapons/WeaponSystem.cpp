@@ -70,7 +70,7 @@ namespace NextDayz
     }
 
     void WeaponSystem::SetViewModelAssets(const std::array<uint32_t, kWeapons.size()>& modelIds,
-                                          const std::array<uint32_t, kWeapons.size()>& materialIds)
+                                          const std::array<FWeaponMaterialSlots, kWeapons.size()>& materialIds)
     {
         viewModelModelIds_ = modelIds;
         viewModelMaterialIds_ = materialIds;
@@ -357,7 +357,8 @@ namespace NextDayz
             return false;
         }
         const glm::mat4& world = viewModelNode_->WorldTransform();
-        outPosition = glm::vec3(world * glm::vec4(0.0f, 0.0f, WeaponMuzzleDistance(ActiveWeaponId()), 1.0f));
+        const FWeaponModelPoints points = WeaponModelPoints(ActiveWeaponId());
+        outPosition = glm::vec3(world * glm::vec4(0.0f, points.boreHeight, points.muzzleForward, 1.0f));
         outForward = glm::normalize(glm::vec3(world[2]));
         return outPosition.y > -900.0f;
     }
@@ -745,9 +746,7 @@ namespace NextDayz
                 if (auto render = viewModelNode_->GetComponent<Runtime::RenderComponent>())
                 {
                     render->SetModelId(viewModelModelIds_[weaponIndex]);
-                    std::array<uint32_t, 16> materials = {0};
-                    materials[0] = viewModelMaterialIds_[weaponIndex];
-                    render->SetMaterials(materials);
+                    render->SetMaterials(viewModelMaterialIds_[weaponIndex]);
                 }
                 engine.GetScene().MarkDirty();
             }
@@ -760,6 +759,13 @@ namespace NextDayz
             viewModelRecoil_ += viewModelRecoilVelocity_ * recoilDt;
 
             glm::vec3 targetOffset = player.IsAiming() ? config_.ViewModelAdsOffset : config_.ViewModelHipOffset;
+            if (player.IsAiming() && def && !def->IsMelee())
+            {
+                // Each model carries its own sight line (irons, bead, PSO-1 axis):
+                // drop the view model until that line sits where the tuned one did.
+                targetOffset.y += (kAdsReferenceSightHeight - WeaponModelPoints(def->id).sightHeight) *
+                                  config_.ViewModelScale;
+            }
             glm::vec3 meleeEuler(0.0f);
             if (def && def->IsMelee())
             {

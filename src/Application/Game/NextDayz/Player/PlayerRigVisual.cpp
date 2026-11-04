@@ -48,8 +48,9 @@ namespace NextDayz
         {
             if (weaponId == "pistol")
             {
-                // Grip into the palm, support hand cupping the firing hand, arms extended.
-                return {glm::vec3(0.0f, 0.10f, -0.065f), true, glm::vec3(0.07f, -0.03f, -0.02f), 0.12f};
+                // Grip into the palm (the Makarov's grip hangs below its origin),
+                // support hand cupping the firing hand, arms extended.
+                return {glm::vec3(0.0f, 0.025f, -0.015f), true, glm::vec3(0.07f, -0.03f, -0.02f), 0.12f};
             }
             return {};
         }
@@ -167,7 +168,7 @@ namespace NextDayz
     }
 
     void PlayerRigVisual::SetWeaponAssets(const std::array<uint32_t, kWeapons.size()>& modelIds,
-                                          const std::array<uint32_t, kWeapons.size()>& materialIds)
+                                          const std::array<FWeaponMaterialSlots, kWeapons.size()>& materialIds)
     {
         weaponModelIds_ = modelIds;
         weaponMaterialIds_ = materialIds;
@@ -191,8 +192,7 @@ namespace NextDayz
             {
                 if (!part.sectionTintable[section])
                 {
-                    sectionMaterials[section] =
-                        Assets::SceneBuilder::AddLambertianMaterial(materials, glm::vec3(part.sectionColors[section]));
+                    sectionMaterials[section] = Assets::SceneBuilder::AddRigSectionMaterial(materials, part, section);
                 }
             }
             partMaterialIds_.push_back(sectionMaterials);
@@ -286,11 +286,9 @@ namespace NextDayz
         {
             if (Assets::Node* socket = BoneNode("bone_weapon_socket"))
             {
-                std::array<uint32_t, 16> weaponMats = {0};
-                weaponMats[0] = weaponMaterialIds_[0];
                 weaponNode_ = Assets::SceneBuilder::CreateRenderNode(
                     "nd_player/weapon", glm::vec3(0.0f), glm::vec3(weaponScale_), scene.GenerateInstanceId(),
-                    weaponModelIds_[0], weaponMats, true, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), false);
+                    weaponModelIds_[0], weaponMaterialIds_[0], true, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), false);
                 weaponNode_->SetParent(socket->shared_from_this());
                 scene.AddNode(weaponNode_);
                 weaponVisible_ = true;
@@ -300,8 +298,6 @@ namespace NextDayz
             {
                 for (int slot = 0; slot < static_cast<int>(holsteredWeaponNodes_.size()); ++slot)
                 {
-                    std::array<uint32_t, 16> weaponMats = {0};
-                    weaponMats[0] = weaponMaterialIds_[0];
                     const float side = slot == 0 ? -1.0f : 1.0f;
                     const glm::quat rotation =
                         glm::angleAxis(glm::radians(side * 24.0f), glm::vec3(0.0f, 0.0f, 1.0f)) *
@@ -310,7 +306,7 @@ namespace NextDayz
                         fmt::format("nd_player/weapon_back_{}", slot),
                         glm::vec3(side * 0.11f, 0.24f, -0.22f - slot * 0.025f),
                         glm::vec3(weaponScale_), scene.GenerateInstanceId(), weaponModelIds_[0],
-                        weaponMats, false, rotation, false);
+                        weaponMaterialIds_[0], false, rotation, false);
                     holsteredWeaponNodes_[slot]->SetParent(torso->shared_from_this());
                     scene.AddNode(holsteredWeaponNodes_[slot]);
                 }
@@ -481,8 +477,8 @@ namespace NextDayz
             return false;
         }
         const glm::mat4& world = weaponNode_->WorldTransform();
-        outPosition = glm::vec3(
-            world * glm::vec4(0.0f, 0.0f, WeaponMuzzleDistance(kWeapons[weaponVisualIndex_].id), 1.0f));
+        const FWeaponModelPoints points = WeaponModelPoints(kWeapons[weaponVisualIndex_].id);
+        outPosition = glm::vec3(world * glm::vec4(0.0f, points.boreHeight, points.muzzleForward, 1.0f));
         outForward = glm::normalize(glm::vec3(world[2]));
         return true;
     }
@@ -796,9 +792,7 @@ namespace NextDayz
                 if (auto render = weaponNode_->GetComponent<Runtime::RenderComponent>())
                 {
                     render->SetModelId(weaponModelIds_[weaponIndex]);
-                    std::array<uint32_t, 16> materials = {0};
-                    materials[0] = weaponMaterialIds_[weaponIndex];
-                    render->SetMaterials(materials);
+                    render->SetMaterials(weaponMaterialIds_[weaponIndex]);
                 }
                 weaponNode_->Translation() = HoldFor(state.weaponId).modelOffset;
                 if (scene_)
@@ -835,9 +829,7 @@ namespace NextDayz
                 if (auto render = holstered->GetComponent<Runtime::RenderComponent>())
                 {
                     render->SetModelId(weaponModelIds_[weaponIndex]);
-                    std::array<uint32_t, 16> materials = {0};
-                    materials[0] = weaponMaterialIds_[weaponIndex];
-                    render->SetMaterials(materials);
+                    render->SetMaterials(weaponMaterialIds_[weaponIndex]);
                 }
                 if (scene_)
                 {

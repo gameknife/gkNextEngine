@@ -43,7 +43,7 @@ namespace Common
             }
             const Vertex v = UnpackVertex(packedVertex);
             positions[i] = mul(proxy.worldTS, float4(v.Position, 1)).xyz;
-            normals[i] = mul(proxy.worldTS, float4(v.Normal, 0)).xyz;
+            normals[i] = TransformAffineNormal(proxy.worldTS, v.Normal);
             tangents[i] = mul(proxy.worldTS, float4(v.Tangent.xyz, 0)).xyz;
             localNormals[i] = v.Normal;
             localTangents[i] = v.Tangent;

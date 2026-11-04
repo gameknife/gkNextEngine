@@ -7,9 +7,21 @@
 #include <glm/vec3.hpp>
 #include <string_view>
 
+namespace Assets
+{
+    struct FRigPart;
+}
+
 namespace Assets::SceneBuilder
 {
     uint32_t AddLambertianMaterial(std::vector<Assets::FMaterial>& materials, const glm::vec3& color);
+    // Lambertian when fully rough and dielectric, otherwise a metal/rough Mixture:
+    // the same mapping the SCAD scene loader gives gk_material().
+    uint32_t AddSurfaceMaterial(std::vector<Assets::FMaterial>& materials, const glm::vec3& color, float roughness,
+                                float metalness);
+    // One section of a rig part: its baked color plus its gk_material surface.
+    uint32_t AddRigSectionMaterial(std::vector<Assets::FMaterial>& materials, const Assets::FRigPart& part,
+                                   size_t section);
     uint32_t AddDiffuseLightMaterial(std::vector<Assets::FMaterial>& materials, const glm::vec3& color, float intensity = 1.0f);
     uint32_t AddLambertianMaterialToScene(Assets::Scene& scene, const glm::vec3& color);
     uint32_t AddDiffuseLightMaterialToScene(Assets::Scene& scene, const glm::vec3& color, float intensity = 1.0f);

@@ -39,7 +39,14 @@ namespace Assets
         int32_t bone = -1;
         int32_t modelIndex = -1;                // index into FRigAsset::partModels
         std::vector<glm::vec4> sectionColors;   // baked color per mesh section
+        std::vector<glm::vec2> sectionSurfaces; // (roughness, metalness) per section; (1, 0) = Lambertian
         std::vector<bool> sectionTintable;      // section hit the tint placeholder color
+
+        // (roughness, metalness) of a section; parts built without surfaces stay Lambertian.
+        glm::vec2 SectionSurface(size_t section) const
+        {
+            return section < sectionSurfaces.size() ? sectionSurfaces[section] : glm::vec2(1.0f, 0.0f);
+        }
     };
 
     struct FRigChannel

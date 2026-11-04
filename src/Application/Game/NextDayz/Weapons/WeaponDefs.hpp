@@ -7,6 +7,7 @@
 // ============================================================================
 
 #include <array>
+#include <cstdint>
 #include <string_view>
 
 namespace NextDayz
@@ -97,17 +98,34 @@ namespace NextDayz
         return nullptr;
     }
 
-    // Barrel tip along +Z in the weapon model's own space (the boxes built by
-    // CreateWeaponVisual in NextDayzGameInstance.cpp); muzzle effects start here.
-    constexpr float WeaponMuzzleDistance(std::string_view id)
+    // Material slots of one injected weapon model (one per mesh section).
+    using FWeaponMaterialSlots = std::array<uint32_t, 16>;
+
+    // Landmarks of the weapon models in their own space (nextdayz_weapons.scad:
+    // origin on the firing grip, +Z muzzle, +Y up). Muzzle effects start at
+    // (0, boreHeight, muzzleForward); the first-person ADS pose puts sightHeight
+    // on the eye line. Keep in step with cw_wpn_*_held in kit_coldwar.scad.
+    struct FWeaponModelPoints
     {
-        if (id == "svd" || id == "mosin") return 0.86f;
-        if (id == "shotgun") return 0.78f;
-        if (id == "pistol") return 0.29f;
-        if (id == "knife") return 0.24f;
-        if (id == "crowbar" || id == "axe") return 0.62f;
-        return 0.66f;
+        float muzzleForward;
+        float boreHeight;
+        float sightHeight;
+    };
+
+    constexpr FWeaponModelPoints WeaponModelPoints(std::string_view id)
+    {
+        if (id == "svd") return {0.844f, 0.066f, 0.128f};     // PSO-1 axis
+        if (id == "mosin") return {0.822f, 0.070f, 0.097f};
+        if (id == "shotgun") return {0.780f, 0.056f, 0.072f}; // bead on the rib
+        if (id == "pistol") return {0.182f, 0.052f, 0.079f};  // 1.5x Makarov
+        if (id == "knife") return {0.236f, 0.0f, 0.0f};
+        if (id == "crowbar") return {0.510f, 0.0f, 0.0f};
+        if (id == "axe") return {0.600f, 0.0f, 0.0f};
+        return {0.662f, 0.068f, 0.106f};                      // AK-74
     }
+
+    // Sight height the configured ViewModelAdsOffset was tuned for.
+    inline constexpr float kAdsReferenceSightHeight = 0.092f;
 
     inline int WeaponIndex(std::string_view id)
     {

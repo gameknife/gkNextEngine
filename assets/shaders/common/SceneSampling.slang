@@ -152,7 +152,8 @@ namespace Common
             // normal mapping use interpolated normal
             float3 vNt = Bindless.GetSampleTexture(inMaterial.NormalTextureId).SampleLevel(inVertex.TexCoord, 0).rgb;
             // here we need local space normal and tangent
-            outNormal.rgb = normalize( mul(proxy.worldTS, float4(mikkTSpace(vNt, inVertex.LocalNormal, inVertex.LocalTangent), 0.0)).xyz );
+            outNormal.rgb = normalize(TransformAffineNormal(
+                proxy.worldTS, mikkTSpace(vNt, inVertex.LocalNormal, inVertex.LocalTangent)));
             outNormal.a = roughness;
             inVertex.Normal.rgb = outNormal.rgb; // Update vertex normal for further calculations
         }

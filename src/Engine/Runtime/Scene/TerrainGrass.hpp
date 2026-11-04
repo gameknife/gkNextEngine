@@ -24,6 +24,32 @@ namespace Runtime
         float windStrength = 0.65f;
         float windYaw = 0.7f; // radians, +X toward -Z
         float windSpeed = 1.0f;
+        bool interactionEnabled = true;
+        float interactionStrength = 1.0f;
+        float recoverySeconds = 1.25f;
+    };
+
+    struct FGrassInteractor
+    {
+        uint64_t id = 0;
+        glm::vec3 position{0.0f}; // feet, in world space
+        float radius = 0.55f;
+        float strength = 1.0f;
+    };
+
+    struct FGrassSweep
+    {
+        glm::vec3 from{0.0f};
+        glm::vec3 to{0.0f};
+        glm::vec3 velocity{0.0f};
+        float radius = 0.55f;
+        float strength = 1.0f;
+    };
+
+    struct FGrassResponse
+    {
+        glm::vec3 deformation{0.0f}; // world X/Z bend, then pressure [0,1]
+        glm::vec3 velocity{0.0f};
     };
 
     struct FGrassPlacement
@@ -58,7 +84,8 @@ namespace Runtime
         // Release residency, retaining staged asset IDs: the engine calls BeforeSceneRebuild
         // before OnSceneUnloaded. Scene owns the actual nodes.
         void Clear();
-        void Tick(Assets::Scene& scene, float dt, const glm::vec3& focus, float weather = 0.0f);
+        void Tick(Assets::Scene& scene, float dt, const glm::vec3& focus, float weather = 0.0f,
+                  std::span<const FGrassInteractor> interactors = {});
 
         uint32_t ActiveCount() const { return activeCount_; }
         uint32_t ActiveCount(uint32_t lod) const { return lod < lodCount ? activeByLod_[lod] : 0; }
@@ -68,6 +95,10 @@ namespace Runtime
         uint64_t PoseChanges() const { return poseChanges_; }
         uint64_t TileBuilds() const { return tileBuilds_; }
         uint32_t MeshCount() const { return prepared_ ? poseCount * lodCount : 0; }
+        uint32_t InteractionCount() const { return interactionCount_; }
+        uint32_t ContactCount() const { return contactCount_; }
+        uint32_t ContactChecks() const { return contactChecks_; }
+        float MaxPressure() const { return maxPressure_; }
 
         // CPU-only generation and wind selection, also used by tests/tools.
         static std::vector<FGrassPlacement> GenerateTile(std::span<const TerrainComponent* const> terrains,
@@ -78,6 +109,8 @@ namespace Runtime
         static float Coverage(float distance, float radius, uint32_t lod);
         static uint32_t SelectPose(float bend, uint32_t previous);
         static Assets::Model CreatePose(uint32_t pose, uint32_t lod = 0);
+        static glm::vec3 Contact(const FGrassPlacement& placement, const FGrassSweep& sweep);
+        static void StepResponse(FGrassResponse& response, glm::vec3 target, float dt, float recoverySeconds);
 
     private:
         struct FInstance
@@ -85,7 +118,11 @@ namespace Runtime
             std::shared_ptr<Assets::Node> node;
             FGrassPlacement placement;
             uint32_t pose = 0;
+            FGrassResponse response;
         };
+        using FContactTiles = std::map<std::array<int, 2>, std::vector<FGrassSweep>>;
+        FContactTiles BuildContactTiles(std::span<const FGrassInteractor> interactors, float elapsed,
+                                       const glm::vec3& focus);
         void Stream(Assets::Scene& scene, const glm::vec3& focus, float radius);
 
         std::array<std::array<uint32_t, poseCount>, lodCount> models_{};
@@ -94,6 +131,7 @@ namespace Runtime
         std::map<std::array<int, 3>, std::vector<uint32_t>> tiles_; // lod, tileX, tileZ
         std::vector<FInstance> pool_;
         std::vector<uint32_t> free_;
+        std::map<uint64_t, glm::vec3> previousInteractors_;
         glm::vec3 lastFocus_{1.0e20f};
         float lastDensity_ = -1.0f;
         float lastRadius_ = -1.0f;
@@ -106,6 +144,10 @@ namespace Runtime
         std::array<uint32_t, lodCount> activeByLod_{};
         float maxActiveDistance_ = 0.0f;
         uint32_t edgeCount_ = 0;
+        uint32_t interactionCount_ = 0;
+        uint32_t contactCount_ = 0;
+        uint32_t contactChecks_ = 0;
+        float maxPressure_ = 0.0f;
         uint64_t poseChanges_ = 0;
         uint64_t tileBuilds_ = 0;
         bool prepared_ = false;

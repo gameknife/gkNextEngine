@@ -1057,7 +1057,11 @@ namespace Assets
                 glm::vec3 localCenter = (model->GetLocalAABBMax() + model->GetLocalAABBMin()) * 0.5f;
                 center = glm::vec3(foundNode->WorldTransform() * glm::vec4(localCenter, 1.0f));
 
-                glm::vec3 extent = (model->GetLocalAABBMax() - model->GetLocalAABBMin()) * foundNode->WorldScale();
+                const auto& transform = foundNode->WorldTransform();
+                const glm::vec3 localExtent = model->GetLocalAABBMax() - model->GetLocalAABBMin();
+                const glm::vec3 extent = glm::abs(glm::vec3(transform[0])) * localExtent.x +
+                                         glm::abs(glm::vec3(transform[1])) * localExtent.y +
+                                         glm::abs(glm::vec3(transform[2])) * localExtent.z;
                 radius = glm::length(extent) * 0.5f;
                 return true;
             }

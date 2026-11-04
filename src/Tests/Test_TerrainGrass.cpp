@@ -332,3 +332,97 @@ TEST_CASE("Grass thins and shortens deterministically beside roads water pads an
         }
     }
 }
+
+TEST_CASE("Grass sweep contacts cover fast motion and reject other floors", "[Unit][TerrainGrass][Interaction]")
+{
+    using Grass = Runtime::FTerrainGrassSystem;
+    Runtime::FGrassPlacement patch;
+    Runtime::FGrassSweep moving{{-3, 0, 0}, {3, 0, 0}, {6, 0, 0}, 0.55f, 1.0f};
+    const auto contact = Grass::Contact(patch, moving);
+    CHECK(contact.z > 0.9f);
+    CHECK(contact.x > 0.0f);
+    auto point = moving;
+    point.from = point.to;
+    CHECK(Grass::Contact(patch, point) == glm::vec3(0)); // endpoints alone miss this grass
+    moving.from.y = moving.to.y = 2.0f;
+    CHECK(Grass::Contact(patch, moving) == glm::vec3(0)); // upstairs or bridge
+    moving.from.y = moving.to.y = 0.0f;
+    patch.lod = 1;
+    CHECK(Grass::Contact(patch, moving) == glm::vec3(0)); // no whole-clump deformation at distance
+    patch.lod = 0;
+    point.from = point.to = {0, 0, 0};
+    point.velocity = {};
+    patch.position = {0, 0, 0.3f};
+    const auto standing = Grass::Contact(patch, point);
+    CHECK(standing.y > 0.0f);
+    patch.position.z = -0.3f;
+    CHECK(Grass::Contact(patch, point).y < 0.0f); // parts to both sides of the body
+    point.velocity = {6, 0, 0};
+    CHECK(Grass::Contact(patch, point).z > standing.z);
+    point.strength = 0;
+    CHECK(Grass::Contact(patch, point) == glm::vec3(0));
+}
+
+TEST_CASE("Grass response bends quickly then recovers independently of update rate", "[Unit][TerrainGrass][Interaction]")
+{
+    using Grass = Runtime::FTerrainGrassSystem;
+    const glm::vec3 target(0.7f, -0.4f, 0.6f);
+    std::array<Runtime::FGrassResponse, 2> responses;
+    for (int rate : {20, 60})
+    {
+        auto& response = responses[rate == 20 ? 0 : 1];
+        for (int step = 0; step < rate / 5; ++step)
+            Grass::StepResponse(response, target, 1.0f / rate, 1.25f);
+        CHECK(response.deformation.z > 0.55f);
+        CHECK(response.deformation.z <= 1.0f);
+        const auto paused = response.deformation;
+        Grass::StepResponse(response, {}, 0, 1.25f);
+        CHECK(response.deformation == paused);
+        for (int step = 0; step < rate / 2; ++step)
+            Grass::StepResponse(response, {}, 1.0f / rate, 1.25f);
+        CHECK(response.deformation.z < 0.3f);
+        CHECK(response.deformation.z >= 0.0f);
+    }
+    CHECK(glm::distance(responses[0].deformation, responses[1].deformation) < 0.001f);
+    auto response = responses[0];
+    for (int step = 0; step < 100; ++step) Grass::StepResponse(response, {}, 0.05f, 1.25f);
+    CHECK(response.deformation == glm::vec3(0));
+    CHECK(response.velocity == glm::vec3(0));
+    Grass::StepResponse(response, target, 2.0f, 1.25f); // long frame remains finite
+    CHECK(glm::distance(response.deformation, target) < 0.001f);
+}
+
+TEST_CASE("Grass affine interaction anchors blade roots and shares render motion matrices", "[Unit][TerrainGrass][Interaction][Node]")
+{
+    const glm::vec3 at(4, 2, -3);
+    const auto rotation = glm::angleAxis(0.35f, glm::normalize(glm::vec3(1, 1, 0)));
+    const glm::vec3 scale(1.2f, 0.45f, 0.8f);
+    auto parent = Assets::Node::CreateNode("parent", {3, 0, 2}, glm::quat(1, 0, 0, 0), {1, 1.1f, 1}, 1);
+    auto node = Assets::Node::CreateNode("grass", at, rotation, scale, 2);
+    node->SetParent(parent);
+    node->TickVelocity();
+    const auto previous = node->WorldTransform();
+    node->SetShearedTransform(at, rotation, scale, {1.7f, -0.8f});
+    REQUIRE(node->TickVelocity());
+    Assets::NodeProxy proxy{};
+    node->GetNodeProxy(proxy);
+    CHECK(proxy.worldTS == node->WorldTransform());
+    CHECK(std::abs(glm::determinant(proxy.worldTS)) > 0.1f);
+    for (uint32_t pose = 0; pose < Runtime::FTerrainGrassSystem::poseCount; ++pose)
+    {
+        const auto mesh = Runtime::FTerrainGrassSystem::CreatePose(pose);
+        for (const auto& vertex : mesh.CPUVertices())
+        {
+            const auto point = glm::vec4(vertex.Position, 1);
+            const glm::vec3 now = proxy.worldTS * point;
+            const glm::vec3 before = previous * point;
+            if (vertex.Position.y == 0.0f) CHECK(glm::distance(now, before) < 0.00001f);
+            const glm::vec3 motionPrevious = proxy.combinedPrevTS * glm::vec4(now, 1);
+            CHECK(glm::distance(motionPrevious, before) < 0.00001f);
+        }
+    }
+    node->SetTranslation({5, 2, -3}); // normal translation updates retain shear
+    CHECK(glm::length(glm::vec3(node->WorldTransform()[1])) > glm::length(scale.y * glm::vec3(rotation * glm::vec3(0,1,0))));
+    node->SetTransform(at, rotation, scale); // ordinary TRS explicitly clears it
+    CHECK(node->WorldTransform() == previous);
+}

@@ -57,7 +57,7 @@ namespace NextDayz
 
         void InjectAssets(std::vector<Assets::Model>& models, std::vector<Assets::FMaterial>& materials);
         void SetWeaponAssets(const std::array<uint32_t, kWeapons.size()>& modelIds,
-                             const std::array<uint32_t, kWeapons.size()>& materialIds);
+                             const std::array<FWeaponMaterialSlots, kWeapons.size()>& materialIds);
         void OnSceneLoaded(Assets::Scene& scene);
         void OnSceneUnloaded();
 
@@ -162,7 +162,7 @@ namespace NextDayz
         std::string baseClipName_;
         std::string weaponActionClipName_;
         std::array<uint32_t, kWeapons.size()> weaponModelIds_{};
-        std::array<uint32_t, kWeapons.size()> weaponMaterialIds_{};
+        std::array<FWeaponMaterialSlots, kWeapons.size()> weaponMaterialIds_{};
         int weaponVisualIndex_ = -1;
         std::array<int, 2> holsteredWeaponVisualIndices_{{-1, -1}};
         bool weaponAssetsSet_ = false;

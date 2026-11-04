@@ -2,7 +2,9 @@
 
 #include <catch2/catch_all.hpp>
 
+#include "Engine/Assets/Data/Material.hpp"
 #include "Engine/Assets/Data/RigAsset.hpp"
+#include "Engine/Runtime/Scene/SceneBuilder.hpp"
 #include "Modules/ScadLoader/FScadEvaluator.h"
 #include "Modules/ScadLoader/FScadLexer.h"
 #include "Modules/ScadLoader/FScadParser.h"
@@ -326,6 +328,50 @@ TEST_CASE("ScadRig marks tint placeholder sections as tintable", "[Unit][ScadRig
         }
     }
     CHECK(tintable == 1);
+}
+
+TEST_CASE("ScadRig keeps gk_material surfaces as their own sections", "[Unit][ScadRig]")
+{
+    FRigAsset asset;
+    REQUIRE(BuildRigFromSource(
+        "module bone_root() {\n"
+        "    gk_material([0.2, 0.2, 0.2], roughness = 0.3, metalness = 0.9) cube(0.1, center = true);\n"
+        "    color([0.2, 0.2, 0.2]) translate([0, 0, 0.3]) cube(0.1, center = true);\n"
+        "}\n"
+        "bone_root();\n",
+        asset));
+
+    // Same RGB, different surface: two sections, not one merged Lambertian.
+    REQUIRE(asset.parts.size() == 1);
+    const FRigPart& part = asset.parts[0];
+    REQUIRE(part.sectionColors.size() == 2);
+    REQUIRE(part.sectionSurfaces.size() == 2);
+
+    std::vector<FMaterial> materials;
+    int metal = 0;
+    int lambert = 0;
+    for (size_t section = 0; section < part.sectionSurfaces.size(); ++section)
+    {
+        const glm::vec2 surface = part.SectionSurface(section);
+        const Material& material =
+            materials[SceneBuilder::AddRigSectionMaterial(materials, part, section)].gpuMaterial_;
+        if (surface.y > 0.5f)
+        {
+            ++metal;
+            CHECK(surface.x == Catch::Approx(0.3f).margin(1e-3));
+            CHECK(surface.y == Catch::Approx(0.9f).margin(1e-3));
+            CHECK(material.MaterialModel == Material::Enum::Mixture);
+            CHECK(material.Metalness == Catch::Approx(0.9f).margin(1e-3));
+        }
+        else
+        {
+            ++lambert;
+            CHECK(surface.x == Catch::Approx(1.0f));
+            CHECK(material.MaterialModel == Material::Enum::Lambertian);
+        }
+    }
+    CHECK(metal == 1);
+    CHECK(lambert == 1);
 }
 
 TEST_CASE("ScadRig bakes mirror inside the bone body into geometry", "[Unit][ScadRig]")
@@ -951,5 +997,37 @@ TEST_CASE("NextDayz loot catalog has a world model for every item", "[Unit][Scad
         REQUIRE(bone >= 0);
         REQUIRE(std::any_of(asset.parts.begin(), asset.parts.end(),
                             [bone](const FRigPart& part) { return part.bone == bone; }));
+    }
+}
+
+TEST_CASE("NextDayz weapon catalog has a PBR held model for every weapon", "[Unit][ScadRig][NextDayz]")
+{
+    using namespace NextDayz;
+    FRigAsset asset;
+    std::string error;
+    std::vector<std::string> warnings;
+    REQUIRE(FScadRigLoader::LoadRig("assets/scad/characters/nextdayz_weapons.scad", {}, asset, error, &warnings));
+    CHECK(warnings.empty());
+    for (const FWeaponDef& weapon : kWeapons)
+    {
+        INFO(weapon.id);
+        const int32_t bone = asset.FindBone("bone_wpn_" + std::string(weapon.id));
+        REQUIRE(bone >= 0);
+        // The game injects one model per weapon: everything must fit one part (<= 16 sections).
+        const auto parts = std::count_if(asset.parts.begin(), asset.parts.end(),
+                                         [bone](const FRigPart& part) { return part.bone == bone; });
+        REQUIRE(parts == 1);
+        const FRigPart& part = *std::find_if(asset.parts.begin(), asset.parts.end(),
+                                             [bone](const FRigPart& p) { return p.bone == bone; });
+        CHECK(std::any_of(part.sectionSurfaces.begin(), part.sectionSurfaces.end(),
+                          [](const glm::vec2& surface) { return surface.y > 0.5f; }));
+
+        // Weapon frame: +Z is the muzzle; the muzzle landmark sits on the model's tip.
+        float tip = -1.0f;
+        for (const Vertex& vertex : asset.partModels[part.modelIndex].CPUVertices())
+        {
+            tip = std::max(tip, vertex.Position.z);
+        }
+        CHECK(tip == Catch::Approx(WeaponModelPoints(weapon.id).muzzleForward).margin(0.012f));
     }
 }

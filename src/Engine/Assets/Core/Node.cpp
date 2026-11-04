@@ -167,9 +167,15 @@ namespace Assets
 
     void Node::SetTransform(glm::vec3 translation, glm::quat rotation, glm::vec3 scale)
     {
+        SetShearedTransform(translation, rotation, scale, glm::vec2(0.0f));
+    }
+
+    void Node::SetShearedTransform(glm::vec3 translation, glm::quat rotation, glm::vec3 scale, glm::vec2 yShear)
+    {
         translation_ = translation;
         rotation_ = rotation;
         scaling_ = scale;
+        yShear_ = yShear;
         RecalcTransform(true);
     }
 
@@ -180,7 +186,10 @@ namespace Assets
 
     void Node::RecalcLocalTransform()
     {
-        localTransform_ = glm::translate(glm::mat4(1), translation_) * glm::mat4_cast(rotation_) * glm::scale(glm::mat4(1), scaling_);
+        auto basis = glm::mat4_cast(rotation_);
+        if (yShear_ != glm::vec2(0.0f))
+            basis[1] += basis[0] * yShear_.x + basis[2] * yShear_.y;
+        localTransform_ = glm::translate(glm::mat4(1), translation_) * basis * glm::scale(glm::mat4(1), scaling_);
     }
 
     void Node::RecalcTransform(bool full)

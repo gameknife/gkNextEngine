@@ -316,6 +316,20 @@ public struct ALIGN_16 NodeProxy
     public uint reserved2;      // outline flags [0:2], visibility transparency [16:31]
 };
 
+#ifndef __cplusplus
+// Inverse-transpose up to a positive scalar, valid for TRS, nonuniform scale and shear.
+// Kept in Types so the fixed-descriptor compatibility rasterizer uses the same normal transform.
+public float3 TransformAffineNormal(float4x4 world, float3 normal)
+{
+    const float3 x = mul(world, float4(1, 0, 0, 0)).xyz;
+    const float3 y = mul(world, float4(0, 1, 0, 0)).xyz;
+    const float3 z = mul(world, float4(0, 0, 1, 0)).xyz;
+    const float3 cofactorX = cross(y, z);
+    const float orientation = dot(x, cofactorX) < 0.0f ? -1.0f : 1.0f;
+    return (cofactorX * normal.x + cross(z, x) * normal.y + cross(x, y) * normal.z) * orientation;
+}
+#endif
+
 public struct ALIGN_16 ModelData
 {
     public uint indexOffset;

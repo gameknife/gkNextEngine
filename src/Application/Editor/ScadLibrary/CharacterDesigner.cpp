@@ -361,8 +361,8 @@ namespace ScadLibrary
                 for (size_t section = 0; section < part.sectionColors.size() && section < sectionMaterials.size();
                      ++section)
                 {
-                    sectionMaterials[section] =
-                        Assets::SceneBuilder::AddLambertianMaterial(materials, glm::vec3(part.sectionColors[section]));
+                    // Kit attachments (weapons, gear) keep their gk_material surfaces.
+                    sectionMaterials[section] = Assets::SceneBuilder::AddRigSectionMaterial(materials, part, section);
                 }
                 attachment.partMaterialIds.push_back(sectionMaterials);
                 models.push_back(attachment.asset.partModels[part.modelIndex]);

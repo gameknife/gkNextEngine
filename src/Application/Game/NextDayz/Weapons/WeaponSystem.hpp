@@ -56,7 +56,7 @@ namespace NextDayz
 
         // View-model proc assets injected by the GameInstance (BeforeSceneRebuild).
         void SetViewModelAssets(const std::array<uint32_t, kWeapons.size()>& modelIds,
-                                const std::array<uint32_t, kWeapons.size()>& materialIds);
+                                const std::array<FWeaponMaterialSlots, kWeapons.size()>& materialIds);
 
         void OnSceneLoaded(NextEngine& engine);
         void OnSceneUnloaded();
@@ -177,7 +177,7 @@ namespace NextDayz
 
         // view model
         std::array<uint32_t, kWeapons.size()> viewModelModelIds_{};
-        std::array<uint32_t, kWeapons.size()> viewModelMaterialIds_{};
+        std::array<FWeaponMaterialSlots, kWeapons.size()> viewModelMaterialIds_{};
         bool viewModelAssetsSet_ = false;
         int viewModelWeaponIndex_ = -1;
         std::shared_ptr<Assets::Node> viewModelNode_;

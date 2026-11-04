@@ -107,7 +107,7 @@ VertexOutput main(uint vertexIndex: SV_VertexID)
     const uint materialSlot = (VertexWords[vertexWord + 5] >> 16u) & 0xFFu;
     output.position =
         mul(mul(pushConstants.ViewProjection, proxy.worldTS), float4(localPosition, 1.0));
-    output.worldNormal = mul((float3x3)proxy.worldTS, localNormal);
+    output.worldNormal = TransformAffineNormal(proxy.worldTS, localNormal);
     output.materialId = FetchNodeMaterialId(proxy, materialSlot);
     return output;
 }

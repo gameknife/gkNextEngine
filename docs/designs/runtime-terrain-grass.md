@@ -72,6 +72,11 @@ NextDayz 的控制台变量（不写入个人 Archive 配置）：
 | `nextdayz.grass.windStrength` | 0.65 | 0–1，叠加天气影响 |
 | `nextdayz.grass.windYaw` | 0.7 | 弧度，+X 朝 -Z |
 | `nextdayz.grass.windSpeed` | 1 | 0–4，0 冻结风场时间 |
+| `nextdayz.grass.interaction` | true | 角色接触与回弹总开关 |
+| `nextdayz.grass.interactionStrength` | 1 | 0–2，角色拨草/踩伏强度 |
+| `nextdayz.grass.recoverySeconds` | 1.25 | 0.3–4，离开后的回弹时间尺度 |
+| `nextdayz.grass.playerInteraction` | true | 玩家接触开关 |
+| `nextdayz.grass.zombieInteraction` | true | 活跃且存活的感染者接触开关 |
 
 查询：`game.grassInstances`、`grassPoolSize`、`grassMeshes`、`grassPoseChanges`、`grassTileBuilds`。
 分档与距离查询：`game.grassNearInstances`、`grassMidInstances`、`grassFarInstances`、`grassFarthestDistance`。
@@ -104,10 +109,36 @@ SoftwareModern、SoftwareTracing、SoftwareModernNoAmbient、PathTracing、PathT
 
 同机位光照对照：`gnb validate --script assets/agentscripts/nextdayz-grass-lighting.agentscript.json`。
 
+## 角色交互
+
+`Tick(..., weather, interactors)` 接收稳定 ID、脚部世界位置、作用半径和强度。NextDayz 在角色运动及
+感染者贴地更新后收集交互源；玩家离地或翻越时不提交，死亡感染者不再持续施压。引擎保存上一次
+20 Hz 更新的位置，用扫掠胶囊覆盖快速移动路径；新 ID 从当前位置开始，单次位移超过 4 m 视为
+传送，不沿途压草。离开输入列表或卸载时清除历史；实例槽回收时清除压痕，避免跨块串扰。
+
+接触源按现有 8 m 网格分桶，草簇只检查自己块内的扫掠段；接触处的切平面高度差超过 0.45 m 则
+忽略，避免桥上、楼上或跳跃中的角色影响下方草地。作用方向混合向身体外侧拨开与顺移动方向拖拽，
+速度越快压力越强；静止保留较轻压力。多个角色的弯曲叠加后限幅，压力取最大值。
+
+每簇只保存弯曲/压力与回弹速度，使用解析阻尼弹簧，接触约 0.1–0.2 秒响应、离开后约 1–2 秒回弹。
+受压时减弱风摆。只在近景 LOD 启用，24–36 m 平滑减弱，在中远景大簇出现前归零。
+
+实例使用 `Node::SetShearedTransform`，局部 `x'=x+shearX*y`、`z'=z+shearZ*y`，配合保持正值的
+高度缩放表现踩伏。所有根部位于局部 y=0，因此接触和风姿态残差都保留草根位置。原 27 个共享
+mesh/BLAS 不变，不更新顶点、不重建 BLAS；完整仿射矩阵驱动光栅、CSM、TLAS 和上一帧运动矩阵。
+可见性重建、法线贴图与硬件射线命中共用逆转置法线变换，包围盒包含剪切后的几何。
+此接口用于没有物理体的运行时装饰，不对碰撞形状执行剪切。
+
+诊断查询：`game.grassInteractionCount`（正在变形或回弹的可见草簇）、`grassContactCount`（当前接触）、
+`grassMaxPressure`、`grassContactChecks`（本次更新实际执行的接触检查）。
+验证：`gnb validate --script assets/agentscripts/nextdayz-grass-interaction.agentscript.json`，覆盖玩家站立/
+奔跑、离开后的恢复、感染者独立接触、硬件光追/光栅截图，以及共享 mesh 与实例池预算。
+
 ## 当前边界
 
 这是量化 mesh 动画，残差旋转只是近似；切换模型的非刚性顶点位移尚无精确逐顶点 motion vector。
 该限制可能在强时域降噪/上采样下产生残影；不要把静态截图当成时域画质保证。
 草簇沿地形平面贴地，不能精确跟随草簇尺度内的凸凹折面；微量埋根避免一般坡面浮根。
+角色交互是每簇的仿射近似，同簇各片草共享弯曲方向，不做逐叶碰撞，也不留下永久踩踏地表。
 建筑占地应标为 terrain pad；本系统不对任意场景物件另做遮挡/占地射线。
 地形运行时改变网格或变换时需重新 Prepare/Bind，和场景重建生命周期一致。

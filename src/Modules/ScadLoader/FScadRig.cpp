@@ -28,9 +28,22 @@ namespace Assets
             return (q(c.r) << 24) | (q(c.g) << 16) | (q(c.b) << 8) | q(c.a);
         }
 
+        // Sections split on color *and* surface: a gk_material() glossy steel and a
+        // matte color() of the same RGB must not merge into one material slot.
+        uint64_t RigBucketKey(const glm::vec4& color, const Scad::ScadMaterialProperties& material)
+        {
+            auto q = [](float v) -> uint64_t
+            {
+                return static_cast<uint64_t>(std::clamp(v, 0.0f, 1.0f) * 65535.0f + 0.5f);
+            };
+            return (static_cast<uint64_t>(RigQuantizeColor(color)) << 32) | (q(material.roughness) << 16) |
+                   q(material.metalness);
+        }
+
         struct RigBucket
         {
             glm::vec4 color{0.78f, 0.78f, 0.78f, 1.0f};
+            glm::vec2 surface{1.0f, 0.0f}; // (roughness, metalness)
             std::vector<glm::dvec3> tris; // SCAD space, baked into bone-pivot-local frame
         };
 
@@ -105,13 +118,15 @@ namespace Assets
             void CollapseInto(
                 const Scad::SceneNode& node,
                 const glm::dmat4& accum,
-                std::map<uint32_t, RigBucket>& buckets,
+                std::map<uint64_t, RigBucket>& buckets,
                 std::vector<std::pair<const Scad::SceneNode*, glm::dmat4>>& childBones)
             {
                 for (const Scad::SceneMeshBucket& mesh : node.meshes)
                 {
-                    RigBucket& bucket = buckets[RigQuantizeColor(mesh.color)];
+                    RigBucket& bucket = buckets[RigBucketKey(mesh.color, mesh.material)];
                     bucket.color = mesh.color;
+                    bucket.surface = glm::vec2(std::clamp(mesh.material.roughness, 0.0f, 1.0f),
+                                               std::clamp(mesh.material.metalness, 0.0f, 1.0f));
                     bucket.tris.reserve(bucket.tris.size() + mesh.tris.size());
                     const bool flipWinding = glm::determinant(glm::dmat3(accum)) < 0.0;
                     const auto transform = [&accum](const glm::dvec3& point)
@@ -180,7 +195,7 @@ namespace Assets
                     asset_.bones[parentIndex].children.push_back(boneIndex);
                 }
 
-                std::map<uint32_t, RigBucket> buckets;
+                std::map<uint64_t, RigBucket> buckets;
                 std::vector<std::pair<const Scad::SceneNode*, glm::dmat4>> childBones;
                 CollapseInto(boneNode, glm::dmat4(1.0), buckets, childBones);
                 BuildParts(boneIndex, buckets);
@@ -191,7 +206,7 @@ namespace Assets
                 }
             }
 
-            void BuildParts(int32_t boneIndex, const std::map<uint32_t, RigBucket>& buckets)
+            void BuildParts(int32_t boneIndex, const std::map<uint64_t, RigBucket>& buckets)
             {
                 std::vector<const RigBucket*> nonEmpty;
                 for (const auto& entry : buckets)
@@ -235,6 +250,7 @@ namespace Assets
                         }
 
                         part.sectionColors.push_back(bucket.color);
+                        part.sectionSurfaces.push_back(bucket.surface);
                         part.sectionTintable.push_back(RigQuantizeColor(bucket.color) == tintKey);
                         ++sectionIndex;
                     }

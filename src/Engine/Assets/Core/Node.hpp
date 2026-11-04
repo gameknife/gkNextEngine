@@ -32,6 +32,9 @@ namespace Assets
         /// Updates the complete local transform with a single hierarchy recalculation. Gameplay
         /// object pools should prefer this over three independent setters.
         void SetTransform(glm::vec3 translation, glm::quat rotation, glm::vec3 scale);
+        /// Render-only affine deformation: local X/Z displacement per unit scaled local Y.
+        /// The local Y=0 root plane stays fixed. Uses the same world matrix for every render path.
+        void SetShearedTransform(glm::vec3 translation, glm::quat rotation, glm::vec3 scale, glm::vec2 yShear);
 
         glm::vec3& Translation() const { return translation_; }
         glm::quat& Rotation() const { return rotation_; }
@@ -121,6 +124,7 @@ namespace Assets
         mutable glm::vec3 translation_;
         mutable glm::quat rotation_;
         mutable glm::vec3 scaling_;
+        glm::vec2 yShear_{0.0f};
         
         glm::mat4 localTransform_;
         glm::mat4 transform_;

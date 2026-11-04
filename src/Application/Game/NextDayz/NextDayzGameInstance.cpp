@@ -41,6 +41,7 @@ namespace
     constexpr const char* kSoldierRig = "assets/scad/characters/nextdayz_survivor.scad";
     constexpr const char* kInfectedRig = "assets/scad/characters/nextdayz_infected.scad";
     constexpr const char* kLootCatalogRig = "assets/scad/characters/nextdayz_loot_items.scad";
+    constexpr const char* kWeaponCatalogRig = "assets/scad/characters/nextdayz_weapons.scad";
     constexpr float kNotificationSeconds = 7.0f;
     constexpr float kLanternFuelSeconds = 15.0f * 60.0f;
     constexpr float kCacheMarkerSeconds = 20.0f * 60.0f;
@@ -59,110 +60,6 @@ namespace
         float bearing = glm::degrees(std::atan2(delta.x, -delta.z));
         bearing = bearing < 0.0f ? bearing + 360.0f : bearing;
         return words[static_cast<size_t>((bearing + 22.5f) / 45.0f) % 8];
-    }
-
-    void AppendWeaponBox(std::vector<Assets::Vertex>& vertices, std::vector<uint32_t>& indices,
-                         const glm::vec3& min, const glm::vec3& max)
-    {
-        Assets::Model box = Assets::FProcModel::CreateBox(min, max);
-        const uint32_t vertexOffset = static_cast<uint32_t>(vertices.size());
-        vertices.insert(vertices.end(), box.CPUVertices().begin(), box.CPUVertices().end());
-        for (uint32_t index : box.CPUIndices())
-        {
-            indices.push_back(vertexOffset + index);
-        }
-    }
-
-    Assets::Model CreateWeaponVisual(std::string_view weaponId)
-    {
-        std::vector<Assets::Vertex> vertices;
-        std::vector<uint32_t> indices;
-        const auto box = [&](const glm::vec3& min, const glm::vec3& max) {
-            AppendWeaponBox(vertices, indices, min, max);
-        };
-
-        if (weaponId == "pistol")
-        {
-            box({-0.040f, -0.015f, -0.08f}, {0.040f, 0.055f, 0.22f}); // slide
-            box({-0.034f, -0.22f, -0.04f}, {0.034f, -0.015f, 0.07f}); // grip
-            box({-0.018f, 0.005f, 0.22f}, {0.018f, 0.035f, 0.29f});   // barrel
-            box({-0.035f, 0.055f, -0.06f}, {-0.016f, 0.095f, -0.035f});
-            box({0.016f, 0.055f, -0.06f}, {0.035f, 0.095f, -0.035f});
-            box({-0.007f, 0.055f, 0.255f}, {0.007f, 0.095f, 0.280f});
-        }
-        else if (weaponId == "shotgun")
-        {
-            box({-0.055f, -0.045f, -0.42f}, {0.055f, 0.045f, -0.10f});
-            box({-0.045f, -0.050f, -0.10f}, {0.045f, 0.055f, 0.20f});
-            box({-0.025f, 0.005f, 0.20f}, {0.025f, 0.050f, 0.78f});
-            box({-0.040f, -0.065f, 0.22f}, {0.040f, -0.005f, 0.48f});
-            box({-0.040f, 0.050f, -0.02f}, {-0.018f, 0.10f, 0.01f});
-            box({0.018f, 0.050f, -0.02f}, {0.040f, 0.10f, 0.01f});
-            box({-0.007f, 0.050f, 0.72f}, {0.007f, 0.10f, 0.75f});
-        }
-        else if (weaponId == "mosin")
-        {
-            box({-0.045f, -0.040f, -0.48f}, {0.045f, 0.045f, 0.12f});
-            box({-0.020f, 0.005f, 0.12f}, {0.020f, 0.040f, 0.86f});
-            box({-0.034f, -0.13f, -0.08f}, {0.034f, -0.04f, 0.03f});
-            box({-0.038f, 0.045f, 0.00f}, {-0.017f, 0.10f, 0.03f});
-            box({0.017f, 0.045f, 0.00f}, {0.038f, 0.10f, 0.03f});
-            box({-0.007f, 0.040f, 0.80f}, {0.007f, 0.10f, 0.83f});
-        }
-        else if (weaponId == "svd")
-        {
-            box({-0.050f, -0.045f, -0.43f}, {0.050f, 0.050f, 0.20f});
-            box({-0.021f, 0.000f, 0.20f}, {0.021f, 0.040f, 0.86f});
-            // Four rails leave a visible sight channel through the scope.
-            box({-0.035f, 0.055f, -0.02f}, {-0.022f, 0.115f, 0.25f});
-            box({0.022f, 0.055f, -0.02f}, {0.035f, 0.115f, 0.25f});
-            box({-0.022f, 0.055f, -0.02f}, {0.022f, 0.068f, 0.25f});
-            box({-0.022f, 0.102f, -0.02f}, {0.022f, 0.115f, 0.25f});
-            box({-0.035f, -0.18f, -0.02f}, {0.035f, -0.045f, 0.10f});
-        }
-        else if (weaponId == "knife")
-        {
-            box({-0.016f, -0.022f, -0.12f}, {0.016f, 0.022f, 0.0f});   // grip
-            box({-0.040f, -0.026f, 0.0f}, {0.040f, 0.026f, 0.015f});   // guard
-            box({-0.004f, -0.016f, 0.015f}, {0.004f, 0.020f, 0.24f});  // blade
-        }
-        else if (weaponId == "crowbar")
-        {
-            box({-0.013f, -0.013f, -0.30f}, {0.013f, 0.013f, 0.50f});
-            box({-0.013f, 0.013f, 0.46f}, {0.013f, 0.09f, 0.50f});      // hooked end
-            box({-0.013f, 0.09f, 0.50f}, {0.013f, 0.11f, 0.62f});
-        }
-        else if (weaponId == "axe")
-        {
-            box({-0.016f, -0.016f, -0.30f}, {0.016f, 0.016f, 0.55f});   // haft
-            box({-0.012f, -0.02f, 0.44f}, {0.012f, 0.16f, 0.58f});      // blade
-            box({-0.016f, -0.07f, 0.47f}, {0.016f, -0.02f, 0.55f});     // back spike
-        }
-        else // AK-74
-        {
-            box({-0.055f, -0.045f, -0.38f}, {0.055f, 0.045f, -0.12f});
-            box({-0.050f, -0.050f, -0.12f}, {0.050f, 0.060f, 0.20f});
-            box({-0.022f, 0.000f, 0.20f}, {0.022f, 0.045f, 0.66f});
-            box({-0.038f, -0.20f, -0.02f}, {0.038f, -0.05f, 0.12f});
-            box({-0.045f, 0.045f, -0.01f}, {-0.018f, 0.105f, 0.025f});
-            box({0.018f, 0.045f, -0.01f}, {0.045f, 0.105f, 0.025f});
-            box({-0.008f, 0.045f, 0.59f}, {0.008f, 0.105f, 0.625f});
-        }
-
-        return Assets::Model::CreateFromGeometry(fmt::format("nd_weapon_{}", weaponId),
-                                                  std::move(vertices), std::move(indices));
-    }
-
-    glm::vec3 WeaponVisualColor(std::string_view weaponId)
-    {
-        if (weaponId == "ak") return {0.20f, 0.13f, 0.07f};
-        if (weaponId == "svd") return {0.24f, 0.15f, 0.08f};
-        if (weaponId == "mosin") return {0.31f, 0.20f, 0.10f};
-        if (weaponId == "shotgun") return {0.14f, 0.12f, 0.10f};
-        if (weaponId == "knife") return {0.30f, 0.30f, 0.32f};
-        if (weaponId == "crowbar") return {0.45f, 0.10f, 0.08f};
-        if (weaponId == "axe") return {0.50f, 0.13f, 0.08f};
-        return {0.10f, 0.11f, 0.12f};
     }
 
     // Faded shirt colours for the infected; each body slot wears one.
@@ -244,6 +141,20 @@ void NextDayzGameInstance::OnInit()
             SPDLOG_WARN("[NextDayz] loot catalog unavailable; loot spots are invisible: {}", error);
         }
     }
+    {
+        std::string error;
+        std::vector<std::string> warnings;
+        weaponCatalogLoaded_ =
+            Assets::FScadRigLoader::LoadRig(kWeaponCatalogRig, {}, weaponCatalogAsset_, error, &warnings);
+        if (!weaponCatalogLoaded_)
+        {
+            SPDLOG_ERROR("[NextDayz] weapon catalog unavailable; held weapons are placeholder boxes: {}", error);
+        }
+        for (const std::string& warning : warnings)
+        {
+            SPDLOG_WARN("[NextDayz] weapon catalog: {}", warning);
+        }
+    }
 
     std::string scene = kDefaultScene;
     if (!GOption->SceneName.empty())
@@ -281,6 +192,16 @@ void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
                         "Wind heading in radians: +X toward -Z");
     cvars.RegisterFloat("nextdayz.grass.windSpeed", 1.0f, &grass_.settings.windSpeed, NextCVar::ECVarFlags::None,
                         "Wind animation speed; zero freezes the field", nullptr, 0.0, 4.0);
+    cvars.RegisterBool("nextdayz.grass.interaction", true, &grass_.settings.interactionEnabled,
+                       NextCVar::ECVarFlags::None, "Root-preserving grass contact and recovery");
+    cvars.RegisterFloat("nextdayz.grass.interactionStrength", 1.0f, &grass_.settings.interactionStrength,
+                        NextCVar::ECVarFlags::None, "Grass contact strength", nullptr, 0.0, 2.0);
+    cvars.RegisterFloat("nextdayz.grass.recoverySeconds", 1.25f, &grass_.settings.recoverySeconds,
+                        NextCVar::ECVarFlags::None, "Grass recovery time after contact", nullptr, 0.3, 4.0);
+    cvars.RegisterBool("nextdayz.grass.playerInteraction", true, &grassPlayerInteraction_,
+                       NextCVar::ECVarFlags::None, "Let the player push grass aside");
+    cvars.RegisterBool("nextdayz.grass.zombieInteraction", true, &grassZombieInteraction_,
+                       NextCVar::ECVarFlags::None, "Let living infected push grass aside");
 
     cvars.RegisterFloat("nextdayz.player.maxStepHeight", config_.Player.MaxStepHeight,
                         &config_.Player.MaxStepHeight, NextCVar::ECVarFlags::Archive,
@@ -583,8 +504,8 @@ void NextDayzGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<Assets
             {
                 if (!part.sectionTintable[section])
                 {
-                    sectionMaterials[section] = Assets::SceneBuilder::AddLambertianMaterial(
-                        materials, glm::vec3(part.sectionColors[section]));
+                    sectionMaterials[section] =
+                        Assets::SceneBuilder::AddRigSectionMaterial(materials, part, section);
                 }
             }
             zombieRigPartMaterialIds_.push_back(sectionMaterials);
@@ -596,13 +517,55 @@ void NextDayzGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<Assets
         }
     }
 
+    InjectWeaponCatalog(models, materials);
+}
+
+void NextDayzGameInstance::InjectWeaponCatalog(std::vector<Assets::Model>& models,
+                                               std::vector<Assets::FMaterial>& materials)
+{
     for (size_t i = 0; i < NextDayz::kWeapons.size(); ++i)
     {
-        const NextDayz::FWeaponDef& def = NextDayz::kWeapons[i];
-        models.push_back(CreateWeaponVisual(def.id));
+        const std::string_view weaponId = NextDayz::kWeapons[i].id;
+        const Assets::FRigPart* model = nullptr;
+        if (weaponCatalogLoaded_)
+        {
+            const int32_t bone = weaponCatalogAsset_.FindBone(fmt::format("bone_wpn_{}", weaponId));
+            int partCount = 0;
+            for (const Assets::FRigPart& part : weaponCatalogAsset_.parts)
+            {
+                if (bone >= 0 && part.bone == bone && part.modelIndex >= 0 &&
+                    part.modelIndex < static_cast<int32_t>(weaponCatalogAsset_.partModels.size()))
+                {
+                    model = model ? model : &part;
+                    ++partCount;
+                }
+            }
+            if (partCount > 1)
+            {
+                // A part holds at most 16 material sections; the render node takes one model.
+                SPDLOG_WARN("[NextDayz] weapon '{}' uses more than 16 materials; only its first part is shown",
+                            weaponId);
+            }
+        }
+
+        weaponMaterialIds_[i] = {};
+        if (model)
+        {
+            models.push_back(weaponCatalogAsset_.partModels[model->modelIndex]);
+            for (size_t section = 0; section < model->sectionColors.size() && section < weaponMaterialIds_[i].size();
+                 ++section)
+            {
+                weaponMaterialIds_[i][section] = Assets::SceneBuilder::AddRigSectionMaterial(materials, *model, section);
+            }
+        }
+        else
+        {
+            SPDLOG_WARN("[NextDayz] weapon catalog has no model for '{}'; using a placeholder box", weaponId);
+            models.push_back(Assets::FProcModel::CreateBox(glm::vec3(-0.02f, -0.03f, -0.30f),
+                                                           glm::vec3(0.02f, 0.05f, 0.50f)));
+            weaponMaterialIds_[i][0] = Assets::SceneBuilder::AddLambertianMaterial(materials, glm::vec3(0.2f));
+        }
         weaponModelIds_[i] = static_cast<uint32_t>(models.size() - 1);
-        weaponMaterialIds_[i] =
-            Assets::SceneBuilder::AddLambertianMaterial(materials, WeaponVisualColor(def.id));
     }
     weapons_.SetViewModelAssets(weaponModelIds_, weaponMaterialIds_);
     rig_.SetWeaponAssets(weaponModelIds_, weaponMaterialIds_);
@@ -1052,7 +1015,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
         }
     }
     time_.Tick(static_cast<double>(dt), GetEngine().GetScene());
-    grass_.Tick(GetEngine().GetScene(), dt, player_.Position(), time_.Storm());
+    UpdateGrass(dt);
     UpdateWorldPressure();
     UpdateFirecrackers(dt);
     UpdateSurvivalFeedback(dt);
@@ -1310,8 +1273,7 @@ void NextDayzGameInstance::InjectLootCatalog(std::vector<Assets::Model>& models,
             visual.modelId = static_cast<uint32_t>(models.size() - 1);
             for (size_t section = 0; section < part.sectionColors.size() && section < visual.materials.size(); ++section)
             {
-                visual.materials[section] =
-                    Assets::SceneBuilder::AddLambertianMaterial(materials, glm::vec3(part.sectionColors[section]));
+                visual.materials[section] = Assets::SceneBuilder::AddRigSectionMaterial(materials, part, section);
             }
             visual.valid = true;
             if (itemId == "unknown")
@@ -2714,6 +2676,25 @@ bool NextDayzGameInstance::OnScroll(double /*xoffset*/, double yoffset)
     return false;
 }
 
+void NextDayzGameInstance::UpdateGrass(float dt)
+{
+    grassInteractors_.clear();
+    grassInteractors_.reserve(zombies_.Capacity() + 1);
+    const auto& locomotion = player_.LocomotionState();
+    if (grassPlayerInteraction_ && survival_.IsAlive() && locomotion.onGround && !player_.IsTraversing())
+        grassInteractors_.push_back({0, player_.Position(), 0.55f, 1.0f});
+    if (grassZombieInteraction_)
+    {
+        for (const auto& zombie : zombies_.Slots())
+        {
+            if (!zombie.active || zombie.state == NextDayz::EZombieState::Dead) continue;
+            const uint64_t id = (uint64_t(zombie.handle.generation) << 32) | (uint64_t(zombie.handle.index) + 1);
+            grassInteractors_.push_back({id, zombie.position, 0.5f, 1.0f});
+        }
+    }
+    grass_.Tick(GetEngine().GetScene(), dt, player_.Position(), time_.Storm(), grassInteractors_);
+}
+
 void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegistry& reg)
 {
     reg.Add("sceneReady", [this]() -> Runtime::Agent::FAgentQueryValue { return sceneReady_; });
@@ -2725,6 +2706,10 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     reg.Add("grassEdgeInstances", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.EdgeCount()); });
     reg.Add("grassPoolSize", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.PoolSize()); });
     reg.Add("grassMeshes", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.MeshCount()); });
+    reg.Add("grassInteractionCount", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.InteractionCount()); });
+    reg.Add("grassContactCount", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.ContactCount()); });
+    reg.Add("grassContactChecks", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.ContactChecks()); });
+    reg.Add("grassMaxPressure", [this]() -> Runtime::Agent::FAgentQueryValue { return double(grass_.MaxPressure()); });
     reg.Add("grassPoseChanges", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.PoseChanges()); });
     reg.Add("grassTileBuilds", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.TileBuilds()); });
     reg.Add("ammoInMag", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<int64_t>(weapons_.AmmoInMag()); });

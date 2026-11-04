@@ -72,6 +72,7 @@ public:
 private:
     // One simulation frame (OnTick wraps it with the debugger's freeze/step/timers).
     void SimulateFrame(float dt);
+    void UpdateGrass(float dt);
     glm::vec3 ResolveSpawnPosition() const;
     // Inventory requests (HUD, quickbar, keys). Each runs one inventory
     // transaction and reports the outcome in the message feed.
@@ -94,6 +95,7 @@ private:
     void UpdateWorldPressure();
     void UpdateFirecrackers(float deltaSeconds);
     void InjectLootCatalog(std::vector<Assets::Model>& models, std::vector<Assets::FMaterial>& materials);
+    void InjectWeaponCatalog(std::vector<Assets::Model>& models, std::vector<Assets::FMaterial>& materials);
     std::vector<NextDayz::FLootSpotSeed> CollectLootSpots() const;
     void StartNewLife();
     void ApplyValidationLoadout();
@@ -143,10 +145,15 @@ private:
     NextGameplay::FNavGrid zombieNavGrid_;
     NextDayz::TimeSystem time_;
     Runtime::FTerrainGrassSystem grass_;
+    std::vector<Runtime::FGrassInteractor> grassInteractors_;
+    bool grassPlayerInteraction_ = true;
+    bool grassZombieInteraction_ = true;
 
-    // Injected weapon silhouettes shared by FPS view model and TPS attachment.
+    // Held weapon models (nextdayz_weapons.scad) shared by FPS view model and TPS attachment.
+    Assets::FRigAsset weaponCatalogAsset_{};
+    bool weaponCatalogLoaded_ = false;
     std::array<uint32_t, NextDayz::kWeapons.size()> weaponModelIds_{};
-    std::array<uint32_t, NextDayz::kWeapons.size()> weaponMaterialIds_{};
+    std::array<NextDayz::FWeaponMaterialSlots, NextDayz::kWeapons.size()> weaponMaterialIds_{};
     Assets::FRigAsset zombieRigAsset_{};
     NextDayz::ZombieRigVisual::FClips zombieRigClips_{};
     std::vector<uint32_t> zombieRigPartModelIds_;

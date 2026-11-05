@@ -4,7 +4,7 @@ category: project
 status: 现行
 owner: NextDayz
 created: 2026-11-04
-last_updated: 2026-11-05
+last_updated: 2026-11-06
 ---
 
 # NextDayz 游戏内调试器
@@ -17,6 +17,7 @@ NextDayz 的各个系统（玩家 3C、生存、背包、武器、感染者 AI�
 
 | 键 | 作用 |
 | --- | --- |
+| `F12` | 即时切换简体中文 / English（游戏界面与调试器同步） |
 | `F5` | 打开/关闭调试器（窗口 + 世界叠加层） |
 | `F6` / `F7` / `F8` | 切换图层：感染者 AI / 物资 / 命中盒+射线 |
 | `F9` | 调试光标：释放鼠标操作调试窗口；在世界里**左键点选**感染者、物资、刷新点 |
@@ -24,6 +25,10 @@ NextDayz 的各个系统（玩家 3C、生存、背包、武器、感染者 AI�
 | `PgUp` / `PgDn` | 切换标签页 |
 
 不开 F9 时窗口是只读的（不拦截鼠标、不影响射击）；背包、地图、暂停或死亡释放鼠标时窗口自动可交互。冻结时相机仍可转动，便于检查某一帧。
+
+首次启动默认简体中文。安全屋、暂停/死亡菜单和调试器顶栏都有“语言 / Language”选择器；选择保存在 NextDayz 用户数据目录的 `settings.json`，下次启动继续使用。通知与事件日志保留双语内容，切换后已有记录也同步更新。验证模式使用独立的默认语言，不读取或写入个人语言偏好。
+
+翻译集中在 `src/Application/Game/NextDayz/UI/Translations.inl`，物品 ID、cvar 名、调试页签的脚本标识和快照键保持英文；显示文本（包括 `game.currentObjective`、`game.lastNotification`）随当前语言变化。`game.language` 返回 `zhCN` 或 `en`。
 
 ## 2. 窗口
 
@@ -129,6 +134,7 @@ NextDayz 的各个系统（玩家 3C、生存、背包、武器、感染者 AI�
 ## 9. 验证
 
 - 单元测试：`gkNextUnitTests "[NextDayz][Debug]"`（刷新结论、补货受阻原因、感知与寻路预算、事件日志与历史序列）。
+- 本地化：`gkNextUnitTests "[NextDayz][Localization]"` 检查格式占位符、物品覆盖、历史消息和稳定 UI ID；`gnb validate --script assets/agentscripts/nextdayz-localization.agentscript.json` 验证语言切换并截图 HUD、调试器、日志、背包、暂停菜单与安全屋。
 - 端到端：`gnb validate --script assets/agentscripts/nextdayz-debug-visualization.agentscript.json`——开 F5、开火、选中最近感染者并环绕查看、冻结与单步、切换 Spawns/Loot/Log 标签、写快照，并在每一步截图。
 
 ## 10. 扩展约定

@@ -1,4 +1,5 @@
 #include "Engine/Common/CoreMinimal.hpp"
+#include "Application/Game/NextDayz/UI/Localization.hpp"
 
 // World overlay layers of the NextDayz debugger. Everything is projected with
 // the camera the frame renders with and drawn on ImGui's background list:
@@ -311,13 +312,13 @@ namespace NextDayz::Debug
             {
                 const size_t pathLeft = zombie.pathWaypoint < zombie.path.size() ? zombie.path.size() - zombie.pathWaypoint : 0;
                 paint.LabelAt(screen, color,
-                              fmt::format("Z{}:{} {} {}  HP {:.0f}\n{:.1f} m  v {:.1f}  path {}{}  repath {:.1f}  "
+                              NextDayz::L10n::Format("Z{}:{} {} {}  HP {:.0f}\n{:.1f} m  v {:.1f}  path {}{}  repath {:.1f}  "
                                           "stuck {:.1f}  poise {:.0f}{}{}",
                                           zombie.handle.index, zombie.handle.generation, ZombieDef(zombie.profile).id,
-                                          ZombieStateName(zombie.state), zombie.health, distance, zombie.Speed(),
-                                          pathLeft, zombie.pathFailed ? " FAIL" : "", zombie.repathSeconds,
-                                          zombie.stuckSeconds, zombie.poise, zombie.Lame() ? "  lame" : "",
-                                          zombie.seesPlayer ? "  SEES" : ""));
+                                          NextDayz::L10n::Tr(ZombieStateName(zombie.state)), zombie.health, distance, zombie.Speed(),
+                                          pathLeft, zombie.pathFailed ? NextDayz::L10n::Tr(" FAIL") : "", zombie.repathSeconds,
+                                          zombie.stuckSeconds, zombie.poise, zombie.Lame() ? NextDayz::L10n::Tr("  lame") : "",
+                                          zombie.seesPlayer ? NextDayz::L10n::Tr("  SEES") : ""));
             }
             else
             {
@@ -382,7 +383,7 @@ namespace NextDayz::Debug
             }
             if (capsules.empty() && zombie.state != EZombieState::Dead)
             {
-                paint.Label(zombie.position + glm::vec3(0.0f, 2.4f, 0.0f), Style::kHover, "NO HITBOXES");
+                paint.Label(zombie.position + glm::vec3(0.0f, 2.4f, 0.0f), Style::kHover, NextDayz::L10n::Tr("NO HITBOXES"));
             }
         }
     }
@@ -402,14 +403,14 @@ namespace NextDayz::Debug
             {
                 continue;   // label only the newest few
             }
-            std::string what = trace.hitZombie ? "INFECTED" : trace.hit ? "WORLD" : "MISS";
+            std::string what = trace.hitZombie ? NextDayz::L10n::Tr("INFECTED") : trace.hit ? NextDayz::L10n::Tr("WORLD") : NextDayz::L10n::Tr("MISS");
             if (trace.hit && !trace.hitZombie && commands_.nodeName)
             {
                 what += " " + commands_.nodeName(trace.hitInstanceId);
             }
             paint.Label(trace.endPoint, base,
-                        fmt::format("#{}.{} {} {:.1f} m{}", trace.sequence, trace.pellet, what,
-                                    glm::distance(trace.origin, trace.endPoint), trace.melee ? " melee" : ""));
+                        NextDayz::L10n::Format("#{}.{} {} {:.1f} m{}", trace.sequence, trace.pellet, what,
+                                    glm::distance(trace.origin, trace.endPoint), trace.melee ? NextDayz::L10n::Tr(" melee") : ""));
         }
     }
 
@@ -428,7 +429,7 @@ namespace NextDayz::Debug
             Ring(paint, center, std::min(noise.radius, 2.0f), color, 2.0f, 12);
             paint.Line(center, center + glm::vec3(0.0f, 3.0f, 0.0f), color, 2.0f);
             paint.Label(center + glm::vec3(0.0f, 3.0f, 0.0f), color,
-                        fmt::format("{} r{:.0f} x{:.1f} {:.1f}s", NoiseTypeName(noise.type), noise.radius,
+                        NextDayz::L10n::Format("{} r{:.0f} x{:.1f} {:.1f}s", NextDayz::L10n::Tr(NoiseTypeName(noise.type)), noise.radius,
                                     noise.strength, noise.remainingSeconds));
         }
     }
@@ -473,9 +474,9 @@ namespace NextDayz::Debug
             {
                 const double cooldown = std::max(0.0, point.cooldownUntil - now);
                 paint.Label(point.position + glm::vec3(0.0f, 3.0f, 0.0f), color,
-                            fmt::format("S{} {} {}/{}  {}{}  {:.0f} m", index, ZombieDef(point.profile).id, out,
-                                        point.groupSize, SpawnVerdictName(point.verdict),
-                                        cooldown > 0.0 ? fmt::format(" {:.0f}s", cooldown) : std::string(), distance));
+                            NextDayz::L10n::Format("S{} {} {}/{}  {}{}  {:.0f} m", index, ZombieDef(point.profile).id, out,
+                                        point.groupSize, NextDayz::L10n::Tr(SpawnVerdictName(point.verdict)),
+                                        cooldown > 0.0 ? NextDayz::L10n::Format(" {:.0f}s", cooldown) : std::string(), distance));
             }
         }
     }
@@ -503,17 +504,17 @@ namespace NextDayz::Debug
             }
             const FLootSlot* slot = loot.ResolveSlot(entry.directorHandle);
             glm::vec4 color = Style::LootCategory(entry.category);
-            std::string state = "Available";
+            std::string state = NextDayz::L10n::Tr("Available");
             if (entry.state == FLootEntry::EState::Reserved)
             {
                 color = Style::kWarn;
-                state = "Reserved";
+                state = NextDayz::L10n::Tr("Reserved");
             }
             else if (entry.state == FLootEntry::EState::Cooldown)
             {
                 color = Style::Alpha(Style::kMuted, 0.8f);
                 const double readyIn = std::max(0.0, loot.Director().ReadyAt(entry.directorHandle) - loot.WorldSeconds());
-                state = fmt::format("Cooldown {:.0f}s {}", readyIn, slot ? LootRespawnBlockName(slot->block) : "");
+                state = NextDayz::L10n::Format("Cooldown {:.0f}s {}", readyIn, slot ? NextDayz::L10n::Tr(LootRespawnBlockName(slot->block)) : "");
             }
             const glm::vec3 top = entry.worldPos + glm::vec3(0.0f, 1.2f, 0.0f);
             paint.Line(entry.worldPos, top, color, 1.5f);
@@ -528,9 +529,9 @@ namespace NextDayz::Debug
             if (distance <= knobs_.labelDistance)
             {
                 paint.LabelAt(screen, color,
-                              fmt::format("L{} {} | {} {} | {} | z{}", index,
+                              NextDayz::L10n::Format("L{} {} | {} {} | {} | z{}", index,
                                           entry.displayName.empty() ? "-" : entry.displayName,
-                                          LootProfileName(entry.profile), LootCategoryName(entry.category), state,
+                                          NextDayz::L10n::Tr(LootProfileName(entry.profile)), NextDayz::L10n::Tr(LootCategoryName(entry.category)), state,
                                           entry.zone));
             }
         }
@@ -565,8 +566,8 @@ namespace NextDayz::Debug
                 available += entry.zone == static_cast<int>(index) && entry.state == FLootEntry::EState::Available ? 1 : 0;
             }
             paint.Label(center + glm::vec3(0.0f, 4.0f, 0.0f), color,
-                        fmt::format("zone {}  {}/{} stocked  r{:.0f}{}", index, available, zone.entries, zone.radius,
-                                    blocking ? "  (you are near: no restock)" : ""));
+                        NextDayz::L10n::Format("zone {}  {}/{} stocked  r{:.0f}{}", index, available, zone.entries, zone.radius,
+                                    blocking ? NextDayz::L10n::Tr("  (you are near: no restock)") : ""));
         }
     }
 
@@ -638,17 +639,17 @@ namespace NextDayz::Debug
             {
             case EWorldAnchorType::Poi:
                 color = Style::kSelect;
-                text = fmt::format("{} ({})  {:.0f} m", anchor.label, anchor.profile, distance);
+                text = NextDayz::L10n::Format("{} ({})  {:.0f} m", anchor.label, anchor.profile, distance);
                 height = 12.0f;
                 break;
             case EWorldAnchorType::Well:
                 color = Style::kInfo;
-                text = fmt::format("well  {:.0f} m", distance);
+                text = NextDayz::L10n::Format("well  {:.0f} m", distance);
                 height = 3.0f;
                 break;
             case EWorldAnchorType::PlayerSafe:
                 color = Style::kGood;
-                text = "player safe spawn";
+                text = NextDayz::L10n::Tr("player safe spawn");
                 break;
             default:
                 continue;   // loot and infected anchors have their own layers
@@ -667,7 +668,7 @@ namespace NextDayz::Debug
         {
             Beam(paint, *facts.cacheMarker, Style::kWarn, 40.0f);
             paint.Label(*facts.cacheMarker + glm::vec3(0.0f, 6.0f, 0.0f), Style::kWarn,
-                        fmt::format("supply cache  {:.0f} m", glm::distance(*facts.cacheMarker, feet)));
+                        NextDayz::L10n::Format("supply cache  {:.0f} m", glm::distance(*facts.cacheMarker, feet)));
         }
         for (const glm::vec3& cracker : facts.firecrackers)
         {
@@ -698,7 +699,7 @@ namespace NextDayz::Debug
         {
             Cross(paint, hit->point + hit->normal * 0.02f, 0.15f, Style::kSelect, 2.0f);
             paint.Label(hit->point, Style::kSelect,
-                        fmt::format("{:.1f} m  {}", hit->distance,
+                        NextDayz::L10n::Format("{:.1f} m  {}", hit->distance,
                                     commands_.nodeName ? commands_.nodeName(hit->instanceId) : std::string()));
         }
         if (systems_.loot && systems_.loot->Hovered())

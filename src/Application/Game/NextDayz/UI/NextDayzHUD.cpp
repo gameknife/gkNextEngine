@@ -1,4 +1,5 @@
 #include "Engine/Common/CoreMinimal.hpp"
+#include "Application/Game/NextDayz/UI/Localization.hpp"
 #include "NextDayzHUD.hpp"
 
 #include <algorithm>
@@ -19,6 +20,18 @@ namespace NextDayz::NextDayzHUD
     {
         constexpr const char* kItemPayload = "ND_ITEM";
         constexpr const char* kLootPayload = "ND_LOOT";
+
+        std::string FitText(std::string text, float width)
+        {
+            if (ImGui::CalcTextSize(text.c_str()).x <= width) return text;
+            while (!text.empty() && ImGui::CalcTextSize((text + "…").c_str()).x > width)
+            {
+                size_t last = text.size() - 1;
+                while (last > 0 && (static_cast<unsigned char>(text[last]) & 0xc0) == 0x80) --last;
+                text.resize(last);
+            }
+            return text + "…";
+        }
 
         void AcceptContainerDrop(const FHudContext& context, FContainerId containerId)
         {
@@ -45,7 +58,7 @@ namespace NextDayz::NextDayzHUD
         std::string ItemName(std::string_view itemId)
         {
             const FItemDef* definition = FindItemDef(itemId);
-            return definition ? std::string(definition->displayName) : std::string(itemId);
+            return definition ? std::string(NextDayz::L10n::Tr(definition->displayName)) : std::string(itemId);
         }
 
         // Bearing in degrees clockwise from north. Engine +Z is south on the map.
@@ -171,7 +184,7 @@ namespace NextDayz::NextDayzHUD
             ImGui::SameLine();
             const bool clear = !context.overcast;
             ImGui::TextColored(clear ? ImVec4(1.0f, 0.82f, 0.3f, 1.0f) : ImVec4(0.65f, 0.72f, 0.8f, 1.0f), "• %s",
-                               context.weather.empty() ? (clear ? "Clear" : "Overcast") : context.weather.c_str());
+                               context.weather.empty() ? (clear ? NextDayz::L10n::Tr("Clear") : NextDayz::L10n::Tr("Overcast")) : context.weather.c_str());
             ImGui::End();
 
             ImGui::PopStyleVar(2);
@@ -197,7 +210,7 @@ namespace NextDayz::NextDayzHUD
             ImGui::Begin("##nd_objective", nullptr,
                          ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoMove |
                          ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoNav);
-            ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), "GOAL");
+            ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), NextDayz::L10n::Tr("GOAL"));
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(0.92f, 0.92f, 0.92f, 1.0f), "%s", context.objective.c_str());
             ImGui::End();
@@ -238,7 +251,7 @@ namespace NextDayz::NextDayzHUD
                 const float x = center.x + delta * pxPerDegree;
                 const float fade = 1.0f - std::abs(delta) / 60.0f;
                 const ImU32 color = IM_COL32(230, 228, 214, static_cast<int>(220.0f * fade));
-                const char* label = tick == 0 ? "N" : tick == 90 ? "E" : tick == 180 ? "S" : tick == 270 ? "W" : nullptr;
+                const char* label = tick == 0 ? NextDayz::L10n::Tr("N") : tick == 90 ? NextDayz::L10n::Tr("E") : tick == 180 ? NextDayz::L10n::Tr("S") : tick == 270 ? NextDayz::L10n::Tr("W") : nullptr;
                 if (label)
                 {
                     draw->AddText(ImVec2(x - 4.0f, center.y - 9.0f),
@@ -258,7 +271,7 @@ namespace NextDayz::NextDayzHUD
                 const float x = center.x + delta * pxPerDegree;
                 draw->AddTriangleFilled(ImVec2(x - 6, center.y + 16), ImVec2(x + 6, center.y + 16), ImVec2(x, center.y + 8),
                                         IM_COL32(255, 70, 50, 240));
-                char text[32];
+                char text[128];
                 std::snprintf(text, sizeof(text), "%.0fm", glm::length(glm::vec2(delta3.x, delta3.z)));
                 draw->AddText(ImVec2(x - 14.0f, center.y + 17.0f), IM_COL32(255, 120, 100, 230), text);
             }
@@ -289,7 +302,7 @@ namespace NextDayz::NextDayzHUD
                                               UITheme::Colors::AccentAmber, IM_COL32(20, 26, 35, 200));
 
                 // Action verb text in center
-                const std::string& action = context.actionLabel.empty() ? "INTERACTING" : context.actionLabel;
+                const std::string& action = context.actionLabel.empty() ? NextDayz::L10n::Tr("INTERACTING") : context.actionLabel;
                 const ImVec2 textSize = ImGui::CalcTextSize(action.c_str());
                 draw->AddText(ImVec2(center.x - textSize.x * 0.5f, center.y - textSize.y * 0.5f),
                               UITheme::Colors::TextPrimary, action.c_str());
@@ -329,7 +342,7 @@ namespace NextDayz::NextDayzHUD
                 draw->AddRectFilled(p1Min, p1Max, UITheme::Colors::SurfaceBg, 4.0f);
                 draw->AddRect(p1Min, p1Max, UITheme::Colors::BorderMuted, 4.0f);
                 UIWidgets::DrawKeyBadge(draw, ImVec2(p1Min.x + 8.0f, p1Min.y + 5.0f), "E", 24.0f);
-                draw->AddText(ImVec2(p1Min.x + 40.0f, p1Min.y + 8.0f), UITheme::Colors::TextPrimary, "DRINK");
+                draw->AddText(ImVec2(p1Min.x + 40.0f, p1Min.y + 8.0f), UITheme::Colors::TextPrimary, NextDayz::L10n::Tr("DRINK"));
 
                 // Pill 2: [F] Fill Bottle
                 const ImVec2 p2Min(p1Max.x + gap, center.y - pillH * 0.5f);
@@ -337,28 +350,29 @@ namespace NextDayz::NextDayzHUD
                 draw->AddRectFilled(p2Min, p2Max, UITheme::Colors::SurfaceBg, 4.0f);
                 draw->AddRect(p2Min, p2Max, UITheme::Colors::BorderMuted, 4.0f);
                 UIWidgets::DrawKeyBadge(draw, ImVec2(p2Min.x + 8.0f, p2Min.y + 5.0f), "F", 24.0f);
-                draw->AddText(ImVec2(p2Min.x + 40.0f, p2Min.y + 8.0f), UITheme::Colors::AccentCyan, "FILL BOTTLE");
+                draw->AddText(ImVec2(p2Min.x + 40.0f, p2Min.y + 8.0f), UITheme::Colors::AccentCyan, NextDayz::L10n::Tr("FILL BOTTLE"));
                 return;
             }
 
             // Single action pill: e.g. "[E] Take AK-74"
             std::string key = "E";
-            std::string action = "INTERACT";
+            std::string action = NextDayz::L10n::Tr("INTERACT");
             std::string target = prompt;
 
             if (prompt.rfind("[E] Take ", 0) == 0)
             {
                 key = "E";
-                action = "TAKE";
+                action = NextDayz::L10n::Tr("TAKE");
                 target = prompt.substr(9);
             }
             else if (prompt.rfind("[E] ", 0) == 0)
             {
                 key = "E";
-                action = "USE";
+                action = NextDayz::L10n::Tr("USE");
                 target = prompt.substr(4);
             }
 
+            target = NextDayz::L10n::Localize(target, NextDayz::L10n::Language());
             const ImVec2 actionSize = ImGui::CalcTextSize(action.c_str());
             const ImVec2 targetSize = ImGui::CalcTextSize(target.c_str());
             const float pillH = 36.0f;
@@ -415,9 +429,9 @@ namespace NextDayz::NextDayzHUD
 
             const FSurvivalSnapshot& s = context.survival;
             const bool lowHealth = s.health < 25.0f;
-            renderBar("HEALTH", s.health, 12.0f, UITheme::Colors::AccentRose, lowHealth);
-            renderBar("HUNGER", s.hunger, 38.0f, UITheme::Colors::AccentAmber, s.hunger < 20.0f);
-            renderBar("THIRST", s.hydration, 64.0f, UITheme::Colors::AccentCyan, s.hydration < 20.0f);
+            renderBar(NextDayz::L10n::Tr("HEALTH"), s.health, 12.0f, UITheme::Colors::AccentRose, lowHealth);
+            renderBar(NextDayz::L10n::Tr("HUNGER"), s.hunger, 38.0f, UITheme::Colors::AccentAmber, s.hunger < 20.0f);
+            renderBar(NextDayz::L10n::Tr("THIRST"), s.hydration, 64.0f, UITheme::Colors::AccentCyan, s.hydration < 20.0f);
 
             // Status badges floating above vitals panel
             float badgeY = panelPos.y - 28.0f;
@@ -425,8 +439,8 @@ namespace NextDayz::NextDayzHUD
 
             if (s.bleedingWounds > 0)
             {
-                char text[32];
-                std::snprintf(text, sizeof(text), "BLEEDING x%d  [H]", s.bleedingWounds);
+                char text[128];
+                std::snprintf(text, sizeof(text), NextDayz::L10n::Tr("BLEEDING x%d  [H]"), s.bleedingWounds);
                 const ImVec2 size = UIWidgets::DrawStatusBadge(draw, ImVec2(badgeX, badgeY), "🩸", text,
                                                                UITheme::Colors::SlotInvalidDropBg,
                                                                UITheme::Colors::AccentRose,
@@ -436,7 +450,7 @@ namespace NextDayz::NextDayzHUD
 
             if (s.cold > 0.25f)
             {
-                const char* coldText = s.cold > 0.55f ? "FREEZING" : "COLD";
+                const char* coldText = s.cold > 0.55f ? NextDayz::L10n::Tr("FREEZING") : NextDayz::L10n::Tr("COLD");
                 const ImVec2 size = UIWidgets::DrawStatusBadge(draw, ImVec2(badgeX, badgeY), "❄️", coldText,
                                                                IM_COL32(30, 58, 90, 200),
                                                                UITheme::Colors::AccentIceBlue,
@@ -446,7 +460,7 @@ namespace NextDayz::NextDayzHUD
 
             if (s.healing && s.bleedingWounds == 0)
             {
-                const char* healText = s.painkillerSeconds > 0.0f ? "PAINKILLERS" : "HEALING";
+                const char* healText = s.painkillerSeconds > 0.0f ? NextDayz::L10n::Tr("PAINKILLERS") : NextDayz::L10n::Tr("HEALING");
                 const ImVec2 size = UIWidgets::DrawStatusBadge(draw, ImVec2(badgeX, badgeY), "💊", healText,
                                                                UITheme::Colors::SlotValidDropBg,
                                                                UITheme::Colors::AccentEmerald,
@@ -456,7 +470,7 @@ namespace NextDayz::NextDayzHUD
 
             if (context.weak)
             {
-                const ImVec2 size = UIWidgets::DrawStatusBadge(draw, ImVec2(badgeX, badgeY), "⚡", "WEAK - NO SPRINT",
+                const ImVec2 size = UIWidgets::DrawStatusBadge(draw, ImVec2(badgeX, badgeY), "⚡", NextDayz::L10n::Tr("WEAK - NO SPRINT"),
                                                                IM_COL32(70, 55, 20, 200),
                                                                UITheme::Colors::AccentAmber,
                                                                UITheme::Colors::AccentAmber);
@@ -465,8 +479,8 @@ namespace NextDayz::NextDayzHUD
 
             if (context.lanternLit)
             {
-                char lanternText[32];
-                std::snprintf(lanternText, sizeof(lanternText), "LANTERN %.0fm", context.lanternMinutes);
+                char lanternText[128];
+                std::snprintf(lanternText, sizeof(lanternText), NextDayz::L10n::Tr("LANTERN %.0fm"), context.lanternMinutes);
                 UIWidgets::DrawStatusBadge(draw, ImVec2(badgeX, badgeY), "💡", lanternText,
                                            IM_COL32(60, 50, 25, 200),
                                            UITheme::Colors::AccentAmber,
@@ -493,9 +507,9 @@ namespace NextDayz::NextDayzHUD
 
             if (!context.hasWeapon)
             {
-                draw->AddText(ImVec2(cardPos.x + 14.0f, cardPos.y + 14.0f), UITheme::Colors::TextMuted, "UNARMED");
+                draw->AddText(ImVec2(cardPos.x + 14.0f, cardPos.y + 14.0f), UITheme::Colors::TextMuted, NextDayz::L10n::Tr("UNARMED"));
                 draw->AddText(ImVec2(cardPos.x + 14.0f, cardPos.y + 36.0f), UITheme::Colors::TextMuted,
-                              context.firstPerson ? "[FPS]" : "[TPS]");
+                              context.firstPerson ? NextDayz::L10n::Tr("[FPS]") : NextDayz::L10n::Tr("[TPS]"));
                 return;
             }
 
@@ -505,7 +519,7 @@ namespace NextDayz::NextDayzHUD
 
             if (context.reloading)
             {
-                draw->AddText(ImVec2(cardPos.x + 14.0f, cardPos.y + 32.0f), UITheme::Colors::AccentAmber, "RELOADING...");
+                draw->AddText(ImVec2(cardPos.x + 14.0f, cardPos.y + 32.0f), UITheme::Colors::AccentAmber, NextDayz::L10n::Tr("RELOADING..."));
                 const ImVec2 barMin(cardPos.x + 14.0f, cardPos.y + 52.0f);
                 const ImVec2 barMax(cardPos.x + cardW - 14.0f, barMin.y + 4.0f);
                 const float t = static_cast<float>(ImGui::GetTime());
@@ -515,8 +529,8 @@ namespace NextDayz::NextDayzHUD
             else if (context.melee)
             {
                 draw->AddText(ImVec2(cardPos.x + 14.0f, cardPos.y + 30.0f), UITheme::Colors::TextSecondary,
-                              context.swinging ? "STRIKING..." : context.aiming ? "GUARD READY" : "RMB  READY");
-                draw->AddText(ImVec2(cardPos.x + 14.0f, cardPos.y + 47.0f), UITheme::Colors::TextMuted, "LMB  STRIKE");
+                              context.swinging ? NextDayz::L10n::Tr("STRIKING...") : context.aiming ? NextDayz::L10n::Tr("GUARD READY") : NextDayz::L10n::Tr("RMB  READY"));
+                draw->AddText(ImVec2(cardPos.x + 14.0f, cardPos.y + 47.0f), UITheme::Colors::TextMuted, NextDayz::L10n::Tr("LMB  STRIKE"));
             }
             else
             {
@@ -535,9 +549,9 @@ namespace NextDayz::NextDayzHUD
             }
 
             // Slot badge on right
-            char slotText[24];
-            std::snprintf(slotText, sizeof(slotText), "SLOT %d  %s", context.activeSlot + 1,
-                          context.firstPerson ? "FPS" : "TPS");
+            char slotText[128];
+            std::snprintf(slotText, sizeof(slotText), NextDayz::L10n::Tr("SLOT %d  %s"), context.activeSlot + 1,
+                          context.firstPerson ? NextDayz::L10n::Tr("FPS") : NextDayz::L10n::Tr("TPS"));
             const ImVec2 slotSize = ImGui::CalcTextSize(slotText);
             draw->AddText(ImVec2(cardPos.x + cardW - slotSize.x - 12.0f, cardPos.y + 42.0f),
                           UITheme::Colors::TextMuted, slotText);
@@ -574,11 +588,7 @@ namespace NextDayz::NextDayzHUD
 
                 if (occupied)
                 {
-                    std::string name = ItemName(itemId);
-                    if (name.size() > 7)
-                    {
-                        name = name.substr(0, 6) + ".";
-                    }
+                    const std::string name = FitText(ItemName(itemId), size - 10.0f);
                     draw->AddText(ImVec2(a.x + 5.0f, a.y + 18.0f),
                                   count > 0 ? UITheme::Colors::TextPrimary : UITheme::Colors::TextMuted,
                                   name.c_str());
@@ -647,12 +657,12 @@ namespace NextDayz::NextDayzHUD
             ImGui::PushStyleColor(ImGuiCol_WindowBg, UITheme::Colors::SurfaceBg);
             ImGui::PushStyleColor(ImGuiCol_Border, UITheme::Colors::BorderMuted);
 
-            ImGui::Begin("Riverland Tactical Map##nd_map", nullptr,
+            ImGui::Begin(NextDayz::L10n::Label("Riverland Tactical Map##nd_map"), nullptr,
                          ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                              ImGuiWindowFlags_NoSavedSettings);
             if (!context.hasMap)
             {
-                ImGui::TextWrapped("You have no map. Look for one in shops, police stations and military sites.");
+                ImGui::TextWrapped(NextDayz::L10n::Tr("You have no map. Look for one in shops, police stations and military sites."));
                 ImGui::End();
                 ImGui::PopStyleColor(2);
                 return;
@@ -694,13 +704,13 @@ namespace NextDayz::NextDayzHUD
                 const bool danger = poi.kind == "military" || poi.kind == "fortress";
                 draw->AddRectFilled(ImVec2(p.x - 4, p.y - 4), ImVec2(p.x + 4, p.y + 4),
                                     danger ? IM_COL32(150, 40, 30, 255) : IM_COL32(50, 46, 40, 255));
-                draw->AddText(ImVec2(p.x + 7, p.y - 7), IM_COL32(30, 28, 24, 255), poi.name.c_str());
+                draw->AddText(ImVec2(p.x + 7, p.y - 7), IM_COL32(30, 28, 24, 255), NextDayz::L10n::Tr(poi.name));
             }
             if (context.cacheMarker)
             {
                 const ImVec2 p = toScreen(context.cacheMarker->x, context.cacheMarker->z);
                 draw->AddCircle(p, 10.0f, IM_COL32(220, 40, 30, 255), 16, 3.0f);
-                draw->AddText(ImVec2(p.x + 12, p.y + 2), IM_COL32(200, 30, 20, 255), "Supply cache");
+                draw->AddText(ImVec2(p.x + 12, p.y + 2), IM_COL32(200, 30, 20, 255), NextDayz::L10n::Tr("Supply cache"));
             }
             const ImVec2 me = toScreen(context.playerPosition.x, context.playerPosition.z);
             const glm::vec2 forward(std::sin(context.yawRadians), std::cos(context.yawRadians));
@@ -711,7 +721,7 @@ namespace NextDayz::NextDayzHUD
             };
             draw->AddTriangleFilled(offset(12.0f, 0.0f), offset(-7.0f, 6.0f), offset(-7.0f, -6.0f), IM_COL32(20, 90, 220, 255));
             ImGui::Dummy(ImVec2(mapSide, mapSide));
-            ImGui::TextDisabled("M close  |  grid 100 m  |  north up");
+            ImGui::TextDisabled(NextDayz::L10n::Tr("M close  |  grid 100 m  |  north up"));
             ImGui::End();
             ImGui::PopStyleColor(2);
         }
@@ -730,37 +740,37 @@ namespace NextDayz::NextDayzHUD
             // Category badge & Title
             ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), "[%s]", UITheme::ItemKindBadge(definition.kind));
             ImGui::SameLine();
-            ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "%s", std::string(definition.displayName).c_str());
+            ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "%s", std::string(NextDayz::L10n::Tr(definition.displayName)).c_str());
 
             const int vol = Inventory::InstanceVolume(instance);
-            ImGui::TextColored(ImVec4(0.65f, 0.65f, 0.70f, 1.0f), "Volume: %d Slot%s", vol, vol == 1 ? "" : "s");
+            ImGui::TextColored(ImVec4(0.65f, 0.65f, 0.70f, 1.0f), NextDayz::L10n::Tr("Volume: %d Slot%s"), vol, vol == 1 ? "" : "s");
 
             if (!definition.description.empty())
             {
                 ImGui::Separator();
                 ImGui::PushTextWrapPos(ImGui::GetFontSize() * 20.0f);
-                ImGui::TextColored(ImVec4(0.85f, 0.85f, 0.85f, 1.0f), "%s", std::string(definition.description).c_str());
+                ImGui::TextColored(ImVec4(0.85f, 0.85f, 0.85f, 1.0f), "%s", std::string(NextDayz::L10n::Tr(definition.description)).c_str());
                 ImGui::PopTextWrapPos();
             }
             if (definition.kind == EItemKind::Weapon)
             {
-                ImGui::TextColored(ImVec4(0.9f, 0.95f, 1.0f, 1.0f), "Loaded Ammo: %d", instance.loadedAmmo);
+                ImGui::TextColored(ImVec4(0.9f, 0.95f, 1.0f, 1.0f), NextDayz::L10n::Tr("Loaded Ammo: %d"), instance.loadedAmmo);
             }
             if (definition.armor > 0.0f)
             {
-                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.4f, 1.0f), "Armor Rating: +%.0f%%", definition.armor * 100.0f);
+                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.4f, 1.0f), NextDayz::L10n::Tr("Armor Rating: +%.0f%%"), definition.armor * 100.0f);
             }
             if (definition.warmth > 0.0f)
             {
-                ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.2f, 1.0f), "Insulation: +%.0f%%", definition.warmth * 100.0f);
+                ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.2f, 1.0f), NextDayz::L10n::Tr("Insulation: +%.0f%%"), definition.warmth * 100.0f);
             }
             if (definition.hungerDelta > 0.0f)
             {
-                ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), "Food Value: +%.0f", definition.hungerDelta);
+                ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), NextDayz::L10n::Tr("Food Value: +%.0f"), definition.hungerDelta);
             }
             if (definition.hydrationDelta > 0.0f)
             {
-                ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "Hydration: +%.0f", definition.hydrationDelta);
+                ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), NextDayz::L10n::Tr("Hydration: +%.0f"), definition.hydrationDelta);
             }
             ImGui::EndTooltip();
             ImGui::PopStyleVar();
@@ -793,11 +803,7 @@ namespace NextDayz::NextDayzHUD
             draw->AddRectFilled(pos, ImVec2(pos.x + 3.0f, max.y), kindColor, 4.0f);
 
             // Item Display Name
-            std::string name(def->displayName);
-            if (slotSize.x < 80.0f && name.size() > 7)
-            {
-                name = name.substr(0, 6) + ".";
-            }
+            const std::string name = FitText(std::string(NextDayz::L10n::Tr(def->displayName)), slotSize.x - 14.0f);
             draw->AddText(ImVec2(pos.x + 7.0f, pos.y + 6.0f), UITheme::Colors::TextPrimary, name.c_str());
 
             // Bottom-right indicator: Ammo count or stack count
@@ -831,7 +837,7 @@ namespace NextDayz::NextDayzHUD
                 ImGui::SetDragDropPayload(kItemPayload, &id, sizeof(id));
 
                 // Floating Ghost Item Card preview
-                ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), "%s", std::string(def->displayName).c_str());
+                ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), "%s", std::string(NextDayz::L10n::Tr(def->displayName)).c_str());
                 if (instance.count > 1)
                 {
                     ImGui::SameLine();
@@ -861,33 +867,33 @@ namespace NextDayz::NextDayzHUD
             if (ImGui::BeginPopupContextItem("##slot_menu"))
             {
                 if ((def->kind == EItemKind::Consumable || def->use != EItemUse::None) && context.useItem &&
-                    ImGui::MenuItem("Use"))
+                    ImGui::MenuItem(NextDayz::L10n::Label("Use")))
                 {
                     context.useItem(instance.instanceId);
                 }
-                if (def->kind == EItemKind::Clothing && !inEquipmentSlot && context.wear && ImGui::MenuItem("Wear"))
+                if (def->kind == EItemKind::Clothing && !inEquipmentSlot && context.wear && ImGui::MenuItem(NextDayz::L10n::Label("Wear")))
                 {
                     context.wear(instance.instanceId);
                 }
-                if (inEquipmentSlot && context.takeOff && ImGui::MenuItem("Take off"))
+                if (inEquipmentSlot && context.takeOff && ImGui::MenuItem(NextDayz::L10n::Label("Take off")))
                 {
                     context.takeOff(instance.instanceId);
                 }
                 if (IsWieldable(*def) && context.equipWeapon)
                 {
-                    if (ImGui::MenuItem("Equip: Primary (1)")) context.equipWeapon(instance.instanceId, 0);
-                    if (ImGui::MenuItem("Equip: Secondary (2)")) context.equipWeapon(instance.instanceId, 1);
+                    if (ImGui::MenuItem(NextDayz::L10n::Label("Equip: Primary (1)"))) context.equipWeapon(instance.instanceId, 0);
+                    if (ImGui::MenuItem(NextDayz::L10n::Label("Equip: Secondary (2)"))) context.equipWeapon(instance.instanceId, 1);
                 }
-                if (instance.count > 1 && context.splitItem && ImGui::MenuItem("Split stack"))
+                if (instance.count > 1 && context.splitItem && ImGui::MenuItem(NextDayz::L10n::Label("Split stack")))
                 {
                     context.splitItem(instance.instanceId);
                 }
-                if (context.bindQuick && ImGui::BeginMenu("Bind to Quickbar"))
+                if (context.bindQuick && ImGui::BeginMenu(NextDayz::L10n::Label("Bind to Quickbar")))
                 {
                     for (int s = 0; s < 4; ++s)
                     {
-                        char name[32];
-                        std::snprintf(name, sizeof(name), "Key %d", s + 3);
+                        char name[128];
+                        std::snprintf(name, sizeof(name), NextDayz::L10n::Tr("Key %d"), s + 3);
                         if (ImGui::MenuItem(name))
                         {
                             context.bindQuick(s, instance.defId);
@@ -898,11 +904,11 @@ namespace NextDayz::NextDayzHUD
                 ImGui::Separator();
                 if (context.dropItem)
                 {
-                    if (instance.count > 1 && ImGui::MenuItem("Drop One"))
+                    if (instance.count > 1 && ImGui::MenuItem(NextDayz::L10n::Label("Drop One")))
                     {
                         context.dropItem(instance.instanceId, 1);
                     }
-                    if (ImGui::MenuItem(instance.count > 1 ? "Drop All" : "Drop"))
+                    if (ImGui::MenuItem(instance.count > 1 ? NextDayz::L10n::Tr("Drop All") : NextDayz::L10n::Tr("Drop")))
                     {
                         context.dropItem(instance.instanceId, -1);
                     }
@@ -942,21 +948,21 @@ namespace NextDayz::NextDayzHUD
             {
                 // Item Name
                 draw->AddText(ImVec2(pos.x + 10.0f, pos.y + 24.0f), UITheme::Colors::TextPrimary,
-                              std::string(def->displayName).c_str());
+                              std::string(NextDayz::L10n::Tr(def->displayName)).c_str());
 
                 // Attribute pills on right
                 char statText[48] = "";
                 if (def->armor > 0.0f)
                 {
-                    std::snprintf(statText, sizeof(statText), "Armor +%.0f%%", def->armor * 100.0f);
+                    std::snprintf(statText, sizeof(statText), NextDayz::L10n::Tr("Armor +%.0f%%"), def->armor * 100.0f);
                 }
                 else if (def->warmth > 0.0f)
                 {
-                    std::snprintf(statText, sizeof(statText), "Warmth +%.0f%%", def->warmth * 100.0f);
+                    std::snprintf(statText, sizeof(statText), NextDayz::L10n::Tr("Warmth +%.0f%%"), def->warmth * 100.0f);
                 }
                 else if (def->containerCapacity > 0)
                 {
-                    std::snprintf(statText, sizeof(statText), "+%d Slots", def->containerCapacity);
+                    std::snprintf(statText, sizeof(statText), NextDayz::L10n::Tr("+%d Slots"), def->containerCapacity);
                 }
 
                 if (statText[0] != '\0')
@@ -976,7 +982,7 @@ namespace NextDayz::NextDayzHUD
                 {
                     const FItemInstanceId id = instance->instanceId;
                     ImGui::SetDragDropPayload(kItemPayload, &id, sizeof(id));
-                    ImGui::TextUnformatted(std::string(def->displayName).c_str());
+                    ImGui::TextUnformatted(std::string(NextDayz::L10n::Tr(def->displayName)).c_str());
                     ImGui::EndDragDropSource();
                 }
 
@@ -987,7 +993,7 @@ namespace NextDayz::NextDayzHUD
             }
             else
             {
-                draw->AddText(ImVec2(pos.x + 10.0f, pos.y + 24.0f), UITheme::Colors::TextMuted, "[ EMPTY ]");
+                draw->AddText(ImVec2(pos.x + 10.0f, pos.y + 24.0f), UITheme::Colors::TextMuted, NextDayz::L10n::Tr("[ EMPTY ]"));
             }
 
             // Drag Drop Target: Dropping clothing on this slot wears it
@@ -1047,10 +1053,10 @@ namespace NextDayz::NextDayzHUD
             if (def && instance)
             {
                 draw->AddText(ImVec2(pos.x + 10.0f, pos.y + 26.0f), UITheme::Colors::TextPrimary,
-                              std::string(def->displayName).c_str());
+                              std::string(NextDayz::L10n::Tr(def->displayName)).c_str());
 
                 char ammoText[32];
-                std::snprintf(ammoText, sizeof(ammoText), "Ammo: %d", instance->loadedAmmo);
+                std::snprintf(ammoText, sizeof(ammoText), NextDayz::L10n::Tr("Ammo: %d"), instance->loadedAmmo);
                 const ImVec2 aSize = ImGui::CalcTextSize(ammoText);
                 draw->AddText(ImVec2(max.x - aSize.x - 70.0f, pos.y + 26.0f), UITheme::Colors::AccentCyan, ammoText);
 
@@ -1061,7 +1067,7 @@ namespace NextDayz::NextDayzHUD
             }
             else
             {
-                draw->AddText(ImVec2(pos.x + 10.0f, pos.y + 26.0f), UITheme::Colors::TextMuted, "[ NONE ]");
+                draw->AddText(ImVec2(pos.x + 10.0f, pos.y + 26.0f), UITheme::Colors::TextMuted, NextDayz::L10n::Tr("[ NONE ]"));
             }
 
             if (ImGui::BeginDragDropTarget())
@@ -1081,7 +1087,7 @@ namespace NextDayz::NextDayzHUD
             if (instance)
             {
                 ImGui::SetCursorScreenPos(ImVec2(max.x - 62.0f, pos.y + 12.0f));
-                if (ImGui::SmallButton("Holster") && context.unequipWeapon)
+                if (ImGui::SmallButton(NextDayz::L10n::Label("Holster")) && context.unequipWeapon)
                 {
                     context.unequipWeapon(slot);
                 }
@@ -1113,16 +1119,16 @@ namespace NextDayz::NextDayzHUD
             ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0f);
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 14.0f));
 
-            ImGui::Begin("INVENTORY & TACTICAL LOADOUT##nd_inv_window", nullptr, ImGuiWindowFlags_NoCollapse);
+            ImGui::Begin(NextDayz::L10n::Label("INVENTORY & TACTICAL LOADOUT##nd_inv_window"), nullptr, ImGuiWindowFlags_NoCollapse);
 
             // Three columns: Vicinity (26%), Equipment (32%), Cargo Containers (42%)
             if (ImGui::BeginTable("##inv_3col_table", 3,
                                   ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY,
                                   ImVec2(0.0f, -ImGui::GetFrameHeightWithSpacing() * 1.8f)))
             {
-                ImGui::TableSetupColumn("VICINITY (GROUND)", ImGuiTableColumnFlags_WidthStretch, 0.26f);
-                ImGui::TableSetupColumn("EQUIPMENT & GEAR", ImGuiTableColumnFlags_WidthStretch, 0.32f);
-                ImGui::TableSetupColumn("CARGO CONTAINERS", ImGuiTableColumnFlags_WidthStretch, 0.42f);
+                ImGui::TableSetupColumn(NextDayz::L10n::Tr("VICINITY (GROUND)"), ImGuiTableColumnFlags_WidthStretch, 0.26f);
+                ImGui::TableSetupColumn(NextDayz::L10n::Tr("EQUIPMENT & GEAR"), ImGuiTableColumnFlags_WidthStretch, 0.32f);
+                ImGui::TableSetupColumn(NextDayz::L10n::Tr("CARGO CONTAINERS"), ImGuiTableColumnFlags_WidthStretch, 0.42f);
                 ImGui::TableHeadersRow();
                 ImGui::TableNextRow();
                 const float columnHeight = std::max(100.0f, ImGui::GetContentRegionAvail().y);
@@ -1132,12 +1138,12 @@ namespace NextDayz::NextDayzHUD
                 // ------------------------------------------------------------
                 ImGui::TableSetColumnIndex(0);
                 ImGui::BeginChild("##vicinity", ImVec2(0.0f, columnHeight));
-                ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), "NEARBY LOOT (%d)", static_cast<int>(context.nearby.size()));
+                ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), NextDayz::L10n::Tr("NEARBY LOOT (%d)"), static_cast<int>(context.nearby.size()));
                 ImGui::Spacing();
 
                 if (context.nearby.empty())
                 {
-                    ImGui::TextDisabled("No ground items nearby.");
+                    ImGui::TextDisabled(NextDayz::L10n::Tr("No ground items nearby."));
                 }
 
                 for (const FHudNearbyLoot& loot : context.nearby)
@@ -1158,7 +1164,7 @@ namespace NextDayz::NextDayzHUD
                     if (ImGui::BeginDragDropSource())
                     {
                         ImGui::SetDragDropPayload(kLootPayload, &loot.index, sizeof(loot.index));
-                        ImGui::TextUnformatted(loot.name.c_str());
+                        ImGui::TextUnformatted(NextDayz::L10n::Localize(loot.name, NextDayz::L10n::Language()).c_str());
                         ImGui::EndDragDropSource();
                     }
 
@@ -1167,14 +1173,14 @@ namespace NextDayz::NextDayzHUD
 
                     // Quick Take Button
                     ImGui::SetCursorScreenPos(ImVec2(lootPos.x + 6.0f, lootPos.y + 7.0f));
-                    if (ImGui::SmallButton("Take") && context.takeLoot)
+                    if (ImGui::SmallButton(NextDayz::L10n::Label("Take")) && context.takeLoot)
                     {
                         context.takeLoot(loot.index, 0, EEquipSlot::None);
                     }
 
                     // Loot Name & Distance
                     draw->AddText(ImVec2(lootPos.x + 56.0f, lootPos.y + 10.0f), UITheme::Colors::TextPrimary,
-                                  loot.name.c_str());
+                                  NextDayz::L10n::Localize(loot.name, NextDayz::L10n::Language()).c_str());
                     char distText[16];
                     std::snprintf(distText, sizeof(distText), "%.1fm", loot.distance);
                     const ImVec2 dSize = ImGui::CalcTextSize(distText);
@@ -1202,7 +1208,7 @@ namespace NextDayz::NextDayzHUD
 
                 // Dashed drop zone box
                 draw->AddRect(dropPos, dropMax, UITheme::Colors::BorderMuted, 4.0f, 0, 1.5f);
-                const char* dropPrompt = "[ DRAG ITEMS HERE TO DROP ]";
+                const char* dropPrompt = NextDayz::L10n::Tr("[ DRAG ITEMS HERE TO DROP ]");
                 const ImVec2 promptSize = ImGui::CalcTextSize(dropPrompt);
                 draw->AddText(ImVec2(dropPos.x + (dropW - promptSize.x) * 0.5f, dropPos.y + (dropH - promptSize.y) * 0.5f),
                               UITheme::Colors::TextMuted, dropPrompt);
@@ -1227,36 +1233,36 @@ namespace NextDayz::NextDayzHUD
                 ImGui::EndChild();
                 ImGui::TableSetColumnIndex(1);
                 ImGui::BeginChild("##equipment", ImVec2(0.0f, columnHeight));
-                ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), "GEAR & WEAPONS");
+                ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), NextDayz::L10n::Tr("GEAR & WEAPONS"));
                 ImGui::Spacing();
 
-                DrawEquipmentSlot(context, "HEAD", EEquipSlot::Head);
-                DrawEquipmentSlot(context, "TORSO", EEquipSlot::Torso);
-                DrawEquipmentSlot(context, "VEST", EEquipSlot::Vest);
-                DrawEquipmentSlot(context, "LEGS", EEquipSlot::Legs);
-                DrawEquipmentSlot(context, "BACKPACK", EEquipSlot::Back);
+                DrawEquipmentSlot(context, NextDayz::L10n::Tr("HEAD"), EEquipSlot::Head);
+                DrawEquipmentSlot(context, NextDayz::L10n::Tr("TORSO"), EEquipSlot::Torso);
+                DrawEquipmentSlot(context, NextDayz::L10n::Tr("VEST"), EEquipSlot::Vest);
+                DrawEquipmentSlot(context, NextDayz::L10n::Tr("LEGS"), EEquipSlot::Legs);
+                DrawEquipmentSlot(context, NextDayz::L10n::Tr("BACKPACK"), EEquipSlot::Back);
 
                 ImGui::Spacing();
                 ImGui::Separator();
                 ImGui::Spacing();
 
-                DrawWeaponSlot(context, "PRIMARY WEAPON", 0);
-                DrawWeaponSlot(context, "SECONDARY WEAPON", 1);
+                DrawWeaponSlot(context, NextDayz::L10n::Tr("PRIMARY WEAPON"), 0);
+                DrawWeaponSlot(context, NextDayz::L10n::Tr("SECONDARY WEAPON"), 1);
 
                 ImGui::Spacing();
                 ImGui::Separator();
                 ImGui::Spacing();
 
                 // Gear Statistics Card
-                ImGui::TextColored(ImVec4(0.85f, 0.85f, 0.85f, 1.0f), "PROTECTION & TOOLS");
-                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.4f, 1.0f), "Armor:   %.0f%%", context.armor * 100.0f);
-                ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.2f, 1.0f), "Warmth:  %.0f%%", context.warmth * 100.0f);
-                ImGui::TextColored(ImVec4(0.7f, 0.75f, 0.8f, 1.0f), "Tools:   %s%s%s%s",
-                                   inventory.HasTool(EItemTool::Compass) ? "Compass " : "",
-                                   inventory.HasTool(EItemTool::Map) ? "Map " : "",
-                                   inventory.CanOpenCans() ? "Can-Opener " : "",
+                ImGui::TextColored(ImVec4(0.85f, 0.85f, 0.85f, 1.0f), NextDayz::L10n::Tr("PROTECTION & TOOLS"));
+                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.4f, 1.0f), NextDayz::L10n::Tr("Armor:   %.0f%%"), context.armor * 100.0f);
+                ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.2f, 1.0f), NextDayz::L10n::Tr("Warmth:  %.0f%%"), context.warmth * 100.0f);
+                ImGui::TextColored(ImVec4(0.7f, 0.75f, 0.8f, 1.0f), NextDayz::L10n::Tr("Tools:   %s%s%s%s"),
+                                   inventory.HasTool(EItemTool::Compass) ? NextDayz::L10n::Tr("Compass ") : "",
+                                   inventory.HasTool(EItemTool::Map) ? NextDayz::L10n::Tr("Map ") : "",
+                                   inventory.CanOpenCans() ? NextDayz::L10n::Tr("Can-Opener ") : "",
                                    (!inventory.HasTool(EItemTool::Compass) && !inventory.HasTool(EItemTool::Map) &&
-                                    !inventory.CanOpenCans()) ? "None" : "");
+                                    !inventory.CanOpenCans()) ? NextDayz::L10n::Tr("None") : "");
 
                 // ------------------------------------------------------------
                 // COLUMN 2: CARGO CONTAINERS (GRID SLOTS MATRIX)
@@ -1264,7 +1270,7 @@ namespace NextDayz::NextDayzHUD
                 ImGui::EndChild();
                 ImGui::TableSetColumnIndex(2);
                 ImGui::BeginChild("##cargo", ImVec2(0.0f, columnHeight));
-                ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), "CARGO CAPACITY: %d / %d SLOTS",
+                ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), NextDayz::L10n::Tr("CARGO CAPACITY: %d / %d SLOTS"),
                                    inventory.UsedCapacity(), inventory.TotalCapacity());
                 ImGui::Spacing();
 
@@ -1288,10 +1294,10 @@ namespace NextDayz::NextDayzHUD
                     cDraw->AddRectFilled(bannerPos, ImVec2(bannerPos.x + bannerW, bannerPos.y + bannerH),
                                          UITheme::Colors::SurfaceHeader, 3.0f);
                     cDraw->AddText(ImVec2(bannerPos.x + 8.0f, bannerPos.y + 4.0f), UITheme::Colors::TextPrimary,
-                                   container.displayName.c_str());
+                                   NextDayz::L10n::Tr(container.displayName));
 
-                    char capText[32];
-                    std::snprintf(capText, sizeof(capText), "%d / %d Slots", used, capacity);
+                    char capText[128];
+                    std::snprintf(capText, sizeof(capText), NextDayz::L10n::Tr("%d / %d Slots"), used, capacity);
                     const ImVec2 capSize = ImGui::CalcTextSize(capText);
                     const ImU32 capColor = used >= capacity ? UITheme::Colors::AccentRose : UITheme::Colors::AccentAmber;
                     cDraw->AddText(ImVec2(bannerPos.x + bannerW - capSize.x - 8.0f, bannerPos.y + 4.0f),
@@ -1386,9 +1392,10 @@ namespace NextDayz::NextDayzHUD
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
-            ImGui::TextColored(ImVec4(0.65f, 0.65f, 0.70f, 1.0f),
-                               "[LMB Double-Click] Equip/Use  |  [RMB] Context Menu  |  [Drag & Drop] Move/Drop  |  "
-                               "[3-6] Quickbar  |  [H] Bandage  |  [M] Map  |  [L] Lantern  |  [TAB] Close");
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f, 0.65f, 0.70f, 1.0f));
+            ImGui::TextWrapped("%s%s", NextDayz::L10n::Tr("[LMB Double-Click] Equip/Use  |  [RMB] Context Menu  |  [Drag & Drop] Move/Drop  |  "),
+                               NextDayz::L10n::Tr("[3-6] Quickbar  |  [H] Bandage  |  [M] Map  |  [L] Lantern  |  [TAB] Close"));
+            ImGui::PopStyleColor();
 
             ImGui::End();
             ImGui::PopStyleVar(2);
@@ -1412,7 +1419,7 @@ namespace NextDayz::NextDayzHUD
                     IM_COL32(20, 0, 0, 160));
             }
             ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-            ImGui::SetNextWindowSize(ImVec2(400.0f, 0.0f), ImGuiCond_Always);
+            ImGui::SetNextWindowSize(ImVec2(std::min(760.0f, viewport->WorkSize.x - 40.0f), 0.0f), ImGuiCond_Always);
             ImGui::SetNextWindowBgAlpha(0.95f);
             ImGui::PushStyleColor(ImGuiCol_WindowBg, UITheme::Colors::SurfaceBg);
             ImGui::PushStyleColor(ImGuiCol_Border, UITheme::Colors::BorderMuted);
@@ -1424,16 +1431,16 @@ namespace NextDayz::NextDayzHUD
             if (context.survival.lifeState == EPlayerLifeState::Dead)
             {
                 ImGui::SetWindowFontScale(1.5f);
-                ImGui::TextColored(ImVec4(0.95f, 0.2f, 0.15f, 1.0f), "YOU ARE DEAD");
+                ImGui::TextColored(ImVec4(0.95f, 0.2f, 0.15f, 1.0f), NextDayz::L10n::Tr("YOU ARE DEAD"));
                 ImGui::SetWindowFontScale(1.0f);
                 ImGui::Separator();
-                ImGui::Text("Cause:       %s", context.survival.lastDamageSource.empty()
-                    ? "Unknown" : context.survival.lastDamageSource.c_str());
-                ImGui::Text("Survived:    %02d:%02d", static_cast<int>(context.survivalSeconds) / 60,
+                ImGui::Text(NextDayz::L10n::Tr("Cause:       %s"), context.survival.lastDamageSource.empty()
+                    ? NextDayz::L10n::Tr("Unknown") : NextDayz::L10n::Tr(context.survival.lastDamageSource));
+                ImGui::Text(NextDayz::L10n::Tr("Survived:    %02d:%02d"), static_cast<int>(context.survivalSeconds) / 60,
                             static_cast<int>(context.survivalSeconds) % 60);
-                ImGui::Text("Infected:    %d Killed", context.kills);
+                ImGui::Text(NextDayz::L10n::Tr("Infected:    %d Killed"), context.kills);
                 ImGui::Spacing();
-                if (context.restartSession && ImGui::Button("WAKE UP AGAIN", ImVec2(-1.0f, 38.0f)))
+                if (context.restartSession && ImGui::Button(NextDayz::L10n::Label("WAKE UP AGAIN"), ImVec2(-1.0f, 38.0f)))
                 {
                     context.restartSession();
                 }
@@ -1441,19 +1448,20 @@ namespace NextDayz::NextDayzHUD
             else
             {
                 ImGui::SetWindowFontScale(1.25f);
-                ImGui::TextUnformatted("GAME PAUSED");
+                ImGui::TextUnformatted(NextDayz::L10n::Tr("GAME PAUSED"));
                 ImGui::SetWindowFontScale(1.0f);
-                ImGui::TextDisabled("Press Esc to resume");
+                ImGui::TextDisabled(NextDayz::L10n::Tr("Press Esc to resume"));
                 ImGui::Separator();
-                ImGui::TextDisabled("WASD move  Shift sprint  Ctrl walk  C crouch  Space jump/vault");
-                ImGui::TextDisabled("LMB fire/swing  RMB aim  R reload  1/2/Q weapons  E take  F fill bottle");
-                ImGui::TextDisabled("Tab inventory  3-6 quickbar  H bandage  M map  L lantern  V view");
+                ImGui::TextWrapped("%s", NextDayz::L10n::Tr("WASD move  Shift sprint  Ctrl walk  C crouch  Space jump/vault"));
+                ImGui::TextWrapped("%s", NextDayz::L10n::Tr("LMB fire/swing  RMB aim  R reload  1/2/Q weapons  E take  F fill bottle"));
+                ImGui::TextWrapped("%s", NextDayz::L10n::Tr("Tab inventory  3-6 quickbar  H bandage  M map  L lantern  V view"));
                 ImGui::Spacing();
-                if (context.restartSession && ImGui::Button("RESTART RUN", ImVec2(-1.0f, 36.0f)))
+                if (context.restartSession && ImGui::Button(NextDayz::L10n::Label("RESTART RUN"), ImVec2(-1.0f, 36.0f)))
                 {
                     context.restartSession();
                 }
             }
+            NextDayz::L10n::DrawLanguageSelector();
             ImGui::End();
             ImGui::PopStyleVar(2);
             ImGui::PopStyleColor(2);

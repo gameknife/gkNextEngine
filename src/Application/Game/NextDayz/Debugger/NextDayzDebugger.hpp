@@ -253,7 +253,7 @@ namespace NextDayz::Debug
     struct FWarning
     {
         int severity = 1;                // 1 warning, 2 error
-        std::string text;
+        L10n::FText text;
     };
 
     struct FTraceRecord
@@ -286,7 +286,7 @@ namespace NextDayz::Debug
         void Draw(const FGameFacts& facts);
 
         // --- game hooks ---
-        void Log(EChannel channel, int severity, std::string text, const glm::vec3* where = nullptr);
+        void Log(EChannel channel, int severity, L10n::FText text, const glm::vec3* where = nullptr);
         void RecordTrace(const FWeaponTraceEvent& trace);
         void RecordDamage(const FDamageEvent& damage);
         void RecordPlayerHit(const glm::vec3& source, float amount, bool landed, bool woundOpened);

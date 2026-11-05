@@ -144,6 +144,7 @@ set(unitTestSources
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/World/ZombieSpawnDirector.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Zombies/ZombieVisualPool.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Debugger/DebugEventLog.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/UI/Localization.cpp
 )
 
 if(GK_DOTNET_ENABLED)

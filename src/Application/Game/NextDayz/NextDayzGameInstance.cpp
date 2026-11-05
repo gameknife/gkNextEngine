@@ -1,4 +1,5 @@
 #include "NextDayzGameInstance.hpp"
+#include "Application/Game/NextDayz/UI/Localization.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -86,6 +87,7 @@ NextDayzGameInstance::NextDayzGameInstance(Vulkan::WindowConfig& config, Runtime
                                            NextEngine* engine)
     : NextGameInstanceBase(config, options, engine)
 {
+    NextDayz::L10n::Initialize(options.AgentValidation);
     ConfigureWindow(config, options, "NextDayz", 1920, 1080, false);
 }
 
@@ -800,8 +802,8 @@ void NextDayzGameInstance::SimulateFrame(float dt)
             audio_.Pickup();
             for (const NextDayz::FLootStack& stack : result.stacks)
             {
-                Notify(stack.count > 1 ? fmt::format("Picked up {} x{}", ItemDisplayName(stack.itemId), stack.count)
-                                       : fmt::format("Picked up {}", ItemDisplayName(stack.itemId)));
+                Notify(stack.count > 1 ? NextDayz::L10n::Message("Picked up {} x{}", ItemDisplayName(stack.itemId), stack.count)
+                                       : NextDayz::L10n::Message("Picked up {}", ItemDisplayName(stack.itemId)));
             }
             if (result.partial)
             {
@@ -889,7 +891,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     if (weapons_.ConsumeDryFire())
     {
         audio_.DryFire();
-        debugger_.Log(NextDayz::Debug::EChannel::Weapon, 0, fmt::format("Dry fire {}", weapons_.ActiveWeaponId()));
+        debugger_.Log(NextDayz::Debug::EChannel::Weapon, 0, NextDayz::L10n::Message("Dry fire {}", weapons_.ActiveWeaponId()));
     }
     if (const NextDayz::EWeaponPresentationAction action = weapons_.PresentationAction(); action != lastWeaponAction_)
     {
@@ -934,7 +936,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     {
         lastShotMelee_ = shot.melee;
         debugger_.Log(NextDayz::Debug::EChannel::Weapon, 0,
-                      fmt::format("{} {}", shot.melee ? "Swung" : "Fired", shot.weaponId));
+                      NextDayz::L10n::Message("{} {}", shot.melee ? "Swung" : "Fired", shot.weaponId));
         if (shot.melee)
         {
             // Dedicated melee clips own the body and weapon; no firearm recoil.
@@ -1179,6 +1181,11 @@ bool NextDayzGameInstance::OverrideRenderCamera(Assets::Camera& outRenderCamera)
 
 bool NextDayzGameInstance::OnRenderUI()
 {
+    if (ImGui::IsKeyPressed(ImGuiKey_F12, false))
+    {
+        using namespace NextDayz::L10n;
+        SetLanguage(Language() == ELanguage::Chinese ? ELanguage::English : ELanguage::Chinese);
+    }
     if (!sceneReady_)
     {
         return false;
@@ -1192,7 +1199,7 @@ bool NextDayzGameInstance::OnRenderUI()
     ctx.melee = weapons_.ActiveIsMelee();
     ctx.swinging = weapons_.IsSwinging();
     ctx.swingProgress = ctx.swinging ? weapons_.PresentationActionTime() : 0.0f;
-    ctx.weaponName = weapons_.ActiveDisplayName();
+    ctx.weaponName = NextDayz::L10n::Tr(weapons_.ActiveDisplayName());
     ctx.ammoInMag = weapons_.AmmoInMag();
     ctx.ammoReserve = weapons_.AmmoReserve(inventory_);
     ctx.reloading = weapons_.IsReloading();
@@ -1200,7 +1207,7 @@ bool NextDayzGameInstance::OnRenderUI()
     ctx.actionActive = actions_.IsActive();
     if (actions_.IsActive())
     {
-        ctx.actionLabel = std::string(NextDayz::ActionLabel(actions_.Action()));
+        ctx.actionLabel = NextDayz::L10n::Tr(NextDayz::ActionLabel(actions_.Action()));
         ctx.actionProgress = static_cast<float>(actions_.NormalizedTime());
         ctx.interactionPrompt = fmt::format("{}...", ctx.actionLabel);
     }
@@ -1217,7 +1224,7 @@ bool NextDayzGameInstance::OnRenderUI()
     ctx.hour = time_.HourInt();
     ctx.minute = time_.MinuteInt();
     ctx.overcast = time_.Overcast();
-    ctx.weather = NextDayz::WeatherName(time_.Weather());
+    ctx.weather = NextDayz::L10n::Tr(NextDayz::WeatherName(time_.Weather()));
     ctx.showInventory = showInventory_;
     ctx.showMap = showMap_;
     ctx.armor = inventory_.Armor();
@@ -1331,7 +1338,7 @@ bool NextDayzGameInstance::OnRenderUI()
     return true;
 }
 
-void NextDayzGameInstance::Notify(std::string text, int severity)
+void NextDayzGameInstance::Notify(NextDayz::L10n::FText text, int severity)
 {
     // HUD severity 0 info, 1 warning, 2 danger, 3 good news -> log severity.
     debugger_.Log(NextDayz::Debug::EChannel::Hud, severity == 3 ? 0 : severity, text);
@@ -1442,7 +1449,7 @@ void NextDayzGameInstance::EquipWeaponInstance(NextDayz::FItemInstanceId instanc
         Notify("That is not something you can hold", 1);
         return;
     }
-    Notify(fmt::format("{} in hand ({})", ItemDisplayName(instance->defId), slot == 0 ? "1" : "2"));
+    Notify(NextDayz::L10n::Message("{} in hand ({})", ItemDisplayName(instance->defId), slot == 0 ? "1" : "2"));
 }
 
 void NextDayzGameInstance::WearItem(NextDayz::FItemInstanceId instanceId)
@@ -1457,7 +1464,7 @@ void NextDayzGameInstance::WearItem(NextDayz::FItemInstanceId instanceId)
     {
         SyncClothingVisuals();
         audio_.Pickup();
-        Notify(fmt::format("Wearing {}", name));
+        Notify(NextDayz::L10n::Message("Wearing {}", name));
     }
     else
     {
@@ -1510,8 +1517,8 @@ void NextDayzGameInstance::DropItem(NextDayz::FItemInstanceId instanceId, int co
     SaveCampaign();
     SyncClothingVisuals();
     audio_.Drop();
-    Notify(removed->count > 1 ? fmt::format("Dropped {} x{}", ItemDisplayName(removed->defId), removed->count)
-                              : fmt::format("Dropped {}", ItemDisplayName(removed->defId)));
+    Notify(removed->count > 1 ? NextDayz::L10n::Message("Dropped {} x{}", ItemDisplayName(removed->defId), removed->count)
+                              : NextDayz::L10n::Message("Dropped {}", ItemDisplayName(removed->defId)));
 }
 
 void NextDayzGameInstance::MoveItem(NextDayz::FItemInstanceId instanceId, NextDayz::FContainerId containerId)
@@ -1650,7 +1657,7 @@ void NextDayzGameInstance::UseQuickSlot(int slot)
     }
     if (!chosen)
     {
-        Notify(fmt::format("No {} left", ItemDisplayName(itemId)), 1);
+        Notify(NextDayz::L10n::Message("No {} left", ItemDisplayName(itemId)), 1);
         return;
     }
     UseInventoryItem(chosen->instanceId);
@@ -1724,7 +1731,7 @@ void NextDayzGameInstance::UseRadio()
     cacheMarker_ = *cache;
     cacheSeconds_ = kCacheMarkerSeconds;
     const glm::vec3 delta = *cache - player_.Position();
-    Notify(fmt::format("Broadcast: supply cache {:.0f} m to the {} (marked on map and compass)",
+    Notify(NextDayz::L10n::Message("Broadcast: supply cache {:.0f} m to the {} (marked on map and compass)",
                        glm::length(glm::vec2(delta.x, delta.z)), CompassWord(delta)), 3);
 }
 
@@ -1999,12 +2006,12 @@ std::string NextDayzGameInstance::CurrentObjective() const
     const NextDayz::FSurvivalSnapshot& state = survival_.Snapshot();
     if (state.bleedingWounds > 0)
     {
-        return "Stop the bleeding: bandage or rags [H]";
+        return NextDayz::L10n::Tr("Stop the bleeding: bandage or rags [H]");
     }
     if (CampaignEnabled())
     {
         if (campaign_.flight.phase != NextDayz::EFlightPhase::Idle)
-            return fmt::format("Rescue: {} ({:.0f}s)", NextDayz::FlightPhaseName(campaign_.flight.phase),
+            return NextDayz::L10n::Format("Rescue: {} ({:.0f}s)", NextDayz::FlightPhaseName(campaign_.flight.phase),
                                campaign_.flight.remaining);
         if (inventory_.CountOf("signal_flare") > 0)
         {
@@ -2017,13 +2024,13 @@ std::string NextDayzGameInstance::CurrentObjective() const
                 if (candidate < distance) { nearest = &anchor; distance = candidate; }
             }
             if (nearest)
-                return fmt::format("Reach {} ({:.0f}m {}) | [B] Fire signal", nearest->label, distance,
+                return NextDayz::L10n::Format("Reach {} ({:.0f}m {}) | [B] Fire signal", nearest->label, distance,
                                    CompassWord(nearest->worldPos - player_.Position()));
         }
     }
     if (inventory_.CountOf("water_bottle") == 0 && inventory_.CountOf("drink_soda") == 0)
     {
-        return "Find water: a bottle, a soda, or a well or pump in a village";
+        return NextDayz::L10n::Tr("Find water: a bottle, a soda, or a well or pump in a village");
     }
     bool hasFood = false;
     for (const NextDayz::FItemInstance& instance : inventory_.Instances())
@@ -2033,22 +2040,22 @@ std::string NextDayzGameInstance::CurrentObjective() const
     }
     if (!hasFood)
     {
-        return "Find food: houses, shops and the supermarket";
+        return NextDayz::L10n::Tr("Find food: houses, shops and the supermarket");
     }
     if (inventory_.TotalCapacity() <= 10)
     {
-        return "Find a backpack or clothes with pockets";
+        return NextDayz::L10n::Tr("Find a backpack or clothes with pockets");
     }
     if (!weapons_.HasActiveWeapon())
     {
-        return "Find something to fight with: a knife, crowbar, axe or a gun";
+        return NextDayz::L10n::Tr("Find something to fight with: a knife, crowbar, axe or a gun");
     }
     if (!inventory_.HasTool(NextDayz::EItemTool::Map) && !inventory_.HasTool(NextDayz::EItemTool::Compass))
     {
-        return "Find a map or compass to navigate";
+        return NextDayz::L10n::Tr("Find a map or compass to navigate");
     }
-    return CampaignEnabled() ? "Find a signal flare gun at a military, police or wilderness site"
-                             : "Raid a fortress or the military base for better gear";
+    return CampaignEnabled() ? NextDayz::L10n::Tr("Find a signal flare gun at a military, police or wilderness site")
+                             : NextDayz::L10n::Tr("Raid a fortress or the military base for better gear");
 }
 
 void NextDayzGameInstance::CreateZombieVisuals()
@@ -2473,7 +2480,7 @@ void NextDayzGameInstance::TeleportPlayer(const glm::vec3& feet)
     player_.Destroy();
     player_.Create(GetEngine().GetPhysicsEngine(), feet + glm::vec3(0.0f, 1.0f, 0.0f), config_);
     debugger_.Log(NextDayz::Debug::EChannel::Player, 1,
-                  fmt::format("Teleported to ({:.1f}, {:.1f}, {:.1f})", feet.x, feet.y, feet.z), &feet);
+                  NextDayz::L10n::Message("Teleported to ({:.1f}, {:.1f}, {:.1f})", feet.x, feet.y, feet.z), &feet);
 }
 
 NextDayz::FZombieHandle NextDayzGameInstance::SpawnZombieAt(NextDayz::EZombieProfile profile, const glm::vec3& feet)
@@ -2524,8 +2531,8 @@ void NextDayzGameInstance::GiveItem(const std::string& itemId, int count)
         loot_.SpawnPile({{itemId, count - fits, 0}}, player_.Position(), 0.0f, GetEngine());
     }
     debugger_.Log(NextDayz::Debug::EChannel::Player, 0,
-                  fits < count ? fmt::format("Debug give {} x{} ({} on the ground)", itemId, count, count - fits)
-                               : fmt::format("Debug give {} x{}", itemId, count));
+                  fits < count ? NextDayz::L10n::Message("Debug give {} x{} ({} on the ground)", itemId, count, count - fits)
+                               : NextDayz::L10n::Message("Debug give {} x{}", itemId, count));
 }
 
 void NextDayzGameInstance::ApplyDebugSelection(const std::string& selection)
@@ -3096,8 +3103,11 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     reg.Add("lanternLit", [this]() -> Runtime::Agent::FAgentQueryValue { return lanternLit_; });
     reg.Add("cacheMarked", [this]() -> Runtime::Agent::FAgentQueryValue { return cacheMarker_.has_value(); });
     reg.Add("showMap", [this]() -> Runtime::Agent::FAgentQueryValue { return showMap_; });
+    reg.Add("language", []() -> Runtime::Agent::FAgentQueryValue {
+        return std::string(NextDayz::L10n::Language() == NextDayz::L10n::ELanguage::Chinese ? "zhCN" : "en");
+    });
     reg.Add("lastNotification", [this]() -> Runtime::Agent::FAgentQueryValue {
-        return notifications_.empty() ? std::string() : notifications_.back().text;
+        return notifications_.empty() ? std::string() : notifications_.back().text.Display();
     });
     reg.Add("itemCount", [this]() -> Runtime::Agent::FAgentQueryValue {
         return static_cast<int64_t>(inventory_.Instances().size());
@@ -3243,7 +3253,7 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
         return static_cast<int64_t>(debugger_.Warnings().size());
     });
     reg.Add("debugWarning", [this]() -> Runtime::Agent::FAgentQueryValue {
-        return debugger_.Warnings().empty() ? std::string() : debugger_.Warnings().front().text;
+        return debugger_.Warnings().empty() ? std::string() : debugger_.Warnings().front().text.Display();
     });
     reg.Add("debugSelected", [this]() -> Runtime::Agent::FAgentQueryValue { return debugger_.SelectionLabel(); });
     reg.Add("debugSnapshot", [this]() -> Runtime::Agent::FAgentQueryValue { return debugger_.LastSnapshotPath(); });

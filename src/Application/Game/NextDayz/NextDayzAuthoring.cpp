@@ -81,7 +81,7 @@ void NextDayzGameInstance::TickMapAuthoring()
     authoringPendingStamp_ = authoringAppliedStamp_;
     if (!parsed)
     {
-        campaignMessage_ = "Draft edit rejected; current world preserved: " + error;
+        campaignMessage_ = NextDayz::L10n::Message("Draft edit rejected; current world preserved: {}", error);
         SPDLOG_WARN("[NextDayz] {}",campaignMessage_);
         return;
     }
@@ -102,7 +102,7 @@ void NextDayzGameInstance::TickMapAuthoring()
         if (!ec) std::filesystem::copy_file(source,destination,std::filesystem::copy_options::overwrite_existing,ec);
         if (ec)
         {
-            campaignMessage_ = "Cannot update draft runtime files: " + ec.message();
+            campaignMessage_ = NextDayz::L10n::Message("Cannot update draft runtime files: {}", ec.message());
             SPDLOG_ERROR("[NextDayz] {}",campaignMessage_);
             return;
         }

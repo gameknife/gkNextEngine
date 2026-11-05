@@ -29,7 +29,7 @@ namespace NextDayz::Debug
     {
     }
 
-    const FEvent& EventLog::Push(EChannel channel, int severity, std::string text, const glm::vec3* position)
+    const FEvent& EventLog::Push(EChannel channel, int severity, L10n::FText text, const glm::vec3* position)
     {
         ++channelCounts_[static_cast<size_t>(channel)];
         if (size_ > 0)

@@ -121,7 +121,7 @@ private:
     void UseRadio();
     void ThrowFirecrackers(NextDayz::FItemInstanceId instanceId);
     void SyncClothingVisuals();
-    void Notify(std::string text, int severity = 0);
+    void Notify(NextDayz::L10n::FText text, int severity = 0);
     void UpdateSurvivalFeedback(float deltaSeconds);
     void UpdateWorldPressure();
     void UpdateFirecrackers(float deltaSeconds);
@@ -183,7 +183,7 @@ private:
     std::vector<std::vector<glm::vec2>> atlasPolygons_;
     bool atlasLoaded_ = false;
     std::string saveError_;
-    std::string campaignMessage_;
+    NextDayz::L10n::FText campaignMessage_;
     float autosaveElapsed_ = 0.0f;
     bool campaignSaveBlocked_ = false;
     bool validationCampaign_ = false;

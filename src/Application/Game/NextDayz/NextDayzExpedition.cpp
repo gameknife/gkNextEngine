@@ -1,4 +1,5 @@
 #include "Engine/Common/CoreMinimal.hpp"
+#include "Application/Game/NextDayz/UI/Localization.hpp"
 #include "NextDayzGameInstance.hpp"
 
 #include <imgui.h>
@@ -63,7 +64,7 @@ void NextDayzGameInstance::InitializeCampaign()
         if (!RestoreCampaign(saved))
         {
             campaignSaveBlocked_ = true;
-            campaignMessage_ = "Cannot restore expedition: " + saveError_;
+            campaignMessage_ = NextDayz::L10n::FText("Cannot restore expedition: ") + saveError_;
         }
         else if (std::exchange(pendingDeployment_, false)) CompleteDeployment();
         else if (upgraded)
@@ -126,8 +127,8 @@ void NextDayzGameInstance::InitializeCampaign()
         if (saved.map.empty() || (!error.empty() && !error.starts_with("Recovered backup")) || !RestoreCampaign(saved))
         {
             campaignSaveBlocked_ = true;
-            saveError_ = "Cannot load campaign. Original save preserved. " + (error.empty() ? saveError_ : error);
-            campaignMessage_ = saveError_;
+            campaignMessage_ = NextDayz::L10n::Message("Cannot load campaign. Original save preserved. {}", error.empty() ? saveError_ : error);
+            saveError_ = campaignMessage_.english;
             SPDLOG_ERROR("[NextDayz] {}", saveError_);
         }
         else if (upgraded)
@@ -197,7 +198,7 @@ bool NextDayzGameInstance::SaveCampaign()
     if (!NextDayz::WriteCampaignSave(campaignPath_, CaptureCampaign(), saveError_))
     {
         campaignSaveBlocked_ = true;
-        campaignMessage_ = "Saving failed. Play paused to protect your progress: " + saveError_;
+        campaignMessage_ = NextDayz::L10n::FText("Saving failed. Play paused to protect your progress: ") + saveError_;
         SetMouseCaptured(false);
         SPDLOG_ERROR("[NextDayz] {}", campaignMessage_);
         return false;
@@ -418,7 +419,7 @@ void NextDayzGameInstance::ReturnToSafehouse(ESafehouseReturn reason)
     campaign_.lastOutcome = died ? "MISSING / GEAR LEFT IN FIELD"
         : reason == ESafehouseReturn::Debug ? "DEBUG RETURN / GEAR STORED" : "EXTRACTED";
     if (const auto* map = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_))
-        campaignMessage_ += " Assignment region: " + map->name + " / " + map->region;
+        campaignMessage_ += NextDayz::L10n::Message(" Assignment region: {} / {}", map->name, map->region);
     campaign_.flight = {};
     actions_.Reset();
     weapons_.ResetRuntime();
@@ -547,8 +548,8 @@ bool NextDayzGameInstance::DrawSafehouse()
         if (campaign_.flight.boarded)
         {
             ImGui::SetNextWindowPos(ImVec2(30,120), ImGuiCond_Always);
-            ImGui::Begin("Rescue", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-            ImGui::Text("On board - taking off: %.0fs", campaign_.flight.remaining);
+            ImGui::Begin(NextDayz::L10n::Label("Rescue"), nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+            ImGui::Text(NextDayz::L10n::Tr("On board - taking off: %.0fs"), campaign_.flight.remaining);
             ImGui::End();
         }
         return false;
@@ -559,20 +560,21 @@ bool NextDayzGameInstance::DrawSafehouse()
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
     ImGui::SetNextWindowBgAlpha(0.97f);
-    ImGui::Begin("NEXTDAYZ / SAFEHOUSE", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove);
+    ImGui::Begin(NextDayz::L10n::Label("NEXTDAYZ / SAFEHOUSE"), nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove);
     ImGui::SetWindowFontScale(1.5f);
-    ImGui::TextUnformatted("SAFEHOUSE");
+    ImGui::TextUnformatted(NextDayz::L10n::Tr("SAFEHOUSE"));
     ImGui::SetWindowFontScale(1.0f);
     ImGui::SameLine();
-    ImGui::Text("  Gold: %llu   |   Expeditions: %llu   |   Extracted: %llu",
+    ImGui::Text(NextDayz::L10n::Tr("  Gold: %llu   |   Expeditions: %llu   |   Extracted: %llu"),
         static_cast<unsigned long long>(campaign_.gold), static_cast<unsigned long long>(campaign_.sorties),
         static_cast<unsigned long long>(campaign_.extractions));
+    NextDayz::L10n::DrawLanguageSelector();
     ImGui::TextWrapped("%s", campaignMessage_.c_str());
-    ImGui::TextDisabled("Sell surplus supplies to clear storage and build your gold reserves.");
+    ImGui::TextDisabled(NextDayz::L10n::Tr("Sell surplus supplies to clear storage and build your gold reserves."));
     if (campaignSaveBlocked_)
     {
         ImGui::TextWrapped("%s", saveError_.c_str());
-        if (ImGui::Button("RETRY SAVE") && !saveError_.empty())
+        if (ImGui::Button(NextDayz::L10n::Label("RETRY SAVE")) && !saveError_.empty())
         {
             // A load failure must never overwrite the unreadable original.
             if (!campaignMessage_.starts_with("Cannot load"))
@@ -582,9 +584,9 @@ bool NextDayzGameInstance::DrawSafehouse()
         return true;
     }
     ImGui::Spacing();
-    if (ImGui::Button("WORLD / OPERATIONS", ImVec2(210, 36))) safehouseTab_ = 0;
+    if (ImGui::Button(NextDayz::L10n::Label("WORLD / OPERATIONS"), ImVec2(210, 36))) safehouseTab_ = 0;
     ImGui::SameLine();
-    if (ImGui::Button("STORAGE / LOADOUT", ImVec2(210, 36))) safehouseTab_ = 1;
+    if (ImGui::Button(NextDayz::L10n::Label("STORAGE / LOADOUT"), ImVec2(210, 36))) safehouseTab_ = 1;
     ImGui::Separator();
     if (safehouseTab_ == 0)
     {
@@ -594,47 +596,47 @@ bool NextDayzGameInstance::DrawSafehouse()
     }
     std::vector<std::function<void()>> requests;
     ImGui::Spacing();
-    if (ImGui::Button("STORE ALL CARRIED GEAR")) requests.emplace_back([this]()
+    if (ImGui::Button(NextDayz::L10n::Label("STORE ALL CARRIED GEAR"))) requests.emplace_back([this]()
     { campaign_.StoreAll(inventory_); weapons_.ResetRuntime(); });
     ImGui::SameLine();
-    if (ImGui::Button(inventory_.Instances().empty() ? "DEPLOY EMPTY-HANDED" : "DEPLOY WITH LOADOUT"))
+    if (ImGui::Button(inventory_.Instances().empty() ? NextDayz::L10n::Tr("DEPLOY EMPTY-HANDED") : NextDayz::L10n::Tr("DEPLOY WITH LOADOUT")))
         requests.emplace_back([this]() { Deploy(); });
     ImGui::Separator();
     if (ImGui::BeginTable("storage_loadout", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable))
     {
         ImGui::TableNextColumn();
-        ImGui::Text("STORAGE (%zu stacks)", campaign_.storage.size());
+        ImGui::Text(NextDayz::L10n::Tr("STORAGE (%zu stacks)"), campaign_.storage.size());
         ImGui::BeginChild("storage", ImVec2(0, -12));
         for (const auto& item : campaign_.storage)
         {
             const auto* def = NextDayz::FindItemDef(item.defId);
             ImGui::PushID(static_cast<int>(item.instanceId));
-            ImGui::Text("%s x%d", def ? std::string(def->displayName).c_str() : item.defId.c_str(), item.count);
-            if (item.loadedAmmo) { ImGui::SameLine(); ImGui::TextDisabled("(%d loaded)", item.loadedAmmo); }
+            ImGui::Text("%s x%d", def ? std::string(NextDayz::L10n::Tr(def->displayName)).c_str() : item.defId.c_str(), item.count);
+            if (item.loadedAmmo) { ImGui::SameLine(); ImGui::TextDisabled(NextDayz::L10n::Tr("(%d loaded)"), item.loadedAmmo); }
             const auto id = item.instanceId;
-            if (ImGui::SmallButton("Take 1")) requests.emplace_back([this,id]()
+            if (ImGui::SmallButton(NextDayz::L10n::Label("Take 1"))) requests.emplace_back([this,id]()
             { if (!campaign_.Take(inventory_,id,1,false)) campaignMessage_ = "Not enough loadout space. Wear a larger pack first."; });
             ImGui::SameLine();
             if (def && def->kind == NextDayz::EItemKind::Clothing)
             {
-                if (ImGui::SmallButton("Wear")) requests.emplace_back([this,id]()
+                if (ImGui::SmallButton(NextDayz::L10n::Label("Wear"))) requests.emplace_back([this,id]()
                 { if (!campaign_.Take(inventory_,id,1,true)) campaignMessage_ = "Cannot wear it; make room for the replaced clothing."; });
                 ImGui::SameLine();
             }
             const int count = item.count;
             if (count > 1)
             {
-                if (ImGui::SmallButton("Take stack")) requests.emplace_back([this,id,count]()
+                if (ImGui::SmallButton(NextDayz::L10n::Label("Take stack"))) requests.emplace_back([this,id,count]()
                 { if (!campaign_.Take(inventory_,id,count,false)) campaignMessage_ = "Not enough loadout space."; });
                 ImGui::SameLine();
             }
             const int price = NextDayz::SellPrice(item.defId, extractionConfig_);
-            if (ImGui::SmallButton(fmt::format("Sell 1 (+{} gold)",price).c_str())) requests.emplace_back([this,id]()
+            if (ImGui::SmallButton(NextDayz::L10n::Format("Sell 1 (+{} gold)",price).c_str())) requests.emplace_back([this,id]()
             { campaign_.Sell(id,1,extractionConfig_); });
             if (count > 1)
             {
                 ImGui::SameLine();
-                if (ImGui::SmallButton("Sell stack")) requests.emplace_back([this,id,count]()
+                if (ImGui::SmallButton(NextDayz::L10n::Label("Sell stack"))) requests.emplace_back([this,id,count]()
                 { campaign_.Sell(id,count,extractionConfig_); });
             }
             ImGui::Separator();
@@ -642,28 +644,28 @@ bool NextDayzGameInstance::DrawSafehouse()
         }
         ImGui::EndChild();
         ImGui::TableNextColumn();
-        ImGui::Text("LOADOUT   Space: %d / %d", inventory_.UsedCapacity(), inventory_.TotalCapacity());
+        ImGui::Text(NextDayz::L10n::Tr("LOADOUT   Space: %d / %d"), inventory_.UsedCapacity(), inventory_.TotalCapacity());
         ImGui::BeginChild("loadout", ImVec2(0,-12));
         for (const auto& item : inventory_.Instances())
         {
             const auto* def = NextDayz::FindItemDef(item.defId);
             ImGui::PushID(static_cast<int>(item.instanceId));
-            ImGui::Text("%s x%d%s", def ? std::string(def->displayName).c_str() : item.defId.c_str(),
-                item.count, inventory_.IsWorn(item.instanceId) ? " [worn]" : "");
+            ImGui::Text("%s x%d%s", def ? std::string(NextDayz::L10n::Tr(def->displayName)).c_str() : item.defId.c_str(),
+                item.count, inventory_.IsWorn(item.instanceId) ? NextDayz::L10n::Tr(" [worn]") : "");
             const auto id = item.instanceId;
-            if (ImGui::SmallButton("Store")) requests.emplace_back([this,id]()
+            if (ImGui::SmallButton(NextDayz::L10n::Label("Store"))) requests.emplace_back([this,id]()
             { if (!campaign_.Store(inventory_,id)) campaignMessage_ = "Store its contents first, or use STORE ALL."; });
             if (def && def->kind == NextDayz::EItemKind::Clothing && !inventory_.IsWorn(id))
             {
                 ImGui::SameLine();
-                if (ImGui::SmallButton("Wear")) requests.emplace_back([this,id]() { WearItem(id); });
+                if (ImGui::SmallButton(NextDayz::L10n::Label("Wear"))) requests.emplace_back([this,id]() { WearItem(id); });
             }
             if (def && NextDayz::IsWieldable(*def))
             {
                 ImGui::SameLine();
-                if (ImGui::SmallButton("Hold (1)")) requests.emplace_back([this,id]() { EquipWeaponInstance(id,0); });
+                if (ImGui::SmallButton(NextDayz::L10n::Label("Hold (1)"))) requests.emplace_back([this,id]() { EquipWeaponInstance(id,0); });
                 ImGui::SameLine();
-                if (ImGui::SmallButton("Hold (2)")) requests.emplace_back([this,id]() { EquipWeaponInstance(id,1); });
+                if (ImGui::SmallButton(NextDayz::L10n::Label("Hold (2)"))) requests.emplace_back([this,id]() { EquipWeaponInstance(id,1); });
             }
             ImGui::Separator();
             ImGui::PopID();

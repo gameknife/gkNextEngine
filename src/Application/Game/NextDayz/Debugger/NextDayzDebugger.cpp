@@ -1,4 +1,5 @@
 #include "Engine/Common/CoreMinimal.hpp"
+#include "Application/Game/NextDayz/UI/Localization.hpp"
 
 #include "NextDayzDebugger.hpp"
 
@@ -170,7 +171,7 @@ namespace NextDayz::Debug
         pathSaturatedUpdates_ = 0;
         watchPrimed_ = false;
         history_ = {};
-        Log(EChannel::System, 1, fmt::format("---- session start: {} ----", reason));
+        Log(EChannel::System, 1, NextDayz::L10n::Message("---- session start: {} ----", reason));
     }
 
     void NextDayzDebugger::SetVisible(bool visible)
@@ -319,7 +320,7 @@ namespace NextDayz::Debug
 
     // ------------------------------------------------------------------ hooks
 
-    void NextDayzDebugger::Log(EChannel channel, int severity, std::string text, const glm::vec3* where)
+    void NextDayzDebugger::Log(EChannel channel, int severity, L10n::FText text, const glm::vec3* where)
     {
         log_.Push(channel, severity, std::move(text), where);
     }
@@ -345,12 +346,12 @@ namespace NextDayz::Debug
                 healthLeft = zombie->health;
             }
         }
-        std::string flags;
+        L10n::FText flags;
         if (damage.killed) flags += " KILLED";
         if (damage.staggered) flags += " staggered";
         if (damage.crippled) flags += " crippled";
         Log(EChannel::Combat, damage.killed ? 1 : 0,
-            fmt::format("{} hit {} for {:.0f} (impact {:.0f}) hp {:.0f}{}", who, HitZoneName(damage.hitZone),
+            NextDayz::L10n::Message("{} hit {} for {:.0f} (impact {:.0f}) hp {:.0f}{}", who, HitZoneName(damage.hitZone),
                         damage.amount, damage.impact, healthLeft, flags),
             &damage.worldPoint);
     }
@@ -360,12 +361,12 @@ namespace NextDayz::Debug
         const float distance = systems_.player ? Horizontal(source, PlayerFeet()) : 0.0f;
         if (!landed)
         {
-            Log(EChannel::Survival, 1, fmt::format("Infected blow for {:.0f} absorbed ({:.1f} m)", amount, distance),
+            Log(EChannel::Survival, 1, NextDayz::L10n::Message("Infected blow for {:.0f} absorbed ({:.1f} m)", amount, distance),
                 &source);
             return;
         }
         Log(EChannel::Survival, 2,
-            fmt::format("Player struck for {:.0f} from {:.1f} m{}", amount, distance, woundOpened ? " - wound opened" : ""),
+            NextDayz::L10n::Message("Player struck for {:.0f} from {:.1f} m{}", amount, distance, woundOpened ? " - wound opened" : ""),
             &source);
     }
 
@@ -622,7 +623,7 @@ namespace NextDayz::Debug
                 if (!prime && watch.active && (!zombie.active || replaced))
                 {
                     Log(EChannel::Spawn, 0,
-                        fmt::format("Z{}:{} {}", watch.handle.index, watch.handle.generation,
+                        NextDayz::L10n::Message("Z{}:{} {}", watch.handle.index, watch.handle.generation,
                                     watch.state == EZombieState::Dead ? "corpse cleared" : "recycled"),
                         &watch.position);
                 }
@@ -630,9 +631,9 @@ namespace NextDayz::Debug
                 {
                     const int point = SpawnPointOf(zombie.handle);
                     Log(EChannel::Spawn, 0,
-                        point >= 0 ? fmt::format("{} spawned at S{} ({:.0f} m away)", ZombieTag(zombie), point,
+                        point >= 0 ? NextDayz::L10n::Message("{} spawned at S{} ({:.0f} m away)", ZombieTag(zombie), point,
                                                  Horizontal(zombie.position, feet))
-                                   : fmt::format("{} spawned by hand ({:.0f} m away)", ZombieTag(zombie),
+                                   : NextDayz::L10n::Message("{} spawned by hand ({:.0f} m away)", ZombieTag(zombie),
                                                  Horizontal(zombie.position, feet)),
                         &zombie.position);
                 }
@@ -646,7 +647,7 @@ namespace NextDayz::Debug
                     const bool hostile = zombie.state == EZombieState::Alert || zombie.state == EZombieState::Chase ||
                                          zombie.state == EZombieState::Attack;
                     Log(EChannel::Infected, hostile ? 1 : 0,
-                        fmt::format("{} {} -> {}{} at {:.1f} m", ZombieTag(zombie), ZombieStateName(watch.state),
+                        NextDayz::L10n::Message("{} {} -> {}{} at {:.1f} m", ZombieTag(zombie), ZombieStateName(watch.state),
                                     ZombieStateName(zombie.state), why, Horizontal(zombie.position, feet)),
                         &zombie.position);
                 }
@@ -675,17 +676,17 @@ namespace NextDayz::Debug
                     const glm::vec3 where = entry.worldPos;
                     if (from == EState::Available && entry.state == EState::Reserved)
                     {
-                        Log(EChannel::Loot, 0, fmt::format("L{} reserved: {}", index, entry.displayName), &where);
+                        Log(EChannel::Loot, 0, NextDayz::L10n::Message("L{} reserved: {}", index, entry.displayName), &where);
                     }
                     else if (from == EState::Reserved && entry.state == EState::Available)
                     {
-                        Log(EChannel::Loot, 0, fmt::format("L{} pickup cancelled", index), &where);
+                        Log(EChannel::Loot, 0, NextDayz::L10n::Message("L{} pickup cancelled", index), &where);
                     }
                     else if (entry.state == EState::Cooldown)
                     {
                         const double readyAt = systems_.loot->Director().ReadyAt(entry.directorHandle);
                         Log(EChannel::Loot, 1,
-                            fmt::format("L{} taken: {} ({} {}, restock in {:.0f} s)", index, watch.name,
+                            NextDayz::L10n::Message("L{} taken: {} ({} {}, restock in {:.0f} s)", index, watch.name,
                                         LootProfileName(entry.profile), LootCategoryName(entry.category),
                                         std::max(0.0, readyAt - systems_.loot->WorldSeconds())),
                             &where);
@@ -693,22 +694,22 @@ namespace NextDayz::Debug
                     else if (from == EState::Cooldown && entry.state == EState::Available)
                     {
                         Log(EChannel::Loot, 0,
-                            fmt::format("L{} restocked: {} ({})", index, entry.displayName, LootCategoryName(entry.category)),
+                            NextDayz::L10n::Message("L{} restocked: {} ({})", index, entry.displayName, LootCategoryName(entry.category)),
                             &where);
                     }
                     else if (entry.state == EState::Empty)
                     {
-                        Log(EChannel::Loot, 0, fmt::format("L{} pile emptied: {}", index, watch.name), &where);
+                        Log(EChannel::Loot, 0, NextDayz::L10n::Message("L{} pile emptied: {}", index, watch.name), &where);
                     }
                     else if (from == EState::Empty && entry.state == EState::Available)
                     {
-                        Log(EChannel::Loot, 0, fmt::format("L{} pile: {}", index, entry.displayName), &where);
+                        Log(EChannel::Loot, 0, NextDayz::L10n::Message("L{} pile: {}", index, entry.displayName), &where);
                     }
                 }
                 else if (!prime && watch.state < 0 && entry.source == ELootSource::Pile &&
                          entry.state == FLootEntry::EState::Available)
                 {
-                    Log(EChannel::Loot, 0, fmt::format("L{} pile: {}", index, entry.displayName), &entry.worldPos);
+                    Log(EChannel::Loot, 0, NextDayz::L10n::Message("L{} pile: {}", index, entry.displayName), &entry.worldPos);
                 }
                 watch.state = state;
                 watch.name = entry.displayName;
@@ -739,7 +740,7 @@ namespace NextDayz::Debug
                     }
                 }
                 Log(EChannel::Noise, 0,
-                    fmt::format("{} noise r={:.0f} m x{:.1f}: {} infected in range", NoiseTypeName(noise.type),
+                    NextDayz::L10n::Message("{} noise r={:.0f} m x{:.1f}: {} infected in range", NoiseTypeName(noise.type),
                                 noise.radius, noise.strength, listeners),
                     &noise.position);
             }
@@ -752,13 +753,13 @@ namespace NextDayz::Debug
             if (!prime && lastHour_ >= 0 && hour != lastHour_)
             {
                 Log(EChannel::World, 0,
-                    fmt::format("Clock {:02d}:00  daylight {:.2f}  chill {:.2f}", hour, systems_.time->Daylight(),
+                    NextDayz::L10n::Message("Clock {:02d}:00  daylight {:.2f}  chill {:.2f}", hour, systems_.time->Daylight(),
                                 systems_.time->Chill()));
             }
             if (!prime && lastHour_ >= 0 && systems_.time->Weather() != lastWeather_)
             {
                 Log(EChannel::World, 1,
-                    fmt::format("Weather {} -> {}", WeatherName(lastWeather_), WeatherName(systems_.time->Weather())));
+                    NextDayz::L10n::Message("Weather {} -> {}", WeatherName(lastWeather_), WeatherName(systems_.time->Weather())));
             }
             lastHour_ = hour;
             lastWeather_ = systems_.time->Weather();
@@ -772,22 +773,22 @@ namespace NextDayz::Debug
             {
                 Log(EChannel::Survival, state.bleedingWounds > lastWounds_ ? 2 : 0,
                     state.bleedingWounds > lastWounds_
-                        ? fmt::format("Bleeding: {} wound(s)", state.bleedingWounds)
-                        : fmt::format("Wounds dressed: {} left", state.bleedingWounds));
+                        ? NextDayz::L10n::Message("Bleeding: {} wound(s)", state.bleedingWounds)
+                        : NextDayz::L10n::Message("Wounds dressed: {} left", state.bleedingWounds));
             }
             if (!prime && state.lifeState != lastLife_)
             {
                 Log(EChannel::Survival, 3,
                     state.lifeState == EPlayerLifeState::Alive
-                        ? std::string("Player alive again")
-                        : fmt::format("Player died: {}", state.lastDamageSource.empty() ? "?" : state.lastDamageSource));
+                        ? NextDayz::L10n::FText("Player alive again")
+                        : NextDayz::L10n::Message("Player died: {}", state.lastDamageSource.empty() ? "?" : state.lastDamageSource));
             }
             const bool weak = systems_.survival->IsWeak();
             if (!prime && weak != lastWeak_)
             {
                 Log(EChannel::Survival, weak ? 2 : 0,
-                    weak ? fmt::format("Weak: hunger {:.0f} thirst {:.0f}", state.hunger, state.hydration)
-                         : std::string("No longer weak"));
+                    weak ? NextDayz::L10n::Message("Weak: hunger {:.0f} thirst {:.0f}", state.hunger, state.hydration)
+                         : NextDayz::L10n::FText("No longer weak"));
             }
             lastWounds_ = state.bleedingWounds;
             lastLife_ = state.lifeState;
@@ -802,7 +803,7 @@ namespace NextDayz::Debug
                 locomotion.traversalAction != EPlayerTraversalAction::None)
             {
                 Log(EChannel::Player, 0,
-                    fmt::format("{} {:.2f} m", TraversalActionName(locomotion.traversalAction), locomotion.traversalHeight),
+                    NextDayz::L10n::Message("{} {:.2f} m", TraversalActionName(locomotion.traversalAction), locomotion.traversalHeight),
                     &feet);
             }
             lastTraversal_ = locomotion.traversalAction;
@@ -813,14 +814,14 @@ namespace NextDayz::Debug
             if (!prime && action != lastWeaponAction_ && action != EWeaponPresentationAction::None)
             {
                 Log(EChannel::Weapon, 0,
-                    fmt::format("{} {}", WeaponActionName(action), systems_.weapons->ActiveWeaponId()));
+                    NextDayz::L10n::Message("{} {}", WeaponActionName(action), systems_.weapons->ActiveWeaponId()));
             }
             lastWeaponAction_ = action;
             const std::string weaponId = systems_.weapons->ActiveWeaponId();
             if (!prime && weaponId != lastWeaponId_)
             {
-                Log(EChannel::Weapon, 0, weaponId.empty() ? std::string("Hands empty")
-                                                          : fmt::format("Holding {} (slot {})", weaponId,
+                Log(EChannel::Weapon, 0, weaponId.empty() ? NextDayz::L10n::FText("Hands empty")
+                                                          : NextDayz::L10n::Message("Holding {} (slot {})", weaponId,
                                                                         systems_.weapons->ActiveSlot() + 1));
             }
             lastWeaponId_ = weaponId;
@@ -865,7 +866,7 @@ namespace NextDayz::Debug
     void NextDayzDebugger::RefreshWarnings()
     {
         warnings_.clear();
-        const auto warn = [this](int severity, std::string text) { warnings_.push_back({severity, std::move(text)}); };
+        const auto warn = [this](int severity, L10n::FText text) { warnings_.push_back({severity, std::move(text)}); };
 
         if (systems_.navGrid && !systems_.navGrid->IsBuilt())
         {
@@ -897,17 +898,17 @@ namespace NextDayz::Debug
                 }
             }
             if (noHitboxes > 0)
-                warn(2, fmt::format("{} active infected have no hitboxes and cannot be shot", noHitboxes));
+                warn(2, L10n::Message("{} active infected have no hitboxes and cannot be shot", noHitboxes));
             if (stuck > 0)
-                warn(1, fmt::format("{} infected making no progress (stuck > 1 s)", stuck));
+                warn(1, L10n::Message("{} infected making no progress (stuck > 1 s)", stuck));
             if (unroutable > 0)
-                warn(1, fmt::format("{} hunting infected found no route", unroutable));
+                warn(1, L10n::Message("{} hunting infected found no route", unroutable));
             if (offGrid > 0)
-                warn(1, fmt::format("{} infected stand on unwalkable nav cells", offGrid));
+                warn(1, L10n::Message("{} infected stand on unwalkable nav cells", offGrid));
         }
         if (pathSaturatedUpdates_ >= 30)
         {
-            warn(1, fmt::format("Path budget saturated for {} updates (MaxPathSolvesPerUpdate {})", pathSaturatedUpdates_,
+            warn(1, L10n::Message("Path budget saturated for {} updates (MaxPathSolvesPerUpdate {})", pathSaturatedUpdates_,
                                 systems_.zombies ? systems_.zombies->Config().MaxPathSolvesPerUpdate : 0));
         }
         if (systems_.loot)
@@ -935,7 +936,7 @@ namespace NextDayz::Debug
             }
             if (!missing.empty())
             {
-                warn(1, fmt::format("No loot available for: {}", missing));
+                warn(1, L10n::Message("No loot available for: {}", missing));
             }
         }
         if (systems_.anchors && systems_.anchors->Count(EWorldAnchorType::Well) == 0)
@@ -944,7 +945,7 @@ namespace NextDayz::Debug
         }
         if (profiler_.Stat(ETimer::Tick).averageMs > 8.0f)
         {
-            warn(1, fmt::format("Game tick averages {:.1f} ms", profiler_.Stat(ETimer::Tick).averageMs));
+            warn(1, L10n::Message("Game tick averages {:.1f} ms", profiler_.Stat(ETimer::Tick).averageMs));
         }
         if (systems_.player && systems_.player->IsValid() && systems_.player->Position().y < -50.0f)
         {
@@ -968,7 +969,7 @@ namespace NextDayz::Debug
         Json warnings = Json::array();
         for (const FWarning& warning : warnings_)
         {
-            warnings.push_back({{"severity", warning.severity}, {"text", warning.text}});
+            warnings.push_back({{"severity", warning.severity}, {"text", warning.text.english}});
         }
         root["warnings"] = std::move(warnings);
 
@@ -1196,7 +1197,7 @@ namespace NextDayz::Debug
             Json line = {{"t", std::round(event.time * 100.0) / 100.0},
                          {"channel", ChannelName(event.channel)},
                          {"severity", event.severity},
-                         {"text", event.text}};
+                         {"text", event.text.english}};
             if (event.repeats > 1) line["repeats"] = event.repeats;
             events.push_back(std::move(line));
         }
@@ -1211,7 +1212,7 @@ namespace NextDayz::Debug
         }
         file << root.dump(2);
         snapshotPath_ = path;
-        Log(EChannel::System, 0, fmt::format("Snapshot written: {}", path));
+        Log(EChannel::System, 0, NextDayz::L10n::Message("Snapshot written: {}", path));
         SPDLOG_INFO("[NextDayz] debug snapshot written: {}", path);
         return path;
     }

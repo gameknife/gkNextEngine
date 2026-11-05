@@ -5,6 +5,9 @@
 
 #include <array>
 #include <span>
+#include <regex>
+#include <set>
+#include <fstream>
 
 #include <glm/glm.hpp>
 
@@ -22,6 +25,109 @@
 #include "Zombies/ZombieSystem.hpp"
 #include "World/ZombieSpawnDirector.hpp"
 #include "Zombies/ZombieVisualPool.hpp"
+#include "UI/Localization.hpp"
+
+TEST_CASE("NextDayz language switches queued feedback and keeps debugger IDs stable", "[NextDayz][Localization]")
+{
+    using namespace NextDayz;
+    using namespace NextDayz::L10n;
+    Initialize(true);
+    const FText pickedUp = Message("Picked up {} x{}", "Water Bottle", 2);
+    Debug::EventLog events;
+    events.Push(Debug::EChannel::Hud, 0, pickedUp);
+    CHECK(pickedUp.Display() == "已拾取 瓶装水 x2");
+    CHECK(Format("Rescue: {} ({:.0f}s)", "Landing", 12.4f) == "救援：降落中（12秒）");
+    CHECK(Localize("Canned Beans x2 (+3 more)", ELanguage::Chinese) == "豆子罐头 x2（另有 3 项）");
+    CHECK(std::string(Tr("unknown_custom_item")) == "unknown_custom_item");
+    const std::string chineseTab = Label("Survival");
+    const std::string chineseWindow = Label("NextDayz Debug###NextDayzDebugger");
+    SetLanguage(ELanguage::English);
+    CHECK(pickedUp.Display() == "Picked up Water Bottle x2");
+    CHECK(events.Newest()->text.Display() == pickedUp.Display());
+    events.Push(Debug::EChannel::Hud, 0, Message("Picked up {} x{}", "Water Bottle", 2));
+    CHECK(events.Size() == 1);
+    CHECK(events.Newest()->repeats == 2);
+    CHECK(Format("Rescue: {} ({:.0f}s)", "Landing", 12.4f) == "Rescue: Landing (12s)");
+    const std::string englishTab = Label("Survival");
+    const std::string englishWindow = Label("NextDayz Debug###NextDayzDebugger");
+    CHECK(chineseTab != englishTab);
+    CHECK(chineseTab.substr(chineseTab.find("###")) == englishTab.substr(englishTab.find("###")));
+    CHECK(chineseWindow.substr(chineseWindow.find("###")) == englishWindow.substr(englishWindow.find("###")));
+    SetLanguage(ELanguage::Chinese);
+    CHECK(events.Newest()->text.Display() == "已拾取 瓶装水 x2");
+}
+
+TEST_CASE("NextDayz translations cover item descriptions and preserve format contracts", "[NextDayz][Localization]")
+{
+    using namespace NextDayz;
+    using namespace NextDayz::L10n;
+    const std::pair<std::string_view, std::string_view> translations[] = {
+#define ND_TEXT(en, zh) {en, zh},
+#include "UI/Translations.inl"
+#undef ND_TEXT
+    };
+    const std::regex placeholder(R"(\{[^}]*\}|%(?:[-+0-9.*]*)(?:ll|z)?[sdfiu])");
+    const auto placeholders = [&](std::string_view text)
+    {
+        const std::string copy(text);
+        std::vector<std::string> result;
+        for (auto it = std::sregex_iterator(copy.begin(), copy.end(), placeholder); it != std::sregex_iterator(); ++it)
+            result.push_back(it->str());
+        return result;
+    };
+    std::set<std::string_view> keys;
+    for (const auto& [english, chinese] : translations)
+    {
+        CAPTURE(english);
+        CHECK(keys.insert(english).second);
+        CHECK_FALSE(chinese.empty());
+        CHECK(placeholders(english) == placeholders(chinese));
+    }
+    const std::set<std::string_view> internationalNames = {"AK-74", "SVD", "5.45x39", "7.62x54", "9x18"};
+    for (const auto& item : AllItemDefs())
+    {
+        CAPTURE(item.id);
+        if (!internationalNames.contains(item.displayName))
+            CHECK(Translate(item.displayName, ELanguage::Chinese) != item.displayName);
+        CHECK(Translate(item.description, ELanguage::Chinese) != item.description);
+    }
+    const Inventory inventory;
+    for (const auto& container : inventory.Containers())
+        CHECK(Translate(container.displayName, ELanguage::Chinese) != container.displayName);
+}
+
+TEST_CASE("NextDayz persists language and isolates validation preferences", "[NextDayz][Localization]")
+{
+    using namespace NextDayz::L10n;
+    const auto path = std::filesystem::temp_directory_path() /
+        fmt::format("nextdayz-language-{}.json", std::chrono::steady_clock::now().time_since_epoch().count());
+    struct FPreferenceCleanup
+    {
+        std::filesystem::path path;
+        ~FPreferenceCleanup()
+        {
+            Initialize(true);
+            std::error_code error;
+            std::filesystem::remove(path, error);
+        }
+    } cleanup{path};
+    Initialize(false, path);
+    CHECK(Language() == ELanguage::Chinese);
+    SetLanguage(ELanguage::English);
+    Initialize(false, path);
+    CHECK(Language() == ELanguage::English);
+    Initialize(true, path);
+    CHECK(Language() == ELanguage::Chinese);
+    SetLanguage(ELanguage::Chinese);
+    Initialize(false, path);
+    CHECK(Language() == ELanguage::English);
+    {
+        std::ofstream corrupt(path);
+        corrupt << R"({"language": 42})";
+    }
+    Initialize(false, path);
+    CHECK(Language() == ELanguage::Chinese);
+}
 
 TEST_CASE("NextDayz deterministic RNG derives stable streams", "[NextDayz][Productization][Rng]")
 {

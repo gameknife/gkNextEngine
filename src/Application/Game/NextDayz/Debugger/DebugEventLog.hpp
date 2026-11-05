@@ -10,6 +10,7 @@
 // ============================================================================
 
 #include "Engine/Common/CoreMinimal.hpp"
+#include "Application/Game/NextDayz/UI/Localization.hpp"
 
 #include <glm/vec3.hpp>
 
@@ -41,7 +42,7 @@ namespace NextDayz::Debug
         double time = 0.0;           // debugger clock (simulation seconds)
         EChannel channel = EChannel::System;
         int severity = 0;            // 0 info, 1 notable, 2 warning, 3 error
-        std::string text;
+        L10n::FText text;
         bool hasPosition = false;
         glm::vec3 position{0.0f};
         uint32_t repeats = 1;
@@ -58,7 +59,7 @@ namespace NextDayz::Debug
             time_ = time;
         }
         // Appends (or folds into the newest line when channel and text match).
-        const FEvent& Push(EChannel channel, int severity, std::string text, const glm::vec3* position = nullptr);
+        const FEvent& Push(EChannel channel, int severity, L10n::FText text, const glm::vec3* position = nullptr);
         void Clear();
 
         size_t Size() const { return size_; }

@@ -20,6 +20,7 @@
 
 #include "Application/Game/NextDayz/Inventory/Inventory.hpp"
 #include "Application/Game/NextDayz/Player/SurvivalSystem.hpp"
+#include "Application/Game/NextDayz/UI/Localization.hpp"
 
 namespace NextDayz
 {
@@ -36,7 +37,7 @@ namespace NextDayz
 
     struct FHudNotification
     {
-        std::string text;
+        L10n::FText text;
         float age = 0.0f;
         int severity = 0;   // 0 info, 1 warning, 2 danger, 3 good news
     };

@@ -41,6 +41,23 @@ namespace NextDayz
     {
     public:
         void Reset(const FTimeConfig& config, uint64_t seed = 1);
+        struct FState
+        {
+            double minutes = 480.0;
+            double nextWeatherChange = 630.0;
+            uint64_t weatherRng = 1;
+            EWeather weather = EWeather::Clear;
+            float blend = 0.0f;
+        };
+        FState Capture() const { return {gameMinutes_, nextWeatherChange_, weatherState_, weather_, weatherBlend_}; }
+        void Restore(const FState& state)
+        {
+            gameMinutes_ = state.minutes;
+            nextWeatherChange_ = state.nextWeatherChange;
+            weatherState_ = state.weatherRng;
+            weather_ = state.weather;
+            weatherBlend_ = state.blend;
+        }
 
         void Tick(double deltaRealSeconds, Assets::Scene& scene);
         void Skip(double gameMinutes) { gameMinutes_ += gameMinutes; }

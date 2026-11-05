@@ -70,6 +70,7 @@ namespace NextDayz
         bool EquipInstance(int slot, const Inventory& inventory, FItemInstanceId instanceId);
         void Unequip(int slot);
         FItemInstanceId SlotInstance(int slot) const;
+        void CopyMagazinesTo(Inventory& inventory) const;
         void SwitchSlot(int slot);
         void SwitchPrevious();
 

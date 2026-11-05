@@ -15,6 +15,7 @@ namespace NextDayz
         Loot,
         Well,
         Poi,        // a named place for the map (nd_poi(name, kind))
+        Extraction,
     };
 
     struct FWorldAnchorHandle

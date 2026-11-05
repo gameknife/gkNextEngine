@@ -1,0 +1,109 @@
+{
+  "name": "nextdayz-extraction-traversal",
+  "target": "NextDayz",
+  "defaults": {
+    "waitFrames": 2,
+    "stepTimeoutMs": 30000
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignPath",
+      "set": "out/nextdayz-validation/traversal.json"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaign",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "new"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "deploy"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.invulnerable",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "295.5,-243.0"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": 0
+    },
+    {
+      "type": "assert",
+      "query": "game.atHospitalRoofHeight",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.atHospitalStairLanding",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 270
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.atHospitalHelipad",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz-rooftop-stairs"
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

@@ -216,6 +216,12 @@ namespace NextDayz
         }
     }
 
+    void WeaponSystem::CopyMagazinesTo(Inventory& inventory) const
+    {
+        for (const auto& slot : slots_)
+            if (slot.instanceId) inventory.SetLoadedAmmo(slot.instanceId, slot.ammoInMag);
+    }
+
     bool WeaponSystem::Equip(int slot, const std::string& weaponId)
     {
         if (slot < 0 || slot >= static_cast<int>(slots_.size()))

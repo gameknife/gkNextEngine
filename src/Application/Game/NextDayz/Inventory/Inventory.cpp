@@ -35,6 +35,82 @@ namespace NextDayz
         containers_.push_back({nextContainerId_++, 0, "Secondary weapon sling", 10, true, true});
     }
 
+    FInventoryState Inventory::Capture() const
+    {
+        return {instances_, containers_, nextInstanceId_, nextContainerId_};
+    }
+
+    bool Inventory::Restore(const FInventoryState& state)
+    {
+        if (state.instances.size() > kMaxSlots || state.containers.size() < 4 ||
+            state.containers.size() > 16 || state.nextInstanceId == 0 || state.nextContainerId == kWornContainer)
+        {
+            return false;
+        }
+        Inventory restored;
+        const auto basic = restored.containers_;
+        restored.instances_ = state.instances;
+        restored.containers_ = state.containers;
+        restored.nextInstanceId_ = state.nextInstanceId;
+        restored.nextContainerId_ = state.nextContainerId;
+        std::unordered_set<FItemInstanceId> itemIds;
+        std::unordered_set<FContainerId> containerIds;
+        std::unordered_set<int> wornSlots;
+        std::unordered_set<FItemInstanceId> containerOwners;
+        for (const auto& container : state.containers)
+        {
+            if (container.containerId == 0 || container.containerId >= state.nextContainerId ||
+                !containerIds.insert(container.containerId).second || !container.active)
+            {
+                return false;
+            }
+            if (container.ownerItemInstanceId == 0)
+            {
+                const auto it = std::find_if(basic.begin(), basic.end(), [&](const auto& expected)
+                { return expected.containerId == container.containerId; });
+                if (it == basic.end() || it->capacity != container.capacity || it->weaponOnly != container.weaponOnly)
+                    return false;
+            }
+            else
+            {
+                const auto* owner = restored.FindInstance(container.ownerItemInstanceId);
+                const auto* def = owner ? FindItemDef(owner->defId) : nullptr;
+                if (!def || owner->containerId != kWornContainer || def->containerCapacity != container.capacity ||
+                    container.capacity <= 0 || container.weaponOnly ||
+                    !containerOwners.insert(owner->instanceId).second)
+                    return false;
+            }
+        }
+        for (const auto& expected : basic)
+            if (!containerIds.contains(expected.containerId)) return false;
+        for (const auto& item : state.instances)
+        {
+            const auto* def = FindItemDef(item.defId);
+            if (!def || item.instanceId == 0 || item.instanceId >= state.nextInstanceId ||
+                !itemIds.insert(item.instanceId).second || item.count <= 0 || item.count > def->maxStack ||
+                item.loadedAmmo < 0 || (item.loadedAmmo != 0 && def->kind != EItemKind::Weapon))
+                return false;
+            if (item.containerId == kWornContainer)
+            {
+                if (def->kind != EItemKind::Clothing || def->equipSlot == EEquipSlot::None || item.count != 1 ||
+                    !wornSlots.insert(static_cast<int>(def->equipSlot)).second ||
+                    (def->containerCapacity > 0 && !containerOwners.contains(item.instanceId)))
+                    return false;
+                restored.equippedClothing_.push_back(item.defId);
+            }
+            else
+            {
+                const auto* container = restored.FindContainer(item.containerId);
+                if (!container || !Accepts(*container, *def)) return false;
+            }
+        }
+        for (const auto& container : state.containers)
+            if (restored.ContainerUsed(container.containerId) > container.capacity) return false;
+        restored.RebuildLegacyItems();
+        *this = std::move(restored);
+        return true;
+    }
+
     int Inventory::InstanceVolume(const FItemInstance& instance)
     {
         const FItemDef* definition = FindItemDef(instance.defId);

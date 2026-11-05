@@ -59,6 +59,14 @@ namespace NextDayz
         int count = 1;
     };
 
+    struct FInventoryState
+    {
+        std::vector<FItemInstance> instances;
+        std::vector<FInventoryContainer> containers;
+        FItemInstanceId nextInstanceId = 1;
+        FContainerId nextContainerId = 1;
+    };
+
     class Inventory
     {
     public:
@@ -66,6 +74,8 @@ namespace NextDayz
 
         Inventory();
         void Clear();
+        FInventoryState Capture() const;
+        bool Restore(const FInventoryState& state);
 
         // 0 auto-stows; kWornContainer equips directly without temporary cargo space.
         bool CanAdd(const std::string& id, int count = 1, FContainerId destination = 0) const;

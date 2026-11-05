@@ -43,6 +43,7 @@ namespace NextDayz
         Radio,        // tune in: needs a battery, marks a supply cache
         Lantern,      // light or put out; burns fuel
         Firecrackers, // thrown ahead, the bangs draw the infected
+        SignalFlare,  // single-use rescue call, only at an extraction helipad
     };
 
     // Carried tools that change how other items work.

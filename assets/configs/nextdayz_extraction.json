@@ -1,0 +1,20 @@
+{
+  "arrivalSeconds": 50,
+  "landingSeconds": 8,
+  "boardingSeconds": 30,
+  "departureSeconds": 8,
+  "callRadius": 7,
+  "doorRadius": 2.5,
+  "autosaveSeconds": 10,
+  "sellPrices": {
+    "ak": 120,
+    "svd": 200,
+    "mosin": 90,
+    "shotgun": 80,
+    "pistol": 50,
+    "signal_flare": 75,
+    "medkit": 25,
+    "radio": 35,
+    "backpack_military": 50
+  }
+}

@@ -37,6 +37,8 @@
 #include "Application/Game/NextDayz/UI/NextDayzHUD.hpp"
 #include "Gameplay/AI/NavGrid.h"
 #include "Gameplay/Rig/RigInstance.h"
+#include "Application/Game/NextDayz/World/Campaign.hpp"
+#include "Application/Game/NextDayz/World/RescueHelicopter.hpp"
 
 class NextDayzGameInstance : public NextGameInstanceBase
 {
@@ -72,6 +74,20 @@ public:
 private:
     // One simulation frame (OnTick wraps it with the debugger's freeze/step/timers).
     void SimulateFrame(float dt);
+    bool CampaignEnabled() const;
+    void InitializeCampaign();
+    NextDayz::FCampaignSave CaptureCampaign() const;
+    bool SaveCampaign();
+    bool RestoreCampaign(const NextDayz::FCampaignSave& saved);
+    bool DrawSafehouse();
+    void Deploy();
+    void ReturnToSafehouse(bool died);
+    void AdvanceExtraction(float dt);
+    void FireSignal(NextDayz::FItemInstanceId id);
+    bool BoardHelicopter();
+    std::string ExtractionPrompt() const;
+    void ConfigureCampaignCVars(NextCVar::FCVarSystem& cvars);
+    void CampaignValidationCommand();
     void UpdateGrass(float dt);
     glm::vec3 ResolveSpawnPosition() const;
     // Inventory requests (HUD, quickbar, keys). Each runs one inventory
@@ -125,6 +141,18 @@ private:
     void ApplyDebugSelection(const std::string& selection);
 
     NextDayz::FConfig config_{};
+    NextDayz::FCampaign campaign_;
+    NextDayz::FExtractionConfig extractionConfig_;
+    NextDayz::RescueHelicopter rescueHelicopter_;
+    std::filesystem::path campaignPath_;
+    std::string campaignMap_;
+    std::string saveError_;
+    std::string campaignMessage_;
+    float autosaveElapsed_ = 0.0f;
+    bool campaignSaveBlocked_ = false;
+    bool validationCampaign_ = false;
+    std::string validationCampaignPath_ = "out/nextdayz-validation/campaign.json";
+    std::string validationCampaignCommand_;
     NextDayz::FDeterministicRng sessionRng_;
     NextDayz::FDeterministicRng survivalRng_;   // wounds, corpse loot, firecracker throws
 

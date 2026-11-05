@@ -85,6 +85,27 @@ namespace NextDayz
         int zone = -1;
         int authoredIndex = -1;
         double pileTime = 0.0;
+        std::string persistentId;
+    };
+
+    struct FSavedLootEntry
+    {
+        std::string id;
+        ELootSource source = ELootSource::Spot;
+        glm::vec3 position{};
+        float yaw = 0.0f;
+        std::vector<FLootStack> contents;
+        FLootEntry::EState state = FLootEntry::EState::Available;
+        FLootSlot slot{};
+    };
+
+    struct FLootWorldState
+    {
+        double seconds = 0.0;
+        uint64_t directorRng = 1;
+        uint64_t rollRng = 1;
+        uint32_t pileSerial = 0;
+        std::vector<FSavedLootEntry> entries;
     };
 
     struct FLootZone
@@ -121,6 +142,8 @@ namespace NextDayz
         void OnSceneLoaded(Assets::Scene& scene, std::span<const FLootSpotSeed> spots = {});
         void OnSceneUnloaded();
         void ResetSession(NextEngine& engine);
+        FLootWorldState Capture() const;
+        void Restore(const FLootWorldState& state, NextEngine& engine);
 
         // Recomputes the hovered entry from player position + view direction and
         // runs restocking.
@@ -148,8 +171,8 @@ namespace NextDayz
         bool Cancel(const FLootHandle& handle);
         bool IsReservedHandleValid(const FLootHandle& handle) const;
 
-        // Puts a pile on the ground (player drop, infected remains). Recycles the
-        // oldest pile when the pool is full.
+        // Puts a pile on the ground (player drop, infected remains). Expands the
+        // visual pool as needed; occupied piles are never overwritten.
         bool SpawnPile(std::vector<FLootStack> contents, const glm::vec3& position, float yaw, NextEngine& engine);
         // Restocks one military spot far from `from` right now with a rifle and
         // ammo (radio supply cache). Returns its position.

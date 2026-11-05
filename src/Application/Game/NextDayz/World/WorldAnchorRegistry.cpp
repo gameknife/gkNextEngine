@@ -37,6 +37,7 @@ namespace NextDayz
 
         std::optional<std::pair<EWorldAnchorType, std::string>> Parse(std::string_view name)
         {
+            if (name == "nd_extraction") return std::pair{EWorldAnchorType::Extraction, std::string("helipad")};
             if (name == "cw_prop_well" || name == "cw_prop_water_pump")
             {
                 return std::pair{EWorldAnchorType::Well, std::string("water")};
@@ -109,6 +110,11 @@ namespace NextDayz
                 {
                     anchor.label = Assets::Scad::MetadataString(metadata, "name", "Unknown");
                     anchor.profile = Assets::Scad::MetadataString(metadata, "kind", "village");
+                }
+                if (anchor.type == EWorldAnchorType::Extraction)
+                {
+                    anchor.label = Assets::Scad::MetadataString(metadata, "name", "Helipad");
+                    anchor.profile = Assets::Scad::MetadataString(metadata, "id", anchor.label);
                 }
             }
             anchors_.push_back(std::move(anchor));

@@ -8,6 +8,9 @@ namespace NextDayz
     {
         // Volume is per stack: `maxStack` units share `volumePerStack` slots.
         constexpr std::array itemDefs = {
+            FItemDef{.id = "signal_flare", .displayName = "Signal Flare Gun", .kind = EItemKind::Consumable,
+                     .volumePerStack = 2, .use = EItemUse::SignalFlare,
+                     .description = "Single use. Fire at a marked helipad to call the rescue helicopter."},
             // ---- firearms ----
             FItemDef{.id = "ak", .displayName = "AK-74", .kind = EItemKind::Weapon, .volumePerStack = 10,
                      .equipSlot = EEquipSlot::PrimaryWeapon, .weaponDefId = "ak",

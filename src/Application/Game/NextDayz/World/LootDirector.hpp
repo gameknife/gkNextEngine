@@ -86,6 +86,9 @@ namespace NextDayz
                              int categoryAvailable, int categoryCap);
 
         const FLootSlot* Resolve(FLootSlotHandle handle) const;
+        bool RestoreSlot(FLootSlotHandle handle, const FLootSlot& saved);
+        uint64_t RngState() const { return rng_.State(); }
+        void RestoreRng(uint64_t state) { rng_.RestoreState(state); }
         // When a cooling spot's (scarcity-scaled) cooldown runs out, in world seconds.
         double ReadyAt(FLootSlotHandle handle) const;
         float CooldownScale(ELootCategory category) const

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <limits>
 #include <unordered_map>
 
 #include <SDL3/SDL_events.h>
@@ -162,11 +163,13 @@ void NextDayzGameInstance::OnInit()
         scene = GOption->SceneName;
     }
     SPDLOG_INFO("[NextDayz] loading scene '{}'", scene);
+    campaignMap_ = scene;
     GetEngine().RequestLoadScene({.filename = scene});
 }
 
 void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
 {
+    ConfigureCampaignCVars(cvars);
     std::string error;
     // Path tracing with DLSS Ray Reconstruction at Quality by default.
     cvars.SetDefaultFromString("r.rendererType", "0", &error);
@@ -486,6 +489,7 @@ void NextDayzGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<Assets
                                               std::vector<Assets::AnimationTrack>& /*tracks*/)
 {
     grass_.Prepare(nodes, models, materials);
+    rescueHelicopter_.InjectAssets(models, materials);
     rig_.InjectAssets(models, materials);
     effects_.InjectAssets(models, materials);
     InjectLootCatalog(models, materials);
@@ -642,6 +646,8 @@ void NextDayzGameInstance::OnSceneLoaded()
     survivalSeconds_ = 0.0;
     SetMouseCaptured(true);
     sceneReady_ = true;
+    rescueHelicopter_.OnSceneLoaded(GetEngine().GetScene());
+    InitializeCampaign();
     grass_.Bind(GetEngine().GetScene());
     grass_.Tick(GetEngine().GetScene(), 0.0f, player_.Position(), time_.Storm());
     SPDLOG_INFO("[NextDayz] scene loaded ({} nodes)", GetEngine().GetScene().Nodes().size());
@@ -649,6 +655,8 @@ void NextDayzGameInstance::OnSceneLoaded()
 
 void NextDayzGameInstance::OnSceneUnloaded()
 {
+    if (sceneReady_) SaveCampaign();
+    rescueHelicopter_.Clear();
     sceneReady_ = false;
     grass_.Clear();
     player_.Destroy();
@@ -675,6 +683,7 @@ void NextDayzGameInstance::OnSceneUnloaded()
 
 void NextDayzGameInstance::OnDestroy()
 {
+    if (sceneReady_) SaveCampaign();
     player_.Destroy();
 }
 
@@ -686,6 +695,26 @@ void NextDayzGameInstance::OnTick(double deltaSeconds)
         return;
     }
     float dt = static_cast<float>(deltaSeconds);
+    if (CampaignEnabled())
+    {
+        if (!campaign_.inField || campaignSaveBlocked_)
+        {
+            rig_.SetVisible(false);
+            weapons_.SetTriggerDown(false);
+            weapons_.SetPresentationSuppressed(true);
+            return;
+        }
+        if (!survival_.IsAlive())
+        {
+            ReturnToSafehouse(true);
+            return;
+        }
+        if (campaign_.flight.boarded)
+        {
+            if (!paused_) AdvanceExtraction(dt);
+            return;
+        }
+    }
     if (paused_)
     {
         weapons_.SetTriggerDown(false);
@@ -701,10 +730,16 @@ void NextDayzGameInstance::OnTick(double deltaSeconds)
         SimulateFrame(dt);
     }
     debugger_.EndTick(dt);
+    if (CampaignEnabled())
+    {
+        if (!survival_.IsAlive()) ReturnToSafehouse(true);
+        else AdvanceExtraction(dt);
+    }
 }
 
 void NextDayzGameInstance::SimulateFrame(float dt)
 {
+    bool inventoryCommitted = false;
     using NextDayz::Debug::ETimer;
     using NextDayz::Debug::ScopedTimer;
     NextDayz::Debug::Profiler& timers = debugger_.Timers();
@@ -737,6 +772,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
             std::exchange(lootDestination_, 0), std::exchange(lootEquipSlot_, NextDayz::EEquipSlot::None));
         if (result.taken)
         {
+            inventoryCommitted = true;
             SyncClothingVisuals();
             audio_.Pickup();
             for (const NextDayz::FLootStack& stack : result.stacks)
@@ -756,6 +792,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     }
     if (const std::optional<NextDayz::FItemActionCommit> commit = actions_.ConsumeItemCommitRequest())
     {
+        inventoryCommitted = true;
         if (commit->action == NextDayz::EPlayerAction::DrinkFromWell)
         {
             survival_.DrinkFromWell();
@@ -1073,6 +1110,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     rig_.Update(player_.Position(), presentation, dt);
     rig_.UpdateCameraFade(player_.CameraPosition(), config_.Camera.TpsFadeNearDistance,
                           config_.Camera.TpsFadeFarDistance, !player_.IsFirstPerson() && !knobs.orbit);
+    if (inventoryCommitted) SaveCampaign();
 }
 
 bool NextDayzGameInstance::OverrideRenderCamera(Assets::Camera& outRenderCamera) const
@@ -1083,6 +1121,12 @@ bool NextDayzGameInstance::OverrideRenderCamera(Assets::Camera& outRenderCamera)
     }
     float fov = config_.Camera.BaseFov;
     player_.FillCamera(outRenderCamera.ModelView, fov);
+    if (CampaignEnabled() && campaign_.flight.boarded)
+    {
+        const glm::vec3 position = rescueHelicopter_.Position(campaign_.flight, extractionConfig_);
+        outRenderCamera.ModelView = glm::lookAt(position + glm::vec3(10.0f,6.0f,-12.0f),
+            position + glm::vec3(0,1.5f,0), glm::vec3(0,1,0));
+    }
     const NextDayz::Debug::FKnobs& knobs = debugger_.Knobs();
     if (knobs.orbit)
     {
@@ -1116,6 +1160,7 @@ bool NextDayzGameInstance::OnRenderUI()
     {
         return false;
     }
+    if (CampaignEnabled() && DrawSafehouse()) return true;
 
     NextDayz::FHudContext ctx;
     ctx.aiming = player_.IsAiming();
@@ -1145,6 +1190,7 @@ bool NextDayzGameInstance::OnRenderUI()
         ctx.interactionPrompt = inventory_.CountOf("water_bottle_empty") > 0 ? "[E] Drink   [F] Fill bottle"
                                                                               : "[E] Drink from the well";
     }
+    if (CampaignEnabled() && !ExtractionPrompt().empty()) ctx.interactionPrompt = ExtractionPrompt();
     ctx.hour = time_.HourInt();
     ctx.minute = time_.MinuteInt();
     ctx.overcast = time_.Overcast();
@@ -1172,6 +1218,8 @@ bool NextDayzGameInstance::OnRenderUI()
             {
                 ctx.pois.push_back({anchor.label, anchor.profile, glm::vec2(anchor.worldPos.x, anchor.worldPos.z)});
             }
+            else if (anchor.type == NextDayz::EWorldAnchorType::Extraction)
+                ctx.pois.push_back({"[H] " + anchor.label, "extraction", glm::vec2(anchor.worldPos.x, anchor.worldPos.z)});
         }
     }
     if (showInventory_)
@@ -1245,7 +1293,8 @@ bool NextDayzGameInstance::OnRenderUI()
             quickSlots_[slot] = itemId;
         }
     };
-    ctx.restartSession = [this, &hudRequests]() { hudRequests.emplace_back([this]() { ResetSession(); }); };
+    if (!CampaignEnabled())
+        ctx.restartSession = [this, &hudRequests]() { hudRequests.emplace_back([this]() { ResetSession(); }); };
     {
         NextDayz::Debug::ScopedTimer timer(debugger_.Timers(), NextDayz::Debug::ETimer::Hud);
         NextDayz::NextDayzHUD::Draw(ctx);
@@ -1254,6 +1303,7 @@ bool NextDayzGameInstance::OnRenderUI()
     {
         request();
     }
+    if (!hudRequests.empty()) SaveCampaign();
     debugger_.Draw(DebugFacts());
     return true;
 }
@@ -1407,6 +1457,7 @@ void NextDayzGameInstance::TakeOffItem(NextDayz::FItemInstanceId instanceId)
 
 void NextDayzGameInstance::DropItem(NextDayz::FItemInstanceId instanceId, int count)
 {
+    weapons_.CopyMagazinesTo(inventory_);
     NextDayz::Inventory transaction = inventory_;
     const std::optional<NextDayz::FItemInstance> removed = transaction.TryRemove(instanceId, count);
     if (!removed)
@@ -1433,6 +1484,7 @@ void NextDayzGameInstance::DropItem(NextDayz::FItemInstanceId instanceId, int co
         return;
     }
     inventory_ = std::move(transaction);
+    SaveCampaign();
     SyncClothingVisuals();
     audio_.Drop();
     Notify(removed->count > 1 ? fmt::format("Dropped {} x{}", ItemDisplayName(removed->defId), removed->count)
@@ -1536,6 +1588,9 @@ void NextDayzGameInstance::UseInventoryItem(NextDayz::FItemInstanceId instanceId
         return;
     case EItemUse::Firecrackers:
         ThrowFirecrackers(instanceId);
+        return;
+    case EItemUse::SignalFlare:
+        FireSignal(instanceId);
         return;
     case EItemUse::None:
         break;
@@ -1856,6 +1911,11 @@ void NextDayzGameInstance::ConfigureZombieSpawnPoints()
 
 void NextDayzGameInstance::ResetSession()
 {
+    if (CampaignEnabled())
+    {
+        if (!survival_.IsAlive() && campaign_.inField) ReturnToSafehouse(true);
+        return;
+    }
     if (!sceneReady_)
     {
         return;
@@ -1900,6 +1960,26 @@ std::string NextDayzGameInstance::CurrentObjective() const
     {
         return "Stop the bleeding: bandage or rags [H]";
     }
+    if (CampaignEnabled())
+    {
+        if (campaign_.flight.phase != NextDayz::EFlightPhase::Idle)
+            return fmt::format("Rescue: {} ({:.0f}s)", NextDayz::FlightPhaseName(campaign_.flight.phase),
+                               campaign_.flight.remaining);
+        if (inventory_.CountOf("signal_flare") > 0)
+        {
+            const NextDayz::FWorldAnchor* nearest = nullptr;
+            float distance = std::numeric_limits<float>::max();
+            for (const auto& anchor : worldAnchors_.All())
+            {
+                if (anchor.type != NextDayz::EWorldAnchorType::Extraction) continue;
+                const float candidate = glm::distance(player_.Position(), anchor.worldPos);
+                if (candidate < distance) { nearest = &anchor; distance = candidate; }
+            }
+            if (nearest)
+                return fmt::format("Reach {} ({:.0f}m {}) | [B] Fire signal", nearest->label, distance,
+                                   CompassWord(nearest->worldPos - player_.Position()));
+        }
+    }
     if (inventory_.CountOf("water_bottle") == 0 && inventory_.CountOf("drink_soda") == 0)
     {
         return "Find water: a bottle, a soda, or a well or pump in a village";
@@ -1926,7 +2006,8 @@ std::string NextDayzGameInstance::CurrentObjective() const
     {
         return "Find a map or compass to navigate";
     }
-    return "Raid a fortress or the military base for better gear";
+    return CampaignEnabled() ? "Find a signal flare gun at a military, police or wilderness site"
+                             : "Raid a fortress or the military base for better gear";
 }
 
 void NextDayzGameInstance::CreateZombieVisuals()
@@ -2477,6 +2558,25 @@ void NextDayzGameInstance::SetInventoryOpen(bool open)
 
 bool NextDayzGameInstance::OnKey(SDL_Event& event)
 {
+    if (CampaignEnabled())
+    {
+        if (!campaign_.inField || campaignSaveBlocked_) return true;
+        if (campaign_.flight.boarded)
+        {
+            if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE)
+            { paused_ = !paused_; SetMouseCaptured(!paused_); }
+            return true;
+        }
+        if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.key == SDLK_E &&
+            !actions_.IsActive() && !player_.IsTraversing() && BoardHelicopter()) return true;
+        if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.key == SDLK_B &&
+            !actions_.IsActive() && !player_.IsTraversing())
+        {
+            if (const auto* flare = inventory_.FindFirst("signal_flare")) FireSignal(flare->instanceId);
+            else Notify("Find a signal flare gun to call rescue", 1);
+            return true;
+        }
+    }
     if (event.type != SDL_EVENT_KEY_DOWN && event.type != SDL_EVENT_KEY_UP)
     {
         return false;
@@ -2676,6 +2776,7 @@ bool NextDayzGameInstance::OnCursorPosition(double xpos, double ypos)
 
 bool NextDayzGameInstance::OnMouseButton(SDL_Event& event)
 {
+    if (CampaignEnabled() && (!campaign_.inField || campaign_.flight.boarded || campaignSaveBlocked_)) return false;
     if (debugger_.CursorMode())
     {
         // Debug cursor: clicks that ImGui did not take select things in the world.
@@ -2759,6 +2860,41 @@ void NextDayzGameInstance::UpdateGrass(float dt)
 
 void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegistry& reg)
 {
+    reg.Add("campaignInField", [this]() -> Runtime::Agent::FAgentQueryValue { return campaign_.inField; });
+    reg.Add("campaignGold", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.gold); });
+    reg.Add("campaignStorage", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.storage.size()); });
+    reg.Add("campaignSorties", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.sorties); });
+    reg.Add("campaignExtractions", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.extractions); });
+    reg.Add("campaignSaveBlocked", [this]() -> Runtime::Agent::FAgentQueryValue { return campaignSaveBlocked_; });
+    reg.Add("campaignSaveError", [this]() -> Runtime::Agent::FAgentQueryValue { return saveError_; });
+    reg.Add("flightPhase", [this]() -> Runtime::Agent::FAgentQueryValue { return std::string(NextDayz::FlightPhaseName(campaign_.flight.phase)); });
+    reg.Add("flightRemaining", [this]() -> Runtime::Agent::FAgentQueryValue { return double(campaign_.flight.remaining); });
+    reg.Add("flightBoarded", [this]() -> Runtime::Agent::FAgentQueryValue { return campaign_.flight.boarded; });
+    reg.Add("signalFlares", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(inventory_.CountOf("signal_flare")); });
+    reg.Add("worldSeconds", [this]() -> Runtime::Agent::FAgentQueryValue { return loot_.WorldSeconds(); });
+    reg.Add("worldCooling", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(loot_.CooldownCount()); });
+    reg.Add("extractionPoints", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(worldAnchors_.Count(NextDayz::EWorldAnchorType::Extraction)); });
+    reg.Add("atHospitalRoofHeight", [this]() -> Runtime::Agent::FAgentQueryValue
+    {
+        for (const auto& anchor : worldAnchors_.All())
+            if (anchor.type == NextDayz::EWorldAnchorType::Extraction && anchor.profile == "gorka_hospital")
+                return player_.Position().y >= anchor.worldPos.y - 0.5f;
+        return false;
+    });
+    reg.Add("atHospitalHelipad", [this]() -> Runtime::Agent::FAgentQueryValue
+    {
+        for (const auto& anchor : worldAnchors_.All())
+            if (anchor.type == NextDayz::EWorldAnchorType::Extraction && anchor.profile == "gorka_hospital")
+                return glm::distance(player_.Position(), anchor.worldPos) <= extractionConfig_.callRadius;
+        return false;
+    });
+    reg.Add("atHospitalStairLanding", [this]() -> Runtime::Agent::FAgentQueryValue
+    {
+        for (const auto& anchor : worldAnchors_.All())
+            if (anchor.type == NextDayz::EWorldAnchorType::Extraction && anchor.profile == "gorka_hospital")
+                return player_.Position().y >= anchor.worldPos.y + 0.25f;
+        return false;
+    });
     reg.Add("sceneReady", [this]() -> Runtime::Agent::FAgentQueryValue { return sceneReady_; });
     reg.Add("grassInstances", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.ActiveCount()); });
     reg.Add("grassNearInstances", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.ActiveCount(0)); });

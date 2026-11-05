@@ -33,7 +33,8 @@ namespace NextDayz
             {"jacket_rescue", 1}, {"vest_rescue", 1}, {"backpack_medical", 3},
         }};
         // Bases and checkpoints: rifles, ammo, armour and the bigger packs.
-        constexpr std::array<FLootTableEntry, 29> military = {{
+        constexpr std::array<FLootTableEntry, 30> military = {{
+            {"signal_flare", 1},
             {"ammo_545", 12, 10, 30}, {"ammo_762", 6, 5, 15}, {"ammo_9mm", 6, 8, 20}, {"ammo_12g", 3, 4, 10},
             {"ak", 3}, {"svd", 1}, {"mosin", 2}, {"pistol", 2},
             {"helmet", 6}, {"vest_military", 3}, {"cargo_pants", 5}, {"jacket", 4},
@@ -42,7 +43,8 @@ namespace NextDayz
             {"compass", 4}, {"map", 3}, {"radio", 2}, {"battery", 3, 1, 2}, {"knife", 3},
             {"hat_boonie", 2}, {"helmet_tactical", 3}, {"vest_chest_rig", 3}, {"pants_tactical", 4}, {"pants_snow", 1}, {"backpack_rolltop", 1},
         }};
-        constexpr std::array<FLootTableEntry, 17> police = {{
+        constexpr std::array<FLootTableEntry, 18> police = {{
+            {"signal_flare", 1},
             {"pistol", 4}, {"ammo_9mm", 10, 8, 24}, {"ammo_12g", 5, 4, 10}, {"shotgun", 2},
             {"bandage", 4, 1, 2}, {"painkillers", 3}, {"helmet", 2}, {"vest_military", 1},
             {"firecrackers", 2, 1, 2}, {"radio", 1}, {"battery", 3, 1, 2}, {"compass", 1}, {"map", 2},
@@ -62,7 +64,8 @@ namespace NextDayz
             {"cap_baseball", 2}, {"hat_boonie", 3}, {"jacket_denim", 2}, {"vest_hunting", 4}, {"jeans", 3},
         }};
         // Camps, hunting stands and wrecks out in the woods.
-        constexpr std::array<FLootTableEntry, 25> wilderness = {{
+        constexpr std::array<FLootTableEntry, 26> wilderness = {{
+            {"signal_flare", 1},
             {"mosin", 3}, {"shotgun", 3}, {"ammo_762", 5, 5, 12}, {"ammo_12g", 5, 4, 10},
             {"knife", 6}, {"axe", 3}, {"jacket", 5}, {"backpack", 4}, {"bedroll", 5}, {"lantern", 4},
             {"fuel", 3}, {"food_tuna", 6}, {"food_can", 6}, {"water_bottle", 6}, {"compass", 3}, {"map", 3},

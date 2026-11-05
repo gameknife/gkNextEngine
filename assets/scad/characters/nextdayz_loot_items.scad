@@ -8,6 +8,13 @@ use <nextdayz_clothing.scad>
 
 $fn = 12;
 
+module bone_item_signal_flare()
+{
+    color([0.93, 0.23, 0.06]) translate([0, 0, 0.07]) cube([0.26, 0.07, 0.09], center = true);
+    color([0.15, 0.17, 0.18]) translate([-0.07, 0, 0.035]) rotate([0, -20, 0]) cube([0.07, 0.06, 0.13], center = true);
+    color([0.38, 0.40, 0.42]) translate([0.10, 0, 0.07]) rotate([0, 90, 0]) cylinder(h = 0.045, r = 0.04, center = true);
+}
+
 // ---- 枪械 ----
 module bone_item_ak() { cw_wpn_ak(1); }
 module bone_item_svd() { cw_wpn_svd(1); }
@@ -174,6 +181,7 @@ module bone_root()
     bone_item_bandage(); bone_item_rag(); bone_item_medkit(); bone_item_painkillers();
     bone_item_can_opener(); bone_item_compass(); bone_item_map(); bone_item_radio(); bone_item_battery();
     bone_item_lantern(); bone_item_fuel(); bone_item_bedroll(); bone_item_firecrackers();
+    bone_item_signal_flare();
     bone_item_unknown();
 }
 

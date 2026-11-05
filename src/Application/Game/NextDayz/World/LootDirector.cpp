@@ -47,6 +47,17 @@ namespace NextDayz
         return true;
     }
 
+    bool LootDirector::RestoreSlot(FLootSlotHandle handle, const FLootSlot& saved)
+    {
+        FLootSlot* slot = ResolveMutable(handle);
+        if (!slot) return false;
+        const glm::vec3 position = slot->worldPos;
+        *slot = saved;
+        slot->worldPos = position;
+        if (slot->state == ELootSlotState::Reserved) slot->state = ELootSlotState::Available;
+        return true;
+    }
+
     bool LootDirector::Commit(FLootSlotHandle handle, double worldSeconds)
     {
         FLootSlot* slot = ResolveMutable(handle);

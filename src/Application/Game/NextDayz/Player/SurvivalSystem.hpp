@@ -35,6 +35,12 @@ namespace NextDayz
     public:
         void Configure(const FSurvivalConfig& config) { config_ = config; }
         void Reset();
+        void Restore(const FSurvivalSnapshot& state)
+        {
+            state_ = state;
+            damageProtectionRemaining_ = 0.0f;
+            ClampState();
+        }
         void Update(float simulationDeltaSeconds, bool sprinting);
 
         // How cold the surroundings are for the clothes worn (0..1), set by the

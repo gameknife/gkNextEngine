@@ -26,6 +26,7 @@ module nd_spawn_player_safe() { color([0.1, 0.8, 0.2]) sphere(r = 0.18, $fn = 6)
 module nd_loot(p = "residential") { color([0.2, 0.4, 0.9]) sphere(r = 0.12, $fn = 6); }
 module nd_zed(p = "civilian", group = 1) { color([0.8, 0.2, 0.2]) sphere(r = 0.16, $fn = 6); }
 module nd_poi(name = "", kind = "village") { color([0.9, 0.85, 0.2]) sphere(r = 0.2, $fn = 6); }
+module nd_extraction(id = "", name = "Helipad") { color([0.0, 0.9, 0.9]) sphere(r = 0.15, $fn = 6); }
 
 // ================= 带家具的建筑组合件（几何 gk_flatten 成一个节点 + 刷新点） =================
 // 家具靠后墙/侧墙，门洞一侧留通道；刷新点放在桌面、床面、货架层板或地面。
@@ -357,6 +358,8 @@ gk_terrain(TERR);
 ter_place(TERR, -320, -165) nd_spawn_player_safe();
 ter_place(TERR, -44, -190) nd_spawn_player_safe();
 ter_place(TERR, -150, -126) nd_spawn_player_safe();
+ter_place(TERR, 188, -279) nd_spawn_player_safe();
+ter_place(TERR, 288, 151) nd_spawn_player_safe();
 
 // ================= 公路桥（跨河点 ~(17,-154)，锚下切带外路面） =================
 translate([17, -154, gk_terrain_height(TERR, 40, -152)])
@@ -614,6 +617,20 @@ ter_place(TERR, 240, -246, dz = 0)
     translate([16, 19, 0]) nd_panel_flat(5, floors = 4, L = 14, D = 9);
     translate([30, 17, 0]) cw_bldg_chapel(seed = 0);
     translate([44, 20, 0]) nd_hospital(2);
+    // Hospital rooftop rescue pad; the exterior staircase is ordinary walkable geometry.
+    translate([47, 20, 9.55]) cw_ground_helipad(S = 7.5);
+    translate([47, 20, 9.58]) nd_extraction(id = "gorka_hospital", name = "Gorka Hospital Roof");
+    gk_flatten()
+    {
+        for (i = [0 : 49])
+            color([0.39, 0.42, 0.40]) translate([54.5, 3.5 + i * 0.34, 0])
+                cube([2.0, 0.36, (i + 1) * 0.20]);
+        color([0.39, 0.42, 0.40]) translate([50.0, 20.0, 9.75]) cube([6.5, 2.0, 0.25]);
+        // Railings leave the stair entrance and rooftop exit open.
+        for (x = [54.4, 56.5], i = [0 : 7])
+            color([0.25, 0.28, 0.27]) translate([x, 4.5 + i * 2.1, i * 1.25 + 0.7])
+                cube([0.07, 0.07, 1.0]);
+    }
     // 中排：超市 + 商铺
     translate([-16, -6, 0]) rotate([0, 0, 180]) nd_supermarket(0, L = 17, D = 11);
     translate([14, -5, 0]) rotate([0, 0, 180]) nd_shop_row(2, L = 11, D = 6);
@@ -918,6 +935,7 @@ ter_place(TERR, 340, 165, dz = 0)
     translate([38, 24, 0]) cw_bldg_water_tower(seed = 1);
     // 停机坪 + 装备
     translate([2, 20, 0]) cw_ground_helipad(S = 12);
+    translate([2, 20, 0.08]) nd_extraction(id = "military_base", name = "Military Base Helipad");
     translate([0, 2, 0]) rotate([0, 0, 15]) cw_veh_btr(seed = 0);
     translate([13, 6, 0]) rotate([0, 0, -8]) cw_veh_tank(seed = 0);
     translate([-10, 0, 0]) rotate([0, 0, 90]) cw_veh_truck_canvas(seed = 0);

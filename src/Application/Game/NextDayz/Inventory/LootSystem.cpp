@@ -1,3 +1,4 @@
+#include "Engine/Common/CoreMinimal.hpp"
 #include "LootSystem.hpp"
 
 #include <algorithm>
@@ -22,6 +23,10 @@ namespace NextDayz
 {
     namespace
     {
+        std::string LootKey(std::string_view type, const glm::vec3& position)
+        {
+            return fmt::format("{}:{:.3f}:{:.3f}:{:.3f}", type, position.x, position.y, position.z);
+        }
         constexpr size_t kPileCount = 32;
         constexpr float kZoneLinkDistance = 28.0f;
         constexpr float kRestockInterval = 1.0f;
@@ -252,6 +257,7 @@ namespace NextDayz
                 entry.nodeInstanceId = reuse[reused++];
                 continue;
             }
+            if (entry.nodeInstanceId != 0) continue;
             const FLootVisual& visual = VisualFor(entry);
             if (!visual.valid)
             {
@@ -312,6 +318,7 @@ namespace NextDayz
             entry.source = ELootSource::Authored;
             entry.nodeInstanceId = node->GetInstanceId();
             entry.worldPos = node->WorldTranslation();
+            entry.persistentId = LootKey(node->GetName(), entry.worldPos);
             entry.authoredIndex = static_cast<int>(std::distance(authored.begin(), it));
             entry.profile = it->second->rollProfile;
             entry.directorHandle = director_.AddSlot(entry.worldPos, entry.profile, ELootCategory::Misc);
@@ -326,6 +333,7 @@ namespace NextDayz
             entry.source = ELootSource::Spot;
             entry.worldPos = seed.position;
             entry.profile = seed.profile;
+            entry.persistentId = LootKey(fmt::format("spot:{}", static_cast<int>(seed.profile)), entry.worldPos);
             entry.directorHandle = director_.AddSlot(entry.worldPos, entry.profile, ELootCategory::Misc);
             const uint32_t roll = director_.Resolve(entry.directorHandle)->roll;
             entry.yaw = static_cast<float>(MixRoll(roll, 90) % 6283u) * 0.001f;
@@ -349,6 +357,15 @@ namespace NextDayz
             entries_.push_back(std::move(entry));
         }
 
+        std::unordered_map<std::string, int> occurrences;
+        for (auto& entry : entries_)
+        {
+            if (entry.source != ELootSource::Pile)
+            {
+                const int ordinal = occurrences[entry.persistentId]++;
+                entry.persistentId += fmt::format(":{}", ordinal);
+            }
+        }
         CreatePoolNodes(scene, reuseNodes);
         for (FLootEntry& entry : entries_)
         {
@@ -817,7 +834,6 @@ namespace NextDayz
             return false;
         }
         FLootEntry* target = nullptr;
-        double oldest = std::numeric_limits<double>::max();
         for (FLootEntry& entry : entries_)
         {
             if (entry.source != ELootSource::Pile || entry.nodeInstanceId == 0)
@@ -829,15 +845,16 @@ namespace NextDayz
                 target = &entry;
                 break;
             }
-            if (entry.state == FLootEntry::EState::Available && entry.pileTime < oldest)
-            {
-                oldest = entry.pileTime;
-                target = &entry;
-            }
         }
         if (!target)
         {
-            return false;
+            FLootEntry entry;
+            entry.source = ELootSource::Pile;
+            entry.state = FLootEntry::EState::Empty;
+            entry.contents = contents;
+            entries_.push_back(std::move(entry));
+            CreatePoolNodes(engine.GetScene(), {});
+            target = &entries_.back();
         }
         target->contents = std::move(contents);
         target->worldPos = position;
@@ -846,8 +863,68 @@ namespace NextDayz
         target->category = CategoryOf(target->contents);
         target->state = FLootEntry::EState::Available;
         target->pileTime = worldSeconds_ + static_cast<double>(++pileSerial_) * 1.0e-6;
+        target->persistentId = fmt::format("pile:{}", pileSerial_);
         ShowEntry(*target, engine.GetScene(), &engine);
         return true;
+    }
+
+    FLootWorldState LootSystem::Capture() const
+    {
+        FLootWorldState saved{worldSeconds_, director_.RngState(), rollRng_.State(), pileSerial_, {}};
+        for (const auto& entry : entries_)
+        {
+            if (entry.source == ELootSource::Pile && entry.state == FLootEntry::EState::Empty) continue;
+            FSavedLootEntry item{entry.persistentId, entry.source, entry.worldPos, entry.yaw, entry.contents,
+                                entry.state == FLootEntry::EState::Reserved ? FLootEntry::EState::Available : entry.state};
+            if (const auto* slot = director_.Resolve(entry.directorHandle))
+            {
+                item.slot = *slot;
+                if (item.slot.state == ELootSlotState::Reserved) item.slot.state = ELootSlotState::Available;
+            }
+            saved.entries.push_back(std::move(item));
+        }
+        return saved;
+    }
+
+    void LootSystem::Restore(const FLootWorldState& saved, NextEngine& engine)
+    {
+        // Also supports reloading the current save without creating duplicate piles.
+        for (auto& entry : entries_)
+        {
+            if (entry.source == ELootSource::Pile)
+            {
+                HideEntry(entry, engine.GetScene(), &engine);
+                entry.contents.clear();
+                entry.state = FLootEntry::EState::Empty;
+            }
+        }
+        for (const auto& item : saved.entries)
+        {
+            if (item.source == ELootSource::Pile)
+            {
+                SpawnPile(item.contents, item.position, item.yaw, engine);
+                continue;
+            }
+            const auto found = std::find_if(entries_.begin(), entries_.end(), [&](const auto& entry)
+            { return entry.source == item.source && entry.persistentId == item.id; });
+            if (found == entries_.end()) continue;
+            found->contents = item.contents;
+            found->state = item.state;
+            found->yaw = item.yaw;
+            found->category = item.slot.category;
+            director_.RestoreSlot(found->directorHandle, item.slot);
+            if (found->state == FLootEntry::EState::Available)
+            {
+                if (found->source != ELootSource::Authored) found->displayName = DescribeContents(found->contents);
+                ShowEntry(*found, engine.GetScene(), &engine);
+            }
+            else HideEntry(*found, engine.GetScene(), &engine);
+        }
+        worldSeconds_ = saved.seconds;
+        pileSerial_ = std::max(pileSerial_, saved.pileSerial);
+        director_.RestoreRng(saved.directorRng);
+        rollRng_.RestoreState(saved.rollRng);
+        hoveredIndex_ = -1;
     }
 
     std::optional<glm::vec3> LootSystem::PlantCache(const glm::vec3& from, float minDistance, NextEngine& engine)

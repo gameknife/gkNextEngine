@@ -63,7 +63,10 @@ namespace NextDayz
 
         void SetVisible(bool visible);
         void UpdateCameraFade(const glm::vec3& cameraPosition, float nearDistance, float farDistance, bool enabled);
-        void SetClothing(const std::string& clothingId, bool on);
+        void SetClothing(const std::vector<std::string>& equipped);
+        // Actual render state, also exposed to the interactive validation runner.
+        std::string ClothingVisuals() const;
+        bool IsBodyPartVisible(std::string_view boneName) const;
 
         // Drives world transform + animation for the frame. The body yaw lags
         // state.aimYawRadians; the upper body twists to cover the difference.
@@ -121,8 +124,23 @@ namespace NextDayz
         void UpdateLocomotion(const FPlayerPresentationState& state, float deltaSeconds);
         void UpdateProcedural(const FPlayerPresentationState& state, float deltaSeconds);
         void UpdateAttachments(const FPlayerPresentationState& state);
+        void ApplyClothing();
+
+        struct FClothingPart
+        {
+            std::string itemId;
+            int32_t bone = -1;
+            bool harness = false;
+            float backExtent = 0.0f;
+            uint32_t modelId = 0;
+            std::array<uint32_t, 16> materialIds{};
+            std::shared_ptr<Assets::Node> node;
+        };
 
         Assets::FRigAsset asset_{};
+        Assets::FRigAsset clothingAsset_{};
+        std::vector<FClothingPart> clothingParts_;
+        std::vector<std::string> equippedClothing_;
         bool hasRig_ = false;
         FBones bones_{};
         FClips clips_{};
@@ -131,17 +149,13 @@ namespace NextDayz
         std::vector<uint32_t> partModelIds_;
         std::vector<std::array<uint32_t, 16>> partMaterialIds_;
         uint32_t tintMaterialId_ = 0;
-        uint32_t helmetModelId_ = 0;
-        uint32_t backpackModelId_ = 0;
-        uint32_t clothingMaterialId_ = 0;
         bool injected_ = false;
 
         // runtime scene state
         Assets::Scene* scene_ = nullptr;
         std::shared_ptr<Assets::Node> worldNode_;
         std::vector<Assets::Node*> boneNodes_;
-        std::shared_ptr<Assets::Node> helmetNode_;
-        std::shared_ptr<Assets::Node> backpackNode_;
+        std::vector<Assets::Node*> bodyPartNodes_;
         std::shared_ptr<Assets::Node> weaponNode_;
         std::array<std::shared_ptr<Assets::Node>, 2> holsteredWeaponNodes_;
         NextGameplay::FRigLayeredAnimator animator_;

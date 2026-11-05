@@ -669,6 +669,69 @@ namespace
     }
 }
 
+TEST_CASE("NextDayz wardrobe covers every clothing item with rigid local bone parts", "[Unit][ScadRig][NextDayz][Clothing]")
+{
+    FRigAsset body;
+    FRigAsset wardrobe;
+    std::string error;
+    std::vector<std::string> warnings;
+    REQUIRE(FScadRigLoader::LoadRig("assets/scad/characters/nextdayz_survivor.scad", {}, body, error));
+    REQUIRE(FScadRigLoader::LoadRig("assets/scad/characters/nextdayz_clothing.scad", {}, wardrobe, error, &warnings));
+    CHECK(warnings.empty());
+    std::unordered_map<std::string, size_t> partCounts;
+    std::unordered_map<std::string, glm::vec3> boundsMin;
+    std::unordered_map<std::string, glm::vec3> boundsMax;
+    for (const FRigPart& part : wardrobe.parts)
+    {
+        const FRigBone& bone = wardrobe.bones[part.bone];
+        const std::string& name = bone.name;
+        INFO(name);
+        REQUIRE(name.starts_with("bone_"));
+        const size_t separator = name.find("__");
+        REQUIRE(separator != std::string::npos);
+        const std::string itemId = name.substr(5, separator - 5);
+        const NextDayz::FItemDef* definition = NextDayz::FindItemDef(itemId);
+        REQUIRE(definition);
+        CHECK(definition->kind == NextDayz::EItemKind::Clothing);
+        const std::string target = name.substr(separator + 2);
+        CHECK(body.FindBone(target == "harness" ? "bone_torso" : "bone_" + target) >= 0);
+        CHECK(glm::length(bone.bindT) == Catch::Approx(0.0f));
+        CHECK(glm::length(bone.bindS - glm::vec3(1.0f)) == Catch::Approx(0.0f));
+        CHECK(std::abs(bone.bindR.w) == Catch::Approx(1.0f));
+        REQUIRE(part.sectionColors.size() <= 16);
+        CHECK(std::none_of(part.sectionTintable.begin(), part.sectionTintable.end(), [](bool tint) { return tint; }));
+        ++partCounts[itemId];
+        const auto& vertices = wardrobe.partModels[part.modelIndex].CPUVertices();
+        REQUIRE_FALSE(vertices.empty());
+        glm::vec3 lo(std::numeric_limits<float>::max());
+        glm::vec3 hi(std::numeric_limits<float>::lowest());
+        for (const auto& vertex : vertices)
+        {
+            lo = glm::min(lo, vertex.Position);
+            hi = glm::max(hi, vertex.Position);
+        }
+        boundsMin[name] = lo;
+        boundsMax[name] = hi;
+        if (target.starts_with("foot_")) CHECK(lo.y >= -0.0001f);
+    }
+    for (const NextDayz::FItemDef& definition : NextDayz::AllItemDefs())
+    {
+        if (definition.kind != NextDayz::EItemKind::Clothing) continue;
+        INFO(definition.id);
+        const size_t expected = definition.equipSlot == NextDayz::EEquipSlot::Torso ? 5 :
+                                definition.equipSlot == NextDayz::EEquipSlot::Legs ? 7 :
+                                definition.equipSlot == NextDayz::EEquipSlot::Back ? 2 : 1;
+        CHECK(partCounts[std::string(definition.id)] == expected);
+    }
+    // Coat, carrier and pack occupy successively deeper silhouettes. Packs
+    // must differ in size as well as colour. Coordinates here are engine Y-up.
+    CHECK(boundsMin["bone_vest_military__torso"].z < boundsMin["bone_jacket__torso"].z);
+    CHECK(boundsMax["bone_vest_military__torso"].z > boundsMax["bone_hoodie__torso"].z);
+    CHECK(boundsMax["bone_backpack_small__torso"].z < -0.20f);
+    CHECK(boundsMin["bone_backpack__torso"].z < boundsMin["bone_backpack_small__torso"].z);
+    CHECK(boundsMin["bone_backpack_military__torso"].z < boundsMin["bone_backpack__torso"].z);
+}
+
 TEST_CASE("NextDayz survivor gaits plant the boots and holds keep both hands on the rifle",
           "[Unit][ScadRig][NextDayz]")
 {
@@ -990,6 +1053,7 @@ TEST_CASE("NextDayz loot catalog has a world model for every item", "[Unit][Scad
     std::vector<std::string> warnings;
     REQUIRE(FScadRigLoader::LoadRig("assets/scad/characters/nextdayz_loot_items.scad", {}, asset, error,
                                             &warnings));
+    CHECK(warnings.empty());
     for (const FItemDef& definition : AllItemDefs())
     {
         INFO(definition.id);
@@ -997,6 +1061,25 @@ TEST_CASE("NextDayz loot catalog has a world model for every item", "[Unit][Scad
         REQUIRE(bone >= 0);
         REQUIRE(std::any_of(asset.parts.begin(), asset.parts.end(),
                             [bone](const FRigPart& part) { return part.bone == bone; }));
+        if (definition.kind == EItemKind::Clothing)
+        {
+            // LootSystem injects a single model per item, and places its origin
+            // on the ground. A missing/split/sunken variant is not usable loot.
+            CHECK(std::count_if(asset.parts.begin(), asset.parts.end(),
+                               [bone](const FRigPart& part) { return part.bone == bone; }) == 1);
+            for (const FRigPart& part : asset.parts)
+            {
+                if (part.bone != bone) continue;
+                CHECK(part.sectionColors.size() <= 16);
+                float lowest = std::numeric_limits<float>::max();
+                for (const Vertex& vertex : asset.partModels[part.modelIndex].CPUVertices())
+                {
+                    lowest = std::min(lowest, vertex.Position.y);
+                }
+                CHECK(lowest >= -0.002f);
+                CHECK(lowest < 0.02f);
+            }
+        }
     }
 }
 

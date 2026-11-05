@@ -27,12 +27,9 @@ use <../lib/rig_humanoid.scad>
 
 $fn = 8;
 
-ROLECOLOR = [1.00, 0.00, 1.00];
-UNIFORM   = [0.22, 0.25, 0.22];
-VEST      = [0.12, 0.14, 0.12];
 SKIN      = [0.72, 0.52, 0.38];
-BOOT      = [0.07, 0.065, 0.06];
-METAL     = [0.18, 0.19, 0.18];
+SHORTS    = [0.85, 0.85, 0.82];
+HAIR      = [0.075, 0.055, 0.04];
 
 // --- Skeleton ----------------------------------------------------------------
 // Must match the bone_* translations below; the clip generators read it.
@@ -92,38 +89,40 @@ RIG = [
 
 module part_pelvis()
 {
-    color(UNIFORM) cube([0.36, 0.22, 0.22], center = true);
-    color(VEST) translate([0, 0, 0.07]) cube([0.39, 0.25, 0.09], center = true);
+    // The only permanent garment. Clothing hides covered body render parts,
+    // never their bones, so removing trousers restores these white shorts.
+    color(SHORTS) cube([0.35, 0.215, 0.22], center = true);
+    color([0.65, 0.65, 0.63]) translate([0, 0, 0.085]) cube([0.355, 0.22, 0.025], center = true);
 }
 
 module part_torso()
 {
-    color(UNIFORM) translate([0, 0, 0.25]) cube([0.40, 0.23, 0.50], center = true);
-    color(ROLECOLOR) translate([0, -0.145, 0.28]) cube([0.37, 0.055, 0.32], center = true);
-    color(VEST)
+    color(SKIN) hull()
     {
-        translate([0, -0.18, 0.26]) cube([0.28, 0.05, 0.26], center = true);
-        translate([0, 0.155, 0.26]) cube([0.31, 0.08, 0.32], center = true);
-        // Magazine pouches on the support side of the plate carrier.
-        translate([0.09, -0.215, 0.17]) cube([0.10, 0.04, 0.12], center = true);
+        translate([0, 0, 0.08]) cube([0.31, 0.19, 0.16], center = true);
+        translate([0, 0, 0.38]) cube([0.39, 0.225, 0.22], center = true);
     }
 }
 
 module part_head()
 {
     color(SKIN) translate([0, -0.005, 0.12]) cube([0.22, 0.22, 0.24], center = true);
-    color(ROLECOLOR) translate([0, 0.005, 0.245]) scale([1.25, 1.18, 0.62]) sphere(r = 0.15);
-    color(METAL) translate([0, -0.13, 0.14]) cube([0.15, 0.025, 0.055], center = true);
+    // Neck belongs to the head, so hiding the torso under a coat keeps it.
+    color(SKIN) translate([0, 0, -0.10]) cylinder(h = 0.135, r = 0.065);
+    color(SKIN) translate([0, -0.127, 0.11]) cube([0.045, 0.035, 0.055], center = true);
+    color(HAIR) translate([0, 0.005, 0.23]) cube([0.225, 0.225, 0.04], center = true);
+    for (s = [-1, 1])
+        color([0.035, 0.035, 0.03]) translate([s * 0.052, -0.118, 0.155]) cube([0.025, 0.008, 0.015], center = true);
 }
 
 module part_upperarm()
 {
-    color(ROLECOLOR) translate([0, 0, -0.155]) cube([0.13, 0.14, 0.31], center = true);
+    color(SKIN) translate([0, 0, -0.155]) cube([0.12, 0.13, 0.31], center = true);
 }
 
 module part_forearm()
 {
-    color(UNIFORM) translate([0, 0, -0.145]) cube([0.115, 0.125, 0.29], center = true);
+    color(SKIN) translate([0, 0, -0.145]) cube([0.105, 0.115, 0.29], center = true);
 }
 
 module part_hand()
@@ -133,19 +132,18 @@ module part_hand()
 
 module part_thigh()
 {
-    color(UNIFORM) translate([0, 0, -0.22]) cube([0.17, 0.18, 0.44], center = true);
-    color(VEST) translate([0, 0, -0.05]) cube([0.18, 0.19, 0.10], center = true);
+    color(SKIN) translate([0, 0, -0.22]) cube([0.16, 0.17, 0.44], center = true);
+    color(SHORTS) translate([0, 0, -0.05]) cube([0.175, 0.185, 0.10], center = true);
 }
 
 module part_calf()
 {
-    color(UNIFORM) translate([0, 0, -0.21]) cube([0.15, 0.16, 0.42], center = true);
+    color(SKIN) translate([0, 0, -0.21]) cube([0.135, 0.145, 0.42], center = true);
 }
 
 module part_foot()
 {
-    color(BOOT) translate([0, -0.07, 0.06]) cube([0.17, 0.31, 0.12], center = true);
-    color(ROLECOLOR) translate([0, -0.20, 0.07]) cube([0.11, 0.045, 0.06], center = true);
+    color(SKIN) translate([0, -0.07, 0.06]) cube([0.17, 0.31, 0.12], center = true);
 }
 
 // --- Bones -------------------------------------------------------------------

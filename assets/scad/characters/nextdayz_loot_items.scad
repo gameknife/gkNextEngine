@@ -4,6 +4,7 @@
 // loot 刷新点 / 掉落堆按物品换模型。新增物品：在 ItemDefs.cpp 加定义，在这里加一根骨骼。
 // 模型本体来自 kit_coldwar.scad 的 cw_wpn_* / cw_item_*，与地图里手摆的物资同源。
 use <../lib/kit_coldwar.scad>
+use <nextdayz_clothing.scad>
 
 $fn = 12;
 
@@ -22,16 +23,86 @@ module bone_item_ammo_545() { cw_item_ammo_pack(0); }
 module bone_item_ammo_762() { cw_item_ammo_pack(1); }
 module bone_item_ammo_12g() { cw_item_ammo_pack(2); }
 module bone_item_ammo_9mm() { cw_item_ammo_pack(3); }
-// ---- 衣物 / 背包 ----
-module bone_item_helmet() { cw_item_helmet(1); }
-module bone_item_jacket() { cw_item_jacket(1); }
-module bone_item_hoodie() { cw_item_jacket(4, hood = true); }
-module bone_item_vest_military() { cw_item_vest(); }
-module bone_item_work_pants() { cw_item_pants(1); }
-module bone_item_cargo_pants() { cw_item_pants(0, cargo = true); }
-module bone_item_backpack_small() { cw_item_backpack_small(1); }
-module bone_item_backpack() { cw_item_backpack(1); }
-module bone_item_backpack_military() { cw_item_backpack_military(); }
+// ---- Clothing / packs: six choices per slot ----
+// Clothing drops use the same palettes and detail modules as the worn items.
+module ndc_loot_head(style)
+{
+    base = [-0.005, 0.175, 0.172, 0.165, -0.005, 0.02][style];
+    translate([0, 0, -base]) ndc_head(style);
+}
+module ndc_loot_coat(style)
+{
+    color(ndc_coat(style)) translate([0, 0, 0.04]) ndc_box([0.32, 0.29, 0.08]);
+    color(ndc_coat(style) * 0.8) translate([0.10, 0, 0.075]) ndc_box([0.105, 0.27, 0.04]);
+    color(ndc_zip()) translate([-0.02, 0, 0.083]) cube([0.01, 0.26, 0.008], center = true);
+    if (style == 1 || style == 3)
+        color(ndc_coat(style)) translate([0, 0.10, 0.10]) ndc_box([0.20, 0.12, 0.06]);
+    if (style == 2)
+        for (y = [-0.10, -0.04, 0.02, 0.08])
+            color(ndc_coat(style) * 1.08) translate([0, y, 0.085]) ndc_box([0.30, 0.045, 0.025], 0.006);
+    if (style == 4)
+        for (x = [-0.10, 0.065])
+            color(ndc_coat(style) * 1.2) translate([x, 0.05, 0.092]) ndc_box([0.08, 0.08, 0.02], 0.004);
+    if (style == 5)
+        for (y = [-0.08, 0.07])
+            color(ndc_reflect()) translate([0, y, 0.098]) cube([0.30, 0.025, 0.008], center = true);
+}
+module ndc_loot_vest(style)
+{
+    // Back-mounted badge/reflective panels determine the resting face.
+    base = style == 1 ? 0.163 : style == 5 ? 0.16525 : 0.151;
+    translate([0, -0.23, base]) rotate([-90, 0, 0]) scale([0.75, 0.75, 0.75]) ndc_vest(style);
+}
+module ndc_loot_pants(style)
+{
+    for (s = [-1, 1])
+        color(ndc_pants(style)) translate([s * 0.07, 0, 0.04]) ndc_box([0.135, 0.32, 0.08]);
+    color(ndc_web()) translate([0, 0.12, 0.085]) ndc_box([0.28, 0.04, 0.025], 0.004);
+    if (style == 1 || style == 3)
+        for (s = [-1, 1])
+            color(ndc_pants(style) * 0.8) translate([s * 0.10, 0, 0.09]) ndc_box([0.065, 0.12, 0.025], 0.004);
+    if (style == 4 || style == 5)
+        for (s = [-1, 1])
+            color(style == 4 ? ndc_reflect() : ndc_web()) translate([s * 0.07, -0.10, 0.085])
+                cube([0.12, 0.025, 0.01], center = true);
+}
+module ndc_loot_pack(style)
+{
+    h = [0.34, 0.43, 0.49, 0.29, 0.40, 0.46][style];
+    d = [0.15, 0.20, 0.24, 0.13, 0.18, 0.18][style];
+    bottom = 0.29 - h / 2 - (style == 2 ? 0.095 : 0);
+    translate([0, -0.21 - d / 2, -bottom]) ndc_pack(style);
+}
+module bone_item_helmet() { ndc_loot_head(0); }
+module bone_item_hat_beanie() { ndc_loot_head(1); }
+module bone_item_cap_baseball() { ndc_loot_head(2); }
+module bone_item_hat_boonie() { ndc_loot_head(3); }
+module bone_item_helmet_tactical() { ndc_loot_head(4); }
+module bone_item_hat_ushanka() { ndc_loot_head(5); }
+module bone_item_jacket() { ndc_loot_coat(0); }
+module bone_item_hoodie() { ndc_loot_coat(1); }
+module bone_item_jacket_puffer() { ndc_loot_coat(2); }
+module bone_item_jacket_rain() { ndc_loot_coat(3); }
+module bone_item_jacket_denim() { ndc_loot_coat(4); }
+module bone_item_jacket_rescue() { ndc_loot_coat(5); }
+module bone_item_vest_military() { ndc_loot_vest(0); }
+module bone_item_vest_police() { ndc_loot_vest(1); }
+module bone_item_vest_chest_rig() { ndc_loot_vest(2); }
+module bone_item_vest_hunting() { ndc_loot_vest(3); }
+module bone_item_vest_utility() { ndc_loot_vest(4); }
+module bone_item_vest_rescue() { ndc_loot_vest(5); }
+module bone_item_work_pants() { ndc_loot_pants(0); }
+module bone_item_cargo_pants() { ndc_loot_pants(1); }
+module bone_item_jeans() { ndc_loot_pants(2); }
+module bone_item_pants_tactical() { ndc_loot_pants(3); }
+module bone_item_pants_rain() { ndc_loot_pants(4); }
+module bone_item_pants_snow() { ndc_loot_pants(5); }
+module bone_item_backpack_small() { ndc_loot_pack(0); }
+module bone_item_backpack() { ndc_loot_pack(1); }
+module bone_item_backpack_military() { ndc_loot_pack(2); }
+module bone_item_backpack_messenger() { ndc_loot_pack(3); }
+module bone_item_backpack_medical() { ndc_loot_pack(4); }
+module bone_item_backpack_rolltop() { ndc_loot_pack(5); }
 // ---- 食物 / 饮水 ----
 module bone_item_food_can() { cw_item_can(2); }
 module bone_item_food_tuna() { cw_item_tuna(1); }
@@ -68,9 +139,36 @@ module bone_root()
     bone_item_ak(); bone_item_svd(); bone_item_mosin(); bone_item_shotgun(); bone_item_pistol();
     bone_item_knife(); bone_item_crowbar(); bone_item_axe();
     bone_item_ammo_545(); bone_item_ammo_762(); bone_item_ammo_12g(); bone_item_ammo_9mm();
-    bone_item_helmet(); bone_item_jacket(); bone_item_hoodie(); bone_item_vest_military();
-    bone_item_work_pants(); bone_item_cargo_pants();
-    bone_item_backpack_small(); bone_item_backpack(); bone_item_backpack_military();
+    bone_item_helmet();
+    bone_item_hat_beanie();
+    bone_item_cap_baseball();
+    bone_item_hat_boonie();
+    bone_item_helmet_tactical();
+    bone_item_hat_ushanka();
+    bone_item_jacket();
+    bone_item_hoodie();
+    bone_item_jacket_puffer();
+    bone_item_jacket_rain();
+    bone_item_jacket_denim();
+    bone_item_jacket_rescue();
+    bone_item_vest_military();
+    bone_item_vest_police();
+    bone_item_vest_chest_rig();
+    bone_item_vest_hunting();
+    bone_item_vest_utility();
+    bone_item_vest_rescue();
+    bone_item_work_pants();
+    bone_item_cargo_pants();
+    bone_item_jeans();
+    bone_item_pants_tactical();
+    bone_item_pants_rain();
+    bone_item_pants_snow();
+    bone_item_backpack_small();
+    bone_item_backpack();
+    bone_item_backpack_military();
+    bone_item_backpack_messenger();
+    bone_item_backpack_medical();
+    bone_item_backpack_rolltop();
     bone_item_food_can(); bone_item_food_tuna(); bone_item_food_crackers(); bone_item_food_apple();
     bone_item_food_chocolate(); bone_item_water_bottle(); bone_item_water_bottle_empty(); bone_item_drink_soda();
     bone_item_bandage(); bone_item_rag(); bone_item_medkit(); bone_item_painkillers();

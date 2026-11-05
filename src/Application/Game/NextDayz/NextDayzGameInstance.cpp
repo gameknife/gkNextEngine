@@ -227,7 +227,7 @@ void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
                            if (inventory_.TryAdd("backpack", "Backpack", NextDayz::EItemKind::Clothing, 1, &id))
                            {
                                inventory_.TryEquip(id);
-                               rig_.SetClothing("backpack", true);
+                               SyncClothingVisuals();
                            }
                        });
     cvars.RegisterBool("nextdayz.validation.addSupplies", false, &validationAddSupplies_, NextCVar::ECVarFlags::None,
@@ -634,6 +634,8 @@ void NextDayzGameInstance::OnSceneLoaded()
     {
         ApplyValidationLoadout();
     }
+
+    SyncClothingVisuals();
 
     showInventory_ = false;
     paused_ = false;
@@ -1356,10 +1358,7 @@ std::vector<NextDayz::FLootSpotSeed> NextDayzGameInstance::CollectLootSpots() co
 
 void NextDayzGameInstance::SyncClothingVisuals()
 {
-    // The rig has a helmet and a backpack attachment; any worn head/back item shows them.
-    const NextDayz::FItemInstance* head = inventory_.FindInstance(inventory_.WornInSlot(NextDayz::EEquipSlot::Head));
-    rig_.SetClothing("helmet", head && head->defId == "helmet");
-    rig_.SetClothing("backpack", inventory_.WornInSlot(NextDayz::EEquipSlot::Back) != 0);
+    rig_.SetClothing(inventory_.EquippedClothing());
 }
 
 void NextDayzGameInstance::EquipWeaponInstance(NextDayz::FItemInstanceId instanceId, int slot)
@@ -1766,7 +1765,7 @@ void NextDayzGameInstance::ApplyValidationLoadout()
         if (inventory_.TryAdd("backpack", "Backpack", NextDayz::EItemKind::Clothing, 1, &backpackId))
         {
             inventory_.TryEquip(backpackId);
-            rig_.SetClothing("backpack", true);
+            SyncClothingVisuals();
         }
     }
     NextDayz::FItemInstanceId akId = 0;
@@ -2856,6 +2855,9 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
         return static_cast<double>(player_.CameraPosition().z);
     });
     reg.Add("playerRigVisible", [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.IsVisible(); });
+    reg.Add("clothingVisuals", [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.ClothingVisuals(); });
+    reg.Add("bareTorsoVisible", [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.IsBodyPartVisible("bone_torso"); });
+    reg.Add("shortsVisible", [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.IsBodyPartVisible("bone_pelvis"); });
     reg.Add("playerRigOpacity", [this]() -> Runtime::Agent::FAgentQueryValue {
         return static_cast<double>(rig_.CameraOpacity());
     });

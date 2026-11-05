@@ -119,6 +119,7 @@
 
 ## 剩余计划
 
+- [NextDayz 持久世界与撤离 MVP](projects/nextdayz/nextdayz-extraction-mvp-plan.md)（草案讨论中；持久地图、随机部署、直升机撤离、安全屋与黄金交易）
 - [NextRaiden MVP](projects/nextraiden/nextraiden-mvp-plan.md)（实施中；P0–P2 已完成，P3/P4 待做）
 - [验证中心 MVP](plans/validation-center-mvp-plan.md)（待实施；CLI 自动留档、Dashboard 查看问题与可见重跑）
 - [iOS NativeAOT C# 真机支持](plans/ios-nativeaot-plan.md)（P0–P2 已完成；待真机验收）

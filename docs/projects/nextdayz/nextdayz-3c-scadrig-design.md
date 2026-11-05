@@ -4,7 +4,7 @@ category: project
 status: 现行架构
 owner: NextDayz
 created: 2026-07-26
-last_updated: 2026-11-04
+last_updated: 2026-11-05
 ---
 
 # NextDayz 复杂 3C 与 ScadRig 分层动画设计
@@ -474,7 +474,7 @@ bone_root                         # 足底世界锚点，不做水平 root motio
 约束：
 
 - `bone_weapon_socket` 不烘焙枪模型；当前装备的 TPS 武器 node 在运行时挂上去，并设为不可 raycast。
-- helmet 仍挂 `bone_head`，backpack 仍挂 `bone_torso`。
+- 衣物按实际装备实例切换：头盔挂 `bone_head`，外衣、护甲和背包挂 `bone_torso`；袖子、裤腿与靴子分别挂四肢骨骼。详见 §18。
 - 角色仍遵守 1 unit = 1 m、Z-up、面朝 SCAD −Y、root 落地。
 - locomotion clip 只做 in-place 动画；`bone_root` 的水平 position 偏移必须接近 0。
 
@@ -748,3 +748,42 @@ mantle、2.2 m 平台 climb、2.0 m 围墙与 1.4 m 院墙 climb_over、带 0.5 
 fixture 目录不在资产自动复制规则里，改完要手动拷到 `out/build/<preset>/assets/agentscripts/fixtures/`。
 teleport cvar 的 `"x,y"` 中 y 是 SCAD 北向，引擎 `z = -y`，lookYaw 0 朝 SCAD -y 走；同一个值连续设置
 不会触发回调。
+
+## 18. 装备驱动的刚体换装
+
+`nextdayz_survivor.scad` 只包含身体、白色短裤和现有 20 骨骼/动作；空装备时没有固定制服、护甲、帽子或鞋。
+`nextdayz_clothing.scad` 集中存放 30 件衣物，每个穿戴部位各 6 款。长裤同时提供对应的鞋靴，整体保持低饱和都市生存风格。
+
+| 部位 | 款式 |
+| --- | --- |
+| 头部 | 钢盔、针织帽、棒球帽、渔夫帽、战术头盔、护耳帽 |
+| 外衣 | 野战夹克、卫衣、羽绒夹克、雨衣、牛仔夹克、救援夹克 |
+| 护甲/背心 | 军用护甲、警用防弹衣、胸挂、狩猎背心、工具背心、反光安全背心 |
+| 裤装 | 工作裤、工装裤、牛仔裤、战术裤、防雨裤、雪地裤 |
+| 背包 | 小型背包、徒步背包、突击背包、邮差包、医疗背包、卷口背包 |
+
+款式区别包含帽檐/护耳、羽绒分仓/封闭拉链/反光带、开放胸挂/弹药环/工具袋、护膝/裤脚护套，以及不同背包轮廓。
+保暖、减伤和容量各有取舍，普通帽子和工具背心没有防弹属性。所有款式都在 `LootTables.cpp` 按地点配置正权重掉落，
+`nextdayz_loot_items.scad` 提供与穿戴款式对应的落地模型（服装折叠、背包立放），不使用未知物品纸箱兜底。
+
+衣物作者契约是 `bone_<物品 id>__<目标骨骼后缀>`，例如 `bone_jacket__forearm_l`；所有 bind TRS 为单位变换，
+几何直接处于目标骨骼的局部坐标。特殊后缀 `harness` 表示挂躯干的独立背带。加载时核对物品和骨骼是否存在，
+场景构建前一次性注入全部 96 个衣物部件，创建动态、不可射线命中的 render node 并登记到 scene。
+这些衣物没有自己的动画骨架；render node 直接跟随玩家骨骼，原有 clip、混合层、IK 和镜头淡出继续生效。
+
+`SyncClothingVisuals()` 使用 `Inventory::EquippedClothing()` 的真实物品 id，同步穿戴、替换、脱下、丢弃、拾取、
+重开及场景加载后的外观。外衣隐藏躯干和双臂对应的身体 render part；长裤隐藏短裤、双腿和裸脚，脱下时恢复。
+只隐藏 render part，不隐藏骨骼或其子树。单穿护甲仍保留裸露皮肤。
+
+防穿插分三层：身体覆盖区域剔除；外衣、护甲、背包使用逐层扩大的几何包络；背包本体、独立背带和背枪再依据
+当前外衣/护甲厚度调整深度，背枪距离使用所穿背包的真实网格后沿计算。袖子和裤腿在肘膝处约 1 cm 重叠，保持分段刚体活动时的连接；衣服下摆和口袋避开护甲下沿。
+这套规则提供固定款式之间的层次配合，不包含布料模拟。
+
+验证：`gnb validate --script assets/agentscripts/nextdayz-clothing.agentscript.json` 检查实际 render part 数量、换装后旧款消失、
+身体遮挡/恢复、重开归零，并生成正背面、蹲姿和跑动截图。`game.clothingVisuals` 返回实际可见的衣物及部件数，
+`game.bareTorsoVisible` / `game.shortsVisible` 查询身体显示状态。单测 `[ScadRig][NextDayz]` 另检查全部衣物均有模型、
+绑定坐标、材质槽、靴底高度和包络尺寸，以及原有步态与持枪契约。
+
+扩充款式回归：`gnb validate --script assets/agentscripts/nextdayz-clothing-variety.agentscript.json`，逐套穿过全部 30 件，
+检查旧款清除、身体覆盖、正背面与动作截图。`[NextDayz][Clothing][Loot]` 保障每部位至少 6 件且均可掉落；
+世界模型测试检查每件衣物恰好一个落地模型、材质槽不溢出、底面贴地。

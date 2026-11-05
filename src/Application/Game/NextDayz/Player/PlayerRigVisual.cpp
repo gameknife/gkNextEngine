@@ -12,7 +12,6 @@
 #include "Engine/Assets/Core/Node.hpp"
 #include "Engine/Assets/Core/Scene.hpp"
 #include "Engine/Assets/Data/Material.hpp"
-#include "Engine/Assets/Loaders/FProcModel.hpp"
 #include "Engine/Runtime/Components/PhysicsComponent.hpp"
 #include "Engine/Runtime/Components/RenderComponent.hpp"
 #include "Engine/Runtime/Scene/NodeUtils.hpp"
@@ -20,6 +19,7 @@
 #include "Gameplay/Rig/RigInstance.h"
 #include "Gameplay/Rig/RigPoseOps.h"
 #include "Modules/ScadLoader/FScadRig.h"
+#include "Application/Game/NextDayz/Data/ItemDefs.hpp"
 
 namespace NextDayz
 {
@@ -107,6 +107,44 @@ namespace NextDayz
         if (hasRig_)
         {
             ResolveRig();
+            warnings.clear();
+            if (!Assets::FScadRigLoader::LoadRig("assets/scad/characters/nextdayz_clothing.scad", {},
+                                               clothingAsset_, error, &warnings))
+            {
+                SPDLOG_ERROR("[NextDayz] failed to load clothing: {}", error);
+                hasRig_ = false;
+                return false;
+            }
+            for (const std::string& warning : warnings)
+            {
+                SPDLOG_WARN("[NextDayz] clothing: {}", warning);
+            }
+            clothingParts_.clear();
+            for (const Assets::FRigPart& part : clothingAsset_.parts)
+            {
+                const std::string& name = clothingAsset_.bones[part.bone].name;
+                const size_t separator = name.find("__");
+                const std::string itemId = separator == std::string::npos ? "" : name.substr(5, separator - 5);
+                const FItemDef* definition = FindItemDef(itemId);
+                const bool harness = separator != std::string::npos && name.substr(separator + 2) == "harness";
+                const int32_t bone = separator == std::string::npos ? -1 :
+                    asset_.FindBone(harness ? "bone_torso" : "bone_" + name.substr(separator + 2));
+                if (!definition || definition->kind != EItemKind::Clothing || bone < 0)
+                {
+                    SPDLOG_ERROR("[NextDayz] invalid clothing binding '{}'", name);
+                    hasRig_ = false;
+                    return false;
+                }
+                FClothingPart binding;
+                binding.itemId = itemId;
+                binding.bone = bone;
+                binding.harness = harness;
+                for (const auto& vertex : clothingAsset_.partModels[part.modelIndex].CPUVertices())
+                {
+                    binding.backExtent = std::max(binding.backExtent, -vertex.Position.z);
+                }
+                clothingParts_.push_back(std::move(binding));
+            }
         }
         return hasRig_;
     }
@@ -203,12 +241,20 @@ namespace NextDayz
         // Faction tint for magenta placeholder sections (olive drab soldier).
         tintMaterialId_ = Assets::SceneBuilder::AddLambertianMaterial(materials, glm::vec3(0.28f, 0.32f, 0.24f));
 
-        // Clothing attachment meshes (helmet, backpack) + a shared dark material.
-        models.push_back(Assets::FProcModel::CreateBox(glm::vec3(-0.14f, -0.02f, -0.15f), glm::vec3(0.14f, 0.14f, 0.16f)));
-        helmetModelId_ = static_cast<uint32_t>(models.size() - 1);
-        models.push_back(Assets::FProcModel::CreateBox(glm::vec3(-0.15f, -0.20f, -0.18f), glm::vec3(0.15f, 0.22f, -0.02f)));
-        backpackModelId_ = static_cast<uint32_t>(models.size() - 1);
-        clothingMaterialId_ = Assets::SceneBuilder::AddLambertianMaterial(materials, glm::vec3(0.10f, 0.11f, 0.10f));
+        // Preload every variant before GPU instance buffers are sized. Changing
+        // clothes later only switches existing render parts, never reloads a scene.
+        for (size_t index = 0; index < clothingAsset_.parts.size(); ++index)
+        {
+            const Assets::FRigPart& part = clothingAsset_.parts[index];
+            FClothingPart& binding = clothingParts_[index];
+            binding.materialIds.fill(0);
+            for (size_t section = 0; section < part.sectionColors.size() && section < binding.materialIds.size(); ++section)
+            {
+                binding.materialIds[section] = Assets::SceneBuilder::AddRigSectionMaterial(materials, part, section);
+            }
+            models.push_back(clothingAsset_.partModels[part.modelIndex]);
+            binding.modelId = static_cast<uint32_t>(models.size() - 1);
+        }
 
         injected_ = true;
     }
@@ -265,22 +311,28 @@ namespace NextDayz
             rigRoot->SetParent(worldNode_);
         }
 
-        // Clothing attachment nodes (hidden until worn).
-        std::array<uint32_t, 16> clothingMats = {0};
-        clothingMats[0] = clothingMaterialId_;
-        if (Assets::Node* head = BoneNode("bone_head"))
+        // Capture only the body's render children; hiding covered skin must
+        // never hide its bone (or the sleeves/limbs attached to that bone).
+        bodyPartNodes_.clear();
+        for (Assets::Node* bone : boneNodes_)
         {
-            helmetNode_ = Assets::SceneBuilder::CreateRenderNode("nd_player/helmet", glm::vec3(0.0f, 0.16f, 0.0f),
-                                                                 glm::vec3(1.0f), scene.GenerateInstanceId(),
-                                                                 helmetModelId_, clothingMats, false);
-            helmetNode_->SetParent(head->shared_from_this());
+            if (!bone) continue;
+            for (const auto& child : bone->Children())
+            {
+                if (child->GetComponent<Runtime::RenderComponent>()) bodyPartNodes_.push_back(child.get());
+            }
         }
-        if (Assets::Node* torso = BoneNode("bone_torso"))
+        for (FClothingPart& part : clothingParts_)
         {
-            backpackNode_ = Assets::SceneBuilder::CreateRenderNode("nd_player/backpack", glm::vec3(0.0f, 0.28f, -0.12f),
-                                                                   glm::vec3(1.0f), scene.GenerateInstanceId(),
-                                                                   backpackModelId_, clothingMats, false);
-            backpackNode_->SetParent(torso->shared_from_this());
+            part.node = Assets::SceneBuilder::CreateRenderNode(
+                fmt::format("nd_player/clothing/{}{}", part.itemId, part.harness ? "/harness" : "/" + asset_.bones[part.bone].name),
+                glm::vec3(0.0f), glm::vec3(1.0f), scene.GenerateInstanceId(), part.modelId, part.materialIds,
+                false, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), false);
+            auto partPhysics = std::make_shared<Runtime::PhysicsComponent>();
+            partPhysics->SetMobility(Runtime::ENodeMobility::Dynamic);
+            part.node->AddComponent(std::move(partPhysics));
+            part.node->SetParent(boneNodes_[part.bone]->shared_from_this());
+            scene.AddNode(part.node);
         }
         if (weaponAssetsSet_)
         {
@@ -316,6 +368,7 @@ namespace NextDayz
         // Presentation only: the controller capsule is the player's body. A
         // raycast-visible rig blocks the infected's line of sight with its own
         // rifle and catches the player's own aim ray.
+        ApplyClothing();
         Assets::NodeUtils::SetRayCastVisibleRecursive(worldNode_, false);
         worldNode_->RecalcTransform(true);
         animator_.Bind(&asset_, boneNodes_, worldNode_.get());
@@ -392,8 +445,8 @@ namespace NextDayz
         weaponActionClipName_.clear();
         scene_ = nullptr;
         worldNode_.reset();
-        helmetNode_.reset();
-        backpackNode_.reset();
+        bodyPartNodes_.clear();
+        for (FClothingPart& part : clothingParts_) part.node.reset();
         weaponNode_.reset();
         holsteredWeaponNodes_ = {};
         weaponVisualIndex_ = -1;
@@ -433,29 +486,107 @@ namespace NextDayz
         // Update already marks the animated scene dirty; opacity travels with its proxies.
     }
 
-    void PlayerRigVisual::SetClothing(const std::string& clothingId, bool on)
+    void PlayerRigVisual::SetClothing(const std::vector<std::string>& equipped)
     {
-        std::shared_ptr<Assets::Node> node;
-        if (clothingId == "helmet")
+        if (equippedClothing_ == equipped) return;
+        equippedClothing_ = equipped;
+        ApplyClothing();
+    }
+
+    void PlayerRigVisual::ApplyClothing()
+    {
+        const auto wears = [this](std::string_view id)
         {
-            node = helmetNode_;
+            return std::find(equippedClothing_.begin(), equippedClothing_.end(), id) != equippedClothing_.end();
+        };
+        bool coat = false;
+        bool trousers = false;
+        bool carrier = false;
+        for (const std::string& id : equippedClothing_)
+        {
+            if (const FItemDef* definition = FindItemDef(id))
+            {
+                coat |= definition->equipSlot == EEquipSlot::Torso;
+                trousers |= definition->equipSlot == EEquipSlot::Legs;
+                carrier |= definition->equipSlot == EEquipSlot::Vest;
+            }
         }
-        else if (clothingId == "backpack")
+        const float packClearance = carrier ? (coat ? 0.0f : 0.04f) : coat ? 0.045f : 0.07f;
+        const float harnessDepth = carrier ? (coat ? 1.0f : 0.78f) : coat ? 0.72f : 0.57f;
+        float stowedDepth = carrier ? 0.24f : coat ? 0.20f : 0.17f;
+        for (FClothingPart& part : clothingParts_)
         {
-            node = backpackNode_;
+            if (!part.node) continue;
+            part.node->GetComponent<Runtime::RenderComponent>()->SetVisible(wears(part.itemId));
+            // Packs were authored over the thickest layer. Pull the bag toward
+            // a bare back; compress just the harness depth to keep its front
+            // over the coat/carrier and its shoulder bridge on the shoulder.
+            const FItemDef* definition = FindItemDef(part.itemId);
+            if (definition && definition->equipSlot == EEquipSlot::Back)
+            {
+                part.node->Translation().z = part.harness ? 0.0f : packClearance;
+                part.node->Scale().z = part.harness ? harnessDepth : 1.0f;
+                if (!part.harness && wears(part.itemId))
+                {
+                    stowedDepth = std::max(stowedDepth, part.backExtent - packClearance + 0.03f);
+                }
+            }
+            else if (definition && definition->equipSlot == EEquipSlot::Vest)
+            {
+                part.node->Scale().z = coat ? 1.0f : 0.78f;
+            }
         }
-        if (!node)
+        for (Assets::Node* node : bodyPartNodes_)
         {
-            return;
+            const auto* parent = node->GetParent();
+            const std::string_view name = parent ? std::string_view(parent->GetName()) : std::string_view{};
+            const bool upper = name.ends_with("bone_torso") || name.find("bone_upperarm_") != std::string_view::npos ||
+                               name.find("bone_forearm_") != std::string_view::npos;
+            const bool lower = name.ends_with("bone_pelvis") || name.find("bone_thigh_") != std::string_view::npos ||
+                               name.find("bone_calf_") != std::string_view::npos || name.find("bone_foot_") != std::string_view::npos;
+            node->GetComponent<Runtime::RenderComponent>()->SetVisible(!(coat && upper) && !(trousers && lower));
         }
-        if (auto render = node->GetComponent<Runtime::RenderComponent>())
+        for (size_t slot = 0; slot < holsteredWeaponNodes_.size(); ++slot)
         {
-            render->SetVisible(on);
+            if (holsteredWeaponNodes_[slot])
+            {
+                holsteredWeaponNodes_[slot]->Translation().z = -stowedDepth - static_cast<float>(slot) * 0.025f;
+            }
         }
         if (scene_)
         {
+            if (worldNode_) worldNode_->RecalcTransform(true);
             scene_->MarkDirty();
         }
+    }
+
+    std::string PlayerRigVisual::ClothingVisuals() const
+    {
+        std::string result;
+        for (const FItemDef& definition : AllItemDefs())
+        {
+            if (definition.kind != EItemKind::Clothing) continue;
+            size_t count = 0;
+            for (const FClothingPart& part : clothingParts_)
+            {
+                if (part.itemId == definition.id && part.node && part.node->GetComponent<Runtime::RenderComponent>()->GetVisible()) ++count;
+            }
+            if (count > 0) result += fmt::format("{}:{};", definition.id, count);
+        }
+        return result;
+    }
+
+    bool PlayerRigVisual::IsBodyPartVisible(std::string_view boneName) const
+    {
+        for (const Assets::Node* node : bodyPartNodes_)
+        {
+            const auto* parent = node->GetParent();
+            if (parent && parent->GetName() == "nd_player/" + std::string(boneName))
+            {
+                if (node->GetComponent<Runtime::RenderComponent>()->GetVisible()) return true;
+            }
+        }
+        return false;
     }
 
     void PlayerRigVisual::TriggerRecoil(float scale)

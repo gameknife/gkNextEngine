@@ -670,6 +670,31 @@ TEST_CASE("NextDayz zombie visual pool is fixed capacity and reusable",
     REQUIRE(pool.Capacity() == 1);
 }
 
+TEST_CASE("NextDayz offers six obtainable clothing choices in every wearable slot", "[NextDayz][Clothing][Loot]")
+{
+    using namespace NextDayz;
+    for (EEquipSlot slot : {EEquipSlot::Head, EEquipSlot::Torso, EEquipSlot::Vest, EEquipSlot::Legs, EEquipSlot::Back})
+    {
+        size_t choices = 0;
+        for (const FItemDef& definition : AllItemDefs())
+        {
+            if (definition.kind != EItemKind::Clothing || definition.equipSlot != slot) continue;
+            INFO(definition.id);
+            ++choices;
+            bool obtainable = false;
+            for (uint8_t index = 0; index < static_cast<uint8_t>(ELootProfile::Count); ++index)
+            {
+                for (const FLootTableEntry& entry : LootTable(static_cast<ELootProfile>(index)))
+                {
+                    obtainable |= entry.itemId == definition.id && entry.weight > 0;
+                }
+            }
+            CHECK(obtainable);
+        }
+        CHECK(choices >= 6);
+    }
+}
+
 TEST_CASE("NextDayz loot tables roll known items deterministically and respect category filters",
           "[NextDayz][Productization][Loot]")
 {

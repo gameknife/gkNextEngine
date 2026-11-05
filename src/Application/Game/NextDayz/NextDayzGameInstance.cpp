@@ -158,6 +158,15 @@ void NextDayzGameInstance::OnInit()
     }
 
     std::string scene = kDefaultScene;
+    std::string mapError;
+    if (!NextDayz::LoadExpeditionMaps(Utilities::FileHelper::ResolvePlatformFilePath(
+            "assets/configs/nextdayz_maps.json"), expeditionMaps_, mapError))
+    {
+        SPDLOG_ERROR("[NextDayz] map registry: {}", mapError);
+    }
+    if (const auto published = std::find_if(expeditionMaps_.begin(), expeditionMaps_.end(),
+            [](const auto& map) { return map.published; }); published != expeditionMaps_.end())
+        scene = published->scene;
     if (!GOption->SceneName.empty())
     {
         scene = GOption->SceneName;
@@ -371,6 +380,13 @@ void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
     cvars.RegisterString("nextdayz.debug.select", "", &debugSelectCvar_, NextCVar::ECVarFlags::None,
                          "Debugger selection: nearest | z<slot> | l<loot index> | s<spawn point> | none",
                          [this]() { ApplyDebugSelection(debugSelectCvar_); });
+    cvars.RegisterString("nextdayz.debug.expedition", "", &debugExpeditionCvar_, NextCVar::ECVarFlags::None,
+                         "Expedition shortcuts: return, save, reload, spawn, alpha, bravo, rescue-kit", [this]()
+                         {
+                             if (const auto action = NextDayz::Debug::ParseExpeditionAction(
+                                     std::exchange(debugExpeditionCvar_, "")))
+                                 DebugExpeditionAction(*action);
+                         });
     cvars.RegisterBool("nextdayz.debug.dump", false, &debugDumpCvar_, NextCVar::ECVarFlags::None,
                        "Write every system's state to debug/nextdayz_snapshot.json (setting it to true writes once)",
                        [this]()
@@ -604,6 +620,7 @@ glm::vec3 NextDayzGameInstance::ResolveSpawnPosition() const
 
 void NextDayzGameInstance::OnSceneLoaded()
 {
+    if (!loadingMapPath_.empty()) campaignMap_ = std::exchange(loadingMapPath_, "");
     debugger_.OnSessionStart("scene loaded");
     worldAnchors_.Scan(GetEngine());
     BuildZombieNavigation();
@@ -648,6 +665,7 @@ void NextDayzGameInstance::OnSceneLoaded()
     sceneReady_ = true;
     rescueHelicopter_.OnSceneLoaded(GetEngine().GetScene());
     InitializeCampaign();
+    ++geographySceneGeneration_;
     grass_.Bind(GetEngine().GetScene());
     grass_.Tick(GetEngine().GetScene(), 0.0f, player_.Position(), time_.Storm());
     SPDLOG_INFO("[NextDayz] scene loaded ({} nodes)", GetEngine().GetScene().Nodes().size());
@@ -655,7 +673,11 @@ void NextDayzGameInstance::OnSceneLoaded()
 
 void NextDayzGameInstance::OnSceneUnloaded()
 {
-    if (sceneReady_) SaveCampaign();
+    if (sceneReady_ && !pendingCampaign_ && !switchingCampaignContext_)
+    {
+        SaveCampaign();
+        if (CampaignEnabled()) pendingCampaign_ = CaptureCampaign();
+    }
     rescueHelicopter_.Clear();
     sceneReady_ = false;
     grass_.Clear();
@@ -690,6 +712,7 @@ void NextDayzGameInstance::OnDestroy()
 void NextDayzGameInstance::OnTick(double deltaSeconds)
 {
     debugger_.BeginFrame();
+    TickMapAuthoring();
     if (!sceneReady_ || !player_.IsValid())
     {
         return;
@@ -706,7 +729,7 @@ void NextDayzGameInstance::OnTick(double deltaSeconds)
         }
         if (!survival_.IsAlive())
         {
-            ReturnToSafehouse(true);
+            ReturnToSafehouse(ESafehouseReturn::Death);
             return;
         }
         if (campaign_.flight.boarded)
@@ -732,7 +755,7 @@ void NextDayzGameInstance::OnTick(double deltaSeconds)
     debugger_.EndTick(dt);
     if (CampaignEnabled())
     {
-        if (!survival_.IsAlive()) ReturnToSafehouse(true);
+        if (!survival_.IsAlive()) ReturnToSafehouse(ESafehouseReturn::Death);
         else AdvanceExtraction(dt);
     }
 }
@@ -1859,18 +1882,34 @@ void NextDayzGameInstance::BuildZombieNavigation()
     settings.maxStepHeight = 0.65f;
     settings.sampleCeiling = 100.0f;
     settings.floorHeightTolerance = 2.0f;
-    settings.worldMin = {-510.0f, 0.0f, -510.0f};
-    settings.worldMax = {510.0f, 0.0f, 510.0f};
-    const auto buildStart = std::chrono::steady_clock::now();
-    zombieNavGrid_.Build(scene.GetCPUAccelerationStructure(), settings);
-    const double buildMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - buildStart).count();
-
+    const auto* map = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_);
+    const float halfSize = map ? map->sizeM * 0.5f : 500.0f;
+    settings.worldMin = {-halfSize - 10.0f, 0.0f, -halfSize - 10.0f};
+    settings.worldMax = {halfSize + 10.0f, 0.0f, halfSize + 10.0f};
     Runtime::TerrainComponent* terrain = nullptr;
     for (Runtime::TerrainComponent* candidate : scene.Components<Runtime::TerrainComponent>())
     {
         terrain = candidate;
         break;
     }
+    if (terrain && map)
+    {
+        float lowest = std::numeric_limits<float>::max();
+        float highest = -lowest;
+        for (int y = 0; y <= 12; ++y)
+            for (int x = 0; x <= 12; ++x)
+            {
+                const float height = terrain->SampleHeight(-halfSize + x * halfSize / 6.0f,
+                                                            -halfSize + y * halfSize / 6.0f);
+                lowest = std::min(lowest, height);
+                highest = std::max(highest, height);
+            }
+        settings.sampleCeiling = highest + 60.0f;
+        settings.floorHeightTolerance = highest - lowest + 12.0f;
+    }
+    const auto buildStart = std::chrono::steady_clock::now();
+    zombieNavGrid_.Build(scene.GetCPUAccelerationStructure(), settings);
+    const double buildMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - buildStart).count();
     if (terrain)
     {
         // The grid keeps one surface per cell, the highest. Water is out, and
@@ -1881,7 +1920,9 @@ void NextDayzGameInstance::BuildZombieNavigation()
         {
             const bool water = terrain->IsWater(point.x, point.z) &&
                                point.y < terrain->WaterSurface(point.x, point.z) + 0.05f;
-            return water || point.y > terrain->SampleHeight(point.x, point.z) + 1.2f;
+            const bool elevatedRoof = !terrain->IsWater(point.x, point.z) &&
+                point.y > terrain->SampleHeight(point.x, point.z) + 1.2f;
+            return water || elevatedRoof;
         });
     }
     SPDLOG_INFO("[NextDayz] infected navigation ready: {}x{} cells at {:.1f} m in {:.0f} ms",
@@ -1913,7 +1954,7 @@ void NextDayzGameInstance::ResetSession()
 {
     if (CampaignEnabled())
     {
-        if (!survival_.IsAlive() && campaign_.inField) ReturnToSafehouse(true);
+        if (!survival_.IsAlive() && campaign_.inField) ReturnToSafehouse(ESafehouseReturn::Death);
         return;
     }
     if (!sceneReady_)
@@ -2375,12 +2416,14 @@ void NextDayzGameInstance::BindDebugger()
     commands.useItem = [this](NextDayz::FItemInstanceId instanceId) { UseInventoryItem(instanceId); };
     commands.dropItem = [this](NextDayz::FItemInstanceId instanceId) { DropItem(instanceId, -1); };
     commands.resetSession = [this]() { ResetSession(); };
+    commands.expeditionAction = [this](NextDayz::Debug::EExpeditionAction action) { DebugExpeditionAction(action); };
     commands.syncZombieVisuals = [this]() { SyncZombieVisuals(); };
     commands.setCursorFree = [this](bool free)
     {
         // Leaving the debug cursor gives the mouse back to the game only if
         // nothing else (inventory, map, pause, death) still wants it free.
-        SetMouseCaptured(!free && !showInventory_ && !showMap_ && !paused_ && survival_.IsAlive());
+        SetMouseCaptured(!free && !showInventory_ && !showMap_ && !paused_ && survival_.IsAlive() &&
+                         (!CampaignEnabled() || campaign_.inField));
         if (free)
         {
             weapons_.SetTriggerDown(false);
@@ -2409,6 +2452,13 @@ NextDayz::Debug::FGameFacts NextDayzGameInstance::DebugFacts() const
     facts.lootCatalogLoaded = lootCatalogLoaded_;
     facts.hoveringWell = hoveredWell_.IsValid();
     facts.objective = CurrentObjective();
+    facts.campaignEnabled = CampaignEnabled();
+    facts.inField = campaign_.inField;
+    facts.expeditionBusy = pendingCampaign_.has_value() || !loadingMapPath_.empty();
+    facts.saveBlocked = campaignSaveBlocked_;
+    const auto* map = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_);
+    facts.regionName = map ? map->name : ActiveMapId();
+    facts.flightPhase = NextDayz::FlightPhaseName(campaign_.flight.phase);
     return facts;
 }
 
@@ -2860,6 +2910,25 @@ void NextDayzGameInstance::UpdateGrass(float dt)
 
 void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegistry& reg)
 {
+    reg.Add("activeMapId", [this]() -> Runtime::Agent::FAgentQueryValue { return ActiveMapId(); });
+    reg.Add("sceneGeneration", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(geographySceneGeneration_); });
+    reg.Add("mapLoading", [this]() -> Runtime::Agent::FAgentQueryValue { return pendingCampaign_.has_value() || !loadingMapPath_.empty(); });
+    reg.Add("publishedMaps", [this]() -> Runtime::Agent::FAgentQueryValue
+    { return int64_t(std::count_if(expeditionMaps_.begin(), expeditionMaps_.end(), [](const auto& map) { return map.published; })); });
+    reg.Add("currentMapSorties", [this]() -> Runtime::Agent::FAgentQueryValue
+    { const auto count = campaign_.mapSorties.find(ActiveMapId()); return int64_t(count == campaign_.mapSorties.end() ? 0 : count->second); });
+    reg.Add("atlasPolygons", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(atlasPolygons_.size()); });
+    reg.Add("browsedMapId", [this]() -> Runtime::Agent::FAgentQueryValue
+    {
+        int index = 0;
+        for (const auto& map : expeditionMaps_)
+            if (map.published || authoringMode_)
+            {
+                if (index++ == selectedWorldMap_) return map.id;
+            }
+        return std::string{};
+    });
+    reg.Add("safeSpawns", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(worldAnchors_.Count(NextDayz::EWorldAnchorType::PlayerSafe)); });
     reg.Add("campaignInField", [this]() -> Runtime::Agent::FAgentQueryValue { return campaign_.inField; });
     reg.Add("campaignGold", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.gold); });
     reg.Add("campaignStorage", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.storage.size()); });
@@ -3158,6 +3227,7 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
         return std::string(NextDayz::Debug::TabName(debugger_.Tab()));
     });
     reg.Add("debugCursor", [this]() -> Runtime::Agent::FAgentQueryValue { return debugger_.CursorMode(); });
+    reg.Add("mouseCaptured", [this]() -> Runtime::Agent::FAgentQueryValue { return mouseCaptured_; });
     reg.Add("debugFrozen", [this]() -> Runtime::Agent::FAgentQueryValue { return debugger_.Knobs().frozen; });
     reg.Add("debugFrame", [this]() -> Runtime::Agent::FAgentQueryValue {
         return static_cast<int64_t>(debugger_.Frame());

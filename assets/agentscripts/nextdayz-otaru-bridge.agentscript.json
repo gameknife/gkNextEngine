@@ -1,0 +1,72 @@
+{
+  "name": "nextdayz-otaru-bridge",
+  "target": "NextDayz",
+  "scene": "assets/scad/proc/nextdayz/jp_otaru_north_canal/scene.scad",
+  "defaults": {
+    "stepTimeoutMs": 180000
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.invulnerable",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-9.9803,-33.8845"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 104.2951
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posX",
+      "op": "gt",
+      "value": 35,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posY",
+      "op": "gt",
+      "value": 10.1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz-otaru-bridge",
+      "ui": true
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

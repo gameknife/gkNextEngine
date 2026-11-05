@@ -1,6 +1,7 @@
 {
   "name": "nextdayz-extraction-traversal",
   "target": "NextDayz",
+  "scene": "assets/scad/proc/coldwar/riverland_1km.scad",
   "defaults": {
     "waitFrames": 2,
     "stepTimeoutMs": 30000

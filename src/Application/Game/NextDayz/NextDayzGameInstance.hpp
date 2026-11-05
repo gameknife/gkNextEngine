@@ -38,6 +38,7 @@
 #include "Gameplay/AI/NavGrid.h"
 #include "Gameplay/Rig/RigInstance.h"
 #include "Application/Game/NextDayz/World/Campaign.hpp"
+#include "Application/Game/NextDayz/World/ExpeditionMaps.hpp"
 #include "Application/Game/NextDayz/World/RescueHelicopter.hpp"
 
 class NextDayzGameInstance : public NextGameInstanceBase
@@ -81,7 +82,20 @@ private:
     bool RestoreCampaign(const NextDayz::FCampaignSave& saved);
     bool DrawSafehouse();
     void Deploy();
-    void ReturnToSafehouse(bool died);
+    void CompleteDeployment();
+    std::string ActiveMapId() const;
+    void RequestExpeditionMap(const NextDayz::FExpeditionMap& map, bool deploy);
+    void DrawWorldOperations();
+    void LoadWorldAtlas();
+    void TickMapAuthoring();
+    enum class ESafehouseReturn
+    {
+        Extraction,
+        Death,
+        Debug,
+    };
+    void ReturnToSafehouse(ESafehouseReturn reason);
+    void DebugExpeditionAction(NextDayz::Debug::EExpeditionAction action);
     void AdvanceExtraction(float dt);
     void FireSignal(NextDayz::FItemInstanceId id);
     bool BoardHelicopter();
@@ -146,11 +160,34 @@ private:
     NextDayz::RescueHelicopter rescueHelicopter_;
     std::filesystem::path campaignPath_;
     std::string campaignMap_;
+    std::vector<NextDayz::FExpeditionMap> expeditionMaps_;
+    std::unordered_map<std::string, NextDayz::FMapWorldSave> mapStates_;
+    std::optional<NextDayz::FCampaignSave> pendingCampaign_;
+    std::string loadingMapPath_;
+    bool pendingDeployment_ = false;
+    bool pendingFreshMap_ = false;
+    uint64_t geographySceneGeneration_ = 0;
+    bool authoringMode_ = false;
+    bool switchingCampaignContext_ = false;
+    std::string authoringMapId_;
+    std::string authoringWatchScene_;
+    std::string authoringAppliedStamp_;
+    std::string authoringPendingStamp_;
+    std::vector<std::filesystem::path> authoringWatchFiles_;
+    std::chrono::steady_clock::time_point authoringNextPoll_{};
+    std::string validationDeployMap_;
+    int safehouseTab_ = 0;
+    int selectedWorldMap_ = 0;
+    float atlasZoom_ = 1.0f;
+    glm::vec2 atlasPan_{};
+    std::vector<std::vector<glm::vec2>> atlasPolygons_;
+    bool atlasLoaded_ = false;
     std::string saveError_;
     std::string campaignMessage_;
     float autosaveElapsed_ = 0.0f;
     bool campaignSaveBlocked_ = false;
     bool validationCampaign_ = false;
+    bool validationCampaignFresh_ = false;
     std::string validationCampaignPath_ = "out/nextdayz-validation/campaign.json";
     std::string validationCampaignCommand_;
     NextDayz::FDeterministicRng sessionRng_;
@@ -247,6 +284,7 @@ private:
     std::string debugLayersCvar_;
     std::string debugTabCvar_;
     std::string debugSelectCvar_;
+    std::string debugExpeditionCvar_;
 
     bool sceneReady_ = false;
     bool showInventory_ = false;

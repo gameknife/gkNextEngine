@@ -1,0 +1,12 @@
+{
+  "id": "jp_otaru_north_canal",
+  "region": "hokkaido",
+  "seed": 1947,
+  "version": 3,
+  "gameplay": {
+    "controls": "assets/scad/specs/nextdayz/jp_otaru_controls.scad",
+    "buildingBudget": 120,
+    "reliefScale": 0.65,
+    "roadLimit": 64
+  }
+}

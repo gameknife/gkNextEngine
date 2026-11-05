@@ -9,6 +9,7 @@
 //         6 snow / 7 bed(水下) / 8 road / 9 pad
 //
 // children 内可读的每实例变量(与 kit_layout 一致):$idx / $seed / $t
+// ter_scatter 另外提供 $px/$py，供子层按最终落点执行通路／场院避让。
 
 use <kit_layout.scad>
 
@@ -130,6 +131,8 @@ module ter_scatter(t, seed = 0, n = 10, region = [-20, -20, 20, 20], filt = [], 
         for (i = [0 : ter_sc_cnt - 1])
         {
             $idx = i;
+            $px = ter_sc_pts[i][0];
+            $py = ter_sc_pts[i][1];
             $instance_seed = ter_sc_pts[i][2];
             $variant = variants > 0 ? lay_randi($instance_seed, 5, ter_sc_variant_count) : i;
             $variant_seed = variants > 0 ? seed * 8191 + $variant * 131 : $instance_seed;

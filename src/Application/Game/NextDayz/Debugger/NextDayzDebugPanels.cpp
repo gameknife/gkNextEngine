@@ -235,6 +235,18 @@ namespace NextDayz::Debug
             WriteSnapshot();
         }
 
+        if (facts.campaignEnabled)
+        {
+            ImGui::BeginDisabled(!facts.inField || facts.expeditionBusy || facts.saveBlocked);
+            if (ImGui::Button("Return to safehouse") && commands_.expeditionAction)
+                commands_.expeditionAction(EExpeditionAction::ReturnToSafehouse);
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("Stores carried gear, cancels rescue and saves. No extraction credit.");
+            ImGui::SameLine();
+            ImGui::TextDisabled("%s | %s", facts.regionName.c_str(), facts.inField ? "IN FIELD" : "SAFEHOUSE");
+        }
+
         ImGui::TextDisabled("Selected:");
         ImGui::SameLine();
         ImGui::TextUnformatted(SelectionLabel().c_str());
@@ -309,6 +321,36 @@ namespace NextDayz::Debug
 
     void NextDayzDebugger::TabOverview(const FGameFacts& facts)
     {
+        if (facts.campaignEnabled)
+        {
+            ImGui::SeparatorText("Expedition shortcuts");
+            ImGui::TextDisabled("Rescue: %s", facts.flightPhase.c_str());
+            ImGui::BeginDisabled(facts.expeditionBusy || facts.saveBlocked);
+            if (ImGui::Button("Save progress") && commands_.expeditionAction)
+                commands_.expeditionAction(EExpeditionAction::Save);
+            ImGui::SameLine();
+            if (ImGui::Button("Reload map (keep progress)") && commands_.expeditionAction)
+                commands_.expeditionAction(EExpeditionAction::ReloadMap);
+            ImGui::BeginDisabled(!facts.inField);
+            if (ImGui::Button("Safe spawn") && commands_.expeditionAction)
+                commands_.expeditionAction(EExpeditionAction::SafeSpawn);
+            const int pads = systems_.anchors ? static_cast<int>(systems_.anchors->Count(EWorldAnchorType::Extraction)) : 0;
+            for (int index = 0; index < 2; ++index)
+            {
+                ImGui::SameLine();
+                ImGui::BeginDisabled(pads <= index);
+                if (ImGui::Button(index == 0 ? "Extraction ALPHA" : "Extraction BRAVO") && commands_.expeditionAction)
+                    commands_.expeditionAction(index == 0 ? EExpeditionAction::ExtractionAlpha : EExpeditionAction::ExtractionBravo);
+                ImGui::EndDisabled();
+            }
+            if (ImGui::Button("Rescue supplies") && commands_.expeditionAction)
+                commands_.expeditionAction(EExpeditionAction::RescueSupplies);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("2 signal flare guns, 2 bandages, 2 water bottles. Overflow drops nearby.");
+            ImGui::EndDisabled();
+            ImGui::EndDisabled();
+            if (facts.saveBlocked) Colored(Style::kBad, "Save blocked; resolve the save error before expedition actions.");
+            ImGui::SeparatorText("Systems");
+        }
         if (ImGui::BeginTable("##systems", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
                                                   ImGuiTableFlags_SizingStretchProp))
         {

@@ -3,6 +3,1118 @@
   "fn": 12,
   "kits": [
     {
+      "name": "kit_abandoned",
+      "file": "kit_abandoned.scad",
+      "prefix": "az_",
+      "scaleClass": "mid",
+      "modules": [
+        {
+          "name": "az_bldg_castle_keep",
+          "category": "bldg",
+          "params": "seed=0,L=20,D=18",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "20"
+            },
+            {
+              "name": "D",
+              "default": "18"
+            }
+          ],
+          "line": 455,
+          "footprint": [
+            20.54,
+            18.27
+          ],
+          "height": 21.42,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.14
+          ],
+          "triangles": 3924,
+          "colors": 20,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_bldg_loket_cottage",
+          "category": "bldg",
+          "params": "seed=0,L=9,D=7",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "9"
+            },
+            {
+              "name": "D",
+              "default": "7"
+            }
+          ],
+          "line": 157,
+          "footprint": [
+            9.52,
+            7.52
+          ],
+          "height": 6.56,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 5076,
+          "colors": 53,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_bldg_loket_ruin",
+          "category": "bldg",
+          "params": "seed=0,L=10,D=8",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            }
+          ],
+          "line": 209,
+          "footprint": [
+            10.52,
+            8.52
+          ],
+          "height": 4.72,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 4896,
+          "colors": 59,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_bldg_loket_shop",
+          "category": "bldg",
+          "params": "seed=0,L=12,D=8",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "12"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            }
+          ],
+          "line": 171,
+          "footprint": [
+            12.52,
+            8.52
+          ],
+          "height": 8.92,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 7728,
+          "colors": 91,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_bldg_loket_townhouse",
+          "category": "bldg",
+          "params": "seed=0,L=10,D=8,floors=2",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            },
+            {
+              "name": "floors",
+              "default": "2"
+            }
+          ],
+          "line": 134,
+          "footprint": [
+            10.52,
+            8.52
+          ],
+          "height": 9.1,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 7080,
+          "colors": 85,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_bldg_loket_villa",
+          "category": "bldg",
+          "params": "seed=0,L=13,D=11",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "13"
+            },
+            {
+              "name": "D",
+              "default": "11"
+            }
+          ],
+          "line": 196,
+          "footprint": [
+            11.98,
+            11.52
+          ],
+          "height": 11.09,
+          "zMin": 0.0,
+          "center": [
+            0.66,
+            0.0
+          ],
+          "triangles": 9984,
+          "colors": 118,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_bldg_loket_workshop",
+          "category": "bldg",
+          "params": "seed=0,L=16,D=9",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "16"
+            },
+            {
+              "name": "D",
+              "default": "9"
+            }
+          ],
+          "line": 185,
+          "footprint": [
+            16.52,
+            9.52
+          ],
+          "height": 5.58,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 8448,
+          "colors": 87,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_bldg_otaru_apartment",
+          "category": "bldg",
+          "params": "seed=0,L=20,D=11",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "20"
+            },
+            {
+              "name": "D",
+              "default": "11"
+            }
+          ],
+          "line": 283,
+          "footprint": [
+            20.25,
+            12.54
+          ],
+          "height": 13.8,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.43
+          ],
+          "triangles": 3524,
+          "colors": 172,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_bldg_otaru_rowhouse",
+          "category": "bldg",
+          "params": "seed=0,L=9,D=7",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "9"
+            },
+            {
+              "name": "D",
+              "default": "7"
+            }
+          ],
+          "line": 242,
+          "footprint": [
+            9.52,
+            7.52
+          ],
+          "height": 7.77,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 5748,
+          "colors": 80,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_bldg_otaru_ruin",
+          "category": "bldg",
+          "params": "seed=0,L=12,D=9",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "12"
+            },
+            {
+              "name": "D",
+              "default": "9"
+            }
+          ],
+          "line": 303,
+          "footprint": [
+            12.52,
+            9.52
+          ],
+          "height": 4.68,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 3120,
+          "colors": 48,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_bldg_otaru_shophouse",
+          "category": "bldg",
+          "params": "seed=0,L=14,D=10",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "14"
+            },
+            {
+              "name": "D",
+              "default": "10"
+            }
+          ],
+          "line": 274,
+          "footprint": [
+            14.52,
+            10.94
+          ],
+          "height": 8.52,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.21
+          ],
+          "triangles": 9852,
+          "colors": 121,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_bldg_otaru_timber",
+          "category": "bldg",
+          "params": "seed=0,L=11,D=8,ruined=false",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "11"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            },
+            {
+              "name": "ruined",
+              "default": "false"
+            }
+          ],
+          "line": 258,
+          "footprint": [
+            11.52,
+            8.52
+          ],
+          "height": 5.18,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 5976,
+          "colors": 61,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_bldg_otaru_warehouse",
+          "category": "bldg",
+          "params": "seed=0,L=18,D=14",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "18"
+            },
+            {
+              "name": "D",
+              "default": "14"
+            }
+          ],
+          "line": 220,
+          "footprint": [
+            18.52,
+            14.52
+          ],
+          "height": 9.5,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 13380,
+          "colors": 98,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_bldg_otaru_workshop",
+          "category": "bldg",
+          "params": "seed=0,L=20,D=12",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "20"
+            },
+            {
+              "name": "D",
+              "default": "12"
+            }
+          ],
+          "line": 295,
+          "footprint": [
+            20.52,
+            12.52
+          ],
+          "height": 6.9,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 11868,
+          "colors": 95,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_bldg_qinglong_visitor",
+          "category": "bldg",
+          "params": "seed=0,L=16,D=10",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "16"
+            },
+            {
+              "name": "D",
+              "default": "10"
+            }
+          ],
+          "line": 379,
+          "footprint": [
+            16.52,
+            10.52
+          ],
+          "height": 5.5,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 4188,
+          "colors": 69,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_bldg_sichuan_courtyard",
+          "category": "bldg",
+          "params": "seed=0,L=12,D=9",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "12"
+            },
+            {
+              "name": "D",
+              "default": "9"
+            }
+          ],
+          "line": 334,
+          "footprint": [
+            12.65,
+            9.47
+          ],
+          "height": 5.98,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.02
+          ],
+          "triangles": 8736,
+          "colors": 62,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_bldg_sichuan_pavilion",
+          "category": "bldg",
+          "params": "seed=0,L=12,D=8",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "12"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            }
+          ],
+          "line": 402,
+          "footprint": [
+            12.65,
+            8.43
+          ],
+          "height": 6.2,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 5508,
+          "colors": 7,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_bldg_sichuan_rowhouse",
+          "category": "bldg",
+          "params": "seed=0,L=12,D=8",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "12"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            }
+          ],
+          "line": 347,
+          "footprint": [
+            12.65,
+            8.52
+          ],
+          "height": 8.64,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 10212,
+          "colors": 94,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_bldg_sichuan_ruin",
+          "category": "bldg",
+          "params": "seed=0,L=12,D=8",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "12"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            }
+          ],
+          "line": 392,
+          "footprint": [
+            12.34,
+            8.52
+          ],
+          "height": 3.86,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 2040,
+          "colors": 29,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_bldg_sichuan_service",
+          "category": "bldg",
+          "params": "seed=0,L=14,D=9",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "14"
+            },
+            {
+              "name": "D",
+              "default": "9"
+            }
+          ],
+          "line": 367,
+          "footprint": [
+            14.55,
+            9.52
+          ],
+          "height": 5.9,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 9588,
+          "colors": 58,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_bldg_sichuan_teahouse",
+          "category": "bldg",
+          "params": "seed=0,L=12,D=8",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "12"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            }
+          ],
+          "line": 360,
+          "footprint": [
+            12.65,
+            8.47
+          ],
+          "height": 5.72,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.02
+          ],
+          "triangles": 8520,
+          "colors": 77,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_nature_bamboo",
+          "category": "nature",
+          "params": "seed=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 439,
+          "footprint": [
+            3.38,
+            2.73
+          ],
+          "height": 6.1,
+          "zMin": 0.0,
+          "center": [
+            -0.02,
+            0.25
+          ],
+          "triangles": 7560,
+          "colors": 7,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_nature_camphor",
+          "category": "nature",
+          "params": "seed=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 412,
+          "footprint": [
+            7.77,
+            7.85
+          ],
+          "height": 8.6,
+          "zMin": 0.0,
+          "center": [
+            0.1,
+            0.07
+          ],
+          "triangles": 1608,
+          "colors": 9,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_nature_thicket",
+          "category": "nature",
+          "params": "seed=0,r=1.2",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "r",
+              "default": "1.2"
+            }
+          ],
+          "line": 486,
+          "footprint": [
+            2.62,
+            2.32
+          ],
+          "height": 1.36,
+          "zMin": -0.04,
+          "center": [
+            0.14,
+            0.02
+          ],
+          "triangles": 480,
+          "colors": 9,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_nature_willow",
+          "category": "nature",
+          "params": "seed=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 424,
+          "footprint": [
+            7.51,
+            7.49
+          ],
+          "height": 6.32,
+          "zMin": 0.0,
+          "center": [
+            -0.0,
+            0.0
+          ],
+          "triangles": 3840,
+          "colors": 11,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_part_roof",
+          "category": "part",
+          "params": "seed=0,L=10,D=8,h=2.2,metal=false",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            },
+            {
+              "name": "h",
+              "default": "2.2"
+            },
+            {
+              "name": "metal",
+              "default": "false"
+            }
+          ],
+          "line": 93,
+          "footprint": [
+            10.14,
+            8.08
+          ],
+          "height": 2.42,
+          "zMin": -0.07,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 2724,
+          "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_part_sichuan_roof",
+          "category": "part",
+          "params": "seed=0,L=12,D=9,h=2",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "12"
+            },
+            {
+              "name": "D",
+              "default": "9"
+            },
+            {
+              "name": "h",
+              "default": "2"
+            }
+          ],
+          "line": 312,
+          "footprint": [
+            12.3,
+            9.07
+          ],
+          "height": 2.24,
+          "zMin": -0.07,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 5004,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_part_wall",
+          "category": "part",
+          "params": "seed=0, L=10, h=6.4, t=0.32, door=true, stone=false, floors=2,tint=[]",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "h",
+              "default": "6.4"
+            },
+            {
+              "name": "t",
+              "default": "0.32"
+            },
+            {
+              "name": "door",
+              "default": "true"
+            },
+            {
+              "name": "stone",
+              "default": "false"
+            },
+            {
+              "name": "floors",
+              "default": "2"
+            },
+            {
+              "name": "tint",
+              "default": "[]"
+            }
+          ],
+          "line": 33,
+          "footprint": [
+            10.32,
+            0.63
+          ],
+          "height": 6.4,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.11
+          ],
+          "triangles": 816,
+          "colors": 17,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_part_window",
+          "category": "part",
+          "params": "seed=0, w=1.15, h=1.45",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "w",
+              "default": "1.15"
+            },
+            {
+              "name": "h",
+              "default": "1.45"
+            }
+          ],
+          "line": 14,
+          "footprint": [
+            1.45,
+            0.31
+          ],
+          "height": 0.82,
+          "zMin": -0.89,
+          "center": [
+            0.0,
+            -0.09
+          ],
+          "triangles": 72,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_prop_bridge",
+          "category": "prop",
+          "params": "seed=0,L=35,W=7,rise=0,pierDepth=12",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "35"
+            },
+            {
+              "name": "W",
+              "default": "7"
+            },
+            {
+              "name": "rise",
+              "default": "0"
+            },
+            {
+              "name": "pierDepth",
+              "default": "12"
+            }
+          ],
+          "line": 496,
+          "footprint": [
+            35.0,
+            7.0
+          ],
+          "height": 1.08,
+          "zMin": -12.3,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 480,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_prop_decay",
+          "category": "prop",
+          "params": "seed=0,L=9,D=7",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "9"
+            },
+            {
+              "name": "D",
+              "default": "7"
+            }
+          ],
+          "line": 114,
+          "footprint": [
+            9.04,
+            6.15
+          ],
+          "height": 0.95,
+          "zMin": 0.01,
+          "center": [
+            0.06,
+            0.14
+          ],
+          "triangles": 972,
+          "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "az_prop_helipad",
+          "category": "prop",
+          "params": "seed=0,L=21",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "21"
+            }
+          ],
+          "line": 469,
+          "footprint": [
+            21.0,
+            21.0
+          ],
+          "height": 0.3,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 336,
+          "colors": 6,
+          "warnings": 0,
+          "ok": true
+        }
+      ]
+    },
+    {
       "name": "kit_airport",
       "file": "kit_airport.scad",
       "prefix": "ap_",

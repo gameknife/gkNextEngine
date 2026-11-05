@@ -1,0 +1,59 @@
+{
+  "maps": [
+    {
+      "center": [
+        50.186,
+        12.754
+      ],
+      "description": "The Ohre curls around an abandoned hill town. Faded plaster, broken tile roofs and a silent castle overlook the river. Cross the bridges, search the old quarter, and keep a route out of the valley.",
+      "draftScene": "assets/scad/proc/nextdayz/cz_loket_riverbend/scene.scad",
+      "id": "cz_loket_riverbend",
+      "localName": "洛克特·河湾",
+      "mapVersion": 3,
+      "name": "LOKET / RIVERBEND",
+      "profile": "bohemian_decay",
+      "region": "CZECHIA / WEST BOHEMIA",
+      "scene": "assets/scad/proc/nextdayz/cz_loket_riverbend/published/v3/scene.scad",
+      "sizeM": 1000,
+      "status": "published",
+      "terrain": "RIVER VALLEY / HILLSIDE OLD TOWN"
+    },
+    {
+      "center": [
+        43.2025,
+        141.0005
+      ],
+      "description": "Abandoned residential blocks and shopping streets lead to the canal stone warehouses. Search timber homes, shuttered shops and port yards; use rear alleys to break the long street sightlines, then reach a clear rescue zone.",
+      "draftScene": "assets/scad/proc/nextdayz/jp_otaru_north_canal/scene.scad",
+      "id": "jp_otaru_north_canal",
+      "localName": "小樽·北运河",
+      "mapVersion": 3,
+      "name": "OTARU / NORTH CANAL",
+      "profile": "hokkaido_decay",
+      "region": "JAPAN / HOKKAIDO",
+      "scene": "assets/scad/proc/nextdayz/jp_otaru_north_canal/published/v3/scene.scad",
+      "sizeM": 1000,
+      "status": "published",
+      "terrain": "COASTAL TOWN / CANAL / FREIGHT YARDS"
+    },
+    {
+      "center": [
+        30.6346,
+        104.1868
+      ],
+      "description": "Abandoned tea courtyards, visitor facilities and village homes line a wetland lake east of Chengdu. Follow the broken greenway, use bamboo groves for cover, and choose exposed footbridges or longer wooded approaches to reach rescue.",
+      "draftScene": "assets/scad/proc/nextdayz/cn_chengdu_qinglong_lake/scene.scad",
+      "id": "cn_chengdu_qinglong_lake",
+      "localName": "青龙湖·荒径",
+      "mapVersion": 1,
+      "name": "CHENGDU / QINGLONG LAKE",
+      "profile": "sichuan_wetland_decay",
+      "region": "CHINA / SICHUAN / CHENGDU",
+      "scene": "assets/scad/proc/nextdayz/cn_chengdu_qinglong_lake/published/v1/scene.scad",
+      "sizeM": 1000,
+      "status": "published",
+      "terrain": "WETLAND PARK / BAMBOO GROVES / LAKESIDE GREENWAY"
+    }
+  ],
+  "version": 1
+}

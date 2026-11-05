@@ -173,6 +173,30 @@ func newGeoCommand(ctx appContext) *cobra.Command {
 	cmd.AddCommand(newGeoMakeCommand(ctx))
 	cmd.AddCommand(newGeoGrowCommand(ctx))
 	cmd.AddCommand(newGeoPakCommand(ctx))
+	cmd.AddCommand(newGeoExpeditionCommand(ctx))
+	return cmd
+}
+
+func newGeoExpeditionCommand(ctx appContext) *cobra.Command {
+	var recipe string
+	var publish bool
+	cmd := &cobra.Command{
+		Use:   "expedition",
+		Short: "Build a playable abandoned-city SCAD kit map from cached geographic data",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path, report, err := geo.ExportExpedition(ctx.repoRoot, recipe, publish)
+			if err != nil {
+				return err
+			}
+			console.Info("expedition: %d tactical sites, %d kit buildings, %d safe spawns, %d rescue zones",
+				len(report.Sites), report.Buildings, len(report.Spawns), len(report.Extractions))
+			console.Info("%s", path)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&recipe, "recipe", "", "geographic game-map recipe JSON")
+	cmd.Flags().BoolVar(&publish, "publish", false, "freeze a new immutable version and register it for dispatch after playtest approval")
+	_ = cmd.MarkFlagRequired("recipe")
 	return cmd
 }
 

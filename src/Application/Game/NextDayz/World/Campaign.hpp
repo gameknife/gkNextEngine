@@ -46,6 +46,10 @@ namespace NextDayz
         uint64_t nextStorageId = 1;
         std::vector<FItemInstance> storage;
         FFlightState flight;
+        std::unordered_map<std::string, uint64_t> mapSorties;
+        std::string lastMapId;
+        std::string lastOutcome;
+        uint64_t sortieId = 0;
 
         bool Store(Inventory& inventory, FItemInstanceId id, int count = -1);
         bool Take(Inventory& inventory, FItemInstanceId id, int count, bool wear);
@@ -56,6 +60,13 @@ namespace NextDayz
         bool Board(const glm::vec3& player, const FExtractionConfig& config);
         // True exactly once when an occupied helicopter finishes taking off.
         bool TickFlight(float dt, const FExtractionConfig& config);
+    };
+
+    struct FMapWorldSave
+    {
+        FLootWorldState world;
+        TimeSystem::FState time;
+        uint32_t version = 1;
     };
 
     struct FCampaignSave
@@ -81,6 +92,8 @@ namespace NextDayz
         bool hasCacheMarker = false;
         glm::vec3 cacheMarker{};
         float cacheSeconds = 0.0f;
+        std::unordered_map<std::string, FMapWorldSave> maps;
+        uint32_t mapVersion = 1;
     };
 
     int SellPrice(std::string_view itemId, const FExtractionConfig& config);

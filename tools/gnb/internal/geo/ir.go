@@ -67,9 +67,9 @@ type TerrainMeta struct {
 	// take its own highest point as the top of the ramp and the two sides of a
 	// seam would come out different colours.
 	PaletteSpan float64 `json:"paletteSpan,omitempty"`
-	HasWater      bool    `json:"hasWater"`
-	IsSea         bool    `json:"isSea"`
-	WaterLevel    float64 `json:"waterLevel"`
+	HasWater    bool    `json:"hasWater"`
+	IsSea       bool    `json:"isSea"`
+	WaterLevel  float64 `json:"waterLevel"`
 }
 
 // Ring is a closed polygon in SCAD metres (first point not repeated).
@@ -103,7 +103,8 @@ type Road struct {
 	// Nodes is index-aligned with Pts: the OSM node id of each vertex. This is
 	// the network topology — shared ids are exact junctions — and it must be
 	// consumed before any clipping or simplification breaks the alignment.
-	Nodes []int64 `json:"nodes,omitempty"`
+	Nodes  []int64 `json:"nodes,omitempty"`
+	Bridge bool    `json:"bridge,omitempty"`
 }
 
 // Area is a tagged polygon (water, landuse, leisure).

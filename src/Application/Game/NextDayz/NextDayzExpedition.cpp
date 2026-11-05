@@ -16,35 +16,139 @@ bool NextDayzGameInstance::CampaignEnabled() const
     return !GOption->AgentValidation || validationCampaign_;
 }
 
+std::string NextDayzGameInstance::ActiveMapId() const
+{
+    const auto* map = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_);
+    return map ? map->id : campaignMap_;
+}
+
 void NextDayzGameInstance::InitializeCampaign()
 {
     if (!CampaignEnabled()) return;
+    switchingCampaignContext_ = false;
     std::string error;
     if (!NextDayz::LoadExtractionConfig(Utilities::FileHelper::ResolvePlatformFilePath(
         "assets/configs/nextdayz_extraction.json"), extractionConfig_, error))
         SPDLOG_ERROR("[NextDayz] extraction config: {}; using defaults", error);
     campaignPath_ = GOption->AgentValidation ? std::filesystem::path(validationCampaignPath_)
         : NextPlatform::UserPaths::EnsureUserFile("NextDayz", "campaign/save.json");
+    if (authoringMode_ && !GOption->AgentValidation)
+        campaignPath_ = NextPlatform::UserPaths::EnsureUserFile("NextDayz", "authoring/" + ActiveMapId() + ".json");
     campaignSaveBlocked_ = false;
     saveError_.clear();
     std::error_code ec;
-    const bool exists = std::filesystem::exists(campaignPath_, ec) ||
-        std::filesystem::exists(campaignPath_.string() + ".bak", ec);
-    if (exists)
+    const bool freshFixture = GOption->AgentValidation && std::exchange(validationCampaignFresh_, false);
+    const bool exists = !freshFixture && (std::filesystem::exists(campaignPath_, ec) ||
+        std::filesystem::exists(campaignPath_.string() + ".bak", ec));
+    if (pendingCampaign_)
+    {
+        auto saved = std::move(*pendingCampaign_);
+        pendingCampaign_.reset();
+        bool upgraded = false;
+        if (const auto* map = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_);
+            map && saved.mapVersion < map->version)
+        {
+            auto target = *map;
+            target.scene = campaignMap_;
+            upgraded = NextDayz::UpgradeExpeditionCampaign(saved,target,
+                {loot_.Capture(),time_.Capture(),target.version},player_.Position());
+        }
+        if (pendingFreshMap_)
+        {
+            saved.world = loot_.Capture();
+            saved.time = time_.Capture();
+            saved.position = player_.Position();
+            pendingFreshMap_ = false;
+        }
+        if (!RestoreCampaign(saved))
+        {
+            campaignSaveBlocked_ = true;
+            campaignMessage_ = "Cannot restore expedition: " + saveError_;
+        }
+        else if (std::exchange(pendingDeployment_, false)) CompleteDeployment();
+        else if (upgraded)
+        {
+            campaignMessage_ = "Region updated. Your gear and safehouse progress are preserved; previous world archived.";
+            SaveCampaign();
+        }
+    }
+    else if (exists)
     {
         NextDayz::FCampaignSave saved;
-        if (!NextDayz::ReadCampaignSave(campaignPath_, saved, error) || !RestoreCampaign(saved))
+        bool migrated = false;
+        bool upgraded = false;
+        const bool read = NextDayz::ReadCampaignSave(campaignPath_, saved, error);
+        const auto* savedMap = read ? NextDayz::FindExpeditionMap(expeditionMaps_,saved.map) : nullptr;
+        if (savedMap && saved.mapVersion < savedMap->version)
+        {
+            const auto archive = std::filesystem::path(campaignPath_.string()+fmt::format(".before-{}-v{}",savedMap->id,saved.mapVersion));
+            const bool archived = std::filesystem::exists(archive,ec);
+            if (ec) error = "Cannot check map revision backup: " + ec.message();
+            else if (!archived && !NextDayz::WriteCampaignSave(archive,saved,error))
+                error = "Cannot preserve map revision backup: " + error;
+            else if (savedMap->id == ActiveMapId())
+            {
+                auto target = *savedMap;
+                target.scene = campaignMap_;
+                upgraded = NextDayz::UpgradeExpeditionCampaign(saved,target,
+                    {loot_.Capture(),time_.Capture(),target.version},player_.Position());
+            }
+        }
+        if (read && (error.empty() || error.starts_with("Recovered backup")) && saved.map != campaignMap_)
+        {
+            const auto* currentMap = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_);
+            if (!authoringMode_ && currentMap && currentMap->published && saved.map == NextDayz::LegacyRiverlandScene)
+            {
+                const auto archive = std::filesystem::path(campaignPath_.string() + ".riverland-backup");
+                const bool archived = std::filesystem::exists(archive, ec);
+                if (ec) error = "Cannot check Riverland backup: " + ec.message();
+                else if (!archived && !NextDayz::WriteCampaignSave(archive, saved, error))
+                    error = "Cannot preserve Riverland backup: " + error;
+                else if (!NextDayz::MigrateRiverlandCampaign(saved, *currentMap,
+                    {loot_.Capture(), time_.Capture(), currentMap->version}, player_.Position()))
+                    error = "Cannot migrate Riverland progress; published map version differs";
+                else migrated = true;
+            }
+            else
+            {
+                const auto* map = NextDayz::FindExpeditionMap(expeditionMaps_, saved.map);
+                if (map || saved.map == NextDayz::LegacyRiverlandScene)
+                {
+                    pendingCampaign_ = std::move(saved);
+                    loadingMapPath_ = map && pendingCampaign_->mapVersion < map->version
+                        ? (authoringMode_ ? map->draftScene : map->scene) : pendingCampaign_->map;
+                    GetEngine().RequestLoadScene({.filename = loadingMapPath_});
+                    return;
+                }
+                error = "Saved expedition map is unavailable";
+            }
+        }
+        if (saved.map.empty() || (!error.empty() && !error.starts_with("Recovered backup")) || !RestoreCampaign(saved))
         {
             campaignSaveBlocked_ = true;
             saveError_ = "Cannot load campaign. Original save preserved. " + (error.empty() ? saveError_ : error);
             campaignMessage_ = saveError_;
             SPDLOG_ERROR("[NextDayz] {}", saveError_);
         }
+        else if (upgraded)
+        {
+            safehouseTab_ = 0;
+            campaignMessage_ = "Region updated. Your gear and safehouse progress are preserved; previous world archived.";
+            SaveCampaign();
+        }
+        else if (migrated)
+        {
+            safehouseTab_ = 0;
+            campaignMessage_ = "Riverland has been retired. Your carried gear, storage and gold are safe. Accept a new world assignment.";
+            SPDLOG_INFO("[NextDayz] migrated Riverland campaign to {} safehouse; original archived", ActiveMapId());
+            SaveCampaign();
+        }
         else if (!error.empty()) campaignMessage_ = error;
     }
     else
     {
         campaign_ = {};
+        mapStates_.clear();
         inventory_.Clear();
         survival_.Reset();
         campaignMessage_ = "Your safehouse is ready. Go in empty-handed, or prepare a loadout.";
@@ -80,12 +184,16 @@ NextDayz::FCampaignSave NextDayzGameInstance::CaptureCampaign() const
     saved.hasCacheMarker = cacheMarker_.has_value();
     saved.cacheMarker = cacheMarker_.value_or(glm::vec3(0.0f));
     saved.cacheSeconds = cacheSeconds_;
+    saved.maps = mapStates_;
+    const auto* map = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_);
+    saved.mapVersion = map ? map->version : 1;
+    saved.maps[ActiveMapId()] = {saved.world, saved.time, saved.mapVersion};
     return saved;
 }
 
 bool NextDayzGameInstance::SaveCampaign()
 {
-    if (!CampaignEnabled() || !sceneReady_ || campaignSaveBlocked_ || campaignPath_.empty()) return false;
+    if (!CampaignEnabled() || !sceneReady_ || pendingCampaign_ || campaignSaveBlocked_ || campaignPath_.empty()) return false;
     if (!NextDayz::WriteCampaignSave(campaignPath_, CaptureCampaign(), saveError_))
     {
         campaignSaveBlocked_ = true;
@@ -105,14 +213,49 @@ bool NextDayzGameInstance::RestoreCampaign(const NextDayz::FCampaignSave& saved)
         saveError_ = "Saved map does not match the current map";
         return false;
     }
+    const auto* map = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_);
+    if (map && saved.mapVersion != map->version)
+    {
+        saveError_ = "Map version changed. Preserve the previous published map and save.";
+        return false;
+    }
+    mapStates_ = saved.maps;
     if (!inventory_.Restore(saved.inventory)) return false;
     campaign_ = saved.campaign;
     loot_.Restore(saved.world, GetEngine());
     survival_.Restore(saved.survival);
     time_.Restore(saved.time);
     time_.Tick(0.0, GetEngine().GetScene());
+    glm::vec3 restoredPosition = saved.position;
+    if (authoringMode_)
+    {
+        auto clear = [this](const glm::vec3& feet)
+        {
+            bool blocked = false;
+            const glm::vec3 waist = feet + glm::vec3(0,0.9f,0);
+            for (const glm::vec3 direction : {glm::vec3(1,0,0),glm::vec3(-1,0,0),
+                                              glm::vec3(0,0,1),glm::vec3(0,0,-1),glm::vec3(0,1,0)})
+            {
+                const float clearance = direction.y > 0 ? 0.8f : config_.Player.ControllerRadius;
+                GetEngine().RayCast(waist,direction,[&](Assets::RayCastResult result)
+                {
+                    if (result.Hit && glm::distance(glm::vec3(result.HitPoint),waist) < clearance) blocked = true;
+                    return true;
+                });
+            }
+            return !blocked;
+        };
+        if (!clear(restoredPosition))
+            for (const auto handle : worldAnchors_.Find(NextDayz::EWorldAnchorType::PlayerSafe))
+                if (const auto* spawn = worldAnchors_.Resolve(handle); spawn && clear(spawn->worldPos))
+                {
+                    restoredPosition = spawn->worldPos;
+                    SPDLOG_INFO("[NextDayz] edited geometry obstructed the authoring position; moved to safe spawn");
+                    break;
+                }
+    }
     player_.Destroy();
-    player_.Create(GetEngine().GetPhysicsEngine(), saved.position, config_);
+    player_.Create(GetEngine().GetPhysicsEngine(), restoredPosition, config_);
     player_.SetYaw(saved.yaw);
     player_.SetPitch(saved.pitch);
     player_.SetFirstPerson(saved.firstPerson);
@@ -140,6 +283,74 @@ bool NextDayzGameInstance::RestoreCampaign(const NextDayz::FCampaignSave& saved)
 void NextDayzGameInstance::Deploy()
 {
     if (!CampaignEnabled() || campaign_.inField || campaignSaveBlocked_) return;
+    if (pendingCampaign_) return;
+    std::vector<const NextDayz::FExpeditionMap*> available;
+    for (const auto& map : expeditionMaps_)
+        if (map.published || authoringMode_) available.push_back(&map);
+    // Existing isolated extraction fixtures keep their explicit legacy scene.
+    const bool legacyFixture = GOption->AgentValidation && validationDeployMap_.empty() &&
+        !NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_);
+    if (!legacyFixture && !available.empty())
+    {
+        const auto* selected = available[sessionRng_.Range(static_cast<uint32_t>(available.size()))];
+        if (authoringMode_) selected = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_);
+        if (GOption->AgentValidation && !validationDeployMap_.empty())
+            selected = NextDayz::FindExpeditionMap(expeditionMaps_, validationDeployMap_);
+        if (!selected) { campaignMessage_ = "No available assignment"; return; }
+        const std::string& targetScene = authoringMode_ ? selected->draftScene : selected->scene;
+        if (targetScene != campaignMap_)
+        {
+            RequestExpeditionMap(*selected, true);
+            return;
+        }
+    }
+    else if (!legacyFixture && !authoringMode_)
+    {
+        campaignMessage_ = "No published assignments available";
+        return;
+    }
+    CompleteDeployment();
+}
+
+void NextDayzGameInstance::RequestExpeditionMap(const NextDayz::FExpeditionMap& map, bool deploy)
+{
+    if (pendingCampaign_ || campaignSaveBlocked_) return;
+    const std::string& targetScene = authoringMode_ ? map.draftScene : map.scene;
+    if (!std::filesystem::exists(Utilities::FileHelper::ResolvePlatformFilePath(targetScene.c_str())))
+    {
+        campaignMessage_ = "Assignment unavailable: scene files are missing";
+        return;
+    }
+    if (!SaveCampaign()) return;
+    auto saved = CaptureCampaign();
+    saved.map = targetScene;
+    saved.mapVersion = map.version;
+    auto state = saved.maps.find(map.id);
+    if (state != saved.maps.end() && state->second.version < map.version)
+    {
+        saved.maps[fmt::format("{}@v{}",map.id,state->second.version)] = state->second;
+        saved.maps.erase(map.id);
+        state = saved.maps.end();
+    }
+    pendingFreshMap_ = state == saved.maps.end();
+    if (!pendingFreshMap_)
+    {
+        saved.world = state->second.world;
+        saved.time = state->second.time;
+        saved.mapVersion = state->second.version;
+    }
+    saved.campaign.inField = false;
+    saved.campaign.flight = {};
+    pendingCampaign_ = std::move(saved);
+    pendingDeployment_ = deploy;
+    loadingMapPath_ = targetScene;
+    campaignMessage_ = "Preparing classified deployment...";
+    SetMouseCaptured(false);
+    GetEngine().RequestLoadScene({.filename = targetScene});
+}
+
+void NextDayzGameInstance::CompleteDeployment()
+{
     const auto spawns = worldAnchors_.Find(NextDayz::EWorldAnchorType::PlayerSafe);
     if (spawns.empty()) { campaignMessage_ = "This map has no safe deployment points"; return; }
     const auto* spawn = worldAnchors_.Resolve(spawns[sessionRng_.Range(static_cast<uint32_t>(spawns.size()))]);
@@ -161,6 +372,10 @@ void NextDayzGameInstance::Deploy()
     campaign_.inField = true;
     campaign_.flight = {};
     ++campaign_.sorties;
+    ++campaign_.sortieId;
+    ++campaign_.mapSorties[ActiveMapId()];
+    campaign_.lastMapId = ActiveMapId();
+    campaign_.lastOutcome = "DEPLOYED";
     paused_ = showMap_ = showInventory_ = false;
     weapons_.SetTriggerDown(false);
     weapons_.SetPresentationSuppressed(false);
@@ -170,8 +385,9 @@ void NextDayzGameInstance::Deploy()
     SaveCampaign();
 }
 
-void NextDayzGameInstance::ReturnToSafehouse(bool died)
+void NextDayzGameInstance::ReturnToSafehouse(ESafehouseReturn reason)
 {
+    const bool died = reason == ESafehouseReturn::Death;
     if (!campaign_.inField && died) return;
     if (died)
     {
@@ -193,9 +409,16 @@ void NextDayzGameInstance::ReturnToSafehouse(bool died)
     {
         weapons_.CopyMagazinesTo(inventory_);
         campaign_.StoreAll(inventory_);
-        campaignMessage_ = "Extraction successful. Everything you carried is now in your safehouse.";
+        campaignMessage_ = reason == ESafehouseReturn::Debug
+            ? "Debug return. Carried gear stored; extraction count unchanged."
+            : "Extraction successful. Everything you carried is now in your safehouse.";
     }
     campaign_.inField = false;
+    if (reason == ESafehouseReturn::Debug) debugger_.SetVisible(false);
+    campaign_.lastOutcome = died ? "MISSING / GEAR LEFT IN FIELD"
+        : reason == ESafehouseReturn::Debug ? "DEBUG RETURN / GEAR STORED" : "EXTRACTED";
+    if (const auto* map = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_))
+        campaignMessage_ += " Assignment region: " + map->name + " / " + map->region;
     campaign_.flight = {};
     actions_.Reset();
     weapons_.ResetRuntime();
@@ -208,12 +431,56 @@ void NextDayzGameInstance::ReturnToSafehouse(bool died)
     SaveCampaign();
 }
 
+void NextDayzGameInstance::DebugExpeditionAction(NextDayz::Debug::EExpeditionAction action)
+{
+    if (!sceneReady_ || !CampaignEnabled() || pendingCampaign_ || !loadingMapPath_.empty() || campaignSaveBlocked_)
+        return;
+    using NextDayz::Debug::EExpeditionAction;
+    if (action == EExpeditionAction::Save)
+    {
+        if (SaveCampaign()) Notify("Campaign progress saved.", 0);
+        return;
+    }
+    if (action == EExpeditionAction::ReloadMap)
+    {
+        if (SaveCampaign())
+        {
+            loadingMapPath_ = campaignMap_;
+            GetEngine().RequestLoadScene({.filename = campaignMap_});
+        }
+        return;
+    }
+    if (!campaign_.inField) return;
+    if (action == EExpeditionAction::ReturnToSafehouse)
+    {
+        ReturnToSafehouse(ESafehouseReturn::Debug);
+        return;
+    }
+    if (action == EExpeditionAction::SafeSpawn)
+        TeleportPlayer(ResolveSpawnPosition());
+    else if (action == EExpeditionAction::ExtractionAlpha || action == EExpeditionAction::ExtractionBravo)
+    {
+        const auto pads = worldAnchors_.Find(NextDayz::EWorldAnchorType::Extraction);
+        const size_t index = action == EExpeditionAction::ExtractionAlpha ? 0 : 1;
+        if (index >= pads.size()) return;
+        if (const auto* pad = worldAnchors_.Resolve(pads[index]))
+            TeleportPlayer(pad->worldPos + glm::vec3(2,0.1f,0));
+    }
+    else if (action == EExpeditionAction::RescueSupplies)
+    {
+        GiveItem("signal_flare", 2);
+        GiveItem("bandage", 2);
+        GiveItem("water_bottle", 2);
+    }
+    SaveCampaign();
+}
+
 void NextDayzGameInstance::AdvanceExtraction(float dt)
 {
     const auto before = campaign_.flight.phase;
     if (campaign_.TickFlight(dt, extractionConfig_))
     {
-        ReturnToSafehouse(false);
+        ReturnToSafehouse(ESafehouseReturn::Extraction);
         return;
     }
     rescueHelicopter_.Update(GetEngine().GetScene(), campaign_.flight, extractionConfig_, dt);
@@ -314,6 +581,17 @@ bool NextDayzGameInstance::DrawSafehouse()
         ImGui::End();
         return true;
     }
+    ImGui::Spacing();
+    if (ImGui::Button("WORLD / OPERATIONS", ImVec2(210, 36))) safehouseTab_ = 0;
+    ImGui::SameLine();
+    if (ImGui::Button("STORAGE / LOADOUT", ImVec2(210, 36))) safehouseTab_ = 1;
+    ImGui::Separator();
+    if (safehouseTab_ == 0)
+    {
+        DrawWorldOperations();
+        ImGui::End();
+        return true;
+    }
     std::vector<std::function<void()>> requests;
     ImGui::Spacing();
     if (ImGui::Button("STORE ALL CARRIED GEAR")) requests.emplace_back([this]()
@@ -411,8 +689,31 @@ bool NextDayzGameInstance::DrawSafehouse()
 
 void NextDayzGameInstance::ConfigureCampaignCVars(NextCVar::FCVarSystem& cvars)
 {
+    cvars.RegisterString("nextdayz.validation.deployMap", "", &validationDeployMap_, NextCVar::ECVarFlags::None,
+        "Agent-only deterministic map assignment; empty uses normal random dispatch");
+    cvars.RegisterBool("nextdayz.authoring", false, &authoringMode_, NextCVar::ECVarFlags::None,
+        "Use isolated authoring saves and enable draft map playtesting", [this]()
+        {
+            if (!sceneReady_ || !CampaignEnabled() || GOption->AgentValidation) return;
+            if (pendingCampaign_ || campaignSaveBlocked_) { authoringMode_ = !authoringMode_; return; }
+            // The previous context still owns campaignPath_. Save it before
+            // loading a fresh scene into the other context's isolated save.
+            if (!SaveCampaign()) { authoringMode_ = !authoringMode_; return; }
+            switchingCampaignContext_ = true;
+            loadingMapPath_ = campaignMap_;
+            GetEngine().RequestLoadScene({.filename = campaignMap_});
+        });
+    cvars.RegisterString("nextdayz.authoring.map", "", &authoringMapId_, NextCVar::ECVarFlags::None,
+        "Playtest a draft map by stable id", [this]()
+        {
+            if (!authoringMode_ || !sceneReady_ || campaign_.inField) return;
+            if (const auto* map = NextDayz::FindExpeditionMap(expeditionMaps_, authoringMapId_))
+                RequestExpeditionMap(*map, true);
+        });
     cvars.RegisterString("nextdayz.validation.campaignPath", validationCampaignPath_, &validationCampaignPath_,
         NextCVar::ECVarFlags::None, "Agent-only isolated campaign save path");
+    cvars.RegisterBool("nextdayz.validation.campaignFresh", false, &validationCampaignFresh_,
+        NextCVar::ECVarFlags::None, "Agent-only: start the next campaign initialization with a fresh fixture");
     cvars.RegisterBool("nextdayz.validation.campaign", false, &validationCampaign_, NextCVar::ECVarFlags::None,
         "Opt agent validation into the persistent campaign", [this]()
         { if (GOption->AgentValidation && validationCampaign_ && sceneReady_) InitializeCampaign(); });
@@ -427,6 +728,7 @@ void NextDayzGameInstance::CampaignValidationCommand()
     if (command == "new")
     {
         campaign_ = {};
+        mapStates_.clear();
         inventory_.Clear();
         survival_.Reset();
         weapons_.ResetRuntime();
@@ -438,6 +740,7 @@ void NextDayzGameInstance::CampaignValidationCommand()
     }
     else if (command == "deploy") Deploy();
     else if (command == "save") SaveCampaign();
+    else if (command == "rebuild") GetEngine().RequestLoadScene({.filename = campaignMap_});
     else if (command == "reload")
     {
         NextDayz::FCampaignSave saved;

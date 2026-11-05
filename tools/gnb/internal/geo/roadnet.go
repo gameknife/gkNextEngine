@@ -199,8 +199,12 @@ func BuildRoadNetwork(roads []Road, half float64, opt EmitOptions) ([]RoadRun, [
 			}
 			last := len(simplified) - 1
 			if endID != 0 && samePoint(simplified[last], trimmed[len(trimmed)-1]) {
+				// Offset edges use densified stations, not the simplified input.
+				// A simplified index can point hundreds of metres before the end
+				// and would stretch the intersection patch across an entire town.
+				edgeLast := len(left) - 1
 				approaches[endID] = append(approaches[endID], approach{
-					nodeID: endID, left: left[last], right: right[last],
+					nodeID: endID, left: left[edgeLast], right: right[edgeLast],
 					width: r.Width, at: seg[len(seg)-1],
 				})
 			}

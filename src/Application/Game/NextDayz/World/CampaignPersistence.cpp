@@ -31,14 +31,16 @@ namespace NextDayz
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FSavedLootEntry, id, source, position, yaw, contents, state, slot)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FLootWorldState, seconds, directorRng, rollRng, pileSerial, entries)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FFlightState, phase, pointId, pad, remaining, boarded)
-    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FCampaign, inField, gold, sorties, extractions, nextStorageId, storage, flight)
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FCampaign, inField, gold, sorties, extractions, nextStorageId, storage, flight,
+                                     mapSorties, lastMapId, lastOutcome, sortieId)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FSurvivalSnapshot, health, hunger, hydration, bleedingWounds, cold,
                                      painkillerSeconds, lifeState, damageSequence, woundSequence, lastDamageSource)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(TimeSystem::FState, minutes, nextWeatherChange, weatherRng, weather, blend)
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FMapWorldSave, world, time, version)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FCampaignSave, map, campaign, inventory, world, survival, time, position,
                                      yaw, pitch, firstPerson, weaponSlots, activeSlot, survivalSeconds, sessionRng,
                                      survivalRng, quickSlots, lanternLit, lanternSeconds, hasCacheMarker, cacheMarker,
-                                     cacheSeconds)
+                                     cacheSeconds, maps, mapVersion)
 
     namespace
     {
@@ -85,6 +87,23 @@ namespace NextDayz
                         (stack.loadedAmmo != 0 && def->kind != EItemKind::Weapon)) return false;
                 }
             }
+            if (saved.mapVersion == 0 || saved.maps.size() > 1024) return false;
+            for (const auto& [id, state] : saved.maps)
+            {
+                if (id.empty() || state.version == 0) return false;
+                // Reuse the same full validation for inactive maps as for the loaded one.
+                auto mapSnapshot = saved;
+                mapSnapshot.maps.clear();
+                mapSnapshot.world = state.world;
+                mapSnapshot.time = state.time;
+                if (!Valid(mapSnapshot)) return false;
+            }
+            uint64_t counted = 0;
+            for (const auto& [id, count] : saved.campaign.mapSorties)
+            {
+                if (id.empty() || count > saved.campaign.sorties - std::min(counted, saved.campaign.sorties)) return false;
+                counted += count;
+            }
             return true;
         }
 
@@ -94,8 +113,20 @@ namespace NextDayz
             {
                 if (std::filesystem::file_size(path) > 64 * 1024 * 1024) throw std::runtime_error("Save too large");
                 std::ifstream stream(path, std::ios::binary);
-                const auto document = nlohmann::json::parse(stream);
-                if (document.at("version").get<int>() != 1) throw std::runtime_error("Unsupported save version");
+                auto document = nlohmann::json::parse(stream);
+                const int version = document.at("version").get<int>();
+                if (version != 1 && version != 2) throw std::runtime_error("Unsupported save version");
+                if (version == 1)
+                {
+                    auto& state = document.at("state");
+                    state["maps"] = nlohmann::json::object();
+                    state["mapVersion"] = 1;
+                    auto& campaign = state.at("campaign");
+                    campaign["mapSorties"] = nlohmann::json::object();
+                    campaign["lastMapId"] = "";
+                    campaign["lastOutcome"] = "";
+                    campaign["sortieId"] = campaign.at("sorties");
+                }
                 auto candidate = document.at("state").get<FCampaignSave>();
                 if (!Valid(candidate)) throw std::runtime_error("Invalid campaign state");
                 save = std::move(candidate);
@@ -132,7 +163,7 @@ namespace NextDayz
             {
                 std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
                 stream.exceptions(std::ios::failbit | std::ios::badbit);
-                stream << nlohmann::json{{"version", 1}, {"state", save}}.dump(2);
+                stream << nlohmann::json{{"version", 2}, {"state", save}}.dump(2);
                 stream.flush();
                 stream.close();
             }

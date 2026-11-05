@@ -1,0 +1,169 @@
+{
+  "name": "nextdayz-qinglong-bridges",
+  "target": "NextDayz",
+  "scene": "assets/scad/proc/nextdayz/cn_chengdu_qinglong_lake/scene.scad",
+  "defaults": {
+    "stepTimeoutMs": 180000
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.invulnerable",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-140,120"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 330.2551187030578
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 6
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "gt",
+      "value": -45,
+      "timeoutMs": 40000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posY",
+      "op": "gt",
+      "value": 10.1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/qinglong-central-bridge",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "280,-80"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 333.434948822922
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 6
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "gt",
+      "value": 175,
+      "timeoutMs": 40000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posY",
+      "op": "gt",
+      "value": 10.1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/qinglong-east-bridge",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-392.24,344.02"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 317.4173328008092
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 6
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "gt",
+      "value": -307,
+      "timeoutMs": 40000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posY",
+      "op": "gt",
+      "value": 10.1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/qinglong-northwest-bridge",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

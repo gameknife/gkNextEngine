@@ -1,0 +1,315 @@
+{
+  "name": "nextdayz-otaru-entrances",
+  "target": "NextDayz",
+  "scene": "assets/scad/proc/nextdayz/jp_otaru_north_canal/scene.scad",
+  "defaults": {
+    "stepTimeoutMs": 180000
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.invulnerable",
+      "set": true
+    },
+    {
+      "type": "log",
+      "message": "Entering cottage"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-383.0000,-300.0000"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "lt",
+      "value": 295.5,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "gt",
+      "value": -383.7
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "lt",
+      "value": -382.3
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/otaru-cottage-interior",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "log",
+      "message": "Entering apartment"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-357.9333,-300.5000"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "lt",
+      "value": 296.0,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "gt",
+      "value": -358.6333333333333
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "lt",
+      "value": -357.23333333333335
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/otaru-apartment-interior",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "log",
+      "message": "Entering shop"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-325.6667,-300.0000"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "lt",
+      "value": 295.5,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "gt",
+      "value": -326.3666666666667
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "lt",
+      "value": -324.9666666666667
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/otaru-shop-interior",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "log",
+      "message": "Entering townhouse"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-297.0000,-90.0000"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "lt",
+      "value": 85.5,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "gt",
+      "value": -297.7
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "lt",
+      "value": -296.3
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/otaru-townhouse-interior",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "log",
+      "message": "Entering warehouse"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-168.0000,244.2500"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "lt",
+      "value": -248.75,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "gt",
+      "value": -168.7
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "lt",
+      "value": -167.3
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/otaru-warehouse-interior",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

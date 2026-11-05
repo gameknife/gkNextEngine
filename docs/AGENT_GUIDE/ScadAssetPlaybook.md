@@ -5,6 +5,8 @@
 语言面以 [SCADLoader.md](SCADLoader.md) 为准，地形以 [ScadTerrain.md](ScadTerrain.md) 为准；
 本文只讲**流程与经验**，与上述两文冲突时以它们为准。
 
+**真实地点的撤离地图**还必须遵守[世界派遣与地理关卡：新地点初始地图强制规则](../projects/nextdayz/nextdayz-world-map-design.md#新地点初始地图的强制规则)：DEM／道路／建成区只提供骨架，建筑预算和战术布局由 Coldwar 模板＋SCAD PCG 控制点决定。按据点整片 TERR pad 找平，再组合地域 kit、家具、loot 与感染者；植被在最终 TERR 上散布并避开通路、场院与撤离净空。统一走 `gnb geo expedition`，禁止按 OSM 逐栋复刻和生成普通实体路板。
+
 ## 0. 开工前侦查（先读后写，10 分钟）
 
 1. 读 `AGENT_GUIDE/SCADLoader.md`；要做地形地图再读 `AGENT_GUIDE/ScadTerrain.md`。
@@ -205,6 +207,7 @@ gnb shot --scene assets/scad/xxx.scad              # 3. 截图肉眼验收（读
 - `ter_scatter` 按生物群系过滤：树只长缓坡草地
   `[0.5, 40, 26, 3, ["grass", "grass_dark"]]`（海拔带 / 坡度≤26° / 避水 3m）；
   岩块只在 `["rock", "rock_high"]`；枯草带放灌木枯树。
+- SCAD 调用链采用动态变量作用域：向 `ter_scatter` 子层传地域类型时，外层用 `flora` 等独立变量名，避免被组合子的 `region` 区域形参遮蔽。0 warning 也可能出现错用其他地域植被的逻辑错误，需同时检查实际植被类型和实景。
 - **密度基准：1km² 约 700~900 棵**（首版 320 棵太稀，一眼荒芜）。树要放大：
   s = 1.5~2.9（8~17m 高），showcase 用的 s=1 在大地图上是灌木。
 - 河谷两岸单独补一层疏林（渡河接近路线的掩体），北坡补密林带。

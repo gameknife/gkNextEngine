@@ -4,7 +4,7 @@ category: project
 status: 现行
 owner: NextDayz
 created: 2026-11-04
-last_updated: 2026-11-04
+last_updated: 2026-11-05
 ---
 
 # NextDayz 游戏内调试器
@@ -42,6 +42,19 @@ NextDayz 的各个系统（玩家 3C、生存、背包、武器、感染者 AI�
 | World | 时钟、昼夜/风暴/寒冷、提灯、补给箱、鞭炮；锚点计数和 POI 表；导航网格 | 拨时间/时速/跳时、天气、POI 传送、显示导航格、**从脚下到准星试算一条感染者路线** |
 | Combat | 击杀/爆头/硬直、部位倍率与韧性参数、特效/音效计数、存活噪声、伤害流 | FX 时间缩放、命中盒/射线/噪声图层 |
 | Log | 事件日志（见 §3）：按通道筛选、文字过滤、跟随、复制 | 悬停在有位置的事件上，世界里出现标记；双击传送过去 |
+
+### 派遣与地图快捷调试
+
+出击后按 **F5** 打开面板，再按 **F9** 释放鼠标：
+
+- 顶栏 `Return to safehouse`：立即收好携带物品、取消当前救援航班并返回局外，保存本图状态，关闭调试面板并释放鼠标；结果显示 `DEBUG RETURN / GEAR STORED`，**不增加成功撤离次数**。
+- Overview 的 `Expedition shortcuts`：`Save progress` 保存当前进度；`Reload map (keep progress)` 先保存，再重载当前 SCAD，恢复玩家、背包、世界和航班状态。
+- `Safe spawn`、`Extraction ALPHA`、`Extraction BRAVO`：快速传送，保留装备与任务状态。
+- `Rescue supplies`：给 2 个信号枪、2 个绷带、2 瓶水，携带空间不足时多余物品落在附近。
+
+加载地图或存档错误期间这些操作禁用。它们遵循当前正式／创作存档上下文；调试返回不清空世界物资，不重置历史出击次数。回到局外后可直接用选图测试按钮再次进入。
+
+同一组功能支持 `nextdayz.debug.expedition`，值为 `return` / `save` / `reload` / `spawn` / `alpha` / `bravo` / `rescue-kit`；UI 和 cvar 共用同一处理入口。回归脚本 `assets/agentscripts/nextdayz-debug-expedition.agentscript.json` 检查进度保留、实际按钮点击、航班取消、物品入库和鼠标状态。
 
 ## 3. 事件日志
 

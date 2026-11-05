@@ -1,0 +1,241 @@
+{
+  "mode": "geographic-skeleton/gameplay-pcg",
+  "buildings": 48,
+  "treeBudget": 1085,
+  "shrubBudget": 600,
+  "referenceRoads": 32,
+  "sites": [
+    {
+      "id": "visitor",
+      "name": "Abandoned visitor centre",
+      "kind": "visitor",
+      "at": [
+        -70,
+        365
+      ],
+      "size": [
+        96,
+        64
+      ],
+      "rotation": 0,
+      "buildings": 5,
+      "risk": 1
+    },
+    {
+      "id": "bamboo_garden",
+      "name": "Bamboo tea garden",
+      "kind": "park",
+      "at": [
+        -280,
+        310
+      ],
+      "size": [
+        76,
+        60
+      ],
+      "rotation": 0,
+      "buildings": 4,
+      "risk": 1
+    },
+    {
+      "id": "ranger",
+      "name": "Quarantine ranger station",
+      "kind": "military",
+      "at": [
+        -365,
+        410
+      ],
+      "size": [
+        72,
+        56
+      ],
+      "rotation": 0,
+      "buildings": 3,
+      "risk": 3
+    },
+    {
+      "id": "greenway_kiosk",
+      "name": "Overgrown greenway rest stop",
+      "kind": "park",
+      "at": [
+        -55,
+        205
+      ],
+      "size": [
+        64,
+        48
+      ],
+      "rotation": 0,
+      "buildings": 3,
+      "risk": 1
+    },
+    {
+      "id": "tea_court",
+      "name": "Lakeside tea courtyard",
+      "kind": "park",
+      "at": [
+        -250,
+        75
+      ],
+      "size": [
+        80,
+        60
+      ],
+      "rotation": 0,
+      "buildings": 4,
+      "risk": 2
+    },
+    {
+      "id": "west_cafe",
+      "name": "Ransacked west-shore cafe",
+      "kind": "visitor",
+      "at": [
+        -422,
+        -255
+      ],
+      "size": [
+        76,
+        70
+      ],
+      "rotation": 0,
+      "buildings": 4,
+      "risk": 2
+    },
+    {
+      "id": "maintenance",
+      "name": "Park maintenance yard",
+      "kind": "industry",
+      "at": [
+        -275,
+        -35
+      ],
+      "size": [
+        76,
+        58
+      ],
+      "rotation": 0,
+      "buildings": 4,
+      "risk": 2
+    },
+    {
+      "id": "clinic",
+      "name": "Emergency aid station",
+      "kind": "medical",
+      "at": [
+        -80,
+        -60
+      ],
+      "size": [
+        70,
+        54
+      ],
+      "rotation": 0,
+      "buildings": 4,
+      "risk": 2
+    },
+    {
+      "id": "old_village",
+      "name": "Abandoned courtyard homes",
+      "kind": "village",
+      "at": [
+        -125,
+        -315
+      ],
+      "size": [
+        84,
+        64
+      ],
+      "rotation": 0,
+      "buildings": 6,
+      "risk": 1
+    },
+    {
+      "id": "fishery",
+      "name": "Deserted fishery workshops",
+      "kind": "farm",
+      "at": [
+        250,
+        -290
+      ],
+      "size": [
+        80,
+        58
+      ],
+      "rotation": 0,
+      "buildings": 4,
+      "risk": 1
+    },
+    {
+      "id": "south_logistics",
+      "name": "South service compound",
+      "kind": "industry",
+      "at": [
+        365,
+        -415
+      ],
+      "size": [
+        78,
+        62
+      ],
+      "rotation": 0,
+      "buildings": 4,
+      "risk": 2
+    },
+    {
+      "id": "east_checkpoint",
+      "name": "East greenway cordon",
+      "kind": "checkpoint",
+      "at": [
+        335,
+        -105
+      ],
+      "size": [
+        64,
+        50
+      ],
+      "rotation": 0,
+      "buildings": 3,
+      "risk": 2
+    }
+  ],
+  "spawns": [
+    [
+      -440,
+      470
+    ],
+    [
+      70,
+      450
+    ],
+    [
+      -440,
+      -440
+    ],
+    [
+      -25,
+      -455
+    ],
+    [
+      450,
+      -310
+    ]
+  ],
+  "extractions": [
+    [
+      -345,
+      70
+    ],
+    [
+      400,
+      -245
+    ]
+  ],
+  "center": [
+    30.6346,
+    104.1868
+  ],
+  "sizeM": 1000,
+  "sourceDatumM": 503.9871987421824,
+  "reliefScale": 0.85,
+  "gameplayBridges": 2
+}

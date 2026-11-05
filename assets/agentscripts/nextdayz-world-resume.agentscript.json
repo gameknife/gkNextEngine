@@ -1,0 +1,279 @@
+{
+  "name": "nextdayz-world-resume",
+  "target": "NextDayz",
+  "scene": "assets/scad/proc/nextdayz/jp_otaru_north_canal/scene.scad",
+  "defaults": {
+    "stepTimeoutMs": 180000
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignPath",
+      "set": "out/nextdayz-validation/world-maps.json"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.authoring",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaign",
+      "set": true
+    },
+    {
+      "type": "wait-until",
+      "query": "game.activeMapId",
+      "op": "eq",
+      "value": "cz_loket_riverbend",
+      "timeoutMs": 180000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.mapLoading",
+      "op": "eq",
+      "value": false,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignInField",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "assert",
+      "query": "game.currentMapSorties",
+      "op": "eq",
+      "value": 2
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignSorties",
+      "op": "eq",
+      "value": 3
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignExtractions",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignSaveBlocked",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "reload"
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignSorties",
+      "op": "eq",
+      "value": 3
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": ""
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "signal_flare"
+    },
+    {
+      "type": "assert",
+      "query": "game.signalFlares",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "pad:0"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "call"
+    },
+    {
+      "type": "assert",
+      "query": "game.flightPhase",
+      "op": "eq",
+      "value": "Inbound"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "flight:58"
+    },
+    {
+      "type": "assert",
+      "query": "game.flightPhase",
+      "op": "eq",
+      "value": "Waiting at helipad"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "board"
+    },
+    {
+      "type": "assert",
+      "query": "game.flightBoarded",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "flight:9"
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignInField",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignExtractions",
+      "op": "eq",
+      "value": 2
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.deployMap",
+      "set": "jp_otaru_north_canal"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "deploy"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.activeMapId",
+      "op": "eq",
+      "value": "jp_otaru_north_canal",
+      "timeoutMs": 180000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.mapLoading",
+      "op": "eq",
+      "value": false,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "assert",
+      "query": "game.lootPiles",
+      "op": "ge",
+      "value": 1
+    },
+    {
+      "type": "assert",
+      "query": "game.currentMapSorties",
+      "op": "eq",
+      "value": 2
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignSorties",
+      "op": "eq",
+      "value": 4
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": ""
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "signal_flare"
+    },
+    {
+      "type": "assert",
+      "query": "game.signalFlares",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "pad:1"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "call"
+    },
+    {
+      "type": "assert",
+      "query": "game.flightPhase",
+      "op": "eq",
+      "value": "Inbound"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "flight:58"
+    },
+    {
+      "type": "assert",
+      "query": "game.flightPhase",
+      "op": "eq",
+      "value": "Waiting at helipad"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "board"
+    },
+    {
+      "type": "assert",
+      "query": "game.flightBoarded",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "flight:9"
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignExtractions",
+      "op": "eq",
+      "value": 3
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignInField",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz-world-return-records",
+      "ui": true
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

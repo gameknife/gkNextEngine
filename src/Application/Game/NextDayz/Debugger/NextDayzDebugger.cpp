@@ -93,6 +93,18 @@ namespace NextDayz::Debug
         return kLayers;
     }
 
+    std::optional<EExpeditionAction> ParseExpeditionAction(std::string_view name)
+    {
+        if (name == "return") return EExpeditionAction::ReturnToSafehouse;
+        if (name == "save") return EExpeditionAction::Save;
+        if (name == "reload") return EExpeditionAction::ReloadMap;
+        if (name == "spawn") return EExpeditionAction::SafeSpawn;
+        if (name == "alpha") return EExpeditionAction::ExtractionAlpha;
+        if (name == "bravo") return EExpeditionAction::ExtractionBravo;
+        if (name == "rescue-kit") return EExpeditionAction::RescueSupplies;
+        return std::nullopt;
+    }
+
     const char* TabName(ETab tab)
     {
         switch (tab)

@@ -1,0 +1,456 @@
+{
+  "name": "nextdayz-qinglong-entrances",
+  "target": "NextDayz",
+  "scene": "assets/scad/proc/nextdayz/cn_chengdu_qinglong_lake/scene.scad",
+  "defaults": {
+    "stepTimeoutMs": 180000
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.invulnerable",
+      "set": true
+    },
+    {
+      "type": "log",
+      "message": "Entering Qinglong visitor"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-95.3333,373.3600"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 6
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "lt",
+      "value": -378.16,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "gt",
+      "value": -96.0333
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "lt",
+      "value": -94.63329999999999
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/qinglong-visitor",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "log",
+      "message": "Entering Qinglong workshop"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-44.6667,373.3600"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 6
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "lt",
+      "value": -378.16,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "gt",
+      "value": -45.3667
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "lt",
+      "value": -43.966699999999996
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/qinglong-workshop",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "log",
+      "message": "Entering Qinglong pavilion"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-265.0000,82.4000"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 6
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "lt",
+      "value": -87.2,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "gt",
+      "value": -265.7
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "lt",
+      "value": -264.3
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/qinglong-pavilion",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "log",
+      "message": "Entering Qinglong teahouse"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-235.0000,82.4000"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 6
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "lt",
+      "value": -87.2,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "gt",
+      "value": -235.7
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "lt",
+      "value": -234.3
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/qinglong-teahouse",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "log",
+      "message": "Entering Qinglong courtyard"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-265.0000,67.6000"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 6
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "gt",
+      "value": -62.800000000000004,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "gt",
+      "value": -265.7
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "lt",
+      "value": -264.3
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/qinglong-courtyard",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "log",
+      "message": "Entering Qinglong ruin"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-235.0000,67.6000"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 6
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "gt",
+      "value": -62.800000000000004,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "gt",
+      "value": -235.7
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "lt",
+      "value": -234.3
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/qinglong-ruin",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "log",
+      "message": "Entering Qinglong rowhouse"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-146.3333,-323.3600"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 6
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "gt",
+      "value": 328.16,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "gt",
+      "value": -147.03333333333333
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "lt",
+      "value": -145.63333333333335
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/qinglong-rowhouse",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-215,66"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 270
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -3
+    },
+    {
+      "type": "wait-frames",
+      "n": 32
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/qinglong-tea-courtyard",
+      "ui": true,
+      "accumulateFrames": 64
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

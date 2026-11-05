@@ -1,0 +1,85 @@
+{
+  "name": "nextdayz-otaru-streets",
+  "target": "NextDayz",
+  "scene": "assets/scad/proc/nextdayz/jp_otaru_north_canal/scene.scad",
+  "defaults": {
+    "stepTimeoutMs": 180000
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.invulnerable",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-423,-102"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 90
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 32
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/otaru-residential-street",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posX",
+      "op": "gt",
+      "value": -220,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posZ",
+      "op": "gt",
+      "value": 101
+    },
+    {
+      "type": "assert",
+      "query": "game.posZ",
+      "op": "lt",
+      "value": 103
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/otaru-street-intersection",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

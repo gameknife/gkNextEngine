@@ -1,0 +1,256 @@
+{
+  "mode": "geographic-skeleton/gameplay-pcg",
+  "buildings": 60,
+  "treeBudget": 912,
+  "shrubBudget": 420,
+  "referenceRoads": 48,
+  "sites": [
+    {
+      "id": "castle",
+      "name": "Castle quarantine",
+      "kind": "castle",
+      "at": [
+        20,
+        140
+      ],
+      "size": [
+        80,
+        68
+      ],
+      "rotation": 0,
+      "buildings": 4,
+      "risk": 3
+    },
+    {
+      "id": "old_quarter",
+      "name": "Old quarter",
+      "kind": "village",
+      "at": [
+        50,
+        40
+      ],
+      "size": [
+        100,
+        68
+      ],
+      "rotation": 0,
+      "buildings": 8,
+      "risk": 1
+    },
+    {
+      "id": "market",
+      "name": "Ransacked market",
+      "kind": "market",
+      "at": [
+        130,
+        -40
+      ],
+      "size": [
+        84,
+        64
+      ],
+      "rotation": 0,
+      "buildings": 6,
+      "risk": 2
+    },
+    {
+      "id": "clinic",
+      "name": "Emergency clinic",
+      "kind": "medical",
+      "at": [
+        145,
+        140
+      ],
+      "size": [
+        66,
+        60
+      ],
+      "rotation": 0,
+      "buildings": 3,
+      "risk": 2
+    },
+    {
+      "id": "workshops",
+      "name": "Riverside workshops",
+      "kind": "industry",
+      "at": [
+        -80,
+        20
+      ],
+      "size": [
+        72,
+        56
+      ],
+      "rotation": 0,
+      "buildings": 4,
+      "risk": 2
+    },
+    {
+      "id": "bridge_gate",
+      "name": "Bridge roadblock",
+      "kind": "checkpoint",
+      "at": [
+        -85,
+        85
+      ],
+      "size": [
+        52,
+        44
+      ],
+      "rotation": 0,
+      "buildings": 2,
+      "risk": 2
+    },
+    {
+      "id": "west_hamlet",
+      "name": "West hamlet",
+      "kind": "village",
+      "at": [
+        -195,
+        285
+      ],
+      "size": [
+        76,
+        60
+      ],
+      "rotation": 0,
+      "buildings": 6,
+      "risk": 1
+    },
+    {
+      "id": "radio",
+      "name": "Forest radio post",
+      "kind": "military",
+      "at": [
+        -355,
+        190
+      ],
+      "size": [
+        58,
+        50
+      ],
+      "rotation": 0,
+      "buildings": 3,
+      "risk": 3
+    },
+    {
+      "id": "farm",
+      "name": "Abandoned farm",
+      "kind": "farm",
+      "at": [
+        -280,
+        -360
+      ],
+      "size": [
+        76,
+        64
+      ],
+      "rotation": 0,
+      "buildings": 5,
+      "risk": 1
+    },
+    {
+      "id": "logistics",
+      "name": "East logistics yard",
+      "kind": "industry",
+      "at": [
+        430,
+        120
+      ],
+      "size": [
+        76,
+        66
+      ],
+      "rotation": 0,
+      "buildings": 5,
+      "risk": 2
+    },
+    {
+      "id": "military",
+      "name": "Southern garrison",
+      "kind": "military",
+      "at": [
+        300,
+        -290
+      ],
+      "size": [
+        84,
+        68
+      ],
+      "rotation": 0,
+      "buildings": 5,
+      "risk": 3
+    },
+    {
+      "id": "north_post",
+      "name": "North road outpost",
+      "kind": "checkpoint",
+      "at": [
+        180,
+        350
+      ],
+      "size": [
+        76,
+        60
+      ],
+      "rotation": 0,
+      "buildings": 5,
+      "risk": 2
+    },
+    {
+      "id": "river_camp",
+      "name": "River salvage camp",
+      "kind": "farm",
+      "at": [
+        145,
+        -240
+      ],
+      "size": [
+        58,
+        48
+      ],
+      "rotation": 0,
+      "buildings": 4,
+      "risk": 1
+    }
+  ],
+  "spawns": [
+    [
+      -430,
+      330
+    ],
+    [
+      -380,
+      -210
+    ],
+    [
+      70,
+      390
+    ],
+    [
+      430,
+      -310
+    ],
+    [
+      150,
+      250
+    ]
+  ],
+  "extractions": [
+    [
+      -265,
+      360
+    ],
+    [
+      430,
+      -150
+    ]
+  ],
+  "center": [
+    50.186,
+    12.754
+  ],
+  "sizeM": 1000,
+  "sourceDatumM": 391.7649233142963,
+  "reliefScale": 0.4
+}

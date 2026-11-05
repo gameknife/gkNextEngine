@@ -117,6 +117,18 @@ namespace NextDayz::Debug
     const char* TabName(ETab tab);
     std::optional<ETab> ParseTab(std::string_view name);
 
+    enum class EExpeditionAction : uint8_t
+    {
+        ReturnToSafehouse,
+        Save,
+        ReloadMap,
+        SafeSpawn,
+        ExtractionAlpha,
+        ExtractionBravo,
+        RescueSupplies,
+    };
+    std::optional<EExpeditionAction> ParseExpeditionAction(std::string_view name);
+
     // Everything the debugger may read or poke: the game instance's members.
     struct FSystems
     {
@@ -175,6 +187,7 @@ namespace NextDayz::Debug
         std::function<void(FItemInstanceId instanceId)> useItem;
         std::function<void(FItemInstanceId instanceId)> dropItem;
         std::function<void()> resetSession;
+        std::function<void(EExpeditionAction action)> expeditionAction;
         std::function<void()> syncZombieVisuals;
         std::function<void(bool free)> setCursorFree;
     };
@@ -194,6 +207,12 @@ namespace NextDayz::Debug
         bool lootCatalogLoaded = false;
         bool hoveringWell = false;
         std::string objective;
+        bool campaignEnabled = false;
+        bool inField = false;
+        bool expeditionBusy = false;
+        bool saveBlocked = false;
+        std::string regionName;
+        std::string flightPhase;
     };
 
     // Debug knobs the game reads back (bound to nextdayz.debug.* cvars too).

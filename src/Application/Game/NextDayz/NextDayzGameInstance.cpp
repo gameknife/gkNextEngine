@@ -882,9 +882,10 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     // Traversal keeps the first-person weapon: WeaponSystem tucks it down and
     // out of the way while the hands are on the obstacle.
     weapons_.SetPresentationSuppressed(actionLocked || dead || knobs.orbit);
+    if (!weapons_.HasActiveWeapon() && player_.IsAds()) player_.CancelAiming();
     if (actionLocked || traversalLocked || showInventory_ || showMap_ || dead)
     {
-        player_.SetAiming(false);
+        player_.CancelAiming();
         weapons_.SetTriggerDown(false);
         weapons_.CancelMelee();
     }
@@ -913,7 +914,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     }
     if (weapons_.IsReloading() || weapons_.IsSwitching())
     {
-        player_.SetAiming(false);
+        player_.CancelAiming();
     }
     for (const NextDayz::FWeaponHitEvent& hit : weapons_.ConsumeHitEvents())
     {
@@ -1190,7 +1191,7 @@ bool NextDayzGameInstance::OverrideRenderCamera(Assets::Camera& outRenderCamera)
         fov = config_.Camera.BaseFov;
     }
     outRenderCamera.FieldOfView = fov;
-    outRenderCamera.NearPlane = 0.1f;
+    outRenderCamera.NearPlane = player_.IsFirstPerson() && !knobs.orbit ? 0.02f : 0.1f;
     outRenderCamera.FarPlane = 1500.f;
     return true;
 }
@@ -1211,6 +1212,7 @@ bool NextDayzGameInstance::OnRenderUI()
     NextDayz::FHudContext ctx;
     ctx.aiming = player_.IsAiming();
     ctx.firstPerson = player_.IsFirstPerson();
+    ctx.scopeView = weapons_.IsScopeView();
     ctx.hasWeapon = weapons_.HasActiveWeapon();
     ctx.melee = weapons_.ActiveIsMelee();
     ctx.swinging = weapons_.IsSwinging();
@@ -1579,7 +1581,7 @@ void NextDayzGameInstance::TakeLoot(int lootIndex, NextDayz::FContainerId destin
     {
         lootDestination_ = destination;
         lootEquipSlot_ = equipSlot;
-        player_.SetAiming(false);
+        player_.CancelAiming();
         weapons_.SetTriggerDown(false);
         weapons_.SetPresentationSuppressed(true);
     }
@@ -2450,7 +2452,7 @@ void NextDayzGameInstance::BindDebugger()
         if (free)
         {
             weapons_.SetTriggerDown(false);
-            player_.SetAiming(false);
+            player_.CancelAiming();
         }
     };
     debugger_.Bind(systems, std::move(commands));
@@ -2606,7 +2608,7 @@ void NextDayzGameInstance::SetMouseCaptured(bool captured)
     // The debug cursor (F9) keeps the mouse free until it is switched off.
     captured = captured && !debugger_.CursorMode();
     mouseCaptured_ = captured;
-    if (!captured) player_.SetAiming(false);
+    if (!captured) player_.CancelAiming();
     resetMouse_ = true;
     if (!GOption->AgentValidation)
     {
@@ -2620,7 +2622,7 @@ void NextDayzGameInstance::SetInventoryOpen(bool open)
     player_.SetMovementLocked(open);
     if (open)
     {
-        player_.SetAiming(false);
+        player_.CancelAiming();
         weapons_.SetTriggerDown(false);
         SetMouseCaptured(false);
     }
@@ -2697,35 +2699,35 @@ bool NextDayzGameInstance::OnKey(SDL_Event& event)
         if (pressed && !player_.IsTraversing())
         {
             weapons_.RequestReload(inventory_);
-            if (weapons_.IsReloading()) player_.SetAiming(false);
+            if (weapons_.IsReloading()) player_.CancelAiming();
         }
         return true;
     case SDLK_1:
         if (pressed && !player_.IsTraversing())
         {
             weapons_.SwitchSlot(0);
-            if (weapons_.IsSwitching()) player_.SetAiming(false);
+            if (weapons_.IsSwitching()) player_.CancelAiming();
         }
         return true;
     case SDLK_2:
         if (pressed && !player_.IsTraversing())
         {
             weapons_.SwitchSlot(1);
-            if (weapons_.IsSwitching()) player_.SetAiming(false);
+            if (weapons_.IsSwitching()) player_.CancelAiming();
         }
         return true;
     case SDLK_Q:
         if (pressed && !player_.IsTraversing())
         {
             weapons_.SwitchPrevious();
-            if (weapons_.IsSwitching()) player_.SetAiming(false);
+            if (weapons_.IsSwitching()) player_.CancelAiming();
         }
         return true;
     case SDLK_3:
         if (pressed && !player_.IsTraversing())
         {
             weapons_.SwitchSlot(NextDayz::kSidearmSlot);
-            if (weapons_.IsSwitching()) player_.SetAiming(false);
+            if (weapons_.IsSwitching()) player_.CancelAiming();
         }
         return true;
     case SDLK_4:
@@ -2750,7 +2752,7 @@ bool NextDayzGameInstance::OnKey(SDL_Event& event)
             if (showMap_)
             {
                 SetInventoryOpen(false);
-                player_.SetAiming(false);
+                player_.CancelAiming();
                 weapons_.SetTriggerDown(false);
             }
             SetMouseCaptured(!showMap_);
@@ -2765,7 +2767,7 @@ bool NextDayzGameInstance::OnKey(SDL_Event& event)
                 {
                     lootDestination_ = 0;
                     lootEquipSlot_ = NextDayz::EEquipSlot::None;
-                    player_.SetAiming(false);
+                    player_.CancelAiming();
                     player_.SetMovementLocked(true);
                     weapons_.SetTriggerDown(false);
                     weapons_.SetPresentationSuppressed(true);
@@ -2862,6 +2864,7 @@ bool NextDayzGameInstance::OnCursorPosition(double xpos, double ypos)
 bool NextDayzGameInstance::OnMouseButton(SDL_Event& event)
 {
     if (CampaignEnabled() && (!campaign_.inField || campaign_.flight.boarded || campaignSaveBlocked_)) return false;
+    if (paused_ || !survival_.IsAlive()) return true;
     if (debugger_.CursorMode())
     {
         // Debug cursor: clicks that ImGui did not take select things in the world.
@@ -2894,7 +2897,12 @@ bool NextDayzGameInstance::OnMouseButton(SDL_Event& event)
         }
         if (event.button.button == SDL_BUTTON_RIGHT)
         {
-            player_.SetAiming(true);
+            if (player_.IsTraversing() || weapons_.IsReloading() || weapons_.IsSwitching())
+            {
+                player_.CancelAiming();
+                return true;
+            }
+            player_.SetAimButton(true, weapons_.HasActiveWeapon() && !weapons_.ActiveIsMelee());
             return true;
         }
     }
@@ -2907,7 +2915,7 @@ bool NextDayzGameInstance::OnMouseButton(SDL_Event& event)
         }
         if (event.button.button == SDL_BUTTON_RIGHT)
         {
-            player_.SetAiming(false);
+            player_.SetAimButton(false, false);
             return true;
         }
     }
@@ -3081,6 +3089,8 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     reg.Add("weaponSlot2", [this]() -> Runtime::Agent::FAgentQueryValue { return weapons_.SlotWeaponId(1); });
     reg.Add("weaponSlot3", [this]() -> Runtime::Agent::FAgentQueryValue { return weapons_.SlotWeaponId(2); });
     reg.Add("isAiming", [this]() -> Runtime::Agent::FAgentQueryValue { return player_.IsAiming(); });
+    reg.Add("adsMode", [this]() -> Runtime::Agent::FAgentQueryValue { return player_.IsAds(); });
+    reg.Add("scopeView", [this]() -> Runtime::Agent::FAgentQueryValue { return weapons_.IsScopeView(); });
     reg.Add("cameraFov", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(player_.CurrentFov()); });
     reg.Add("firstPerson", [this]() -> Runtime::Agent::FAgentQueryValue { return player_.IsFirstPerson(); });
     reg.Add("cameraArmLength", [this]() -> Runtime::Agent::FAgentQueryValue {
@@ -3101,6 +3111,22 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     reg.Add("playerRigVisible", [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.IsVisible(); });
     reg.Add("heldWeaponVisible", [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.IsHeldWeaponVisible(); });
     reg.Add("viewModelVisible", [this]() -> Runtime::Agent::FAgentQueryValue { return weapons_.IsViewModelVisible(); });
+    reg.Add("adsSightCenterError", [this]() -> Runtime::Agent::FAgentQueryValue {
+        glm::vec3 sight, forward;
+        if (!weapons_.ViewModelSight(sight, forward)) return 180.0;
+        const glm::vec3 eyeToSight = glm::normalize(sight - player_.CameraPosition());
+        return static_cast<double>(glm::degrees(std::acos(glm::clamp(glm::dot(eyeToSight, player_.CameraForward()), -1.0f, 1.0f))));
+    });
+    reg.Add("adsSightAxisError", [this]() -> Runtime::Agent::FAgentQueryValue {
+        glm::vec3 sight, forward;
+        if (!weapons_.ViewModelSight(sight, forward)) return 180.0;
+        return static_cast<double>(glm::degrees(std::acos(glm::clamp(glm::dot(forward, player_.CameraForward()), -1.0f, 1.0f))));
+    });
+    reg.Add("adsEyeRelief", [this]() -> Runtime::Agent::FAgentQueryValue {
+        glm::vec3 sight, forward;
+        if (!weapons_.ViewModelSight(sight, forward)) return -1.0;
+        return static_cast<double>(glm::dot(sight - player_.CameraPosition(), player_.CameraForward()));
+    });
     reg.Add("elbowConstraintError", [this]() -> Runtime::Agent::FAgentQueryValue {
         return static_cast<double>(rig_.ElbowConstraintErrorDegrees());
     });

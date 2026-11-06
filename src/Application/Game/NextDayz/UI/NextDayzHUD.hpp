@@ -53,6 +53,7 @@ namespace NextDayz
     {
         bool aiming = false;
         bool firstPerson = true;
+        bool scopeView = false;
 
         bool hasWeapon = false;
         bool melee = false;

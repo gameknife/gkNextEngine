@@ -71,14 +71,60 @@ namespace NextDayz::NextDayzHUD
         // ====================================================================
         // CROSSHAIR & DAMAGE FEEDBACK
         // ====================================================================
+        void DrawScope(const FHudContext& context)
+        {
+            if (!context.scopeView || !context.firstPerson || !context.aiming || context.showInventory || context.showMap) return;
+            const ImGuiViewport* viewport = ImGui::GetMainViewport();
+            const ImVec2 center = viewport->GetCenter();
+            const float radius = std::min(viewport->Size.x, viewport->Size.y) * 0.43f;
+            const float outside = std::hypot(viewport->Size.x, viewport->Size.y);
+            ImDrawList* draw = ImGui::GetBackgroundDrawList();
+            constexpr int segments = 96;
+            const auto point = [&](float angle, float distance) {
+                return ImVec2(center.x + std::cos(angle) * distance, center.y + std::sin(angle) * distance);
+            };
+            // One magnified scene through the lens; the housing masks its
+            // periphery. The unscoped weapon mesh would occlude this image.
+            const ImDrawListFlags flags = draw->Flags;
+            draw->Flags &= ~ImDrawListFlags_AntiAliasedFill;
+            for (int i = 0; i < segments; ++i)
+            {
+                const float a = 6.2831853f * i / segments;
+                const float b = 6.2831853f * (i + 1) / segments;
+                draw->AddQuadFilled(point(a, radius), point(a, outside), point(b, outside), point(b, radius), IM_COL32(8, 9, 10, 255));
+            }
+            draw->Flags = flags;
+            draw->AddCircle(center, radius - 2.0f, IM_COL32(30, 32, 33, 255), segments, 9.0f);
+            const ImU32 ink = IM_COL32(12, 14, 12, 245);
+            const auto line = [&](float x0, float y0, float x1, float y1) {
+                draw->AddLine(ImVec2(center.x + x0 * radius, center.y + y0 * radius),
+                              ImVec2(center.x + x1 * radius, center.y + y1 * radius), ink, 1.7f);
+            };
+            // PSO-style chevron: its apex is the camera / hitscan aim point.
+            for (int i = 0; i < 4; ++i)
+            {
+                const float y = i * 0.085f;
+                line(-0.027f, y + 0.027f, 0.0f, y);
+                line(0.0f, y, 0.027f, y + 0.027f);
+            }
+            line(-0.75f, 0.0f, -0.12f, 0.0f);
+            line(0.12f, 0.0f, 0.75f, 0.0f);
+            for (int i = 2; i <= 7; ++i)
+            {
+                const float x = i * 0.1f;
+                line(-x, -0.012f, -x, 0.012f);
+                line(x, -0.012f, x, 0.012f);
+            }
+        }
+
         void DrawCrosshair(const FHudContext& context)
         {
             ImDrawList* draw = ImGui::GetForegroundDrawList();
             const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
             const ImU32 color = IM_COL32(235, 235, 235, 220);
             const ImU32 outline = IM_COL32(20, 20, 20, 210);
-            const float gap = context.firstPerson && context.aiming ? 2.0f : 6.0f;
-            const float len = context.firstPerson && context.aiming ? 5.0f : 10.0f;
+            constexpr float gap = 6.0f;
+            constexpr float len = 10.0f;
             const auto line = [&](const ImVec2& a, const ImVec2& b) {
                 draw->AddLine(a, b, outline, 4.0f);
                 draw->AddLine(a, b, color, 1.8f);
@@ -95,15 +141,18 @@ namespace NextDayz::NextDayzHUD
                     draw->PathStroke(UITheme::Colors::AccentAmber, 0, 2.0f);
                 }
             }
-            else
+            else if (!(context.firstPerson && context.aiming))
             {
                 line(ImVec2(center.x - gap - len, center.y), ImVec2(center.x - gap, center.y));
                 line(ImVec2(center.x + gap, center.y), ImVec2(center.x + gap + len, center.y));
                 line(ImVec2(center.x, center.y - gap - len), ImVec2(center.x, center.y - gap));
                 line(ImVec2(center.x, center.y + gap), ImVec2(center.x, center.y + gap + len));
             }
-            draw->AddCircleFilled(center, 2.4f, outline);
-            draw->AddCircleFilled(center, 1.2f, color);
+            if (context.melee || !(context.firstPerson && context.aiming))
+            {
+                draw->AddCircleFilled(center, 2.4f, outline);
+                draw->AddCircleFilled(center, 1.2f, color);
+            }
 
             // Hit marker: four ticks that pop out and settle.
             if (context.hitMarker > 0.0f)
@@ -1458,7 +1507,7 @@ namespace NextDayz::NextDayzHUD
                 ImGui::TextDisabled(NextDayz::L10n::Tr("Press Esc to resume"));
                 ImGui::Separator();
                 ImGui::TextWrapped("%s", NextDayz::L10n::Tr("WASD move  Shift sprint  Ctrl walk  C crouch  Space jump/vault"));
-                ImGui::TextWrapped("%s", NextDayz::L10n::Tr("LMB fire/swing  RMB aim  R reload  1/2/3/Q weapons  E take  F fill bottle"));
+                ImGui::TextWrapped("%s", NextDayz::L10n::Tr("LMB fire/swing  RMB tap ADS / hold aim  R reload  1/2/3/Q weapons  E take  F fill bottle"));
                 ImGui::TextWrapped("%s", NextDayz::L10n::Tr("Tab inventory  4-7 quickbar  H bandage  M map  L lantern  V view"));
                 ImGui::Spacing();
                 if (context.restartSession && ImGui::Button(NextDayz::L10n::Label("RESTART RUN"), ImVec2(-1.0f, 36.0f)))
@@ -1478,6 +1527,7 @@ namespace NextDayz::NextDayzHUD
     // ========================================================================
     void Draw(const FHudContext& context)
     {
+        DrawScope(context);
         DrawDamageFeedback(context);
         if (context.hasWeapon && !context.showMap && !context.showInventory)
         {

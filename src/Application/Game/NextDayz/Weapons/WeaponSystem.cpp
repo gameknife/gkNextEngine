@@ -98,6 +98,7 @@ namespace NextDayz
         landingVelocity_ = 0.0f;
         aimAlpha_ = 0.0f;
         viewModelVisible_ = false;
+        scopeView_ = false;
         viewModelInScene_ = false;
         viewModelWeaponIndex_ = -1;
         shotEvents_.clear();
@@ -126,6 +127,7 @@ namespace NextDayz
         CancelMelee();
         viewModelNode_.reset();
         viewModelVisible_ = false;
+        scopeView_ = false;
         viewModelInScene_ = false;
         viewModelWeaponIndex_ = -1;
         shotEvents_.clear();
@@ -389,7 +391,7 @@ namespace NextDayz
 
     bool WeaponSystem::ViewModelMuzzle(glm::vec3& outPosition, glm::vec3& outForward) const
     {
-        if (!viewModelNode_ || !viewModelVisible_ || !HasActiveWeapon())
+        if (!viewModelNode_ || (!viewModelVisible_ && !scopeView_) || !HasActiveWeapon())
         {
             return false;
         }
@@ -398,6 +400,16 @@ namespace NextDayz
         outPosition = glm::vec3(world * glm::vec4(0.0f, points.boreHeight, points.muzzleForward, 1.0f));
         outForward = glm::normalize(glm::vec3(world[2]));
         return outPosition.y > -900.0f;
+    }
+
+    bool WeaponSystem::ViewModelSight(glm::vec3& outPosition, glm::vec3& outForward) const
+    {
+        if (!viewModelNode_ || (!viewModelVisible_ && !scopeView_) || !HasActiveWeapon() || ActiveIsMelee()) return false;
+        const FWeaponModelPoints points = WeaponModelPoints(ActiveWeaponId());
+        const glm::mat4& world = viewModelNode_->WorldTransform();
+        outPosition = glm::vec3(world * glm::vec4(0.0f, points.sightHeight, points.rearSightForward, 1.0f));
+        outForward = glm::normalize(glm::vec3(world[2]));
+        return true;
     }
 
     EWeaponPresentationAction WeaponSystem::PresentationAction() const
@@ -735,7 +747,8 @@ namespace NextDayz
         const FWeaponDef* def = ActiveWeapon();
 
         // Feed ADS target FOV to the camera controller.
-        player.SetAimFov(def ? def->adsFov : player.CurrentFov());
+        const float scopeFov = def ? WeaponModelPoints(def->id).scopeFov : 0.0f;
+        player.SetAimFov(def ? (player.IsFirstPerson() && scopeFov > 0.0f ? scopeFov : def->adsFov) : player.CurrentFov());
 
         // Coming out of a sprint the weapon has to be up before it fires; a
         // held trigger fires the moment it is.
@@ -796,13 +809,14 @@ namespace NextDayz
                 recoilDt;
             viewModelRecoil_ += viewModelRecoilVelocity_ * recoilDt;
 
-            glm::vec3 targetOffset = player.IsAiming() ? config_.ViewModelAdsOffset : config_.ViewModelHipOffset;
+            glm::vec3 targetOffset = config_.ViewModelHipOffset;
             if (player.IsAiming() && def && !def->IsMelee())
             {
-                // Each model carries its own sight line (irons, bead, PSO-1 axis):
-                // drop the view model until that line sits where the tuned one did.
-                targetOffset.y += (kAdsReferenceSightHeight - WeaponModelPoints(def->id).sightHeight) *
-                                  config_.ViewModelScale;
+                // Anchor the actual rear sight / eyepiece ahead of the eye.
+                // A shared grip offset leaves long guns floating far in front.
+                const FWeaponModelPoints points = WeaponModelPoints(def->id);
+                targetOffset = glm::vec3(0.0f, -points.sightHeight * config_.ViewModelScale,
+                                        points.adsEyeRelief - points.rearSightForward * config_.ViewModelScale);
             }
             glm::vec3 meleeEuler(0.0f);
             if (def && def->IsMelee())
@@ -846,7 +860,10 @@ namespace NextDayz
 
             const bool betweenWeapons = switching_ && actionTime >= kWeaponViewModelHideTime && actionTime < kWeaponViewModelShowTime;
             const bool firstPersonWeapon = HasActiveWeapon() && player.IsFirstPerson() && !presentationSuppressed_ && !betweenWeapons;
-            const bool show = firstPersonWeapon;
+            // The optical image replaces the empty geometric scope tube once
+            // the eye reaches it; TPS still renders the complete scoped rifle.
+            scopeView_ = firstPersonWeapon && player.IsAiming() && scopeFov > 0.0f && aimAlpha_ > 0.98f;
+            const bool show = firstPersonWeapon && !scopeView_;
             if (show != viewModelVisible_ || show != viewModelInScene_)
             {
                 viewModelVisible_ = show;
@@ -870,6 +887,12 @@ namespace NextDayz
             glm::vec3 motionOffset(0.0f);
             glm::vec3 motionEuler(0.0f);
             UpdateViewModelMotion(player, deltaSeconds, motionOffset, motionEuler);
+            if (def && !def->IsMelee())
+            {
+                // Keep ordinary weapon motion out of the sight line as ADS settles.
+                motionOffset *= 1.0f - aimAlpha_;
+                motionEuler *= 1.0f - aimAlpha_;
+            }
             viewModelMeleeEuler_ = IsSwinging() ? meleeEuler : glm::mix(viewModelMeleeEuler_, meleeEuler, t);
             motionEuler += viewModelMeleeEuler_;
             const bool waistPhase = (actionTime < 0.5f ? switchSourceSlot_ : switchTargetSlot_) == kSidearmSlot;
@@ -879,8 +902,8 @@ namespace NextDayz
             {
                 const glm::vec3 eye = player.CameraPosition();
                 const glm::vec3 forward = player.CameraForward();
-                const glm::vec3 right = player.Right();
-                const glm::vec3 up = glm::normalize(glm::cross(right, forward));
+                const glm::vec3 up = player.CameraUp();
+                const glm::vec3 right = glm::normalize(glm::cross(forward, up));
                 // Proper (det +1) rotation basis: object +Z -> forward, +Y -> up,
                 // +X = up x forward (right() is left-handed w.r.t. forward/up).
                 const glm::vec3 xAxis = glm::normalize(glm::cross(up, forward));
@@ -896,6 +919,13 @@ namespace NextDayz
                     glm::angleAxis(reloading_ ? actionArc * 0.45f : 0.0f, glm::vec3(0.0f, 0.0f, 1.0f)) *
                     glm::angleAxis(-viewModelRecoil_ * 100.0f * glm::radians(config_.ViewModelRecoilPitchDegrees),
                                    glm::vec3(1.0f, 0.0f, 0.0f));
+                if (def && !def->IsMelee())
+                {
+                    const FWeaponModelPoints points = WeaponModelPoints(def->id);
+                    const glm::vec3 sight = glm::vec3(0.0f, points.sightHeight, points.rearSightForward) * config_.ViewModelScale;
+                    // Tilt about the rear sight, rather than sweeping it around the grip.
+                    pos += cameraRotation * (sight - motionRotation * sight) * aimAlpha_;
+                }
                 viewModelNode_->Translation() = pos;
                 viewModelNode_->Rotation() = cameraRotation * motionRotation;
                 viewModelNode_->RecalcTransform(true);

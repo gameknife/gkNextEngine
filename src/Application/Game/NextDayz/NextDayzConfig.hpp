@@ -52,6 +52,7 @@ namespace NextDayz
         float MouseSensitivity = 0.0022f;
         float BaseFov = 75.0f;
         float FovLerpSpeed = 12.0f;     // exponential smoothing rate for ADS FOV
+        float AimTapSeconds = 0.20f;   // shorter RMB presses toggle FPS ADS; longer presses hold aim
         float MaxPitchDegrees = 85.0f;
         // Third person
         float TpsDistance = 3.8f;
@@ -89,7 +90,6 @@ namespace NextDayz
         // FPS view-model placement, in camera space (right, up, forward).
         float ViewModelScale = 0.65f;
         glm::vec3 ViewModelHipOffset{0.22f, -0.30f, 0.75f};
-        glm::vec3 ViewModelAdsOffset{0.0f, -0.060f, 0.75f};
         float ViewModelLerpSpeed = 14.0f;
         float CameraRecoilSpring = 90.0f;
         float CameraRecoilDamping = 18.0f;

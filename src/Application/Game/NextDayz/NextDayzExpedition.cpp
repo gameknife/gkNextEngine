@@ -520,7 +520,7 @@ bool NextDayzGameInstance::BoardHelicopter()
     if (!survival_.IsAlive() || !campaign_.Board(player_.Position(), extractionConfig_)) return false;
     weapons_.SetTriggerDown(false);
     weapons_.SetPresentationSuppressed(true);
-    player_.SetAiming(false);
+    player_.CancelAiming();
     rig_.SetVisible(false);
     SetInventoryOpen(false);
     Notify("On board. Taking off...", 3);

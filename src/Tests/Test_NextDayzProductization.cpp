@@ -18,6 +18,7 @@
 #include "Weapons/WeaponDefs.hpp"
 #include "Inventory/Inventory.hpp"
 #include "Player/PlayerActionController.hpp"
+#include "Player/AimInput.hpp"
 #include "Player/SurvivalSystem.hpp"
 #include "World/LootDirector.hpp"
 #include "Combat/CombatSystem.hpp"
@@ -26,6 +27,72 @@
 #include "World/ZombieSpawnDirector.hpp"
 #include "Zombies/ZombieVisualPool.hpp"
 #include "UI/Localization.hpp"
+
+TEST_CASE("NextDayz aim taps toggle ADS and ignore duplicate release", "[NextDayz][AimInput]")
+{
+    NextDayz::AimInput aim;
+    aim.Press(0.0, true);
+    REQUIRE(aim.IsAiming());
+    REQUIRE_FALSE(aim.IsAds());
+    aim.Release(0.05, 0.2);
+    REQUIRE(aim.IsAds());
+    REQUIRE(aim.IsAiming());
+    aim.Release(0.06, 0.2);
+    REQUIRE(aim.IsAds());
+    aim.Press(0.10, true);
+    REQUIRE(aim.IsAds()); // clicking to exit must not flash TPS on button-down
+    aim.Release(0.15, 0.2);
+    REQUIRE_FALSE(aim.IsAds());
+    REQUIRE_FALSE(aim.IsAiming());
+}
+
+TEST_CASE("NextDayz aim holds use shoulder aim and can leave latched ADS", "[NextDayz][AimInput]")
+{
+    NextDayz::AimInput aim;
+    aim.Press(0.0, true);
+    aim.Update(0.25, 0.2);
+    REQUIRE(aim.IsAiming());
+    REQUIRE_FALSE(aim.IsAds());
+    aim.Release(0.30, 0.2);
+    REQUIRE_FALSE(aim.IsAiming());
+    aim.Press(1.0, true);
+    aim.Release(1.05, 0.2);
+    REQUIRE(aim.IsAds());
+    aim.Press(2.0, true);
+    aim.Update(2.25, 0.2);
+    REQUIRE_FALSE(aim.IsAds());
+    REQUIRE(aim.IsAiming());
+    aim.Release(2.30, 0.2);
+    REQUIRE_FALSE(aim.IsAiming());
+    // Release alone must classify a hold even if no simulation tick occurred.
+    aim.Press(3.0, true);
+    aim.Press(3.15, true);
+    aim.Release(3.21, 0.2);
+    REQUIRE_FALSE(aim.IsAiming());
+    REQUIRE_FALSE(aim.IsAds());
+}
+
+TEST_CASE("NextDayz cancelled aim and melee taps cannot latch ADS", "[NextDayz][AimInput]")
+{
+    NextDayz::AimInput aim;
+    aim.Press(0.0, true);
+    aim.Release(0.2, 0.2); // threshold belongs to hold, not tap
+    REQUIRE_FALSE(aim.IsAds());
+    aim.Press(1.0, true);
+    aim.Cancel();
+    aim.Release(1.05, 0.2);
+    REQUIRE_FALSE(aim.IsAiming());
+    aim.Press(2.0, true);
+    aim.Release(2.05, 0.2);
+    REQUIRE(aim.IsAds());
+    aim.Cancel();
+    REQUIRE_FALSE(aim.IsAds());
+    aim.Press(3.0, false);
+    REQUIRE(aim.IsAiming()); // melee guard remains a held action
+    aim.Release(3.05, 0.2);
+    REQUIRE_FALSE(aim.IsAiming());
+    REQUIRE_FALSE(aim.IsAds());
+}
 
 TEST_CASE("NextDayz language switches queued feedback and keeps debugger IDs stable", "[NextDayz][Localization]")
 {

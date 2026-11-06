@@ -16,6 +16,7 @@
 
 #include "Application/Game/NextDayz/NextDayzConfig.hpp"
 #include "Application/Game/NextDayz/Player/PlayerState.hpp"
+#include "Application/Game/NextDayz/Player/AimInput.hpp"
 
 class NextPhysics;
 class NextEngine;
@@ -40,8 +41,13 @@ namespace NextDayz
         void QueueContextualJump(NextEngine& engine);
         void SetJumpHeld(bool held) { jumpHeld_ = held; }
         void QueueCrouchToggle() { crouchToggleQueued_ = true; }
-        void SetAiming(bool aiming) { aiming_ = aiming; }
-        void SetMeleeEquipped(bool melee) { meleeEquipped_ = melee; }
+        void SetAimButton(bool pressed, bool allowAds);
+        void CancelAiming() { aimInput_.Cancel(); }
+        void SetMeleeEquipped(bool melee)
+        {
+            meleeEquipped_ = melee;
+            if (melee && IsAds()) CancelAiming();
+        }
         void SetMovementLocked(bool locked) { movementLocked_ = locked; }
         // Holding the trigger ends a sprint (the weapon has to come up first).
         void SetSprintBlocked(bool blocked) { sprintBlocked_ = blocked; }
@@ -49,7 +55,11 @@ namespace NextDayz
         void ApplyCameraRecoil(const glm::vec2& impulseRadians);
         void SetYaw(float yawRadians) { yaw_ = yawRadians; }
         void SetPitch(float pitchRadians) { pitch_ = pitchRadians; }
-        void SetFirstPerson(bool firstPerson) { firstPerson_ = firstPerson; }
+        void SetFirstPerson(bool firstPerson)
+        {
+            if (IsAds()) CancelAiming();
+            firstPerson_ = firstPerson;
+        }
         void ToggleView();
         void AdjustCameraDistance(float scrollY);
 
@@ -66,13 +76,15 @@ namespace NextDayz
         // Render view direction: Forward() plus the first-person traversal
         // head motion (looking down at the lip, leaning into a vault).
         glm::vec3 CameraForward() const;
+        glm::vec3 CameraUp() const;
         glm::vec3 Right() const;     // horizontal right
         glm::vec3 Up() const;
         float Yaw() const { return yaw_; }
         float Pitch() const { return pitch_; }
         float CurrentFov() const { return currentFov_; }
-        bool IsFirstPerson() const { return firstPerson_; }
-        bool IsAiming() const { return aiming_; }
+        bool IsFirstPerson() const { return firstPerson_ || IsAds(); }
+        bool IsAiming() const { return aimInput_.IsAiming(); }
+        bool IsAds() const { return aimInput_.IsAds(); }
         bool IsSprinting() const { return locomotion_.gait == EPlayerGait::Sprint; }
         bool IsTraversing() const { return traversalAction_ != EPlayerTraversalAction::None; }
         const std::string& TraversalProbeResult() const { return traversalProbeResult_; }
@@ -152,7 +164,7 @@ namespace NextDayz
         bool walkModifier_ = false;
         bool sprintModifier_ = false;
         bool sprintBlocked_ = false;
-        bool aiming_ = false;
+        AimInput aimInput_;
         bool meleeEquipped_ = false;
         bool movementLocked_ = false;
         bool jumpQueued_ = false;

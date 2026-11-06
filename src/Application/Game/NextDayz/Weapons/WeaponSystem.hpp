@@ -129,9 +129,11 @@ namespace NextDayz
         }
         bool ViewModelRecoilActive() const;
         bool IsViewModelVisible() const { return viewModelVisible_; }
-        // World-space barrel tip and direction of the first-person view model;
-        // false while it is hidden.
+        bool IsScopeView() const { return scopeView_; }
+        // World-space view-model landmarks. The scoped optical view keeps its
+        // weapon pose for effects and validation even while the mesh is hidden.
         bool ViewModelMuzzle(glm::vec3& outPosition, glm::vec3& outForward) const;
+        bool ViewModelSight(glm::vec3& outPosition, glm::vec3& outForward) const;
 
     private:
         struct FSlot
@@ -189,6 +191,7 @@ namespace NextDayz
         int viewModelWeaponIndex_ = -1;
         std::shared_ptr<Assets::Node> viewModelNode_;
         bool viewModelVisible_ = false;
+        bool scopeView_ = false;
         bool viewModelInScene_ = false;
         glm::vec3 viewModelOffset_{0.16f, -0.19f, 0.55f};
         glm::vec3 viewModelMeleeEuler_{0.0f};

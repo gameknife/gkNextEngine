@@ -113,22 +113,22 @@ namespace NextDayz
         float muzzleForward;
         float boreHeight;
         float sightHeight;
+        float rearSightForward = 0.0f;
+        float adsEyeRelief = 0.0f; // camera -> rear sight, in metres after view-model scaling
+        float scopeFov = 0.0f; // optical view, separate from TPS shoulder-aim FOV
     };
 
     constexpr FWeaponModelPoints WeaponModelPoints(std::string_view id)
     {
-        if (id == "svd") return {0.844f, 0.066f, 0.128f};     // PSO-1 axis
-        if (id == "mosin") return {0.822f, 0.070f, 0.097f};
-        if (id == "shotgun") return {0.780f, 0.056f, 0.072f}; // bead on the rib
-        if (id == "pistol") return {0.182f, 0.052f, 0.079f};  // 1.5x Makarov
+        if (id == "svd") return {0.844f, 0.066f, 0.128f, -0.188f, 0.070f, 22.0f}; // PSO-1 eyecup / 4x view
+        if (id == "mosin") return {0.822f, 0.070f, 0.094f, 0.211f, 0.340f};
+        if (id == "shotgun") return {0.780f, 0.056f, 0.0715f, 0.112f, 0.350f}; // rib / bead
+        if (id == "pistol") return {0.182f, 0.052f, 0.07875f, -0.0465f, 0.360f}; // 1.5x Makarov
         if (id == "knife") return {0.236f, 0.0f, 0.0f};
         if (id == "crowbar") return {0.510f, 0.0f, 0.0f};
         if (id == "axe") return {0.600f, 0.0f, 0.0f};
-        return {0.662f, 0.068f, 0.106f};                      // AK-74
+        return {0.662f, 0.068f, 0.1078f, 0.160f, 0.320f}; // AK-74 notch / front post tip
     }
-
-    // Sight height the configured ViewModelAdsOffset was tuned for.
-    inline constexpr float kAdsReferenceSightHeight = 0.092f;
 
     inline int WeaponIndex(std::string_view id)
     {

@@ -4,7 +4,7 @@ category: project
 status: 现行架构
 owner: NextDayz
 created: 2026-07-26
-last_updated: 2026-11-05
+last_updated: 2026-11-06
 ---
 
 # NextDayz 复杂 3C 与 ScadRig 分层动画设计
@@ -73,7 +73,7 @@ last_updated: 2026-11-05
 | Run | 无速度修饰键时的默认步态 |
 | Sprint | 按住 `Shift`；仅站姿且未 ADS、未 loot 时允许 |
 | 四方向 Sprint | 支持 F/B/L/R clip；后退和侧向通过方向速度系数降低实际速度 |
-| ADS | 鼠标右键按住；ADS 将 Walk/Run/Sprint 解析结果限制为 Walk |
+| 瞄准 | 右键点按切换 FPS ADS，按住使用当前视角举枪；两种瞄准均将 Walk/Run/Sprint 解析结果限制为 Walk |
 | 蹲姿移动 | 只有 crouch-walk 一档；方向速度系数仍生效 |
 | 蹲姿跳跃 | 拒绝；跳跃输入先请求站起，净空不足则本次跳跃失败 |
 | loot | E 开始，约 `0.9s`；`55%` 进度提交物品；提交前可由移动/跳跃取消 |
@@ -776,7 +776,7 @@ teleport cvar 的 `"x,y"` 中 y 是 SCAD 北向，引擎 `z = -y`，lookYaw 0 �
 只隐藏 render part，不隐藏骨骼或其子树。单穿护甲仍保留裸露皮肤。
 
 防穿插分三层：身体覆盖区域剔除；外衣、护甲、背包使用逐层扩大的几何包络；背包本体、独立背带和背枪再依据
-当前外衣/护甲厚度调整深度，背枪距离使用所穿背包的真实网格后沿计算。袖子和裤腿在肘膝处约 1 cm 重叠，保持分段刚体活动时的连接；衣服下摆和口袋避开护甲下沿。
+当前外衣/护甲厚度调整深度，背枪放在所穿背包真实网格的左右两侧，深度取包体前后沿中点。袖子和裤腿在肘膝处约 1 cm 重叠，保持分段刚体活动时的连接；衣服下摆和口袋避开护甲下沿。
 这套规则提供固定款式之间的层次配合，不包含布料模拟。
 
 验证：`gnb validate --script assets/agentscripts/nextdayz-clothing.agentscript.json` 检查实际 render part 数量、换装后旧款消失、
@@ -815,6 +815,38 @@ FPS 在 0.46～0.54 短暂隐藏单个视模以替换模型，再抬回持枪位
 
 验证：`gnb validate --script assets/agentscripts/nextdayz-crouch-aim.agentscript.json`，检查站蹲切换、蹲姿直接举枪、
 俯仰与转向、蹲走 ADS、后坐力及第一人称视模/FOV；通过实际枪口和相机方向夹角检查举枪，避免只检查 `aimWeight` 而漏掉姿态错误。
+
+## 21. 右键点按 ADS / 按住举枪
+
+右键按下立即按当前视角举枪；在 `FCameraConfig::AimTapSeconds`（默认 0.2 秒）内松开则切换保持式 FPS ADS，
+再次点按退出。在 TPS 下按住右键保持第三人称举枪，松开结束；从已保持的 ADS 长按右键时，超过阈值转为 TPS 举枪，松开结束。
+`V` 手动选择的 FPS 仍支持原有按住瞄准；ADS 只临时覆盖视角，退出时恢复原有视角。
+
+`Player/AimInput.hpp` 独立处理点按/长按，使用单调墙钟时间，与帧率、游戏时间缩放和调试单步解耦。
+`PlayerController::IsAiming()` 统一供移动、镜头 FOV、视模和骨骼使用；`IsAds()` 只表示点按保持的 ADS。
+切枪、换弹、搜刮、攀爬、死亡或释放鼠标给界面时调用 `CancelAiming()`，同时清除保持状态与未完成点按；
+随后收到的松键不会重新进入 ADS。近战右键仍是按住戒备，空槽和近战不允许点按进入枪械 ADS。
+
+验证：单测 `[NextDayz][AimInput]` 覆盖快速互切、长按、阈值边界、取消及重复输入；
+`gnb validate --script assets/agentscripts/nextdayz-ads-input.agentscript.json` 检查实际视角、视模、FOV、
+站蹲 ADS、长按、`V`、界面/切枪/换弹中断、近战及空槽，并保留 TPS/FPS 截图。
+
+## 22. ADS 瞄具贴眼与光学视野
+
+第一人称举枪不再使用统一的前伸握把偏移。`WeaponModelPoints` 保存照门 / 目镜的模型坐标和贴眼距离，
+由 `eyeRelief - rearSightForward * ViewModelScale` 推算握把前后位置，并把瞄准线高度移到眼睛高度。
+AK、莫辛、霰弹枪和手枪分别使用 0.32 / 0.34 / 0.35 / 0.36 米贴眼距离，铁瞄直接使用模型上的照门与准星；
+举枪期间隐藏 HUD 十字与中心点，命中反馈保留。
+
+相机和视模共享包含横滚的正交坐标系，举枪时收敛腰射惯性 / 呼吸偏移，避免蹲走、转向时瞄具脱离屏幕中心。
+后坐力仍作用于相机和枪械，视模绕照门转动，恢复后回到同一条瞄准线。基础相机仍由角色控制，以保持碰撞和命中方向一致。
+第一人称近裁切距离为 0.02 米，避免近处机匣和目镜被切开；第三人称仍为 0.1 米。
+
+SVD 以 PSO-1 目镜为锚点，在贴眼过渡结束后隐藏空心镜筒视模，显示圆形镜内画面和中心尖角分划线。
+第一人称光学视野为 22 度（约 4 倍），第三人称按住举枪继续使用原有 40 度视野；退出 ADS、切枪、换弹和界面中断会退出镜内画面。
+
+验证：`gnb validate --script assets/agentscripts/nextdayz-ads-sight.agentscript.json`，逐枪检查真实视模照门到相机的距离、
+照门及瞄准轴相对相机的角误差，覆盖俯仰 / 转向 / 蹲走 / 后坐恢复及镜内画面退出，并保存靶场截图。
 
 ## 24. 腰部手枪槽与上一把武器
 

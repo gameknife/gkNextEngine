@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 #include <optional>
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -15,6 +16,11 @@ namespace NextDayz
 {
     namespace
     {
+        double AimInputTime()
+        {
+            return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        }
+
         std::optional<Assets::RayCastResult> RaycastWithin(NextEngine& engine,
                                                            const glm::vec3& origin,
                                                            const glm::vec3& direction,
@@ -165,6 +171,7 @@ namespace NextDayz
     void PlayerController::Create(NextPhysics* physics, const glm::vec3& spawnPosition, const FConfig& config)
     {
         config_ = config;
+        CancelAiming();
         currentFov_ = config_.Camera.BaseFov;
         aimFov_ = config_.Camera.BaseFov;
         camDistance_ = config_.Camera.TpsDistance;
@@ -216,6 +223,7 @@ namespace NextDayz
 
     void PlayerController::Destroy()
     {
+        CancelAiming();
         controller_.Destroy();
     }
 
@@ -239,7 +247,16 @@ namespace NextDayz
 
     void PlayerController::ToggleView()
     {
-        firstPerson_ = !firstPerson_;
+        const bool firstPerson = !IsFirstPerson();
+        if (IsAds()) CancelAiming();
+        firstPerson_ = firstPerson;
+    }
+
+    void PlayerController::SetAimButton(bool pressed, bool allowAds)
+    {
+        const double now = AimInputTime();
+        if (pressed) aimInput_.Press(now, allowAds);
+        else aimInput_.Release(now, config_.Camera.AimTapSeconds);
     }
 
     void PlayerController::AdjustCameraDistance(float scrollY)
@@ -270,7 +287,7 @@ namespace NextDayz
 
     glm::vec3 PlayerController::CameraForward() const
     {
-        if (!firstPerson_ || (traversalViewPitch_ == 0.0f))
+        if (!IsFirstPerson() || (traversalViewPitch_ == 0.0f))
         {
             return Forward();
         }
@@ -287,6 +304,14 @@ namespace NextDayz
         return glm::normalize(glm::cross(Right(), Forward()));
     }
 
+    glm::vec3 PlayerController::CameraUp() const
+    {
+        const glm::vec3 forward = CameraForward();
+        const glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
+        const glm::vec3 up = glm::cross(right, forward);
+        return IsFirstPerson() ? glm::vec3(glm::rotate(glm::mat4(1.0f), viewRoll_, forward) * glm::vec4(up, 0.0f)) : up;
+    }
+
     glm::vec3 PlayerController::EyePosition() const
     {
         return controller_.GetPosition() + glm::vec3(0.0f, currentEyeHeight_, 0.0f);
@@ -294,7 +319,7 @@ namespace NextDayz
 
     glm::vec3 PlayerController::CameraPosition() const
     {
-        if (firstPerson_)
+        if (IsFirstPerson())
         {
             return EyePosition() + headBob_ + glm::vec3(0.0f, eyeDip_, 0.0f);
         }
@@ -317,7 +342,7 @@ namespace NextDayz
 
     float PlayerController::CameraArmLength() const
     {
-        return firstPerson_ ? 0.0f : std::min(cameraArmLength_, glm::length(ThirdPersonOffset()));
+        return IsFirstPerson() ? 0.0f : std::min(cameraArmLength_, glm::length(ThirdPersonOffset()));
     }
 
     float PlayerController::CameraArmFraction() const
@@ -330,7 +355,7 @@ namespace NextDayz
     {
         const glm::vec3 offset = ThirdPersonOffset();
         const float desiredLength = glm::length(offset);
-        if (firstPerson_ || desiredLength <= 0.0f)
+        if (IsFirstPerson() || desiredLength <= 0.0f)
         {
             cameraArmLength_ = desiredLength;
             return;
@@ -1134,7 +1159,7 @@ namespace NextDayz
         jumpQueued_ = false;
         jumpBufferSeconds_ = 0.0f;
         crouchToggleQueued_ = false;
-        aiming_ = false;
+        CancelAiming();
         jumpPhaseElapsed_ = 0.0f;
         locomotion_.jumpPhase = EPlayerJumpPhase::None;
         locomotion_.jumpPhaseTime01 = 0.0f;
@@ -1268,7 +1293,7 @@ namespace NextDayz
                                                  0.01f);
         sprintAlpha_ = glm::clamp(sprintAlpha_ + (sprinting ? 1.0f : -1.0f) * sprintRate * dt, 0.0f, 1.0f);
 
-        const float targetFov = (aiming_ && !meleeEquipped_ ? aimFov_ : camera.BaseFov) + camera.SprintFovBoost * sprintAlpha_;
+        const float targetFov = (IsAiming() && !meleeEquipped_ ? aimFov_ : camera.BaseFov) + camera.SprintFovBoost * sprintAlpha_;
         const float t = 1.0f - std::exp(-camera.FovLerpSpeed * dt);
         currentFov_ = glm::mix(currentFov_, targetFov, t);
 
@@ -1286,7 +1311,7 @@ namespace NextDayz
         const float bobTarget = locomotion_.onGround && !IsTraversing()
                                     ? glm::clamp(speed / config_.Animation.StandRunAuthoredSpeed, 0.0f, 1.0f) *
                                           (sprinting ? camera.HeadBobSprintScale : 1.0f) *
-                                          (aiming_ ? camera.HeadBobAimScale : 1.0f)
+                                          (IsAiming() ? camera.HeadBobAimScale : 1.0f)
                                     : 0.0f;
         bobWeight_ = glm::mix(bobWeight_, bobTarget, 1.0f - std::exp(-10.0f * dt));
         const float theta = glm::two_pi<float>() * stridePhase_;
@@ -1299,7 +1324,7 @@ namespace NextDayz
             IsTraversing() ? 0.0f
                            : glm::clamp(LocalVelocity().x * camera.StrafeRollDegreesPerMps, -camera.StrafeRollMaxDegrees,
                                         camera.StrafeRollMaxDegrees) *
-                                 (aiming_ ? 0.4f : 1.0f);
+                                 (IsAiming() ? 0.4f : 1.0f);
         strafeRoll_ = glm::mix(strafeRoll_, rollTarget, 1.0f - std::exp(-8.0f * dt));
         viewRoll_ = glm::radians(strafeRoll_ + camera.HeadBobRollDegrees * bobWeight_ * std::sin(theta)) +
                     traversalViewRoll_;
@@ -1336,6 +1361,7 @@ namespace NextDayz
 
     void PlayerController::Update(float deltaSeconds, NextEngine& engine)
     {
+        aimInput_.Update(AimInputTime(), config_.Camera.AimTapSeconds);
         lookDelta_ = lookDeltaAccum_;
         lookDeltaAccum_ = glm::vec2(0.0f);
         landingSpeed_ = 0.0f;
@@ -1405,7 +1431,7 @@ namespace NextDayz
         const bool moving = glm::length(localMove) > 0.001f;
         // CoD rules: sprinting is forward-led, and aiming or holding the
         // trigger takes priority over it.
-        const bool wantsSprint = moving && sprintModifier_ && !aiming_ && !sprintBlocked_ &&
+        const bool wantsSprint = moving && sprintModifier_ && !IsAiming() && !sprintBlocked_ &&
                                  locomotion_.actualStance == EPlayerStance::Standing &&
                                  localMove.y >= config_.Player.SprintMinForwardInput;
 
@@ -1413,7 +1439,7 @@ namespace NextDayz
         {
             locomotion_.gait = EPlayerGait::Idle;
         }
-        else if (locomotion_.actualStance == EPlayerStance::Crouched || aiming_ || walkModifier_)
+        else if (locomotion_.actualStance == EPlayerStance::Crouched || IsAiming() || walkModifier_)
         {
             locomotion_.gait = EPlayerGait::Walk;
         }
@@ -1453,7 +1479,7 @@ namespace NextDayz
             {
                 speed *= (absX * config_.Player.StrafeScale + absY * forwardScale) / axisWeight;
             }
-            if (aiming_)
+            if (IsAiming())
             {
                 speed *= config_.Player.AimMoveScale;
             }
@@ -1604,13 +1630,9 @@ namespace NextDayz
     void PlayerController::FillCamera(glm::mat4& outModelView, float& outFov) const
     {
         const glm::vec3 forward = CameraForward();
-        constexpr glm::vec3 worldUp(0.0f, 1.0f, 0.0f);
         const glm::vec3 eye = CameraPosition();
         // First-person strafe lean and step sway roll the view about its axis.
-        const glm::vec3 up = firstPerson_ ? glm::vec3(glm::rotate(glm::mat4(1.0f), viewRoll_, forward) *
-                                                      glm::vec4(worldUp, 0.0f))
-                                          : worldUp;
-        outModelView = glm::lookAt(eye, eye + forward, up);
+        outModelView = glm::lookAt(eye, eye + forward, CameraUp());
         outFov = currentFov_;
     }
 }

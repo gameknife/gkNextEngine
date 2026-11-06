@@ -113,9 +113,11 @@ private:
     void TakeOffItem(NextDayz::FItemInstanceId instanceId);
     void DropItem(NextDayz::FItemInstanceId instanceId, int count);
     void MoveItem(NextDayz::FItemInstanceId instanceId, NextDayz::FContainerId containerId);
+    void PlaceItem(NextDayz::FItemInstanceId instanceId, NextDayz::FContainerId containerId, NextDayz::FGridPlacement placement);
     void SplitItem(NextDayz::FItemInstanceId instanceId);
     void TakeLoot(int lootIndex, NextDayz::FContainerId destination = 0,
-                  NextDayz::EEquipSlot equipSlot = NextDayz::EEquipSlot::None);
+                  NextDayz::EEquipSlot equipSlot = NextDayz::EEquipSlot::None,
+                  std::optional<NextDayz::FGridPlacement> placement = std::nullopt);
     void UseInventoryItem(NextDayz::FItemInstanceId instanceId);
     void UseQuickSlot(int slot);
     void QuickBandage();
@@ -204,6 +206,7 @@ private:
     NextDayz::LootSystem loot_;
     NextDayz::FContainerId lootDestination_ = 0;
     NextDayz::EEquipSlot lootEquipSlot_ = NextDayz::EEquipSlot::None;
+    std::optional<NextDayz::FGridPlacement> lootPlacement_;
     NextDayz::WorldAnchorRegistry worldAnchors_;
     NextDayz::ZombieSystem zombies_;
     NextDayz::CombatSystem combat_{zombies_};

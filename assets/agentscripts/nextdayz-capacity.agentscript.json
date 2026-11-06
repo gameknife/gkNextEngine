@@ -10,7 +10,7 @@
     { "type": "assert", "query": "game.inventoryCapacity", "op": "eq", "value": 10 },
     { "type": "cvar", "name": "nextdayz.validation.addBackpack", "set": true },
     { "type": "wait-frames", "n": 2 },
-    { "type": "assert", "query": "game.inventoryCapacity", "op": "eq", "value": 38 },
+    { "type": "assert", "query": "game.inventoryCapacity", "op": "eq", "value": 46 },
     { "type": "assert", "query": "game.currentObjective", "op": "contains", "value": "water" },
     { "type": "key", "code": "I", "action": "press" },
     { "type": "wait-frames", "n": 5 },

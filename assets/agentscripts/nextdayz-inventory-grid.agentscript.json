@@ -1,0 +1,483 @@
+{
+  "name": "nextdayz-inventory-grid",
+  "target": "NextDayz",
+  "scene": "assets/scad/tests/nextdayz_melee.scad",
+  "args": [
+    "--system-dpi-scaling"
+  ],
+  "defaults": {
+    "waitFrames": 3,
+    "stepTimeoutMs": 20000
+  },
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.freezeNeeds",
+      "set": true
+    },
+    {
+      "type": "key",
+      "code": "TAB",
+      "action": "press"
+    },
+    {
+      "type": "wait-frames",
+      "n": 10
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_grid_initial",
+      "ui": true
+    },
+    {
+      "type": "log",
+      "message": "Rotate the empty bottle from a 2x1 shirt placement into a 1x2 trouser placement"
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.726,
+          0.17
+        ]
+      }
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "down"
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.726,
+          0.27
+        ]
+      }
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "key",
+      "code": "R",
+      "action": "press"
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_grid_valid_rotation",
+      "ui": true
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "up"
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryLayout",
+      "op": "contains",
+      "value": "water_bottle_empty@2:1,0:1x2:0;"
+    },
+    {
+      "type": "log",
+      "message": "An out-of-bounds vertical bottle must stay in its original position"
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.726,
+          0.27
+        ]
+      }
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "down"
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.726,
+          0.315
+        ]
+      }
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_grid_invalid_bounds",
+      "ui": true
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "up"
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryLayout",
+      "op": "contains",
+      "value": "water_bottle_empty@2:1,0:1x2:0;"
+    },
+    {
+      "type": "log",
+      "message": "Rearrange inside the same container before transferring to another"
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.701,
+          0.17
+        ]
+      }
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "down"
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.826,
+          0.17
+        ]
+      }
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "up"
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryLayout",
+      "op": "contains",
+      "value": "bandage@1:5,0:1x1:0;"
+    },
+    {
+      "type": "log",
+      "message": "Move a one-cell item to an exact empty cell"
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.826,
+          0.17
+        ]
+      }
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "down"
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.701,
+          0.315
+        ]
+      }
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "up"
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryLayout",
+      "op": "contains",
+      "value": "bandage@2:0,1:1x1:0;"
+    },
+    {
+      "type": "log",
+      "message": "Place a world magazine into exact shirt cells after rotating it"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "mag_quick"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.drop",
+      "set": "mag_quick"
+    },
+    {
+      "type": "wait-frames",
+      "n": 10
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.1,
+          0.132
+        ]
+      }
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "down"
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.801,
+          0.17
+        ]
+      }
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "key",
+      "code": "R",
+      "action": "press"
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "up"
+    },
+    {
+      "type": "wait-ms",
+      "ms": 1300
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryLayout",
+      "op": "contains",
+      "value": "mag_quick@1:4,0:2x1:1;"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_grid_placed_loot",
+      "ui": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.restart",
+      "set": true
+    },
+    {
+      "type": "wait-frames",
+      "n": 10
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.loadout",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "backpack_military"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "backpack_military"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "jacket"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "jacket"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "helmet"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "helmet"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "work_pants"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "work_pants"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "mag_quick"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "mag_extended"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "water_bottle"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "fuel"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "lantern"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "medkit"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "optic_4x"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "food_can"
+    },
+    {
+      "type": "key",
+      "code": "TAB",
+      "action": "press"
+    },
+    {
+      "type": "wait-frames",
+      "n": 15
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.85,
+          0.6
+        ]
+      }
+    },
+    {
+      "type": "scroll",
+      "y": -20
+    },
+    {
+      "type": "wait-frames",
+      "n": 20
+    },
+    {
+      "type": "scroll",
+      "y": 3
+    },
+    {
+      "type": "wait-frames",
+      "n": 15
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_grid_6x8_backpack",
+      "ui": true
+    },
+    {
+      "type": "key",
+      "code": "TAB",
+      "action": "press"
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryOpen",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "key",
+      "code": "TAB",
+      "action": "press"
+    },
+    {
+      "type": "wait-frames",
+      "n": 10
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryPreviewReady",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

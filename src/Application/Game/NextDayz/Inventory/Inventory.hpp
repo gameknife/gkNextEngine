@@ -1,7 +1,7 @@
 #pragma once
 
 // ============================================================================
-// Inventory.hpp - Capacity-bound inventory. Every item is an instance that
+// Inventory.hpp - Spatial grid inventory. Every item is an instance that
 // lives either in a cargo container (pockets, the weapon slings, and whatever
 // the worn clothing provides) or is worn in an equipment slot. Worn items do
 // not take cargo space. Every Try* is a transaction: it fully succeeds or
@@ -41,6 +41,7 @@ namespace NextDayz
         FContainerId containerId = 0;
         int loadedAmmo = 0;
         FWeaponAttachments attachments{};
+        FGridPlacement placement{};
     };
 
     struct FInventoryContainer
@@ -48,9 +49,10 @@ namespace NextDayz
         FContainerId containerId = 0;
         FItemInstanceId ownerItemInstanceId = 0;
         std::string displayName;
-        int capacity = 0;
+        FGridSize size{0, 0};
         bool active = true;
         bool weaponOnly = false;
+        int Capacity() const { return size.Area(); }
     };
 
     struct FInventoryAddRequest
@@ -78,12 +80,20 @@ namespace NextDayz
         void Clear();
         FInventoryState Capture() const;
         bool Restore(const FInventoryState& state);
+        // Old saves had no coordinates. Validate their metadata, then place their items;
+        // the campaign moves any overflow into safehouse storage without discarding it.
+        bool RestoreLegacy(const FInventoryState& state, std::vector<FItemInstance>& overflow);
 
         // 0 auto-stows; kWornContainer equips directly without temporary cargo space.
         bool CanAdd(const std::string& id, int count = 1, FContainerId destination = 0) const;
         bool TryAdd(const std::string& id, const std::string& displayName, EItemKind kind, int count,
                     FItemInstanceId* outInstanceId = nullptr, FContainerId destination = 0);
         bool TryAddBatch(std::span<const FInventoryAddRequest> requests);
+        bool TryAddAt(const std::string& id, int count, FContainerId destination, FGridPlacement placement,
+                      FItemInstanceId* outInstanceId = nullptr);
+        int FitCountAt(std::string_view id, int count, FContainerId destination, FGridPlacement placement) const;
+        const FItemInstance* FindStackAt(std::string_view id, FContainerId destination, int x, int y,
+                                        FItemInstanceId ignored = 0) const;
         // How many of `count` would fit right now (0..count).
         int FitCount(const std::string& id, int count, FContainerId destination = 0) const;
 
@@ -92,6 +102,14 @@ namespace NextDayz
         void Add(const std::string& id, const std::string& displayName, EItemKind kind, int count);
 
         bool TryMove(FItemInstanceId instanceId, FContainerId destination, int count = -1);
+        bool CanPlace(FItemInstanceId instanceId, FContainerId destination, FGridPlacement placement) const;
+        bool TryPlace(FItemInstanceId instanceId, FContainerId destination, FGridPlacement placement);
+        bool TryMerge(FItemInstanceId source, FItemInstanceId target);
+        bool CanPlaceItem(std::string_view id, FContainerId destination, FGridPlacement placement,
+                          FItemInstanceId ignored = 0) const;
+        std::optional<FGridPlacement> FindPlacement(std::string_view id, FContainerId destination,
+                                                   FItemInstanceId ignored = 0) const;
+        static FGridSize InstanceSize(const FItemInstance& instance);
         bool TrySplit(FItemInstanceId instanceId, int count, FItemInstanceId& outSplitId);
         // Wears the item; whatever is worn in that slot is taken off first (and
         // needs somewhere to go), so this is also a swap.
@@ -124,7 +142,7 @@ namespace NextDayz
         int UsedCapacity() const;
         int TotalCapacity() const;
         int FreeCapacity() const { return TotalCapacity() - UsedCapacity(); }
-        static int InstanceVolume(const FItemInstance& instance);
+        static int InstanceArea(const FItemInstance& instance);
 
         int CountOf(const std::string& id) const;
         int Consume(const std::string& id, int count);
@@ -145,7 +163,9 @@ namespace NextDayz
     private:
         // Takes a worn item off: its container's contents move to the other
         // containers; the item itself goes to cargo (or leaves, for a drop).
-        bool TakeOff(FItemInstanceId instanceId, bool intoCargo, FContainerId destination = 0);
+        bool TakeOff(FItemInstanceId instanceId, bool intoCargo, FContainerId destination = 0,
+                     std::optional<FGridPlacement> placement = std::nullopt);
+        bool RestoreInternal(const FInventoryState& state, bool legacy, std::vector<FItemInstance>* overflow);
         FContainerId FindContainerWithSpace(const FItemDef& definition, int count,
                                             FContainerId excluded = 0) const;
         void RebuildLegacyItems();

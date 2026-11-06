@@ -43,7 +43,8 @@ namespace NextDayz
     void to_json(nlohmann::json& json, const FItemInstance& item)
     {
         json = {{"instanceId", item.instanceId}, {"defId", item.defId}, {"count", item.count},
-                {"containerId", item.containerId}, {"loadedAmmo", item.loadedAmmo}, {"attachments", item.attachments}};
+                {"containerId", item.containerId}, {"loadedAmmo", item.loadedAmmo}, {"attachments", item.attachments},
+                {"gridX", item.placement.x}, {"gridY", item.placement.y}, {"rotated", item.placement.rotated}};
     }
     void from_json(const nlohmann::json& json, FItemInstance& item)
     {
@@ -53,9 +54,24 @@ namespace NextDayz
         json.at("containerId").get_to(item.containerId);
         json.at("loadedAmmo").get_to(item.loadedAmmo);
         item.attachments = ReadAttachments(json);
+        item.placement = {json.value("gridX", -1), json.value("gridY", -1), json.value("rotated", false)};
     }
-    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FInventoryContainer, containerId, ownerItemInstanceId, displayName,
-                                     capacity, active, weaponOnly)
+    void to_json(nlohmann::json& json, const FInventoryContainer& container)
+    {
+        json = {{"containerId", container.containerId}, {"ownerItemInstanceId", container.ownerItemInstanceId},
+                {"displayName", container.displayName}, {"width", container.size.width}, {"height", container.size.height},
+                {"active", container.active}, {"weaponOnly", container.weaponOnly}};
+    }
+    void from_json(const nlohmann::json& json, FInventoryContainer& container)
+    {
+        json.at("containerId").get_to(container.containerId);
+        json.at("ownerItemInstanceId").get_to(container.ownerItemInstanceId);
+        json.at("displayName").get_to(container.displayName);
+        json.at("width").get_to(container.size.width);
+        json.at("height").get_to(container.size.height);
+        json.at("active").get_to(container.active);
+        json.at("weaponOnly").get_to(container.weaponOnly);
+    }
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FInventoryState, instances, containers, nextInstanceId, nextContainerId)
     void to_json(nlohmann::json& json, const FLootStack& item)
     {
@@ -86,6 +102,41 @@ namespace NextDayz
 
     namespace
     {
+        void UpgradeLegacyContainers(nlohmann::json& state)
+        {
+            const Inventory basic;
+            auto& inventory = state.at("inventory");
+            for (auto& container : inventory.at("containers"))
+            {
+                const auto owner = container.at("ownerItemInstanceId").get<FItemInstanceId>();
+                FGridSize size{0, 0};
+                int legacyCapacity = 0;
+                if (!owner)
+                {
+                    const auto* expected = basic.FindContainer(container.at("containerId").get<FContainerId>());
+                    if (!expected) throw std::runtime_error("Invalid legacy container");
+                    size = expected->size;
+                    legacyCapacity = expected->weaponOnly ? 10 : size.Area();
+                }
+                else
+                {
+                    for (const auto& item : inventory.at("instances"))
+                    {
+                        if (item.at("instanceId").get<FItemInstanceId>() != owner) continue;
+                        const auto* def = FindItemDef(item.at("defId").get<std::string>());
+                        if (!def) throw std::runtime_error("Unknown legacy container owner");
+                        size = def->containerSize;
+                        legacyCapacity = def->id == "backpack" ? 28 : def->id == "backpack_military" ? 40 : size.Area();
+                        break;
+                    }
+                }
+                if (!size.IsValid() || container.at("capacity").get<int>() != legacyCapacity)
+                    throw std::runtime_error("Invalid legacy container size");
+                container["width"] = size.width;
+                container["height"] = size.height;
+            }
+        }
+
         bool Valid(const FCampaignSave& saved)
         {
             Inventory inventory;
@@ -172,7 +223,7 @@ namespace NextDayz
                 std::ifstream stream(path, std::ios::binary);
                 auto document = nlohmann::json::parse(stream);
                 const int version = document.at("version").get<int>();
-                if (version < 1 || version > 4) throw std::runtime_error("Unsupported save version");
+                if (version < 1 || version > 5) throw std::runtime_error("Unsupported save version");
                 if (version == 1)
                 {
                     auto& state = document.at("state");
@@ -192,7 +243,27 @@ namespace NextDayz
                     slots.push_back(0);
                     state["previousSlot"] = -1;
                 }
+                if (version < 5) UpgradeLegacyContainers(document.at("state"));
                 auto candidate = document.at("state").get<FCampaignSave>();
+                if (version < 5)
+                {
+                    Inventory migrated;
+                    std::vector<FItemInstance> overflow;
+                    if (!migrated.RestoreLegacy(candidate.inventory, overflow))
+                        throw std::runtime_error("Invalid legacy inventory");
+                    candidate.inventory = migrated.Capture();
+                    for (auto item : overflow)
+                    {
+                        for (auto& slot : candidate.weaponSlots)
+                            if (slot == item.instanceId) slot = 0;
+                        if (candidate.campaign.nextStorageId == std::numeric_limits<uint64_t>::max())
+                            throw std::runtime_error("Storage id overflow");
+                        item.instanceId = candidate.campaign.nextStorageId++;
+                        item.containerId = 0;
+                        item.placement = {};
+                        candidate.campaign.storage.push_back(std::move(item));
+                    }
+                }
                 if (!Valid(candidate)) throw std::runtime_error("Invalid campaign state");
                 save = std::move(candidate);
                 return true;
@@ -228,7 +299,7 @@ namespace NextDayz
             {
                 std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
                 stream.exceptions(std::ios::failbit | std::ios::badbit);
-                stream << nlohmann::json{{"version", 4}, {"state", save}}.dump(2);
+                stream << nlohmann::json{{"version", 5}, {"state", save}}.dump(2);
                 stream.flush();
                 stream.close();
             }

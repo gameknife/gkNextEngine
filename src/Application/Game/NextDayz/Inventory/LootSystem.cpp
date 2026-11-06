@@ -743,7 +743,7 @@ namespace NextDayz
     }
 
     FLootCommitResult LootSystem::Commit(const FLootHandle& handle, Inventory& inventory, NextEngine& engine,
-                                        FContainerId destination, EEquipSlot equipSlot)
+                                        FContainerId destination, EEquipSlot equipSlot, std::optional<FGridPlacement> placement)
     {
         FLootCommitResult result;
         if (!IsReservedHandleValid(handle))
@@ -752,18 +752,24 @@ namespace NextDayz
         }
         FLootEntry& entry = entries_[handle.index];
         std::vector<FLootStack> left;
+        bool firstStack = true;
         for (const FLootStack& stack : entry.contents)
         {
             const FItemDef* definition = FindItemDef(stack.itemId);
             const bool matchesSlot = destination != kWornContainer ||
                 (definition && definition->kind == EItemKind::Clothing && definition->equipSlot == equipSlot);
             int fit = definition && matchesSlot ? inventory.FitCount(stack.itemId, stack.count, destination) : 0;
+            if (placement)
+                fit = firstStack ? inventory.FitCountAt(stack.itemId, stack.count, destination, *placement) : 0;
             if (fit > 0)
             {
                 FItemInstanceId instanceId = 0;
                 Inventory transaction = inventory;
-                if (transaction.TryAdd(stack.itemId, std::string(definition->displayName), definition->kind, fit,
-                                     &instanceId, destination) &&
+                const bool added = placement
+                    ? transaction.TryAddAt(stack.itemId, fit, destination, *placement, &instanceId)
+                    : transaction.TryAdd(stack.itemId, std::string(definition->displayName), definition->kind, fit,
+                                         &instanceId, destination);
+                if (added &&
                     (definition->kind != EItemKind::Weapon || transaction.SetWeaponState(instanceId, stack.loadedAmmo, stack.attachments)))
                 {
                     inventory = std::move(transaction);
@@ -778,6 +784,7 @@ namespace NextDayz
             {
                 left.push_back({stack.itemId, stack.count - fit, stack.loadedAmmo, stack.attachments});
             }
+            firstStack = false;
         }
         result.taken = !result.stacks.empty();
         result.partial = !left.empty();

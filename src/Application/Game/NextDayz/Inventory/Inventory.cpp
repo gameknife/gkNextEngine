@@ -29,10 +29,10 @@ namespace NextDayz
         equippedClothing_.clear();
         nextInstanceId_ = 1;
         nextContainerId_ = 1;
-        containers_.push_back({nextContainerId_++, 0, "Basic shirt pockets", 6, true, false});
-        containers_.push_back({nextContainerId_++, 0, "Basic trouser pockets", 4, true, false});
-        containers_.push_back({nextContainerId_++, 0, "Primary weapon sling", 10, true, true});
-        containers_.push_back({nextContainerId_++, 0, "Secondary weapon sling", 10, true, true});
+        containers_.push_back({nextContainerId_++, 0, "Basic shirt pockets", {6, 1}, true, false});
+        containers_.push_back({nextContainerId_++, 0, "Basic trouser pockets", {2, 2}, true, false});
+        containers_.push_back({nextContainerId_++, 0, "Primary weapon sling", {4, 2}, true, true});
+        containers_.push_back({nextContainerId_++, 0, "Secondary weapon sling", {4, 2}, true, true});
     }
 
     FInventoryState Inventory::Capture() const
@@ -41,6 +41,16 @@ namespace NextDayz
     }
 
     bool Inventory::Restore(const FInventoryState& state)
+    {
+        return RestoreInternal(state, false, nullptr);
+    }
+
+    bool Inventory::RestoreLegacy(const FInventoryState& state, std::vector<FItemInstance>& overflow)
+    {
+        return RestoreInternal(state, true, &overflow);
+    }
+
+    bool Inventory::RestoreInternal(const FInventoryState& state, bool legacy, std::vector<FItemInstance>* overflow)
     {
         if (state.instances.size() > kMaxSlots || state.containers.size() < 4 ||
             state.containers.size() > 16 || state.nextInstanceId == 0 || state.nextContainerId == kWornContainer)
@@ -60,7 +70,7 @@ namespace NextDayz
         for (const auto& container : state.containers)
         {
             if (container.containerId == 0 || container.containerId >= state.nextContainerId ||
-                !containerIds.insert(container.containerId).second || !container.active)
+                !containerIds.insert(container.containerId).second || !container.active || !container.size.IsValid())
             {
                 return false;
             }
@@ -68,15 +78,15 @@ namespace NextDayz
             {
                 const auto it = std::find_if(basic.begin(), basic.end(), [&](const auto& expected)
                 { return expected.containerId == container.containerId; });
-                if (it == basic.end() || it->capacity != container.capacity || it->weaponOnly != container.weaponOnly)
+                if (it == basic.end() || it->size != container.size || it->weaponOnly != container.weaponOnly)
                     return false;
             }
             else
             {
                 const auto* owner = restored.FindInstance(container.ownerItemInstanceId);
                 const auto* def = owner ? FindItemDef(owner->defId) : nullptr;
-                if (!def || owner->containerId != kWornContainer || def->containerCapacity != container.capacity ||
-                    container.capacity <= 0 || container.weaponOnly ||
+                if (!def || owner->containerId != kWornContainer || def->containerSize != container.size ||
+                    container.Capacity() <= 0 || container.weaponOnly ||
                     !containerOwners.insert(owner->instanceId).second)
                     return false;
             }
@@ -96,7 +106,7 @@ namespace NextDayz
             {
                 if (def->kind != EItemKind::Clothing || def->equipSlot == EEquipSlot::None || item.count != 1 ||
                     !wornSlots.insert(static_cast<int>(def->equipSlot)).second ||
-                    (def->containerCapacity > 0 && !containerOwners.contains(item.instanceId)))
+                    (def->containerSize.Area() > 0 && !containerOwners.contains(item.instanceId)))
                     return false;
                 restored.equippedClothing_.push_back(item.defId);
             }
@@ -106,8 +116,38 @@ namespace NextDayz
                 if (!container || !Accepts(*container, *def)) return false;
             }
         }
-        for (const auto& container : state.containers)
-            if (restored.ContainerUsed(container.containerId) > container.capacity) return false;
+        std::vector<FItemInstance> surplus;
+        if (legacy)
+        {
+            std::vector<FItemInstance> cargo;
+            std::erase_if(restored.instances_, [&](const FItemInstance& item)
+            {
+                if (item.containerId == kWornContainer) return false;
+                cargo.push_back(item);
+                return true;
+            });
+            std::stable_sort(cargo.begin(), cargo.end(), [](const auto& a, const auto& b)
+            { return InstanceArea(a) > InstanceArea(b); });
+            for (auto item : cargo)
+            {
+                auto placement = restored.FindPlacement(item.defId, item.containerId);
+                if (!placement)
+                {
+                    item.containerId = restored.FindContainerWithSpace(*FindItemDef(item.defId), item.count);
+                    placement = restored.FindPlacement(item.defId, item.containerId);
+                }
+                if (!placement) { surplus.push_back(item); continue; }
+                item.placement = *placement;
+                restored.instances_.push_back(std::move(item));
+            }
+        }
+        else
+        {
+            for (const auto& item : restored.instances_)
+                if (item.containerId != kWornContainer &&
+                    !restored.CanPlaceItem(item.defId, item.containerId, item.placement, item.instanceId)) return false;
+        }
+        if (overflow) *overflow = std::move(surplus);
         restored.RebuildLegacyItems();
         *this = std::move(restored);
         return true;
@@ -173,15 +213,71 @@ namespace NextDayz
         return true;
     }
 
-    int Inventory::InstanceVolume(const FItemInstance& instance)
+    int Inventory::InstanceArea(const FItemInstance& instance)
     {
-        const FItemDef* definition = FindItemDef(instance.defId);
-        if (!definition || instance.count <= 0)
+        const auto* definition = FindItemDef(instance.defId);
+        return definition ? definition->size.Area() : 1;
+    }
+
+    FGridSize Inventory::InstanceSize(const FItemInstance& instance)
+    {
+        const auto* definition = FindItemDef(instance.defId);
+        const FGridSize size = definition ? definition->size : FGridSize{};
+        return instance.placement.rotated ? size.Rotated() : size;
+    }
+
+    bool Inventory::CanPlaceItem(std::string_view id, FContainerId destination, FGridPlacement placement,
+                                 FItemInstanceId ignored) const
+    {
+        const auto* definition = FindItemDef(id);
+        const auto* container = FindContainer(destination);
+        if (!definition || !container || !Accepts(*container, *definition) ||
+            (ignored && container->ownerItemInstanceId == ignored)) return false;
+        const FGridSize size = placement.rotated ? definition->size.Rotated() : definition->size;
+        if (!size.IsValid() || placement.x < 0 || placement.y < 0 ||
+            placement.x > container->size.width - size.width || placement.y > container->size.height - size.height)
+            return false;
+        for (const auto& item : instances_)
         {
-            return 0;
+            if (item.instanceId == ignored || item.containerId != destination) continue;
+            const auto other = InstanceSize(item);
+            if (placement.x < item.placement.x + other.width && placement.x + size.width > item.placement.x &&
+                placement.y < item.placement.y + other.height && placement.y + size.height > item.placement.y)
+                return false;
         }
-        const int stackCount = (instance.count + definition->maxStack - 1) / definition->maxStack;
-        return stackCount * definition->volumePerStack;
+        return true;
+    }
+
+    std::optional<FGridPlacement> Inventory::FindPlacement(std::string_view id, FContainerId destination,
+                                                          FItemInstanceId ignored) const
+    {
+        const auto* container = FindContainer(destination);
+        if (!container) return std::nullopt;
+        for (bool rotated : {false, true})
+            for (int y = 0; y < container->size.height; ++y)
+                for (int x = 0; x < container->size.width; ++x)
+                    if (CanPlaceItem(id, destination, {x, y, rotated}, ignored)) return FGridPlacement{x, y, rotated};
+        return std::nullopt;
+    }
+
+    bool Inventory::CanPlace(FItemInstanceId instanceId, FContainerId destination, FGridPlacement placement) const
+    {
+        const auto* item = FindInstance(instanceId);
+        if (!item || !CanPlaceItem(item->defId, destination, placement, instanceId)) return false;
+        if (!IsWorn(instanceId)) return true;
+        Inventory transaction = *this;
+        return transaction.TakeOff(instanceId, true, destination, placement);
+    }
+
+    bool Inventory::TryPlace(FItemInstanceId instanceId, FContainerId destination, FGridPlacement placement)
+    {
+        const auto* item = FindInstance(instanceId);
+        if (!item || !CanPlaceItem(item->defId, destination, placement, instanceId)) return false;
+        if (IsWorn(instanceId)) return TakeOff(instanceId, true, destination, placement);
+        auto* moving = FindInstance(instanceId);
+        moving->containerId = destination;
+        moving->placement = placement;
+        return true;
     }
 
     const FItemInstance* Inventory::FindInstance(FItemInstanceId instanceId) const
@@ -242,7 +338,7 @@ namespace NextDayz
         {
             if (instance.containerId == containerId)
             {
-                used += InstanceVolume(instance);
+                used += InstanceArea(instance);
             }
         }
         return used;
@@ -268,7 +364,7 @@ namespace NextDayz
         {
             if (container.active && !container.weaponOnly)
             {
-                capacity += container.capacity;
+                capacity += container.Capacity();
             }
         }
         return capacity;
@@ -276,19 +372,13 @@ namespace NextDayz
 
     FContainerId Inventory::FindContainerWithSpace(const FItemDef& definition, int count, FContainerId excluded) const
     {
-        FItemInstance candidate{0, std::string(definition.id), count};
-        const int volume = InstanceVolume(candidate);
-        for (const FInventoryContainer& container : containers_)
-        {
-            if (container.containerId == excluded || !Accepts(container, definition))
-            {
-                continue;
-            }
-            if (ContainerUsed(container.containerId) + volume <= container.capacity)
-            {
-                return container.containerId;
-            }
-        }
+        if (count <= 0) return 0;
+        // Carry guns and melee on the slings first, keeping pockets available for supplies.
+        for (bool weapons : {true, false})
+            for (const auto& container : containers_)
+                if (container.weaponOnly == weapons && container.containerId != excluded &&
+                    Accepts(container, definition) && FindPlacement(definition.id, container.containerId))
+                    return container.containerId;
         return 0;
     }
 
@@ -305,106 +395,134 @@ namespace NextDayz
 
     int Inventory::FitCount(const std::string& id, int count, FContainerId destination) const
     {
-        for (int fit = count; fit > 0; --fit)
+        const auto* definition = FindItemDef(id);
+        if (!definition || count <= 0) return 0;
+        int low = 0;
+        int high = std::min(count, static_cast<int>(kMaxSlots) * definition->maxStack);
+        while (low < high)
         {
-            if (CanAdd(id, fit, destination))
-            {
-                return fit;
-            }
+            const int mid = low + (high - low + 1) / 2;
+            if (CanAdd(id, mid, destination)) low = mid;
+            else high = mid - 1;
         }
-        return 0;
+        return low;
     }
 
     bool Inventory::TryAdd(const std::string& id, const std::string& displayName, EItemKind kind, int count,
                            FItemInstanceId* outInstanceId, FContainerId destination)
     {
-        if (count <= 0)
-        {
-            return false;
-        }
-        Inventory rollback = *this;
-        const FItemDef& definition = ResolveItemDef(id, displayName, kind);
+        const auto* known = FindItemDef(id);
+        if (!known || count <= 0 || count > static_cast<int>(kMaxSlots) * known->maxStack) return false;
+        const FItemDef& definition = *known;
+        Inventory transaction = *this;
+        FItemInstanceId first = 0;
         if (destination == kWornContainer)
         {
             if (count != 1 || definition.kind != EItemKind::Clothing || definition.equipSlot == EEquipSlot::None ||
-                instances_.size() >= kMaxSlots)
+                transaction.instances_.size() >= kMaxSlots) return false;
+            first = transaction.nextInstanceId_++;
+            transaction.instances_.push_back({first, id, 1});
+            if (!transaction.TryEquip(first)) return false;
+        }
+        else
+        {
+            if (destination)
             {
-                return false;
+                const auto* target = transaction.FindContainer(destination);
+                if (!target || !Accepts(*target, definition)) return false;
             }
-            const FItemInstanceId instanceId = nextInstanceId_++;
-            instances_.push_back({instanceId, id, 1, 0, 0});
-            if (!TryEquip(instanceId))
+            int remaining = count;
+            for (auto& item : transaction.instances_)
             {
-                *this = std::move(rollback);
-                return false;
+                if (item.defId != id || item.containerId == kWornContainer ||
+                    (destination && item.containerId != destination)) continue;
+                const int add = std::min(remaining, definition.maxStack - item.count);
+                if (add <= 0) continue;
+                item.count += add;
+                remaining -= add;
+                if (!first) first = item.instanceId;
+                if (!remaining) break;
             }
-            if (outInstanceId)
+            while (remaining > 0)
             {
-                *outInstanceId = instanceId;
+                const int stack = std::min(remaining, definition.maxStack);
+                const auto target = destination ? destination : transaction.FindContainerWithSpace(definition, stack);
+                const auto placement = transaction.FindPlacement(id, target);
+                if (!placement || transaction.instances_.size() >= kMaxSlots) return false;
+                FItemInstance item{transaction.nextInstanceId_++, id, stack, target};
+                item.placement = *placement;
+                if (!first) first = item.instanceId;
+                transaction.instances_.push_back(std::move(item));
+                remaining -= stack;
             }
+        }
+        transaction.RebuildLegacyItems();
+        *this = std::move(transaction);
+        if (outInstanceId) *outInstanceId = first;
+        (void)displayName;
+        (void)kind;
+        return true;
+    }
+
+    const FItemInstance* Inventory::FindStackAt(std::string_view id, FContainerId destination, int x, int y,
+                                               FItemInstanceId ignored) const
+    {
+        const auto* def = FindItemDef(id);
+        if (!def || def->maxStack <= 1 || x < 0 || y < 0) return nullptr;
+        for (const auto& item : instances_)
+        {
+            if (item.instanceId == ignored || item.containerId != destination || item.defId != id) continue;
+            const auto size = InstanceSize(item);
+            if (x >= item.placement.x && x < item.placement.x + size.width &&
+                y >= item.placement.y && y < item.placement.y + size.height) return &item;
+        }
+        return nullptr;
+    }
+
+    int Inventory::FitCountAt(std::string_view id, int count, FContainerId destination, FGridPlacement placement) const
+    {
+        const auto* def = FindItemDef(id);
+        const auto* container = FindContainer(destination);
+        if (!def || count <= 0 || !container || !Accepts(*container, *def)) return 0;
+        if (const auto* stack = FindStackAt(id, destination, placement.x, placement.y))
+            return std::max(0, std::min(count, def->maxStack - stack->count));
+        return instances_.size() < kMaxSlots && CanPlaceItem(id, destination, placement)
+            ? std::min(count, def->maxStack) : 0;
+    }
+
+    bool Inventory::TryAddAt(const std::string& id, int count, FContainerId destination, FGridPlacement placement,
+                             FItemInstanceId* outInstanceId)
+    {
+        if (count <= 0 || FitCountAt(id, count, destination, placement) < count) return false;
+        if (const auto* stack = FindStackAt(id, destination, placement.x, placement.y))
+        {
+            const auto instanceId = stack->instanceId;
+            FindInstance(instanceId)->count += count;
+            RebuildLegacyItems();
+            if (outInstanceId) *outInstanceId = instanceId;
             return true;
         }
-        const FInventoryContainer* target = destination ? FindContainer(destination) : nullptr;
-        if (destination && (!target || !Accepts(*target, definition)))
-        {
-            return false;
-        }
-        int remaining = count;
-        FItemInstanceId firstInstanceId = 0;
+        FItemInstance item{nextInstanceId_++, id, count, destination};
+        item.placement = placement;
+        instances_.push_back(item);
+        RebuildLegacyItems();
+        if (outInstanceId) *outInstanceId = item.instanceId;
+        return true;
+    }
 
-        if (definition.maxStack > 1)
-        {
-            for (FItemInstance& instance : instances_)
-            {
-                if (instance.defId != id || instance.count >= definition.maxStack ||
-                    (destination && instance.containerId != destination))
-                {
-                    continue;
-                }
-                const int oldVolume = InstanceVolume(instance);
-                const int add = std::min(remaining, definition.maxStack - instance.count);
-                instance.count += add;
-                const int volumeDelta = InstanceVolume(instance) - oldVolume;
-                const FInventoryContainer* container = FindContainer(instance.containerId);
-                if (!container || ContainerUsed(instance.containerId) > container->capacity)
-                {
-                    instance.count -= add;
-                    continue;
-                }
-                remaining -= add;
-                firstInstanceId = firstInstanceId == 0 ? instance.instanceId : firstInstanceId;
-                if (remaining == 0)
-                {
-                    break;
-                }
-                (void)volumeDelta;
-            }
-        }
-
-        while (remaining > 0)
-        {
-            const int stackCount = std::min(remaining, definition.maxStack);
-            const FContainerId containerId = destination ? destination : FindContainerWithSpace(definition, stackCount);
-            if (containerId == 0 || instances_.size() >= kMaxSlots)
-            {
-                *this = std::move(rollback);
-                return false;
-            }
-            if (destination && ContainerUsed(destination) + InstanceVolume({0, id, stackCount}) > target->capacity)
-            {
-                *this = std::move(rollback);
-                return false;
-            }
-            const FItemInstanceId instanceId = nextInstanceId_++;
-            instances_.push_back({instanceId, id, stackCount, containerId, 0});
-            firstInstanceId = firstInstanceId == 0 ? instanceId : firstInstanceId;
-            remaining -= stackCount;
-        }
-
-        if (outInstanceId)
-        {
-            *outInstanceId = firstInstanceId;
-        }
+    bool Inventory::TryMerge(FItemInstanceId sourceId, FItemInstanceId targetId)
+    {
+        auto* source = FindInstance(sourceId);
+        auto* target = FindInstance(targetId);
+        if (!source || !target || sourceId == targetId || source->defId != target->defId ||
+            IsWorn(sourceId) || IsWorn(targetId)) return false;
+        const auto* def = FindItemDef(source->defId);
+        if (!def || def->maxStack <= 1) return false;
+        const int moved = std::min(source->count, def->maxStack - target->count);
+        if (moved <= 0) return false;
+        target->count += moved;
+        source->count -= moved;
+        RemoveEmptyInstances();
         RebuildLegacyItems();
         return true;
     }
@@ -430,78 +548,66 @@ namespace NextDayz
 
     bool Inventory::TryMove(FItemInstanceId instanceId, FContainerId destination, int count)
     {
-        FItemInstance* source = FindInstance(instanceId);
-        const FInventoryContainer* target = FindContainer(destination);
-        if (!source || !target || !target->active || target->ownerItemInstanceId == instanceId)
+        const auto* source = FindInstance(instanceId);
+        if (!source) return false;
+        const int movingCount = count < 0 ? source->count : count;
+        if (movingCount <= 0 || movingCount > source->count) return false;
+        const auto* def = FindItemDef(source->defId);
+        if (movingCount == source->count && source->containerId != destination && def && def->maxStack > 1)
         {
-            return false;
+            Inventory transaction = *this;
+            std::vector<FItemInstanceId> targets;
+            for (const auto& item : instances_)
+                if (item.containerId == destination && item.defId == source->defId && item.count < def->maxStack)
+                    targets.push_back(item.instanceId);
+            bool merged = false;
+            for (const auto target : targets)
+                merged |= transaction.TryMerge(instanceId, target);
+            if (merged)
+            {
+                if (transaction.FindInstance(instanceId) && !transaction.TryMove(instanceId, destination)) return false;
+                *this = std::move(transaction);
+                return true;
+            }
         }
-        const FItemDef* definition = FindItemDef(source->defId);
-        if (!definition || !Accepts(*target, *definition))
+        if (movingCount == source->count)
         {
-            return false;
+            const auto placement = FindPlacement(source->defId, destination, instanceId);
+            if (!placement) return false;
+            if (source->containerId == destination) return true;
+            return TryPlace(instanceId, destination, *placement);
         }
-        const int moveCount = count < 0 ? source->count : count;
-        if (moveCount <= 0 || moveCount > source->count)
-        {
-            return false;
-        }
-        if (source->containerId == destination)
-        {
-            return true;
-        }
-        if (IsWorn(instanceId))
-        {
-            return TakeOff(instanceId, true, destination);
-        }
-        if (moveCount < source->count && instances_.size() >= kMaxSlots)
-        {
-            return false;
-        }
+        if (IsWorn(instanceId) || instances_.size() >= kMaxSlots) return false;
+        const auto placement = FindPlacement(source->defId, destination);
+        if (!placement) return false;
         FItemInstance moving = *source;
-        moving.count = moveCount;
+        moving.instanceId = nextInstanceId_++;
+        moving.count = movingCount;
         moving.containerId = destination;
-        if (ContainerUsed(destination) + InstanceVolume(moving) > target->capacity)
-        {
-            return false;
-        }
-        if (moveCount == source->count)
-        {
-            source->containerId = destination;
-        }
-        else
-        {
-            source->count -= moveCount;
-            moving.instanceId = nextInstanceId_++;
-            instances_.push_back(std::move(moving));
-        }
+        moving.placement = *placement;
+        FindInstance(instanceId)->count -= movingCount;
+        instances_.push_back(std::move(moving));
         RebuildLegacyItems();
         return true;
     }
 
     bool Inventory::TrySplit(FItemInstanceId instanceId, int count, FItemInstanceId& outSplitId)
     {
-        FItemInstance* source = FindInstance(instanceId);
-        if (!source || count <= 0 || count >= source->count || instances_.size() >= kMaxSlots)
-        {
+        const auto* source = FindInstance(instanceId);
+        if (!source || IsWorn(instanceId) || count <= 0 || count >= source->count || instances_.size() >= kMaxSlots)
             return false;
-        }
-        const FItemDef* definition = FindItemDef(source->defId);
-        if (!definition || definition->maxStack <= 1)
-        {
-            return false;
-        }
         FItemInstance split = *source;
+        auto placement = FindPlacement(split.defId, split.containerId);
+        if (!placement)
+        {
+            split.containerId = FindContainerWithSpace(*FindItemDef(split.defId), count);
+            placement = FindPlacement(split.defId, split.containerId);
+        }
+        if (!placement) return false;
+        split.placement = *placement;
         split.instanceId = nextInstanceId_++;
         split.count = count;
-        source->count -= count;
-        const FInventoryContainer* container = FindContainer(source->containerId);
-        if (!container || ContainerUsed(source->containerId) + InstanceVolume(split) > container->capacity)
-        {
-            source->count += count;
-            --nextInstanceId_;
-            return false;
-        }
+        FindInstance(instanceId)->count -= count;
         outSplitId = split.instanceId;
         instances_.push_back(std::move(split));
         RebuildLegacyItems();
@@ -525,11 +631,12 @@ namespace NextDayz
             return false;
         }
         item->containerId = kWornContainer;
+        item->placement = {};
         transaction.equippedClothing_.push_back(item->defId);
-        if (definition->containerCapacity > 0)
+        if (definition->containerSize.Area() > 0)
         {
             transaction.containers_.push_back({transaction.nextContainerId_++, instanceId,
-                                               std::string(definition->displayName), definition->containerCapacity,
+                                               std::string(definition->displayName), definition->containerSize,
                                                true, false});
         }
         // Free the incoming item's cargo space and provide its new container
@@ -571,60 +678,43 @@ namespace NextDayz
         }
     }
 
-    bool Inventory::TakeOff(FItemInstanceId instanceId, bool intoCargo, FContainerId destination)
+    bool Inventory::TakeOff(FItemInstanceId instanceId, bool intoCargo, FContainerId destination,
+                             std::optional<FGridPlacement> placement)
     {
-        if (!IsWorn(instanceId))
-        {
-            return false;
-        }
+        if (!IsWorn(instanceId)) return false;
         Inventory transaction = *this;
-        const FItemDef* definition = FindItemDef(transaction.FindInstance(instanceId)->defId);
-        if (!definition)
-        {
-            return false;
-        }
+        const auto* definition = FindItemDef(transaction.FindInstance(instanceId)->defId);
+        if (!definition) return false;
         if (destination)
         {
-            const FInventoryContainer* target = transaction.FindContainer(destination);
-            if (!intoCargo || !target || target->ownerItemInstanceId == instanceId || !Accepts(*target, *definition) ||
-                transaction.ContainerUsed(destination) + InstanceVolume(*transaction.FindInstance(instanceId)) >
-                    target->capacity)
-            {
-                return false;
-            }
-            // Reserve the selected cargo space before evacuating the item's contents.
-            transaction.FindInstance(instanceId)->containerId = destination;
+            if (!intoCargo) return false;
+            if (!placement) placement = transaction.FindPlacement(definition->id, destination, instanceId);
+            if (!placement || !transaction.CanPlaceItem(definition->id, destination, *placement, instanceId)) return false;
+            // Reserve the exact rectangle before evacuating the item's container.
+            auto* item = transaction.FindInstance(instanceId);
+            item->containerId = destination;
+            item->placement = *placement;
         }
         FContainerId removedId = 0;
-        if (const FInventoryContainer* owned = transaction.ContainerOwnedBy(instanceId))
+        if (const auto* owned = transaction.ContainerOwnedBy(instanceId))
         {
             removedId = owned->containerId;
             const auto findSpace = [&transaction, removedId](const FItemDef& itemDef, int count)
-            {
-                return transaction.FindContainerWithSpace(itemDef, count, removedId);
-            };
-            if (!EvacuateContainer(transaction, removedId, findSpace))
-            {
-                return false;
-            }
-            std::erase_if(transaction.containers_,
-                [removedId](const FInventoryContainer& container) { return container.containerId == removedId; });
+            { return transaction.FindContainerWithSpace(itemDef, count, removedId); };
+            if (!EvacuateContainer(transaction, removedId, findSpace)) return false;
+            std::erase_if(transaction.containers_, [removedId](const auto& container)
+            { return container.containerId == removedId; });
         }
-        if (intoCargo && destination == 0)
+        if (intoCargo && !destination)
         {
-            const FContainerId destination = transaction.FindContainerWithSpace(*definition, 1, removedId);
-            if (destination == 0)
-            {
-                return false;
-            }
-            transaction.FindInstance(instanceId)->containerId = destination;
+            destination = transaction.FindContainerWithSpace(*definition, 1, removedId);
+            const auto chosen = transaction.FindPlacement(definition->id, destination, instanceId);
+            if (!chosen) return false;
+            auto* item = transaction.FindInstance(instanceId);
+            item->containerId = destination;
+            item->placement = *chosen;
         }
-        const auto worn = std::find(transaction.equippedClothing_.begin(), transaction.equippedClothing_.end(),
-                                    std::string(definition->id));
-        if (worn != transaction.equippedClothing_.end())
-        {
-            transaction.equippedClothing_.erase(worn);
-        }
+        std::erase(transaction.equippedClothing_, std::string(definition->id));
         transaction.RebuildLegacyItems();
         *this = std::move(transaction);
         return true;

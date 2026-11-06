@@ -14,7 +14,7 @@
     { "type": "cvar", "name": "nextdayz.validation.loadout", "set": true },
     { "type": "cvar", "name": "nextdayz.validation.spawnZombie", "set": true },
     { "type": "wait-frames", "n": 30 },
-    { "type": "assert", "query": "game.inventoryCapacity", "op": "eq", "value": 38 },
+    { "type": "assert", "query": "game.inventoryCapacity", "op": "eq", "value": 46 },
     { "type": "assert", "query": "game.activeZombies", "op": "ge", "value": 1 },
     { "type": "mouse-button", "button": "left", "action": "down" },
     { "type": "wait-ms", "ms": 1000 },

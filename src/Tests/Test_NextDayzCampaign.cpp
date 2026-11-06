@@ -56,9 +56,16 @@ TEST_CASE("NextDayz mounted parts survive storage world piles and legacy save mi
 
     nlohmann::json document;
     { std::ifstream stream(path); stream >> document; }
-    REQUIRE(document.at("version") == 4);
+    REQUIRE(document.at("version") == 5);
     document["version"] = 3;
     auto& state = document["state"];
+    for (auto& container : state["inventory"]["containers"])
+    {
+        container["capacity"] = container["weaponOnly"].get<bool>() ? 10 :
+            container["width"].get<int>() * container["height"].get<int>();
+        container.erase("width");
+        container.erase("height");
+    }
     for (auto& item : state["inventory"]["instances"]) item.erase("attachments");
     for (auto& item : state["campaign"]["storage"]) item.erase("attachments");
     const auto stripWorld = [](auto& world)
@@ -224,4 +231,79 @@ TEST_CASE("NextDayz save round-trip retains world depletion and recovers a backu
     REQUIRE(error.find("Recovered backup") != std::string::npos);
     saved.inventory.instances.front().containerId = 9999;
     REQUIRE_FALSE(WriteCampaignSave(path, saved, error));
+}
+
+
+TEST_CASE("NextDayz grid save roundtrip retains coordinates and rejects overlapping cargo", "[NextDayz][Campaign][InventoryGrid]")
+{
+    const auto path = std::filesystem::temp_directory_path() /
+        fmt::format("nextdayz-grid-{}.json", std::chrono::steady_clock::now().time_since_epoch().count());
+    struct Cleanup
+    {
+        std::filesystem::path path;
+        ~Cleanup() { std::error_code ec; for (const auto* suffix : {"", ".bak", ".tmp"}) std::filesystem::remove(path.string() + suffix, ec); }
+    } cleanup{path};
+    Inventory inventory;
+    FItemInstanceId pistol = 0;
+    REQUIRE(inventory.TryAddAt("pistol", 1, 2, {0, 0, true}, &pistol));
+    REQUIRE(inventory.TryAddAt("bandage", 2, 2, {1, 1, false}));
+    REQUIRE(inventory.SetLoadedAmmo(pistol, 6));
+    FCampaignSave saved;
+    saved.map = "grid-test";
+    saved.inventory = inventory.Capture();
+    std::string error;
+    REQUIRE(WriteCampaignSave(path, saved, error));
+    FCampaignSave read;
+    REQUIRE(ReadCampaignSave(path, read, error));
+    Inventory restored;
+    REQUIRE(restored.Restore(read.inventory));
+    REQUIRE((restored.FindInstance(pistol)->placement == FGridPlacement{0, 0, true}));
+    REQUIRE(restored.LoadedAmmo(pistol) == 6);
+    auto invalid = saved;
+    invalid.inventory.instances.back().placement = {0, 0, false};
+    REQUIRE_FALSE(WriteCampaignSave(path, invalid, error));
+}
+
+TEST_CASE("NextDayz legacy grid migration keeps items that no longer fit in safehouse storage", "[NextDayz][Campaign][InventoryGrid]")
+{
+    const auto path = std::filesystem::temp_directory_path() /
+        fmt::format("nextdayz-grid-legacy-{}.json", std::chrono::steady_clock::now().time_since_epoch().count());
+    struct Cleanup
+    {
+        std::filesystem::path path;
+        ~Cleanup() { std::error_code ec; for (const auto* suffix : {"", ".bak", ".tmp"}) std::filesystem::remove(path.string() + suffix, ec); }
+    } cleanup{path};
+    FCampaignSave saved;
+    saved.map = "legacy-grid-test";
+    saved.inventory = Inventory{}.Capture();
+    std::string error;
+    REQUIRE(WriteCampaignSave(path, saved, error));
+    nlohmann::json document;
+    { std::ifstream stream(path); stream >> document; }
+    document["version"] = 4;
+    auto& inventory = document["state"]["inventory"];
+    for (auto& container : inventory["containers"])
+    {
+        container["capacity"] = container["weaponOnly"].get<bool>() ? 10 :
+            container["width"].get<int>() * container["height"].get<int>();
+        container.erase("width");
+        container.erase("height");
+    }
+    // Under the old scalar rules two helmets fit in the shirt (6), one in the trousers (4).
+    // Their 2x2 footprints can now use only the trousers; the other two must not disappear.
+    for (int id = 1; id <= 3; ++id)
+        inventory["instances"].push_back({{"instanceId", id}, {"defId", "helmet"}, {"count", 1},
+            {"containerId", id <= 2 ? 1 : 2}, {"loadedAmmo", 0}});
+    inventory["nextInstanceId"] = 4;
+    { std::ofstream stream(path, std::ios::trunc); stream << document; }
+    FCampaignSave read;
+    REQUIRE(ReadCampaignSave(path, read, error));
+    Inventory restored;
+    REQUIRE(restored.Restore(read.inventory));
+    REQUIRE(restored.CountOf("helmet") == 1);
+    REQUIRE(read.campaign.storage.size() == 2);
+    for (const auto& item : read.campaign.storage) REQUIRE(item.defId == "helmet");
+    REQUIRE(WriteCampaignSave(path, read, error));
+    REQUIRE(ReadCampaignSave(path, read, error));
+    REQUIRE(read.campaign.storage.size() == 2);
 }

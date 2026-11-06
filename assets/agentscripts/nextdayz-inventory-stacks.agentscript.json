@@ -1,0 +1,694 @@
+{
+  "name": "nextdayz-inventory-stacks",
+  "target": "NextDayz",
+  "scene": "assets/scad/tests/nextdayz_melee.scad",
+  "args": [
+    "--system-dpi-scaling"
+  ],
+  "defaults": {
+    "waitFrames": 3,
+    "stepTimeoutMs": 20000
+  },
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.freezeNeeds",
+      "set": true
+    },
+    {
+      "type": "log",
+      "message": "Ground ammo merges into a partially full stack even when hovering its second grid cell; overflow stays on the ground"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "ammo_545:40"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.drop",
+      "set": ""
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.drop",
+      "set": "ammo_545"
+    },
+    {
+      "type": "key",
+      "code": "TAB",
+      "action": "press"
+    },
+    {
+      "type": "wait-frames",
+      "n": 10
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryContents",
+      "op": "contains",
+      "value": "ammo_545@Basic trouser pockets:10;"
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.1,
+          0.132
+        ]
+      }
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "down"
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.726,
+          0.27
+        ]
+      }
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_stacks_ground_preview",
+      "ui": true
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "up"
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "wait-ms",
+      "ms": 1300
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryContents",
+      "op": "contains",
+      "value": "ammo_545@Basic trouser pockets:30;"
+    },
+    {
+      "type": "assert",
+      "query": "game.lootRemaining",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_stacks_overflow_remains",
+      "ui": true
+    },
+    {
+      "type": "log",
+      "message": "A full ammo stack rejects another drop without deleting the ground remainder"
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.1,
+          0.132
+        ]
+      }
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "down"
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.726,
+          0.27
+        ]
+      }
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_stacks_full_rejected",
+      "ui": true
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "up"
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "wait-ms",
+      "ms": 1300
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryContents",
+      "op": "contains",
+      "value": "ammo_545@Basic trouser pockets:30;"
+    },
+    {
+      "type": "assert",
+      "query": "game.lootRemaining",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "log",
+      "message": "Two owned ammo rectangles become one stack and release the source cells"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.restart",
+      "set": false
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.restart",
+      "set": true
+    },
+    {
+      "type": "wait-frames",
+      "n": 10
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "ammo_545:20"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.drop",
+      "set": ""
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.drop",
+      "set": "ammo_545"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "ammo_545:10"
+    },
+    {
+      "type": "key",
+      "code": "TAB",
+      "action": "press"
+    },
+    {
+      "type": "wait-frames",
+      "n": 10
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.1,
+          0.132
+        ]
+      }
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "down"
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.701,
+          0.27
+        ]
+      }
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "up"
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "wait-ms",
+      "ms": 1300
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryContents",
+      "op": "contains",
+      "value": "ammo_545@Basic shirt pockets:10;"
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryContents",
+      "op": "contains",
+      "value": "ammo_545@Basic trouser pockets:20;"
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryUsed",
+      "op": "eq",
+      "value": 7
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.776,
+          0.17
+        ]
+      }
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "down"
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.701,
+          0.27
+        ]
+      }
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_stacks_owned_preview",
+      "ui": true
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "up"
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "wait-ms",
+      "ms": 1300
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryContents",
+      "op": "contains",
+      "value": "ammo_545@Basic trouser pockets:30;"
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryUsed",
+      "op": "eq",
+      "value": 5
+    },
+    {
+      "type": "assert",
+      "query": "game.lootRemaining",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "log",
+      "message": "Rags and bandages follow their own limits and release their ground pile after merging"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "rag:4"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.drop",
+      "set": ""
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.drop",
+      "set": "rag"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "rag:2"
+    },
+    {
+      "type": "wait-frames",
+      "n": 10
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.1,
+          0.132
+        ]
+      }
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "down"
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.776,
+          0.17
+        ]
+      }
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "up"
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "wait-ms",
+      "ms": 1300
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryContents",
+      "op": "contains",
+      "value": "rag@Basic shirt pockets:6;"
+    },
+    {
+      "type": "assert",
+      "query": "game.lootRemaining",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "bandage:2"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.drop",
+      "set": ""
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.drop",
+      "set": "bandage"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "bandage:1"
+    },
+    {
+      "type": "wait-frames",
+      "n": 10
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.1,
+          0.132
+        ]
+      }
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "down"
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.701,
+          0.17
+        ]
+      }
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "up"
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "wait-ms",
+      "ms": 1300
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryContents",
+      "op": "contains",
+      "value": "bandage@Basic shirt pockets:4;"
+    },
+    {
+      "type": "assert",
+      "query": "game.lootRemaining",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryUsed",
+      "op": "eq",
+      "value": 6
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_stacks_ammo_rags_bandages",
+      "ui": true
+    },
+    {
+      "type": "log",
+      "message": "The context-menu merge action collects matching medical stacks into the selected item"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.restart",
+      "set": false
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.restart",
+      "set": true
+    },
+    {
+      "type": "wait-frames",
+      "n": 10
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "bandage:2"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.drop",
+      "set": ""
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.drop",
+      "set": "bandage"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "bandage:1"
+    },
+    {
+      "type": "key",
+      "code": "TAB",
+      "action": "press"
+    },
+    {
+      "type": "wait-frames",
+      "n": 10
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.1,
+          0.132
+        ]
+      }
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "down"
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.776,
+          0.17
+        ]
+      }
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "up"
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "wait-ms",
+      "ms": 1300
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryUsed",
+      "op": "eq",
+      "value": 4
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.701,
+          0.17
+        ]
+      }
+    },
+    {
+      "type": "mouse-button",
+      "button": "right",
+      "action": "down"
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "mouse-button",
+      "button": "right",
+      "action": "up"
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_stacks_context_menu",
+      "ui": true
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.715,
+          0.188
+        ]
+      }
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "down"
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "up"
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryContents",
+      "op": "contains",
+      "value": "bandage@Basic shirt pockets:4;"
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryUsed",
+      "op": "eq",
+      "value": 3
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_stacks_context_merged",
+      "ui": true
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

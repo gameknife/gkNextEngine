@@ -740,7 +740,7 @@ namespace NextDayz::Debug
             if (container.active)
             {
                 ImGui::TextDisabled("%s: %d / %d%s", NextDayz::L10n::Tr(container.displayName), inventory->ContainerUsed(container.containerId),
-                                    container.capacity, container.weaponOnly ? NextDayz::L10n::Tr(" (weapons)") : "");
+                                    container.Capacity(), container.weaponOnly ? NextDayz::L10n::Tr(" (weapons)") : "");
             }
         }
 

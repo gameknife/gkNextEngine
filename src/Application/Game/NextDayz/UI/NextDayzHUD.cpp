@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include <imgui.h>
+#include <imgui_internal.h>
 
 #include "Application/Game/NextDayz/Inventory/Inventory.hpp"
 #include "Application/Game/NextDayz/Weapons/WeaponSystem.hpp"
@@ -20,6 +21,28 @@ namespace NextDayz::NextDayzHUD
     {
         constexpr const char* kItemPayload = "ND_ITEM";
         constexpr const char* kLootPayload = "ND_LOOT";
+
+        struct FInventoryDrag
+        {
+            FItemInstanceId item = 0;
+            int loot = -1;
+            bool rotated = false;
+            int anchorX = 0;
+            int anchorY = 0;
+        };
+        FInventoryDrag InventoryDrag;
+
+        void StartItemDrag(const FItemInstance& item, ImVec2 origin, float cellSize = 0.0f)
+        {
+            if (InventoryDrag.item == item.instanceId && InventoryDrag.loot == -1) return;
+            const auto size = Inventory::InstanceSize(item);
+            const ImVec2 current = ImGui::GetMousePos();
+            const ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0.0f);
+            const ImVec2 mouse(current.x - delta.x, current.y - delta.y);
+            InventoryDrag = {item.instanceId, -1, item.placement.rotated,
+                cellSize > 0.0f ? std::clamp(static_cast<int>((mouse.x - origin.x) / cellSize), 0, size.width - 1) : 0,
+                cellSize > 0.0f ? std::clamp(static_cast<int>((mouse.y - origin.y) / cellSize), 0, size.height - 1) : 0};
+        }
 
         std::string FitText(std::string text, float width)
         {
@@ -817,8 +840,12 @@ namespace NextDayz::NextDayzHUD
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "%s", std::string(NextDayz::L10n::Tr(definition.displayName)).c_str());
 
-            const int vol = Inventory::InstanceVolume(instance);
-            ImGui::TextColored(ImVec4(0.65f, 0.65f, 0.70f, 1.0f), NextDayz::L10n::Tr("Volume: %d Slot%s"), vol, vol == 1 ? "" : "s");
+            const auto size = Inventory::InstanceSize(instance);
+            ImGui::Text(L10n::Tr("Footprint: %d x %d cells"), size.width, size.height);
+            if (definition.containerSize.IsValid())
+                ImGui::Text(L10n::Tr("Container: %d x %d cells"), definition.containerSize.width, definition.containerSize.height);
+            if (definition.maxStack > 1)
+                ImGui::Text(L10n::Tr("Stack: %d / %d"), instance.count, definition.maxStack);
 
             if (!definition.description.empty())
             {
@@ -891,7 +918,7 @@ namespace NextDayz::NextDayzHUD
 
         // Renders an item card slot in a grid. Returns true if clicked.
         bool DrawGridItemSlot(const FHudContext& context, const FItemInstance& instance,
-                              const ImVec2& slotSize, bool inEquipmentSlot = false)
+                              const ImVec2& slotSize, bool inEquipmentSlot = false, float cellSize = 0.0f)
         {
             const FItemDef* def = FindItemDef(instance.defId);
             if (!def)
@@ -917,12 +944,18 @@ namespace NextDayz::NextDayzHUD
             // Item Display Name
             const std::string name = FitText(std::string(NextDayz::L10n::Tr(def->displayName)), slotSize.x - 14.0f);
             draw->AddText(ImVec2(pos.x + 7.0f, pos.y + 6.0f), UITheme::Colors::TextPrimary, name.c_str());
+            const auto footprint = Inventory::InstanceSize(instance);
+            const auto dimensions = fmt::format("{}x{}", footprint.width, footprint.height);
+            const float indicatorWidth = def->maxStack > 1 || def->kind == EItemKind::Weapon ? 36.0f : 0.0f;
+            if (slotSize.x > ImGui::CalcTextSize(dimensions.c_str()).x + indicatorWidth + 14.0f)
+                draw->AddText(ImVec2(pos.x + 7.0f, max.y - ImGui::GetTextLineHeight() - 4.0f),
+                              UITheme::Colors::TextMuted, dimensions.c_str());
 
             // Bottom-right indicator: Ammo count or stack count
-            if (instance.count > 1)
+            if (def->maxStack > 1)
             {
                 char countText[16];
-                std::snprintf(countText, sizeof(countText), "x%d", instance.count);
+                std::snprintf(countText, sizeof(countText), "%d/%d", instance.count, def->maxStack);
                 const ImVec2 cSize = ImGui::CalcTextSize(countText);
                 draw->AddText(ImVec2(max.x - cSize.x - 5.0f, max.y - cSize.y - 4.0f),
                               UITheme::Colors::AccentAmber, countText);
@@ -945,16 +978,19 @@ namespace NextDayz::NextDayzHUD
             // Drag Source
             if (ImGui::BeginDragDropSource())
             {
+                StartItemDrag(instance, pos, cellSize);
                 const FItemInstanceId id = instance.instanceId;
                 ImGui::SetDragDropPayload(kItemPayload, &id, sizeof(id));
 
                 // Floating Ghost Item Card preview
                 ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), "%s", std::string(NextDayz::L10n::Tr(def->displayName)).c_str());
-                if (instance.count > 1)
+                if (def->maxStack > 1)
                 {
                     ImGui::SameLine();
-                    ImGui::Text("x%d", instance.count);
+                    ImGui::Text("%d / %d", instance.count, def->maxStack);
                 }
+                const auto size = InventoryDrag.rotated ? def->size.Rotated() : def->size;
+                ImGui::Text(L10n::Tr("%d x %d  [R] Rotate"), size.width, size.height);
                 ImGui::EndDragDropSource();
             }
 
@@ -978,6 +1014,28 @@ namespace NextDayz::NextDayzHUD
             // Context Menu
             if (ImGui::BeginPopupContextItem("##slot_menu"))
             {
+                if (def->maxStack > 1 && context.mergeItems)
+                {
+                    const bool hasMatching = std::any_of(context.inventory->Instances().begin(),
+                        context.inventory->Instances().end(), [&](const auto& other)
+                        { return other.instanceId != instance.instanceId && other.defId == instance.defId; });
+                    if (ImGui::MenuItem(L10n::Label("Merge matching stacks"), nullptr, false,
+                                       hasMatching && instance.count < def->maxStack))
+                    {
+                        int room = def->maxStack - instance.count;
+                        for (const auto& other : context.inventory->Instances())
+                            if (room > 0 && other.instanceId != instance.instanceId && other.defId == instance.defId)
+                            {
+                                context.mergeItems(other.instanceId, instance.instanceId);
+                                room -= std::min(room, other.count);
+                            }
+                    }
+                }
+                FGridPlacement rotated = instance.placement;
+                rotated.rotated = !rotated.rotated;
+                if (ImGui::MenuItem(L10n::Label("Rotate"), nullptr, false,
+                    context.inventory->CanPlace(instance.instanceId, instance.containerId, rotated)) && context.placeItem)
+                    context.placeItem(instance.instanceId, instance.containerId, rotated);
                 if ((def->kind == EItemKind::Consumable || def->use != EItemUse::None) && context.useItem &&
                     ImGui::MenuItem(NextDayz::L10n::Label("Use")))
                 {
@@ -1092,9 +1150,9 @@ namespace NextDayz::NextDayzHUD
                 {
                     std::snprintf(statText, sizeof(statText), NextDayz::L10n::Tr("Warmth +%.0f%%"), def->warmth * 100.0f);
                 }
-                else if (def->containerCapacity > 0)
+                else if (def->containerSize.Area() > 0)
                 {
-                    std::snprintf(statText, sizeof(statText), NextDayz::L10n::Tr("+%d Slots"), def->containerCapacity);
+                    std::snprintf(statText, sizeof(statText), NextDayz::L10n::Tr("+%d Slots"), def->containerSize.Area());
                 }
 
                 if (statText[0] != '\0')
@@ -1112,6 +1170,7 @@ namespace NextDayz::NextDayzHUD
                 // Drag Source: dragging worn gear to take off / move
                 if (ImGui::BeginDragDropSource())
                 {
+                    StartItemDrag(*instance, pos);
                     const FItemInstanceId id = instance->instanceId;
                     ImGui::SetDragDropPayload(kItemPayload, &id, sizeof(id));
                     ImGui::TextUnformatted(std::string(NextDayz::L10n::Tr(def->displayName)).c_str());
@@ -1266,6 +1325,111 @@ namespace NextDayz::NextDayzHUD
             ImGui::Spacing();
         }
 
+        void DrawCargoGrid(const FHudContext& context, const FInventoryContainer& container)
+        {
+            const auto& inventory = *context.inventory;
+            const ImVec2 origin = ImGui::GetCursorScreenPos();
+            constexpr float maxCellSize = 48.0f;
+            const float cell = std::max(1.0f, std::floor(std::min(maxCellSize,
+                ImGui::GetContentRegionAvail().x / static_cast<float>(container.size.width))));
+            const ImVec2 gridSize(cell * container.size.width, cell * container.size.height);
+            auto* draw = ImGui::GetWindowDrawList();
+            ImGui::BeginGroup();
+            for (int y = 0; y < container.size.height; ++y)
+                for (int x = 0; x < container.size.width; ++x)
+                {
+                    const ImVec2 a(origin.x + x * cell + 1.0f, origin.y + y * cell + 1.0f);
+                    UIWidgets::DrawSlotFrame(draw, a, ImVec2(a.x + cell - 2.0f, a.y + cell - 2.0f),
+                                             false, false, false, false, 2.0f);
+                }
+            for (const auto& item : inventory.Instances())
+            {
+                if (item.containerId != container.containerId) continue;
+                const auto size = Inventory::InstanceSize(item);
+                ImGui::SetCursorScreenPos(ImVec2(origin.x + item.placement.x * cell + 2.0f,
+                                                origin.y + item.placement.y * cell + 2.0f));
+                DrawGridItemSlot(context, item, ImVec2(size.width * cell - 4.0f, size.height * cell - 4.0f), false, cell);
+            }
+            // Dummy reserves the full matrix without intercepting presses on the item cards.
+            ImGui::SetCursorScreenPos(origin);
+            ImGui::Dummy(gridSize);
+            ImGui::EndGroup();
+            // EndGroup can inherit the dragged item's ID. A separate target ID also
+            // permits rearranging items inside their own container.
+            if (!ImGui::BeginDragDropTargetCustom(ImRect(origin, ImVec2(origin.x + gridSize.x, origin.y + gridSize.y)),
+                                                ImGui::GetID("##grid_drop"))) return;
+            const auto* payload = ImGui::GetDragDropPayload();
+            const bool fromItem = payload && payload->IsDataType(kItemPayload);
+            const bool fromLoot = payload && payload->IsDataType(kLootPayload);
+            const FItemInstance* item = fromItem ? inventory.FindInstance(*static_cast<const FItemInstanceId*>(payload->Data)) : nullptr;
+            const FHudNearbyLoot* loot = nullptr;
+            if (fromLoot)
+                for (const auto& entry : context.nearby)
+                    if (entry.index == *static_cast<const int*>(payload->Data)) { loot = &entry; break; }
+            const auto* def = item ? FindItemDef(item->defId) : loot ? FindItemDef(loot->itemId) : nullptr;
+            if (def)
+            {
+                const ImVec2 mouse = ImGui::GetMousePos();
+                const int mouseX = static_cast<int>(std::floor((mouse.x - origin.x) / cell));
+                const int mouseY = static_cast<int>(std::floor((mouse.y - origin.y) / cell));
+                const FGridPlacement placement{mouseX - InventoryDrag.anchorX, mouseY - InventoryDrag.anchorY, InventoryDrag.rotated};
+                const auto size = placement.rotated ? def->size.Rotated() : def->size;
+                const auto* merge = inventory.FindStackAt(def->id, container.containerId, mouseX, mouseY,
+                                                           item ? item->instanceId : 0);
+                const int mergedCount = merge ? std::min(item ? item->count : loot->count, def->maxStack - merge->count) : 0;
+                const bool fits = merge ? mergedCount > 0 : (item
+                    ? inventory.CanPlace(item->instanceId, container.containerId, placement)
+                    : inventory.FitCountAt(def->id, loot->count, container.containerId, placement) > 0);
+                const auto dropPlacement = merge ? merge->placement : placement;
+                const auto dropSize = merge ? Inventory::InstanceSize(*merge) : size;
+                const ImVec2 a(origin.x + dropPlacement.x * cell, origin.y + dropPlacement.y * cell);
+                const ImVec2 b(a.x + dropSize.width * cell, a.y + dropSize.height * cell);
+                draw->PushClipRect(origin, ImVec2(origin.x + gridSize.x, origin.y + gridSize.y), true);
+                draw->AddRectFilled(a, b, fits ? UITheme::Colors::SlotValidDropBg : UITheme::Colors::SlotInvalidDropBg, 3.0f);
+                draw->AddRect(a, b, fits ? UITheme::Colors::AccentEmerald : UITheme::Colors::AccentRose, 3.0f, 0, 2.0f);
+                draw->PopClipRect();
+                if (merge)
+                    ImGui::SetTooltip(L10n::Tr("Merge +%d  (%d / %d)"), mergedCount,
+                                      merge->count + mergedCount, def->maxStack);
+                const auto* accepted = ImGui::AcceptDragDropPayload(fromItem ? kItemPayload : kLootPayload,
+                    ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
+                if (accepted && accepted->IsDelivery() && fits)
+                {
+                    if (merge && item && context.mergeItems) context.mergeItems(item->instanceId, merge->instanceId);
+                    else if (item && context.placeItem) context.placeItem(item->instanceId, container.containerId, placement);
+                    else if (loot && context.takeLootAt) context.takeLootAt(loot->index, container.containerId, dropPlacement);
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
+
+        void DrawCargoContainer(const FHudContext& context, const FInventoryContainer& container)
+        {
+            if (!container.active) return;
+            const int used = context.inventory->ContainerUsed(container.containerId);
+            const int capacity = container.Capacity();
+            ImGui::PushID(static_cast<int>(container.containerId));
+            const ImVec2 pos = ImGui::GetCursorScreenPos();
+            const float width = ImGui::GetContentRegionAvail().x;
+            auto* draw = ImGui::GetWindowDrawList();
+            draw->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + 28.0f), UITheme::Colors::SurfaceHeader, 3.0f);
+            const auto count = fmt::format("{} / {}", used, capacity);
+            const auto name = FitText(fmt::format("{}  {}x{}", L10n::Tr(container.displayName),
+                container.size.width, container.size.height), width - ImGui::CalcTextSize(count.c_str()).x - 26.0f);
+            draw->AddText(ImVec2(pos.x + 8.0f, pos.y + 6.0f), UITheme::Colors::TextPrimary, name.c_str());
+            draw->AddText(ImVec2(pos.x + width - ImGui::CalcTextSize(count.c_str()).x - 8.0f, pos.y + 6.0f),
+                          used >= capacity ? UITheme::Colors::AccentRose : UITheme::Colors::AccentAmber, count.c_str());
+            ImGui::Dummy(ImVec2(width, 28.0f));
+            AcceptContainerDrop(context, container.containerId);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", L10n::Tr("Drop on the header to auto-place"));
+            ImGui::Spacing();
+            DrawCargoGrid(context, container);
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            ImGui::PopID();
+        }
+
         // ====================================================================
         // CHARACTER PREVIEW & FULLSCREEN INVENTORY
         // ====================================================================
@@ -1318,6 +1482,14 @@ namespace NextDayz::NextDayzHUD
             {
                 return;
             }
+            const auto* payload = ImGui::GetDragDropPayload();
+            if (!payload) InventoryDrag = {};
+            else if ((payload->IsDataType(kItemPayload) || payload->IsDataType(kLootPayload)) &&
+                     ImGui::IsKeyPressed(ImGuiKey_R, false))
+            {
+                InventoryDrag.rotated = !InventoryDrag.rotated;
+                InventoryDrag.anchorX = InventoryDrag.anchorY = 0;
+            }
             const Inventory& inventory = *context.inventory;
             const ImGuiViewport* vp = ImGui::GetMainViewport();
 
@@ -1342,7 +1514,8 @@ namespace NextDayz::NextDayzHUD
             ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() - closeWidth - 20.0f, header.y));
             if (ImGui::Button(close, ImVec2(closeWidth, 30.0f)) && context.closeInventory) context.closeInventory();
             ImGui::SetCursorPos(ImVec2(header.x, std::max(headerEnd, header.y + 34.0f)));
-            ImGui::TextDisabled("%s", L10n::Tr("Inspect your survivor. Organize your gear."));
+            ImGui::TextDisabled("%s  |  %s", L10n::Tr("Inspect your survivor. Organize your gear."),
+                                L10n::Tr("[R] Rotate while dragging"));
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
@@ -1392,6 +1565,8 @@ namespace NextDayz::NextDayzHUD
                     // Bind the source to the card before submitting its Take button.
                     if (ImGui::BeginDragDropSource())
                     {
+                        if (InventoryDrag.loot != loot.index || InventoryDrag.item)
+                            InventoryDrag = {0, loot.index, false, 0, 0};
                         ImGui::SetDragDropPayload(kLootPayload, &loot.index, sizeof(loot.index));
                         ImGui::TextUnformatted(NextDayz::L10n::Localize(loot.name, NextDayz::L10n::Language()).c_str());
                         ImGui::EndDragDropSource();
@@ -1511,115 +1686,8 @@ namespace NextDayz::NextDayzHUD
                                    inventory.UsedCapacity(), inventory.TotalCapacity());
                 ImGui::Spacing();
 
-                for (const FInventoryContainer& container : inventory.Containers())
-                {
-                    if (!container.active)
-                    {
-                        continue;
-                    }
-                    const int used = inventory.ContainerUsed(container.containerId);
-                    const int capacity = container.capacity;
-                    ImGui::PushID(static_cast<int>(container.containerId));
-                    ImGui::BeginGroup();
-
-                    // Container Header Banner
-                    const ImVec2 bannerPos = ImGui::GetCursorScreenPos();
-                    const float bannerW = ImGui::GetContentRegionAvail().x;
-                    const float bannerH = 26.0f;
-                    ImDrawList* cDraw = ImGui::GetWindowDrawList();
-
-                    cDraw->AddRectFilled(bannerPos, ImVec2(bannerPos.x + bannerW, bannerPos.y + bannerH),
-                                         UITheme::Colors::SurfaceHeader, 3.0f);
-                    cDraw->AddText(ImVec2(bannerPos.x + 8.0f, bannerPos.y + 4.0f), UITheme::Colors::TextPrimary,
-                                   NextDayz::L10n::Tr(container.displayName));
-
-                    char capText[128];
-                    std::snprintf(capText, sizeof(capText), NextDayz::L10n::Tr("%d / %d Slots"), used, capacity);
-                    const ImVec2 capSize = ImGui::CalcTextSize(capText);
-                    const ImU32 capColor = used >= capacity ? UITheme::Colors::AccentRose : UITheme::Colors::AccentAmber;
-                    cDraw->AddText(ImVec2(bannerPos.x + bannerW - capSize.x - 8.0f, bannerPos.y + 4.0f),
-                                   capColor, capText);
-
-                    ImGui::Dummy(ImVec2(bannerW, bannerH));
-
-                    // Capacity Progress Bar
-                    const ImVec2 barMin(bannerPos.x, bannerPos.y + bannerH + 2.0f);
-                    const ImVec2 barMax(bannerPos.x + bannerW, barMin.y + 4.0f);
-                    UIWidgets::DrawTacticalBar(cDraw, barMin, barMax,
-                                               capacity > 0 ? static_cast<float>(used) / static_cast<float>(capacity) : 0.0f,
-                                               used >= capacity ? UITheme::Colors::AccentRose : UITheme::Colors::AccentEmerald);
-                    ImGui::Dummy(ImVec2(bannerW, 8.0f));
-
-                    // Container Grid Matrix
-                    // Keep item names legible as the full-screen layout scales with resolution.
-                    const int cols = std::clamp(static_cast<int>(bannerW / 100.0f), 2, 6);
-                    const float slotPadding = 6.0f;
-                    const float slotW = (bannerW - (cols - 1) * slotPadding) / static_cast<float>(cols);
-                    const float slotH = 46.0f;
-                    const ImVec2 slotSize(slotW, slotH);
-
-                    // Collect items in this container
-                    std::vector<const FItemInstance*> containerItems;
-                    for (const FItemInstance& item : inventory.Instances())
-                    {
-                        if (item.containerId == container.containerId)
-                        {
-                            containerItems.push_back(&item);
-                        }
-                    }
-
-                    // A nested table owns row heights and wrapping. SameLine
-                    // cursor state from card buttons/popups must not size the grid.
-                    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(slotPadding * 0.5f, slotPadding * 0.5f));
-                    if (ImGui::BeginTable("##cargo_grid", cols,
-                        ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoPadOuterX))
-                    {
-                        int currentSlot = 0;
-                        // Render occupied item slots
-                        for (const FItemInstance* item : containerItems)
-                        {
-                            ImGui::TableNextColumn();
-                            DrawGridItemSlot(context, *item, slotSize, false);
-                            currentSlot++;
-                        }
-
-                        // Show actual free volume; a full container has no fake empty cell.
-                        const int emptySlotsToShow = std::max(0, capacity - used);
-                        const int totalSlotsToDraw = currentSlot + emptySlotsToShow;
-
-                        while (currentSlot < totalSlotsToDraw)
-                        {
-                            ImGui::TableNextColumn();
-
-                            const ImVec2 ePos = ImGui::GetCursorScreenPos();
-                            ImGui::PushID(currentSlot + 10000);
-                            ImGui::InvisibleButton("##empty_slot", slotSize);
-                            const bool eHovered = ImGui::IsItemHovered();
-
-                            UIWidgets::DrawSlotFrame(cDraw, ePos, ImVec2(ePos.x + slotW, ePos.y + slotH),
-                                                     false, eHovered, false, false, 4.0f);
-
-                            // Plus sign in center of empty slot
-                            cDraw->AddText(ImVec2(ePos.x + slotW * 0.5f - 4.0f, ePos.y + slotH * 0.5f - 7.0f),
-                                           UITheme::Colors::SlotEmptyBorder, "+");
-
-                            ImGui::PopID();
-                            currentSlot++;
-                        }
-                        ImGui::EndTable();
-                    }
-                    ImGui::PopStyleVar();
-
-                    // EndGroup exposes the complete banner + grid as one target,
-                    // including occupied cells, gaps and containers with no free cells.
-                    ImGui::EndGroup();
-                    AcceptContainerDrop(context, container.containerId);
-
-                    ImGui::Spacing();
-                    ImGui::Separator();
-                    ImGui::Spacing();
-                    ImGui::PopID();
-                }
+                for (const auto& container : inventory.Containers())
+                    DrawCargoContainer(context, container);
 
                 ImGui::EndChild();
                 ImGui::EndTable();

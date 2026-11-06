@@ -57,15 +57,33 @@ namespace NextDayz
         Map,         // the map screen (M)
     };
 
+    struct FGridSize
+    {
+        int width = 1;
+        int height = 1;
+        constexpr int Area() const { return width * height; }
+        constexpr bool IsValid() const { return width > 0 && height > 0 && width <= 16 && height <= 16; }
+        constexpr FGridSize Rotated() const { return {height, width}; }
+        constexpr bool operator==(const FGridSize&) const = default;
+    };
+
+    struct FGridPlacement
+    {
+        int x = -1;
+        int y = -1;
+        bool rotated = false;
+        constexpr bool operator==(const FGridPlacement&) const = default;
+    };
+
     struct FItemDef
     {
         std::string_view id;
         std::string_view displayName;
         EItemKind kind = EItemKind::Misc;
-        int volumePerStack = 1;
+        FGridSize size{};
         int maxStack = 1;
         EEquipSlot equipSlot = EEquipSlot::None;
-        int containerCapacity = 0;
+        FGridSize containerSize{0, 0};
         float hungerDelta = 0.0f;
         float hydrationDelta = 0.0f;
         float healthDelta = 0.0f;

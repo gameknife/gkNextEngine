@@ -104,6 +104,7 @@
   现行契约见 [AGENT_GUIDE/NextAstrobot.md](AGENT_GUIDE/NextAstrobot.md)，设计文末 §11 列剩余打磨项）
 - NextDayz：[3C 与 ScadRig](projects/nextdayz/nextdayz-3c-scadrig-design.md) ·
   [PVE 生存循环](projects/nextdayz/nextdayz-productization-design.md) ·
+  [网格背包与物品尺寸](projects/nextdayz/inventory-grid-design.md) ·
   [持久世界与直升机撤离](projects/nextdayz/nextdayz-extraction-design.md) ·
   [世界派遣与地理关卡](projects/nextdayz/nextdayz-world-map-design.md) ·
   [游戏内调试器](projects/nextdayz/nextdayz-debugger.md)

@@ -848,6 +848,19 @@ SVD 以 PSO-1 目镜为锚点，在贴眼过渡结束后隐藏空心镜筒视模
 验证：`gnb validate --script assets/agentscripts/nextdayz-ads-sight.agentscript.json`，逐枪检查真实视模照门到相机的距离、
 照门及瞄准轴相对相机的角误差，覆盖俯仰 / 转向 / 蹲走 / 后坐恢复及镜内画面退出，并保存靶场截图。
 
+## 23. 第一人称瞄具与相机同帧提交
+
+场景的异步节点更新在下一帧交接渲染代理，而相机 UBO 使用当前帧姿态。仅校验 CPU 节点会漏掉这一帧差：
+转向、移动和站蹲时，CPU 瞄具已对齐，上传的枪械仍处于上一帧位置。
+
+`WeaponSystem::Update` 在完成相机空间姿态后，仅修正上传快照中当前视模的全部模型分段，
+同步 `worldTS`、显示状态及用于运动矢量的 `combinedPrevTS`，通过 `Scene::RequestGpuNodeProxyUpload()` 同帧提交。
+普通世界节点继续异步更新。举枪权重超过 0.98 后固定瞄具锚点，取消剩余腰射惯性；抬枪过渡、切枪、近战与后坐力保留。
+
+验证：`gnb validate --script assets/agentscripts/nextdayz-ads-follow.agentscript.json`，
+对 AK、莫辛、霰弹枪和手枪分别执行鼠标转向、前进 / 横移、急停、站蹲切换。
+每次只模拟一帧，同时检查 CPU 瞄具和本次实际上传快照的瞄准误差；记录该次快照，避免之后的静止帧追平掩盖问题。
+
 ## 24. 腰部手枪槽与上一把武器
 
 `WeaponSystem` 有三个槽：1 / 2 沿用背后左右插槽，3 只接受手枪。物品双击 / 使用手枪默认装备到 3，

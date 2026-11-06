@@ -134,6 +134,8 @@ namespace NextDayz
         // weapon pose for effects and validation even while the mesh is hidden.
         bool ViewModelMuzzle(glm::vec3& outPosition, glm::vec3& outForward) const;
         bool ViewModelSight(glm::vec3& outPosition, glm::vec3& outForward) const;
+        // Snapshot of the proxy submitted alongside this tick's render camera.
+        bool ViewModelRenderedSight(glm::vec3& outPosition, glm::vec3& outForward) const;
 
     private:
         struct FSlot
@@ -192,6 +194,8 @@ namespace NextDayz
         std::shared_ptr<Assets::Node> viewModelNode_;
         bool viewModelVisible_ = false;
         bool scopeView_ = false;
+        bool renderedViewModelValid_ = false;
+        glm::mat4 renderedViewModelTransform_{1.0f};
         bool viewModelInScene_ = false;
         glm::vec3 viewModelOffset_{0.16f, -0.19f, 0.55f};
         glm::vec3 viewModelMeleeEuler_{0.0f};

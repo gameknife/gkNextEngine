@@ -99,6 +99,7 @@ namespace NextDayz
         aimAlpha_ = 0.0f;
         viewModelVisible_ = false;
         scopeView_ = false;
+        renderedViewModelValid_ = false;
         viewModelInScene_ = false;
         viewModelWeaponIndex_ = -1;
         shotEvents_.clear();
@@ -128,6 +129,7 @@ namespace NextDayz
         viewModelNode_.reset();
         viewModelVisible_ = false;
         scopeView_ = false;
+        renderedViewModelValid_ = false;
         viewModelInScene_ = false;
         viewModelWeaponIndex_ = -1;
         shotEvents_.clear();
@@ -409,6 +411,15 @@ namespace NextDayz
         const glm::mat4& world = viewModelNode_->WorldTransform();
         outPosition = glm::vec3(world * glm::vec4(0.0f, points.sightHeight, points.rearSightForward, 1.0f));
         outForward = glm::normalize(glm::vec3(world[2]));
+        return true;
+    }
+
+    bool WeaponSystem::ViewModelRenderedSight(glm::vec3& outPosition, glm::vec3& outForward) const
+    {
+        if (!renderedViewModelValid_ || !HasActiveWeapon() || ActiveIsMelee()) return false;
+        const FWeaponModelPoints points = WeaponModelPoints(ActiveWeaponId());
+        outPosition = glm::vec3(renderedViewModelTransform_ * glm::vec4(0.0f, points.sightHeight, points.rearSightForward, 1.0f));
+        outForward = glm::normalize(glm::vec3(renderedViewModelTransform_[2]));
         return true;
     }
 
@@ -887,11 +898,20 @@ namespace NextDayz
             glm::vec3 motionOffset(0.0f);
             glm::vec3 motionEuler(0.0f);
             UpdateViewModelMotion(player, deltaSeconds, motionOffset, motionEuler);
+            float sightWeight = aimAlpha_;
             if (def && !def->IsMelee())
             {
-                // Keep ordinary weapon motion out of the sight line as ADS settles.
-                motionOffset *= 1.0f - aimAlpha_;
-                motionEuler *= 1.0f - aimAlpha_;
+                const bool sightLocked = player.IsAiming() && aimAlpha_ > 0.98f &&
+                                         !reloading_ && !switching_ && !player.IsTraversing();
+                if (sightLocked)
+                {
+                    viewModelOffset_ = targetOffset;
+                    sightWeight = 1.0f;
+                }
+                // The sight follows the eye when shouldered. Camera bob and
+                // recoil still move the view; hip-fire inertia must not break ADS alignment.
+                motionOffset *= 1.0f - sightWeight;
+                motionEuler *= 1.0f - sightWeight;
             }
             viewModelMeleeEuler_ = IsSwinging() ? meleeEuler : glm::mix(viewModelMeleeEuler_, meleeEuler, t);
             motionEuler += viewModelMeleeEuler_;
@@ -924,7 +944,7 @@ namespace NextDayz
                     const FWeaponModelPoints points = WeaponModelPoints(def->id);
                     const glm::vec3 sight = glm::vec3(0.0f, points.sightHeight, points.rearSightForward) * config_.ViewModelScale;
                     // Tilt about the rear sight, rather than sweeping it around the grip.
-                    pos += cameraRotation * (sight - motionRotation * sight) * aimAlpha_;
+                    pos += cameraRotation * (sight - motionRotation * sight) * sightWeight;
                 }
                 viewModelNode_->Translation() = pos;
                 viewModelNode_->Rotation() = cameraRotation * motionRotation;
@@ -935,7 +955,31 @@ namespace NextDayz
                 viewModelNode_->Translation() = glm::vec3(0.0f, -1000.0f, 0.0f);
                 viewModelNode_->RecalcTransform(true);
             }
-            engine.GetScene().MarkTransformDirty();
+            // The camera is current-frame, but scene proxies are handed off one
+            // frame later. Patch only this camera-attached mesh in the upload
+            // snapshot; rebuilding the whole scene synchronously would stall it.
+            Assets::Scene& scene = engine.GetScene();
+            const glm::mat4 world = viewModelNode_->WorldTransform();
+            const glm::mat4 inverseWorld = show ? glm::inverse(world) : glm::mat4(1.0f);
+            const auto render = viewModelNode_->GetComponent<Runtime::RenderComponent>();
+            const uint32_t participation = show && render ? render->GetRenderParticipationMask() : 0;
+            bool patchedProxy = false;
+            renderedViewModelValid_ = false;
+            for (auto& proxy : scene.GetNodeProxies())
+            {
+                if (proxy.instanceId != viewModelNode_->GetInstanceId()) continue;
+                if (show)
+                {
+                    proxy.combinedPrevTS = proxy.worldTS * inverseWorld;
+                    proxy.worldTS = world;
+                    renderedViewModelTransform_ = proxy.worldTS;
+                    renderedViewModelValid_ = true;
+                }
+                proxy.visible = participation;
+                patchedProxy = true;
+            }
+            if (patchedProxy) scene.RequestGpuNodeProxyUpload();
+            scene.MarkTransformDirty();
         }
     }
 

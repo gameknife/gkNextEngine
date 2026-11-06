@@ -3122,6 +3122,17 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
         if (!weapons_.ViewModelSight(sight, forward)) return 180.0;
         return static_cast<double>(glm::degrees(std::acos(glm::clamp(glm::dot(forward, player_.CameraForward()), -1.0f, 1.0f))));
     });
+    reg.Add("adsRenderedSightCenterError", [this]() -> Runtime::Agent::FAgentQueryValue {
+        glm::vec3 sight, forward;
+        if (!weapons_.ViewModelRenderedSight(sight, forward)) return 180.0;
+        const glm::vec3 eyeToSight = glm::normalize(sight - player_.CameraPosition());
+        return static_cast<double>(glm::degrees(std::acos(glm::clamp(glm::dot(eyeToSight, player_.CameraForward()), -1.0f, 1.0f))));
+    });
+    reg.Add("adsRenderedSightAxisError", [this]() -> Runtime::Agent::FAgentQueryValue {
+        glm::vec3 sight, forward;
+        if (!weapons_.ViewModelRenderedSight(sight, forward)) return 180.0;
+        return static_cast<double>(glm::degrees(std::acos(glm::clamp(glm::dot(forward, player_.CameraForward()), -1.0f, 1.0f))));
+    });
     reg.Add("adsEyeRelief", [this]() -> Runtime::Agent::FAgentQueryValue {
         glm::vec3 sight, forward;
         if (!weapons_.ViewModelSight(sight, forward)) return -1.0;

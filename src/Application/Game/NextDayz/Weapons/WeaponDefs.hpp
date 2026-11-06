@@ -12,6 +12,8 @@
 
 namespace NextDayz
 {
+    inline constexpr int kWeaponSlotCount = 3;
+    inline constexpr int kSidearmSlot = 2;
     enum class EAmmoType
     {
         Rifle545,
@@ -70,6 +72,7 @@ namespace NextDayz
         float meleeRange = 0.0f;      // > 0: a melee weapon; swings reach this far, no ammo
         float meleeStrikeTime01 = 0.0f; // contact frame in the independent attack clip
         bool IsMelee() const { return meleeRange > 0.0f; }
+        bool IsSidearm() const { return id == "pistol"; }
     };
 
     inline constexpr std::array<FWeaponDef, 8> kWeapons = {{

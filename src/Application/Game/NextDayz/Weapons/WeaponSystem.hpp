@@ -1,7 +1,7 @@
 #pragma once
 
 // ============================================================================
-// WeaponSystem.hpp - Two-slot weapon runtime for NextDayz: equip / switch /
+// WeaponSystem.hpp - Two back slots plus a waist sidearm: equip / switch /
 // hitscan fire / melee swings / reload / ADS. Fire is an engine RayCast for
 // the world plus a hitbox trace for the infected; hits leave as
 // FWeaponHitEvent for the CombatSystem. Melee owns a wind-up/contact/recovery
@@ -73,6 +73,8 @@ namespace NextDayz
         void CopyMagazinesTo(Inventory& inventory) const;
         void SwitchSlot(int slot);
         void SwitchPrevious();
+        static bool CanEquipInSlot(int slot, std::string_view weaponId);
+        void RestoreSelection(int activeSlot, int previousSlot);
 
         // Rounds are traced against the infected hitboxes up to the first
         // world surface; the world raycast alone never sees an infected.
@@ -108,6 +110,8 @@ namespace NextDayz
         EWeaponPresentationAction PresentationAction() const;
         float PresentationActionTime() const;
         int ActiveSlot() const { return activeSlot_; }
+        int PreviousSlot() const { return previousSlot_; }
+        int SwitchSourceSlot() const { return switchSourceSlot_; }
         int SwitchTargetSlot() const { return switchTargetSlot_; }
         bool SwitchCommitted() const { return switchCommitted_; }
         const std::string& SlotWeaponId(int slot) const;
@@ -124,6 +128,7 @@ namespace NextDayz
             return fired;
         }
         bool ViewModelRecoilActive() const;
+        bool IsViewModelVisible() const { return viewModelVisible_; }
         // World-space barrel tip and direction of the first-person view model;
         // false while it is hidden.
         bool ViewModelMuzzle(glm::vec3& outPosition, glm::vec3& outForward) const;
@@ -150,9 +155,9 @@ namespace NextDayz
 
         FWeaponFeelConfig config_{};
         FTargetTracer targetTracer_;
-        std::array<FSlot, 2> slots_{};
+        std::array<FSlot, kWeaponSlotCount> slots_{};
         int activeSlot_ = 0;
-        int previousSlot_ = 1;
+        int previousSlot_ = -1;
 
         bool triggerDown_ = false;
         bool triggerPressed_ = false;
@@ -165,6 +170,7 @@ namespace NextDayz
         bool switching_ = false;
         bool switchCommitted_ = false;
         int switchTargetSlot_ = -1;
+        int switchSourceSlot_ = -1;
         float switchTimer_ = 0.0f;
         float swingTimer_ = 0.0f;
         float swingDuration_ = 0.0f;

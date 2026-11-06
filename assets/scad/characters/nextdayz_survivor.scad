@@ -444,11 +444,12 @@ anim_reload_rifle = rh_upper_clip(SKEL, RIG, [
 
 anim_switch_weapon = rh_upper_clip(SKEL, RIG, [
     [0.00, nd_hold(HOLD_READY, READY_BLADE)],
-    [0.38, [["weapon", HOLD_LOW], ["torso", [4, 0, 6]], ["head", [6, 0, -4]],
-            ["hand_l", [[0.30, 0.10, 0.10], [-20, 0, 0]]]]],
-    [0.52, [["weapon", HOLD_LOW], ["torso", [4, 0, 6]], ["head", [6, 0, -4]],
-            ["hand_l", [[0.30, 0.10, 0.10], [-20, 0, 0]]]]],
-    [0.90, nd_hold(HOLD_READY, READY_BLADE)]
+    // Runtime moves the weapon around the appropriate shoulder to the actual
+    // back socket (including the equipped pack's width) and solves the arms.
+    // Keep a stable front hold here, with a small body dip during the exchange.
+    [0.42, nd_hold(HOLD_READY, READY_BLADE, [["torso", [5, 0, -READY_BLADE]], ["head", [6, 0, -8]]])],
+    [0.58, nd_hold(HOLD_READY, READY_BLADE, [["torso", [5, 0, -READY_BLADE]], ["head", [6, 0, -8]]])],
+    [1.00, nd_hold(HOLD_READY, READY_BLADE)]
 ], false);
 
 // Additive kick: starts and ends at identity so it can be retriggered per shot.

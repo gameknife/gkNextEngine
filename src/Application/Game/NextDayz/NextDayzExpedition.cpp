@@ -174,8 +174,9 @@ NextDayz::FCampaignSave NextDayzGameInstance::CaptureCampaign() const
     saved.yaw = player_.Yaw();
     saved.pitch = player_.Pitch();
     saved.firstPerson = player_.IsFirstPerson();
-    saved.weaponSlots = {weapons_.SlotInstance(0), weapons_.SlotInstance(1)};
+    saved.weaponSlots = {weapons_.SlotInstance(0), weapons_.SlotInstance(1), weapons_.SlotInstance(2)};
     saved.activeSlot = weapons_.ActiveSlot();
+    saved.previousSlot = weapons_.PreviousSlot();
     saved.survivalSeconds = survivalSeconds_;
     saved.sessionRng = sessionRng_.State();
     saved.survivalRng = survivalRng_.State();
@@ -261,9 +262,9 @@ bool NextDayzGameInstance::RestoreCampaign(const NextDayz::FCampaignSave& saved)
     player_.SetPitch(saved.pitch);
     player_.SetFirstPerson(saved.firstPerson);
     weapons_.ResetRuntime();
-    for (int slot = 0; slot < 2; ++slot)
+    for (int slot = 0; slot < NextDayz::kWeaponSlotCount; ++slot)
         if (saved.weaponSlots[slot]) weapons_.EquipInstance(slot, inventory_, saved.weaponSlots[slot]);
-    weapons_.SwitchSlot(saved.activeSlot);
+    weapons_.RestoreSelection(saved.activeSlot, saved.previousSlot);
     survivalSeconds_ = saved.survivalSeconds;
     sessionRng_.RestoreState(saved.sessionRng);
     survivalRng_.RestoreState(saved.survivalRng);
@@ -666,6 +667,11 @@ bool NextDayzGameInstance::DrawSafehouse()
                 if (ImGui::SmallButton(NextDayz::L10n::Label("Hold (1)"))) requests.emplace_back([this,id]() { EquipWeaponInstance(id,0); });
                 ImGui::SameLine();
                 if (ImGui::SmallButton(NextDayz::L10n::Label("Hold (2)"))) requests.emplace_back([this,id]() { EquipWeaponInstance(id,1); });
+                if (NextDayz::WeaponSystem::CanEquipInSlot(NextDayz::kSidearmSlot, def->weaponDefId))
+                {
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton(NextDayz::L10n::Label("Hold (3)"))) requests.emplace_back([this,id]() { EquipWeaponInstance(id,2); });
+                }
             }
             ImGui::Separator();
             ImGui::PopID();
@@ -680,7 +686,7 @@ bool NextDayzGameInstance::DrawSafehouse()
         const auto oldCampaign = campaign_;
         const auto oldInventory = inventory_;
         for (auto& request : requests) request();
-        for (int slot = 0; slot < 2; ++slot)
+        for (int slot = 0; slot < NextDayz::kWeaponSlotCount; ++slot)
             if (weapons_.SlotInstance(slot) && !inventory_.FindInstance(weapons_.SlotInstance(slot))) weapons_.Unequip(slot);
         SyncClothingVisuals();
         if (!campaign_.inField && !SaveCampaign())

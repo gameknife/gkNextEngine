@@ -581,9 +581,9 @@ namespace NextDayz::NextDayzHUD
 
                 UIWidgets::DrawSlotFrame(draw, a, b, occupied, false, false, false, 4.0f);
 
-                // Slot Key badge (3..6)
+                // Slot Key badge (4..7)
                 char key[4];
-                std::snprintf(key, sizeof(key), "%d", slot + 3);
+                std::snprintf(key, sizeof(key), "%d", slot + 4);
                 draw->AddText(ImVec2(a.x + 5.0f, a.y + 3.0f), UITheme::Colors::TextMuted, key);
 
                 if (occupied)
@@ -855,7 +855,7 @@ namespace NextDayz::NextDayzHUD
                 }
                 else if (IsWieldable(*def) && context.equipWeapon)
                 {
-                    context.equipWeapon(instance.instanceId, def->equipSlot == EEquipSlot::PrimaryWeapon ? 0 : 1);
+                    context.equipWeapon(instance.instanceId, PreferredWeaponSlot(*def));
                 }
                 else if (context.useItem)
                 {
@@ -883,6 +883,8 @@ namespace NextDayz::NextDayzHUD
                 {
                     if (ImGui::MenuItem(NextDayz::L10n::Label("Equip: Primary (1)"))) context.equipWeapon(instance.instanceId, 0);
                     if (ImGui::MenuItem(NextDayz::L10n::Label("Equip: Secondary (2)"))) context.equipWeapon(instance.instanceId, 1);
+                    if (WeaponSystem::CanEquipInSlot(kSidearmSlot, def->weaponDefId) &&
+                        ImGui::MenuItem(NextDayz::L10n::Label("Equip: Waist Sidearm (3)"))) context.equipWeapon(instance.instanceId, 2);
                 }
                 if (instance.count > 1 && context.splitItem && ImGui::MenuItem(NextDayz::L10n::Label("Split stack")))
                 {
@@ -893,7 +895,7 @@ namespace NextDayz::NextDayzHUD
                     for (int s = 0; s < 4; ++s)
                     {
                         char name[128];
-                        std::snprintf(name, sizeof(name), NextDayz::L10n::Tr("Key %d"), s + 3);
+                        std::snprintf(name, sizeof(name), NextDayz::L10n::Tr("Key %d"), s + 4);
                         if (ImGui::MenuItem(name))
                         {
                             context.bindQuick(s, instance.defId);
@@ -1074,7 +1076,9 @@ namespace NextDayz::NextDayzHUD
             {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kItemPayload))
                 {
-                    if (context.equipWeapon)
+                    const auto* dragged = inventory.FindInstance(*static_cast<const FItemInstanceId*>(payload->Data));
+                    const auto* definition = dragged ? FindItemDef(dragged->defId) : nullptr;
+                    if (context.equipWeapon && definition && WeaponSystem::CanEquipInSlot(slot, definition->weaponDefId))
                     {
                         context.equipWeapon(*static_cast<const FItemInstanceId*>(payload->Data), slot);
                     }
@@ -1248,6 +1252,7 @@ namespace NextDayz::NextDayzHUD
 
                 DrawWeaponSlot(context, NextDayz::L10n::Tr("PRIMARY WEAPON"), 0);
                 DrawWeaponSlot(context, NextDayz::L10n::Tr("SECONDARY WEAPON"), 1);
+                DrawWeaponSlot(context, NextDayz::L10n::Tr("WAIST SIDEARM [3]"), 2);
 
                 ImGui::Spacing();
                 ImGui::Separator();
@@ -1394,7 +1399,7 @@ namespace NextDayz::NextDayzHUD
             ImGui::Spacing();
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f, 0.65f, 0.70f, 1.0f));
             ImGui::TextWrapped("%s%s", NextDayz::L10n::Tr("[LMB Double-Click] Equip/Use  |  [RMB] Context Menu  |  [Drag & Drop] Move/Drop  |  "),
-                               NextDayz::L10n::Tr("[3-6] Quickbar  |  [H] Bandage  |  [M] Map  |  [L] Lantern  |  [TAB] Close"));
+                               NextDayz::L10n::Tr("[4-7] Quickbar  |  [H] Bandage  |  [M] Map  |  [L] Lantern  |  [TAB] Close"));
             ImGui::PopStyleColor();
 
             ImGui::End();
@@ -1453,8 +1458,8 @@ namespace NextDayz::NextDayzHUD
                 ImGui::TextDisabled(NextDayz::L10n::Tr("Press Esc to resume"));
                 ImGui::Separator();
                 ImGui::TextWrapped("%s", NextDayz::L10n::Tr("WASD move  Shift sprint  Ctrl walk  C crouch  Space jump/vault"));
-                ImGui::TextWrapped("%s", NextDayz::L10n::Tr("LMB fire/swing  RMB aim  R reload  1/2/Q weapons  E take  F fill bottle"));
-                ImGui::TextWrapped("%s", NextDayz::L10n::Tr("Tab inventory  3-6 quickbar  H bandage  M map  L lantern  V view"));
+                ImGui::TextWrapped("%s", NextDayz::L10n::Tr("LMB fire/swing  RMB aim  R reload  1/2/3/Q weapons  E take  F fill bottle"));
+                ImGui::TextWrapped("%s", NextDayz::L10n::Tr("Tab inventory  4-7 quickbar  H bandage  M map  L lantern  V view"));
                 ImGui::Spacing();
                 if (context.restartSession && ImGui::Button(NextDayz::L10n::Label("RESTART RUN"), ImVec2(-1.0f, 36.0f)))
                 {

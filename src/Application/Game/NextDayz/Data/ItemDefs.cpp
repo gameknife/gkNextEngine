@@ -25,7 +25,7 @@ namespace NextDayz
                      .equipSlot = EEquipSlot::PrimaryWeapon, .weaponDefId = "shotgun",
                      .description = "Double-barrel. Devastating up close, very loud. 12 gauge."},
             FItemDef{.id = "pistol", .displayName = "Makarov", .kind = EItemKind::Weapon, .volumePerStack = 4,
-                     .equipSlot = EEquipSlot::SecondaryWeapon, .weaponDefId = "pistol",
+                     .equipSlot = EEquipSlot::Sidearm, .weaponDefId = "pistol",
                      .description = "Sidearm. Quieter than a rifle. 9x18."},
             // ---- melee ----
             FItemDef{.id = "knife", .displayName = "Hunting Knife", .kind = EItemKind::Melee, .volumePerStack = 2,

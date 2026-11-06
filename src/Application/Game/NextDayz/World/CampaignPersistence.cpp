@@ -1,5 +1,6 @@
 #include "Engine/Common/CoreMinimal.hpp"
 #include "Campaign.hpp"
+#include "Application/Game/NextDayz/Weapons/WeaponDefs.hpp"
 
 #include <cmath>
 #include <nlohmann/json.hpp>
@@ -38,7 +39,7 @@ namespace NextDayz
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(TimeSystem::FState, minutes, nextWeatherChange, weatherRng, weather, blend)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FMapWorldSave, world, time, version)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FCampaignSave, map, campaign, inventory, world, survival, time, position,
-                                     yaw, pitch, firstPerson, weaponSlots, activeSlot, survivalSeconds, sessionRng,
+                                     yaw, pitch, firstPerson, weaponSlots, activeSlot, previousSlot, survivalSeconds, sessionRng,
                                      survivalRng, quickSlots, lanternLit, lanternSeconds, hasCacheMarker, cacheMarker,
                                      cacheSeconds, maps, mapVersion)
 
@@ -48,12 +49,23 @@ namespace NextDayz
         {
             Inventory inventory;
             if (saved.map.empty() || !inventory.Restore(saved.inventory) || saved.activeSlot < 0 ||
-                saved.activeSlot > 1 || saved.campaign.nextStorageId == 0 ||
+                saved.activeSlot >= 3 || saved.previousSlot < -1 || saved.previousSlot >= 3 ||
+                saved.campaign.nextStorageId == 0 ||
                 !std::isfinite(saved.world.seconds) || saved.world.seconds < 0 ||
                 !std::isfinite(saved.yaw) || !std::isfinite(saved.pitch) ||
                 !std::isfinite(saved.survivalSeconds) || saved.survivalSeconds < 0 ||
                 !std::isfinite(saved.time.minutes) || !std::isfinite(saved.time.nextWeatherChange) ||
                 saved.time.weather > EWeather::Fog || !std::isfinite(saved.time.blend)) return false;
+            std::unordered_set<FItemInstanceId> equipped;
+            for (int slot = 0; slot < kWeaponSlotCount; ++slot)
+            {
+                const FItemInstanceId id = saved.weaponSlots[slot];
+                if (!id) continue;
+                const auto* instance = inventory.FindInstance(id);
+                const auto* item = instance ? FindItemDef(instance->defId) : nullptr;
+                const auto* weapon = item ? FindWeaponDef(item->weaponDefId) : nullptr;
+                if (!weapon || !equipped.insert(id).second || (slot == kSidearmSlot && !weapon->IsSidearm())) return false;
+            }
             const auto& body = saved.survival;
             if (!std::isfinite(body.health) || !std::isfinite(body.hunger) || !std::isfinite(body.hydration) ||
                 !std::isfinite(body.cold) || !std::isfinite(body.painkillerSeconds) ||
@@ -115,7 +127,7 @@ namespace NextDayz
                 std::ifstream stream(path, std::ios::binary);
                 auto document = nlohmann::json::parse(stream);
                 const int version = document.at("version").get<int>();
-                if (version != 1 && version != 2) throw std::runtime_error("Unsupported save version");
+                if (version != 1 && version != 2 && version != 3) throw std::runtime_error("Unsupported save version");
                 if (version == 1)
                 {
                     auto& state = document.at("state");
@@ -126,6 +138,14 @@ namespace NextDayz
                     campaign["lastMapId"] = "";
                     campaign["lastOutcome"] = "";
                     campaign["sortieId"] = campaign.at("sorties");
+                }
+                if (version < 3)
+                {
+                    auto& state = document.at("state");
+                    auto& slots = state.at("weaponSlots");
+                    if (!slots.is_array() || slots.size() != 2) throw std::runtime_error("Invalid legacy weapon slots");
+                    slots.push_back(0);
+                    state["previousSlot"] = -1;
                 }
                 auto candidate = document.at("state").get<FCampaignSave>();
                 if (!Valid(candidate)) throw std::runtime_error("Invalid campaign state");
@@ -163,7 +183,7 @@ namespace NextDayz
             {
                 std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
                 stream.exceptions(std::ios::failbit | std::ios::badbit);
-                stream << nlohmann::json{{"version", 2}, {"state", save}}.dump(2);
+                stream << nlohmann::json{{"version", 3}, {"state", save}}.dump(2);
                 stream.flush();
                 stream.close();
             }

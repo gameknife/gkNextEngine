@@ -102,7 +102,7 @@ namespace NextDayz
         std::optional<glm::vec3> cacheMarker;
         // Inventory screen and quickbar.
         std::vector<FHudNearbyLoot> nearby;
-        std::array<std::string, 4> quickSlots;   // item ids bound to keys 3..6
+        std::array<std::string, 4> quickSlots;   // item ids bound to keys 4..7
         std::vector<FHudNotification> notifications;
 
         std::function<void(FItemInstanceId instanceId, int slot)> equipWeapon;

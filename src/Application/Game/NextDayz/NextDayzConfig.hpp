@@ -98,7 +98,7 @@ namespace NextDayz
         float TracerLifetimeSeconds = 0.04f;
         float FireAnimSeconds = 0.22f;  // TPS fire clip hold
         float ReloadSeconds = 2.2f;
-        float SwitchSeconds = 0.9f;
+        float SwitchSeconds = 0.85f;
         // View-model motion (camera space: x right, y up, z forward).
         glm::vec3 ViewModelBob{0.011f, 0.009f, 0.0f};   // m, at run speed
         float ViewModelBobRollDegrees = 1.4f;

@@ -112,6 +112,12 @@ TEST_CASE("NextDayz save round-trip retains world depletion and recovers a backu
     FCampaignSave saved;
     Inventory inventory;
     REQUIRE(inventory.TryAdd("bandage", "Bandage", EItemKind::Consumable, 2));
+    FItemInstanceId pistol = 0;
+    REQUIRE(inventory.TryAdd("pistol", "Makarov", EItemKind::Weapon, 1, &pistol));
+    inventory.SetLoadedAmmo(pistol, 7);
+    saved.weaponSlots[2] = pistol;
+    saved.activeSlot = 2;
+    saved.previousSlot = 1;
     saved.inventory = inventory.Capture();
     saved.map = "test-map";
     saved.campaign.gold = 42;
@@ -133,6 +139,10 @@ TEST_CASE("NextDayz save round-trip retains world depletion and recovers a backu
     REQUIRE(read.world.entries.front().slot.cooldownUntil == 200);
     REQUIRE(read.campaign.flight.remaining == 4);
     REQUIRE(read.position.x == 1);
+    REQUIRE(read.weaponSlots[2] == pistol);
+    REQUIRE(read.activeSlot == 2);
+    REQUIRE(read.previousSlot == 1);
+    REQUIRE(read.inventory.instances.back().loadedAmmo == 7);
     saved.campaign.gold = 99;
     REQUIRE(WriteCampaignSave(path, saved, error));
     std::ofstream(path, std::ios::trunc) << "broken save";

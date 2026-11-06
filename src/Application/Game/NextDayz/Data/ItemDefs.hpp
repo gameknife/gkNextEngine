@@ -27,6 +27,7 @@ namespace NextDayz
         PrimaryWeapon,
         SecondaryWeapon,
         Hands,
+        Sidearm,
     };
 
     // What "Use" does with an item. Passive tools (compass, map, can opener)
@@ -87,5 +88,11 @@ namespace NextDayz
     {
         return (definition.kind == EItemKind::Weapon || definition.kind == EItemKind::Melee) &&
                !definition.weaponDefId.empty();
+    }
+
+    inline int PreferredWeaponSlot(const FItemDef& definition)
+    {
+        if (definition.equipSlot == EEquipSlot::Sidearm) return 2;
+        return definition.equipSlot == EEquipSlot::PrimaryWeapon ? 0 : 1;
     }
 }

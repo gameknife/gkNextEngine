@@ -66,6 +66,13 @@ namespace NextDayz
         Melee,
     };
 
+    // TPS overlaps stow/draw by 6% (0.051 s at the default 0.85 s). FPS hides
+    // its single model briefly around the authoritative slot change at 0.5.
+    inline constexpr float kWeaponStowTime = 0.53f;
+    inline constexpr float kWeaponDrawTime = 0.47f;
+    inline constexpr float kWeaponViewModelHideTime = 0.46f;
+    inline constexpr float kWeaponViewModelShowTime = 0.54f;
+
     struct FPlayerLocomotionState
     {
         EPlayerStance desiredStance = EPlayerStance::Standing;
@@ -96,13 +103,16 @@ namespace NextDayz
         float aimWeight = 0.0f;
         float aimPitchRadians = 0.0f;
         float aimYawRadians = 0.0f;   // camera yaw; the rig's lower body follows it with lag
+        glm::vec3 aimDirection{0.0f, 0.0f, 1.0f}; // world-space camera aim, including recoil
         float sprintAlpha = 0.0f;     // 0 = weapon up, 1 = sprint carry
         bool hasWeapon = false;
         std::string weaponId;
         EWeaponPresentationAction weaponAction = EWeaponPresentationAction::None;
         float weaponActionTime01 = 0.0f;
         int activeWeaponSlot = 0;
-        std::array<std::string, 2> slotWeaponIds;
+        int switchSourceSlot = -1;
+        int switchTargetSlot = -1;
+        std::array<std::string, 3> slotWeaponIds;
     };
 
     inline const char* StanceName(EPlayerStance stance)

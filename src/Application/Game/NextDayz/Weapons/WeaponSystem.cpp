@@ -81,7 +81,8 @@ namespace NextDayz
     {
         slots_ = {};
         activeSlot_ = 0;
-        previousSlot_ = 1;
+        previousSlot_ = -1;
+        switchSourceSlot_ = -1;
         reloading_ = false;
         switching_ = false;
         shotSequence_ = 0;
@@ -136,7 +137,8 @@ namespace NextDayz
     {
         slots_ = {};
         activeSlot_ = 0;
-        previousSlot_ = 1;
+        previousSlot_ = -1;
+        switchSourceSlot_ = -1;
         triggerDown_ = false;
         triggerPressed_ = false;
         presentationSuppressed_ = false;
@@ -229,11 +231,11 @@ namespace NextDayz
             return false;
         }
         const FWeaponDef* def = FindWeaponDef(weaponId);
-        if (!def)
+        if (!def || !CanEquipInSlot(slot, weaponId))
         {
             return false;
         }
-        previousSlot_ = activeSlot_;
+        if (slot != activeSlot_ && HasActiveWeapon()) previousSlot_ = activeSlot_;
         slots_[slot].weaponId = weaponId;
         slots_[slot].ammoInMag = def->magSize; // fresh magazine on equip
         slots_[slot].instanceId = 0;
@@ -244,6 +246,7 @@ namespace NextDayz
         switching_ = false;
         switchCommitted_ = false;
         switchTargetSlot_ = -1;
+        switchSourceSlot_ = -1;
         switchTimer_ = 0.0f;
         viewModelMeleeEuler_ = glm::vec3(0.0f);
         if (def->IsMelee())
@@ -267,12 +270,40 @@ namespace NextDayz
         switching_ = true;
         switchCommitted_ = false;
         switchTargetSlot_ = slot;
+        switchSourceSlot_ = activeSlot_;
         switchTimer_ = std::max(config_.SwitchSeconds, 0.01f);
+    }
+
+    bool WeaponSystem::CanEquipInSlot(int slot, std::string_view weaponId)
+    {
+        const FWeaponDef* def = FindWeaponDef(weaponId);
+        return slot >= 0 && slot < kWeaponSlotCount && def && (slot != kSidearmSlot || def->IsSidearm());
+    }
+
+    void WeaponSystem::RestoreSelection(int activeSlot, int previousSlot)
+    {
+        if (activeSlot >= 0 && activeSlot < kWeaponSlotCount) activeSlot_ = activeSlot;
+        previousSlot_ = previousSlot >= 0 && previousSlot < kWeaponSlotCount && previousSlot != activeSlot_
+                            ? previousSlot : -1;
     }
 
     void WeaponSystem::SwitchPrevious()
     {
-        SwitchSlot(previousSlot_);
+        if (switching_) return;
+        if (previousSlot_ >= 0 && previousSlot_ != activeSlot_ && !SlotWeaponId(previousSlot_).empty())
+        {
+            SwitchSlot(previousSlot_);
+            return;
+        }
+        for (int offset = 1; offset < kWeaponSlotCount; ++offset)
+        {
+            const int slot = (activeSlot_ + offset) % kWeaponSlotCount;
+            if (!SlotWeaponId(slot).empty())
+            {
+                SwitchSlot(slot);
+                return;
+            }
+        }
     }
 
     void WeaponSystem::RequestReload(Inventory& inventory)
@@ -409,7 +440,7 @@ namespace NextDayz
         {
             if (auto render = viewModelNode_->GetComponent<Runtime::RenderComponent>())
             {
-                render->SetVisible(HasActiveWeapon());
+                render->SetVisible(viewModelVisible_ && HasActiveWeapon() && !presentationSuppressed_);
             }
         }
     }
@@ -686,16 +717,17 @@ namespace NextDayz
             switchTimer_ -= dt;
             if (!switchCommitted_ && PresentationActionTime() >= 0.5f)
             {
-                previousSlot_ = activeSlot_;
+                if (HasActiveWeapon()) previousSlot_ = activeSlot_;
                 activeSlot_ = switchTargetSlot_;
                 switchCommitted_ = true;
-                RefreshViewModelVisibility();
             }
-            if (switchTimer_ <= 0.0f)
+            // Avoid adding a whole frame for floating-point timer residue.
+            if (switchTimer_ <= 1.0e-5f)
             {
                 switching_ = false;
                 switchCommitted_ = false;
                 switchTargetSlot_ = -1;
+                switchSourceSlot_ = -1;
                 switchTimer_ = 0.0f;
             }
         }
@@ -786,11 +818,6 @@ namespace NextDayz
                 targetOffset.y -= actionArc * 0.18f;
                 targetOffset.x += actionArc * 0.08f;
             }
-            else if (switching_)
-            {
-                targetOffset.y -= actionArc * 0.42f;
-                targetOffset.z -= actionArc * 0.18f;
-            }
             // Traversal: the weapon swings down and out to the firing side while
             // the hands are on the obstacle, and comes back up as the body stands.
             if (player.IsTraversing() && !IsSwinging())
@@ -800,6 +827,16 @@ namespace NextDayz
             }
             const float t = 1.0f - std::exp(-config_.ViewModelLerpSpeed * std::max(0.0f, deltaSeconds));
             viewModelOffset_ = glm::mix(viewModelOffset_, targetOffset, t);
+            // Follow the switch timeline directly: the old gun leaves the
+            // view before the model changes, then the new one is drawn in.
+            // Smoothing this offset lets the replacement pop into view.
+            float switchLower = 0.0f;
+            if (switching_)
+            {
+                switchLower = actionTime < 0.5f
+                    ? glm::smoothstep(0.0f, kWeaponViewModelHideTime, actionTime)
+                    : 1.0f - glm::smoothstep(kWeaponViewModelShowTime, 1.0f, actionTime);
+            }
             if (def && def->IsMelee() && IsSwinging())
             {
                 const FMeleeViewPose pose = SampleMeleeSwing(*def, PresentationActionTime());
@@ -807,16 +844,16 @@ namespace NextDayz
                 meleeEuler = glm::radians(pose.euler);
             }
 
-            const bool show = HasActiveWeapon() && player.IsFirstPerson() && !presentationSuppressed_;
-            if (show != viewModelVisible_)
+            const bool betweenWeapons = switching_ && actionTime >= kWeaponViewModelHideTime && actionTime < kWeaponViewModelShowTime;
+            const bool firstPersonWeapon = HasActiveWeapon() && player.IsFirstPerson() && !presentationSuppressed_ && !betweenWeapons;
+            const bool show = firstPersonWeapon;
+            if (show != viewModelVisible_ || show != viewModelInScene_)
             {
                 viewModelVisible_ = show;
                 if (auto render = viewModelNode_->GetComponent<Runtime::RenderComponent>())
                 {
                     render->SetVisible(show);
                 }
-                viewModelNode_->Scale() =
-                    show ? glm::vec3(config_.ViewModelScale) : glm::vec3(0.0f);
                 if (!show && viewModelInScene_)
                 {
                     engine.GetScene().RemoveNodeByInstanceId(viewModelNode_->GetInstanceId());
@@ -829,12 +866,16 @@ namespace NextDayz
                 }
                 engine.GetScene().MarkDirty();
             }
+            viewModelNode_->Scale() = firstPersonWeapon ? glm::vec3(config_.ViewModelScale) : glm::vec3(0.0f);
             glm::vec3 motionOffset(0.0f);
             glm::vec3 motionEuler(0.0f);
             UpdateViewModelMotion(player, deltaSeconds, motionOffset, motionEuler);
             viewModelMeleeEuler_ = IsSwinging() ? meleeEuler : glm::mix(viewModelMeleeEuler_, meleeEuler, t);
             motionEuler += viewModelMeleeEuler_;
-            if (show)
+            const bool waistPhase = (actionTime < 0.5f ? switchSourceSlot_ : switchTargetSlot_) == kSidearmSlot;
+            motionEuler += glm::radians(waistPhase ? glm::vec3(70.0f, -10.0f, -5.0f)
+                                                  : glm::vec3(55.0f, -18.0f, -22.0f)) * switchLower;
+            if (firstPersonWeapon)
             {
                 const glm::vec3 eye = player.CameraPosition();
                 const glm::vec3 forward = player.CameraForward();
@@ -843,18 +884,20 @@ namespace NextDayz
                 // Proper (det +1) rotation basis: object +Z -> forward, +Y -> up,
                 // +X = up x forward (right() is left-handed w.r.t. forward/up).
                 const glm::vec3 xAxis = glm::normalize(glm::cross(up, forward));
-                const glm::vec3 offset = viewModelOffset_ + motionOffset;
-                const glm::vec3 pos =
+                const glm::vec3 offset = viewModelOffset_ + motionOffset +
+                    (waistPhase ? glm::vec3(0.22f, -0.52f, -0.05f) : glm::vec3(0.12f, -0.65f, -0.22f)) * switchLower;
+                glm::vec3 pos =
                     eye + right * offset.x + up * offset.y + forward * (offset.z - viewModelRecoil_ * 2.5f);
-                viewModelNode_->Translation() = pos;
-                viewModelNode_->Rotation() =
-                    glm::quat_cast(glm::mat3(xAxis, up, forward)) *
+                const glm::quat cameraRotation = glm::quat_cast(glm::mat3(xAxis, up, forward));
+                const glm::quat motionRotation =
                     glm::angleAxis(motionEuler.y, glm::vec3(0.0f, 1.0f, 0.0f)) *
                     glm::angleAxis(motionEuler.x, glm::vec3(1.0f, 0.0f, 0.0f)) *
                     glm::angleAxis(motionEuler.z, glm::vec3(0.0f, 0.0f, 1.0f)) *
                     glm::angleAxis(reloading_ ? actionArc * 0.45f : 0.0f, glm::vec3(0.0f, 0.0f, 1.0f)) *
                     glm::angleAxis(-viewModelRecoil_ * 100.0f * glm::radians(config_.ViewModelRecoilPitchDegrees),
                                    glm::vec3(1.0f, 0.0f, 0.0f));
+                viewModelNode_->Translation() = pos;
+                viewModelNode_->Rotation() = cameraRotation * motionRotation;
                 viewModelNode_->RecalcTransform(true);
             }
             else

@@ -81,8 +81,9 @@ namespace NextDayz
         float yaw = 0.0f;
         float pitch = 0.0f;
         bool firstPerson = true;
-        std::array<FItemInstanceId, 2> weaponSlots{};
+        std::array<FItemInstanceId, 3> weaponSlots{};
         int activeSlot = 0;
+        int previousSlot = -1;
         double survivalSeconds = 0.0;
         uint64_t sessionRng = 1;
         uint64_t survivalRng = 1;

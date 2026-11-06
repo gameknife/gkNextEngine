@@ -1040,7 +1040,7 @@ namespace NextDayz::Debug
         {
             root["weapons"] = {{"active", systems_.weapons->ActiveWeaponId()},
                                {"slot", systems_.weapons->ActiveSlot()},
-                               {"slots", Json::array({systems_.weapons->SlotWeaponId(0), systems_.weapons->SlotWeaponId(1)})},
+                               {"slots", Json::array({systems_.weapons->SlotWeaponId(0), systems_.weapons->SlotWeaponId(1), systems_.weapons->SlotWeaponId(2)})},
                                {"mag", systems_.weapons->AmmoInMag()},
                                {"reserve", systems_.weapons->AmmoReserve(*systems_.inventory)},
                                {"action", WeaponActionName(systems_.weapons->PresentationAction())},

@@ -465,6 +465,18 @@ void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
                                  UseInventoryItem(instance->instanceId);
                              }
                          });
+    cvars.RegisterString("nextdayz.validation.equip", "", &validationEquip_, NextCVar::ECVarFlags::None,
+                         "Agent-only: equip an owned weapon in slot 1..3, e.g. 2:mosin; slot alone unequips",
+                         [this, validationReady]()
+                         {
+                             if (!validationReady() || validationEquip_.empty()) return;
+                             const int slot = validationEquip_[0] - '1';
+                             if (slot < 0 || slot >= NextDayz::kWeaponSlotCount) return;
+                             if (validationEquip_.size() == 1) { weapons_.Unequip(slot); return; }
+                             if (validationEquip_[1] != ':') return;
+                             if (const auto* instance = inventory_.FindFirst(validationEquip_.substr(2)))
+                                 EquipWeaponInstance(instance->instanceId, slot);
+                         });
     cvars.RegisterString("nextdayz.validation.teleport", "", &validationTeleport_, NextCVar::ECVarFlags::None,
                          "Agent-only: move the player to map coordinates \"x,y\" (SCAD space: +y north)",
                          [this, validationReady]()
@@ -1120,15 +1132,19 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     presentation.aimWeight = player_.IsAiming() ? 1.0f : 0.0f;
     presentation.aimPitchRadians = player_.Pitch();
     presentation.aimYawRadians = player_.Yaw();
+    presentation.aimDirection = player_.Forward();
     presentation.sprintAlpha = player_.SprintAlpha();
     presentation.hasWeapon = weapons_.HasActiveWeapon();
     presentation.weaponId = weapons_.ActiveWeaponId();
     presentation.weaponAction = weapons_.PresentationAction();
     presentation.weaponActionTime01 = weapons_.PresentationActionTime();
     presentation.activeWeaponSlot = weapons_.ActiveSlot();
+    presentation.switchSourceSlot = weapons_.SwitchSourceSlot();
+    presentation.switchTargetSlot = weapons_.SwitchTargetSlot();
     presentation.slotWeaponIds = {
         weapons_.SlotWeaponId(0),
         weapons_.SlotWeaponId(1),
+        weapons_.SlotWeaponId(2),
     };
     presentation.action = actions_.Action();
     presentation.actionTime01 = actions_.NormalizedTime();
@@ -1449,7 +1465,7 @@ void NextDayzGameInstance::EquipWeaponInstance(NextDayz::FItemInstanceId instanc
         Notify("That is not something you can hold", 1);
         return;
     }
-    Notify(NextDayz::L10n::Message("{} in hand ({})", ItemDisplayName(instance->defId), slot == 0 ? "1" : "2"));
+    Notify(NextDayz::L10n::Message("{} in hand ({})", ItemDisplayName(instance->defId), std::to_string(slot + 1)));
 }
 
 void NextDayzGameInstance::WearItem(NextDayz::FItemInstanceId instanceId)
@@ -1627,7 +1643,7 @@ void NextDayzGameInstance::UseInventoryItem(NextDayz::FItemInstanceId instanceId
     }
     if (NextDayz::IsWieldable(*definition))
     {
-        EquipWeaponInstance(instanceId, definition->equipSlot == NextDayz::EEquipSlot::PrimaryWeapon ? 0 : 1);
+        EquipWeaponInstance(instanceId, NextDayz::PreferredWeaponSlot(*definition));
     }
     else if (definition->kind == NextDayz::EItemKind::Clothing)
     {
@@ -2590,6 +2606,7 @@ void NextDayzGameInstance::SetMouseCaptured(bool captured)
     // The debug cursor (F9) keeps the mouse free until it is switched off.
     captured = captured && !debugger_.CursorMode();
     mouseCaptured_ = captured;
+    if (!captured) player_.SetAiming(false);
     resetMouse_ = true;
     if (!GOption->AgentValidation)
     {
@@ -2698,15 +2715,26 @@ bool NextDayzGameInstance::OnKey(SDL_Event& event)
         }
         return true;
     case SDLK_Q:
-        if (pressed && !player_.IsTraversing()) weapons_.SwitchPrevious();
+        if (pressed && !player_.IsTraversing())
+        {
+            weapons_.SwitchPrevious();
+            if (weapons_.IsSwitching()) player_.SetAiming(false);
+        }
         return true;
     case SDLK_3:
+        if (pressed && !player_.IsTraversing())
+        {
+            weapons_.SwitchSlot(NextDayz::kSidearmSlot);
+            if (weapons_.IsSwitching()) player_.SetAiming(false);
+        }
+        return true;
     case SDLK_4:
     case SDLK_5:
     case SDLK_6:
+    case SDLK_7:
         if (pressed && !player_.IsTraversing())
         {
-            UseQuickSlot(static_cast<int>(event.key.key - SDLK_3));
+            UseQuickSlot(static_cast<int>(event.key.key - SDLK_4));
         }
         return true;
     case SDLK_H:
@@ -3048,6 +3076,10 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     reg.Add("activeWeaponSlot", [this]() -> Runtime::Agent::FAgentQueryValue {
         return static_cast<int64_t>(weapons_.ActiveSlot());
     });
+    reg.Add("previousWeaponSlot", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<int64_t>(weapons_.PreviousSlot()); });
+    reg.Add("weaponSlot1", [this]() -> Runtime::Agent::FAgentQueryValue { return weapons_.SlotWeaponId(0); });
+    reg.Add("weaponSlot2", [this]() -> Runtime::Agent::FAgentQueryValue { return weapons_.SlotWeaponId(1); });
+    reg.Add("weaponSlot3", [this]() -> Runtime::Agent::FAgentQueryValue { return weapons_.SlotWeaponId(2); });
     reg.Add("isAiming", [this]() -> Runtime::Agent::FAgentQueryValue { return player_.IsAiming(); });
     reg.Add("cameraFov", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(player_.CurrentFov()); });
     reg.Add("firstPerson", [this]() -> Runtime::Agent::FAgentQueryValue { return player_.IsFirstPerson(); });
@@ -3067,6 +3099,32 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
         return static_cast<double>(player_.CameraPosition().z);
     });
     reg.Add("playerRigVisible", [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.IsVisible(); });
+    reg.Add("heldWeaponVisible", [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.IsHeldWeaponVisible(); });
+    reg.Add("viewModelVisible", [this]() -> Runtime::Agent::FAgentQueryValue { return weapons_.IsViewModelVisible(); });
+    reg.Add("elbowConstraintError", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(rig_.ElbowConstraintErrorDegrees());
+    });
+    reg.Add("leftHandHeight", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(rig_.HandHeightInTorso(0));
+    });
+    reg.Add("rightHandHeight", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(rig_.HandHeightInTorso(1));
+    });
+    reg.Add("backWeapon1Visible", [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.IsHolsteredWeaponVisible(0); });
+    reg.Add("backWeapon2Visible", [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.IsHolsteredWeaponVisible(1); });
+    reg.Add("waistWeaponVisible", [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.IsHolsteredWeaponVisible(2); });
+    reg.Add("waistWeaponX", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(rig_.HolsterPosition(2).x); });
+    reg.Add("waistWeaponY", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(rig_.HolsterPosition(2).y); });
+    reg.Add("waistMuzzleVertical", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(rig_.HolsteredMuzzleVertical(2)); });
+    reg.Add("weapon3HolsterDistance", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(rig_.WeaponDistanceFromHolster(2)); });
+    reg.Add("backWeapon1X", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(rig_.HolsterPosition(0).x); });
+    reg.Add("backWeapon2X", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(rig_.HolsterPosition(1).x); });
+    reg.Add("weapon1BackDistance", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(rig_.WeaponDistanceFromHolster(0));
+    });
+    reg.Add("weapon2BackDistance", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(rig_.WeaponDistanceFromHolster(1));
+    });
     reg.Add("clothingVisuals", [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.ClothingVisuals(); });
     reg.Add("bareTorsoVisible", [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.IsBodyPartVisible("bone_torso"); });
     reg.Add("shortsVisible", [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.IsBodyPartVisible("bone_pelvis"); });
@@ -3188,6 +3246,11 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
             [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.CurrentBaseClipName(); });
     reg.Add("aimWeight",
             [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(rig_.AimWeight()); });
+    reg.Add("weaponAimError", [this]() -> Runtime::Agent::FAgentQueryValue {
+        glm::vec3 position, forward;
+        if (!rig_.WeaponMuzzle(position, forward)) return 180.0;
+        return static_cast<double>(glm::degrees(std::acos(glm::clamp(glm::dot(forward, player_.Forward()), -1.0f, 1.0f))));
+    });
     reg.Add("horizontalSpeed",
             [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(player_.HorizontalSpeed()); });
     reg.Add("sprintAlpha",

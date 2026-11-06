@@ -810,8 +810,9 @@ namespace NextDayz::Debug
             return;
         }
         const FWeaponDef* active = weapons->ActiveWeapon();
-        KV(NextDayz::L10n::Tr("Slots"), "1: {}  2: {}  (active {})", weapons->SlotWeaponId(0).empty() ? "-" : weapons->SlotWeaponId(0),
-           weapons->SlotWeaponId(1).empty() ? "-" : weapons->SlotWeaponId(1), weapons->ActiveSlot() + 1);
+        KV(NextDayz::L10n::Tr("Slots"), "1: {}  2: {}  3: {}  (active {})", weapons->SlotWeaponId(0).empty() ? "-" : weapons->SlotWeaponId(0),
+           weapons->SlotWeaponId(1).empty() ? "-" : weapons->SlotWeaponId(1),
+           weapons->SlotWeaponId(2).empty() ? "-" : weapons->SlotWeaponId(2), weapons->ActiveSlot() + 1);
         KV(NextDayz::L10n::Tr("Ammo"), "{} in mag / {} reserve", weapons->AmmoInMag(), weapons->AmmoReserve(*systems_.inventory));
         KV(NextDayz::L10n::Tr("Action"), "{} {:.2f}{}{}", NextDayz::L10n::Tr(WeaponActionName(weapons->PresentationAction())), weapons->PresentationActionTime(),
            weapons->IsReloading() ? NextDayz::L10n::Tr("  reloading") : "",

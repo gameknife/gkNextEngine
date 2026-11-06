@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include <glm/gtc/quaternion.hpp>
 
@@ -29,6 +30,9 @@ namespace NextDayz
         const glm::vec3 kAxisX(1.0f, 0.0f, 0.0f);
         const glm::vec3 kAxisY(0.0f, 1.0f, 0.0f);
         const glm::vec3 kAxisZ(0.0f, 0.0f, 1.0f);
+        const glm::quat kBackWeaponRotation = glm::angleAxis(glm::pi<float>(), kAxisY) *
+                                              glm::angleAxis(glm::radians(-90.0f), kAxisX);
+        const glm::quat kWaistWeaponRotation = glm::angleAxis(glm::radians(90.0f), kAxisX);
 
         // Elbow pole points in torso space (engine axes: +Z forward, -X right):
         // firing elbow down and out, support elbow down under the handguard.
@@ -139,9 +143,12 @@ namespace NextDayz
                 binding.itemId = itemId;
                 binding.bone = bone;
                 binding.harness = harness;
+                binding.frontExtent = std::numeric_limits<float>::max();
                 for (const auto& vertex : clothingAsset_.partModels[part.modelIndex].CPUVertices())
                 {
                     binding.backExtent = std::max(binding.backExtent, -vertex.Position.z);
+                    binding.frontExtent = std::min(binding.frontExtent, -vertex.Position.z);
+                    binding.halfWidth = std::max(binding.halfWidth, std::abs(vertex.Position.x));
                 }
                 clothingParts_.push_back(std::move(binding));
             }
@@ -350,16 +357,18 @@ namespace NextDayz
             {
                 for (int slot = 0; slot < static_cast<int>(holsteredWeaponNodes_.size()); ++slot)
                 {
-                    const float side = slot == 0 ? -1.0f : 1.0f;
-                    const glm::quat rotation =
-                        glm::angleAxis(glm::radians(side * 24.0f), glm::vec3(0.0f, 0.0f, 1.0f)) *
-                        glm::angleAxis(glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+                    // Character left is +X. Keep the barrels up and the
+                    // grips (-Y in weapon space) pointing back (-Z).
+                    const float side = slot == 0 ? 1.0f : -1.0f;
+                    const bool waist = slot == kSidearmSlot;
+                    holsterPositions_[slot] = waist ? glm::vec3(-0.235f, 0.08f, 0.04f)
+                                                    : glm::vec3(side * 0.20f, 0.24f, -0.20f);
                     holsteredWeaponNodes_[slot] = Assets::SceneBuilder::CreateRenderNode(
-                        fmt::format("nd_player/weapon_back_{}", slot),
-                        glm::vec3(side * 0.11f, 0.24f, -0.22f - slot * 0.025f),
+                        fmt::format("nd_player/weapon_holster_{}", slot), holsterPositions_[slot],
                         glm::vec3(weaponScale_), scene.GenerateInstanceId(), weaponModelIds_[0],
-                        weaponMaterialIds_[0], false, rotation, false);
-                    holsteredWeaponNodes_[slot]->SetParent(torso->shared_from_this());
+                        weaponMaterialIds_[0], false, waist ? kWaistWeaponRotation : kBackWeaponRotation, false);
+                    Assets::Node* parent = waist ? BoneNode("bone_pelvis") : torso;
+                    holsteredWeaponNodes_[slot]->SetParent(parent->shared_from_this());
                     scene.AddNode(holsteredWeaponNodes_[slot]);
                 }
             }
@@ -450,9 +459,9 @@ namespace NextDayz
         weaponNode_.reset();
         holsteredWeaponNodes_ = {};
         weaponVisualIndex_ = -1;
-        holsteredWeaponVisualIndices_ = {{-1, -1}};
+        holsteredWeaponVisualIndices_.fill(-1);
         weaponVisible_ = false;
-        holsteredWeaponVisible_ = {{false, false}};
+        holsteredWeaponVisible_.fill(false);
         boneNodes_.clear();
         transforms_.clear();
         aimWeight_ = 0.0f;
@@ -514,6 +523,7 @@ namespace NextDayz
         const float packClearance = carrier ? (coat ? 0.0f : 0.04f) : coat ? 0.045f : 0.07f;
         const float harnessDepth = carrier ? (coat ? 1.0f : 0.78f) : coat ? 0.72f : 0.57f;
         float stowedDepth = carrier ? 0.24f : coat ? 0.20f : 0.17f;
+        float stowedSide = 0.20f;
         for (FClothingPart& part : clothingParts_)
         {
             if (!part.node) continue;
@@ -528,7 +538,10 @@ namespace NextDayz
                 part.node->Scale().z = part.harness ? harnessDepth : 1.0f;
                 if (!part.harness && wears(part.itemId))
                 {
-                    stowedDepth = std::max(stowedDepth, part.backExtent - packClearance + 0.03f);
+                    // Beside the pack, halfway through its depth, rather
+                    // than floating behind its outermost pocket.
+                    stowedDepth = (part.frontExtent + part.backExtent) * 0.5f - packClearance;
+                    stowedSide = part.halfWidth + 0.045f * weaponScale_ + 0.012f;
                 }
             }
             else if (definition && definition->equipSlot == EEquipSlot::Vest)
@@ -550,7 +563,9 @@ namespace NextDayz
         {
             if (holsteredWeaponNodes_[slot])
             {
-                holsteredWeaponNodes_[slot]->Translation().z = -stowedDepth - static_cast<float>(slot) * 0.025f;
+                holsterPositions_[slot] = slot == kSidearmSlot ? glm::vec3(coat ? -0.26f : -0.235f, 0.08f, 0.04f)
+                    : glm::vec3(slot == 0 ? stowedSide : -stowedSide, 0.24f, -stowedDepth);
+                holsteredWeaponNodes_[slot]->Translation() = holsterPositions_[slot];
             }
         }
         if (scene_)
@@ -558,6 +573,29 @@ namespace NextDayz
             if (worldNode_) worldNode_->RecalcTransform(true);
             scene_->MarkDirty();
         }
+    }
+
+    float PlayerRigVisual::HolsteredMuzzleVertical(int slot) const
+    {
+        return holsteredWeaponNodes_[slot] ? (holsteredWeaponNodes_[slot]->Rotation() * kAxisZ).y : 0.0f;
+    }
+
+    glm::vec3 PlayerRigVisual::HolsterPosition(int slot) const
+    {
+        return holsterPositions_[slot];
+    }
+
+    float PlayerRigVisual::WeaponDistanceFromHolster(int slot) const
+    {
+        return holsteredWeaponNodes_[slot]
+            ? glm::distance(holsteredWeaponNodes_[slot]->Translation(), holsterPositions_[slot]) : 0.0f;
+    }
+
+    float PlayerRigVisual::HandHeightInTorso(int slot) const
+    {
+        const int32_t hand = slot == 0 ? bones_.handL : bones_.handR;
+        if (bones_.torso < 0 || hand < 0 || hand >= static_cast<int32_t>(transforms_.size())) return 0.0f;
+        return glm::vec3(glm::inverse(transforms_[bones_.torso]) * transforms_[hand][3]).y;
     }
 
     std::string PlayerRigVisual::ClothingVisuals() const
@@ -755,6 +793,209 @@ namespace NextDayz
         }
     }
 
+    float PlayerRigVisual::ElbowConstraintErrorDegrees() const
+    {
+        const auto& pose = animator_.Pose();
+        float error = 0.0f;
+        for (int32_t bone : {bones_.foreArmL, bones_.foreArmR})
+        {
+            if (bone < 0 || bone >= static_cast<int32_t>(pose.bones.size())) continue;
+            glm::quat rotation = glm::normalize(pose.bones[bone].r);
+            if (rotation.w < 0.0f) rotation = -rotation;
+            const float flex = glm::degrees(-2.0f * std::atan2(rotation.x, rotation.w));
+            const float offAxis = glm::degrees(std::acos(glm::clamp(glm::dot(rotation * kAxisX, kAxisX), -1.0f, 1.0f)));
+            // The released hand can retain the authored near-straight hold;
+            // only backwards flexion, over-folding and off-axis twist fail.
+            error = std::max({error, offAxis, -flex, flex - 150.0f});
+        }
+        return error;
+    }
+
+    void PlayerRigVisual::UpdateSwitchPose(const FPlayerPresentationState& state)
+    {
+        using namespace NextGameplay;
+        FRigPose& pose = animator_.MutablePose();
+        const glm::mat4 torso = transforms_[bones_.torso];
+        const glm::mat4 toTorso = glm::inverse(torso);
+        const glm::quat torsoRotation = RigBoneRotation(transforms_, bones_.torso);
+        const glm::vec3 readyPosition(toTorso * glm::vec4(RigBonePosition(transforms_, bones_.ikWeapon), 1.0f));
+        const glm::quat readyRotation = glm::inverse(torsoRotation) * RigBoneRotation(transforms_, bones_.ikWeapon);
+        const float time = state.weaponActionTime01;
+        const int oldSlot = state.switchSourceSlot;
+        const int newSlot = state.switchTargetSlot;
+        const bool sidearmSwitch = oldSlot == kSidearmSlot || newSlot == kSidearmSlot;
+        // A shared right hand must finish stowing before reaching the other
+        // holster. Opposite back slots retain their short two-hand overlap.
+        const float stowEnd = sidearmSwitch ? 0.44f : kWeaponStowTime;
+        const float drawStart = sidearmSwitch ? 0.56f : kWeaponDrawTime;
+        const int oldHand = oldSlot == 0 ? 0 : 1;
+        const int newHand = newSlot == 0 ? 0 : 1;
+        const glm::mat4 pelvisToTorso = toTorso * transforms_[bones_.pelvis];
+        const glm::quat pelvisInTorso = glm::inverse(torsoRotation) * RigBoneRotation(transforms_, bones_.pelvis);
+        struct FSwitchPose
+        {
+            glm::vec3 position;
+            glm::quat rotation;
+            float release = 0.0f;
+        };
+        const auto sample = [&](int slot, float travel, bool fromBelow = false)
+        {
+            travel = glm::clamp(travel, 0.0f, 1.0f);
+            const bool waist = slot == kSidearmSlot;
+            const glm::quat holsterRotation = waist ? pelvisInTorso * kWaistWeaponRotation : kBackWeaponRotation;
+            const glm::vec3 holsterPosition = waist ? glm::vec3(pelvisToTorso * glm::vec4(holsterPositions_[slot], 1.0f))
+                                                    : holsterPositions_[slot];
+            const glm::vec3 backPosition = holsterPosition - holsterRotation * HoldFor(state.slotWeaponIds[slot]).modelOffset;
+            // Stow over the shoulder; draw around the waist. Keep the lower
+            // route outside the pack and within a bent arm's reach.
+            const float side = slot == 0 ? 1.0f : -1.0f;
+            const glm::vec3 waypoint = waist ? glm::mix(readyPosition, backPosition, 0.6f) + glm::vec3(-0.05f, 0.10f, 0.12f)
+                : fromBelow ? glm::vec3(side * std::max(0.36f, std::abs(holsterPositions_[slot].x) + 0.10f), 0.12f, 0.16f)
+                            : glm::vec3(side * 0.36f, 0.74f, 0.18f);
+            const glm::quat waypointRotation = glm::slerp(readyRotation, holsterRotation, waist ? 0.35f : fromBelow ? 0.55f : 0.75f);
+            FSwitchPose frame;
+            if (travel < 0.5f)
+            {
+                const float blend = glm::smoothstep(0.0f, 0.5f, travel);
+                frame.position = glm::mix(readyPosition, waypoint, blend);
+                frame.rotation = glm::slerp(readyRotation, waypointRotation, blend);
+            }
+            else
+            {
+                const float blend = glm::smoothstep(0.5f, 1.0f, travel);
+                frame.position = glm::mix(waypoint, backPosition, blend);
+                frame.rotation = glm::slerp(waypointRotation, holsterRotation, blend);
+            }
+            // Below-waist reaching keeps the elbow down and out.
+            frame.release = waist || fromBelow ? 0.0f : glm::smoothstep(0.0f, 0.5f, travel);
+            return frame;
+        };
+        std::array<FSwitchPose, kWeaponSlotCount> frames;
+        for (int slot = 0; slot < kWeaponSlotCount; ++slot) frames[slot] = sample(slot, 1.0f);
+        frames[oldSlot] = sample(oldSlot, time / stowEnd);
+        frames[newSlot] = sample(newSlot, (1.0f - time) / (1.0f - drawStart), true);
+        // Both existing back nodes become independent moving weapons. During
+        // the overlap neither model is replaced or teleported to the other hand.
+        for (int slot = 0; slot < kWeaponSlotCount; ++slot)
+        {
+            const glm::mat4 toParent = slot == kSidearmSlot ? glm::inverse(pelvisToTorso) : glm::mat4(1.0f);
+            holsteredWeaponNodes_[slot]->Translation() = glm::vec3(toParent * glm::vec4(frames[slot].position +
+                frames[slot].rotation * HoldFor(state.slotWeaponIds[slot]).modelOffset, 1.0f));
+            holsteredWeaponNodes_[slot]->Rotation() = slot == kSidearmSlot
+                ? glm::inverse(pelvisInTorso) * frames[slot].rotation : frames[slot].rotation;
+        }
+        const auto wrist = [&](const FSwitchPose& frame, int slot, bool left)
+        {
+            const auto& grip = asset_.bones[left ? bones_.ikHandL : bones_.ikHandR];
+            const FWeaponRigHold hold = HoldFor(state.slotWeaponIds[slot]);
+            glm::vec3 local = left && hold.overrideSupport ? hold.supportWrist : grip.bindT;
+            if (left && slot == 0 && slot == newSlot)
+            {
+                // Fetch the left-slot gun by its low grip too, then slide to
+                // the handguard as the right hand takes the firing grip.
+                local = glm::mix(asset_.bones[bones_.ikHandR].bindT, local, glm::smoothstep(0.78f, 1.0f, time));
+            }
+            return FSwitchPose{frame.position + frame.rotation * local, frame.rotation * grip.bindR, frame.release};
+        };
+        std::array<FSwitchPose, 2> hands;
+        hands[oldHand] = wrist(frames[oldSlot], oldSlot, oldHand == 0);
+        hands[newHand] = wrist(frames[newSlot], newSlot, newHand == 0);
+        // The incoming hand reaches its own socket while the other hand is
+        // still stowing. Once stowed, the outgoing hand returns to support the
+        // new gun. Free hands travel below the socket, clear of the torso.
+        if (oldHand != newHand && time < drawStart)
+        {
+            FSwitchPose& hand = hands[newHand];
+            hand = wrist(sample(newSlot, time / drawStart, true), newSlot, newHand == 0);
+            const FSwitchPose start = wrist(sample(oldSlot, 0.0f), oldSlot, newHand == 0);
+            const float blend = glm::smoothstep(0.0f, drawStart * 0.35f, time);
+            hand.position = glm::mix(start.position, hand.position, blend);
+            hand.rotation = glm::slerp(start.rotation, hand.rotation, blend);
+        }
+        if (oldHand != newHand && time > stowEnd)
+        {
+            FSwitchPose& hand = hands[oldHand];
+            hand = wrist(sample(oldSlot, (1.0f - time) / (1.0f - stowEnd), true), oldSlot, oldHand == 0);
+            const FSwitchPose support = wrist(frames[newSlot], newSlot, oldHand == 0);
+            const float blend = glm::smoothstep(0.75f, 1.0f, time);
+            hand.position = glm::mix(hand.position, support.position, blend);
+            hand.rotation = glm::slerp(hand.rotation, support.rotation, blend);
+        }
+        if (oldHand == newHand)
+        {
+            const FSwitchPose stowed = wrist(frames[oldSlot], oldSlot, false);
+            const FSwitchPose drawn = wrist(frames[newSlot], newSlot, false);
+            const float transfer = glm::smoothstep(stowEnd, drawStart, time);
+            hands[1] = {glm::mix(stowed.position, drawn.position, transfer),
+                        glm::slerp(stowed.rotation, drawn.rotation, transfer),
+                        glm::mix(stowed.release, drawn.release, transfer)};
+            const FSwitchPose start = wrist(sample(oldSlot, 0.0f), oldSlot, true);
+            const FSwitchPose finish = wrist(frames[newSlot], newSlot, true);
+            const glm::vec3 resting(0.12f, 0.20f, 0.25f);
+            const float lower = glm::smoothstep(0.0f, 0.25f, time);
+            const float support = glm::smoothstep(0.75f, 1.0f, time);
+            hands[0] = {glm::mix(glm::mix(start.position, resting, lower), finish.position, support),
+                        glm::slerp(start.rotation, finish.rotation, support), 0.0f};
+        }
+        const FSwitchPose& activeFrame = frames[state.activeWeaponSlot];
+        SetRigBoneComponentRotation(asset_, pose, transforms_, bones_.ikWeapon, torsoRotation * activeFrame.rotation);
+        SetRigBoneComponentPosition(asset_, pose, transforms_, bones_.ikWeapon,
+                                    glm::vec3(torso * glm::vec4(activeFrame.position, 1.0f)));
+        const auto solve = [&](int32_t upper, int32_t lower, int32_t hand, int slot)
+        {
+            const FSwitchPose& target = hands[slot];
+            const glm::vec3 goal(torso * glm::vec4(target.position, 1.0f));
+            const glm::quat handRotation = torsoRotation * target.rotation;
+            const glm::vec3 pole = glm::mix(slot == 0 ? kPoleLeft : kPoleRight,
+                                           glm::vec3(slot == 0 ? 0.65f : -0.65f, 0.75f, 0.30f), target.release);
+            const glm::vec3 shoulder = RigBonePosition(transforms_, upper);
+            const float upperLength = glm::length(RigBonePosition(transforms_, lower) - shoulder);
+            const float lowerLength = glm::length(RigBonePosition(transforms_, hand) - RigBonePosition(transforms_, lower));
+            const glm::vec3 reach = goal - shoulder;
+            if (glm::length(reach) <= 1.0e-4f || upperLength <= 1.0e-4f || lowerLength <= 1.0e-4f) return;
+            const glm::vec3 direction = glm::normalize(reach);
+            const glm::vec3 poleOffset = glm::vec3(torso * glm::vec4(pole, 1.0f)) - shoulder;
+            glm::vec3 bend = poleOffset - direction * glm::dot(poleOffset, direction);
+            if (glm::length(bend) <= 1.0e-4f)
+            {
+                const glm::vec3 outward = torsoRotation * glm::vec3(upper == bones_.upperArmL ? 1.0f : -1.0f, 0.0f, 0.0f);
+                bend = outward - direction * glm::dot(outward, direction);
+            }
+            bend = glm::normalize(bend);
+            // NextDayz's arm bones point down local -Y and the elbow is a
+            // -X hinge, matching rh_arm_ik in rig_humanoid.scad. Rebuild the
+            // upper-arm basis from the bend plane instead of preserving its
+            // old twist with an unconstrained shortest-arc rotation.
+            const float cosineFlex = glm::clamp(
+                (glm::dot(reach, reach) - upperLength * upperLength - lowerLength * lowerLength) /
+                    (2.0f * upperLength * lowerLength),
+                std::cos(glm::radians(150.0f)), std::cos(glm::radians(5.0f)));
+            const float distance = std::sqrt(upperLength * upperLength + lowerLength * lowerLength +
+                                             2.0f * upperLength * lowerLength * cosineFlex);
+            const float cosine = glm::clamp((upperLength * upperLength + distance * distance - lowerLength * lowerLength) /
+                                               (2.0f * upperLength * distance), -1.0f, 1.0f);
+            const float sine = std::sqrt(std::max(0.0f, 1.0f - cosine * cosine));
+            const glm::vec3 upperDirection = direction * cosine + bend * sine;
+            const glm::vec3 elbowPlane = bend * cosine - direction * sine;
+            const glm::quat upperRotation = glm::quat_cast(glm::mat3(glm::cross(upperDirection, elbowPlane),
+                                                                    -upperDirection, -elbowPlane));
+            SetRigBoneComponentRotation(asset_, pose, transforms_, upper, upperRotation);
+            auto& forearm = pose.bones[lower];
+            forearm.r = glm::angleAxis(-std::acos(cosineFlex), kAxisX);
+            forearm.Mark(ERigPoseComponent::Rotation);
+            RefreshRigComponentTransforms(asset_, pose, lower, transforms_);
+            SetRigBoneComponentRotation(asset_, pose, transforms_, hand, handRotation);
+            const bool carrying = (slot == oldHand && time <= stowEnd && !state.slotWeaponIds[oldSlot].empty()) ||
+                                  (slot == newHand && time >= drawStart && !state.slotWeaponIds[newSlot].empty());
+            if (carrying)
+            {
+                gripError_ = std::max(gripError_, glm::length(RigBonePosition(transforms_, hand) - goal));
+            }
+        };
+        solve(bones_.upperArmR, bones_.foreArmR, bones_.handR, 1);
+        solve(bones_.upperArmL, bones_.foreArmL, bones_.handL, 0);
+    }
+
     void PlayerRigVisual::UpdateProcedural(const FPlayerPresentationState& state, float dt)
     {
         using namespace NextGameplay;
@@ -798,6 +1039,14 @@ namespace NextDayz
         }
 
         gripError_ = 0.0f;
+        if (state.weaponAction == EWeaponPresentationAction::Switch && valid(bones_.torso) &&
+            valid(bones_.ikWeapon) && valid(bones_.ikHandR) && valid(bones_.ikHandL) &&
+            holsteredWeaponNodes_[0] && holsteredWeaponNodes_[1] && holsteredWeaponNodes_[2] &&
+            state.switchSourceSlot >= 0 && state.switchTargetSlot >= 0)
+        {
+            UpdateSwitchPose(state);
+            return;
+        }
         // Traversal hand plants, world -> component space. The clip already
         // places the hands near the lip; this pins them onto the real top
         // whatever its height, so palms never float or sink into the wall.
@@ -874,6 +1123,20 @@ namespace NextDayz
                                                              sprintHoldWeight_ * bob,
                                                          kAxisZ);
         weaponPosition += weaponRotation * glm::vec3(0.0f, 0.0f, hold.extend * aimWeight_);
+        // Crouch locomotion pitches pelvis + torso forward by about 30 degrees.
+        // Its additive body pose must not drag ADS down with it. Rotate about
+        // the firing shoulder, preserving the grip reach, then solve both arms
+        // onto the raised weapon. Actual camera aim retains the recoil kick.
+        const float crouchAim = crouchWeight_ * aimWeight_ * (1.0f - busy) * (1.0f - weaponActionWeight_);
+        if (const FWeaponDef* weapon = FindWeaponDef(state.weaponId);
+            weapon && !weapon->IsMelee() && crouchAim > 1.0e-3f)
+        {
+            const glm::vec3 direction = glm::inverse(worldNode_->Rotation()) * state.aimDirection;
+            const glm::quat correction = glm::slerp(glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
+                RigRotationBetween(weaponRotation * kAxisZ, direction), crouchAim);
+            weaponPosition = pivot + correction * (weaponPosition - pivot);
+            weaponRotation = correction * weaponRotation;
+        }
         // The firing hand plants with the weapon in it: slide the weapon frame
         // so its grip lands on the plant, the hand IK below follows the grip.
         if (plantWeight[1] > 1.0e-3f)
@@ -914,6 +1177,7 @@ namespace NextDayz
 
     void PlayerRigVisual::UpdateAttachments(const FPlayerPresentationState& state)
     {
+        const bool switching = state.weaponAction == EWeaponPresentationAction::Switch;
         if (weaponNode_)
         {
             const int weaponIndex = WeaponIndex(state.weaponId);
@@ -931,7 +1195,7 @@ namespace NextDayz
                     scene_->MarkDirty();
                 }
             }
-            const bool showWeapon = visible_ && state.hasWeapon;
+            const bool showWeapon = visible_ && state.hasWeapon && !switching;
             if (showWeapon != weaponVisible_)
             {
                 weaponVisible_ = showWeapon;
@@ -953,6 +1217,11 @@ namespace NextDayz
             {
                 continue;
             }
+            if (!switching)
+            {
+                holstered->Translation() = holsterPositions_[slot];
+                holstered->Rotation() = slot == kSidearmSlot ? kWaistWeaponRotation : kBackWeaponRotation;
+            }
             const int weaponIndex = WeaponIndex(state.slotWeaponIds[slot]);
             if (weaponIndex >= 0 && weaponIndex != holsteredWeaponVisualIndices_[slot])
             {
@@ -967,7 +1236,7 @@ namespace NextDayz
                     scene_->MarkDirty();
                 }
             }
-            const bool showHolstered = visible_ && weaponIndex >= 0 && slot != state.activeWeaponSlot;
+            const bool showHolstered = visible_ && weaponIndex >= 0 && (switching || slot != state.activeWeaponSlot);
             if (showHolstered != holsteredWeaponVisible_[slot])
             {
                 holsteredWeaponVisible_[slot] = showHolstered;
@@ -1069,7 +1338,8 @@ namespace NextDayz
         // Layer weights.
         crouchWeight_ = Approach(crouchWeight_, locomotion.actualStance == EPlayerStance::Crouched ? 1.0f : 0.0f,
                                  anim.StanceBlendSeconds * 0.5f, dt);
-        const bool holding = state.hasWeapon && !looting && !traversing;
+        const bool holding = (state.hasWeapon || state.weaponAction == EWeaponPresentationAction::Switch) &&
+                             !looting && !traversing;
         weaponWeight_ = Approach(weaponWeight_, state.hasWeapon ? 1.0f : 0.0f, 0.06f, dt);
         holdWeight_ = Approach(holdWeight_, holding ? 1.0f : 0.0f, anim.HoldFadeSeconds * 0.5f, dt);
         freeHandWeight_ = Approach(freeHandWeight_, looting || traversing ? 1.0f : 0.0f, 0.05f, dt);

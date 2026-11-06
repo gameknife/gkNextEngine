@@ -252,7 +252,18 @@ TEST_CASE("NextDayz geographic maps have independent persistent loot and mission
     // or the total sortie counter. The new per-map counts start from zero.
     nlohmann::json legacy;
     { std::ifstream input(path); input >> legacy; }
+    auto legacyTwo = legacy;
+    legacyTwo["version"] = 2;
+    legacyTwo["state"]["weaponSlots"] = nlohmann::json::array({0, 0});
+    legacyTwo["state"].erase("previousSlot");
+    { std::ofstream output(path); output << legacyTwo; }
+    REQUIRE(ReadCampaignSave(path, restored, error));
+    CHECK(restored.weaponSlots[2] == 0);
+    CHECK(restored.previousSlot == -1);
+    CHECK(restored.maps.at("map-a").world.seconds == 150);
     legacy["version"] = 1;
+    legacy["state"]["weaponSlots"] = nlohmann::json::array({0, 0});
+    legacy["state"].erase("previousSlot");
     legacy["state"].erase("maps");
     legacy["state"].erase("mapVersion");
     for (const auto* key : {"mapSorties","lastMapId","lastOutcome","sortieId"})

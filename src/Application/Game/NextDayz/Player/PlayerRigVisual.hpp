@@ -67,6 +67,12 @@ namespace NextDayz
         // Actual render state, also exposed to the interactive validation runner.
         std::string ClothingVisuals() const;
         bool IsBodyPartVisible(std::string_view boneName) const;
+        bool IsHeldWeaponVisible() const { return weaponVisible_; }
+        bool IsHolsteredWeaponVisible(int slot) const { return holsteredWeaponVisible_[slot]; }
+        glm::vec3 HolsterPosition(int slot) const;
+        float WeaponDistanceFromHolster(int slot) const;
+        float HolsteredMuzzleVertical(int slot) const;
+        float HandHeightInTorso(int slot) const;
 
         // Drives world transform + animation for the frame. The body yaw lags
         // state.aimYawRadians; the upper body twists to cover the difference.
@@ -88,6 +94,8 @@ namespace NextDayz
         bool WeaponMuzzle(glm::vec3& outPosition, glm::vec3& outForward) const;
         // Distance from the right hand to its grip target (m); 0 when no weapon.
         float GripError() const { return gripError_; }
+        // Actual pose deviation from a forward-only elbow hinge (degrees).
+        float ElbowConstraintErrorDegrees() const;
         // Worst distance (m) of a fully planted traversal hand from its lip target; 0 when none is planted.
         float PlantError() const { return plantError_; }
 
@@ -123,6 +131,7 @@ namespace NextDayz
         void ResolveRig();
         void UpdateLocomotion(const FPlayerPresentationState& state, float deltaSeconds);
         void UpdateProcedural(const FPlayerPresentationState& state, float deltaSeconds);
+        void UpdateSwitchPose(const FPlayerPresentationState& state);
         void UpdateAttachments(const FPlayerPresentationState& state);
         void ApplyClothing();
 
@@ -132,6 +141,8 @@ namespace NextDayz
             int32_t bone = -1;
             bool harness = false;
             float backExtent = 0.0f;
+            float frontExtent = 0.0f;
+            float halfWidth = 0.0f;
             uint32_t modelId = 0;
             std::array<uint32_t, 16> materialIds{};
             std::shared_ptr<Assets::Node> node;
@@ -157,7 +168,8 @@ namespace NextDayz
         std::vector<Assets::Node*> boneNodes_;
         std::vector<Assets::Node*> bodyPartNodes_;
         std::shared_ptr<Assets::Node> weaponNode_;
-        std::array<std::shared_ptr<Assets::Node>, 2> holsteredWeaponNodes_;
+        std::array<std::shared_ptr<Assets::Node>, kWeaponSlotCount> holsteredWeaponNodes_;
+        std::array<glm::vec3, kWeaponSlotCount> holsterPositions_{};
         NextGameplay::FRigLayeredAnimator animator_;
         NextGameplay::FRigLayerHandle locomotionLayer_ = NextGameplay::invalidRigLayerHandle;
         NextGameplay::FRigLayerHandle holdLayer_ = NextGameplay::invalidRigLayerHandle;
@@ -178,10 +190,10 @@ namespace NextDayz
         std::array<uint32_t, kWeapons.size()> weaponModelIds_{};
         std::array<FWeaponMaterialSlots, kWeapons.size()> weaponMaterialIds_{};
         int weaponVisualIndex_ = -1;
-        std::array<int, 2> holsteredWeaponVisualIndices_{{-1, -1}};
+        std::array<int, kWeaponSlotCount> holsteredWeaponVisualIndices_{{-1, -1, -1}};
         bool weaponAssetsSet_ = false;
         bool weaponVisible_ = false;
-        std::array<bool, 2> holsteredWeaponVisible_{{false, false}};
+        std::array<bool, kWeaponSlotCount> holsteredWeaponVisible_{};
 
         // graph state
         bool yawInitialized_ = false;

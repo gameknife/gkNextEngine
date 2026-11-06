@@ -312,6 +312,7 @@ private:
     float debugFogDensityScale_ = 1.0f;
     std::string validationGive_;
     std::string validationUse_;
+    std::string validationEquip_;
     std::string validationDrop_;
     std::string validationTeleport_;
     uint64_t validationAttackSequence_ = 0;

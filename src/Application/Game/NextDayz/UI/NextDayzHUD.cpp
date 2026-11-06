@@ -100,6 +100,18 @@ namespace NextDayz::NextDayzHUD
                 draw->AddLine(ImVec2(center.x + x0 * radius, center.y + y0 * radius),
                               ImVec2(center.x + x1 * radius, center.y + y1 * radius), ink, 1.7f);
             };
+            if (context.optic == EWeaponAttachment::Scope4x)
+            {
+                line(-0.80f, 0.0f, 0.80f, 0.0f);
+                line(0.0f, -0.80f, 0.0f, 0.80f);
+                for (int i = 1; i <= 5; ++i)
+                {
+                    line(-0.015f, i * 0.10f, 0.015f, i * 0.10f);
+                    line(i * 0.10f, -0.015f, i * 0.10f, 0.015f);
+                    line(-i * 0.10f, -0.015f, -i * 0.10f, 0.015f);
+                }
+                return;
+            }
             // PSO-style chevron: its apex is the camera / hitscan aim point.
             for (int i = 0; i < 4; ++i)
             {
@@ -121,6 +133,19 @@ namespace NextDayz::NextDayzHUD
         {
             ImDrawList* draw = ImGui::GetForegroundDrawList();
             const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+            if (context.firstPerson && context.aiming && context.sightReady && !context.showInventory && !context.showMap &&
+                (context.optic == EWeaponAttachment::RedDot || context.optic == EWeaponAttachment::Holographic))
+            {
+                const ImVec2 reticle(center.x + context.reflexOffsetPx.x, center.y + context.reflexOffsetPx.y);
+                const ImU32 red = IM_COL32(255, 58, 40, 245);
+                draw->AddCircleFilled(reticle, 2.0f, red, 12);
+                if (context.optic == EWeaponAttachment::Holographic)
+                {
+                    draw->AddCircle(reticle, 12.0f, red, 48, 1.5f);
+                    draw->AddLine(ImVec2(reticle.x, reticle.y - 16), ImVec2(reticle.x, reticle.y - 10), red, 1.5f);
+                    draw->AddLine(ImVec2(reticle.x, reticle.y + 10), ImVec2(reticle.x, reticle.y + 16), red, 1.5f);
+                }
+            }
             const ImU32 color = IM_COL32(235, 235, 235, 220);
             const ImU32 outline = IM_COL32(20, 20, 20, 210);
             constexpr float gap = 6.0f;
@@ -804,6 +829,11 @@ namespace NextDayz::NextDayzHUD
             if (definition.kind == EItemKind::Weapon)
             {
                 ImGui::TextColored(ImVec4(0.9f, 0.95f, 1.0f, 1.0f), NextDayz::L10n::Tr("Loaded Ammo: %d"), instance.loadedAmmo);
+                ImGui::Text(NextDayz::L10n::Tr("Magazine capacity: %d"), WeaponMagazineCapacity(definition.weaponDefId, instance.attachments));
+                for (size_t slot = 0; slot < instance.attachments.size(); ++slot)
+                    if (const auto* part = FindAttachmentDef(instance.attachments[slot]))
+                        ImGui::BulletText("%s: %s", L10n::Tr(AttachmentSlotName(static_cast<EAttachmentSlot>(slot))),
+                                          std::string(L10n::Tr(part->displayName)).c_str());
             }
             if (definition.armor > 0.0f)
             {
@@ -824,6 +854,38 @@ namespace NextDayz::NextDayzHUD
             ImGui::EndTooltip();
             ImGui::PopStyleVar();
             ImGui::PopStyleColor(2);
+        }
+
+        void DrawAttachmentOptions(const FHudContext& context, const FItemInstance& gun, EAttachmentSlot slot)
+        {
+            const auto installed = AttachmentAt(gun.attachments, slot);
+            if (installed != EWeaponAttachment::None && context.removeAttachment && ImGui::MenuItem(L10n::Label("Remove attachment")))
+                context.removeAttachment(gun.instanceId, slot);
+            bool any = false;
+            for (const auto& item : context.inventory->Instances())
+            {
+                const auto* part = FindAttachmentDef(item.defId);
+                if (!part || part->slot != slot || !SupportsAttachment(gun.defId, part->type)) continue;
+                any = true;
+                ImGui::PushID(static_cast<int>(item.instanceId));
+                if (ImGui::MenuItem(std::string(L10n::Tr(part->displayName)).c_str()) && context.installAttachment)
+                    context.installAttachment(gun.instanceId, item.instanceId);
+                ImGui::PopID();
+            }
+            if (!any) ImGui::TextDisabled("%s", L10n::Tr("No compatible attachments in backpack"));
+        }
+
+        void DrawAttachmentMenu(const FHudContext& context, const FItemInstance& gun)
+        {
+            for (size_t slot = 0; slot < kAttachmentSlotCount; ++slot)
+            {
+                const auto kind = static_cast<EAttachmentSlot>(slot);
+                if (ImGui::BeginMenu(L10n::Label(AttachmentSlotName(kind))))
+                {
+                    DrawAttachmentOptions(context, gun, kind);
+                    ImGui::EndMenu();
+                }
+            }
         }
 
         // Renders an item card slot in a grid. Returns true if clicked.
@@ -934,6 +996,24 @@ namespace NextDayz::NextDayzHUD
                     if (ImGui::MenuItem(NextDayz::L10n::Label("Equip: Secondary (2)"))) context.equipWeapon(instance.instanceId, 1);
                     if (WeaponSystem::CanEquipInSlot(kSidearmSlot, def->weaponDefId) &&
                         ImGui::MenuItem(NextDayz::L10n::Label("Equip: Waist Sidearm (3)"))) context.equipWeapon(instance.instanceId, 2);
+                }
+                if (def->kind == EItemKind::Weapon && ImGui::BeginMenu(L10n::Label("Attachments")))
+                {
+                    DrawAttachmentMenu(context, instance);
+                    ImGui::EndMenu();
+                }
+                if (const auto* part = FindAttachmentDef(instance.defId); part && context.weapons &&
+                    ImGui::BeginMenu(L10n::Label("Install on weapon")))
+                {
+                    for (int slot = 0; slot < kWeaponSlotCount; ++slot)
+                    {
+                        const auto* gun = context.inventory->FindInstance(context.weapons->SlotInstance(slot));
+                        if (!gun || !SupportsAttachment(gun->defId, part->type)) continue;
+                        const auto name = fmt::format("{} [{}]", L10n::Tr(FindItemDef(gun->defId)->displayName), slot + 1);
+                        if (ImGui::MenuItem(name.c_str()) && context.installAttachment)
+                            context.installAttachment(gun->instanceId, instance.instanceId);
+                    }
+                    ImGui::EndMenu();
                 }
                 if (instance.count > 1 && context.splitItem && ImGui::MenuItem(NextDayz::L10n::Label("Split stack")))
                 {
@@ -1127,7 +1207,11 @@ namespace NextDayz::NextDayzHUD
                 {
                     const auto* dragged = inventory.FindInstance(*static_cast<const FItemInstanceId*>(payload->Data));
                     const auto* definition = dragged ? FindItemDef(dragged->defId) : nullptr;
-                    if (context.equipWeapon && definition && WeaponSystem::CanEquipInSlot(slot, definition->weaponDefId))
+                    if (instance && dragged && FindAttachmentDef(dragged->defId) && context.installAttachment)
+                    {
+                        context.installAttachment(instance->instanceId, dragged->instanceId);
+                    }
+                    else if (context.equipWeapon && definition && WeaponSystem::CanEquipInSlot(slot, definition->weaponDefId))
                     {
                         context.equipWeapon(*static_cast<const FItemInstanceId*>(payload->Data), slot);
                     }
@@ -1147,6 +1231,36 @@ namespace NextDayz::NextDayzHUD
                 ImGui::SetCursorScreenPos(ImVec2(pos.x, max.y + ImGui::GetStyle().ItemSpacing.y));
             }
 
+            if (instance && def && def->kind == EItemKind::Weapon && ImGui::TreeNode(L10n::Label("Attachments")))
+            {
+                for (size_t index = 0; index < kAttachmentSlotCount; ++index)
+                {
+                    const auto kind = static_cast<EAttachmentSlot>(index);
+                    const auto* part = FindAttachmentDef(instance->attachments[index]);
+                    const auto text = fmt::format("{}: {}", L10n::Tr(AttachmentSlotName(kind)),
+                                                  part ? L10n::Tr(part->displayName) : std::string_view(L10n::Tr("[ NONE ]")));
+                    ImGui::PushID(static_cast<int>(index));
+                    if (ImGui::Button(text.c_str(), ImVec2(-1.0f, 0.0f))) ImGui::OpenPopup("parts");
+                    if (ImGui::BeginDragDropTarget())
+                    {
+                        if (const auto* payload = ImGui::AcceptDragDropPayload(kItemPayload))
+                        {
+                            const auto* dragged = inventory.FindInstance(*static_cast<const FItemInstanceId*>(payload->Data));
+                            const auto* accessory = dragged ? FindAttachmentDef(dragged->defId) : nullptr;
+                            if (accessory && accessory->slot == kind && context.installAttachment)
+                                context.installAttachment(instance->instanceId, dragged->instanceId);
+                        }
+                        ImGui::EndDragDropTarget();
+                    }
+                    if (ImGui::BeginPopup("parts"))
+                    {
+                        DrawAttachmentOptions(context, *instance, kind);
+                        ImGui::EndPopup();
+                    }
+                    ImGui::PopID();
+                }
+                ImGui::TreePop();
+            }
             ImGui::PopID();
             ImGui::Spacing();
         }

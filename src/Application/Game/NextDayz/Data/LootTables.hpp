@@ -13,6 +13,7 @@
 
 #include "Application/Game/NextDayz/Data/ItemDefs.hpp"
 #include "Application/Game/NextDayz/Data/WorldProfiles.hpp"
+#include "Application/Game/NextDayz/Weapons/AttachmentDefs.hpp"
 
 namespace NextDayz
 {
@@ -30,6 +31,7 @@ namespace NextDayz
         std::string itemId;
         int count = 1;
         int loadedAmmo = 0;     // firearms: rounds already in the magazine
+        FWeaponAttachments attachments{};
     };
 
     std::span<const FLootTableEntry> LootTable(ELootProfile profile);

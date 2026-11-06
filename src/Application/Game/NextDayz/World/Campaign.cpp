@@ -29,6 +29,7 @@ namespace NextDayz
         case EItemKind::Ammo: return 1;
         case EItemKind::Clothing: return 20;
         case EItemKind::Melee: return 15;
+        case EItemKind::Attachment: return 25;
         default: return 5;
         }
     }
@@ -52,10 +53,12 @@ namespace NextDayz
         if (found == storage.end() || count <= 0 || count > found->count) return false;
         const auto* def = FindItemDef(found->defId);
         if (!def) return false;
+        Inventory transaction = inventory;
         FItemInstanceId newId = 0;
-        if (!inventory.TryAdd(found->defId, std::string(def->displayName), def->kind, count, &newId,
+        if (!transaction.TryAdd(found->defId, std::string(def->displayName), def->kind, count, &newId,
                               wear ? kWornContainer : 0)) return false;
-        if (def->kind == EItemKind::Weapon) inventory.SetLoadedAmmo(newId, found->loadedAmmo);
+        if (def->kind == EItemKind::Weapon && !transaction.SetWeaponState(newId, found->loadedAmmo, found->attachments)) return false;
+        inventory = std::move(transaction);
         found->count -= count;
         if (found->count == 0) storage.erase(found);
         return true;
@@ -79,7 +82,9 @@ namespace NextDayz
         const auto found = std::find_if(storage.begin(), storage.end(), [id](const auto& item)
         { return item.instanceId == id; });
         if (found == storage.end() || count <= 0 || count > found->count) return false;
-        const int price = SellPrice(found->defId, config);
+        int price = SellPrice(found->defId, config);
+        for (const auto type : found->attachments)
+            if (const auto* part = FindAttachmentDef(type)) price += SellPrice(part->id, config);
         const uint64_t value = static_cast<uint64_t>(std::max(price, 0)) * static_cast<uint64_t>(count);
         if (price <= 0 || value > std::numeric_limits<uint64_t>::max() - gold) return false;
         gold += value;

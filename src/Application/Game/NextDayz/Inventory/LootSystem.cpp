@@ -761,14 +761,13 @@ namespace NextDayz
             if (fit > 0)
             {
                 FItemInstanceId instanceId = 0;
-                if (inventory.TryAdd(stack.itemId, std::string(definition->displayName), definition->kind, fit,
-                                     &instanceId, destination))
+                Inventory transaction = inventory;
+                if (transaction.TryAdd(stack.itemId, std::string(definition->displayName), definition->kind, fit,
+                                     &instanceId, destination) &&
+                    (definition->kind != EItemKind::Weapon || transaction.SetWeaponState(instanceId, stack.loadedAmmo, stack.attachments)))
                 {
-                    if (definition->kind == EItemKind::Weapon)
-                    {
-                        inventory.SetLoadedAmmo(instanceId, stack.loadedAmmo);
-                    }
-                    result.stacks.push_back({stack.itemId, fit, stack.loadedAmmo});
+                    inventory = std::move(transaction);
+                    result.stacks.push_back({stack.itemId, fit, stack.loadedAmmo, stack.attachments});
                 }
                 else
                 {
@@ -777,7 +776,7 @@ namespace NextDayz
             }
             if (fit < stack.count)
             {
-                left.push_back({stack.itemId, stack.count - fit, stack.loadedAmmo});
+                left.push_back({stack.itemId, stack.count - fit, stack.loadedAmmo, stack.attachments});
             }
         }
         result.taken = !result.stacks.empty();
@@ -829,7 +828,12 @@ namespace NextDayz
 
     bool LootSystem::SpawnPile(std::vector<FLootStack> contents, const glm::vec3& position, float yaw, NextEngine& engine)
     {
-        if (contents.empty())
+        if (contents.empty() || std::any_of(contents.begin(), contents.end(), [](const auto& item)
+            {
+                const auto* def = FindItemDef(item.itemId);
+                return !def || item.count <= 0 || item.loadedAmmo < 0 || !ValidAttachments(item.itemId, item.attachments) ||
+                    (def->kind == EItemKind::Weapon && item.loadedAmmo > WeaponMagazineCapacity(item.itemId, item.attachments));
+            }))
         {
             return false;
         }

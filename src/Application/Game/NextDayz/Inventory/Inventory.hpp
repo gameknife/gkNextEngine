@@ -11,6 +11,7 @@
 #include "Engine/Common/CoreMinimal.hpp"
 
 #include "Application/Game/NextDayz/Data/ItemDefs.hpp"
+#include "Application/Game/NextDayz/Weapons/AttachmentDefs.hpp"
 
 #include <functional>
 #include <optional>
@@ -39,6 +40,7 @@ namespace NextDayz
         int count = 1;
         FContainerId containerId = 0;
         int loadedAmmo = 0;
+        FWeaponAttachments attachments{};
     };
 
     struct FInventoryContainer
@@ -111,6 +113,9 @@ namespace NextDayz
         const FItemInstance* FindFirst(std::string_view defId) const;
         bool SetLoadedAmmo(FItemInstanceId instanceId, int loadedAmmo);
         int LoadedAmmo(FItemInstanceId instanceId) const;
+        bool SetWeaponState(FItemInstanceId instanceId, int loadedAmmo, const FWeaponAttachments& attachments);
+        bool TryAttach(FItemInstanceId weaponId, FItemInstanceId attachmentId, std::string* error = nullptr);
+        bool TryDetach(FItemInstanceId weaponId, EAttachmentSlot slot, std::string* error = nullptr);
         const FInventoryContainer* FindContainer(FContainerId containerId) const;
         // The container an equipped item provides (nullptr if none).
         const FInventoryContainer* ContainerOwnedBy(FItemInstanceId instanceId) const;

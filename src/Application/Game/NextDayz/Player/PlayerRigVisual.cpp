@@ -350,6 +350,7 @@ namespace NextDayz
                     weaponModelIds_[0], weaponMaterialIds_[0], true, glm::quat(1.0f, 0.0f, 0.0f, 0.0f), false);
                 weaponNode_->SetParent(socket->shared_from_this());
                 scene.AddNode(weaponNode_);
+                heldAttachments_.Bind(scene, weaponNode_, attachmentAssets_, "nd_player/weapon");
                 weaponVisible_ = true;
                 weaponVisualIndex_ = 0;
             }
@@ -370,6 +371,8 @@ namespace NextDayz
                     Assets::Node* parent = waist ? BoneNode("bone_pelvis") : torso;
                     holsteredWeaponNodes_[slot]->SetParent(parent->shared_from_this());
                     scene.AddNode(holsteredWeaponNodes_[slot]);
+                    holsteredAttachments_[slot].Bind(scene, holsteredWeaponNodes_[slot], attachmentAssets_,
+                                                     fmt::format("nd_player/holster_{}", slot));
                 }
             }
         }
@@ -457,6 +460,8 @@ namespace NextDayz
         bodyPartNodes_.clear();
         for (FClothingPart& part : clothingParts_) part.node.reset();
         weaponNode_.reset();
+        heldAttachments_.Clear();
+        for (auto& attachments : holsteredAttachments_) attachments.Clear();
         holsteredWeaponNodes_ = {};
         weaponVisualIndex_ = -1;
         holsteredWeaponVisualIndices_.fill(-1);
@@ -647,7 +652,8 @@ namespace NextDayz
         }
         const glm::mat4& world = weaponNode_->WorldTransform();
         const FWeaponModelPoints points = WeaponModelPoints(kWeapons[weaponVisualIndex_].id);
-        outPosition = glm::vec3(world * glm::vec4(0.0f, points.boreHeight, points.muzzleForward, 1.0f));
+        outPosition = glm::vec3(world * glm::vec4(0.0f, points.boreHeight,
+            points.muzzleForward + (WeaponSuppressed(heldLoadout_) ? SuppressorLength(kWeapons[weaponVisualIndex_].id) : 0.0f), 1.0f));
         outForward = glm::normalize(glm::vec3(world[2]));
         return true;
     }
@@ -1178,6 +1184,7 @@ namespace NextDayz
     void PlayerRigVisual::UpdateAttachments(const FPlayerPresentationState& state)
     {
         const bool switching = state.weaponAction == EWeaponPresentationAction::Switch;
+        heldLoadout_ = state.slotAttachments[state.activeWeaponSlot];
         if (weaponNode_)
         {
             const int weaponIndex = WeaponIndex(state.weaponId);
@@ -1196,6 +1203,7 @@ namespace NextDayz
                 }
             }
             const bool showWeapon = visible_ && state.hasWeapon && !switching;
+            heldAttachments_.Update(state.weaponId, heldLoadout_, showWeapon);
             if (showWeapon != weaponVisible_)
             {
                 weaponVisible_ = showWeapon;
@@ -1237,6 +1245,7 @@ namespace NextDayz
                 }
             }
             const bool showHolstered = visible_ && weaponIndex >= 0 && (switching || slot != state.activeWeaponSlot);
+            holsteredAttachments_[slot].Update(state.slotWeaponIds[slot], state.slotAttachments[slot], showHolstered);
             if (showHolstered != holsteredWeaponVisible_[slot])
             {
                 holsteredWeaponVisible_[slot] = showHolstered;

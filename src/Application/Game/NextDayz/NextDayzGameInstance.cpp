@@ -159,6 +159,12 @@ void NextDayzGameInstance::OnInit()
         }
     }
 
+    {
+        std::string error;
+        attachmentCatalogLoaded_ = Assets::FScadRigLoader::LoadRig(
+            "assets/scad/characters/nextdayz_attachments.scad", {}, attachmentCatalogAsset_, error);
+        if (!attachmentCatalogLoaded_) SPDLOG_ERROR("[NextDayz] attachment catalog unavailable: {}", error);
+    }
     std::string scene = kDefaultScene;
     std::string mapError;
     if (!NextDayz::LoadExpeditionMaps(Utilities::FileHelper::ResolvePlatformFilePath(
@@ -477,6 +483,20 @@ void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
                              if (const auto* instance = inventory_.FindFirst(validationEquip_.substr(2)))
                                  EquipWeaponInstance(instance->instanceId, slot);
                          });
+    cvars.RegisterString("nextdayz.validation.attachment", "", &validationAttachment_, NextCVar::ECVarFlags::None,
+                         "Agent-only: mount e.g. 1:optic_red_dot; detach with 1:-0 (slot index 0..4)",
+                         [this, validationReady]()
+                         {
+                             if (!validationReady() || validationAttachment_.size() < 3 || validationAttachment_[1] != ':') return;
+                             const int slot = validationAttachment_[0] - '1';
+                             if (slot < 0 || slot >= NextDayz::kWeaponSlotCount) return;
+                             const auto weapon = weapons_.SlotInstance(slot);
+                             const auto part = validationAttachment_.substr(2);
+                             if (part.size() == 2 && part[0] == '-' && part[1] >= '0' && part[1] <= '4')
+                                 RemoveAttachment(weapon, static_cast<NextDayz::EAttachmentSlot>(part[1] - '0'));
+                             else if (const auto* instance = inventory_.FindFirst(part))
+                                 InstallAttachment(weapon, instance->instanceId);
+                         });
     cvars.RegisterString("nextdayz.validation.teleport", "", &validationTeleport_, NextCVar::ECVarFlags::None,
                          "Agent-only: move the player to map coordinates \"x,y\" (SCAD space: +y north)",
                          [this, validationReady]()
@@ -603,6 +623,27 @@ void NextDayzGameInstance::InjectWeaponCatalog(std::vector<Assets::Model>& model
     }
     weapons_.SetViewModelAssets(weaponModelIds_, weaponMaterialIds_);
     rig_.SetWeaponAssets(weaponModelIds_, weaponMaterialIds_);
+    NextDayz::FAttachmentVisualAssets attachments;
+    attachments.ready = attachmentCatalogLoaded_;
+    for (size_t i = 0; i < attachments.models.size() && attachments.ready; ++i)
+    {
+        const std::string_view id = i < NextDayz::kAttachments.size() ? NextDayz::kAttachments[i].id : "svd_scope";
+        const int32_t bone = attachmentCatalogAsset_.FindBone(fmt::format("bone_att_{}", id));
+        const auto part = std::find_if(attachmentCatalogAsset_.parts.begin(), attachmentCatalogAsset_.parts.end(),
+                                     [bone](const auto& entry) { return entry.bone == bone && entry.modelIndex >= 0; });
+        if (bone < 0 || part == attachmentCatalogAsset_.parts.end())
+        {
+            SPDLOG_ERROR("[NextDayz] attachment catalog missing '{}'", id);
+            attachments.ready = false;
+            break;
+        }
+        models.push_back(attachmentCatalogAsset_.partModels[part->modelIndex]);
+        attachments.models[i] = static_cast<uint32_t>(models.size() - 1);
+        for (size_t section = 0; section < part->sectionColors.size() && section < 16; ++section)
+            attachments.materials[i][section] = Assets::SceneBuilder::AddRigSectionMaterial(materials, *part, section);
+    }
+    weapons_.SetAttachmentAssets(attachments);
+    rig_.SetAttachmentAssets(attachments);
 }
 
 glm::vec3 NextDayzGameInstance::ResolveSpawnPosition() const
@@ -963,16 +1004,16 @@ void NextDayzGameInstance::SimulateFrame(float dt)
         if (hasVisualMuzzle)
         {
             const float flash = shot.weaponId == "pistol" ? 0.6f : shot.weaponId == "shotgun" ? 1.25f : 1.0f;
-            effects_.MuzzleFlash(visualMuzzle, visualMuzzleForward, flash * (firstPersonView ? 0.55f : 0.6f));
+            effects_.MuzzleFlash(visualMuzzle, visualMuzzleForward, flash * (firstPersonView ? 0.55f : 0.6f) * (shot.suppressed ? 0.15f : 1.0f));
         }
-        audio_.Shot(shot.weaponId);
+        audio_.Shot(shot.weaponId, shot.suppressed);
         player_.ApplyCameraRecoil(shot.cameraImpulseRadians);
         rig_.TriggerRecoil(shot.rigRecoilScale);
         if (const NextDayz::FWeaponDef* definition = NextDayz::FindWeaponDef(shot.weaponId))
         {
             const NextDayz::ENoiseType noiseType = shot.weaponId == "shotgun" ? NextDayz::ENoiseType::Shotgun
                 : shot.weaponId == "pistol" ? NextDayz::ENoiseType::Pistol : NextDayz::ENoiseType::Rifle;
-            noise_.Emit(player_.Position(), definition->noiseRadius, 1.0f, noiseType);
+            noise_.Emit(player_.Position(), definition->noiseRadius * (shot.suppressed ? 0.25f : 1.0f), 1.0f, noiseType);
         }
     }
 
@@ -1148,6 +1189,8 @@ void NextDayzGameInstance::SimulateFrame(float dt)
         weapons_.SlotWeaponId(2),
     };
     presentation.action = actions_.Action();
+    for (int slot = 0; slot < NextDayz::kWeaponSlotCount; ++slot)
+        presentation.slotAttachments[slot] = weapons_.SlotAttachments(slot);
     presentation.actionTime01 = actions_.NormalizedTime();
     rig_.Update(player_.Position(), presentation, dt);
     rig_.UpdateCameraFade(player_.CameraPosition(), config_.Camera.TpsFadeNearDistance,
@@ -1213,6 +1256,19 @@ bool NextDayzGameInstance::OnRenderUI()
     ctx.aiming = player_.IsAiming();
     ctx.firstPerson = player_.IsFirstPerson();
     ctx.scopeView = weapons_.IsScopeView();
+    ctx.optic = weapons_.ActiveOptic();
+    ctx.sightReady = weapons_.SightReady();
+    glm::vec3 sight, sightForward;
+    if (ctx.sightReady && weapons_.ViewModelSight(sight, sightForward))
+    {
+        const glm::vec3 forward = player_.CameraForward();
+        const glm::vec3 up = player_.CameraUp();
+        const glm::vec3 right = glm::normalize(glm::cross(forward, up));
+        const glm::vec3 delta = sight + sightForward * 4.0f - player_.CameraPosition();
+        const float depth = glm::dot(delta, forward);
+        const float focal = ImGui::GetMainViewport()->Size.y / (2.0f * std::tan(glm::radians(player_.CurrentFov()) * 0.5f));
+        if (depth > 0.01f) ctx.reflexOffsetPx = glm::vec2(glm::dot(delta, right), -glm::dot(delta, up)) * focal / depth;
+    }
     ctx.hasWeapon = weapons_.HasActiveWeapon();
     ctx.melee = weapons_.ActiveIsMelee();
     ctx.swinging = weapons_.IsSwinging();
@@ -1306,6 +1362,10 @@ bool NextDayzGameInstance::OnRenderUI()
         hudRequests.emplace_back([this, id, slot]() { EquipWeaponInstance(id, slot); });
     };
     ctx.unequipWeapon = [this](int slot) { weapons_.Unequip(slot); };
+    ctx.installAttachment = [this, &hudRequests](auto weapon, auto attachment)
+    { hudRequests.emplace_back([this, weapon, attachment]() { InstallAttachment(weapon, attachment); }); };
+    ctx.removeAttachment = [this, &hudRequests](auto weapon, auto slot)
+    { hudRequests.emplace_back([this, weapon, slot]() { RemoveAttachment(weapon, slot); }); };
     ctx.wear = [this, &hudRequests](NextDayz::FItemInstanceId id)
     {
         hudRequests.emplace_back([this, id]() { WearItem(id); });
@@ -1470,6 +1530,32 @@ void NextDayzGameInstance::EquipWeaponInstance(NextDayz::FItemInstanceId instanc
     Notify(NextDayz::L10n::Message("{} in hand ({})", ItemDisplayName(instance->defId), std::to_string(slot + 1)));
 }
 
+void NextDayzGameInstance::InstallAttachment(NextDayz::FItemInstanceId weapon, NextDayz::FItemInstanceId attachment)
+{
+    if (!survival_.IsAlive() || actions_.IsActive()) return;
+    weapons_.CopyMagazinesTo(inventory_);
+    std::string error;
+    if (!inventory_.TryAttach(weapon, attachment, &error)) { Notify(error, 1); return; }
+    weapons_.RefreshInventory(inventory_);
+    player_.CancelAiming();
+    weapons_.SetTriggerDown(false);
+    audio_.Pickup();
+    Notify("Attachment installed", 3);
+}
+
+void NextDayzGameInstance::RemoveAttachment(NextDayz::FItemInstanceId weapon, NextDayz::EAttachmentSlot slot)
+{
+    if (!survival_.IsAlive() || actions_.IsActive()) return;
+    weapons_.CopyMagazinesTo(inventory_);
+    std::string error;
+    if (!inventory_.TryDetach(weapon, slot, &error)) { Notify(error, 1); return; }
+    weapons_.RefreshInventory(inventory_);
+    player_.CancelAiming();
+    weapons_.SetTriggerDown(false);
+    audio_.Pickup();
+    Notify("Attachment removed", 3);
+}
+
 void NextDayzGameInstance::WearItem(NextDayz::FItemInstanceId instanceId)
 {
     const NextDayz::FItemInstance* instance = inventory_.FindInstance(instanceId);
@@ -1525,7 +1611,7 @@ void NextDayzGameInstance::DropItem(NextDayz::FItemInstanceId instanceId, int co
         }
         return true;
     });
-    if (!loot_.SpawnPile({{removed->defId, removed->count, removed->loadedAmmo}}, at,
+    if (!loot_.SpawnPile({{removed->defId, removed->count, removed->loadedAmmo, removed->attachments}}, at,
                          survivalRng_.UnitFloat() * 6.28f, GetEngine()))
     {
         Notify("Cannot drop it here", 1);
@@ -1604,6 +1690,11 @@ void NextDayzGameInstance::UseInventoryItem(NextDayz::FItemInstanceId instanceId
         return;
     }
     using NextDayz::EItemUse;
+    if (definition->kind == NextDayz::EItemKind::Attachment)
+    {
+        InstallAttachment(weapons_.SlotInstance(weapons_.ActiveSlot()), instanceId);
+        return;
+    }
     using NextDayz::EPlayerAction;
     switch (definition->use)
     {
@@ -2953,6 +3044,15 @@ void NextDayzGameInstance::UpdateGrass(float dt)
 
 void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegistry& reg)
 {
+    reg.Add("magazineCapacity", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(weapons_.MagazineCapacity()); });
+    reg.Add("reloadDuration", [this]() -> Runtime::Agent::FAgentQueryValue { return double(weapons_.ReloadDuration()); });
+    reg.Add("stabilityScale", [this]() -> Runtime::Agent::FAgentQueryValue { return double(NextDayz::WeaponStabilityScale(weapons_.SlotAttachments(weapons_.ActiveSlot()))); });
+    reg.Add("suppressed", [this]() -> Runtime::Agent::FAgentQueryValue { return weapons_.IsSuppressed(); });
+    reg.Add("activeOptic", [this]() -> Runtime::Agent::FAgentQueryValue
+    { const auto* optic = NextDayz::FindAttachmentDef(weapons_.ActiveOptic()); return optic ? std::string(optic->id) : std::string("factory"); });
+    reg.Add("viewModelAttachments", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(weapons_.VisibleAttachments()); });
+    reg.Add("renderedAttachmentError", [this]() -> Runtime::Agent::FAgentQueryValue { return double(weapons_.RenderedAttachmentError()); });
+    reg.Add("heldAttachments", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(rig_.HeldAttachmentCount()); });
     reg.Add("activeMapId", [this]() -> Runtime::Agent::FAgentQueryValue { return ActiveMapId(); });
     reg.Add("sceneGeneration", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(geographySceneGeneration_); });
     reg.Add("mapLoading", [this]() -> Runtime::Agent::FAgentQueryValue { return pendingCampaign_.has_value() || !loadingMapPath_.empty(); });

@@ -56,6 +56,7 @@ namespace NextDayz::UITheme
         case EItemKind::Weapon:     return IM_COL32(249, 115, 22, 240);  // Tactical Orange
         case EItemKind::Melee:      return IM_COL32(234, 88, 12, 240);   // Burnt Orange
         case EItemKind::Ammo:       return IM_COL32(234, 179, 8, 240);   // Brass Yellow
+        case EItemKind::Attachment: return IM_COL32(56, 189, 248, 240);
         case EItemKind::Clothing:   return IM_COL32(168, 85, 247, 240);  // Tactical Purple/Blue
         case EItemKind::Consumable: return IM_COL32(34, 197, 94, 240);   // Emerald Green
         case EItemKind::Misc:
@@ -71,6 +72,7 @@ namespace NextDayz::UITheme
         case EItemKind::Weapon:     return "WEAPON";
         case EItemKind::Melee:      return "MELEE";
         case EItemKind::Ammo:       return "AMMO";
+        case EItemKind::Attachment: return "ATTACHMENT";
         case EItemKind::Clothing:   return "GEAR";
         case EItemKind::Consumable: return "SUPPLY";
         case EItemKind::Misc:

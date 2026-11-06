@@ -14,6 +14,7 @@ namespace NextDayz
         Consumable,
         Melee,
         Misc,
+        Attachment,
     };
 
     enum class EEquipSlot : uint8_t

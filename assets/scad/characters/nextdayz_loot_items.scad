@@ -5,6 +5,7 @@
 // 模型本体来自 kit_coldwar.scad 的 cw_wpn_* / cw_item_*，与地图里手摆的物资同源。
 use <../lib/kit_coldwar.scad>
 use <nextdayz_clothing.scad>
+use <nextdayz_attachments.scad>
 
 $fn = 12;
 
@@ -21,6 +22,15 @@ module bone_item_svd() { cw_wpn_svd(1); }
 module bone_item_mosin() { cw_wpn_mosin(1); }
 module bone_item_shotgun() { cw_wpn_shotgun(1); }
 module bone_item_pistol() { cw_wpn_pistol(1); }
+// Loose accessories rest on their side, above the same ground plane as loot.
+module bone_item_optic_red_dot() { gk_flatten() translate([0, 0, 0.03]) rotate([0, 90, 0]) nd_att_red_dot(); }
+module bone_item_optic_holographic() { gk_flatten() translate([0, 0, 0.036]) rotate([0, 90, 0]) nd_att_holographic(); }
+module bone_item_optic_4x() { gk_flatten() translate([0, 0, 0.038]) rotate([0, 90, 0]) nd_att_scope4x(); }
+module bone_item_grip_vertical() { gk_flatten() translate([0, 0, 0.019]) rotate([0, 90, 0]) nd_att_grip(); }
+module bone_item_mag_quick() { gk_flatten() translate([0, 0, 0.023]) rotate([0, 90, 0]) nd_att_quick_mag(); }
+module bone_item_mag_extended() { gk_flatten() translate([0, 0, 0.023]) rotate([0, 90, 0]) nd_att_extended_mag(); }
+module bone_item_muzzle_suppressor() { gk_flatten() translate([0, 0, 0.023]) nd_att_suppressor(); }
+module bone_item_tactical_flashlight() { gk_flatten() translate([0, 0, 0.022]) nd_att_flashlight(); }
 // ---- 近战 ----
 module bone_item_knife() { cw_item_knife(); }
 module bone_item_crowbar() { cw_item_crowbar(); }
@@ -145,6 +155,9 @@ module bone_root()
 {
     bone_item_ak(); bone_item_svd(); bone_item_mosin(); bone_item_shotgun(); bone_item_pistol();
     bone_item_knife(); bone_item_crowbar(); bone_item_axe();
+    bone_item_optic_red_dot(); bone_item_optic_holographic(); bone_item_optic_4x();
+    bone_item_grip_vertical(); bone_item_mag_quick(); bone_item_mag_extended();
+    bone_item_muzzle_suppressor(); bone_item_tactical_flashlight();
     bone_item_ammo_545(); bone_item_ammo_762(); bone_item_ammo_12g(); bone_item_ammo_9mm();
     bone_item_helmet();
     bone_item_hat_beanie();

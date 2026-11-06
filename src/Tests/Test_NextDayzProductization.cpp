@@ -28,6 +28,151 @@
 #include "Zombies/ZombieVisualPool.hpp"
 #include "UI/Localization.hpp"
 
+namespace
+{
+    NextDayz::FItemInstanceId AttachmentTestAdd(NextDayz::Inventory& inventory, const char* id)
+    {
+        const auto* def = NextDayz::FindItemDef(id);
+        REQUIRE(def);
+        NextDayz::FItemInstanceId instance = 0;
+        REQUIRE(inventory.TryAdd(id, std::string(def->displayName), def->kind, 1, &instance));
+        return instance;
+    }
+}
+
+TEST_CASE("NextDayz attachments fit firearm-specific slots and change sight landmarks", "[NextDayz][Attachments]")
+{
+    using namespace NextDayz;
+    for (const auto& part : kAttachments)
+    {
+        REQUIRE(FindItemDef(part.id)->kind == EItemKind::Attachment);
+        REQUIRE(SupportsAttachment("ak", part.type));
+        REQUIRE_FALSE(SupportsAttachment("knife", part.type));
+        REQUIRE_FALSE(SupportsAttachment("not-a-weapon", part.type));
+        REQUIRE(std::any_of(LootTable(ELootProfile::Military).begin(), LootTable(ELootProfile::Military).end(),
+                            [&](const auto& entry) { return entry.itemId == part.id; }));
+    }
+    REQUIRE_FALSE(SupportsAttachment("pistol", EWeaponAttachment::Scope4x));
+    REQUIRE_FALSE(SupportsAttachment("pistol", EWeaponAttachment::VerticalGrip));
+    REQUIRE_FALSE(SupportsAttachment("mosin", EWeaponAttachment::ExtendedMagazine));
+    REQUIRE_FALSE(SupportsAttachment("shotgun", EWeaponAttachment::QuickMagazine));
+    FWeaponAttachments parts{};
+    const auto iron = WeaponSightPoints("ak", parts);
+    parts[0] = EWeaponAttachment::RedDot;
+    const auto red = WeaponSightPoints("ak", parts);
+    REQUIRE(red.sightHeight > iron.sightHeight);
+    REQUIRE(red.scopeFov == 0.0f);
+    parts[0] = EWeaponAttachment::Holographic;
+    REQUIRE(WeaponSightPoints("ak", parts).sightHeight > red.sightHeight);
+    parts[0] = EWeaponAttachment::Scope4x;
+    REQUIRE(WeaponSightPoints("ak", parts).scopeFov == 22.0f);
+    REQUIRE(WeaponSightPoints("ak", parts).adsEyeRelief < red.adsEyeRelief);
+    parts[1] = EWeaponAttachment::VerticalGrip;
+    parts[2] = EWeaponAttachment::QuickMagazine;
+    parts[3] = EWeaponAttachment::Suppressor;
+    REQUIRE(WeaponStabilityScale(parts) == Catch::Approx(0.75f));
+    REQUIRE(WeaponReloadScale(parts) == Catch::Approx(0.70f));
+    REQUIRE(WeaponSuppressed(parts));
+    parts[2] = EWeaponAttachment::ExtendedMagazine;
+    REQUIRE(WeaponMagazineCapacity("ak", parts) == 45);
+    REQUIRE(WeaponMagazineCapacity("svd", parts) == 15);
+    REQUIRE(WeaponMagazineCapacity("pistol", parts) == 18);
+    REQUIRE(WeaponReloadScale(parts) == 1.0f);
+}
+
+TEST_CASE("NextDayz attachment installation consumes loose parts and preserves each gun", "[NextDayz][Attachments]")
+{
+    using namespace NextDayz;
+    Inventory inventory;
+    FItemInstanceId bag = 0;
+    REQUIRE(inventory.TryAdd("backpack_military", "Pack", EItemKind::Clothing, 1, &bag, kWornContainer));
+    const auto first = AttachmentTestAdd(inventory, "ak");
+    const auto second = AttachmentTestAdd(inventory, "ak");
+    REQUIRE(inventory.SetLoadedAmmo(first, 19));
+    for (const char* id : {"optic_red_dot", "grip_vertical", "mag_extended", "muzzle_suppressor", "tactical_flashlight"})
+    {
+        const auto part = AttachmentTestAdd(inventory, id);
+        REQUIRE(inventory.TryAttach(first, part));
+        REQUIRE_FALSE(inventory.FindInstance(part));
+        REQUIRE(inventory.CountOf(id) == 0);
+    }
+    const auto parts = inventory.FindInstance(first)->attachments;
+    REQUIRE(ValidAttachments("ak", parts));
+    REQUIRE(inventory.FindInstance(second)->attachments == FWeaponAttachments{});
+    REQUIRE(inventory.LoadedAmmo(first) == 19);
+    const auto holo = AttachmentTestAdd(inventory, "optic_holographic");
+    REQUIRE(inventory.TryAttach(first, holo));
+    REQUIRE(inventory.CountOf("optic_red_dot") == 1);
+    REQUIRE(inventory.TryDetach(first, EAttachmentSlot::Optic));
+    REQUIRE(inventory.CountOf("optic_holographic") == 1);
+    Inventory restored;
+    REQUIRE(restored.Restore(inventory.Capture()));
+    REQUIRE(restored.FindInstance(first)->attachments == inventory.FindInstance(first)->attachments);
+    const auto dropped = restored.TryRemove(first);
+    REQUIRE(dropped);
+    REQUIRE(dropped->attachments[2] == EWeaponAttachment::ExtendedMagazine);
+    REQUIRE(dropped->loadedAmmo == 19);
+    REQUIRE(restored.FindInstance(second));
+}
+
+TEST_CASE("NextDayz attachment swaps and magazine removal are atomic when cargo is full", "[NextDayz][Attachments]")
+{
+    using namespace NextDayz;
+    Inventory inventory;
+    const auto gun = AttachmentTestAdd(inventory, "ak");
+    REQUIRE(inventory.TryAttach(gun, AttachmentTestAdd(inventory, "optic_4x")));
+    const auto red = AttachmentTestAdd(inventory, "optic_red_dot");
+    while (inventory.TryAdd("map", "Map", EItemKind::Misc, 1)) {}
+    const auto before = inventory.Capture();
+    REQUIRE_FALSE(inventory.TryAttach(gun, red));
+    REQUIRE(inventory.FindInstance(gun)->attachments[0] == EWeaponAttachment::Scope4x);
+    REQUIRE(inventory.FindInstance(red));
+    REQUIRE(inventory.Capture().nextInstanceId == before.nextInstanceId);
+    REQUIRE_FALSE(inventory.TryDetach(gun, EAttachmentSlot::Optic));
+    REQUIRE(inventory.CountOf("optic_4x") == 0);
+
+    inventory.Clear();
+    const auto extendedGun = AttachmentTestAdd(inventory, "ak");
+    REQUIRE(inventory.TryAttach(extendedGun, AttachmentTestAdd(inventory, "mag_extended")));
+    REQUIRE(inventory.SetLoadedAmmo(extendedGun, 45));
+    while (inventory.TryAdd("map", "Map", EItemKind::Misc, 1)) {}
+    REQUIRE(inventory.Consume("map", 2) == 2);
+    // The magazine fits, but its extra 15 rounds don't: neither may be lost.
+    REQUIRE_FALSE(inventory.TryDetach(extendedGun, EAttachmentSlot::Magazine));
+    REQUIRE(inventory.LoadedAmmo(extendedGun) == 45);
+    REQUIRE(inventory.CountOf("mag_extended") == 0);
+    REQUIRE(inventory.CountOf("ammo_545") == 0);
+    REQUIRE(inventory.Consume("map", 2) == 2);
+    REQUIRE(inventory.TryDetach(extendedGun, EAttachmentSlot::Magazine));
+    REQUIRE(inventory.LoadedAmmo(extendedGun) == 30);
+    REQUIRE(inventory.CountOf("ammo_545") == 15);
+    REQUIRE(inventory.CountOf("mag_extended") == 1);
+}
+
+TEST_CASE("NextDayz invalid attachment loadouts are rejected without changing inventory", "[NextDayz][Attachments]")
+{
+    using namespace NextDayz;
+    Inventory inventory;
+    const auto pistol = AttachmentTestAdd(inventory, "pistol");
+    const auto scope = AttachmentTestAdd(inventory, "optic_4x");
+    REQUIRE_FALSE(inventory.TryAttach(pistol, scope));
+    const auto state = inventory.Capture();
+    auto corrupt = state;
+    corrupt.instances.front().attachments[0] = EWeaponAttachment::Scope4x;
+    REQUIRE_FALSE(inventory.Restore(corrupt));
+    corrupt = state;
+    corrupt.instances.front().attachments[1] = EWeaponAttachment::RedDot;
+    REQUIRE_FALSE(inventory.Restore(corrupt));
+    corrupt = state;
+    corrupt.instances.front().attachments[0] = static_cast<EWeaponAttachment>(255);
+    REQUIRE_FALSE(inventory.Restore(corrupt));
+    corrupt = state;
+    corrupt.instances.back().attachments[0] = EWeaponAttachment::RedDot;
+    REQUIRE_FALSE(inventory.Restore(corrupt));
+    REQUIRE(inventory.FindInstance(pistol)->attachments == FWeaponAttachments{});
+    REQUIRE(inventory.FindInstance(scope));
+}
+
 TEST_CASE("NextDayz aim taps toggle ADS and ignore duplicate release", "[NextDayz][AimInput]")
 {
     NextDayz::AimInput aim;

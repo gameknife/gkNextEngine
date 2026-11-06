@@ -30,7 +30,7 @@ namespace NextDayz
         uint64_t PlayedCount() const { return played_; }
 
         // Player weapon.
-        void Shot(std::string_view weaponId);
+        void Shot(std::string_view weaponId, bool suppressed = false);
         void DryFire();
         void Reload();
         void Switch();

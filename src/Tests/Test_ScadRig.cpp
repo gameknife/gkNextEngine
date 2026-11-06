@@ -12,6 +12,7 @@
 #include "Gameplay/Rig/RigPoseOps.h"
 #include "Data/ItemDefs.hpp"
 #include "Weapons/WeaponDefs.hpp"
+#include "Weapons/AttachmentDefs.hpp"
 #include <algorithm>
 
 #include <cmath>
@@ -1113,4 +1114,26 @@ TEST_CASE("NextDayz weapon catalog has a PBR held model for every weapon", "[Uni
         }
         CHECK(tip == Catch::Approx(WeaponModelPoints(weapon.id).muzzleForward).margin(0.012f));
     }
+}
+
+TEST_CASE("NextDayz attachment catalog provides every mount as a single PBR model", "[Unit][ScadRig][NextDayz][Attachments]")
+{
+    using namespace NextDayz;
+    FRigAsset asset;
+    std::string error;
+    std::vector<std::string> warnings;
+    REQUIRE(FScadRigLoader::LoadRig("assets/scad/characters/nextdayz_attachments.scad", {}, asset, error, &warnings));
+    CHECK(warnings.empty());
+    for (const auto& partDef : kAttachments)
+    {
+        INFO(partDef.id);
+        const int bone = asset.FindBone("bone_att_" + std::string(partDef.id));
+        REQUIRE(bone >= 0);
+        REQUIRE(std::count_if(asset.parts.begin(), asset.parts.end(), [bone](const auto& part) { return part.bone == bone; }) == 1);
+        const auto& part = *std::find_if(asset.parts.begin(), asset.parts.end(), [bone](const auto& entry) { return entry.bone == bone; });
+        CHECK(part.sectionColors.size() <= 16);
+        CHECK_FALSE(asset.partModels[part.modelIndex].CPUVertices().empty());
+        CHECK(std::any_of(part.sectionSurfaces.begin(), part.sectionSurfaces.end(), [](const auto& surface) { return surface.x > 0.3f; }));
+    }
+    REQUIRE(asset.FindBone("bone_att_svd_scope") >= 0);
 }

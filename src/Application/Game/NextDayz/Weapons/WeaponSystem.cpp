@@ -119,6 +119,7 @@ namespace NextDayz
         physics->SetMobility(Runtime::ENodeMobility::Dynamic);
         viewModelNode_->AddComponent(physics);
         scene.AddNode(viewModelNode_);
+        attachmentVisuals_.Bind(scene, viewModelNode_, attachmentAssets_, "nd_viewmodel");
         viewModelInScene_ = true;
         scene.MarkDirty();
     }
@@ -127,6 +128,7 @@ namespace NextDayz
     {
         CancelMelee();
         viewModelNode_.reset();
+        attachmentVisuals_.Clear();
         viewModelVisible_ = false;
         scopeView_ = false;
         renderedViewModelValid_ = false;
@@ -179,7 +181,8 @@ namespace NextDayz
         }
         slots_[slot].instanceId = instanceId;
         const FWeaponDef* def = FindWeaponDef(item->weaponDefId);
-        slots_[slot].ammoInMag = def ? std::clamp(instance->loadedAmmo, 0, def->magSize) : 0;
+        slots_[slot].attachments = instance->attachments;
+        slots_[slot].ammoInMag = def ? std::clamp(instance->loadedAmmo, 0, WeaponMagazineCapacity(def->id, instance->attachments)) : 0;
         RefreshViewModelVisibility();
         return true;
     }
@@ -213,10 +216,17 @@ namespace NextDayz
             {
                 continue;
             }
-            if (!inventory.FindInstance(current.instanceId))
+            const auto* instance = inventory.FindInstance(current.instanceId);
+            if (!instance)
             {
                 Unequip(static_cast<int>(slot));
                 continue;
+            }
+            if (current.attachments != instance->attachments)
+            {
+                current.attachments = instance->attachments;
+                current.ammoInMag = instance->loadedAmmo;
+                if (static_cast<int>(slot) == activeSlot_) { reloading_ = false; reloadTimer_ = 0.0f; }
             }
             inventory.SetLoadedAmmo(current.instanceId, current.ammoInMag);
         }
@@ -243,6 +253,7 @@ namespace NextDayz
         slots_[slot].weaponId = weaponId;
         slots_[slot].ammoInMag = def->magSize; // fresh magazine on equip
         slots_[slot].instanceId = 0;
+        slots_[slot].attachments = {};
         CancelMelee();
         activeSlot_ = slot;
         reloading_ = false;
@@ -317,7 +328,7 @@ namespace NextDayz
         {
             return;
         }
-        if (slots_[activeSlot_].ammoInMag >= def->magSize)
+        if (slots_[activeSlot_].ammoInMag >= MagazineCapacity())
         {
             return;
         }
@@ -326,7 +337,14 @@ namespace NextDayz
             return;
         }
         reloading_ = true;
-        reloadTimer_ = std::max(config_.ReloadSeconds, 0.01f);
+        reloadDuration_ = std::max(ReloadDuration(), 0.01f);
+        reloadTimer_ = reloadDuration_;
+    }
+
+    const FWeaponAttachments& WeaponSystem::SlotAttachments(int slot) const
+    {
+        static const FWeaponAttachments empty{};
+        return slot >= 0 && slot < kWeaponSlotCount ? slots_[slot].attachments : empty;
     }
 
     const FWeaponDef* WeaponSystem::ActiveWeapon() const
@@ -399,7 +417,8 @@ namespace NextDayz
         }
         const glm::mat4& world = viewModelNode_->WorldTransform();
         const FWeaponModelPoints points = WeaponModelPoints(ActiveWeaponId());
-        outPosition = glm::vec3(world * glm::vec4(0.0f, points.boreHeight, points.muzzleForward, 1.0f));
+        outPosition = glm::vec3(world * glm::vec4(0.0f, points.boreHeight,
+            points.muzzleForward + (IsSuppressed() ? SuppressorLength(ActiveWeaponId()) : 0.0f), 1.0f));
         outForward = glm::normalize(glm::vec3(world[2]));
         return outPosition.y > -900.0f;
     }
@@ -407,7 +426,7 @@ namespace NextDayz
     bool WeaponSystem::ViewModelSight(glm::vec3& outPosition, glm::vec3& outForward) const
     {
         if (!viewModelNode_ || (!viewModelVisible_ && !scopeView_) || !HasActiveWeapon() || ActiveIsMelee()) return false;
-        const FWeaponModelPoints points = WeaponModelPoints(ActiveWeaponId());
+        const FWeaponModelPoints points = WeaponSightPoints(ActiveWeaponId(), SlotAttachments(activeSlot_));
         const glm::mat4& world = viewModelNode_->WorldTransform();
         outPosition = glm::vec3(world * glm::vec4(0.0f, points.sightHeight, points.rearSightForward, 1.0f));
         outForward = glm::normalize(glm::vec3(world[2]));
@@ -417,7 +436,7 @@ namespace NextDayz
     bool WeaponSystem::ViewModelRenderedSight(glm::vec3& outPosition, glm::vec3& outForward) const
     {
         if (!renderedViewModelValid_ || !HasActiveWeapon() || ActiveIsMelee()) return false;
-        const FWeaponModelPoints points = WeaponModelPoints(ActiveWeaponId());
+        const FWeaponModelPoints points = WeaponSightPoints(ActiveWeaponId(), SlotAttachments(activeSlot_));
         outPosition = glm::vec3(renderedViewModelTransform_ * glm::vec4(0.0f, points.sightHeight, points.rearSightForward, 1.0f));
         outForward = glm::normalize(glm::vec3(renderedViewModelTransform_[2]));
         return true;
@@ -448,7 +467,7 @@ namespace NextDayz
         }
         if (reloading_)
         {
-            return glm::clamp(1.0f - reloadTimer_ / std::max(config_.ReloadSeconds, 0.01f), 0.0f, 1.0f);
+            return glm::clamp(1.0f - reloadTimer_ / std::max(reloadDuration_, 0.01f), 0.0f, 1.0f);
         }
         if (IsSwinging())
         {
@@ -507,7 +526,8 @@ namespace NextDayz
         glm::vec3 dir = glm::normalize(aimPoint - muzzle);
 
         // Random cone spread around the muzzle-to-crosshair direction.
-        const float spread = player.IsAiming() ? def->spreadAds : def->spreadHip;
+        const float stability = WeaponStabilityScale(SlotAttachments(activeSlot_));
+        const float spread = (player.IsAiming() ? def->spreadAds : def->spreadHip) * (stability < 1.0f ? 0.85f : 1.0f);
         if (spread > 0.0f)
         {
             std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
@@ -576,9 +596,10 @@ namespace NextDayz
         event.sequence = sequence;
         event.weaponId = std::string(def->id);
         event.cameraImpulseRadians =
-            glm::radians(glm::vec2(yawDist(rng_), -def->cameraKickDegrees));
-        event.viewModelImpulse = def->viewModelKick;
-        event.rigRecoilScale = def->rigRecoilScale;
+            glm::radians(glm::vec2(yawDist(rng_), -def->cameraKickDegrees)) * stability;
+        event.viewModelImpulse = def->viewModelKick * stability;
+        event.rigRecoilScale = def->rigRecoilScale * stability;
+        event.suppressed = IsSuppressed();
         shotEvents_.push_back(event);
         viewModelRecoilVelocity_ += event.viewModelImpulse;
     }
@@ -728,7 +749,7 @@ namespace NextDayz
                 if (const FWeaponDef* def = ActiveWeapon())
                 {
                     const std::string ammoId(AmmoItemId(def->ammo));
-                    const int need = def->magSize - slots_[activeSlot_].ammoInMag;
+                    const int need = MagazineCapacity() - slots_[activeSlot_].ammoInMag;
                     const int got = inventory.Consume(ammoId, std::max(0, need));
                     slots_[activeSlot_].ammoInMag += got;
                 }
@@ -758,8 +779,9 @@ namespace NextDayz
         const FWeaponDef* def = ActiveWeapon();
 
         // Feed ADS target FOV to the camera controller.
-        const float scopeFov = def ? WeaponModelPoints(def->id).scopeFov : 0.0f;
-        player.SetAimFov(def ? (player.IsFirstPerson() && scopeFov > 0.0f ? scopeFov : def->adsFov) : player.CurrentFov());
+        const float scopeFov = def ? WeaponSightPoints(def->id, SlotAttachments(activeSlot_)).scopeFov : 0.0f;
+        const float fpsFov = scopeFov > 0.0f ? scopeFov : ActiveOptic() != EWeaponAttachment::None ? 65.0f : def ? def->adsFov : player.CurrentFov();
+        player.SetAimFov(def ? (player.IsFirstPerson() ? fpsFov : def->adsFov) : player.CurrentFov());
 
         // Coming out of a sprint the weapon has to be up before it fires; a
         // held trigger fires the moment it is.
@@ -825,7 +847,7 @@ namespace NextDayz
             {
                 // Anchor the actual rear sight / eyepiece ahead of the eye.
                 // A shared grip offset leaves long guns floating far in front.
-                const FWeaponModelPoints points = WeaponModelPoints(def->id);
+                const FWeaponModelPoints points = WeaponSightPoints(def->id, SlotAttachments(activeSlot_));
                 targetOffset = glm::vec3(0.0f, -points.sightHeight * config_.ViewModelScale,
                                         points.adsEyeRelief - points.rearSightForward * config_.ViewModelScale);
             }
@@ -941,7 +963,7 @@ namespace NextDayz
                                    glm::vec3(1.0f, 0.0f, 0.0f));
                 if (def && !def->IsMelee())
                 {
-                    const FWeaponModelPoints points = WeaponModelPoints(def->id);
+                    const FWeaponModelPoints points = WeaponSightPoints(def->id, SlotAttachments(activeSlot_));
                     const glm::vec3 sight = glm::vec3(0.0f, points.sightHeight, points.rearSightForward) * config_.ViewModelScale;
                     // Tilt about the rear sight, rather than sweeping it around the grip.
                     pos += cameraRotation * (sight - motionRotation * sight) * sightWeight;
@@ -959,25 +981,48 @@ namespace NextDayz
             // frame later. Patch only this camera-attached mesh in the upload
             // snapshot; rebuilding the whole scene synchronously would stall it.
             Assets::Scene& scene = engine.GetScene();
-            const glm::mat4 world = viewModelNode_->WorldTransform();
-            const glm::mat4 inverseWorld = show ? glm::inverse(world) : glm::mat4(1.0f);
-            const auto render = viewModelNode_->GetComponent<Runtime::RenderComponent>();
-            const uint32_t participation = show && render ? render->GetRenderParticipationMask() : 0;
+            attachmentVisuals_.Update(ActiveWeaponId(), SlotAttachments(activeSlot_), show);
+            std::array<std::shared_ptr<Assets::Node>, kAttachmentSlotCount + 1> cameraNodes;
+            cameraNodes[0] = viewModelNode_;
+            std::copy(attachmentVisuals_.Nodes().begin(), attachmentVisuals_.Nodes().end(), cameraNodes.begin() + 1);
             bool patchedProxy = false;
             renderedViewModelValid_ = false;
+            renderedAttachmentError_ = 0.0f;
+            std::array<bool, kAttachmentSlotCount + 1> matched{};
             for (auto& proxy : scene.GetNodeProxies())
             {
-                if (proxy.instanceId != viewModelNode_->GetInstanceId()) continue;
-                if (show)
+                const auto match = std::find_if(cameraNodes.begin(), cameraNodes.end(), [&](const auto& node)
+                { return node && proxy.instanceId == node->GetInstanceId(); });
+                if (match == cameraNodes.end()) continue;
+                const auto& node = *match;
+                matched[std::distance(cameraNodes.begin(), match)] = true;
+                const auto render = node->GetComponent<Runtime::RenderComponent>();
+                const bool visible = show && render && render->GetVisible();
+                const glm::mat4 world = node->WorldTransform();
+                if (visible)
                 {
-                    proxy.combinedPrevTS = proxy.worldTS * inverseWorld;
+                    proxy.combinedPrevTS = proxy.worldTS * glm::inverse(world);
                     proxy.worldTS = world;
-                    renderedViewModelTransform_ = proxy.worldTS;
-                    renderedViewModelValid_ = true;
+                    if (node == viewModelNode_)
+                    {
+                        renderedViewModelTransform_ = proxy.worldTS;
+                        renderedViewModelValid_ = true;
+                    }
+                    else
+                    {
+                        const glm::mat4 local = glm::translate(glm::mat4(1.0f), node->Translation()) *
+                            glm::mat4_cast(node->Rotation()) * glm::scale(glm::mat4(1.0f), node->Scale());
+                        const glm::mat4 expected = viewModelNode_->WorldTransform() * local;
+                        for (int column = 0; column < 4; ++column)
+                            renderedAttachmentError_ = std::max(renderedAttachmentError_, glm::length(proxy.worldTS[column] - expected[column]));
+                    }
                 }
-                proxy.visible = participation;
+                proxy.visible = visible ? render->GetRenderParticipationMask() : 0;
                 patchedProxy = true;
             }
+            for (size_t i = 1; i < cameraNodes.size(); ++i)
+                if (show && cameraNodes[i] && cameraNodes[i]->GetComponent<Runtime::RenderComponent>()->GetVisible() && !matched[i])
+                    renderedAttachmentError_ = 1000.0f;
             if (patchedProxy) scene.RequestGpuNodeProxyUpload();
             scene.MarkTransformDirty();
         }

@@ -1949,7 +1949,7 @@ module cw_svd_scope(lens = false)
         }
 }
 
-module cw_wpn_svd_held(lens = false)
+module cw_wpn_svd_held(lens = false, scope = true)
 {
     BZ = 0.066;
     cw_m_park() difference()
@@ -2045,7 +2045,7 @@ module cw_wpn_svd_held(lens = false)
         cw_blk(-0.250, 0.079, [0.037, 0.120, 0.012], 0, 0.003);
         cw_blk(-0.250, 0.091, [0.026, 0.100, 0.006], 0, 0.002);
     }
-    cw_svd_scope(lens);
+    if (scope) cw_svd_scope(lens);
 }
 
 module cw_wpn_svd(seed = 0) gk_flatten() cw_lay(0.212, 0.032) cw_wpn_svd_held(lens = true);

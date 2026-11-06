@@ -100,23 +100,24 @@ namespace NextDayz
         ++cursor;
     }
 
-    void NextDayzAudio::Shot(std::string_view weaponId)
+    void NextDayzAudio::Shot(std::string_view weaponId, bool suppressed)
     {
+        const float volume = suppressed ? 0.25f : 1.0f;
         if (weaponId == "svd" || weaponId == "mosin")
         {
-            Play(Sniper, 1.0f);
+            Play(Sniper, volume);
         }
         else if (weaponId == "shotgun")
         {
-            Play(Shotgun, 1.0f);
+            Play(Shotgun, volume);
         }
         else if (weaponId == "pistol")
         {
-            Play(Pistol, 0.85f);
+            Play(Pistol, 0.85f * volume);
         }
         else
         {
-            Play(Rifle, 0.9f);
+            Play(Rifle, 0.9f * volume);
         }
     }
 

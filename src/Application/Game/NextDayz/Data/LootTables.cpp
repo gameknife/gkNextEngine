@@ -33,7 +33,9 @@ namespace NextDayz
             {"jacket_rescue", 1}, {"vest_rescue", 1}, {"backpack_medical", 3},
         }};
         // Bases and checkpoints: rifles, ammo, armour and the bigger packs.
-        constexpr std::array<FLootTableEntry, 30> military = {{
+        constexpr std::array<FLootTableEntry, 38> military = {{
+            {"optic_red_dot", 4}, {"optic_holographic", 3}, {"optic_4x", 2}, {"grip_vertical", 4},
+            {"mag_quick", 4}, {"mag_extended", 4}, {"muzzle_suppressor", 2}, {"tactical_flashlight", 3},
             {"signal_flare", 1},
             {"ammo_545", 12, 10, 30}, {"ammo_762", 6, 5, 15}, {"ammo_9mm", 6, 8, 20}, {"ammo_12g", 3, 4, 10},
             {"ak", 3}, {"svd", 1}, {"mosin", 2}, {"pistol", 2},
@@ -43,7 +45,8 @@ namespace NextDayz
             {"compass", 4}, {"map", 3}, {"radio", 2}, {"battery", 3, 1, 2}, {"knife", 3},
             {"hat_boonie", 2}, {"helmet_tactical", 3}, {"vest_chest_rig", 3}, {"pants_tactical", 4}, {"pants_snow", 1}, {"backpack_rolltop", 1},
         }};
-        constexpr std::array<FLootTableEntry, 18> police = {{
+        constexpr std::array<FLootTableEntry, 23> police = {{
+            {"optic_red_dot", 3}, {"optic_holographic", 2}, {"mag_quick", 3}, {"mag_extended", 2}, {"tactical_flashlight", 3},
             {"signal_flare", 1},
             {"pistol", 4}, {"ammo_9mm", 10, 8, 24}, {"ammo_12g", 5, 4, 10}, {"shotgun", 2},
             {"bandage", 4, 1, 2}, {"painkillers", 3}, {"helmet", 2}, {"vest_military", 1},

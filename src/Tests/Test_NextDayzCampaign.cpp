@@ -2,8 +2,81 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 #include "Application/Game/NextDayz/World/Campaign.hpp"
+#include <nlohmann/json.hpp>
 
 using namespace NextDayz;
+
+TEST_CASE("NextDayz mounted parts survive storage world piles and legacy save migration", "[NextDayz][Campaign][Attachments]")
+{
+    const auto path = std::filesystem::temp_directory_path() /
+        fmt::format("nextdayz-attachments-{}.json", std::chrono::steady_clock::now().time_since_epoch().count());
+    struct Cleanup
+    {
+        std::filesystem::path path;
+        ~Cleanup() { std::error_code ec; for (const auto* suffix : {"", ".bak", ".tmp"}) std::filesystem::remove(path.string() + suffix, ec); }
+    } cleanup{path};
+    Inventory inventory;
+    FItemInstanceId gun = 0, part = 0;
+    REQUIRE(inventory.TryAdd("ak", "AK", EItemKind::Weapon, 1, &gun));
+    REQUIRE(inventory.TryAdd("optic_4x", "Scope", EItemKind::Attachment, 1, &part));
+    REQUIRE(inventory.TryAttach(gun, part));
+    REQUIRE(inventory.SetLoadedAmmo(gun, 21));
+    const auto loadout = inventory.FindInstance(gun)->attachments;
+    FCampaign campaign;
+    REQUIRE(campaign.Store(inventory, gun));
+    const auto storageId = campaign.storage.front().instanceId;
+    REQUIRE(campaign.storage.front().attachments == loadout);
+    REQUIRE(campaign.Take(inventory, storageId, 1, false));
+    REQUIRE(inventory.FindFirst("ak")->attachments == loadout);
+    REQUIRE(inventory.FindFirst("ak")->loadedAmmo == 21);
+    FCampaignSave saved;
+    saved.map = "attachments-test";
+    saved.inventory = inventory.Capture();
+    saved.campaign = campaign;
+    FSavedLootEntry pile;
+    pile.id = "pile:1";
+    pile.source = ELootSource::Pile;
+    pile.contents.push_back({"ak", 1, 21, loadout});
+    saved.world.entries.push_back(pile);
+    // Also cover stored guns and inactive-map piles.
+    campaign.StoreAll(inventory);
+    saved.campaign = campaign;
+    saved.maps["inactive"] = {saved.world, saved.time, 1};
+    std::string error;
+    REQUIRE(WriteCampaignSave(path, saved, error));
+    FCampaignSave read;
+    REQUIRE(ReadCampaignSave(path, read, error));
+    REQUIRE(read.inventory.instances.front().attachments == loadout);
+    REQUIRE(read.campaign.storage.front().attachments == loadout);
+    REQUIRE(read.world.entries.front().contents.front().attachments == loadout);
+    REQUIRE(read.maps.at("inactive").world.entries.front().contents.front().attachments == loadout);
+    auto invalid = saved;
+    invalid.world.entries.front().contents.front().attachments[0] = EWeaponAttachment::VerticalGrip;
+    REQUIRE_FALSE(WriteCampaignSave(path, invalid, error));
+
+    nlohmann::json document;
+    { std::ifstream stream(path); stream >> document; }
+    REQUIRE(document.at("version") == 4);
+    document["version"] = 3;
+    auto& state = document["state"];
+    for (auto& item : state["inventory"]["instances"]) item.erase("attachments");
+    for (auto& item : state["campaign"]["storage"]) item.erase("attachments");
+    const auto stripWorld = [](auto& world)
+    { for (auto& entry : world["entries"]) for (auto& item : entry["contents"]) item.erase("attachments"); };
+    stripWorld(state["world"]);
+    for (auto& map : state["maps"].items()) stripWorld(map.value()["world"]);
+    { std::ofstream stream(path, std::ios::trunc); stream << document; }
+    REQUIRE(ReadCampaignSave(path, read, error));
+    REQUIRE(read.inventory.instances.front().attachments == FWeaponAttachments{});
+    REQUIRE(read.campaign.storage.front().attachments == FWeaponAttachments{});
+    REQUIRE(read.world.entries.front().contents.front().attachments == FWeaponAttachments{});
+    state["inventory"]["instances"][0]["attachments"] = {0, 0};
+    { std::ofstream stream(path, std::ios::trunc); stream << document; }
+    REQUIRE_FALSE(ReadCampaignSave(path, read, error));
+    state["inventory"]["instances"][0]["attachments"] = {257, 0, 0, 0, 0};
+    { std::ofstream stream(path, std::ios::trunc); stream << document; }
+    REQUIRE_FALSE(ReadCampaignSave(path, read, error));
+}
 
 TEST_CASE("NextDayz inventory snapshot restores worn containers and rejects invalid ownership", "[NextDayz][Campaign]")
 {

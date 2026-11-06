@@ -7,7 +7,7 @@
 use <../lib/kit_coldwar.scad>
 
 module bone_wpn_ak() { cw_wpn_ak_held(); }
-module bone_wpn_svd() { cw_wpn_svd_held(); }
+module bone_wpn_svd() { cw_wpn_svd_held(scope = false); }
 module bone_wpn_mosin() { cw_wpn_mosin_held(); }
 module bone_wpn_shotgun() { cw_wpn_shotgun_held(); }
 module bone_wpn_pistol() { cw_wpn_pistol_held(); }

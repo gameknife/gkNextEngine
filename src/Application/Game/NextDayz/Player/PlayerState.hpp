@@ -4,6 +4,7 @@
 #include <string>
 
 #include <glm/glm.hpp>
+#include "Application/Game/NextDayz/Weapons/AttachmentDefs.hpp"
 
 namespace NextDayz
 {
@@ -113,6 +114,7 @@ namespace NextDayz
         int switchSourceSlot = -1;
         int switchTargetSlot = -1;
         std::array<std::string, 3> slotWeaponIds;
+        std::array<FWeaponAttachments, 3> slotAttachments{};
     };
 
     inline const char* StanceName(EPlayerStance stance)

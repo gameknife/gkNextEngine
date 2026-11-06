@@ -107,6 +107,8 @@ private:
     // Inventory requests (HUD, quickbar, keys). Each runs one inventory
     // transaction and reports the outcome in the message feed.
     void EquipWeaponInstance(NextDayz::FItemInstanceId instanceId, int slot);
+    void InstallAttachment(NextDayz::FItemInstanceId weapon, NextDayz::FItemInstanceId attachment);
+    void RemoveAttachment(NextDayz::FItemInstanceId weapon, NextDayz::EAttachmentSlot slot);
     void WearItem(NextDayz::FItemInstanceId instanceId);
     void TakeOffItem(NextDayz::FItemInstanceId instanceId);
     void DropItem(NextDayz::FItemInstanceId instanceId, int count);
@@ -220,6 +222,8 @@ private:
     // Held weapon models (nextdayz_weapons.scad) shared by FPS view model and TPS attachment.
     Assets::FRigAsset weaponCatalogAsset_{};
     bool weaponCatalogLoaded_ = false;
+    Assets::FRigAsset attachmentCatalogAsset_{};
+    bool attachmentCatalogLoaded_ = false;
     std::array<uint32_t, NextDayz::kWeapons.size()> weaponModelIds_{};
     std::array<NextDayz::FWeaponMaterialSlots, NextDayz::kWeapons.size()> weaponMaterialIds_{};
     Assets::FRigAsset zombieRigAsset_{};
@@ -313,6 +317,7 @@ private:
     std::string validationGive_;
     std::string validationUse_;
     std::string validationEquip_;
+    std::string validationAttachment_;
     std::string validationDrop_;
     std::string validationTeleport_;
     uint64_t validationAttackSequence_ = 0;

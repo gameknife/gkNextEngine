@@ -34,6 +34,7 @@
 #include "Application/Game/NextDayz/NextDayzConfig.hpp"
 #include "Application/Game/NextDayz/Player/PlayerState.hpp"
 #include "Application/Game/NextDayz/Weapons/WeaponDefs.hpp"
+#include "Application/Game/NextDayz/Weapons/WeaponAttachmentVisuals.hpp"
 
 namespace Assets
 {
@@ -59,6 +60,8 @@ namespace NextDayz
         void SetWeaponAssets(const std::array<uint32_t, kWeapons.size()>& modelIds,
                              const std::array<FWeaponMaterialSlots, kWeapons.size()>& materialIds);
         void OnSceneLoaded(Assets::Scene& scene);
+        void SetAttachmentAssets(const FAttachmentVisualAssets& assets) { attachmentAssets_ = assets; }
+        int HeldAttachmentCount() const { return heldAttachments_.VisibleCount(); }
         void OnSceneUnloaded();
 
         void SetVisible(bool visible);
@@ -168,6 +171,10 @@ namespace NextDayz
         std::vector<Assets::Node*> boneNodes_;
         std::vector<Assets::Node*> bodyPartNodes_;
         std::shared_ptr<Assets::Node> weaponNode_;
+        FAttachmentVisualAssets attachmentAssets_;
+        WeaponAttachmentVisuals heldAttachments_;
+        std::array<WeaponAttachmentVisuals, kWeaponSlotCount> holsteredAttachments_;
+        FWeaponAttachments heldLoadout_{};
         std::array<std::shared_ptr<Assets::Node>, kWeaponSlotCount> holsteredWeaponNodes_;
         std::array<glm::vec3, kWeaponSlotCount> holsterPositions_{};
         NextGameplay::FRigLayeredAnimator animator_;

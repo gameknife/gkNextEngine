@@ -27,6 +27,7 @@
 #include "Application/Game/NextDayz/Inventory/Inventory.hpp"
 #include "Application/Game/NextDayz/Player/PlayerState.hpp"
 #include "Application/Game/NextDayz/Weapons/WeaponDefs.hpp"
+#include "Application/Game/NextDayz/Weapons/WeaponAttachmentVisuals.hpp"
 
 class NextEngine;
 
@@ -45,6 +46,7 @@ namespace NextDayz
         float viewModelImpulse = 0.0f;
         float rigRecoilScale = 1.0f;
         bool melee = false;
+        bool suppressed = false;
     };
 
     class PlayerController;
@@ -71,6 +73,10 @@ namespace NextDayz
         void Unequip(int slot);
         FItemInstanceId SlotInstance(int slot) const;
         void CopyMagazinesTo(Inventory& inventory) const;
+        void RefreshInventory(Inventory& inventory) { SyncInventory(inventory); }
+        void SetAttachmentAssets(const FAttachmentVisualAssets& assets) { attachmentAssets_ = assets; }
+        int VisibleAttachments() const { return attachmentVisuals_.VisibleCount(); }
+        float RenderedAttachmentError() const { return renderedAttachmentError_; }
         void SwitchSlot(int slot);
         void SwitchPrevious();
         static bool CanEquipInSlot(int slot, std::string_view weaponId);
@@ -102,6 +108,12 @@ namespace NextDayz
         std::string ActiveDisplayName() const;
         int AmmoInMag() const;
         int AmmoReserve(const Inventory& inventory) const;
+        int MagazineCapacity() const { return WeaponMagazineCapacity(ActiveWeaponId(), SlotAttachments(activeSlot_)); }
+        float ReloadDuration() const { return config_.ReloadSeconds * WeaponReloadScale(SlotAttachments(activeSlot_)); }
+        const FWeaponAttachments& SlotAttachments(int slot) const;
+        EWeaponAttachment ActiveOptic() const { return AttachmentAt(SlotAttachments(activeSlot_), EAttachmentSlot::Optic); }
+        bool IsSuppressed() const { return WeaponSuppressed(SlotAttachments(activeSlot_)); }
+        bool SightReady() const { return aimAlpha_ > 0.98f && viewModelVisible_; }
         bool IsReloading() const { return reloading_; }
         bool IsSwitching() const { return switching_; }
         bool IsSwinging() const { return swingTimer_ > 0.0f; }
@@ -143,6 +155,7 @@ namespace NextDayz
             std::string weaponId;   // empty = empty slot
             int ammoInMag = 0;
             FItemInstanceId instanceId = 0;   // 0 = not bound to an inventory item
+            FWeaponAttachments attachments{};
         };
 
         void FireOneShot(PlayerController& player, NextEngine& engine);
@@ -171,6 +184,7 @@ namespace NextDayz
         float fireCooldown_ = 0.0f;
         bool reloading_ = false;
         float reloadTimer_ = 0.0f;
+        float reloadDuration_ = 0.0f;
         bool switching_ = false;
         bool switchCommitted_ = false;
         int switchTargetSlot_ = -1;
@@ -192,6 +206,9 @@ namespace NextDayz
         bool viewModelAssetsSet_ = false;
         int viewModelWeaponIndex_ = -1;
         std::shared_ptr<Assets::Node> viewModelNode_;
+        FAttachmentVisualAssets attachmentAssets_;
+        WeaponAttachmentVisuals attachmentVisuals_;
+        float renderedAttachmentError_ = 0.0f;
         bool viewModelVisible_ = false;
         bool scopeView_ = false;
         bool renderedViewModelValid_ = false;

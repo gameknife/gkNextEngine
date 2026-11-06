@@ -22,11 +22,52 @@ namespace glm
 
 namespace NextDayz
 {
-    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FItemInstance, instanceId, defId, count, containerId, loadedAmmo)
+    namespace
+    {
+        FWeaponAttachments ReadAttachments(const nlohmann::json& json)
+        {
+            FWeaponAttachments result{};
+            if (!json.contains("attachments")) return result; // v1..v3
+            const auto& parts = json.at("attachments");
+            if (!parts.is_array() || parts.size() != result.size()) throw std::runtime_error("Invalid attachment slots");
+            for (size_t slot = 0; slot < result.size(); ++slot)
+            {
+                if (!parts[slot].is_number_integer() || parts[slot].get<int64_t>() < 0 ||
+                    parts[slot].get<uint64_t>() >= static_cast<uint64_t>(EWeaponAttachment::Count))
+                    throw std::runtime_error("Invalid attachment type");
+                result[slot] = static_cast<EWeaponAttachment>(parts[slot].get<int>());
+            }
+            return result;
+        }
+    }
+    void to_json(nlohmann::json& json, const FItemInstance& item)
+    {
+        json = {{"instanceId", item.instanceId}, {"defId", item.defId}, {"count", item.count},
+                {"containerId", item.containerId}, {"loadedAmmo", item.loadedAmmo}, {"attachments", item.attachments}};
+    }
+    void from_json(const nlohmann::json& json, FItemInstance& item)
+    {
+        json.at("instanceId").get_to(item.instanceId);
+        json.at("defId").get_to(item.defId);
+        json.at("count").get_to(item.count);
+        json.at("containerId").get_to(item.containerId);
+        json.at("loadedAmmo").get_to(item.loadedAmmo);
+        item.attachments = ReadAttachments(json);
+    }
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FInventoryContainer, containerId, ownerItemInstanceId, displayName,
                                      capacity, active, weaponOnly)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FInventoryState, instances, containers, nextInstanceId, nextContainerId)
-    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FLootStack, itemId, count, loadedAmmo)
+    void to_json(nlohmann::json& json, const FLootStack& item)
+    {
+        json = {{"itemId", item.itemId}, {"count", item.count}, {"loadedAmmo", item.loadedAmmo}, {"attachments", item.attachments}};
+    }
+    void from_json(const nlohmann::json& json, FLootStack& item)
+    {
+        json.at("itemId").get_to(item.itemId);
+        json.at("count").get_to(item.count);
+        json.at("loadedAmmo").get_to(item.loadedAmmo);
+        item.attachments = ReadAttachments(json);
+    }
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FLootSlot, worldPos, profile, category, state, committedAt, cooldownUntil,
                                      offscreenSince, roll)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FSavedLootEntry, id, source, position, yaw, contents, state, slot)
@@ -78,7 +119,9 @@ namespace NextDayz
                 const auto* def = FindItemDef(item.defId);
                 if (!def || item.instanceId == 0 || item.instanceId >= saved.campaign.nextStorageId ||
                     !ids.insert(item.instanceId).second || item.count <= 0 || item.count > def->maxStack ||
-                    item.loadedAmmo < 0 || (item.loadedAmmo != 0 && def->kind != EItemKind::Weapon)) return false;
+                    item.loadedAmmo < 0 || (item.loadedAmmo != 0 && def->kind != EItemKind::Weapon) ||
+                    !ValidAttachments(item.defId, item.attachments) ||
+                    (def->kind == EItemKind::Weapon && item.loadedAmmo > WeaponMagazineCapacity(item.defId, item.attachments))) return false;
             }
             const auto& flight = saved.campaign.flight;
             if (flight.phase > EFlightPhase::Departing || !std::isfinite(flight.remaining) || flight.remaining < 0 ||
@@ -96,7 +139,9 @@ namespace NextDayz
                 {
                     const auto* def = FindItemDef(stack.itemId);
                     if (!def || stack.count <= 0 || stack.count > 10000 || stack.loadedAmmo < 0 ||
-                        (stack.loadedAmmo != 0 && def->kind != EItemKind::Weapon)) return false;
+                        (stack.loadedAmmo != 0 && def->kind != EItemKind::Weapon) ||
+                        !ValidAttachments(stack.itemId, stack.attachments) ||
+                        (def->kind == EItemKind::Weapon && stack.loadedAmmo > WeaponMagazineCapacity(stack.itemId, stack.attachments))) return false;
                 }
             }
             if (saved.mapVersion == 0 || saved.maps.size() > 1024) return false;
@@ -127,7 +172,7 @@ namespace NextDayz
                 std::ifstream stream(path, std::ios::binary);
                 auto document = nlohmann::json::parse(stream);
                 const int version = document.at("version").get<int>();
-                if (version != 1 && version != 2 && version != 3) throw std::runtime_error("Unsupported save version");
+                if (version < 1 || version > 4) throw std::runtime_error("Unsupported save version");
                 if (version == 1)
                 {
                     auto& state = document.at("state");
@@ -183,7 +228,7 @@ namespace NextDayz
             {
                 std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
                 stream.exceptions(std::ios::failbit | std::ios::badbit);
-                stream << nlohmann::json{{"version", 3}, {"state", save}}.dump(2);
+                stream << nlohmann::json{{"version", 4}, {"state", save}}.dump(2);
                 stream.flush();
                 stream.close();
             }

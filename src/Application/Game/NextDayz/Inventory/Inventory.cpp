@@ -90,6 +90,8 @@ namespace NextDayz
                 !itemIds.insert(item.instanceId).second || item.count <= 0 || item.count > def->maxStack ||
                 item.loadedAmmo < 0 || (item.loadedAmmo != 0 && def->kind != EItemKind::Weapon))
                 return false;
+            if (!ValidAttachments(item.defId, item.attachments)) return false;
+            if (def->kind == EItemKind::Weapon && item.loadedAmmo > WeaponMagazineCapacity(item.defId, item.attachments)) return false;
             if (item.containerId == kWornContainer)
             {
                 if (def->kind != EItemKind::Clothing || def->equipSlot == EEquipSlot::None || item.count != 1 ||
@@ -108,6 +110,66 @@ namespace NextDayz
             if (restored.ContainerUsed(container.containerId) > container.capacity) return false;
         restored.RebuildLegacyItems();
         *this = std::move(restored);
+        return true;
+    }
+
+    bool Inventory::SetWeaponState(FItemInstanceId instanceId, int loadedAmmo, const FWeaponAttachments& attachments)
+    {
+        auto* item = FindInstance(instanceId);
+        const auto* def = item ? FindItemDef(item->defId) : nullptr;
+        if (!def || def->kind != EItemKind::Weapon || loadedAmmo < 0 ||
+            !ValidAttachments(item->defId, attachments) || loadedAmmo > WeaponMagazineCapacity(item->defId, attachments)) return false;
+        item->loadedAmmo = loadedAmmo;
+        item->attachments = attachments;
+        return true;
+    }
+
+    bool Inventory::TryAttach(FItemInstanceId weaponId, FItemInstanceId attachmentId, std::string* error)
+    {
+        const auto fail = [&](const char* message) { if (error) *error = message; return false; };
+        const auto* weapon = FindInstance(weaponId);
+        const auto* part = FindInstance(attachmentId);
+        const auto* def = part ? FindAttachmentDef(part->defId) : nullptr;
+        if (!weapon || !def || !SupportsAttachment(weapon->defId, def->type)) return fail("This attachment does not fit that weapon.");
+        Inventory transaction = *this;
+        const size_t slot = static_cast<size_t>(def->slot);
+        const auto old = weapon->attachments[slot];
+        if (!transaction.TryConsumeInstance(attachmentId)) return fail("Attachment is no longer available.");
+        transaction.FindInstance(weaponId)->attachments[slot] = def->type;
+        if (const auto* previous = FindAttachmentDef(old);
+            previous && !transaction.TryAdd(std::string(previous->id), std::string(previous->displayName), EItemKind::Attachment, 1))
+            return fail("Not enough space for the removed attachment.");
+        auto* gun = transaction.FindInstance(weaponId);
+        const int capacity = WeaponMagazineCapacity(gun->defId, gun->attachments);
+        const int excess = std::max(0, gun->loadedAmmo - capacity);
+        const auto* gunDef = FindWeaponDef(gun->defId);
+        if (excess && !transaction.TryAdd(std::string(AmmoItemId(gunDef->ammo)), std::string(AmmoDisplayName(gunDef->ammo)), EItemKind::Ammo, excess))
+            return fail("Not enough space for the excess ammunition.");
+        transaction.FindInstance(weaponId)->loadedAmmo -= excess;
+        *this = std::move(transaction);
+        if (error) error->clear();
+        return true;
+    }
+
+    bool Inventory::TryDetach(FItemInstanceId weaponId, EAttachmentSlot slot, std::string* error)
+    {
+        const auto fail = [&](const char* message) { if (error) *error = message; return false; };
+        const auto* weapon = FindInstance(weaponId);
+        if (!weapon || static_cast<size_t>(slot) >= kAttachmentSlotCount) return fail("No attachment in that slot.");
+        const auto* part = FindAttachmentDef(AttachmentAt(weapon->attachments, slot));
+        if (!part) return fail("No attachment in that slot.");
+        Inventory transaction = *this;
+        transaction.FindInstance(weaponId)->attachments[static_cast<size_t>(slot)] = EWeaponAttachment::None;
+        if (!transaction.TryAdd(std::string(part->id), std::string(part->displayName), EItemKind::Attachment, 1))
+            return fail("Not enough space for the removed attachment.");
+        auto* gun = transaction.FindInstance(weaponId);
+        const int excess = std::max(0, gun->loadedAmmo - WeaponMagazineCapacity(gun->defId, gun->attachments));
+        const auto* gunDef = FindWeaponDef(gun->defId);
+        if (excess && !transaction.TryAdd(std::string(AmmoItemId(gunDef->ammo)), std::string(AmmoDisplayName(gunDef->ammo)), EItemKind::Ammo, excess))
+            return fail("Not enough space for the excess ammunition.");
+        transaction.FindInstance(weaponId)->loadedAmmo -= excess;
+        *this = std::move(transaction);
+        if (error) error->clear();
         return true;
     }
 

@@ -54,6 +54,9 @@ namespace NextDayz
         bool aiming = false;
         bool firstPerson = true;
         bool scopeView = false;
+        EWeaponAttachment optic = EWeaponAttachment::None;
+        bool sightReady = false;
+        glm::vec2 reflexOffsetPx{0.0f};
 
         bool hasWeapon = false;
         bool melee = false;
@@ -107,6 +110,8 @@ namespace NextDayz
         std::vector<FHudNotification> notifications;
 
         std::function<void(FItemInstanceId instanceId, int slot)> equipWeapon;
+        std::function<void(FItemInstanceId weapon, FItemInstanceId attachment)> installAttachment;
+        std::function<void(FItemInstanceId weapon, EAttachmentSlot slot)> removeAttachment;
         std::function<void(FItemInstanceId instanceId)> wear;
         std::function<void(FItemInstanceId instanceId)> takeOff;
         std::function<void(FItemInstanceId instanceId)> useItem;

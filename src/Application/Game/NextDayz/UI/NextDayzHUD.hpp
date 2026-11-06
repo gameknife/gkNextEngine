@@ -52,6 +52,7 @@ namespace NextDayz
     struct FHudContext
     {
         bool aiming = false;
+        bool freeLooking = false;
         bool firstPerson = true;
         bool scopeView = false;
         EWeaponAttachment optic = EWeaponAttachment::None;

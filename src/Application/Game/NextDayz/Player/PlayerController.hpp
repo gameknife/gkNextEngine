@@ -32,6 +32,7 @@ namespace NextDayz
 
         // --- input feed (called from GameInstance input handlers) ---
         void OnLook(float dxPixels, float dyPixels);
+        void SetFreeLook(bool held);
         void SetMoveKey(int dir, bool pressed); // 0=fwd 1=back 2=left 3=right
         void SetWalkModifier(bool pressed) { walkModifier_ = pressed; }
         void SetSprintModifier(bool pressed) { sprintModifier_ = pressed; }
@@ -57,6 +58,7 @@ namespace NextDayz
         void SetPitch(float pitchRadians) { pitch_ = pitchRadians; }
         void SetFirstPerson(bool firstPerson)
         {
+            SetFreeLook(false);
             if (IsAds()) CancelAiming();
             firstPerson_ = firstPerson;
         }
@@ -81,6 +83,7 @@ namespace NextDayz
         glm::vec3 Up() const;
         float Yaw() const { return yaw_; }
         float Pitch() const { return pitch_; }
+        bool IsFreeLooking() const { return freeLooking_; }
         float CurrentFov() const { return currentFov_; }
         bool IsFirstPerson() const { return firstPerson_ || IsAds(); }
         bool IsAiming() const { return aimInput_.IsAiming(); }
@@ -160,6 +163,8 @@ namespace NextDayz
 
         float yaw_ = 0.0f;
         float pitch_ = 0.0f;
+        bool freeLooking_ = false;
+        glm::vec2 freeLookOffset_{0.0f}; // camera-only yaw/pitch; movement and aim retain yaw_/pitch_
         bool firstPerson_ = true;
         bool walkModifier_ = false;
         bool sprintModifier_ = false;

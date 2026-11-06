@@ -131,6 +131,7 @@ namespace NextDayz::NextDayzHUD
 
         void DrawCrosshair(const FHudContext& context)
         {
+            if (context.freeLooking) return;
             ImDrawList* draw = ImGui::GetForegroundDrawList();
             const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
             if (context.firstPerson && context.aiming && context.sightReady && !context.showInventory && !context.showMap &&
@@ -1622,7 +1623,7 @@ namespace NextDayz::NextDayzHUD
                 ImGui::Separator();
                 ImGui::TextWrapped("%s", NextDayz::L10n::Tr("WASD move  Shift sprint  Ctrl walk  C crouch  Space jump/vault"));
                 ImGui::TextWrapped("%s", NextDayz::L10n::Tr("LMB fire/swing  RMB tap ADS / hold aim  R reload  1/2/3/Q weapons  E take  F fill bottle"));
-                ImGui::TextWrapped("%s", NextDayz::L10n::Tr("Tab inventory  4-7 quickbar  H bandage  M map  L lantern  V view"));
+                ImGui::TextWrapped("%s", NextDayz::L10n::Tr("Tab inventory  4-7 quickbar  H bandage  M map  L lantern  V view  Alt free look"));
                 ImGui::Spacing();
                 if (context.restartSession && ImGui::Button(NextDayz::L10n::Label("RESTART RUN"), ImVec2(-1.0f, 36.0f)))
                 {

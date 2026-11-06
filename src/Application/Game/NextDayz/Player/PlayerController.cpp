@@ -172,6 +172,7 @@ namespace NextDayz
     {
         config_ = config;
         CancelAiming();
+        SetFreeLook(false);
         currentFov_ = config_.Camera.BaseFov;
         aimFov_ = config_.Camera.BaseFov;
         camDistance_ = config_.Camera.TpsDistance;
@@ -223,18 +224,36 @@ namespace NextDayz
 
     void PlayerController::Destroy()
     {
+        SetFreeLook(false);
         CancelAiming();
         controller_.Destroy();
     }
 
     void PlayerController::OnLook(float dxPixels, float dyPixels)
     {
+        const float maxPitch = glm::radians(config_.Camera.MaxPitchDegrees);
+        if (freeLooking_)
+        {
+            freeLookOffset_.x = std::remainder(freeLookOffset_.x - dxPixels * config_.Camera.MouseSensitivity,
+                                             glm::two_pi<float>());
+            const float viewPitch = pitch_ + freeLookOffset_.y + dyPixels * config_.Camera.MouseSensitivity;
+            freeLookOffset_.y = glm::clamp(viewPitch, -maxPitch, maxPitch) - pitch_;
+            return;
+        }
         const float previousPitch = pitch_;
         yaw_ -= dxPixels * config_.Camera.MouseSensitivity;
         pitch_ += dyPixels * config_.Camera.MouseSensitivity;
-        const float maxPitch = glm::radians(config_.Camera.MaxPitchDegrees);
         pitch_ = glm::clamp(pitch_, -maxPitch, maxPitch);
         lookDeltaAccum_ += glm::vec2(-dxPixels * config_.Camera.MouseSensitivity, pitch_ - previousPitch);
+    }
+
+    void PlayerController::SetFreeLook(bool held)
+    {
+        freeLooking_ = held && !IsFirstPerson() && !IsAiming();
+        if (!freeLooking_)
+        {
+            freeLookOffset_ = glm::vec2(0.0f);
+        }
     }
 
     void PlayerController::SetMoveKey(int dir, bool pressed)
@@ -247,6 +266,7 @@ namespace NextDayz
 
     void PlayerController::ToggleView()
     {
+        SetFreeLook(false);
         const bool firstPerson = !IsFirstPerson();
         if (IsAds()) CancelAiming();
         firstPerson_ = firstPerson;
@@ -254,6 +274,7 @@ namespace NextDayz
 
     void PlayerController::SetAimButton(bool pressed, bool allowAds)
     {
+        SetFreeLook(false);
         const double now = AimInputTime();
         if (pressed) aimInput_.Press(now, allowAds);
         else aimInput_.Release(now, config_.Camera.AimTapSeconds);
@@ -287,13 +308,15 @@ namespace NextDayz
 
     glm::vec3 PlayerController::CameraForward() const
     {
-        if (!IsFirstPerson() || (traversalViewPitch_ == 0.0f))
+        if (!freeLooking_ && (!IsFirstPerson() || traversalViewPitch_ == 0.0f))
         {
             return Forward();
         }
-        const float viewYaw = yaw_ + cameraRecoil_.x;
+        const float viewYaw = yaw_ + cameraRecoil_.x + freeLookOffset_.x;
         const float maxPitch = glm::radians(config_.Camera.MaxPitchDegrees);
-        const float viewPitch = glm::clamp(pitch_ + cameraRecoil_.y + traversalViewPitch_, -maxPitch, maxPitch);
+        const float traversalPitch = IsFirstPerson() ? traversalViewPitch_ : 0.0f;
+        const float viewPitch = glm::clamp(pitch_ + cameraRecoil_.y + freeLookOffset_.y + traversalPitch,
+                                          -maxPitch, maxPitch);
         const float cosPitch = std::cos(viewPitch);
         return glm::normalize(
             glm::vec3(std::sin(viewYaw) * cosPitch, -std::sin(viewPitch), std::cos(viewYaw) * cosPitch));
@@ -335,7 +358,7 @@ namespace NextDayz
 
     glm::vec3 PlayerController::ThirdPersonOffset() const
     {
-        const glm::vec3 forward = Forward();
+        const glm::vec3 forward = CameraForward();
         const glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
         return -forward * camDistance_ + right * config_.Camera.TpsShoulderOffset;
     }

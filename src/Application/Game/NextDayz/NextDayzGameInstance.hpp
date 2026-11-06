@@ -325,6 +325,8 @@ private:
     double survivalSeconds_ = 0.0;
     NextDayz::FWorldAnchorHandle hoveredWell_{};
     bool mouseCaptured_ = false;
+    bool leftAltHeld_ = false;
+    bool rightAltHeld_ = false;
     bool resetMouse_ = true;
     glm::dvec2 mousePos_{0.0, 0.0};
 };

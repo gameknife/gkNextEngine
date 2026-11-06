@@ -1253,6 +1253,7 @@ bool NextDayzGameInstance::OnRenderUI()
     if (CampaignEnabled() && DrawSafehouse()) return true;
 
     NextDayz::FHudContext ctx;
+    ctx.freeLooking = player_.IsFreeLooking();
     ctx.aiming = player_.IsAiming();
     ctx.firstPerson = player_.IsFirstPerson();
     ctx.scopeView = weapons_.IsScopeView();
@@ -2699,7 +2700,13 @@ void NextDayzGameInstance::SetMouseCaptured(bool captured)
     // The debug cursor (F9) keeps the mouse free until it is switched off.
     captured = captured && !debugger_.CursorMode();
     mouseCaptured_ = captured;
-    if (!captured) player_.CancelAiming();
+    if (!captured)
+    {
+        player_.CancelAiming();
+        player_.SetFreeLook(false);
+        leftAltHeld_ = false;
+        rightAltHeld_ = false;
+    }
     resetMouse_ = true;
     if (!GOption->AgentValidation)
     {
@@ -2766,6 +2773,14 @@ bool NextDayzGameInstance::OnKey(SDL_Event& event)
     case SDLK_S: player_.SetMoveKey(1, pressed); return true;
     case SDLK_A: player_.SetMoveKey(2, pressed); return true;
     case SDLK_D: player_.SetMoveKey(3, pressed); return true;
+    case SDLK_LALT:
+    case SDLK_RALT:
+        if (event.key.repeat) return true;
+        if (event.key.key == SDLK_LALT) leftAltHeld_ = pressed;
+        else rightAltHeld_ = pressed;
+        player_.SetFreeLook((leftAltHeld_ || rightAltHeld_) && mouseCaptured_ && !paused_ &&
+                            survival_.IsAlive() && !weapons_.TriggerDown());
+        return true;
     case SDLK_LSHIFT:
     case SDLK_RSHIFT:
         player_.SetSprintModifier(pressed);
@@ -2983,6 +2998,7 @@ bool NextDayzGameInstance::OnMouseButton(SDL_Event& event)
         }
         if (event.button.button == SDL_BUTTON_LEFT)
         {
+            player_.SetFreeLook(false);
             weapons_.SetTriggerDown(true);
             return true;
         }
@@ -3193,6 +3209,16 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     reg.Add("scopeView", [this]() -> Runtime::Agent::FAgentQueryValue { return weapons_.IsScopeView(); });
     reg.Add("cameraFov", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(player_.CurrentFov()); });
     reg.Add("firstPerson", [this]() -> Runtime::Agent::FAgentQueryValue { return player_.IsFirstPerson(); });
+    reg.Add("freeLookActive", [this]() -> Runtime::Agent::FAgentQueryValue { return player_.IsFreeLooking(); });
+    reg.Add("playerYaw", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(player_.Yaw()); });
+    reg.Add("playerPitch", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(player_.Pitch()); });
+    reg.Add("cameraYaw", [this]() -> Runtime::Agent::FAgentQueryValue {
+        const glm::vec3 forward = player_.CameraForward();
+        return static_cast<double>(std::atan2(forward.x, forward.z));
+    });
+    reg.Add("cameraPitch", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(std::asin(glm::clamp(-player_.CameraForward().y, -1.0f, 1.0f)));
+    });
     reg.Add("cameraArmLength", [this]() -> Runtime::Agent::FAgentQueryValue {
         return static_cast<double>(player_.CameraArmLength());
     });

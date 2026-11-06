@@ -138,6 +138,7 @@ namespace NextDayz
         void ConfigureRespawn(const FLootRespawnTuning& tuning) { director_.Configure(tuning); }
         void SetSeed(uint64_t seed) { seed_ = seed; }
         void SetVisualCatalog(std::unordered_map<std::string, FLootVisual> catalog, FLootVisual fallback);
+        const FLootVisual& VisualForItem(std::string_view itemId) const;
 
         void OnSceneLoaded(Assets::Scene& scene, std::span<const FLootSpotSeed> spots = {});
         void OnSceneUnloaded();

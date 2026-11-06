@@ -154,13 +154,13 @@ namespace NextDayz
 
     const FLootVisual& LootSystem::VisualFor(const FLootEntry& entry) const
     {
-        if (!entry.contents.empty())
-        {
-            if (const auto it = catalog_.find(entry.contents.front().itemId); it != catalog_.end() && it->second.valid)
-            {
-                return it->second;
-            }
-        }
+        return VisualForItem(entry.contents.empty() ? std::string_view{} : entry.contents.front().itemId);
+    }
+
+    const FLootVisual& LootSystem::VisualForItem(std::string_view itemId) const
+    {
+        if (const auto it = catalog_.find(std::string(itemId)); it != catalog_.end() && it->second.valid)
+            return it->second;
         return fallbackVisual_;
     }
 

@@ -302,6 +302,7 @@ private:
     bool validationUseWater_ = false;
     bool validationFinishZombie_ = false;
     bool validationRestart_ = false;
+    bool validationPreloadItemIcons_ = false;
     float validationLookYaw_ = 0.0f;
     float validationLookPitch_ = 0.0f;
     bool validationThirdPerson_ = false;

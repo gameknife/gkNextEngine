@@ -2,6 +2,7 @@
 #include "NextDayzGameInstance.hpp"
 #include "Application/Game/NextDayz/UI/Localization.hpp"
 #include "Application/Game/NextDayz/UI/InventoryPreview.hpp"
+#include "Application/Game/NextDayz/UI/ItemIconCache.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -532,6 +533,13 @@ void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
                        "Agent-only in-process restart", [this, validationReady]()
                        {
                            if (validationRestart_ && validationReady()) ResetSession();
+                       });
+    cvars.RegisterBool("nextdayz.validation.preloadItemIcons", false, &validationPreloadItemIcons_, NextCVar::ECVarFlags::None,
+                       "Agent-only: request every catalog item's runtime thumbnail", [this, validationReady]()
+                       {
+                           if (!validationPreloadItemIcons_ || !validationReady()) return;
+                           auto& icons = NextDayz::GetItemIconCache(GetEngine().GetRenderer());
+                           for (const auto& def : NextDayz::AllItemDefs()) icons.Request(def.id, loot_.VisualForItem(def.id));
                        });
 }
 
@@ -1374,6 +1382,13 @@ bool NextDayzGameInstance::OnRenderUI()
     };
     if (showInventory_)
     {
+        ctx.itemIcon = [this](std::string_view id) -> uint64_t
+        {
+            auto& icons = NextDayz::GetItemIconCache(GetEngine().GetRenderer());
+            const uint32_t slot = icons.Request(id, loot_.VisualForItem(id));
+            return slot != std::numeric_limits<uint32_t>::max()
+                ? GetEngine().GetUserInterface()->RequestImTextureIdRaw(slot) : 0;
+        };
         ctx.characterPreview = [this](glm::vec2 size, float yaw, float distance) -> uint64_t
         {
             auto& preview = NextDayz::GetInventoryPreview(GetEngine().GetRenderer());
@@ -3179,6 +3194,21 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     {
         const auto* provider = GetEngine().GetRenderer().ViewServices().FindProvider("NextDayzLoadout");
         return provider && static_cast<const NextDayz::InventoryPreview*>(provider)->IsReady();
+    });
+    reg.Add("inventoryIconCount", [this]() -> Runtime::Agent::FAgentQueryValue
+    {
+        const auto* provider = GetEngine().GetRenderer().ViewServices().FindProvider("NextDayzItemIcons");
+        return int64_t(provider ? static_cast<const NextDayz::ItemIconCache*>(provider)->ReadyCount() : 0);
+    });
+    reg.Add("inventoryIconsRendered", [this]() -> Runtime::Agent::FAgentQueryValue
+    {
+        const auto* provider = GetEngine().GetRenderer().ViewServices().FindProvider("NextDayzItemIcons");
+        return int64_t(provider ? static_cast<const NextDayz::ItemIconCache*>(provider)->RenderedCount() : 0);
+    });
+    reg.Add("inventoryIconCacheHits", [this]() -> Runtime::Agent::FAgentQueryValue
+    {
+        const auto* provider = GetEngine().GetRenderer().ViewServices().FindProvider("NextDayzItemIcons");
+        return int64_t(provider ? static_cast<const NextDayz::ItemIconCache*>(provider)->CacheHitCount() : 0);
     });
     reg.Add("grassInstances", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.ActiveCount()); });
     reg.Add("grassNearInstances", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.ActiveCount(0)); });

@@ -113,6 +113,7 @@ namespace NextDayz
         std::vector<FHudNotification> notifications;
         // Request an offscreen character image; zero means the first frame is still pending.
         std::function<uint64_t(glm::vec2 size, float yaw, float distance)> characterPreview;
+        std::function<uint64_t(std::string_view itemId)> itemIcon;
         std::function<void()> closeInventory;
 
         std::function<void(FItemInstanceId instanceId, int slot)> equipWeapon;

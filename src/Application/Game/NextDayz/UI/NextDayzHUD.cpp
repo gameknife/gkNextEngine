@@ -9,6 +9,7 @@
 
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <glm/gtc/constants.hpp>
 
 #include "Application/Game/NextDayz/Inventory/Inventory.hpp"
 #include "Application/Game/NextDayz/Weapons/WeaponSystem.hpp"
@@ -54,6 +55,33 @@ namespace NextDayz::NextDayzHUD
                 text.resize(last);
             }
             return text + "…";
+        }
+
+        bool DrawItemIcon(const FHudContext& context, std::string_view id, ImVec2 min, ImVec2 max, bool rotated = false)
+        {
+            const auto* def = FindItemDef(id);
+            const uint64_t texture = context.itemIcon ? context.itemIcon(id) : 0;
+            if (!def || !texture) return false;
+            const float width = static_cast<float>(rotated ? def->size.height : def->size.width);
+            const float height = static_cast<float>(rotated ? def->size.width : def->size.height);
+            const float scale = std::max(0.0f, std::min((max.x - min.x) / width, (max.y - min.y) / height));
+            const ImVec2 center((min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f);
+            const ImVec2 a(center.x - width * scale * 0.5f, center.y - height * scale * 0.5f);
+            const ImVec2 b(center.x + width * scale * 0.5f, center.y + height * scale * 0.5f);
+            ImGui::GetWindowDrawList()->AddImageQuad(static_cast<ImTextureID>(texture), a, ImVec2(b.x, a.y), b,
+                ImVec2(a.x, b.y), rotated ? ImVec2(0, 1) : ImVec2(0, 0), rotated ? ImVec2(0, 0) : ImVec2(1, 0),
+                rotated ? ImVec2(1, 0) : ImVec2(1, 1), rotated ? ImVec2(1, 1) : ImVec2(0, 1));
+            return true;
+        }
+
+        void ItemIconPreview(const FHudContext& context, const FItemDef& def, bool rotated, float longestSide)
+        {
+            const auto size = rotated ? def.size.Rotated() : def.size;
+            const float cell = longestSide / std::max(size.width, size.height);
+            const ImVec2 pos = ImGui::GetCursorScreenPos();
+            const ImVec2 extent(size.width * cell, size.height * cell);
+            if (DrawItemIcon(context, def.id, pos, ImVec2(pos.x + extent.x, pos.y + extent.y), rotated))
+                ImGui::Dummy(extent);
         }
 
         void AcceptContainerDrop(const FHudContext& context, FContainerId containerId)
@@ -828,12 +856,14 @@ namespace NextDayz::NextDayzHUD
         // MODERN GRID-BASED INVENTORY & EXPLICIT DRAG-DROP
         // ====================================================================
 
-        void ItemTooltip(const FItemDef& definition, const FItemInstance& instance)
+        void ItemTooltip(const FHudContext& context, const FItemDef& definition, const FItemInstance& instance)
         {
             ImGui::PushStyleColor(ImGuiCol_PopupBg, UITheme::Colors::SurfaceBg);
             ImGui::PushStyleColor(ImGuiCol_Border, UITheme::Colors::BorderMuted);
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 8.0f));
             ImGui::BeginTooltip();
+
+            ItemIconPreview(context, definition, false, 160.0f);
 
             // Category badge & Title
             ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), "[%s]", UITheme::ItemKindBadge(definition.kind));
@@ -941,15 +971,23 @@ namespace NextDayz::NextDayzHUD
             const ImU32 kindColor = UITheme::ItemKindColor(def->kind);
             draw->AddRectFilled(pos, ImVec2(pos.x + 3.0f, max.y), kindColor, 4.0f);
 
-            // Item Display Name
-            const std::string name = FitText(std::string(NextDayz::L10n::Tr(def->displayName)), slotSize.x - 14.0f);
-            draw->AddText(ImVec2(pos.x + 7.0f, pos.y + 6.0f), UITheme::Colors::TextPrimary, name.c_str());
+            // Pending icons retain a readable label; completed icons use the whole rectangle.
+            if (!DrawItemIcon(context, def->id, ImVec2(pos.x + 5.0f, pos.y + 3.0f),
+                              ImVec2(max.x - 3.0f, max.y - 3.0f), instance.placement.rotated))
+            {
+                const auto name = FitText(std::string(L10n::Tr(def->displayName)), slotSize.x - 14.0f);
+                draw->AddText(ImVec2(pos.x + 7.0f, pos.y + 6.0f), UITheme::Colors::TextPrimary, name.c_str());
+            }
             const auto footprint = Inventory::InstanceSize(instance);
             const auto dimensions = fmt::format("{}x{}", footprint.width, footprint.height);
             const float indicatorWidth = def->maxStack > 1 || def->kind == EItemKind::Weapon ? 36.0f : 0.0f;
             if (slotSize.x > ImGui::CalcTextSize(dimensions.c_str()).x + indicatorWidth + 14.0f)
+            {
+                draw->AddRectFilled(ImVec2(pos.x + 5.0f, max.y - ImGui::GetTextLineHeight() - 5.0f),
+                    ImVec2(pos.x + 9.0f + ImGui::CalcTextSize(dimensions.c_str()).x, max.y - 2.0f), IM_COL32(10, 12, 16, 200), 2.0f);
                 draw->AddText(ImVec2(pos.x + 7.0f, max.y - ImGui::GetTextLineHeight() - 4.0f),
                               UITheme::Colors::TextMuted, dimensions.c_str());
+            }
 
             // Bottom-right indicator: Ammo count or stack count
             if (def->maxStack > 1)
@@ -957,6 +995,8 @@ namespace NextDayz::NextDayzHUD
                 char countText[16];
                 std::snprintf(countText, sizeof(countText), "%d/%d", instance.count, def->maxStack);
                 const ImVec2 cSize = ImGui::CalcTextSize(countText);
+                draw->AddRectFilled(ImVec2(max.x - cSize.x - 7.0f, max.y - cSize.y - 5.0f),
+                    ImVec2(max.x - 3.0f, max.y - 2.0f), IM_COL32(10, 12, 16, 220), 2.0f);
                 draw->AddText(ImVec2(max.x - cSize.x - 5.0f, max.y - cSize.y - 4.0f),
                               UITheme::Colors::AccentAmber, countText);
             }
@@ -965,6 +1005,8 @@ namespace NextDayz::NextDayzHUD
                 char ammoText[16];
                 std::snprintf(ammoText, sizeof(ammoText), "[%d]", instance.loadedAmmo);
                 const ImVec2 aSize = ImGui::CalcTextSize(ammoText);
+                draw->AddRectFilled(ImVec2(max.x - aSize.x - 7.0f, max.y - aSize.y - 5.0f),
+                    ImVec2(max.x - 3.0f, max.y - 2.0f), IM_COL32(10, 12, 16, 220), 2.0f);
                 draw->AddText(ImVec2(max.x - aSize.x - 5.0f, max.y - aSize.y - 4.0f),
                               UITheme::Colors::AccentCyan, ammoText);
             }
@@ -972,7 +1014,7 @@ namespace NextDayz::NextDayzHUD
             // Hover tooltip
             if (hovered)
             {
-                ItemTooltip(*def, instance);
+                ItemTooltip(context, *def, instance);
             }
 
             // Drag Source
@@ -983,6 +1025,7 @@ namespace NextDayz::NextDayzHUD
                 ImGui::SetDragDropPayload(kItemPayload, &id, sizeof(id));
 
                 // Floating Ghost Item Card preview
+                ItemIconPreview(context, *def, InventoryDrag.rotated, 96.0f);
                 ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), "%s", std::string(NextDayz::L10n::Tr(def->displayName)).c_str());
                 if (def->maxStack > 1)
                 {
@@ -1131,14 +1174,15 @@ namespace NextDayz::NextDayzHUD
             // Background slot frame
             UIWidgets::DrawSlotFrame(draw, pos, max, instance != nullptr, hovered, false, false, 4.0f);
 
-            // Left badge: Slot Type Tag
-            draw->AddText(ImVec2(pos.x + 10.0f, pos.y + 6.0f), UITheme::Colors::TextMuted, label);
+            const float textOffset = def ? 58.0f : 10.0f;
+            draw->AddText(ImVec2(pos.x + textOffset, pos.y + 6.0f), UITheme::Colors::TextMuted, label);
 
             if (def && instance)
             {
+                DrawItemIcon(context, def->id, ImVec2(pos.x + 5.0f, pos.y + 3.0f), ImVec2(pos.x + 51.0f, max.y - 3.0f));
                 // Item Name
-                const auto name = FitText(std::string(L10n::Tr(def->displayName)), slotW - 20.0f);
-                draw->AddText(ImVec2(pos.x + 10.0f, pos.y + 24.0f), UITheme::Colors::TextPrimary, name.c_str());
+                const auto name = FitText(std::string(L10n::Tr(def->displayName)), slotW - textOffset - 10.0f);
+                draw->AddText(ImVec2(pos.x + textOffset, pos.y + 24.0f), UITheme::Colors::TextPrimary, name.c_str());
 
                 // Attribute pills on right
                 char statText[48] = "";
@@ -1164,7 +1208,7 @@ namespace NextDayz::NextDayzHUD
 
                 if (hovered)
                 {
-                    ItemTooltip(*def, *instance);
+                    ItemTooltip(context, *def, *instance);
                 }
 
                 // Drag Source: dragging worn gear to take off / move
@@ -1173,6 +1217,7 @@ namespace NextDayz::NextDayzHUD
                     StartItemDrag(*instance, pos);
                     const FItemInstanceId id = instance->instanceId;
                     ImGui::SetDragDropPayload(kItemPayload, &id, sizeof(id));
+                    ItemIconPreview(context, *def, InventoryDrag.rotated, 96.0f);
                     ImGui::TextUnformatted(std::string(NextDayz::L10n::Tr(def->displayName)).c_str());
                     ImGui::EndDragDropSource();
                 }
@@ -1239,12 +1284,14 @@ namespace NextDayz::NextDayzHUD
             const bool hovered = ImGui::IsItemHovered();
 
             UIWidgets::DrawSlotFrame(draw, pos, max, instance != nullptr, hovered, false, false, 4.0f);
-            draw->AddText(ImVec2(pos.x + 10.0f, pos.y + 6.0f), UITheme::Colors::TextMuted, label);
+            const float textOffset = def ? 112.0f : 10.0f;
+            draw->AddText(ImVec2(pos.x + textOffset, pos.y + 6.0f), UITheme::Colors::TextMuted, label);
 
             if (def && instance)
             {
-                draw->AddText(ImVec2(pos.x + 10.0f, pos.y + 26.0f), UITheme::Colors::TextPrimary,
-                              std::string(NextDayz::L10n::Tr(def->displayName)).c_str());
+                DrawItemIcon(context, def->id, ImVec2(pos.x + 5.0f, pos.y + 3.0f), ImVec2(pos.x + 104.0f, max.y - 3.0f));
+                const auto name = FitText(std::string(L10n::Tr(def->displayName)), slotW - textOffset - 132.0f);
+                draw->AddText(ImVec2(pos.x + textOffset, pos.y + 26.0f), UITheme::Colors::TextPrimary, name.c_str());
 
                 char ammoText[32];
                 std::snprintf(ammoText, sizeof(ammoText), NextDayz::L10n::Tr("Ammo: %d"), instance->loadedAmmo);
@@ -1253,7 +1300,7 @@ namespace NextDayz::NextDayzHUD
 
                 if (hovered)
                 {
-                    ItemTooltip(*def, *instance);
+                    ItemTooltip(context, *def, *instance);
                 }
             }
             else

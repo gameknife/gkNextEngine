@@ -109,6 +109,9 @@ namespace NextDayz
         std::vector<FHudNearbyLoot> nearby;
         std::array<std::string, 4> quickSlots;   // item ids bound to keys 4..7
         std::vector<FHudNotification> notifications;
+        // Request an offscreen character image; zero means the first frame is still pending.
+        std::function<uint64_t(glm::vec2 size, float yaw, float distance)> characterPreview;
+        std::function<void()> closeInventory;
 
         std::function<void(FItemInstanceId instanceId, int slot)> equipWeapon;
         std::function<void(FItemInstanceId weapon, FItemInstanceId attachment)> installAttachment;

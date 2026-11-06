@@ -83,6 +83,7 @@ namespace NextDayz
         void TriggerRecoil(float scale);
 
         bool HasRig() const { return hasRig_; }
+        const std::shared_ptr<Assets::Node>& WorldRoot() const { return worldNode_; }
         bool IsVisible() const { return visible_; }
         float CameraOpacity() const { return cameraOpacity_; }
         const std::string& CurrentBaseClipName() const { return baseClipName_; }

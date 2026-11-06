@@ -1,5 +1,7 @@
+#include "Engine/Common/CoreMinimal.hpp"
 #include "NextDayzGameInstance.hpp"
 #include "Application/Game/NextDayz/UI/Localization.hpp"
+#include "Application/Game/NextDayz/UI/InventoryPreview.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -88,7 +90,8 @@ NextDayzGameInstance::NextDayzGameInstance(Vulkan::WindowConfig& config, Runtime
     : NextGameInstanceBase(config, options, engine)
 {
     NextDayz::L10n::Initialize(options.AgentValidation);
-    ConfigureWindow(config, options, "NextDayz", 1920, 1080, false);
+    ConfigureWindow(config, options, "NextDayz", options.WidthSpecified ? static_cast<int>(options.Width) : 1920,
+                    options.HeightSpecified ? static_cast<int>(options.Height) : 1080, false);
 }
 
 void NextDayzGameInstance::OnInit()
@@ -1168,7 +1171,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     }
 
     section.emplace(timers, ETimer::Presentation);
-    rig_.SetVisible(!player_.IsFirstPerson() || knobs.orbit);
+    rig_.SetVisible(!player_.IsFirstPerson() || knobs.orbit || showInventory_);
     NextDayz::FPlayerPresentationState presentation;
     presentation.locomotion = player_.LocomotionState();
     presentation.aimWeight = player_.IsAiming() ? 1.0f : 0.0f;
@@ -1358,6 +1361,19 @@ bool NextDayzGameInstance::OnRenderUI()
     // Run inventory mutations after drawing: their transactions replace vectors
     // that the HUD is currently iterating and holding item references into.
     std::vector<std::function<void()>> hudRequests;
+    ctx.closeInventory = [this, &hudRequests]()
+    {
+        hudRequests.emplace_back([this]() { SetInventoryOpen(false); });
+    };
+    if (showInventory_)
+    {
+        ctx.characterPreview = [this](glm::vec2 size, float yaw, float distance) -> uint64_t
+        {
+            auto& preview = NextDayz::GetInventoryPreview(GetEngine().GetRenderer());
+            preview.Request(rig_.WorldRoot(), {static_cast<uint32_t>(size.x), static_cast<uint32_t>(size.y)}, yaw, distance);
+            return preview.IsReady() ? GetEngine().GetUserInterface()->RequestImTextureIdRaw(preview.SampleSlot()) : 0;
+        };
+    }
     ctx.equipWeapon = [this, &hudRequests](NextDayz::FItemInstanceId id, int slot)
     {
         hudRequests.emplace_back([this, id, slot]() { EquipWeaponInstance(id, slot); });
@@ -3124,6 +3140,12 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
         return false;
     });
     reg.Add("sceneReady", [this]() -> Runtime::Agent::FAgentQueryValue { return sceneReady_; });
+    reg.Add("inventoryOpen", [this]() -> Runtime::Agent::FAgentQueryValue { return showInventory_; });
+    reg.Add("inventoryPreviewReady", [this]() -> Runtime::Agent::FAgentQueryValue
+    {
+        const auto* provider = GetEngine().GetRenderer().ViewServices().FindProvider("NextDayzLoadout");
+        return provider && static_cast<const NextDayz::InventoryPreview*>(provider)->IsReady();
+    });
     reg.Add("grassInstances", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.ActiveCount()); });
     reg.Add("grassNearInstances", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.ActiveCount(0)); });
     reg.Add("grassMidInstances", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.ActiveCount(1)); });

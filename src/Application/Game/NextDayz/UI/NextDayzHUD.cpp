@@ -1079,8 +1079,8 @@ namespace NextDayz::NextDayzHUD
             if (def && instance)
             {
                 // Item Name
-                draw->AddText(ImVec2(pos.x + 10.0f, pos.y + 24.0f), UITheme::Colors::TextPrimary,
-                              std::string(NextDayz::L10n::Tr(def->displayName)).c_str());
+                const auto name = FitText(std::string(L10n::Tr(def->displayName)), slotW - 20.0f);
+                draw->AddText(ImVec2(pos.x + 10.0f, pos.y + 24.0f), UITheme::Colors::TextPrimary, name.c_str());
 
                 // Attribute pills on right
                 char statText[48] = "";
@@ -1100,7 +1100,7 @@ namespace NextDayz::NextDayzHUD
                 if (statText[0] != '\0')
                 {
                     const ImVec2 sSize = ImGui::CalcTextSize(statText);
-                    draw->AddText(ImVec2(max.x - sSize.x - 12.0f, pos.y + 14.0f),
+                    draw->AddText(ImVec2(max.x - sSize.x - 12.0f, pos.y + 6.0f),
                                   UITheme::Colors::AccentEmerald, statText);
                 }
 
@@ -1267,8 +1267,51 @@ namespace NextDayz::NextDayzHUD
         }
 
         // ====================================================================
-        // MAIN INVENTORY WINDOW (3-COLUMN TACTICAL LAYOUT)
+        // CHARACTER PREVIEW & FULLSCREEN INVENTORY
         // ====================================================================
+        void DrawCharacterPreview(const FHudContext& context)
+        {
+            static float yaw = 0.35f;
+            static float distance = 3.4f;
+            ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(UITheme::Colors::AccentAmber), "%s", L10n::Tr("CURRENT LOADOUT"));
+            ImGui::TextDisabled("%s", L10n::Tr("Drag to rotate / Scroll to zoom"));
+            ImGui::Spacing();
+
+            const float statsHeight = ImGui::GetTextLineHeightWithSpacing() * 7.0f;
+            const ImVec2 size(std::max(1.0f, ImGui::GetContentRegionAvail().x),
+                              std::max(160.0f, ImGui::GetContentRegionAvail().y - statsHeight));
+            const ImVec2 pos = ImGui::GetCursorScreenPos();
+            ImGui::InvisibleButton("##character_orbit", size);
+            if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+                yaw = std::remainder(yaw - ImGui::GetIO().MouseDelta.x * 0.012f, glm::two_pi<float>());
+            if (ImGui::IsItemHovered())
+                distance = std::clamp(distance - ImGui::GetIO().MouseWheel * 0.2f, 2.4f, 5.0f);
+
+            const uint64_t texture = context.characterPreview
+                ? context.characterPreview(glm::vec2(size.x, size.y), yaw, distance) : 0;
+            auto* draw = ImGui::GetWindowDrawList();
+            const ImVec2 max(pos.x + size.x, pos.y + size.y);
+            if (texture)
+                draw->AddImage(static_cast<ImTextureID>(texture), pos, max);
+            else
+                draw->AddText(ImVec2(pos.x + 16.0f, pos.y + 20.0f), UITheme::Colors::TextMuted, L10n::Tr("Preparing character preview..."));
+
+            if (ImGui::Button(L10n::Label("Front"))) yaw = 0.0f;
+            ImGui::SameLine();
+            if (ImGui::Button(L10n::Label("Back"))) yaw = glm::pi<float>();
+            ImGui::SameLine();
+            if (ImGui::Button(L10n::Label("Reset view"))) { yaw = 0.35f; distance = 3.4f; }
+            ImGui::Spacing();
+            ImGui::Separator();
+            const auto stat = [&](const char* label, float value, ImU32 color)
+            {
+                ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(color), "%s  %.0f%%", L10n::Tr(label), value);
+            };
+            stat("HEALTH", context.survival.health, UITheme::Colors::AccentRose);
+            stat("HUNGER", context.survival.hunger, UITheme::Colors::AccentAmber);
+            stat("THIRST", context.survival.hydration, UITheme::Colors::AccentCyan);
+        }
+
         void DrawInventoryPanel(const FHudContext& context)
         {
             if (!context.showInventory || context.inventory == nullptr)
@@ -1278,28 +1321,46 @@ namespace NextDayz::NextDayzHUD
             const Inventory& inventory = *context.inventory;
             const ImGuiViewport* vp = ImGui::GetMainViewport();
 
-            ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-            ImGui::SetNextWindowSize(ImVec2(std::min(1220.0f, vp->Size.x - 30.0f), std::min(720.0f, vp->Size.y - 60.0f)),
-                                     ImGuiCond_Appearing);
-            ImGui::SetNextWindowBgAlpha(0.95f);
+            ImGui::SetNextWindowPos(vp->Pos, ImGuiCond_Always);
+            ImGui::SetNextWindowSize(vp->Size, ImGuiCond_Always);
+            ImGui::SetNextWindowBgAlpha(1.0f);
             ImGui::PushStyleColor(ImGuiCol_WindowBg, UITheme::Colors::SurfaceBg);
             ImGui::PushStyleColor(ImGuiCol_Border, UITheme::Colors::BorderMuted);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 14.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20.0f, 18.0f));
 
-            ImGui::Begin(NextDayz::L10n::Label("INVENTORY & TACTICAL LOADOUT##nd_inv_window"), nullptr, ImGuiWindowFlags_NoCollapse);
+            ImGui::Begin("##nd_inv_window", nullptr,
+                         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                         ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar);
+            const ImVec2 header = ImGui::GetCursorPos();
+            ImGui::SetWindowFontScale(1.4f);
+            ImGui::TextUnformatted(L10n::Tr("INVENTORY & TACTICAL LOADOUT"));
+            ImGui::SetWindowFontScale(1.0f);
+            const float headerEnd = ImGui::GetCursorPosY();
+            const char* close = L10n::Label("Close [TAB]");
+            const float closeWidth = ImGui::CalcTextSize(close, nullptr, true).x + 28.0f;
+            ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() - closeWidth - 20.0f, header.y));
+            if (ImGui::Button(close, ImVec2(closeWidth, 30.0f)) && context.closeInventory) context.closeInventory();
+            ImGui::SetCursorPos(ImVec2(header.x, std::max(headerEnd, header.y + 34.0f)));
+            ImGui::TextDisabled("%s", L10n::Tr("Inspect your survivor. Organize your gear."));
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
 
-            // Three columns: Vicinity (26%), Equipment (32%), Cargo Containers (42%)
-            if (ImGui::BeginTable("##inv_3col_table", 3,
-                                  ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY,
-                                  ImVec2(0.0f, -ImGui::GetFrameHeightWithSpacing() * 1.8f)))
+            // Independent scrolling keeps the character visible while browsing long cargo lists.
+            const float footerHeight = ImGui::GetTextLineHeightWithSpacing() * 3.0f;
+            const float bodyHeight = std::max(100.0f, ImGui::GetContentRegionAvail().y - footerHeight);
+            ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(12.0f, 8.0f));
+            if (ImGui::BeginTable("##inv_4col_table", 4,
+                                  ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp,
+                                  ImVec2(0.0f, bodyHeight)))
             {
-                ImGui::TableSetupColumn(NextDayz::L10n::Tr("VICINITY (GROUND)"), ImGuiTableColumnFlags_WidthStretch, 0.26f);
-                ImGui::TableSetupColumn(NextDayz::L10n::Tr("EQUIPMENT & GEAR"), ImGuiTableColumnFlags_WidthStretch, 0.32f);
-                ImGui::TableSetupColumn(NextDayz::L10n::Tr("CARGO CONTAINERS"), ImGuiTableColumnFlags_WidthStretch, 0.42f);
-                ImGui::TableHeadersRow();
+                ImGui::TableSetupColumn("vicinity", ImGuiTableColumnFlags_WidthStretch, 0.18f);
+                ImGui::TableSetupColumn("survivor", ImGuiTableColumnFlags_WidthStretch, 0.25f);
+                ImGui::TableSetupColumn("equipment", ImGuiTableColumnFlags_WidthStretch, 0.25f);
+                ImGui::TableSetupColumn("cargo", ImGuiTableColumnFlags_WidthStretch, 0.32f);
                 ImGui::TableNextRow();
-                const float columnHeight = std::max(100.0f, ImGui::GetContentRegionAvail().y);
+                const float columnHeight = bodyHeight - 16.0f;
 
                 // ------------------------------------------------------------
                 // COLUMN 0: VICINITY & DROP ZONE
@@ -1347,11 +1408,11 @@ namespace NextDayz::NextDayzHUD
                     }
 
                     // Loot Name & Distance
-                    draw->AddText(ImVec2(lootPos.x + 56.0f, lootPos.y + 10.0f), UITheme::Colors::TextPrimary,
-                                  NextDayz::L10n::Localize(loot.name, NextDayz::L10n::Language()).c_str());
                     char distText[16];
                     std::snprintf(distText, sizeof(distText), "%.1fm", loot.distance);
                     const ImVec2 dSize = ImGui::CalcTextSize(distText);
+                    const auto name = FitText(L10n::Localize(loot.name, L10n::Language()), std::max(1.0f, cardW - dSize.x - 80.0f));
+                    draw->AddText(ImVec2(lootPos.x + 56.0f, lootPos.y + 10.0f), UITheme::Colors::TextPrimary, name.c_str());
                     draw->AddText(ImVec2(lootPos.x + cardW - dSize.x - 8.0f, lootPos.y + 10.0f),
                                   UITheme::Colors::TextMuted, distText);
 
@@ -1368,7 +1429,7 @@ namespace NextDayz::NextDayzHUD
 
                 const ImVec2 dropPos = ImGui::GetCursorScreenPos();
                 const float dropW = ImGui::GetContentRegionAvail().x;
-                const float dropH = std::max(90.0f, ImGui::GetContentRegionAvail().y - 10.0f);
+                const float dropH = 110.0f;
                 const ImVec2 dropMax(dropPos.x + dropW, dropPos.y + dropH);
                 ImDrawList* draw = ImGui::GetWindowDrawList();
 
@@ -1376,7 +1437,7 @@ namespace NextDayz::NextDayzHUD
 
                 // Dashed drop zone box
                 draw->AddRect(dropPos, dropMax, UITheme::Colors::BorderMuted, 4.0f, 0, 1.5f);
-                const char* dropPrompt = NextDayz::L10n::Tr("[ DRAG ITEMS HERE TO DROP ]");
+                const char* dropPrompt = NextDayz::L10n::Tr("Drag here to drop");
                 const ImVec2 promptSize = ImGui::CalcTextSize(dropPrompt);
                 draw->AddText(ImVec2(dropPos.x + (dropW - promptSize.x) * 0.5f, dropPos.y + (dropH - promptSize.y) * 0.5f),
                               UITheme::Colors::TextMuted, dropPrompt);
@@ -1396,10 +1457,17 @@ namespace NextDayz::NextDayzHUD
                 }
 
                 // ------------------------------------------------------------
-                // COLUMN 1: EQUIPMENT & GEAR (PAPERDOLL SLOTS)
+                // COLUMN 1: LIVE CHARACTER PREVIEW
                 // ------------------------------------------------------------
                 ImGui::EndChild();
                 ImGui::TableSetColumnIndex(1);
+                ImGui::BeginChild("##survivor", ImVec2(0.0f, columnHeight), 0,
+                                  ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBackground);
+                DrawCharacterPreview(context);
+                ImGui::EndChild();
+
+                // COLUMN 2: EQUIPMENT & GEAR
+                ImGui::TableSetColumnIndex(2);
                 ImGui::BeginChild("##equipment", ImVec2(0.0f, columnHeight));
                 ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), NextDayz::L10n::Tr("GEAR & WEAPONS"));
                 ImGui::Spacing();
@@ -1434,10 +1502,10 @@ namespace NextDayz::NextDayzHUD
                                     !inventory.CanOpenCans()) ? NextDayz::L10n::Tr("None") : "");
 
                 // ------------------------------------------------------------
-                // COLUMN 2: CARGO CONTAINERS (GRID SLOTS MATRIX)
+                // COLUMN 3: CARGO CONTAINERS (GRID SLOTS MATRIX)
                 // ------------------------------------------------------------
                 ImGui::EndChild();
-                ImGui::TableSetColumnIndex(2);
+                ImGui::TableSetColumnIndex(3);
                 ImGui::BeginChild("##cargo", ImVec2(0.0f, columnHeight));
                 ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), NextDayz::L10n::Tr("CARGO CAPACITY: %d / %d SLOTS"),
                                    inventory.UsedCapacity(), inventory.TotalCapacity());
@@ -1483,8 +1551,8 @@ namespace NextDayz::NextDayzHUD
                     ImGui::Dummy(ImVec2(bannerW, 8.0f));
 
                     // Container Grid Matrix
-                    // Determine grid dimensions: 4 columns or 5 columns
-                    const int cols = (bannerW > 320.0f) ? 5 : 4;
+                    // Keep item names legible as the full-screen layout scales with resolution.
+                    const int cols = std::clamp(static_cast<int>(bannerW / 100.0f), 2, 6);
                     const float slotPadding = 6.0f;
                     const float slotW = (bannerW - (cols - 1) * slotPadding) / static_cast<float>(cols);
                     const float slotH = 46.0f;
@@ -1556,11 +1624,21 @@ namespace NextDayz::NextDayzHUD
                 ImGui::EndChild();
                 ImGui::EndTable();
             }
+            ImGui::PopStyleVar();
 
             // Bottom Shortcut Instruction Bar
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
+            // Keep transaction failures and pickup feedback visible within the fullscreen screen.
+            if (!context.notifications.empty() && context.notifications.back().age < 6.5f)
+            {
+                const auto& message = context.notifications.back();
+                const ImU32 color = message.severity == 2 ? UITheme::Colors::AccentRose :
+                    message.severity == 1 ? UITheme::Colors::AccentAmber : UITheme::Colors::AccentEmerald;
+                const auto text = FitText(message.text.Display(), ImGui::GetContentRegionAvail().x);
+                ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(color), "%s", text.c_str());
+            }
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f, 0.65f, 0.70f, 1.0f));
             ImGui::TextWrapped("%s%s", NextDayz::L10n::Tr("[LMB Double-Click] Equip/Use  |  [RMB] Context Menu  |  [Drag & Drop] Move/Drop  |  "),
                                NextDayz::L10n::Tr("[4-7] Quickbar  |  [H] Bandage  |  [M] Map  |  [L] Lantern  |  [TAB] Close"));
@@ -1642,6 +1720,12 @@ namespace NextDayz::NextDayzHUD
     // ========================================================================
     void Draw(const FHudContext& context)
     {
+        if (context.showInventory)
+        {
+            DrawInventoryPanel(context);
+            DrawSessionOverlay(context);
+            return;
+        }
         DrawScope(context);
         DrawDamageFeedback(context);
         if (context.hasWeapon && !context.showMap && !context.showInventory)
@@ -1656,7 +1740,6 @@ namespace NextDayz::NextDayzHUD
         DrawQuickbar(context);
         DrawNotifications(context);
         DrawInteractionPrompt(context);
-        DrawInventoryPanel(context);
         DrawMap(context);
         DrawSessionOverlay(context);
     }

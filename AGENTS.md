@@ -410,6 +410,10 @@ tools/gnb/                   # Project CLI (Go) — see "gnb" section below
     （立面窗格 / 地域屋顶 / 人行道街具，`kit_geo_city.scad` + `kit_road.scad`），
     含"装饰不得越出 OSM 轮廓"这条可行走性硬规则；§7 是**大地块**：`--size 3000/5000` 由
     1km part 拼成，`gnb geo grow` 增量扩缩，地形整块算完再切片（否则接缝错台 1m）
+  - `../projects/nextdayz/nextdayz-world-map-design.md` - NextDayz 真实地点撤离地图：地理骨架 + 地域 kit +
+    聚落形态（村绿村、广场、街道、农庄、周末小屋、集体农场…）+ 土地覆盖。新建或改进这类地图走 skill
+    `nextdayz-geomap`（`.agents/skills/nextdayz-geomap/SKILL.md`），用 `tools/nextdayz/geomap_preview.py`
+    规划、`tools/nextdayz/geomap_shots.py` 截图验收
   - `NextWorldTravel.md` - 生成 tile 的浏览器：Walk / Aerial / Focus 三视图，`poi.json` 地点标签
     sidecar、鸟瞰 POI 地图与绕物取景、滑动 NavGrid 窗口、街面出生点选择
   - `ScadRig.md` - ScadRig rigid-body character rigs (bone_ modules + anim_* clips, FRigAnimator

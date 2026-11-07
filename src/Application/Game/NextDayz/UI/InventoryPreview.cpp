@@ -1,5 +1,6 @@
 #include "Engine/Common/CoreMinimal.hpp"
 #include "InventoryPreview.hpp"
+#include "InventoryImageResolve.hpp"
 
 #include "Engine/Assets/Core/Node.hpp"
 #include "Engine/Assets/Data/Material.hpp"
@@ -36,7 +37,7 @@ namespace NextDayz
     {
         if (root_.lock() != root) ready_ = false;
         root_ = root;
-        // Bound the cost at high DPI without stretching the character's proportions.
+        // Bound the displayed image at high DPI; rendering uses twice this extent per axis.
         const float scale = std::min({1.0f, 768.0f / std::max(1u, extent.width), 1024.0f / std::max(1u, extent.height)});
         extent_ = {std::max(1u, static_cast<uint32_t>(extent.width * scale)),
                    std::max(1u, static_cast<uint32_t>(extent.height * scale))};
@@ -59,7 +60,7 @@ namespace NextDayz
         // Main-scene commits already wait for the GPU. Drop geometry and old render-pass references.
         Vulkan::RenderViewResourceFactory(renderer_).DestroyView(view_);
         target_.ResetSwapChainResources(false);
-        alphaPipeline_.reset();
+        resolvePipeline_.reset();
         scene_.reset();
         retiredScenes_.clear();
         nodes_.clear();
@@ -71,7 +72,8 @@ namespace NextDayz
     void InventoryPreview::OnSwapChainResourcesInvalidated(bool releaseSampledOutputs)
     {
         target_.ResetSwapChainResources(releaseSampledOutputs);
-        alphaPipeline_.reset();
+        if (releaseSampledOutputs) outputInitialized_ = false;
+        resolvePipeline_.reset();
         if (auto* view = renderer_.RenderViews().Resolve(view_))
         {
             view->SetSceneOverride(nullptr);
@@ -216,20 +218,29 @@ namespace NextDayz
         camera.ModelView = glm::lookAt(eye, focus, glm::vec3(0.0f, 1.0f, 0.0f));
 
         Vulkan::RenderViewResourceFactory resources(renderer_);
+        const VkExtent2D renderExtent{extent_.width * inventoryImageSampleScale, extent_.height * inventoryImageSampleScale};
         Vulkan::FViewDesc desc{};
-        desc.renderExtent = extent_;
+        desc.renderExtent = renderExtent;
         desc.schedule = Vulkan::EViewSchedule::OnDemand;
         auto& view = resources.EnsureView(view_, desc, "NextDayz loadout preview", false);
-        resources.EnsureSampledOffscreenTarget(view, target_, extent_, SampleSlot(), "NextDayz Loadout");
-        if (!alphaPipeline_)
+        if (view.AllocatedExtent().width != renderExtent.width || view.AllocatedExtent().height != renderExtent.height ||
+            !target_.visibilityFramebuffer)
         {
-            alphaPipeline_ = std::make_unique<Vulkan::PipelineCommon::ZeroBindCustomPushConstantPipeline>(
-                renderer_.SwapChain(), "assets/shaders/NextDayz.InventoryPreview.comp.slang.spv", 0u);
+            target_.visibilityFramebuffer = resources.RebuildVisibilityFramebuffer(view, renderExtent);
+        }
+        if (!target_.offscreenImage || target_.offscreenImage->GetImage().Extent().width != extent_.width ||
+            target_.offscreenImage->GetImage().Extent().height != extent_.height)
+        {
+            target_.offscreenImage = resources.CreateSampledColorImage(extent_, "NextDayz Loadout SSAA");
+            if (!target_.offscreenSampler) target_.offscreenSampler = resources.CreateClampSampler();
+            target_.outputSampleSlot = SampleSlot();
+            resources.BindSampledColorImage(SampleSlot(), *target_.offscreenImage, *target_.offscreenSampler);
+            outputInitialized_ = false;
         }
         auto* logic = renderer_.EnsureLogicRenderer(Vulkan::ERT_SoftwareModernNoAmbient);
         if (!logic) return false;
         const auto ubo = Vulkan::BuildViewCameraUbo({
-            .scene = *scene_, .camera = camera, .extent = extent_, .cascadeDistance = 10.0f,
+            .scene = *scene_, .camera = camera, .extent = renderExtent, .cascadeDistance = 10.0f,
             .totalFrames = 1, .fillSceneLighting = true, .thumbnailDefaults = true,
         });
         renderer_.SetRenderViewUbo(view, imageIndex, ubo);
@@ -238,17 +249,8 @@ namespace NextDayz
         view.SetPrevDepthValid(false);
         renderer_.ScheduleRenderView(view, *logic, false, [this, commandBuffer](Vulkan::RenderView& rendered)
         {
-            using namespace Vulkan::PipelineCommon;
-            renderer_.TransitionViewImages(commandBuffer, rendered, {
-                {Assets::Bindless::RT_OBJECTID_0, ERenderStage::Compute, EResourceAccess::ShaderRead},
-                {Assets::Bindless::RT_SCENE_COLOR, ERenderStage::Compute,
-                 EResourceAccess::ShaderRead | EResourceAccess::ShaderWrite},
-            }, "inventory preview alpha");
-            alphaPipeline_->BindPipeline(commandBuffer, nullptr, rendered.RtBankBase());
-            const VkExtent2D extent = rendered.RenderExtent();
-            vkCmdDispatch(commandBuffer, (extent.width + 7u) / 8u, (extent.height + 7u) / 8u, 1u);
-            ready_ = Vulkan::RenderViewResourceFactory(renderer_).CopyRenderOutputToImage(
-                commandBuffer, rendered, *target_.offscreenImage);
+            ready_ = ResolveInventoryImage(renderer_, rendered, commandBuffer, resolvePipeline_,
+                *target_.offscreenImage, outputInitialized_);
             rendered.SetSceneOverride(nullptr);
         });
         return false;

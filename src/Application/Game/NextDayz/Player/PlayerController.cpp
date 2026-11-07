@@ -175,7 +175,6 @@ namespace NextDayz
         SetFreeLook(false);
         currentFov_ = config_.Camera.BaseFov;
         aimFov_ = config_.Camera.BaseFov;
-        camDistance_ = config_.Camera.TpsDistance;
         cameraArmLength_ = glm::length(ThirdPersonOffset());
         currentEyeHeight_ = config_.Player.StandingEyeHeight;
         cameraRecoil_ = glm::vec2(0.0f);
@@ -280,12 +279,6 @@ namespace NextDayz
         else aimInput_.Release(now, config_.Camera.AimTapSeconds);
     }
 
-    void PlayerController::AdjustCameraDistance(float scrollY)
-    {
-        camDistance_ = glm::clamp(camDistance_ - scrollY * config_.Camera.ScrollStep,
-                                  config_.Camera.TpsMinDistance, config_.Camera.TpsMaxDistance);
-    }
-
     glm::vec3 PlayerController::MoveForward() const
     {
         return glm::vec3(std::sin(yaw_), 0.0f, std::cos(yaw_));
@@ -360,7 +353,7 @@ namespace NextDayz
     {
         const glm::vec3 forward = CameraForward();
         const glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
-        return -forward * camDistance_ + right * config_.Camera.TpsShoulderOffset;
+        return -forward * config_.Camera.TpsDistance + right * config_.Camera.TpsShoulderOffset;
     }
 
     float PlayerController::CameraArmLength() const
@@ -407,7 +400,7 @@ namespace NextDayz
             }
         }
 
-        // Collision always wins over the user's minimum zoom distance. Never
+        // Collision always wins over the fixed third-person distance. Never
         // smooth inward: even one interpolated frame could put the lens in a wall.
         const float returnStep = camera.TpsArmReturnSpeed * std::max(0.0f, deltaSeconds);
         cameraArmLength_ = std::min(clearLength, cameraArmLength_ + returnStep);

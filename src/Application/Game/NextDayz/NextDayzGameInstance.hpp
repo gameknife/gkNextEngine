@@ -49,6 +49,7 @@ public:
 
     // lifecycle
     void OnInit() override;
+    void OnInitUI() override;
     void OnTick(double deltaSeconds) override;
     void OnDestroy() override;
     void ConfigureCVars(NextCVar::FCVarSystem& cvars) override;
@@ -70,9 +71,10 @@ public:
     bool OnKey(SDL_Event& event) override;
     bool OnCursorPosition(double xpos, double ypos) override;
     bool OnMouseButton(SDL_Event& event) override;
-    bool OnScroll(double xoffset, double yoffset) override;
 
 private:
+    ImFont* inventoryTitleFont_ = nullptr;
+
     // One simulation frame (OnTick wraps it with the debugger's freeze/step/timers).
     void SimulateFrame(float dt);
     bool CampaignEnabled() const;

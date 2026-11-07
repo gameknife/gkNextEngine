@@ -662,8 +662,9 @@ action          FullBody  Override  loot
 包含肩部偏移。中心与周围八个采样覆盖镜头边缘；探测范围超过目标镜头位置，预留
 `TpsCollisionRadius`（0.20 m）与 `TpsCollisionPadding`（0.05 m）的安全距离。
 
-遇障碍当帧收缩，离开障碍以 `TpsArmReturnSpeed`（5 m/s）伸回。滚轮设置的距离独立保留，
-碰撞允许缩到 `TpsMinDistance` 以下；肩部偏移随臂长一起缩短。角色部件与挂载物按各自世界位置到相机的
+第三人称距离 `TpsDistance` 固定为原来的最近距离 1.5 m，滚轮不再调整臂长。
+遇障碍当帧收缩，离开障碍以 `TpsArmReturnSpeed`（5 m/s）伸回；碰撞允许缩到固定距离以下，
+肩部偏移随臂长一起缩短。角色部件与挂载物按各自世界位置到相机的
 距离渐隐：`TpsFadeFarDistance`（1.5 m）之外完全不透明，进入后 smoothstep 降低覆盖率，到
 `TpsFadeNearDistance`（0.35 m）完全淡出。较远的腿部仍保留；拉远后自然恢复，调试环绕关闭渐隐。
 
@@ -675,7 +676,7 @@ Bayer 图案 discard，角色各部件与正反面共用像素阈值。被丢弃
 查询 `game.cameraArmLength` / `cameraArmFraction`、`cameraPosX/Y/Z`、`playerRigVisible`、
 `playerRigOpacity`（可见部件最低覆盖率）可观察结果。
 `assets/agentscripts/nextdayz-camera-arm.agentscript.json` 使用独立几何 fixture 验证墙面、侧墙、细柱、
-目标位置外的安全间距、地面、缩放记忆、平滑恢复和视角切换。
+目标位置外的安全间距、地面、滚轮不改变固定距离、平滑恢复和视角切换。
 
 ## 16. 近战动作（2026-11-04）
 

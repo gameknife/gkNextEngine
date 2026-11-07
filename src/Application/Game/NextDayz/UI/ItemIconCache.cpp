@@ -1,5 +1,6 @@
 #include "Engine/Common/CoreMinimal.hpp"
 #include "ItemIconCache.hpp"
+#include "InventoryImageResolve.hpp"
 
 #include "Application/Game/NextDayz/Inventory/LootSystem.hpp"
 #include "Engine/Assets/Core/Model.hpp"
@@ -20,10 +21,9 @@ namespace NextDayz
     namespace
     {
         constexpr uint64_t cacheMagic = 0x314e4f43495a444eull; // NDZICON1
-        constexpr uint32_t iconRevision = 4;
+        constexpr uint32_t iconRevision = 5;
         constexpr float iconFaceTiltDegrees = 6.0f;
         constexpr uint32_t pixelsPerCell = 64;
-        constexpr VkExtent2D renderExtent{256, 256};
         constexpr uint32_t sampleBase = Assets::Bindless::RES_THUMBNAIL_BASE;
         constexpr uint32_t unavailable = std::numeric_limits<uint32_t>::max();
 
@@ -120,7 +120,7 @@ namespace NextDayz
         Vulkan::VulkanBaseRenderer& renderer;
         Vulkan::FRenderViewHandle view;
         Vulkan::FRenderViewTargetResources target;
-        std::unique_ptr<Vulkan::PipelineCommon::ZeroBindCustomPushConstantPipeline> alphaPipeline;
+        std::unique_ptr<Vulkan::PipelineCommon::ZeroBindCustomPushConstantPipeline> resolvePipeline;
         std::unique_ptr<Assets::Scene> scene;
         std::vector<FRetiredScene> retiredScenes;
         std::vector<FSlot> slots;
@@ -130,13 +130,17 @@ namespace NextDayz
         uint32_t rendered = 0;
         uint32_t cacheHits = 0;
 
-        static VkRect2D Crop(const FSlot& slot)
+        static VkExtent2D RenderExtent(const FSlot& slot)
         {
-            const uint32_t longest = std::max(slot.extent.width, slot.extent.height);
-            const VkExtent2D extent{renderExtent.width * slot.extent.width / longest,
-                                    renderExtent.height * slot.extent.height / longest};
-            return {{static_cast<int32_t>((renderExtent.width - extent.width) / 2u),
-                     static_cast<int32_t>((renderExtent.height - extent.height) / 2u)}, extent};
+            const uint32_t side = std::max(slot.extent.width, slot.extent.height) * inventoryImageSampleScale;
+            return {side, side};
+        }
+
+        static VkOffset2D CropOffset(const FSlot& slot)
+        {
+            const auto extent = RenderExtent(slot);
+            return {static_cast<int32_t>((extent.width - slot.extent.width * inventoryImageSampleScale) / 2u),
+                    static_cast<int32_t>((extent.height - slot.extent.height * inventoryImageSampleScale) / 2u)};
         }
 
         void BeginImageWrite(FSlot& slot, VkCommandBuffer commandBuffer)
@@ -194,30 +198,8 @@ namespace NextDayz
 
         bool CopyIconOutput(FSlot& slot, VkCommandBuffer commandBuffer, Vulkan::RenderView& view)
         {
-            using namespace Vulkan::PipelineCommon;
-            const auto* source = renderer.GetStorageImage(view.RtBankBase() + Assets::Bindless::RT_SCENE_COLOR);
-            if (!source) return false;
-            renderer.TransitionViewImages(commandBuffer, view, {
-                {Assets::Bindless::RT_SCENE_COLOR, ERenderStage::Transfer, EResourceAccess::TransferRead,
-                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL},
-            }, "crop item icon");
-            BeginImageWrite(slot, commandBuffer);
-            const auto crop = Crop(slot);
-            VkImageBlit blit{};
-            blit.srcSubresource = blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-            blit.srcOffsets[0] = {crop.offset.x, crop.offset.y, 0};
-            blit.srcOffsets[1] = {crop.offset.x + static_cast<int32_t>(crop.extent.width),
-                                  crop.offset.y + static_cast<int32_t>(crop.extent.height), 1};
-            blit.dstOffsets[1] = {static_cast<int32_t>(slot.extent.width), static_cast<int32_t>(slot.extent.height), 1};
-            vkCmdBlitImage(commandBuffer, source->GetImage().Handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                slot.image->GetImage().Handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
-            slot.image->InsertBarrier(commandBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-            renderer.TransitionViewImages(commandBuffer, view, {
-                {Assets::Bindless::RT_SCENE_COLOR, ERenderStage::Compute,
-                 EResourceAccess::ShaderRead | EResourceAccess::ShaderWrite},
-            }, "restore item view");
-            return true;
+            return ResolveInventoryImage(renderer, view, commandBuffer, resolvePipeline,
+                *slot.image, slot.initialized, CropOffset(slot));
         }
 
         void QueueReadback(FSlot& slot, VkCommandBuffer commandBuffer)
@@ -336,9 +318,8 @@ namespace NextDayz
             camera.FieldOfView = 32.0f;
             camera.Aperture = 0;
             const float tangent = std::tan(glm::radians(camera.FieldOfView) * 0.5f);
-            const auto crop = Crop(slot);
-            const glm::vec2 fraction(static_cast<float>(crop.extent.width) / renderExtent.width,
-                                      static_cast<float>(crop.extent.height) / renderExtent.height);
+            const float longest = static_cast<float>(std::max(slot.extent.width, slot.extent.height));
+            const glm::vec2 fraction(slot.extent.width / longest, slot.extent.height / longest);
             float distance = 0.01f;
             for (int corner = 0; corner < 8; ++corner)
             {
@@ -424,7 +405,7 @@ namespace NextDayz
         auto& state = *state_;
         Vulkan::RenderViewResourceFactory(state.renderer).DestroyView(state.view);
         state.target.ResetSwapChainResources(false);
-        state.alphaPipeline.reset();
+        state.resolvePipeline.reset();
         state.scene.reset();
         state.retiredScenes.clear();
         state.pending.clear();
@@ -434,7 +415,7 @@ namespace NextDayz
     void ItemIconCache::OnSwapChainResourcesInvalidated(bool)
     {
         state_->target.ResetSwapChainResources(false);
-        state_->alphaPipeline.reset();
+        state_->resolvePipeline.reset();
         if (auto* view = state_->renderer.RenderViews().Resolve(state_->view))
         {
             view->SetSceneOverride(nullptr);
@@ -463,15 +444,14 @@ namespace NextDayz
         if (state.LoadCached(slot, commandBuffer)) return false;
 
         state.BuildScene(slot);
+        const VkExtent2D renderExtent = FState::RenderExtent(slot);
         Vulkan::FViewDesc desc{};
         desc.renderExtent = renderExtent;
         desc.schedule = Vulkan::EViewSchedule::Transient;
         auto& view = resources.EnsureView(state.view, desc, "NextDayz item thumbnail", false);
-        if (!state.target.visibilityFramebuffer)
+        if (!state.target.visibilityFramebuffer || view.AllocatedExtent().width != renderExtent.width ||
+            view.AllocatedExtent().height != renderExtent.height)
             state.target.visibilityFramebuffer = resources.RebuildVisibilityFramebuffer(view, renderExtent);
-        if (!state.alphaPipeline)
-            state.alphaPipeline = std::make_unique<Vulkan::PipelineCommon::ZeroBindCustomPushConstantPipeline>(
-                state.renderer.SwapChain(), "assets/shaders/NextDayz.InventoryPreview.comp.slang.spv", 0u);
         auto* logic = state.renderer.EnsureLogicRenderer(Vulkan::ERT_SoftwareModernNoAmbient);
         if (!logic) return false;
         const auto ubo = Vulkan::BuildViewCameraUbo({
@@ -484,15 +464,7 @@ namespace NextDayz
         view.SetPrevDepthValid(false);
         state.renderer.ScheduleRenderView(view, *logic, false, [this, commandBuffer, index](Vulkan::RenderView& rendered)
         {
-            using namespace Vulkan::PipelineCommon;
             auto& state = *state_;
-            state.renderer.TransitionViewImages(commandBuffer, rendered, {
-                {Assets::Bindless::RT_OBJECTID_0, ERenderStage::Compute, EResourceAccess::ShaderRead},
-                {Assets::Bindless::RT_SCENE_COLOR, ERenderStage::Compute, EResourceAccess::ShaderRead | EResourceAccess::ShaderWrite},
-            }, "item icon alpha");
-            state.alphaPipeline->BindPipeline(commandBuffer, nullptr, rendered.RtBankBase());
-            const auto extent = rendered.RenderExtent();
-            vkCmdDispatch(commandBuffer, (extent.width + 7u) / 8u, (extent.height + 7u) / 8u, 1u);
             auto& slot = state.slots[index];
             slot.ready = state.CopyIconOutput(slot, commandBuffer, rendered);
             if (slot.ready)

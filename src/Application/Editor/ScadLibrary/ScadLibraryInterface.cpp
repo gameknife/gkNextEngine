@@ -4693,6 +4693,10 @@ namespace ScadLibrary
                         changed |= editNumber("高度缩放", feature.zScale);
                         changed |= editNumber("高度偏移", feature.zBias);
                         break;
+                    case EType::Paint:
+                        ImGui::TextDisabled("地表涂色多边形");
+                        changed |= editPoints(feature.pts);
+                        break;
                     }
                     ImGui::TreePop();
                 }
@@ -5103,6 +5107,10 @@ namespace ScadLibrary
             }
             changed |= editNumber("高度缩放", feature.zScale);
             changed |= editNumber("高度偏移", feature.zBias);
+            break;
+        case EType::Paint:
+            ImGui::TextDisabled("地表涂色多边形");
+            changed |= editPoints(feature.pts);
             break;
         }
         return changed;
@@ -9017,6 +9025,8 @@ namespace ScadLibrary
                 return IM_COL32(255, 108, 196, alpha);
             case EType::Hmap:
                 return IM_COL32(150, 160, 170, alpha);
+            case EType::Paint:
+                return IM_COL32(120, 200, 110, alpha);
             }
             return IM_COL32(255, 255, 255, alpha);
         };

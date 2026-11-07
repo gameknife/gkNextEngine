@@ -1,0 +1,3514 @@
+// kit_coldwar.scad —— 冷战东欧生存射击零件库（DayZ 风格废弃世界）
+// 纯零件库：只含 module/function 定义，无顶层几何。命名空间前缀 "cw_"。
+// 常量以零参 function 内置（use 语义不传播顶层赋值），调用方无需重申环境常量。
+// 放置契约：落地件底面 z=0，带朝向件 front = -y（载具车头朝 +x，武器枪口朝 +x）。
+// 调用方自设 $fn（建议 12）。尺度：mid，1 unit = 1 m。
+// 类别：ground 地面 / bldg 建筑 / nature 植被生态 / prop 道具路标 / veh 载具 /
+//       wpn 武器（平躺地面 loot）/ item 物资（小件 loot）。
+// 覆盖场景：废弃城镇、工厂、加油站、军事基地、监狱、城市超市、城市医院；
+// 扩展段（文件末尾）：NextDayz 功能物资、室内家具、末日痕迹（尸袋/血迹/路障/检疫牌/涂鸦）、
+// 农场/车库/警察局/汽车旅馆/要塞/火车站/教堂等建筑。
+
+// ================= 配色（低饱和铁幕灰绿；PT 强日光下会整体提亮，故基色偏深偏饱和） =================
+function cw_ASPH()    = [0.29, 0.29, 0.31];   // 沥青路面
+function cw_ASPHD()   = [0.22, 0.22, 0.24];   // 沥青裂缝/补丁
+function cw_CONC()    = [0.52, 0.51, 0.48];   // 混凝土
+function cw_CONCD()   = [0.40, 0.39, 0.37];   // 脏污混凝土/基座
+function cw_PANEL()   = [0.55, 0.52, 0.46];   // 预制板米灰
+function cw_PANELD()  = [0.42, 0.40, 0.36];   // 预制板拼缝
+function cw_BRICK()   = [0.46, 0.23, 0.15];   // 红砖
+function cw_BRICKD()  = [0.35, 0.18, 0.12];   // 深砖
+function cw_PLASTER() = [0.54, 0.46, 0.32];   // 赭石抹灰
+function cw_WHITEW()  = [0.64, 0.63, 0.58];   // 白灰墙（医院/检查站）
+function cw_RUSTC()   = [0.36, 0.19, 0.12];   // 锈
+function cw_METALC()  = [0.44, 0.46, 0.48];   // 镀锌金属
+function cw_METALD()  = [0.26, 0.28, 0.30];   // 深金属
+function cw_OLIVE()   = [0.24, 0.28, 0.16];   // 军绿
+function cw_OLIVED()  = [0.17, 0.20, 0.12];   // 深军绿
+function cw_KHAKI()   = [0.42, 0.38, 0.24];   // 卡其帆布
+function cw_WOODC()   = [0.37, 0.27, 0.18];   // 原木
+function cw_WOODD()   = [0.24, 0.18, 0.13];   // 深木
+function cw_TRUNKC()  = [0.30, 0.23, 0.16];   // 树干
+function cw_BIRCHW()  = [0.66, 0.64, 0.58];   // 白桦树皮
+function cw_PINEC()   = [0.15, 0.27, 0.15];   // 松针中
+function cw_PINED()   = [0.11, 0.20, 0.12];   // 松针深
+function cw_LEAFC()   = [0.31, 0.41, 0.20];   // 阔叶
+function cw_LEAFD()   = [0.24, 0.33, 0.16];   // 阔叶深
+function cw_GRASSC()  = [0.36, 0.41, 0.24];   // 草地
+function cw_GRASSD()  = [0.29, 0.34, 0.19];   // 深草斑
+function cw_SOILC()   = [0.36, 0.27, 0.19];   // 泥土
+function cw_DARKC()   = [0.10, 0.10, 0.10];   // 窗芯/洞口
+function cw_GLASSC()  = [0.30, 0.40, 0.46];   // 玻璃
+function cw_MARKW()   = [0.78, 0.78, 0.72];   // 白标线/白漆
+function cw_REDC()    = [0.56, 0.13, 0.10];   // 苏式红
+function cw_YELLOWC() = [0.72, 0.55, 0.12];   // 警示黄
+function cw_SIGNB()   = [0.13, 0.29, 0.48];   // 路牌蓝
+function cw_ROOFM()   = [0.32, 0.35, 0.37];   // 金属屋面
+function cw_ROOFR()   = [0.40, 0.20, 0.14];   // 锈红屋面
+
+// ---- 确定性伪随机（必须含平方项：线性同余的组合仍是线性，连续 seed 会出等差伪影） ----
+function cw_sq(x) = (x * x + x * 601 + 37) % 65521;
+function cw_rnd(s, m) = cw_sq(cw_sq(((s % 65521) + 65521) % 65521) + 11) % m;
+function cw_rndf(s) = cw_rnd(s, 1000) / 999;                       // [0, 1]
+function cw_rndr(s, a, b) = a + (b - a) * cw_rndf(s);              // [a, b]
+
+// ---- 变体调色板 ----
+function cw_panel_c(i) = [[0.55, 0.52, 0.46], [0.51, 0.47, 0.39], [0.49, 0.51, 0.49],
+                          [0.54, 0.44, 0.34]][cw_rnd(i, 4)];                          // 预制板墙
+function cw_wall_c(i)  = [cw_PLASTER(), cw_BRICK(), [0.47, 0.44, 0.37], cw_WHITEW(),
+                          [0.42, 0.34, 0.26]][cw_rnd(i, 5)];                          // 杂墙
+function cw_roof_c(i)  = [cw_ROOFM(), cw_ROOFR(), [0.25, 0.28, 0.32], [0.34, 0.25, 0.17]][cw_rnd(i, 4)];
+function cw_car_c(i)   = [[0.54, 0.15, 0.11], [0.60, 0.58, 0.52], [0.20, 0.34, 0.44],
+                          [0.62, 0.50, 0.14], [0.24, 0.38, 0.24], [0.30, 0.30, 0.34]][cw_rnd(i, 6)];
+function cw_drum_c(i)  = [cw_RUSTC(), cw_OLIVE(), [0.20, 0.33, 0.44], cw_METALD()][cw_rnd(i, 4)];
+function cw_goods_c(i) = [[0.56, 0.14, 0.10], [0.18, 0.34, 0.48], [0.62, 0.52, 0.16],
+                          [0.24, 0.40, 0.24], [0.60, 0.58, 0.52], [0.40, 0.24, 0.14]][cw_rnd(i, 6)];
+
+// ---- 基础工具 ----
+module cw_boxc(s) cube(s, center = true);
+module cw_slab(L = 4, D = 4, t = 0.2) translate([0, 0, t / 2]) cw_boxc([L, D, t]);   // 底面 z=0 平板
+
+// ================= 通用构件 =================
+
+// 坡屋面 polyhedron：正脊沿 x。L,D=檐口对应墙皮，h=脊高，ov=出檐，
+// rin=山面内收（0=双坡，rin>=L/2=攒尖）。面序为 OpenSCAD 约定（从外看顺时针）。
+module cw_part_roof(L = 8, D = 6, h = 1.8, ov = 0.5, rin = 0, c = [0.28, 0.31, 0.36])
+{
+    hw = L / 2 + ov;
+    hd = D / 2 + ov;
+    rx = max(0.02, L / 2 - rin);
+    color(c) polyhedron(
+        points = [[-hw, -hd, 0], [hw, -hd, 0], [hw, hd, 0], [-hw, hd, 0], [-rx, 0, h], [rx, 0, h]],
+        faces = [[0, 1, 2, 3], [4, 5, 1, 0], [5, 4, 3, 2], [5, 2, 1], [4, 0, 3]]);
+}
+
+// 标准窗（贴墙面用，front=-y，锚点=窗中心）：浅框 + 深芯 + 中梃
+module cw_part_window(w = 1.0, h = 1.3)
+{
+    color(cw_MARKW()) cw_boxc([w + 0.16, 0.10, h + 0.14]);
+    color(cw_DARKC()) translate([0, -0.03, 0]) cw_boxc([w, 0.10, h]);
+    color(cw_MARKW()) translate([0, -0.05, 0]) cw_boxc([0.07, 0.08, h]);
+}
+
+// 破损/钉板窗变体：seed 决定完好/钉板/破洞
+module cw_part_window_worn(w = 1.0, h = 1.3, seed = 0)
+{
+    v = cw_rnd(seed, 4);
+    if (v == 0)
+    {
+        color(cw_MARKW()) cw_boxc([w + 0.16, 0.10, h + 0.14]);
+        color(cw_WOODD()) translate([0, -0.03, 0]) cw_boxc([w, 0.10, h]);
+        color(cw_WOODC()) translate([0, -0.06, 0.1]) rotate([0, 14, 0]) cw_boxc([w * 1.05, 0.06, 0.24]);
+        color(cw_WOODC()) translate([0, -0.06, -0.2]) rotate([0, -10, 0]) cw_boxc([w * 1.05, 0.06, 0.24]);
+    }
+    else
+        cw_part_window(w, h);
+}
+
+// 铁栏窗（监狱/仓库，front=-y）
+module cw_part_window_bar(w = 0.8, h = 0.9)
+{
+    color(cw_CONCD()) cw_boxc([w + 0.16, 0.10, h + 0.14]);
+    color(cw_DARKC()) translate([0, -0.03, 0]) cw_boxc([w, 0.10, h]);
+    color(cw_METALD()) for (i = [-1, 0, 1])
+        translate([i * w * 0.28, -0.06, 0]) cw_boxc([0.05, 0.06, h]);
+}
+
+// 木门带框（front=-y，底面 z=0）
+module cw_part_door(w = 1.0, h = 2.1, c = [0.30, 0.22, 0.16])
+{
+    color(cw_CONCD()) translate([0, 0, h / 2]) cw_boxc([w + 0.24, 0.12, h]);
+    color(c) translate([0, -0.03, h / 2]) cw_boxc([w, 0.14, h]);
+    color([0.70, 0.62, 0.28]) translate([w * 0.3, -0.11, h * 0.5]) cw_boxc([0.07, 0.06, 0.07]);
+}
+
+// 铁门（军营/监狱，front=-y，底面 z=0）
+module cw_part_door_metal(w = 1.1, h = 2.1, c = [0.26, 0.28, 0.30])
+{
+    color(cw_CONCD()) translate([0, 0, h / 2]) cw_boxc([w + 0.22, 0.12, h]);
+    color(c) translate([0, -0.03, h / 2]) cw_boxc([w, 0.12, h]);
+    color(cw_RUSTC()) translate([-w * 0.2, -0.10, h * 0.3]) cw_boxc([0.3, 0.02, 0.4]);
+    color(cw_METALC()) translate([w * 0.3, -0.10, h * 0.5]) cw_boxc([0.06, 0.05, 0.16]);
+}
+
+// ---- 可进入空心外壳（DayZ 掩体攻防：角色可走入，室内可放 loot） ----
+// 四面墙 + 混凝土脚圈，室内挖空直通地面（无门槛），门/窗为纯洞口。front = -y。
+// 本 evaluator 中 difference() 结果整体取首个子件颜色，故墙体与脚圈各用独立单色 difference。
+// 每个颜色桶都会生成三角网碰撞：任何装饰件都不得横跨门洞的行走高度，否则会挡住入口。
+//   L,D,wh   外墙足印/墙高；wc 墙色；t 墙厚
+//   dw,dh,dx 前墙门洞 宽/高/中心x（洞口直通地面）
+//   roomH    室内净高：0 => 直通墙顶（坡屋顶另置于其上）；>0 => 该高度以上留实心（平顶/多层地面楼板）
+//   wins     窗洞列表 [face,u,z,w,h]；face 0=前(-y)/1=后(+y)/2=左(-x)/3=右(+x)，u=沿墙偏移，z=洞心高
+//   plinth   是否绘制混凝土脚圈
+module cw_part_shell_hole(L, D, t, w)
+{
+    if (w[0] == 0)      translate([w[1], -D / 2, w[2]]) cw_boxc([w[3], t * 4, w[4]]);
+    else if (w[0] == 1) translate([w[1],  D / 2, w[2]]) cw_boxc([w[3], t * 4, w[4]]);
+    else if (w[0] == 2) translate([-L / 2, w[1], w[2]]) cw_boxc([t * 4, w[3], w[4]]);
+    else                translate([ L / 2, w[1], w[2]]) cw_boxc([t * 4, w[3], w[4]]);
+}
+
+module cw_part_shell(L, D, wh, wc, t = 0.28, dw = 1.5, dh = 2.1, dx = 0, roomH = 0, wins = [], plinth = true)
+{
+    ih = (roomH > 0 ? roomH : wh + 1.0);
+    // 墙体：实心块挖空 + 门洞 + 窗洞（单色 wc）
+    color(wc) difference()
+    {
+        cw_slab(L, D, wh);
+        translate([0, 0, -0.1]) cw_slab(L - 2 * t, D - 2 * t, ih + 0.1);
+        translate([dx, -D / 2, dh / 2 - 0.06]) cw_boxc([dw, t * 4, dh]);
+        for (w = wins) cw_part_shell_hole(L, D, t, w);
+    }
+    // 混凝土脚圈：门洞处断开，避免门槛（单色）
+    if (plinth)
+        color(cw_CONCD()) difference()
+        {
+            cw_slab(L + 0.25, D + 0.25, 0.16);
+            translate([0, 0, -0.1]) cw_slab(L - 2 * t, D - 2 * t, 0.5);
+            translate([dx, -D / 2, 0.12]) cw_boxc([dw, 1.4, 0.6]);
+        }
+}
+
+// ================= 地面（沿 x 铺设，底面 z=0） =================
+
+// 老化沥青路段：褪色单虚中线 + 裂缝 + 补丁
+module cw_ground_road(L = 24, W = 7, seed = 0)
+{
+    color(cw_ASPH()) cw_slab(L, W, 0.12);
+    for (i = [0 : 2])
+        color(cw_ASPHD())
+            translate([cw_rndr(seed * 7 + i * 31, -(L - 4) / 2, (L - 4) / 2),
+                       cw_rndr(seed * 13 + i * 17 + 5, -(W - 2.4) / 2, (W - 2.4) / 2), 0.12])
+                cw_slab(1.4 + cw_rnd(seed + i, 3) * 0.5, 1.0 + cw_rnd(seed + i + 9, 3) * 0.4, 0.012);
+    for (i = [0 : 3])
+        color(cw_ASPHD())
+            translate([cw_rndr(seed * 3 + i * 43, -(L - 3) / 2, (L - 3) / 2),
+                       cw_rndr(seed * 5 + i * 23 + 7, -(W - 1.6) / 2, (W - 1.6) / 2), 0.12])
+                rotate([0, 0, cw_rnd(seed + i * 7, 180)]) cw_slab(1.8, 0.09, 0.014);
+    nd = floor(L / 3.0);
+    color(cw_MARKW()) for (i = [0 : nd - 1])
+        if (cw_rnd(seed + i * 13, 4) != 0)
+            translate([-L / 2 + 1.5 + i * 3.0, 0, 0.12]) cw_slab(1.5, 0.13, 0.02);
+}
+
+// 十字路口块：W x W 沥青 + 褪色人行横道
+module cw_ground_cross(W = 7, seed = 0)
+{
+    color(cw_ASPH()) cw_slab(W, W, 0.12);
+    color(cw_ASPHD()) translate([cw_rndr(seed + 3, -1.5, 1.5), cw_rndr(seed + 11, -1.5, 1.5), 0.12])
+        cw_slab(1.8, 1.3, 0.012);
+    for (a = [0, 90, 180, 270])
+        rotate([0, 0, a])
+            color(cw_MARKW()) for (i = [0 : 4])
+                if (cw_rnd(seed + a + i * 7, 5) != 0)
+                    translate([-W / 2 + 0.9 + i * (W - 1.8) / 4, -W / 2 + 0.75, 0.12])
+                        cw_slab(0.4, 1.1, 0.02);
+}
+
+// 混凝土板人行道（伸缩缝 + 缺角破损）
+module cw_ground_sidewalk(L = 8, W = 1.8, seed = 0)
+{
+    color(cw_CONC()) cw_slab(L, W, 0.16);
+    nj = floor(L / 1.6);
+    color(cw_CONCD()) for (i = [1 : nj - 1])
+        translate([-L / 2 + i * 1.6, 0, 0.16]) cw_slab(0.07, W, 0.012);
+    if (cw_rnd(seed, 3) == 0)
+        color(cw_CONCD()) translate([cw_rndr(seed, -L / 3, L / 3), W * 0.2, 0.16]) cw_slab(0.9, 0.7, 0.012);
+}
+
+// 荒草地块（深色草斑）
+module cw_ground_grass(L = 20, D = 20, seed = 0)
+{
+    color(cw_GRASSC()) cw_slab(L, D, 0.10);
+    for (i = [0 : 5])
+        color(cw_GRASSD())
+            translate([cw_rndr(seed * 31 + i * 47, -(L - 4) / 2, (L - 4) / 2),
+                       cw_rndr(seed * 17 + i * 71 + 3, -(D - 4) / 2, (D - 4) / 2), 0.10])
+                cw_slab(cw_rndr(seed + i, 1.6, 3.6), cw_rndr(seed + i + 5, 1.2, 2.8), 0.012);
+}
+
+// 裸土斑块：多边形叠片近似有机轮廓
+module cw_ground_dirt(L = 10, D = 8, seed = 0)
+{
+    color(cw_SOILC())
+    {
+        rotate([0, 0, cw_rnd(seed, 180)]) scale([L * 0.5, D * 0.5, 1]) cylinder(h = 0.08, r = 1, $fn = 9);
+        translate([L * 0.2, D * 0.14, 0]) rotate([0, 0, cw_rnd(seed + 3, 180)])
+            scale([L * 0.3, D * 0.26, 1]) cylinder(h = 0.08, r = 1, $fn = 8);
+        translate([-L * 0.22, -D * 0.15, 0]) rotate([0, 0, cw_rnd(seed + 5, 180)])
+            scale([L * 0.26, D * 0.3, 1]) cylinder(h = 0.08, r = 1, $fn = 8);
+    }
+    for (i = [0 : 2])
+        color([0.28, 0.20, 0.14])
+            translate([cw_rndr(seed * 7 + i * 31, -L * 0.28, L * 0.28),
+                       cw_rndr(seed * 11 + i * 17 + 3, -D * 0.28, D * 0.28), 0.08])
+                scale([cw_rndr(seed + i, L * 0.08, L * 0.18), cw_rndr(seed + i + 5, D * 0.08, D * 0.18), 1])
+                    cylinder(h = 0.012, r = 1, $fn = 8);
+}
+
+// 停车场：沥青 + 褪色白线车位（车位口朝 -y）
+module cw_ground_parking(L = 18, D = 10, seed = 0)
+{
+    color(cw_ASPH()) cw_slab(L, D, 0.12);
+    ns = floor(L / 3.0);
+    color(cw_MARKW()) for (i = [0 : ns])
+        if (cw_rnd(seed + i * 17, 5) != 0)
+            translate([-L / 2 + 0.6 + i * (L - 1.2) / ns, -D / 2 + 2.75, 0.12]) cw_slab(0.12, 5.5, 0.02);
+    color(cw_ASPHD()) translate([cw_rndr(seed, -L / 3, L / 3), cw_rndr(seed + 7, -D / 3, D / 3), 0.12])
+        cw_slab(2.2, 1.4, 0.012);
+}
+
+// 停机坪：方形混凝土 + 白 H + 圆环
+module cw_ground_helipad(S = 12)
+{
+    color(cw_CONC()) cw_slab(S, S, 0.15);
+    color(cw_MARKW())
+    {
+        translate([0, 0, 0.15]) difference()
+        {
+            cylinder(h = 0.02, r = S * 0.36, $fn = 12);
+            translate([0, 0, -0.05]) cylinder(h = 0.2, r = S * 0.31, $fn = 12);
+        }
+        for (sx = [-1, 1]) translate([sx * S * 0.09, 0, 0.15]) cw_slab(0.34, S * 0.3, 0.02);
+        translate([0, 0, 0.15]) cw_slab(0.34, 0.9, 0.02);
+        rotate([0, 0, 90]) translate([0, 0, 0.15]) cw_slab(0.34, S * 0.12, 0.02);
+    }
+}
+
+// 铁路轨道段（沿 x）：道砟 + 枕木 + 双轨
+module cw_ground_rail(L = 20, seed = 0)
+{
+    color([0.34, 0.33, 0.31]) cw_slab(L, 2.6, 0.14);
+    nt = floor(L / 0.85);
+    color(cw_WOODD()) for (i = [0 : nt - 1])
+        translate([-L / 2 + 0.5 + i * (L - 1.0) / (nt - 1), 0, 0.14]) cw_slab(0.26, 2.2, 0.10);
+    color(cw_RUSTC()) for (sy = [-1, 1])
+        translate([0, sy * 0.72, 0.24]) cw_slab(L, 0.10, 0.12);
+}
+
+// ================= 建筑（front = -y） =================
+
+// 苏式预制板筒子楼（赫鲁晓夫楼）：板缝 + 窗阵（部分钉板）+ 阳台 + 门斗 + 女儿墙
+module cw_bldg_panel_flat(seed = 0, floors = 4, L = 16, D = 10)
+{
+    fh = 2.8;
+    wh = floors * fh + 0.5;
+    wc = cw_panel_c(seed);
+    sc = [wc[0] * 0.78, wc[1] * 0.78, wc[2] * 0.78];
+    nw = max(3, floor((L - 2.6) / 2.2));
+    dx = -L * 0.18;
+    // 底层可进入（门斗洞 + 底层前后窗洞），以上楼层实心
+    cw_part_shell(L, D, wh, wc, t = 0.3, dw = 1.5, dh = 2.1, dx = dx, roomH = fh - 0.3,
+                  wins = [ for (i = [0 : nw - 1]) if (abs(-L / 2 + 1.5 + i * (L - 3.0) / (nw - 1) - dx) > 1.2)
+                               [0, -L / 2 + 1.5 + i * (L - 3.0) / (nw - 1), 1.6, 1.0, 1.2],
+                           for (i = [0 : nw - 1]) [1, -L / 2 + 1.5 + i * (L - 3.0) / (nw - 1), 1.6, 1.0, 1.2] ]);
+    // 竖向板缝（前后立面）
+    nb = max(2, floor(L / 3.2));
+    color(sc) for (i = [1 : nb - 1], sy = [-1, 1])
+        translate([-L / 2 + i * L / nb, sy * (D / 2 + 0.01), wh / 2 + 0.25]) cw_boxc([0.10, 0.05, wh - 0.5]);
+    // 横向层缝
+    color(sc) for (f = [1 : floors - 1], sy = [-1, 1])
+        translate([0, sy * (D / 2 + 0.01), 0.5 + f * fh]) cw_boxc([L, 0.05, 0.10]);
+    // 上层窗阵（贴墙，seed 决定钉板窗；底层为洞口）
+    for (f = [1 : floors - 1], i = [0 : nw - 1], sy = [-1, 1])
+        translate([-L / 2 + 1.5 + i * (L - 3.0) / (nw - 1), sy * (D / 2 + 0.04), 0.5 + f * fh + 1.5])
+            rotate([0, 0, sy > 0 ? 180 : 0])
+                cw_part_window_worn(1.0, 1.3, seed * 13 + f * 31 + i * 7 + sy * 3);
+    // 阳台（前立面部分开间，二层起）
+    if (floors > 1)
+        for (f = [1 : floors - 1], i = [0 : nw - 1])
+            if (cw_rnd(seed + f * 17 + i * 29, 3) == 0)
+                translate([-L / 2 + 1.5 + i * (L - 3.0) / (nw - 1), -D / 2 - 0.55, 0.5 + f * fh])
+                {
+                    color(cw_CONCD()) translate([0, 0, 0.75]) cw_slab(1.7, 1.1, 0.12);
+                    color(cw_rnd(seed + f + i, 2) == 0 ? cw_METALD() : [0.44, 0.48, 0.42])
+                        translate([0, -0.5, 1.35]) cw_boxc([1.7, 0.08, 0.9]);
+                }
+    // 门斗雨棚（门为洞口）
+    color(cw_CONCD()) translate([dx, -D / 2 - 0.6, 2.7]) cw_boxc([1.9, 1.2, 0.12]);
+    // 女儿墙 + 屋面构件
+    color(sc) translate([0, 0, wh]) difference()
+    {
+        cw_slab(L + 0.16, D + 0.16, 0.5);
+        translate([0, 0, -0.05]) cw_slab(L - 0.5, D - 0.5, 0.7);
+    }
+    color(cw_CONCD()) translate([L * 0.25, D * 0.12, wh]) cw_boxc([1.6, 1.4, 1.6]);
+    color(cw_METALD()) translate([-L * 0.2, -D * 0.1, wh + 0.4]) cylinder(h = 0.9, r = 0.12, $fn = 6);
+}
+
+// 乡村木屋：原木墙 + 白窗套 + 金属坡顶 + 砖烟囱 + 门廊
+module cw_bldg_house_rural(seed = 0, L = 7, D = 5.5)
+{
+    wh = 2.5;
+    rc = cw_roof_c(seed + 3);
+    wc = cw_rnd(seed, 2) == 0 ? cw_WOODC() : [0.44, 0.34, 0.22];
+    dx = (cw_rnd(seed + 5, 2) == 0 ? -1 : 1) * L * 0.24;
+    // 可进入空心木屋：门洞 + 前/侧窗洞（纯洞）
+    cw_part_shell(L, D, wh, wc, t = 0.24, dw = 1.3, dh = 2.0, dx = dx,
+                  wins = [[0, -dx, 1.5, 0.9, 1.1], [2, D * 0.12, 1.5, 0.9, 1.1], [3, -D * 0.12, 1.5, 0.9, 1.1]]);
+    // 原木水平线（仅后檐墙外侧，避免横跨门/窗洞挡路）
+    color(cw_WOODD()) for (z = [0.9, 1.5, 2.1])
+        translate([0, D / 2 + 0.01, z]) cw_boxc([L, 0.04, 0.07]);
+    translate([0, 0, wh]) cw_part_roof(L, D, 1.6, 0.5, 0, rc);
+    color(cw_BRICKD()) translate([L * 0.26, D * 0.15, wh + 0.8]) cw_boxc([0.5, 0.5, 2.0]);
+    color(cw_CONCD()) translate([L * 0.26, D * 0.15, wh + 1.82]) cw_boxc([0.62, 0.62, 0.08]);
+    // 门廊台阶 + 雨棚
+    color(cw_WOODD()) translate([dx, -D / 2 - 0.5, 0]) cw_slab(1.5, 0.9, 0.28);
+    color(cw_WOODD()) for (sx = [-1, 1]) translate([dx + sx * 0.82, -D / 2 - 0.95, 1.12]) cw_boxc([0.1, 0.1, 2.24]);
+    color(rc) translate([dx, -D / 2 - 0.55, 2.3]) rotate([-14, 0, 0]) cw_boxc([1.9, 1.15, 0.06]);
+    // 门框 + 窗套 + 百叶（都在洞口外缘，不挡通行）
+    color(cw_WOODD())
+    {
+        translate([dx, -D / 2 - 0.05, 2.06]) cw_boxc([1.55, 0.08, 0.12]);
+        for (sx = [-1, 1]) translate([dx + sx * 0.72, -D / 2 - 0.05, 1.0]) cw_boxc([0.1, 0.08, 2.0]);
+    }
+    color(cw_MARKW())
+    {
+        for (z = [0.92, 2.08]) translate([-dx, -D / 2 - 0.04, z]) cw_boxc([1.12, 0.1, 0.07]);
+        for (z = [0.92, 2.08]) translate([-L / 2 - 0.04, D * 0.12, z]) cw_boxc([0.1, 1.12, 0.07]);
+        for (z = [0.92, 2.08]) translate([L / 2 + 0.04, -D * 0.12, z]) cw_boxc([0.1, 1.12, 0.07]);
+    }
+    sh = [[0.22, 0.34, 0.30], [0.40, 0.24, 0.18], [0.30, 0.34, 0.42]][cw_rnd(seed + 2, 3)];
+    color(sh) for (sx = [-1, 1])
+        translate([-dx + sx * 0.72, -D / 2 - 0.08, 1.5]) rotate([0, 0, sx * 20]) translate([sx * 0.2, 0, 0]) cw_boxc([0.4, 0.04, 1.1]);
+    // 部分人家钉死了窗户（末日屋主的最后防线）
+    if (cw_rnd(seed + 9, 3) == 0)
+        color(cw_WOODC()) for (i = [0 : 2])
+            translate([-dx, -D / 2 - 0.1, 1.15 + i * 0.32]) rotate([0, cw_rnd(seed + i, 16) - 8, 0]) cw_boxc([1.2, 0.04, 0.16]);
+}
+
+// 单层临街商铺排：抹灰墙 + 大橱窗（部分钉板）+ 色块招牌带
+module cw_bldg_shop_row(seed = 0, L = 10, D = 6)
+{
+    wh = 3.4;
+    wc = cw_wall_c(seed);
+    sc = cw_goods_c(seed + 2);
+    nw = max(2, floor(L / 3.4));
+    dx = L / 2 - 1.2;
+    // 可进入商铺：右侧门洞 + 敞开橱窗洞（避开门），平顶留楼板
+    cw_part_shell(L, D, wh, wc, t = 0.22, dw = 1.0, dh = 2.1, dx = dx, roomH = wh - 0.35,
+                  wins = [ for (i = [0 : nw - 1]) let (wx = -L / 2 + (i + 0.5) * L / nw)
+                               if (abs(wx - dx) > 1.4) [0, wx, 1.5, 2.0, 1.6] ]);
+    color(cw_CONCD()) translate([0, 0, wh]) cw_slab(L + 0.2, D + 0.2, 0.15);
+    // 招牌带（色块 + 白字块示意）
+    color(sc) translate([0, -D / 2 - 0.10, 2.85]) cw_boxc([L - 0.6, 0.16, 0.7]);
+    color(cw_MARKW()) translate([-L * 0.1, -D / 2 - 0.20, 2.85]) cw_boxc([L * 0.4, 0.03, 0.34]);
+}
+
+// 城市超市（大盒子）：肋板墙 + 玻璃门面带 + 大招牌 + 后侧装卸台
+module cw_bldg_supermarket(seed = 0, L = 18, D = 12)
+{
+    wh = 4.6;
+    dx = -L * 0.12;
+    // 可进入超市：敞开店面（中门 + 两侧橱窗洞）+ 侧/后窗洞，平顶留楼板
+    cw_part_shell(L, D, wh, cw_PANEL(), t = 0.3, dw = 2.0, dh = 2.5, dx = dx, roomH = wh - 0.4,
+                  wins = [[0, dx - L * 0.22, 1.4, L * 0.16, 1.9], [0, dx + L * 0.22, 1.4, L * 0.16, 1.9],
+                          [1, -L * 0.22, 1.8, 1.4, 1.2], [1, -L * 0.02, 1.8, 1.4, 1.2],
+                          [2, 0, 1.8, 1.4, 1.2], [3, 0, 1.8, 1.4, 1.2]]);
+    // 竖肋（前排避开店面洞口 → 充当橱窗竖梃）
+    color(cw_PANELD()) for (i = [0 : floor(L / 1.6)])
+    {
+        rx = -L / 2 + 0.8 + i * 1.6;
+        translate([rx, D / 2 + 0.01, wh / 2 + 0.6]) cw_boxc([0.18, 0.05, wh - 1.6]);
+        if (abs(rx - dx) > 1.2)
+            translate([rx, -D / 2 - 0.01, wh / 2 + 0.6]) cw_boxc([0.18, 0.05, wh - 1.6]);
+    }
+    // 大招牌带（红底白块）
+    color(cw_REDC()) translate([0, -D / 2 - 0.14, wh - 0.55]) cw_boxc([L - 1.0, 0.2, 0.95]);
+    color(cw_MARKW()) for (i = [0 : 5])
+        translate([-L * 0.3 + i * L * 0.12, -D / 2 - 0.26, wh - 0.55]) cw_boxc([L * 0.07, 0.03, 0.5]);
+    // 屋顶机组 + 女儿墙
+    color(cw_CONCD()) translate([0, 0, wh]) difference()
+    {
+        cw_slab(L + 0.16, D + 0.16, 0.4);
+        translate([0, 0, -0.05]) cw_slab(L - 0.5, D - 0.5, 0.6);
+    }
+    color(cw_METALC()) translate([L * 0.22, D * 0.1, wh]) cw_boxc([2.0, 1.4, 0.9]);
+    // 背面装卸台
+    color(cw_CONCD()) translate([L * 0.2, D / 2 + 0.9, 0]) cw_slab(4.5, 1.8, 1.0);
+    color(cw_METALD()) translate([L * 0.2, D / 2 + 0.04, 1.9]) cw_boxc([2.6, 0.08, 1.8]);
+}
+
+// 城市医院：白灰板楼 + 红十字 + 入口雨棚柱廊 + 急救坡道
+module cw_bldg_hospital(seed = 0, floors = 3, L = 18, D = 9)
+{
+    fh = 3.0;
+    wh = floors * fh + 0.5;
+    nw = max(3, floor((L - 2.6) / 2.0));
+    // 底层可进入（中央大门 + 底层前后窗洞），以上楼层实心
+    cw_part_shell(L, D, wh, cw_WHITEW(), t = 0.3, dw = 2.2, dh = 2.4, dx = 0, roomH = fh - 0.3,
+                  wins = [ for (i = [0 : nw - 1]) if (abs(-L / 2 + 1.4 + i * (L - 2.8) / (nw - 1)) > 1.4)
+                               [0, -L / 2 + 1.4 + i * (L - 2.8) / (nw - 1), 1.55, 1.1, 1.4],
+                           for (i = [0 : nw - 1]) if (abs(-L / 2 + 1.4 + i * (L - 2.8) / (nw - 1)) > 1.4)
+                               [1, -L / 2 + 1.4 + i * (L - 2.8) / (nw - 1), 1.55, 1.1, 1.4] ]);
+    // 层间带
+    color([0.48, 0.52, 0.52]) for (f = [1 : floors - 1], sy = [-1, 1])
+        translate([0, sy * (D / 2 + 0.01), 0.5 + f * fh]) cw_boxc([L, 0.05, 0.5]);
+    // 上层窗阵（贴墙装饰；底层为洞口）
+    for (f = [1 : floors - 1], i = [0 : nw - 1], sy = [-1, 1])
+        translate([-L / 2 + 1.4 + i * (L - 2.8) / (nw - 1), sy * (D / 2 + 0.04), 0.5 + f * fh + 1.55])
+            rotate([0, 0, sy > 0 ? 180 : 0]) cw_part_window(1.1, 1.4);
+    // 红十字招牌（front 顶部）
+    color(cw_MARKW()) translate([0, -D / 2 - 0.12, wh - 0.9]) cw_boxc([1.7, 0.16, 1.7]);
+    color(cw_REDC())
+    {
+        translate([0, -D / 2 - 0.22, wh - 0.9]) cw_boxc([0.42, 0.03, 1.3]);
+        translate([0, -D / 2 - 0.22, wh - 0.9]) cw_boxc([1.3, 0.03, 0.42]);
+    }
+    // 入口柱廊雨棚 + 坡道
+    color(cw_CONCD())
+    {
+        translate([0, -D / 2 - 1.3, 3.0]) cw_boxc([5.5, 2.6, 0.2]);
+        for (sx = [-1, 1]) translate([sx * 2.3, -D / 2 - 2.2, 1.5]) cw_boxc([0.3, 0.3, 3.0]);
+        translate([0, -D / 2 - 0.9, 0]) cw_slab(5.0, 1.8, 0.4);
+        translate([-4.2, -D / 2 - 0.9, 0]) rotate([0, -7, 0]) cw_slab(3.6, 1.6, 0.36);
+    }
+    // 女儿墙 + 电梯机房
+    color([0.52, 0.54, 0.52]) translate([0, 0, wh]) difference()
+    {
+        cw_slab(L + 0.16, D + 0.16, 0.45);
+        translate([0, 0, -0.05]) cw_slab(L - 0.5, D - 0.5, 0.65);
+    }
+    color(cw_WHITEW()) translate([-L * 0.28, 0, wh]) cw_boxc([2.4, 2.6, 1.7])
+    ;
+}
+
+// 厂房（双坡 + 天窗脊）：砖墙 + 高窗带 + 大推拉门
+module cw_bldg_factory_hall(seed = 0, L = 14, D = 9)
+{
+    wh = 4.6;
+    bc = cw_rnd(seed, 2) == 0 ? cw_BRICK() : [0.44, 0.40, 0.34];
+    // 可进入厂房：前墙大门洞 + 前后高侧窗（天窗带），坡顶在上
+    cw_part_shell(L, D, wh, bc, t = 0.3, dw = 3.0, dh = 3.4, dx = -L * 0.15,
+                  wins = [[0, L * 0.28, 3.95, L * 0.3, 1.0], [1, 0, 3.95, L - 2.4, 1.0]]);
+    translate([0, 0, wh]) cw_part_roof(L, D, 1.8, 0.4, 0, cw_roof_c(seed + 1));
+    // 天窗脊
+    color(cw_GLASSC()) translate([0, 0, wh + 1.35]) cw_boxc([L * 0.65, 0.9, 0.7]);
+    color(cw_METALD()) translate([0, 0, wh + 1.75]) cw_boxc([L * 0.68, 1.1, 0.12]);
+    // 门楣导轨
+    color(cw_METALC()) translate([-L * 0.15, -D / 2 - 0.13, 3.6]) cw_boxc([5.6, 0.08, 0.14]);
+}
+
+// 锯齿厂房：三连锯齿顶（北向天窗）+ 砖墙 + 侧门
+module cw_bldg_factory_saw(seed = 0, L = 14, D = 10)
+{
+    wh = 3.8;
+    bc = cw_rnd(seed, 2) == 0 ? cw_BRICK() : cw_PANELD();
+    // 可进入锯齿厂房：前墙装卸大门 + 右侧小门洞 + 左墙高窗洞，锯齿顶在上
+    cw_part_shell(L, D, wh, bc, t = 0.3, dw = 2.2, dh = 3.0, dx = -L * 0.2,
+                  wins = [[0, L * 0.25, 1.05, 1.1, 2.1],
+                          for (i = [0 : 2]) [2, -D / 2 + 2 + i * 3, 2.6, 1.0, 1.2]]);
+    nt = 3;
+    for (i = [0 : nt - 1])
+    {
+        ty = -D / 2 + (i + 0.5) * D / nt;
+        color(cw_roof_c(seed + 2)) translate([0, ty + D / nt * 0.08, wh + 0.75])
+            rotate([-22, 0, 0]) cw_boxc([L + 0.4, D / nt * 1.12, 0.14]);
+        color(cw_GLASSC()) translate([0, ty - D / nt * 0.42, wh + 0.62]) rotate([70, 0, 0]) cw_boxc([L - 0.8, 1.2, 0.1]);
+    }
+}
+
+// 砖砌烟囱：锥柱 + 白环带 + 顶箍
+module cw_bldg_smokestack(seed = 0, h = 15)
+{
+    color(cw_BRICKD()) cylinder(h = 1.2, r = 1.7, $fn = 9);
+    color(cw_BRICK()) cylinder(h = h, r1 = 1.35, r2 = 0.85, $fn = 9);
+    color(cw_MARKW()) translate([0, 0, h * 0.82]) cylinder(h = h * 0.06, r1 = 0.97, r2 = 0.94, $fn = 9);
+    color(cw_MARKW()) translate([0, 0, h * 0.62]) cylinder(h = h * 0.06, r1 = 1.06, r2 = 1.03, $fn = 9);
+    color(cw_METALD()) translate([0, 0, h - 0.3]) cylinder(h = 0.35, r = 0.92, $fn = 9);
+}
+
+// 金属仓库：波纹墙（双色条）+ 浅坡金属顶 + 推拉大门
+module cw_bldg_warehouse(seed = 0, L = 12, D = 8)
+{
+    wh = 3.6;
+    mc = cw_rnd(seed, 2) == 0 ? cw_METALC() : [0.38, 0.42, 0.38];
+    md = [mc[0] * 0.8, mc[1] * 0.8, mc[2] * 0.8];
+    dx = -L * 0.12;
+    // 可进入仓库：前墙卷帘大门 + 前后高窗洞，坡顶在上
+    cw_part_shell(L, D, wh, mc, t = 0.26, dw = 2.8, dh = 2.6, dx = dx,
+                  wins = [[0, L * 0.35, wh - 0.7, 1.2, 0.6], [1, L * 0.35, wh - 0.7, 1.2, 0.6],
+                          [1, -L * 0.25, wh - 0.7, 1.2, 0.6]]);
+    // 波纹竖肋（前排避开门洞）
+    color(md) for (i = [0 : floor(L / 1.1)])
+    {
+        rx = -L / 2 + 0.55 + i * 1.1;
+        translate([rx, D / 2 + 0.01, wh / 2 + 0.15]) cw_boxc([0.34, 0.04, wh - 0.3]);
+        if (abs(rx - dx) > 1.6)
+            translate([rx, -D / 2 - 0.01, wh / 2 + 0.15]) cw_boxc([0.34, 0.04, wh - 0.3]);
+    }
+    translate([0, 0, wh]) cw_part_roof(L, D, 1.0, 0.45, 0, cw_roof_c(seed + 4));
+}
+
+// 加油站雨棚 + 收银亭（油泵用 cw_prop_pump_gas 另摆；front=-y）
+module cw_bldg_gas_canopy(seed = 0)
+{
+    // 雨棚
+    color(cw_CONC()) for (sx = [-1, 1]) translate([sx * 3.0, 0, 1.9]) cw_boxc([0.4, 0.4, 3.8]);
+    color(cw_MARKW()) translate([0, 0, 3.9]) cw_boxc([10.5, 6.5, 0.35]);
+    color(cw_REDC()) translate([0, -3.3, 3.9]) cw_boxc([10.5, 0.12, 0.35]);
+    color(cw_REDC()) translate([0, 3.3, 3.9]) cw_boxc([10.5, 0.12, 0.35]);
+    // 收银亭（雨棚后侧，可进入：右门洞 + 左橱窗洞）
+    translate([0, 4.9, 0])
+    {
+        cw_part_shell(4.5, 3.2, 2.9, cw_WHITEW(), t = 0.2, dw = 0.95, dh = 2.1, dx = 1.5, roomH = 2.6,
+                      wins = [[0, -0.6, 1.5, 1.9, 1.2]]);
+        color(cw_CONCD()) translate([0, 0, 2.9]) cw_slab(4.7, 3.4, 0.15);
+        color(cw_REDC()) translate([0, -1.7, 2.55]) cw_boxc([4.0, 0.1, 0.5]);
+    }
+}
+
+// 军用瞭望塔：四内倾腿 + 平台 + 舱室环窗 + 攒尖顶 + 爬梯
+module cw_bldg_guard_tower(seed = 0)
+{
+    ph = 4.2;
+    tl = 4;      // 腿倾角：顶端内收
+    r0 = 1.0;    // 腿在杆件中点高度的半间距
+    // 顶端内收 = rotate 的 X 角与 y 偏移同号、Y 角与 x 偏移反号
+    color(cw_WOODD()) for (sx = [-1, 1], sy = [-1, 1])
+        translate([sx * r0, sy * r0, ph / 2]) rotate([sy * tl, sx * -tl, 0]) cw_boxc([0.18, 0.18, ph + 0.4]);
+    color(cw_WOODD()) for (z = [1.4, 2.8])
+    {
+        rz = r0 + (ph / 2 - z) * tan(tl) + 0.05;   // 横撑跟随腿的收分
+        translate([0, -rz, z]) cw_boxc([rz * 2 + 0.2, 0.08, 0.12]);
+        translate([0, rz, z]) cw_boxc([rz * 2 + 0.2, 0.08, 0.12]);
+        translate([-rz, 0, z]) cw_boxc([0.08, rz * 2 + 0.2, 0.12]);
+        translate([rz, 0, z]) cw_boxc([0.08, rz * 2 + 0.2, 0.12]);
+    }
+    color(cw_WOODC()) translate([0, 0, ph]) cw_slab(2.9, 2.9, 0.14);
+    color(cw_OLIVED()) translate([0, 0, ph + 0.14]) cw_slab(2.6, 2.6, 1.0);
+    color(cw_DARKC()) translate([0, 0, ph + 1.45]) cw_boxc([2.62, 2.62, 0.62]);
+    color(cw_OLIVED()) for (sx = [-1, 1], sy = [-1, 1])
+        translate([sx * 1.24, sy * 1.24, ph + 1.45]) cw_boxc([0.14, 0.14, 0.66]);
+    translate([0, 0, ph + 1.78]) cw_part_roof(3.1, 3.1, 1.0, 0.2, 1.55, cw_ROOFM());
+    // 爬梯
+    color(cw_METALD())
+    {
+        for (sx = [-1, 1]) translate([sx * 0.25, -1.35, ph / 2 + 0.2]) cw_boxc([0.06, 0.06, ph + 0.4]);
+        for (i = [0 : 7]) translate([0, -1.35, 0.5 + i * 0.5]) cw_boxc([0.5, 0.05, 0.05]);
+    }
+}
+
+// 军营板房：长条单层 + 军绿墙 + 成排窗 + 低坡顶
+module cw_bldg_barracks(seed = 0, L = 14, D = 6)
+{
+    wh = 2.8;
+    wc = cw_rnd(seed, 2) == 0 ? cw_OLIVE() : cw_KHAKI();
+    nw = max(3, floor((L - 2.4) / 2.0));
+    // 可进入营房：中央门洞 + 前后成排窗洞（前排避开门）
+    cw_part_shell(L, D, wh, wc, t = 0.24, dw = 1.5, dh = 2.1, dx = 0,
+                  wins = [ for (i = [0 : nw - 1]) [1, -L / 2 + 1.4 + i * (L - 2.8) / (nw - 1), 1.6, 0.9, 1.0],
+                           for (i = [0 : nw - 1]) if (abs(-L / 2 + 1.4 + i * (L - 2.8) / (nw - 1)) > 1.1)
+                               [0, -L / 2 + 1.4 + i * (L - 2.8) / (nw - 1), 1.6, 0.9, 1.0] ]);
+    translate([0, 0, wh]) cw_part_roof(L, D, 1.1, 0.45, 0, cw_roof_c(seed + 7));
+    color(cw_METALD()) translate([L * 0.32, D * 0.1, wh + 0.9]) cylinder(h = 1.1, r = 0.1, $fn = 6);
+}
+
+// 军事指挥部：两层赭石抹灰 + 门廊双柱 + 红星徽
+module cw_bldg_hq(seed = 0, L = 12, D = 8)
+{
+    wh = 6.2;
+    nw = max(3, floor((L - 2.4) / 2.2));
+    // 底层可进入（中央大门 + 底层前后窗洞），二层实心
+    cw_part_shell(L, D, wh, cw_PLASTER(), t = 0.3, dw = 1.6, dh = 2.4, dx = 0, roomH = 2.7,
+                  wins = [ for (i = [0 : nw - 1]) if (abs(-L / 2 + 1.4 + i * (L - 2.8) / (nw - 1)) > 1.2)
+                               [0, -L / 2 + 1.4 + i * (L - 2.8) / (nw - 1), 1.7, 1.0, 1.4],
+                           for (i = [0 : nw - 1]) if (abs(-L / 2 + 1.4 + i * (L - 2.8) / (nw - 1)) > 1.2)
+                               [1, -L / 2 + 1.4 + i * (L - 2.8) / (nw - 1), 1.7, 1.0, 1.4] ]);
+    color(cw_CONCD()) for (sy = [-1, 1]) translate([0, sy * (D / 2 + 0.01), 3.2]) cw_boxc([L, 0.06, 0.3]);
+    // 二层窗阵（贴墙装饰；底层为洞口）
+    for (i = [0 : nw - 1], sy = [-1, 1])
+        translate([-L / 2 + 1.4 + i * (L - 2.8) / (nw - 1), sy * (D / 2 + 0.04), 1.7 + 2.9])
+            rotate([0, 0, sy > 0 ? 180 : 0]) cw_part_window(1.0, 1.4);
+    // 中央门廊 + 红星
+    color(cw_WHITEW()) for (sx = [-1, 1]) translate([sx * 1.1, -D / 2 - 0.9, 1.55]) cw_boxc([0.34, 0.34, 3.1]);
+    color(cw_CONCD()) translate([0, -D / 2 - 0.85, 3.1]) cw_boxc([3.4, 2.0, 0.25]);
+    color(cw_REDC())
+    {
+        translate([0, -D / 2 - 0.10, wh - 0.85]) cw_boxc([0.75, 0.10, 0.28]);
+        translate([0, -D / 2 - 0.10, wh - 0.62]) cw_boxc([0.28, 0.10, 0.5]);
+        translate([-0.2, -D / 2 - 0.10, wh - 1.02]) rotate([0, 40, 0]) cw_boxc([0.24, 0.10, 0.5]);
+        translate([0.2, -D / 2 - 0.10, wh - 1.02]) rotate([0, -40, 0]) cw_boxc([0.24, 0.10, 0.5]);
+    }
+    color(cw_CONCD()) translate([0, 0, wh]) difference()
+    {
+        cw_slab(L + 0.16, D + 0.16, 0.4);
+        translate([0, 0, -0.05]) cw_slab(L - 0.5, D - 0.5, 0.6);
+    }
+    color(cw_METALD()) translate([-L * 0.3, D * 0.2, wh + 1.0]) cylinder(h = 2.2, r = 0.05, $fn = 5);
+    color(cw_REDC()) translate([-L * 0.3 + 0.35, D * 0.2, wh + 2.9]) cw_boxc([0.7, 0.02, 0.4]);
+}
+
+// 拱顶机库：椭拱壳 + 后墙 + 前大门（半开）
+module cw_bldg_hangar(seed = 0, L = 12, D = 14)
+{
+    // 拱壳（difference 去除地下半）
+    color(cw_OLIVED()) difference()
+    {
+        scale([1, 1, 0.62]) rotate([90, 0, 0]) cylinder(h = D, r = L / 2, center = true, $fn = 10);
+        translate([0, 0, -L / 2]) cw_boxc([L + 2, D + 2, L]);
+    }
+    // 后墙封板
+    color(cw_OLIVE()) difference()
+    {
+        translate([0, D / 2 - 0.15, 0]) scale([0.96, 1, 0.60]) rotate([90, 0, 0]) cylinder(h = 0.5, r = L / 2, $fn = 10);
+        translate([0, D / 2, -L / 2]) cw_boxc([L + 2, 3, L]);
+    }
+    // 前门框 + 双扇滑门（一扇半开露黑）
+    color(cw_METALD()) translate([-L * 0.14, -D / 2 - 0.05, 1.9]) cw_boxc([L * 0.36, 0.16, 3.8]);
+    color(cw_OLIVE()) translate([L * 0.22, -D / 2 - 0.10, 1.9]) cw_boxc([L * 0.32, 0.14, 3.8]);
+    color(cw_DARKC()) translate([L * 0.05, -D / 2 - 0.02, 1.8]) cw_boxc([L * 0.34, 0.06, 3.6]);
+    color(cw_MARKW()) translate([-L * 0.14, -D / 2 - 0.16, 2.4]) cw_boxc([L * 0.3, 0.03, 0.5]);
+}
+
+// 混凝土碉堡：八角低墩 + 射击缝 + 顶板 + 后门
+module cw_bldg_bunker(seed = 0)
+{
+    color(cw_CONCD()) cylinder(h = 1.7, r1 = 2.7, r2 = 2.3, $fn = 8);
+    color(cw_CONC()) translate([0, 0, 1.7]) cylinder(h = 0.35, r = 2.5, $fn = 8);
+    color(cw_DARKC()) for (a = [-40, 0, 40])
+        rotate([0, 0, a]) translate([0, -2.3, 1.25]) cw_boxc([1.1, 0.5, 0.28]);
+    color(cw_DARKC()) translate([0, 2.35, 0.9]) cw_boxc([1.0, 0.5, 1.8]);
+    color(cw_SOILC()) translate([0, -1.2, 0]) rotate([0, 0, 30]) scale([2.2, 1.4, 1]) cylinder(h = 0.25, r = 1, $fn = 8);
+}
+
+// 监狱囚室楼：灰墙 + 小铁栏窗阵 + 铁门 + 探照灯
+module cw_bldg_prison_block(seed = 0, floors = 2, L = 14, D = 7)
+{
+    fh = 2.9;
+    wh = floors * fh + 0.4;
+    nw = max(4, floor((L - 2.0) / 1.7));
+    // 底层可进入（铁门洞），二层实心；铁栏窗保留为贴墙装饰（窄且高，不可穿越）
+    cw_part_shell(L, D, wh, [0.46, 0.46, 0.44], t = 0.3, dw = 1.5, dh = 2.1, dx = -L * 0.2, roomH = fh - 0.3);
+    for (f = [0 : floors - 1], i = [0 : nw - 1], sy = [-1, 1])
+        translate([-L / 2 + 1.2 + i * (L - 2.4) / (nw - 1), sy * (D / 2 + 0.04), 0.4 + f * fh + 1.7])
+            rotate([0, 0, sy > 0 ? 180 : 0]) cw_part_window_bar(0.7, 0.8);
+    color(cw_CONCD()) translate([0, 0, wh]) difference()
+    {
+        cw_slab(L + 0.14, D + 0.14, 0.4);
+        translate([0, 0, -0.05]) cw_slab(L - 0.5, D - 0.5, 0.6);
+    }
+    color(cw_METALD()) translate([L * 0.35, -D / 2 + 0.4, wh + 0.35]) cw_boxc([0.1, 0.1, 0.7]);
+    color(cw_YELLOWC()) translate([L * 0.35, -D / 2 + 0.25, wh + 0.72]) rotate([30, 0, 0]) cw_boxc([0.3, 0.3, 0.24]);
+}
+
+// 监狱高墙段（沿 x 通长）：壁柱 + 顶部铁丝网
+module cw_bldg_prison_wall(len = 10)
+{
+    h = 4.0;
+    color([0.48, 0.48, 0.46]) translate([0, 0, h / 2]) cw_boxc([len, 0.5, h]);
+    color(cw_CONCD()) for (i = [0 : floor(len / 5)])
+        translate([min(-len / 2 + i * 5, len / 2 - 0.3), 0, h / 2]) cw_boxc([0.7, 0.7, h]);
+    color(cw_CONCD()) translate([0, 0, h]) cw_boxc([len, 0.6, 0.18]);
+    // 顶部斜撑铁丝
+    color(cw_METALD()) for (i = [0 : floor(len / 2.5)])
+        translate([-len / 2 + 0.5 + i * 2.5, 0, h + 0.35]) rotate([25, 0, 0]) cw_boxc([0.06, 0.06, 0.75]);
+    color(cw_METALD()) for (k = [0 : 2])
+        translate([0, -0.14 * k + 0.14, h + 0.25 + k * 0.16]) cw_boxc([len, 0.025, 0.025]);
+}
+
+// 监狱大门段：门楼 + 双扇铁门 + 灯
+module cw_bldg_prison_gate(seed = 0)
+{
+    h = 4.6;
+    for (sx = [-1, 1]) color([0.48, 0.48, 0.46]) translate([sx * 2.4, 0, h / 2]) cw_boxc([1.4, 1.0, h]);
+    color(cw_CONCD()) translate([0, 0, h]) cw_boxc([6.6, 1.1, 0.7]);
+    color(cw_REDC()) translate([0, -0.58, h + 0.02]) cw_boxc([2.4, 0.04, 0.4]);
+    color(cw_METALD())
+    {
+        translate([-0.9, -0.2, 1.75]) rotate([0, 0, -14]) cw_boxc([1.9, 0.1, 3.5]);
+        translate([1.1, 0.1, 1.75]) rotate([0, 0, 10]) cw_boxc([1.9, 0.1, 3.5]);
+    }
+    color(cw_MARKW()) translate([0, -0.5, h - 0.75]) cw_boxc([0.9, 0.08, 0.3]);
+    color(cw_YELLOWC()) translate([0, -0.62, h + 0.5]) cw_boxc([0.4, 0.3, 0.26]);
+}
+
+// 检查站岗亭：白亭红带 + 环窗
+module cw_bldg_checkpoint(seed = 0)
+{
+    color(cw_CONCD()) cw_slab(2.6, 2.6, 0.25);
+    color(cw_WHITEW()) translate([0, 0, 0.25]) cw_slab(2.2, 2.2, 2.3);
+    color(cw_REDC()) translate([0, 0, 0.7]) cw_boxc([2.26, 2.26, 0.28]);
+    color(cw_DARKC()) translate([0, 0, 1.95]) cw_boxc([2.26, 1.7, 0.75]);
+    color(cw_DARKC()) translate([0, 0, 1.95]) cw_boxc([1.7, 2.26, 0.75]);
+    color(cw_ROOFM()) translate([0, 0, 2.55]) cw_slab(2.7, 2.7, 0.14);
+    color(cw_DARKC()) translate([0, -1.13, 1.3]) cw_boxc([0.8, 0.06, 1.9]);
+}
+
+// 水塔：四内倾腿桁架 + 柱身筒 + 锥顶罐
+module cw_bldg_water_tower(seed = 0)
+{
+    lh = 6.5;
+    tl = 6;      // 腿倾角：顶端内收
+    r0 = 1.2;    // 腿在杆件中点高度的半间距
+    // 顶端内收 = rotate 的 X 角与 y 偏移同号、Y 角与 x 偏移反号
+    color(cw_RUSTC()) for (sx = [-1, 1], sy = [-1, 1])
+        translate([sx * r0, sy * r0, lh / 2]) rotate([sy * tl, sx * -tl, 0]) cw_boxc([0.2, 0.2, lh + 0.5]);
+    color(cw_METALD()) for (z = [2.0, 4.2])
+    {
+        rz = r0 + (lh / 2 - z) * tan(tl) + 0.12;   // 横撑跟随腿的收分
+        translate([0, -rz, z]) cw_boxc([rz * 2 + 0.16, 0.08, 0.12]);
+        translate([0, rz, z]) cw_boxc([rz * 2 + 0.16, 0.08, 0.12]);
+        translate([-rz, 0, z]) cw_boxc([0.08, rz * 2 + 0.16, 0.12]);
+        translate([rz, 0, z]) cw_boxc([0.08, rz * 2 + 0.16, 0.12]);
+    }
+    color(cw_rnd(seed, 2) == 0 ? [0.34, 0.38, 0.34] : cw_RUSTC()) translate([0, 0, lh]) cylinder(h = 2.8, r = 1.9, $fn = 9);
+    color(cw_METALD()) translate([0, 0, lh + 2.8]) cylinder(h = 1.0, r1 = 2.0, r2 = 0.2, $fn = 9);
+    // 角部斜撑：与腿同向内倾
+    color(cw_METALD()) translate([0.9, 0.9, lh / 2]) rotate([0, -12, 45]) cw_boxc([0.06, 0.06, lh]);
+}
+
+// 乡村小教堂：白墙 + 坡顶 + 鼓座洋葱顶 + 十字
+module cw_bldg_chapel(seed = 0)
+{
+    wh = 3.4;
+    L = 4.2;
+    // 可进入小教堂：前门洞 + 三面高窗洞，坡顶洋葱顶在上
+    cw_part_shell(L, L, wh, cw_WHITEW(), t = 0.24, dw = 1.0, dh = 2.0, dx = 0,
+                  wins = [[1, 0, 2.1, 0.55, 1.1], [2, 0, 2.1, 0.55, 1.1], [3, 0, 2.1, 0.55, 1.1]]);
+    translate([0, 0, wh]) cw_part_roof(L, L, 1.3, 0.4, 0, cw_ROOFM());
+    color(cw_WHITEW()) translate([0, 0, wh + 1.2]) cylinder(h = 1.3, r = 0.75, $fn = 8);
+    color([0.58, 0.44, 0.14])
+    {
+        translate([0, 0, wh + 2.5]) sphere(r = 0.85, $fn = 8);
+        translate([0, 0, wh + 3.1]) cylinder(h = 1.0, r1 = 0.6, r2 = 0.04, $fn = 8);
+    }
+    color([0.58, 0.44, 0.14])
+    {
+        translate([0, 0, wh + 4.1]) cw_boxc([0.06, 0.06, 0.55]);
+        translate([0, 0, wh + 4.28]) cw_boxc([0.3, 0.06, 0.06]);
+    }
+}
+
+// 公交候车亭：混凝土壳 + 马赛克色带 + 内置坐凳
+module cw_bldg_bus_stop(seed = 0)
+{
+    color(cw_CONCD()) cw_slab(4.2, 2.0, 0.15);
+    color(cw_CONC())
+    {
+        translate([0, 0.85, 1.25]) cw_boxc([4.2, 0.18, 2.2]);
+        for (sx = [-1, 1]) translate([sx * 2.0, 0.2, 1.25]) cw_boxc([0.18, 1.5, 2.2]);
+        translate([0, 0.1, 2.35]) cw_boxc([4.6, 2.1, 0.16]);
+    }
+    for (i = [0 : 7])
+        color(cw_goods_c(seed * 3 + i)) translate([-1.7 + i * 0.5, 0.74, 1.5]) cw_boxc([0.42, 0.04, 0.6]);
+    color(cw_WOODD()) translate([0, 0.45, 0.55]) cw_boxc([3.4, 0.5, 0.1]);
+    color(cw_CONCD()) for (sx = [-1, 1]) translate([sx * 1.4, 0.45, 0.28]) cw_boxc([0.3, 0.4, 0.45]);
+}
+
+// 废墟残楼：断墙圈 + 齿状破口 + 瓦砾堆
+module cw_bldg_ruin(seed = 0, L = 8, D = 6)
+{
+    bc = cw_rnd(seed, 2) == 0 ? cw_BRICKD() : cw_CONCD();
+    hs = [2.6, 1.1, 1.9, 0.7, 2.2, 1.5];
+    // 前后墙（分段随机高度）
+    for (i = [0 : 3], sy = [-1, 1])
+    {
+        hh = hs[cw_rnd(seed + i * 7 + sy * 3, 6)];
+        color(bc) translate([-L / 2 + (i + 0.5) * L / 4, sy * (D / 2 - 0.15), hh / 2]) cw_boxc([L / 4 + 0.02, 0.3, hh]);
+    }
+    for (i = [0 : 2], sx = [-1, 1])
+    {
+        hh = hs[cw_rnd(seed + i * 13 + sx * 5 + 1, 6)];
+        color(bc) translate([sx * (L / 2 - 0.15), -D / 2 + (i + 0.5) * D / 3, hh / 2]) cw_boxc([0.3, D / 3 + 0.02, hh]);
+    }
+    color(cw_DARKC()) translate([-L * 0.1, -(D / 2 - 0.15), 1.0]) cw_boxc([1.2, 0.34, 2.0]);
+    // 瓦砾
+    color(cw_CONCD()) translate([L * 0.1, 0, 0]) scale([L * 0.32, D * 0.3, 1]) cylinder(h = 0.55, r = 1, $fn = 8);
+    for (i = [0 : 4])
+        color(cw_rnd(seed + i, 2) == 0 ? bc : cw_CONC())
+            translate([cw_rndr(seed * 5 + i * 17, -L * 0.3, L * 0.3), cw_rndr(seed * 7 + i * 23 + 2, -D * 0.28, D * 0.28),
+                       0.3 + i * 0.06])
+                rotate([0, 0, cw_rnd(seed + i * 3, 180)]) cw_boxc([0.8, 0.5, 0.28]);
+    color(cw_RUSTC()) translate([-L * 0.25, D * 0.1, 0.6]) rotate([0, 70, 25]) cylinder(h = 1.8, r = 0.05, $fn = 5);
+}
+
+// ================= 植被生态（底面 z=0） =================
+
+// 云杉（东欧针叶林主树）：窄高多层锥
+module cw_nature_pine(s = 1.0, seed = 0)
+{
+    c1 = cw_rnd(seed, 2) == 0 ? cw_PINED() : cw_PINEC();
+    c2 = cw_rnd(seed, 2) == 0 ? cw_PINEC() : cw_PINED();
+    scale([s, s, s])
+    {
+        color(cw_TRUNKC()) cylinder(h = 1.2, r = 0.20, $fn = 6);
+        color(c1) translate([0, 0, 0.9]) cylinder(h = 1.9, r1 = 1.45, r2 = 0.85, $fn = 7);
+        color(c2) translate([0, 0, 2.4]) cylinder(h = 1.8, r1 = 1.15, r2 = 0.55, $fn = 7);
+        color(c1) translate([0, 0, 3.9]) cylinder(h = 1.6, r1 = 0.85, r2 = 0.28, $fn = 7);
+        color(c2) translate([0, 0, 5.2]) cylinder(h = 1.4, r1 = 0.52, r2 = 0.03, $fn = 7);
+    }
+}
+
+// 白桦：白干黑斑 + 疏朗浅色团冠
+module cw_nature_birch(s = 1.0, seed = 0)
+{
+    scale([s, s, s])
+    {
+        color(cw_BIRCHW()) cylinder(h = 3.4, r1 = 0.16, r2 = 0.10, $fn = 6);
+        color(cw_DARKC()) for (i = [0 : 4])
+            translate([0.1 * (cw_rnd(seed + i, 2) == 0 ? 1 : -1), 0.08, 0.5 + i * 0.6])
+                cw_boxc([0.14, 0.14, 0.12]);
+        color(cw_rnd(seed, 2) == 0 ? [0.40, 0.48, 0.24] : cw_LEAFC()) translate([0, 0, 3.6]) sphere(r = 1.1, $fn = 6);
+        color(cw_LEAFC()) translate([0.55, 0.3, 4.2]) sphere(r = 0.7, $fn = 6);
+        color([0.44, 0.52, 0.26]) translate([-0.5, -0.25, 4.3]) sphere(r = 0.6, $fn = 6);
+    }
+}
+
+// 枯树：光秃分叉
+module cw_nature_tree_dead(s = 1.0, seed = 0)
+{
+    scale([s, s, s])
+    {
+        color([0.28, 0.24, 0.20]) cylinder(h = 3.0, r1 = 0.24, r2 = 0.12, $fn = 6);
+        color([0.28, 0.24, 0.20])
+        {
+            translate([0, 0, 2.6]) rotate([0, 35, cw_rnd(seed, 180)]) cylinder(h = 1.5, r1 = 0.10, r2 = 0.03, $fn = 5);
+            translate([0, 0, 2.2]) rotate([0, -42, cw_rnd(seed + 3, 180)]) cylinder(h = 1.2, r1 = 0.09, r2 = 0.03, $fn = 5);
+            translate([0, 0, 1.5]) rotate([0, 55, cw_rnd(seed + 7, 180)]) cylinder(h = 0.9, r1 = 0.07, r2 = 0.02, $fn = 5);
+        }
+    }
+}
+
+// 灌木丛
+module cw_nature_bush(s = 1.0, seed = 0)
+{
+    scale([s, s, s])
+    {
+        color(cw_rnd(seed, 2) == 0 ? cw_LEAFD() : cw_PINEC()) translate([0, 0, 0.42]) sphere(r = 0.55, $fn = 6);
+        color(cw_LEAFC()) translate([0.4, 0.15, 0.36]) sphere(r = 0.38, $fn = 6);
+        color(cw_LEAFD()) translate([-0.35, -0.2, 0.34]) sphere(r = 0.34, $fn = 6);
+    }
+}
+
+// 荒草簇
+module cw_nature_grass_tuft(seed = 0)
+{
+    for (i = [0 : 2])
+        color(i % 2 == 0 ? cw_GRASSD() : [0.50, 0.52, 0.30])
+            rotate([0, 0, cw_rnd(seed + i, 180)])
+                translate([0, 0, cw_rndr(seed + i + 3, 0.1, 0.18)])
+                    cw_boxc([0.5, 0.06, cw_rndr(seed + i + 7, 0.2, 0.38)]);
+}
+
+// 芦苇丛（水边/沟渠）
+module cw_nature_reeds(seed = 0)
+{
+    for (i = [0 : 5])
+    {
+        rx = cw_rndr(seed * 3 + i * 11, -0.35, 0.35);
+        ry = cw_rndr(seed * 5 + i * 17 + 2, -0.3, 0.3);
+        rh = cw_rndr(seed + i, 0.9, 1.5);
+        color([0.36, 0.42, 0.22]) translate([rx, ry, rh / 2]) rotate([cw_rnd(seed + i, 8) - 4, 0, 0]) cw_boxc([0.05, 0.05, rh]);
+        if (i % 2 == 0)
+            color([0.34, 0.22, 0.12]) translate([rx, ry, rh]) cylinder(h = 0.22, r = 0.045, $fn = 5);
+    }
+}
+
+// 冰碛岩块
+module cw_nature_rock(s = 1.0, seed = 0)
+{
+    scale([s, s, s])
+    {
+        color([0.42, 0.42, 0.40]) rotate([0, 0, cw_rnd(seed, 180)]) scale([1, 0.75, 0.55]) sphere(r = 0.9, $fn = 7);
+        color([0.36, 0.36, 0.35]) translate([0.5, 0.25, 0]) scale([0.6, 0.5, 0.4]) sphere(r = 0.8, $fn = 6);
+        color([0.47, 0.47, 0.44]) translate([-0.4, -0.2, 0.1]) scale([0.5, 0.4, 0.45]) sphere(r = 0.7, $fn = 6);
+    }
+}
+
+// 树桩
+module cw_nature_stump(s = 1.0, seed = 0)
+{
+    scale([s, s, s])
+    {
+        color(cw_TRUNKC()) cylinder(h = 0.5, r = 0.32, $fn = 7);
+        color([0.52, 0.42, 0.27]) translate([0, 0, 0.5]) cylinder(h = 0.04, r = 0.27, $fn = 7);
+        color(cw_TRUNKC()) rotate([0, 0, cw_rnd(seed, 180)]) translate([0.28, 0.1, 0]) cylinder(h = 0.18, r = 0.12, $fn = 5);
+    }
+}
+
+// 倒木
+module cw_nature_log(seed = 0)
+{
+    color(cw_TRUNKC()) translate([-1.2, 0, 0.26]) rotate([0, 90, 0]) cylinder(h = 2.4, r = 0.26, $fn = 7);
+    color([0.52, 0.42, 0.27]) translate([1.2, 0, 0.26]) rotate([0, 90, 0]) cylinder(h = 0.04, r = 0.21, $fn = 7);
+    color([0.52, 0.42, 0.27]) translate([-1.24, 0, 0.26]) rotate([0, 90, 0]) cylinder(h = 0.04, r = 0.21, $fn = 7);
+    color(cw_TRUNKC()) translate([0.35, 0.12, 0.38]) rotate([-35, 0, 0]) cylinder(h = 0.5, r = 0.08, $fn = 5);
+    if (cw_rnd(seed, 2) == 0)
+        color(cw_LEAFD()) translate([-0.6, -0.15, 0.42]) sphere(r = 0.24, $fn = 6);
+}
+
+// 撂荒农田：土垄 + 杂草侵占
+module cw_nature_field(L = 12, D = 9, seed = 0)
+{
+    color(cw_SOILC()) cw_slab(L, D, 0.14);
+    nr = max(2, floor(D / 1.4));
+    for (r = [0 : nr - 1])
+    {
+        py = -D / 2 + 0.8 + r * (D - 1.6) / (nr - 1);
+        color([0.31, 0.23, 0.16]) translate([0, py, 0.14]) cw_slab(L - 0.8, 0.5, 0.12);
+    }
+    for (i = [0 : 7])
+        color(cw_rnd(seed + i, 2) == 0 ? cw_GRASSD() : [0.46, 0.46, 0.26])
+            translate([cw_rndr(seed * 7 + i * 19, -(L - 2) / 2, (L - 2) / 2),
+                       cw_rndr(seed * 11 + i * 29 + 4, -(D - 2) / 2, (D - 2) / 2), 0.26])
+                sphere(r = cw_rndr(seed + i + 8, 0.24, 0.5), $fn = 6);
+}
+
+// ================= 道具 / 路标（底面 z=0；带朝向者 front=-y） =================
+
+// 预制板围墙段（ПО-2 式，沿 x 通长）
+module cw_prop_fence_concrete(len = 5, h = 2.0)
+{
+    np = floor(len / 2.5);
+    color(cw_CONCD()) for (i = [0 : np])
+        translate([-len / 2 + i * len / np, 0, (h + 0.3) / 2]) cw_boxc([0.3, 0.34, h + 0.3]);
+    color(cw_CONC()) translate([0, 0, h / 2 + 0.1]) cw_boxc([len, 0.14, h - 0.2]);
+    color([0.44, 0.43, 0.40]) for (i = [0 : np - 1])
+        translate([-len / 2 + (i + 0.5) * len / np, -0.08, h / 2 + 0.1]) cw_boxc([len / np - 0.5, 0.02, h - 0.7]);
+}
+
+// 铁丝网围栏段（半透明网面，沿 x 通长）
+module cw_prop_fence_chain(len = 6, h = 2.2)
+{
+    np = floor(len / 3);
+    color(cw_METALD()) for (i = [0 : np])
+        translate([-len / 2 + i * len / np, 0, h / 2]) cw_boxc([0.09, 0.09, h]);
+    color(cw_METALD()) translate([0, 0, h - 0.05]) cw_boxc([len, 0.05, 0.05]);
+    color([0.40, 0.42, 0.44, 0.45]) translate([0, 0, h / 2 + 0.05]) cw_boxc([len, 0.02, h - 0.3]);
+    // 顶部三道刺线斜出
+    color(cw_METALD()) for (i = [0 : np])
+        translate([-len / 2 + i * len / np, -0.18, h + 0.2]) rotate([28, 0, 0]) cw_boxc([0.06, 0.05, 0.55]);
+    color(cw_METALD()) for (k = [0 : 1])
+        translate([0, -0.28 + k * 0.14, h + 0.30 - k * 0.06]) cw_boxc([len, 0.02, 0.02]);
+}
+
+// 木桩铁丝网（战地/农田边界，沿 x 通长）
+module cw_prop_fence_barbed(len = 6)
+{
+    np = floor(len / 2);
+    color(cw_WOODD()) for (i = [0 : np])
+        translate([-len / 2 + i * len / np, 0, 0.6]) rotate([cw_rnd(i * 7, 10) - 5, 0, 0]) cw_boxc([0.09, 0.09, 1.2]);
+    color(cw_METALD()) for (k = [0 : 2])
+        translate([0, 0, 0.35 + k * 0.35]) cw_boxc([len, 0.025, 0.025]);
+}
+
+// 沙袋胸墙（沿 x 通长，双层错缝）
+module cw_prop_wall_sandbag(len = 3)
+{
+    n = floor(len / 0.55);
+    for (r = [0 : 2], i = [0 : n - 1 - (r % 2 == 1 ? 1 : 0)])
+        color(r % 2 == 0 ? cw_KHAKI() : [0.38, 0.34, 0.21])
+            translate([-len / 2 + 0.3 + i * 0.55 + (r % 2) * 0.27, 0, 0.14 + r * 0.24])
+                scale([1, 0.65, 0.45]) sphere(r = 0.30, $fn = 6);
+}
+
+// 反坦克拒马（三向工字钢，交叉点离地）
+module cw_prop_hedgehog()
+{
+    translate([0, 0, 0.68])
+    {
+        color(cw_RUSTC())
+        {
+            rotate([0, 45, 0]) cw_boxc([0.16, 0.16, 1.9]);
+            rotate([0, -45, 0]) cw_boxc([0.16, 0.16, 1.9]);
+            rotate([45, 0, 90]) cw_boxc([0.16, 0.16, 1.9]);
+        }
+        color(cw_METALD()) cw_boxc([0.2, 0.2, 0.2]);
+    }
+}
+
+// 苏式路灯（混凝土杆，灯头悬向 -y）
+module cw_prop_lamp()
+{
+    color(cw_CONCD())
+    {
+        cylinder(h = 0.16, r = 0.18, $fn = 7);
+        cylinder(h = 5.2, r1 = 0.11, r2 = 0.07, $fn = 6);
+    }
+    color(cw_METALD()) translate([0, -0.35, 5.05]) rotate([18, 0, 0]) cw_boxc([0.08, 0.85, 0.07]);
+    color([0.93, 0.88, 0.70]) translate([0, -0.72, 5.14]) cw_boxc([0.2, 0.5, 0.12]);
+}
+
+// 混凝土电力杆：横担 + 绝缘子（沿 x 路边排布时线向即路向）
+module cw_prop_pole_concrete(seed = 0)
+{
+    color(cw_CONCD()) cylinder(h = 7.2, r1 = 0.16, r2 = 0.10, $fn = 6);
+    color(cw_METALD()) translate([0, 0, 6.5]) cw_boxc([0.12, 1.8, 0.12]);
+    color(cw_MARKW()) for (i = [-1, 0, 1])
+        translate([0, i * 0.7, 6.6]) cylinder(h = 0.14, r = 0.05, $fn = 5);
+    if (cw_rnd(seed, 3) == 0)
+        color(cw_METALD()) translate([0, 0.4, 5.6]) rotate([35, 0, 0]) cw_boxc([0.1, 0.1, 1.6]);
+}
+
+// 城镇名牌（白板黑带，出城版红斜杠；front=-y）
+module cw_prop_sign_town(seed = 0)
+{
+    color(cw_METALC()) for (sx = [-1, 1]) translate([sx * 0.8, 0, 1.1]) cw_boxc([0.09, 0.09, 2.2]);
+    color(cw_MARKW()) translate([0, -0.06, 1.8]) cw_boxc([2.2, 0.08, 0.75]);
+    color(cw_DARKC()) translate([-0.2, -0.11, 1.85]) cw_boxc([1.4, 0.02, 0.26]);
+    if (cw_rnd(seed, 2) == 0)
+        color(cw_REDC()) translate([0, -0.12, 1.8]) rotate([0, 24, 0]) cw_boxc([2.3, 0.02, 0.16]);
+}
+
+// 蓝底方向路牌（单柱白箭头；front=-y）
+module cw_prop_sign_road(seed = 0)
+{
+    color(cw_METALC()) translate([0, 0, 1.35]) cw_boxc([0.09, 0.09, 2.7]);
+    color(cw_SIGNB()) translate([0, -0.07, 2.35]) cw_boxc([2.0, 0.08, 0.9]);
+    color(cw_MARKW())
+    {
+        translate([-0.3, -0.12, 2.5]) cw_boxc([1.1, 0.02, 0.16]);
+        translate([-0.3, -0.12, 2.2]) cw_boxc([0.8, 0.02, 0.14]);
+        translate([0.62, -0.12, 2.35]) rotate([0, 45, 0]) cw_boxc([0.3, 0.02, 0.3]);
+    }
+}
+
+// 宣传牌坊（红底白字块 + 五角星；front=-y）
+module cw_prop_billboard(seed = 0)
+{
+    color(cw_METALD()) for (sx = [-1, 1]) translate([sx * 2.2, 0, 1.5]) cw_boxc([0.18, 0.18, 3.0]);
+    color(cw_REDC()) translate([0, -0.1, 3.7]) cw_boxc([5.6, 0.16, 2.2]);
+    color([0.46, 0.10, 0.08]) translate([1.4, -0.12, 3.3]) cw_boxc([1.8, 0.16, 1.0]);
+    color(cw_MARKW())
+    {
+        translate([-1.1, -0.20, 4.1]) cw_boxc([2.6, 0.03, 0.4]);
+        translate([-0.8, -0.20, 3.5]) cw_boxc([3.2, 0.03, 0.3]);
+    }
+    color(cw_YELLOWC())
+    {
+        translate([2.0, -0.20, 4.35]) cw_boxc([0.55, 0.03, 0.2]);
+        translate([2.0, -0.20, 4.1]) rotate([0, 36, 0]) cw_boxc([0.5, 0.03, 0.18]);
+        translate([2.0, -0.20, 4.1]) rotate([0, -36, 0]) cw_boxc([0.5, 0.03, 0.18]);
+    }
+    color(cw_METALD()) for (sx = [-1, 1]) translate([sx * 1.6, 0.5, 1.7]) rotate([28, 0, 0]) cw_boxc([0.12, 0.12, 3.4]);
+}
+
+// 纪念碑：台阶基座 + 方尖碑 + 红星
+module cw_prop_monument(seed = 0)
+{
+    color(cw_CONC()) cw_slab(3.2, 3.2, 0.3);
+    color(cw_CONC()) translate([0, 0, 0.3]) cw_slab(2.4, 2.4, 0.3);
+    color(cw_CONCD()) translate([0, 0, 0.6]) cw_slab(1.3, 1.3, 0.8);
+    color([0.56, 0.56, 0.54]) translate([0, 0, 1.4]) cylinder(h = 4.2, r1 = 0.55, r2 = 0.32, $fn = 4);
+    color(cw_REDC())
+    {
+        translate([0, 0, 5.9]) cw_boxc([0.7, 0.1, 0.24]);
+        translate([0, 0, 6.1]) cw_boxc([0.24, 0.1, 0.45]);
+        translate([-0.18, 0, 5.75]) rotate([0, 40, 0]) cw_boxc([0.2, 0.1, 0.45]);
+        translate([0.18, 0, 5.75]) rotate([0, -40, 0]) cw_boxc([0.2, 0.1, 0.45]);
+    }
+    color(cw_MARKW()) translate([0, -0.66, 1.0]) cw_boxc([0.9, 0.03, 0.3]);
+}
+
+// 铜像：基座 + 抬臂人像（front=-y）
+module cw_prop_statue(seed = 0)
+{
+    color(cw_CONCD()) cw_slab(1.8, 1.8, 0.25);
+    color(cw_CONC()) translate([0, 0, 0.25]) cw_slab(1.2, 1.2, 1.6);
+    color([0.20, 0.24, 0.20])
+    {
+        translate([0, 0, 2.35]) cw_boxc([0.55, 0.4, 1.1]);      // 大衣躯干
+        translate([0, 0, 3.1]) sphere(r = 0.19, $fn = 6);       // 头
+        translate([-0.38, -0.18, 2.85]) rotate([0, 55, 15]) cw_boxc([0.16, 0.16, 0.8]);   // 抬臂指向
+        translate([0.3, 0, 2.5]) rotate([0, -12, 0]) cw_boxc([0.15, 0.16, 0.7]);
+        translate([0, 0, 1.95]) cw_boxc([0.5, 0.36, 0.35]);
+    }
+    color(cw_MARKW()) translate([0, -0.62, 1.0]) cw_boxc([0.7, 0.03, 0.24]);
+}
+
+// 油桶（seed 选色：锈/军绿/蓝/灰）
+module cw_prop_barrel(seed = 0)
+{
+    c = cw_drum_c(seed);
+    color(c) cylinder(h = 0.86, r = 0.3, $fn = 8);
+    color([c[0] * 0.75, c[1] * 0.75, c[2] * 0.75]) for (z = [0.26, 0.58])
+        translate([0, 0, z]) cylinder(h = 0.05, r = 0.315, $fn = 8);
+}
+
+// 军用弹药箱堆（大件；seed 决定 1-3 只错叠）
+module cw_prop_crate_ammo(seed = 0)
+{
+    n = 1 + cw_rnd(seed, 3);
+    for (i = [0 : n - 1])
+        translate([cw_rndr(seed + i * 7, -0.2, 0.2), cw_rndr(seed + i * 13 + 2, -0.15, 0.15), i * 0.42])
+            rotate([0, 0, cw_rnd(seed + i * 3, 30) - 15])
+            {
+                color(cw_OLIVE()) translate([0, 0, 0.21]) cw_boxc([1.0, 0.5, 0.42]);
+                color(cw_OLIVED()) translate([0, 0, 0.40]) cw_boxc([1.04, 0.54, 0.06]);
+                color(cw_MARKW()) translate([0, -0.26, 0.2]) cw_boxc([0.5, 0.02, 0.12]);
+                color(cw_WOODD()) for (sx = [-1, 1]) translate([sx * 0.52, 0, 0.18]) cw_boxc([0.04, 0.3, 0.1]);
+            }
+}
+
+// 木托盘
+module cw_prop_pallet(seed = 0)
+{
+    rotate([0, 0, cw_rnd(seed, 40) - 20])
+    {
+        color(cw_WOODC()) for (i = [0 : 4]) translate([-0.5 + i * 0.25, 0, 0.13]) cw_boxc([0.16, 1.1, 0.04])
+        ;
+        color(cw_WOODD()) for (y = [-0.45, 0, 0.45]) translate([0, y, 0.06]) cw_boxc([1.15, 0.14, 0.1]);
+    }
+}
+
+// 轮胎堆
+module cw_prop_tires(seed = 0)
+{
+    for (i = [0 : 2])
+        color([0.11, 0.11, 0.11])
+            translate([cw_rndr(seed + i, -0.1, 0.1), cw_rndr(seed + i + 4, -0.1, 0.1), 0.11 + i * 0.22])
+                rotate([0, 0, cw_rnd(seed + i, 60)])
+                    difference()
+                    {
+                        cylinder(h = 0.22, r = 0.36, center = true, $fn = 8);
+                        cylinder(h = 0.3, r = 0.17, center = true, $fn = 8);
+                    }
+    color([0.11, 0.11, 0.11]) translate([0.62, 0.3, 0.36]) rotate([80, 0, 20])
+        difference()
+        {
+            cylinder(h = 0.22, r = 0.36, center = true, $fn = 8);
+            cylinder(h = 0.3, r = 0.17, center = true, $fn = 8);
+        }
+}
+
+// 铁皮垃圾箱（front=-y）
+module cw_prop_dumpster()
+{
+    color(cw_METALD()) for (sx = [-1, 1]) translate([sx * 0.9, 0, 0.09]) cw_boxc([0.3, 1.1, 0.18]);
+    color([0.30, 0.36, 0.30]) translate([0, 0, 0.72]) cw_boxc([2.2, 1.2, 1.1]);
+    color(cw_RUSTC()) translate([-0.7, -0.61, 0.5]) cw_boxc([0.6, 0.02, 0.4]);
+    color(cw_METALD())
+    {
+        translate([-0.56, -0.03, 1.32]) cw_boxc([1.06, 1.26, 0.1]);
+        translate([0.56, 0.08, 1.42]) rotate([12, 0, 0]) cw_boxc([1.06, 1.26, 0.1]);
+    }
+}
+
+// 加油机（front=-y）
+module cw_prop_pump_gas(seed = 0)
+{
+    color(cw_CONCD()) cw_slab(1.2, 0.8, 0.14);
+    color(cw_rnd(seed, 2) == 0 ? cw_REDC() : [0.20, 0.34, 0.44]) translate([0, 0, 0.14]) cw_slab(0.8, 0.45, 1.5);
+    color(cw_MARKW()) translate([0, -0.24, 1.25]) cw_boxc([0.6, 0.04, 0.5]);
+    color(cw_DARKC()) translate([0, -0.26, 1.3]) cw_boxc([0.44, 0.03, 0.24]);
+    color(cw_METALD())
+    {
+        translate([0.42, 0, 1.2]) cw_boxc([0.06, 0.12, 0.5]);
+        translate([0.42, 0, 0.95]) rotate([0, 25, 0]) cw_boxc([0.05, 0.05, 0.55]);
+    }
+    color(cw_DARKC()) translate([0.34, 0, 1.5]) cw_boxc([0.12, 0.2, 0.16]);
+}
+
+// 卧式储油罐：鞍座 + 顶部人孔 + 爬梯（长轴沿 x）
+module cw_prop_fueltank(seed = 0)
+{
+    c = cw_rnd(seed, 2) == 0 ? [0.34, 0.38, 0.34] : cw_RUSTC();
+    color(cw_CONCD()) for (sx = [-1, 1]) translate([sx * 1.4, 0, 0.35]) cw_boxc([0.5, 1.6, 0.7]);
+    color(c) translate([-2.4, 0, 1.5]) rotate([0, 90, 0]) cylinder(h = 4.8, r = 1.1, $fn = 9);
+    color(cw_METALD())
+    {
+        translate([0.6, 0, 2.6]) cylinder(h = 0.3, r = 0.28, $fn = 7);
+        translate([-2.45, 0, 1.5]) rotate([0, 90, 0]) cylinder(h = 0.06, r = 1.12, $fn = 9);
+        translate([2.39, 0, 1.5]) rotate([0, 90, 0]) cylinder(h = 0.06, r = 1.12, $fn = 9);
+    }
+    color(cw_RUSTC()) translate([-1.0, -1.06, 1.35]) cw_boxc([1.1, 0.04, 0.5]);
+    color(cw_METALD())
+    {
+        for (sy = [-1, 1]) translate([2.7, sy * 0.2, 1.3]) cw_boxc([0.05, 0.05, 2.6]);
+        for (i = [0 : 4]) translate([2.7, 0, 0.4 + i * 0.5]) cw_boxc([0.05, 0.45, 0.05]);
+    }
+}
+
+// 加油站价目立牌
+module cw_prop_sign_pylon(seed = 0)
+{
+    color(cw_METALD()) translate([0, 0, 2.2]) cw_boxc([0.45, 0.3, 4.4]);
+    color(cw_REDC()) translate([0, 0, 4.9]) cw_boxc([1.7, 0.4, 1.0]);
+    color(cw_MARKW())
+    {
+        translate([0, -0.22, 5.1]) cw_boxc([1.2, 0.03, 0.3]);
+        for (i = [0 : 2]) translate([-0.4 + i * 0.4, -0.22, 4.68]) cw_boxc([0.24, 0.03, 0.24]);
+    }
+    color(cw_MARKW()) translate([0, 0, 3.6]) cw_boxc([1.0, 0.34, 0.55]);
+}
+
+// 道闸（杆指向 +x；seed 决定开/合）
+module cw_prop_barrier_gate(seed = 0)
+{
+    up = cw_rnd(seed, 2);
+    color(cw_CONCD()) cw_slab(0.7, 0.7, 0.2);
+    color(cw_METALD()) translate([0, 0, 0.2]) cw_slab(0.4, 0.4, 0.9);
+    rotate([0, up == 1 ? -62 : 0, 0]) translate([1.9, 0, 1.0])
+    {
+        color(cw_MARKW()) cw_boxc([3.8, 0.12, 0.16]);
+        color(cw_REDC()) for (i = [0 : 2]) translate([-1.2 + i * 1.2, 0, 0]) cw_boxc([0.55, 0.13, 0.17]);
+    }
+    color(cw_METALD()) translate([-0.5, 0, 1.0]) cw_boxc([0.6, 0.2, 0.3]);
+    if (up == 0) color(cw_METALD()) translate([3.7, 0, 0.45]) cw_boxc([0.1, 0.3, 0.9]);
+}
+
+// 桁架通信塔：三段收分 + 横撑 + 鞭状天线
+module cw_prop_antenna(seed = 0)
+{
+    hs = [4.0, 3.2, 2.6];
+    ws = [1.4, 1.0, 0.65];
+    for (k = [0 : 2])
+    {
+        z0 = k == 0 ? 0 : (k == 1 ? 4.0 : 7.2);
+        // 顶端内收 = rotate 的 X 角与 y 偏移同号、Y 角与 x 偏移反号
+        color(cw_METALD()) for (sx = [-1, 1], sy = [-1, 1])
+        {
+            w0 = ws[k];
+            translate([sx * w0 / 2, sy * w0 / 2, z0 + hs[k] / 2]) rotate([sy * 2.5, sx * -2.5, 0]) cw_boxc([0.1, 0.1, hs[k]]);
+        }
+        color(cw_METALD())
+        {
+            w1 = ws[k];
+            translate([0, -w1 / 2, z0 + hs[k] * 0.55]) cw_boxc([w1, 0.06, 0.08]);
+            translate([0, w1 / 2, z0 + hs[k] * 0.55]) cw_boxc([w1, 0.06, 0.08]);
+            translate([-w1 / 2, 0, z0 + hs[k] * 0.55]) cw_boxc([0.06, w1, 0.08]);
+            translate([w1 / 2, 0, z0 + hs[k] * 0.55]) cw_boxc([0.06, w1, 0.08]);
+        }
+    }
+    color(cw_METALC()) translate([0, 0, 9.8]) cylinder(h = 2.4, r = 0.04, $fn = 5);
+    color(cw_REDC()) translate([0, 0, 12.2]) sphere(r = 0.12, $fn = 6);
+    color(cw_MARKW()) translate([0.35, 0, 8.2]) cw_boxc([0.5, 0.06, 0.4]);
+}
+
+// 探照灯（front=-y 照向）
+module cw_prop_searchlight(seed = 0)
+{
+    color(cw_METALD()) for (a = [0, 120, 240])
+        rotate([0, 0, a]) translate([0, 0.35, 0.55]) rotate([16, 0, 0]) cw_boxc([0.08, 0.08, 1.2]);
+    color(cw_OLIVED()) translate([0, 0, 1.15]) sphere(r = 0.14, $fn = 6);
+    color(cw_OLIVED()) translate([0, -0.15, 1.35]) rotate([55, 0, 0]) cylinder(h = 0.5, r = 0.32, $fn = 8);
+    color([0.93, 0.88, 0.70]) translate([0, -0.31, 1.55]) rotate([55, 0, 0]) cylinder(h = 0.04, r = 0.29, $fn = 8);
+}
+
+// 军用帐篷（脊沿 x，front=-y 开口）
+module cw_prop_tent_military(seed = 0, L = 4.5, D = 3.2)
+{
+    c = cw_rnd(seed, 2) == 0 ? cw_OLIVE() : cw_KHAKI();
+    cd = [c[0] * 0.8, c[1] * 0.8, c[2] * 0.8];
+    color(c)
+    {
+        translate([0, D * 0.28, 0]) rotate([62, 0, 0]) cw_boxc([L, 0.1, D * 0.72]);
+        translate([0, -D * 0.28, 0]) rotate([-62, 0, 0]) cw_boxc([L, 0.1, D * 0.72]);
+    }
+    color(cd)
+    {
+        translate([0, 0, 1.35]) cw_boxc([L + 0.15, 0.3, 0.12]);
+        translate([L / 2 - 0.04, 0, 0.62]) rotate([0, 0, 90]) rotate([76, 0, 0]) cw_boxc([D * 0.94, 0.08, 1.5]);
+    }
+    color(cw_DARKC()) translate([-L / 2 + 0.02, 0, 0.6]) rotate([0, 0, 90]) rotate([76, 0, 0]) cw_boxc([D * 0.8, 0.06, 1.3]);
+    color(cw_WOODD()) for (sy = [-1, 1], sx = [-1, 1])
+        translate([sx * (L / 2 - 0.3), sy * (D / 2 + 0.3), 0.15]) rotate([sy * 40, 0, 0]) cw_boxc([0.05, 0.05, 0.4]);
+}
+
+// 篝火营地：石圈 + 焦木 + 吊锅架
+module cw_prop_campfire(seed = 0)
+{
+    for (a = [0 : 45 : 315])
+        color([0.40, 0.40, 0.38]) rotate([0, 0, a + cw_rnd(seed + a, 14)]) translate([0.5, 0, 0.1])
+            scale([1, 0.7, 0.6]) sphere(r = 0.17, $fn = 6);
+    color([0.14, 0.12, 0.10])
+    {
+        translate([0, 0, 0.1]) rotate([0, 80, 20]) cylinder(h = 0.7, r = 0.07, $fn = 5);
+        translate([0.1, -0.1, 0.1]) rotate([0, 82, 130]) cylinder(h = 0.6, r = 0.06, $fn = 5);
+        translate([-0.1, 0.1, 0.1]) rotate([0, 78, 260]) cylinder(h = 0.65, r = 0.06, $fn = 5);
+    }
+    color(cw_DARKC()) translate([0, 0, 0]) cylinder(h = 0.05, r = 0.42, $fn = 8);
+    color(cw_WOODD()) for (a = [0, 120, 240])
+        rotate([0, 0, a]) translate([0, 0.4, 0.55]) rotate([20, 0, 0]) cw_boxc([0.05, 0.05, 1.2]);
+    color(cw_METALD()) translate([0, 0, 0.85]) cylinder(h = 0.25, r = 0.15, $fn = 7);
+}
+
+// 购物车（front=-y 推行向，网面半透明）
+module cw_prop_cart_shop(seed = 0)
+{
+    rotate([cw_rnd(seed, 3) == 0 ? 78 : 0, 0, cw_rnd(seed, 50)])   // 部分翻倒
+    {
+        color(cw_METALC())
+        {
+            for (sx = [-1, 1], sy = [-1, 1]) translate([sx * 0.32, sy * 0.42, 0.5]) cw_boxc([0.05, 0.05, 0.5]);
+            translate([0, 0.5, 1.02]) cw_boxc([0.75, 0.06, 0.06]);
+        }
+        color([0.55, 0.57, 0.60, 0.5])
+        {
+            translate([0, 0, 0.75]) cw_boxc([0.7, 0.9, 0.03]);
+            for (sx = [-1, 1]) translate([sx * 0.34, 0, 0.9]) cw_boxc([0.02, 0.9, 0.34]);
+            translate([0, -0.44, 0.9]) cw_boxc([0.7, 0.02, 0.34]);
+            translate([0, 0.44, 0.9]) cw_boxc([0.7, 0.02, 0.34]);
+        }
+        color(cw_DARKC()) for (sx = [-1, 1], sy = [-1, 1])
+            translate([sx * 0.28, sy * 0.38, 0.12]) sphere(r = 0.07, $fn = 6);
+        color(cw_REDC()) translate([0, 0.52, 0.98]) cw_boxc([0.5, 0.05, 0.05]);
+    }
+}
+
+// 超市货架（front=-y 取货面；seed 决定余货/倾倒）
+module cw_prop_shelf_market(seed = 0, L = 2.4)
+{
+    color(cw_METALC()) translate([0, 0.12, 0]) cw_slab(L, 0.5, 0.1);
+    color([0.52, 0.54, 0.52]) translate([0, 0.3, 1.0]) cw_boxc([L, 0.06, 2.0]);
+    color(cw_METALC()) for (z = [0.55, 1.1, 1.65])
+        translate([0, 0.1, z]) cw_boxc([L, 0.44, 0.05]);
+    for (z = [0.55, 1.1, 1.65], i = [0 : floor(L / 0.35)])
+        if (cw_rnd(seed * 5 + z * 41 + i * 7, 3) == 0)
+            color(cw_goods_c(seed * 7 + z * 13 + i))
+                translate([-L / 2 + 0.25 + i * 0.35, 0.08, z + 0.14])
+                    rotate([0, 0, cw_rnd(seed + i * 3, 40) - 20]) cw_boxc([0.2, 0.2, 0.28]);
+    // 散落地面的货品
+    for (i = [0 : 2])
+        color(cw_goods_c(seed * 11 + i * 5))
+            translate([cw_rndr(seed + i * 13, -L / 2, L / 2), -0.55 - cw_rndr(seed + i * 7, 0, 0.4), 0.1])
+                rotate([cw_rnd(seed + i, 80), 0, cw_rnd(seed + i * 17, 180)]) cw_boxc([0.2, 0.2, 0.28]);
+}
+
+// 报刊亭（front=-y；seed 决定卷帘关闭）
+module cw_prop_kiosk(seed = 0)
+{
+    color(cw_CONCD()) cw_slab(2.4, 2.0, 0.15);
+    color(cw_rnd(seed, 2) == 0 ? [0.22, 0.36, 0.30] : [0.42, 0.30, 0.22]) translate([0, 0, 0.15]) cw_slab(2.2, 1.8, 2.3);
+    if (cw_rnd(seed + 1, 2) == 0)
+        color(cw_DARKC()) translate([0, -0.92, 1.5]) cw_boxc([1.6, 0.08, 0.9]);
+    else
+        color(cw_METALC()) translate([0, -0.92, 1.5]) cw_boxc([1.6, 0.08, 0.9]);
+    color(cw_MARKW()) translate([0, -0.94, 2.15]) cw_boxc([1.9, 0.06, 0.4]);
+    color(cw_ROOFM()) translate([0, 0, 2.45]) cw_slab(2.5, 2.1, 0.12);
+}
+
+// 电话亭（front=-y，半透明玻璃）
+module cw_prop_phone_booth(seed = 0)
+{
+    color(cw_METALD())
+    {
+        for (sx = [-1, 1], sy = [-1, 1]) translate([sx * 0.44, sy * 0.44, 1.15]) cw_boxc([0.1, 0.1, 2.3]);
+        translate([0, 0, 2.3]) cw_slab(1.1, 1.1, 0.14);
+        cw_slab(1.0, 1.0, 0.1);
+    }
+    color([0.45, 0.52, 0.56, 0.5]) for (a = [0, 90, 180])
+        rotate([0, 0, a]) translate([0, -0.47, 1.3]) cw_boxc([0.8, 0.03, 1.7]);
+    color(cw_DARKC()) translate([0, 0.42, 1.6]) cw_boxc([0.3, 0.1, 0.4]);
+}
+
+// 村井：石圈 + 双柱小顶 + 辘轳
+module cw_prop_well(seed = 0)
+{
+    color([0.44, 0.44, 0.42]) difference()
+    {
+        cylinder(h = 0.8, r = 0.7, $fn = 8);
+        translate([0, 0, 0.15]) cylinder(h = 0.8, r = 0.5, $fn = 8);
+    }
+    color(cw_WOODD()) for (sx = [-1, 1]) translate([sx * 0.62, 0, 1.0]) cw_boxc([0.12, 0.12, 1.6]);
+    translate([0, 0, 1.8]) cw_part_roof(1.9, 1.5, 0.55, 0.15, 0, cw_WOODD());
+    color(cw_WOODC()) translate([-0.62, 0, 1.35]) rotate([0, 90, 0]) cylinder(h = 1.24, r = 0.08, $fn = 6);
+    color(cw_METALD()) translate([0.72, 0, 1.35]) rotate([0, 0, 30]) cw_boxc([0.3, 0.06, 0.06]);
+    color(cw_METALD()) translate([0, 0, 0.9]) cw_boxc([0.02, 0.02, 0.9]);
+    color(cw_METALC()) translate([0, 0, 0.75]) cylinder(h = 0.2, r = 0.12, $fn = 6);
+}
+
+// 柴垛（两桩夹圆木）
+module cw_prop_woodpile(seed = 0)
+{
+    for (r = [0 : 2], i = [0 : 3 - (r % 2 == 1 ? 1 : 0)])
+        color(cw_rnd(seed + r * 7 + i, 2) == 0 ? cw_WOODC() : cw_TRUNKC())
+            translate([0, -0.45 + i * 0.3 + (r % 2) * 0.15, 0.15 + r * 0.26])
+                rotate([0, 90, 0]) cylinder(h = 1.6, r = 0.15, center = true, $fn = 6);
+    color(cw_WOODD()) for (sx = [-1, 1]) translate([sx * 0.75, 0, 0.6]) cw_boxc([0.08, 0.08, 1.2]);
+}
+
+// 混凝土腿长椅（front=-y）
+module cw_prop_bench()
+{
+    color(cw_CONCD()) for (sx = [-1, 1]) translate([sx * 0.7, 0, 0.2]) cw_boxc([0.12, 0.48, 0.4]);
+    color(cw_WOODC()) for (y = [-0.16, 0, 0.16]) translate([0, y, 0.44]) cw_boxc([1.8, 0.13, 0.05]);
+    color(cw_WOODC()) for (z = [0.64, 0.8]) translate([0, 0.26, z]) cw_boxc([1.8, 0.05, 0.12]);
+}
+
+// 废弃儿童乐园：锈秋千 + 滑梯 + 沙坑
+module cw_prop_playground(seed = 0)
+{
+    // 秋千
+    translate([-1.6, 0, 0])
+    {
+        color(cw_RUSTC()) for (sx = [-1, 1])
+        {
+            translate([sx * 1.1, 0.45, 1.1]) rotate([20, 0, 0]) cw_boxc([0.09, 0.09, 2.3]);
+            translate([sx * 1.1, -0.45, 1.1]) rotate([-20, 0, 0]) cw_boxc([0.09, 0.09, 2.3]);
+        }
+        color(cw_RUSTC()) translate([0, 0, 2.15]) rotate([0, 90, 0]) cylinder(h = 2.4, r = 0.05, center = true, $fn = 6);
+        color(cw_METALD()) translate([-0.5, 0, 1.55]) cw_boxc([0.03, 0.03, 1.2]);
+        color(cw_METALD()) translate([-0.35, 0, 1.55]) cw_boxc([0.03, 0.03, 1.2]);
+        color(cw_WOODD()) translate([-0.42, 0, 0.95]) cw_boxc([0.4, 0.24, 0.06]);
+        color(cw_METALD()) translate([0.5, 0.1, 2.0]) rotate([35, 0, 0]) cw_boxc([0.03, 0.03, 1.0]);   // 缠住的断链
+    }
+    // 滑梯
+    translate([1.8, 0.3, 0])
+    {
+        color([0.20, 0.34, 0.44]) translate([0.8, 0, 0.75]) rotate([0, 32, 0]) cw_boxc([2.0, 0.6, 0.08]);
+        color(cw_METALC()) for (sy = [-1, 1]) translate([1.55, sy * 0.32, 0.5]) rotate([0, 32, 0]) cw_boxc([1.9, 0.05, 0.16]);
+        color(cw_RUSTC()) translate([-0.25, 0, 0.7]) cw_boxc([0.1, 0.5, 1.4]);
+        color(cw_METALD()) for (i = [0 : 3]) translate([-0.25, 0, 0.25 + i * 0.35]) cw_boxc([0.05, 0.44, 0.05]);
+        color([0.20, 0.34, 0.44]) translate([0.05, 0, 1.35]) cw_boxc([0.5, 0.6, 0.07]);
+    }
+    // 沙坑
+    color([0.48, 0.42, 0.30]) translate([0, -2.0, 0]) cw_slab(2.6, 1.6, 0.12);
+    color(cw_WOODD()) for (sy = [-1, 1]) translate([0, -2.0 + sy * 0.83, 0]) cw_slab(2.7, 0.14, 0.2);
+    color(cw_WOODD()) for (sx = [-1, 1]) translate([sx * 1.32, -2.0, 0]) cw_slab(0.14, 1.6, 0.2);
+}
+
+// 病床（front=-y；seed 决定翻倒）
+module cw_prop_bed_hospital(seed = 0)
+{
+    rotate([0, cw_rnd(seed, 4) == 0 ? 85 : 0, cw_rnd(seed, 30) - 15])
+    {
+        color(cw_METALC()) for (sx = [-1, 1], sy = [-1, 1])
+            translate([sx * 0.85, sy * 0.38, 0.3]) cw_boxc([0.07, 0.07, 0.6]);
+        color(cw_MARKW()) translate([0, 0, 0.66]) cw_boxc([2.0, 0.9, 0.16]);
+        color([0.60, 0.62, 0.60]) translate([0.55, 0, 0.77]) cw_boxc([0.5, 0.7, 0.1]);
+        color(cw_METALC())
+        {
+            translate([0.98, 0, 0.85]) cw_boxc([0.06, 0.9, 0.5]);
+            translate([-0.98, 0, 0.8]) cw_boxc([0.06, 0.9, 0.4]);
+        }
+        color(cw_DARKC()) for (sx = [-1, 1], sy = [-1, 1])
+            translate([sx * 0.85, sy * 0.38, 0.05]) sphere(r = 0.06, $fn = 6);
+    }
+}
+
+// 杂物堆：碎砖 + 板材 + 管件
+module cw_prop_debris(seed = 0)
+{
+    color(cw_CONCD()) scale([1.3, 1.0, 0.5]) cylinder(h = 0.4, r = 1, $fn = 8);
+    for (i = [0 : 4])
+        color(cw_rnd(seed + i, 3) == 0 ? cw_BRICKD() : (cw_rnd(seed + i + 7, 2) == 0 ? cw_WOODD() : cw_CONC()))
+            translate([cw_rndr(seed * 3 + i * 13, -0.9, 0.9), cw_rndr(seed * 5 + i * 19 + 1, -0.7, 0.7), 0.25 + i * 0.07])
+                rotate([cw_rnd(seed + i, 20), cw_rnd(seed + i + 3, 16), cw_rnd(seed + i * 7, 180)])
+                    cw_boxc([0.7, 0.34, 0.12]);
+    color(cw_RUSTC()) translate([0.4, -0.5, 0.35]) rotate([0, 65, 30]) cylinder(h = 1.1, r = 0.05, $fn = 5);
+}
+
+// 混凝土公路桥（沿 x 跨越；桥面顶 z≈0.8，锚点=引桥端路面高度，桥墩向下没入河床）
+// 布置契约（见 AGENT_GUIDE/ScadTerrain.md）：桥长 ≥ 2.5x河宽，锚点取河岸下切带外的路面高度。
+module cw_prop_bridge(L = 30, W = 9, seed = 0)
+{
+    color(cw_CONC()) translate([0, 0, 0.45]) cw_boxc([L, W, 0.5]);             // 主梁
+    color(cw_CONCD()) translate([0, 0, 0.72]) cw_boxc([L, W + 0.4, 0.14]);     // 桥面
+    for (sx = [-1, 1])
+        color(cw_CONCD()) translate([sx * (L / 2 + 1.6), 0, 0.35]) rotate([0, sx * 12, 0]) cw_boxc([3.8, W + 0.4, 0.14]);
+    color(cw_CONCD()) for (px = [-L / 5, L / 5], sy = [-1, 1])
+        translate([px, sy * (W / 2 - 0.9), -2.6]) cw_boxc([1.0, 1.0, 6.4]);    // 桥墩
+    color(cw_METALD()) for (sy = [-1, 1])
+    {
+        translate([0, sy * (W / 2 + 0.1), 1.35]) cw_boxc([L, 0.08, 0.12]);
+        for (i = [0 : floor(L / 2.4)])
+            translate([-L / 2 + 0.6 + i * 2.4, sy * (W / 2 + 0.1), 1.05]) cw_boxc([0.1, 0.08, 0.55]);
+    }
+    color(cw_MARKW()) translate([0, 0, 0.80]) cw_boxc([L * 0.88, 0.12, 0.02]);
+}
+
+// ================= 载具（车头朝 +x，底面 z=0） =================
+
+module cw_veh_wheel(r = 0.34, w = 0.26)
+{
+    color([0.10, 0.10, 0.10]) translate([0, w / 2, 0]) rotate([90, 0, 0]) cylinder(h = w, r = r, $fn = 7);
+    color(cw_METALC()) translate([0, (w + 0.04) / 2, 0]) rotate([90, 0, 0]) cylinder(h = w + 0.04, r = r * 0.42, $fn = 7);
+}
+
+// 方盒轿车（拉达式；seed 选色）
+module cw_veh_lada(seed = 0)
+{
+    c = cw_car_c(seed);
+    color(c) translate([0, 0, 0.6]) cw_boxc([3.9, 1.7, 0.58]);
+    color(c) translate([-0.2, 0, 1.16]) cw_boxc([1.9, 1.6, 0.54]);
+    color(cw_GLASSC()) translate([-0.2, 0, 1.16]) cw_boxc([1.65, 1.68, 0.4]);
+    color(cw_METALC()) for (sx = [-1, 1]) translate([sx * 1.96, 0, 0.4]) cw_boxc([0.07, 1.5, 0.18]);
+    color(cw_MARKW()) for (sy = [-1, 1]) translate([1.96, sy * 0.55, 0.68]) cw_boxc([0.05, 0.26, 0.14]);
+    color([0.70, 0.13, 0.10]) for (sy = [-1, 1]) translate([-1.96, sy * 0.55, 0.68]) cw_boxc([0.05, 0.26, 0.14]);
+    for (sx = [-1, 1], sy = [-1, 1]) translate([1.2 * sx, 0.87 * sy, 0.33]) cw_veh_wheel();
+}
+
+// 面包车（UAZ 452 式圆头厢车）
+module cw_veh_uaz_van(seed = 0)
+{
+    c = cw_rnd(seed, 3) == 0 ? cw_OLIVE() : [0.48, 0.54, 0.52];
+    color(c) translate([-0.2, 0, 1.06]) cw_boxc([3.5, 1.8, 1.5]);
+    color(c) translate([1.65, 0, 0.95]) rotate([0, 14, 0]) cw_boxc([0.5, 1.76, 1.2]);
+    color(cw_GLASSC()) translate([1.55, 0, 1.5]) rotate([0, 10, 0]) cw_boxc([0.4, 1.7, 0.5]);
+    color(cw_GLASSC()) for (sy = [-1, 1]) translate([0.6, sy * 0.92, 1.5]) cw_boxc([0.7, 0.05, 0.45]);
+    color(cw_MARKW()) for (sy = [-1, 1]) translate([1.86, sy * 0.55, 0.85]) cylinder(h = 0.06, r = 0.11, $fn = 6);
+    color(cw_METALD()) translate([-1.97, 0, 1.0]) cw_boxc([0.06, 1.6, 1.3]);
+    for (sx = [-1, 1], sy = [-1, 1]) translate([1.1 * sx, 0.9 * sy, 0.36]) cw_veh_wheel(0.36, 0.24);
+}
+
+// 军卡（乌拉尔式长鼻卡车 + 帆布篷）
+module cw_veh_truck_canvas(seed = 0)
+{
+    color(cw_OLIVED()) translate([2.2, 0, 1.0]) cw_boxc([1.4, 1.9, 0.85]);   // 长鼻机盖
+    color(cw_OLIVE()) translate([1.15, 0, 1.25]) cw_boxc([0.9, 2.0, 1.4]);   // 驾驶室
+    color(cw_GLASSC()) translate([1.52, 0, 1.62]) cw_boxc([0.3, 1.9, 0.5]);
+    color(cw_OLIVED()) translate([-1.1, 0, 1.25]) cw_boxc([3.4, 2.1, 0.5]);  // 货台
+    // 帆布拱篷
+    color(cw_KHAKI()) difference()
+    {
+        translate([-1.1, 0, 1.5]) scale([1, 1, 0.75]) rotate([0, 90, 0]) cylinder(h = 3.4, r = 1.05, center = true, $fn = 8);
+        translate([-1.1, 0, 0.2]) cw_boxc([3.6, 2.6, 2.6]);
+    }
+    color(cw_DARKC()) translate([-2.78, 0, 1.95]) scale([1, 1, 0.72]) rotate([0, 90, 0]) cylinder(h = 0.06, r = 0.9, $fn = 8);
+    color(cw_MARKW()) for (sy = [-1, 1]) translate([2.92, sy * 0.7, 1.0]) cylinder(h = 0.06, r = 0.1, $fn = 6);
+    color(cw_METALD()) translate([2.95, 0, 0.62]) cw_boxc([0.1, 1.9, 0.24]);
+    for (sy = [-1, 1])
+    {
+        translate([2.0, sy * 1.0, 0.48]) cw_veh_wheel(0.48, 0.34);
+        translate([-0.4, sy * 1.0, 0.48]) cw_veh_wheel(0.48, 0.34);
+        translate([-1.6, sy * 1.0, 0.48]) cw_veh_wheel(0.48, 0.34);
+    }
+}
+
+// 中巴（PAZ 式；seed 决定涂装）
+module cw_veh_bus(seed = 0)
+{
+    c = cw_rnd(seed, 2) == 0 ? [0.62, 0.58, 0.44] : [0.20, 0.38, 0.44];
+    color(c) translate([0, 0, 1.15]) cw_boxc([6.4, 2.1, 1.9]);
+    color(cw_GLASSC()) translate([0.2, 0, 1.75]) cw_boxc([5.4, 2.16, 0.65]);
+    color(cw_GLASSC()) translate([3.16, 0, 1.45]) cw_boxc([0.12, 1.8, 0.9]);
+    color(cw_DARKC()) translate([2.2, -1.02, 0.95]) cw_boxc([0.9, 0.12, 1.5]);
+    color([c[0] * 0.7, c[1] * 0.7, c[2] * 0.7]) translate([0, 0, 0.45]) cw_boxc([6.4, 2.12, 0.5]);
+    color(cw_MARKW()) for (sy = [-1, 1]) translate([3.18, sy * 0.7, 0.75]) cylinder(h = 0.06, r = 0.11, $fn = 6);
+    color([0.70, 0.13, 0.10]) for (sy = [-1, 1]) translate([-3.18, sy * 0.7, 0.75]) cw_boxc([0.05, 0.26, 0.16]);
+    for (sx = [-1, 1], sy = [-1, 1]) translate([2.0 * sx, 1.06 * sy, 0.42]) cw_veh_wheel(0.42, 0.3);
+}
+
+// 农用拖拉机（开放驾驶位）
+module cw_veh_tractor(seed = 0)
+{
+    c = cw_rnd(seed, 2) == 0 ? [0.20, 0.38, 0.24] : [0.56, 0.16, 0.12];
+    color(c) translate([0.9, 0, 1.05]) cw_boxc([1.6, 0.9, 0.9]);          // 机罩
+    color(cw_METALD()) translate([1.72, 0, 1.0]) cw_boxc([0.1, 0.8, 0.7]);
+    color(cw_METALD()) translate([1.2, 0.25, 1.9]) cylinder(h = 0.7, r = 0.06, $fn = 5);   // 排气管
+    color(c) translate([-0.5, 0, 1.0]) cw_boxc([1.2, 1.0, 0.5]);
+    color(cw_DARKC()) translate([-0.7, 0, 1.5]) cw_boxc([0.5, 0.5, 0.16]);   // 座椅
+    color(cw_METALD()) translate([-0.15, 0, 1.6]) rotate([0, -30, 0]) cylinder(h = 0.4, r = 0.03, $fn = 5);
+    color(cw_METALD()) translate([-0.05, 0, 1.95]) rotate([0, 60, 0]) cylinder(h = 0.05, r = 0.2, $fn = 7);
+    for (sy = [-1, 1]) translate([-0.9, sy * 0.85, 0.75]) cw_veh_wheel(0.75, 0.4);
+    for (sy = [-1, 1]) translate([1.3, sy * 0.7, 0.42]) cw_veh_wheel(0.42, 0.26);
+}
+
+// 装甲运兵车（BTR 式八轮 + 小炮塔）
+module cw_veh_btr(seed = 0)
+{
+    color(cw_OLIVE()) translate([0, 0, 1.15]) cw_boxc([6.2, 2.3, 0.9]);
+    color(cw_OLIVED()) translate([2.6, 0, 1.35]) rotate([0, 24, 0]) cw_boxc([1.6, 2.28, 0.55]);   // 斜首上
+    color(cw_OLIVED()) translate([-2.9, 0, 1.2]) rotate([0, -55, 0]) cw_boxc([0.9, 2.26, 0.5]);   // 斜尾
+    color(cw_OLIVED()) for (sy = [-1, 1]) translate([0, sy * 1.12, 0.85]) rotate([sy * 30, 0, 0]) cw_boxc([6.0, 0.5, 0.5]);
+    color(cw_OLIVE()) translate([0.6, 0, 1.85]) cylinder(h = 0.5, r = 0.65, $fn = 8);            // 炮塔
+    color(cw_METALD()) translate([1.1, 0, 2.2]) rotate([0, 87, 0]) cylinder(h = 1.5, r = 0.06, $fn = 5);
+    color(cw_OLIVED()) for (i = [0 : 1]) translate([-1.2 - i * 0.9, 0, 1.72]) cylinder(h = 0.14, r = 0.3, $fn = 7);   // 舱盖
+    color(cw_MARKW()) translate([-2.2, -1.16, 1.2]) cw_boxc([0.02, 0.02, 0.02]);
+    for (sy = [-1, 1], i = [0 : 3])
+        translate([2.1 - i * 1.35, sy * 1.05, 0.55]) cw_veh_wheel(0.55, 0.4);
+}
+
+// 主战坦克（T 系）：履带箱 + 车体 + 扁圆炮塔 + 长管
+module cw_veh_tank(seed = 0)
+{
+    for (sy = [-1, 1])
+    {
+        color(cw_METALD()) translate([0, sy * 1.25, 0.55]) cw_boxc([6.0, 0.85, 0.85]);
+        color([0.16, 0.17, 0.16]) for (i = [0 : 4])
+            translate([-2.2 + i * 1.1, sy * 1.25, 0.5]) rotate([90, 0, 0]) cylinder(h = 0.9, r = 0.42, center = true, $fn = 7);
+    }
+    color(cw_OLIVE()) translate([0, 0, 1.15]) cw_boxc([6.2, 2.0, 0.55]);
+    color(cw_OLIVED()) translate([2.9, 0, 1.15]) rotate([0, 30, 0]) cw_boxc([0.9, 1.98, 0.4]);
+    color(cw_OLIVE()) translate([-0.3, 0, 1.55]) scale([1.25, 1, 0.5]) sphere(r = 1.05, $fn = 8);
+    color(cw_OLIVED()) translate([1.8, 0, 1.75]) rotate([0, 88, 0]) cylinder(h = 3.2, r1 = 0.10, r2 = 0.07, $fn = 6);
+    color(cw_METALD()) translate([4.98, 0, 1.62]) rotate([0, 88, 0]) cylinder(h = 0.3, r = 0.11, $fn = 6);
+    color(cw_OLIVED()) translate([-0.5, 0.4, 2.05]) cylinder(h = 0.12, r = 0.26, $fn = 7);
+    color(cw_RUSTC()) for (sy = [-1, 1]) translate([-3.1, sy * 0.5, 1.3]) rotate([0, 90, 0]) cylinder(h = 0.5, r = 0.22, $fn = 7);   // 尾部油桶
+}
+
+// 坠毁运输直升机（Mi-8 式）：机身侧倾 + 断尾梁 + 折弯旋翼 + 焦土
+module cw_veh_heli_wreck(seed = 0)
+{
+    color(cw_ASPHD()) scale([5.5, 3.5, 1]) cylinder(h = 0.03, r = 1, $fn = 9);   // 焦土
+    rotate([0, 0, cw_rnd(seed, 40) - 20])
+    {
+        rotate([8, 0, 0]) translate([0, 0, 0.9])
+        {
+            color(cw_OLIVE()) scale([1, 0.62, 0.62]) rotate([0, 90, 0]) cylinder(h = 6.0, r = 1.5, center = true, $fn = 8);   // 机身
+            color(cw_GLASSC()) translate([2.9, 0, 0]) scale([0.5, 0.56, 0.56]) sphere(r = 1.45, $fn = 8);   // 机头玻璃
+            color(cw_OLIVED()) translate([0.3, 0, 1.0]) cw_boxc([2.6, 1.3, 0.6]);   // 发动机罩
+            color(cw_DARKC()) translate([0.5, -0.94, 0.2]) cw_boxc([1.3, 0.1, 0.9]);   // 侧舱门开
+            // 旋翼毂 + 折弯桨叶
+            color(cw_METALD()) translate([0.3, 0, 1.4]) cylinder(h = 0.5, r = 0.22, $fn = 7);
+            for (a = [0, 72, 144, 216, 288])
+                color(cw_OLIVED()) rotate([0, 0, a + cw_rnd(seed, 30)]) translate([2.1, 0, 1.75])
+                    rotate([0, a % 144 == 0 ? 28 : 14, 0]) cw_boxc([4.0, 0.32, 0.07]);
+        }
+        // 断尾梁（甩在机尾方向）
+        translate([-4.6, 1.2, 0.4]) rotate([0, 0, 25])
+        {
+            color(cw_OLIVE()) rotate([0, 85, 0]) cylinder(h = 3.4, r1 = 0.5, r2 = 0.28, $fn = 7);
+            color(cw_OLIVED()) translate([3.2, 0, 0.6]) cw_boxc([0.8, 0.08, 1.3]);
+            color(cw_METALD()) translate([3.3, 0.35, 0.9]) rotate([90, 0, 0]) cylinder(h = 0.16, r = 0.5, $fn = 6);
+        }
+        color(cw_OLIVED()) translate([1.5, -2.6, 0.1]) rotate([0, 0, 70]) cw_boxc([2.6, 0.3, 0.1]);   // 甩出的桨叶
+        for (i = [0 : 3])
+            color(cw_rnd(seed + i, 2) == 0 ? cw_OLIVED() : cw_METALD())
+                translate([cw_rndr(seed * 3 + i * 17, -3.5, 3.5), cw_rndr(seed * 7 + i * 23 + 2, -2.6, 2.6), 0.1])
+                    rotate([0, 0, cw_rnd(seed + i * 5, 180)]) cw_boxc([0.6, 0.4, 0.14]);
+    }
+}
+
+// 锈蚀弃车残骸：无玻璃 + 缺轮 + 引擎盖掀开
+module cw_veh_wreck(seed = 0)
+{
+    c = [0.32, 0.27, 0.23];
+    rotate([0, 0, cw_rnd(seed, 7) - 3]) translate([0, 0, -0.05])
+    {
+        color(c) translate([0, 0, 0.58]) cw_boxc([3.9, 1.7, 0.56]);
+        color([0.27, 0.23, 0.20]) translate([-0.2, 0, 1.12]) cw_boxc([1.9, 1.6, 0.5]);
+        color(cw_DARKC()) translate([-0.2, 0, 1.14]) cw_boxc([1.66, 1.66, 0.34]);
+        color(cw_RUSTC()) translate([1.45, 0, 1.1]) rotate([0, -35, 0]) cw_boxc([1.0, 1.4, 0.06]);
+        color(cw_DARKC()) translate([1.25, 0, 0.9]) cw_boxc([0.8, 1.1, 0.18]);
+        color(cw_RUSTC())
+        {
+            translate([0.8, 0.86, 0.6]) cw_boxc([0.9, 0.02, 0.3]);
+            translate([-1.3, -0.86, 0.52]) cw_boxc([1.1, 0.02, 0.32]);
+        }
+        for (sx = [-1, 1]) translate([1.2 * sx, 0.87, 0.33]) cw_veh_wheel();
+        translate([1.2, -0.87, 0.33]) cw_veh_wheel();
+        color(cw_METALD()) translate([-1.2, -0.87, 0.28]) rotate([90, 0, 0]) cylinder(h = 0.1, r = 0.15, $fn = 7);
+    }
+}
+
+// ================= 武器（PBR：gk_material 粗糙度 / 金属度） =================
+// 每件武器两层：
+//   cw_wpn_<id>_held()  手持坐标系：原点 = 右手握把（握拳）中心；枪口 / 刃尖朝 -Y，顶面 +Z，
+//                       +X 为武器左侧（拉机柄、快慢机、枪栓柄都在 -X 的右侧）。与
+//                       nextdayz_survivor.scad 的 weapon frame / bone_weapon_socket 一致：
+//                       NextDayz 经 nextdayz_weapons.scad 把它原样挂到手上，第一人称视模也用它。
+//   cw_wpn_<id>(seed)   地面 loot / 地图手摆：右侧朝上平躺，枪口朝 +X，沿长度居中，贴 z = 0。
+// 侧视坐标一律写成 [f, z]：f = 朝枪口的前向距离（= -Y），z = 高度。
+// 近战武器（刀 / 撬棍 / 斧）同理：cw_wpn_<id>_held + 物资名 cw_item_<id> 的平躺版本。
+
+// ---- 材质 ----
+module cw_m_blued()  { gk_material([0.17, 0.175, 0.19], roughness = 0.32, metalness = 0.85) children(); } // 发蓝钢：枪管、枪机座
+module cw_m_park()   { gk_material([0.21, 0.21, 0.20], roughness = 0.55, metalness = 0.6) children(); }   // 磷化哑光钢：冲压机匣
+module cw_m_bright() { gk_material([0.64, 0.64, 0.65], roughness = 0.2, metalness = 1.0) children(); }     // 磨亮钢：枪机、刃口
+module cw_m_silver() { gk_material([0.55, 0.55, 0.54], roughness = 0.28, metalness = 0.95) children(); }   // 白钢 / 镀镍机匣
+module cw_m_etch()   { gk_material([0.34, 0.34, 0.33], roughness = 0.6, metalness = 0.9) children(); }     // 雕花面（压暗）
+module cw_m_hole()   { gk_material([0.025, 0.025, 0.028], roughness = 0.75, metalness = 0.2) children(); } // 孔洞 / 内腔
+module cw_m_anod()   { gk_material([0.05, 0.052, 0.056], roughness = 0.42, metalness = 0.5) children(); }  // 黑色阳极氧化：瞄具
+module cw_m_wood(c)  { gk_material(c, roughness = 0.36, metalness = 0) children(); }                         // 清漆木
+module cw_m_check(c) { gk_material(c, roughness = 0.85, metalness = 0) children(); }                         // 握把网纹
+module cw_m_bake(c)  { gk_material(c, roughness = 0.3, metalness = 0) children(); }                          // 胶木：AK-74 弹匣、握片
+module cw_m_rubber(c = [0.035, 0.035, 0.035]) { gk_material(c, roughness = 0.9, metalness = 0) children(); }
+module cw_m_leather(c) { gk_material(c, roughness = 0.7, metalness = 0) children(); }
+module cw_m_brass()  { gk_material([0.80, 0.60, 0.30], roughness = 0.26, metalness = 1.0) children(); }
+module cw_m_paint(c) { gk_material(c, roughness = 0.3, metalness = 0.05) children(); }                       // 搪瓷漆
+module cw_m_lens()   { gk_material([0.05, 0.10, 0.16], roughness = 0.02, metalness = 0.3) children(); }
+
+// ---- 武器几何工具 ----
+// 注意：本引擎求值器忽略 builtin 调用参数里的 $fn（cylinder(..., $fn = 8) 无效），
+// 只认作用域内的 `$fn = N;` 赋值，所以分段数一律经下面这些在模块体内赋值的工具传入。
+module cw_cyl(h, r, fn = 16, r2 = -1, center = false) { $fn = fn; cylinder(h = h, r1 = r, r2 = r2 < 0 ? r : r2, center = center); }
+module cw_sph(r, fn = 16) { $fn = fn; sphere(r = r); }
+module cw_torus(R, r, fn = 16) { $fn = fn; rotate_extrude() translate([R, 0]) circle(r = r); }
+module cw_wf(f, z = 0, x = 0) translate([x, -f, z]) children();
+// 沿枪轴（-Y）的圆柱 / 圆锥：从前向 f0 起，长 len
+module cw_bore(f0, len, r, z, x = 0, r2 = -1, fn = 20)
+    translate([x, -f0, z]) rotate([90, 0, 0]) cw_cyl(len, r, fn, r2);
+// 侧视轮廓 [[f, z], ...] 沿 X 居中拉伸成厚度 w
+module cw_side(w, pts, x = 0)
+    translate([x, 0, 0]) rotate([90, 0, -90]) linear_extrude(height = w, center = true) polygon(pts);
+// 带一个孔的侧视轮廓（镂空托、扳机护圈）
+module cw_side_hole(w, outer, hole, x = 0)
+    translate([x, 0, 0]) rotate([90, 0, -90]) linear_extrude(height = w, center = true)
+        polygon(points = concat(outer, hole),
+                paths = [[for (i = [0 : len(outer) - 1]) i], [for (i = [0 : len(hole) - 1]) len(outer) + i]]);
+// 绕枪轴的旋转体：pts = [[r, f], ...]
+module cw_lathe(pts, z, x = 0, fn = 24)
+{
+    $fn = fn;
+    translate([x, 0, z]) rotate([90, 0, 0]) rotate_extrude() polygon(pts);
+}
+// 倒角盒（三向内缩盒的 hull），s = [宽 X, 长 f, 高 z]
+module cw_cbox(s, c = 0.003)
+    hull()
+    {
+        cube([s[0], max(s[1] - 2 * c, 0.0004), max(s[2] - 2 * c, 0.0004)], center = true);
+        cube([max(s[0] - 2 * c, 0.0004), s[1], max(s[2] - 2 * c, 0.0004)], center = true);
+        cube([max(s[0] - 2 * c, 0.0004), max(s[1] - 2 * c, 0.0004), s[2]], center = true);
+    }
+module cw_blk(f, z, s, x = 0, c = 0.003) cw_wf(f, z, x) cw_cbox(s, c);
+// 侧视轮廓向内斜接偏移 c（凸 / 近凸多边形），给木托、护木做倒角用
+function cw_vsum(v, i = 0) = i >= len(v) ? 0 : v[i] + cw_vsum(v, i + 1);
+function cw_sarea(p) = cw_vsum([for (i = [0 : len(p) - 1]) p[i][0] * p[(i + 1) % len(p)][1] - p[(i + 1) % len(p)][0] * p[i][1]]);
+function cw_inset(p, c) =
+    let(n = len(p), sg = cw_sarea(p) > 0 ? 1 : -1)
+    [for (i = [0 : n - 1])
+        let(a = p[(i + n - 1) % n], b = p[i], d = p[(i + 1) % n],
+            l1 = norm([b[0] - a[0], b[1] - a[1]]), l2 = norm([d[0] - b[0], d[1] - b[1]]),
+            n1 = [-sg * (b[1] - a[1]) / l1, sg * (b[0] - a[0]) / l1],
+            n2 = [-sg * (d[1] - b[1]) / l2, sg * (d[0] - b[0]) / l2],
+            k = c / (1 + n1[0] * n2[0] + n1[1] * n2[1]))
+        [b[0] + k * (n1[0] + n2[0]), b[1] + k * (n1[1] + n2[1])]];
+// 武器倒角厚板：侧视轮廓（凸）沿 X 拉伸成 w 厚，四周倒角 c；与地面/建筑的 cw_slab(L, D, t) 分开命名。
+module cw_wpn_slab(w, pts, c = 0.004, x = 0)
+    hull() { cw_side(w - 2 * c, pts, x); cw_side(w, cw_inset(pts, c), x); }
+// 沿 X 的横销 / 铆钉
+module cw_pin(f, z, r, w, x = 0, fn = 12) cw_wf(f, z, x) rotate([0, 90, 0]) cw_cyl(w, r, fn, -1, true);
+// 沿 -X（右侧）伸出的杆
+module cw_rod_r(f, z, x0, len, r, fn = 12) cw_wf(f, z, x0) rotate([0, -90, 0]) cw_cyl(len, r, fn);
+// 手持坐标 → 地面平躺：右侧朝上、枪口 +X；cf = 沿枪轴的居中点，lift = 左侧最大外凸
+module cw_lay(cf, lift)
+    translate([-cf, 0, lift]) multmatrix([[0, -1, 0, 0], [0, 0, 1, 0], [-1, 0, 0, 0], [0, 0, 0, 1]]) children();
+// 弧形弹匣脊线：[[f, z, 倾角], ...]，每段长 L，倾角从 a0 起每段增加 da（向前弯）
+function cw_arc(n, a0, da, L, p, i = 0) =
+    i > n ? [] : concat([[p[0], p[1], a0 + da * i]],
+                        cw_arc(n, a0, da, L, [p[0] + L * sin(a0 + da * i), p[1] - L * cos(a0 + da * i)], i + 1));
+// 弹匣截面片：脊线点 p，前后厚 d，宽 w，厚 t
+module cw_mag_slab(p, d, w, t = 0.002, c = 0.0025) cw_wf(p[0], p[1]) rotate([-p[2], 0, 0])
+    hull() { cube([w - 2 * c, d, t], center = true); cube([w, d - 2 * c, t], center = true); }
+
+// ---------------- AK-74 ----------------
+// 辨识点：橙褐层压木托（两侧减重槽）+ 胶木弧形弹匣 + 圆柱制退器两侧大窗 + 三角准星座 +
+// 带横筋的防尘盖 + 右侧大拨片快慢机。
+function cw_AK_WOOD()  = [0.44, 0.20, 0.09];
+function cw_AK_PLUM()  = [0.36, 0.12, 0.07];
+function cw_AK_GRIP()  = [0.20, 0.075, 0.05];
+
+module cw_wpn_ak_held()
+{
+    BZ = 0.068;
+    MAG = cw_arc(7, 6, 4.6, 0.027, [0.115, 0.030]);
+    // 机匣：冲压钢盒，右侧开抛壳窗，窗内露出磨亮的枪机框
+    cw_m_park() difference()
+    {
+        cw_wpn_slab(0.034, [[-0.086, 0.031], [0.205, 0.031], [0.205, 0.084], [-0.086, 0.084]], 0.0025);
+        cw_blk(0.085, 0.072, [0.012, 0.070, 0.015], -0.017, 0.001);
+    }
+    cw_m_bright() cw_blk(0.085, 0.072, [0.004, 0.068, 0.012], -0.0118, 0.001);
+    cw_m_blued()
+    {
+        cw_blk(0.189, 0.058, [0.037, 0.034, 0.054], 0, 0.004);                       // 前机匣座
+        for (p = [[0.008, 0.037], [0.034, 0.037], [0.060, 0.037], [-0.040, 0.040], [-0.068, 0.040],
+                  [0.176, 0.040], [0.198, 0.077]])
+            cw_pin(p[0], p[1], 0.0024, 0.0364);                                      // 机匣铆钉
+        // 防尘盖：圆弧顶 + 4 道横筋 + 复进簧按钮
+        hull()
+        {
+            cw_bore(-0.084, 0.232, 0.0168, 0.0815, 0, -1, 24);
+            cw_blk(0.032, 0.0835, [0.035, 0.232, 0.004], 0, 0.001);
+        }
+        for (f = [-0.060, -0.034, -0.008, 0.018]) cw_bore(f, 0.006, 0.0177, 0.0815, 0, -1, 24);
+        cw_blk(-0.090, 0.082, [0.020, 0.010, 0.010], 0, 0.002);
+        // 表尺座 + 表尺板 + 缺口
+        cw_side(0.026, [[0.150, 0.084], [0.206, 0.084], [0.206, 0.097], [0.168, 0.099], [0.150, 0.097]]);
+        cw_side(0.017, [[0.156, 0.098], [0.202, 0.099], [0.202, 0.102], [0.156, 0.104]]);
+        for (s = [-1, 1]) cw_blk(0.160, 0.1065, [0.0048, 0.006, 0.006], s * 0.0046, 0.001);
+        // 枪管、导气箍、导气管
+        cw_bore(0.205, 0.372, 0.0102, BZ, 0, 0.0094, 20);
+        cw_bore(0.205, 0.016, 0.0145, BZ, 0, -1, 20);
+        hull()
+        {
+            cw_bore(0.436, 0.030, 0.0128, BZ, 0, -1, 20);
+            cw_bore(0.441, 0.022, 0.0112, 0.0885, 0, -1, 16);
+        }
+        cw_bore(0.208, 0.240, 0.0092, 0.0885, 0, -1, 16);
+        // 三角准星座 + 护翼 + 刺刀座
+        cw_bore(0.514, 0.044, 0.0128, BZ, 0, -1, 20);
+        cw_side(0.013, [[0.517, BZ], [0.557, BZ], [0.551, 0.099], [0.531, 0.099]]);
+        for (s = [-1, 1]) cw_side(0.0026, [[0.532, 0.093], [0.550, 0.093], [0.548, 0.111], [0.535, 0.111]], s * 0.0066);
+        cw_blk(0.530, 0.052, [0.010, 0.024, 0.010], 0, 0.002);
+        // 护木前箍、上护木钢帽
+        cw_bore(0.418, 0.014, 0.0236, 0.057, 0, -1, 22);
+        cw_bore(0.379, 0.010, 0.0165, 0.0895, 0, -1, 20);
+        // 扳机护圈、弹匣卡笋
+        cw_side(0.008, [[0.072, 0.031], [0.078, 0.031], [0.068, 0.006], [0.024, 0.003], [0.019, 0.010],
+                        [0.064, 0.011]]);
+        cw_blk(0.079, 0.025, [0.012, 0.007, 0.010], 0, 0.001);
+        // 快慢机大拨片（右侧）+ 轴座
+        cw_side(0.0022, [[-0.074, 0.074], [-0.064, 0.080], [0.070, 0.066], [0.073, 0.057], [0.063, 0.056],
+                         [-0.066, 0.068]], -0.0182);
+        cw_pin(-0.069, 0.073, 0.0055, 0.040);
+        // 钢托底板 + 机匣尾托板
+        cw_side(0.042, [[-0.357, 0.060], [-0.366, 0.059], [-0.368, -0.070], [-0.357, -0.069]]);
+        cw_blk(-0.094, 0.0815, [0.022, 0.020, 0.006], 0, 0.001);
+    }
+    // 准星柱、扳机、拉机柄（右侧，磨亮）
+    cw_m_bright()
+    {
+        cw_wf(0.541, 0.099) cw_cyl(0.0088, 0.0016, 8);
+        cw_side(0.005, [[0.046, 0.031], [0.051, 0.031], [0.047, 0.017], [0.040, 0.011], [0.042, 0.021]]);
+        cw_rod_r(0.136, 0.074, -0.016, 0.022, 0.0042);
+        cw_wf(0.137, 0.074, -0.040) scale([1, 1.5, 1]) cw_sph(0.0062, 14);
+    }
+    // AK-74 制退器：圆柱筒 + 两侧大窗 + 前端斜切；窗内为暗腔
+    cw_m_blued() difference()
+    {
+        union()
+        {
+            cw_bore(0.574, 0.088, 0.0122, BZ, 0, -1, 24);
+            cw_bore(0.570, 0.009, 0.0131, BZ, 0, -1, 24);
+        }
+        cw_bore(0.560, 0.120, 0.0042, BZ, 0, -1, 12);
+        cw_blk(0.606, BZ, [0.040, 0.020, 0.0105], 0, 0.001);
+        cw_wf(0.664, BZ - 0.0115) rotate([32, 0, 0]) cube([0.040, 0.014, 0.014], center = true);
+    }
+    cw_m_hole() cw_bore(0.593, 0.026, 0.0058, BZ, 0, -1, 16);
+    // 护木（层压木）
+    cw_m_wood(cw_AK_WOOD())
+    {
+        difference()
+        {
+            hull()
+            {
+                cw_side(0.044, [[0.210, 0.078], [0.420, 0.078], [0.424, 0.060], [0.418, 0.046], [0.300, 0.039],
+                                [0.222, 0.044], [0.210, 0.058]]);
+                cw_bore(0.214, 0.205, 0.0195, 0.056, 0, -1, 20);
+            }
+            for (s = [-1, 1]) cw_blk(0.258, 0.059, [0.008, 0.058, 0.010], s * 0.0245, 0.002);   // 两侧指槽
+        }
+        hull()
+        {
+            cw_bore(0.212, 0.168, 0.0152, 0.0895, 0, -1, 20);
+            cw_blk(0.296, 0.081, [0.032, 0.168, 0.004], 0, 0.001);
+        }
+        // 枪托：渐宽 hull + 两侧 AK-74 减重槽
+        difference()
+        {
+            hull()
+            {
+                cw_wpn_slab(0.031, [[-0.084, 0.084], [-0.200, 0.072], [-0.355, 0.058], [-0.358, -0.068],
+                                [-0.300, -0.054], [-0.150, -0.004], [-0.095, 0.024], [-0.084, 0.030]], 0.005);
+                cw_wpn_slab(0.041, [[-0.345, 0.060], [-0.358, 0.058], [-0.358, -0.068], [-0.345, -0.066]], 0.006);
+            }
+            for (s = [-1, 1])
+                cw_side(0.012, [[-0.165, 0.046], [-0.335, 0.034], [-0.335, 0.012], [-0.165, 0.026]], s * 0.0205);
+        }
+    }
+    // 胶木握把
+    cw_m_bake(cw_AK_GRIP()) hull()
+    {
+        cw_side(0.025, [[0.018, 0.031], [-0.011, -0.066], [-0.040, -0.070], [-0.024, 0.031]]);
+        cw_side(0.031, [[0.012, 0.024], [-0.010, -0.054], [-0.031, -0.057], [-0.018, 0.024]]);
+    }
+    // 胶木弧形弹匣 + 侧筋 + 钢挂耳 / 底板
+    cw_m_bake(cw_AK_PLUM())
+    {
+        for (i = [0 : 6]) hull() { cw_mag_slab(MAG[i], 0.062 + 0.0014 * i, 0.025); cw_mag_slab(MAG[i + 1], 0.0634 + 0.0014 * i, 0.025); }
+        for (i = [1 : 2 : 5]) cw_mag_slab(MAG[i], 0.052, 0.0274, 0.004, 0.003);
+    }
+    cw_m_blued()
+    {
+        cw_mag_slab(MAG[0], 0.064, 0.0262, 0.006);
+        cw_mag_slab(MAG[7], 0.074, 0.0268, 0.006);
+        cw_wf(MAG[0][0] + 0.033, MAG[0][1] - 0.004) cube([0.010, 0.008, 0.010], center = true);
+    }
+}
+
+module cw_wpn_ak(seed = 0) gk_flatten() cw_lay(0.147, 0.0236) cw_wpn_ak_held();
+
+// ---------------- SVD 德拉贡诺夫 ----------------
+// 辨识点：镂空拇指孔木托 + 托腮板 + PSO-1 侧装镜（空心镜筒，第一人称开镜可从筒里看出去）+
+// 开槽护木 + 五槽消焰器 + 高准星座 + 10 发直弹匣。
+function cw_SVD_WOOD() = [0.42, 0.22, 0.11];
+function cw_SVD_SZ() = 0.128;   // 瞄准镜光轴高
+
+module cw_svd_scope(lens = false)
+{
+    SZ = cw_SVD_SZ();
+    cw_m_anod()
+    {
+        cw_side(0.010, [[0.010, 0.052], [0.120, 0.052], [0.115, 0.112], [0.020, 0.112]], 0.0205);   // 左侧燕尾座板
+        cw_blk(0.065, 0.1115, [0.032, 0.090, 0.009], 0.011, 0.003);                                 // 镜座横梁
+        cw_blk(0.072, 0.064, [0.006, 0.030, 0.014], 0.0285, 0.002);                                 // 夹紧手柄
+        cw_lathe([[0.0108, -0.150], [0.0168, -0.150], [0.0168, -0.110], [0.0138, -0.090], [0.0138, 0.080],
+                  [0.0205, 0.112], [0.0205, 0.170], [0.0186, 0.170], [0.0186, 0.118], [0.0118, 0.090],
+                  [0.0118, -0.105], [0.0108, -0.110]], SZ, 0, 28);                                  // 镜筒（空心）
+        cw_wf(0.010, SZ + 0.011) cw_cyl(0.020, 0.0112, 18);                          // 高低手轮
+        cw_wf(0.010, SZ, 0.011) rotate([0, 90, 0]) cw_cyl(0.020, 0.0112, 18);        // 方向手轮
+        cw_wf(-0.045, SZ - 0.005, 0.011) rotate([0, 90, 0]) cw_cyl(0.012, 0.0065, 14); // 分划照明电池盖
+    }
+    cw_m_bright()
+    {
+        cw_wf(0.010, SZ + 0.031) cw_cyl(0.0015, 0.0095, 18);                         // 手轮刻度圈
+        cw_wf(0.010, SZ, 0.031) rotate([0, 90, 0]) cw_cyl(0.0015, 0.0095, 18);
+    }
+    cw_m_rubber() cw_lathe([[0.0110, -0.188], [0.0186, -0.188], [0.0178, -0.150], [0.0150, -0.146],
+                            [0.0110, -0.146]], SZ, 0, 24);                                          // 橡胶眼罩
+    if (lens)
+        cw_m_lens()
+        {
+            cw_bore(0.150, 0.003, 0.0186, SZ, 0, -1, 24);
+            cw_bore(-0.140, 0.003, 0.0118, SZ, 0, -1, 20);
+        }
+}
+
+module cw_wpn_svd_held(lens = false, scope = true)
+{
+    BZ = 0.066;
+    cw_m_park() difference()
+    {
+        cw_side(0.032, [[-0.066, 0.032], [0.222, 0.032], [0.222, 0.082], [-0.066, 0.082]]);
+        cw_blk(0.095, 0.069, [0.012, 0.072, 0.016], -0.016, 0.001);
+    }
+    cw_m_bright() cw_blk(0.095, 0.069, [0.004, 0.070, 0.012], -0.0108, 0.001);
+    cw_m_blued()
+    {
+        hull()
+        {
+            cw_bore(-0.064, 0.240, 0.0158, 0.0795, 0, -1, 24);
+            cw_blk(0.056, 0.0815, [0.033, 0.240, 0.004], 0, 0.001);
+        }
+        cw_blk(0.206, 0.057, [0.036, 0.036, 0.050], 0, 0.004);
+        cw_side(0.024, [[0.178, 0.082], [0.222, 0.082], [0.222, 0.091], [0.182, 0.093]]);
+        for (p = [[0.010, 0.037], [0.040, 0.037], [-0.040, 0.040], [0.196, 0.040]]) cw_pin(p[0], p[1], 0.0023, 0.0342);
+        // 枪管 + 导气
+        cw_bore(0.222, 0.560, 0.0098, BZ, 0, 0.0084, 20);
+        hull()
+        {
+            cw_bore(0.462, 0.034, 0.0122, BZ, 0, -1, 20);
+            cw_bore(0.466, 0.026, 0.0105, 0.087, 0, -1, 16);
+        }
+        cw_bore(0.224, 0.240, 0.0085, 0.087, 0, -1, 16);
+        cw_blk(0.452, 0.066, [0.045, 0.008, 0.064], 0, 0.006);                 // 护木前箍
+        // 高准星座 + 护圈
+        cw_bore(0.730, 0.026, 0.0108, BZ, 0, -1, 20);
+        cw_side(0.010, [[0.733, BZ], [0.754, BZ], [0.750, 0.098], [0.737, 0.098]]);
+        cw_lathe([[0.0085, 0.736], [0.0106, 0.736], [0.0106, 0.751], [0.0085, 0.751]], 0.100, 0, 20);
+        // 五槽消焰器
+        difference()
+        {
+            cw_bore(0.780, 0.064, 0.0118, BZ, 0, -1, 20);
+            cw_bore(0.770, 0.090, 0.0056, BZ, 0, -1, 12);
+            for (a = [0 : 72 : 288])
+                cw_wf(0.816, BZ) rotate([0, a, 0]) translate([0, 0, 0.009]) cube([0.0028, 0.046, 0.010], center = true);
+        }
+        // 10 发直弹匣：横竖加强筋 + 底板
+        cw_side(0.024, [[0.100, 0.032], [0.168, 0.032], [0.160, -0.060], [0.098, -0.060]]);
+        for (z = [-0.040, -0.014, 0.010]) cw_side(0.0262, [[0.103, z + 0.004], [0.163, z + 0.004], [0.163, z], [0.103, z]]);
+        for (f = [0.118, 0.142]) cw_side(0.0262, [[f, 0.028], [f + 0.004, 0.028], [f + 0.003, -0.056], [f - 0.001, -0.056]]);
+        cw_blk(0.129, -0.062, [0.027, 0.070, 0.006], 0, 0.0015);
+        // 扳机护圈（与扳机座一体）
+        cw_side_hole(0.010, [[0.026, 0.032], [0.090, 0.032], [0.086, 0.008], [0.060, 0.002], [0.022, 0.004], [0.018, 0.016]],
+                     [[0.031, 0.026], [0.078, 0.026], [0.075, 0.012], [0.058, 0.008], [0.032, 0.010]]);
+        // 快慢机（右侧）
+        cw_side(0.0022, [[-0.058, 0.072], [-0.050, 0.078], [0.070, 0.066], [0.072, 0.058], [0.062, 0.057],
+                         [-0.052, 0.067]], -0.0172);
+        cw_pin(-0.054, 0.072, 0.0052, 0.038);
+        // 钢托底板
+        cw_side(0.036, [[-0.414, 0.066], [-0.421, 0.066], [-0.412, -0.100], [-0.405, -0.098]]);
+    }
+    cw_m_bright()
+    {
+        cw_side(0.005, [[0.048, 0.032], [0.053, 0.032], [0.050, 0.016], [0.044, 0.012], [0.045, 0.022]]);  // 扳机
+        cw_rod_r(0.150, 0.071, -0.015, 0.018, 0.0045);                                                   // 拉机柄
+        cw_wf(0.151, 0.071, -0.035) scale([1, 1.4, 1]) cw_sph(0.0064, 14);
+        cw_wf(0.743, 0.098) cw_cyl(0.007, 0.0014, 8);                                    // 准星柱
+    }
+    // 开槽护木（槽内露出深色导气管腔）
+    cw_m_hole() hull()
+    {
+        cw_bore(0.228, 0.220, 0.0160, 0.077, 0, -1, 16);
+        cw_blk(0.338, 0.053, [0.031, 0.220, 0.026], 0, 0.004);
+    }
+    cw_m_wood(cw_SVD_WOOD())
+    {
+        difference()
+        {
+            hull()
+            {
+                cw_bore(0.226, 0.226, 0.0215, 0.077, 0, -1, 22);
+                cw_blk(0.339, 0.052, [0.040, 0.226, 0.030], 0, 0.006);
+            }
+            for (i = [0 : 5]) for (s = [-1, 1])
+                cw_wf(0.258 + i * 0.032, 0.072, s * 0.0215) rotate([28, 0, 0]) cube([0.012, 0.0075, 0.028], center = true);
+        }
+        // 镂空拇指孔枪托（握把一体）
+        // 镂空拇指孔枪托：握把 / 下梁 / 托底 / 托腮梁四个倒角凸块拼成，中间自然留出拇指孔
+        cw_wpn_slab(0.034, [[0.028, 0.032], [-0.004, -0.078], [-0.050, -0.086], [-0.046, -0.054], [-0.028, 0.014],
+                        [-0.020, 0.032]], 0.005);
+        cw_wpn_slab(0.032, [[-0.040, -0.054], [-0.044, -0.086], [-0.322, -0.079], [-0.306, -0.052]], 0.005);
+        cw_wpn_slab(0.038, [[-0.334, -0.064], [-0.322, -0.080], [-0.405, -0.098], [-0.414, 0.066], [-0.320, 0.075],
+                        [-0.334, 0.044]], 0.006);
+        cw_wpn_slab(0.034, [[-0.066, 0.032], [-0.066, 0.082], [-0.300, 0.075], [-0.336, 0.050], [-0.300, 0.044],
+                        [-0.090, 0.049]], 0.005);
+    }
+    // 托腮板（人造革）
+    cw_m_leather([0.13, 0.09, 0.06]) hull()
+    {
+        cw_blk(-0.250, 0.079, [0.037, 0.120, 0.012], 0, 0.003);
+        cw_blk(-0.250, 0.091, [0.026, 0.100, 0.006], 0, 0.002);
+    }
+    if (scope) cw_svd_scope(lens);
+}
+
+module cw_wpn_svd(seed = 0) gk_flatten() cw_lay(0.212, 0.032) cw_wpn_svd_held(lens = true);
+
+// ---------------- 莫辛-纳甘 M91/30 ----------------
+// 辨识点：通长直颈木托 + 上护木 + 两道枪箍 + 六角机匣前环 + 直拉球形枪栓柄 + 蘑菇头击针帽 +
+// 护圈准星 + 托上背带孔（贯通）。
+function cw_MOSIN_WOOD() = [0.38, 0.20, 0.09];
+
+module cw_wpn_mosin_held()
+{
+    BZ = 0.070;
+    cw_m_wood(cw_MOSIN_WOOD())
+    {
+        // 直握颈（比托身细）+ 机匣座
+        cw_wpn_slab(0.030, [[-0.074, 0.054], [-0.035, 0.059], [-0.020, 0.064], [0.048, 0.066], [0.048, 0.022],
+                        [-0.030, 0.000], [-0.074, -0.004]], 0.005);
+        cw_wpn_slab(0.033, [[0.030, 0.066], [0.212, 0.067], [0.212, 0.036], [0.150, 0.030], [0.030, 0.022]], 0.004);
+        // 托身（向后渐宽）+ 贯通背带孔
+        difference()
+        {
+            hull()
+            {
+                cw_wpn_slab(0.030, [[-0.074, 0.054], [-0.062, 0.055], [-0.062, -0.004], [-0.074, -0.005]], 0.005);
+                cw_wpn_slab(0.044, [[-0.446, 0.042], [-0.436, 0.043], [-0.436, -0.080], [-0.448, -0.082]], 0.007);
+            }
+            cw_blk(-0.250, -0.012, [0.060, 0.034, 0.010], 0, 0.004);
+        }
+        // 前托（圆底）+ 前背带孔
+        difference()
+        {
+            hull()
+            {
+                cw_wpn_slab(0.034, [[0.200, 0.068], [0.708, 0.070], [0.708, 0.052], [0.600, 0.047], [0.200, 0.036]], 0.004);
+                cw_bore(0.204, 0.500, 0.0148, 0.052, 0, 0.0115, 20);
+            }
+            cw_blk(0.565, 0.050, [0.060, 0.030, 0.008], 0, 0.003);
+        }
+        // 上护木（表尺前到第一道箍）
+        hull()
+        {
+            cw_bore(0.272, 0.200, 0.0142, BZ + 0.001, 0, -1, 20);
+            cw_blk(0.372, 0.070, [0.031, 0.200, 0.004], 0, 0.001);
+        }
+    }
+    cw_m_blued()
+    {
+        // 圆机匣（顶部装弹口露出枪机）+ 六角前环 + 尾舌
+        difference()
+        {
+            cw_bore(-0.028, 0.160, 0.0158, BZ, 0, -1, 24);
+            cw_blk(0.050, BZ + 0.012, [0.017, 0.078, 0.012], -0.004, 0.001);
+        }
+        cw_bore(0.128, 0.048, 0.0188, BZ, 0, -1, 6);
+        cw_blk(-0.050, 0.062, [0.016, 0.044, 0.006], 0, 0.002);
+        // 枪管 + 表尺 + 护圈准星
+        cw_bore(0.176, 0.646, 0.0108, BZ, 0, 0.0088, 20);
+        cw_side(0.024, [[0.200, BZ], [0.272, BZ], [0.272, BZ + 0.014], [0.214, BZ + 0.019], [0.200, BZ + 0.017]]);
+        cw_side(0.012, [[0.208, BZ + 0.018], [0.268, BZ + 0.015], [0.268, BZ + 0.019], [0.210, BZ + 0.025]]);
+        for (s = [-1, 1]) cw_blk(0.211, BZ + 0.0275, [0.0042, 0.006, 0.006], s * 0.004, 0.001);
+        cw_bore(0.792, 0.022, 0.0118, BZ, 0, -1, 18);
+        cw_side(0.006, [[0.796, BZ], [0.810, BZ], [0.808, BZ + 0.026], [0.799, BZ + 0.026]]);
+        cw_lathe([[0.0095, 0.794], [0.0116, 0.794], [0.0116, 0.812], [0.0095, 0.812]], BZ + 0.018, 0, 18);
+        // 两道枪箍
+        for (f = [0.470, 0.655])
+            hull()
+            {
+                cw_blk(f, 0.057, [0.038, 0.011, 0.034], 0, 0.003);
+                cw_bore(f - 0.0055, 0.011, 0.0156, BZ + 0.002, 0, -1, 20);
+            }
+        // 通条
+        cw_bore(0.640, 0.160, 0.0028, BZ - 0.016, 0, -1, 8);
+        cw_bore(0.800, 0.008, 0.0042, BZ - 0.016, 0, -1, 10);
+        // 弹仓 + 扳机护圈
+        cw_wpn_slab(0.029, [[0.042, 0.026], [0.140, 0.031], [0.128, -0.022], [0.064, -0.030], [0.046, -0.026]], 0.003);
+        cw_side_hole(0.009, [[-0.032, -0.008], [0.040, 0.022], [0.042, -0.036], [0.010, -0.040], [-0.024, -0.024]],
+                     [[-0.018, -0.010], [0.034, 0.012], [0.034, -0.028], [0.010, -0.031], [-0.013, -0.020]]);
+        // 钢托底板
+        cw_side(0.045, [[-0.447, 0.043], [-0.455, 0.042], [-0.457, -0.083], [-0.449, -0.083]]);
+        // 蘑菇头击针帽（尾部）
+        cw_lathe([[0, -0.121], [0.0112, -0.119], [0.0128, -0.111], [0.0110, -0.098], [0, -0.098]], BZ + 0.003, 0, 16);
+    }
+    cw_m_bright()
+    {
+        cw_bore(-0.098, 0.200, 0.0094, BZ + 0.003, 0, -1, 18);                  // 枪机体
+        cw_rod_r(-0.004, BZ - 0.004, -0.008, 0.058, 0.0042);                    // 直拉柄
+        cw_wf(-0.004, BZ - 0.006, -0.068) cw_sph(0.0098, 16);         // 球形柄头
+        cw_side(0.005, [[0.014, 0.010], [0.019, 0.010], [0.016, -0.010], [0.010, -0.016], [0.012, -0.004]]);  // 扳机
+        cw_blk(0.090, -0.029, [0.006, 0.010, 0.005], 0, 0.001);                  // 弹仓底盖卡笋
+        cw_wf(0.803, BZ) cw_cyl(0.024, 0.0013, 8);               // 准星柱
+    }
+}
+
+module cw_wpn_mosin(seed = 0) gk_flatten() cw_lay(0.183, 0.0226) cw_wpn_mosin_held();
+
+// ---------------- 双管猎枪（IZh-43K 式外露击锤） ----------------
+// 辨识点：并列双管 + 枪口两个膛孔 + 黄铜准星珠 + 白钢雕花机匣 + 双外露击锤 + 双扳机 +
+// 半手枪握把胡桃木托（网纹）+ 白线橡胶托底。
+function cw_SG_WALNUT() = [0.30, 0.16, 0.08];
+
+module cw_wpn_shotgun_held()
+{
+    BZ = 0.056;
+    BX = 0.0118;
+    BR = 0.0118;
+    cw_m_blued()
+    {
+        for (s = [-1, 1]) difference()
+        {
+            cw_bore(0.112, 0.668, BR, BZ, s * BX, BR * 0.93, 22);
+            cw_bore(0.700, 0.100, 0.0093, BZ, s * BX, -1, 18);
+        }
+        cw_blk(0.446, BZ - 0.0085, [0.010, 0.668, 0.0075], 0, 0.001);      // 下筋
+        cw_blk(0.132, BZ, [0.0475, 0.040, 0.026], 0, 0.004);               // 枪管后段（monoblock）
+        cw_blk(0.150, BZ - 0.020, [0.020, 0.030, 0.012], 0, 0.002);       // 钩座
+        cw_blk(0.168, 0.030, [0.040, 0.020, 0.010], 0, 0.002);            // 前托铁
+        // 双外露击锤 + 击锤轴
+        for (s = [-1, 1])
+            cw_side(0.0055, [[0.040, 0.046], [0.050, 0.058], [0.044, 0.072], [0.026, 0.086], [0.018, 0.084],
+                             [0.030, 0.068], [0.028, 0.050]], s * 0.0215);
+        cw_pin(0.034, 0.050, 0.0040, 0.056);
+        // 开闩扳手（向右后偏）+ 保险
+        cw_wf(0.010, 0.072) rotate([0, 0, 20]) translate([0, 0.018, 0]) cube([0.010, 0.040, 0.006], center = true);
+        cw_blk(-0.030, 0.0705, [0.007, 0.012, 0.004], 0, 0.001);
+        // 扳机护圈
+        cw_side(0.008, [[0.084, 0.014], [0.090, 0.014], [0.078, -0.017], [0.040, -0.025], [0.000, -0.020],
+                        [-0.020, -0.004], [-0.014, 0.000], [0.002, -0.013], [0.040, -0.018], [0.072, -0.011]]);
+    }
+    cw_m_park() cw_blk(0.446, BZ + 0.0085, [0.010, 0.668, 0.0075], 0, 0.001);   // 哑光顶筋
+    cw_m_hole() for (s = [-1, 1]) cw_bore(0.700, 0.010, 0.0094, BZ, s * BX, -1, 18);   // 膛内暗底
+    cw_m_brass() cw_wf(0.774, BZ + 0.0128) cw_sph(0.0027, 12);               // 黄铜准星珠
+    cw_m_bright() for (f = [0.036, 0.060])
+        cw_side(0.0045, [[f, 0.014], [f + 0.005, 0.014], [f + 0.002, -0.004], [f - 0.004, -0.010], [f - 0.002, 0.002]]);
+    // 白钢机匣：侧面压一圈边框，框内是压暗的雕花面
+    cw_m_silver() difference()
+    {
+        cw_side(0.050, [[0.010, 0.070], [0.112, 0.070], [0.112, 0.042], [0.168, 0.040], [0.168, 0.026],
+                        [0.112, 0.014], [0.030, 0.012], [0.010, 0.026]]);
+        for (s = [-1, 1]) cw_side(0.004, [[0.030, 0.022], [0.100, 0.022], [0.100, 0.060], [0.030, 0.060]], s * 0.0262);
+    }
+    cw_m_etch() for (s = [-1, 1])
+        cw_side(0.0012, [[0.032, 0.024], [0.098, 0.024], [0.098, 0.058], [0.032, 0.058]], s * 0.0244);
+    cw_m_wood(cw_SG_WALNUT())
+    {
+        // 半手枪握把段（凹形轮廓直接拉伸）
+        cw_wpn_slab(0.040, [[0.012, 0.070], [-0.070, 0.066], [-0.110, 0.063], [-0.110, -0.052], [-0.075, -0.060],
+                        [-0.042, -0.064], [-0.022, -0.050], [-0.006, -0.020], [0.004, 0.004], [0.012, 0.012]], 0.006);
+        // 托身（hull 渐宽）
+        hull()
+        {
+            cw_wpn_slab(0.040, [[-0.108, 0.063], [-0.100, 0.0635], [-0.100, -0.054], [-0.108, -0.053]], 0.006);
+            cw_wpn_slab(0.046, [[-0.400, 0.040], [-0.392, 0.041], [-0.392, -0.100], [-0.400, -0.102]], 0.007);
+        }
+        // 前托（splinter）
+        hull()
+        {
+            cw_wpn_slab(0.046, [[0.160, 0.046], [0.368, 0.046], [0.374, 0.040], [0.366, 0.030], [0.160, 0.028]], 0.005);
+            cw_bore(0.162, 0.200, 0.020, 0.040, 0, 0.018, 20);
+        }
+    }
+    cw_m_check([0.17, 0.085, 0.045]) for (s = [-1, 1])
+        cw_side(0.0012, [[-0.014, 0.026], [-0.050, 0.036], [-0.066, -0.028], [-0.030, -0.042]], s * 0.0201);   // 握把网纹
+    cw_m_paint([0.82, 0.80, 0.74]) cw_wpn_slab(0.0462, [[-0.400, 0.040], [-0.403, 0.040], [-0.403, -0.102], [-0.400, -0.102]], 0.0065);
+    cw_m_rubber([0.07, 0.04, 0.03]) cw_wpn_slab(0.0466, [[-0.403, 0.0405], [-0.418, 0.040], [-0.420, -0.100], [-0.403, -0.1025]], 0.0068);
+}
+
+module cw_wpn_shotgun(seed = 0) gk_flatten() cw_lay(0.18, 0.0236) cw_wpn_shotgun_held();
+
+// ---------------- 马卡洛夫 PM ----------------
+// 按真实尺寸（m）建模再整体放大 1.5 倍以配合方块角色的手。辨识点：圆鼻套筒 + 尾部竖防滑纹 +
+// 左侧保险拨片（红点）+ 外露击锤 + 大圆扳机护圈 + 褐色胶木一体握片（五角星）+ 尾部挂绳环。
+function cw_PM_SCALE() = 1.5;
+function cw_PM_GRIP() = [0.24, 0.11, 0.055];
+
+module cw_pm_star(r = 0.0065)
+    polygon([for (i = [0 : 9]) let(a = 90 + i * 36, rr = i % 2 == 0 ? r : r * 0.42) [rr * cos(a), rr * sin(a)]]);
+
+module cw_wpn_pistol_held()
+{
+    scale(cw_PM_SCALE())
+    {
+        // 套筒：圆顶 + 圆鼻，尾部竖防滑纹，右侧抛壳窗，枪口钻孔
+        cw_m_blued() difference()
+        {
+            hull()
+            {
+                cw_bore(-0.040, 0.150, 0.0128, 0.0345, 0, -1, 24);
+                cw_wf(0.110, 0.0345) cw_sph(0.0128, 24);
+                cw_side(0.029, [[-0.040, 0.021], [0.110, 0.021], [0.110, 0.033], [-0.040, 0.033]]);
+                cw_wf(0.112, 0.027) rotate([0, 90, 0]) cw_cyl(0.029, 0.0062, 16, -1, true);
+            }
+            for (i = [0 : 9]) for (s = [-1, 1]) cw_blk(-0.036 + i * 0.0026, 0.034, [0.003, 0.0011, 0.020], s * 0.0148, 0);
+            cw_blk(0.024, 0.038, [0.010, 0.028, 0.013], -0.0145, 0.001);
+            cw_bore(0.100, 0.040, 0.0062, 0.0345, 0, -1, 16);
+        }
+        cw_m_bright() cw_blk(0.024, 0.038, [0.004, 0.026, 0.011], -0.0105, 0.001);   // 抛壳窗内枪管节套
+        cw_m_blued() difference()
+        {
+            cw_bore(0.090, 0.028, 0.0060, 0.0345, 0, -1, 16);
+            cw_bore(0.085, 0.040, 0.0046, 0.0345, 0, -1, 14);
+        }
+        cw_m_hole() cw_bore(0.098, 0.004, 0.0047, 0.0345, 0, -1, 14);
+        cw_m_blued()
+        {
+            // 准星 + 照门
+            cw_side(0.003, [[0.106, 0.046], [0.116, 0.046], [0.115, 0.0525], [0.109, 0.0525]]);
+            for (s = [-1, 1]) cw_blk(-0.031, 0.0495, [0.0045, 0.009, 0.007], s * 0.004, 0.001);
+            // 套座（枪身）+ 大圆扳机护圈
+            cw_side(0.026, [[-0.042, 0.022], [0.112, 0.022], [0.112, 0.012], [0.064, 0.010], [0.004, 0.012], [-0.042, 0.014]]);
+            cw_side_hole(0.008, [[0.064, 0.014], [0.066, 0.000], [0.058, -0.014], [0.040, -0.021], [0.012, -0.020],
+                                 [0.004, -0.010], [0.004, 0.014]],
+                         [[0.057, 0.008], [0.058, -0.002], [0.052, -0.011], [0.040, -0.015], [0.016, -0.014],
+                          [0.011, -0.006], [0.011, 0.008]]);
+            // 握把骨架（后背条外露）
+            cw_side(0.022, [[0.004, 0.014], [-0.012, -0.068], [-0.042, -0.072], [-0.044, 0.022]]);
+            // 外露击锤：圆形击锤尾
+            hull()
+            {
+                cw_side(0.008, [[-0.040, 0.026], [-0.040, 0.038], [-0.045, 0.038], [-0.045, 0.026]]);
+                cw_pin(-0.0465, 0.0445, 0.0052, 0.008, 0, 16);
+            }
+            // 左侧保险拨片 + 空仓挂机柄
+            cw_side(0.0022, [[-0.037, 0.039], [-0.016, 0.044], [-0.014, 0.040], [-0.035, 0.035]], 0.0156);
+            cw_pin(-0.034, 0.037, 0.0035, 0.0322);
+            cw_side(0.0022, [[0.034, 0.019], [0.056, 0.020], [0.056, 0.024], [0.036, 0.025]], 0.0141);
+            // 弹匣底板
+            cw_blk(-0.027, -0.0725, [0.025, 0.031, 0.005], 0, 0.0015);
+        }
+        cw_m_paint([0.72, 0.06, 0.04]) cw_pin(-0.026, 0.031, 0.0018, 0.0012, 0.0150);  // 保险红点（左侧）
+        cw_m_bright() cw_side(0.0045, [[0.030, 0.010], [0.035, 0.010], [0.033, -0.004], [0.027, -0.010], [0.029, 0.000]]);  // 扳机
+        // 一体握片：胶木，两侧五角星 + 网纹区
+        cw_m_bake(cw_PM_GRIP()) hull()
+        {
+            cw_side(0.025, [[0.000, 0.012], [-0.013, -0.068], [-0.041, -0.070], [-0.039, 0.016]]);
+            cw_side(0.030, [[-0.004, 0.006], [-0.015, -0.062], [-0.037, -0.064], [-0.035, 0.010]]);
+        }
+        cw_m_bake([0.17, 0.075, 0.04]) for (s = [-1, 1])
+            cw_wf(-0.017, -0.004, s * 0.0152) rotate([0, 90, 0]) cw_cyl(0.0012, 0.0085, 20, -1, true);
+        cw_m_check([0.20, 0.09, 0.045]) for (s = [-1, 1])
+            cw_side(0.0012, [[-0.012, -0.018], [-0.034, -0.018], [-0.038, -0.058], [-0.018, -0.058]], s * 0.0150);
+        cw_m_bake([0.40, 0.20, 0.10]) for (s = [-1, 1])
+            cw_wf(-0.017, -0.004, s * 0.0160) rotate([0, s * 90, 0]) rotate([0, 0, s * 90])
+                linear_extrude(height = 0.0012, center = true) cw_pm_star();
+        // 挂绳环
+        cw_m_bright() cw_wf(-0.043, -0.066) rotate([0, 90, 0]) cw_torus(0.0055, 0.0013, 12);
+    }
+}
+
+module cw_wpn_pistol(seed = 0) gk_flatten() cw_lay(0.051, 0.0255) cw_wpn_pistol_held();
+
+// ---------------- RPG-7（地图道具） ----------------
+function cw_RPG_WOOD() = [0.40, 0.21, 0.10];
+
+module cw_wpn_rpg_held()
+{
+    BZ = 0.060;
+    cw_m_blued()
+    {
+        cw_bore(-0.620, 0.950, 0.0205, BZ, 0, -1, 24);                                       // 发射筒
+        cw_lathe([[0.0175, -0.620], [0.0215, -0.620], [0.0425, -0.745], [0.0395, -0.745],
+                  [0.0175, -0.640]], BZ, 0, 28);                                              // 喇叭形尾喷管
+        cw_bore(-0.630, 0.014, 0.0235, BZ, 0, -1, 24);
+        cw_bore(0.320, 0.012, 0.0235, BZ, 0, -1, 24);                                        // 筒口箍
+        // 机械瞄具
+        cw_side(0.006, [[0.200, BZ + 0.018], [0.214, BZ + 0.018], [0.211, BZ + 0.040], [0.203, BZ + 0.040]]);
+        cw_side(0.014, [[-0.010, BZ + 0.018], [0.012, BZ + 0.018], [0.010, BZ + 0.034], [-0.008, BZ + 0.034]]);
+        // 扳机护圈
+        cw_side(0.008, [[0.058, 0.040], [0.064, 0.040], [0.056, 0.008], [0.022, 0.004], [0.018, 0.010], [0.052, 0.013]]);
+    }
+    cw_m_bright() cw_side(0.005, [[0.034, 0.040], [0.039, 0.040], [0.036, 0.022], [0.030, 0.016], [0.032, 0.026]]);
+    // 木隔热护套 + 铜螺钉
+    cw_m_wood(cw_RPG_WOOD()) cw_bore(-0.300, 0.290, 0.0275, BZ, 0, -1, 24);
+    cw_m_brass() for (f = [-0.27, -0.04]) for (s = [-1, 1]) cw_pin(f, BZ, 0.0032, 0.0565);
+    // 握把 ×2
+    cw_m_bake([0.18, 0.09, 0.05])
+    {
+        hull()
+        {
+            cw_side(0.026, [[0.016, 0.040], [-0.012, -0.060], [-0.040, -0.064], [-0.026, 0.040]]);
+            cw_side(0.031, [[0.010, 0.032], [-0.010, -0.050], [-0.032, -0.053], [-0.020, 0.032]]);
+        }
+        hull()
+        {
+            cw_side(0.026, [[-0.180, 0.040], [-0.200, -0.040], [-0.226, -0.042], [-0.214, 0.040]]);
+            cw_side(0.031, [[-0.186, 0.032], [-0.202, -0.032], [-0.222, -0.034], [-0.210, 0.032]]);
+        }
+    }
+    // PGO-7 光学镜（左侧）
+    cw_m_anod()
+    {
+        cw_blk(-0.020, BZ + 0.012, [0.022, 0.070, 0.040], 0.036, 0.004);
+        cw_bore(-0.080, 0.130, 0.0110, BZ + 0.024, 0.046, -1, 20);
+        cw_bore(0.040, 0.020, 0.0135, BZ + 0.024, 0.046, -1, 20);
+    }
+    cw_m_rubber() cw_lathe([[0.0105, -0.115], [0.0160, -0.115], [0.0140, -0.080], [0.0105, -0.080]], BZ + 0.024, 0.046, 20);
+    // PG-7V 火箭弹：橄榄绿战斗部 + 灰色发动机段 + 铝引信尖
+    cw_m_paint([0.27, 0.06, 0.03]) cw_bore(0.300, 0.032, 0.0165, BZ, 0, 0.0175, 20);
+    cw_m_paint([0.30, 0.34, 0.20]) cw_lathe([[0, 0.330], [0.0205, 0.330], [0.0420, 0.392], [0.0425, 0.432],
+                                             [0.0200, 0.525], [0.0085, 0.575], [0, 0.578]], BZ, 0, 28);
+    cw_m_bright() cw_lathe([[0, 0.570], [0.0092, 0.570], [0.0040, 0.598], [0, 0.600]], BZ, 0, 16);
+}
+
+module cw_wpn_rpg(seed = 0) gk_flatten() cw_lay(-0.072, 0.058) cw_wpn_rpg_held();
+
+// 开盖武器箱（内置步枪 loot）
+module cw_wpn_crate(seed = 0)
+{
+    color(cw_OLIVE()) difference()
+    {
+        translate([0, 0, 0.26]) cw_boxc([1.4, 0.7, 0.52]);
+        translate([0, 0, 0.36]) cw_boxc([1.24, 0.54, 0.5]);
+    }
+    color(cw_OLIVED()) translate([0, 0.52, 0.12]) rotate([70, 0, 0]) cw_boxc([1.44, 0.74, 0.05]);   // 掀开盖靠边
+    color(cw_DARKC()) translate([0, 0, 0.14]) cw_boxc([1.22, 0.52, 0.06]);
+    translate([-0.05, 0.12, 0.17]) rotate([0, 0, 4]) cw_wpn_ak(seed);
+    translate([0.05, -0.12, 0.17]) rotate([0, 0, -3]) cw_wpn_ak(seed + 3);
+    color(cw_MARKW()) translate([0, -0.36, 0.3]) cw_boxc([0.5, 0.02, 0.14]);
+}
+
+// ---------------- 近战：猎刀 ----------------
+// 夹尖刃 + 磨亮刃口斜面 + 血槽 + 黄铜护手 / 尾锤 + 叠层皮革柄（红色纤维垫片）。刃口朝 -Z。
+function cw_KNIFE_LEATHER(i) = [[0.36, 0.22, 0.12], [0.29, 0.17, 0.09]][i % 2];
+
+module cw_wpn_knife_held()
+{
+    // 刃身平面（缎面钢）+ 血槽
+    gk_material([0.52, 0.53, 0.55], roughness = 0.3, metalness = 1.0) difference()
+    {
+        cw_side(0.0048, [[0.008, 0.013], [0.150, 0.012], [0.205, 0.005], [0.205, 0.001], [0.030, -0.007], [0.008, -0.007]]);
+        for (s = [-1, 1]) cw_side(0.0012, [[0.032, 0.0065], [0.128, 0.0065], [0.128, 0.0030], [0.032, 0.0030]], s * 0.0024);
+    }
+    // 刃口斜面（磨亮）
+    cw_m_bright() hull()
+    {
+        cw_side(0.0044, [[0.012, -0.005], [0.205, 0.003], [0.205, 0.001], [0.012, -0.007]]);
+        cw_side(0.0006, [[0.236, 0.000], [0.215, -0.009], [0.175, -0.017], [0.060, -0.020], [0.010, -0.017], [0.010, -0.007]]);
+    }
+    // 黄铜护手 + 尾锤
+    cw_m_brass()
+    {
+        hull()
+        {
+            cw_bore(-0.004, 0.009, 0.0062, 0.017, 0, -1, 16);
+            cw_bore(-0.004, 0.009, 0.0068, -0.025, 0, -1, 16);
+        }
+        cw_wf(-0.120, -0.002) scale([1.0, 0.75, 1.25]) cw_sph(0.0112, 18);
+    }
+    // 叠层皮革柄（中段鼓起）+ 两端红色纤维垫片
+    for (i = [0 : 15])
+        cw_m_leather(cw_KNIFE_LEATHER(i))
+            cw_wf(-0.008 - i * 0.0066, -0.002) rotate([90, 0, 0]) scale([1, 1.25, 1])
+                cw_cyl(0.0066, 0.0094 + 0.0016 * sin(180 * (i + 0.5) / 16), 20);
+    cw_m_paint([0.55, 0.08, 0.05]) for (f = [-0.006, -0.1135])
+        cw_wf(f, -0.002) rotate([90, 0, 0]) scale([1, 1.25, 1]) cw_cyl(0.0018, 0.0098, 20);
+}
+
+module cw_item_knife(seed = 0) gk_flatten() cw_lay(0.052, 0.0118) cw_wpn_knife_held();
+
+// ---------------- 近战：撬棍（鹅颈撬棍） ----------------
+// 红漆六角钢杆 + 鹅颈弯钩（向 +Z）+ 分叉起钉爪 + 扁凿头；两端露出磨亮的钢。
+function cw_BAR_RED() = [0.60, 0.07, 0.04];
+
+module cw_bar_sec(a, gr, r) cw_wf(0.440 + gr * sin(a), gr - gr * cos(a)) rotate([-a, 0, 0]) rotate([90, 0, 0])
+    cw_cyl(0.002, r, 6, -1, true);
+
+module cw_wpn_crowbar_held()
+{
+    R = 0.0115;
+    GR = 0.058;
+    cw_m_paint(cw_BAR_RED())
+    {
+        cw_bore(-0.240, 0.680, R, 0, 0, -1, 6);
+        for (a = [0 : 15 : 150]) hull() { cw_bar_sec(a, GR, R); cw_bar_sec(a + 15, GR, R); }
+    }
+    cw_m_park()
+    {
+        // 起钉爪：从弯钩末端压扁成宽爪，中间 V 形分叉
+        difference()
+        {
+            hull()
+            {
+                cw_bar_sec(165, GR, R);
+                cw_wf(0.440 + GR * sin(165) - 0.052 * cos(15), GR - GR * cos(165) + 0.052 * sin(15)) rotate([15, 0, 0])
+                    cube([0.026, 0.002, 0.004], center = true);
+            }
+            cw_wf(0.440 + GR * sin(165) - 0.050 * cos(15), GR - GR * cos(165) + 0.050 * sin(15)) rotate([15, 0, 0])
+                rotate([0, 0, 0]) linear_extrude(height = 0.03, center = true)
+                    polygon([[-0.0035, -0.001], [0.0035, -0.001], [0.0008, -0.036], [-0.0008, -0.036]]);
+        }
+        // 扁凿头（尾端略上翘）
+        hull()
+        {
+            cw_bore(-0.250, 0.010, R, 0, 0, -1, 6);
+            cw_wf(-0.300, 0.008) rotate([-12, 0, 0]) cube([0.024, 0.002, 0.0035], center = true);
+        }
+    }
+    cw_m_bright()
+    {
+        cw_wf(0.440 + GR * sin(165) - 0.053 * cos(15), GR - GR * cos(165) + 0.053 * sin(15)) rotate([15, 0, 0])
+            cube([0.0262, 0.0022, 0.0028], center = true);
+        cw_wf(-0.3012, 0.0083) rotate([-12, 0, 0]) cube([0.0242, 0.0022, 0.0022], center = true);
+    }
+}
+
+module cw_item_crowbar(seed = 0) gk_flatten() cw_lay(0.11, 0.0145) cw_wpn_crowbar_held();
+
+// ---------------- 近战：消防斧（尖镐背） ----------------
+// 红漆斧头 + 磨亮弧形刃口（朝 -Z，劈砍时刃口领先）+ 尖镐背 + 白蜡木椭圆斧柄（尾端鼓包）。
+function cw_AXE_RED() = [0.62, 0.06, 0.04];
+function cw_AXE_ASH() = [0.64, 0.46, 0.26];
+
+module cw_axe_disk(h) cw_wf(h[0], 0) rotate([90, 0, 0]) scale([h[1], h[2], 1]) cw_cyl(0.002, 0.5, 20, -1, true);
+
+module cw_wpn_axe_held()
+{
+    HAFT = [[-0.276, 0.022, 0.028], [-0.262, 0.026, 0.040], [-0.235, 0.023, 0.031], [0.300, 0.023, 0.031],
+            [0.470, 0.024, 0.036], [0.566, 0.024, 0.036]];
+    cw_m_wood(cw_AXE_ASH()) for (i = [0 : len(HAFT) - 2]) hull() { cw_axe_disk(HAFT[i]); cw_axe_disk(HAFT[i + 1]); }
+    cw_m_blued() cw_blk(0.566, 0, [0.004, 0.004, 0.030], 0, 0.001);   // 柄顶铁楔
+    cw_m_paint(cw_AXE_RED())
+    {
+        cw_blk(0.515, 0, [0.026, 0.088, 0.052], 0, 0.005);          // 斧身（包住柄眼）
+        hull()                                                      // 斧刃（漆面部分）
+        {
+            cw_blk(0.515, -0.024, [0.024, 0.080, 0.004], 0, 0.001);
+            cw_blk(0.520, -0.094, [0.010, 0.150, 0.004], 0, 0.001);
+        }
+        for (i = [0 : 2]) hull()                                    // 尖镐背：方截面渐细，略向柄尾回弯
+        {
+            cw_blk(0.515 - [0, 0.004, 0.012][i], 0.024 + [0, 0.045, 0.090][i],
+                   [[0.020, 0.030, 0.004], [0.015, 0.022, 0.004], [0.010, 0.014, 0.004]][i], 0, 0.001);
+            cw_blk(0.515 - [0.004, 0.012, 0.024][i], 0.024 + [0.045, 0.090, 0.120][i],
+                   [[0.015, 0.022, 0.004], [0.010, 0.014, 0.004], [0.004, 0.005, 0.003]][i], 0, 0.001);
+        }
+    }
+    cw_m_bright()
+    {
+        hull()                                                      // 磨亮的弧形刃口斜面
+        {
+            cw_blk(0.520, -0.094, [0.0096, 0.150, 0.004], 0, 0.001);
+            for (p = [[0.440, -0.112], [0.470, -0.126], [0.520, -0.132], [0.570, -0.126], [0.600, -0.110]])
+                cw_wf(p[0], p[1]) cube([0.0012, 0.006, 0.003], center = true);
+        }
+        hull()                                                      // 镐尖磨亮
+        {
+            cw_blk(0.495, 0.140, [0.0052, 0.0062, 0.002], 0, 0.0005);
+            cw_wf(0.488, 0.156) cube([0.0012, 0.0012, 0.001], center = true);
+        }
+    }
+}
+
+module cw_item_axe(seed = 0) gk_flatten() cw_lay(0.162, 0.0142) cw_wpn_axe_held();
+
+// ================= 物资（小件 loot，底面 z=0） =================
+
+// 罐头
+module cw_item_can(seed = 0)
+{
+    color(cw_METALC()) cylinder(h = 0.13, r = 0.05, $fn = 7);
+    color(cw_goods_c(seed)) translate([0, 0, 0.03]) cylinder(h = 0.07, r = 0.052, $fn = 7);
+}
+
+// 油壶（jerry can）
+module cw_item_jerrycan(seed = 0)
+{
+    c = cw_rnd(seed, 2) == 0 ? cw_OLIVE() : cw_REDC();
+    color(c) translate([0, 0, 0.24]) cw_boxc([0.35, 0.16, 0.48]);
+    color([c[0] * 0.8, c[1] * 0.8, c[2] * 0.8])
+    {
+        translate([0, 0, 0.45]) rotate([0, 45, 0]) cw_boxc([0.1, 0.17, 0.1]);
+        translate([-0.09, 0, 0.51]) cw_boxc([0.1, 0.05, 0.05]);
+    }
+    color(cw_METALD()) translate([0.13, 0, 0.5]) cylinder(h = 0.05, r = 0.035, $fn = 6);
+}
+
+// 医疗箱（白盒红十字）
+module cw_item_medkit()
+{
+    color(cw_MARKW()) translate([0, 0, 0.11]) cw_boxc([0.36, 0.26, 0.22]);
+    color(cw_REDC())
+    {
+        translate([0, -0.131, 0.12]) cw_boxc([0.05, 0.004, 0.14]);
+        translate([0, -0.131, 0.12]) cw_boxc([0.14, 0.004, 0.05]);
+        translate([0, 0, 0.221]) cw_boxc([0.05, 0.14, 0.004]);
+        translate([0, 0, 0.221]) cw_boxc([0.14, 0.05, 0.004]);
+    }
+    color(cw_METALD()) translate([0, -0.12, 0.2]) cw_boxc([0.08, 0.03, 0.03]);
+}
+
+// 弹药盒（军绿提箱）
+module cw_item_ammobox(seed = 0)
+{
+    color(cw_OLIVE()) translate([0, 0, 0.13]) cw_boxc([0.32, 0.16, 0.26]);
+    color(cw_OLIVED()) translate([0, 0, 0.25]) cw_boxc([0.34, 0.18, 0.05]);
+    color(cw_MARKW()) translate([0, -0.081, 0.12]) cw_boxc([0.18, 0.004, 0.07]);
+    color(cw_METALD()) translate([0, 0, 0.29]) cw_boxc([0.1, 0.04, 0.03]);
+}
+
+// 行军背包（靠放）
+module cw_item_backpack(seed = 0)
+{
+    c = cw_rnd(seed, 2) == 0 ? cw_KHAKI() : cw_OLIVE();
+    rotate([0, 0, cw_rnd(seed, 90)]) rotate([-16, 0, 0])
+    {
+        color(c) translate([0, 0, 0.3]) scale([1, 0.6, 1.15]) sphere(r = 0.26, $fn = 7);
+        color([c[0] * 0.8, c[1] * 0.8, c[2] * 0.8]) translate([0, -0.1, 0.52]) scale([0.8, 0.5, 0.5]) sphere(r = 0.2, $fn = 6);
+        color(cw_WOODD()) for (sx = [-1, 1]) translate([sx * 0.12, 0.15, 0.3]) cw_boxc([0.05, 0.03, 0.4]);
+    }
+}
+
+// 野战电台（旋钮 + 鞭天线）
+module cw_item_radio(seed = 0)
+{
+    color(cw_OLIVED()) translate([0, 0, 0.16]) cw_boxc([0.38, 0.2, 0.32]);
+    color(cw_METALD()) for (i = [0 : 2]) translate([-0.1 + i * 0.1, -0.11, 0.22]) cylinder(h = 0.025, r = 0.025, $fn = 6);
+    color(cw_DARKC()) translate([0.05, -0.11, 0.1]) cw_boxc([0.14, 0.01, 0.06]);
+    color(cw_METALC()) translate([0.14, 0.06, 0.32]) cylinder(h = 0.9, r = 0.012, $fn = 5);
+}
+
+// 煤油马灯（暖光罩）
+module cw_item_lantern(seed = 0)
+{
+    color(cw_METALD()) cylinder(h = 0.05, r = 0.08, $fn = 7);
+    color([0.90, 0.80, 0.52, 0.8]) translate([0, 0, 0.05]) cylinder(h = 0.14, r1 = 0.06, r2 = 0.045, $fn = 7);
+    color(cw_METALD())
+    {
+        translate([0, 0, 0.19]) cylinder(h = 0.04, r = 0.06, $fn = 7);
+        translate([0, 0, 0.24]) rotate([0, 90, 0]) cylinder(h = 0.02, r = 0.06, $fn = 6);
+    }
+}
+
+// 铺盖卷（行军床垫）
+module cw_item_bedroll(seed = 0)
+{
+    c = cw_rnd(seed, 2) == 0 ? cw_OLIVE() : [0.44, 0.36, 0.28];
+    color(c) translate([-0.35, 0, 0.12]) rotate([0, 90, 0]) cylinder(h = 0.7, r = 0.12, $fn = 8);
+    color([c[0] * 0.8, c[1] * 0.8, c[2] * 0.8]) for (x = [-0.2, 0.15])
+        translate([x, 0, 0.12]) rotate([0, 90, 0]) cylinder(h = 0.05, r = 0.125, $fn = 8);
+}
+
+// 钢盔
+module cw_item_helmet(seed = 0)
+{
+    color(cw_rnd(seed, 2) == 0 ? cw_OLIVE() : cw_OLIVED()) difference()
+    {
+        scale([1.15, 1, 0.8]) sphere(r = 0.15, $fn = 8);
+        translate([0, 0, -0.2]) cw_boxc([0.5, 0.5, 0.4]);
+    }
+    color(cw_OLIVED()) cylinder(h = 0.02, r = 0.16, $fn = 8);
+}
+
+// 救援物资箱（木箱红十字，空投样式）
+module cw_item_crate_supply(seed = 0)
+{
+    color([0.48, 0.38, 0.24]) translate([0, 0, 0.3]) cw_boxc([0.8, 0.8, 0.6]);
+    color(cw_WOODD())
+    {
+        for (sz = [0.06, 0.55]) translate([0, 0, sz]) cw_boxc([0.84, 0.84, 0.09]);
+        for (a = [45, -45]) translate([0, -0.41, 0.3]) rotate([0, a, 0]) cw_boxc([0.85, 0.02, 0.1]);
+    }
+    color(cw_MARKW()) translate([0, -0.42, 0.32]) cw_boxc([0.3, 0.02, 0.3]);
+    color(cw_REDC())
+    {
+        translate([0, -0.43, 0.32]) cw_boxc([0.07, 0.02, 0.24]);
+        translate([0, -0.43, 0.32]) cw_boxc([0.24, 0.02, 0.07]);
+    }
+}
+
+
+// =====================================================================================
+// ================= 扩展：NextDayz 末日生存（功能物资 / 室内家具 / 末日痕迹 / 新建筑） =================
+// =====================================================================================
+// 物资件同时是 loot 目录 characters/nextdayz_loot_items.scad 的模型来源：改这里两处一起变。
+
+// ================= 扩展物资（底面 z=0，小件平放） =================
+
+// 塑料水瓶（直立；full=false 为空瓶）
+module cw_item_water_bottle(seed = 0, full = true)
+{
+    body = full ? [0.26, 0.46, 0.62] : [0.60, 0.64, 0.64];
+    color(body)
+    {
+        cylinder(h = 0.2, r = 0.042, $fn = 14);
+        translate([0, 0, 0.2]) cylinder(h = 0.045, r1 = 0.042, r2 = 0.017, $fn = 14);
+    }
+    color([0.15, 0.34, 0.66]) translate([0, 0, 0.245]) cylinder(h = 0.024, r = 0.019, $fn = 10);
+    color(cw_MARKW()) translate([0, 0, 0.07]) cylinder(h = 0.075, r = 0.0435, $fn = 14);
+    color(cw_SIGNB()) translate([0, 0, 0.095]) cylinder(h = 0.025, r = 0.0445, $fn = 14);
+}
+
+// 汽水罐
+module cw_item_soda(seed = 0)
+{
+    color(cw_goods_c(seed + 3)) cylinder(h = 0.115, r = 0.033, $fn = 14);
+    color(cw_METALC())
+    {
+        translate([0, 0, 0.115]) cylinder(h = 0.008, r1 = 0.033, r2 = 0.026, $fn = 14);
+        cylinder(h = 0.006, r = 0.03, $fn = 14);
+    }
+    color(cw_MARKW()) translate([0, 0, 0.045]) cylinder(h = 0.025, r = 0.0335, $fn = 14);
+}
+
+// 金枪鱼扁罐
+module cw_item_tuna(seed = 0)
+{
+    color(cw_METALC()) cylinder(h = 0.036, r = 0.045, $fn = 16);
+    color(cw_rnd(seed, 2) == 0 ? cw_SIGNB() : [0.70, 0.52, 0.16]) translate([0, 0, 0.008]) cylinder(h = 0.02, r = 0.0455, $fn = 16);
+    color(cw_METALD()) translate([0.026, 0, 0.037]) cw_boxc([0.02, 0.012, 0.004]);
+}
+
+// 苏打饼干盒
+module cw_item_crackers(seed = 0)
+{
+    color([0.72, 0.58, 0.22]) translate([0, 0, 0.06]) cw_boxc([0.18, 0.06, 0.12]);
+    color(cw_REDC()) translate([0, -0.031, 0.075]) cw_boxc([0.12, 0.004, 0.05]);
+    color(cw_MARKW()) translate([0, -0.032, 0.03]) cw_boxc([0.14, 0.004, 0.018]);
+}
+
+// 苹果
+module cw_item_apple(seed = 0)
+{
+    color(cw_rnd(seed, 3) == 0 ? [0.50, 0.62, 0.20] : [0.62, 0.14, 0.10])
+        translate([0, 0, 0.038]) scale([1, 1, 0.9]) sphere(r = 0.042, $fn = 12);
+    color(cw_WOODD()) translate([0, 0, 0.07]) rotate([12, 0, 0]) cylinder(h = 0.022, r = 0.004, $fn = 5);
+    color(cw_LEAFC()) translate([0.01, 0, 0.088]) rotate([0, 50, 0]) scale([1, 0.5, 0.15]) sphere(r = 0.014, $fn = 6);
+}
+
+// 巧克力条
+module cw_item_chocolate(seed = 0)
+{
+    color([0.30, 0.16, 0.10]) translate([0, 0, 0.008]) cw_boxc([0.15, 0.06, 0.016]);
+    color(cw_rnd(seed, 2) == 0 ? cw_REDC() : cw_SIGNB()) translate([0.02, 0, 0.009]) cw_boxc([0.115, 0.062, 0.018]);
+    color(cw_MARKW()) translate([0.02, 0, 0.0185]) cw_boxc([0.06, 0.03, 0.002]);
+}
+
+// 绷带卷（卧放）
+module cw_item_bandage(seed = 0)
+{
+    color(cw_MARKW()) translate([0, 0, 0.034]) rotate([90, 0, 0]) cylinder(h = 0.075, r = 0.034, center = true, $fn = 14);
+    color([0.82, 0.80, 0.74]) translate([0, 0, 0.034]) rotate([90, 0, 0]) cylinder(h = 0.077, r = 0.012, center = true, $fn = 10);
+    color(cw_MARKW()) translate([0.06, 0, 0.003]) cw_boxc([0.08, 0.07, 0.004]);
+}
+
+// 碎布堆
+module cw_item_rags(seed = 0)
+{
+    for (i = [0 : 2])
+        color([[0.52, 0.48, 0.42], [0.36, 0.40, 0.44], [0.48, 0.30, 0.26]][(seed + i) % 3])
+            translate([cw_rndr(seed + i * 7, -0.04, 0.04), cw_rndr(seed + i * 11, -0.03, 0.03), 0.01 + i * 0.012])
+                rotate([0, 0, cw_rnd(seed + i * 5, 90)]) cw_boxc([0.16, 0.11, 0.012]);
+}
+
+// 止痛药瓶
+module cw_item_painkillers(seed = 0)
+{
+    color(cw_MARKW()) cylinder(h = 0.07, r = 0.022, $fn = 12);
+    color(cw_REDC()) translate([0, 0, 0.07]) cylinder(h = 0.018, r = 0.024, $fn = 12);
+    color(cw_SIGNB()) translate([0, 0, 0.022]) cylinder(h = 0.03, r = 0.0225, $fn = 12);
+}
+
+// 开罐器
+module cw_item_can_opener(seed = 0)
+{
+    color(cw_METALC())
+    {
+        translate([0, 0, 0.006]) cw_boxc([0.14, 0.018, 0.01]);
+        translate([0.075, 0, 0.012]) cylinder(h = 0.008, r = 0.018, $fn = 10);
+    }
+    color(cw_REDC()) translate([-0.045, 0, 0.007]) cw_boxc([0.07, 0.024, 0.014]);
+}
+
+// 军用指南针（开盖）
+module cw_item_compass(seed = 0)
+{
+    color(cw_OLIVED()) cylinder(h = 0.016, r = 0.036, $fn = 16);
+    color(cw_MARKW()) translate([0, 0, 0.016]) cylinder(h = 0.002, r = 0.03, $fn = 16);
+    color(cw_REDC()) translate([0.012, 0, 0.019]) cw_boxc([0.026, 0.006, 0.003]);
+    color(cw_METALD()) translate([-0.012, 0, 0.019]) cw_boxc([0.026, 0.006, 0.003]);
+    color(cw_OLIVED()) translate([-0.055, 0, 0.004]) rotate([0, 0, 0]) cw_boxc([0.04, 0.05, 0.006]);   // 翻开的盖
+}
+
+// 折叠地图
+module cw_item_map(seed = 0)
+{
+    color([0.80, 0.76, 0.62]) translate([0, 0, 0.006]) cw_boxc([0.22, 0.15, 0.012]);
+    color(cw_GRASSC()) translate([-0.04, 0.02, 0.0125]) cw_boxc([0.09, 0.07, 0.002]);
+    color(cw_SIGNB()) translate([0.03, -0.01, 0.0125]) rotate([0, 0, 35]) cw_boxc([0.16, 0.012, 0.002]);
+    color(cw_REDC()) translate([0.05, 0.04, 0.0125]) cw_boxc([0.012, 0.012, 0.003]);
+    color([0.64, 0.60, 0.48]) translate([0, 0, 0.0125]) cw_boxc([0.004, 0.15, 0.002]);
+}
+
+// 电池
+module cw_item_battery(seed = 0)
+{
+    color([0.12, 0.12, 0.13]) translate([0, 0, 0.024]) cw_boxc([0.026, 0.017, 0.048]);
+    color([0.72, 0.52, 0.18]) translate([0, 0, 0.012]) cw_boxc([0.027, 0.018, 0.024]);
+    color(cw_METALC()) for (sx = [-1, 1]) translate([sx * 0.006, 0, 0.05]) cylinder(h = 0.005, r = 0.0035, $fn = 6);
+}
+
+// 鞭炮串
+module cw_item_firecrackers(seed = 0)
+{
+    for (i = [0 : 5])
+        color(cw_REDC()) translate([-0.05 + i * 0.02, (i % 2) * 0.012, 0.009]) rotate([90, 0, 0])
+            cylinder(h = 0.07, r = 0.009, center = true, $fn = 8);
+    color(cw_YELLOWC()) translate([0, 0, 0.018]) cw_boxc([0.13, 0.03, 0.004]);
+    color(cw_DARKC()) translate([0.07, 0.03, 0.01]) rotate([0, 0, 40]) cw_boxc([0.06, 0.003, 0.003]);
+}
+
+// 弹药纸盒：kind 0=5.45 / 1=7.62 / 2=12 号霰弹 / 3=9mm
+module cw_item_ammo_pack(kind = 0)
+{
+    c = [cw_OLIVE(), [0.42, 0.28, 0.16], cw_REDC(), [0.46, 0.46, 0.44]][kind];
+    sz = [[0.13, 0.08, 0.05], [0.14, 0.07, 0.06], [0.12, 0.07, 0.07], [0.09, 0.06, 0.035]][kind];
+    color(c) translate([0, 0, sz[2] / 2]) cw_boxc(sz);
+    color(cw_MARKW()) translate([0, -sz[1] / 2 - 0.001, sz[2] * 0.55]) cw_boxc([sz[0] * 0.6, 0.002, sz[2] * 0.35]);
+    if (kind == 2)
+        for (i = [0 : 3]) color([0.72, 0.56, 0.20]) translate([-0.045 + i * 0.03, 0.045, 0.012]) rotate([90, 0, 0])
+            cylinder(h = 0.05, r = 0.011, center = true, $fn = 8);
+    else
+        for (i = [0 : 2]) color([0.72, 0.56, 0.20]) translate([-0.03 + i * 0.03, 0.05, 0.006]) rotate([0, 90, 30])
+            cylinder(h = 0.045, r = 0.005, center = true, $fn = 6);
+}
+
+// 叠好的夹克 / 卫衣（hood=true 为卫衣）
+module cw_item_jacket(seed = 0, hood = false)
+{
+    c = hood ? [[0.40, 0.40, 0.42], [0.22, 0.30, 0.44], [0.46, 0.24, 0.20]][cw_rnd(seed, 3)]
+             : (cw_rnd(seed, 2) == 0 ? cw_OLIVE() : [0.30, 0.26, 0.20]);
+    cd = [c[0] * 0.8, c[1] * 0.8, c[2] * 0.8];
+    color(c) translate([0, 0, 0.04]) cw_boxc([0.42, 0.32, 0.08]);
+    color(cd)
+    {
+        translate([0, 0.14, 0.085]) cw_boxc([0.18, 0.06, 0.02]);
+        for (sx = [-1, 1]) translate([sx * 0.12, -0.06, 0.082]) cw_boxc([0.1, 0.07, 0.012]);
+        if (hood) translate([0, 0.18, 0.03]) scale([1.4, 0.7, 0.45]) sphere(r = 0.08, $fn = 10);
+        else translate([0, 0.165, 0.06]) cw_boxc([0.24, 0.04, 0.05]);
+    }
+}
+
+// 叠好的长裤
+module cw_item_pants(seed = 0, cargo = false)
+{
+    c = cargo ? cw_OLIVED() : [[0.22, 0.26, 0.36], [0.30, 0.26, 0.20]][cw_rnd(seed, 2)];
+    color(c) translate([0, 0, 0.035]) cw_boxc([0.38, 0.26, 0.07]);
+    color([c[0] * 0.8, c[1] * 0.8, c[2] * 0.8])
+    {
+        translate([0, 0, 0.071]) cw_boxc([0.38, 0.006, 0.004]);
+        if (cargo) for (sx = [-1, 1]) translate([sx * 0.1, -0.08, 0.075]) cw_boxc([0.1, 0.08, 0.012]);
+    }
+    color([0.24, 0.18, 0.12]) translate([-0.17, 0, 0.072]) cw_boxc([0.035, 0.27, 0.01]);
+}
+
+// 防弹背心（平放）
+module cw_item_vest(seed = 0)
+{
+    color(cw_OLIVED()) translate([0, 0, 0.04]) cw_boxc([0.4, 0.34, 0.08]);
+    color(cw_OLIVE())
+    {
+        for (i = [0 : 2]) translate([-0.12 + i * 0.12, -0.13, 0.1]) cw_boxc([0.09, 0.07, 0.05]);
+        for (sx = [-1, 1]) translate([sx * 0.13, 0.16, 0.085]) cw_boxc([0.08, 0.06, 0.012]);
+    }
+    color(cw_METALD()) translate([0, 0.02, 0.083]) cw_boxc([0.28, 0.14, 0.006]);
+}
+
+// 书包（小背包）
+module cw_item_backpack_small(seed = 0)
+{
+    c = [[0.20, 0.30, 0.48], [0.50, 0.18, 0.16], [0.30, 0.30, 0.32]][cw_rnd(seed, 3)];
+    rotate([-14, 0, 0])
+    {
+        color(c) translate([0, 0, 0.2]) cw_boxc([0.3, 0.14, 0.4]);
+        color([c[0] * 0.75, c[1] * 0.75, c[2] * 0.75]) translate([0, -0.08, 0.14]) cw_boxc([0.24, 0.05, 0.18]);
+        color(cw_DARKC()) for (sx = [-1, 1]) translate([sx * 0.09, 0.075, 0.22]) cw_boxc([0.04, 0.02, 0.32]);
+    }
+}
+
+// 军用突击背包（大）
+module cw_item_backpack_military(seed = 0)
+{
+    rotate([-12, 0, 0])
+    {
+        color(cw_OLIVE()) translate([0, 0, 0.32]) cw_boxc([0.42, 0.26, 0.64]);
+        color(cw_OLIVED())
+        {
+            translate([0, -0.15, 0.24]) cw_boxc([0.32, 0.06, 0.26]);
+            for (sx = [-1, 1]) translate([sx * 0.23, 0, 0.3]) cw_boxc([0.06, 0.18, 0.3]);
+            translate([0, 0, 0.66]) cw_boxc([0.44, 0.28, 0.06]);
+        }
+        color(cw_KHAKI()) translate([0, 0.02, 0.72]) rotate([0, 90, 0]) cylinder(h = 0.4, r = 0.06, center = true, $fn = 10);
+    }
+}
+
+// 急救包（红白软包）
+module cw_item_medical_bag(seed = 0)
+{
+    color(cw_REDC()) translate([0, 0, 0.11]) scale([1, 0.62, 0.7]) rotate([0, 90, 0]) cylinder(h = 0.42, r = 0.16, center = true, $fn = 12);
+    color(cw_MARKW())
+    {
+        translate([0, -0.1, 0.13]) cw_boxc([0.04, 0.004, 0.12]);
+        translate([0, -0.1, 0.13]) cw_boxc([0.12, 0.004, 0.04]);
+    }
+    color(cw_DARKC()) translate([0, 0, 0.22]) cw_boxc([0.2, 0.03, 0.03]);
+}
+
+// 工具箱
+module cw_item_toolbox(seed = 0)
+{
+    color(cw_rnd(seed, 2) == 0 ? cw_REDC() : [0.20, 0.34, 0.50]) translate([0, 0, 0.09]) cw_boxc([0.46, 0.2, 0.18]);
+    color(cw_METALD())
+    {
+        translate([0, 0, 0.19]) cw_boxc([0.46, 0.21, 0.02]);
+        for (sx = [-1, 1]) translate([sx * 0.12, 0, 0.23]) cw_boxc([0.02, 0.02, 0.06]);
+        translate([0, 0, 0.26]) cw_boxc([0.26, 0.025, 0.02]);
+    }
+}
+
+// ================= 室内家具（front=-y，靠墙摆放；不得挡门洞） =================
+
+// 木桌（seed 决定翻倒）
+module cw_prop_table(seed = 0, L = 1.2, D = 0.7)
+{
+    flipped = cw_rnd(seed, 4) == 0;
+    translate([0, 0, flipped ? D / 2 : 0]) rotate([flipped ? 90 : 0, 0, cw_rnd(seed, 20) - 10])
+    {
+        color(cw_WOODC()) translate([0, 0, 0.73]) cw_boxc([L, D, 0.05]);
+        color(cw_WOODD()) for (sx = [-1, 1], sy = [-1, 1])
+            translate([sx * (L / 2 - 0.06), sy * (D / 2 - 0.06), 0.355]) cw_boxc([0.06, 0.06, 0.71]);
+        if (!flipped) for (i = [0 : 1])
+            color(cw_goods_c(seed + i * 5)) translate([-0.25 + i * 0.4, cw_rndr(seed + i, -0.15, 0.15), 0.8])
+                cylinder(h = 0.09, r = 0.04, $fn = 10);
+    }
+}
+
+// 椅子（seed 决定倒地）
+module cw_prop_chair(seed = 0)
+{
+    rotate([cw_rnd(seed, 3) == 0 ? -80 : 0, 0, cw_rnd(seed + 2, 90)]) translate([0, 0, cw_rnd(seed, 3) == 0 ? 0.25 : 0])
+    {
+        color(cw_WOODC()) translate([0, 0, 0.45]) cw_boxc([0.44, 0.44, 0.04]);
+        color(cw_WOODD())
+        {
+            for (sx = [-1, 1], sy = [-1, 1]) translate([sx * 0.19, sy * 0.19, 0.22]) cw_boxc([0.04, 0.04, 0.45]);
+            for (sx = [-1, 1]) translate([sx * 0.19, 0.2, 0.7]) cw_boxc([0.04, 0.04, 0.5]);
+            translate([0, 0.2, 0.85]) cw_boxc([0.42, 0.03, 0.14]);
+        }
+    }
+}
+
+// 木床 + 床垫 + 揉乱的毯子
+module cw_prop_bed(seed = 0)
+{
+    color(cw_WOODD())
+    {
+        translate([0, 0, 0.2]) cw_boxc([2.0, 0.95, 0.12]);
+        translate([0.98, 0, 0.45]) cw_boxc([0.06, 0.95, 0.9]);
+        for (sx = [-1, 1], sy = [-1, 1]) translate([sx * 0.95, sy * 0.44, 0.15]) cw_boxc([0.06, 0.06, 0.3]);
+    }
+    color([0.62, 0.60, 0.52]) translate([0, 0, 0.33]) cw_boxc([1.92, 0.9, 0.14]);
+    color(cw_MARKW()) translate([0.75, 0, 0.44]) scale([1, 2.2, 0.6]) sphere(r = 0.16, $fn = 8);
+    color(cw_goods_c(seed + 1)) translate([-0.3, cw_rndr(seed, -0.08, 0.08), 0.42]) rotate([0, 0, cw_rnd(seed, 16) - 8])
+        cw_boxc([1.2, 0.96, 0.06]);
+    if (cw_rnd(seed + 4, 3) == 0)
+        color([0.34, 0.08, 0.06]) translate([0.1, 0.1, 0.405]) scale([1, 0.7, 1]) cylinder(h = 0.012, r = 0.24, $fn = 9);
+}
+
+// 衣柜（门半开）
+module cw_prop_wardrobe(seed = 0)
+{
+    color(cw_WOODD()) difference()
+    {
+        translate([0, 0, 0.95]) cw_boxc([0.95, 0.55, 1.9]);
+        translate([0, -0.05, 1.0]) cw_boxc([0.85, 0.5, 1.7]);
+    }
+    color(cw_WOODC())
+    {
+        translate([0.22, -0.28, 1.0]) cw_boxc([0.44, 0.03, 1.7]);
+        translate([-0.45, -0.5, 1.0]) rotate([0, 0, -60]) translate([0.22, 0, 0]) cw_boxc([0.44, 0.03, 1.7]);
+    }
+    color(cw_goods_c(seed)) translate([0, 0.05, 1.3]) cw_boxc([0.6, 0.3, 0.5]);
+}
+
+// 铁皮柜 / 更衣柜（军营、厂房）
+module cw_prop_locker(seed = 0, n = 3)
+{
+    for (i = [0 : n - 1])
+    {
+        color(cw_rnd(seed + i, 2) == 0 ? [0.36, 0.42, 0.40] : cw_METALC()) translate([(i - (n - 1) / 2) * 0.42, 0, 0.9])
+            cw_boxc([0.4, 0.45, 1.8]);
+        color(cw_DARKC()) translate([(i - (n - 1) / 2) * 0.42, -0.226, 1.5]) cw_boxc([0.2, 0.004, 0.08]);
+        if (cw_rnd(seed + i * 7, 3) == 0)
+            color(cw_METALD()) translate([(i - (n - 1) / 2) * 0.42 - 0.2, -0.38, 0.9]) rotate([0, 0, -50])
+                translate([0.19, 0, 0]) cw_boxc([0.38, 0.02, 1.7]);
+    }
+}
+
+// 木货架（杂物）
+module cw_prop_shelf_wood(seed = 0, L = 1.6)
+{
+    color(cw_WOODD())
+    {
+        for (sx = [-1, 1]) translate([sx * (L / 2 - 0.03), 0, 0.9]) cw_boxc([0.05, 0.4, 1.8]);
+        for (z = [0.1, 0.65, 1.2, 1.75]) translate([0, 0, z]) cw_boxc([L, 0.4, 0.04]);
+    }
+    for (z = [0.65, 1.2], i = [0 : 2])
+        if (cw_rnd(seed + i * 3 + z * 10, 2) == 0)
+            color(cw_goods_c(seed + i + z * 7)) translate([-L / 3 + i * L / 3, 0, z + 0.12]) cw_boxc([0.3, 0.26, 0.2]);
+}
+
+// 搪瓷灶台
+module cw_prop_stove(seed = 0)
+{
+    color([0.80, 0.78, 0.72]) translate([0, 0, 0.43]) cw_boxc([0.6, 0.6, 0.86]);
+    color(cw_DARKC())
+    {
+        translate([0, -0.302, 0.4]) cw_boxc([0.44, 0.004, 0.36]);
+        for (sx = [-1, 1], sy = [-1, 1]) translate([sx * 0.14, sy * 0.14, 0.865]) cylinder(h = 0.012, r = 0.08, $fn = 10);
+    }
+    color(cw_METALD()) translate([0.14, 0.14, 0.88]) cylinder(h = 0.12, r = 0.1, $fn = 10);
+}
+
+// 旧沙发
+module cw_prop_sofa(seed = 0)
+{
+    c = cw_goods_c(seed + 2);
+    cd = [c[0] * 0.75, c[1] * 0.75, c[2] * 0.75];
+    color(c) translate([0, 0, 0.24]) cw_boxc([1.9, 0.85, 0.48]);
+    color(cd)
+    {
+        translate([0, 0.33, 0.62]) cw_boxc([1.9, 0.2, 0.55]);
+        for (sx = [-1, 1]) translate([sx * 0.87, 0, 0.55]) cw_boxc([0.18, 0.85, 0.28]);
+    }
+    color(cw_SOILC()) translate([0.3, -0.1, 0.485]) cw_boxc([0.5, 0.4, 0.01]);
+}
+
+// 店铺柜台 + 收银机
+module cw_prop_counter(seed = 0, L = 2.2)
+{
+    color(cw_WOODC()) translate([0, 0, 0.5]) cw_boxc([L, 0.6, 1.0]);
+    color(cw_PANELD()) translate([0, 0, 1.02]) cw_boxc([L + 0.06, 0.66, 0.04]);
+    color(cw_METALD()) translate([L * 0.3, 0, 1.12]) cw_boxc([0.36, 0.3, 0.16]);
+    color(cw_DARKC()) translate([L * 0.3, 0.06, 1.26]) rotate([-30, 0, 0]) cw_boxc([0.24, 0.02, 0.14]);
+}
+
+// 工作台 + 台钳
+module cw_prop_workbench(seed = 0)
+{
+    color(cw_WOODD()) translate([0, 0, 0.88]) cw_boxc([1.8, 0.75, 0.08]);
+    color(cw_METALD())
+    {
+        for (sx = [-1, 1], sy = [-1, 1]) translate([sx * 0.82, sy * 0.32, 0.42]) cw_boxc([0.06, 0.06, 0.84]);
+        translate([0, 0, 0.2]) cw_boxc([1.7, 0.7, 0.03]);
+        translate([0.65, -0.3, 0.98]) cw_boxc([0.16, 0.14, 0.14]);
+    }
+    color(cw_METALC()) translate([-0.4, 0.37, 1.3]) cw_boxc([1.0, 0.03, 0.7]);
+    color(cw_DARKC()) for (i = [0 : 3]) translate([-0.75 + i * 0.22, 0.34, 1.3]) cw_boxc([0.04, 0.04, 0.3]);
+}
+
+// ================= 末日痕迹 =================
+
+// 尸袋（黑/军绿长袋，seed 决定朝向和弯折）
+module cw_prop_body_bag(seed = 0)
+{
+    c = cw_rnd(seed, 3) == 0 ? cw_OLIVED() : [0.10, 0.10, 0.11];
+    rotate([0, 0, cw_rnd(seed, 180)])
+    {
+        color(c)
+        {
+            translate([0, 0, 0.13]) scale([1, 0.42, 0.24]) rotate([0, 90, 0]) cylinder(h = 1.8, r = 0.55, center = true, $fn = 12);
+            translate([0.82, 0, 0.14]) scale([0.9, 1, 0.9]) sphere(r = 0.2, $fn = 10);
+        }
+        color(cw_METALC()) translate([0, 0.05, 0.255]) cw_boxc([1.5, 0.015, 0.012]);
+        color(cw_MARKW()) translate([0.5, 0, 0.26]) cw_boxc([0.14, 0.09, 0.004]);
+    }
+}
+
+// 干涸血迹（地面贴片）
+module cw_prop_blood_stain(seed = 0, s = 1.0)
+{
+    color([0.24, 0.04, 0.03]) for (i = [0 : 3])
+        translate([cw_rndr(seed + i * 7, -0.4, 0.4) * s, cw_rndr(seed + i * 13, -0.3, 0.3) * s, 0.004 + i * 0.001])
+            scale([cw_rndr(seed + i, 0.18, 0.5) * s, cw_rndr(seed + i + 9, 0.12, 0.34) * s, 1])
+                cylinder(h = 0.006, r = 1, $fn = 9);
+}
+
+// 垃圾堆（黑袋 + 纸屑 + 罐子）
+module cw_prop_trash(seed = 0)
+{
+    for (i = [0 : 2 + cw_rnd(seed, 3)])
+        color(cw_rnd(seed + i, 3) == 0 ? [0.22, 0.28, 0.34] : [0.08, 0.08, 0.09])
+            translate([cw_rndr(seed + i * 11, -0.6, 0.6), cw_rndr(seed + i * 17, -0.45, 0.45), 0.18])
+                scale([1, 0.85, 0.75]) sphere(r = cw_rndr(seed + i * 3, 0.2, 0.3), $fn = 9);
+    for (i = [0 : 3])
+        color(cw_rnd(seed + i, 2) == 0 ? cw_MARKW() : [0.62, 0.56, 0.40])
+            translate([cw_rndr(seed + i * 5, -0.9, 0.9), cw_rndr(seed + i * 23, -0.7, 0.7), 0.01])
+                rotate([0, 0, cw_rnd(seed + i * 9, 180)]) cw_boxc([0.2, 0.14, 0.01]);
+    color(cw_goods_c(seed)) translate([0.5, -0.4, 0.03]) rotate([90, 0, cw_rnd(seed, 180)]) cylinder(h = 0.12, r = 0.035, center = true, $fn = 10);
+}
+
+// 木板路障（钉死的门窗 / 街垒，沿 x；front=-y）
+module cw_prop_barricade(len = 3, h = 1.4, seed = 0)
+{
+    color(cw_WOODD()) for (sx = [-1, 1]) translate([sx * (len / 2 - 0.1), 0, h / 2]) cw_boxc([0.1, 0.1, h]);
+    for (i = [0 : floor(h / 0.3) - 1])
+        color(cw_rnd(seed + i, 2) == 0 ? cw_WOODC() : [0.42, 0.34, 0.24])
+            translate([0, -0.07, 0.2 + i * 0.3]) rotate([0, cw_rnd(seed + i * 7, 12) - 6, 0]) cw_boxc([len, 0.04, 0.2]);
+    color(cw_WOODD()) translate([0, -0.1, h / 2]) rotate([0, 38, 0]) cw_boxc([len * 0.95, 0.04, 0.16]);
+    color(cw_RUSTC()) translate([len * 0.25, -0.35, 0.4]) rotate([0, 0, 15]) cw_boxc([0.9, 0.5, 0.8]);   // 塞进来的旧柜子
+}
+
+// 混凝土新泽西护栏（沿 x）
+module cw_prop_jersey_barrier(len = 3)
+{
+    color(cw_CONC()) hull()
+    {
+        translate([0, 0, 0.04]) cw_boxc([len, 0.6, 0.08]);
+        translate([0, 0, 0.3]) cw_boxc([len, 0.36, 0.1]);
+        translate([0, 0, 0.8]) cw_boxc([len, 0.18, 0.04]);
+    }
+    color(cw_YELLOWC()) for (i = [0 : floor(len / 1.2)])
+        translate([-len / 2 + 0.4 + i * 1.2, -0.2, 0.42]) rotate([0, 30, 0]) cw_boxc([0.3, 0.02, 0.18]);
+}
+
+// 检疫告示牌（双柱 + 黄黑警示 + 文字）
+module cw_prop_sign_quarantine(seed = 0, msg = "QUARANTINE")
+{
+    color(cw_METALD()) for (sx = [-1, 1]) translate([sx * 0.9, 0, 1.0]) cw_boxc([0.08, 0.08, 2.0]);
+    color(cw_MARKW()) translate([0, 0, 1.65]) cw_boxc([2.1, 0.05, 0.6]);
+    color(cw_REDC()) translate([0, -0.032, 1.65]) rotate([90, 0, 0]) linear_extrude(height = 0.01)
+        text(msg, size = 0.2, halign = "center", valign = "center");
+    color(cw_YELLOWC()) translate([0, 0, 1.2]) cw_boxc([2.1, 0.05, 0.22]);
+    color(cw_DARKC()) for (i = [0 : 5]) translate([-0.85 + i * 0.34, -0.03, 1.2]) rotate([0, 35, 0]) cw_boxc([0.1, 0.01, 0.3]);
+}
+
+// 墙面涂鸦（贴墙；front=-y，锚点=文字中心）
+module cw_prop_graffiti(msg = "HELP", size = 0.6, seed = 0)
+{
+    color([[0.62, 0.08, 0.06], [0.82, 0.80, 0.74], [0.10, 0.10, 0.10]][cw_rnd(seed, 3)])
+        rotate([90, 0, 0]) linear_extrude(height = 0.02)
+            text(msg, size = size, halign = "center", valign = "center");
+}
+
+// 医疗帐篷（白帐 + 红十字）
+module cw_prop_tent_medical(seed = 0, L = 5, D = 3.6)
+{
+    color([0.72, 0.72, 0.68])
+    {
+        translate([0, D * 0.28, 0]) rotate([62, 0, 0]) cw_boxc([L, 0.1, D * 0.72]);
+        translate([0, -D * 0.28, 0]) rotate([-62, 0, 0]) cw_boxc([L, 0.1, D * 0.72]);
+    }
+    color([0.58, 0.58, 0.54]) translate([0, 0, 1.5]) cw_boxc([L + 0.15, 0.3, 0.12]);
+    color(cw_REDC()) for (sy = [-1, 1])
+        translate([0, sy * 0.95, 0.9]) rotate([sy * -28, 0, 0])
+        {
+            cw_boxc([0.18, 0.04, 0.6]);
+            cw_boxc([0.6, 0.04, 0.18]);
+        }
+    color(cw_DARKC()) translate([-L / 2 + 0.02, 0, 0.66]) rotate([0, 0, 90]) rotate([76, 0, 0]) cw_boxc([D * 0.8, 0.06, 1.4]);
+}
+
+// 圆草捆（卧放）
+module cw_prop_haybale(seed = 0)
+{
+    rotate([0, 0, cw_rnd(seed, 180)])
+    {
+        color([0.66, 0.56, 0.30]) translate([0, 0, 0.6]) rotate([90, 0, 0]) cylinder(h = 1.2, r = 0.6, center = true, $fn = 14);
+        color([0.54, 0.44, 0.22]) for (sy = [-1, 1]) translate([0, sy * 0.601, 0.6]) rotate([90, 0, 0])
+            cylinder(h = 0.01, r = 0.5, center = true, $fn = 14);
+    }
+}
+
+// 原木堆（锯木场）
+module cw_prop_log_pile(seed = 0, L = 5)
+{
+    for (r = [0 : 2], i = [0 : 4 - r])
+        color(cw_rnd(seed + r * 5 + i, 3) == 0 ? cw_BIRCHW() : cw_TRUNKC())
+            translate([0, -0.9 + i * 0.42 + r * 0.21, 0.21 + r * 0.36]) rotate([0, 90, 0])
+                cylinder(h = L + cw_rndr(seed + i, -0.4, 0.4), r = 0.2, center = true, $fn = 9);
+    color(cw_WOODD()) for (sx = [-1, 1], sy = [-1, 1]) translate([sx * L * 0.35, sy * 1.2, 0.6]) cw_boxc([0.12, 0.12, 1.2]);
+}
+
+// 沙袋机枪巢（U 形，开口朝 +y）
+module cw_prop_sandbag_nest(seed = 0)
+{
+    translate([0, -1.4, 0]) cw_prop_wall_sandbag(len = 3);
+    for (sx = [-1, 1]) translate([sx * 1.55, 0, 0]) rotate([0, 0, 90]) cw_prop_wall_sandbag(len = 2.4);
+    color(cw_METALD())
+    {
+        translate([0, -1.25, 1.05]) rotate([0, 0, 90]) rotate([0, 90, 0]) cylinder(h = 1.1, r = 0.03, $fn = 6);
+        translate([0, -0.9, 0.85]) cw_boxc([0.14, 0.4, 0.14]);
+        for (sx = [-1, 1]) translate([sx * 0.18, -0.85, 0.42]) rotate([0, sx * 20, 0]) cw_boxc([0.03, 0.03, 0.85]);
+    }
+    color(cw_OLIVE()) translate([0.6, -0.2, 0.15]) cw_boxc([0.4, 0.2, 0.3]);
+}
+
+// 手压水泵（东欧乡村水源；NextDayz 识别为水井）
+module cw_prop_water_pump(seed = 0)
+{
+    color(cw_CONCD()) cw_slab(1.0, 1.0, 0.18);
+    color([0.20, 0.34, 0.26])
+    {
+        translate([0, 0, 0.18]) cylinder(h = 0.95, r = 0.09, $fn = 12);
+        translate([0, 0, 1.13]) cylinder(h = 0.14, r1 = 0.11, r2 = 0.06, $fn = 12);
+        translate([0, -0.14, 0.86]) rotate([60, 0, 0]) cylinder(h = 0.24, r = 0.035, $fn = 8);
+    }
+    color(cw_METALD())
+    {
+        translate([0, 0.22, 1.24]) rotate([-18, 0, 0]) cw_boxc([0.04, 0.6, 0.04]);
+        translate([0, 0.05, 1.2]) cw_boxc([0.05, 0.05, 0.12]);
+    }
+    color(cw_METALC()) translate([0, -0.34, 0.18]) cylinder(h = 0.26, r1 = 0.12, r2 = 0.15, $fn = 12);
+}
+
+// 烧毁的轿车（焦黑车壳 + 锈；无轮胎）
+module cw_veh_car_burnt(seed = 0)
+{
+    rotate([0, 0, cw_rnd(seed, 9) - 4]) translate([0, 0, -0.12])
+    {
+        color([0.12, 0.11, 0.10]) translate([0, 0, 0.55]) cw_boxc([4.0, 1.62, 0.52]);
+        color([0.10, 0.09, 0.09]) translate([-0.15, 0, 1.06]) cw_boxc([2.0, 1.5, 0.5]);
+        color(cw_DARKC()) translate([-0.15, 0, 1.08]) cw_boxc([1.8, 1.56, 0.36]);
+        color(cw_RUSTC())
+        {
+            translate([1.5, 0, 0.83]) cw_boxc([0.9, 1.5, 0.04]);
+            translate([-1.6, 0.4, 0.83]) cw_boxc([0.6, 0.7, 0.04]);
+            for (sx = [-1, 1], sy = [-1, 1]) translate([sx * 1.25, sy * 0.78, 0.3]) rotate([90, 0, 0])
+                cylinder(h = 0.12, r = 0.26, center = true, $fn = 10);
+        }
+    }
+}
+
+// 货运车厢（棚车，沿 x）
+module cw_veh_freight_car(seed = 0)
+{
+    c = [[0.40, 0.20, 0.14], [0.30, 0.34, 0.30], [0.36, 0.30, 0.22]][cw_rnd(seed, 3)];
+    color(c) translate([0, 0, 2.3]) cw_boxc([13.0, 2.9, 2.8]);
+    color([c[0] * 0.75, c[1] * 0.75, c[2] * 0.75])
+    {
+        for (i = [0 : 12]) translate([-6.2 + i * 1.03, -1.46, 2.3]) cw_boxc([0.06, 0.04, 2.7]);
+        translate([0, 0, 3.75]) cw_boxc([13.1, 3.0, 0.12]);
+    }
+    color(cw_DARKC()) translate([0.5, -1.47, 2.0]) cw_boxc([2.2, 0.03, 2.2]);   // 拉开的车门洞
+    color(c) translate([2.0, -1.55, 2.0]) cw_boxc([2.2, 0.06, 2.2]);
+    color(cw_METALD())
+    {
+        translate([0, 0, 0.85]) cw_boxc([12.4, 2.4, 0.3]);
+        for (sx = [-1, 1]) translate([sx * 4.8, 0, 0.5]) cw_boxc([2.2, 2.0, 0.5]);
+        for (sx = [-1, 1], k = [-1, 1], sy = [-1, 1]) translate([sx * 4.8 + k * 0.8, sy * 0.72, 0.45])
+            rotate([90, 0, 0]) cylinder(h = 0.12, r = 0.42, center = true, $fn = 12);
+    }
+}
+
+// 油罐车厢（沿 x）
+module cw_veh_tank_car(seed = 0)
+{
+    color(cw_rnd(seed, 2) == 0 ? [0.12, 0.12, 0.13] : [0.40, 0.42, 0.42])
+        translate([0, 0, 2.2]) rotate([0, 90, 0]) cylinder(h = 11.0, r = 1.4, center = true, $fn = 16);
+    color(cw_METALD())
+    {
+        for (sx = [-1, 1]) translate([sx * 5.55, 0, 2.2]) scale([0.2, 1, 1]) sphere(r = 1.4, $fn = 12);
+        translate([0, 0, 3.65]) cylinder(h = 0.3, r = 0.35, $fn = 10);
+        translate([0, 0, 0.85]) cw_boxc([11.4, 2.2, 0.3]);
+        for (sx = [-1, 1], k = [-1, 1], sy = [-1, 1]) translate([sx * 4.2 + k * 0.8, sy * 0.72, 0.45])
+            rotate([90, 0, 0]) cylinder(h = 0.12, r = 0.42, center = true, $fn = 12);
+    }
+    color(cw_RUSTC()) translate([2.0, -1.38, 1.6]) rotate([0, 90, 0]) scale([1, 0.3, 1]) cylinder(h = 3.0, r = 0.4, $fn = 8);
+}
+
+// ================= 扩展建筑（front=-y；可进入外壳 + 细部） =================
+
+// 两层砖房：底层可进入，二层窗 + 层间腰线 + 坡顶 + 烟囱 + 门廊
+module cw_bldg_house_two(seed = 0, L = 9, D = 7)
+{
+    fh = 2.9;
+    wh = fh * 2 + 0.3;
+    wc = [cw_BRICK(), cw_PLASTER(), [0.50, 0.46, 0.38], cw_WHITEW()][cw_rnd(seed, 4)];
+    dx = (cw_rnd(seed + 3, 2) == 0 ? -1 : 1) * L * 0.2;
+    cw_part_shell(L, D, wh, wc, t = 0.3, dw = 1.2, dh = 2.1, dx = dx, roomH = fh - 0.2,
+                  wins = [[0, -dx, 1.5, 1.1, 1.3], [1, -L * 0.25, 1.5, 1.1, 1.3], [1, L * 0.25, 1.5, 1.1, 1.3],
+                          [2, 0, 1.5, 1.0, 1.3], [3, D * 0.15, 1.5, 1.0, 1.3]]);
+    // 窗框 + 窗台（底层洞口外缘）
+    for (w = [[-dx, -1], [-L * 0.25, 1], [L * 0.25, 1]])
+        translate([w[0], w[1] * (D / 2 + 0.02), 0])
+        {
+            color(cw_MARKW()) translate([0, 0, 0.82]) cw_boxc([1.3, 0.12, 0.06]);
+            color(cw_MARKW()) translate([0, 0, 2.18]) cw_boxc([1.3, 0.1, 0.08]);
+            color(cw_WOODD()) for (sx = [-1, 1]) translate([sx * 0.8, w[1] * 0.04, 1.5]) cw_boxc([0.45, 0.04, 1.3]);
+        }
+    // 二层窗阵 + 腰线
+    color(cw_CONCD()) for (sy = [-1, 1]) translate([0, sy * (D / 2 + 0.02), fh + 0.15]) cw_boxc([L + 0.04, 0.06, 0.2]);
+    for (i = [-1, 0, 1], sy = [-1, 1])
+        translate([i * L * 0.3, sy * (D / 2 + 0.04), fh + 1.55]) rotate([0, 0, sy > 0 ? 180 : 0])
+            cw_part_window_worn(1.0, 1.25, seed * 7 + i * 3 + sy * 5);
+    translate([0, 0, wh]) cw_part_roof(L, D, 2.2, 0.5, 0, cw_roof_c(seed + 5));
+    color(cw_BRICKD()) translate([-L * 0.28, D * 0.18, wh + 1.0]) cw_boxc([0.6, 0.6, 2.4]);
+    color(cw_CONCD()) translate([-L * 0.28, D * 0.18, wh + 2.25]) cw_boxc([0.72, 0.72, 0.1]);
+    // 门廊（雨棚 + 双柱 + 台阶）
+    color(cw_WOODD()) for (sx = [-1, 1]) translate([dx + sx * 0.85, -D / 2 - 1.0, 1.25]) cw_boxc([0.12, 0.12, 2.5]);
+    color(cw_roof_c(seed + 5)) translate([dx, -D / 2 - 0.55, 2.6]) rotate([-12, 0, 0]) cw_boxc([2.1, 1.3, 0.08]);
+    color(cw_CONCD()) translate([dx, -D / 2 - 0.55, 0]) cw_slab(1.8, 1.1, 0.16);
+    // 檐沟 + 落水管
+    color(cw_METALD())
+    {
+        translate([0, -D / 2 - 0.45, wh + 0.02]) cw_boxc([L + 0.9, 0.1, 0.08]);
+        translate([L / 2 + 0.3, -D / 2 - 0.4, wh / 2]) cylinder(h = wh, r = 0.05, center = true, $fn = 6);
+    }
+}
+
+// 农舍谷仓：木板墙 + 折线（复斜）屋顶 + 双开大门（可进入）
+module cw_bldg_barn(seed = 0, L = 12, D = 8)
+{
+    wh = 3.4;
+    wc = cw_rnd(seed, 2) == 0 ? [0.42, 0.18, 0.12] : [0.38, 0.30, 0.22];
+    cw_part_shell(L, D, wh, wc, t = 0.22, dw = 3.2, dh = 3.0, dx = 0,
+                  wins = [[2, 0, 2.2, 1.0, 0.9], [3, 0, 2.2, 1.0, 0.9], [1, L * 0.3, 2.3, 0.9, 0.8]]);
+    color([wc[0] * 0.75, wc[1] * 0.75, wc[2] * 0.75]) for (i = [0 : floor(L / 0.6)])
+        translate([-L / 2 + 0.3 + i * 0.6, D / 2 + 0.01, wh / 2]) cw_boxc([0.05, 0.03, wh]);
+    rc = cw_roof_c(seed + 8);
+    translate([0, 0, wh]) cw_part_roof(L, D, 1.4, 0.3, 0, rc);
+    color(rc) translate([0, 0, wh + 1.25]) cw_part_roof(L * 0.98, D * 0.55, 1.3, 0.2, 0, rc);
+    // 半开的谷仓门（门洞两侧）
+    color([wc[0] * 0.8, wc[1] * 0.8, wc[2] * 0.8])
+    {
+        translate([-2.4, -D / 2 - 0.5, 1.5]) rotate([0, 0, 30]) cw_boxc([1.6, 0.08, 3.0]);
+        translate([2.3, -D / 2 - 0.1, 1.5]) cw_boxc([1.6, 0.08, 3.0]);
+    }
+    color(cw_MARKW()) translate([2.3, -D / 2 - 0.15, 1.5]) rotate([0, 45, 0]) cw_boxc([2.0, 0.03, 0.1]);
+    color(cw_WOODD()) translate([0, -D / 2 - 0.02, wh + 0.6]) cw_boxc([1.2, 0.06, 0.8]);
+}
+
+// 筒仓（混凝土 + 锈顶）
+module cw_bldg_silo(seed = 0, h = 11)
+{
+    color(cw_CONC()) cylinder(h = h, r = 2.2, $fn = 16);
+    color(cw_CONCD()) for (z = [h * 0.33, h * 0.66]) translate([0, 0, z]) cylinder(h = 0.2, r = 2.25, $fn = 16);
+    color(cw_RUSTC()) translate([0, 0, h]) scale([1, 1, 0.45]) sphere(r = 2.25, $fn = 16);
+    color(cw_METALD()) for (i = [0 : floor(h / 0.5)]) translate([0, -2.28, 0.4 + i * 0.5]) cw_boxc([0.4, 0.04, 0.04]);
+    color(cw_METALD()) for (sx = [-1, 1]) translate([sx * 0.2, -2.28, h / 2]) cw_boxc([0.04, 0.04, h]);
+}
+
+// 木工具棚（可进入小门）
+module cw_bldg_shed(seed = 0, L = 3.2, D = 2.6)
+{
+    wc = cw_rnd(seed, 2) == 0 ? cw_WOODC() : [0.36, 0.32, 0.26];
+    cw_part_shell(L, D, 2.3, wc, t = 0.12, dw = 0.95, dh = 1.95, dx = L * 0.2, plinth = false,
+                  wins = [[2, 0, 1.5, 0.5, 0.4]]);
+    translate([0, 0, 2.3]) rotate([0, 0, 0]) cw_part_roof(L, D, 0.6, 0.25, 0, cw_ROOFM());
+    color(cw_WOODD()) translate([L * 0.2 - 0.62, -D / 2 - 0.35, 1.0]) rotate([0, 0, 40]) cw_boxc([0.95, 0.05, 1.95]);
+}
+
+// 旱厕
+module cw_bldg_outhouse(seed = 0)
+{
+    color(cw_WOODC()) difference()
+    {
+        translate([0, 0, 1.1]) cw_boxc([1.0, 1.0, 2.2]);
+        translate([0, 0, 1.1]) cw_boxc([0.85, 0.85, 2.5]);
+    }
+    color(cw_WOODD())
+    {
+        translate([0, 0, 2.25]) rotate([-10, 0, 0]) cw_boxc([1.2, 1.3, 0.06]);
+        translate([0.3, -0.75, 1.0]) rotate([0, 0, 50]) cw_boxc([0.75, 0.04, 1.9]);
+    }
+}
+
+// 车库（卷帘门半开，可进入）
+module cw_bldg_garage(seed = 0, L = 6, D = 7)
+{
+    wh = 3.0;
+    wc = cw_rnd(seed, 2) == 0 ? [0.48, 0.46, 0.42] : cw_BRICKD();
+    cw_part_shell(L, D, wh, wc, t = 0.24, dw = 3.0, dh = 2.5, dx = 0, roomH = wh - 0.3);
+    color(cw_CONCD()) translate([0, 0, wh]) cw_slab(L + 0.2, D + 0.2, 0.18);
+    color(cw_METALC()) translate([0, -D / 2 - 0.04, 2.55 - 0.35]) cw_boxc([3.0, 0.06, 0.7]);   // 卷到一半的卷帘
+    color(cw_METALD()) for (i = [0 : 3]) translate([0, -D / 2 - 0.08, 1.95 + i * 0.16]) cw_boxc([3.0, 0.02, 0.03]);
+    color(cw_YELLOWC()) for (sx = [-1, 1]) translate([sx * 1.58, -D / 2 - 0.05, 0.6]) cw_boxc([0.12, 0.04, 1.2]);
+    color(cw_DARKC()) translate([0, -D / 2 + 1.5, 0.004]) scale([1.2, 0.8, 1]) cylinder(h = 0.008, r = 0.6, $fn = 9);
+}
+
+// 警察局：白蓝墙 + 蓝色腰带 + POLICE 字样 + 屋顶警灯（可进入）
+module cw_bldg_police(seed = 0, L = 12, D = 8)
+{
+    wh = 3.6;
+    cw_part_shell(L, D, wh, cw_WHITEW(), t = 0.28, dw = 1.6, dh = 2.3, dx = -L * 0.15, roomH = wh - 0.35,
+                  wins = [[0, L * 0.2, 1.6, 1.4, 1.1], [0, -L * 0.38, 1.6, 1.2, 1.1],
+                          [1, -L * 0.25, 1.6, 1.2, 1.0], [1, L * 0.25, 1.6, 1.2, 1.0], [3, 0, 1.6, 1.2, 1.0]]);
+    color(cw_SIGNB()) for (sy = [-1, 1]) translate([0, sy * (D / 2 + 0.02), 2.6]) cw_boxc([L + 0.04, 0.06, 0.32]);
+    color(cw_CONCD()) translate([0, 0, wh]) difference()
+    {
+        cw_slab(L + 0.16, D + 0.16, 0.45);
+        translate([0, 0, -0.05]) cw_slab(L - 0.5, D - 0.5, 0.6);
+    }
+    color(cw_SIGNB()) translate([-L * 0.15, -D / 2 - 0.06, 3.2]) cw_boxc([3.0, 0.08, 0.5]);
+    color(cw_MARKW()) translate([-L * 0.15, -D / 2 - 0.11, 3.2]) rotate([90, 0, 0]) linear_extrude(height = 0.02)
+        text("POLICE", size = 0.34, halign = "center", valign = "center");
+    // 窗铁栏（贴墙装饰在窗洞外侧上方，不挡洞）
+    color(cw_METALD()) for (u = [L * 0.2, -L * 0.38]) translate([u, -D / 2 - 0.04, 2.2]) cw_boxc([1.5, 0.04, 0.06]);
+    color(cw_METALD()) translate([L * 0.3, D * 0.1, wh + 0.45]) cylinder(h = 3.0, r = 0.05, $fn = 6);
+    color(cw_SIGNB()) translate([L * 0.3, D * 0.1, wh + 3.4]) cw_boxc([0.5, 0.2, 0.15]);
+    color(cw_REDC()) translate([L * 0.3 + 0.3, D * 0.1, wh + 3.4]) cw_boxc([0.2, 0.2, 0.15]);
+}
+
+// 加油站便利店：大玻璃面 + 招牌字样（可进入）
+module cw_bldg_gas_shop(seed = 0, L = 9, D = 6, msg = "SHOP 24")
+{
+    wh = 3.4;
+    cw_part_shell(L, D, wh, cw_WHITEW(), t = 0.22, dw = 1.4, dh = 2.2, dx = L * 0.28, roomH = wh - 0.3,
+                  wins = [[0, -L * 0.15, 1.5, L * 0.42, 1.6], [3, 0, 1.6, 1.2, 1.0]]);
+    color(cw_CONCD()) translate([0, 0, wh]) cw_slab(L + 0.6, D + 0.6, 0.25);
+    color(cw_REDC()) translate([0, -D / 2 - 0.32, wh + 0.12]) cw_boxc([L + 0.6, 0.06, 0.45]);
+    color(cw_MARKW()) translate([0, -D / 2 - 0.37, wh + 0.12]) rotate([90, 0, 0]) linear_extrude(height = 0.02)
+        text(msg, size = 0.3, halign = "center", valign = "center");
+    color(cw_METALD()) for (i = [0 : 3]) translate([-L / 2 + 0.6 + i * L * 0.14, -D / 2 - 0.02, 1.5]) cw_boxc([0.06, 0.05, 1.6]);
+    color(cw_CONCD()) translate([0, -D / 2 - 0.6, 0]) cw_slab(L, 1.2, 0.14);
+}
+
+// 路边汽车旅馆：一排独立客房（每间可进入）+ 前廊
+module cw_bldg_motel(seed = 0, rooms = 5, W = 4.0, D = 6)
+{
+    L = rooms * W;
+    for (i = [0 : rooms - 1])
+        translate([-L / 2 + W / 2 + i * W, 0, 0])
+            cw_part_shell(W, D, 2.9, [[0.62, 0.52, 0.38], [0.52, 0.56, 0.52]][cw_rnd(seed, 2)], t = 0.18, dw = 0.95, dh = 2.1,
+                          dx = -W * 0.22, roomH = 2.6, wins = [[0, W * 0.2, 1.5, 1.1, 1.0]]);
+    color(cw_CONCD()) translate([0, 0, 2.9]) cw_slab(L + 0.2, D + 0.2, 0.16);
+    color([0.62, 0.20, 0.14]) translate([0, -D / 2 - 1.1, 2.75]) cw_boxc([L + 0.4, 2.3, 0.1]);
+    color(cw_WOODD()) for (i = [0 : rooms]) translate([-L / 2 + i * W, -D / 2 - 2.1, 1.35]) cw_boxc([0.12, 0.12, 2.7]);
+    color(cw_CONC()) translate([0, -D / 2 - 1.1, 0]) cw_slab(L + 0.4, 2.2, 0.12);
+    for (i = [0 : rooms - 1])
+        color(cw_MARKW()) translate([-L / 2 + W / 2 + i * W + W * 0.22, -D / 2 - 0.03, 2.35]) cw_boxc([0.2, 0.02, 0.14]);
+    // 立柱招牌
+    color(cw_METALD()) translate([L / 2 + 1.5, -D / 2 - 3.0, 2.5]) cylinder(h = 5.0, r = 0.1, center = true, $fn = 6);
+    color(cw_REDC()) translate([L / 2 + 1.5, -D / 2 - 3.0, 5.2]) cw_boxc([2.6, 0.2, 0.9]);
+    color(cw_MARKW()) translate([L / 2 + 1.5, -D / 2 - 3.12, 5.2]) rotate([90, 0, 0]) linear_extrude(height = 0.02)
+        text("MOTEL", size = 0.45, halign = "center", valign = "center");
+}
+
+// 要塞城墙段（沿 x；厚墙 + 顶部步道 + 垛口；front=-y 为外侧）
+module cw_bldg_fort_wall(len = 12, h = 5.0, seed = 0)
+{
+    t = 1.6;
+    sc = [0.46, 0.43, 0.38];
+    color(sc) hull()
+    {
+        translate([0, 0, 0.1]) cw_boxc([len, t + 0.5, 0.2]);
+        translate([0, 0, h - 0.1]) cw_boxc([len, t, 0.2]);
+    }
+    color([0.38, 0.35, 0.31])
+    {
+        translate([0, -t / 2 + 0.2, h + 0.5]) cw_boxc([len, 0.4, 1.0]);
+        for (i = [0 : floor(len / 1.6) - 1])
+            translate([-len / 2 + 0.8 + i * 1.6, -t / 2 + 0.2, h + 1.25]) cw_boxc([0.8, 0.4, 0.5]);
+    }
+    // 石块缝与苔痕
+    color([0.34, 0.32, 0.28]) for (z = [1.2, 2.4, 3.6])
+        translate([0, -t / 2 - 0.26 + z * 0.05, z]) cw_boxc([len, 0.04, 0.06]);
+    color([0.28, 0.34, 0.20]) translate([cw_rndr(seed, -len / 3, len / 3), -t / 2 - 0.22, 0.6]) cw_boxc([len * 0.3, 0.04, 1.0]);
+}
+
+// 要塞棱堡塔（八角，带垛口与门洞装饰）
+module cw_bldg_fort_bastion(seed = 0, r = 4.0, h = 7.0)
+{
+    color([0.46, 0.43, 0.38]) cylinder(h = h, r1 = r + 0.6, r2 = r, $fn = 8);
+    color([0.38, 0.35, 0.31])
+    {
+        translate([0, 0, h]) difference()
+        {
+            cylinder(h = 1.0, r = r + 0.1, $fn = 8);
+            translate([0, 0, -0.1]) cylinder(h = 1.3, r = r - 0.5, $fn = 8);
+        }
+        for (a = [0 : 45 : 315]) rotate([0, 0, a + 22.5]) translate([r - 0.2, 0, h + 1.25]) cw_boxc([0.4, 0.9, 0.5]);
+    }
+    color(cw_DARKC()) for (a = [0 : 90 : 270]) rotate([0, 0, a]) translate([0, -r - 0.05, h * 0.7]) cw_boxc([0.3, 0.2, 0.9]);
+    color(cw_DARKC()) translate([0, -r - 0.32, 1.1]) cw_boxc([1.3, 0.1, 2.2]);
+    color(cw_REDC()) translate([0, 0, h + 1.0]) cylinder(h = 3.5, r = 0.05, $fn = 5);
+    color(cw_REDC()) translate([0.45, 0, h + 4.2]) cw_boxc([0.9, 0.02, 0.6]);
+}
+
+// 要塞门楼（门洞 4m，可通行；沿 x 接城墙）
+module cw_bldg_fort_gate(seed = 0, h = 6.5)
+{
+    for (sx = [-1, 1]) color([0.46, 0.43, 0.38]) translate([sx * 3.2, 0, h / 2]) cw_boxc([2.4, 2.4, h]);
+    color([0.40, 0.37, 0.33]) translate([0, 0, h - 0.9]) cw_boxc([8.8, 2.4, 1.8]);
+    color([0.38, 0.35, 0.31]) for (i = [0 : 4]) translate([-3.6 + i * 1.8, -1.0, h + 0.3]) cw_boxc([0.9, 0.4, 0.6]);
+    color(cw_MARKW()) translate([0, -1.22, h - 0.9]) cw_boxc([2.6, 0.04, 0.7]);
+    color(cw_DARKC()) translate([0, -1.25, h - 0.9]) rotate([90, 0, 0]) linear_extrude(height = 0.02)
+        text("1887", size = 0.4, halign = "center", valign = "center");
+    color(cw_METALD()) translate([-1.4, -1.6, 2.0]) rotate([0, 0, -40]) cw_boxc([2.0, 0.12, 4.0]);   // 被撞开的铁门
+}
+
+// 小火车站：砖站房 + 站台 + 站名牌（可进入）
+module cw_bldg_station(seed = 0, L = 14, D = 7, msg = "RIVERLAND")
+{
+    wh = 4.0;
+    cw_part_shell(L, D, wh, [0.56, 0.44, 0.30], t = 0.3, dw = 1.6, dh = 2.5, dx = 0, roomH = wh - 0.4,
+                  wins = [[0, -L * 0.3, 1.8, 1.2, 1.6], [0, L * 0.3, 1.8, 1.2, 1.6],
+                          [1, -L * 0.3, 1.8, 1.2, 1.6], [1, 0, 1.8, 1.4, 1.8], [1, L * 0.3, 1.8, 1.2, 1.6]]);
+    translate([0, 0, wh]) cw_part_roof(L, D, 2.0, 0.6, 1.2, cw_ROOFR());
+    color(cw_CONC()) translate([0, D / 2 + 2.0, 0]) cw_slab(L + 8, 4.0, 0.9);
+    color(cw_YELLOWC()) translate([0, D / 2 + 3.9, 0.9]) cw_boxc([L + 8, 0.2, 0.01]);
+    color([0.40, 0.20, 0.14]) translate([0, D / 2 + 1.6, 3.4]) cw_boxc([L + 2, 2.6, 0.12]);
+    color(cw_METALD()) for (i = [0 : 4]) translate([-L / 2 - 0.5 + i * (L + 1) / 4, D / 2 + 2.6, 2.1]) cylinder(h = 2.6, r = 0.08, center = true, $fn = 6);
+    color(cw_SIGNB()) translate([0, -D / 2 - 0.06, wh - 0.6]) cw_boxc([4.6, 0.08, 0.6]);
+    color(cw_MARKW()) translate([0, -D / 2 - 0.11, wh - 0.6]) rotate([90, 0, 0]) linear_extrude(height = 0.02)
+        text(msg, size = 0.36, halign = "center", valign = "center");
+    color(cw_MARKW()) translate([L * 0.3, -D / 2 - 0.08, wh + 1.0]) rotate([90, 0, 0]) cylinder(h = 0.05, r = 0.4, $fn = 16);
+}
+
+// 狩猎高台（木架 + 小棚）
+module cw_bldg_hunting_stand(seed = 0, h = 3.6)
+{
+    color(cw_WOODD()) for (sx = [-1, 1], sy = [-1, 1])
+        translate([sx * 0.8, sy * 0.8, h / 2]) rotate([sy * 3, -sx * 3, 0]) cw_boxc([0.14, 0.14, h + 0.3]);
+    color(cw_WOODC())
+    {
+        translate([0, 0, h]) cw_slab(1.9, 1.9, 0.08);
+        for (a = [0, 90, 180, 270]) rotate([0, 0, a]) translate([0, -0.92, h + 0.45]) cw_boxc([1.9, 0.05, 0.9]);
+    }
+    translate([0, 0, h + 1.7]) cw_part_roof(2.0, 2.0, 0.5, 0.2, 0, cw_WOODD());
+    color(cw_WOODD()) for (sx = [-1, 1]) translate([sx * 0.8, 0, h + 1.3]) cw_boxc([0.1, 1.9, 0.8]);
+    color(cw_WOODD())
+    {
+        for (sx = [-1, 1]) translate([sx * 0.25, -1.6, h / 2]) rotate([-20, 0, 0]) cw_boxc([0.06, 0.06, h + 0.4]);
+        for (i = [0 : floor(h / 0.4)]) translate([0, -1.0 - i * 0.14, 0.3 + i * 0.38]) cw_boxc([0.5, 0.05, 0.05]);
+    }
+}
+
+// 锯木场敞棚（立柱 + 单坡顶 + 锯台）
+module cw_bldg_lumber_shed(seed = 0, L = 12, D = 6)
+{
+    color(cw_WOODD()) for (i = [0 : 3], sy = [-1, 1])
+        translate([-L / 2 + 0.2 + i * (L - 0.4) / 3, sy * (D / 2 - 0.2), sy > 0 ? 2.2 : 1.7]) cw_boxc([0.22, 0.22, sy > 0 ? 4.4 : 3.4]);
+    color(cw_ROOFM()) translate([0, 0, 3.9]) rotate([-9, 0, 0]) cw_boxc([L + 0.8, D + 1.0, 0.1]);
+    color(cw_METALD()) translate([0, 0, 0.45]) cw_boxc([3.5, 1.0, 0.9]);
+    color(cw_METALC()) translate([0, -0.1, 1.0]) rotate([90, 0, 0]) cylinder(h = 0.03, r = 0.5, center = true, $fn = 18);
+    color(cw_TRUNKC()) translate([-1.0, 0, 1.15]) rotate([0, 90, 0]) cylinder(h = 3.0, r = 0.25, center = true, $fn = 9);
+    color([0.62, 0.52, 0.34]) translate([1.5, 1.4, 0]) scale([1.6, 1, 0.35]) sphere(r = 0.8, $fn = 9);   // 木屑堆
+}
+
+// 乡村教堂（大）：中殿可进入 + 钟楼 + 洋葱顶
+module cw_bldg_church(seed = 0, L = 14, D = 8)
+{
+    wh = 5.0;
+    cw_part_shell(L, D, wh, cw_WHITEW(), t = 0.4, dw = 1.6, dh = 2.8, dx = -L * 0.32,
+                  wins = [for (i = [0 : 2]) [1, -L * 0.25 + i * L * 0.25, 3.0, 0.8, 1.8],
+                          for (i = [1 : 2]) [0, -L * 0.25 + i * L * 0.25, 3.0, 0.8, 1.8],
+                          [3, 0, 3.2, 1.0, 1.8]]);
+    translate([0, 0, wh]) cw_part_roof(L, D, 2.6, 0.4, 0, cw_ROOFM());
+    // 钟楼（入口侧，实心）
+    translate([-L / 2 - 1.8, 0, 0])
+    {
+        color(cw_WHITEW()) translate([0, 0, 5.0]) cw_boxc([3.6, 3.6, 10.0]);
+        color(cw_DARKC()) for (a = [0, 90, 180, 270]) rotate([0, 0, a]) translate([0, -1.81, 8.4]) cw_boxc([0.9, 0.04, 1.6]);
+        color([0.52, 0.42, 0.14])
+        {
+            translate([0, 0, 10.0]) cylinder(h = 0.8, r = 1.6, $fn = 8);
+            translate([0, 0, 11.4]) sphere(r = 1.4, $fn = 10);
+            translate([0, 0, 12.4]) cylinder(h = 1.4, r1 = 0.9, r2 = 0.05, $fn = 10);
+        }
+        color([0.62, 0.50, 0.18])
+        {
+            translate([0, 0, 14.2]) cw_boxc([0.08, 0.08, 0.9]);
+            translate([0, 0, 14.4]) cw_boxc([0.5, 0.08, 0.08]);
+        }
+    }
+    color(cw_CONCD()) translate([-L * 0.32, -D / 2 - 0.6, 0]) cw_slab(2.4, 1.2, 0.2);
+}

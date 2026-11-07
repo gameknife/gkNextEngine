@@ -422,6 +422,13 @@ namespace ScadLibrary
             return escaped;
         }
 
+        const char* SurfaceName(int biome)
+        {
+            static const char* names[] = {"grass", "grass_dark", "dry_grass", "sand", "rock",
+                                          "rock_high", "snow", "bed", "road", "pad"};
+            return biome >= 0 && biome < static_cast<int>(std::size(names)) ? names[biome] : "pad";
+        }
+
         std::string SerializeTerrain(const std::string& variable, const Assets::Scad::FTerrainSpec& terrain)
         {
             std::ostringstream source;
@@ -467,6 +474,16 @@ namespace ScadLibrary
                 case EType::Pad:
                     source << FormatPoint(feature.at) << ", " << FormatPoint(feature.size) << ", "
                            << FormatNumber(feature.rot);
+                    if (feature.apron > 0.0) source << ", " << FormatNumber(feature.apron);
+                    if (feature.biome >= 0) source << ", \"" << SurfaceName(feature.biome) << "\"";
+                    break;
+                case EType::Paint:
+                    source << FormatPoints(feature.pts) << ", \"" << SurfaceName(feature.biome) << "\"";
+                    if (feature.stripeBiome >= 0 && feature.stripePeriod > 0.0)
+                    {
+                        source << ", [\"" << SurfaceName(feature.stripeBiome) << "\", "
+                               << FormatNumber(feature.stripePeriod) << ", " << FormatNumber(feature.stripeAngle) << "]";
+                    }
                     break;
                 case EType::Hmap:
                     // Sampled heightfields are data, not editable geometry: the
@@ -1011,6 +1028,8 @@ namespace ScadLibrary
             return "pad";
         case EType::Hmap:
             return "hmap";
+        case EType::Paint:
+            return "paint";
         }
         return "unknown";
     }

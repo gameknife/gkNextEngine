@@ -55,12 +55,9 @@ namespace NextDayz
         float AimTapSeconds = 0.20f;   // shorter RMB presses toggle FPS ADS; longer presses hold aim
         float MaxPitchDegrees = 85.0f;
         // Third person
-        float TpsDistance = 3.8f;
+        float TpsDistance = 1.5f; // fixed at the former minimum zoom distance
         float TpsHeight = 1.7f;
         float TpsShoulderOffset = 0.90f;
-        float TpsMinDistance = 1.5f;
-        float TpsMaxDistance = 9.0f;
-        float ScrollStep = 0.6f;
         float TpsCollisionRadius = 0.20f; // near-plane clearance around the camera arm
         float TpsCollisionPadding = 0.05f;
         float TpsArmReturnSpeed = 5.0f;   // m/s; obstruction retracts the arm immediately

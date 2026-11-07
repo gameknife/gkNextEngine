@@ -37,6 +37,7 @@
 #include "Engine/Vulkan/WindowSurface.hpp"
 #include "Modules/ScadLoader/FScadRig.h"
 #include "Modules/ScadLoader/ScadModule.hpp"
+#include "Modules/NextUI/FontLoader.hpp"
 
 #include "Application/Game/NextDayz/UI/NextDayzHUD.hpp"
 
@@ -93,6 +94,31 @@ NextDayzGameInstance::NextDayzGameInstance(Vulkan::WindowConfig& config, Runtime
     NextDayz::L10n::Initialize(options.AgentValidation);
     ConfigureWindow(config, options, "NextDayz", options.WidthSpecified ? static_cast<int>(options.Width) : 1920,
                     options.HeightSpecified ? static_cast<int>(options.Height) : 1080, false);
+}
+
+void NextDayzGameInstance::OnInitUI()
+{
+    NextGameInstanceBase::OnInitUI();
+    const float density = ImGui::GetIO().FontDefault->Sources[0]->RasterizerDensity;
+    constexpr float titleSize = 28.0f;
+    inventoryTitleFont_ = NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
+        .filePath = "assets/fonts/Roboto-BoldCondensed.ttf",
+        .pixelSize = titleSize,
+        .rasterizerDensity = density,
+    });
+    if (inventoryTitleFont_)
+    {
+        // Pair the Title face with the localized heading's Chinese glyphs.
+        ImFontConfig fallback;
+        fallback.MergeMode = true;
+        NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
+            .filePath = "assets/fonts/DroidSansFallback.ttf",
+            .pixelSize = titleSize,
+            .extraGlyphsUtf8 = NextDayz::L10n::Translate("Inventory", NextDayz::L10n::ELanguage::Chinese).data(),
+            .fontConfig = &fallback,
+            .rasterizerDensity = density,
+        });
+    }
 }
 
 void NextDayzGameInstance::OnInit()
@@ -210,11 +236,11 @@ void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
                         nullptr, 0.0, 12.0);
     cvars.RegisterFloat("nextdayz.grass.transmission", 1.0f, &grass_.settings.transmission, NextCVar::ECVarFlags::None,
                         "Grass direct-light translucency; zero restores opaque lighting", nullptr, 0.0, 1.0);
-    cvars.RegisterFloat("nextdayz.grass.windStrength", 0.65f, &grass_.settings.windStrength, NextCVar::ECVarFlags::None,
+    cvars.RegisterFloat("nextdayz.grass.windStrength", 1.0f, &grass_.settings.windStrength, NextCVar::ECVarFlags::None,
                         "Wind bending strength", nullptr, 0.0, 1.0);
     cvars.RegisterFloat("nextdayz.grass.windYaw", 0.7f, &grass_.settings.windYaw, NextCVar::ECVarFlags::None,
                         "Wind heading in radians: +X toward -Z");
-    cvars.RegisterFloat("nextdayz.grass.windSpeed", 1.0f, &grass_.settings.windSpeed, NextCVar::ECVarFlags::None,
+    cvars.RegisterFloat("nextdayz.grass.windSpeed", 1.15f, &grass_.settings.windSpeed, NextCVar::ECVarFlags::None,
                         "Wind animation speed; zero freezes the field", nullptr, 0.0, 4.0);
     cvars.RegisterBool("nextdayz.grass.interaction", true, &grass_.settings.interactionEnabled,
                        NextCVar::ECVarFlags::None, "Root-preserving grass contact and recovery");
@@ -1266,6 +1292,7 @@ bool NextDayzGameInstance::OnRenderUI()
     if (CampaignEnabled() && DrawSafehouse()) return true;
 
     NextDayz::FHudContext ctx;
+    ctx.titleFont = inventoryTitleFont_;
     ctx.freeLooking = player_.IsFreeLooking();
     ctx.aiming = player_.IsAiming();
     ctx.firstPerson = player_.IsFirstPerson();
@@ -3094,16 +3121,6 @@ bool NextDayzGameInstance::OnMouseButton(SDL_Event& event)
     return false;
 }
 
-bool NextDayzGameInstance::OnScroll(double /*xoffset*/, double yoffset)
-{
-    if (!player_.IsFirstPerson())
-    {
-        player_.AdjustCameraDistance(static_cast<float>(yoffset));
-        return true;
-    }
-    return false;
-}
-
 void NextDayzGameInstance::UpdateGrass(float dt)
 {
     grassInteractors_.clear();
@@ -3221,6 +3238,7 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     reg.Add("grassInteractionCount", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.InteractionCount()); });
     reg.Add("grassContactCount", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.ContactCount()); });
     reg.Add("grassContactChecks", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.ContactChecks()); });
+    reg.Add("grassUpdatedInstances", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.UpdatedCount()); });
     reg.Add("grassMaxPressure", [this]() -> Runtime::Agent::FAgentQueryValue { return double(grass_.MaxPressure()); });
     reg.Add("grassPoseChanges", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.PoseChanges()); });
     reg.Add("grassTileBuilds", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(grass_.TileBuilds()); });

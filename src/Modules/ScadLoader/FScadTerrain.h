@@ -20,8 +20,19 @@
 //   ["lake",     [x,y], radius, depth]
 //   ["river",    [[x,y],...], width, depth]     // carve + water surface
 //   ["road",     [[x,y],...], width]            // flatten + dirt color
-//   ["pad",      [x,y], [w,d], rotDeg]          // flat build site
+//   ["pad",      [x,y], [w,d], rotDeg(, apron)(, "biome")]  // flat build site
 //   ["hmap",     path|[cols,rows][,grid], mode, zScale, zBias]  // sampled DEM
+//   ["paint",    [[x,y],...], "biome"(, ["alt", period, angleDeg])]  // land cover (no height)
+//
+// pad's optional trailing operands: a number overrides the blend apron width
+// (metres outside the rectangle), a biome name changes only the rendered
+// surface (a farmyard of trodden earth or a lawn instead of grey paving); the
+// cell keeps its pad semantics for queries, vegetation and grass. paint
+// recolours natural ground inside a closed polygon (fields, forest floor,
+// meadows). Water, roads, pads, cliffs and snow keep priority; later paints
+// win over earlier ones. The optional stripe operand alternates the polygon
+// between two surfaces in parallel bands (ploughed strips, stubble rows);
+// periods below ~4 terrain cells alias into noise.
 //
 // The hmap operator stamps a sampled heightfield (real-world elevation, a
 // sculpted mask, ...) into the field. Two source forms:
@@ -83,7 +94,8 @@ namespace Assets::Scad
             River,
             Road,
             Pad,
-            Hmap
+            Hmap,
+            Paint
         };
 
         EType type = EType::Mountain;
@@ -95,7 +107,12 @@ namespace Assets::Scad
         double depth = 0.0;        // lake/river
         double width = 0.0;        // ridge/river/road
         double rugged = 0.0;       // mountain noise perturbation [0..1]
-        std::vector<glm::dvec2> pts; // ridge/river/road polyline
+        double apron = -1.0;       // pad blend width override (<0 => derived from size)
+        int biome = -1;            // paint biome / pad rendered surface (<0 => default)
+        int stripeBiome = -1;      // paint: alternate biome of parallel bands (<0 => solid)
+        double stripePeriod = 0.0; // paint: band pair width in metres
+        double stripeAngle = 0.0;  // paint: band direction, degrees from +x
+        std::vector<glm::dvec2> pts; // ridge/river/road polyline, paint ring
 
         // hmap
         std::string path;   // runtime-root-relative .hmap ("" => inline literal)

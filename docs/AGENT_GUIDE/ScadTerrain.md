@@ -37,8 +37,9 @@ TERR = ["gkterr1", [sizeX, sizeY], [cellsX, cellsY], seed,
           ["lake",     [x,y], radius, depth],
           ["river",    [[x,y],...], width, depth],     // 上游→下游
           ["road",     [[x,y],...], width],            // 填方>0.9 的深沟留空给桥
-          ["pad",      [x,y], [w,d], rotDeg],          // 建筑基座压平
-          ["hmap",     path|[cols,rows][,grid], mode, zScale, zBias] ]];  // 采样高度场
+          ["pad",      [x,y], [w,d], rotDeg(, apron)(, "surface")],  // 建筑基座压平
+          ["hmap",     path|[cols,rows][,grid], mode, zScale, zBias],      // 采样高度场
+          ["paint",    [[x,y],...], "biome"(, ["alt", period, angleDeg])] ]];  // 土地覆盖涂色
 ```
 
 - features **按序作用**：hmap→山→河（下切+水面）→路（压平）→pad（最后压平）。
@@ -49,10 +50,24 @@ TERR = ["gkterr1", [sizeX, sizeY], [cellsX, cellsY], seed,
 - `urban` 另有一条 `minGreenRiseM = 40`：起伏不到 40m 就完全不上绿色。色带本来是"本块起伏的
   百分比"，这对城市问错了问题 —— 曼哈顿建成区总共只有 27m 起伏，55% 就是 15m，半个中城会被
   涂成山坡。
-- 调色板：`temperate` / `arid` / `alpine` / `urban`；biomeId 枚举见 `FScadTerrain.h`
+- 调色板：`temperate` / `arid` / `alpine` / `urban` / `continental`（中欧农林：偏深偏冷的草绿、
+  卡其色麦茬与褐色土路，与运行时草叶同色系；颜色只来自 paint，不随海拔变干、不下雪）；biomeId 枚举见 `FScadTerrain.h`
   `ETerrainBiome`（grass=0, grass_dark, dry_grass, sand, rock, rock_high, snow, bed, road, pad）。
   `urban` 把低平地染成混凝土、把高处染成绿坡并**彻底关掉雪线**（城市丘陵只有一两百米，
   用 temperate 会在山顶盖雪），给真实地理数据生成的城市关卡使用。
+
+### paint 与地块 pad（plot）
+
+- `paint`：闭合多边形内把自然地表改成指定 biome（`grass`/`grass_dark`/`dry_grass`/`sand`/`rock`/
+  `road`/`pad`…，不能是 `bed`），不改高度。水、道路、pad、陡崖与雪优先；后写的 paint 覆盖先写的。
+  `cellBiome` 跟着变，所以 `ter_scatter` 的 biome 过滤、运行时草地（只长在 grass/grass_dark/dry_grass）
+  都会尊重它：涂成 `road` 的翻耕地不长草。可选第四项 `["alt", period, angle]` 让多边形按平行条带在两种
+  地表间交替（条田、麦茬行）；period 小于约 4 个格会混叠成噪点。
+- `pad` 尾部可选操作数（顺序任意）：数字 = 缓坡宽度（默认 0.35×短边），字符串 = 渲染地表
+  （农家院用 `road` 夯土、花园用 `grass`）。地表只改颜色，格子仍是 pad 语义（不长草、植被避让）。
+- **带任一可选操作数的 pad 是地块（plot）**：平整区外扩一个网格对角线的"肩"，保证声明矩形在渲染网格上
+  逐三角形都平；且后写的地块不会改动先写地块的矩形与肩。所以不同高度的地块之间至少留 2 个肩宽
+  （256 格／1 km 时约 11 m，聚落规划取 12 m）。不带操作数的旧 pad 行为不变，已发布地图不受影响。
 
 ### hmap：把任意采样高度场喂进地形
 

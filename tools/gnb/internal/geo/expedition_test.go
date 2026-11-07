@@ -96,7 +96,7 @@ PCG_CLEAR = [];
 	if report.Roads != 1 || !strings.Contains(string(before), "[-400, 300]") || strings.Contains(string(before), "[-480, 0]") {
 		t.Fatal("park recipes must select cycling/foot routes independently of road-only defaults")
 	}
-	if !strings.Contains(string(before), "nd_pcg_pads(") || !strings.Contains(string(before), "nd_pcg_vegetation(") || report.Trees != 200 || report.Shrubs != 80 {
+	if !strings.Contains(string(before), "nd_pcg_terrain(PCG_SITES,PCG_SPAWNS,PCG_EXTRACTIONS,7,[])") || !strings.Contains(string(before), "nd_pcg_vegetation(") || report.Trees != 200 || report.Shrubs != 80 {
 		t.Fatal("SCAD controls must own shared earthworks and vegetation budgets")
 	}
 	authoring := filepath.Join(filepath.Dir(scene), "adjustments.scad")
@@ -201,5 +201,40 @@ PCG_BRIDGES=[[[-200,200],[200,200],4]];`
 	g.Values[7*11+7] = 9 // east bridge bank only; no other pad depends on it
 	if _, err = readExpeditionControls(path, &ir, g, 4); err == nil {
 		t.Fatal("bridge ending underwater accepted")
+	}
+}
+
+func TestExpeditionSettlementsAndLandCover(t *testing.T) {
+	ir := IR{SizeM: 1000, Terrain: &TerrainMeta{}}
+	grid := NewHeightGrid(11, 11, -500, -500, 100, 100)
+	for i := range grid.Values {
+		grid.Values[i] = 20 + float64(i%11)
+	}
+	const source = `PCG_SITES=[["green","Village green","naves",[0,0],[120,110],0,12,1],
+ ["town","Square","square",[-250,250],[120,80],10,20,2]];
+PCG_SPAWNS=[[-400,-400],[400,400],[-400,400]];
+PCG_EXTRACTIONS=[[-300,-100],[300,0]];
+PCG_PATHS=[]; PCG_VEGETATION=[]; PCG_CLEAR=[];
+PCG_LANDCOVER=[["woods","spruce",[[200,-400],[450,-400],[450,-150],[200,-150]]],["fields","field",[[-450,-300],[-200,-300],[-200,-150]]]];
+PCG_ALLEYS=[[[[-200,-80],[200,-80]],"fruit",11,6]];`
+	path := filepath.Join(t.TempDir(), "layout.scad")
+	if err := os.WriteFile(path, []byte(source), 0644); err != nil {
+		t.Fatal(err)
+	}
+	report, err := readExpeditionControls(path, &ir, grid, 32)
+	if err != nil || report.Buildings != 32 || len(report.Landcover) != 2 || report.Alleys != 1 || report.Landcover[0].AreaM2 != 62500 {
+		t.Fatalf("settlement controls rejected: %+v %v", report, err)
+	}
+	for _, edit := range []string{
+		strings.Replace(source, "[120,110],0,12", "[80,110],0,12", 1), // farmsteads do not fit along the green
+		strings.Replace(source, "\"square\",[-250,250],[120,80],10,20", "\"square\",[-250,250],[120,80],10,40", 1),
+		strings.Replace(source, "\"spruce\"", "\"jungle\"", 1),
+	} {
+		if err = os.WriteFile(path, []byte(edit), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = readExpeditionControls(path, &ir, grid, 32); err == nil {
+			t.Fatal("invalid settlement or land cover accepted")
+		}
 	}
 }

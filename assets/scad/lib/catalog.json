@@ -6660,6 +6660,2122 @@
       ]
     },
     {
+      "name": "kit_bohemia",
+      "file": "kit_bohemia.scad",
+      "prefix": "bh_",
+      "scaleClass": "mid",
+      "modules": [
+        {
+          "name": "bh_bldg_barn",
+          "category": "bldg",
+          "params": "seed=0,L=16,D=9",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "16"
+            },
+            {
+              "name": "D",
+              "default": "9"
+            }
+          ],
+          "line": 432,
+          "footprint": [
+            17.14,
+            12.88
+          ],
+          "height": 10.35,
+          "zMin": -0.13,
+          "center": [
+            -0.07,
+            -0.04
+          ],
+          "triangles": 4304,
+          "colors": 284,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_bldg_burgher",
+          "category": "bldg",
+          "params": "seed=0,L=8,D=12,floors=2,front=-1,shop=false",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "8"
+            },
+            {
+              "name": "D",
+              "default": "12"
+            },
+            {
+              "name": "floors",
+              "default": "2"
+            },
+            {
+              "name": "front",
+              "default": "-1"
+            },
+            {
+              "name": "shop",
+              "default": "false"
+            }
+          ],
+          "line": 470,
+          "footprint": [
+            9.1,
+            13.22
+          ],
+          "height": 12.49,
+          "zMin": -0.05,
+          "center": [
+            -0.09,
+            0.0
+          ],
+          "triangles": 3988,
+          "colors": 254,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_bldg_castle",
+          "category": "bldg",
+          "params": "seed=0,L=34,D=26",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "34"
+            },
+            {
+              "name": "D",
+              "default": "26"
+            }
+          ],
+          "line": 793,
+          "footprint": [
+            34.0,
+            28.46
+          ],
+          "height": 30.87,
+          "zMin": -0.05,
+          "center": [
+            0.0,
+            -0.6
+          ],
+          "triangles": 9756,
+          "colors": 695,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_bldg_chapel",
+          "category": "bldg",
+          "params": "seed=0,L=6,D=8",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "6"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            }
+          ],
+          "line": 582,
+          "footprint": [
+            7.02,
+            8.76
+          ],
+          "height": 11.71,
+          "zMin": 0.0,
+          "center": [
+            0.03,
+            0.02
+          ],
+          "triangles": 1530,
+          "colors": 68,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_bldg_chata",
+          "category": "bldg",
+          "params": "seed=0,L=6,D=5,aframe=-1",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "6"
+            },
+            {
+              "name": "D",
+              "default": "5"
+            },
+            {
+              "name": "aframe",
+              "default": "-1"
+            }
+          ],
+          "line": 705,
+          "footprint": [
+            6.9,
+            7.22
+          ],
+          "height": 5.42,
+          "zMin": -0.5,
+          "center": [
+            0.0,
+            -0.59
+          ],
+          "triangles": 1516,
+          "colors": 124,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_bldg_church",
+          "category": "bldg",
+          "params": "seed=0,L=24,D=11",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "24"
+            },
+            {
+              "name": "D",
+              "default": "11"
+            }
+          ],
+          "line": 525,
+          "footprint": [
+            25.44,
+            12.35
+          ],
+          "height": 33.9,
+          "zMin": -0.05,
+          "center": [
+            -0.02,
+            0.0
+          ],
+          "triangles": 3652,
+          "colors": 140,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_bldg_cowshed",
+          "category": "bldg",
+          "params": "seed=0,L=36,D=11",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "36"
+            },
+            {
+              "name": "D",
+              "default": "11"
+            }
+          ],
+          "line": 741,
+          "footprint": [
+            37.1,
+            12.17
+          ],
+          "height": 6.15,
+          "zMin": -0.05,
+          "center": [
+            -0.09,
+            0.0
+          ],
+          "triangles": 9148,
+          "colors": 691,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_bldg_egerland",
+          "category": "bldg",
+          "params": "seed=0,L=13,D=9,gable=1",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "13"
+            },
+            {
+              "name": "D",
+              "default": "9"
+            },
+            {
+              "name": "gable",
+              "default": "1"
+            }
+          ],
+          "line": 408,
+          "footprint": [
+            14.1,
+            10.25
+          ],
+          "height": 13.36,
+          "zMin": -0.05,
+          "center": [
+            -0.09,
+            0.0
+          ],
+          "triangles": 9748,
+          "colors": 736,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_bldg_factory",
+          "category": "bldg",
+          "params": "seed=0,L=30,D=16",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "30"
+            },
+            {
+              "name": "D",
+              "default": "16"
+            }
+          ],
+          "line": 767,
+          "footprint": [
+            31.1,
+            16.78
+          ],
+          "height": 11.37,
+          "zMin": -0.05,
+          "center": [
+            -0.09,
+            0.0
+          ],
+          "triangles": 5520,
+          "colors": 388,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_bldg_farmhouse",
+          "category": "bldg",
+          "params": "seed=0,L=12,D=8,gable=1,style=-1",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "12"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            },
+            {
+              "name": "gable",
+              "default": "1"
+            },
+            {
+              "name": "style",
+              "default": "-1"
+            }
+          ],
+          "line": 384,
+          "footprint": [
+            13.1,
+            9.15
+          ],
+          "height": 9.76,
+          "zMin": -0.05,
+          "center": [
+            -0.09,
+            0.0
+          ],
+          "triangles": 4612,
+          "colors": 308,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_bldg_firestation",
+          "category": "bldg",
+          "params": "seed=0,L=11,D=8",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "11"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            }
+          ],
+          "line": 611,
+          "footprint": [
+            12.38,
+            10.14
+          ],
+          "height": 14.5,
+          "zMin": -0.8,
+          "center": [
+            0.05,
+            -0.33
+          ],
+          "triangles": 3296,
+          "colors": 179,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_bldg_kostka",
+          "category": "bldg",
+          "params": "seed=0,L=9,D=9",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "9"
+            },
+            {
+              "name": "D",
+              "default": "9"
+            }
+          ],
+          "line": 684,
+          "footprint": [
+            10.1,
+            10.5
+          ],
+          "height": 9.9,
+          "zMin": -0.05,
+          "center": [
+            -0.09,
+            -0.35
+          ],
+          "triangles": 4264,
+          "colors": 281,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_bldg_stable",
+          "category": "bldg",
+          "params": "seed=0,L=11,D=7",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "11"
+            },
+            {
+              "name": "D",
+              "default": "7"
+            }
+          ],
+          "line": 453,
+          "footprint": [
+            12.1,
+            8.04
+          ],
+          "height": 6.92,
+          "zMin": -0.05,
+          "center": [
+            -0.09,
+            0.0
+          ],
+          "triangles": 3476,
+          "colors": 215,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_bldg_townhall",
+          "category": "bldg",
+          "params": "seed=0,L=16,D=12",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "16"
+            },
+            {
+              "name": "D",
+              "default": "12"
+            }
+          ],
+          "line": 506,
+          "footprint": [
+            17.1,
+            13.22
+          ],
+          "height": 19.2,
+          "zMin": -0.05,
+          "center": [
+            -0.09,
+            0.0
+          ],
+          "triangles": 7664,
+          "colors": 511,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_bldg_villa",
+          "category": "bldg",
+          "params": "seed=0,L=12,D=10",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "12"
+            },
+            {
+              "name": "D",
+              "default": "10"
+            }
+          ],
+          "line": 650,
+          "footprint": [
+            13.24,
+            11.8
+          ],
+          "height": 13.4,
+          "zMin": -0.05,
+          "center": [
+            -0.02,
+            -0.3
+          ],
+          "triangles": 8076,
+          "colors": 570,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_beam2",
+          "category": "misc",
+          "params": "a,b,w=0.16,d=0.12",
+          "paramList": [
+            {
+              "name": "a"
+            },
+            {
+              "name": "b"
+            },
+            {
+              "name": "w",
+              "default": "0.16"
+            },
+            {
+              "name": "d",
+              "default": "0.12"
+            }
+          ],
+          "line": 36,
+          "footprint": [
+            0.1,
+            0.12
+          ],
+          "height": 0.08,
+          "zMin": -0.08,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 12,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_box",
+          "category": "misc",
+          "params": "s",
+          "paramList": [
+            {
+              "name": "s"
+            }
+          ],
+          "line": 33,
+          "footprint": [
+            1.0,
+            1.0
+          ],
+          "height": 0.5,
+          "zMin": -0.5,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 12,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_prism3",
+          "category": "misc",
+          "params": "a,b,c,th=0.1",
+          "paramList": [
+            {
+              "name": "a"
+            },
+            {
+              "name": "b"
+            },
+            {
+              "name": "c"
+            },
+            {
+              "name": "th",
+              "default": "0.1"
+            }
+          ],
+          "line": 45,
+          "footprint": [
+            0.0,
+            0.0
+          ],
+          "height": 0.0,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 8,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_prism4",
+          "category": "misc",
+          "params": "p0,p1,p2,p3,th=0.1",
+          "paramList": [
+            {
+              "name": "p0"
+            },
+            {
+              "name": "p1"
+            },
+            {
+              "name": "p2"
+            },
+            {
+              "name": "p3"
+            },
+            {
+              "name": "th",
+              "default": "0.1"
+            }
+          ],
+          "line": 42,
+          "footprint": [
+            0.0,
+            0.0
+          ],
+          "height": 0.0,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 12,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_slab",
+          "category": "misc",
+          "params": "L=4,D=4,t=0.2",
+          "paramList": [
+            {
+              "name": "L",
+              "default": "4"
+            },
+            {
+              "name": "D",
+              "default": "4"
+            },
+            {
+              "name": "t",
+              "default": "0.2"
+            }
+          ],
+          "line": 34,
+          "footprint": [
+            4.0,
+            4.0
+          ],
+          "height": 0.2,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 12,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_nature_alder",
+          "category": "nature",
+          "params": "seed=0,h=13",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "h",
+              "default": "13"
+            }
+          ],
+          "line": 1044,
+          "footprint": [
+            4.55,
+            4.12
+          ],
+          "height": 10.82,
+          "zMin": -0.02,
+          "center": [
+            -0.41,
+            -0.41
+          ],
+          "triangles": 504,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_nature_birch",
+          "category": "nature",
+          "params": "seed=0,h=14",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "h",
+              "default": "14"
+            }
+          ],
+          "line": 1063,
+          "footprint": [
+            4.48,
+            4.46
+          ],
+          "height": 13.02,
+          "zMin": 0.0,
+          "center": [
+            0.02,
+            0.1
+          ],
+          "triangles": 720,
+          "colors": 9,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_nature_broadleaf",
+          "category": "nature",
+          "params": "seed=0,h=16,oak=false",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "h",
+              "default": "16"
+            },
+            {
+              "name": "oak",
+              "default": "false"
+            }
+          ],
+          "line": 1015,
+          "footprint": [
+            11.27,
+            12.22
+          ],
+          "height": 14.42,
+          "zMin": 0.0,
+          "center": [
+            -0.06,
+            0.32
+          ],
+          "triangles": 960,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_nature_fern",
+          "category": "nature",
+          "params": "seed=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 1079,
+          "footprint": [
+            1.72,
+            1.73
+          ],
+          "height": 0.83,
+          "zMin": 0.01,
+          "center": [
+            0.01,
+            -0.03
+          ],
+          "triangles": 840,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_nature_fruit",
+          "category": "nature",
+          "params": "seed=0,h=5.5",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "h",
+              "default": "5.5"
+            }
+          ],
+          "line": 1035,
+          "footprint": [
+            4.67,
+            4.68
+          ],
+          "height": 4.87,
+          "zMin": 0.0,
+          "center": [
+            -0.03,
+            0.06
+          ],
+          "triangles": 840,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_nature_hedge",
+          "category": "nature",
+          "params": "seed=0,r=2.2",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "r",
+              "default": "2.2"
+            }
+          ],
+          "line": 1072,
+          "footprint": [
+            3.87,
+            3.37
+          ],
+          "height": 1.67,
+          "zMin": 0.0,
+          "center": [
+            -0.16,
+            0.07
+          ],
+          "triangles": 600,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_nature_linden",
+          "category": "nature",
+          "params": "seed=0,h=17",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "h",
+              "default": "17"
+            }
+          ],
+          "line": 1026,
+          "footprint": [
+            10.49,
+            10.58
+          ],
+          "height": 15.82,
+          "zMin": 0.0,
+          "center": [
+            0.12,
+            0.15
+          ],
+          "triangles": 768,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_nature_pine",
+          "category": "nature",
+          "params": "seed=0,h=18",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "h",
+              "default": "18"
+            }
+          ],
+          "line": 1003,
+          "footprint": [
+            6.3,
+            6.38
+          ],
+          "height": 17.44,
+          "zMin": -0.01,
+          "center": [
+            0.12,
+            -0.34
+          ],
+          "triangles": 648,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_nature_spruce",
+          "category": "nature",
+          "params": "seed=0,h=20",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "h",
+              "default": "20"
+            }
+          ],
+          "line": 981,
+          "footprint": [
+            5.55,
+            5.55
+          ],
+          "height": 21.47,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 384,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_nature_spruce_dead",
+          "category": "nature",
+          "params": "seed=0,h=18",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "h",
+              "default": "18"
+            }
+          ],
+          "line": 991,
+          "footprint": [
+            3.56,
+            3.37
+          ],
+          "height": 18.0,
+          "zMin": 0.0,
+          "center": [
+            0.14,
+            -0.02
+          ],
+          "triangles": 1344,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_nature_weeds",
+          "category": "nature",
+          "params": "seed=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 1086,
+          "footprint": [
+            1.02,
+            1.23
+          ],
+          "height": 1.25,
+          "zMin": 0.0,
+          "center": [
+            -0.06,
+            -0.01
+          ],
+          "triangles": 1176,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_nature_willow",
+          "category": "nature",
+          "params": "seed=0,h=7",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "h",
+              "default": "7"
+            }
+          ],
+          "line": 1055,
+          "footprint": [
+            3.7,
+            2.98
+          ],
+          "height": 6.72,
+          "zMin": 0.0,
+          "center": [
+            0.13,
+            0.16
+          ],
+          "triangles": 1512,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_part_boards",
+          "category": "part",
+          "params": "seed=0,L=10,z0=0.9,z1=4.5,gw=0,gh=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "z0",
+              "default": "0.9"
+            },
+            {
+              "name": "z1",
+              "default": "4.5"
+            },
+            {
+              "name": "gw",
+              "default": "0"
+            },
+            {
+              "name": "gh",
+              "default": "0"
+            }
+          ],
+          "line": 331,
+          "footprint": [
+            10.0,
+            0.12
+          ],
+          "height": 4.5,
+          "zMin": 0.9,
+          "center": [
+            0.0,
+            0.03
+          ],
+          "triangles": 360,
+          "colors": 30,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_part_chimney",
+          "category": "part",
+          "params": "seed=0,h=1.8,w=0.62",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "h",
+              "default": "1.8"
+            },
+            {
+              "name": "w",
+              "default": "0.62"
+            }
+          ],
+          "line": 271,
+          "footprint": [
+            0.76,
+            0.76
+          ],
+          "height": 1.94,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 36,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_part_church_wall",
+          "category": "part",
+          "params": "seed=0,L=12,H=9.5,t=0.7,c=[0.46,0.42,0.32],ops=[]",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "12"
+            },
+            {
+              "name": "H",
+              "default": "9.5"
+            },
+            {
+              "name": "t",
+              "default": "0.7"
+            },
+            {
+              "name": "c",
+              "default": "[0.46,0.42,0.32]"
+            },
+            {
+              "name": "ops",
+              "default": "[]"
+            }
+          ],
+          "line": 356,
+          "footprint": [
+            12.2,
+            0.88
+          ],
+          "height": 9.5,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.09
+          ],
+          "triangles": 36,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_part_crenel",
+          "category": "part",
+          "params": "len=10,wt=1.4",
+          "paramList": [
+            {
+              "name": "len",
+              "default": "10"
+            },
+            {
+              "name": "wt",
+              "default": "1.4"
+            }
+          ],
+          "line": 352,
+          "footprint": [
+            8.8,
+            1.4
+          ],
+          "height": 0.9,
+          "zMin": 0.0,
+          "center": [
+            -0.5,
+            0.0
+          ],
+          "triangles": 72,
+          "colors": 6,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_part_decay",
+          "category": "part",
+          "params": "seed=0,L=10,D=8",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            }
+          ],
+          "line": 291,
+          "footprint": [
+            11.1,
+            5.57
+          ],
+          "height": 0.91,
+          "zMin": -0.05,
+          "center": [
+            -0.09,
+            0.11
+          ],
+          "triangles": 960,
+          "colors": 11,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_part_dormer",
+          "category": "part",
+          "params": "seed=0,w=1.6,h=1.5,ang=40,c=[0.4,0.4,0.4]",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "w",
+              "default": "1.6"
+            },
+            {
+              "name": "h",
+              "default": "1.5"
+            },
+            {
+              "name": "ang",
+              "default": "40"
+            },
+            {
+              "name": "c",
+              "default": "[0.4,0.4,0.4]"
+            }
+          ],
+          "line": 279,
+          "footprint": [
+            1.77,
+            2.5
+          ],
+          "height": 2.16,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            1.0
+          ],
+          "triangles": 172,
+          "colors": 13,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_part_facade",
+          "category": "part",
+          "params": "seed=0,L=10,floors=1,fh=3.1,t=0.42,c=[],door=true,dw=1.6,dh=2.45,win=[1.1,1.4], sh=false,plinth=0.65,arch=false,shop=false,cols=0,pilaster=true,sill=0.95",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "floors",
+              "default": "1"
+            },
+            {
+              "name": "fh",
+              "default": "3.1"
+            },
+            {
+              "name": "t",
+              "default": "0.42"
+            },
+            {
+              "name": "c",
+              "default": "[]"
+            },
+            {
+              "name": "door",
+              "default": "true"
+            },
+            {
+              "name": "dw",
+              "default": "1.6"
+            },
+            {
+              "name": "dh",
+              "default": "2.45"
+            },
+            {
+              "name": "win",
+              "default": "[1.1,1.4]"
+            },
+            {
+              "name": "sh",
+              "default": "false"
+            },
+            {
+              "name": "plinth",
+              "default": "0.65"
+            },
+            {
+              "name": "arch",
+              "default": "false"
+            },
+            {
+              "name": "shop",
+              "default": "false"
+            },
+            {
+              "name": "cols",
+              "default": "0"
+            },
+            {
+              "name": "pilaster",
+              "default": "true"
+            },
+            {
+              "name": "sill",
+              "default": "0.95"
+            }
+          ],
+          "line": 100,
+          "footprint": [
+            10.2,
+            0.78
+          ],
+          "height": 3.13,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.18
+          ],
+          "triangles": 516,
+          "colors": 43,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_part_frame",
+          "category": "part",
+          "params": "seed=0,L=10,H=2.8,n=4,win=[0.95,1.15],zb=0.85,t=0.42",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "H",
+              "default": "2.8"
+            },
+            {
+              "name": "n",
+              "default": "4"
+            },
+            {
+              "name": "win",
+              "default": "[0.95,1.15]"
+            },
+            {
+              "name": "zb",
+              "default": "0.85"
+            },
+            {
+              "name": "t",
+              "default": "0.42"
+            }
+          ],
+          "line": 314,
+          "footprint": [
+            10.13,
+            0.08
+          ],
+          "height": 2.8,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.25
+          ],
+          "triangles": 300,
+          "colors": 25,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_part_gable",
+          "category": "part",
+          "params": "seed=0,W=8,rise=4,t=0.42,c=[],style=\"plain\",cut=0,win=1,wh=[0.75,0.95],door=[0,0]",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "W",
+              "default": "8"
+            },
+            {
+              "name": "rise",
+              "default": "4"
+            },
+            {
+              "name": "t",
+              "default": "0.42"
+            },
+            {
+              "name": "c",
+              "default": "[]"
+            },
+            {
+              "name": "style",
+              "default": "\"plain\""
+            },
+            {
+              "name": "cut",
+              "default": "0"
+            },
+            {
+              "name": "win",
+              "default": "1"
+            },
+            {
+              "name": "wh",
+              "default": "[0.75,0.95]"
+            },
+            {
+              "name": "door",
+              "default": "[0,0]"
+            }
+          ],
+          "line": 174,
+          "footprint": [
+            8.0,
+            0.62
+          ],
+          "height": 4.0,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.1
+          ],
+          "triangles": 148,
+          "colors": 11,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_part_ivy",
+          "category": "part",
+          "params": "seed=0,h=3,w=1.6",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "h",
+              "default": "3"
+            },
+            {
+              "name": "w",
+              "default": "1.6"
+            }
+          ],
+          "line": 306,
+          "footprint": [
+            1.78,
+            0.06
+          ],
+          "height": 2.49,
+          "zMin": 0.06,
+          "center": [
+            -0.1,
+            -0.04
+          ],
+          "triangles": 72,
+          "colors": 6,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_part_onion",
+          "category": "part",
+          "params": "seed=0,r=1.3,h=4.2",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "r",
+              "default": "1.3"
+            },
+            {
+              "name": "h",
+              "default": "4.2"
+            }
+          ],
+          "line": 344,
+          "footprint": [
+            2.76,
+            2.76
+          ],
+          "height": 5.3,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 432,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_part_roof",
+          "category": "part",
+          "params": "seed=0,L=10,D=8,rise=4,ovx=0.35,ovy=0.45,hip=0,dmg=1,metal=false",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            },
+            {
+              "name": "rise",
+              "default": "4"
+            },
+            {
+              "name": "ovx",
+              "default": "0.35"
+            },
+            {
+              "name": "ovy",
+              "default": "0.45"
+            },
+            {
+              "name": "hip",
+              "default": "0"
+            },
+            {
+              "name": "dmg",
+              "default": "1"
+            },
+            {
+              "name": "metal",
+              "default": "false"
+            }
+          ],
+          "line": 263,
+          "footprint": [
+            10.8,
+            9.14
+          ],
+          "height": 4.17,
+          "zMin": -0.73,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 456,
+          "colors": 35,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_part_roof_slope",
+          "category": "part",
+          "params": "seed=0,L=10,D=8,rise=4,ovx=0.35,ovy=0.45,hip=0,dmg=1,metal=false",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            },
+            {
+              "name": "rise",
+              "default": "4"
+            },
+            {
+              "name": "ovx",
+              "default": "0.35"
+            },
+            {
+              "name": "ovy",
+              "default": "0.45"
+            },
+            {
+              "name": "hip",
+              "default": "0"
+            },
+            {
+              "name": "dmg",
+              "default": "1"
+            },
+            {
+              "name": "metal",
+              "default": "false"
+            }
+          ],
+          "line": 218,
+          "footprint": [
+            10.7,
+            4.69
+          ],
+          "height": 4.14,
+          "zMin": -0.73,
+          "center": [
+            0.0,
+            -2.23
+          ],
+          "triangles": 240,
+          "colors": 20,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_part_wall",
+          "category": "part",
+          "params": "L=10,H=3,ops=[],t=0.4,c=[0.45,0.40,0.30]",
+          "paramList": [
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "H",
+              "default": "3"
+            },
+            {
+              "name": "ops",
+              "default": "[]"
+            },
+            {
+              "name": "t",
+              "default": "0.4"
+            },
+            {
+              "name": "c",
+              "default": "[0.45,0.40,0.30]"
+            }
+          ],
+          "line": 78,
+          "footprint": [
+            10.0,
+            0.4
+          ],
+          "height": 3.0,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 12,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_part_window",
+          "category": "part",
+          "params": "seed=0,w=1.1,h=1.4,sh=false,tc=[0.48,0.46,0.41]",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "w",
+              "default": "1.1"
+            },
+            {
+              "name": "h",
+              "default": "1.4"
+            },
+            {
+              "name": "sh",
+              "default": "false"
+            },
+            {
+              "name": "tc",
+              "default": "[0.48,0.46,0.41]"
+            }
+          ],
+          "line": 52,
+          "footprint": [
+            1.5,
+            0.34
+          ],
+          "height": 0.92,
+          "zMin": -0.85,
+          "center": [
+            0.0,
+            -0.03
+          ],
+          "triangles": 120,
+          "colors": 10,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_prop_bale",
+          "category": "prop",
+          "params": "seed=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 956,
+          "footprint": [
+            1.49,
+            1.67
+          ],
+          "height": 1.44,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 48,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_prop_bus_shelter",
+          "category": "prop",
+          "params": "seed=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 938,
+          "footprint": [
+            5.3,
+            2.27
+          ],
+          "height": 2.85,
+          "zMin": 0.0,
+          "center": [
+            0.2,
+            0.25
+          ],
+          "triangles": 144,
+          "colors": 9,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_prop_chimney",
+          "category": "prop",
+          "params": "seed=0,h=34",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "h",
+              "default": "34"
+            }
+          ],
+          "line": 972,
+          "footprint": [
+            3.6,
+            3.6
+          ],
+          "height": 34.05,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 204,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_prop_cross",
+          "category": "prop",
+          "params": "seed=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 921,
+          "footprint": [
+            1.0,
+            1.0
+          ],
+          "height": 3.85,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 48,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_prop_fence",
+          "category": "prop",
+          "params": "seed=0,L=10",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "10"
+            }
+          ],
+          "line": 869,
+          "footprint": [
+            10.14,
+            0.14
+          ],
+          "height": 1.4,
+          "zMin": 0.0,
+          "center": [
+            -0.03,
+            0.02
+          ],
+          "triangles": 708,
+          "colors": 59,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_prop_fountain",
+          "category": "prop",
+          "params": "seed=0,r=3.0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "r",
+              "default": "3.0"
+            }
+          ],
+          "line": 899,
+          "footprint": [
+            5.95,
+            5.95
+          ],
+          "height": 2.45,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 240,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_prop_memorial",
+          "category": "prop",
+          "params": "seed=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 911,
+          "footprint": [
+            3.72,
+            3.72
+          ],
+          "height": 5.7,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 468,
+          "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_prop_plague_column",
+          "category": "prop",
+          "params": "seed=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 882,
+          "footprint": [
+            6.35,
+            6.35
+          ],
+          "height": 12.92,
+          "zMin": 0.0,
+          "center": [
+            -0.0,
+            0.0
+          ],
+          "triangles": 1164,
+          "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_prop_pole",
+          "category": "prop",
+          "params": "seed=0,h=7.5",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "h",
+              "default": "7.5"
+            }
+          ],
+          "line": 948,
+          "footprint": [
+            1.64,
+            1.58
+          ],
+          "height": 7.5,
+          "zMin": 0.0,
+          "center": [
+            0.58,
+            -0.01
+          ],
+          "triangles": 240,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_prop_shrine",
+          "category": "prop",
+          "params": "seed=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 928,
+          "footprint": [
+            1.64,
+            1.64
+          ],
+          "height": 4.2,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.0
+          ],
+          "triangles": 108,
+          "colors": 6,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_prop_silo",
+          "category": "prop",
+          "params": "seed=0,h=16",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "h",
+              "default": "16"
+            }
+          ],
+          "line": 963,
+          "footprint": [
+            10.0,
+            4.63
+          ],
+          "height": 18.6,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.02
+          ],
+          "triangles": 144,
+          "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_prop_yard_wall",
+          "category": "prop",
+          "params": "seed=0,L=10,h=2.5,gate=3.4",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "h",
+              "default": "2.5"
+            },
+            {
+              "name": "gate",
+              "default": "3.4"
+            }
+          ],
+          "line": 838,
+          "footprint": [
+            10.0,
+            1.92
+          ],
+          "height": 5.33,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.48
+          ],
+          "triangles": 332,
+          "colors": 12,
+          "warnings": 0,
+          "ok": true
+        }
+      ]
+    },
+    {
       "name": "kit_char",
       "file": "kit_char.scad",
       "prefix": "ch_",

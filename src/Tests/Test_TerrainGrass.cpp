@@ -78,6 +78,7 @@ TEST_CASE("Grass poses share roots and preserve topology without extra LOD BLAS"
     for (uint32_t lod = 0; lod < Grass::lodCount; ++lod)
     {
         const auto rest = Grass::CreatePose(0, lod);
+        float maxTipBend = 0.0f;
         for (uint32_t pose = 0; pose < Grass::poseCount; ++pose)
         {
             auto bent = Grass::CreatePose(pose, lod);
@@ -92,12 +93,15 @@ TEST_CASE("Grass poses share roots and preserve topology without extra LOD BLAS"
                 const auto& a = rest.CPUVertices()[i];
                 const auto& b = bent.CPUVertices()[i];
                 if (a.Position.y == 0.0f) CHECK(a.Position == b.Position);
+                if (pose == Grass::poseCount - 1)
+                    maxTipBend = std::max(maxTipBend, std::abs(b.Position.x - a.Position.x));
                 moved |= a.Position != b.Position;
                 CHECK(std::isfinite(b.Normal.x));
                 CHECK(glm::length(b.Normal) == Catch::Approx(1.0f));
             }
             if (pose > 0) CHECK(moved);
         }
+        CHECK(maxTipBend > 0.3f); // pronounced gusts, with the same anchored roots
     }
     CHECK(Grass::SelectPose(-1, 0) == 0);
     CHECK(Grass::SelectPose(2, 0) == 8);

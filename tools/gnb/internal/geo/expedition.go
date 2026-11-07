@@ -19,6 +19,8 @@ type ExpeditionGameplay struct {
 	ReliefScale    float64  `json:"reliefScale"`
 	RoadLimit      int      `json:"roadLimit"`
 	RoadClasses    []string `json:"roadClasses,omitempty"`
+	// Terrain palette; empty picks the region default (bohemia: continental).
+	Palette string `json:"palette,omitempty"`
 }
 type ExpeditionRecipe struct {
 	ID       string              `json:"id"`
@@ -38,19 +40,26 @@ type ExpeditionSite struct {
 	Risk      int        `json:"risk"`
 }
 type ExpeditionReport struct {
-	Mode        string           `json:"mode"`
-	Buildings   int              `json:"buildings"`
-	Trees       int              `json:"treeBudget"`
-	Shrubs      int              `json:"shrubBudget"`
-	Roads       int              `json:"referenceRoads"`
-	Sites       []ExpeditionSite `json:"sites"`
-	Spawns      [][2]float64     `json:"spawns"`
-	Extractions [][2]float64     `json:"extractions"`
-	Center      [2]float64       `json:"center"`
-	SizeM       float64          `json:"sizeM"`
-	Datum       float64          `json:"sourceDatumM"`
-	ReliefScale float64          `json:"reliefScale"`
-	Bridges     int              `json:"gameplayBridges,omitempty"`
+	Mode        string                `json:"mode"`
+	Buildings   int                   `json:"buildings"`
+	Trees       int                   `json:"treeBudget"`
+	Shrubs      int                   `json:"shrubBudget"`
+	Roads       int                   `json:"referenceRoads"`
+	Sites       []ExpeditionSite      `json:"sites"`
+	Spawns      [][2]float64          `json:"spawns"`
+	Extractions [][2]float64          `json:"extractions"`
+	Center      [2]float64            `json:"center"`
+	SizeM       float64               `json:"sizeM"`
+	Datum       float64               `json:"sourceDatumM"`
+	ReliefScale float64               `json:"reliefScale"`
+	Bridges     int                   `json:"gameplayBridges,omitempty"`
+	Landcover   []ExpeditionLandcover `json:"landcover,omitempty"`
+	Alleys      int                   `json:"treeAlleys,omitempty"`
+}
+type ExpeditionLandcover struct {
+	ID     string  `json:"id"`
+	Kind   string  `json:"kind"`
+	AreaM2 float64 `json:"areaM2"`
 }
 
 var expeditionID = regexp.MustCompile(`^[a-z][a-z0-9_]{2,63}$`)
@@ -138,12 +147,24 @@ func ExportExpedition(repoRoot, recipePath string, publish bool) (string, Expedi
 	var out strings.Builder
 	fmt.Fprintf(&out, "// Geographic reference only; gameplay lives in layout.scad.\n// %.5f, %.5f; %.0fm square. DEM relief scale %.2f.\n// © OpenStreetMap contributors (ODbL); SRTM / NASA-USGS.\nuse <../../../lib/gk_camera.scad>\nuse <../../../lib/kit_abandoned.scad>\nuse <../../../lib/nextdayz_pcg.scad>\nuse <../../../lib/nextdayz_coldwar.scad>\n$fn=12;\ninclude <layout.scad>\n", ir.Center[0], ir.Center[1], ir.SizeM, gp.ReliefScale)
 	var reference strings.Builder
-	tile := Tile{Name: recipe.ID, SizeM: ir.SizeM, Cells: 176, Seed: recipe.Seed}
+	// Settlements level every plot exactly; the finer mesh (3.9 m cells) keeps
+	// the transition between neighbouring plots short. Legacy layouts keep 176.
+	cells := 176
+	for _, s := range report.Sites {
+		if _, ok := settlementRules[s.Kind]; ok {
+			cells = 256
+		}
+	}
+	tile := Tile{Name: recipe.ID, SizeM: ir.SizeM, Cells: cells, Seed: recipe.Seed}
 	writeTerrain(&reference, tile, assetRoot+"/terrain.hmap", roads, ir.Terrain, scope{})
 	ref := strings.Replace(reference.String(), "TERR =", "GEO_TERR =", 1)
-	ref = strings.Replace(ref, "\"urban\"", "\"temperate\"", 1)
+	ref = strings.Replace(ref, "\"urban\"", fmt.Sprintf("%q", expeditionPalette(recipe)), 1)
 	out.WriteString(ref)
-	out.WriteString("TERR=[\"gkterr1\",GEO_TERR[1],GEO_TERR[2],GEO_TERR[3],GEO_TERR[4],GEO_TERR[5],GEO_TERR[6],concat(GEO_TERR[7],PCG_PATHS,nd_pcg_pads(PCG_SITES,PCG_SPAWNS,PCG_EXTRACTIONS))];\ngk_terrain(TERR);\nfunction nd_ground(x,y)=gk_terrain_height(TERR,x,y);\n")
+	landcover := "[]"
+	if len(report.Landcover) > 0 {
+		landcover = "PCG_LANDCOVER"
+	}
+	fmt.Fprintf(&out, "TERR=[\"gkterr1\",GEO_TERR[1],GEO_TERR[2],GEO_TERR[3],GEO_TERR[4],GEO_TERR[5],GEO_TERR[6],concat(GEO_TERR[7],PCG_PATHS,nd_pcg_terrain(PCG_SITES,PCG_SPAWNS,PCG_EXTRACTIONS,%d,%s))];\ngk_terrain(TERR);\nfunction nd_ground(x,y)=gk_terrain_height(TERR,x,y);\n", recipe.Seed, landcover)
 	writeExpeditionBridges(&out, &ir, recipe.Seed)
 	if report.Bridges > 0 {
 		fmt.Fprintf(&out, "for(i=[0:len(PCG_BRIDGES)-1]) nd_pcg_bridge(TERR,PCG_BRIDGES[i][0],PCG_BRIDGES[i][1],PCG_BRIDGES[i][2],%d+i*17);\n", recipe.Seed)
@@ -153,7 +174,15 @@ func ExportExpedition(repoRoot, recipePath string, publish bool) (string, Expedi
 	for i, p := range report.Extractions {
 		fmt.Fprintf(&out, "translate([%s,%s,nd_ground(%s,%s)]) { gk_flatten() az_prop_helipad(seed=%d); translate([0,0,0.15]) nd_extraction(id=%q,name=%q); }\n", fnum(p[0]), fnum(p[1]), fnum(p[0]), fnum(p[1]), recipe.Seed+i, fmt.Sprintf("%s_pad_%d", recipe.ID, i), []string{"Rescue zone ALPHA", "Rescue zone BRAVO"}[i])
 	}
-	fmt.Fprintf(&out, "nd_pcg_vegetation(TERR,PCG_VEGETATION,PCG_SITES,PCG_SPAWNS,PCG_EXTRACTIONS,PCG_CLEAR,%d,%q);\n", recipe.Seed, recipe.Region)
+	if report.Trees+report.Shrubs > 0 {
+		fmt.Fprintf(&out, "nd_pcg_vegetation(TERR,PCG_VEGETATION,PCG_SITES,PCG_SPAWNS,PCG_EXTRACTIONS,PCG_CLEAR,%d,%q);\n", recipe.Seed, recipe.Region)
+	}
+	if len(report.Landcover) > 0 {
+		fmt.Fprintf(&out, "nd_pcg_landcover(TERR,PCG_LANDCOVER,PCG_SITES,PCG_SPAWNS,PCG_EXTRACTIONS,PCG_CLEAR,%d,%q);\n", recipe.Seed, recipe.Region)
+	}
+	if report.Alleys > 0 {
+		fmt.Fprintf(&out, "nd_pcg_alleys(TERR,PCG_ALLEYS,PCG_SITES,PCG_SPAWNS,PCG_EXTRACTIONS,PCG_CLEAR,%d,%q);\n", recipe.Seed, recipe.Region)
+	}
 	out.WriteString("gk_camera_lookat([-625,-725,520],[0,0,25],\"overview\",48);\ngk_camera_lookat([-150,-230,135],[20,85,25],\"tactical_core\",55);\n")
 	if err = os.WriteFile(filepath.Join(output, "base.scad"), []byte(out.String()), 0644); err != nil {
 		return "", report, err
@@ -184,6 +213,18 @@ func ExportExpedition(repoRoot, recipePath string, publish bool) (string, Expedi
 		return publishExpedition(repoRoot, output, assetRoot, recipe, report)
 	}
 	return filepath.Join(output, "scene.scad"), report, nil
+}
+
+// Regional ground colours. Existing regions keep the palette their published
+// maps were made with; a recipe may name any engine palette explicitly.
+func expeditionPalette(recipe ExpeditionRecipe) string {
+	if recipe.Gameplay != nil && recipe.Gameplay.Palette != "" {
+		return recipe.Gameplay.Palette
+	}
+	if recipe.Region == "bohemia" {
+		return "continental"
+	}
+	return "temperate"
 }
 
 func writeExpeditionBridges(out *strings.Builder, ir *IR, seed int) {
@@ -241,7 +282,7 @@ func publishExpedition(repoRoot, output, assetRoot string, recipe ExpeditionReci
 			return "", report, err
 		}
 	}
-	for _, name := range []string{"nextdayz_pcg.scad", "nextdayz_coldwar.scad", "kit_abandoned.scad", "kit_coldwar.scad", "nextdayz_geography.scad", "kit_road.scad", "gk_camera.scad", "kit_layout.scad", "kit_terrain.scad"} {
+	for _, name := range []string{"nextdayz_pcg.scad", "nextdayz_settlement.scad", "nextdayz_coldwar.scad", "kit_abandoned.scad", "kit_bohemia.scad", "kit_coldwar.scad", "nextdayz_geography.scad", "kit_road.scad", "gk_camera.scad", "kit_layout.scad", "kit_terrain.scad"} {
 		data, err := os.ReadFile(filepath.Join(repoRoot, "assets/scad/lib", name))
 		if err != nil {
 			return "", report, err

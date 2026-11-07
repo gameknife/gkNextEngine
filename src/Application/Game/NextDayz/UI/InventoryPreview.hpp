@@ -50,7 +50,7 @@ namespace NextDayz
         Vulkan::VulkanBaseRenderer& renderer_;
         Vulkan::FRenderViewHandle view_;
         Vulkan::FRenderViewTargetResources target_;
-        std::unique_ptr<Vulkan::PipelineCommon::ZeroBindCustomPushConstantPipeline> alphaPipeline_;
+        std::unique_ptr<Vulkan::PipelineCommon::ZeroBindCustomPushConstantPipeline> resolvePipeline_;
         std::weak_ptr<Assets::Node> root_;
         std::unique_ptr<Assets::Scene> scene_;
         std::vector<std::shared_ptr<Assets::Node>> nodes_;
@@ -61,6 +61,7 @@ namespace NextDayz
         float distance_ = 3.4f;
         bool requested_ = false;
         bool ready_ = false;
+        bool outputInitialized_ = false;
     };
 
     InventoryPreview& GetInventoryPreview(Vulkan::VulkanBaseRenderer& renderer);

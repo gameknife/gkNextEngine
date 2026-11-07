@@ -63,7 +63,6 @@ namespace NextDayz
             firstPerson_ = firstPerson;
         }
         void ToggleView();
-        void AdjustCameraDistance(float scrollY);
 
         // --- per-frame update ---
         void Update(float deltaSeconds, NextEngine& engine);
@@ -180,7 +179,6 @@ namespace NextDayz
 
         float currentFov_ = 75.0f;
         float aimFov_ = 55.0f;
-        float camDistance_ = 4.5f;
         float cameraArmLength_ = 0.0f; // resolved length, including the shoulder offset
         float currentEyeHeight_ = 1.65f;
         glm::vec2 cameraRecoil_{0.0f};

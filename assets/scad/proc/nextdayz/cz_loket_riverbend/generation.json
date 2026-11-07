@@ -1,89 +1,57 @@
 {
   "mode": "geographic-skeleton/gameplay-pcg",
-  "buildings": 60,
-  "treeBudget": 912,
-  "shrubBudget": 420,
-  "referenceRoads": 48,
+  "buildings": 108,
+  "treeBudget": 0,
+  "shrubBudget": 260,
+  "referenceRoads": 32,
   "sites": [
     {
+      "id": "old_town",
+      "name": "Old town square",
+      "kind": "square",
+      "at": [
+        40,
+        40
+      ],
+      "size": [
+        130,
+        84
+      ],
+      "rotation": -8,
+      "buildings": 22,
+      "risk": 2
+    },
+    {
       "id": "castle",
-      "name": "Castle quarantine",
-      "kind": "castle",
+      "name": "Castle Loket",
+      "kind": "hillcastle",
       "at": [
         20,
         140
       ],
       "size": [
-        80,
-        68
-      ],
-      "rotation": 0,
-      "buildings": 4,
-      "risk": 3
-    },
-    {
-      "id": "old_quarter",
-      "name": "Old quarter",
-      "kind": "village",
-      "at": [
-        50,
-        40
-      ],
-      "size": [
-        100,
-        68
-      ],
-      "rotation": 0,
-      "buildings": 8,
-      "risk": 1
-    },
-    {
-      "id": "market",
-      "name": "Ransacked market",
-      "kind": "market",
-      "at": [
-        130,
-        -40
-      ],
-      "size": [
-        84,
-        64
-      ],
-      "rotation": 0,
-      "buildings": 6,
-      "risk": 2
-    },
-    {
-      "id": "clinic",
-      "name": "Emergency clinic",
-      "kind": "medical",
-      "at": [
-        145,
-        140
-      ],
-      "size": [
-        66,
+        52,
         60
       ],
       "rotation": 0,
       "buildings": 3,
-      "risk": 2
+      "risk": 3
     },
     {
-      "id": "workshops",
-      "name": "Riverside workshops",
-      "kind": "industry",
+      "id": "lower_town",
+      "name": "Lower town street",
+      "kind": "street",
       "at": [
-        -80,
-        20
+        0,
+        -52
       ],
       "size": [
-        72,
-        56
+        130,
+        44
       ],
-      "rotation": 0,
-      "buildings": 4,
-      "risk": 2
+      "rotation": -6,
+      "buildings": 17,
+      "risk": 1
     },
     {
       "id": "bridge_gate",
@@ -102,19 +70,147 @@
       "risk": 2
     },
     {
-      "id": "west_hamlet",
-      "name": "West hamlet",
-      "kind": "village",
+      "id": "clinic",
+      "name": "Health centre",
+      "kind": "medical",
       "at": [
-        -195,
-        285
+        150,
+        140
       ],
       "size": [
-        76,
+        66,
         60
       ],
       "rotation": 0,
+      "buildings": 3,
+      "risk": 2
+    },
+    {
+      "id": "north_village",
+      "name": "North green village",
+      "kind": "naves",
+      "at": [
+        190,
+        400
+      ],
+      "size": [
+        140,
+        110
+      ],
+      "rotation": 80,
+      "buildings": 13,
+      "risk": 1
+    },
+    {
+      "id": "porcelain",
+      "name": "Porcelain works",
+      "kind": "factory",
+      "at": [
+        450,
+        -85
+      ],
+      "size": [
+        80,
+        60
+      ],
+      "rotation": 0,
+      "buildings": 4,
+      "risk": 2
+    },
+    {
+      "id": "spa_villas",
+      "name": "Spa villas",
+      "kind": "villas",
+      "at": [
+        458,
+        110
+      ],
+      "size": [
+        110,
+        56
+      ],
+      "rotation": 90,
       "buildings": 6,
+      "risk": 1
+    },
+    {
+      "id": "se_suburb",
+      "name": "SE suburb",
+      "kind": "suburb",
+      "at": [
+        285,
+        -170
+      ],
+      "size": [
+        150,
+        52
+      ],
+      "rotation": 22,
+      "buildings": 10,
+      "risk": 1
+    },
+    {
+      "id": "west_farm",
+      "name": "West farmstead",
+      "kind": "homestead",
+      "at": [
+        -205,
+        290
+      ],
+      "size": [
+        64,
+        64
+      ],
+      "rotation": 20,
+      "buildings": 3,
+      "risk": 1
+    },
+    {
+      "id": "sw_farm",
+      "name": "Field farmstead",
+      "kind": "homestead",
+      "at": [
+        -420,
+        -150
+      ],
+      "size": [
+        60,
+        62
+      ],
+      "rotation": 0,
+      "buildings": 3,
+      "risk": 1
+    },
+    {
+      "id": "jzd",
+      "name": "Collective farm",
+      "kind": "jzd",
+      "at": [
+        390,
+        -360
+      ],
+      "size": [
+        96,
+        86
+      ],
+      "rotation": 0,
+      "buildings": 6,
+      "risk": 2
+    },
+    {
+      "id": "chaty",
+      "name": "Weekend cottages",
+      "kind": "chaty",
+      "at": [
+        -340,
+        170
+      ],
+      "size": [
+        100,
+        90
+      ],
+      "rotation": 0,
+      "buildings": 8,
       "risk": 1
     },
     {
@@ -122,8 +218,8 @@
       "name": "Forest radio post",
       "kind": "military",
       "at": [
-        -355,
-        190
+        -430,
+        290
       ],
       "size": [
         58,
@@ -134,106 +230,42 @@
       "risk": 3
     },
     {
-      "id": "farm",
-      "name": "Abandoned farm",
-      "kind": "farm",
+      "id": "garrison",
+      "name": "Southern garrison",
+      "kind": "military",
       "at": [
-        -280,
-        -360
+        48,
+        -440
       ],
       "size": [
-        76,
+        84,
         64
       ],
       "rotation": 0,
       "buildings": 5,
-      "risk": 1
-    },
-    {
-      "id": "logistics",
-      "name": "East logistics yard",
-      "kind": "industry",
-      "at": [
-        430,
-        120
-      ],
-      "size": [
-        76,
-        66
-      ],
-      "rotation": 0,
-      "buildings": 5,
-      "risk": 2
-    },
-    {
-      "id": "military",
-      "name": "Southern garrison",
-      "kind": "military",
-      "at": [
-        300,
-        -290
-      ],
-      "size": [
-        84,
-        68
-      ],
-      "rotation": 0,
-      "buildings": 5,
       "risk": 3
-    },
-    {
-      "id": "north_post",
-      "name": "North road outpost",
-      "kind": "checkpoint",
-      "at": [
-        180,
-        350
-      ],
-      "size": [
-        76,
-        60
-      ],
-      "rotation": 0,
-      "buildings": 5,
-      "risk": 2
-    },
-    {
-      "id": "river_camp",
-      "name": "River salvage camp",
-      "kind": "farm",
-      "at": [
-        145,
-        -240
-      ],
-      "size": [
-        58,
-        48
-      ],
-      "rotation": 0,
-      "buildings": 4,
-      "risk": 1
     }
   ],
   "spawns": [
     [
-      -430,
-      330
+      -460,
+      -300
     ],
     [
-      -380,
-      -210
+      -200,
+      -265
     ],
     [
-      70,
-      390
+      330,
+      470
     ],
     [
-      430,
-      -310
+      -20,
+      460
     ],
     [
-      150,
-      250
+      370,
+      20
     ]
   ],
   "extractions": [
@@ -242,8 +274,8 @@
       360
     ],
     [
-      430,
-      -150
+      240,
+      -300
     ]
   ],
   "center": [
@@ -252,5 +284,123 @@
   ],
   "sizeM": 1000,
   "sourceDatumM": 391.7649233142963,
-  "reliefScale": 0.4
+  "reliefScale": 0.4,
+  "landcover": [
+    {
+      "id": "nw_spruce",
+      "kind": "spruce",
+      "areaM2": 59154
+    },
+    {
+      "id": "w_beetle",
+      "kind": "beetle",
+      "areaM2": 22613
+    },
+    {
+      "id": "w_spruce",
+      "kind": "spruce",
+      "areaM2": 25638
+    },
+    {
+      "id": "n_mixed",
+      "kind": "mixed",
+      "areaM2": 21450
+    },
+    {
+      "id": "ne_mixed",
+      "kind": "mixed",
+      "areaM2": 20160
+    },
+    {
+      "id": "e_beech",
+      "kind": "beech",
+      "areaM2": 29580
+    },
+    {
+      "id": "sw_spruce",
+      "kind": "spruce",
+      "areaM2": 79774
+    },
+    {
+      "id": "s_pine",
+      "kind": "pine",
+      "areaM2": 13800
+    },
+    {
+      "id": "field_a",
+      "kind": "field",
+      "areaM2": 10520
+    },
+    {
+      "id": "field_b",
+      "kind": "field",
+      "areaM2": 7740
+    },
+    {
+      "id": "meadow_c",
+      "kind": "meadow",
+      "areaM2": 12300
+    },
+    {
+      "id": "field_d",
+      "kind": "field",
+      "areaM2": 15940
+    },
+    {
+      "id": "field_f",
+      "kind": "field",
+      "areaM2": 9980
+    },
+    {
+      "id": "field_g",
+      "kind": "field",
+      "areaM2": 22684
+    },
+    {
+      "id": "jzd_orchard",
+      "kind": "orchard",
+      "areaM2": 2400
+    },
+    {
+      "id": "field_ne",
+      "kind": "field",
+      "areaM2": 8409
+    },
+    {
+      "id": "meadow_ne",
+      "kind": "meadow",
+      "areaM2": 10488
+    },
+    {
+      "id": "village_orchard",
+      "kind": "orchard",
+      "areaM2": 2384
+    },
+    {
+      "id": "field_sw",
+      "kind": "field",
+      "areaM2": 11500
+    },
+    {
+      "id": "loop_meadow",
+      "kind": "meadow",
+      "areaM2": 31050
+    },
+    {
+      "id": "river_loop",
+      "kind": "riparian",
+      "areaM2": 330500
+    },
+    {
+      "id": "river_north",
+      "kind": "riparian",
+      "areaM2": 79184
+    },
+    {
+      "id": "river_east",
+      "kind": "riparian",
+      "areaM2": 59112
+    }
+  ],
+  "treeAlleys": 7
 }

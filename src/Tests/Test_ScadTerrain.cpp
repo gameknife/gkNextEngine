@@ -631,6 +631,138 @@ TEST_CASE("ScadTerrain features: road and pad material boundaries use triangle m
     CHECK(CountMaterialTips(*data, "terrain_pad") == 0);
 }
 
+TEST_CASE("ScadTerrain paint and pad surfaces recolour ground without changing semantics",
+          "[Unit][Scad][ScadTerrain]")
+{
+    const Value terr = VecV({StrV("gkterr1"), PtV(60.0, 60.0), PtV(20.0, 20.0), NumV(5.0),
+        VecV({NumV(0.0), NumV(0.0), NumV(0.5)}), Value(), StrV("temperate"),
+        VecV({VecV({StrV("paint"), VecV({PtV(-28, -28), PtV(0, -28), PtV(0, 28), PtV(-28, 28)}), StrV("dry_grass")}),
+              VecV({StrV("paint"), VecV({PtV(-28, 0), PtV(0, 0), PtV(0, 28), PtV(-28, 28)}), StrV("grass_dark")}),
+              VecV({StrV("pad"), PtV(15.0, 10.0), PtV(12.0, 9.0), NumV(0.0), NumV(2.0), StrV("road")}),
+              VecV({StrV("paint"), VecV({PtV(1, 1), PtV(2, 1), PtV(2, 2)}), StrV("bed")})})});
+    FTerrainSpec spec;
+    std::string error;
+    std::vector<std::string> warnings;
+    REQUIRE(ScadTerrain::DecodeSpec(terr, spec, error, warnings));
+    // The water floor is never paintable; everything else decoded cleanly.
+    REQUIRE(warnings.size() == 1);
+    REQUIRE(spec.features.size() == 3);
+    CHECK(spec.features[0].type == FTerrainFeature::EType::Paint);
+    CHECK(spec.features[2].apron == Catch::Approx(2.0));
+    CHECK(spec.features[2].biome == static_cast<int>(ETerrainBiome::Road));
+
+    const auto data = ScadTerrain::Build(spec);
+    double h = 0.0, slope = 0.0;
+    bool water = false;
+    uint8_t biome = 0;
+    data->InfoAt(-14.0, -14.0, h, slope, water, biome);
+    CHECK(biome == static_cast<uint8_t>(ETerrainBiome::DryGrass));
+    data->InfoAt(-14.0, 14.0, h, slope, water, biome); // later paint wins
+    CHECK(biome == static_cast<uint8_t>(ETerrainBiome::GrassDark));
+    data->InfoAt(15.0, 10.0, h, slope, water, biome); // pad keeps its semantics
+    CHECK(biome == static_cast<uint8_t>(ETerrainBiome::Pad));
+    bool earthFace = false, pavedFace = false;
+    for (const FTerrainData::ColoredTris& bucket : data->landGeom)
+    {
+        for (size_t tri = 0; tri + 2 < bucket.tris.size(); tri += 3)
+        {
+            const glm::dvec3 c = (bucket.tris[tri] + bucket.tris[tri + 1] + bucket.tris[tri + 2]) / 3.0;
+            if (std::abs(c.x - 15.0) < 4.0 && std::abs(c.y - 10.0) < 3.0)
+            {
+                earthFace |= bucket.materialName == "terrain_road";
+                pavedFace |= bucket.materialName == "terrain_pad";
+            }
+        }
+    }
+    CHECK(earthFace);
+    CHECK_FALSE(pavedFace);
+    // Surface operands must not shift an existing key: a plain pad keys as before.
+    FTerrainSpec plain = spec;
+    plain.features[2].apron = -1.0;
+    plain.features[2].biome = -1;
+    CHECK(ScadTerrain::SpecCacheKey(plain) != ScadTerrain::SpecCacheKey(spec));
+    plain.features = {plain.features[2]};
+    CHECK(ScadTerrain::SpecCacheKey(plain).find('o') == std::string::npos);
+}
+
+TEST_CASE("ScadTerrain plot pads are flat on the mesh up to their edges and keep their neighbours",
+          "[Unit][Scad][ScadTerrain]")
+{
+    // A tilted ramp with two rotated plots 13 m apart: both rectangles must be
+    // exactly flat on the rendered triangles, edges included.
+    FTerrainSpec spec;
+    spec.size = {200.0, 200.0};
+    spec.cells = {50, 50};
+    spec.seed = 9;
+    spec.relief = 0.0;
+    FTerrainFeature ramp;
+    ramp.type = FTerrainFeature::EType::Hmap;
+    auto grid = std::make_shared<FHeightGrid>();
+    grid->cols = grid->rows = 2;
+    grid->origin = {-100.0, -100.0};
+    grid->cell = {200.0, 200.0};
+    grid->values = {0.0f, 30.0f, 0.0f, 30.0f};
+    ramp.grid = grid;
+    spec.features.push_back(ramp);
+    for (const glm::dvec2 at : {glm::dvec2(-20.0, 5.0), glm::dvec2(17.0, 9.0)})
+    {
+        FTerrainFeature plot;
+        plot.type = FTerrainFeature::EType::Pad;
+        plot.at = at;
+        plot.size = {22.0, 16.0};
+        plot.rot = 23.0;
+        plot.apron = 3.0;
+        plot.biome = static_cast<int>(ETerrainBiome::Road);
+        spec.features.push_back(plot);
+    }
+    const auto data = ScadTerrain::Build(spec);
+    double first = 0.0;
+    for (int k = 0; k < 2; ++k)
+    {
+        const FTerrainFeature& plot = spec.features[1 + k];
+        const double target = data->HeightAt(plot.at.x, plot.at.y);
+        if (k == 0) first = target;
+        const double c = std::cos(plot.rot * kDeg2Rad), s = std::sin(plot.rot * kDeg2Rad);
+        for (int i = -10; i <= 10; ++i)
+        {
+            for (int j = -10; j <= 10; ++j)
+            {
+                const double u = i * plot.size.x / 20.0, v = j * plot.size.y / 20.0;
+                INFO("plot " << k << " sample " << u << "," << v);
+                CHECK(data->HeightAt(plot.at.x + u * c - v * s, plot.at.y + u * s + v * c) ==
+                      Catch::Approx(target).margin(1e-6));
+            }
+        }
+    }
+    // The ramp puts the two plots at different datums; neither flattened the other.
+    CHECK(std::abs(data->HeightAt(17.0, 9.0) - first) > 3.0);
+}
+
+TEST_CASE("ScadTerrain paint stripes alternate surfaces in parallel bands", "[Unit][Scad][ScadTerrain]")
+{
+    const Value terr = VecV({StrV("gkterr1"), PtV(80.0, 80.0), PtV(40.0, 40.0), NumV(3.0),
+        VecV({NumV(0.0), NumV(0.0), NumV(0.5)}), Value(), StrV("continental"),
+        VecV({VecV({StrV("paint"), VecV({PtV(-38, -38), PtV(38, -38), PtV(38, 38), PtV(-38, 38)}), StrV("road"),
+                    VecV({StrV("dry_grass"), NumV(20.0), NumV(0.0)})})})});
+    FTerrainSpec spec;
+    std::string error;
+    std::vector<std::string> warnings;
+    REQUIRE(ScadTerrain::DecodeSpec(terr, spec, error, warnings));
+    REQUIRE(warnings.empty());
+    CHECK(spec.palette == "continental");
+    const auto data = ScadTerrain::Build(spec);
+    double h = 0.0, slope = 0.0;
+    bool water = false;
+    uint8_t biome = 0;
+    // Bands run along +x, 10 m each: y in [0,10) keeps the base, [10,20) alternates.
+    data->InfoAt(0.0, 5.0, h, slope, water, biome);
+    CHECK(biome == static_cast<uint8_t>(ETerrainBiome::Road));
+    data->InfoAt(0.0, 15.0, h, slope, water, biome);
+    CHECK(biome == static_cast<uint8_t>(ETerrainBiome::DryGrass));
+    data->InfoAt(0.0, -5.0, h, slope, water, biome);
+    CHECK(biome == static_cast<uint8_t>(ETerrainBiome::DryGrass));
+}
+
 TEST_CASE("ScadTerrain river: carves below a downstream-monotonic water line", "[Unit][Scad][ScadTerrain]")
 {
     const auto data = ScadTerrain::Build(MakeTestSpec());

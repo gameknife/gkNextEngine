@@ -16,6 +16,8 @@ namespace Runtime
         constexpr std::array<uint32_t, 3> grassBlades = {12, 36, 64};
         constexpr std::array<float, 3> grassPatchRadius = {0.45f, 1.35f, 2.5f};
         constexpr std::array<float, 3> grassClearance = {0.85f, 1.95f, 3.5f};
+        constexpr float grassMaxBend = 0.60f;
+        constexpr float grassHeightScale = 1.25f;
 
         float GrassTransmission(float strength, uint32_t biome, uint32_t slot)
         {
@@ -171,7 +173,7 @@ namespace Runtime
                     const float width = lod == 0 ? 0.8f + GrassRandom(seed, 4) * 0.65f
                                                  : 0.88f + GrassRandom(seed, 4) * 0.28f;
                     const float height = (0.7f + GrassRandom(seed, 5) * 0.85f) * (biome == 2 ? 0.85f : 1.0f);
-                    placement.scale = {width, height * glm::mix(0.35f, 1.0f, edgeWeight), width};
+                    placement.scale = {width, height * grassHeightScale * glm::mix(0.35f, 1.0f, edgeWeight), width};
                     placement.edgeWeight = edgeWeight;
                     placement.heading = (GrassRandom(seed, 6) - 0.5f) * 1.4f;
                     placement.phase = GrassRandom(seed, 7) * glm::two_pi<float>();
@@ -209,7 +211,7 @@ namespace Runtime
         std::vector<Assets::Vertex> vertices;
         std::vector<uint32_t> indices;
         lod = std::min(lod, lodCount - 1);
-        const float bend = float(std::min(pose, poseCount - 1)) / float(poseCount - 1) * 0.42f;
+        const float bend = float(std::min(pose, poseCount - 1)) / float(poseCount - 1) * grassMaxBend;
         const auto triangle = [&](glm::vec3 a, glm::vec3 b, glm::vec3 c, uint32_t material)
         {
             const glm::vec3 normal = glm::normalize(glm::cross(b - a, c - a));
@@ -319,17 +321,20 @@ namespace Runtime
         activeByLod_.fill(0);
         maxActiveDistance_ = 0.0f;
         edgeCount_ = 0;
-        interactionCount_ = contactCount_ = contactChecks_ = 0;
+        interactionCount_ = contactCount_ = contactChecks_ = updatedCount_ = 0;
         maxPressure_ = 0.0f;
         poseChanges_ = 0;
         tileBuilds_ = 0;
         time_ = 0;
-        updateClock_ = 0;
+        updateTime_ = 0;
+        windRevision_ = 0;
         lastFocus_ = glm::vec3(1.0e20f);
         lastDensity_ = lastRadius_ = -1.0f;
         lastEdgeWidth_ = -1.0f;
         lastTransmission_ = -1.0f;
+        lastWindStrength_ = lastWeather_ = -1.0f;
         lastEnabled_ = settings.enabled;
+        lastInteractionEnabled_ = settings.interactionEnabled;
     }
 
     void FTerrainGrassSystem::Bind(Assets::Scene& scene)
@@ -339,13 +344,13 @@ namespace Runtime
         for (const auto* terrain : scene.Components<TerrainComponent>())
             if (terrain->HasData()) terrains_.push_back(terrain);
         windYaw_ = settings.windYaw;
+        baseWindYaw_ = settings.windYaw;
     }
 
     void FTerrainGrassSystem::Stream(Assets::Scene& scene, const glm::vec3& focus, float radius)
     {
         const int cx = static_cast<int>(std::floor(focus.x / tileSize));
         const int cz = static_cast<int>(std::floor(focus.z / tileSize));
-        const int extent = static_cast<int>(std::ceil(radius / tileSize));
         const bool densityChanged = settings.density != lastDensity_ || settings.edgeWidth != lastEdgeWidth_;
         for (auto it = tiles_.begin(); it != tiles_.end();)
         {
@@ -356,7 +361,7 @@ namespace Runtime
             if (densityChanged || !settings.enabled || range.y <= range.x ||
                 distance > range.y + tileSize * 1.5f || distance < range.x - tileSize * 1.5f)
             {
-                for (uint32_t slot : it->second)
+                for (uint32_t slot : it->second.slots)
                 {
                     pool_[slot].node->GetComponent<RenderComponent>()->SetVisible(false);
                     pool_[slot].response = {};
@@ -373,6 +378,7 @@ namespace Runtime
             {
                 const glm::vec2 range = GrassLodRange(radius, lod);
                 if (range.y <= range.x) continue;
+                const int extent = static_cast<int>(std::ceil(range.y / tileSize));
                 for (int z = cz - extent; z <= cz + extent; ++z)
                     for (int x = cx - extent; x <= cx + extent; ++x)
                     {
@@ -398,7 +404,10 @@ namespace Runtime
         for (auto tile : requested)
         {
             const auto placements = GenerateTile(terrains_, tile[1], tile[2], settings.density, tile[0], settings.edgeWidth);
-            auto& slots = tiles_[tile];
+            auto& resident = tiles_[tile];
+            resident.updatePhase = GrassRandom(GrassHash(static_cast<uint32_t>(tile[1])) ^
+                                               static_cast<uint32_t>(tile[2]), 13);
+            auto& slots = resident.slots;
             ++tileBuilds_;
             for (const auto& placement : placements)
             {
@@ -421,9 +430,11 @@ namespace Runtime
                     node->AddComponent(render);
                     node->SetTag("RuntimeGrass");
                     scene.AddNode(node);
-                    pool_.push_back({std::move(node), {}, 0});
+                    pool_.push_back({std::move(node)});
                 }
                 pool_[slot].placement = placement;
+                pool_[slot].baseRotation = glm::rotation(glm::vec3(0, 1, 0), placement.normal) *
+                                           glm::angleAxis(placement.heading, glm::vec3(0, 1, 0));
                 pool_[slot].response = {};
                 pool_[slot].node->GetComponent<RenderComponent>()->SetMaterials(materials_[placement.biome]);
                 slots.push_back(slot);
@@ -509,22 +520,18 @@ namespace Runtime
             previousInteractors_.clear();
             return contacts;
         }
-        std::erase_if(previousInteractors_, [&](const auto& previous)
-        {
-            return std::none_of(interactors.begin(), interactors.end(), [&](const auto& actor)
-                { return actor.id == previous.first; });
-        });
+        std::map<uint64_t, glm::vec3> currentInteractors;
         for (const auto& actor : interactors)
         {
             if (!std::isfinite(actor.position.x) || !std::isfinite(actor.position.y) ||
                 !std::isfinite(actor.position.z)) continue;
-            const auto previous = previousInteractors_.try_emplace(actor.id, actor.position).first;
-            glm::vec3 from = previous->second;
-            previous->second = actor.position;
-            // New spawns and teleports are point contacts, never long trampled corridors.
-            if (glm::distance2(from, actor.position) > 16.0f) from = actor.position;
             if (glm::length2(glm::vec2(actor.position.x - focus.x, actor.position.z - focus.z)) > 42.0f * 42.0f ||
                 actor.strength <= 0.0f) continue;
+            const auto previous = previousInteractors_.find(actor.id);
+            glm::vec3 from = previous != previousInteractors_.end() ? previous->second : actor.position;
+            currentInteractors.emplace(actor.id, actor.position);
+            // New spawns and teleports are point contacts, never long trampled corridors.
+            if (glm::distance2(from, actor.position) > 16.0f) from = actor.position;
             const FGrassSweep sweep{from, actor.position, (actor.position - from) / std::max(elapsed, 0.001f),
                                     actor.radius, actor.strength * std::clamp(settings.interactionStrength, 0.0f, 2.0f)};
             const float margin = std::clamp(actor.radius, 0.2f, 1.4f) + 1.0f;
@@ -535,6 +542,7 @@ namespace Runtime
             for (int z = minZ; z <= maxZ; ++z)
                 for (int x = minX; x <= maxX; ++x) contacts[{x, z}].push_back(sweep);
         }
+        previousInteractors_.swap(currentInteractors);
         return contacts;
     }
 
@@ -553,93 +561,151 @@ namespace Runtime
             lastTransmission_ = transmission;
         }
         const float radius = std::clamp(settings.radius, 8.0f, maxRadius);
-        time_ += std::max(0.0f, dt) * std::clamp(settings.windSpeed, 0.0f, 4.0f);
-        updateClock_ += std::max(0.0f, dt);
+        const float elapsed = std::max(0.0f, dt);
+        const float windSpeed = std::clamp(settings.windSpeed, 0.0f, 4.0f);
+        time_ += elapsed * windSpeed;
+        updateTime_ += elapsed;
+        const bool settingsChanged = lastDensity_ != settings.density || lastRadius_ != radius ||
+                                     lastEdgeWidth_ != settings.edgeWidth || lastEnabled_ != settings.enabled ||
+                                     lastInteractionEnabled_ != settings.interactionEnabled;
         const bool stream = glm::length2(glm::vec2(focus.x - lastFocus_.x, focus.z - lastFocus_.z)) > 1.0f ||
                             lastDensity_ != settings.density || lastRadius_ != radius ||
                             lastEdgeWidth_ != settings.edgeWidth ||
                             lastEnabled_ != settings.enabled ||
                             (!settings.enabled && !tiles_.empty());
-        if (!stream && updateClock_ < 0.05f) return;
-        const float elapsed = updateClock_;
-        updateClock_ = 0;
         if (stream) Stream(scene, focus, radius);
         const auto contacts = BuildContactTiles(interactors, elapsed, focus);
-        const float targetYaw = settings.windYaw + 0.16f * std::sin(float(time_) * 0.12f);
-        windYaw_ += std::atan2(std::sin(targetYaw - windYaw_), std::cos(targetYaw - windYaw_)) *
-                    std::min(1.0f, elapsed * 0.6f);
+        const float yawDelta = std::atan2(std::sin(settings.windYaw - baseWindYaw_),
+                                          std::cos(settings.windYaw - baseWindYaw_));
+        baseWindYaw_ = std::abs(yawDelta) < 0.0001f ? settings.windYaw
+            : baseWindYaw_ + yawDelta * std::min(1.0f, elapsed * 0.6f);
+        const float previousYaw = windYaw_;
+        windYaw_ = baseWindYaw_ + 0.16f * std::sin(float(time_) * 0.12f);
+        const bool windChanging = previousYaw != windYaw_ ||
+                                  (windSpeed > 0.0f && settings.windStrength + weather * 0.3f > 0.0f);
+        if (windChanging || lastWindStrength_ != settings.windStrength || lastWeather_ != weather)
+            ++windRevision_;
+        const float windCos = std::cos(windYaw_);
+        const float windSin = std::sin(windYaw_);
+        const glm::quat windRotation = glm::angleAxis(windYaw_, glm::vec3(0, 1, 0));
         activeCount_ = 0;
         activeByLod_.fill(0);
         maxActiveDistance_ = 0.0f;
         edgeCount_ = 0;
-        interactionCount_ = contactCount_ = contactChecks_ = 0;
+        interactionCount_ = contactCount_ = contactChecks_ = updatedCount_ = 0;
         maxPressure_ = 0.0f;
-        for (const auto& [tile, slots] : tiles_)
+        bool dirty = stream;
+        for (auto& [tile, resident] : tiles_)
         {
-            const auto cell = contacts.find({tile[1], tile[2]});
-            for (uint32_t slot : slots)
+            const auto cell = tile[0] == 0 ? contacts.find({tile[1], tile[2]}) : contacts.end();
+            const float tileDistanceSquared = glm::length2(glm::vec2((tile[1] + 0.5f) * tileSize - focus.x,
+                                                                     (tile[2] + 0.5f) * tileSize - focus.z));
+            // Keep nearby wind and all contacts continuous. Stagger other tiles in time
+            // instead of transforming the whole meadow in one 20 Hz burst.
+            const double interval = tile[0] == 0 ? (tileDistanceSquared < 12.0f * 12.0f ? 0.0 : 0.1)
+                                                 : tile[0] == 1 ? 0.2 : 0.4;
+            const bool due = interval == 0.0 || resident.lastUpdate < 0.0 ||
+                std::floor(updateTime_ / interval + resident.updatePhase) !=
+                std::floor(resident.lastUpdate / interval + resident.updatePhase);
+            const bool update = resident.lastUpdate < 0.0 || settingsChanged ||
+                                cell != contacts.end() || resident.recovering ||
+                                (due && (resident.windRevision != windRevision_ ||
+                                    glm::length2(glm::vec2(focus.x - resident.lastFocus.x,
+                                                          focus.z - resident.lastFocus.z)) > 0.0001f));
+            if (update)
             {
-                auto& instance = pool_[slot];
-                const auto& p = instance.placement;
-                auto* render = instance.node->GetComponent<RenderComponent>();
-                const float distance = glm::length(glm::vec2(p.position.x - focus.x, p.position.z - focus.z));
-                const float fade = Coverage(distance, radius, p.lod);
-                const bool visible = settings.enabled && fade > 0.015f;
-                render->SetVisible(visible);
-                if (!visible)
+                const bool coverageChanged = resident.lastUpdate < 0.0 || settingsChanged ||
+                                             focus.x != resident.lastFocus.x || focus.z != resident.lastFocus.z;
+                const float responseElapsed = resident.lastUpdate < 0.0 ? elapsed
+                    : static_cast<float>(updateTime_ - resident.lastUpdate);
+                resident.activeCount = resident.edgeCount = resident.interactionCount = resident.contactCount = 0;
+                resident.maxDistance = resident.maxPressure = 0.0f;
+                resident.recovering = false;
+                for (uint32_t slot : resident.slots)
                 {
-                    instance.response = {};
-                    continue;
-                }
-                ++activeCount_;
-                ++activeByLod_[p.lod];
-                if (p.edgeWeight < 0.999f) ++edgeCount_;
-                maxActiveDistance_ = std::max(maxActiveDistance_, distance);
-                const float alongWind = p.position.x * std::cos(windYaw_) - p.position.z * std::sin(windYaw_);
-                const float phase = float(time_) * 1.8f - alongWind * 0.12f;
-                const float gust = 0.55f + 0.24f * std::sin(phase) + 0.09f * std::sin(float(time_) * 2.9f + p.phase);
-                glm::vec3 target(0.0f);
-                // Fade to zero before the 36 m near/mid crossfade; never deform a 5 m far patch.
-                if (p.lod == 0 && distance < 36.0f && cell != contacts.end())
-                {
-                    for (const auto& sweep : cell->second)
+                    auto& instance = pool_[slot];
+                    const auto& p = instance.placement;
+                    auto* render = instance.node->GetComponent<RenderComponent>();
+                    if (coverageChanged)
                     {
-                        ++contactChecks_;
-                        const glm::vec3 contact = Contact(p, sweep);
-                        target.x += contact.x;
-                        target.y += contact.y;
-                        target.z = std::max(target.z, contact.z);
+                        instance.distance = glm::length(glm::vec2(p.position.x - focus.x, p.position.z - focus.z));
+                        instance.coverage = Coverage(instance.distance, radius, p.lod);
                     }
-                    target *= 1.0f - glm::smoothstep(24.0f, 36.0f, distance);
+                    const float distance = instance.distance;
+                    const float fade = instance.coverage;
+                    const bool visible = settings.enabled && fade > 0.015f;
+                    dirty |= render->GetVisible() != visible;
+                    render->SetVisible(visible);
+                    if (!visible)
+                    {
+                        instance.response = {};
+                        continue;
+                    }
+                    ++resident.activeCount;
+                    if (p.edgeWeight < 0.999f) ++resident.edgeCount;
+                    resident.maxDistance = std::max(resident.maxDistance, distance);
+                    const float alongWind = p.position.x * windCos - p.position.z * windSin;
+                    const float phase = float(time_) * 1.8f - alongWind * 0.12f;
+                    const float gust = 0.55f + 0.30f * std::sin(phase) + 0.12f * std::sin(float(time_) * 2.9f + p.phase);
+                    glm::vec3 target(0.0f);
+                    // Fade to zero before the 36 m near/mid crossfade; never deform a 5 m far patch.
+                    if (p.lod == 0 && distance < 36.0f && cell != contacts.end())
+                    {
+                        for (const auto& sweep : cell->second)
+                        {
+                            ++contactChecks_;
+                            const glm::vec3 contact = Contact(p, sweep);
+                            target.x += contact.x;
+                            target.y += contact.y;
+                            target.z = std::max(target.z, contact.z);
+                        }
+                        target *= 1.0f - glm::smoothstep(24.0f, 36.0f, distance);
+                    }
+                    if (target.z > 0.001f) ++resident.contactCount;
+                    if (settings.interactionEnabled)
+                        StepResponse(instance.response, target, responseElapsed, settings.recoverySeconds);
+                    else instance.response = {};
+                    resident.recovering |= instance.response.deformation != glm::vec3(0.0f) ||
+                                           instance.response.velocity != glm::vec3(0.0f);
+                    const float pressure = instance.response.deformation.z;
+                    if (pressure > 0.01f || glm::length2(glm::vec2(instance.response.deformation)) > 0.0001f)
+                        ++resident.interactionCount;
+                    resident.maxPressure = std::max(resident.maxPressure, pressure);
+                    const float bend = std::clamp((settings.windStrength + weather * 0.3f) * gust, 0.0f, 1.0f) *
+                                       (1.0f - pressure * 0.85f);
+                    const uint32_t pose = SelectPose(bend, instance.pose);
+                    if (pose != instance.pose) ++poseChanges_;
+                    instance.pose = pose;
+                    render->SetModelId(models_[p.lod][pose]);
+                    const glm::quat rotation = instance.baseRotation * windRotation;
+                    // Shear preserves every blade root, including the sub-pose wind residual.
+                    const float residual = bend - float(pose) / float(poseCount - 1);
+                    const auto& deformation = instance.response.deformation;
+                    glm::vec3 worldBend(deformation.x, 0.0f, deformation.y);
+                    worldBend.y = -glm::dot(worldBend, p.normal) / std::max(p.normal.y, 0.5f);
+                    const glm::vec3 localBend = glm::conjugate(rotation) * worldBend;
+                    const float compression = 1.0f - pressure * 0.65f;
+                    const glm::vec2 shear = glm::vec2(localBend.x + residual * grassMaxBend, localBend.z) / compression;
+                    instance.node->SetShearedTransform(p.position, rotation,
+                        p.scale * glm::vec3(1.0f, fade * compression, 1.0f), shear);
+                    ++updatedCount_;
+                    dirty = true;
                 }
-                if (target.z > 0.001f) ++contactCount_;
-                if (settings.interactionEnabled)
-                    StepResponse(instance.response, target, elapsed, settings.recoverySeconds);
-                else instance.response = {};
-                const float pressure = instance.response.deformation.z;
-                if (pressure > 0.01f || glm::length2(glm::vec2(instance.response.deformation)) > 0.0001f)
-                    ++interactionCount_;
-                maxPressure_ = std::max(maxPressure_, pressure);
-                const float bend = std::clamp((settings.windStrength + weather * 0.3f) * gust, 0.0f, 1.0f) *
-                                   (1.0f - pressure * 0.85f);
-                const uint32_t pose = SelectPose(bend, instance.pose);
-                if (pose != instance.pose) ++poseChanges_;
-                instance.pose = pose;
-                render->SetModelId(models_[p.lod][pose]);
-                const glm::quat align = glm::rotation(glm::vec3(0, 1, 0), p.normal);
-                const glm::quat yaw = glm::angleAxis(windYaw_ + p.heading, glm::vec3(0, 1, 0));
-                // Shear preserves every blade root, including the sub-pose wind residual.
-                const float residual = bend - float(pose) / float(poseCount - 1);
-                const auto& deformation = instance.response.deformation;
-                glm::vec3 worldBend(deformation.x, 0.0f, deformation.y);
-                worldBend.y = -glm::dot(worldBend, p.normal) / std::max(p.normal.y, 0.5f);
-                const glm::vec3 localBend = glm::inverse(align * yaw) * worldBend;
-                const float compression = 1.0f - pressure * 0.65f;
-                const glm::vec2 shear = glm::vec2(localBend.x + residual * 0.42f, localBend.z) / compression;
-                instance.node->SetShearedTransform(p.position, align * yaw,
-                    p.scale * glm::vec3(1.0f, fade * compression, 1.0f), shear);
+                resident.lastUpdate = updateTime_;
+                resident.windRevision = windRevision_;
+                resident.lastFocus = focus;
             }
+            activeCount_ += resident.activeCount;
+            activeByLod_[tile[0]] += resident.activeCount;
+            edgeCount_ += resident.edgeCount;
+            interactionCount_ += resident.interactionCount;
+            contactCount_ += resident.contactCount;
+            maxActiveDistance_ = std::max(maxActiveDistance_, resident.maxDistance);
+            maxPressure_ = std::max(maxPressure_, resident.maxPressure);
         }
-        scene.MarkTransformDirty(); // GPU/TLAS only; CPU collision/navigation stays unchanged
+        lastWindStrength_ = settings.windStrength;
+        lastWeather_ = weather;
+        lastInteractionEnabled_ = settings.interactionEnabled;
+        if (dirty) scene.MarkTransformDirty(); // GPU/TLAS only; CPU collision/navigation stays unchanged
     }
 }

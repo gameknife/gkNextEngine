@@ -5,15 +5,15 @@
         50.186,
         12.754
       ],
-      "description": "The Ohre curls around an abandoned hill town. Faded plaster, broken tile roofs and a silent castle overlook the river. Cross the bridges, search the old quarter, and keep a route out of the valley.",
+      "description": "The Ohre loops around Loket's rock: a baroque square, a castle and a stepped lower street. Across the river lie a green village, spa villas, a porcelain works, a collective farm and cottages hidden in the spruce woods. Cross the bridges, search house by house, and keep a route out of the valley.",
       "draftScene": "assets/scad/proc/nextdayz/cz_loket_riverbend/scene.scad",
       "id": "cz_loket_riverbend",
       "localName": "洛克特·河湾",
-      "mapVersion": 3,
+      "mapVersion": 4,
       "name": "LOKET / RIVERBEND",
       "profile": "bohemian_decay",
       "region": "CZECHIA / WEST BOHEMIA",
-      "scene": "assets/scad/proc/nextdayz/cz_loket_riverbend/published/v3/scene.scad",
+      "scene": "assets/scad/proc/nextdayz/cz_loket_riverbend/published/v4/scene.scad",
       "sizeM": 1000,
       "status": "published",
       "terrain": "RIVER VALLEY / HILLSIDE OLD TOWN"

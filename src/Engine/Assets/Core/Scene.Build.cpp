@@ -19,6 +19,7 @@
 #include "Engine/Runtime/Components/EnvironmentComponent.hpp"
 #include "Engine/Runtime/Components/LightComponent.hpp"
 #include "Engine/Runtime/Components/SkinnedMeshComponent.hpp"
+#include "Engine/Runtime/Components/TerrainComponent.hpp"
 #include "Engine/Runtime/Config/UserSettings.hpp"
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/Utilities/NextEngineHelper.hpp"
@@ -378,11 +379,28 @@ namespace Assets
             cachedMeshShapes_.assign(models_.size(), NextMeshShapeHandle{});
             std::vector<uint32_t> shapeCookTasks;
             shapeCookTasks.reserve(models_.size());
+            // Ground is never optional: a 256-cell terrain alone has ~131k triangles,
+            // and dropping its collision drops the player through the world.
+            std::vector<bool> terrainModels(models_.size(), false);
+            for (auto* render : Components<Runtime::RenderComponent>())
+            {
+                const Node* owner = render->GetOwner();
+                if (owner && owner->GetComponent<Runtime::TerrainComponent>() && render->GetModelId() < models_.size())
+                {
+                    terrainModels[render->GetModelId()] = true;
+                }
+            }
             for (size_t modelIndex = 0; modelIndex < models_.size(); ++modelIndex)
             {
                 const Model& model = models_[modelIndex];
-                if (model.NumberOfIndices() >= 65535 * 3 || model.NumberOfIndices() == 0)
+                if (model.NumberOfIndices() == 0)
                 {
+                    continue;
+                }
+                if (model.NumberOfIndices() >= 65535 * 3 && !terrainModels[modelIndex])
+                {
+                    SPDLOG_WARN("[Physics] model '{}' has {} triangles; skipped collision (limit 65535)",
+                                model.Name(), model.NumberOfIndices() / 3);
                     continue;
                 }
 

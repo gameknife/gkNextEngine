@@ -965,7 +965,8 @@ namespace NextDayz::NextDayzHUD
             const bool hovered = ImGui::IsItemHovered();
 
             // Slot Background & Frame
-            UIWidgets::DrawSlotFrame(draw, pos, max, true, hovered, false, false, 4.0f);
+            UIWidgets::DrawSlotFrame(draw, pos, max, true, hovered, false, false, 3.0f);
+            UIWidgets::DrawCornerTicks(draw, pos, max, 4.0f, hovered ? UITheme::Colors::AccentAmber : UITheme::Colors::BorderMuted);
 
             // Left Category Color Accent Stripe
             const ImU32 kindColor = UITheme::ItemKindColor(def->kind);
@@ -1163,7 +1164,7 @@ namespace NextDayz::NextDayzHUD
 
             const ImVec2 pos = ImGui::GetCursorScreenPos();
             const float slotW = ImGui::GetContentRegionAvail().x;
-            const float slotH = 46.0f;
+            const float slotH = 48.0f;
             const ImVec2 max(pos.x + slotW, pos.y + slotH);
             ImDrawList* draw = ImGui::GetWindowDrawList();
 
@@ -1171,20 +1172,29 @@ namespace NextDayz::NextDayzHUD
             ImGui::InvisibleButton("##eq_btn", ImVec2(slotW, slotH));
             const bool hovered = ImGui::IsItemHovered();
 
-            // Background slot frame
-            UIWidgets::DrawSlotFrame(draw, pos, max, instance != nullptr, hovered, false, false, 4.0f);
+            // Background slot frame & corner ticks
+            UIWidgets::DrawSlotFrame(draw, pos, max, instance != nullptr, hovered, false, false, 3.0f);
+            UIWidgets::DrawCornerTicks(draw, pos, max, 6.0f, hovered ? UITheme::Colors::AccentAmber : UITheme::Colors::BorderMuted);
 
-            const float textOffset = def ? 58.0f : 10.0f;
-            draw->AddText(ImVec2(pos.x + textOffset, pos.y + 6.0f), UITheme::Colors::TextMuted, label);
+            const char* slotType = (slot == EEquipSlot::Head) ? "HEAD" :
+                                   (slot == EEquipSlot::Torso) ? "TORSO" :
+                                   (slot == EEquipSlot::Vest) ? "VEST" :
+                                   (slot == EEquipSlot::Legs) ? "LEGS" :
+                                   (slot == EEquipSlot::Back) ? "BACKPACK" : "GEAR";
 
             if (def && instance)
             {
-                DrawItemIcon(context, def->id, ImVec2(pos.x + 5.0f, pos.y + 3.0f), ImVec2(pos.x + 51.0f, max.y - 3.0f));
-                // Item Name
-                const auto name = FitText(std::string(L10n::Tr(def->displayName)), slotW - textOffset - 10.0f);
-                draw->AddText(ImVec2(pos.x + textOffset, pos.y + 24.0f), UITheme::Colors::TextPrimary, name.c_str());
+                // Left tactical gear category stripe
+                draw->AddRectFilled(pos, ImVec2(pos.x + 3.0f, max.y), UITheme::Colors::AccentViolet, 3.0f);
 
-                // Attribute pills on right
+                DrawItemIcon(context, def->id, ImVec2(pos.x + 6.0f, pos.y + 4.0f), ImVec2(pos.x + 52.0f, max.y - 4.0f));
+
+                // Slot title & Item name
+                draw->AddText(ImVec2(pos.x + 58.0f, pos.y + 5.0f), UITheme::Colors::TextMuted, label);
+                const auto name = FitText(std::string(L10n::Tr(def->displayName)), slotW - 60.0f - 110.0f);
+                draw->AddText(ImVec2(pos.x + 58.0f, pos.y + 24.0f), UITheme::Colors::TextPrimary, name.c_str());
+
+                // Attribute badge on right
                 char statText[48] = "";
                 if (def->armor > 0.0f)
                 {
@@ -1202,8 +1212,11 @@ namespace NextDayz::NextDayzHUD
                 if (statText[0] != '\0')
                 {
                     const ImVec2 sSize = ImGui::CalcTextSize(statText);
-                    draw->AddText(ImVec2(max.x - sSize.x - 12.0f, pos.y + 6.0f),
-                                  UITheme::Colors::AccentEmerald, statText);
+                    const ImVec2 bMin(max.x - sSize.x - 16.0f, pos.y + 12.0f);
+                    const ImVec2 bMax(max.x - 8.0f, pos.y + 34.0f);
+                    draw->AddRectFilled(bMin, bMax, IM_COL32(16, 24, 34, 220), 2.0f);
+                    draw->AddRect(bMin, bMax, UITheme::Colors::BorderMuted, 2.0f, 0, 1.0f);
+                    draw->AddText(ImVec2(bMin.x + 4.0f, bMin.y + 3.0f), UITheme::Colors::AccentEmerald, statText);
                 }
 
                 if (hovered)
@@ -1211,7 +1224,7 @@ namespace NextDayz::NextDayzHUD
                     ItemTooltip(context, *def, *instance);
                 }
 
-                // Drag Source: dragging worn gear to take off / move
+                // Drag Source
                 if (ImGui::BeginDragDropSource())
                 {
                     StartItemDrag(*instance, pos);
@@ -1229,7 +1242,10 @@ namespace NextDayz::NextDayzHUD
             }
             else
             {
-                draw->AddText(ImVec2(pos.x + 10.0f, pos.y + 24.0f), UITheme::Colors::TextMuted, NextDayz::L10n::Tr("[ EMPTY ]"));
+                // Empty slot with tactical line silhouette
+                UIWidgets::DrawSlotSilhouette(draw, ImVec2(pos.x + 6.0f, pos.y + 4.0f), ImVec2(pos.x + 52.0f, max.y - 4.0f), slotType);
+                draw->AddText(ImVec2(pos.x + 58.0f, pos.y + 6.0f), UITheme::Colors::TextMuted, label);
+                draw->AddText(ImVec2(pos.x + 58.0f, pos.y + 24.0f), IM_COL32(80, 95, 120, 180), NextDayz::L10n::Tr("[ EMPTY SLOT ]"));
             }
 
             // Drag Drop Target: Dropping clothing on this slot wears it
@@ -1274,29 +1290,38 @@ namespace NextDayz::NextDayzHUD
 
             const ImVec2 pos = ImGui::GetCursorScreenPos();
             const float slotW = ImGui::GetContentRegionAvail().x;
-            const float slotH = 50.0f;
+            const float slotH = instance ? 54.0f : 48.0f;
             const ImVec2 max(pos.x + slotW, pos.y + slotH);
             ImDrawList* draw = ImGui::GetWindowDrawList();
 
             ImGui::PushID(slot + 2000);
-            // Leave the Holster button outside the card's hit area.
-            ImGui::InvisibleButton("##wp_slot_btn", ImVec2(instance ? slotW - 70.0f : slotW, slotH));
+            ImGui::InvisibleButton("##wp_slot_btn", ImVec2(instance ? slotW - 74.0f : slotW, slotH));
             const bool hovered = ImGui::IsItemHovered();
 
-            UIWidgets::DrawSlotFrame(draw, pos, max, instance != nullptr, hovered, false, false, 4.0f);
-            const float textOffset = def ? 112.0f : 10.0f;
-            draw->AddText(ImVec2(pos.x + textOffset, pos.y + 6.0f), UITheme::Colors::TextMuted, label);
+            UIWidgets::DrawSlotFrame(draw, pos, max, instance != nullptr, hovered, false, false, 3.0f);
+            UIWidgets::DrawCornerTicks(draw, pos, max, 6.0f, hovered ? UITheme::Colors::AccentAmber : UITheme::Colors::BorderMuted);
 
             if (def && instance)
             {
-                DrawItemIcon(context, def->id, ImVec2(pos.x + 5.0f, pos.y + 3.0f), ImVec2(pos.x + 104.0f, max.y - 3.0f));
-                const auto name = FitText(std::string(L10n::Tr(def->displayName)), slotW - textOffset - 132.0f);
-                draw->AddText(ImVec2(pos.x + textOffset, pos.y + 26.0f), UITheme::Colors::TextPrimary, name.c_str());
+                // Weapon orange category stripe
+                draw->AddRectFilled(pos, ImVec2(pos.x + 3.0f, max.y), UITheme::Colors::AccentOrange, 3.0f);
 
+                DrawItemIcon(context, def->id, ImVec2(pos.x + 6.0f, pos.y + 4.0f), ImVec2(pos.x + 110.0f, max.y - 4.0f));
+
+                const float textOffset = 118.0f;
+                draw->AddText(ImVec2(pos.x + textOffset, pos.y + 6.0f), UITheme::Colors::TextMuted, label);
+                const auto name = FitText(std::string(L10n::Tr(def->displayName)), slotW - textOffset - 170.0f);
+                draw->AddText(ImVec2(pos.x + textOffset, pos.y + 27.0f), UITheme::Colors::TextPrimary, name.c_str());
+
+                // Ammo badge
                 char ammoText[32];
-                std::snprintf(ammoText, sizeof(ammoText), NextDayz::L10n::Tr("Ammo: %d"), instance->loadedAmmo);
+                std::snprintf(ammoText, sizeof(ammoText), "[ %d ]", instance->loadedAmmo);
                 const ImVec2 aSize = ImGui::CalcTextSize(ammoText);
-                draw->AddText(ImVec2(max.x - aSize.x - 70.0f, pos.y + 26.0f), UITheme::Colors::AccentCyan, ammoText);
+                const ImVec2 aMin(max.x - aSize.x - 82.0f, pos.y + 15.0f);
+                const ImVec2 aMax(max.x - 74.0f, pos.y + 37.0f);
+                draw->AddRectFilled(aMin, aMax, IM_COL32(14, 22, 32, 230), 2.0f);
+                draw->AddRect(aMin, aMax, UITheme::Colors::BorderMuted, 2.0f, 0, 1.0f);
+                draw->AddText(ImVec2(aMin.x + 4.0f, aMin.y + 3.0f), UITheme::Colors::AccentCyan, ammoText);
 
                 if (hovered)
                 {
@@ -1305,9 +1330,14 @@ namespace NextDayz::NextDayzHUD
             }
             else
             {
-                draw->AddText(ImVec2(pos.x + 10.0f, pos.y + 26.0f), UITheme::Colors::TextMuted, NextDayz::L10n::Tr("[ NONE ]"));
+                // Empty weapon slot with silhouette
+                UIWidgets::DrawSlotSilhouette(draw, ImVec2(pos.x + 8.0f, pos.y + 4.0f), ImVec2(pos.x + 80.0f, max.y - 4.0f),
+                                              slot == 2 ? "SIDEARM" : "WEAPON");
+                draw->AddText(ImVec2(pos.x + 90.0f, pos.y + 8.0f), UITheme::Colors::TextMuted, label);
+                draw->AddText(ImVec2(pos.x + 90.0f, pos.y + 26.0f), IM_COL32(80, 95, 120, 180), NextDayz::L10n::Tr("[ NO WEAPON EQUIPPED ]"));
             }
 
+            // Drag drop to equip weapon
             if (ImGui::BeginDragDropTarget())
             {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kItemPayload))
@@ -1326,48 +1356,120 @@ namespace NextDayz::NextDayzHUD
                 ImGui::EndDragDropTarget();
             }
 
-            // Keep the weapon card body as the target; the nested button must
-            // not replace ImGui's last item before BeginDragDropTarget().
+            // Holster button & Tactical Rails
             if (instance)
             {
-                ImGui::SetCursorScreenPos(ImVec2(max.x - 62.0f, pos.y + 12.0f));
-                if (ImGui::SmallButton(NextDayz::L10n::Label("Holster")) && context.unequipWeapon)
+                ImGui::SetCursorScreenPos(ImVec2(max.x - 70.0f, pos.y + 14.0f));
+                if (ImGui::Button(NextDayz::L10n::Label("Holster"), ImVec2(64.0f, 26.0f)) && context.unequipWeapon)
                 {
                     context.unequipWeapon(slot);
                 }
-                ImGui::SetCursorScreenPos(ImVec2(pos.x, max.y + ImGui::GetStyle().ItemSpacing.y));
+                ImGui::SetCursorScreenPos(ImVec2(pos.x, max.y + 4.0f));
+
+                // INTEGRATED TACTICAL ATTACHMENT RAILS
+                if (def && def->kind == EItemKind::Weapon)
+                {
+                    constexpr size_t kSlotCount = kAttachmentSlotCount;
+                    const float railGap = 4.0f;
+                    const float railW = std::floor((slotW - railGap * static_cast<float>(kSlotCount - 1)) / static_cast<float>(kSlotCount));
+                    const float railH = 26.0f;
+
+                    for (size_t index = 0; index < kSlotCount; ++index)
+                    {
+                        const auto kind = static_cast<EAttachmentSlot>(index);
+                        const auto* part = FindAttachmentDef(instance->attachments[index]);
+                        const ImVec2 rMin = ImGui::GetCursorScreenPos();
+                        const ImVec2 rMax(rMin.x + railW, rMin.y + railH);
+
+                        ImGui::PushID(static_cast<int>(index * 100 + slot));
+                        ImGui::InvisibleButton("##rail_btn", ImVec2(railW, railH));
+                        const bool rHovered = ImGui::IsItemHovered();
+
+                        // Slot frame
+                        draw->AddRectFilled(rMin, rMax, part ? IM_COL32(18, 28, 40, 230) : IM_COL32(14, 18, 24, 180), 2.0f);
+                        draw->AddRect(rMin, rMax, part ? UITheme::Colors::AccentCyan :
+                                      rHovered ? UITheme::Colors::AccentAmber : UITheme::Colors::BorderMuted, 2.0f, 0, 1.0f);
+
+                        // Rail Slot Abbreviation Tag
+                        const char* slotTag = (kind == EAttachmentSlot::Optic) ? "OPT" :
+                                              (kind == EAttachmentSlot::Muzzle) ? "MUZ" :
+                                              (kind == EAttachmentSlot::Magazine) ? "MAG" :
+                                              (kind == EAttachmentSlot::Grip) ? "GRP" : "TAC";
+
+                        if (part)
+                        {
+                            draw->AddRectFilled(rMin, ImVec2(rMin.x + 3.0f, rMax.y), UITheme::Colors::AccentCyan, 2.0f);
+                            const auto pName = FitText(fmt::format("{}: {}", slotTag, L10n::Tr(part->displayName)), railW - 10.0f);
+                            draw->AddText(ImVec2(rMin.x + 6.0f, rMin.y + 5.0f), UITheme::Colors::TextPrimary, pName.c_str());
+
+                            if (rHovered)
+                            {
+                                ImGui::SetTooltip("%s: %s\n%s", L10n::Tr(AttachmentSlotName(kind)),
+                                                  L10n::Tr(part->displayName),
+                                                  L10n::Tr("[RMB] Detach attachment"));
+                            }
+
+                            // Right-click to detach
+                            if (ImGui::BeginPopupContextItem("##part_menu"))
+                            {
+                                if (ImGui::MenuItem(L10n::Label("Detach Attachment")) && context.removeAttachment)
+                                {
+                                    context.removeAttachment(instance->instanceId, kind);
+                                }
+                                ImGui::EndPopup();
+                            }
+                        }
+                        else
+                        {
+                            char emptyText[32];
+                            std::snprintf(emptyText, sizeof(emptyText), "+ %s", slotTag);
+                            const ImVec2 eSize = ImGui::CalcTextSize(emptyText);
+                            draw->AddText(ImVec2(rMin.x + (railW - eSize.x) * 0.5f, rMin.y + 5.0f),
+                                          rHovered ? UITheme::Colors::AccentAmber : IM_COL32(90, 105, 125, 180), emptyText);
+
+                            if (rHovered)
+                            {
+                                ImGui::SetTooltip("%s: %s", L10n::Tr(AttachmentSlotName(kind)),
+                                                  L10n::Tr("Drag compatible attachment here"));
+                            }
+
+                            if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+                            {
+                                ImGui::OpenPopup("parts_picker");
+                            }
+                        }
+
+                        // Drag drop attachment on this rail
+                        if (ImGui::BeginDragDropTarget())
+                        {
+                            if (const auto* payload = ImGui::AcceptDragDropPayload(kItemPayload))
+                            {
+                                const auto* dragged = inventory.FindInstance(*static_cast<const FItemInstanceId*>(payload->Data));
+                                const auto* accessory = dragged ? FindAttachmentDef(dragged->defId) : nullptr;
+                                if (accessory && accessory->slot == kind && context.installAttachment)
+                                {
+                                    context.installAttachment(instance->instanceId, dragged->instanceId);
+                                }
+                            }
+                            ImGui::EndDragDropTarget();
+                        }
+
+                        if (ImGui::BeginPopup("parts_picker"))
+                        {
+                            DrawAttachmentOptions(context, *instance, kind);
+                            ImGui::EndPopup();
+                        }
+
+                        ImGui::PopID();
+                        if (index + 1 < kSlotCount)
+                        {
+                            ImGui::SameLine(0.0f, railGap);
+                        }
+                    }
+                    ImGui::Spacing();
+                }
             }
 
-            if (instance && def && def->kind == EItemKind::Weapon && ImGui::TreeNode(L10n::Label("Attachments")))
-            {
-                for (size_t index = 0; index < kAttachmentSlotCount; ++index)
-                {
-                    const auto kind = static_cast<EAttachmentSlot>(index);
-                    const auto* part = FindAttachmentDef(instance->attachments[index]);
-                    const auto text = fmt::format("{}: {}", L10n::Tr(AttachmentSlotName(kind)),
-                                                  part ? L10n::Tr(part->displayName) : std::string_view(L10n::Tr("[ NONE ]")));
-                    ImGui::PushID(static_cast<int>(index));
-                    if (ImGui::Button(text.c_str(), ImVec2(-1.0f, 0.0f))) ImGui::OpenPopup("parts");
-                    if (ImGui::BeginDragDropTarget())
-                    {
-                        if (const auto* payload = ImGui::AcceptDragDropPayload(kItemPayload))
-                        {
-                            const auto* dragged = inventory.FindInstance(*static_cast<const FItemInstanceId*>(payload->Data));
-                            const auto* accessory = dragged ? FindAttachmentDef(dragged->defId) : nullptr;
-                            if (accessory && accessory->slot == kind && context.installAttachment)
-                                context.installAttachment(instance->instanceId, dragged->instanceId);
-                        }
-                        ImGui::EndDragDropTarget();
-                    }
-                    if (ImGui::BeginPopup("parts"))
-                    {
-                        DrawAttachmentOptions(context, *instance, kind);
-                        ImGui::EndPopup();
-                    }
-                    ImGui::PopID();
-                }
-                ImGui::TreePop();
-            }
             ImGui::PopID();
             ImGui::Spacing();
         }
@@ -1386,8 +1488,11 @@ namespace NextDayz::NextDayzHUD
                 for (int x = 0; x < container.size.width; ++x)
                 {
                     const ImVec2 a(origin.x + x * cell + 1.0f, origin.y + y * cell + 1.0f);
-                    UIWidgets::DrawSlotFrame(draw, a, ImVec2(a.x + cell - 2.0f, a.y + cell - 2.0f),
-                                             false, false, false, false, 2.0f);
+                    const ImVec2 b(a.x + cell - 2.0f, a.y + cell - 2.0f);
+                    UIWidgets::DrawSlotFrame(draw, a, b, false, false, false, false, 2.0f);
+                    const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+                    draw->AddLine(ImVec2(c.x - 2.0f, c.y), ImVec2(c.x + 2.0f, c.y), UITheme::Colors::GridCrossDot, 1.0f);
+                    draw->AddLine(ImVec2(c.x, c.y - 2.0f), ImVec2(c.x, c.y + 2.0f), UITheme::Colors::GridCrossDot, 1.0f);
                 }
             for (const auto& item : inventory.Instances())
             {
@@ -1459,14 +1564,26 @@ namespace NextDayz::NextDayzHUD
             const ImVec2 pos = ImGui::GetCursorScreenPos();
             const float width = ImGui::GetContentRegionAvail().x;
             auto* draw = ImGui::GetWindowDrawList();
-            draw->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + 28.0f), UITheme::Colors::SurfaceHeader, 3.0f);
+
+            // Tactical elevated container header
+            draw->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + 30.0f), UITheme::Colors::SurfaceHeader, 3.0f);
+            draw->AddRectFilled(pos, ImVec2(pos.x + 3.0f, pos.y + 30.0f), UITheme::Colors::AccentAmber, 3.0f);
+            draw->AddRect(pos, ImVec2(pos.x + width, pos.y + 30.0f), UITheme::Colors::BorderMuted, 3.0f, 0, 1.0f);
+
             const auto count = fmt::format("{} / {}", used, capacity);
-            const auto name = FitText(fmt::format("{}  {}x{}", L10n::Tr(container.displayName),
-                container.size.width, container.size.height), width - ImGui::CalcTextSize(count.c_str()).x - 26.0f);
-            draw->AddText(ImVec2(pos.x + 8.0f, pos.y + 6.0f), UITheme::Colors::TextPrimary, name.c_str());
-            draw->AddText(ImVec2(pos.x + width - ImGui::CalcTextSize(count.c_str()).x - 8.0f, pos.y + 6.0f),
+            const auto name = FitText(fmt::format("{}  [{}x{}]", L10n::Tr(container.displayName),
+                container.size.width, container.size.height), width - ImGui::CalcTextSize(count.c_str()).x - 30.0f);
+            draw->AddText(ImVec2(pos.x + 10.0f, pos.y + 7.0f), UITheme::Colors::TextPrimary, name.c_str());
+            draw->AddText(ImVec2(pos.x + width - ImGui::CalcTextSize(count.c_str()).x - 10.0f, pos.y + 7.0f),
                           used >= capacity ? UITheme::Colors::AccentRose : UITheme::Colors::AccentAmber, count.c_str());
-            ImGui::Dummy(ImVec2(width, 28.0f));
+
+            // Bottom micro progress bar on header
+            const float frac = capacity > 0 ? std::clamp(static_cast<float>(used) / static_cast<float>(capacity), 0.0f, 1.0f) : 0.0f;
+            const ImU32 barCol = frac >= 1.0f ? UITheme::Colors::AccentRose :
+                                 frac > 0.75f ? UITheme::Colors::AccentAmber : UITheme::Colors::AccentCyan;
+            draw->AddRectFilled(ImVec2(pos.x + 3.0f, pos.y + 28.0f), ImVec2(pos.x + width * frac, pos.y + 30.0f), barCol);
+
+            ImGui::Dummy(ImVec2(width, 30.0f));
             AcceptContainerDrop(context, container.containerId);
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", L10n::Tr("Drop on the header to auto-place"));
             ImGui::Spacing();
@@ -1478,49 +1595,373 @@ namespace NextDayz::NextDayzHUD
         }
 
         // ====================================================================
-        // CHARACTER PREVIEW & FULLSCREEN INVENTORY
+        // CHARACTER PREVIEW, VITALS & TACTICAL QUICKBAR
         // ====================================================================
-        void DrawCharacterPreview(const FHudContext& context)
+        void DrawVitalsMonitor(const FHudContext& context, const ImVec2& pos, const ImVec2& size)
+        {
+            ImDrawList* draw = ImGui::GetWindowDrawList();
+            draw->AddText(pos, UITheme::Colors::TextPrimary, L10n::Tr("VITALS"));
+            const ImU32 healthCol = context.survival.health > 50.0f ? UITheme::Colors::AccentEmerald :
+                                    context.survival.health > 25.0f ? UITheme::Colors::AccentAmber : UITheme::Colors::AccentRose;
+            UIWidgets::DrawECGLine(draw, ImVec2(pos.x, pos.y + 24.0f), ImVec2(size.x, 22.0f),
+                                   context.survival.health < 30.0f ? 110.0f : 72.0f, healthCol);
+
+            const float rowY = pos.y + 58.0f;
+            const float rowStep = std::clamp((size.y - 110.0f) / 5.0f, 36.0f, 60.0f);
+            char hpText[32];
+            std::snprintf(hpText, sizeof(hpText), "%.0f%%", context.survival.health);
+            UIWidgets::DrawVitalsGauge(draw, ImVec2(pos.x, rowY), size.x, L10n::Tr("HEALTH"),
+                                       context.survival.health / 100.0f, healthCol, hpText, context.survival.health < 25.0f);
+
+            char energyText[32];
+            std::snprintf(energyText, sizeof(energyText), "%.0f%%", context.survival.hunger);
+            UIWidgets::DrawVitalsGauge(draw, ImVec2(pos.x, rowY + rowStep), size.x,
+                                       L10n::Tr("ENERGY"), context.survival.hunger / 100.0f,
+                                       UITheme::Colors::AccentAmber, energyText);
+
+            char hydroText[32];
+            std::snprintf(hydroText, sizeof(hydroText), "%.0f%%", context.survival.hydration);
+            UIWidgets::DrawVitalsGauge(draw, ImVec2(pos.x, rowY + rowStep * 2.0f), size.x,
+                                       L10n::Tr("HYDRATION"), context.survival.hydration / 100.0f,
+                                       UITheme::Colors::AccentCyan, hydroText);
+
+            const float warm01 = std::clamp(1.0f - context.survival.cold, 0.0f, 1.0f);
+            UIWidgets::DrawVitalsGauge(draw, ImVec2(pos.x, rowY + rowStep * 3.0f), size.x,
+                                       L10n::Tr("TEMP"), warm01,
+                                       context.survival.cold > 0.5f ? UITheme::Colors::AccentIceBlue : IM_COL32(45, 212, 191, 255),
+                                       L10n::Tr(context.survival.cold > 0.5f ? "COLD" : "WARM"));
+
+            char armorText[32];
+            std::snprintf(armorText, sizeof(armorText), "%.0f%%", context.armor * 100.0f);
+            UIWidgets::DrawVitalsGauge(draw, ImVec2(pos.x, rowY + rowStep * 4.0f), size.x,
+                                       L10n::Tr("ARMOR"), context.armor,
+                                       IM_COL32(129, 140, 248, 255), armorText);
+
+            // Separate status rows keep simultaneous bleeding and healing clear of the gauges.
+            float statusY = rowY + rowStep * 5.0f;
+            if (context.survival.bleedingWounds > 0)
+            {
+                const auto label = L10n::Format("BLEEDING x{}", context.survival.bleedingWounds);
+                const ImVec2 badge = UIWidgets::DrawStatusBadge(draw, ImVec2(pos.x, statusY), "!",
+                    label.c_str(), IM_COL32(60, 10, 15, 230), UITheme::Colors::AccentRose, UITheme::Colors::AccentRose);
+                statusY += badge.y + 4.0f;
+            }
+            if (context.survival.healing)
+            {
+                UIWidgets::DrawStatusBadge(draw, ImVec2(pos.x, statusY), "+", L10n::Tr("RECOVERING"),
+                    IM_COL32(10, 50, 30, 230), UITheme::Colors::AccentEmerald, UITheme::Colors::AccentEmerald);
+            }
+        }
+
+        void DrawCharacterPreview(const FHudContext& context, float height)
         {
             static float yaw = 0.35f;
             static float distance = 3.4f;
-            ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(UITheme::Colors::AccentAmber), "%s", L10n::Tr("CURRENT LOADOUT"));
-            ImGui::TextDisabled("%s", L10n::Tr("Drag to rotate / Scroll to zoom"));
-            ImGui::Spacing();
 
-            const float statsHeight = ImGui::GetTextLineHeightWithSpacing() * 7.0f;
-            const ImVec2 size(std::max(1.0f, ImGui::GetContentRegionAvail().x),
-                              std::max(160.0f, ImGui::GetContentRegionAvail().y - statsHeight));
             const ImVec2 pos = ImGui::GetCursorScreenPos();
-            ImGui::InvisibleButton("##character_orbit", size);
+            const float width = std::max(1.0f, ImGui::GetContentRegionAvail().x);
+            const ImVec2 max(pos.x + width, pos.y + height);
+            ImDrawList* draw = ImGui::GetWindowDrawList();
+            draw->AddRectFilled(pos, max, UITheme::Colors::SurfaceCard, 3.0f);
+            draw->AddRect(pos, max, UITheme::Colors::BorderMuted, 3.0f, 0, 1.0f);
+            UIWidgets::DrawCornerTicks(draw, pos, max, 10.0f, UITheme::Colors::BorderTactical);
+            draw->AddText(ImVec2(pos.x + 12.0f, pos.y + 10.0f), UITheme::Colors::TextSecondary, L10n::Tr("CURRENT LOADOUT"));
+
+            const float vitalsWidth = std::clamp(width * 0.30f, 150.0f, 220.0f);
+            const float dividerX = max.x - vitalsWidth - 28.0f;
+            const ImVec2 previewPos(pos.x + 8.0f, pos.y + 34.0f);
+            const ImVec2 previewSize(std::max(1.0f, dividerX - previewPos.x - 10.0f), height - 110.0f);
+            const ImVec2 previewMax(previewPos.x + previewSize.x, previewPos.y + previewSize.y);
+            draw->AddLine(ImVec2(dividerX, previewPos.y), ImVec2(dividerX, max.y - 48.0f), UITheme::Colors::BorderMuted);
+
+            ImGui::SetCursorScreenPos(previewPos);
+            ImGui::InvisibleButton("##character_orbit", previewSize);
             if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
                 yaw = std::remainder(yaw - ImGui::GetIO().MouseDelta.x * 0.012f, glm::two_pi<float>());
             if (ImGui::IsItemHovered())
+            {
                 distance = std::clamp(distance - ImGui::GetIO().MouseWheel * 0.2f, 2.4f, 5.0f);
+                ImGui::SetTooltip("%s", L10n::Tr("Drag to rotate / Scroll to zoom"));
+            }
 
             const uint64_t texture = context.characterPreview
-                ? context.characterPreview(glm::vec2(size.x, size.y), yaw, distance) : 0;
-            auto* draw = ImGui::GetWindowDrawList();
-            const ImVec2 max(pos.x + size.x, pos.y + size.y);
+                ? context.characterPreview(glm::vec2(previewSize.x, previewSize.y), yaw, distance) : 0;
             if (texture)
-                draw->AddImage(static_cast<ImTextureID>(texture), pos, max);
+                draw->AddImage(static_cast<ImTextureID>(texture), previewPos, previewMax);
             else
-                draw->AddText(ImVec2(pos.x + 16.0f, pos.y + 20.0f), UITheme::Colors::TextMuted, L10n::Tr("Preparing character preview..."));
+                draw->AddText(ImVec2(previewPos.x + 8.0f, previewPos.y + previewSize.y * 0.45f),
+                              UITheme::Colors::TextMuted, L10n::Tr("Preparing character preview..."));
 
-            if (ImGui::Button(L10n::Label("Front"))) yaw = 0.0f;
+            ImGui::SetCursorScreenPos(ImVec2(previewPos.x + 4.0f, previewMax.y + 6.0f));
+            if (ImGui::SmallButton(L10n::Label("Front"))) yaw = 0.0f;
             ImGui::SameLine();
-            if (ImGui::Button(L10n::Label("Back"))) yaw = glm::pi<float>();
+            if (ImGui::SmallButton(L10n::Label("Back"))) yaw = glm::pi<float>();
             ImGui::SameLine();
-            if (ImGui::Button(L10n::Label("Reset view"))) { yaw = 0.35f; distance = 3.4f; }
-            ImGui::Spacing();
-            ImGui::Separator();
-            const auto stat = [&](const char* label, float value, ImU32 color)
+            if (ImGui::SmallButton(L10n::Label("Reset")))
             {
-                ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(color), "%s  %.0f%%", L10n::Tr(label), value);
+                yaw = 0.35f;
+                distance = 3.4f;
+            }
+
+            DrawVitalsMonitor(context, ImVec2(dividerX + 14.0f, previewPos.y), ImVec2(vitalsWidth, height - 92.0f));
+
+            // Field tools share the character panel's bottom edge.
+            const float toolY = max.y - 34.0f;
+            draw->AddLine(ImVec2(pos.x + 10.0f, toolY - 8.0f), ImVec2(max.x - 10.0f, toolY - 8.0f), UITheme::Colors::BorderMuted);
+            const float chipW = (width - 20.0f - 18.0f) / 4.0f;
+            const auto drawToolChip = [&](float x, const char* name, bool owned)
+            {
+                const ImVec2 tPos(x, toolY);
+                const ImVec2 tSize(chipW, 22.0f);
+                const ImVec2 tMax(tPos.x + tSize.x, tPos.y + tSize.y);
+                draw->AddRectFilled(tPos, tMax, owned ? IM_COL32(20, 32, 44, 230) : IM_COL32(15, 18, 22, 160), 2.0f);
+                draw->AddRect(tPos, tMax, owned ? UITheme::Colors::AccentCyan : UITheme::Colors::BorderMuted, 2.0f, 0, 1.0f);
+                const ImVec2 txtSize = ImGui::CalcTextSize(name);
+                draw->AddText(ImVec2(tPos.x + (tSize.x - txtSize.x) * 0.5f, tPos.y + 4.0f),
+                              owned ? UITheme::Colors::TextPrimary : IM_COL32(90, 100, 115, 160), name);
             };
-            stat("HEALTH", context.survival.health, UITheme::Colors::AccentRose);
-            stat("HUNGER", context.survival.hunger, UITheme::Colors::AccentAmber);
-            stat("THIRST", context.survival.hydration, UITheme::Colors::AccentCyan);
+
+            drawToolChip(pos.x + 10.0f + (chipW + 6.0f) * 0.0f, L10n::Tr("COMPASS"), context.inventory->HasTool(EItemTool::Compass));
+            drawToolChip(pos.x + 10.0f + (chipW + 6.0f) * 1.0f, L10n::Tr("MAP"), context.inventory->HasTool(EItemTool::Map));
+            drawToolChip(pos.x + 10.0f + (chipW + 6.0f) * 2.0f, L10n::Tr("OPENER"), context.inventory->CanOpenCans());
+            drawToolChip(pos.x + 10.0f + (chipW + 6.0f) * 3.0f, L10n::Tr("LANTERN"), context.lanternLit || context.lanternMinutes > 0.0f);
+
+            ImGui::SetCursorScreenPos(ImVec2(pos.x, max.y + 6.0f));
+            ImGui::Dummy(ImVec2(width, 0.0f));
+        }
+
+        void DrawTacticalQuickbar(const FHudContext& context)
+        {
+            if (context.inventory == nullptr) return;
+
+            const ImVec2 pos = ImGui::GetCursorScreenPos();
+            const float width = ImGui::GetContentRegionAvail().x;
+            const float slotH = 50.0f;
+            constexpr int kSlots = 4;
+            const float gap = 6.0f;
+            const float slotW = std::floor((width - gap * (kSlots - 1)) / static_cast<float>(kSlots));
+            ImDrawList* draw = ImGui::GetWindowDrawList();
+
+            // Header title
+            draw->AddText(ImVec2(pos.x + 2.0f, pos.y), UITheme::Colors::TextMuted, L10n::Tr("TACTICAL QUICKBAR [4 - 7]"));
+            const float startY = pos.y + 18.0f;
+
+            for (int slot = 0; slot < kSlots; ++slot)
+            {
+                const ImVec2 a(pos.x + slot * (slotW + gap), startY);
+                const ImVec2 b(a.x + slotW, a.y + slotH);
+                const std::string& itemId = context.quickSlots[slot];
+                const int count = itemId.empty() ? 0 : context.inventory->CountOf(itemId);
+                const bool occupied = !itemId.empty();
+                const FItemDef* def = occupied ? FindItemDef(itemId) : nullptr;
+
+                ImGui::PushID(slot + 5000);
+                ImGui::SetCursorScreenPos(a);
+                ImGui::InvisibleButton("##qb_slot", ImVec2(slotW, slotH));
+                const bool hovered = ImGui::IsItemHovered();
+
+                UIWidgets::DrawSlotFrame(draw, a, b, occupied, hovered, false, false, 3.0f);
+                UIWidgets::DrawCornerTicks(draw, a, b, 5.0f, hovered ? UITheme::Colors::AccentAmber : UITheme::Colors::BorderMuted);
+
+                // Slot Key badge (4..7)
+                char key[8];
+                std::snprintf(key, sizeof(key), "%d", slot + 4);
+                UIWidgets::DrawKeyBadge(draw, ImVec2(a.x + 3.0f, a.y + 3.0f), key, 16.0f);
+
+                if (occupied && def)
+                {
+                    DrawItemIcon(context, def->id, ImVec2(a.x + 24.0f, a.y + 3.0f), ImVec2(b.x - 4.0f, b.y - 14.0f));
+
+                    if (count > 0)
+                    {
+                        char cStr[16];
+                        std::snprintf(cStr, sizeof(cStr), "x%d", count);
+                        const ImVec2 cSize = ImGui::CalcTextSize(cStr);
+                        draw->AddText(ImVec2(b.x - cSize.x - 4.0f, b.y - 15.0f),
+                                      UITheme::Colors::AccentAmber, cStr);
+                    }
+
+                    const auto sName = FitText(std::string(L10n::Tr(def->displayName)), slotW - 8.0f);
+                    draw->AddText(ImVec2(a.x + 4.0f, b.y - 13.0f), UITheme::Colors::TextSecondary, sName.c_str());
+
+                    if (hovered)
+                    {
+                        ImGui::SetTooltip("%s [%d]\n%s\n%s", L10n::Tr("Quickbar Slot"), slot + 4,
+                                          L10n::Tr(def->displayName),
+                                          L10n::Tr("[RMB] Unbind slot"));
+                    }
+
+                    if (ImGui::BeginPopupContextItem("##qb_ctx"))
+                    {
+                        if (ImGui::MenuItem(L10n::Label("Unbind Slot")) && context.bindQuick)
+                        {
+                            context.bindQuick(slot, "");
+                        }
+                        ImGui::EndPopup();
+                    }
+                }
+                else
+                {
+                    draw->AddText(ImVec2(a.x + (slotW - 36.0f) * 0.5f, a.y + 24.0f),
+                                  IM_COL32(75, 88, 105, 160), L10n::Tr("[ EMPTY ]"));
+                }
+
+                // Drag Drop Target to bind item
+                if (ImGui::BeginDragDropTarget())
+                {
+                    if (const auto* payload = ImGui::AcceptDragDropPayload(kItemPayload))
+                    {
+                        const auto* dragged = context.inventory->FindInstance(*static_cast<const FItemInstanceId*>(payload->Data));
+                        if (dragged && context.bindQuick)
+                        {
+                            context.bindQuick(slot, dragged->defId);
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+
+                ImGui::PopID();
+            }
+
+            ImGui::SetCursorScreenPos(ImVec2(pos.x, startY + slotH + 8.0f));
+            ImGui::Dummy(ImVec2(width, 0.0f));
+        }
+
+        void DrawVicinityColumn(const FHudContext& context, float columnHeight)
+        {
+            const float dropH = 100.0f;
+            const float lootListH = std::max(80.0f, columnHeight - dropH - 24.0f);
+
+            // 1. NEARBY LOOT SECTION
+            ImGui::BeginChild("##vicinity_loot", ImVec2(0.0f, lootListH), false);
+
+            const ImVec2 hPos = ImGui::GetCursorScreenPos();
+            const float w = ImGui::GetContentRegionAvail().x;
+            const ImVec2 hMax(hPos.x + w, hPos.y + 26.0f);
+            ImDrawList* draw = ImGui::GetWindowDrawList();
+
+            // Tactical Header for loot
+            draw->AddRectFilled(hPos, hMax, UITheme::Colors::SurfaceHeader, 3.0f);
+            draw->AddLine(ImVec2(hPos.x, hMax.y), hMax, UITheme::Colors::BorderMuted, 1.0f);
+            draw->AddRectFilled(ImVec2(hPos.x + 3.0f, hPos.y + 5.0f), ImVec2(hPos.x + 6.0f, hMax.y - 5.0f), UITheme::Colors::AccentAmber, 1.0f);
+            draw->AddText(ImVec2(hPos.x + 12.0f, hPos.y + 5.0f), UITheme::Colors::TextPrimary, L10n::Tr("NEARBY GROUND LOOT"));
+
+            char countStr[24];
+            std::snprintf(countStr, sizeof(countStr), "[ %d ]", static_cast<int>(context.nearby.size()));
+            const ImVec2 cSize = ImGui::CalcTextSize(countStr);
+            draw->AddText(ImVec2(hMax.x - cSize.x - 8.0f, hPos.y + 5.0f),
+                          context.nearby.empty() ? UITheme::Colors::TextMuted : UITheme::Colors::AccentAmber, countStr);
+
+            ImGui::Dummy(ImVec2(w, 28.0f));
+            ImGui::Spacing();
+
+            if (context.nearby.empty())
+            {
+                // Radar sweep frame when empty
+                const ImVec2 ePos = ImGui::GetCursorScreenPos();
+                const float eH = 120.0f;
+                const ImVec2 eMax(ePos.x + w, ePos.y + eH);
+                draw->AddRectFilled(ePos, eMax, UITheme::Colors::SurfaceCard, 3.0f);
+                draw->AddRect(ePos, eMax, UITheme::Colors::BorderMuted, 3.0f, 0, 1.0f);
+                UIWidgets::DrawCornerTicks(draw, ePos, eMax, 6.0f, UITheme::Colors::BorderTactical);
+
+                // Subtle reticle circle in center
+                const ImVec2 eCenter((ePos.x + eMax.x) * 0.5f, ePos.y + 45.0f);
+                draw->AddCircle(eCenter, 20.0f, IM_COL32(50, 65, 85, 100), 24, 1.0f);
+                draw->AddLine(ImVec2(eCenter.x - 26.0f, eCenter.y), ImVec2(eCenter.x + 26.0f, eCenter.y), IM_COL32(50, 65, 85, 100), 1.0f);
+                draw->AddLine(ImVec2(eCenter.x, eCenter.y - 26.0f), ImVec2(eCenter.x, eCenter.y + 26.0f), IM_COL32(50, 65, 85, 100), 1.0f);
+
+                const char* msg = L10n::Tr("NO ITEMS IN IMMEDIATE VICINITY");
+                const ImVec2 mSize = ImGui::CalcTextSize(msg);
+                draw->AddText(ImVec2(ePos.x + (w - mSize.x) * 0.5f, ePos.y + 82.0f), UITheme::Colors::TextMuted, msg);
+
+                ImGui::Dummy(ImVec2(w, eH));
+            }
+            else
+            {
+                for (const FHudNearbyLoot& loot : context.nearby)
+                {
+                    ImGui::PushID(loot.index);
+                    const ImVec2 lootPos = ImGui::GetCursorScreenPos();
+                    const float cardW = ImGui::GetContentRegionAvail().x;
+                    const float cardH = 44.0f;
+                    const ImVec2 cardMax(lootPos.x + cardW, lootPos.y + cardH);
+
+                    ImGui::SetCursorScreenPos(ImVec2(lootPos.x + 58.0f, lootPos.y));
+                    ImGui::InvisibleButton("##loot_card", ImVec2(cardW - 58.0f, cardH));
+                    const bool hovered = ImGui::IsItemHovered();
+
+                    if (ImGui::BeginDragDropSource())
+                    {
+                        if (InventoryDrag.loot != loot.index || InventoryDrag.item)
+                            InventoryDrag = {0, loot.index, false, 0, 0};
+                        ImGui::SetDragDropPayload(kLootPayload, &loot.index, sizeof(loot.index));
+                        ImGui::TextUnformatted(NextDayz::L10n::Localize(loot.name, NextDayz::L10n::Language()).c_str());
+                        ImGui::EndDragDropSource();
+                    }
+
+                    UIWidgets::DrawSlotFrame(draw, lootPos, cardMax, true, hovered, false, false, 3.0f);
+                    UIWidgets::DrawCornerTicks(draw, lootPos, cardMax, 5.0f, hovered ? UITheme::Colors::AccentAmber : UITheme::Colors::BorderMuted);
+
+                    // Category / Accent stripe on left
+                    draw->AddRectFilled(lootPos, ImVec2(lootPos.x + 3.0f, cardMax.y), UITheme::Colors::AccentAmber, 3.0f);
+
+                    // Icon if available
+                    DrawItemIcon(context, loot.itemId, ImVec2(lootPos.x + 6.0f, lootPos.y + 4.0f), ImVec2(lootPos.x + 52.0f, cardMax.y - 4.0f));
+
+                    // Quick Take Button on left/mid
+                    ImGui::SetCursorScreenPos(ImVec2(cardMax.x - 56.0f, lootPos.y + 8.0f));
+                    if (ImGui::Button(NextDayz::L10n::Label("Take"), ImVec2(50.0f, 26.0f)) && context.takeLoot)
+                    {
+                        context.takeLoot(loot.index, 0, EEquipSlot::None);
+                    }
+
+                    // Loot Name & Distance
+                    char distText[16];
+                    std::snprintf(distText, sizeof(distText), "%.1fm", loot.distance);
+                    const auto name = FitText(L10n::Localize(loot.name, L10n::Language()), std::max(1.0f, cardW - 130.0f));
+                    draw->AddText(ImVec2(lootPos.x + 58.0f, lootPos.y + 6.0f), UITheme::Colors::TextPrimary, name.c_str());
+                    draw->AddText(ImVec2(lootPos.x + 58.0f, lootPos.y + 25.0f), UITheme::Colors::AccentCyan, distText);
+
+                    ImGui::SetCursorScreenPos(ImVec2(lootPos.x, cardMax.y + 4.0f));
+                    ImGui::PopID();
+                    ImGui::Spacing();
+                }
+            }
+
+            ImGui::EndChild();
+
+            // 2. RAPID JETTISON / DROP ZONE SECTION
+            ImGui::Spacing();
+            const ImVec2 dropPos = ImGui::GetCursorScreenPos();
+            const float dropW = ImGui::GetContentRegionAvail().x;
+            const ImVec2 dropMax(dropPos.x + dropW, dropPos.y + dropH);
+            ImDrawList* dDraw = ImGui::GetWindowDrawList();
+
+            ImGui::InvisibleButton("##drop_zone_btn", ImVec2(dropW, dropH));
+            const bool dHovered = ImGui::IsItemHovered();
+
+            bool activeDrop = false;
+            const auto* payload = ImGui::GetDragDropPayload();
+            if (payload && (payload->IsDataType(kItemPayload) || payload->IsDataType(kLootPayload)))
+            {
+                activeDrop = dHovered;
+            }
+
+            UIWidgets::DrawHazardDropZone(dDraw, dropPos, dropMax, L10n::Tr("RAPID JETTISON // DRAG HERE TO DROP"),
+                                         dHovered, activeDrop);
+
+            if (ImGui::BeginDragDropTarget())
+            {
+                if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload(kItemPayload))
+                {
+                    if (context.dropItem)
+                    {
+                        context.dropItem(*static_cast<const FItemInstanceId*>(p->Data), -1);
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
         }
 
         void DrawInventoryPanel(const FHudContext& context)
@@ -1546,152 +1987,109 @@ namespace NextDayz::NextDayzHUD
             ImGui::PushStyleColor(ImGuiCol_WindowBg, UITheme::Colors::SurfaceBg);
             ImGui::PushStyleColor(ImGuiCol_Border, UITheme::Colors::BorderMuted);
             ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20.0f, 18.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 14.0f));
 
             ImGui::Begin("##nd_inv_window", nullptr,
                          ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                          ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar);
-            const ImVec2 header = ImGui::GetCursorPos();
-            ImGui::SetWindowFontScale(1.4f);
-            ImGui::TextUnformatted(L10n::Tr("INVENTORY & TACTICAL LOADOUT"));
-            ImGui::SetWindowFontScale(1.0f);
-            const float headerEnd = ImGui::GetCursorPosY();
-            const char* close = L10n::Label("Close [TAB]");
-            const float closeWidth = ImGui::CalcTextSize(close, nullptr, true).x + 28.0f;
-            ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() - closeWidth - 20.0f, header.y));
-            if (ImGui::Button(close, ImVec2(closeWidth, 30.0f)) && context.closeInventory) context.closeInventory();
-            ImGui::SetCursorPos(ImVec2(header.x, std::max(headerEnd, header.y + 34.0f)));
-            ImGui::TextDisabled("%s  |  %s", L10n::Tr("Inspect your survivor. Organize your gear."),
-                                L10n::Tr("[R] Rotate while dragging"));
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
 
-            // Independent scrolling keeps the character visible while browsing long cargo lists.
-            const float footerHeight = ImGui::GetTextLineHeightWithSpacing() * 3.0f;
+            // ====================================================================
+            // INVENTORY TITLE
+            // ====================================================================
+            const ImVec2 headerPos = ImGui::GetCursorScreenPos();
+            const float fullW = ImGui::GetContentRegionAvail().x;
+            const float headerH = 46.0f;
+            const ImVec2 headerMax(headerPos.x + fullW, headerPos.y + headerH);
+            ImDrawList* draw = ImGui::GetWindowDrawList();
+
+            draw->AddRectFilled(headerPos, headerMax, UITheme::Colors::SurfaceHeader, 3.0f);
+            draw->AddRect(headerPos, headerMax, UITheme::Colors::BorderMuted, 3.0f, 0, 1.0f);
+            UIWidgets::DrawCornerTicks(draw, headerPos, headerMax, 8.0f, UITheme::Colors::BorderTactical);
+            draw->AddRectFilled(headerPos, ImVec2(headerPos.x + 4.0f, headerMax.y), UITheme::Colors::AccentAmber, 3.0f);
+
+            ImGui::PushFont(context.titleFont ? context.titleFont : ImGui::GetFont());
+            ImGui::SetCursorScreenPos(ImVec2(headerPos.x + 14.0f, headerPos.y + (headerH - ImGui::GetTextLineHeight()) * 0.5f));
+            ImGui::TextUnformatted(L10n::Tr("Inventory"));
+            ImGui::PopFont();
+
+            const float closeBtnW = 110.0f;
+            const float closeBtnH = 32.0f;
+            ImGui::SetCursorScreenPos(ImVec2(headerMax.x - closeBtnW - 8.0f, headerPos.y + 7.0f));
+            if (ImGui::Button(L10n::Label("CLOSE [TAB]"), ImVec2(closeBtnW, closeBtnH)) && context.closeInventory)
+            {
+                context.closeInventory();
+            }
+
+            ImGui::SetCursorScreenPos(ImVec2(headerPos.x, headerMax.y + 10.0f));
+
+            // ====================================================================
+            // 3-COLUMN ERGONOMIC TACTICAL LAYOUT
+            // Column 0: VICINITY & JETTISON (0.22)
+            // Column 1: OPERATOR DOSSIER, VITALS & WEAPONS (0.39)
+            // Column 2: LOADOUT SLOTS, CARGO RIGS & QUICKBAR (0.39)
+            // ====================================================================
+            const float footerHeight = 44.0f;
             const float bodyHeight = std::max(100.0f, ImGui::GetContentRegionAvail().y - footerHeight);
-            ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(12.0f, 8.0f));
-            if (ImGui::BeginTable("##inv_4col_table", 4,
+            ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(10.0f, 6.0f));
+
+            if (ImGui::BeginTable("##inv_3col_table", 3,
                                   ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp,
                                   ImVec2(0.0f, bodyHeight)))
             {
-                ImGui::TableSetupColumn("vicinity", ImGuiTableColumnFlags_WidthStretch, 0.18f);
-                ImGui::TableSetupColumn("survivor", ImGuiTableColumnFlags_WidthStretch, 0.25f);
-                ImGui::TableSetupColumn("equipment", ImGuiTableColumnFlags_WidthStretch, 0.25f);
-                ImGui::TableSetupColumn("cargo", ImGuiTableColumnFlags_WidthStretch, 0.32f);
+                ImGui::TableSetupColumn("vicinity", ImGuiTableColumnFlags_WidthStretch, 0.22f);
+                ImGui::TableSetupColumn("operator_center", ImGuiTableColumnFlags_WidthStretch, 0.39f);
+                ImGui::TableSetupColumn("rigs_and_cargo", ImGuiTableColumnFlags_WidthStretch, 0.39f);
                 ImGui::TableNextRow();
-                const float columnHeight = bodyHeight - 16.0f;
+                const float columnHeight = bodyHeight - 12.0f;
 
                 // ------------------------------------------------------------
-                // COLUMN 0: VICINITY & DROP ZONE
+                // COLUMN 0: VICINITY & JETTISON
                 // ------------------------------------------------------------
                 ImGui::TableSetColumnIndex(0);
-                ImGui::BeginChild("##vicinity", ImVec2(0.0f, columnHeight));
-                ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), NextDayz::L10n::Tr("NEARBY LOOT (%d)"), static_cast<int>(context.nearby.size()));
-                ImGui::Spacing();
-
-                if (context.nearby.empty())
-                {
-                    ImGui::TextDisabled(NextDayz::L10n::Tr("No ground items nearby."));
-                }
-
-                for (const FHudNearbyLoot& loot : context.nearby)
-                {
-                    ImGui::PushID(loot.index);
-                    const ImVec2 lootPos = ImGui::GetCursorScreenPos();
-                    const float cardW = ImGui::GetContentRegionAvail().x;
-                    const float cardH = 38.0f;
-                    ImDrawList* draw = ImGui::GetWindowDrawList();
-
-                    // The Take button needs its own hit area. Overlapping it with
-                    // the card's InvisibleButton would steal its mouse press.
-                    ImGui::SetCursorScreenPos(ImVec2(lootPos.x + 56.0f, lootPos.y));
-                    ImGui::InvisibleButton("##loot_card", ImVec2(cardW - 56.0f, cardH));
-                    const bool hovered = ImGui::IsItemHovered();
-
-                    // Bind the source to the card before submitting its Take button.
-                    if (ImGui::BeginDragDropSource())
-                    {
-                        if (InventoryDrag.loot != loot.index || InventoryDrag.item)
-                            InventoryDrag = {0, loot.index, false, 0, 0};
-                        ImGui::SetDragDropPayload(kLootPayload, &loot.index, sizeof(loot.index));
-                        ImGui::TextUnformatted(NextDayz::L10n::Localize(loot.name, NextDayz::L10n::Language()).c_str());
-                        ImGui::EndDragDropSource();
-                    }
-
-                    UIWidgets::DrawSlotFrame(draw, lootPos, ImVec2(lootPos.x + cardW, lootPos.y + cardH),
-                                             true, hovered, false, false, 4.0f);
-
-                    // Quick Take Button
-                    ImGui::SetCursorScreenPos(ImVec2(lootPos.x + 6.0f, lootPos.y + 7.0f));
-                    if (ImGui::SmallButton(NextDayz::L10n::Label("Take")) && context.takeLoot)
-                    {
-                        context.takeLoot(loot.index, 0, EEquipSlot::None);
-                    }
-
-                    // Loot Name & Distance
-                    char distText[16];
-                    std::snprintf(distText, sizeof(distText), "%.1fm", loot.distance);
-                    const ImVec2 dSize = ImGui::CalcTextSize(distText);
-                    const auto name = FitText(L10n::Localize(loot.name, L10n::Language()), std::max(1.0f, cardW - dSize.x - 80.0f));
-                    draw->AddText(ImVec2(lootPos.x + 56.0f, lootPos.y + 10.0f), UITheme::Colors::TextPrimary, name.c_str());
-                    draw->AddText(ImVec2(lootPos.x + cardW - dSize.x - 8.0f, lootPos.y + 10.0f),
-                                  UITheme::Colors::TextMuted, distText);
-
-                    ImGui::SetCursorScreenPos(ImVec2(lootPos.x, lootPos.y + cardH + ImGui::GetStyle().ItemSpacing.y));
-
-                    ImGui::PopID();
-                    ImGui::Spacing();
-                }
-
-                // Explicit DROP ZONE: Drag items here to drop to ground
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::Spacing();
-
-                const ImVec2 dropPos = ImGui::GetCursorScreenPos();
-                const float dropW = ImGui::GetContentRegionAvail().x;
-                const float dropH = 110.0f;
-                const ImVec2 dropMax(dropPos.x + dropW, dropPos.y + dropH);
-                ImDrawList* draw = ImGui::GetWindowDrawList();
-
-                ImGui::InvisibleButton("##drop_zone_btn", ImVec2(dropW, dropH));
-
-                // Dashed drop zone box
-                draw->AddRect(dropPos, dropMax, UITheme::Colors::BorderMuted, 4.0f, 0, 1.5f);
-                const char* dropPrompt = NextDayz::L10n::Tr("Drag here to drop");
-                const ImVec2 promptSize = ImGui::CalcTextSize(dropPrompt);
-                draw->AddText(ImVec2(dropPos.x + (dropW - promptSize.x) * 0.5f, dropPos.y + (dropH - promptSize.y) * 0.5f),
-                              UITheme::Colors::TextMuted, dropPrompt);
-
-                if (ImGui::BeginDragDropTarget())
-                {
-                    draw->AddRectFilled(dropPos, dropMax, UITheme::Colors::SlotInvalidDropBg, 4.0f);
-                    draw->AddRect(dropPos, dropMax, UITheme::Colors::AccentRose, 4.0f, 0, 2.0f);
-                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kItemPayload))
-                    {
-                        if (context.dropItem)
-                        {
-                            context.dropItem(*static_cast<const FItemInstanceId*>(payload->Data), -1);
-                        }
-                    }
-                    ImGui::EndDragDropTarget();
-                }
+                DrawVicinityColumn(context, columnHeight);
 
                 // ------------------------------------------------------------
-                // COLUMN 1: LIVE CHARACTER PREVIEW
+                // COLUMN 1: OPERATOR DOSSIER, VITALS & WEAPONS
                 // ------------------------------------------------------------
-                ImGui::EndChild();
                 ImGui::TableSetColumnIndex(1);
-                ImGui::BeginChild("##survivor", ImVec2(0.0f, columnHeight), 0,
-                                  ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBackground);
-                DrawCharacterPreview(context);
+                ImGui::BeginChild("##col_operator", ImVec2(0.0f, columnHeight), false);
+
+                // The survivor and vitals share the main panel; reserve room for all weapon rigs below.
+                const float characterHeight = std::max(380.0f, columnHeight - 360.0f);
+                DrawCharacterPreview(context, characterHeight);
+                ImGui::Spacing();
+
+                // Firearms Arsenal
+                const ImVec2 wpHeaderPos = ImGui::GetCursorScreenPos();
+                const float wpW = ImGui::GetContentRegionAvail().x;
+                draw->AddRectFilled(wpHeaderPos, ImVec2(wpHeaderPos.x + wpW, wpHeaderPos.y + 24.0f), UITheme::Colors::SurfaceHeader, 3.0f);
+                draw->AddRectFilled(wpHeaderPos, ImVec2(wpHeaderPos.x + 3.0f, wpHeaderPos.y + 24.0f), UITheme::Colors::AccentOrange, 3.0f);
+                draw->AddText(ImVec2(wpHeaderPos.x + 10.0f, wpHeaderPos.y + 4.0f), UITheme::Colors::TextPrimary, L10n::Tr("TACTICAL ARSENAL & WEAPON RIGS"));
+                ImGui::Dummy(ImVec2(wpW, 26.0f));
+                ImGui::Spacing();
+
+                DrawWeaponSlot(context, NextDayz::L10n::Tr("PRIMARY WEAPON [1]"), 0);
+                DrawWeaponSlot(context, NextDayz::L10n::Tr("SECONDARY WEAPON [2]"), 1);
+                DrawWeaponSlot(context, NextDayz::L10n::Tr("WAIST SIDEARM [3]"), 2);
+
                 ImGui::EndChild();
 
-                // COLUMN 2: EQUIPMENT & GEAR
+                // ------------------------------------------------------------
+                // COLUMN 2: LOADOUT SLOTS, CARGO RIGS & QUICKBAR
+                // ------------------------------------------------------------
                 ImGui::TableSetColumnIndex(2);
-                ImGui::BeginChild("##equipment", ImVec2(0.0f, columnHeight));
-                ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), NextDayz::L10n::Tr("GEAR & WEAPONS"));
+                const float qbHeight = 78.0f;
+                const float cargoScrollHeight = std::max(100.0f, columnHeight - qbHeight - 6.0f);
+
+                ImGui::BeginChild("##col_cargo_scroll", ImVec2(0.0f, cargoScrollHeight), false);
+
+                // 1. Body Equipment Slots
+                const ImVec2 eqHeaderPos = ImGui::GetCursorScreenPos();
+                const float eqW = ImGui::GetContentRegionAvail().x;
+                draw->AddRectFilled(eqHeaderPos, ImVec2(eqHeaderPos.x + eqW, eqHeaderPos.y + 24.0f), UITheme::Colors::SurfaceHeader, 3.0f);
+                draw->AddRectFilled(eqHeaderPos, ImVec2(eqHeaderPos.x + 3.0f, eqHeaderPos.y + 24.0f), UITheme::Colors::AccentViolet, 3.0f);
+                draw->AddText(ImVec2(eqHeaderPos.x + 10.0f, eqHeaderPos.y + 4.0f), UITheme::Colors::TextPrimary, L10n::Tr("BODY ARMOR & EQUIPMENT RIG"));
+                ImGui::Dummy(ImVec2(eqW, 26.0f));
                 ImGui::Spacing();
 
                 DrawEquipmentSlot(context, NextDayz::L10n::Tr("HEAD"), EEquipSlot::Head);
@@ -1704,60 +2102,65 @@ namespace NextDayz::NextDayzHUD
                 ImGui::Separator();
                 ImGui::Spacing();
 
-                DrawWeaponSlot(context, NextDayz::L10n::Tr("PRIMARY WEAPON"), 0);
-                DrawWeaponSlot(context, NextDayz::L10n::Tr("SECONDARY WEAPON"), 1);
-                DrawWeaponSlot(context, NextDayz::L10n::Tr("WAIST SIDEARM [3]"), 2);
-
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::Spacing();
-
-                // Gear Statistics Card
-                ImGui::TextColored(ImVec4(0.85f, 0.85f, 0.85f, 1.0f), NextDayz::L10n::Tr("PROTECTION & TOOLS"));
-                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.4f, 1.0f), NextDayz::L10n::Tr("Armor:   %.0f%%"), context.armor * 100.0f);
-                ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.2f, 1.0f), NextDayz::L10n::Tr("Warmth:  %.0f%%"), context.warmth * 100.0f);
-                ImGui::TextColored(ImVec4(0.7f, 0.75f, 0.8f, 1.0f), NextDayz::L10n::Tr("Tools:   %s%s%s%s"),
-                                   inventory.HasTool(EItemTool::Compass) ? NextDayz::L10n::Tr("Compass ") : "",
-                                   inventory.HasTool(EItemTool::Map) ? NextDayz::L10n::Tr("Map ") : "",
-                                   inventory.CanOpenCans() ? NextDayz::L10n::Tr("Can-Opener ") : "",
-                                   (!inventory.HasTool(EItemTool::Compass) && !inventory.HasTool(EItemTool::Map) &&
-                                    !inventory.CanOpenCans()) ? NextDayz::L10n::Tr("None") : "");
-
-                // ------------------------------------------------------------
-                // COLUMN 3: CARGO CONTAINERS (GRID SLOTS MATRIX)
-                // ------------------------------------------------------------
-                ImGui::EndChild();
-                ImGui::TableSetColumnIndex(3);
-                ImGui::BeginChild("##cargo", ImVec2(0.0f, columnHeight));
-                ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), NextDayz::L10n::Tr("CARGO CAPACITY: %d / %d SLOTS"),
-                                   inventory.UsedCapacity(), inventory.TotalCapacity());
-                ImGui::Spacing();
-
+                // 2. Cargo Rig Containers
                 for (const auto& container : inventory.Containers())
+                {
                     DrawCargoContainer(context, container);
+                }
 
                 ImGui::EndChild();
+
+                // 3. Fixed Tactical Quickbar pinned at bottom of column 2
+                ImGui::Spacing();
+                DrawTacticalQuickbar(context);
+
                 ImGui::EndTable();
             }
             ImGui::PopStyleVar();
 
-            // Bottom Shortcut Instruction Bar
+            // ====================================================================
+            // BOTTOM TACTICAL HOTKEYS & NOTIFICATIONS BAR
+            // ====================================================================
             ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            // Keep transaction failures and pickup feedback visible within the fullscreen screen.
+            const ImVec2 fPos = ImGui::GetCursorScreenPos();
+            const float fW = ImGui::GetContentRegionAvail().x;
+            const ImVec2 fMax(fPos.x + fW, fPos.y + 34.0f);
+
+            draw->AddRectFilled(fPos, fMax, UITheme::Colors::SurfaceHeader, 2.0f);
+            draw->AddRect(fPos, fMax, UITheme::Colors::BorderMuted, 2.0f, 0, 1.0f);
+
+            // Notifications pill on right if active
             if (!context.notifications.empty() && context.notifications.back().age < 6.5f)
             {
                 const auto& message = context.notifications.back();
-                const ImU32 color = message.severity == 2 ? UITheme::Colors::AccentRose :
-                    message.severity == 1 ? UITheme::Colors::AccentAmber : UITheme::Colors::AccentEmerald;
-                const auto text = FitText(message.text.Display(), ImGui::GetContentRegionAvail().x);
-                ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(color), "%s", text.c_str());
+                const ImU32 notifCol = message.severity == 2 ? UITheme::Colors::AccentRose :
+                                       message.severity == 1 ? UITheme::Colors::AccentAmber : UITheme::Colors::AccentEmerald;
+                const auto text = FitText(message.text.Display(), fW * 0.4f);
+                const ImVec2 nSize = ImGui::CalcTextSize(text.c_str());
+                draw->AddRectFilled(ImVec2(fMax.x - nSize.x - 16.0f, fPos.y + 5.0f),
+                                    ImVec2(fMax.x - 6.0f, fMax.y - 5.0f), IM_COL32(20, 26, 36, 220), 2.0f);
+                draw->AddText(ImVec2(fMax.x - nSize.x - 12.0f, fPos.y + 8.0f), notifCol, text.c_str());
             }
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f, 0.65f, 0.70f, 1.0f));
-            ImGui::TextWrapped("%s%s", NextDayz::L10n::Tr("[LMB Double-Click] Equip/Use  |  [RMB] Context Menu  |  [Drag & Drop] Move/Drop  |  "),
-                               NextDayz::L10n::Tr("[4-7] Quickbar  |  [H] Bandage  |  [M] Map  |  [L] Lantern  |  [TAB] Close"));
-            ImGui::PopStyleColor();
+
+            // Tactical keycaps row
+            float curX = fPos.x + 8.0f;
+            const float keyY = fPos.y + 6.0f;
+            const auto drawKeyGuide = [&](const char* key, const char* desc)
+            {
+                const float kw = UIWidgets::DrawKeyBadge(draw, ImVec2(curX, keyY), key, 22.0f);
+                curX += kw + 5.0f;
+                draw->AddText(ImVec2(curX, keyY + 3.0f), UITheme::Colors::TextSecondary, desc);
+                curX += ImGui::CalcTextSize(desc).x + 14.0f;
+            };
+
+            drawKeyGuide("LMB x2", L10n::Tr("Equip/Use"));
+            drawKeyGuide("RMB", L10n::Tr("Menu"));
+            drawKeyGuide("DRAG", L10n::Tr("Move"));
+            drawKeyGuide("R", L10n::Tr("Rotate"));
+            drawKeyGuide("4-7", L10n::Tr("Quickbar"));
+            drawKeyGuide("H", L10n::Tr("Bandage"));
+            drawKeyGuide("M", L10n::Tr("Map"));
+            drawKeyGuide("TAB", L10n::Tr("Close"));
 
             ImGui::End();
             ImGui::PopStyleVar(2);

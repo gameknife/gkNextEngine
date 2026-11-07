@@ -22,6 +22,8 @@
 #include "Application/Game/NextDayz/Player/SurvivalSystem.hpp"
 #include "Application/Game/NextDayz/UI/Localization.hpp"
 
+struct ImFont;
+
 namespace NextDayz
 {
     class WeaponSystem;
@@ -53,6 +55,7 @@ namespace NextDayz
 
     struct FHudContext
     {
+        ImFont* titleFont = nullptr;
         bool aiming = false;
         bool freeLooking = false;
         bool firstPerson = true;

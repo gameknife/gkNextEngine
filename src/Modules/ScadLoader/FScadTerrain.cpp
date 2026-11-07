@@ -286,7 +286,29 @@ namespace Assets::Scad
                 // rise, which is what keeps a city with no hills in it grey.
                 4.0, 36.0, 0.55, 3000.0, 40.0};
 
+            // Central European farmland and forest: deeper, cooler greens that
+            // sit with the runtime grass blades, khaki stubble and brown earth.
+            // Colour comes from painted land cover, never from altitude: the
+            // dry band and snow line are pushed out of reach.
+            static const FPaletteDef continental = {
+                {
+                    {0.22f, 0.29f, 0.16f, 1.0f}, // Grass     -> meadow
+                    {0.16f, 0.22f, 0.13f, 1.0f}, // GrassDark -> forest floor
+                    {0.36f, 0.33f, 0.21f, 1.0f}, // DryGrass  -> stubble / fallow
+                    {0.40f, 0.36f, 0.25f, 1.0f}, // Sand      -> gravel bank / straw rows
+                    {0.32f, 0.30f, 0.28f, 1.0f}, // Rock
+                    {0.40f, 0.39f, 0.37f, 1.0f}, // RockHigh
+                    {0.82f, 0.84f, 0.88f, 1.0f}, // Snow (unreachable)
+                    {0.29f, 0.26f, 0.19f, 1.0f}, // Bed
+                    {0.29f, 0.24f, 0.18f, 1.0f}, // Road      -> earth track / ploughland
+                    {0.31f, 0.30f, 0.28f, 1.0f}, // Pad       -> cobbles / concrete
+                },
+                {0.17f, 0.32f, 0.36f, 1.0f},
+                {0.26f, 0.23f, 0.19f, 1.0f},
+                4.0, 38.0, 4.0, 3000.0};
+
             if (name == "temperate") return &temperate;
+            if (name == "continental") return &continental;
             if (name == "arid") return &arid;
             if (name == "alpine") return &alpine;
             if (name == "urban") return &urban;
@@ -307,6 +329,8 @@ namespace Assets::Scad
             double padTarget = 0.0;      // pad flatten height
             double cosR = 1.0;
             double sinR = 0.0;
+            size_t index = 0;            // position in the ordered feature list
+            bool plot = false;           // pad with explicit apron/surface operands
             glm::dvec2 bboxMin{-1e30, -1e30};
             glm::dvec2 bboxMax{1e30, 1e30};
 
@@ -324,6 +348,11 @@ namespace Assets::Scad
                 const double minSize = std::min(spec.size.x, spec.size.y);
                 baseFreq_ = 1.0 / std::max(1.0, minSize / (3.0 + 5.0 * Clamp01(spec.roughness)));
                 baseOctaves_ = 2 + static_cast<int>(std::lround(Clamp01(spec.roughness) * 2.0));
+                // One cell diagonal: a triangle touching a plot's rectangle never
+                // reaches further than this, so the rectangle is flat on the mesh.
+                const double cellX = spec.size.x / std::max(1, spec.cells.x);
+                const double cellY = spec.size.y / std::max(1, spec.cells.y);
+                shoulder_ = std::sqrt(cellX * cellX + cellY * cellY) + 0.05;
             }
 
             void Compile()
@@ -335,6 +364,8 @@ namespace Assets::Scad
                     FCompiledFeature c;
                     c.src = &f;
                     c.seed = HashMix(spec_.seed ^ (0xF00D0000ULL + i * 0x9E3779B97F4A7C15ULL));
+                    c.index = compiled_.size();
+                    c.plot = f.type == FTerrainFeature::EType::Pad && (f.apron >= 0.0 || f.biome >= 0);
                     CompileFeature(f, c, compiled_.size());
                     compiled_.push_back(std::move(c));
                 }
@@ -419,8 +450,9 @@ namespace Assets::Scad
                     {
                         glm::dvec2 local;
                         PadLocal(c, f, p, local);
-                        if (std::abs(local.x) < f.size.x * 0.5 + margin &&
-                            std::abs(local.y) < f.size.y * 0.5 + margin)
+                        const double grow = margin + (c.plot ? shoulder_ : 0.0);
+                        if (std::abs(local.x) < f.size.x * 0.5 + grow &&
+                            std::abs(local.y) < f.size.y * 0.5 + grow)
                         {
                             return true;
                         }
@@ -442,18 +474,79 @@ namespace Assets::Scad
 
             bool OnPad(const glm::dvec2& p) const
             {
-                for (const FCompiledFeature& c : compiled_)
+                int surface = -1;
+                return PadSurfaceAt(p, surface);
+            }
+
+            // Rendered surface of the pad that owns p: the last pad covering it
+            // wins, matching the height order. outSurface < 0 means grey paving.
+            bool PadSurfaceAt(const glm::dvec2& p, int& outSurface) const
+            {
+                for (auto it = compiled_.rbegin(); it != compiled_.rend(); ++it)
                 {
-                    const FTerrainFeature& f = *c.src;
+                    const FTerrainFeature& f = *it->src;
                     if (f.type != FTerrainFeature::EType::Pad) continue;
                     glm::dvec2 local;
-                    PadLocal(c, f, p, local);
-                    if (std::abs(local.x) <= f.size.x * 0.5 && std::abs(local.y) <= f.size.y * 0.5) return true;
+                    PadLocal(*it, f, p, local);
+                    if (std::abs(local.x) <= f.size.x * 0.5 && std::abs(local.y) <= f.size.y * 0.5)
+                    {
+                        outSurface = f.biome;
+                        return true;
+                    }
                 }
                 return false;
             }
 
+            // Land cover painted over natural ground; the last polygon wins.
+            int PaintAt(const glm::dvec2& p) const
+            {
+                for (auto it = compiled_.rbegin(); it != compiled_.rend(); ++it)
+                {
+                    const FTerrainFeature& f = *it->src;
+                    if (f.type != FTerrainFeature::EType::Paint || it->Rejects(p)) continue;
+                    bool inside = false;
+                    for (size_t i = 0, j = f.pts.size() - 1; i < f.pts.size(); j = i++)
+                    {
+                        const glm::dvec2& a = f.pts[i];
+                        const glm::dvec2& b = f.pts[j];
+                        if ((a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x)
+                        {
+                            inside = !inside;
+                        }
+                    }
+                    if (!inside) continue;
+                    if (f.stripeBiome >= 0 && f.stripePeriod > 0.0)
+                    {
+                        const double a = f.stripeAngle * kDeg2Rad;
+                        // Distance across the bands (bands run along the angle).
+                        const double across = -p.x * std::sin(a) + p.y * std::cos(a);
+                        const long band = static_cast<long>(std::floor(across / (0.5 * f.stripePeriod)));
+                        if (band % 2 != 0) return f.stripeBiome;
+                    }
+                    return f.biome;
+                }
+                return -1;
+            }
+
         private:
+            // True when p lies on an earlier plot (its rectangle plus shoulder).
+            bool InsideEarlierPlot(size_t index, const glm::dvec2& p) const
+            {
+                for (size_t i = 0; i < index && i < compiled_.size(); ++i)
+                {
+                    const FCompiledFeature& e = compiled_[i];
+                    if (!e.plot || e.Rejects(p)) continue;
+                    glm::dvec2 local;
+                    PadLocal(e, *e.src, p, local);
+                    if (std::abs(local.x) <= e.src->size.x * 0.5 + shoulder_ &&
+                        std::abs(local.y) <= e.src->size.y * 0.5 + shoulder_)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
             static void PadLocal(const FCompiledFeature& c, const FTerrainFeature& f,
                                  const glm::dvec2& p, glm::dvec2& outLocal)
             {
@@ -546,12 +639,26 @@ namespace Assets::Scad
                     }
                     break;
                 }
+                case FTerrainFeature::EType::Paint:
+                {
+                    glm::dvec2 lo(1e30), hi(-1e30);
+                    for (const glm::dvec2& q : f.pts)
+                    {
+                        lo = glm::min(lo, q);
+                        hi = glm::max(hi, q);
+                    }
+                    c.bboxMin = lo;
+                    c.bboxMax = hi;
+                    break;
+                }
                 case FTerrainFeature::EType::Pad:
                 {
                     const double rad = f.rot * kDeg2Rad;
                     c.cosR = std::cos(rad);
                     c.sinR = std::sin(rad);
-                    const double pad = 0.5 * std::max(f.size.x, f.size.y) * 1.6 + 2.0;
+                    const double pad = std::max(0.5 * std::max(f.size.x, f.size.y) * 1.6 + 2.0,
+                                                0.71 * std::max(f.size.x, f.size.y) + std::max(0.0, f.apron) + 1.0 +
+                                                    (c.plot ? shoulder_ : 0.0));
                     c.bboxMin = f.at - glm::dvec2(pad);
                     c.bboxMax = f.at + glm::dvec2(pad);
                     double sum = EvalHeight(f.at.x, f.at.y, priorCount);
@@ -692,22 +799,28 @@ namespace Assets::Scad
                     PadLocal(c, f, p, local);
                     const double hx = f.size.x * 0.5;
                     const double hy = f.size.y * 0.5;
-                    const double apron = std::max(1.5, 0.35 * std::min(f.size.x, f.size.y));
+                    const double apron = f.apron > 0.0 ? f.apron : std::max(1.5, 0.35 * std::min(f.size.x, f.size.y));
                     const double dx = std::abs(local.x) - hx;
                     const double dy = std::abs(local.y) - hy;
                     const double outside = std::max(dx, dy);
-                    if (outside >= apron) return;
-                    if (outside <= 0.0)
+                    // Plots keep a flat shoulder so their whole rectangle is flat
+                    // on the rendered mesh, and never disturb an earlier plot.
+                    const double shoulder = c.plot ? shoulder_ : 0.0;
+                    if (outside >= shoulder + apron) return;
+                    if (c.plot && InsideEarlierPlot(c.index, p)) return;
+                    if (outside <= shoulder)
                     {
                         h = c.padTarget;
                     }
                     else
                     {
-                        const double s = SmoothStep01(outside / apron);
+                        const double s = SmoothStep01((outside - shoulder) / apron);
                         h = c.padTarget + s * (h - c.padTarget);
                     }
                     return;
                 }
+                case FTerrainFeature::EType::Paint:
+                    return; // surface only
                 }
             }
 
@@ -715,6 +828,7 @@ namespace Assets::Scad
             double baseFreq_ = 0.01;
             int baseOctaves_ = 3;
             std::vector<FCompiledFeature> compiled_;
+            double shoulder_ = 0.0;
         };
 
         double Area2(const glm::dvec2& a, const glm::dvec2& b, const glm::dvec2& c)
@@ -774,6 +888,23 @@ namespace Assets::Scad
             char buf[40];
             std::snprintf(buf, sizeof(buf), "%.17g,", v);
             key += buf;
+        }
+
+        // Surface names a paint/pad operand may use. "bed" is the water floor
+        // and never painted onto dry land.
+        int PaintableBiome(const std::string& name)
+        {
+            static const std::pair<const char*, ETerrainBiome> names[] = {
+                {"grass", ETerrainBiome::Grass},       {"grass_dark", ETerrainBiome::GrassDark},
+                {"dry_grass", ETerrainBiome::DryGrass}, {"sand", ETerrainBiome::Sand},
+                {"rock", ETerrainBiome::Rock},          {"rock_high", ETerrainBiome::RockHigh},
+                {"snow", ETerrainBiome::Snow},          {"road", ETerrainBiome::Road},
+                {"pad", ETerrainBiome::Pad}};
+            for (const auto& [text, biome] : names)
+            {
+                if (name == text) return static_cast<int>(biome);
+            }
+            return -1;
         }
     } // namespace
 
@@ -1194,6 +1325,49 @@ namespace Assets::Scad
                 ok = fv.vec.size() >= 3 && ReadVec2(fv.vec[1], f.at) && ReadVec2(fv.vec[2], f.size);
                 f.rot = num(3, 0.0);
                 ok = ok && f.size.x > 0.0 && f.size.y > 0.0;
+                // Optional trailing operands, in any order: a number is the
+                // blend apron, a string is the rendered surface.
+                for (size_t i = 4; ok && i < fv.vec.size(); ++i)
+                {
+                    if (fv.vec[i].type == Value::Type::Str)
+                    {
+                        f.biome = PaintableBiome(fv.vec[i].str);
+                        if (f.biome < 0) outWarnings.push_back("pad surface '" + fv.vec[i].str + "' unknown (using pad)");
+                    }
+                    else if (fv.vec[i].IsNumber())
+                    {
+                        f.apron = std::clamp(fv.vec[i].num, 0.5, 60.0);
+                    }
+                }
+            }
+            else if (kind == "paint")
+            {
+                f.type = FTerrainFeature::EType::Paint;
+                ok = fv.vec.size() >= 3 && ReadPoints(fv.vec[1], f.pts) && f.pts.size() >= 3 &&
+                     fv.vec[2].type == Value::Type::Str;
+                if (ok)
+                {
+                    f.biome = PaintableBiome(fv.vec[2].str);
+                    if (f.biome < 0 || f.biome == static_cast<int>(ETerrainBiome::Bed))
+                    {
+                        outWarnings.push_back("paint biome '" + fv.vec[2].str + "' unknown; skipped");
+                        continue;
+                    }
+                    // Optional ["alt", period, angleDeg]: parallel bands.
+                    if (fv.vec.size() >= 4 && fv.vec[3].type == Value::Type::Vec && fv.vec[3].vec.size() >= 2 &&
+                        fv.vec[3].vec[0].type == Value::Type::Str)
+                    {
+                        f.stripeBiome = PaintableBiome(fv.vec[3].vec[0].str);
+                        f.stripePeriod = std::max(0.0, fv.vec[3].vec[1].AsNumber(0.0));
+                        f.stripeAngle = fv.vec[3].vec.size() > 2 ? fv.vec[3].vec[2].AsNumber(0.0) : 0.0;
+                        if (f.stripeBiome < 0 || f.stripePeriod <= 0.0)
+                        {
+                            outWarnings.push_back("paint stripes need [biome, period>0, angle]; drawn solid");
+                            f.stripeBiome = -1;
+                            f.stripePeriod = 0.0;
+                        }
+                    }
+                }
             }
             else if (kind == "hmap")
             {
@@ -1318,6 +1492,16 @@ namespace Assets::Scad
             AppendKeyNumber(key, f.depth);
             AppendKeyNumber(key, f.width);
             AppendKeyNumber(key, f.rugged);
+            // Appended only when set, so existing TERR literals keep their keys.
+            if (f.apron >= 0.0 || f.biome >= 0)
+            {
+                key += 'o';
+                AppendKeyNumber(key, f.apron);
+                AppendKeyNumber(key, static_cast<double>(f.biome));
+                AppendKeyNumber(key, static_cast<double>(f.stripeBiome));
+                AppendKeyNumber(key, f.stripePeriod);
+                AppendKeyNumber(key, f.stripeAngle);
+            }
             if (f.type == FTerrainFeature::EType::Hmap)
             {
                 key += f.path;
@@ -1517,7 +1701,11 @@ namespace Assets::Scad
             // visibly axis-aligned, square feature boundaries.
             const glm::dvec2 centroidXY(centroid.x, centroid.y);
             if (field.OnRoad(centroidXY)) return ETerrainBiome::Road;
-            if (field.OnPad(centroidXY)) return ETerrainBiome::Pad;
+            int padSurface = -1;
+            if (field.PadSurfaceAt(centroidXY, padSurface))
+            {
+                return padSurface >= 0 ? static_cast<ETerrainBiome>(padSurface) : ETerrainBiome::Pad;
+            }
 
             glm::dvec3 n = glm::cross(b - a, c - a);
             const double len = glm::length(n);
@@ -1532,6 +1720,9 @@ namespace Assets::Scad
                 return centroid.z > rockHighZ ? ETerrainBiome::RockHigh : ETerrainBiome::Rock;
             }
             if (snowEligible && centroid.z > snowLine) return ETerrainBiome::Snow;
+
+            const int painted = field.PaintAt(centroidXY);
+            if (painted >= 0) return static_cast<ETerrainBiome>(painted);
 
             double waterLevel = 0.0;
             if (cellHasWaterNeighbor(i, j, waterLevel) && centroid.z < waterLevel + 0.5)

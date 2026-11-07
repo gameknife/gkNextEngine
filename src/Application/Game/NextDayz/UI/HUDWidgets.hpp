@@ -28,4 +28,29 @@ namespace NextDayz::UIWidgets
     // Renders an affliction / status pill (e.g. "BLEEDING x2", "FREEZING")
     ImVec2 DrawStatusBadge(ImDrawList* draw, const ImVec2& pos, const char* icon, const char* text,
                            ImU32 bgColor, ImU32 borderColor, ImU32 textColor);
+
+    // Renders 4 corner ticks / reticle brackets around a box for tactical immersion
+    void DrawCornerTicks(ImDrawList* draw, const ImVec2& min, const ImVec2& max,
+                         float tickLen = 8.0f, ImU32 color = UITheme::Colors::BorderTactical);
+
+    // Renders a high-tech tactical chassis panel with optional title banner and corner accents
+    void DrawTacticalPanel(ImDrawList* draw, const ImVec2& min, const ImVec2& max,
+                           const char* title = nullptr, const char* badge = nullptr,
+                           bool cornerTicks = true);
+
+    // Renders a military-grade hazard discard / drop zone with angled warning stripes
+    void DrawHazardDropZone(ImDrawList* draw, const ImVec2& min, const ImVec2& max,
+                            const char* label, bool hovered, bool activeDrop);
+
+    // Renders a vitals gauge meter (label, segmented/smooth bar, percentage, status)
+    void DrawVitalsGauge(ImDrawList* draw, const ImVec2& pos, float width,
+                         const char* label, float value01, ImU32 barColor,
+                         const char* valStr = nullptr, bool pulse = false);
+
+    // Renders an animated/static ECG pulse wave heartbeat line for health monitoring
+    void DrawECGLine(ImDrawList* draw, const ImVec2& pos, const ImVec2& size,
+                     float bpm, ImU32 color = UITheme::Colors::AccentRose);
+
+    // Renders an icon-style line silhouette for an empty equipment slot (head, torso, vest, legs, back, weapon)
+    void DrawSlotSilhouette(ImDrawList* draw, const ImVec2& min, const ImVec2& max, const char* slotType);
 }

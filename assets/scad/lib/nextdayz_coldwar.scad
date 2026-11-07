@@ -240,7 +240,7 @@ module nd_church(seed = 0, L = 14, D = 8)
 {
     gk_flatten()
     {
-        cw_bldg_church(seed, L, D);
+        if ($children > 0) children(); else cw_bldg_church(seed, L, D);
         for (x = [-2.0, 0.2, 2.4], sy = [-1, 1]) translate([x, sy * 1.7, 0]) rotate([0, 0, 90]) cw_prop_bench();
         translate([L / 2 - 1.3, 0, 0]) cw_prop_table(seed + 1, 1.6, 0.8);
         translate([-3.6, 1.6, 0]) cw_prop_body_bag(seed);
@@ -278,4 +278,102 @@ module nd_body_bags(seed = 0, n = 4)
 {
     gk_flatten() for (i = [0 : n - 1])
         translate([i * 0.9, cw_rndr(seed + i, -0.2, 0.2), 0]) rotate([0, 0, 90 + cw_rnd(seed + i, 16) - 8]) cw_prop_body_bag(seed + i);
+}
+
+// ================= 按占地缩放的室内组合（地域外壳传 children；家具贴墙、门轴留空） =================
+// 位置全部按 L/D 比例摆放，窄长的城镇房（L≈7~10）也不会把刷新点塞进墙里。
+
+module nd_shop(seed = 0, L = 8, D = 12, p = "commercial")
+{
+    gk_flatten()
+    {
+        children();
+        translate([-L * 0.22, D / 2 - 0.95, 0]) cw_prop_shelf_market(seed, min(2.4, L * 0.35));
+        translate([L * 0.2, D * 0.12, 0]) rotate([0, 0, 90]) cw_prop_counter(seed, 2.0);
+        translate([-L * 0.25, -D * 0.05, 0]) cw_prop_shelf_market(seed + 3, min(2.0, L * 0.3));
+        translate([L * 0.25, -D / 2 + 1.5, 0]) cw_prop_trash(seed);
+    }
+    translate([-L * 0.22, D / 2 - 0.9, 0.58]) nd_loot(p = p);
+    translate([L * 0.2, D * 0.12, 1.05]) nd_loot(p = p);
+    translate([-L * 0.25, -D * 0.05, 1.13]) nd_loot(p = p);
+    translate([L * 0.22, D / 2 - 1.2, 0]) nd_loot(p = p);
+}
+
+module nd_pub(seed = 0, L = 8, D = 12)
+{
+    gk_flatten()
+    {
+        children();
+        translate([L * 0.24, D * 0.18, 0]) rotate([0, 0, 90]) cw_prop_counter(seed, min(3.0, D * 0.4));
+        for (i = [0 : 1]) translate([-L * 0.18, -D * 0.12 + i * D * 0.3, 0])
+        {
+            cw_prop_table(seed + i, 1.2, 0.8);
+            translate([0.9, 0, 0]) cw_prop_chair(seed + i * 3);
+            translate([-0.9, 0, 0]) cw_prop_chair(seed + i * 5);
+        }
+        translate([L * 0.3, D / 2 - 0.7, 0]) cw_prop_barrel(seed);
+    }
+    translate([L * 0.24, D * 0.18, 1.05]) nd_loot(p = "commercial");
+    translate([-L * 0.18, -D * 0.12, nd_table_top(seed)]) nd_loot(p = "residential");
+    translate([-L * 0.18, D * 0.18, nd_table_top(seed + 1)]) nd_loot(p = "commercial");
+}
+
+module nd_office(seed = 0, L = 16, D = 12, p = "police")
+{
+    gk_flatten()
+    {
+        children();
+        translate([-L * 0.25, D * 0.15, 0]) cw_prop_table(seed + 2, 1.6, 0.9);
+        translate([-L * 0.25, D * 0.15 - 0.8, 0]) cw_prop_chair(seed + 3);
+        translate([L * 0.25, D / 2 - 0.9, 0]) cw_prop_locker(seed, 3);
+        translate([L * 0.32, -D * 0.1, 0]) rotate([0, 0, 90]) cw_prop_shelf_wood(seed, 1.6);
+        translate([-L * 0.35, D / 2 - 0.8, 0]) cw_prop_shelf_wood(seed + 1, 1.6);
+    }
+    translate([-L * 0.25, D * 0.15, nd_table_top(seed + 2)]) nd_loot(p = p);
+    translate([L * 0.25, D / 2 - 1.6, 0]) nd_loot(p = p);
+    translate([-L * 0.35, D / 2 - 0.8, 0.67]) nd_loot(p = "residential");
+}
+
+module nd_depot(seed = 0, L = 11, D = 8, p = "industrial")
+{
+    gk_flatten()
+    {
+        children();
+        translate([-L * 0.3, D / 2 - 0.9, 0]) cw_prop_workbench(seed);
+        translate([L * 0.05, D / 2 - 0.7, 0]) cw_prop_locker(seed, 2);
+        translate([-L * 0.38, -D * 0.1, 0]) cw_prop_tires(seed);
+        translate([L * 0.05, -D * 0.2, 0]) cw_prop_barrel(seed + 1);
+    }
+    translate([-L * 0.3, D / 2 - 0.9, 0.93]) nd_loot(p = p);
+    translate([L * 0.05, D / 2 - 1.4, 0]) nd_loot(p = "police");
+    translate([-L * 0.15, -D * 0.2, 0]) nd_loot(p = p);
+}
+
+module nd_chapel(seed = 0, L = 6, D = 8)
+{
+    gk_flatten()
+    {
+        children();
+        for (y = [-D * 0.18, D * 0.05]) translate([0, y, 0]) cw_prop_bench();
+        translate([0, D * 0.3, 0]) cw_prop_table(seed, 1.2, 0.6);
+    }
+    translate([0, D * 0.3, nd_table_top(seed)]) nd_loot(p = "medical");
+    translate([L * 0.3, -D * 0.3, 0]) nd_loot(p = "residential");
+    translate([-L * 0.3, D * 0.1, 0]) nd_loot(p = "residential");
+}
+
+module nd_castle_hall(seed = 0, L = 34, D = 26)
+{
+    gk_flatten()
+    {
+        children();
+        translate([-6, D / 2 - 6, 0]) cw_prop_table(seed, 1.8, 0.9);
+        translate([6, D / 2 - 6.5, 0]) cw_prop_crate_ammo(seed);
+        translate([2, D / 2 - 3, 0]) cw_prop_locker(seed, 3);
+        translate([-7, -D / 2 + 9, 0]) rotate([0, 0, 30]) cw_prop_barricade(len = 3, seed = seed);
+    }
+    translate([-6, D / 2 - 6, nd_table_top(seed)]) nd_loot(p = "military");
+    translate([6, D / 2 - 6.5, 0.45]) nd_loot(p = "military");
+    translate([2, D / 2 - 3.6, 0]) nd_loot(p = "medical");
+    translate([-3, 0, 0]) nd_loot(p = "military");
 }

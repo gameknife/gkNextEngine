@@ -20,9 +20,13 @@ NextDayz 默认启用，入口为 `NextDayzGameInstance` 的 Prepare / Bind / Ti
   的四色材质，分别采用低饱和橄榄绿、灰绿和枯卡其色，贴合地面与场景的灰绿基调。
   根/尖明度倍率为 0.82/1.12，第二组变体乘 0.90，保留层次并减轻草簇的色块感。
   dry_grass 更矮、更稀疏，使用枯草颜色。
-- 风场由缓慢转动的主风向、空间行进波、局部不同相位组成，NextDayz 天气增加阵风强度。20 Hz
-  更新实例，带滞回地选择最近的弯曲档位；剩余弯曲量用小幅根部旋转近似。方向缓动与不同相位
-  避免整片草同帧跳档。mesh 顶点与 BLAS 内容始终不变。
+  近、中、远景草簇的高度统一乘以 1.25，保留原来的随机高低与边缘缩矮比例。
+- 风场由缓慢转动的主风向、空间行进波、局部不同相位组成，NextDayz 天气增加阵风强度。
+  默认风强提高到 1.0，风速 1.15，最大草尖弯曲从草高的 0.42 提高到 0.60，阵风起伏加大。
+  脚边 12 m 内的分块与正在接触/回弹的分块逐帧更新；其余近景 10 Hz、中景 5 Hz、远景 2.5 Hz，
+  各块以稳定随机相位错开，避免整片草场集中更新造成周期性尖峰。固定的贴地/朝向旋转在流送时缓存，
+  主风向三角函数每帧只计算一次。冻结风场且没有接触、回弹或覆盖变化时跳过变换和脏标记。
+  带滞回地选择最近的弯曲档位，残差用保根剪切补足；mesh 顶点与 BLAS 内容始终不变。
 - `RenderComponent::SetModelId` 同时驱动普通可见性/CSM 和现有 GPU RT LOD-select，后者从 model
   取共享 BLAS 地址重建 TLAS。软件光栅路径也能看到同样的草。TLAS 更新与实例/光栅开销依然随
   草簇数量增长；共享 BLAS 节省几何和底层加速结构，不能消除 TLAS 与着色成本。
@@ -69,9 +73,9 @@ NextDayz 的控制台变量（不写入个人 Archive 配置）：
 | `nextdayz.grass.density` | 1.0 | 0–1，稳定子集 |
 | `nextdayz.grass.edgeWidth` | 4 | 0–12 m，边缘密度/高度过渡宽度；0 恢复硬剔除 |
 | `nextdayz.grass.transmission` | 1.0 | 0–1，主表面直接光透光强度；0 恢复原不透明光照 |
-| `nextdayz.grass.windStrength` | 0.65 | 0–1，叠加天气影响 |
+| `nextdayz.grass.windStrength` | 1.0 | 0–1，叠加天气影响 |
 | `nextdayz.grass.windYaw` | 0.7 | 弧度，+X 朝 -Z |
-| `nextdayz.grass.windSpeed` | 1 | 0–4，0 冻结风场时间 |
+| `nextdayz.grass.windSpeed` | 1.15 | 0–4，0 冻结风场时间 |
 | `nextdayz.grass.interaction` | true | 角色接触与回弹总开关 |
 | `nextdayz.grass.interactionStrength` | 1 | 0–2，角色拨草/踩伏强度 |
 | `nextdayz.grass.recoverySeconds` | 1.25 | 0.3–4，离开后的回弹时间尺度 |
@@ -113,7 +117,7 @@ SoftwareModern、SoftwareTracing、SoftwareModernNoAmbient、PathTracing、PathT
 
 `Tick(..., weather, interactors)` 接收稳定 ID、脚部世界位置、作用半径和强度。NextDayz 在角色运动及
 感染者贴地更新后收集交互源；玩家离地或翻越时不提交，死亡感染者不再持续施压。引擎保存上一次
-20 Hz 更新的位置，用扫掠胶囊覆盖快速移动路径；新 ID 从当前位置开始，单次位移超过 4 m 视为
+每帧的位置，用扫掠胶囊覆盖快速移动路径；新 ID 从当前位置开始，单次位移超过 4 m 视为
 传送，不沿途压草。离开输入列表或卸载时清除历史；实例槽回收时清除压痕，避免跨块串扰。
 
 接触源按现有 8 m 网格分桶，草簇只检查自己块内的扫掠段；接触处的切平面高度差超过 0.45 m 则
@@ -131,6 +135,7 @@ mesh/BLAS 不变，不更新顶点、不重建 BLAS；完整仿射矩阵驱动�
 
 诊断查询：`game.grassInteractionCount`（正在变形或回弹的可见草簇）、`grassContactCount`（当前接触）、
 `grassMaxPressure`、`grassContactChecks`（本次更新实际执行的接触检查）。
+`game.grassUpdatedInstances` 是当前帧实际更新变换的可见草簇数，可确认静止时跳过工作和交互只更新局部。
 验证：`gnb validate --script assets/agentscripts/nextdayz-grass-interaction.agentscript.json`，覆盖玩家站立/
 奔跑、离开后的恢复、感染者独立接触、硬件光追/光栅截图，以及共享 mesh 与实例池预算。
 

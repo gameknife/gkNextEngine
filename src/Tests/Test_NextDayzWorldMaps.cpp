@@ -135,7 +135,7 @@ TEST_CASE("NextDayz published revisions preserve shared progress and archive onl
 TEST_CASE("NextDayz PCG encounters have flat entrances native roads and clear vegetation", "[NextDayz][Landscape]")
 {
     struct MapCheck { const char* id; int sites, buildings, minTrees, minShrubs; };
-    for (const auto& map : {MapCheck{"cz_loket_riverbend",13,60,500,200}, MapCheck{"jp_otaru_north_canal",10,120,230,150}, MapCheck{"cn_chengdu_qinglong_lake",12,48,600,300}})
+    for (const auto& map : {MapCheck{"cz_loket_riverbend",15,108,2000,400}, MapCheck{"jp_otaru_north_canal",10,120,230,150}, MapCheck{"cn_chengdu_qinglong_lake",12,48,600,300}})
     {
         INFO(map.id);
         Assets::EnvironmentSetting environment;

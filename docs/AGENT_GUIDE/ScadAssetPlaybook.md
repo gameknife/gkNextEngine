@@ -5,7 +5,7 @@
 语言面以 [SCADLoader.md](SCADLoader.md) 为准，地形以 [ScadTerrain.md](ScadTerrain.md) 为准；
 本文只讲**流程与经验**，与上述两文冲突时以它们为准。
 
-**真实地点的撤离地图**还必须遵守[世界派遣与地理关卡：新地点初始地图强制规则](../projects/nextdayz/nextdayz-world-map-design.md#新地点初始地图的强制规则)：DEM／道路／建成区只提供骨架，建筑预算和战术布局由 Coldwar 模板＋SCAD PCG 控制点决定。按据点整片 TERR pad 找平，再组合地域 kit、家具、loot 与感染者；植被在最终 TERR 上散布并避开通路、场院与撤离净空。统一走 `gnb geo expedition`，禁止按 OSM 逐栋复刻和生成普通实体路板。
+**真实地点的撤离地图**还必须遵守[世界派遣与地理关卡：新地点初始地图强制规则](../projects/nextdayz/nextdayz-world-map-design.md#新地点初始地图的强制规则)，按 skill `nextdayz-geomap`（`.agents/skills/nextdayz-geomap/SKILL.md`）执行：DEM／道路／建成区提供骨架，每个建成区按当地真实聚落形态展开（地块各自找平、间隔 12 m），建筑用该地域专属 kit，植被用土地覆盖多边形和行道树画出当地林相与田制；建筑预算和战术布局仍由控制点决定。统一走 `gnb geo expedition`，禁止按 OSM 逐栋复刻和生成普通实体路板；用 `tools/nextdayz/geomap_shots.py` 的总览／鸟瞰／街景截图验收。
 
 ## 0. 开工前侦查（先读后写，10 分钟）
 

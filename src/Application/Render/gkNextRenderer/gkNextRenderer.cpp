@@ -458,7 +458,8 @@ void NextRendererGameInstance::OnSceneLoaded()
     Assets::Scene& scene = GetEngine().GetScene();
     viewWeaponParts_ = {};
     muzzleNode_.reset();
-    if (viewReceiverModelId_ < scene.Models().size() && !matIds_.empty())
+    // Scene validation captures must not be covered by the debug weapon.
+    if (!GetEngine().GetOptions().AgentValidation && viewReceiverModelId_ < scene.Models().size() && !matIds_.empty())
     {
         const auto createPart = [&](std::string_view name, uint32_t modelId, const glm::vec3& localOffset)
         {

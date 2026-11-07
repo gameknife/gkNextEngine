@@ -20,6 +20,7 @@
 // flat shoulder (one cell diagonal) cannot reach it. Gardens, lanes and greens
 // fill those gaps, which is also how real plots are spaced.
 use <kit_bohemia.scad>
+use <nextdayz_hokkaido.scad>
 
 function nd_u(s,k) = bh_rnd(s*7+k*131,1000)/999;
 function nd_gap() = 12;
@@ -35,7 +36,7 @@ function nd_far(p,list,r,i=0) = i>=len(list) ? true : norm([p[0]-list[i][0],p[1]
 function nd_count_bldg(items) = len([for(it=items) if(it[0]=="bldg") 1]);
 
 function nd_is_settlement(kind) = kind=="naves" || kind=="homestead" || kind=="square" || kind=="street" ||
-    kind=="suburb" || kind=="chaty" || kind=="jzd" || kind=="villas" || kind=="factory" || kind=="hillcastle";
+    kind=="suburb" || kind=="chaty" || kind=="jzd" || kind=="villas" || kind=="factory" || kind=="hillcastle" || hk_is_settlement(kind);
 
 // Row of m buildings across length Lr: [[centre offset, width], ...]; widths vary 7..12 m.
 function nd_row(m,Lr,seed,wmin=7,wmax=12) = m<=0 ? [] : let(
@@ -258,6 +259,7 @@ function nd_m_hillcastle(W,H,n,risk,seed) = let(cL=min(34,W-4), cD=26, cy=H/2-1-
         [for(z=[0:risk]) ["zed",(z%2-0.5)*8,cy-4+z*2,0,"military",1+risk]]);
 
 function nd_settlement(site,seed) = let(k=site[2],W=site[4][0],H=site[4][1],n=site[6],r=site[7])
+    hk_is_settlement(k) ? hk_settlement(k,W,H,n,r,seed) :
     k=="naves" ? nd_m_naves(W,H,n,r,seed) : k=="homestead" ? nd_m_homestead(W,H,n,r,seed) :
     k=="square" ? nd_m_square(W,H,n,r,seed) : k=="street" ? nd_m_street(W,H,n,r,seed) :
     k=="suburb" ? nd_m_suburb(W,H,n,r,seed) : k=="villas" ? nd_m_suburb(W,H,n,r,seed,true) :

@@ -23,15 +23,15 @@
         43.2025,
         141.0005
       ],
-      "description": "Abandoned residential blocks and shopping streets lead to the canal stone warehouses. Search timber homes, shuttered shops and port yards; use rear alleys to break the long street sightlines, then reach a clear rescue zone.",
+      "description": "Timber-house backstreets and narrow shopfronts descend to the north canal stone stores. Search the Meiji shipping office, slip through terraced gardens and the hillside shrine grove, or risk the exposed cargo quays. Birch and oak woods cover the northwest; the harbour stays open, with five bridge approaches and two rescue zones.",
       "draftScene": "assets/scad/proc/nextdayz/jp_otaru_north_canal/scene.scad",
       "id": "jp_otaru_north_canal",
       "localName": "小樽·北运河",
-      "mapVersion": 3,
+      "mapVersion": 4,
       "name": "OTARU / NORTH CANAL",
       "profile": "hokkaido_decay",
       "region": "JAPAN / HOKKAIDO",
-      "scene": "assets/scad/proc/nextdayz/jp_otaru_north_canal/published/v3/scene.scad",
+      "scene": "assets/scad/proc/nextdayz/jp_otaru_north_canal/published/v4/scene.scad",
       "sizeM": 1000,
       "status": "published",
       "terrain": "COASTAL TOWN / CANAL / FREIGHT YARDS"

@@ -18,15 +18,28 @@ def main():
     previous = region["mapVersion"] - 1
     assert previous >= 1
     fixture = json.loads((ROOT / "assets/agentscripts/fixtures/nextdayz-riverland-v1.json").read_text())
-    fixture["version"] = 2
+    # Exercise a region-version upgrade independently of legacy inventory
+    # conversion. The Riverland seed predates spatial pockets and attachments;
+    # give this fixture current, explicit placements so strict equality below
+    # still checks every carried item, attachment and storage record.
+    fixture["version"] = 5
     old = fixture["state"]
+    old["weaponSlots"].append(0)
+    old["previousSlot"] = -1
+    for container, size in zip(old["inventory"]["containers"], [(6, 1), (2, 2), (4, 2), (4, 2)]):
+        container.pop("capacity")
+        container.update(width=size[0], height=size[1])
+    for item in old["inventory"]["instances"]:
+        item.update(attachments=[0] * 5, gridX=0, gridY=0, rotated=True)
+    for item in old["campaign"]["storage"]:
+        item.update(attachments=[0] * 5, gridX=-1, gridY=-1, rotated=False)
     old["mapVersion"] = previous
     old["map"] = region["scene"].replace(f"/v{region['mapVersion']}/", f"/v{previous}/")
     old["campaign"].update(mapSorties={region["id"]: 3}, lastMapId=region["id"], lastOutcome="", sortieId=4)
     other = {"world": copy.deepcopy(old["world"]), "time": copy.deepcopy(old["time"]), "version": other_region["mapVersion"]}
     other["world"]["seconds"] = 77
     old["maps"] = {other_region["id"]: other}
-    save_name = f"region-upgrade-{args.map_id}.json"
+    save_name = f"region-upgrade-{args.map_id}-v{region['mapVersion']}.json"
     save = ROOT / "out/build/windows/bin/out/nextdayz-validation" / save_name
     save.parent.mkdir(parents=True, exist_ok=True)
     save.write_text(json.dumps(fixture))

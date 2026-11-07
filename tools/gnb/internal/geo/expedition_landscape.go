@@ -340,6 +340,17 @@ func terraceRow(houses int, plot float64) float64 {
 }
 
 var settlementRules = map[string]settlementRule{
+	"hokkaido_lane": {2, 20, true, func(n int) (float64, float64) {
+		groups := math.Ceil(math.Ceil(float64(n)/2) / 2)
+		return 8 + groups*26 + (groups-1)*settlementGap, 64
+	}},
+	"shotengai": {2, 24, true, func(n int) (float64, float64) {
+		groups := math.Ceil(math.Ceil(float64(n)/2) / 2)
+		return 8 + groups*25 + (groups-1)*settlementGap, 46
+	}},
+	"canal":    {2, 6, true, func(n int) (float64, float64) { return 8 + float64(n)*33, 60 }},
+	"portyard": {2, 8, true, func(n int) (float64, float64) { return 10 + math.Ceil(float64(n)/2)*42, 100 }},
+	"shrine":   {1, 2, true, func(n int) (float64, float64) { return 66, 80 }},
 	"naves": {3, 16, true, func(n int) (float64, float64) {
 		top, bottom := navesRows(n)
 		return math.Max(top, bottom) + 8, 110
@@ -372,7 +383,8 @@ var settlementRules = map[string]settlementRule{
 }
 
 var landcoverKinds = map[string]bool{"spruce": true, "mixed": true, "beech": true, "pine": true, "beetle": true,
-	"riparian": true, "orchard": true, "field": true, "meadow": true, "clearing": true}
+	"riparian": true, "orchard": true, "field": true, "meadow": true, "clearing": true,
+	"hokkaido_mixed": true, "coastal_grass": true}
 
 func validateExpeditionPad(ir *IR, grid *HeightGrid, at, size [2]float64, angle float64) error {
 	return validateExpeditionPadSpan(ir, grid, at, size, angle, 12)

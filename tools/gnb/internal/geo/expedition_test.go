@@ -1,6 +1,7 @@
 package geo
 
 import (
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -236,5 +237,65 @@ PCG_ALLEYS=[[[[-200,-80],[200,-80]],"fruit",11,6]];`
 		if _, err = readExpeditionControls(path, &ir, grid, 32); err == nil {
 			t.Fatal("invalid settlement or land cover accepted")
 		}
+	}
+}
+
+func TestExpeditionHokkaidoSettlementBounds(t *testing.T) {
+	ir := IR{SizeM: 1000, Terrain: &TerrainMeta{}}
+	grid := NewHeightGrid(11, 11, -500, -500, 100, 100)
+	for i := range grid.Values {
+		grid.Values[i] = 20
+	}
+	for _, kind := range []string{"hokkaido_lane", "shotengai", "canal", "portyard", "shrine"} {
+		t.Run(kind, func(t *testing.T) {
+			rule := settlementRules[kind]
+			n := rule.max
+			w, d := rule.size(n)
+			source := fmt.Sprintf(`PCG_SITES=[["s","Hokkaido","%s",[0,0],[%g,%g],0,%d,2]];
+PCG_SPAWNS=[[-400,-400],[400,400],[-400,400]];
+PCG_EXTRACTIONS=[[-300,0],[300,0]];
+PCG_PATHS=[]; PCG_VEGETATION=[]; PCG_CLEAR=[];`, kind, w, d, n)
+			path := filepath.Join(t.TempDir(), "layout.scad")
+			if err := os.WriteFile(path, []byte(source), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := readExpeditionControls(path, &ir, grid, n); err != nil {
+				t.Fatal(err)
+			}
+			undersized := strings.Replace(source, fmt.Sprintf("[%g,%g]", w, d), fmt.Sprintf("[%g,%g]", w-1, d), 1)
+			if err := os.WriteFile(path, []byte(undersized), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := readExpeditionControls(path, &ir, grid, n); err == nil {
+				t.Fatal("undersized regional plots accepted")
+			}
+		})
+	}
+}
+
+func TestExpeditionOSMBridgeReachesDryAbutments(t *testing.T) {
+	ir := IR{SizeM: 1000, Terrain: &TerrainMeta{HasWater: true, WaterLevel: 10}}
+	grid := NewHeightGrid(101, 3, -50, -1, 1, 1)
+	for y := 0; y < grid.Rows; y++ {
+		for x := 0; x < grid.Cols; x++ {
+			grid.Values[y*grid.Cols+x] = 12
+			if math.Abs(float64(x)-50) < 20 {
+				grid.Values[y*grid.Cols+x] = 7
+			}
+		}
+	}
+	a, b, err := expeditionBridgeBanks(&ir, grid, [2]float64{-12, 0}, [2]float64{12, 0})
+	if err != nil || a[0] > -20 || b[0] < 20 || grid.Sample(a[0], a[1]) < 10.5 || grid.Sample(b[0], b[1]) < 10.5 {
+		t.Fatalf("submerged OSM endpoints were not extended to dry banks: %v %v %v", a, b, err)
+	}
+	left, right, err := expeditionBridgeBanks(&ir, grid, a, b)
+	if err != nil || left != a || right != b {
+		t.Fatal("already dry abutments must not move")
+	}
+	for i := range grid.Values {
+		grid.Values[i] = 7
+	}
+	if _, _, err := expeditionBridgeBanks(&ir, grid, a, b); err == nil {
+		t.Fatal("an unbridgeable water span must fail generation")
 	}
 }

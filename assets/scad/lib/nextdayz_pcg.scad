@@ -5,6 +5,7 @@ use <kit_terrain.scad>
 use <kit_coldwar.scad>
 use <kit_abandoned.scad>
 use <kit_bohemia.scad>
+use <kit_hokkaido.scad>
 use <nextdayz_coldwar.scad>
 use <nextdayz_settlement.scad>
 
@@ -43,13 +44,13 @@ function nd_pcg_clear(t,x,y,sites,spawns,exits,paths,r) =
     nd_pcg_outside_sites(x,y,sites,r) && nd_pcg_outside_circles(x,y,spawns,6+r) &&
     nd_pcg_outside_circles(x,y,exits,18+r) && nd_pcg_outside_corridors(x,y,paths,r);
 
-// Settlement kinds have regional shells; other regions fall back to the
-// nearest legacy family until their own kit grows the same building types.
+// Settlement kinds have regional shells. Hokkaido is dispatched before the
+// legacy fallback so every port, medical and military shell stays regional.
 function nd_kind_profile(kind) =
     kind=="barn" || kind=="stable" || kind=="cowshed" ? "farm" :
     kind=="shop" || kind=="pub" ? "commercial" : kind=="pharmacy" ? "medical" :
-    kind=="townhall" ? "police" : kind=="firestation" || kind=="factory" ? "industrial" :
-    kind=="chata" ? "wilderness" : kind=="castle" ? "military" : "residential";
+    kind=="townhall" || kind=="office" ? "police" : kind=="firestation" || kind=="factory" || kind=="warehouse" || kind=="workshop" ? "industrial" :
+    kind=="chata" || kind=="shrine" ? "wilderness" : kind=="castle" ? "military" : "residential";
 function nd_kind_fallback(kind) =
     kind=="farmhouse" || kind=="chata" ? "cottage" : kind=="egerland" || kind=="burgher" || kind=="kostka" ? "townhouse" :
     kind=="shop" || kind=="pharmacy" || kind=="pub" || kind=="townhall" ? "shop" :
@@ -60,7 +61,8 @@ function nd_opt(o,i,d) = len(o)>i ? o[i] : d;
 // Coldwar owns furniture + typed loot positions. Only the regional shell changes.
 module nd_pcg_building(kind="cottage",seed=0,region="bohemia",L=10,D=8,p="residential",opt=[])
 {
-    if(region=="bohemia" && (kind=="farmhouse" || kind=="cottage"))
+    if(region=="hokkaido") nd_hk_building(kind,seed,L,D,p);
+    else if(region=="bohemia" && (kind=="farmhouse" || kind=="cottage"))
         nd_house_rural(seed,L,D,p) bh_bldg_farmhouse(seed,L,D,nd_opt(opt,0,1));
     else if(region=="bohemia" && kind=="egerland") nd_house_two(seed,L,D,p) bh_bldg_egerland(seed,L,D,nd_opt(opt,0,1));
     else if(region=="bohemia" && kind=="barn") nd_barn(seed,L,D,"farm") bh_bldg_barn(seed,L,D);
@@ -140,6 +142,24 @@ module nd_pcg_building(kind="cottage",seed=0,region="bohemia",L=10,D=8,p="reside
     }
 }
 
+module nd_hk_building(kind="cottage",seed=0,L=10,D=8,p="residential")
+{
+    if(kind=="warehouse") nd_warehouse(seed,L,D,p) hk_bldg_warehouse(seed,L,D);
+    else if(kind=="workshop" || kind=="garage") nd_depot(seed,L,D,"industrial") hk_bldg_workshop(seed,L,D);
+    else if(kind=="office" || kind=="hq") nd_office(seed,L,D,kind=="hq" ? "military" : "police") hk_bldg_office(seed,L,D);
+    else if(kind=="medical") nd_office(seed,L,D,"medical") hk_bldg_clinic(seed,L,D);
+    else if(kind=="police") nd_office(seed,L,D,"police") hk_bldg_koban(seed,L,D);
+    else if(kind=="shop" || kind=="pharmacy" || kind=="supermarket")
+        nd_shop(seed,L,D,kind=="pharmacy" ? "medical" : "commercial") hk_bldg_shop(seed,L,D);
+    else if(kind=="pub") nd_pub(seed,L,D) hk_bldg_shop(seed,L,D);
+    else if(kind=="shrine") nd_chapel(seed,L,D) hk_bldg_shrine(seed,L,D);
+    else if(kind=="apartment") nd_house_two(seed,L,D,p) hk_bldg_apartment(seed,L,D);
+    else if(kind=="townhouse") nd_house_two(seed,L,D,p) hk_bldg_rowhouse(seed,L,D);
+    else if(kind=="ruin") nd_house_rural(seed,L,D,p) hk_bldg_ruin(seed,L,D);
+    else if(kind=="barracks") nd_house_rural(seed,L,D,"military") hk_bldg_workshop(seed,L,D);
+    else nd_house_rural(seed,L,D,p) hk_bldg_house(seed,L,D);
+}
+
 function nd_pcg_kind(type,i,seed) =
     type=="park" ? (i==0 ? "pavilion" : i==1 ? "shop" : i%3==0 ? "ruin" : "cottage") :
     type=="visitor" ? (i==0 ? "visitor" : i==1 ? "shop" : i==2 ? "workshop" : "cottage") :
@@ -203,7 +223,12 @@ module nd_pcg_prop(name="bench",seed=0,a=0,b=0)
     if(name=="pump") cw_prop_water_pump(seed);
     else gk_flatten()
     {
-        if(name=="yard_wall") bh_prop_yard_wall(seed,a,2.5,b);
+        if(name=="hk_torii") hk_prop_torii(seed,a,b);
+        else if(name=="hk_pole") hk_prop_pole(seed);
+        else if(name=="hk_bollard") hk_prop_bollard(seed);
+        else if(name=="hk_vending") hk_prop_vending(seed);
+        else if(name=="hk_lantern") hk_prop_lantern(seed);
+        else if(name=="yard_wall") bh_prop_yard_wall(seed,a,2.5,b);
         else if(name=="fence") bh_prop_fence(seed,a);
         else if(name=="plague_column") bh_prop_plague_column(seed);
         else if(name=="fountain") bh_prop_fountain(seed);
@@ -229,7 +254,8 @@ module nd_pcg_prop(name="bench",seed=0,a=0,b=0)
 module nd_site_plant(species="linden",variant=0,region="bohemia")
 {
     gk_flatten()
-        if(species=="linden") bh_nature_linden(variant*131+7);
+        if(region=="hokkaido") nd_hk_flora(species,variant*131+7);
+        else if(species=="linden") bh_nature_linden(variant*131+7);
         else if(species=="fruit") bh_nature_fruit(variant*131+11);
         else if(species=="willow") bh_nature_willow(variant*131+13);
         else if(species=="birch") bh_nature_birch(variant*131+17);
@@ -311,11 +337,25 @@ module nd_pcg_plant(kind="tree",variant=0,seed=0,region="bohemia",species="")
         if(region=="bohemia")
             nd_bh_flora(species!="" ? species : kind=="dead" ? "spruce_dead" : kind=="shrub" ? ["hedge","weeds","fern"][variant%3] :
                         ["spruce","broadleaf","pine","spruce"][variant%4],seed);
+        else if(region=="hokkaido") nd_hk_flora(species!="" ? species : kind=="shrub" ? "shrub" : kind=="dead" ? "dead" : "birch",seed);
         else if(kind=="dead") cw_nature_tree_dead(seed=seed);
         else if(kind=="shrub") lay_pick(i=variant) { cw_nature_bush(seed=seed); cw_nature_grass_tuft(seed=seed); cw_nature_stump(seed=seed); }
         else if(kind=="bamboo") az_nature_bamboo(seed);
         else if(region=="sichuan") lay_pick(i=variant) { az_nature_camphor(seed); az_nature_willow(seed); az_nature_camphor(seed+1); }
         else lay_pick(i=variant) { cw_nature_pine(seed=seed); cw_nature_birch(seed=seed); cw_nature_pine(seed=seed+1); }
+}
+
+module nd_hk_flora(sp="birch",seed=0)
+{
+    if(sp=="spruce" || sp=="pine") hk_nature_spruce(seed);
+    else if(sp=="birch") hk_nature_birch(seed);
+    else if(sp=="oak") hk_nature_oak(seed);
+    else if(sp=="elm" || sp=="broadleaf" || sp=="linden" || sp=="fruit") hk_nature_elm(seed);
+    else if(sp=="alder" || sp=="willow") hk_nature_alder(seed);
+    else if(sp=="dead" || sp=="spruce_dead") cw_nature_tree_dead(seed=seed);
+    else if(sp=="stump") cw_nature_stump(seed=seed);
+    else if(sp=="reeds") cw_nature_reeds(seed=seed);
+    else hk_nature_shrub(seed);
 }
 
 // West Bohemian flora by species name (one mesh per species+seed).
@@ -356,6 +396,8 @@ module nd_pcg_vegetation(t,layers,sites,spawns,exits,clear,seed=0,flora="bohemia
 // grid, thinned by a broad noise so forests keep glades and ragged edges.
 // recipe = [paint, spacing, slopeMax, keep, edgeShrub, [[species,kind,weight,s0,s1],...]]
 function nd_lc_recipe(k) =
+    k=="hokkaido_mixed" ? ["grass_dark",7.5,36,0.90,0.35,[["oak","tree",4,0.85,1.2],["elm","tree",3,0.85,1.15],["birch","tree",4,0.85,1.2],["spruce","tree",1,0.9,1.1]]] :
+    k=="coastal_grass" ? ["dry_grass",12,30,0.5,0,[["reeds","shrub",3,0.9,1.3],["shrub","shrub",2,0.7,1.1]]] :
     k=="spruce" ? ["grass_dark",6.9,36,0.92,0.35,[["spruce","tree",10,0.85,1.2],["spruce_dead","dead",1,0.8,1.05],["birch","tree",1,0.8,1.1]]] :
     k=="mixed" ? ["grass_dark",7.6,36,0.88,0.4,[["broadleaf","tree",4,0.8,1.2],["spruce","tree",4,0.8,1.15],["oak","tree",1,0.85,1.2],["birch","tree",2,0.8,1.1],["pine","tree",1,0.85,1.1]]] :
     k=="beech" ? ["grass_dark",8.0,38,0.88,0.3,[["broadleaf","tree",6,0.85,1.25],["oak","tree",2,0.85,1.2],["spruce","tree",1,0.8,1.1]]] :

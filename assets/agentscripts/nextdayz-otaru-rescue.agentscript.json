@@ -1,7 +1,7 @@
 {
   "name": "nextdayz-otaru-rescue",
   "target": "NextDayz",
-  "scene": "assets/scad/proc/nextdayz/jp_otaru_north_canal/published/v3/scene.scad",
+  "scene": "assets/scad/proc/nextdayz/jp_otaru_north_canal/published/v4/scene.scad",
   "defaults": { "stepTimeoutMs": 180000 },
   "steps": [
     { "type": "wait-until", "query": "game.sceneReady", "op": "eq", "value": true, "timeoutMs": 180000 },

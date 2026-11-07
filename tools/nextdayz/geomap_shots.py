@@ -21,7 +21,17 @@ import subprocess
 import sys
 from pathlib import Path
 
+from PIL import Image, ImageStat
+
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def is_review_image(path):
+    """Reject a clear-only frame captured during the first GPU scene upload."""
+    if not path.exists():
+        return False
+    with Image.open(path) as img:
+        return max(ImageStat.Stat(img.convert("RGB")).stddev) > 1.0
 
 
 def scad_array(text, name):
@@ -85,6 +95,11 @@ def main():
                 "suburb": ((-w * 0.47, 0), (w * 0.3, 0)),
                 "villas": ((-w * 0.47, 0), (w * 0.3, 0)),
                 "chaty": ((-w * 0.45, 0), (w * 0.2, d * 0.1)),
+                "hokkaido_lane": ((-w * 0.45, 0), (w * 0.3, 0)),
+                "shotengai": ((-w * 0.45, 0), (w * 0.3, 0)),
+                "canal": ((-w * 0.43, -9), (w * 0.3, -4)),
+                "portyard": ((-w * 0.43, 0), (w * 0.3, 0)),
+                "shrine": ((0, -d * 0.43), (0, 12)),
             }.get(s[2], ((0, -d / 2 - 12), (0, 0)))
             (lx, ly), (tx, ty) = local
             ex, ey = x + lx * math.cos(a) - ly * math.sin(a), y + lx * math.sin(a) + ly * math.cos(a)
@@ -93,17 +108,26 @@ def main():
 
     gnb = ROOT / ("gnb.bat" if sys.platform == "win32" else "gnb.sh")
     capture = ROOT / "out/build" / ("windows" if sys.platform == "win32" else "linux") / "screenshots/agent_validation.jpg"
+    failed = []
     for name, eye, target, fov in shots:
         wrapper = out / f"{name}.scad"
         wrapper.write_text(f'use <{camlib}>\ngk_camera_lookat({eye},{target},"{name}",{fov});\ninclude <{scene}>\n', encoding="utf-8")
-        res = subprocess.run([str(gnb), "shot", "--scene", wrapper.resolve().as_posix(), "--frames", str(args.frames),
-                              "--reason", f"geomap review {args.map} {name}"], cwd=ROOT, capture_output=True, text=True)
+        for attempt in range(3):
+            frames = args.frames if attempt == 0 else max(180, args.frames * (attempt + 1))
+            res = subprocess.run([str(gnb), "shot", "--scene", wrapper.resolve().as_posix(), "--frames", str(frames),
+                                  "--reason", f"geomap review {args.map} {name}"], cwd=ROOT, capture_output=True, text=True)
+            if res.returncode != 0 or is_review_image(capture):
+                break
+            print(f"{name}: clear-only capture; retrying after more stable frames")
         warn = [ln for ln in res.stdout.splitlines() if "SCAD: loaded" in ln or "[error]" in ln]
-        if res.returncode != 0 or not capture.exists():
+        if res.returncode != 0 or not is_review_image(capture):
             print(f"{name}: FAILED\n{res.stdout[-2000:]}{res.stderr[-2000:]}")
+            failed.append(name)
             continue
         shutil.copyfile(capture, out / f"{name}.jpg")
         print(f"{out / (name + '.jpg')}  {warn[-1].split('SCAD: ')[-1] if warn else ''}")
+    if failed:
+        raise SystemExit(f"Review incomplete: {', '.join(failed)}")
 
 
 if __name__ == "__main__":

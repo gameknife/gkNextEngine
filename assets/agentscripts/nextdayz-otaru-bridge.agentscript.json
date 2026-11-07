@@ -19,14 +19,18 @@
       "set": true
     },
     {
+      "type": "log",
+      "message": "Walking across OSM bridge 1"
+    },
+    {
       "type": "cvar",
       "name": "nextdayz.validation.teleport",
-      "set": "-9.9803,-33.8845"
+      "set": "-84.6,280.96"
     },
     {
       "type": "cvar",
       "name": "nextdayz.validation.lookYaw",
-      "set": 104.2951
+      "set": 88.90455528312799
     },
     {
       "type": "cvar",
@@ -35,7 +39,7 @@
     },
     {
       "type": "wait-frames",
-      "n": 4
+      "n": 6
     },
     {
       "type": "key",
@@ -46,8 +50,8 @@
       "type": "wait-until",
       "query": "game.posX",
       "op": "gt",
-      "value": 35,
-      "timeoutMs": 60000
+      "value": -44.4003,
+      "timeoutMs": 40000
     },
     {
       "type": "key",
@@ -62,8 +66,217 @@
     },
     {
       "type": "screenshot",
-      "out": "screenshots/nextdayz-otaru-bridge",
-      "ui": true
+      "out": "screenshots/nextdayz-otaru-bridge-1",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "log",
+      "message": "Walking across OSM bridge 2"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "75.84,-279.4"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 113.00306680324043
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 6
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posX",
+      "op": "gt",
+      "value": 96.7007,
+      "timeoutMs": 40000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posY",
+      "op": "gt",
+      "value": 10.1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz-otaru-bridge-2",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "log",
+      "message": "Walking across OSM bridge 3"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-9.98,-33.88"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 104.28391820554106
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 6
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posX",
+      "op": "gt",
+      "value": 19.2036,
+      "timeoutMs": 40000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posY",
+      "op": "gt",
+      "value": 10.1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz-otaru-bridge-3",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "log",
+      "message": "Walking across OSM bridge 4"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "84.96,-130.64"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 202.85958645075615
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 6
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "lt",
+      "value": 88.7678,
+      "timeoutMs": 40000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posY",
+      "op": "gt",
+      "value": 10.1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz-otaru-bridge-4",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "log",
+      "message": "Walking across OSM bridge 5"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "37.78,81.49"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 167.89851903757724
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 6
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "lt",
+      "value": -158.6067,
+      "timeoutMs": 40000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posY",
+      "op": "gt",
+      "value": 10.1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz-otaru-bridge-5",
+      "ui": true,
+      "accumulateFrames": 32
     },
     {
       "type": "quit"

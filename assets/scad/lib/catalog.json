@@ -18849,6 +18849,953 @@
       ]
     },
     {
+      "name": "kit_hokkaido",
+      "file": "kit_hokkaido.scad",
+      "prefix": "hk_",
+      "scaleClass": "mid",
+      "modules": [
+        {
+          "name": "hk_bldg_apartment",
+          "category": "bldg",
+          "params": "seed=0,L=14,D=10",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "14"
+            },
+            {
+              "name": "D",
+              "default": "10"
+            }
+          ],
+          "line": 150,
+          "footprint": [
+            14.21,
+            10.54
+          ],
+          "height": 10.3,
+          "zMin": 0.0,
+          "center": [
+            0.01,
+            -0.15
+          ],
+          "triangles": 6936,
+          "colors": 578,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_bldg_clinic",
+          "category": "bldg",
+          "params": "seed=0,L=18,D=9",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "18"
+            },
+            {
+              "name": "D",
+              "default": "9"
+            }
+          ],
+          "line": 149,
+          "footprint": [
+            18.21,
+            9.54
+          ],
+          "height": 7.4,
+          "zMin": 0.0,
+          "center": [
+            0.01,
+            -0.15
+          ],
+          "triangles": 5520,
+          "colors": 460,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_bldg_house",
+          "category": "bldg",
+          "params": "seed=0,L=10,D=8",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            }
+          ],
+          "line": 142,
+          "footprint": [
+            10.55,
+            8.97
+          ],
+          "height": 7.52,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.22
+          ],
+          "triangles": 6344,
+          "colors": 529,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_bldg_koban",
+          "category": "bldg",
+          "params": "seed=0,L=10,D=8",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            }
+          ],
+          "line": 151,
+          "footprint": [
+            10.18,
+            8.18
+          ],
+          "height": 4.5,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 1836,
+          "colors": 153,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_bldg_office",
+          "category": "bldg",
+          "params": "seed=0,L=18,D=12",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "18"
+            },
+            {
+              "name": "D",
+              "default": "12"
+            }
+          ],
+          "line": 148,
+          "footprint": [
+            18.67,
+            12.71
+          ],
+          "height": 8.18,
+          "zMin": 0.0,
+          "center": [
+            -0.06,
+            -0.09
+          ],
+          "triangles": 7660,
+          "colors": 639,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_bldg_rowhouse",
+          "category": "bldg",
+          "params": "seed=0,L=9,D=10",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "9"
+            },
+            {
+              "name": "D",
+              "default": "10"
+            }
+          ],
+          "line": 143,
+          "footprint": [
+            9.55,
+            10.97
+          ],
+          "height": 7.92,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.22
+          ],
+          "triangles": 6320,
+          "colors": 527,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_bldg_ruin",
+          "category": "bldg",
+          "params": "seed=0,L=10,D=8",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            }
+          ],
+          "line": 144,
+          "footprint": [
+            10.18,
+            8.18
+          ],
+          "height": 4.5,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 3060,
+          "colors": 255,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_bldg_shop",
+          "category": "bldg",
+          "params": "seed=0,L=9,D=11",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "9"
+            },
+            {
+              "name": "D",
+              "default": "11"
+            }
+          ],
+          "line": 145,
+          "footprint": [
+            9.55,
+            11.97
+          ],
+          "height": 8.13,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.22
+          ],
+          "triangles": 7796,
+          "colors": 650,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_bldg_shrine",
+          "category": "bldg",
+          "params": "seed=0,L=10,D=8",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            }
+          ],
+          "line": 152,
+          "footprint": [
+            10.55,
+            9.07
+          ],
+          "height": 4.62,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.27
+          ],
+          "triangles": 3344,
+          "colors": 279,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_bldg_warehouse",
+          "category": "bldg",
+          "params": "seed=0,L=20,D=13",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "20"
+            },
+            {
+              "name": "D",
+              "default": "13"
+            }
+          ],
+          "line": 146,
+          "footprint": [
+            20.67,
+            13.54
+          ],
+          "height": 8.98,
+          "zMin": 0.0,
+          "center": [
+            -0.06,
+            0.0
+          ],
+          "triangles": 5228,
+          "colors": 436,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_bldg_workshop",
+          "category": "bldg",
+          "params": "seed=0,L=16,D=11",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "16"
+            },
+            {
+              "name": "D",
+              "default": "11"
+            }
+          ],
+          "line": 147,
+          "footprint": [
+            16.55,
+            11.97
+          ],
+          "height": 5.23,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.22
+          ],
+          "triangles": 5516,
+          "colors": 460,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_box",
+          "category": "misc",
+          "params": "s",
+          "paramList": [
+            {
+              "name": "s"
+            }
+          ],
+          "line": 15,
+          "footprint": [
+            1.0,
+            1.0
+          ],
+          "height": 0.5,
+          "zMin": -0.5,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 12,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_nature_alder",
+          "category": "nature",
+          "params": "seed=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 209,
+          "footprint": [
+            5.91,
+            5.83
+          ],
+          "height": 7.4,
+          "zMin": 0.0,
+          "center": [
+            -0.04,
+            0.01
+          ],
+          "triangles": 648,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_nature_birch",
+          "category": "nature",
+          "params": "seed=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 193,
+          "footprint": [
+            3.69,
+            3.46
+          ],
+          "height": 7.7,
+          "zMin": 0.0,
+          "center": [
+            0.12,
+            0.0
+          ],
+          "triangles": 468,
+          "colors": 8,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_nature_elm",
+          "category": "nature",
+          "params": "seed=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 201,
+          "footprint": [
+            9.09,
+            8.33
+          ],
+          "height": 10.57,
+          "zMin": 0.0,
+          "center": [
+            -0.06,
+            0.02
+          ],
+          "triangles": 648,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_nature_oak",
+          "category": "nature",
+          "params": "seed=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 210,
+          "footprint": [
+            11.96,
+            10.39
+          ],
+          "height": 12.18,
+          "zMin": 0.0,
+          "center": [
+            0.03,
+            0.17
+          ],
+          "triangles": 768,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_nature_shrub",
+          "category": "nature",
+          "params": "seed=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 208,
+          "footprint": [
+            1.62,
+            1.1
+          ],
+          "height": 0.82,
+          "zMin": -0.11,
+          "center": [
+            0.05,
+            0.0
+          ],
+          "triangles": 360,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_nature_spruce",
+          "category": "nature",
+          "params": "seed=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 194,
+          "footprint": [
+            5.26,
+            5.26
+          ],
+          "height": 14.46,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 336,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_part_facade",
+          "category": "part",
+          "params": "seed=0,L=10,floors=2,t=0.32,c=[],door=true,shop=false,warehouse=false,boards=false",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "floors",
+              "default": "2"
+            },
+            {
+              "name": "t",
+              "default": "0.32"
+            },
+            {
+              "name": "c",
+              "default": "[]"
+            },
+            {
+              "name": "door",
+              "default": "true"
+            },
+            {
+              "name": "shop",
+              "default": "false"
+            },
+            {
+              "name": "warehouse",
+              "default": "false"
+            },
+            {
+              "name": "boards",
+              "default": "false"
+            }
+          ],
+          "line": 48,
+          "footprint": [
+            10.0,
+            0.41
+          ],
+          "height": 5.8,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.05
+          ],
+          "triangles": 636,
+          "colors": 53,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_part_roof",
+          "category": "part",
+          "params": "seed=0,L=10,D=8,rise=1.7",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            },
+            {
+              "name": "rise",
+              "default": "1.7"
+            }
+          ],
+          "line": 78,
+          "footprint": [
+            10.55,
+            8.54
+          ],
+          "height": 1.8,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 308,
+          "colors": 26,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_part_shell",
+          "category": "part",
+          "params": "seed=0,L=10,D=8,floors=2,style=\"boards\"",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            },
+            {
+              "name": "floors",
+              "default": "2"
+            },
+            {
+              "name": "style",
+              "default": "\"boards\""
+            }
+          ],
+          "line": 87,
+          "footprint": [
+            10.55,
+            8.97
+          ],
+          "height": 7.52,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.22
+          ],
+          "triangles": 6344,
+          "colors": 529,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_part_wall",
+          "category": "part",
+          "params": "L=10,H=3,ops=[[-2.5,0.9,1.4,1.3],[0,0,1.8,2.5],[2.5,0.9,1.4,1.3]],t=0.32,c=[0.32,0.35,0.32]",
+          "paramList": [
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "H",
+              "default": "3"
+            },
+            {
+              "name": "ops",
+              "default": "[[-2.5,0.9,1.4,1.3],[0,0,1.8,2.5],[2.5,0.9,1.4,1.3]]"
+            },
+            {
+              "name": "t",
+              "default": "0.32"
+            },
+            {
+              "name": "c",
+              "default": "[0.32,0.35,0.32]"
+            }
+          ],
+          "line": 18,
+          "footprint": [
+            10.0,
+            0.32
+          ],
+          "height": 3.0,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 108,
+          "colors": 9,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_part_window",
+          "category": "part",
+          "params": "seed=0,w=1.4,h=1.3",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "w",
+              "default": "1.4"
+            },
+            {
+              "name": "h",
+              "default": "1.3"
+            }
+          ],
+          "line": 33,
+          "footprint": [
+            1.58,
+            0.16
+          ],
+          "height": 0.74,
+          "zMin": -0.74,
+          "center": [
+            0.0,
+            -0.01
+          ],
+          "triangles": 72,
+          "colors": 6,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_prop_bollard",
+          "category": "prop",
+          "params": "seed=0,a=0,b=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "a",
+              "default": "0"
+            },
+            {
+              "name": "b",
+              "default": "0"
+            }
+          ],
+          "line": 175,
+          "footprint": [
+            0.7,
+            0.36
+          ],
+          "height": 0.72,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 60,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_prop_lantern",
+          "category": "prop",
+          "params": "seed=0,a=0,b=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "a",
+              "default": "0"
+            },
+            {
+              "name": "b",
+              "default": "0"
+            }
+          ],
+          "line": 185,
+          "footprint": [
+            0.75,
+            0.75
+          ],
+          "height": 1.73,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 80,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_prop_pole",
+          "category": "prop",
+          "params": "seed=0,a=0,b=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "a",
+              "default": "0"
+            },
+            {
+              "name": "b",
+              "default": "0"
+            }
+          ],
+          "line": 169,
+          "footprint": [
+            2.3,
+            0.3
+          ],
+          "height": 8.0,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 216,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_prop_torii",
+          "category": "prop",
+          "params": "seed=0,a=5,b=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "a",
+              "default": "5"
+            },
+            {
+              "name": "b",
+              "default": "0"
+            }
+          ],
+          "line": 159,
+          "footprint": [
+            5.3,
+            0.45
+          ],
+          "height": 4.14,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 132,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "hk_prop_vending",
+          "category": "prop",
+          "params": "seed=0,a=0,b=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "a",
+              "default": "0"
+            },
+            {
+              "name": "b",
+              "default": "0"
+            }
+          ],
+          "line": 179,
+          "footprint": [
+            0.85,
+            0.81
+          ],
+          "height": 1.8,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.03
+          ],
+          "triangles": 132,
+          "colors": 11,
+          "warnings": 0,
+          "ok": true
+        }
+      ]
+    },
+    {
       "name": "kit_island",
       "file": "kit_island.scad",
       "prefix": "is_",

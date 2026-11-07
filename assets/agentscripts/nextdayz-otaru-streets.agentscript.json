@@ -21,7 +21,7 @@
     {
       "type": "cvar",
       "name": "nextdayz.validation.teleport",
-      "set": "-423,-102"
+      "set": "-442,-125"
     },
     {
       "type": "cvar",
@@ -52,7 +52,7 @@
       "type": "wait-until",
       "query": "game.posX",
       "op": "gt",
-      "value": -220,
+      "value": -242,
       "timeoutMs": 60000
     },
     {
@@ -64,13 +64,13 @@
       "type": "assert",
       "query": "game.posZ",
       "op": "gt",
-      "value": 101
+      "value": 124
     },
     {
       "type": "assert",
       "query": "game.posZ",
       "op": "lt",
-      "value": 103
+      "value": 126
     },
     {
       "type": "screenshot",

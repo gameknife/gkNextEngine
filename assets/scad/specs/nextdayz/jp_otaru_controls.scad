@@ -1,24 +1,29 @@
-// Otaru urban gameplay controls. Geography is reference, not a building list.
-// 120 buildings; connected residential streets, canal warehouses and freight yards.
-// Site=[id,name,kind,center,padSize,rotation,buildingCount,risk].
+// Otaru v4: regional street terraces, stone-store frontage and open quays.
+// Geographic skeleton: north canal + harbour; 14 sites / 120 buildings.
+// Research and spatial rules: docs/projects/nextdayz/otaru-v4-authoring.md.
+// Site=[id,name,kind,center,size,rotation,buildingCount,risk].
 
 PCG_SITES = [
-    ["south_housing","South residential blocks","urban",[-340,-340],[200,160],0,24,1],
-    ["central_housing","Iro-nai residential streets","urban",[-340,-130],[200,160],0,24,1],
-    ["hill_housing","Hillside neighbourhood","urban",[-340,95],[200,160],-8,20,1],
-    ["market_street","Ransacked shopping streets","downtown",[-115,-180],[150,170],0,16,2],
-    ["canal_warehouses","Canal stone warehouses","port",[-145,210],[120,150],0,8,2],
-    ["north_quay","North cargo quay","port",[175,325],[150,130],0,8,2],
-    ["southern_freight","South freight workshops","industry",[270,-390],[130,100],0,6,2],
-    ["clinic","Emergency clinic","medical",[-130,30],[130,96],0,4,2],
-    ["police","South police cordon","checkpoint",[-130,-410],[120,80],0,4,2],
-    ["port_command","South quarantine command","military",[-130,-317],[100,76],0,6,3]
+    ["south_housing","Minami timber-house lanes","hokkaido_lane",[-350,-340],[210,78],0,16,1],
+    ["central_housing","Ironai backstreet homes","hokkaido_lane",[-350,-125],[210,78],0,16,1],
+    ["hill_housing","Temiya hillside homes","hokkaido_lane",[-350,85],[195,78],-8,14,1],
+    ["ironai_west","Ironai old shopping street","shotengai",[-340,-235],[210,48],0,16,2],
+    ["market_street","Canal approach shops","shotengai",[-130,-175],[150,48],0,12,2],
+    ["temiya_shops","Temiya neighbourhood shops","shotengai",[-330,180],[190,48],0,12,1],
+    ["canal_warehouses","North canal stone stores","canal",[-150,200],[210,62],90,6,2],
+    ["north_quay","Ironai cargo quay","portyard",[180,325],[150,110],0,6,2],
+    ["southern_freight","South freight repair yard","portyard",[270,-390],[130,100],0,4,2],
+    ["shipping_office","Former shipping office and stores","portyard",[-145,365],[100,100],0,4,2],
+    ["clinic","Emergency clinic","medical",[-130,20],[110,72],0,4,2],
+    ["police","South koban cordon","checkpoint",[-130,-410],[105,72],0,4,2],
+    ["port_command","Port quarantine command","military",[-130,-315],[100,76],0,4,3],
+    ["shrine","Hillside neighbourhood shrine","shrine",[-340,300],[70,80],0,2,1]
 ];
 
 PCG_SPAWNS = [
     [-470,-470],
     [-470,330],
-    [-160,455],
+    [-170,480],
     [-40,-470],
     [430,-470]
 ];
@@ -42,19 +47,47 @@ PCG_PATHS = [
     ["road",[[85,-131],[130,-180],[150,-280]],7],
     ["road",[[94,-272],[155,-300],[200,-340],[270,-334],[360,-350],[430,-350]],7],
     ["road",[[-40,-470],[-70,-460],[-130,-455]],6],
-    ["road",[[-470,330],[-460,250],[-450,210]],6]
+    ["road",[[-470,330],[-460,250],[-450,210]],6],
+    ["road",[[-450,-340],[-230,-340]],6],
+    ["road",[[-450,-235],[-230,-235]],6],
+    ["road",[[-450,-125],[-230,-125]],6],
+    ["road",[[-450,85],[-230,85]],6],
+    ["road",[[-450,180],[-230,180]],6],
+    ["road",[[-230,365],[-195,365]],5],
+    ["road",[[-340,205],[-340,260]],3.5]
 ];
 
 PCG_VEGETATION = [
-    ["hillside_green",[-480,230,-230,480],180,30,[1.4,2.3],"tree"],
-    ["fringe_trees",[-480,-480,-430,210],60,28,[1.2,1.9],"tree"],
-    ["canal_greens",[-220,-480,150,480],65,25,[1.2,1.8],"tree"],
-    ["reclaimed_lots",[-480,-480,480,480],380,30,[0.8,1.5],"shrub"],
-    ["dead_street_trees",[-480,-480,460,470],40,28,[1.1,1.7],"dead"]
+    ["ruderal",[-480,-480,480,480],260,30,[0.8,1.3],"shrub"]
+];
+
+PCG_LANDCOVER = [
+    ["nw_birch_oak","hokkaido_mixed",[[-492,240],[-492,492],[-260,492],[-260,340],[-295,340],[-300,250]]],
+    ["north_spruce_pocket","spruce",[[-260,420],[-260,492],[-205,492],[-205,430]]],
+    ["west_slope_woods","hokkaido_mixed",[[-492,20],[-492,235],[-455,230],[-455,15]]],
+    ["shrine_grove","hokkaido_mixed",[[-390,235],[-290,235],[-285,350],[-395,350]]],
+    ["north_canal_park","meadow",[[-255,270],[-205,270],[-205,420],[-255,420]]],
+    ["north_rail_verge","coastal_grass",[[-225,420],[-90,420],[-90,492],[-225,492]]],
+    ["west_back_gardens","meadow",[[-455,-290],[-245,-290],[-245,-185],[-455,-185]]],
+    ["middle_back_gardens","meadow",[[-455,-70],[-245,-70],[-245,20],[-455,20]]],
+    ["south_rail_verge","coastal_grass",[[-235,-492],[-210,-492],[-210,-250],[-235,-250]]],
+    ["quay_reclaimed_grass","coastal_grass",[[100,240],[360,230],[390,290],[310,410],[100,410]]],
+    ["south_dock_grass","meadow",[[175,-320],[300,-260],[470,-190],[492,-210],[492,-330],[370,-330]]],
+    ["canal_bank_scrub","riparian",[[-100,-470],[165,-470],[165,-160],[90,30],[-80,70]]]
+];
+
+PCG_ALLEYS = [
+    [[[-450,-440],[-450,195]],"birch",22,6],
+    [[[-230,-440],[-230,240]],"elm",24,6],
+    [[[-220,270],[-220,410]],"elm",16,5],
+    [[[105,235],[350,240]],"birch",25,5],
+    [[[180,-310],[430,-350]],"birch",24,6]
 ];
 
 PCG_CLEAR = [
     [[-15,-35],[35,-23],12],
     [[-85,281],[-45,280],12],
-    [[65,-91],[87,-135],12]
+    [[65,-91],[87,-135],12],
+    [[-230,280],[-50,280],10],
+    [[80,325],[270,325],10]
 ];

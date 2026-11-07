@@ -25,6 +25,7 @@ LANDCOVER = {
     "spruce": (24, 64, 40), "mixed": (52, 92, 44), "beech": (70, 112, 48), "pine": (88, 100, 52),
     "beetle": (128, 92, 60), "riparian": (40, 110, 90), "orchard": (150, 170, 70), "field": (196, 176, 96),
     "meadow": (128, 170, 84), "clearing": (160, 140, 90),
+    "hokkaido_mixed": (42, 100, 60), "coastal_grass": (160, 155, 100),
 }
 
 

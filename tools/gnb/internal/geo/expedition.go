@@ -165,7 +165,9 @@ func ExportExpedition(repoRoot, recipePath string, publish bool) (string, Expedi
 		landcover = "PCG_LANDCOVER"
 	}
 	fmt.Fprintf(&out, "TERR=[\"gkterr1\",GEO_TERR[1],GEO_TERR[2],GEO_TERR[3],GEO_TERR[4],GEO_TERR[5],GEO_TERR[6],concat(GEO_TERR[7],PCG_PATHS,nd_pcg_terrain(PCG_SITES,PCG_SPAWNS,PCG_EXTRACTIONS,%d,%s))];\ngk_terrain(TERR);\nfunction nd_ground(x,y)=gk_terrain_height(TERR,x,y);\n", recipe.Seed, landcover)
-	writeExpeditionBridges(&out, &ir, recipe.Seed)
+	if err = writeExpeditionBridges(&out, &ir, grid, recipe.Seed); err != nil {
+		return "", report, err
+	}
 	if report.Bridges > 0 {
 		fmt.Fprintf(&out, "for(i=[0:len(PCG_BRIDGES)-1]) nd_pcg_bridge(TERR,PCG_BRIDGES[i][0],PCG_BRIDGES[i][1],PCG_BRIDGES[i][2],%d+i*17);\n", recipe.Seed)
 	}
@@ -227,7 +229,35 @@ func expeditionPalette(recipe ExpeditionRecipe) string {
 	return "temperate"
 }
 
-func writeExpeditionBridges(out *strings.Builder, ir *IR, seed int) {
+// OSM abutments can lie in a DEM shoreline cell. Extend along the bridge axis
+// to dry ground instead of sampling a submerged deck datum from those cells.
+func expeditionBridgeBanks(ir *IR, grid *HeightGrid, a, b [2]float64) ([2]float64, [2]float64, error) {
+	if !ir.Terrain.HasWater {
+		return a, b, nil
+	}
+	length := math.Hypot(b[0]-a[0], b[1]-a[1])
+	dir := [2]float64{(b[0] - a[0]) / length, (b[1] - a[1]) / length}
+	bank := func(p [2]float64, side float64) ([2]float64, bool) {
+		for distance := 0.0; distance <= 64; distance += 2 {
+			q := [2]float64{p[0] + side*dir[0]*distance, p[1] + side*dir[1]*distance}
+			if math.Abs(q[0]) > ir.SizeM/2-8 || math.Abs(q[1]) > ir.SizeM/2-8 {
+				break
+			}
+			if grid.Sample(q[0], q[1]) >= ir.Terrain.WaterLevel+0.5 {
+				return q, true
+			}
+		}
+		return p, false
+	}
+	left, okLeft := bank(a, -1)
+	right, okRight := bank(b, 1)
+	if !okLeft || !okRight {
+		return a, b, fmt.Errorf("OSM bridge %v to %v has no dry abutments within 64m", a, b)
+	}
+	return left, right, nil
+}
+
+func writeExpeditionBridges(out *strings.Builder, ir *IR, grid *HeightGrid, seed int) error {
 	roads := append([]Road(nil), ir.Roads...)
 	sort.SliceStable(roads, func(i, j int) bool { return roads[i].Width > roads[j].Width })
 	var centers [][2]float64
@@ -236,12 +266,18 @@ func writeExpeditionBridges(out *strings.Builder, ir *IR, seed int) {
 			continue
 		}
 		a, b := r.Pts[0], r.Pts[len(r.Pts)-1]
-		mid := [2]float64{(a[0] + b[0]) / 2, (a[1] + b[1]) / 2}
 		length := math.Hypot(b[0]-a[0], b[1]-a[1])
 		half := ir.SizeM/2 - 8
 		if length < 12 || math.Abs(a[0]) > half || math.Abs(a[1]) > half || math.Abs(b[0]) > half || math.Abs(b[1]) > half {
 			continue
 		}
+		var err error
+		a, b, err = expeditionBridgeBanks(ir, grid, a, b)
+		if err != nil {
+			return err
+		}
+		mid := [2]float64{(a[0] + b[0]) / 2, (a[1] + b[1]) / 2}
+		length = math.Hypot(b[0]-a[0], b[1]-a[1])
 		duplicate := false
 		for _, c := range centers {
 			if math.Hypot(mid[0]-c[0], mid[1]-c[1]) < 18 {
@@ -256,6 +292,7 @@ func writeExpeditionBridges(out *strings.Builder, ir *IR, seed int) {
 		angle := math.Atan2(b[1]-a[1], b[0]-a[0]) * 180 / math.Pi
 		fmt.Fprintf(out, "let(za=nd_ground(%s,%s)+0.06,zb=nd_ground(%s,%s)+0.06) translate([%s,%s,(za+zb)/2]) rotate([0,0,%s]) gk_flatten() az_prop_bridge(seed=%d,L=%s,W=%s,rise=zb-za,pierDepth=max(10,(za+zb)/2-%s+8));\n", fnum(a[0]), fnum(a[1]), fnum(b[0]), fnum(b[1]), fnum(mid[0]), fnum(mid[1]), fnum(angle), seed+len(centers), fnum(length+3), fnum(width), fnum(ir.Terrain.WaterLevel))
 	}
+	return nil
 }
 
 func publishExpedition(repoRoot, output, assetRoot string, recipe ExpeditionRecipe, report ExpeditionReport) (string, ExpeditionReport, error) {
@@ -282,7 +319,7 @@ func publishExpedition(repoRoot, output, assetRoot string, recipe ExpeditionReci
 			return "", report, err
 		}
 	}
-	for _, name := range []string{"nextdayz_pcg.scad", "nextdayz_settlement.scad", "nextdayz_coldwar.scad", "kit_abandoned.scad", "kit_bohemia.scad", "kit_coldwar.scad", "nextdayz_geography.scad", "kit_road.scad", "gk_camera.scad", "kit_layout.scad", "kit_terrain.scad"} {
+	for _, name := range []string{"nextdayz_pcg.scad", "nextdayz_settlement.scad", "nextdayz_hokkaido.scad", "nextdayz_coldwar.scad", "kit_abandoned.scad", "kit_bohemia.scad", "kit_hokkaido.scad", "kit_coldwar.scad", "nextdayz_geography.scad", "kit_road.scad", "gk_camera.scad", "kit_layout.scad", "kit_terrain.scad"} {
 		data, err := os.ReadFile(filepath.Join(repoRoot, "assets/scad/lib", name))
 		if err != nil {
 			return "", report, err

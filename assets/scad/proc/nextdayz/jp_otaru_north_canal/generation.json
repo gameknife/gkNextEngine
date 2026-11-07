@@ -1,110 +1,142 @@
 {
   "mode": "geographic-skeleton/gameplay-pcg",
   "buildings": 120,
-  "treeBudget": 345,
-  "shrubBudget": 380,
-  "referenceRoads": 64,
+  "treeBudget": 0,
+  "shrubBudget": 260,
+  "referenceRoads": 28,
   "sites": [
     {
       "id": "south_housing",
-      "name": "South residential blocks",
-      "kind": "urban",
+      "name": "Minami timber-house lanes",
+      "kind": "hokkaido_lane",
       "at": [
-        -340,
+        -350,
         -340
       ],
       "size": [
-        200,
-        160
+        210,
+        78
       ],
       "rotation": 0,
-      "buildings": 24,
+      "buildings": 16,
       "risk": 1
     },
     {
       "id": "central_housing",
-      "name": "Iro-nai residential streets",
-      "kind": "urban",
+      "name": "Ironai backstreet homes",
+      "kind": "hokkaido_lane",
       "at": [
-        -340,
-        -130
+        -350,
+        -125
       ],
       "size": [
-        200,
-        160
+        210,
+        78
       ],
       "rotation": 0,
-      "buildings": 24,
+      "buildings": 16,
       "risk": 1
     },
     {
       "id": "hill_housing",
-      "name": "Hillside neighbourhood",
-      "kind": "urban",
+      "name": "Temiya hillside homes",
+      "kind": "hokkaido_lane",
       "at": [
-        -340,
-        95
+        -350,
+        85
       ],
       "size": [
-        200,
-        160
+        195,
+        78
       ],
       "rotation": -8,
-      "buildings": 20,
+      "buildings": 14,
       "risk": 1
     },
     {
-      "id": "market_street",
-      "name": "Ransacked shopping streets",
-      "kind": "downtown",
+      "id": "ironai_west",
+      "name": "Ironai old shopping street",
+      "kind": "shotengai",
       "at": [
-        -115,
-        -180
+        -340,
+        -235
       ],
       "size": [
-        150,
-        170
+        210,
+        48
       ],
       "rotation": 0,
       "buildings": 16,
       "risk": 2
     },
     {
-      "id": "canal_warehouses",
-      "name": "Canal stone warehouses",
-      "kind": "port",
+      "id": "market_street",
+      "name": "Canal approach shops",
+      "kind": "shotengai",
       "at": [
-        -145,
-        210
+        -130,
+        -175
       ],
       "size": [
-        120,
-        150
+        150,
+        48
       ],
       "rotation": 0,
-      "buildings": 8,
+      "buildings": 12,
+      "risk": 2
+    },
+    {
+      "id": "temiya_shops",
+      "name": "Temiya neighbourhood shops",
+      "kind": "shotengai",
+      "at": [
+        -330,
+        180
+      ],
+      "size": [
+        190,
+        48
+      ],
+      "rotation": 0,
+      "buildings": 12,
+      "risk": 1
+    },
+    {
+      "id": "canal_warehouses",
+      "name": "North canal stone stores",
+      "kind": "canal",
+      "at": [
+        -150,
+        200
+      ],
+      "size": [
+        210,
+        62
+      ],
+      "rotation": 90,
+      "buildings": 6,
       "risk": 2
     },
     {
       "id": "north_quay",
-      "name": "North cargo quay",
-      "kind": "port",
+      "name": "Ironai cargo quay",
+      "kind": "portyard",
       "at": [
-        175,
+        180,
         325
       ],
       "size": [
         150,
-        130
+        110
       ],
       "rotation": 0,
-      "buildings": 8,
+      "buildings": 6,
       "risk": 2
     },
     {
       "id": "southern_freight",
-      "name": "South freight workshops",
-      "kind": "industry",
+      "name": "South freight repair yard",
+      "kind": "portyard",
       "at": [
         270,
         -390
@@ -114,7 +146,23 @@
         100
       ],
       "rotation": 0,
-      "buildings": 6,
+      "buildings": 4,
+      "risk": 2
+    },
+    {
+      "id": "shipping_office",
+      "name": "Former shipping office and stores",
+      "kind": "portyard",
+      "at": [
+        -145,
+        365
+      ],
+      "size": [
+        100,
+        100
+      ],
+      "rotation": 0,
+      "buildings": 4,
       "risk": 2
     },
     {
@@ -123,11 +171,11 @@
       "kind": "medical",
       "at": [
         -130,
-        30
+        20
       ],
       "size": [
-        130,
-        96
+        110,
+        72
       ],
       "rotation": 0,
       "buildings": 4,
@@ -135,15 +183,15 @@
     },
     {
       "id": "police",
-      "name": "South police cordon",
+      "name": "South koban cordon",
       "kind": "checkpoint",
       "at": [
         -130,
         -410
       ],
       "size": [
-        120,
-        80
+        105,
+        72
       ],
       "rotation": 0,
       "buildings": 4,
@@ -151,19 +199,35 @@
     },
     {
       "id": "port_command",
-      "name": "South quarantine command",
+      "name": "Port quarantine command",
       "kind": "military",
       "at": [
         -130,
-        -317
+        -315
       ],
       "size": [
         100,
         76
       ],
       "rotation": 0,
-      "buildings": 6,
+      "buildings": 4,
       "risk": 3
+    },
+    {
+      "id": "shrine",
+      "name": "Hillside neighbourhood shrine",
+      "kind": "shrine",
+      "at": [
+        -340,
+        300
+      ],
+      "size": [
+        70,
+        80
+      ],
+      "rotation": 0,
+      "buildings": 2,
+      "risk": 1
     }
   ],
   "spawns": [
@@ -176,8 +240,8 @@
       330
     ],
     [
-      -160,
-      455
+      -170,
+      480
     ],
     [
       -40,
@@ -204,5 +268,68 @@
   ],
   "sizeM": 1000,
   "sourceDatumM": 0,
-  "reliefScale": 0.65
+  "reliefScale": 0.65,
+  "landcover": [
+    {
+      "id": "nw_birch_oak",
+      "kind": "hokkaido_mixed",
+      "areaM2": 53729
+    },
+    {
+      "id": "north_spruce_pocket",
+      "kind": "spruce",
+      "areaM2": 3685
+    },
+    {
+      "id": "west_slope_woods",
+      "kind": "hokkaido_mixed",
+      "areaM2": 7955
+    },
+    {
+      "id": "shrine_grove",
+      "kind": "hokkaido_mixed",
+      "areaM2": 12075
+    },
+    {
+      "id": "north_canal_park",
+      "kind": "meadow",
+      "areaM2": 7500
+    },
+    {
+      "id": "north_rail_verge",
+      "kind": "coastal_grass",
+      "areaM2": 9720
+    },
+    {
+      "id": "west_back_gardens",
+      "kind": "meadow",
+      "areaM2": 22050
+    },
+    {
+      "id": "middle_back_gardens",
+      "kind": "meadow",
+      "areaM2": 18900
+    },
+    {
+      "id": "south_rail_verge",
+      "kind": "coastal_grass",
+      "areaM2": 6050
+    },
+    {
+      "id": "quay_reclaimed_grass",
+      "kind": "coastal_grass",
+      "areaM2": 45200
+    },
+    {
+      "id": "south_dock_grass",
+      "kind": "meadow",
+      "areaM2": 24735
+    },
+    {
+      "id": "canal_bank_scrub",
+      "kind": "riparian",
+      "areaM2": 124175
+    }
+  ],
+  "treeAlleys": 5
 }

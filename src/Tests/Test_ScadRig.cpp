@@ -831,6 +831,32 @@ TEST_CASE("NextDayz melee clips keep grips attached through wind-up contact and 
         CHECK(low->loop);
         CHECK_FALSE(attack->loop);
         CHECK(attack->duration == Catch::Approx(1.0f));
+        for (const FRigClip* hold : {low, guard})
+        {
+            INFO(hold->name);
+            const auto pose = SampleSurvivorClip(asset, *hold, 0.0f);
+            NextGameplay::ComputeRigComponentTransforms(asset, pose, transforms);
+            CHECK(glm::length(NextGameplay::RigBonePosition(transforms, socket) -
+                              NextGameplay::RigBonePosition(transforms, weapon)) < 0.025f);
+            CHECK(glm::length(NextGameplay::RigBonePosition(transforms, handL) -
+                              NextGameplay::RigBonePosition(transforms, targetL)) < 0.04f);
+            if (definition->id == "axe")
+            {
+                // The heavy head stays up, and both palms wrap the haft with
+                // enough separation to control it instead of cupping a gun grip.
+                const glm::mat4 toWeapon = glm::inverse(transforms[weapon]);
+                const int32_t handR = asset.FindBone("bone_hand_r");
+                const glm::vec4 palm(0.0f, -0.06f, 0.01f, 1.0f);
+                const glm::vec3 palmL(toWeapon * transforms[handL] * palm);
+                const glm::vec3 palmR(toWeapon * transforms[handR] * palm);
+                const glm::vec3 haft = glm::normalize(glm::vec3(transforms[weapon][2]));
+                CHECK(haft.y > 0.65f);
+                CHECK(glm::length(glm::vec2(palmL.x, palmL.y)) < 0.025f);
+                CHECK(palmL.z > 0.15f);
+                CHECK(palmL.z < 0.35f);
+                CHECK(glm::length(palmL - palmR) > 0.22f);
+            }
+        }
         glm::vec3 start{};
         for (float time : {0.0f, contact * 0.6f, contact, contact + 0.16f, 1.0f})
         {

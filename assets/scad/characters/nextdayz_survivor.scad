@@ -380,17 +380,21 @@ anim_weapon_low       = rh_upper_clip(SKEL, RIG, [[0, [["weapon", HOLD_LOW], ["t
 function nd_melee_key(weapon, body = [0, 0, 0], twoHands = false) =
     let(guard = [[0.20, -0.23, 0.34], [-25, 0, -15]],
         guardLocal = rh_fx(rh_finv(rh_frame(weapon[0], weapon[1])), rh_frame(guard[0], guard[1])),
-        support = twoHands ? [[0, -0.035, 0.015], [-160, 0, 0]] : [guardLocal[0], rh_e(guardLocal[1])])
+        // Left palm sits on the haft, a hand-span above the right grip.
+        // The wrist is below the shaft because this hand wraps over it.
+        support = twoHands ? [[0, -0.20, -0.06], [-160, 0, 0]] : [guardLocal[0], rh_e(guardLocal[1])])
     [["weapon", weapon], ["torso", body],
      ["head", [-body[0] * 0.6, -body[1] * 0.6, -body[2] * 0.8]],
      ["hand_l", support]];
 
-KNIFE_LOW = [[-0.28, -0.18, 0.12], [55, 0, -12]];
-KNIFE_GUARD = [[-0.27, -0.28, 0.34], [-12, 0, -15]];
-BAR_LOW = [[-0.29, -0.18, 0.15], [60, 0, -12]];
-BAR_GUARD = [[-0.28, -0.26, 0.34], [-65, 0, -25]];
-AXE_LOW = [[-0.22, -0.26, 0.17], [45, 0, -12]];
-AXE_GUARD = [[-0.22, -0.29, 0.36], [-55, 0, -15]];
+KNIFE_LOW = [[-0.30, -0.13, 0.10], [35, -20, -18]];
+KNIFE_GUARD = [[-0.30, -0.30, 0.31], [-35, -15, -20]];
+// Long tools stand beside the body instead of pointing like a rifle barrel.
+BAR_LOW = [[-0.30, -0.14, 0.10], [-72, 0, -12]];
+BAR_GUARD = [[-0.29, -0.25, 0.34], [-70, 0, -25]];
+// Low two-handed diagonal carry; guard raises the head to the shoulder.
+AXE_LOW = [[-0.20, -0.29, 0.13], [-75, 0, 28]];
+AXE_GUARD = [[-0.19, -0.30, 0.31], [-65, 0, 25]];
 
 anim_melee_knife_low = rh_upper_clip(SKEL, RIG, [[0, nd_melee_key(KNIFE_LOW)]], true);
 anim_melee_knife_ready = rh_upper_clip(SKEL, RIG, [[0, nd_melee_key(KNIFE_GUARD, [0, 0, -12])]], true);
@@ -421,8 +425,8 @@ anim_melee_crowbar_attack = rh_upper_clip(SKEL, RIG, [
 anim_melee_axe_attack = rh_upper_clip(SKEL, RIG, [
     [0.00, nd_melee_key(AXE_GUARD, [0, 0, -12], true)],
     [0.26, nd_melee_key([[-0.24, -0.17, 0.51], [-115, 0, -25]], [-10, 0, -24], true)],
-    [0.43, nd_melee_key([[-0.13, -0.45, 0.29], [15, 0, 10]], [12, 0, 12], true)],
-    [0.59, nd_melee_key([[-0.04, -0.35, 0.16], [60, 0, 30]], [18, 0, 22], true)],
+    [0.43, nd_melee_key([[-0.02, -0.27, 0.34], [15, 0, 10]], [12, 0, 12], true)],
+    [0.59, nd_melee_key([[0.02, -0.25, 0.28], [60, 0, 30]], [18, 0, 22], true)],
     [1.00, nd_melee_key(AXE_GUARD, [0, 0, -12], true)]
 ], false);
 

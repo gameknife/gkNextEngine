@@ -34,8 +34,16 @@ namespace NextDayz
 
         FMeleeViewPose MeleeReadyPose(const FWeaponDef& def)
         {
-            return {{0.26f, -0.22f, 0.48f},
-                    {def.id == "knife" ? -15.0f : -52.0f, -12.0f, -12.0f}};
+            if (def.id == "axe") return {{0.28f, -0.28f, 0.46f}, {-66.0f, -12.0f, 65.0f}};
+            if (def.id == "crowbar") return {{0.30f, -0.24f, 0.44f}, {-68.0f, -16.0f, -14.0f}};
+            return {{0.24f, -0.22f, 0.43f}, {-25.0f, -18.0f, -12.0f}};
+        }
+
+        FMeleeViewPose MeleeLowPose(const FWeaponDef& def)
+        {
+            if (def.id == "axe") return {{0.32f, -0.46f, 0.48f}, {-74.0f, -10.0f, 60.0f}};
+            if (def.id == "crowbar") return {{0.32f, -0.40f, 0.46f}, {-65.0f, -16.0f, -18.0f}};
+            return {{0.28f, -0.34f, 0.45f}, {32.0f, -12.0f, -15.0f}};
         }
 
         // The same contact times drive first-person motion, TPS clips and damage.
@@ -854,9 +862,9 @@ namespace NextDayz
             glm::vec3 meleeEuler(0.0f);
             if (def && def->IsMelee())
             {
-                const FMeleeViewPose ready = MeleeReadyPose(*def);
-                targetOffset = player.IsAiming() || IsSwinging() ? ready.offset : glm::vec3(0.28f, -0.36f, 0.48f);
-                meleeEuler = glm::radians(player.IsAiming() || IsSwinging() ? ready.euler : glm::vec3(38.0f, -8.0f, -12.0f));
+                const FMeleeViewPose pose = player.IsAiming() || IsSwinging() ? MeleeReadyPose(*def) : MeleeLowPose(*def);
+                targetOffset = pose.offset;
+                meleeEuler = glm::radians(pose.euler);
             }
             const float actionTime = PresentationActionTime();
             const float actionArc = std::sin(glm::pi<float>() * actionTime);

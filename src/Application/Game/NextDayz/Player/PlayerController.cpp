@@ -1309,7 +1309,15 @@ namespace NextDayz
                                                  0.01f);
         sprintAlpha_ = glm::clamp(sprintAlpha_ + (sprinting ? 1.0f : -1.0f) * sprintRate * dt, 0.0f, 1.0f);
 
-        const float targetFov = (IsAiming() && !meleeEquipped_ ? aimFov_ : camera.BaseFov) + camera.SprintFovBoost * sprintAlpha_;
+        // Widen the view only as measured horizontal speed rises above a run.
+        // Sprint input can stay held while a wall prevents the body from moving.
+        const float speed = locomotion_.horizontalSpeed;
+        const float sprintSpeedAlpha = glm::clamp(
+            (speed - config_.Player.StandRunSpeed) /
+                std::max(config_.Player.StandSprintSpeed - config_.Player.StandRunSpeed, 0.01f),
+            0.0f, 1.0f);
+        const float targetFov = (IsAiming() && !meleeEquipped_ ? aimFov_ : camera.BaseFov) +
+                                camera.SprintFovBoost * sprintAlpha_ * sprintSpeedAlpha;
         const float t = 1.0f - std::exp(-camera.FovLerpSpeed * dt);
         currentFov_ = glm::mix(currentFov_, targetFov, t);
 
@@ -1323,7 +1331,6 @@ namespace NextDayz
         eyeDip_ = glm::clamp(eyeDip_ + eyeDipVelocity_ * dt, -0.18f, 0.06f);
 
         // Head bob in step with the stride: two dips and one roll sway per cycle.
-        const float speed = locomotion_.horizontalSpeed;
         const float bobTarget = locomotion_.onGround && !IsTraversing()
                                     ? glm::clamp(speed / config_.Animation.StandRunAuthoredSpeed, 0.0f, 1.0f) *
                                           (sprinting ? camera.HeadBobSprintScale : 1.0f) *

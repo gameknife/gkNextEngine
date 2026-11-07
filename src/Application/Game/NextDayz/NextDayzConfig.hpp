@@ -371,11 +371,12 @@ namespace NextDayz
         // Weather cycle (game hours between changes).
         double WeatherMinHours = 2.5;
         double WeatherMaxHours = 5.5;
+        float WeatherTransitionSeconds = 30.0f; // real seconds for the full clear <-> fog range
         // Height fog: density per weather, a morning mist on top, and the fog
         // colour's radiance (same scale as the sun: ~50 reads as daylight haze).
         float ClearFogDensity = 0.0035f;
         float OvercastFogDensity = 0.0075f;
-        float FogWeatherDensity = 0.028f;
+        float FogWeatherDensity = 0.065f;
         float DawnMistDensity = 0.008f;
         float NightFogDensity = 0.004f;
         float FogHeightFalloff = 0.05f;

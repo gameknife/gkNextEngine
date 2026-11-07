@@ -5,7 +5,6 @@
 
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/Subsystems/NextAudio.hpp"
-#include "Application/Game/NextDayz/World/TimeSystem.hpp"
 #include "Application/Game/NextDayz/Weapons/WeaponDefs.hpp"
 
 namespace NextDayz
@@ -199,16 +198,15 @@ namespace NextDayz
         return lo + (hi - lo) * static_cast<float>(ambienceState_ >> 8) / 16777216.0f;
     }
 
-    void NextDayzAudio::UpdateAmbience(float deltaSeconds, float hour, float daylight, EWeather weather, float storm)
+    void NextDayzAudio::UpdateAmbience(float deltaSeconds, float hour, float daylight, float fog, float storm)
     {
         const float dt = std::max(deltaSeconds, 0.0f);
         const float day = SmoothStep(0.1f, 0.85f, daylight);
         const float night = 1.0f - SmoothStep(0.05f, 0.65f, daylight);
         const float dawn = SmoothStep(4.5f, 5.5f, hour) * (1.0f - SmoothStep(8.0f, 9.0f, hour));
         const float evening = SmoothStep(16.0f, 18.0f, hour) * (1.0f - SmoothStep(19.5f, 21.0f, hour));
-        const bool fog = weather == EWeather::Fog;
         const float overcast = std::clamp(storm / 0.6f, 0.0f, 1.0f);
-        const float wildlife = fog ? 0.35f : 1.0f - 0.45f * overcast;
+        const float wildlife = glm::mix(1.0f - 0.45f * overcast, 0.35f, fog);
         ambienceMix_ = {
             0.20f * day * (1.0f - 0.6f * evening) * wildlife,
             0.18f * evening * wildlife,
@@ -217,8 +215,8 @@ namespace NextDayz
             0.10f * day * wildlife,
             0.13f * std::max(night, evening) * wildlife,
             0.18f * night * wildlife,
-            fog ? 0.018f : 0.045f + 0.07f * overcast,
-            fog ? 0.025f : 0.045f + 0.08f * overcast,
+            glm::mix(0.045f + 0.07f * overcast, 0.018f, fog),
+            glm::mix(0.045f + 0.08f * overcast, 0.025f, fog),
         };
 
         // Adjacent clips overlap only over their baked fades. Inactive layers
@@ -232,7 +230,7 @@ namespace NextDayz
         }
         if ((windSeconds_ -= dt) <= 0.0f)
         {
-            Play(!fog && overcast > 0.5f ? WindGust : WindCalm, ambienceMix_.wind, 1000);
+            Play(fog < 0.5f && overcast > 0.5f ? WindGust : WindCalm, ambienceMix_.wind, 1000);
             windSeconds_ = 6.0f;
         }
         if ((birdSeconds_ -= dt) <= 0.0f)

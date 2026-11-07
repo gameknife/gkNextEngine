@@ -87,6 +87,8 @@ namespace NextDayz
         float Daylight() const { return daylight_; }
         // 0 clear .. 1 the worst of it (for wind, cold and the infected).
         float Storm() const;
+        // Current fog coverage, including the gradual arrival/departure.
+        float Fog() const;
         // 0 day .. 1 deep night, deepened by bad weather: how cold it is outside.
         float Chill() const;
         // Extra night light from a lit lantern (0 off .. 1 lit).

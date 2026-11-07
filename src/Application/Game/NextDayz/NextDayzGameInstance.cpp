@@ -1212,7 +1212,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     UpdateWorldPressure();
     UpdateFirecrackers(dt);
     UpdateSurvivalFeedback(dt);
-    audio_.UpdateAmbience(dt, static_cast<float>(time_.Hour()), time_.Daylight(), time_.Weather(), time_.Storm());
+    audio_.UpdateAmbience(dt, static_cast<float>(time_.Hour()), time_.Daylight(), time_.Fog(), time_.Storm());
     if (lanternLit_)
     {
         lanternSeconds_ -= dt;
@@ -2067,10 +2067,7 @@ void NextDayzGameInstance::UpdateWorldPressure()
     {
         sight *= 0.7f;
     }
-    if (time_.Weather() == NextDayz::EWeather::Fog)
-    {
-        sight *= 0.7f;
-    }
+    sight *= glm::mix(1.0f, 0.7f, time_.Fog());
     zombies_.SetSightScale(sight);
     // More of them walk the night.
     zombieSpawns_.SetGlobalCap(night > 0.6f ? 48 : 40);
@@ -3507,6 +3504,15 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     reg.Add("armor", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(inventory_.Armor()); });
     reg.Add("weather", [this]() -> Runtime::Agent::FAgentQueryValue {
         return std::string(NextDayz::WeatherName(time_.Weather()));
+    });
+    reg.Add("weatherBlend", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(time_.Storm());
+    });
+    reg.Add("fogDensity", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(GetEngine().GetScene().GetEnvSettings().Atmosphere.FogDensity);
+    });
+    reg.Add("sunIntensity", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(GetEngine().GetScene().GetEnvSettings().SunIntensity);
     });
     reg.Add("lanternLit", [this]() -> Runtime::Agent::FAgentQueryValue { return lanternLit_; });
     reg.Add("cacheMarked", [this]() -> Runtime::Agent::FAgentQueryValue { return cacheMarker_.has_value(); });

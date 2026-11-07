@@ -24,8 +24,6 @@ class NextEngine;
 
 namespace NextDayz
 {
-    enum class EWeather : uint8_t;
-
     struct FAmbienceMix
     {
         float day = 0.0f;
@@ -75,7 +73,7 @@ namespace NextDayz
         // Layered rural beds, wildlife and quiet wind, selected by clock and
         // actual weather. Fog is sheltered/muffled, not a stronger wind storm.
         // Eight-second beds have two-second fades and start six seconds apart.
-        void UpdateAmbience(float deltaSeconds, float hour, float daylight, EWeather weather, float storm);
+        void UpdateAmbience(float deltaSeconds, float hour, float daylight, float fog, float storm);
         const FAmbienceMix& AmbienceMix() const { return ambienceMix_; }
 
     private:

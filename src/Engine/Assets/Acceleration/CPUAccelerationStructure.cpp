@@ -395,12 +395,16 @@ void FCPUAccelerationStructure::RebuildBVHOnly(Scene& scene)
 
 RayCastResult FCPUAccelerationStructure::RayCastInCPU(vec3 rayOrigin, vec3 rayDir)
 {
-    RayCastResult result {};
     const SnapshotPtr snapshot = AcquireSnapshot();
+    return snapshot ? RayCastInSnapshot(*snapshot, rayOrigin, rayDir) : RayCastResult{};
+}
 
-    if (snapshot && !snapshot->instances.empty())
+RayCastResult FCPUAccelerationStructure::RayCastInSnapshot(const FCPUTLASSnapshot& snapshot, vec3 rayOrigin, vec3 rayDir,
+                                                          bool faceNormalTowardRay, float maxDistance)
+{
+    RayCastResult result {};
+    if (!snapshot.instances.empty())
     {
-        constexpr float maxDistance = 2000.0f;
         constexpr float skipEpsilon = 1e-3f;
         float accumulatedT = 0.0f;
         glm::vec3 currentOrigin = rayOrigin;
@@ -409,19 +413,19 @@ RayCastResult FCPUAccelerationStructure::RayCastInCPU(vec3 rayOrigin, vec3 rayDi
             const float remainingDistance = maxDistance - accumulatedT;
             tinybvh::Ray ray(tinybvh::bvhvec3(currentOrigin.x, currentOrigin.y, currentOrigin.z),
                              tinybvh::bvhvec3(rayDir.x, rayDir.y, rayDir.z), remainingDistance);
-            snapshot->tlas.Intersect(ray);
+            snapshot.tlas.Intersect(ray);
             if (ray.hit.t >= remainingDistance)
             {
                 break;
             }
 
             uint32_t primIdx = ray.hit.prim;
-            if (!snapshot->blasSet || ray.hit.inst >= snapshot->instances.size() || ray.hit.inst >= snapshot->contexts.size())
+            if (!snapshot.blasSet || ray.hit.inst >= snapshot.instances.size() || ray.hit.inst >= snapshot.contexts.size())
             {
                 break;
             }
-            const tinybvh::BLASInstance& instance = snapshot->instances[ray.hit.inst];
-            const FCPUTLASInstanceInfo& instContext = snapshot->contexts[ray.hit.inst];
+            const tinybvh::BLASInstance& instance = snapshot.instances[ray.hit.inst];
+            const FCPUTLASInstanceInfo& instContext = snapshot.contexts[ray.hit.inst];
             const float globalT = accumulatedT + ray.hit.t;
             vec3 hitPos = rayOrigin + rayDir * globalT;
             if (!instContext.rayCastVisible)
@@ -431,11 +435,11 @@ RayCastResult FCPUAccelerationStructure::RayCastInCPU(vec3 rayOrigin, vec3 rayDi
                 continue;
             }
 
-            if (instance.blasIdx >= snapshot->blasSet->contexts.size())
+            if (instance.blasIdx >= snapshot.blasSet->contexts.size())
             {
                 break;
             }
-            const FCPUBLASContext& context = snapshot->blasSet->contexts[instance.blasIdx];
+            const FCPUBLASContext& context = snapshot.blasSet->contexts[instance.blasIdx];
             if (primIdx >= context.extinfos.size())
             {
                 break;
@@ -443,14 +447,14 @@ RayCastResult FCPUAccelerationStructure::RayCastInCPU(vec3 rayOrigin, vec3 rayDi
             mat4* worldTS = (mat4*)instance.transform;
             vec4 normalWS = vec4( context.extinfos[primIdx].normal, 0.0f) * *worldTS;
             // Ensure normal faces toward the ray origin (flip if we hit a back face)
-            if (glm::dot(glm::vec3(normalWS), rayDir) > 0.0f)
+            if (faceNormalTowardRay && glm::dot(glm::vec3(normalWS), rayDir) > 0.0f)
                 normalWS = -normalWS;
             result.HitPoint = vec4(hitPos, 0);
             result.Normal = normalWS;
             result.Hit = true;
             result.T = globalT;
             result.InstanceId = instContext.nodeId;
-            result.MaterialId = FetchMaterialId(*snapshot, context.extinfos[primIdx].matIdx, ray.hit.inst);
+            result.MaterialId = FetchMaterialId(snapshot, context.extinfos[primIdx].matIdx, ray.hit.inst);
             break;
         }
     }

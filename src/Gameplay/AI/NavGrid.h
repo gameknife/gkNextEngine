@@ -9,6 +9,12 @@
 namespace Assets::CPU
 {
     class FCPUAccelerationStructure;
+    struct FCPUTLASSnapshot;
+}
+
+namespace Runtime
+{
+    class TerrainComponent;
 }
 
 namespace NextGameplay
@@ -29,6 +35,16 @@ namespace NextGameplay
         float maxStepHeight = 0.5f;
         float sampleCeiling = 50.0f;
         float floorHeightTolerance = 1.5f;
+        // Optional ground-level sampling for outdoor grids with enterable
+        // buildings. Start below roofs, relative to the terrain at each ray.
+        std::function<float(float, float)> sampleFloorHeight;
+        float floorSearchHeight = 1.2f;
+        std::function<bool(const glm::vec3&)> isUnwalkable;
+        int maxSamplingWorkers = 32;
+        // Optional exact heightfield shortcut, used only where the immutable
+        // scene BVH has no other geometry overlapping the agent footprint.
+        const Runtime::TerrainComponent* terrain = nullptr;
+        std::vector<uint32_t> terrainInstanceIds;
         glm::vec3 worldMin{0.0f};
         glm::vec3 worldMax{0.0f};
     };
@@ -37,6 +53,12 @@ namespace NextGameplay
     {
     public:
         void Build(Assets::CPU::FCPUAccelerationStructure& bvh, const FNavGridSettings& settings);
+        // Reuse overlapping cells from an immutable window of the same static
+        // scene/sampling policy. A separate destination allows background
+        // sampling while the old grid continues serving paths. Returns the
+        // number of resampled cells (zero on a cache hit).
+        size_t BuildShifted(Assets::CPU::FCPUAccelerationStructure& bvh, const FNavGridSettings& settings,
+                            const FNavGrid& previous);
         void RebuildDirtyRegion(Assets::CPU::FCPUAccelerationStructure& bvh, const glm::vec3& dirtyWorldMin, const glm::vec3& dirtyWorldMax);
 
         // Marks cells whose predicate returns true as unwalkable — semantic
@@ -65,6 +87,8 @@ namespace NextGameplay
         int GetHeight() const { return height_; }
         glm::vec3 GetWorldMin() const { return settings_.worldMin; }
         float GetCellSize() const { return settings_.cellSize; }
+        size_t SampledCellCount() const { return sampledCellCount_; }
+        size_t GeometrySampledCellCount() const { return geometrySampledCellCount_; }
 
         bool IsCellWalkable(int gx, int gz) const;
         bool IsCellReachable(int gx, int gz, float referenceHeight) const;
@@ -94,7 +118,8 @@ namespace NextGameplay
         bool IsGridRectValid(const FGridRect& rect) const;
         void SampleBaseWalkability(Assets::CPU::FCPUAccelerationStructure& bvh, const FGridRect& rect);
         void UpdateWalkabilityFromBase(const FGridRect& rect);
-        bool SampleBaseCell(Assets::CPU::FCPUAccelerationStructure& bvh, int gx, int gz, FNavCell& outCell) const;
+        bool SampleBaseCell(const Assets::CPU::FCPUTLASSnapshot& snapshot, int gx, int gz, FNavCell& outCell) const;
+        bool SampleTerrainCell(int gx, int gz, FNavCell& outCell) const;
         int GetFootprintMarginCells() const;
         int GetExtraErosionCells() const;
 
@@ -102,5 +127,7 @@ namespace NextGameplay
         FNavGridSettings settings_;
         int width_ = 0;
         int height_ = 0;
+        size_t sampledCellCount_ = 0;
+        size_t geometrySampledCellCount_ = 0;
     };
 }

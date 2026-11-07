@@ -836,6 +836,70 @@ namespace
     }
 }
 
+TEST_CASE("NextDayz pursuit stays fast while searching after losing sight", "[NextDayz][Zombie][Navigation]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(1);
+    const auto handle = zombies.Spawn(EZombieProfile::Civilian, {});
+    auto& zombie = *zombies.Resolve(handle);
+    zombie.state = EZombieState::Chase;
+    zombie.aware = true;
+    zombie.variant.lame = false;
+    zombie.variant.speedScale = 1.0f;
+    const glm::vec3 player(0.0f, 0.0f, 30.0f);
+    for (int tick = 0; tick < 90; ++tick)
+    {
+        zombies.Update(1.0f / 60.0f, player, {}, true, AlwaysVisible, {});
+    }
+    CHECK(zombie.Speed() > FPlayerConfig{}.StandRunSpeed);
+    CHECK(zombie.Speed() < FPlayerConfig{}.StandSprintSpeed);
+    const auto blocked = [](const glm::vec3&, const glm::vec3&) { return false; };
+    for (int tick = 0; tick < 90; ++tick)
+    {
+        zombies.Update(1.0f / 60.0f, player, {}, true, blocked, {});
+    }
+    CHECK(zombie.state == EZombieState::Investigate);
+    CHECK(zombie.Speed() > FPlayerConfig{}.StandRunSpeed);
+}
+
+TEST_CASE("NextDayz exhausted routes stop without climbing toward the target", "[NextDayz][Zombie][Navigation]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(1);
+    const auto handle = zombies.Spawn(EZombieProfile::Civilian, {});
+    auto& zombie = *zombies.Resolve(handle);
+    zombie.state = EZombieState::Chase;
+    zombie.aware = true;
+    const glm::vec3 player(0.0f, 1.5f, 2.0f);
+    const auto route = [](const glm::vec3& from, const glm::vec3&)
+    {
+        return std::vector<glm::vec3>{from}; // no reachable continuation onto the ledge
+    };
+    for (int tick = 0; tick < 120; ++tick)
+    {
+        zombies.Update(1.0f / 60.0f, player, {}, true, AlwaysVisible, {}, route);
+    }
+    CHECK(zombie.position.z == Catch::Approx(0.0f));
+    CHECK(zombie.position.y == Catch::Approx(0.0f));
+    CHECK(zombies.ConsumePlayerDamageRequests().empty());
+}
+
+TEST_CASE("NextDayz attack cannot land through a wall or above its reach", "[NextDayz][Zombie][Navigation]")
+{
+    using namespace NextDayz;
+    for (const bool wall : {false, true})
+    {
+        ZombieSystem zombies(1);
+        const auto handle = zombies.Spawn(EZombieProfile::Civilian, {});
+        auto& zombie = *zombies.Resolve(handle);
+        zombie.state = EZombieState::Attack;
+        const auto visible = [wall](const glm::vec3&, const glm::vec3&) { return !wall; };
+        zombies.Update(zombies.AttackStrikeTime(zombie.attack) + 0.01f,
+                       {0.0f, wall ? 0.0f : 1.5f, 1.0f}, {}, true, visible, {});
+        CHECK(zombies.ConsumePlayerDamageRequests().empty());
+    }
+}
+
 TEST_CASE("NextDayz infected steer like bodies: limited turn rate and acceleration",
           "[NextDayz][Productization][Zombie]")
 {
@@ -848,6 +912,7 @@ TEST_CASE("NextDayz infected steer like bodies: limited turn rate and accelerati
     zombie.aware = true;
     // Prey directly behind: one 0.1 s tick cannot turn it around.
     const glm::vec3 player(0.0f, 0.0f, -8.0f);
+    zombie.lastKnownPlayerPosition = player;
     zombies.Update(0.1f, player, {}, true, AlwaysVisible, {});
     const float turned = glm::degrees(std::acos(glm::clamp(glm::dot(zombie.forward, glm::vec3(0, 0, 1)), -1.0f, 1.0f)));
     CHECK(turned > 5.0f);

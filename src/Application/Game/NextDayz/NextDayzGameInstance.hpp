@@ -41,6 +41,8 @@
 #include "Application/Game/NextDayz/World/ExpeditionMaps.hpp"
 #include "Application/Game/NextDayz/World/RescueHelicopter.hpp"
 
+#include <future>
+
 class NextDayzGameInstance : public NextGameInstanceBase
 {
 public:
@@ -139,7 +141,36 @@ private:
     void CreateZombieVisuals();
     void SyncZombieVisuals(float deltaSeconds = 0.0f);
     void ConfigureZombieSpawnPoints();
-    void BuildZombieNavigation();
+    void BuildZombieNavigation(bool background = false);
+    void UpdateZombieNavigation();
+    struct FZombieNavigationBuild
+    {
+        NextGameplay::FNavGrid grid;
+        double elapsedMs = 0.0;
+    };
+    void ApplyZombieNavigation(FZombieNavigationBuild result);
+    struct FNavigationFrameStats
+    {
+        std::array<uint32_t, 1001> histogram{};
+        uint32_t frames = 0;
+        double peakMs = 0.0;
+        void Record(double milliseconds)
+        {
+            ++histogram[std::clamp(static_cast<int>(std::ceil(milliseconds)), 0, 1000)];
+            ++frames;
+            peakMs = std::max(peakMs, milliseconds);
+        }
+        double P95() const
+        {
+            uint32_t count = 0;
+            for (size_t bucket = 0; bucket < histogram.size(); ++bucket)
+            {
+                count += histogram[bucket];
+                if (count >= (frames * 95 + 99) / 100) return static_cast<double>(bucket);
+            }
+            return 0.0;
+        }
+    };
     void HandleDamageEvents();
     void UpdateZombieAudio(float deltaSeconds);
     void ValidationHitZombie(NextDayz::EHitZone zone);
@@ -218,6 +249,16 @@ private:
     NextDayz::ZombieSpawnDirector zombieSpawns_;
     NextDayz::ZombieVisualPool zombieVisuals_;
     NextGameplay::FNavGrid zombieNavGrid_;
+    NextGameplay::FNavGrid zombieNavSpare_;
+    std::future<FZombieNavigationBuild> zombieNavBuild_;
+    glm::vec3 zombieNavCenter_{};
+    uint64_t zombieNavBuildCount_ = 0;
+    double zombieNavBuildMs_ = 0.0;
+    double zombieNavApplyPeakMs_ = 0.0;
+    bool validationNavProfile_ = false;
+    FNavigationFrameStats navBuildFrames_{};
+    FNavigationFrameStats navIdleFrames_{};
+    std::chrono::steady_clock::time_point navProfileFrame_{};
     NextDayz::TimeSystem time_;
     Runtime::FTerrainGrassSystem grass_;
     std::vector<Runtime::FGrassInteractor> grassInteractors_;

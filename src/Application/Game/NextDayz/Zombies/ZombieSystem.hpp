@@ -165,6 +165,7 @@ namespace NextDayz
     {
     public:
         using FPathResolver = std::function<std::vector<glm::vec3>(const glm::vec3&, const glm::vec3&)>;
+        using FMovementResolver = std::function<glm::vec3(const glm::vec3&, const glm::vec3&)>;
 
         explicit ZombieSystem(size_t capacity = 56);
 
@@ -182,7 +183,8 @@ namespace NextDayz
 
         void Update(float deltaSeconds, const glm::vec3& playerPosition, const glm::vec3& playerForward,
                     bool playerAlive, const std::function<bool(const glm::vec3&, const glm::vec3&)>& hasLineOfSight,
-                    std::span<const FNoiseEvent> noises, const FPathResolver& resolvePath = {});
+                    std::span<const FNoiseEvent> noises, const FPathResolver& resolvePath = {},
+                    const FMovementResolver& resolveMovement = {});
 
         const FZombieRuntime* Resolve(FZombieHandle handle) const;
         FZombieRuntime* Resolve(FZombieHandle handle);
@@ -217,7 +219,8 @@ namespace NextDayz
                           const std::function<bool(const glm::vec3&, const glm::vec3&)>& hasLineOfSight) const;
         void UpdateAttack(FZombieRuntime& zombie, const glm::vec3& playerPosition, bool playerAlive,
                           float deltaSeconds);
-        void Separate(float deltaSeconds, const glm::vec3& playerPosition);
+        void Move(FZombieRuntime& zombie, const glm::vec3& displacement, const FMovementResolver& resolveMovement) const;
+        void Separate(float deltaSeconds, const glm::vec3& playerPosition, const FMovementResolver& resolveMovement);
         FZombieVariant MakeVariant(FZombieHandle handle) const;
         glm::vec3 NextRoamTarget(FZombieRuntime& zombie) const;
 

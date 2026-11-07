@@ -12,7 +12,7 @@ namespace NextDayz
     {
         constexpr float kChaseRepathSeconds = 0.6f;
         constexpr float kRoamRepathSeconds = 3.0f;
-        constexpr float kWaypointReach = 0.5f;
+        constexpr float kWaypointReach = 0.18f;
         constexpr float kSteerDirectDistance = 2.5f;   // inside this, chase the player, not the grid
         constexpr float kWindupCloseSpeed = 1.6f;
 
@@ -310,7 +310,7 @@ namespace NextDayz
             alignment = std::clamp(glm::dot(zombie.forward, desired), 0.0f, 1.0f);
         }
         // Sharp turns bleed speed: a charging infected cannot cut a corner at full tilt.
-        const float target = std::max(speed, 0.0f) * (0.25f + 0.75f * alignment);
+        const float target = length > 1.0e-4f ? std::max(speed, 0.0f) * (0.25f + 0.75f * alignment) : 0.0f;
         const float current = zombie.Speed();
         const float rate = target > current ? config_.Acceleration : config_.Deceleration;
         zombie.velocity = zombie.forward * MoveTowards(current, target, rate * deltaSeconds);
@@ -330,8 +330,7 @@ namespace NextDayz
             zombie.state == EZombieState::Wander ? kRoamRepathSeconds : kChaseRepathSeconds;
         zombie.repathSeconds = std::max(0.0f, zombie.repathSeconds - deltaSeconds);
         const bool targetMoved = glm::length(Flat(target - zombie.pathTarget)) >= 2.0f;
-        const bool pathFinished = zombie.pathWaypoint >= zombie.path.size();
-        const bool wantsRoute = resolvePath && (zombie.repathSeconds <= 0.0f || targetMoved || pathFinished);
+        const bool wantsRoute = resolvePath && (zombie.repathSeconds <= 0.0f || targetMoved);
         if (wantsRoute && pathBudget_ <= 0)
         {
             ++pathDeferred_;
@@ -354,7 +353,7 @@ namespace NextDayz
             }
         }
 
-        glm::vec3 waypoint = target;
+        glm::vec3 waypoint = resolvePath ? zombie.position : target;
         if (resolvePath)
         {
             while (zombie.pathWaypoint < zombie.path.size() &&
@@ -365,14 +364,8 @@ namespace NextDayz
             if (zombie.pathWaypoint < zombie.path.size())
             {
                 waypoint = zombie.path[zombie.pathWaypoint];
-                // Ride the segment's height instead of popping to the next cell's.
-                const glm::vec3 from = zombie.pathWaypoint > 0 ? zombie.path[zombie.pathWaypoint - 1] : zombie.position;
-                const glm::vec3 segment = Flat(waypoint - from);
-                const float segmentLength2 = glm::dot(segment, segment);
-                const float t = segmentLength2 > 1.0e-6f
-                    ? std::clamp(glm::dot(Flat(zombie.position - from), segment) / segmentLength2, 0.0f, 1.0f)
-                    : 1.0f;
-                zombie.position.y = glm::mix(from.y, waypoint.y, t);
+                // Waypoints steer horizontally. Only the movement resolver may
+                // change floor height, after checking the actual geometry.
             }
         }
 
@@ -429,7 +422,9 @@ namespace NextDayz
         {
             zombie.attackCommitted = true;
             const bool facing = distance <= 0.01f || glm::dot(zombie.forward, toPlayer / distance) > c.StrikeFacingDot;
-            if (playerAlive && distance <= definition.attackRange + c.StrikeReachBonus && facing)
+            if (playerAlive && zombie.seesPlayer &&
+                std::abs(playerPosition.y - zombie.position.y) <= c.MaxAttackHeight &&
+                distance <= definition.attackRange + c.StrikeReachBonus && facing)
             {
                 damageRequests_.push_back({zombie.handle, definition.attackDamage, zombie.position});
             }
@@ -442,7 +437,15 @@ namespace NextDayz
         }
     }
 
-    void ZombieSystem::Separate(float deltaSeconds, const glm::vec3& playerPosition)
+    void ZombieSystem::Move(FZombieRuntime& zombie, const glm::vec3& displacement,
+                             const FMovementResolver& resolveMovement) const
+    {
+        const glm::vec3 target = zombie.position + displacement;
+        zombie.position = resolveMovement ? resolveMovement(zombie.position, target) : target;
+    }
+
+    void ZombieSystem::Separate(float deltaSeconds, const glm::vec3& playerPosition,
+                                const FMovementResolver& resolveMovement)
     {
         const float radius = config_.SeparationRadius;
         const float personal = config_.PlayerPersonalSpace;
@@ -456,14 +459,15 @@ namespace NextDayz
             }
             const glm::vec3 fromPlayer = Flat(a.position - playerPosition);
             const float playerDistance = glm::length(fromPlayer);
-            if (playerDistance < personal && playerDistance > 1.0e-4f)
+            if (std::abs(a.position.y - playerPosition.y) < config_.ControllerHeight &&
+                playerDistance < personal && playerDistance > 1.0e-4f)
             {
-                a.position += fromPlayer / playerDistance * (personal - playerDistance) * blend;
+                Move(a, fromPlayer / playerDistance * (personal - playerDistance) * blend, resolveMovement);
             }
             for (size_t j = i + 1; j < slots_.size(); ++j)
             {
                 FZombieRuntime& b = slots_[j];
-                if (!Alive(b))
+                if (!Alive(b) || std::abs(a.position.y - b.position.y) >= config_.ControllerHeight)
                 {
                     continue;
                 }
@@ -477,8 +481,8 @@ namespace NextDayz
                     ? delta / distance
                     : glm::vec3(std::cos(static_cast<float>(i)), 0.0f, std::sin(static_cast<float>(i)));
                 const glm::vec3 push = normal * ((radius - distance) * 0.5f * blend);
-                a.position += push;
-                b.position -= push;
+                Move(a, push, resolveMovement);
+                Move(b, -push, resolveMovement);
             }
         }
     }
@@ -486,7 +490,7 @@ namespace NextDayz
     void ZombieSystem::Update(
         float deltaSeconds, const glm::vec3& playerPosition, const glm::vec3& /*playerForward*/, bool playerAlive,
         const std::function<bool(const glm::vec3&, const glm::vec3&)>& hasLineOfSight,
-        std::span<const FNoiseEvent> noises, const FPathResolver& resolvePath)
+        std::span<const FNoiseEvent> noises, const FPathResolver& resolvePath, const FMovementResolver& resolveMovement)
     {
         const float dt = std::max(deltaSeconds, 0.0f);
         const FZombieConfig& c = config_;
@@ -514,7 +518,7 @@ namespace NextDayz
                 // Momentum carries the body as it falls, then it lies still.
                 zombie.corpseSeconds += dt;
                 const float slide = std::max(0.0f, 1.0f - zombie.corpseSeconds / std::max(c.DeathSlideSeconds, 1.0e-3f));
-                zombie.position += zombie.deathVelocity * slide * dt;
+                Move(zombie, zombie.deathVelocity * slide * dt, resolveMovement);
                 zombie.velocity = {};
                 if (zombie.corpseSeconds >= c.CorpseSeconds)
                 {
@@ -528,7 +532,7 @@ namespace NextDayz
                 const float duration = std::max(c.StaggerSeconds, 1.0e-3f);
                 const float u = std::clamp(zombie.stateSeconds / duration, 0.0f, 1.0f);
                 zombie.velocity = zombie.staggerDirection * (c.StaggerPushback * 2.0f * (1.0f - u) / duration);
-                zombie.position += zombie.velocity * dt;
+                Move(zombie, zombie.velocity * dt, resolveMovement);
                 if (zombie.stateSeconds >= duration)
                 {
                     zombie.state = zombie.aware ? EZombieState::Chase : EZombieState::Investigate;
@@ -609,7 +613,8 @@ namespace NextDayz
                 }
                 break;
             case EZombieState::Chase:
-                if (playerAlive && playerDistance <= definition.attackRange && zombie.attackCooldown <= 0.0f)
+                if (seesPlayer && std::abs(playerPosition.y - zombie.position.y) <= c.MaxAttackHeight &&
+                    playerDistance <= definition.attackRange && zombie.attackCooldown <= 0.0f)
                 {
                     zombie.state = EZombieState::Attack;
                     zombie.stateSeconds = 0.0f;
@@ -623,14 +628,15 @@ namespace NextDayz
                 else
                 {
                     glm::vec3 direction(0.0f);
-                    if (!NavigateToward(zombie, playerPosition, dt, resolvePath, direction))
+                    if (!NavigateToward(zombie, zombie.lastKnownPlayerPosition, dt, resolvePath, direction))
                     {
                         zombie.state = EZombieState::Investigate;
                         zombie.stateSeconds = 0.0f;
                         Steer(zombie, zombie.forward, 0.0f, 0.0f, dt);
                         break;
                     }
-                    if (playerDistance < kSteerDirectDistance && playerDistance > 0.01f)
+                    if (seesPlayer && std::abs(playerPosition.y - zombie.position.y) <= c.MaxStepHeight &&
+                        playerDistance < kSteerDirectDistance && playerDistance > 0.01f)
                     {
                         direction = toPlayer / playerDistance;
                     }
@@ -655,10 +661,14 @@ namespace NextDayz
                     break;
                 }
                 const float remaining = glm::length(Flat(zombie.lastKnownPlayerPosition - zombie.position));
+                const bool pursuing = zombie.aware && zombie.stateSeconds < c.PursuitSearchSeconds;
+                const float searchSpeed = pursuing ? definition.chaseSpeed : definition.wanderSpeed * 1.35f;
+                const float lameScale = pursuing ? c.CrippledSpeedScale : c.LameWanderScale;
                 const float speed = remaining > 0.35f
-                    ? definition.wanderSpeed * 1.35f * speedScale * (zombie.Lame() ? c.LameWanderScale : 1.0f)
+                    ? searchSpeed * speedScale * (zombie.Lame() ? lameScale : 1.0f)
                     : 0.0f;
-                Steer(zombie, direction, speed, c.InvestigateTurnDegreesPerSecond, dt);
+                Steer(zombie, direction, speed,
+                      pursuing ? c.ChaseTurnDegreesPerSecond : c.InvestigateTurnDegreesPerSecond, dt);
                 if (remaining < 0.5f && zombie.stateSeconds > 6.0f)
                 {
                     zombie.state = EZombieState::Wander;
@@ -691,9 +701,9 @@ namespace NextDayz
             default:
                 break;
             }
-            zombie.position += zombie.velocity * dt;
+            Move(zombie, zombie.velocity * dt, resolveMovement);
         }
-        Separate(dt, playerPosition);
+        Separate(dt, playerPosition, resolveMovement);
     }
 
     std::vector<FPlayerDamageRequest> ZombieSystem::ConsumePlayerDamageRequests()

@@ -36,6 +36,7 @@
 #include "Engine/Runtime/Utilities/NextEngineHelper.hpp"
 #include "Engine/Vulkan/WindowSurface.hpp"
 #include "Modules/ScadLoader/FScadRig.h"
+#include "Zombies/ZombieMovement.hpp"
 #include "Modules/ScadLoader/ScadModule.hpp"
 #include "Modules/NextUI/FontLoader.hpp"
 
@@ -272,6 +273,15 @@ void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
                            }
                        });
     const auto validationReady = [this]() { return GOption->AgentValidation && sceneReady_; };
+    cvars.RegisterBool("nextdayz.validation.navProfile", false, &validationNavProfile_, NextCVar::ECVarFlags::None,
+                       "Agent-only: reset wall-clock frame histograms for navigation builds", [this]()
+                       {
+                           validationNavProfile_ = validationNavProfile_ && GOption->AgentValidation;
+                           navBuildFrames_ = {};
+                           navIdleFrames_ = {};
+                           zombieNavApplyPeakMs_ = 0.0;
+                           navProfileFrame_ = std::chrono::steady_clock::now();
+                       });
     cvars.RegisterBool("nextdayz.validation.addBackpack", false, &validationAddBackpack_, NextCVar::ECVarFlags::None,
                        "Agent-only capacity fixture", [this, validationReady]()
                        {
@@ -741,7 +751,6 @@ void NextDayzGameInstance::OnSceneLoaded()
     if (!loadingMapPath_.empty()) campaignMap_ = std::exchange(loadingMapPath_, "");
     debugger_.OnSessionStart("scene loaded");
     worldAnchors_.Scan(GetEngine());
-    BuildZombieNavigation();
     zombies_.Reset();
     combat_.Reset();
     noise_.Reset();
@@ -783,6 +792,7 @@ void NextDayzGameInstance::OnSceneLoaded()
     sceneReady_ = true;
     rescueHelicopter_.OnSceneLoaded(GetEngine().GetScene());
     InitializeCampaign();
+    BuildZombieNavigation();
     ++geographySceneGeneration_;
     grass_.Bind(GetEngine().GetScene());
     grass_.Tick(GetEngine().GetScene(), 0.0f, player_.Position(), time_.Storm());
@@ -791,6 +801,9 @@ void NextDayzGameInstance::OnSceneLoaded()
 
 void NextDayzGameInstance::OnSceneUnloaded()
 {
+    // The worker samples this scene's immutable geometry and terrain. Join it
+    // before either is destroyed or a different scene is installed.
+    if (zombieNavBuild_.valid()) zombieNavBuild_.get();
     if (sceneReady_ && !pendingCampaign_ && !switchingCampaignContext_)
     {
         SaveCampaign();
@@ -814,6 +827,7 @@ void NextDayzGameInstance::OnSceneUnloaded()
     zombieSpawns_.Reset(sessionRng_.Derive(0x5A4F4D42ULL).Seed());
     zombieVisuals_.Reset();
     zombieNavGrid_ = {};
+    zombieNavSpare_ = {};
     zombieVisualOwners_.clear();
     zombieRigVisuals_.clear();
     zombieAudio_.clear();
@@ -823,12 +837,20 @@ void NextDayzGameInstance::OnSceneUnloaded()
 
 void NextDayzGameInstance::OnDestroy()
 {
+    if (zombieNavBuild_.valid()) zombieNavBuild_.get();
     if (sceneReady_) SaveCampaign();
     player_.Destroy();
 }
 
 void NextDayzGameInstance::OnTick(double deltaSeconds)
 {
+    if (validationNavProfile_)
+    {
+        const auto now = std::chrono::steady_clock::now();
+        const double frameMs = std::chrono::duration<double, std::milli>(now - navProfileFrame_).count();
+        navProfileFrame_ = now;
+        (zombieNavBuild_.valid() ? navBuildFrames_ : navIdleFrames_).Record(frameMs);
+    }
     debugger_.BeginFrame();
     TickMapAuthoring();
     if (!sceneReady_ || !player_.IsValid())
@@ -1095,6 +1117,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
         return distance > 0.01f && distance < 150.0f && glm::dot(delta / distance, player_.Forward()) > 0.45f;
     };
     section.emplace(timers, ETimer::SpawnDirector);
+    UpdateZombieNavigation();
     zombieSpawns_.Update(dt, player_.Position(), zombies_, visibleFromPlayer,
                          [this](const glm::vec3& point)
                          {
@@ -1128,29 +1151,20 @@ void NextDayzGameInstance::SimulateFrame(float dt)
         return zombieNavGrid_.FindPath(from, to, from.y, config_.Zombie.MaxPathExpansions);
     };
     const float zombieDt = dt * knobs.zombieTimeScale;
+    auto& collision = GetEngine().GetScene().GetCPUAccelerationStructure();
+    const auto resolveMovement = [this, &collision](const glm::vec3& from, const glm::vec3& to)
+    {
+        const glm::vec3 result = NextDayz::ResolveZombieMovement(from, to, config_.Zombie,
+            [&collision](const glm::vec3& origin, const glm::vec3& direction)
+            {
+                return collision.RayCastInCPU(origin, direction);
+            });
+        // Keep the semantic water veto even for close-range steering/pushes.
+        return !zombieNavGrid_.IsBuilt() || zombieNavGrid_.IsWalkable(result) ? result : from;
+    };
     section.emplace(timers, ETimer::InfectedAi);
     zombies_.Update(zombieDt, player_.Position(), player_.Forward(), survival_.IsAlive(),
-                    lineOfSight, noise_.Events(), resolvePath);
-    // Keep the infected on whatever floor they are over (under a canopy, inside
-    // a house) rather than the grid's single top surface.
-    section.emplace(timers, ETimer::InfectedGround);
-    for (const NextDayz::FZombieRuntime& slot : zombies_.Slots())
-    {
-        NextDayz::FZombieRuntime* zombie = slot.active ? zombies_.Resolve(slot.handle) : nullptr;
-        if (!zombie)
-        {
-            continue;
-        }
-        GetEngine().RayCast(zombie->position + glm::vec3(0.0f, 1.2f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f),
-                            [zombie](Assets::RayCastResult result)
-                            {
-                                if (result.Hit && result.T < 3.5f)
-                                {
-                                    zombie->position.y = static_cast<float>(result.HitPoint.y);
-                                }
-                                return true;
-                            });
-    }
+                    lineOfSight, noise_.Events(), resolvePath, resolveMovement);
     section.emplace(timers, ETimer::Survival);
     for (const NextDayz::FPlayerDamageRequest& damage : zombies_.ConsumePlayerDamageRequests())
     {
@@ -2140,21 +2154,28 @@ void NextDayzGameInstance::ApplyValidationLoadout()
     }
 }
 
-void NextDayzGameInstance::BuildZombieNavigation()
+void NextDayzGameInstance::BuildZombieNavigation(bool background)
 {
     Assets::Scene& scene = GetEngine().GetScene();
     NextGameplay::FNavGridSettings settings;
-    settings.cellSize = 2.0f;
-    settings.agentRadius = 0.35f;
+    settings.cellSize = config_.Zombie.NavigationCellSize;
+    // Loading may use more cores; the live window update keeps a small budget.
+    settings.maxSamplingWorkers = background ? config_.Zombie.NavigationWorkers : 8;
+    settings.agentRadius = config_.Zombie.ControllerRadius;
     settings.maxSlopeAngle = 48.0f;
-    settings.clearanceHeight = 2.1f;
-    settings.maxStepHeight = 0.65f;
+    settings.clearanceHeight = config_.Zombie.ControllerHeight;
+    settings.maxStepHeight = config_.Zombie.MaxStepHeight;
     settings.sampleCeiling = 100.0f;
     settings.floorHeightTolerance = 2.0f;
     const auto* map = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_);
-    const float halfSize = map ? map->sizeM * 0.5f : 500.0f;
-    settings.worldMin = {-halfSize - 10.0f, 0.0f, -halfSize - 10.0f};
-    settings.worldMax = {halfSize + 10.0f, 0.0f, halfSize + 10.0f};
+    const float halfSize = config_.Zombie.NavigationHalfSize;
+    zombieNavCenter_ = player_.Position();
+    // Keep lattice coordinates stable as the window moves, including doorways
+    // sitting on a cell boundary. Existing waypoints remain world positions.
+    zombieNavCenter_.x = std::floor(zombieNavCenter_.x / settings.cellSize) * settings.cellSize;
+    zombieNavCenter_.z = std::floor(zombieNavCenter_.z / settings.cellSize) * settings.cellSize;
+    settings.worldMin = {zombieNavCenter_.x - halfSize, 0.0f, zombieNavCenter_.z - halfSize};
+    settings.worldMax = {zombieNavCenter_.x + halfSize, 0.0f, zombieNavCenter_.z + halfSize};
     Runtime::TerrainComponent* terrain = nullptr;
     for (Runtime::TerrainComponent* candidate : scene.Components<Runtime::TerrainComponent>())
     {
@@ -2168,34 +2189,96 @@ void NextDayzGameInstance::BuildZombieNavigation()
         for (int y = 0; y <= 12; ++y)
             for (int x = 0; x <= 12; ++x)
             {
-                const float height = terrain->SampleHeight(-halfSize + x * halfSize / 6.0f,
-                                                            -halfSize + y * halfSize / 6.0f);
+                const float height = terrain->SampleHeight(settings.worldMin.x + x * halfSize / 6.0f,
+                                                            settings.worldMin.z + y * halfSize / 6.0f);
                 lowest = std::min(lowest, height);
                 highest = std::max(highest, height);
             }
         settings.sampleCeiling = highest + 60.0f;
         settings.floorHeightTolerance = highest - lowest + 12.0f;
     }
-    const auto buildStart = std::chrono::steady_clock::now();
-    zombieNavGrid_.Build(scene.GetCPUAccelerationStructure(), settings);
-    const double buildMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - buildStart).count();
     if (terrain)
     {
-        // The grid keeps one surface per cell, the highest. Water is out, and
-        // so is anything well above the terrain: roofs, canopies and wall tops
-        // would otherwise be walked on. The infected go round buildings and
-        // only close the last metres to a player inside one directly.
-        zombieNavGrid_.MaskUnwalkable([terrain](const glm::vec3& point)
+        settings.terrain = terrain;
+        const auto collectTerrainIds = [&](auto&& self, const Assets::Node* node) -> void
         {
-            const bool water = terrain->IsWater(point.x, point.z) &&
-                               point.y < terrain->WaterSurface(point.x, point.z) + 0.05f;
-            const bool elevatedRoof = !terrain->IsWater(point.x, point.z) &&
-                point.y > terrain->SampleHeight(point.x, point.z) + 1.2f;
-            return water || elevatedRoof;
-        });
+            if (!node) return;
+            settings.terrainInstanceIds.push_back(node->GetInstanceId());
+            for (const auto& child : node->Children()) self(self, child.get());
+        };
+        collectTerrainIds(collectTerrainIds, terrain->GetOwner());
+        const float waterProbeHeight = settings.sampleCeiling - settings.floorSearchHeight;
+        settings.sampleFloorHeight = [terrain, waterProbeHeight](float x, float z)
+        {
+            // Over water retain the top deck, including bridges several
+            // metres above the river. Land samples must start below roofs.
+            return terrain->IsWater(x, z)
+                ? waterProbeHeight
+                : terrain->SampleHeight(x, z);
+        };
+        settings.isUnwalkable = [terrain](const glm::vec3& point)
+        {
+            return terrain->IsWater(point.x, point.z) &&
+                   point.y < terrain->WaterSurface(point.x, point.z) + 0.05f;
+        };
     }
-    SPDLOG_INFO("[NextDayz] infected navigation ready: {}x{} cells at {:.1f} m in {:.0f} ms",
-                zombieNavGrid_.GetWidth(), zombieNavGrid_.GetHeight(), zombieNavGrid_.GetCellSize(), buildMs);
+    auto* collision = &scene.GetCPUAccelerationStructure();
+    // The active grid is immutable until this single worker has completed;
+    // scene unload also joins it. Reuse the other buffer entirely on the
+    // worker, including allocation/copying and disposal of old cell storage.
+    const auto* previous = background ? &zombieNavGrid_ : nullptr;
+    auto build = [collision, settings, previous, grid = std::move(zombieNavSpare_)]() mutable
+    {
+        const auto buildStart = std::chrono::steady_clock::now();
+        if (previous)
+        {
+            grid.BuildShifted(*collision, settings, *previous);
+        }
+        else
+        {
+            grid.Build(*collision, settings);
+        }
+        const double buildMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - buildStart).count();
+        SPDLOG_INFO("[NextDayz] infected navigation ready: {}x{} cells at {:.2f} m, sampled {} cells ({} geometry), {} workers in {:.1f} ms",
+                    grid.GetWidth(), grid.GetHeight(), grid.GetCellSize(), grid.SampledCellCount(),
+                    grid.GeometrySampledCellCount(), settings.maxSamplingWorkers, buildMs);
+        return FZombieNavigationBuild{std::move(grid), buildMs};
+    };
+    if (background)
+    {
+        zombieNavBuild_ = std::async(std::launch::async, std::move(build));
+    }
+    else
+    {
+        ApplyZombieNavigation(build());
+    }
+}
+
+void NextDayzGameInstance::ApplyZombieNavigation(FZombieNavigationBuild result)
+{
+    const auto start = std::chrono::steady_clock::now();
+    std::swap(zombieNavGrid_, result.grid);
+    zombieNavSpare_ = std::move(result.grid);
+    zombieNavBuildMs_ = result.elapsedMs;
+    ++zombieNavBuildCount_;
+    zombieNavApplyPeakMs_ = std::max(zombieNavApplyPeakMs_,
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
+}
+
+void NextDayzGameInstance::UpdateZombieNavigation()
+{
+    if (zombieNavBuild_.valid())
+    {
+        if (zombieNavBuild_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+        ApplyZombieNavigation(zombieNavBuild_.get());
+    }
+    const glm::vec3 offset = player_.Position() - zombieNavCenter_;
+    if (std::max(std::abs(offset.x), std::abs(offset.z)) >= config_.Zombie.NavigationRecenterDistance)
+    {
+        // Retain the current grid throughout the build so a chase does not
+        // pause just because the player crossed a navigation window boundary.
+        BuildZombieNavigation(true);
+    }
 }
 
 void NextDayzGameInstance::ConfigureZombieSpawnPoints()
@@ -3690,6 +3773,33 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     });
     reg.Add("pathSolves", [this]() -> Runtime::Agent::FAgentQueryValue {
         return static_cast<int64_t>(zombies_.PathSolvesLastUpdate());
+    });
+    reg.Add("zombieNavReady", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return zombieNavGrid_.IsBuilt() && !zombieNavBuild_.valid();
+    });
+    reg.Add("navBuildCount", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<int64_t>(zombieNavBuildCount_); });
+    reg.Add("navBuildMs", [this]() -> Runtime::Agent::FAgentQueryValue { return zombieNavBuildMs_; });
+    reg.Add("navSampledCells", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<int64_t>(zombieNavGrid_.SampledCellCount());
+    });
+    reg.Add("navApplyPeakMs", [this]() -> Runtime::Agent::FAgentQueryValue { return zombieNavApplyPeakMs_; });
+    reg.Add("navBuildFrameCount", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(navBuildFrames_.frames); });
+    reg.Add("navBuildFrameP95Ms", [this]() -> Runtime::Agent::FAgentQueryValue { return navBuildFrames_.P95(); });
+    reg.Add("navIdleFrameP95Ms", [this]() -> Runtime::Agent::FAgentQueryValue { return navIdleFrames_.P95(); });
+    reg.Add("navFramePeakMs", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return std::max(navBuildFrames_.peakMs, navIdleFrames_.peakMs);
+    });
+    reg.Add("zombiePosX", [this]() -> Runtime::Agent::FAgentQueryValue {
+        const auto* zombie = FocusZombie();
+        return static_cast<double>(zombie ? zombie->position.x : 0.0f);
+    });
+    reg.Add("zombiePosY", [this]() -> Runtime::Agent::FAgentQueryValue {
+        const auto* zombie = FocusZombie();
+        return static_cast<double>(zombie ? zombie->position.y : 0.0f);
+    });
+    reg.Add("zombiePosZ", [this]() -> Runtime::Agent::FAgentQueryValue {
+        const auto* zombie = FocusZombie();
+        return static_cast<double>(zombie ? zombie->position.z : 0.0f);
     });
     // Infected with live skeleton hitboxes / their capsules (names kept from the proxy era).
     reg.Add("hitProxyRegistered", [this]() -> Runtime::Agent::FAgentQueryValue {

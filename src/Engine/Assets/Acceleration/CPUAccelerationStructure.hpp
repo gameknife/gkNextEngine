@@ -267,6 +267,12 @@ public:
 
     
     Assets::RayCastResult RayCastInCPU(glm::vec3 rayOrigin, glm::vec3 rayDir);
+    // Batch readers pin a snapshot once rather than contending on the shared
+    // snapshot owner for every ray. The same geometry is used for the batch.
+    // Floor probes preserve the normal to reject the inside of solid meshes.
+    static Assets::RayCastResult RayCastInSnapshot(const FCPUTLASSnapshot& snapshot,
+                                                   glm::vec3 rayOrigin, glm::vec3 rayDir,
+                                                   bool faceNormalTowardRay = true, float maxDistance = 2000.0f);
     
     bool AsyncProcessFull(Assets::Scene& scene, Vulkan::DeviceMemory* VoxelGPUMemory);
     void AsyncProcessGroup(int xInMeter, int zInMeter, Assets::Scene& scene, ECubeProcType procType, EBakerType bakerType,

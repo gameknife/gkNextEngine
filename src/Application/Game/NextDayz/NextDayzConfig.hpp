@@ -283,8 +283,17 @@ namespace NextDayz
         float ChaseTurnDegreesPerSecond = 220.0f;    // a charging infected overshoots a sidestep
         float AttackTurnDegreesPerSecond = 260.0f;
         float AlertTurnDegreesPerSecond = 420.0f;
-        float Acceleration = 7.0f;
+        float Acceleration = 9.0f;
         float Deceleration = 10.0f;
+        float ControllerRadius = 0.28f;
+        float ControllerHeight = 1.8f;
+        float MaxStepHeight = 0.25f;
+        float MaxGroundDrop = 0.65f;
+        float MaxAttackHeight = 0.8f;
+        float NavigationCellSize = 0.35f;            // fits 0.95 m doors regardless of grid alignment
+        float NavigationHalfSize = 180.0f;          // covers the 160 m spawn range
+        float NavigationRecenterDistance = 40.0f;
+        int NavigationWorkers = 2;                 // leave CPU capacity for the live frame
         float SeparationRadius = 0.70f;
         float PlayerPersonalSpace = 1.0f;            // arms' length: grabbing hands, not overlapping bodies
         float RoamRadius = 7.0f;
@@ -298,6 +307,7 @@ namespace NextDayz
         float AlertSeconds = 0.80f;
         float AlertSkipDistance = 3.0f;
         float LostSightSeconds = 0.6f;
+        float PursuitSearchSeconds = 8.0f;          // keep running to the last sight/noise after losing contact
         // Attacks. Damage lands on the strike frame; the infected stops
         // tracking just before it, so a late sidestep makes it miss.
         float LungeSeconds = 1.0f;
@@ -342,7 +352,7 @@ namespace NextDayz
         float LimpAuthoredSpeed = 0.8f;
         float HobbleAuthoredSpeed = 1.7f;
         float MinPlayRate = 0.7f;
-        float MaxPlayRate = 1.4f;
+        float MaxPlayRate = 2.0f;
         float ActionFadeSeconds = 0.08f;
         float ReachDistance = 6.0f;                  // arms come up inside this
         float LookYawLimitDegrees = 75.0f;

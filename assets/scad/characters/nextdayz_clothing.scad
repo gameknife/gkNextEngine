@@ -12,6 +12,8 @@
 // covered skin/shorts are hidden. Pack/harness and stowed guns get runtime
 // clearance for the current outer layers. No skinning or cloth simulation.
 
+use <nextdayz_clothing_heritage.scad>
+
 $fn = 8;
 
 function ndc_zip() = [0.055, 0.06, 0.065];
@@ -484,6 +486,58 @@ module bone_backpack_medical__harness() { ndc_harness(4); }
 module bone_backpack_rolltop__torso() { ndc_pack(5); }
 module bone_backpack_rolltop__harness() { ndc_harness(5); }
 
+// ---- 有史可考的一组（几何在 nextdayz_clothing_heritage.scad）----
+module bone_hat_panama__head() { ndh_panama(); }
+module bone_helmet_ssh68__head() { ndh_ssh68(); }
+module bone_helmet_m56__head() { ndh_m56(); }
+module bone_shirt_telnyashka__torso() { ndh_coat_torso("telnyashka"); }
+module bone_shirt_telnyashka__upperarm_l() { ndh_sleeve("telnyashka", forearm = false); }
+module bone_shirt_telnyashka__upperarm_r() { mirror([1, 0, 0]) ndh_sleeve("telnyashka", forearm = false); }
+module bone_shirt_telnyashka__forearm_l() { ndh_sleeve("telnyashka", forearm = true); }
+module bone_shirt_telnyashka__forearm_r() { mirror([1, 0, 0]) ndh_sleeve("telnyashka", forearm = true); }
+module bone_jacket_afganka__torso() { ndh_coat_torso("afganka"); }
+module bone_jacket_afganka__upperarm_l() { ndh_sleeve("afganka", forearm = false); }
+module bone_jacket_afganka__upperarm_r() { mirror([1, 0, 0]) ndh_sleeve("afganka", forearm = false); }
+module bone_jacket_afganka__forearm_l() { ndh_sleeve("afganka", forearm = true); }
+module bone_jacket_afganka__forearm_r() { mirror([1, 0, 0]) ndh_sleeve("afganka", forearm = true); }
+module bone_jacket_gorka__torso() { ndh_coat_torso("gorka"); }
+module bone_jacket_gorka__upperarm_l() { ndh_sleeve("gorka", forearm = false); }
+module bone_jacket_gorka__upperarm_r() { mirror([1, 0, 0]) ndh_sleeve("gorka", forearm = false); }
+module bone_jacket_gorka__forearm_l() { ndh_sleeve("gorka", forearm = true); }
+module bone_jacket_gorka__forearm_r() { mirror([1, 0, 0]) ndh_sleeve("gorka", forearm = true); }
+module bone_jacket_strichtarn__torso() { ndh_coat_torso("strichtarn"); }
+module bone_jacket_strichtarn__upperarm_l() { ndh_sleeve("strichtarn", forearm = false); }
+module bone_jacket_strichtarn__upperarm_r() { mirror([1, 0, 0]) ndh_sleeve("strichtarn", forearm = false); }
+module bone_jacket_strichtarn__forearm_l() { ndh_sleeve("strichtarn", forearm = true); }
+module bone_jacket_strichtarn__forearm_r() { mirror([1, 0, 0]) ndh_sleeve("strichtarn", forearm = true); }
+module bone_vest_type56__torso() { ndh_type56(); }
+module bone_vest_6b3__torso() { ndh_6b3(); }
+module bone_pants_afganka__pelvis() { ndh_pelvis("afganka"); }
+module bone_pants_afganka__thigh_l() { ndh_leg("afganka", calf = false); }
+module bone_pants_afganka__thigh_r() { mirror([1, 0, 0]) ndh_leg("afganka", calf = false); }
+module bone_pants_afganka__calf_l() { ndh_leg("afganka", calf = true); }
+module bone_pants_afganka__calf_r() { mirror([1, 0, 0]) ndh_leg("afganka", calf = true); }
+module bone_pants_afganka__foot_l() { ndh_boot("afganka"); }
+module bone_pants_afganka__foot_r() { mirror([1, 0, 0]) ndh_boot("afganka"); }
+module bone_pants_gorka__pelvis() { ndh_pelvis("gorka"); }
+module bone_pants_gorka__thigh_l() { ndh_leg("gorka", calf = false); }
+module bone_pants_gorka__thigh_r() { mirror([1, 0, 0]) ndh_leg("gorka", calf = false); }
+module bone_pants_gorka__calf_l() { ndh_leg("gorka", calf = true); }
+module bone_pants_gorka__calf_r() { mirror([1, 0, 0]) ndh_leg("gorka", calf = true); }
+module bone_pants_gorka__foot_l() { ndh_boot("gorka"); }
+module bone_pants_gorka__foot_r() { mirror([1, 0, 0]) ndh_boot("gorka"); }
+module bone_pants_strichtarn__pelvis() { ndh_pelvis("strichtarn"); }
+module bone_pants_strichtarn__thigh_l() { ndh_leg("strichtarn", calf = false); }
+module bone_pants_strichtarn__thigh_r() { mirror([1, 0, 0]) ndh_leg("strichtarn", calf = false); }
+module bone_pants_strichtarn__calf_l() { ndh_leg("strichtarn", calf = true); }
+module bone_pants_strichtarn__calf_r() { mirror([1, 0, 0]) ndh_leg("strichtarn", calf = true); }
+module bone_pants_strichtarn__foot_l() { ndh_boot("strichtarn"); }
+module bone_pants_strichtarn__foot_r() { mirror([1, 0, 0]) ndh_boot("strichtarn"); }
+module bone_backpack_rd54__torso() { ndh_rd54(); }
+module bone_backpack_rd54__harness() { ndc_harness(0); }
+module bone_backpack_abalakov__torso() { ndh_abalakov(); }
+module bone_backpack_abalakov__harness() { ndh_leather_harness(); }
+
 module bone_wardrobe()
 {
     bone_helmet__head();
@@ -582,6 +636,56 @@ module bone_wardrobe()
     bone_backpack_medical__harness();
     bone_backpack_rolltop__torso();
     bone_backpack_rolltop__harness();
+    bone_hat_panama__head();
+    bone_helmet_ssh68__head();
+    bone_helmet_m56__head();
+    bone_shirt_telnyashka__torso();
+    bone_shirt_telnyashka__upperarm_l();
+    bone_shirt_telnyashka__upperarm_r();
+    bone_shirt_telnyashka__forearm_l();
+    bone_shirt_telnyashka__forearm_r();
+    bone_jacket_afganka__torso();
+    bone_jacket_afganka__upperarm_l();
+    bone_jacket_afganka__upperarm_r();
+    bone_jacket_afganka__forearm_l();
+    bone_jacket_afganka__forearm_r();
+    bone_jacket_gorka__torso();
+    bone_jacket_gorka__upperarm_l();
+    bone_jacket_gorka__upperarm_r();
+    bone_jacket_gorka__forearm_l();
+    bone_jacket_gorka__forearm_r();
+    bone_jacket_strichtarn__torso();
+    bone_jacket_strichtarn__upperarm_l();
+    bone_jacket_strichtarn__upperarm_r();
+    bone_jacket_strichtarn__forearm_l();
+    bone_jacket_strichtarn__forearm_r();
+    bone_vest_type56__torso();
+    bone_vest_6b3__torso();
+    bone_pants_afganka__pelvis();
+    bone_pants_afganka__thigh_l();
+    bone_pants_afganka__thigh_r();
+    bone_pants_afganka__calf_l();
+    bone_pants_afganka__calf_r();
+    bone_pants_afganka__foot_l();
+    bone_pants_afganka__foot_r();
+    bone_pants_gorka__pelvis();
+    bone_pants_gorka__thigh_l();
+    bone_pants_gorka__thigh_r();
+    bone_pants_gorka__calf_l();
+    bone_pants_gorka__calf_r();
+    bone_pants_gorka__foot_l();
+    bone_pants_gorka__foot_r();
+    bone_pants_strichtarn__pelvis();
+    bone_pants_strichtarn__thigh_l();
+    bone_pants_strichtarn__thigh_r();
+    bone_pants_strichtarn__calf_l();
+    bone_pants_strichtarn__calf_r();
+    bone_pants_strichtarn__foot_l();
+    bone_pants_strichtarn__foot_r();
+    bone_backpack_rd54__torso();
+    bone_backpack_rd54__harness();
+    bone_backpack_abalakov__torso();
+    bone_backpack_abalakov__harness();
 }
 
 bone_wardrobe();

@@ -48,7 +48,7 @@ TEST_CASE("NextDayz sight pictures: eye stations, zoom and raise times", "[NextD
     redDot[0] = EWeaponAttachment::RedDot;
     FWeaponAttachments scope{};
     scope[0] = EWeaponAttachment::Scope4x;
-    for (const char* id : {"ak", "mosin", "shotgun", "pistol"})
+    for (const char* id : {"ak", "mosin", "shotgun", "pistol", "aks74u", "bizon", "aps", "svt40", "toz34"})
     {
         const FWeaponModelPoints points = WeaponModelPoints(id);
         // The eye is behind the rear sight, and in front of where the old fixed
@@ -115,6 +115,66 @@ TEST_CASE("NextDayz attachments fit firearm-specific slots and change sight land
     REQUIRE(WeaponMagazineCapacity("svd", parts) == 15);
     REQUIRE(WeaponMagazineCapacity("pistol", parts) == 18);
     REQUIRE(WeaponReloadScale(parts) == 1.0f);
+}
+
+TEST_CASE("NextDayz field kit with a documented past is complete, obtainable and fed by existing ammo",
+          "[NextDayz][Loot][Heritage]")
+{
+    using namespace NextDayz;
+    const std::array<std::string_view, 19> heritage = {
+        "aks74u", "bizon", "aps", "svt40", "toz34",
+        "hat_panama", "helmet_ssh68", "helmet_m56", "shirt_telnyashka", "jacket_afganka", "jacket_gorka",
+        "jacket_strichtarn", "vest_type56", "vest_6b3", "pants_afganka", "pants_gorka", "pants_strichtarn",
+        "backpack_rd54", "backpack_abalakov"};
+    const auto obtainable = [](std::string_view id)
+    {
+        for (uint8_t index = 0; index < static_cast<uint8_t>(ELootProfile::Count); ++index)
+            for (const FLootTableEntry& entry : LootTable(static_cast<ELootProfile>(index)))
+                if (entry.itemId == id && entry.weight > 0) return true;
+        return false;
+    };
+    for (std::string_view id : heritage)
+    {
+        INFO(id);
+        const FItemDef* item = FindItemDef(id);
+        REQUIRE(item != nullptr);
+        CHECK_FALSE(item->lore.empty());
+        CHECK(obtainable(id));
+        if (item->kind != EItemKind::Weapon) continue;
+        const FWeaponDef* weapon = FindWeaponDef(item->weaponDefId);
+        REQUIRE(weapon != nullptr);
+        CHECK(weapon->id == item->id);
+        // Every new gun is fed by ammunition the world already drops.
+        CHECK(FindItemDef(AmmoItemId(weapon->ammo)) != nullptr);
+        CHECK(obtainable(AmmoItemId(weapon->ammo)));
+        CHECK((item->equipSlot == EEquipSlot::Sidearm) == weapon->IsSidearm());
+    }
+    CHECK(FindWeaponDef("aps")->IsSidearm());
+    CHECK(FindWeaponDef("aps")->fullAuto);
+    CHECK(FindWeaponDef("bizon")->magSize == 64);
+    CHECK(FindWeaponDef("bizon")->family == EWeaponFamily::Smg);
+    CHECK(FindWeaponDef("svt40")->family == EWeaponFamily::Marksman);
+    CHECK(FindWeaponDef("toz34")->family == EWeaponFamily::Shotgun);
+    CHECK(FindWeaponDef("toz34")->magSize == 2);
+    // The carbine is lighter in the hand and on the target than the full rifle.
+    CHECK(FindWeaponDef("aks74u")->baseDamage < FindWeaponDef("ak")->baseDamage);
+    CHECK(FindItemDef("aks74u")->size.width < FindItemDef("ak")->size.width);
+    // Mounts follow the real guns: wartime rifles take only the sniper scope,
+    // the helical drum is not swappable, a holster pistol takes no 4x.
+    CHECK(SupportsAttachment("svt40", EWeaponAttachment::Scope4x));
+    CHECK_FALSE(SupportsAttachment("svt40", EWeaponAttachment::RedDot));
+    CHECK_FALSE(SupportsAttachment("bizon", EWeaponAttachment::VerticalGrip));
+    CHECK_FALSE(SupportsAttachment("bizon", EWeaponAttachment::ExtendedMagazine));
+    CHECK_FALSE(SupportsAttachment("aps", EWeaponAttachment::Scope4x));
+    CHECK_FALSE(SupportsAttachment("toz34", EWeaponAttachment::Scope4x));
+    FWeaponAttachments extended{};
+    extended[static_cast<size_t>(EAttachmentSlot::Magazine)] = EWeaponAttachment::ExtendedMagazine;
+    CHECK(WeaponMagazineCapacity("aps", extended) == 30);
+    CHECK(SuppressorLength("aps") == Catch::Approx(SuppressorLength("pistol")));
+    CHECK(WeaponAimSeconds("aps", {}) > WeaponAimSeconds("pistol", {}));
+    // Titanium plates outrank the generic plate carrier; the telnyashka has no pockets.
+    CHECK(FindItemDef("vest_6b3")->armor > FindItemDef("vest_military")->armor);
+    CHECK(FindItemDef("shirt_telnyashka")->containerSize.Area() == 0);
 }
 
 TEST_CASE("NextDayz attachment installation consumes loose parts and preserves each gun", "[NextDayz][Attachments]")
@@ -339,6 +399,8 @@ TEST_CASE("NextDayz translations cover item descriptions and preserve format con
         if (!internationalNames.contains(item.displayName))
             CHECK(Translate(item.displayName, ELanguage::Chinese) != item.displayName);
         CHECK(Translate(item.description, ELanguage::Chinese) != item.description);
+        if (!item.lore.empty())
+            CHECK(Translate(item.lore, ELanguage::Chinese) != item.lore);
     }
     const Inventory inventory;
     for (const auto& container : inventory.Containers())

@@ -1,7 +1,7 @@
 #pragma once
 
 // ============================================================================
-// WeaponDefs.hpp - Static weapon / ammo data tables (constexpr): five firearms
+// WeaponDefs.hpp - Static weapon / ammo data tables (constexpr): ten firearms
 // and three melee weapons. Runtime state (mag counts, slots) lives in
 // WeaponSystem; this file is pure data + lookup helpers.
 // ============================================================================
@@ -49,10 +49,23 @@ namespace NextDayz
         }
     }
 
+    // Handling class shared by guns that are not individually special-cased:
+    // shot sound, muzzle flash, infected noise type, sidearm slot and ADS speed.
+    enum class EWeaponFamily : uint8_t
+    {
+        Rifle,     // assault rifles and carbines
+        Smg,       // pistol-calibre shoulder weapons
+        Marksman,  // full-power rifle cartridges
+        Shotgun,
+        Sidearm,   // fits the holster slot
+        Melee,
+    };
+
     struct FWeaponDef
     {
         std::string_view id;          // "ak" / "svd" / "mosin" / "shotgun" / "pistol"
         std::string_view displayName; // "AK-74"
+        EWeaponFamily family;
         EAmmoType ammo;
         int   magSize;
         float fireInterval;           // seconds between shots (RPM converted)
@@ -72,21 +85,29 @@ namespace NextDayz
         float meleeRange = 0.0f;      // > 0: a melee weapon; swings reach this far, no ammo
         float meleeStrikeTime01 = 0.0f; // contact frame in the independent attack clip
         bool IsMelee() const { return meleeRange > 0.0f; }
-        bool IsSidearm() const { return id == "pistol"; }
+        bool IsSidearm() const { return family == EWeaponFamily::Sidearm; }
     };
 
-    inline constexpr std::array<FWeaponDef, 8> kWeapons = {{
-        // id        display     ammo                    mag interval auto hip      ads      fov   camUp yaw vm   rig  dmg pel fall noise impact
+    inline constexpr std::array<FWeaponDef, 13> kWeapons = {{
+        // id        display     family                  ammo                 mag interval auto hip      ads      fov   camUp yaw vm   rig  dmg pel fall noise impact
         // Iron sights only magnify a little (about 1.15-1.35x of the 75 degree view); a 4x optic is the real zoom.
-        {"ak",      "AK-74",    EAmmoType::Rifle545,     30, 0.092f, true, 0.035f, 0.006f, 64.0f, 1.7f, 0.35f, 0.12f, 1.0f, 34.0f, 1, 110.0f, 110.0f, 0.5f},
-        {"svd",     "SVD",      EAmmoType::Rifle762,     10, 0.28f,  false,0.020f, 0.0015f,62.0f, 3.2f, 0.55f, 0.20f, 1.25f, 72.0f, 1, 180.0f, 120.0f, 1.0f},
-        {"mosin",   "Mosin",    EAmmoType::Rifle762,      5, 0.95f,  false,0.018f, 0.0012f,60.0f, 4.0f, 0.45f, 0.24f, 1.35f, 86.0f, 1, 170.0f, 125.0f, 1.0f},
-        {"shotgun", "Shotgun",  EAmmoType::Shotgun12,     6, 0.80f,  false,0.090f, 0.055f, 68.0f, 5.0f, 0.65f, 0.30f, 1.5f, 18.0f, 8, 45.0f, 130.0f, 1.0f},
-        {"pistol",  "Makarov",  EAmmoType::Pistol9,       12, 0.18f,  false,0.045f, 0.020f, 66.0f, 1.3f, 0.40f, 0.09f, 0.8f, 26.0f, 1, 65.0f, 55.0f, 0.6f},
+        {"ak",      "AK-74",    EWeaponFamily::Rifle,    EAmmoType::Rifle545,  30, 0.092f, true, 0.035f, 0.006f, 64.0f, 1.7f, 0.35f, 0.12f, 1.0f, 34.0f, 1, 110.0f, 110.0f, 0.5f},
+        {"svd",     "SVD",      EWeaponFamily::Marksman, EAmmoType::Rifle762,  10, 0.28f,  false,0.020f, 0.0015f,62.0f, 3.2f, 0.55f, 0.20f, 1.25f, 72.0f, 1, 180.0f, 120.0f, 1.0f},
+        {"mosin",   "Mosin",    EWeaponFamily::Marksman, EAmmoType::Rifle762,   5, 0.95f,  false,0.018f, 0.0012f,60.0f, 4.0f, 0.45f, 0.24f, 1.35f, 86.0f, 1, 170.0f, 125.0f, 1.0f},
+        {"shotgun", "Shotgun",  EWeaponFamily::Shotgun,  EAmmoType::Shotgun12,  6, 0.80f,  false,0.090f, 0.055f, 68.0f, 5.0f, 0.65f, 0.30f, 1.5f, 18.0f, 8, 45.0f, 130.0f, 1.0f},
+        {"pistol",  "Makarov",  EWeaponFamily::Sidearm,  EAmmoType::Pistol9,   12, 0.18f,  false,0.045f, 0.020f, 66.0f, 1.3f, 0.40f, 0.09f, 0.8f, 26.0f, 1, 65.0f, 55.0f, 0.6f},
+        // Field finds with a history (innawoods-inspired set). Short barrels shed
+        // velocity: the carbine trades range and quiet for handiness, the Bizon
+        // spends cheap 9x18 by the drum, the Stechkin is a machine pistol in a holster.
+        {"aks74u",  "AKS-74U",  EWeaponFamily::Rifle,    EAmmoType::Rifle545,  30, 0.082f, true, 0.040f, 0.009f, 66.0f, 1.9f, 0.45f, 0.12f, 1.0f, 30.0f, 1, 80.0f, 120.0f, 0.45f},
+        {"bizon",   "PP-19 Bizon", EWeaponFamily::Smg,   EAmmoType::Pistol9,   64, 0.088f, true, 0.030f, 0.011f, 66.0f, 1.0f, 0.30f, 0.08f, 0.8f, 22.0f, 1, 55.0f, 72.0f, 0.45f},
+        {"aps",     "APS Stechkin", EWeaponFamily::Sidearm, EAmmoType::Pistol9, 20, 0.080f, true, 0.050f, 0.024f, 66.0f, 1.6f, 0.60f, 0.10f, 0.85f, 25.0f, 1, 60.0f, 58.0f, 0.55f},
+        {"svt40",   "SVT-40",   EWeaponFamily::Marksman, EAmmoType::Rifle762,  10, 0.24f,  false,0.022f, 0.0018f,61.0f, 3.6f, 0.60f, 0.22f, 1.3f, 76.0f, 1, 170.0f, 128.0f, 1.0f},
+        {"toz34",   "TOZ-34",   EWeaponFamily::Shotgun,  EAmmoType::Shotgun12,  2, 0.30f,  false,0.080f, 0.045f, 68.0f, 5.2f, 0.60f, 0.32f, 1.5f, 19.0f, 8, 55.0f, 130.0f, 1.0f},
         // Melee: complete wind-up / contact / recovery cycle; no gun recoil or ADS zoom.
-        {"knife",   "Hunting Knife", EAmmoType::None,     0, 0.42f,  false,0.0f, 0.0f, 75.0f, 0.0f, 0.0f, 0.0f, 0.0f, 38.0f, 1, 10.0f,  6.0f, 0.9f, 1.7f, 0.38f},
-        {"crowbar", "Crowbar",  EAmmoType::None,          0, 0.78f,  false,0.0f, 0.0f, 75.0f, 0.0f, 0.0f, 0.0f, 0.0f, 52.0f, 1, 10.0f,  9.0f, 1.6f, 2.0f, 0.42f},
-        {"axe",     "Fire Axe", EAmmoType::None,          0, 1.05f,  false,0.0f, 0.0f, 75.0f, 0.0f, 0.0f, 0.0f, 0.0f, 85.0f, 1, 10.0f,  9.0f, 1.8f, 2.1f, 0.43f},
+        {"knife",   "Hunting Knife", EWeaponFamily::Melee, EAmmoType::None,     0, 0.42f,  false,0.0f, 0.0f, 75.0f, 0.0f, 0.0f, 0.0f, 0.0f, 38.0f, 1, 10.0f,  6.0f, 0.9f, 1.7f, 0.38f},
+        {"crowbar", "Crowbar",  EWeaponFamily::Melee,    EAmmoType::None,       0, 0.78f,  false,0.0f, 0.0f, 75.0f, 0.0f, 0.0f, 0.0f, 0.0f, 52.0f, 1, 10.0f,  9.0f, 1.6f, 2.0f, 0.42f},
+        {"axe",     "Fire Axe", EWeaponFamily::Melee,    EAmmoType::None,       0, 1.05f,  false,0.0f, 0.0f, 75.0f, 0.0f, 0.0f, 0.0f, 0.0f, 85.0f, 1, 10.0f,  9.0f, 1.8f, 2.1f, 0.43f},
     }};
 
     // Returns nullptr for an unknown id.
@@ -145,6 +166,14 @@ namespace NextDayz
         if (id == "shotgun") return EyeStation({0.780f, 0.056f, 0.079f, 0.112f, -0.130f});
         // Two-handed, arms extended: the eye is well behind the slide.
         if (id == "pistol") return EyeStation({0.182f, 0.052f, 0.07875f, -0.0465f, -0.600f});
+        // kit_nd_arsenal.scad: flip rear sight on the top-cover hinge, post on the gas block.
+        // Same eye station as the AK-74 they are built on, so the dust cover stays low in the picture.
+        if (id == "aks74u") return EyeStation({0.485f, 0.068f, 0.1075f, 0.175f, -0.165f});
+        if (id == "bizon") return EyeStation({0.470f, 0.068f, 0.106f, 0.165f, -0.165f});
+        if (id == "aps") return EyeStation({0.273f, 0.054f, 0.081f, -0.051f, -0.600f});
+        if (id == "svt40") return EyeStation({0.805f, 0.066f, 0.091f, 0.150f, -0.240f});
+        // Over-under: effects leave between the barrels, the bead rides the rib.
+        if (id == "toz34") return EyeStation({0.785f, 0.048f, 0.087f, 0.115f, -0.130f});
         if (id == "knife") return {0.236f, 0.0f, 0.0f};
         if (id == "crowbar") return {0.510f, 0.0f, 0.0f};
         if (id == "axe") return {0.600f, 0.0f, 0.0f};

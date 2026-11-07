@@ -1032,6 +1032,14 @@ namespace NextDayz::NextDayzHUD
                 ImGui::TextColored(ImVec4(0.85f, 0.85f, 0.85f, 1.0f), "%s", std::string(NextDayz::L10n::Tr(definition.description)).c_str());
                 ImGui::PopTextWrapPos();
             }
+            if (!definition.lore.empty())
+            {
+                ImGui::Separator();
+                ImGui::TextColored(ImVec4(0.72f, 0.66f, 0.50f, 1.0f), "%s", NextDayz::L10n::Tr("FIELD NOTES"));
+                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 20.0f);
+                ImGui::TextColored(ImVec4(0.66f, 0.64f, 0.58f, 1.0f), "%s", std::string(NextDayz::L10n::Tr(definition.lore)).c_str());
+                ImGui::PopTextWrapPos();
+            }
             if (definition.kind == EItemKind::Weapon)
             {
                 ImGui::TextColored(ImVec4(0.9f, 0.95f, 1.0f, 1.0f), NextDayz::L10n::Tr("Loaded Ammo: %d"), instance.loadedAmmo);

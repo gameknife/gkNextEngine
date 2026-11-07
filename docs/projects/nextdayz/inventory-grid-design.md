@@ -23,7 +23,7 @@
 - 角色预览与物品图标共用 2× SSAA：按输出宽高各两倍渲染，以每个输出像素的 2×2 样本计算颜色和几何覆盖率。输出使用非预乘 alpha，避免透明轮廓混入背景或产生黑边，不依赖时域历史。图标仍按每格 64 像素缓存，取景裁切区按该尺寸的两倍生成。
 - 磁盘缓存写在 `FileHelper::GetWritableFilePath("cache/item-icons/…")` 指向的应用用户目录；`.thumb` 保存带校验的 RGBA16F 像素，不在 `assets/` 生成图片或模型文件。
 - 缓存键包含渲染版本、尺寸、几何和材质内容；模型或材质随场景重新加载时会重新校验。缺失、损坏的缓存自动重建，缓存不可写时继续使用内存中的图标。
-- `gnb validate --script assets/agentscripts/nextdayz-inventory-icons.agentscript.json` 检查全部 72 种目录物品和旋转拖放。`game.inventoryIconsRendered` 与 `game.inventoryIconCacheHits` 可区分首次渲染和磁盘缓存命中。
+- `gnb validate --script assets/agentscripts/nextdayz-inventory-icons.agentscript.json` 检查全部 91 种目录物品和旋转拖放。`game.inventoryIconsRendered` 与 `game.inventoryIconCacheHits` 可区分首次渲染和磁盘缓存命中。
 
 ## 堆叠上限
 
@@ -68,6 +68,11 @@
 | `mosin` | 莫辛步枪 | 4×1 | — |
 | `shotgun` | 霰弹枪 | 4×1 | — |
 | `pistol` | 马卡洛夫手枪 | 2×1 | — |
+| `aks74u` | AKS-74U 短突击步枪 | 3×1 | — |
+| `bizon` | PP-19 野牛冲锋枪 | 3×1 | — |
+| `aps` | APS 斯捷奇金冲锋手枪 | 2×1 | — |
+| `svt40` | SVT-40 半自动步枪 | 4×1 | — |
+| `toz34` | TOZ-34 上下双管猎枪 | 4×1 | — |
 | `knife` | 猎刀 | 2×1 | — |
 | `crowbar` | 撬棍 | 4×1 | — |
 | `axe` | 消防斧 | 3×2 | — |
@@ -105,6 +110,20 @@
 | `backpack_messenger` | 邮差包 | 3×2 | 6×3 |
 | `backpack_medical` | 医疗背包 | 2×2 | 6×4 |
 | `backpack_rolltop` | 卷口背包 | 2×3 | 4×8 |
+| `hat_panama` | 巴拿马帽 | 2×1 | — |
+| `helmet_ssh68` | SSh-68 钢盔 | 2×2 | — |
+| `helmet_m56` | M56 钢盔 | 2×2 | — |
+| `shirt_telnyashka` | 海魂衫 | 2×1 | — |
+| `jacket_afganka` | 阿富汗卡上衣 | 2×2 | 6×2 |
+| `jacket_gorka` | 戈尔卡山地罩衫 | 2×2 | 6×2 |
+| `jacket_strichtarn` | 雨点迷彩上衣 | 2×2 | 5×2 |
+| `vest_type56` | 56 式胸挂 | 2×2 | 7×2 |
+| `vest_6b3` | 6B3 防弹衣 | 2×2 | 4×2 |
+| `pants_afganka` | 阿富汗卡长裤 | 2×2 | 5×2 |
+| `pants_gorka` | 戈尔卡山地长裤 | 2×2 | 5×2 |
+| `pants_strichtarn` | 雨点迷彩长裤 | 2×2 | 4×2 |
+| `backpack_rd54` | RD-54 伞兵背包 | 2×2 | 5×5 |
+| `backpack_abalakov` | 阿巴拉科夫背包 | 3×2 | 7×5 |
 | `food_can` | 豆子罐头 | 1×2 | — |
 | `food_tuna` | 金枪鱼罐头 | 1×1 | — |
 | `food_crackers` | 饼干 | 2×1 | — |
@@ -126,6 +145,10 @@
 | `fuel` | 燃料罐 | 2×2 | — |
 | `bedroll` | 铺盖卷 | 3×2 | — |
 | `firecrackers` | 鞭炮 | 1×1 | — |
+
+## 有史可考的物品档案
+
+`FItemDef::lore` 是可选的“物品档案”文本（英文为翻译键，中文在 `UI/Translations.inl`），在背包悬浮提示的描述下方显示。上表 `aks74u` 到 `toz34` 的五把枪与 `hat_panama` 到 `backpack_abalakov` 的十四件服装取材自 [innawoods.net](https://innawoods.net/) 的手绘装备图鉴，每件都写了真实来历；枪械只用世界里已有的四种弹药。模型在 `assets/scad/lib/kit_nd_arsenal.scad`（武器）和 `assets/scad/characters/nextdayz_clothing_heritage.scad`（服装），验收展台是 `assets/scad/source/others/nextdayz_heritage_showroom.scad`。
 
 ## 存档契约
 

@@ -332,9 +332,11 @@ Dormant → Wander ──→ Investigate ──→ Alert ──→ Chase ──�
 
 - HUD：准星命中标记（白色命中、琥珀色爆头、红色放大的击杀，一串连射合并成一个标记）；被抓伤时屏幕边缘红色晕影、准星周围指向攻击者的红色弧，镜头朝远离攻击方向抖一下；低血量时晕影脉动；
 - `CombatEffects`：枪口焰（第一/第三人称各自从看到的枪口出发）、曳光（340 m/s，霰弹枪每 3 颗弹丸显示 1 条）、命中感染者时入口血雾 + 沿弹道从背面喷出的血滴（爆头和击杀更多）、命中地面的尘土与火星、尸体下按地面法线铺开的不规则血泊。所有节点在 `BeforeSceneRebuild` 注入网格、加载场景时一次建好，空闲时停在地图下方，开火不分配、不重建场景。自发光材质的辐射亮度与太阳同量级（百级），个位数会显示成暗灰；
-- `NextDayzAudio`：枪声（步枪 / 狙击 / 霰弹 / 手枪各自多版本轮换）、空仓、换弹、切枪、肉体命中 / 爆头 / 击杀确认、地面弹着、玩家受伤，以及感染者游荡/追击的低吼、发现时的嘶吼、扑咬、死亡与倒地声。NextAudio 是 2D、一文件一声道，所以变体轮换避免连发打断自己的尾音，距离只表现为音量衰减。默认音效由 `tools/audio/nextdayz_sfx.py` 用 numpy 程序化合成（无第三方采样，结果按种子固定）。生成的 `.wav` 不入库（`assets/sounds/nextdayz/` 在 `.gitignore` 中），每个 checkout 先运行一次 `python tools/audio/nextdayz_sfx.py`；缺文件时游戏照常运行、只是没有声音，NextAudio 每个缺失文件警告一次。
+- `NextDayzAudio`：枪声（步枪 / 狙击 / 霰弹 / 手枪各自多版本轮换）、空仓、换弹、切枪、肉体命中 / 爆头 / 击杀确认、地面弹着、玩家受伤，以及感染者游荡/追击的低吼、发现时的嘶吼、扑咬、死亡与倒地声。NextAudio 是 2D、一文件一个播放实例，所以变体轮换避免连发打断自己的尾音，距离只表现为音量衰减。默认音效由 `tools/audio/nextdayz_sfx.py` 用 numpy 程序化合成（无第三方采样，结果按种子固定）。生成的 `.wav` 不入库（`assets/sounds/nextdayz/` 在 `.gitignore` 中），每个 checkout 先运行一次 `python tools/audio/nextdayz_sfx.py`；缺文件时游戏照常运行、只是没有声音，NextAudio 每个缺失文件警告一次。
 
-本机录音素材试验：`python tools/audio/nextdayz_dayz_trial.py --dayz-root <DayZ安装目录>` 从本地 PBO 只读取选定 OGG，转为 44.1 kHz 单声道 PCM16 WAV，替换 50 个现有 cue（枪声混合发射、机械与户外尾音；风声裁成 8 秒并淡入淡出）。击杀提示和鞭炮保留合成音；爆头使用另外两条肉体弹着录音，感染者死亡使用重击人声并沿用延迟倒地声。原件备份、来源 SHA-256 清单、逐项先旧后新的 `before_after.wav` 对比试听均在 `out/audio/dayz/`，素材不提交、不发布。脚本同时同步已有桌面构建的音效目录，分别备份；`python tools/audio/nextdayz_dayz_trial.py --restore` 还原源码资源与运行副本。切换后重启 NextDayz（NextAudio 缓存解码结果）。这仍沿用现有 2D 音量衰减与消音器降音量逻辑，未引入 DayZ 的空间音频或独立消音采样。
+本机录音素材试验：`python tools/audio/nextdayz_dayz_trial.py --dayz-root <DayZ安装目录>` 从本地 PBO 只读取选定 OGG，转为 44.1 kHz PCM16 WAV（战斗单声道、环境立体声），导入 77 个 cue。击杀提示和鞭炮保留合成音；爆头使用另外两条肉体弹着录音，感染者死亡使用重击人声并沿用延迟倒地声。原件备份、来源 SHA-256 清单、逐项先旧后新的 `before_after.wav` 对比试听均在 `out/audio/dayz/`，素材不提交、不发布。脚本同时同步已有桌面构建的音效目录，分别备份；`python tools/audio/nextdayz_dayz_trial.py --restore` 还原源码资源与运行副本（后续增加的 cue 也纳入恢复记录）。切换后重启 NextDayz（NextAudio 缓存解码结果）。这仍沿用现有 2D 音量衰减与消音器降音量逻辑，未引入 DayZ 的空间音频或独立消音采样。
+
+环境声按实际天气与时钟分层：清晨提高鸟鸣频率和音量；白天交替林间、草地底声，点缀六种鸟鸣和昼间昆虫；傍晚交叉混入蟋蟀与夜间底声；深夜切换三段夜野底声、夜虫和猫头鹰，停播白天鸟鸣。阴天减少生物声，增加阵风、树叶与树干吱响；雾天改为安静的轻风与稀疏鸟虫，不能因为 `Storm()` 更高就播放大风。当前天气只有晴/阴/雾，没有降雨状态，因此不播放雨声或雷声。八秒底声与风声均在两端淡入淡出两秒，每六秒调度，避免风声硬切和持续叠加；录音同时限制 RMS 与峰值，运行时轻风音量为 0.045、阴天阵风上限 0.115、雾天 0.018。`ambience_showcase.wav` 按清晨/正午/黄昏/深夜/阴天/雾天各十秒给出示意试听。`gnb validate --script assets/agentscripts/nextdayz-ambience.agentscript.json` 验证分层与切换；`game.ambienceDay/Evening/Night/Birds/Owls/Wind` 暴露当前混音权重。
 
 ## 10. 玩家界面
 
@@ -441,7 +443,7 @@ game.currentObjective
 ### 15.3 氛围
 
 - 天气：`TimeSystem` 按种子每 2.5～5.5 游戏小时在晴/阴/雾之间切换，G 键手动轮换；阴天压暗和去饱和，雾天能见度约百米；清晨有薄雾；高度雾的颜色辐射亮度按白天 4、夜间 0.15 调（远景与天空亮度衔接，见 `FTimeConfig`）；
-- 声音：`tools/audio/nextdayz_sfx.py` 新增风声（3 段交替、阴天更大）、白天乌鸦、远处枪声、夜间远处尖叫、近战挥击与钝击、鞭炮、拾取/丢弃/进食/饮水/包扎/电台/提灯；`NextDayzAudio::UpdateAmbience` 调度；
+- 声音：`NextDayzAudio::UpdateAmbience` 按时间和晴/阴/雾天气混合昼夜林野底声、黄昏蟋蟀、鸟鸣、昼夜昆虫、猫头鹰、轻风/阵风和树叶树干声，另有稀疏乌鸦、远处枪声与夜间尖叫；`tools/audio/nextdayz_sfx.py` 提供完整合成后备，`tools/audio/nextdayz_dayz_trial.py` 安装本机录音试验（§9.4）；动作声含近战、鞭炮、拾取/丢弃/进食/饮水/包扎/电台/提灯；
 - 末日痕迹 kit：尸袋、血迹、垃圾堆、木板路障与钉死的窗、新泽西护栏、检疫告示牌、墙面涂鸦（"HELP" 等，`text()` 生成）、医疗帐篷、烧毁的车、货运车厢；
 - HUD：DayZ 式消息流（拾取、饥渴、流血、寒冷、电台播报……）、状态提示（流血闪烁、寒冷/冻僵、虚弱、回血、提灯剩余）、死亡总结（死因、存活时间、击杀数）。
 

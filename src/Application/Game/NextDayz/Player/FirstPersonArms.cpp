@@ -39,21 +39,26 @@ namespace NextDayz
         // (nextdayz_weapons.scad origin), its axis raked back like the grip.
         FHandPlacement GripPlacement(std::string_view weaponId)
         {
-            if (weaponId == "pistol") return {{0.0f, -0.020f, -0.021f}, 12.0f};
+            if (weaponId == "pistol" || weaponId == "aps") return {{0.0f, -0.020f, -0.021f}, 12.0f};
             if (weaponId == "svd") return {{0.0f, -0.022f, -0.012f}, 16.0f};
             if (weaponId == "mosin") return {{0.0f, 0.004f, -0.035f}, 35.0f};   // straight wrist
-            if (weaponId == "shotgun") return {{0.0f, 0.002f, -0.030f}, 35.0f}; // semi-pistol grip
-            return {{0.0f, -0.020f, -0.006f}, 13.0f};                          // AK-74
+            if (weaponId == "svt40") return {{0.0f, 0.002f, -0.034f}, 32.0f};   // semi-pistol wrist
+            if (weaponId == "shotgun" || weaponId == "toz34") return {{0.0f, 0.002f, -0.030f}, 35.0f}; // semi-pistol grip
+            return {{0.0f, -0.020f, -0.006f}, 13.0f};                          // AK-74 family
         }
 
         // Left hand: under the handguard / forend; under the magazine base
         // (cup and saucer) for the pistol.
         FHandPlacement SupportPlacement(std::string_view weaponId)
         {
-            if (weaponId == "pistol") return {{0.004f, -0.062f, -0.012f}, 0.0f};
+            if (weaponId == "pistol" || weaponId == "aps") return {{0.004f, -0.062f, -0.012f}, 0.0f};
             if (weaponId == "svd") return {{0.0f, 0.062f, 0.340f}, 0.0f};
             if (weaponId == "mosin") return {{0.0f, 0.048f, 0.280f}, 0.0f};
+            if (weaponId == "svt40") return {{0.0f, 0.052f, 0.340f}, 0.0f};
             if (weaponId == "shotgun") return {{0.0f, 0.040f, 0.250f}, 0.0f};
+            if (weaponId == "toz34") return {{0.0f, 0.036f, 0.250f}, 0.0f};
+            if (weaponId == "aks74u") return {{0.0f, 0.054f, 0.270f}, 0.0f};  // short handguard
+            if (weaponId == "bizon") return {{0.0f, 0.030f, 0.290f}, 0.0f};   // around the helical drum
             return {{0.0f, 0.058f, 0.300f}, 0.0f};
         }
 
@@ -82,7 +87,7 @@ namespace NextDayz
         FArmStance StanceFor(std::string_view weaponId)
         {
             // Pistol: isosceles stance, both shoulders square to the target.
-            if (weaponId == "pistol")
+            if (weaponId == "pistol" || weaponId == "aps")
                 return {{-0.165f, -0.215f, -0.03f}, {0.165f, -0.215f, -0.03f},
                         {-0.30f, -0.55f, 0.15f}, {0.30f, -0.55f, 0.15f}};
             // Long guns: bladed body, firing shoulder back under the stock, the

@@ -96,6 +96,10 @@ namespace NextDayz
         float warmth = 0.0f;         // insulation while worn (0..1, summed)
         std::string_view leftover;   // what remains after use (water bottle -> empty bottle)
         std::string_view description;
+        // Optional field history (where the real piece came from, who carried it).
+        // Shown under the description in the inventory tooltip; English is the
+        // translation key, like every other item string.
+        std::string_view lore;
     };
 
     const FItemDef* FindItemDef(std::string_view id);

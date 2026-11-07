@@ -5,6 +5,8 @@
 
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/Subsystems/NextAudio.hpp"
+#include "Application/Game/NextDayz/World/TimeSystem.hpp"
+#include "Application/Game/NextDayz/Weapons/WeaponDefs.hpp"
 
 namespace NextDayz
 {
@@ -45,13 +47,40 @@ namespace NextDayz
         constexpr const char* kBodyFall = "assets/sounds/nextdayz/body_fall.wav";
         constexpr const char* kSwing[] = {"assets/sounds/nextdayz/melee_swing_1.wav",
                                           "assets/sounds/nextdayz/melee_swing_2.wav"};
-        constexpr const char* kWind[] = {"assets/sounds/nextdayz/ambient_wind_1.wav",
-                                         "assets/sounds/nextdayz/ambient_wind_2.wav",
-                                         "assets/sounds/nextdayz/ambient_wind_3.wav"};
+        constexpr const char* kWindCalm[] = {"assets/sounds/nextdayz/ambient_wind_1.wav",
+                                             "assets/sounds/nextdayz/ambient_wind_2.wav"};
+        constexpr const char* kWindGust[] = {"assets/sounds/nextdayz/ambient_wind_3.wav",
+                                             "assets/sounds/nextdayz/ambient_wind_4.wav"};
         constexpr const char* kCrow[] = {"assets/sounds/nextdayz/ambient_crow_1.wav",
                                          "assets/sounds/nextdayz/ambient_crow_2.wav"};
         constexpr const char* kDistantShot[] = {"assets/sounds/nextdayz/distant_shot_1.wav",
                                                 "assets/sounds/nextdayz/distant_shot_2.wav"};
+        constexpr const char* kDayBed[] = {"assets/sounds/nextdayz/ambient_day_1.wav",
+                                           "assets/sounds/nextdayz/ambient_day_2.wav",
+                                           "assets/sounds/nextdayz/ambient_day_3.wav"};
+        constexpr const char* kEveningBed[] = {"assets/sounds/nextdayz/ambient_evening_1.wav",
+                                               "assets/sounds/nextdayz/ambient_evening_2.wav"};
+        constexpr const char* kNightBed[] = {"assets/sounds/nextdayz/ambient_night_1.wav",
+                                             "assets/sounds/nextdayz/ambient_night_2.wav",
+                                             "assets/sounds/nextdayz/ambient_night_3.wav"};
+        constexpr const char* kBird[] = {"assets/sounds/nextdayz/ambient_bird_1.wav",
+                                         "assets/sounds/nextdayz/ambient_bird_2.wav",
+                                         "assets/sounds/nextdayz/ambient_bird_3.wav",
+                                         "assets/sounds/nextdayz/ambient_bird_4.wav",
+                                         "assets/sounds/nextdayz/ambient_bird_5.wav",
+                                         "assets/sounds/nextdayz/ambient_bird_6.wav"};
+        constexpr const char* kDayInsect[] = {"assets/sounds/nextdayz/ambient_insect_day_1.wav",
+                                              "assets/sounds/nextdayz/ambient_insect_day_2.wav",
+                                              "assets/sounds/nextdayz/ambient_insect_day_3.wav"};
+        constexpr const char* kNightInsect[] = {"assets/sounds/nextdayz/ambient_insect_night_1.wav",
+                                                "assets/sounds/nextdayz/ambient_insect_night_2.wav",
+                                                "assets/sounds/nextdayz/ambient_insect_night_3.wav"};
+        constexpr const char* kOwl[] = {"assets/sounds/nextdayz/ambient_owl_1.wav",
+                                        "assets/sounds/nextdayz/ambient_owl_2.wav",
+                                        "assets/sounds/nextdayz/ambient_owl_3.wav"};
+        constexpr const char* kFoliage[] = {"assets/sounds/nextdayz/ambient_foliage_1.wav",
+                                            "assets/sounds/nextdayz/ambient_foliage_2.wav",
+                                            "assets/sounds/nextdayz/ambient_foliage_3.wav"};
         constexpr const char* kMeleeImpact = "assets/sounds/nextdayz/melee_impact.wav";
         constexpr const char* kFirecracker = "assets/sounds/nextdayz/firecracker.wav";
         constexpr const char* kDistantScream = "assets/sounds/nextdayz/distant_scream.wav";
@@ -67,9 +96,16 @@ namespace NextDayz
         {
             static constexpr std::span<const char* const> table[] = {
                 kRifle, kSniper, kShotgun, kPistol, kFlesh, kHead, kDirt, kHurt, kGroan, kAlert, kAttack, kDeath,
-                kSwing, kWind, kCrow, kDistantShot,
+                kSwing, kWindCalm, kWindGust, kCrow, kDistantShot,
+                kDayBed, kEveningBed, kNightBed, kBird, kDayInsect, kNightInsect, kOwl, kFoliage,
             };
             return table[cue];
+        }
+
+        float SmoothStep(float lo, float hi, float value)
+        {
+            const float t = std::clamp((value - lo) / (hi - lo), 0.0f, 1.0f);
+            return t * t * (3.0f - 2.0f * t);
         }
     }
 
@@ -103,15 +139,17 @@ namespace NextDayz
     void NextDayzAudio::Shot(std::string_view weaponId, bool suppressed)
     {
         const float volume = suppressed ? 0.25f : 1.0f;
-        if (weaponId == "svd" || weaponId == "mosin")
+        const FWeaponDef* weapon = FindWeaponDef(weaponId);
+        const EWeaponFamily family = weapon ? weapon->family : EWeaponFamily::Rifle;
+        if (family == EWeaponFamily::Marksman)
         {
             Play(Sniper, volume);
         }
-        else if (weaponId == "shotgun")
+        else if (family == EWeaponFamily::Shotgun)
         {
             Play(Shotgun, volume);
         }
-        else if (weaponId == "pistol")
+        else if (family == EWeaponFamily::Sidearm || family == EWeaponFamily::Smg)
         {
             Play(Pistol, 0.85f * volume);
         }
@@ -161,33 +199,78 @@ namespace NextDayz
         return lo + (hi - lo) * static_cast<float>(ambienceState_ >> 8) / 16777216.0f;
     }
 
-    void NextDayzAudio::UpdateAmbience(float deltaSeconds, float daylight, float storm)
+    void NextDayzAudio::UpdateAmbience(float deltaSeconds, float hour, float daylight, EWeather weather, float storm)
     {
         const float dt = std::max(deltaSeconds, 0.0f);
-        // Wind clips are ~7-9 s long and overlap a little, so it never stops.
+        const float day = SmoothStep(0.1f, 0.85f, daylight);
+        const float night = 1.0f - SmoothStep(0.05f, 0.65f, daylight);
+        const float dawn = SmoothStep(4.5f, 5.5f, hour) * (1.0f - SmoothStep(8.0f, 9.0f, hour));
+        const float evening = SmoothStep(16.0f, 18.0f, hour) * (1.0f - SmoothStep(19.5f, 21.0f, hour));
+        const bool fog = weather == EWeather::Fog;
+        const float overcast = std::clamp(storm / 0.6f, 0.0f, 1.0f);
+        const float wildlife = fog ? 0.35f : 1.0f - 0.45f * overcast;
+        ambienceMix_ = {
+            0.20f * day * (1.0f - 0.6f * evening) * wildlife,
+            0.18f * evening * wildlife,
+            0.18f * night * (1.0f - 0.5f * evening) * wildlife,
+            0.22f * std::min(day + 0.65f * dawn, 1.6f) * wildlife,
+            0.10f * day * wildlife,
+            0.13f * std::max(night, evening) * wildlife,
+            0.18f * night * wildlife,
+            fog ? 0.018f : 0.045f + 0.07f * overcast,
+            fog ? 0.025f : 0.045f + 0.08f * overcast,
+        };
+
+        // Adjacent clips overlap only over their baked fades. Inactive layers
+        // stop being scheduled, letting the previous clip fade out naturally.
+        if ((bedSeconds_ -= dt) <= 0.0f)
+        {
+            Play(DayBed, ambienceMix_.day, 1000);
+            Play(EveningBed, ambienceMix_.evening, 1000);
+            Play(NightBed, ambienceMix_.night, 1000);
+            bedSeconds_ = 6.0f;
+        }
         if ((windSeconds_ -= dt) <= 0.0f)
         {
-            Play(Wind, 0.16f + 0.22f * storm + 0.06f * (1.0f - daylight), 1000);
-            windSeconds_ = AmbienceRandom(5.5f, 6.5f);
+            Play(!fog && overcast > 0.5f ? WindGust : WindCalm, ambienceMix_.wind, 1000);
+            windSeconds_ = 6.0f;
+        }
+        if ((birdSeconds_ -= dt) <= 0.0f)
+        {
+            Play(Bird, ambienceMix_.birds * AmbienceRandom(0.65f, 1.0f), 1000);
+            birdSeconds_ = AmbienceRandom(5.0f, 14.0f) / (1.0f + dawn) / std::max(wildlife, 0.3f);
+        }
+        if ((insectSeconds_ -= dt) <= 0.0f)
+        {
+            Play(DayInsect, ambienceMix_.dayInsects * AmbienceRandom(0.6f, 1.0f), 1000);
+            Play(NightInsect, ambienceMix_.nightInsects * AmbienceRandom(0.6f, 1.0f), 1000);
+            insectSeconds_ = AmbienceRandom(8.0f, 18.0f);
+        }
+        if ((owlSeconds_ -= dt) <= 0.0f)
+        {
+            Play(Owl, ambienceMix_.owls * AmbienceRandom(0.6f, 1.0f), 2000);
+            owlSeconds_ = AmbienceRandom(20.0f, 45.0f);
+        }
+        if ((foliageSeconds_ -= dt) <= 0.0f)
+        {
+            Play(Foliage, ambienceMix_.foliage * AmbienceRandom(0.6f, 1.0f), 1000);
+            foliageSeconds_ = AmbienceRandom(12.0f, 30.0f);
         }
         if ((crowSeconds_ -= dt) <= 0.0f)
         {
-            if (daylight > 0.4f)
-            {
-                Play(Crow, AmbienceRandom(0.12f, 0.3f), 2000);
-            }
+            Play(Crow, day * wildlife * AmbienceRandom(0.08f, 0.16f), 2000);
             crowSeconds_ = AmbienceRandom(18.0f, 55.0f);
         }
         if ((shotSeconds_ -= dt) <= 0.0f)
         {
-            Play(DistantShot, AmbienceRandom(0.15f, 0.4f), 3000);
+            Play(DistantShot, AmbienceRandom(0.10f, 0.24f), 3000);
             shotSeconds_ = AmbienceRandom(45.0f, 140.0f);
         }
         if ((screamSeconds_ -= dt) <= 0.0f)
         {
-            if (daylight < 0.5f)
+            if (night > 0.5f)
             {
-                PlayOne(kDistantScream, AmbienceRandom(0.15f, 0.35f), 3000);
+                PlayOne(kDistantScream, night * AmbienceRandom(0.08f, 0.16f), 3000);
             }
             screamSeconds_ = AmbienceRandom(30.0f, 90.0f);
         }

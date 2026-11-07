@@ -9,7 +9,7 @@ namespace NextDayz
     namespace
     {
         // Houses: food, cloth, small tools, the odd hunting gun.
-        constexpr std::array<FLootTableEntry, 35> residential = {{
+        constexpr std::array<FLootTableEntry, 40> residential = {{
             {"food_can", 10}, {"food_tuna", 6}, {"food_crackers", 7}, {"food_apple", 8}, {"food_chocolate", 5},
             {"drink_soda", 7}, {"water_bottle", 8}, {"water_bottle_empty", 4},
             {"rag", 9, 1, 3}, {"bandage", 4}, {"painkillers", 3},
@@ -18,14 +18,16 @@ namespace NextDayz
             {"firecrackers", 3, 1, 2}, {"map", 2}, {"compass", 1},
             {"ammo_9mm", 2, 6, 16}, {"ammo_12g", 3, 4, 8}, {"shotgun", 1}, {"pistol", 1},
             {"hat_beanie", 2}, {"cap_baseball", 2}, {"hat_ushanka", 1}, {"jacket_puffer", 2}, {"jacket_denim", 3}, {"jeans", 4}, {"backpack_messenger", 2},
+            {"toz34", 1}, {"shirt_telnyashka", 2}, {"jacket_gorka", 1}, {"backpack_abalakov", 2}, {"hat_panama", 1},
         }};
         // Shops, the supermarket, the gas station: the best food, no guns.
-        constexpr std::array<FLootTableEntry, 28> commercial = {{
+        constexpr std::array<FLootTableEntry, 32> commercial = {{
             {"food_can", 12}, {"food_tuna", 8}, {"food_crackers", 9}, {"food_chocolate", 8},
             {"drink_soda", 12}, {"water_bottle", 10}, {"can_opener", 4}, {"battery", 5, 1, 2},
             {"firecrackers", 4, 1, 3}, {"map", 4}, {"compass", 2}, {"rag", 3, 1, 3}, {"bandage", 3},
             {"painkillers", 3}, {"backpack_small", 3}, {"hoodie", 3}, {"fuel", 4}, {"lantern", 2}, {"knife", 2},
             {"hat_beanie", 2}, {"cap_baseball", 2}, {"jacket_puffer", 2}, {"jacket_rain", 2}, {"jeans", 3}, {"vest_utility", 2}, {"vest_rescue", 1}, {"backpack_messenger", 2}, {"backpack_rolltop", 1},
+            {"shirt_telnyashka", 2}, {"jacket_gorka", 1}, {"pants_gorka", 1}, {"backpack_abalakov", 1},
         }};
         constexpr std::array<FLootTableEntry, 10> medical = {{
             {"bandage", 14, 1, 2}, {"medkit", 6}, {"painkillers", 10}, {"rag", 6, 2, 4},
@@ -33,7 +35,7 @@ namespace NextDayz
             {"jacket_rescue", 1}, {"vest_rescue", 1}, {"backpack_medical", 3},
         }};
         // Bases and checkpoints: rifles, ammo, armour and the bigger packs.
-        constexpr std::array<FLootTableEntry, 38> military = {{
+        constexpr std::array<FLootTableEntry, 53> military = {{
             {"optic_red_dot", 4}, {"optic_holographic", 3}, {"optic_4x", 2}, {"grip_vertical", 4},
             {"mag_quick", 4}, {"mag_extended", 4}, {"muzzle_suppressor", 2}, {"tactical_flashlight", 3},
             {"signal_flare", 1},
@@ -44,35 +46,44 @@ namespace NextDayz
             {"bandage", 5, 1, 2}, {"medkit", 2}, {"food_can", 4}, {"water_bottle", 3},
             {"compass", 4}, {"map", 3}, {"radio", 2}, {"battery", 3, 1, 2}, {"knife", 3},
             {"hat_boonie", 2}, {"helmet_tactical", 3}, {"vest_chest_rig", 3}, {"pants_tactical", 4}, {"pants_snow", 1}, {"backpack_rolltop", 1},
+            {"aks74u", 2}, {"svt40", 1}, {"aps", 1}, {"bizon", 1},
+            {"helmet_ssh68", 4}, {"hat_panama", 2}, {"helmet_m56", 2}, {"shirt_telnyashka", 2},
+            {"jacket_afganka", 3}, {"pants_afganka", 3}, {"jacket_strichtarn", 2}, {"pants_strichtarn", 2},
+            {"vest_type56", 2}, {"vest_6b3", 2}, {"backpack_rd54", 3},
         }};
-        constexpr std::array<FLootTableEntry, 23> police = {{
+        constexpr std::array<FLootTableEntry, 26> police = {{
             {"optic_red_dot", 3}, {"optic_holographic", 2}, {"mag_quick", 3}, {"mag_extended", 2}, {"tactical_flashlight", 3},
             {"signal_flare", 1},
             {"pistol", 4}, {"ammo_9mm", 10, 8, 24}, {"ammo_12g", 5, 4, 10}, {"shotgun", 2},
             {"bandage", 4, 1, 2}, {"painkillers", 3}, {"helmet", 2}, {"vest_military", 1},
             {"firecrackers", 2, 1, 2}, {"radio", 1}, {"battery", 3, 1, 2}, {"compass", 1}, {"map", 2},
             {"helmet_tactical", 2}, {"vest_police", 4}, {"pants_tactical", 2}, {"backpack_medical", 1},
+            {"bizon", 2}, {"aps", 2}, {"aks74u", 1},
         }};
         // Factories, garages, the sawmill: melee weapons, fuel and work clothes.
-        constexpr std::array<FLootTableEntry, 19> industrial = {{
+        constexpr std::array<FLootTableEntry, 21> industrial = {{
             {"crowbar", 8}, {"axe", 4}, {"knife", 3}, {"fuel", 8}, {"work_pants", 6}, {"jacket", 3},
             {"rag", 6, 1, 3}, {"battery", 4, 1, 2}, {"lantern", 4}, {"can_opener", 3}, {"water_bottle", 3},
             {"food_can", 3}, {"firecrackers", 3, 1, 2}, {"backpack_small", 2},
             {"jacket_rain", 2}, {"jacket_rescue", 3}, {"vest_utility", 4}, {"vest_rescue", 3}, {"pants_rain", 3},
+            {"shirt_telnyashka", 1}, {"pants_gorka", 1},
         }};
-        constexpr std::array<FLootTableEntry, 20> farm = {{
+        constexpr std::array<FLootTableEntry, 25> farm = {{
             {"food_apple", 14, 1, 3}, {"food_can", 6}, {"water_bottle", 5}, {"axe", 5}, {"knife", 3},
             {"mosin", 2}, {"shotgun", 3}, {"ammo_12g", 5, 4, 8}, {"ammo_762", 3, 5, 10},
             {"jacket", 4}, {"work_pants", 5}, {"rag", 6, 1, 3}, {"fuel", 4}, {"lantern", 3}, {"bedroll", 3},
             {"cap_baseball", 2}, {"hat_boonie", 3}, {"jacket_denim", 2}, {"vest_hunting", 4}, {"jeans", 3},
+            {"toz34", 3}, {"svt40", 1}, {"jacket_gorka", 2}, {"pants_gorka", 2}, {"backpack_abalakov", 1},
         }};
         // Camps, hunting stands and wrecks out in the woods.
-        constexpr std::array<FLootTableEntry, 26> wilderness = {{
+        constexpr std::array<FLootTableEntry, 33> wilderness = {{
             {"signal_flare", 1},
             {"mosin", 3}, {"shotgun", 3}, {"ammo_762", 5, 5, 12}, {"ammo_12g", 5, 4, 10},
             {"knife", 6}, {"axe", 3}, {"jacket", 5}, {"backpack", 4}, {"bedroll", 5}, {"lantern", 4},
             {"fuel", 3}, {"food_tuna", 6}, {"food_can", 6}, {"water_bottle", 6}, {"compass", 3}, {"map", 3},
             {"hat_beanie", 2}, {"hat_boonie", 3}, {"hat_ushanka", 2}, {"jacket_puffer", 3}, {"jacket_rain", 3}, {"vest_hunting", 3}, {"pants_rain", 2}, {"pants_snow", 3}, {"backpack_rolltop", 3},
+            {"toz34", 3}, {"svt40", 1}, {"jacket_gorka", 3}, {"pants_gorka", 3}, {"backpack_abalakov", 3},
+            {"backpack_rd54", 1}, {"hat_panama", 1},
         }};
 
         uint32_t TotalWeight(std::span<const FLootTableEntry> table, ELootCategory onlyCategory)

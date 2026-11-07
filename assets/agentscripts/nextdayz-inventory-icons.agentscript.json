@@ -45,7 +45,7 @@
       "type": "wait-until",
       "query": "game.inventoryIconCount",
       "op": "eq",
-      "value": 72,
+      "value": 91,
       "timeoutMs": 30000
     },
     {
@@ -131,7 +131,7 @@
       "type": "assert",
       "query": "game.inventoryIconCount",
       "op": "eq",
-      "value": 72
+      "value": 91
     },
     {
       "type": "mouse-move",

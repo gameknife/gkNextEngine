@@ -24,7 +24,8 @@ namespace NextDayz
 
     inline FWeaponRigHold WeaponRigHoldFor(std::string_view weaponId)
     {
-        if (weaponId == "pistol")
+        // The Stechkin is built on the Makarov's grip frame (kit_nd_arsenal.scad).
+        if (weaponId == "pistol" || weaponId == "aps")
         {
             // Grip into the palm (the Makarov's grip hangs below its origin),
             // support hand cupping the firing hand, arms extended.

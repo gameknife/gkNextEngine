@@ -42,6 +42,38 @@ namespace NextDayz
             FItemDef{.id = "pistol", .displayName = "Makarov", .kind = EItemKind::Weapon, .size = {2, 1},
                      .equipSlot = EEquipSlot::Sidearm, .weaponDefId = "pistol",
                      .description = "Sidearm. Quieter than a rifle. 9x18."},
+            // Weapons with a documented past (selected from the innawoods.net catalog).
+            FItemDef{.id = "aks74u", .displayName = "AKS-74U", .kind = EItemKind::Weapon, .size = {3, 1},
+                     .equipSlot = EEquipSlot::PrimaryWeapon, .weaponDefId = "aks74u",
+                     .description = "Folding-stock carbine. Handy, but very loud. 5.45x39.",
+                     .lore = "Adopted in 1979 for tank, helicopter and signals crews with no room for a full rifle. "
+                             "The cone on the muzzle is a gas booster, not a flash hider: the short barrel needs it "
+                             "to cycle, and it throws a fireball at night. Soldiers called it the 'Ksyukha'."},
+            FItemDef{.id = "bizon", .displayName = "PP-19 Bizon", .kind = EItemKind::Weapon, .size = {3, 1},
+                     .equipSlot = EEquipSlot::PrimaryWeapon, .weaponDefId = "bizon",
+                     .description = "Submachine gun with a 64-round helical magazine. Quiet for its firepower. 9x18.",
+                     .lore = "Designed at Izhmash in 1993 by Victor Kalashnikov and Alexei Dragunov, sons of the two "
+                             "famous designers, around an AKS-74 receiver. The cylinder under the barrel is the "
+                             "magazine: 64 Makarov rounds wound in a spiral. Interior Ministry troops carried it "
+                             "through the 1990s."},
+            FItemDef{.id = "aps", .displayName = "APS Stechkin", .kind = EItemKind::Weapon, .size = {2, 1},
+                     .equipSlot = EEquipSlot::Sidearm, .weaponDefId = "aps",
+                     .description = "Select-fire machine pistol, 20 rounds. Hard to hold on full auto. 9x18.",
+                     .lore = "Igor Stechkin's pistol was adopted with the Makarov in 1951 for officers and vehicle "
+                             "crews, then put into storage as too bulky to carry. The depots opened again in the "
+                             "1990s, and special units gave it a second life for its automatic fire."},
+            FItemDef{.id = "svt40", .displayName = "SVT-40", .kind = EItemKind::Weapon, .size = {4, 1},
+                     .equipSlot = EEquipSlot::PrimaryWeapon, .weaponDefId = "svt40",
+                     .description = "Self-loading rifle with a 10-round box. Powerful and loud. 7.62x54.",
+                     .lore = "Fedor Tokarev's rifle was meant to replace the Mosin after the Winter War; about 1.6 "
+                             "million were made before wartime factories went back to the simpler bolt-action. It "
+                             "wants more cleaning than most Soviet guns. The Finns captured many and prized them."},
+            FItemDef{.id = "toz34", .displayName = "TOZ-34", .kind = EItemKind::Weapon, .size = {4, 1},
+                     .equipSlot = EEquipSlot::PrimaryWeapon, .weaponDefId = "toz34",
+                     .description = "Over-under hunting gun. Two tightly choked barrels. 12 gauge.",
+                     .lore = "Made at the Tula Arms Plant from 1964 and found in hunting lodges from the Baltic to "
+                             "Kamchatka. It was the gun a Soviet hunter saved up for; the pins on the tang show "
+                             "which barrel is still cocked."},
             // ---- melee ----
             FItemDef{.id = "knife", .displayName = "Hunting Knife", .kind = EItemKind::Melee, .size = {2, 1},
                      .equipSlot = EEquipSlot::Hands, .weaponDefId = "knife", .toolCanOpener = true,
@@ -54,13 +86,13 @@ namespace NextDayz
                      .description = "Slow, brutal, silent. Splits a head in one blow."},
             // ---- ammunition ----
             FItemDef{.id = "ammo_545", .displayName = "5.45x39", .kind = EItemKind::Ammo, .size = {2, 1}, .maxStack = 30,
-                     .description = "Rifle rounds for the AK-74."},
+                     .description = "Rifle rounds for the AK-74 and AKS-74U."},
             FItemDef{.id = "ammo_762", .displayName = "7.62x54", .kind = EItemKind::Ammo, .size = {2, 1}, .maxStack = 20,
-                     .description = "Full-power rounds for the SVD and Mosin."},
+                     .description = "Full-power rounds for the SVD, SVT-40 and Mosin."},
             FItemDef{.id = "ammo_12g", .displayName = "12 Gauge", .kind = EItemKind::Ammo, .size = {2, 1}, .maxStack = 12,
                      .description = "Buckshot shells."},
             FItemDef{.id = "ammo_9mm", .displayName = "9x18", .kind = EItemKind::Ammo, .size = {1, 1}, .maxStack = 24,
-                     .description = "Pistol rounds for the Makarov."},
+                     .description = "Pistol rounds for the Makarov, Stechkin and Bizon."},
             // ---- clothing ----
             FItemDef{.id = "helmet", .displayName = "Helmet", .kind = EItemKind::Clothing, .size = {2, 2},
                      .equipSlot = EEquipSlot::Head, .armor = 0.15f, .warmth = 0.05f,
@@ -152,6 +184,92 @@ namespace NextDayz
             FItemDef{.id = "backpack_rolltop", .displayName = "Rolltop Pack", .kind = EItemKind::Clothing, .size = {2, 3},
                      .equipSlot = EEquipSlot::Back, .containerSize = {4, 8},
                      .description = "Tall teal dry bag with a rolled closure and twin buckles (32)."},
+            // ---- field kit with a documented past (innawoods.net selection) ----
+            // Soviet Afghan war: panama, Afganka, captured chest rig, 6B3, RD-54.
+            FItemDef{.id = "hat_panama", .displayName = "Panama Hat", .kind = EItemKind::Clothing, .size = {2, 1},
+                     .equipSlot = EEquipSlot::Head, .warmth = 0.05f,
+                     .description = "Wide-brimmed khaki field hat with a red star.",
+                     .lore = "The 'panamka' was issued to troops in the hot southern districts and became the face "
+                             "of the Soviet war in Afghanistan. Veterans still wear theirs, faded almost white, every "
+                             "15 February: the day in 1989 the last column crossed back over the border."},
+            FItemDef{.id = "helmet_ssh68", .displayName = "SSh-68 Helmet", .kind = EItemKind::Clothing, .size = {2, 2},
+                     .equipSlot = EEquipSlot::Head, .armor = 0.15f, .warmth = 0.05f,
+                     .description = "Soviet steel helmet. Absorbs 15% of infected damage.",
+                     .lore = "Adopted in 1968 and stamped out by the million, the SSh-68 covered Soviet and then "
+                             "Russian heads for three decades. It stops shell splinters, not rifle bullets, and every "
+                             "army depot still has stacks of them."},
+            FItemDef{.id = "shirt_telnyashka", .displayName = "Telnyashka", .kind = EItemKind::Clothing, .size = {2, 1},
+                     .equipSlot = EEquipSlot::Torso, .warmth = 0.15f,
+                     .description = "Long-sleeved striped undershirt. Light and warm, no pockets.",
+                     .lore = "Russian sailors have worn the blue-and-white stripes since 1874; in 1969 the Airborne "
+                             "Forces took their own with sky-blue stripes. Under a field jacket it marked a "
+                             "paratrooper or a marine. Today anyone who wants to look like one wears it."},
+            FItemDef{.id = "jacket_afganka", .displayName = "Afganka Jacket", .kind = EItemKind::Clothing, .size = {2, 2},
+                     .equipSlot = EEquipSlot::Torso, .containerSize = {6, 2}, .armor = 0.03f, .warmth = 0.30f,
+                     .description = "Sand-khaki field jacket with slanted chest pockets (12).",
+                     .lore = "First issued to troops in Afghanistan in the mid-1980s and adopted army-wide as the 1988 "
+                             "pattern, the 'Afganka' swapped the old tunic cut for a jacket made to fight in. The "
+                             "summer cloth bleaches to pale sand within a season."},
+            FItemDef{.id = "vest_type56", .displayName = "Type 56 Chest Rig", .kind = EItemKind::Clothing, .size = {2, 2},
+                     .equipSlot = EEquipSlot::Vest, .containerSize = {7, 2}, .armor = 0.06f,
+                     .description = "Chinese canvas chest rig: three magazine pouches and four grenade pockets (14).",
+                     .lore = "Shipped to the mujahideen through Pakistan, these Chinese rigs were stripped from the "
+                             "dead and worn out on Soviet chests. Soldiers who could not get one sewed copies from "
+                             "old rucksacks and called them the 'lifchik': the bra."},
+            FItemDef{.id = "vest_6b3", .displayName = "6B3 Body Armor", .kind = EItemKind::Clothing, .size = {2, 2},
+                     .equipSlot = EEquipSlot::Vest, .containerSize = {4, 2}, .armor = 0.32f, .warmth = 0.05f,
+                     .description = "Titanium-plated vest. Absorbs 32% of infected damage; magazine pockets (8).",
+                     .lore = "Built after Afghanistan showed that the older 6B2 would not stop a rifle bullet: "
+                             "overlapping titanium plates in an olive cover, four AK magazine pockets on the chest "
+                             "and about twelve kilos on the shoulders."},
+            FItemDef{.id = "pants_afganka", .displayName = "Afganka Trousers", .kind = EItemKind::Clothing, .size = {2, 2},
+                     .equipSlot = EEquipSlot::Legs, .containerSize = {5, 2}, .warmth = 0.14f,
+                     .description = "Sand-khaki field trousers with thigh pockets, worn with kirza boots (10).",
+                     .lore = "Roomy thigh pockets for the mountains, tucked into 'kirza' boots of pressed artificial "
+                             "leather: the cheap, waterproof Soviet substitute that shod the army for half a century."},
+            FItemDef{.id = "backpack_rd54", .displayName = "RD-54 Airborne Pack", .kind = EItemKind::Clothing, .size = {2, 2},
+                     .equipSlot = EEquipSlot::Back, .containerSize = {5, 5},
+                     .description = "Olive canvas paratrooper pack with outside pockets (25).",
+                     .lore = "The 'paratrooper's pack, model 1954' was cut to ride under a parachute harness, with "
+                             "outside pockets for magazines, grenades and the entrenching tool. Generations of "
+                             "conscripts carried everything they owned in one."},
+            // Mountain troops and hunters: the Gorka suit and the Abalakov rucksack.
+            FItemDef{.id = "jacket_gorka", .displayName = "Gorka Anorak", .kind = EItemKind::Clothing, .size = {2, 2},
+                     .equipSlot = EEquipSlot::Torso, .containerSize = {6, 2}, .armor = 0.04f, .warmth = 0.45f,
+                     .description = "Windproof tent-cloth smock with a hood and reinforced elbows (12).",
+                     .lore = "Developed in the late 1970s for Soviet mountain troops; 'gorka' means 'little hill'. "
+                             "The thick canvas shell with brown reinforcements went on to the Caucasus with special "
+                             "forces, and then to every hunter, fisherman and mushroom picker in the country."},
+            FItemDef{.id = "pants_gorka", .displayName = "Gorka Trousers", .kind = EItemKind::Clothing, .size = {2, 2},
+                     .equipSlot = EEquipSlot::Legs, .containerSize = {5, 2}, .armor = 0.03f, .warmth = 0.25f,
+                     .description = "Tent-cloth trousers reinforced at the knees and seat (10).",
+                     .lore = "Cut loose and doubled at the knees and seat for crawling over rock, with cuffs that "
+                             "keep the snow out of the boots. The pattern has been sewn, copied and counterfeited "
+                             "for forty years."},
+            FItemDef{.id = "backpack_abalakov", .displayName = "Abalakov Rucksack", .kind = EItemKind::Clothing, .size = {3, 2},
+                     .equipSlot = EEquipSlot::Back, .containerSize = {7, 5},
+                     .description = "Wide canvas tourist rucksack with leather straps (35).",
+                     .lore = "Designed by the mountaineer Vitaly Abalakov in the 1930s and made with little change "
+                             "for half a century, the wide canvas 'abalakovsky' went on every Soviet hike, geology "
+                             "expedition and dacha trip. It sags and rides low, but it swallows everything."},
+            // East German National People's Army (NVA).
+            FItemDef{.id = "helmet_m56", .displayName = "M56 Stahlhelm", .kind = EItemKind::Clothing, .size = {2, 2},
+                     .equipSlot = EEquipSlot::Head, .armor = 0.17f, .warmth = 0.05f,
+                     .description = "Flared East German steel helmet. Absorbs 17% of infected damage.",
+                     .lore = "Designed during the Second World War as a lighter Wehrmacht helmet and shelved; the "
+                             "East German army adopted it in 1956 precisely because it did not look like the old "
+                             "one. After 1990 the NVA's stocks were sold off across Central Europe."},
+            FItemDef{.id = "jacket_strichtarn", .displayName = "Strichtarn Jacket", .kind = EItemKind::Clothing, .size = {2, 2},
+                     .equipSlot = EEquipSlot::Torso, .containerSize = {5, 2}, .armor = 0.03f, .warmth = 0.34f,
+                     .description = "East German rain-pattern field jacket (10).",
+                     .lore = "The NVA printed its field uniforms in 'Strichtarn' from 1965 until 1990: fine brown "
+                             "rain strokes on grey-green, nicknamed 'one stroke, no stroke'. The Czechoslovak army "
+                             "across the border wore a close cousin, the needle pattern."},
+            FItemDef{.id = "pants_strichtarn", .displayName = "Strichtarn Trousers", .kind = EItemKind::Clothing, .size = {2, 2},
+                     .equipSlot = EEquipSlot::Legs, .containerSize = {4, 2}, .warmth = 0.18f,
+                     .description = "Rain-pattern field trousers with high marching boots (8).",
+                     .lore = "Issued with the jacket to East German conscripts and worn over high leather marching "
+                             "boots, which the NVA kept long after most armies had moved to laced ones."},
             // ---- food and drink ----
             FItemDef{.id = "food_can", .displayName = "Canned Beans", .kind = EItemKind::Consumable, .size = {1, 2},
                      .maxStack = 4, .hungerDelta = 32.0f, .use = EItemUse::Eat, .needsOpener = true,

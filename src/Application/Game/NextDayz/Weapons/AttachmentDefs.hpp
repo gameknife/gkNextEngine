@@ -58,10 +58,16 @@ namespace NextDayz
         switch (attachment->slot)
         {
         case EAttachmentSlot::Optic:
-            if (weaponId == "mosin") return type == EWeaponAttachment::Scope4x;
-            return type != EWeaponAttachment::Scope4x || (!weapon->IsSidearm() && weaponId != "shotgun");
-        case EAttachmentSlot::Grip: return weaponId == "ak" || weaponId == "svd" || weaponId == "shotgun";
-        case EAttachmentSlot::Magazine: return weaponId == "ak" || weaponId == "svd" || weapon->IsSidearm();
+            // Wartime rifles only take the sniper mount (PU-style 4x).
+            if (weaponId == "mosin" || weaponId == "svt40") return type == EWeaponAttachment::Scope4x;
+            return type != EWeaponAttachment::Scope4x ||
+                   (!weapon->IsSidearm() && weapon->family != EWeaponFamily::Shotgun);
+        case EAttachmentSlot::Grip:
+            // The Bizon's helical drum already is the forend.
+            return weaponId == "ak" || weaponId == "svd" || weaponId == "shotgun" || weaponId == "aks74u";
+        case EAttachmentSlot::Magazine:
+            return weaponId == "ak" || weaponId == "svd" || weaponId == "aks74u" || weaponId == "svt40" ||
+                   weapon->IsSidearm();
         case EAttachmentSlot::Muzzle:
         case EAttachmentSlot::Tactical: return true;
         default: return false;
@@ -111,15 +117,20 @@ namespace NextDayz
     inline float WeaponOpticRailHeight(std::string_view id)
     {
         if (id == "pistol") return 0.081f;
+        if (id == "aps") return 0.084f;
         if (id == "shotgun") return 0.090f;
-        if (id == "mosin" || id == "svd") return 0.106f;
+        if (id == "toz34") return 0.092f;
+        if (id == "mosin" || id == "svd" || id == "svt40") return 0.106f;
         return 0.116f;
     }
 
     inline float WeaponOpticRailForward(std::string_view id)
     {
         if (id == "pistol") return 0.010f;
+        if (id == "aps") return 0.030f;
         if (id == "svd") return 0.050f;
+        if (id == "svt40") return 0.040f;
+        if (id == "aks74u" || id == "bizon") return 0.060f;
         return 0.100f;
     }
 
@@ -154,16 +165,19 @@ namespace NextDayz
     inline float WeaponAimSeconds(std::string_view id, const FWeaponAttachments& attachments)
     {
         float seconds = 0.20f;
-        if (id == "pistol") seconds = 0.15f;
-        else if (id == "shotgun") seconds = 0.19f;
+        const auto* weapon = FindWeaponDef(id);
+        if (weapon && weapon->IsSidearm()) seconds = id == "aps" ? 0.16f : 0.15f;
+        else if (id == "aks74u" || id == "bizon") seconds = 0.18f;
+        else if (weapon && weapon->family == EWeaponFamily::Shotgun) seconds = 0.19f;
         else if (id == "mosin") seconds = 0.25f;
-        else if (id == "svd") seconds = 0.26f;
+        else if (id == "svd" || id == "svt40") seconds = 0.26f;
         if (WeaponSightPoints(id, attachments).scopeFov > 0.0f) seconds += 0.04f;
         return seconds;
     }
 
     inline float SuppressorLength(std::string_view id)
     {
-        return id == "pistol" ? 0.105f : 0.150f;
+        const auto* weapon = FindWeaponDef(id);
+        return weapon && weapon->IsSidearm() ? 0.105f : 0.150f;
     }
 }

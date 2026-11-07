@@ -24,6 +24,21 @@ class NextEngine;
 
 namespace NextDayz
 {
+    enum class EWeather : uint8_t;
+
+    struct FAmbienceMix
+    {
+        float day = 0.0f;
+        float evening = 0.0f;
+        float night = 0.0f;
+        float birds = 0.0f;
+        float dayInsects = 0.0f;
+        float nightInsects = 0.0f;
+        float owls = 0.0f;
+        float wind = 0.0f;
+        float foliage = 0.0f;
+    };
+
     class NextDayzAudio
     {
     public:
@@ -57,9 +72,11 @@ namespace NextDayz
         void Bandage();
         void RadioStatic();
         void Lantern();
-        // The world around: wind always, crows by day, distant gunfire, screams
-        // at night. `daylight` 0..1, `storm` 0..1 (overcast/rain strength).
-        void UpdateAmbience(float deltaSeconds, float daylight, float storm);
+        // Layered rural beds, wildlife and quiet wind, selected by clock and
+        // actual weather. Fog is sheltered/muffled, not a stronger wind storm.
+        // Eight-second beds have two-second fades and start six seconds apart.
+        void UpdateAmbience(float deltaSeconds, float hour, float daylight, EWeather weather, float storm);
+        const FAmbienceMix& AmbienceMix() const { return ambienceMix_; }
 
     private:
         enum ECue : size_t
@@ -77,9 +94,18 @@ namespace NextDayz
             Attack,
             Death,
             Swing,
-            Wind,
+            WindCalm,
+            WindGust,
             Crow,
             DistantShot,
+            DayBed,
+            EveningBed,
+            NightBed,
+            Bird,
+            DayInsect,
+            NightInsect,
+            Owl,
+            Foliage,
             CueCount,
         };
 
@@ -93,7 +119,13 @@ namespace NextDayz
         uint64_t played_ = 0;
         // Ambience timers (seconds until the next one) and a tiny LCG so the
         // soundscape does not depend on any gameplay random stream.
-        float windSeconds_ = 0.5f;
+        FAmbienceMix ambienceMix_{};
+        float bedSeconds_ = 0.1f;
+        float windSeconds_ = 1.5f;
+        float birdSeconds_ = 2.0f;
+        float insectSeconds_ = 4.0f;
+        float owlSeconds_ = 5.0f;
+        float foliageSeconds_ = 9.0f;
         float crowSeconds_ = 12.0f;
         float shotSeconds_ = 40.0f;
         float screamSeconds_ = 25.0f;

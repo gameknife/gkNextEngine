@@ -1066,19 +1066,25 @@ void NextDayzGameInstance::SimulateFrame(float dt)
             }
             continue;
         }
+        const NextDayz::FWeaponDef* shotWeapon = NextDayz::FindWeaponDef(shot.weaponId);
+        const NextDayz::EWeaponFamily shotFamily = shotWeapon ? shotWeapon->family : NextDayz::EWeaponFamily::Rifle;
         if (hasVisualMuzzle)
         {
-            const float flash = shot.weaponId == "pistol" ? 0.6f : shot.weaponId == "shotgun" ? 1.25f : 1.0f;
+            const float flash = shotFamily == NextDayz::EWeaponFamily::Sidearm ? 0.6f
+                : shotFamily == NextDayz::EWeaponFamily::Smg ? 0.7f
+                : shotFamily == NextDayz::EWeaponFamily::Shotgun ? 1.25f
+                : shot.weaponId == "aks74u" ? 1.35f : 1.0f; // the muzzle booster's fireball
             effects_.MuzzleFlash(visualMuzzle, visualMuzzleForward, flash * (firstPersonView ? 0.55f : 0.6f) * (shot.suppressed ? 0.15f : 1.0f));
         }
         audio_.Shot(shot.weaponId, shot.suppressed);
         player_.ApplyCameraRecoil(shot.cameraImpulseRadians);
         rig_.TriggerRecoil(shot.rigRecoilScale);
-        if (const NextDayz::FWeaponDef* definition = NextDayz::FindWeaponDef(shot.weaponId))
+        if (shotWeapon)
         {
-            const NextDayz::ENoiseType noiseType = shot.weaponId == "shotgun" ? NextDayz::ENoiseType::Shotgun
-                : shot.weaponId == "pistol" ? NextDayz::ENoiseType::Pistol : NextDayz::ENoiseType::Rifle;
-            noise_.Emit(player_.Position(), definition->noiseRadius * (shot.suppressed ? 0.25f : 1.0f), 1.0f, noiseType);
+            const NextDayz::ENoiseType noiseType = shotFamily == NextDayz::EWeaponFamily::Shotgun ? NextDayz::ENoiseType::Shotgun
+                : shotFamily == NextDayz::EWeaponFamily::Sidearm || shotFamily == NextDayz::EWeaponFamily::Smg
+                    ? NextDayz::ENoiseType::Pistol : NextDayz::ENoiseType::Rifle;
+            noise_.Emit(player_.Position(), shotWeapon->noiseRadius * (shot.suppressed ? 0.25f : 1.0f), 1.0f, noiseType);
         }
     }
 
@@ -1206,7 +1212,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     UpdateWorldPressure();
     UpdateFirecrackers(dt);
     UpdateSurvivalFeedback(dt);
-    audio_.UpdateAmbience(dt, time_.Daylight(), time_.Storm());
+    audio_.UpdateAmbience(dt, static_cast<float>(time_.Hour()), time_.Daylight(), time_.Weather(), time_.Storm());
     if (lanternLit_)
     {
         lanternSeconds_ -= dt;
@@ -3745,6 +3751,24 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     reg.Add("hurt", [this]() -> Runtime::Agent::FAgentQueryValue { return hurtSeconds_ > 0.0f; });
     reg.Add("audioPlayed", [this]() -> Runtime::Agent::FAgentQueryValue {
         return static_cast<int64_t>(audio_.PlayedCount());
+    });
+    reg.Add("ambienceDay", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(audio_.AmbienceMix().day);
+    });
+    reg.Add("ambienceEvening", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(audio_.AmbienceMix().evening);
+    });
+    reg.Add("ambienceNight", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(audio_.AmbienceMix().night);
+    });
+    reg.Add("ambienceBirds", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(audio_.AmbienceMix().birds);
+    });
+    reg.Add("ambienceOwls", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(audio_.AmbienceMix().owls);
+    });
+    reg.Add("ambienceWind", [this]() -> Runtime::Agent::FAgentQueryValue {
+        return static_cast<double>(audio_.AmbienceMix().wind);
     });
     reg.Add("fxParticles", [this]() -> Runtime::Agent::FAgentQueryValue {
         return static_cast<int64_t>(effects_.ActiveParticles());

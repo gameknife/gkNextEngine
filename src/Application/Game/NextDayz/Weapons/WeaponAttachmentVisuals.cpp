@@ -84,7 +84,8 @@ namespace NextDayz
                 inScene_[slot] = show;
                 scene_->MarkDirty();
             }
-            const bool pistol = weaponId == "pistol";
+            const FWeaponDef* weapon = FindWeaponDef(weaponId);
+            const bool pistol = weapon && weapon->IsSidearm();
             glm::vec3 position(0.0f);
             switch (static_cast<EAttachmentSlot>(slot))
             {
@@ -95,7 +96,9 @@ namespace NextDayz
                 position = {0.0f, points.boreHeight - 0.040f, weaponId == "svd" ? 0.36f : 0.28f};
                 break;
             case EAttachmentSlot::Magazine:
-                position = {0.0f, pistol ? -0.115f : weaponId == "svd" ? -0.15f : -0.19f, pistol ? -0.04f : 0.15f};
+                if (weaponId == "aps") position = {0.0f, -0.135f, -0.05f};
+                else if (weaponId == "svt40") position = {0.0f, -0.14f, 0.09f};
+                else position = {0.0f, pistol ? -0.115f : weaponId == "svd" ? -0.15f : -0.19f, pistol ? -0.04f : 0.15f};
                 break;
             case EAttachmentSlot::Muzzle: position = {0.0f, points.boreHeight, points.muzzleForward}; break;
             case EAttachmentSlot::Tactical:

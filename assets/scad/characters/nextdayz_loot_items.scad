@@ -6,6 +6,8 @@
 use <../lib/kit_coldwar.scad>
 use <nextdayz_clothing.scad>
 use <nextdayz_attachments.scad>
+use <../lib/kit_nd_arsenal.scad>
+use <nextdayz_clothing_heritage.scad>
 
 $fn = 12;
 
@@ -120,6 +122,29 @@ module bone_item_backpack_military() { ndc_loot_pack(2); }
 module bone_item_backpack_messenger() { ndc_loot_pack(3); }
 module bone_item_backpack_medical() { ndc_loot_pack(4); }
 module bone_item_backpack_rolltop() { ndc_loot_pack(5); }
+// ---- 有史可考的一组（innawoods.net 图鉴挑选）：武器在 kit_nd_arsenal.scad，服装在 nextdayz_clothing_heritage.scad ----
+module bone_item_aks74u() { nd_wpn_aks74u(); }
+module bone_item_bizon() { nd_wpn_bizon(); }
+module bone_item_aps() { nd_wpn_aps(); }
+module bone_item_svt40() { nd_wpn_svt40(); }
+module bone_item_toz34() { nd_wpn_toz34(); }
+// 帽盔立放：最低点（帽檐 / 盔沿）贴地，下颚带收起
+module bone_item_hat_panama() { translate([0, 0, -0.166]) ndh_panama(); }
+module bone_item_helmet_ssh68() { translate([0, 0, -0.155]) ndh_ssh68(strap = false); }
+module bone_item_helmet_m56() { translate([0, 0, -0.122]) ndh_m56(strap = false); }
+module bone_item_shirt_telnyashka() { ndh_loot_coat("telnyashka"); }
+module bone_item_jacket_afganka() { ndh_loot_coat("afganka"); }
+module bone_item_jacket_gorka() { ndh_loot_coat("gorka"); }
+module bone_item_jacket_strichtarn() { ndh_loot_coat("strichtarn"); }
+// 背心正面朝上压扁平放（前后厚度 × 0.35）：背面最外层（56 式过肩带 .18 / 6B3 钛板鼓包 .208）× 0.35 贴地
+module bone_item_vest_type56() { translate([0, -0.23, 0.065]) rotate([-90, 0, 0]) scale([0.75, 0.35, 0.75]) ndh_type56(); }
+module bone_item_vest_6b3() { translate([0, -0.23, 0.075]) rotate([-90, 0, 0]) scale([0.75, 0.35, 0.75]) ndh_6b3(); }
+module bone_item_pants_afganka() { ndh_loot_pants("afganka"); }
+module bone_item_pants_gorka() { ndh_loot_pants("gorka"); }
+module bone_item_pants_strichtarn() { ndh_loot_pants("strichtarn"); }
+// 背包立放：包底贴地（RD-54 底 z = .10，阿巴拉科夫底 z = .05）
+module bone_item_backpack_rd54() { translate([0, -0.285, -0.099]) ndh_rd54(); }
+module bone_item_backpack_abalakov() { translate([0, -0.31, -0.049]) ndh_abalakov(); }
 // ---- 食物 / 饮水 ----
 module bone_item_food_can() { cw_item_can(2); }
 module bone_item_food_tuna() { cw_item_tuna(1); }
@@ -194,6 +219,12 @@ module bone_root()
     bone_item_bandage(); bone_item_rag(); bone_item_medkit(); bone_item_painkillers();
     bone_item_can_opener(); bone_item_compass(); bone_item_map(); bone_item_radio(); bone_item_battery();
     bone_item_lantern(); bone_item_fuel(); bone_item_bedroll(); bone_item_firecrackers();
+    bone_item_aks74u(); bone_item_bizon(); bone_item_aps(); bone_item_svt40(); bone_item_toz34();
+    bone_item_hat_panama(); bone_item_helmet_ssh68(); bone_item_helmet_m56();
+    bone_item_shirt_telnyashka(); bone_item_jacket_afganka(); bone_item_jacket_gorka(); bone_item_jacket_strichtarn();
+    bone_item_vest_type56(); bone_item_vest_6b3();
+    bone_item_pants_afganka(); bone_item_pants_gorka(); bone_item_pants_strichtarn();
+    bone_item_backpack_rd54(); bone_item_backpack_abalakov();
     bone_item_signal_flare();
     bone_item_unknown();
 }

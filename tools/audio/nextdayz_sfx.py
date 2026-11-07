@@ -336,6 +336,37 @@ def wind(rng, seconds=7.0, gust=1.0):
     return finish(body * swell * env, peak=0.6, fade=0.2)
 
 
+def ambient_bird(rng, owl=False):
+    """Small procedural fallback; local DayZ trials replace this with recordings."""
+    out = np.zeros(int(2.4 * RATE))
+    for i in range(3):
+        seconds = 0.38 if owl else 0.16
+        t = t_axis(seconds)
+        hz = rng.uniform(340.0, 480.0) if owl else rng.uniform(2200.0, 4200.0)
+        pitch = hz * (1.0 + 0.12 * np.sin(np.pi * t / seconds))
+        note = np.sin(2 * np.pi * np.cumsum(pitch) / RATE) * np.sin(np.pi * t / seconds) ** 2
+        out = place(out, note, 0.2 + i * (0.65 if owl else 0.3))
+    return finish(out, peak=0.4, fade=0.1)
+
+
+def ambient_insect(rng, seconds=2.5, night=False):
+    t = t_axis(seconds)
+    carrier = np.sin(2 * np.pi * rng.uniform(3500.0, 5200.0) * t)
+    trill = np.maximum(np.sin(2 * np.pi * (24.0 if night else 38.0) * t), 0) ** 3
+    phrase = np.maximum(np.sin(2 * np.pi * (1.5 if night else 0.8) * t), 0) ** 2
+    return finish(carrier * trill * phrase, peak=0.3, fade=0.2)
+
+
+def ambient_bed(rng, night=False, evening=False):
+    out = lowpass(rng.standard_normal(int(8.0 * RATE)), 1800.0) * 0.035
+    if night or evening:
+        out += ambient_insect(rng, 8.0, night=True) * (0.25 if evening else 0.12)
+    else:
+        for at in (0.6, 3.1, 5.5):
+            out = place(out, ambient_bird(rng) * 0.15, at)
+    return finish(out, peak=0.3, fade=2.0)
+
+
 def crow(rng):
     """Two or three harsh caws drifting over the fields."""
     out = np.zeros(int(1.6 * RATE))
@@ -459,8 +490,20 @@ def build(out_dir):
         add(f"melee_swing_{i + 1}", 220 + i, lambda r, i=i: melee_swing(r, 1.0 + i * 0.15))
     add("melee_impact", 222, melee_impact)
     add("firecracker", 223, firecracker)
+    for i in range(4):
+        add(f"ambient_wind_{i + 1}", 230 + i,
+            lambda r, i=i: finish(wind(r, 8.0, 0.6 + i * 0.4), peak=0.24, fade=2.0))
+    for kind, count in (("day", 3), ("evening", 2), ("night", 3)):
+        for i in range(count):
+            add(f"ambient_{kind}_{i + 1}", 300 + i + {"day": 0, "evening": 10, "night": 20}[kind],
+                lambda r, kind=kind: ambient_bed(r, night=kind == "night", evening=kind == "evening"))
+    for i in range(6):
+        add(f"ambient_bird_{i + 1}", 330 + i, ambient_bird)
     for i in range(3):
-        add(f"ambient_wind_{i + 1}", 230 + i, lambda r, i=i: wind(r, 7.0 + i, 0.6 + i * 0.4))
+        add(f"ambient_insect_day_{i + 1}", 340 + i, ambient_insect)
+        add(f"ambient_insect_night_{i + 1}", 350 + i, lambda r: ambient_insect(r, night=True))
+        add(f"ambient_owl_{i + 1}", 360 + i, lambda r: ambient_bird(r, owl=True))
+        add(f"ambient_foliage_{i + 1}", 370 + i, lambda r: rustle(r, 1.5, 1400.0))
     for i in range(2):
         add(f"ambient_crow_{i + 1}", 235 + i, crow)
         add(f"distant_shot_{i + 1}", 237 + i, lambda r, i=i: distant_shot(r, 90.0 - i * 25.0))

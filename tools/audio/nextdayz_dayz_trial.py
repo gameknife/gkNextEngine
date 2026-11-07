@@ -45,6 +45,8 @@ class Cue:
     layers: tuple[Layer, ...]
     peak: float = 0.8
     fade: float = 0.008
+    rms: float | None = None
+    channels: int = 1
 
 
 def weapons(entry, **kwargs):
@@ -109,11 +111,34 @@ def cues():
     result["body_fall"] = Cue((characters("movement/bodyfall/dirt_ext/bodyfall_1.ogg"),), peak=0.65)
     result["melee_impact"] = Cue((weapons("hits/melee/axe/hit_axe_body_heavy_1.ogg"),), peak=0.75)
     for i, (entry, start) in enumerate((
-        ("WindForestLight_-9db", 0.0), ("WindHills_-9db", 9.0), ("WindForestHeavy_-9db", 2.0),
+        ("WindForestLight_-9db", 0.0), ("WindHousesLight_-9db", 6.0),
+        ("WindForestHeavy_-9db", 2.0), ("WindHousesHeavy_-9db", 4.0),
     ), 1):
         result[f"ambient_wind_{i}"] = Cue((
             Layer("sounds_environment", f"ambients/{entry}.ogg", start=start, duration=8.0),
-        ), peak=0.5, fade=0.65)
+        ), peak=0.24, fade=2.0, rms=0.075, channels=2)
+    for kind, sources in (
+        ("day", ("ForestDaySunny_-30db", "MeadowDay_-30db", "ForestDay_-30db")),
+        ("night", ("ForestNight_-30db", "MeadowNight_-30db", "MeadowNight2_-30db")),
+        ("evening", ("MeadowEveningCrickets", "MeadowEveningCrickets")),
+    ):
+        for i, entry in enumerate(sources, 1):
+            result[f"ambient_{kind}_{i}"] = Cue((
+                Layer("sounds_environment", f"ambients/{entry}.ogg", start=(i - 1) * 4.0, duration=8.0),
+            ), peak=0.5, fade=2.0, rms=0.10, channels=2)
+    for kind, entries in (
+        ("bird", ("birds/Sparrow_1", "birds/Chickadee_1", "birds/Wabler_1",
+                  "birds/Quail_1", "birds/Jay_1", "birds/Sparrow_3")),
+        ("insect_day", ("insects/InsectDay_1", "insects/InsectDay_5", "insects/InsectDay_10")),
+        ("insect_night", ("insects/InsectNight_1", "insects/InsectNight_3", "insects/InsectNight_8")),
+        ("owl", ("birds/Owl_1", "birds/Owl_5", "birds/Owl_9")),
+        ("foliage", ("weather/winds/WindTreeSmallLeaves_1", "weather/winds/WindTreeLargeLeaves_1",
+                     "weather/winds/WindTreeCreak_1")),
+    ):
+        for i, entry in enumerate(entries, 1):
+            result[f"ambient_{kind}_{i}"] = Cue((
+                Layer("sounds_environment", entry + ".ogg"),
+            ), peak=0.55, rms=0.12, channels=2)
     result["distant_scream"] = Cue((infected("ZmbF_Normal_CallToArmsShort_1"),), peak=0.5)
     result["pickup"] = Cue((characters("actions/items/bakedbeanscan/BakedBeansCan_pickup_1.ogg"),), peak=0.5)
     result["item_drop"] = Cue((characters("actions/items/bakedbeanscan/BakedBeansCan_drop_1.ogg"),), peak=0.5)
@@ -195,21 +220,21 @@ def find_ffmpeg(explicit):
         raise RuntimeError("Install ffmpeg or imageio_ffmpeg, or pass --ffmpeg") from error
 
 
-def decode(ffmpeg, data):
+def decode(ffmpeg, data, channels=1):
     result = subprocess.run([
         ffmpeg, "-hide_banner", "-loglevel", "error", "-i", "pipe:0",
-        "-f", "f32le", "-ac", "1", "-ar", str(RATE), "pipe:1",
+        "-f", "f32le", "-ac", str(channels), "-ar", str(RATE), "pipe:1",
     ], input=data, capture_output=True, check=True)
     samples = np.frombuffer(result.stdout, dtype="<f4").copy()
     if len(samples) == 0 or not np.isfinite(samples).all() or np.max(np.abs(samples)) < 1e-6:
         raise ValueError("Empty, silent or invalid audio sample")
-    return samples
+    return samples if channels == 1 else samples.reshape(-1, channels)
 
 
 def render(cue, get_audio):
     layers = []
     for layer in cue.layers:
-        samples = get_audio(layer)
+        samples = get_audio(layer, cue.channels)
         start = round(layer.start * RATE)
         stop = None if layer.duration is None else start + round(layer.duration * RATE)
         samples = samples[start:stop] * layer.gain
@@ -218,28 +243,37 @@ def render(cue, get_audio):
         if layer.duration is not None and len(samples) < round(layer.duration * RATE):
             raise ValueError(f"Sample too short for requested slice: {layer.entry}")
         layers.append((round(layer.at * RATE), samples))
-    mixed = np.zeros(max(at + len(samples) for at, samples in layers), dtype=np.float32)
+    frames = max(at + len(samples) for at, samples in layers)
+    mixed = np.zeros(frames if cue.channels == 1 else (frames, cue.channels), dtype=np.float32)
     for at, samples in layers:
         mixed[at:at + len(samples)] += samples
-    mixed -= mixed.mean()
+    mixed -= mixed.mean(axis=0)
     # Preserve shot transients. Other cues get a short attack; all cues get
     # a tail fade to prevent clicks after trimming or resampling.
     fade = min(round(cue.fade * RATE), len(mixed) // 2)
     attack = min(fade, round(0.0005 * RATE))
-    mixed[:attack] *= np.linspace(0, 1, attack)
-    mixed[-fade:] *= np.linspace(1, 0, fade)
+    def ramp(start, stop, length):
+        values = np.linspace(start, stop, length)
+        return values if cue.channels == 1 else values[:, None]
+
+    mixed[:attack] *= ramp(0, 1, attack)
+    mixed[-fade:] *= ramp(1, 0, fade)
     if cue.fade > 0.1:
-        mixed[:fade] *= np.linspace(0, 1, fade)
+        mixed[:fade] *= ramp(0, 1, fade)
     peak = float(np.max(np.abs(mixed)))
     if peak < 1e-6:
         raise ValueError("Silent rendered cue")
-    return mixed * (cue.peak / peak)
+    gain = cue.peak / peak
+    if cue.rms is not None:
+        gain = min(gain, cue.rms / float(np.sqrt(np.mean(mixed * mixed))))
+    return mixed * gain
 
 
 def write_wav(path, samples):
     path.parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(path), "wb") as output:
-        output.setparams((1, 2, RATE, 0, "NONE", "not compressed"))
+        channels = 1 if samples.ndim == 1 else samples.shape[1]
+        output.setparams((channels, 2, RATE, 0, "NONE", "not compressed"))
         output.writeframes((np.clip(samples, -1, 1) * 32767).astype("<i2").tobytes())
 
 
@@ -260,6 +294,16 @@ def baseline(out, work, names):
         data = json.loads(marker.read_text(encoding="utf-8"))
         if Path(data["out"]).resolve() != out:
             raise ValueError("This work directory belongs to a different --out directory")
+        # A later trial can introduce more cue files. Record only new names,
+        # preserving the original pre-trial backup for every existing cue.
+        added = set(names) - set(data["names"])
+        for name in sorted(added):
+            path = out / f"{name}.wav"
+            if path.exists():
+                shutil.copy2(path, work / "original" / path.name)
+                data["existing"].append(name)
+        data["names"] = sorted(set(data["names"]) | set(names))
+        write_json(marker, data)
         return data
     backup = work / "original"
     backup.mkdir(parents=True, exist_ok=True)
@@ -349,9 +393,10 @@ def audition(out, work):
                 continue
             with wave.open(str(path), "rb") as stream:
                 frames = stream.readframes(stream.getnframes())
-                if stream.getsampwidth() != 2 or stream.getnchannels() != 1:
+                if stream.getsampwidth() != 2:
                     continue
                 samples = np.frombuffer(frames, dtype="<i2").astype(np.float32) / 32768
+                samples = samples.reshape(-1, stream.getnchannels()).mean(axis=1)
                 old_rate = stream.getframerate()
             if old_rate != RATE:
                 samples = np.interp(np.arange(round(len(samples) * RATE / old_rate)) * old_rate / RATE,
@@ -364,6 +409,40 @@ def audition(out, work):
             cursor += len(samples) / RATE + 0.45
     write_wav(work / "before_after.wav", np.concatenate(tracks))
     write_json(work / "before_after.json", timeline)
+
+
+def ambience_audition(out, work):
+    # Illustrative ten-second excerpts at the game's mix levels. Do not
+    # normalise each scene: the contrast between clear, overcast and fog matters.
+    scenes = (
+        ("clear_dawn", (("day_1", 0.2), ("bird_1", 0.35), ("bird_2", 0.28), ("wind_1", 0.045))),
+        ("clear_noon", (("day_2", 0.2), ("bird_3", 0.22), ("insect_day_1", 0.10), ("wind_2", 0.045))),
+        ("clear_dusk", (("evening_1", 0.18), ("night_1", 0.083), ("insect_night_1", 0.13), ("wind_1", 0.045))),
+        ("clear_night", (("night_2", 0.18), ("owl_1", 0.18), ("insect_night_2", 0.13), ("wind_2", 0.045))),
+        ("overcast_noon", (("day_3", 0.11), ("bird_4", 0.12), ("foliage_1", 0.125), ("wind_3", 0.115))),
+        ("fog_noon", (("day_1", 0.07), ("bird_5", 0.077), ("foliage_2", 0.025), ("wind_1", 0.018))),
+    )
+    excerpts, timeline = [], []
+    for scene, layers in scenes:
+        mixed = np.zeros((10 * RATE, 2), dtype=np.float32)
+        for i, (name, gain) in enumerate(layers):
+            with wave.open(str(out / f"ambient_{name}.wav"), "rb") as stream:
+                samples = np.frombuffer(stream.readframes(stream.getnframes()), dtype="<i2").astype(np.float32) / 32768
+                samples = samples.reshape(-1, stream.getnchannels())
+                if samples.shape[1] == 1:
+                    samples = np.repeat(samples, 2, axis=1)
+            is_bed = name.startswith(("day_", "night_", "evening_", "wind_"))
+            for seconds in ((0.0, 6.0) if is_bed else (1.0 + i * 1.3,)):
+                at = round(seconds * RATE)
+                length = min(len(samples), len(mixed) - at)
+                mixed[at:at + length] += samples[:length] * gain
+        fade = round(0.3 * RATE)
+        mixed[:fade] *= np.linspace(0, 1, fade)[:, None]
+        mixed[-fade:] *= np.linspace(1, 0, fade)[:, None]
+        timeline.append({"scene": scene, "at_seconds": len(excerpts) * 10})
+        excerpts.append(mixed)
+    write_wav(work / "ambience_showcase.wav", np.concatenate(excerpts))
+    write_json(work / "ambience_showcase.json", timeline)
 
 
 def main():
@@ -404,11 +483,11 @@ def main():
     cache = {}
     provenance = {}
 
-    def get_audio(layer):
-        key = (layer.archive, layer.entry)
+    def get_audio(layer, channels):
+        key = (layer.archive, layer.entry, channels)
         if key not in cache:
             data = archives[layer.archive].read(layer.entry)
-            cache[key] = decode(ffmpeg, data)
+            cache[key] = decode(ffmpeg, data, channels)
             provenance[key] = {"archive": f"{layer.archive}.pbo", "entry": layer.entry,
                                "sha256": hashlib.sha256(data).hexdigest()}
         return cache[key]
@@ -419,8 +498,9 @@ def main():
         destination = staging / f"{name}.wav"
         write_wav(destination, samples)
         entries.append({"file": destination.name, "seconds": round(len(samples) / RATE, 3),
-                        "peak": cue.peak, "sha256": hashlib.sha256(destination.read_bytes()).hexdigest(),
-                        "layers": [{**provenance[(layer.archive, layer.entry)],
+                        "peak": cue.peak, "rms_target": cue.rms, "channels": cue.channels,
+                        "sha256": hashlib.sha256(destination.read_bytes()).hexdigest(),
+                        "layers": [{**provenance[(layer.archive, layer.entry, cue.channels)],
                                     "gain": layer.gain, "at": layer.at, "start": layer.start,
                                     "duration": layer.duration} for layer in cue.layers]})
         print(f"Prepared {name}: {len(samples) / RATE:.2f}s")
@@ -437,7 +517,7 @@ def main():
     for name in sorted(set(mapping) | set(missing)):
         (staging / f"{name}.wav").replace(out / f"{name}.wav")
     manifest = {"purpose": "Local DayZ audio trial; extracted samples are not repository assets",
-                "source": str(source), "sample_rate": RATE, "format": "mono PCM16 WAV",
+                "source": str(source), "sample_rate": RATE, "format": "PCM16 WAV; stereo ambience, mono combat",
                 "backup": str(work / "original"), "replaced": entries,
                 "retained_procedural": sorted(retained),
                 "substitutions": {"head_hit": "Alternate bullet/body takes",
@@ -446,9 +526,11 @@ def main():
     write_json(work / "trial_manifest.json", manifest)
     sync_runtime(out, work, names)
     audition(out, work)
+    ambience_audition(out, work)
     print(f"Installed {len(entries)} DayZ-based cues; kept {len(retained)} procedural cues.")
     print(f"Original backup: {work / 'original'} ({len(original['existing'])} files)")
     print(f"A/B audition (each cue: before, then DayZ): {work / 'before_after.wav'}")
+    print(f"Ambience showcase (dawn, noon, dusk, night, overcast, fog): {work / 'ambience_showcase.wav'}")
     print("Restart NextDayz to reload cached audio. Use --restore to undo the trial.")
 
 

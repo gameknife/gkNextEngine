@@ -1,10 +1,12 @@
 #pragma once
 
 // ============================================================================
-// NextDayzAudio.hpp - The one place NextDayz talks to NextAudio. Every sound
-// is procedural and generated per checkout, not committed: run
-// `python tools/audio/nextdayz_sfx.py` (writes assets/sounds/nextdayz); a
-// missing file is skipped with one warning. This file only names them.
+// NextDayzAudio.hpp - The one place NextDayz talks to NextAudio. Sounds are
+// generated per checkout, not committed: `python tools/audio/nextdayz_sfx.py`
+// writes assets/sounds/nextdayz. For a reversible local sample trial, use
+// tools/audio/nextdayz_dayz_trial.py --dayz-root <installation> (or --restore).
+// Restart the game after switching the WAVs: NextAudio caches decoded files.
+// A missing file is skipped with one warning. This file only names them.
 // NextAudio plays 2D one-shots with one voice per file, so variants are cycled
 // round-robin (automatic fire never cuts off its own tail) and distance is a
 // squared volume falloff.

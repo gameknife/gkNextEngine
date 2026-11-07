@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Procedural sound effects for NextDayz.
 
-Every NextDayz sound is synthesised here from noise, oscillators and simple
+The default NextDayz sound set is synthesised here from noise, oscillators and simple
 spectral shaping -- no recorded or third-party samples. Each sound is seeded;
 running the script twice writes identical files. The .wav files are not
 committed (assets/sounds/nextdayz/ is git-ignored): run this once per checkout.
 Without them the game runs silent and NextAudio warns once per missing file.
+For a reversible local recorded-sample trial, use nextdayz_dayz_trial.py instead.
 
     python tools/audio/nextdayz_sfx.py            # writes assets/sounds/nextdayz/*.wav
     python tools/audio/nextdayz_sfx.py --out DIR  # somewhere else

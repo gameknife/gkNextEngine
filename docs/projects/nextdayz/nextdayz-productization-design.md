@@ -332,7 +332,9 @@ Dormant → Wander ──→ Investigate ──→ Alert ──→ Chase ──�
 
 - HUD：准星命中标记（白色命中、琥珀色爆头、红色放大的击杀，一串连射合并成一个标记）；被抓伤时屏幕边缘红色晕影、准星周围指向攻击者的红色弧，镜头朝远离攻击方向抖一下；低血量时晕影脉动；
 - `CombatEffects`：枪口焰（第一/第三人称各自从看到的枪口出发）、曳光（340 m/s，霰弹枪每 3 颗弹丸显示 1 条）、命中感染者时入口血雾 + 沿弹道从背面喷出的血滴（爆头和击杀更多）、命中地面的尘土与火星、尸体下按地面法线铺开的不规则血泊。所有节点在 `BeforeSceneRebuild` 注入网格、加载场景时一次建好，空闲时停在地图下方，开火不分配、不重建场景。自发光材质的辐射亮度与太阳同量级（百级），个位数会显示成暗灰；
-- `NextDayzAudio`：枪声（步枪 / 狙击 / 霰弹 / 手枪各自多版本轮换）、空仓、换弹、切枪、肉体命中 / 爆头 / 击杀确认、地面弹着、玩家受伤，以及感染者游荡/追击的低吼、发现时的嘶吼、扑咬、死亡与倒地声。NextAudio 是 2D、一文件一声道，所以变体轮换避免连发打断自己的尾音，距离只表现为音量衰减。所有音效由 `tools/audio/nextdayz_sfx.py` 用 numpy 程序化合成（无第三方采样，结果按种子固定）。生成的 `.wav` 不入库（`assets/sounds/nextdayz/` 在 `.gitignore` 中），每个 checkout 先运行一次 `python tools/audio/nextdayz_sfx.py`；缺文件时游戏照常运行、只是没有声音，NextAudio 每个缺失文件警告一次。
+- `NextDayzAudio`：枪声（步枪 / 狙击 / 霰弹 / 手枪各自多版本轮换）、空仓、换弹、切枪、肉体命中 / 爆头 / 击杀确认、地面弹着、玩家受伤，以及感染者游荡/追击的低吼、发现时的嘶吼、扑咬、死亡与倒地声。NextAudio 是 2D、一文件一声道，所以变体轮换避免连发打断自己的尾音，距离只表现为音量衰减。默认音效由 `tools/audio/nextdayz_sfx.py` 用 numpy 程序化合成（无第三方采样，结果按种子固定）。生成的 `.wav` 不入库（`assets/sounds/nextdayz/` 在 `.gitignore` 中），每个 checkout 先运行一次 `python tools/audio/nextdayz_sfx.py`；缺文件时游戏照常运行、只是没有声音，NextAudio 每个缺失文件警告一次。
+
+本机录音素材试验：`python tools/audio/nextdayz_dayz_trial.py --dayz-root <DayZ安装目录>` 从本地 PBO 只读取选定 OGG，转为 44.1 kHz 单声道 PCM16 WAV，替换 50 个现有 cue（枪声混合发射、机械与户外尾音；风声裁成 8 秒并淡入淡出）。击杀提示和鞭炮保留合成音；爆头使用另外两条肉体弹着录音，感染者死亡使用重击人声并沿用延迟倒地声。原件备份、来源 SHA-256 清单、逐项先旧后新的 `before_after.wav` 对比试听均在 `out/audio/dayz/`，素材不提交、不发布。脚本同时同步已有桌面构建的音效目录，分别备份；`python tools/audio/nextdayz_dayz_trial.py --restore` 还原源码资源与运行副本。切换后重启 NextDayz（NextAudio 缓存解码结果）。这仍沿用现有 2D 音量衰减与消音器降音量逻辑，未引入 DayZ 的空间音频或独立消音采样。
 
 ## 10. 玩家界面
 

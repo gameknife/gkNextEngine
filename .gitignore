@@ -408,7 +408,7 @@ assets/textures/umhlanga_sunrise_1k.hdr
 tools/optional-pak/output/
 tools/brotato3d-pak/output/
 tools/magicalego-pak/output/
-# NextDayz SFX are generated locally, never committed: python tools/audio/nextdayz_sfx.py
+# NextDayz SFX are local only: nextdayz_sfx.py or nextdayz_dayz_trial.py; never commit samples.
 assets/sounds/nextdayz/
 
 # third party libraries

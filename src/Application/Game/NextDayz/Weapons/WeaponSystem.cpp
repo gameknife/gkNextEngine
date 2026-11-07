@@ -25,6 +25,13 @@ namespace NextDayz
     {
         constexpr float kHitscanRange = 400.0f;
         const std::string kEmptyId;
+        // Magnified optics: the housing vignette starts closing in at this aim
+        // progress, and the geometric tube is swapped for the lens image once
+        // the vignette is this far in (ScopeBlend).
+        constexpr float kScopeBlendStart = 0.55f;
+        constexpr float kScopeMeshHide = 0.35f;
+        // View-model recoil velocity added as the stock seats on the cheek.
+        constexpr float kAdsSettleImpulse = 0.010f;
 
         struct FMeleeViewPose
         {
@@ -105,8 +112,10 @@ namespace NextDayz
         landingOffset_ = 0.0f;
         landingVelocity_ = 0.0f;
         aimAlpha_ = 0.0f;
+        previousAimProgress_ = 0.0f;
         viewModelVisible_ = false;
         scopeView_ = false;
+        scopeBlend_ = 0.0f;
         renderedViewModelValid_ = false;
         viewModelInScene_ = false;
         viewModelWeaponIndex_ = -1;
@@ -128,6 +137,7 @@ namespace NextDayz
         viewModelNode_->AddComponent(physics);
         scene.AddNode(viewModelNode_);
         attachmentVisuals_.Bind(scene, viewModelNode_, attachmentAssets_, "nd_viewmodel");
+        arms_.Bind(scene, viewModelNode_);
         viewModelInScene_ = true;
         scene.MarkDirty();
     }
@@ -137,8 +147,10 @@ namespace NextDayz
         CancelMelee();
         viewModelNode_.reset();
         attachmentVisuals_.Clear();
+        arms_.Clear();
         viewModelVisible_ = false;
         scopeView_ = false;
+        scopeBlend_ = 0.0f;
         renderedViewModelValid_ = false;
         viewModelInScene_ = false;
         viewModelWeaponIndex_ = -1;
@@ -447,6 +459,28 @@ namespace NextDayz
         const FWeaponModelPoints points = WeaponSightPoints(ActiveWeaponId(), SlotAttachments(activeSlot_));
         outPosition = glm::vec3(renderedViewModelTransform_ * glm::vec4(0.0f, points.sightHeight, points.rearSightForward, 1.0f));
         outForward = glm::normalize(glm::vec3(renderedViewModelTransform_[2]));
+        return true;
+    }
+
+    bool WeaponSystem::ViewModelReflexWindow(glm::vec3& outCenter, glm::vec3& outHalfX, glm::vec3& outHalfY) const
+    {
+        const EWeaponAttachment optic = ActiveOptic();
+        if (!viewModelNode_ || !viewModelVisible_ || !HasActiveWeapon() || ActiveIsMelee() ||
+            (optic != EWeaponAttachment::RedDot && optic != EWeaponAttachment::Holographic))
+        {
+            return false;
+        }
+        // Mount on the rail (WeaponAttachmentVisuals); window sizes from nextdayz_attachments.scad:
+        // the red dot's front aperture, the holographic frame's inner opening.
+        const std::string id = ActiveWeaponId();
+        const bool holo = optic == EWeaponAttachment::Holographic;
+        const glm::vec3 mount(0.0f, WeaponOpticRailHeight(id), WeaponOpticRailForward(id));
+        const glm::vec3 local = mount + (holo ? glm::vec3(0.0f, 0.045f, -0.006f) : glm::vec3(0.0f, 0.035f, 0.030f));
+        const glm::vec2 half = holo ? glm::vec2(0.0285f, 0.026f) : glm::vec2(0.024f);
+        const glm::mat4& world = viewModelNode_->WorldTransform();
+        outCenter = glm::vec3(world * glm::vec4(local, 1.0f));
+        outHalfX = glm::vec3(world * glm::vec4(half.x, 0.0f, 0.0f, 0.0f));
+        outHalfY = glm::vec3(world * glm::vec4(0.0f, half.y, 0.0f, 0.0f));
         return true;
     }
 
@@ -786,10 +820,16 @@ namespace NextDayz
 
         const FWeaponDef* def = ActiveWeapon();
 
-        // Feed ADS target FOV to the camera controller.
-        const float scopeFov = def ? WeaponSightPoints(def->id, SlotAttachments(activeSlot_)).scopeFov : 0.0f;
-        const float fpsFov = scopeFov > 0.0f ? scopeFov : ActiveOptic() != EWeaponAttachment::None ? 65.0f : def ? def->adsFov : player.CurrentFov();
-        player.SetAimFov(def ? (player.IsFirstPerson() ? fpsFov : def->adsFov) : player.CurrentFov());
+        // Feed the sight picture to the camera: the first-person FOV of this
+        // sight and how long this weapon takes to come up onto it. Shoulder aim
+        // in third person uses the camera's own modest zoom.
+        const FWeaponAttachments& loadout = SlotAttachments(activeSlot_);
+        const float scopeFov = def ? WeaponSightPoints(def->id, loadout).scopeFov : 0.0f;
+        if (def)
+        {
+            player.SetAimFov(WeaponAdsFov(def->id, loadout));
+            player.SetAimSeconds(WeaponAimSeconds(def->id, loadout));
+        }
 
         // Coming out of a sprint the weapon has to be up before it fires; a
         // held trigger fires the moment it is.
@@ -850,13 +890,18 @@ namespace NextDayz
                 recoilDt;
             viewModelRecoil_ += viewModelRecoilVelocity_ * recoilDt;
 
+            // Hip pose (smoothed below, with reload / traversal dips) and the
+            // sight pose: the actual rear sight / eyepiece anchored ahead of the
+            // eye. The raise between them follows the player's aim timeline so
+            // the camera zoom, the flight from third person and the weapon all
+            // arrive together; a shared grip offset left long guns floating.
             glm::vec3 targetOffset = config_.ViewModelHipOffset;
-            if (player.IsAiming() && def && !def->IsMelee())
+            glm::vec3 sightOffset = targetOffset;
+            const bool firearm = def && !def->IsMelee();
+            if (firearm)
             {
-                // Anchor the actual rear sight / eyepiece ahead of the eye.
-                // A shared grip offset leaves long guns floating far in front.
-                const FWeaponModelPoints points = WeaponSightPoints(def->id, SlotAttachments(activeSlot_));
-                targetOffset = glm::vec3(0.0f, -points.sightHeight * config_.ViewModelScale,
+                const FWeaponModelPoints points = WeaponSightPoints(def->id, loadout);
+                sightOffset = glm::vec3(0.0f, -points.sightHeight * config_.ViewModelScale,
                                         points.adsEyeRelief - points.rearSightForward * config_.ViewModelScale);
             }
             glm::vec3 meleeEuler(0.0f);
@@ -901,9 +946,14 @@ namespace NextDayz
 
             const bool betweenWeapons = switching_ && actionTime >= kWeaponViewModelHideTime && actionTime < kWeaponViewModelShowTime;
             const bool firstPersonWeapon = HasActiveWeapon() && player.IsFirstPerson() && !presentationSuppressed_ && !betweenWeapons;
-            // The optical image replaces the empty geometric scope tube once
-            // the eye reaches it; TPS still renders the complete scoped rifle.
-            scopeView_ = firstPersonWeapon && player.IsAiming() && scopeFov > 0.0f && aimAlpha_ > 0.98f;
+            // A magnified optic: as the eye closes on the eyepiece the housing
+            // vignette closes in from the screen edges (ScopeBlend, drawn by the
+            // HUD) and the empty geometric tube gives way to the lens image.
+            // Third person still renders the complete scoped rifle.
+            const float aimProgress = player.AimProgress();
+            scopeBlend_ = firstPersonWeapon && scopeFov > 0.0f && !reloading_ && !switching_
+                              ? glm::smoothstep(kScopeBlendStart, 1.0f, aimProgress) : 0.0f;
+            scopeView_ = scopeBlend_ >= kScopeMeshHide;
             const bool show = firstPersonWeapon && !scopeView_;
             if (show != viewModelVisible_ || show != viewModelInScene_)
             {
@@ -929,25 +979,36 @@ namespace NextDayz
             glm::vec3 motionEuler(0.0f);
             UpdateViewModelMotion(player, deltaSeconds, motionOffset, motionEuler);
             float sightWeight = aimAlpha_;
-            if (def && !def->IsMelee())
+            glm::vec3 poseOffset = viewModelOffset_;
+            if (firearm)
             {
-                const bool sightLocked = player.IsAiming() && aimAlpha_ > 0.98f &&
-                                         !reloading_ && !switching_ && !player.IsTraversing();
-                if (sightLocked)
-                {
-                    viewModelOffset_ = targetOffset;
-                    sightWeight = 1.0f;
-                }
+                // The raise is driven exactly by the aim timeline, so a settled
+                // sight sits precisely on the eye line with no smoothing residue.
+                const float raise = (reloading_ || switching_ || player.IsTraversing()) ? 0.0f : aimAlpha_;
+                poseOffset = glm::mix(viewModelOffset_, sightOffset, raise);
+                sightWeight = raise;
                 // The sight follows the eye when shouldered. Camera bob and
                 // recoil still move the view; hip-fire inertia must not break ADS alignment.
                 motionOffset *= 1.0f - sightWeight;
                 motionEuler *= 1.0f - sightWeight;
+                // Swing the gun up in an arc rather than sliding it: it cants
+                // toward the firing shoulder and rolls level as the stock meets
+                // the cheek. Zero at both ends, so hip and sight poses are exact.
+                const float arc = std::sin(glm::pi<float>() * raise);
+                motionEuler += glm::radians(glm::vec3(2.5f, 3.5f, -9.0f)) * arc;
+                // A small thump as the stock seats: one impulse when the sight arrives.
+                if (aimProgress >= 1.0f && previousAimProgress_ < 1.0f && player.IsAiming())
+                {
+                    viewModelRecoilVelocity_ += kAdsSettleImpulse;
+                }
             }
+            previousAimProgress_ = aimProgress;
             viewModelMeleeEuler_ = IsSwinging() ? meleeEuler : glm::mix(viewModelMeleeEuler_, meleeEuler, t);
             motionEuler += viewModelMeleeEuler_;
             const bool waistPhase = (actionTime < 0.5f ? switchSourceSlot_ : switchTargetSlot_) == kSidearmSlot;
             motionEuler += glm::radians(waistPhase ? glm::vec3(70.0f, -10.0f, -5.0f)
                                                   : glm::vec3(55.0f, -18.0f, -22.0f)) * switchLower;
+            glm::mat4 cameraWorld(1.0f);
             if (firstPersonWeapon)
             {
                 const glm::vec3 eye = player.CameraPosition();
@@ -957,7 +1018,7 @@ namespace NextDayz
                 // Proper (det +1) rotation basis: object +Z -> forward, +Y -> up,
                 // +X = up x forward (right() is left-handed w.r.t. forward/up).
                 const glm::vec3 xAxis = glm::normalize(glm::cross(up, forward));
-                const glm::vec3 offset = viewModelOffset_ + motionOffset +
+                const glm::vec3 offset = poseOffset + motionOffset +
                     (waistPhase ? glm::vec3(0.22f, -0.52f, -0.05f) : glm::vec3(0.12f, -0.65f, -0.22f)) * switchLower;
                 glm::vec3 pos =
                     eye + right * offset.x + up * offset.y + forward * (offset.z - viewModelRecoil_ * 2.5f);
@@ -969,9 +1030,9 @@ namespace NextDayz
                     glm::angleAxis(reloading_ ? actionArc * 0.45f : 0.0f, glm::vec3(0.0f, 0.0f, 1.0f)) *
                     glm::angleAxis(-viewModelRecoil_ * 100.0f * glm::radians(config_.ViewModelRecoilPitchDegrees),
                                    glm::vec3(1.0f, 0.0f, 0.0f));
-                if (def && !def->IsMelee())
+                if (firearm)
                 {
-                    const FWeaponModelPoints points = WeaponSightPoints(def->id, SlotAttachments(activeSlot_));
+                    const FWeaponModelPoints points = WeaponSightPoints(def->id, loadout);
                     const glm::vec3 sight = glm::vec3(0.0f, points.sightHeight, points.rearSightForward) * config_.ViewModelScale;
                     // Tilt about the rear sight, rather than sweeping it around the grip.
                     pos += cameraRotation * (sight - motionRotation * sight) * sightWeight;
@@ -979,6 +1040,7 @@ namespace NextDayz
                 viewModelNode_->Translation() = pos;
                 viewModelNode_->Rotation() = cameraRotation * motionRotation;
                 viewModelNode_->RecalcTransform(true);
+                cameraWorld = glm::translate(glm::mat4(1.0f), eye) * glm::mat4_cast(cameraRotation);
             }
             else
             {
@@ -989,21 +1051,31 @@ namespace NextDayz
             // frame later. Patch only this camera-attached mesh in the upload
             // snapshot; rebuilding the whole scene synchronously would stall it.
             Assets::Scene& scene = engine.GetScene();
-            attachmentVisuals_.Update(ActiveWeaponId(), SlotAttachments(activeSlot_), show);
-            std::array<std::shared_ptr<Assets::Node>, kAttachmentSlotCount + 1> cameraNodes;
-            cameraNodes[0] = viewModelNode_;
-            std::copy(attachmentVisuals_.Nodes().begin(), attachmentVisuals_.Nodes().end(), cameraNodes.begin() + 1);
+            attachmentVisuals_.Update(ActiveWeaponId(), loadout, show);
+            // The survivor's own arms hold every firearm the camera carries.
+            const bool armsVisible = show && firearm;
+            arms_.Update(ActiveWeaponId(),
+                         armsVisible ? glm::inverse(cameraWorld) * viewModelNode_->WorldTransform() : glm::mat4(1.0f),
+                         config_.ViewModelScale, armsVisible, true);
+            std::vector<std::shared_ptr<Assets::Node>> cameraNodes;
+            cameraNodes.reserve(1 + kAttachmentSlotCount + arms_.Nodes().size());
+            cameraNodes.push_back(viewModelNode_);
+            cameraNodes.insert(cameraNodes.end(), attachmentVisuals_.Nodes().begin(), attachmentVisuals_.Nodes().end());
+            const size_t firstArmNode = cameraNodes.size();
+            cameraNodes.insert(cameraNodes.end(), arms_.Nodes().begin(), arms_.Nodes().end());
             bool patchedProxy = false;
             renderedViewModelValid_ = false;
             renderedAttachmentError_ = 0.0f;
-            std::array<bool, kAttachmentSlotCount + 1> matched{};
+            renderedArmError_ = 0.0f;
+            std::vector<bool> matched(cameraNodes.size(), false);
             for (auto& proxy : scene.GetNodeProxies())
             {
                 const auto match = std::find_if(cameraNodes.begin(), cameraNodes.end(), [&](const auto& node)
                 { return node && proxy.instanceId == node->GetInstanceId(); });
                 if (match == cameraNodes.end()) continue;
                 const auto& node = *match;
-                matched[std::distance(cameraNodes.begin(), match)] = true;
+                const size_t matchIndex = static_cast<size_t>(std::distance(cameraNodes.begin(), match));
+                matched[matchIndex] = true;
                 const auto render = node->GetComponent<Runtime::RenderComponent>();
                 const bool visible = show && render && render->GetVisible();
                 const glm::mat4 world = node->WorldTransform();
@@ -1021,8 +1093,9 @@ namespace NextDayz
                         const glm::mat4 local = glm::translate(glm::mat4(1.0f), node->Translation()) *
                             glm::mat4_cast(node->Rotation()) * glm::scale(glm::mat4(1.0f), node->Scale());
                         const glm::mat4 expected = viewModelNode_->WorldTransform() * local;
+                        float& error = matchIndex >= firstArmNode ? renderedArmError_ : renderedAttachmentError_;
                         for (int column = 0; column < 4; ++column)
-                            renderedAttachmentError_ = std::max(renderedAttachmentError_, glm::length(proxy.worldTS[column] - expected[column]));
+                            error = std::max(error, glm::length(proxy.worldTS[column] - expected[column]));
                     }
                 }
                 proxy.visible = visible ? render->GetRenderParticipationMask() : 0;
@@ -1030,7 +1103,7 @@ namespace NextDayz
             }
             for (size_t i = 1; i < cameraNodes.size(); ++i)
                 if (show && cameraNodes[i] && cameraNodes[i]->GetComponent<Runtime::RenderComponent>()->GetVisible() && !matched[i])
-                    renderedAttachmentError_ = 1000.0f;
+                    (i >= firstArmNode ? renderedArmError_ : renderedAttachmentError_) = 1000.0f;
             if (patchedProxy) scene.RequestGpuNodeProxyUpload();
             scene.MarkTransformDirty();
         }
@@ -1041,7 +1114,8 @@ namespace NextDayz
     {
         const float dt = std::max(deltaSeconds, 0.0f);
         const FWeaponFeelConfig& feel = config_;
-        aimAlpha_ = glm::mix(aimAlpha_, player.IsAiming() ? 1.0f : 0.0f, 1.0f - std::exp(-14.0f * dt));
+        // The player's raise timeline (eased), shared with the camera zoom and flight.
+        aimAlpha_ = player.AimBlend();
         const float hipAlpha = 1.0f - aimAlpha_;
         const float sprint = glm::smoothstep(0.0f, 1.0f, player.SprintAlpha());
         const FPlayerLocomotionState& locomotion = player.LocomotionState();

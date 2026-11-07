@@ -175,6 +175,9 @@ namespace NextDayz
         SetFreeLook(false);
         currentFov_ = config_.Camera.BaseFov;
         aimFov_ = config_.Camera.BaseFov;
+        aimProgress_ = 0.0f;
+        viewBlend_ = firstPerson_ ? 1.0f : 0.0f;
+        sprintFovBoost_ = 0.0f;
         cameraArmLength_ = glm::length(ThirdPersonOffset());
         currentEyeHeight_ = config_.Player.StandingEyeHeight;
         cameraRecoil_ = glm::vec2(0.0f);
@@ -239,11 +242,20 @@ namespace NextDayz
             freeLookOffset_.y = glm::clamp(viewPitch, -maxPitch, maxPitch) - pitch_;
             return;
         }
+        // Zoomed views turn by the same on-screen distance per mouse count: a
+        // 4x optic would otherwise swing the reticle four times as far.
+        float sensitivity = config_.Camera.MouseSensitivity;
+        if (currentFov_ < config_.Camera.BaseFov)
+        {
+            const float zoom = std::tan(glm::radians(currentFov_) * 0.5f) /
+                               std::tan(glm::radians(config_.Camera.BaseFov) * 0.5f);
+            sensitivity *= glm::mix(1.0f, zoom, glm::clamp(config_.Camera.AimSensitivityFovScale, 0.0f, 1.0f));
+        }
         const float previousPitch = pitch_;
-        yaw_ -= dxPixels * config_.Camera.MouseSensitivity;
-        pitch_ += dyPixels * config_.Camera.MouseSensitivity;
+        yaw_ -= dxPixels * sensitivity;
+        pitch_ += dyPixels * sensitivity;
         pitch_ = glm::clamp(pitch_, -maxPitch, maxPitch);
-        lookDeltaAccum_ += glm::vec2(-dxPixels * config_.Camera.MouseSensitivity, pitch_ - previousPitch);
+        lookDeltaAccum_ += glm::vec2(-dxPixels * sensitivity, pitch_ - previousPitch);
     }
 
     void PlayerController::SetFreeLook(bool held)
@@ -266,9 +278,10 @@ namespace NextDayz
     void PlayerController::ToggleView()
     {
         SetFreeLook(false);
-        const bool firstPerson = !IsFirstPerson();
+        const bool firstPerson = !WantsFirstPerson();
         if (IsAds()) CancelAiming();
         firstPerson_ = firstPerson;
+        viewBlend_ = firstPerson ? 1.0f : 0.0f;
     }
 
     void PlayerController::SetAimButton(bool pressed, bool allowAds)
@@ -301,13 +314,14 @@ namespace NextDayz
 
     glm::vec3 PlayerController::CameraForward() const
     {
-        if (!freeLooking_ && (!IsFirstPerson() || traversalViewPitch_ == 0.0f))
+        const float viewBlend = ViewBlendEased();
+        if (!freeLooking_ && (viewBlend <= 0.0f || traversalViewPitch_ == 0.0f))
         {
             return Forward();
         }
         const float viewYaw = yaw_ + cameraRecoil_.x + freeLookOffset_.x;
         const float maxPitch = glm::radians(config_.Camera.MaxPitchDegrees);
-        const float traversalPitch = IsFirstPerson() ? traversalViewPitch_ : 0.0f;
+        const float traversalPitch = traversalViewPitch_ * viewBlend;
         const float viewPitch = glm::clamp(pitch_ + cameraRecoil_.y + freeLookOffset_.y + traversalPitch,
                                           -maxPitch, maxPitch);
         const float cosPitch = std::cos(viewPitch);
@@ -325,7 +339,8 @@ namespace NextDayz
         const glm::vec3 forward = CameraForward();
         const glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
         const glm::vec3 up = glm::cross(right, forward);
-        return IsFirstPerson() ? glm::vec3(glm::rotate(glm::mat4(1.0f), viewRoll_, forward) * glm::vec4(up, 0.0f)) : up;
+        const float roll = viewRoll_ * ViewBlendEased();
+        return roll != 0.0f ? glm::vec3(glm::rotate(glm::mat4(1.0f), roll, forward) * glm::vec4(up, 0.0f)) : up;
     }
 
     glm::vec3 PlayerController::EyePosition() const
@@ -333,14 +348,33 @@ namespace NextDayz
         return controller_.GetPosition() + glm::vec3(0.0f, currentEyeHeight_, 0.0f);
     }
 
+    glm::vec3 PlayerController::FirstPersonEye() const
+    {
+        return EyePosition() + headBob_ + glm::vec3(0.0f, eyeDip_, 0.0f);
+    }
+
+    float PlayerController::ViewBlendEased() const
+    {
+        return viewBlend_ * viewBlend_ * (3.0f - 2.0f * viewBlend_);
+    }
+
+    float PlayerController::AimBlend() const
+    {
+        return aimProgress_ * aimProgress_ * (3.0f - 2.0f * aimProgress_);
+    }
+
     glm::vec3 PlayerController::CameraPosition() const
     {
-        if (IsFirstPerson())
+        // The ADS flight: from the (collision-clamped) shoulder camera straight
+        // into the eye. The body dissolves on the way in (camera fade) and
+        // hands over to the first-person weapon at AdsViewHandoff.
+        const float blend = ViewBlendEased();
+        if (blend >= 1.0f)
         {
-            return EyePosition() + headBob_ + glm::vec3(0.0f, eyeDip_, 0.0f);
+            return FirstPersonEye();
         }
-
-        return ThirdPersonFocus() + ThirdPersonOffset() * CameraArmFraction();
+        const glm::vec3 shoulder = ThirdPersonFocus() + ThirdPersonOffset() * ThirdPersonArmFraction();
+        return blend <= 0.0f ? shoulder : glm::mix(shoulder, FirstPersonEye(), blend);
     }
 
     glm::vec3 PlayerController::ThirdPersonFocus() const
@@ -353,12 +387,24 @@ namespace NextDayz
     {
         const glm::vec3 forward = CameraForward();
         const glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
-        return -forward * config_.Camera.TpsDistance + right * config_.Camera.TpsShoulderOffset;
+        // Held aim pulls the camera in over the shoulder (PUBG-style shoulder aim).
+        const FCameraConfig& camera = config_.Camera;
+        const float aim = meleeEquipped_ ? 0.0f : AimBlend();
+        return -forward * glm::mix(camera.TpsDistance, camera.TpsAimDistance, aim) +
+               right * glm::mix(camera.TpsShoulderOffset, camera.TpsAimShoulderOffset, aim);
+    }
+
+    float PlayerController::ThirdPersonArmFraction() const
+    {
+        const float desiredLength = glm::length(ThirdPersonOffset());
+        return desiredLength > 0.0f ? std::min(cameraArmLength_, desiredLength) / desiredLength : 0.0f;
     }
 
     float PlayerController::CameraArmLength() const
     {
-        return IsFirstPerson() ? 0.0f : std::min(cameraArmLength_, glm::length(ThirdPersonOffset()));
+        // The shoulder arm actually in use; it shrinks to 0 as ADS flies into the eye.
+        return viewBlend_ >= 1.0f ? 0.0f
+                                  : std::min(cameraArmLength_, glm::length(ThirdPersonOffset())) * (1.0f - ViewBlendEased());
     }
 
     float PlayerController::CameraArmFraction() const
@@ -371,7 +417,9 @@ namespace NextDayz
     {
         const glm::vec3 offset = ThirdPersonOffset();
         const float desiredLength = glm::length(offset);
-        if (IsFirstPerson() || desiredLength <= 0.0f)
+        // Keep probing during the ADS flight: the shoulder end of the path
+        // must stay out of walls until the camera is all the way in.
+        if (viewBlend_ >= 1.0f || desiredLength <= 0.0f)
         {
             cameraArmLength_ = desiredLength;
             return;
@@ -1316,10 +1364,28 @@ namespace NextDayz
             (speed - config_.Player.StandRunSpeed) /
                 std::max(config_.Player.StandSprintSpeed - config_.Player.StandRunSpeed, 0.01f),
             0.0f, 1.0f);
-        const float targetFov = (IsAiming() && !meleeEquipped_ ? aimFov_ : camera.BaseFov) +
-                                camera.SprintFovBoost * sprintAlpha_ * sprintSpeedAlpha;
         const float t = 1.0f - std::exp(-camera.FovLerpSpeed * dt);
-        currentFov_ = glm::mix(currentFov_, targetFov, t);
+        sprintFovBoost_ = glm::mix(sprintFovBoost_, camera.SprintFovBoost * sprintAlpha_ * sprintSpeedAlpha, t);
+
+        // One raise timeline drives the camera flight, the zoom and the view
+        // model: the weapon's own time going up, a shared quicker time coming down.
+        const bool raising = IsAiming();
+        const float aimRate = 1.0f / std::max(raising ? aimSeconds_ : camera.AimOutSeconds, 0.01f);
+        aimProgress_ = glm::clamp(aimProgress_ + (raising ? aimRate : -aimRate) * dt, 0.0f, 1.0f);
+        // Only ADS flies the camera; the chosen view (V) is set directly.
+        const bool wantsEye = WantsFirstPerson();
+        const float viewRate = 1.0f / std::max(wantsEye ? aimSeconds_ : camera.AimOutSeconds, 0.01f);
+        viewBlend_ = glm::clamp(viewBlend_ + (wantsEye ? viewRate : -viewRate) * dt, 0.0f, 1.0f);
+
+        // Zoom in magnification (tan) space so a 4x optic zooms evenly instead
+        // of rushing through the last few degrees. Shoulder aim and the sight
+        // FOV blend with the camera flight; melee guard never zooms.
+        const float hipFov = camera.BaseFov + sprintFovBoost_;
+        const float aimFov = meleeEquipped_ ? hipFov : glm::mix(camera.TpsAimFov, aimFov_, ViewBlendEased());
+        const float hipTan = std::tan(glm::radians(hipFov) * 0.5f);
+        const float aimTan = std::tan(glm::radians(aimFov) * 0.5f);
+        const float zoomTan = hipTan * std::pow(aimTan / hipTan, AimBlend());
+        currentFov_ = glm::degrees(2.0f * std::atan(zoomTan));
 
         // Landing dip: an impulse into a damped spring so the eye sinks and
         // recovers instead of stepping.

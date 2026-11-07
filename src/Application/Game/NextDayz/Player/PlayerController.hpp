@@ -43,6 +43,7 @@ namespace NextDayz
         void SetJumpHeld(bool held) { jumpHeld_ = held; }
         void QueueCrouchToggle() { crouchToggleQueued_ = true; }
         void SetAimButton(bool pressed, bool allowAds);
+        // Lowering and leaving ADS is animated by Update (camera flies back out).
         void CancelAiming() { aimInput_.Cancel(); }
         void SetMeleeEquipped(bool melee)
         {
@@ -52,15 +53,19 @@ namespace NextDayz
         void SetMovementLocked(bool locked) { movementLocked_ = locked; }
         // Holding the trigger ends a sprint (the weapon has to come up first).
         void SetSprintBlocked(bool blocked) { sprintBlocked_ = blocked; }
-        void SetAimFov(float fov) { aimFov_ = fov; } // absolute FOV target while ADS
+        void SetAimFov(float fov) { aimFov_ = fov; } // first-person sight FOV (vertical degrees)
+        // Seconds the active weapon takes to come fully onto its sight.
+        void SetAimSeconds(float seconds) { aimSeconds_ = seconds; }
         void ApplyCameraRecoil(const glm::vec2& impulseRadians);
         void SetYaw(float yawRadians) { yaw_ = yawRadians; }
         void SetPitch(float pitchRadians) { pitch_ = pitchRadians; }
+        // A chosen view (V, debug, save) cuts; only ADS enter / exit is animated.
         void SetFirstPerson(bool firstPerson)
         {
             SetFreeLook(false);
             if (IsAds()) CancelAiming();
             firstPerson_ = firstPerson;
+            viewBlend_ = firstPerson ? 1.0f : 0.0f;
         }
         void ToggleView();
 
@@ -84,7 +89,16 @@ namespace NextDayz
         float Pitch() const { return pitch_; }
         bool IsFreeLooking() const { return freeLooking_; }
         float CurrentFov() const { return currentFov_; }
-        bool IsFirstPerson() const { return firstPerson_ || IsAds(); }
+        // Logical view: the chosen view, or FPS while ADS is latched.
+        bool WantsFirstPerson() const { return firstPerson_ || IsAds(); }
+        bool PrefersFirstPerson() const { return firstPerson_; }
+        // Presentation: the camera is close enough to the eye that the body is
+        // hidden and the first-person weapon is drawn. Equal to WantsFirstPerson
+        // except during the short ADS camera flight.
+        bool IsFirstPerson() const { return viewBlend_ >= config_.Camera.AdsViewHandoff; }
+        float ViewBlend() const { return viewBlend_; }   // 0 = shoulder camera, 1 = eye
+        float AimProgress() const { return aimProgress_; } // linear 0 -> 1 over the raise
+        float AimBlend() const;                           // eased raise used by camera and weapon
         bool IsAiming() const { return aimInput_.IsAiming(); }
         bool IsAds() const { return aimInput_.IsAds(); }
         bool IsSprinting() const { return locomotion_.gait == EPlayerGait::Sprint; }
@@ -155,6 +169,9 @@ namespace NextDayz
         void UpdateCameraArm(float deltaSeconds, NextEngine& engine);
         glm::vec3 ThirdPersonFocus() const;
         glm::vec3 ThirdPersonOffset() const;
+        glm::vec3 FirstPersonEye() const;
+        float ViewBlendEased() const;
+        float ThirdPersonArmFraction() const;
         float StrideLength(float speed) const;
 
         NextCharacterController controller_;
@@ -179,6 +196,10 @@ namespace NextDayz
 
         float currentFov_ = 75.0f;
         float aimFov_ = 55.0f;
+        float aimSeconds_ = 0.22f;
+        float aimProgress_ = 0.0f;
+        float viewBlend_ = 1.0f;
+        float sprintFovBoost_ = 0.0f;
         float cameraArmLength_ = 0.0f; // resolved length, including the shoulder offset
         float currentEyeHeight_ = 1.65f;
         glm::vec2 cameraRecoil_{0.0f};

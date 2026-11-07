@@ -229,6 +229,8 @@ private:
     bool weaponCatalogLoaded_ = false;
     Assets::FRigAsset attachmentCatalogAsset_{};
     bool attachmentCatalogLoaded_ = false;
+    Assets::FRigAsset fpsHandsAsset_{};   // nextdayz_fps_hands.scad
+    bool fpsHandsLoaded_ = false;
     std::array<uint32_t, NextDayz::kWeapons.size()> weaponModelIds_{};
     std::array<NextDayz::FWeaponMaterialSlots, NextDayz::kWeapons.size()> weaponMaterialIds_{};
     Assets::FRigAsset zombieRigAsset_{};

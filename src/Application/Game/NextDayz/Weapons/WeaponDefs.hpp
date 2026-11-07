@@ -59,7 +59,7 @@ namespace NextDayz
         bool  fullAuto;
         float spreadHip;              // radians of random cone, hip fire
         float spreadAds;              // radians of random cone, aimed
-        float adsFov;                 // absolute FOV target while aiming
+        float adsFov;                 // first-person iron-sight FOV (vertical degrees); optics override it
         float cameraKickDegrees;      // upward camera velocity impulse
         float cameraYawDegrees;       // deterministic signed horizontal impulse range
         float viewModelKick;          // backward local offset velocity impulse
@@ -77,11 +77,12 @@ namespace NextDayz
 
     inline constexpr std::array<FWeaponDef, 8> kWeapons = {{
         // id        display     ammo                    mag interval auto hip      ads      fov   camUp yaw vm   rig  dmg pel fall noise impact
-        {"ak",      "AK-74",    EAmmoType::Rifle545,     30, 0.092f, true, 0.035f, 0.006f, 55.0f, 1.7f, 0.35f, 0.12f, 1.0f, 34.0f, 1, 110.0f, 110.0f, 0.5f},
-        {"svd",     "SVD",      EAmmoType::Rifle762,     10, 0.28f,  false,0.020f, 0.0015f,40.0f, 3.2f, 0.55f, 0.20f, 1.25f, 72.0f, 1, 180.0f, 120.0f, 1.0f},
-        {"mosin",   "Mosin",    EAmmoType::Rifle762,      5, 0.95f,  false,0.018f, 0.0012f,38.0f, 4.0f, 0.45f, 0.24f, 1.35f, 86.0f, 1, 170.0f, 125.0f, 1.0f},
-        {"shotgun", "Shotgun",  EAmmoType::Shotgun12,     6, 0.80f,  false,0.090f, 0.055f, 62.0f, 5.0f, 0.65f, 0.30f, 1.5f, 18.0f, 8, 45.0f, 130.0f, 1.0f},
-        {"pistol",  "Makarov",  EAmmoType::Pistol9,       12, 0.18f,  false,0.045f, 0.020f, 60.0f, 1.3f, 0.40f, 0.09f, 0.8f, 26.0f, 1, 65.0f, 55.0f, 0.6f},
+        // Iron sights only magnify a little (about 1.15-1.35x of the 75 degree view); a 4x optic is the real zoom.
+        {"ak",      "AK-74",    EAmmoType::Rifle545,     30, 0.092f, true, 0.035f, 0.006f, 64.0f, 1.7f, 0.35f, 0.12f, 1.0f, 34.0f, 1, 110.0f, 110.0f, 0.5f},
+        {"svd",     "SVD",      EAmmoType::Rifle762,     10, 0.28f,  false,0.020f, 0.0015f,62.0f, 3.2f, 0.55f, 0.20f, 1.25f, 72.0f, 1, 180.0f, 120.0f, 1.0f},
+        {"mosin",   "Mosin",    EAmmoType::Rifle762,      5, 0.95f,  false,0.018f, 0.0012f,60.0f, 4.0f, 0.45f, 0.24f, 1.35f, 86.0f, 1, 170.0f, 125.0f, 1.0f},
+        {"shotgun", "Shotgun",  EAmmoType::Shotgun12,     6, 0.80f,  false,0.090f, 0.055f, 68.0f, 5.0f, 0.65f, 0.30f, 1.5f, 18.0f, 8, 45.0f, 130.0f, 1.0f},
+        {"pistol",  "Makarov",  EAmmoType::Pistol9,       12, 0.18f,  false,0.045f, 0.020f, 66.0f, 1.3f, 0.40f, 0.09f, 0.8f, 26.0f, 1, 65.0f, 55.0f, 0.6f},
         // Melee: complete wind-up / contact / recovery cycle; no gun recoil or ADS zoom.
         {"knife",   "Hunting Knife", EAmmoType::None,     0, 0.42f,  false,0.0f, 0.0f, 75.0f, 0.0f, 0.0f, 0.0f, 0.0f, 38.0f, 1, 10.0f,  6.0f, 0.9f, 1.7f, 0.38f},
         {"crowbar", "Crowbar",  EAmmoType::None,          0, 0.78f,  false,0.0f, 0.0f, 75.0f, 0.0f, 0.0f, 0.0f, 0.0f, 52.0f, 1, 10.0f,  9.0f, 1.6f, 2.0f, 0.42f},
@@ -104,6 +105,10 @@ namespace NextDayz
     // Material slots of one injected weapon model (one per mesh section).
     using FWeaponMaterialSlots = std::array<uint32_t, 16>;
 
+    // The FPS view model is drawn at this scale (FWeaponFeelConfig::ViewModelScale)
+    // so that it stays out of walls; eye reliefs below are real camera distances.
+    inline constexpr float kViewModelScale = 0.65f;
+
     // Landmarks of the weapon models in their own space (nextdayz_weapons.scad:
     // origin on the firing grip, +Z muzzle, +Y up). Muzzle effects start at
     // (0, boreHeight, muzzleForward); the first-person ADS pose puts sightHeight
@@ -114,20 +119,36 @@ namespace NextDayz
         float boreHeight;
         float sightHeight;
         float rearSightForward = 0.0f;
-        float adsEyeRelief = 0.0f; // camera -> rear sight, in metres after view-model scaling
-        float scopeFov = 0.0f; // optical view, separate from TPS shoulder-aim FOV
+        // Where the eye sits along the gun for iron sights and 1x optics (model
+        // space). Like PUBG it is over the back of the receiver rather than at a
+        // true cheek weld: with a 75 degree view, an eye further back looks down
+        // the whole stock (the old fixed relief put it on the butt plate).
+        float eyeForward = 0.0f;
+        float adsEyeRelief = 0.0f; // camera -> rear sight / eyepiece, metres after view-model scaling
+        float scopeFov = 0.0f;     // > 0: magnified optic, replaces the mesh with a lens view
     };
+
+    constexpr FWeaponModelPoints EyeStation(FWeaponModelPoints points)
+    {
+        points.adsEyeRelief = (points.rearSightForward - points.eyeForward) * kViewModelScale;
+        return points;
+    }
 
     constexpr FWeaponModelPoints WeaponModelPoints(std::string_view id)
     {
-        if (id == "svd") return {0.844f, 0.066f, 0.128f, -0.188f, 0.070f, 22.0f}; // PSO-1 eyecup / 4x view
-        if (id == "mosin") return {0.822f, 0.070f, 0.094f, 0.211f, 0.340f};
-        if (id == "shotgun") return {0.780f, 0.056f, 0.0715f, 0.112f, 0.350f}; // rib / bead
-        if (id == "pistol") return {0.182f, 0.052f, 0.07875f, -0.0465f, 0.360f}; // 1.5x Makarov
+        // PSO-1 eyecup / 4x view (explicit relief); 1x optics sit over the receiver.
+        if (id == "svd") return {0.844f, 0.066f, 0.128f, -0.188f, -0.110f, 0.070f, 22.0f};
+        // Far enough back that the cocking knob sits low in the picture.
+        if (id == "mosin") return EyeStation({0.822f, 0.070f, 0.094f, 0.211f, -0.250f});
+        // The eye rides a centimetre above the rib, behind the firing hand, so the
+        // bead sits on the rib between the two hammers.
+        if (id == "shotgun") return EyeStation({0.780f, 0.056f, 0.079f, 0.112f, -0.130f});
+        // Two-handed, arms extended: the eye is well behind the slide.
+        if (id == "pistol") return EyeStation({0.182f, 0.052f, 0.07875f, -0.0465f, -0.600f});
         if (id == "knife") return {0.236f, 0.0f, 0.0f};
         if (id == "crowbar") return {0.510f, 0.0f, 0.0f};
         if (id == "axe") return {0.600f, 0.0f, 0.0f};
-        return {0.662f, 0.068f, 0.1078f, 0.160f, 0.320f}; // AK-74 notch / front post tip
+        return EyeStation({0.662f, 0.068f, 0.1078f, 0.160f, -0.165f}); // AK-74 notch / front post tip
     }
 
     inline int WeaponIndex(std::string_view id)

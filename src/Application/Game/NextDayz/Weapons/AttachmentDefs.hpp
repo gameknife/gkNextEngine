@@ -131,9 +131,35 @@ namespace NextDayz
         const bool scope = optic == EWeaponAttachment::Scope4x;
         points.sightHeight = WeaponOpticRailHeight(id) + (scope ? 0.038f : optic == EWeaponAttachment::RedDot ? 0.035f : 0.045f);
         points.rearSightForward = WeaponOpticRailForward(id) - (scope ? 0.105f : 0.030f);
-        points.adsEyeRelief = scope ? 0.065f : 0.240f;
+        // 1x optics keep the weapon's eye station (the head only rises to the
+        // taller sight); a magnified optic puts the eye at the eyepiece.
+        points.adsEyeRelief = scope ? 0.065f : (points.rearSightForward - points.eyeForward) * kViewModelScale;
         points.scopeFov = scope ? 22.0f : 0.0f;
         return points;
+    }
+
+    // First-person ADS FOV (vertical degrees): optics fix their own view, iron
+    // sights only tighten the 75 degree view slightly.
+    inline float WeaponAdsFov(std::string_view id, const FWeaponAttachments& attachments)
+    {
+        const auto points = WeaponSightPoints(id, attachments);
+        if (points.scopeFov > 0.0f) return points.scopeFov;
+        if (AttachmentAt(attachments, EAttachmentSlot::Optic) != EWeaponAttachment::None) return 62.0f;
+        const auto* weapon = FindWeaponDef(id);
+        return weapon ? weapon->adsFov : 75.0f;
+    }
+
+    // Seconds from hip to a settled sight picture: light guns snap up, long
+    // rifles and magnified optics take longer (PUBG-like ADS-in times).
+    inline float WeaponAimSeconds(std::string_view id, const FWeaponAttachments& attachments)
+    {
+        float seconds = 0.20f;
+        if (id == "pistol") seconds = 0.15f;
+        else if (id == "shotgun") seconds = 0.19f;
+        else if (id == "mosin") seconds = 0.25f;
+        else if (id == "svd") seconds = 0.26f;
+        if (WeaponSightPoints(id, attachments).scopeFov > 0.0f) seconds += 0.04f;
+        return seconds;
     }
 
     inline float SuppressorLength(std::string_view id)

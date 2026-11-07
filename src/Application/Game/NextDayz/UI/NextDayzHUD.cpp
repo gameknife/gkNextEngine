@@ -122,62 +122,217 @@ namespace NextDayz::NextDayzHUD
         // ====================================================================
         // CROSSHAIR & DAMAGE FEEDBACK
         // ====================================================================
-        void DrawScope(const FHudContext& context)
+        // A ring whose colour runs from col0 at r0 to col1 at r1 (radial gradient).
+        void RadialBand(ImDrawList* draw, ImVec2 center, float r0, float r1, ImU32 col0, ImU32 col1, int segments = 96)
         {
-            if (!context.scopeView || !context.firstPerson || !context.aiming || context.showInventory || context.showMap) return;
-            const ImGuiViewport* viewport = ImGui::GetMainViewport();
-            const ImVec2 center = viewport->GetCenter();
-            const float radius = std::min(viewport->Size.x, viewport->Size.y) * 0.43f;
-            const float outside = std::hypot(viewport->Size.x, viewport->Size.y);
-            ImDrawList* draw = ImGui::GetBackgroundDrawList();
-            constexpr int segments = 96;
-            const auto point = [&](float angle, float distance) {
-                return ImVec2(center.x + std::cos(angle) * distance, center.y + std::sin(angle) * distance);
-            };
-            // One magnified scene through the lens; the housing masks its
-            // periphery. The unscoped weapon mesh would occlude this image.
-            const ImDrawListFlags flags = draw->Flags;
-            draw->Flags &= ~ImDrawListFlags_AntiAliasedFill;
+            const ImVec2 uv = ImGui::GetFontTexUvWhitePixel();
+            draw->PrimReserve(segments * 6, segments * 4);
             for (int i = 0; i < segments; ++i)
             {
                 const float a = 6.2831853f * i / segments;
                 const float b = 6.2831853f * (i + 1) / segments;
-                draw->AddQuadFilled(point(a, radius), point(a, outside), point(b, outside), point(b, radius), IM_COL32(8, 9, 10, 255));
+                const ImDrawIdx base = static_cast<ImDrawIdx>(draw->_VtxCurrentIdx);
+                draw->PrimWriteVtx(ImVec2(center.x + std::cos(a) * r0, center.y + std::sin(a) * r0), uv, col0);
+                draw->PrimWriteVtx(ImVec2(center.x + std::cos(a) * r1, center.y + std::sin(a) * r1), uv, col1);
+                draw->PrimWriteVtx(ImVec2(center.x + std::cos(b) * r1, center.y + std::sin(b) * r1), uv, col1);
+                draw->PrimWriteVtx(ImVec2(center.x + std::cos(b) * r0, center.y + std::sin(b) * r0), uv, col0);
+                draw->PrimWriteIdx(base);
+                draw->PrimWriteIdx(static_cast<ImDrawIdx>(base + 1));
+                draw->PrimWriteIdx(static_cast<ImDrawIdx>(base + 2));
+                draw->PrimWriteIdx(base);
+                draw->PrimWriteIdx(static_cast<ImDrawIdx>(base + 2));
+                draw->PrimWriteIdx(static_cast<ImDrawIdx>(base + 3));
             }
+        }
+
+        ImU32 WithAlpha(ImU32 color, float alpha)
+        {
+            const int a = static_cast<int>(((color >> IM_COL32_A_SHIFT) & 0xFF) * std::clamp(alpha, 0.0f, 1.0f));
+            return (color & ~IM_COL32_A_MASK) | (static_cast<ImU32>(a) << IM_COL32_A_SHIFT);
+        }
+
+        // An illuminated reticle mark: a soft glow under a crisp core.
+        void GlowLine(ImDrawList* draw, ImVec2 a, ImVec2 b, ImU32 color, float width, float alpha)
+        {
+            draw->AddLine(a, b, WithAlpha(color, 0.18f * alpha), width * 4.0f);
+            draw->AddLine(a, b, WithAlpha(color, 0.35f * alpha), width * 2.0f);
+            draw->AddLine(a, b, WithAlpha(color, alpha), width);
+        }
+
+        void GlowDot(ImDrawList* draw, ImVec2 p, ImU32 color, float radius, float alpha)
+        {
+            draw->AddCircleFilled(p, radius * 4.0f, WithAlpha(color, 0.07f * alpha), 24);
+            draw->AddCircleFilled(p, radius * 2.2f, WithAlpha(color, 0.22f * alpha), 20);
+            draw->AddCircleFilled(p, radius, WithAlpha(color, alpha), 16);
+            draw->AddCircleFilled(p, radius * 0.45f, WithAlpha(IM_COL32(255, 220, 200, 255), 0.85f * alpha), 12);
+        }
+
+        // Magnified optic. As the eye closes on the eyepiece the housing closes
+        // in from the screen edges with a soft edge, then the lens settles:
+        // a darker rim, a thin glint and the reticle. The eye box drifts with
+        // look lag, so turning shades one side of the lens (scope shadow).
+        void DrawScope(const FHudContext& context)
+        {
+            const float blend = context.scopeBlend;
+            if (blend <= 0.0f || !context.firstPerson || context.showInventory || context.showMap) return;
+            const ImGuiViewport* viewport = ImGui::GetMainViewport();
+            const ImVec2 screenCenter = viewport->GetCenter();
+            const float lensRadius = std::min(viewport->Size.x, viewport->Size.y) * 0.455f;
+            const float diagonal = 0.5f * std::hypot(viewport->Size.x, viewport->Size.y);
+            const float outside = diagonal * 2.2f;
+            ImDrawList* draw = ImGui::GetBackgroundDrawList();
+            const float closing = 1.0f - std::pow(1.0f - std::clamp(blend, 0.0f, 1.0f), 3.0f);
+            const float settled = glm::smoothstep(0.65f, 1.0f, blend);
+            const glm::vec2 reticle = glm::vec2(screenCenter.x, screenCenter.y) + context.scopeReticlePx * settled;
+            const glm::vec2 drift = context.scopeEyeBoxPx * settled;
+            const ImVec2 lens(reticle.x + drift.x, reticle.y + drift.y);
+            const float radius = glm::mix(diagonal * 1.15f, lensRadius, closing);
+            const float softness = glm::mix(diagonal * 0.45f, lensRadius * 0.10f, closing);
+            const float alpha = glm::smoothstep(0.0f, 0.35f, blend);
+            const ImU32 housing = IM_COL32(5, 6, 7, 255);
+
+            const ImDrawListFlags flags = draw->Flags;
+            draw->Flags &= ~ImDrawListFlags_AntiAliasedFill;
+            RadialBand(draw, lens, radius, outside, WithAlpha(housing, alpha), WithAlpha(housing, alpha));
+            RadialBand(draw, lens, radius - softness, radius, WithAlpha(housing, 0.0f), WithAlpha(housing, alpha));
             draw->Flags = flags;
-            draw->AddCircle(center, radius - 2.0f, IM_COL32(30, 32, 33, 255), segments, 9.0f);
-            const ImU32 ink = IM_COL32(12, 14, 12, 245);
-            const auto line = [&](float x0, float y0, float x1, float y1) {
-                draw->AddLine(ImVec2(center.x + x0 * radius, center.y + y0 * radius),
-                              ImVec2(center.x + x1 * radius, center.y + y1 * radius), ink, 1.7f);
+            if (settled <= 0.0f) return;
+
+            // Lens: rim darkening, tube wall and a faint glint at the top left.
+            RadialBand(draw, lens, lensRadius * 0.80f, lensRadius * 0.985f, IM_COL32(0, 0, 0, 0),
+                       WithAlpha(IM_COL32(0, 0, 0, 150), settled));
+            draw->AddCircle(lens, lensRadius * 0.992f, WithAlpha(IM_COL32(48, 52, 56, 255), settled), 128, 3.0f);
+            draw->PathArcTo(lens, lensRadius * 0.955f, 3.55f, 4.45f, 32);
+            draw->PathStroke(WithAlpha(IM_COL32(170, 200, 230, 60), settled), 0, 2.0f);
+
+            // Reticle, sized to the lens so it reads the same at every resolution.
+            const float unit = lensRadius;
+            const float thin = std::max(1.2f, lensRadius / 330.0f);
+            const ImU32 ink = IM_COL32(8, 10, 8, 240);
+            const ImU32 red = IM_COL32(255, 52, 36, 255);
+            const auto at = [&](float x, float y) { return ImVec2(reticle.x + x * unit, reticle.y + y * unit); };
+            const auto line = [&](float x0, float y0, float x1, float y1, float width) {
+                draw->AddLine(at(x0, y0), at(x1, y1), WithAlpha(ink, settled), width);
             };
-            if (context.optic == EWeaponAttachment::Scope4x)
+            if (!context.factoryScope)
             {
-                line(-0.80f, 0.0f, 0.80f, 0.0f);
-                line(0.0f, -0.80f, 0.0f, 0.80f);
-                for (int i = 1; i <= 5; ++i)
+                // ACOG-style: black posts stop short of an illuminated chevron;
+                // shrinking bullet-drop bars hang below it.
+                line(-1.0f, 0.0f, -0.16f, 0.0f, thin * 2.2f);
+                line(0.16f, 0.0f, 1.0f, 0.0f, thin * 2.2f);
+                line(0.0f, 1.0f, 0.0f, 0.45f, thin * 2.2f);
+                line(0.0f, 0.42f, 0.0f, 0.06f, thin);
+                for (int i = 1; i <= 4; ++i)
                 {
-                    line(-0.015f, i * 0.10f, 0.015f, i * 0.10f);
-                    line(i * 0.10f, -0.015f, i * 0.10f, 0.015f);
-                    line(-i * 0.10f, -0.015f, -i * 0.10f, 0.015f);
+                    const float y = 0.06f + 0.085f * i;
+                    const float half = 0.055f - 0.009f * i;
+                    line(-half, y, half, y, thin);
                 }
+                GlowLine(draw, at(-0.032f, 0.030f), at(0.0f, 0.0f), red, thin * 1.6f, settled);
+                GlowLine(draw, at(0.0f, 0.0f), at(0.032f, 0.030f), red, thin * 1.6f, settled);
                 return;
             }
-            // PSO-style chevron: its apex is the camera / hitscan aim point.
+            // PSO-1: chevron (its apex is the aim point), range chevrons below,
+            // a split horizontal line with windage ticks and the stadia curve.
             for (int i = 0; i < 4; ++i)
             {
                 const float y = i * 0.085f;
-                line(-0.027f, y + 0.027f, 0.0f, y);
-                line(0.0f, y, 0.027f, y + 0.027f);
+                line(-0.027f, y + 0.027f, 0.0f, y, thin * 1.4f);
+                line(0.0f, y, 0.027f, y + 0.027f, thin * 1.4f);
             }
-            line(-0.75f, 0.0f, -0.12f, 0.0f);
-            line(0.12f, 0.0f, 0.75f, 0.0f);
+            line(-0.75f, 0.0f, -0.12f, 0.0f, thin * 1.4f);
+            line(0.12f, 0.0f, 0.75f, 0.0f, thin * 1.4f);
             for (int i = 2; i <= 7; ++i)
             {
                 const float x = i * 0.1f;
-                line(-x, -0.012f, -x, 0.012f);
-                line(x, -0.012f, x, 0.012f);
+                line(-x, -0.012f, -x, 0.012f, thin);
+                line(x, -0.012f, x, 0.012f, thin);
             }
+            for (int i = 0; i < 12; ++i)
+            {
+                const float x0 = -0.62f + i * 0.06f;
+                const float x1 = x0 + 0.06f;
+                const auto curve = [](float x) { return 0.30f + 0.10f * std::sqrt(std::max(0.0f, 0.62f + x) / 0.72f); };
+                line(x0, curve(x0), x1, curve(x1), thin);
+            }
+        }
+
+        // Iron sights and 1x optics: the periphery dims a little as the eye
+        // settles behind the sight, pulling attention to the centre.
+        void DrawAdsVignette(const FHudContext& context)
+        {
+            const float amount = std::clamp(context.adsVignette, 0.0f, 1.0f);
+            if (amount <= 0.0f || context.showInventory || context.showMap) return;
+            const ImGuiViewport* viewport = ImGui::GetMainViewport();
+            const float diagonal = 0.5f * std::hypot(viewport->Size.x, viewport->Size.y);
+            ImDrawList* draw = ImGui::GetBackgroundDrawList();
+            const ImU32 dark = IM_COL32(4, 5, 6, 255);
+            RadialBand(draw, viewport->GetCenter(), diagonal * 0.55f, diagonal * 1.02f, WithAlpha(dark, 0.0f),
+                       WithAlpha(dark, 0.42f * amount));
+        }
+
+        // Red dot / holographic: the dot is projected at infinity, so it sits
+        // where the optic points and is only seen through its glass.
+        void DrawReflex(const FHudContext& context)
+        {
+            const ImGuiViewport* viewport = ImGui::GetMainViewport();
+            const ImVec2 center = viewport->GetCenter();
+            ImDrawList* draw = ImGui::GetBackgroundDrawList();
+            const float scale = viewport->Size.y / 1080.0f;
+            const ImVec2 reticle(center.x + context.reflexOffsetPx.x, center.y + context.reflexOffsetPx.y);
+            const ImU32 red = IM_COL32(255, 46, 32, 255);
+            const bool holo = context.optic == EWeaponAttachment::Holographic;
+            ImVec2 clipMin = viewport->Pos;
+            ImVec2 clipMax(viewport->Pos.x + viewport->Size.x, viewport->Pos.y + viewport->Size.y);
+            float visible = 1.0f;
+            if (context.reflexWindowValid)
+            {
+                const ImVec2 window(center.x + context.reflexWindowCenterPx.x, center.y + context.reflexWindowCenterPx.y);
+                const ImVec2 half(context.reflexWindowHalfPx.x, context.reflexWindowHalfPx.y);
+                // Coated glass: a faint tint and a soft reflection across the top.
+                if (holo)
+                {
+                    draw->AddRectFilled(ImVec2(window.x - half.x, window.y - half.y), ImVec2(window.x + half.x, window.y + half.y),
+                                        IM_COL32(120, 170, 210, 16));
+                    draw->AddRectFilledMultiColor(ImVec2(window.x - half.x, window.y - half.y),
+                                                  ImVec2(window.x + half.x, window.y - half.y * 0.2f),
+                                                  IM_COL32(220, 235, 255, 26), IM_COL32(220, 235, 255, 8),
+                                                  IM_COL32(220, 235, 255, 0), IM_COL32(220, 235, 255, 0));
+                    clipMin = ImVec2(window.x - half.x, window.y - half.y);
+                    clipMax = ImVec2(window.x + half.x, window.y + half.y);
+                }
+                else
+                {
+                    const float radius = std::min(half.x, half.y);
+                    draw->AddCircleFilled(window, radius, IM_COL32(150, 200, 255, 14), 48);
+                    draw->PathArcTo(window, radius * 0.82f, 3.6f, 4.6f, 24);
+                    draw->PathStroke(IM_COL32(220, 235, 255, 40), 0, 1.5f * scale);
+                    const float distance = std::hypot(reticle.x - window.x, reticle.y - window.y);
+                    visible = 1.0f - glm::smoothstep(radius * 0.80f, radius * 0.95f, distance);
+                }
+            }
+            if (visible <= 0.0f) return;
+            draw->PushClipRect(clipMin, clipMax, true);
+            if (holo)
+            {
+                // EOTech-style 65 MOA ring with quadrant ticks around a 1 MOA dot.
+                const float ring = 15.0f * scale;
+                const float width = 1.6f * scale;
+                draw->AddCircle(reticle, ring, WithAlpha(red, 0.18f * visible), 64, width * 3.5f);
+                draw->AddCircle(reticle, ring, WithAlpha(red, 0.95f * visible), 64, width);
+                for (const ImVec2 axis : {ImVec2(0, -1), ImVec2(0, 1), ImVec2(-1, 0), ImVec2(1, 0)})
+                {
+                    GlowLine(draw, ImVec2(reticle.x + axis.x * ring, reticle.y + axis.y * ring),
+                             ImVec2(reticle.x + axis.x * (ring + 5.0f * scale), reticle.y + axis.y * (ring + 5.0f * scale)),
+                             red, width, visible);
+                }
+                GlowDot(draw, reticle, red, 1.5f * scale, visible);
+            }
+            else
+            {
+                GlowDot(draw, reticle, red, 2.8f * scale, visible);
+            }
+            draw->PopClipRect();
         }
 
         void DrawCrosshair(const FHudContext& context)
@@ -188,19 +343,12 @@ namespace NextDayz::NextDayzHUD
             if (context.firstPerson && context.aiming && context.sightReady && !context.showInventory && !context.showMap &&
                 (context.optic == EWeaponAttachment::RedDot || context.optic == EWeaponAttachment::Holographic))
             {
-                const ImVec2 reticle(center.x + context.reflexOffsetPx.x, center.y + context.reflexOffsetPx.y);
-                const ImU32 red = IM_COL32(255, 58, 40, 245);
-                draw->AddCircleFilled(reticle, 2.0f, red, 12);
-                if (context.optic == EWeaponAttachment::Holographic)
-                {
-                    draw->AddCircle(reticle, 12.0f, red, 48, 1.5f);
-                    draw->AddLine(ImVec2(reticle.x, reticle.y - 16), ImVec2(reticle.x, reticle.y - 10), red, 1.5f);
-                    draw->AddLine(ImVec2(reticle.x, reticle.y + 10), ImVec2(reticle.x, reticle.y + 16), red, 1.5f);
-                }
+                DrawReflex(context);
             }
-            const ImU32 color = IM_COL32(235, 235, 235, 220);
-            const ImU32 outline = IM_COL32(20, 20, 20, 210);
-            constexpr float gap = 6.0f;
+            const float crosshair = context.melee ? 1.0f : std::clamp(context.crosshairAlpha, 0.0f, 1.0f);
+            const ImU32 color = WithAlpha(IM_COL32(235, 235, 235, 220), crosshair);
+            const ImU32 outline = WithAlpha(IM_COL32(20, 20, 20, 210), crosshair);
+            const float gap = 6.0f * (context.melee ? 1.0f : context.crosshairGapScale);
             constexpr float len = 10.0f;
             const auto line = [&](const ImVec2& a, const ImVec2& b) {
                 draw->AddLine(a, b, outline, 4.0f);
@@ -218,14 +366,14 @@ namespace NextDayz::NextDayzHUD
                     draw->PathStroke(UITheme::Colors::AccentAmber, 0, 2.0f);
                 }
             }
-            else if (!(context.firstPerson && context.aiming))
+            else if (crosshair > 0.01f)
             {
                 line(ImVec2(center.x - gap - len, center.y), ImVec2(center.x - gap, center.y));
                 line(ImVec2(center.x + gap, center.y), ImVec2(center.x + gap + len, center.y));
                 line(ImVec2(center.x, center.y - gap - len), ImVec2(center.x, center.y - gap));
                 line(ImVec2(center.x, center.y + gap), ImVec2(center.x, center.y + gap + len));
             }
-            if (context.melee || !(context.firstPerson && context.aiming))
+            if (context.melee || crosshair > 0.01f)
             {
                 draw->AddCircleFilled(center, 2.4f, outline);
                 draw->AddCircleFilled(center, 1.2f, color);
@@ -2244,6 +2392,7 @@ namespace NextDayz::NextDayzHUD
             DrawSessionOverlay(context);
             return;
         }
+        DrawAdsVignette(context);
         DrawScope(context);
         DrawDamageFeedback(context);
         if (context.hasWeapon && !context.showMap && !context.showInventory)

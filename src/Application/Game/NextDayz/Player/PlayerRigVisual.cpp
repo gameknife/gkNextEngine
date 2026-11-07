@@ -21,6 +21,7 @@
 #include "Gameplay/Rig/RigPoseOps.h"
 #include "Modules/ScadLoader/FScadRig.h"
 #include "Application/Game/NextDayz/Data/ItemDefs.hpp"
+#include "Application/Game/NextDayz/Player/WeaponRigHold.hpp"
 
 namespace NextDayz
 {
@@ -40,24 +41,7 @@ namespace NextDayz
         const glm::vec3 kPoleLeft(0.45f, 0.08f, 0.15f);
 
         // Weapons that are not held like the rifle the rig's grips were built for.
-        struct FWeaponRigHold
-        {
-            glm::vec3 modelOffset{0.0f};   // weapon model under the socket
-            bool overrideSupport = false;
-            glm::vec3 supportWrist{0.0f};  // left wrist in bone_ik_weapon space
-            float extend = 0.0f;           // push the frame along the muzzle (m)
-        };
-
-        FWeaponRigHold HoldFor(std::string_view weaponId)
-        {
-            if (weaponId == "pistol")
-            {
-                // Grip into the palm (the Makarov's grip hangs below its origin),
-                // support hand cupping the firing hand, arms extended.
-                return {glm::vec3(0.0f, 0.025f, -0.015f), true, glm::vec3(0.07f, -0.03f, -0.02f), 0.12f};
-            }
-            return {};
-        }
+        FWeaponRigHold HoldFor(std::string_view weaponId) { return WeaponRigHoldFor(weaponId); }
 
         float Approach(float current, float target, float seconds, float dt)
         {
@@ -264,6 +248,36 @@ namespace NextDayz
         }
 
         injected_ = true;
+    }
+
+    FFirstPersonArmAssets PlayerRigVisual::FirstPersonArmAssets() const
+    {
+        FFirstPersonArmAssets arms;
+        if (!hasRig_ || !injected_) return arms;
+        arms.rig = &asset_;
+        arms.weaponScale = weaponScale_;
+        const auto isArm = [this](int32_t bone)
+        {
+            return bone >= 0 && (bone == bones_.upperArmL || bone == bones_.foreArmL || bone == bones_.handL ||
+                                 bone == bones_.upperArmR || bone == bones_.foreArmR || bone == bones_.handR);
+        };
+        for (size_t index = 0; index < asset_.parts.size() && index < partModelIds_.size(); ++index)
+        {
+            const Assets::FRigPart& part = asset_.parts[index];
+            if (!isArm(part.bone)) continue;
+            FFirstPersonArmPart arm{part.bone, partModelIds_[index], partMaterialIds_[index], {}};
+            for (size_t section = 0; section < part.sectionTintable.size() && section < arm.materials.size(); ++section)
+            {
+                if (part.sectionTintable[section]) arm.materials[section] = tintMaterialId_;
+            }
+            arms.parts.push_back(std::move(arm));
+        }
+        for (const FClothingPart& part : clothingParts_)
+        {
+            if (part.harness || !isArm(part.bone)) continue;
+            arms.parts.push_back({part.bone, part.modelId, part.materialIds, part.itemId});
+        }
+        return arms;
     }
 
     Assets::Node* PlayerRigVisual::BoneNode(std::string_view boneName)

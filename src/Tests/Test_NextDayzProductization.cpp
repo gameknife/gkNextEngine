@@ -40,6 +40,43 @@ namespace
     }
 }
 
+TEST_CASE("NextDayz sight pictures: eye stations, zoom and raise times", "[NextDayz][Attachments][ADS]")
+{
+    using namespace NextDayz;
+    const FWeaponAttachments iron{};
+    FWeaponAttachments redDot{};
+    redDot[0] = EWeaponAttachment::RedDot;
+    FWeaponAttachments scope{};
+    scope[0] = EWeaponAttachment::Scope4x;
+    for (const char* id : {"ak", "mosin", "shotgun", "pistol"})
+    {
+        const FWeaponModelPoints points = WeaponModelPoints(id);
+        // The eye is behind the rear sight, and in front of where the old fixed
+        // relief left it (on or past the butt plate for every long gun).
+        CHECK(points.eyeForward < points.rearSightForward);
+        CHECK(points.adsEyeRelief ==
+              Catch::Approx((points.rearSightForward - points.eyeForward) * kViewModelScale));
+        // Iron sights only tighten the 75 degree view a little: well short of a 2x optic.
+        const float ironFov = WeaponAdsFov(id, iron);
+        CHECK(ironFov > 58.0f);
+        CHECK(ironFov < 75.0f);
+    }
+    CHECK(WeaponModelPoints("ak").adsEyeRelief < 0.25f);
+    CHECK(WeaponModelPoints("mosin").adsEyeRelief < 0.32f);
+    CHECK(WeaponModelPoints("shotgun").adsEyeRelief < 0.20f);
+    // 1x optics keep the eye station; the 4x puts the eye at its eyepiece.
+    CHECK(WeaponSightPoints("ak", redDot).adsEyeRelief < WeaponModelPoints("ak").adsEyeRelief);
+    CHECK(WeaponAdsFov("ak", redDot) == Catch::Approx(62.0f));
+    CHECK(WeaponAdsFov("ak", scope) == Catch::Approx(22.0f));
+    CHECK(WeaponAdsFov("svd", iron) == Catch::Approx(22.0f)); // factory PSO-1
+    // Light guns snap up, long rifles and magnified optics take longer.
+    CHECK(WeaponAimSeconds("pistol", iron) < WeaponAimSeconds("ak", iron));
+    CHECK(WeaponAimSeconds("ak", iron) < WeaponAimSeconds("mosin", iron));
+    CHECK(WeaponAimSeconds("ak", redDot) == Catch::Approx(WeaponAimSeconds("ak", iron)));
+    CHECK(WeaponAimSeconds("ak", scope) > WeaponAimSeconds("ak", iron));
+    CHECK(WeaponAimSeconds("svd", iron) > WeaponAimSeconds("mosin", iron));
+}
+
 TEST_CASE("NextDayz attachments fit firearm-specific slots and change sight landmarks", "[NextDayz][Attachments]")
 {
     using namespace NextDayz;

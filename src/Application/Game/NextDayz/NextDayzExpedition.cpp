@@ -173,7 +173,7 @@ NextDayz::FCampaignSave NextDayzGameInstance::CaptureCampaign() const
     saved.position = player_.Position();
     saved.yaw = player_.Yaw();
     saved.pitch = player_.Pitch();
-    saved.firstPerson = player_.IsFirstPerson();
+    saved.firstPerson = player_.PrefersFirstPerson();
     saved.weaponSlots = {weapons_.SlotInstance(0), weapons_.SlotInstance(1), weapons_.SlotInstance(2)};
     saved.activeSlot = weapons_.ActiveSlot();
     saved.previousSlot = weapons_.PreviousSlot();

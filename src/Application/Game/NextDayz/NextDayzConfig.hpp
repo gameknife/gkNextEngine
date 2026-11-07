@@ -51,13 +51,26 @@ namespace NextDayz
     {
         float MouseSensitivity = 0.0022f;
         float BaseFov = 75.0f;
-        float FovLerpSpeed = 12.0f;     // exponential smoothing rate for ADS FOV
+        float FovLerpSpeed = 12.0f;     // exponential smoothing rate for the sprint FOV boost
         float AimTapSeconds = 0.20f;   // shorter RMB presses toggle FPS ADS; longer presses hold aim
+        // Aim timing: raising follows the weapon (WeaponAimSeconds); lowering is
+        // quicker for every weapon. Camera dolly, FOV and the view model all use it.
+        float AimOutSeconds = 0.15f;
+        // Tapped ADS from third person flies the camera into the eye. The body
+        // hands over to the first-person weapon and arms halfway along, before
+        // the lens can pass through the dissolving head.
+        float AdsViewHandoff = 0.5f;
+        // Look speed follows the zoom (1 = same on-screen speed at every FOV).
+        float AimSensitivityFovScale = 1.0f;
         float MaxPitchDegrees = 85.0f;
         // Third person
         float TpsDistance = 1.5f; // fixed at the former minimum zoom distance
         float TpsHeight = 1.7f;
         float TpsShoulderOffset = 0.90f;
+        // Held shoulder aim: the camera tightens over the shoulder with a modest zoom.
+        float TpsAimDistance = 1.30f;
+        float TpsAimShoulderOffset = 0.76f;
+        float TpsAimFov = 62.0f;
         float TpsCollisionRadius = 0.20f; // near-plane clearance around the camera arm
         float TpsCollisionPadding = 0.05f;
         float TpsArmReturnSpeed = 5.0f;   // m/s; obstruction retracts the arm immediately
@@ -84,9 +97,10 @@ namespace NextDayz
 
     struct FWeaponFeelConfig
     {
-        // FPS view-model placement, in camera space (right, up, forward).
-        float ViewModelScale = 0.65f;
-        glm::vec3 ViewModelHipOffset{0.22f, -0.30f, 0.75f};
+        // FPS view-model placement, in camera space (right, up, forward). The
+        // hip pose stays within arm's reach: the first-person arms hold it.
+        float ViewModelScale = 0.65f; // = kViewModelScale (WeaponDefs.hpp)
+        glm::vec3 ViewModelHipOffset{0.115f, -0.132f, 0.212f};
         float ViewModelLerpSpeed = 14.0f;
         float CameraRecoilSpring = 90.0f;
         float CameraRecoilDamping = 18.0f;

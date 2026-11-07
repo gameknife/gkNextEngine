@@ -177,7 +177,7 @@
     {"type": "cvar", "name": "nextdayz.debug.step", "set": 0},
     {"type": "cvar", "name": "nextdayz.debug.step", "set": 30},
     {"type": "wait-frames", "n": 32},
-    {"type": "assert", "query": "game.cameraFov", "op": "lt", "value": 56},
+    {"type": "assert", "query": "game.cameraFov", "op": "lt", "value": 66},
     {"type": "mouse-button", "button": "left", "action": "down"},
     {"type": "cvar", "name": "nextdayz.debug.step", "set": 0},
     {"type": "cvar", "name": "nextdayz.debug.step", "set": 20},

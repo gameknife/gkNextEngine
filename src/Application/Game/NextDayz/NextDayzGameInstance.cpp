@@ -194,6 +194,9 @@ void NextDayzGameInstance::OnInit()
         attachmentCatalogLoaded_ = Assets::FScadRigLoader::LoadRig(
             "assets/scad/characters/nextdayz_attachments.scad", {}, attachmentCatalogAsset_, error);
         if (!attachmentCatalogLoaded_) SPDLOG_ERROR("[NextDayz] attachment catalog unavailable: {}", error);
+        fpsHandsLoaded_ = Assets::FScadRigLoader::LoadRig("assets/scad/characters/nextdayz_fps_hands.scad", {},
+                                                          fpsHandsAsset_, error);
+        if (!fpsHandsLoaded_) SPDLOG_ERROR("[NextDayz] first-person hands unavailable: {}", error);
     }
     std::string scene = kDefaultScene;
     std::string mapError;
@@ -578,6 +581,29 @@ void NextDayzGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<Assets
     grass_.Prepare(nodes, models, materials);
     rescueHelicopter_.InjectAssets(models, materials);
     rig_.InjectAssets(models, materials);
+    {
+        // The survivor's forearms (rig parts) plus first-person hand models.
+        NextDayz::FFirstPersonArmAssets arms = rig_.FirstPersonArmAssets();
+        arms.handsReady = fpsHandsLoaded_;
+        for (size_t side = 0; side < 2 && arms.handsReady; ++side)
+        {
+            const int32_t bone = fpsHandsAsset_.FindBone(side == 0 ? "bone_fps_hand_grip" : "bone_fps_hand_support");
+            const auto part = std::find_if(fpsHandsAsset_.parts.begin(), fpsHandsAsset_.parts.end(),
+                                           [bone](const auto& entry) { return entry.bone == bone && entry.modelIndex >= 0; });
+            if (bone < 0 || part == fpsHandsAsset_.parts.end())
+            {
+                SPDLOG_ERROR("[NextDayz] first-person hand model {} missing", side);
+                arms.handsReady = false;
+                break;
+            }
+            models.push_back(fpsHandsAsset_.partModels[part->modelIndex]);
+            arms.handModels[side] = static_cast<uint32_t>(models.size() - 1);
+            arms.handMaterials[side].fill(0);
+            for (size_t section = 0; section < part->sectionColors.size() && section < 16; ++section)
+                arms.handMaterials[side][section] = Assets::SceneBuilder::AddRigSectionMaterial(materials, *part, section);
+        }
+        weapons_.SetFirstPersonArmAssets(std::move(arms));
+    }
     effects_.InjectAssets(models, materials);
     InjectLootCatalog(models, materials);
 
@@ -1299,16 +1325,48 @@ bool NextDayzGameInstance::OnRenderUI()
     ctx.scopeView = weapons_.IsScopeView();
     ctx.optic = weapons_.ActiveOptic();
     ctx.sightReady = weapons_.SightReady();
-    glm::vec3 sight, sightForward;
-    if (ctx.sightReady && weapons_.ViewModelSight(sight, sightForward))
     {
+        // Screen projection from the render camera, in pixels from the centre.
+        const glm::vec3 eye = player_.CameraPosition();
         const glm::vec3 forward = player_.CameraForward();
         const glm::vec3 up = player_.CameraUp();
         const glm::vec3 right = glm::normalize(glm::cross(forward, up));
-        const glm::vec3 delta = sight + sightForward * 4.0f - player_.CameraPosition();
-        const float depth = glm::dot(delta, forward);
         const float focal = ImGui::GetMainViewport()->Size.y / (2.0f * std::tan(glm::radians(player_.CurrentFov()) * 0.5f));
-        if (depth > 0.01f) ctx.reflexOffsetPx = glm::vec2(glm::dot(delta, right), -glm::dot(delta, up)) * focal / depth;
+        const auto project = [&](const glm::vec3& point, glm::vec2& out)
+        {
+            const glm::vec3 delta = point - eye;
+            const float depth = glm::dot(delta, forward);
+            if (depth <= 0.01f) return false;
+            out = glm::vec2(glm::dot(delta, right), -glm::dot(delta, up)) * focal / depth;
+            return true;
+        };
+        glm::vec3 sight, sightForward;
+        const bool hasSight = weapons_.ViewModelSight(sight, sightForward);
+        // Optics project their mark at infinity: where the sight axis points.
+        if (ctx.sightReady && hasSight) project(sight + sightForward * 4.0f, ctx.reflexOffsetPx);
+        glm::vec3 window, halfX, halfY;
+        glm::vec2 windowCenter, windowX, windowY;
+        if (weapons_.ViewModelReflexWindow(window, halfX, halfY) && project(window, windowCenter) &&
+            project(window + halfX, windowX) && project(window + halfY, windowY))
+        {
+            ctx.reflexWindowValid = true;
+            ctx.reflexWindowCenterPx = windowCenter;
+            ctx.reflexWindowHalfPx = glm::vec2(glm::length(windowX - windowCenter), glm::length(windowY - windowCenter));
+        }
+        ctx.scopeBlend = weapons_.ScopeBlend();
+        ctx.adsVignette = player_.IsFirstPerson() && weapons_.HasActiveWeapon() && !weapons_.ActiveIsMelee()
+                              ? player_.AimBlend() * (1.0f - ctx.scopeBlend) : 0.0f;
+        if (ctx.scopeBlend > 0.0f && hasSight) project(sight + sightForward * 4.0f, ctx.scopeReticlePx);
+        // The eye box lags the look: turning right shades the right of the lens.
+        const float lens = std::min(ImGui::GetMainViewport()->Size.x, ImGui::GetMainViewport()->Size.y) * 0.455f;
+        const glm::vec2 sway = weapons_.SwayAngle();
+        ctx.scopeEyeBoxPx = glm::clamp(glm::vec2(-sway.x, sway.y) * lens * 3.0f, glm::vec2(-lens * 0.12f), glm::vec2(lens * 0.12f));
+        ctx.factoryScope = weapons_.ActiveWeaponId() == "svd" && weapons_.ActiveOptic() == NextDayz::EWeaponAttachment::None;
+        // The hip crosshair gives way to the sight as the weapon comes up; in
+        // third-person shoulder aim it stays and tightens.
+        const bool sightPicture = player_.WantsFirstPerson() || player_.IsFirstPerson();
+        ctx.crosshairAlpha = sightPicture ? 1.0f - glm::smoothstep(0.10f, 0.55f, player_.AimProgress()) : 1.0f;
+        ctx.crosshairGapScale = sightPicture ? 1.0f : glm::mix(1.0f, 0.55f, player_.AimBlend());
     }
     ctx.hasWeapon = weapons_.HasActiveWeapon();
     ctx.melee = weapons_.ActiveIsMelee();
@@ -1599,6 +1657,7 @@ std::vector<NextDayz::FLootSpotSeed> NextDayzGameInstance::CollectLootSpots() co
 void NextDayzGameInstance::SyncClothingVisuals()
 {
     rig_.SetClothing(inventory_.EquippedClothing());
+    weapons_.SetArmClothing(inventory_.EquippedClothing());
 }
 
 void NextDayzGameInstance::EquipWeaponInstance(NextDayz::FItemInstanceId instanceId, int slot)
@@ -3323,7 +3382,14 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     reg.Add("adsMode", [this]() -> Runtime::Agent::FAgentQueryValue { return player_.IsAds(); });
     reg.Add("scopeView", [this]() -> Runtime::Agent::FAgentQueryValue { return weapons_.IsScopeView(); });
     reg.Add("cameraFov", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(player_.CurrentFov()); });
-    reg.Add("firstPerson", [this]() -> Runtime::Agent::FAgentQueryValue { return player_.IsFirstPerson(); });
+    reg.Add("firstPerson", [this]() -> Runtime::Agent::FAgentQueryValue { return player_.WantsFirstPerson(); });
+    reg.Add("viewBlend", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(player_.ViewBlend()); });
+    reg.Add("aimProgress", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(player_.AimProgress()); });
+    reg.Add("presentationFirstPerson", [this]() -> Runtime::Agent::FAgentQueryValue { return player_.IsFirstPerson(); });
+    reg.Add("scopeBlend", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(weapons_.ScopeBlend()); });
+    reg.Add("fpsArmParts", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<int64_t>(weapons_.VisibleArmParts()); });
+    reg.Add("fpsArmGripError", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(weapons_.ArmGripError()); });
+    reg.Add("fpsArmRenderedError", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(weapons_.RenderedArmError()); });
     reg.Add("freeLookActive", [this]() -> Runtime::Agent::FAgentQueryValue { return player_.IsFreeLooking(); });
     reg.Add("playerYaw", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(player_.Yaw()); });
     reg.Add("playerPitch", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<double>(player_.Pitch()); });

@@ -63,6 +63,19 @@ namespace NextDayz
         EWeaponAttachment optic = EWeaponAttachment::None;
         bool sightReady = false;
         glm::vec2 reflexOffsetPx{0.0f};
+        // Sight presentation (ADS):
+        float crosshairAlpha = 1.0f;      // fades out as a weapon comes onto its sight
+        float crosshairGapScale = 1.0f;   // tightens during shoulder aim
+        float scopeBlend = 0.0f;          // magnified optic: eye closing on the eyepiece
+        float adsVignette = 0.0f;         // iron / 1x sight picture: soft dark corners
+        glm::vec2 scopeReticlePx{0.0f};   // where the scope axis points (recoil climbs it)
+        glm::vec2 scopeEyeBoxPx{0.0f};    // lens drift behind the reticle (look lag)
+        bool factoryScope = false;        // SVD PSO-1 reticle instead of the 4x attachment
+        // Reflex window projected on screen (centre, half extents); the dot is
+        // only seen through the glass.
+        bool reflexWindowValid = false;
+        glm::vec2 reflexWindowCenterPx{0.0f};
+        glm::vec2 reflexWindowHalfPx{0.0f};
 
         bool hasWeapon = false;
         bool melee = false;

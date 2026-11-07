@@ -58,7 +58,7 @@
     {"type": "assert", "query": "game.isAiming", "op": "eq", "value": true},
     {"type": "assert", "query": "game.viewModelVisible", "op": "eq", "value": true},
     {"type": "assert", "query": "game.playerRigVisible", "op": "eq", "value": false},
-    {"type": "assert", "query": "game.cameraFov", "op": "lt", "value": 56},
+    {"type": "assert", "query": "game.cameraFov", "op": "lt", "value": 66},
     {"type": "screenshot", "out": "screenshots/nextdayz_ads_latched_fps"},
     {"type": "cvar", "name": "nextdayz.debug.step", "set": 0},
     {"type": "cvar", "name": "nextdayz.debug.step", "set": 60},

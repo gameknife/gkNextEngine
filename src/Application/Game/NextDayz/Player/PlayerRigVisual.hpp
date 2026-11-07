@@ -32,6 +32,7 @@
 #include "Gameplay/Rig/RigLayeredAnimator.h"
 
 #include "Application/Game/NextDayz/NextDayzConfig.hpp"
+#include "Application/Game/NextDayz/Player/FirstPersonArms.hpp"
 #include "Application/Game/NextDayz/Player/PlayerState.hpp"
 #include "Application/Game/NextDayz/Weapons/WeaponDefs.hpp"
 #include "Application/Game/NextDayz/Weapons/WeaponAttachmentVisuals.hpp"
@@ -57,6 +58,9 @@ namespace NextDayz
         }
 
         void InjectAssets(std::vector<Assets::Model>& models, std::vector<Assets::FMaterial>& materials);
+        // The arm parts (skin and every sleeve variant) as injected above, for
+        // the first-person arms. Valid after InjectAssets.
+        FFirstPersonArmAssets FirstPersonArmAssets() const;
         void SetWeaponAssets(const std::array<uint32_t, kWeapons.size()>& modelIds,
                              const std::array<FWeaponMaterialSlots, kWeapons.size()>& materialIds);
         void OnSceneLoaded(Assets::Scene& scene);

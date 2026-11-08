@@ -5,11 +5,13 @@
 #include "Engine/Assets/Data/Material.hpp"
 #include "Engine/Assets/Data/RigAsset.hpp"
 #include "Engine/Assets/Loaders/ProceduralTexture.hpp"
+#include "Engine/Utilities/FileHelper.hpp"
 #include "Engine/Runtime/Scene/SceneBuilder.hpp"
 #include "Modules/ScadLoader/FScadEvaluator.h"
 #include "Modules/ScadLoader/FScadLexer.h"
 #include "Modules/ScadLoader/FScadParser.h"
 #include "Modules/ScadLoader/FScadRig.h"
+#include "Modules/ScadLoader/FScadTexturePrints.h"
 #include "Gameplay/Rig/RigPoseOps.h"
 #include "Data/ItemDefs.hpp"
 #include "Weapons/WeaponDefs.hpp"
@@ -17,6 +19,8 @@
 #include <algorithm>
 
 #include <cmath>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -65,6 +69,16 @@ namespace
         const SceneEvalResult result = EvalRigScene(src);
         std::string err;
         return FScadRigLoader::BuildRig(result, options, outAsset, err, warnings);
+    }
+
+    // A named print from the SCAD print library (tex_<name>() in gk_texgraph.scad).
+    FProceduralTexture PrintNamed(std::string_view name)
+    {
+        std::string error;
+        const auto texture = MakeTexturePrint(name, error);
+        INFO(error);
+        REQUIRE(texture);
+        return *texture;
     }
 
     bool AnyWarningContains(const std::vector<std::string>& warnings, const std::string& needle)
@@ -1173,11 +1187,10 @@ TEST_CASE("NextDayz attachment catalog provides every mount as a single PBR mode
 TEST_CASE("Procedural prints bake deterministically and wrap without a seam", "[Unit][ProceduralTexture]")
 {
     constexpr uint32_t size = 128;
-    for (std::string_view pattern : ProceduralTexture::PatternNames())
+    for (std::string_view pattern : TexturePrintNames())
     {
         INFO(pattern);
-        FProceduralTexture texture;
-        texture.pattern = std::string(pattern);
+        FProceduralTexture texture = PrintNamed(pattern);
         texture.seed = 3;
         const std::vector<uint8_t> a = ProceduralTexture::Bake(texture, size);
         const std::vector<uint8_t> b = ProceduralTexture::Bake(texture, size);
@@ -1219,8 +1232,7 @@ TEST_CASE("Ground and building prints stay a low-contrast modulation", "[Unit][P
                                 "planks", "stone", "concrete"})
     {
         INFO(pattern);
-        FProceduralTexture texture;
-        texture.pattern = pattern;
+        FProceduralTexture texture = PrintNamed(pattern);
         const std::vector<uint8_t> pixels = ProceduralTexture::Bake(texture, size);
         double sum = 0.0, sumSq = 0.0;
         for (size_t i = 0; i < pixels.size(); i += 4)
@@ -1257,11 +1269,10 @@ TEST_CASE("Procedural prints bake a gentle seamless relief and their surface fac
         }
         return sum / static_cast<double>(normal.size() / 4);
     };
-    for (std::string_view pattern : ProceduralTexture::PatternNames())
+    for (std::string_view pattern : TexturePrintNames())
     {
         INFO(pattern);
-        FProceduralTexture texture;
-        texture.pattern = std::string(pattern);
+        FProceduralTexture texture = PrintNamed(pattern);
         texture.seed = 3;
         const FProceduralMaps maps = ProceduralTexture::BakeMaps(texture, size);
         CHECK(maps.albedo == ProceduralTexture::Bake(texture, size));
@@ -1303,14 +1314,15 @@ TEST_CASE("Procedural prints bake a gentle seamless relief and their surface fac
         CHECK_FALSE(flat.hasNormal);
         CHECK(flat.normal.empty());
         CHECK(flat.albedo == maps.albedo);
-        CHECK(texture.Hash() != FProceduralTexture{texture.pattern, {}, 0.5f, 3}.Hash());
+        FProceduralTexture defaultRelief = PrintNamed(texture.pattern);
+        defaultRelief.seed = 3;
+        CHECK(texture.Hash() != defaultRelief.Hash());
     }
 
     // Uniform surfaces need no MRA map; worn ones vary in roughness and metal.
     const auto factors = [&](const char* pattern)
     {
-        FProceduralTexture texture;
-        texture.pattern = pattern;
+        FProceduralTexture texture = PrintNamed(pattern);
         return ProceduralTexture::BakeMaps(texture, size);
     };
     for (const char* pattern : {"woodland", "canvas", "meadow", "plaster", "brick", "concrete"})
@@ -1396,12 +1408,186 @@ TEST_CASE("ScadRig box-projected tangents follow the print's UVs on every face",
     CHECK(checked * 3 >= indices.size() * 9 / 10);
 }
 
+namespace
+{
+    FTexExpr TxNum(double v)
+    {
+        FTexExpr e;
+        e.kind = FTexExpr::EKind::Number;
+        e.number = v;
+        return e;
+    }
+    FTexExpr TxList(std::string op, std::vector<FTexExpr> args)
+    {
+        FTexExpr e;
+        e.kind = FTexExpr::EKind::List;
+        FTexExpr head;
+        head.kind = FTexExpr::EKind::String;
+        head.text = std::move(op);
+        e.items.push_back(std::move(head));
+        for (FTexExpr& a : args) e.items.push_back(std::move(a));
+        return e;
+    }
+    FTexExpr TxColor(float r, float g, float b)
+    {
+        FTexExpr e;
+        e.kind = FTexExpr::EKind::List;
+        e.items = {TxNum(r), TxNum(g), TxNum(b)};
+        return e;
+    }
+    FTexExpr TxSurface(FTexExpr color, FTexExpr height, FTexExpr rough = TxNum(1), FTexExpr metal = TxNum(1))
+    {
+        return TxList("surface", {std::move(color), std::move(height), std::move(rough), std::move(metal), TxNum(10), TxNum(1)});
+    }
+
+    std::string ReadAssetText(const char* relative)
+    {
+        std::ifstream file(Utilities::FileHelper::GetPlatformFilePath(relative), std::ios::binary);
+        std::stringstream text;
+        text << file.rdbuf();
+        return text.str();
+    }
+}
+
+TEST_CASE("Texture graphs compile, validate their nodes and share equal subtrees", "[Unit][ProceduralTexture][TextureGraph]")
+{
+    std::string error;
+    // The same fbm used twice compiles to one node.
+    const FTexExpr fbm = TxList("fbm", {TxNum(4), TxNum(4), TxNum(3), TxNum(1)});
+    const auto graph = FTextureGraph::Compile(
+        TxSurface(TxList("mul", {fbm, TxColor(1, 0.5f, 0.2f)}), TxList("band", {fbm, TxNum(0.5), TxNum(0.1)})), error);
+    REQUIRE(graph);
+    CHECK(error.empty());
+    // fbm, colour, mul, band, the shared constant 1 and surface.
+    CHECK(graph->NodeCount() == 6);
+    CHECK(graph->Canonical().find("(fbm 4 4 3 1)") != std::string::npos);
+
+    // Equal graphs share a canonical text (the content key).
+    const auto again = FTextureGraph::Compile(
+        TxSurface(TxList("mul", {fbm, TxColor(1, 0.5f, 0.2f)}), TxList("band", {fbm, TxNum(0.5), TxNum(0.1)})), error);
+    REQUIRE(again);
+    CHECK(again->Canonical() == graph->Canonical());
+
+    const auto fails = [&](const FTexExpr& root, const char* needle)
+    {
+        std::string message;
+        const auto bad = FTextureGraph::Compile(root, message);
+        INFO(message);
+        CHECK_FALSE(bad);
+        CHECK(message.find(needle) != std::string::npos);
+    };
+    fails(TxSurface(TxList("plaid", {}), TxNum(0)), "unknown node 'plaid'");
+    fails(TxSurface(TxList("fbm", {TxNum(4)}), TxNum(0)), "'fbm' takes");
+    fails(TxSurface(TxList("fbm", {TxNum(0), TxNum(4), TxNum(3), TxNum(0)}), TxNum(0)), "cellsU must be 1..256");
+    fails(TxSurface(TxList("cells", {TxNum(8), TxNum(0), TxList("x", {})}), TxNum(0)), "has no mode");
+    fails(TxList("fbm", {TxNum(4), TxNum(4), TxNum(3), TxNum(0)}), "root must be");
+    fails(TxSurface(TxSurface(TxNum(1), TxNum(0)), TxNum(0)), "only be the root");
+    fails(TxSurface(TxList("top", {fbm, TxNum(1.5)}), TxNum(0)), "fraction must be 0..1");
+}
+
+TEST_CASE("Texture graphs bake seamless, seeded, recolourable prints with exact coverage", "[Unit][ProceduralTexture][TextureGraph]")
+{
+    constexpr uint32_t size = ProceduralTexture::kDefaultSize;
+    std::string error;
+    // 30 % red blotches over blue, a blotch relief, glossy metal in the blotches.
+    const FTexExpr blotch = TxList("top", {TxList("fbm", {TxNum(5), TxNum(5), TxNum(4), TxNum(2)}), TxNum(0.3)});
+    FProceduralTexture texture;
+    texture.pattern = "graph";
+    texture.graph = FTextureGraph::Compile(
+        TxSurface(TxList("select", {blotch, TxList("palette", {TxNum(0), TxColor(1, 0, 0)}), TxColor(0, 0, 1)}),
+                  blotch, TxList("select", {blotch, TxNum(0.4), TxNum(1)}), TxList("select", {blotch, TxNum(1), TxNum(0)})),
+        error);
+    INFO(error);
+    REQUIRE(texture.graph);
+
+    const FProceduralMaps maps = ProceduralTexture::BakeMaps(texture, size);
+    CHECK(maps.albedo == ProceduralTexture::BakeMaps(texture, size).albedo);
+    CHECK(maps.hasNormal);
+    REQUIRE(maps.hasMra);
+    size_t red = 0;
+    size_t metalRed = 0;
+    for (size_t i = 0; i < maps.albedo.size(); i += 4)
+    {
+        if (maps.albedo[i] > 200 && maps.albedo[i + 2] < 50)
+        {
+            ++red;
+            metalRed += maps.mra[i + 2] > 240 && maps.mra[i + 1] < 110 ? 1 : 0;
+        }
+    }
+    const double total = static_cast<double>(size) * size;
+    CHECK(red / total == Catch::Approx(0.3).margin(0.005)); // coverage by rank, not by luck
+    CHECK(metalRed == red);
+
+    // Seamless: the step across the tile edge looks like any interior step.
+    const auto luma = [&](uint32_t x, uint32_t y)
+    {
+        return static_cast<double>(maps.albedo[(static_cast<size_t>(y) * size + x) * 4]);
+    };
+    double interior = 0.0;
+    double wrap = 0.0;
+    for (uint32_t y = 0; y < size; ++y)
+    {
+        for (uint32_t x = 0; x + 1 < size; ++x)
+            interior += std::abs(luma(x + 1, y) - luma(x, y)) + std::abs(luma(y, x + 1) - luma(y, x));
+        wrap += std::abs(luma(0, y) - luma(size - 1, y)) + std::abs(luma(y, 0) - luma(y, size - 1));
+    }
+    CHECK(wrap / (2.0 * size) < interior / (2.0 * size * (size - 1)) * 2.5 + 2.0);
+
+    // The palette node takes the author's colour; the seed re-rolls the noise.
+    FProceduralTexture green = texture;
+    green.palette = {{0, 1, 0}};
+    const std::vector<uint8_t> recoloured = ProceduralTexture::Bake(green, size);
+    size_t greenCount = 0;
+    for (size_t i = 0; i < recoloured.size(); i += 4) greenCount += recoloured[i + 1] > 200 && recoloured[i] < 50 ? 1 : 0;
+    CHECK(greenCount == red);
+    CHECK(green.Hash() != texture.Hash());
+    FProceduralTexture reseeded = texture;
+    reseeded.seed = 9;
+    CHECK(ProceduralTexture::Bake(reseeded, size) != maps.albedo);
+}
+
+TEST_CASE("gk_texgraph.scad prints load through gk_texture without engine changes", "[Unit][ScadRig][ProceduralTexture][TextureGraph]")
+{
+    const std::string library = ReadAssetText("assets/scad/lib/gk_texgraph.scad");
+    REQUIRE(library.find("function tx_surface") != std::string::npos);
+    const std::vector<std::string> recipes = {"tex_corrugated()", "tex_bark()", "tex_tigerstripe()", "tex_splinter()",
+                                              "tex_flagstone()", "tex_brickwall()"};
+    std::string source = library + "\nmodule bone_root() {\n";
+    for (size_t i = 0; i < recipes.size(); ++i)
+    {
+        source += fmt::format("    gk_material([{0}, 1, 1], roughness = 0.8, metalness = 0.9) gk_texture({1}, scale = 0.5)"
+                              " translate([{2}, 0, 0]) cube(0.3, center = true);\n",
+                              0.5 + 0.05 * static_cast<double>(i), recipes[i], i);
+    }
+    // A broken graph warns and leaves its geometry unprinted.
+    source += "    gk_texture(tx_surface(tx_fbm(0), 0)) translate([0, 2, 0]) cube(0.3, center = true);\n}\nbone_root();\n";
+
+    const SceneEvalResult evaluated = EvalRigScene(source);
+    CHECK(AnyWarningContains(evaluated.warnings, "cellsU must be 1..256"));
+    CHECK_FALSE(AnyWarningContains(evaluated.warnings, "unknown function"));
+    FRigAsset asset;
+    std::string rigError;
+    REQUIRE(FScadRigLoader::BuildRig(evaluated, {}, asset, rigError));
+    size_t graphs = 0;
+    for (const FRigPart& part : asset.parts)
+    {
+        for (const auto& texture : part.sectionTextures)
+        {
+            if (!texture || !texture->graph) continue;
+            ++graphs;
+            CHECK(texture->pattern == "graph");
+            const FProceduralMaps maps = ProceduralTexture::BakeMaps(*texture, ProceduralTexture::kDefaultSize);
+            CHECK(maps.hasNormal);
+        }
+    }
+    CHECK(graphs == recipes.size());
+}
+
 TEST_CASE("Camouflage prints use their palette and keep the historical layer mix", "[Unit][ProceduralTexture]")
 {
     constexpr uint32_t size = 128;
     // A two-colour palette makes every pixel nameable despite the light weave relief.
-    FProceduralTexture woodland;
-    woodland.pattern = "woodland";
+    FProceduralTexture woodland = PrintNamed("woodland");
     woodland.palette = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}, {0, 0, 0}};
     const std::vector<uint8_t> pixels = ProceduralTexture::Bake(woodland, size);
     std::array<size_t, 4> counts{};
@@ -1422,8 +1608,7 @@ TEST_CASE("Camouflage prints use their palette and keep the historical layer mix
     CHECK(counts[3] / total < 0.16);
 
     // DBDU: the black and white "chocolate chip" rocks are there.
-    FProceduralTexture desert;
-    desert.pattern = "desert";
+    FProceduralTexture desert = PrintNamed("desert");
     const std::vector<uint8_t> chips = ProceduralTexture::Bake(desert, 256);
     size_t black = 0;
     size_t white = 0;

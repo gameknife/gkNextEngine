@@ -7,7 +7,9 @@
 //   chipped / rust / worn 的色板是绝对颜色，所以外层材质是白色。
 // 第一排：布料 / 皮革；第二排：地表与路面；第三排：建筑；第四排：旧金属与木。
 // 每项：[图案, 颜色, scale, roughness, metalness]
+// 右侧 2×3：完全用 SCAD 写的节点图印花（gk_texgraph.scad），不改 C++。
 use <../../lib/gk_camera.scad>
+use <../../lib/gk_texgraph.scad>
 
 ROWS = [
     [["woodland", [1, 1, 1], 0.45], ["digital", [1, 1, 1], 0.45], ["desert", [1, 1, 1], 0.45],
@@ -36,6 +38,26 @@ for (r = [0 : len(ROWS) - 1], i = [0 : len(ROWS[r]) - 1])
     color([0.85, 0.85, 0.82]) translate([x - 0.34, 0.835, z - 0.56]) rotate([90, 0, 0])
         linear_extrude(height = 0.004) text(p[0], size = 0.08);
 }
+// SCAD 节点图印花：[名字, 节点图, 颜色, scale, roughness, metalness]
+GRAPHS = [
+    ["corrugated", tex_corrugated(), [1, 1, 1], 0.9, 0.8, 0.9],
+    ["flagstone", tex_flagstone(), [0.45, 0.43, 0.38], 1.2, 1, 0],
+    ["bark", tex_bark(), [0.36, 0.27, 0.19], 0.5, 1, 0],
+    ["brickwall", tex_brickwall(rows = 12, columns = 4, joint = 0.1), [0.36, 0.22, 0.16], 1.0, 1, 0],
+    ["tigerstripe", tex_tigerstripe(), [1, 1, 1], 0.45, 1, 0],
+    ["splinter", tex_splinter(), [1, 1, 1], 0.45, 1, 0],
+];
+for (k = [0 : len(GRAPHS) - 1])
+{
+    g = GRAPHS[k];
+    x = 2.0 + (k % 2) * 0.82;
+    z = 3.95 - (1 + floor(k / 2)) * 1.1;
+    gk_material(g[2], roughness = g[4], metalness = g[5]) gk_texture(g[1], scale = g[3])
+        translate([x, 0.85, z]) cube([0.72, 0.02, 0.95], center = true);
+    color([0.85, 0.85, 0.82]) translate([x - 0.34, 0.835, z - 0.56]) rotate([90, 0, 0])
+        linear_extrude(height = 0.004) text(g[0], size = 0.07);
+}
+
 // 地面平铺：地表图案的俯视投影
 for (i = [0 : len(ROWS[1]) - 1])
 {

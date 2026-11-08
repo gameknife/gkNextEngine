@@ -151,7 +151,7 @@ rotate → scale` 顺序最多各出现一次，终点是 kit 表里能解析到
 
 ### `gk_texture`：过程纹理印花
 
-`gk_texture(pattern, palette = [[r,g,b], ...], scale = 0.5, seed = 0, relief = 1) children();`
+`gk_texture(name | graph, palette = [[r,g,b], ...], scale = 0.5, seed = 0, relief = 1) children();`
 
 图案而不是形状的表面——迷彩、雨点纹、帆布织纹、皮革粒面——用几何去拼要上千个小片，还像贴纸。
 `gk_texture` 让加载器在 CPU 上烘焙一张可平铺的 sRGB 贴图（`Engine/Assets/Loaders/ProceduralTexture`），
@@ -165,15 +165,18 @@ rotate → scale` 顺序最多各出现一次，终点是 kit 表里能解析到
 - `gk_texture` 与 `gk_material` 可任意嵌套：内层 `gk_material` 保留外层印花，`gk_texture` 保留外层粗糙度 / 金属度。
 - `scale` 是一个平铺单元覆盖的 SCAD 长度（米），只影响 UV，不影响烘焙；色板和 seed 决定贴图内容，
   相同内容全进程只烘焙、上传一次（主线程同步上传，加载线程走异步 PNG 上传）。
-- 图案（`ProceduralTexture::PatternNames()`）：`woodland`（M81 式四色大斑块 + 黑色枝条）、`digital`
+- 印花名就是 `assets/scad/lib/gk_texgraph.scad` 里的 `tex_<名字>()`（见下一节，全部用 SCAD 写成，
+  C++ 里没有任何图案）：`woodland`（M81 式四色大斑块 + 黑色枝条）、`digital`
   （俄式"数码植物"像素迷彩）、`desert`（DBDU 六色"巧克力片"）、`flora`（VSR-98 竖向"西瓜皮"条纹）、
   `rain`（东德雨点纹）、`canvas` / `twill`（帆布 / 斜纹织纹）、`grain`（皮革粒面）；地表：`meadow`
   （草甸斑块）、`dirt`（土面与碎屑）、`gravel`（碎石）、`asphalt`（沥青：补丁与裂缝）、`rock`（岩层与
   裂隙）；建筑：`plaster`（抹灰：污斑、雨痕、局部剥落露出砖色）、`brick`（顺砖错缝）、`tiles`
   （陶瓦行与苔）、`planks`（竖板与节疤）、`stone`（乱石砌与地衣）、`concrete`（模板线与水渍）；
   旧金属与木：`chipped`（漆面剥落露钢）、`rust`（钢面锈斑、锈皮与流痕）、`worn`（发蓝 / 磷化涂层
-  磨穿处露出亮钢）、`woodgrain`（顺 +u 的连续年轮木纹，枪托、家具）。
-  不给 palette 时用该图案的默认色板；迷彩图案自带一层斜纹织纹明暗。未知图案会告警并按无印花处理。
+  磨穿处露出亮钢）、`woodgrain`（顺 +u 的连续年轮木纹，枪托、家具）；以及 `corrugated`（锈瓦楞铁）、
+  `flagstone`（不规则石板）、`bark`（树皮）、`brickwall`（参数化砖墙）、`tigerstripe` / `splinter`（迷彩）。
+  不给 palette 时用该印花 `tx_palette()` 的默认色；迷彩自带一层斜纹织纹明暗。未知名字会告警（列出全部
+  已知印花）并按无印花处理。
 - **地表 / 建筑印花是调制纹理**：默认色板接近白色，只做低对比、色阶化的明暗（剥落、苔、地衣这类
   第二色由 palette[1] 控制），乘在本色上。它们的作用是给块面加一点颗粒，造型仍由低模块面的明暗承担——
   单测守着这条（均值 > 160、标准差 < 40）。`scale` 取真实尺度：砖 ~1.2 m、抹灰 ~3 m、草地 ~9 m。
@@ -185,6 +188,42 @@ rotate → scale` 顺序最多各出现一次，终点是 kit 表里能解析到
   （单测、纯 CPU 工具）材质无贴图但 UV 与印花描述照常保留。
 - 样板场景：`assets/scad/source/others/gk_texture_patterns.scad`。
 
+#### 用 SCAD 写印花：纹理节点图（`gk_texgraph.scad`）
+
+**所有印花都是 SCAD 写的纹理节点图**，C++ 只负责求值、烘焙和上传。`gk_texture` 的第一个参数是印花名
+或一张节点图：`assets/scad/lib/gk_texgraph.scad` 的 `tx_*` 函数只返回列表数据（`tx_fbm(4)` →
+`["fbm", 4, 4, 4, 0]`），加载器把整棵树编译一次（`Engine/Assets/Loaders/TextureGraph`：校验每个节点、相同
+子树合并、规范文本作内容键），再在 C++ 里逐 texel 求值——写法在 SCAD，速度是原生的（一张 256² 约 50~100 ms）。
+**印花名**由 `Modules/ScadLoader/FScadTexturePrints` 解析：`gk_texture("plaster")` = 库里的 `tex_plaster()`，
+求值、编译一次后缓存，库文件改了自动重读（地形印花同样走这里）。在库里加 `function tex_foo() = tx_surface(...);`
+就多了 `gk_texture("foo")`；带参数的印花直接调用：`gk_texture(tex_brickwall(rows = 12))`。
+不做"每个 texel 调一次 SCAD 函数"：65536 次解释执行太慢，而且"按覆盖率切"这类整图运算表达不了。
+
+```scad
+use <../lib/gk_texgraph.scad>
+// 30% 覆盖的锈斑：锈是电介质、粗糙、凸起；其余是较光滑的钢。
+rusty = tx_top(tx_fbm(5, octaves = 4, seed = 1), 0.3);
+gk_material([1, 1, 1], roughness = 0.8, metalness = 0.9)
+    gk_texture(tx_surface(tx_select(rusty, tx_palette(1, [0.22, 0.08, 0.03]), tx_palette(0, [0.5, 0.5, 0.5])),
+                          height = rusty, rough = tx_select(rusty, 1, 0.5), metal = tx_select(rusty, 0, 1),
+                          tilt = 12), scale = 0.8) cube([1, 0.02, 1]);
+```
+
+- 根是 `tx_surface(color, height, rough, metal, tilt, blur)`：颜色、起伏高度（烘成法线，只看坡度）、
+  粗糙度系数、金属度系数（烘成 MRA）；`tilt` 是最陡 10% 像素的坡度（度），`blur` 是斜面模糊（texel）。
+  之后是同一条路：反照率 × 外层颜色、`relief`、`seed`、`palette`、切线、MRA 规则对所有印花都一样。
+- 每个节点求值成 RGB，标量三分量相同；数字和 `[r,g,b]` 自动广播，颜色与标量可混算。
+- 场：`tx_u/v`、`tx_fbm`（周期 fBm，`cells_v` 少则沿 u 拉长）、`tx_cells`（Voronoi：`dist`/`edge`/`rand`）、
+  `tx_course`（砌块：`fu`/`fv`/`edge`/`rand`/`row`/`col`）、`tx_weave`、`tx_stripes`、`tx_checker`、`tx_hash`、
+  `tx_palette(i, 默认色)`（可被 `gk_texture(palette = ...)` 换色）。运算：`abs/fract/invert/posterize/smoothstep/
+  step/band/pow/add/sub/mul/min/max/mix/select`，`tx_top(field, f)` 按排名精确切出 f 比例。域变换：
+  `tx_warp/tile/shear/pixelate/offset`。网格数都是整数，所以任何组合都无缝平铺。
+- 写错时加载告警，指出节点和期望参数，并带路径（`<- argument 2 of 'mul'`），几何照常无印花加载；
+  `undef` 参数单独提示（多半是参数没给或函数名写错）。注意本求值器没有 `is_undef()`，用 `x == undef`。
+- 样板见 `gk_texture_patterns.scad`。新印花写成 `gk_texgraph.scad` 里的 `tex_<名字>()`；单测会对库里
+  每个印花检查无缝、确定性、起伏坡度范围，地表 / 建筑印花还要守低对比（均值 > 160、标准差 < 40）。
+  真正需要新的**基础节点**（新噪声、新拼法）时才改 `TextureGraph.cpp`。
+
 #### 印花的表面：法线起伏与粗糙度 / 金属度
 
 印花不只有颜色。每个图案同时烘焙出**高度**（砖缝下凹、陶瓦逐行的楔形台阶、石块的鼓面、织物的纱线、
@@ -193,8 +232,8 @@ rotate → scale` 顺序最多各出现一次，终点是 kit 表里能解析到
 
 - **法线对所有材质生效**（包括 Lambertian 的布料、抹灰、地形）：加载器按盒投影写出与 UV 完全一致的
   切线（`ProceduralTexture::BoxProjectTangents`），所以每个面上的起伏都从正确的方向受光。
-- **强度按坡度定义，不按深度**：每个图案有一个"最陡的 10% 像素达到多少度"的目标（4°~15°，
-  `ReliefStyle()`），烘焙时归一化，最大 40°。`relief` 乘在这个坡度上，`relief = 0` 不生成法线贴图。
+- **强度按坡度定义，不按深度**：每个印花在 `tx_surface(tilt = ...)` 给出"最陡的 10% 像素达到多少度"
+  的目标（库里的印花在 4°~16°），烘焙时归一化，最大 40°。`relief` 乘在这个坡度上，`relief = 0` 不生成法线贴图。
   起伏只在块面**内部**加颗粒，造型仍由低模块面承担——这是保留 lowpoly 味道的关键，别把坡度调高。
   地形印花用 `relief = 0.7`（地面总在掠射角下远看）。
 - **MRA 系数乘在 `gk_material` 上**：粗糙度 = 材质粗糙度 × G，金属度 = 材质金属度 × B。所以材质的

@@ -403,7 +403,8 @@ tools/gnb/                   # Project CLI (Go) — see "gnb" section below
   - `HotReload.md` - Shader/script hot reload mechanics
   - `LDrawLoader.md` - LDraw model loading (used by MagicaLego/BrickPlayer)
   - `SCADLoader.md` - OpenSCAD (.scad) DSL loading (parser/evaluator/CSG via Manifold/text via FreeType);
-    `gk_material` PBR layering (fabric stays Lambertian) and `gk_texture` procedural prints (camouflage, weave, leather grain)
+    `gk_material` PBR layering (fabric stays Lambertian) and `gk_texture` procedural prints (albedo + relief normal + MRA);
+    new prints are written in SCAD as texture node graphs (`assets/scad/lib/gk_texgraph.scad`), no C++ change
   - `ScadTerrain.md` - gk_terrain low-poly walkable terrain (TERR spec, ter_* combinators, TerrainComponent)
   - `ScadAssetPlaybook.md` - SCAD 资产生成实战手册：kit → 场景 → 地形开放地图的流程、契约与验证闭环（新题材组件库/地图生成任务必读）
   - `../designs/geo-city-generation-design.md` - `gnb geo`：从 SRTM 高程 + OpenStreetMap 生成真实

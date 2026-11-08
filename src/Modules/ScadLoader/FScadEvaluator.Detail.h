@@ -11,6 +11,7 @@
 #include "Modules/ScadLoader/FScadGeometry.h"
 #include "Modules/ScadLoader/FScadTerrain.h"
 #include "Modules/ScadLoader/FScadTess.h"
+#include "Modules/ScadLoader/FScadTexturePrints.h"
 #include "Modules/ScadLoader/FScadText.h"
 
 #include <algorithm>
@@ -813,26 +814,38 @@ namespace Assets::Scad
                 }
                 if (name == "gk_texture")
                 {
-                    // gk_texture(pattern, palette = [[r,g,b], ...], scale = 0.5, seed = 0, relief = 1)
+                    // gk_texture(pattern | graph, palette = [[r,g,b], ...], scale = 0.5, seed = 0, relief = 1)
                     // A procedural print (ProceduralTexture.hpp) on the children: the
                     // loader box-projects UVs in object space and the material samples
                     // the bake; final albedo = enclosing color x print. The print also
                     // carries its relief (normal map, x relief; 0 = flat) and its
                     // roughness/metalness factors, which multiply gk_material()'s.
+                    // A name is a print from the SCAD library (tex_<name>() in
+                    // gk_texgraph.scad); a list is a graph written inline. Either
+                    // way the print is a texture graph, compiled once.
                     const Value patternValue = Arg(inst, "pattern", 0);
-                    if (patternValue.type != Value::Type::Str ||
-                        !ProceduralTexture::IsKnownPattern(patternValue.str))
+                    std::shared_ptr<const FTextureGraph> graph;
+                    std::string graphError;
+                    if (patternValue.IsVec())
                     {
-                        std::string known;
-                        for (std::string_view patternName : ProceduralTexture::PatternNames())
-                        {
-                            known += known.empty() ? std::string(patternName) : ", " + std::string(patternName);
-                        }
-                        Warn("gk_texture", "gk_texture(): unknown pattern '" + patternValue.str + "' (known: " + known + ")");
+                        graph = FTextureGraph::Compile(ToTexExpr(patternValue), graphError);
+                    }
+                    else if (patternValue.type == Value::Type::Str)
+                    {
+                        graph = ResolveTexturePrint(patternValue.str, graphError);
+                    }
+                    else
+                    {
+                        graphError = "expects a print name or a texture graph (tx_surface(...))";
+                    }
+                    if (!graph)
+                    {
+                        Warn("gk_texture", "gk_texture(): " + graphError);
                         return EvalScope(inst.children, xform, color, hasColor);
                     }
                     auto texture = std::make_shared<FProceduralTexture>();
-                    texture->pattern = patternValue.str;
+                    texture->pattern = patternValue.type == Value::Type::Str ? patternValue.str : std::string("graph");
+                    texture->graph = std::move(graph);
                     const Value paletteValue = Arg(inst, "palette", 1);
                     if (paletteValue.IsVec())
                     {

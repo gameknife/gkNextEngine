@@ -11,38 +11,45 @@ namespace Assets::Scad::EvalDetail
         // low-poly read, the print adds the grain of grass, earth, stone.
         FProceduralTextureRef TerrainPrint(const std::string& materialName)
         {
-            static const std::map<std::string, FProceduralTextureRef> prints = []
+            struct FGroundPrint
             {
-                const auto make = [](const char* pattern, float scale, uint32_t seed)
-                {
-                    auto texture = std::make_shared<FProceduralTexture>();
-                    texture->pattern = pattern;
-                    texture->scale = scale;
-                    texture->seed = seed;
-                    // Ground is seen at grazing angles over long distances: a
-                    // softer relief than the same print on a wall or an item.
-                    texture->relief = 0.7f;
-                    return FProceduralTextureRef(texture);
-                };
-                std::map<std::string, FProceduralTextureRef> map;
-                map["terrain_grass"] = make("meadow", 9.0f, 1);
-                map["terrain_grass_dark"] = make("meadow", 9.0f, 2);
-                map["terrain_dry_grass"] = make("meadow", 9.0f, 3);
-                map["terrain_sand"] = make("dirt", 4.0f, 4);
-                map["terrain_rock"] = make("rock", 6.0f, 5);
-                map["terrain_rock_high"] = make("rock", 6.0f, 6);
-                map["terrain_bed"] = make("gravel", 3.0f, 7);
-                map["terrain_road"] = make("dirt", 5.0f, 8);       // ploughland and farmyards
-                map["terrain_pad"] = make("stone", 1.6f, 9);       // cobbled squares and yards
-                map["terrain_road_verge"] = make("dirt", 4.0f, 10);
-                map["terrain_road_asphalt"] = make("asphalt", 6.0f, 11);
-                map["terrain_road_gravel"] = make("gravel", 2.5f, 12);
-                map["terrain_road_track"] = make("dirt", 3.5f, 13);
-                map["terrain_road_strip"] = make("meadow", 6.0f, 14);
-                return map;
-            }();
-            const auto found = prints.find(materialName);
-            return found == prints.end() ? nullptr : found->second;
+                const char* print; // a tex_<print>() of gk_texgraph.scad
+                float scale;
+                uint32_t seed;
+            };
+            static const std::map<std::string, FGroundPrint, std::less<>> table = {
+                {"terrain_grass", {"meadow", 9.0f, 1}},
+                {"terrain_grass_dark", {"meadow", 9.0f, 2}},
+                {"terrain_dry_grass", {"meadow", 9.0f, 3}},
+                {"terrain_sand", {"dirt", 4.0f, 4}},
+                {"terrain_rock", {"rock", 6.0f, 5}},
+                {"terrain_rock_high", {"rock", 6.0f, 6}},
+                {"terrain_bed", {"gravel", 3.0f, 7}},
+                {"terrain_road", {"dirt", 5.0f, 8}},       // ploughland and farmyards
+                {"terrain_pad", {"stone", 1.6f, 9}},       // cobbled squares and yards
+                {"terrain_road_verge", {"dirt", 4.0f, 10}},
+                {"terrain_road_asphalt", {"asphalt", 6.0f, 11}},
+                {"terrain_road_gravel", {"gravel", 2.5f, 12}},
+                {"terrain_road_track", {"dirt", 3.5f, 13}},
+                {"terrain_road_strip", {"meadow", 6.0f, 14}},
+            };
+            const auto found = table.find(materialName);
+            if (found == table.end()) return nullptr;
+            // Resolved per call (the library caches the graph), so editing the
+            // print library reaches the terrain on the next rebuild.
+            std::string error;
+            auto texture = MakeTexturePrint(found->second.print, error);
+            if (!texture)
+            {
+                SPDLOG_WARN("SCAD: terrain print {}: {}", found->second.print, error);
+                return nullptr;
+            }
+            texture->scale = found->second.scale;
+            texture->seed = found->second.seed;
+            // Ground is seen at grazing angles over long distances: a softer
+            // relief than the same print on a wall or an item.
+            texture->relief = 0.7f;
+            return texture;
         }
     }
 

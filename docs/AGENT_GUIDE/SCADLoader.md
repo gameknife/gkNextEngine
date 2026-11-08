@@ -151,7 +151,7 @@ rotate → scale` 顺序最多各出现一次，终点是 kit 表里能解析到
 
 ### `gk_texture`：过程纹理印花
 
-`gk_texture(pattern, palette = [[r,g,b], ...], scale = 0.5, seed = 0) children();`
+`gk_texture(pattern, palette = [[r,g,b], ...], scale = 0.5, seed = 0, relief = 1) children();`
 
 图案而不是形状的表面——迷彩、雨点纹、帆布织纹、皮革粒面——用几何去拼要上千个小片，还像贴纸。
 `gk_texture` 让加载器在 CPU 上烘焙一张可平铺的 sRGB 贴图（`Engine/Assets/Loaders/ProceduralTexture`），
@@ -167,12 +167,50 @@ rotate → scale` 顺序最多各出现一次，终点是 kit 表里能解析到
   相同内容全进程只烘焙、上传一次（主线程同步上传，加载线程走异步 PNG 上传）。
 - 图案（`ProceduralTexture::PatternNames()`）：`woodland`（M81 式四色大斑块 + 黑色枝条）、`digital`
   （俄式"数码植物"像素迷彩）、`desert`（DBDU 六色"巧克力片"）、`flora`（VSR-98 竖向"西瓜皮"条纹）、
-  `rain`（东德雨点纹）、`canvas` / `twill`（帆布 / 斜纹织纹）、`grain`（皮革粒面）。不给 palette 时用
-  该图案的历史默认色板；迷彩图案自带一层斜纹织纹明暗。未知图案会告警并按无印花处理。
+  `rain`（东德雨点纹）、`canvas` / `twill`（帆布 / 斜纹织纹）、`grain`（皮革粒面）；地表：`meadow`
+  （草甸斑块）、`dirt`（土面与碎屑）、`gravel`（碎石）、`asphalt`（沥青：补丁与裂缝）、`rock`（岩层与
+  裂隙）；建筑：`plaster`（抹灰：污斑、雨痕、局部剥落露出砖色）、`brick`（顺砖错缝）、`tiles`
+  （陶瓦行与苔）、`planks`（竖板与节疤）、`stone`（乱石砌与地衣）、`concrete`（模板线与水渍）；
+  旧金属与木：`chipped`（漆面剥落露钢）、`rust`（钢面锈斑、锈皮与流痕）、`worn`（发蓝 / 磷化涂层
+  磨穿处露出亮钢）、`woodgrain`（顺 +u 的连续年轮木纹，枪托、家具）。
+  不给 palette 时用该图案的默认色板；迷彩图案自带一层斜纹织纹明暗。未知图案会告警并按无印花处理。
+- **地表 / 建筑印花是调制纹理**：默认色板接近白色，只做低对比、色阶化的明暗（剥落、苔、地衣这类
+  第二色由 palette[1] 控制），乘在本色上。它们的作用是给块面加一点颗粒，造型仍由低模块面的明暗承担——
+  单测守着这条（均值 > 160、标准差 < 40）。`scale` 取真实尺度：砖 ~1.2 m、抹灰 ~3 m、草地 ~9 m。
+  建筑 kit 的做法见 `kit_bohemia.scad` 的 `bh_m_*`：多孔材料（抹灰、砖、石、木、陶瓦、水泥板）一律
+  `roughness = 1` + 印花，只有油漆、釉面、玻璃、水、金属保留高光。地形的 `gk_terrain(TERR, detail=true)`
+  自动给各 biome 配印花，见 [ScadTerrain](ScadTerrain.md)。
 - 带印花的几何单独成一个材质分段（计入每部件 16 段的上限）；ScadRig 部件把它记在
   `FRigPart::sectionTextures`，`SceneBuilder::AddRigSectionMaterial` 取贴图。没有 GPU 贴图池时
   （单测、纯 CPU 工具）材质无贴图但 UV 与印花描述照常保留。
 - 样板场景：`assets/scad/source/others/gk_texture_patterns.scad`。
+
+#### 印花的表面：法线起伏与粗糙度 / 金属度
+
+印花不只有颜色。每个图案同时烘焙出**高度**（砖缝下凹、陶瓦逐行的楔形台阶、石块的鼓面、织物的纱线、
+抹灰剥落的凹坑……）和**粗糙度 / 金属度系数**，加载器一起生成三张 256² 贴图：反照率（sRGB）、
+切线空间法线（线性）、glTF 式 MRA（线性，G = 粗糙度系数，B = 金属度系数）。
+
+- **法线对所有材质生效**（包括 Lambertian 的布料、抹灰、地形）：加载器按盒投影写出与 UV 完全一致的
+  切线（`ProceduralTexture::BoxProjectTangents`），所以每个面上的起伏都从正确的方向受光。
+- **强度按坡度定义，不按深度**：每个图案有一个"最陡的 10% 像素达到多少度"的目标（4°~15°，
+  `ReliefStyle()`），烘焙时归一化，最大 40°。`relief` 乘在这个坡度上，`relief = 0` 不生成法线贴图。
+  起伏只在块面**内部**加颗粒，造型仍由低模块面承担——这是保留 lowpoly 味道的关键，别把坡度调高。
+  地形印花用 `relief = 0.7`（地面总在掠射角下远看）。
+- **MRA 系数乘在 `gk_material` 上**：粗糙度 = 材质粗糙度 × G，金属度 = 材质金属度 × B。所以材质的
+  粗糙度是印花能达到的**最粗糙**值，金属度是**最大**金属度。只有 Mixture 材质（非 roughness=1 且
+  metalness=0）读 MRA；全图系数都是 1 的图案不生成 MRA。有系数变化的图案：`grain`（褶皱间的磨光面
+  更亮）、`gravel` / `asphalt` / `stone` / `tiles`（石面、补丁、陶瓦比缝隙光滑）、`woodgrain`（清漆
+  填平的早材更光滑）、`worn`（磨穿的亮钢最光滑，全部是金属）、`chipped` / `rust`（漆面、锈是电介质，
+  露出的钢是金属且更光滑）。
+- **`chipped` / `rust` / `worn` 的色板是绝对颜色**（漆和钢的差别在金属度，不只是色调），外层材质用
+  白色：`gk_material([1,1,1], roughness = 0.72, metalness = 0.9) gk_texture("chipped", palette = [漆色, 钢色], scale = 0.3)`。
+  用例：`ndh_paint`（钢盔哑光漆）、`cw_m_blued` / `cw_m_park`（发蓝 / 磷化钢）、`cw_m_wood` /
+  `nd_m_birch` / `nd_m_walnut`（木件）、`bh_m_iron`（锈铁）。
+- 着色器侧（`SceneSampling.FetchGBuffer`）：贴图无 mip，掠射角下一个像素覆盖很多 texel，所以扰动按
+  `|N·V|` 淡出（地面上这近似于随距离淡出，抑制摩尔纹）；扰动后的法线若背向视线会被掰回，避免黑点。
+- 贴图名带像素内容哈希：加载线程的上传路径按名字在磁盘缓存 KTX，改了烘焙代码而参数没变时，
+  名字随像素变化，不会读回旧图。
 
 ## 相机机位（虚拟点）
 

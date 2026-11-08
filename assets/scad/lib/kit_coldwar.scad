@@ -1695,14 +1695,16 @@ module cw_veh_wreck(seed = 0)
 // 近战武器（刀 / 撬棍 / 斧）同理：cw_wpn_<id>_held + 物资名 cw_item_<id> 的平躺版本。
 
 // ---- 材质 ----
-module cw_m_blued()  { gk_material([0.17, 0.175, 0.19], roughness = 0.32, metalness = 0.85) children(); } // 发蓝钢：枪管、枪机座
-module cw_m_park()   { gk_material([0.21, 0.21, 0.20], roughness = 0.55, metalness = 0.6) children(); }   // 磷化哑光钢：冲压机匣
+// 发蓝 / 磷化钢带 gk_texture("worn")：涂层磨穿处露出更亮、更光滑的钢（印花自带颜色与金属度/粗糙度系数，
+// 所以 gk_material 用白色）；木件用 "woodgrain"：顺 +u 的年轮、清漆填平的早材更光滑。
+module cw_m_blued()  { gk_material([1, 1, 1], roughness = 0.32, metalness = 0.85) gk_texture("worn", palette = [[0.17, 0.175, 0.19], [0.50, 0.50, 0.52]], scale = 0.12) children(); } // 发蓝钢：枪管、枪机座
+module cw_m_park()   { gk_material([1, 1, 1], roughness = 0.55, metalness = 0.6) gk_texture("worn", palette = [[0.21, 0.21, 0.20], [0.48, 0.48, 0.48]], scale = 0.12, seed = 1) children(); }   // 磷化哑光钢：冲压机匣
 module cw_m_bright() { gk_material([0.64, 0.64, 0.65], roughness = 0.2, metalness = 1.0) children(); }     // 磨亮钢：枪机、刃口
 module cw_m_silver() { gk_material([0.55, 0.55, 0.54], roughness = 0.28, metalness = 0.95) children(); }   // 白钢 / 镀镍机匣
 module cw_m_etch()   { gk_material([0.34, 0.34, 0.33], roughness = 0.6, metalness = 0.9) children(); }     // 雕花面（压暗）
 module cw_m_hole()   { gk_material([0.025, 0.025, 0.028], roughness = 0.75, metalness = 0.2) children(); } // 孔洞 / 内腔
 module cw_m_anod()   { gk_material([0.05, 0.052, 0.056], roughness = 0.42, metalness = 0.5) children(); }  // 黑色阳极氧化：瞄具
-module cw_m_wood(c)  { gk_material(c, roughness = 0.36, metalness = 0) children(); }                         // 清漆木
+module cw_m_wood(c)  { gk_material(c, roughness = 0.36, metalness = 0) gk_texture("woodgrain", scale = 0.25) children(); } // 清漆木
 module cw_m_check(c) { gk_material(c, roughness = 0.85, metalness = 0) children(); }                         // 握把网纹
 module cw_m_bake(c)  { gk_material(c, roughness = 0.3, metalness = 0) children(); }                          // 胶木：AK-74 弹匣、握片
 module cw_m_rubber(c = [0.035, 0.035, 0.035]) { gk_material(c, roughness = 0.9, metalness = 0) children(); }

@@ -102,6 +102,7 @@ namespace Assets::Scad
         std::string materialName;
         std::vector<glm::dvec3> tris; // triangle soup (3N), local to the owning scene node
         bool faceted = false; // skip vertex-normal smoothing (terrain)
+        bool terrainDecal = false; // draped overlay (road ribbons): own node, no collision / raycast
         bool terrainWater = false; // translucent terrain water surface (split to a
                                    // dedicated node, no raycast visibility)
     };

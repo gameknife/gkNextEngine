@@ -244,9 +244,12 @@ namespace Assets
                             Scad::ScadComputeSmoothNormals(localPos, options_.smoothAngleDegrees);
                         // Bone-local projection: a print on a sleeve stays put as the arm swings.
                         std::vector<glm::vec2> uvs(localPos.size(), glm::vec2(0.0f));
+                        std::vector<glm::vec4> tangents(localPos.size(), glm::vec4(1, 0, 0, 1));
                         if (bucket.texture)
                         {
                             ProceduralTexture::BoxProjectUVs(bucket.tris, bucket.texture->scale, uvs);
+                            ProceduralTexture::BoxProjectTangents(
+                                bucket.tris, glm::mat3(Scad::ScadToWorldBasis(1.0)), normals, tangents);
                         }
 
                         const uint32_t vertexOffset = static_cast<uint32_t>(vertices.size());
@@ -254,7 +257,7 @@ namespace Assets
                         indices.reserve(indices.size() + localPos.size());
                         for (uint32_t i = 0; i < static_cast<uint32_t>(localPos.size()); ++i)
                         {
-                            vertices.push_back(Vertex{localPos[i], normals[i], glm::vec4(1, 0, 0, 1),
+                            vertices.push_back(Vertex{localPos[i], normals[i], tangents[i],
                                                       uvs[i], sectionIndex});
                             indices.push_back(vertexOffset + i);
                         }

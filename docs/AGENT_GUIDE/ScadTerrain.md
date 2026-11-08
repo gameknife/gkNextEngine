@@ -23,6 +23,7 @@ gnb shot --scene assets/scad/proc/terrain_layout_demo.scad   # 地形 + kit 贴�
 ```scad
 gk_terrain(TERR);                        // module：生成地形网格 + 半透明水面
 gk_terrain(TERR, water=[c|undef, roughness, metalness]);  // 可选：只给水面 gk_material 材质
+gk_terrain(TERR, detail=true);           // 可选：细节外观（地表印花 + 平滑道路带）
 h    = gk_terrain_height(TERR, x, y);    // 纯函数：地表高度（与渲染网格逐三角形一致）
 info = gk_terrain_info(TERR, x, y);      // [height, slopeDeg, water(0/1), biomeId]
 ```
@@ -31,6 +32,24 @@ info = gk_terrain_info(TERR, x, y);      // [height, slopeDeg, water(0/1), biome
   水色；不传时水面仍是旧的哑光 Lambertian。低 roughness（0.02–0.08）在路径追踪下给出 Fresnel 天空
   与岸线反射；水体色要压暗（反照率 ~0.1），亮度交给反射。`gnb geo expedition` 的 recipe 用
   `gameplay.water: {color, roughness, metalness}` 输出这个参数。
+- `detail=true` 同样是渲染选择、不进 TERR（高度/信息查询、碰撞、缓存键都不变），不传时外观与以前
+  逐字节一致，已发布的地图不受影响。打开后：
+  - **地表印花**：每个 biome 按材质名配一张 `gk_texture` 调制印花（草地 `meadow`、沙土 `dirt`、岩石
+    `rock`、河床 `gravel`、耕地 `dirt`、广场 pad `stone`），表在 `FScadEvaluator.Geometry.cpp`
+    `TerrainPrint()`。印花低对比、色阶化（单测守着均值 > 160、标准差 < 40），块面明暗仍然决定造型，
+    保留低模味道；不要为了"更真实"去拉高对比。印花也带法线起伏（草丛、土块、石面鼓起、岩层台阶），
+    地形统一用 `relief = 0.7`，且着色器在掠射角下淡出起伏——远处地面不会出摩尔纹，详见
+    [SCADLoader](SCADLoader.md) 的"印花的表面"。
+  - **道路带**：道路 feature 压出的路基面不再整格涂成路色（那会顺着网格走成横平竖直、斜走成锯齿），
+    而是保留原生地表（`FTerrainData::roadBedGeom`）；路面改由沿 Chaikin 平滑中心线生成的带状贴花
+    （`roadDecalGeom`）画出：路肩 + 路面（宽 ≥ 5.5 m 沥青、≥ 3.6 m 碎石、更窄是两道车辙中间夹草带的
+    土路），边缘用低频 1D 噪声轻微起伏，两端是圆头。每个带状三角形都按下面的地形三角面裁剪，贴在
+    面上抬高 2–6 cm，不穿插也不悬空；外缘压到面下 1 cm，与地面交成一条干净的线（抬起的边沿在视平线
+  上会露出阴影缝，读成一道黑边）；层按抬高排序（路肩 < 土路 < 碎石 < 沥青 < 草带），路口处
+    等级高的路面自然盖住低的。遇水格断开（桥面负责过河）。
+  - 贴花在 loader 里拆到 `<name>__decals` 子节点，rayCast 不可见、无碰撞——行走、寻路、草地生长
+    仍以路基（压平的地形）为准。
+  - `gnb geo expedition` 的 recipe 用 `gameplay.terrainDetail: true` 输出这个参数。
 
 TERR 编码（compose 自动生成，手写参考 `assets/scad/proc/terrain_demo.scad` 头注释）：
 

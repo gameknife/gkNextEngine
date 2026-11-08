@@ -4,6 +4,48 @@
 
 namespace Assets::Scad::EvalDetail
 {
+    namespace
+    {
+        // Ground prints of the detailed terrain look, by terrain material name.
+        // Low-contrast, posterized modulation: the flat-shaded facets keep the
+        // low-poly read, the print adds the grain of grass, earth, stone.
+        FProceduralTextureRef TerrainPrint(const std::string& materialName)
+        {
+            static const std::map<std::string, FProceduralTextureRef> prints = []
+            {
+                const auto make = [](const char* pattern, float scale, uint32_t seed)
+                {
+                    auto texture = std::make_shared<FProceduralTexture>();
+                    texture->pattern = pattern;
+                    texture->scale = scale;
+                    texture->seed = seed;
+                    // Ground is seen at grazing angles over long distances: a
+                    // softer relief than the same print on a wall or an item.
+                    texture->relief = 0.7f;
+                    return FProceduralTextureRef(texture);
+                };
+                std::map<std::string, FProceduralTextureRef> map;
+                map["terrain_grass"] = make("meadow", 9.0f, 1);
+                map["terrain_grass_dark"] = make("meadow", 9.0f, 2);
+                map["terrain_dry_grass"] = make("meadow", 9.0f, 3);
+                map["terrain_sand"] = make("dirt", 4.0f, 4);
+                map["terrain_rock"] = make("rock", 6.0f, 5);
+                map["terrain_rock_high"] = make("rock", 6.0f, 6);
+                map["terrain_bed"] = make("gravel", 3.0f, 7);
+                map["terrain_road"] = make("dirt", 5.0f, 8);       // ploughland and farmyards
+                map["terrain_pad"] = make("stone", 1.6f, 9);       // cobbled squares and yards
+                map["terrain_road_verge"] = make("dirt", 4.0f, 10);
+                map["terrain_road_asphalt"] = make("asphalt", 6.0f, 11);
+                map["terrain_road_gravel"] = make("gravel", 2.5f, 12);
+                map["terrain_road_track"] = make("dirt", 3.5f, 13);
+                map["terrain_road_strip"] = make("meadow", 6.0f, 14);
+                return map;
+            }();
+            const auto found = prints.find(materialName);
+            return found == prints.end() ? nullptr : found->second;
+        }
+    }
+
     GeomList Evaluator::MakeGeom(TriSoup&& objSpace, const glm::dmat4& xform, const glm::dvec4& color, bool hasColor)
     {
         if (objSpace.empty())
@@ -200,33 +242,59 @@ namespace Assets::Scad::EvalDetail
             Warn("gk_terrain.water", "gk_terrain water must be [colour|undef, roughness, metalness]; ignored");
         }
 
+        // detail = true is the textured look, also a rendering choice outside
+        // TERR: ground prints per biome, road beds keep their natural surface,
+        // and roads are drawn as smooth draped ribbons instead of a staircase
+        // of road-coloured cells. Without it the terrain renders as before.
+        const bool detail = Arg(inst, "detail", -1).IsTruthy();
+
         GeomList out;
-        auto emit = [&](const FTerrainData::ColoredTris& src, bool water)
+        auto emit = [&](const FTerrainData::ColoredTris& src, bool water, bool decal, const glm::vec4* colorOverride,
+                        const char* nameOverride)
         {
             if (src.tris.empty())
                 return;
             TriSoup soup = src.tris; // MakeGeom consumes; cached data stays intact
-            const glm::dvec4 surfaceColor = water && hasWaterColor ? waterColor : glm::dvec4(src.color);
+            const glm::dvec4 surfaceColor = water && hasWaterColor ? waterColor
+                                          : colorOverride ? glm::dvec4(*colorOverride) : glm::dvec4(src.color);
+            const std::string materialName = nameOverride ? std::string(nameOverride) : src.materialName;
             GeomList part = MakeGeom(std::move(soup), xform, surfaceColor, true);
             for (ColoredSoup& cs : part)
             {
                 cs.faceted = true;
                 cs.terrainWater = water;
-                cs.materialName = src.materialName;
+                cs.terrainDecal = decal;
+                cs.materialName = materialName;
                 if (water && hasWaterMaterial)
                 {
                     cs.material = waterMaterial;
+                }
+                else if (detail && !water)
+                {
+                    cs.material.texture = TerrainPrint(materialName);
                 }
             }
             AppendMove(out, std::move(part));
         };
         for (const FTerrainData::ColoredTris& land : data->landGeom)
         {
-            emit(land, false);
+            emit(land, false, false, nullptr, nullptr);
+        }
+        for (const FTerrainData::ColoredTris& bed : data->roadBedGeom)
+        {
+            if (detail) emit(bed, false, false, nullptr, nullptr);
+            else emit(bed, false, false, &data->roadColor, "terrain_road");
+        }
+        if (detail)
+        {
+            for (const FTerrainData::ColoredTris& ribbon : data->roadDecalGeom)
+            {
+                emit(ribbon, false, true, nullptr, nullptr);
+            }
         }
         for (const FTerrainData::ColoredTris& water : data->waterGeom)
         {
-            emit(water, true);
+            emit(water, true, false, nullptr, nullptr);
         }
 
         // Record the terrain payload for the loader (TerrainComponent). Skip

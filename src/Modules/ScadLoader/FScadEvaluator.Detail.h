@@ -40,6 +40,7 @@ namespace Assets::Scad
             bool hasColor = false;
             bool faceted = false; // terrain: keep flat shading in the loader
             bool terrainWater = false; // terrain water surface (dedicated node)
+            bool terrainDecal = false; // draped terrain overlay, e.g. road ribbons (dedicated node)
             std::string materialName;
             std::string groupName;
             uint64_t groupInstanceId = 0;
@@ -576,7 +577,10 @@ namespace Assets::Scad
                 for (const ColoredSoup& cs : geom)
                 {
                     const glm::vec4 c = cs.hasColor ? glm::vec4(cs.color) : glm::vec4(0.78f, 0.78f, 0.78f, 1.0f);
-                    SceneMeshBucket& bucket = owner->meshes[QuantizeMaterial(c, cs.material)];
+                    // Overlays never share a bucket with solid geometry of the
+                    // same material: they go to a node without collision.
+                    const uint64_t key = QuantizeMaterial(c, cs.material) ^ (cs.terrainDecal ? 0x6DECA1D0C0FFEE01ULL : 0ULL);
+                    SceneMeshBucket& bucket = owner->meshes[key];
                     bucket.color = c;
                     bucket.material = cs.material;
                     if (bucket.materialName.empty() && !cs.materialName.empty())
@@ -585,6 +589,7 @@ namespace Assets::Scad
                     }
                     bucket.faceted = bucket.faceted || cs.faceted;
                     bucket.terrainWater = bucket.terrainWater || cs.terrainWater;
+                    bucket.terrainDecal = bucket.terrainDecal || cs.terrainDecal;
                     bucket.tris.insert(bucket.tris.end(), cs.soup.begin(), cs.soup.end());
                     AddTriangleCount(cs.soup.size() / 3);
                 }
@@ -808,10 +813,12 @@ namespace Assets::Scad
                 }
                 if (name == "gk_texture")
                 {
-                    // gk_texture(pattern, palette = [[r,g,b], ...], scale = 0.5, seed = 0)
+                    // gk_texture(pattern, palette = [[r,g,b], ...], scale = 0.5, seed = 0, relief = 1)
                     // A procedural print (ProceduralTexture.hpp) on the children: the
                     // loader box-projects UVs in object space and the material samples
-                    // the bake; final albedo = enclosing color x print.
+                    // the bake; final albedo = enclosing color x print. The print also
+                    // carries its relief (normal map, x relief; 0 = flat) and its
+                    // roughness/metalness factors, which multiply gk_material()'s.
                     const Value patternValue = Arg(inst, "pattern", 0);
                     if (patternValue.type != Value::Type::Str ||
                         !ProceduralTexture::IsKnownPattern(patternValue.str))
@@ -840,6 +847,7 @@ namespace Assets::Scad
                     }
                     texture->scale = static_cast<float>(std::clamp(Arg(inst, "scale", 2).AsNumber(0.5), 0.005, 1000.0));
                     texture->seed = static_cast<uint32_t>(std::max(0.0, Arg(inst, "seed", 3).AsNumber(0.0)));
+                    texture->relief = static_cast<float>(std::clamp(Arg(inst, "relief", 4).AsNumber(1.0), 0.0, 3.0));
                     ScadMaterialProperties material =
                         materialPropertiesStack_.empty() ? ScadMaterialProperties{} : materialPropertiesStack_.back();
                     material.texture = std::move(texture);

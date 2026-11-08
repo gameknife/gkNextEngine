@@ -23,6 +23,10 @@ type ExpeditionGameplay struct {
 	Palette string `json:"palette,omitempty"`
 	// Water surface material; nil keeps the palette's matte water.
 	Water *ExpeditionWater `json:"water,omitempty"`
+	// Textured terrain look: gk_terrain(TERR, detail=true) prints ground
+	// textures per biome and draws roads as smooth draped ribbons instead of
+	// a staircase of road-coloured cells. Off keeps the flat-colour terrain.
+	TerrainDetail bool `json:"terrainDetail,omitempty"`
 }
 
 // ExpeditionWater is the gk_material() triple for the terrain water slab:
@@ -176,7 +180,7 @@ func ExportExpedition(repoRoot, recipePath string, publish bool) (string, Expedi
 	if len(report.Landcover) > 0 {
 		landcover = "PCG_LANDCOVER"
 	}
-	fmt.Fprintf(&out, "TERR=[\"gkterr1\",GEO_TERR[1],GEO_TERR[2],GEO_TERR[3],GEO_TERR[4],GEO_TERR[5],GEO_TERR[6],concat(GEO_TERR[7],PCG_PATHS,nd_pcg_terrain(PCG_SITES,PCG_SPAWNS,PCG_EXTRACTIONS,%d,%s))];\ngk_terrain(TERR%s);\nfunction nd_ground(x,y)=gk_terrain_height(TERR,x,y);\n", recipe.Seed, landcover, expeditionWaterArg(recipe))
+	fmt.Fprintf(&out, "TERR=[\"gkterr1\",GEO_TERR[1],GEO_TERR[2],GEO_TERR[3],GEO_TERR[4],GEO_TERR[5],GEO_TERR[6],concat(GEO_TERR[7],PCG_PATHS,nd_pcg_terrain(PCG_SITES,PCG_SPAWNS,PCG_EXTRACTIONS,%d,%s))];\ngk_terrain(TERR%s);\nfunction nd_ground(x,y)=gk_terrain_height(TERR,x,y);\n", recipe.Seed, landcover, expeditionTerrainArgs(recipe))
 	if err = writeExpeditionBridges(&out, &ir, grid, recipe.Seed); err != nil {
 		return "", report, err
 	}
@@ -258,6 +262,16 @@ func expeditionWaterArg(recipe ExpeditionRecipe) string {
 		colour = "[" + strings.Join(parts, ",") + "]"
 	}
 	return fmt.Sprintf(",water=[%s,%s,%s]", colour, unit(w.Roughness), unit(w.Metalness))
+}
+
+// Optional terrain look argument for gk_terrain; "" keeps the flat-colour
+// terrain, so recipes without terrainDetail regenerate byte-identically.
+func expeditionTerrainArgs(recipe ExpeditionRecipe) string {
+	args := expeditionWaterArg(recipe)
+	if recipe.Gameplay != nil && recipe.Gameplay.TerrainDetail {
+		args += ",detail=true"
+	}
+	return args
 }
 
 // OSM abutments can lie in a DEM shoreline cell. Extend along the bridge axis

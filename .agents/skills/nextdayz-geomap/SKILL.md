@@ -48,11 +48,21 @@ Kit contract: base z=0, front=-y, real door/window voids, walk-in door on the
 front axis, roofs with closed gables, colours < 0.5 albedo. Surfaces go through
 per-class `gk_material` wrappers (Bohemia: `bh_m_*` — render, tile, slate,
 paint, zinc, gilt, varnish, ceramic...); glass is opaque low-roughness, since a
-transmissive dielectric turns black under an overcast sky. Interiors are part
+transmissive dielectric turns black under an overcast sky. Porous materials
+(render, brick, stone, boards, clay tile, fibre-cement) are diffuse
+(`roughness=1`) with a low-contrast `gk_texture` print (`plaster`, `brick`,
+`stone`, `planks`, `tiles`, `concrete`): a dielectric lobe there reads as
+plastic, and a high-contrast print loses the low-poly read. Prints also carry
+their relief (normal map) and, for specular materials, roughness/metalness
+factors: old iron uses the `rust` print (`bh_m_iron`), and `chipped` / `worn`
+cover painted or blued steel — keep `relief` at its default or lower; never
+raise it to fake shape the facets should carry. Interiors are part
 of the shell: floor finish, inner wall skin with dado, puddles under the roof
 holes, shards under broken windows — placed clear of the coldwar furniture and
 loot points of the `nd_*` wrapper that hosts the shell. Water material comes
-from the recipe (`gameplay.water`). Render a showcase
+from the recipe (`gameplay.water`); `gameplay.terrainDetail: true` turns on
+the textured ground and smooth draped road ribbons (`gk_terrain(..., detail=true)`,
+see `docs/AGENT_GUIDE/ScadTerrain.md`). Render a showcase
 (`gnb shot --scene <abs path to a .scad using the kit>`) and fix what reads
 wrong before using it in a map.
 

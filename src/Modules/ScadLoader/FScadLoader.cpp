@@ -48,15 +48,22 @@ namespace Assets
                 material.Diffuse = glm::vec4(rgb, alpha);
                 return material;
             }
-            const int32_t textureId =
-                properties.texture ? ProceduralTexture::Acquire(*properties.texture) : -1;
+            // A print brings its relief (normal map) to every model, and its
+            // roughness/metalness factors (MRA) to the specular ones.
+            const FProceduralTextureIds maps =
+                properties.texture ? ProceduralTexture::AcquireMaps(*properties.texture)
+                                   : FProceduralTextureIds{};
             if (roughness >= 0.999f && metalness <= 0.001f)
             {
-                return Material::Lambertian(rgb, textureId);
+                Material material = Material::Lambertian(rgb, maps.albedo);
+                material.NormalTextureId = maps.normal;
+                return material;
             }
 
-            Material material = Material::Mixture(rgb, roughness, textureId);
+            Material material = Material::Mixture(rgb, roughness, maps.albedo);
             material.Metalness = metalness;
+            material.MRATextureId = maps.mra;
+            material.NormalTextureId = maps.normal;
             return material;
         }
 
@@ -232,9 +239,12 @@ namespace Assets
                 // gk_texture(): UVs come from the node-local SCAD positions (Z up), so
                 // the print keeps its size and stays on the object as it moves.
                 std::vector<glm::vec2> uvs(localPos.size(), glm::vec2(0.0f));
+                std::vector<glm::vec4> tangents(localPos.size(), glm::vec4(1, 0, 0, 1));
                 if (bucket.material.texture)
                 {
                     ProceduralTexture::BoxProjectUVs(bucket.tris, bucket.material.texture->scale, uvs);
+                    ProceduralTexture::BoxProjectTangents(
+                        bucket.tris, glm::mat3(Scad::ScadToWorldBasis(1.0)), normals, tangents);
                 }
 
                 const uint32_t vertexOffset = static_cast<uint32_t>(vertices.size());
@@ -242,7 +252,7 @@ namespace Assets
                 indices.reserve(indices.size() + localPos.size());
                 for (uint32_t i = 0; i < static_cast<uint32_t>(localPos.size()); ++i)
                 {
-                    vertices.push_back(Vertex{localPos[i], normals[i], glm::vec4(1, 0, 0, 1), uvs[i], sectionIndex});
+                    vertices.push_back(Vertex{localPos[i], normals[i], tangents[i], uvs[i], sectionIndex});
                     indices.push_back(vertexOffset + i);
                 }
 
@@ -455,12 +465,16 @@ namespace Assets
                 // Terrain water surfaces get their own child node: translucent,
                 // and invisible to raycasts so NavGrid/picking hit the river bed
                 // (or a bridge deck) instead of the water plane.
+                // Draped overlays (terrain road ribbons) likewise: they float a
+                // few centimetres over the ground mesh, so they must neither
+                // collide nor answer ground raycasts.
                 std::vector<Scad::SceneMeshBucket> solidBuckets;
                 std::vector<Scad::SceneMeshBucket> waterBuckets;
+                std::vector<Scad::SceneMeshBucket> decalBuckets;
                 solidBuckets.reserve(sceneNode.meshes.size());
                 for (const Scad::SceneMeshBucket& bucket : sceneNode.meshes)
                 {
-                    (bucket.terrainWater ? waterBuckets : solidBuckets).push_back(bucket);
+                    (bucket.terrainWater ? waterBuckets : bucket.terrainDecal ? decalBuckets : solidBuckets).push_back(bucket);
                 }
 
                 constexpr size_t kMaxMaterialsPerNode = 16;
@@ -504,6 +518,30 @@ namespace Assets
                             materials,
                             cache);
                     }
+                }
+
+                if (!decalBuckets.empty())
+                {
+                    auto decalNode = Node::CreateNode(
+                        fmt::format("{}__decals", sceneNode.name),
+                        glm::vec3(0.0f),
+                        glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
+                        glm::vec3(1.0f),
+                        static_cast<uint32_t>(nodes.size()));
+                    decalNode->SetParent(node);
+                    nodes.push_back(decalNode);
+                    AttachSceneMeshesToNode(
+                        fmt::format("{}__decals", sceneNode.name),
+                        decalBuckets,
+                        0,
+                        kMaxMaterialsPerNode,
+                        scale,
+                        smoothAngleDegrees,
+                        false,
+                        decalNode,
+                        models,
+                        materials,
+                        cache);
                 }
 
                 if (!waterBuckets.empty())

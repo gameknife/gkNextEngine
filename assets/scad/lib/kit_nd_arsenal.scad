@@ -11,8 +11,8 @@ use <kit_coldwar.scad>
 
 // ---- 额外材质 ----
 module nd_m_poly(c = [0.065, 0.066, 0.07]) { gk_material(c, roughness = 0.78, metalness = 0) children(); }   // 黑色哑光聚合物
-module nd_m_birch(c) { gk_material(c, roughness = 0.64, metalness = 0) children(); }                         // 油浸桦木（战时木托，缎面）
-module nd_m_walnut(c) { gk_material(c, roughness = 0.40, metalness = 0) children(); }                        // 清漆胡桃木（民用猎枪）
+module nd_m_birch(c) { gk_material(c, roughness = 0.64, metalness = 0) gk_texture("woodgrain", scale = 0.22, seed = 2) children(); }                         // 油浸桦木（战时木托，缎面）
+module nd_m_walnut(c) { gk_material(c, roughness = 0.40, metalness = 0) gk_texture("woodgrain", scale = 0.28, seed = 3) children(); }                        // 清漆胡桃木（民用猎枪）
 module nd_m_worn() { gk_material([0.36, 0.36, 0.37], roughness = 0.38, metalness = 0.95) children(); }       // 磨掉发蓝的棱边
 
 // 两点之间的倒角方杆（冲压钢折叠托的托杆）

@@ -40,6 +40,17 @@ func TestExpeditionWaterMaterialArgument(t *testing.T) {
 	}
 }
 
+func TestExpeditionTerrainDetailArgument(t *testing.T) {
+	if got := expeditionTerrainArgs(ExpeditionRecipe{Gameplay: &ExpeditionGameplay{}}); got != "" {
+		t.Fatalf("recipes without terrainDetail must keep the legacy call, got %q", got)
+	}
+	detailed := ExpeditionRecipe{Gameplay: &ExpeditionGameplay{TerrainDetail: true,
+		Water: &ExpeditionWater{Roughness: 0.04}}}
+	if got := expeditionTerrainArgs(detailed); got != ",water=[undef,0.04,0],detail=true" {
+		t.Fatalf("detail must follow the water argument, got %q", got)
+	}
+}
+
 func TestExpeditionRegenerationPreservesAuthoringAndRegionalKits(t *testing.T) {
 	root := t.TempDir()
 	paths := NewPaths(root, "test_region")

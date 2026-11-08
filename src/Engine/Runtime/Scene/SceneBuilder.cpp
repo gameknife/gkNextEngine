@@ -53,12 +53,21 @@ namespace Assets::SceneBuilder
         const glm::vec3 color = section < part.sectionColors.size() ? glm::vec3(part.sectionColors[section])
                                                                     : glm::vec3(0.78f);
         const glm::vec2 surface = part.SectionSurface(section);
-        int32_t textureId = -1;
+        Assets::FProceduralTextureIds maps;
         if (section < part.sectionTextures.size() && part.sectionTextures[section])
         {
-            textureId = Assets::ProceduralTexture::Acquire(*part.sectionTextures[section]);
+            maps = Assets::ProceduralTexture::AcquireMaps(*part.sectionTextures[section]);
         }
-        return AddSurfaceMaterial(materials, color, surface.x, surface.y, textureId);
+        const uint32_t index = AddSurfaceMaterial(materials, color, surface.x, surface.y, maps.albedo);
+        // The print's relief lights every surface; its roughness/metalness
+        // factors only mean something to a specular (non-Lambertian) one.
+        Assets::Material& material = materials[index].gpuMaterial_;
+        material.NormalTextureId = maps.normal;
+        if (material.MaterialModel != Assets::Material::Enum::Lambertian)
+        {
+            material.MRATextureId = maps.mra;
+        }
+        return index;
     }
 
     uint32_t AddDiffuseLightMaterial(std::vector<Assets::FMaterial>& materials, const glm::vec3& color, float intensity)

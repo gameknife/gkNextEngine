@@ -169,8 +169,20 @@ namespace Assets::Scad
             std::string materialName;
             TriSoup tris; // SCAD space (Z-up)
         };
-        std::vector<ColoredTris> landGeom;  // land + skirt + bottom, per color
+        std::vector<ColoredTris> landGeom;  // land + skirt + bottom, per color (minus road beds)
         std::vector<ColoredTris> waterGeom; // translucent water surfaces
+        // Faces a road feature turned into road, grouped by the surface they
+        // would have without it (natural colour + material name). The default
+        // look paints them roadColor: one staircase of 3-4 m cells, the jagged
+        // edge of a diagonal road. gk_terrain(..., detail = true) keeps their
+        // natural surface and lays the road down as roadDecalGeom instead.
+        std::vector<ColoredTris> roadBedGeom;
+        glm::vec4 roadColor{0.5f, 0.5f, 0.5f, 1.0f};
+        // Road ribbons draped a few centimetres over the mesh along each
+        // (smoothed) road polyline: a verge, the surface (asphalt / gravel /
+        // track by width) and the grass strip of a track, with noise-wobbled
+        // edges. Drawn only in the detailed look; never collided or ray-cast.
+        std::vector<ColoredTris> roadDecalGeom;
 
         static constexpr uint8_t kFlagWater = 1u << 0;
         static constexpr uint8_t kFlagRoad = 1u << 1;

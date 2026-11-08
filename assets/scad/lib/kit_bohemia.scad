@@ -41,20 +41,32 @@ function bh_gutter(s) = bh_rnd(s,3)==0 ? [0.27,0.17,0.11] : [0.33,0.34,0.34];
 // Path tracing turns these into Fresnel sheen and real reflections; plain color()
 // stays Lambertian. Glass is opaque gloss: a transmissive dielectric goes black
 // under the overcast or night sky of an abandoned map.
-module bh_m_plaster(c) { gk_material(c, roughness=0.86) children(); }          // lime render
-module bh_m_stone(c) { gk_material(c, roughness=0.7) children(); }             // worn granite / sandstone
-module bh_m_brick(c) { gk_material(c, roughness=0.78) children(); }
-module bh_m_tile(c) { gk_material(c, roughness=0.58) children(); }             // fired clay tiles: faint sheen
-module bh_m_slate(c) { gk_material(c, roughness=0.55) children(); }            // slate: soft sheen
-module bh_m_eternit(c) { gk_material(c, roughness=0.7) children(); }           // fibre-cement sheets
-module bh_m_wood(c) { gk_material(c, roughness=0.8) children(); }              // weathered boards, beams
+// Porous building materials are diffuse (roughness 1): a dielectric lobe on
+// render, brick, stone, timber or fired clay reads as plastic under path
+// tracing. Their texture comes from a gk_texture() print instead -- posterized,
+// low-contrast modulation that keeps the flat-shaded low-poly read (see
+// docs/AGENT_GUIDE/SCADLoader.md). Only paint, glaze, glass, water and metal shine.
+module bh_m_plaster(c) { gk_material(c, roughness=1) gk_texture("plaster", scale=3.0) children(); }  // lime render, spalling to brick
+module bh_m_stone(c) { gk_material(c, roughness=1) gk_texture("stone", scale=2.4) children(); }      // coursed granite / sandstone
+module bh_m_brick(c) { gk_material(c, roughness=1) gk_texture("brick", scale=1.2) children(); }
+module bh_m_tile(c) { gk_material(c, roughness=1) gk_texture("tiles", scale=3.5) children(); }       // unglazed clay courses, moss
+module bh_m_slate(c) { gk_material(c, roughness=0.62) gk_texture("tiles", scale=2.2, seed=1) children(); } // slate keeps a soft sheen
+module bh_m_eternit(c) { gk_material(c, roughness=1) gk_texture("concrete", scale=2.0, seed=1) children(); } // fibre-cement sheets
+module bh_m_wood(c) { gk_material(c, roughness=1) gk_texture("planks", scale=1.4) children(); }     // weathered boards, beams
+// Gable infill: rendered (plaster) or boarded (planks).
+module bh_m_gable(c, boards=false) { if(boards) bh_m_wood(c) children(); else bh_m_plaster(c) children(); }
+// Roof cladding: clay tiles or fibre-cement sheets.
+module bh_m_roof(c, metal=false) { if(metal) bh_m_eternit(c) children(); else bh_m_tile(c) children(); }
 module bh_m_paint(c) { gk_material(c, roughness=0.42) children(); }            // oil paint: doors, shutters, dado
 module bh_m_varnish(c) { gk_material(c, roughness=0.26) children(); }          // varnished boards, parquet
 module bh_m_ceramic(c) { gk_material(c, roughness=0.14) children(); }          // glazed tiles, tiled stoves, enamel
 module bh_m_marble(c) { gk_material(c, roughness=0.12) children(); }           // polished stone floors, granite plaques
-module bh_m_concrete(c) { gk_material(c, roughness=0.74) children(); }
+module bh_m_concrete(c) { gk_material(c, roughness=1) gk_texture("concrete", scale=3.0) children(); }
 module bh_m_damp(c) { gk_material(c, roughness=0.45) children(); }             // soaked boards / render around puddles
-module bh_m_iron(c=[0.17,0.16,0.15]) { gk_material(c, roughness=0.6, metalness=0.55) children(); }  // wrought, rusty iron
+// Wrought iron left out for decades: gk_texture("rust") blooms the steel (palette[0],
+// metallic, smoother) into rust and scale (dielectric, rough, pitted). The print carries
+// the colours, so the material is white.
+module bh_m_iron(c=[0.17,0.16,0.15]) { gk_material([1,1,1], roughness=0.85, metalness=0.8) gk_texture("rust", palette=[c,[0.20,0.075,0.03],[0.08,0.035,0.02]], scale=0.9) children(); }
 module bh_m_zinc(c=[0.33,0.34,0.34]) { gk_material(c, roughness=0.36, metalness=0.85) children(); } // gutters, tin domes
 module bh_m_copper(c) { gk_material(c, roughness=0.46, metalness=0.3) children(); }               // verdigris copper
 module bh_m_gilt() { gk_material([0.60,0.45,0.19], roughness=0.24, metalness=1) children(); }      // crosses, clock hands
@@ -155,7 +167,7 @@ module bh_part_wall(L=10,H=3,ops=[],t=0.4,c=[0.45,0.40,0.30],rough=0.86)
 {
     n=len(ops);
     e=concat([-L/2],[for(o=ops) each [o[0]-o[2]/2,o[0]+o[2]/2]],[L/2]);
-    gk_material(c,roughness=rough)
+    bh_m_plaster(c)
     {
         for(i=[0:n]) if(e[2*i+1]-e[2*i]>0.01)
             translate([(e[2*i]+e[2*i+1])/2,0,H/2]) bh_box([e[2*i+1]-e[2*i],t,H]);
@@ -300,8 +312,8 @@ module bh_part_facade(seed=0,L=10,floors=1,fh=3.1,t=0.42,c=[],door=true,dw=1.6,d
         if(n>1 && sw>0.25) for(i=[1:n-1]) if(bh_rnd(seed+i*37,3)!=0)
             let(sh2=bh_rf(seed+i*41,0.6,min(1.7,fh-zt-0.3)),zc=fh-0.12-sh2/2)
             {
-                gk_material([0.33,0.27,0.18],roughness=0.8) translate([-L/2+i*step,t/2+0.018,zc]) bh_box([sw,0.006,sh2]);
-                gk_material([0.26,0.21,0.14],roughness=0.8) translate([-L/2+i*step,t/2+0.02,zc+sh2*0.12]) bh_box([sw*0.55,0.006,sh2*0.6]);
+                bh_m_wood([0.33,0.27,0.18]) translate([-L/2+i*step,t/2+0.018,zc]) bh_box([sw,0.006,sh2]);
+                bh_m_wood([0.26,0.21,0.14]) translate([-L/2+i*step,t/2+0.02,zc+sh2*0.12]) bh_box([sw*0.55,0.006,sh2*0.6]);
             }
     }
 }
@@ -326,7 +338,7 @@ module bh_part_gable(seed=0,W=8,rise=4,t=0.42,c=[],style="plain",cut=0,win=1,wh=
     wz=style=="baroque" ? rise*0.22 : min(rise*0.3,top-wh[1]-0.5);
     wx=win>=2 ? W*(style=="baroque" ? 0.22 : 0.18) : 0;
     ws=win>=2 ? [-wx,wx] : win==1 ? [0] : [];
-    gk_material(style=="timber" ? bh_infill(seed) : style=="boards" ? bh_wood(seed) : cc,roughness=style=="boards" ? 0.8 : 0.86) difference()
+    bh_m_gable(style=="timber" ? bh_infill(seed) : style=="boards" ? bh_wood(seed) : cc,style=="boards") difference()
     {
         translate([0,t/2,0]) rotate([90,0,0]) linear_extrude(height=t) polygon(bh_gable_outline(W,rise,style,cut));
         for(x=ws) translate([x,0,wz+wh[1]/2]) bh_box([wh[0],t+0.3,wh[1]]);
@@ -393,7 +405,7 @@ module bh_part_roof_slope(seed=0,L=10,D=8,rise=4,ovx=0.35,ovy=0.45,hip=0,dmg=1,m
         cuts=[for(hl=holes) if(dmg>0 && k>=hl[2] && k<=hl[3]) hl];
         segs=len(cuts)==0 ? [[-1e3,1e3]] : [[-1e3,cuts[0][0]-cuts[0][1]/2],[cuts[0][0]+cuts[0][1]/2,1e3]];
         tint=metal ? bh_eternit(seed+k) : bh_tile(seed+bh_rnd(seed+k,2));
-        gk_material(tint,roughness=metal ? 0.7 : 0.58) for(g=segs)
+        bh_m_roof(tint,metal) for(g=segs)
         {
             l0=max(-a0,g[0]); r0=min(a0,g[1]); l1=max(-a1,g[0]); r1=min(a1,g[1]);
             if(r0-l0>0.08 && r1-l1>0.02)
@@ -411,7 +423,7 @@ module bh_part_roof_slope(seed=0,L=10,D=8,rise=4,ovx=0.35,ovy=0.45,hip=0,dmg=1,m
     if(dmg>0) bh_m_wood([0.20,0.16,0.11]) for(hl=holes) for(x=[hl[0]-hl[1]/2+0.3:0.75:hl[0]+hl[1]/2])
         if(abs(x)<rx+E*0.5) translate([x,-E*0.5,(ze+zr)/2-0.22]) rotate([ang,0,0]) bh_box([0.12,sl,0.16]);
     // Hip / half-hip end at +x; the 180-degree copy supplies the -x end.
-    if(hip>0) gk_material(metal ? bh_eternit(seed) : bh_tile(seed+1),roughness=metal ? 0.7 : 0.58)
+    if(hip>0) bh_m_roof(metal ? bh_eternit(seed) : bh_tile(seed+1),metal)
         bh_prism3([hx0,-E*hip,ze+(zr-ze)*th],[hx0,E*hip,ze+(zr-ze)*th],[rx,0,zr],metal ? 0.06 : 0.09);
     // Barge board along the gable verge.
     if(hip<=0) bh_m_wood(bh_wood(seed)) translate([hx0-0.04,-E*0.5,(ze+zr)/2+0.02]) rotate([ang,0,0]) bh_box([0.06,sl+0.1,0.24]);
@@ -435,7 +447,7 @@ module bh_part_roof(seed=0,L=10,D=8,rise=4,ovx=0.35,ovy=0.45,hip=0,dmg=1,metal=f
     bh_part_roof_slope(seed,L,D,rise,ovx,ovy,hip,dmg,metal,pipe);
     rotate([0,0,180]) bh_part_roof_slope(seed+77,L,D,rise,ovx,ovy,hip,max(0,dmg-1),metal,pipe);
     rx=max(0.05,L/2+(hip>0 ? ovy : ovx)-hip*(D/2+ovy));
-    gk_material(metal ? bh_eternit(seed+2) : bh_tile(seed+2),roughness=metal ? 0.7 : 0.58) translate([0,0,rise+0.03]) rotate([0,90,0]) cylinder(h=2*rx+0.1,r=0.14,center=true,$fn=8);
+    bh_m_roof(metal ? bh_eternit(seed+2) : bh_tile(seed+2),metal) translate([0,0,rise+0.03]) rotate([0,90,0]) cylinder(h=2*rx+0.1,r=0.14,center=true,$fn=8);
 }
 
 module bh_part_chimney(seed=0,h=1.8,w=0.62)
@@ -463,7 +475,7 @@ module bh_part_decay(seed=0,L=10,D=8)
     for(i=[0:7])
     {
         sx=bh_rnd(seed+i*23,2)==0 ? -1 : 1;
-        gk_material(i%3==0 ? bh_tile(seed+i) : bh_stone(seed+i),roughness=0.66)
+        bh_m_stone(i%3==0 ? bh_tile(seed+i) : bh_stone(seed+i))
             translate([sx*bh_rf(seed+i*11,L*0.30,L*0.46),bh_rf(seed+i*19,-D*0.40,D*0.40),0.08])
                 rotate([6,bh_rf(seed+i,-15,15),bh_rnd(seed+i*7,180)]) bh_box([bh_rf(seed+i,0.2,0.55),0.24,0.12]);
     }
@@ -675,7 +687,7 @@ module bh_bldg_barn(seed=0,L=16,D=9)
 {
     h=4.6; ph=0.9; t=0.5; rise=D*0.62; gw=min(3.8,L*0.3); gh=3.9;
     bh_part_floor(seed,L,D,t,"earth",bh_roof_holes(seed,L,D,rise,0.45,0.5,0,2));
-    gk_material([0.42,0.36,0.20],roughness=0.9) for(i=[0:9])
+    gk_material([0.42,0.36,0.20],roughness=1) for(i=[0:9])
         translate([bh_rf(seed+i*5,-L/2+1,L/2-1),bh_rf(seed+i*7,-D/2+1,D/2-1),0.125]) rotate([0,0,bh_rnd(seed+i*11,180)])
             bh_box([bh_rf(seed+i*13,0.6,1.6),bh_rf(seed+i*17,0.3,0.9),0.01]);
     for(sy=[-1,1]) translate([0,sy*(D/2-t/2),0]) bh_part_wall(L,ph,[[0,0,gw,ph]],t,bh_stone(seed+sy));
@@ -1262,7 +1274,7 @@ module bh_prop_shrine(seed=0)
 module bh_prop_bus_shelter(seed=0)
 {
     c=bh_rnd(seed,2)==0 ? bh_brick(seed) : bh_plaster(seed);
-    gk_material(c,roughness=0.8) { translate([0,0.9,1.2]) bh_box([4.4,0.3,2.4]); for(sx=[-1,1]) translate([sx*2.05,0.3,1.2]) bh_box([0.3,1.5,2.4]); }
+    bh_m_plaster(c) { translate([0,0.9,1.2]) bh_box([4.4,0.3,2.4]); for(sx=[-1,1]) translate([sx*2.05,0.3,1.2]) bh_box([0.3,1.5,2.4]); }
     bh_m_tile(bh_tile(seed)) translate([0,0.25,2.55]) rotate([-12,0,0]) bh_box([4.9,2.3,0.12]);
     bh_m_wood(bh_wood(seed)) { translate([0,0.55,0.45]) bh_box([3.6,0.4,0.06]); for(sx=[-1,1]) translate([sx*1.6,0.55,0.22]) bh_box([0.08,0.36,0.44]); }
     bh_m_zinc([0.30,0.31,0.31]) translate([2.6,-0.6,0]) cylinder(h=2.6,r=0.04,$fn=6);

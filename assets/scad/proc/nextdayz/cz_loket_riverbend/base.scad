@@ -44,7 +44,7 @@ GEO_TERR = ["gkterr1", [1000, 1000], [256, 256], 817,
      ["road", [[-100.49, 473.34], [-104.06, 475.12], [-148.29, 500]], 11]]];
 
 TERR=["gkterr1",GEO_TERR[1],GEO_TERR[2],GEO_TERR[3],GEO_TERR[4],GEO_TERR[5],GEO_TERR[6],concat(GEO_TERR[7],PCG_PATHS,nd_pcg_terrain(PCG_SITES,PCG_SPAWNS,PCG_EXTRACTIONS,817,PCG_LANDCOVER))];
-gk_terrain(TERR,water=[[0.07,0.1,0.09],0.04,0]);
+gk_terrain(TERR,water=[[0.07,0.1,0.09],0.04,0],detail=true);
 function nd_ground(x,y)=gk_terrain_height(TERR,x,y);
 let(za=nd_ground(-92.41,117.35)+0.06,zb=nd_ground(-152.36,244.19)+0.06) translate([-122.39,180.77,(za+zb)/2]) rotate([0,0,115.3]) gk_flatten() az_prop_bridge(seed=818,L=143.3,W=7,rise=zb-za,pierDepth=max(10,(za+zb)/2-10+8));
 let(za=nd_ground(397.3,293.38)+0.06,zb=nd_ground(331.7,339.36)+0.06) translate([364.5,316.37,(za+zb)/2]) rotate([0,0,144.97]) gk_flatten() az_prop_bridge(seed=819,L=83.1,W=6.8,rise=zb-za,pierDepth=max(10,(za+zb)/2-10+8));

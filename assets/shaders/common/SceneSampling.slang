@@ -151,9 +151,25 @@ namespace Common
         {
             // normal mapping use interpolated normal
             float3 vNt = Bindless.GetSampleTexture(inMaterial.NormalTextureId).SampleLevel(inVertex.TexCoord, 0).rgb;
+            // Normal maps are sampled without mips: toward grazing view the
+            // texels under one pixel average away, so fade the perturbation
+            // there instead of letting it alias into moire and dark speckle.
+            // On a floor the view angle tracks distance, which is where it bites.
+            const float3 toEye = -rayDir;
+            const float facing = abs(dot(inVertex.Normal.rgb, toEye));
+            const float detail = saturate(facing * 5.0f);
+            vNt.xy = (vNt.xy * 2.0f - 1.0f) * detail * 0.5f + 0.5f;
             // here we need local space normal and tangent
-            outNormal.rgb = normalize(TransformAffineNormal(
+            float3 mapped = normalize(TransformAffineNormal(
                 proxy.worldTS, mikkTSpace(vNt, inVertex.LocalNormal, inVertex.LocalTangent)));
+            // A relief normal must still face the eye, or the sample shades black.
+            const float side = dot(inVertex.Normal.rgb, toEye) >= 0.0f ? 1.0f : -1.0f;
+            const float lean = dot(mapped, toEye) * side;
+            if (lean < 0.05f)
+            {
+                mapped = normalize(mapped + toEye * side * (0.05f - lean));
+            }
+            outNormal.rgb = mapped;
             outNormal.a = roughness;
             inVertex.Normal.rgb = outNormal.rgb; // Update vertex normal for further calculations
         }

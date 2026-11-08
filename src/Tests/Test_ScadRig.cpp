@@ -19,6 +19,7 @@
 #include <cmath>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #define GLM_ENABLE_EXPERIMENTAL
@@ -1196,14 +1197,203 @@ TEST_CASE("Procedural prints bake deterministically and wrap without a seam", "[
         double wrap = 0.0;
         for (uint32_t y = 0; y < size; ++y)
         {
-            for (uint32_t x = 0; x + 1 < size; ++x) interior += std::abs(luma(x + 1, y) - luma(x, y));
+            // Both directions, like the wrap: grain-like prints differ far more across than along.
+            for (uint32_t x = 0; x + 1 < size; ++x)
+                interior += std::abs(luma(x + 1, y) - luma(x, y)) + std::abs(luma(y, x + 1) - luma(y, x));
             wrap += std::abs(luma(0, y) - luma(size - 1, y));
             wrap += std::abs(luma(y, 0) - luma(y, size - 1));
         }
-        interior /= static_cast<double>(size) * (size - 1);
+        interior /= 2.0 * static_cast<double>(size) * (size - 1);
         wrap /= 2.0 * size;
         CHECK(wrap < interior * 2.5 + 2.0);
     }
+}
+
+TEST_CASE("Ground and building prints stay a low-contrast modulation", "[Unit][ProceduralTexture]")
+{
+    // These prints multiply the flat colour of terrain biomes and building
+    // parts. Bright on average and with a narrow spread they add grain, while
+    // the facet shading keeps carrying the low-poly form.
+    constexpr uint32_t size = 128;
+    for (const char* pattern : {"meadow", "dirt", "gravel", "asphalt", "rock", "plaster", "brick", "tiles",
+                                "planks", "stone", "concrete"})
+    {
+        INFO(pattern);
+        FProceduralTexture texture;
+        texture.pattern = pattern;
+        const std::vector<uint8_t> pixels = ProceduralTexture::Bake(texture, size);
+        double sum = 0.0, sumSq = 0.0;
+        for (size_t i = 0; i < pixels.size(); i += 4)
+        {
+            const double luma = 0.3 * pixels[i] + 0.59 * pixels[i + 1] + 0.11 * pixels[i + 2];
+            sum += luma;
+            sumSq += luma * luma;
+        }
+        const double count = static_cast<double>(size) * size;
+        const double mean = sum / count;
+        const double spread = std::sqrt(std::max(0.0, sumSq / count - mean * mean));
+        CAPTURE(mean, spread);
+        CHECK(mean > 160.0);
+        CHECK(spread < 40.0);
+        CHECK(spread > 3.0); // and it is not blank
+    }
+}
+
+TEST_CASE("Procedural prints bake a gentle seamless relief and their surface factors", "[Unit][ProceduralTexture]")
+{
+    // At the size the engine bakes: thread-scale reliefs need a few texels per thread.
+    constexpr uint32_t size = ProceduralTexture::kDefaultSize;
+    const auto decode = [](const uint8_t* p)
+    {
+        return glm::vec3(p[0], p[1], p[2]) / 255.0f * 2.0f - 1.0f;
+    };
+    const auto meanTilt = [&](const std::vector<uint8_t>& normal)
+    {
+        double sum = 0.0;
+        for (size_t i = 0; i < normal.size(); i += 4)
+        {
+            const glm::vec3 n = decode(&normal[i]);
+            sum += glm::degrees(std::acos(std::clamp(static_cast<double>(n.z) / glm::length(n), -1.0, 1.0)));
+        }
+        return sum / static_cast<double>(normal.size() / 4);
+    };
+    for (std::string_view pattern : ProceduralTexture::PatternNames())
+    {
+        INFO(pattern);
+        FProceduralTexture texture;
+        texture.pattern = std::string(pattern);
+        texture.seed = 3;
+        const FProceduralMaps maps = ProceduralTexture::BakeMaps(texture, size);
+        CHECK(maps.albedo == ProceduralTexture::Bake(texture, size));
+        REQUIRE(maps.hasNormal);
+        REQUIRE(maps.normal.size() == size * size * 4);
+
+        // Unit normals facing out of the surface, never tipped past 55 degrees.
+        double wrap = 0.0;
+        double interior = 0.0;
+        size_t badNormals = 0;
+        for (uint32_t y = 0; y < size; ++y)
+        {
+            for (uint32_t x = 0; x < size; ++x)
+            {
+                const glm::vec3 n = decode(&maps.normal[(static_cast<size_t>(y) * size + x) * 4]);
+                badNormals += std::abs(glm::length(n) - 1.0f) > 0.02f || n.z <= 0.55f ? 1 : 0;
+                if (x + 1 < size)
+                    interior += glm::length(decode(&maps.normal[(static_cast<size_t>(y) * size + x + 1) * 4]) - n);
+            }
+            wrap += glm::length(decode(&maps.normal[(static_cast<size_t>(y) * size) * 4]) -
+                                decode(&maps.normal[(static_cast<size_t>(y) * size + size - 1) * 4]));
+            wrap += glm::length(decode(&maps.normal[static_cast<size_t>(y) * 4]) -
+                                decode(&maps.normal[(static_cast<size_t>(size - 1) * size + y) * 4]));
+        }
+        CHECK(badNormals == 0);
+        // The relief repeats without a seam, like the colour.
+        CHECK(wrap / (2.0 * size) < interior / (static_cast<double>(size) * (size - 1)) * 2.5 + 0.02);
+        // Grain inside a facet, not a new shape: a few degrees on average.
+        const double tilt = meanTilt(maps.normal);
+        CAPTURE(tilt);
+        CHECK(tilt > 1.0);
+        CHECK(tilt < 22.0);
+
+        // relief scales the slopes; 0 switches the normal map off.
+        texture.relief = 2.0f;
+        CHECK(meanTilt(ProceduralTexture::BakeMaps(texture, size).normal) > tilt * 1.15); // steep bevels saturate at the 40 degree cap
+        texture.relief = 0.0f;
+        const FProceduralMaps flat = ProceduralTexture::BakeMaps(texture, size);
+        CHECK_FALSE(flat.hasNormal);
+        CHECK(flat.normal.empty());
+        CHECK(flat.albedo == maps.albedo);
+        CHECK(texture.Hash() != FProceduralTexture{texture.pattern, {}, 0.5f, 3}.Hash());
+    }
+
+    // Uniform surfaces need no MRA map; worn ones vary in roughness and metal.
+    const auto factors = [&](const char* pattern)
+    {
+        FProceduralTexture texture;
+        texture.pattern = pattern;
+        return ProceduralTexture::BakeMaps(texture, size);
+    };
+    for (const char* pattern : {"woodland", "canvas", "meadow", "plaster", "brick", "concrete"})
+    {
+        INFO(pattern);
+        CHECK_FALSE(factors(pattern).hasMra);
+    }
+    for (const char* pattern : {"grain", "gravel", "tiles", "stone", "woodgrain", "worn"})
+    {
+        INFO(pattern);
+        const FProceduralMaps maps = factors(pattern);
+        REQUIRE(maps.hasMra);
+        uint8_t lowestRough = 255;
+        for (size_t i = 0; i < maps.mra.size(); i += 4) lowestRough = std::min(lowestRough, maps.mra[i + 1]);
+        CHECK(lowestRough < 230);
+    }
+    // Chipped paint and rust are dielectric over bare metal: the metalness
+    // factor splits into both ends, and the bare metal is the glossier part.
+    for (const char* pattern : {"chipped", "rust"})
+    {
+        INFO(pattern);
+        const FProceduralMaps maps = factors(pattern);
+        REQUIRE(maps.hasMra);
+        size_t metal = 0, dielectric = 0;
+        double metalRough = 0.0, dielectricRough = 0.0;
+        for (size_t i = 0; i < maps.mra.size(); i += 4)
+        {
+            if (maps.mra[i + 2] > 240) { ++metal; metalRough += maps.mra[i + 1]; }
+            if (maps.mra[i + 2] < 10) { ++dielectric; dielectricRough += maps.mra[i + 1]; }
+        }
+        const double total = static_cast<double>(size) * size;
+        CHECK(metal / total > 0.05);
+        CHECK(dielectric / total > 0.05);
+        CHECK(metalRough / std::max<size_t>(metal, 1) < dielectricRough / std::max<size_t>(dielectric, 1));
+    }
+}
+
+TEST_CASE("ScadRig box-projected tangents follow the print's UVs on every face", "[Unit][ScadRig][ProceduralTexture]")
+{
+    // A tilted, spun box exercises all six projection planes and both
+    // handednesses; the tangent frame must agree with the UVs or the relief
+    // would light from the wrong side.
+    FRigAsset asset;
+    REQUIRE(BuildRigFromSource(
+        "module bone_root() {\n"
+        "    gk_texture(\"brick\", scale = 0.2)\n"
+        "        rotate([17, -23, 38]) cube(0.5, center = true);\n"
+        "    gk_texture(\"tiles\", scale = 0.3)\n"
+        "        translate([1, 0, 0]) rotate([0, 0, 90]) sphere(0.3, $fn = 12);\n"
+        "}\n"
+        "bone_root();\n",
+        asset));
+    REQUIRE(asset.parts.size() == 1);
+    const Model& model = asset.partModels[asset.parts[0].modelIndex];
+    const auto& vertices = model.CPUVertices();
+    const auto& indices = model.CPUIndices();
+    REQUIRE(indices.size() >= 36);
+    size_t checked = 0;
+    size_t wrong = 0;
+    for (size_t i = 0; i + 2 < indices.size(); i += 3)
+    {
+        const Vertex& a = vertices[indices[i]];
+        const Vertex& b = vertices[indices[i + 1]];
+        const Vertex& c = vertices[indices[i + 2]];
+        const glm::vec3 e1 = b.Position - a.Position, e2 = c.Position - a.Position;
+        const glm::vec2 t1 = b.TexCoord - a.TexCoord, t2 = c.TexCoord - a.TexCoord;
+        const float det = t1.x * t2.y - t1.y * t2.x;
+        if (std::abs(det) < 1e-6f) continue;
+        const glm::vec3 dPdu = glm::normalize((e1 * t2.y - e2 * t1.y) / det);
+        const glm::vec3 dPdv = glm::normalize((e2 * t1.x - e1 * t2.x) / det);
+        for (const Vertex* v : {&a, &b, &c})
+        {
+            const glm::vec3 n = glm::normalize(v->Normal);
+            const glm::vec3 t(v->Tangent);
+            const bool orthonormal = std::abs(glm::dot(t, n)) < 1e-3f && std::abs(glm::length(t) - 1.0f) < 1e-3f;
+            const bool alongU = glm::dot(t, dPdu) > 0.5f;
+            const bool handed = glm::dot(v->Tangent.w * glm::cross(n, t), dPdv) > 0.5f;
+            wrong += orthonormal && alongU && handed ? 0 : 1;
+        }
+        ++checked;
+    }
+    CHECK(wrong == 0);
+    CHECK(checked * 3 >= indices.size() * 9 / 10);
 }
 
 TEST_CASE("Camouflage prints use their palette and keep the historical layer mix", "[Unit][ProceduralTexture]")
@@ -1347,7 +1537,10 @@ TEST_CASE("NextDayz heritage fabrics are diffuse and the camouflage is printed, 
             const auto& texture = part.sectionTextures[section];
             if (!texture) continue;
             // Woven and printed cloth is Lambertian: a specular lobe on fabric reads as plastic.
-            if (texture->pattern != "grain")
+            // (Leather grain and the worn-metal prints on helmets are specular on purpose.)
+            static const std::unordered_set<std::string> cloth = {"woodland", "digital", "desert", "flora",
+                                                                  "rain",     "canvas",  "twill"};
+            if (cloth.contains(texture->pattern))
             {
                 CHECK(part.SectionSurface(section).x == Catch::Approx(1.0f));
                 CHECK(part.SectionSurface(section).y == Catch::Approx(0.0f));

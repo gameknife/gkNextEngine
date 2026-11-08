@@ -36,7 +36,8 @@ module ndh_leather(c, r = 0.55, grain = true)
 module ndh_rubber(c = [0.05, 0.05, 0.048]) { gk_material(c, roughness = 0.85, metalness = 0) children(); }
 module ndh_metal(c = [0.30, 0.30, 0.29], r = 0.42) { gk_material(c, roughness = r, metalness = 0.9) children(); }
 module ndh_brass() { gk_material([0.74, 0.56, 0.26], roughness = 0.32, metalness = 1.0) children(); }
-module ndh_paint(c, r = 0.72) { gk_material(c, roughness = r, metalness = 0) children(); }      // 钢盔哑光漆
+// 钢盔哑光漆：gk_texture("chipped") 让漆面（电介质、哑光）在磕碰处剥落，露出更光滑的钢（金属）。
+module ndh_paint(c, r = 0.72) { gk_material([1, 1, 1], roughness = r, metalness = 0.9) gk_texture("chipped", palette = [c, [0.42, 0.42, 0.43]], scale = 0.3) children(); }
 module ndh_enamel(c) { gk_material(c, roughness = 0.25, metalness = 0) children(); }          // 帽徽搪瓷
 module ndh_plastic(c, r = 0.45) { gk_material(c, roughness = r, metalness = 0) children(); }
 

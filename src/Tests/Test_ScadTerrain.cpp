@@ -970,6 +970,59 @@ TEST_CASE("ScadTerrain scene: non-terrain geometry keeps default flags", "[Unit]
     CHECK(result.terrains.empty());
 }
 
+TEST_CASE("ScadTerrain scene: water argument sets only the water surface material", "[Unit][Scad][ScadTerrain]")
+{
+    auto collect = [](const SceneEvalResult& result, std::vector<SceneMeshBucket>& water,
+                      std::vector<SceneMeshBucket>& land)
+    {
+        for (const SceneNode& root : result.roots)
+        {
+            for (const SceneMeshBucket& bucket : root.meshes)
+            {
+                (bucket.terrainWater ? water : land).push_back(bucket);
+            }
+        }
+    };
+
+    std::vector<SceneMeshBucket> legacyWater;
+    std::vector<SceneMeshBucket> legacyLand;
+    collect(EvalSceneProgram(std::string(kTerrScad) + "gk_terrain(TERR);\n"), legacyWater, legacyLand);
+    REQUIRE_FALSE(legacyWater.empty());
+    for (const SceneMeshBucket& bucket : legacyWater)
+    {
+        CHECK_FALSE(bucket.material.explicitParameters);
+    }
+
+    // Glossy water with the palette colour kept (undef colour).
+    std::vector<SceneMeshBucket> glossyWater;
+    std::vector<SceneMeshBucket> glossyLand;
+    collect(EvalSceneProgram(std::string(kTerrScad) + "gk_terrain(TERR, water = [undef, 0.06, 0.1]);\n"),
+            glossyWater, glossyLand);
+    REQUIRE(glossyWater.size() == legacyWater.size());
+    for (size_t i = 0; i < glossyWater.size(); ++i)
+    {
+        CHECK(glossyWater[i].material.explicitParameters);
+        CHECK(glossyWater[i].material.roughness == Catch::Approx(0.06f));
+        CHECK(glossyWater[i].material.metalness == Catch::Approx(0.1f));
+        CHECK(glossyWater[i].color == legacyWater[i].color);
+        CHECK(glossyWater[i].materialName == "terrain_water");
+    }
+    for (const SceneMeshBucket& bucket : glossyLand)
+    {
+        CHECK_FALSE(bucket.material.explicitParameters);
+    }
+
+    // An explicit colour replaces the palette water colour.
+    std::vector<SceneMeshBucket> tintedWater;
+    std::vector<SceneMeshBucket> tintedLand;
+    collect(EvalSceneProgram(std::string(kTerrScad) + "gk_terrain(TERR, water = [[0.1, 0.2, 0.3], 0.05]);\n"),
+            tintedWater, tintedLand);
+    REQUIRE_FALSE(tintedWater.empty());
+    CHECK(tintedWater[0].color.r == Catch::Approx(0.1f));
+    CHECK(tintedWater[0].color.b == Catch::Approx(0.3f));
+    CHECK(tintedWater[0].material.metalness == Catch::Approx(0.0f));
+}
+
 TEST_CASE("ScadTerrain loader: water splits to a raycast-invisible node", "[Unit][Scad][ScadTerrain]")
 {
     ScopedDir dir;

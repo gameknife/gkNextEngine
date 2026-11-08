@@ -6683,7 +6683,7 @@
               "default": "9"
             }
           ],
-          "line": 432,
+          "line": 674,
           "footprint": [
             17.14,
             12.88
@@ -6694,8 +6694,8 @@
             -0.07,
             -0.04
           ],
-          "triangles": 4304,
-          "colors": 284,
+          "triangles": 4652,
+          "colors": 302,
           "warnings": 0,
           "ok": true
         },
@@ -6729,19 +6729,19 @@
               "default": "false"
             }
           ],
-          "line": 470,
+          "line": 717,
           "footprint": [
             9.1,
-            13.22
+            13.59
           ],
           "height": 12.49,
           "zMin": -0.05,
           "center": [
             -0.09,
-            0.0
+            0.18
           ],
-          "triangles": 3988,
-          "colors": 254,
+          "triangles": 7624,
+          "colors": 514,
           "warnings": 0,
           "ok": true
         },
@@ -6763,7 +6763,7 @@
               "default": "26"
             }
           ],
-          "line": 793,
+          "line": 1081,
           "footprint": [
             34.0,
             28.46
@@ -6774,8 +6774,8 @@
             0.0,
             -0.6
           ],
-          "triangles": 9756,
-          "colors": 695,
+          "triangles": 13712,
+          "colors": 959,
           "warnings": 0,
           "ok": true
         },
@@ -6797,7 +6797,7 @@
               "default": "8"
             }
           ],
-          "line": 582,
+          "line": 839,
           "footprint": [
             7.02,
             8.76
@@ -6808,8 +6808,8 @@
             0.03,
             0.02
           ],
-          "triangles": 1530,
-          "colors": 68,
+          "triangles": 2550,
+          "colors": 127,
           "warnings": 0,
           "ok": true
         },
@@ -6835,7 +6835,7 @@
               "default": "-1"
             }
           ],
-          "line": 705,
+          "line": 980,
           "footprint": [
             6.9,
             7.22
@@ -6846,8 +6846,8 @@
             0.0,
             -0.59
           ],
-          "triangles": 1516,
-          "colors": 124,
+          "triangles": 2344,
+          "colors": 191,
           "warnings": 0,
           "ok": true
         },
@@ -6869,7 +6869,7 @@
               "default": "11"
             }
           ],
-          "line": 525,
+          "line": 778,
           "footprint": [
             25.44,
             12.35
@@ -6880,8 +6880,8 @@
             -0.02,
             0.0
           ],
-          "triangles": 3652,
-          "colors": 140,
+          "triangles": 6652,
+          "colors": 345,
           "warnings": 0,
           "ok": true
         },
@@ -6903,19 +6903,19 @@
               "default": "11"
             }
           ],
-          "line": 741,
+          "line": 1016,
           "footprint": [
             37.1,
-            12.17
+            13.08
           ],
           "height": 6.15,
           "zMin": -0.05,
           "center": [
             -0.09,
-            0.0
+            0.3
           ],
-          "triangles": 9148,
-          "colors": 691,
+          "triangles": 13964,
+          "colors": 971,
           "warnings": 0,
           "ok": true
         },
@@ -6941,19 +6941,19 @@
               "default": "1"
             }
           ],
-          "line": 408,
+          "line": 646,
           "footprint": [
-            14.1,
-            10.25
+            14.41,
+            10.38
           ],
           "height": 13.36,
           "zMin": -0.05,
           "center": [
-            -0.09,
-            0.0
+            -0.05,
+            -0.07
           ],
-          "triangles": 9748,
-          "colors": 736,
+          "triangles": 15032,
+          "colors": 1114,
           "warnings": 0,
           "ok": true
         },
@@ -6975,10 +6975,10 @@
               "default": "16"
             }
           ],
-          "line": 767,
+          "line": 1045,
           "footprint": [
             31.1,
-            16.78
+            16.81
           ],
           "height": 11.37,
           "zMin": -0.05,
@@ -6986,8 +6986,8 @@
             -0.09,
             0.0
           ],
-          "triangles": 5520,
-          "colors": 388,
+          "triangles": 7548,
+          "colors": 454,
           "warnings": 0,
           "ok": true
         },
@@ -7017,7 +7017,7 @@
               "default": "-1"
             }
           ],
-          "line": 384,
+          "line": 617,
           "footprint": [
             13.1,
             9.15
@@ -7028,8 +7028,8 @@
             -0.09,
             0.0
           ],
-          "triangles": 4612,
-          "colors": 308,
+          "triangles": 8620,
+          "colors": 592,
           "warnings": 0,
           "ok": true
         },
@@ -7051,7 +7051,7 @@
               "default": "8"
             }
           ],
-          "line": 611,
+          "line": 873,
           "footprint": [
             12.38,
             10.14
@@ -7062,8 +7062,8 @@
             0.05,
             -0.33
           ],
-          "triangles": 3296,
-          "colors": 179,
+          "triangles": 4656,
+          "colors": 257,
           "warnings": 0,
           "ok": true
         },
@@ -7085,19 +7085,19 @@
               "default": "9"
             }
           ],
-          "line": 684,
+          "line": 951,
           "footprint": [
             10.1,
-            10.5
+            10.71
           ],
           "height": 9.9,
           "zMin": -0.05,
           "center": [
             -0.09,
-            -0.35
+            -0.24
           ],
-          "triangles": 4264,
-          "colors": 281,
+          "triangles": 6824,
+          "colors": 452,
           "warnings": 0,
           "ok": true
         },
@@ -7119,19 +7119,19 @@
               "default": "7"
             }
           ],
-          "line": 453,
+          "line": 698,
           "footprint": [
             12.1,
-            8.04
+            8.07
           ],
           "height": 6.92,
           "zMin": -0.05,
           "center": [
             -0.09,
-            0.0
+            0.01
           ],
-          "triangles": 3476,
-          "colors": 215,
+          "triangles": 5392,
+          "colors": 324,
           "warnings": 0,
           "ok": true
         },
@@ -7153,19 +7153,19 @@
               "default": "12"
             }
           ],
-          "line": 506,
+          "line": 757,
           "footprint": [
             17.1,
-            13.22
+            14.5
           ],
           "height": 19.2,
           "zMin": -0.05,
           "center": [
             -0.09,
-            0.0
+            0.27
           ],
-          "triangles": 7664,
-          "colors": 511,
+          "triangles": 13916,
+          "colors": 969,
           "warnings": 0,
           "ok": true
         },
@@ -7187,21 +7187,267 @@
               "default": "10"
             }
           ],
-          "line": 650,
+          "line": 916,
           "footprint": [
             13.24,
-            11.8
+            12.72
           ],
-          "height": 13.4,
+          "height": 14.1,
           "zMin": -0.05,
           "center": [
             -0.02,
-            -0.3
+            0.16
           ],
-          "triangles": 8076,
-          "colors": 570,
+          "triangles": 12184,
+          "colors": 833,
           "warnings": 0,
           "ok": true
+        },
+        {
+          "name": "bh_m_brick",
+          "category": "m",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 46,
+          "ok": false
+        },
+        {
+          "name": "bh_m_ceramic",
+          "category": "m",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 53,
+          "ok": false
+        },
+        {
+          "name": "bh_m_concrete",
+          "category": "m",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 55,
+          "ok": false
+        },
+        {
+          "name": "bh_m_copper",
+          "category": "m",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 59,
+          "ok": false
+        },
+        {
+          "name": "bh_m_damp",
+          "category": "m",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 56,
+          "ok": false
+        },
+        {
+          "name": "bh_m_eternit",
+          "category": "m",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 49,
+          "ok": false
+        },
+        {
+          "name": "bh_m_film",
+          "category": "m",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 65,
+          "ok": false
+        },
+        {
+          "name": "bh_m_gilt",
+          "category": "m",
+          "params": "",
+          "paramList": [],
+          "line": 60,
+          "ok": false
+        },
+        {
+          "name": "bh_m_glass",
+          "category": "m",
+          "params": "",
+          "paramList": [],
+          "line": 61,
+          "ok": false
+        },
+        {
+          "name": "bh_m_iron",
+          "category": "m",
+          "params": "c=[0.17,0.16,0.15]",
+          "paramList": [
+            {
+              "name": "c",
+              "default": "[0.17,0.16,0.15]"
+            }
+          ],
+          "line": 57,
+          "ok": false
+        },
+        {
+          "name": "bh_m_marble",
+          "category": "m",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 54,
+          "ok": false
+        },
+        {
+          "name": "bh_m_oil",
+          "category": "m",
+          "params": "",
+          "paramList": [],
+          "line": 64,
+          "ok": false
+        },
+        {
+          "name": "bh_m_paint",
+          "category": "m",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 51,
+          "ok": false
+        },
+        {
+          "name": "bh_m_plaster",
+          "category": "m",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 44,
+          "ok": false
+        },
+        {
+          "name": "bh_m_shard",
+          "category": "m",
+          "params": "",
+          "paramList": [],
+          "line": 62,
+          "ok": false
+        },
+        {
+          "name": "bh_m_slate",
+          "category": "m",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 48,
+          "ok": false
+        },
+        {
+          "name": "bh_m_stone",
+          "category": "m",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 45,
+          "ok": false
+        },
+        {
+          "name": "bh_m_tile",
+          "category": "m",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 47,
+          "ok": false
+        },
+        {
+          "name": "bh_m_varnish",
+          "category": "m",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 52,
+          "ok": false
+        },
+        {
+          "name": "bh_m_water",
+          "category": "m",
+          "params": "",
+          "paramList": [],
+          "line": 63,
+          "ok": false
+        },
+        {
+          "name": "bh_m_wood",
+          "category": "m",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 50,
+          "ok": false
+        },
+        {
+          "name": "bh_m_zinc",
+          "category": "m",
+          "params": "c=[0.33,0.34,0.34]",
+          "paramList": [
+            {
+              "name": "c",
+              "default": "[0.33,0.34,0.34]"
+            }
+          ],
+          "line": 58,
+          "ok": false
         },
         {
           "name": "bh_beam2",
@@ -7223,7 +7469,7 @@
               "default": "0.12"
             }
           ],
-          "line": 36,
+          "line": 70,
           "footprint": [
             0.1,
             0.12
@@ -7248,7 +7494,7 @@
               "name": "s"
             }
           ],
-          "line": 33,
+          "line": 67,
           "footprint": [
             1.0,
             1.0
@@ -7283,7 +7529,7 @@
               "default": "0.1"
             }
           ],
-          "line": 45,
+          "line": 79,
           "footprint": [
             0.0,
             0.0
@@ -7321,7 +7567,7 @@
               "default": "0.1"
             }
           ],
-          "line": 42,
+          "line": 76,
           "footprint": [
             0.0,
             0.0
@@ -7333,6 +7579,38 @@
             0.0
           ],
           "triangles": 12,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_rod",
+          "category": "misc",
+          "params": "a,b,r=0.05",
+          "paramList": [
+            {
+              "name": "a"
+            },
+            {
+              "name": "b"
+            },
+            {
+              "name": "r",
+              "default": "0.05"
+            }
+          ],
+          "line": 83,
+          "footprint": [
+            0.0,
+            0.1
+          ],
+          "height": 0.05,
+          "zMin": -0.05,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 48,
           "colors": 1,
           "warnings": 0,
           "ok": true
@@ -7355,7 +7633,7 @@
               "default": "0.2"
             }
           ],
-          "line": 34,
+          "line": 68,
           "footprint": [
             4.0,
             4.0
@@ -7385,7 +7663,7 @@
               "default": "13"
             }
           ],
-          "line": 1044,
+          "line": 1369,
           "footprint": [
             4.55,
             4.12
@@ -7415,7 +7693,7 @@
               "default": "14"
             }
           ],
-          "line": 1063,
+          "line": 1388,
           "footprint": [
             4.48,
             4.46
@@ -7449,7 +7727,7 @@
               "default": "false"
             }
           ],
-          "line": 1015,
+          "line": 1340,
           "footprint": [
             11.27,
             12.22
@@ -7475,7 +7753,7 @@
               "default": "0"
             }
           ],
-          "line": 1079,
+          "line": 1404,
           "footprint": [
             1.72,
             1.73
@@ -7505,7 +7783,7 @@
               "default": "5.5"
             }
           ],
-          "line": 1035,
+          "line": 1360,
           "footprint": [
             4.67,
             4.68
@@ -7535,7 +7813,7 @@
               "default": "2.2"
             }
           ],
-          "line": 1072,
+          "line": 1397,
           "footprint": [
             3.87,
             3.37
@@ -7565,7 +7843,7 @@
               "default": "17"
             }
           ],
-          "line": 1026,
+          "line": 1351,
           "footprint": [
             10.49,
             10.58
@@ -7595,7 +7873,7 @@
               "default": "18"
             }
           ],
-          "line": 1003,
+          "line": 1328,
           "footprint": [
             6.3,
             6.38
@@ -7625,7 +7903,7 @@
               "default": "20"
             }
           ],
-          "line": 981,
+          "line": 1306,
           "footprint": [
             5.55,
             5.55
@@ -7655,7 +7933,7 @@
               "default": "18"
             }
           ],
-          "line": 991,
+          "line": 1316,
           "footprint": [
             3.56,
             3.37
@@ -7681,7 +7959,7 @@
               "default": "0"
             }
           ],
-          "line": 1086,
+          "line": 1411,
           "footprint": [
             1.02,
             1.23
@@ -7711,7 +7989,7 @@
               "default": "7"
             }
           ],
-          "line": 1055,
+          "line": 1380,
           "footprint": [
             3.7,
             2.98
@@ -7724,6 +8002,44 @@
           ],
           "triangles": 1512,
           "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_part_beams",
+          "category": "part",
+          "params": "seed=0,Li=8,Di=6,c=[0.20,0.12,0.08]",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "Li",
+              "default": "8"
+            },
+            {
+              "name": "Di",
+              "default": "6"
+            },
+            {
+              "name": "c",
+              "default": "[0.20,0.12,0.08]"
+            }
+          ],
+          "line": 610,
+          "footprint": [
+            6.8,
+            6.0
+          ],
+          "height": 0.0,
+          "zMin": -0.18,
+          "center": [
+            -0.13,
+            0.0
+          ],
+          "triangles": 96,
+          "colors": 8,
           "warnings": 0,
           "ok": true
         },
@@ -7757,7 +8073,7 @@
               "default": "0"
             }
           ],
-          "line": 331,
+          "line": 501,
           "footprint": [
             10.0,
             0.12
@@ -7791,7 +8107,7 @@
               "default": "0.62"
             }
           ],
-          "line": 271,
+          "line": 441,
           "footprint": [
             0.76,
             0.76
@@ -7810,7 +8126,7 @@
         {
           "name": "bh_part_church_wall",
           "category": "part",
-          "params": "seed=0,L=12,H=9.5,t=0.7,c=[0.46,0.42,0.32],ops=[]",
+          "params": "seed=0,L=12,H=9.5,t=0.7,c=[0.46,0.42,0.32],ops=[],ftop=0.14",
           "paramList": [
             {
               "name": "seed",
@@ -7835,21 +8151,25 @@
             {
               "name": "ops",
               "default": "[]"
+            },
+            {
+              "name": "ftop",
+              "default": "0.14"
             }
           ],
-          "line": 356,
+          "line": 530,
           "footprint": [
             12.2,
-            0.88
+            0.91
           ],
           "height": 9.5,
           "zMin": 0.0,
           "center": [
             0.0,
-            -0.09
+            -0.08
           ],
-          "triangles": 36,
-          "colors": 3,
+          "triangles": 72,
+          "colors": 6,
           "warnings": 0,
           "ok": true
         },
@@ -7867,7 +8187,7 @@
               "default": "1.4"
             }
           ],
-          "line": 352,
+          "line": 524,
           "footprint": [
             8.8,
             1.4
@@ -7901,7 +8221,7 @@
               "default": "8"
             }
           ],
-          "line": 291,
+          "line": 461,
           "footprint": [
             11.1,
             5.57
@@ -7943,7 +8263,7 @@
               "default": "[0.4,0.4,0.4]"
             }
           ],
-          "line": 279,
+          "line": 449,
           "footprint": [
             1.77,
             2.5
@@ -7954,15 +8274,15 @@
             0.0,
             1.0
           ],
-          "triangles": 172,
-          "colors": 13,
+          "triangles": 184,
+          "colors": 14,
           "warnings": 0,
           "ok": true
         },
         {
           "name": "bh_part_facade",
           "category": "part",
-          "params": "seed=0,L=10,floors=1,fh=3.1,t=0.42,c=[],door=true,dw=1.6,dh=2.45,win=[1.1,1.4], sh=false,plinth=0.65,arch=false,shop=false,cols=0,pilaster=true,sill=0.95",
+          "params": "seed=0,L=10,floors=1,fh=3.1,t=0.42,c=[],door=true,dw=1.6,dh=2.45,win=[1.1,1.4], sh=false,plinth=0.65,arch=false,shop=false,cols=0,pilaster=true,sill=0.95, inside=true,inner=[],ftop=0.12",
           "paramList": [
             {
               "name": "seed",
@@ -8031,21 +8351,125 @@
             {
               "name": "sill",
               "default": "0.95"
+            },
+            {
+              "name": "inside",
+              "default": "true"
+            },
+            {
+              "name": "inner",
+              "default": "[]"
+            },
+            {
+              "name": "ftop",
+              "default": "0.12"
             }
           ],
-          "line": 100,
+          "line": 208,
           "footprint": [
             10.2,
-            0.78
+            0.81
           ],
           "height": 3.13,
           "zMin": 0.0,
           "center": [
             0.0,
-            -0.18
+            -0.17
           ],
-          "triangles": 516,
-          "colors": 43,
+          "triangles": 792,
+          "colors": 66,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_part_finish",
+          "category": "part",
+          "params": "seed=0,Li=8,Di=6,kind=\"boards\"",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "Li",
+              "default": "8"
+            },
+            {
+              "name": "Di",
+              "default": "6"
+            },
+            {
+              "name": "kind",
+              "default": "\"boards\""
+            }
+          ],
+          "line": 567,
+          "footprint": [
+            8.0,
+            6.0
+          ],
+          "height": 0.02,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 1272,
+          "colors": 106,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_part_floor",
+          "category": "part",
+          "params": "seed=0,L=10,D=8,t=0.42,kind=\"boards\",wet=[],oil=0,top=0.12",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            },
+            {
+              "name": "t",
+              "default": "0.42"
+            },
+            {
+              "name": "kind",
+              "default": "\"boards\""
+            },
+            {
+              "name": "wet",
+              "default": "[]"
+            },
+            {
+              "name": "oil",
+              "default": "0"
+            },
+            {
+              "name": "top",
+              "default": "0.12"
+            }
+          ],
+          "line": 595,
+          "footprint": [
+            10.0,
+            8.0
+          ],
+          "height": 0.12,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 1680,
+          "colors": 140,
           "warnings": 0,
           "ok": true
         },
@@ -8083,7 +8507,7 @@
               "default": "0.42"
             }
           ],
-          "line": 314,
+          "line": 484,
           "footprint": [
             10.13,
             0.08
@@ -8145,7 +8569,7 @@
               "default": "[0,0]"
             }
           ],
-          "line": 174,
+          "line": 321,
           "footprint": [
             8.0,
             0.62
@@ -8156,8 +8580,8 @@
             0.0,
             -0.1
           ],
-          "triangles": 148,
-          "colors": 11,
+          "triangles": 160,
+          "colors": 12,
           "warnings": 0,
           "ok": true
         },
@@ -8179,7 +8603,7 @@
               "default": "1.6"
             }
           ],
-          "line": 306,
+          "line": 476,
           "footprint": [
             1.78,
             0.06
@@ -8192,6 +8616,48 @@
           ],
           "triangles": 72,
           "colors": 6,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_part_leaf",
+          "category": "part",
+          "params": "seed=0,w=0.75,h=2.2,c=[0.2,0.3,0.2],hand=1",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "w",
+              "default": "0.75"
+            },
+            {
+              "name": "h",
+              "default": "2.2"
+            },
+            {
+              "name": "c",
+              "default": "[0.2,0.3,0.2]"
+            },
+            {
+              "name": "hand",
+              "default": "1"
+            }
+          ],
+          "line": 194,
+          "footprint": [
+            0.75,
+            0.11
+          ],
+          "height": 2.2,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 48,
+          "colors": 4,
           "warnings": 0,
           "ok": true
         },
@@ -8213,7 +8679,7 @@
               "default": "4.2"
             }
           ],
-          "line": 344,
+          "line": 515,
           "footprint": [
             2.76,
             2.76
@@ -8230,9 +8696,43 @@
           "ok": true
         },
         {
+          "name": "bh_part_puddle",
+          "category": "part",
+          "params": "seed=0,r=0.8,halo=[0.10,0.08,0.06]",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "r",
+              "default": "0.8"
+            },
+            {
+              "name": "halo",
+              "default": "[0.10,0.08,0.06]"
+            }
+          ],
+          "line": 93,
+          "footprint": [
+            1.73,
+            1.35
+          ],
+          "height": 0.01,
+          "zMin": 0.0,
+          "center": [
+            0.19,
+            0.06
+          ],
+          "triangles": 64,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "bh_part_roof",
           "category": "part",
-          "params": "seed=0,L=10,D=8,rise=4,ovx=0.35,ovy=0.45,hip=0,dmg=1,metal=false",
+          "params": "seed=0,L=10,D=8,rise=4,ovx=0.35,ovy=0.45,hip=0,dmg=1,metal=false,pipe=0",
           "paramList": [
             {
               "name": "seed",
@@ -8269,9 +8769,13 @@
             {
               "name": "metal",
               "default": "false"
+            },
+            {
+              "name": "pipe",
+              "default": "0"
             }
           ],
-          "line": 263,
+          "line": 433,
           "footprint": [
             10.8,
             9.14
@@ -8290,7 +8794,7 @@
         {
           "name": "bh_part_roof_slope",
           "category": "part",
-          "params": "seed=0,L=10,D=8,rise=4,ovx=0.35,ovy=0.45,hip=0,dmg=1,metal=false",
+          "params": "seed=0,L=10,D=8,rise=4,ovx=0.35,ovy=0.45,hip=0,dmg=1,metal=false,pipe=0",
           "paramList": [
             {
               "name": "seed",
@@ -8327,9 +8831,13 @@
             {
               "name": "metal",
               "default": "false"
+            },
+            {
+              "name": "pipe",
+              "default": "0"
             }
           ],
-          "line": 218,
+          "line": 375,
           "footprint": [
             10.7,
             4.69
@@ -8346,9 +8854,89 @@
           "ok": true
         },
         {
+          "name": "bh_part_shards",
+          "category": "part",
+          "params": "seed=0,w=1.0,n=6,depth=1.0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "w",
+              "default": "1.0"
+            },
+            {
+              "name": "n",
+              "default": "6"
+            },
+            {
+              "name": "depth",
+              "default": "1.0"
+            }
+          ],
+          "line": 101,
+          "footprint": [
+            1.0,
+            0.6
+          ],
+          "height": 0.01,
+          "zMin": 0.0,
+          "center": [
+            -0.13,
+            0.24
+          ],
+          "triangles": 52,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_part_skin",
+          "category": "part",
+          "params": "L=10,H=3,ops=[],inner=[[0.46,0.45,0.42],[0.13,0.24,0.18]],zt=0.9",
+          "paramList": [
+            {
+              "name": "L",
+              "default": "10"
+            },
+            {
+              "name": "H",
+              "default": "3"
+            },
+            {
+              "name": "ops",
+              "default": "[]"
+            },
+            {
+              "name": "inner",
+              "default": "[[0.46,0.45,0.42],[0.13,0.24,0.18]]"
+            },
+            {
+              "name": "zt",
+              "default": "0.9"
+            }
+          ],
+          "line": 184,
+          "footprint": [
+            10.0,
+            0.03
+          ],
+          "height": 3.0,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.01
+          ],
+          "triangles": 36,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "bh_part_wall",
           "category": "part",
-          "params": "L=10,H=3,ops=[],t=0.4,c=[0.45,0.40,0.30]",
+          "params": "L=10,H=3,ops=[],t=0.4,c=[0.45,0.40,0.30],rough=0.86",
           "paramList": [
             {
               "name": "L",
@@ -8369,9 +8957,13 @@
             {
               "name": "c",
               "default": "[0.45,0.40,0.30]"
+            },
+            {
+              "name": "rough",
+              "default": "0.86"
             }
           ],
-          "line": 78,
+          "line": 154,
           "footprint": [
             10.0,
             0.4
@@ -8413,7 +9005,7 @@
               "default": "[0.48,0.46,0.41]"
             }
           ],
-          "line": 52,
+          "line": 113,
           "footprint": [
             1.5,
             0.34
@@ -8424,8 +9016,8 @@
             0.0,
             -0.03
           ],
-          "triangles": 120,
-          "colors": 10,
+          "triangles": 132,
+          "colors": 11,
           "warnings": 0,
           "ok": true
         },
@@ -8439,7 +9031,7 @@
               "default": "0"
             }
           ],
-          "line": 956,
+          "line": 1281,
           "footprint": [
             1.49,
             1.67
@@ -8465,7 +9057,7 @@
               "default": "0"
             }
           ],
-          "line": 938,
+          "line": 1262,
           "footprint": [
             5.3,
             2.27
@@ -8495,7 +9087,7 @@
               "default": "34"
             }
           ],
-          "line": 972,
+          "line": 1297,
           "footprint": [
             3.6,
             3.6
@@ -8521,7 +9113,7 @@
               "default": "0"
             }
           ],
-          "line": 921,
+          "line": 1244,
           "footprint": [
             1.0,
             1.0
@@ -8551,7 +9143,7 @@
               "default": "10"
             }
           ],
-          "line": 869,
+          "line": 1187,
           "footprint": [
             10.14,
             0.14
@@ -8581,7 +9173,7 @@
               "default": "3.0"
             }
           ],
-          "line": 899,
+          "line": 1218,
           "footprint": [
             5.95,
             5.95
@@ -8592,8 +9184,8 @@
             0.0,
             0.0
           ],
-          "triangles": 240,
-          "colors": 2,
+          "triangles": 408,
+          "colors": 5,
           "warnings": 0,
           "ok": true
         },
@@ -8607,7 +9199,7 @@
               "default": "0"
             }
           ],
-          "line": 911,
+          "line": 1233,
           "footprint": [
             3.72,
             3.72
@@ -8618,8 +9210,8 @@
             0.0,
             0.0
           ],
-          "triangles": 468,
-          "colors": 5,
+          "triangles": 504,
+          "colors": 9,
           "warnings": 0,
           "ok": true
         },
@@ -8633,7 +9225,7 @@
               "default": "0"
             }
           ],
-          "line": 882,
+          "line": 1200,
           "footprint": [
             6.35,
             6.35
@@ -8645,7 +9237,7 @@
             0.0
           ],
           "triangles": 1164,
-          "colors": 5,
+          "colors": 8,
           "warnings": 0,
           "ok": true
         },
@@ -8663,7 +9255,7 @@
               "default": "7.5"
             }
           ],
-          "line": 948,
+          "line": 1273,
           "footprint": [
             1.64,
             1.58
@@ -8689,7 +9281,7 @@
               "default": "0"
             }
           ],
-          "line": 928,
+          "line": 1251,
           "footprint": [
             1.64,
             1.64
@@ -8700,8 +9292,8 @@
             0.0,
             -0.0
           ],
-          "triangles": 108,
-          "colors": 6,
+          "triangles": 120,
+          "colors": 7,
           "warnings": 0,
           "ok": true
         },
@@ -8719,7 +9311,7 @@
               "default": "16"
             }
           ],
-          "line": 963,
+          "line": 1288,
           "footprint": [
             10.0,
             4.63
@@ -8732,6 +9324,32 @@
           ],
           "triangles": 144,
           "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bh_prop_tiled_stove",
+          "category": "prop",
+          "params": "seed=0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 1130,
+          "footprint": [
+            1.0,
+            0.84
+          ],
+          "height": 2.0,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 216,
+          "colors": 18,
           "warnings": 0,
           "ok": true
         },
@@ -8757,7 +9375,7 @@
               "default": "3.4"
             }
           ],
-          "line": 838,
+          "line": 1156,
           "footprint": [
             10.0,
             1.92
@@ -13144,6 +13762,96 @@
       "scaleClass": "mid",
       "modules": [
         {
+          "name": "cw_axe_disk",
+          "category": "axe",
+          "params": "h",
+          "paramList": [
+            {
+              "name": "h"
+            }
+          ],
+          "line": 2462,
+          "footprint": [
+            1.0,
+            0.0
+          ],
+          "height": 0.5,
+          "zMin": -0.5,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 80,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_bar_sec",
+          "category": "bar",
+          "params": "a, gr, r",
+          "paramList": [
+            {
+              "name": "a"
+            },
+            {
+              "name": "gr"
+            },
+            {
+              "name": "r"
+            }
+          ],
+          "line": 2413,
+          "footprint": [
+            2.0,
+            0.0
+          ],
+          "height": 0.87,
+          "zMin": -0.87,
+          "center": [
+            0.0,
+            -0.44
+          ],
+          "triangles": 24,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_bldg_barn",
+          "category": "bldg",
+          "params": "seed = 0, L = 12, D = 8",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "12"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            }
+          ],
+          "line": 3260,
+          "footprint": [
+            12.63,
+            9.23
+          ],
+          "height": 5.95,
+          "zMin": 0.0,
+          "center": [
+            0.01,
+            -0.32
+          ],
+          "triangles": 468,
+          "colors": 29,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_bldg_barracks",
           "category": "bldg",
           "params": "seed = 0, L = 14, D = 6",
@@ -13161,7 +13869,7 @@
               "default": "6"
             }
           ],
-          "line": 569,
+          "line": 593,
           "footprint": [
             14.9,
             6.9
@@ -13187,7 +13895,7 @@
               "default": "0"
             }
           ],
-          "line": 641,
+          "line": 665,
           "footprint": [
             5.4,
             5.5
@@ -13213,7 +13921,7 @@
               "default": "0"
             }
           ],
-          "line": 760,
+          "line": 784,
           "footprint": [
             4.6,
             2.15
@@ -13239,7 +13947,7 @@
               "default": "0"
             }
           ],
-          "line": 738,
+          "line": 762,
           "footprint": [
             5.0,
             5.0
@@ -13265,7 +13973,7 @@
               "default": "0"
             }
           ],
-          "line": 703,
+          "line": 727,
           "footprint": [
             2.7,
             2.7
@@ -13278,6 +13986,40 @@
           ],
           "triangles": 84,
           "colors": 7,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_bldg_church",
+          "category": "bldg",
+          "params": "seed = 0, L = 14, D = 8",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "14"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            }
+          ],
+          "line": 3490,
+          "footprint": [
+            18.03,
+            9.6
+          ],
+          "height": 14.65,
+          "zMin": 0.0,
+          "center": [
+            -1.62,
+            -0.4
+          ],
+          "triangles": 532,
+          "colors": 12,
           "warnings": 0,
           "ok": true
         },
@@ -13299,7 +14041,7 @@
               "default": "9"
             }
           ],
-          "line": 453,
+          "line": 477,
           "footprint": [
             14.8,
             9.8
@@ -13333,7 +14075,7 @@
               "default": "10"
             }
           ],
-          "line": 469,
+          "line": 493,
           "footprint": [
             14.4,
             10.48
@@ -13350,6 +14092,138 @@
           "ok": true
         },
         {
+          "name": "cw_bldg_fort_bastion",
+          "category": "bldg",
+          "params": "seed = 0, r = 4.0, h = 7.0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "r",
+              "default": "4.0"
+            },
+            {
+              "name": "h",
+              "default": "7.0"
+            }
+          ],
+          "line": 3410,
+          "footprint": [
+            9.2,
+            9.2
+          ],
+          "height": 11.5,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 360,
+          "colors": 17,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_bldg_fort_gate",
+          "category": "bldg",
+          "params": "seed = 0, h = 6.5",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "h",
+              "default": "6.5"
+            }
+          ],
+          "line": 3429,
+          "footprint": [
+            8.8,
+            3.49
+          ],
+          "height": 7.1,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.54
+          ],
+          "triangles": 812,
+          "colors": 11,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_bldg_fort_wall",
+          "category": "bldg",
+          "params": "len = 12, h = 5.0, seed = 0",
+          "paramList": [
+            {
+              "name": "len",
+              "default": "12"
+            },
+            {
+              "name": "h",
+              "default": "5.0"
+            },
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 3388,
+          "footprint": [
+            12.0,
+            2.1
+          ],
+          "height": 6.5,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 164,
+          "colors": 13,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_bldg_garage",
+          "category": "bldg",
+          "params": "seed = 0, L = 6, D = 7",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "6"
+            },
+            {
+              "name": "D",
+              "default": "7"
+            }
+          ],
+          "line": 3317,
+          "footprint": [
+            6.25,
+            7.25
+          ],
+          "height": 3.18,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 232,
+          "colors": 11,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_bldg_gas_canopy",
           "category": "bldg",
           "params": "seed = 0",
@@ -13359,7 +14233,7 @@
               "default": "0"
             }
           ],
-          "line": 520,
+          "line": 544,
           "footprint": [
             10.5,
             9.99
@@ -13376,6 +14250,44 @@
           "ok": true
         },
         {
+          "name": "cw_bldg_gas_shop",
+          "category": "bldg",
+          "params": "seed = 0, L = 9, D = 6, msg = \"SHOP 24\"",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "9"
+            },
+            {
+              "name": "D",
+              "default": "6"
+            },
+            {
+              "name": "msg",
+              "default": "\"SHOP 24\""
+            }
+          ],
+          "line": 3353,
+          "footprint": [
+            9.6,
+            7.5
+          ],
+          "height": 3.75,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.45
+          ],
+          "triangles": 1070,
+          "colors": 10,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_bldg_guard_tower",
           "category": "bldg",
           "params": "seed = 0",
@@ -13385,7 +14297,7 @@
               "default": "0"
             }
           ],
-          "line": 538,
+          "line": 562,
           "footprint": [
             3.5,
             3.5
@@ -13419,7 +14331,7 @@
               "default": "14"
             }
           ],
-          "line": 619,
+          "line": 643,
           "footprint": [
             12.0,
             14.18
@@ -13457,7 +14369,7 @@
               "default": "9"
             }
           ],
-          "line": 409,
+          "line": 433,
           "footprint": [
             18.25,
             11.73
@@ -13491,19 +14403,53 @@
               "default": "5.5"
             }
           ],
-          "line": 338,
+          "line": 340,
           "footprint": [
             8.0,
-            6.95
+            7.12
           ],
-          "height": 4.3,
+          "height": 4.36,
           "zMin": 0.0,
           "center": [
             0.0,
-            -0.23
+            -0.31
           ],
-          "triangles": 220,
-          "colors": 8,
+          "triangles": 400,
+          "colors": 23,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_bldg_house_two",
+          "category": "bldg",
+          "params": "seed = 0, L = 9, D = 7",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "9"
+            },
+            {
+              "name": "D",
+              "default": "7"
+            }
+          ],
+          "line": 3222,
+          "footprint": [
+            10.0,
+            8.69
+          ],
+          "height": 8.4,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.35
+          ],
+          "triangles": 736,
+          "colors": 45,
           "warnings": 0,
           "ok": true
         },
@@ -13525,7 +14471,7 @@
               "default": "8"
             }
           ],
-          "line": 584,
+          "line": 608,
           "footprint": [
             12.25,
             9.98
@@ -13538,6 +14484,134 @@
           ],
           "triangles": 736,
           "colors": 38,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_bldg_hunting_stand",
+          "category": "bldg",
+          "params": "seed = 0, h = 3.6",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "h",
+              "default": "3.6"
+            }
+          ],
+          "line": 3459,
+          "footprint": [
+            2.4,
+            3.51
+          ],
+          "height": 5.8,
+          "zMin": -0.15,
+          "center": [
+            0.0,
+            -0.56
+          ],
+          "triangles": 284,
+          "colors": 24,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_bldg_lumber_shed",
+          "category": "bldg",
+          "params": "seed = 0, L = 12, D = 6",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "12"
+            },
+            {
+              "name": "D",
+              "default": "6"
+            }
+          ],
+          "line": 3478,
+          "footprint": [
+            12.8,
+            6.93
+          ],
+          "height": 4.5,
+          "zMin": -0.28,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 336,
+          "colors": 13,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_bldg_motel",
+          "category": "bldg",
+          "params": "seed = 0, rooms = 5, W = 4.0, D = 6",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "rooms",
+              "default": "5"
+            },
+            {
+              "name": "W",
+              "default": "4.0"
+            },
+            {
+              "name": "D",
+              "default": "6"
+            }
+          ],
+          "line": 3367,
+          "footprint": [
+            23.0,
+            9.27
+          ],
+          "height": 5.65,
+          "zMin": 0.0,
+          "center": [
+            1.3,
+            -1.51
+          ],
+          "triangles": 1148,
+          "colors": 27,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_bldg_outhouse",
+          "category": "bldg",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 3302,
+          "footprint": [
+            1.2,
+            1.7
+          ],
+          "height": 2.39,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.2
+          ],
+          "triangles": 56,
+          "colors": 3,
           "warnings": 0,
           "ok": true
         },
@@ -13563,7 +14637,7 @@
               "default": "10"
             }
           ],
-          "line": 290,
+          "line": 292,
           "footprint": [
             16.25,
             11.33
@@ -13576,6 +14650,40 @@
           ],
           "triangles": 2044,
           "colors": 142,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_bldg_police",
+          "category": "bldg",
+          "params": "seed = 0, L = 12, D = 8",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "12"
+            },
+            {
+              "name": "D",
+              "default": "8"
+            }
+          ],
+          "line": 3330,
+          "footprint": [
+            12.25,
+            8.25
+          ],
+          "height": 7.08,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.0
+          ],
+          "triangles": 944,
+          "colors": 12,
           "warnings": 0,
           "ok": true
         },
@@ -13601,7 +14709,7 @@
               "default": "7"
             }
           ],
-          "line": 652,
+          "line": 676,
           "footprint": [
             14.25,
             7.26
@@ -13627,7 +14735,7 @@
               "default": "0"
             }
           ],
-          "line": 687,
+          "line": 711,
           "footprint": [
             6.6,
             1.32
@@ -13653,7 +14761,7 @@
               "default": "10"
             }
           ],
-          "line": 672,
+          "line": 696,
           "footprint": [
             10.88,
             0.7
@@ -13687,7 +14795,7 @@
               "default": "6"
             }
           ],
-          "line": 776,
+          "line": 800,
           "footprint": [
             8.02,
             6.03
@@ -13700,6 +14808,40 @@
           ],
           "triangles": 336,
           "colors": 22,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_bldg_shed",
+          "category": "bldg",
+          "params": "seed = 0, L = 3.2, D = 2.6",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "3.2"
+            },
+            {
+              "name": "D",
+              "default": "2.6"
+            }
+          ],
+          "line": 3292,
+          "footprint": [
+            3.7,
+            3.52
+          ],
+          "height": 2.9,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.21
+          ],
+          "triangles": 88,
+          "colors": 3,
           "warnings": 0,
           "ok": true
         },
@@ -13721,7 +14863,7 @@
               "default": "6"
             }
           ],
-          "line": 357,
+          "line": 381,
           "footprint": [
             10.25,
             6.34
@@ -13734,6 +14876,36 @@
           ],
           "triangles": 144,
           "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_bldg_silo",
+          "category": "bldg",
+          "params": "seed = 0, h = 11",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "h",
+              "default": "11"
+            }
+          ],
+          "line": 3282,
+          "footprint": [
+            4.5,
+            4.55
+          ],
+          "height": 12.01,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.02
+          ],
+          "triangles": 564,
+          "colors": 28,
           "warnings": 0,
           "ok": true
         },
@@ -13751,7 +14923,7 @@
               "default": "15"
             }
           ],
-          "line": 488,
+          "line": 512,
           "footprint": [
             3.4,
             3.4
@@ -13764,6 +14936,44 @@
           ],
           "triangles": 240,
           "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_bldg_station",
+          "category": "bldg",
+          "params": "seed = 0, L = 14, D = 7, msg = \"RIVERLAND\"",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "14"
+            },
+            {
+              "name": "D",
+              "default": "7"
+            },
+            {
+              "name": "msg",
+              "default": "\"RIVERLAND\""
+            }
+          ],
+          "line": 3441,
+          "footprint": [
+            22.0,
+            11.6
+          ],
+          "height": 6.0,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            1.7
+          ],
+          "triangles": 1226,
+          "colors": 9,
           "warnings": 0,
           "ok": true
         },
@@ -13785,7 +14995,7 @@
               "default": "12"
             }
           ],
-          "line": 375,
+          "line": 399,
           "footprint": [
             18.62,
             14.08
@@ -13819,7 +15029,7 @@
               "default": "8"
             }
           ],
-          "line": 498,
+          "line": 522,
           "footprint": [
             12.9,
             8.9
@@ -13845,7 +15055,7 @@
               "default": "0"
             }
           ],
-          "line": 715,
+          "line": 739,
           "footprint": [
             4.0,
             4.0
@@ -13875,7 +15085,7 @@
               "default": "0"
             }
           ],
-          "line": 193,
+          "line": 195,
           "footprint": [
             7.0,
             7.0
@@ -13909,7 +15119,7 @@
               "default": "0"
             }
           ],
-          "line": 229,
+          "line": 231,
           "footprint": [
             9.53,
             9.16
@@ -13943,7 +15153,7 @@
               "default": "0"
             }
           ],
-          "line": 218,
+          "line": 220,
           "footprint": [
             20.0,
             20.0
@@ -13969,7 +15179,7 @@
               "default": "12"
             }
           ],
-          "line": 260,
+          "line": 262,
           "footprint": [
             12.0,
             12.0
@@ -14003,7 +15213,7 @@
               "default": "0"
             }
           ],
-          "line": 248,
+          "line": 250,
           "footprint": [
             18.0,
             10.0
@@ -14033,7 +15243,7 @@
               "default": "0"
             }
           ],
-          "line": 277,
+          "line": 279,
           "footprint": [
             20.0,
             2.6
@@ -14067,7 +15277,7 @@
               "default": "0"
             }
           ],
-          "line": 173,
+          "line": 175,
           "footprint": [
             24.0,
             7.0
@@ -14101,7 +15311,7 @@
               "default": "0"
             }
           ],
-          "line": 207,
+          "line": 209,
           "footprint": [
             8.0,
             1.8
@@ -14118,6 +15328,32 @@
           "ok": true
         },
         {
+          "name": "cw_item_ammo_pack",
+          "category": "item",
+          "params": "kind = 0",
+          "paramList": [
+            {
+              "name": "kind",
+              "default": "0"
+            }
+          ],
+          "line": 2761,
+          "footprint": [
+            0.13,
+            0.11
+          ],
+          "height": 0.05,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.01
+          ],
+          "triangles": 168,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_item_ammobox",
           "category": "item",
           "params": "seed = 0",
@@ -14127,7 +15363,7 @@
               "default": "0"
             }
           ],
-          "line": 1799,
+          "line": 2541,
           "footprint": [
             0.34,
             0.18
@@ -14144,6 +15380,58 @@
           "ok": true
         },
         {
+          "name": "cw_item_apple",
+          "category": "item",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2670,
+          "footprint": [
+            0.08,
+            0.08
+          ],
+          "height": 0.1,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 288,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_item_axe",
+          "category": "item",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2502,
+          "footprint": [
+            0.88,
+            0.29
+          ],
+          "height": 0.03,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.01
+          ],
+          "triangles": 966,
+          "colors": 13,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_item_backpack",
           "category": "item",
           "params": "seed = 0",
@@ -14153,7 +15441,7 @@
               "default": "0"
             }
           ],
-          "line": 1808,
+          "line": 2550,
           "footprint": [
             0.46,
             0.47
@@ -14170,6 +15458,110 @@
           "ok": true
         },
         {
+          "name": "cw_item_backpack_military",
+          "category": "item",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2829,
+          "footprint": [
+            0.52,
+            0.43
+          ],
+          "height": 0.76,
+          "zMin": -0.03,
+          "center": [
+            0.0,
+            0.06
+          ],
+          "triangles": 108,
+          "colors": 6,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_item_backpack_small",
+          "category": "item",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2817,
+          "footprint": [
+            0.3,
+            0.26
+          ],
+          "height": 0.41,
+          "zMin": -0.02,
+          "center": [
+            0.0,
+            0.04
+          ],
+          "triangles": 48,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_item_bandage",
+          "category": "item",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2687,
+          "footprint": [
+            0.13,
+            0.08
+          ],
+          "height": 0.07,
+          "zMin": 0.0,
+          "center": [
+            0.03,
+            0.0
+          ],
+          "triangles": 108,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_item_battery",
+          "category": "item",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2743,
+          "footprint": [
+            0.03,
+            0.02
+          ],
+          "height": 0.06,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 120,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_item_bedroll",
           "category": "item",
           "params": "seed = 0",
@@ -14179,7 +15571,7 @@
               "default": "0"
             }
           ],
-          "line": 1841,
+          "line": 2583,
           "footprint": [
             0.7,
             0.25
@@ -14205,7 +15597,7 @@
               "default": "0"
             }
           ],
-          "line": 1765,
+          "line": 2507,
           "footprint": [
             0.1,
             0.1
@@ -14222,6 +15614,110 @@
           "ok": true
         },
         {
+          "name": "cw_item_can_opener",
+          "category": "item",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2712,
+          "footprint": [
+            0.17,
+            0.04
+          ],
+          "height": 0.02,
+          "zMin": 0.0,
+          "center": [
+            0.01,
+            0.0
+          ],
+          "triangles": 72,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_item_chocolate",
+          "category": "item",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2679,
+          "footprint": [
+            0.15,
+            0.06
+          ],
+          "height": 0.02,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 36,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_item_compass",
+          "category": "item",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2723,
+          "footprint": [
+            0.11,
+            0.07
+          ],
+          "height": 0.02,
+          "zMin": 0.0,
+          "center": [
+            -0.02,
+            0.0
+          ],
+          "triangles": 132,
+          "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_item_crackers",
+          "category": "item",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2662,
+          "footprint": [
+            0.18,
+            0.06
+          ],
+          "height": 0.12,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.0
+          ],
+          "triangles": 36,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_item_crate_supply",
           "category": "item",
           "params": "seed = 0",
@@ -14231,7 +15727,7 @@
               "default": "0"
             }
           ],
-          "line": 1861,
+          "line": 2603,
           "footprint": [
             0.84,
             0.86
@@ -14248,6 +15744,58 @@
           "ok": true
         },
         {
+          "name": "cw_item_crowbar",
+          "category": "item",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2455,
+          "footprint": [
+            0.81,
+            0.14
+          ],
+          "height": 0.03,
+          "zMin": 0.0,
+          "center": [
+            -0.01,
+            0.06
+          ],
+          "triangles": 532,
+          "colors": 16,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_item_firecrackers",
+          "category": "item",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2751,
+          "footprint": [
+            0.16,
+            0.09
+          ],
+          "height": 0.02,
+          "zMin": -0.0,
+          "center": [
+            0.01,
+            0.01
+          ],
+          "triangles": 312,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_item_helmet",
           "category": "item",
           "params": "seed = 0",
@@ -14257,7 +15805,7 @@
               "default": "0"
             }
           ],
-          "line": 1850,
+          "line": 2592,
           "footprint": [
             0.34,
             0.32
@@ -14274,6 +15822,36 @@
           "ok": true
         },
         {
+          "name": "cw_item_jacket",
+          "category": "item",
+          "params": "seed = 0, hood = false",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "hood",
+              "default": "false"
+            }
+          ],
+          "line": 2776,
+          "footprint": [
+            0.42,
+            0.35
+          ],
+          "height": 0.1,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.01
+          ],
+          "triangles": 60,
+          "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_item_jerrycan",
           "category": "item",
           "params": "seed = 0",
@@ -14283,7 +15861,7 @@
               "default": "0"
             }
           ],
-          "line": 1772,
+          "line": 2514,
           "footprint": [
             0.35,
             0.17
@@ -14300,6 +15878,32 @@
           "ok": true
         },
         {
+          "name": "cw_item_knife",
+          "category": "item",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2407,
+          "footprint": [
+            0.36,
+            0.06
+          ],
+          "height": 0.02,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.0
+          ],
+          "triangles": 1884,
+          "colors": 22,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_item_lantern",
           "category": "item",
           "params": "seed = 0",
@@ -14309,7 +15913,7 @@
               "default": "0"
             }
           ],
-          "line": 1829,
+          "line": 2571,
           "footprint": [
             0.16,
             0.16
@@ -14326,11 +15930,63 @@
           "ok": true
         },
         {
+          "name": "cw_item_map",
+          "category": "item",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2733,
+          "footprint": [
+            0.22,
+            0.15
+          ],
+          "height": 0.01,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 60,
+          "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_item_medical_bag",
+          "category": "item",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2845,
+          "footprint": [
+            0.42,
+            0.2
+          ],
+          "height": 0.24,
+          "zMin": -0.0,
+          "center": [
+            0.0,
+            -0.0
+          ],
+          "triangles": 84,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_item_medkit",
           "category": "item",
           "params": "",
           "paramList": [],
-          "line": 1785,
+          "line": 2527,
           "footprint": [
             0.36,
             0.27
@@ -14347,6 +16003,62 @@
           "ok": true
         },
         {
+          "name": "cw_item_painkillers",
+          "category": "item",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2704,
+          "footprint": [
+            0.05,
+            0.05
+          ],
+          "height": 0.09,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 144,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_item_pants",
+          "category": "item",
+          "params": "seed = 0, cargo = false",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "cargo",
+              "default": "false"
+            }
+          ],
+          "line": 2792,
+          "footprint": [
+            0.38,
+            0.27
+          ],
+          "height": 0.08,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 36,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_item_radio",
           "category": "item",
           "params": "seed = 0",
@@ -14356,7 +16068,7 @@
               "default": "0"
             }
           ],
-          "line": 1820,
+          "line": 2562,
           "footprint": [
             0.38,
             0.24
@@ -14373,6 +16085,435 @@
           "ok": true
         },
         {
+          "name": "cw_item_rags",
+          "category": "item",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2695,
+          "footprint": [
+            0.21,
+            0.21
+          ],
+          "height": 0.04,
+          "zMin": 0.0,
+          "center": [
+            -0.02,
+            -0.01
+          ],
+          "triangles": 36,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_item_soda",
+          "category": "item",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2642,
+          "footprint": [
+            0.07,
+            0.07
+          ],
+          "height": 0.12,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 192,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_item_toolbox",
+          "category": "item",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2857,
+          "footprint": [
+            0.46,
+            0.21
+          ],
+          "height": 0.27,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 60,
+          "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_item_tuna",
+          "category": "item",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2654,
+          "footprint": [
+            0.09,
+            0.09
+          ],
+          "height": 0.04,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 108,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_item_vest",
+          "category": "item",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2805,
+          "footprint": [
+            0.4,
+            0.36
+          ],
+          "height": 0.13,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.01
+          ],
+          "triangles": 84,
+          "colors": 7,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_item_water_bottle",
+          "category": "item",
+          "params": "seed = 0, full = true",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "full",
+              "default": "true"
+            }
+          ],
+          "line": 2628,
+          "footprint": [
+            0.09,
+            0.09
+          ],
+          "height": 0.27,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 240,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_m_anod",
+          "category": "m",
+          "params": "",
+          "paramList": [],
+          "line": 1704,
+          "ok": false
+        },
+        {
+          "name": "cw_m_bake",
+          "category": "m",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 1707,
+          "ok": false
+        },
+        {
+          "name": "cw_m_blued",
+          "category": "m",
+          "params": "",
+          "paramList": [],
+          "line": 1698,
+          "ok": false
+        },
+        {
+          "name": "cw_m_brass",
+          "category": "m",
+          "params": "",
+          "paramList": [],
+          "line": 1710,
+          "ok": false
+        },
+        {
+          "name": "cw_m_bright",
+          "category": "m",
+          "params": "",
+          "paramList": [],
+          "line": 1700,
+          "ok": false
+        },
+        {
+          "name": "cw_m_check",
+          "category": "m",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 1706,
+          "ok": false
+        },
+        {
+          "name": "cw_m_etch",
+          "category": "m",
+          "params": "",
+          "paramList": [],
+          "line": 1702,
+          "ok": false
+        },
+        {
+          "name": "cw_m_hole",
+          "category": "m",
+          "params": "",
+          "paramList": [],
+          "line": 1703,
+          "ok": false
+        },
+        {
+          "name": "cw_m_leather",
+          "category": "m",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 1709,
+          "ok": false
+        },
+        {
+          "name": "cw_m_lens",
+          "category": "m",
+          "params": "",
+          "paramList": [],
+          "line": 1712,
+          "ok": false
+        },
+        {
+          "name": "cw_m_paint",
+          "category": "m",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 1711,
+          "ok": false
+        },
+        {
+          "name": "cw_m_park",
+          "category": "m",
+          "params": "",
+          "paramList": [],
+          "line": 1699,
+          "ok": false
+        },
+        {
+          "name": "cw_m_rubber",
+          "category": "m",
+          "params": "c = [0.035, 0.035, 0.035]",
+          "paramList": [
+            {
+              "name": "c",
+              "default": "[0.035, 0.035, 0.035]"
+            }
+          ],
+          "line": 1708,
+          "ok": false
+        },
+        {
+          "name": "cw_m_silver",
+          "category": "m",
+          "params": "",
+          "paramList": [],
+          "line": 1701,
+          "ok": false
+        },
+        {
+          "name": "cw_m_wood",
+          "category": "m",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 1705,
+          "ok": false
+        },
+        {
+          "name": "cw_mag_slab",
+          "category": "mag",
+          "params": "p, d, w, t = 0.002, c = 0.0025",
+          "paramList": [
+            {
+              "name": "p"
+            },
+            {
+              "name": "d"
+            },
+            {
+              "name": "w"
+            },
+            {
+              "name": "t",
+              "default": "0.002"
+            },
+            {
+              "name": "c",
+              "default": "0.0025"
+            }
+          ],
+          "line": 1774,
+          "footprint": [
+            1.0,
+            1.0
+          ],
+          "height": 0.0,
+          "zMin": -0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 28,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_blk",
+          "category": "misc",
+          "params": "f, z, s, x = 0, c = 0.003",
+          "paramList": [
+            {
+              "name": "f"
+            },
+            {
+              "name": "z"
+            },
+            {
+              "name": "s"
+            },
+            {
+              "name": "x",
+              "default": "0"
+            },
+            {
+              "name": "c",
+              "default": "0.003"
+            }
+          ],
+          "line": 1746,
+          "footprint": [
+            1.0,
+            1.0
+          ],
+          "height": 0.5,
+          "zMin": -0.5,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 44,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_bore",
+          "category": "misc",
+          "params": "f0, len, r, z, x = 0, r2 = -1, fn = 20",
+          "paramList": [
+            {
+              "name": "f0"
+            },
+            {
+              "name": "len"
+            },
+            {
+              "name": "r"
+            },
+            {
+              "name": "z"
+            },
+            {
+              "name": "x",
+              "default": "0"
+            },
+            {
+              "name": "r2",
+              "default": "-1"
+            },
+            {
+              "name": "fn",
+              "default": "20"
+            }
+          ],
+          "line": 1722,
+          "footprint": [
+            2.0,
+            1.0
+          ],
+          "height": 1.0,
+          "zMin": -1.0,
+          "center": [
+            0.0,
+            -0.5
+          ],
+          "triangles": 80,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_boxc",
           "category": "misc",
           "params": "s",
@@ -14381,7 +16522,7 @@
               "name": "s"
             }
           ],
-          "line": 66,
+          "line": 68,
           "footprint": [
             1.0,
             1.0
@@ -14396,6 +16537,174 @@
           "colors": 1,
           "warnings": 0,
           "ok": true
+        },
+        {
+          "name": "cw_cbox",
+          "category": "misc",
+          "params": "s, c = 0.003",
+          "paramList": [
+            {
+              "name": "s"
+            },
+            {
+              "name": "c",
+              "default": "0.003"
+            }
+          ],
+          "line": 1739,
+          "footprint": [
+            1.0,
+            1.0
+          ],
+          "height": 0.5,
+          "zMin": -0.5,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 44,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_cyl",
+          "category": "misc",
+          "params": "h, r, fn = 16, r2 = -1, center = false",
+          "paramList": [
+            {
+              "name": "h"
+            },
+            {
+              "name": "r"
+            },
+            {
+              "name": "fn",
+              "default": "16"
+            },
+            {
+              "name": "r2",
+              "default": "-1"
+            },
+            {
+              "name": "center",
+              "default": "false"
+            }
+          ],
+          "line": 1717,
+          "footprint": [
+            2.0,
+            2.0
+          ],
+          "height": 1.0,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 64,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_lathe",
+          "category": "misc",
+          "params": "pts, z, x = 0, fn = 24",
+          "paramList": [
+            {
+              "name": "pts"
+            },
+            {
+              "name": "z"
+            },
+            {
+              "name": "x",
+              "default": "0"
+            },
+            {
+              "name": "fn",
+              "default": "24"
+            }
+          ],
+          "line": 1733,
+          "ok": false
+        },
+        {
+          "name": "cw_lay",
+          "category": "misc",
+          "params": "cf, lift",
+          "paramList": [
+            {
+              "name": "cf"
+            },
+            {
+              "name": "lift"
+            }
+          ],
+          "line": 1767,
+          "ok": false
+        },
+        {
+          "name": "cw_pin",
+          "category": "misc",
+          "params": "f, z, r, w, x = 0, fn = 12",
+          "paramList": [
+            {
+              "name": "f"
+            },
+            {
+              "name": "z"
+            },
+            {
+              "name": "r"
+            },
+            {
+              "name": "w"
+            },
+            {
+              "name": "x",
+              "default": "0"
+            },
+            {
+              "name": "fn",
+              "default": "12"
+            }
+          ],
+          "line": 1763,
+          "footprint": [
+            1.0,
+            2.0
+          ],
+          "height": 1.0,
+          "zMin": -1.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 48,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_side",
+          "category": "misc",
+          "params": "w, pts, x = 0",
+          "paramList": [
+            {
+              "name": "w"
+            },
+            {
+              "name": "pts"
+            },
+            {
+              "name": "x",
+              "default": "0"
+            }
+          ],
+          "line": 1725,
+          "ok": false
         },
         {
           "name": "cw_slab",
@@ -14415,7 +16724,7 @@
               "default": "0.2"
             }
           ],
-          "line": 67,
+          "line": 69,
           "footprint": [
             4.0,
             4.0
@@ -14432,6 +16741,87 @@
           "ok": true
         },
         {
+          "name": "cw_sph",
+          "category": "misc",
+          "params": "r, fn = 16",
+          "paramList": [
+            {
+              "name": "r"
+            },
+            {
+              "name": "fn",
+              "default": "16"
+            }
+          ],
+          "line": 1718,
+          "footprint": [
+            2.0,
+            2.0
+          ],
+          "height": 1.0,
+          "zMin": -1.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 224,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_torus",
+          "category": "misc",
+          "params": "R, r, fn = 16",
+          "paramList": [
+            {
+              "name": "R"
+            },
+            {
+              "name": "r"
+            },
+            {
+              "name": "fn",
+              "default": "16"
+            }
+          ],
+          "line": 1719,
+          "footprint": [
+            2.0,
+            2.0
+          ],
+          "height": 1.0,
+          "zMin": -1.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 512,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_wf",
+          "category": "misc",
+          "params": "f, z = 0, x = 0",
+          "paramList": [
+            {
+              "name": "f"
+            },
+            {
+              "name": "z",
+              "default": "0"
+            },
+            {
+              "name": "x",
+              "default": "0"
+            }
+          ],
+          "line": 1720,
+          "ok": false
+        },
+        {
           "name": "cw_nature_birch",
           "category": "nature",
           "params": "s = 1.0, seed = 0",
@@ -14445,7 +16835,7 @@
               "default": "0"
             }
           ],
-          "line": 820,
+          "line": 844,
           "footprint": [
             2.35,
             2.2
@@ -14475,7 +16865,7 @@
               "default": "0"
             }
           ],
-          "line": 850,
+          "line": 874,
           "footprint": [
             1.47,
             1.1
@@ -14509,7 +16899,7 @@
               "default": "0"
             }
           ],
-          "line": 918,
+          "line": 942,
           "footprint": [
             12.0,
             9.0
@@ -14535,7 +16925,7 @@
               "default": "0"
             }
           ],
-          "line": 861,
+          "line": 885,
           "footprint": [
             0.46,
             0.48
@@ -14561,7 +16951,7 @@
               "default": "0"
             }
           ],
-          "line": 907,
+          "line": 931,
           "footprint": [
             2.48,
             0.73
@@ -14591,7 +16981,7 @@
               "default": "0"
             }
           ],
-          "line": 805,
+          "line": 829,
           "footprint": [
             2.9,
             2.9
@@ -14617,7 +17007,7 @@
               "default": "0"
             }
           ],
-          "line": 871,
+          "line": 895,
           "footprint": [
             0.71,
             0.64
@@ -14647,7 +17037,7 @@
               "default": "0"
             }
           ],
-          "line": 885,
+          "line": 909,
           "footprint": [
             1.75,
             1.62
@@ -14677,7 +17067,7 @@
               "default": "0"
             }
           ],
-          "line": 896,
+          "line": 920,
           "footprint": [
             0.64,
             0.71
@@ -14707,7 +17097,7 @@
               "default": "0"
             }
           ],
-          "line": 835,
+          "line": 859,
           "footprint": [
             1.33,
             1.13
@@ -14741,7 +17131,7 @@
               "default": "[0.30, 0.22, 0.16]"
             }
           ],
-          "line": 116,
+          "line": 118,
           "footprint": [
             1.24,
             0.2
@@ -14775,7 +17165,7 @@
               "default": "[0.26, 0.28, 0.30]"
             }
           ],
-          "line": 124,
+          "line": 126,
           "footprint": [
             1.32,
             0.19
@@ -14821,7 +17211,7 @@
               "default": "[0.28, 0.31, 0.36]"
             }
           ],
-          "line": 73,
+          "line": 75,
           "footprint": [
             9.0,
             7.0
@@ -14883,7 +17273,7 @@
               "default": "true"
             }
           ],
-          "line": 149,
+          "line": 151,
           "footprint": [
             1.0,
             1.0
@@ -14917,7 +17307,7 @@
               "name": "w"
             }
           ],
-          "line": 141,
+          "line": 143,
           "footprint": [
             0.0,
             1.0
@@ -14947,7 +17337,7 @@
               "default": "1.3"
             }
           ],
-          "line": 84,
+          "line": 86,
           "footprint": [
             1.16,
             0.14
@@ -14977,7 +17367,7 @@
               "default": "0.9"
             }
           ],
-          "line": 107,
+          "line": 109,
           "footprint": [
             0.96,
             0.14
@@ -15011,7 +17401,7 @@
               "default": "0"
             }
           ],
-          "line": 92,
+          "line": 94,
           "footprint": [
             1.16,
             0.14
@@ -15028,6 +17418,19 @@
           "ok": true
         },
         {
+          "name": "cw_pm_star",
+          "category": "pm",
+          "params": "r = 0.0065",
+          "paramList": [
+            {
+              "name": "r",
+              "default": "0.0065"
+            }
+          ],
+          "line": 2225,
+          "ok": false
+        },
+        {
           "name": "cw_prop_antenna",
           "category": "prop",
           "params": "seed = 0",
@@ -15037,7 +17440,7 @@
               "default": "0"
             }
           ],
-          "line": 1228,
+          "line": 1252,
           "footprint": [
             1.67,
             1.67
@@ -15063,7 +17466,7 @@
               "default": "0"
             }
           ],
-          "line": 1097,
+          "line": 1121,
           "footprint": [
             0.63,
             0.63
@@ -15080,6 +17483,40 @@
           "ok": true
         },
         {
+          "name": "cw_prop_barricade",
+          "category": "prop",
+          "params": "len = 3, h = 1.4, seed = 0",
+          "paramList": [
+            {
+              "name": "len",
+              "default": "3"
+            },
+            {
+              "name": "h",
+              "default": "1.4"
+            },
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 3051,
+          "footprint": [
+            3.01,
+            0.76
+          ],
+          "height": 1.64,
+          "zMin": -0.24,
+          "center": [
+            0.0,
+            -0.33
+          ],
+          "triangles": 96,
+          "colors": 8,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_prop_barrier_gate",
           "category": "prop",
           "params": "seed = 0",
@@ -15089,7 +17526,7 @@
               "default": "0"
             }
           ],
-          "line": 1213,
+          "line": 1237,
           "footprint": [
             1.93,
             0.7
@@ -15106,6 +17543,32 @@
           "ok": true
         },
         {
+          "name": "cw_prop_bed",
+          "category": "prop",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2901,
+          "footprint": [
+            2.01,
+            1.04
+          ],
+          "height": 0.9,
+          "zMin": 0.0,
+          "center": [
+            0.01,
+            -0.04
+          ],
+          "triangles": 264,
+          "colors": 10,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_prop_bed_hospital",
           "category": "prop",
           "params": "seed = 0",
@@ -15115,7 +17578,7 @@
               "default": "0"
             }
           ],
-          "line": 1439,
+          "line": 1463,
           "footprint": [
             2.08,
             1.04
@@ -15136,7 +17599,7 @@
           "category": "prop",
           "params": "",
           "paramList": [],
-          "line": 1399,
+          "line": 1423,
           "footprint": [
             1.8,
             0.53
@@ -15162,7 +17625,7 @@
               "default": "0"
             }
           ],
-          "line": 1044,
+          "line": 1068,
           "footprint": [
             5.6,
             1.7
@@ -15175,6 +17638,62 @@
           ],
           "triangles": 132,
           "colors": 11,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_prop_blood_stain",
+          "category": "prop",
+          "params": "seed = 0, s = 1.0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "s",
+              "default": "1.0"
+            }
+          ],
+          "line": 3028,
+          "footprint": [
+            1.07,
+            0.83
+          ],
+          "height": 0.01,
+          "zMin": 0.0,
+          "center": [
+            -0.14,
+            -0.1
+          ],
+          "triangles": 192,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_prop_body_bag",
+          "category": "prop",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 3012,
+          "footprint": [
+            1.53,
+            1.66
+          ],
+          "height": 0.32,
+          "zMin": -0.04,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 192,
+          "colors": 3,
           "warnings": 0,
           "ok": true
         },
@@ -15196,7 +17715,7 @@
               "default": "0"
             }
           ],
-          "line": 1471,
+          "line": 1495,
           "footprint": [
             36.95,
             9.4
@@ -15222,7 +17741,7 @@
               "default": "0"
             }
           ],
-          "line": 1286,
+          "line": 1310,
           "footprint": [
             1.34,
             1.34
@@ -15248,7 +17767,7 @@
               "default": "0"
             }
           ],
-          "line": 1304,
+          "line": 1328,
           "footprint": [
             1.18,
             1.22
@@ -15265,6 +17784,62 @@
           "ok": true
         },
         {
+          "name": "cw_prop_chair",
+          "category": "prop",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2886,
+          "footprint": [
+            0.61,
+            0.61
+          ],
+          "height": 0.95,
+          "zMin": -0.01,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 96,
+          "colors": 8,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_prop_counter",
+          "category": "prop",
+          "params": "seed = 0, L = 2.2",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "2.2"
+            }
+          ],
+          "line": 2987,
+          "footprint": [
+            2.26,
+            0.66
+          ],
+          "height": 1.33,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 48,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_prop_crate_ammo",
           "category": "prop",
           "params": "seed = 0",
@@ -15274,7 +17849,7 @@
               "default": "0"
             }
           ],
-          "line": 1106,
+          "line": 1130,
           "footprint": [
             1.2,
             0.93
@@ -15300,7 +17875,7 @@
               "default": "0"
             }
           ],
-          "line": 1458,
+          "line": 1482,
           "footprint": [
             2.6,
             2.0
@@ -15321,7 +17896,7 @@
           "category": "prop",
           "params": "",
           "paramList": [],
-          "line": 1152,
+          "line": 1176,
           "footprint": [
             2.2,
             1.37
@@ -15347,7 +17922,7 @@
               "default": "6"
             }
           ],
-          "line": 963,
+          "line": 987,
           "footprint": [
             6.09,
             0.17
@@ -15377,7 +17952,7 @@
               "default": "2.2"
             }
           ],
-          "line": 948,
+          "line": 972,
           "footprint": [
             6.09,
             0.38
@@ -15407,7 +17982,7 @@
               "default": "2.0"
             }
           ],
-          "line": 937,
+          "line": 961,
           "footprint": [
             5.3,
             0.34
@@ -15433,7 +18008,7 @@
               "default": "0"
             }
           ],
-          "line": 1180,
+          "line": 1204,
           "footprint": [
             5.18,
             2.24
@@ -15450,11 +18025,71 @@
           "ok": true
         },
         {
+          "name": "cw_prop_graffiti",
+          "category": "prop",
+          "params": "msg = \"HELP\", size = 0.6, seed = 0",
+          "paramList": [
+            {
+              "name": "msg",
+              "default": "\"HELP\""
+            },
+            {
+              "name": "size",
+              "default": "0.6"
+            },
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 3086,
+          "footprint": [
+            1.29,
+            0.02
+          ],
+          "height": 0.2,
+          "zMin": -0.23,
+          "center": [
+            0.01,
+            -0.01
+          ],
+          "triangles": 246,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_prop_haybale",
+          "category": "prop",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 3112,
+          "footprint": [
+            1.69,
+            1.69
+          ],
+          "height": 1.2,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 144,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_prop_hedgehog",
           "category": "prop",
           "params": "",
           "paramList": [],
-          "line": 983,
+          "line": 1007,
           "footprint": [
             1.46,
             0.2
@@ -15471,6 +18106,32 @@
           "ok": true
         },
         {
+          "name": "cw_prop_jersey_barrier",
+          "category": "prop",
+          "params": "len = 3",
+          "paramList": [
+            {
+              "name": "len",
+              "default": "3"
+            }
+          ],
+          "line": 3062,
+          "footprint": [
+            3.0,
+            0.6
+          ],
+          "height": 0.82,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 56,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_prop_kiosk",
           "category": "prop",
           "params": "seed = 0",
@@ -15480,7 +18141,7 @@
               "default": "0"
             }
           ],
-          "line": 1346,
+          "line": 1370,
           "footprint": [
             2.5,
             2.1
@@ -15501,7 +18162,7 @@
           "category": "prop",
           "params": "",
           "paramList": [],
-          "line": 998,
+          "line": 1022,
           "footprint": [
             0.36,
             1.15
@@ -15518,6 +18179,66 @@
           "ok": true
         },
         {
+          "name": "cw_prop_locker",
+          "category": "prop",
+          "params": "seed = 0, n = 3",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "n",
+              "default": "3"
+            }
+          ],
+          "line": 2934,
+          "footprint": [
+            1.24,
+            0.9
+          ],
+          "height": 1.8,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.23
+          ],
+          "triangles": 84,
+          "colors": 7,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_prop_log_pile",
+          "category": "prop",
+          "params": "seed = 0, L = 5",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "5"
+            }
+          ],
+          "line": 3123,
+          "footprint": [
+            5.38,
+            2.52
+          ],
+          "height": 1.2,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 624,
+          "colors": 6,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_prop_monument",
           "category": "prop",
           "params": "seed = 0",
@@ -15527,7 +18248,7 @@
               "default": "0"
             }
           ],
-          "line": 1064,
+          "line": 1088,
           "footprint": [
             3.2,
             3.2
@@ -15553,7 +18274,7 @@
               "default": "0"
             }
           ],
-          "line": 1121,
+          "line": 1145,
           "footprint": [
             1.32,
             1.27
@@ -15579,7 +18300,7 @@
               "default": "0"
             }
           ],
-          "line": 1359,
+          "line": 1383,
           "footprint": [
             1.1,
             1.1
@@ -15605,7 +18326,7 @@
               "default": "0"
             }
           ],
-          "line": 1407,
+          "line": 1431,
           "footprint": [
             7.0,
             3.79
@@ -15631,7 +18352,7 @@
               "default": "0"
             }
           ],
-          "line": 1010,
+          "line": 1034,
           "footprint": [
             0.32,
             1.8
@@ -15657,7 +18378,7 @@
               "default": "0"
             }
           ],
-          "line": 1165,
+          "line": 1189,
           "footprint": [
             1.2,
             0.8
@@ -15674,6 +18395,32 @@
           "ok": true
         },
         {
+          "name": "cw_prop_sandbag_nest",
+          "category": "prop",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 3133,
+          "footprint": [
+            3.49,
+            2.65
+          ],
+          "height": 1.08,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.27
+          ],
+          "triangles": 4416,
+          "colors": 11,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_prop_searchlight",
           "category": "prop",
           "params": "seed = 0",
@@ -15683,7 +18430,7 @@
               "default": "0"
             }
           ],
-          "line": 1256,
+          "line": 1280,
           "footprint": [
             1.0,
             1.3
@@ -15713,7 +18460,7 @@
               "default": "2.4"
             }
           ],
-          "line": 1327,
+          "line": 1351,
           "footprint": [
             2.4,
             1.27
@@ -15730,6 +18477,36 @@
           "ok": true
         },
         {
+          "name": "cw_prop_shelf_wood",
+          "category": "prop",
+          "params": "seed = 0, L = 1.6",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "1.6"
+            }
+          ],
+          "line": 2948,
+          "footprint": [
+            1.6,
+            0.4
+          ],
+          "height": 1.8,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 96,
+          "colors": 8,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_prop_sign_pylon",
           "category": "prop",
           "params": "seed = 0",
@@ -15739,7 +18516,7 @@
               "default": "0"
             }
           ],
-          "line": 1200,
+          "line": 1224,
           "footprint": [
             1.7,
             0.44
@@ -15756,6 +18533,36 @@
           "ok": true
         },
         {
+          "name": "cw_prop_sign_quarantine",
+          "category": "prop",
+          "params": "seed = 0, msg = \"QUARANTINE\"",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "msg",
+              "default": "\"QUARANTINE\""
+            }
+          ],
+          "line": 3075,
+          "footprint": [
+            2.1,
+            0.08
+          ],
+          "height": 2.0,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.0
+          ],
+          "triangles": 992,
+          "colors": 11,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_prop_sign_road",
           "category": "prop",
           "params": "seed = 0",
@@ -15765,7 +18572,7 @@
               "default": "0"
             }
           ],
-          "line": 1031,
+          "line": 1055,
           "footprint": [
             2.0,
             0.18
@@ -15791,7 +18598,7 @@
               "default": "0"
             }
           ],
-          "line": 1021,
+          "line": 1045,
           "footprint": [
             2.2,
             0.16
@@ -15808,6 +18615,32 @@
           "ok": true
         },
         {
+          "name": "cw_prop_sofa",
+          "category": "prop",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2973,
+          "footprint": [
+            1.92,
+            0.86
+          ],
+          "height": 0.9,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 60,
+          "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_prop_statue",
           "category": "prop",
           "params": "seed = 0",
@@ -15817,7 +18650,7 @@
               "default": "0"
             }
           ],
-          "line": 1081,
+          "line": 1105,
           "footprint": [
             1.8,
             1.8
@@ -15829,6 +18662,100 @@
             0.0
           ],
           "triangles": 204,
+          "colors": 8,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_prop_stove",
+          "category": "prop",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2961,
+          "footprint": [
+            0.6,
+            0.6
+          ],
+          "height": 1.0,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.0
+          ],
+          "triangles": 264,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_prop_table",
+          "category": "prop",
+          "params": "seed = 0, L = 1.2, D = 0.7",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "1.2"
+            },
+            {
+              "name": "D",
+              "default": "0.7"
+            }
+          ],
+          "line": 2871,
+          "footprint": [
+            1.21,
+            0.72
+          ],
+          "height": 0.89,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 156,
+          "colors": 7,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_prop_tent_medical",
+          "category": "prop",
+          "params": "seed = 0, L = 5, D = 3.6",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "L",
+              "default": "5"
+            },
+            {
+              "name": "D",
+              "default": "3.6"
+            }
+          ],
+          "line": 3094,
+          "footprint": [
+            5.74,
+            4.35
+          ],
+          "height": 1.56,
+          "zMin": -0.65,
+          "center": [
+            -0.3,
+            0.0
+          ],
+          "triangles": 96,
           "colors": 8,
           "warnings": 0,
           "ok": true
@@ -15851,7 +18778,7 @@
               "default": "3.2"
             }
           ],
-          "line": 1266,
+          "line": 1290,
           "footprint": [
             5.82,
             4.1
@@ -15877,7 +18804,7 @@
               "default": "0"
             }
           ],
-          "line": 1132,
+          "line": 1156,
           "footprint": [
             1.41,
             0.94
@@ -15894,6 +18821,32 @@
           "ok": true
         },
         {
+          "name": "cw_prop_trash",
+          "category": "prop",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 3037,
+          "footprint": [
+            1.55,
+            0.87
+          ],
+          "height": 0.4,
+          "zMin": -0.04,
+          "center": [
+            -0.03,
+            -0.24
+          ],
+          "triangles": 576,
+          "colors": 6,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_prop_wall_sandbag",
           "category": "prop",
           "params": "len = 3",
@@ -15903,7 +18856,7 @@
               "default": "3"
             }
           ],
-          "line": 973,
+          "line": 997,
           "footprint": [
             2.8,
             0.39
@@ -15920,6 +18873,58 @@
           "ok": true
         },
         {
+          "name": "cw_prop_wardrobe",
+          "category": "prop",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2918,
+          "footprint": [
+            0.95,
+            1.16
+          ],
+          "height": 1.9,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.31
+          ],
+          "triangles": 64,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_prop_water_pump",
+          "category": "prop",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 3147,
+          "footprint": [
+            1.0,
+            1.01
+          ],
+          "height": 1.35,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.01
+          ],
+          "triangles": 228,
+          "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_prop_well",
           "category": "prop",
           "params": "seed = 0",
@@ -15929,7 +18934,7 @@
               "default": "0"
             }
           ],
-          "line": 1373,
+          "line": 1397,
           "footprint": [
             2.2,
             1.8
@@ -15955,7 +18960,7 @@
               "default": "0"
             }
           ],
-          "line": 1389,
+          "line": 1413,
           "footprint": [
             1.6,
             1.2
@@ -15972,6 +18977,121 @@
           "ok": true
         },
         {
+          "name": "cw_prop_workbench",
+          "category": "prop",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 2996,
+          "footprint": [
+            1.8,
+            0.76
+          ],
+          "height": 1.65,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.01
+          ],
+          "triangles": 144,
+          "colors": 12,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_rod_r",
+          "category": "rod",
+          "params": "f, z, x0, len, r, fn = 12",
+          "paramList": [
+            {
+              "name": "f"
+            },
+            {
+              "name": "z"
+            },
+            {
+              "name": "x0"
+            },
+            {
+              "name": "len"
+            },
+            {
+              "name": "r"
+            },
+            {
+              "name": "fn",
+              "default": "12"
+            }
+          ],
+          "line": 1765,
+          "footprint": [
+            1.0,
+            2.0
+          ],
+          "height": 1.0,
+          "zMin": -1.0,
+          "center": [
+            -0.5,
+            0.0
+          ],
+          "triangles": 48,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_side_hole",
+          "category": "side",
+          "params": "w, outer, hole, x = 0",
+          "paramList": [
+            {
+              "name": "w"
+            },
+            {
+              "name": "outer"
+            },
+            {
+              "name": "hole"
+            },
+            {
+              "name": "x",
+              "default": "0"
+            }
+          ],
+          "line": 1728,
+          "ok": false
+        },
+        {
+          "name": "cw_svd_scope",
+          "category": "svd",
+          "params": "lens = false",
+          "paramList": [
+            {
+              "name": "lens",
+              "default": "false"
+            }
+          ],
+          "line": 1923,
+          "footprint": [
+            0.05,
+            0.36
+          ],
+          "height": 0.16,
+          "zMin": 0.05,
+          "center": [
+            0.01,
+            0.01
+          ],
+          "triangles": 1356,
+          "colors": 10,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_veh_btr",
           "category": "veh",
           "params": "seed = 0",
@@ -15981,7 +19101,7 @@
               "default": "0"
             }
           ],
-          "line": 1576,
+          "line": 1600,
           "footprint": [
             6.81,
             2.92
@@ -16007,7 +19127,7 @@
               "default": "0"
             }
           ],
-          "line": 1547,
+          "line": 1571,
           "footprint": [
             6.5,
             2.46
@@ -16024,6 +19144,58 @@
           "ok": true
         },
         {
+          "name": "cw_veh_car_burnt",
+          "category": "veh",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 3165,
+          "footprint": [
+            4.0,
+            1.68
+          ],
+          "height": 1.19,
+          "zMin": -0.08,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 252,
+          "colors": 6,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_veh_freight_car",
+          "category": "veh",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 3183,
+          "footprint": [
+            13.1,
+            3.08
+          ],
+          "height": 3.81,
+          "zMin": 0.03,
+          "center": [
+            0.0,
+            -0.04
+          ],
+          "triangles": 624,
+          "colors": 21,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_veh_heli_wreck",
           "category": "veh",
           "params": "seed = 0",
@@ -16033,7 +19205,7 @@
               "default": "0"
             }
           ],
-          "line": 1609,
+          "line": 1633,
           "footprint": [
             11.0,
             7.65
@@ -16059,7 +19231,7 @@
               "default": "0"
             }
           ],
-          "line": 1497,
+          "line": 1521,
           "footprint": [
             3.99,
             2.04
@@ -16085,7 +19257,7 @@
               "default": "0"
             }
           ],
-          "line": 1591,
+          "line": 1615,
           "footprint": [
             8.38,
             3.4
@@ -16102,6 +19274,32 @@
           "ok": true
         },
         {
+          "name": "cw_veh_tank_car",
+          "category": "veh",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 3204,
+          "footprint": [
+            11.66,
+            2.9
+          ],
+          "height": 3.95,
+          "zMin": 0.03,
+          "center": [
+            0.0,
+            -0.05
+          ],
+          "triangles": 780,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
           "name": "cw_veh_tractor",
           "category": "veh",
           "params": "seed = 0",
@@ -16111,7 +19309,7 @@
               "default": "0"
             }
           ],
-          "line": 1561,
+          "line": 1585,
           "footprint": [
             3.42,
             2.14
@@ -16137,7 +19335,7 @@
               "default": "0"
             }
           ],
-          "line": 1523,
+          "line": 1547,
           "footprint": [
             5.82,
             2.38
@@ -16163,7 +19361,7 @@
               "default": "0"
             }
           ],
-          "line": 1510,
+          "line": 1534,
           "footprint": [
             4.04,
             2.08
@@ -16193,7 +19391,7 @@
               "default": "0.26"
             }
           ],
-          "line": 1490,
+          "line": 1514,
           "footprint": [
             0.68,
             0.3
@@ -16219,7 +19417,7 @@
               "default": "0"
             }
           ],
-          "line": 1642,
+          "line": 1666,
           "footprint": [
             3.93,
             2.04
@@ -16245,19 +19443,61 @@
               "default": "0"
             }
           ],
-          "line": 1666,
+          "line": 1915,
           "footprint": [
-            1.43,
-            0.35
+            1.03,
+            0.28
           ],
-          "height": 0.1,
-          "zMin": 0.01,
+          "height": 0.07,
+          "zMin": 0.0,
           "center": [
-            0.11,
-            -0.13
+            -0.0,
+            -0.03
           ],
-          "triangles": 132,
-          "colors": 8,
+          "triangles": 3402,
+          "colors": 60,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_wpn_ak_held",
+          "category": "wpn",
+          "params": "",
+          "paramList": [],
+          "line": 1784,
+          "footprint": [
+            0.07,
+            1.03
+          ],
+          "height": 0.11,
+          "zMin": -0.17,
+          "center": [
+            -0.01,
+            -0.15
+          ],
+          "triangles": 3402,
+          "colors": 60,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_wpn_axe_held",
+          "category": "wpn",
+          "params": "",
+          "paramList": [],
+          "line": 2464,
+          "footprint": [
+            0.03,
+            0.88
+          ],
+          "height": 0.16,
+          "zMin": -0.13,
+          "center": [
+            0.0,
+            -0.16
+          ],
+          "triangles": 964,
+          "colors": 13,
           "warnings": 0,
           "ok": true
         },
@@ -16271,19 +19511,61 @@
               "default": "0"
             }
           ],
-          "line": 1748,
+          "line": 2356,
           "footprint": [
-            1.65,
-            1.1
+            1.44,
+            1.04
           ],
           "height": 0.52,
           "zMin": -0.24,
           "center": [
-            0.1,
-            0.12
+            0.0,
+            0.15
           ],
-          "triangles": 328,
-          "colors": 20,
+          "triangles": 7066,
+          "colors": 124,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_wpn_crowbar_held",
+          "category": "wpn",
+          "params": "",
+          "paramList": [],
+          "line": 2416,
+          "footprint": [
+            0.03,
+            0.81
+          ],
+          "height": 0.13,
+          "zMin": -0.01,
+          "center": [
+            0.0,
+            -0.1
+          ],
+          "triangles": 532,
+          "colors": 16,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_wpn_knife_held",
+          "category": "wpn",
+          "params": "",
+          "paramList": [],
+          "line": 2374,
+          "footprint": [
+            0.02,
+            0.36
+          ],
+          "height": 0.02,
+          "zMin": -0.03,
+          "center": [
+            0.0,
+            -0.05
+          ],
+          "triangles": 1884,
+          "colors": 22,
           "warnings": 0,
           "ok": true
         },
@@ -16297,19 +19579,40 @@
               "default": "0"
             }
           ],
-          "line": 1698,
+          "line": 2143,
           "footprint": [
-            1.51,
-            0.12
+            1.28,
+            0.18
           ],
-          "height": 0.08,
+          "height": 0.1,
           "zMin": 0.0,
           "center": [
-            0.11,
-            -0.03
+            -0.0,
+            0.01
           ],
-          "triangles": 96,
-          "colors": 5,
+          "triangles": 1902,
+          "colors": 30,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_wpn_mosin_held",
+          "category": "wpn",
+          "params": "",
+          "paramList": [],
+          "line": 2059,
+          "footprint": [
+            0.1,
+            1.28
+          ],
+          "height": 0.1,
+          "zMin": -0.08,
+          "center": [
+            -0.03,
+            -0.18
+          ],
+          "triangles": 1908,
+          "colors": 30,
           "warnings": 0,
           "ok": true
         },
@@ -16323,19 +19626,40 @@
               "default": "0"
             }
           ],
-          "line": 1723,
+          "line": 2299,
           "footprint": [
-            0.18,
-            0.13
+            0.26,
+            0.19
           ],
-          "height": 0.06,
+          "height": 0.05,
           "zMin": 0.0,
           "center": [
-            -0.0,
+            0.0,
+            -0.02
+          ],
+          "triangles": 1838,
+          "colors": 25,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_wpn_pistol_held",
+          "category": "wpn",
+          "params": "",
+          "paramList": [],
+          "line": 2228,
+          "footprint": [
+            0.05,
+            0.26
+          ],
+          "height": 0.08,
+          "zMin": -0.11,
+          "center": [
+            0.0,
             -0.05
           ],
-          "triangles": 36,
-          "colors": 3,
+          "triangles": 1838,
+          "colors": 25,
           "warnings": 0,
           "ok": true
         },
@@ -16349,19 +19673,40 @@
               "default": "0"
             }
           ],
-          "line": 1734,
+          "line": 2353,
           "footprint": [
-            1.22,
-            0.22
+            1.35,
+            0.17
           ],
-          "height": 0.16,
-          "zMin": -0.04,
+          "height": 0.1,
+          "zMin": -0.0,
           "center": [
-            0.11,
-            -0.01
+            -0.0,
+            0.02
           ],
-          "triangles": 216,
-          "colors": 6,
+          "triangles": 1936,
+          "colors": 22,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_wpn_rpg_held",
+          "category": "wpn",
+          "params": "",
+          "paramList": [],
+          "line": 2304,
+          "footprint": [
+            0.1,
+            1.35
+          ],
+          "height": 0.1,
+          "zMin": -0.06,
+          "center": [
+            0.01,
+            0.07
+          ],
+          "triangles": 1936,
+          "colors": 22,
           "warnings": 0,
           "ok": true
         },
@@ -16375,21 +19720,65 @@
               "default": "0"
             }
           ],
-          "line": 1711,
+          "line": 2217,
           "footprint": [
-            1.38,
-            0.09
+            1.2,
+            0.2
           ],
-          "height": 0.08,
-          "zMin": 0.0,
+          "height": 0.05,
+          "zMin": -0.0,
           "center": [
-            0.23,
+            0.0,
             -0.01
           ],
-          "triangles": 120,
-          "colors": 3,
+          "triangles": 1386,
+          "colors": 28,
           "warnings": 0,
           "ok": true
+        },
+        {
+          "name": "cw_wpn_shotgun_held",
+          "category": "wpn",
+          "params": "",
+          "paramList": [],
+          "line": 2150,
+          "footprint": [
+            0.06,
+            1.2
+          ],
+          "height": 0.09,
+          "zMin": -0.11,
+          "center": [
+            0.0,
+            -0.18
+          ],
+          "triangles": 1386,
+          "colors": 28,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_wpn_slab",
+          "category": "wpn",
+          "params": "w, pts, c = 0.004, x = 0",
+          "paramList": [
+            {
+              "name": "w"
+            },
+            {
+              "name": "pts"
+            },
+            {
+              "name": "c",
+              "default": "0.004"
+            },
+            {
+              "name": "x",
+              "default": "0"
+            }
+          ],
+          "line": 1760,
+          "ok": false
         },
         {
           "name": "cw_wpn_svd",
@@ -16401,19 +19790,49 @@
               "default": "0"
             }
           ],
-          "line": 1682,
+          "line": 2052,
           "footprint": [
-            1.9,
+            1.27,
             0.26
           ],
-          "height": 0.1,
-          "zMin": 0.01,
+          "height": 0.07,
+          "zMin": -0.0,
           "center": [
-            0.3,
-            -0.04
+            -0.0,
+            0.03
           ],
-          "triangles": 204,
-          "colors": 6,
+          "triangles": 3940,
+          "colors": 51,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "cw_wpn_svd_held",
+          "category": "wpn",
+          "params": "lens = false, scope = true",
+          "paramList": [
+            {
+              "name": "lens",
+              "default": "false"
+            },
+            {
+              "name": "scope",
+              "default": "true"
+            }
+          ],
+          "line": 1953,
+          "footprint": [
+            0.07,
+            1.26
+          ],
+          "height": 0.16,
+          "zMin": -0.1,
+          "center": [
+            -0.0,
+            -0.21
+          ],
+          "triangles": 3756,
+          "colors": 49,
           "warnings": 0,
           "ok": true
         }
@@ -21259,6 +24678,368 @@
           ],
           "line": 70,
           "ok": false
+        }
+      ]
+    },
+    {
+      "name": "kit_nd_arsenal",
+      "file": "kit_nd_arsenal.scad",
+      "prefix": "nd_",
+      "scaleClass": "mid",
+      "modules": [
+        {
+          "name": "nd_ak_folding_stock",
+          "category": "ak",
+          "params": "butt = -0.392",
+          "paramList": [
+            {
+              "name": "butt",
+              "default": "-0.392"
+            }
+          ],
+          "line": 60,
+          "footprint": [
+            0.04,
+            0.31
+          ],
+          "height": 0.08,
+          "zMin": -0.06,
+          "center": [
+            0.0,
+            0.24
+          ],
+          "triangles": 242,
+          "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nd_ak_receiver",
+          "category": "ak",
+          "params": "coverEnd = 0.150",
+          "paramList": [
+            {
+              "name": "coverEnd",
+              "default": "0.150"
+            }
+          ],
+          "line": 21,
+          "footprint": [
+            0.07,
+            0.3
+          ],
+          "height": 0.1,
+          "zMin": 0.0,
+          "center": [
+            -0.01,
+            -0.06
+          ],
+          "triangles": 1352,
+          "colors": 22,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nd_m_birch",
+          "category": "m",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 14,
+          "ok": false
+        },
+        {
+          "name": "nd_m_poly",
+          "category": "m",
+          "params": "c = [0.065, 0.066, 0.07]",
+          "paramList": [
+            {
+              "name": "c",
+              "default": "[0.065, 0.066, 0.07]"
+            }
+          ],
+          "line": 13,
+          "ok": false
+        },
+        {
+          "name": "nd_m_worn",
+          "category": "m",
+          "params": "",
+          "paramList": [],
+          "line": 15,
+          "ok": false
+        },
+        {
+          "name": "nd_strut",
+          "category": "misc",
+          "params": "a, b, w, h",
+          "paramList": [
+            {
+              "name": "a"
+            },
+            {
+              "name": "b"
+            },
+            {
+              "name": "w"
+            },
+            {
+              "name": "h"
+            }
+          ],
+          "line": 18,
+          "footprint": [
+            1.0,
+            0.0
+          ],
+          "height": 0.5,
+          "zMin": -0.5,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 44,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nd_wpn_aks74u",
+          "category": "wpn",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 148,
+          "footprint": [
+            0.88,
+            0.28
+          ],
+          "height": 0.07,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.03
+          ],
+          "triangles": 3612,
+          "colors": 60,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nd_wpn_aks74u_held",
+          "category": "wpn",
+          "params": "",
+          "paramList": [],
+          "line": 75,
+          "footprint": [
+            0.07,
+            0.88
+          ],
+          "height": 0.11,
+          "zMin": -0.17,
+          "center": [
+            -0.01,
+            -0.05
+          ],
+          "triangles": 3610,
+          "colors": 60,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nd_wpn_aps",
+          "category": "wpn",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 284,
+          "footprint": [
+            0.36,
+            0.23
+          ],
+          "height": 0.05,
+          "zMin": -0.0,
+          "center": [
+            -0.0,
+            -0.03
+          ],
+          "triangles": 1910,
+          "colors": 28,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nd_wpn_aps_held",
+          "category": "wpn",
+          "params": "",
+          "paramList": [],
+          "line": 215,
+          "footprint": [
+            0.05,
+            0.36
+          ],
+          "height": 0.09,
+          "zMin": -0.14,
+          "center": [
+            0.0,
+            -0.09
+          ],
+          "triangles": 1910,
+          "colors": 28,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nd_wpn_bizon",
+          "category": "wpn",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 209,
+          "footprint": [
+            0.86,
+            0.18
+          ],
+          "height": 0.07,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.02
+          ],
+          "triangles": 5448,
+          "colors": 64,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nd_wpn_bizon_held",
+          "category": "wpn",
+          "params": "",
+          "paramList": [],
+          "line": 153,
+          "footprint": [
+            0.07,
+            0.86
+          ],
+          "height": 0.11,
+          "zMin": -0.07,
+          "center": [
+            -0.01,
+            -0.04
+          ],
+          "triangles": 5438,
+          "colors": 64,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nd_wpn_svt40",
+          "category": "wpn",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 398,
+          "footprint": [
+            1.26,
+            0.2
+          ],
+          "height": 0.08,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.0
+          ],
+          "triangles": 3510,
+          "colors": 48,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nd_wpn_svt40_held",
+          "category": "wpn",
+          "params": "",
+          "paramList": [],
+          "line": 291,
+          "footprint": [
+            0.08,
+            1.26
+          ],
+          "height": 0.1,
+          "zMin": -0.1,
+          "center": [
+            -0.02,
+            -0.18
+          ],
+          "triangles": 3510,
+          "colors": 48,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nd_wpn_toz34",
+          "category": "wpn",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 475,
+          "footprint": [
+            1.21,
+            0.19
+          ],
+          "height": 0.05,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.02
+          ],
+          "triangles": 1858,
+          "colors": 41,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "nd_wpn_toz34_held",
+          "category": "wpn",
+          "params": "",
+          "paramList": [],
+          "line": 405,
+          "footprint": [
+            0.05,
+            1.21
+          ],
+          "height": 0.08,
+          "zMin": -0.11,
+          "center": [
+            0.0,
+            -0.18
+          ],
+          "triangles": 1858,
+          "colors": 41,
+          "warnings": 0,
+          "ok": true
         }
       ]
     },
@@ -29184,6 +32965,1645 @@
           ],
           "triangles": 224,
           "colors": 16,
+          "warnings": 0,
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "kit_scadplay",
+      "file": "kit_scadplay.scad",
+      "prefix": "sp_",
+      "scaleClass": "mid",
+      "modules": [
+        {
+          "name": "sp_coin_row",
+          "category": "coin",
+          "params": "n = 5, dx = 1.2, hover = 0.9, prefix = \"\"",
+          "paramList": [
+            {
+              "name": "n",
+              "default": "5"
+            },
+            {
+              "name": "dx",
+              "default": "1.2"
+            },
+            {
+              "name": "hover",
+              "default": "0.9"
+            },
+            {
+              "name": "prefix",
+              "default": "\"\""
+            }
+          ],
+          "line": 200,
+          "footprint": [
+            5.44,
+            0.08
+          ],
+          "height": 1.21,
+          "zMin": 0.59,
+          "center": [
+            2.4,
+            0.0
+          ],
+          "triangles": 280,
+          "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_block",
+          "category": "misc",
+          "params": "w = 2, d = 2, h = 1, c = sp_STONE()",
+          "paramList": [
+            {
+              "name": "w",
+              "default": "2"
+            },
+            {
+              "name": "d",
+              "default": "2"
+            },
+            {
+              "name": "h",
+              "default": "1"
+            },
+            {
+              "name": "c",
+              "default": "sp_STONE()"
+            }
+          ],
+          "line": 90,
+          "footprint": [
+            2.0,
+            2.0
+          ],
+          "height": 1.0,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 24,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_box",
+          "category": "misc",
+          "params": "L = 1, D = 1, H = 1",
+          "paramList": [
+            {
+              "name": "L",
+              "default": "1"
+            },
+            {
+              "name": "D",
+              "default": "1"
+            },
+            {
+              "name": "H",
+              "default": "1"
+            }
+          ],
+          "line": 75,
+          "footprint": [
+            1.0,
+            1.0
+          ],
+          "height": 1.0,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 12,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_boxc",
+          "category": "misc",
+          "params": "s",
+          "paramList": [
+            {
+              "name": "s"
+            }
+          ],
+          "line": 73,
+          "footprint": [
+            1.0,
+            1.0
+          ],
+          "height": 0.5,
+          "zMin": -0.5,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 12,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_bridge",
+          "category": "misc",
+          "params": "id = \"\", on = \"\", any = \"\", len = 6, w = 2, speed = 60, c = sp_WOOD()",
+          "paramList": [
+            {
+              "name": "id",
+              "default": "\"\""
+            },
+            {
+              "name": "on",
+              "default": "\"\""
+            },
+            {
+              "name": "any",
+              "default": "\"\""
+            },
+            {
+              "name": "len",
+              "default": "6"
+            },
+            {
+              "name": "w",
+              "default": "2"
+            },
+            {
+              "name": "speed",
+              "default": "60"
+            },
+            {
+              "name": "c",
+              "default": "sp_WOOD()"
+            }
+          ],
+          "line": 323,
+          "footprint": [
+            0.4,
+            2.6
+          ],
+          "height": 6.0,
+          "zMin": -0.3,
+          "center": [
+            0.05,
+            0.0
+          ],
+          "triangles": 60,
+          "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_checkpoint",
+          "category": "misc",
+          "params": "id = \"\", r = 1.2",
+          "paramList": [
+            {
+              "name": "id",
+              "default": "\"\""
+            },
+            {
+              "name": "r",
+              "default": "1.2"
+            }
+          ],
+          "line": 181,
+          "footprint": [
+            1.15,
+            1.0
+          ],
+          "height": 2.2,
+          "zMin": 0.0,
+          "center": [
+            0.07,
+            0.0
+          ],
+          "triangles": 108,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_coin",
+          "category": "misc",
+          "params": "id = \"\", value = 1, hover = 0.9, collision = \"none\"",
+          "paramList": [
+            {
+              "name": "id",
+              "default": "\"\""
+            },
+            {
+              "name": "value",
+              "default": "1"
+            },
+            {
+              "name": "hover",
+              "default": "0.9"
+            },
+            {
+              "name": "collision",
+              "default": "\"none\""
+            }
+          ],
+          "line": 193,
+          "footprint": [
+            0.64,
+            0.08
+          ],
+          "height": 1.21,
+          "zMin": 0.59,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 56,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_counter",
+          "category": "misc",
+          "params": "id = \"\", from = \"sp_coin\", count = 0, collision = \"none\"",
+          "paramList": [
+            {
+              "name": "id",
+              "default": "\"\""
+            },
+            {
+              "name": "from",
+              "default": "\"sp_coin\""
+            },
+            {
+              "name": "count",
+              "default": "0"
+            },
+            {
+              "name": "collision",
+              "default": "\"none\""
+            }
+          ],
+          "line": 430,
+          "ok": false
+        },
+        {
+          "name": "sp_crate",
+          "category": "misc",
+          "params": "s = 1",
+          "paramList": [
+            {
+              "name": "s",
+              "default": "1"
+            }
+          ],
+          "line": 147,
+          "footprint": [
+            1.02,
+            1.02
+          ],
+          "height": 1.0,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 36,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_crumble",
+          "category": "misc",
+          "params": "id = \"\", w = 2, d = 2, warn = 0.6, respawn = 3",
+          "paramList": [
+            {
+              "name": "id",
+              "default": "\"\""
+            },
+            {
+              "name": "w",
+              "default": "2"
+            },
+            {
+              "name": "d",
+              "default": "2"
+            },
+            {
+              "name": "warn",
+              "default": "0.6"
+            },
+            {
+              "name": "respawn",
+              "default": "3"
+            }
+          ],
+          "line": 448,
+          "footprint": [
+            2.0,
+            2.0
+          ],
+          "height": 0.36,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 36,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_door",
+          "category": "misc",
+          "params": "id = \"\", on = \"\", any = \"\", near = 0, latch = false, w = 2, h = 3, travel = [0, 0, 0], speed = 2.5, c = sp_PURPLE()",
+          "paramList": [
+            {
+              "name": "id",
+              "default": "\"\""
+            },
+            {
+              "name": "on",
+              "default": "\"\""
+            },
+            {
+              "name": "any",
+              "default": "\"\""
+            },
+            {
+              "name": "near",
+              "default": "0"
+            },
+            {
+              "name": "latch",
+              "default": "false"
+            },
+            {
+              "name": "w",
+              "default": "2"
+            },
+            {
+              "name": "h",
+              "default": "3"
+            },
+            {
+              "name": "travel",
+              "default": "[0, 0, 0]"
+            },
+            {
+              "name": "speed",
+              "default": "2.5"
+            },
+            {
+              "name": "c",
+              "default": "sp_PURPLE()"
+            }
+          ],
+          "line": 267,
+          "footprint": [
+            3.0,
+            0.6
+          ],
+          "height": 3.4,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 60,
+          "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_enemy",
+          "category": "misc",
+          "params": "id = \"\", travel = [4, 0, 0], speed = 1.6, stompable = true, collision = \"none\"",
+          "paramList": [
+            {
+              "name": "id",
+              "default": "\"\""
+            },
+            {
+              "name": "travel",
+              "default": "[4, 0, 0]"
+            },
+            {
+              "name": "speed",
+              "default": "1.6"
+            },
+            {
+              "name": "stompable",
+              "default": "true"
+            },
+            {
+              "name": "collision",
+              "default": "\"none\""
+            }
+          ],
+          "line": 395,
+          "footprint": [
+            1.1,
+            1.05
+          ],
+          "height": 0.89,
+          "zMin": 0.01,
+          "center": [
+            0.02,
+            -0.0
+          ],
+          "triangles": 840,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_gloss",
+          "category": "misc",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 68,
+          "ok": false
+        },
+        {
+          "name": "sp_goal",
+          "category": "misc",
+          "params": "id = \"goal\", on = \"\", any = \"\", next = \"\"",
+          "paramList": [
+            {
+              "name": "id",
+              "default": "\"goal\""
+            },
+            {
+              "name": "on",
+              "default": "\"\""
+            },
+            {
+              "name": "any",
+              "default": "\"\""
+            },
+            {
+              "name": "next",
+              "default": "\"\""
+            }
+          ],
+          "line": 214,
+          "footprint": [
+            3.0,
+            3.0
+          ],
+          "height": 2.82,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 1344,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_gold",
+          "category": "misc",
+          "params": "",
+          "paramList": [],
+          "line": 70,
+          "ok": false
+        },
+        {
+          "name": "sp_ground",
+          "category": "misc",
+          "params": "w = 20, d = 20, t = 1.0, c = sp_GRASS()",
+          "paramList": [
+            {
+              "name": "w",
+              "default": "20"
+            },
+            {
+              "name": "d",
+              "default": "20"
+            },
+            {
+              "name": "t",
+              "default": "1.0"
+            },
+            {
+              "name": "c",
+              "default": "sp_GRASS()"
+            }
+          ],
+          "line": 80,
+          "footprint": [
+            20.0,
+            20.0
+          ],
+          "height": 0.0,
+          "zMin": -1.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 24,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_hazard",
+          "category": "misc",
+          "params": "w = 4, d = 4, kind = \"lava\", id = \"\", collision = \"none\"",
+          "paramList": [
+            {
+              "name": "w",
+              "default": "4"
+            },
+            {
+              "name": "d",
+              "default": "4"
+            },
+            {
+              "name": "kind",
+              "default": "\"lava\""
+            },
+            {
+              "name": "id",
+              "default": "\"\""
+            },
+            {
+              "name": "collision",
+              "default": "\"none\""
+            }
+          ],
+          "line": 348,
+          "footprint": [
+            4.0,
+            4.0
+          ],
+          "height": 0.1,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 12,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_jumppad",
+          "category": "misc",
+          "params": "id = \"\", on = \"\", any = \"\", launch = 6, r = 0.9",
+          "paramList": [
+            {
+              "name": "id",
+              "default": "\"\""
+            },
+            {
+              "name": "on",
+              "default": "\"\""
+            },
+            {
+              "name": "any",
+              "default": "\"\""
+            },
+            {
+              "name": "launch",
+              "default": "6"
+            },
+            {
+              "name": "r",
+              "default": "0.9"
+            }
+          ],
+          "line": 335,
+          "footprint": [
+            2.1,
+            2.1
+          ],
+          "height": 0.32,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 232,
+          "colors": 8,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_level",
+          "category": "misc",
+          "params": "title = \"\", goal = \"\", id = \"level\", collision = \"none\"",
+          "paramList": [
+            {
+              "name": "title",
+              "default": "\"\""
+            },
+            {
+              "name": "goal",
+              "default": "\"\""
+            },
+            {
+              "name": "id",
+              "default": "\"level\""
+            },
+            {
+              "name": "collision",
+              "default": "\"none\""
+            }
+          ],
+          "line": 172,
+          "ok": false
+        },
+        {
+          "name": "sp_lever",
+          "category": "misc",
+          "params": "id = \"\", toggle = true",
+          "paramList": [
+            {
+              "name": "id",
+              "default": "\"\""
+            },
+            {
+              "name": "toggle",
+              "default": "true"
+            }
+          ],
+          "line": 246,
+          "footprint": [
+            0.94,
+            0.5
+          ],
+          "height": 1.25,
+          "zMin": 0.0,
+          "center": [
+            -0.17,
+            0.0
+          ],
+          "triangles": 72,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_logic",
+          "category": "misc",
+          "params": "id = \"\", on = \"\", any = \"\", invert = false, delay = 0, collision = \"none\"",
+          "paramList": [
+            {
+              "name": "id",
+              "default": "\"\""
+            },
+            {
+              "name": "on",
+              "default": "\"\""
+            },
+            {
+              "name": "any",
+              "default": "\"\""
+            },
+            {
+              "name": "invert",
+              "default": "false"
+            },
+            {
+              "name": "delay",
+              "default": "0"
+            },
+            {
+              "name": "collision",
+              "default": "\"none\""
+            }
+          ],
+          "line": 435,
+          "ok": false
+        },
+        {
+          "name": "sp_matte",
+          "category": "misc",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 66,
+          "ok": false
+        },
+        {
+          "name": "sp_metal",
+          "category": "misc",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 69,
+          "ok": false
+        },
+        {
+          "name": "sp_mover",
+          "category": "misc",
+          "params": "id = \"\", on = \"\", any = \"\", travel = [0, 0, 3], speed = 1.5, wait = 1, mode = \"loop\", w = 3, d = 3, t = 0.4, c = sp_TEAL()",
+          "paramList": [
+            {
+              "name": "id",
+              "default": "\"\""
+            },
+            {
+              "name": "on",
+              "default": "\"\""
+            },
+            {
+              "name": "any",
+              "default": "\"\""
+            },
+            {
+              "name": "travel",
+              "default": "[0, 0, 3]"
+            },
+            {
+              "name": "speed",
+              "default": "1.5"
+            },
+            {
+              "name": "wait",
+              "default": "1"
+            },
+            {
+              "name": "mode",
+              "default": "\"loop\""
+            },
+            {
+              "name": "w",
+              "default": "3"
+            },
+            {
+              "name": "d",
+              "default": "3"
+            },
+            {
+              "name": "t",
+              "default": "0.4"
+            },
+            {
+              "name": "c",
+              "default": "sp_TEAL()"
+            }
+          ],
+          "line": 289,
+          "footprint": [
+            3.0,
+            3.0
+          ],
+          "height": 0.42,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 24,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_pillar",
+          "category": "misc",
+          "params": "r = 0.4, h = 3, c = sp_STONE()",
+          "paramList": [
+            {
+              "name": "r",
+              "default": "0.4"
+            },
+            {
+              "name": "h",
+              "default": "3"
+            },
+            {
+              "name": "c",
+              "default": "sp_STONE()"
+            }
+          ],
+          "line": 122,
+          "footprint": [
+            1.0,
+            1.0
+          ],
+          "height": 3.0,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 144,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_plastic",
+          "category": "misc",
+          "params": "c",
+          "paramList": [
+            {
+              "name": "c"
+            }
+          ],
+          "line": 67,
+          "ok": false
+        },
+        {
+          "name": "sp_plate",
+          "category": "misc",
+          "params": "id = \"\", latch = false, w = 1.4",
+          "paramList": [
+            {
+              "name": "id",
+              "default": "\"\""
+            },
+            {
+              "name": "latch",
+              "default": "false"
+            },
+            {
+              "name": "w",
+              "default": "1.4"
+            }
+          ],
+          "line": 230,
+          "footprint": [
+            1.7,
+            1.7
+          ],
+          "height": 0.18,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 24,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_portal",
+          "category": "misc",
+          "params": "id = \"\", on = \"\", any = \"\", to = \"\", spawn = \"start\"",
+          "paramList": [
+            {
+              "name": "id",
+              "default": "\"\""
+            },
+            {
+              "name": "on",
+              "default": "\"\""
+            },
+            {
+              "name": "any",
+              "default": "\"\""
+            },
+            {
+              "name": "to",
+              "default": "\"\""
+            },
+            {
+              "name": "spawn",
+              "default": "\"start\""
+            }
+          ],
+          "line": 421,
+          "footprint": [
+            2.6,
+            2.6
+          ],
+          "height": 2.44,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 1248,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_ramp",
+          "category": "misc",
+          "params": "l = 4, w = 2, h = 1, c = sp_STONE()",
+          "paramList": [
+            {
+              "name": "l",
+              "default": "4"
+            },
+            {
+              "name": "w",
+              "default": "2"
+            },
+            {
+              "name": "h",
+              "default": "1"
+            },
+            {
+              "name": "c",
+              "default": "sp_STONE()"
+            }
+          ],
+          "line": 100,
+          "footprint": [
+            4.0,
+            2.0
+          ],
+          "height": 1.0,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 8,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_sign",
+          "category": "misc",
+          "params": "text = \"\", label = \"!\", r = 3, id = \"\"",
+          "paramList": [
+            {
+              "name": "text",
+              "default": "\"\""
+            },
+            {
+              "name": "label",
+              "default": "\"!\""
+            },
+            {
+              "name": "r",
+              "default": "3"
+            },
+            {
+              "name": "id",
+              "default": "\"\""
+            }
+          ],
+          "line": 401,
+          "footprint": [
+            0.16,
+            1.1
+          ],
+          "height": 1.95,
+          "zMin": 0.0,
+          "center": [
+            0.01,
+            0.0
+          ],
+          "triangles": 144,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_spawn",
+          "category": "misc",
+          "params": "id = \"start\", collision = \"none\"",
+          "paramList": [
+            {
+              "name": "id",
+              "default": "\"start\""
+            },
+            {
+              "name": "collision",
+              "default": "\"none\""
+            }
+          ],
+          "line": 160,
+          "footprint": [
+            1.8,
+            1.8
+          ],
+          "height": 0.1,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 88,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_spinner",
+          "category": "misc",
+          "params": "id = \"\", on = \"\", any = \"\", speed = 40, r = 3, c = sp_ORANGE()",
+          "paramList": [
+            {
+              "name": "id",
+              "default": "\"\""
+            },
+            {
+              "name": "on",
+              "default": "\"\""
+            },
+            {
+              "name": "any",
+              "default": "\"\""
+            },
+            {
+              "name": "speed",
+              "default": "40"
+            },
+            {
+              "name": "r",
+              "default": "3"
+            },
+            {
+              "name": "c",
+              "default": "sp_ORANGE()"
+            }
+          ],
+          "line": 306,
+          "footprint": [
+            6.0,
+            6.0
+          ],
+          "height": 0.42,
+          "zMin": -0.6,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 192,
+          "colors": 6,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_stairs",
+          "category": "misc",
+          "params": "n = 4, w = 2, rise = 0.4, run = 0.6, c = sp_STONE()",
+          "paramList": [
+            {
+              "name": "n",
+              "default": "4"
+            },
+            {
+              "name": "w",
+              "default": "2"
+            },
+            {
+              "name": "rise",
+              "default": "0.4"
+            },
+            {
+              "name": "run",
+              "default": "0.6"
+            },
+            {
+              "name": "c",
+              "default": "sp_STONE()"
+            }
+          ],
+          "line": 108,
+          "footprint": [
+            2.4,
+            2.0
+          ],
+          "height": 1.6,
+          "zMin": 0.0,
+          "center": [
+            1.2,
+            0.0
+          ],
+          "triangles": 48,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_sweeper",
+          "category": "misc",
+          "params": "id = \"\", on = \"\", any = \"\", len = 4, height = 0.6, speed = 90, collision = \"none\"",
+          "paramList": [
+            {
+              "name": "id",
+              "default": "\"\""
+            },
+            {
+              "name": "on",
+              "default": "\"\""
+            },
+            {
+              "name": "any",
+              "default": "\"\""
+            },
+            {
+              "name": "len",
+              "default": "4"
+            },
+            {
+              "name": "height",
+              "default": "0.6"
+            },
+            {
+              "name": "speed",
+              "default": "90"
+            },
+            {
+              "name": "collision",
+              "default": "\"none\""
+            }
+          ],
+          "line": 377,
+          "footprint": [
+            4.57,
+            0.6
+          ],
+          "height": 1.0,
+          "zMin": 0.0,
+          "center": [
+            1.98,
+            0.0
+          ],
+          "triangles": 168,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_tree",
+          "category": "misc",
+          "params": "h = 4, seed = 0",
+          "paramList": [
+            {
+              "name": "h",
+              "default": "4"
+            },
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 134,
+          "footprint": [
+            2.48,
+            2.48
+          ],
+          "height": 3.87,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 96,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_wall",
+          "category": "misc",
+          "params": "l = 6, h = 3, t = 0.4, c = sp_STONED()",
+          "paramList": [
+            {
+              "name": "l",
+              "default": "6"
+            },
+            {
+              "name": "h",
+              "default": "3"
+            },
+            {
+              "name": "t",
+              "default": "0.4"
+            },
+            {
+              "name": "c",
+              "default": "sp_STONED()"
+            }
+          ],
+          "line": 116,
+          "footprint": [
+            6.0,
+            0.4
+          ],
+          "height": 3.0,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 12,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_part_bridge_deck",
+          "category": "part",
+          "params": "len = 6, w = 2, c = sp_WOOD()",
+          "paramList": [
+            {
+              "name": "len",
+              "default": "6"
+            },
+            {
+              "name": "w",
+              "default": "2"
+            },
+            {
+              "name": "c",
+              "default": "sp_WOOD()"
+            }
+          ],
+          "line": 315,
+          "footprint": [
+            6.0,
+            2.0
+          ],
+          "height": 0.0,
+          "zMin": -0.25,
+          "center": [
+            3.0,
+            0.0
+          ],
+          "triangles": 36,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_part_checkpoint_flag",
+          "category": "part",
+          "params": "c = sp_ORANGE()",
+          "paramList": [
+            {
+              "name": "c",
+              "default": "sp_ORANGE()"
+            }
+          ],
+          "line": 177,
+          "footprint": [
+            0.6,
+            0.04
+          ],
+          "height": 0.4,
+          "zMin": 0.0,
+          "center": [
+            0.35,
+            0.0
+          ],
+          "triangles": 12,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_part_crumble_slab",
+          "category": "part",
+          "params": "w = 2, d = 2, c = sp_SAND()",
+          "paramList": [
+            {
+              "name": "w",
+              "default": "2"
+            },
+            {
+              "name": "d",
+              "default": "2"
+            },
+            {
+              "name": "c",
+              "default": "sp_SAND()"
+            }
+          ],
+          "line": 440,
+          "footprint": [
+            2.0,
+            2.0
+          ],
+          "height": 0.36,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 36,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_part_door_slab",
+          "category": "part",
+          "params": "w = 2, h = 3, c = sp_PURPLE()",
+          "paramList": [
+            {
+              "name": "w",
+              "default": "2"
+            },
+            {
+              "name": "h",
+              "default": "3"
+            },
+            {
+              "name": "c",
+              "default": "sp_PURPLE()"
+            }
+          ],
+          "line": 259,
+          "footprint": [
+            2.0,
+            0.3
+          ],
+          "height": 3.0,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 24,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_part_enemy_body",
+          "category": "part",
+          "params": "c = sp_PURPLE()",
+          "paramList": [
+            {
+              "name": "c",
+              "default": "sp_PURPLE()"
+            }
+          ],
+          "line": 385,
+          "footprint": [
+            1.1,
+            1.05
+          ],
+          "height": 0.89,
+          "zMin": 0.01,
+          "center": [
+            0.02,
+            -0.0
+          ],
+          "triangles": 840,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_part_goal_ring",
+          "category": "part",
+          "params": "c = sp_YELLOW()",
+          "paramList": [
+            {
+              "name": "c",
+              "default": "sp_YELLOW()"
+            }
+          ],
+          "line": 208,
+          "footprint": [
+            2.44,
+            0.24
+          ],
+          "height": 1.22,
+          "zMin": -1.22,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 1152,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_part_jumppad_cap",
+          "category": "part",
+          "params": "r = 0.9, c = sp_GREEN()",
+          "paramList": [
+            {
+              "name": "r",
+              "default": "0.9"
+            },
+            {
+              "name": "c",
+              "default": "sp_GREEN()"
+            }
+          ],
+          "line": 330,
+          "footprint": [
+            1.8,
+            1.8
+          ],
+          "height": 0.12,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 80,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_part_lever_arm",
+          "category": "part",
+          "params": "",
+          "paramList": [],
+          "line": 237,
+          "footprint": [
+            0.19,
+            0.16
+          ],
+          "height": 1.03,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 48,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_part_mover_deck",
+          "category": "part",
+          "params": "w = 3, d = 3, t = 0.4, c = sp_TEAL()",
+          "paramList": [
+            {
+              "name": "w",
+              "default": "3"
+            },
+            {
+              "name": "d",
+              "default": "3"
+            },
+            {
+              "name": "t",
+              "default": "0.4"
+            },
+            {
+              "name": "c",
+              "default": "sp_TEAL()"
+            }
+          ],
+          "line": 281,
+          "footprint": [
+            3.0,
+            3.0
+          ],
+          "height": 0.42,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 24,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_part_plate_cap",
+          "category": "part",
+          "params": "w = 1.4, c = sp_RED()",
+          "paramList": [
+            {
+              "name": "w",
+              "default": "1.4"
+            },
+            {
+              "name": "c",
+              "default": "sp_RED()"
+            }
+          ],
+          "line": 226,
+          "footprint": [
+            1.4,
+            1.4
+          ],
+          "height": 0.1,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 12,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_part_portal_ring",
+          "category": "part",
+          "params": "c = sp_BLUE()",
+          "paramList": [
+            {
+              "name": "c",
+              "default": "sp_BLUE()"
+            }
+          ],
+          "line": 415,
+          "footprint": [
+            2.28,
+            0.28
+          ],
+          "height": 1.14,
+          "zMin": -1.14,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 1152,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_part_spinner_top",
+          "category": "part",
+          "params": "r = 3, c = sp_ORANGE()",
+          "paramList": [
+            {
+              "name": "r",
+              "default": "3"
+            },
+            {
+              "name": "c",
+              "default": "sp_ORANGE()"
+            }
+          ],
+          "line": 296,
+          "footprint": [
+            6.0,
+            6.0
+          ],
+          "height": 0.42,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 144,
+          "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "sp_part_sweeper_arm",
+          "category": "part",
+          "params": "len = 4, height = 0.6, c = sp_RED()",
+          "paramList": [
+            {
+              "name": "len",
+              "default": "4"
+            },
+            {
+              "name": "height",
+              "default": "0.6"
+            },
+            {
+              "name": "c",
+              "default": "sp_RED()"
+            }
+          ],
+          "line": 368,
+          "footprint": [
+            4.27,
+            0.51
+          ],
+          "height": 0.88,
+          "zMin": 0.32,
+          "center": [
+            2.13,
+            0.0
+          ],
+          "triangles": 120,
+          "colors": 2,
           "warnings": 0,
           "ok": true
         }

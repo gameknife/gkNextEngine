@@ -22,9 +22,15 @@ gnb shot --scene assets/scad/proc/terrain_layout_demo.scad   # 地形 + kit 贴�
 
 ```scad
 gk_terrain(TERR);                        // module：生成地形网格 + 半透明水面
+gk_terrain(TERR, water=[c|undef, roughness, metalness]);  // 可选：只给水面 gk_material 材质
 h    = gk_terrain_height(TERR, x, y);    // 纯函数：地表高度（与渲染网格逐三角形一致）
 info = gk_terrain_info(TERR, x, y);      // [height, slopeDeg, water(0/1), biomeId]
 ```
+
+- `water=` 是渲染选择，不进 TERR：高度/信息查询与地形缓存键都不受影响。`c` 为 `undef` 时保留调色板
+  水色；不传时水面仍是旧的哑光 Lambertian。低 roughness（0.02–0.08）在路径追踪下给出 Fresnel 天空
+  与岸线反射；水体色要压暗（反照率 ~0.1），亮度交给反射。`gnb geo expedition` 的 recipe 用
+  `gameplay.water: {color, roughness, metalness}` 输出这个参数。
 
 TERR 编码（compose 自动生成，手写参考 `assets/scad/proc/terrain_demo.scad` 头注释）：
 

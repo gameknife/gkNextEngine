@@ -135,6 +135,7 @@ rotate → scale` 顺序最多各出现一次，终点是 kit 表里能解析到
   路径为 runtime-root 相对、经 `ScadReadAsset` 读取，pak 与 loose 行为一致。
   地形桶带 faceted 标志（loader 跳过法线平滑）、水面桶拆分为 `__water` 子节点（rayCast 不可见、
   无物理体）、地形数据经 `SceneTerrain` payload 挂成引擎 `TerrainComponent`。
+  `gk_terrain(TERR, water=[c|undef, roughness, metalness])` 只给水面桶设 `gk_material` 参数。
   详见 `AGENT_GUIDE/ScadTerrain.md`。
 
 `gk_material(c, roughness = 1, metalness = 0, alpha = 1) children();` 是材质表达扩展。

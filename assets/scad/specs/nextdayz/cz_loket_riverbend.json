@@ -2,7 +2,7 @@
   "id": "cz_loket_riverbend",
   "region": "bohemia",
   "seed": 817,
-  "version": 4,
+  "version": 5,
   "gameplay": {
     "controls": "assets/scad/specs/nextdayz/cz_loket_controls.scad",
     "buildingBudget": 108,
@@ -14,6 +14,14 @@
       "tertiary",
       "unclassified",
       "residential"
-    ]
+    ],
+    "water": {
+      "color": [
+        0.07,
+        0.1,
+        0.09
+      ],
+      "roughness": 0.04
+    }
   }
 }

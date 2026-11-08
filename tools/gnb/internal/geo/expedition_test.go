@@ -25,6 +25,21 @@ func TestLongRoadJunctionUsesLastDensifiedStation(t *testing.T) {
 	}
 }
 
+func TestExpeditionWaterMaterialArgument(t *testing.T) {
+	if got := expeditionWaterArg(ExpeditionRecipe{Gameplay: &ExpeditionGameplay{}}); got != "" {
+		t.Fatalf("recipes without water must keep the legacy call, got %q", got)
+	}
+	glossy := ExpeditionRecipe{Gameplay: &ExpeditionGameplay{Water: &ExpeditionWater{Roughness: 0.06}}}
+	if got := expeditionWaterArg(glossy); got != ",water=[undef,0.06,0]" {
+		t.Fatalf("palette colour must stay undef, got %q", got)
+	}
+	tinted := ExpeditionRecipe{Gameplay: &ExpeditionGameplay{Water: &ExpeditionWater{
+		Color: []float64{0.07, 0.11, 1.4}, Roughness: 0.08, Metalness: 0.1}}}
+	if got := expeditionWaterArg(tinted); got != ",water=[[0.07,0.11,1],0.08,0.1]" {
+		t.Fatalf("colour must be clamped and emitted, got %q", got)
+	}
+}
+
 func TestExpeditionRegenerationPreservesAuthoringAndRegionalKits(t *testing.T) {
 	root := t.TempDir()
 	paths := NewPaths(root, "test_region")
@@ -291,6 +306,19 @@ func TestExpeditionOSMBridgeReachesDryAbutments(t *testing.T) {
 	left, right, err := expeditionBridgeBanks(&ir, grid, a, b)
 	if err != nil || left != a || right != b {
 		t.Fatal("already dry abutments must not move")
+	}
+	// A flat floodplain just above the water on one side: that dry OSM endpoint
+	// stays the abutment instead of failing generation.
+	for y := 0; y < grid.Rows; y++ {
+		for x := 0; x < grid.Cols; x++ {
+			if x > 50 {
+				grid.Values[y*grid.Cols+x] = 10.2
+			}
+		}
+	}
+	left, right, err = expeditionBridgeBanks(&ir, grid, [2]float64{-12, 0}, [2]float64{12, 0})
+	if err != nil || left[0] > -20 || right[0] != 12 {
+		t.Fatalf("a dry floodplain bank must be accepted where it is: %v %v %v", left, right, err)
 	}
 	for i := range grid.Values {
 		grid.Values[i] = 7

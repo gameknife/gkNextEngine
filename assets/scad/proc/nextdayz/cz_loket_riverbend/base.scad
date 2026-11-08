@@ -44,14 +44,14 @@ GEO_TERR = ["gkterr1", [1000, 1000], [256, 256], 817,
      ["road", [[-100.49, 473.34], [-104.06, 475.12], [-148.29, 500]], 11]]];
 
 TERR=["gkterr1",GEO_TERR[1],GEO_TERR[2],GEO_TERR[3],GEO_TERR[4],GEO_TERR[5],GEO_TERR[6],concat(GEO_TERR[7],PCG_PATHS,nd_pcg_terrain(PCG_SITES,PCG_SPAWNS,PCG_EXTRACTIONS,817,PCG_LANDCOVER))];
-gk_terrain(TERR);
+gk_terrain(TERR,water=[[0.07,0.1,0.09],0.04,0]);
 function nd_ground(x,y)=gk_terrain_height(TERR,x,y);
 let(za=nd_ground(-92.41,117.35)+0.06,zb=nd_ground(-152.36,244.19)+0.06) translate([-122.39,180.77,(za+zb)/2]) rotate([0,0,115.3]) gk_flatten() az_prop_bridge(seed=818,L=143.3,W=7,rise=zb-za,pierDepth=max(10,(za+zb)/2-10+8));
 let(za=nd_ground(397.3,293.38)+0.06,zb=nd_ground(331.7,339.36)+0.06) translate([364.5,316.37,(za+zb)/2]) rotate([0,0,144.97]) gk_flatten() az_prop_bridge(seed=819,L=83.1,W=6.8,rise=zb-za,pierDepth=max(10,(za+zb)/2-10+8));
 let(za=nd_ground(392.2,-96.28)+0.06,zb=nd_ground(396.5,-81.93)+0.06) translate([394.35,-89.11,(za+zb)/2]) rotate([0,0,73.35]) gk_flatten() az_prop_bridge(seed=820,L=17.98,W=6.8,rise=zb-za,pierDepth=max(10,(za+zb)/2-10+8));
 let(za=nd_ground(244.84,248.55)+0.06,zb=nd_ground(263.99,237.95)+0.06) translate([254.42,243.25,(za+zb)/2]) rotate([0,0,-28.97]) gk_flatten() az_prop_bridge(seed=821,L=24.89,W=4.5,rise=zb-za,pierDepth=max(10,(za+zb)/2-10+8));
-let(za=nd_ground(263.32,165.97)+0.06,zb=nd_ground(253.55,155.17)+0.06) translate([258.44,160.57,(za+zb)/2]) rotate([0,0,-132.13]) gk_flatten() az_prop_bridge(seed=822,L=17.56,W=3,rise=zb-za,pierDepth=max(10,(za+zb)/2-10+8));
-let(za=nd_ground(144.77,-178.56)+0.06,zb=nd_ground(127.49,-145.49)+0.06) translate([136.13,-162.03,(za+zb)/2]) rotate([0,0,117.59]) gk_flatten() az_prop_bridge(seed=823,L=40.31,W=3,rise=zb-za,pierDepth=max(10,(za+zb)/2-10+8));
+let(za=nd_ground(266,168.94)+0.06,zb=nd_ground(253.55,155.17)+0.06) translate([259.78,162.05,(za+zb)/2]) rotate([0,0,-132.13]) gk_flatten() az_prop_bridge(seed=822,L=21.56,W=3,rise=zb-za,pierDepth=max(10,(za+zb)/2-10+8));
+let(za=nd_ground(151.26,-190.97)+0.06,zb=nd_ground(127.49,-145.49)+0.06) translate([139.37,-168.23,(za+zb)/2]) rotate([0,0,117.59]) gk_flatten() az_prop_bridge(seed=823,L=54.31,W=3,rise=zb-za,pierDepth=max(10,(za+zb)/2-10+8));
 let(za=nd_ground(-138.5,222.65)+0.06,zb=nd_ground(-149.37,245.74)+0.06) translate([-143.93,234.19,(za+zb)/2]) rotate([0,0,115.23]) gk_flatten() az_prop_bridge(seed=824,L=28.52,W=3,rise=zb-za,pierDepth=max(10,(za+zb)/2-10+8));
 for(i=[0:len(PCG_SITES)-1]) nd_pcg_site(TERR,PCG_SITES[i],"bohemia",817+i*131);
 for(p=PCG_SPAWNS) translate([p[0],p[1],nd_ground(p[0],p[1])+0.15]) nd_spawn_player_safe();

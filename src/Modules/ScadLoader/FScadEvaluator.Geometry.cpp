@@ -174,18 +174,49 @@ namespace Assets::Scad::EvalDetail
             return {};
         }
 
+        // Optional water surface material, the gk_material() triple for the
+        // water slab only: gk_terrain(TERR, water = [colour | undef, roughness,
+        // metalness]). It is a rendering choice, not terrain data, so it stays
+        // out of TERR (height/info queries and the terrain cache key ignore
+        // it). An undef colour keeps the palette's water colour; without the
+        // argument the surface keeps its legacy matte material.
+        bool hasWaterMaterial = false;
+        bool hasWaterColor = false;
+        glm::dvec4 waterColor(0.0, 0.0, 0.0, 1.0);
+        ScadMaterialProperties waterMaterial;
+        const Value waterArg = Arg(inst, "water", -1);
+        if (waterArg.IsVec() && !waterArg.vec.empty())
+        {
+            hasWaterMaterial = true;
+            hasWaterColor = waterArg.vec[0].IsVec() && waterArg.vec[0].AsVec4(waterColor);
+            waterMaterial.explicitParameters = true;
+            waterMaterial.roughness = static_cast<float>(
+                std::clamp(waterArg.vec.size() > 1 ? waterArg.vec[1].AsNumber(1.0) : 1.0, 0.0, 1.0));
+            waterMaterial.metalness = static_cast<float>(
+                std::clamp(waterArg.vec.size() > 2 ? waterArg.vec[2].AsNumber(0.0) : 0.0, 0.0, 1.0));
+        }
+        else if (waterArg.type != Value::Type::Undef)
+        {
+            Warn("gk_terrain.water", "gk_terrain water must be [colour|undef, roughness, metalness]; ignored");
+        }
+
         GeomList out;
         auto emit = [&](const FTerrainData::ColoredTris& src, bool water)
         {
             if (src.tris.empty())
                 return;
             TriSoup soup = src.tris; // MakeGeom consumes; cached data stays intact
-            GeomList part = MakeGeom(std::move(soup), xform, glm::dvec4(src.color), true);
+            const glm::dvec4 surfaceColor = water && hasWaterColor ? waterColor : glm::dvec4(src.color);
+            GeomList part = MakeGeom(std::move(soup), xform, surfaceColor, true);
             for (ColoredSoup& cs : part)
             {
                 cs.faceted = true;
                 cs.terrainWater = water;
                 cs.materialName = src.materialName;
+                if (water && hasWaterMaterial)
+                {
+                    cs.material = waterMaterial;
+                }
             }
             AppendMove(out, std::move(part));
         };

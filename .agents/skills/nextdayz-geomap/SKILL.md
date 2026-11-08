@@ -45,7 +45,14 @@ castle -- plus flora species for `nd_bh_flora`-style dispatch. Falling back to
 another region's shells is exactly what made earlier maps look identical.
 
 Kit contract: base z=0, front=-y, real door/window voids, walk-in door on the
-front axis, roofs with closed gables, colours < 0.5 albedo. Render a showcase
+front axis, roofs with closed gables, colours < 0.5 albedo. Surfaces go through
+per-class `gk_material` wrappers (Bohemia: `bh_m_*` — render, tile, slate,
+paint, zinc, gilt, varnish, ceramic...); glass is opaque low-roughness, since a
+transmissive dielectric turns black under an overcast sky. Interiors are part
+of the shell: floor finish, inner wall skin with dado, puddles under the roof
+holes, shards under broken windows — placed clear of the coldwar furniture and
+loot points of the `nd_*` wrapper that hosts the shell. Water material comes
+from the recipe (`gameplay.water`). Render a showcase
 (`gnb shot --scene <abs path to a .scad using the kit>`) and fix what reads
 wrong before using it in a map.
 
@@ -90,6 +97,11 @@ Open every image (out/nextdayz/shots/<mapId>/) and check:
   (church/chapel, column, pond, fire station, memorial, silo...).
 - **Street (eye height)**: regional silhouettes and colours, open entrances,
   no floating or sunk floors, props on the ground.
+
+Interiors render near-black under `gnb shot` (fixed exposure); review them
+with `gnb validate` and a script that sets `r.exposure.auto` true and
+`r.exposure.maxEV` 3 like NextDayz, after a `wait-ms` long enough for the
+draft to parse (a full map takes ~15 s).
 
 Iterate on layout and kit until all three pass. Parse time of the draft
 should stay below ~10 s (`parsed scene ... on cpu` in the run log).

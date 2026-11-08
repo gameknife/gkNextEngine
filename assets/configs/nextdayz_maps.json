@@ -9,11 +9,11 @@
       "draftScene": "assets/scad/proc/nextdayz/cz_loket_riverbend/scene.scad",
       "id": "cz_loket_riverbend",
       "localName": "洛克特·河湾",
-      "mapVersion": 4,
+      "mapVersion": 5,
       "name": "LOKET / RIVERBEND",
       "profile": "bohemian_decay",
       "region": "CZECHIA / WEST BOHEMIA",
-      "scene": "assets/scad/proc/nextdayz/cz_loket_riverbend/published/v4/scene.scad",
+      "scene": "assets/scad/proc/nextdayz/cz_loket_riverbend/published/v5/scene.scad",
       "sizeM": 1000,
       "status": "published",
       "terrain": "RIVER VALLEY / HILLSIDE OLD TOWN"

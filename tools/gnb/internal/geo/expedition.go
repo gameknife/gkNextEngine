@@ -21,7 +21,19 @@ type ExpeditionGameplay struct {
 	RoadClasses    []string `json:"roadClasses,omitempty"`
 	// Terrain palette; empty picks the region default (bohemia: continental).
 	Palette string `json:"palette,omitempty"`
+	// Water surface material; nil keeps the palette's matte water.
+	Water *ExpeditionWater `json:"water,omitempty"`
 }
+
+// ExpeditionWater is the gk_material() triple for the terrain water slab:
+// gk_terrain(TERR, water=[colour|undef, roughness, metalness]). An empty
+// colour keeps the palette's water colour.
+type ExpeditionWater struct {
+	Color     []float64 `json:"color,omitempty"`
+	Roughness float64   `json:"roughness"`
+	Metalness float64   `json:"metalness,omitempty"`
+}
+
 type ExpeditionRecipe struct {
 	ID       string              `json:"id"`
 	Region   string              `json:"region"`
@@ -164,7 +176,7 @@ func ExportExpedition(repoRoot, recipePath string, publish bool) (string, Expedi
 	if len(report.Landcover) > 0 {
 		landcover = "PCG_LANDCOVER"
 	}
-	fmt.Fprintf(&out, "TERR=[\"gkterr1\",GEO_TERR[1],GEO_TERR[2],GEO_TERR[3],GEO_TERR[4],GEO_TERR[5],GEO_TERR[6],concat(GEO_TERR[7],PCG_PATHS,nd_pcg_terrain(PCG_SITES,PCG_SPAWNS,PCG_EXTRACTIONS,%d,%s))];\ngk_terrain(TERR);\nfunction nd_ground(x,y)=gk_terrain_height(TERR,x,y);\n", recipe.Seed, landcover)
+	fmt.Fprintf(&out, "TERR=[\"gkterr1\",GEO_TERR[1],GEO_TERR[2],GEO_TERR[3],GEO_TERR[4],GEO_TERR[5],GEO_TERR[6],concat(GEO_TERR[7],PCG_PATHS,nd_pcg_terrain(PCG_SITES,PCG_SPAWNS,PCG_EXTRACTIONS,%d,%s))];\ngk_terrain(TERR%s);\nfunction nd_ground(x,y)=gk_terrain_height(TERR,x,y);\n", recipe.Seed, landcover, expeditionWaterArg(recipe))
 	if err = writeExpeditionBridges(&out, &ir, grid, recipe.Seed); err != nil {
 		return "", report, err
 	}
@@ -229,8 +241,31 @@ func expeditionPalette(recipe ExpeditionRecipe) string {
 	return "temperate"
 }
 
+// Optional water material argument for gk_terrain. "" keeps matte water, so
+// recipes without a water block regenerate byte-identically.
+func expeditionWaterArg(recipe ExpeditionRecipe) string {
+	if recipe.Gameplay == nil || recipe.Gameplay.Water == nil {
+		return ""
+	}
+	w := recipe.Gameplay.Water
+	unit := func(v float64) string { return fnum(math.Max(0, math.Min(1, v))) }
+	colour := "undef"
+	if len(w.Color) >= 3 {
+		parts := make([]string, 0, 4)
+		for i := 0; i < len(w.Color) && i < 4; i++ {
+			parts = append(parts, unit(w.Color[i]))
+		}
+		colour = "[" + strings.Join(parts, ",") + "]"
+	}
+	return fmt.Sprintf(",water=[%s,%s,%s]", colour, unit(w.Roughness), unit(w.Metalness))
+}
+
 // OSM abutments can lie in a DEM shoreline cell. Extend along the bridge axis
 // to dry ground instead of sampling a submerged deck datum from those cells.
+// An endpoint that is already dry stays where OSM put it. A submerged one
+// moves to a bank 0.5 m above the water, or, on a flat floodplain that never
+// rises that far (Loket's Ohře meadows sit 0.16 m above it at relief 0.4),
+// to the first point that is dry. Only water on a whole side fails.
 func expeditionBridgeBanks(ir *IR, grid *HeightGrid, a, b [2]float64) ([2]float64, [2]float64, error) {
 	if !ir.Terrain.HasWater {
 		return a, b, nil
@@ -238,16 +273,24 @@ func expeditionBridgeBanks(ir *IR, grid *HeightGrid, a, b [2]float64) ([2]float6
 	length := math.Hypot(b[0]-a[0], b[1]-a[1])
 	dir := [2]float64{(b[0] - a[0]) / length, (b[1] - a[1]) / length}
 	bank := func(p [2]float64, side float64) ([2]float64, bool) {
-		for distance := 0.0; distance <= 64; distance += 2 {
+		if grid.Sample(p[0], p[1]) >= ir.Terrain.WaterLevel+0.1 {
+			return p, true
+		}
+		low, haveLow := p, false
+		for distance := 2.0; distance <= 64; distance += 2 {
 			q := [2]float64{p[0] + side*dir[0]*distance, p[1] + side*dir[1]*distance}
 			if math.Abs(q[0]) > ir.SizeM/2-8 || math.Abs(q[1]) > ir.SizeM/2-8 {
 				break
 			}
-			if grid.Sample(q[0], q[1]) >= ir.Terrain.WaterLevel+0.5 {
+			h := grid.Sample(q[0], q[1])
+			if h >= ir.Terrain.WaterLevel+0.5 {
 				return q, true
 			}
+			if !haveLow && h >= ir.Terrain.WaterLevel+0.1 {
+				low, haveLow = q, true
+			}
 		}
-		return p, false
+		return low, haveLow
 	}
 	left, okLeft := bank(a, -1)
 	right, okRight := bank(b, 1)

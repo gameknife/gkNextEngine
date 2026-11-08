@@ -198,6 +198,14 @@ namespace
             if (query == "engine.totalFrames") return static_cast<int64_t>(engine_.GetTotalFrames());
             if (query == "engine.frameRate") return static_cast<double>(engine_.GetFrameRate());
             if (query == "engine.time") return engine_.GetTime();
+            if (query == "scene.ready")
+            {
+                if (!engine_.GetSceneLoadError().empty())
+                {
+                    throw std::runtime_error(engine_.GetSceneLoadError());
+                }
+                return engine_.IsSceneReady();
+            }
             if (query == "engine.status")
             {
                 switch (engine_.GetEngineStatus())

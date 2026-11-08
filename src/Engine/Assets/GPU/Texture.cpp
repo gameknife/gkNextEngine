@@ -759,8 +759,10 @@ namespace Assets
                         GlobalTexturePool::GetInstance()->hdrShUpdatedCallback_();
                     }
                 }
+                pendingTextureLoads_.fetch_sub(1, std::memory_order_release);
             };
 
+        pendingTextureLoads_.fetch_add(1, std::memory_order_relaxed);
         if (textureWorkerUploadEnabled_)
         {
             Tasks::TaskCoordinator::GetInstance()->AddTask(
@@ -916,8 +918,10 @@ namespace Assets
                 {
                     GlobalTexturePool::GetInstance()->hdrShUpdatedCallback_();
                 }
+                pendingTextureLoads_.fetch_sub(1, std::memory_order_release);
             };
 
+        pendingTextureLoads_.fetch_add(1, std::memory_order_relaxed);
         if (textureWorkerUploadEnabled_)
         {
             Tasks::TaskCoordinator::GetInstance()->AddTask(

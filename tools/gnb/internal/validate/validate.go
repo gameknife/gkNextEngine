@@ -102,27 +102,17 @@ func ShotWithResult(ctx context.Context, o Options, frames int, ui bool, out str
 		frames = 90
 	}
 	s := Script{Name: "agent_validation"}
-	// Generous, because the step that actually waits for the scene is
-	// wait-frames: a scene is parsed on the main thread, so the frame counter
-	// simply stops until it is done, and a multi-part geo area takes tens of
-	// seconds of CPU evaluation. Every step returns the moment its condition
-	// holds, so the budget costs a small scene nothing.
+	// Large scenes can take minutes to parse and upload asynchronously. Wait for
+	// readiness rather than spending the frame budget on the empty startup scene.
 	s.Defaults.StepTimeoutMs = 300000
-	// No explicit budget on "Running" either: the engine reaches it once the
-	// first scene is committed, which for a large area is exactly the wait this
-	// whole step list exists to sit through.
-	s.Steps = []map[string]any{{"type": "wait-until", "query": "engine.status", "op": "eq", "value": "Running"}}
-	// Startup creates an empty scene before a requested scene is loaded asynchronously. Waiting
-	// for one node avoids a valid-but-black capture on fast software/headless frame loops.
-	if o.Scene != "" {
-		s.Steps = append(s.Steps, map[string]any{"type": "wait-until", "query": "scene.nodeCount", "op": "gt", "value": 0})
-	}
-	s.Steps = append(s.Steps,
-		map[string]any{"type": "wait-frames", "n": frames},
+	s.Steps = []map[string]any{
+		{"type": "wait-until", "query": "scene.ready", "value": true, "fatal": true},
+		{"type": "wait-frames", "n": frames, "readyQuery": "scene.ready", "fatal": true},
 		// Make capture and normal process shutdown a single engine-side operation.
 		// A separate quit control request can race with the server teardown that
 		// follows a synchronous screenshot on a headless host.
-		map[string]any{"type": "screenshot", "out": out, "ui": ui, "quitAfterCapture": true})
+		{"type": "screenshot", "out": out, "ui": ui, "quitAfterCapture": true},
+	}
 	script, _ := json.MarshalIndent(s, "", "  ")
 	o.Frames = frames
 	o.IncludeUI = ui
@@ -596,12 +586,32 @@ func execute(ctx context.Context, c *client, st map[string]any, s Script, o Opti
 	timeout := duration(st, s)
 	switch typ {
 	case "wait-frames":
-		start, er := query(c, "engine.totalFrames")
-		if er != nil {
-			return e, er
-		}
-		target := num(start) + numv(st, "n", float64(max(1, s.Defaults.WaitFrames)))
-		return e, pollContext(ctx, timeout, func() (bool, error) { v, x := query(c, "engine.totalFrames"); return num(v) >= target, x })
+		var start, lastFrame float64
+		started := false
+		frames := numv(st, "n", float64(max(1, s.Defaults.WaitFrames)))
+		return e, pollContext(ctx, timeout, func() (bool, error) {
+			if readyQuery := str(st, "readyQuery", ""); readyQuery != "" {
+				ready, err := query(c, readyQuery)
+				if err != nil {
+					return false, err
+				}
+				if ready != true {
+					// Late texture/HDR uploads or another scene load restart warm-up.
+					started = false
+					return false, nil
+				}
+			}
+			v, err := query(c, "engine.totalFrames")
+			if err != nil {
+				return false, err
+			}
+			frame := num(v)
+			if !started || frame < lastFrame {
+				start, started = frame, true
+			}
+			lastFrame = frame
+			return frame-start >= frames, nil
+		})
 	case "wait-ms":
 		timer := time.NewTimer(time.Duration(numv(st, "ms", 0)) * time.Millisecond)
 		defer timer.Stop()

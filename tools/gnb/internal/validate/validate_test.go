@@ -1,8 +1,11 @@
 package validate
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +13,116 @@ import (
 
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/validationstore"
 )
+
+func queryClient(t *testing.T, respond func(string) (any, error)) *client {
+	t.Helper()
+	conn, server := net.Pipe()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer server.Close()
+		decoder, encoder := json.NewDecoder(server), json.NewEncoder(server)
+		for {
+			var request struct{ Params struct{ Query string } }
+			if decoder.Decode(&request) != nil {
+				return
+			}
+			value, err := respond(request.Params.Query)
+			response := map[string]any{"result": value}
+			if err != nil {
+				response["error"] = err.Error()
+			}
+			if encoder.Encode(response) != nil {
+				return
+			}
+		}
+	}()
+	t.Cleanup(func() { conn.Close(); <-done })
+	return &client{conn: conn, rw: bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))}
+}
+
+func TestWaitFramesCountsOnlyAfterReadinessAndRestartsForLateUploads(t *testing.T) {
+	ready := []bool{false, false, true, true, false, true, true, true}
+	frames := []int{1000, 1004, 2000, 2004, 2005}
+	readyIndex, frameIndex := 0, 0
+	c := queryClient(t, func(q string) (any, error) {
+		if q == "scene.ready" && readyIndex < len(ready) {
+			value := ready[readyIndex]
+			readyIndex++
+			return value, nil
+		}
+		if q == "engine.totalFrames" && frameIndex < len(frames) {
+			value := frames[frameIndex]
+			frameIndex++
+			return value, nil
+		}
+		return nil, fmt.Errorf("unexpected query %s", q)
+	})
+	_, err := execute(context.Background(), c, map[string]any{
+		"type": "wait-frames", "n": 5, "readyQuery": "scene.ready", "timeoutMs": 2000,
+	}, Script{}, Options{}, 0)
+	if err != nil || readyIndex != len(ready) || frameIndex != len(frames) {
+		t.Fatalf("err=%v, readiness polls=%d, frame polls=%d", err, readyIndex, frameIndex)
+	}
+}
+
+func TestWaitFramesRestartsWhenSceneResetsFrameCounter(t *testing.T) {
+	frames := []int{10, 12, 1, 3, 5, 6}
+	index := 0
+	c := queryClient(t, func(q string) (any, error) {
+		if q != "engine.totalFrames" || index >= len(frames) {
+			return nil, fmt.Errorf("unexpected query %s", q)
+		}
+		value := frames[index]
+		index++
+		return value, nil
+	})
+	_, err := execute(context.Background(), c, map[string]any{
+		"type": "wait-frames", "n": 5, "timeoutMs": 2000,
+	}, Script{}, Options{}, 0)
+	if err != nil || index != len(frames) {
+		t.Fatalf("err=%v, frame polls=%d", err, index)
+	}
+}
+
+func TestWaitFramesPropagatesSceneLoadFailure(t *testing.T) {
+	c := queryClient(t, func(q string) (any, error) {
+		return nil, fmt.Errorf("failed to load scene [missing.glb]")
+	})
+	_, err := execute(context.Background(), c, map[string]any{
+		"type": "wait-frames", "n": 5, "readyQuery": "scene.ready",
+	}, Script{}, Options{}, 0)
+	if err == nil || !strings.Contains(err.Error(), "missing.glb") {
+		t.Fatalf("err=%v, want scene load failure", err)
+	}
+}
+
+func TestShotWaitsForReadinessEvenWithoutExplicitScene(t *testing.T) {
+	for _, scene := range []string{"", "assets/models/playground.glb"} {
+		t.Run(scene, func(t *testing.T) {
+			root := t.TempDir()
+			result, err := ShotWithResult(context.Background(), Options{
+				RepoRoot: root, Preset: "test", Scene: scene, ValidationRoot: root,
+			}, 1, false, "shot")
+			if err == nil || !strings.Contains(err.Error(), "executable not found") {
+				t.Fatalf("err=%v, want missing executable", err)
+			}
+			data, err := os.ReadFile(filepath.Join(result.EvidenceDir, "script.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var script Script
+			if err := json.Unmarshal(data, &script); err != nil {
+				t.Fatal(err)
+			}
+			if len(script.Steps) != 3 || script.Steps[0]["query"] != "scene.ready" ||
+				script.Steps[1]["readyQuery"] != "scene.ready" || script.Steps[1]["n"] != float64(1) ||
+				script.Steps[0]["fatal"] != true || script.Steps[1]["fatal"] != true {
+				t.Fatalf("shot must gate capture on readiness and ready frames: %s", data)
+			}
+		})
+	}
+}
 
 func TestCompare(t *testing.T) {
 	tests := []struct {

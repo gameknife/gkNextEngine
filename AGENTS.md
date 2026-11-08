@@ -138,7 +138,7 @@ gnb shot --target AirportSim --ui  # 截图包含 ImGui，适合验证 HUD / 面
 ```
 
 机制（gnb 统一编排，所有 target 行为一致）：
-- gnb 启动目标并建立带一次性 token 的 loopback 控制通道，等待稳定帧后请求截图到**固定路径** `out/build/<preset>/screenshots/agent_validation.jpg`（覆盖式，无时间戳），确认落盘后请求退出。
+- gnb 启动目标并建立带一次性 token 的 loopback 控制通道，先等待 `scene.ready`（场景加载/提交、管线预热及纹理上传完成），再等待稳定帧后请求截图到**固定路径** `out/build/<preset>/screenshots/agent_validation.jpg`（覆盖式，无时间戳），确认落盘后请求退出。加载期间的空转帧不计入 `--frames`；就绪等待失败则终止并返回非零退出码。
 - 默认截图隐藏 ImGui；传 `gnb shot --ui` 让截图包含当帧 UI（gnb 在截图请求里带上 ui 参数）。
 - 窗口用 `SDL_WINDOW_HIDDEN` 创建：**不弹窗、不抢焦点**，不会打断你的 dev loop；present 自动切 immediate mode，渲染不受 vsync 限制，wall-clock 很快（几秒一张图）。
 - AGENT 读那张 `agent_validation.jpg` 即可肉眼判断。需要换帧数用 `--frames`;输出路径固定为上述 `agent_validation.jpg`。
@@ -176,7 +176,7 @@ gnb validate --script assets/agentscripts/smoke.agentscript.json --visible  # �
 - 每次 `gnb validate` / `gnb shot` 都会登记到 `out/build/<preset>/validation_runs/<runId>/`，即使 Dashboard 没有启动也会保留 `run.json`、`script.json`、`runner.log` 和独立截图。CLI 会打印 runId 与证据目录；有截图的机器通过在 Dashboard 中仍显示为“待审阅”。可用 `gnb validation note <runId> --issue --message "…"` 记录视觉问题，审阅不会改写机器状态。
 - Agent 脚本鼠标移动只推送合成 `SDL_EVENT_MOUSE_MOTION`，不会 `SDL_WarpMouseInWindow` 移动系统光标；按键/鼠标按钮也只走 SDL 事件队列。
 - 支持步骤：`key` / `text` / `mouse-move` / `mouse-button` / `click` / `drag` / `scroll` / `wait-frames` / `wait-ms` / `wait-until` / `cvar` / `exec` / `assert` / `screenshot` / `log` / `quit`。
-- 内建查询：`engine.totalFrames`、`engine.frameRate`、`engine.time`、`engine.status`、`scene.nodeCount`、`scene.selectedId`、`scene.selectedCount`、`cvar.<name>`；游戏可通过 `RegisterAgentQueries` 暴露 `game.<name>`。
+- 内建查询：`engine.totalFrames`、`engine.frameRate`、`engine.time`、`engine.status`、`scene.ready`、`scene.nodeCount`、`scene.selectedId`、`scene.selectedCount`、`cvar.<name>`；游戏可通过 `RegisterAgentQueries` 暴露 `game.<name>`。
 - 结束会写 JSON report 到 `out/build/<preset>/agent_reports/<script-name>.json`；任一断言失败时进程返回非零退出码，CI 可直接判定失败。
 
 ## Linting

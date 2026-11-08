@@ -1,5 +1,6 @@
 set(unitTestSources
     TestCommon.cpp
+    Test_SceneReadiness.cpp
     Test_PhysicsSync.cpp
     Test_Bindless3DTexture.cpp
     Test_Atmosphere.cpp

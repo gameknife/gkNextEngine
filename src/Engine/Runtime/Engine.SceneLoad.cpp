@@ -75,8 +75,19 @@ namespace
     }
 }
 
+bool NextEngine::IsSceneReady() const
+{
+    const auto* texturePool = Assets::GlobalTexturePool::GetInstance();
+    return status_ == NextRenderer::EApplicationStatus::Running && pendingSceneLoads_ == 0 &&
+        sceneLoadError_.empty() && renderer_ && !renderer_->PipelineWarmupProgress().active &&
+        texturePool && texturePool->PendingTextureLoads() == 0;
+}
+
 void NextEngine::RequestLoadScene(FSceneLoadRequest request)
 {
+    // Running can briefly describe the startup scene while this request is still queued.
+    ++pendingSceneLoads_;
+    sceneLoadError_.clear();
     AddTickedTask(
         [this, request = std::move(request)](double deltaSeconds) -> bool
         {
@@ -263,8 +274,10 @@ void NextEngine::LaunchLoadSceneTask(std::string sceneFileName, std::function<vo
             else
             {
                 SPDLOG_ERROR("failed to load scene [{}]", std::filesystem::path(sceneFileName).filename().string());
+                sceneLoadError_ = "failed to load scene [" + sceneFileName + "]";
             }
 
+            --pendingSceneLoads_;
             status_ = NextRenderer::EApplicationStatus::Running;
         },
         1,
@@ -273,6 +286,7 @@ void NextEngine::LaunchLoadSceneTask(std::string sceneFileName, std::function<vo
 
 void NextEngine::LoadScene(const FSceneLoadRequest& request)
 {
+    sceneLoadError_.clear();
     if (!request.append)
     {
         scene_->CleanUp();

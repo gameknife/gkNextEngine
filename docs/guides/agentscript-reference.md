@@ -60,7 +60,7 @@ last_updated: 2026-09-14
 
 | type | 字段 | 说明 |
 |---|---|---|
-| `wait-frames` | `n` (int) | 等到 `engine.totalFrames` 增长 n。场景解析在主线程，帧计数在那期间会停住，这正是它能等住加载的原因 |
+| `wait-frames` | `n` (int)，可选 `readyQuery` (string) | 等到 `engine.totalFrames` 增长 n；指定 `readyQuery` 时仅在查询返回 `true` 后计帧，变回 `false` 或帧计数重置时重新计帧。异步加载期间仍会增长帧数，因此截图前应使用 `scene.ready` |
 | `wait-ms` | `ms` (int) | 墙钟等待。**不推荐**，帧率不同结果不同；能用 `wait-frames` 就用它 |
 | `wait-until` | `query`, `op`, `value` | 轮询到条件成立；超时算失败 |
 | `assert` | `query`, `op`, `value` | 立即判定一次，不成立则**立刻失败并让进程返回非零退出码** |
@@ -163,7 +163,7 @@ last_updated: 2026-09-14
 - **引擎**：`engine.totalFrames`、`engine.frameRate`、`engine.time`、`engine.status`
   （`Starting`/`Running`/`Loading`/`AsyncPreparing`）、`engine.rendererType`、
   `engine.checkerboardActive`、`engine.sparseCheckerboardActive`
-- **场景**：`scene.nodeCount`、`scene.selectedId`、`scene.selectedCount`、`scene.sunElevation`、
+- **场景**：`scene.ready`、`scene.nodeCount`、`scene.selectedId`、`scene.selectedCount`、`scene.sunElevation`、
   `scene.atmosphereEnabled`、`scene.aerialPerspectiveEnabled`、`scene.heightFogEnabled`
 - **GPU-driven 统计**：`scene.renderProxyCount`、`scene.maxVisibleProxyIndex`、
   `scene.drawnTriangleCount`、`scene.drawnProxyCount`、`scene.lod0TriangleCount`、
@@ -175,14 +175,16 @@ last_updated: 2026-09-14
 `scene.drawnTrianglesPerProxy` 是在引擎里算好再返回的，不要自己用两个查询相除——统计每帧刷新，
 两次查询可能落在不同帧上，比值没有意义。
 
+`scene.ready` 等待排队中的场景加载、GPU 场景提交、管线预热，以及纹理/HDR 上传的主线程完成回调。
+场景加载失败时查询返回错误；合法空场景也可以就绪，节点数不能代替这个信号。
+
 ## 惯用写法
 
-**等场景真正就绪**（只等 `Running` 不够，启动时先有一个空场景）：
+**等场景真正就绪再预热**（启动空场景也有根节点，`Running` 和节点数都不能证明加载完成）：
 
 ```json
-{ "type": "wait-until", "query": "engine.status", "op": "eq", "value": "Running", "timeoutMs": 30000 },
-{ "type": "wait-until", "query": "scene.nodeCount", "op": "gt", "value": 0 },
-{ "type": "wait-frames", "n": 20 }
+{ "type": "wait-until", "query": "scene.ready", "value": true, "timeoutMs": 300000, "fatal": true },
+{ "type": "wait-frames", "n": 20, "readyQuery": "scene.ready", "fatal": true }
 ```
 
 **在一个进程里扫多个渲染器**，比每个渲染器开一次进程快得多：

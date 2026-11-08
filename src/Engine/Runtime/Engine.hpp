@@ -174,6 +174,9 @@ public:
     bool IsCapturingScreenShot() const { return screenShot_.IsCapturing(); }
 
     // Scene and command operations
+    // Includes queued load requests and texture uploads awaiting main-thread completion.
+    bool IsSceneReady() const;
+    const std::string& GetSceneLoadError() const { return sceneLoadError_; }
     void RequestLoadScene(FSceneLoadRequest request);
     void RequestAddSceneReference(std::string assetPath, glm::vec3 translation);
     void RequestSceneGpuRefresh();
@@ -471,6 +474,8 @@ private:
     bool closeRequested_ = false;
     FTaskQueues taskQueues_{};
     NextRenderer::EApplicationStatus status_{};
+    uint32_t pendingSceneLoads_ = 0;
+    std::string sceneLoadError_;
 
     // Runtime services and UI
     std::unique_ptr<NextUI::IUserInterface> userInterface_;

@@ -632,6 +632,7 @@ func newShotCommand(ctx appContext) *cobra.Command {
 		Use:   "shot [--scene <path>] [--target <name>] [--frames N] [--ui] [--visible] [--headless]",
 		Short: tr("cli.shot.short"),
 		Long: "Render a scene to a stable frame, capture a single screenshot to a fixed path, then exit.\n\n" +
+			"Waits for scene loading and texture uploads before counting warm-up frames.\n" +
 			"The window is hidden so it never pops to the foreground or steals focus during an agent\n" +
 			"dev loop, and the app exits on its own. Pass --ui to include ImGui in the capture.\n" +
 			"The screenshot path is printed when finished.\n\n" +
@@ -668,7 +669,7 @@ func newShotCommand(ctx appContext) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&scene, "scene", "", "scene to load (file path or built-in .proc name)")
 	cmd.Flags().StringVar(&target, "target", "gkNextRenderer", "target executable to run")
-	cmd.Flags().IntVar(&frames, "frames", 0, "frames to render before capture (0 = engine default)")
+	cmd.Flags().IntVar(&frames, "frames", 0, "warm-up frames after scene and textures are ready (0 = 90)")
 	cmd.Flags().BoolVar(&includeUI, "ui", false, "include ImGui UI in the screenshot")
 	cmd.Flags().BoolVar(&visible, "visible", false, "show the desktop window while capturing")
 	cmd.Flags().BoolVar(&headless, "headless", false, "force VK_EXT_headless_surface (including on macOS)")

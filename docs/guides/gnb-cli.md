@@ -51,6 +51,8 @@ GNB_LANG=en ./gnb.sh doctor
 
 `shot` 是快速肉眼验证；`validate` 用输入脚本驱动并断言；`visual` 才是多场景 baseline 回归。每次 `shot`/`validate` 会先在 `out/build/<preset>/validation_runs/<runId>/` 登记运行，Dashboard 未启动也不会丢失记录；CLI 会打印 `runId` 与证据目录。`gnb validation note` 只写入独立的 `review.json`，不会把人工结论伪装成机器通过。Remote Play 的安全与能力边界见 [当前设计](../designs/webrtc-remoteplay-design.md)。
 
+`shot` 会先等待 `scene.ready`（场景提交、管线预热及纹理上传完成），再计算 `--frames` 指定的稳定帧数（默认 90）；途中再次加载资源会重新计帧。无需额外写固定秒数等待，未指定 `--scene` 时也适用。就绪等待失败会返回非零退出码，证据目录中的失败截图仅用于排查。
+
 打开 Dashboard 的“验证”页后，会自动发现 `assets/agentscripts/*.agentscript.json`，并列出脚本的 target、场景和步骤数。已构建 target 的脚本可以直接点击“后台验证”或“可见验证”启动，不必另开终端；未构建的 target 会保留在列表中并明确标记原因。
 
 ## 项目工具

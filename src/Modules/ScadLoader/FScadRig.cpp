@@ -36,14 +36,17 @@ namespace Assets
             {
                 return static_cast<uint64_t>(std::clamp(v, 0.0f, 1.0f) * 65535.0f + 0.5f);
             };
-            return (static_cast<uint64_t>(RigQuantizeColor(color)) << 32) | (q(material.roughness) << 16) |
-                   q(material.metalness);
+            return Scad::MixTextureIntoKey(
+                (static_cast<uint64_t>(RigQuantizeColor(color)) << 32) | (q(material.roughness) << 16) |
+                    q(material.metalness),
+                material);
         }
 
         struct RigBucket
         {
             glm::vec4 color{0.78f, 0.78f, 0.78f, 1.0f};
             glm::vec2 surface{1.0f, 0.0f}; // (roughness, metalness)
+            FProceduralTextureRef texture; // gk_texture() print, UVs projected in the bone-local frame
             std::vector<glm::dvec3> tris; // SCAD space, baked into bone-pivot-local frame
         };
 
@@ -127,6 +130,7 @@ namespace Assets
                     bucket.color = mesh.color;
                     bucket.surface = glm::vec2(std::clamp(mesh.material.roughness, 0.0f, 1.0f),
                                                std::clamp(mesh.material.metalness, 0.0f, 1.0f));
+                    bucket.texture = mesh.material.texture;
                     bucket.tris.reserve(bucket.tris.size() + mesh.tris.size());
                     const bool flipWinding = glm::determinant(glm::dmat3(accum)) < 0.0;
                     const auto transform = [&accum](const glm::dvec3& point)
@@ -238,6 +242,12 @@ namespace Assets
                         }
                         const std::vector<glm::vec3> normals =
                             Scad::ScadComputeSmoothNormals(localPos, options_.smoothAngleDegrees);
+                        // Bone-local projection: a print on a sleeve stays put as the arm swings.
+                        std::vector<glm::vec2> uvs(localPos.size(), glm::vec2(0.0f));
+                        if (bucket.texture)
+                        {
+                            ProceduralTexture::BoxProjectUVs(bucket.tris, bucket.texture->scale, uvs);
+                        }
 
                         const uint32_t vertexOffset = static_cast<uint32_t>(vertices.size());
                         vertices.reserve(vertices.size() + localPos.size());
@@ -245,12 +255,13 @@ namespace Assets
                         for (uint32_t i = 0; i < static_cast<uint32_t>(localPos.size()); ++i)
                         {
                             vertices.push_back(Vertex{localPos[i], normals[i], glm::vec4(1, 0, 0, 1),
-                                                      glm::vec2(0, 0), sectionIndex});
+                                                      uvs[i], sectionIndex});
                             indices.push_back(vertexOffset + i);
                         }
 
                         part.sectionColors.push_back(bucket.color);
                         part.sectionSurfaces.push_back(bucket.surface);
+                        part.sectionTextures.push_back(bucket.texture);
                         part.sectionTintable.push_back(RigQuantizeColor(bucket.color) == tintKey);
                         ++sectionIndex;
                     }

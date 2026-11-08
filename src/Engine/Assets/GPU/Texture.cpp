@@ -231,6 +231,12 @@ namespace Assets
         defaultWhiteTexture_.reset();
         textureImages_.clear();
         descriptorSetManager_.reset();
+        // Loaders reach the pool through GetInstance(); a torn-down engine (tests, tools that
+        // restart the renderer) must not leave them a dangling pointer.
+        if (instance_ == this)
+        {
+            instance_ = nullptr;
+        }
     }
 
     void GlobalTexturePool::BindTexture(uint32_t textureIdx, const TextureImage& textureImage)

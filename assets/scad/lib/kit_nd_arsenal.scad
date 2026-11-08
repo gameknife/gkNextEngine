@@ -10,8 +10,9 @@
 use <kit_coldwar.scad>
 
 // ---- 额外材质 ----
-module nd_m_poly(c = [0.065, 0.066, 0.07]) { gk_material(c, roughness = 0.62, metalness = 0) children(); }   // 黑色聚合物
-module nd_m_birch(c) { gk_material(c, roughness = 0.48, metalness = 0) children(); }                         // 油浸桦木（战时木托）
+module nd_m_poly(c = [0.065, 0.066, 0.07]) { gk_material(c, roughness = 0.78, metalness = 0) children(); }   // 黑色哑光聚合物
+module nd_m_birch(c) { gk_material(c, roughness = 0.64, metalness = 0) children(); }                         // 油浸桦木（战时木托，缎面）
+module nd_m_walnut(c) { gk_material(c, roughness = 0.40, metalness = 0) children(); }                        // 清漆胡桃木（民用猎枪）
 module nd_m_worn() { gk_material([0.36, 0.36, 0.37], roughness = 0.38, metalness = 0.95) children(); }       // 磨掉发蓝的棱边
 
 // 两点之间的倒角方杆（冲压钢折叠托的托杆）
@@ -443,7 +444,7 @@ module nd_wpn_toz34_held()
             cw_side(0.0045, [[f, 0.012], [f + 0.005, 0.012], [f + 0.002, -0.006], [f - 0.004, -0.012], [f - 0.002, 0.000]]);
         for (s = [-1, 1]) cw_wf(-0.018, 0.0745, s * 0.007) cw_cyl(0.0035, 0.0018, 8);  // 击发指示销
     }
-    nd_m_birch(nd_TOZ_WALNUT())
+    nd_m_walnut(nd_TOZ_WALNUT())
     {
         // 半手枪握把段：凹形轮廓直接拉伸（hull 会把握把弧线填平）
         cw_side(0.038, [[0.004, 0.074], [-0.030, 0.066], [-0.070, 0.058], [-0.110, 0.054], [-0.110, -0.030], [-0.082, -0.040],

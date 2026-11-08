@@ -29,18 +29,18 @@ namespace Assets::SceneBuilder
     }
 
     uint32_t AddSurfaceMaterial(std::vector<Assets::FMaterial>& materials, const glm::vec3& color, float roughness,
-                                float metalness)
+                                float metalness, int32_t diffuseTextureId)
     {
         const glm::vec3 rgb = glm::clamp(color, glm::vec3(0.0f), glm::vec3(1.0f));
         roughness = glm::clamp(roughness, 0.0f, 1.0f);
         metalness = glm::clamp(metalness, 0.0f, 1.0f);
         if (roughness >= 0.999f && metalness <= 0.001f)
         {
-            materials.push_back({Assets::Material::Lambertian(rgb)});
+            materials.push_back({Assets::Material::Lambertian(rgb, diffuseTextureId)});
         }
         else
         {
-            Assets::Material material = Assets::Material::Mixture(rgb, roughness);
+            Assets::Material material = Assets::Material::Mixture(rgb, roughness, diffuseTextureId);
             material.Metalness = metalness;
             materials.push_back({material});
         }
@@ -53,7 +53,12 @@ namespace Assets::SceneBuilder
         const glm::vec3 color = section < part.sectionColors.size() ? glm::vec3(part.sectionColors[section])
                                                                     : glm::vec3(0.78f);
         const glm::vec2 surface = part.SectionSurface(section);
-        return AddSurfaceMaterial(materials, color, surface.x, surface.y);
+        int32_t textureId = -1;
+        if (section < part.sectionTextures.size() && part.sectionTextures[section])
+        {
+            textureId = Assets::ProceduralTexture::Acquire(*part.sectionTextures[section]);
+        }
+        return AddSurfaceMaterial(materials, color, surface.x, surface.y, textureId);
     }
 
     uint32_t AddDiffuseLightMaterial(std::vector<Assets::FMaterial>& materials, const glm::vec3& color, float intensity)

@@ -11,193 +11,1314 @@
     "height": 1000
   },
   "steps": [
-    {"type": "wait-until", "query": "game.sceneReady", "op": "eq", "value": true, "timeoutMs": 30000},
-    {"type": "cvar", "name": "nextdayz.debug.freezeNeeds", "set": true},
-    {"type": "cvar", "name": "nextdayz.debug.orbit", "set": true},
-    {"type": "cvar", "name": "nextdayz.debug.orbitDistance", "set": 2.4},
-    {"type": "cvar", "name": "nextdayz.debug.orbitHeight", "set": 0.95},
-
-    {"type": "log", "message": "Soviet Afghan war: panama, Afganka, Type 56 rig, RD-54"},
-    {"type": "wait-until", "query": "game.onGround", "op": "eq", "value": true, "timeoutMs": 10000},
-    {"type": "wait-until", "query": "game.baseAnim", "op": "eq", "value": "stand_idle", "timeoutMs": 10000},
-    {"type": "wait-frames", "n": 30},
-    {"type": "cvar", "name": "nextdayz.debug.orbitYaw", "set": 160},
-    {"type": "cvar", "name": "nextdayz.validation.give", "set": "hat_panama"},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": "hat_panama"},
-    {"type": "cvar", "name": "nextdayz.validation.give", "set": "jacket_afganka"},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": "jacket_afganka"},
-    {"type": "cvar", "name": "nextdayz.validation.give", "set": "vest_type56"},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": "vest_type56"},
-    {"type": "cvar", "name": "nextdayz.validation.give", "set": "pants_afganka"},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": "pants_afganka"},
-    {"type": "cvar", "name": "nextdayz.validation.give", "set": "backpack_rd54"},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": "backpack_rd54"},
-    {"type": "assert", "query": "game.clothingVisuals", "op": "eq", "value": "hat_panama:1;jacket_afganka:5;vest_type56:1;pants_afganka:7;backpack_rd54:2;"},
-    {"type": "assert", "query": "game.bareTorsoVisible", "op": "eq", "value": false},
-    {"type": "assert", "query": "game.shortsVisible", "op": "eq", "value": false},
-    {"type": "wait-frames", "n": 40},
-    {"type": "screenshot", "out": "screenshots/nextdayz_heritage_afghan_front"},
-    {"type": "cvar", "name": "nextdayz.debug.orbitYaw", "set": 20},
-    {"type": "wait-frames", "n": 30},
-    {"type": "screenshot", "out": "screenshots/nextdayz_heritage_afghan_back"},
-
-    {"type": "log", "message": "Mountain troops: SSh-68, Gorka, 6B3, Abalakov rucksack"},
-    {"type": "cvar", "name": "nextdayz.validation.restart", "set": false},
-    {"type": "cvar", "name": "nextdayz.validation.restart", "set": true},
-    {"type": "assert", "query": "game.clothingVisuals", "op": "eq", "value": ""},
-    {"type": "wait-until", "query": "game.onGround", "op": "eq", "value": true, "timeoutMs": 10000},
-    {"type": "wait-until", "query": "game.baseAnim", "op": "eq", "value": "stand_idle", "timeoutMs": 10000},
-    {"type": "wait-frames", "n": 30},
-    {"type": "cvar", "name": "nextdayz.debug.orbitYaw", "set": 160},
-    {"type": "cvar", "name": "nextdayz.validation.give", "set": "helmet_ssh68"},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": "helmet_ssh68"},
-    {"type": "cvar", "name": "nextdayz.validation.give", "set": "jacket_gorka"},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": "jacket_gorka"},
-    {"type": "cvar", "name": "nextdayz.validation.give", "set": "vest_6b3"},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": "vest_6b3"},
-    {"type": "cvar", "name": "nextdayz.validation.give", "set": "pants_gorka"},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": "pants_gorka"},
-    {"type": "cvar", "name": "nextdayz.validation.give", "set": "backpack_abalakov"},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": "backpack_abalakov"},
-    {"type": "assert", "query": "game.clothingVisuals", "op": "eq", "value": "helmet_ssh68:1;vest_6b3:1;jacket_gorka:5;pants_gorka:7;backpack_abalakov:2;"},
-    {"type": "assert", "query": "game.bareTorsoVisible", "op": "eq", "value": false},
-    {"type": "assert", "query": "game.shortsVisible", "op": "eq", "value": false},
-    {"type": "wait-frames", "n": 40},
-    {"type": "screenshot", "out": "screenshots/nextdayz_heritage_gorka_front"},
-    {"type": "cvar", "name": "nextdayz.debug.orbitYaw", "set": 20},
-    {"type": "wait-frames", "n": 30},
-    {"type": "screenshot", "out": "screenshots/nextdayz_heritage_gorka_back"},
-
-    {"type": "log", "message": "East German NVA: M56, Strichtarn jacket and trousers"},
-    {"type": "cvar", "name": "nextdayz.validation.restart", "set": false},
-    {"type": "cvar", "name": "nextdayz.validation.restart", "set": true},
-    {"type": "assert", "query": "game.clothingVisuals", "op": "eq", "value": ""},
-    {"type": "wait-until", "query": "game.onGround", "op": "eq", "value": true, "timeoutMs": 10000},
-    {"type": "wait-until", "query": "game.baseAnim", "op": "eq", "value": "stand_idle", "timeoutMs": 10000},
-    {"type": "wait-frames", "n": 30},
-    {"type": "cvar", "name": "nextdayz.debug.orbitYaw", "set": 160},
-    {"type": "cvar", "name": "nextdayz.validation.give", "set": "helmet_m56"},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": "helmet_m56"},
-    {"type": "cvar", "name": "nextdayz.validation.give", "set": "jacket_strichtarn"},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": "jacket_strichtarn"},
-    {"type": "cvar", "name": "nextdayz.validation.give", "set": "pants_strichtarn"},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": "pants_strichtarn"},
-    {"type": "assert", "query": "game.clothingVisuals", "op": "eq", "value": "helmet_m56:1;jacket_strichtarn:5;pants_strichtarn:7;"},
-    {"type": "wait-frames", "n": 40},
-    {"type": "screenshot", "out": "screenshots/nextdayz_heritage_nva_front"},
-
-    {"type": "log", "message": "Telnyashka under nothing: stripes on torso and sleeves"},
-    {"type": "cvar", "name": "nextdayz.validation.give", "set": "shirt_telnyashka"},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": "shirt_telnyashka"},
-    {"type": "assert", "query": "game.clothingVisuals", "op": "eq", "value": "shirt_telnyashka:5;helmet_m56:1;pants_strichtarn:7;"},
-    {"type": "assert", "query": "game.bareTorsoVisible", "op": "eq", "value": false},
-    {"type": "wait-frames", "n": 40},
-    {"type": "screenshot", "out": "screenshots/nextdayz_heritage_telnyashka_front"},
-
-    {"type": "log", "message": "Iron sights of the five new guns line up on the eye"},
-    {"type": "cvar", "name": "nextdayz.debug.orbit", "set": false},
-    {"type": "cvar", "name": "nextdayz.validation.teleport", "set": "0,0"},
-    {"type": "cvar", "name": "nextdayz.validation.lookYaw", "set": 0},
-    {"type": "cvar", "name": "nextdayz.validation.lookPitch", "set": 0},
-    {"type": "cvar", "name": "nextdayz.validation.thirdPerson", "set": true},
-    {"type": "cvar", "name": "nextdayz.debug.freeze", "set": true},
-
-    {"type": "cvar", "name": "nextdayz.validation.give", "set": "aks74u"},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": ""},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": "aks74u"},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 0},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 60},
-    {"type": "wait-frames", "n": 63},
-    {"type": "screenshot", "out": "screenshots/nextdayz_heritage_aks74u_hold"},
-    {"type": "mouse-button", "button": "right", "action": "press"},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 0},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 60},
-    {"type": "wait-frames", "n": 63},
-    {"type": "assert", "query": "game.adsMode", "op": "eq", "value": true},
-    {"type": "assert", "query": "game.adsSightCenterError", "op": "lt", "value": 0.1},
-    {"type": "assert", "query": "game.adsSightAxisError", "op": "lt", "value": 0.1},
-    {"type": "screenshot", "out": "screenshots/nextdayz_heritage_aks74u_ads"},
-    {"type": "mouse-button", "button": "right", "action": "press"},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 0},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 60},
-    {"type": "wait-frames", "n": 63},
-
-    {"type": "cvar", "name": "nextdayz.validation.give", "set": "bizon"},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": ""},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": "bizon"},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 0},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 60},
-    {"type": "wait-frames", "n": 63},
-    {"type": "screenshot", "out": "screenshots/nextdayz_heritage_bizon_hold"},
-    {"type": "mouse-button", "button": "right", "action": "press"},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 0},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 60},
-    {"type": "wait-frames", "n": 63},
-    {"type": "assert", "query": "game.adsMode", "op": "eq", "value": true},
-    {"type": "assert", "query": "game.adsSightCenterError", "op": "lt", "value": 0.1},
-    {"type": "assert", "query": "game.adsSightAxisError", "op": "lt", "value": 0.1},
-    {"type": "screenshot", "out": "screenshots/nextdayz_heritage_bizon_ads"},
-    {"type": "mouse-button", "button": "right", "action": "press"},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 0},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 60},
-    {"type": "wait-frames", "n": 63},
-
-    {"type": "cvar", "name": "nextdayz.validation.give", "set": "svt40"},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": ""},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": "svt40"},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 0},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 60},
-    {"type": "wait-frames", "n": 63},
-    {"type": "screenshot", "out": "screenshots/nextdayz_heritage_svt40_hold"},
-    {"type": "mouse-button", "button": "right", "action": "press"},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 0},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 60},
-    {"type": "wait-frames", "n": 63},
-    {"type": "assert", "query": "game.adsMode", "op": "eq", "value": true},
-    {"type": "assert", "query": "game.adsSightCenterError", "op": "lt", "value": 0.1},
-    {"type": "assert", "query": "game.adsSightAxisError", "op": "lt", "value": 0.1},
-    {"type": "screenshot", "out": "screenshots/nextdayz_heritage_svt40_ads"},
-    {"type": "mouse-button", "button": "right", "action": "press"},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 0},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 60},
-    {"type": "wait-frames", "n": 63},
-
-    {"type": "cvar", "name": "nextdayz.validation.give", "set": "toz34"},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": ""},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": "toz34"},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 0},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 60},
-    {"type": "wait-frames", "n": 63},
-    {"type": "screenshot", "out": "screenshots/nextdayz_heritage_toz34_hold"},
-    {"type": "mouse-button", "button": "right", "action": "press"},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 0},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 60},
-    {"type": "wait-frames", "n": 63},
-    {"type": "assert", "query": "game.adsMode", "op": "eq", "value": true},
-    {"type": "assert", "query": "game.adsSightCenterError", "op": "lt", "value": 0.1},
-    {"type": "assert", "query": "game.adsSightAxisError", "op": "lt", "value": 0.1},
-    {"type": "screenshot", "out": "screenshots/nextdayz_heritage_toz34_ads"},
-    {"type": "mouse-button", "button": "right", "action": "press"},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 0},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 60},
-    {"type": "wait-frames", "n": 63},
-
-    {"type": "cvar", "name": "nextdayz.validation.give", "set": "aps"},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": ""},
-    {"type": "cvar", "name": "nextdayz.validation.use", "set": "aps"},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 0},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 60},
-    {"type": "wait-frames", "n": 63},
-    {"type": "assert", "query": "game.weaponSlot3", "op": "eq", "value": "aps"},
-    {"type": "screenshot", "out": "screenshots/nextdayz_heritage_aps_hold"},
-    {"type": "mouse-button", "button": "right", "action": "press"},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 0},
-    {"type": "cvar", "name": "nextdayz.debug.step", "set": 60},
-    {"type": "wait-frames", "n": 63},
-    {"type": "assert", "query": "game.adsMode", "op": "eq", "value": true},
-    {"type": "assert", "query": "game.adsSightCenterError", "op": "lt", "value": 0.1},
-    {"type": "assert", "query": "game.adsSightAxisError", "op": "lt", "value": 0.1},
-    {"type": "screenshot", "out": "screenshots/nextdayz_heritage_aps_ads"},
-    {"type": "quit"}
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.freezeNeeds",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.orbit",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.orbitDistance",
+      "set": 2.4
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.orbitHeight",
+      "set": 0.95
+    },
+    {
+      "type": "log",
+      "message": "Soviet Afghan war: panama, Afganka, Type 56 rig, RD-54"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.onGround",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.baseAnim",
+      "op": "eq",
+      "value": "stand_idle",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait-frames",
+      "n": 30
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.orbitYaw",
+      "set": 160
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "hat_panama"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "hat_panama"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "jacket_afganka"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "jacket_afganka"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "vest_type56"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "vest_type56"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "pants_afganka"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "pants_afganka"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "backpack_rd54"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "backpack_rd54"
+    },
+    {
+      "type": "assert",
+      "query": "game.clothingVisuals",
+      "op": "eq",
+      "value": "hat_panama:1;jacket_afganka:5;vest_type56:1;pants_afganka:7;backpack_rd54:2;"
+    },
+    {
+      "type": "assert",
+      "query": "game.bareTorsoVisible",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "assert",
+      "query": "game.shortsVisible",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "wait-frames",
+      "n": 40
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_afghan_front"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.orbitYaw",
+      "set": 20
+    },
+    {
+      "type": "wait-frames",
+      "n": 30
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_afghan_back"
+    },
+    {
+      "type": "log",
+      "message": "Mountain troops: SSh-68, Gorka, 6B3, Abalakov rucksack"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.restart",
+      "set": false
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.restart",
+      "set": true
+    },
+    {
+      "type": "assert",
+      "query": "game.clothingVisuals",
+      "op": "eq",
+      "value": ""
+    },
+    {
+      "type": "wait-until",
+      "query": "game.onGround",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.baseAnim",
+      "op": "eq",
+      "value": "stand_idle",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait-frames",
+      "n": 30
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.orbitYaw",
+      "set": 160
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "helmet_ssh68"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "helmet_ssh68"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "jacket_gorka"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "jacket_gorka"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "vest_6b3"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "vest_6b3"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "pants_gorka"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "pants_gorka"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "backpack_abalakov"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "backpack_abalakov"
+    },
+    {
+      "type": "assert",
+      "query": "game.clothingVisuals",
+      "op": "eq",
+      "value": "helmet_ssh68:1;vest_6b3:1;jacket_gorka:5;pants_gorka:7;backpack_abalakov:2;"
+    },
+    {
+      "type": "assert",
+      "query": "game.bareTorsoVisible",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "assert",
+      "query": "game.shortsVisible",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "wait-frames",
+      "n": 40
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_gorka_front"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.orbitYaw",
+      "set": 20
+    },
+    {
+      "type": "wait-frames",
+      "n": 30
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_gorka_back"
+    },
+    {
+      "type": "log",
+      "message": "East German NVA: M56, Strichtarn jacket and trousers"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.restart",
+      "set": false
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.restart",
+      "set": true
+    },
+    {
+      "type": "assert",
+      "query": "game.clothingVisuals",
+      "op": "eq",
+      "value": ""
+    },
+    {
+      "type": "wait-until",
+      "query": "game.onGround",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.baseAnim",
+      "op": "eq",
+      "value": "stand_idle",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait-frames",
+      "n": 30
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.orbitYaw",
+      "set": 160
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "helmet_m56"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "helmet_m56"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "jacket_strichtarn"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "jacket_strichtarn"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "pants_strichtarn"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "pants_strichtarn"
+    },
+    {
+      "type": "assert",
+      "query": "game.clothingVisuals",
+      "op": "eq",
+      "value": "helmet_m56:1;jacket_strichtarn:5;pants_strichtarn:7;"
+    },
+    {
+      "type": "wait-frames",
+      "n": 40
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_nva_front"
+    },
+    {
+      "type": "log",
+      "message": "Telnyashka under nothing: stripes on torso and sleeves"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "shirt_telnyashka"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "shirt_telnyashka"
+    },
+    {
+      "type": "assert",
+      "query": "game.clothingVisuals",
+      "op": "eq",
+      "value": "shirt_telnyashka:5;helmet_m56:1;pants_strichtarn:7;"
+    },
+    {
+      "type": "assert",
+      "query": "game.bareTorsoVisible",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "wait-frames",
+      "n": 40
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_telnyashka_front"
+    },
+    {
+      "type": "log",
+      "message": "M81 Woodland BDU with PASGT"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.restart",
+      "set": false
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.restart",
+      "set": true
+    },
+    {
+      "type": "assert",
+      "query": "game.clothingVisuals",
+      "op": "eq",
+      "value": ""
+    },
+    {
+      "type": "wait-until",
+      "query": "game.onGround",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.baseAnim",
+      "op": "eq",
+      "value": "stand_idle",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait-frames",
+      "n": 30
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.orbitYaw",
+      "set": 160
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "helmet_pasgt"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "helmet_pasgt"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "jacket_m81"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "jacket_m81"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "pants_m81"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "pants_m81"
+    },
+    {
+      "type": "assert",
+      "query": "game.clothingVisuals",
+      "op": "eq",
+      "value": "helmet_pasgt:1;jacket_m81:5;pants_m81:7;"
+    },
+    {
+      "type": "assert",
+      "query": "game.bareTorsoVisible",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "wait-frames",
+      "n": 40
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_m81_front"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.orbitYaw",
+      "set": 20
+    },
+    {
+      "type": "wait-frames",
+      "n": 30
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_m81_back"
+    },
+    {
+      "type": "log",
+      "message": "EMR digital with boonie"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.restart",
+      "set": false
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.restart",
+      "set": true
+    },
+    {
+      "type": "assert",
+      "query": "game.clothingVisuals",
+      "op": "eq",
+      "value": ""
+    },
+    {
+      "type": "wait-until",
+      "query": "game.onGround",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.baseAnim",
+      "op": "eq",
+      "value": "stand_idle",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait-frames",
+      "n": 30
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.orbitYaw",
+      "set": 160
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "hat_boonie_emr"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "hat_boonie_emr"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "jacket_emr"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "jacket_emr"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "pants_emr"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "pants_emr"
+    },
+    {
+      "type": "assert",
+      "query": "game.clothingVisuals",
+      "op": "eq",
+      "value": "hat_boonie_emr:1;jacket_emr:5;pants_emr:7;"
+    },
+    {
+      "type": "assert",
+      "query": "game.bareTorsoVisible",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "wait-frames",
+      "n": 40
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_emr_front"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.orbitYaw",
+      "set": 20
+    },
+    {
+      "type": "wait-frames",
+      "n": 30
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_emr_back"
+    },
+    {
+      "type": "log",
+      "message": "DBDU chocolate chip"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.restart",
+      "set": false
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.restart",
+      "set": true
+    },
+    {
+      "type": "assert",
+      "query": "game.clothingVisuals",
+      "op": "eq",
+      "value": ""
+    },
+    {
+      "type": "wait-until",
+      "query": "game.onGround",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.baseAnim",
+      "op": "eq",
+      "value": "stand_idle",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait-frames",
+      "n": 30
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.orbitYaw",
+      "set": 160
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "jacket_dbdu"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "jacket_dbdu"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "pants_dbdu"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "pants_dbdu"
+    },
+    {
+      "type": "assert",
+      "query": "game.clothingVisuals",
+      "op": "eq",
+      "value": "jacket_dbdu:5;pants_dbdu:7;"
+    },
+    {
+      "type": "assert",
+      "query": "game.bareTorsoVisible",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "wait-frames",
+      "n": 40
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_dbdu_front"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.orbitYaw",
+      "set": 20
+    },
+    {
+      "type": "wait-frames",
+      "n": 30
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_dbdu_back"
+    },
+    {
+      "type": "log",
+      "message": "VSR-98 Flora with SSh-68 and 6B3"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.restart",
+      "set": false
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.restart",
+      "set": true
+    },
+    {
+      "type": "assert",
+      "query": "game.clothingVisuals",
+      "op": "eq",
+      "value": ""
+    },
+    {
+      "type": "wait-until",
+      "query": "game.onGround",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.baseAnim",
+      "op": "eq",
+      "value": "stand_idle",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait-frames",
+      "n": 30
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.orbitYaw",
+      "set": 160
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "helmet_ssh68"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "helmet_ssh68"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "jacket_flora"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "jacket_flora"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "vest_6b3"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "vest_6b3"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "pants_flora"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "pants_flora"
+    },
+    {
+      "type": "assert",
+      "query": "game.clothingVisuals",
+      "op": "eq",
+      "value": "helmet_ssh68:1;vest_6b3:1;jacket_flora:5;pants_flora:7;"
+    },
+    {
+      "type": "assert",
+      "query": "game.bareTorsoVisible",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "wait-frames",
+      "n": 40
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_flora_front"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.orbitYaw",
+      "set": 20
+    },
+    {
+      "type": "wait-frames",
+      "n": 30
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_flora_back"
+    },
+    {
+      "type": "log",
+      "message": "Iron sights of the five new guns line up on the eye"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.orbit",
+      "set": false
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "0,0"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.thirdPerson",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.freeze",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "aks74u"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": ""
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "aks74u"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 60
+    },
+    {
+      "type": "wait-frames",
+      "n": 63
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_aks74u_hold"
+    },
+    {
+      "type": "mouse-button",
+      "button": "right",
+      "action": "press"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 60
+    },
+    {
+      "type": "wait-frames",
+      "n": 63
+    },
+    {
+      "type": "assert",
+      "query": "game.adsMode",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "assert",
+      "query": "game.adsSightCenterError",
+      "op": "lt",
+      "value": 0.1
+    },
+    {
+      "type": "assert",
+      "query": "game.adsSightAxisError",
+      "op": "lt",
+      "value": 0.1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_aks74u_ads"
+    },
+    {
+      "type": "mouse-button",
+      "button": "right",
+      "action": "press"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 60
+    },
+    {
+      "type": "wait-frames",
+      "n": 63
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "bizon"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": ""
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "bizon"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 60
+    },
+    {
+      "type": "wait-frames",
+      "n": 63
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_bizon_hold"
+    },
+    {
+      "type": "mouse-button",
+      "button": "right",
+      "action": "press"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 60
+    },
+    {
+      "type": "wait-frames",
+      "n": 63
+    },
+    {
+      "type": "assert",
+      "query": "game.adsMode",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "assert",
+      "query": "game.adsSightCenterError",
+      "op": "lt",
+      "value": 0.1
+    },
+    {
+      "type": "assert",
+      "query": "game.adsSightAxisError",
+      "op": "lt",
+      "value": 0.1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_bizon_ads"
+    },
+    {
+      "type": "mouse-button",
+      "button": "right",
+      "action": "press"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 60
+    },
+    {
+      "type": "wait-frames",
+      "n": 63
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "svt40"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": ""
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "svt40"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 60
+    },
+    {
+      "type": "wait-frames",
+      "n": 63
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_svt40_hold"
+    },
+    {
+      "type": "mouse-button",
+      "button": "right",
+      "action": "press"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 60
+    },
+    {
+      "type": "wait-frames",
+      "n": 63
+    },
+    {
+      "type": "assert",
+      "query": "game.adsMode",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "assert",
+      "query": "game.adsSightCenterError",
+      "op": "lt",
+      "value": 0.1
+    },
+    {
+      "type": "assert",
+      "query": "game.adsSightAxisError",
+      "op": "lt",
+      "value": 0.1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_svt40_ads"
+    },
+    {
+      "type": "mouse-button",
+      "button": "right",
+      "action": "press"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 60
+    },
+    {
+      "type": "wait-frames",
+      "n": 63
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "toz34"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": ""
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "toz34"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 60
+    },
+    {
+      "type": "wait-frames",
+      "n": 63
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_toz34_hold"
+    },
+    {
+      "type": "mouse-button",
+      "button": "right",
+      "action": "press"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 60
+    },
+    {
+      "type": "wait-frames",
+      "n": 63
+    },
+    {
+      "type": "assert",
+      "query": "game.adsMode",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "assert",
+      "query": "game.adsSightCenterError",
+      "op": "lt",
+      "value": 0.1
+    },
+    {
+      "type": "assert",
+      "query": "game.adsSightAxisError",
+      "op": "lt",
+      "value": 0.1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_toz34_ads"
+    },
+    {
+      "type": "mouse-button",
+      "button": "right",
+      "action": "press"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 60
+    },
+    {
+      "type": "wait-frames",
+      "n": 63
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "aps"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": ""
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "aps"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 60
+    },
+    {
+      "type": "wait-frames",
+      "n": 63
+    },
+    {
+      "type": "assert",
+      "query": "game.weaponSlot3",
+      "op": "eq",
+      "value": "aps"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_aps_hold"
+    },
+    {
+      "type": "mouse-button",
+      "button": "right",
+      "action": "press"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.step",
+      "set": 60
+    },
+    {
+      "type": "wait-frames",
+      "n": 63
+    },
+    {
+      "type": "assert",
+      "query": "game.adsMode",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "assert",
+      "query": "game.adsSightCenterError",
+      "op": "lt",
+      "value": 0.1
+    },
+    {
+      "type": "assert",
+      "query": "game.adsSightAxisError",
+      "op": "lt",
+      "value": 0.1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_heritage_aps_ads"
+    },
+    {
+      "type": "quit"
+    }
   ]
 }

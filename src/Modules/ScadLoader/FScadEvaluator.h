@@ -25,6 +25,7 @@
 
 #include <glm/glm.hpp>
 
+#include "Engine/Assets/Loaders/ProceduralTexture.hpp"
 #include "Modules/ScadLoader/FScadTypes.h"
 
 namespace Assets::Scad
@@ -38,7 +39,25 @@ namespace Assets::Scad
         float roughness = 1.0f;
         float metalness = 0.0f;
         bool explicitParameters = false;
+        // gk_texture() print for this geometry (null = plain color). Shared, so
+        // copying properties through CSG and buckets stays cheap.
+        FProceduralTextureRef texture;
     };
+
+    // Folds a gk_texture() print into a color/surface bucket key: geometry with
+    // the same color but a different print must land in its own material slot.
+    inline uint64_t MixTextureIntoKey(uint64_t key, const ScadMaterialProperties& material)
+    {
+        if (!material.texture)
+        {
+            return key;
+        }
+        uint64_t h = material.texture->Hash() ^ (static_cast<uint64_t>(material.texture->scale * 4096.0f) << 1u);
+        h ^= h >> 33u;
+        h *= 0xff51afd7ed558ccdULL;
+        h ^= h >> 33u;
+        return key ^ (h | 1ULL);
+    }
 
     struct ColorBucket
     {

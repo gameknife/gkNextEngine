@@ -23,7 +23,7 @@
 - 角色预览与物品图标共用 2× SSAA：按输出宽高各两倍渲染，以每个输出像素的 2×2 样本计算颜色和几何覆盖率。输出使用非预乘 alpha，避免透明轮廓混入背景或产生黑边，不依赖时域历史。图标仍按每格 64 像素缓存，取景裁切区按该尺寸的两倍生成。
 - 磁盘缓存写在 `FileHelper::GetWritableFilePath("cache/item-icons/…")` 指向的应用用户目录；`.thumb` 保存带校验的 RGBA16F 像素，不在 `assets/` 生成图片或模型文件。
 - 缓存键包含渲染版本、尺寸、几何和材质内容；模型或材质随场景重新加载时会重新校验。缺失、损坏的缓存自动重建，缓存不可写时继续使用内存中的图标。
-- `gnb validate --script assets/agentscripts/nextdayz-inventory-icons.agentscript.json` 检查全部 91 种目录物品和旋转拖放。`game.inventoryIconsRendered` 与 `game.inventoryIconCacheHits` 可区分首次渲染和磁盘缓存命中。
+- `gnb validate --script assets/agentscripts/nextdayz-inventory-icons.agentscript.json` 检查全部 101 种目录物品和旋转拖放。`game.inventoryIconsRendered` 与 `game.inventoryIconCacheHits` 可区分首次渲染和磁盘缓存命中。
 
 ## 堆叠上限
 
@@ -122,6 +122,16 @@
 | `pants_afganka` | 阿富汗卡长裤 | 2×2 | 5×2 |
 | `pants_gorka` | 戈尔卡山地长裤 | 2×2 | 5×2 |
 | `pants_strichtarn` | 雨点迷彩长裤 | 2×2 | 4×2 |
+| `helmet_pasgt` | PASGT 头盔 | 2×2 | — |
+| `hat_boonie_emr` | EMR 数码奔尼帽 | 2×1 | — |
+| `jacket_m81` | M81 林地迷彩上衣 | 2×2 | 6×2 |
+| `pants_m81` | M81 林地迷彩长裤 | 2×2 | 6×2 |
+| `jacket_emr` | EMR 数码迷彩上衣 | 2×2 | 6×2 |
+| `pants_emr` | EMR 数码迷彩长裤 | 2×2 | 6×2 |
+| `jacket_dbdu` | DBDU 沙漠迷彩上衣 | 2×2 | 6×2 |
+| `pants_dbdu` | DBDU 沙漠迷彩长裤 | 2×2 | 6×2 |
+| `jacket_flora` | VSR-98 植物迷彩上衣 | 2×2 | 6×2 |
+| `pants_flora` | VSR-98 植物迷彩长裤 | 2×2 | 5×2 |
 | `backpack_rd54` | RD-54 伞兵背包 | 2×2 | 5×5 |
 | `backpack_abalakov` | 阿巴拉科夫背包 | 3×2 | 7×5 |
 | `food_can` | 豆子罐头 | 1×2 | — |
@@ -149,6 +159,12 @@
 ## 有史可考的物品档案
 
 `FItemDef::lore` 是可选的“物品档案”文本（英文为翻译键，中文在 `UI/Translations.inl`），在背包悬浮提示的描述下方显示。上表 `aks74u` 到 `toz34` 的五把枪与 `hat_panama` 到 `backpack_abalakov` 的十四件服装取材自 [innawoods.net](https://innawoods.net/) 的手绘装备图鉴，每件都写了真实来历；枪械只用世界里已有的四种弹药。模型在 `assets/scad/lib/kit_nd_arsenal.scad`（武器）和 `assets/scad/characters/nextdayz_clothing_heritage.scad`（服装），验收展台是 `assets/scad/source/others/nextdayz_heritage_showroom.scad`。
+
+服装按"剪裁 × 面料"组织：剪裁（阿富汗卡、BDU、EMR、戈尔卡、东德野战服、海魂衫）决定口袋、领子、
+加固片的几何，面料决定颜色与质感。布料全部是漫反射（Lambertian），斜纹 / 帆布织纹和迷彩
+（M81 林地、EMR 数码、DBDU 六色沙漠、VSR-98 植物、东德雨点）都用 `gk_texture` 过程纹理印在布上；
+只有皮革、漆面、塑料扣、橡胶和金属件带高光。`gnb validate --script assets/agentscripts/nextdayz-heritage-kit.agentscript.json`
+逐套穿上并截图，同时校验五把新枪的开镜准星。
 
 ## 存档契约
 

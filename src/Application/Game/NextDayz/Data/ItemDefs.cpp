@@ -265,6 +265,63 @@ namespace NextDayz
                      .lore = "The NVA printed its field uniforms in 'Strichtarn' from 1965 until 1990: fine brown "
                              "rain strokes on grey-green, nicknamed 'one stroke, no stroke'. The Czechoslovak army "
                              "across the border wore a close cousin, the needle pattern."},
+            // Printed camouflage (gk_texture prints): M81 Woodland, EMR, DBDU, VSR-98 Flora.
+            FItemDef{.id = "helmet_pasgt", .displayName = "PASGT Helmet", .kind = EItemKind::Clothing, .size = {2, 2},
+                     .equipSlot = EEquipSlot::Head, .armor = 0.22f, .warmth = 0.06f,
+                     .description = "Kevlar helmet under a woodland cover. Absorbs 22% of infected damage.",
+                     .lore = "The US Army's Personnel Armor System for Ground Troops replaced the steel M1 in the early "
+                             "1980s. Its Kevlar shell first saw combat on Grenada in 1983, and soldiers called it the "
+                             "'Fritz' for its likeness to the old German helmet."},
+            FItemDef{.id = "hat_boonie_emr", .displayName = "EMR Boonie Hat", .kind = EItemKind::Clothing, .size = {2, 1},
+                     .equipSlot = EEquipSlot::Head, .warmth = 0.05f,
+                     .description = "Soft wide-brimmed hat in Russian digital camouflage, with a foliage band.",
+                     .lore = "The army 'panama' again, now in the 2008 digital print: the same shade-giving brim as "
+                             "the Afghan-war panamka, with loops on the band for grass and twigs."},
+            FItemDef{.id = "jacket_m81", .displayName = "M81 Woodland Jacket", .kind = EItemKind::Clothing, .size = {2, 2},
+                     .equipSlot = EEquipSlot::Torso, .containerSize = {6, 2}, .armor = 0.04f, .warmth = 0.34f,
+                     .description = "Woodland BDU coat with four flapped pockets and reinforced elbows (12).",
+                     .lore = "The Battle Dress Uniform arrived in 1981 printed in M81 Woodland, an enlarged version "
+                             "of the ERDL pattern from Vietnam. For two decades it was the American soldier's look, "
+                             "and surplus carried it to armies, militias and hunters around the world."},
+            FItemDef{.id = "pants_m81", .displayName = "M81 Woodland Trousers", .kind = EItemKind::Clothing, .size = {2, 2},
+                     .equipSlot = EEquipSlot::Legs, .containerSize = {6, 2}, .armor = 0.03f, .warmth = 0.18f,
+                     .description = "BDU trousers with cargo pockets and doubled knees, worn with black combat boots (12).",
+                     .lore = "Cut with double-layer knees and seat and big cargo pockets, bloused over black leather "
+                             "boots. The temperate cloth was a nylon-cotton twill; a lighter cotton ripstop followed "
+                             "for hot climates."},
+            FItemDef{.id = "jacket_emr", .displayName = "EMR Field Jacket", .kind = EItemKind::Clothing, .size = {2, 2},
+                     .equipSlot = EEquipSlot::Torso, .containerSize = {6, 2}, .armor = 0.04f, .warmth = 0.36f,
+                     .description = "Russian digital-camouflage jacket with zipped chest pockets and arm pockets (12).",
+                     .lore = "In 2008 the Russian army changed into a uniform from the fashion house of Valentin "
+                             "Yudashkin, printed in the Unified Camouflage Pattern (EMR) that every soldier simply "
+                             "calls 'Tsifra': the digital."},
+            FItemDef{.id = "pants_emr", .displayName = "EMR Field Trousers", .kind = EItemKind::Clothing, .size = {2, 2},
+                     .equipSlot = EEquipSlot::Legs, .containerSize = {6, 2}, .armor = 0.04f, .warmth = 0.20f,
+                     .description = "Digital-camouflage trousers with cargo pockets and knee-pad pockets, worn with laced boots (12).",
+                     .lore = "The trousers take insert knee pads and tuck into laced 'bertsy': the boots that, with "
+                             "this uniform, finally retired the kirza and the footwrap."},
+            FItemDef{.id = "jacket_dbdu", .displayName = "DBDU Desert Jacket", .kind = EItemKind::Clothing, .size = {2, 2},
+                     .equipSlot = EEquipSlot::Torso, .containerSize = {6, 2}, .armor = 0.03f, .warmth = 0.26f,
+                     .description = "Six-color 'chocolate chip' desert coat in the BDU cut (12).",
+                     .lore = "Issued for desert operations from the early 1980s, the six-color pattern went to war in "
+                             "the Gulf in 1991. Its dark rock spots stood out on the pale sand there, and a plainer "
+                             "three-color desert uniform replaced it soon after."},
+            FItemDef{.id = "pants_dbdu", .displayName = "DBDU Desert Trousers", .kind = EItemKind::Clothing, .size = {2, 2},
+                     .equipSlot = EEquipSlot::Legs, .containerSize = {6, 2}, .warmth = 0.14f,
+                     .description = "Chocolate-chip trousers with cargo pockets, worn with tan suede desert boots (12).",
+                     .lore = "Worn with tan suede desert boots instead of black leather: black boots soaked up the "
+                             "sun and showed every scuff of sand."},
+            FItemDef{.id = "jacket_flora", .displayName = "VSR-98 Flora Jacket", .kind = EItemKind::Clothing, .size = {2, 2},
+                     .equipSlot = EEquipSlot::Torso, .containerSize = {6, 2}, .armor = 0.03f, .warmth = 0.30f,
+                     .description = "Russian 'watermelon' camouflage field jacket in the Afganka cut (12).",
+                     .lore = "Adopted in 1998 and worn through the Second Chechen War, Flora's vertical green stripes "
+                             "earned it the nickname 'watermelon'. It was printed on the Afganka cut until the "
+                             "digital uniform took over in 2008."},
+            FItemDef{.id = "pants_flora", .displayName = "VSR-98 Flora Trousers", .kind = EItemKind::Clothing, .size = {2, 2},
+                     .equipSlot = EEquipSlot::Legs, .containerSize = {5, 2}, .warmth = 0.16f,
+                     .description = "Flora-pattern trousers with thigh pockets and knee pads, worn with laced boots (10).",
+                     .lore = "The same cut as the Afganka trousers. By the late 1990s laced combat boots had begun to "
+                             "push the kirza out of combat units."},
             FItemDef{.id = "pants_strichtarn", .displayName = "Strichtarn Trousers", .kind = EItemKind::Clothing, .size = {2, 2},
                      .equipSlot = EEquipSlot::Legs, .containerSize = {4, 2}, .warmth = 0.18f,
                      .description = "Rain-pattern field trousers with high marching boots (8).",

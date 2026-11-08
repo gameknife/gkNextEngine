@@ -4,6 +4,7 @@
 
 #include "Engine/Assets/Data/Material.hpp"
 #include "Engine/Assets/Data/RigAsset.hpp"
+#include "Engine/Assets/Loaders/ProceduralTexture.hpp"
 #include "Engine/Runtime/Scene/SceneBuilder.hpp"
 #include "Modules/ScadLoader/FScadEvaluator.h"
 #include "Modules/ScadLoader/FScadLexer.h"
@@ -1162,4 +1163,209 @@ TEST_CASE("NextDayz attachment catalog provides every mount as a single PBR mode
         CHECK(std::any_of(part.sectionSurfaces.begin(), part.sectionSurfaces.end(), [](const auto& surface) { return surface.x > 0.3f; }));
     }
     REQUIRE(asset.FindBone("bone_att_svd_scope") >= 0);
+}
+
+// ---------------------------------------------------------------------------
+// gk_texture(): procedural prints (Engine/Assets/Loaders/ProceduralTexture)
+// ---------------------------------------------------------------------------
+
+TEST_CASE("Procedural prints bake deterministically and wrap without a seam", "[Unit][ProceduralTexture]")
+{
+    constexpr uint32_t size = 128;
+    for (std::string_view pattern : ProceduralTexture::PatternNames())
+    {
+        INFO(pattern);
+        FProceduralTexture texture;
+        texture.pattern = std::string(pattern);
+        texture.seed = 3;
+        const std::vector<uint8_t> a = ProceduralTexture::Bake(texture, size);
+        const std::vector<uint8_t> b = ProceduralTexture::Bake(texture, size);
+        REQUIRE(a.size() == size * size * 4);
+        CHECK(a == b);
+        texture.seed = 4;
+        CHECK(ProceduralTexture::Bake(texture, size) != a);
+
+        // The step across the tile edge (last column -> first, last row -> first)
+        // looks like any interior step: no visible seam when the print repeats.
+        const auto luma = [&](uint32_t x, uint32_t y)
+        {
+            const uint8_t* p = &a[(static_cast<size_t>(y) * size + x) * 4];
+            return 0.3 * p[0] + 0.59 * p[1] + 0.11 * p[2];
+        };
+        double interior = 0.0;
+        double wrap = 0.0;
+        for (uint32_t y = 0; y < size; ++y)
+        {
+            for (uint32_t x = 0; x + 1 < size; ++x) interior += std::abs(luma(x + 1, y) - luma(x, y));
+            wrap += std::abs(luma(0, y) - luma(size - 1, y));
+            wrap += std::abs(luma(y, 0) - luma(y, size - 1));
+        }
+        interior /= static_cast<double>(size) * (size - 1);
+        wrap /= 2.0 * size;
+        CHECK(wrap < interior * 2.5 + 2.0);
+    }
+}
+
+TEST_CASE("Camouflage prints use their palette and keep the historical layer mix", "[Unit][ProceduralTexture]")
+{
+    constexpr uint32_t size = 128;
+    // A two-colour palette makes every pixel nameable despite the light weave relief.
+    FProceduralTexture woodland;
+    woodland.pattern = "woodland";
+    woodland.palette = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}, {0, 0, 0}};
+    const std::vector<uint8_t> pixels = ProceduralTexture::Bake(woodland, size);
+    std::array<size_t, 4> counts{};
+    for (size_t i = 0; i < pixels.size(); i += 4)
+    {
+        const int r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
+        if (r < 40 && g < 40 && b < 40) ++counts[3];
+        else if (r >= g && r >= b) ++counts[0];
+        else if (g >= b) ++counts[1];
+        else ++counts[2];
+    }
+    const double total = static_cast<double>(size) * size;
+    // Ground, green and brown each a large share; black branches the smallest.
+    CHECK(counts[0] / total > 0.12);
+    CHECK(counts[1] / total > 0.20);
+    CHECK(counts[2] / total > 0.20);
+    CHECK(counts[3] / total > 0.04);
+    CHECK(counts[3] / total < 0.16);
+
+    // DBDU: the black and white "chocolate chip" rocks are there.
+    FProceduralTexture desert;
+    desert.pattern = "desert";
+    const std::vector<uint8_t> chips = ProceduralTexture::Bake(desert, 256);
+    size_t black = 0;
+    size_t white = 0;
+    for (size_t i = 0; i < chips.size(); i += 4)
+    {
+        if (chips[i] < 80 && chips[i + 1] < 80) ++black; // linear 0.05 is ~63 in sRGB
+        if (chips[i] > 215 && chips[i + 1] > 215 && chips[i + 2] > 205) ++white;
+    }
+    CHECK(black > 200);
+    CHECK(white > 120);
+
+    // The content key follows the bake, not the tiling scale.
+    FProceduralTexture scaled = desert;
+    scaled.scale = 2.0f;
+    CHECK(scaled.Hash() == desert.Hash());
+    scaled.palette = {{0.1f, 0.1f, 0.1f}};
+    CHECK(scaled.Hash() != desert.Hash());
+}
+
+TEST_CASE("ScadRig gk_texture gives its own textured section with box-projected UVs", "[Unit][ScadRig][ProceduralTexture]")
+{
+    FRigAsset asset;
+    std::vector<std::string> warnings;
+    REQUIRE(BuildRigFromSource(
+        "module bone_root() {\n"
+        "    gk_texture(\"woodland\", scale = 0.25, seed = 2)\n"
+        "        gk_material([1, 1, 1], roughness = 1) cube(0.5, center = true);\n"
+        "    gk_material([1, 1, 1], roughness = 0.6) gk_texture(\"grain\", scale = 0.1)\n"
+        "        translate([1, 0, 0]) cube(0.2, center = true);\n"
+        "    color([1, 1, 1]) translate([0, 0, 1]) cube(0.2, center = true);\n"
+        "    color([1, 1, 1]) gk_texture(\"plaid\") translate([0, 1, 0]) cube(0.1, center = true);\n"
+        "}\n"
+        "bone_root();\n",
+        asset, &warnings));
+    REQUIRE(asset.parts.size() == 1);
+    const FRigPart& part = asset.parts[0];
+    // Same white color three ways: woodland print, leather grain, plain (+ the
+    // unknown pattern, which falls back to plain geometry and merges with it).
+    REQUIRE(part.sectionColors.size() == 3);
+    REQUIRE(part.sectionTextures.size() == 3);
+    int woodland = 0;
+    int grain = 0;
+    int plain = 0;
+    uint32_t woodlandSection = 0;
+    for (size_t section = 0; section < part.sectionTextures.size(); ++section)
+    {
+        const auto& texture = part.sectionTextures[section];
+        if (!texture)
+        {
+            ++plain;
+            continue;
+        }
+        if (texture->pattern == "woodland")
+        {
+            ++woodland;
+            woodlandSection = static_cast<uint32_t>(section);
+            CHECK(texture->scale == Catch::Approx(0.25f));
+            CHECK(texture->seed == 2u);
+            // A print under gk_material keeps the diffuse (Lambertian) surface.
+            CHECK(part.SectionSurface(section).x == Catch::Approx(1.0f));
+        }
+        if (texture->pattern == "grain")
+        {
+            ++grain;
+            // gk_texture inside gk_material keeps the leather's roughness.
+            CHECK(part.SectionSurface(section).x == Catch::Approx(0.6f));
+        }
+    }
+    CHECK(woodland == 1);
+    CHECK(grain == 1);
+    CHECK(plain == 1);
+
+    // Textured triangles carry tile-space UVs (the 0.5 m cube spans two 0.25 m tiles).
+    float maxUv = 0.0f;
+    for (const Vertex& vertex : asset.partModels[part.modelIndex].CPUVertices())
+    {
+        if (vertex.MaterialIndex != woodlandSection) continue;
+        maxUv = std::max({maxUv, std::abs(vertex.TexCoord.x), std::abs(vertex.TexCoord.y)});
+    }
+    CHECK(maxUv == Catch::Approx(1.0f).margin(1e-3f));
+
+    // Without a GPU texture pool the material stays untextured but keeps its surface.
+    std::vector<FMaterial> materials;
+    for (size_t section = 0; section < part.sectionColors.size(); ++section)
+    {
+        const Material& material = materials[SceneBuilder::AddRigSectionMaterial(materials, part, section)].gpuMaterial_;
+        CHECK(material.DiffuseTextureId == -1);
+    }
+}
+
+TEST_CASE("NextDayz heritage fabrics are diffuse and the camouflage is printed, not modelled", "[Unit][ScadRig][NextDayz][Clothing]")
+{
+    using namespace NextDayz;
+    FRigAsset wardrobe;
+    std::string error;
+    REQUIRE(FScadRigLoader::LoadRig("assets/scad/characters/nextdayz_clothing.scad", {}, wardrobe, error));
+    const std::unordered_map<std::string, std::string> expectedPrint = {
+        {"jacket_m81", "woodland"}, {"pants_m81", "woodland"}, {"helmet_pasgt", "woodland"},
+        {"jacket_emr", "digital"}, {"pants_emr", "digital"}, {"hat_boonie_emr", "digital"},
+        {"jacket_dbdu", "desert"}, {"pants_dbdu", "desert"},
+        {"jacket_flora", "flora"}, {"pants_flora", "flora"},
+        {"jacket_strichtarn", "rain"}, {"pants_strichtarn", "rain"}};
+    std::unordered_map<std::string, bool> found;
+    for (const FRigPart& part : wardrobe.parts)
+    {
+        const std::string& name = wardrobe.bones[part.bone].name;
+        const std::string itemId = name.substr(5, name.find("__") - 5);
+        INFO(name);
+        for (size_t section = 0; section < part.sectionTextures.size(); ++section)
+        {
+            const auto& texture = part.sectionTextures[section];
+            if (!texture) continue;
+            // Woven and printed cloth is Lambertian: a specular lobe on fabric reads as plastic.
+            if (texture->pattern != "grain")
+            {
+                CHECK(part.SectionSurface(section).x == Catch::Approx(1.0f));
+                CHECK(part.SectionSurface(section).y == Catch::Approx(0.0f));
+            }
+            if (const auto it = expectedPrint.find(itemId); it != expectedPrint.end() && texture->pattern == it->second)
+            {
+                found[itemId] = true;
+            }
+        }
+        // Strichtarn strokes used to be thousands of slivers; the print keeps the parts light.
+        if (itemId == "jacket_strichtarn" && name.ends_with("__torso"))
+        {
+            CHECK(wardrobe.partModels[part.modelIndex].CPUVertices().size() < 6000);
+        }
+    }
+    for (const auto& [item, pattern] : expectedPrint)
+    {
+        INFO(item << " expects " << pattern);
+        CHECK(found[item]);
+    }
 }

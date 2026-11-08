@@ -5,6 +5,7 @@
 #include "Application/Game/NextDayz/Inventory/LootSystem.hpp"
 #include "Engine/Assets/Core/Model.hpp"
 #include "Engine/Assets/GPU/Texture.hpp"
+#include "Engine/Assets/Loaders/ProceduralTexture.hpp"
 #include "Engine/Rendering/PipelineCommon/CommonComputePipeline.hpp"
 #include "Engine/Rendering/ViewCameraUboBuilder.hpp"
 #include "Engine/Rendering/VulkanBaseRenderer.hpp"
@@ -21,7 +22,7 @@ namespace NextDayz
     namespace
     {
         constexpr uint64_t cacheMagic = 0x314e4f43495a444eull; // NDZICON1
-        constexpr uint32_t iconRevision = 5;
+        constexpr uint32_t iconRevision = 6;
         constexpr float iconFaceTiltDegrees = 6.0f;
         constexpr uint32_t pixelsPerCell = 64;
         constexpr uint32_t sampleBase = Assets::Bindless::RES_THUMBNAIL_BASE;
@@ -69,6 +70,7 @@ namespace NextDayz
                 hash = HashBytes(&vertex.Position, sizeof(vertex.Position), hash);
                 hash = HashBytes(&vertex.Normal, sizeof(vertex.Normal), hash);
                 hash = HashBytes(&vertex.MaterialIndex, sizeof(vertex.MaterialIndex), hash);
+                hash = HashBytes(&vertex.TexCoord, sizeof(vertex.TexCoord), hash);
             }
             hash = HashBytes(model.CPUIndices().data(), model.CPUIndices().size() * sizeof(uint32_t), hash);
             for (const auto id : visual.materials)
@@ -78,6 +80,9 @@ namespace NextDayz
                 hash = HashBytes(&material.Metalness, sizeof(material.Metalness), hash);
                 hash = HashBytes(&material.Fuzziness, sizeof(material.Fuzziness), hash);
                 hash = HashBytes(&material.MaterialModel, sizeof(material.MaterialModel), hash);
+                // A gk_texture() print is part of the look: key it by content, not by pool slot.
+                const uint64_t print = Assets::ProceduralTexture::ContentHashOfTexture(material.DiffuseTextureId);
+                hash = HashBytes(&print, sizeof(print), hash);
             }
             return hash;
         }

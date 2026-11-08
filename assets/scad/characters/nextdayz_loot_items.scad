@@ -132,16 +132,27 @@ module bone_item_toz34() { nd_wpn_toz34(); }
 module bone_item_hat_panama() { translate([0, 0, -0.166]) ndh_panama(); }
 module bone_item_helmet_ssh68() { translate([0, 0, -0.155]) ndh_ssh68(strap = false); }
 module bone_item_helmet_m56() { translate([0, 0, -0.122]) ndh_m56(strap = false); }
-module bone_item_shirt_telnyashka() { ndh_loot_coat("telnyashka"); }
-module bone_item_jacket_afganka() { ndh_loot_coat("afganka"); }
-module bone_item_jacket_gorka() { ndh_loot_coat("gorka"); }
-module bone_item_jacket_strichtarn() { ndh_loot_coat("strichtarn"); }
+module bone_item_helmet_pasgt() { translate([0, 0, -0.099]) ndh_pasgt(strap = false); }
+module bone_item_hat_boonie_emr() { translate([0, 0, -0.166]) ndh_boonie_emr(strap = false); }
+// 叠好的上衣 / 长裤：剪裁 × 面料与穿戴版一致
+module bone_item_shirt_telnyashka() { ndh_loot_coat("telnyashka", "tel"); }
+module bone_item_jacket_afganka() { ndh_loot_coat("afganka", "afganka"); }
+module bone_item_jacket_gorka() { ndh_loot_coat("gorka", "gorka"); }
+module bone_item_jacket_strichtarn() { ndh_loot_coat("nva", "strichtarn"); }
+module bone_item_jacket_m81() { ndh_loot_coat("bdu", "m81"); }
+module bone_item_jacket_emr() { ndh_loot_coat("emr", "emr"); }
+module bone_item_jacket_dbdu() { ndh_loot_coat("bdu", "dbdu"); }
+module bone_item_jacket_flora() { ndh_loot_coat("afganka", "flora"); }
+module bone_item_pants_afganka() { ndh_loot_pants("afganka", "afganka"); }
+module bone_item_pants_gorka() { ndh_loot_pants("gorka", "gorka"); }
+module bone_item_pants_strichtarn() { ndh_loot_pants("nva", "strichtarn"); }
+module bone_item_pants_m81() { ndh_loot_pants("bdu", "m81"); }
+module bone_item_pants_emr() { ndh_loot_pants("emr", "emr"); }
+module bone_item_pants_dbdu() { ndh_loot_pants("bdu", "dbdu"); }
+module bone_item_pants_flora() { ndh_loot_pants("afganka", "flora"); }
 // 背心正面朝上压扁平放（前后厚度 × 0.35）：背面最外层（56 式过肩带 .18 / 6B3 钛板鼓包 .208）× 0.35 贴地
 module bone_item_vest_type56() { translate([0, -0.23, 0.065]) rotate([-90, 0, 0]) scale([0.75, 0.35, 0.75]) ndh_type56(); }
 module bone_item_vest_6b3() { translate([0, -0.23, 0.075]) rotate([-90, 0, 0]) scale([0.75, 0.35, 0.75]) ndh_6b3(); }
-module bone_item_pants_afganka() { ndh_loot_pants("afganka"); }
-module bone_item_pants_gorka() { ndh_loot_pants("gorka"); }
-module bone_item_pants_strichtarn() { ndh_loot_pants("strichtarn"); }
 // 背包立放：包底贴地（RD-54 底 z = .10，阿巴拉科夫底 z = .05）
 module bone_item_backpack_rd54() { translate([0, -0.285, -0.099]) ndh_rd54(); }
 module bone_item_backpack_abalakov() { translate([0, -0.31, -0.049]) ndh_abalakov(); }
@@ -220,10 +231,12 @@ module bone_root()
     bone_item_can_opener(); bone_item_compass(); bone_item_map(); bone_item_radio(); bone_item_battery();
     bone_item_lantern(); bone_item_fuel(); bone_item_bedroll(); bone_item_firecrackers();
     bone_item_aks74u(); bone_item_bizon(); bone_item_aps(); bone_item_svt40(); bone_item_toz34();
-    bone_item_hat_panama(); bone_item_helmet_ssh68(); bone_item_helmet_m56();
+    bone_item_hat_panama(); bone_item_helmet_ssh68(); bone_item_helmet_m56(); bone_item_helmet_pasgt(); bone_item_hat_boonie_emr();
     bone_item_shirt_telnyashka(); bone_item_jacket_afganka(); bone_item_jacket_gorka(); bone_item_jacket_strichtarn();
+    bone_item_jacket_m81(); bone_item_jacket_emr(); bone_item_jacket_dbdu(); bone_item_jacket_flora();
     bone_item_vest_type56(); bone_item_vest_6b3();
     bone_item_pants_afganka(); bone_item_pants_gorka(); bone_item_pants_strichtarn();
+    bone_item_pants_m81(); bone_item_pants_emr(); bone_item_pants_dbdu(); bone_item_pants_flora();
     bone_item_backpack_rd54(); bone_item_backpack_abalakov();
     bone_item_signal_flare();
     bone_item_unknown();

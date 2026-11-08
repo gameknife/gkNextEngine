@@ -48,12 +48,14 @@ namespace Assets
                 material.Diffuse = glm::vec4(rgb, alpha);
                 return material;
             }
+            const int32_t textureId =
+                properties.texture ? ProceduralTexture::Acquire(*properties.texture) : -1;
             if (roughness >= 0.999f && metalness <= 0.001f)
             {
-                return Material::Lambertian(rgb);
+                return Material::Lambertian(rgb, textureId);
             }
 
-            Material material = Material::Mixture(rgb, roughness);
+            Material material = Material::Mixture(rgb, roughness, textureId);
             material.Metalness = metalness;
             return material;
         }
@@ -168,10 +170,11 @@ namespace Assets
         {
             const float effectiveRoughness =
                 color.a < 0.99f && !properties.explicitParameters ? 0.0f : properties.roughness;
-            const uint64_t colorKey =
+            const uint64_t colorKey = Scad::MixTextureIntoKey(
                 (static_cast<uint64_t>(QuantizeMaterialColor(color)) << 32u) |
                 (static_cast<uint64_t>(std::clamp(effectiveRoughness, 0.0f, 1.0f) * 65535.0f + 0.5f) << 16u) |
-                static_cast<uint64_t>(std::clamp(properties.metalness, 0.0f, 1.0f) * 65535.0f + 0.5f);
+                static_cast<uint64_t>(std::clamp(properties.metalness, 0.0f, 1.0f) * 65535.0f + 0.5f),
+                properties);
             auto found = cache.materialByProperties.find(colorKey);
             if (found != cache.materialByProperties.end())
             {
@@ -226,13 +229,20 @@ namespace Assets
                 // facets on gentle slopes into a soft gradient.
                 const float bucketSmoothAngle = bucket.faceted ? 0.0f : smoothAngleDegrees;
                 const std::vector<glm::vec3> normals = Scad::ScadComputeSmoothNormals(localPos, bucketSmoothAngle);
+                // gk_texture(): UVs come from the node-local SCAD positions (Z up), so
+                // the print keeps its size and stays on the object as it moves.
+                std::vector<glm::vec2> uvs(localPos.size(), glm::vec2(0.0f));
+                if (bucket.material.texture)
+                {
+                    ProceduralTexture::BoxProjectUVs(bucket.tris, bucket.material.texture->scale, uvs);
+                }
 
                 const uint32_t vertexOffset = static_cast<uint32_t>(vertices.size());
                 vertices.reserve(vertices.size() + localPos.size());
                 indices.reserve(indices.size() + localPos.size());
                 for (uint32_t i = 0; i < static_cast<uint32_t>(localPos.size()); ++i)
                 {
-                    vertices.push_back(Vertex{localPos[i], normals[i], glm::vec4(1, 0, 0, 1), glm::vec2(0, 0), sectionIndex});
+                    vertices.push_back(Vertex{localPos[i], normals[i], glm::vec4(1, 0, 0, 1), uvs[i], sectionIndex});
                     indices.push_back(vertexOffset + i);
                 }
 

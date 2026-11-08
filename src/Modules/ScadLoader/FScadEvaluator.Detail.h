@@ -66,9 +66,10 @@ namespace Assets::Scad
             };
             const float effectiveRoughness =
                 c.a < 0.99f && !material.explicitParameters ? 0.0f : material.roughness;
-            return (static_cast<uint64_t>(QuantizeColor(c)) << 32u) |
-                   (q(effectiveRoughness) << 16u) |
-                   q(material.metalness);
+            return MixTextureIntoKey((static_cast<uint64_t>(QuantizeColor(c)) << 32u) |
+                                     (q(effectiveRoughness) << 16u) |
+                                     q(material.metalness),
+                                     material);
         }
 
         inline void AppendMove(GeomList& dst, GeomList&& src)
@@ -791,6 +792,11 @@ namespace Assets::Scad
                             Arg(inst, "roughness", 1).AsNumber(1.0), 0.0, 1.0));
                         material.metalness = static_cast<float>(std::clamp(
                             Arg(inst, "metalness", 2).AsNumber(0.0), 0.0, 1.0));
+                        // A surface change keeps an enclosing gk_texture() print.
+                        if (!materialPropertiesStack_.empty())
+                        {
+                            material.texture = materialPropertiesStack_.back().texture;
+                        }
                         materialNameStack_.push_back(ResolveColorName(inst));
                         materialPropertiesStack_.push_back(material);
                         GeomList result = EvalScope(inst.children, xform, c, true);
@@ -799,6 +805,48 @@ namespace Assets::Scad
                         return result;
                     }
                     return EvalScope(inst.children, xform, color, hasColor);
+                }
+                if (name == "gk_texture")
+                {
+                    // gk_texture(pattern, palette = [[r,g,b], ...], scale = 0.5, seed = 0)
+                    // A procedural print (ProceduralTexture.hpp) on the children: the
+                    // loader box-projects UVs in object space and the material samples
+                    // the bake; final albedo = enclosing color x print.
+                    const Value patternValue = Arg(inst, "pattern", 0);
+                    if (patternValue.type != Value::Type::Str ||
+                        !ProceduralTexture::IsKnownPattern(patternValue.str))
+                    {
+                        std::string known;
+                        for (std::string_view patternName : ProceduralTexture::PatternNames())
+                        {
+                            known += known.empty() ? std::string(patternName) : ", " + std::string(patternName);
+                        }
+                        Warn("gk_texture", "gk_texture(): unknown pattern '" + patternValue.str + "' (known: " + known + ")");
+                        return EvalScope(inst.children, xform, color, hasColor);
+                    }
+                    auto texture = std::make_shared<FProceduralTexture>();
+                    texture->pattern = patternValue.str;
+                    const Value paletteValue = Arg(inst, "palette", 1);
+                    if (paletteValue.IsVec())
+                    {
+                        for (const Value& entry : paletteValue.vec)
+                        {
+                            glm::dvec3 rgb(0.0);
+                            if (entry.AsVec3(rgb))
+                            {
+                                texture->palette.push_back(glm::vec3(rgb));
+                            }
+                        }
+                    }
+                    texture->scale = static_cast<float>(std::clamp(Arg(inst, "scale", 2).AsNumber(0.5), 0.005, 1000.0));
+                    texture->seed = static_cast<uint32_t>(std::max(0.0, Arg(inst, "seed", 3).AsNumber(0.0)));
+                    ScadMaterialProperties material =
+                        materialPropertiesStack_.empty() ? ScadMaterialProperties{} : materialPropertiesStack_.back();
+                    material.texture = std::move(texture);
+                    materialPropertiesStack_.push_back(material);
+                    GeomList result = EvalScope(inst.children, xform, color, hasColor);
+                    materialPropertiesStack_.pop_back();
+                    return result;
                 }
                 if (name == "union" || name == "group" || name == "render")
                 {

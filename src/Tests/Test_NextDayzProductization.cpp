@@ -121,11 +121,13 @@ TEST_CASE("NextDayz field kit with a documented past is complete, obtainable and
           "[NextDayz][Loot][Heritage]")
 {
     using namespace NextDayz;
-    const std::array<std::string_view, 19> heritage = {
+    const std::array<std::string_view, 29> heritage = {
         "aks74u", "bizon", "aps", "svt40", "toz34",
         "hat_panama", "helmet_ssh68", "helmet_m56", "shirt_telnyashka", "jacket_afganka", "jacket_gorka",
         "jacket_strichtarn", "vest_type56", "vest_6b3", "pants_afganka", "pants_gorka", "pants_strichtarn",
-        "backpack_rd54", "backpack_abalakov"};
+        "backpack_rd54", "backpack_abalakov",
+        "helmet_pasgt", "hat_boonie_emr", "jacket_m81", "pants_m81", "jacket_emr", "pants_emr",
+        "jacket_dbdu", "pants_dbdu", "jacket_flora", "pants_flora"};
     const auto obtainable = [](std::string_view id)
     {
         for (uint8_t index = 0; index < static_cast<uint8_t>(ELootProfile::Count); ++index)

@@ -7,6 +7,8 @@
 #include "Engine/Assets/GPU/UniformBuffer.hpp"
 #include "Engine/Vulkan/DescriptorSystem.hpp"
 
+#include <thread>
+
 namespace Assets
 {
     enum class ETextureStatus : uint8
@@ -132,6 +134,9 @@ namespace Assets
         ~GlobalTexturePool();
 
         const FBindlessProfile& Profile() const { return profile_; }
+        // The pool is built on the main thread, which owns GetMainThreadCommandPool():
+        // only there may a texture be created and registered synchronously.
+        bool IsOwnerThread() const { return std::this_thread::get_id() == ownerThread_; }
 
         VkDescriptorSetLayout Layout() const { return descriptorSetManager_->DescriptorSetLayout().Handle(); }
         VkDescriptorSet DescriptorSet(uint32_t index) const { return descriptorSetManager_->DescriptorSets().Handle(0); }
@@ -221,6 +226,7 @@ namespace Assets
         static GlobalTexturePool* instance_;
 
         const class Vulkan::Device& device_;
+        std::thread::id ownerThread_ = std::this_thread::get_id();
         Vulkan::CommandPool& commandPool_;
         Vulkan::CommandPool& mainThreadCommandPool_;
         bool textureWorkerUploadEnabled_ {};

@@ -119,7 +119,7 @@ rotate → scale` 顺序最多各出现一次，终点是 kit 表里能解析到
 - **图元 3D**：`cube`、`sphere`、`cylinder`(含 r1/r2 圆锥)、`polyhedron`
 - **图元 2D**（在 extrude 内）：`circle`、`square`、`polygon`(含 `paths` 洞)、`text`(FreeType, CJK)
 - **变换**：`translate`、`rotate`(欧拉/角轴)、`scale`、`mirror`、`multmatrix`、`color`(rgba/命名色)、
-  `gk_material`(颜色 + roughness/metalness)
+  `gk_material`(颜色 + roughness/metalness)、`gk_texture`(过程纹理印花)
 - **CSG**：`union`、`difference`、`intersection`、`hull`（Manifold）；`minkowski`(近似为 union)
 - **拉伸**：`linear_extrude`(凹/带洞/嵌套变换)、`rotate_extrude`(angle，360 闭合/部分端盖)
 - **控制流**：`for`(笛卡尔多绑定)、`if/else`、`let`、`intersection_for`(按 for)
@@ -142,6 +142,37 @@ rotate → scale` 顺序最多各出现一次，终点是 kit 表里能解析到
 `roughness` 和 `metalness` 都会被限制到 `0..1`，并随几何桶传入 GPU 材质；未包在
 `gk_material` 中的旧 `color()` 仍然生成 roughness=1、metalness=0 的 Lambertian，
 因此既有资产不改变外观。材质参数也参与颜色桶合并键，避免相同颜色的玻璃和墙面被错误合并。
+
+**roughness < 1 的电介质不是"稍微粗糙一点的漫反射"**：它走 Mixture 模型，在整块表面叠一层
+约 3.4% 的 GGX 镜面高光，路径追踪下布料、帆布、纸板会因此发灰、像塑料。布料一律用
+`roughness = 1, metalness = 0`（Lambertian），质感交给 `gk_texture`；高光只留给真正有光泽的
+材料——皮革（0.45~0.65）、哑光漆（0.7~0.75）、塑料扣（0.45）、清漆木（0.4）、油浸木（0.6~0.65）、
+橡胶（0.85）、金属件（metalness 0.9~1）。同一件装备里按部件分层，比整件一个粗糙度更有质感。
+
+### `gk_texture`：过程纹理印花
+
+`gk_texture(pattern, palette = [[r,g,b], ...], scale = 0.5, seed = 0) children();`
+
+图案而不是形状的表面——迷彩、雨点纹、帆布织纹、皮革粒面——用几何去拼要上千个小片，还像贴纸。
+`gk_texture` 让加载器在 CPU 上烘焙一张可平铺的 sRGB 贴图（`Engine/Assets/Loaders/ProceduralTexture`），
+给这些三角形按**物体自身坐标**做盒投影 UV（每个三角形取法线最朝向的平面，侧面的 v 沿 +Z，
+所以竖条纹保持竖直），材质照常采样 `DiffuseTextureId`。规则：
+
+- **最终反照率 = 外层 `color()`/`gk_material()` 颜色 × 印花**（同 glTF baseColorFactor）。迷彩用白色
+  材质 `gk_material([1,1,1], roughness = 1) gk_texture("woodland")`，叠层压暗用 `[0.85,0.85,0.85]`；
+  织纹 / 皮纹（默认白色色板，只调明暗）直接乘在本色上：`gk_material(c, 1) gk_texture("twill", scale = 0.1)`。
+  没有外层颜色时几何默认 0.78 灰，印花会被压暗。
+- `gk_texture` 与 `gk_material` 可任意嵌套：内层 `gk_material` 保留外层印花，`gk_texture` 保留外层粗糙度 / 金属度。
+- `scale` 是一个平铺单元覆盖的 SCAD 长度（米），只影响 UV，不影响烘焙；色板和 seed 决定贴图内容，
+  相同内容全进程只烘焙、上传一次（主线程同步上传，加载线程走异步 PNG 上传）。
+- 图案（`ProceduralTexture::PatternNames()`）：`woodland`（M81 式四色大斑块 + 黑色枝条）、`digital`
+  （俄式"数码植物"像素迷彩）、`desert`（DBDU 六色"巧克力片"）、`flora`（VSR-98 竖向"西瓜皮"条纹）、
+  `rain`（东德雨点纹）、`canvas` / `twill`（帆布 / 斜纹织纹）、`grain`（皮革粒面）。不给 palette 时用
+  该图案的历史默认色板；迷彩图案自带一层斜纹织纹明暗。未知图案会告警并按无印花处理。
+- 带印花的几何单独成一个材质分段（计入每部件 16 段的上限）；ScadRig 部件把它记在
+  `FRigPart::sectionTextures`，`SceneBuilder::AddRigSectionMaterial` 取贴图。没有 GPU 贴图池时
+  （单测、纯 CPU 工具）材质无贴图但 UV 与印花描述照常保留。
+- 样板场景：`assets/scad/source/others/gk_texture_patterns.scad`。
 
 ## 相机机位（虚拟点）
 

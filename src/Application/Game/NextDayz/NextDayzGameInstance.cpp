@@ -11,6 +11,7 @@
 #include <unordered_map>
 
 #include <SDL3/SDL_events.h>
+#include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_keycode.h>
 #include <SDL3/SDL_mouse.h>
@@ -96,6 +97,9 @@ NextDayzGameInstance::NextDayzGameInstance(Vulkan::WindowConfig& config, Runtime
     NextDayz::L10n::Initialize(options.AgentValidation);
     ConfigureWindow(config, options, "NextDayz", options.WidthSpecified ? static_cast<int>(options.Width) : 1920,
                     options.HeightSpecified ? static_cast<int>(options.Height) : 1080, false);
+    // Leave GPU time for other local clients, independent of focus or display refresh rate.
+    SDL_SetHint(SDL_HINT_MAIN_CALLBACK_RATE, "60");
+    options.PresentMode = static_cast<uint32_t>(VK_PRESENT_MODE_IMMEDIATE_KHR);
 }
 
 void NextDayzGameInstance::OnInitUI()

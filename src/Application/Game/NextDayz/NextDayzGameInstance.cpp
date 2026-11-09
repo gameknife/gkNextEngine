@@ -996,7 +996,29 @@ void NextDayzGameInstance::SimulateFrame(float dt)
         lootEquipSlot_ = NextDayz::EEquipSlot::None;
         lootPlacement_.reset();
     }
-    if (const std::optional<NextDayz::FLootHandle> commit = actions_.ConsumeCommitRequest())
+    if (const std::optional<NextDayz::FLootHandle> commit = actions_.ConsumeCommitRequest();
+        commit && netMode_ == ENetMode::Client)
+    {
+        // The server decides who gets it; check here only that something would fit.
+        const auto destination = std::exchange(lootDestination_, 0);
+        const auto equipSlot = std::exchange(lootEquipSlot_, NextDayz::EEquipSlot::None);
+        const auto placement = std::exchange(lootPlacement_, std::nullopt);
+        NextDayz::Inventory trial = inventory_;
+        std::vector<NextDayz::FLootStack> left;
+        const bool fits = commit->index < loot_.Entries().size() &&
+            !NextDayz::LootSystem::AddToInventory(loot_.Entries()[commit->index].contents, trial, destination, equipSlot,
+                                                  placement, left).empty();
+        if (fits)
+        {
+            NetRequestTake(*commit, destination, equipSlot, placement);
+        }
+        else
+        {
+            loot_.Cancel(*commit);
+            Notify("Not enough space - drop something or find a bigger bag", 1);
+        }
+    }
+    else if (commit)
     {
         const NextDayz::FLootCommitResult result = loot_.Commit(*commit, inventory_, GetEngine(),
             std::exchange(lootDestination_, 0), std::exchange(lootEquipSlot_, NextDayz::EEquipSlot::None),
@@ -1231,6 +1253,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     if (!survival_.IsAlive())
     {
         SetMouseCaptured(false);
+        if (netMode_ == ENetMode::Client) NetDropOnDeath();
     }
     world_.noise.Update(dt);
     section.emplace(timers, ETimer::InfectedVisuals);
@@ -1240,7 +1263,15 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     effects_.Update(dt * knobs.fxTimeScale);
 
     section.emplace(timers, ETimer::Loot);
-    loot_.Update(dt, player_.EyePosition(), player_.Forward(), GetEngine());
+    if (netMode_ == ENetMode::Client)
+    {
+        // The server restocks; here we only see what is under the crosshair.
+        loot_.UpdateHover(player_.EyePosition(), player_.Forward());
+    }
+    else
+    {
+        loot_.Update(dt, player_.EyePosition(), player_.Forward(), GetEngine());
+    }
     section.emplace(timers, ETimer::World);
     hoveredWell_ = {};
     float bestWellDot = 0.45f;
@@ -1644,6 +1675,8 @@ void NextDayzGameInstance::Notify(NextDayz::L10n::FText text, int severity)
 
 void NextDayzGameInstance::StartNewLife()
 {
+    ++netLife_;
+    netDeathDropped_ = false;
     quickSlots_ = {"bandage", "water_bottle", "food_can", ""};
     notifications_.clear();
     firecrackers_.clear();
@@ -1844,8 +1877,8 @@ void NextDayzGameInstance::DropItem(NextDayz::FItemInstanceId instanceId, int co
         }
         return true;
     });
-    if (!loot_.SpawnPile({{removed->defId, removed->count, removed->loadedAmmo, removed->attachments}}, at,
-                         survivalRng_.UnitFloat() * 6.28f, GetEngine()))
+    if (!PlacePile({{removed->defId, removed->count, removed->loadedAmmo, removed->attachments}}, at,
+                   survivalRng_.UnitFloat() * 6.28f))
     {
         Notify("Cannot drop it here", 1);
         return;
@@ -2073,6 +2106,12 @@ void NextDayzGameInstance::UseRadio()
         return;
     }
     audio_.RadioStatic();
+    if (netMode_ == ENetMode::Client)
+    {
+        // Supply drops are not part of the shared world yet.
+        Notify("Only static on the military band...", 1);
+        return;
+    }
     const std::optional<glm::vec3> cache = loot_.PlantCache(player_.Position(), 120.0f, GetEngine());
     if (!cache)
     {
@@ -2276,8 +2315,13 @@ void NextDayzGameInstance::ResetSession()
     world_.ResetPopulation(sessionRng_.Derive(0x5A4F4D42ULL).Seed());
     zombieVisuals_.Reset();
     effects_.Reset();
-    loot_.ResetSession(GetEngine());
-    time_.Reset(config_.Time, sessionRng_.Derive(0x57454154ULL).Seed());
+    if (netMode_ != ENetMode::Client)
+    {
+        // Online, the world (loot and clock) is the server's and outlives our death.
+        loot_.ResetSession(GetEngine());
+        time_.Reset(config_.Time, sessionRng_.Derive(0x57454154ULL).Seed());
+    }
+    netDeathDropped_ = false;
     player_.Destroy();
     player_.Create(GetEngine().GetPhysicsEngine(), ResolveSpawnPosition(), config_);
     if ((validationLoadout_ && GOption->AgentValidation) || (netMode_ == ENetMode::Client && netKitCvar_))
@@ -2835,7 +2879,7 @@ void NextDayzGameInstance::GiveItem(const std::string& itemId, int count)
     if (fits < count)
     {
         // What does not fit lands at the feet, like a drop.
-        loot_.SpawnPile({{itemId, count - fits, 0}}, player_.Position(), 0.0f, GetEngine());
+        PlacePile({{itemId, count - fits, 0}}, player_.Position(), 0.0f);
     }
     debugger_.Log(NextDayz::Debug::EChannel::Player, 0,
                   fits < count ? NextDayz::L10n::Message("Debug give {} x{} ({} on the ground)", itemId, count, count - fits)

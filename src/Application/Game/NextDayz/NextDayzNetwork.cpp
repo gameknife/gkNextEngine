@@ -17,6 +17,7 @@
 
 #if GK_MODULE_NEXTNET
 #include "Application/Game/NextDayz/Net/NetProtocol.hpp"
+#include "Application/Game/NextDayz/Sim/ItemLedger.hpp"
 #include "Modules/NextNet/NetHost.hpp"
 #endif
 
@@ -48,6 +49,12 @@ namespace
     constexpr float kSurvivorRadius = 0.32f;
 
     float Ease(float rate, float dt) { return 1.0f - std::exp(-rate * std::max(dt, 0.0f)); }
+
+    std::string ItemDisplayName(std::string_view itemId)
+    {
+        const FItemDef* definition = FindItemDef(itemId);
+        return definition ? std::string(definition->displayName) : std::string(itemId);
+    }
 
     // Closest distance between segments p0-p1 and q0-q1; s is the parameter on p.
     float SegmentDistance(const glm::vec3& p0, const glm::vec3& p1, const glm::vec3& q0, const glm::vec3& q1, float& s)
@@ -100,10 +107,23 @@ struct NextDayzGameInstance::FNetSession
         std::string name;
         bool hasState = false;
         Net::FPlayerState state;
+        // What the server knows this survivor carries (see Sim/ItemLedger).
+        enum class ELife : uint8_t
+        {
+            AwaitingKit,   // a new life: the first inventory must be a starting kit
+            Alive,
+            Dead,          // until the client starts its next life
+        };
+        ELife life = ELife::AwaitingKit;
+        uint32_t lifeNumber = 0;
+        FItemTotals carried;
+        FInventoryState inventory;   // the last report the ledger accepted
+        uint32_t refusals = 0;
     };
     std::unordered_map<FPeerId, FClient> clients;
     uint32_t nextSurvivorId = Net::kFirstSurvivorId;
     float snapshotTimer = 0.0f;
+    uint64_t lootRevision = 0;   // loot changes up to here have been broadcast
 
     FClient* ClientBySurvivor(uint32_t survivorId)
     {
@@ -138,7 +158,44 @@ struct NextDayzGameInstance::FNetSession
         bool seen = false;
     };
     std::unordered_map<uint32_t, FRemote> remotes;
+    // Loot: synced once per loaded map; pick-ups wait here for the server's answer.
+    uint64_t lootSyncedScene = 0;
+    uint64_t lootRequestedScene = 0;
+    uint32_t nextTakeRequest = 1;
+    struct FPendingTake
+    {
+        FLootHandle handle;
+        FLootReplica entry;
+        FContainerId destination = 0;
+        EEquipSlot equipSlot = EEquipSlot::None;
+        std::optional<FGridPlacement> placement;
+    };
+    std::unordered_map<uint32_t, FPendingTake> pendingTakes;
+    // Inventory reports: sent when changed, at most this often.
+    float inventoryTimer = 0.0f;
+    std::vector<std::byte> lastInventorySync;
+    uint32_t fixes = 0;
 };
+
+namespace
+{
+    // A fresh survivor's starting inventory, built the way a client builds it.
+    FInventoryState StartingInventory(bool testingKit)
+    {
+        Inventory inventory;
+        inventory.TryAdd("bandage", "Bandage", EItemKind::Consumable, 1);
+        inventory.TryAdd("water_bottle_empty", "Empty Bottle", EItemKind::Misc, 1);
+        if (testingKit)
+        {
+            FItemInstanceId backpack = 0;
+            if (inventory.TryAdd("backpack", "Backpack", EItemKind::Clothing, 1, &backpack)) inventory.TryEquip(backpack);
+            FItemInstanceId rifle = 0;
+            if (inventory.TryAdd("ak", "AK-74", EItemKind::Weapon, 1, &rifle)) inventory.SetLoadedAmmo(rifle, 30);
+            inventory.TryAdd("ammo_545", "5.45x39", EItemKind::Ammo, 60);
+        }
+        return inventory.Capture();
+    }
+}
 
 void NextDayzGameInstance::ConfigureNetCVars(NextCVar::FCVarSystem& cvars)
 {
@@ -170,6 +227,45 @@ void NextDayzGameInstance::ConfigureNetCVars(NextCVar::FCVarSystem& cvars)
             FNetWriter writer;
             Net::Write(writer, hit);
             net_->host.Send(net_->host.ServerPeer(), writer.Bytes(), EDelivery::Reliable);
+        });
+    cvars.RegisterInt("nextdayz.validation.netTake", 0, &validationNetTake_, ECVarFlags::None,
+        "Agent-only (client): 1 = take the available loot nearest the map's first safe point; "
+        "2 = ask for the nearest spot even if it looks taken here (the server must refuse a stale request)", [this]()
+        {
+            if (!GOption->AgentValidation || !net_ || validationNetTake_ == 0 || net_->survivorId == 0) return;
+            const auto safe = world_.anchors.Find(EWorldAnchorType::PlayerSafe);
+            const FWorldAnchor* anchor = safe.empty() ? nullptr : world_.anchors.Resolve(safe.front());
+            if (!anchor) return;
+            const bool stale = validationNetTake_ == 2;
+            int best = -1;
+            float nearest = std::numeric_limits<float>::max();
+            const auto& entries = loot_.Entries();
+            for (size_t index = 0; index < entries.size(); ++index)
+            {
+                if (entries[index].source == ELootSource::Pile) continue;
+                if (!stale && (entries[index].state != FLootEntry::EState::Available || entries[index].contents.empty())) continue;
+                const float distance = glm::distance(entries[index].worldPos, anchor->worldPos);
+                if (distance < nearest) { nearest = distance; best = static_cast<int>(index); }
+            }
+            if (best < 0) return;
+            // Stand next to it, as a survivor reaching for it would.
+            TeleportPlayer(entries[best].worldPos);
+            std::optional<FLootHandle> handle = loot_.ReserveEntry(best);
+            if (!handle && !stale) return;
+            if (!handle) handle = FLootHandle{static_cast<uint32_t>(best), entries[best].nodeInstanceId, 0};
+            validationNetTakeId_ = entries[best].persistentId;
+            validationNetTakeResult_ = 0;
+            // Our survivor's new position reaches the server before the request.
+            FNetWriter state;
+            Net::FPlayerState presence;
+            presence.presence = LocalSurvivor();
+            presence.presence.id = net_->survivorId;
+            presence.presence.feet = entries[best].worldPos;
+            presence.presence.eye = entries[best].worldPos + glm::vec3(0.0f, 1.6f, 0.0f);
+            presence.presentation = LocalPresentation();
+            Net::Write(state, presence);
+            net_->host.Send(net_->host.ServerPeer(), state.Bytes(), EDelivery::Reliable);
+            NetRequestTake(*handle, 0, EEquipSlot::None, std::nullopt);
         });
     cvars.RegisterBool("nextdayz.net.pvp", false, &netPvpCvar_, ECVarFlags::None,
         "Server: survivors can hurt each other (can change while running)", [this]()
@@ -244,6 +340,25 @@ void NextDayzGameInstance::NetPoll()
 
     if (netMode_ == ENetMode::Server)
     {
+        // A survivor who dies or leaves leaves everything the server knows they carried.
+        const auto dropBody = [this](FNetSession::FClient& client)
+        {
+            std::vector<FLootStack> body = InventoryAsStacks(client.inventory);
+            if (!body.empty() && client.hasState)
+            {
+                loot_.SpawnPile(std::move(body), client.state.presence.feet, 0.0f, GetEngine());
+            }
+            client.carried.clear();
+            client.inventory = {};
+        };
+        const auto fix = [&net](FNetSession::FClient& client, std::string reason)
+        {
+            ++client.refusals;
+            SPDLOG_WARN("[NextDayz][net] survivor {} inventory refused: {}", client.survivorId, reason);
+            FNetWriter writer;
+            Net::Write(writer, Net::FInventoryFix{client.lifeNumber, std::move(reason), client.inventory});
+            net.host.Send(client.peer, writer.Bytes(), EDelivery::Reliable);
+        };
         for (NextNet::FNetEvent& event : events)
         {
             if (event.type == NextNet::FNetEvent::EType::Connected)
@@ -257,6 +372,7 @@ void NextDayzGameInstance::NetPoll()
                 if (it == net.clients.end()) continue;
                 if (it->second.survivorId != 0)
                 {
+                    if (it->second.life == FNetSession::FClient::ELife::Alive) dropBody(it->second);
                     world_.RemoveSurvivor(it->second.survivorId);
                     FNetWriter writer;
                     Net::WritePlayerLeft(writer, it->second.survivorId);
@@ -352,6 +468,102 @@ void NextDayzGameInstance::NetPoll()
                                   std::clamp(noise.strength, 0.0f, 1.0f), noise.type);
                 break;
             }
+            case Net::EMessage::LootSync:
+            {
+                if (!sceneReady_) break;
+                FNetWriter writer;
+                Net::Write(writer, Net::FLootState{true, loot_.Replicas(0)});
+                net.host.Send(event.peer, writer.Bytes(), EDelivery::Reliable);
+                break;
+            }
+            case Net::EMessage::LootTake:
+            {
+                Net::FLootTake take;
+                if (!Net::Read(reader, take)) break;
+                Net::FLootGrant grant;
+                grant.request = take.request;
+                const int index = loot_.FindEntry(take.id);
+                // Whoever's request arrives first gets it; it has to be within reach.
+                if (index >= 0 && client.hasState && client.life == FNetSession::FClient::ELife::Alive &&
+                    glm::distance(loot_.Entries()[index].worldPos, client.state.presence.eye) <= config_.Loot.ReachMeters + 2.0f)
+                {
+                    if (std::optional<std::vector<FLootStack>> contents = loot_.TakeAll(index, GetEngine()))
+                    {
+                        AddTotals(client.carried, CountItems(*contents));
+                        grant.granted = true;
+                        grant.contents = std::move(*contents);
+                    }
+                }
+                FNetWriter writer;
+                Net::Write(writer, grant);
+                net.host.Send(event.peer, writer.Bytes(), EDelivery::Reliable);
+                if (grant.granted)
+                {
+                    SPDLOG_INFO("[NextDayz][net] survivor {} took '{}'", client.survivorId, take.id);
+                }
+                break;
+            }
+            case Net::EMessage::LootDrop:
+            {
+                Net::FLootDrop drop;
+                if (!Net::Read(reader, drop) || !client.hasState || drop.contents.empty()) break;
+                if (glm::distance(drop.position, client.state.presence.feet) > 6.0f) break;
+                if (client.life != FNetSession::FClient::ELife::Alive ||
+                    !SubtractTotals(client.carried, CountItems(drop.contents)))
+                {
+                    fix(client, "dropped something it does not carry");
+                    break;
+                }
+                loot_.SpawnPile(std::move(drop.contents), drop.position, drop.yaw, GetEngine());
+                break;
+            }
+            case Net::EMessage::InventorySync:
+            {
+                Net::FInventorySync sync;
+                if (!Net::Read(reader, sync) || sync.life < client.lifeNumber) break;
+                using ELife = FNetSession::FClient::ELife;
+                if (sync.life > client.lifeNumber)
+                {
+                    // A new life; a previous one that never reported its death leaves its body.
+                    if (client.life == ELife::Alive) dropBody(client);
+                    client.lifeNumber = sync.life;
+                    client.life = ELife::AwaitingKit;
+                    client.carried.clear();
+                    client.inventory = {};
+                }
+                if (!sync.alive)
+                {
+                    if (client.life == ELife::Alive) dropBody(client);
+                    client.life = ELife::Dead;
+                    break;
+                }
+                if (client.life == ELife::Dead) break;
+                const FItemTotals reported = CountItems(sync.inventory);
+                if (client.life == ELife::AwaitingKit)
+                {
+                    const FLedgerVerdict verdict = CheckConservation(StartingKit(netKitCvar_), reported);
+                    client.life = ELife::Alive;
+                    if (!verdict.accepted)
+                    {
+                        client.inventory = StartingInventory(netKitCvar_);
+                        client.carried = CountItems(client.inventory);
+                        fix(client, "not a starting kit: " + verdict.reason);
+                        break;
+                    }
+                    client.carried = reported;
+                    client.inventory = std::move(sync.inventory);
+                    break;
+                }
+                const FLedgerVerdict verdict = CheckConservation(client.carried, reported);
+                if (!verdict.accepted)
+                {
+                    fix(client, verdict.reason);
+                    break;
+                }
+                client.carried = reported;
+                client.inventory = std::move(sync.inventory);
+                break;
+            }
             default:
                 break;
             }
@@ -410,6 +622,74 @@ void NextDayzGameInstance::NetPoll()
             {
                 TeleportPlayer(ResolveSpawnPosition() - glm::vec3(0.0f, 1.0f, 0.0f));
             }
+            break;
+        }
+        case Net::EMessage::LootState:
+        {
+            Net::FLootState state;
+            if (!Net::Read(reader, state) || !sceneReady_) break;
+            // Changes before the full picture are already part of it.
+            if (!state.full && net.lootSyncedScene != geographySceneGeneration_) break;
+            for (const FLootReplica& entry : state.entries) loot_.ApplyReplica(entry, GetEngine());
+            if (state.full)
+            {
+                net.lootSyncedScene = geographySceneGeneration_;
+                SPDLOG_INFO("[NextDayz][net] loot synced: {} entries", state.entries.size());
+            }
+            break;
+        }
+        case Net::EMessage::LootGrant:
+        {
+            Net::FLootGrant grant;
+            if (!Net::Read(reader, grant)) break;
+            const auto it = net.pendingTakes.find(grant.request);
+            if (it == net.pendingTakes.end()) break;
+            FNetSession::FPendingTake pending = std::move(it->second);
+            net.pendingTakes.erase(it);
+            if (pending.entry.id == validationNetTakeId_) validationNetTakeResult_ = grant.granted ? 1 : 2;
+            if (!grant.granted)
+            {
+                loot_.Cancel(pending.handle);
+                Notify("Someone else got there first", 1);
+                break;
+            }
+            // It is ours: gone from the ground at once, here and (by the server) everywhere.
+            FLootReplica gone = pending.entry;
+            gone.available = false;
+            loot_.ApplyReplica(gone, GetEngine());
+            std::vector<FLootStack> left;
+            const std::vector<FLootStack> taken = LootSystem::AddToInventory(
+                grant.contents, inventory_, pending.destination, pending.equipSlot, pending.placement, left);
+            if (!taken.empty())
+            {
+                SyncClothingVisuals();
+                audio_.Pickup();
+                for (const FLootStack& stack : taken)
+                {
+                    Notify(stack.count > 1 ? L10n::Message("Picked up {} x{}", ItemDisplayName(stack.itemId), stack.count)
+                                           : L10n::Message("Picked up {}", ItemDisplayName(stack.itemId)));
+                }
+            }
+            if (!left.empty())
+            {
+                PlacePile(std::move(left), pending.entry.position, pending.entry.yaw);
+                Notify(taken.empty() ? "Not enough space - drop something or find a bigger bag"
+                                     : "No room for the rest - it stays here", 1);
+            }
+            break;
+        }
+        case Net::EMessage::InventoryFix:
+        {
+            Net::FInventoryFix fix;
+            if (!Net::Read(reader, fix) || fix.life != netLife_ || !survival_.IsAlive()) break;
+            ++net.fixes;
+            if (inventory_.Restore(fix.inventory))
+            {
+                weapons_.ResetRuntime();
+                SyncClothingVisuals();
+            }
+            SPDLOG_WARN("[NextDayz][net] the server corrected our inventory: {}", fix.reason);
+            Notify("The server corrected your inventory", 2);
             break;
         }
         case Net::EMessage::Reject:
@@ -517,6 +797,7 @@ void NextDayzGameInstance::TickServer(float dt)
     }
     world_.noise.Update(dt);
     time_.Tick(static_cast<double>(dt), GetEngine().GetScene());
+    TickServerLoot(dt);
 
     net.snapshotTimer += dt;
     if (net.snapshotTimer < kSnapshotSeconds || net.clients.empty())
@@ -573,6 +854,15 @@ void NextDayzGameInstance::NetClientSend(float dt)
         return;
     }
     const FPeerId server = net.host.ServerPeer();
+    if (sceneReady_ && net.lootRequestedScene != geographySceneGeneration_)
+    {
+        // A freshly loaded map: the server's loot replaces our own roll of it.
+        net.lootRequestedScene = geographySceneGeneration_;
+        net.pendingTakes.clear();
+        FNetWriter writer;
+        Net::WriteLootSync(writer);
+        net.host.Send(server, writer.Bytes(), EDelivery::Reliable);
+    }
     net.sendTimer += dt;
     if (net.sendTimer >= kStateSeconds)
     {
@@ -585,6 +875,21 @@ void NextDayzGameInstance::NetClientSend(float dt)
         Net::Write(writer, state);
         net.host.Send(server, writer.Bytes(), EDelivery::Unreliable);
     }
+    // What we carry, whenever it changed (the server's ledger checks it).
+    net.inventoryTimer += dt;
+    if (sceneReady_ && survival_.IsAlive() && net.inventoryTimer >= 0.2f)
+    {
+        net.inventoryTimer = 0.0f;
+        weapons_.CopyMagazinesTo(inventory_);
+        FNetWriter writer;
+        Net::Write(writer, Net::FInventorySync{netLife_, true, inventory_.Capture()});
+        const std::span<const std::byte> bytes = writer.Bytes();
+        if (!std::equal(bytes.begin(), bytes.end(), net.lastInventorySync.begin(), net.lastInventorySync.end()))
+        {
+            net.lastInventorySync.assign(bytes.begin(), bytes.end());
+            net.host.Send(server, bytes, EDelivery::Reliable);
+        }
+    }
     // Our shots and footfalls are what the server's infected hear.
     for (const FNoiseEvent& noise : world_.noise.Events())
     {
@@ -594,6 +899,86 @@ void NextDayzGameInstance::NetClientSend(float dt)
         Net::Write(writer, Net::FNoise{noise.position, noise.radius, noise.strength, noise.type});
         net.host.Send(server, writer.Bytes(), EDelivery::Reliable);
     }
+}
+
+void NextDayzGameInstance::TickServerLoot(float dt)
+{
+    FNetSession& net = *net_;
+    std::vector<LootSystem::FViewer> viewers;
+    for (const FSurvivorPresence& survivor : world_.Survivors())
+    {
+        if (survivor.alive) viewers.push_back({survivor.eye, survivor.forward});
+    }
+    loot_.TickWorld(dt, viewers, GetEngine());
+    const uint64_t latest = loot_.Revision();
+    if (latest == net.lootRevision)
+    {
+        return;
+    }
+    Net::FLootState changes{false, loot_.Replicas(net.lootRevision)};
+    net.lootRevision = latest;
+    if (changes.entries.empty() || net.clients.empty())
+    {
+        return;
+    }
+    FNetWriter writer;
+    Net::Write(writer, changes);
+    net.host.Broadcast(writer.Bytes(), EDelivery::Reliable);
+}
+
+void NextDayzGameInstance::NetRequestTake(const FLootHandle& handle, FContainerId destination, EEquipSlot equipSlot,
+                                          std::optional<FGridPlacement> placement)
+{
+    if (!net_ || net_->survivorId == 0 || handle.index >= loot_.Entries().size())
+    {
+        loot_.Cancel(handle);
+        Notify("Not connected to the server", 1);
+        return;
+    }
+    FNetSession& net = *net_;
+    const FLootEntry& entry = loot_.Entries()[handle.index];
+    const uint32_t request = net.nextTakeRequest++;
+    net.pendingTakes[request] = {handle, {entry.persistentId, entry.source, entry.worldPos, entry.yaw, true, entry.contents},
+                                 destination, equipSlot, placement};
+    FNetWriter writer;
+    Net::Write(writer, Net::FLootTake{request, entry.persistentId});
+    net.host.Send(net.host.ServerPeer(), writer.Bytes(), EDelivery::Reliable);
+}
+
+bool NextDayzGameInstance::PlacePile(std::vector<FLootStack> contents, const glm::vec3& position, float yaw)
+{
+    if (netMode_ != ENetMode::Client)
+    {
+        return loot_.SpawnPile(std::move(contents), position, yaw, GetEngine());
+    }
+    if (!net_ || net_->survivorId == 0 || contents.empty())
+    {
+        return false;
+    }
+    FNetWriter writer;
+    Net::Write(writer, Net::FLootDrop{position, yaw, std::move(contents)});
+    return net_->host.Send(net_->host.ServerPeer(), writer.Bytes(), EDelivery::Reliable);
+}
+
+void NextDayzGameInstance::NetDropOnDeath()
+{
+    if (netDeathDropped_)
+    {
+        return;
+    }
+    netDeathDropped_ = true;
+    if (!net_ || net_->survivorId == 0)
+    {
+        return;
+    }
+    // The server drops the body from its own ledger; we only let go of it here.
+    FNetWriter writer;
+    Net::Write(writer, Net::FInventorySync{netLife_, false, {}});
+    net_->host.Send(net_->host.ServerPeer(), writer.Bytes(), EDelivery::Reliable);
+    net_->lastInventorySync.clear();
+    inventory_.Clear();
+    weapons_.ResetRuntime();
+    SyncClothingVisuals();
 }
 
 void NextDayzGameInstance::NetSendWeaponHit(const FWeaponHitEvent& hit)
@@ -732,6 +1117,24 @@ void NextDayzGameInstance::RegisterNetQueries(Runtime::Agent::FAgentQueryRegistr
     reg.Add("netPvp", [this]() -> FAgentQueryValue { return net_ && net_->pvp; });
     reg.Add("netInfected", [this]() -> FAgentQueryValue { return int64_t(world_.zombies.ActiveCount()); });
     reg.Add("netClients", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->clients.size() : 0); });
+    reg.Add("netLootSynced", [this]() -> FAgentQueryValue
+    {
+        return net_ && net_->lootSyncedScene != 0 && net_->lootSyncedScene == geographySceneGeneration_;
+    });
+    reg.Add("netPendingTakes", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->pendingTakes.size() : 0); });
+    reg.Add("netTakeResult", [this]() -> FAgentQueryValue { return int64_t(validationNetTakeResult_); });
+    reg.Add("netInventoryFixes", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->fixes : 0); });
+    reg.Add("netBandages", [this]() -> FAgentQueryValue { return int64_t(inventory_.CountOf("bandage")); });
+    reg.Add("netLife", [this]() -> FAgentQueryValue { return int64_t(netLife_); });
+    // Whether the entry the validation take went for still lies on the ground here.
+    reg.Add("netTakeTargetOnGround", [this]() -> FAgentQueryValue
+    {
+        const int index = loot_.FindEntry(validationNetTakeId_);
+        if (index < 0) return false;
+        const FLootEntry::EState state = loot_.Entries()[index].state;
+        return state == FLootEntry::EState::Available || state == FLootEntry::EState::Reserved;
+    });
+    reg.Add("netLootAvailable", [this]() -> FAgentQueryValue { return int64_t(loot_.RemainingCount()); });
 }
 
 void NextDayzGameInstance::DrawNetStatus()
@@ -780,6 +1183,17 @@ void NextDayzGameInstance::ApplyZombieReplication(float) {}
 void NextDayzGameInstance::UpdateRemoteSurvivors(float) {}
 void NextDayzGameInstance::DrawNetStatus() {}
 void NextDayzGameInstance::RegisterNetQueries(Runtime::Agent::FAgentQueryRegistry&) {}
+void NextDayzGameInstance::NetRequestTake(const NextDayz::FLootHandle& handle, NextDayz::FContainerId,
+                                          NextDayz::EEquipSlot, std::optional<NextDayz::FGridPlacement>)
+{
+    loot_.Cancel(handle);
+}
+bool NextDayzGameInstance::PlacePile(std::vector<NextDayz::FLootStack> contents, const glm::vec3& position, float yaw)
+{
+    return loot_.SpawnPile(std::move(contents), position, yaw, GetEngine());
+}
+void NextDayzGameInstance::TickServerLoot(float) {}
+void NextDayzGameInstance::NetDropOnDeath() {}
 
 #endif
 

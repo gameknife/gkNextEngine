@@ -523,6 +523,7 @@ namespace NextDayz
 
     void LootSystem::ShowEntry(FLootEntry& entry, Assets::Scene& scene, NextEngine* engine)
     {
+        entry.revision = ++revision_;
         Assets::Node* node = entry.nodeInstanceId ? scene.GetNodeByInstanceId(entry.nodeInstanceId) : nullptr;
         if (!node)
         {
@@ -548,6 +549,7 @@ namespace NextDayz
 
     void LootSystem::HideEntry(FLootEntry& entry, Assets::Scene& scene, NextEngine* engine)
     {
+        entry.revision = ++revision_;
         Assets::Node* node = entry.nodeInstanceId ? scene.GetNodeByInstanceId(entry.nodeInstanceId) : nullptr;
         if (!node)
         {
@@ -812,40 +814,7 @@ namespace NextDayz
         }
         FLootEntry& entry = entries_[handle.index];
         std::vector<FLootStack> left;
-        bool firstStack = true;
-        for (const FLootStack& stack : entry.contents)
-        {
-            const FItemDef* definition = FindItemDef(stack.itemId);
-            const bool matchesSlot = destination != kWornContainer ||
-                (definition && definition->kind == EItemKind::Clothing && definition->equipSlot == equipSlot);
-            int fit = definition && matchesSlot ? inventory.FitCount(stack.itemId, stack.count, destination) : 0;
-            if (placement)
-                fit = firstStack ? inventory.FitCountAt(stack.itemId, stack.count, destination, *placement) : 0;
-            if (fit > 0)
-            {
-                FItemInstanceId instanceId = 0;
-                Inventory transaction = inventory;
-                const bool added = placement
-                    ? transaction.TryAddAt(stack.itemId, fit, destination, *placement, &instanceId)
-                    : transaction.TryAdd(stack.itemId, std::string(definition->displayName), definition->kind, fit,
-                                         &instanceId, destination);
-                if (added &&
-                    (definition->kind != EItemKind::Weapon || transaction.SetWeaponState(instanceId, stack.loadedAmmo, stack.attachments)))
-                {
-                    inventory = std::move(transaction);
-                    result.stacks.push_back({stack.itemId, fit, stack.loadedAmmo, stack.attachments});
-                }
-                else
-                {
-                    fit = 0;
-                }
-            }
-            if (fit < stack.count)
-            {
-                left.push_back({stack.itemId, stack.count - fit, stack.loadedAmmo, stack.attachments});
-            }
-            firstStack = false;
-        }
+        result.stacks = AddToInventory(entry.contents, inventory, destination, equipSlot, placement, left);
         result.taken = !result.stacks.empty();
         result.partial = !left.empty();
 
@@ -882,6 +851,135 @@ namespace NextDayz
         return result;
     }
 
+    std::vector<FLootStack> LootSystem::AddToInventory(const std::vector<FLootStack>& contents, Inventory& inventory,
+                                                       FContainerId destination, EEquipSlot equipSlot,
+                                                       std::optional<FGridPlacement> placement,
+                                                       std::vector<FLootStack>& left)
+    {
+        std::vector<FLootStack> taken;
+        bool firstStack = true;
+        for (const FLootStack& stack : contents)
+        {
+            const FItemDef* definition = FindItemDef(stack.itemId);
+            const bool matchesSlot = destination != kWornContainer ||
+                (definition && definition->kind == EItemKind::Clothing && definition->equipSlot == equipSlot);
+            int fit = definition && matchesSlot ? inventory.FitCount(stack.itemId, stack.count, destination) : 0;
+            if (placement)
+                fit = firstStack ? inventory.FitCountAt(stack.itemId, stack.count, destination, *placement) : 0;
+            if (fit > 0)
+            {
+                FItemInstanceId instanceId = 0;
+                Inventory transaction = inventory;
+                const bool added = placement
+                    ? transaction.TryAddAt(stack.itemId, fit, destination, *placement, &instanceId)
+                    : transaction.TryAdd(stack.itemId, std::string(definition->displayName), definition->kind, fit,
+                                         &instanceId, destination);
+                if (added &&
+                    (definition->kind != EItemKind::Weapon || transaction.SetWeaponState(instanceId, stack.loadedAmmo, stack.attachments)))
+                {
+                    inventory = std::move(transaction);
+                    taken.push_back({stack.itemId, fit, stack.loadedAmmo, stack.attachments});
+                }
+                else
+                {
+                    fit = 0;
+                }
+            }
+            if (fit < stack.count)
+            {
+                left.push_back({stack.itemId, stack.count - fit, stack.loadedAmmo, stack.attachments});
+            }
+            firstStack = false;
+        }
+        return taken;
+    }
+
+    int LootSystem::FindEntry(std::string_view persistentId) const
+    {
+        for (size_t index = 0; index < entries_.size(); ++index)
+        {
+            if (entries_[index].persistentId == persistentId) return static_cast<int>(index);
+        }
+        return -1;
+    }
+
+    std::vector<FLootReplica> LootSystem::Replicas(uint64_t sinceRevision) const
+    {
+        std::vector<FLootReplica> replicas;
+        for (const FLootEntry& entry : entries_)
+        {
+            if (entry.persistentId.empty() || entry.revision <= sinceRevision) continue;
+            const bool available = entry.state == FLootEntry::EState::Available ||
+                                   entry.state == FLootEntry::EState::Reserved;
+            // A fresh client has never seen a picked-up pile: nothing to tell it.
+            if (sinceRevision == 0 && entry.source == ELootSource::Pile && !available) continue;
+            replicas.push_back({entry.persistentId, entry.source, entry.worldPos, entry.yaw, available,
+                                available ? entry.contents : std::vector<FLootStack>{}});
+        }
+        return replicas;
+    }
+
+    void LootSystem::ApplyReplica(const FLootReplica& replica, NextEngine& engine)
+    {
+        const int index = FindEntry(replica.id);
+        if (index < 0)
+        {
+            // Spots and map loot exist on both sides; only piles come and go.
+            if (replica.source == ELootSource::Pile && replica.available)
+            {
+                SpawnPile(replica.contents, replica.position, replica.yaw, engine, replica.id);
+            }
+            return;
+        }
+        FLootEntry& entry = entries_[index];
+        Assets::Scene& scene = engine.GetScene();
+        if (replica.available && !replica.contents.empty())
+        {
+            entry.contents = replica.contents;
+            if (entry.source == ELootSource::Pile)
+            {
+                entry.worldPos = replica.position;
+                entry.yaw = replica.yaw;
+            }
+            if (entry.source != ELootSource::Authored) entry.displayName = DescribeContents(entry.contents);
+            entry.category = CategoryOf(entry.contents);
+            // A pick-up of ours still waiting on the server keeps its reservation.
+            if (entry.state != FLootEntry::EState::Reserved) entry.state = FLootEntry::EState::Available;
+            ShowEntry(entry, scene, &engine);
+        }
+        else
+        {
+            entry.contents.clear();
+            entry.state = entry.source == ELootSource::Pile ? FLootEntry::EState::Empty : FLootEntry::EState::Cooldown;
+            HideEntry(entry, scene, &engine);
+            if (hoveredIndex_ == index) hoveredIndex_ = -1;
+        }
+    }
+
+    std::optional<std::vector<FLootStack>> LootSystem::TakeAll(int index, NextEngine& engine)
+    {
+        const std::optional<FLootHandle> handle = ReserveEntry(index);
+        if (!handle)
+        {
+            return std::nullopt;
+        }
+        FLootEntry& entry = entries_[index];
+        std::vector<FLootStack> contents = std::move(entry.contents);
+        entry.contents.clear();
+        HideEntry(entry, engine.GetScene(), &engine);
+        if (entry.source == ELootSource::Pile)
+        {
+            entry.state = FLootEntry::EState::Empty;
+        }
+        else
+        {
+            if (entry.directorHandle.IsValid()) director_.Commit(entry.directorHandle, worldSeconds_);
+            entry.state = FLootEntry::EState::Cooldown;
+        }
+        if (hoveredIndex_ == index) hoveredIndex_ = -1;
+        return contents;
+    }
+
     bool LootSystem::Cancel(const FLootHandle& handle)
     {
         if (!IsReservedHandleValid(handle))
@@ -893,7 +991,8 @@ namespace NextDayz
         return !entry.directorHandle.IsValid() || director_.Cancel(entry.directorHandle);
     }
 
-    bool LootSystem::SpawnPile(std::vector<FLootStack> contents, const glm::vec3& position, float yaw, NextEngine& engine)
+    bool LootSystem::SpawnPile(std::vector<FLootStack> contents, const glm::vec3& position, float yaw, NextEngine& engine,
+                               std::string_view persistentId)
     {
         if (contents.empty() || std::any_of(contents.begin(), contents.end(), [](const auto& item)
             {
@@ -934,7 +1033,7 @@ namespace NextDayz
         target->category = CategoryOf(target->contents);
         target->state = FLootEntry::EState::Available;
         target->pileTime = worldSeconds_ + static_cast<double>(++pileSerial_) * 1.0e-6;
-        target->persistentId = fmt::format("pile:{}", pileSerial_);
+        target->persistentId = persistentId.empty() ? fmt::format("pile:{}", pileSerial_) : std::string(persistentId);
         ShowEntry(*target, engine.GetScene(), &engine);
         return true;
     }

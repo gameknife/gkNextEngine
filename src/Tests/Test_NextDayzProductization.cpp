@@ -26,6 +26,7 @@
 #include "Zombies/ZombieSystem.hpp"
 #include "World/ZombieSpawnDirector.hpp"
 #include "Sim/WorldSim.hpp"
+#include "Sim/ItemLedger.hpp"
 #include "Zombies/ZombieVisualPool.hpp"
 #include "UI/Localization.hpp"
 
@@ -1883,4 +1884,63 @@ TEST_CASE("NextDayz world sim hunts and strikes the right survivor among several
     world.RemoveSurvivor(2);
     CHECK(world.FindSurvivor(2) == nullptr);
     CHECK_FALSE(world.VisibleToAnySurvivor({300.0f, 1.0f, 20.0f}));
+}
+
+TEST_CASE("NextDayz item ledger lets survivors use, reload and convert but never create items",
+          "[NextDayz][Productization][Multiplayer]")
+{
+    using namespace NextDayz;
+    // The testing kit: AK with 30 loaded, 60 spare, a backpack, a bandage and an empty bottle.
+    FInventoryState kit;
+    kit.instances.push_back({1, "ak", 1, 0, 30});
+    kit.instances.push_back({2, "ammo_545", 60});
+    kit.instances.push_back({3, "backpack", 1});
+    kit.instances.push_back({4, "bandage", 1});
+    kit.instances.push_back({5, "water_bottle_empty", 1});
+    const FItemTotals carried = CountItems(kit);
+    CHECK(carried.at("ammo_545") == 90);
+    CHECK(CheckConservation(StartingKit(true), carried).accepted);
+    CHECK_FALSE(CheckConservation(StartingKit(false), carried).accepted);
+
+    // Firing and reloading: rounds move between magazine and stack, some are spent.
+    FInventoryState reloaded = kit;
+    reloaded.instances[0].loadedAmmo = 30;
+    reloaded.instances[1].count = 50;   // 10 fired, 10 reloaded
+    CHECK(CheckConservation(carried, CountItems(reloaded)).accepted);
+
+    // Filling the empty bottle at a well, then drinking it back to empty.
+    FInventoryState filled = kit;
+    filled.instances[4].defId = "water_bottle";
+    CHECK(CheckConservation(carried, CountItems(filled)).accepted);
+    CHECK(CheckConservation(CountItems(filled), CountItems(kit)).accepted);
+
+    // Fitting an attachment moves it from the bag onto the rifle.
+    FInventoryState withDot = kit;
+    withDot.instances.push_back({6, "optic_red_dot", 1});
+    FItemTotals withDotTotals = CountItems(withDot);
+    FInventoryState fitted = kit;
+    fitted.instances[0].attachments[0] = FindAttachmentDef("optic_red_dot")->type;
+    CHECK(CheckConservation(withDotTotals, CountItems(fitted)).accepted);
+
+    // Duplication is refused: a second bandage, extra rounds, a second bottle of water.
+    FInventoryState duplicated = kit;
+    duplicated.instances.push_back({7, "bandage", 1});
+    const FLedgerVerdict verdict = CheckConservation(carried, CountItems(duplicated));
+    CHECK_FALSE(verdict.accepted);
+    CHECK(verdict.reason.find("bandage") != std::string::npos);
+    FInventoryState moreAmmo = kit;
+    moreAmmo.instances[0].loadedAmmo = 31;
+    CHECK_FALSE(CheckConservation(carried, CountItems(moreAmmo)).accepted);
+    FInventoryState twoWaters = filled;
+    twoWaters.instances.push_back({8, "water_bottle", 1});
+    CHECK_FALSE(CheckConservation(carried, CountItems(twoWaters)).accepted);
+
+    // Grants and drops move totals; a drop of what you do not have is refused.
+    FItemTotals ledger = carried;
+    AddTotals(ledger, CountItems(std::vector<FLootStack>{{"food_can", 2, 0, {}}}));
+    CHECK(ledger.at("food_can") == 2);
+    CHECK(SubtractTotals(ledger, CountItems(std::vector<FLootStack>{{"ak", 1, 30, {}}})));
+    CHECK(ledger.at("ammo_545") == 60);
+    CHECK_FALSE(SubtractTotals(ledger, CountItems(std::vector<FLootStack>{{"ak", 1, 0, {}}})));
+    CHECK(InventoryAsStacks(kit).size() == kit.instances.size());
 }

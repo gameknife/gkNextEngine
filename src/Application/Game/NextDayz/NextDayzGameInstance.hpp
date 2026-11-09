@@ -171,6 +171,21 @@ private:
     void UpdateRemoteSurvivors(float dt);
     void DrawNetStatus();
     void RegisterNetQueries(Runtime::Agent::FAgentQueryRegistry& reg);
+    // Loot on a client belongs to the server: a pick-up becomes a request, a
+    // drop becomes a request, and the world shows what the server says.
+    void NetRequestTake(const NextDayz::FLootHandle& handle, NextDayz::FContainerId destination,
+                        NextDayz::EEquipSlot equipSlot, std::optional<NextDayz::FGridPlacement> placement);
+    // Puts items on the ground: locally offline, through the server online.
+    bool PlacePile(std::vector<NextDayz::FLootStack> contents, const glm::vec3& position, float yaw);
+    void TickServerLoot(float dt);
+    // Client death: everything carried falls where the survivor fell (once per life).
+    void NetDropOnDeath();
+    bool netDeathDropped_ = false;
+    // This survivor's life number: the server's item ledger starts afresh with each.
+    uint32_t netLife_ = 0;
+    int32_t validationNetTake_ = 0;
+    std::string validationNetTakeId_;   // the entry the last validation take went for
+    int32_t validationNetTakeResult_ = 0; // 0 pending, 1 granted, 2 refused
     int32_t validationNetPvpHit_ = 0;
     // The id the world knows this client's survivor by (1 offline).
     uint32_t LocalSurvivorId() const;

@@ -10,6 +10,7 @@
 #include "Modules/NextNet/NetBuffer.hpp"
 #include "Modules/NextNet/NetHost.hpp"
 #include "Application/Game/NextDayz/Net/NetProtocol.hpp"
+#include "Application/Game/NextDayz/Sim/ItemLedger.hpp"
 
 TEST_CASE("NextDayz net protocol round-trips a snapshot, a hit and a welcome", "[Unit][NextNet][NextDayz][Multiplayer]")
 {
@@ -76,6 +77,110 @@ TEST_CASE("NextDayz net protocol round-trips a snapshot, a hit and a welcome", "
     Net::ReadHeader(truncated, message);
     Net::FWelcome welcome;
     CHECK_FALSE(Net::Read(truncated, welcome));
+}
+
+TEST_CASE("NextDayz net protocol round-trips loot state, takes, grants and drops", "[Unit][NextNet][NextDayz][Multiplayer]")
+{
+    using namespace NextDayz;
+    Net::FLootState state;
+    state.full = true;
+    FLootReplica rifle;
+    rifle.id = "spot:military:12";
+    rifle.source = ELootSource::Spot;
+    rifle.position = {3.0f, 1.0f, -2.0f};
+    rifle.available = true;
+    rifle.contents.push_back({"ak", 1, 30, {}});
+    rifle.contents.push_back({"ammo_545", 45, 0, {}});
+    FLootReplica pile;
+    pile.id = "pile:7";
+    pile.source = ELootSource::Pile;
+    state.entries = {rifle, pile};
+
+    NextNet::FNetWriter writer;
+    Net::Write(writer, state);
+    NextNet::FNetReader reader(writer.Bytes());
+    Net::EMessage message{};
+    REQUIRE(Net::ReadHeader(reader, message));
+    REQUIRE(message == Net::EMessage::LootState);
+    Net::FLootState copy;
+    REQUIRE(Net::Read(reader, copy));
+    CHECK(reader.AtEnd());
+    CHECK(copy.full);
+    REQUIRE(copy.entries.size() == 2);
+    CHECK(copy.entries[0].id == "spot:military:12");
+    CHECK(copy.entries[0].available);
+    REQUIRE(copy.entries[0].contents.size() == 2);
+    CHECK(copy.entries[0].contents[0].loadedAmmo == 30);
+    CHECK(copy.entries[0].contents[1].count == 45);
+    CHECK(copy.entries[1].source == ELootSource::Pile);
+    CHECK_FALSE(copy.entries[1].available);
+
+    writer.Clear();
+    Net::Write(writer, Net::FLootGrant{9, true, rifle.contents});
+    NextNet::FNetReader grantReader(writer.Bytes());
+    REQUIRE(Net::ReadHeader(grantReader, message));
+    REQUIRE(message == Net::EMessage::LootGrant);
+    Net::FLootGrant grant;
+    REQUIRE(Net::Read(grantReader, grant));
+    CHECK(grant.request == 9);
+    CHECK(grant.granted);
+    CHECK(grant.contents.size() == 2);
+
+    writer.Clear();
+    Net::Write(writer, Net::FLootDrop{{1.0f, 0.0f, 1.0f}, 0.5f, {{"bandage", 2, 0, {}}}});
+    NextNet::FNetReader dropReader(writer.Bytes());
+    REQUIRE(Net::ReadHeader(dropReader, message));
+    Net::FLootDrop drop;
+    REQUIRE(Net::Read(dropReader, drop));
+    CHECK(drop.contents.front().itemId == "bandage");
+    CHECK(drop.yaw == 0.5f);
+
+    // A packet claiming more stacks than any entry holds is refused.
+    NextNet::FNetWriter hostile;
+    hostile.Write(Net::EMessage::LootDrop).Write(glm::vec3(0.0f)).Write(0.0f).Write<uint16_t>(60000);
+    NextNet::FNetReader hostileReader(hostile.Bytes());
+    Net::ReadHeader(hostileReader, message);
+    Net::FLootDrop refused;
+    CHECK_FALSE(Net::Read(hostileReader, refused));
+}
+
+TEST_CASE("NextDayz net protocol round-trips an inventory report and a correction", "[Unit][NextNet][NextDayz][Multiplayer]")
+{
+    using namespace NextDayz;
+    Inventory inventory;
+    FItemInstanceId rifle = 0;
+    REQUIRE(inventory.TryAdd("ak", "AK-74", EItemKind::Weapon, 1, &rifle));
+    REQUIRE(inventory.SetLoadedAmmo(rifle, 17));
+    REQUIRE(inventory.TryAdd("bandage", "Bandage", EItemKind::Consumable, 2));
+    const FInventoryState state = inventory.Capture();
+
+    NextNet::FNetWriter writer;
+    Net::Write(writer, Net::FInventorySync{3, true, state});
+    NextNet::FNetReader reader(writer.Bytes());
+    Net::EMessage message{};
+    REQUIRE(Net::ReadHeader(reader, message));
+    REQUIRE(message == Net::EMessage::InventorySync);
+    Net::FInventorySync sync;
+    REQUIRE(Net::Read(reader, sync));
+    CHECK(reader.AtEnd());
+    CHECK(sync.life == 3);
+    CHECK(sync.alive);
+    CHECK(CountItems(sync.inventory) == CountItems(state));
+    Inventory copy;
+    REQUIRE(copy.Restore(sync.inventory));
+    CHECK(copy.CountOf("bandage") == 2);
+    REQUIRE(copy.FindInstance(rifle) != nullptr);
+    CHECK(copy.FindInstance(rifle)->loadedAmmo == 17);
+
+    writer.Clear();
+    Net::Write(writer, Net::FInventoryFix{3, "bandage x5 appeared from nothing", state});
+    NextNet::FNetReader fixReader(writer.Bytes());
+    REQUIRE(Net::ReadHeader(fixReader, message));
+    REQUIRE(message == Net::EMessage::InventoryFix);
+    Net::FInventoryFix fix;
+    REQUIRE(Net::Read(fixReader, fix));
+    CHECK(fix.reason == "bandage x5 appeared from nothing");
+    CHECK(fix.inventory.instances.size() == state.instances.size());
 }
 
 TEST_CASE("NextDayz zombie replicas take the server's slots and drop the rest", "[Unit][NextDayz][Multiplayer]")

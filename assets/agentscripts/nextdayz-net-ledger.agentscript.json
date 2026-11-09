@@ -1,0 +1,30 @@
+{
+  "name": "nextdayz-net-ledger",
+  "description": "Server item ledger. Needs `gnb ds --clients 0` (any NextDayz server on 127.0.0.1:27015 with the testing kit on). The starting kit is accepted; items conjured locally are taken back by the server; a real pick-up and drop are accepted; on death the server, not the client, leaves the body.",
+  "target": "NextDayz",
+  "args": ["--disable-streamline", "--cvar", "nextdayz.net.mode client", "--cvar", "nextdayz.net.name ledger"],
+  "defaults": { "waitFrames": 2, "stepTimeoutMs": 120000 },
+  "steps": [
+    { "type": "wait-until", "query": "game.sceneReady", "op": "eq", "value": true, "timeoutMs": 180000 },
+    { "type": "wait-until", "query": "game.netOnline", "op": "eq", "value": true, "timeoutMs": 60000 },
+    { "type": "wait-until", "query": "game.netLootSynced", "op": "eq", "value": true, "timeoutMs": 30000 },
+    { "type": "wait-ms", "ms": 2000 },
+    { "type": "assert", "query": "game.netInventoryFixes", "op": "eq", "value": 0 },
+    { "type": "assert", "query": "game.netBandages", "op": "eq", "value": 1 },
+    { "type": "cvar", "name": "nextdayz.validation.give", "set": "bandage:5" },
+    { "type": "assert", "query": "game.netBandages", "op": "eq", "value": 6 },
+    { "type": "wait-until", "query": "game.netInventoryFixes", "op": "ge", "value": 1, "timeoutMs": 10000 },
+    { "type": "assert", "query": "game.netBandages", "op": "eq", "value": 1 },
+    { "type": "cvar", "name": "nextdayz.validation.netTake", "set": 1 },
+    { "type": "wait-until", "query": "game.netTakeResult", "op": "eq", "value": 1, "timeoutMs": 20000 },
+    { "type": "cvar", "name": "nextdayz.validation.drop", "set": "bandage" },
+    { "type": "wait-until", "query": "game.lootPiles", "op": "ge", "value": 1, "timeoutMs": 10000 },
+    { "type": "wait-ms", "ms": 2000 },
+    { "type": "assert", "query": "game.netInventoryFixes", "op": "eq", "value": 1 },
+    { "type": "cvar", "name": "nextdayz.validation.damagePlayer", "set": 200 },
+    { "type": "wait-until", "query": "game.lootPiles", "op": "ge", "value": 2, "timeoutMs": 10000 },
+    { "type": "assert", "query": "game.netInventoryFixes", "op": "eq", "value": 1 },
+    { "type": "screenshot", "out": "screenshots/nextdayz_net_ledger", "ui": true },
+    { "type": "quit" }
+  ]
+}

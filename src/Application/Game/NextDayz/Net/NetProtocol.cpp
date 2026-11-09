@@ -54,6 +54,99 @@ namespace NextDayz::Net
             for (FWeaponAttachments& attachments : p.slotAttachments) reader.Read(attachments);
         }
 
+        // Bounded so a malformed packet cannot ask for a huge allocation.
+        constexpr uint16_t kMaxStacks = 512;
+
+        void WriteStacks(FNetWriter& writer, const std::vector<FLootStack>& stacks)
+        {
+            writer.Write(static_cast<uint16_t>(std::min<size_t>(stacks.size(), kMaxStacks)));
+            for (size_t index = 0; index < stacks.size() && index < kMaxStacks; ++index)
+            {
+                const FLootStack& stack = stacks[index];
+                writer.WriteString(stack.itemId)
+                    .Write<int32_t>(stack.count)
+                    .Write<int32_t>(stack.loadedAmmo)
+                    .Write(stack.attachments);
+            }
+        }
+
+        bool ReadStacks(FNetReader& reader, std::vector<FLootStack>& stacks)
+        {
+            const auto count = reader.Read<uint16_t>();
+            if (reader.Failed() || count > kMaxStacks) return false;
+            stacks.resize(count);
+            for (FLootStack& stack : stacks)
+            {
+                stack.itemId = reader.ReadString();
+                stack.count = reader.Read<int32_t>();
+                stack.loadedAmmo = reader.Read<int32_t>();
+                reader.Read(stack.attachments);
+            }
+            return !reader.Failed();
+        }
+
+        constexpr uint16_t kMaxInventoryEntries = 1024;
+
+        void WriteInventory(FNetWriter& writer, const FInventoryState& state)
+        {
+            writer.Write(static_cast<uint16_t>(std::min<size_t>(state.instances.size(), kMaxInventoryEntries)));
+            for (size_t index = 0; index < state.instances.size() && index < kMaxInventoryEntries; ++index)
+            {
+                const FItemInstance& item = state.instances[index];
+                writer.Write(item.instanceId)
+                    .WriteString(item.defId)
+                    .Write<int32_t>(item.count)
+                    .Write(item.containerId)
+                    .Write<int32_t>(item.loadedAmmo)
+                    .Write(item.attachments)
+                    .Write(item.placement);
+            }
+            writer.Write(static_cast<uint16_t>(std::min<size_t>(state.containers.size(), kMaxInventoryEntries)));
+            for (size_t index = 0; index < state.containers.size() && index < kMaxInventoryEntries; ++index)
+            {
+                const FInventoryContainer& container = state.containers[index];
+                writer.Write(container.containerId)
+                    .Write(container.ownerItemInstanceId)
+                    .WriteString(container.displayName)
+                    .Write(container.size)
+                    .Write<uint8_t>(static_cast<uint8_t>((container.active ? 1 : 0) | (container.weaponOnly ? 2 : 0)));
+            }
+            writer.Write(state.nextInstanceId).Write(state.nextContainerId);
+        }
+
+        bool ReadInventory(FNetReader& reader, FInventoryState& state)
+        {
+            const auto items = reader.Read<uint16_t>();
+            if (reader.Failed() || items > kMaxInventoryEntries) return false;
+            state.instances.resize(items);
+            for (FItemInstance& item : state.instances)
+            {
+                reader.Read(item.instanceId);
+                item.defId = reader.ReadString();
+                item.count = reader.Read<int32_t>();
+                reader.Read(item.containerId);
+                item.loadedAmmo = reader.Read<int32_t>();
+                reader.Read(item.attachments);
+                reader.Read(item.placement);
+            }
+            const auto containers = reader.Read<uint16_t>();
+            if (reader.Failed() || containers > kMaxInventoryEntries) return false;
+            state.containers.resize(containers);
+            for (FInventoryContainer& container : state.containers)
+            {
+                reader.Read(container.containerId);
+                reader.Read(container.ownerItemInstanceId);
+                container.displayName = reader.ReadString();
+                reader.Read(container.size);
+                const auto flags = reader.Read<uint8_t>();
+                container.active = (flags & 1) != 0;
+                container.weaponOnly = (flags & 2) != 0;
+            }
+            reader.Read(state.nextInstanceId);
+            reader.Read(state.nextContainerId);
+            return !reader.Failed();
+        }
+
         // What a client needs to animate, hit and judge an infected.
         void WriteZombie(FNetWriter& writer, const FZombieRuntime& z)
         {
@@ -195,6 +288,114 @@ namespace NextDayz::Net
     {
         Header(writer, EMessage::Pvp);
         writer.Write<uint8_t>(pvp ? 1 : 0);
+    }
+
+    void WriteLootSync(FNetWriter& writer)
+    {
+        Header(writer, EMessage::LootSync);
+    }
+
+    void Write(FNetWriter& writer, const FLootState& value)
+    {
+        Header(writer, EMessage::LootState);
+        writer.Write<uint8_t>(value.full ? 1 : 0);
+        writer.Write(static_cast<uint32_t>(value.entries.size()));
+        for (const FLootReplica& entry : value.entries)
+        {
+            writer.WriteString(entry.id)
+                .Write(entry.source)
+                .Write(entry.position)
+                .Write(entry.yaw)
+                .Write<uint8_t>(entry.available ? 1 : 0);
+            WriteStacks(writer, entry.contents);
+        }
+    }
+
+    void Write(FNetWriter& writer, const FLootTake& value)
+    {
+        Header(writer, EMessage::LootTake);
+        writer.Write(value.request).WriteString(value.id);
+    }
+
+    void Write(FNetWriter& writer, const FLootGrant& value)
+    {
+        Header(writer, EMessage::LootGrant);
+        writer.Write(value.request).Write<uint8_t>(value.granted ? 1 : 0);
+        WriteStacks(writer, value.contents);
+    }
+
+    void Write(FNetWriter& writer, const FLootDrop& value)
+    {
+        Header(writer, EMessage::LootDrop);
+        writer.Write(value.position).Write(value.yaw);
+        WriteStacks(writer, value.contents);
+    }
+
+    void Write(FNetWriter& writer, const FInventorySync& value)
+    {
+        Header(writer, EMessage::InventorySync);
+        writer.Write(value.life).Write<uint8_t>(value.alive ? 1 : 0);
+        WriteInventory(writer, value.inventory);
+    }
+
+    void Write(FNetWriter& writer, const FInventoryFix& value)
+    {
+        Header(writer, EMessage::InventoryFix);
+        writer.Write(value.life).WriteString(value.reason);
+        WriteInventory(writer, value.inventory);
+    }
+
+    bool Read(FNetReader& reader, FInventorySync& out)
+    {
+        reader.Read(out.life);
+        out.alive = reader.Read<uint8_t>() != 0;
+        return ReadInventory(reader, out.inventory);
+    }
+
+    bool Read(FNetReader& reader, FInventoryFix& out)
+    {
+        reader.Read(out.life);
+        out.reason = reader.ReadString();
+        return ReadInventory(reader, out.inventory);
+    }
+
+    bool Read(FNetReader& reader, FLootState& out)
+    {
+        out.full = reader.Read<uint8_t>() != 0;
+        const auto count = reader.Read<uint32_t>();
+        if (reader.Failed() || count > 65536) return false;
+        out.entries.resize(count);
+        for (FLootReplica& entry : out.entries)
+        {
+            entry.id = reader.ReadString();
+            reader.Read(entry.source);
+            reader.Read(entry.position);
+            reader.Read(entry.yaw);
+            entry.available = reader.Read<uint8_t>() != 0;
+            if (!ReadStacks(reader, entry.contents)) return false;
+        }
+        return !reader.Failed();
+    }
+
+    bool Read(FNetReader& reader, FLootTake& out)
+    {
+        reader.Read(out.request);
+        out.id = reader.ReadString();
+        return !reader.Failed();
+    }
+
+    bool Read(FNetReader& reader, FLootGrant& out)
+    {
+        reader.Read(out.request);
+        out.granted = reader.Read<uint8_t>() != 0;
+        return ReadStacks(reader, out.contents);
+    }
+
+    bool Read(FNetReader& reader, FLootDrop& out)
+    {
+        reader.Read(out.position);
+        reader.Read(out.yaw);
+        return ReadStacks(reader, out.contents);
     }
 
     bool Read(FNetReader& reader, FHello& out)

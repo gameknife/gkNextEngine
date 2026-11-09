@@ -94,6 +94,18 @@ namespace NextDayz
         std::string persistentId;
         std::string fixedItem;     // display spot: what it always holds
         int fixedCount = 1;
+        uint64_t revision = 0;     // LootSystem::Revision() when it last appeared or vanished
+    };
+
+    // One loot entry as a network client needs it: where, what, and whether it is there.
+    struct FLootReplica
+    {
+        std::string id;            // FLootEntry::persistentId
+        ELootSource source = ELootSource::Spot;
+        glm::vec3 position{};
+        float yaw = 0.0f;
+        bool available = false;
+        std::vector<FLootStack> contents;
     };
 
     struct FSavedLootEntry
@@ -195,7 +207,24 @@ namespace NextDayz
 
         // Puts a pile on the ground (player drop, infected remains). Expands the
         // visual pool as needed; occupied piles are never overwritten.
-        bool SpawnPile(std::vector<FLootStack> contents, const glm::vec3& position, float yaw, NextEngine& engine);
+        bool SpawnPile(std::vector<FLootStack> contents, const glm::vec3& position, float yaw, NextEngine& engine,
+                       std::string_view persistentId = {});
+
+        // --- network: the server owns the world's loot, clients mirror it ---
+        // Bumped whenever an entry appears, changes what it shows, or vanishes.
+        uint64_t Revision() const { return revision_; }
+        // Entries changed after `sinceRevision` (0: everything that exists).
+        std::vector<FLootReplica> Replicas(uint64_t sinceRevision) const;
+        // Client: make the local entry match the server's (piles are created on demand).
+        void ApplyReplica(const FLootReplica& replica, NextEngine& engine);
+        int FindEntry(std::string_view persistentId) const;
+        // Server: a survivor takes everything an available entry holds.
+        std::optional<std::vector<FLootStack>> TakeAll(int index, NextEngine& engine);
+        // Puts stacks into an inventory the way picking up does; what does not fit goes to `left`.
+        static std::vector<FLootStack> AddToInventory(const std::vector<FLootStack>& contents, Inventory& inventory,
+                                                      FContainerId destination, EEquipSlot equipSlot,
+                                                      std::optional<FGridPlacement> placement,
+                                                      std::vector<FLootStack>& left);
         // Restocks one military spot far from `from` right now with a rifle and
         // ammo (radio supply cache). Returns its position.
         std::optional<glm::vec3> PlantCache(const glm::vec3& from, float minDistance, NextEngine& engine);
@@ -234,6 +263,7 @@ namespace NextDayz
         static std::string DescribeContents(const std::vector<FLootStack>& contents);
 
         FLootConfig config_{};
+        uint64_t revision_ = 0;
         std::vector<FLootEntry> entries_;
         std::vector<FLootZone> zones_;
         std::vector<uint32_t> pileNodeIds_;   // pooled pile visuals

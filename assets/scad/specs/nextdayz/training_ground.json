@@ -2,7 +2,7 @@
   "id": "training_ground",
   "region": "training",
   "seed": 707,
-  "version": 1,
+  "version": 2,
   "synthetic": {
     "sizeM": 800,
     "base": 40,

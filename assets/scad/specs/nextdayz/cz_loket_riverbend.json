@@ -2,7 +2,7 @@
   "id": "cz_loket_riverbend",
   "region": "bohemia",
   "seed": 817,
-  "version": 7,
+  "version": 8,
   "gameplay": {
     "controls": "assets/scad/specs/nextdayz/cz_loket_controls.scad",
     "buildingBudget": 108,

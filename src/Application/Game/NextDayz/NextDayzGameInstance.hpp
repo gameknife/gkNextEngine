@@ -18,8 +18,6 @@
 #include "Application/Game/NextDayz/Data/DeterministicRng.hpp"
 #include "Application/Game/NextDayz/Audio/NextDayzAudio.hpp"
 #include "Application/Game/NextDayz/Combat/CombatEffects.hpp"
-#include "Application/Game/NextDayz/Combat/CombatSystem.hpp"
-#include "Application/Game/NextDayz/Combat/NoiseSystem.hpp"
 #include "Application/Game/NextDayz/Data/LootTables.hpp"
 #include "Application/Game/NextDayz/Debugger/NextDayzDebugger.hpp"
 #include "Application/Game/NextDayz/Inventory/Inventory.hpp"
@@ -30,12 +28,10 @@
 #include "Application/Game/NextDayz/Player/SurvivalSystem.hpp"
 #include "Application/Game/NextDayz/Weapons/WeaponSystem.hpp"
 #include "Application/Game/NextDayz/World/TimeSystem.hpp"
-#include "Application/Game/NextDayz/World/WorldAnchorRegistry.hpp"
-#include "Application/Game/NextDayz/World/ZombieSpawnDirector.hpp"
+#include "Application/Game/NextDayz/Sim/WorldSim.hpp"
 #include "Application/Game/NextDayz/Zombies/ZombieRigVisual.hpp"
 #include "Application/Game/NextDayz/Zombies/ZombieVisualPool.hpp"
 #include "Application/Game/NextDayz/UI/NextDayzHUD.hpp"
-#include "Gameplay/AI/NavGrid.h"
 #include "Gameplay/Rig/RigInstance.h"
 #include "Application/Game/NextDayz/World/Campaign.hpp"
 #include "Application/Game/NextDayz/World/ExpeditionMaps.hpp"
@@ -144,15 +140,9 @@ private:
     void ApplyValidationLoadout();
     void CreateZombieVisuals();
     void SyncZombieVisuals(float deltaSeconds = 0.0f);
-    void ConfigureZombieSpawnPoints();
-    void BuildZombieNavigation(bool background = false);
-    void UpdateZombieNavigation();
-    struct FZombieNavigationBuild
-    {
-        NextGameplay::FNavGrid grid;
-        double elapsedMs = 0.0;
-    };
-    void ApplyZombieNavigation(FZombieNavigationBuild result);
+    void BuildZombieNavigation();
+    // This client's survivor as the world sees it (position, gaze, lantern, crouch).
+    NextDayz::FSurvivorPresence LocalSurvivor() const;
     struct FNavigationFrameStats
     {
         std::array<uint32_t, 1001> histogram{};
@@ -244,21 +234,12 @@ private:
     NextDayz::FContainerId lootDestination_ = 0;
     NextDayz::EEquipSlot lootEquipSlot_ = NextDayz::EEquipSlot::None;
     std::optional<NextDayz::FGridPlacement> lootPlacement_;
-    NextDayz::WorldAnchorRegistry worldAnchors_;
-    NextDayz::ZombieSystem zombies_;
-    NextDayz::CombatSystem combat_{zombies_};
+    // The map's authoritative world (infected, noise, anchors, navigation).
+    // This client's survivor is kLocalPlayerTargetId in it.
+    NextDayz::WorldSim world_;
     NextDayz::CombatEffects effects_;
     NextDayz::NextDayzAudio audio_;
-    NextDayz::NoiseSystem noise_;
-    NextDayz::ZombieSpawnDirector zombieSpawns_;
     NextDayz::ZombieVisualPool zombieVisuals_;
-    NextGameplay::FNavGrid zombieNavGrid_;
-    NextGameplay::FNavGrid zombieNavSpare_;
-    std::future<FZombieNavigationBuild> zombieNavBuild_;
-    glm::vec3 zombieNavCenter_{};
-    uint64_t zombieNavBuildCount_ = 0;
-    double zombieNavBuildMs_ = 0.0;
-    double zombieNavApplyPeakMs_ = 0.0;
     bool validationNavProfile_ = false;
     FNavigationFrameStats navBuildFrames_{};
     FNavigationFrameStats navIdleFrames_{};

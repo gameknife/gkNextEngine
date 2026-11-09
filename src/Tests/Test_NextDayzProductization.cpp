@@ -25,6 +25,7 @@
 #include "Combat/NoiseSystem.hpp"
 #include "Zombies/ZombieSystem.hpp"
 #include "World/ZombieSpawnDirector.hpp"
+#include "Sim/WorldSim.hpp"
 #include "Zombies/ZombieVisualPool.hpp"
 #include "UI/Localization.hpp"
 
@@ -1846,4 +1847,40 @@ TEST_CASE("NextDayz automatic container moves merge before asking for another re
         }
         REQUIRE(inventory.CountOf("ammo_545") == targetCount + 5);
     }
+}
+
+TEST_CASE("NextDayz world sim hunts and strikes the right survivor among several",
+          "[NextDayz][Productization][Zombie][Multiplayer]")
+{
+    using namespace NextDayz;
+    WorldSim world;
+    world.Configure(FZombieConfig{});
+    world.ResetPopulation(7);
+
+    // Two survivors far apart, both looking north.
+    world.UpsertSurvivor({1, {0.0f, 0.0f, 0.0f}, {0.0f, 1.6f, 0.0f}, {0.0f, 0.0f, 1.0f}, true, 1.0f});
+    world.UpsertSurvivor({2, {300.0f, 0.0f, 0.0f}, {300.0f, 1.6f, 0.0f}, {0.0f, 0.0f, 1.0f}, true, 1.0f});
+    REQUIRE(world.Survivors().size() == 2);
+    world.UpsertSurvivor({2, {300.0f, 0.0f, 0.0f}, {300.0f, 1.6f, 0.0f}, {0.0f, 0.0f, 1.0f}, true, 1.0f});
+    REQUIRE(world.Survivors().size() == 2);
+
+    // Something just in front of either survivor is in view; behind them is not.
+    CHECK(world.VisibleToAnySurvivor({300.0f, 1.0f, 20.0f}));
+    CHECK_FALSE(world.VisibleToAnySurvivor({300.0f, 1.0f, -20.0f}));
+    CHECK_FALSE(world.VisibleToAnySurvivor({150.0f, 1.0f, -20.0f}));
+
+    // An infected right next to survivor 2, facing it.
+    const FZombieHandle handle = world.zombies.Spawn(EZombieProfile::Civilian, {300.0f, 0.0f, -1.0f});
+    world.zombies.Resolve(handle)->forward = {0.0f, 0.0f, 1.0f};
+    world.TickInfected(0.1f);
+    REQUIRE(world.zombies.Resolve(handle)->targetId == 2);
+    world.TickInfected(0.45f);
+    const auto hits = world.ConsumeSurvivorHits();
+    REQUIRE(hits.size() == 1);
+    CHECK(hits.front().targetId == 2);
+
+    // A survivor that leaves is no longer a target or a viewer.
+    world.RemoveSurvivor(2);
+    CHECK(world.FindSurvivor(2) == nullptr);
+    CHECK_FALSE(world.VisibleToAnySurvivor({300.0f, 1.0f, 20.0f}));
 }

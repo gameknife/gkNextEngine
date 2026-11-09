@@ -138,11 +138,15 @@ void NextDayzGameInstance::OnInit()
     rig_.Configure(config_.Animation, config_.Weapon.TpsWeaponScale);
     actions_.Configure(config_.Action);
     survival_.Configure(config_.Survival);
-    zombies_.Configure(config_.Zombie);
+    world_.Configure(config_.Zombie);
+    world_.SetRayCast([this](const glm::vec3& origin, const glm::vec3& direction)
+    {
+        return GetEngine().GetScene().GetCPUAccelerationStructure().RayCastInCPU(origin, direction);
+    });
     audio_.SetEngine(&GetEngine());
     weapons_.SetTargetTracer([this](const glm::vec3& origin, const glm::vec3& direction, float maxDistance)
     {
-        return combat_.TraceHitboxes(origin, direction, maxDistance);
+        return world_.combat.TraceHitboxes(origin, direction, maxDistance);
     });
 
     if (!rig_.LoadRig(kSoldierRig))
@@ -280,7 +284,7 @@ void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
                            validationNavProfile_ = validationNavProfile_ && GOption->AgentValidation;
                            navBuildFrames_ = {};
                            navIdleFrames_ = {};
-                           zombieNavApplyPeakMs_ = 0.0;
+                           world_.ResetNavigationStats();
                            navProfileFrame_ = std::chrono::steady_clock::now();
                        });
     cvars.RegisterBool("nextdayz.validation.addBackpack", false, &validationAddBackpack_, NextCVar::ECVarFlags::None,
@@ -327,11 +331,11 @@ void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
                        "Agent-only deterministic combat commit", [this, validationReady]()
                        {
                            if (!validationFinishZombie_ || !validationReady()) return;
-                           for (const NextDayz::FZombieRuntime& zombie : zombies_.Slots())
+                           for (const NextDayz::FZombieRuntime& zombie : world_.zombies.Slots())
                            {
                                if (zombie.active && zombie.state != NextDayz::EZombieState::Dead)
                                {
-                                   combat_.ProcessMelee(++validationAttackSequence_, zombie.handle, 200.0f,
+                                   world_.combat.ProcessMelee(++validationAttackSequence_, zombie.handle, 200.0f,
                                                         NextDayz::EHitZone::Head);
                                    break;
                                }
@@ -751,13 +755,9 @@ void NextDayzGameInstance::OnSceneLoaded()
 {
     if (!loadingMapPath_.empty()) campaignMap_ = std::exchange(loadingMapPath_, "");
     debugger_.OnSessionStart("scene loaded");
-    worldAnchors_.Scan(GetEngine());
-    zombies_.Reset();
-    combat_.Reset();
-    noise_.Reset();
+    world_.anchors.Scan(GetEngine());
+    world_.ResetPopulation(sessionRng_.Derive(0x5A4F4D42ULL).Seed());
     zombieVisuals_.Reset();
-    zombieSpawns_.Reset(sessionRng_.Derive(0x5A4F4D42ULL).Seed());
-    ConfigureZombieSpawnPoints();
     // Loot scan first so the spawn can be derived from real supply ground height.
     loot_.OnSceneLoaded(GetEngine().GetScene(), CollectLootSpots());
 
@@ -804,7 +804,7 @@ void NextDayzGameInstance::OnSceneUnloaded()
 {
     // The worker samples this scene's immutable geometry and terrain. Join it
     // before either is destroyed or a different scene is installed.
-    if (zombieNavBuild_.valid()) zombieNavBuild_.get();
+    world_.JoinNavigation();
     if (sceneReady_ && !pendingCampaign_ && !switchingCampaignContext_)
     {
         SaveCampaign();
@@ -818,17 +818,14 @@ void NextDayzGameInstance::OnSceneUnloaded()
     weapons_.OnSceneUnloaded();
     effects_.OnSceneUnloaded();
     loot_.OnSceneUnloaded();
-    worldAnchors_.Clear();
+    world_.anchors.Clear();
     inventory_.Clear();
     actions_.Reset();
     survival_.Reset();
-    zombies_.Reset();
-    combat_.Reset();
-    noise_.Reset();
-    zombieSpawns_.Reset(sessionRng_.Derive(0x5A4F4D42ULL).Seed());
+    world_.ResetPopulation(sessionRng_.Derive(0x5A4F4D42ULL).Seed());
+    world_.ClearSurvivors();
+    world_.ClearNavigation();
     zombieVisuals_.Reset();
-    zombieNavGrid_ = {};
-    zombieNavSpare_ = {};
     zombieVisualOwners_.clear();
     zombieRigVisuals_.clear();
     zombieAudio_.clear();
@@ -838,7 +835,7 @@ void NextDayzGameInstance::OnSceneUnloaded()
 
 void NextDayzGameInstance::OnDestroy()
 {
-    if (zombieNavBuild_.valid()) zombieNavBuild_.get();
+    world_.JoinNavigation();
     if (sceneReady_) SaveCampaign();
     player_.Destroy();
 }
@@ -850,7 +847,7 @@ void NextDayzGameInstance::OnTick(double deltaSeconds)
         const auto now = std::chrono::steady_clock::now();
         const double frameMs = std::chrono::duration<double, std::milli>(now - navProfileFrame_).count();
         navProfileFrame_ = now;
-        (zombieNavBuild_.valid() ? navBuildFrames_ : navIdleFrames_).Record(frameMs);
+        (world_.NavigationBuilding() ? navBuildFrames_ : navIdleFrames_).Record(frameMs);
     }
     debugger_.BeginFrame();
     TickMapAuthoring();
@@ -1049,7 +1046,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     {
         if (const NextDayz::FWeaponDef* definition = NextDayz::FindWeaponDef(hit.weaponId))
         {
-            combat_.ProcessHit(hit, definition->damageFalloffDistance);
+            world_.combat.ProcessHit(hit, definition->damageFalloffDistance);
         }
     }
     HandleDamageEvents();
@@ -1086,7 +1083,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
             audio_.MeleeSwing();
             if (const NextDayz::FWeaponDef* definition = NextDayz::FindWeaponDef(shot.weaponId))
             {
-                noise_.Emit(player_.Position(), definition->noiseRadius, 0.5f, NextDayz::ENoiseType::Melee);
+                world_.noise.Emit(player_.Position(), definition->noiseRadius, 0.5f, NextDayz::ENoiseType::Melee);
             }
             continue;
         }
@@ -1108,68 +1105,24 @@ void NextDayzGameInstance::SimulateFrame(float dt)
             const NextDayz::ENoiseType noiseType = shotFamily == NextDayz::EWeaponFamily::Shotgun ? NextDayz::ENoiseType::Shotgun
                 : shotFamily == NextDayz::EWeaponFamily::Sidearm || shotFamily == NextDayz::EWeaponFamily::Smg
                     ? NextDayz::ENoiseType::Pistol : NextDayz::ENoiseType::Rifle;
-            noise_.Emit(player_.Position(), shotWeapon->noiseRadius * (shot.suppressed ? 0.25f : 1.0f), 1.0f, noiseType);
+            world_.noise.Emit(player_.Position(), shotWeapon->noiseRadius * (shot.suppressed ? 0.25f : 1.0f), 1.0f, noiseType);
         }
     }
 
-    const auto visibleFromPlayer = [this](const glm::vec3& position)
-    {
-        const glm::vec3 delta = position - player_.EyePosition();
-        const float distance = glm::length(delta);
-        return distance > 0.01f && distance < 150.0f && glm::dot(delta / distance, player_.Forward()) > 0.45f;
-    };
+    // The world sees this client's survivor as it stands after its own move.
+    world_.UpsertSurvivor(LocalSurvivor());
     section.emplace(timers, ETimer::SpawnDirector);
-    UpdateZombieNavigation();
-    zombieSpawns_.Update(dt, player_.Position(), zombies_, visibleFromPlayer,
-                         [this](const glm::vec3& point)
-                         {
-                             return !zombieNavGrid_.IsBuilt() || zombieNavGrid_.IsWalkable(point);
-                         });
-    const auto lineOfSight = [this](const glm::vec3& from, const glm::vec3& to)
-    {
-        const glm::vec3 delta = to - from;
-        const float distance = glm::length(delta);
-        if (distance <= 0.01f)
-        {
-            return true;
-        }
-        bool clear = true;
-        GetEngine().RayCast(from, delta / distance, [&](Assets::RayCastResult result)
-        {
-            if (result.Hit && result.T < distance - 0.35f)
-            {
-                clear = false;
-            }
-            return true;
-        });
-        return clear;
-    };
-    const auto resolvePath = [this](const glm::vec3& from, const glm::vec3& to)
-    {
-        if (!zombieNavGrid_.IsBuilt())
-        {
-            return std::vector<glm::vec3>{to};
-        }
-        return zombieNavGrid_.FindPath(from, to, from.y, config_.Zombie.MaxPathExpansions);
-    };
+    world_.TickSpawns(dt);
     const float zombieDt = dt * knobs.zombieTimeScale;
-    auto& collision = GetEngine().GetScene().GetCPUAccelerationStructure();
-    const auto resolveMovement = [this, &collision](const glm::vec3& from, const glm::vec3& to)
-    {
-        const glm::vec3 result = NextDayz::ResolveZombieMovement(from, to, config_.Zombie,
-            [&collision](const glm::vec3& origin, const glm::vec3& direction)
-            {
-                return collision.RayCastInCPU(origin, direction);
-            });
-        // Keep the semantic water veto even for close-range steering/pushes.
-        return !zombieNavGrid_.IsBuilt() || zombieNavGrid_.IsWalkable(result) ? result : from;
-    };
     section.emplace(timers, ETimer::InfectedAi);
-    zombies_.Update(zombieDt, player_.Position(), player_.Forward(), survival_.IsAlive(),
-                    lineOfSight, noise_.Events(), resolvePath, resolveMovement);
+    world_.TickInfected(zombieDt);
     section.emplace(timers, ETimer::Survival);
-    for (const NextDayz::FPlayerDamageRequest& damage : zombies_.ConsumePlayerDamageRequests())
+    for (const NextDayz::FPlayerDamageRequest& damage : world_.ConsumeSurvivorHits())
     {
+        if (damage.targetId != NextDayz::kLocalPlayerTargetId)
+        {
+            continue;
+        }
         const bool invulnerable = (validationInvulnerable_ && GOption->AgentValidation) || knobs.god;
         const int woundsBefore = survival_.Snapshot().bleedingWounds;
         const bool landed = !invulnerable &&
@@ -1192,7 +1145,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     {
         SetMouseCaptured(false);
     }
-    noise_.Update(dt);
+    world_.noise.Update(dt);
     section.emplace(timers, ETimer::InfectedVisuals);
     SyncZombieVisuals(zombieDt);
     section.emplace(timers, ETimer::Presentation);
@@ -1204,9 +1157,9 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     section.emplace(timers, ETimer::World);
     hoveredWell_ = {};
     float bestWellDot = 0.45f;
-    for (const NextDayz::FWorldAnchorHandle handle : worldAnchors_.Find(NextDayz::EWorldAnchorType::Well))
+    for (const NextDayz::FWorldAnchorHandle handle : world_.anchors.Find(NextDayz::EWorldAnchorType::Well))
     {
-        const NextDayz::FWorldAnchor* well = worldAnchors_.Resolve(handle);
+        const NextDayz::FWorldAnchor* well = world_.anchors.Resolve(handle);
         if (!well)
         {
             continue;
@@ -1427,7 +1380,7 @@ bool NextDayzGameInstance::OnRenderUI()
     ctx.weak = survival_.IsWeak();
     ctx.lanternLit = lanternLit_;
     ctx.lanternMinutes = lanternSeconds_ / 60.0f;
-    ctx.kills = zombies_.KillCount();
+    ctx.kills = world_.zombies.KillCount();
     ctx.hasCompass = inventory_.HasTool(NextDayz::EItemTool::Compass);
     ctx.hasMap = inventory_.HasTool(NextDayz::EItemTool::Map);
     ctx.yawRadians = player_.Yaw();
@@ -1437,7 +1390,7 @@ bool NextDayzGameInstance::OnRenderUI()
     ctx.notifications = notifications_;
     if (showMap_)
     {
-        for (const NextDayz::FWorldAnchor& anchor : worldAnchors_.All())
+        for (const NextDayz::FWorldAnchor& anchor : world_.anchors.All())
         {
             if (anchor.type == NextDayz::EWorldAnchorType::Poi)
             {
@@ -1665,9 +1618,9 @@ void NextDayzGameInstance::InjectLootCatalog(std::vector<Assets::Model>& models,
 std::vector<NextDayz::FLootSpotSeed> NextDayzGameInstance::CollectLootSpots() const
 {
     std::vector<NextDayz::FLootSpotSeed> spots;
-    for (const NextDayz::FWorldAnchorHandle handle : worldAnchors_.Find(NextDayz::EWorldAnchorType::Loot))
+    for (const NextDayz::FWorldAnchorHandle handle : world_.anchors.Find(NextDayz::EWorldAnchorType::Loot))
     {
-        if (const NextDayz::FWorldAnchor* anchor = worldAnchors_.Resolve(handle))
+        if (const NextDayz::FWorldAnchor* anchor = world_.anchors.Resolve(handle))
         {
             const std::optional<NextDayz::ELootProfile> profile = NextDayz::ParseLootProfile(anchor->profile);
             spots.push_back({anchor->worldPos, profile.value_or(NextDayz::ELootProfile::Residential), anchor->item,
@@ -2078,7 +2031,7 @@ void NextDayzGameInstance::UpdateFirecrackers(float deltaSeconds)
         cracker.timer -= deltaSeconds;
         if (cracker.timer <= 0.0f)
         {
-            noise_.Emit(cracker.position, 75.0f, 1.3f, NextDayz::ENoiseType::Rifle, 2.0f);
+            world_.noise.Emit(cracker.position, 75.0f, 1.3f, NextDayz::ENoiseType::Rifle, 2.0f);
             audio_.Firecracker(cracker.position);
             effects_.WorldImpact(cracker.position + glm::vec3(0.0f, 0.1f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
             ++cracker.bangs;
@@ -2097,19 +2050,10 @@ void NextDayzGameInstance::UpdateWorldPressure()
     // Darkness hides you, a crouch hides you more, fog hides everything; a lit
     // lantern at night is a beacon.
     const float night = 1.0f - time_.Daylight();
-    float sight = glm::mix(1.0f, 0.55f, night);
-    if (lanternLit_)
-    {
-        sight = std::max(sight, glm::mix(1.0f, 1.4f, night));
-    }
-    if (player_.LocomotionState().actualStance == NextDayz::EPlayerStance::Crouched)
-    {
-        sight *= 0.7f;
-    }
-    sight *= glm::mix(1.0f, 0.7f, time_.Fog());
-    zombies_.SetSightScale(sight);
+    // The lantern and crouch are per survivor (LocalSurvivor).
+    world_.SetWorldSightScale(glm::mix(1.0f, 0.55f, night) * glm::mix(1.0f, 0.7f, time_.Fog()));
     // More of them walk the night.
-    zombieSpawns_.SetGlobalCap(night > 0.6f ? 48 : 40);
+    world_.spawns.SetGlobalCap(night > 0.6f ? 48 : 40);
     time_.SetLanternLight(lanternLit_ ? 1.0f : 0.0f);
 }
 
@@ -2179,152 +2123,33 @@ void NextDayzGameInstance::ApplyValidationLoadout()
     }
 }
 
-void NextDayzGameInstance::BuildZombieNavigation(bool background)
+NextDayz::FSurvivorPresence NextDayzGameInstance::LocalSurvivor() const
 {
-    Assets::Scene& scene = GetEngine().GetScene();
-    NextGameplay::FNavGridSettings settings;
-    settings.cellSize = config_.Zombie.NavigationCellSize;
-    // Loading may use more cores; the live window update keeps a small budget.
-    settings.maxSamplingWorkers = background ? config_.Zombie.NavigationWorkers : 8;
-    settings.agentRadius = config_.Zombie.ControllerRadius;
-    settings.maxSlopeAngle = 48.0f;
-    settings.clearanceHeight = config_.Zombie.ControllerHeight;
-    settings.maxStepHeight = config_.Zombie.MaxStepHeight;
-    settings.sampleCeiling = 100.0f;
-    settings.floorHeightTolerance = 2.0f;
-    const auto* map = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_);
-    const float halfSize = config_.Zombie.NavigationHalfSize;
-    zombieNavCenter_ = player_.Position();
-    // Keep lattice coordinates stable as the window moves, including doorways
-    // sitting on a cell boundary. Existing waypoints remain world positions.
-    zombieNavCenter_.x = std::floor(zombieNavCenter_.x / settings.cellSize) * settings.cellSize;
-    zombieNavCenter_.z = std::floor(zombieNavCenter_.z / settings.cellSize) * settings.cellSize;
-    settings.worldMin = {zombieNavCenter_.x - halfSize, 0.0f, zombieNavCenter_.z - halfSize};
-    settings.worldMax = {zombieNavCenter_.x + halfSize, 0.0f, zombieNavCenter_.z + halfSize};
-    Runtime::TerrainComponent* terrain = nullptr;
-    for (Runtime::TerrainComponent* candidate : scene.Components<Runtime::TerrainComponent>())
+    NextDayz::FSurvivorPresence survivor;
+    survivor.id = NextDayz::kLocalPlayerTargetId;
+    survivor.feet = player_.Position();
+    survivor.eye = player_.EyePosition();
+    survivor.forward = player_.Forward();
+    survivor.alive = survival_.IsAlive();
+    // Night and fog are world-wide (UpdateWorldPressure); a lit lantern makes
+    // this survivor a beacon and a crouch hides it.
+    const float night = 1.0f - time_.Daylight();
+    const float darkness = glm::mix(1.0f, 0.55f, night);
+    survivor.sightScale = lanternLit_ ? std::max(darkness, glm::mix(1.0f, 1.4f, night)) / darkness : 1.0f;
+    if (player_.LocomotionState().actualStance == NextDayz::EPlayerStance::Crouched)
     {
-        terrain = candidate;
-        break;
+        survivor.sightScale *= 0.7f;
     }
-    if (terrain && map)
-    {
-        float lowest = std::numeric_limits<float>::max();
-        float highest = -lowest;
-        for (int y = 0; y <= 12; ++y)
-            for (int x = 0; x <= 12; ++x)
-            {
-                const float height = terrain->SampleHeight(settings.worldMin.x + x * halfSize / 6.0f,
-                                                            settings.worldMin.z + y * halfSize / 6.0f);
-                lowest = std::min(lowest, height);
-                highest = std::max(highest, height);
-            }
-        settings.sampleCeiling = highest + 60.0f;
-        settings.floorHeightTolerance = highest - lowest + 12.0f;
-    }
-    if (terrain)
-    {
-        settings.terrain = terrain;
-        const auto collectTerrainIds = [&](auto&& self, const Assets::Node* node) -> void
-        {
-            if (!node) return;
-            settings.terrainInstanceIds.push_back(node->GetInstanceId());
-            for (const auto& child : node->Children()) self(self, child.get());
-        };
-        collectTerrainIds(collectTerrainIds, terrain->GetOwner());
-        const float waterProbeHeight = settings.sampleCeiling - settings.floorSearchHeight;
-        settings.sampleFloorHeight = [terrain, waterProbeHeight](float x, float z)
-        {
-            // Over water retain the top deck, including bridges several
-            // metres above the river. Land samples must start below roofs.
-            return terrain->IsWater(x, z)
-                ? waterProbeHeight
-                : terrain->SampleHeight(x, z);
-        };
-        settings.isUnwalkable = [terrain](const glm::vec3& point)
-        {
-            return terrain->IsWater(point.x, point.z) &&
-                   point.y < terrain->WaterSurface(point.x, point.z) + 0.05f;
-        };
-    }
-    auto* collision = &scene.GetCPUAccelerationStructure();
-    // The active grid is immutable until this single worker has completed;
-    // scene unload also joins it. Reuse the other buffer entirely on the
-    // worker, including allocation/copying and disposal of old cell storage.
-    const auto* previous = background ? &zombieNavGrid_ : nullptr;
-    auto build = [collision, settings, previous, grid = std::move(zombieNavSpare_)]() mutable
-    {
-        const auto buildStart = std::chrono::steady_clock::now();
-        if (previous)
-        {
-            grid.BuildShifted(*collision, settings, *previous);
-        }
-        else
-        {
-            grid.Build(*collision, settings);
-        }
-        const double buildMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - buildStart).count();
-        SPDLOG_INFO("[NextDayz] infected navigation ready: {}x{} cells at {:.2f} m, sampled {} cells ({} geometry), {} workers in {:.1f} ms",
-                    grid.GetWidth(), grid.GetHeight(), grid.GetCellSize(), grid.SampledCellCount(),
-                    grid.GeometrySampledCellCount(), settings.maxSamplingWorkers, buildMs);
-        return FZombieNavigationBuild{std::move(grid), buildMs};
-    };
-    if (background)
-    {
-        zombieNavBuild_ = std::async(std::launch::async, std::move(build));
-    }
-    else
-    {
-        ApplyZombieNavigation(build());
-    }
+    return survivor;
 }
 
-void NextDayzGameInstance::ApplyZombieNavigation(FZombieNavigationBuild result)
+void NextDayzGameInstance::BuildZombieNavigation()
 {
-    const auto start = std::chrono::steady_clock::now();
-    std::swap(zombieNavGrid_, result.grid);
-    zombieNavSpare_ = std::move(result.grid);
-    zombieNavBuildMs_ = result.elapsedMs;
-    ++zombieNavBuildCount_;
-    zombieNavApplyPeakMs_ = std::max(zombieNavApplyPeakMs_,
-        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
-}
-
-void NextDayzGameInstance::UpdateZombieNavigation()
-{
-    if (zombieNavBuild_.valid())
-    {
-        if (zombieNavBuild_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
-        ApplyZombieNavigation(zombieNavBuild_.get());
-    }
-    const glm::vec3 offset = player_.Position() - zombieNavCenter_;
-    if (std::max(std::abs(offset.x), std::abs(offset.z)) >= config_.Zombie.NavigationRecenterDistance)
-    {
-        // Retain the current grid throughout the build so a chase does not
-        // pause just because the player crossed a navigation window boundary.
-        BuildZombieNavigation(true);
-    }
-}
-
-void NextDayzGameInstance::ConfigureZombieSpawnPoints()
-{
-    std::vector<NextDayz::FZombieSpawnPoint> zombiePoints;
-    for (const NextDayz::FWorldAnchorHandle handle : worldAnchors_.Find(NextDayz::EWorldAnchorType::Zombie))
-    {
-        const NextDayz::FWorldAnchor* anchor = worldAnchors_.Resolve(handle);
-        if (!anchor)
-        {
-            continue;
-        }
-        NextDayz::EZombieProfile profile = NextDayz::EZombieProfile::Civilian;
-        if (anchor->profile == "military") profile = NextDayz::EZombieProfile::Military;
-        else if (anchor->profile == "industrial") profile = NextDayz::EZombieProfile::Industrial;
-        else if (anchor->profile == "wilderness") profile = NextDayz::EZombieProfile::Wilderness;
-        NextDayz::FZombieSpawnPoint point{anchor->worldPos, profile};
-        point.groupSize = anchor->group;
-        zombiePoints.push_back(point);
-    }
-    zombieSpawns_.SetPoints(std::move(zombiePoints));
+    world_.UpsertSurvivor(LocalSurvivor());
+    // Geographic maps fit the sampling band to their terrain; the legacy scene
+    // keeps its fixed band.
+    const bool geographic = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_) != nullptr;
+    world_.BuildNavigation(GetEngine().GetScene(), false, geographic);
 }
 
 void NextDayzGameInstance::ResetSession()
@@ -2346,11 +2171,7 @@ void NextDayzGameInstance::ResetSession()
     survival_.Reset();
     StartNewLife();
     weapons_.ResetRuntime();
-    zombies_.Reset();
-    combat_.Reset();
-    noise_.Reset();
-    zombieSpawns_.Reset(sessionRng_.Derive(0x5A4F4D42ULL).Seed());
-    ConfigureZombieSpawnPoints();
+    world_.ResetPopulation(sessionRng_.Derive(0x5A4F4D42ULL).Seed());
     zombieVisuals_.Reset();
     effects_.Reset();
     loot_.ResetSession(GetEngine());
@@ -2387,7 +2208,7 @@ std::string NextDayzGameInstance::CurrentObjective() const
         {
             const NextDayz::FWorldAnchor* nearest = nullptr;
             float distance = std::numeric_limits<float>::max();
-            for (const auto& anchor : worldAnchors_.All())
+            for (const auto& anchor : world_.anchors.All())
             {
                 if (anchor.type != NextDayz::EWorldAnchorType::Extraction) continue;
                 const float candidate = glm::distance(player_.Position(), anchor.worldPos);
@@ -2432,11 +2253,11 @@ void NextDayzGameInstance::CreateZombieVisuals()
 {
     Assets::Scene& scene = GetEngine().GetScene();
     zombieRigVisuals_.clear();
-    zombieRigVisuals_.resize(zombies_.Capacity());
-    zombieVisualOwners_.assign(zombies_.Capacity(), {});
+    zombieRigVisuals_.resize(world_.zombies.Capacity());
+    zombieVisualOwners_.assign(world_.zombies.Capacity(), {});
     if (zombieRigLoaded_ && !zombieRigPartModelIds_.empty())
     {
-        for (size_t index = 0; index < zombies_.Capacity(); ++index)
+        for (size_t index = 0; index < world_.zombies.Capacity(); ++index)
         {
             NextGameplay::FRigInstanceDesc desc;
             desc.namePrefix = fmt::format("nd_infected_{}/rig", index);
@@ -2466,7 +2287,7 @@ void NextDayzGameInstance::CreateZombieVisuals()
 
 void NextDayzGameInstance::SyncZombieVisuals(float deltaSeconds)
 {
-    const auto& slots = zombies_.Slots();
+    const auto& slots = world_.zombies.Slots();
     // The infected look at, and reach for, the player's chest.
     const glm::vec3 lookTarget = player_.EyePosition() - glm::vec3(0.0f, 0.25f, 0.0f);
     std::array<NextDayz::FHitCapsule, NextDayz::ZombieRigVisual::kHitCapsuleCount> standing{};
@@ -2480,7 +2301,7 @@ void NextDayzGameInstance::SyncZombieVisuals(float deltaSeconds)
         {
             if (owner.IsValid())
             {
-                combat_.ClearHitboxes(owner);
+                world_.combat.ClearHitboxes(owner);
                 zombieVisuals_.Release(owner);
                 owner = {};
             }
@@ -2494,7 +2315,7 @@ void NextDayzGameInstance::SyncZombieVisuals(float deltaSeconds)
         {
             if (owner.IsValid())
             {
-                combat_.ClearHitboxes(owner);
+                world_.combat.ClearHitboxes(owner);
                 zombieVisuals_.Release(owner);
             }
             owner = zombie.handle;
@@ -2510,16 +2331,16 @@ void NextDayzGameInstance::SyncZombieVisuals(float deltaSeconds)
         }
         if (zombie.state == NextDayz::EZombieState::Dead)
         {
-            combat_.ClearHitboxes(zombie.handle);
+            world_.combat.ClearHitboxes(zombie.handle);
         }
         else if (visual)
         {
-            combat_.SetHitboxes(zombie.handle, visual->Hitboxes());
+            world_.combat.SetHitboxes(zombie.handle, visual->Hitboxes());
         }
         else
         {
             const size_t count = NextDayz::ZombieRigVisual::StandingHitboxes(zombie.position, zombie.forward, standing);
-            combat_.SetHitboxes(zombie.handle, std::span<const NextDayz::FHitCapsule>(standing.data(), count));
+            world_.combat.SetHitboxes(zombie.handle, std::span<const NextDayz::FHitCapsule>(standing.data(), count));
         }
     }
     GetEngine().GetScene().MarkTransformDirty();
@@ -2527,7 +2348,7 @@ void NextDayzGameInstance::SyncZombieVisuals(float deltaSeconds)
 
 void NextDayzGameInstance::HandleDamageEvents()
 {
-    for (const NextDayz::FDamageEvent& damage : combat_.ConsumeDamageEvents())
+    for (const NextDayz::FDamageEvent& damage : world_.combat.ConsumeDamageEvents())
     {
         debugger_.RecordDamage(damage);
         if (damage.target.index < zombieRigVisuals_.size() && zombieRigVisuals_[damage.target.index].IsBound())
@@ -2542,7 +2363,7 @@ void NextDayzGameInstance::HandleDamageEvents()
         }
         if (damage.killed)
         {
-            if (const NextDayz::FZombieRuntime* zombie = zombies_.Resolve(damage.target))
+            if (const NextDayz::FZombieRuntime* zombie = world_.zombies.Resolve(damage.target))
             {
                 // Under the chest once it has fallen: behind the feet, ahead, or where it knelt.
                 const float along = zombie->death == NextDayz::EZombieDeath::Back ? -0.7f
@@ -2591,7 +2412,7 @@ void NextDayzGameInstance::HandleDamageEvents()
 
 void NextDayzGameInstance::UpdateZombieAudio(float deltaSeconds)
 {
-    const auto& slots = zombies_.Slots();
+    const auto& slots = world_.zombies.Slots();
     zombieAudio_.resize(slots.size());
     for (size_t index = 0; index < slots.size(); ++index)
     {
@@ -2656,11 +2477,11 @@ const NextDayz::FZombieRuntime* NextDayzGameInstance::FocusZombie() const
     {
         return zombie;
     }
-    if (const NextDayz::FZombieRuntime* zombie = zombies_.Resolve(validationZombie_))
+    if (const NextDayz::FZombieRuntime* zombie = world_.zombies.Resolve(validationZombie_))
     {
         return zombie;
     }
-    for (const NextDayz::FZombieRuntime& zombie : zombies_.Slots())
+    for (const NextDayz::FZombieRuntime& zombie : world_.zombies.Slots())
     {
         if (zombie.active)
         {
@@ -2680,7 +2501,7 @@ void NextDayzGameInstance::ValidationHitZombie(NextDayz::EHitZone zone)
         {
             return;
         }
-        for (const NextDayz::FHitCapsule& capsule : combat_.Hitboxes(zombie.handle))
+        for (const NextDayz::FHitCapsule& capsule : world_.combat.Hitboxes(zombie.handle))
         {
             if (capsule.zone != zone)
             {
@@ -2692,7 +2513,7 @@ void NextDayzGameInstance::ValidationHitZombie(NextDayz::EHitZone zone)
             const glm::vec3 target = (capsule.a + capsule.b) * 0.5f;
             const glm::vec3 origin = target + zombie.forward * 2.5f;
             const glm::vec3 direction = glm::normalize(target - origin);
-            std::optional<NextDayz::FHitboxHit> hit = combat_.TraceHitboxes(origin, direction, 400.0f);
+            std::optional<NextDayz::FHitboxHit> hit = world_.combat.TraceHitboxes(origin, direction, 400.0f);
             if (!hit || hit->zone != zone || hit->zombie != zombie.handle)
             {
                 hit = NextDayz::FHitboxHit{zombie.handle, zone, 2.5f, target, -direction};
@@ -2712,7 +2533,7 @@ void NextDayzGameInstance::ValidationHitZombie(NextDayz::EHitZone zone)
             event.impactScale = rifle->impactScale;
             event.zombie = hit->zombie;
             event.zone = hit->zone;
-            combat_.ProcessHit(event, rifle->damageFalloffDistance);
+            world_.combat.ProcessHit(event, rifle->damageFalloffDistance);
             HandleDamageEvents();
             return;
         }
@@ -2732,14 +2553,14 @@ void NextDayzGameInstance::BindDebugger()
     systems.weapons = &weapons_;
     systems.inventory = &inventory_;
     systems.loot = &loot_;
-    systems.anchors = &worldAnchors_;
-    systems.zombies = &zombies_;
-    systems.combat = &combat_;
+    systems.anchors = &world_.anchors;
+    systems.zombies = &world_.zombies;
+    systems.combat = &world_.combat;
     systems.effects = &effects_;
     systems.audio = &audio_;
-    systems.noise = &noise_;
-    systems.spawns = &zombieSpawns_;
-    systems.navGrid = &zombieNavGrid_;
+    systems.noise = &world_.noise;
+    systems.spawns = &world_.spawns;
+    systems.navGrid = &world_.Navigation();
     systems.time = &time_;
     systems.zombieVisuals = &zombieRigVisuals_;
 
@@ -2855,8 +2676,8 @@ void NextDayzGameInstance::TeleportPlayer(const glm::vec3& feet)
 
 NextDayz::FZombieHandle NextDayzGameInstance::SpawnZombieAt(NextDayz::EZombieProfile profile, const glm::vec3& feet)
 {
-    const NextDayz::FZombieHandle handle = zombies_.Spawn(profile, feet);
-    if (NextDayz::FZombieRuntime* zombie = zombies_.Resolve(handle))
+    const NextDayz::FZombieHandle handle = world_.zombies.Spawn(profile, feet);
+    if (NextDayz::FZombieRuntime* zombie = world_.zombies.Resolve(handle))
     {
         // Face the player so a fixture starts from a known pose.
         glm::vec3 toPlayer = player_.Position() - feet;
@@ -2877,7 +2698,7 @@ NextDayz::FZombieHandle NextDayzGameInstance::SpawnZombieAt(NextDayz::EZombiePro
 void NextDayzGameInstance::KillZombie(NextDayz::FZombieHandle zombie)
 {
     // Through combat like any blow, so death clips, blood, loot and the log all run.
-    if (combat_.ProcessMelee(++validationAttackSequence_, zombie, 1000.0f, NextDayz::EHitZone::Head))
+    if (world_.combat.ProcessMelee(++validationAttackSequence_, zombie, 1000.0f, NextDayz::EHitZone::Head))
     {
         HandleDamageEvents();
     }
@@ -2915,7 +2736,7 @@ void NextDayzGameInstance::ApplyDebugSelection(const std::string& selection)
     if (selection == "nearest")
     {
         const NextDayz::FZombieRuntime* nearest = nullptr;
-        for (const NextDayz::FZombieRuntime& zombie : zombies_.Slots())
+        for (const NextDayz::FZombieRuntime& zombie : world_.zombies.Slots())
         {
             if (zombie.active && zombie.state != NextDayz::EZombieState::Dead &&
                 (!nearest || glm::distance(zombie.position, player_.Position()) <
@@ -2935,9 +2756,9 @@ void NextDayzGameInstance::ApplyDebugSelection(const std::string& selection)
     switch (selection.front())
     {
     case 'z':
-        if (index >= 0 && index < static_cast<int>(zombies_.Slots().size()) && zombies_.Slots()[index].active)
+        if (index >= 0 && index < static_cast<int>(world_.zombies.Slots().size()) && world_.zombies.Slots()[index].active)
         {
-            debugger_.SelectZombie(zombies_.Slots()[index].handle);
+            debugger_.SelectZombie(world_.zombies.Slots()[index].handle);
             debugger_.RequestTab(NextDayz::Debug::ETab::Infected);
         }
         break;
@@ -3294,13 +3115,13 @@ bool NextDayzGameInstance::OnMouseButton(SDL_Event& event)
 void NextDayzGameInstance::UpdateGrass(float dt)
 {
     grassInteractors_.clear();
-    grassInteractors_.reserve(zombies_.Capacity() + 1);
+    grassInteractors_.reserve(world_.zombies.Capacity() + 1);
     const auto& locomotion = player_.LocomotionState();
     if (grassPlayerInteraction_ && survival_.IsAlive() && locomotion.onGround && !player_.IsTraversing())
         grassInteractors_.push_back({0, player_.Position(), 0.55f, 1.0f});
     if (grassZombieInteraction_)
     {
-        for (const auto& zombie : zombies_.Slots())
+        for (const auto& zombie : world_.zombies.Slots())
         {
             if (!zombie.active || zombie.state == NextDayz::EZombieState::Dead) continue;
             const uint64_t id = (uint64_t(zombie.handle.generation) << 32) | (uint64_t(zombie.handle.index) + 1);
@@ -3325,8 +3146,8 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     reg.Add("displayLoot", [this]() -> Runtime::Agent::FAgentQueryValue
     {
         int64_t count = 0;
-        for (const NextDayz::FWorldAnchorHandle handle : worldAnchors_.Find(NextDayz::EWorldAnchorType::Loot))
-            if (const auto* anchor = worldAnchors_.Resolve(handle); anchor && !anchor->item.empty()) ++count;
+        for (const NextDayz::FWorldAnchorHandle handle : world_.anchors.Find(NextDayz::EWorldAnchorType::Loot))
+            if (const auto* anchor = world_.anchors.Resolve(handle); anchor && !anchor->item.empty()) ++count;
         return count;
     });
     reg.Add("activeMapId", [this]() -> Runtime::Agent::FAgentQueryValue { return ActiveMapId(); });
@@ -3347,7 +3168,7 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
             }
         return std::string{};
     });
-    reg.Add("safeSpawns", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(worldAnchors_.Count(NextDayz::EWorldAnchorType::PlayerSafe)); });
+    reg.Add("safeSpawns", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(world_.anchors.Count(NextDayz::EWorldAnchorType::PlayerSafe)); });
     reg.Add("campaignInField", [this]() -> Runtime::Agent::FAgentQueryValue { return campaign_.inField; });
     reg.Add("campaignGold", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.gold); });
     reg.Add("campaignStorage", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.storage.size()); });
@@ -3361,24 +3182,24 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     reg.Add("signalFlares", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(inventory_.CountOf("signal_flare")); });
     reg.Add("worldSeconds", [this]() -> Runtime::Agent::FAgentQueryValue { return loot_.WorldSeconds(); });
     reg.Add("worldCooling", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(loot_.CooldownCount()); });
-    reg.Add("extractionPoints", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(worldAnchors_.Count(NextDayz::EWorldAnchorType::Extraction)); });
+    reg.Add("extractionPoints", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(world_.anchors.Count(NextDayz::EWorldAnchorType::Extraction)); });
     reg.Add("atHospitalRoofHeight", [this]() -> Runtime::Agent::FAgentQueryValue
     {
-        for (const auto& anchor : worldAnchors_.All())
+        for (const auto& anchor : world_.anchors.All())
             if (anchor.type == NextDayz::EWorldAnchorType::Extraction && anchor.profile == "gorka_hospital")
                 return player_.Position().y >= anchor.worldPos.y - 0.5f;
         return false;
     });
     reg.Add("atHospitalHelipad", [this]() -> Runtime::Agent::FAgentQueryValue
     {
-        for (const auto& anchor : worldAnchors_.All())
+        for (const auto& anchor : world_.anchors.All())
             if (anchor.type == NextDayz::EWorldAnchorType::Extraction && anchor.profile == "gorka_hospital")
                 return glm::distance(player_.Position(), anchor.worldPos) <= extractionConfig_.callRadius;
         return false;
     });
     reg.Add("atHospitalStairLanding", [this]() -> Runtime::Agent::FAgentQueryValue
     {
-        for (const auto& anchor : worldAnchors_.All())
+        for (const auto& anchor : world_.anchors.All())
             if (anchor.type == NextDayz::EWorldAnchorType::Extraction && anchor.profile == "gorka_hospital")
                 return player_.Position().y >= anchor.worldPos.y + 0.25f;
         return false;
@@ -3605,13 +3426,13 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
         return static_cast<int64_t>(loot_.Zones().size());
     });
     reg.Add("poiCount", [this]() -> Runtime::Agent::FAgentQueryValue {
-        return static_cast<int64_t>(worldAnchors_.Count(NextDayz::EWorldAnchorType::Poi));
+        return static_cast<int64_t>(world_.anchors.Count(NextDayz::EWorldAnchorType::Poi));
     });
     reg.Add("zombieCap", [this]() -> Runtime::Agent::FAgentQueryValue {
-        return static_cast<int64_t>(zombieSpawns_.GlobalCap());
+        return static_cast<int64_t>(world_.spawns.GlobalCap());
     });
     reg.Add("zombieSpawnPoints", [this]() -> Runtime::Agent::FAgentQueryValue {
-        return static_cast<int64_t>(zombieSpawns_.Points().size());
+        return static_cast<int64_t>(world_.spawns.Points().size());
     });
     reg.Add("bleeding", [this]() -> Runtime::Agent::FAgentQueryValue {
         return static_cast<int64_t>(survival_.Snapshot().bleedingWounds);
@@ -3643,22 +3464,22 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
         return static_cast<int64_t>(inventory_.Instances().size());
     });
     reg.Add("worldZombieAnchors", [this]() -> Runtime::Agent::FAgentQueryValue {
-        return static_cast<int64_t>(worldAnchors_.Count(NextDayz::EWorldAnchorType::Zombie));
+        return static_cast<int64_t>(world_.anchors.Count(NextDayz::EWorldAnchorType::Zombie));
     });
     reg.Add("worldLootAnchors", [this]() -> Runtime::Agent::FAgentQueryValue {
-        return static_cast<int64_t>(worldAnchors_.Count(NextDayz::EWorldAnchorType::Loot));
+        return static_cast<int64_t>(world_.anchors.Count(NextDayz::EWorldAnchorType::Loot));
     });
     reg.Add("activeZombies", [this]() -> Runtime::Agent::FAgentQueryValue {
-        return static_cast<int64_t>(zombies_.ActiveCount());
+        return static_cast<int64_t>(world_.zombies.ActiveCount());
     });
     reg.Add("alertedZombies", [this]() -> Runtime::Agent::FAgentQueryValue {
-        return static_cast<int64_t>(zombies_.AlertedCount());
+        return static_cast<int64_t>(world_.zombies.AlertedCount());
     });
     reg.Add("zombieKills", [this]() -> Runtime::Agent::FAgentQueryValue {
-        return static_cast<int64_t>(zombies_.KillCount());
+        return static_cast<int64_t>(world_.zombies.KillCount());
     });
     reg.Add("lastHitZombie", [this]() -> Runtime::Agent::FAgentQueryValue {
-        const NextDayz::FZombieHandle handle = combat_.LastHitZombie();
+        const NextDayz::FZombieHandle handle = world_.combat.LastHitZombie();
         return handle.IsValid() ? static_cast<int64_t>(handle.index) : static_cast<int64_t>(-1);
     });
     reg.Add("hour", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<int64_t>(time_.HourInt()); });
@@ -3798,24 +3619,24 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     reg.Add("spawnVerdict", [this]() -> Runtime::Agent::FAgentQueryValue {
         // The nearest spawn point's last verdict: why the closest anchor did or did not spawn.
         const NextDayz::FZombieSpawnPoint* nearest = nullptr;
-        for (const NextDayz::FZombieSpawnPoint& point : zombieSpawns_.Points())
+        for (const NextDayz::FZombieSpawnPoint& point : world_.spawns.Points())
         {
             if (!nearest || point.playerDistance < nearest->playerDistance) nearest = &point;
         }
         return std::string(nearest ? NextDayz::SpawnVerdictName(nearest->verdict) : "none");
     });
     reg.Add("pathSolves", [this]() -> Runtime::Agent::FAgentQueryValue {
-        return static_cast<int64_t>(zombies_.PathSolvesLastUpdate());
+        return static_cast<int64_t>(world_.zombies.PathSolvesLastUpdate());
     });
     reg.Add("zombieNavReady", [this]() -> Runtime::Agent::FAgentQueryValue {
-        return zombieNavGrid_.IsBuilt() && !zombieNavBuild_.valid();
+        return world_.NavigationReady();
     });
-    reg.Add("navBuildCount", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<int64_t>(zombieNavBuildCount_); });
-    reg.Add("navBuildMs", [this]() -> Runtime::Agent::FAgentQueryValue { return zombieNavBuildMs_; });
+    reg.Add("navBuildCount", [this]() -> Runtime::Agent::FAgentQueryValue { return static_cast<int64_t>(world_.NavigationBuildCount()); });
+    reg.Add("navBuildMs", [this]() -> Runtime::Agent::FAgentQueryValue { return world_.NavigationBuildMs(); });
     reg.Add("navSampledCells", [this]() -> Runtime::Agent::FAgentQueryValue {
-        return static_cast<int64_t>(zombieNavGrid_.SampledCellCount());
+        return static_cast<int64_t>(world_.Navigation().SampledCellCount());
     });
-    reg.Add("navApplyPeakMs", [this]() -> Runtime::Agent::FAgentQueryValue { return zombieNavApplyPeakMs_; });
+    reg.Add("navApplyPeakMs", [this]() -> Runtime::Agent::FAgentQueryValue { return world_.NavigationApplyPeakMs(); });
     reg.Add("navBuildFrameCount", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(navBuildFrames_.frames); });
     reg.Add("navBuildFrameP95Ms", [this]() -> Runtime::Agent::FAgentQueryValue { return navBuildFrames_.P95(); });
     reg.Add("navIdleFrameP95Ms", [this]() -> Runtime::Agent::FAgentQueryValue { return navIdleFrames_.P95(); });
@@ -3837,24 +3658,24 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     // Infected with live skeleton hitboxes / their capsules (names kept from the proxy era).
     reg.Add("hitProxyRegistered", [this]() -> Runtime::Agent::FAgentQueryValue {
         int64_t bodies = 0;
-        for (const NextDayz::FZombieRuntime& zombie : zombies_.Slots())
-            bodies += zombie.active && !combat_.Hitboxes(zombie.handle).empty() ? 1 : 0;
+        for (const NextDayz::FZombieRuntime& zombie : world_.zombies.Slots())
+            bodies += zombie.active && !world_.combat.Hitboxes(zombie.handle).empty() ? 1 : 0;
         return bodies;
     });
     reg.Add("hitProxyCpuEligible", [this]() -> Runtime::Agent::FAgentQueryValue {
         int64_t capsules = 0;
-        for (const NextDayz::FZombieRuntime& zombie : zombies_.Slots())
-            capsules += zombie.active ? static_cast<int64_t>(combat_.Hitboxes(zombie.handle).size()) : 0;
+        for (const NextDayz::FZombieRuntime& zombie : world_.zombies.Slots())
+            capsules += zombie.active ? static_cast<int64_t>(world_.combat.Hitboxes(zombie.handle).size()) : 0;
         return capsules;
     });
     reg.Add("lastHitZone", [this]() -> Runtime::Agent::FAgentQueryValue {
-        return std::string(combat_.LastHitZombie().IsValid() ? HitZoneName(combat_.LastHitZone()) : "none");
+        return std::string(world_.combat.LastHitZombie().IsValid() ? HitZoneName(world_.combat.LastHitZone()) : "none");
     });
     reg.Add("headshots", [this]() -> Runtime::Agent::FAgentQueryValue {
-        return static_cast<int64_t>(combat_.HeadshotCount());
+        return static_cast<int64_t>(world_.combat.HeadshotCount());
     });
     reg.Add("zombieStaggers", [this]() -> Runtime::Agent::FAgentQueryValue {
-        return static_cast<int64_t>(zombies_.StaggerCount());
+        return static_cast<int64_t>(world_.zombies.StaggerCount());
     });
     reg.Add("zombieState", [this]() -> Runtime::Agent::FAgentQueryValue {
         const NextDayz::FZombieRuntime* zombie = FocusZombie();
@@ -3928,7 +3749,7 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     reg.Add("fxMuzzleFlash", [this]() -> Runtime::Agent::FAgentQueryValue { return effects_.FlashVisible(); });
     reg.Add("zombiePathSegments", [this]() -> Runtime::Agent::FAgentQueryValue {
         int64_t segments = 0;
-        for (const NextDayz::FZombieRuntime& zombie : zombies_.Slots())
+        for (const NextDayz::FZombieRuntime& zombie : world_.zombies.Slots())
         {
             if (zombie.active && zombie.pathWaypoint < zombie.path.size())
                 segments += static_cast<int64_t>(zombie.path.size() - zombie.pathWaypoint);
@@ -3955,7 +3776,7 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
         if (!zombie) return std::string("none");
         const glm::vec3 delta = zombie->position - player_.Position();
         return fmt::format("{:.2f} {:.2f} {:.2f} hitboxes {}", delta.x, delta.y, delta.z,
-                           combat_.Hitboxes(zombie->handle).size());
+                           world_.combat.Hitboxes(zombie->handle).size());
     });
     reg.Add("lastTraceNode", [this]() -> Runtime::Agent::FAgentQueryValue {
         if (debugger_.Traces().empty()) return std::string("none");

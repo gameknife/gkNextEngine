@@ -272,8 +272,8 @@ bool NextDayzGameInstance::RestoreCampaign(const NextDayz::FCampaignSave& saved)
             return !blocked;
         };
         if (!clear(restoredPosition))
-            for (const auto handle : worldAnchors_.Find(NextDayz::EWorldAnchorType::PlayerSafe))
-                if (const auto* spawn = worldAnchors_.Resolve(handle); spawn && clear(spawn->worldPos))
+            for (const auto handle : world_.anchors.Find(NextDayz::EWorldAnchorType::PlayerSafe))
+                if (const auto* spawn = world_.anchors.Resolve(handle); spawn && clear(spawn->worldPos))
                 {
                     restoredPosition = spawn->worldPos;
                     SPDLOG_INFO("[NextDayz] edited geometry obstructed the authoring position; moved to safe spawn");
@@ -377,9 +377,9 @@ void NextDayzGameInstance::RequestExpeditionMap(const NextDayz::FExpeditionMap& 
 
 void NextDayzGameInstance::CompleteDeployment()
 {
-    const auto spawns = worldAnchors_.Find(NextDayz::EWorldAnchorType::PlayerSafe);
+    const auto spawns = world_.anchors.Find(NextDayz::EWorldAnchorType::PlayerSafe);
     if (spawns.empty()) { campaignMessage_ = "This map has no safe deployment points"; return; }
-    const auto* spawn = worldAnchors_.Resolve(spawns[sessionRng_.Range(static_cast<uint32_t>(spawns.size()))]);
+    const auto* spawn = world_.anchors.Resolve(spawns[sessionRng_.Range(static_cast<uint32_t>(spawns.size()))]);
     const glm::vec3 position = spawn->worldPos + glm::vec3(0.0f, 0.1f, 0.0f);
     player_.Destroy();
     player_.Create(GetEngine().GetPhysicsEngine(), position, config_);
@@ -388,12 +388,8 @@ void NextDayzGameInstance::CompleteDeployment()
     survivalSeconds_ = 0.0;
     StartNewLife();
     // New enemies can repopulate; physical loot and the world clock keep their state.
-    zombies_.Reset();
+    world_.ResetPopulation(sessionRng_.NextU32());
     zombieVisuals_.Reset();
-    combat_.Reset();
-    noise_.Reset();
-    zombieSpawns_.Reset(sessionRng_.NextU32());
-    ConfigureZombieSpawnPoints();
     SyncZombieVisuals();
     campaign_.inField = true;
     campaign_.flight = {};
@@ -486,10 +482,10 @@ void NextDayzGameInstance::DebugExpeditionAction(NextDayz::Debug::EExpeditionAct
         TeleportPlayer(ResolveSpawnPosition());
     else if (action == EExpeditionAction::ExtractionAlpha || action == EExpeditionAction::ExtractionBravo)
     {
-        const auto pads = worldAnchors_.Find(NextDayz::EWorldAnchorType::Extraction);
+        const auto pads = world_.anchors.Find(NextDayz::EWorldAnchorType::Extraction);
         const size_t index = action == EExpeditionAction::ExtractionAlpha ? 0 : 1;
         if (index >= pads.size()) return;
-        if (const auto* pad = worldAnchors_.Resolve(pads[index]))
+        if (const auto* pad = world_.anchors.Resolve(pads[index]))
             TeleportPlayer(pad->worldPos + glm::vec3(2,0.1f,0));
     }
     else if (action == EExpeditionAction::RescueSupplies)
@@ -524,12 +520,12 @@ void NextDayzGameInstance::AdvanceExtraction(float dt)
 void NextDayzGameInstance::FireSignal(NextDayz::FItemInstanceId id)
 {
     if (!CampaignEnabled() || !campaign_.inField || campaign_.flight.boarded || !survival_.IsAlive()) return;
-    for (const auto& anchor : worldAnchors_.All())
+    for (const auto& anchor : world_.anchors.All())
     {
         if (anchor.type != NextDayz::EWorldAnchorType::Extraction) continue;
         if (campaign_.Call(inventory_, id, anchor.profile, anchor.worldPos, player_.Position(), extractionConfig_))
         {
-            noise_.Emit(player_.Position(), 120.0f, 1.0f, NextDayz::ENoiseType::Rifle);
+            world_.noise.Emit(player_.Position(), 120.0f, 1.0f, NextDayz::ENoiseType::Rifle);
             Notify("Signal fired. Rescue is on its way. Stay alive!", 3);
             SaveCampaign();
             return;
@@ -559,7 +555,7 @@ std::string NextDayzGameInstance::ExtractionPrompt() const
         return "[E] Board rescue helicopter";
     if (campaign_.flight.phase != NextDayz::EFlightPhase::Idle)
         return fmt::format("{} | {:.0f}s", NextDayz::FlightPhaseName(campaign_.flight.phase), campaign_.flight.remaining);
-    for (const auto& anchor : worldAnchors_.All())
+    for (const auto& anchor : world_.anchors.All())
         if (anchor.type == NextDayz::EWorldAnchorType::Extraction &&
             glm::distance(anchor.worldPos, player_.Position()) <= extractionConfig_.callRadius)
             return fmt::format("{} | [B] Fire signal flare gun", anchor.label);
@@ -790,11 +786,11 @@ void NextDayzGameInstance::CampaignValidationCommand()
     else if (command == "board") BoardHelicopter();
     else if (command.starts_with("pad:"))
     {
-        const auto pads = worldAnchors_.Find(NextDayz::EWorldAnchorType::Extraction);
+        const auto pads = world_.anchors.Find(NextDayz::EWorldAnchorType::Extraction);
         const auto index = static_cast<size_t>(std::stoul(command.substr(4)));
         if (index < pads.size())
         {
-            const auto* pad = worldAnchors_.Resolve(pads[index]);
+            const auto* pad = world_.anchors.Resolve(pads[index]);
             player_.Destroy();
             player_.Create(GetEngine().GetPhysicsEngine(),pad->worldPos + glm::vec3(2,0.1f,0),config_);
         }

@@ -129,3 +129,12 @@ last_updated: 2026-11-09
 
 - 2026-11-09：`ZombieSystem` 改为接收目标列表（`FZombieTarget`），每只感染者记录当前追击目标
   `targetId`，伤害请求带受害者 id，挤开逻辑对全部玩家生效；单人路径以 id 1 包装调用。
+  刷怪导演按最近幸存者评估（`UpdateForSurvivors`）；物资补货拆为 `TickWorld`（全部视角）与
+  `UpdateHover`（单个玩家）。
+- 2026-11-09：新增 `Sim/WorldSim`，持有感染者、战斗、噪声、刷怪导演、世界锚点与感染者导航；
+  幸存者每帧以 `FSurvivorPresence` 进入（位置、视线、存活、个人可见度：提灯/蹲伏），受击以
+  `ConsumeSurvivorHits` 返回。夜晚与雾是全局可见度，提灯与蹲伏改为每名幸存者各自的系数。
+  GameInstance 通过 `world_` 驱动世界，不再直接持有这些系统。导航仍是单窗口，跟随第一名幸存者；
+  多窗口是下一步。
+- M1 剩余：导航按幸存者簇多窗口；物资世界状态并入 WorldSim；库存/生存/武器状态按幸存者归入
+  `Sim/`；PlayerController 拆运动体与相机/输入；WeaponSystem 拆开火判定与视图模型。

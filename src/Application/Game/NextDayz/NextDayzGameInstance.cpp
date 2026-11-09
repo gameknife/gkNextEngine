@@ -2560,7 +2560,7 @@ void NextDayzGameInstance::BindDebugger()
     systems.audio = &audio_;
     systems.noise = &world_.noise;
     systems.spawns = &world_.spawns;
-    systems.navGrid = &world_.Navigation();
+    systems.navGrid = [this]() { return &world_.Navigation(); };
     systems.time = &time_;
     systems.zombieVisuals = &zombieRigVisuals_;
 

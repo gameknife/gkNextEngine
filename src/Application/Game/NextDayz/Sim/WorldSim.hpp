@@ -29,6 +29,15 @@
 namespace Assets
 {
     class Scene;
+    namespace CPU
+    {
+        class FCPUAccelerationStructure;
+    }
+}
+
+namespace Runtime
+{
+    class TerrainComponent;
 }
 
 namespace NextDayz
@@ -86,16 +95,35 @@ namespace NextDayz
         bool VisibleToAnySurvivor(const glm::vec3& position) const;
 
         // --- navigation ---
-        // The grid is a window around the first survivor (multi-window per
-        // survivor cluster is the next step). `adaptToTerrain` fits the sampling
-        // band to the terrain under the window (geographic maps).
+        // Infected navigate on windows of NavigationHalfSize around survivors.
+        // Each window has an owner survivor and follows it; a survivor within
+        // NavigationRecenterDistance of a window's centre shares it, anyone
+        // else gets a window of their own (up to kMaxNavigationWindows), and a
+        // window whose owner joins another window or leaves the world goes away.
+        // BuildNavigation installs the scene and builds the first windows now;
+        // later ones build in the background. `adaptToTerrain` fits the
+        // sampling band to the terrain under each window (geographic maps).
+        static constexpr size_t kMaxNavigationWindows = 8;
         void BuildNavigation(Assets::Scene& scene, bool background, bool adaptToTerrain);
+        // Same, from the collision and (optional) terrain directly.
+        void BuildNavigation(Assets::CPU::FCPUAccelerationStructure& collision, Runtime::TerrainComponent* terrain,
+                             bool background, bool adaptToTerrain);
+        // Waits for every running build and puts it into service.
         void JoinNavigation();
         void ClearNavigation();
-        bool NavigationBuilding() const { return navBuild_.valid(); }
-        bool NavigationReady() const { return navGrid_.IsBuilt() && !navBuild_.valid(); }
-        const NextGameplay::FNavGrid& Navigation() const { return navGrid_; }
-        bool IsNavigable(const glm::vec3& point) const { return !navGrid_.IsBuilt() || navGrid_.IsWalkable(point); }
+        bool NavigationBuilding() const;
+        // Every window built and none rebuilding.
+        bool NavigationReady() const;
+        size_t NavigationWindowCount() const { return navWindows_.size(); }
+        // The window of the first survivor (single player: the player's); an
+        // empty grid when there is none.
+        const NextGameplay::FNavGrid& Navigation() const;
+        // The built window that holds `point`, if any.
+        const NextGameplay::FNavGrid* NavigationAt(const glm::vec3& point) const;
+        // Walkable on the window that holds it. With no window built anywhere
+        // yet everything counts as navigable (infected walk straight lines).
+        bool IsNavigable(const glm::vec3& point) const;
+        std::vector<glm::vec3> FindPath(const glm::vec3& from, const glm::vec3& to) const;
         uint64_t NavigationBuildCount() const { return navBuildCount_; }
         double NavigationBuildMs() const { return navBuildMs_; }
         double NavigationApplyPeakMs() const { return navApplyPeakMs_; }
@@ -115,20 +143,31 @@ namespace NextDayz
             NextGameplay::FNavGrid grid;
             double elapsedMs = 0.0;
         };
-        void ApplyNavigation(FNavigationBuild result);
+        struct FNavigationWindow
+        {
+            uint32_t ownerId = 0;
+            glm::vec3 center{};                  // lattice-snapped centre of the latest build
+            NextGameplay::FNavGrid grid;         // serves paths; immutable while a build runs
+            NextGameplay::FNavGrid spare;
+            std::future<FNavigationBuild> build;
+        };
+        // Starts (or, without `background`, completes) a build of `window`
+        // around `feet`; `shifted` reuses the window's current cells.
+        void BuildWindow(FNavigationWindow& window, const glm::vec3& feet, bool background, bool shifted);
+        void ApplyNavigation(FNavigationWindow& window, FNavigationBuild result);
         void UpdateNavigation();
+        bool Covers(const FNavigationWindow& window, const glm::vec3& feet) const;
         Assets::RayCastResult RayCast(const glm::vec3& origin, const glm::vec3& direction) const;
 
         FZombieConfig config_{};
         FRayCast rayCast_;
         std::vector<FSurvivorPresence> survivors_;
 
-        Assets::Scene* navScene_ = nullptr;
+        Assets::CPU::FCPUAccelerationStructure* navCollision_ = nullptr;
+        Runtime::TerrainComponent* navTerrain_ = nullptr;
         bool navAdaptToTerrain_ = false;
-        NextGameplay::FNavGrid navGrid_;
-        NextGameplay::FNavGrid navSpare_;
-        std::future<FNavigationBuild> navBuild_;
-        glm::vec3 navCenter_{};
+        std::vector<std::unique_ptr<FNavigationWindow>> navWindows_;
+        NextGameplay::FNavGrid emptyGrid_;
         uint64_t navBuildCount_ = 0;
         double navBuildMs_ = 0.0;
         double navApplyPeakMs_ = 0.0;

@@ -148,7 +148,10 @@ namespace NextDayz::Debug
         NextDayzAudio* audio = nullptr;
         NoiseSystem* noise = nullptr;
         ZombieSpawnDirector* spawns = nullptr;
-        const NextGameplay::FNavGrid* navGrid = nullptr;
+        // The navigation window around the local survivor; asked each time
+        // because windows come and go as survivors move.
+        std::function<const NextGameplay::FNavGrid*()> navGrid;
+        const NextGameplay::FNavGrid* NavGrid() const { return navGrid ? navGrid() : nullptr; }
         TimeSystem* time = nullptr;
         const std::vector<ZombieRigVisual>* zombieVisuals = nullptr;
     };

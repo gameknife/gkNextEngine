@@ -868,7 +868,7 @@ namespace NextDayz::Debug
         warnings_.clear();
         const auto warn = [this](int severity, L10n::FText text) { warnings_.push_back({severity, std::move(text)}); };
 
-        if (systems_.navGrid && !systems_.navGrid->IsBuilt())
+        if (systems_.NavGrid() && !systems_.NavGrid()->IsBuilt())
         {
             warn(2, "Infected nav grid is not built: they walk straight lines");
         }
@@ -892,7 +892,7 @@ namespace NextDayz::Debug
                 stuck += zombie.stuckSeconds > 1.0f ? 1 : 0;
                 const bool hunting = zombie.state == EZombieState::Chase || zombie.state == EZombieState::Investigate;
                 unroutable += hunting && zombie.pathFailed ? 1 : 0;
-                if (systems_.navGrid && systems_.navGrid->IsBuilt() && !systems_.navGrid->IsWalkable(zombie.position))
+                if (systems_.NavGrid() && systems_.NavGrid()->IsBuilt() && !systems_.NavGrid()->IsWalkable(zombie.position))
                 {
                     ++offGrid;
                 }

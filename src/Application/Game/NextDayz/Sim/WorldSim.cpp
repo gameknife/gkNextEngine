@@ -128,14 +128,7 @@ namespace NextDayz
             const Assets::RayCastResult result = RayCast(from, delta / distance);
             return !(result.Hit && result.T < distance - 0.35f);
         };
-        const auto resolvePath = [this](const glm::vec3& from, const glm::vec3& to)
-        {
-            if (!navGrid_.IsBuilt())
-            {
-                return std::vector<glm::vec3>{to};
-            }
-            return navGrid_.FindPath(from, to, from.y, config_.MaxPathExpansions);
-        };
+        const auto resolvePath = [this](const glm::vec3& from, const glm::vec3& to) { return FindPath(from, to); };
         const auto resolveMovement = [this](const glm::vec3& from, const glm::vec3& to)
         {
             const glm::vec3 result = ResolveZombieMovement(from, to, config_,
@@ -146,13 +139,61 @@ namespace NextDayz
         zombies.Update(deltaSeconds, targets, lineOfSight, noise.Events(), resolvePath, resolveMovement);
     }
 
+    namespace
+    {
+        bool GridContains(const NextGameplay::FNavGrid& grid, const glm::vec3& point)
+        {
+            if (!grid.IsBuilt()) return false;
+            const glm::vec3 min = grid.GetWorldMin();
+            const float cell = grid.GetCellSize();
+            return point.x >= min.x && point.z >= min.z &&
+                   point.x < min.x + static_cast<float>(grid.GetWidth()) * cell &&
+                   point.z < min.z + static_cast<float>(grid.GetHeight()) * cell;
+        }
+    }
+
+    bool WorldSim::Covers(const FNavigationWindow& window, const glm::vec3& feet) const
+    {
+        const glm::vec3 offset = feet - window.center;
+        return std::max(std::abs(offset.x), std::abs(offset.z)) < config_.NavigationRecenterDistance;
+    }
+
     void WorldSim::BuildNavigation(Assets::Scene& scene, bool background, bool adaptToTerrain)
     {
-        navScene_ = &scene;
+        Runtime::TerrainComponent* terrain = nullptr;
+        for (Runtime::TerrainComponent* candidate : scene.Components<Runtime::TerrainComponent>())
+        {
+            terrain = candidate;
+            break;
+        }
+        BuildNavigation(scene.GetCPUAccelerationStructure(), terrain, background, adaptToTerrain);
+    }
+
+    void WorldSim::BuildNavigation(Assets::CPU::FCPUAccelerationStructure& collision,
+                                   Runtime::TerrainComponent* terrain, bool background, bool adaptToTerrain)
+    {
+        ClearNavigation();
+        navCollision_ = &collision;
+        navTerrain_ = terrain;
         navAdaptToTerrain_ = adaptToTerrain;
+        for (const FSurvivorPresence& survivor : survivors_)
+        {
+            const bool covered = std::any_of(navWindows_.begin(), navWindows_.end(),
+                [&](const auto& window) { return Covers(*window, survivor.feet); });
+            if (covered || navWindows_.size() >= kMaxNavigationWindows) continue;
+            auto window = std::make_unique<FNavigationWindow>();
+            window->ownerId = survivor.id;
+            BuildWindow(*window, survivor.feet, background, false);
+            navWindows_.push_back(std::move(window));
+        }
+    }
+
+    void WorldSim::BuildWindow(FNavigationWindow& window, const glm::vec3& feet, bool background, bool shifted)
+    {
+        Runtime::TerrainComponent* terrain = navTerrain_;
         NextGameplay::FNavGridSettings settings;
         settings.cellSize = config_.NavigationCellSize;
-        // Loading may use more cores; the live window update keeps a small budget.
+        // Loading may use more cores; live window updates keep a small budget.
         settings.maxSamplingWorkers = background ? config_.NavigationWorkers : 8;
         settings.agentRadius = config_.ControllerRadius;
         settings.maxSlopeAngle = 48.0f;
@@ -161,20 +202,14 @@ namespace NextDayz
         settings.sampleCeiling = 100.0f;
         settings.floorHeightTolerance = 2.0f;
         const float halfSize = config_.NavigationHalfSize;
-        navCenter_ = survivors_.empty() ? glm::vec3(0.0f) : survivors_.front().feet;
         // Keep lattice coordinates stable as the window moves, including doorways
         // sitting on a cell boundary. Existing waypoints remain world positions.
-        navCenter_.x = std::floor(navCenter_.x / settings.cellSize) * settings.cellSize;
-        navCenter_.z = std::floor(navCenter_.z / settings.cellSize) * settings.cellSize;
-        settings.worldMin = {navCenter_.x - halfSize, 0.0f, navCenter_.z - halfSize};
-        settings.worldMax = {navCenter_.x + halfSize, 0.0f, navCenter_.z + halfSize};
-        Runtime::TerrainComponent* terrain = nullptr;
-        for (Runtime::TerrainComponent* candidate : scene.Components<Runtime::TerrainComponent>())
-        {
-            terrain = candidate;
-            break;
-        }
-        if (terrain && adaptToTerrain)
+        window.center = feet;
+        window.center.x = std::floor(window.center.x / settings.cellSize) * settings.cellSize;
+        window.center.z = std::floor(window.center.z / settings.cellSize) * settings.cellSize;
+        settings.worldMin = {window.center.x - halfSize, 0.0f, window.center.z - halfSize};
+        settings.worldMax = {window.center.x + halfSize, 0.0f, window.center.z + halfSize};
+        if (terrain && navAdaptToTerrain_)
         {
             float lowest = std::numeric_limits<float>::max();
             float highest = -lowest;
@@ -214,12 +249,12 @@ namespace NextDayz
                        point.y < terrain->WaterSurface(point.x, point.z) + 0.05f;
             };
         }
-        auto* collision = &scene.GetCPUAccelerationStructure();
-        // The active grid is immutable until this single worker has completed;
-        // scene unload also joins it. Reuse the other buffer entirely on the
+        auto* collision = navCollision_;
+        // The serving grid is immutable until this window's worker completes;
+        // scene unload also joins it. Reuse the spare buffer entirely on the
         // worker, including allocation/copying and disposal of old cell storage.
-        const auto* previous = background ? &navGrid_ : nullptr;
-        auto build = [collision, settings, previous, grid = std::move(navSpare_)]() mutable
+        const NextGameplay::FNavGrid* previous = shifted && window.grid.IsBuilt() ? &window.grid : nullptr;
+        auto build = [collision, settings, previous, grid = std::move(window.spare)]() mutable
         {
             const auto buildStart = std::chrono::steady_clock::now();
             if (previous)
@@ -239,19 +274,19 @@ namespace NextDayz
         };
         if (background)
         {
-            navBuild_ = std::async(std::launch::async, std::move(build));
+            window.build = std::async(std::launch::async, std::move(build));
         }
         else
         {
-            ApplyNavigation(build());
+            ApplyNavigation(window, build());
         }
     }
 
-    void WorldSim::ApplyNavigation(FNavigationBuild result)
+    void WorldSim::ApplyNavigation(FNavigationWindow& window, FNavigationBuild result)
     {
         const auto start = std::chrono::steady_clock::now();
-        std::swap(navGrid_, result.grid);
-        navSpare_ = std::move(result.grid);
+        std::swap(window.grid, result.grid);
+        window.spare = std::move(result.grid);
         navBuildMs_ = result.elapsedMs;
         ++navBuildCount_;
         navApplyPeakMs_ = std::max(navApplyPeakMs_,
@@ -260,36 +295,170 @@ namespace NextDayz
 
     void WorldSim::UpdateNavigation()
     {
-        if (navBuild_.valid())
-        {
-            if (navBuild_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
-            ApplyNavigation(navBuild_.get());
-        }
-        if (!navScene_ || survivors_.empty())
+        if (!navCollision_)
         {
             return;
         }
-        const glm::vec3 offset = survivors_.front().feet - navCenter_;
-        if (std::max(std::abs(offset.x), std::abs(offset.z)) >= config_.NavigationRecenterDistance)
+        for (auto& window : navWindows_)
         {
-            // Retain the current grid throughout the build so a chase does not
-            // pause just because the survivor crossed a navigation window boundary.
-            BuildNavigation(*navScene_, true, navAdaptToTerrain_);
+            if (window->build.valid() && window->build.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+            {
+                ApplyNavigation(*window, window->build.get());
+            }
         }
+        const auto isOwner = [this](uint32_t id)
+        {
+            return std::any_of(navWindows_.begin(), navWindows_.end(),
+                               [id](const auto& window) { return window->ownerId == id; });
+        };
+        // An owner that left the world hands its window to someone inside it, or it goes.
+        for (auto& window : navWindows_)
+        {
+            if (window->ownerId == 0 || FindSurvivor(window->ownerId)) continue;
+            window->ownerId = 0;
+            for (const FSurvivorPresence& survivor : survivors_)
+            {
+                if (!isOwner(survivor.id) && Covers(*window, survivor.feet))
+                {
+                    window->ownerId = survivor.id;
+                    break;
+                }
+            }
+        }
+        // An owner that walked off: into another survivor's window (its own goes),
+        // or the window follows it.
+        for (auto& window : navWindows_)
+        {
+            const FSurvivorPresence* owner = window->ownerId ? FindSurvivor(window->ownerId) : nullptr;
+            if (!owner || window->build.valid() || Covers(*window, owner->feet)) continue;
+            const bool sheltered = std::any_of(navWindows_.begin(), navWindows_.end(), [&](const auto& other)
+            {
+                return other.get() != window.get() && other->ownerId != 0 && Covers(*other, owner->feet);
+            });
+            if (sheltered)
+            {
+                window->ownerId = 0;
+                continue;
+            }
+            // Keep serving the current grid throughout the build so a chase does
+            // not pause just because the survivor crossed a window boundary.
+            BuildWindow(*window, owner->feet, true, true);
+        }
+        std::erase_if(navWindows_, [](std::unique_ptr<FNavigationWindow>& window)
+        {
+            if (window->ownerId != 0) return false;
+            if (window->build.valid()) window->build.get();
+            return true;
+        });
+        // Anyone outside every window gets one of their own.
+        for (const FSurvivorPresence& survivor : survivors_)
+        {
+            if (navWindows_.size() >= kMaxNavigationWindows) break;
+            const bool covered = std::any_of(navWindows_.begin(), navWindows_.end(),
+                [&](const auto& window) { return Covers(*window, survivor.feet); });
+            if (covered) continue;
+            auto window = std::make_unique<FNavigationWindow>();
+            window->ownerId = survivor.id;
+            BuildWindow(*window, survivor.feet, true, false);
+            navWindows_.push_back(std::move(window));
+        }
+    }
+
+    bool WorldSim::NavigationBuilding() const
+    {
+        return std::any_of(navWindows_.begin(), navWindows_.end(),
+                           [](const auto& window) { return window->build.valid(); });
+    }
+
+    bool WorldSim::NavigationReady() const
+    {
+        return !navWindows_.empty() && std::all_of(navWindows_.begin(), navWindows_.end(), [](const auto& window)
+        {
+            return window->grid.IsBuilt() && !window->build.valid();
+        });
+    }
+
+    const NextGameplay::FNavGrid& WorldSim::Navigation() const
+    {
+        if (!survivors_.empty())
+        {
+            for (const auto& window : navWindows_)
+            {
+                if (window->ownerId == survivors_.front().id) return window->grid;
+            }
+            for (const auto& window : navWindows_)
+            {
+                if (Covers(*window, survivors_.front().feet)) return window->grid;
+            }
+        }
+        return navWindows_.empty() ? emptyGrid_ : navWindows_.front()->grid;
+    }
+
+    const NextGameplay::FNavGrid* WorldSim::NavigationAt(const glm::vec3& point) const
+    {
+        // Overlapping windows sample the same scene; the one centred nearest
+        // the point leaves the most room around it.
+        const NextGameplay::FNavGrid* best = nullptr;
+        float bestDistance = std::numeric_limits<float>::max();
+        for (const auto& window : navWindows_)
+        {
+            if (!GridContains(window->grid, point)) continue;
+            const glm::vec3 offset = point - window->center;
+            const float distance = std::max(std::abs(offset.x), std::abs(offset.z));
+            if (distance < bestDistance)
+            {
+                best = &window->grid;
+                bestDistance = distance;
+            }
+        }
+        return best;
+    }
+
+    bool WorldSim::IsNavigable(const glm::vec3& point) const
+    {
+        const bool anyBuilt = std::any_of(navWindows_.begin(), navWindows_.end(),
+                                          [](const auto& window) { return window->grid.IsBuilt(); });
+        if (!anyBuilt) return true;
+        const NextGameplay::FNavGrid* grid = NavigationAt(point);
+        return grid && grid->IsWalkable(point);
+    }
+
+    std::vector<glm::vec3> WorldSim::FindPath(const glm::vec3& from, const glm::vec3& to) const
+    {
+        // A window that holds both ends routes the whole way; otherwise the one
+        // under the infected takes it as far toward the goal as it reaches.
+        const NextGameplay::FNavGrid* grid = nullptr;
+        for (const auto& window : navWindows_)
+        {
+            if (GridContains(window->grid, from) && GridContains(window->grid, to))
+            {
+                grid = &window->grid;
+                break;
+            }
+        }
+        if (!grid) grid = NavigationAt(from);
+        if (!grid)
+        {
+            return {to};
+        }
+        return grid->FindPath(from, to, from.y, config_.MaxPathExpansions);
     }
 
     void WorldSim::JoinNavigation()
     {
-        // The worker samples the scene's immutable geometry and terrain: join it
+        // Workers sample the scene's immutable geometry and terrain: join them
         // before either is destroyed or a different scene is installed.
-        if (navBuild_.valid()) navBuild_.get();
+        for (auto& window : navWindows_)
+        {
+            if (window->build.valid()) ApplyNavigation(*window, window->build.get());
+        }
     }
 
     void WorldSim::ClearNavigation()
     {
         JoinNavigation();
-        navScene_ = nullptr;
-        navGrid_ = {};
-        navSpare_ = {};
+        navWindows_.clear();
+        navCollision_ = nullptr;
+        navTerrain_ = nullptr;
     }
 }

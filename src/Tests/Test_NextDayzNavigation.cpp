@@ -8,6 +8,7 @@
 #include "Engine/Runtime/Components/TerrainComponent.hpp"
 #include "Zombies/ZombieMovement.hpp"
 #include "Zombies/ZombieSystem.hpp"
+#include "Sim/WorldSim.hpp"
 
 namespace
 {
@@ -283,4 +284,59 @@ TEST_CASE("Terrain navigation shortcut matches geometry near obstacles and windo
                       Catch::Approx(exact.GetCellWorldPosition(x, z).y).margin(0.001f));
             }
         }
+}
+
+TEST_CASE("NextDayz world sim keeps one navigation window per survivor cluster",
+          "[Unit][NextDayz][Navigation][Multiplayer]")
+{
+    FNavigationGeometry geometry;
+    geometry.Box({-150.0f, -0.2f, -150.0f}, {150.0f, 0.0f, 150.0f});
+    geometry.Box({1.0f, 0.0f, 4.0f}, {3.0f, 2.0f, 6.0f}); // something to walk around
+    geometry.Build();
+
+    NextDayz::FZombieConfig config;
+    config.NavigationHalfSize = 15.0f;
+    config.NavigationRecenterDistance = 6.0f;
+    config.NavigationCellSize = 0.5f;
+    config.NavigationWorkers = 1;
+    NextDayz::WorldSim world;
+    world.Configure(config);
+    world.UpsertSurvivor({1, {0.0f, 0.0f, 0.0f}, {0.0f, 1.6f, 0.0f}});
+    world.UpsertSurvivor({2, {100.0f, 0.0f, 0.0f}, {100.0f, 1.6f, 0.0f}});
+
+    // Two survivors far apart: a window each, built at load.
+    world.BuildNavigation(geometry.collision, nullptr, false, false);
+    REQUIRE(world.NavigationWindowCount() == 2);
+    REQUIRE(world.NavigationReady());
+    CHECK_FALSE(world.FindPath({0.5f, 0.0f, 0.5f}, {2.0f, 0.0f, 9.0f}).empty());
+    CHECK(world.NavigationAt({50.0f, 0.0f, 0.0f}) == nullptr);
+    CHECK_FALSE(world.IsNavigable({50.0f, 0.0f, 0.0f}));
+    CHECK(world.IsNavigable({100.0f, 0.0f, 3.0f}));
+
+    // Survivor 2 walks into survivor 1's window: its own window goes.
+    world.UpsertSurvivor({2, {3.0f, 0.0f, 0.0f}, {3.0f, 1.6f, 0.0f}});
+    world.TickSpawns(0.01f);
+    CHECK(world.NavigationWindowCount() == 1);
+
+    // Survivor 1 leaves: the window stays for survivor 2, who is inside it.
+    world.RemoveSurvivor(1);
+    world.TickSpawns(0.01f);
+    REQUIRE(world.NavigationWindowCount() == 1);
+    CHECK(world.Navigation().IsBuilt());
+
+    // Its new owner walks off: the window follows.
+    world.UpsertSurvivor({2, {40.0f, 0.0f, 0.0f}, {40.0f, 1.6f, 0.0f}});
+    world.TickSpawns(0.01f);
+    world.JoinNavigation();
+    CHECK(world.NavigationWindowCount() == 1);
+    CHECK(world.NavigationAt({40.0f, 0.0f, 10.0f}) != nullptr);
+    CHECK(world.NavigationAt({0.0f, 0.0f, 0.0f}) == nullptr);
+
+    // A newcomer far away gets a window of their own, built in the background.
+    world.UpsertSurvivor({3, {-100.0f, 0.0f, 0.0f}, {-100.0f, 1.6f, 0.0f}});
+    world.TickSpawns(0.01f);
+    CHECK(world.NavigationWindowCount() == 2);
+    world.JoinNavigation();
+    CHECK(world.NavigationReady());
+    CHECK(world.IsNavigable({-100.0f, 0.0f, 5.0f}));
 }

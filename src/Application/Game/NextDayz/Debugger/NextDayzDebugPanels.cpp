@@ -437,14 +437,14 @@ namespace NextDayz::Debug
                                 systems_.audio->PlayedCount()),
                     Style::kGood);
             }
-            if (systems_.navGrid)
+            if (systems_.NavGrid())
             {
                 row(NextDayz::L10n::Tr("Nav grid"),
-                    systems_.navGrid->IsBuilt()
-                        ? NextDayz::L10n::Format("{} x {} cells at {:.1f} m", systems_.navGrid->GetWidth(),
-                                      systems_.navGrid->GetHeight(), systems_.navGrid->GetCellSize())
+                    systems_.NavGrid()->IsBuilt()
+                        ? NextDayz::L10n::Format("{} x {} cells at {:.1f} m", systems_.NavGrid()->GetWidth(),
+                                      systems_.NavGrid()->GetHeight(), systems_.NavGrid()->GetCellSize())
                         : std::string(NextDayz::L10n::Tr("NOT BUILT")),
-                    systems_.navGrid->IsBuilt() ? Style::kGood : Style::kBad);
+                    systems_.NavGrid()->IsBuilt() ? Style::kGood : Style::kBad);
             }
             row(NextDayz::L10n::Tr("Assets"),
                 NextDayz::L10n::Format("soldier rig {}  infected rig {}  loot catalog {}", facts.soldierRigLoaded ? NextDayz::L10n::Tr("ok") : NextDayz::L10n::Tr("MISSING"),
@@ -1582,7 +1582,7 @@ namespace NextDayz::Debug
             }
         }
 
-        if (const NextGameplay::FNavGrid* grid = systems_.navGrid)
+        if (const NextGameplay::FNavGrid* grid = systems_.NavGrid())
         {
             ImGui::SeparatorText(NextDayz::L10n::Tr("Infected navigation"));
             KV(NextDayz::L10n::Tr("Grid"), "{}", grid->IsBuilt() ? NextDayz::L10n::Format("{} x {} cells at {:.1f} m", grid->GetWidth(), grid->GetHeight(),

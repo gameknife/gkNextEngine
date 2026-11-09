@@ -573,7 +573,7 @@ namespace NextDayz::Debug
 
     void NextDayzDebugger::OverlayNav(FPainter& paint)
     {
-        const NextGameplay::FNavGrid* grid = systems_.navGrid;
+        const NextGameplay::FNavGrid* grid = systems_.NavGrid();
         if (!grid || !grid->IsBuilt())
         {
             return;

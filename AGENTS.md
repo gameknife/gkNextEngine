@@ -35,7 +35,7 @@ gkNextRenderer is a cross-platform 3D game engine built with modern C++20 and Vu
     `projects/<Name>/`；模板是 `assets/templates/games/` 下的内容目录，加模板不用改代码。CoreCLR 专属——
     launcher 在 AOT 配置下不构建，编辑器的 PIE 在 AOT 下报告不可用。见
     [托管游戏 Launcher](docs/designs/managed-game-launcher-design.md)
-- Util: Packager (asset paking), ScadCatalog
+- Util: Packager (asset paking), ScadCatalog, NextDayzBots (load-test clients for a NextDayz map server)
 
 **Release targets:** the desktop release ships exactly five of these —
 `gkNextRenderer`, `gkNextEditor`, `ScadLibrary`, `NextAstrobot`, `Brotato3D`.
@@ -99,7 +99,8 @@ because concurrent Windows builds can lock `.obj`, executables, or vcpkg state f
 - Managed IDE solution: `./gnb.sh dotnet sln` (regenerate) / `./gnb.sh dotnet sln --check` (CI guard)
 - Game templates: `./gnb.sh dotnet templates` (instantiate every `assets/templates/games/` template and build it)
 - NextDayz multiplayer: `./gnb.sh ds` (local dedicated server + 1 client; `--clients N --pvp`; logs in `out/build/<preset>/ds-runs/`);
-  `./gnb.sh ds --master` / `./gnb.sh master serve|status|kick|pvp|stop` (the Master: accounts, storage, map server fleet)
+  `./gnb.sh ds --master` / `./gnb.sh master serve|status|kick|pvp|stop` (the Master: accounts, storage, map server fleet);
+  `./gnb.sh ds --bots 16 --minutes 30` (load test with `NextDayzBots`, non-zero exit on failure)
 - Dashboard: `./gnb.sh dashboard` (Wails window on Windows/macOS, browser fallback on Linux; todo/build/run/test/验证/git/chat/LOC tabs)
 
 Desktop binaries can be launched from any working directory; no `cd out/build/<preset>/bin` is required.

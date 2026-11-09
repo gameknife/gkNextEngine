@@ -33,8 +33,12 @@ type dsOptions struct {
 	Cheats       bool
 	ShowServer   bool
 	KeepServer   bool
-	Master       bool   // run a NextDayz Master; it starts map servers, clients use its lobby
-	MasterData   string // the Master's data directory (default: a fresh one per run)
+	Master       bool    // run a NextDayz Master; it starts map servers, clients use its lobby
+	Bots         int     // load test: this many NextDayzBots against the server
+	Minutes      float64 // how long the bots play
+	BotLatency   int     // link simulation on the bots (ms)
+	BotLoss      float64 // and unreliable loss (%)
+	MasterData   string  // the Master's data directory (default: a fresh one per run)
 	ReadyTimeout time.Duration
 	DryRun       bool
 }
@@ -66,6 +70,10 @@ func newDSCommand(ctx appContext) *cobra.Command {
 	cmd.Flags().IntVar(&opts.Clients, "clients", opts.Clients, "local clients to start (0 = server only)")
 	cmd.Flags().IntVar(&opts.Port, "port", opts.Port, "UDP port of the server")
 	cmd.Flags().BoolVar(&opts.Pvp, "pvp", false, "allow survivors to hurt each other")
+	cmd.Flags().IntVar(&opts.Bots, "bots", 0, "load test: run this many NextDayzBots against the server, then stop (non-zero exit on failure)")
+	cmd.Flags().Float64Var(&opts.Minutes, "minutes", 2, "with --bots: how long they play")
+	cmd.Flags().IntVar(&opts.BotLatency, "bot-latency", 0, "with --bots: simulated latency (ms) on what each bot sends")
+	cmd.Flags().Float64Var(&opts.BotLoss, "bot-loss", 0, "with --bots: simulated loss (%) of each bot's unreliable messages")
 	cmd.Flags().BoolVar(&opts.Master, "master", false, "run a Master on 127.0.0.1:7780: it starts map servers on demand and clients log in, choose gear and deploy from its lobby")
 	cmd.Flags().StringVar(&opts.MasterData, "master-data", "", "with --master: keep accounts here across runs (default: a fresh directory in this run's logs)")
 	cmd.Flags().BoolVar(&opts.Cheats, "cheats", false, "let clients' validation hooks hurt their own survivor (automated tests)")
@@ -88,7 +96,7 @@ func dsServerArgs(opts dsOptions) []string {
 	if opts.Scene != "" {
 		args = append(args, "--load-scene="+opts.Scene)
 	}
-	maxPlayers := opts.Clients
+	maxPlayers := max(opts.Clients, opts.Bots)
 	if maxPlayers < 8 {
 		maxPlayers = 8
 	}
@@ -255,6 +263,10 @@ func runDS(ctx appContext, opts dsOptions, clientExtra []string) error {
 		return nil
 	}
 
+	if opts.Bots > 0 {
+		return runDSBots(ctx, opts, runDir, server)
+	}
+
 	clients := make([]*dsProcess, 0, opts.Clients)
 	defer func() {
 		for _, client := range clients {
@@ -417,4 +429,66 @@ func runDSMaster(ctx appContext, opts dsOptions, clientExtra []string) error {
 			return nil
 		}
 	}
+}
+
+// runDSBots plays NextDayzBots against the running server and reports how it
+// went: the bots' RESULT line, and the server's last statistics line.
+func runDSBots(ctx appContext, opts dsOptions, runDir string, server *dsProcess) error {
+	binDir := platform.BinDir(ctx.repoRoot, ctx.preset)
+	exe := platform.ExecutablePath(binDir, "NextDayzBots")
+	if _, err := os.Stat(exe); err != nil {
+		return fmt.Errorf("executable not found: %s\n请先运行 `gnb build NextDayzBots`", exe)
+	}
+	args := []string{"--port", fmt.Sprint(opts.Port), "--bots", fmt.Sprint(opts.Bots),
+		"--seconds", fmt.Sprintf("%.0f", opts.Minutes*60), "--report", "30"}
+	if opts.BotLatency > 0 {
+		args = append(args, "--latency", fmt.Sprint(opts.BotLatency))
+	}
+	if opts.BotLoss > 0 {
+		args = append(args, "--loss", fmt.Sprintf("%g", opts.BotLoss))
+	}
+	console.CommandLine(exe + " " + dsQuoteArgs(args))
+	result := ""
+	bots, err := startDSProcess("bots", exe, args, filepath.Join(runDir, "bots.log"), func(line string) {
+		if strings.HasPrefix(line, "[") && strings.Contains(line, "online") || strings.HasPrefix(line, "RESULT") {
+			fmt.Printf("%s %s\n", console.Dim("[bots]"), line)
+		}
+		if strings.HasPrefix(line, "RESULT") {
+			result = line
+		}
+	})
+	if err != nil {
+		return err
+	}
+	defer bots.log.Close()
+	var botErr error
+	select {
+	case botErr = <-bots.done:
+	case err := <-server.done:
+		bots.stop()
+		return fmt.Errorf("the server exited during the load test (%v); see %s", err, filepath.Join(runDir, "server.log"))
+	}
+	stats := lastLineContaining(filepath.Join(runDir, "server.log"), "] stats:")
+	if stats != "" {
+		console.Info("server %s", dsTrimLogPrefix(stats))
+	}
+	if botErr != nil || !strings.HasPrefix(result, "RESULT ok") {
+		return fmt.Errorf("load test failed: %s (logs %s)", result, runDir)
+	}
+	console.Success("load test passed: %s", result)
+	return nil
+}
+
+func lastLineContaining(path, needle string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(string(data), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if strings.Contains(lines[i], needle) {
+			return strings.TrimSpace(lines[i])
+		}
+	}
+	return ""
 }

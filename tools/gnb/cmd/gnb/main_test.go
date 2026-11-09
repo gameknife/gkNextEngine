@@ -367,3 +367,10 @@ func TestDSArgsHideServerAndPointClientsAtIt(t *testing.T) {
 		t.Fatalf("visible server with scene: %q", server)
 	}
 }
+
+func TestDSServerHasRoomForEveryBot(t *testing.T) {
+	server := strings.Join(dsServerArgs(dsOptions{Target: "NextDayz", Port: 27015, Bots: 16}), "|")
+	if !strings.Contains(server, "nextdayz.net.maxPlayers 16") {
+		t.Fatalf("16 bots need 16 places: %q", server)
+	}
+}

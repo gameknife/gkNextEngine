@@ -3,7 +3,10 @@
 
 #include <enet/enet.h>
 
+#include <chrono>
+#include <deque>
 #include <mutex>
+#include <random>
 #include <unordered_map>
 
 namespace NextNet
@@ -47,7 +50,22 @@ namespace NextNet
 
     struct FNetHost::FImpl
     {
+        // A message the link simulation is holding back.
+        struct FDelayed
+        {
+            std::chrono::steady_clock::time_point release;
+            bool broadcast = false;
+            FPeerId peer = kInvalidPeer;
+            EDelivery delivery = EDelivery::Reliable;
+            std::vector<std::byte> payload;
+        };
+
         ENetHost* host = nullptr;
+        FLinkSimulation simulation;
+        std::deque<FDelayed> delayed;
+        std::chrono::steady_clock::time_point lastReliableRelease{};
+        std::mt19937 random{0x6e657421u};
+        FTrafficStats traffic;
         bool server = false;
         bool libraryHeld = false;
         FPeerId nextPeerId = 1;
@@ -63,6 +81,62 @@ namespace NextNet
         {
             const auto it = peers.find(id);
             return it == peers.end() ? nullptr : it->second;
+        }
+
+        bool SendNow(FPeerId id, std::span<const std::byte> payload, EDelivery delivery)
+        {
+            const auto it = peers.find(id);
+            ENetPeer* target = it == peers.end() ? nullptr : it->second;
+            if (!target || target->state != ENET_PEER_STATE_CONNECTED) return false;
+            ENetPacket* packet = MakePacket(payload, delivery);
+            if (enet_peer_send(target, ChannelOf(delivery), packet) != 0)
+            {
+                enet_packet_destroy(packet);
+                return false;
+            }
+            return true;
+        }
+
+        void BroadcastNow(std::span<const std::byte> payload, EDelivery delivery)
+        {
+            if (host) enet_host_broadcast(host, ChannelOf(delivery), MakePacket(payload, delivery));
+        }
+
+        // True when the simulation took the message (held or dropped it).
+        bool Simulate(bool broadcast, FPeerId peer, std::span<const std::byte> payload, EDelivery delivery)
+        {
+            if (!simulation.Active()) return false;
+            if (delivery == EDelivery::Unreliable && simulation.lossPercent > 0.0f &&
+                std::uniform_real_distribution<float>(0.0f, 100.0f)(random) < simulation.lossPercent)
+            {
+                ++traffic.simulatedDrops;
+                return true;
+            }
+            const int jitter = simulation.jitterMs > 0
+                ? std::uniform_int_distribution<int>(-static_cast<int>(simulation.jitterMs), static_cast<int>(simulation.jitterMs))(random)
+                : 0;
+            auto release = std::chrono::steady_clock::now() +
+                std::chrono::milliseconds(std::max(0, static_cast<int>(simulation.latencyMs) + jitter));
+            if (delivery == EDelivery::Reliable)
+            {
+                // Reliable stays in order: never released before an earlier reliable one.
+                release = std::max(release, lastReliableRelease);
+                lastReliableRelease = release;
+            }
+            delayed.push_back({release, broadcast, peer, delivery, {payload.begin(), payload.end()}});
+            return true;
+        }
+
+        void ReleaseDue()
+        {
+            const auto now = std::chrono::steady_clock::now();
+            for (auto it = delayed.begin(); it != delayed.end();)
+            {
+                if (it->release > now) { ++it; continue; }
+                if (it->broadcast) BroadcastNow(it->payload, it->delivery);
+                else SendNow(it->peer, it->payload, it->delivery);
+                it = delayed.erase(it);
+            }
         }
 
         FPeerId Adopt(ENetPeer* peer)
@@ -146,6 +220,7 @@ namespace NextNet
         {
             return;
         }
+        impl_->ReleaseDue();
         ENetEvent event{};
         while (enet_host_service(impl_->host, &event, 0) > 0)
         {
@@ -173,6 +248,8 @@ namespace NextNet
                 FNetEvent message{FNetEvent::EType::Message, impl_->IdOf(event.peer), {}};
                 const auto* bytes = reinterpret_cast<const std::byte*>(event.packet->data);
                 message.payload.assign(bytes, bytes + event.packet->dataLength);
+                impl_->traffic.bytesReceived += event.packet->dataLength;
+                ++impl_->traffic.messagesReceived;
                 enet_packet_destroy(event.packet);
                 outEvents.push_back(std::move(message));
                 break;
@@ -191,13 +268,13 @@ namespace NextNet
         {
             return false;
         }
-        ENetPacket* packet = MakePacket(payload, delivery);
-        if (enet_peer_send(target, ChannelOf(delivery), packet) != 0)
+        impl_->traffic.bytesSent += payload.size();
+        ++impl_->traffic.messagesSent;
+        if (impl_->Simulate(false, peer, payload, delivery))
         {
-            enet_packet_destroy(packet);
-            return false;
+            return true;
         }
-        return true;
+        return impl_->SendNow(peer, payload, delivery);
     }
 
     void FNetHost::Broadcast(std::span<const std::byte> payload, EDelivery delivery)
@@ -206,7 +283,28 @@ namespace NextNet
         {
             return;
         }
-        enet_host_broadcast(impl_->host, ChannelOf(delivery), MakePacket(payload, delivery));
+        impl_->traffic.bytesSent += payload.size() * impl_->peers.size();
+        impl_->traffic.messagesSent += impl_->peers.size();
+        if (impl_->Simulate(true, kInvalidPeer, payload, delivery))
+        {
+            return;
+        }
+        impl_->BroadcastNow(payload, delivery);
+    }
+
+    void FNetHost::SetLinkSimulation(const FLinkSimulation& simulation)
+    {
+        impl_->simulation = simulation;
+    }
+
+    const FLinkSimulation& FNetHost::LinkSimulation() const
+    {
+        return impl_->simulation;
+    }
+
+    FTrafficStats FNetHost::Traffic() const
+    {
+        return impl_->traffic;
     }
 
     void FNetHost::Disconnect(FPeerId peer)
@@ -231,6 +329,7 @@ namespace NextNet
             impl_->host = nullptr;
         }
         impl_->peers.clear();
+        impl_->delayed.clear();
         impl_->serverPeer = kInvalidPeer;
         if (impl_->libraryHeld)
         {

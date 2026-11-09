@@ -392,3 +392,56 @@ TEST_CASE("NextDayz Master JSON matches what tools/gnb/internal/dzmaster sends a
     CHECK_FALSE(character["inventory"][1].contains("attachments"));
     CHECK(character["survival"]["health"] == 50);
 }
+
+TEST_CASE("NextNet link simulation delays everything and drops only unreliable messages", "[Unit][NextNet]")
+{
+    using namespace NextNet;
+    constexpr uint16_t port = 47912;
+    FNetHost server;
+    FNetHost client;
+    std::string error;
+    REQUIRE(server.Listen(port, 2, error));
+    REQUIRE(client.Connect("127.0.0.1", port, error));
+    std::vector<FNetEvent> serverEvents;
+    std::vector<FNetEvent> clientEvents;
+    const auto pump = [&](double seconds, const std::function<bool()>& done)
+    {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::duration<double>(seconds);
+        while (!done() && std::chrono::steady_clock::now() < deadline)
+        {
+            server.Poll(serverEvents);
+            client.Poll(clientEvents);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        return done();
+    };
+    REQUIRE(pump(5.0, [&] { return client.ServerPeer() != kInvalidPeer && server.PeerCount() == 1; }));
+    serverEvents.clear();
+
+    // 150 ms on what the client sends; every unreliable message lost.
+    client.SetLinkSimulation({150, 0, 100.0f});
+    FNetWriter reliable;
+    reliable.Write<uint32_t>(1);
+    FNetWriter unreliable;
+    unreliable.Write<uint32_t>(2);
+    const auto sent = std::chrono::steady_clock::now();
+    REQUIRE(client.Send(client.ServerPeer(), reliable.Bytes(), EDelivery::Reliable));
+    REQUIRE(client.Send(client.ServerPeer(), unreliable.Bytes(), EDelivery::Unreliable));
+    std::vector<uint32_t> got;
+    const auto collect = [&]
+    {
+        for (const FNetEvent& event : serverEvents)
+            if (event.type == FNetEvent::EType::Message) got.push_back(FNetReader(event.payload).Read<uint32_t>());
+        serverEvents.clear();
+        return !got.empty();
+    };
+    REQUIRE(pump(3.0, collect));
+    const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - sent).count();
+    CHECK(elapsed >= 0.14);
+    pump(0.3, [] { return false; });
+    collect();
+    CHECK(got == std::vector<uint32_t>{1});
+    CHECK(client.Traffic().simulatedDrops == 1);
+    CHECK(client.Traffic().messagesSent >= 2);
+    CHECK(server.Traffic().bytesReceived >= sizeof(uint32_t));
+}

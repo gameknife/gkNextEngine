@@ -46,6 +46,27 @@ namespace NextNet
         float packetLoss = 0.0f;   // 0..1
     };
 
+    // Everything this host sent and received (payload bytes, before ENet headers).
+    struct FTrafficStats
+    {
+        uint64_t bytesSent = 0;
+        uint64_t bytesReceived = 0;
+        uint64_t messagesSent = 0;
+        uint64_t messagesReceived = 0;
+        uint64_t simulatedDrops = 0;
+    };
+
+    // A bad network, made on purpose: what this host sends is held back by
+    // latency (+/- jitter) and unreliable messages are dropped at `lossPercent`.
+    // Reliable messages are only delayed (in order), never dropped.
+    struct FLinkSimulation
+    {
+        uint32_t latencyMs = 0;
+        uint32_t jitterMs = 0;
+        float lossPercent = 0.0f;
+        bool Active() const { return latencyMs > 0 || jitterMs > 0 || lossPercent > 0.0f; }
+    };
+
     class FNetHost
     {
     public:
@@ -66,6 +87,10 @@ namespace NextNet
         void Disconnect(FPeerId peer);
         // Gracefully disconnects every peer (best effort) and releases the socket.
         void Shutdown();
+
+        void SetLinkSimulation(const FLinkSimulation& simulation);
+        const FLinkSimulation& LinkSimulation() const;
+        FTrafficStats Traffic() const;
 
         bool IsOpen() const;
         bool IsServer() const;

@@ -1,10 +1,10 @@
 ---
 title: "NextDayz 多人联机：Master 调度 + 关卡 DS"
 category: project
-status: 计划（MVP 实施中；直连联机原型可运行）
+status: MVP 完成（M2～M6；M1 内部拆分有剩余）
 owner: NextDayz
 created: 2026-11-09
-last_updated: 2026-11-09
+last_updated: 2026-11-10
 ---
 
 # NextDayz 多人联机：Master 调度 + 关卡 DS
@@ -117,6 +117,7 @@ last_updated: 2026-11-09
 
 - `gnb mp up|down|status|bots`；轻量 bot 客户端（不渲染）；联机调试面板接入 F5 调试器；
   双客户端 agentscript；16 bot × 30 分钟浸泡测试。
+- 实际落地见第 9 节：命令沿用已有的 `gnb ds` / `gnb master`（`--bots` 跑压测），没有另起 `gnb mp`。
 
 **规模目标**：一台开发机 1 Master + 最多 4 DS（每图一个），每 DS 16 玩家、48 感染者。
 
@@ -246,7 +247,39 @@ gnb master kick <playerId> / pvp <dsId> --on=false / stop <dsId>
 Master 已知限制：昵称即身份（无密码）；只在本机/局域网使用（HTTP 明文、管理接口无鉴权）；没有交易与出售；
 登出不留尸体（可以借下线躲避战斗）；同一地图只开一个服务器实例的拆分规则（满员才开下一个）。
 
-## 9. 实施记录
+## 9. 工具与压测（M6，当前可运行）
+
+```powershell
+gnb ds --bots 16 --minutes 30 --bot-latency 80 --bot-loss 2   # 一个 DS + 16 个 bot，结束后给出结论
+gnb run NextDayz -- --cvar nextdayz.net.stats=1               # 客户端/服务器的联机面板
+```
+
+- **链路模拟**（NextNet `FLinkSimulation`）：对本端发出的消息加固定延迟 + 抖动，并按比例丢弃不可靠消息；
+  可靠消息只延迟、保持顺序，不会因模拟而丢失（与 ENet 的保证一致）。NextDayz 用 cvar
+  `nextdayz.net.simLatency`（ms）/ `simJitter`（ms）/ `simLoss`（%）随时开关，客户端与服务器都可用。
+- **流量统计**：`FNetHost` 记录收发字节与消息数（`FTrafficStats`），每个连接有 RTT 与丢包（`FPeerStats`）。
+- **联机面板**：`nextdayz.net.stats=1`，或 F5 调试器打开时显示：角色、RTT、收发速率、快照大小、在线幸存者，
+  服务器另有 tick 耗时与拒绝的命中数。服务器每 10 秒在日志里写一行 `stats:`（`gnb ds` 结束时会转述最后一行）。
+- **NextDayzBots**（`src/Application/Util/NextDayzBots`）：不渲染、不加载地图的协议客户端。每个 bot 入场、
+  申请物资表、报出生套装，在物资点之间走动拾取再放回（物品账本最繁忙的路径），向附近感染者开枪
+  （走回溯命中校验），死亡后重新出生。每 `--report` 秒打印一次总览，最后一行是
+  `RESULT ok|FAIL online=… refusals=… disconnects=…`：全部在线、无被拒、无掉线才算通过。
+- **`gnb ds --bots N`**：服务器的 `maxPlayers` 至少容纳全部 bot；bot 跑满 `--minutes` 后 gnb 读出 RESULT 与服务器
+  最后一行统计，失败时返回非零。`--bot-latency` / `--bot-loss` 给 bot 加链路模拟。
+
+压测结果（Windows 开发机，DS 为 `--dedicated` 30 Hz，bot 80 ms 延迟 + 2% 丢包）：
+
+| 场景 | 结果 | 服务器 tick 平均 / 最大 | 服务器发出 | 快照 |
+|---|---|---|---|---|
+| 8 bot × 3 分钟 | 8/8 在线 | 5.6 ms / 12.5 ms | 389 KB/s | ~2.5 KB |
+| 16 bot × 3 分钟 | 16/16 在线，0 被拒，0 掉线 | 4.5 ms / 10.7 ms | 1.08 MB/s | ~3.4 KB |
+| 16 bot × 30 分钟 | 16/16 在线，0 被拒，0 掉线；拾取 1028 次、死亡重生 20 次 | 5.7 ms / 22.1 ms（全程 180 次采样） | ~1.0 MB/s | ~3.3 KB |
+
+服务器统计里的"refused hits"是 bot 故意乱射被回溯校验拒掉的命中（bot 只按距离判断目标，不做视线），不是错误。
+出流量随人数近似平方增长（每人一份含全部相关幸存者的快照），16 人约 1 MB/s，局域网内无压力；公网部署前应做
+增量快照。
+
+## 10. 实施记录
 
 - 2026-11-09：`ZombieSystem` 改为接收目标列表（`FZombieTarget`），每只感染者记录当前追击目标
   `targetId`，伤害请求带受害者 id，挤开逻辑对全部玩家生效；单人路径以 id 1 包装调用。
@@ -279,5 +312,9 @@ Master 已知限制：昵称即身份（无密码）；只在本机/局域网使
   DS 的注册/心跳/世界恢复/票据兑换/检查点/撤离、客户端大厅。顺带修复：`FNetHost::Disconnect` 改为在已排队的
   消息发完后再断开（告别与拒绝原先会丢失）；`WorldSim` 不再同步等待被丢弃导航窗口的后台构建（曾让服务器卡住
   15 秒、被 Master 判定失联）。
+- 2026-11-10：M6（第 9 节）：NextNet 链路模拟与流量统计、NextDayz 联机面板与服务器统计日志、
+  `NextDayzBots` 压测客户端、`gnb ds --bots`。修复：压测时服务器人数上限按 bot 数放大（原先固定 8 人，
+  16 bot 只有 8 个能进）；死亡后才到达的丢弃消息被忽略（物品已在尸体里），不再当作账本违规纠正
+  （浸泡测试中 bot 拾取后同一 tick 渴死时出现）。
 - M1 剩余：物资世界状态并入 WorldSim；库存/生存/武器状态按幸存者归入
   `Sim/`；PlayerController 拆运动体与相机/输入；WeaponSystem 拆开火判定与视图模型。

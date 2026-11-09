@@ -50,6 +50,7 @@ GNB_LANG=en ./gnb.sh doctor
 ./gnb.sh ds                          # NextDayz：本地 DS + 1 个客户端
 ./gnb.sh ds --clients 2 --pvp        # 两名幸存者，允许互伤
 ./gnb.sh ds --master --clients 2     # 进程内 Master，客户端从大厅登录、选装备、出击
+./gnb.sh ds --bots 16 --minutes 30   # 压测：16 个 NextDayzBots，结束给出 RESULT（失败非零退出）
 ./gnb.sh master serve                # 单独运行 NextDayz Master（127.0.0.1:7780）
 ./gnb.sh master status               # 地图服务器、账号、谁在哪；另有 kick / pvp / stop
 ```

@@ -299,6 +299,47 @@ struct NextDayzGameInstance::FNetSession
     std::vector<std::byte> lastInventorySync;
     uint32_t fixes = 0;
     uint32_t myHits = 0;          // damage notices for our own rounds
+
+    // --- statistics (the network panel and the server's periodic log line) ---
+    struct FStats
+    {
+        NextNet::FTrafficStats last;
+        float window = 0.0f;
+        float inKBps = 0.0f;
+        float outKBps = 0.0f;
+        double tickMsSum = 0.0;
+        double tickMsMax = 0.0;
+        uint32_t ticks = 0;
+        double tickMsAvgShown = 0.0;
+        double tickMsMaxShown = 0.0;
+        uint64_t snapshotBytes = 0;
+        uint32_t snapshotCount = 0;
+        uint32_t snapshotAvgShown = 0;
+        uint32_t snapshotsPerSecond = 0;
+        uint32_t snapshotsThisWindow = 0;
+        float logSeconds = 0.0f;
+    } stats;
+
+    // Rolls the counters over once a second.
+    void UpdateStats(float dt)
+    {
+        stats.window += dt;
+        if (stats.window < 1.0f) return;
+        const NextNet::FTrafficStats now = host.Traffic();
+        stats.inKBps = static_cast<float>(now.bytesReceived - stats.last.bytesReceived) / 1024.0f / stats.window;
+        stats.outKBps = static_cast<float>(now.bytesSent - stats.last.bytesSent) / 1024.0f / stats.window;
+        stats.last = now;
+        stats.tickMsAvgShown = stats.ticks ? stats.tickMsSum / stats.ticks : 0.0;
+        stats.tickMsMaxShown = stats.tickMsMax;
+        stats.snapshotAvgShown = stats.snapshotCount ? static_cast<uint32_t>(stats.snapshotBytes / stats.snapshotCount) : 0;
+        stats.snapshotsPerSecond = static_cast<uint32_t>(stats.snapshotsThisWindow / stats.window);
+        stats.tickMsSum = stats.tickMsMax = 0.0;
+        stats.ticks = 0;
+        stats.snapshotBytes = 0;
+        stats.snapshotCount = 0;
+        stats.snapshotsThisWindow = 0;
+        stats.window = 0.0f;
+    }
 };
 
 namespace
@@ -367,6 +408,15 @@ void NextDayzGameInstance::ConfigureNetCVars(NextCVar::FCVarSystem& cvars)
             net_->host.Send(net_->host.ServerPeer(), state.Bytes(), EDelivery::Reliable);
             NetRequestExtract();
         });
+    cvars.RegisterInt("nextdayz.net.simLatency", 0, &netSimLatencyCvar_, ECVarFlags::None,
+        "Delay (ms) added to everything this process sends (link simulation)", [this]() { ApplyLinkSimulation(); }, 0, 2000);
+    cvars.RegisterInt("nextdayz.net.simJitter", 0, &netSimJitterCvar_, ECVarFlags::None,
+        "Random +/- delay (ms) on top of simLatency", [this]() { ApplyLinkSimulation(); }, 0, 1000);
+    cvars.RegisterFloat("nextdayz.net.simLoss", 0.0f, &netSimLossCvar_, ECVarFlags::None,
+        "Percent of unreliable messages this process drops (reliable ones are only delayed)",
+        [this]() { ApplyLinkSimulation(); }, 0.0, 100.0);
+    cvars.RegisterBool("nextdayz.net.stats", false, &netStatsCvar_, ECVarFlags::None,
+        "Show the network panel (RTT, loss, bandwidth, snapshots, server tick)");
     cvars.RegisterBool("nextdayz.net.cheats", false, &netCheatsCvar_, ECVarFlags::None,
         "Server: honour clients' debug harm (automated tests only)");
     cvars.RegisterBool("nextdayz.net.kit", true, &netKitCvar_, ECVarFlags::None,
@@ -490,6 +540,7 @@ void NextDayzGameInstance::StartNetwork()
         return;
     }
     net_.reset(new FNetSession());
+    ApplyLinkSimulation();
     std::string error;
     const auto port = static_cast<uint16_t>(netPortCvar_);
     if (NetUsesMaster())
@@ -798,8 +849,10 @@ void NextDayzGameInstance::NetPoll()
                 Net::FLootDrop drop;
                 if (!Net::Read(reader, drop) || !client.hasState || drop.contents.empty()) break;
                 if (glm::distance(drop.position, client.state.presence.feet) > 6.0f) break;
-                if (client.life != FNetSession::FClient::ELife::Alive ||
-                    !SubtractTotals(client.carried, CountItems(drop.contents)))
+                // A drop sent just before the server decided this survivor died arrives after the
+                // death: those items are already in the body. Ignore it rather than correct anyone.
+                if (client.life != FNetSession::FClient::ELife::Alive) break;
+                if (!SubtractTotals(client.carried, CountItems(drop.contents)))
                 {
                     fix(client, "dropped something it does not carry");
                     break;
@@ -1108,6 +1161,9 @@ void NextDayzGameInstance::NetPoll()
             Net::FSnapshot snapshot;
             if (!Net::Read(reader, snapshot)) break;
             ++net.snapshots;
+            ++net.stats.snapshotsThisWindow;
+            net.stats.snapshotBytes += event.payload.size();
+            ++net.stats.snapshotCount;
             // The server keeps the clock and weather; follow it when we drift.
             const TimeSystem::FState local = time_.Capture();
             if (std::abs(local.minutes - snapshot.time.minutes) > 1.0 || local.weather != snapshot.time.weather)
@@ -1191,6 +1247,30 @@ void NextDayzGameInstance::NetPoll()
 void NextDayzGameInstance::TickServer(float dt)
 {
     FNetSession& net = *net_;
+    const auto tickStart = std::chrono::steady_clock::now();
+    struct FTickTimer
+    {
+        FNetSession& net;
+        std::chrono::steady_clock::time_point start;
+        float dt;
+        ~FTickTimer()
+        {
+            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+            net.stats.tickMsSum += ms;
+            net.stats.tickMsMax = std::max(net.stats.tickMsMax, ms);
+            ++net.stats.ticks;
+            net.UpdateStats(dt);
+            net.stats.logSeconds += dt;
+            if (net.stats.logSeconds >= 10.0f)
+            {
+                net.stats.logSeconds = 0.0f;
+                SPDLOG_INFO("[NextDayz][net] stats: {} survivors, tick avg {:.2f} ms max {:.2f} ms, out {:.1f} KB/s in {:.1f} KB/s, "
+                            "snapshot {} B, refused hits {}", net.clients.size(), net.stats.tickMsAvgShown,
+                            net.stats.tickMsMaxShown, net.stats.outKBps, net.stats.inKBps, net.stats.snapshotAvgShown,
+                            net.rejectedHits);
+            }
+        }
+    } tickTimer{net, tickStart, dt};
     // The world runs with every connected survivor in it, nobody else.
     world_.SetWorldSightScale(WorldSightScale());
     world_.spawns.SetGlobalCap(1.0f - time_.Daylight() > 0.6f ? 48 : 40);
@@ -1273,6 +1353,9 @@ void NextDayzGameInstance::TickServer(float dt)
         }
         FNetWriter writer;
         Net::Write(writer, snapshot);
+        net.stats.snapshotBytes += writer.Size();
+        ++net.stats.snapshotCount;
+        ++net.stats.snapshotsThisWindow;
         net.host.Send(peer, writer.Bytes(), EDelivery::Unreliable);
     }
 }
@@ -1284,6 +1367,7 @@ void NextDayzGameInstance::NetClientSend(float dt)
         return;
     }
     FNetSession& net = *net_;
+    net.UpdateStats(dt);
     if (net.master && !net.connected)
     {
         return;   // a Master client reconnects through the lobby
@@ -1631,6 +1715,7 @@ void NextDayzGameInstance::DrawNetStatus()
     {
         return;
     }
+    DrawNetPanel();
     std::string text;
     if (netMode_ == ENetMode::Server)
     {
@@ -1962,6 +2047,91 @@ void NextDayzGameInstance::TickServerMaster(float dt)
             GetEngine().RequestExit(0);
         }
     }
+}
+
+void NextDayzGameInstance::ApplyLinkSimulation()
+{
+    if (!net_)
+    {
+        return;
+    }
+    const NextNet::FLinkSimulation simulation{static_cast<uint32_t>(std::max(netSimLatencyCvar_, 0)),
+                                              static_cast<uint32_t>(std::max(netSimJitterCvar_, 0)),
+                                              std::clamp(netSimLossCvar_, 0.0f, 100.0f)};
+    net_->host.SetLinkSimulation(simulation);
+    if (simulation.Active())
+    {
+        SPDLOG_INFO("[NextDayz][net] link simulation: {} ms +/- {} ms, {:.1f}% unreliable loss", simulation.latencyMs,
+                    simulation.jitterMs, simulation.lossPercent);
+    }
+}
+
+void NextDayzGameInstance::DrawNetPanel()
+{
+    if (!net_ || (!netStatsCvar_ && !debugger_.Visible()))
+    {
+        return;
+    }
+    FNetSession& net = *net_;
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 340.0f, 60.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(320.0f, 0.0f), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Network", nullptr, ImGuiWindowFlags_NoCollapse))
+    {
+        ImGui::End();
+        return;
+    }
+    const NextNet::FLinkSimulation& simulation = net.host.LinkSimulation();
+    if (netMode_ == ENetMode::Server)
+    {
+        ImGui::Text("Server  %s", net.status.c_str());
+        ImGui::Text("Survivors %zu   infected %d", net.clients.size(), world_.zombies.ActiveCount());
+        ImGui::Text("Tick avg %.2f ms   max %.2f ms", net.stats.tickMsAvgShown, net.stats.tickMsMaxShown);
+        ImGui::Text("Snapshots %u/s   avg %u B", net.stats.snapshotsPerSecond, net.stats.snapshotAvgShown);
+        ImGui::Text("Refused hits %u", net.rejectedHits);
+        if (ImGui::BeginTable("clients", 4, ImGuiTableFlags_RowBg))
+        {
+            ImGui::TableSetupColumn("Survivor");
+            ImGui::TableSetupColumn("RTT");
+            ImGui::TableSetupColumn("Loss");
+            ImGui::TableSetupColumn("Refusals");
+            ImGui::TableHeadersRow();
+            for (const auto& [peer, client] : net.clients)
+            {
+                const NextNet::FPeerStats peerStats = net.host.Stats(peer);
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("%u %s", client.survivorId, client.name.c_str());
+                ImGui::TableNextColumn();
+                ImGui::Text("%u ms", peerStats.roundTripMs);
+                ImGui::TableNextColumn();
+                ImGui::Text("%.1f%%", peerStats.packetLoss * 100.0f);
+                ImGui::TableNextColumn();
+                ImGui::Text("%u", client.refusals);
+            }
+            ImGui::EndTable();
+        }
+    }
+    else
+    {
+        const NextNet::FPeerStats peerStats = net.host.Stats(net.host.ServerPeer());
+        ImGui::Text("Survivor %u   %s", net.survivorId, net.status.c_str());
+        ImGui::Text("RTT %u ms   loss %.1f%%", peerStats.roundTripMs, peerStats.packetLoss * 100.0f);
+        ImGui::Text("Snapshots %u/s   avg %u B", net.stats.snapshotsPerSecond, net.stats.snapshotAvgShown);
+        ImGui::Text("Others %zu   infected %d", net.remotes.size(), world_.zombies.ActiveCount());
+        ImGui::Text("My hits %u   inventory fixes %u", net.myHits, net.fixes);
+    }
+    ImGui::Separator();
+    ImGui::Text("In %.1f KB/s   out %.1f KB/s", net.stats.inKBps, net.stats.outKBps);
+    const NextNet::FTrafficStats traffic = net.host.Traffic();
+    ImGui::Text("Messages in %llu  out %llu", static_cast<unsigned long long>(traffic.messagesReceived),
+                static_cast<unsigned long long>(traffic.messagesSent));
+    if (simulation.Active())
+    {
+        ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "Simulating %u ms +/- %u, %.1f%% loss (%llu dropped)",
+                           simulation.latencyMs, simulation.jitterMs, simulation.lossPercent,
+                           static_cast<unsigned long long>(traffic.simulatedDrops));
+    }
+    ImGui::End();
 }
 
 // ============================================================================ Master: client lobby
@@ -2301,6 +2471,8 @@ void NextDayzGameInstance::TickLobby(float) {}
 void NextDayzGameInstance::TickServerMaster(float) {}
 void NextDayzGameInstance::NetSendCheckpoint() {}
 void NextDayzGameInstance::NetAdmitSurvivor(uint32_t, const NextNet::FHttpResult&) {}
+void NextDayzGameInstance::ApplyLinkSimulation() {}
+void NextDayzGameInstance::DrawNetPanel() {}
 
 #endif
 

@@ -211,6 +211,13 @@ private:
     bool netPvpCvar_ = false;
     bool netKitCvar_ = true;
     bool netCheatsCvar_ = false;   // server: honour clients' debug harm (tests)
+    // A bad network on purpose (both roles): delay, jitter, unreliable loss on what we send.
+    int32_t netSimLatencyCvar_ = 0;
+    int32_t netSimJitterCvar_ = 0;
+    float netSimLossCvar_ = 0.0f;
+    bool netStatsCvar_ = false;    // the network panel (also shown with the F5 debugger)
+    void ApplyLinkSimulation();
+    void DrawNetPanel();
     // The NextDayz Master (tools/gnb/internal/dzmaster): with it a server is one of
     // its fleet and a client starts in the lobby (login, storage, deploy).
     std::string netMasterCvar_;

@@ -129,6 +129,9 @@ last_updated: 2026-11-09
 
 M2/M3/M4 的第一个可玩切片：一个 NextDayz 进程当地图服务器，其余进程作为客户端直连。还没有 Master。
 
+最快的方式是 `gnb ds`：本地起一个隐藏窗口的服务器，加载完地图后再起一个客户端连上，客户端关掉时服务器一起停止
+（`--clients 2 --pvp` 两人互伤，日志在 `out/build/<preset>/ds-runs/`）。手动启动的等价命令如下。
+
 ```powershell
 # 服务器（无本地玩家，隐藏窗口；UDP 27015；互伤开）
 out/build/windows/bin/NextDayz.exe --hidden-window --cvar "nextdayz.net.mode server" --cvar "nextdayz.net.pvp true"

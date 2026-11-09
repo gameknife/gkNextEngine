@@ -47,7 +47,15 @@ GNB_LANG=en ./gnb.sh doctor
 ./gnb.sh validation note <runId> --issue --message "角色穿过台阶，见第二张截图"
 ./gnb.sh tui --scene assets/models/playground.glb
 ./gnb.sh remote --scene assets/models/playground.glb
+./gnb.sh ds                          # NextDayz：本地 DS + 1 个客户端
+./gnb.sh ds --clients 2 --pvp        # 两名幸存者，允许互伤
 ```
+
+`ds` 先以隐藏窗口启动专用服务器（无本地玩家），等它监听端口并加载完地图，再逐个启动可见客户端连上 `127.0.0.1`。
+所有客户端退出（或 Ctrl+C）时一并停止服务器；`--clients 0` 只起服务器，`--keep-server` 让服务器在客户端退出后继续运行，
+`--show-server` 显示服务器窗口，`--` 之后的参数追加给每个客户端。服务器总是带 `--disable-streamline`；
+多于一个客户端时每个客户端也带上（同时多个 Streamline/DLSS 实例会出错），单客户端保留 DLSS。每次运行的日志在 `out/build/<preset>/ds-runs/<时间>/`
+（`server.log`、`client<N>.log`），终端只回显联网与错误行。联机设计见 [NextDayz 多人联机](../projects/nextdayz/nextdayz-multiplayer-design.md)。
 
 `shot` 是快速肉眼验证；`validate` 用输入脚本驱动并断言；`visual` 才是多场景 baseline 回归。每次 `shot`/`validate` 会先在 `out/build/<preset>/validation_runs/<runId>/` 登记运行，Dashboard 未启动也不会丢失记录；CLI 会打印 `runId` 与证据目录。`gnb validation note` 只写入独立的 `review.json`，不会把人工结论伪装成机器通过。Remote Play 的安全与能力边界见 [当前设计](../designs/webrtc-remoteplay-design.md)。
 

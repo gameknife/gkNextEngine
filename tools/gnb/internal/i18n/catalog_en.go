@@ -436,6 +436,7 @@ var en = map[string]string{
 	"cli.typos.short":             "Check first-party files for spelling mistakes",
 	"cli.dashboard.short":         "Launch the native desktop dashboard for .spec/ workflow",
 	"cli.remote.short":            "Run a target in WebRTC remote host mode",
+	"cli.ds.short":                "Start a local dedicated server and connect clients to it (NextDayz)",
 	"cli.git.short":               "Common git operations (status / branch / switch / pull / log)",
 	"cli.git.commit-msg.short":    "Generate a commit message from local changes using an AI provider",
 	"cli.git.status.short":        "Show current branch, head, and dirty/upstream summary",

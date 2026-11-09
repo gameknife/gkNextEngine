@@ -98,6 +98,7 @@ because concurrent Windows builds can lock `.obj`, executables, or vcpkg state f
 - .NET verification: `./gnb.sh dotnet probe` (two-backend ABI) / `./gnb.sh dotnet ci` (full)
 - Managed IDE solution: `./gnb.sh dotnet sln` (regenerate) / `./gnb.sh dotnet sln --check` (CI guard)
 - Game templates: `./gnb.sh dotnet templates` (instantiate every `assets/templates/games/` template and build it)
+- NextDayz multiplayer: `./gnb.sh ds` (local dedicated server + 1 client; `--clients N --pvp`; logs in `out/build/<preset>/ds-runs/`)
 - Dashboard: `./gnb.sh dashboard` (Wails window on Windows/macOS, browser fallback on Linux; todo/build/run/test/验证/git/chat/LOC tabs)
 
 Desktop binaries can be launched from any working directory; no `cd out/build/<preset>/bin` is required.

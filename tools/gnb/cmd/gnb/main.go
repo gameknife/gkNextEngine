@@ -122,6 +122,7 @@ func main() {
 	root.AddCommand(newGraphCommand(ctx))
 	root.AddCommand(newRunCommand(ctx))
 	root.AddCommand(newRemoteCommand(ctx))
+	root.AddCommand(newDSCommand(ctx))
 	root.AddCommand(newTestCommand(ctx))
 	root.AddCommand(newVisualCommand(ctx))
 	root.AddCommand(newShotCommand(ctx))

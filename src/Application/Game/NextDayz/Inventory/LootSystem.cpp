@@ -598,7 +598,7 @@ namespace NextDayz
         director_.SetCooldownScale(ELootCategory::Medical, medicalScarce ? 0.5f : 1.0f);
     }
 
-    void LootSystem::UpdateRestock(const glm::vec3& eyePosition, const glm::vec3& viewForward, NextEngine& engine)
+    void LootSystem::UpdateRestock(std::span<const FViewer> viewers, NextEngine& engine)
     {
         std::array<int, static_cast<size_t>(ELootCategory::Count)> available{};
         for (const FLootEntry& entry : entries_)
@@ -615,8 +615,17 @@ namespace NextDayz
             {
                 continue;
             }
-            const glm::vec3 delta = entry.worldPos - eyePosition;
-            const float distance = glm::length(delta);
+            // Nearest survivor, and whether anyone has it in view.
+            float distance = std::numeric_limits<float>::max();
+            bool visible = false;
+            for (const FViewer& viewer : viewers)
+            {
+                const glm::vec3 delta = entry.worldPos - viewer.eye;
+                const float viewerDistance = glm::length(delta);
+                distance = std::min(distance, viewerDistance);
+                const float viewDot = viewerDistance > 0.01f ? glm::dot(delta / viewerDistance, viewer.forward) : 1.0f;
+                visible = visible || (viewDot > config_.AimDotMin && viewerDistance < 140.0f);
+            }
             if (!entry.fixedItem.empty())
             {
                 // Displays ignore scarcity, stock caps and being watched.
@@ -632,15 +641,17 @@ namespace NextDayz
                 ShowEntry(entry, engine.GetScene(), &engine);
                 continue;
             }
-            const float viewDot = distance > 0.01f ? glm::dot(delta / distance, viewForward) : 1.0f;
-            const bool visible = viewDot > config_.AimDotMin && distance < 140.0f;
-            // The player has to have left the place, not just this shelf.
+            // Every player has to have left the place, not just this shelf.
             float zoneDistance = distance;
             if (entry.zone >= 0 && entry.zone < static_cast<int>(zones_.size()))
             {
                 const FLootZone& zone = zones_[entry.zone];
-                zoneDistance = glm::distance(glm::vec2(eyePosition.x, eyePosition.z), glm::vec2(zone.center.x, zone.center.z)) -
-                               zone.radius;
+                for (const FViewer& viewer : viewers)
+                {
+                    zoneDistance = std::min(zoneDistance,
+                        glm::distance(glm::vec2(viewer.eye.x, viewer.eye.z), glm::vec2(zone.center.x, zone.center.z)) -
+                        zone.radius);
+                }
             }
             const FLootSlot* slot = director_.Resolve(entry.directorHandle);
             const size_t category = slot ? static_cast<size_t>(slot->category) : static_cast<size_t>(ELootCategory::Misc);
@@ -660,14 +671,24 @@ namespace NextDayz
     void LootSystem::Update(float deltaSeconds, const glm::vec3& eyePosition, const glm::vec3& viewForward,
                             NextEngine& engine)
     {
+        const FViewer viewer{eyePosition, viewForward};
+        TickWorld(deltaSeconds, std::span<const FViewer>(&viewer, 1), engine);
+        UpdateHover(eyePosition, viewForward);
+    }
+
+    void LootSystem::TickWorld(float deltaSeconds, std::span<const FViewer> viewers, NextEngine& engine)
+    {
         worldSeconds_ += std::max(deltaSeconds, 0.0f);
         restockAccumulator_ += std::max(deltaSeconds, 0.0f);
         if (restockAccumulator_ >= kRestockInterval)
         {
             restockAccumulator_ = std::fmod(restockAccumulator_, kRestockInterval);
-            UpdateRestock(eyePosition, viewForward, engine);
+            UpdateRestock(viewers, engine);
         }
+    }
 
+    void LootSystem::UpdateHover(const glm::vec3& eyePosition, const glm::vec3& viewForward)
+    {
         hoveredIndex_ = -1;
         float bestDot = config_.AimDotMin;
         for (size_t i = 0; i < entries_.size(); ++i)

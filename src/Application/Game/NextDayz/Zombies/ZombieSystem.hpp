@@ -85,6 +85,8 @@ namespace NextDayz
         bool lame = false;           // born with a dragging leg
     };
 
+    inline constexpr uint32_t kLocalPlayerTargetId = 1;
+
     struct FZombieDamage
     {
         float amount = 0.0f;                   // before the zone multiplier
@@ -93,6 +95,17 @@ namespace NextDayz
         glm::vec3 point{};
         glm::vec3 source{};                    // where the attacker stands
         float impact = 0.0f;                   // poise damage
+        uint32_t attackerId = 0;               // FZombieTarget::id of the shooter, 0 = unknown
+    };
+
+    // A player the infected may perceive and hunt. Single player passes one
+    // (id kLocalPlayerTargetId); a server passes every connected survivor.
+    struct FZombieTarget
+    {
+        uint32_t id = 0;                       // non-zero, stable while the player is in the world
+        glm::vec3 position{};                  // feet
+        bool alive = true;
+        float sightScale = 1.0f;               // crouch / lantern, multiplied with the system-wide scale
     };
 
     struct FZombieDamageResult
@@ -144,8 +157,10 @@ namespace NextDayz
         bool crippled = false;
         bool aware = false;          // has seen or been shot by the player since spawning
         bool active = false;
-        // Diagnostics for the debugger: written by Update, never read by the rules.
-        bool seesPlayer = false;     // the last perception pass saw the player
+        uint32_t targetId = 0;       // the survivor it is hunting (FZombieTarget::id), 0 = none
+        // Written by Update: the last perception pass saw its target. The
+        // debugger shows it; the attack rules also require it.
+        bool seesPlayer = false;
         float heardNoise = 0.0f;     // loudest new noise heard in the last update (0 = none)
         uint32_t pathSolves = 0;     // routes planned since it spawned
         bool pathFailed = false;     // the last route came back empty
@@ -156,6 +171,7 @@ namespace NextDayz
 
     struct FPlayerDamageRequest
     {
+        uint32_t targetId = 0;                 // FZombieTarget::id of the survivor struck
         FZombieHandle source{};
         float amount = 0.0f;
         glm::vec3 sourcePosition{};
@@ -181,8 +197,16 @@ namespace NextDayz
         bool Recycle(FZombieHandle handle);
         FZombieDamageResult ApplyDamage(FZombieHandle handle, const FZombieDamage& damage);
 
+        using FLineOfSight = std::function<bool(const glm::vec3&, const glm::vec3&)>;
+
+        // Every survivor in the world. Each infected keeps hunting its current
+        // target while it can see it, otherwise turns to the nearest one it sees.
+        void Update(float deltaSeconds, std::span<const FZombieTarget> targets, const FLineOfSight& hasLineOfSight,
+                    std::span<const FNoiseEvent> noises, const FPathResolver& resolvePath = {},
+                    const FMovementResolver& resolveMovement = {});
+        // Single-survivor convenience: the player is target kLocalPlayerTargetId.
         void Update(float deltaSeconds, const glm::vec3& playerPosition, const glm::vec3& playerForward,
-                    bool playerAlive, const std::function<bool(const glm::vec3&, const glm::vec3&)>& hasLineOfSight,
+                    bool playerAlive, const FLineOfSight& hasLineOfSight,
                     std::span<const FNoiseEvent> noises, const FPathResolver& resolvePath = {},
                     const FMovementResolver& resolveMovement = {});
 
@@ -215,12 +239,14 @@ namespace NextDayz
         // waypoint (zero once there).
         bool NavigateToward(FZombieRuntime& zombie, const glm::vec3& target, float deltaSeconds,
                             const FPathResolver& resolvePath, glm::vec3& outDirection) const;
-        bool CanSeePlayer(const FZombieRuntime& zombie, const glm::vec3& playerPosition,
-                          const std::function<bool(const glm::vec3&, const glm::vec3&)>& hasLineOfSight) const;
-        void UpdateAttack(FZombieRuntime& zombie, const glm::vec3& playerPosition, bool playerAlive,
-                          float deltaSeconds);
+        bool CanSee(const FZombieRuntime& zombie, const FZombieTarget& target, const FLineOfSight& hasLineOfSight) const;
+        // The target this infected perceives this update (nullptr: none in sight).
+        // Prefers its current target, then the nearest visible survivor.
+        const FZombieTarget* Perceive(const FZombieRuntime& zombie, std::span<const FZombieTarget> targets,
+                                      const FLineOfSight& hasLineOfSight) const;
+        void UpdateAttack(FZombieRuntime& zombie, const FZombieTarget* target, float deltaSeconds);
         void Move(FZombieRuntime& zombie, const glm::vec3& displacement, const FMovementResolver& resolveMovement) const;
-        void Separate(float deltaSeconds, const glm::vec3& playerPosition, const FMovementResolver& resolveMovement);
+        void Separate(float deltaSeconds, std::span<const FZombieTarget> targets, const FMovementResolver& resolveMovement);
         FZombieVariant MakeVariant(FZombieHandle handle) const;
         glm::vec3 NextRoamTarget(FZombieRuntime& zombie) const;
 

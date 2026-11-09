@@ -756,6 +756,63 @@ TEST_CASE("NextDayz zombies hear investigate chase attack and respect stale hand
     const auto damage = zombies.ConsumePlayerDamageRequests();
     REQUIRE(damage.size() == 1);
     REQUIRE(damage.front().source == attacker);
+    REQUIRE(damage.front().targetId == kLocalPlayerTargetId);
+}
+
+TEST_CASE("NextDayz zombies hunt one of several survivors and strike only that one",
+          "[NextDayz][Productization][Zombie][Multiplayer]")
+{
+    using namespace NextDayz;
+    const auto clearSight = [](const glm::vec3&, const glm::vec3&) { return true; };
+    ZombieSystem zombies(1);
+    const FZombieHandle handle = zombies.Spawn(EZombieProfile::Civilian, {});
+    zombies.Resolve(handle)->forward = {0.0f, 0.0f, 1.0f};
+
+    // Survivor 7 is nearer and in view: it becomes the target.
+    std::array<FZombieTarget, 2> targets{{{3, {0.0f, 0.0f, 6.0f}, true, 1.0f},
+                                          {7, {0.0f, 0.0f, 1.0f}, true, 1.0f}}};
+    zombies.Update(0.1f, targets, clearSight, {});
+    REQUIRE(zombies.Resolve(handle)->targetId == 7);
+    REQUIRE(zombies.Resolve(handle)->seesPlayer);
+
+    // Loyalty: a closer survivor appearing does not steal it while 7 is still seen.
+    targets[0].position = {0.45f, 0.0f, 0.8f};
+    zombies.Update(0.05f, targets, clearSight, {});
+    REQUIRE(zombies.Resolve(handle)->targetId == 7);
+
+    // The strike lands on the survivor it was hunting, not the bystander.
+    zombies.Update(0.45f, targets, clearSight, {});
+    const auto damage = zombies.ConsumePlayerDamageRequests();
+    REQUIRE(damage.size() == 1);
+    REQUIRE(damage.front().targetId == 7);
+
+    // A dead target is no longer seen: it turns to the other survivor in view.
+    targets[1].alive = false;
+    zombies.Update(0.05f, targets, clearSight, {});
+    REQUIRE(zombies.Resolve(handle)->targetId == 3);
+}
+
+TEST_CASE("NextDayz zombies turn on the survivor who shot them",
+          "[NextDayz][Productization][Zombie][Multiplayer]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(1);
+    const FZombieHandle handle = zombies.Spawn(EZombieProfile::Civilian, {});
+    FZombieDamage damage;
+    damage.amount = 5.0f;
+    damage.source = {20.0f, 0.0f, 0.0f};
+    damage.attackerId = 42;
+    REQUIRE(zombies.ApplyDamage(handle, damage).applied);
+    REQUIRE(zombies.Resolve(handle)->targetId == 42);
+    REQUIRE(zombies.Resolve(handle)->lastKnownPlayerPosition == damage.source);
+
+    // With nobody in sight it heads for the shooter, not the bystander next to it.
+    const std::array<FZombieTarget, 2> targets{{{9, {1.0f, 0.0f, -1.0f}, true, 1.0f},
+                                                {42, {20.0f, 0.0f, 0.0f}, true, 1.0f}}};
+    const auto blind = [](const glm::vec3&, const glm::vec3&) { return false; };
+    zombies.Update(0.5f, targets, blind, {});
+    REQUIRE(zombies.Resolve(handle)->targetId == 42);
+    REQUIRE(zombies.Resolve(handle)->position.x > 0.0f);
 }
 
 TEST_CASE("NextDayz combat resolves hit zones and invalidates recycled proxies",
@@ -1420,6 +1477,40 @@ TEST_CASE("NextDayz spawn director records why each point did or did not spawn",
     director.Update(1.0f, {}, zombies, visible, navigable);
     CHECK(points[4].verdict == ESpawnVerdict::Cooldown);
     CHECK(std::string_view(SpawnVerdictName(points[4].verdict)) == "Cooldown");
+}
+
+TEST_CASE("NextDayz spawn director measures every point against the nearest survivor",
+          "[NextDayz][Productization][Zombie][Multiplayer]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(8);
+    ZombieSpawnDirector director;
+    director.Reset(42);
+    director.SetPoints({
+        {{10.0f, 0.0f, 0.0f}, EZombieProfile::Civilian},     // on top of survivor A
+        {{510.0f, 0.0f, 0.0f}, EZombieProfile::Civilian},    // on top of survivor B
+        {{0.0f, 0.0f, 90.0f}, EZombieProfile::Civilian},     // near A only
+        {{500.0f, 0.0f, 90.0f}, EZombieProfile::Civilian},   // near B only
+        {{250.0f, 0.0f, 0.0f}, EZombieProfile::Civilian},    // far from both
+    });
+    const std::array<glm::vec3, 2> survivors{glm::vec3(0.0f), glm::vec3(500.0f, 0.0f, 0.0f)};
+    director.UpdateForSurvivors(2.0f, survivors, zombies, {}, {});
+    const auto& points = director.Points();
+    CHECK(points[0].verdict == ESpawnVerdict::TooClose);
+    CHECK(points[1].verdict == ESpawnVerdict::TooClose);
+    CHECK(points[2].verdict == ESpawnVerdict::Spawned);
+    CHECK(points[3].verdict == ESpawnVerdict::Spawned);
+    CHECK(points[3].playerDistance == Catch::Approx(90.0f));
+    CHECK(points[4].verdict == ESpawnVerdict::TooFar);
+
+    // Nobody in the world: nothing spawns, everything reads as too far.
+    ZombieSystem empty(4);
+    ZombieSpawnDirector idle;
+    idle.Reset(1);
+    idle.SetPoints({{{0.0f, 0.0f, 90.0f}, EZombieProfile::Civilian}});
+    idle.UpdateForSurvivors(2.0f, {}, empty, {}, {});
+    CHECK(empty.ActiveCount() == 0);
+    CHECK(idle.Points()[0].verdict == ESpawnVerdict::TooFar);
 }
 
 TEST_CASE("NextDayz loot director records what holds a restock back", "[NextDayz][Productization][Debug]")

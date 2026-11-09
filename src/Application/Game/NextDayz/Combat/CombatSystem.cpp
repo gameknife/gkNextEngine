@@ -229,6 +229,7 @@ namespace NextDayz
         damage.direction = event.direction;
         damage.point = event.hitPoint;
         damage.source = event.origin;
+        damage.attackerId = event.shooterId;
         damage.impact = damage.amount * event.impactScale;
         return Apply(target, damage, event.sequence);
     }

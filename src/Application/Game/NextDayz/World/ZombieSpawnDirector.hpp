@@ -87,6 +87,10 @@ namespace NextDayz
         void SetPoints(std::vector<FZombieSpawnPoint> points);
         void SetGlobalCap(int cap) { globalCap_ = std::max(cap, 0); }
         int GlobalCap() const { return globalCap_; }
+        // Every survivor in the world; isVisible should answer "can any of them see it".
+        void UpdateForSurvivors(float deltaSeconds, std::span<const glm::vec3> playerPositions, ZombieSystem& zombies,
+                    const std::function<bool(const glm::vec3&)>& isVisible,
+                    const std::function<bool(const glm::vec3&)>& isNavigable);
         void Update(float deltaSeconds, const glm::vec3& playerPosition, ZombieSystem& zombies,
                     const std::function<bool(const glm::vec3&)>& isVisible,
                     const std::function<bool(const glm::vec3&)>& isNavigable);

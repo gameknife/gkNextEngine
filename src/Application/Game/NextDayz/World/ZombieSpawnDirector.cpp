@@ -30,6 +30,24 @@ namespace NextDayz
                                      const std::function<bool(const glm::vec3&)>& isVisible,
                                      const std::function<bool(const glm::vec3&)>& isNavigable)
     {
+        UpdateForSurvivors(deltaSeconds, std::span<const glm::vec3>(&playerPosition, 1), zombies, isVisible, isNavigable);
+    }
+
+    void ZombieSpawnDirector::UpdateForSurvivors(float deltaSeconds, std::span<const glm::vec3> playerPositions,
+                                     ZombieSystem& zombies, const std::function<bool(const glm::vec3&)>& isVisible,
+                                     const std::function<bool(const glm::vec3&)>& isNavigable)
+    {
+        // Distances are to the nearest survivor: a place spawns when nobody is too
+        // close and somebody is near enough, and recycles only when everyone is far.
+        const auto nearestPlayer = [playerPositions](const glm::vec3& position)
+        {
+            float nearest = std::numeric_limits<float>::max();
+            for (const glm::vec3& player : playerPositions)
+            {
+                nearest = std::min(nearest, glm::distance(position, player));
+            }
+            return nearest;
+        };
         const float delta = std::max(deltaSeconds, 0.0f);
         const float interval = std::max(tuning_.evaluationSeconds, 0.05f);
         worldSeconds_ += delta;
@@ -42,7 +60,7 @@ namespace NextDayz
 
         for (FZombieSpawnPoint& point : points_)
         {
-            point.playerDistance = glm::distance(point.position, playerPosition);
+            point.playerDistance = nearestPlayer(point.position);
             bool anyActive = false;
             bool allCalmAndFar = true;
             bool lostMember = false;
@@ -62,7 +80,7 @@ namespace NextDayz
                 }
                 anyActive = true;
                 const bool calm = zombie->state == EZombieState::Wander || zombie->state == EZombieState::Dormant;
-                if (!calm || glm::distance(zombie->position, playerPosition) <= tuning_.recycleDistance)
+                if (!calm || nearestPlayer(zombie->position) <= tuning_.recycleDistance)
                 {
                     allCalmAndFar = false;
                 }

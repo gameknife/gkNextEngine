@@ -69,6 +69,8 @@ namespace NextDayz
         FZombieHandle zombie{};
         EHitZone zone = EHitZone::Torso;
         glm::vec3 normal{};
+        // Survivor who fired (FZombieTarget::id); single player is always 1.
+        uint32_t shooterId = 1;
     };
 
     struct FWeaponTraceEvent

@@ -206,6 +206,10 @@ namespace NextDayz
         if (!zombie->aware || zombie->state == EZombieState::Wander || zombie->state == EZombieState::Investigate)
         {
             zombie->lastKnownPlayerPosition = damage.source;
+            if (damage.attackerId != 0)
+            {
+                zombie->targetId = damage.attackerId;
+            }
         }
         zombie->aware = true;
 
@@ -272,14 +276,17 @@ namespace NextDayz
         return result;
     }
 
-    bool ZombieSystem::CanSeePlayer(
-        const FZombieRuntime& zombie, const glm::vec3& playerPosition,
-        const std::function<bool(const glm::vec3&, const glm::vec3&)>& hasLineOfSight) const
+    bool ZombieSystem::CanSee(const FZombieRuntime& zombie, const FZombieTarget& target,
+                              const FLineOfSight& hasLineOfSight) const
     {
+        if (!target.alive)
+        {
+            return false;
+        }
         const FZombieDef& definition = ZombieDef(zombie.profile);
-        const glm::vec3 delta = Flat(playerPosition - zombie.position);
+        const glm::vec3 delta = Flat(target.position - zombie.position);
         const float distance = glm::length(delta);
-        if (distance <= 0.01f || distance > definition.sightDistance * sightScale_)
+        if (distance <= 0.01f || distance > definition.sightDistance * sightScale_ * std::max(target.sightScale, 0.05f))
         {
             return false;
         }
@@ -290,7 +297,36 @@ namespace NextDayz
             return false;
         }
         return !hasLineOfSight || hasLineOfSight(zombie.position + glm::vec3(0.0f, 1.4f, 0.0f),
-                                                 playerPosition + glm::vec3(0.0f, 1.0f, 0.0f));
+                                                 target.position + glm::vec3(0.0f, 1.0f, 0.0f));
+    }
+
+    const FZombieTarget* ZombieSystem::Perceive(const FZombieRuntime& zombie, std::span<const FZombieTarget> targets,
+                                                const FLineOfSight& hasLineOfSight) const
+    {
+        // Loyal to the survivor it is already after, so two players walking side
+        // by side do not make it flicker between them.
+        for (const FZombieTarget& target : targets)
+        {
+            if (target.id == zombie.targetId && zombie.targetId != 0)
+            {
+                if (CanSee(zombie, target, hasLineOfSight)) return &target;
+                break;
+            }
+        }
+        const FZombieTarget* best = nullptr;
+        float bestDistance = std::numeric_limits<float>::max();
+        for (const FZombieTarget& target : targets)
+        {
+            if (target.id == zombie.targetId && zombie.targetId != 0) continue;
+            const float distance = glm::length(Flat(target.position - zombie.position));
+            // Cheap range test first: line of sight is a ray cast.
+            if (distance < bestDistance && CanSee(zombie, target, hasLineOfSight))
+            {
+                best = &target;
+                bestDistance = distance;
+            }
+        }
+        return best;
     }
 
     void ZombieSystem::Steer(FZombieRuntime& zombie, const glm::vec3& direction, float speed, float turnDegrees,
@@ -398,13 +434,14 @@ namespace NextDayz
         return true;
     }
 
-    void ZombieSystem::UpdateAttack(FZombieRuntime& zombie, const glm::vec3& playerPosition, bool playerAlive,
-                                    float deltaSeconds)
+    void ZombieSystem::UpdateAttack(FZombieRuntime& zombie, const FZombieTarget* target, float deltaSeconds)
     {
         const FZombieConfig& c = config_;
         const FZombieDef& definition = ZombieDef(zombie.profile);
         zombie.attackTimer += deltaSeconds;
         const float strike = AttackStrikeTime(zombie.attack);
+        const bool playerAlive = target && target->alive;
+        const glm::vec3 playerPosition = target ? target->position : zombie.position + zombie.forward;
         const glm::vec3 toPlayer = Flat(playerPosition - zombie.position);
         const float distance = glm::length(toPlayer);
         if (zombie.attackTimer < strike - c.TrackingLockLeadSeconds)
@@ -426,7 +463,7 @@ namespace NextDayz
                 std::abs(playerPosition.y - zombie.position.y) <= c.MaxAttackHeight &&
                 distance <= definition.attackRange + c.StrikeReachBonus && facing)
             {
-                damageRequests_.push_back({zombie.handle, definition.attackDamage, zombie.position});
+                damageRequests_.push_back({target->id, zombie.handle, definition.attackDamage, zombie.position});
             }
         }
         if (zombie.attackTimer >= AttackDuration(zombie.attack))
@@ -444,7 +481,7 @@ namespace NextDayz
         zombie.position = resolveMovement ? resolveMovement(zombie.position, target) : target;
     }
 
-    void ZombieSystem::Separate(float deltaSeconds, const glm::vec3& playerPosition,
+    void ZombieSystem::Separate(float deltaSeconds, std::span<const FZombieTarget> targets,
                                 const FMovementResolver& resolveMovement)
     {
         const float radius = config_.SeparationRadius;
@@ -457,12 +494,15 @@ namespace NextDayz
             {
                 continue;
             }
-            const glm::vec3 fromPlayer = Flat(a.position - playerPosition);
-            const float playerDistance = glm::length(fromPlayer);
-            if (std::abs(a.position.y - playerPosition.y) < config_.ControllerHeight &&
-                playerDistance < personal && playerDistance > 1.0e-4f)
+            for (const FZombieTarget& target : targets)
             {
-                Move(a, fromPlayer / playerDistance * (personal - playerDistance) * blend, resolveMovement);
+                const glm::vec3 fromPlayer = Flat(a.position - target.position);
+                const float playerDistance = glm::length(fromPlayer);
+                if (std::abs(a.position.y - target.position.y) < config_.ControllerHeight &&
+                    playerDistance < personal && playerDistance > 1.0e-4f)
+                {
+                    Move(a, fromPlayer / playerDistance * (personal - playerDistance) * blend, resolveMovement);
+                }
             }
             for (size_t j = i + 1; j < slots_.size(); ++j)
             {
@@ -489,9 +529,36 @@ namespace NextDayz
 
     void ZombieSystem::Update(
         float deltaSeconds, const glm::vec3& playerPosition, const glm::vec3& /*playerForward*/, bool playerAlive,
-        const std::function<bool(const glm::vec3&, const glm::vec3&)>& hasLineOfSight,
+        const FLineOfSight& hasLineOfSight, std::span<const FNoiseEvent> noises, const FPathResolver& resolvePath,
+        const FMovementResolver& resolveMovement)
+    {
+        const FZombieTarget player{kLocalPlayerTargetId, playerPosition, playerAlive, 1.0f};
+        Update(deltaSeconds, std::span<const FZombieTarget>(&player, 1), hasLineOfSight, noises, resolvePath,
+               resolveMovement);
+    }
+
+    void ZombieSystem::Update(
+        float deltaSeconds, std::span<const FZombieTarget> targets, const FLineOfSight& hasLineOfSight,
         std::span<const FNoiseEvent> noises, const FPathResolver& resolvePath, const FMovementResolver& resolveMovement)
     {
+        // The survivor an infected measures itself against when it has no sight
+        // of anyone: its current target if still in the world, else the nearest.
+        const auto hunted = [targets](const FZombieRuntime& zombie) -> const FZombieTarget*
+        {
+            const FZombieTarget* nearest = nullptr;
+            float nearestDistance = std::numeric_limits<float>::max();
+            for (const FZombieTarget& target : targets)
+            {
+                if (zombie.targetId != 0 && target.id == zombie.targetId) return &target;
+                const float distance = glm::length(Flat(target.position - zombie.position));
+                if (distance < nearestDistance)
+                {
+                    nearest = &target;
+                    nearestDistance = distance;
+                }
+            }
+            return nearest;
+        };
         const float dt = std::max(deltaSeconds, 0.0f);
         const FZombieConfig& c = config_;
         // A gunshot can wake a crowd at once: spread their route planning over
@@ -542,8 +609,15 @@ namespace NextDayz
             }
 
             // --- perception ---
-            const bool seesPlayer = playerAlive && CanSeePlayer(zombie, playerPosition, hasLineOfSight);
+            const FZombieTarget* seen = Perceive(zombie, targets, hasLineOfSight);
+            const bool seesPlayer = seen != nullptr;
             zombie.seesPlayer = seesPlayer;
+            if (seen)
+            {
+                zombie.targetId = seen->id;
+            }
+            const FZombieTarget* target = seen ? seen : hunted(zombie);
+            const glm::vec3 playerPosition = target ? target->position : zombie.lastKnownPlayerPosition;
             if (seesPlayer)
             {
                 zombie.lastKnownPlayerPosition = playerPosition;
@@ -647,7 +721,7 @@ namespace NextDayz
                 }
                 break;
             case EZombieState::Attack:
-                UpdateAttack(zombie, playerPosition, playerAlive, dt);
+                UpdateAttack(zombie, target, dt);
                 break;
             case EZombieState::Investigate:
             {
@@ -703,7 +777,7 @@ namespace NextDayz
             }
             Move(zombie, zombie.velocity * dt, resolveMovement);
         }
-        Separate(dt, playerPosition, resolveMovement);
+        Separate(dt, targets, resolveMovement);
     }
 
     std::vector<FPlayerDamageRequest> ZombieSystem::ConsumePlayerDamageRequests()

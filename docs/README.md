@@ -107,7 +107,8 @@
   [网格背包与物品尺寸](projects/nextdayz/inventory-grid-design.md) ·
   [持久世界与直升机撤离](projects/nextdayz/nextdayz-extraction-design.md) ·
   [世界派遣与地理关卡](projects/nextdayz/nextdayz-world-map-design.md) ·
-  [游戏内调试器](projects/nextdayz/nextdayz-debugger.md)
+  [游戏内调试器](projects/nextdayz/nextdayz-debugger.md) ·
+  [多人联机（计划）](projects/nextdayz/nextdayz-multiplayer-design.md)
 - NextRaiden：[竖版街机射击 MVP 设计](projects/nextraiden/nextraiden-mvp-design.md) ·
   [开发计划](projects/nextraiden/nextraiden-mvp-plan.md)（实施中：P0–P2 已完成，关卡 1 可通关）
 - NextRA：[架构不变量](projects/nextra/architecture.md) ·

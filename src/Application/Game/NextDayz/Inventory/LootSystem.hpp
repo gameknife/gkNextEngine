@@ -20,6 +20,7 @@
 
 #include <string>
 #include <optional>
+#include <span>
 #include <unordered_map>
 #include <vector>
 
@@ -153,10 +154,22 @@ namespace NextDayz
         FLootWorldState Capture() const;
         void Restore(const FLootWorldState& state, NextEngine& engine);
 
-        // Recomputes the hovered entry from player position + view direction and
-        // runs restocking.
+        // A survivor whose presence and gaze hold back restocking.
+        struct FViewer
+        {
+            glm::vec3 eye{};
+            glm::vec3 forward{0.0f, 0.0f, 1.0f};
+        };
+
+        // Single player: advances the world (TickWorld with one viewer) and
+        // picks the hovered entry (UpdateHover).
         void Update(float deltaSeconds, const glm::vec3& eyePosition, const glm::vec3& viewForward,
                     NextEngine& engine);
+        // World side: advances world time and restocks. A spot restocks only
+        // when every viewer has left its place and none is looking at it.
+        void TickWorld(float deltaSeconds, std::span<const FViewer> viewers, NextEngine& engine);
+        // Player side: the available entry under this survivor's aim.
+        void UpdateHover(const glm::vec3& eyePosition, const glm::vec3& viewForward);
         // Starving or out of bandages: food / medical restock sooner and spots
         // lean toward them.
         void SetScarcity(bool foodScarce, bool medicalScarce);
@@ -215,7 +228,7 @@ namespace NextDayz
         void RollContents(FLootEntry& entry, uint32_t roll, bool restock);
         void ShowEntry(FLootEntry& entry, Assets::Scene& scene, NextEngine* engine);
         void HideEntry(FLootEntry& entry, Assets::Scene& scene, NextEngine* engine);
-        void UpdateRestock(const glm::vec3& eyePosition, const glm::vec3& viewForward, NextEngine& engine);
+        void UpdateRestock(std::span<const FViewer> viewers, NextEngine& engine);
         const FLootVisual& VisualFor(const FLootEntry& entry) const;
         void CreatePoolNodes(Assets::Scene& scene, std::span<const uint32_t> reuse);
         static std::string DescribeContents(const std::vector<FLootStack>& contents);

@@ -29,6 +29,7 @@ type dsOptions struct {
 	Clients      int
 	Port         int
 	Pvp          bool
+	Cheats       bool
 	ShowServer   bool
 	KeepServer   bool
 	ReadyTimeout time.Duration
@@ -62,6 +63,7 @@ func newDSCommand(ctx appContext) *cobra.Command {
 	cmd.Flags().IntVar(&opts.Clients, "clients", opts.Clients, "local clients to start (0 = server only)")
 	cmd.Flags().IntVar(&opts.Port, "port", opts.Port, "UDP port of the server")
 	cmd.Flags().BoolVar(&opts.Pvp, "pvp", false, "allow survivors to hurt each other")
+	cmd.Flags().BoolVar(&opts.Cheats, "cheats", false, "let clients' validation hooks hurt their own survivor (automated tests)")
 	cmd.Flags().BoolVar(&opts.ShowServer, "show-server", false, "show the server window (it has no player, only the world)")
 	cmd.Flags().BoolVar(&opts.KeepServer, "keep-server", false, "leave the server running after the clients exit (Ctrl+C stops it)")
 	cmd.Flags().DurationVar(&opts.ReadyTimeout, "ready-timeout", opts.ReadyTimeout, "how long to wait for the server to load its map")
@@ -89,6 +91,7 @@ func dsServerArgs(opts dsOptions) []string {
 		"--cvar", fmt.Sprintf("nextdayz.net.port %d", opts.Port),
 		"--cvar", fmt.Sprintf("nextdayz.net.pvp %t", opts.Pvp),
 		"--cvar", fmt.Sprintf("nextdayz.net.maxPlayers %d", maxPlayers),
+		"--cvar", fmt.Sprintf("nextdayz.net.cheats %t", opts.Cheats),
 	)
 }
 

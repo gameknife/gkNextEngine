@@ -944,7 +944,12 @@ namespace NextDayz
             if (entry.source != ELootSource::Authored) entry.displayName = DescribeContents(entry.contents);
             entry.category = CategoryOf(entry.contents);
             // A pick-up of ours still waiting on the server keeps its reservation.
-            if (entry.state != FLootEntry::EState::Reserved) entry.state = FLootEntry::EState::Available;
+            if (entry.state != FLootEntry::EState::Reserved)
+            {
+                entry.state = FLootEntry::EState::Available;
+                // Our own restock bookkeeping follows the server, or a reservation would fail here.
+                if (entry.directorHandle.IsValid()) director_.ForceAvailable(entry.directorHandle);
+            }
             ShowEntry(entry, scene, &engine);
         }
         else

@@ -24,6 +24,7 @@ TEST_CASE("NextDayz net protocol round-trips a snapshot, a hit and a welcome", "
     survivor.presentation.slotWeaponIds = {"ak", "", "makarov"};
     survivor.presentation.locomotion.gait = EPlayerGait::Sprint;
     survivor.presentation.aimPitchRadians = 0.25f;
+    survivor.clothing = {"jacket", "helmet"};
     snapshot.survivors.push_back(survivor);
     FZombieRuntime zombie;
     zombie.handle = {3, 9};
@@ -49,6 +50,7 @@ TEST_CASE("NextDayz net protocol round-trips a snapshot, a hit and a welcome", "
     CHECK(copy.survivors[0].presentation.weaponId == "ak");
     CHECK(copy.survivors[0].presentation.slotWeaponIds[2] == "makarov");
     CHECK(copy.survivors[0].presentation.locomotion.gait == EPlayerGait::Sprint);
+    CHECK(copy.survivors[0].clothing == std::vector<std::string>{"jacket", "helmet"});
     REQUIRE(copy.zombies.size() == 1);
     CHECK(copy.zombies[0].handle == zombie.handle);
     CHECK(copy.zombies[0].state == EZombieState::Attack);
@@ -71,6 +73,26 @@ TEST_CASE("NextDayz net protocol round-trips a snapshot, a hit and a welcome", "
     CHECK(hitCopy.weaponId == "ak");
     CHECK(hitCopy.zombie == hit.zombie);
     CHECK(hitCopy.zone == EHitZone::Head);
+
+    // The body the server keeps, as its owner receives it.
+    Net::FSurvivalState body;
+    body.life = 4;
+    body.body.health = 37.5f;
+    body.body.bleedingWounds = 2;
+    body.body.lifeState = EPlayerLifeState::Dead;
+    body.body.lastDamageSource = "infected";
+    writer.Clear();
+    Net::Write(writer, body);
+    NextNet::FNetReader bodyReader(writer.Bytes());
+    REQUIRE(Net::ReadHeader(bodyReader, message));
+    REQUIRE(message == Net::EMessage::SurvivalState);
+    Net::FSurvivalState bodyCopy;
+    REQUIRE(Net::Read(bodyReader, bodyCopy));
+    CHECK(bodyCopy.life == 4);
+    CHECK(bodyCopy.body.health == 37.5f);
+    CHECK(bodyCopy.body.bleedingWounds == 2);
+    CHECK(bodyCopy.body.lifeState == EPlayerLifeState::Dead);
+    CHECK(bodyCopy.body.lastDamageSource == "infected");
 
     // A truncated snapshot is refused rather than half-applied.
     NextNet::FNetReader truncated(writer.Bytes().first(4));

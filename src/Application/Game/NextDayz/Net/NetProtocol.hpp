@@ -17,13 +17,14 @@
 #include "Application/Game/NextDayz/Combat/NoiseSystem.hpp"
 #include "Application/Game/NextDayz/Inventory/LootSystem.hpp"
 #include "Application/Game/NextDayz/Player/PlayerState.hpp"
+#include "Application/Game/NextDayz/Player/SurvivalSystem.hpp"
 #include "Application/Game/NextDayz/Sim/WorldSim.hpp"
 #include "Application/Game/NextDayz/World/TimeSystem.hpp"
 #include "Application/Game/NextDayz/Zombies/ZombieSystem.hpp"
 
 namespace NextDayz::Net
 {
-    inline constexpr uint16_t kProtocolVersion = 3;
+    inline constexpr uint16_t kProtocolVersion = 4;
     inline constexpr uint16_t kDefaultPort = 27015;
     // Survivor 1 is single player's local survivor; network survivors start here.
     inline constexpr uint32_t kFirstSurvivorId = 2;
@@ -49,6 +50,8 @@ namespace NextDayz::Net
         LootDrop,        // C->S reliable: put these items on the ground here
         InventorySync,   // C->S reliable: what I carry now (or that I died), per life
         InventoryFix,    // S->C reliable: refused; this is what you carry
+        SurvivalAction,  // C->S reliable: I use this item / drink at a well / rest
+        SurvivalState,   // S->C reliable: your body as the server keeps it
     };
 
     struct FHello
@@ -70,6 +73,7 @@ namespace NextDayz::Net
     {
         FSurvivorPresence presence;
         FPlayerPresentationState presentation;
+        std::vector<std::string> clothing;       // worn item ids, for other survivors to see
     };
 
     struct FSnapshot
@@ -150,6 +154,27 @@ namespace NextDayz::Net
         FInventoryState inventory;
     };
 
+    enum class ESurvivalAction : uint8_t
+    {
+        UseItem,         // eat, drink, bandage, first aid, painkillers
+        DrinkFromWell,
+        Rest,
+        DebugHarm,       // honoured only by a server with nextdayz.net.cheats on
+    };
+
+    struct FSurvivalAction
+    {
+        ESurvivalAction action = ESurvivalAction::UseItem;
+        FItemInstanceId instanceId = 0;
+        float amount = 0.0f;
+    };
+
+    struct FSurvivalState
+    {
+        uint32_t life = 0;
+        FSurvivalSnapshot body;
+    };
+
     // Reads the leading message byte; false on an empty packet.
     bool ReadHeader(NextNet::FNetReader& reader, EMessage& out);
 
@@ -172,6 +197,8 @@ namespace NextDayz::Net
     void Write(NextNet::FNetWriter& writer, const FLootDrop& value);
     void Write(NextNet::FNetWriter& writer, const FInventorySync& value);
     void Write(NextNet::FNetWriter& writer, const FInventoryFix& value);
+    void Write(NextNet::FNetWriter& writer, const FSurvivalAction& value);
+    void Write(NextNet::FNetWriter& writer, const FSurvivalState& value);
 
     // Bodies only (after ReadHeader). False when the packet is malformed.
     bool Read(NextNet::FNetReader& reader, FHello& out);
@@ -189,6 +216,8 @@ namespace NextDayz::Net
     bool Read(NextNet::FNetReader& reader, FLootDrop& out);
     bool Read(NextNet::FNetReader& reader, FInventorySync& out);
     bool Read(NextNet::FNetReader& reader, FInventoryFix& out);
+    bool Read(NextNet::FNetReader& reader, FSurvivalAction& out);
+    bool Read(NextNet::FNetReader& reader, FSurvivalState& out);
 }
 
 #endif

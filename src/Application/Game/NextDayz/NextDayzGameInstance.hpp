@@ -180,6 +180,9 @@ private:
     void TickServerLoot(float dt);
     // Client death: everything carried falls where the survivor fell (once per life).
     void NetDropOnDeath();
+    // Client: the server keeps the body; these tell it what we did to it.
+    void NetSurvivalAction(uint8_t action, NextDayz::FItemInstanceId instanceId = 0, float amount = 0.0f);
+    bool NetOwnsSurvival() const { return netMode_ == ENetMode::Client; }
     bool netDeathDropped_ = false;
     // This survivor's life number: the server's item ledger starts afresh with each.
     uint32_t netLife_ = 0;
@@ -201,6 +204,7 @@ private:
     int32_t netPortCvar_ = 27015;
     bool netPvpCvar_ = false;
     bool netKitCvar_ = true;
+    bool netCheatsCvar_ = false;   // server: honour clients' debug harm (tests)
     int32_t netMaxPlayersCvar_ = 8;
     // Remote survivors' bodies: a pool built with the scene (clients only).
     std::vector<std::unique_ptr<NextDayz::PlayerRigVisual>> remoteRigs_;

@@ -119,6 +119,14 @@ struct NextDayzGameInstance::FNetSession
         FItemTotals carried;
         FInventoryState inventory;   // the last report the ledger accepted
         uint32_t refusals = 0;
+        // The body, kept here: the client only sees it.
+        SurvivalSystem survival;
+        Inventory body;              // `inventory` as an object: armour, warmth, uses
+        float survivalSyncTimer = 0.0f;
+        // Movement sanity: where the last report put them, and when.
+        glm::vec3 lastFeet{};
+        std::chrono::steady_clock::time_point lastStateTime{};
+        uint32_t suspiciousMoves = 0;
     };
     std::unordered_map<FPeerId, FClient> clients;
     uint32_t nextSurvivorId = Net::kFirstSurvivorId;
@@ -130,6 +138,36 @@ struct NextDayzGameInstance::FNetSession
         for (auto& [peer, client] : clients)
             if (client.survivorId == survivorId) return &client;
         return nullptr;
+    }
+
+    // A survivor who dies or leaves leaves everything the server knows they carried.
+    static void DropBody(FClient& client, LootSystem& loot, NextEngine& engine)
+    {
+        std::vector<FLootStack> body = InventoryAsStacks(client.inventory);
+        if (!body.empty() && client.hasState)
+        {
+            loot.SpawnPile(std::move(body), client.state.presence.feet, 0.0f, engine);
+        }
+        client.carried.clear();
+        client.inventory = {};
+        client.body.Clear();
+    }
+
+    void SendSurvival(FClient& client)
+    {
+        client.survivalSyncTimer = 0.0f;
+        FNetWriter writer;
+        Net::Write(writer, Net::FSurvivalState{client.lifeNumber, client.survival.Snapshot()});
+        host.Send(client.peer, writer.Bytes(), EDelivery::Reliable);
+    }
+
+    // The ledger accepted this inventory: it is now what the body carries.
+    static void Accept(FClient& client, FInventoryState inventory)
+    {
+        client.carried = CountItems(inventory);
+        client.inventory = std::move(inventory);
+        Inventory body;
+        if (body.Restore(client.inventory)) client.body = std::move(body);
     }
 
     // --- client ---
@@ -154,6 +192,8 @@ struct NextDayzGameInstance::FNetSession
         glm::vec3 feet{};
         glm::vec3 targetFeet{};
         FPlayerPresentationState presentation;
+        std::vector<std::string> clothing;
+        bool clothingDirty = true;
         bool alive = true;
         bool seen = false;
     };
@@ -209,6 +249,8 @@ void NextDayzGameInstance::ConfigureNetCVars(NextCVar::FCVarSystem& cvars)
     cvars.RegisterString("nextdayz.net.name", "", &netNameCvar_, ECVarFlags::None, "Client: survivor name");
     cvars.RegisterInt("nextdayz.net.maxPlayers", 8, &netMaxPlayersCvar_, ECVarFlags::None,
         "Server: survivors allowed at once / client: remote bodies to prepare", nullptr, 1, 32);
+    cvars.RegisterBool("nextdayz.net.cheats", false, &netCheatsCvar_, ECVarFlags::None,
+        "Server: honour clients' debug harm (automated tests only)");
     cvars.RegisterBool("nextdayz.net.kit", true, &netKitCvar_, ECVarFlags::None,
         "Client: spawn with an AK and a backpack (testing)");
     cvars.RegisterInt("nextdayz.validation.netPvpHit", 0, &validationNetPvpHit_, ECVarFlags::None,
@@ -340,16 +382,9 @@ void NextDayzGameInstance::NetPoll()
 
     if (netMode_ == ENetMode::Server)
     {
-        // A survivor who dies or leaves leaves everything the server knows they carried.
         const auto dropBody = [this](FNetSession::FClient& client)
         {
-            std::vector<FLootStack> body = InventoryAsStacks(client.inventory);
-            if (!body.empty() && client.hasState)
-            {
-                loot_.SpawnPile(std::move(body), client.state.presence.feet, 0.0f, GetEngine());
-            }
-            client.carried.clear();
-            client.inventory = {};
+            FNetSession::DropBody(client, loot_, GetEngine());
         };
         const auto fix = [&net](FNetSession::FClient& client, std::string reason)
         {
@@ -363,7 +398,9 @@ void NextDayzGameInstance::NetPoll()
         {
             if (event.type == NextNet::FNetEvent::EType::Connected)
             {
-                net.clients[event.peer].peer = event.peer;
+                FNetSession::FClient& client = net.clients[event.peer];
+                client.peer = event.peer;
+                client.survival.Configure(config_.Survival);
                 continue;
             }
             if (event.type == NextNet::FNetEvent::EType::Disconnected)
@@ -423,6 +460,25 @@ void NextDayzGameInstance::NetPoll()
                 if (!Net::Read(reader, state)) break;
                 state.presence.id = client.survivorId;
                 state.presence.sightScale = std::clamp(state.presence.sightScale, 0.1f, 2.0f);
+                // Movement is the client's; the server only notices impossible moves.
+                const auto now = std::chrono::steady_clock::now();
+                if (client.hasState && client.life == FNetSession::FClient::ELife::Alive)
+                {
+                    const float seconds = std::max(0.05f, std::chrono::duration<float>(now - client.lastStateTime).count());
+                    const glm::vec2 moved(state.presence.feet.x - client.lastFeet.x, state.presence.feet.z - client.lastFeet.z);
+                    if (glm::length(moved) > 6.0f && glm::length(moved) / seconds > 25.0f)
+                    {
+                        if (client.suspiciousMoves++ % 20 == 0)
+                        {
+                            SPDLOG_WARN("[NextDayz][net] survivor {} moved {:.1f} m in {:.2f} s", client.survivorId,
+                                        glm::length(moved), seconds);
+                        }
+                    }
+                }
+                client.lastFeet = state.presence.feet;
+                client.lastStateTime = now;
+                // Alive is the server's to say: a body it keeps dead stays dead.
+                state.presence.alive = client.survival.IsAlive() && client.life != FNetSession::FClient::ELife::Dead;
                 client.state = state;
                 client.hasState = true;
                 world_.UpsertSurvivor(state.presence);
@@ -454,10 +510,12 @@ void NextDayzGameInstance::NetPoll()
                 if (!victim || !victim->hasState || !victim->state.presence.alive) break;
                 if (glm::distance(hit.source, client.state.presence.eye) > 4.0f) break;
                 hit.amount = std::clamp(hit.amount, 0.0f, 150.0f);
+                if (!victim->survival.ApplyInfectedHit(hit.amount, victim->body.Armor(), survivalRng_.UnitFloat())) break;
                 hit.survivorId = client.survivorId;   // the victim learns who shot
                 FNetWriter writer;
                 Net::Write(writer, hit);
                 net.host.Send(victim->peer, writer.Bytes(), EDelivery::Reliable);
+                net.SendSurvival(*victim);
                 break;
             }
             case Net::EMessage::Noise:
@@ -530,6 +588,8 @@ void NextDayzGameInstance::NetPoll()
                     client.life = ELife::AwaitingKit;
                     client.carried.clear();
                     client.inventory = {};
+                    client.survival.Reset();
+                    net.SendSurvival(client);
                 }
                 if (!sync.alive)
                 {
@@ -545,13 +605,11 @@ void NextDayzGameInstance::NetPoll()
                     client.life = ELife::Alive;
                     if (!verdict.accepted)
                     {
-                        client.inventory = StartingInventory(netKitCvar_);
-                        client.carried = CountItems(client.inventory);
+                        FNetSession::Accept(client, StartingInventory(netKitCvar_));
                         fix(client, "not a starting kit: " + verdict.reason);
                         break;
                     }
-                    client.carried = reported;
-                    client.inventory = std::move(sync.inventory);
+                    FNetSession::Accept(client, std::move(sync.inventory));
                     break;
                 }
                 const FLedgerVerdict verdict = CheckConservation(client.carried, reported);
@@ -560,8 +618,47 @@ void NextDayzGameInstance::NetPoll()
                     fix(client, verdict.reason);
                     break;
                 }
-                client.carried = reported;
-                client.inventory = std::move(sync.inventory);
+                FNetSession::Accept(client, std::move(sync.inventory));
+                break;
+            }
+            case Net::EMessage::SurvivalAction:
+            {
+                Net::FSurvivalAction action;
+                if (!Net::Read(reader, action) || client.life != FNetSession::FClient::ELife::Alive ||
+                    !client.survival.IsAlive())
+                {
+                    break;
+                }
+                switch (action.action)
+                {
+                case Net::ESurvivalAction::UseItem:
+                    // Only what the ledger knows they carry can be eaten, drunk or put on a wound.
+                    if (client.body.FindInstance(action.instanceId) &&
+                        client.survival.TryUseItem(client.body, action.instanceId))
+                    {
+                        FNetSession::Accept(client, client.body.Capture());
+                    }
+                    break;
+                case Net::ESurvivalAction::DrinkFromWell:
+                {
+                    bool nearWell = false;
+                    for (const FWorldAnchorHandle handle : world_.anchors.Find(EWorldAnchorType::Well))
+                    {
+                        const FWorldAnchor* well = world_.anchors.Resolve(handle);
+                        nearWell = nearWell || (well && glm::distance(well->worldPos, client.state.presence.eye) <
+                                                            config_.Loot.ReachMeters + 2.0f);
+                    }
+                    if (nearWell) client.survival.DrinkFromWell();
+                    break;
+                }
+                case Net::ESurvivalAction::Rest:
+                    client.survival.Rest();
+                    break;
+                case Net::ESurvivalAction::DebugHarm:
+                    if (netCheatsCvar_) client.survival.ApplyDamage(std::clamp(action.amount, 0.0f, 500.0f), "debug", false);
+                    break;
+                }
+                net.SendSurvival(client);
                 break;
             }
             default:
@@ -678,6 +775,13 @@ void NextDayzGameInstance::NetPoll()
             }
             break;
         }
+        case Net::EMessage::SurvivalState:
+        {
+            Net::FSurvivalState state;
+            if (!Net::Read(reader, state) || state.life != netLife_) break;
+            survival_.Restore(state.body);
+            break;
+        }
         case Net::EMessage::InventoryFix:
         {
             Net::FInventoryFix fix;
@@ -721,6 +825,11 @@ void NextDayzGameInstance::NetPoll()
                 if (fresh) remote.feet = survivor.presence.feet;
                 remote.targetFeet = survivor.presence.feet;
                 remote.presentation = survivor.presentation;
+                if (remote.clothing != survivor.clothing)
+                {
+                    remote.clothing = survivor.clothing;
+                    remote.clothingDirty = true;
+                }
                 remote.alive = survivor.presence.alive;
                 remote.seen = true;
             }
@@ -788,12 +897,32 @@ void NextDayzGameInstance::TickServer(float dt)
     world_.TickInfected(dt);
     for (const FPlayerDamageRequest& strike : world_.ConsumeSurvivorHits())
     {
-        if (FNetSession::FClient* client = net.ClientBySurvivor(strike.targetId))
+        FNetSession::FClient* client = net.ClientBySurvivor(strike.targetId);
+        if (!client || client->life != FNetSession::FClient::ELife::Alive) continue;
+        if (!client->survival.ApplyInfectedHit(strike.amount, client->body.Armor(), survivalRng_.UnitFloat())) continue;
+        FNetWriter writer;
+        Net::Write(writer, Net::FSurvivorStrike{strike.amount, strike.sourcePosition});
+        net.host.Send(client->peer, writer.Bytes(), EDelivery::Reliable);
+        net.SendSurvival(*client);
+    }
+    // Every living body: hunger, thirst, cold, bleeding; the server says who dies.
+    for (auto& [peer, client] : net.clients)
+    {
+        if (client.life != FNetSession::FClient::ELife::Alive) continue;
+        client.survival.SetCold(std::clamp(time_.Chill() - client.body.Warmth() * 0.8f, 0.0f, 1.0f));
+        client.survival.Update(dt, client.state.presentation.locomotion.gait == EPlayerGait::Sprint);
+        if (!client.survival.IsAlive())
         {
-            FNetWriter writer;
-            Net::Write(writer, Net::FSurvivorStrike{strike.amount, strike.sourcePosition});
-            net.host.Send(client->peer, writer.Bytes(), EDelivery::Reliable);
+            SPDLOG_INFO("[NextDayz][net] survivor {} died ({})", client.survivorId,
+                        client.survival.Snapshot().lastDamageSource);
+            FNetSession::DropBody(client, loot_, GetEngine());
+            client.life = FNetSession::FClient::ELife::Dead;
+            world_.RemoveSurvivor(client.survivorId);
+            net.SendSurvival(client);
+            continue;
         }
+        client.survivalSyncTimer += dt;
+        if (client.survivalSyncTimer >= 0.25f) net.SendSurvival(client);
     }
     world_.noise.Update(dt);
     time_.Tick(static_cast<double>(dt), GetEngine().GetScene());
@@ -871,6 +1000,7 @@ void NextDayzGameInstance::NetClientSend(float dt)
         state.presence = LocalSurvivor();
         state.presence.id = net.survivorId;
         state.presentation = LocalPresentation();
+        state.clothing = inventory_.EquippedClothing();
         FNetWriter writer;
         Net::Write(writer, state);
         net.host.Send(server, writer.Bytes(), EDelivery::Unreliable);
@@ -981,6 +1111,17 @@ void NextDayzGameInstance::NetDropOnDeath()
     SyncClothingVisuals();
 }
 
+void NextDayzGameInstance::NetSurvivalAction(uint8_t action, FItemInstanceId instanceId, float amount)
+{
+    if (!net_ || net_->survivorId == 0)
+    {
+        return;
+    }
+    FNetWriter writer;
+    Net::Write(writer, Net::FSurvivalAction{static_cast<Net::ESurvivalAction>(action), instanceId, amount});
+    net_->host.Send(net_->host.ServerPeer(), writer.Bytes(), EDelivery::Reliable);
+}
+
 void NextDayzGameInstance::NetSendWeaponHit(const FWeaponHitEvent& hit)
 {
     if (!net_ || net_->survivorId == 0)
@@ -1089,11 +1230,17 @@ void NextDayzGameInstance::UpdateRemoteSurvivors(float dt)
             if (free == used.end()) continue;   // more survivors than prepared bodies
             remote.rig = static_cast<int>(free - used.begin());
             used[remote.rig] = true;
+            remote.clothingDirty = true;
             remote.feet = remote.targetFeet;
         }
         if (glm::distance(remote.feet, remote.targetFeet) > 6.0f) remote.feet = remote.targetFeet;
         remote.feet = glm::mix(remote.feet, remote.targetFeet, blend);
         PlayerRigVisual& rig = *remoteRigs_[remote.rig];
+        if (remote.clothingDirty)
+        {
+            rig.SetClothing(remote.clothing);
+            remote.clothingDirty = false;
+        }
         rig.SetVisible(remote.alive);
         rig.Update(remote.feet, remote.presentation, dt);
     }
@@ -1194,6 +1341,7 @@ bool NextDayzGameInstance::PlacePile(std::vector<NextDayz::FLootStack> contents,
 }
 void NextDayzGameInstance::TickServerLoot(float) {}
 void NextDayzGameInstance::NetDropOnDeath() {}
+void NextDayzGameInstance::NetSurvivalAction(uint8_t, NextDayz::FItemInstanceId, float) {}
 
 #endif
 

@@ -366,7 +366,9 @@ void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
                         {
                             if (validationDamagePlayer_ > 0.0f && validationReady())
                             {
-                                survival_.ApplyDamage(validationDamagePlayer_, "validation", false);
+                                // Online the body is the server's: ask it (it must allow cheats).
+                                if (NetOwnsSurvival()) NetSurvivalAction(3, 0, validationDamagePlayer_);
+                                else survival_.ApplyDamage(validationDamagePlayer_, "validation", false);
                             }
                         }, 0.0, 200.0);
     cvars.RegisterFloat("nextdayz.validation.hunger", -1.0f, &validationHunger_, NextCVar::ECVarFlags::None,
@@ -1046,6 +1048,13 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     if (const std::optional<NextDayz::FItemActionCommit> commit = actions_.ConsumeItemCommitRequest())
     {
         inventoryCommitted = true;
+        if (NetOwnsSurvival())
+        {
+            // The server applies it to the body it keeps; we show it at once.
+            if (commit->action == NextDayz::EPlayerAction::DrinkFromWell) NetSurvivalAction(1);
+            else if (commit->action == NextDayz::EPlayerAction::Rest) NetSurvivalAction(2);
+            else if (commit->action != NextDayz::EPlayerAction::FillBottle) NetSurvivalAction(0, commit->instanceId);
+        }
         if (commit->action == NextDayz::EPlayerAction::DrinkFromWell)
         {
             survival_.DrinkFromWell();
@@ -1111,7 +1120,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     section.emplace(timers, ETimer::Survival);
     // Cold: night and bad weather against whatever the player is wearing.
     survival_.SetCold(std::clamp(time_.Chill() - inventory_.Warmth() * 0.8f, 0.0f, 1.0f));
-    if (!knobs.freezeNeeds)
+    if (!knobs.freezeNeeds && !NetOwnsSurvival())
     {
         survival_.Update(dt, player_.LocomotionState().gait == NextDayz::EPlayerGait::Sprint);
     }
@@ -1234,8 +1243,9 @@ void NextDayzGameInstance::SimulateFrame(float dt)
         }
         const bool invulnerable = (validationInvulnerable_ && GOption->AgentValidation) || knobs.god;
         const int woundsBefore = survival_.Snapshot().bleedingWounds;
-        const bool landed = !invulnerable &&
-            survival_.ApplyInfectedHit(damage.amount, inventory_.Armor(), survivalRng_.UnitFloat());
+        // Online the server has already applied it to the body it keeps.
+        const bool landed = NetOwnsSurvival() ||
+            (!invulnerable && survival_.ApplyInfectedHit(damage.amount, inventory_.Armor(), survivalRng_.UnitFloat()));
         debugger_.RecordPlayerHit(damage.sourcePosition, damage.amount, landed,
                                   survival_.Snapshot().bleedingWounds > woundsBefore);
         if (invulnerable || landed)

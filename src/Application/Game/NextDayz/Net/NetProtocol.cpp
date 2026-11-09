@@ -54,6 +54,21 @@ namespace NextDayz::Net
             for (FWeaponAttachments& attachments : p.slotAttachments) reader.Read(attachments);
         }
 
+        void WriteClothing(FNetWriter& writer, const std::vector<std::string>& clothing)
+        {
+            writer.Write(static_cast<uint8_t>(std::min<size_t>(clothing.size(), 16)));
+            for (size_t index = 0; index < clothing.size() && index < 16; ++index) writer.WriteString(clothing[index]);
+        }
+
+        bool ReadClothing(FNetReader& reader, std::vector<std::string>& clothing)
+        {
+            const auto count = reader.Read<uint8_t>();
+            if (reader.Failed() || count > 16) return false;
+            clothing.resize(count);
+            for (std::string& item : clothing) item = reader.ReadString();
+            return !reader.Failed();
+        }
+
         // Bounded so a malformed packet cannot ask for a huge allocation.
         constexpr uint16_t kMaxStacks = 512;
 
@@ -223,6 +238,7 @@ namespace NextDayz::Net
         Header(writer, EMessage::PlayerState);
         writer.Write(value.presence);
         WritePresentation(writer, value.presentation);
+        WriteClothing(writer, value.clothing);
     }
 
     void WritePlayerLeft(FNetWriter& writer, uint32_t survivorId)
@@ -240,6 +256,7 @@ namespace NextDayz::Net
         {
             writer.Write(survivor.presence);
             WritePresentation(writer, survivor.presentation);
+            WriteClothing(writer, survivor.clothing);
         }
         writer.Write(static_cast<uint16_t>(value.zombies.size()));
         for (const FZombieRuntime& zombie : value.zombies) WriteZombie(writer, zombie);
@@ -345,6 +362,56 @@ namespace NextDayz::Net
         WriteInventory(writer, value.inventory);
     }
 
+    void Write(FNetWriter& writer, const FSurvivalAction& value)
+    {
+        Header(writer, EMessage::SurvivalAction);
+        writer.Write(value.action).Write(value.instanceId).Write(value.amount);
+    }
+
+    void Write(FNetWriter& writer, const FSurvivalState& value)
+    {
+        Header(writer, EMessage::SurvivalState);
+        const FSurvivalSnapshot& body = value.body;
+        writer.Write(value.life)
+            .Write(body.health)
+            .Write(body.hunger)
+            .Write(body.hydration)
+            .Write<int32_t>(body.bleedingWounds)
+            .Write(body.cold)
+            .Write(body.painkillerSeconds)
+            .Write<uint8_t>(body.healing ? 1 : 0)
+            .Write(body.lifeState)
+            .Write(body.damageSequence)
+            .Write(body.woundSequence)
+            .WriteString(body.lastDamageSource);
+    }
+
+    bool Read(FNetReader& reader, FSurvivalAction& out)
+    {
+        reader.Read(out.action);
+        reader.Read(out.instanceId);
+        reader.Read(out.amount);
+        return !reader.Failed();
+    }
+
+    bool Read(FNetReader& reader, FSurvivalState& out)
+    {
+        FSurvivalSnapshot& body = out.body;
+        reader.Read(out.life);
+        reader.Read(body.health);
+        reader.Read(body.hunger);
+        reader.Read(body.hydration);
+        body.bleedingWounds = reader.Read<int32_t>();
+        reader.Read(body.cold);
+        reader.Read(body.painkillerSeconds);
+        body.healing = reader.Read<uint8_t>() != 0;
+        reader.Read(body.lifeState);
+        reader.Read(body.damageSequence);
+        reader.Read(body.woundSequence);
+        body.lastDamageSource = reader.ReadString();
+        return !reader.Failed();
+    }
+
     bool Read(FNetReader& reader, FInventorySync& out)
     {
         reader.Read(out.life);
@@ -419,7 +486,7 @@ namespace NextDayz::Net
     {
         reader.Read(out.presence);
         ReadPresentation(reader, out.presentation);
-        return !reader.Failed();
+        return ReadClothing(reader, out.clothing);
     }
 
     bool Read(FNetReader& reader, FSnapshot& out)
@@ -430,7 +497,7 @@ namespace NextDayz::Net
         {
             reader.Read(survivor.presence);
             ReadPresentation(reader, survivor.presentation);
-            if (reader.Failed()) return false;
+            if (!ReadClothing(reader, survivor.clothing)) return false;
         }
         out.zombies.resize(reader.Read<uint16_t>());
         for (FZombieRuntime& zombie : out.zombies)

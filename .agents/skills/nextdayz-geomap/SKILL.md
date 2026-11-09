@@ -11,6 +11,11 @@ pipeline (`gnb geo expedition`) only assembles what the layout and the
 regional kit describe, so quality is decided in steps 1-4. Paths are relative
 to the repository root.
 
+A level that stands for no real place (the training ground) skips step 1 and
+the geocache: its recipe carries a `synthetic` terrain block instead, and
+everything from the layout on is the same pipeline (design doc,
+*无经纬度关卡*).
+
 Rules and file roles: `docs/projects/nextdayz/nextdayz-world-map-design.md`
 (read it first, especially *新地点初始地图的强制规则*). Terrain operators
 (`paint`, plot pads): `docs/AGENT_GUIDE/ScadTerrain.md`. Worked example: Loket

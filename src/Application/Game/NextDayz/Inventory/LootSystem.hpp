@@ -53,6 +53,11 @@ namespace NextDayz
     {
         glm::vec3 position{};
         ELootProfile profile = ELootProfile::Residential;
+        // Display spot (nd_item): always this item. Never rolls, always stocked
+        // at start, and restocks shortly after it is taken (training ground).
+        std::string itemId;
+        int count = 1;
+        float yaw = 0.0f;
     };
 
     enum class ELootSource : uint8_t
@@ -86,6 +91,8 @@ namespace NextDayz
         int authoredIndex = -1;
         double pileTime = 0.0;
         std::string persistentId;
+        std::string fixedItem;     // display spot: what it always holds
+        int fixedCount = 1;
     };
 
     struct FSavedLootEntry

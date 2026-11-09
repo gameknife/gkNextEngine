@@ -33,6 +33,10 @@ namespace NextDayz
         glm::vec3 worldPos{};
         uint32_t nodeInstanceId = 0;
         int group = 1;              // infected anchors: how many spawn together
+        // Loot anchors from nd_item(id, n): always this item, n of it (displays).
+        std::string item;
+        int count = 1;
+        float yaw = 0.0f;           // world yaw of the anchor (displays keep their layout)
     };
 
     class WorldAnchorRegistry

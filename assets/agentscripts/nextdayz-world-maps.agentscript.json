@@ -78,13 +78,18 @@
       "value": 3
     },
     {
+      "type": "wait-frames",
+      "n": 3
+    },
+    {
       "type": "click",
       "at": {
         "px": [
           110,
-          335
+          462
         ]
-      }
+      },
+      "comment": "Second field record (training ground); window pixels at 125% UI scale (1600x900 viewport)."
     },
     {
       "type": "wait-frames",
@@ -94,7 +99,7 @@
       "type": "assert",
       "query": "game.browsedMapId",
       "op": "eq",
-      "value": "jp_otaru_north_canal"
+      "value": "training_ground"
     },
     {
       "type": "assert",
@@ -251,7 +256,7 @@
     {
       "type": "cvar",
       "name": "nextdayz.validation.deployMap",
-      "set": "jp_otaru_north_canal"
+      "set": "training_ground"
     },
     {
       "type": "cvar",
@@ -262,7 +267,7 @@
       "type": "wait-until",
       "query": "game.activeMapId",
       "op": "eq",
-      "value": "jp_otaru_north_canal",
+      "value": "training_ground",
       "timeoutMs": 180000
     },
     {
@@ -308,7 +313,7 @@
     },
     {
       "type": "screenshot",
-      "out": "screenshots/nextdayz-otaru-street",
+      "out": "screenshots/nextdayz-training-street",
       "ui": true,
       "accumulateFrames": 64
     },

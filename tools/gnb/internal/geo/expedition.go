@@ -44,7 +44,13 @@ type ExpeditionRecipe struct {
 	Seed     int                 `json:"seed"`
 	Version  int                 `json:"version"`
 	Gameplay *ExpeditionGameplay `json:"gameplay"`
+	// Synthetic replaces the geocache: no coordinates, procedural ground
+	// (expedition_synthetic.go). Everything after the terrain is identical.
+	Synthetic *ExpeditionSynthetic `json:"synthetic,omitempty"`
 }
+
+var expeditionRegions = map[string]bool{"bohemia": true, "hokkaido": true, "sichuan": true, "training": true}
+
 type ExpeditionSite struct {
 	ID        string     `json:"id"`
 	Name      string     `json:"name"`
@@ -86,28 +92,36 @@ func ExportExpedition(repoRoot, recipePath string, publish bool) (string, Expedi
 	if err := readJSON(recipePath, &recipe); err != nil {
 		return "", report, err
 	}
-	if !expeditionID.MatchString(recipe.ID) || (recipe.Region != "bohemia" && recipe.Region != "hokkaido" && recipe.Region != "sichuan") || recipe.Version < 1 || recipe.Gameplay == nil {
+	if !expeditionID.MatchString(recipe.ID) || !expeditionRegions[recipe.Region] || recipe.Version < 1 || recipe.Gameplay == nil {
 		return "", report, fmt.Errorf("geographic extraction recipes require a region and gameplay PCG controls")
 	}
 	gp := recipe.Gameplay
 	if gp.ReliefScale <= 0 || gp.ReliefScale > 1 || gp.BuildingBudget < 1 || gp.BuildingBudget > 120 {
 		return "", report, fmt.Errorf("invalid gameplay budget or relief scale")
 	}
-	paths := NewPaths(repoRoot, recipe.ID)
 	var ir IR
-	if err := readJSON(paths.PartIRPath("p0_0"), &ir); err != nil {
-		return "", report, fmt.Errorf("run geo fetch/build first: %w", err)
-	}
-	if ir.Terrain == nil || ir.SizeM > 1000 || ir.SizeM < 100 {
-		return "", report, fmt.Errorf("PCG expedition needs a built single tile")
-	}
-	blob, err := os.ReadFile(paths.HmapPath())
-	if err != nil {
-		return "", report, err
-	}
-	grid, err := DecodeHmap(blob)
-	if err != nil {
-		return "", report, err
+	var grid *HeightGrid
+	var err error
+	synthetic := recipe.Synthetic != nil
+	if synthetic {
+		if ir, grid, err = syntheticExpeditionTerrain(recipe); err != nil {
+			return "", report, err
+		}
+	} else {
+		paths := NewPaths(repoRoot, recipe.ID)
+		if err = readJSON(paths.PartIRPath("p0_0"), &ir); err != nil {
+			return "", report, fmt.Errorf("run geo fetch/build first: %w", err)
+		}
+		if ir.Terrain == nil || ir.SizeM > 1000 || ir.SizeM < 100 {
+			return "", report, fmt.Errorf("PCG expedition needs a built single tile")
+		}
+		blob, e := os.ReadFile(paths.HmapPath())
+		if e != nil {
+			return "", report, e
+		}
+		if grid, err = DecodeHmap(blob); err != nil {
+			return "", report, err
+		}
 	}
 	meta := *ir.Terrain
 	datum := meta.BaseElevation
@@ -141,6 +155,9 @@ func ExportExpedition(repoRoot, recipePath string, publish bool) (string, Expedi
 		return "", report, err
 	}
 	report.Mode = "geographic-skeleton/gameplay-pcg"
+	if synthetic {
+		report.Mode = "synthetic-terrain/gameplay-pcg"
+	}
 	report.Center, report.SizeM, report.Datum, report.ReliefScale = ir.Center, ir.SizeM, datum, gp.ReliefScale
 	shifted, err := EncodeHmap(grid)
 	if err != nil {
@@ -161,13 +178,17 @@ func ExportExpedition(repoRoot, recipePath string, publish bool) (string, Expedi
 	roads := selectRoads(&ir, ir.SizeM/2, opt)
 	report.Roads = len(roads)
 	var out strings.Builder
-	fmt.Fprintf(&out, "// Geographic reference only; gameplay lives in layout.scad.\n// %.5f, %.5f; %.0fm square. DEM relief scale %.2f.\n// © OpenStreetMap contributors (ODbL); SRTM / NASA-USGS.\nuse <../../../lib/gk_camera.scad>\nuse <../../../lib/kit_abandoned.scad>\nuse <../../../lib/nextdayz_pcg.scad>\nuse <../../../lib/nextdayz_coldwar.scad>\n$fn=12;\ninclude <layout.scad>\n", ir.Center[0], ir.Center[1], ir.SizeM, gp.ReliefScale)
+	if synthetic {
+		fmt.Fprintf(&out, "// Synthetic ground (no real place); gameplay lives in layout.scad.\n// %.0fm square, seed %d. Relief scale %.2f.\nuse <../../../lib/gk_camera.scad>\nuse <../../../lib/kit_abandoned.scad>\nuse <../../../lib/nextdayz_pcg.scad>\nuse <../../../lib/nextdayz_coldwar.scad>\n$fn=12;\ninclude <layout.scad>\n", ir.SizeM, recipe.Seed, gp.ReliefScale)
+	} else {
+		fmt.Fprintf(&out, "// Geographic reference only; gameplay lives in layout.scad.\n// %.5f, %.5f; %.0fm square. DEM relief scale %.2f.\n// © OpenStreetMap contributors (ODbL); SRTM / NASA-USGS.\nuse <../../../lib/gk_camera.scad>\nuse <../../../lib/kit_abandoned.scad>\nuse <../../../lib/nextdayz_pcg.scad>\nuse <../../../lib/nextdayz_coldwar.scad>\n$fn=12;\ninclude <layout.scad>\n", ir.Center[0], ir.Center[1], ir.SizeM, gp.ReliefScale)
+	}
 	var reference strings.Builder
 	// Settlements level every plot exactly; the finer mesh (3.9 m cells) keeps
 	// the transition between neighbouring plots short. Legacy layouts keep 176.
 	cells := 176
 	for _, s := range report.Sites {
-		if _, ok := settlementRules[s.Kind]; ok {
+		if _, ok := settlementRules[s.Kind]; ok || trainingRules[s.Kind].max > 0 {
 			cells = 256
 		}
 	}
@@ -201,7 +222,8 @@ func ExportExpedition(repoRoot, recipePath string, publish bool) (string, Expedi
 	if report.Alleys > 0 {
 		fmt.Fprintf(&out, "nd_pcg_alleys(TERR,PCG_ALLEYS,PCG_SITES,PCG_SPAWNS,PCG_EXTRACTIONS,PCG_CLEAR,%d,%q);\n", recipe.Seed, recipe.Region)
 	}
-	out.WriteString("gk_camera_lookat([-625,-725,520],[0,0,25],\"overview\",48);\ngk_camera_lookat([-150,-230,135],[20,85,25],\"tactical_core\",55);\n")
+	k := ir.SizeM / 1000
+	fmt.Fprintf(&out, "gk_camera_lookat([%s,%s,%s],[0,0,25],\"overview\",48);\ngk_camera_lookat([-150,-230,135],[20,85,25],\"tactical_core\",55);\n", fnum(-625*k), fnum(-725*k), fnum(520*k))
 	if err = os.WriteFile(filepath.Join(output, "base.scad"), []byte(out.String()), 0644); err != nil {
 		return "", report, err
 	}
@@ -217,10 +239,15 @@ func ExportExpedition(repoRoot, recipePath string, publish bool) (string, Expedi
 			}
 		}
 	}
-	if err = writeJSON(filepath.Join(output, "reference.json"), expeditionBuiltAreas(&ir)); err != nil {
+	referenceData := expeditionBuiltAreas(&ir)
+	attribution := fmt.Sprintf("# %s\n\nGeographic reference: %.5f, %.5f. © OpenStreetMap contributors (ODbL 1.0); SRTM / NASA-USGS.\n\nTerrain relief, roads and district hints are adapted for gameplay. Building counts, tactical sites, vegetation and loot are authored PCG decisions; this is not a reconstruction.\n", recipe.ID, ir.Center[0], ir.Center[1])
+	if synthetic {
+		referenceData = map[string]interface{}{"usage": "synthetic terrain; no geographic reference", "sizeM": ir.SizeM, "seed": recipe.Seed, "synthetic": recipe.Synthetic}
+		attribution = fmt.Sprintf("# %s\n\nSynthetic level: procedural terrain from the recipe (seed %d); no geographic or third-party map data.\n\nSites, buildings, vegetation, displays and loot are authored PCG decisions.\n", recipe.ID, recipe.Seed)
+	}
+	if err = writeJSON(filepath.Join(output, "reference.json"), referenceData); err != nil {
 		return "", report, err
 	}
-	attribution := fmt.Sprintf("# %s\n\nGeographic reference: %.5f, %.5f. © OpenStreetMap contributors (ODbL 1.0); SRTM / NASA-USGS.\n\nTerrain relief, roads and district hints are adapted for gameplay. Building counts, tactical sites, vegetation and loot are authored PCG decisions; this is not a reconstruction.\n", recipe.ID, ir.Center[0], ir.Center[1])
 	if err = os.WriteFile(filepath.Join(output, "ATTRIBUTION.md"), []byte(attribution), 0644); err != nil {
 		return "", report, err
 	}
@@ -376,7 +403,7 @@ func publishExpedition(repoRoot, output, assetRoot string, recipe ExpeditionReci
 			return "", report, err
 		}
 	}
-	for _, name := range []string{"nextdayz_pcg.scad", "nextdayz_settlement.scad", "nextdayz_hokkaido.scad", "nextdayz_coldwar.scad", "kit_abandoned.scad", "kit_bohemia.scad", "kit_hokkaido.scad", "kit_coldwar.scad", "nextdayz_geography.scad", "kit_road.scad", "gk_camera.scad", "kit_layout.scad", "kit_terrain.scad"} {
+	for _, name := range []string{"nextdayz_pcg.scad", "nextdayz_settlement.scad", "nextdayz_hokkaido.scad", "nextdayz_coldwar.scad", "nextdayz_training.scad", "kit_abandoned.scad", "kit_bohemia.scad", "kit_hokkaido.scad", "kit_training.scad", "kit_coldwar.scad", "gk_texgraph.scad", "nextdayz_geography.scad", "kit_road.scad", "gk_camera.scad", "kit_layout.scad", "kit_terrain.scad"} {
 		data, err := os.ReadFile(filepath.Join(repoRoot, "assets/scad/lib", name))
 		if err != nil {
 			return "", report, err

@@ -1,24 +1,97 @@
 {
   "name": "nextdayz-zombie-indoor",
   "target": "NextDayz",
-  "scene": "assets/scad/proc/nextdayz/cn_chengdu_qinglong_lake/scene.scad",
-  "defaults": { "stepTimeoutMs": 180000 },
-  "viewport": { "width": 1280, "height": 720 },
+  "scene": "assets/scad/proc/nextdayz/training_ground/scene.scad",
+  "defaults": {
+    "stepTimeoutMs": 180000
+  },
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
   "steps": [
-    { "type": "wait-until", "query": "game.sceneReady", "op": "eq", "value": true, "timeoutMs": 180000 },
-    { "type": "cvar", "name": "nextdayz.validation.invulnerable", "set": true },
-    { "type": "cvar", "name": "nextdayz.validation.teleport", "set": "-95.3333,373.3600" },
-    { "type": "wait-until", "query": "game.zombieNavReady", "op": "eq", "value": true, "timeoutMs": 60000 },
-    { "type": "cvar", "name": "nextdayz.validation.lookYaw", "set": 180 },
-    { "type": "cvar", "name": "nextdayz.validation.lookPitch", "set": -5 },
-    { "type": "cvar", "name": "nextdayz.validation.zombieDistance", "set": -8.0 },
-    { "type": "cvar", "name": "nextdayz.validation.spawnZombie", "set": true },
-    { "type": "key", "code": "W", "action": "down" },
-    { "type": "wait-until", "query": "game.posZ", "op": "lt", "value": -378.16, "timeoutMs": 10000 },
-    { "type": "key", "code": "W", "action": "up" },
-    { "type": "wait-until", "query": "game.zombiePosZ", "op": "lt", "value": -377.6, "timeoutMs": 15000 },
-    { "type": "wait-until", "query": "game.zombieState", "op": "eq", "value": "Attack", "timeoutMs": 8000 },
-    { "type": "screenshot", "out": "screenshots/nextdayz-zombie-indoor", "ui": true },
-    { "type": "quit" }
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.invulnerable",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-89.5,-106"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.zombieNavReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": 2
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.zombieDistance",
+      "set": -8.0
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.spawnZombie",
+      "set": true
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "lt",
+      "value": 99.0,
+      "timeoutMs": 10000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.zombiePosZ",
+      "op": "lt",
+      "value": 101.0,
+      "timeoutMs": 15000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.zombieState",
+      "op": "eq",
+      "value": "Attack",
+      "timeoutMs": 8000
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz-zombie-indoor",
+      "ui": true
+    },
+    {
+      "type": "quit"
+    }
   ]
 }

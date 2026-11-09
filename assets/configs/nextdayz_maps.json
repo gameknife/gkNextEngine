@@ -19,40 +19,19 @@
       "terrain": "RIVER VALLEY / HILLSIDE OLD TOWN"
     },
     {
-      "center": [
-        43.2025,
-        141.0005
-      ],
-      "description": "Timber-house backstreets and narrow shopfronts descend to the north canal stone stores. Search the Meiji shipping office, slip through terraced gardens and the hillside shrine grove, or risk the exposed cargo quays. Birch and oak woods cover the northwest; the harbour stays open, with five bridge approaches and two rescue zones.",
-      "draftScene": "assets/scad/proc/nextdayz/jp_otaru_north_canal/scene.scad",
-      "id": "jp_otaru_north_canal",
-      "localName": "小樽·北运河",
-      "mapVersion": 4,
-      "name": "OTARU / NORTH CANAL",
-      "profile": "hokkaido_decay",
-      "region": "JAPAN / HOKKAIDO",
-      "scene": "assets/scad/proc/nextdayz/jp_otaru_north_canal/published/v4/scene.scad",
-      "sizeM": 1000,
-      "status": "published",
-      "terrain": "COASTAL TOWN / CANAL / FREIGHT YARDS"
-    },
-    {
-      "center": [
-        30.6346,
-        104.1868
-      ],
-      "description": "Abandoned tea courtyards, visitor facilities and village homes line a wetland lake east of Chengdu. Follow the broken greenway, use bamboo groves for cover, and choose exposed footbridges or longer wooded approaches to reach rescue.",
-      "draftScene": "assets/scad/proc/nextdayz/cn_chengdu_qinglong_lake/scene.scad",
-      "id": "cn_chengdu_qinglong_lake",
-      "localName": "青龙湖·荒径",
+      "description": "An army training area behind a concrete gate. Every weapon, magazine and attachment lies in the armory, every garment in the quartermaster store, rations in the mess tent, medicine and tools in the field stores; take anything, it is back on the table a few seconds later. Zero rifles on the 300 m range, clear the shoot house, run the obstacle course, or try your aim on the infected penned east of the range.",
+      "draftScene": "assets/scad/proc/nextdayz/training_ground/scene.scad",
+      "id": "training_ground",
+      "kind": "training",
+      "localName": "训练场",
       "mapVersion": 1,
-      "name": "CHENGDU / QINGLONG LAKE",
-      "profile": "sichuan_wetland_decay",
-      "region": "CHINA / SICHUAN / CHENGDU",
-      "scene": "assets/scad/proc/nextdayz/cn_chengdu_qinglong_lake/published/v1/scene.scad",
-      "sizeM": 1000,
+      "name": "TRAINING GROUND",
+      "profile": "training",
+      "region": "MILITARY TRAINING AREA",
+      "scene": "assets/scad/proc/nextdayz/training_ground/published/v1/scene.scad",
+      "sizeM": 800,
       "status": "published",
-      "terrain": "WETLAND PARK / BAMBOO GROVES / LAKESIDE GREENWAY"
+      "terrain": "FIRING RANGE / ARMORY / OBSTACLE COURSE"
     }
   ],
   "version": 1

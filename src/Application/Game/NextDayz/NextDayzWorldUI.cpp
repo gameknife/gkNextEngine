@@ -61,7 +61,9 @@ void NextDayzGameInstance::DrawWorldOperations()
     ImGui::TextColored(ImVec4(0.89f,0.71f,0.40f,1), NextDayz::L10n::Tr("MERCENARY FIELD OFFICE"));
     ImGui::Spacing();
     ImGui::TextWrapped(NextDayz::L10n::Tr("Search. Survive. Bring it home."));
-    ImGui::TextDisabled(NextDayz::L10n::Tr("%zu regions / 1 shared safehouse"), visible.size());
+    const size_t regions = static_cast<size_t>(std::count_if(visible.begin(), visible.end(),
+        [](const auto* map) { return !map->training; }));
+    ImGui::TextDisabled(NextDayz::L10n::Tr("%zu regions / 1 shared safehouse"), regions);
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::TextDisabled(NextDayz::L10n::Tr("FIELD RECORDS"));
@@ -72,7 +74,9 @@ void NextDayzGameInstance::DrawWorldOperations()
         const uint64_t sorties = count == campaign_.mapSorties.end() ? 0 : count->second;
         ImGui::PushID(static_cast<int>(index));
         ImGui::Spacing();
-        const auto title = NextDayz::L10n::Format("{}\n{}  |  {} deployments", map.name, map.region, sorties);
+        const auto title = map.training
+            ? NextDayz::L10n::Format("{}\n{}  |  practice, never assigned", map.name, map.region)
+            : NextDayz::L10n::Format("{}\n{}  |  {} deployments", map.name, map.region, sorties);
         if (ImGui::Selectable(title.c_str(), selectedWorldMap_ == static_cast<int>(index), 0, ImVec2(0, 62)))
             selectedWorldMap_ = static_cast<int>(index);
         ImGui::PopID();
@@ -112,6 +116,19 @@ void NextDayzGameInstance::DrawWorldOperations()
     }
     ImGui::EndDisabled();
     if (!visible.empty()) ImGui::TextWrapped(NextDayz::L10n::Tr("Selected: %s"), NextDayz::L10n::Tr(visible[selectedWorldMap_]->name));
+    // Practice range: every weapon, magazine, garment, food and tool on display.
+    const auto training = std::find_if(visible.begin(), visible.end(), [](const auto* map) { return map->training; });
+    if (training != visible.end() && !authoringMode_)
+    {
+        ImGui::Spacing();
+        ImGui::BeginDisabled(pendingCampaign_.has_value() || campaignSaveBlocked_);
+        if (ImGui::Button(NextDayz::L10n::Tr("ENTER TRAINING GROUND"), ImVec2(-1, 32)))
+        {
+            if ((*training)->scene == campaignMap_) CompleteDeployment();
+            else RequestExpeditionMap(**training, true);
+        }
+        ImGui::EndDisabled();
+    }
     ImGui::EndChild();
     ImGui::SameLine();
 
@@ -172,6 +189,7 @@ void NextDayzGameInstance::DrawWorldOperations()
     for (size_t index = 0; index < visible.size(); ++index)
     {
         const auto& map = *visible[index];
+        if (map.training) continue;   // no real place to point at
         const ImVec2 point = project(map.longitude, map.latitude);
         const bool selected = static_cast<int>(index) == selectedWorldMap_;
         const float distance = std::hypot(io.MousePos.x - point.x, io.MousePos.y - point.y);
@@ -212,7 +230,8 @@ void NextDayzGameInstance::DrawWorldOperations()
         ImGui::TextColored(ImVec4(0.89f,0.71f,0.40f,1), "%s", NextDayz::L10n::Tr(map.name));
         ImGui::SameLine();
         ImGui::TextDisabled(" | %s | %.0f x %.0f m", NextDayz::L10n::Tr(map.region), map.sizeM, map.sizeM);
-        ImGui::TextDisabled("%.4f N, %.4f E   /   %s", map.latitude, map.longitude, NextDayz::L10n::Tr(map.terrain));
+        if (map.training) ImGui::TextDisabled("%s   /   %s", NextDayz::L10n::Tr("NO FIXED LOCATION"), NextDayz::L10n::Tr(map.terrain));
+        else ImGui::TextDisabled("%.4f N, %.4f E   /   %s", map.latitude, map.longitude, NextDayz::L10n::Tr(map.terrain));
         ImGui::TextWrapped("%s", NextDayz::L10n::Tr(map.description));
     }
     ImGui::TextDisabled(NextDayz::L10n::Tr("Made with Natural Earth."));

@@ -36,6 +36,7 @@
 #include "Engine/Runtime/Utilities/NextEngineHelper.hpp"
 #include "Engine/Vulkan/WindowSurface.hpp"
 #include "Modules/ScadLoader/FScadRig.h"
+#include "Modules/ScadLoader/FScadShared.h"
 #include "Zombies/ZombieMovement.hpp"
 #include "Modules/ScadLoader/ScadModule.hpp"
 #include "Modules/NextUI/FontLoader.hpp"
@@ -207,7 +208,7 @@ void NextDayzGameInstance::OnInit()
         SPDLOG_ERROR("[NextDayz] map registry: {}", mapError);
     }
     if (const auto published = std::find_if(expeditionMaps_.begin(), expeditionMaps_.end(),
-            [](const auto& map) { return map.published; }); published != expeditionMaps_.end())
+            [](const auto& map) { return map.published && !map.training; }); published != expeditionMaps_.end())
         scene = published->scene;
     if (!GOption->SceneName.empty())
     {
@@ -1070,6 +1071,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
         {
             effects_.WorldImpact(trace.endPoint, trace.normal);
             audio_.Impact(trace.endPoint);
+            if (!trace.melee && trace.pellet == 0) ScoreRangeTarget(trace);
         }
         debugger_.RecordTrace(trace);
     }
@@ -1668,10 +1670,33 @@ std::vector<NextDayz::FLootSpotSeed> NextDayzGameInstance::CollectLootSpots() co
         if (const NextDayz::FWorldAnchor* anchor = worldAnchors_.Resolve(handle))
         {
             const std::optional<NextDayz::ELootProfile> profile = NextDayz::ParseLootProfile(anchor->profile);
-            spots.push_back({anchor->worldPos, profile.value_or(NextDayz::ELootProfile::Residential)});
+            spots.push_back({anchor->worldPos, profile.value_or(NextDayz::ELootProfile::Residential), anchor->item,
+                             anchor->count, anchor->yaw});
         }
     }
     return spots;
+}
+
+void NextDayzGameInstance::ScoreRangeTarget(const NextDayz::FWeaponTraceEvent& trace)
+{
+    const Assets::Node* node = GetEngine().GetScene().GetNodeByInstanceId(trace.hitInstanceId);
+    while (node && node->GetName() != "nd_target") node = node->GetParent();
+    if (!node) return;
+    // nd_target's origin is the aim point; the face is thin, so the distance
+    // from the origin is the distance from the centre of the bull.
+    const Assets::Scad::FMetadata metadata = Assets::Scad::ParseScadMetadata(node->GetMetadata());
+    const int range = static_cast<int>(Assets::Scad::MetadataNumber(metadata, "d", 0.0));
+    const float radius = static_cast<float>(Assets::Scad::MetadataNumber(metadata, "r", 0.0));
+    const glm::vec3 local = glm::inverse(node->WorldTransform()) * glm::vec4(trace.endPoint, 1.0f);
+    ++rangeHits_;
+    if (radius <= 0.0f)
+    {
+        Notify(NextDayz::L10n::Message("Target {} m: hit", range), 0);
+        return;
+    }
+    const int ring = std::clamp(10 - static_cast<int>(std::floor(glm::length(local) / radius * 10.0f)), 0, 10);
+    if (ring == 0) Notify(NextDayz::L10n::Message("Target {} m: outside the rings", range), 0);
+    else Notify(NextDayz::L10n::Message("Target {} m: {} ring", range, ring), 0);
 }
 
 void NextDayzGameInstance::SyncClothingVisuals()
@@ -3296,6 +3321,14 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     reg.Add("viewModelAttachments", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(weapons_.VisibleAttachments()); });
     reg.Add("renderedAttachmentError", [this]() -> Runtime::Agent::FAgentQueryValue { return double(weapons_.RenderedAttachmentError()); });
     reg.Add("heldAttachments", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(rig_.HeldAttachmentCount()); });
+    reg.Add("rangeHits", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(rangeHits_); });
+    reg.Add("displayLoot", [this]() -> Runtime::Agent::FAgentQueryValue
+    {
+        int64_t count = 0;
+        for (const NextDayz::FWorldAnchorHandle handle : worldAnchors_.Find(NextDayz::EWorldAnchorType::Loot))
+            if (const auto* anchor = worldAnchors_.Resolve(handle); anchor && !anchor->item.empty()) ++count;
+        return count;
+    });
     reg.Add("activeMapId", [this]() -> Runtime::Agent::FAgentQueryValue { return ActiveMapId(); });
     reg.Add("sceneGeneration", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(geographySceneGeneration_); });
     reg.Add("mapLoading", [this]() -> Runtime::Agent::FAgentQueryValue { return pendingCampaign_.has_value() || !loadingMapPath_.empty(); });

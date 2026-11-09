@@ -1,7 +1,7 @@
 {
   "name": "nextdayz-world-resume",
   "target": "NextDayz",
-  "scene": "assets/scad/proc/nextdayz/jp_otaru_north_canal/scene.scad",
+  "scene": "assets/scad/proc/nextdayz/training_ground/scene.scad",
   "defaults": {
     "stepTimeoutMs": 180000
   },
@@ -157,7 +157,7 @@
     {
       "type": "cvar",
       "name": "nextdayz.validation.deployMap",
-      "set": "jp_otaru_north_canal"
+      "set": "training_ground"
     },
     {
       "type": "cvar",
@@ -168,7 +168,7 @@
       "type": "wait-until",
       "query": "game.activeMapId",
       "op": "eq",
-      "value": "jp_otaru_north_canal",
+      "value": "training_ground",
       "timeoutMs": 180000
     },
     {

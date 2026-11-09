@@ -32,6 +32,10 @@ namespace NextDayz
         constexpr float kRestockInterval = 1.0f;
         constexpr float kInitialStockShare = 0.78f;
         constexpr float kLootParkedY = -1000.0f;
+        // Display spots come back soon after they are taken, once the taker
+        // has stepped away from the table.
+        constexpr double kDisplayRestockSeconds = 12.0;
+        constexpr float kDisplayRestockClearance = 2.5f;
         // Restocking never fills more than this share of all entries with one category.
         constexpr std::array<float, static_cast<size_t>(ELootCategory::Count)> kCategoryStockCap = {
             0.45f, 0.20f, 0.14f, 0.08f, 0.15f, 0.25f};
@@ -167,7 +171,23 @@ namespace NextDayz
     void LootSystem::RollContents(FLootEntry& entry, uint32_t roll, bool restock)
     {
         entry.contents.clear();
-        if (entry.source == ELootSource::Authored)
+        if (!entry.fixedItem.empty())
+        {
+            FLootStack stack{entry.fixedItem, std::max(1, entry.fixedCount), 0};
+            // Displays hand out ready guns: a full magazine, like a range issue.
+            const FItemDef* item = FindItemDef(stack.itemId);
+            if (const FWeaponDef* weapon = item ? FindWeaponDef(item->weaponDefId) : nullptr; weapon && weapon->magSize > 0)
+            {
+                stack.loadedAmmo = weapon->magSize;
+            }
+            if (item && item->maxStack > 0)
+            {
+                stack.count = std::min(stack.count, item->maxStack);
+            }
+            entry.contents.push_back(std::move(stack));
+            entry.displayName = DescribeContents(entry.contents);
+        }
+        else if (entry.source == ELootSource::Authored)
         {
             static const auto authored = AuthoredByIndex();
             if (entry.authoredIndex < 0 || entry.authoredIndex >= static_cast<int>(authored.size()))
@@ -333,13 +353,17 @@ namespace NextDayz
             entry.source = ELootSource::Spot;
             entry.worldPos = seed.position;
             entry.profile = seed.profile;
-            entry.persistentId = LootKey(fmt::format("spot:{}", static_cast<int>(seed.profile)), entry.worldPos);
+            entry.fixedItem = seed.itemId;
+            entry.fixedCount = seed.count;
+            entry.persistentId = entry.fixedItem.empty()
+                ? LootKey(fmt::format("spot:{}", static_cast<int>(seed.profile)), entry.worldPos)
+                : LootKey(fmt::format("item:{}", entry.fixedItem), entry.worldPos);
             entry.directorHandle = director_.AddSlot(entry.worldPos, entry.profile, ELootCategory::Misc);
             const uint32_t roll = director_.Resolve(entry.directorHandle)->roll;
-            entry.yaw = static_cast<float>(MixRoll(roll, 90) % 6283u) * 0.001f;
+            entry.yaw = entry.fixedItem.empty() ? static_cast<float>(MixRoll(roll, 90) % 6283u) * 0.001f : seed.yaw;
             RollContents(entry, roll, false);
             // Not every drawer has something in it; the empty ones fill in later.
-            if (static_cast<float>(MixRoll(roll, 91) % 1000u) >= kInitialStockShare * 1000.0f)
+            if (entry.fixedItem.empty() && static_cast<float>(MixRoll(roll, 91) % 1000u) >= kInitialStockShare * 1000.0f)
             {
                 entry.state = FLootEntry::EState::Cooldown;
                 director_.StartCooldown(entry.directorHandle, 0.0, 60.0 + static_cast<double>(MixRoll(roll, 92) % 240u));
@@ -476,7 +500,7 @@ namespace NextDayz
             }
             else if (entry.source == ELootSource::Spot)
             {
-                spots.push_back({entry.worldPos, entry.profile});
+                spots.push_back({entry.worldPos, entry.profile, entry.fixedItem, entry.fixedCount, entry.yaw});
             }
         }
         // The pooled nodes stay in the scene and are handed back in the same
@@ -593,6 +617,21 @@ namespace NextDayz
             }
             const glm::vec3 delta = entry.worldPos - eyePosition;
             const float distance = glm::length(delta);
+            if (!entry.fixedItem.empty())
+            {
+                // Displays ignore scarcity, stock caps and being watched.
+                const FLootSlot* slot = director_.Resolve(entry.directorHandle);
+                if (!slot || worldSeconds_ - slot->committedAt < kDisplayRestockSeconds || distance < kDisplayRestockClearance ||
+                    !director_.ForceAvailable(entry.directorHandle))
+                {
+                    continue;
+                }
+                RollContents(entry, slot->roll, true);
+                entry.state = FLootEntry::EState::Available;
+                ++available[static_cast<size_t>(entry.category)];
+                ShowEntry(entry, engine.GetScene(), &engine);
+                continue;
+            }
             const float viewDot = distance > 0.01f ? glm::dot(delta / distance, viewForward) : 1.0f;
             const bool visible = viewDot > config_.AimDotMin && distance < 140.0f;
             // The player has to have left the place, not just this shelf.
@@ -921,7 +960,7 @@ namespace NextDayz
             if (found == entries_.end()) continue;
             found->contents = item.contents;
             found->state = item.state;
-            found->yaw = item.yaw;
+            if (found->fixedItem.empty()) found->yaw = item.yaw;   // displays keep their layout
             found->category = item.slot.category;
             director_.RestoreSlot(found->directorHandle, item.slot);
             if (found->state == FLootEntry::EState::Available)
@@ -945,7 +984,7 @@ namespace NextDayz
         for (FLootEntry& entry : entries_)
         {
             if (entry.source != ELootSource::Spot || entry.profile != ELootProfile::Military ||
-                entry.state == FLootEntry::EState::Reserved)
+                entry.state == FLootEntry::EState::Reserved || !entry.fixedItem.empty())
             {
                 continue;
             }

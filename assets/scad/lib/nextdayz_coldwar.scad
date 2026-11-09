@@ -4,6 +4,8 @@ use <kit_coldwar.scad>
 // ================= 运行时语义锚点（极小几何保证导入；WorldAnchorRegistry 读取后隐藏） =================
 module nd_spawn_player_safe() { color([0.1, 0.8, 0.2]) sphere(r = 0.18, $fn = 6); }
 module nd_loot(p = "residential") { color([0.2, 0.4, 0.9]) sphere(r = 0.12, $fn = 6); }
+// Display spot: always item `id` (n of a stack), restocked soon after it is taken.
+module nd_item(id = "ak", n = 1, p = "military") { color([0.9, 0.6, 0.1]) sphere(r = 0.1, $fn = 6); }
 module nd_zed(p = "civilian", group = 1) { color([0.8, 0.2, 0.2]) sphere(r = 0.16, $fn = 6); }
 module nd_poi(name = "", kind = "village") { color([0.9, 0.85, 0.2]) sphere(r = 0.2, $fn = 6); }
 module nd_extraction(id = "", name = "Helipad") { color([0.0, 0.9, 0.9]) sphere(r = 0.15, $fn = 6); }

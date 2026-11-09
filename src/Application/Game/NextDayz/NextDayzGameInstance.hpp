@@ -129,6 +129,10 @@ private:
     void UseRadio();
     void ThrowFirecrackers(NextDayz::FItemInstanceId instanceId);
     void SyncClothingVisuals();
+    // Training range: a round that lands on an nd_target reports its distance
+    // and ring (paper) or a plate hit (steel).
+    void ScoreRangeTarget(const NextDayz::FWeaponTraceEvent& trace);
+    uint64_t rangeHits_ = 0;
     void Notify(NextDayz::L10n::FText text, int severity = 0);
     void UpdateSurvivalFeedback(float deltaSeconds);
     void UpdateWorldPressure();

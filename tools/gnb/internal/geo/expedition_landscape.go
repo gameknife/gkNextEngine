@@ -39,6 +39,9 @@ func readExpeditionControls(path string, ir *IR, grid *HeightGrid, budget int) (
 	for k := range settlementRules {
 		kinds[k] = true
 	}
+	for k := range trainingRules {
+		kinds[k] = true
+	}
 	for _, r := range rows {
 		if len(r) != 8 {
 			return report, fmt.Errorf("each site needs 8 fields")
@@ -51,8 +54,12 @@ func readExpeditionControls(path string, ir *IR, grid *HeightGrid, budget int) (
 			}
 		}
 		rule, settlement := settlementRules[p.Kind]
+		training, isTraining := trainingRules[p.Kind]
 		cityBlock := p.Kind == "urban" || p.Kind == "downtown" || p.Kind == "port"
 		maxBuildings, maxWidth, maxDepth := 12, 140.0, 120.0
+		if isTraining {
+			maxBuildings, maxWidth, maxDepth = training.max, training.width, training.depth
+		}
 		if cityBlock || settlement {
 			maxBuildings, maxWidth, maxDepth = 24, 220, 200
 		}
@@ -68,6 +75,10 @@ func readExpeditionControls(path string, ir *IR, grid *HeightGrid, budget int) (
 			}
 			if w, d := rule.size(p.Buildings); p.Size[0] < w || p.Size[1] < d {
 				return report, fmt.Errorf("site %s: a %s of %d buildings needs at least %.0fx%.0f m", p.ID, p.Kind, p.Buildings, w, d)
+			}
+		} else if isTraining {
+			if p.Buildings < training.min || p.Size[0] < training.minWidth || p.Size[1] < training.minDepth {
+				return report, fmt.Errorf("site %s: a %s needs %d..%d buildings and at least %.0fx%.0f m", p.ID, p.Kind, training.min, training.max, training.minWidth, training.minDepth)
 			}
 		} else {
 			minimumWidth := 20 + 15*float64((p.Buildings+1)/2)
@@ -380,6 +391,28 @@ var settlementRules = map[string]settlementRule{
 		}
 		return 38, 42 + math.Max(12, 11*math.Ceil(float64(n-1)/2)+1)
 	}},
+}
+
+// Training ground kinds (nextdayz_training.scad) each lay out one compound on
+// a single levelled pad; the bounds keep the SCAD layouts inside the pad.
+type trainingRule struct {
+	min, max                         int
+	minWidth, minDepth, width, depth float64
+}
+
+var trainingRules = map[string]trainingRule{
+	"tg_gate":          {2, 4, 40, 42, 90, 80},
+	"tg_hq":            {2, 6, 60, 50, 140, 120},
+	"tg_armory":        {1, 3, 50, 44, 120, 100},
+	"tg_quartermaster": {1, 3, 50, 44, 140, 110},
+	"tg_mess":          {1, 3, 44, 42, 110, 100},
+	"tg_stores":        {1, 3, 44, 42, 120, 100},
+	"tg_barracks":      {2, 8, 60, 50, 160, 140},
+	"tg_range":         {1, 4, 50, 120, 140, 420},
+	"tg_obstacle":      {1, 2, 50, 60, 140, 200},
+	"tg_killhouse":     {1, 2, 40, 42, 100, 100},
+	"tg_motorpool":     {1, 4, 50, 44, 140, 120},
+	"tg_pen":           {1, 2, 40, 42, 90, 90},
 }
 
 var landcoverKinds = map[string]bool{"spruce": true, "mixed": true, "beech": true, "pine": true, "beetle": true,

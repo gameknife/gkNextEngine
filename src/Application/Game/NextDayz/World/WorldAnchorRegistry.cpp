@@ -51,6 +51,11 @@ namespace NextDayz
             {
                 return std::pair{EWorldAnchorType::Loot, std::string("residential")};
             }
+            // A display: one named item that is always there (training ground).
+            if (name == "nd_item")
+            {
+                return std::pair{EWorldAnchorType::Loot, std::string("military")};
+            }
             if (name == "nd_zed")
             {
                 return std::pair{EWorldAnchorType::Zombie, std::string("civilian")};
@@ -105,6 +110,14 @@ namespace NextDayz
                 if (anchor.type == EWorldAnchorType::Loot || anchor.type == EWorldAnchorType::Zombie)
                 {
                     anchor.profile = Assets::Scad::MetadataString(metadata, "p", anchor.profile);
+                }
+                if (anchor.type == EWorldAnchorType::Loot && node->GetName() == "nd_item")
+                {
+                    anchor.item = Assets::Scad::MetadataString(metadata, "id", "");
+                    anchor.count = std::max(1, static_cast<int>(Assets::Scad::MetadataNumber(metadata, "n", 1.0)));
+                    // Local +X in world space: the yaw of angleAxis(yaw, +Y) that produced it.
+                    const glm::vec3 axis = glm::vec3(node->WorldTransform() * glm::vec4(1.0f, 0.0f, 0.0f, 0.0f));
+                    anchor.yaw = std::atan2(-axis.z, axis.x);
                 }
                 if (anchor.type == EWorldAnchorType::Poi)
                 {

@@ -77,6 +77,7 @@ void NextDayzGameInstance::InitializeCampaign()
     {
         NextDayz::FCampaignSave saved;
         bool migrated = false;
+        bool retiredRegion = false;
         bool upgraded = false;
         const bool read = NextDayz::ReadCampaignSave(campaignPath_, saved, error);
         const auto* savedMap = read ? NextDayz::FindExpeditionMap(expeditionMaps_,saved.map) : nullptr;
@@ -98,7 +99,9 @@ void NextDayzGameInstance::InitializeCampaign()
         if (read && (error.empty() || error.starts_with("Recovered backup")) && saved.map != campaignMap_)
         {
             const auto* currentMap = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_);
-            if (!authoringMode_ && currentMap && currentMap->published && saved.map == NextDayz::LegacyRiverlandScene)
+            const std::string retired = NextDayz::RetiredExpeditionMapId(expeditionMaps_, saved.map);
+            if (!authoringMode_ && currentMap && currentMap->published && !currentMap->training &&
+                saved.map == NextDayz::LegacyRiverlandScene)
             {
                 const auto archive = std::filesystem::path(campaignPath_.string() + ".riverland-backup");
                 const bool archived = std::filesystem::exists(archive, ec);
@@ -109,6 +112,24 @@ void NextDayzGameInstance::InitializeCampaign()
                     {loot_.Capture(), time_.Capture(), currentMap->version}, player_.Position()))
                     error = "Cannot migrate Riverland progress; published map version differs";
                 else migrated = true;
+            }
+            else if (!authoringMode_ && currentMap && currentMap->published && !currentMap->training && !retired.empty())
+            {
+                // The saved region was removed from the game: same rescue as Riverland.
+                const auto archive = std::filesystem::path(campaignPath_.string() + fmt::format(".retired-{}-backup", retired));
+                const bool archived = std::filesystem::exists(archive, ec);
+                if (ec) error = "Cannot check retired region backup: " + ec.message();
+                else if (!archived && !NextDayz::WriteCampaignSave(archive, saved, error))
+                    error = "Cannot preserve retired region backup: " + error;
+                else if (!NextDayz::RetireExpeditionCampaign(saved, *currentMap,
+                    {loot_.Capture(), time_.Capture(), currentMap->version}, player_.Position(),
+                    retired, "RETURNED / REGION RETIRED"))
+                    error = "Cannot move progress out of a retired region; published map version differs";
+                else
+                {
+                    migrated = true;
+                    retiredRegion = true;
+                }
             }
             else
             {
@@ -140,8 +161,11 @@ void NextDayzGameInstance::InitializeCampaign()
         else if (migrated)
         {
             safehouseTab_ = 0;
-            campaignMessage_ = "Riverland has been retired. Your carried gear, storage and gold are safe. Accept a new world assignment.";
-            SPDLOG_INFO("[NextDayz] migrated Riverland campaign to {} safehouse; original archived", ActiveMapId());
+            campaignMessage_ = retiredRegion
+                ? "That region has been retired. Your carried gear, storage and gold are safe. Accept a new world assignment."
+                : "Riverland has been retired. Your carried gear, storage and gold are safe. Accept a new world assignment.";
+            SPDLOG_INFO("[NextDayz] migrated {} campaign to {} safehouse; original archived",
+                        retiredRegion ? "retired-region" : "Riverland", ActiveMapId());
             SaveCampaign();
         }
         else if (!error.empty()) campaignMessage_ = error;
@@ -288,7 +312,7 @@ void NextDayzGameInstance::Deploy()
     if (pendingCampaign_) return;
     std::vector<const NextDayz::FExpeditionMap*> available;
     for (const auto& map : expeditionMaps_)
-        if (map.published || authoringMode_) available.push_back(&map);
+        if (NextDayz::IsDispatchable(map, authoringMode_)) available.push_back(&map);
     // Existing isolated extraction fixtures keep their explicit legacy scene.
     const bool legacyFixture = GOption->AgentValidation && validationDeployMap_.empty() &&
         !NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_);

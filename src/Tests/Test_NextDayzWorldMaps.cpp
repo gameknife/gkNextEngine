@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 #include "Application/Game/NextDayz/World/Campaign.hpp"
 #include "Application/Game/NextDayz/World/ExpeditionMaps.hpp"
+#include "Application/Game/NextDayz/Data/ItemDefs.hpp"
 #include "Engine/Assets/Core/Node.hpp"
 #include "Engine/Assets/Data/Material.hpp"
 #include "Engine/Runtime/Components/RenderComponent.hpp"
@@ -107,7 +108,7 @@ TEST_CASE("NextDayz published revisions preserve shared progress and archive onl
     saved.campaign.gold = 37;
     saved.campaign.mapSorties[map.id] = 4;
     saved.world.seconds = 123;
-    saved.maps["jp_otaru_north_canal"].world.seconds = 77;
+    saved.maps["other_region"].world.seconds = 77;
     Inventory inventory;
     REQUIRE(inventory.TryAdd("food_can", "Food", EItemKind::Consumable, 2));
     saved.inventory = inventory.Capture();
@@ -124,7 +125,7 @@ TEST_CASE("NextDayz published revisions preserve shared progress and archive onl
     CHECK(saved.campaign.sorties == 7);
     CHECK(saved.campaign.mapSorties.at(map.id) == 4);
     CHECK(saved.maps.at("cz_loket_riverbend@v2").world.seconds == 123);
-    CHECK(saved.maps.at("jp_otaru_north_canal").world.seconds == 77);
+    CHECK(saved.maps.at("other_region").world.seconds == 77);
     CHECK(saved.world.seconds == 0);
     Inventory restored;
     REQUIRE(restored.Restore(saved.inventory));
@@ -135,7 +136,7 @@ TEST_CASE("NextDayz published revisions preserve shared progress and archive onl
 TEST_CASE("NextDayz PCG encounters have flat entrances native roads and clear vegetation", "[NextDayz][Landscape]")
 {
     struct MapCheck { const char* id; int sites, buildings, minTrees, minShrubs; };
-    for (const auto& map : {MapCheck{"cz_loket_riverbend",15,108,2000,400}, MapCheck{"jp_otaru_north_canal",14,120,230,150}, MapCheck{"cn_chengdu_qinglong_lake",12,48,600,300}})
+    for (const auto& map : {MapCheck{"cz_loket_riverbend",15,108,2000,400}})
     {
         INFO(map.id);
         Assets::EnvironmentSetting environment;
@@ -173,8 +174,6 @@ TEST_CASE("NextDayz PCG encounters have flat entrances native roads and clear ve
             if (name == "nd_loot") { ++loot; lootProfiles.insert(parameter(metadata,"p")); }
             if (name == "nd_pcg_plant")
             {
-                if (std::string_view(map.id) == "cn_chengdu_qinglong_lake")
-                    CHECK(parameter(metadata,"region") == "sichuan");
                 shrubs += parameter(metadata,"kind") == "shrub";
                 trees += parameter(metadata,"kind") != "shrub";
                 const glm::vec3 pos = node->WorldTransform() * glm::vec4(0,0,0,1);
@@ -292,7 +291,8 @@ TEST_CASE("NextDayz geographic SCAD scenes retain finite bounded geometry and ga
     std::string error;
     REQUIRE(NextDayz::LoadExpeditionMaps(Utilities::FileHelper::ResolvePlatformFilePath(
         "assets/configs/nextdayz_maps.json"),maps,error));
-    REQUIRE(maps.size() == 3);
+    REQUIRE(maps.size() == 2);
+    CHECK(std::count_if(maps.begin(), maps.end(), [](const auto& map) { return map.training; }) == 1);
     for (const auto& map : maps)
     {
         INFO(map.id);
@@ -327,6 +327,139 @@ TEST_CASE("NextDayz geographic SCAD scenes retain finite bounded geometry and ga
         }
         CHECK(spawns >= 3);
         CHECK(extractions == 2);
-        CHECK(buildings >= 40);
+        CHECK(buildings >= (map.training ? 20 : 40));
     }
+}
+
+TEST_CASE("NextDayz retired regions return their saves to a safehouse", "[NextDayz][Startup]")
+{
+    using namespace NextDayz;
+    FExpeditionMap loket;
+    loket.id = "cz_loket_riverbend";
+    loket.scene = "assets/scad/proc/nextdayz/cz_loket_riverbend/published/v7/scene.scad";
+    loket.draftScene = "assets/scad/proc/nextdayz/cz_loket_riverbend/scene.scad";
+    loket.version = 7;
+    loket.published = true;
+    FExpeditionMap training = loket;
+    training.id = "training_ground";
+    training.scene = "assets/scad/proc/nextdayz/training_ground/published/v1/scene.scad";
+    training.draftScene = "assets/scad/proc/nextdayz/training_ground/scene.scad";
+    training.version = 1;
+    training.training = true;
+    const std::vector<FExpeditionMap> maps{loket, training};
+
+    CHECK(RetiredExpeditionMapId(maps, "assets/scad/proc/nextdayz/jp_otaru_north_canal/published/v4/scene.scad") == "jp_otaru_north_canal");
+    CHECK(RetiredExpeditionMapId(maps, "assets/scad/proc/nextdayz/cn_chengdu_qinglong_lake/scene.scad") == "cn_chengdu_qinglong_lake");
+    CHECK(RetiredExpeditionMapId(maps, loket.scene).empty());
+    CHECK(RetiredExpeditionMapId(maps, "assets/scad/proc/nextdayz/cz_loket_riverbend/published/v9/extra.scad").empty());
+    CHECK(RetiredExpeditionMapId(maps, std::string(LegacyRiverlandScene)).empty());
+    CHECK(RetiredExpeditionMapId(maps, "assets/scad/proc/other/x.scad").empty());
+    CHECK_FALSE(IsDispatchable(training, false));
+    CHECK_FALSE(IsDispatchable(training, true));
+    CHECK(IsDispatchable(loket, false));
+
+    FCampaignSave saved;
+    saved.map = "assets/scad/proc/nextdayz/jp_otaru_north_canal/published/v4/scene.scad";
+    saved.mapVersion = 4;
+    saved.campaign.inField = true;
+    saved.campaign.gold = 12;
+    saved.campaign.flight = {EFlightPhase::Inbound, "old_pad", {}, 3, false};
+    saved.world.seconds = 99;
+    Inventory inventory;
+    REQUIRE(inventory.TryAdd("ak", "AK", EItemKind::Weapon, 1));
+    saved.inventory = inventory.Capture();
+    FMapWorldSave fresh;
+    fresh.version = loket.version;
+    CHECK_FALSE(RetireExpeditionCampaign(saved, training, {0,0,1}, {}, "jp_otaru_north_canal", "x"));
+    REQUIRE(RetireExpeditionCampaign(saved, loket, fresh, {1,2,3}, "jp_otaru_north_canal", "RETURNED / REGION RETIRED"));
+    CHECK(saved.map == loket.scene);
+    CHECK(saved.mapVersion == 7);
+    CHECK_FALSE(saved.campaign.inField);
+    CHECK(saved.campaign.flight.phase == EFlightPhase::Idle);
+    CHECK(saved.campaign.gold == 12);
+    CHECK(saved.campaign.lastMapId == "jp_otaru_north_canal");
+    CHECK(saved.maps.at("jp_otaru_north_canal").world.seconds == 99);
+    Inventory carried;
+    REQUIRE(carried.Restore(saved.inventory));
+    CHECK(carried.CountOf("ak") == 1);
+}
+
+TEST_CASE("NextDayz training ground displays every item and scores the range", "[NextDayz][Landscape][Training]")
+{
+    Assets::EnvironmentSetting environment;
+    std::vector<std::shared_ptr<Assets::Node>> nodes;
+    std::vector<Assets::Model> models;
+    std::vector<Assets::FMaterial> materials;
+    std::vector<Assets::LightObject> lights;
+    std::vector<Assets::AnimationTrack> tracks;
+    std::vector<Assets::Skeleton> skeletons;
+    REQUIRE(Assets::FScadLoader::LoadScadScene("assets/scad/proc/nextdayz/training_ground/scene.scad",
+        environment,nodes,models,materials,lights,tracks,skeletons));
+    Runtime::TerrainComponent* terrain = nullptr;
+    for (const auto& node : nodes)
+    {
+        node->RecalcTransform(true);
+        if (auto component = node->GetComponent<Runtime::TerrainComponent>()) terrain = component;
+    }
+    REQUIRE(terrain);
+    auto parameter = [](const std::string& metadata, std::string_view name)
+    {
+        const auto start = metadata.find(std::string(name) + "=");
+        if (start == std::string::npos) return std::string();
+        const auto value = start + name.size() + 1;
+        return metadata.substr(value,metadata.find(';',value)-value);
+    };
+    std::set<std::string> displayed;
+    int sites = 0, buildings = 0, targets = 0, scored = 0, infected = 0, spawns = 0, extractions = 0;
+    for (const auto& node : nodes)
+    {
+        const auto& name = node->GetName();
+        const auto& metadata = node->GetMetadata();
+        sites += name == "nd_pcg_encounter";
+        infected += name == "nd_zed";
+        spawns += name == "nd_spawn_player_safe";
+        extractions += name == "nd_extraction";
+        if (name == "nd_item")
+        {
+            const std::string id = parameter(metadata,"id");
+            INFO("display item " << id);
+            CHECK(NextDayz::FindItemDef(id) != nullptr);
+            displayed.insert(id);
+            // Displays stand on a table, a shelf or the floor, never inside the ground.
+            const glm::vec3 pos = node->WorldTransform() * glm::vec4(0,0,0,1);
+            CHECK(pos.y > terrain->SampleHeight(pos.x,pos.z) - 0.05f);
+        }
+        if (name == "nd_target")
+        {
+            ++targets;
+            scored += std::stof(parameter(metadata,"r")) > 0.0f;
+            CHECK(std::stof(parameter(metadata,"d")) > 0.0f);
+            CHECK((node->GetComponent<Runtime::RenderComponent>() != nullptr || !node->Children().empty()));
+        }
+        if (name != "nd_pcg_building") continue;
+        ++buildings;
+        CHECK(parameter(metadata,"region") == "training");
+        const float width = std::stof(parameter(metadata,"L")), depth = std::stof(parameter(metadata,"D"));
+        const auto transform = node->WorldTransform();
+        const float datum = glm::vec3(transform * glm::vec4(0,0,0,1)).y;
+        for (int y=-2;y<=2;++y)
+            for (int x=-2;x<=2;++x)
+            {
+                const glm::vec3 sample = transform * glm::vec4(x*width/4,0,y*depth/4,1);
+                INFO(metadata);
+                CHECK(std::abs(datum-terrain->SampleHeight(sample.x,sample.z)) < 0.16f);
+            }
+    }
+    for (const NextDayz::FItemDef& item : NextDayz::AllItemDefs())
+    {
+        INFO("missing from the training ground displays: " << item.id);
+        CHECK(displayed.contains(std::string(item.id)));
+    }
+    CHECK(sites == 12);
+    CHECK(buildings == 21);
+    CHECK(targets >= 17);
+    CHECK(scored >= 3);
+    CHECK(infected >= 3);
+    CHECK(spawns >= 3);
+    CHECK(extractions == 2);
 }

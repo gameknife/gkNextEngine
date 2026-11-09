@@ -8,6 +8,7 @@ use <kit_bohemia.scad>
 use <kit_hokkaido.scad>
 use <nextdayz_coldwar.scad>
 use <nextdayz_settlement.scad>
+use <nextdayz_training.scad>
 
 function nd_pcg_pads(sites,spawns,exits) = concat(
     [for(p=sites) if(!nd_is_settlement(p[2])) ["pad",p[3],p[4],p[5]]],
@@ -19,8 +20,9 @@ function nd_pcg_pads(sites,spawns,exits) = concat(
 // one nd_pcg_site receives (recipe seed; site i uses seed+i*131).
 function nd_pcg_terrain(sites,spawns,exits,seed,landcover=[]) = concat(
     nd_pcg_landcover_paint(landcover),
-    [for(p=sites) if(!nd_is_settlement(p[2])) ["pad",p[3],p[4],p[5]]],
+    [for(p=sites) if(!nd_is_settlement(p[2]) && !nd_is_training(p[2])) ["pad",p[3],p[4],p[5]]],
     nd_settlement_terrain(sites,seed),
+    nd_tg_terrain(sites),
     [for(p=spawns) ["pad",p,[14,14],0]],
     [for(p=exits) ["pad",p,[42,42],0]]);
 
@@ -61,7 +63,8 @@ function nd_opt(o,i,d) = len(o)>i ? o[i] : d;
 // Coldwar owns furniture + typed loot positions. Only the regional shell changes.
 module nd_pcg_building(kind="cottage",seed=0,region="bohemia",L=10,D=8,p="residential",opt=[])
 {
-    if(region=="hokkaido") nd_hk_building(kind,seed,L,D,p);
+    if(region=="training") nd_tg_building(kind,seed,L,D);
+    else if(region=="hokkaido") nd_hk_building(kind,seed,L,D,p);
     else if(region=="bohemia" && (kind=="farmhouse" || kind=="cottage"))
         nd_house_rural(seed,L,D,p) bh_bldg_farmhouse(seed,L,D,nd_opt(opt,0,1));
     else if(region=="bohemia" && kind=="egerland") nd_house_two(seed,L,D,p) bh_bldg_egerland(seed,L,D,nd_opt(opt,0,1));
@@ -182,7 +185,7 @@ module nd_pcg_site(t,site,region="bohemia",seed=0)
         nd_pcg_encounter(site[0],site[1],site[2],site[4],site[6],site[7],region,seed,t,site[3],site[5]);
 }
 
-function nd_poi_kind(type) = type=="medical" ? "hospital" : type=="military" ? "military" :
+function nd_poi_kind(type) = type=="medical" ? "hospital" : type=="military" || nd_is_training(type) ? "military" :
     type=="hillcastle" || type=="castle" ? "fortress" : type=="square" || type=="street" ? "town" :
     type=="jzd" || type=="factory" || type=="industry" ? "industrial" : type=="homestead" || type=="farm" ? "farm" : "village";
 
@@ -204,6 +207,7 @@ module nd_pcg_encounter(id="site",name="Site",type="village",pad=[76,60],count=6
             }
         }
     }
+    else if(nd_is_training(type)) nd_tg_site(id,type,pad,count,seed);
     else nd_pcg_legacy(id,name,type,pad,count,risk,region,seed);
 }
 
@@ -334,7 +338,7 @@ module nd_pcg_legacy(id="site",name="Site",type="village",pad=[76,60],count=6,ri
 module nd_pcg_plant(kind="tree",variant=0,seed=0,region="bohemia",species="")
 {
     gk_flatten()
-        if(region=="bohemia")
+        if(region=="bohemia" || region=="training")
             nd_bh_flora(species!="" ? species : kind=="dead" ? "spruce_dead" : kind=="shrub" ? ["hedge","weeds","fern"][variant%3] :
                         ["spruce","broadleaf","pine","spruce"][variant%4],seed);
         else if(region=="hokkaido") nd_hk_flora(species!="" ? species : kind=="shrub" ? "shrub" : kind=="dead" ? "dead" : "birch",seed);

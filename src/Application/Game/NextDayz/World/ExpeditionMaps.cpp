@@ -30,16 +30,16 @@ namespace NextDayz
         return true;
     }
 
-    bool MigrateRiverlandCampaign(FCampaignSave& saved, const FExpeditionMap& map,
-                                 const FMapWorldSave& freshWorld, const glm::vec3& safePosition)
+    bool RetireExpeditionCampaign(FCampaignSave& saved, const FExpeditionMap& map, const FMapWorldSave& freshWorld,
+                                  const glm::vec3& safePosition, std::string_view retiredKey, std::string_view outcome)
     {
-        if (saved.map != LegacyRiverlandScene || !map.published || map.version == 0) return false;
+        if (retiredKey.empty() || !map.published || map.version == 0 || IsTrainingMap(map)) return false;
         const auto existing = saved.maps.find(map.id);
         if (existing != saved.maps.end() && existing->second.version != map.version) return false;
         const FMapWorldSave destination = existing == saved.maps.end() ? freshWorld : existing->second;
         if (destination.version != map.version) return false;
 
-        saved.maps[std::string(LegacyRiverlandScene)] = {saved.world, saved.time, saved.mapVersion};
+        saved.maps[std::string(retiredKey)] = {saved.world, saved.time, saved.mapVersion};
         saved.maps[map.id] = destination;
         saved.map = map.scene;
         saved.mapVersion = map.version;
@@ -49,14 +49,36 @@ namespace NextDayz
         saved.yaw = saved.pitch = 0.0f;
         saved.campaign.inField = false;
         saved.campaign.flight = {};
-        saved.campaign.lastMapId = std::string(LegacyRiverlandScene);
-        saved.campaign.lastOutcome = "RETURNED / RIVERLAND RETIRED";
+        saved.campaign.lastMapId = std::string(retiredKey);
+        saved.campaign.lastOutcome = std::string(outcome);
         saved.survival = {};
         saved.survivalSeconds = 0.0;
         saved.hasCacheMarker = false;
         saved.cacheSeconds = 0.0f;
         saved.lanternLit = false;
         return true;
+    }
+
+    bool MigrateRiverlandCampaign(FCampaignSave& saved, const FExpeditionMap& map,
+                                 const FMapWorldSave& freshWorld, const glm::vec3& safePosition)
+    {
+        if (saved.map != LegacyRiverlandScene) return false;
+        return RetireExpeditionCampaign(saved, map, freshWorld, safePosition, LegacyRiverlandScene,
+                                        "RETURNED / RIVERLAND RETIRED");
+    }
+
+    std::string RetiredExpeditionMapId(const std::vector<FExpeditionMap>& maps, std::string_view scene)
+    {
+        constexpr std::string_view root = "assets/scad/proc/nextdayz/";
+        if (!scene.starts_with(root) || !scene.ends_with(".scad") || FindExpeditionMap(maps, scene)) return {};
+        const std::string_view rest = scene.substr(root.size());
+        const std::string_view id = rest.substr(0, rest.find('/'));
+        if (id.empty() || id.size() == rest.size() ||
+            !std::all_of(id.begin(), id.end(), [](char ch) { return (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_'; }))
+            return {};
+        // A registered id at a path it no longer uses is a stale revision, not a retired region.
+        if (std::any_of(maps.begin(), maps.end(), [id](const auto& map) { return map.id == id; })) return {};
+        return std::string(id);
     }
 
     bool LoadExpeditionMaps(const std::filesystem::path& path, std::vector<FExpeditionMap>& maps, std::string& error)
@@ -79,8 +101,15 @@ namespace NextDayz
                 map.scene = entry.at("scene").get<std::string>();
                 map.draftScene = entry.value("draftScene", map.scene);
                 map.profile = entry.at("profile").get<std::string>();
-                map.latitude = entry.at("center").at(0).get<double>();
-                map.longitude = entry.at("center").at(1).get<double>();
+                const auto kind = entry.value("kind", std::string("expedition"));
+                if (kind != "expedition" && kind != "training") throw std::runtime_error("Invalid map kind");
+                map.training = kind == "training";
+                // A training ground is no real place: it has no centre and stays off the atlas.
+                if (!map.training || entry.contains("center"))
+                {
+                    map.latitude = entry.at("center").at(0).get<double>();
+                    map.longitude = entry.at("center").at(1).get<double>();
+                }
                 map.sizeM = entry.at("sizeM").get<float>();
                 map.version = entry.at("mapVersion").get<uint32_t>();
                 const auto status = entry.at("status").get<std::string>();

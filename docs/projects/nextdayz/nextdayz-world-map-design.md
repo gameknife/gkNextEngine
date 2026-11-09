@@ -1,10 +1,10 @@
 ---
 title: "NextDayz 世界派遣与地理关卡"
 category: design
-status: 现行（三地图）
+status: 现行（一张地理地图 + 训练场）
 owner: NextDayz
 created: 2026-11-05
-last_updated: 2026-11-07
+last_updated: 2026-11-09
 ---
 
 # NextDayz 世界派遣与地理关卡
@@ -18,24 +18,20 @@ last_updated: 2026-11-07
 | 地图 | 生成中心（WGS84 纬度，经度） | 内容与体验 |
 | --- | --- | --- |
 | 洛克特·河湾 / Loket — Riverbend | 捷克洛克特，`50.1860, 12.7540` | 奥赫热河曲流环抱岩岬上的老城：广场连续市民房立面、鼠疫柱与洋葱顶教堂，下城沿街台地，城堡守住北坡。北岗是围绕村绿和池塘的农庄村，东岸是温泉别墅与瓷器厂，东南是战后小住宅区，南部台地是集体农场、营地与条田；西北云杉林里藏着周末小屋，西部有小蠹虫枯死林。强调过河、林间潜行与分散搜刮。 |
-| 小樽·北运河 / Otaru — North Canal | 日本北海道小樽，`43.2025, 141.0005` | 北运河、色内码头、仓储街区及邻近住宅。盐蚀石仓、锈损金属屋顶、废弃日式街屋和遗留货物；强调仓库穿行、沿岸暴露与集中补给。 |
-| 青龙湖·荒径 / Qinglong Lake — Lost Greenway | 中国成都青龙湖湿地公园中心附近，`30.6346, 104.1868` | 湖汊、绿道、缓坡与林地提供骨架。废弃游客中心、灰瓦茶舍、旧村院落和公园养护场构成搜刮据点；阔叶树、垂柳与竹丛提供遮蔽，步桥和林间绕行形成不同风险路线。 |
+| 训练场 / Training Ground | 无（合成地形，`kind: training`） | 东欧陆军训练区：水泥大门、靶场指挥部与阅兵场、军械库与开放式武器陈列棚、军需帐篷、食堂帐篷、野战物资帐篷、营房、300 m 步枪靶场与手枪靶位、障碍场、CQB 训练屋、车场、封闭的感染者围栏。**游戏里每一件物品都在这里陈列**，拿走后十几秒补回；靶子命中按距离报环数。供玩家练枪、试穿，也是开发者的快速测试场。 |
 
-三图均为 **1 km × 1 km**，各有五个安全落点、两处撤离区。真实地理只提供环境骨架；荒废状态、敌人与物资分布属于游戏虚构。地理参考：[捷克国家旅游局](https://www.visitczechia.com/en-us/things-to-do/places/landmarks/cities/t-loket)、[北海道官方旅游网站](https://www.visit-hokkaido.jp/en/spot/detail_10040.html)、[青龙湖公园地理参考](https://sichuan.scol.com.cn/ggxw/202204/58506692.html)、[OSM 公园边界](https://www.openstreetmap.org/relation/13882630)。
+洛克特为 **1 km × 1 km**，五个安全落点、两处撤离区；训练场 **800 m × 800 m**，四个落点（都在大门南侧来路上）、两处直升机撤离点。真实地理只提供环境骨架；荒废状态、敌人与物资分布属于游戏虚构。地理参考：[捷克国家旅游局](https://www.visitczechia.com/en-us/things-to-do/places/landmarks/cities/t-loket)。小樽·北运河与青龙湖·荒径因品质不足已于 2026-11-09 下线（目录、配方、脚本一并删除）；北海道 / 四川的地域 kit 仍留在共享库里，洛克特的冻结快照也各自带着一份。
 
 **生产原则：地理提供骨架，地域知识决定长相，Coldwar 玩法决定节奏。** 高程、河流、主路和建成区来自真实地点；每个建成区按当地真实聚落形态（村绿村、广场、街道、独立农庄、周末小屋区、集体农场……）展开，建筑用该地域专属 kit，植被按当地真实的森林／田地／河岸格局绘制土地覆盖。建筑数量、入口、物资、感染者和风险收益由游戏设计决定；允许压缩高差、简化道路、移动据点，以保证可玩性。
 
 洛克特 v5 沿用 v4 的布局，只提升质感：`kit_bohemia` 的 PBR 材质与室内（见下文地域外壳段），奥赫热河水面用 recipe 的 `gameplay.water`（深绿褐水体、roughness 0.04）呈现反射。两座 v4 桥端落在水里的步桥延伸到干岸，其余桥不变。v4 使用 **15 个据点、108 栋建筑、5 个安全落点、2 个撤离区**：老城广场（22，含市政厅与教堂）、下城街（17）、城堡（3）、北岗村绿村（13，含小教堂、消防站、酒馆）、温泉别墅（6）、瓷器厂（4）、东南小住宅区（10）、两处独立农庄（3+3）、集体农场 JZD（6）、周末小屋区（8），以及桥头关卡、卫生站、林中电台和南部营地。19 块土地覆盖（云杉林、混交林、山毛榉林、松林、小蠹虫枯死林、三条河岸带、条田、草甸、果园）和 7 条行道树／树篱。OSM 原有多少栋建筑，不改变这份预算。v3 的散点场院布局保留在冻结快照中。
 
-小樽 v4 使用 **14 个据点、120 栋建筑、5 个安全落点、2 个撤离区**：三片木板住宅街区（16+16+14）、三条商街（16+12+12）、沿运河单侧排列的石仓（6）、北码头货运场（6）、南部修理场（4）、航运办公区（4）、诊所（4）、派出所（4）、检疫指挥点（4）和坡地神社（2）。北海道专属的 `hokkaido_lane`／`shotengai`／`canal`／`portyard`／`shrine` 形态按地块找平，台地间保留花园和横巷；12 块土地覆盖和 5 条行道树绘制西北栎榆白桦混交林、针叶林口袋、后院、公园和滨岸荒草，港池及装卸通道保持开敞。五个原 OSM 跨水桥口保留，北侧落点移出新办公区的警戒范围。详见[小樽地域调研与关卡规划](otaru-v4-authoring.md)。v3 的四排大场院布局保留在冻结快照中。
-
-青龙湖 v1 使用 **12 个据点、48 栋建筑、5 个安全落点、2 个撤离区**；地形保留 85% 高差。OSM 只记录了本块少量建筑，游戏里的茶舍、游客中心、村居、医疗和补给布置由预算与 PCG 控制点决定。保留一座 OSM 过水桥，并用两个 PCG 桥梁控制点补充战术连通；不要求复刻现实的公园设施清单。植被使用四川园林主题的阔叶树、垂柳和竹丛。
-
 地域外壳按地域分 kit：波希米亚走 `kit_bohemia.scad`（`bh_`：民间巴洛克、埃格兰半木构、连续立面市民房、洋葱顶教堂、JZD 与城堡，以及中欧小品和林木。表面按材质类走 `bh_m_*` 的 `gk_material`：石灰抹灰、陶瓦、石板、油漆门窗、锌皮檐沟与落水管、铜绿／锡皮洋葱顶、镀金十字架、不透明高光玻璃——路径追踪下透射玻璃在阴天会发黑。外观另有双扇外开／缺失／倒地的门、搪瓷门牌、墙基返潮与窗下雨痕；室内是石灰墙＋油漆墙裙（olejový sokl）、清漆木地板／方块拼花／metlach 地砖／抛光石材／混凝土、屋顶破洞下方的积水镜面、破窗下的碎玻璃、墙面水渍、农舍梁顶与釉面瓷砖炉。新增室内件只放在 coldwar 家具与物资点让开的位置）；北海道走 `kit_hokkaido.scad`（`hk_`：木骨石仓、金属顶木板住宅、两层店铺、石造航运办公室、平顶公寓和诊所、派出所、神社、鸟居、石灯笼、电杆、自动售货机与栎／榆／白桦／针叶树），全部北海道建筑优先分派到本地外壳；四川仍走 `kit_abandoned.scad`（`az_`）。`nextdayz_settlement.scad` 与 `nextdayz_hokkaido.scad` 把聚落据点展开成地块、街道和小品；`nextdayz_coldwar.scad` 提供家具和分类物资组合（按占地缩放的 `nd_shop`／`nd_pub`／`nd_office`／`nd_depot`／`nd_chapel`），`nextdayz_pcg.scad` 装配并散布土地覆盖。几何独立合并，物资／感染者语义锚点与水泵（水源锚点）留在合并之外；建模不以压低三角数量为目标。
 
 ## 派遣、安全屋与存档
 
-- 从 `assets/configs/nextdayz_maps.json` 中的 `published` 地图等概率随机派遣，再随机选该图的安全落点。世界地图用于浏览，不指定下次任务地点。
+- 从 `assets/configs/nextdayz_maps.json` 中的 `published` 地图等概率随机派遣，再随机选该图的安全落点。世界地图用于浏览，不指定下次任务地点。`"kind": "training"` 的地图（训练场）不参与派遣、不画在世界地图上、不作为启动默认地图，也不需要 `center`；安全屋左侧列表照常列出，并有专门的 `ENTER TRAINING GROUND` 按钮。
+- 存档所在地区已从注册表删除（`assets/scad/proc/nextdayz/<旧 id>/...` 且注册表没有该 id）时，读档按 Riverland 退役的方式处理：原存档备份为 `save.json.retired-<id>-backup`，旧世界状态存到 `maps[<id>]`，玩家回到当前地图的安全屋，随身装备、仓库、金币和历史次数保留。
 - 安全屋分为世界／任务页与仓库／携装页。世界地图用 Natural Earth 陆地矢量直接绘制，支持缩放、拖动、点击地点，显示简介和各图出击次数；完全离线。
 - 临时测试入口：在左侧列表或世界地图选中地区后，点击 `ENTER SELECTED MAP (TEST)` 直接部署到该图。沿用正式出击、携装与存档规则；原有 `ACCEPT & DEPLOY` 继续随机派遣。
 - 成功进入地图才计一次新出击，死亡也计入；加载失败、续接、热重建和重复结算不重复累计。返程显示地区和结果。
@@ -54,8 +50,7 @@ gnb.bat geo build --name cz_loket_riverbend --at 50.1860,12.7540 --size 1000 --p
 
 # 从缓存离线重生成游戏关卡。
 gnb.bat geo expedition --recipe assets/scad/specs/nextdayz/cz_loket_riverbend.json
-gnb.bat geo expedition --recipe assets/scad/specs/nextdayz/jp_otaru_north_canal.json
-gnb.bat geo expedition --recipe assets/scad/specs/nextdayz/cn_chengdu_qinglong_lake.json
+gnb.bat geo expedition --recipe assets/scad/specs/nextdayz/training_ground.json   # 合成地形，不需要 geo fetch/build
 ```
 
 配方在 `assets/scad/specs/nextdayz/`，声明地域、种子、发布版本和 `gameplay`：控制点模板路径、建筑预算、地形高差比例、参考道路数量；可选 `roadClasses` 选择参考路类，可选 `palette` 覆盖地域默认地表色板（波希米亚默认 `continental`，其余 `temperate`）。公园应纳入 `cycleway`／`footway`／`path`；城镇不要带 `service`／`footway`，否则拆掉建筑后只剩满地土路斑块。洛克特使用 `reliefScale=0.4`、`roadLimit=32` 和主次干路路类。含聚落据点的地图地形网格自动用 256×256（3.9 m 格）。
@@ -75,7 +70,42 @@ gnb.bat geo expedition --recipe assets/scad/specs/nextdayz/cn_chengdu_qinglong_l
 | 评审截图 | `geomap_preview.py` 出规划图；`geomap_shots.py` 出总览、每个聚落的鸟瞰与街景，逐张对照上面各行的验收重点迭代。 | 草稿解析时间保持在 10 s 内（运行日志 `parsed scene ... on cpu`）。 |
 | 试玩发布 | 重生成保留人工控制点，完成鸟瞰、地面进屋、跨桥及撤离流程检查后冻结新版本。 | kit 无新警告，正式快照包含全部 PCG 控制点与库；不可覆盖已发布版本。 |
 
-Go 验证建筑预算、各聚落形态的最小尺寸、水域、过大挖填（单块 12 m、分地块 20 m）、据点重叠、安全落点、土地覆盖与行道树参数和重生成保留。C++ `[NextDayz][Landscape]` 求值实际 SCAD，检查洛克特 108 栋、小樽 120 栋、青龙湖 48 栋建筑的全占地／入口贴地、多种建筑与 loot 类型、植被避让及道路语义；输入脚本另检查实际进屋、跨桥。自动检查不能替代风险收益和节奏的实玩调优。
+Go 验证建筑预算、各聚落形态的最小尺寸、水域、过大挖填（单块 12 m、分地块 20 m）、据点重叠、安全落点、土地覆盖与行道树参数和重生成保留。C++ `[NextDayz][Landscape]` 求值实际 SCAD，检查洛克特 108 栋建筑的全占地／入口贴地、多种建筑与 loot 类型、植被避让及道路语义；输入脚本另检查实际进屋、跨桥。自动检查不能替代风险收益和节奏的实玩调优。
+
+### 无经纬度关卡：合成地形与训练场
+
+不对应真实地点的关卡也走同一条管线（配方 → `layout.scad` 控制层 → PCG → 冻结发布），只是地形来自配方而不是 SRTM/OSM。配方里写 `synthetic` 就不读 geocache：
+
+```json
+"synthetic": { "sizeM": 800, "base": 40, "relief": 7, "wavelength": 300,
+               "flat":  [[x, y, 半径, 过渡宽度], ...],
+               "hills": [[x, y, 半径X, 半径Y, 旋转°, 高度], ...] }
+```
+
+确定性 fBm 起伏（种子 = 配方 `seed`）叠加人工丘陵，`flat` 圆盘把据点所在区域压回基准面。没有道路、水域和 OSM 署名；`reference.json` 与 `ATTRIBUTION.md` 写明是合成地形。`region: "training"` 时植被沿用中欧林木（松、云杉、桦）。
+
+训练场（`training_ground`，配方 `assets/scad/specs/nextdayz/training_ground.json`）用 12 种 `tg_*` 据点，每个据点一块找平地块，由 `nextdayz_training.scad` 展开（建筑是 `region: "training"` 的 `nd_pcg_building`）：
+
+| 据点 | 内容 |
+| --- | --- |
+| `tg_gate` | 水泥板围墙、红白拦车杆、岗亭、沙袋机枪位、拒马、"TRAINING AREA 7"门楣 |
+| `tg_hq` | 靶场指挥部（双坡铁皮顶砖房）、水泥阅兵场、三根旗杆、检阅台、BTR 纪念碑、信号所 |
+| `tg_armory` | 军械库（铁栅窗、天窗的混凝土库房）+ 开放式武器陈列棚：全部枪械、弹药、配件、冷兵器 |
+| `tg_quartermaster` | 两顶卷起侧帘的军需帐篷：头盔帽子、上衣、裤子、背心与背包四排；旁边尼森棚当仓库 |
+| `tg_mess` / `tg_stores` | 食堂帐篷（全部食物饮料）、野战物资帐篷（药品与全部工具） |
+| `tg_barracks` | 三栋营房（上下铺、储物柜）、厕所、水塔、帐篷营地、单杠 |
+| `tg_range` | 8 道步枪靶位（25/50 m 环靶、100–300 m 人形靶与钢板）、3 道手枪靶位、射击棚、校枪桌、侧护堤与 8 m 高背挡堤、距离牌、靶场塔、枪弹领用台 |
+| `tg_obstacle` / `tg_killhouse` | 十站障碍场；无顶胶合板 CQB 训练屋，每个房间一个人形靶 |
+| `tg_motorpool` / `tg_pen` | 车棚、修理间、加油点、坦克与卡车；封闭水泥围栏里的感染者刷新点，南墙外有观察塔 |
+
+营区外围（南侧与两翼水泥围墙、角楼、路灯、指路牌）写在 `adjustments.scad`。kit 在 `assets/scad/lib/kit_training.scad`（`tg_` 前缀，`tg_m_*` 材质），样板场景 `assets/scad/source/training_showcase.scad`。
+
+**陈列与靶子的玩法约定：**
+
+- `nd_item(id, n)` 是物资锚点：永远是物品 `id`（`n` 个一堆），开局必有，枪械满弹匣；被拿走 12 s 后、玩家离开桌边 2.5 m 就补回，不受稀缺度、品类上限和"被看着"的限制，也不会被电台补给点选中。
+- 陈列清单在 `nextdayz_training.scad` 的 `tg_list_*()` 里，与 `ItemDefs.cpp` 一一对应；`[NextDayz][Training]` 单测在有物品没上桌时失败，**新增物品时同时加到清单里**。
+- `nd_target(d, r)` 的节点原点是瞄准点：`r > 0` 按到中心的距离报 10–1 环，`r = 0` 只报命中；HUD 提示"100 米靶：8 环"。
+- 引擎只有天光、NextDayz 的曝光上限 3 EV、玻璃不透光，所以封闭室内很暗：陈列一律放在开放式棚子或卷起侧帘的帐篷里，库房只做装饰。
 
 ### 可编辑层
 
@@ -121,7 +151,7 @@ set nextdayz.authoring.map cz_loket_riverbend
 完成通路、入口、桥梁、物资／感染者分布和撤离路线验收后：
 
 ```powershell
-gnb.bat geo expedition --recipe assets/scad/specs/nextdayz/cn_chengdu_qinglong_lake.json --publish
+gnb.bat geo expedition --recipe assets/scad/specs/nextdayz/training_ground.json --publish
 
 # 将新场景、地图注册表与依赖同步到运行目录。
 gnb.bat build NextDayz
@@ -129,7 +159,7 @@ gnb.bat build NextDayz
 
 正式化把场景、人工调整、高度场和 kit 依赖复制到 `published/v<版本>/`，将该入口登记为 `published`，同时保留 `draftScene`。同版本拒绝覆盖；草稿及共享 kit 后续修改不会影响正式关卡。成品随游戏资产分发，玩家机器不需要开发缓存或在线地理服务。
 
-洛克特 `v4`、小樽 `v4` 及青龙湖 `v1` 都使用以上玩法优先流程，旧版保留在各自冻结快照中。洛克特 v4 首个采用聚落形态、地域 kit 与土地覆盖；小樽 v4 将同一流程用于北海道木板街区、金属屋顶、石仓、航运办公楼与港岸荒草。青龙湖偏湖岸步道、茶舍院落与密林遮蔽，后续重做时补齐四川聚落形态与独立 kit。共享 kit 的后续改动不会影响已冻结地图。
+洛克特 `v4` 起使用以上玩法优先流程，首个采用聚落形态、地域 kit 与土地覆盖；旧版保留在冻结快照中。训练场 `v1` 用同一流程发布在合成地形上。共享 kit 的后续改动不会影响已冻结地图。
 
 ## 验证入口与边界
 
@@ -139,23 +169,17 @@ out/build/windows/bin/gkNextUnitTests.exe "[NextDayz]"
 out/build/windows/bin/gkNextUnitTests.exe "[NextDayz][Landscape]"
 python tools/nextdayz/check_legacy_startup.py
 python tools/nextdayz/check_region_upgrade.py
-python tools/nextdayz/check_region_upgrade.py --map jp_otaru_north_canal
 gnb.bat validate --script assets/agentscripts/nextdayz-world-maps.agentscript.json
 gnb.bat validate --script assets/agentscripts/nextdayz-world-resume.agentscript.json
 gnb.bat validate --script assets/agentscripts/nextdayz-published-dispatch.agentscript.json
 gnb.bat validate --script assets/agentscripts/nextdayz-extraction.agentscript.json
-gnb.bat validate --script assets/agentscripts/nextdayz-otaru-rescue.agentscript.json
 gnb.bat validate --script assets/agentscripts/nextdayz-loket-entrance.agentscript.json
 gnb.bat validate --script assets/agentscripts/nextdayz-loket-bridge.agentscript.json
-gnb.bat validate --script assets/agentscripts/nextdayz-otaru-bridge.agentscript.json
-gnb.bat validate --script assets/agentscripts/nextdayz-otaru-entrances.agentscript.json
-gnb.bat validate --script assets/agentscripts/nextdayz-otaru-streets.agentscript.json
-gnb.bat validate --script assets/agentscripts/nextdayz-qinglong-bridges.agentscript.json
-gnb.bat validate --script assets/agentscripts/nextdayz-qinglong-entrances.agentscript.json
-gnb.bat validate --script assets/agentscripts/nextdayz-qinglong-rescue.agentscript.json
+gnb.bat validate --script assets/agentscripts/nextdayz-training-ground.agentscript.json
+gnb.bat validate --script assets/agentscripts/nextdayz-zombie-indoor.agentscript.json
 ```
 
-前两份脚本顺序执行，分别覆盖多图、场景重建、撤离／死亡与跨进程恢复；`published-dispatch` 检查冻结场景的普通随机派遣，`extraction` 保留原撤离循环回归。桥梁脚本使用实际移动输入检查跨水通路；`qinglong-rescue` 覆盖第三张图的派遣、实际按键登机、撤离和读档，并确认旧地区记录与仓库保留。隔离测试不改正式存档；首份与正式派遣脚本会重建各自的测试进度，可重复执行。地形全景检查使用 `nextdayz-geography-overview.agentscript.json`，可通过 `--scene` 覆盖地图。
+前两份脚本顺序执行，分别覆盖多图、场景重建、撤离／死亡与跨进程恢复；`published-dispatch` 检查冻结场景的普通随机派遣，`extraction` 保留原撤离循环回归。桥梁脚本使用实际移动输入检查跨水通路；`world-maps` 的第二张图是训练场（点击坐标按 125% 界面缩放的窗口像素写死）。`training-ground` 检查 111 个陈列点、走进武器陈列棚 / 军需帐篷 / 食堂 / 物资帐篷，并在 25 m 靶位实际开枪确认报环；`zombie-indoor` 让感染者跟进军需帐篷。隔离测试不改正式存档；首份与正式派遣脚本会重建各自的测试进度，可重复执行。地形全景检查使用 `nextdayz-geography-overview.agentscript.json`，可通过 `--scene` 覆盖地图。
 
 规划与评审工具：`tools/nextdayz/geomap_preview.py`（俯视规划图：地形、坡度、水、OSM 与全部控制层）、`tools/nextdayz/geomap_shots.py`（直接渲染源码草稿的总览／鸟瞰／街景截图）。世界地图矢量数据更新工具为 `tools/nextdayz/fetch_world_atlas.py`。Natural Earth 为公有领域；OSM 与 SRTM 署名随关卡保留。
 

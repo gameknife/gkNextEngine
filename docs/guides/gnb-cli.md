@@ -51,9 +51,9 @@ GNB_LANG=en ./gnb.sh doctor
 ./gnb.sh ds --clients 2 --pvp        # 两名幸存者，允许互伤
 ```
 
-`ds` 先以隐藏窗口启动专用服务器（无本地玩家），等它监听端口并加载完地图，再逐个启动可见客户端连上 `127.0.0.1`。
+`ds` 先以引擎 `--dedicated` 模式启动专用服务器（无本地玩家，不绘制），等它监听端口并加载完地图，再逐个启动可见客户端连上 `127.0.0.1`。
 所有客户端退出（或 Ctrl+C）时一并停止服务器；`--clients 0` 只起服务器，`--keep-server` 让服务器在客户端退出后继续运行，
-`--show-server` 显示服务器窗口，`--cheats` 让服务器接受客户端测试钩子的自伤（仅自动化测试），`--` 之后的参数追加给每个客户端。服务器总是带 `--disable-streamline`；
+`--show-server` 改为在可见窗口里绘制服务器，`--cheats` 让服务器接受客户端测试钩子的自伤（仅自动化测试），`--` 之后的参数追加给每个客户端。服务器总是带 `--disable-streamline`；
 多于一个客户端时每个客户端也带上（同时多个 Streamline/DLSS 实例会出错），单客户端保留 DLSS。每次运行的日志在 `out/build/<preset>/ds-runs/<时间>/`
 （`server.log`、`client<N>.log`），终端只回显联网与错误行。联机设计见 [NextDayz 多人联机](../projects/nextdayz/nextdayz-multiplayer-design.md)。
 

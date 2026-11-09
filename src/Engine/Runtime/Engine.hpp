@@ -472,6 +472,7 @@ private:
     Runtime::Agent::FAgentQueryRegistry agentQueries_;
     int requestedExitCode_ = 0;
     bool closeRequested_ = false;
+    uint32_t dedicatedTicks_ = 0;   // --dedicated: the frame count, as no frame is drawn
     FTaskQueues taskQueues_{};
     NextRenderer::EApplicationStatus status_{};
     uint32_t pendingSceneLoads_ = 0;

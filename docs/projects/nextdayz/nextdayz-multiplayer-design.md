@@ -184,6 +184,14 @@ out/build/windows/bin/NextDayz.exe --cvar "nextdayz.net.mode client" --cvar "nex
   - 互相可见的服装：位置上报附带已穿戴的衣物，远端角色显示相同服装。
   - 移动校验（只检测不纠正）：一次上报水平移动超过 6 m 且速度超过 25 m/s 时记录警告。
   - `gnb ds --cheats` 让服务器接受客户端测试钩子的自伤（`nextdayz.net.cheats`），只用于自动化测试。
+- 专用服务器不渲染：引擎 `--dedicated`（`--dedicated-tick-rate`，默认 30）只跑游戏逻辑，不绘制、不呈现、
+  不做管线预热；后台任务（场景加载）照常在主线程完成。隐含隐藏窗口、关闭 Streamline/FidelityFX 与硬件光追。
+  仍需要 Vulkan 设备来装场景网格（CPU 射线与物理用的数据由此构建）。`gnb ds` 默认用它起服务器，
+  `--show-server` 才画服务器窗口。实测空载约占 0.11 个 CPU 核。
+- 按距离同步：每个客户端的快照只含 500 m 内的其他幸存者和 250 m 内的感染者；离开范围的在客户端消失。
+- 延迟补偿的命中校验：服务器每个 tick 记下所有感染者与幸存者的位置（保留 1 秒）。客户端报告的命中
+  （打感染者、互伤）按"射手看到的那一刻"（当前时间减去半个 RTT 与 0.12 s 插值延迟，前后各 0.15 s）
+  回溯：命中点必须落在目标当时身体轴线 1.05 m 以内，且射手到命中点之间没有被场景挡住，否则拒绝。
 
 自动冒烟：先 `gnb ds --clients 0` 起服务器，再同时运行两组 agentscript：
 - `nextdayz-net-bravo` 与 `nextdayz-net-alpha`（服务器需 `--pvp`）：bravo 能看到 alpha 和感染者，并在 alpha 的
@@ -192,11 +200,13 @@ out/build/windows/bin/NextDayz.exe --cvar "nextdayz.net.mode client" --cvar "nex
   发起请求被服务器拒绝，并看到它已消失；bravo 能看到 alpha 丢下的绷带。
 - `nextdayz-net-ledger`（单客户端，服务器需 `--cheats`）：出生套装被接受；本地凭空多出的 5 个绷带被服务器
   收回；真实拾取与丢弃被接受；死亡后由服务器留下尸体掉落堆。
+- `nextdayz-net-hits`（单客户端）：报在感染者旁 5 m 的命中被服务器拒绝，打在其胸口的命中被接受。
 - `nextdayz-net-survival`（单客户端，服务器需 `--cheats`）：服务器扣的血到达客户端；客户端本地改的饥饿值被
   服务器改回；致命伤由服务器判定死亡并留下尸体。
 
-已知限制（下一步）：子弹消耗不做逐发核对（只保证不凭空增加）；移动只检测不纠正；没有延迟补偿，命中以射手画面为准；远端角色不显示服装；服务器仍需要 GPU 并按正常帧率
-运行；没有 Master、账号和存档（重启即重置）。
+已知限制（下一步）：子弹消耗不做逐发核对（只保证不凭空增加）；移动只检测不纠正；命中由客户端发现、服务器
+回溯校验（不是服务器自行重放射线）；服务器仍需要 Vulkan 设备；没有 Master、账号和存档（重启即重置）；
+压测工具（机器人客户端、延迟/丢包模拟、联机调试面板）待做。
 
 ## 8. 实施记录
 
@@ -225,5 +235,7 @@ out/build/windows/bin/NextDayz.exe --cvar "nextdayz.net.mode client" --cvar "nex
 - 2026-11-09：身体由服务器结算（第 7 节）：服务器为每名幸存者运行 `SurvivalSystem`，伤害、物品使用、代谢
   与死亡都在服务器；协议版本 4 增加 `SurvivalAction / SurvivalState`，位置上报附带服装；移动异常检测；
   客户端物资的补货簿记跟随服务器（修复：服务器说可拾取、本地却因补货冷却无法预约的问题）。
+- 2026-11-09：引擎 `--dedicated` 专用服务器模式（不绘制、固定步长、跳过管线预热）；`gnb ds` 默认使用。
+  快照按距离筛选；`Sim/LagCompensation`（`FLagHistory`）回溯校验命中。
 - M1 剩余：物资世界状态并入 WorldSim；库存/生存/武器状态按幸存者归入
   `Sim/`；PlayerController 拆运动体与相机/输入；WeaponSystem 拆开火判定与视图模型。

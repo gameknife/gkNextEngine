@@ -27,6 +27,7 @@
 #include "World/ZombieSpawnDirector.hpp"
 #include "Sim/WorldSim.hpp"
 #include "Sim/ItemLedger.hpp"
+#include "Sim/LagCompensation.hpp"
 #include "Zombies/ZombieVisualPool.hpp"
 #include "UI/Localization.hpp"
 
@@ -1943,4 +1944,43 @@ TEST_CASE("NextDayz item ledger lets survivors use, reload and convert but never
     CHECK(ledger.at("ammo_545") == 60);
     CHECK_FALSE(SubtractTotals(ledger, CountItems(std::vector<FLootStack>{{"ak", 1, 0, {}}})));
     CHECK(InventoryAsStacks(kit).size() == kit.instances.size());
+}
+
+TEST_CASE("NextDayz lag history checks a hit against where the target stood when the shooter saw it",
+          "[NextDayz][Productization][Multiplayer]")
+{
+    using namespace NextDayz;
+    FLagHistory history(1.0);
+    std::array<FZombieRuntime, 1> zombies{};
+    zombies[0].handle = {0, 3};
+    zombies[0].active = true;
+    std::array<FSurvivorPresence, 1> survivors{{{5, {}, {}, {0.0f, 0.0f, 1.0f}, true, 1.0f}}};
+    // Both walk +x at 4 m/s, recorded at 30 Hz for two seconds.
+    for (int tick = 0; tick <= 60; ++tick)
+    {
+        const double time = tick / 30.0;
+        zombies[0].position = {4.0f * static_cast<float>(time), 0.0f, 0.0f};
+        survivors[0].feet = {4.0f * static_cast<float>(time), 0.0f, 10.0f};
+        history.Record(time, zombies, survivors);
+    }
+    CHECK(history.OldestTime() >= 1.0 - 1.0e-6);   // only the last second is kept
+
+    // At t = 1.8 s the infected stood at x = 7.2; now (t = 2) it is at x = 8.
+    const glm::vec3 chestThen(7.2f, 1.3f, 0.0f);
+    const auto then = history.ZombieDistance({0, 3}, chestThen, 1.8, 0.05);
+    REQUIRE(then);
+    CHECK(*then < 0.2f);
+    // Judged against the present instead, the same shot would be a 0.8 m miss.
+    CHECK(DistanceToBodyAxis(glm::vec3(8.0f, 0.0f, 0.0f), chestThen) == Catch::Approx(0.8f).margin(0.01f));
+    // A shot 5 m to the side is a miss at any moment of the window.
+    const auto wide = history.ZombieDistance({0, 3}, chestThen + glm::vec3(0.0f, 0.0f, 5.0f), 1.8, 0.15);
+    REQUIRE(wide);
+    CHECK(*wide > 4.0f);
+    // Too old, or a body never recorded: no answer, so no hit.
+    CHECK_FALSE(history.ZombieDistance({0, 3}, chestThen, 0.5, 0.05));
+    CHECK_FALSE(history.ZombieDistance({1, 1}, chestThen, 1.8, 0.05));
+    // Survivors the same way.
+    const auto survivor = history.SurvivorDistance(5, glm::vec3(6.0f, 1.5f, 10.0f), 1.5, 0.05);
+    REQUIRE(survivor);
+    CHECK(*survivor < 0.2f);
 }

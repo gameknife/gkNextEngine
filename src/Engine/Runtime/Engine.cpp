@@ -649,7 +649,16 @@ void NextEngine::Start()
             return true;
         });
 
-    StartPipelineWarmup();
+    if (options_->Dedicated)
+    {
+        // Nothing will be drawn, so no pipeline needs warming (warm-up advances on presents).
+        status_ = NextRenderer::EApplicationStatus::Running;
+        SPDLOG_INFO("Dedicated mode: ticking at {} Hz, nothing is drawn", options_->DedicatedTickRate);
+    }
+    else
+    {
+        StartPipelineWarmup();
+    }
 
     GK_LOG_STAGE("---- Next Engine Started in {}", stopwatch.elapsed_ms());
 }
@@ -905,6 +914,11 @@ bool NextEngine::Tick(bool forcingDelta)
             {
                 minimumTickInterval = minimizedTickIntervalSeconds;
             }
+            if (options_->Dedicated)
+            {
+                // No present paces a dedicated server: sleep to its tick rate instead.
+                minimumTickInterval = 1.0 / static_cast<double>(options_->DedicatedTickRate);
+            }
             if (!forcingDelta && minimumTickInterval > 0.0)
             {
                 const double elapsed = currentTime - prevTime;
@@ -1034,6 +1048,14 @@ bool NextEngine::Tick(bool forcingDelta)
         // 到这里，这一帧的nodes操作已经结束，这里可以发起Scene Nodes的多线程更新
         if (scene_) scene_->StartUpdateNodes();
         
+        if (options_->Dedicated)
+        {
+            // Nothing is drawn, but finished background work (scene loads) still
+            // completes on this thread, as it would before a frame.
+            OnRendererBeforeNextFrame();
+            ++dedicatedTicks_;
+        }
+        else
         {
             SCOPED_CPU_TIMER("draw frame");
             if (ShouldCaptureScreenShotThisFrame())
@@ -1042,7 +1064,7 @@ bool NextEngine::Tick(bool forcingDelta)
             }
             renderer_->DrawFrame();
         }
-        frameState_.totalFrames = renderer_->FrameCount();
+        frameState_.totalFrames = options_->Dedicated ? dedicatedTicks_ : renderer_->FrameCount();
         if (options_->ExitAfterFrames > 0 && frameState_.totalFrames >= options_->ExitAfterFrames)
         {
             RequestExit(0);

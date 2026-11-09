@@ -64,7 +64,7 @@ func newDSCommand(ctx appContext) *cobra.Command {
 	cmd.Flags().IntVar(&opts.Port, "port", opts.Port, "UDP port of the server")
 	cmd.Flags().BoolVar(&opts.Pvp, "pvp", false, "allow survivors to hurt each other")
 	cmd.Flags().BoolVar(&opts.Cheats, "cheats", false, "let clients' validation hooks hurt their own survivor (automated tests)")
-	cmd.Flags().BoolVar(&opts.ShowServer, "show-server", false, "show the server window (it has no player, only the world)")
+	cmd.Flags().BoolVar(&opts.ShowServer, "show-server", false, "draw the server in a visible window (it has no player, only the world); by default it runs --dedicated and draws nothing")
 	cmd.Flags().BoolVar(&opts.KeepServer, "keep-server", false, "leave the server running after the clients exit (Ctrl+C stops it)")
 	cmd.Flags().DurationVar(&opts.ReadyTimeout, "ready-timeout", opts.ReadyTimeout, "how long to wait for the server to load its map")
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "print the commands without running them")
@@ -75,8 +75,9 @@ func dsServerArgs(opts dsOptions) []string {
 	// Nobody looks at the server's frames: keep NVIDIA Streamline out of it.
 	args := []string{"--disable-streamline"}
 	if !opts.ShowServer {
-		// The hidden server only needs simulation; avoid another full-size path tracer.
-		args = append(args, "--hidden-window", "--width=320", "--height=180",
+		// The server only needs simulation: --dedicated ticks without drawing; a small
+		// cheap swapchain keeps what the device still allocates minimal.
+		args = append(args, "--dedicated", "--width=320", "--height=180",
 			"--cvar", "r.rendererType 4", "--cvar", "r.upscaler.type 0")
 	}
 	if opts.Scene != "" {

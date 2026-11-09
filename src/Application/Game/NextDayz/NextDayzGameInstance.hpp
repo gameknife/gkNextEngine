@@ -187,6 +187,7 @@ private:
     // This survivor's life number: the server's item ledger starts afresh with each.
     uint32_t netLife_ = 0;
     int32_t validationNetTake_ = 0;
+    int32_t validationNetShoot_ = 0;
     std::string validationNetTakeId_;   // the entry the last validation take went for
     int32_t validationNetTakeResult_ = 0; // 0 pending, 1 granted, 2 refused
     int32_t validationNetPvpHit_ = 0;

@@ -18,6 +18,7 @@
 #if GK_MODULE_NEXTNET
 #include "Application/Game/NextDayz/Net/NetProtocol.hpp"
 #include "Application/Game/NextDayz/Sim/ItemLedger.hpp"
+#include "Application/Game/NextDayz/Sim/LagCompensation.hpp"
 #include "Modules/NextNet/NetHost.hpp"
 #endif
 
@@ -47,6 +48,15 @@ namespace
     // Friendly fire is softer than the infected's flesh: survivors carry 100 HP.
     constexpr float kPvpDamageScale = 0.6f;
     constexpr float kSurvivorRadius = 0.32f;
+    // What each client is told about: survivors within sight (scopes reach far),
+    // infected around where they spawn and hunt.
+    constexpr float kSurvivorRelevance = 500.0f;
+    constexpr float kInfectedRelevance = 250.0f;
+    // Lag compensation: a client sees the world a round trip plus its
+    // interpolation behind; a hit must land on a body as it stood then.
+    constexpr double kClientInterpolationSeconds = 0.12;
+    constexpr double kRewindWindowSeconds = 0.15;
+    constexpr float kHitToleranceMeters = 1.05f;   // body radius plus aim and ease slop
 
     float Ease(float rate, float dt) { return 1.0f - std::exp(-rate * std::max(dt, 0.0f)); }
 
@@ -132,6 +142,9 @@ struct NextDayzGameInstance::FNetSession
     uint32_t nextSurvivorId = Net::kFirstSurvivorId;
     float snapshotTimer = 0.0f;
     uint64_t lootRevision = 0;   // loot changes up to here have been broadcast
+    double clock = 0.0;          // server simulation seconds
+    FLagHistory history;
+    uint32_t rejectedHits = 0;
 
     FClient* ClientBySurvivor(uint32_t survivorId)
     {
@@ -215,6 +228,7 @@ struct NextDayzGameInstance::FNetSession
     float inventoryTimer = 0.0f;
     std::vector<std::byte> lastInventorySync;
     uint32_t fixes = 0;
+    uint32_t myHits = 0;          // damage notices for our own rounds
 };
 
 namespace
@@ -309,6 +323,44 @@ void NextDayzGameInstance::ConfigureNetCVars(NextCVar::FCVarSystem& cvars)
             net_->host.Send(net_->host.ServerPeer(), state.Bytes(), EDelivery::Reliable);
             NetRequestTake(*handle, 0, EEquipSlot::None, std::nullopt);
         });
+    cvars.RegisterInt("nextdayz.validation.netShoot", 0, &validationNetShoot_, ECVarFlags::None,
+        "Agent-only (client): stand 2 m from the nearest infected and report a hit on its chest; "
+        "2 = report the same hit 5 m to its side (the server must refuse it)", [this]()
+        {
+            if (!GOption->AgentValidation || !net_ || validationNetShoot_ == 0 || net_->survivorId == 0) return;
+            const FZombieRuntime* target = nullptr;
+            float nearest = std::numeric_limits<float>::max();
+            for (const FZombieRuntime& zombie : world_.zombies.Slots())
+            {
+                if (!zombie.active || zombie.state == EZombieState::Dead) continue;
+                const float distance = glm::distance(zombie.position, player_.Position());
+                if (distance < nearest) { nearest = distance; target = &zombie; }
+            }
+            if (!target) return;
+            const glm::vec3 chest = target->position + glm::vec3(0.0f, 1.3f, 0.0f);
+            const glm::vec3 side = glm::normalize(glm::cross(target->forward, glm::vec3(0.0f, 1.0f, 0.0f)));
+            const glm::vec3 feet = target->position + target->forward * 2.0f;
+            TeleportPlayer(feet);
+            // Our new stance reaches the server before the shot.
+            Net::FPlayerState stance;
+            stance.presence = LocalSurvivor();
+            stance.presence.id = net_->survivorId;
+            stance.presence.feet = feet;
+            stance.presence.eye = feet + glm::vec3(0.0f, 1.6f, 0.0f);
+            stance.presentation = LocalPresentation();
+            FNetWriter state;
+            Net::Write(state, stance);
+            net_->host.Send(net_->host.ServerPeer(), state.Bytes(), EDelivery::Reliable);
+            FWeaponHitEvent hit;
+            hit.sequence = ++validationAttackSequence_;
+            hit.weaponId = "ak";
+            hit.origin = stance.presence.eye;
+            hit.hitPoint = validationNetShoot_ == 2 ? chest + side * 5.0f : chest;
+            hit.direction = glm::normalize(hit.hitPoint - hit.origin);
+            hit.zombie = target->handle;
+            hit.zone = EHitZone::Torso;
+            NetSendWeaponHit(hit);
+        });
     cvars.RegisterBool("nextdayz.net.pvp", false, &netPvpCvar_, ECVarFlags::None,
         "Server: survivors can hurt each other (can change while running)", [this]()
         {
@@ -385,6 +437,33 @@ void NextDayzGameInstance::NetPoll()
         const auto dropBody = [this](FNetSession::FClient& client)
         {
             FNetSession::DropBody(client, loot_, GetEngine());
+        };
+        // When the shooter saw the world, and whether a round from `from` reaches `to`.
+        const auto shooterTime = [&net](const FNetSession::FClient& shooter)
+        {
+            const double rtt = static_cast<double>(net.host.Stats(shooter.peer).roundTripMs) / 1000.0;
+            return net.clock - (rtt * 0.5 + kClientInterpolationSeconds);
+        };
+        const auto worldBlocks = [this](const glm::vec3& from, const glm::vec3& to)
+        {
+            const glm::vec3 delta = to - from;
+            const float distance = glm::length(delta);
+            if (distance < 0.05f) return false;
+            bool blocked = false;
+            GetEngine().RayCast(from, delta / distance, [&](Assets::RayCastResult result)
+            {
+                blocked = result.Hit && result.T < distance - 0.3f;
+                return true;
+            });
+            return blocked;
+        };
+        const auto rejectHit = [&net](const FNetSession::FClient& shooter, const char* why)
+        {
+            if (net.rejectedHits++ % 10 == 0)
+            {
+                SPDLOG_WARN("[NextDayz][net] survivor {} hit refused: {} ({} refused so far)", shooter.survivorId, why,
+                            net.rejectedHits);
+            }
         };
         const auto fix = [&net](FNetSession::FClient& client, std::string reason)
         {
@@ -491,6 +570,13 @@ void NextDayzGameInstance::NetPoll()
                 const FWeaponDef* definition = FindWeaponDef(hit.weaponId);
                 // A round leaves from where its shooter stands, not across the map.
                 if (!definition || glm::distance(hit.origin, client.state.presence.eye) > 4.0f) break;
+                if (hit.zombie.IsValid())
+                {
+                    const std::optional<float> miss = net.history.ZombieDistance(hit.zombie, hit.hitPoint,
+                                                                                 shooterTime(client), kRewindWindowSeconds);
+                    if (!miss || *miss > kHitToleranceMeters) { rejectHit(client, "no infected stood there"); break; }
+                    if (worldBlocks(hit.origin, hit.hitPoint)) { rejectHit(client, "the shot passes through the world"); break; }
+                }
                 hit.shooterId = client.survivorId;
                 hit.baseDamage = definition->baseDamage;
                 world_.combat.ProcessHit(hit, definition->damageFalloffDistance);
@@ -509,6 +595,10 @@ void NextDayzGameInstance::NetPoll()
                 FNetSession::FClient* victim = net.ClientBySurvivor(hit.survivorId);
                 if (!victim || !victim->hasState || !victim->state.presence.alive) break;
                 if (glm::distance(hit.source, client.state.presence.eye) > 4.0f) break;
+                const std::optional<float> miss = net.history.SurvivorDistance(hit.survivorId, hit.point,
+                                                                               shooterTime(client), kRewindWindowSeconds);
+                if (!miss || *miss > kHitToleranceMeters) { rejectHit(client, "no survivor stood there"); break; }
+                if (worldBlocks(hit.source, hit.point)) { rejectHit(client, "the shot passes through the world"); break; }
                 hit.amount = std::clamp(hit.amount, 0.0f, 150.0f);
                 if (!victim->survival.ApplyInfectedHit(hit.amount, victim->body.Armor(), survivalRng_.UnitFloat())) break;
                 hit.survivorId = client.survivorId;   // the victim learns who shot
@@ -854,7 +944,9 @@ void NextDayzGameInstance::NetPoll()
         case Net::EMessage::DamageNotice:
         {
             Net::FDamageNotice notice;
-            if (Net::Read(reader, notice)) netDamage_.push_back({notice.damage, notice.shooterId == net.survivorId});
+            if (!Net::Read(reader, notice)) break;
+            netDamage_.push_back({notice.damage, notice.shooterId == net.survivorId});
+            if (notice.shooterId == net.survivorId) ++net.myHits;
             break;
         }
         case Net::EMessage::SurvivorStrike:
@@ -895,6 +987,8 @@ void NextDayzGameInstance::TickServer(float dt)
     world_.spawns.SetGlobalCap(1.0f - time_.Daylight() > 0.6f ? 48 : 40);
     world_.TickSpawns(dt);
     world_.TickInfected(dt);
+    net.clock += dt;
+    net.history.Record(net.clock, world_.zombies.Slots(), world_.Survivors());
     for (const FPlayerDamageRequest& strike : world_.ConsumeSurvivorHits())
     {
         FNetSession::FClient* client = net.ClientBySurvivor(strike.targetId);
@@ -936,9 +1030,10 @@ void NextDayzGameInstance::TickServer(float dt)
     net.snapshotTimer = std::fmod(net.snapshotTimer, kSnapshotSeconds);
     Net::FSnapshot snapshot;
     snapshot.time = time_.Capture();
+    std::vector<const FZombieRuntime*> infected;
     for (const FZombieRuntime& zombie : world_.zombies.Slots())
     {
-        if (zombie.active) snapshot.zombies.push_back(zombie);
+        if (zombie.active) infected.push_back(&zombie);
     }
     std::vector<Net::FPlayerState> everyone;
     for (const auto& [peer, client] : net.clients)
@@ -948,10 +1043,22 @@ void NextDayzGameInstance::TickServer(float dt)
     for (const auto& [peer, client] : net.clients)
     {
         if (client.survivorId == 0) continue;
+        // Only what is near this survivor: the rest of the map is not theirs to know.
+        const glm::vec3 here = client.state.presence.feet;
+        const auto relevant = [&](const glm::vec3& at, float radius)
+        {
+            return !client.hasState || glm::length(glm::vec2(at.x - here.x, at.z - here.z)) <= radius;
+        };
         snapshot.survivors.clear();
         for (const Net::FPlayerState& state : everyone)
         {
-            if (state.presence.id != client.survivorId) snapshot.survivors.push_back(state);
+            if (state.presence.id != client.survivorId && relevant(state.presence.feet, kSurvivorRelevance))
+                snapshot.survivors.push_back(state);
+        }
+        snapshot.zombies.clear();
+        for (const FZombieRuntime* zombie : infected)
+        {
+            if (relevant(zombie->position, kInfectedRelevance)) snapshot.zombies.push_back(*zombie);
         }
         FNetWriter writer;
         Net::Write(writer, snapshot);
@@ -1271,6 +1378,7 @@ void NextDayzGameInstance::RegisterNetQueries(Runtime::Agent::FAgentQueryRegistr
     reg.Add("netPendingTakes", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->pendingTakes.size() : 0); });
     reg.Add("netTakeResult", [this]() -> FAgentQueryValue { return int64_t(validationNetTakeResult_); });
     reg.Add("netInventoryFixes", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->fixes : 0); });
+    reg.Add("netMyHits", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->myHits : 0); });
     reg.Add("netBandages", [this]() -> FAgentQueryValue { return int64_t(inventory_.CountOf("bandage")); });
     reg.Add("netLife", [this]() -> FAgentQueryValue { return int64_t(netLife_); });
     // Whether the entry the validation take went for still lies on the ground here.

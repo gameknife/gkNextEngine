@@ -343,7 +343,7 @@ func writeTestTODOFile(repoRoot string, nextSection string) error {
 func TestDSArgsHideServerAndPointClientsAtIt(t *testing.T) {
 	opts := dsOptions{Target: "NextDayz", Clients: 2, Port: 27100, Pvp: true}
 	server := strings.Join(dsServerArgs(opts), "|")
-	for _, want := range []string{"--hidden-window", "nextdayz.net.mode server", "nextdayz.net.port 27100", "nextdayz.net.pvp true"} {
+	for _, want := range []string{"--dedicated", "nextdayz.net.mode server", "nextdayz.net.port 27100", "nextdayz.net.pvp true"} {
 		if !strings.Contains(server, want) {
 			t.Fatalf("server args %q missing %q", server, want)
 		}
@@ -363,7 +363,7 @@ func TestDSArgsHideServerAndPointClientsAtIt(t *testing.T) {
 	opts.ShowServer = true
 	opts.Scene = "assets/x.scad"
 	server = strings.Join(dsServerArgs(opts), "|")
-	if strings.Contains(server, "--hidden-window") || !strings.Contains(server, "--load-scene=assets/x.scad") {
+	if strings.Contains(server, "--dedicated") || !strings.Contains(server, "--load-scene=assets/x.scad") {
 		t.Fatalf("visible server with scene: %q", server)
 	}
 }

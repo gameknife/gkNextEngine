@@ -423,6 +423,7 @@ var zh = map[string]string{
 	"cli.dashboard.short":         "启动 .spec/ 工作流的原生桌面 Dashboard",
 	"cli.remote.short":            "以 WebRTC remote host 模式运行 target",
 	"cli.ds.short":                "启动本地专用服务器（DS）并让客户端连上（NextDayz）",
+	"cli.master.short":            "运行或管理 NextDayz Master（账号、仓库、地图服务器）",
 	"cli.git.short":               "常用 git 操作（status / branch / switch / pull / log）",
 	"cli.git.commit-msg.short":    "用 AI provider 根据本地改动生成 commit message",
 	"cli.git.status.short":        "显示当前分支、HEAD 以及 dirty/upstream 摘要",

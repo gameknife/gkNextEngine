@@ -833,7 +833,7 @@ void NextDayzGameInstance::OnSceneLoaded()
     inventory_.TryAdd("bandage", "Bandage", NextDayz::EItemKind::Consumable, 1);
     inventory_.TryAdd("water_bottle_empty", "Empty Bottle", NextDayz::EItemKind::Misc, 1);
     StartNewLife();
-    if ((validationLoadout_ && GOption->AgentValidation) || (netMode_ == ENetMode::Client && netKitCvar_))
+    if ((validationLoadout_ && GOption->AgentValidation) || (netMode_ == ENetMode::Client && netKitCvar_ && !NetUsesMaster()))
     {
         ApplyValidationLoadout();
     }
@@ -852,6 +852,7 @@ void NextDayzGameInstance::OnSceneLoaded()
     grass_.Bind(GetEngine().GetScene());
     grass_.Tick(GetEngine().GetScene(), 0.0f, player_.Position(), time_.Storm());
     SPDLOG_INFO("[NextDayz] scene loaded ({} nodes)", GetEngine().GetScene().Nodes().size());
+    NetAfterSceneLoaded();
 }
 
 void NextDayzGameInstance::OnSceneUnloaded()
@@ -924,6 +925,12 @@ void NextDayzGameInstance::OnTick(double deltaSeconds)
     float dt = static_cast<float>(deltaSeconds);
     if (netMode_ == ENetMode::Client)
     {
+        if (NetInLobby())
+        {
+            // Between sorties: the Master's lobby, the world is just a backdrop.
+            TickLobby(dt);
+            return;
+        }
         NetClientSend(dt);
     }
     if (CampaignEnabled())
@@ -1416,6 +1423,10 @@ bool NextDayzGameInstance::OverrideRenderCamera(Assets::Camera& outRenderCamera)
 bool NextDayzGameInstance::OnRenderUI()
 {
     DrawNetStatus();
+    if (DrawLobby())
+    {
+        return true;
+    }
     if (ImGui::IsKeyPressed(ImGuiKey_F12, false))
     {
         using namespace NextDayz::L10n;
@@ -2305,6 +2316,12 @@ void NextDayzGameInstance::BuildZombieNavigation()
 
 void NextDayzGameInstance::ResetSession()
 {
+    if (NetUsesMaster() && netMode_ == ENetMode::Client)
+    {
+        // A sortie ended in death: the next one starts from the lobby.
+        NetReturnToLobby("You died. Your gear lies where you fell.");
+        return;
+    }
     if (CampaignEnabled())
     {
         if (!survival_.IsAlive() && campaign_.inField) ReturnToSafehouse(ESafehouseReturn::Death);
@@ -2334,7 +2351,7 @@ void NextDayzGameInstance::ResetSession()
     netDeathDropped_ = false;
     player_.Destroy();
     player_.Create(GetEngine().GetPhysicsEngine(), ResolveSpawnPosition(), config_);
-    if ((validationLoadout_ && GOption->AgentValidation) || (netMode_ == ENetMode::Client && netKitCvar_))
+    if ((validationLoadout_ && GOption->AgentValidation) || (netMode_ == ENetMode::Client && netKitCvar_ && !NetUsesMaster()))
     {
         ApplyValidationLoadout();
     }
@@ -2983,6 +3000,15 @@ void NextDayzGameInstance::SetInventoryOpen(bool open)
 
 bool NextDayzGameInstance::OnKey(SDL_Event& event)
 {
+    if (NetInLobby())
+    {
+        return false;   // the lobby is ImGui; the game takes no keys
+    }
+    if (NetUsesMaster() && netMode_ == ENetMode::Client && event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
+        event.key.key == SDLK_B && !actions_.IsActive() && !player_.IsTraversing() && NetRequestExtract())
+    {
+        return true;
+    }
     if (CampaignEnabled())
     {
         if (!campaign_.inField || campaignSaveBlocked_) return true;

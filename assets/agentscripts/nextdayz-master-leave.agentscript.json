@@ -1,0 +1,22 @@
+{
+  "name": "nextdayz-master-leave",
+  "description": "Master sortie, part 1. Needs a Master on 127.0.0.1:7780 (`gnb master serve --cheats` with a fresh --data). Logs in as 'pilot', deploys (the Master starts a map server), picks something up, then logs out: the Master keeps the survivor with its gear.",
+  "target": "NextDayz",
+  "args": ["--disable-streamline", "--cvar", "nextdayz.net.mode client", "--cvar", "nextdayz.net.master http://127.0.0.1:7780",
+           "--cvar", "nextdayz.net.name pilot", "--cvar", "nextdayz.net.autoDeploy true"],
+  "defaults": { "waitFrames": 2, "stepTimeoutMs": 300000 },
+  "steps": [
+    { "type": "wait-until", "query": "game.sceneReady", "op": "eq", "value": true, "timeoutMs": 180000 },
+    { "type": "wait-until", "query": "game.netLobby", "op": "eq", "value": "playing", "timeoutMs": 300000 },
+    { "type": "wait-until", "query": "game.netLootSynced", "op": "eq", "value": true, "timeoutMs": 30000 },
+    { "type": "wait-ms", "ms": 1500 },
+    { "type": "assert", "query": "game.netInventoryFixes", "op": "eq", "value": 0 },
+    { "type": "assert", "query": "game.netInventoryItems", "op": "eq", "value": 2 },
+    { "type": "cvar", "name": "nextdayz.validation.netTake", "set": 1 },
+    { "type": "wait-until", "query": "game.netTakeResult", "op": "eq", "value": 1, "timeoutMs": 20000 },
+    { "type": "wait-until", "query": "game.netInventoryItems", "op": "ge", "value": 3, "timeoutMs": 5000 },
+    { "type": "wait-ms", "ms": 2000 },
+    { "type": "screenshot", "out": "screenshots/nextdayz_master_leave", "ui": true },
+    { "type": "quit" }
+  ]
+}

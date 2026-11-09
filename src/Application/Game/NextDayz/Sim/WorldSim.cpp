@@ -344,11 +344,15 @@ namespace NextDayz
             // not pause just because the survivor crossed a window boundary.
             BuildWindow(*window, owner->feet, true, true);
         }
-        std::erase_if(navWindows_, [](std::unique_ptr<FNavigationWindow>& window)
+        std::erase_if(navWindows_, [this](std::unique_ptr<FNavigationWindow>& window)
         {
             if (window->ownerId != 0) return false;
-            if (window->build.valid()) window->build.get();
+            if (window->build.valid()) retiredWindows_.push_back(std::move(window));
             return true;
+        });
+        std::erase_if(retiredWindows_, [](const std::unique_ptr<FNavigationWindow>& window)
+        {
+            return !window->build.valid() || window->build.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
         });
         // Anyone outside every window gets one of their own.
         for (const FSurvivorPresence& survivor : survivors_)
@@ -452,6 +456,11 @@ namespace NextDayz
         {
             if (window->build.valid()) ApplyNavigation(*window, window->build.get());
         }
+        for (auto& window : retiredWindows_)
+        {
+            if (window->build.valid()) window->build.get();
+        }
+        retiredWindows_.clear();
     }
 
     void WorldSim::ClearNavigation()

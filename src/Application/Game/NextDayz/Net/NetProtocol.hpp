@@ -24,7 +24,7 @@
 
 namespace NextDayz::Net
 {
-    inline constexpr uint16_t kProtocolVersion = 4;
+    inline constexpr uint16_t kProtocolVersion = 5;
     inline constexpr uint16_t kDefaultPort = 27015;
     // Survivor 1 is single player's local survivor; network survivors start here.
     inline constexpr uint32_t kFirstSurvivorId = 2;
@@ -52,6 +52,10 @@ namespace NextDayz::Net
         InventoryFix,    // S->C reliable: refused; this is what you carry
         SurvivalAction,  // C->S reliable: I use this item / drink at a well / rest
         SurvivalState,   // S->C reliable: your body as the server keeps it
+        CharacterSpawn,  // S->C reliable: the survivor the Master sent you as (gear, body, place)
+        Extract,         // C->S reliable: start (or stop) holding an extraction point
+        ExtractState,    // S->C reliable: seconds left holding it, or done / broken off
+        Farewell,        // S->C reliable: you are leaving this server, and why
     };
 
     struct FHello
@@ -59,6 +63,7 @@ namespace NextDayz::Net
         uint16_t protocol = kProtocolVersion;
         std::string name;
         std::string scene;
+        std::string ticket;      // from the Master; empty on a direct-connect server
     };
 
     struct FWelcome
@@ -175,6 +180,36 @@ namespace NextDayz::Net
         FSurvivalSnapshot body;
     };
 
+    struct FCharacterSpawn
+    {
+        uint32_t life = 0;       // the life number the client reports its inventory under
+        FInventoryState inventory;
+        FSurvivalSnapshot body;
+        glm::vec3 feet{};
+        float yaw = 0.0f;
+    };
+
+    struct FExtractState
+    {
+        float secondsLeft = 0.0f;
+        bool done = false;       // extracted: what you carried is in storage
+        bool broken = false;     // left the point, or hurt badly: start again
+    };
+
+    enum class EFarewell : uint8_t
+    {
+        Extracted,
+        Kicked,
+        ServerStopping,
+        Refused,
+    };
+
+    struct FFarewell
+    {
+        EFarewell reason = EFarewell::Refused;
+        std::string message;
+    };
+
     // Reads the leading message byte; false on an empty packet.
     bool ReadHeader(NextNet::FNetReader& reader, EMessage& out);
 
@@ -199,6 +234,10 @@ namespace NextDayz::Net
     void Write(NextNet::FNetWriter& writer, const FInventoryFix& value);
     void Write(NextNet::FNetWriter& writer, const FSurvivalAction& value);
     void Write(NextNet::FNetWriter& writer, const FSurvivalState& value);
+    void Write(NextNet::FNetWriter& writer, const FCharacterSpawn& value);
+    void WriteExtract(NextNet::FNetWriter& writer, bool begin);
+    void Write(NextNet::FNetWriter& writer, const FExtractState& value);
+    void Write(NextNet::FNetWriter& writer, const FFarewell& value);
 
     // Bodies only (after ReadHeader). False when the packet is malformed.
     bool Read(NextNet::FNetReader& reader, FHello& out);
@@ -218,6 +257,9 @@ namespace NextDayz::Net
     bool Read(NextNet::FNetReader& reader, FInventoryFix& out);
     bool Read(NextNet::FNetReader& reader, FSurvivalAction& out);
     bool Read(NextNet::FNetReader& reader, FSurvivalState& out);
+    bool Read(NextNet::FNetReader& reader, FCharacterSpawn& out);
+    bool Read(NextNet::FNetReader& reader, FExtractState& out);
+    bool Read(NextNet::FNetReader& reader, FFarewell& out);
 }
 
 #endif

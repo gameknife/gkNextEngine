@@ -347,4 +347,43 @@ namespace NextDayz
         }
         catch (const std::exception& ex) { error = ex.what(); return false; }
     }
+
+    std::string WorldToJson(const FLootWorldState& world, const TimeSystem::FState& time)
+    {
+        return nlohmann::json{{"version", 1}, {"loot", world}, {"time", time}}.dump();
+    }
+
+    bool WorldFromJson(std::string_view json, FLootWorldState& world, TimeSystem::FState& time, std::string& error)
+    {
+        try
+        {
+            const auto document = nlohmann::json::parse(json);
+            document.at("loot").get_to(world);
+            document.at("time").get_to(time);
+            return true;
+        }
+        catch (const std::exception& ex)
+        {
+            error = ex.what();
+            return false;
+        }
+    }
+
+    std::string SurvivalToJson(const FSurvivalSnapshot& body)
+    {
+        return nlohmann::json(body).dump();
+    }
+
+    bool SurvivalFromJson(std::string_view json, FSurvivalSnapshot& body)
+    {
+        try
+        {
+            nlohmann::json::parse(json).get_to(body);
+            return true;
+        }
+        catch (const std::exception&)
+        {
+            return false;
+        }
+    }
 }

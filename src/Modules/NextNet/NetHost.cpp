@@ -213,7 +213,8 @@ namespace NextNet
     {
         if (ENetPeer* target = impl_->Find(peer))
         {
-            enet_peer_disconnect(target, 0);
+            // After what is already queued for them (a farewell, a refusal), not instead of it.
+            enet_peer_disconnect_later(target, 0);
         }
     }
 

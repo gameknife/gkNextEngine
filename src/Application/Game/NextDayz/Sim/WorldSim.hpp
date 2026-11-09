@@ -167,6 +167,9 @@ namespace NextDayz
         Runtime::TerrainComponent* navTerrain_ = nullptr;
         bool navAdaptToTerrain_ = false;
         std::vector<std::unique_ptr<FNavigationWindow>> navWindows_;
+        // Windows nobody needs any more whose build is still running: dropped
+        // once it finishes, never waited on (a build can take seconds).
+        std::vector<std::unique_ptr<FNavigationWindow>> retiredWindows_;
         NextGameplay::FNavGrid emptyGrid_;
         uint64_t navBuildCount_ = 0;
         double navBuildMs_ = 0.0;

@@ -102,4 +102,11 @@ namespace NextDayz
     bool LoadExtractionConfig(const std::filesystem::path& path, FExtractionConfig& config, std::string& error);
     bool WriteCampaignSave(const std::filesystem::path& path, const FCampaignSave& save, std::string& error);
     bool ReadCampaignSave(const std::filesystem::path& path, FCampaignSave& save, std::string& error);
+
+    // A map's world and a survivor's body as JSON, encoded as in the save (the
+    // NextDayz Master stores them for its dedicated servers).
+    std::string WorldToJson(const FLootWorldState& world, const TimeSystem::FState& time);
+    bool WorldFromJson(std::string_view json, FLootWorldState& world, TimeSystem::FState& time, std::string& error);
+    std::string SurvivalToJson(const FSurvivalSnapshot& body);
+    bool SurvivalFromJson(std::string_view json, FSurvivalSnapshot& body);
 }

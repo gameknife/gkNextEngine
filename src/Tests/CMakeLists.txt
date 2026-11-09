@@ -156,7 +156,8 @@ set(unitTestSources
 if("NextNet" IN_LIST GK_MODULE_NAMES)
     list(APPEND unitTestSources
         Test_NextNet.cpp
-        ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Net/NetProtocol.cpp)
+        ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Net/NetProtocol.cpp
+        ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Net/MasterApi.cpp)
 endif()
 
 if(GK_DOTNET_ENABLED)

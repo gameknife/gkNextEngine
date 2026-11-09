@@ -11,6 +11,8 @@
 #include "Modules/NextNet/NetHost.hpp"
 #include "Application/Game/NextDayz/Net/NetProtocol.hpp"
 #include "Application/Game/NextDayz/Sim/ItemLedger.hpp"
+#include "Application/Game/NextDayz/Net/MasterApi.hpp"
+#include <nlohmann/json.hpp>
 
 TEST_CASE("NextDayz net protocol round-trips a snapshot, a hit and a welcome", "[Unit][NextNet][NextDayz][Multiplayer]")
 {
@@ -330,4 +332,63 @@ TEST_CASE("NextNet hosts connect over loopback and deliver reliable and unreliab
         return left;
     }));
     CHECK(server.PeerCount() == 0);
+}
+
+TEST_CASE("NextDayz Master JSON matches what tools/gnb/internal/dzmaster sends and expects",
+          "[Unit][NextNet][NextDayz][Multiplayer]")
+{
+    using namespace NextDayz;
+    // A profile as the Go Master encodes it (Stack: id/count/loaded/attachments).
+    const std::string profileJson = R"({"playerId":7,"name":"pilot","gold":12,
+        "storage":[{"id":"ak","count":1,"loaded":30,"attachments":[1,0,0,0,0]},{"id":"bandage","count":4}],
+        "character":{"map":"loket","position":[1.5,2,3],"yaw":0.25,"survival":{"health":80},
+                     "inventory":[{"id":"food_can","count":2}],"sortie":9,"fresh":false},
+        "sorties":3,"extractions":1,"deaths":1,"lastOutcome":"died on loket","maps":[{"id":"loket","name":"LOKET","scene":"a.scad","training":false}],
+        "playing":""})";
+    Master::FProfile profile;
+    REQUIRE(Master::ParseProfile(profileJson, profile));
+    CHECK(profile.playerId == 7);
+    REQUIRE(profile.storage.size() == 2);
+    CHECK(profile.storage[0].loadedAmmo == 30);
+    CHECK(profile.storage[0].attachments[0] == static_cast<EWeaponAttachment>(1));
+    CHECK(profile.storage[1].count == 4);
+    REQUIRE(profile.character);
+    CHECK(profile.character->position == glm::vec3(1.5f, 2.0f, 3.0f));
+    CHECK(profile.character->sortie == 9);
+    CHECK_FALSE(profile.character->fresh);
+    CHECK(profile.character->survivalJson.find("80") != std::string::npos);
+    REQUIRE(profile.maps.size() == 1);
+    CHECK(profile.maps[0].scene == "a.scad");
+
+    Master::FDeploy deploy;
+    REQUIRE(Master::ParseDeploy(R"({"state":"ready","server":"ds1","host":"127.0.0.1","port":27100,"ticket":"ab","map":"loket","scene":"a.scad","resume":true})", deploy));
+    CHECK(deploy.port == 27100);
+    CHECK(deploy.resume);
+    Master::FHeartbeatReply beat;
+    REQUIRE(Master::ParseHeartbeat(R"({"stop":true,"pvp":false,"kick":[3,4]})", beat));
+    CHECK(beat.stop);
+    CHECK(beat.kick == std::vector<uint64_t>{3, 4});
+    std::string world;
+    REQUIRE(Master::ParseWorld(R"({"seq":2,"blob":{"version":1}})", world));
+    CHECK(world.find("version") != std::string::npos);
+    REQUIRE(Master::ParseWorld(R"({"seq":0,"blob":null})", world));
+    CHECK(world.empty());
+    CHECK_FALSE(Master::ParseDeploy("not json", deploy));
+
+    // A checkpoint as the Go Master decodes it.
+    Master::FCheckpointCharacter extracted;
+    extracted.playerId = 7;
+    extracted.sortie = 9;
+    extracted.outcome = Master::EOutcome::Extracted;
+    extracted.position = {1.0f, 2.0f, 3.0f};
+    extracted.survivalJson = R"({"health":50})";
+    extracted.inventory = {{"ak", 1, 12, {}}, {"bandage", 2, 0, {}}};
+    const auto body = nlohmann::json::parse(Master::CheckpointRequest("ds1", "key", 4, R"({"loot":1})", {extracted}));
+    CHECK(body["seq"] == 4);
+    CHECK(body["world"]["loot"] == 1);
+    const auto& character = body["characters"][0];
+    CHECK(character["outcome"] == "extracted");
+    CHECK(character["inventory"][0]["loaded"] == 12);
+    CHECK_FALSE(character["inventory"][1].contains("attachments"));
+    CHECK(character["survival"]["health"] == 50);
 }

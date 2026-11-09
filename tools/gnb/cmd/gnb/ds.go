@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -32,6 +33,8 @@ type dsOptions struct {
 	Cheats       bool
 	ShowServer   bool
 	KeepServer   bool
+	Master       bool   // run a NextDayz Master; it starts map servers, clients use its lobby
+	MasterData   string // the Master's data directory (default: a fresh one per run)
 	ReadyTimeout time.Duration
 	DryRun       bool
 }
@@ -63,6 +66,8 @@ func newDSCommand(ctx appContext) *cobra.Command {
 	cmd.Flags().IntVar(&opts.Clients, "clients", opts.Clients, "local clients to start (0 = server only)")
 	cmd.Flags().IntVar(&opts.Port, "port", opts.Port, "UDP port of the server")
 	cmd.Flags().BoolVar(&opts.Pvp, "pvp", false, "allow survivors to hurt each other")
+	cmd.Flags().BoolVar(&opts.Master, "master", false, "run a Master on 127.0.0.1:7780: it starts map servers on demand and clients log in, choose gear and deploy from its lobby")
+	cmd.Flags().StringVar(&opts.MasterData, "master-data", "", "with --master: keep accounts here across runs (default: a fresh directory in this run's logs)")
 	cmd.Flags().BoolVar(&opts.Cheats, "cheats", false, "let clients' validation hooks hurt their own survivor (automated tests)")
 	cmd.Flags().BoolVar(&opts.ShowServer, "show-server", false, "draw the server in a visible window (it has no player, only the world); by default it runs --dedicated and draws nothing")
 	cmd.Flags().BoolVar(&opts.KeepServer, "keep-server", false, "leave the server running after the clients exit (Ctrl+C stops it)")
@@ -182,6 +187,9 @@ func dsTrimLogPrefix(line string) string {
 }
 
 func runDS(ctx appContext, opts dsOptions, clientExtra []string) error {
+	if opts.Master {
+		return runDSMaster(ctx, opts, clientExtra)
+	}
 	if opts.Clients < 0 {
 		return fmt.Errorf("--clients must be 0 or more")
 	}
@@ -309,4 +317,104 @@ func dsQuoteArgs(args []string) string {
 		}
 	}
 	return strings.Join(quoted, " ")
+}
+
+func dsMasterClientArgs(masterURL string, index int, extra []string) []string {
+	args := []string{
+		"--cvar", "nextdayz.net.mode client",
+		"--cvar", "nextdayz.net.master " + masterURL,
+		"--cvar", fmt.Sprintf("nextdayz.net.name client%d", index),
+	}
+	return append(args, extra...)
+}
+
+// runDSMaster: a Master in this process, and clients that start in its lobby.
+// The Master starts (and stops) map servers itself; their logs are in its data directory.
+func runDSMaster(ctx appContext, opts dsOptions, clientExtra []string) error {
+	binDir := platform.BinDir(ctx.repoRoot, ctx.preset)
+	exe := platform.ExecutablePath(binDir, opts.Target)
+	runDir := filepath.Join(filepath.Dir(binDir), "ds-runs", time.Now().Format("20060102-150405"))
+	data := opts.MasterData
+	if data == "" {
+		data = filepath.Join(runDir, "master")
+	}
+	console.Header("NextDayz Master test")
+	console.Label("master", "http://127.0.0.1:7780")
+	console.Label("data", data)
+	console.Label("clients", fmt.Sprintf("%d", opts.Clients))
+	if opts.DryRun {
+		for index := 1; index <= opts.Clients; index++ {
+			console.CommandLine(exe + " " + dsQuoteArgs(dsMasterClientArgs("http://127.0.0.1:7780", index, clientExtra)))
+		}
+		return nil
+	}
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		return err
+	}
+	m, err := newMaster(ctx, masterOptions{Listen: "127.0.0.1:7780", DataDir: data, PortBase: opts.Port,
+		MaxPlayers: 16, IdleSeconds: 120, Pvp: opts.Pvp, Cheats: opts.Cheats})
+	if err != nil {
+		return err
+	}
+	masterCtx, stopMaster := context.WithCancel(context.Background())
+	masterDone := make(chan error, 1)
+	go func() { masterDone <- m.Run(masterCtx) }()
+	defer func() {
+		stopMaster()
+		<-masterDone
+	}()
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt)
+	defer signal.Stop(interrupt)
+
+	clients := make([]*dsProcess, 0, opts.Clients)
+	defer func() {
+		for _, client := range clients {
+			client.stop()
+			client.log.Close()
+		}
+	}()
+	for index := 1; index <= opts.Clients; index++ {
+		args := dsMasterClientArgs(m.URL(), index, clientExtra)
+		if opts.Clients > 1 {
+			args = append([]string{"--disable-streamline"}, args...)
+		}
+		console.CommandLine(exe + " " + dsQuoteArgs(args))
+		name := fmt.Sprintf("client%d", index)
+		client, err := startDSProcess(name, exe, args, filepath.Join(runDir, name+".log"), dsEcho("["+name+"]"))
+		if err != nil {
+			return fmt.Errorf("start %s: %w", name, err)
+		}
+		clients = append(clients, client)
+		time.Sleep(time.Second)
+	}
+	if opts.Clients == 0 {
+		console.Info("Master running; connect with: %s --cvar \"nextdayz.net.mode client\" --cvar \"nextdayz.net.master %s\"", exe, m.URL())
+		console.Info("Ctrl+C stops it (and the map servers it started)")
+	}
+	remaining := len(clients)
+	clientDone := make(chan string, len(clients))
+	for _, client := range clients {
+		go func(p *dsProcess) {
+			<-p.done
+			clientDone <- p.name
+		}(client)
+	}
+	for {
+		if remaining == 0 && len(clients) > 0 {
+			console.Success("all clients exited; stopping the Master and its map servers")
+			return nil
+		}
+		select {
+		case name := <-clientDone:
+			remaining--
+			console.Info("%s exited (%d still running)", name, remaining)
+		case err := <-masterDone:
+			masterDone <- err
+			return fmt.Errorf("the Master stopped: %v", err)
+		case <-interrupt:
+			console.Warn("interrupted; stopping the Master, its map servers and the clients")
+			return nil
+		}
+	}
 }

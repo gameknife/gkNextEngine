@@ -13,6 +13,12 @@ endif()
 if(TARGET NextNet)
     find_package(unofficial-enet CONFIG REQUIRED)
     target_link_libraries(NextNet PRIVATE unofficial::enet::enet)
+    # HTTP to the NextDayz Master where cpp-httplib exists (Windows/Linux).
+    find_package(httplib CONFIG QUIET)
+    if(TARGET httplib::httplib)
+        target_link_libraries(NextNet PRIVATE httplib::httplib)
+        target_compile_definitions(NextNet PRIVATE GK_NEXTNET_HTTP=1)
+    endif()
 endif()
 
 if(TARGET NextCapture)

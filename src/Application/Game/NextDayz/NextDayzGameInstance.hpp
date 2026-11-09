@@ -39,6 +39,11 @@
 
 #include <future>
 
+namespace NextNet
+{
+    struct FHttpResult;
+}
+
 class NextDayzGameInstance : public NextGameInstanceBase
 {
 public:
@@ -206,6 +211,25 @@ private:
     bool netPvpCvar_ = false;
     bool netKitCvar_ = true;
     bool netCheatsCvar_ = false;   // server: honour clients' debug harm (tests)
+    // The NextDayz Master (tools/gnb/internal/dzmaster): with it a server is one of
+    // its fleet and a client starts in the lobby (login, storage, deploy).
+    std::string netMasterCvar_;
+    std::string netDsIdCvar_;
+    std::string netMasterKeyCvar_;
+    bool netAutoDeployCvar_ = false;  // client: log in and deploy at once (automation)
+    std::string netAutoMapCvar_;
+    int32_t validationNetExtract_ = 0;
+    bool NetUsesMaster() const { return netMode_ != ENetMode::Offline && !netMasterCvar_.empty(); }
+    // Master client: true while the lobby owns the screen (and the game is paused).
+    bool NetInLobby() const;
+    bool DrawLobby();
+    void NetReturnToLobby(std::string message);
+    bool NetRequestExtract();
+    void NetAfterSceneLoaded();
+    void TickLobby(float dt);
+    void TickServerMaster(float dt);
+    void NetSendCheckpoint();
+    void NetAdmitSurvivor(uint32_t peer, const NextNet::FHttpResult& result);
     int32_t netMaxPlayersCvar_ = 8;
     // Remote survivors' bodies: a pool built with the scene (clients only).
     std::vector<std::unique_ptr<NextDayz::PlayerRigVisual>> remoteRigs_;

@@ -49,6 +49,9 @@ GNB_LANG=en ./gnb.sh doctor
 ./gnb.sh remote --scene assets/models/playground.glb
 ./gnb.sh ds                          # NextDayz：本地 DS + 1 个客户端
 ./gnb.sh ds --clients 2 --pvp        # 两名幸存者，允许互伤
+./gnb.sh ds --master --clients 2     # 进程内 Master，客户端从大厅登录、选装备、出击
+./gnb.sh master serve                # 单独运行 NextDayz Master（127.0.0.1:7780）
+./gnb.sh master status               # 地图服务器、账号、谁在哪；另有 kick / pvp / stop
 ```
 
 `ds` 先以引擎 `--dedicated` 模式启动专用服务器（无本地玩家，不绘制），等它监听端口并加载完地图，再逐个启动可见客户端连上 `127.0.0.1`。

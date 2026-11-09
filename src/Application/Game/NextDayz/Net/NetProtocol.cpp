@@ -218,7 +218,7 @@ namespace NextDayz::Net
     void Write(FNetWriter& writer, const FHello& value)
     {
         Header(writer, EMessage::Hello);
-        writer.Write(value.protocol).WriteString(value.name).WriteString(value.scene);
+        writer.Write(value.protocol).WriteString(value.name).WriteString(value.scene).WriteString(value.ticket);
     }
 
     void Write(FNetWriter& writer, const FWelcome& value)
@@ -386,6 +386,72 @@ namespace NextDayz::Net
             .WriteString(body.lastDamageSource);
     }
 
+    void Write(FNetWriter& writer, const FCharacterSpawn& value)
+    {
+        Header(writer, EMessage::CharacterSpawn);
+        writer.Write(value.life);
+        WriteInventory(writer, value.inventory);
+        FNetWriter body;
+        Write(body, FSurvivalState{value.life, value.body});
+        // The body travels as a whole SurvivalState message nested after the inventory.
+        writer.Write(static_cast<uint16_t>(body.Size()));
+        for (const std::byte b : body.Bytes()) writer.Write(b);
+        writer.Write(value.feet).Write(value.yaw);
+    }
+
+    void WriteExtract(FNetWriter& writer, bool begin)
+    {
+        Header(writer, EMessage::Extract);
+        writer.Write<uint8_t>(begin ? 1 : 0);
+    }
+
+    void Write(FNetWriter& writer, const FExtractState& value)
+    {
+        Header(writer, EMessage::ExtractState);
+        writer.Write(value.secondsLeft).Write<uint8_t>(static_cast<uint8_t>((value.done ? 1 : 0) | (value.broken ? 2 : 0)));
+    }
+
+    void Write(FNetWriter& writer, const FFarewell& value)
+    {
+        Header(writer, EMessage::Farewell);
+        writer.Write(value.reason).WriteString(value.message);
+    }
+
+    bool Read(FNetReader& reader, FCharacterSpawn& out)
+    {
+        reader.Read(out.life);
+        if (!ReadInventory(reader, out.inventory)) return false;
+        const auto size = reader.Read<uint16_t>();
+        if (reader.Failed()) return false;
+        std::vector<std::byte> body(size);
+        for (std::byte& b : body) reader.Read(b);
+        if (reader.Failed()) return false;
+        FNetReader bodyReader(body);
+        EMessage message{};
+        FSurvivalState state;
+        if (!ReadHeader(bodyReader, message) || message != EMessage::SurvivalState || !Read(bodyReader, state)) return false;
+        out.body = state.body;
+        reader.Read(out.feet);
+        reader.Read(out.yaw);
+        return !reader.Failed();
+    }
+
+    bool Read(FNetReader& reader, FExtractState& out)
+    {
+        reader.Read(out.secondsLeft);
+        const auto flags = reader.Read<uint8_t>();
+        out.done = (flags & 1) != 0;
+        out.broken = (flags & 2) != 0;
+        return !reader.Failed();
+    }
+
+    bool Read(FNetReader& reader, FFarewell& out)
+    {
+        reader.Read(out.reason);
+        out.message = reader.ReadString();
+        return !reader.Failed();
+    }
+
     bool Read(FNetReader& reader, FSurvivalAction& out)
     {
         reader.Read(out.action);
@@ -470,6 +536,7 @@ namespace NextDayz::Net
         reader.Read(out.protocol);
         out.name = reader.ReadString();
         out.scene = reader.ReadString();
+        out.ticket = reader.ReadString();
         return !reader.Failed();
     }
 

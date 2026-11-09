@@ -12,6 +12,7 @@
 
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/Interface/AgentQueries.hpp"
+#include "Engine/Runtime/Config/CVarSystem.hpp"
 
 #include <imgui.h>
 
@@ -19,6 +20,8 @@
 #include "Application/Game/NextDayz/Net/NetProtocol.hpp"
 #include "Application/Game/NextDayz/Sim/ItemLedger.hpp"
 #include "Application/Game/NextDayz/Sim/LagCompensation.hpp"
+#include "Application/Game/NextDayz/Net/MasterApi.hpp"
+#include "Modules/NextNet/NetHttp.hpp"
 #include "Modules/NextNet/NetHost.hpp"
 #endif
 
@@ -57,6 +60,10 @@ namespace
     constexpr double kClientInterpolationSeconds = 0.12;
     constexpr double kRewindWindowSeconds = 0.15;
     constexpr float kHitToleranceMeters = 1.05f;   // body radius plus aim and ease slop
+    // Master: how often a server commits its world, and how extraction works.
+    constexpr float kCheckpointSeconds = 15.0f;
+    constexpr float kExtractRadius = 12.0f;
+    constexpr float kExtractHoldSeconds = 10.0f;
 
     float Ease(float rate, float dt) { return 1.0f - std::exp(-rate * std::max(dt, 0.0f)); }
 
@@ -133,6 +140,15 @@ struct NextDayzGameInstance::FNetSession
         SurvivalSystem survival;
         Inventory body;              // `inventory` as an object: armour, warmth, uses
         float survivalSyncTimer = 0.0f;
+        // A Master survivor: who they are there, and their sortie.
+        uint64_t playerId = 0;
+        uint64_t sortie = 0;
+        bool redeeming = false;
+        glm::vec3 spawnFeet{};
+        // Holding an extraction point.
+        float extractSeconds = -1.0f;
+        float extractNotify = 0.0f;
+        glm::vec3 extractPoint{};
         // Movement sanity: where the last report put them, and when.
         glm::vec3 lastFeet{};
         std::chrono::steady_clock::time_point lastStateTime{};
@@ -224,6 +240,60 @@ struct NextDayzGameInstance::FNetSession
         std::optional<FGridPlacement> placement;
     };
     std::unordered_map<uint32_t, FPendingTake> pendingTakes;
+    // --- Master (both roles) ---
+    std::unique_ptr<NextNet::FHttpWorker> master;
+    // server
+    bool worldRequested = false;
+    bool worldLoaded = false;
+    float heartbeatTimer = 0.0f;
+    float checkpointTimer = 0.0f;
+    uint64_t checkpointSeq = 0;
+    bool stopping = false;
+    float stopSeconds = 0.0f;
+    std::vector<Master::FCheckpointCharacter> outcomes;   // sorties that ended since the last checkpoint
+    // client lobby
+    enum class ELobby : uint8_t
+    {
+        Off,          // not a Master client
+        Login,
+        Waiting,      // a request to the Master is out
+        Profile,
+        Deploying,    // the Master is starting a server; asking again shortly
+        Joining,      // connecting to the server, waiting for our survivor
+        Playing,
+    };
+    ELobby lobby = ELobby::Off;
+    std::string token;
+    Master::FProfile profile;
+    Master::FDeploy deploy;
+    std::vector<int> bring;
+    int mapChoice = 0;            // 0 = random
+    std::string lobbyMessage;
+    float pollSeconds = 0.0f;
+    bool autoTried = false;      // automation: logged in once
+    bool autoDeployed = false;   // automation: deployed once (not again after the sortie)
+    bool wantLogin = false;
+    bool wantDeploy = false;
+    std::array<char, 64> nameBuffer{};
+    std::optional<Net::FCharacterSpawn> pendingSpawn;
+    Net::FExtractState extract{};
+    bool extracting = false;
+
+    // A Master survivor's sortie changed: remember it for the next checkpoint.
+    void RecordOutcome(FClient& client, Master::EOutcome outcome)
+    {
+        if (!master || client.playerId == 0) return;
+        Master::FCheckpointCharacter c;
+        c.playerId = client.playerId;
+        c.sortie = client.sortie;
+        c.outcome = outcome;
+        c.position = client.hasState ? client.state.presence.feet : client.spawnFeet;
+        c.yaw = client.state.presentation.aimYawRadians;
+        c.survivalJson = SurvivalToJson(client.survival.Snapshot());
+        if (outcome != Master::EOutcome::Dead) c.inventory = InventoryAsStacks(client.inventory);
+        outcomes.push_back(std::move(c));
+    }
+
     // Inventory reports: sent when changed, at most this often.
     float inventoryTimer = 0.0f;
     std::vector<std::byte> lastInventorySync;
@@ -263,6 +333,40 @@ void NextDayzGameInstance::ConfigureNetCVars(NextCVar::FCVarSystem& cvars)
     cvars.RegisterString("nextdayz.net.name", "", &netNameCvar_, ECVarFlags::None, "Client: survivor name");
     cvars.RegisterInt("nextdayz.net.maxPlayers", 8, &netMaxPlayersCvar_, ECVarFlags::None,
         "Server: survivors allowed at once / client: remote bodies to prepare", nullptr, 1, 32);
+    cvars.RegisterString("nextdayz.net.master", "", &netMasterCvar_, ECVarFlags::None,
+        "URL of the NextDayz Master (e.g. http://127.0.0.1:7780): a server joins its fleet, a client starts in its lobby");
+    cvars.RegisterString("nextdayz.net.dsId", "", &netDsIdCvar_, ECVarFlags::None, "Server: id the Master gave it");
+    cvars.RegisterString("nextdayz.net.masterKey", "", &netMasterKeyCvar_, ECVarFlags::None,
+        "Server: key the Master gave it");
+    cvars.RegisterBool("nextdayz.net.autoDeploy", false, &netAutoDeployCvar_, ECVarFlags::None,
+        "Client: log in as nextdayz.net.name and deploy at once, bringing all storage (automation)");
+    cvars.RegisterString("nextdayz.net.autoMap", "", &netAutoMapCvar_, ECVarFlags::None,
+        "Client: map id for autoDeploy (empty: the Master picks)");
+    cvars.RegisterInt("nextdayz.validation.netExtract", 0, &validationNetExtract_, ECVarFlags::None,
+        "Agent-only (Master client): go to the nearest extraction point and start holding it", [this]()
+        {
+            if (!GOption->AgentValidation || validationNetExtract_ == 0 || !net_ || net_->survivorId == 0) return;
+            const FWorldAnchor* best = nullptr;
+            float nearest = std::numeric_limits<float>::max();
+            for (const FWorldAnchorHandle handle : world_.anchors.Find(EWorldAnchorType::Extraction))
+            {
+                const FWorldAnchor* anchor = world_.anchors.Resolve(handle);
+                const float distance = anchor ? glm::distance(anchor->worldPos, player_.Position()) : nearest;
+                if (distance < nearest) { nearest = distance; best = anchor; }
+            }
+            if (!best) return;
+            TeleportPlayer(best->worldPos);
+            Net::FPlayerState stance;
+            stance.presence = LocalSurvivor();
+            stance.presence.id = net_->survivorId;
+            stance.presence.feet = best->worldPos;
+            stance.presence.eye = best->worldPos + glm::vec3(0.0f, 1.6f, 0.0f);
+            stance.presentation = LocalPresentation();
+            FNetWriter state;
+            Net::Write(state, stance);
+            net_->host.Send(net_->host.ServerPeer(), state.Bytes(), EDelivery::Reliable);
+            NetRequestExtract();
+        });
     cvars.RegisterBool("nextdayz.net.cheats", false, &netCheatsCvar_, ECVarFlags::None,
         "Server: honour clients' debug harm (automated tests only)");
     cvars.RegisterBool("nextdayz.net.kit", true, &netKitCvar_, ECVarFlags::None,
@@ -388,6 +492,12 @@ void NextDayzGameInstance::StartNetwork()
     net_.reset(new FNetSession());
     std::string error;
     const auto port = static_cast<uint16_t>(netPortCvar_);
+    if (NetUsesMaster())
+    {
+        net_->master = std::make_unique<NextNet::FHttpWorker>();
+        net_->master->SetBaseUrl(netMasterCvar_);
+        if (!NextNet::HttpAvailable()) SPDLOG_ERROR("[NextDayz][net] this build cannot reach a Master (no HTTP client)");
+    }
     if (netMode_ == ENetMode::Server)
     {
         net_->pvp = netPvpCvar_;
@@ -400,6 +510,22 @@ void NextDayzGameInstance::StartNetwork()
         SPDLOG_INFO("[NextDayz][net] server listening on UDP {} for up to {} survivors, friendly fire {}", port,
                     netMaxPlayersCvar_, net_->pvp ? "ON" : "OFF");
         net_->status = fmt::format("server :{}", port);
+        if (net_->master)
+        {
+            net_->master->Post("/ds/register", Master::RegisterRequest(netDsIdCvar_, netMasterKeyCvar_, port, campaignMap_),
+                [](const NextNet::FHttpResult& result)
+                {
+                    if (result.Ok()) SPDLOG_INFO("[NextDayz][net] registered with the Master");
+                    else SPDLOG_ERROR("[NextDayz][net] Master refused registration: {}", result.error);
+                });
+        }
+    }
+    else if (net_->master)
+    {
+        // A Master client starts in the lobby; it connects once a server is ready for it.
+        net_->lobby = FNetSession::ELobby::Login;
+        std::snprintf(net_->nameBuffer.data(), net_->nameBuffer.size(), "%s", netNameCvar_.c_str());
+        net_->status = "lobby";
     }
     else
     {
@@ -488,7 +614,13 @@ void NextDayzGameInstance::NetPoll()
                 if (it == net.clients.end()) continue;
                 if (it->second.survivorId != 0)
                 {
-                    if (it->second.life == FNetSession::FClient::ELife::Alive) dropBody(it->second);
+                    if (it->second.life == FNetSession::FClient::ELife::Alive)
+                    {
+                        // With a Master a survivor who logs out is kept (gear and all) for later;
+                        // on a direct server they leave a body.
+                        if (net.master) net.RecordOutcome(it->second, Master::EOutcome::Left);
+                        else dropBody(it->second);
+                    }
                     world_.RemoveSurvivor(it->second.survivorId);
                     FNetWriter writer;
                     Net::WritePlayerLeft(writer, it->second.survivorId);
@@ -516,6 +648,16 @@ void NextDayzGameInstance::NetPoll()
                                                          hello.protocol));
                     net.host.Send(event.peer, writer.Bytes(), EDelivery::Reliable);
                     net.host.Disconnect(event.peer);
+                    continue;
+                }
+                if (net.master)
+                {
+                    // A Master server admits only survivors the Master sent, by ticket.
+                    if (hello.ticket.empty() || client.redeeming) continue;
+                    client.redeeming = true;
+                    const FPeerId peer = event.peer;
+                    net.master->Post("/ds/redeem", Master::RedeemRequest(netDsIdCvar_, netMasterKeyCvar_, hello.ticket),
+                        [this, peer](const NextNet::FHttpResult& result) { NetAdmitSurvivor(peer, result); });
                     continue;
                 }
                 client.survivorId = net.nextSurvivorId++;
@@ -683,7 +825,11 @@ void NextDayzGameInstance::NetPoll()
                 }
                 if (!sync.alive)
                 {
-                    if (client.life == ELife::Alive) dropBody(client);
+                    if (client.life == ELife::Alive)
+                    {
+                        net.RecordOutcome(client, Master::EOutcome::Dead);
+                        dropBody(client);
+                    }
                     client.life = ELife::Dead;
                     break;
                 }
@@ -709,6 +855,31 @@ void NextDayzGameInstance::NetPoll()
                     break;
                 }
                 FNetSession::Accept(client, std::move(sync.inventory));
+                break;
+            }
+            case Net::EMessage::Extract:
+            {
+                const bool begin = reader.Read<uint8_t>() != 0;
+                if (!net.master || client.life != FNetSession::FClient::ELife::Alive) break;
+                if (!begin) { client.extractSeconds = -1.0f; break; }
+                const FWorldAnchor* point = nullptr;
+                for (const FWorldAnchorHandle handle : world_.anchors.Find(EWorldAnchorType::Extraction))
+                {
+                    const FWorldAnchor* anchor = world_.anchors.Resolve(handle);
+                    if (anchor && glm::distance(anchor->worldPos, client.state.presence.feet) <= kExtractRadius) point = anchor;
+                }
+                FNetWriter writer;
+                if (!point)
+                {
+                    Net::Write(writer, Net::FExtractState{0.0f, false, true});
+                    net.host.Send(client.peer, writer.Bytes(), EDelivery::Reliable);
+                    break;
+                }
+                client.extractSeconds = kExtractHoldSeconds;
+                client.extractPoint = point->worldPos;
+                client.extractNotify = 0.0f;
+                Net::Write(writer, Net::FExtractState{kExtractHoldSeconds, false, false});
+                net.host.Send(client.peer, writer.Bytes(), EDelivery::Reliable);
                 break;
             }
             case Net::EMessage::SurvivalAction:
@@ -766,8 +937,10 @@ void NextDayzGameInstance::NetPoll()
             net.connected = true;
             net.status = "connected, joining";
             Net::FHello hello;
-            hello.name = netNameCvar_;
+            hello.name = net.master ? std::string(net.nameBuffer.data()) : netNameCvar_;
             hello.scene = campaignMap_;
+            hello.ticket = net.deploy.ticket;
+            if (net.master) net.status = "joining " + net.deploy.server;
             FNetWriter writer;
             Net::Write(writer, hello);
             net.host.Send(event.peer, writer.Bytes(), EDelivery::Reliable);
@@ -783,6 +956,11 @@ void NextDayzGameInstance::NetPoll()
             net.remotes.clear();
             world_.zombies.ApplyReplicas({});
             SPDLOG_WARN("[NextDayz][net] {}", net.status);
+            if (net.master && (net.lobby == FNetSession::ELobby::Playing || net.lobby == FNetSession::ELobby::Joining))
+            {
+                NetReturnToLobby(net.lobbyMessage.empty() ? "Lost the connection to the server." : net.lobbyMessage);
+                return;
+            }
             continue;
         }
         FNetReader reader(event.payload);
@@ -863,6 +1041,37 @@ void NextDayzGameInstance::NetPoll()
                 Notify(taken.empty() ? "Not enough space - drop something or find a bigger bag"
                                      : "No room for the rest - it stays here", 1);
             }
+            break;
+        }
+        case Net::EMessage::CharacterSpawn:
+        {
+            Net::FCharacterSpawn spawn;
+            if (!Net::Read(reader, spawn)) break;
+            // Mid map change the survivor is placed once the new map is in.
+            net.pendingSpawn = std::move(spawn);
+            if (sceneReady_ && campaignMap_ == net.deploy.scene) NetAfterSceneLoaded();
+            break;
+        }
+        case Net::EMessage::ExtractState:
+        {
+            Net::FExtractState state;
+            if (!Net::Read(reader, state)) break;
+            net.extract = state;
+            net.extracting = !state.done && !state.broken;
+            if (state.broken) Notify("Extraction broken off - stay at the point", 1);
+            if (state.done)
+            {
+                net.lobbyMessage = "Extracted. What you carried is in your storage.";
+                SPDLOG_INFO("[NextDayz][net] extracted");
+            }
+            break;
+        }
+        case Net::EMessage::Farewell:
+        {
+            Net::FFarewell farewell;
+            if (!Net::Read(reader, farewell)) break;
+            SPDLOG_INFO("[NextDayz][net] the server says goodbye: {}", farewell.message);
+            if (farewell.reason != Net::EFarewell::Extracted) net.lobbyMessage = farewell.message;
             break;
         }
         case Net::EMessage::SurvivalState:
@@ -985,6 +1194,7 @@ void NextDayzGameInstance::TickServer(float dt)
     // The world runs with every connected survivor in it, nobody else.
     world_.SetWorldSightScale(WorldSightScale());
     world_.spawns.SetGlobalCap(1.0f - time_.Daylight() > 0.6f ? 48 : 40);
+    TickServerMaster(dt);
     world_.TickSpawns(dt);
     world_.TickInfected(dt);
     net.clock += dt;
@@ -1009,6 +1219,7 @@ void NextDayzGameInstance::TickServer(float dt)
         {
             SPDLOG_INFO("[NextDayz][net] survivor {} died ({})", client.survivorId,
                         client.survival.Snapshot().lastDamageSource);
+            net.RecordOutcome(client, Master::EOutcome::Dead);
             FNetSession::DropBody(client, loot_, GetEngine());
             client.life = FNetSession::FClient::ELife::Dead;
             world_.RemoveSurvivor(client.survivorId);
@@ -1073,6 +1284,10 @@ void NextDayzGameInstance::NetClientSend(float dt)
         return;
     }
     FNetSession& net = *net_;
+    if (net.master && !net.connected)
+    {
+        return;   // a Master client reconnects through the lobby
+    }
     if (!net.host.IsOpen() || (!net.connected && net.rejected.empty() && net.status == "disconnected"))
     {
         net.reconnectTimer += dt;
@@ -1379,6 +1594,24 @@ void NextDayzGameInstance::RegisterNetQueries(Runtime::Agent::FAgentQueryRegistr
     reg.Add("netTakeResult", [this]() -> FAgentQueryValue { return int64_t(validationNetTakeResult_); });
     reg.Add("netInventoryFixes", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->fixes : 0); });
     reg.Add("netMyHits", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->myHits : 0); });
+    reg.Add("netLobby", [this]() -> FAgentQueryValue
+    {
+        if (!net_ || !net_->master) return std::string("off");
+        switch (net_->lobby)
+        {
+        case FNetSession::ELobby::Login: return std::string("login");
+        case FNetSession::ELobby::Waiting: return std::string("waiting");
+        case FNetSession::ELobby::Profile: return std::string("profile");
+        case FNetSession::ELobby::Deploying: return std::string("deploying");
+        case FNetSession::ELobby::Joining: return std::string("joining");
+        case FNetSession::ELobby::Playing: return std::string("playing");
+        case FNetSession::ELobby::Off: break;
+        }
+        return std::string("off");
+    });
+    reg.Add("netStorageStacks", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->profile.storage.size() : 0); });
+    reg.Add("netExtractions", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->profile.extractions : 0); });
+    reg.Add("netInventoryItems", [this]() -> FAgentQueryValue { return int64_t(inventory_.Instances().size()); });
     reg.Add("netBandages", [this]() -> FAgentQueryValue { return int64_t(inventory_.CountOf("bandage")); });
     reg.Add("netLife", [this]() -> FAgentQueryValue { return int64_t(netLife_); });
     // Whether the entry the validation take went for still lies on the ground here.
@@ -1418,6 +1651,615 @@ void NextDayzGameInstance::DrawNetStatus()
     draw->AddText(at, IM_COL32(210, 230, 200, 255), text.c_str());
 }
 
+// ============================================================================ Master: dedicated server
+
+namespace
+{
+    // A survivor's gear, as the Master keeps it, back in a pack: clothing worn
+    // first (so its pockets exist), then everything else; what does not fit is returned.
+    FInventoryState BuildInventory(const std::vector<FLootStack>& stacks, bool pocketKit, std::vector<FLootStack>& leftover)
+    {
+        Inventory inventory;
+        if (pocketKit)
+        {
+            inventory.TryAdd("bandage", "Bandage", EItemKind::Consumable, 1);
+            inventory.TryAdd("water_bottle_empty", "Empty Bottle", EItemKind::Misc, 1);
+        }
+        std::vector<FLootStack> rest;
+        for (const FLootStack& stack : stacks)
+        {
+            const FItemDef* definition = FindItemDef(stack.itemId);
+            if (!definition)
+            {
+                continue;   // an item this build no longer knows
+            }
+            if (definition->kind != EItemKind::Clothing)
+            {
+                rest.push_back(stack);
+                continue;
+            }
+            for (int piece = 0; piece < stack.count; ++piece)
+            {
+                FItemInstanceId id = 0;
+                if (!inventory.TryAdd(stack.itemId, std::string(definition->displayName), definition->kind, 1, &id,
+                                      kWornContainer))
+                {
+                    rest.push_back({stack.itemId, 1, 0, {}});
+                }
+            }
+        }
+        LootSystem::AddToInventory(rest, inventory, 0, EEquipSlot::None, std::nullopt, leftover);
+        return inventory.Capture();
+    }
+}
+
+void NextDayzGameInstance::NetAdmitSurvivor(uint32_t peer, const NextNet::FHttpResult& result)
+{
+    FNetSession& net = *net_;
+    const auto it = net.clients.find(peer);
+    if (it == net.clients.end())
+    {
+        return;   // gone while the Master answered
+    }
+    FNetSession::FClient& client = it->second;
+    client.redeeming = false;
+    Master::FRedeem redeem;
+    if (!result.Ok() || !Master::ParseRedeem(result.body, redeem))
+    {
+        FNetWriter writer;
+        Net::WriteReject(writer, result.error.empty() ? "the Master did not admit you" : result.error);
+        net.host.Send(peer, writer.Bytes(), EDelivery::Reliable);
+        net.host.Disconnect(peer);
+        SPDLOG_WARN("[NextDayz][net] refused a survivor: {}", result.error);
+        return;
+    }
+    for (auto& [otherPeer, other] : net.clients)
+    {
+        if (other.playerId == redeem.playerId && otherPeer != peer)
+        {
+            net.host.Disconnect(otherPeer);   // the same survivor cannot be here twice
+        }
+    }
+    client.survivorId = net.nextSurvivorId++;
+    client.playerId = redeem.playerId;
+    client.sortie = redeem.sortie;
+    client.name = redeem.name;
+
+    // Where: a fresh survivor at a random safe point, a returning one where they left.
+    glm::vec3 feet = redeem.character.position;
+    float yaw = redeem.character.yaw;
+    if (redeem.character.fresh)
+    {
+        const auto safe = world_.anchors.Find(EWorldAnchorType::PlayerSafe);
+        if (!safe.empty())
+        {
+            const FWorldAnchor* anchor =
+                world_.anchors.Resolve(safe[survivalRng_.Range(static_cast<uint32_t>(safe.size()))]);
+            const float angle = static_cast<float>(client.survivorId) * 2.4f;
+            feet = anchor->worldPos + glm::vec3(std::cos(angle), 0.0f, std::sin(angle)) * 2.5f;
+            GetEngine().RayCast(feet + glm::vec3(0.0f, 3.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f),
+                                [&](Assets::RayCastResult hit)
+                                {
+                                    if (hit.Hit && hit.T < 6.0f) feet.y = static_cast<float>(hit.HitPoint.y);
+                                    return true;
+                                });
+            feet.y += 0.1f;
+        }
+        yaw = 0.0f;
+    }
+    client.spawnFeet = feet;
+
+    // What they carry and how their body is.
+    std::vector<FLootStack> leftover;
+    const FInventoryState inventory = BuildInventory(redeem.character.inventory, redeem.character.fresh, leftover);
+    if (!leftover.empty())
+    {
+        loot_.SpawnPile(std::move(leftover), feet, 0.0f, GetEngine());
+    }
+    client.survival.Reset();
+    FSurvivalSnapshot body;
+    if (!redeem.character.fresh && SurvivalFromJson(redeem.character.survivalJson, body) &&
+        body.lifeState == EPlayerLifeState::Alive)
+    {
+        client.survival.Restore(body);
+    }
+    FNetSession::Accept(client, inventory);
+    client.lifeNumber = 1000000u + static_cast<uint32_t>(client.sortie % 1000000u);
+    client.life = FNetSession::FClient::ELife::Alive;
+    client.hasState = false;
+
+    FNetWriter welcome;
+    Net::Write(welcome, Net::FWelcome{Net::kProtocolVersion, client.survivorId, campaignMap_, net.pvp});
+    net.host.Send(peer, welcome.Bytes(), EDelivery::Reliable);
+    FNetWriter spawn;
+    Net::Write(spawn, Net::FCharacterSpawn{client.lifeNumber, client.inventory, client.survival.Snapshot(), feet, yaw});
+    net.host.Send(peer, spawn.Bytes(), EDelivery::Reliable);
+    SPDLOG_INFO("[NextDayz][net] survivor {} '{}' (player {}, sortie {}) {} ({} online)", client.survivorId, client.name,
+                client.playerId, client.sortie, redeem.character.fresh ? "deployed" : "returned", net.clients.size());
+}
+
+void NextDayzGameInstance::NetSendCheckpoint()
+{
+    FNetSession& net = *net_;
+    if (!net.master || !net.worldLoaded)
+    {
+        return;
+    }
+    net.checkpointTimer = 0.0f;
+    std::vector<Master::FCheckpointCharacter> characters = std::move(net.outcomes);
+    net.outcomes.clear();
+    const size_t ended = characters.size();
+    for (auto& [peer, client] : net.clients)
+    {
+        if (client.playerId == 0 || client.life != FNetSession::FClient::ELife::Alive) continue;
+        Master::FCheckpointCharacter c;
+        c.playerId = client.playerId;
+        c.sortie = client.sortie;
+        c.outcome = Master::EOutcome::Field;
+        c.position = client.hasState ? client.state.presence.feet : client.spawnFeet;
+        c.yaw = client.state.presentation.aimYawRadians;
+        c.survivalJson = SurvivalToJson(client.survival.Snapshot());
+        c.inventory = InventoryAsStacks(client.inventory);
+        characters.push_back(std::move(c));
+    }
+    // The world and every survivor on it, in one commit.
+    std::vector<Master::FCheckpointCharacter> retry(characters.begin(), characters.begin() + ended);
+    const std::string body = Master::CheckpointRequest(netDsIdCvar_, netMasterKeyCvar_, ++net.checkpointSeq,
+                                                       WorldToJson(loot_.Capture(), time_.Capture()), characters);
+    net.master->Post("/ds/checkpoint", body, [this, retry = std::move(retry)](const NextNet::FHttpResult& result) mutable
+    {
+        if (result.Ok() || !net_) return;
+        SPDLOG_WARN("[NextDayz][net] checkpoint failed ({}); ended sorties go with the next one", result.error);
+        net_->outcomes.insert(net_->outcomes.begin(), retry.begin(), retry.end());
+    }, {}, 20);
+}
+
+void NextDayzGameInstance::TickServerMaster(float dt)
+{
+    FNetSession& net = *net_;
+    if (!net.master)
+    {
+        return;
+    }
+    net.master->Pump();
+
+    // The map's world as the Master last committed it (once, when the map is in).
+    if (sceneReady_ && !net.worldRequested)
+    {
+        net.worldRequested = true;
+        net.master->Post("/ds/world", Master::DsRequest(netDsIdCvar_, netMasterKeyCvar_),
+            [this](const NextNet::FHttpResult& result)
+            {
+                std::string world;
+                if (result.Ok() && Master::ParseWorld(result.body, world) && !world.empty())
+                {
+                    FLootWorldState loot;
+                    TimeSystem::FState time;
+                    std::string error;
+                    if (WorldFromJson(world, loot, time, error))
+                    {
+                        loot_.Restore(loot, GetEngine());
+                        time_.Restore(time);
+                        SPDLOG_INFO("[NextDayz][net] world restored from the Master ({} loot entries)", loot.entries.size());
+                    }
+                    else SPDLOG_ERROR("[NextDayz][net] the Master's world is unreadable: {}", error);
+                }
+                else if (!result.Ok())
+                {
+                    SPDLOG_ERROR("[NextDayz][net] could not fetch the world: {}", result.error);
+                }
+                net_->worldLoaded = true;
+            });
+    }
+
+    net.heartbeatTimer += dt;
+    if (net.heartbeatTimer >= 2.0f)
+    {
+        net.heartbeatTimer = 0.0f;
+        std::vector<uint64_t> players;
+        for (const auto& [peer, client] : net.clients)
+        {
+            if (client.playerId != 0) players.push_back(client.playerId);
+        }
+        net.master->Post("/ds/heartbeat", Master::HeartbeatRequest(netDsIdCvar_, netMasterKeyCvar_, players, net.worldLoaded),
+            [this](const NextNet::FHttpResult& result)
+            {
+                Master::FHeartbeatReply reply;
+                if (!net_ || !result.Ok() || !Master::ParseHeartbeat(result.body, reply)) return;
+                FNetSession& session = *net_;
+                if (reply.pvp != session.pvp)
+                {
+                    session.pvp = reply.pvp;
+                    FNetWriter writer;
+                    Net::WritePvp(writer, session.pvp);
+                    session.host.Broadcast(writer.Bytes(), EDelivery::Reliable);
+                    SPDLOG_INFO("[NextDayz][net] friendly fire {} (Master)", session.pvp ? "ON" : "OFF");
+                }
+                for (const uint64_t playerId : reply.kick)
+                {
+                    for (auto& [peer, client] : session.clients)
+                    {
+                        if (client.playerId != playerId) continue;
+                        FNetWriter writer;
+                        Net::Write(writer, Net::FFarewell{Net::EFarewell::Kicked, "Removed from the server by an admin"});
+                        session.host.Send(peer, writer.Bytes(), EDelivery::Reliable);
+                        session.host.Disconnect(peer);
+                    }
+                }
+                if (reply.stop && !session.stopping)
+                {
+                    session.stopping = true;
+                    SPDLOG_INFO("[NextDayz][net] the Master asked this server to stop");
+                    for (auto& [peer, client] : session.clients)
+                    {
+                        FNetWriter writer;
+                        Net::Write(writer, Net::FFarewell{Net::EFarewell::ServerStopping, "The server is shutting down"});
+                        session.host.Send(peer, writer.Bytes(), EDelivery::Reliable);
+                        if (client.life == FNetSession::FClient::ELife::Alive)
+                        {
+                            session.RecordOutcome(client, Master::EOutcome::Left);
+                            client.life = FNetSession::FClient::ELife::Dead;   // nothing more counts
+                        }
+                        session.host.Disconnect(peer);
+                    }
+                    NetSendCheckpoint();
+                }
+            });
+    }
+
+    // Survivors holding an extraction point.
+    for (auto& [peer, client] : net.clients)
+    {
+        if (client.extractSeconds < 0.0f) continue;
+        FNetWriter writer;
+        const bool alive = client.life == FNetSession::FClient::ELife::Alive && client.survival.IsAlive();
+        if (!alive || glm::distance(client.state.presence.feet, client.extractPoint) > kExtractRadius)
+        {
+            client.extractSeconds = -1.0f;
+            Net::Write(writer, Net::FExtractState{0.0f, false, true});
+            net.host.Send(peer, writer.Bytes(), EDelivery::Reliable);
+            continue;
+        }
+        client.extractSeconds -= dt;
+        client.extractNotify -= dt;
+        if (client.extractSeconds > 0.0f)
+        {
+            if (client.extractNotify <= 0.0f)
+            {
+                client.extractNotify = 0.5f;
+                Net::Write(writer, Net::FExtractState{client.extractSeconds, false, false});
+                net.host.Send(peer, writer.Bytes(), EDelivery::Reliable);
+            }
+            continue;
+        }
+        // Out: everything carried goes home; nothing is left in the world.
+        client.extractSeconds = -1.0f;
+        net.RecordOutcome(client, Master::EOutcome::Extracted);
+        client.life = FNetSession::FClient::ELife::Dead;
+        client.inventory = {};
+        client.carried.clear();
+        world_.RemoveSurvivor(client.survivorId);
+        Net::Write(writer, Net::FExtractState{0.0f, true, false});
+        net.host.Send(peer, writer.Bytes(), EDelivery::Reliable);
+        FNetWriter farewell;
+        Net::Write(farewell, Net::FFarewell{Net::EFarewell::Extracted, "Extracted"});
+        net.host.Send(peer, farewell.Bytes(), EDelivery::Reliable);
+        net.host.Disconnect(peer);
+        SPDLOG_INFO("[NextDayz][net] survivor {} '{}' extracted", client.survivorId, client.name);
+    }
+
+    net.checkpointTimer += dt;
+    if (!net.stopping && (net.checkpointTimer >= kCheckpointSeconds || !net.outcomes.empty()))
+    {
+        NetSendCheckpoint();
+    }
+    if (net.stopping)
+    {
+        net.stopSeconds += dt;
+        if ((net.master->Pending() == 0 && net.outcomes.empty()) || net.stopSeconds > 15.0f)
+        {
+            SPDLOG_INFO("[NextDayz][net] stopped by the Master");
+            GetEngine().RequestExit(0);
+        }
+    }
+}
+
+// ============================================================================ Master: client lobby
+
+bool NextDayzGameInstance::NetInLobby() const
+{
+    return net_ && net_->master && netMode_ == ENetMode::Client && net_->lobby != FNetSession::ELobby::Playing;
+}
+
+void NextDayzGameInstance::NetReturnToLobby(std::string message)
+{
+    if (!net_ || !net_->master)
+    {
+        return;
+    }
+    FNetSession& net = *net_;
+    net.host.Shutdown();
+    net.connected = false;
+    net.survivorId = 0;
+    for (auto& [id, remote] : net.remotes)
+        if (remote.rig >= 0) remoteRigs_[remote.rig]->SetVisible(false);
+    net.remotes.clear();
+    net.pendingTakes.clear();
+    net.pendingSpawn.reset();
+    net.extracting = false;
+    net.lootRequestedScene = 0;
+    net.lootSyncedScene = 0;
+    net.lastInventorySync.clear();
+    world_.zombies.ApplyReplicas({});
+    inventory_.Clear();
+    weapons_.ResetRuntime();
+    survival_.Reset();
+    SyncClothingVisuals();
+    net.lobbyMessage = std::move(message);
+    net.lobby = FNetSession::ELobby::Waiting;
+    net.master->Post("/api/profile", "{}", [this](const NextNet::FHttpResult& result)
+    {
+        if (!net_) return;
+        if (result.Ok() && Master::ParseProfile(result.body, net_->profile))
+        {
+            net_->bring.assign(net_->profile.storage.size(), 0);
+            net_->lobby = FNetSession::ELobby::Profile;
+        }
+        else
+        {
+            net_->lobbyMessage = result.error;
+            net_->lobby = FNetSession::ELobby::Login;
+        }
+    }, net.token);
+    SetMouseCaptured(false);
+    SPDLOG_INFO("[NextDayz][net] back in the lobby: {}", net.lobbyMessage);
+}
+
+bool NextDayzGameInstance::NetRequestExtract()
+{
+    if (!net_ || net_->survivorId == 0)
+    {
+        return false;
+    }
+    bool atPoint = false;
+    for (const FWorldAnchorHandle handle : world_.anchors.Find(EWorldAnchorType::Extraction))
+    {
+        const FWorldAnchor* anchor = world_.anchors.Resolve(handle);
+        atPoint = atPoint || (anchor && glm::distance(anchor->worldPos, player_.Position()) <= kExtractRadius);
+    }
+    if (!atPoint)
+    {
+        Notify("No extraction point here - find a marked [H] helipad", 1);
+        return false;
+    }
+    FNetWriter writer;
+    Net::WriteExtract(writer, !net_->extracting);
+    net_->host.Send(net_->host.ServerPeer(), writer.Bytes(), EDelivery::Reliable);
+    net_->extracting = !net_->extracting;
+    Notify(net_->extracting ? "Hold the extraction point..." : "Extraction cancelled", 0);
+    return true;
+}
+
+void NextDayzGameInstance::NetAfterSceneLoaded()
+{
+    if (!net_ || !net_->pendingSpawn || netMode_ != ENetMode::Client)
+    {
+        return;
+    }
+    // Our survivor as the Master kept them: gear, body, place.
+    Net::FCharacterSpawn spawn = std::move(*net_->pendingSpawn);
+    net_->pendingSpawn.reset();
+    netLife_ = spawn.life;
+    netDeathDropped_ = false;
+    if (inventory_.Restore(spawn.inventory))
+    {
+        weapons_.ResetRuntime();
+        for (const FItemInstance& item : inventory_.Instances())
+        {
+            if (FindWeaponDef(item.defId))
+            {
+                weapons_.EquipInstance(0, inventory_, item.instanceId);
+                break;
+            }
+        }
+    }
+    survival_.Restore(spawn.body);
+    TeleportPlayer(spawn.feet - glm::vec3(0.0f, 1.0f, 0.0f));
+    SyncClothingVisuals();
+    net_->lastInventorySync.clear();
+    net_->lobby = FNetSession::ELobby::Playing;
+    net_->lobbyMessage.clear();
+    paused_ = false;
+    showInventory_ = false;
+    SetMouseCaptured(true);
+    SPDLOG_INFO("[NextDayz][net] in the field as survivor {}", net_->survivorId);
+}
+
+void NextDayzGameInstance::TickLobby(float dt)
+{
+    FNetSession& net = *net_;
+    net.master->Pump();
+    using ELobby = FNetSession::ELobby;
+    const auto login = [this, &net]()
+    {
+        net.lobby = ELobby::Waiting;
+        net.master->Post("/api/login", Master::LoginRequest(net.nameBuffer.data()), [this](const NextNet::FHttpResult& result)
+        {
+            if (!net_) return;
+            uint64_t playerId = 0;
+            if (!result.Ok() || !Master::ParseLogin(result.body, playerId, net_->token))
+            {
+                net_->lobbyMessage = result.error.empty() ? "The Master is unreachable" : result.error;
+                net_->lobby = ELobby::Login;
+                return;
+            }
+            NetReturnToLobby(net_->lobbyMessage);
+        });
+    };
+    if (net.lobby == ELobby::Login && !net.autoTried && netAutoDeployCvar_ && net.nameBuffer[0] != '\0')
+    {
+        net.autoTried = true;
+        login();
+    }
+    if (net.lobby == ELobby::Login && std::exchange(net.wantLogin, false))
+    {
+        login();
+    }
+    // Automation: deploy once, with everything in storage, as soon as the profile is in.
+    if (net.lobby == ELobby::Profile && netAutoDeployCvar_ && sceneReady_ && !net.autoDeployed)
+    {
+        net.autoDeployed = true;
+        for (size_t index = 0; index < net.bring.size(); ++index) net.bring[index] = net.profile.storage[index].count;
+        net.wantDeploy = true;
+    }
+    if (net.lobby == ELobby::Deploying)
+    {
+        net.pollSeconds -= dt;
+    }
+    const bool askDeploy = (net.lobby == ELobby::Profile && std::exchange(net.wantDeploy, false)) ||
+                           (net.lobby == ELobby::Deploying && net.pollSeconds <= 0.0f);
+    if (askDeploy)
+    {
+        std::vector<Master::FBring> bring;
+        for (size_t index = 0; index < net.bring.size(); ++index)
+            if (net.bring[index] > 0) bring.push_back({static_cast<int>(index), net.bring[index]});
+        std::string mapId = netAutoMapCvar_;
+        if (!netAutoDeployCvar_)
+            mapId = net.mapChoice > 0 && net.mapChoice <= static_cast<int>(net.profile.maps.size())
+                ? net.profile.maps[net.mapChoice - 1].id : std::string();
+        net.lobbyMessage.clear();
+        net.lobby = ELobby::Waiting;
+        net.master->Post("/api/deploy", Master::DeployRequest(mapId, bring), [this](const NextNet::FHttpResult& result)
+        {
+            if (!net_) return;
+            FNetSession& session = *net_;
+            if (!result.Ok() || !Master::ParseDeploy(result.body, session.deploy))
+            {
+                session.lobbyMessage = result.error;
+                NetReturnToLobby(session.lobbyMessage);
+                return;
+            }
+            if (session.deploy.state != "ready")
+            {
+                session.lobby = ELobby::Deploying;   // the server is still loading its map
+                session.pollSeconds = 1.0f;
+                return;
+            }
+            session.lobby = ELobby::Joining;
+            std::string error;
+            if (!session.host.Connect(session.deploy.host, session.deploy.port, error))
+            {
+                NetReturnToLobby(error);
+                return;
+            }
+            session.status = fmt::format("connecting to {} ({}:{})", session.deploy.server, session.deploy.host,
+                                         session.deploy.port);
+            SPDLOG_INFO("[NextDayz][net] {}", session.status);
+        }, net.token);
+    }
+}
+
+bool NextDayzGameInstance::DrawLobby()
+{
+    if (!NetInLobby())
+    {
+        return false;
+    }
+    FNetSession& net = *net_;
+    using ELobby = FNetSession::ELobby;
+    const ImVec2 display = ImGui::GetIO().DisplaySize;
+    ImGui::SetNextWindowPos(ImVec2(display.x * 0.5f, display.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(std::min(720.0f, display.x - 40.0f), std::min(600.0f, display.y - 40.0f)), ImGuiCond_Always);
+    ImGui::Begin("NextDayz Online", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
+    ImGui::TextDisabled("Master %s", netMasterCvar_.c_str());
+    const std::string& message = net.lobbyMessage;
+    if (!message.empty())
+    {
+        ImGui::TextWrapped("%s", message.c_str());
+    }
+    ImGui::Separator();
+    switch (net.lobby)
+    {
+    case ELobby::Login:
+        ImGui::InputText("Survivor name", net.nameBuffer.data(), net.nameBuffer.size());
+        if (ImGui::Button("Log in", ImVec2(160, 0)) && net.nameBuffer[0] != '\0') net.wantLogin = true;
+        break;
+    case ELobby::Waiting:
+        ImGui::TextUnformatted("Talking to the Master...");
+        break;
+    case ELobby::Deploying:
+        ImGui::Text("Server %s is loading %s...", net.deploy.server.c_str(), net.deploy.map.c_str());
+        break;
+    case ELobby::Joining:
+        ImGui::Text("%s", net.status.c_str());
+        break;
+    case ELobby::Profile:
+    {
+        const Master::FProfile& profile = net.profile;
+        ImGui::Text("%s    sorties %llu   extracted %llu   died %llu   gold %lld", profile.name.c_str(),
+                    static_cast<unsigned long long>(profile.sorties), static_cast<unsigned long long>(profile.extractions),
+                    static_cast<unsigned long long>(profile.deaths), static_cast<long long>(profile.gold));
+        if (!profile.lastOutcome.empty()) ImGui::TextDisabled("Last sortie: %s", profile.lastOutcome.c_str());
+        ImGui::Spacing();
+        if (!profile.playing.empty())
+        {
+            ImGui::TextWrapped("Your survivor is still on %s. Wait for it to save, then return.", profile.playing.c_str());
+            if (ImGui::Button("Refresh", ImVec2(160, 0))) NetReturnToLobby({});
+            break;
+        }
+        if (profile.character)
+        {
+            ImGui::TextWrapped("Your survivor is out on %s with %zu stacks of gear.", profile.character->map.c_str(),
+                               profile.character->inventory.size());
+            if (ImGui::Button("Return to the field", ImVec2(220, 0))) net.wantDeploy = true;
+            break;
+        }
+        ImGui::TextUnformatted("Storage - choose what to take:");
+        if (ImGui::BeginTable("storage", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersInnerH,
+                              ImVec2(0, 300)))
+        {
+            ImGui::TableSetupColumn("Item");
+            ImGui::TableSetupColumn("Held", ImGuiTableColumnFlags_WidthFixed, 60);
+            ImGui::TableSetupColumn("Take", ImGuiTableColumnFlags_WidthFixed, 140);
+            ImGui::TableHeadersRow();
+            for (size_t index = 0; index < profile.storage.size() && index < net.bring.size(); ++index)
+            {
+                const FLootStack& stack = profile.storage[index];
+                const FItemDef* definition = FindItemDef(stack.itemId);
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(definition ? std::string(definition->displayName).c_str() : stack.itemId.c_str());
+                ImGui::TableNextColumn();
+                ImGui::Text("%d", stack.count);
+                ImGui::TableNextColumn();
+                ImGui::PushID(static_cast<int>(index));
+                ImGui::SetNextItemWidth(130);
+                ImGui::SliderInt("##take", &net.bring[index], 0, stack.count);
+                ImGui::PopID();
+            }
+            ImGui::EndTable();
+        }
+        std::string maps = "Any map";
+        maps.push_back('\0');
+        for (const Master::FMap& map : profile.maps)
+        {
+            maps += map.name.empty() ? map.id : map.name;
+            maps.push_back('\0');
+        }
+        ImGui::SetNextItemWidth(260);
+        ImGui::Combo("Map", &net.mapChoice, maps.c_str());
+        if (ImGui::Button("Deploy", ImVec2(160, 0))) net.wantDeploy = true;
+        ImGui::SameLine();
+        if (ImGui::Button("Refresh", ImVec2(120, 0))) NetReturnToLobby({});
+        break;
+    }
+    default:
+        break;
+    }
+    ImGui::End();
+    return true;
+}
+
 #else
 
 // Built without the NextNet module (mobile): single player only.
@@ -1450,6 +2292,15 @@ bool NextDayzGameInstance::PlacePile(std::vector<NextDayz::FLootStack> contents,
 void NextDayzGameInstance::TickServerLoot(float) {}
 void NextDayzGameInstance::NetDropOnDeath() {}
 void NextDayzGameInstance::NetSurvivalAction(uint8_t, NextDayz::FItemInstanceId, float) {}
+bool NextDayzGameInstance::NetInLobby() const { return false; }
+bool NextDayzGameInstance::DrawLobby() { return false; }
+void NextDayzGameInstance::NetReturnToLobby(std::string) {}
+bool NextDayzGameInstance::NetRequestExtract() { return false; }
+void NextDayzGameInstance::NetAfterSceneLoaded() {}
+void NextDayzGameInstance::TickLobby(float) {}
+void NextDayzGameInstance::TickServerMaster(float) {}
+void NextDayzGameInstance::NetSendCheckpoint() {}
+void NextDayzGameInstance::NetAdmitSurvivor(uint32_t, const NextNet::FHttpResult&) {}
 
 #endif
 

@@ -43,7 +43,7 @@ class NextDayzGameInstance : public NextGameInstanceBase
 {
 public:
     NextDayzGameInstance(Vulkan::WindowConfig& config, Runtime::Config::Options& options, NextEngine* engine);
-    ~NextDayzGameInstance() override = default;
+    ~NextDayzGameInstance() override;
 
     // lifecycle
     void OnInit() override;
@@ -104,6 +104,7 @@ private:
     void CampaignValidationCommand();
     void UpdateGrass(float dt);
     glm::vec3 ResolveSpawnPosition() const;
+    std::optional<glm::vec3> NetworkSpawnPosition() const;
     // Inventory requests (HUD, quickbar, keys). Each runs one inventory
     // transaction and reports the outcome in the message feed.
     void EquipWeaponInstance(NextDayz::FItemInstanceId instanceId, int slot);
@@ -143,6 +144,59 @@ private:
     void BuildZombieNavigation();
     // This client's survivor as the world sees it (position, gaze, lantern, crouch).
     NextDayz::FSurvivorPresence LocalSurvivor() const;
+    NextDayz::FPlayerPresentationState LocalPresentation() const;
+    // Night and fog: how far the infected see, for everyone on this map.
+    float WorldSightScale() const;
+
+    // --- multiplayer (NextDayzNetwork.cpp; see nextdayz-multiplayer-design.md) ---
+    // Offline: single player. Server: the map's authoritative world, no local
+    // survivor. Client: plays its own survivor; the infected and the other
+    // survivors come from the server.
+    enum class ENetMode : uint8_t
+    {
+        Offline,
+        Server,
+        Client,
+    };
+    struct FNetSession;
+    void ConfigureNetCVars(NextCVar::FCVarSystem& cvars);
+    void StartNetwork();
+    void ShutdownNetwork();
+    void NetPoll();
+    void TickServer(float dt);
+    void NetClientSend(float dt);
+    void NetSendWeaponHit(const NextDayz::FWeaponHitEvent& hit);
+    void NetCheckPvp(const NextDayz::FWeaponTraceEvent& trace);
+    void ApplyZombieReplication(float dt);
+    void UpdateRemoteSurvivors(float dt);
+    void DrawNetStatus();
+    void RegisterNetQueries(Runtime::Agent::FAgentQueryRegistry& reg);
+    int32_t validationNetPvpHit_ = 0;
+    // The id the world knows this client's survivor by (1 offline).
+    uint32_t LocalSurvivorId() const;
+    ENetMode netMode_ = ENetMode::Offline;
+    struct FNetSessionDeleter
+    {
+        void operator()(FNetSession* session) const;
+    };
+    std::unique_ptr<FNetSession, FNetSessionDeleter> net_;
+    std::string netModeCvar_ = "off";
+    std::string netHostCvar_ = "127.0.0.1";
+    std::string netNameCvar_;
+    int32_t netPortCvar_ = 27015;
+    bool netPvpCvar_ = false;
+    bool netKitCvar_ = true;
+    int32_t netMaxPlayersCvar_ = 8;
+    // Remote survivors' bodies: a pool built with the scene (clients only).
+    std::vector<std::unique_ptr<NextDayz::PlayerRigVisual>> remoteRigs_;
+    // Damage the server has resolved (client): who fired, and what it did.
+    struct FNetDamage
+    {
+        NextDayz::FDamageEvent damage;
+        bool mine = false;
+    };
+    std::vector<FNetDamage> netDamage_;
+    std::vector<NextDayz::FPlayerDamageRequest> netStrikes_;
     struct FNavigationFrameStats
     {
         std::array<uint32_t, 1001> histogram{};

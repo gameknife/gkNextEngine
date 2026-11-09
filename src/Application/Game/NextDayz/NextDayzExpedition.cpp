@@ -14,6 +14,9 @@
 
 bool NextDayzGameInstance::CampaignEnabled() const
 {
+    // A networked survivor plays straight in the map (the Master/Hive owns
+    // storage later); offline keeps the safehouse campaign.
+    if (netMode_ != ENetMode::Offline) return false;
     return !GOption->AgentValidation || validationCampaign_;
 }
 

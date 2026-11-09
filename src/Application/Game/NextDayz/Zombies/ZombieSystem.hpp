@@ -195,6 +195,11 @@ namespace NextDayz
         void Reset();
         FZombieHandle Spawn(EZombieProfile profile, const glm::vec3& position);
         bool Recycle(FZombieHandle handle);
+        // Network client: the server's infected become exactly these slots
+        // (same index and generation); every other slot goes inactive. A slot
+        // that keeps its handle keeps its position and facing, so the caller
+        // can ease them toward the server's (they are overwritten otherwise).
+        void ApplyReplicas(std::span<const FZombieRuntime> replicas);
         FZombieDamageResult ApplyDamage(FZombieHandle handle, const FZombieDamage& damage);
 
         using FLineOfSight = std::function<bool(const glm::vec3&, const glm::vec3&)>;

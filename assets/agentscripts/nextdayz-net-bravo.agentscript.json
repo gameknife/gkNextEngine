@@ -1,0 +1,60 @@
+{
+  "name": "nextdayz-net-bravo",
+  "description": "Multiplayer smoke, survivor B (target). Needs a NextDayz server on 127.0.0.1:27015 with friendly fire on, and nextdayz-net-alpha running at the same time: B sees A and the server's infected, and takes A's friendly-fire hits.",
+  "target": "NextDayz",
+  "args": [
+    "--cvar",
+    "nextdayz.net.mode client",
+    "--cvar",
+    "nextdayz.net.name bravo"
+  ],
+  "defaults": {
+    "waitFrames": 2,
+    "stepTimeoutMs": 120000
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.netOnline",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.netVisibleRemotes",
+      "op": "ge",
+      "value": 1,
+      "timeoutMs": 120000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.netInfected",
+      "op": "ge",
+      "value": 1,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.health",
+      "op": "le",
+      "value": 75,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_net_bravo",
+      "ui": true
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

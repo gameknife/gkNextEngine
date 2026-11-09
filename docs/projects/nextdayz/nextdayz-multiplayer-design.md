@@ -1,7 +1,7 @@
 ---
 title: "NextDayz 多人联机：Master 调度 + 关卡 DS"
 category: project
-status: 计划（MVP 实施中）
+status: 计划（MVP 实施中；直连联机原型可运行）
 owner: NextDayz
 created: 2026-11-09
 last_updated: 2026-11-09
@@ -125,7 +125,45 @@ last_updated: 2026-11-09
 公网部署 / NAT 穿透 / 加密、真实账号与反作弊、同图多实例、载具、语音、移动端联机客户端、
 无 GPU DS、完整移动预测回滚。
 
-## 7. 实施记录
+## 7. 直连联机原型（当前可运行）
+
+M2/M3/M4 的第一个可玩切片：一个 NextDayz 进程当地图服务器，其余进程作为客户端直连。还没有 Master。
+
+```powershell
+# 服务器（无本地玩家，隐藏窗口；UDP 27015；互伤开）
+out/build/windows/bin/NextDayz.exe --hidden-window --cvar "nextdayz.net.mode server" --cvar "nextdayz.net.pvp true"
+# 客户端（每开一个就是一名幸存者；跨机器时把 host 换成服务器 IP）
+out/build/windows/bin/NextDayz.exe --cvar "nextdayz.net.mode client" --cvar "nextdayz.net.name alpha"
+out/build/windows/bin/NextDayz.exe --cvar "nextdayz.net.mode client" --cvar "nextdayz.net.name bravo" --cvar "nextdayz.net.host 127.0.0.1"
+```
+
+| CVar | 作用 |
+| --- | --- |
+| `nextdayz.net.mode` | `off`（默认，单人）/ `server` / `client`，启动时生效 |
+| `nextdayz.net.host` / `nextdayz.net.port` | 客户端连接地址 / 服务器监听端口（默认 27015） |
+| `nextdayz.net.pvp` | 服务器：是否允许互伤；运行中在服务器控制台改也会立即通知所有客户端 |
+| `nextdayz.net.name` | 客户端昵称（只出现在服务器日志） |
+| `nextdayz.net.maxPlayers` | 服务器人数上限；客户端据此准备最多 4 个远端角色 |
+| `nextdayz.net.kit` | 客户端出生自带 AK、60 发与背包（测试用，默认开） |
+
+行为：
+- 客户端跳过安全屋，直接出生在地图第一个安全落点，按幸存者 id 排成小圈；地图以服务器为准（不一致会自动切图）。
+- 服务器运行 WorldSim：感染者只在服务器刷新、感知、追击和攻击，20 Hz 快照给客户端；客户端插值显示，
+  命中盒取自本地动画，命中感染者上报服务器结算，伤害通知广播给所有人（只有射手有命中标记）。
+- 客户端 30 Hz 上报位置与表现状态；远端幸存者用同一套士兵 rig 播放其移动、持枪、换弹和翻越。
+- 枪声等噪声上报服务器，感染者能听到任何一名幸存者。昼夜与天气以服务器为准。
+- 互伤：客户端按远端幸存者胶囊判定命中（头部 ×2、腿 ×0.6、整体 ×0.6），服务器检查开关和射手位置后
+  转发给受害者；关闭时服务器丢弃。
+- 左下角状态行显示在线 id、RTT、其他人数与互伤开关。
+
+自动冒烟（需先手动起上面的服务器）：同时运行 `nextdayz-net-bravo` 与 `nextdayz-net-alpha` 两个 agentscript；
+bravo 断言能看到 alpha 和感染者，并在 alpha 的互伤命中后掉血。
+
+已知限制（下一步）：物资仍是每个客户端各自的（不同步，拾取不影响他人）；库存、生存数值和死亡由客户端
+自己结算；移动无服务端校验；没有延迟补偿，命中以射手画面为准；远端角色不显示服装；服务器仍需要 GPU
+并按正常帧率运行；没有 Master、账号和存档（重启即重置）。
+
+## 8. 实施记录
 
 - 2026-11-09：`ZombieSystem` 改为接收目标列表（`FZombieTarget`），每只感染者记录当前追击目标
   `targetId`，伤害请求带受害者 id，挤开逻辑对全部玩家生效；单人路径以 id 1 包装调用。
@@ -140,5 +178,9 @@ last_updated: 2026-11-09
   的幸存者共用该窗口，其余幸存者各自后台建窗口；所有者走进别人的窗口或离开世界时，窗口交给仍在
   其中的幸存者，否则销毁。寻路优先用同时包含起终点的窗口，否则用感染者脚下的窗口走到边缘；可走性
   按包含该点的窗口判断。单人只有一个窗口，行为与原先一致。导航可直接从碰撞 + 地形构建，便于单测。
+- 2026-11-09：直连联机原型（第 7 节）。新增 `src/Modules/NextNet`（ENet，桌面平台）：`FNetHost`
+  服务器/客户端、可靠与不可靠两个通道、`FNetWriter/FNetReader`。NextDayz 新增 `Net/NetProtocol`
+  （版本 1，消息表见头文件）与 `NextDayzNetwork.cpp`；`ZombieSystem::ApplyReplicas` 让客户端镜像服务器的
+  感染者槽位。移动端构建不含 NextNet，NextDayz 在那里只有单人。
 - M1 剩余：物资世界状态并入 WorldSim；库存/生存/武器状态按幸存者归入
   `Sim/`；PlayerController 拆运动体与相机/输入；WeaponSystem 拆开火判定与视图模型。

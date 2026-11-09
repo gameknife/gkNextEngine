@@ -10,6 +10,11 @@ if(TARGET NextUI)
     target_link_libraries(NextUI PRIVATE SDL3::SDL3 imgui::imgui)
 endif()
 
+if(TARGET NextNet)
+    find_package(unofficial-enet CONFIG REQUIRED)
+    target_link_libraries(NextNet PRIVATE unofficial::enet::enet)
+endif()
+
 if(TARGET NextCapture)
     target_link_libraries(NextCapture PRIVATE WebP::webp WebP::libwebpmux)
     if(WITH_AVIF)

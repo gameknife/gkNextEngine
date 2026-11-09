@@ -151,6 +151,12 @@ set(unitTestSources
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/UI/Localization.cpp
 )
 
+if("NextNet" IN_LIST GK_MODULE_NAMES)
+    list(APPEND unitTestSources
+        Test_NextNet.cpp
+        ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Net/NetProtocol.cpp)
+endif()
+
 if(GK_DOTNET_ENABLED)
     list(APPEND unitTestSources Test_DotNetEngineApi.cpp)
     list(APPEND unitTestSources Test_ManagedGameTemplate.cpp)
@@ -178,6 +184,9 @@ target_include_directories(gkNextUnitTests PRIVATE
     ${GK_SOURCE_ROOT}/Application/Game/NextTotalwar
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz
 )
+if(TARGET NextNet)
+    target_link_libraries(gkNextUnitTests PRIVATE NextNet)
+endif()
 target_link_libraries(gkNextUnitTests PRIVATE
     gkNextEngine
     NextGameplay

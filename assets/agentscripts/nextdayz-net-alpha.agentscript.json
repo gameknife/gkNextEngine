@@ -1,0 +1,87 @@
+{
+  "name": "nextdayz-net-alpha",
+  "description": "Multiplayer smoke, survivor A (shooter). Needs a NextDayz server on 127.0.0.1:27015 with friendly fire on, and nextdayz-net-bravo running at the same time. See docs/projects/nextdayz/nextdayz-multiplayer-design.md.",
+  "target": "NextDayz",
+  "args": [
+    "--cvar",
+    "nextdayz.net.mode client",
+    "--cvar",
+    "nextdayz.net.name alpha"
+  ],
+  "defaults": {
+    "waitFrames": 2,
+    "stepTimeoutMs": 120000
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.netOnline",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.netSnapshots",
+      "op": "ge",
+      "value": 20,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.netVisibleRemotes",
+      "op": "ge",
+      "value": 1,
+      "timeoutMs": 120000
+    },
+    {
+      "type": "assert",
+      "query": "game.netPvp",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "wait-ms",
+      "ms": 4000
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_net_alpha",
+      "ui": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.netPvpHit",
+      "set": 1
+    },
+    {
+      "type": "wait-ms",
+      "ms": 400
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.netPvpHit",
+      "set": 2
+    },
+    {
+      "type": "wait-ms",
+      "ms": 6000
+    },
+    {
+      "type": "assert",
+      "query": "game.netOnline",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

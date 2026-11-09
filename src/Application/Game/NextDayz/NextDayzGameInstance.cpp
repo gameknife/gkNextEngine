@@ -139,6 +139,8 @@ void NextDayzGameInstance::OnInit()
     actions_.Configure(config_.Action);
     survival_.Configure(config_.Survival);
     world_.Configure(config_.Zombie);
+    netMode_ = netModeCvar_ == "server" ? ENetMode::Server
+             : netModeCvar_ == "client" ? ENetMode::Client : ENetMode::Offline;
     world_.SetRayCast([this](const glm::vec3& origin, const glm::vec3& direction)
     {
         return GetEngine().GetScene().GetCPUAccelerationStructure().RayCastInCPU(origin, direction);
@@ -152,6 +154,17 @@ void NextDayzGameInstance::OnInit()
     if (!rig_.LoadRig(kSoldierRig))
     {
         SPDLOG_WARN("[NextDayz] soldier rig unavailable; player will have no visual");
+    }
+    if (netMode_ == ENetMode::Client)
+    {
+        // Bodies for the other survivors, built with the scene like the player's own.
+        for (int index = 0; index < std::clamp(netMaxPlayersCvar_ - 1, 1, 4); ++index)
+        {
+            auto remote = std::make_unique<NextDayz::PlayerRigVisual>();
+            remote->Configure(config_.Animation, config_.Weapon.TpsWeaponScale);
+            if (!remote->LoadRig(kSoldierRig)) break;
+            remoteRigs_.push_back(std::move(remote));
+        }
     }
     {
         std::string error;
@@ -221,11 +234,13 @@ void NextDayzGameInstance::OnInit()
     SPDLOG_INFO("[NextDayz] loading scene '{}'", scene);
     campaignMap_ = scene;
     GetEngine().RequestLoadScene({.filename = scene});
+    StartNetwork();
 }
 
 void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
 {
     ConfigureCampaignCVars(cvars);
+    ConfigureNetCVars(cvars);
     std::string error;
     // Path tracing with DLSS Ray Reconstruction at Quality by default.
     cvars.SetDefaultFromString("r.rendererType", "0", &error);
@@ -596,6 +611,7 @@ void NextDayzGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<Assets
     grass_.Prepare(nodes, models, materials);
     rescueHelicopter_.InjectAssets(models, materials);
     rig_.InjectAssets(models, materials);
+    for (auto& remote : remoteRigs_) remote->InjectAssets(models, materials);
     {
         // The survivor's forearms (rig parts) plus first-person hand models.
         NextDayz::FFirstPersonArmAssets arms = rig_.FirstPersonArmAssets();
@@ -701,6 +717,7 @@ void NextDayzGameInstance::InjectWeaponCatalog(std::vector<Assets::Model>& model
     }
     weapons_.SetViewModelAssets(weaponModelIds_, weaponMaterialIds_);
     rig_.SetWeaponAssets(weaponModelIds_, weaponMaterialIds_);
+    for (auto& remote : remoteRigs_) remote->SetWeaponAssets(weaponModelIds_, weaponMaterialIds_);
     NextDayz::FAttachmentVisualAssets attachments;
     attachments.ready = attachmentCatalogLoaded_;
     for (size_t i = 0; i < attachments.models.size() && attachments.ready; ++i)
@@ -722,6 +739,7 @@ void NextDayzGameInstance::InjectWeaponCatalog(std::vector<Assets::Model>& model
     }
     weapons_.SetAttachmentAssets(attachments);
     rig_.SetAttachmentAssets(attachments);
+    for (auto& remote : remoteRigs_) remote->SetAttachmentAssets(attachments);
 }
 
 glm::vec3 NextDayzGameInstance::ResolveSpawnPosition() const
@@ -730,6 +748,10 @@ glm::vec3 NextDayzGameInstance::ResolveSpawnPosition() const
     // raycast at the gas station hits the canopy roof, not the pad. Using a loot
     // item's world position gives real ground height and puts the player facing
     // it (loot is placed a few metres ahead along +Z, our default yaw).
+    if (netMode_ == ENetMode::Client)
+    {
+        if (const std::optional<glm::vec3> spawn = NetworkSpawnPosition()) return *spawn;
+    }
     glm::vec3 lootPos;
     if (loot_.NearestLootPos(glm::vec2(config_.SpawnXZ.x, config_.SpawnXZ.z), lootPos))
     {
@@ -751,6 +773,27 @@ glm::vec3 NextDayzGameInstance::ResolveSpawnPosition() const
     return glm::vec3(config_.SpawnXZ.x, groundY + 1.0f, config_.SpawnXZ.z);
 }
 
+std::optional<glm::vec3> NextDayzGameInstance::NetworkSpawnPosition() const
+{
+    // Every survivor of a server starts at the map's first safe deployment
+    // point, so they meet; each stands on its own spot of a small ring.
+    const auto safe = world_.anchors.Find(NextDayz::EWorldAnchorType::PlayerSafe);
+    const NextDayz::FWorldAnchor* anchor = safe.empty() ? nullptr : world_.anchors.Resolve(safe.front());
+    if (!anchor)
+    {
+        return std::nullopt;
+    }
+    const float angle = static_cast<float>(LocalSurvivorId()) * 2.4f;
+    glm::vec3 feet = anchor->worldPos + glm::vec3(std::cos(angle), 0.0f, std::sin(angle)) * 2.5f;
+    GetEngine().RayCast(feet + glm::vec3(0.0f, 3.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f),
+                        [&](Assets::RayCastResult result)
+                        {
+                            if (result.Hit && result.T < 6.0f) feet.y = static_cast<float>(result.HitPoint.y);
+                            return true;
+                        });
+    return feet + glm::vec3(0.0f, 0.1f, 0.0f);
+}
+
 void NextDayzGameInstance::OnSceneLoaded()
 {
     if (!loadingMapPath_.empty()) campaignMap_ = std::exchange(loadingMapPath_, "");
@@ -765,6 +808,11 @@ void NextDayzGameInstance::OnSceneLoaded()
     player_.Create(GetEngine().GetPhysicsEngine(), spawn, config_);
 
     rig_.OnSceneLoaded(GetEngine().GetScene());
+    for (auto& remote : remoteRigs_)
+    {
+        remote->OnSceneLoaded(GetEngine().GetScene());
+        remote->SetVisible(false);
+    }
     weapons_.OnSceneLoaded(GetEngine());
     effects_.OnSceneLoaded(GetEngine().GetScene());
     CreateZombieVisuals();
@@ -779,7 +827,7 @@ void NextDayzGameInstance::OnSceneLoaded()
     inventory_.TryAdd("bandage", "Bandage", NextDayz::EItemKind::Consumable, 1);
     inventory_.TryAdd("water_bottle_empty", "Empty Bottle", NextDayz::EItemKind::Misc, 1);
     StartNewLife();
-    if (validationLoadout_ && GOption->AgentValidation)
+    if ((validationLoadout_ && GOption->AgentValidation) || (netMode_ == ENetMode::Client && netKitCvar_))
     {
         ApplyValidationLoadout();
     }
@@ -815,6 +863,7 @@ void NextDayzGameInstance::OnSceneUnloaded()
     grass_.Clear();
     player_.Destroy();
     rig_.OnSceneUnloaded();
+    for (auto& remote : remoteRigs_) remote->OnSceneUnloaded();
     weapons_.OnSceneUnloaded();
     effects_.OnSceneUnloaded();
     loot_.OnSceneUnloaded();
@@ -835,6 +884,7 @@ void NextDayzGameInstance::OnSceneUnloaded()
 
 void NextDayzGameInstance::OnDestroy()
 {
+    ShutdownNetwork();
     world_.JoinNavigation();
     if (sceneReady_) SaveCampaign();
     player_.Destroy();
@@ -851,11 +901,25 @@ void NextDayzGameInstance::OnTick(double deltaSeconds)
     }
     debugger_.BeginFrame();
     TickMapAuthoring();
+    if (netMode_ != ENetMode::Offline)
+    {
+        NetPoll();
+    }
+    if (netMode_ == ENetMode::Server)
+    {
+        // The map's world, with every client's survivor in it; nobody plays here.
+        if (sceneReady_) TickServer(static_cast<float>(deltaSeconds));
+        return;
+    }
     if (!sceneReady_ || !player_.IsValid())
     {
         return;
     }
     float dt = static_cast<float>(deltaSeconds);
+    if (netMode_ == ENetMode::Client)
+    {
+        NetClientSend(dt);
+    }
     if (CampaignEnabled())
     {
         if (!campaign_.inField || campaignSaveBlocked_)
@@ -1044,7 +1108,12 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     }
     for (const NextDayz::FWeaponHitEvent& hit : weapons_.ConsumeHitEvents())
     {
-        if (const NextDayz::FWeaponDef* definition = NextDayz::FindWeaponDef(hit.weaponId))
+        if (netMode_ == ENetMode::Client)
+        {
+            // The server owns the infected: it resolves the hit and tells everyone.
+            NetSendWeaponHit(hit);
+        }
+        else if (const NextDayz::FWeaponDef* definition = NextDayz::FindWeaponDef(hit.weaponId))
         {
             world_.combat.ProcessHit(hit, definition->damageFalloffDistance);
         }
@@ -1070,6 +1139,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
             audio_.Impact(trace.endPoint);
             if (!trace.melee && trace.pellet == 0) ScoreRangeTarget(trace);
         }
+        if (netMode_ == ENetMode::Client) NetCheckPvp(trace);
         debugger_.RecordTrace(trace);
     }
     for (const NextDayz::FShotEvent& shot : weapons_.ConsumeShotEvents())
@@ -1109,17 +1179,30 @@ void NextDayzGameInstance::SimulateFrame(float dt)
         }
     }
 
-    // The world sees this client's survivor as it stands after its own move.
-    world_.UpsertSurvivor(LocalSurvivor());
-    section.emplace(timers, ETimer::SpawnDirector);
-    world_.TickSpawns(dt);
     const float zombieDt = dt * knobs.zombieTimeScale;
-    section.emplace(timers, ETimer::InfectedAi);
-    world_.TickInfected(zombieDt);
-    section.emplace(timers, ETimer::Survival);
-    for (const NextDayz::FPlayerDamageRequest& damage : world_.ConsumeSurvivorHits())
+    std::vector<NextDayz::FPlayerDamageRequest> strikes;
+    if (netMode_ == ENetMode::Client)
     {
-        if (damage.targetId != NextDayz::kLocalPlayerTargetId)
+        // The infected and the other survivors are the server's; ease toward them.
+        section.emplace(timers, ETimer::InfectedAi);
+        ApplyZombieReplication(zombieDt);
+        UpdateRemoteSurvivors(dt);
+        strikes = std::exchange(netStrikes_, {});
+    }
+    else
+    {
+        // The world sees this client's survivor as it stands after its own move.
+        world_.UpsertSurvivor(LocalSurvivor());
+        section.emplace(timers, ETimer::SpawnDirector);
+        world_.TickSpawns(dt);
+        section.emplace(timers, ETimer::InfectedAi);
+        world_.TickInfected(zombieDt);
+        strikes = world_.ConsumeSurvivorHits();
+    }
+    section.emplace(timers, ETimer::Survival);
+    for (const NextDayz::FPlayerDamageRequest& damage : strikes)
+    {
+        if (damage.targetId != LocalSurvivorId())
         {
             continue;
         }
@@ -1209,6 +1292,15 @@ void NextDayzGameInstance::SimulateFrame(float dt)
 
     section.emplace(timers, ETimer::Presentation);
     rig_.SetVisible(!player_.IsFirstPerson() || knobs.orbit || showInventory_);
+    const NextDayz::FPlayerPresentationState presentation = LocalPresentation();
+    rig_.Update(player_.Position(), presentation, dt);
+    rig_.UpdateCameraFade(player_.CameraPosition(), config_.Camera.TpsFadeNearDistance,
+                          config_.Camera.TpsFadeFarDistance, !player_.IsFirstPerson() && !knobs.orbit);
+    if (inventoryCommitted) SaveCampaign();
+}
+
+NextDayz::FPlayerPresentationState NextDayzGameInstance::LocalPresentation() const
+{
     NextDayz::FPlayerPresentationState presentation;
     presentation.locomotion = player_.LocomotionState();
     presentation.aimWeight = player_.IsAiming() ? 1.0f : 0.0f;
@@ -1232,10 +1324,7 @@ void NextDayzGameInstance::SimulateFrame(float dt)
     for (int slot = 0; slot < NextDayz::kWeaponSlotCount; ++slot)
         presentation.slotAttachments[slot] = weapons_.SlotAttachments(slot);
     presentation.actionTime01 = actions_.NormalizedTime();
-    rig_.Update(player_.Position(), presentation, dt);
-    rig_.UpdateCameraFade(player_.CameraPosition(), config_.Camera.TpsFadeNearDistance,
-                          config_.Camera.TpsFadeFarDistance, !player_.IsFirstPerson() && !knobs.orbit);
-    if (inventoryCommitted) SaveCampaign();
+    return presentation;
 }
 
 bool NextDayzGameInstance::OverrideRenderCamera(Assets::Camera& outRenderCamera) const
@@ -1281,6 +1370,7 @@ bool NextDayzGameInstance::OverrideRenderCamera(Assets::Camera& outRenderCamera)
 
 bool NextDayzGameInstance::OnRenderUI()
 {
+    DrawNetStatus();
     if (ImGui::IsKeyPressed(ImGuiKey_F12, false))
     {
         using namespace NextDayz::L10n;
@@ -2051,10 +2141,16 @@ void NextDayzGameInstance::UpdateWorldPressure()
     // lantern at night is a beacon.
     const float night = 1.0f - time_.Daylight();
     // The lantern and crouch are per survivor (LocalSurvivor).
-    world_.SetWorldSightScale(glm::mix(1.0f, 0.55f, night) * glm::mix(1.0f, 0.7f, time_.Fog()));
+    world_.SetWorldSightScale(WorldSightScale());
     // More of them walk the night.
     world_.spawns.SetGlobalCap(night > 0.6f ? 48 : 40);
     time_.SetLanternLight(lanternLit_ ? 1.0f : 0.0f);
+}
+
+float NextDayzGameInstance::WorldSightScale() const
+{
+    const float night = 1.0f - time_.Daylight();
+    return glm::mix(1.0f, 0.55f, night) * glm::mix(1.0f, 0.7f, time_.Fog());
 }
 
 void NextDayzGameInstance::UpdateSurvivalFeedback(float /*deltaSeconds*/)
@@ -2145,7 +2241,9 @@ NextDayz::FSurvivorPresence NextDayzGameInstance::LocalSurvivor() const
 
 void NextDayzGameInstance::BuildZombieNavigation()
 {
-    world_.UpsertSurvivor(LocalSurvivor());
+    // A server has no survivor of its own: windows open as clients arrive.
+    if (netMode_ == ENetMode::Server) world_.ClearSurvivors();
+    else if (netMode_ == ENetMode::Offline) world_.UpsertSurvivor(LocalSurvivor());
     // Geographic maps fit the sampling band to their terrain; the legacy scene
     // keeps its fixed band.
     const bool geographic = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_) != nullptr;
@@ -2178,7 +2276,7 @@ void NextDayzGameInstance::ResetSession()
     time_.Reset(config_.Time, sessionRng_.Derive(0x57454154ULL).Seed());
     player_.Destroy();
     player_.Create(GetEngine().GetPhysicsEngine(), ResolveSpawnPosition(), config_);
-    if (validationLoadout_ && GOption->AgentValidation)
+    if ((validationLoadout_ && GOption->AgentValidation) || (netMode_ == ENetMode::Client && netKitCvar_))
     {
         ApplyValidationLoadout();
     }
@@ -2348,8 +2446,18 @@ void NextDayzGameInstance::SyncZombieVisuals(float deltaSeconds)
 
 void NextDayzGameInstance::HandleDamageEvents()
 {
-    for (const NextDayz::FDamageEvent& damage : world_.combat.ConsumeDamageEvents())
+    // Offline every hit is the player's; a client hears every survivor's from the server.
+    std::vector<FNetDamage> events = std::exchange(netDamage_, {});
+    if (netMode_ != ENetMode::Client)
     {
+        for (const NextDayz::FDamageEvent& damage : world_.combat.ConsumeDamageEvents())
+        {
+            events.push_back({damage, true});
+        }
+    }
+    for (const FNetDamage& notice : events)
+    {
+        const NextDayz::FDamageEvent& damage = notice.damage;
         debugger_.RecordDamage(damage);
         if (damage.target.index < zombieRigVisuals_.size() && zombieRigVisuals_[damage.target.index].IsBound())
         {
@@ -2357,11 +2465,15 @@ void NextDayzGameInstance::HandleDamageEvents()
         }
         effects_.BloodHit(damage.worldPoint, damage.direction, -damage.direction, damage.hitZone, damage.killed);
         audio_.Hit(damage.hitZone, damage.killed);
+        if (!notice.mine)
+        {
+            continue;   // another survivor's round: no marker, and no drop here
+        }
         if (weapons_.ActiveIsMelee())
         {
             audio_.MeleeImpact();
         }
-        if (damage.killed)
+        if (damage.killed && netMode_ == ENetMode::Offline)
         {
             if (const NextDayz::FZombieRuntime* zombie = world_.zombies.Resolve(damage.target))
             {
@@ -3133,6 +3245,7 @@ void NextDayzGameInstance::UpdateGrass(float dt)
 
 void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegistry& reg)
 {
+    RegisterNetQueries(reg);
     reg.Add("magazineCapacity", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(weapons_.MagazineCapacity()); });
     reg.Add("reloadDuration", [this]() -> Runtime::Agent::FAgentQueryValue { return double(weapons_.ReloadDuration()); });
     reg.Add("stabilityScale", [this]() -> Runtime::Agent::FAgentQueryValue { return double(NextDayz::WeaponStabilityScale(weapons_.SlotAttachments(weapons_.ActiveSlot()))); });

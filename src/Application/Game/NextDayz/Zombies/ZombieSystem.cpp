@@ -133,6 +133,40 @@ namespace NextDayz
         return {};
     }
 
+    void ZombieSystem::ApplyReplicas(std::span<const FZombieRuntime> replicas)
+    {
+        std::vector<bool> present(slots_.size(), false);
+        for (const FZombieRuntime& replica : replicas)
+        {
+            const uint32_t index = replica.handle.index;
+            if (index >= slots_.size() || !replica.handle.IsValid())
+            {
+                continue;
+            }
+            present[index] = true;
+            FZombieRuntime& zombie = slots_[index];
+            const bool same = zombie.active && zombie.handle == replica.handle;
+            const glm::vec3 position = zombie.position;
+            const glm::vec3 forward = zombie.forward;
+            zombie = replica;
+            zombie.active = true;
+            zombie.variant = MakeVariant(replica.handle);
+            generations_[index] = replica.handle.generation;
+            if (same)
+            {
+                zombie.position = position;
+                zombie.forward = forward;
+            }
+        }
+        for (size_t index = 0; index < slots_.size(); ++index)
+        {
+            if (!present[index] && slots_[index].active)
+            {
+                slots_[index].active = false;
+            }
+        }
+    }
+
     const FZombieRuntime* ZombieSystem::Resolve(FZombieHandle handle) const
     {
         if (!handle.IsValid() || handle.index >= slots_.size() || generations_[handle.index] != handle.generation)

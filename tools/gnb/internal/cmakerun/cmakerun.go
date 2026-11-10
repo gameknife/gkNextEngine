@@ -29,7 +29,16 @@ func Build(repoRoot string, preset string, opts BuildOptions) error {
 	return BuildWithCMake(repoRoot, "cmake", preset, opts)
 }
 
+func ensureVcpkgBinarySources(repoRoot string) {
+	if os.Getenv("VCPKG_BINARY_SOURCES") == "" {
+		cacheDir := filepath.Join(repoRoot, ".vcpkg_bincache")
+		_ = os.MkdirAll(cacheDir, 0o755)
+		_ = os.Setenv("VCPKG_BINARY_SOURCES", fmt.Sprintf("clear;files,%s,readwrite", cacheDir))
+	}
+}
+
 func BuildWithCMake(repoRoot string, cmakePath string, preset string, opts BuildOptions) error {
+	ensureVcpkgBinarySources(repoRoot)
 	buildDir := filepath.Join(repoRoot, "out", "build", preset)
 	cache := filepath.Join(buildDir, "CMakeCache.txt")
 	if opts.Clean {
@@ -81,6 +90,7 @@ func BuildWithCMake(repoRoot string, cmakePath string, preset string, opts Build
 // This is useful for IDE generators such as Visual Studio, where the
 // generated solution is the requested artifact.
 func ConfigureWithCMake(repoRoot string, cmakePath string, preset string, configureArgs ...string) error {
+	ensureVcpkgBinarySources(repoRoot)
 	args := []string{"--preset", preset}
 	args = append(args, configureArgs...)
 	return run(repoRoot, false, cmakePath, args...)

@@ -5,6 +5,10 @@ on:
   schedule:
     - cron: '0 3 * * 1'
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   windows-no-unity:
     name: Windows No-Unity
@@ -20,23 +24,44 @@ jobs:
         shell: pwsh
         run: |
           "key=$(.\gnb.bat info --bincache-key)" >> $env:GITHUB_OUTPUT
-      - uses: actions/cache/restore@v6
+      - name: Restore local vcpkg binary cache
+        uses: actions/cache/restore@v6
         id: cache-vcpkg-restore
         with:
-          path: |
-            .vcpkg
-            .vcpkg_bincache
+          path: .vcpkg_bincache
           key: ${{ steps.gnb.outputs.key }}
+          restore-keys: |
+            ${{ runner.os }}-vcpkg-
       - name: Setup dependencies
         run: .\gnb.bat setup
+      - name: Setup NuGet Binary Cache for GitHub Packages
+        shell: pwsh
+        env:
+          FEED_URL: "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+          NUGET_USER: "${{ github.actor }}"
+          NUGET_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+        run: |
+          $repoRoot = (Get-Location).Path
+          $bincachePath = Join-Path $repoRoot ".vcpkg_bincache"
+          $vcpkgExe = Join-Path $repoRoot ".vcpkg\vcpkg.exe"
+          $nuget = & $vcpkgExe fetch nuget | Select-Object -Last 1
+          if ($nuget -and (Test-Path $nuget)) {
+            & $nuget sources remove -Name "github-packages" -ErrorAction SilentlyContinue | Out-Null
+            & $nuget sources add -Name "github-packages" -Source $env:FEED_URL -UserName $env:NUGET_USER -Password $env:NUGET_TOKEN -StorePasswordInClearText | Out-Null
+            "VCPKG_BINARY_SOURCES=clear;nuget,$($env:FEED_URL),readwrite;files,$bincachePath,readwrite" >> $env:GITHUB_ENV
+            "VCPKG_NUGET_REPOSITORY=${{ github.server_url }}/${{ github.repository }}" >> $env:GITHUB_ENV
+            Write-Host "Configured Windows NuGet binary cache pointing to GitHub Packages (readwrite)"
+          } else {
+            "VCPKG_BINARY_SOURCES=clear;files,$bincachePath,readwrite" >> $env:GITHUB_ENV
+            Write-Host "NuGet not available, falling back to local files binary cache"
+          }
       - name: Configure without Unity Build
         run: cmake --preset windows-no-unity
       - name: Build all targets without Unity Build
         run: cmake --build --preset windows-no-unity --parallel
-      - uses: actions/cache/save@v6
+      - name: Save local vcpkg binary cache
+        uses: actions/cache/save@v6
         if: steps.cache-vcpkg-restore.outputs.cache-hit != 'true'
         with:
-          path: |
-            .vcpkg
-            .vcpkg_bincache
+          path: .vcpkg_bincache
           key: ${{ steps.gnb.outputs.key }}

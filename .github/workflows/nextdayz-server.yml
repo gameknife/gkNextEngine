@@ -74,10 +74,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/cache@v6
         with:
-          path: |
-            .vcpkg
-            .vcpkg_bincache
+          path: .vcpkg_bincache
           key: nextdayz-${{ steps.gnb.outputs.key }}
+          restore-keys: |
+            nextdayz-${{ steps.gnb.outputs.key }}-
+            nextdayz-
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: |

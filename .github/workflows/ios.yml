@@ -20,16 +20,15 @@ jobs:
       - uses: actions/cache/restore@v6
         id: cache-vcpkg-restore
         with:
-          path: |
-            .vcpkg
-            .vcpkg_bincache
+          path: .vcpkg_bincache
           key: ${{ steps.gnb.outputs.key }}-ios-device
+          restore-keys: |
+            ${{ steps.gnb.outputs.key }}-
+            macOS-vcpkg-
       - run: ./gnb.sh setup --skip-paks
       - run: ./gnb.sh ios build
       - uses: actions/cache/save@v6
         if: steps.cache-vcpkg-restore.outputs.cache-hit != 'true'
         with:
-          path: |
-            .vcpkg
-            .vcpkg_bincache
+          path: .vcpkg_bincache
           key: ${{ steps.gnb.outputs.key }}-ios-device

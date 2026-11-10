@@ -443,8 +443,8 @@ Windows 上若存在 `C:/Program Files/RenderDoc/renderdoc_app.h`，构建会自
     <td width="33%" align="center" valign="top" style="padding: 0;">
       <img src="https://github.com/gameknife/gkNextEngine/releases/download/readme-assets-v1/nextdayz.webp" width="100%" style="display: block; width: 100%;" alt="NextDayZ" />
       <div style="padding: 10px 8px 12px 8px;">
-        <strong>🧟 NextDayZ / CharacterDemo</strong><br>
-        <sub>角色控制、NavGrid A* 寻路、AI 行为树与生存战斗原型</sub>
+        <strong>🧟 NextDayz</strong><br>
+        <sub>硬核末日撤离沙盒、真实地理关卡、程序化 3C 与 Master-DS 多人联机体系</sub>
       </div>
     </td>
     <td width="33%" align="center" valign="top" style="padding: 0;">
@@ -481,7 +481,8 @@ Windows 上若存在 `C:/Program Files/RenderDoc/renderdoc_app.h`，构建会自
 - **`FlappyCpp` / `FlappyCSharp`**：Flappy Bird 的 C++ 与 C# 逐行对照实现，作为绑定面确定性重播 parity 的回归基线。
 - **`Brotato3DCSharp`**：Brotato3D 的 C# 实现，验证完整玩法规模下的托管绑定面。
 - **`NextWorldTravel`**：真实地点浏览器，用 Walk / Aerial / Focus 三视图浏览 `gnb geo` 生成的城市 tile。
-- **`TruckerDemo` / `CitySolSim` / `NextDayz` / `NextTotalWar`**：车辆驾驶、城市交通、生存战术与军团模拟原型。
+- **`NextDayz`**：DayZ 风格硬核末日撤离沙盒，集成 1km² 真实地理关卡、程序化 3C 拟真枪战、动态感染者生态与 Master-DS 分布式专用服务器集群。
+- **`TruckerDemo` / `CitySolSim` / `NextTotalWar`**：车辆驾驶、城市交通与军团战术模拟原型。
 
 #### 基准测试与自动化工具 (Benchmark & Tools)
 - **`gkNextStillBenchmark`**：静态场景帧率与画质基准测试。
@@ -493,6 +494,100 @@ Windows 上若存在 `C:/Program Files/RenderDoc/renderdoc_app.h`，构建会自
 > 所有桌面 Target 均可配合 `./gnb remote --target <Target>` 进入 Remote Play host 模式（WebRTC 浏览器零安装游玩）。`src/Application/Game/Voyage3D` 是航海 / 港口 / 海战源码原型。
 
 </details>
+
+### 🧟 重点子项目：NextDayz（硬核末日撤离沙盒与分布式联机系统）
+
+`NextDayz` 是基于 gkNextEngine 打造的 DayZ 风格末日战术撤离与多人联机生存沙盒原型。它作为引擎综合系统能力的“试验尖兵”，验证了引擎在**大规模真实地理场景生成、拟真程序化士兵 3C 与枪战、动态感染者生态、服务端权威（Server-Authoritative）架构与 Master-DS 分布式联机调度**等全栈维度的实战表现。
+
+#### 1. 核心玩法与长线撤离循环 (The Extraction Loop)
+
+游戏采用长线战术撤离机制：从安全屋机舱整备出征，深入危险重重的废土搜刮生存，呼叫直升机撤离并将战利品带回安全屋。
+
+```mermaid
+flowchart LR
+    Lobby["🚁 直升机舱大厅<br>(轻量备装/仓库/离线世界地图)"] --> Deploy["🪂 随机战术部署<br>(1km² 真实地理废土)"]
+    Deploy --> Scavenge["🎒 搜刮生存与对抗<br>(42+功能物品/代谢管理/感染者/PVP)"]
+    Scavenge --> Flare["🚨 寻找信号枪<br>(前往停机坪呼叫直升机)"]
+    Flare --> Extract["🚁 限时防守并登机<br>(物资入库/黄金出售/战局沉淀)"]
+    Scavenge -. 阵亡 .-> Death["💀 遗留可回收掉落堆<br>(返回机舱，世界跨次保留)"]
+```
+
+- **直升机大厅与备装**：启动直接进入轻量直升机舱大厅，展示坐姿穿戴的角色与仓库，无需预载整张地图；内置基于 Natural Earth 离线矢量的全球部署地图。
+- **生存代谢与三栏背包**：玩家具备生命、饥饿、口渴、创伤流血与保暖等多维真实代谢状态；42+ 种具象功能物品（开罐器、止血带、夹板、防弹衣、提灯、指南针、电台补给等）；背包重构为“附近地面 / 随身穿戴 / 容器储物”三栏容量管理。
+- **信号枪与直升机撤离**：搜刮稀有信号枪，前往指定停机坪发射呼叫直升机；直升机进场并限时停留，玩家需抵御威胁并在舱门踏板处登机撤离。
+- **持久化资产与世界状态**：成功撤离后物资安全入库、换取黄金；死亡随身物品就地形成跨重启保留的掉落堆，可重返拾回；单人、训练场与联机存档互不干扰。
+
+#### 2. 拟真战术枪控与程序化 3C (Tactical Gunplay & Procedural IK)
+
+- **士兵 3C 战术机动**：FPS / TPS 视角平滑切换，支持站立、蹲伏、跑动、冲刺、滑铲、跳跃、矮墙翻越与物理攀爬。
+- **机械瞄具与视线对齐 ADS**：支持机械瞄具与光学瞄准镜（红点/倍镜）自由切换；摄像机平滑飞越（Camera flight）对齐第一人称瞄具视线，消除单帧延迟（0-frame viewmodel lag）。
+- **程序化骨骼 IK 与武器配件**：基于 ScadRig 骨架的纯算法程序化 IK 驱动，实时计算武器后坐力、摆动、受击摇晃与切枪动作；支持武器配件装配（瞄具、消音器等）与战术枪套副武器快速切换。
+- **分部位命中与视听反馈**：跟随骨架的动态胶囊体命中盒，提供分部位伤害（爆头击杀、打腿断肢硬直）、命中准星提示（Hitmarker）、枪口火焰、曳光弹流与真实枪械环境音效。
+
+#### 3. 动态感染者生态 (Dynamic Infected AI)
+
+- **视听感知与行为树**：感染者具备基于视线锥的视觉感知，以及对开火、跑步脚步声的听觉空间噪声传播感知；支持使用鞭炮诱饵声东击西。
+- **部位破坏与战术硬直**：击中腿部致残减速或倒地爬行、受击硬直与踉跄；支持警觉、搜寻、群体狂暴与近距离扑击。
+- **生态刷新机制**：按 POI 区域风险预算生成，严格执行视线遮挡判定防止在眼前凭空刷怪；支持昼夜光照影响活跃度。
+
+#### 4. 1km² 真实地理关卡与波希米亚风格 (Geographic Worlds)
+
+- **真实地理程序化转化**：复用 `gnb geo` 工具链，直接基于 SRTM 高程与 OpenStreetMap 矢量生成 1km × 1km 真实比例关卡：
+  - **捷克洛克特·河湾（Loket — Riverbend）**：依托奥赫热河环抱岩岬的真实地形，包含老城广场、历史城堡、温泉别墅、集体农场、瓷器厂等 15 个据点、108 栋可自由探索建筑、反射水体与 22 块多样土地覆盖。
+  - **综合军用训练场（800m × 800m）**：内置靶场指挥部、全物品陈列棚（供快速试装练枪）、300m 步枪射击靶位（自动距离报环）、CQB 训练屋与感染者测试围栏。
+- **地域专属 PBR 资产套件（`kit_bohemia.scad`）**：民间巴洛克市民房立面、陶瓦、石板、洋葱顶教堂、水渍与室内油漆墙裙，全部以明文 OpenSCAD DSL 描述，由实时路径追踪渲染。
+- **大气与环境表现**：动态昼夜交替、高度雾与平滑天候过渡、自适应曝光与 Biome 运行时植被（Grass）。
+
+#### 5. 分布式 Master-DS 联机网络架构 (Multiplayer Architecture)
+
+NextDayz 实现了工业级标准的“专用服务器（DS）+ 调度中心（Master）”分布式网络架构：
+
+```
+ 客户端 NextDayz.exe
+   │ ① HTTP：登录 / 档案 / 请求出击        ┌─────────────────────────┐
+   ├───────────────────────────────────────►│  Master（调度 + 仓库中心） │
+   │ ② 签发票据 + DS 目标地址                │  账号·全局档案·地图舰队   │
+   │◄───────────────────────────────────────│  DS 自动拉起·票据鉴权·存档 │
+   │ ③ UDP (ENet) + 票据接入                 └──────────▲──────────────┘
+   ▼                                                    │ 注册/心跳/角色迁入/原子存档
+ 关卡 DS：NextDayz.exe --dedicated --map <id> ──────────┘
+```
+
+- **无头专用服务器（Dedicated Server）**：启动传 `--dedicated` 进入无头模式，引擎完全跳过光栅化、UI 与音频渲染，单机与联机复用同一套权威模拟核心，极大降低 CPU/GPU 负载并保持 60Hz 稳定判定。
+- **轻量传输与权威裁决（NextNet）**：基于 ENet 打造的轻量级跨平台传输模块；采用“客户端预测移动 + 服务端防作弊物理校验”；射击伤害、战利品 Ledger 账本、掉落事务由服务端全权仲裁；支持服务端历史位姿回退的延迟补偿（Lag Compensation）。
+- **Master 调度集群**：采用 Go + SQLite 构建常驻主控服务，负责跨地图全局账号档案、地图 DS 舰队的健康心跳与动态编排拉起、票据派遣机制与原子事务检查点。
+- **压测与网络仿真**：配套 `NextDayzBots` 机器人集群自动化压测工具，支持链路丢包、延迟抖动模拟注入，并在客户端提供实时网络状态诊断面板。
+
+#### 6. 常用运行与调试命令
+
+```bash
+# 启动游戏（进入机舱大厅，支持单人训练场/单机战役/联机模式选择）
+./gnb.sh run NextDayz
+
+# 本地一键启动 Master 调度中心 + 关卡 DS + 自动登录的客户端
+./gnb.sh ds --master
+
+# 启动独立关卡专用服务器 (DS) 并直连
+./gnb.sh ds
+
+# Master 服务端舰队独立管理
+./gnb.sh master serve       # 启动 HTTP Master (默认端口 7780)
+./gnb.sh master status      # 查看当前 DS 舰队状态与在线玩家
+./gnb.sh master pvp on|off  # 全局切换 PVP 伤害模式
+
+# 自动化压测（拉起 16 个 NextDayzBots 机器人持续压测 30 分钟）
+./gnb.sh ds --bots 16 --minutes 30
+
+# 自动化 Agent 无窗口冒烟验证
+./gnb.sh validate --script assets/agentscripts/nextdayz-smoke.agentscript.json
+```
+
+> 深入了解 NextDayz 设计细节与技术实现：
+> - [NextDayz 多人联机与 Master-DS 架构](docs/projects/nextdayz/nextdayz-multiplayer-design.md)
+> - [NextDayz 持久世界与直升机撤离设计](docs/projects/nextdayz/nextdayz-extraction-design.md)
+> - [NextDayz 真实地理关卡与世界派遣](docs/projects/nextdayz/nextdayz-world-map-design.md)
+> - [NextDayz 战术 3C 与 ScadRig 分层动画](docs/projects/nextdayz/nextdayz-3c-scadrig-design.md)
+> - [NextDayz 服务端部署与运维指南](docs/guides/nextdayz-server-deployment.md)
 
 <p align="center">✦</p>
 

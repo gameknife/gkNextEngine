@@ -825,7 +825,9 @@ TEST_CASE("ScadTerrain eval: bad spec warns and produces nothing", "[Unit][Scad]
 
 TEST_CASE("ScadTerrain eval: gk_terrain renders warning-free", "[Unit][Scad][ScadTerrain]")
 {
-    const EvalResult result = EvalTerrainProgram(std::string(kTerrScad) + "gk_terrain(TERR);\n");
+    std::string program(kTerrScad);
+    program.append("gk_terrain(TERR);\n");
+    const EvalResult result = EvalTerrainProgram(program);
     CHECK(result.warningCount == 0);
     // 60x50 cells => 6000 land triangles + skirt + water.
     CHECK(TerrainTotalTriangles(result) > 6000);
@@ -997,7 +999,11 @@ TEST_CASE("ScadTerrain eval: detail = true textures the ground and drapes road r
 {
     const auto evalGround = [](const char* call)
     {
-        return EvalTerrainSceneProgram(std::string(kTerrScad) + "module ground() { " + call + " }\nground();\n");
+        std::string program(kTerrScad);
+        program.append("module ground() { ");
+        program.append(call);
+        program.append(" }\nground();\n");
+        return EvalTerrainSceneProgram(program);
     };
     const SceneEvalResult plain = evalGround("gk_terrain(TERR);");
     const SceneEvalResult detail = evalGround("gk_terrain(TERR, detail=true);");

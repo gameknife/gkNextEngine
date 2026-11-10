@@ -283,7 +283,7 @@ TEST_CASE("Grass thins and shortens deterministically beside roads water pads an
         {uint8_t(Runtime::ETerrainBiome::Grass), terrain.kFlagWater},
         {uint8_t(Runtime::ETerrainBiome::Grass), terrain.kFlagPad},
         {uint8_t(Runtime::ETerrainBiome::Sand), uint8_t(0)}};
-    for (const auto [biome, flags] : exclusions)
+    for (const auto& [biome, flags] : exclusions)
     {
         auto grid = GrassTestGrid();
         for (int y = 0; y < 8; ++y)

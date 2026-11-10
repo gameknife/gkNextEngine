@@ -7,7 +7,7 @@
 #include <thread>
 
 TEST_CASE_METHOD(EngineTestFixture, "Scene readiness includes queued loads and texture completion",
-                 "[Unit][SceneReadiness]")
+                 "[GPU][Integration][SceneReadiness]")
 {
     const auto waitUntil = [this](const auto& predicate)
     {

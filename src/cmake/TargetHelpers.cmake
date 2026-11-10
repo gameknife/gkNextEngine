@@ -128,7 +128,20 @@ function(gk_apply_target_defaults target)
     endif()
 
     if(MSVC)
-        target_compile_options(${target} PRIVATE /MP /utf-8 /WX /wd4200 /Zf)
+        target_compile_options(${target} PRIVATE /utf-8 /WX /wd4200 /Zf)
+        # Ninja already schedules one compiler process per source file. /MP adds
+        # no parallelism there and conflicts with PCH generation (/Yc).
+        if(NOT CMAKE_GENERATOR MATCHES "Ninja")
+            target_compile_options(${target} PRIVATE /MP)
+        endif()
+        # Avoid sharing a compiler PDB between parallel translation units. The
+        # linker can still generate a final PDB from the embedded debug info.
+        # Live++ requires /Zi; also honor an explicit toolchain/user selection.
+        if(NOT GK_ENABLE_CPP_LIVE_CODING AND
+           NOT DEFINED CMAKE_MSVC_DEBUG_INFORMATION_FORMAT)
+            set_property(TARGET ${target} PROPERTY MSVC_DEBUG_INFORMATION_FORMAT
+                "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>")
+        endif()
         if(GK_ENABLE_CPP_LIVE_CODING)
             target_compile_options(${target} PRIVATE /Zi /Gm- /Gy /Gw)
         endif()

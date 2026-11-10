@@ -174,6 +174,15 @@ add_executable(gkNextUnitTests ${unitTestSources})
 
 gk_apply_target_defaults(gkNextUnitTests)
 set_target_properties(gkNextUnitTests PROPERTIES FOLDER "Tests")
+# Reuse the common standard-library and Catch2 headers across test translation units.
+# Keep no-unity builds free of forced includes so they still detect missing includes.
+# MSVC uses PCH on Ninja, which schedules compilation without the /MP /Yc conflict.
+if(ENABLE_UNITY_BUILD AND (NOT MSVC OR CMAKE_GENERATOR MATCHES "Ninja"))
+    target_precompile_headers(gkNextUnitTests PRIVATE
+        "${GK_SOURCE_ROOT}/Engine/Common/CoreMinimal.hpp"
+        <catch2/catch_all.hpp>
+    )
+endif()
 # The reflection manifest test reads a committed source file, and the tests are launched from
 # whatever directory the caller happens to be in.
 target_compile_definitions(gkNextUnitTests PRIVATE GK_NEXT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

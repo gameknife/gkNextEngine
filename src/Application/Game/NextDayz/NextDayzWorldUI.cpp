@@ -5,6 +5,7 @@
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 #include "Engine/Utilities/FileHelper.hpp"
+#include "Engine/Options.hpp"
 
 namespace
 {
@@ -105,17 +106,20 @@ void NextDayzGameInstance::DrawWorldOperations()
     ImGui::PopStyleColor(2);
     if (ImGui::Button(NextDayz::L10n::Label("PREPARE LOADOUT"), ImVec2(-1, 30))) safehouseTab_ = 1;
     ImGui::Spacing();
-    ImGui::TextDisabled(authoringMode_ ? NextDayz::L10n::Tr("DRAFT PLAYTEST") : NextDayz::L10n::Tr("TEMPORARY MAP TEST"));
-    ImGui::BeginDisabled(visible.empty() || pendingCampaign_.has_value() || campaignSaveBlocked_);
-    if (ImGui::Button(authoringMode_ ? NextDayz::L10n::Tr("PLAYTEST BROWSED MAP") : NextDayz::L10n::Tr("ENTER SELECTED MAP (TEST)"), ImVec2(-1, 36)))
+    if (authoringMode_ || GOption->AgentValidation)
     {
-        const auto& selected = *visible[selectedWorldMap_];
-        const auto& scene = authoringMode_ ? selected.draftScene : selected.scene;
-        if (scene == campaignMap_) CompleteDeployment();
-        else RequestExpeditionMap(selected, true);
+        ImGui::TextDisabled(authoringMode_ ? NextDayz::L10n::Tr("DRAFT PLAYTEST") : NextDayz::L10n::Tr("TEMPORARY MAP TEST"));
+        ImGui::BeginDisabled(visible.empty() || pendingCampaign_.has_value() || campaignSaveBlocked_);
+        if (ImGui::Button(authoringMode_ ? NextDayz::L10n::Tr("PLAYTEST BROWSED MAP") : NextDayz::L10n::Tr("ENTER SELECTED MAP (TEST)"), ImVec2(-1, 36)))
+        {
+            const auto& selected = *visible[selectedWorldMap_];
+            const auto& scene = authoringMode_ ? selected.draftScene : selected.scene;
+            if (scene == campaignMap_ && !cabinScene_) CompleteDeployment();
+            else RequestExpeditionMap(selected, true);
+        }
+        ImGui::EndDisabled();
+        if (!visible.empty()) ImGui::TextWrapped(NextDayz::L10n::Tr("Selected: %s"), NextDayz::L10n::Tr(visible[selectedWorldMap_]->name));
     }
-    ImGui::EndDisabled();
-    if (!visible.empty()) ImGui::TextWrapped(NextDayz::L10n::Tr("Selected: %s"), NextDayz::L10n::Tr(visible[selectedWorldMap_]->name));
     // Practice range: every weapon, magazine, garment, food and tool on display.
     const auto training = std::find_if(visible.begin(), visible.end(), [](const auto* map) { return map->training; });
     if (training != visible.end() && !authoringMode_)
@@ -124,7 +128,7 @@ void NextDayzGameInstance::DrawWorldOperations()
         ImGui::BeginDisabled(pendingCampaign_.has_value() || campaignSaveBlocked_);
         if (ImGui::Button(NextDayz::L10n::Tr("ENTER TRAINING GROUND"), ImVec2(-1, 32)))
         {
-            if ((*training)->scene == campaignMap_) CompleteDeployment();
+            if ((*training)->scene == campaignMap_ && !cabinScene_) CompleteDeployment();
             else RequestExpeditionMap(**training, true);
         }
         ImGui::EndDisabled();
@@ -132,6 +136,13 @@ void NextDayzGameInstance::DrawWorldOperations()
     ImGui::EndChild();
     ImGui::SameLine();
 
+    DrawWorldAtlas(visible, availableHeight);
+}
+
+void NextDayzGameInstance::DrawWorldAtlas(const std::vector<const NextDayz::FExpeditionMap*>& visible, float availableHeight)
+{
+    LoadWorldAtlas();
+    selectedWorldMap_ = std::clamp(selectedWorldMap_, 0, std::max(0, static_cast<int>(visible.size()) - 1));
     ImGui::BeginChild("world_atlas_panel", ImVec2(0, availableHeight), false);
     ImGui::TextUnformatted(NextDayz::L10n::Tr("GLOBAL OPERATIONS"));
     ImGui::SameLine();

@@ -274,6 +274,11 @@ struct NextDayzGameInstance::FNetSession
     bool autoDeployed = false;   // automation: deployed once (not again after the sortie)
     bool wantLogin = false;
     bool wantDeploy = false;
+    bool previewDirty = true;
+    bool connectWhenReady = false;
+    bool refreshProfile = false;
+    int profileAttempts = 0;
+    float profileRetrySeconds = 0.0f;
     std::array<char, 64> nameBuffer{};
     std::optional<Net::FCharacterSpawn> pendingSpawn;
     Net::FExtractState extract{};
@@ -1030,10 +1035,11 @@ void NextDayzGameInstance::NetPoll()
             net.status = "online";
             SPDLOG_INFO("[NextDayz][net] joined as survivor {} on '{}', friendly fire {}", welcome.survivorId,
                         welcome.scene, welcome.pvp ? "ON" : "OFF");
-            if (welcome.scene != campaignMap_)
+            if (welcome.scene != campaignMap_ || cabinScene_)
             {
                 // Same map as the server, whatever this client started with.
                 loadingMapPath_ = welcome.scene;
+                loadingCabin_ = false;
                 GetEngine().RequestLoadScene({.filename = welcome.scene});
             }
             else if (sceneReady_)
@@ -2156,6 +2162,7 @@ void NextDayzGameInstance::NetReturnToLobby(std::string message)
     net.remotes.clear();
     net.pendingTakes.clear();
     net.pendingSpawn.reset();
+    net.connectWhenReady = false;
     net.extracting = false;
     net.lootRequestedScene = 0;
     net.lootSyncedScene = 0;
@@ -2167,21 +2174,11 @@ void NextDayzGameInstance::NetReturnToLobby(std::string message)
     SyncClothingVisuals();
     net.lobbyMessage = std::move(message);
     net.lobby = FNetSession::ELobby::Waiting;
-    net.master->Post("/api/profile", "{}", [this](const NextNet::FHttpResult& result)
-    {
-        if (!net_) return;
-        if (result.Ok() && Master::ParseProfile(result.body, net_->profile))
-        {
-            net_->bring.assign(net_->profile.storage.size(), 0);
-            net_->lobby = FNetSession::ELobby::Profile;
-        }
-        else
-        {
-            net_->lobbyMessage = result.error;
-            net_->lobby = FNetSession::ELobby::Login;
-        }
-    }, net.token);
+    net.refreshProfile = true;
+    net.profileAttempts = 0;
+    net.profileRetrySeconds = 0.0f;
     SetMouseCaptured(false);
+    RequestCabin();
     SPDLOG_INFO("[NextDayz][net] back in the lobby: {}", net.lobbyMessage);
 }
 
@@ -2212,7 +2209,7 @@ bool NextDayzGameInstance::NetRequestExtract()
 
 void NextDayzGameInstance::NetAfterSceneLoaded()
 {
-    if (!net_ || !net_->pendingSpawn || netMode_ != ENetMode::Client)
+    if (!net_ || !net_->pendingSpawn || netMode_ != ENetMode::Client || cabinScene_ || !loadingMapPath_.empty())
     {
         return;
     }
@@ -2250,6 +2247,37 @@ void NextDayzGameInstance::TickLobby(float dt)
     FNetSession& net = *net_;
     net.master->Pump();
     using ELobby = FNetSession::ELobby;
+    if (net.refreshProfile && sceneReady_ && cabinScene_)
+    {
+        net.profileRetrySeconds -= dt;
+        if (net.profileRetrySeconds <= 0.0f)
+        {
+            net.refreshProfile = false;
+            ++net.profileAttempts;
+            net.master->Post("/api/profile", "{}", [this](const NextNet::FHttpResult& result)
+            {
+                if (!net_) return;
+                if (result.Ok() && Master::ParseProfile(result.body, net_->profile))
+                {
+                    net_->bring.assign(net_->profile.storage.size(), 0);
+                    net_->previewDirty = true;
+                    net_->lobby = ELobby::Profile;
+                }
+                else if ((result.status == 0 || result.status >= 500) && net_->profileAttempts < 3)
+                {
+                    net_->refreshProfile = true;
+                    net_->profileRetrySeconds = 1.0f;
+                    SPDLOG_WARN("[NextDayz][net] profile refresh failed (HTTP {}): {}; retrying", result.status, result.error);
+                }
+                else
+                {
+                    net_->lobbyMessage = "Cannot refresh storage. Please log in again.";
+                    net_->lobby = ELobby::Login;
+                    SPDLOG_WARN("[NextDayz][net] profile unavailable (HTTP {}): {}", result.status, result.error);
+                }
+            }, net.token);
+        }
+    }
     const auto login = [this, &net]()
     {
         net.lobby = ELobby::Waiting;
@@ -2274,6 +2302,44 @@ void NextDayzGameInstance::TickLobby(float dt)
     if (net.lobby == ELobby::Login && std::exchange(net.wantLogin, false))
     {
         login();
+    }
+    // Mesh/physics commits can block the main thread for several seconds.
+    // Finish loading before opening the UDP connection, so admission and ENet
+    // keepalives do not run while this client cannot service its socket.
+    if (net.lobby == ELobby::Joining && net.connectWhenReady && sceneReady_ &&
+        !cabinScene_ && loadingMapPath_.empty())
+    {
+        net.connectWhenReady = false;
+        std::string error;
+        if (!net.host.Connect(net.deploy.host, net.deploy.port, error))
+        {
+            NetReturnToLobby(error);
+            return;
+        }
+        net.status = fmt::format("connecting to {} ({}:{})", net.deploy.server, net.deploy.host, net.deploy.port);
+        SPDLOG_INFO("[NextDayz][net] {}", net.status);
+    }
+    if (net.lobby == ELobby::Profile && cabinScene_ && sceneReady_ && std::exchange(net.previewDirty, false))
+    {
+        std::vector<FLootStack> stacks;
+        if (net.profile.character) stacks = net.profile.character->inventory;
+        else for (size_t index = 0; index < net.bring.size(); ++index)
+            if (net.bring[index] > 0)
+            {
+                auto stack = net.profile.storage[index];
+                stack.count = net.bring[index];
+                stacks.push_back(std::move(stack));
+            }
+        std::vector<FLootStack> leftover;
+        inventory_.Restore(BuildInventory(stacks, !net.profile.character, leftover));
+        weapons_.ResetRuntime();
+        int slot = 0;
+        for (const auto& item : inventory_.Instances())
+            if (FindWeaponDef(item.defId) && slot < kWeaponSlotCount)
+            {
+                if (weapons_.EquipInstance(slot, inventory_, item.instanceId)) ++slot;
+            }
+        SyncClothingVisuals();
     }
     // Automation: deploy once, with everything in storage, as soon as the profile is in.
     if (net.lobby == ELobby::Profile && netAutoDeployCvar_ && sceneReady_ && !net.autoDeployed)
@@ -2316,81 +2382,103 @@ void NextDayzGameInstance::TickLobby(float dt)
                 return;
             }
             session.lobby = ELobby::Joining;
-            std::string error;
-            if (!session.host.Connect(session.deploy.host, session.deploy.port, error))
+            session.connectWhenReady = true;
+            if (cabinScene_ || campaignMap_ != session.deploy.scene)
             {
-                NetReturnToLobby(error);
-                return;
+                loadingCabin_ = false;
+                loadingMapPath_ = session.deploy.scene;
+                GetEngine().RequestLoadScene({.filename = loadingMapPath_});
             }
-            session.status = fmt::format("connecting to {} ({}:{})", session.deploy.server, session.deploy.host,
-                                         session.deploy.port);
-            SPDLOG_INFO("[NextDayz][net] {}", session.status);
         }, net.token);
     }
 }
 
 bool NextDayzGameInstance::DrawLobby()
 {
-    if (!NetInLobby())
-    {
-        return false;
-    }
+    if (!NetInLobby()) return false;
+    using namespace NextDayz::L10n;
     FNetSession& net = *net_;
     using ELobby = FNetSession::ELobby;
-    const ImVec2 display = ImGui::GetIO().DisplaySize;
-    ImGui::SetNextWindowPos(ImVec2(display.x * 0.5f, display.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(std::min(720.0f, display.x - 40.0f), std::min(600.0f, display.y - 40.0f)), ImGuiCond_Always);
-    ImGui::Begin("NextDayz Online", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
-    ImGui::TextDisabled("Master %s", netMasterCvar_.c_str());
-    const std::string& message = net.lobbyMessage;
-    if (!message.empty())
+    const auto& profile = net.profile;
+    const bool ready = net.lobby == ELobby::Profile;
+    const bool resume = profile.character.has_value();
+    std::string status = Localize(net.lobbyMessage, Language());
+    if (ready)
     {
-        ImGui::TextWrapped("%s", message.c_str());
+        status = fmt::format("{}    {} {}    {} {}", profile.name, Tr("Gold:"), profile.gold,
+                             Tr("Expeditions:"), profile.sorties) + (status.empty() ? "" : "\n" + status);
     }
-    ImGui::Separator();
-    switch (net.lobby)
+    else if (status.empty()) status = Tr(net.lobby == ELobby::Login ? "Log in to prepare your next expedition."
+        : net.lobby == ELobby::Joining ? "Joining expedition..." : "Preparing your expedition...");
+    DrawCabinMenu(status, ready && profile.playing.empty(), resume, net.wantDeploy);
+    if (net.lobby == ELobby::Login)
     {
-    case ELobby::Login:
-        ImGui::InputText("Survivor name", net.nameBuffer.data(), net.nameBuffer.size());
-        if (ImGui::Button("Log in", ImVec2(160, 0)) && net.nameBuffer[0] != '\0') net.wantLogin = true;
-        break;
-    case ELobby::Waiting:
-        ImGui::TextUnformatted("Talking to the Master...");
-        break;
-    case ELobby::Deploying:
-        ImGui::Text("Server %s is loading %s...", net.deploy.server.c_str(), net.deploy.map.c_str());
-        break;
-    case ELobby::Joining:
-        ImGui::Text("%s", net.status.c_str());
-        break;
-    case ELobby::Profile:
+        const auto* vp = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.035f, vp->WorkPos.y + vp->WorkSize.y * 0.60f));
+        ImGui::SetNextWindowSize(ImVec2(std::clamp(vp->WorkSize.x * 0.23f, 200.0f, 310.0f), 145));
+        ImGui::SetNextWindowBgAlpha(0.92f);
+        ImGui::Begin("##cabin_login", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
+        ImGui::TextUnformatted(Tr("Survivor name"));
+        ImGui::SetNextItemWidth(-1);
+        const bool enter = ImGui::InputText("##survivor_name", net.nameBuffer.data(), net.nameBuffer.size(), ImGuiInputTextFlags_EnterReturnsTrue);
+        if ((ImGui::Button(Label("Log in"), ImVec2(-1,32)) || enter) && net.nameBuffer[0] != '\0') net.wantLogin = true;
+        ImGui::End();
+    }
+    if (safehouseTab_ < 0) return true;
+    BeginCabinPanel(safehouseTab_ == 0 ? "WORLD / OPERATIONS" : "STORAGE / LOADOUT");
+    if (safehouseTab_ == 0)
     {
-        const Master::FProfile& profile = net.profile;
-        ImGui::Text("%s    sorties %llu   extracted %llu   died %llu   gold %lld", profile.name.c_str(),
-                    static_cast<unsigned long long>(profile.sorties), static_cast<unsigned long long>(profile.extractions),
-                    static_cast<unsigned long long>(profile.deaths), static_cast<long long>(profile.gold));
-        if (!profile.lastOutcome.empty()) ImGui::TextDisabled("Last sortie: %s", profile.lastOutcome.c_str());
+        std::vector<const FExpeditionMap*> visible;
+        if (ready)
+        {
+            for (const auto& map : profile.maps)
+                if (const auto* known = FindExpeditionMap(expeditionMaps_, map.id)) visible.push_back(known);
+        }
+        else for (const auto& map : expeditionMaps_)
+            if (map.published) visible.push_back(&map);
+        const float height = ImGui::GetContentRegionAvail().y;
+        ImGui::BeginChild("online_assignments", ImVec2(260, height));
+        ImGui::TextUnformatted(Tr("GLOBAL OPERATIONS"));
         ImGui::Spacing();
-        if (!profile.playing.empty())
+        if (ready && ImGui::Selectable(Tr("Any map"), net.mapChoice == 0)) net.mapChoice = 0;
+        for (size_t index = 0; index < profile.maps.size(); ++index)
         {
-            ImGui::TextWrapped("Your survivor is still on %s. Wait for it to save, then return.", profile.playing.c_str());
-            if (ImGui::Button("Refresh", ImVec2(160, 0))) NetReturnToLobby({});
-            break;
+            const auto& map = profile.maps[index];
+            ImGui::PushID(static_cast<int>(index));
+            if (ImGui::Selectable(Tr(map.name.empty() ? map.id : map.name), net.mapChoice == static_cast<int>(index) + 1, 0, ImVec2(0,40)))
+            {
+                net.mapChoice = static_cast<int>(index) + 1;
+                const auto found = std::find_if(visible.begin(), visible.end(), [&](const auto* entry) { return entry->id == map.id; });
+                if (found != visible.end()) selectedWorldMap_ = static_cast<int>(found - visible.begin());
+            }
+            ImGui::PopID();
         }
-        if (profile.character)
-        {
-            ImGui::TextWrapped("Your survivor is out on %s with %zu stacks of gear.", profile.character->map.c_str(),
-                               profile.character->inventory.size());
-            if (ImGui::Button("Return to the field", ImVec2(220, 0))) net.wantDeploy = true;
-            break;
-        }
-        ImGui::TextUnformatted("Storage - choose what to take:");
+        ImGui::BeginDisabled(!ready || !profile.playing.empty());
+        if (ImGui::Button(Label(resume ? "CONTINUE EXPEDITION" : "DEPLOY"), ImVec2(-1,42))) net.wantDeploy = true;
+        ImGui::EndDisabled();
+        if (ImGui::Button(Label("PREPARE LOADOUT"), ImVec2(-1,32))) safehouseTab_ = 1;
+        ImGui::EndChild();
+        ImGui::SameLine();
+        DrawWorldAtlas(visible, height);
+    }
+    else if (!ready) ImGui::TextWrapped("%s", Tr("Log in to prepare your next expedition."));
+    else if (!profile.playing.empty())
+        ImGui::TextWrapped(Tr("Your survivor is still on %s. Wait for it to save, then return."), profile.playing.c_str());
+    else if (resume)
+    {
+        ImGui::TextWrapped(Tr("Your survivor is out on %s with %zu stacks of gear."), profile.character->map.c_str(), profile.character->inventory.size());
+        if (ImGui::Button(Label("CONTINUE EXPEDITION"))) net.wantDeploy = true;
+    }
+    else
+    {
+        ImGui::TextUnformatted(Tr("Storage - choose what to take:"));
+        ImGui::TextDisabled("%s", Tr("Equipment changes appear on your survivor."));
         if (ImGui::BeginTable("storage", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersInnerH,
-                              ImVec2(0, 300)))
+                              ImVec2(0, std::max(100.0f, ImGui::GetContentRegionAvail().y - 45))))
         {
-            ImGui::TableSetupColumn("Item");
-            ImGui::TableSetupColumn("Held", ImGuiTableColumnFlags_WidthFixed, 60);
-            ImGui::TableSetupColumn("Take", ImGuiTableColumnFlags_WidthFixed, 140);
+            ImGui::TableSetupColumn(Tr("Item"));
+            ImGui::TableSetupColumn(Tr("Held"), ImGuiTableColumnFlags_WidthFixed, 70);
+            ImGui::TableSetupColumn(Tr("Take"), ImGuiTableColumnFlags_WidthFixed, 180);
             ImGui::TableHeadersRow();
             for (size_t index = 0; index < profile.storage.size() && index < net.bring.size(); ++index)
             {
@@ -2398,34 +2486,19 @@ bool NextDayzGameInstance::DrawLobby()
                 const FItemDef* definition = FindItemDef(stack.itemId);
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                ImGui::TextUnformatted(definition ? std::string(definition->displayName).c_str() : stack.itemId.c_str());
+                ImGui::TextUnformatted(definition ? std::string(Tr(definition->displayName)).c_str() : stack.itemId.c_str());
                 ImGui::TableNextColumn();
                 ImGui::Text("%d", stack.count);
                 ImGui::TableNextColumn();
                 ImGui::PushID(static_cast<int>(index));
-                ImGui::SetNextItemWidth(130);
-                ImGui::SliderInt("##take", &net.bring[index], 0, stack.count);
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::SliderInt("##take", &net.bring[index], 0, stack.count)) net.previewDirty = true;
                 ImGui::PopID();
             }
             ImGui::EndTable();
         }
-        std::string maps = "Any map";
-        maps.push_back('\0');
-        for (const Master::FMap& map : profile.maps)
-        {
-            maps += map.name.empty() ? map.id : map.name;
-            maps.push_back('\0');
-        }
-        ImGui::SetNextItemWidth(260);
-        ImGui::Combo("Map", &net.mapChoice, maps.c_str());
-        if (ImGui::Button("Deploy", ImVec2(160, 0))) net.wantDeploy = true;
-        ImGui::SameLine();
-        if (ImGui::Button("Refresh", ImVec2(120, 0))) NetReturnToLobby({});
-        break;
     }
-    default:
-        break;
-    }
+    if (ready && ImGui::Button(Label("Refresh"))) NetReturnToLobby({});
     ImGui::End();
     return true;
 }

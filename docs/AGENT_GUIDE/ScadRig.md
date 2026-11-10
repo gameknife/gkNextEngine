@@ -65,6 +65,41 @@ anim_sit = [ ["loop", false], ["bone_root","pos",[[0,[0,0,-0.42]]]] ];   // 单�
 `FRigPreview::OnSceneUnloaded` 只清 animator/节点指针，不可清注入产物（同 AirportSim 教训）。
 回归脚本：`gnb validate --script assets/agentscripts/scadlibrary-designer.agentscript.json`。
 
+## 放样造型库 rig_forms（让刚体角色不再是方块人）
+
+`assets/scad/lib/rig_forms.scad`（前缀 `rf_`）给刚体部件提供"截面放样"，仍然是每骨骼一个刚体、无蒙皮：
+
+- **一个形体 = 沿骨骼 Z 轴的几圈截面**。`rf_loft(rings, m = 8, n = 2.6)`，ring 是
+  `[z, w, d(, x, y(, n))]`：高度、全宽、全深、截面中心偏移、可选的超椭圆指数（2 = 椭圆，
+  ~3 = 肌肉感，6+ = 倒角盒）。自下而上列出，首尾自动封盖。输出是一个 `polyhedron`，
+  8 边 6 圈约 100 个三角形。
+- **盒子做不到的三件事**：锥度（手腕比前臂细）、偏离骨轴的体积（胸、小腿肚、三角肌）、
+  **圆头并伸过枢轴**——上臂下端和前臂上端都收成圆顶并互相重叠，所以肘 / 膝 / 肩弯曲时看到的
+  是一个关节而不是一道缝。这是刚体绑定里最值钱的一条。
+- **着色**跟随加载器的 35° 折痕角：8 边保持硬朗的切面，12 边以上绕形体平滑。默认相位让
+  ±X / ±Y 轴上是一个**平面**而不是一条棱，口袋、插板、织带才有面可贴。
+- `rf_grow(rings, dw)` 把截面整体放大一圈（衣服套在身体上、绗缝层套在外套上）；
+  `rf_span(rings, z0, z1)` 取其中一段并在切口处插值（袖口、反光条、护膝都是"沿着形体的一圈"，
+  而不是套在外面的方盒）；`rf_box(size, bevel)` 是硬件细节用的倒角盒。
+
+NextDayz 是完整用例：
+
+- `characters/nextdayz_body.scad` 是幸存者的**身体形体**（`ndb_` 前缀）：躯干 / 骨盆 / 四肢的截面表
+  （`ndb_torso()` 等函数）、带下颌-颧骨-眉弓-鼻梁的头、松握拳的手、赤脚。`nextdayz_survivor.scad`
+  的 `part_*` 只是转调它们，骨架与全部 clip 不变。
+- 同一个文件还提供**服装外壳** `ndb_shell_coat / sleeve / leg / seat` 和靴子 `ndb_boot_*`。衣柜原先的
+  分层包络（外套厚 .28、袖 .158×.168、裤腿 .19×.205…）是按盒子定的，口袋、拉链、织带全都贴在
+  那些面上；外壳**在细节所在的高度保持同一包络**，只在盒子没有形状的地方做文章——收腰、斜肩到
+  领口平台、收口的袖口、圆头盖住关节、裆部内收。所以 `nextdayz_clothing.scad`（基础款）和
+  `nextdayz_clothing_heritage.scad`（史实款）换壳时细节坐标一行没动。
+- 约束仍在：衣物隐藏的是身体的渲染部件而不是骨骼；裸体躯干要留在背心内壁以内
+  （无外套时背心深度会缩到 0.78）；头要装得进原有帽盔（宽 ≤ .22、顶 ≤ .25）。
+- 手的局部坐标约定：手指沿 −Z 并朝 −Y 卷曲（掌心朝 −Y，武器 socket 与 IK 握点都在那一侧），
+  拇指在外侧。
+- 预算：裸体 15 个部件合计约 2900 三角形（`Test_ScadRig.cpp` 守着 < 3200）。
+- 快速看效果：`gnb validate --script assets/agentscripts/nextdayz-lobby-look.agentscript.json`
+  （进机舱大厅、穿一套衣服、截一张图，约 7 秒）。只改了 `.scad` 时先 `gnb build NextDayz` 同步资产。
+
 ## ScadLibrary 角色工作室（动作 + 装备）
 
 ScadLibrary 顶栏把作者工具组织成三个应用级模式，每个模式拥有独立布局：

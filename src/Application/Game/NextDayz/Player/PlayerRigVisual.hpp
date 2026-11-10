@@ -84,6 +84,7 @@ namespace NextDayz
         // Drives world transform + animation for the frame. The body yaw lags
         // state.aimYawRadians; the upper body twists to cover the difference.
         void Update(const glm::vec3& feetPosition, const FPlayerPresentationState& state, float deltaSeconds);
+        void UpdateSeated(const glm::vec3& origin, const FPlayerPresentationState& equipment, float deltaSeconds);
         void TriggerRecoil(float scale);
 
         bool HasRig() const { return hasRig_; }

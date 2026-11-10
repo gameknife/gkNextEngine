@@ -4,7 +4,7 @@ category: project
 status: 现行（MVP）
 owner: NextDayz
 created: 2026-11-05
-last_updated: 2026-11-05
+last_updated: 2026-11-10
 ---
 
 # NextDayz 持久世界与直升机撤离
@@ -17,9 +17,9 @@ last_updated: 2026-11-05
 
 | 环节 | 当前行为 |
 | --- | --- |
-| 安全屋 | 首次进入打开仓库与出击准备界面；仓库不限容量。可存取单件／整栈、穿戴衣物、选择手持武器或一键存入全部装备。 |
+| 安全屋 | 默认进入轻量直升机舱：镜头在角色左前方的坐姿高度，穿戴当前装备的角色前倾坐在画面右侧，出征与整备菜单叠在左侧。M 打开世界地图，Tab 打开仓库，Esc 返回机舱。仓库不限容量，可存取单件／整栈、穿戴、选择武器或一键入库。 |
 | 新出击 | 可携装或空手出击，不赠送消耗品；从地图标记的五个 POI 外围安全落点中随机部署。基础衣物口袋始终存在。 |
-| 中途退出 | 原地续接，恢复随身装备、生命／饥渴／伤口、视角、快捷栏、提灯、世界时间和当前撤离航班。未提交的使用／拾取动作取消。 |
+| 中途退出 | 重启先进入机舱，点击“继续出征”后原地续接，恢复随身装备、生命／饥渴／伤口、视角、快捷栏、提灯、世界时间和当前撤离航班。未提交的使用／拾取动作取消。 |
 | 地图物资 | 手摆物资、随机刷新点的内容和已拾取状态、补货计时、地面掉落均保存。沿用离开区域且不在视野内才补货的规则。 |
 | 信号枪 | 军事、警察与野外物资表低权重刷新，一次性使用。到有效停机坪按 **B** 或在背包中使用；无效位置、已有航班时不消耗。 |
 | 撤离点 | 每张地理关卡提供两处撤离区。Riverland 回归场景仍使用军事基地地面停机坪与戈尔卡医院屋顶，医院东侧外楼梯可直接步行上顶。地图物品打开的地图标记两处 `[H]` 撤离点；携带信号枪时目标栏显示最近撤离点距离和方向。 |
@@ -32,6 +32,16 @@ last_updated: 2026-11-05
 信号枪稀有度由 `Data/LootTables.cpp` 的权重决定。`assets/configs/nextdayz_extraction.json` 配置到达／降落／停留／起飞时长、呼叫／登机距离、自动存档间隔，以及特定物品售价；其余物品使用按种类固定的售价。
 
 ## 持久化与物资归属
+
+### 机舱大厅与按需加载
+
+`NextDayzLobby.cpp` 与 `assets/scad/scenes/nextdayz_helicopter_lobby.scad` 提供单机和 Master 客户端共用的大厅。机舱只实例化角色、服装和装备展示，不加载地理地图、草地、感染者、物资目录、第一人称手臂或导航。角色的 `cabin_seated` 循环沿用游戏中的骨架与穿戴节点；仓库调整会同步更新展示。机位是场景里名为 `Cabin` 的 `gk_camera` 标记（构图跟布景写在同一个 `.scad` 里），顶灯与舷窗补光是 `nextdayz.cabin.lights`、天空是 `nextdayz.cabin.env` 两个 cvar（SCAD 坐标，场景加载时生效），调氛围不需要重编。联网备装预览复用服务器的库存装配规则。
+
+部署才加载完整地图，撤离／死亡返回时卸载地图并切回机舱。Master 客户端先完成地图加载，再建立 UDP 连接和领取角色，避免网格／物理提交期间主线程无法处理网络心跳而断线。单机大厅保留独立的出征快照：在大厅保存、换装、入库都不会用空机舱覆盖地图物资、世界时钟或出征位置。地图制作模式仍直接加载其草稿；既有直接进入地图的 agent fixtures 保持原入口。
+
+运行 `gnb validate --script assets/agentscripts/nextdayz-helicopter-lobby.agentscript.json` 验证轻量启动、坐姿穿戴、地图／仓库快捷键、部署和返回后的仓库保存。`game.cabinScene`、`game.fieldAssetsLoaded`、`game.cabinPanel` 和 `game.cabinClip` 是对应查询。单独截图可用 `gnb shot --target NextDayz --scene assets/scad/scenes/nextdayz_helicopter_lobby.scad --ui`，使用隔离的验证存档。只想看角色造型与大厅观感时用 `gnb validate --script assets/agentscripts/nextdayz-lobby-look.agentscript.json`（穿一套装备后截一张图，约 7 秒）。
+
+### 存档契约
 
 - `World/Campaign` 负责仓库、黄金、出击记录与撤离状态机；`NextDayzExpedition.cpp` 连接游戏生命周期、存档、界面与输入。
 - 世界和玩家作为同一份版本化 JSON 快照提交，物资在地图、随身库存和仓库之间只保留一个归属。保存数量、枪械装弹、穿戴状态和衣物提供的容器关系。

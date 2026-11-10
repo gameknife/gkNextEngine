@@ -24,12 +24,9 @@
 // ============================================================================
 
 use <../lib/rig_humanoid.scad>
+use <nextdayz_body.scad>
 
 $fn = 8;
-
-SKIN      = [0.72, 0.52, 0.38];
-SHORTS    = [0.85, 0.85, 0.82];
-HAIR      = [0.075, 0.055, 0.04];
 
 // --- Skeleton ----------------------------------------------------------------
 // Must match the bone_* translations below; the clip generators read it.
@@ -86,65 +83,18 @@ RIG = [
 ];
 
 // --- Parts -------------------------------------------------------------------
+// The forms live in nextdayz_body.scad (shared with the wardrobe, which fits
+// garments over the same sections). Limbs are modelled for the left side.
 
-module part_pelvis()
-{
-    // The only permanent garment. Clothing hides covered body render parts,
-    // never their bones, so removing trousers restores these white shorts.
-    color(SHORTS) cube([0.35, 0.215, 0.22], center = true);
-    color([0.65, 0.65, 0.63]) translate([0, 0, 0.085]) cube([0.355, 0.22, 0.025], center = true);
-}
-
-module part_torso()
-{
-    color(SKIN) hull()
-    {
-        translate([0, 0, 0.08]) cube([0.31, 0.19, 0.16], center = true);
-        translate([0, 0, 0.38]) cube([0.39, 0.225, 0.22], center = true);
-    }
-}
-
-module part_head()
-{
-    color(SKIN) translate([0, -0.005, 0.12]) cube([0.22, 0.22, 0.24], center = true);
-    // Neck belongs to the head, so hiding the torso under a coat keeps it.
-    color(SKIN) translate([0, 0, -0.10]) cylinder(h = 0.135, r = 0.065);
-    color(SKIN) translate([0, -0.127, 0.11]) cube([0.045, 0.035, 0.055], center = true);
-    color(HAIR) translate([0, 0.005, 0.23]) cube([0.225, 0.225, 0.04], center = true);
-    for (s = [-1, 1])
-        color([0.035, 0.035, 0.03]) translate([s * 0.052, -0.118, 0.155]) cube([0.025, 0.008, 0.015], center = true);
-}
-
-module part_upperarm()
-{
-    color(SKIN) translate([0, 0, -0.155]) cube([0.12, 0.13, 0.31], center = true);
-}
-
-module part_forearm()
-{
-    color(SKIN) translate([0, 0, -0.145]) cube([0.105, 0.115, 0.29], center = true);
-}
-
-module part_hand()
-{
-    color(SKIN) translate([0, -0.01, -0.06]) cube([0.105, 0.11, 0.12], center = true);
-}
-
-module part_thigh()
-{
-    color(SKIN) translate([0, 0, -0.22]) cube([0.16, 0.17, 0.44], center = true);
-    color(SHORTS) translate([0, 0, -0.05]) cube([0.175, 0.185, 0.10], center = true);
-}
-
-module part_calf()
-{
-    color(SKIN) translate([0, 0, -0.21]) cube([0.135, 0.145, 0.42], center = true);
-}
-
-module part_foot()
-{
-    color(SKIN) translate([0, -0.07, 0.06]) cube([0.17, 0.31, 0.12], center = true);
-}
+module part_pelvis() { ndb_part_pelvis(); }
+module part_torso() { ndb_part_torso(); }
+module part_head() { ndb_part_head(); }
+module part_upperarm() { ndb_part_upperarm(); }
+module part_forearm() { ndb_part_forearm(); }
+module part_hand() { ndb_part_hand(); }
+module part_thigh() { ndb_part_thigh(); }
+module part_calf() { ndb_part_calf(); }
+module part_foot() { ndb_part_foot(); }
 
 // --- Bones -------------------------------------------------------------------
 
@@ -353,6 +303,37 @@ CROUCH_BASE = [
 
 anim_stand_idle  = nd_breath_clip(STAND_BASE, 3.2, 1.0);
 anim_crouch_idle = nd_breath_clip(CROUCH_BASE, 2.8, 0.8);
+
+// Cabin bench: hunched forward on the cushion, forearms across the thighs,
+// hands loose between the knees, eyes on the deck ahead. The wrists are
+// root-space targets re-solved on every key, so the hands stay put while the
+// chest breathes. Clothes use the same bones as gameplay and follow the pose.
+SEAT_WRIST_L = [[ 0.075, -0.50, 0.600], [-38, 0, -42]];
+SEAT_WRIST_R = [[-0.045, -0.53, 0.570], [-46, 0,  48]];
+SEAT_ELBOW_L = [ 0.36, -0.22, 0.70];
+SEAT_ELBOW_R = [-0.36, -0.22, 0.70];
+
+function nd_in_torso(tr, frame) =
+    let(f = rh_fx(rh_finv(tr), rh_frame(frame[0], frame[1]))) [f[0], rh_e(f[1])];
+
+// phase 0..1 over one breath; glance 0..1 turns the head toward the door.
+function nd_seat_key(phase, glance = 0) =
+    let(b = sin(360 * phase),
+        pelvis = [0, 0.02, -0.36 - 0.003 * b],
+        pelvisRot = [11, 0, -3],
+        torso = [29 + 1.1 * b, 0, 5],
+        tr = rh_torso_frame(SKEL, pelvis, pelvisRot, torso))
+    [["pelvis", pelvis], ["pelvis_rot", pelvisRot], ["torso", torso],
+     ["head", [-20 - 0.6 * b - 6 * glance, -3, 4 + 22 * glance]],
+     ["foot_l", [0.25, -0.50, 14, 0]], ["foot_r", [-0.23, -0.40, -18, 0]],
+     ["wrist_l", nd_in_torso(tr, SEAT_WRIST_L)], ["wrist_r", nd_in_torso(tr, SEAT_WRIST_R)],
+     ["pole_l", nd_in_torso(tr, [SEAT_ELBOW_L, [0, 0, 0]])[0]],
+     ["pole_r", nd_in_torso(tr, [SEAT_ELBOW_R, [0, 0, 0]])[0]]];
+
+// Three breaths; on the last one he looks up toward the open door and back.
+function nd_seat_glance(t) = rh_smooth((t - 8.6) / 1.4) * (1 - rh_smooth((t - 11.2) / 1.6));
+anim_cabin_seated = rh_free_body_clip(SKEL, [for (i = [0 : 36])
+    let(t = 13.2 * i / 36) [t, nd_seat_key(t / 4.4, nd_seat_glance(t))]], true);
 
 // --- Weapon holds (upper body) -------------------------------------------------
 // Torso/head carry the blade; layered additively over locomotion at runtime.

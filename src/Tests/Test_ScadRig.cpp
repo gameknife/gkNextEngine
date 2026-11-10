@@ -643,7 +643,9 @@ TEST_CASE("ScadRig loads the articulated NextDayz survivor contract", "[Unit][Sc
     }
     INFO("NextDayz survivor triangles: " << triangles);
     CHECK(triangles > 0);
-    CHECK(triangles < 1500);
+    // Lofted body forms (nextdayz_body.scad): tapered limbs, a shaped head and hands.
+    // The box body was under 1500; this stays a low-poly budget, just not a toy one.
+    CHECK(triangles < 3200);
 }
 
 namespace

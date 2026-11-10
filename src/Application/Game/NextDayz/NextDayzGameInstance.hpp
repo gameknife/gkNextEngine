@@ -78,6 +78,37 @@ public:
 private:
     ImFont* inventoryTitleFont_ = nullptr;
 
+    static constexpr const char* cabinScenePath = "assets/scad/scenes/nextdayz_helicopter_lobby.scad";
+    void LoadFieldAssets();
+    void RequestCabin();
+    void InitializeCabinCampaign();
+    void TickCabin(float dt);
+    void DrawCabinMenu(const std::string& status, bool canDeploy, bool resume, bool& deploy);
+    void BeginCabinPanel(const char* title);
+    bool cabinLobby_ = false;
+    bool cabinScene_ = false;
+    bool loadingCabin_ = false;
+    bool fieldAssetsLoaded_ = false;
+    float cabinSeconds_ = 0.0f;
+    std::optional<NextDayz::FCampaignSave> cabinCampaign_;
+    // Cabin presentation. The shot is the scene's "Cabin" gk_camera, so framing is
+    // authored next to the set; lamps and sky are cvars so the mood can be tuned live.
+    void ConfigureCabinCVars(NextCVar::FCVarSystem& cvars);
+    void InjectCabinLights(std::vector<std::shared_ptr<Assets::Node>>& nodes, std::vector<Assets::Model>& models,
+                           std::vector<Assets::FMaterial>& materials);
+    void ApplyCabinEnvironment();
+    void BindCabinCamera();
+    glm::mat4 cabinView_{1.0f};
+    float cabinFov_ = 48.0f;
+    float cabinAperture_ = 0.0f;
+    float cabinFocal_ = 0.0f;
+    // SCAD space (metres, Z-up): "x y z  nx ny nz  size  r g b  intensity; ..."
+    // A warm dome lamp over the survivor (key) and dusk through the port door window (fill).
+    std::string cabinLights_ = "0.55 -0.25 2.14  -0.45 0.05 -1  0.26  1.0 0.24 0.12  1200;"
+                               "-1.64 -0.72 1.35  1 0 0  0.62  0.25 0.55 0.70  16";
+    // "skyIntensity skyR skyG skyB  sunIntensity sunR sunG sunB  sunRotation sunElevation"
+    std::string cabinEnv_ = "16 0.45 0.72 0.95  0 1 0.83 0.63  0.37 0.28";
+
     // One simulation frame (OnTick wraps it with the debugger's freeze/step/timers).
     void SimulateFrame(float dt);
     bool CampaignEnabled() const;
@@ -91,6 +122,7 @@ private:
     std::string ActiveMapId() const;
     void RequestExpeditionMap(const NextDayz::FExpeditionMap& map, bool deploy);
     void DrawWorldOperations();
+    void DrawWorldAtlas(const std::vector<const NextDayz::FExpeditionMap*>& visible, float availableHeight);
     void LoadWorldAtlas();
     void TickMapAuthoring();
     enum class ESafehouseReturn
@@ -312,7 +344,7 @@ private:
     std::vector<std::filesystem::path> authoringWatchFiles_;
     std::chrono::steady_clock::time_point authoringNextPoll_{};
     std::string validationDeployMap_;
-    int safehouseTab_ = 0;
+    int safehouseTab_ = -1; // -1 cabin, 0 world map, 1 storage
     int selectedWorldMap_ = 0;
     float atlasZoom_ = 1.0f;
     glm::vec2 atlasPan_{};

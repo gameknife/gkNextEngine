@@ -29,6 +29,7 @@ std::string NextDayzGameInstance::ActiveMapId() const
 void NextDayzGameInstance::InitializeCampaign()
 {
     if (!CampaignEnabled()) return;
+    if (cabinScene_) { InitializeCabinCampaign(); return; }
     switchingCampaignContext_ = false;
     std::string error;
     if (!NextDayz::LoadExtractionConfig(Utilities::FileHelper::ResolvePlatformFilePath(
@@ -49,6 +50,24 @@ void NextDayzGameInstance::InitializeCampaign()
         auto saved = std::move(*pendingCampaign_);
         pendingCampaign_.reset();
         bool upgraded = false;
+        const auto* destination = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_);
+        const bool legacy = saved.map == NextDayz::LegacyRiverlandScene;
+        const std::string retired = NextDayz::RetiredExpeditionMapId(expeditionMaps_, saved.map);
+        if (saved.map != campaignMap_ && destination && (legacy || !retired.empty()))
+        {
+            const auto archive = std::filesystem::path(campaignPath_.string() +
+                (legacy ? ".riverland-backup" : fmt::format(".retired-{}-backup", retired)));
+            if ((!std::filesystem::exists(archive, ec) && !NextDayz::WriteCampaignSave(archive, saved, error)) || ec ||
+                !NextDayz::RetireExpeditionCampaign(saved, *destination,
+                    {loot_.Capture(), time_.Capture(), destination->version}, player_.Position(),
+                    legacy ? std::string(NextDayz::LegacyRiverlandScene) : retired, "RETURNED / REGION RETIRED"))
+            {
+                campaignSaveBlocked_ = true;
+                saveError_ = error.empty() ? "Cannot migrate retired region" : error;
+                campaignMessage_ = NextDayz::L10n::FText("Cannot restore expedition: ") + saveError_;
+                return;
+            }
+        }
         if (const auto* map = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_);
             map && saved.mapVersion < map->version)
         {
@@ -188,6 +207,20 @@ void NextDayzGameInstance::InitializeCampaign()
 
 NextDayz::FCampaignSave NextDayzGameInstance::CaptureCampaign() const
 {
+    if (cabinScene_ && cabinCampaign_)
+    {
+        auto saved = *cabinCampaign_;
+        saved.campaign = campaign_;
+        auto inventory = inventory_;
+        weapons_.CopyMagazinesTo(inventory);
+        saved.inventory = inventory.Capture();
+        saved.weaponSlots = {weapons_.SlotInstance(0), weapons_.SlotInstance(1), weapons_.SlotInstance(2)};
+        saved.activeSlot = weapons_.ActiveSlot();
+        saved.previousSlot = weapons_.PreviousSlot();
+        saved.sessionRng = sessionRng_.State();
+        saved.survivalRng = survivalRng_.State();
+        return saved;
+    }
     NextDayz::FCampaignSave saved;
     saved.map = campaignMap_;
     saved.campaign = campaign_;
@@ -311,8 +344,38 @@ bool NextDayzGameInstance::RestoreCampaign(const NextDayz::FCampaignSave& saved)
 
 void NextDayzGameInstance::Deploy()
 {
-    if (!CampaignEnabled() || campaign_.inField || campaignSaveBlocked_) return;
-    if (pendingCampaign_) return;
+    if (!CampaignEnabled() || campaignSaveBlocked_ || pendingCampaign_) return;
+    if (cabinScene_ && cabinCampaign_ && campaign_.inField)
+    {
+        std::string targetScene = campaignMap_;
+        if (const auto* map = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_);
+            map && cabinCampaign_->mapVersion < map->version)
+        {
+            targetScene = map->scene;
+            pendingDeployment_ = true;
+        }
+        else if (campaignMap_ == NextDayz::LegacyRiverlandScene ||
+            !NextDayz::RetiredExpeditionMapId(expeditionMaps_, campaignMap_).empty())
+        {
+            const auto replacement = std::find_if(expeditionMaps_.begin(), expeditionMaps_.end(),
+                [](const auto& map) { return map.published && !map.training; });
+            if (replacement == expeditionMaps_.end()) { campaignMessage_ = "No available assignment"; return; }
+            targetScene = replacement->scene;
+            pendingDeployment_ = true;
+        }
+        if (!std::filesystem::exists(Utilities::FileHelper::ResolvePlatformFilePath(targetScene.c_str())))
+        {
+            pendingDeployment_ = false;
+            campaignMessage_ = "Assignment unavailable: scene files are missing";
+            return;
+        }
+        pendingCampaign_ = CaptureCampaign();
+        loadingMapPath_ = targetScene;
+        loadingCabin_ = false;
+        GetEngine().RequestLoadScene({.filename = loadingMapPath_});
+        return;
+    }
+    if (campaign_.inField) return;
     std::vector<const NextDayz::FExpeditionMap*> available;
     for (const auto& map : expeditionMaps_)
         if (NextDayz::IsDispatchable(map, authoringMode_)) available.push_back(&map);
@@ -327,7 +390,7 @@ void NextDayzGameInstance::Deploy()
             selected = NextDayz::FindExpeditionMap(expeditionMaps_, validationDeployMap_);
         if (!selected) { campaignMessage_ = "No available assignment"; return; }
         const std::string& targetScene = authoringMode_ ? selected->draftScene : selected->scene;
-        if (targetScene != campaignMap_)
+        if (targetScene != campaignMap_ || cabinScene_)
         {
             RequestExpeditionMap(*selected, true);
             return;
@@ -375,6 +438,7 @@ void NextDayzGameInstance::RequestExpeditionMap(const NextDayz::FExpeditionMap& 
     loadingMapPath_ = targetScene;
     campaignMessage_ = "Preparing classified deployment...";
     SetMouseCaptured(false);
+    loadingCabin_ = false;
     GetEngine().RequestLoadScene({.filename = targetScene});
 }
 
@@ -453,7 +517,8 @@ void NextDayzGameInstance::ReturnToSafehouse(ESafehouseReturn reason)
     SyncClothingVisuals();
     rescueHelicopter_.Update(GetEngine().GetScene(), campaign_.flight, extractionConfig_, 0.0f);
     SetMouseCaptured(false);
-    SaveCampaign();
+    if (cabinLobby_) RequestCabin();
+    else SaveCampaign();
 }
 
 void NextDayzGameInstance::DebugExpeditionAction(NextDayz::Debug::EExpeditionAction action)
@@ -567,7 +632,7 @@ std::string NextDayzGameInstance::ExtractionPrompt() const
 
 bool NextDayzGameInstance::DrawSafehouse()
 {
-    if (campaign_.inField && !campaignSaveBlocked_)
+    if (!cabinScene_ && campaign_.inField && !campaignSaveBlocked_)
     {
         if (campaign_.flight.boarded)
         {
@@ -580,38 +645,30 @@ bool NextDayzGameInstance::DrawSafehouse()
     }
     SetMouseCaptured(false);
     weapons_.SetPresentationSuppressed(true);
-    const auto* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(viewport->WorkPos);
-    ImGui::SetNextWindowSize(viewport->WorkSize);
-    ImGui::SetNextWindowBgAlpha(0.97f);
-    ImGui::Begin(NextDayz::L10n::Label("NEXTDAYZ / SAFEHOUSE"), nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove);
-    ImGui::SetWindowFontScale(1.5f);
-    ImGui::TextUnformatted(NextDayz::L10n::Tr("SAFEHOUSE"));
-    ImGui::SetWindowFontScale(1.0f);
-    ImGui::SameLine();
-    ImGui::Text(NextDayz::L10n::Tr("  Gold: %llu   |   Expeditions: %llu   |   Extracted: %llu"),
-        static_cast<unsigned long long>(campaign_.gold), static_cast<unsigned long long>(campaign_.sorties),
-        static_cast<unsigned long long>(campaign_.extractions));
-    NextDayz::L10n::DrawLanguageSelector();
-    ImGui::TextWrapped("%s", campaignMessage_.c_str());
-    ImGui::TextDisabled(NextDayz::L10n::Tr("Sell surplus supplies to clear storage and build your gold reserves."));
+    bool deploy = false;
+    const auto records = NextDayz::L10n::Format("Gold: {}  |  Expeditions: {}  |  Extracted: {}",
+        campaign_.gold, campaign_.sorties, campaign_.extractions);
+    DrawCabinMenu(records + "\n" + campaignMessage_.Display(), !campaignSaveBlocked_ && !pendingCampaign_, campaign_.inField, deploy);
+    if (deploy) Deploy();
     if (campaignSaveBlocked_)
     {
+        BeginCabinPanel("CAMPAIGN UNAVAILABLE");
         ImGui::TextWrapped("%s", saveError_.c_str());
-        if (ImGui::Button(NextDayz::L10n::Label("RETRY SAVE")) && !saveError_.empty())
-        {
-            // A load failure must never overwrite the unreadable original.
-            if (!campaignMessage_.starts_with("Cannot load"))
-            { campaignSaveBlocked_ = false; SaveCampaign(); }
-        }
+        if (ImGui::Button(NextDayz::L10n::Label("RETRY SAVE")) && !saveError_.empty() &&
+            !campaignMessage_.starts_with("Cannot load"))
+        { campaignSaveBlocked_ = false; SaveCampaign(); }
         ImGui::End();
         return true;
     }
-    ImGui::Spacing();
-    if (ImGui::Button(NextDayz::L10n::Label("WORLD / OPERATIONS"), ImVec2(210, 36))) safehouseTab_ = 0;
-    ImGui::SameLine();
-    if (ImGui::Button(NextDayz::L10n::Label("STORAGE / LOADOUT"), ImVec2(210, 36))) safehouseTab_ = 1;
-    ImGui::Separator();
+    if (safehouseTab_ < 0) return true;
+    BeginCabinPanel(safehouseTab_ == 0 ? "WORLD / OPERATIONS" : "STORAGE / LOADOUT");
+    if (campaign_.inField)
+    {
+        ImGui::TextWrapped("%s", NextDayz::L10n::Tr("Your expedition is saved. Continue when ready."));
+        if (ImGui::Button(NextDayz::L10n::Label("CONTINUE EXPEDITION"))) Deploy();
+        ImGui::End();
+        return true;
+    }
     if (safehouseTab_ == 0)
     {
         DrawWorldOperations();
@@ -731,6 +788,7 @@ void NextDayzGameInstance::ConfigureCampaignCVars(NextCVar::FCVarSystem& cvars)
             // loading a fresh scene into the other context's isolated save.
             if (!SaveCampaign()) { authoringMode_ = !authoringMode_; return; }
             switchingCampaignContext_ = true;
+            loadingCabin_ = false;
             loadingMapPath_ = campaignMap_;
             GetEngine().RequestLoadScene({.filename = campaignMap_});
         });
@@ -771,7 +829,11 @@ void NextDayzGameInstance::CampaignValidationCommand()
     }
     else if (command == "deploy") Deploy();
     else if (command == "save") SaveCampaign();
-    else if (command == "rebuild") GetEngine().RequestLoadScene({.filename = campaignMap_});
+    else if (command == "rebuild")
+    {
+        loadingCabin_ = cabinScene_;
+        GetEngine().RequestLoadScene({.filename = cabinScene_ ? cabinScenePath : campaignMap_});
+    }
     else if (command == "reload")
     {
         NextDayz::FCampaignSave saved;

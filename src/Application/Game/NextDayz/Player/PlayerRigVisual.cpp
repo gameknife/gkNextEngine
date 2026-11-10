@@ -1275,6 +1275,29 @@ namespace NextDayz
         }
     }
 
+    void PlayerRigVisual::UpdateSeated(const glm::vec3& origin, const FPlayerPresentationState& equipment,
+                                      float deltaSeconds)
+    {
+        if (!bound_ || !worldNode_) return;
+        worldNode_->Translation() = origin;
+        worldNode_->Rotation() = glm::quat(1,0,0,0);
+        worldNode_->RecalcTransform(true);
+        for (auto layer : {holdLayer_, holdBodyLayer_, weaponActionLayer_, weaponActionBodyLayer_, recoilLayer_, actionLayer_})
+            animator_.SetLayerWeight(layer, 0.0f);
+        animator_.SetLayerWeight(locomotionLayer_, 1.0f);
+        const auto* seated = asset_.FindClip("cabin_seated");
+        animator_.SetLoopBlend(locomotionLayer_, {{seated, 1.0f}}, "cabin", 1.0f, 0.0f);
+        baseClipName_ = seated ? seated->name : "";
+        // Stow every weapon while seated. The Switch presentation flag exposes
+        // all holsters without moving the hands away from the seated clip.
+        auto stowed = equipment;
+        stowed.hasWeapon = false;
+        stowed.weaponAction = EWeaponPresentationAction::Switch;
+        UpdateAttachments(stowed);
+        animator_.Update(std::max(0.0f, deltaSeconds));
+        if (scene_) scene_->MarkTransformDirty();
+    }
+
     void PlayerRigVisual::Update(const glm::vec3& feetPosition, const FPlayerPresentationState& state,
                                  float deltaSeconds)
     {

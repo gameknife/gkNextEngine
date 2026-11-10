@@ -16,7 +16,11 @@
 //     电介质高光，看起来像塑料。布料的质感靠 gk_texture()：斜纹 twill / 帆布 canvas 织纹，
 //     迷彩是印在斜纹上的过程纹理（woodland / digital / desert / flora / rain）。
 //   * 只有皮革、橡胶、漆面、塑料扣、金属件带高光，各自用不同的粗糙度 / 金属度。
-// 每个部件不超过 16 种材质（颜色 × 粗糙度 × 金属度 × 纹理各算一种）。本文件不 use 其他服装文件。
+// 每个部件不超过 16 种材质（颜色 × 粗糙度 × 金属度 × 纹理各算一种）。本文件不 use 其他服装文件；
+// 外套 / 袖 / 裤的外壳来自 nextdayz_body.scad 的 ndb_shell_*（与原盒子同一包络的放样形体）。
+
+use <../lib/rig_forms.scad>
+use <nextdayz_body.scad>
 
 // ---------------- 材质 ----------------
 // 布料：漫反射；weave 非空时叠一层织纹（最终颜色 = c × 织纹明暗）
@@ -89,11 +93,7 @@ function ndh_td(z) = z < 0.105 ? 0.26 : z > 0.245 ? 0.28 : 0.26 + (z - 0.105) / 
 
 module ndh_coat_shell(fabric)
 {
-    ndh_fabric(fabric) hull()
-    {
-        translate([0, 0, 0.04]) ndh_box([0.37, 0.26, 0.13]);
-        translate([0, 0, 0.37]) ndh_box([0.425, 0.28, 0.25]);
-    }
+    ndh_fabric(fabric) ndb_shell_coat();
 }
 
 // 翻领 + 肩章 + 门襟纽扣（阿富汗卡 / BDU / 东德野战服共用）
@@ -396,7 +396,7 @@ module ndh_sleeve(cut, fabric, forearm = false)
     }
     else
     {
-        ndh_fabric(fabric) translate([0, 0, -len / 2]) ndh_box([width, depth, len + 0.018]);
+        ndh_fabric(fabric) ndb_shell_sleeve(forearm);
         if (cut == "gorka")
         {
             ndh_fabric("gorka_patch")
@@ -514,7 +514,7 @@ module ndh_boot_leather(style) ndh_leather(ndh_boot_c(style), ndh_boot_r(style))
 module ndh_pelvis(cut, fabric)
 {
     $fn = 10;
-    ndh_fabric(fabric) ndh_box([0.375, 0.245, 0.235]);
+    ndh_fabric(fabric) ndb_shell_seat();
     if (cut == "afganka")
     {
         // 苏军士兵皮腰带 + 黄铜星徽扣
@@ -560,7 +560,7 @@ module ndh_leg(cut, fabric, calf = false)
     big = cut == "bdu" || cut == "emr";   // 风箱式大货袋
     if (!calf)
     {
-        ndh_fabric(fabric) translate([0, 0, -len / 2]) ndh_box([width, depth, len + 0.018]);
+        ndh_fabric(fabric) ndb_shell_leg(false);
         if (cut != "gorka")
         {
             // 大腿外侧大口袋 + 袋盖（BDU / EMR 是风箱式大货袋）
@@ -575,7 +575,7 @@ module ndh_leg(cut, fabric, calf = false)
     else
     {
         // 裤腿（到靴筒顶）+ 靴筒
-        ndh_fabric(fabric) translate([0, 0, -top / 2 + 0.009]) ndh_box([width, depth, top + 0.018]);
+        ndh_fabric(fabric) ndb_band(ndb_trouser_calf(), -top, 0.050, 0);
         ndh_boot_leather(style) translate([0, 0, (shaft - len) / 2])
             ndh_box([width + 0.006, depth + 0.006, len + shaft + 0.004], 0.010);
         if (style == "laced" || style == "laced_brown" || style == "desert")

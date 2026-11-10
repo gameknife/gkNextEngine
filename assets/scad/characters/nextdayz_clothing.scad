@@ -12,6 +12,8 @@
 // covered skin/shorts are hidden. Pack/harness and stowed guns get runtime
 // clearance for the current outer layers. No skinning or cloth simulation.
 
+use <../lib/rig_forms.scad>
+use <nextdayz_body.scad>
 use <nextdayz_clothing_heritage.scad>
 
 $fn = 8;
@@ -44,11 +46,7 @@ module ndc_box(size, bevel = 0.012)
 
 module ndc_coat_torso(style = 0)
 {
-    color(ndc_coat(style)) hull()
-    {
-        translate([0, 0, 0.04]) ndc_box([0.37, 0.26, 0.13]);
-        translate([0, 0, 0.37]) ndc_box([0.425, 0.28, 0.25]);
-    }
+    color(ndc_coat(style)) ndb_shell_coat();
     // Zipper and pull sit below the carrier's front face, with low pockets
     // below its hem so both silhouettes can be worn together.
     color(ndc_zip()) translate([0, -0.144, 0.245]) cube([0.012, 0.008, 0.47], center = true);
@@ -72,9 +70,9 @@ module ndc_coat_torso(style = 0)
     }
     if (style == 2)
     {
-        // Raised quilt chambers on front and back stay inside the carrier envelope.
-        for (z = [0.09, 0.18, 0.27, 0.36, 0.45], side = [-1, 1])
-            color(ndc_coat(style) * 1.08) translate([0, side * 0.128, z]) ndc_box([0.39, 0.048, 0.074], 0.015);
+        // Quilt chambers wrap the whole shell and stay inside the carrier envelope.
+        for (z = [0.02, 0.11, 0.20, 0.29, 0.38])
+            color(ndc_coat(style) * 1.08) ndb_band(ndb_coat(), z, z + 0.074, 0.014, m = 12, n = 10);
     }
     if (style == 3)
     {
@@ -104,16 +102,22 @@ module ndc_sleeve(style = 0, forearm = false)
     len = forearm ? 0.29 : 0.31;
     width = forearm ? 0.137 : 0.158;
     depth = forearm ? 0.147 : 0.168;
-    color(ndc_coat(style)) translate([0, 0, -len / 2]) ndc_box([width, depth, len + 0.018]);
+    rings = forearm ? ndb_sleeve_fore() : ndb_sleeve_upper();
+    tape = style == 5 ? 0.018 : 0.006;
+    color(ndc_coat(style)) ndb_shell_sleeve(forearm);
     if (style == 2)
-        for (z = [-0.055, -0.135, -0.215])
-            color(ndc_coat(style) * 1.08) translate([0, 0, z]) ndc_box([width + 0.009, depth + 0.009, 0.065], 0.015);
+        for (z = [-0.095, -0.175, -0.255])
+            color(ndc_coat(style) * 1.08) ndb_band(rings, z, z + 0.066, 0.012);
     if (style == 3 || style == 5)
-        color(ndc_reflect()) translate([0, 0, -0.20]) ndc_box([width + 0.006, depth + 0.006, style == 5 ? 0.035 : 0.012], 0.005);
+        color(ndc_reflect()) ndb_band(rings, -0.20 - tape, -0.20 + tape, 0.006);
     if (style == 4)
         color([0.29, 0.32, 0.32]) translate([0.02, -depth / 2 - 0.004, -len / 2]) cube([0.006, 0.008, len - 0.04], center = true);
     if (forearm)
-        color(ndc_zip()) translate([0, 0, -len + 0.022]) ndc_box([width + 0.004, depth + 0.004, 0.035], 0.006);
+    {
+        // Knit cuff and a reinforced elbow.
+        color(ndc_zip()) ndb_band(rings, -0.299, -0.262, 0.010);
+        color(ndc_coat(style) * 0.86) ndb_band(rings, -0.085, 0.030, 0.008);
+    }
     else
     {
         color(ndc_web()) translate([0.081, 0, -0.105]) ndc_box([0.012, 0.09, 0.065], 0.004);
@@ -198,7 +202,7 @@ module ndc_vest(style = 0)
 
 module ndc_pelvis(style = 0)
 {
-    color(ndc_pants(style)) ndc_box([0.375, 0.245, 0.235]);
+    color(ndc_pants(style)) ndb_shell_seat();
     color(ndc_web()) translate([0, 0, 0.08]) ndc_box([0.385, 0.252, 0.035], 0.006);
     color([0.24, 0.25, 0.23]) translate([0, -0.132, 0.08]) cube([0.045, 0.013, 0.03], center = true);
 }
@@ -208,7 +212,7 @@ module ndc_leg(style = 0, calf = false)
     len = calf ? 0.42 : 0.44;
     width = calf ? 0.165 : 0.19;
     depth = calf ? 0.18 : 0.205;
-    color(ndc_pants(style)) translate([0, 0, -len / 2]) ndc_box([width, depth, len + 0.018]);
+    color(ndc_pants(style)) ndb_shell_leg(calf);
     if (!calf && (style == 1 || style == 3))
     {
         color(ndc_pants(style) * 0.8) translate([0.107, 0.015, -0.20]) ndc_box([0.042, 0.15, 0.17]);
@@ -240,13 +244,17 @@ module ndc_leg(style = 0, calf = false)
 
 module ndc_boot(style = 0)
 {
-    color(style == 2 ? [0.18, 0.19, 0.20] : style == 3 ? [0.22, 0.18, 0.12] : [0.065, 0.06, 0.05])
-        translate([0, -0.07, 0.065]) ndc_box([0.175, 0.315, 0.13]);
-    color(style == 2 ? ndc_reflect() : ndc_web()) translate([0, -0.07, 0.015]) ndc_box([0.18, 0.32, 0.03], 0.005);
-    color(style == 3 ? [0.22, 0.18, 0.12] : [0.10, 0.095, 0.08]) translate([0, 0.005, style == 2 ? 0.10 : 0.14])
-        ndc_box([0.16, 0.16, style == 2 ? 0.08 : 0.13]);
-    for (z = [0.095, 0.125, 0.155])
-        color([0.22, 0.21, 0.18]) translate([0, -0.08, z]) cube([0.09, 0.012, 0.008], center = true);
+    leather = style == 2 ? [0.18, 0.19, 0.20] : style == 3 ? [0.22, 0.18, 0.12] : [0.065, 0.06, 0.05];
+    shaft = style == 2 ? 0.150 : 0.205;
+    gk_material(leather, roughness = 0.6) ndb_boot_upper(shaft);
+    gk_material(style == 2 ? ndc_reflect() : [0.04, 0.04, 0.038], roughness = 0.85) ndb_boot_sole();
+    // Padded collar, toe cap seam and laces.
+    gk_material(style == 3 ? [0.16, 0.13, 0.09] : [0.10, 0.095, 0.08], roughness = 0.7)
+    {
+        translate([0, 0.004, shaft - 0.012]) rf_box([0.166, 0.180, 0.030], 0.010);
+        translate([0, -0.150, 0.092]) rotate([-12, 0, 0]) cube([0.150, 0.008, 0.008], center = true);
+    }
+    color([0.22, 0.21, 0.18]) ndb_boot_laces(shaft);
 }
 
 module ndc_helmet(shell = [0.145, 0.17, 0.13])

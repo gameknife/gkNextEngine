@@ -1,0 +1,363 @@
+{
+  "name": "nextdayz-helicopter-lobby",
+  "target": "NextDayz",
+  "viewport": {
+    "width": 1600,
+    "height": 900
+  },
+  "args": [
+    "--cvar",
+    "nextdayz.validation.campaign true",
+    "--cvar",
+    "nextdayz.validation.campaignFresh true",
+    "--cvar",
+    "nextdayz.validation.campaignPath out/nextdayz-validation/helicopter-lobby.json"
+  ],
+  "defaults": {
+    "waitFrames": 2,
+    "stepTimeoutMs": 180000
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "assert",
+      "query": "game.cabinScene",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "assert",
+      "query": "game.fieldAssetsLoaded",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "assert",
+      "query": "scene.nodeCount",
+      "op": "le",
+      "value": 350
+    },
+    {
+      "type": "assert",
+      "query": "game.navBuildCount",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "assert",
+      "query": "game.activeZombies",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "assert",
+      "query": "game.cabinClip",
+      "op": "eq",
+      "value": "cabin_seated"
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignSaveBlocked",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "click",
+      "at": {
+        "norm": [
+          0.5,
+          0.12
+        ]
+      },
+      "button": "left"
+    },
+    {
+      "type": "assert",
+      "query": "game.mouseCaptured",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "key",
+      "code": "F12",
+      "action": "press"
+    },
+    {
+      "type": "wait-frames",
+      "n": 2
+    },
+    {
+      "type": "assert",
+      "query": "game.language",
+      "op": "eq",
+      "value": "en"
+    },
+    {
+      "type": "key",
+      "code": "F12",
+      "action": "press"
+    },
+    {
+      "type": "wait-frames",
+      "n": 2
+    },
+    {
+      "type": "assert",
+      "query": "game.language",
+      "op": "eq",
+      "value": "zhCN"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "jacket"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "jacket"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "cargo_pants"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "cargo_pants"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "backpack_small"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "backpack_small"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "helmet"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "helmet"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "vest_military"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "vest_military"
+    },
+    {
+      "type": "assert",
+      "query": "game.clothingVisuals",
+      "op": "contains",
+      "value": "jacket:5;"
+    },
+    {
+      "type": "wait-frames",
+      "n": 90
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_helicopter_cabin",
+      "ui": true
+    },
+    {
+      "type": "key",
+      "code": "M",
+      "action": "press"
+    },
+    {
+      "type": "wait-frames",
+      "n": 3
+    },
+    {
+      "type": "assert",
+      "query": "game.cabinPanel",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_helicopter_map",
+      "ui": true
+    },
+    {
+      "type": "key",
+      "code": "Escape",
+      "action": "press"
+    },
+    {
+      "type": "wait-frames",
+      "n": 3
+    },
+    {
+      "type": "assert",
+      "query": "game.cabinPanel",
+      "op": "eq",
+      "value": -1
+    },
+    {
+      "type": "key",
+      "code": "Tab",
+      "action": "press"
+    },
+    {
+      "type": "wait-frames",
+      "n": 3
+    },
+    {
+      "type": "assert",
+      "query": "game.cabinPanel",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_helicopter_storage",
+      "ui": true
+    },
+    {
+      "type": "assert",
+      "query": "game.fieldAssetsLoaded",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "save"
+    },
+    {
+      "type": "key",
+      "code": "Escape",
+      "action": "press"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.deployMap",
+      "set": "training_ground"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "deploy"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.campaignInField",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "assert",
+      "query": "game.cabinScene",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "assert",
+      "query": "game.fieldAssetsLoaded",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "assert",
+      "query": "game.activeMapId",
+      "op": "eq",
+      "value": "training_ground"
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignSaveBlocked",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "assert",
+      "query": "game.clothingVisuals",
+      "op": "contains",
+      "value": "jacket:5;"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "food_can"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.expedition",
+      "set": "return"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.cabinScene",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignInField",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignStorage",
+      "op": "ge",
+      "value": 6
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignSaveBlocked",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "assert",
+      "query": "scene.nodeCount",
+      "op": "le",
+      "value": 350
+    },
+    {
+      "type": "key",
+      "code": "Tab",
+      "action": "press"
+    },
+    {
+      "type": "wait-frames",
+      "n": 3
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_helicopter_returned",
+      "ui": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "save"
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

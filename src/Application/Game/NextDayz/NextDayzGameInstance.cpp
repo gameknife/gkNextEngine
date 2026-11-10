@@ -159,6 +159,62 @@ void NextDayzGameInstance::OnInit()
     {
         SPDLOG_WARN("[NextDayz] soldier rig unavailable; player will have no visual");
     }
+    {
+        std::string error;
+        std::vector<std::string> warnings;
+        weaponCatalogLoaded_ =
+            Assets::FScadRigLoader::LoadRig(kWeaponCatalogRig, {}, weaponCatalogAsset_, error, &warnings);
+        if (!weaponCatalogLoaded_)
+        {
+            SPDLOG_ERROR("[NextDayz] weapon catalog unavailable; held weapons are placeholder boxes: {}", error);
+        }
+        for (const std::string& warning : warnings)
+        {
+            SPDLOG_WARN("[NextDayz] weapon catalog: {}", warning);
+        }
+    }
+
+    {
+        std::string error;
+        attachmentCatalogLoaded_ = Assets::FScadRigLoader::LoadRig(
+            "assets/scad/characters/nextdayz_attachments.scad", {}, attachmentCatalogAsset_, error);
+        if (!attachmentCatalogLoaded_) SPDLOG_ERROR("[NextDayz] attachment catalog unavailable: {}", error);
+    }
+    std::string scene = kDefaultScene;
+    std::string mapError;
+    if (!NextDayz::LoadExpeditionMaps(Utilities::FileHelper::ResolvePlatformFilePath(
+            "assets/configs/nextdayz_maps.json"), expeditionMaps_, mapError))
+    {
+        SPDLOG_ERROR("[NextDayz] map registry: {}", mapError);
+    }
+    if (const auto published = std::find_if(expeditionMaps_.begin(), expeditionMaps_.end(),
+            [](const auto& map) { return map.published && !map.training; }); published != expeditionMaps_.end())
+        scene = published->scene;
+    if (!GOption->SceneName.empty())
+    {
+        scene = GOption->SceneName;
+    }
+    campaignMap_ = scene;
+    loadingCabin_ = !authoringMode_ && ((CampaignEnabled() && netMode_ == ENetMode::Offline) ||
+        (netMode_ == ENetMode::Client && NetUsesMaster()));
+    if (scene == cabinScenePath)
+    {
+        loadingCabin_ = true;
+        if (GOption->AgentValidation) validationCampaign_ = true;
+        campaignMap_ = kDefaultScene;
+        if (const auto published = std::find_if(expeditionMaps_.begin(), expeditionMaps_.end(),
+                [](const auto& map) { return map.published && !map.training; }); published != expeditionMaps_.end())
+            campaignMap_ = published->scene;
+    }
+    cabinLobby_ = loadingCabin_;
+    SPDLOG_INFO("[NextDayz] loading scene '{}'", loadingCabin_ ? cabinScenePath : scene);
+    GetEngine().RequestLoadScene({.filename = loadingCabin_ ? cabinScenePath : scene});
+    StartNetwork();
+}
+
+void NextDayzGameInstance::LoadFieldAssets()
+{
+    if (fieldAssetsLoaded_) return;
     if (netMode_ == ENetMode::Client)
     {
         // Bodies for the other survivors, built with the scene like the player's own.
@@ -199,52 +255,18 @@ void NextDayzGameInstance::OnInit()
     }
     {
         std::string error;
-        std::vector<std::string> warnings;
-        weaponCatalogLoaded_ =
-            Assets::FScadRigLoader::LoadRig(kWeaponCatalogRig, {}, weaponCatalogAsset_, error, &warnings);
-        if (!weaponCatalogLoaded_)
-        {
-            SPDLOG_ERROR("[NextDayz] weapon catalog unavailable; held weapons are placeholder boxes: {}", error);
-        }
-        for (const std::string& warning : warnings)
-        {
-            SPDLOG_WARN("[NextDayz] weapon catalog: {}", warning);
-        }
-    }
-
-    {
-        std::string error;
-        attachmentCatalogLoaded_ = Assets::FScadRigLoader::LoadRig(
-            "assets/scad/characters/nextdayz_attachments.scad", {}, attachmentCatalogAsset_, error);
-        if (!attachmentCatalogLoaded_) SPDLOG_ERROR("[NextDayz] attachment catalog unavailable: {}", error);
         fpsHandsLoaded_ = Assets::FScadRigLoader::LoadRig("assets/scad/characters/nextdayz_fps_hands.scad", {},
                                                           fpsHandsAsset_, error);
         if (!fpsHandsLoaded_) SPDLOG_ERROR("[NextDayz] first-person hands unavailable: {}", error);
     }
-    std::string scene = kDefaultScene;
-    std::string mapError;
-    if (!NextDayz::LoadExpeditionMaps(Utilities::FileHelper::ResolvePlatformFilePath(
-            "assets/configs/nextdayz_maps.json"), expeditionMaps_, mapError))
-    {
-        SPDLOG_ERROR("[NextDayz] map registry: {}", mapError);
-    }
-    if (const auto published = std::find_if(expeditionMaps_.begin(), expeditionMaps_.end(),
-            [](const auto& map) { return map.published && !map.training; }); published != expeditionMaps_.end())
-        scene = published->scene;
-    if (!GOption->SceneName.empty())
-    {
-        scene = GOption->SceneName;
-    }
-    SPDLOG_INFO("[NextDayz] loading scene '{}'", scene);
-    campaignMap_ = scene;
-    GetEngine().RequestLoadScene({.filename = scene});
-    StartNetwork();
+    fieldAssetsLoaded_ = true;
 }
 
 void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
 {
     ConfigureCampaignCVars(cvars);
     ConfigureNetCVars(cvars);
+    ConfigureCabinCVars(cvars);
     std::string error;
     // Path tracing with DLSS Ray Reconstruction at Quality by default.
     cvars.SetDefaultFromString("r.rendererType", "0", &error);
@@ -614,6 +636,15 @@ void NextDayzGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<Assets
                                               std::vector<Assets::LightObject>& /*lights*/,
                                               std::vector<Assets::AnimationTrack>& /*tracks*/)
 {
+    cabinScene_ = loadingCabin_;
+    if (cabinScene_)
+    {
+        rig_.InjectAssets(models, materials);
+        InjectWeaponCatalog(models, materials);
+        InjectCabinLights(nodes, models, materials);
+        return;
+    }
+    LoadFieldAssets();
     grass_.Prepare(nodes, models, materials);
     rescueHelicopter_.InjectAssets(models, materials);
     rig_.InjectAssets(models, materials);
@@ -802,6 +833,21 @@ std::optional<glm::vec3> NextDayzGameInstance::NetworkSpawnPosition() const
 
 void NextDayzGameInstance::OnSceneLoaded()
 {
+    if (cabinScene_)
+    {
+        rig_.OnSceneLoaded(GetEngine().GetScene());
+        sceneReady_ = true;
+        cabinSeconds_ = 0.0f;
+        ApplyCabinEnvironment();
+        BindCabinCamera();
+        if (CampaignEnabled()) InitializeCabinCampaign();
+        SyncClothingVisuals();
+        TickCabin(0.0f);
+        SetMouseCaptured(false);
+        SPDLOG_INFO("[NextDayz] helicopter lobby ready ({} nodes); expedition assets deferred",
+                    GetEngine().GetScene().Nodes().size());
+        return;
+    }
     if (!loadingMapPath_.empty()) campaignMap_ = std::exchange(loadingMapPath_, "");
     debugger_.OnSessionStart("scene loaded");
     world_.anchors.Scan(GetEngine());
@@ -918,6 +964,15 @@ void NextDayzGameInstance::OnTick(double deltaSeconds)
         if (sceneReady_) TickServer(static_cast<float>(deltaSeconds));
         return;
     }
+    if (netMode_ == ENetMode::Client && NetInLobby())
+    {
+        TickLobby(static_cast<float>(deltaSeconds));
+    }
+    if (sceneReady_ && cabinScene_)
+    {
+        TickCabin(static_cast<float>(deltaSeconds));
+        return;
+    }
     if (!sceneReady_ || !player_.IsValid())
     {
         return;
@@ -927,8 +982,7 @@ void NextDayzGameInstance::OnTick(double deltaSeconds)
     {
         if (NetInLobby())
         {
-            // Between sorties: the Master's lobby, the world is just a backdrop.
-            TickLobby(dt);
+            // Keep the expedition frozen until the cabin scene is committed.
             return;
         }
         NetClientSend(dt);
@@ -1381,6 +1435,19 @@ NextDayz::FPlayerPresentationState NextDayzGameInstance::LocalPresentation() con
 
 bool NextDayzGameInstance::OverrideRenderCamera(Assets::Camera& outRenderCamera) const
 {
+    if (cabinScene_)
+    {
+        // A slow drift in view space: the airframe is never perfectly still.
+        const glm::vec3 sway(std::sin(cabinSeconds_ * 0.65f) * 0.006f,
+                             std::sin(cabinSeconds_ * 0.41f + 1.3f) * 0.004f, 0.0f);
+        outRenderCamera.ModelView = glm::translate(glm::mat4(1.0f), -sway) * cabinView_;
+        outRenderCamera.FieldOfView = cabinFov_;
+        outRenderCamera.Aperture = cabinAperture_;
+        outRenderCamera.FocalDistance = cabinFocal_;
+        outRenderCamera.NearPlane = 0.03f;
+        outRenderCamera.FarPlane = 80.0f;
+        return true;
+    }
     if (!player_.IsValid())
     {
         return false;
@@ -1422,16 +1489,13 @@ bool NextDayzGameInstance::OverrideRenderCamera(Assets::Camera& outRenderCamera)
 
 bool NextDayzGameInstance::OnRenderUI()
 {
-    DrawNetStatus();
-    if (DrawLobby())
-    {
-        return true;
-    }
     if (ImGui::IsKeyPressed(ImGuiKey_F12, false))
     {
         using namespace NextDayz::L10n;
         SetLanguage(Language() == ELanguage::Chinese ? ELanguage::English : ELanguage::Chinese);
     }
+    if (DrawLobby()) return true;
+    DrawNetStatus();
     if (!sceneReady_)
     {
         return false;
@@ -3000,9 +3064,9 @@ void NextDayzGameInstance::SetInventoryOpen(bool open)
 
 bool NextDayzGameInstance::OnKey(SDL_Event& event)
 {
-    if (NetInLobby())
+    if (cabinScene_ || NetInLobby())
     {
-        return false;   // the lobby is ImGui; the game takes no keys
+        return false; // cabin shortcuts are handled by ImGui, without controlling the survivor
     }
     if (NetUsesMaster() && netMode_ == ENetMode::Client && event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
         event.key.key == SDLK_B && !actions_.IsActive() && !player_.IsTraversing() && NetRequestExtract())
@@ -3248,6 +3312,7 @@ bool NextDayzGameInstance::OnCursorPosition(double xpos, double ypos)
 
 bool NextDayzGameInstance::OnMouseButton(SDL_Event& event)
 {
+    if (cabinScene_ || NetInLobby()) return false;
     if (CampaignEnabled() && (!campaign_.inField || campaign_.flight.boarded || campaignSaveBlocked_)) return false;
     if (paused_ || !survival_.IsAlive()) return true;
     if (debugger_.CursorMode())
@@ -3330,6 +3395,10 @@ void NextDayzGameInstance::UpdateGrass(float dt)
 void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegistry& reg)
 {
     RegisterNetQueries(reg);
+    reg.Add("cabinScene", [this]() -> Runtime::Agent::FAgentQueryValue { return cabinScene_ && sceneReady_; });
+    reg.Add("fieldAssetsLoaded", [this]() -> Runtime::Agent::FAgentQueryValue { return fieldAssetsLoaded_; });
+    reg.Add("cabinPanel", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(safehouseTab_); });
+    reg.Add("cabinClip", [this]() -> Runtime::Agent::FAgentQueryValue { return rig_.CurrentBaseClipName(); });
     reg.Add("magazineCapacity", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(weapons_.MagazineCapacity()); });
     reg.Add("reloadDuration", [this]() -> Runtime::Agent::FAgentQueryValue { return double(weapons_.ReloadDuration()); });
     reg.Add("stabilityScale", [this]() -> Runtime::Agent::FAgentQueryValue { return double(NextDayz::WeaponStabilityScale(weapons_.SlotAttachments(weapons_.ActiveSlot()))); });

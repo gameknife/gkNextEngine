@@ -370,7 +370,7 @@ TEST_CASE("NextDayz retired regions return their saves to a safehouse", "[NextDa
     saved.inventory = inventory.Capture();
     FMapWorldSave fresh;
     fresh.version = loket.version;
-    CHECK_FALSE(RetireExpeditionCampaign(saved, training, {0,0,1}, {}, "jp_otaru_north_canal", "x"));
+    CHECK_FALSE(RetireExpeditionCampaign(saved, training, fresh, {}, "jp_otaru_north_canal", "x"));
     REQUIRE(RetireExpeditionCampaign(saved, loket, fresh, {1,2,3}, "jp_otaru_north_canal", "RETURNED / REGION RETIRED"));
     CHECK(saved.map == loket.scene);
     CHECK(saved.mapVersion == 7);

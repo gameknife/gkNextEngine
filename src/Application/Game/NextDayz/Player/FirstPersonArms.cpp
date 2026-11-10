@@ -183,7 +183,7 @@ namespace NextDayz
     int FirstPersonArms::VisibleCount() const
     {
         return static_cast<int>(std::count_if(nodes_.begin(), nodes_.end(), [](const auto& node)
-        { return node && node->GetComponent<Runtime::RenderComponent>()->GetVisible(); }));
+        { return node && node->template GetComponent<Runtime::RenderComponent>()->GetVisible(); }));
     }
 
     void FirstPersonArms::Update(std::string_view weaponId, const glm::mat4& weaponInEye, float viewModelScale,

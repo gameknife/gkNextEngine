@@ -244,12 +244,12 @@ namespace NextDayz::Debug
                 commands_.expeditionAction(EExpeditionAction::ReturnToSafehouse);
             ImGui::EndDisabled();
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-                ImGui::SetTooltip(NextDayz::L10n::Tr("Stores carried gear, cancels rescue and saves. No extraction credit."));
+                ImGui::SetTooltip("%s", NextDayz::L10n::Tr("Stores carried gear, cancels rescue and saves. No extraction credit."));
             ImGui::SameLine();
             ImGui::TextDisabled("%s | %s", NextDayz::L10n::Tr(facts.regionName), facts.inField ? NextDayz::L10n::Tr("IN FIELD") : NextDayz::L10n::Tr("SAFEHOUSE"));
         }
 
-        ImGui::TextDisabled(NextDayz::L10n::Tr("Selected:"));
+        ImGui::TextDisabled("%s", NextDayz::L10n::Tr("Selected:"));
         ImGui::SameLine();
         ImGui::TextUnformatted(L10n::Tr(SelectionLabel()));
         if (selection_.kind != ESelection::None)
@@ -263,12 +263,12 @@ namespace NextDayz::Debug
         if (!cursorMode_ && !facts.mouseFree)
         {
             ImGui::SameLine();
-            ImGui::TextDisabled(NextDayz::L10n::Tr("  F9: free the cursor to use this window / click things in the world"));
+            ImGui::TextDisabled("%s", NextDayz::L10n::Tr("  F9: free the cursor to use this window / click things in the world"));
         }
         else if (cursorMode_)
         {
             ImGui::SameLine();
-            ImGui::TextDisabled(NextDayz::L10n::Tr("  click in the world to select | PgUp/PgDn tabs"));
+            ImGui::TextDisabled("%s", NextDayz::L10n::Tr("  click in the world to select | PgUp/PgDn tabs"));
         }
     }
 
@@ -347,7 +347,7 @@ namespace NextDayz::Debug
             }
             if (ImGui::Button(NextDayz::L10n::Label("Rescue supplies")) && commands_.expeditionAction)
                 commands_.expeditionAction(EExpeditionAction::RescueSupplies);
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip(NextDayz::L10n::Tr("2 signal flare guns, 2 bandages, 2 water bottles. Overflow drops nearby."));
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", NextDayz::L10n::Tr("2 signal flare guns, 2 bandages, 2 water bottles. Overflow drops nearby."));
             ImGui::EndDisabled();
             ImGui::EndDisabled();
             if (facts.saveBlocked) Colored(Style::kBad, NextDayz::L10n::Tr("Save blocked; resolve the save error before expedition actions."));
@@ -496,7 +496,7 @@ namespace NextDayz::Debug
         PlayerController* player = systems_.player;
         if (!player || !player->IsValid())
         {
-            ImGui::TextDisabled(NextDayz::L10n::Tr("No player"));
+            ImGui::TextDisabled("%s", NextDayz::L10n::Tr("No player"));
             return;
         }
         const FPlayerLocomotionState& locomotion = player->LocomotionState();
@@ -797,7 +797,7 @@ namespace NextDayz::Debug
         kit(NextDayz::L10n::Tr("Axe"), {{"axe", 1}});
         ImGui::SameLine();
         kit(NextDayz::L10n::Tr("Map + compass"), {{"map", 1}, {"compass", 1}});
-        ImGui::TextDisabled(NextDayz::L10n::Tr("Given items that do not fit are dropped; Use equips weapons and wears clothes."));
+        ImGui::TextDisabled("%s", NextDayz::L10n::Tr("Given items that do not fit are dropped; Use equips weapons and wears clothes."));
     }
 
     // ------------------------------------------------------------------ weapons
@@ -1253,7 +1253,7 @@ namespace NextDayz::Debug
             }
             ImGui::EndTable();
         }
-        ImGui::TextDisabled(NextDayz::L10n::Tr("Right-click a row to teleport. Verdicts update once per pass."));
+        ImGui::TextDisabled("%s", NextDayz::L10n::Tr("Right-click a row to teleport. Verdicts update once per pass."));
     }
 
     // ------------------------------------------------------------------ loot
@@ -1339,7 +1339,7 @@ namespace NextDayz::Debug
             Colored(count > 0 ? Style::kGood : Style::kBad, NextDayz::L10n::Format("{} {}", name, count));
             ImGui::SameLine();
         };
-        ImGui::TextDisabled(NextDayz::L10n::Tr("Coverage:"));
+        ImGui::TextDisabled("%s", NextDayz::L10n::Tr("Coverage:"));
         ImGui::SameLine();
         coverage(NextDayz::L10n::Tr("food"), food);
         coverage(NextDayz::L10n::Tr("medical"), medical);
@@ -1702,7 +1702,7 @@ namespace NextDayz::Debug
         }
         if (shown == 0)
         {
-            ImGui::TextDisabled(NextDayz::L10n::Tr("No hits yet"));
+            ImGui::TextDisabled("%s", NextDayz::L10n::Tr("No hits yet"));
         }
     }
 

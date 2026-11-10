@@ -47,7 +47,7 @@ namespace NextDayz
     int WeaponAttachmentVisuals::VisibleCount() const
     {
         return static_cast<int>(std::count_if(nodes_.begin(), nodes_.end(), [](const auto& node)
-        { return node && node->GetComponent<Runtime::RenderComponent>()->GetVisible(); }));
+        { return node && node->template GetComponent<Runtime::RenderComponent>()->GetVisible(); }));
     }
 
     void WeaponAttachmentVisuals::Update(std::string_view weaponId, const FWeaponAttachments& attachments, bool visible)

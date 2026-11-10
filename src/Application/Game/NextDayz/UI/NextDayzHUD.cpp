@@ -484,7 +484,7 @@ namespace NextDayz::NextDayzHUD
             ImGui::Begin("##nd_objective", nullptr,
                          ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoMove |
                          ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoNav);
-            ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), NextDayz::L10n::Tr("GOAL"));
+            ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), "%s", NextDayz::L10n::Tr("GOAL"));
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(0.92f, 0.92f, 0.92f, 1.0f), "%s", context.objective.c_str());
             ImGui::End();
@@ -936,7 +936,7 @@ namespace NextDayz::NextDayzHUD
                              ImGuiWindowFlags_NoSavedSettings);
             if (!context.hasMap)
             {
-                ImGui::TextWrapped(NextDayz::L10n::Tr("You have no map. Look for one in shops, police stations and military sites."));
+                ImGui::TextWrapped("%s", NextDayz::L10n::Tr("You have no map. Look for one in shops, police stations and military sites."));
                 ImGui::End();
                 ImGui::PopStyleColor(2);
                 return;
@@ -995,7 +995,7 @@ namespace NextDayz::NextDayzHUD
             };
             draw->AddTriangleFilled(offset(12.0f, 0.0f), offset(-7.0f, 6.0f), offset(-7.0f, -6.0f), IM_COL32(20, 90, 220, 255));
             ImGui::Dummy(ImVec2(mapSide, mapSide));
-            ImGui::TextDisabled(NextDayz::L10n::Tr("M close  |  grid 100 m  |  north up"));
+            ImGui::TextDisabled("%s", NextDayz::L10n::Tr("M close  |  grid 100 m  |  north up"));
             ImGui::End();
             ImGui::PopStyleColor(2);
         }
@@ -1560,8 +1560,8 @@ namespace NextDayz::NextDayzHUD
 
                             if (rHovered)
                             {
-                                ImGui::SetTooltip("%s: %s\n%s", L10n::Tr(AttachmentSlotName(kind)),
-                                                  L10n::Tr(part->displayName),
+                                ImGui::SetTooltip("%s: %s\n%s", std::string(L10n::Tr(AttachmentSlotName(kind))).c_str(),
+                                                  std::string(L10n::Tr(part->displayName)).c_str(),
                                                   L10n::Tr("[RMB] Detach attachment"));
                             }
 
@@ -1943,7 +1943,7 @@ namespace NextDayz::NextDayzHUD
                     if (hovered)
                     {
                         ImGui::SetTooltip("%s [%d]\n%s\n%s", L10n::Tr("Quickbar Slot"), slot + 4,
-                                          L10n::Tr(def->displayName),
+                                          std::string(L10n::Tr(def->displayName)).c_str(),
                                           L10n::Tr("[RMB] Unbind slot"));
                     }
 
@@ -2353,7 +2353,7 @@ namespace NextDayz::NextDayzHUD
             if (context.survival.lifeState == EPlayerLifeState::Dead)
             {
                 ImGui::SetWindowFontScale(1.5f);
-                ImGui::TextColored(ImVec4(0.95f, 0.2f, 0.15f, 1.0f), NextDayz::L10n::Tr("YOU ARE DEAD"));
+                ImGui::TextColored(ImVec4(0.95f, 0.2f, 0.15f, 1.0f), "%s", NextDayz::L10n::Tr("YOU ARE DEAD"));
                 ImGui::SetWindowFontScale(1.0f);
                 ImGui::Separator();
                 ImGui::Text(NextDayz::L10n::Tr("Cause:       %s"), context.survival.lastDamageSource.empty()
@@ -2372,7 +2372,7 @@ namespace NextDayz::NextDayzHUD
                 ImGui::SetWindowFontScale(1.25f);
                 ImGui::TextUnformatted(NextDayz::L10n::Tr("GAME PAUSED"));
                 ImGui::SetWindowFontScale(1.0f);
-                ImGui::TextDisabled(NextDayz::L10n::Tr("Press Esc to resume"));
+                ImGui::TextDisabled("%s", NextDayz::L10n::Tr("Press Esc to resume"));
                 ImGui::Separator();
                 ImGui::TextWrapped("%s", NextDayz::L10n::Tr("WASD move  Shift sprint  Ctrl walk  C crouch  Space jump/vault"));
                 ImGui::TextWrapped("%s", NextDayz::L10n::Tr("LMB fire/swing  RMB tap ADS / hold aim  R reload  1/2/3/Q weapons  E take  F fill bottle"));

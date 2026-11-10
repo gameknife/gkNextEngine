@@ -59,15 +59,15 @@ void NextDayzGameInstance::DrawWorldOperations()
 
     ImGui::BeginChild("operation_brief", ImVec2(sidebarWidth, availableHeight), false);
     ImGui::Spacing();
-    ImGui::TextColored(ImVec4(0.89f,0.71f,0.40f,1), NextDayz::L10n::Tr("MERCENARY FIELD OFFICE"));
+    ImGui::TextColored(ImVec4(0.89f,0.71f,0.40f,1), "%s", NextDayz::L10n::Tr("MERCENARY FIELD OFFICE"));
     ImGui::Spacing();
-    ImGui::TextWrapped(NextDayz::L10n::Tr("Search. Survive. Bring it home."));
+    ImGui::TextWrapped("%s", NextDayz::L10n::Tr("Search. Survive. Bring it home."));
     const size_t regions = static_cast<size_t>(std::count_if(visible.begin(), visible.end(),
         [](const auto* map) { return !map->training; }));
     ImGui::TextDisabled(NextDayz::L10n::Tr("%zu regions / 1 shared safehouse"), regions);
     ImGui::Spacing();
     ImGui::Separator();
-    ImGui::TextDisabled(NextDayz::L10n::Tr("FIELD RECORDS"));
+    ImGui::TextDisabled("%s", NextDayz::L10n::Tr("FIELD RECORDS"));
     for (size_t index = 0; index < visible.size(); ++index)
     {
         const auto& map = *visible[index];
@@ -86,14 +86,14 @@ void NextDayzGameInstance::DrawWorldOperations()
     ImGui::Separator();
     if (!campaign_.lastMapId.empty())
     {
-        ImGui::TextDisabled(NextDayz::L10n::Tr("LAST ASSIGNMENT"));
+        ImGui::TextDisabled("%s", NextDayz::L10n::Tr("LAST ASSIGNMENT"));
         if (const auto* last = NextDayz::FindExpeditionMap(expeditionMaps_, campaign_.lastMapId))
             ImGui::TextWrapped("%s", NextDayz::L10n::Tr(last->name));
         ImGui::TextColored(ImVec4(0.7f,0.78f,0.64f,1), "%s", NextDayz::L10n::Tr(campaign_.lastOutcome));
         ImGui::Spacing();
     }
-    ImGui::TextDisabled(NextDayz::L10n::Tr("CLASSIFIED RECOVERY CONTRACT"));
-    ImGui::TextWrapped(NextDayz::L10n::Tr("Destination assigned on departure. The map is your field record; browsing a region does not select your next assignment."));
+    ImGui::TextDisabled("%s", NextDayz::L10n::Tr("CLASSIFIED RECOVERY CONTRACT"));
+    ImGui::TextWrapped("%s", NextDayz::L10n::Tr("Destination assigned on departure. The map is your field record; browsing a region does not select your next assignment."));
     ImGui::Spacing();
     ImGui::Text(NextDayz::L10n::Tr("Carried gear: %zu stacks"), inventory_.Instances().size());
     ImGui::Text(NextDayz::L10n::Tr("Free space: %d"), inventory_.TotalCapacity() - inventory_.UsedCapacity());
@@ -108,7 +108,7 @@ void NextDayzGameInstance::DrawWorldOperations()
     ImGui::Spacing();
     if (authoringMode_ || GOption->AgentValidation)
     {
-        ImGui::TextDisabled(authoringMode_ ? NextDayz::L10n::Tr("DRAFT PLAYTEST") : NextDayz::L10n::Tr("TEMPORARY MAP TEST"));
+        ImGui::TextDisabled("%s", authoringMode_ ? NextDayz::L10n::Tr("DRAFT PLAYTEST") : NextDayz::L10n::Tr("TEMPORARY MAP TEST"));
         ImGui::BeginDisabled(visible.empty() || pendingCampaign_.has_value() || campaignSaveBlocked_);
         if (ImGui::Button(authoringMode_ ? NextDayz::L10n::Tr("PLAYTEST BROWSED MAP") : NextDayz::L10n::Tr("ENTER SELECTED MAP (TEST)"), ImVec2(-1, 36)))
         {
@@ -146,7 +146,7 @@ void NextDayzGameInstance::DrawWorldAtlas(const std::vector<const NextDayz::FExp
     ImGui::BeginChild("world_atlas_panel", ImVec2(0, availableHeight), false);
     ImGui::TextUnformatted(NextDayz::L10n::Tr("GLOBAL OPERATIONS"));
     ImGui::SameLine();
-    ImGui::TextDisabled(NextDayz::L10n::Tr("  /  KNOWN DEPLOYMENT ZONES"));
+    ImGui::TextDisabled("%s", NextDayz::L10n::Tr("  /  KNOWN DEPLOYMENT ZONES"));
     const ImVec2 mapSize(std::max(180.0f, ImGui::GetContentRegionAvail().x),
                         std::max(150.0f, ImGui::GetContentRegionAvail().y - 150.0f));
     const ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -245,6 +245,6 @@ void NextDayzGameInstance::DrawWorldAtlas(const std::vector<const NextDayz::FExp
         else ImGui::TextDisabled("%.4f N, %.4f E   /   %s", map.latitude, map.longitude, NextDayz::L10n::Tr(map.terrain));
         ImGui::TextWrapped("%s", NextDayz::L10n::Tr(map.description));
     }
-    ImGui::TextDisabled(NextDayz::L10n::Tr("Made with Natural Earth."));
+    ImGui::TextDisabled("%s", NextDayz::L10n::Tr("Made with Natural Earth."));
     ImGui::EndChild();
 }

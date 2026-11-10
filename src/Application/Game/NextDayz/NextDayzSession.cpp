@@ -33,10 +33,17 @@ void NextDayzGameInstance::InitializeSessionMenu()
         {
             std::vector<NextDayz::FMasterServer> saved;
             if (NextDayz::ReadMasterServers(path, saved, error))
+            {
                 for (auto& server : saved)
+                {
                     if (masterServers_.size() < 64 && std::none_of(masterServers_.begin(), masterServers_.end(), [&](const auto& entry) { return entry.url == server.url; }))
                         masterServers_.push_back(std::move(server));
-            else sessionMenuMessage_ = NextDayz::L10n::Message("Cannot read saved servers: {}", error);
+                }
+            }
+            else
+            {
+                sessionMenuMessage_ = NextDayz::L10n::Message("Cannot read saved servers: {}", error);
+            }
         }
     }
     if (!netMasterCvar_.empty())

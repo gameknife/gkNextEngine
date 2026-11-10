@@ -994,22 +994,22 @@ TEST_CASE("NextDayz infected scream before a distant chase but bite at once up c
 {
     using namespace NextDayz;
     ZombieSystem zombies(2);
-    const FZombieHandle far = zombies.Spawn(EZombieProfile::Civilian, {0.0f, 0.0f, 0.0f});
-    zombies.Resolve(far)->forward = {0.0f, 0.0f, 1.0f};
+    const FZombieHandle distantZombie = zombies.Spawn(EZombieProfile::Civilian, {0.0f, 0.0f, 0.0f});
+    zombies.Resolve(distantZombie)->forward = {0.0f, 0.0f, 1.0f};
     zombies.Update(0.05f, {0.0f, 0.0f, 12.0f}, {}, true, AlwaysVisible, {});
-    REQUIRE(zombies.Resolve(far)->state == EZombieState::Alert);
+    REQUIRE(zombies.Resolve(distantZombie)->state == EZombieState::Alert);
     CHECK(zombies.AlertedCount() == 1);
     for (int tick = 0; tick < 20; ++tick)
     {
         zombies.Update(0.05f, {0.0f, 0.0f, 12.0f}, {}, true, AlwaysVisible, {});
     }
-    CHECK(zombies.Resolve(far)->state == EZombieState::Chase);
+    CHECK(zombies.Resolve(distantZombie)->state == EZombieState::Chase);
 
     zombies.Reset();
-    const FZombieHandle near = zombies.Spawn(EZombieProfile::Civilian, {});
-    zombies.Resolve(near)->forward = {0.0f, 0.0f, 1.0f};
+    const FZombieHandle nearbyZombie = zombies.Spawn(EZombieProfile::Civilian, {});
+    zombies.Resolve(nearbyZombie)->forward = {0.0f, 0.0f, 1.0f};
     zombies.Update(0.05f, {0.0f, 0.0f, 1.0f}, {}, true, AlwaysVisible, {});
-    CHECK(zombies.Resolve(near)->state == EZombieState::Attack);
+    CHECK(zombies.Resolve(nearbyZombie)->state == EZombieState::Attack);
 }
 
 TEST_CASE("NextDayz infected attacks commit on the strike frame and whiff a late sidestep",

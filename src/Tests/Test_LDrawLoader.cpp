@@ -11,7 +11,7 @@
 
 namespace
 {
-    void CheckVec3Near(const glm::vec3& actual, const glm::vec3& expected)
+    void CheckLoaderVec3Near(const glm::vec3& actual, const glm::vec3& expected)
     {
         CHECK(actual.x == Catch::Approx(expected.x).margin(1e-5f));
         CHECK(actual.y == Catch::Approx(expected.y).margin(1e-5f));
@@ -153,7 +153,7 @@ TEST_CASE("LDraw loader applies configurable LDU scale to geometry and placement
 
     REQUIRE(nodes.size() == 1);
     std::shared_ptr<Assets::Node> partNode = nodes[0];
-    CheckVec3Near(partNode->Translation(), glm::vec3(-1.0f, -2.0f, 3.0f));
+    CheckLoaderVec3Near(partNode->Translation(), glm::vec3(-1.0f, -2.0f, 3.0f));
 
     auto renderComp = partNode->GetComponent<Runtime::RenderComponent>();
     REQUIRE(renderComp);
@@ -161,6 +161,6 @@ TEST_CASE("LDraw loader applies configurable LDU scale to geometry and placement
 
     const auto& cpuVertices = models[renderComp->GetModelId()].CPUVertices();
     REQUIRE(cpuVertices.size() == 3);
-    CheckVec3Near(cpuVertices[1].Position, glm::vec3(-0.2f, -0.4f, 0.6f));
-    CheckVec3Near(cpuVertices[2].Position, glm::vec3(0.0f, -0.2f, 0.0f));
+    CheckLoaderVec3Near(cpuVertices[1].Position, glm::vec3(-0.2f, -0.4f, 0.6f));
+    CheckLoaderVec3Near(cpuVertices[2].Position, glm::vec3(0.0f, -0.2f, 0.0f));
 }

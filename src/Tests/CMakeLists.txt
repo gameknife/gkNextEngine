@@ -173,6 +173,7 @@ find_package(Catch2 3 REQUIRED)
 add_executable(gkNextUnitTests ${unitTestSources})
 
 gk_apply_target_defaults(gkNextUnitTests)
+gk_enable_unity_build(gkNextUnitTests 8)
 set_target_properties(gkNextUnitTests PROPERTIES FOLDER "Tests")
 # Reuse the common standard-library and Catch2 headers across test translation units.
 # Keep no-unity builds free of forced includes so they still detect missing includes.

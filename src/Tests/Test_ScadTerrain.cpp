@@ -48,7 +48,7 @@ namespace
         }
     }
 
-    EvalResult EvalProgram(const std::string& src)
+    EvalResult EvalTerrainProgram(const std::string& src)
     {
         Scope top;
         std::unordered_map<std::string, StmtPtr> modules;
@@ -62,7 +62,7 @@ namespace
         return result;
     }
 
-    SceneEvalResult EvalSceneProgram(const std::string& src)
+    SceneEvalResult EvalTerrainSceneProgram(const std::string& src)
     {
         Scope top;
         std::unordered_map<std::string, StmtPtr> modules;
@@ -76,7 +76,7 @@ namespace
         return result;
     }
 
-    size_t TotalTriangles(const EvalResult& result)
+    size_t TerrainTotalTriangles(const EvalResult& result)
     {
         size_t tris = 0;
         for (const auto& entry : result.buckets)
@@ -245,16 +245,16 @@ namespace
         return tips;
     }
 
-    class ScopedDir
+    class ScopedTerrainDir
     {
     public:
-        ScopedDir()
+        ScopedTerrainDir()
         {
             const auto suffix = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
             dir_ = std::filesystem::temp_directory_path() / ("scad_terrain_test_" + suffix);
             std::filesystem::create_directories(dir_);
         }
-        ~ScopedDir()
+        ~ScopedTerrainDir()
         {
             std::error_code ec;
             std::filesystem::remove_all(dir_, ec);
@@ -818,17 +818,17 @@ TEST_CASE("ScadTerrain palette: bounded color bucket count", "[Unit][Scad][ScadT
 
 TEST_CASE("ScadTerrain eval: bad spec warns and produces nothing", "[Unit][Scad][ScadTerrain]")
 {
-    const EvalResult result = EvalProgram("gk_terrain(42);\n");
+    const EvalResult result = EvalTerrainProgram("gk_terrain(42);\n");
     CHECK(result.warningCount >= 1);
-    CHECK(TotalTriangles(result) == 0);
+    CHECK(TerrainTotalTriangles(result) == 0);
 }
 
 TEST_CASE("ScadTerrain eval: gk_terrain renders warning-free", "[Unit][Scad][ScadTerrain]")
 {
-    const EvalResult result = EvalProgram(std::string(kTerrScad) + "gk_terrain(TERR);\n");
+    const EvalResult result = EvalTerrainProgram(std::string(kTerrScad) + "gk_terrain(TERR);\n");
     CHECK(result.warningCount == 0);
     // 60x50 cells => 6000 land triangles + skirt + water.
-    CHECK(TotalTriangles(result) > 6000);
+    CHECK(TerrainTotalTriangles(result) > 6000);
 }
 
 TEST_CASE("ScadTerrain eval: gk_terrain_height matches the built mesh", "[Unit][Scad][ScadTerrain]")
@@ -836,7 +836,7 @@ TEST_CASE("ScadTerrain eval: gk_terrain_height matches the built mesh", "[Unit][
     const auto data = ScadTerrain::Build(MakeTestSpec());
 
     const EvalResult result =
-        EvalProgram(std::string(kTerrScad) + "translate([12, 8, gk_terrain_height(TERR, 12, 8)]) cube(1);\n");
+        EvalTerrainProgram(std::string(kTerrScad) + "translate([12, 8, gk_terrain_height(TERR, 12, 8)]) cube(1);\n");
     CHECK(result.warningCount == 0);
     REQUIRE(result.buckets.size() == 1);
 
@@ -852,7 +852,7 @@ TEST_CASE("ScadTerrain eval: gk_terrain_height matches the built mesh", "[Unit][
 TEST_CASE("ScadTerrain eval: identity cache distinguishes multiple terrain values",
           "[Unit][Scad][ScadTerrain]")
 {
-    const SceneEvalResult result = EvalSceneProgram(
+    const SceneEvalResult result = EvalTerrainSceneProgram(
         "A = [\"gkterr1\", [4,4], [4,4], 1, [0,0,0], undef, \"temperate\", []];\n"
         "B = [\"gkterr1\", [4,4], [4,4], 2, [10,0,0], undef, \"temperate\", []];\n"
         "function sample(t) = gk_terrain_height(t, 0, 0);\n"
@@ -894,7 +894,7 @@ TEST_CASE("Scad normals: zero smoothing angle uses exact per-face normals", "[Un
 
 TEST_CASE("ScadTerrain scene: faceted + water flags and terrain payload", "[Unit][Scad][ScadTerrain]")
 {
-    const SceneEvalResult result = EvalSceneProgram(std::string(kTerrScad) +
+    const SceneEvalResult result = EvalTerrainSceneProgram(std::string(kTerrScad) +
                                                     "module ground() { gk_terrain(TERR); }\n"
                                                     "ground();\n");
     CHECK(result.warningCount == 0);
@@ -997,7 +997,7 @@ TEST_CASE("ScadTerrain eval: detail = true textures the ground and drapes road r
 {
     const auto evalGround = [](const char* call)
     {
-        return EvalSceneProgram(std::string(kTerrScad) + "module ground() { " + call + " }\nground();\n");
+        return EvalTerrainSceneProgram(std::string(kTerrScad) + "module ground() { " + call + " }\nground();\n");
     };
     const SceneEvalResult plain = evalGround("gk_terrain(TERR);");
     const SceneEvalResult detail = evalGround("gk_terrain(TERR, detail=true);");
@@ -1083,14 +1083,14 @@ TEST_CASE("Scad gk_flatten: collapses a rule library's module calls into one nod
 
     int looseNodes = 0;
     size_t looseVerts = 0;
-    const SceneEvalResult loose = EvalSceneProgram(std::string(kLib) + "loose();\n");
+    const SceneEvalResult loose = EvalTerrainSceneProgram(std::string(kLib) + "loose();\n");
     REQUIRE(loose.roots.size() == 1);
     walk(loose.roots[0], looseNodes, looseVerts);
     CHECK(looseNodes == 7); // loose() + one per piece()
 
     int packedNodes = 0;
     size_t packedVerts = 0;
-    const SceneEvalResult packed = EvalSceneProgram(std::string(kLib) + "packed();\n");
+    const SceneEvalResult packed = EvalTerrainSceneProgram(std::string(kLib) + "packed();\n");
     REQUIRE(packed.roots.size() == 1);
     walk(packed.roots[0], packedNodes, packedVerts);
     CHECK(packedNodes == 1);
@@ -1102,7 +1102,7 @@ TEST_CASE("Scad gk_flatten: collapses a rule library's module calls into one nod
 
 TEST_CASE("ScadTerrain scene: non-terrain geometry keeps default flags", "[Unit][Scad][ScadTerrain]")
 {
-    const SceneEvalResult result = EvalSceneProgram("cube(1);\n");
+    const SceneEvalResult result = EvalTerrainSceneProgram("cube(1);\n");
     REQUIRE(result.roots.size() == 1);
     REQUIRE_FALSE(result.roots[0].meshes.empty());
     for (const SceneMeshBucket& bucket : result.roots[0].meshes)
@@ -1129,7 +1129,7 @@ TEST_CASE("ScadTerrain scene: water argument sets only the water surface materia
 
     std::vector<SceneMeshBucket> legacyWater;
     std::vector<SceneMeshBucket> legacyLand;
-    collect(EvalSceneProgram(std::string(kTerrScad) + "gk_terrain(TERR);\n"), legacyWater, legacyLand);
+    collect(EvalTerrainSceneProgram(std::string(kTerrScad) + "gk_terrain(TERR);\n"), legacyWater, legacyLand);
     REQUIRE_FALSE(legacyWater.empty());
     for (const SceneMeshBucket& bucket : legacyWater)
     {
@@ -1139,7 +1139,7 @@ TEST_CASE("ScadTerrain scene: water argument sets only the water surface materia
     // Glossy water with the palette colour kept (undef colour).
     std::vector<SceneMeshBucket> glossyWater;
     std::vector<SceneMeshBucket> glossyLand;
-    collect(EvalSceneProgram(std::string(kTerrScad) + "gk_terrain(TERR, water = [undef, 0.06, 0.1]);\n"),
+    collect(EvalTerrainSceneProgram(std::string(kTerrScad) + "gk_terrain(TERR, water = [undef, 0.06, 0.1]);\n"),
             glossyWater, glossyLand);
     REQUIRE(glossyWater.size() == legacyWater.size());
     for (size_t i = 0; i < glossyWater.size(); ++i)
@@ -1158,7 +1158,7 @@ TEST_CASE("ScadTerrain scene: water argument sets only the water surface materia
     // An explicit colour replaces the palette water colour.
     std::vector<SceneMeshBucket> tintedWater;
     std::vector<SceneMeshBucket> tintedLand;
-    collect(EvalSceneProgram(std::string(kTerrScad) + "gk_terrain(TERR, water = [[0.1, 0.2, 0.3], 0.05]);\n"),
+    collect(EvalTerrainSceneProgram(std::string(kTerrScad) + "gk_terrain(TERR, water = [[0.1, 0.2, 0.3], 0.05]);\n"),
             tintedWater, tintedLand);
     REQUIRE_FALSE(tintedWater.empty());
     CHECK(tintedWater[0].color.r == Catch::Approx(0.1f));
@@ -1168,7 +1168,7 @@ TEST_CASE("ScadTerrain scene: water argument sets only the water surface materia
 
 TEST_CASE("ScadTerrain loader: water splits to a raycast-invisible node", "[Unit][Scad][ScadTerrain]")
 {
-    ScopedDir dir;
+    ScopedTerrainDir dir;
     const std::filesystem::path mainPath = dir.Write("terrain.scad", std::string(kTerrScad) + "gk_terrain(TERR);\n");
 
     Assets::EnvironmentSetting environment;
@@ -1214,7 +1214,7 @@ TEST_CASE("ScadTerrain loader: water splits to a raycast-invisible node", "[Unit
 
 TEST_CASE("ScadTerrain loader: road ribbons split to a raycast-invisible node", "[Unit][Scad][ScadTerrain]")
 {
-    ScopedDir dir;
+    ScopedTerrainDir dir;
     const std::filesystem::path mainPath =
         dir.Write("terrain.scad", std::string(kTerrScad) + "gk_terrain(TERR, detail=true);\n");
 
@@ -1254,7 +1254,7 @@ TEST_CASE("ScadTerrain scatter: variants bound baked mesh diversity", "[Unit][Sc
     REQUIRE(std::filesystem::is_regular_file(kitPath));
 
     const auto LoadScatterModelCount = [&](int variants) {
-        ScopedDir dir;
+        ScopedTerrainDir dir;
         const std::string source =
             fmt::format("use <{}>\n"
                         "TERR = [\"gkterr1\", [100,100], [10,10], 7, [0,0,0], undef, \"temperate\", []];\n"
@@ -1290,7 +1290,7 @@ TEST_CASE("ScadTerrain scatter: variants bound baked mesh diversity", "[Unit][Sc
 
 TEST_CASE("ScadTerrain loader: TerrainComponent matches the evaluated heightfield", "[Unit][Scad][ScadTerrain]")
 {
-    ScopedDir dir;
+    ScopedTerrainDir dir;
     const std::filesystem::path mainPath = dir.Write("terrain.scad", std::string(kTerrScad) + "gk_terrain(TERR);\n");
 
     Assets::EnvironmentSetting environment;

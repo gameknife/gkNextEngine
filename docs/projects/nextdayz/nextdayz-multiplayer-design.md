@@ -15,6 +15,40 @@ last_updated: 2026-11-10
 
 单人模式保留：单人 = 本地运行同一份权威模拟、只有一名玩家、不走网络。只维护一套玩法逻辑。
 
+## 直接启动与模式切换
+
+直接运行 `NextDayz.exe` 或 `gnb run NextDayz` 会进入直升机大厅并打开“游玩模式 / 服务器”。
+大厅左上角和游戏 HUD 始终显示当前模式；大厅还显示 Master 登录状态，登录成功后显示角色昵称。
+右上角“游玩模式 / 服务器”可随时重新打开选择面板，“设置”仍独立可用。
+
+| 模式 | 入口 | 存档与装备 |
+| --- | --- | --- |
+| 单机训练场 | 无需登录，启动面板或大厅整备区“进入训练场” | 每次创建临时训练会话，训练物品不写入单机战役或 Master 仓库 |
+| 单机战役 | 启动面板“单机战役”，随后在大厅继续或出征 | 使用原有本地角色、安全屋和战役存档 |
+| Master 联机 | “Master 服务器”列表选择地址，输入昵称后“登录 Master” | 每个 Master 的账号、仓库和在外角色独立；登录后选地图、准备装备、出征 |
+| 直连联机 | “直连服务器”输入主机、UDP 端口及昵称 | 直接连接独立 DS，不使用 Master 账号或仓库；地图跟随 DS |
+
+游戏内按 Esc，选择“返回大厅”后可再切换模式。单机战役先保存；训练会话丢弃临时装备；
+Master 联机保留登录并由服务器保存野外角色，**返回大厅不等于撤离入库**。要更换 Master 或退出
+联机，在大厅选择另一台服务器或单机模式即可。连接失败时仍可返回单机或直接进入训练场。
+
+默认服务器列表在 `assets/configs/nextdayz_servers.json`，只预置 `http://127.0.0.1:7780`，并不自动
+启动本机服务。可在界面添加、命名和保存 HTTP Master 地址；用户列表保存在 NextDayz 用户数据目录的
+`servers.json`。昵称会记住，登录 token 仅保留在当前进程内。服务端仍使用现有 MVP 昵称登录契约。
+
+命令行入口保持可用：
+
+```powershell
+gnb master serve                             # 默认本机 HTTP 7780，按需启动地图 DS
+gnb ds --master                              # 本机 Master + 自动登录的客户端
+gnb ds                                      # 独立 DS + 直连客户端
+out/build/windows/bin/NextDayz.exe --cvar "nextdayz.net.master http://127.0.0.1:7780" --cvar "nextdayz.net.name alpha"
+```
+
+传 `nextdayz.net.master` 而未指定角色时按 Master 客户端启动；显式 `server` 仍按 DS 启动。
+`nextdayz.net.autoDeploy true` 的自动登录/派遣流程、显式场景回归脚本和专用服务器不弹启动选择面板。
+`nextdayz.ui.sessionMenu true` 可显式打开面板。没有 NextNet 的构建保留单机入口并禁用联机按钮。
+
 ## 1. 已定决策（2026-11-09）
 
 | 议题 | 决定 | 理由 |
@@ -128,14 +162,14 @@ last_updated: 2026-11-10
 
 ## 7. 直连联机原型（当前可运行）
 
-M2/M3/M4 的第一个可玩切片：一个 NextDayz 进程当地图服务器，其余进程作为客户端直连。还没有 Master。
+直连方式：一个 NextDayz 进程当地图服务器，其余进程作为客户端直连，不经过 Master。
 
 最快的方式是 `gnb ds`：本地起一个隐藏窗口的服务器，加载完地图后再起一个客户端连上，客户端关掉时服务器一起停止
 （`--clients 2 --pvp` 两人互伤，日志在 `out/build/<preset>/ds-runs/`）。手动启动的等价命令如下。
 
 ```powershell
 # 服务器（无本地玩家，隐藏窗口；UDP 27015；互伤开）
-out/build/windows/bin/NextDayz.exe --hidden-window --cvar "nextdayz.net.mode server" --cvar "nextdayz.net.pvp true"
+out/build/windows/bin/NextDayz.exe --dedicated --cvar "nextdayz.net.mode server" --cvar "nextdayz.net.pvp true"
 # 客户端（每开一个就是一名幸存者；跨机器时把 host 换成服务器 IP）
 out/build/windows/bin/NextDayz.exe --cvar "nextdayz.net.mode client" --cvar "nextdayz.net.name alpha"
 out/build/windows/bin/NextDayz.exe --cvar "nextdayz.net.mode client" --cvar "nextdayz.net.name bravo" --cvar "nextdayz.net.host 127.0.0.1"
@@ -151,7 +185,7 @@ out/build/windows/bin/NextDayz.exe --cvar "nextdayz.net.mode client" --cvar "nex
 | `nextdayz.net.kit` | 客户端出生自带 AK、60 发与背包（测试用，默认开） |
 
 行为：
-- 客户端跳过安全屋，直接出生在地图第一个安全落点，按幸存者 id 排成小圈；地图以服务器为准（不一致会自动切图）。
+- 客户端先显示连接大厅，加入后出生在地图第一个安全落点，按幸存者 id 排成小圈；地图以服务器为准（不一致会自动切图）。
 - 服务器运行 WorldSim：感染者只在服务器刷新、感知、追击和攻击，20 Hz 快照给客户端；客户端插值显示，
   命中盒取自本地动画，命中感染者上报服务器结算，伤害通知广播给所有人（只有射手有命中标记）。
 - 客户端 30 Hz 上报位置与表现状态；远端幸存者用同一套士兵 rig 播放其移动、持枪、换弹和翻越。

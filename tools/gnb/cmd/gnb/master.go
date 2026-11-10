@@ -6,10 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/console"
@@ -28,13 +31,16 @@ type masterOptions struct {
 	DataDir     string
 	PortBase    int
 	MaxPlayers  int
+	MaxServers  int
 	IdleSeconds int
 	Pvp         bool
 	Cheats      bool
+	RuntimeRoot string
+	Headless    bool
 }
 
 func newMasterCommand(ctx appContext) *cobra.Command {
-	opts := masterOptions{Listen: "127.0.0.1:7780", PortBase: 27100, MaxPlayers: 16, IdleSeconds: 300}
+	opts := masterOptions{Listen: "127.0.0.1:7780", PortBase: 27100, MaxPlayers: 16, MaxServers: 32, IdleSeconds: 300, Headless: runtime.GOOS == "linux"}
 	cmd := &cobra.Command{
 		Use:   "master",
 		Short: tr("cli.master.short"),
@@ -47,7 +53,7 @@ func newMasterCommand(ctx appContext) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			runCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+			runCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 			return m.Run(runCtx)
 		},
@@ -57,9 +63,12 @@ func newMasterCommand(ctx appContext) *cobra.Command {
 	serve.Flags().StringVar(&opts.DataDir, "data", "", "directory for master.json and server logs (default out/build/<preset>/master)")
 	serve.Flags().IntVar(&opts.PortBase, "port-base", opts.PortBase, "first UDP port given to a map server")
 	serve.Flags().IntVar(&opts.MaxPlayers, "max-players", opts.MaxPlayers, "survivors per map server")
+	serve.Flags().IntVar(&opts.MaxServers, "max-servers", opts.MaxServers, "maximum concurrent DS processes; UDP range is port-base through port-base + max-servers - 1")
 	serve.Flags().IntVar(&opts.IdleSeconds, "idle", opts.IdleSeconds, "seconds an empty map server lives")
 	serve.Flags().BoolVar(&opts.Pvp, "pvp", false, "friendly fire on new map servers")
 	serve.Flags().BoolVar(&opts.Cheats, "cheats", false, "map servers honour clients' test hooks (automated tests)")
+	serve.Flags().StringVar(&opts.RuntimeRoot, "runtime-root", "", "standalone server bundle root (auto-detected beside bin/gnb)")
+	serve.Flags().BoolVar(&opts.Headless, "headless", opts.Headless, "DS uses VK_EXT_headless_surface without a desktop (default on Linux)")
 
 	var url string
 	status := &cobra.Command{
@@ -118,41 +127,63 @@ func newMasterCommand(ctx appContext) *cobra.Command {
 
 func newMaster(ctx appContext, opts masterOptions) (*dzmaster.Master, error) {
 	binDir := platform.BinDir(ctx.repoRoot, ctx.preset)
+	assetRoot := ctx.repoRoot
+	if opts.RuntimeRoot == "" {
+		if executable, err := os.Executable(); err == nil {
+			root := filepath.Dir(filepath.Dir(executable))
+			if _, err := os.Stat(filepath.Join(root, "nextdayz-server.json")); err == nil {
+				opts.RuntimeRoot = root
+			}
+		}
+	}
+	if opts.RuntimeRoot != "" {
+		root, err := filepath.Abs(opts.RuntimeRoot)
+		if err != nil {
+			return nil, err
+		}
+		assetRoot, binDir = root, filepath.Join(root, "bin")
+	} else if ctx.repoRoot == "" {
+		return nil, fmt.Errorf("no server bundle found; use --runtime-root <extracted-package>")
+	}
 	exe := platform.ExecutablePath(binDir, "NextDayz")
 	if _, err := os.Stat(exe); err != nil {
 		return nil, fmt.Errorf("executable not found: %s\n请先运行 `gnb build NextDayz`", exe)
 	}
-	maps, err := dzmaster.LoadMaps(filepath.Join(ctx.repoRoot, "assets", "configs", "nextdayz_maps.json"))
+	maps, err := dzmaster.LoadMaps(filepath.Join(assetRoot, "assets", "configs", "nextdayz_maps.json"))
 	if err != nil {
 		return nil, err
 	}
 	if opts.DataDir == "" {
 		opts.DataDir = filepath.Join(filepath.Dir(binDir), "master")
+		if opts.RuntimeRoot != "" {
+			opts.DataDir = filepath.Join(assetRoot, "data")
+		}
 	}
 	publicHost := opts.PublicHost
 	if publicHost == "" {
 		host, _, _ := splitHostPort(opts.Listen)
 		publicHost = host
 	}
+	if publicHost == "" || publicHost == "0.0.0.0" || publicHost == "::" {
+		return nil, fmt.Errorf("--public-host must specify the public IP or DNS name when listening on all interfaces")
+	}
 	dsArgs := []string{}
+	if opts.Headless {
+		dsArgs = append(dsArgs, "--headless-surface")
+	}
 	if opts.Cheats {
 		dsArgs = append(dsArgs, "--cvar", "nextdayz.net.cheats true")
 	}
 	return dzmaster.New(dzmaster.Config{
 		Listen: opts.Listen, PublicHost: publicHost, DataDir: opts.DataDir, Exe: exe, Maps: maps,
-		PortBase: opts.PortBase, MaxPlayers: opts.MaxPlayers, IdleSeconds: opts.IdleSeconds, Pvp: opts.Pvp,
+		PortBase: opts.PortBase, MaxPlayers: opts.MaxPlayers, MaxServers: opts.MaxServers, IdleSeconds: opts.IdleSeconds, Pvp: opts.Pvp,
 		DSArgs: dsArgs, Launch: dzmaster.ExecLauncher(exe),
 		Logf: func(format string, args ...any) { console.Info("[master] "+format, args...) },
 	})
 }
 
 func splitHostPort(address string) (string, string, error) {
-	for i := len(address) - 1; i >= 0; i-- {
-		if address[i] == ':' {
-			return address[:i], address[i+1:], nil
-		}
-	}
-	return address, "", nil
+	return net.SplitHostPort(address)
 }
 
 func masterCall(url, path string, body any) ([]byte, error) {

@@ -2,8 +2,8 @@
 // NextDayzNetwork.cpp - NextDayzGameInstance's multiplayer half: a map server
 // (the authoritative WorldSim with every client's survivor in it, no local
 // player) and a client (plays its own survivor; the infected, the other
-// survivors and the world clock come from the server). Direct connection, no
-// Master yet. Movement is the client's; infected, damage and friendly fire are
+// survivors and the world clock come from the server). Supports direct and
+// Master-managed connections. Movement is the client's; infected, damage and friendly fire are
 // the server's. See docs/projects/nextdayz/nextdayz-multiplayer-design.md.
 // ============================================================================
 
@@ -604,6 +604,97 @@ void NextDayzGameInstance::ShutdownNetwork()
     }
 }
 
+bool NextDayzGameInstance::NetworkAvailable() const { return true; }
+bool NextDayzGameInstance::NetLoggedIn() const
+{
+    return net_ && net_->master && !net_->token.empty() && net_->lobby != FNetSession::ELobby::Login;
+}
+std::string NextDayzGameInstance::NetAccountName() const
+{
+    return NetLoggedIn() ? (net_->profile.name.empty() ? std::string(net_->nameBuffer.data()) : net_->profile.name) : std::string();
+}
+std::string NextDayzGameInstance::NetLobbyStatus() const
+{
+    if (!net_) return {};
+    return net_->lobbyMessage.empty() ? net_->status : net_->lobbyMessage;
+}
+
+void NextDayzGameInstance::RetireNetworkSession()
+{
+    ShutdownNetwork();
+    if (net_) retiredNetSessions_.push_back(std::move(net_));
+    netDamage_.clear();
+    netStrikes_.clear();
+}
+
+void NextDayzGameInstance::PumpRetiredNetworkSessions()
+{
+    for (auto it = retiredNetSessions_.begin(); it != retiredNetSessions_.end();)
+    {
+        auto& session = **it;
+        if (session.master) session.master->Pump();
+        if (!session.master || session.master->Pending() == 0) it = retiredNetSessions_.erase(it);
+        else ++it;
+    }
+}
+
+void NextDayzGameInstance::LoginToMaster(const std::string& address, const std::string& name)
+{
+    std::string url;
+    if (!NextNet::HttpAvailable())
+    {
+        sessionMenuMessage_ = "Master login is unavailable in this build. Direct and offline play are available.";
+        return;
+    }
+    if (!NextDayz::NormalizeMasterUrl(address, url))
+    {
+        sessionMenuMessage_ = "Enter an HTTP Master address, for example http://127.0.0.1:7780.";
+        return;
+    }
+    const auto first = name.find_first_not_of(" \t\r\n");
+    const std::string trimmed = first == std::string::npos ? "" : name.substr(first, name.find_last_not_of(" \t\r\n") - first + 1);
+    if (trimmed.empty() || trimmed.size() > 32)
+    {
+        sessionMenuMessage_ = "Enter a survivor name of 1-32 bytes.";
+        return;
+    }
+    if (!PrepareSessionSwitch()) return;
+    RetireNetworkSession();
+    netMode_ = ENetMode::Client;
+    trainingSession_ = false;
+    netMasterCvar_ = url;
+    netNameCvar_ = trimmed;
+    netAutoDeployCvar_ = false;
+    loadingCabin_ = cabinLobby_ = true;
+    sessionMenuOpen_ = false;
+    sessionMenuMessage_ = {};
+    GetEngine().RequestLoadScene({.filename = cabinScenePath});
+    StartNetwork();
+    net_->wantLogin = true;
+}
+
+void NextDayzGameInstance::ConnectDirect(const std::string& host, int port, const std::string& name)
+{
+    if (host.empty() || host.find_first_of(" \t\r\n/\\") != std::string::npos || port < 1 || port > 65535)
+    {
+        sessionMenuMessage_ = "Enter a server host and a UDP port from 1 to 65535.";
+        return;
+    }
+    if (!PrepareSessionSwitch()) return;
+    RetireNetworkSession();
+    netMode_ = ENetMode::Client;
+    trainingSession_ = false;
+    netMasterCvar_.clear();
+    netHostCvar_ = host;
+    netPortCvar_ = port;
+    netNameCvar_ = name.empty() ? "Survivor" : name;
+    netAutoDeployCvar_ = false;
+    loadingCabin_ = cabinLobby_ = true;
+    sessionMenuOpen_ = false;
+    GetEngine().RequestLoadScene({.filename = cabinScenePath});
+    StartNetwork();
+}
+
 void NextDayzGameInstance::NetPoll()
 {
     if (!net_)
@@ -1035,7 +1126,7 @@ void NextDayzGameInstance::NetPoll()
             net.status = "online";
             SPDLOG_INFO("[NextDayz][net] joined as survivor {} on '{}', friendly fire {}", welcome.survivorId,
                         welcome.scene, welcome.pvp ? "ON" : "OFF");
-            if (welcome.scene != campaignMap_ || cabinScene_)
+            if (welcome.scene != campaignMap_ || cabinScene_ || loadingCabin_)
             {
                 // Same map as the server, whatever this client started with.
                 loadingMapPath_ = welcome.scene;
@@ -1686,7 +1777,8 @@ void NextDayzGameInstance::RegisterNetQueries(Runtime::Agent::FAgentQueryRegistr
     reg.Add("netMyHits", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->myHits : 0); });
     reg.Add("netLobby", [this]() -> FAgentQueryValue
     {
-        if (!net_ || !net_->master) return std::string("off");
+        if (!net_) return std::string("off");
+        if (!net_->master) return std::string(NetInLobby() ? "connecting" : "playing");
         switch (net_->lobby)
         {
         case FNetSession::ELobby::Login: return std::string("login");
@@ -2144,7 +2236,9 @@ void NextDayzGameInstance::DrawNetPanel()
 
 bool NextDayzGameInstance::NetInLobby() const
 {
-    return net_ && net_->master && netMode_ == ENetMode::Client && net_->lobby != FNetSession::ELobby::Playing;
+    if (!net_ || netMode_ != ENetMode::Client) return false;
+    return net_->master ? net_->lobby != FNetSession::ELobby::Playing
+                        : net_->survivorId == 0 || cabinScene_ || !sceneReady_;
 }
 
 void NextDayzGameInstance::NetReturnToLobby(std::string message)
@@ -2245,6 +2339,11 @@ void NextDayzGameInstance::NetAfterSceneLoaded()
 void NextDayzGameInstance::TickLobby(float dt)
 {
     FNetSession& net = *net_;
+    if (!net.master)
+    {
+        NetClientSend(dt);
+        return;
+    }
     net.master->Pump();
     using ELobby = FNetSession::ELobby;
     if (net.refreshProfile && sceneReady_ && cabinScene_)
@@ -2254,9 +2353,9 @@ void NextDayzGameInstance::TickLobby(float dt)
         {
             net.refreshProfile = false;
             ++net.profileAttempts;
-            net.master->Post("/api/profile", "{}", [this](const NextNet::FHttpResult& result)
+            net.master->Post("/api/profile", "{}", [this, session = &net](const NextNet::FHttpResult& result)
             {
-                if (!net_) return;
+                if (net_.get() != session) return;
                 if (result.Ok() && Master::ParseProfile(result.body, net_->profile))
                 {
                     net_->bring.assign(net_->profile.storage.size(), 0);
@@ -2272,18 +2371,20 @@ void NextDayzGameInstance::TickLobby(float dt)
                 else
                 {
                     net_->lobbyMessage = "Cannot refresh storage. Please log in again.";
+                    net_->token.clear();
+                    net_->profile = {};
                     net_->lobby = ELobby::Login;
                     SPDLOG_WARN("[NextDayz][net] profile unavailable (HTTP {}): {}", result.status, result.error);
                 }
-            }, net.token);
+            }, net.token, 3);
         }
     }
     const auto login = [this, &net]()
     {
         net.lobby = ELobby::Waiting;
-        net.master->Post("/api/login", Master::LoginRequest(net.nameBuffer.data()), [this](const NextNet::FHttpResult& result)
+        net.master->Post("/api/login", Master::LoginRequest(net.nameBuffer.data()), [this, session = &net](const NextNet::FHttpResult& result)
         {
-            if (!net_) return;
+            if (net_.get() != session) return;
             uint64_t playerId = 0;
             if (!result.Ok() || !Master::ParseLogin(result.body, playerId, net_->token))
             {
@@ -2291,8 +2392,11 @@ void NextDayzGameInstance::TickLobby(float dt)
                 net_->lobby = ELobby::Login;
                 return;
             }
+            std::string error;
+            GetEngine().GetCVarSystem().SetValueFromString("nextdayz.settings.survivorName", net_->nameBuffer.data(),
+                NextCVar::ECVarSetBy::Console, &error);
             NetReturnToLobby(net_->lobbyMessage);
-        });
+        }, {}, 3);
     };
     if (net.lobby == ELobby::Login && !net.autoTried && netAutoDeployCvar_ && net.nameBuffer[0] != '\0')
     {
@@ -2365,9 +2469,9 @@ void NextDayzGameInstance::TickLobby(float dt)
                 ? net.profile.maps[net.mapChoice - 1].id : std::string();
         net.lobbyMessage.clear();
         net.lobby = ELobby::Waiting;
-        net.master->Post("/api/deploy", Master::DeployRequest(mapId, bring), [this](const NextNet::FHttpResult& result)
+        net.master->Post("/api/deploy", Master::DeployRequest(mapId, bring), [this, active = &net](const NextNet::FHttpResult& result)
         {
-            if (!net_) return;
+            if (net_.get() != active) return;
             FNetSession& session = *net_;
             if (!result.Ok() || !Master::ParseDeploy(result.body, session.deploy))
             {
@@ -2389,7 +2493,7 @@ void NextDayzGameInstance::TickLobby(float dt)
                 loadingMapPath_ = session.deploy.scene;
                 GetEngine().RequestLoadScene({.filename = loadingMapPath_});
             }
-        }, net.token);
+        }, net.token, 3);
     }
 }
 
@@ -2398,6 +2502,13 @@ bool NextDayzGameInstance::DrawLobby()
     if (!NetInLobby()) return false;
     using namespace NextDayz::L10n;
     FNetSession& net = *net_;
+    if (!net.master)
+    {
+        bool deploy = false;
+        DrawCabinMenu(Format("Direct server: {}:{}", netHostCvar_, netPortCvar_) + "\n" +
+            Tr("Waiting for the game server. You can switch modes or train offline."), false, false, deploy);
+        return true;
+    }
     using ELobby = FNetSession::ELobby;
     const auto& profile = net.profile;
     const bool ready = net.lobby == ELobby::Profile;
@@ -2411,19 +2522,6 @@ bool NextDayzGameInstance::DrawLobby()
     else if (status.empty()) status = Tr(net.lobby == ELobby::Login ? "Log in to prepare your next expedition."
         : net.lobby == ELobby::Joining ? "Joining expedition..." : "Preparing your expedition...");
     DrawCabinMenu(status, ready && profile.playing.empty(), resume, net.wantDeploy);
-    if (net.lobby == ELobby::Login)
-    {
-        const auto* vp = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.035f, vp->WorkPos.y + vp->WorkSize.y * 0.60f));
-        ImGui::SetNextWindowSize(ImVec2(std::clamp(vp->WorkSize.x * 0.23f, 200.0f, 310.0f), 145));
-        ImGui::SetNextWindowBgAlpha(0.92f);
-        ImGui::Begin("##cabin_login", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
-        ImGui::TextUnformatted(Tr("Survivor name"));
-        ImGui::SetNextItemWidth(-1);
-        const bool enter = ImGui::InputText("##survivor_name", net.nameBuffer.data(), net.nameBuffer.size(), ImGuiInputTextFlags_EnterReturnsTrue);
-        if ((ImGui::Button(Label("Log in"), ImVec2(-1,32)) || enter) && net.nameBuffer[0] != '\0') net.wantLogin = true;
-        ImGui::End();
-    }
     if (safehouseTab_ < 0) return true;
     BeginCabinPanel(safehouseTab_ == 0 ? "WORLD / OPERATIONS" : "STORAGE / LOADOUT");
     if (safehouseTab_ == 0)
@@ -2514,6 +2612,14 @@ void NextDayzGameInstance::StartNetwork()
     netMode_ = ENetMode::Offline;
 }
 void NextDayzGameInstance::ShutdownNetwork() {}
+bool NextDayzGameInstance::NetworkAvailable() const { return false; }
+bool NextDayzGameInstance::NetLoggedIn() const { return false; }
+std::string NextDayzGameInstance::NetAccountName() const { return {}; }
+std::string NextDayzGameInstance::NetLobbyStatus() const { return {}; }
+void NextDayzGameInstance::RetireNetworkSession() { net_.reset(); }
+void NextDayzGameInstance::PumpRetiredNetworkSessions() {}
+void NextDayzGameInstance::LoginToMaster(const std::string&, const std::string&) {}
+void NextDayzGameInstance::ConnectDirect(const std::string&, int, const std::string&) {}
 void NextDayzGameInstance::NetPoll() {}
 void NextDayzGameInstance::TickServer(float) {}
 void NextDayzGameInstance::NetClientSend(float) {}

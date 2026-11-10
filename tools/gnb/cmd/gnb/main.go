@@ -96,6 +96,7 @@ func main() {
 		"help":       true,
 		"version":    true,
 		"completion": true,
+		"master":     true, // Deployed server bundles do not contain a source repository.
 	}
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if repoErr == nil {
@@ -1159,6 +1160,7 @@ func newPackageCommand(ctx appContext) *cobra.Command {
 	cmd.Flags().StringVar(&runtimePak, "runtime-pak", "", "reuse a directory containing runtime.pak, runtime-assets.txt, and runtime.manifest.json")
 	cmd.Flags().IntVar(&traceFrames, "trace-frames", 120, "stable frames to sample per target with --trace-assets")
 	cmd.Flags().BoolVar(&includeGNB, "include-gnb", false, "include the gnb executable and agent manifest in the desktop package")
+	cmd.AddCommand(newNextDayzPackageCommand(ctx, false), newNextDayzPackageCommand(ctx, true))
 	return cmd
 }
 

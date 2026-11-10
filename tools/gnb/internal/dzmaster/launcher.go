@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 )
 
 // execLauncher runs a DS as a child process, its output in a log file.
@@ -41,7 +42,11 @@ func (l execLauncher) Launch(server *Server, args []string, logPath string) (Pro
 		return nil, err
 	}
 	cmd := exec.Command(l.exe, args...)
+	configureDSProcess(cmd)
 	cmd.Dir = filepath.Dir(l.exe)
+	if runtime.GOOS == "linux" {
+		cmd.Env = append(os.Environ(), "LD_LIBRARY_PATH="+cmd.Dir+":"+os.Getenv("LD_LIBRARY_PATH"))
+	}
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	if err := cmd.Start(); err != nil {

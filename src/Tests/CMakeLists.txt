@@ -20,6 +20,7 @@ set(unitTestSources
     Test_LDrawParser.cpp
     Test_LDrawConnectivity.cpp
     Test_CVarSystem.cpp
+    Test_NextDayzSessions.cpp
     Test_SceneList.cpp
     Test_SceneReference.cpp
     Test_ScadLoader.cpp
@@ -151,6 +152,7 @@ set(unitTestSources
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Zombies/ZombieVisualPool.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Debugger/DebugEventLog.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/UI/Localization.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Net/ServerDirectory.cpp
 )
 
 if("NextNet" IN_LIST GK_MODULE_NAMES)

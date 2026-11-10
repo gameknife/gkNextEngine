@@ -42,6 +42,7 @@ namespace NextDayz
     public:
         void SetEngine(NextEngine* engine) { engine_ = engine; }
         void SetListener(const glm::vec3& position) { listener_ = position; }
+        void SetVolume(float volume) { volume_ = glm::clamp(volume, 0.0f, 1.0f); }
         uint64_t PlayedCount() const { return played_; }
 
         // Player weapon.
@@ -112,6 +113,7 @@ namespace NextDayz
         float Falloff(const glm::vec3& at, float range) const;
 
         NextEngine* engine_ = nullptr;
+        float volume_ = 1.0f;
         glm::vec3 listener_{0.0f};
         std::array<uint32_t, CueCount> cursors_{};
         uint64_t played_ = 0;

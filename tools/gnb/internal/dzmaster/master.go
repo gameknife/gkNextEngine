@@ -76,6 +76,7 @@ type Config struct {
 	Maps        []MapInfo
 	PortBase    int      // first UDP port handed to a DS
 	MaxPlayers  int      // survivors per DS
+	MaxServers  int      // bounds the DS UDP port range and process count
 	IdleSeconds int      // an empty DS is stopped after this long
 	Pvp         bool     // friendly fire on new servers
 	DSArgs      []string // extra arguments for every DS
@@ -149,6 +150,12 @@ func New(cfg Config) (*Master, error) {
 	if cfg.MaxPlayers == 0 {
 		cfg.MaxPlayers = 16
 	}
+	if cfg.MaxServers == 0 {
+		cfg.MaxServers = 32
+	}
+	if cfg.MaxServers < 1 || cfg.PortBase < 1 || cfg.PortBase > 65535 || cfg.MaxServers > 65536-cfg.PortBase {
+		return nil, errors.New("invalid DS port range: port-base + max-servers must fit UDP ports 1..65535")
+	}
 	if cfg.IdleSeconds == 0 {
 		cfg.IdleSeconds = 300
 	}
@@ -169,7 +176,18 @@ func New(cfg Config) (*Master, error) {
 		tickets: map[string]*ticket{}, nextDS: 1}, nil
 }
 
-func (m *Master) URL() string { return "http://" + m.cfg.Listen }
+// DS processes run on this machine. Wildcard bind addresses are not callback hosts.
+func (m *Master) URL() string {
+	host, port, err := net.SplitHostPort(m.cfg.Listen)
+	if err == nil && (host == "" || host == "0.0.0.0" || host == "::") {
+		host = "127.0.0.1"
+		if strings.Contains(m.cfg.Listen, "[") {
+			host = "::1"
+		}
+		return "http://" + net.JoinHostPort(host, port)
+	}
+	return "http://" + m.cfg.Listen
+}
 
 // Handler serves the client API (/api), the DS API (/ds) and admin (/admin).
 func (m *Master) Handler() http.Handler {
@@ -186,7 +204,16 @@ func (m *Master) Handler() http.Handler {
 	mux.HandleFunc("/admin/pvp", m.handleAdminPvp)
 	mux.HandleFunc("/admin/kick", m.handleAdminKick)
 	mux.HandleFunc("/admin/stop", m.handleAdminStop)
-	return mux
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/admin/") {
+			host, _, err := net.SplitHostPort(r.RemoteAddr)
+			if err != nil || !net.ParseIP(host).IsLoopback() {
+				httpError(w, http.StatusForbidden, "admin API is loopback-only")
+				return
+			}
+		}
+		mux.ServeHTTP(w, r)
+	})
 }
 
 // Run serves until ctx ends, then stops every DS (they checkpoint first).
@@ -420,6 +447,9 @@ func (m *Master) pendingLocked(serverID string) int {
 func (m *Master) launchLocked(mapInfo MapInfo) (*Server, error) {
 	port := m.cfg.PortBase
 	for {
+		if port >= m.cfg.PortBase+m.cfg.MaxServers {
+			return nil, errors.New("map server capacity reached")
+		}
 		taken := false
 		for _, s := range m.servers {
 			if s.State != stateDead && s.Port == port {

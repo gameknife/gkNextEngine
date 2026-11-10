@@ -2328,6 +2328,7 @@ namespace NextDayz::NextDayzHUD
         // ====================================================================
         void DrawSessionOverlay(const FHudContext& context)
         {
+            if (context.settingsOpen) return;
             if (!context.paused && context.survival.lifeState != EPlayerLifeState::Dead)
             {
                 return;
@@ -2377,12 +2378,23 @@ namespace NextDayz::NextDayzHUD
                 ImGui::TextWrapped("%s", NextDayz::L10n::Tr("LMB fire/swing  RMB tap ADS / hold aim  R reload  1/2/3/Q weapons  E take  F fill bottle"));
                 ImGui::TextWrapped("%s", NextDayz::L10n::Tr("Tab inventory  4-7 quickbar  H bandage  M map  L lantern  V view  Alt free look"));
                 ImGui::Spacing();
-                if (context.restartSession && ImGui::Button(NextDayz::L10n::Label("RESTART RUN"), ImVec2(-1.0f, 36.0f)))
+                if (context.resumeSession && ImGui::Button(NextDayz::L10n::Label("RESUME GAME"), ImVec2(-1.0f, 38.0f)))
+                    context.resumeSession();
+                if (context.openSettings && ImGui::Button(NextDayz::L10n::Label("SETTINGS"), ImVec2(-1.0f, 38.0f)))
+                    context.openSettings();
+                const float halfWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+                if (context.restartSession && ImGui::Button(NextDayz::L10n::Label("RESTART RUN"), ImVec2(halfWidth, 36.0f)))
                 {
                     context.restartSession();
                 }
+                if (context.restartSession) ImGui::SameLine();
+                if (context.returnToLobby && ImGui::Button(NextDayz::L10n::Label("RETURN TO LOBBY"), ImVec2(-1,36)))
+                    context.returnToLobby();
             }
-            NextDayz::L10n::DrawLanguageSelector();
+            if (context.survival.lifeState == EPlayerLifeState::Dead && context.openSettings &&
+                ImGui::Button(NextDayz::L10n::Label("SETTINGS"), ImVec2(-1.0f, 38.0f))) context.openSettings();
+            if (context.survival.lifeState == EPlayerLifeState::Dead && context.returnToLobby &&
+                ImGui::Button(NextDayz::L10n::Label("RETURN TO LOBBY"), ImVec2(-1.0f, 36.0f))) context.returnToLobby();
             ImGui::End();
             ImGui::PopStyleVar(2);
             ImGui::PopStyleColor(2);
@@ -2394,6 +2406,16 @@ namespace NextDayz::NextDayzHUD
     // ========================================================================
     void Draw(const FHudContext& context)
     {
+        if (!context.sessionLabel.empty())
+        {
+            const auto* viewport = ImGui::GetMainViewport();
+            ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + 20, viewport->WorkPos.y + 20));
+            ImGui::SetNextWindowBgAlpha(0.8f);
+            ImGui::Begin("##nd_session_mode", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize);
+            ImGui::TextUnformatted(context.sessionLabel.c_str());
+            ImGui::End();
+        }
         if (context.showInventory)
         {
             DrawInventoryPanel(context);

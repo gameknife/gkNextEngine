@@ -16,7 +16,7 @@ bool NextDayzGameInstance::CampaignEnabled() const
 {
     // A networked survivor plays straight in the map (the Master/Hive owns
     // storage later); offline keeps the safehouse campaign.
-    if (netMode_ != ENetMode::Offline) return false;
+    if (trainingSession_ || netMode_ != ENetMode::Offline) return false;
     return !GOption->AgentValidation || validationCampaign_;
 }
 
@@ -255,7 +255,7 @@ NextDayz::FCampaignSave NextDayzGameInstance::CaptureCampaign() const
 
 bool NextDayzGameInstance::SaveCampaign()
 {
-    if (!CampaignEnabled() || !sceneReady_ || pendingCampaign_ || campaignSaveBlocked_ || campaignPath_.empty()) return false;
+    if (!CampaignEnabled() || !sceneReady_ || switchingCampaignContext_ || pendingCampaign_ || campaignSaveBlocked_ || campaignPath_.empty()) return false;
     if (!NextDayz::WriteCampaignSave(campaignPath_, CaptureCampaign(), saveError_))
     {
         campaignSaveBlocked_ = true;

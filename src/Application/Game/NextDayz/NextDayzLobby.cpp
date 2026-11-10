@@ -206,9 +206,13 @@ void NextDayzGameInstance::DrawCabinMenu(const std::string& status, bool canDepl
     const float width = std::clamp(size.x * 0.23f, 200.0f, 310.0f);
     const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground;
-    if (!ImGui::GetIO().WantTextInput)
+    if (!settingsOpen_ && !sessionMenuOpen_ && !ImGui::GetIO().WantTextInput)
     {
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) safehouseTab_ = -1;
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        {
+            if (safehouseTab_ >= 0) safehouseTab_ = -1;
+            else OpenSettings();
+        }
         if (ImGui::IsKeyPressed(ImGuiKey_M, false)) safehouseTab_ = safehouseTab_ == 0 ? -1 : 0;
         if (ImGui::IsKeyPressed(ImGuiKey_Tab, false)) safehouseTab_ = safehouseTab_ == 1 ? -1 : 1;
     }
@@ -228,6 +232,19 @@ void NextDayzGameInstance::DrawCabinMenu(const std::string& status, bool canDepl
     ImGui::TextUnformatted("NEXTDAYZ");
     ImGui::SetWindowFontScale(1.0f);
     ImGui::TextColored(ImVec4(0.80f,0.68f,0.43f,1), "%s", Tr("AIRBORNE / FORWARD OPERATIONS"));
+    const auto mode = std::string(Tr(SessionModeLabel())) + "  |  " +
+        (NetLoggedIn() ? Format("Logged in: {}", NetAccountName()) : std::string(Tr("Not logged in")));
+    ImGui::TextColored(ImVec4(0.72f,0.84f,0.80f,1), "%s", mode.c_str());
+    ImGui::End();
+    ImGui::SetNextWindowPos(ImVec2(bottom.x - margin - 400, origin.y + 30));
+    ImGui::SetNextWindowSize(ImVec2(228, 64));
+    ImGui::Begin("##cabin_mode", nullptr, flags);
+    if (ImGui::Button(Label("PLAY MODE / SERVERS"), ImVec2(-1, 38))) OpenSessionMenu();
+    ImGui::End();
+    ImGui::SetNextWindowPos(ImVec2(bottom.x - margin - 160, origin.y + 30));
+    ImGui::SetNextWindowSize(ImVec2(160, 64));
+    ImGui::Begin("##cabin_settings", nullptr, flags);
+    if (ImGui::Button(Label("SETTINGS"), ImVec2(-1, 38))) OpenSettings();
     ImGui::End();
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18,18));
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(14,12));
@@ -264,7 +281,7 @@ void NextDayzGameInstance::DrawCabinMenu(const std::string& status, bool canDepl
         {
             if (ImGui::Button(Label("STORAGE / LOADOUT  [TAB]"), ImVec2(-1,56))) safehouseTab_ = safehouseTab_ == 1 ? -1 : 1;
             ImGui::TextWrapped("%s", Tr("Equipment changes appear on your survivor."));
-            DrawLanguageSelector();
+            if (ImGui::Button(Label("ENTER TRAINING GROUND"), ImVec2(-1,36))) StartTraining();
         }
         ImGui::End();
     }
@@ -275,7 +292,12 @@ void NextDayzGameInstance::DrawCabinMenu(const std::string& status, bool canDepl
     ImGui::Begin("##cabin_status", nullptr, flags);
     ImGui::SetWindowFontScale(1.1f);
     ImGui::TextWrapped("%s", status.c_str());
-    ImGui::TextColored(ImVec4(0.68f,0.74f,0.70f,1), "%s", Tr("M  World map     TAB  Storage     ESC  Back to cabin"));
+    if (netMode_ == ENetMode::Client)
+    {
+        const auto connection = (NetUsesMaster() ? netMasterCvar_ + "  |  " : "") + Localize(NetLobbyStatus(), Language());
+        ImGui::TextWrapped("%s", connection.c_str());
+    }
+    ImGui::TextColored(ImVec4(0.68f,0.74f,0.70f,1), "%s", Tr("M  World map     TAB  Storage     ESC  Settings / Back"));
     ImGui::End();
 }
 

@@ -107,6 +107,11 @@ namespace NextDayz
         bool lanternLit = false;
         float lanternMinutes = 0.0f;
         bool paused = false;
+        bool settingsOpen = false;
+        std::string sessionLabel;
+        std::function<void()> openSettings;
+        std::function<void()> resumeSession;
+        std::function<void()> returnToLobby;
         double survivalSeconds = 0.0;
         int kills = 0;
         std::string objective;

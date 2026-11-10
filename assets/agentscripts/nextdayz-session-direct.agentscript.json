@@ -1,0 +1,63 @@
+{
+  "name": "nextdayz-session-direct",
+  "description": "Requires a standalone NextDayz --dedicated --load-scene assets/agentscripts/fixtures/nextdayz-traversal.scad --cvar \"nextdayz.net.mode server\" --cvar \"nextdayz.net.port 17881\". Exercises UI direct connection and returns without copying the starter kit into the local campaign.",
+  "target": "NextDayz",
+  "viewport": {
+    "width": 1600,
+    "height": 900
+  },
+  "args": [
+    "--cvar",
+    "nextdayz.validation.campaign true",
+    "--cvar",
+    "nextdayz.validation.campaignFresh true",
+    "--cvar",
+    "nextdayz.validation.campaignPath out/nextdayz-validation/session-direct.json",
+    "--cvar",
+    "nextdayz.ui.sessionMenu true"
+  ],
+  "defaults": {
+    "stepTimeoutMs": 60000
+  },
+  "steps": [
+    {"type": "wait-until", "query": "game.sceneReady", "op": "eq", "value": true, "timeoutMs": 30000, "fatal": true},
+    {"type": "click", "at": {"norm": [0.65, 0.264444]}, "button": "left"},
+    {"type": "wait-frames", "n": 4},
+    {"type": "assert", "query": "game.sessionMenuTab", "op": "eq", "value": 2, "fatal": true},
+    {"type": "click", "at": {"norm": [0.4375, 0.418889]}, "button": "left"},
+    {"type": "wait-frames", "n": 4},
+    {"type": "key", "code": "A", "action": "press", "mods": ["CTRL"]},
+    {"type": "wait-frames", "n": 4},
+    {"type": "key", "code": "LCTRL", "action": "up"},
+    {"type": "wait-frames", "n": 4},
+    {"type": "text", "value": "17881"},
+    {"type": "wait-frames", "n": 4},
+    {"type": "click", "at": {"norm": [0.4375, 0.483333]}, "button": "left"},
+    {"type": "wait-frames", "n": 4},
+    {"type": "key", "code": "A", "action": "press", "mods": ["CTRL"]},
+    {"type": "wait-frames", "n": 4},
+    {"type": "key", "code": "LCTRL", "action": "up"},
+    {"type": "wait-frames", "n": 4},
+    {"type": "text", "value": "direct-ui-check"},
+    {"type": "wait-frames", "n": 4},
+    {"type": "click", "at": {"norm": [0.5, 0.53]}, "button": "left"},
+    {"type": "wait-frames", "n": 4},
+    {"type": "wait-until", "query": "game.netLobby", "op": "eq", "value": "playing", "timeoutMs": 30000, "fatal": true},
+    {"type": "wait-until", "query": "game.netLootSynced", "op": "eq", "value": true, "timeoutMs": 30000, "fatal": true},
+    {"type": "assert", "query": "game.sessionMode", "op": "eq", "value": "direct", "fatal": true},
+    {"type": "assert", "query": "game.loggedIn", "op": "eq", "value": false, "fatal": true},
+    {"type": "assert", "query": "game.cabinScene", "op": "eq", "value": false, "fatal": true},
+    {"type": "screenshot", "out": "screenshots/session-direct-online", "ui": true},
+    {"type": "key", "code": "Escape", "action": "press"},
+    {"type": "wait-frames", "n": 4},
+    {"type": "click", "at": {"norm": [0.625, 0.614444]}, "button": "left"},
+    {"type": "wait-frames", "n": 4},
+    {"type": "wait-until", "query": "game.sessionMode", "op": "eq", "value": "offline", "timeoutMs": 30000, "fatal": true},
+    {"type": "wait-until", "query": "game.cabinScene", "op": "eq", "value": true, "timeoutMs": 30000, "fatal": true},
+    {"type": "wait-until", "query": "game.inventoryCount", "op": "eq", "value": 0, "timeoutMs": 30000, "fatal": true},
+    {"type": "assert", "query": "game.loggedIn", "op": "eq", "value": false, "fatal": true},
+    {"type": "assert", "query": "game.campaignGold", "op": "eq", "value": 0, "fatal": true},
+    {"type": "screenshot", "out": "screenshots/session-direct-return-offline", "ui": true},
+    {"type": "quit"}
+  ]
+}

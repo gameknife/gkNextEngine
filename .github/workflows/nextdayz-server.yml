@@ -1,0 +1,226 @@
+name: NextDayz packages and release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package version and Release tag (letters, digits, dots, underscores, hyphens)
+        required: true
+        default: nextdayz-snapshot
+        type: string
+      master_url:
+        description: Optional public Master HTTP URL preconfigured in client packages
+        required: false
+        default: ''
+        type: string
+      publish_release:
+        description: Publish all four packages and checksums to GitHub Release after validation
+        required: true
+        default: true
+        type: boolean
+  push:
+    tags:
+      - 'nextdayz-*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nextdayz-packages-${{ inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: win64
+            runner: windows-latest
+            entry: ./gnb.bat
+          - platform: linux64
+            runner: ubuntu-24.04
+            entry: ./gnb.sh
+    runs-on: ${{ matrix.runner }}
+    env:
+      PACKAGE_VERSION: ${{ inputs.version || github.ref_name }}
+      NEXTDAYZ_MASTER_URL: ${{ inputs.master_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.23.x'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Validate version and test tools
+        shell: pwsh
+        run: |
+          if ($env:PACKAGE_VERSION -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw 'Invalid package version' }
+          git check-ref-format "refs/tags/$env:PACKAGE_VERSION"
+          if ($LASTEXITCODE -ne 0) { throw 'Package version must also be a valid Release tag' }
+          Push-Location tools/gnb
+          go test ./internal/packager ./internal/dzmaster ./cmd/gnb
+          $result = $LASTEXITCODE
+          Pop-Location
+          if ($result -ne 0) { exit $result }
+          python -m unittest discover -s tools/nextdayz -p test_release_packages.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Cache key
+        id: gnb
+        shell: pwsh
+        run: |
+          "key=$(& '${{ matrix.entry }}' info --bincache-key)" >> $env:GITHUB_OUTPUT
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/cache@v6
+        with:
+          path: |
+            .vcpkg
+            .vcpkg_bincache
+          key: nextdayz-${{ steps.gnb.outputs.key }}
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes curl unzip tar ninja-build binutils libxi-dev libxinerama-dev libxcursor-dev libxrandr-dev wayland-protocols libxkbcommon-dev xorg-dev libvulkan1 mesa-vulkan-drivers software-properties-common vulkan-tools
+      - name: Upgrade Lavapipe for headless validation
+        if: runner.os == 'Linux'
+        run: |
+          sudo add-apt-repository --yes ppa:kisak/kisak-mesa
+          sudo apt-get update
+          sudo apt-get install --only-upgrade --yes mesa-vulkan-drivers libgbm1 libgl1-mesa-dri
+          lavapipe_icd="$(find /usr/share/vulkan/icd.d -maxdepth 1 -type f -name 'lvp_icd*.json' -print -quit)"
+          test -n "$lavapipe_icd"
+          echo "VK_ICD_FILENAMES=$lavapipe_icd" >> "$GITHUB_ENV"
+          echo "VK_DRIVER_FILES=$lavapipe_icd" >> "$GITHUB_ENV"
+          VK_ICD_FILENAMES="$lavapipe_icd" VK_DRIVER_FILES="$lavapipe_icd" vulkaninfo > /tmp/nextdayz-vulkaninfo.txt
+          grep --fixed-strings --quiet VK_EXT_headless_surface /tmp/nextdayz-vulkaninfo.txt
+      - name: Set up build dependencies
+        shell: pwsh
+        run: |
+          & '${{ matrix.entry }}' setup
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build and package native server and client
+        shell: pwsh
+        run: |
+          "BUILDVER($env:PACKAGE_VERSION)" | Set-Content src/build.version -NoNewline
+          & '${{ matrix.entry }}' package nextdayz-server --version "$env:PACKAGE_VERSION"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $clientArgs = @('package', 'nextdayz-client', '--skip-build', '--version', $env:PACKAGE_VERSION)
+          if ($env:NEXTDAYZ_MASTER_URL) { $clientArgs += @('--master-url', $env:NEXTDAYZ_MASTER_URL) }
+          & '${{ matrix.entry }}' @clientArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify relocated package and Master
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python tools/nextdayz/smoke_server_package.py "out/dist/nextdayz/NextDayz-server_win64_$env:PACKAGE_VERSION.zip"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/nextdayz/smoke_client_package.py "out/dist/nextdayz/NextDayz-client_win64_$env:PACKAGE_VERSION.zip"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify relocated package and all real map servers
+        if: runner.os == 'Linux'
+        run: python tools/nextdayz/smoke_server_package.py "out/dist/nextdayz/NextDayz-server_linux64_${PACKAGE_VERSION}.tar.gz" --launch-ds --timeout 300
+      - name: Verify relocated client rendering and training UI
+        if: runner.os == 'Linux'
+        run: python tools/nextdayz/smoke_client_package.py "out/dist/nextdayz/NextDayz-client_linux64_${PACKAGE_VERSION}.tar.gz" --launch --gnb "$PWD/gnb" --timeout 300
+      - name: Upload server and client packages together
+        uses: actions/upload-artifact@v7
+        with:
+          name: NextDayz-packages-${{ matrix.platform }}-${{ env.PACKAGE_VERSION }}
+          path: |
+            out/dist/nextdayz/NextDayz-server_${{ matrix.platform }}_${{ env.PACKAGE_VERSION }}.*
+            out/dist/nextdayz/NextDayz-client_${{ matrix.platform }}_${{ env.PACKAGE_VERSION }}.*
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 30
+      - name: Collect smoke evidence
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out/server-smoke-evidence | Out-Null
+          Get-ChildItem ([IO.Path]::GetTempPath()) -Directory -Filter 'nextdayz-server-smoke-*' | ForEach-Object {
+            Copy-Item $_.FullName out/server-smoke-evidence -Recurse -Force
+          }
+          Get-ChildItem ([IO.Path]::GetTempPath()) -Directory -Filter 'nextdayz-client-smoke-*' | ForEach-Object {
+            Copy-Item $_.FullName out/server-smoke-evidence -Recurse -Force
+          }
+      - name: Upload smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: NextDayz-server-evidence-${{ matrix.platform }}
+          path: |
+            out/server-smoke-evidence/**/master*.log
+            out/server-smoke-evidence/**/data/**
+            out/server-smoke-evidence/**/client*.log
+            out/server-smoke-evidence/**/agent_reports/**
+            out/server-smoke-evidence/**/validation_runs/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  release:
+    needs: package
+    if: github.event_name == 'push' || inputs.publish_release
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    env:
+      PACKAGE_VERSION: ${{ inputs.version || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Download both platform bundles
+        uses: actions/download-artifact@v8
+        with:
+          pattern: NextDayz-packages-*-${{ env.PACKAGE_VERSION }}
+          path: release-packages
+          merge-multiple: true
+      - name: Verify complete Release asset set
+        run: python tools/nextdayz/verify_release_packages.py release-packages --version "$PACKAGE_VERSION"
+      - name: Verify Release tag identifies the built commit
+        run: |
+          git check-ref-format "refs/tags/$PACKAGE_VERSION"
+          existing_ref="$(git ls-remote --refs origin "refs/tags/$PACKAGE_VERSION")"
+          if [ -n "$existing_ref" ]; then
+            git fetch --no-tags --depth=1 origin "refs/tags/$PACKAGE_VERSION"
+            tag_commit="$(git rev-parse 'FETCH_HEAD^{commit}')"
+            if [ "$tag_commit" != "$GITHUB_SHA" ]; then
+              echo "::error::Release tag $PACKAGE_VERSION points to $tag_commit, but these packages were built from $GITHUB_SHA. Run the workflow on that tag or choose a new version."
+              exit 1
+            fi
+          fi
+      - name: Publish all client and server packages
+        id: publish
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ env.PACKAGE_VERSION }}
+          target_commitish: ${{ github.sha }}
+          name: NextDayz ${{ env.PACKAGE_VERSION }}
+          draft: false
+          make_latest: 'false'
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          body: |
+            NextDayz client and Master/dedicated-server packages, built from ${{ github.sha }}.
+
+            Both Windows x64 and Linux x86_64 packages are included. Each archive has a matching SHA-256 checksum.
+            Client: extract and launch start-client.bat / start-client.sh.
+            Server: extract and run start-master.bat / start-master.sh with --listen and --public-host.
+            See the README/DEPLOYMENT guides inside each package for configuration and runtime requirements.
+          files: |
+            release-packages/NextDayz-server_win64_${{ env.PACKAGE_VERSION }}.zip
+            release-packages/NextDayz-server_win64_${{ env.PACKAGE_VERSION }}.zip.sha256
+            release-packages/NextDayz-client_win64_${{ env.PACKAGE_VERSION }}.zip
+            release-packages/NextDayz-client_win64_${{ env.PACKAGE_VERSION }}.zip.sha256
+            release-packages/NextDayz-server_linux64_${{ env.PACKAGE_VERSION }}.tar.gz
+            release-packages/NextDayz-server_linux64_${{ env.PACKAGE_VERSION }}.tar.gz.sha256
+            release-packages/NextDayz-client_linux64_${{ env.PACKAGE_VERSION }}.tar.gz
+            release-packages/NextDayz-client_linux64_${{ env.PACKAGE_VERSION }}.tar.gz.sha256
+      - name: Link published Release
+        env:
+          RELEASE_URL: ${{ steps.publish.outputs.url }}
+        run: printf '[Download NextDayz client and server packages](%s)\n' "$RELEASE_URL" >> "$GITHUB_STEP_SUMMARY"

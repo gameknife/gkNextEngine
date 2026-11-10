@@ -116,6 +116,7 @@ namespace NextDayz
 
     void NextDayzAudio::PlayOne(const char* path, float volume, uint64_t minIntervalMs)
     {
+        volume *= volume_;
         if (volume <= 0.01f || !engine_)
         {
             return;

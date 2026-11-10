@@ -145,6 +145,17 @@ void NextDayzGameInstance::OnInit()
     world_.Configure(config_.Zombie);
     netMode_ = netModeCvar_ == "server" ? ENetMode::Server
              : netModeCvar_ == "client" ? ENetMode::Client : ENetMode::Offline;
+    const bool explicitNetMode = std::any_of(GOption->CVarOverrides.begin(), GOption->CVarOverrides.end(), [](std::string_view command)
+    {
+        const auto first = command.find_first_not_of(" \t");
+        if (first == std::string_view::npos) return false;
+        command.remove_prefix(first);
+        constexpr std::string_view key = "nextdayz.net.mode";
+        return command.starts_with(key) && command.size() > key.size() &&
+            (command[key.size()] == '=' || command[key.size()] == ' ' || command[key.size()] == '\t');
+    });
+    if (!explicitNetMode && netMode_ == ENetMode::Offline && !netMasterCvar_.empty()) netMode_ = ENetMode::Client;
+    InitializeSessionMenu();
     world_.SetRayCast([this](const glm::vec3& origin, const glm::vec3& direction)
     {
         return GetEngine().GetScene().GetCPUAccelerationStructure().RayCastInCPU(origin, direction);
@@ -195,8 +206,7 @@ void NextDayzGameInstance::OnInit()
         scene = GOption->SceneName;
     }
     campaignMap_ = scene;
-    loadingCabin_ = !authoringMode_ && ((CampaignEnabled() && netMode_ == ENetMode::Offline) ||
-        (netMode_ == ENetMode::Client && NetUsesMaster()));
+    loadingCabin_ = !authoringMode_ && ((CampaignEnabled() && netMode_ == ENetMode::Offline) || netMode_ == ENetMode::Client);
     if (scene == cabinScenePath)
     {
         loadingCabin_ = true;
@@ -214,8 +224,7 @@ void NextDayzGameInstance::OnInit()
 
 void NextDayzGameInstance::LoadFieldAssets()
 {
-    if (fieldAssetsLoaded_) return;
-    if (netMode_ == ENetMode::Client)
+    if (netMode_ == ENetMode::Client && remoteRigs_.empty())
     {
         // Bodies for the other survivors, built with the scene like the player's own.
         for (int index = 0; index < std::clamp(netMaxPlayersCvar_ - 1, 1, 4); ++index)
@@ -226,6 +235,7 @@ void NextDayzGameInstance::LoadFieldAssets()
             remoteRigs_.push_back(std::move(remote));
         }
     }
+    if (fieldAssetsLoaded_) return;
     {
         std::string error;
         std::vector<std::string> warnings;
@@ -267,6 +277,8 @@ void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
     ConfigureCampaignCVars(cvars);
     ConfigureNetCVars(cvars);
     ConfigureCabinCVars(cvars);
+    ConfigureSettingsCVars(cvars);
+    ConfigureSessionCVars(cvars);
     std::string error;
     // Path tracing with DLSS Ray Reconstruction at Quality by default.
     cvars.SetDefaultFromString("r.rendererType", "0", &error);
@@ -840,6 +852,7 @@ void NextDayzGameInstance::OnSceneLoaded()
         cabinSeconds_ = 0.0f;
         ApplyCabinEnvironment();
         BindCabinCamera();
+        switchingCampaignContext_ = false;
         if (CampaignEnabled()) InitializeCabinCampaign();
         SyncClothingVisuals();
         TickCabin(0.0f);
@@ -849,6 +862,7 @@ void NextDayzGameInstance::OnSceneLoaded()
         return;
     }
     if (!loadingMapPath_.empty()) campaignMap_ = std::exchange(loadingMapPath_, "");
+    switchingCampaignContext_ = false;
     debugger_.OnSessionStart("scene loaded");
     world_.anchors.Scan(GetEngine());
     world_.ResetPopulation(sessionRng_.Derive(0x5A4F4D42ULL).Seed());
@@ -899,6 +913,7 @@ void NextDayzGameInstance::OnSceneLoaded()
     grass_.Tick(GetEngine().GetScene(), 0.0f, player_.Position(), time_.Storm());
     SPDLOG_INFO("[NextDayz] scene loaded ({} nodes)", GetEngine().GetScene().Nodes().size());
     NetAfterSceneLoaded();
+    switchingCampaignContext_ = false;
 }
 
 void NextDayzGameInstance::OnSceneUnloaded()
@@ -937,6 +952,8 @@ void NextDayzGameInstance::OnSceneUnloaded()
 
 void NextDayzGameInstance::OnDestroy()
 {
+    if (settingsDirty_ && !GOption->AgentValidation && !GetEngine().GetCVarSystem().SaveUserFiles())
+        SPDLOG_WARN("[NextDayz] failed to save settings on exit");
     ShutdownNetwork();
     world_.JoinNavigation();
     if (sceneReady_) SaveCampaign();
@@ -953,11 +970,13 @@ void NextDayzGameInstance::OnTick(double deltaSeconds)
         (world_.NavigationBuilding() ? navBuildFrames_ : navIdleFrames_).Record(frameMs);
     }
     debugger_.BeginFrame();
+    PumpRetiredNetworkSessions();
     TickMapAuthoring();
     if (netMode_ != ENetMode::Offline)
     {
         NetPoll();
     }
+    if (switchingCampaignContext_) return;
     if (netMode_ == ENetMode::Server)
     {
         // The map's world, with every client's survivor in it; nobody plays here.
@@ -1007,7 +1026,7 @@ void NextDayzGameInstance::OnTick(double deltaSeconds)
             return;
         }
     }
-    if (paused_)
+    if (paused_ || settingsOpen_ || sessionMenuOpen_)
     {
         weapons_.SetTriggerDown(false);
         return;
@@ -1494,13 +1513,23 @@ bool NextDayzGameInstance::OnRenderUI()
         using namespace NextDayz::L10n;
         SetLanguage(Language() == ELanguage::Chinese ? ELanguage::English : ELanguage::Chinese);
     }
-    if (DrawLobby()) return true;
+    if (DrawLobby())
+    {
+        DrawSessionMenu();
+        DrawSettings();
+        return true;
+    }
     DrawNetStatus();
     if (!sceneReady_)
     {
         return false;
     }
-    if (CampaignEnabled() && DrawSafehouse()) return true;
+    if (CampaignEnabled() && DrawSafehouse())
+    {
+        DrawSessionMenu();
+        DrawSettings();
+        return true;
+    }
 
     NextDayz::FHudContext ctx;
     ctx.titleFont = inventoryTitleFont_;
@@ -1636,6 +1665,10 @@ bool NextDayzGameInstance::OnRenderUI()
     ctx.weapons = &weapons_;
     ctx.survival = survival_.Snapshot();
     ctx.paused = paused_;
+    ctx.settingsOpen = settingsOpen_;
+    ctx.sessionLabel = NextDayz::L10n::Tr(SessionModeLabel());
+    ctx.openSettings = [this]() { OpenSettings(); };
+    ctx.resumeSession = [this]() { paused_ = false; SetMouseCaptured(true); };
     ctx.survivalSeconds = survivalSeconds_;
     ctx.objective = CurrentObjective();
     ctx.hitMarker = std::min(1.0f, hitMarkerSeconds_ / kHitMarkerSeconds);
@@ -1649,6 +1682,10 @@ bool NextDayzGameInstance::OnRenderUI()
     ctx.closeInventory = [this, &hudRequests]()
     {
         hudRequests.emplace_back([this]() { SetInventoryOpen(false); });
+    };
+    ctx.returnToLobby = [this, &hudRequests]()
+    {
+        hudRequests.emplace_back([this]() { ReturnToSessionLobby(); });
     };
     if (showInventory_)
     {
@@ -1726,7 +1763,7 @@ bool NextDayzGameInstance::OnRenderUI()
             quickSlots_[slot] = itemId;
         }
     };
-    if (!CampaignEnabled())
+    if (!CampaignEnabled() && netMode_ == ENetMode::Offline)
         ctx.restartSession = [this, &hudRequests]() { hudRequests.emplace_back([this]() { ResetSession(); }); };
     {
         NextDayz::Debug::ScopedTimer timer(debugger_.Timers(), NextDayz::Debug::ETimer::Hud);
@@ -1738,6 +1775,8 @@ bool NextDayzGameInstance::OnRenderUI()
     }
     if (!hudRequests.empty()) SaveCampaign();
     debugger_.Draw(DebugFacts());
+    DrawSessionMenu();
+    DrawSettings();
     return true;
 }
 
@@ -3030,7 +3069,7 @@ void NextDayzGameInstance::ApplyDebugSelection(const std::string& selection)
 void NextDayzGameInstance::SetMouseCaptured(bool captured)
 {
     // The debug cursor (F9) keeps the mouse free until it is switched off.
-    captured = captured && !debugger_.CursorMode();
+    captured = captured && !settingsOpen_ && !sessionMenuOpen_ && !debugger_.CursorMode();
     mouseCaptured_ = captured;
     if (!captured)
     {
@@ -3064,6 +3103,7 @@ void NextDayzGameInstance::SetInventoryOpen(bool open)
 
 bool NextDayzGameInstance::OnKey(SDL_Event& event)
 {
+    if (settingsOpen_ || sessionMenuOpen_) return true;
     if (cabinScene_ || NetInLobby())
     {
         return false; // cabin shortcuts are handled by ImGui, without controlling the survivor
@@ -3286,14 +3326,15 @@ bool NextDayzGameInstance::OnKey(SDL_Event& event)
 
 bool NextDayzGameInstance::OnCursorPosition(double xpos, double ypos)
 {
-    if (!mouseCaptured_ || showInventory_ || showMap_)
+    if (settingsOpen_ || sessionMenuOpen_ || !mouseCaptured_ || showInventory_ || showMap_)
     {
         return false;
     }
 
     if (SDL_GetWindowRelativeMouseMode(GetEngine().GetWindow().Handle()))
     {
-        player_.OnLook(static_cast<float>(xpos), static_cast<float>(ypos));
+        player_.OnLook(static_cast<float>(xpos) * mouseSensitivity_,
+                       static_cast<float>(ypos) * mouseSensitivity_ * (invertMouseY_ ? -1.0f : 1.0f));
     }
     else
     {
@@ -3305,13 +3346,15 @@ bool NextDayzGameInstance::OnCursorPosition(double xpos, double ypos)
         }
         const glm::dvec2 delta = glm::dvec2(xpos, ypos) - mousePos_;
         mousePos_ = glm::dvec2(xpos, ypos);
-        player_.OnLook(static_cast<float>(delta.x), static_cast<float>(delta.y));
+        player_.OnLook(static_cast<float>(delta.x) * mouseSensitivity_,
+                       static_cast<float>(delta.y) * mouseSensitivity_ * (invertMouseY_ ? -1.0f : 1.0f));
     }
     return true;
 }
 
 bool NextDayzGameInstance::OnMouseButton(SDL_Event& event)
 {
+    if (settingsOpen_ || sessionMenuOpen_) return true;
     if (cabinScene_ || NetInLobby()) return false;
     if (CampaignEnabled() && (!campaign_.inField || campaign_.flight.boarded || campaignSaveBlocked_)) return false;
     if (paused_ || !survival_.IsAlive()) return true;
@@ -3394,6 +3437,17 @@ void NextDayzGameInstance::UpdateGrass(float dt)
 
 void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegistry& reg)
 {
+    reg.Add("sessionMode", [this]() -> Runtime::Agent::FAgentQueryValue { return std::string(trainingSession_ ? "training" :
+        netMode_ == ENetMode::Server ? "server" : netMode_ == ENetMode::Client ? NetUsesMaster() ? "master" : "direct" : "offline"); });
+    reg.Add("sessionMenuOpen", [this]() -> Runtime::Agent::FAgentQueryValue { return sessionMenuOpen_; });
+    reg.Add("sessionMenuTab", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(sessionMenuTab_); });
+    reg.Add("masterServerCount", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(masterServers_.size()); });
+    reg.Add("loggedIn", [this]() -> Runtime::Agent::FAgentQueryValue { return NetLoggedIn(); });
+    reg.Add("accountName", [this]() -> Runtime::Agent::FAgentQueryValue { return NetAccountName(); });
+    reg.Add("masterUrl", [this]() -> Runtime::Agent::FAgentQueryValue { return netMasterCvar_; });
+    reg.Add("sessionMessage", [this]() -> Runtime::Agent::FAgentQueryValue { return sessionMenuMessage_.Display(); });
+    reg.Add("settingsOpen", [this]() -> Runtime::Agent::FAgentQueryValue { return settingsOpen_; });
+    reg.Add("settingsTab", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(settingsTab_); });
     RegisterNetQueries(reg);
     reg.Add("cabinScene", [this]() -> Runtime::Agent::FAgentQueryValue { return cabinScene_ && sceneReady_; });
     reg.Add("fieldAssetsLoaded", [this]() -> Runtime::Agent::FAgentQueryValue { return fieldAssetsLoaded_; });

@@ -36,6 +36,7 @@
 #include "Application/Game/NextDayz/World/Campaign.hpp"
 #include "Application/Game/NextDayz/World/ExpeditionMaps.hpp"
 #include "Application/Game/NextDayz/World/RescueHelicopter.hpp"
+#include "Application/Game/NextDayz/Net/ServerDirectory.hpp"
 
 #include <future>
 
@@ -76,6 +77,39 @@ public:
     bool OnMouseButton(SDL_Event& event) override;
 
 private:
+    void ConfigureSessionCVars(NextCVar::FCVarSystem& cvars);
+    void InitializeSessionMenu();
+    void DrawSessionMenu();
+    void OpenSessionMenu();
+    bool PrepareSessionSwitch();
+    void StartTraining();
+    void StartOfflineLobby();
+    void ReturnToSessionLobby();
+    const char* SessionModeLabel() const;
+    bool sessionMenuOpen_ = false;
+    bool trainingSession_ = false;
+    std::string preferredSurvivorName_;
+    std::vector<NextDayz::FMasterServer> masterServers_;
+    int selectedMasterServer_ = 0;
+    int sessionMenuTab_ = 0;
+    int directPort_ = 27015;
+    std::array<char, 64> survivorNameInput_{};
+    std::array<char, 256> masterUrlInput_{};
+    std::array<char, 128> masterNameInput_{};
+    std::array<char, 256> directHostInput_{};
+    NextDayz::L10n::FText sessionMenuMessage_;
+
+    void ConfigureSettingsCVars(NextCVar::FCVarSystem& cvars);
+    void OpenSettings();
+    void DrawSettings();
+    bool settingsOpen_ = false;
+    bool settingsDirty_ = false;
+    bool settingsSaveFailed_ = false;
+    int settingsTab_ = 0;
+    float soundVolume_ = 1.0f;
+    float mouseSensitivity_ = 1.0f;
+    bool invertMouseY_ = false;
+
     ImFont* inventoryTitleFont_ = nullptr;
 
     static constexpr const char* cabinScenePath = "assets/scad/scenes/nextdayz_helicopter_lobby.scad";
@@ -236,6 +270,15 @@ private:
         void operator()(FNetSession* session) const;
     };
     std::unique_ptr<FNetSession, FNetSessionDeleter> net_;
+    std::vector<std::unique_ptr<FNetSession, FNetSessionDeleter>> retiredNetSessions_;
+    void RetireNetworkSession();
+    void PumpRetiredNetworkSessions();
+    bool NetworkAvailable() const;
+    bool NetLoggedIn() const;
+    std::string NetAccountName() const;
+    std::string NetLobbyStatus() const;
+    void LoginToMaster(const std::string& url, const std::string& name);
+    void ConnectDirect(const std::string& host, int port, const std::string& name);
     std::string netModeCvar_ = "off";
     std::string netHostCvar_ = "127.0.0.1";
     std::string netNameCvar_;

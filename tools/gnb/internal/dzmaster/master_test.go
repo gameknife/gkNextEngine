@@ -77,6 +77,54 @@ func dsKey(m *Master, id string) string {
 	return m.servers[id].key
 }
 
+func TestPublicMasterCallbacksAndAdminBoundary(t *testing.T) {
+	m, _, _ := newTestMaster(t)
+	for _, tc := range []struct{ listen, want string }{
+		{"0.0.0.0:7780", "http://127.0.0.1:7780"}, {":7780", "http://127.0.0.1:7780"},
+		{"[::]:7780", "http://[::1]:7780"}, {"127.0.0.1:7780", "http://127.0.0.1:7780"},
+	} {
+		m.cfg.Listen = tc.listen
+		if got := m.URL(); got != tc.want {
+			t.Fatalf("callback %s: got %s", tc.listen, got)
+		}
+	}
+	for _, address := range []string{"203.0.113.8:55000", "[2001:db8::1]:55000"} {
+		req := httptest.NewRequest(http.MethodPost, "/admin/status", bytes.NewReader([]byte("{}")))
+		req.RemoteAddr = address
+		req.Header.Set("X-Forwarded-For", "127.0.0.1")
+		out := httptest.NewRecorder()
+		m.Handler().ServeHTTP(out, req)
+		if out.Code != http.StatusForbidden {
+			t.Fatalf("remote admin accepted from %s", address)
+		}
+	}
+}
+
+func TestMasterBoundsDSFleetAndReusesFreedPort(t *testing.T) {
+	m, _, _ := newTestMaster(t)
+	m.cfg.MaxServers = 1
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	first, err := m.launchLocked(m.cfg.Maps[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.launchLocked(m.cfg.Maps[1]); err == nil {
+		t.Fatal("exceeded server capacity")
+	}
+	first.State = stateDead
+	_ = first.proc.Kill()
+	second, err := m.launchLocked(m.cfg.Maps[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Port != first.Port {
+		t.Fatal("did not reuse released port")
+	}
+	second.State = stateDead
+	_ = second.proc.Kill()
+}
+
 func TestMasterSortieLifecycle(t *testing.T) {
 	m, server, launcher := newTestMaster(t)
 

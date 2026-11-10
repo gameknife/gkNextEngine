@@ -55,43 +55,14 @@ jobs:
       - name: Test packaging tools
         working-directory: tools/gnb
         run: go test ./internal/packager ./internal/config
-      - name: Cache key
-        id: gnb
-        shell: pwsh
-        run: |
-          "key=$(./gnb.sh info --bincache-key)" >> $env:GITHUB_OUTPUT
-      - uses: actions/cache/restore@v6
-        id: cache-vcpkg-restore
-        with:
-          path: .vcpkg_bincache
-          key: ${{ steps.gnb.outputs.key }}
-          restore-keys: |
-            Linux-vcpkg-
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y curl unzip p7zip-full tar ninja-build libxi-dev libxinerama-dev libxcursor-dev libxrandr-dev wayland-protocols libxkbcommon-dev xorg-dev mesa-vulkan-drivers xvfb mono-complete
-      - name: Setup NuGet Binary Cache for GitHub Packages
-        shell: pwsh
-        env:
-          FEED_URL: "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
-          NUGET_USER: "${{ github.actor }}"
-          NUGET_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-        run: |
-          $repoRoot = (Get-Location).Path
-          $bincachePath = Join-Path $repoRoot ".vcpkg_bincache"
-          ./gnb.sh setup --vcpkg-only
-          $vcpkgExe = Join-Path $repoRoot ".vcpkg/vcpkg"
-          $nuget = & $vcpkgExe fetch nuget | Select-Object -Last 1
-          if ($nuget -and (Get-Command mono -ErrorAction SilentlyContinue)) {
-            mono $nuget sources remove -Name "github-packages" 2>$null | Out-Null
-            mono $nuget sources add -Name "github-packages" -Source $env:FEED_URL -UserName $env:NUGET_USER -Password $env:NUGET_TOKEN -StorePasswordInClearText | Out-Null
-            "VCPKG_BINARY_SOURCES=clear;nuget,$($env:FEED_URL),readwrite;files,$bincachePath,readwrite" >> $env:GITHUB_ENV
-            "VCPKG_NUGET_REPOSITORY=${{ github.server_url }}/${{ github.repository }}" >> $env:GITHUB_ENV
-            Write-Host "Configured Linux NuGet binary cache with Mono pointing to GitHub Packages (readwrite)"
-          } else {
-            "VCPKG_BINARY_SOURCES=clear;files,$bincachePath,readwrite" >> $env:GITHUB_ENV
-          }
+      - name: Configure vcpkg binary cache
+        uses: ./.github/actions/vcpkg-cache
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Upgrade Lavapipe for headless validation
         run: |
           sudo apt-get install --no-install-recommends --yes software-properties-common
@@ -137,12 +108,6 @@ jobs:
           fail_on_unmatched_files: true
           files: ./gknextrenderer_linux64_${{ github.ref_name }}.7z
 
-      - uses: actions/cache/save@v6
-        if: steps.cache-vcpkg-restore.outputs.cache-hit != 'true'
-        with:
-          path: .vcpkg_bincache
-          key: ${{ steps.gnb.outputs.key }}
-
   windows-build:
     needs: linux-build
     runs-on: windows-latest
@@ -161,40 +126,11 @@ jobs:
       - name: Test packaging tools
         working-directory: tools/gnb
         run: go test ./internal/packager ./internal/config
-      - name: Cache key
-        id: gnb
-        shell: pwsh
-        run: |
-          "key=$(./gnb.bat info --bincache-key)" >> $env:GITHUB_OUTPUT
-      - uses: actions/cache/restore@v6
-        id: cache-vcpkg-restore
-        with:
-          path: .vcpkg_bincache
-          key: ${{ steps.gnb.outputs.key }}
-          restore-keys: |
-            Windows-vcpkg-
       - uses: microsoft/setup-msbuild@v3
-      - name: Setup NuGet Binary Cache for GitHub Packages
-        shell: pwsh
-        env:
-          FEED_URL: "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
-          NUGET_USER: "${{ github.actor }}"
-          NUGET_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-        run: |
-          $repoRoot = (Get-Location).Path
-          $bincachePath = Join-Path $repoRoot ".vcpkg_bincache"
-          .\gnb.bat setup --vcpkg-only
-          $vcpkgExe = Join-Path $repoRoot ".vcpkg\vcpkg.exe"
-          $nuget = & $vcpkgExe fetch nuget | Select-Object -Last 1
-          if ($nuget -and (Test-Path $nuget)) {
-            & $nuget sources remove -Name "github-packages" -ErrorAction SilentlyContinue | Out-Null
-            & $nuget sources add -Name "github-packages" -Source $env:FEED_URL -UserName $env:NUGET_USER -Password $env:NUGET_TOKEN -StorePasswordInClearText | Out-Null
-            "VCPKG_BINARY_SOURCES=clear;nuget,$($env:FEED_URL),readwrite;files,$bincachePath,readwrite" >> $env:GITHUB_ENV
-            "VCPKG_NUGET_REPOSITORY=${{ github.server_url }}/${{ github.repository }}" >> $env:GITHUB_ENV
-            Write-Host "Configured Windows NuGet binary cache pointing to GitHub Packages (readwrite)"
-          } else {
-            "VCPKG_BINARY_SOURCES=clear;files,$bincachePath,readwrite" >> $env:GITHUB_ENV
-          }
+      - name: Configure vcpkg binary cache
+        uses: ./.github/actions/vcpkg-cache
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build release targets
         shell: pwsh
         run: |
@@ -229,18 +165,13 @@ jobs:
           fail_on_unmatched_files: true
           files: ./gknextrenderer_win64_${{ github.ref_name }}.7z
 
-      - uses: actions/cache/save@v6
-        if: steps.cache-vcpkg-restore.outputs.cache-hit != 'true'
-        with:
-          path: .vcpkg_bincache
-          key: ${{ steps.gnb.outputs.key }}
-
   macos-build:
     needs: linux-build
     runs-on: macos-latest
     permissions:
       contents: write
       actions: read
+      packages: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
@@ -252,20 +183,12 @@ jobs:
       - name: Test packaging tools
         working-directory: tools/gnb
         run: go test ./internal/packager ./internal/config
-      - name: Cache key
-        id: gnb
-        shell: pwsh
-        run: |
-          "key=$(./gnb.sh info --bincache-key)" >> $env:GITHUB_OUTPUT
-      - uses: actions/cache/restore@v6
-        id: cache-vcpkg-restore
-        with:
-          path: .vcpkg_bincache
-          key: ${{ steps.gnb.outputs.key }}
-          restore-keys: |
-            macOS-vcpkg-
       - name: Install 7-Zip
         run: brew install sevenzip
+      - name: Configure vcpkg binary cache
+        uses: ./.github/actions/vcpkg-cache
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build release targets
         run: |
           echo "BUILDVER($RELEASE_TAG)" > src/build.version
@@ -291,11 +214,6 @@ jobs:
           draft: true
           fail_on_unmatched_files: true
           files: ./gknextrenderer_macos_${{ github.ref_name }}.7z
-      - uses: actions/cache/save@v6
-        if: steps.cache-vcpkg-restore.outputs.cache-hit != 'true'
-        with:
-          path: .vcpkg_bincache
-          key: ${{ steps.gnb.outputs.key }}
 
   draft-ready:
     needs: [linux-build, windows-build, macos-build]

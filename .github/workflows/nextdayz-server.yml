@@ -31,6 +31,9 @@ concurrency:
 
 jobs:
   package:
+    permissions:
+      contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -66,24 +69,15 @@ jobs:
           if ($result -ne 0) { exit $result }
           python -m unittest discover -s tools/nextdayz -p test_release_packages.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Cache key
-        id: gnb
-        shell: pwsh
-        run: |
-          "key=$(& '${{ matrix.entry }}' info --bincache-key)" >> $env:GITHUB_OUTPUT
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - uses: actions/cache@v6
-        with:
-          path: .vcpkg_bincache
-          key: nextdayz-${{ steps.gnb.outputs.key }}
-          restore-keys: |
-            nextdayz-${{ steps.gnb.outputs.key }}-
-            nextdayz-
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install --yes curl unzip tar ninja-build binutils libxi-dev libxinerama-dev libxcursor-dev libxrandr-dev wayland-protocols libxkbcommon-dev xorg-dev libvulkan1 mesa-vulkan-drivers software-properties-common vulkan-tools
+          sudo apt-get install --yes curl unzip tar ninja-build binutils libxi-dev libxinerama-dev libxcursor-dev libxrandr-dev wayland-protocols libxkbcommon-dev xorg-dev libvulkan1 mesa-vulkan-drivers software-properties-common vulkan-tools mono-complete
+      - name: Configure vcpkg binary cache
+        uses: ./.github/actions/vcpkg-cache
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Upgrade Lavapipe for headless validation
         if: runner.os == 'Linux'
         run: |

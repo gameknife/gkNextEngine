@@ -2,6 +2,7 @@
 
 #include "GeoTerrainSet.h"
 #include "GeoTileCatalog.h"
+#include "NextWorldTravelConfig.hpp"
 
 #include <glm/glm.hpp>
 

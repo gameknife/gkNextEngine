@@ -10,6 +10,17 @@ if(TARGET NextUI)
     target_link_libraries(NextUI PRIVATE SDL3::SDL3 imgui::imgui)
 endif()
 
+if(TARGET NextNet)
+    find_package(unofficial-enet CONFIG REQUIRED)
+    target_link_libraries(NextNet PRIVATE unofficial::enet::enet)
+    # HTTP to the NextDayz Master where cpp-httplib exists (Windows/Linux).
+    find_package(httplib CONFIG QUIET)
+    if(TARGET httplib::httplib)
+        target_link_libraries(NextNet PRIVATE httplib::httplib)
+        target_compile_definitions(NextNet PRIVATE GK_NEXTNET_HTTP=1)
+    endif()
+endif()
+
 if(TARGET NextCapture)
     target_link_libraries(NextCapture PRIVATE WebP::webp WebP::libwebpmux)
     if(WITH_AVIF)
@@ -130,8 +141,12 @@ if(TARGET NextDotNet)
         # source tree, not the runtime root: only the published assemblies are copied next to the
         # executable, and resolving "assets/csharp" against the runtime root finds nothing.
         GK_DOTNET_MANAGED_SOURCE_ROOT="${GK_DOTNET_MANAGED_ROOT}"
+        # Where game projects live in the source tree (projects/<Game>/). A manifest is read from
+        # its runtime copy under assets/projects, which holds no C#; rebuilding a game or creating
+        # a new one needs the real directory.
+        GK_GAME_PROJECTS_SOURCE_ROOT="${GK_GAME_PROJECTS_ROOT}"
     )
-    target_link_libraries(NextDotNet PRIVATE SDL3::SDL3 imgui::imgui)
+    target_link_libraries(NextDotNet PRIVATE SDL3::SDL3 imgui::imgui NextUI)
 
     # --- managed assemblies ------------------------------------------------------------------
     # Only the bootstrap is published here, and only for CoreCLR: it is application-independent.

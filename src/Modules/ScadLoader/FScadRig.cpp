@@ -28,9 +28,25 @@ namespace Assets
             return (q(c.r) << 24) | (q(c.g) << 16) | (q(c.b) << 8) | q(c.a);
         }
 
+        // Sections split on color *and* surface: a gk_material() glossy steel and a
+        // matte color() of the same RGB must not merge into one material slot.
+        uint64_t RigBucketKey(const glm::vec4& color, const Scad::ScadMaterialProperties& material)
+        {
+            auto q = [](float v) -> uint64_t
+            {
+                return static_cast<uint64_t>(std::clamp(v, 0.0f, 1.0f) * 65535.0f + 0.5f);
+            };
+            return Scad::MixTextureIntoKey(
+                (static_cast<uint64_t>(RigQuantizeColor(color)) << 32) | (q(material.roughness) << 16) |
+                    q(material.metalness),
+                material);
+        }
+
         struct RigBucket
         {
             glm::vec4 color{0.78f, 0.78f, 0.78f, 1.0f};
+            glm::vec2 surface{1.0f, 0.0f}; // (roughness, metalness)
+            FProceduralTextureRef texture; // gk_texture() print, UVs projected in the bone-local frame
             std::vector<glm::dvec3> tris; // SCAD space, baked into bone-pivot-local frame
         };
 
@@ -105,17 +121,35 @@ namespace Assets
             void CollapseInto(
                 const Scad::SceneNode& node,
                 const glm::dmat4& accum,
-                std::map<uint32_t, RigBucket>& buckets,
+                std::map<uint64_t, RigBucket>& buckets,
                 std::vector<std::pair<const Scad::SceneNode*, glm::dmat4>>& childBones)
             {
                 for (const Scad::SceneMeshBucket& mesh : node.meshes)
                 {
-                    RigBucket& bucket = buckets[RigQuantizeColor(mesh.color)];
+                    RigBucket& bucket = buckets[RigBucketKey(mesh.color, mesh.material)];
                     bucket.color = mesh.color;
+                    bucket.surface = glm::vec2(std::clamp(mesh.material.roughness, 0.0f, 1.0f),
+                                               std::clamp(mesh.material.metalness, 0.0f, 1.0f));
+                    bucket.texture = mesh.material.texture;
                     bucket.tris.reserve(bucket.tris.size() + mesh.tris.size());
-                    for (const glm::dvec3& p : mesh.tris)
+                    const bool flipWinding = glm::determinant(glm::dmat3(accum)) < 0.0;
+                    const auto transform = [&accum](const glm::dvec3& point)
                     {
-                        bucket.tris.push_back(glm::dvec3(accum * glm::dvec4(p, 1.0)));
+                        return glm::dvec3(accum * glm::dvec4(point, 1.0));
+                    };
+                    for (size_t i = 0; i + 2 < mesh.tris.size(); i += 3)
+                    {
+                        bucket.tris.push_back(transform(mesh.tris[i]));
+                        if (flipWinding)
+                        {
+                            bucket.tris.push_back(transform(mesh.tris[i + 2]));
+                            bucket.tris.push_back(transform(mesh.tris[i + 1]));
+                        }
+                        else
+                        {
+                            bucket.tris.push_back(transform(mesh.tris[i + 1]));
+                            bucket.tris.push_back(transform(mesh.tris[i + 2]));
+                        }
                     }
                 }
 
@@ -165,7 +199,7 @@ namespace Assets
                     asset_.bones[parentIndex].children.push_back(boneIndex);
                 }
 
-                std::map<uint32_t, RigBucket> buckets;
+                std::map<uint64_t, RigBucket> buckets;
                 std::vector<std::pair<const Scad::SceneNode*, glm::dmat4>> childBones;
                 CollapseInto(boneNode, glm::dmat4(1.0), buckets, childBones);
                 BuildParts(boneIndex, buckets);
@@ -176,7 +210,7 @@ namespace Assets
                 }
             }
 
-            void BuildParts(int32_t boneIndex, const std::map<uint32_t, RigBucket>& buckets)
+            void BuildParts(int32_t boneIndex, const std::map<uint64_t, RigBucket>& buckets)
             {
                 std::vector<const RigBucket*> nonEmpty;
                 for (const auto& entry : buckets)
@@ -208,18 +242,29 @@ namespace Assets
                         }
                         const std::vector<glm::vec3> normals =
                             Scad::ScadComputeSmoothNormals(localPos, options_.smoothAngleDegrees);
+                        // Bone-local projection: a print on a sleeve stays put as the arm swings.
+                        std::vector<glm::vec2> uvs(localPos.size(), glm::vec2(0.0f));
+                        std::vector<glm::vec4> tangents(localPos.size(), glm::vec4(1, 0, 0, 1));
+                        if (bucket.texture)
+                        {
+                            ProceduralTexture::BoxProjectUVs(bucket.tris, bucket.texture->scale, uvs);
+                            ProceduralTexture::BoxProjectTangents(
+                                bucket.tris, glm::mat3(Scad::ScadToWorldBasis(1.0)), normals, tangents);
+                        }
 
                         const uint32_t vertexOffset = static_cast<uint32_t>(vertices.size());
                         vertices.reserve(vertices.size() + localPos.size());
                         indices.reserve(indices.size() + localPos.size());
                         for (uint32_t i = 0; i < static_cast<uint32_t>(localPos.size()); ++i)
                         {
-                            vertices.push_back(Vertex{localPos[i], normals[i], glm::vec4(1, 0, 0, 1),
-                                                      glm::vec2(0, 0), sectionIndex});
+                            vertices.push_back(Vertex{localPos[i], normals[i], tangents[i],
+                                                      uvs[i], sectionIndex});
                             indices.push_back(vertexOffset + i);
                         }
 
                         part.sectionColors.push_back(bucket.color);
+                        part.sectionSurfaces.push_back(bucket.surface);
+                        part.sectionTextures.push_back(bucket.texture);
                         part.sectionTintable.push_back(RigQuantizeColor(bucket.color) == tintKey);
                         ++sectionIndex;
                     }

@@ -1,6 +1,7 @@
 #include "Engine/Common/CoreMinimal.hpp"
 
 #include "AnchorDebugOverlay.h"
+#include "Modules/NextUI/UI/UiHud.hpp"
 
 #include <fmt/format.h>
 #include <imgui.h>
@@ -13,26 +14,6 @@ namespace NextGameplay::Sim
 {
     namespace
     {
-        bool ProjectWorld(const glm::mat4& viewProjection, const ImVec2& viewportPosition,
-                          const ImVec2& viewportSize, const glm::vec3& worldPosition, ImVec2& outScreen)
-        {
-            const glm::vec4 clip = viewProjection * glm::vec4(worldPosition, 1.0f);
-            if (clip.w <= 0.0f)
-            {
-                return false;
-            }
-            const glm::vec3 ndc = glm::vec3(clip) / clip.w;
-            if (ndc.x < -1.2f || ndc.x > 1.2f || ndc.y < -1.2f || ndc.y > 1.2f)
-            {
-                return false;
-            }
-            outScreen = {
-                viewportPosition.x + (ndc.x * 0.5f + 0.5f) * viewportSize.x,
-                viewportPosition.y + (-ndc.y * 0.5f + 0.5f) * viewportSize.y,
-            };
-            return true;
-        }
-
         ImU32 CategoryColor(std::string_view category)
         {
             constexpr std::array<ImU32, 10> palette = {
@@ -67,9 +48,9 @@ namespace NextGameplay::Sim
                 const glm::vec3 worldPosition = positionOf(point);
                 ImVec2 groundScreen;
                 ImVec2 labelScreen;
-                if (!ProjectWorld(viewProjection, viewport->Pos, viewport->Size, worldPosition, groundScreen) ||
-                    !ProjectWorld(viewProjection, viewport->Pos, viewport->Size,
-                                  worldPosition + glm::vec3(0.0f, config.labelHeight, 0.0f), labelScreen))
+                if (!NextUI::Hud::TryProjectWorldToScreen(viewProjection, viewport->Pos, viewport->Size, worldPosition, groundScreen) ||
+                    !NextUI::Hud::TryProjectWorldToScreen(viewProjection, viewport->Pos, viewport->Size,
+                                                          worldPosition + glm::vec3(0.0f, config.labelHeight, 0.0f), labelScreen))
                 {
                     continue;
                 }

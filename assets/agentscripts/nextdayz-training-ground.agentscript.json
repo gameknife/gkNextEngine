@@ -1,0 +1,486 @@
+{
+  "name": "nextdayz-training-ground",
+  "target": "NextDayz",
+  "scene": "assets/scad/proc/nextdayz/training_ground/scene.scad",
+  "viewport": {
+    "width": 1600,
+    "height": 900
+  },
+  "defaults": {
+    "stepTimeoutMs": 180000
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "cvar",
+      "name": "r.exposure.auto",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "r.exposure.maxEV",
+      "set": 3
+    },
+    {
+      "type": "cvar",
+      "name": "r.exposure.speedToDark",
+      "set": 8
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.invulnerable",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.hour",
+      "set": 11
+    },
+    {
+      "type": "log",
+      "message": "Every item is on display, plus the range issue tables"
+    },
+    {
+      "type": "assert",
+      "query": "game.displayLoot",
+      "op": "ge",
+      "value": 111
+    },
+    {
+      "type": "assert",
+      "query": "game.safeSpawns",
+      "op": "ge",
+      "value": 3
+    },
+    {
+      "type": "assert",
+      "query": "game.extractionPoints",
+      "op": "eq",
+      "value": 2
+    },
+    {
+      "type": "log",
+      "message": "Arms display pavilion in front of the armory"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-165,-108"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": 4
+    },
+    {
+      "type": "wait-ms",
+      "ms": 1500
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/training-armory-front",
+      "ui": true
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "lt",
+      "value": 100.0,
+      "timeoutMs": 12000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": 28
+    },
+    {
+      "type": "wait-ms",
+      "ms": 2200
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/training-arms-display",
+      "ui": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 200
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": 34
+    },
+    {
+      "type": "wait-ms",
+      "ms": 2200
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/training-arms-guns",
+      "ui": true
+    },
+    {
+      "type": "log",
+      "message": "Quartermaster tents"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-89.5,-108"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": 4
+    },
+    {
+      "type": "wait-ms",
+      "ms": 1200
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "lt",
+      "value": 99.0,
+      "timeoutMs": 12000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": 22
+    },
+    {
+      "type": "wait-ms",
+      "ms": 2200
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/training-quartermaster",
+      "ui": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 215
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": 32
+    },
+    {
+      "type": "wait-ms",
+      "ms": 2200
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/training-quartermaster-row",
+      "ui": true
+    },
+    {
+      "type": "log",
+      "message": "Mess tent"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-165,-26"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": 4
+    },
+    {
+      "type": "wait-ms",
+      "ms": 1200
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "lt",
+      "value": 17.0,
+      "timeoutMs": 12000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": 26
+    },
+    {
+      "type": "wait-ms",
+      "ms": 2200
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/training-mess",
+      "ui": true
+    },
+    {
+      "type": "log",
+      "message": "Field stores"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-85,-31"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": 4
+    },
+    {
+      "type": "wait-ms",
+      "ms": 1200
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "lt",
+      "value": 21.0,
+      "timeoutMs": 12000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": 26
+    },
+    {
+      "type": "wait-ms",
+      "ms": 2200
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/training-stores",
+      "ui": true
+    },
+    {
+      "type": "log",
+      "message": "Rifle range lane 1 (25 m bullseye) from just in front of the firing shed"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.loadout",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "46,-43"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": 0.6
+    },
+    {
+      "type": "wait-ms",
+      "ms": 2500
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/training-range-lane",
+      "ui": true
+    },
+    {
+      "type": "mouse-button",
+      "button": "right",
+      "action": "down"
+    },
+    {
+      "type": "wait-ms",
+      "ms": 900
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "down"
+    },
+    {
+      "type": "wait-ms",
+      "ms": 90
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "up"
+    },
+    {
+      "type": "wait-ms",
+      "ms": 650
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "down"
+    },
+    {
+      "type": "wait-ms",
+      "ms": 90
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "up"
+    },
+    {
+      "type": "wait-ms",
+      "ms": 650
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "down"
+    },
+    {
+      "type": "wait-ms",
+      "ms": 90
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "up"
+    },
+    {
+      "type": "wait-ms",
+      "ms": 650
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/training-range-hit",
+      "ui": true
+    },
+    {
+      "type": "mouse-button",
+      "button": "right",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.rangeHits",
+      "op": "ge",
+      "value": 1
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "-60,-300"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": 3
+    },
+    {
+      "type": "wait-ms",
+      "ms": 2000
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/training-gate",
+      "ui": true
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

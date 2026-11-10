@@ -10,7 +10,7 @@ import (
 func newRiderCommand(ctx appContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "rider",
-		Short: "Launch Rider with the root CMake project",
+		Short: tr("cli.rider.short"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			executable, err := rider.Launch(ctx.repoRoot)

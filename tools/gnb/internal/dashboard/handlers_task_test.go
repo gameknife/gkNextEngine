@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/i18n"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/spec"
 )
 
@@ -30,7 +31,7 @@ func setupTODORepoWithContent(t *testing.T, todo string) *Server {
 		t.Fatal(err)
 	}
 	return &Server{
-		opts:  Options{RepoRoot: dir},
+		opts:  Options{RepoRoot: dir, Lang: i18n.LangZh},
 		tpl:   tpl,
 		jobs:  NewJobManager(),
 		chats: NewChatStore(),

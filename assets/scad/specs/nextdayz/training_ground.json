@@ -1,0 +1,38 @@
+{
+  "id": "training_ground",
+  "region": "training",
+  "seed": 707,
+  "version": 2,
+  "synthetic": {
+    "sizeM": 800,
+    "base": 40,
+    "relief": 7,
+    "wavelength": 300,
+    "flat": [
+      [-130, -110, 190, 70],
+      [60, 120, 70, 50],
+      [60, -20, 70, 50],
+      [60, 250, 60, 40],
+      [290, 200, 50, 40],
+      [-270, 0, 60, 50],
+      [200, -150, 40, 40],
+      [-300, 250, 40, 40],
+      [-60, -330, 80, 50]
+    ],
+    "hills": [
+      [60, 375, 170, 55, 0, 20],
+      [-375, 60, 50, 280, 0, 14],
+      [370, -80, 60, 220, 0, 12],
+      [250, -330, 100, 60, 15, 9],
+      [180, 300, 70, 45, 0, 10]
+    ]
+  },
+  "gameplay": {
+    "controls": "assets/scad/specs/nextdayz/training_controls.scad",
+    "buildingBudget": 21,
+    "reliefScale": 1,
+    "roadLimit": 1,
+    "palette": "continental",
+    "terrainDetail": true
+  }
+}

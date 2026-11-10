@@ -8,6 +8,7 @@
 #include "Engine/Runtime/Components/RenderComponent.hpp"
 #include <memory>
 #include <array>
+#include <cstring>
 
 TEST_CASE("Visibility buffer capacity contract", "[Unit][Rendering][Visibility]")
 {
@@ -22,6 +23,24 @@ TEST_CASE("Mixture material keeps a valid dielectric IOR", "[Unit][Material]")
     const Assets::Material material = Assets::Material::Mixture(glm::vec3(0.5f), 0.1f);
     CHECK(material.RefractionIndex == Catch::Approx(1.45f));
     CHECK(material.RefractionIndex2 == Catch::Approx(material.RefractionIndex));
+}
+
+TEST_CASE("Foliage material preserves Lambertian layout and secondary shading", "[Unit][Material]")
+{
+    STATIC_REQUIRE(sizeof(Assets::Material) == 64);
+    const auto opaque = Assets::Material::Lambertian(glm::vec3(0.3f), 7);
+    auto foliage = Assets::Material::Foliage(glm::vec3(0.3f), 0.7f, 0.08f, 7);
+    CHECK_FALSE(opaque.IsFoliage());
+    CHECK(foliage.IsFoliage());
+    CHECK(foliage.Reserved2 == Catch::Approx(0.7f));
+    CHECK(foliage.Reserved3 == Catch::Approx(0.08f));
+    // Only the two reserved slots change; all existing BSDF inputs stay identical.
+    foliage.Reserved2 = foliage.Reserved3 = 0.0f;
+    CHECK(std::memcmp(&opaque, &foliage, sizeof(opaque)) == 0);
+    CHECK(Assets::Material::Foliage(glm::vec3(1), -1.0f).Reserved2 == 0.0f);
+    const auto clamped = Assets::Material::Foliage(glm::vec3(1), 2.0f, 1.0f);
+    CHECK(clamped.Reserved2 == 1.0f);
+    CHECK(clamped.Reserved3 == Catch::Approx(0.3f));
 }
 
 TEST_CASE("RenderComponent Usage", "[Unit][RenderComponent]") {
@@ -82,6 +101,31 @@ TEST_CASE("Node provides one cached component lookup path", "[Unit][RenderCompon
 
     node->RemoveComponent<Runtime::RenderComponent>();
     CHECK(node->GetComponent<Runtime::RenderComponent>() == nullptr);
+}
+
+TEST_CASE("Visibility opacity leaves shadow and ray participation intact", "[Unit][RenderComponent][Visibility]")
+{
+    STATIC_REQUIRE(sizeof(Assets::NodeProxy) == 224);
+    auto node = Assets::Node::CreateNode(
+        "FadingNode", glm::vec3(0), glm::quat(1, 0, 0, 0), glm::vec3(1), 0);
+    auto render = std::make_shared<Runtime::RenderComponent>();
+    node->AddComponent(render);
+    Assets::NodeProxy proxy{};
+    node->GetNodeProxy(proxy);
+    CHECK(proxy.reserved2 == 0u); // default opaque, including zero-initialized GPU data
+
+    for (float opacity : {0.0f, 0.25f, 0.5f, 1.0f})
+    {
+        render->SetMainOpacity(opacity);
+        node->GetNodeProxy(proxy);
+        CHECK(proxy.visible == Runtime::RenderParticipation::defaultMask);
+        CHECK(proxy.reserved1 == 0u);
+        CHECK((proxy.reserved2 & 0xffffu) == 0u); // outline bits stay available
+        const float decodedOpacity = 1.0f -
+            static_cast<float>(proxy.reserved2 >> Assets::NODE_PROXY_MAIN_TRANSPARENCY_SHIFT) /
+                Assets::NODE_PROXY_MAIN_TRANSPARENCY_MAX;
+        CHECK(decodedOpacity == Catch::Approx(opacity).margin(1.0f / 65535.0f));
+    }
 }
 
 TEST_CASE("Scene model section encoding is bounds checked", "[Unit][Scene]")

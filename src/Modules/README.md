@@ -8,7 +8,7 @@ Application 显式链接；核心层 `src/Engine` 不得反向依赖本目录。
 Android 平台模块源直接并入单一 SHARED target；`NextTui` 仅桌面 + `GK_WITH_TUI`，
 `NextDotNet` 需要 CMake 找到 .NET 工具链（`GK_DOTNET_ENABLED`），移动端不构建。
 
-当前模块（最多 23 个；部分受平台/工具链开关控制）：
+当前模块（最多 24 个；部分受平台/工具链开关控制）：
 
 | 模块 | 职责 |
 |---|---|
@@ -18,7 +18,7 @@ Android 平台模块源直接并入单一 SHARED target；`NextTui` 仅桌面 + 
 | SplatLoader | Gaussian Splat / SOG 加载与渲染 pass |
 | SceneContent | 场景扫描、scene reference 装配与递归引用解析 |
 | SceneExport | 场景保存/导出（`FSceneSaver`） |
-| NextDotNet | C# 脚本运行时：CoreCLR/NativeAOT 双后端宿主、EngineApi 绑定表 |
+| NextDotNet | C# 脚本运行时：CoreCLR/NativeAOT 双后端宿主、EngineApi 绑定表、游戏 manifest 与会话、模板脚手架 |
 | NextPhysics | Jolt 物理后端 |
 | NextAudio | miniaudio 音频后端 |
 | NextAI | 轻量 LLM Chat / Structured Output 客户端（`FAIService`、`GnbAIClient`）；provider 路由与凭据由 gnb 管理 |
@@ -26,6 +26,7 @@ Android 平台模块源直接并入单一 SHARED target；`NextTui` 仅桌面 + 
 | NextUI | ImGui/Vulkan backend、字体缩放、纹理解析与 Desktop UI Foundation |
 | NextCapture | 截图编码、异步导出与视频录制 |
 | NextValidation | `gnb shot/validate` loopback 控制、查询与 SDL 合成输入 |
+| NextNet | 游戏联机传输（ENet，仅桌面）：服务器/客户端、可靠与不可靠通道、消息缓冲、链路模拟与流量统计、HTTP JSON 工作线程 |
 | NextRemote | Remote Play：视频编码、WebRTC、远程输入 |
 | NextStreamline | DLSS / Streamline 集成（仅 Windows） |
 | NextFidelityFX | FidelityFX FSR 3.1 upscale / Frame Generation Vulkan 集成（仅 Windows） |

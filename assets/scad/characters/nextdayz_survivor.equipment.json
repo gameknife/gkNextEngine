@@ -31,11 +31,11 @@
       "label": "主武器",
       "bone": "bone_weapon_socket",
       "kit": "../lib/kit_coldwar.scad",
-      "module": "cw_wpn_ak",
-      "args": "seed = 0",
+      "module": "cw_wpn_ak_held",
+      "args": "",
       "enabled": true,
       "translation": [0.0, 0.0, 0.0],
-      "rotation": [0.0, 0.0, -90.0],
+      "rotation": [0.0, 0.0, 0.0],
       "scale": [1.0, 1.0, 1.0]
     }
   ]

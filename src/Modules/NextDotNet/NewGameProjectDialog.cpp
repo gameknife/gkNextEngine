@@ -1,0 +1,803 @@
+#include "Modules/NextDotNet/NewGameProjectDialog.hpp"
+
+#include "Engine/Runtime/Engine.hpp"
+#include "Modules/NextDotNet/DotNetRuntime.hpp"
+#include "Modules/NextDotNet/ManagedGameSession.hpp"
+#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Modules/NextUI/UI/UiContainers.hpp"
+#include "Modules/NextUI/UI/UiScopes.hpp"
+#include "Modules/NextUI/UI/UiTheme.hpp"
+#include "Modules/NextUI/UI/UiWidgets.hpp"
+#include "ThirdParty/fontawesome/IconsFontAwesome6.h"
+
+#include <fmt/format.h>
+#include <imgui.h>
+#include <imgui_internal.h>
+
+#include <algorithm>
+#include <array>
+#include <cstring>
+#include <string_view>
+
+namespace Modules::NextDotNet
+{
+    using NextUI::Foundation::Color;
+    using NextUI::Foundation::ColorU32;
+    using NextUI::Foundation::EColor;
+
+    namespace
+    {
+        constexpr const char* kPopupTitle = "New Game Project";
+
+        template <size_t N>
+        void SetBuffer(std::array<char, N>& buffer, std::string_view value)
+        {
+            const size_t length = std::min(value.size(), N - 1);
+            std::memcpy(buffer.data(), value.data(), length);
+            buffer[length] = '\0';
+        }
+
+        const char* GetTemplateIcon(std::string_view id)
+        {
+            if (id == "blank")
+            {
+                return ICON_FA_CUBES;
+            }
+            if (id == "arcade2d")
+            {
+                return ICON_FA_PERSON_RUNNING;
+            }
+            if (id == "topdown3d")
+            {
+                return ICON_FA_SHIELD_HALVED;
+            }
+            if (id == "firstperson")
+            {
+                return ICON_FA_COMPASS;
+            }
+            if (id == "tps")
+            {
+                return ICON_FA_CROSSHAIRS;
+            }
+            return ICON_FA_GAMEPAD;
+        }
+
+        const char* GetTemplateCategory(std::string_view id)
+        {
+            if (id == "blank")
+            {
+                return "Minimal Starter";
+            }
+            if (id == "arcade2d")
+            {
+                return "2D Arcade";
+            }
+            if (id == "topdown3d")
+            {
+                return "Action Roguelike";
+            }
+            if (id == "firstperson")
+            {
+                return "3D First-Person";
+            }
+            if (id == "tps")
+            {
+                return "Shooter & Rig";
+            }
+            return "Game Template";
+        }
+
+        void DrawBadge(const char* icon, const char* label, ImVec4 bgCol, ImVec4 textCol, ImVec4 borderCol)
+        {
+            NextUI::Foundation::DrawPillBadge(icon, label, bgCol, textCol, borderCol, 5.0f, ImVec2(8.0f, 4.0f));
+        }
+
+        using NextUI::Foundation::DrawCodeBadge;
+    }
+
+    std::string FNewGameProjectDialog::UnavailableReason()
+    {
+        if (GameProjectsSourceRoot().empty() || DotNetRuntime::ManagedSourceRoot().empty())
+        {
+            return "This build has no source tree to write a project into (an installed build never does).";
+        }
+        if (GameTemplateRoot().empty())
+        {
+            return "No project templates found under assets/templates/games.";
+        }
+        return {};
+    }
+
+    void FNewGameProjectDialog::Open()
+    {
+        templates_ = ScanGameTemplates();
+        unavailableReason_ = UnavailableReason();
+        ResetForm();
+        open_ = true;
+        requestOpen_ = true;
+    }
+
+    void FNewGameProjectDialog::Close()
+    {
+        open_ = false;
+        requestOpen_ = false;
+        phase_ = EPhase::Editing;
+        builder_.Reset();
+    }
+
+    void FNewGameProjectDialog::ResetForm()
+    {
+        phase_ = EPhase::Editing;
+        selectedTemplate_ = 0;
+        projectName_[0] = '\0';
+        displayName_[0] = '\0';
+        gameId_[0] = '\0';
+        displayNameEdited_ = false;
+        gameIdEdited_ = false;
+        buildAfterCreate_ = true;
+        validationError_.clear();
+        buildError_.clear();
+        built_ = false;
+        result_ = {};
+        builder_.Reset();
+    }
+
+    const FGameTemplate* FNewGameProjectDialog::SelectedTemplate() const
+    {
+        if (selectedTemplate_ < 0 || static_cast<size_t>(selectedTemplate_) >= templates_.size())
+        {
+            return nullptr;
+        }
+        return &templates_[static_cast<size_t>(selectedTemplate_)];
+    }
+
+    void FNewGameProjectDialog::SyncDerivedNames()
+    {
+        const std::string projectName = projectName_.data();
+        if (!displayNameEdited_)
+        {
+            SetBuffer(displayName_, projectName);
+        }
+        if (!gameIdEdited_)
+        {
+            SetBuffer(gameId_, DeriveGameId(projectName));
+        }
+    }
+
+    void FNewGameProjectDialog::PerformWork(ManagedGameSession* session)
+    {
+        const FGameTemplate* gameTemplate = SelectedTemplate();
+        if (gameTemplate == nullptr)
+        {
+            validationError_ = "Please select a template.";
+            phase_ = EPhase::Editing;
+            return;
+        }
+
+        FNewGameRequest request;
+        request.templateId = gameTemplate->id;
+        request.projectName = projectName_.data();
+        request.displayName = displayName_.data();
+        request.gameId = gameId_.data();
+
+        result_ = CreateManagedGame(*gameTemplate, request);
+        if (!result_.created)
+        {
+            validationError_ = result_.error;
+            phase_ = EPhase::Editing;
+            return;
+        }
+
+        built_ = false;
+        buildError_.clear();
+
+        if (buildAfterCreate_ && session != nullptr)
+        {
+            phase_ = EPhase::Working;
+            builder_.StartBuild(session, result_.manifest, displayName_.data());
+        }
+        else
+        {
+            phase_ = EPhase::Done;
+        }
+    }
+
+    FNewGameProjectOutcome FNewGameProjectDialog::Draw(ManagedGameSession* session)
+    {
+        FNewGameProjectOutcome outcome;
+        if (!open_)
+        {
+            return outcome;
+        }
+
+        // If currently in Working phase, check if background build has finished
+        if (phase_ == EPhase::Working)
+        {
+            if (builder_.HasFinished())
+            {
+                if (builder_.IsSuccess())
+                {
+                    built_ = true;
+                    buildError_.clear();
+                }
+                else
+                {
+                    built_ = false;
+                    buildError_ = builder_.GetErrorMessage();
+                }
+
+                phase_ = EPhase::Done;
+                outcome.created = true;
+                outcome.gameId = result_.manifest.id;
+                outcome.built = built_;
+            }
+        }
+
+        if (requestOpen_)
+        {
+            requestOpen_ = false;
+            ImGui::OpenPopup(kPopupTitle);
+        }
+
+        bool stayOpen = true;
+        NextUI::Theme::FModernModalConfig modalConfig{};
+        modalConfig.PopupId = kPopupTitle;
+        modalConfig.TargetSize = ImVec2(880.0f, 620.0f);
+        modalConfig.Padding = ImVec2(0.0f, 0.0f);
+        modalConfig.Rounding = 8.0f;
+        modalConfig.Open = &stayOpen;
+
+        if (!NextUI::Theme::BeginModernModal(modalConfig))
+        {
+            open_ = false;
+            builder_.Reset();
+            return outcome;
+        }
+
+        if (phase_ != EPhase::Working && !ImGui::IsAnyItemActive() && ImGui::IsKeyPressed(ImGuiKey_Escape))
+        {
+            ImGui::CloseCurrentPopup();
+            open_ = false;
+            builder_.Reset();
+            NextUI::Theme::EndModernModal();
+            return outcome;
+        }
+
+        ImFont* titleFont = nullptr;
+        ImFont* defaultFont = ImGui::GetFont();
+        if (NextEngine* engine = NextEngine::GetInstance())
+        {
+            titleFont = NextUI::Theme::GetTitleFont(*engine);
+            if (ImFont* df = NextUI::Theme::GetDefaultFont(*engine))
+            {
+                defaultFont = df;
+            }
+        }
+        if (titleFont == nullptr)
+        {
+            titleFont = defaultFont;
+        }
+
+        const ImVec2 dialogPos = ImGui::GetWindowPos();
+        const ImVec2 dialogSize = ImGui::GetWindowSize();
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+        // ==========================================
+        // 1. Header Bar
+        // ==========================================
+        constexpr float kHeaderHeight = 56.0f;
+        if (NextUI::Theme::DrawModalHeader(
+                ICON_FA_FOLDER_PLUS, "Create New Game Project",
+                "Initialize a new .NET 9 managed C# gameplay project from a template",
+                titleFont, true) &&
+            phase_ != EPhase::Working)
+        {
+            ImGui::CloseCurrentPopup();
+            open_ = false;
+            builder_.Reset();
+        }
+
+        // ==========================================
+        // 2. Body Area
+        // ==========================================
+        constexpr float kFooterHeight = 56.0f;
+        const float bodyHeight = dialogSize.y - kHeaderHeight - kFooterHeight;
+
+        if (!unavailableReason_.empty())
+        {
+            // Unavailable view
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(24.0f, 16.0f));
+            ImGui::BeginChild("##UnavailableBody", ImVec2(0.0f, bodyHeight), false);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 28.0f);
+
+            ImGui::BeginGroup();
+            const float centerX = ImGui::GetWindowWidth() * 0.5f;
+
+            ImGui::PushStyleColor(ImGuiCol_Text, Color(EColor::Danger));
+            ImGui::PushFont(titleFont);
+            const char* unavTitle = ICON_FA_CIRCLE_EXCLAMATION "  Cannot Create Project Here";
+            const ImVec2 unavTitleSize = ImGui::CalcTextSize(unavTitle);
+            ImGui::SetCursorPosX(centerX - unavTitleSize.x * 0.5f);
+            ImGui::TextUnformatted(unavTitle);
+            ImGui::PopFont();
+            ImGui::PopStyleColor();
+
+            ImGui::Dummy(ImVec2(0.0f, 14.0f));
+
+            const float panelWidth = std::min(620.0f, ImGui::GetContentRegionAvail().x - 40.0f);
+            ImGui::SetCursorPosX((ImGui::GetWindowWidth() - panelWidth) * 0.5f);
+            if (NextUI::Theme::BeginInsetPanel("##UnavReasonBox", ImVec2(panelWidth, 100.0f), true, 0,
+                                               ImVec2(18.0f, 16.0f), 0.40f))
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, Color(EColor::TextMuted));
+                ImGui::TextWrapped("%s", unavailableReason_.c_str());
+                ImGui::PopStyleColor();
+            }
+            NextUI::Theme::EndInsetPanel();
+            ImGui::EndGroup();
+
+            ImGui::EndChild();
+            ImGui::PopStyleVar();
+        }
+        else if (phase_ == EPhase::Working)
+        {
+            // Working / Publishing view: smoothly animated inline progress
+            builder_.DrawInlineProgress(ImVec2(dialogSize.x, bodyHeight));
+        }
+        else if (phase_ == EPhase::Done)
+        {
+            // Done / Success view
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28.0f, 18.0f));
+            ImGui::BeginChild("##DoneBody", ImVec2(0.0f, bodyHeight), false);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 10.0f);
+
+            // Success Header Banner
+            ImGui::PushStyleColor(ImGuiCol_Text, Color(EColor::Success));
+            ImGui::PushFont(titleFont);
+            const std::string doneTitle =
+                fmt::format(ICON_FA_CIRCLE_CHECK "  Project '{}' Created Successfully!", result_.manifest.id);
+            ImGui::SetCursorPosX(28.0f);
+            ImGui::TextUnformatted(doneTitle.c_str());
+            ImGui::PopFont();
+            ImGui::PopStyleColor();
+
+            ImGui::Dummy(ImVec2(0.0f, 10.0f));
+            ImGui::SetCursorPosX(28.0f);
+
+            const float contentWidth = dialogSize.x - 56.0f;
+
+            // Details Inset Panel with Table layout (no hardcoded SameLine)
+            if (NextUI::Theme::BeginInsetPanel("##DoneDetails", ImVec2(contentWidth, 136.0f), true, 0,
+                                               ImVec2(18.0f, 14.0f), 0.35f))
+            {
+                if (ImGui::BeginTable("##DoneDetailsTable", 2, ImGuiTableFlags_NoSavedSettings))
+                {
+                    ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 170.0f);
+                    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::TextColored(Color(EColor::TextDim), ICON_FA_FOLDER "  Project Directory:");
+                    ImGui::TableNextColumn();
+                    ImGui::TextColored(Color(EColor::Text), "%s", result_.projectDirectory.string().c_str());
+
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Dummy(ImVec2(0.0f, 2.0f));
+                    ImGui::TextColored(Color(EColor::TextDim), ICON_FA_FILE_CODE "  Manifest Path:");
+                    ImGui::TableNextColumn();
+                    ImGui::Dummy(ImVec2(0.0f, 2.0f));
+                    ImGui::TextColored(Color(EColor::Text), "%s", result_.manifestFile.string().c_str());
+
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Dummy(ImVec2(0.0f, 2.0f));
+                    ImGui::TextColored(Color(EColor::TextDim), ICON_FA_HAMMER "  Build Status:");
+                    ImGui::TableNextColumn();
+                    ImGui::Dummy(ImVec2(0.0f, 2.0f));
+                    if (built_)
+                    {
+                        DrawBadge(ICON_FA_CHECK, "Published & Ready to Play", Color(EColor::SurfaceElevated, 0.85f),
+                                  Color(EColor::Success), Color(EColor::BorderStrong, 0.6f));
+                    }
+                    else if (!buildError_.empty())
+                    {
+                        ImGui::TextColored(Color(EColor::Warning), ICON_FA_TRIANGLE_EXCLAMATION "  Not built: %s",
+                                           buildError_.c_str());
+                    }
+                    else
+                    {
+                        ImGui::TextColored(Color(EColor::TextMuted),
+                                           "Created on disk. Build with 'Rebuild C#' or dotnet publish.");
+                    }
+
+                    ImGui::EndTable();
+                }
+            }
+            NextUI::Theme::EndInsetPanel();
+
+            ImGui::Dummy(ImVec2(0.0f, 12.0f));
+            ImGui::SetCursorPosX(28.0f);
+
+            // Guidance Inset Panel with structured steps and code badges
+            if (NextUI::Theme::BeginInsetPanel("##DoneGuidance", ImVec2(contentWidth, 144.0f), true, 0,
+                                               ImVec2(18.0f, 14.0f), 0.25f))
+            {
+                ImGui::TextColored(Color(EColor::AccentHover), ICON_FA_LIGHTBULB "  Next Steps");
+                ImGui::Dummy(ImVec2(0.0f, 6.0f));
+
+                // Step 1
+                ImGui::TextColored(Color(EColor::AccentHover), "[1]");
+                ImGui::SameLine(0.0f, 8.0f);
+                ImGui::TextColored(Color(EColor::Text), "Register project in solution: run");
+                ImGui::SameLine(0.0f, 6.0f);
+                DrawCodeBadge("gnb dotnet sln");
+                ImGui::SameLine(0.0f, 6.0f);
+                ImGui::TextColored(Color(EColor::TextDim), "(updates assets/csharp/GkNextManaged.sln)");
+
+                // Step 2
+                ImGui::Dummy(ImVec2(0.0f, 3.0f));
+                ImGui::TextColored(Color(EColor::AccentHover), "[2]");
+                ImGui::SameLine(0.0f, 8.0f);
+                ImGui::TextColored(Color(EColor::Text), "Open solution in VS / Rider / VS Code for full C# code editing & debugging.");
+
+                // Step 3
+                ImGui::Dummy(ImVec2(0.0f, 3.0f));
+                ImGui::TextColored(Color(EColor::AccentHover), "[3]");
+                ImGui::SameLine(0.0f, 8.0f);
+                ImGui::TextColored(Color(EColor::Text), "Launch directly from gkNextLauncher or Play-In-Editor in gkNextEditor.");
+            }
+            NextUI::Theme::EndInsetPanel();
+
+            ImGui::EndChild();
+            ImGui::PopStyleVar();
+        }
+        else
+        {
+            // Standard Two-Column Editing View
+            // -----------------------------------------------------------------
+            // Left Column: Templates Rail
+            // -----------------------------------------------------------------
+            constexpr float kLeftColumnWidth = 270.0f;
+
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f, 14.0f));
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, Color(EColor::Background, 0.45f));
+            ImGui::BeginChild("##TemplatesRail", ImVec2(kLeftColumnWidth, bodyHeight), false);
+
+            ImGui::PushStyleColor(ImGuiCol_Text, Color(EColor::TextDim));
+            ImGui::Text(ICON_FA_LIST "  PROJECT TEMPLATES (%zu)", templates_.size());
+            ImGui::PopStyleColor();
+            ImGui::Dummy(ImVec2(0.0f, 6.0f));
+
+            for (size_t i = 0; i < templates_.size(); ++i)
+            {
+                const FGameTemplate& tmpl = templates_[i];
+                const bool isSelected = static_cast<int>(i) == selectedTemplate_;
+
+                ImGui::PushID(static_cast<int>(i));
+
+                constexpr float kCardHeight = 54.0f;
+                const NextUI::Theme::FInteractiveCardState cardState =
+                    NextUI::Theme::DrawInteractiveCard(NextUI::Theme::FInteractiveCardConfig{
+                        .Id = "##TemplateCard",
+                        .Size = ImVec2(0.0f, kCardHeight),
+                        .Selected = isSelected,
+                        .Rounding = 6.0f,
+                        .ShowSelectionStrip = true,
+                    });
+                if (cardState.Clicked)
+                {
+                    selectedTemplate_ = static_cast<int>(i);
+                }
+                const ImVec2 cardPos = cardState.Min;
+
+                // Icon Box
+                constexpr float itemIconSize = 34.0f;
+                const ImVec2 itemIconMin(cardPos.x + 10.0f, cardPos.y + (kCardHeight - itemIconSize) * 0.5f);
+                const ImVec2 itemIconMax(itemIconMin.x + itemIconSize, itemIconMin.y + itemIconSize);
+                const char* iconStr = GetTemplateIcon(tmpl.id);
+
+                drawList->AddRectFilled(itemIconMin, itemIconMax,
+                                        isSelected ? ColorU32(EColor::Accent, 0.22f)
+                                                   : ColorU32(EColor::Background, 0.40f),
+                                        6.0f);
+                const ImVec2 iconTextSize = ImGui::CalcTextSize(iconStr);
+                drawList->AddText(
+                    ImVec2(itemIconMin.x + (itemIconSize - iconTextSize.x) * 0.5f,
+                           itemIconMin.y + (itemIconSize - iconTextSize.y) * 0.5f),
+                    isSelected ? ColorU32(EColor::Text) : ColorU32(EColor::TextMuted), iconStr);
+
+                // Title and Subtitle Text with comfortable vertical spacing
+                const float textLeft = itemIconMax.x + 12.0f;
+                const ImVec2 titlePos(textLeft, cardPos.y + 9.0f);
+                drawList->AddText(titlePos, isSelected ? ColorU32(EColor::Text) : ColorU32(EColor::Text),
+                                  tmpl.displayName.c_str());
+
+                const ImVec2 subPos(textLeft, cardPos.y + 29.0f);
+                drawList->AddText(subPos, ColorU32(EColor::TextDim), GetTemplateCategory(tmpl.id));
+
+                ImGui::PopID();
+                ImGui::Dummy(ImVec2(0.0f, 3.0f));
+            }
+
+            if (templates_.empty())
+            {
+                ImGui::TextColored(Color(EColor::TextDim), "No templates available");
+            }
+
+            ImGui::EndChild();
+            ImGui::PopStyleColor();
+            ImGui::PopStyleVar();
+
+            ImGui::SameLine(0.0f, 0.0f);
+
+            // Vertical divider line between columns
+            const ImVec2 dividerPos = ImGui::GetCursorScreenPos();
+            drawList->AddLine(dividerPos, ImVec2(dividerPos.x, dividerPos.y + bodyHeight),
+                              ColorU32(EColor::Border, 0.50f), 1.0f);
+
+            // -----------------------------------------------------------------
+            // Right Column: Template Overview & Configuration Form
+            // -----------------------------------------------------------------
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20.0f, 16.0f));
+            ImGui::BeginChild("##FormContent", ImVec2(0.0f, bodyHeight), false);
+
+            const FGameTemplate* selectedTmpl = SelectedTemplate();
+            if (selectedTmpl != nullptr)
+            {
+                // Top: Template Overview Inset Panel (compact, sleek, no scrollbar)
+                if (NextUI::Theme::BeginInsetPanel("##TmplOverview", ImVec2(0.0f, 86.0f), true,
+                                                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse,
+                                                   ImVec2(14.0f, 10.0f), 0.28f))
+                {
+                    ImGui::BeginGroup();
+                    ImGui::PushFont(titleFont);
+                    ImGui::TextColored(Color(EColor::Text), "%s", selectedTmpl->displayName.c_str());
+                    ImGui::PopFont();
+
+                    ImGui::SameLine(0.0f, 12.0f);
+                    for (const std::string& mod : selectedTmpl->requiredModules)
+                    {
+                        DrawBadge(ICON_FA_CUBE, mod.c_str(), Color(EColor::SurfaceElevated, 0.85f),
+                                  Color(EColor::AccentHover), Color(EColor::BorderStrong, 0.6f));
+                        ImGui::SameLine(0.0f, 6.0f);
+                    }
+                    if (selectedTmpl->hotReload)
+                    {
+                        DrawBadge(ICON_FA_BOLT, "Hot Reload", Color(EColor::SurfaceElevated, 0.85f),
+                                  Color(EColor::Success), Color(EColor::BorderStrong, 0.6f));
+                    }
+                    ImGui::EndGroup();
+
+                    ImGui::Dummy(ImVec2(0.0f, 3.0f));
+                    ImGui::PushStyleColor(ImGuiCol_Text, Color(EColor::TextMuted));
+                    ImGui::TextWrapped("%s", selectedTmpl->description.c_str());
+                    ImGui::PopStyleColor();
+
+                    if (!selectedTmpl->highlights.empty())
+                    {
+                        ImGui::Dummy(ImVec2(0.0f, 3.0f));
+                        ImGui::TextColored(Color(EColor::Success), ICON_FA_CIRCLE_CHECK);
+                        ImGui::SameLine(0.0f, 8.0f);
+                        ImGui::TextColored(Color(EColor::Text), "%s", selectedTmpl->highlights[0].c_str());
+                    }
+                }
+                NextUI::Theme::EndInsetPanel();
+
+                ImGui::Dummy(ImVec2(0.0f, 10.0f));
+
+                // Bottom: Project Configuration Form
+                ImGui::PushStyleColor(ImGuiCol_Text, Color(EColor::TextDim));
+                ImGui::Text(ICON_FA_SLIDERS "  PROJECT CONFIGURATION");
+                ImGui::PopStyleColor();
+                ImGui::Dummy(ImVec2(0.0f, 6.0f));
+
+                // Form styles: comfortable FramePadding and FrameRounding (never 0 padding!)
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 8.0f));
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+                ImGui::PushStyleColor(ImGuiCol_FrameBg, Color(EColor::SurfaceElevated, 0.55f));
+                ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Color(EColor::SurfaceHover, 0.70f));
+                ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Color(EColor::SurfaceHover, 0.90f));
+                ImGui::PushStyleColor(ImGuiCol_Border, Color(EColor::Border, 0.65f));
+
+                // 1. Project Name (C# Identifier)
+                ImGui::TextColored(Color(EColor::Text), ICON_FA_SIGNATURE "  Project Name");
+                ImGui::SameLine(0.0f, 8.0f);
+                ImGui::TextColored(Color(EColor::TextDim), "(PascalCase C# Identifier)");
+                ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+                ImGui::SetNextItemWidth(-1.0f);
+                if (ImGui::InputTextWithHint("##ProjectName", "e.g. SpaceShooter", projectName_.data(), projectName_.size()))
+                {
+                    SyncDerivedNames();
+                }
+                ImGui::Dummy(ImVec2(0.0f, 4.0f));
+                ImGui::TextColored(Color(EColor::TextDim),
+                                   ICON_FA_INFO "  Sets directory projects/<Name>/, namespace and class name.");
+
+                ImGui::Dummy(ImVec2(0.0f, 12.0f));
+
+                // 2. Display Name & Game ID in two columns with proper CellPadding
+                ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(10.0f, 0.0f));
+                if (ImGui::BeginTable("##DualNameTable", 2, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoSavedSettings))
+                {
+                    ImGui::TableNextColumn();
+                    ImGui::TextColored(Color(EColor::Text), ICON_FA_TAG "  Display Name");
+                    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+                    ImGui::SetNextItemWidth(-1.0f);
+                    if (ImGui::InputTextWithHint("##DisplayName", "e.g. Space Shooter", displayName_.data(), displayName_.size()))
+                    {
+                        displayNameEdited_ = true;
+                    }
+                    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+                    ImGui::TextColored(Color(EColor::TextDim), ICON_FA_INFO "  Window & menu title");
+
+                    ImGui::TableNextColumn();
+                    ImGui::TextColored(Color(EColor::Text), ICON_FA_CODE "  Game ID");
+                    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+                    ImGui::SetNextItemWidth(-1.0f);
+                    if (ImGui::InputTextWithHint("##GameId", "e.g. spaceshooter", gameId_.data(), gameId_.size()))
+                    {
+                        gameIdEdited_ = true;
+                    }
+                    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+                    ImGui::TextColored(Color(EColor::TextDim), ICON_FA_INFO "  Manifest & publish dir (lowercase)");
+
+                    ImGui::EndTable();
+                }
+                ImGui::PopStyleVar(); // Pop CellPadding
+
+                ImGui::PopStyleColor(4); // Pop FrameBg colors and Border
+                ImGui::PopStyleVar(3);   // Pop FramePadding, FrameRounding, FrameBorderSize
+
+                // 3. Publish Checkbox Card
+                if (session != nullptr)
+                {
+                    ImGui::Dummy(ImVec2(0.0f, 10.0f));
+                    if (NextUI::Theme::BeginInsetPanel("##PublishOptCard", ImVec2(0.0f, 52.0f), true,
+                                                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse,
+                                                       ImVec2(12.0f, 7.0f), 0.35f))
+                    {
+                        ImGui::PushStyleColor(ImGuiCol_CheckMark, Color(EColor::AccentHover));
+                        ImGui::Checkbox(ICON_FA_ROCKET "  Publish project immediately (ready to play instantly)",
+                                        &buildAfterCreate_);
+                        ImGui::PopStyleColor();
+
+                        ImGui::Dummy(ImVec2(0.0f, 2.0f));
+                        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 24.0f);
+                        ImGui::TextColored(Color(EColor::TextDim),
+                                           "Compiles C# assemblies with .NET SDK so the game is ready on completion.");
+                    }
+                    NextUI::Theme::EndInsetPanel();
+                }
+
+                // Real-time Request Validation
+                FNewGameRequest request;
+                request.templateId = selectedTmpl->id;
+                request.projectName = projectName_.data();
+                request.displayName = displayName_.data();
+                request.gameId = gameId_.data();
+                std::string error;
+                const bool valid = ValidateNewGameRequest(request, error);
+                validationError_ = valid || projectName_[0] == '\0' ? std::string() : error;
+
+                if (!validationError_.empty())
+                {
+                    ImGui::Dummy(ImVec2(0.0f, 10.0f));
+                    if (NextUI::Theme::BeginInsetPanel("##ValidationAlert", ImVec2(0.0f, 36.0f), true, 0,
+                                                       ImVec2(12.0f, 8.0f), 0.20f))
+                    {
+                        ImGui::PushStyleColor(ImGuiCol_Text, Color(EColor::Danger));
+                        ImGui::Text(ICON_FA_CIRCLE_EXCLAMATION "  %s", validationError_.c_str());
+                        ImGui::PopStyleColor();
+                    }
+                    NextUI::Theme::EndInsetPanel();
+                }
+            }
+
+            ImGui::EndChild();
+            ImGui::PopStyleVar();
+        }
+
+        // Set cursor to Footer position
+        ImGui::SetCursorScreenPos(ImVec2(dialogPos.x, dialogPos.y + dialogSize.y - kFooterHeight));
+
+        // ==========================================
+        // 3. Footer Action Bar
+        // ==========================================
+        const ImVec2 footerMin(dialogPos.x, dialogPos.y + dialogSize.y - kFooterHeight);
+        const ImVec2 footerMax(dialogPos.x + dialogSize.x, dialogPos.y + dialogSize.y);
+
+        drawList->AddRectFilled(footerMin, footerMax, ColorU32(EColor::Background, 0.70f), 8.0f,
+                                ImDrawFlags_RoundCornersBottom);
+        drawList->AddLine(footerMin, ImVec2(footerMax.x, footerMin.y), ColorU32(EColor::Border, 0.50f), 1.0f);
+
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20.0f, 12.0f));
+        ImGui::BeginChild("##FooterContent", ImVec2(0.0f, kFooterHeight), false,
+                          ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+        if (!unavailableReason_.empty())
+        {
+            ImGui::SetCursorPosX(dialogSize.x - 140.0f);
+            if (ImGui::Button("Close", ImVec2(120.0f, 32.0f)))
+            {
+                ImGui::CloseCurrentPopup();
+                open_ = false;
+                builder_.Reset();
+            }
+        }
+        else if (phase_ == EPhase::Done)
+        {
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
+            ImGui::TextColored(Color(EColor::TextDim), ICON_FA_INFO "  You can close this dialog at any time.");
+            ImGui::SameLine(dialogSize.x - 158.0f);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 4.0f);
+            if (ImGui::Button(ICON_FA_CHECK "  Done", ImVec2(140.0f, 32.0f)))
+            {
+                ImGui::CloseCurrentPopup();
+                open_ = false;
+                builder_.Reset();
+            }
+        }
+        else if (phase_ == EPhase::Working)
+        {
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
+            ImGui::TextColored(Color(EColor::AccentHover), ICON_FA_ROTATE "  Publishing in progress... Please wait.");
+        }
+        else
+        {
+            // Left side info
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
+            if (const FGameTemplate* tmpl = SelectedTemplate())
+            {
+                ImGui::TextColored(Color(EColor::TextDim), ICON_FA_CODE_BRANCH "  Template: %s • .NET 9.0",
+                                   tmpl->id.c_str());
+            }
+
+            // Right side buttons
+            constexpr float btnWidth = 140.0f;
+            constexpr float cancelWidth = 90.0f;
+            ImGui::SameLine(dialogSize.x - btnWidth - cancelWidth - 28.0f);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 4.0f);
+
+            // Cancel Button (Ghost style)
+            if (ImGui::Button("Cancel", ImVec2(cancelWidth, 32.0f)))
+            {
+                ImGui::CloseCurrentPopup();
+                open_ = false;
+                builder_.Reset();
+            }
+
+            ImGui::SameLine(0.0f, 10.0f);
+
+            // Create Project Button (Primary Accent)
+            const bool canCreate =
+                SelectedTemplate() != nullptr && projectName_[0] != '\0' && validationError_.empty();
+
+            ImGui::BeginDisabled(!canCreate);
+            ImGui::PushStyleColor(ImGuiCol_Button, Color(EColor::Accent));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Color(EColor::AccentHover));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, Color(EColor::AccentHover, 0.8f));
+            if (ImGui::Button(ICON_FA_PLUS "  Create Project", ImVec2(btnWidth, 32.0f)))
+            {
+                PerformWork(session);
+                if (phase_ == EPhase::Done)
+                {
+                    outcome.created = true;
+                    outcome.gameId = result_.manifest.id;
+                    outcome.built = built_;
+                }
+            }
+            ImGui::PopStyleColor(3);
+            ImGui::EndDisabled();
+        }
+
+        ImGui::EndChild();
+        ImGui::PopStyleVar();
+
+        NextUI::Theme::EndModernModal();
+
+        return outcome;
+    }
+}

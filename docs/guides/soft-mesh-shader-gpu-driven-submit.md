@@ -4,7 +4,7 @@ category: guide
 status: 现行
 owner: engine
 created: 2026-06-03
-last_updated: 2026-07-17
+last_updated: 2026-11-03
 ---
 
 # Soft Mesh Shader GPU-Driven 提交路径
@@ -13,7 +13,7 @@ last_updated: 2026-07-17
 
 ## 资源与 slot
 
-`SoftMeshShaderResources` 定义在 `assets/shaders/common/BasicTypes.slang`，保存六个 device address：主 primitive、shadow primitive、visible items、draw args、dispatch args、counters。C++ 对应资源由 `src/Engine/Assets/Core/Scene.Build.cpp` 创建。
+`SoftMeshShaderResources` 定义在 `assets/shaders/common/BasicTypes.slang`，保存 soft-mesh 的六个 device address（主 primitive、shadow primitive、visible items、draw args、dispatch args、counters），以及挂在同一张表上的 Lights、LightGrid 和逐 proxy 的 `RayTracingLods`。C++ 对应资源由 `src/Engine/Assets/Core/Scene.Build.cpp` 创建。
 
 | Slot | 用途 |
 | ---: | --- |
@@ -67,6 +67,24 @@ Soft-mesh scratch 当前属于 Scene，全 scheduled view 复用。多视图之�
 - finalize → indirect read 的 dispatch/draw args；
 - expand → vertex read 的 primitive stream；
 - 前一个 view 消费完成后 scratch 才能被下一个 view 覆盖。
+
+## Discrete LOD 与硬件光追
+
+`Model::BuildLods` 用 meshoptimizer 为单 section、非蒙皮模型生成最多 `MAX_MODEL_LOD_COUNT` 级索引流，`ModelData` 记录每级的 `lodIndexOffset/lodIndexCount` 和相对 LOD0 的物体空间误差 `lodError`。cull pass 用 `SoftMeshShaderCull.slang` 的 `ComputeScreenExtent` + `SelectLod` 逐 proxy 选级，级别编码进 visibility id 的高位，重建（`Common.get_material_data`）按该级的索引区间取三角形。
+
+硬件光追必须追踪同一个表面，否则从 visibility buffer 重建的主命中点（LOD k 表面）会和 TLAS 里的 LOD0 表面自相交，次级光线（阳光阴影、NEE、反弹）出现黑斑/漏光。因此：
+
+- **BLAS 按级构建**：`CreateBottomLevelStructures` 为每个有简化级的模型每级建一个 BLAS，索引区间直接取光栅 LOD 表；蒙皮模型只有 LOD0（每帧 refit）。
+- **TLAS 逐实例选级**：`Task.RayTracingLodSelect.comp.slang` 在 TLAS 重建前运行，用与主视图 cull **完全相同**的矩阵（`PrevViewProjectionUnJit`）、bounds、viewport、`LodBaseThreshold` 和 `SelectLod` 选级，把 CPU 写的实例模板（全 LOD0）复制到 device-local 实例缓冲并改指对应 BLAS，同时写逐 proxy 的 `RayTracingLods`。完全在相机背后的 proxy 不会被主视图画到，用镜像 w 的投影尺寸选级，而不是一律 LOD0。相机移动、节点变化或 LOD 设置变化时重建 TLAS；静止时不重建。
+- **命中解码**：`FHardwareRayTracer.TraceRay` 用 `RayTracingLods[instance]` 选 `lodIndexOffset`，`CommittedPrimitiveIndex` 是该级 BLAS 内的序号。实例下标必须等于 NodeProxy 下标，失效模型的槽位写空实例而不是跳过。
+- **主命中点对齐**：`r.lod.rayTracingBias > 0`（RT proxy：光追比光栅粗 N 级）、次视图（自己的光栅级）或阈值边界的浮点差都会让两边级别不同。`IRayTracer.ResolvePrimaryOrigin` 在硬件 tracer 里比较 visibility id 的级别和 `RayTracingLods`，不同则沿视线、只在该 proxy 自身的三角形里、在两级 `lodError` 之和允许的窗口内找到被追踪的表面，把起点移过去并保持调用方原有的 standoff。`FPathTracingRenderer.Render` 与 ReSTIR spatial pass 在发出任何光线前调用它；软件 tracer 原样返回。
+
+| CVar | 默认 | 作用 |
+| --- | --- | --- |
+| `r.lod.rayTracing` | 1 | 光追跟随主视图逐实例选级；0 = 全部追踪 LOD0（对照基线） |
+| `r.lod.rayTracingBias` | 0 | 光追 proxy 在上述选择上再粗 N 级；0 = 主视图里光追与光栅完全一致 |
+
+两个开关组合 `r.lod.rayTracing 0` + `r.lod.rayTracingBias N` 即固定级 RT proxy。
 
 ## 与旧 MDI 的边界
 

@@ -65,6 +65,82 @@ using NextUI::Theme::PushViewportToolbarStyle;
 constexpr uint32_t dropSphereGridSize = 20;
 constexpr uint32_t dropSphereCount = dropSphereGridSize * dropSphereGridSize;
 
+constexpr float shootHintDurationSeconds = 3.5f;
+
+// Everything the Space shortcut puts into the world -- the projectile, the weapon it leaves and
+// the muzzle velocity -- is derived from a single scene scale, in the reference units below.
+// playground.glb, whose scene AABB has a longest side of about 29 m, is the reference. The
+// camera only decides how far away the weapon is held, never how big any of it is.
+constexpr float launchReferenceSceneExtent = 28.0f;
+constexpr float launchMinSceneScale = 0.35f;
+constexpr float launchMaxSceneScale = 2.2f;
+constexpr float projectileBaseSize = 0.22f;   // cube edge length at scene scale 1
+constexpr float projectileBaseSpeed = 34.0f;  // m/s at scene scale 1
+constexpr float projectileSpinPitch = 1.6f;   // rad/s about the view right axis
+constexpr float projectileSpinYaw = 0.7f;     // rad/s about the view up axis
+
+// Camera-relative weapon. The barrel is four walls around an open bore just wider than the
+// projectile, and the projectile is spawned centred on the muzzle mouth, so a shell is always
+// exactly as wide as the hole it comes out of. A solid barrel pointed down the view axis is seen
+// almost end on and reads as a featureless slab; the hole is what makes it a muzzle.
+//
+// The whole rig therefore takes the scene scale and nothing else, exactly like the shell it
+// fires, and the field of view is answered by moving it along the view axis instead of resizing
+// it. Scaling the rig by the field of view as well used to shrink the bore, and with it the
+// shell, by another factor of two in a narrow view -- which cancelled the scene scale outright
+// and fired the same 13 cm cube in a 10 m room and in a 29 m playground.
+constexpr float muzzleReferenceFovDegrees = 60.0f;
+constexpr float muzzleDepthScaleMin = 0.5f;
+constexpr float muzzleDepthScaleMax = 4.0f;
+constexpr float muzzleBoreHalfWidth = projectileBaseSize * 0.5f + 0.01f;
+constexpr float muzzleBarrelHalfWidth = muzzleBoreHalfWidth + 0.045f;
+constexpr float muzzleBarrelWallHalfThickness = (muzzleBarrelHalfWidth - muzzleBoreHalfWidth) * 0.5f;
+constexpr float muzzleBarrelWallOffset = (muzzleBarrelHalfWidth + muzzleBoreHalfWidth) * 0.5f;
+constexpr float muzzleBarrelHalfLength = 0.52f;
+constexpr float muzzleReceiverHalfWidth = 0.17f;
+constexpr float muzzleReceiverHalfHeight = 0.13f;
+constexpr float muzzleReceiverHalfLength = 0.30f;
+constexpr float muzzleReceiverOffsetY = -0.30f;
+constexpr float muzzleReceiverOffsetZ = 0.30f;
+constexpr float muzzleRigRearExtent = muzzleReceiverOffsetZ + muzzleReceiverHalfLength;
+constexpr float muzzleRigNearMargin = 0.30f;
+constexpr float muzzleDepth = 1.75f;
+constexpr float muzzleRightOffset = 0.77f;
+constexpr float muzzleDownOffset = 0.55f;
+
+float GetLaunchSceneScale(const Assets::Scene& scene)
+{
+    const glm::vec3 boundsSize = scene.GetSceneAABBMax() - scene.GetSceneAABBMin();
+    const float sceneExtent = std::max({boundsSize.x, boundsSize.y, boundsSize.z});
+    if (!std::isfinite(sceneExtent) || sceneExtent <= 0.0f)
+    {
+        return 1.0f;
+    }
+
+    // Square root rather than the raw ratio: a kilometre-wide city tile is a hundred times
+    // playground, and a projectile a hundred times bigger would be a building. The continuous
+    // curve also removes the visible jump the previous half/double thresholds produced between
+    // two scenes of almost the same size.
+    return std::clamp(std::sqrt(sceneExtent / launchReferenceSceneExtent),
+                      launchMinSceneScale, launchMaxSceneScale);
+}
+
+// Field-of-view compensation for the weapon, applied to its distance from the camera alone,
+// since its size is now spoken for: a narrow view needs the rig further out to keep the same
+// share of the frame, a wide one needs it closer. The tangent ratio is compensated in full, so
+// the weapon and the shell leaving it hold exactly the same on-screen size and position at every
+// field of view, and only their world size follows the scene. Distance is the one lever left --
+// shrinking the rig instead would shrink the bore, and the bore is the shell -- so it is simply
+// clamped at both ends rather than softened: far enough out and the weapon starts picking up
+// scene geometry in front of it, close enough in and its rear reaches the camera.
+float GetMuzzleDepthScale(float fieldOfViewDegrees)
+{
+    const float halfFovTangent = glm::tan(glm::radians(fieldOfViewDegrees) * 0.5f);
+    const float referenceTangent = glm::tan(glm::radians(muzzleReferenceFovDegrees) * 0.5f);
+    return std::clamp(referenceTangent / halfFovTangent,
+                      muzzleDepthScaleMin, muzzleDepthScaleMax);
+}
+
 uint32_t HashUint(uint32_t value)
 {
     value ^= value >> 16;
@@ -131,11 +207,6 @@ static void UpdateUiScaledMetrics()
     float scale = 1.0f;
 
 #if !ANDROID
-    if (Vulkan::SwapChain::UiContentScale() < 1.0f)
-    {
-        scale *= 0.75f / Vulkan::SwapChain::UiContentScale();
-    }
-
     if (ImGui::GetCurrentContext() != nullptr)
     {
         const float fontSize = ImGui::GetFontSize();
@@ -217,6 +288,9 @@ void NextRendererGameInstance::OnInit()
 
 void NextRendererGameInstance::OnTick(double deltaSeconds)
 {
+    shootHintRemainingSeconds_ = std::max(
+        0.0f, shootHintRemainingSeconds_ - static_cast<float>(std::max(0.0, deltaSeconds)));
+
     bool arMoving = false;
 #if GK_WITH_VITURE
     arMoving = UpdateArTracking(deltaSeconds);
@@ -228,6 +302,11 @@ void NextRendererGameInstance::OnTick(double deltaSeconds)
     }
 
     const bool moving = modelViewController_.UpdateCamera(10.0f, deltaSeconds) || arMoving;
+    const bool fovChanged = std::abs(modelViewController_.FieldOfView() - muzzleFieldOfView_) > 0.001f;
+    if ((moving || fovChanged) && muzzleNode_)
+    {
+        RefreshMuzzleTransform();
+    }
     GetEngine().SetProgressiveRendering(GetEngine().GetUserSettings().ProgressiveRender && !moving);
     stepRequested_ = false;
 }
@@ -304,8 +383,29 @@ void NextRendererGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<As
     models.push_back(Assets::FProcModel::CreateSphere(glm::vec3(0,0,0), 0.2f));
     modelId_ = static_cast<uint32_t>(models.size() - 1);
     
-    models.push_back(Assets::FProcModel::CreateBox(glm::vec3(-0.2,-0.2,-0.2), glm::vec3(0.2,0.2,0.2)));
+    constexpr float projectileHalfSize = projectileBaseSize * 0.5f;
+    models.push_back(Assets::FProcModel::CreateBox(
+        glm::vec3(-projectileHalfSize), glm::vec3(projectileHalfSize)));
     boxModelId_ = static_cast<uint32_t>(models.size() - 1);
+
+    // A camera-relative weapon gives the Space shortcut a visible point of reference. Its parts
+    // are added as regular render nodes after the scene is loaded, so they do not affect the
+    // scene AABB the launch scale is read from. Local -Z is the muzzle mouth. One horizontal and
+    // one vertical wall model are instanced twice each to box in the bore.
+    models.push_back(Assets::FProcModel::CreateBox(
+        glm::vec3(-muzzleBarrelHalfWidth, -muzzleBarrelWallHalfThickness, -muzzleBarrelHalfLength),
+        glm::vec3(muzzleBarrelHalfWidth, muzzleBarrelWallHalfThickness, muzzleBarrelHalfLength)));
+    viewBarrelWallHModelId_ = static_cast<uint32_t>(models.size() - 1);
+
+    models.push_back(Assets::FProcModel::CreateBox(
+        glm::vec3(-muzzleBarrelWallHalfThickness, -muzzleBoreHalfWidth, -muzzleBarrelHalfLength),
+        glm::vec3(muzzleBarrelWallHalfThickness, muzzleBoreHalfWidth, muzzleBarrelHalfLength)));
+    viewBarrelWallVModelId_ = static_cast<uint32_t>(models.size() - 1);
+
+    models.push_back(Assets::FProcModel::CreateBox(
+        glm::vec3(-muzzleReceiverHalfWidth, -muzzleReceiverHalfHeight, -muzzleReceiverHalfLength),
+        glm::vec3(muzzleReceiverHalfWidth, muzzleReceiverHalfHeight, muzzleReceiverHalfLength)));
+    viewReceiverModelId_ = static_cast<uint32_t>(models.size() - 1);
 
     matIds_.clear();
 
@@ -317,6 +417,11 @@ void NextRendererGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<As
     materials.push_back(MatPreparedForAdd.back());matIds_.push_back(uint32_t(materials.size() - 1));
     MatPreparedForAdd.push_back({Assets::Material::Mixture(glm::vec3(1.0f, 0.3f, 0.3f), 0.1f)});
     materials.push_back(MatPreparedForAdd.back());matIds_.push_back(uint32_t(materials.size() - 1));
+
+    // Gunmetal for the weapon. The white lambertian the barrel used to borrow read as a loose
+    // slab of scene geometry rather than something the camera is holding.
+    materials.push_back({Assets::Material::Mixture(glm::vec3(0.30f, 0.32f, 0.37f), 0.34f), "viewWeapon"});
+    viewWeaponMatId_ = static_cast<uint32_t>(materials.size() - 1);
 
     dropSphereMatIds_.clear();
     dropSphereMatIds_.reserve(dropSphereCount);
@@ -346,7 +451,48 @@ void NextRendererGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<As
 void NextRendererGameInstance::OnSceneLoaded()
 {
     NextGameInstanceBase::OnSceneLoaded();
+    launchSceneScale_ = GetLaunchSceneScale(GetEngine().GetScene());
     modelViewController_.Reset( GetEngine().GetScene().GetRenderCamera() );
+    shootHintRemainingSeconds_ = shootHintDurationSeconds;
+
+    Assets::Scene& scene = GetEngine().GetScene();
+    viewWeaponParts_ = {};
+    muzzleNode_.reset();
+    // Scene validation captures must not be covered by the debug weapon.
+    if (!GetEngine().GetOptions().AgentValidation && viewReceiverModelId_ < scene.Models().size() && !matIds_.empty())
+    {
+        const auto createPart = [&](std::string_view name, uint32_t modelId, const glm::vec3& localOffset)
+        {
+            FViewWeaponPart part;
+            part.localOffset = localOffset;
+            part.node = Assets::SceneBuilder::CreateRenderNode(
+                name, glm::vec3(0.0f), glm::vec3(1.0f),
+                static_cast<uint32_t>(scene.Nodes().size()), modelId, viewWeaponMatId_, true,
+                glm::quat(1.0f, 0.0f, 0.0f, 0.0f), false);
+            // No shadow: a weapon-shaped shadow sweeping the scene as the camera turns reads as
+            // scene geometry gone wrong. Indirect light stays on, or the weapon is a black slab in
+            // any scene whose fill comes from the sky rather than from the sun.
+            if (auto* render = part.node->GetComponent<Runtime::RenderComponent>())
+            {
+                render->SetCastShadows(false);
+            }
+            scene.AddNode(part.node);
+            return part;
+        };
+
+        viewWeaponParts_[0] = createPart("viewBarrelTop", viewBarrelWallHModelId_,
+                                         glm::vec3(0.0f, muzzleBarrelWallOffset, 0.0f));
+        viewWeaponParts_[1] = createPart("viewBarrelBottom", viewBarrelWallHModelId_,
+                                         glm::vec3(0.0f, -muzzleBarrelWallOffset, 0.0f));
+        viewWeaponParts_[2] = createPart("viewBarrelLeft", viewBarrelWallVModelId_,
+                                         glm::vec3(-muzzleBarrelWallOffset, 0.0f, 0.0f));
+        viewWeaponParts_[3] = createPart("viewBarrelRight", viewBarrelWallVModelId_,
+                                         glm::vec3(muzzleBarrelWallOffset, 0.0f, 0.0f));
+        viewWeaponParts_[4] = createPart("viewWeaponReceiver", viewReceiverModelId_,
+                                         glm::vec3(0.0f, muzzleReceiverOffsetY, muzzleReceiverOffsetZ));
+        muzzleNode_ = viewWeaponParts_[0].node;
+        RefreshMuzzleTransform();
+    }
 
     GetEngine().GetScene().PlayAllTracks();
 }
@@ -445,6 +591,11 @@ bool NextRendererGameInstance::DrawRendererUi(const FGameUiFrameContext& context
         uiState.workMode = EWorkMode::Render;
         uiState.lastWorkMode = EWorkMode::Count;
     }
+    else if (uiState.workMode == EWorkMode::Detail && !uiState.showSettings)
+    {
+        uiState.workMode = EWorkMode::Render;
+        uiState.lastWorkMode = EWorkMode::Count;
+    }
 
     DrawTitleBar(context, uiState);
 #if GK_WITH_VITURE
@@ -457,6 +608,7 @@ bool NextRendererGameInstance::DrawRendererUi(const FGameUiFrameContext& context
     DrawSettings(uiState);
     DrawViewportTopBar(context, uiState);
     DrawViewportCheatSheet(uiState);
+    DrawShootHint(context);
     DrawBottomStatusBar();
     Utilities::UI::ShowAboutDialog(uiState.showAbout);
 
@@ -510,6 +662,173 @@ bool NextRendererGameInstance::DrawRendererUi(const FGameUiFrameContext& context
 void NextRendererGameInstance::OnInitUI()
 {
     NextGameInstanceBase::OnInitUI();
+}
+
+void NextRendererGameInstance::DrawShootHint(const FGameUiFrameContext& context)
+{
+    if (context.surfaceKind != FGameUiFrameContext::ESurfaceKind::MainWindow ||
+        shootHintRemainingSeconds_ <= 0.0f || ImGui::GetCurrentContext() == nullptr)
+    {
+        return;
+    }
+
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const float scale = std::max(0.75f, ImGui::GetFontSize() / 16.0f);
+    const float elapsed = shootHintDurationSeconds - shootHintRemainingSeconds_;
+    const float fadeIn = std::clamp(elapsed / 0.18f, 0.0f, 1.0f);
+    const float fadeOut = std::clamp(shootHintRemainingSeconds_ / 0.65f, 0.0f, 1.0f);
+    const float alpha = fadeIn * fadeOut;
+    if (alpha <= 0.0f)
+    {
+        return;
+    }
+
+    constexpr const char* prefix = "Press";
+    constexpr const char* key = "SPACE";
+    constexpr const char* suffix = "to shoot a cube";
+    const ImVec2 prefixSize = ImGui::CalcTextSize(prefix);
+    const ImVec2 keySize = ImGui::CalcTextSize(key);
+    const ImVec2 suffixSize = ImGui::CalcTextSize(suffix);
+    const float gap = 8.0f * scale;
+    const float paddingX = 16.0f * scale;
+    const float paddingY = 9.0f * scale;
+    const float keyPaddingX = 11.0f * scale;
+    const float keyPaddingY = 5.0f * scale;
+    const float keyWidth = keySize.x + keyPaddingX * 2.0f;
+    const float keyHeight = keySize.y + keyPaddingY * 2.0f;
+    const float panelWidth = paddingX * 2.0f + prefixSize.x + gap + keyWidth + gap + suffixSize.x;
+    const float panelHeight = paddingY * 2.0f + std::max(keyHeight, ImGui::GetFontSize());
+    const ImVec2 panelCenter(
+        viewport->Pos.x + viewport->Size.x * 0.5f,
+        viewport->Pos.y + viewport->Size.y - 92.0f * scale);
+    const ImVec2 panelMin(panelCenter.x - panelWidth * 0.5f, panelCenter.y - panelHeight * 0.5f);
+    const ImVec2 panelMax(panelCenter.x + panelWidth * 0.5f, panelCenter.y + panelHeight * 0.5f);
+    const float textY = panelCenter.y - ImGui::GetFontSize() * 0.5f;
+
+    ImDrawList* drawList = ImGui::GetForegroundDrawList(viewport);
+    drawList->AddRectFilled(
+        panelMin, panelMax,
+        NextUI::Theme::ColorU32(NextUI::Theme::EColor::SurfaceElevated, 0.94f * alpha),
+        8.0f * scale);
+    drawList->AddRect(
+        panelMin, panelMax,
+        NextUI::Theme::ColorU32(NextUI::Theme::EColor::BorderStrong, 0.9f * alpha),
+        8.0f * scale, 0, 1.0f * scale);
+
+    float cursorX = panelMin.x + paddingX;
+    drawList->AddText(
+        ImVec2(cursorX, textY),
+        NextUI::Theme::ColorU32(NextUI::Theme::EColor::Text, alpha), prefix);
+    cursorX += prefixSize.x + gap;
+
+    const ImVec2 keyMin(cursorX, panelCenter.y - keyHeight * 0.5f);
+    const ImVec2 keyMax(keyMin.x + keyWidth, keyMin.y + keyHeight);
+    drawList->AddRectFilled(
+        keyMin, keyMax,
+        NextUI::Theme::ColorU32(NextUI::Theme::EColor::Accent, 0.95f * alpha),
+        5.0f * scale);
+    drawList->AddRect(
+        keyMin, keyMax,
+        NextUI::Theme::ColorU32(NextUI::Theme::EColor::AccentHover, alpha),
+        5.0f * scale, 0, 1.0f * scale);
+    drawList->AddText(
+        ImVec2(keyMin.x + keyPaddingX, keyMin.y + keyPaddingY),
+        NextUI::Theme::ColorU32(NextUI::Theme::EColor::Text, alpha), key);
+    cursorX = keyMax.x + gap;
+    drawList->AddText(
+        ImVec2(cursorX, textY),
+        NextUI::Theme::ColorU32(NextUI::Theme::EColor::TextMuted, alpha), suffix);
+}
+
+void NextRendererGameInstance::UpdateMuzzleTransform()
+{
+    if (!muzzleNode_)
+    {
+        return;
+    }
+
+    const glm::vec3 forward = glm::normalize(modelViewController_.GetForward());
+    const glm::vec3 right = glm::normalize(modelViewController_.GetRight());
+    const glm::vec3 up = glm::normalize(modelViewController_.GetUp());
+    const glm::quat yawOffset = glm::angleAxis(glm::radians(muzzleYawOffsetDegrees_), up);
+    const glm::quat pitchOffset = glm::angleAxis(glm::radians(muzzlePitchOffsetDegrees_), right);
+    const glm::quat aimOffset = glm::normalize(pitchOffset * yawOffset);
+    const glm::vec3 muzzleForward = glm::normalize(aimOffset * forward);
+    const glm::vec3 muzzleRight = glm::normalize(aimOffset * right);
+    const glm::vec3 muzzleUp = glm::normalize(aimOffset * up);
+    const glm::mat3 cameraBasis(muzzleRight, muzzleUp, -muzzleForward);
+    const glm::quat rotation = glm::normalize(glm::quat_cast(cameraBasis));
+    const float fieldOfView = std::clamp(modelViewController_.FieldOfView(), 5.0f, 170.0f);
+    const float rigScale = launchSceneScale_;
+    // The rig extends backwards from the barrel, and a wide field of view pulls it closer, so its
+    // rear must not be allowed to pass through the camera: a ray that starts inside an opaque box
+    // fills the frame with its inner walls.
+    const float depth = std::max(muzzleDepth * rigScale * GetMuzzleDepthScale(fieldOfView),
+                                 (muzzleRigRearExtent + muzzleRigNearMargin) * rigScale);
+    const glm::vec3 origin = modelViewController_.GetPosition() +
+        right * (muzzleRightOffset * rigScale) + up * (-muzzleDownOffset * rigScale) +
+        forward * depth;
+
+    muzzleFieldOfView_ = fieldOfView;
+    muzzleOrigin_ = origin;
+    muzzleRotation_ = rotation;
+    muzzleRigScale_ = rigScale;
+
+    for (const FViewWeaponPart& part : viewWeaponParts_)
+    {
+        if (part.node)
+        {
+            part.node->SetTransform(origin + rotation * (part.localOffset * rigScale), rotation,
+                                    glm::vec3(rigScale));
+        }
+    }
+
+    // Scene node proxies are prepared asynchronously and normally become visible one frame
+    // later. The backup vector is the proxy set that this frame will upload, so patch just the
+    // camera-relative weapon here instead of synchronously rebuilding every scene node.
+    Assets::Scene& scene = GetEngine().GetScene();
+    bool patchedProxy = false;
+    for (auto& proxy : scene.GetNodeProxies())
+    {
+        for (const FViewWeaponPart& part : viewWeaponParts_)
+        {
+            if (!part.node || proxy.instanceId != part.node->GetInstanceId())
+            {
+                continue;
+            }
+
+            const glm::mat4 worldTransform = part.node->WorldTransform();
+            proxy.combinedPrevTS = proxy.worldTS * glm::inverse(worldTransform);
+            proxy.worldTS = worldTransform;
+            patchedProxy = true;
+            break;
+        }
+    }
+    if (patchedProxy)
+    {
+        scene.RequestGpuNodeProxyUpload();
+    }
+}
+
+glm::vec3 NextRendererGameInstance::MuzzleMouthPosition() const
+{
+    return muzzleOrigin_ + muzzleRotation_ * glm::vec3(0.0f, 0.0f, -muzzleBarrelHalfLength * muzzleRigScale_);
+}
+
+glm::vec3 NextRendererGameInstance::MuzzleDirection() const
+{
+    return glm::normalize(muzzleRotation_ * glm::vec3(0.0f, 0.0f, -1.0f));
+}
+
+void NextRendererGameInstance::RefreshMuzzleTransform()
+{
+    if (!muzzleNode_)
+    {
+        return;
+    }
+
+    UpdateMuzzleTransform();
+    GetEngine().GetScene().MarkTransformDirty();
 }
 
 void NextRendererGameInstance::RequestScreenshot(bool openFolder, const std::string& tag)
@@ -682,7 +1001,10 @@ bool NextRendererGameInstance::OnKey(SDL_Event& event)
                 }
             }
             break;
-        case SDLK_SPACE: CreateBoxAndPush(); return true;
+        case SDLK_SPACE:
+            shootHintRemainingSeconds_ = 0.0f;
+            CreateBoxAndPush();
+            return true;
         case SDLK_B: DropPhysicsSphereGrid(); return true;
         case SDLK_DELETE:
         case SDLK_BACKSPACE:
@@ -915,7 +1237,11 @@ bool NextRendererGameInstance::OnRemoteViewAction(const FRemoteViewActionContext
 
 void NextRendererGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
 {
-    //std::string error;
+    const auto refreshMuzzle = [this]() { RefreshMuzzleTransform(); };
+    cvars.RegisterFloat("r.muzzle.pitch", 0.0f, &muzzlePitchOffsetDegrees_, NextCVar::ECVarFlags::Archive,
+                       "Muzzle pitch offset relative to the camera direction", refreshMuzzle, -45.0, 45.0);
+    cvars.RegisterFloat("r.muzzle.yaw", 0.0f, &muzzleYawOffsetDegrees_, NextCVar::ECVarFlags::Archive,
+                       "Muzzle yaw offset relative to the camera direction", refreshMuzzle, -45.0, 45.0);
     //cvars.SetDefaultFromString("r.upscaler.qualityMode", "4", &error);
 }
 
@@ -951,7 +1277,24 @@ void NextRendererGameInstance::CreateBoxAndPush()
         .right = modelViewController_.GetRight(),
         .up = modelViewController_.GetUp(),
         .debugName = "tempBox",
+        .useMuzzle = true,
     });
+}
+
+void NextRendererGameInstance::EnsurePhysicsTicking(const char* what)
+{
+    Runtime::Config::UserSettings& userSettings = GetEngine().GetUserSettings();
+    if (userSettings.TickPhysics)
+    {
+        return;
+    }
+
+    // sys.tickPhysics is archived, and a lighting or denoiser session usually leaves it off so
+    // progressive accumulation is never disturbed. Spawning a body under that setting produces a
+    // shot that hangs in mid-air with no indication why, so a request that only makes sense with
+    // physics running turns the tick back on and says so.
+    userSettings.TickPhysics = true;
+    SPDLOG_INFO("gkNextRenderer: sys.tickPhysics was off; turned it on so the {} can move", what);
 }
 
 void NextRendererGameInstance::CreateBoxAndPushFromView(const FLaunchView& view)
@@ -966,29 +1309,63 @@ void NextRendererGameInstance::CreateBoxAndPushFromView(const FLaunchView& view)
         SPDLOG_WARN("gkNextRenderer: ignored box launch before dynamic box model is ready");
         return;
     }
+    NextPhysics* physicsEngine = GetEngine().GetPhysicsEngine();
+    if (physicsEngine == nullptr)
+    {
+        SPDLOG_WARN("gkNextRenderer: ignored box launch because physics is unavailable");
+        return;
+    }
 
-    glm::vec3 forward = glm::normalize(view.forward);
-    glm::vec3 right = glm::normalize(view.right);
-    glm::vec3 up = glm::normalize(view.up);
-    glm::vec3 center = view.position + forward * 0.1f + right * 0.5f + up * -0.5f;
-    glm::vec3 farTarget = view.position + forward * 1000.0f + up * 200.f;
-    glm::vec3 shotDir = glm::normalize((farTarget - center));
-    uint32_t instanceId = uint32_t(GetEngine().GetScene().Nodes().size());
+    EnsurePhysicsTicking("launched projectile");
 
-    uint32_t newMatId = matIds_[std::rand() % matIds_.size()];
+    const glm::vec3 forward = glm::normalize(view.forward);
+    const glm::vec3 right = glm::normalize(view.right);
+    const glm::vec3 up = glm::normalize(view.up);
+    const bool fromMuzzle = view.useMuzzle && muzzleNode_;
+    // A shell is a world object: how big it is depends on the scene it lands in, never on the
+    // camera looking at it. The weapon takes the same scale, so the bore stays exactly as wide as
+    // the shell leaving it at every field of view.
+    const float projectileScale = launchSceneScale_;
+    const float projectileSize = projectileBaseSize * projectileScale;
+
+    glm::vec3 launchDirection = forward;
+    glm::quat launchRotation = glm::normalize(glm::quat_cast(glm::mat3(right, up, -forward)));
+    glm::vec3 center = view.position +
+        (forward * muzzleDepth + right * muzzleRightOffset - up * muzzleDownOffset) * launchSceneScale_;
+    if (fromMuzzle)
+    {
+        launchRotation = muzzleRotation_;
+        launchDirection = MuzzleDirection();
+        // Centre the shell on the muzzle mouth: its rear half stays inside the barrel, so it
+        // reads as leaving the bore rather than appearing in mid-air ahead of it.
+        center = MuzzleMouthPosition();
+    }
+
+    const uint32_t instanceId = uint32_t(GetEngine().GetScene().Nodes().size());
+    const uint32_t newMatId = matIds_[std::rand() % matIds_.size()];
     std::shared_ptr<Assets::Node> newNode =
-        Assets::SceneBuilder::CreateRenderNode(view.debugName, center, glm::vec3(1), instanceId, boxModelId_, newMatId);
-    
+        Assets::SceneBuilder::CreateRenderNode(
+            view.debugName, center, glm::vec3(projectileScale), instanceId, boxModelId_, newMatId,
+            true, launchRotation);
+
     auto phys = std::make_shared<Runtime::PhysicsComponent>();
     phys->SetMobility(Runtime::ENodeMobility::Dynamic);
-    auto id = GetEngine().GetPhysicsEngine()->CreateBoxBody(center, {0.4,0.4,0.4}, NextMotionType::Dynamic);
+    auto id = physicsEngine->CreateBoxBody(
+        center, launchRotation, glm::vec3(projectileSize), NextMotionType::Dynamic);
     phys->BindPhysicsBody(id);
     newNode->AddComponent(phys);
 
     GetEngine().GetScene().AddNode(newNode);
     GetEngine().GetScene().MarkDirty();
 
-    GetEngine().GetPhysicsEngine()->AddForceToBody(id, shotDir * 100000.f);
+    // Set the muzzle velocity rather than adding a force. A one-step force divides by the frame
+    // time, so the same press threw the cube at roughly 26 m/s at 60 fps and barely nudged it at
+    // the 1200 fps this renderer reaches on a hidden window. Speed follows the scene scale, which
+    // is the square root of the extent ratio -- exactly the relation that keeps the ballistic arc
+    // looking the same when every distance in the scene grows.
+    const float speed = projectileBaseSpeed * launchSceneScale_;
+    physicsEngine->SetBodyVelocity(id, launchDirection * speed,
+                                   right * projectileSpinPitch + up * projectileSpinYaw);
 }
 
 void NextRendererGameInstance::DropPhysicsSphereGrid()
@@ -1010,6 +1387,8 @@ void NextRendererGameInstance::DropPhysicsSphereGrid()
         SPDLOG_WARN("gkNextRenderer: ignored sphere drop before sphere materials are ready");
         return;
     }
+
+    EnsurePhysicsTicking("dropped spheres");
 
     const glm::vec3 boundsMin = scene.GetSceneAABBMin() * 0.5f;
     const glm::vec3 boundsMax = scene.GetSceneAABBMax() * 0.5f;

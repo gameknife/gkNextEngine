@@ -18,7 +18,7 @@ namespace Modules::NextDotNet
 {
     /// Bumped whenever the layout of FEngineApi or FManagedApi changes. Bootstrap rejects a
     /// mismatch instead of reading a table with a different shape.
-    inline constexpr uint32_t GK_DOTNET_ABI_VERSION = 5;
+    inline constexpr uint32_t GK_DOTNET_ABI_VERSION = 8;
 
     // --- primitive cross-boundary types --------------------------------------------------------
 
@@ -111,6 +111,50 @@ namespace Modules::NextDotNet
         FVec3 LinearVelocity;
         GkPhysicsMotionType MotionType;
         GkBool Active;
+        GkBool Valid;
+    };
+
+    /// An axis-aligned box. Valid is part of the value for the same reason as in
+    /// FPhysicsBodyState: "nothing in that subtree draws" needs no second status channel.
+    struct FBounds
+    {
+        FVec3 Min;
+        FVec3 Max;
+        GkBool Valid;
+    };
+
+    /// Closest hit of a CPU ray query against the scene's raycast-visible geometry. NodeId is
+    /// GK_INVALID_NODE_ID and Hit is 0 when the ray reached its maximum distance unobstructed.
+    struct FRayHit
+    {
+        FVec3 Position;
+        FVec3 Normal;
+        float Distance;
+        uint32_t NodeId;
+        GkBool Hit;
+    };
+
+    /// A capsule character standing on FootPosition. Slope and step are the backend's walkability
+    /// limits; zero picks the engine default for either.
+    struct FCharacterSpec
+    {
+        FVec3 FootPosition;
+        float Height;
+        float Radius;
+        float MaxSlopeDegrees;
+        float MaxStepHeight;
+    };
+
+    /// Character state after the last move. GroundState mirrors ECharacterGroundState: 0 on
+    /// ground, 1 on a slope too steep to stand on, 2 touching but unsupported, 3 in the air.
+    struct FCharacterState
+    {
+        FVec3 FootPosition;
+        FVec3 Velocity;
+        FVec3 GroundNormal;
+        FVec3 GroundVelocity;
+        uint32_t GroundBodyId;
+        int32_t GroundState;
         GkBool Valid;
     };
 

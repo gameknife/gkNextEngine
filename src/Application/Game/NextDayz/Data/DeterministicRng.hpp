@@ -13,6 +13,8 @@ namespace NextDayz
         }
 
         uint64_t Seed() const { return seed_; }
+        uint64_t State() const { return state_; }
+        void RestoreState(uint64_t state) { state_ = state; }
 
         void Reset(uint64_t seed)
         {

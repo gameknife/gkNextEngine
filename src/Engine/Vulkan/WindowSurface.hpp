@@ -38,6 +38,8 @@ struct WindowConfig final
     // Use VK_EXT_headless_surface instead of creating an SDL window. This is intended for
     // unattended Vulkan captures on Linux hosts with no X11 or Wayland display server.
     bool HeadlessSurface {};
+    // Optional path to the window icon. If empty, the engine infers it from the application identity.
+    std::string IconPath;
 };
 
 // ============================================================================
@@ -59,13 +61,24 @@ public:
     Next_Window* Handle() const { return window_; }
     bool IsHeadless() const { return config_.HeadlessSurface; }
 
+    // Content display scale relative to the window's *pixel* size: what the user expects UI to be
+    // magnified by once it is already measured in framebuffer pixels. This is what the Windows and
+    // Android UI paths scale by.
     float ContentScale() const;
+    // FramebufferSize() / WindowSize(): how many pixels one window coordinate covers. 1.0 on every
+    // platform except iOS, where SDL reports the window in UIKit points and the back buffer at the
+    // display's native density.
+    float PixelDensity() const;
     VkExtent2D FramebufferSize() const;
     VkExtent2D WindowSize() const;
 
     // GLFW instance properties (i.e. not bound to a window handler).
     std::vector<const char*> GetRequiredInstanceExtensions() const;
     double GetTime() const;
+    // Refresh rate of the display the window is currently on, or 0 when SDL cannot report one
+    // (headless surfaces, and drivers that leave the mode's refresh rate unset). Frame pacing
+    // treats 0 as "unknown" rather than guessing a period.
+    float DisplayRefreshRateHz() const;
 
     // Methods
     void Close();

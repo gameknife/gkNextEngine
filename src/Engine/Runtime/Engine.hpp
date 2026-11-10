@@ -19,6 +19,7 @@
 #include "Engine/Runtime/Interface/ShaderHotReload.hpp"
 #include "Engine/Runtime/Config/ShowFlags.hpp"
 #include "Engine/Runtime/Config/UserSettings.hpp"
+#include "Engine/Runtime/FramePacer.hpp"
 #include "Engine/Runtime/RuntimeFwd.hpp"
 #include "Engine/Utilities/FileHelper.hpp"
 #include "Engine/Vulkan/WindowSurface.hpp"
@@ -134,6 +135,10 @@ public:
     NextCVar::FCVarSystem& GetCVarSystem() { return *services_.cvarSystem; }
     const NextCVar::FCVarSystem& GetCVarSystem() const { return *services_.cvarSystem; }
     NextPhysics* GetPhysicsEngine() { return services_.physics.get(); }
+    /// Null in a build or an application that never installed a rig provider; every caller has to
+    /// cope, because most applications have no characters and pay nothing for them.
+    NextRig* GetRig() { return services_.rig.get(); }
+    const NextRig* GetRig() const { return services_.rig.get(); }
     Utilities::Package::FPackageFileSystem& GetPakSystem() { return *services_.packageFileSystem; }
 
     // Frame state
@@ -169,6 +174,9 @@ public:
     bool IsCapturingScreenShot() const { return screenShot_.IsCapturing(); }
 
     // Scene and command operations
+    // Includes queued load requests and texture uploads awaiting main-thread completion.
+    bool IsSceneReady() const;
+    const std::string& GetSceneLoadError() const { return sceneLoadError_; }
     void RequestLoadScene(FSceneLoadRequest request);
     void RequestAddSceneReference(std::string assetPath, glm::vec3 translation);
     void RequestSceneGpuRefresh();
@@ -278,6 +286,14 @@ public:
     {
         physicsFactory_ = std::move(factory);
     }
+
+    /// Installed by NextGameplay for applications that use ScadRig characters. Like the physics
+    /// factory this is a factory rather than an instance so the engine keeps ownership and the
+    /// lifetime question has one answer.
+    void SetRigFactory(std::function<std::unique_ptr<NextRig>()> factory)
+    {
+        rigFactory_ = std::move(factory);
+    }
     
     void SetExternalService(const std::string& key, std::shared_ptr<void> service)
     {
@@ -348,6 +364,10 @@ private:
     void TickHotReload();
     void StartPipelineWarmup();
     void PumpPipelineWarmupAfterPresent();
+    // Present mode, display refresh rate and the user's pacing toggles, refreshed per tick because
+    // all three can change under the engine (a swapchain rebuild, a window dragged to another
+    // monitor, a cvar).
+    void UpdateFramePacerConfig();
 
     // Configuration and user-facing toggles
     struct FConfigState
@@ -361,6 +381,9 @@ private:
     {
         uint32_t totalFrames = 0;
         double time = 0.0;
+        // The wall-clock period of the loop. deltaSeconds is what the simulation advances by, which
+        // the frame pacer may set to the display period instead -- see FFramePacer.
+        double rawDeltaSeconds = 0.0;
         double deltaSeconds = 0.0;
         double smoothedDeltaSeconds = 0.0;
         float frameRate = 0.0f;
@@ -423,6 +446,7 @@ private:
         std::unique_ptr<NextCVar::FCVarSystem> cvarSystem;
         std::unique_ptr<NextAudio> audio;
         std::unique_ptr<NextPhysics> physics;
+        std::unique_ptr<NextRig> rig;
         std::unique_ptr<Utilities::Package::FPackageFileSystem> packageFileSystem;
         std::unique_ptr<Runtime::IShaderHotReloader> shaderHotReloader;
         std::unordered_map<std::string, std::shared_ptr<void>> externalServices;
@@ -438,6 +462,7 @@ private:
     // Engine state
     FConfigState config_{};
     FFrameState frameState_{};
+    Runtime::FFramePacer framePacer_{};
     FInputState inputState_{};
     FProgressiveRenderState progressiveRender_{};
     FScreenShotState screenShot_{};
@@ -447,8 +472,11 @@ private:
     Runtime::Agent::FAgentQueryRegistry agentQueries_;
     int requestedExitCode_ = 0;
     bool closeRequested_ = false;
+    uint32_t dedicatedTicks_ = 0;   // --dedicated: the frame count, as no frame is drawn
     FTaskQueues taskQueues_{};
     NextRenderer::EApplicationStatus status_{};
+    uint32_t pendingSceneLoads_ = 0;
+    std::string sceneLoadError_;
 
     // Runtime services and UI
     std::unique_ptr<NextUI::IUserInterface> userInterface_;
@@ -460,6 +488,7 @@ private:
     Runtime::ShaderHotReloaderFactory shaderHotReloaderFactory_;
     std::function<std::unique_ptr<NextAudio>()> audioFactory_;
     std::function<std::unique_ptr<NextPhysics>()> physicsFactory_;
+    std::function<std::unique_ptr<NextRig>()> rigFactory_;
     std::unique_ptr<Runtime::IScriptRuntime> scriptRuntime_;
     FRuntimeServices services_{};
     Runtime::IDebugUiProvider* debugUiProvider_ = nullptr;

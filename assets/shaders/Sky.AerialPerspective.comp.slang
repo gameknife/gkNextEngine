@@ -20,7 +20,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     const float2 uv = (float2(dispatchThreadId.xy) + 0.5f) / float2(size.xy);
     const float2 ndc = uv * 2.0f - 1.0f;
-    const float4 viewTarget = mul(camera.ProjectionInverseUnJit, float4(ndc, 1.0f, 1.0f));
+    const float4 viewTarget = mul(camera.ProjectionInverse, float4(ndc, 1.0f, 1.0f));
     const float3 viewDirection = normalize(viewTarget.xyz / max(abs(viewTarget.w), 1.0e-6f));
     const float3 worldDirection = normalize(mul(camera.ModelViewInverse, float4(viewDirection, 0.0f)).xyz);
     const float3 cameraWorld =
@@ -32,7 +32,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         (float(dispatchThreadId.z) + 0.5f) / float(size.z) * params.AerialPerspectiveMaxDistance;
     const float distanceKm = distanceWorld / max(params.WorldUnitsPerKm, 1.0e-3f);
 
-    const uint stepCount = 16;
+    const uint stepCount = Atmosphere.STEPS_AERIAL;
     const float stepLength = distanceKm / float(stepCount);
     const float3 sunDirection = normalize(camera.SunDirection.xyz);
     const float cosTheta = dot(worldDirection, sunDirection);
@@ -49,7 +49,8 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         const float mieDensity = exp(-altitude / max(params.MieDensityH, 1.0e-3f));
         const float sunDistance = Atmosphere.RaySphereNearest(samplePosition, sunDirection, params.TopRadius);
         const float3 sunTransmittance = sunDistance > 0.0f
-            ? Atmosphere.IntegrateTransmittance(params, samplePosition, sunDirection, sunDistance, 8)
+            ? Atmosphere.IntegrateTransmittance(
+                params, samplePosition, sunDirection, sunDistance, Atmosphere.STEPS_AERIAL_SUN)
             : float3(0.0f);
         const float3 source =
             params.RayleighScattering * rayleighDensity * rayleighPhase +

@@ -5,11 +5,13 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/cmakerun"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/console"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/csharpgen"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/csharpsln"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/csharptemplates"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/dotnetsdk"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/platform"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/vcpkg"
@@ -19,13 +21,14 @@ import (
 func newDotNetCommand(ctx appContext) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "dotnet",
-		Short: ".NET toolchain and managed scripting layer",
+		Short: tr("cli.dotnet.short"),
 	}
 	root.AddCommand(newDotNetSetupCommand(ctx))
 	root.AddCommand(newDotNetStatusCommand(ctx))
 	root.AddCommand(newDotNetSlnCommand(ctx))
 	root.AddCommand(newDotNetBuildCommand(ctx))
 	root.AddCommand(newDotNetProbeCommand(ctx))
+	root.AddCommand(newDotNetTemplatesCommand(ctx))
 	root.AddCommand(newDotNetCICommand(ctx))
 	return root
 }
@@ -34,11 +37,12 @@ func newDotNetSlnCommand(ctx appContext) *cobra.Command {
 	var check bool
 	cmd := &cobra.Command{
 		Use:   "sln",
-		Short: "Regenerate the IDE solution for assets/csharp",
-		Long: "Writes assets/csharp/GkNextManaged.sln from the csproj files on disk. The solution is\n" +
-			"what an IDE needs to load GkNext.Engine and the source generator alongside a game, which\n" +
-			"is what gives the game's C# working navigation and completion; the build itself never\n" +
-			"reads it. Run this after adding a managed project. --check fails instead of writing.",
+		Short: tr("cli.dotnet.sln.short"),
+		Long: "Writes assets/csharp/GkNextManaged.sln from the csproj files on disk: the engine's\n" +
+			"assemblies under assets/csharp and every game project's Scripts/ under projects/. The\n" +
+			"solution is what an IDE needs to load GkNext.Engine and the source generator alongside a\n" +
+			"game, which is what gives the game's C# working navigation and completion; the build itself\n" +
+			"never reads it. Run this after adding a managed project. --check fails instead of writing.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			result, err := csharpsln.Run(ctx.repoRoot, check)
@@ -69,7 +73,7 @@ func newDotNetSetupCommand(ctx appContext) *cobra.Command {
 	var force bool
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "Ensure a usable .NET SDK, downloading the pinned one if needed",
+		Short: tr("cli.dotnet.setup.short"),
 		Long: "Accepts an installed SDK at or above the pinned version so a 300 MB download is not\n" +
 			"forced on developers who already have one. Use --force to install the pinned SDK into\n" +
 			"external/dotnet regardless.",
@@ -90,7 +94,7 @@ func newDotNetSetupCommand(ctx appContext) *cobra.Command {
 func newDotNetStatusCommand(ctx appContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Show which .NET toolchain would be used",
+		Short: tr("cli.dotnet.status.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			toolchain, err := dotnetsdk.Resolve(ctx.repoRoot, ctx.cfg.External.DotNet)
 			if err != nil {
@@ -114,7 +118,7 @@ func newDotNetBuildCommand(ctx appContext) *cobra.Command {
 	var nativeLib string
 	cmd := &cobra.Command{
 		Use:   "build",
-		Short: "Publish the managed assemblies (assets/csharp)",
+		Short: tr("cli.dotnet.build.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			toolchain, err := dotnetsdk.Resolve(ctx.repoRoot, ctx.cfg.External.DotNet)
 			if err != nil {
@@ -169,7 +173,7 @@ func newDotNetProbeCommand(ctx appContext) *cobra.Command {
 	var configuration string
 	cmd := &cobra.Command{
 		Use:   "probe",
-		Short: "Run the two-backend acceptance probe",
+		Short: tr("cli.dotnet.probe.short"),
 		Long: "Builds a standalone native host and runs the same C# under CoreCLR and NativeAOT,\n" +
 			"checking that the two backends produce identical output, that a collectible load\n" +
 			"context swaps game code, and that it is collected afterwards.",
@@ -201,6 +205,58 @@ func backendDirName(aot bool) string {
 	return "coreclr"
 }
 
+// newDotNetTemplatesCommand builds every shipped game template. The templates are the first code a
+// user of the managed layer reads, and until this existed nothing in the tree compiled them: a
+// rename in GkNext.Engine broke them silently and the failure surfaced as a wall of compiler errors
+// in somebody's brand new project.
+func newDotNetTemplatesCommand(ctx appContext) *cobra.Command {
+	var configuration string
+	cmd := &cobra.Command{
+		Use:   "templates [id...]",
+		Short: tr("cli.dotnet.templates.short"),
+		Long: "Instantiates each template under assets/templates/games the way the New Game Project " +
+			"dialog does — into a scratch directory under projects/ — builds the result, and deletes it " +
+			"again. With no arguments every template is checked; naming one or more ids checks only those.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			toolchain, err := dotnetsdk.Resolve(ctx.repoRoot, ctx.cfg.External.DotNet)
+			if err != nil {
+				return err
+			}
+			return checkGameTemplates(ctx, toolchain, args, configuration)
+		},
+	}
+	cmd.Flags().StringVar(&configuration, "configuration", "Debug", "build configuration")
+	return cmd
+}
+
+// checkGameTemplates reports every template rather than stopping at the first failure: when an
+// engine change breaks the templates it usually breaks several, and fixing them one run at a time
+// is the slowest possible way to find that out.
+func checkGameTemplates(ctx appContext, toolchain dotnetsdk.Toolchain, ids []string, configuration string) error {
+	results, err := csharptemplates.Check(ctx.repoRoot, toolchain, ids, configuration)
+	if err != nil {
+		return err
+	}
+
+	failed := 0
+	for _, result := range results {
+		if result.Err == nil {
+			console.Success("template %s builds", result.ID)
+			continue
+		}
+		failed++
+		console.Error("template %s failed", result.ID)
+		if trimmed := strings.TrimSpace(result.Output); trimmed != "" {
+			fmt.Fprintln(os.Stderr, trimmed)
+		}
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d of %d game templates do not compile", failed, len(results))
+	}
+	console.Success("all %d game templates build", len(results))
+	return nil
+}
+
 // newDotNetCICommand is the enforcement point for the rule in design section 3.4: AOT
 // compatibility rots silently unless something builds it on every change. Running only the
 // CoreCLR half is what "we will fix it before release" looks like in practice.
@@ -208,7 +264,7 @@ func newDotNetCICommand(ctx appContext) *cobra.Command {
 	var targets []string
 	cmd := &cobra.Command{
 		Use:   "ci",
-		Short: "Verify the managed layer under both backends",
+		Short: tr("cli.dotnet.ci.short"),
 		Long: "Checks that the generated managed files match their sources, runs the standalone " +
 			"two-backend probe, then builds the engine itself under CoreCLR and NativeAOT. The " +
 			"build is left configured for CoreCLR, which is the default developers work against.",
@@ -229,6 +285,16 @@ func newDotNetCICommand(ctx appContext) *cobra.Command {
 				return err
 			}
 			console.Success("%s lists every managed project", csharpsln.SolutionPath)
+
+			// Before the expensive half. A template that no longer compiles is a broken first
+			// experience for every new managed game, and it costs seconds to catch here.
+			toolchain, err := dotnetsdk.Resolve(ctx.repoRoot, ctx.cfg.External.DotNet)
+			if err != nil {
+				return err
+			}
+			if err := checkGameTemplates(ctx, toolchain, nil, "Debug"); err != nil {
+				return err
+			}
 
 			if err := newDotNetProbe(ctx, dotnetsdk.ProbeOptions{Configuration: "Release"}); err != nil {
 				return err

@@ -122,4 +122,70 @@ namespace Assets
         }
         return nullptr;
     }
+
+    void FLoaderRegistry::RegisterSceneSourceCheck(std::initializer_list<std::string_view> extensions,
+                                                   FSceneSourceCheckFn checkFn)
+    {
+        FSourceCheckEntry entry;
+        for (std::string_view extension : extensions)
+        {
+            entry.extensions.push_back(ToLowerExtension(extension));
+        }
+        entry.check = std::move(checkFn);
+
+        for (FSourceCheckEntry& existing : sourceChecks_)
+        {
+            if (existing.extensions == entry.extensions)
+            {
+                existing.check = std::move(entry.check);
+                return;
+            }
+        }
+        sourceChecks_.push_back(std::move(entry));
+    }
+
+    const FSceneSourceCheckFn* FLoaderRegistry::FindSceneSourceCheck(std::string_view extension) const
+    {
+        const std::string normalized = ToLowerExtension(extension);
+        for (const FSourceCheckEntry& entry : sourceChecks_)
+        {
+            if (std::find(entry.extensions.begin(), entry.extensions.end(), normalized) != entry.extensions.end())
+            {
+                return &entry.check;
+            }
+        }
+        return nullptr;
+    }
+
+    void FLoaderRegistry::PublishLoadReport(const std::string& filename, FSceneSourceReport report)
+    {
+        // Thumbnails and previews load scenes too; a handful of entries covers every host that
+        // reads its own report back right after the load it asked for.
+        constexpr size_t maxReports = 8;
+
+        std::lock_guard lock(loadReportsMutex_);
+        report.serial = nextLoadReportSerial_++;
+        loadReports_.erase(std::remove_if(loadReports_.begin(), loadReports_.end(),
+                                          [&filename](const auto& entry) { return entry.first == filename; }),
+                           loadReports_.end());
+        if (loadReports_.size() >= maxReports)
+        {
+            loadReports_.erase(loadReports_.begin());
+        }
+        loadReports_.emplace_back(filename, std::move(report));
+    }
+
+    bool FLoaderRegistry::FindLoadReport(const std::string& filename, FSceneSourceReport& outReport) const
+    {
+        std::lock_guard lock(loadReportsMutex_);
+        for (const auto& [name, report] : loadReports_)
+        {
+            if (name == filename)
+            {
+                outReport = report;
+                return true;
+            }
+        }
+        return false;
+    }
 }

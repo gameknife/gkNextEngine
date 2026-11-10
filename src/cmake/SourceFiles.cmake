@@ -73,6 +73,11 @@ endif()
 if(GK_WITH_TUI AND NOT (ANDROID OR IOS))
     list(APPEND GK_MODULE_NAMES NextTui)
 endif()
+# Game networking (ENet). Desktop only for now: dedicated servers and the
+# first multiplayer clients run on Windows/Linux/macOS.
+if(NOT (ANDROID OR IOS))
+    list(APPEND GK_MODULE_NAMES NextNet)
+endif()
 if(GK_DOTNET_ENABLED)
     list(APPEND GK_MODULE_NAMES NextDotNet)
 endif()

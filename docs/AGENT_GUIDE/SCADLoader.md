@@ -11,6 +11,10 @@
 - `FScadEvaluator.cpp`、`.Expr.cpp`、`.Geometry.cpp`：作用域、语言求值和几何分发。
 - `FScadGeometry.*` / `FScadCsg.*` / `FScadTess.*` / `FScadText.*`：图元、Manifold boolean、earcut 和 FreeType text。
 - `FScadShared.*`：scene 与 rig 共用的 `use/include` 闭包、坐标转换和法线工具。
+- `FScadSourceIndex.*`：顶层语句与 module/function 定义的**字节区间索引**。parser 在解析时
+  记录每条顶层语句的 `[begin, end)`（`ScadParser::Parse` 的 `outTopLevelSpans`），`use/include`
+  只做掩码不删字节，因此索引里的偏移直接寻址调用方的原始源码。编辑器靠它做单语句改写；
+  `ApplyScadSourceEdits` 从后往前套用编辑并丢弃重叠的陈旧区间。
 - `FScadLoader.*`：颜色桶、module 调用树、Model/Node/材质组装。
 - `FScadRig.*`：ScadRig 资产读取；约定见 [ScadRig](ScadRig.md)。
 
@@ -30,37 +34,92 @@
 
 每个 user module 调用实例形成逻辑 Node；直属几何按量化 RGBA 分桶并尽量合并进多-section Model。材质槽超过引擎上限时拆成同名 render 子节点。alpha `< 0.99` 的 bucket 使用透明 Dielectric 路径。
 
+**"直属"是字面意思**：只有 module body 里由 builtin 产生的几何留在该 Node 上，body 里每一次
+user module 调用都另开一个子 Node 带走自己的几何。库里的材质包装（`ab_gold(c) { ... }` 这类
+`gk_material` 的一行别名）也是 user module，所以一个 kit 件的调用节点常常自己不画任何东西，
+几何全在下面一两层。玩法代码按模块名索引到的是那个调用节点，隐藏/显示/量尺寸要走
+`Assets::NodeUtils` 的 `SetVisibleRecursive` / `SetRayCastVisibleRecursive` /
+`GetSubtreeWorldBounds`，只改根节点会静默无效。
+
 **`gk_flatten() { ... }`**：声明"以下全是几何、不是场景结构"，抑制子树内的 Node 创建，
 几何并入最近的外层 Node。规则库（`kit_road` 把一张路网表展开成几千个子段调用）必须用它——
 否则每个 module 调用各成一个 Node，也就各成一个 Model 和碰撞体。实测 1km 香港 tile
 不加是 7683 个 Node、物理 shape cooking 1.2 秒；加上后 90 个 Node、34 毫秒。
 分块粒度仍由调用方控制，每块要留在 65535 三角的 Model 上限之下。
 
+**每个 user module 调用的具名参数写进 `Node::metadata`**（`"k=v;k=v"`，`ParseScadMetadata` 读回）：
+数字、布尔、字符串照原样；扁平向量写成逗号连接的元素（`travel=0,0,3`、`on=plate_a,plate_b`），
+嵌套向量、range、含分隔符的字符串被丢弃。`MetadataNumber` 要求整个值都是数字，向量不会被当成它的第一个元素。
+
+**`collision = "none"`**：module 带这个参数时，整棵子树的网格以射线不可见方式构建——不生成隐式静态碰撞体，
+CPU 射线（镜头吊臂、拾取、NavGrid）也穿过它。收集物、触发区、纯装饰用；默认参与碰撞。
+
+**引擎节点 instance id = 节点在加载输出里的序号**，同一次加载内唯一。不要拿它去匹配求值器的
+`instanceId`（64 位，并行求值时每条顶层语句从 `(k + 1) << 40` 起编号）；要回到源码用根节点的
+`scad-placement:<字节偏移>` tag。
+
+**给"边编辑边运行"的宿主**：`Modules::Scad::Register()` 同时注册了 `.scad` 的源文件预检
+（`FLoaderRegistry::FindSceneSourceCheck`：只解析 use/include 闭包、不求值，返回首个错误和全部依赖文件），
+每次加载也会发布加载报告（`FindLoadReport`：成败、警告原文、依赖、节点数、三角数、耗时、递增 serial）。
+引擎在解析新文件**之前**就丢弃当前场景，所以一个运行中重建关卡的宿主必须先预检；C# 侧是
+`Assets.CheckSceneSource` / `GetSceneCheckReport` / `GetSceneLoadReport`，用例见 [ScadPlay](ScadPlay.md)。
+
 `SceneEvalResult::SceneNode` 同时保留 module 调用的源行、求值后的具名参数、调用点颜色和
-局部变换。ScadLibrary 使用这些作者元数据沿 module 调用树提取最终 Kit 实例；它不改变
+局部变换。ScadLibrary 使用这些作者元数据沿 module 调用树提取 Kit 实例；它不改变
 运行时 Node/Model 的装配语义。
 
-ScadLibrary 场景对象 Gizmo 在引擎 Y-up 与 SCAD Z-up 之间用 `ScadToWorldBasis` 双向转换。
+## ScadLibrary 的统一场景文档
+
+**一个 `.scad` 根文件没有"类型"。** `FScadSceneDocument`（`Application/Editor/ScadLibrary/
+ScadSceneDocument.*`）把打开的文件解析成一串顶层节点，逐条分类：
+
+| 节点 | 源码形态 | 归谁编辑 |
+| --- | --- | --- |
+| `Instance` | `[color] translate rotate scale kit_module(args);` | 对象列表 + 视口 Gizmo |
+| `Terrain` | `TERR = [...]` 赋值与 `gk_terrain(TERR)` 调用 | 地形画布 |
+| `TerrainRule` | 顶层 `ter_*` 贴地规则 | 过程规则列表 |
+| `Source` | 其余一切：循环、条件、`module`/`function` 定义、自由几何 | 源码页，可整条开关 |
+
+四类在同一个文件里共存：`source/` 下的程序可以直接加实例和地形，`evaluated/` 下的实例
+列表也可以加循环。目录只决定归档位置，不再决定能用哪个编辑器。
+
+被识别为 `Instance` 的条件是保守的：变换参数必须是字面量，且按 `color → translate →
+rotate → scale` 顺序最多各出现一次，终点是 kit 表里能解析到的 module。不满足就留作
+`Source`——对象编辑器只认领它能逐字写回的语句。终点调用的实参**从源码字节切片**读取，
+所以 AST 打印不回来的表达式也能原样保留。
+
+写回是**按语句拼接**（`FScadSceneDocument::BuildSource` + `ApplyScadSourceEdits`），只重写
+真正改动过的语句：文档保留解析时的实例副本与 terrain/规则序列化快照，逐条比对。打开再保存
+一个没动过的场景是字节级 no-op，注释、格式和不支持的语法全部保留。`Test_ScadSceneDocument.cpp`
+用 `old_city.scad` 与 `terrain_layout_demo.scad` 守这条不变量。
+
+### 逐节点关闭与展开
+
+`Source` 节点里的**调用语句**可以原地关掉——在语句前加 OpenSCAD 的 `*` 修饰符，求值器
+（`FScadEvaluator.Detail.h` 与 `.Geometry.cpp`）本来就跳过它。赋值和 `module`/`function`
+定义不接受修饰符，`FScadSceneDocument::IsSwitchable` 会拒绝。
+
+"关闭并展开为实例"求值**整个文件**（结构依赖它前面的变量和 module，片段无法单独求值），
+按顶层语句的行区间 `[line, endLine]` 把 root SceneNode 归属回该语句，转成实例写在它后面，
+再关闭原语句。这是过去"整文件 Source → Evaluated 转换"的逐结构替代品；保存前可撤销。
+若该结构只产生图元或未知模块（没有可归属的 Kit root），操作会带原因失败，而不是静默产出空结果。
+
+### Gizmo 与点选
+
+场景对象 Gizmo 在引擎 Y-up 与 SCAD Z-up 之间用 `ScadToWorldBasis` 双向转换。
 拖动期间直接更新匹配实例的运行时 Node，并用 `Scene::MarkTransformDirty()` 刷新 GPU 变换；
-松手只持久化文件，不触发 SCAD 重载。平铺场景会把三轴 `translate` / `rotate` 写回原 SCAD；
-复杂 Source 场景经显式转换后写入 `assets/scad/evaluated/*_evaluated.scad` 的确定实例副本，禁止用展开结果
-覆盖原程序结构。
+松手把该实例写回它所在的那条语句，不重写文件其余部分，也不触发 SCAD 重载。
 
 视口点选使用引擎 CPU Picking 返回的 render-node instance ID，再沿 `Node::GetParent()` 向上
-追溯 Kit 调用节点。求值场景优先匹配 evaluator 保留的稳定 instance ID；平铺场景以模块名
-和世界变换消除同名实例歧义。选中状态同步到对象列表和 Gizmo；首次点选的同一次鼠标按压
-不会立即抓取刚出现的 Gizmo。
-
-程序化场景扁平化时，ScadLibrary 会从原源码独立提取 TERR 声明与 `gk_terrain(...)` 语句，
-并在 Kit 实例列表之前原样写入预览/可编辑副本。Terrain 仍由原生 `gk_terrain` evaluator
-重建，不应被转换为普通 Kit 实例或在 Gizmo 保存时丢弃。
+追溯 Kit 调用节点，优先匹配 evaluator 保留的稳定 instance ID，同名实例以世界变换消歧。
+选中状态同步到对象列表和 Gizmo；首次点选的同一次鼠标按压不会立即抓取刚出现的 Gizmo。
 
 ## 当前语言面
 
 - **图元 3D**：`cube`、`sphere`、`cylinder`(含 r1/r2 圆锥)、`polyhedron`
 - **图元 2D**（在 extrude 内）：`circle`、`square`、`polygon`(含 `paths` 洞)、`text`(FreeType, CJK)
 - **变换**：`translate`、`rotate`(欧拉/角轴)、`scale`、`mirror`、`multmatrix`、`color`(rgba/命名色)、
-  `gk_material`(颜色 + roughness/metalness)
+  `gk_material`(颜色 + roughness/metalness)、`gk_texture`(过程纹理印花)
 - **CSG**：`union`、`difference`、`intersection`、`hull`（Manifold）；`minkowski`(近似为 union)
 - **拉伸**：`linear_extrude`(凹/带洞/嵌套变换)、`rotate_extrude`(angle，360 闭合/部分端盖)
 - **控制流**：`for`(笛卡尔多绑定)、`if/else`、`let`、`intersection_for`(按 for)
@@ -76,12 +135,121 @@ ScadLibrary 场景对象 Gizmo 在引擎 Y-up 与 SCAD Z-up 之间用 `ScadToWor
   路径为 runtime-root 相对、经 `ScadReadAsset` 读取，pak 与 loose 行为一致。
   地形桶带 faceted 标志（loader 跳过法线平滑）、水面桶拆分为 `__water` 子节点（rayCast 不可见、
   无物理体）、地形数据经 `SceneTerrain` payload 挂成引擎 `TerrainComponent`。
+  `gk_terrain(TERR, water=[c|undef, roughness, metalness])` 只给水面桶设 `gk_material` 参数。
   详见 `AGENT_GUIDE/ScadTerrain.md`。
 
 `gk_material(c, roughness = 1, metalness = 0, alpha = 1) children();` 是材质表达扩展。
 `roughness` 和 `metalness` 都会被限制到 `0..1`，并随几何桶传入 GPU 材质；未包在
 `gk_material` 中的旧 `color()` 仍然生成 roughness=1、metalness=0 的 Lambertian，
 因此既有资产不改变外观。材质参数也参与颜色桶合并键，避免相同颜色的玻璃和墙面被错误合并。
+
+**roughness < 1 的电介质不是"稍微粗糙一点的漫反射"**：它走 Mixture 模型，在整块表面叠一层
+约 3.4% 的 GGX 镜面高光，路径追踪下布料、帆布、纸板会因此发灰、像塑料。布料一律用
+`roughness = 1, metalness = 0`（Lambertian），质感交给 `gk_texture`；高光只留给真正有光泽的
+材料——皮革（0.45~0.65）、哑光漆（0.7~0.75）、塑料扣（0.45）、清漆木（0.4）、油浸木（0.6~0.65）、
+橡胶（0.85）、金属件（metalness 0.9~1）。同一件装备里按部件分层，比整件一个粗糙度更有质感。
+
+### `gk_texture`：过程纹理印花
+
+`gk_texture(name | graph, palette = [[r,g,b], ...], scale = 0.5, seed = 0, relief = 1) children();`
+
+图案而不是形状的表面——迷彩、雨点纹、帆布织纹、皮革粒面——用几何去拼要上千个小片，还像贴纸。
+`gk_texture` 让加载器在 CPU 上烘焙一张可平铺的 sRGB 贴图（`Engine/Assets/Loaders/ProceduralTexture`），
+给这些三角形按**物体自身坐标**做盒投影 UV（每个三角形取法线最朝向的平面，侧面的 v 沿 +Z，
+所以竖条纹保持竖直），材质照常采样 `DiffuseTextureId`。规则：
+
+- **最终反照率 = 外层 `color()`/`gk_material()` 颜色 × 印花**（同 glTF baseColorFactor）。迷彩用白色
+  材质 `gk_material([1,1,1], roughness = 1) gk_texture("woodland")`，叠层压暗用 `[0.85,0.85,0.85]`；
+  织纹 / 皮纹（默认白色色板，只调明暗）直接乘在本色上：`gk_material(c, 1) gk_texture("twill", scale = 0.1)`。
+  没有外层颜色时几何默认 0.78 灰，印花会被压暗。
+- `gk_texture` 与 `gk_material` 可任意嵌套：内层 `gk_material` 保留外层印花，`gk_texture` 保留外层粗糙度 / 金属度。
+- `scale` 是一个平铺单元覆盖的 SCAD 长度（米），只影响 UV，不影响烘焙；色板和 seed 决定贴图内容，
+  相同内容全进程只烘焙、上传一次（主线程同步上传，加载线程走异步 PNG 上传）。
+- 印花名就是 `assets/scad/lib/gk_texgraph.scad` 里的 `tex_<名字>()`（见下一节，全部用 SCAD 写成，
+  C++ 里没有任何图案）：`woodland`（M81 式四色大斑块 + 黑色枝条）、`digital`
+  （俄式"数码植物"像素迷彩）、`desert`（DBDU 六色"巧克力片"）、`flora`（VSR-98 竖向"西瓜皮"条纹）、
+  `rain`（东德雨点纹）、`canvas` / `twill`（帆布 / 斜纹织纹）、`grain`（皮革粒面）；地表：`meadow`
+  （草甸斑块）、`dirt`（土面与碎屑）、`gravel`（碎石）、`asphalt`（沥青：补丁与裂缝）、`rock`（岩层与
+  裂隙）；建筑：`plaster`（抹灰：污斑、雨痕、局部剥落露出砖色）、`brick`（顺砖错缝）、`tiles`
+  （陶瓦行与苔）、`planks`（竖板与节疤）、`stone`（乱石砌与地衣）、`concrete`（模板线与水渍）；
+  旧金属与木：`chipped`（漆面剥落露钢）、`rust`（钢面锈斑、锈皮与流痕）、`worn`（发蓝 / 磷化涂层
+  磨穿处露出亮钢）、`woodgrain`（顺 +u 的连续年轮木纹，枪托、家具）；以及 `corrugated`（锈瓦楞铁）、
+  `flagstone`（不规则石板）、`bark`（树皮）、`brickwall`（参数化砖墙）、`tigerstripe` / `splinter`（迷彩）。
+  不给 palette 时用该印花 `tx_palette()` 的默认色；迷彩自带一层斜纹织纹明暗。未知名字会告警（列出全部
+  已知印花）并按无印花处理。
+- **地表 / 建筑印花是调制纹理**：默认色板接近白色，只做低对比、色阶化的明暗（剥落、苔、地衣这类
+  第二色由 palette[1] 控制），乘在本色上。它们的作用是给块面加一点颗粒，造型仍由低模块面的明暗承担——
+  单测守着这条（均值 > 160、标准差 < 40）。`scale` 取真实尺度：砖 ~1.2 m、抹灰 ~3 m、草地 ~9 m。
+  建筑 kit 的做法见 `kit_bohemia.scad` 的 `bh_m_*`：多孔材料（抹灰、砖、石、木、陶瓦、水泥板）一律
+  `roughness = 1` + 印花，只有油漆、釉面、玻璃、水、金属保留高光。地形的 `gk_terrain(TERR, detail=true)`
+  自动给各 biome 配印花，见 [ScadTerrain](ScadTerrain.md)。
+- 带印花的几何单独成一个材质分段（计入每部件 16 段的上限）；ScadRig 部件把它记在
+  `FRigPart::sectionTextures`，`SceneBuilder::AddRigSectionMaterial` 取贴图。没有 GPU 贴图池时
+  （单测、纯 CPU 工具）材质无贴图但 UV 与印花描述照常保留。
+- 样板场景：`assets/scad/source/others/gk_texture_patterns.scad`。
+
+#### 用 SCAD 写印花：纹理节点图（`gk_texgraph.scad`）
+
+**所有印花都是 SCAD 写的纹理节点图**，C++ 只负责求值、烘焙和上传。`gk_texture` 的第一个参数是印花名
+或一张节点图：`assets/scad/lib/gk_texgraph.scad` 的 `tx_*` 函数只返回列表数据（`tx_fbm(4)` →
+`["fbm", 4, 4, 4, 0]`），加载器把整棵树编译一次（`Engine/Assets/Loaders/TextureGraph`：校验每个节点、相同
+子树合并、规范文本作内容键），再在 C++ 里逐 texel 求值——写法在 SCAD，速度是原生的（一张 256² 约 50~100 ms）。
+**印花名**由 `Modules/ScadLoader/FScadTexturePrints` 解析：`gk_texture("plaster")` = 库里的 `tex_plaster()`，
+求值、编译一次后缓存，库文件改了自动重读（地形印花同样走这里）。在库里加 `function tex_foo() = tx_surface(...);`
+就多了 `gk_texture("foo")`；带参数的印花直接调用：`gk_texture(tex_brickwall(rows = 12))`。
+不做"每个 texel 调一次 SCAD 函数"：65536 次解释执行太慢，而且"按覆盖率切"这类整图运算表达不了。
+
+```scad
+use <../lib/gk_texgraph.scad>
+// 30% 覆盖的锈斑：锈是电介质、粗糙、凸起；其余是较光滑的钢。
+rusty = tx_top(tx_fbm(5, octaves = 4, seed = 1), 0.3);
+gk_material([1, 1, 1], roughness = 0.8, metalness = 0.9)
+    gk_texture(tx_surface(tx_select(rusty, tx_palette(1, [0.22, 0.08, 0.03]), tx_palette(0, [0.5, 0.5, 0.5])),
+                          height = rusty, rough = tx_select(rusty, 1, 0.5), metal = tx_select(rusty, 0, 1),
+                          tilt = 12), scale = 0.8) cube([1, 0.02, 1]);
+```
+
+- 根是 `tx_surface(color, height, rough, metal, tilt, blur)`：颜色、起伏高度（烘成法线，只看坡度）、
+  粗糙度系数、金属度系数（烘成 MRA）；`tilt` 是最陡 10% 像素的坡度（度），`blur` 是斜面模糊（texel）。
+  之后是同一条路：反照率 × 外层颜色、`relief`、`seed`、`palette`、切线、MRA 规则对所有印花都一样。
+- 每个节点求值成 RGB，标量三分量相同；数字和 `[r,g,b]` 自动广播，颜色与标量可混算。
+- 场：`tx_u/v`、`tx_fbm`（周期 fBm，`cells_v` 少则沿 u 拉长）、`tx_cells`（Voronoi：`dist`/`edge`/`rand`）、
+  `tx_course`（砌块：`fu`/`fv`/`edge`/`rand`/`row`/`col`）、`tx_weave`、`tx_stripes`、`tx_checker`、`tx_hash`、
+  `tx_palette(i, 默认色)`（可被 `gk_texture(palette = ...)` 换色）。运算：`abs/fract/invert/posterize/smoothstep/
+  step/band/pow/add/sub/mul/min/max/mix/select`，`tx_top(field, f)` 按排名精确切出 f 比例。域变换：
+  `tx_warp/tile/shear/pixelate/offset`。网格数都是整数，所以任何组合都无缝平铺。
+- 写错时加载告警，指出节点和期望参数，并带路径（`<- argument 2 of 'mul'`），几何照常无印花加载；
+  `undef` 参数单独提示（多半是参数没给或函数名写错）。注意本求值器没有 `is_undef()`，用 `x == undef`。
+- 样板见 `gk_texture_patterns.scad`。新印花写成 `gk_texgraph.scad` 里的 `tex_<名字>()`；单测会对库里
+  每个印花检查无缝、确定性、起伏坡度范围，地表 / 建筑印花还要守低对比（均值 > 160、标准差 < 40）。
+  真正需要新的**基础节点**（新噪声、新拼法）时才改 `TextureGraph.cpp`。
+
+#### 印花的表面：法线起伏与粗糙度 / 金属度
+
+印花不只有颜色。每个图案同时烘焙出**高度**（砖缝下凹、陶瓦逐行的楔形台阶、石块的鼓面、织物的纱线、
+抹灰剥落的凹坑……）和**粗糙度 / 金属度系数**，加载器一起生成三张 256² 贴图：反照率（sRGB）、
+切线空间法线（线性）、glTF 式 MRA（线性，G = 粗糙度系数，B = 金属度系数）。
+
+- **法线对所有材质生效**（包括 Lambertian 的布料、抹灰、地形）：加载器按盒投影写出与 UV 完全一致的
+  切线（`ProceduralTexture::BoxProjectTangents`），所以每个面上的起伏都从正确的方向受光。
+- **强度按坡度定义，不按深度**：每个印花在 `tx_surface(tilt = ...)` 给出"最陡的 10% 像素达到多少度"
+  的目标（库里的印花在 4°~16°），烘焙时归一化，最大 40°。`relief` 乘在这个坡度上，`relief = 0` 不生成法线贴图。
+  起伏只在块面**内部**加颗粒，造型仍由低模块面承担——这是保留 lowpoly 味道的关键，别把坡度调高。
+  地形印花用 `relief = 0.7`（地面总在掠射角下远看）。
+- **MRA 系数乘在 `gk_material` 上**：粗糙度 = 材质粗糙度 × G，金属度 = 材质金属度 × B。所以材质的
+  粗糙度是印花能达到的**最粗糙**值，金属度是**最大**金属度。只有 Mixture 材质（非 roughness=1 且
+  metalness=0）读 MRA；全图系数都是 1 的图案不生成 MRA。有系数变化的图案：`grain`（褶皱间的磨光面
+  更亮）、`gravel` / `asphalt` / `stone` / `tiles`（石面、补丁、陶瓦比缝隙光滑）、`woodgrain`（清漆
+  填平的早材更光滑）、`worn`（磨穿的亮钢最光滑，全部是金属）、`chipped` / `rust`（漆面、锈是电介质，
+  露出的钢是金属且更光滑）。
+- **`chipped` / `rust` / `worn` 的色板是绝对颜色**（漆和钢的差别在金属度，不只是色调），外层材质用
+  白色：`gk_material([1,1,1], roughness = 0.72, metalness = 0.9) gk_texture("chipped", palette = [漆色, 钢色], scale = 0.3)`。
+  用例：`ndh_paint`（钢盔哑光漆）、`cw_m_blued` / `cw_m_park`（发蓝 / 磷化钢）、`cw_m_wood` /
+  `nd_m_birch` / `nd_m_walnut`（木件）、`bh_m_iron`（锈铁）。
+- 着色器侧（`SceneSampling.FetchGBuffer`）：贴图无 mip，掠射角下一个像素覆盖很多 texel，所以扰动按
+  `|N·V|` 淡出（地面上这近似于随距离淡出，抑制摩尔纹）；扰动后的法线若背向视线会被掰回，避免黑点。
+- 贴图名带像素内容哈希：加载线程的上传路径按名字在磁盘缓存 KTX，改了烘焙代码而参数没变时，
+  名字随像素变化，不会读回旧图。
 
 ## 相机机位（虚拟点）
 
@@ -116,9 +284,11 @@ glTF 相机完全相同的运行时结构：定点机位进 `EnvironmentSetting.
 ## 资产与 compose
 
 现行手写验证场景使用 `assets/scad/source/beer_cup.scad`、`source/oldcity/old_city.scad` 等。Kit 位于
-`assets/scad/lib/`，严格 JSON spec 位于 `assets/scad/specs/`，派生场景按结构位于
+`assets/scad/lib/`，严格 JSON spec 位于 `assets/scad/specs/`，派生场景位于
 `assets/scad/source/generated/` 或 `assets/scad/proc/generated/`。生成管线见
-`docs/designs/scad-scene-compose-design.md`。
+`docs/designs/scad-scene-compose-design.md`。`gnb scad compose` 仍按 spec 有没有 `terrain`
+段选择输出目录，但那只是归档：产物打开后照样能同时用对象、地形和结构三个编辑器。
+目录约定见 `assets/scad/README.md`。
 
 ## 验证
 
@@ -127,6 +297,8 @@ glTF 相机完全相同的运行时结构：定点机位进 `EnvironmentSetting.
 ./out/build/<preset>/bin/gkNextUnitTests "[Scad]"
 ./gnb.sh shot --scene assets/scad/source/oldcity/old_city.scad
 ./gnb.sh shot --target ScadStudio --scene assets/scad/source/beer_cup.scad --frames 60
+./out/build/<preset>/bin/gkNextUnitTests "[SceneDocument]"
+./gnb.sh validate --script assets/agentscripts/scadlibrary-mixed-document.agentscript.json
 ```
 
 排查顺序：先看 `SCAD:` warning 与 include 路径，再看节点/三角形/颜色 bucket 数；几何黑面检查 face winding 和 normal smoothing；复杂 boolean 慢时缩小 CSG 范围，不要对整座场景做一次巨型 operation。

@@ -401,7 +401,12 @@ VkDeviceAddress Buffer::GetDeviceAddress() const
     info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
     info.pNext = nullptr;
     info.buffer = Handle();
-    return vkGetBufferDeviceAddress(device_.Handle(), &info);
+    const auto& deviceProcedures = device_.GetDeviceProcedures();
+    if (!deviceProcedures.vkGetBufferDeviceAddress)
+    {
+        return 0;
+    }
+    return deviceProcedures.vkGetBufferDeviceAddress(device_.Handle(), &info);
 }
 
 void Buffer::CopyFrom(CommandPool& commandPool, const Buffer& src, VkDeviceSize size)

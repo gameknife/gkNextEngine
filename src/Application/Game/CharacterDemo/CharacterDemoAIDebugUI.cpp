@@ -6,6 +6,7 @@
 #include "Engine/Assets/Core/Model.hpp"
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Utilities/Math.hpp"
+#include "Modules/NextUI/UI/UiHud.hpp"
 
 namespace CharacterDemoAIDebugUI
 {
@@ -242,19 +243,7 @@ namespace CharacterDemoAIDebugUI
 
         auto project = [&](const glm::vec3& worldPos, ImVec2& screenPos) -> bool
         {
-            const glm::vec4 clip = viewProjection * glm::vec4(worldPos, 1.0f);
-            if (clip.w <= 0.0f)
-            {
-                return false;
-            }
-            const glm::vec3 ndc = glm::vec3(clip) / clip.w;
-            if (ndc.x < -1.2f || ndc.x > 1.2f || ndc.y < -1.2f || ndc.y > 1.2f)
-            {
-                return false;
-            }
-            screenPos.x = viewportPos.x + (ndc.x * 0.5f + 0.5f) * viewportSize.x;
-            screenPos.y = viewportPos.y + (-ndc.y * 0.5f + 0.5f) * viewportSize.y;
-            return true;
+            return NextUI::Hud::TryProjectWorldToScreen(viewProjection, viewportPos, viewportSize, worldPos, screenPos);
         };
 
         auto* drawList = ImGui::GetForegroundDrawList();

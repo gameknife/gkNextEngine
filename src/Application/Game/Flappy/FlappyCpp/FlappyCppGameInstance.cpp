@@ -9,6 +9,7 @@
 #include "Engine/Runtime/Scene/SceneBuilder.hpp"
 #include "Engine/Runtime/Scene/NodeUtils.hpp"
 #include "Engine/Runtime/Subsystems/NextAudio.hpp"
+#include "Engine/Utilities/FileHelper.hpp"
 
 #include <glm/ext.hpp>
 #include <imgui.h>
@@ -17,11 +18,13 @@
 
 namespace
 {
-    constexpr const char* gameplayConfigPath = "assets/configs/flappy/gameplay.json";
-    constexpr const char* replayConfigPath = "assets/configs/flappy/replay.json";
-    constexpr const char* flapSfx = "assets/sounds/flappy_flap.wav";
-    constexpr const char* scoreSfx = "assets/sounds/flappy_score.wav";
-    constexpr const char* hitSfx = "assets/sounds/flappy_hit.wav";
+    // The Flappy game project (projects/Flappy) owns this data; FlappyCSharp is its C# half and
+    // reads the very same files, which is what makes the replay parity comparison meaningful.
+    constexpr const char* gameplayConfigPath = "assets/projects/Flappy/Content/configs/gameplay.json";
+    constexpr const char* replayConfigPath = "assets/projects/Flappy/Content/configs/replay.json";
+    constexpr const char* flapSfx = "assets/projects/Flappy/Content/sounds/flap.wav";
+    constexpr const char* scoreSfx = "assets/projects/Flappy/Content/sounds/score.wav";
+    constexpr const char* hitSfx = "assets/projects/Flappy/Content/sounds/hit.wav";
 
     std::shared_ptr<Assets::Node> CreateNode(std::vector<std::shared_ptr<Assets::Node>>& nodes,
                                              std::string_view name,
@@ -53,23 +56,6 @@ namespace
                event.gbutton.button == SDL_GAMEPAD_BUTTON_SOUTH;
     }
 
-    std::filesystem::path FindProjectRoot()
-    {
-        std::filesystem::path cursor = std::filesystem::current_path();
-        for (int depth = 0; depth < 8; ++depth)
-        {
-            if (std::filesystem::exists(cursor / "AGENTS.md") && std::filesystem::exists(cursor / "assets"))
-            {
-                return cursor;
-            }
-            if (!cursor.has_parent_path())
-            {
-                break;
-            }
-            cursor = cursor.parent_path();
-        }
-        return std::filesystem::current_path();
-    }
 }
 
 std::unique_ptr<NextGameInstanceBase> CreateGameInstance(Vulkan::WindowConfig& config, Runtime::Config::Options& options, NextEngine* engine)
@@ -615,9 +601,10 @@ void FlappyCppGameInstance::WriteReplayTrace(const std::vector<Flappy::FFlappyTr
         });
     }
 
-    const std::filesystem::path outputDir = FindProjectRoot() / "out";
-    std::filesystem::create_directories(outputDir);
-    const std::filesystem::path outputPath = outputDir / "flappy_cpp_trace.json";
+    const std::filesystem::path outputPath = Utilities::FileHelper::ResolveWritablePath(
+        "replays/flappy_cpp_trace.json");
+    std::error_code errorCode;
+    std::filesystem::create_directories(outputPath.parent_path(), errorCode);
     std::ofstream output(outputPath);
     output << document.dump(2) << '\n';
     SPDLOG_INFO("[FlappyCpp] replay trace written to {}", outputPath.string());

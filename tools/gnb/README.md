@@ -33,6 +33,8 @@ Common commands:
 ./gnb dashboard
 ```
 
+UI language is `--lang zh|en|auto`, `GNB_LANG`, `gnb.toml [gnb].lang`, then the OS language. The dashboard 中/EN toggle stores `gnb_lang` and reloads.
+
 Bare `gnb` and `gnb dashboard` open the native Wails window on Windows/macOS.
 On Linux the Wails native window is not built; `gnb`/`gnb dashboard` fall back
 to opening the dashboard in the system browser, and `gnb dashboard --no-open`

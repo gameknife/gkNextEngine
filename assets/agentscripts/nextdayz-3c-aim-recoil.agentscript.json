@@ -6,6 +6,7 @@
   "viewport": { "width": 1600, "height": 900 },
   "steps": [
     { "type": "wait-until", "query": "engine.status", "op": "eq", "value": "Running", "timeoutMs": 20000 },
+    { "type": "wait-until", "query": "game.sceneReady", "op": "eq", "value": true, "timeoutMs": 30000 },
     { "type": "cvar", "name": "nextdayz.validation.loadout", "set": true },
     { "type": "wait-frames", "n": 60 },
     { "type": "key", "code": "S", "action": "down" },
@@ -16,7 +17,7 @@
     { "type": "log", "message": "3C: ADS fades in and constrains moving gait to walk" },
     { "type": "mouse-button", "button": "right", "action": "down" },
     { "type": "key", "code": "W", "action": "down" },
-    { "type": "wait-frames", "n": 20 },
+    { "type": "wait-ms", "ms": 300 },
     { "type": "assert", "query": "game.isAiming", "op": "eq", "value": true },
     { "type": "assert", "query": "game.aimWeight", "op": "gt", "value": 0.9 },
     { "type": "assert", "query": "game.gait", "op": "eq", "value": "walk" },

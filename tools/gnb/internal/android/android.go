@@ -13,19 +13,43 @@ import (
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/config"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/console"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/fetcher"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/icons"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/mobileapps"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/vcpkg"
 )
 
 const (
 	defaultVariant = "release"
-	packageName    = "com.gknext.renderer"
-	activityName   = packageName + "/" + packageName + ".GkNextActivity"
+	// Every application reuses the same activity class, so only the application id varies.
+	activityClass = "com.gknext.renderer.GkNextActivity"
+	packageName   = "com.gknext.renderer"
+	activityName  = packageName + "/" + activityClass
+	// fallbackApp is used only where a build directory has to be named without a registry read
+	// being able to fail. Which applications exist, and which one is the default, is the
+	// registry's answer everywhere it can be asked properly.
+	fallbackApp = "gkNextRenderer"
 )
+
+// resolveApp maps an application name onto its registry entry. An empty name selects the default.
+func resolveApp(repoRoot, app string) (mobileapps.App, error) {
+	return mobileapps.Resolve(repoRoot, mobileapps.Android, app)
+}
+
+// defaultApp names the application a build directory is called after when none was requested.
+func defaultApp(repoRoot string) string {
+	resolved, err := resolveApp(repoRoot, "")
+	if err != nil {
+		return fallbackApp
+	}
+	return resolved.Target
+}
 
 // Artifact identifies the APK emitted by the Android CMake driver.
 type Artifact struct {
-	APKPath string
-	SDKRoot string
+	APKPath       string
+	SDKRoot       string
+	App           string
+	ApplicationID string
 }
 
 // RunResult describes the device that received the APK.
@@ -104,11 +128,16 @@ func OpenRenderDoc(repoRoot, requestedSerial string) (RunResult, error) {
 
 // Build configures the Android driver and produces the shared APK. Release is
 // the default; provide signing properties before using its APK on a device.
-func Build(repoRoot string, cfg config.Config, variant string) (Artifact, error) {
+func Build(repoRoot string, cfg config.Config, variant, app string) (Artifact, error) {
 	variant, err := normalizeVariant(variant)
 	if err != nil {
 		return Artifact{}, err
 	}
+	resolved, err := resolveApp(repoRoot, app)
+	if err != nil {
+		return Artifact{}, err
+	}
+	app = resolved.Target
 	if err := vcpkg.Ensure(repoRoot, cfg, false); err != nil {
 		return Artifact{}, err
 	}
@@ -124,31 +153,36 @@ func Build(repoRoot string, cfg config.Config, variant string) (Artifact, error)
 		sdkRoot = fetcher.DiscoverVulkanSDK(repoRoot, cfg)
 	}
 
-	buildDir := buildDirectory(repoRoot, variant)
+	buildDir := buildDirectory(repoRoot, variant, app)
 	driverDir := filepath.Join(repoRoot, "tools", "android")
 	configureArgs := []string{
 		"-S", driverDir,
 		"-B", buildDir,
 		"-DGK_ANDROID_VARIANT=" + variant,
+		"-DGK_ANDROID_APP=" + app,
 	}
 	if err := runCommand(repoRoot, androidEnvironment(sdkRoot), cmakePath, configureArgs...); err != nil {
 		return Artifact{}, err
 	}
+	gradleResDir := filepath.Join(buildDir, "gradle", "app", "src", "main", "res")
+	if err := icons.GenerateAndroidAppIcons(repoRoot, app, gradleResDir); err != nil {
+		console.Warn("failed to generate Android icons for %s: %v", app, err)
+	}
 	if err := runCommand(repoRoot, androidEnvironment(sdkRoot), cmakePath, "--build", buildDir, "--target", "android-apk"); err != nil {
 		return Artifact{}, err
 	}
-	return ReadArtifact(repoRoot, variant)
+	return ReadArtifact(repoRoot, variant, app)
 }
 
 // Run installs a previously built APK and starts its launcher activity. An
 // already-online adb device is preferred. Otherwise the selected local AVD
 // (or the first one listed by the emulator) is started and awaited.
-func Run(repoRoot, variant, requestedSerial, requestedAVD string) (RunResult, error) {
+func Run(repoRoot, variant, app, requestedSerial, requestedAVD string) (RunResult, error) {
 	variant, err := normalizeVariant(variant)
 	if err != nil {
 		return RunResult{}, err
 	}
-	artifact, err := ReadArtifact(repoRoot, variant)
+	artifact, err := ReadArtifact(repoRoot, variant, app)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -182,7 +216,7 @@ func Run(repoRoot, variant, requestedSerial, requestedAVD string) (RunResult, er
 	// clear them before a normal launch so a previous capture cannot affect the
 	// shared APK when it is started without --renderdoc.
 	resetRenderDocAndroidSettings(adbPath, serial)
-	if err := installAndLaunch(adbPath, serial, artifact.APKPath); err != nil {
+	if err := installAndLaunch(adbPath, serial, artifact.APKPath, artifact.ApplicationID); err != nil {
 		return RunResult{}, err
 	}
 	result.Serial = serial
@@ -196,7 +230,7 @@ func ForwardPort(repoRoot, variant, requestedSerial string, port int) (RunResult
 	if port <= 0 || port > 65535 {
 		return RunResult{}, fmt.Errorf("invalid Tracy port %d", port)
 	}
-	artifact, err := ReadArtifact(repoRoot, variant)
+	artifact, err := ReadArtifact(repoRoot, variant, defaultApp(repoRoot))
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -224,7 +258,7 @@ func ForwardPort(repoRoot, variant, requestedSerial string, port int) (RunResult
 // perform its official Android injection and target-control capture flow.
 func Capture(repoRoot string, _ config.Config, requestedSerial string) (RunResult, error) {
 	const variant = "release"
-	artifact, err := ReadArtifact(repoRoot, variant)
+	artifact, err := ReadArtifact(repoRoot, variant, defaultApp(repoRoot))
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -265,17 +299,22 @@ func Capture(repoRoot string, _ config.Config, requestedSerial string) (RunResul
 }
 
 // ReadArtifact locates the archived APK and Android SDK for a completed build.
-func ReadArtifact(repoRoot, variant string) (Artifact, error) {
+func ReadArtifact(repoRoot, variant, app string) (Artifact, error) {
 	variant, err := normalizeVariant(variant)
 	if err != nil {
 		return Artifact{}, err
 	}
-	buildDir := buildDirectory(repoRoot, variant)
-	apkPath := filepath.Join(buildDir, "apk", "gkNextRenderer-"+variant+".apk")
+	resolved, err := resolveApp(repoRoot, app)
+	if err != nil {
+		return Artifact{}, err
+	}
+	app = resolved.Target
+	buildDir := buildDirectory(repoRoot, variant, app)
+	apkPath := filepath.Join(buildDir, "apk", app+"-"+variant+".apk")
 	info, err := os.Stat(apkPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return Artifact{}, fmt.Errorf("Android build artifact not found: %s\nrun `gnb android build %s` first", apkPath, variant)
+			return Artifact{}, fmt.Errorf("Android build artifact not found: %s\nrun `gnb android build %s --app %s` first", apkPath, variant, app)
 		}
 		return Artifact{}, fmt.Errorf("inspect Android APK %s: %w", apkPath, err)
 	}
@@ -286,7 +325,7 @@ func ReadArtifact(repoRoot, variant string) (Artifact, error) {
 	if err != nil {
 		return Artifact{}, err
 	}
-	return Artifact{APKPath: apkPath, SDKRoot: sdkRoot}, nil
+	return Artifact{APKPath: apkPath, SDKRoot: sdkRoot, App: app, ApplicationID: resolved.AndroidID}, nil
 }
 
 func normalizeVariant(variant string) (string, error) {
@@ -300,12 +339,19 @@ func normalizeVariant(variant string) (string, error) {
 	return variant, nil
 }
 
-func buildDirectory(repoRoot, variant string) string {
-	return filepath.Join(repoRoot, "out", "build", "android-"+variant)
+// buildDirectory keeps one tree per application. Android compiles the whole engine into each
+// application library, so sharing a directory between two of them would mean a full rebuild on
+// every switch. The default application keeps the historical path.
+func buildDirectory(repoRoot, variant, app string) string {
+	name := "android-" + variant
+	if app != "" && app != defaultApp(repoRoot) {
+		name += "-" + app
+	}
+	return filepath.Join(repoRoot, "out", "build", name)
 }
 
 func discoverSDKRoot(repoRoot, variant string) (string, error) {
-	return discoverSDKRootFromBuildDir(repoRoot, buildDirectory(repoRoot, variant))
+	return discoverSDKRootFromBuildDir(repoRoot, buildDirectory(repoRoot, variant, defaultApp(repoRoot)))
 }
 
 func discoverSDKRootFromBuildDir(repoRoot, buildDir string) (string, error) {
@@ -612,15 +658,18 @@ func waitForEmulator(adbPath string, timeout time.Duration) (string, error) {
 	return "", fmt.Errorf("timed out after %s", timeout)
 }
 
-func installAndLaunch(adbPath, serial, apkPath string) error {
+func installAndLaunch(adbPath, serial, apkPath, applicationID string) error {
 	if err := runCommand("", nil, adbPath, "-s", serial, "install", "-r", apkPath); err != nil {
 		return fmt.Errorf("install Android APK on %s: %w", serial, err)
 	}
-	return launchInstalled(adbPath, serial, false)
+	return launchInstalled(adbPath, serial, applicationID, false)
 }
 
-func launchInstalled(adbPath, serial string, renderDoc bool) error {
-	arguments := []string{"-s", serial, "shell", "am", "start", "-S", "-n", activityName}
+func launchInstalled(adbPath, serial, applicationID string, renderDoc bool) error {
+	if applicationID == "" {
+		applicationID = packageName
+	}
+	arguments := []string{"-s", serial, "shell", "am", "start", "-S", "-n", applicationID + "/" + activityClass}
 	if renderDoc {
 		arguments = append(arguments, "--ez", "gknext.renderdoc", "true")
 	}

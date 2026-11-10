@@ -1,9 +1,11 @@
 #include "Modules/NextDotNet/DotNetRuntime.hpp"
+#include "Modules/NextDotNet/EngineApi.hpp"
 #include "Engine/Runtime/Profiling/TracyIntegration.hpp"
 
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/Platform/PlatformCommon.hpp"
 #include "Engine/Utilities/FileHelper.hpp"
+#include "Engine/Options.hpp"
 
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -44,31 +46,53 @@ namespace Modules::NextDotNet
 #endif
         }
 
-        /// The C# sources, for the two operations that compile rather than load: the start-up
-        /// rebuild and a host-initiated republish.
-        ///
-        /// Not resolved through the asset path: assets/csharp is not copied next to the executable
-        /// — only its published output is — so resolving it against the runtime root silently finds
-        /// nothing, which is how the start-up rebuild used to no-op in a normal build tree. The
-        /// baked source path is the only thing that knows where the tree is; an installed build has
-        /// no sources and correctly gets an empty path.
-        std::filesystem::path ResolveManagedSourceRoot()
+        /// The launcher is commonly started by Finder/LaunchServices, whose PATH does not include
+        /// Homebrew or the SDK installed by `gnb dotnet setup`.  Use the SDK root CMake resolved
+        /// for the native host instead of relying on a shell lookup of `dotnet`.
+        std::filesystem::path ResolveDotNetExecutable()
         {
-            if (const char* fromEnv = std::getenv("GK_DOTNET_MANAGED_SOURCES");
-                fromEnv != nullptr && *fromEnv != '\0')
+            const std::filesystem::path root = ResolveDotNetRoot();
+            if (root.empty())
             {
-                return std::filesystem::path(fromEnv);
+                return {};
             }
-#if defined(GK_DOTNET_MANAGED_SOURCE_ROOT)
-            std::error_code ec;
-            const std::filesystem::path baked(GK_DOTNET_MANAGED_SOURCE_ROOT);
-            if (std::filesystem::exists(baked, ec))
-            {
-                return baked;
-            }
+
+#if WIN32
+            const std::filesystem::path executable = root / "dotnet.exe";
+#else
+            const std::filesystem::path executable = root / "dotnet";
 #endif
-            return {};
+            std::error_code ec;
+            return std::filesystem::is_regular_file(executable, ec) ? executable : std::filesystem::path{};
         }
+    }
+
+    /// The engine's C# sources, for everything that compiles rather than loads: the start-up
+    /// rebuild of GkNext.Game, and the templates a new game project is scaffolded from (they sit
+    /// beside it in the source assets tree). Game projects themselves live in projects/ and are
+    /// found through GameProjectsSourceRoot().
+    ///
+    /// Not resolved through the asset path: assets/csharp is not copied next to the executable
+    /// — only its published output is — so resolving it against the runtime root silently finds
+    /// nothing, which is how the start-up rebuild used to no-op in a normal build tree. The
+    /// baked source path is the only thing that knows where the tree is; an installed build has
+    /// no sources and correctly gets an empty path.
+    std::filesystem::path DotNetRuntime::ManagedSourceRoot()
+    {
+        if (const char* fromEnv = std::getenv("GK_DOTNET_MANAGED_SOURCES");
+            fromEnv != nullptr && *fromEnv != '\0')
+        {
+            return std::filesystem::path(fromEnv);
+        }
+#if defined(GK_DOTNET_MANAGED_SOURCE_ROOT)
+        std::error_code ec;
+        const std::filesystem::path baked(GK_DOTNET_MANAGED_SOURCE_ROOT);
+        if (std::filesystem::exists(baked, ec))
+        {
+            return baked;
+        }
+#endif
+        return {};
     }
 
     std::filesystem::path DotNetRuntime::ManagedRoot()
@@ -80,36 +104,37 @@ namespace Modules::NextDotNet
         return NextRenderer::GetExecutableDirectory() / "csharp";
     }
 
-    bool DotNetRuntime::PublishProject(const std::string& projectRelativeToManagedSources,
+    bool DotNetRuntime::PublishProject(const std::filesystem::path& projectFile,
                                        const std::string& outputSubdirectory,
                                        std::string& outError)
     {
 #if GK_DOTNET_USE_AOT
-        (void)projectRelativeToManagedSources;
+        (void)projectFile;
         (void)outputSubdirectory;
         outError = "the managed game is linked into this binary; rebuild the executable instead";
         return false;
 #else
-        const std::filesystem::path sourceRoot = ResolveManagedSourceRoot();
-        if (sourceRoot.empty())
+        const std::filesystem::path project = projectFile.lexically_normal();
+        std::error_code ec;
+        if (project.empty() || !std::filesystem::exists(project, ec))
         {
-            outError = "no C# sources are reachable from this build";
+            outError = "project not found: " + project.string();
             return false;
         }
 
-        const std::filesystem::path project = sourceRoot / projectRelativeToManagedSources;
-        std::error_code ec;
-        if (!std::filesystem::exists(project, ec))
+        const std::filesystem::path dotnet = ResolveDotNetExecutable();
+        if (dotnet.empty())
         {
-            outError = "project not found: " + project.string();
+            outError = "dotnet SDK executable not found under " + ResolveDotNetRoot().string();
             return false;
         }
 
         // Same command CMake's gk_dotnet_managed_game runs. Deliberately the same output layout
         // too: a rebuild from inside the launcher must land where the next load will look, or it
         // would appear to succeed and change nothing.
-        const std::string command = "dotnet publish \"" + project.string() + "\" -c Release -o \"" +
-                                    (ManagedRoot() / outputSubdirectory).string() + "\" --nologo";
+        const std::string command = "\"" + dotnet.string() + "\" publish \"" + project.string() +
+                                    "\" -c Release -o \"" + (ManagedRoot() / outputSubdirectory).string() +
+                                    "\" --nologo";
         SPDLOG_INFO("[dotnet] republishing {}", project.string());
 
         const int exitCode = NextRenderer::OSProcess(command.c_str());
@@ -264,9 +289,12 @@ namespace Modules::NextDotNet
         }
 
         const int32_t status = managed_->UnloadGame();
+        ReleaseManagedCharacters();
         gameLoaded_ = false;
         gameAssemblyPath_.clear();
         isPaused_ = false;
+        relativeMouseRequested_ = false;
+        ApplyRelativeMouseMode();
 
         switch (static_cast<EGameStatus>(status))
         {
@@ -296,6 +324,10 @@ namespace Modules::NextDotNet
         {
             managed_->Tick(deltaSeconds);
         }
+        // Look reads the delta during Tick. Clearing afterwards (rather than on read) lets a
+        // second consumer in the same Tick see the same motion, and a skipped UI hook cannot
+        // leak last frame's travel into the next one.
+        GInputState.mouseDelta = {};
 
         TickHotReload(deltaSeconds);
     }
@@ -321,12 +353,40 @@ namespace Modules::NextDotNet
             return;
         }
         inputEnabled_ = enabled;
+        ApplyRelativeMouseMode();
         if (!enabled)
         {
             // Whatever was held when input was cut never gets its key-up, so release it here.
             // Otherwise a game ejected out of mid-stride keeps walking for as long as it runs.
             GInputState.Reset();
         }
+    }
+
+    void DotNetRuntime::SetRelativeMouseRequested(bool enabled)
+    {
+        relativeMouseRequested_ = enabled;
+        ApplyRelativeMouseMode();
+    }
+
+    void DotNetRuntime::ApplyRelativeMouseMode()
+    {
+        SDL_Window* window = engine_.GetWindow().Handle();
+        if (window == nullptr)
+        {
+            return;
+        }
+
+        const bool capture = inputEnabled_ && relativeMouseRequested_ &&
+                             (GOption == nullptr || !GOption->AgentValidation);
+        if (static_cast<bool>(SDL_GetWindowRelativeMouseMode(window)) == capture)
+        {
+            return;
+        }
+
+        SDL_SetWindowRelativeMouseMode(window, capture);
+        // Enabling pointer lock warps the cursor; drop that motion so the first look frame
+        // does not snap by however far the pointer was from the window centre.
+        GInputState.mouseDelta = {};
     }
 
     void DotNetRuntime::HandleEvent(const SDL_Event& event)
@@ -392,6 +452,11 @@ namespace Modules::NextDotNet
             forwarded.Type = static_cast<int32_t>(EInputEventType::GamepadButtonUp);
             forwarded.GamepadButton = event.gbutton.button;
             forward = true;
+            break;
+
+        case SDL_EVENT_MOUSE_MOTION:
+            GInputState.mouseDelta.x += event.motion.xrel;
+            GInputState.mouseDelta.y += event.motion.yrel;
             break;
 
         default:
@@ -516,7 +581,7 @@ namespace Modules::NextDotNet
         // Deliberately shallow: the authoritative build happens in CMake, which publishes into the
         // binary directory. This only exists so editing C# and pressing run picks the change up
         // without a C++ rebuild, and it stays quiet when the SDK is not reachable.
-        const std::filesystem::path sourceRoot = ResolveManagedSourceRoot();
+        const std::filesystem::path sourceRoot = ManagedSourceRoot();
         std::error_code ec;
         if (sourceRoot.empty())
         {
@@ -570,8 +635,16 @@ namespace Modules::NextDotNet
             }
         }
 
+        const std::filesystem::path dotnet = ResolveDotNetExecutable();
+        if (dotnet.empty())
+        {
+            SPDLOG_WARN("[dotnet] managed rebuild skipped: SDK executable not found under {}", ResolveDotNetRoot().string());
+            return false;
+        }
+
         SPDLOG_INFO("[dotnet] managed sources changed; rebuilding assets/csharp");
-        const std::string command = "dotnet publish \"" + (sourceRoot / "GkNext.Game" / "GkNext.Game.csproj").string() +
+        const std::string command = "\"" + dotnet.string() + "\" publish \"" +
+                                    (sourceRoot / "GkNext.Game" / "GkNext.Game.csproj").string() +
                                     "\" -c Release -o \"" + (ResolveManagedRoot() / "game").string() + "\" --nologo";
         const int exitCode = NextRenderer::OSProcess(command.c_str());
         if (exitCode != 0)
@@ -613,6 +686,9 @@ namespace Modules::NextDotNet
         gameAssemblyTimestamp_ = timestamp;
 
         const std::string path = gameAssemblyPath_.string();
+        // The outgoing instance is unloaded first whatever happens next, and the incoming one has
+        // no ids for what it left behind.
+        ReleaseManagedCharacters();
         const int32_t status = managed_->ReloadGame(MakeStr(path));
         switch (static_cast<EGameStatus>(status))
         {

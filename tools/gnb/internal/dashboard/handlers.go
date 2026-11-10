@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"fmt"
+	"html/template"
 	"net/http"
 	"runtime"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/gitops"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/i18n"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/llm"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/loc"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/platform"
@@ -25,6 +27,12 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /docs/save", s.handleDocsSave)
 	mux.HandleFunc("GET /docs/source", s.handleDocsSource)
 	mux.HandleFunc("GET /graph/data", s.handleGraphData)
+	mux.HandleFunc("GET /validation/{id}/artifact/{path...}", s.handleValidationArtifact)
+	mux.HandleFunc("GET /validation/{id}/log", s.handleValidationLog)
+	mux.HandleFunc("GET /validation/{id}/steps", s.handleValidationSteps)
+	mux.HandleFunc("POST /validation/run-script", s.handleValidationRunScript)
+	mux.HandleFunc("POST /validation/{id}/review", s.handleValidationReview)
+	mux.HandleFunc("POST /validation/{id}/rerun", s.handleValidationRerun)
 	mux.HandleFunc("GET /task/{id}", s.handleTaskDetail)
 	mux.HandleFunc("POST /task/add", s.handleTaskAdd)
 	mux.HandleFunc("POST /task/{id}/done", s.handleTaskDone)
@@ -37,6 +45,8 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /task/{id}/spec/save", s.handleTaskSpecSave)
 	mux.HandleFunc("POST /task/{id}/delete", s.handleTaskDelete)
 	mux.HandleFunc("GET /tab/{kind}", s.handleTab)
+	mux.HandleFunc("GET /settings/lang", s.handleSetLang)
+	mux.HandleFunc("POST /settings/lang", s.handleSetLang)
 	mux.HandleFunc("POST /jobs/{kind}", s.handleJobStart)
 	mux.HandleFunc("POST /jobs/{id}/cancel", s.handleJobCancel)
 	mux.HandleFunc("OPTIONS /jobs/{id}/stream", s.handleJobStreamOptions)
@@ -85,26 +95,27 @@ type sectionVM struct {
 }
 
 type indexVM struct {
-	RepoRoot   string
-	StreamBase string
-	Milestone  string
-	Status     string
-	Sections   []sectionVM
-	Journals   []journalSummary
-	Version    string
-	Preset     string
-	OS         string
-	RecentSize int
-	ActiveTab  string // "todo" | "docs" | "build" | "remote" | "test" | "git" | "chat" | "loc" | "paks" | "graph" | "settings"
-	BuildVM    buildRunVM
-	RemoteVM   remoteVM
-	TestVM     testVM
-	GitVM      gitVM
-	ChatVM     chatVM
-	LocVM      locVM
-	PaksVM     paksVM
-	DocsVM     docsVM
-	GraphVM    graphVM
+	RepoRoot     string
+	StreamBase   string
+	Milestone    string
+	Status       string
+	Sections     []sectionVM
+	Journals     []journalSummary
+	Version      string
+	Preset       string
+	OS           string
+	RecentSize   int
+	ActiveTab    string // "todo" | "docs" | "build" | "remote" | "test" | "git" | "chat" | "loc" | "paks" | "graph" | "validation" | "settings"
+	BuildVM      buildRunVM
+	RemoteVM     remoteVM
+	TestVM       testVM
+	GitVM        gitVM
+	ChatVM       chatVM
+	LocVM        locVM
+	PaksVM       paksVM
+	DocsVM       docsVM
+	GraphVM      graphVM
+	ValidationVM validationVM
 }
 
 type locVM struct {
@@ -185,9 +196,10 @@ type gitVM struct {
 }
 
 type buildRunVM struct {
-	Targets []targetVM
-	Latest  JobSnapshot
-	HasJob  bool
+	Targets      []targetVM
+	TargetGroups []TargetGroupVM
+	Latest       JobSnapshot
+	HasJob       bool
 }
 
 type remoteVM struct {
@@ -208,12 +220,13 @@ type remoteVM struct {
 }
 
 type testVM struct {
-	Tests     []TestCase
-	ListErr   string
-	BinPath   string
-	BinExists bool
-	Latest    JobSnapshot
-	HasJob    bool
+	Tests      []TestCase
+	Categories []CategoryCount
+	ListErr    string
+	BinPath    string
+	BinExists  bool
+	Latest     JobSnapshot
+	HasJob     bool
 }
 
 type chatVM struct {
@@ -344,8 +357,10 @@ func (s *Server) buildHeader(activeTab string) indexVM {
 }
 
 func (s *Server) buildBuildRunVM() buildRunVM {
+	targets := discoverTargets(s.opts.RepoRoot, s.opts.Preset, s.opts.Config.Targets.All)
 	vm := buildRunVM{
-		Targets: discoverTargets(s.opts.RepoRoot, s.opts.Preset, s.opts.Config.Targets.All),
+		Targets:      targets,
+		TargetGroups: groupTargets(targets),
 	}
 	build, hasBuild := s.jobs.LatestSnapshot(JobBuild)
 	run, hasRun := s.jobs.LatestSnapshot(JobRun)
@@ -373,11 +388,12 @@ func (s *Server) buildTestVM() testVM {
 	binDir := platform.BinDir(s.opts.RepoRoot, s.opts.Preset)
 	binPath := platform.ExecutablePath(binDir, "gkNextUnitTests")
 	vm := testVM{BinPath: binPath}
-	cases, err := ListCatch2Tests(binPath)
+	cases, categories, err := ListCatch2Tests(binPath)
 	if err != nil {
 		vm.ListErr = err.Error()
 	} else {
 		vm.Tests = cases
+		vm.Categories = categories
 		vm.BinExists = true
 	}
 	if snap, ok := s.jobs.LatestSnapshot(JobTest); ok {
@@ -425,6 +441,17 @@ func (s *Server) buildRemoteVM() remoteVM {
 }
 
 func (s *Server) buildLocVM(includeThirdParty bool, selectedDepth string) locVM {
+	s.cacheMu.RLock()
+	if s.locCache != nil &&
+		time.Since(s.locCache.cachedAt) < 60*time.Second &&
+		s.locCache.thirdParty == includeThirdParty &&
+		s.locCache.depth == selectedDepth {
+		cached := s.locCache.vm
+		s.cacheMu.RUnlock()
+		return cached
+	}
+	s.cacheMu.RUnlock()
+
 	snap, err := loc.Scan(loc.Options{
 		Root:              s.opts.RepoRoot,
 		IncludeThirdParty: includeThirdParty,
@@ -458,6 +485,16 @@ func (s *Server) buildLocVM(includeThirdParty bool, selectedDepth string) locVM 
 	} else {
 		vm.HourlyCommits = buildHourlyCommitGraph(hourlyCounts)
 	}
+
+	s.cacheMu.Lock()
+	s.locCache = &locCacheEntry{
+		vm:         vm,
+		cachedAt:   time.Now(),
+		thirdParty: includeThirdParty,
+		depth:      selectedDepth,
+	}
+	s.cacheMu.Unlock()
+
 	return vm
 }
 
@@ -695,10 +732,61 @@ func collectJournals(repoRoot string, doc *spec.Document, limit int) []journalSu
 // ----- handlers -------------------------------------------------------
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("tab") == "paks" {
+	tab := r.URL.Query().Get("tab")
+	switch tab {
+	case "docs":
+		vm := s.buildHeader("docs")
+		vm.DocsVM = s.buildDocsVM(r.URL.Query().Get("file"), r.URL.Query().Get("edit") == "1", "", "")
+		s.render(w, r, "layout.html", vm)
+		return
+	case "build", "run":
+		vm := s.buildHeader("build")
+		vm.BuildVM = s.buildBuildRunVM()
+		s.render(w, r, "layout.html", vm)
+		return
+	case "remote":
+		vm := s.buildHeader("remote")
+		vm.RemoteVM = s.buildRemoteVM()
+		s.render(w, r, "layout.html", vm)
+		return
+	case "test":
+		vm := s.buildHeader("test")
+		vm.TestVM = s.buildTestVM()
+		s.render(w, r, "layout.html", vm)
+		return
+	case "git":
+		vm := s.buildHeader("git")
+		vm.GitVM = s.buildGitVM("")
+		s.render(w, r, "layout.html", vm)
+		return
+	case "chat":
+		vm := s.buildHeader("chat")
+		vm.ChatVM = s.buildChatVM("", "", "", "")
+		s.render(w, r, "layout.html", vm)
+		return
+	case "loc":
+		vm := s.buildHeader("loc")
+		vm.LocVM = s.buildLocVM(r.URL.Query().Get("thirdparty") != "", r.URL.Query().Get("depth"))
+		s.render(w, r, "layout.html", vm)
+		return
+	case "paks":
 		vm := s.buildHeader("paks")
-		vm.PaksVM = s.buildPaksVM(r.URL.Query().Get("file"))
-		s.render(w, "layout.html", vm)
+		vm.PaksVM = s.buildPaksVM(r.URL.Query().Get("file"), r.URL.Query().Get("q"), parsePakLimit(r.URL.Query().Get("limit")))
+		s.render(w, r, "layout.html", vm)
+		return
+	case "graph":
+		vm := s.buildHeader("graph")
+		vm.GraphVM = s.buildGraphVM()
+		s.render(w, r, "layout.html", vm)
+		return
+	case "validation":
+		vm := s.buildHeader("validation")
+		vm.ValidationVM = s.buildValidationVM(r.URL.Query())
+		s.render(w, r, "layout.html", vm)
+		return
+	case "settings":
+		vm := s.buildHeader("settings")
+		s.render(w, r, "layout.html", vm)
 		return
 	}
 	vm, err := s.buildIndex()
@@ -706,24 +794,69 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		httpError(w, err)
 		return
 	}
-	s.render(w, "layout.html", vm)
+	s.render(w, r, "layout.html", vm)
 }
 
 // ----- helpers --------------------------------------------------------
 
-func (s *Server) render(w http.ResponseWriter, name string, data any) {
+func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, data any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	var err error
-	if strings.HasSuffix(name, ".html") {
-		err = s.tpl.ExecuteTemplate(w, name, data)
-	} else {
-		err = s.tpl.ExecuteTemplate(w, name, data)
+	lang := s.resolveLang(r)
+	var tpl *template.Template
+	if s.tplByLang != nil {
+		tpl = s.tplByLang[lang]
+		if tpl == nil {
+			tpl = s.tplByLang[i18n.LangZh]
+		}
 	}
-	if err != nil {
-		// Headers may already be flushed; best we can do is log.
+	if tpl == nil && s.tpl != nil {
+		// Fallback for tests that constructed Server directly without New():
+		cloned, err := s.tpl.Clone()
+		if err == nil {
+			cloned.Funcs(langFuncs(lang))
+			tpl = cloned
+		} else {
+			tpl = s.tpl
+		}
+	}
+	if tpl == nil {
+		http.Error(w, "template not initialized", http.StatusInternalServerError)
+		return
+	}
+	if err := tpl.ExecuteTemplate(w, name, data); err != nil {
 		fmt.Printf("template %s error: %v\n", name, err)
 	}
+}
+
+func (s *Server) withLang(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if lang := i18n.Parse(r.URL.Query().Get("lang")); lang != "" {
+			i18n.SetCookie(w, lang)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) handleSetLang(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	lang := i18n.Parse(r.FormValue("lang"))
+	if lang == "" {
+		lang = i18n.Parse(r.URL.Query().Get("lang"))
+	}
+	if lang == "" {
+		http.Error(w, "invalid lang", http.StatusBadRequest)
+		return
+	}
+	i18n.SetCookie(w, lang)
+	loc := r.Header.Get("Referer")
+	if loc == "" {
+		loc = "/"
+	}
+	http.Redirect(w, r, loc, http.StatusSeeOther)
 }
 
 func parsePathID(r *http.Request) (int, error) {
@@ -753,50 +886,54 @@ func (s *Server) handleTab(w http.ResponseWriter, r *http.Request) {
 			httpError(w, err)
 			return
 		}
-		s.render(w, "tab_todo", vm)
+		s.render(w, r, "tab_todo", vm)
 	case "build":
 		vm := s.buildHeader("build")
 		vm.BuildVM = s.buildBuildRunVM()
-		s.render(w, "tab_build", vm)
+		s.render(w, r, "tab_build", vm)
 	case "remote":
 		vm := s.buildHeader("remote")
 		vm.RemoteVM = s.buildRemoteVM()
-		s.render(w, "tab_remote", vm)
+		s.render(w, r, "tab_remote", vm)
 	case "docs":
 		vm := s.buildHeader("docs")
 		vm.DocsVM = s.buildDocsVM(r.URL.Query().Get("file"), r.URL.Query().Get("edit") == "1", "", "")
-		s.render(w, "tab_docs", vm)
+		s.render(w, r, "tab_docs", vm)
 	case "run":
 		vm := s.buildHeader("build")
 		vm.BuildVM = s.buildBuildRunVM()
-		s.render(w, "tab_build", vm)
+		s.render(w, r, "tab_build", vm)
 	case "test":
 		vm := s.buildHeader("test")
 		vm.TestVM = s.buildTestVM()
-		s.render(w, "tab_test", vm)
+		s.render(w, r, "tab_test", vm)
 	case "git":
 		vm := s.buildHeader("git")
 		vm.GitVM = s.buildGitVM("")
-		s.render(w, "tab_git", vm)
+		s.render(w, r, "tab_git", vm)
 	case "chat":
 		vm := s.buildHeader("chat")
 		vm.ChatVM = s.buildChatVM("", "", "", "")
-		s.render(w, "tab_chat", vm)
+		s.render(w, r, "tab_chat", vm)
 	case "loc":
 		vm := s.buildHeader("loc")
 		vm.LocVM = s.buildLocVM(r.URL.Query().Get("thirdparty") != "", r.URL.Query().Get("depth"))
-		s.render(w, "tab_loc", vm)
+		s.render(w, r, "tab_loc", vm)
 	case "paks":
 		vm := s.buildHeader("paks")
-		vm.PaksVM = s.buildPaksVM(r.URL.Query().Get("file"))
-		s.render(w, "tab_paks", vm)
+		vm.PaksVM = s.buildPaksVM(r.URL.Query().Get("file"), r.URL.Query().Get("q"), parsePakLimit(r.URL.Query().Get("limit")))
+		s.render(w, r, "tab_paks", vm)
 	case "graph":
 		vm := s.buildHeader("graph")
 		vm.GraphVM = s.buildGraphVM()
-		s.render(w, "tab_graph", vm)
+		s.render(w, r, "tab_graph", vm)
+	case "validation":
+		vm := s.buildHeader("validation")
+		vm.ValidationVM = s.buildValidationVM(r.URL.Query())
+		s.render(w, r, "tab_validation", vm)
 	case "settings":
 		vm := s.buildHeader("settings")
-		s.render(w, "tab_settings", vm)
+		s.render(w, r, "tab_settings", vm)
 	default:
 		http.Error(w, "unknown tab "+kind, http.StatusNotFound)
 	}

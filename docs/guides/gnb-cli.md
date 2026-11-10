@@ -4,12 +4,22 @@ category: guide
 status: 现行
 owner: tools
 created: 2026-06-24
-last_updated: 2026-07-17
+last_updated: 2026-09-12
 ---
 
 # gnb CLI 速查
 
 以下只描述稳定入口；完整参数始终以当前源码的 `./gnb.sh <command> --help`（Windows 为 `gnb.bat`）为准。开发 gnb 自身时不要依赖可能过期的仓库根二进制。
+
+## 语言
+
+Dashboard 与 `gnb --help` 支持中/英切换。解析顺序：`--lang zh|en|auto`，环境变量 `GNB_LANG`，`gnb.toml` 的 `[gnb].lang`，最后是操作系统 UI 语言。Dashboard 标题栏的「中 / EN」会写入 cookie `gnb_lang` 并立即生效，不必重启。日志和错误输出仍为英文，方便脚本抓取。
+
+```bash
+./gnb.sh --lang en help
+./gnb.sh --lang zh dashboard
+GNB_LANG=en ./gnb.sh doctor
+```
 
 ## 环境与构建
 
@@ -34,11 +44,28 @@ last_updated: 2026-07-17
 ./gnb.sh visual
 ./gnb.sh shot --scene assets/models/playground.glb
 ./gnb.sh validate --script assets/agentscripts/smoke.agentscript.json
+./gnb.sh validation note <runId> --issue --message "角色穿过台阶，见第二张截图"
 ./gnb.sh tui --scene assets/models/playground.glb
 ./gnb.sh remote --scene assets/models/playground.glb
+./gnb.sh ds                          # NextDayz：本地 DS + 1 个客户端
+./gnb.sh ds --clients 2 --pvp        # 两名幸存者，允许互伤
+./gnb.sh ds --master --clients 2     # 进程内 Master，客户端从大厅登录、选装备、出击
+./gnb.sh ds --bots 16 --minutes 30   # 压测：16 个 NextDayzBots，结束给出 RESULT（失败非零退出）
+./gnb.sh master serve                # 单独运行 NextDayz Master（127.0.0.1:7780）
+./gnb.sh master status               # 地图服务器、账号、谁在哪；另有 kick / pvp / stop
 ```
 
-`shot` 是快速肉眼验证；`validate` 用输入脚本驱动并断言；`visual` 才是多场景 baseline 回归。Remote Play 的安全与能力边界见 [当前设计](../designs/webrtc-remoteplay-design.md)。
+`ds` 先以引擎 `--dedicated` 模式启动专用服务器（无本地玩家，不绘制），等它监听端口并加载完地图，再逐个启动可见客户端连上 `127.0.0.1`。
+所有客户端退出（或 Ctrl+C）时一并停止服务器；`--clients 0` 只起服务器，`--keep-server` 让服务器在客户端退出后继续运行，
+`--show-server` 改为在可见窗口里绘制服务器，`--cheats` 让服务器接受客户端测试钩子的自伤（仅自动化测试），`--` 之后的参数追加给每个客户端。服务器总是带 `--disable-streamline`；
+多于一个客户端时每个客户端也带上（同时多个 Streamline/DLSS 实例会出错），单客户端保留 DLSS。每次运行的日志在 `out/build/<preset>/ds-runs/<时间>/`
+（`server.log`、`client<N>.log`），终端只回显联网与错误行。联机设计见 [NextDayz 多人联机](../projects/nextdayz/nextdayz-multiplayer-design.md)。
+
+`shot` 是快速肉眼验证；`validate` 用输入脚本驱动并断言；`visual` 才是多场景 baseline 回归。每次 `shot`/`validate` 会先在 `out/build/<preset>/validation_runs/<runId>/` 登记运行，Dashboard 未启动也不会丢失记录；CLI 会打印 `runId` 与证据目录。`gnb validation note` 只写入独立的 `review.json`，不会把人工结论伪装成机器通过。Remote Play 的安全与能力边界见 [当前设计](../designs/webrtc-remoteplay-design.md)。
+
+`shot` 会先等待 `scene.ready`（场景提交、管线预热及纹理上传完成），再计算 `--frames` 指定的稳定帧数（默认 90）；途中再次加载资源会重新计帧。无需额外写固定秒数等待，未指定 `--scene` 时也适用。就绪等待失败会返回非零退出码，证据目录中的失败截图仅用于排查。
+
+打开 Dashboard 的“验证”页后，会自动发现 `assets/agentscripts/*.agentscript.json`，并列出脚本的 target、场景和步骤数。已构建 target 的脚本可以直接点击“后台验证”或“可见验证”启动，不必另开终端；未构建的 target 会保留在列表中并明确标记原因。
 
 ## 项目工具
 
@@ -51,7 +78,7 @@ last_updated: 2026-07-17
 ./gnb.sh package <windows|linux|macos>
 # 使用 gnb.toml 的 default package preset，隐藏运行其目标并生成单一 runtime.pak
 ./gnb.sh package windows --trace-assets --version v0.1.2.0
-# 使用独立的 MagicaLego preset，但复用完全相同的 trace / runtime.pak / 7z 流程
+# 本地或按需交付可使用独立的 MagicaLego preset（tag Release 只发布 default）
 ./gnb.sh package windows --package-preset magicalego --trace-assets --version m0.1.0
 # 复用多轮运行合并出的覆盖清单（也适合无 GPU / 跨平台打包环境）
 ./gnb.sh package windows --asset-trace out/build/windows/asset-traces/release-assets.txt --version v0.1.2.0
@@ -72,7 +99,7 @@ package preset 配置在 `gnb.toml` 的 `[package.presets.<name>]`，可独立�
 同时使用。Release CI 在 Linux/Lavapipe 上生成这两个 preset 的资产包，再由 Windows 与 macOS
 直接装配到各自的归档中。
 
-裸 `gnb` 启动 Dashboard。Windows/macOS 使用 Wails 原生窗口；Linux build 回退浏览器，`dashboard --no-open` 为 server-only。
+裸 `gnb` 启动 Dashboard。Windows/macOS 使用 Wails 原生窗口；Linux build 回退浏览器，`dashboard --no-open` 为 server-only。Dashboard 的「验证」页会轮询运行目录，展示运行中/历史、失败步骤、日志尾部和已完成截图；终态运行可以后台重跑或可见重跑。可见重跑是按脚本快照使用当前构建创建的新运行，不是历史录像；截图也不是直播。可在「待处理」筛选中集中查看机器失败、待审阅和已记录问题。
 
 ## AI、LLM 与 SCAD
 
@@ -111,21 +138,20 @@ package preset 配置在 `gnb.toml` 的 `[package.presets.<name>]`，可独立�
 ## 移动平台与安装
 
 ```bash
-./gnb.sh android build    # CMake 驱动构建 release APK
-./gnb.sh android run      # 安装并启动已构建的 APK
+./gnb.sh android build [variant] [--app <target>]  # 默认 release
+./gnb.sh android run [variant] [--app <target>]    # 安装并启动
 ./gnb.sh android devices  # 列出 adb 已连接设备及其状态
 ./gnb.sh android connect 192.168.1.100:5555  # 通过 adb 连接远程调试设备
 ./gnb.sh android build relwithdebinfo  # 可选：构建带原生调试符号的 APK
-./gnb.sh ios build
-./gnb.sh ios run
+./gnb.sh ios build [--app <target>] --team-id <TEAM_ID>
+./gnb.sh ios run [--app <target>]
 ./gnb.sh install
 ./gnb.sh init
 ```
 
-Android 的 Gradle 工程由 `tools/android/templates/` 生成到
-`out/build/android-<variant>/gradle/`，固定 APK 位于
-`out/build/android-<variant>/apk/gkNextRenderer-<variant>.apk`。默认 variant 是
-`release`。如需保留 CMake 的 `RelWithDebInfo` 及 Android debug 签名以便安装和原生调试，使用
+Android 的 Gradle 工程由 `tools/android/templates/` 生成到 application 对应的构建目录，APK 位于其
+`apk/<target>-<variant>.apk`。可选 application 及其 applicationId、显示名和 .NET 要求以
+[`MobileApplications.json`](../../src/Application/MobileApplications.json) 为准；省略 `--app` 时使用登记表第一项。默认 variant 是 `release`。如需保留 CMake 的 `RelWithDebInfo` 及 Android debug 签名以便安装和原生调试，使用
 `gnb android build relwithdebinfo`。
 `gnb android run` 优先安装到当前第一个在线 adb 设备；没有在线设备时，会启动本机第一个 AVD（可用
 `--avd <name>` 指定）并等待其完成启动，再安装运行。Gradle 是内部打包后端，
@@ -161,7 +187,7 @@ release 正式签名从仓库外的 `~/.gknext/android-signing.properties` 自�
 `storeFile`、`storePassword`、`keyAlias` 和 `keyPassword`；未配置时 release 仍生成 unsigned
 APK 供 CI 构建验证，但不能直接安装或发布。发布密钥必须长期备份，后续升级包必须使用同一密钥。
 
-iOS 由根 CMake 工程生成 arm64 device `.app`；需要签名时通过 `--team-id` 提供仓库外 Team ID，
+iOS 由同一份 application 登记表选择目标并生成 arm64 device `.app`；需要签名时通过 `--team-id` 提供仓库外 Team ID，
 未提供时禁用签名并生成 CI 可验证的 unsigned bundle（该 bundle 无法启动，`gnb ios build` 此时也不会
 生成下面的 wrapper）。可用的 Team ID 通过 `gnb ios teams` 从本机 provisioning profile 列出。项目
 不支持 iOS Simulator。

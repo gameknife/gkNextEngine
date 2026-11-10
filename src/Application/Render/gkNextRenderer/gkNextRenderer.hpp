@@ -8,6 +8,57 @@
 #include "Modules/NextViture/VitureModule.hpp"
 #endif
 
+#define GK_NEXT_RENDERER_SHARED_UI_HELPERS
+#include <array>
+#include <filesystem>
+
+extern float TitlebarSize;
+extern float TitlebarRightInfoWidth;
+extern float ModeRailWidth;
+extern float ModeRailButtonSize;
+
+enum class ESceneListGroup : uint8_t
+{
+    Procedural = 0,
+    Gltf = 1,
+    LDraw = 2,
+    Other = 3,
+};
+
+inline ESceneListGroup GetSceneListGroup(std::string_view scenePath)
+{
+    const std::string extension = std::filesystem::path(scenePath).extension().string();
+    if (extension == ".proc")
+    {
+        return ESceneListGroup::Procedural;
+    }
+    if (extension == ".glb" || extension == ".gltf")
+    {
+        return ESceneListGroup::Gltf;
+    }
+    if (extension == ".ldr" || extension == ".mpd")
+    {
+        return ESceneListGroup::LDraw;
+    }
+    return ESceneListGroup::Other;
+}
+
+inline const char* GetSceneListGroupLabel(ESceneListGroup group)
+{
+    switch (group)
+    {
+    case ESceneListGroup::Procedural:
+        return "Procedural";
+    case ESceneListGroup::Gltf:
+        return "glTF";
+    case ESceneListGroup::LDraw:
+        return "OMR/LDraw";
+    case ESceneListGroup::Other:
+    default:
+        return "Other";
+    }
+}
+
 class NextRendererGameInstance : public NextGameInstanceBase
 {
 public:
@@ -61,12 +112,26 @@ public:
         Count,
     };
 
+    enum class ESettingsCategory : uint8_t
+    {
+        Renderer = 0,
+        Environment,
+        Camera,
+        Quality,
+        VoxelGI,
+        Scene,
+        Animation,
+        PostProcess,
+        Count,
+    };
+
 private:
     struct FRendererUiState
     {
         NextUI::GizmoController gizmoController;
         EWorkMode workMode = EWorkMode::Render;
         EWorkMode lastWorkMode = EWorkMode::Render;
+        ESettingsCategory settingsCategory = ESettingsCategory::Renderer;
         bool showSettings = false;
         bool showCheatSheet = true;
         bool showAbout = false;
@@ -79,9 +144,21 @@ private:
         glm::vec3 right{1.0f, 0.0f, 0.0f};
         glm::vec3 up{0.0f, 1.0f, 0.0f};
         std::string debugName{"tempBox"};
+        bool useMuzzle = false;
+    };
+
+    // One piece of the camera-relative weapon. The offset is in the muzzle frame and in
+    // reference units (x right, y up, z towards the camera); the rig's world scale multiplies it.
+    struct FViewWeaponPart
+    {
+        std::shared_ptr<Assets::Node> node;
+        glm::vec3 localOffset{0.0f};
     };
 
     void CreateBoxAndPushFromView(const FLaunchView& view);
+    void EnsurePhysicsTicking(const char* what);
+    glm::vec3 MuzzleMouthPosition() const;
+    glm::vec3 MuzzleDirection() const;
 
     bool DrawRendererUi(const FGameUiFrameContext& context, FRendererUiState& uiState);
     FRendererUiState& GetRemoteUiState(std::string_view sessionId);
@@ -91,6 +168,9 @@ private:
     void DrawModeRail(FRendererUiState& uiState);
     void DrawViewportTopBar(const FGameUiFrameContext& context, FRendererUiState& uiState);
     void DrawViewportCheatSheet(FRendererUiState& uiState);
+    void DrawShootHint(const FGameUiFrameContext& context);
+    void UpdateMuzzleTransform();
+    void RefreshMuzzleTransform();
     void RequestScreenshot(bool openFolder, const std::string& tag);
     void DrawVideoCaptureMenuItems();
     void RequestThreeSecondVideo(Runtime::IScreenShotService::EVideoOutputScale outputScale);
@@ -116,6 +196,13 @@ private:
 
     uint32_t modelId_;
     uint32_t boxModelId_;
+    uint32_t viewBarrelWallHModelId_ = 0;
+    uint32_t viewBarrelWallVModelId_ = 0;
+    uint32_t viewReceiverModelId_ = 0;
+    uint32_t viewWeaponMatId_ = 0;
+    float launchSceneScale_ = 1.0f;
+    std::array<FViewWeaponPart, 5> viewWeaponParts_{};
+    std::shared_ptr<Assets::Node> muzzleNode_;
     std::vector<uint32_t> matIds_;
     std::vector<uint32_t> dropSphereMatIds_;
     uint32_t dropSphereSequence_ = 0;
@@ -126,4 +213,13 @@ private:
         Runtime::IScreenShotService::EVideoOutputScale::Half;
     bool playbackPaused_ = false;
     bool stepRequested_ = false;
+    float shootHintRemainingSeconds_ = 0.0f;
+    float muzzleFieldOfView_ = -1.0f;
+    // Last frame used to place the weapon. The launch path reads these instead of the node's
+    // world transform, which the scene only publishes a frame later.
+    glm::vec3 muzzleOrigin_{0.0f};
+    glm::quat muzzleRotation_{1.0f, 0.0f, 0.0f, 0.0f};
+    float muzzleRigScale_ = 1.0f;
+    float muzzlePitchOffsetDegrees_ = 0.0f;
+    float muzzleYawOffsetDegrees_ = 0.0f;
 };

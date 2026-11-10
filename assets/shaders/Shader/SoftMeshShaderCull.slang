@@ -118,3 +118,79 @@ public bool IsAABBInFrustum(float3 min, float3 max, float4x4 wvp)
 
     return true;
 }
+
+// ---------------------------------------------------------------------------
+// Discrete LOD selection, shared by the main and shadow cull passes (and their wave variants) so
+// every path resolves a level the same way. The choice is made once per proxy here; expansion and
+// the vertex stage only ever see the index range it resolved to.
+// ---------------------------------------------------------------------------
+
+// Longest screen-space edge of the proxy's projected bounds, in pixels. Anything crossing the near
+// plane returns a huge extent: bounds straddling w=0 have no meaningful projected size, and forcing
+// full detail there is both cheap (it is close) and safe.
+public float ComputeScreenExtent(float3 minPoint, float3 maxPoint, float4x4 wvp, float2 viewportSize)
+{
+    float2 ndcMin = float2(1e30f, 1e30f);
+    float2 ndcMax = float2(-1e30f, -1e30f);
+    for (uint i = 0; i < 8u; ++i)
+    {
+        const float3 corner = float3(
+            (i & 1u) != 0u ? maxPoint.x : minPoint.x,
+            (i & 2u) != 0u ? maxPoint.y : minPoint.y,
+            (i & 4u) != 0u ? maxPoint.z : minPoint.z);
+        const float4 clipPos = mul(wvp, float4(corner, 1.0));
+        if (clipPos.w <= 1e-6f)
+        {
+            return 1e30f;
+        }
+        const float2 ndc = clipPos.xy / clipPos.w;
+        ndcMin = min(ndcMin, ndc);
+        ndcMax = max(ndcMax, ndc);
+    }
+    // NDC spans [-1,1], so half the extent maps onto the viewport dimension.
+    const float2 pixelExtent = (ndcMax - ndcMin) * 0.5f * viewportSize;
+    return max(pixelExtent.x, pixelExtent.y);
+}
+
+// Level 0 at or above baseThreshold pixels, halving the bar for each further level. A
+// baseThreshold of 0 pins everything to level 0, which is the A/B baseline for measuring LOD.
+public uint SelectLod(float screenExtent, uint lodCount, float baseThreshold)
+{
+    uint lod = 0u;
+    float threshold = baseThreshold;
+    while (lod + 1u < lodCount && screenExtent < threshold)
+    {
+        ++lod;
+        threshold *= 0.5f;
+    }
+    return lod;
+}
+
+// The extent Task.RayTracingLodSelect sizes a TLAS instance by. Anything with a corner in front of
+// the eye goes through ComputeScreenExtent untouched: the main view may draw it, and the traced
+// proxy is only guaranteed to be the surface the visibility buffer holds if both sides resolve the
+// same level from the same numbers. Bounds entirely behind the eye are never drawn, so they are
+// free to differ; projecting them through the mirrored w sizes them as a camera facing backwards
+// would, instead of pinning everything behind the player to LOD0.
+public float ComputeRayTracingScreenExtent(float3 minPoint, float3 maxPoint, float4x4 wvp, float2 viewportSize)
+{
+    float2 ndcMin = float2(1e30f, 1e30f);
+    float2 ndcMax = float2(-1e30f, -1e30f);
+    for (uint i = 0; i < 8u; ++i)
+    {
+        const float3 corner = float3(
+            (i & 1u) != 0u ? maxPoint.x : minPoint.x,
+            (i & 2u) != 0u ? maxPoint.y : minPoint.y,
+            (i & 4u) != 0u ? maxPoint.z : minPoint.z);
+        const float4 clipPos = mul(wvp, float4(corner, 1.0));
+        if (clipPos.w >= -1e-6f)
+        {
+            return ComputeScreenExtent(minPoint, maxPoint, wvp, viewportSize);
+        }
+        const float2 ndc = clipPos.xy / -clipPos.w;
+        ndcMin = min(ndcMin, ndc);
+        ndcMax = max(ndcMax, ndc);
+    }
+    const float2 pixelExtent = (ndcMax - ndcMin) * 0.5f * viewportSize;
+    return max(pixelExtent.x, pixelExtent.y);
+}

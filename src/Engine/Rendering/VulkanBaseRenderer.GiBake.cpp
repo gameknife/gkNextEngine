@@ -30,6 +30,250 @@
 
 namespace Vulkan
 {
+    namespace
+    {
+        constexpr uint32_t kAmbientBakeFrameStartQuery = 0u;
+        constexpr uint32_t kAmbientBakeStartQuery = 1u;
+        constexpr uint32_t kAmbientBakeEndQuery = 2u;
+        constexpr uint32_t kAmbientBakeFrameEndQuery = 3u;
+        constexpr uint32_t kAmbientBakeTimestampQueryCount = 4u;
+        constexpr uint32_t kGpuFrameStartQuery = 0u;
+        constexpr uint32_t kGpuFrameEndQuery = 1u;
+        constexpr uint32_t kGpuFrameTimestampQueryCount = 2u;
+
+        bool TryGetElapsedMilliseconds(uint64_t startTimestamp, uint64_t endTimestamp,
+                                       const double timestampPeriodNanoseconds, const uint32_t validBits,
+                                       double& outMilliseconds)
+        {
+            outMilliseconds = 0.0;
+            if (timestampPeriodNanoseconds <= 0.0 || validBits == 0u)
+            {
+                return false;
+            }
+
+            const uint32_t bits = std::min(validBits, 64u);
+            const uint64_t mask = bits == 64u ? std::numeric_limits<uint64_t>::max() : (uint64_t{1} << bits) - 1u;
+            startTimestamp &= mask;
+            endTimestamp &= mask;
+            const uint64_t elapsedTicks = endTimestamp >= startTimestamp
+                ? endTimestamp - startTimestamp
+                : (bits < 64u ? mask - startTimestamp + endTimestamp + 1u : 0u);
+            if (elapsedTicks == 0u && endTimestamp < startTimestamp && bits == 64u)
+            {
+                return false;
+            }
+
+            outMilliseconds = static_cast<double>(elapsedTicks) * timestampPeriodNanoseconds * 1.0e-6;
+            return std::isfinite(outMilliseconds);
+        }
+    }
+
+    void VulkanBaseRenderer::BeginGpuFrameTiming(const VkCommandBuffer commandBuffer)
+    {
+        gpuFrameTiming_.frameActive = false;
+        if (gpuFrameTiming_.queryPool == VK_NULL_HANDLE)
+        {
+            const auto queueFamilies = GetEnumerateVector(
+                ctx_.device->PhysicalDevice(), vkGetPhysicalDeviceQueueFamilyProperties);
+            const uint32_t queueFamily = ctx_.device->GraphicsFamilyIndex();
+            const double timestampPeriod = ctx_.device->DeviceProperties().limits.timestampPeriod;
+            if (queueFamily >= queueFamilies.size() || queueFamilies[queueFamily].timestampValidBits == 0u ||
+                timestampPeriod <= 0.0)
+            {
+                return;
+            }
+
+            VkQueryPoolCreateInfo createInfo{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+            createInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
+            createInfo.queryCount = kGpuFrameTimestampQueryCount;
+            if (vkCreateQueryPool(ctx_.device->Handle(), &createInfo, nullptr, &gpuFrameTiming_.queryPool) != VK_SUCCESS)
+            {
+                SPDLOG_WARN("GPU frame timing disabled: failed to create timestamp query pool");
+                gpuFrameTiming_.queryPool = VK_NULL_HANDLE;
+                return;
+            }
+            gpuFrameTiming_.timestampValidBits = std::min(queueFamilies[queueFamily].timestampValidBits, 64u);
+            gpuFrameTiming_.timestampPeriodNanoseconds = timestampPeriod;
+        }
+
+        if (gpuFrameTiming_.pending)
+        {
+            std::array<uint64_t, kGpuFrameTimestampQueryCount * 2u> results{};
+            const VkResult result = vkGetQueryPoolResults(
+                ctx_.device->Handle(), gpuFrameTiming_.queryPool, 0u, kGpuFrameTimestampQueryCount,
+                sizeof(results), results.data(), sizeof(uint64_t) * 2u,
+                VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+            if (result == VK_SUCCESS && results[kGpuFrameStartQuery * 2u + 1u] != 0u &&
+                results[kGpuFrameEndQuery * 2u + 1u] != 0u)
+            {
+                double milliseconds = 0.0;
+                if (TryGetElapsedMilliseconds(results[kGpuFrameStartQuery * 2u], results[kGpuFrameEndQuery * 2u],
+                                               gpuFrameTiming_.timestampPeriodNanoseconds,
+                                               gpuFrameTiming_.timestampValidBits, milliseconds))
+                {
+                    gpuFrameTiming_.lastMilliseconds = milliseconds;
+                }
+                gpuFrameTiming_.pending = false;
+            }
+            else if (result != VK_NOT_READY)
+            {
+                SPDLOG_WARN("GPU frame timing disabled: timestamp query failed ({})", static_cast<int>(result));
+                DeleteGpuFrameTiming();
+                return;
+            }
+            else
+            {
+                return;
+            }
+        }
+
+        vkCmdResetQueryPool(commandBuffer, gpuFrameTiming_.queryPool, 0u, kGpuFrameTimestampQueryCount);
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, gpuFrameTiming_.queryPool,
+                            kGpuFrameStartQuery);
+        gpuFrameTiming_.frameActive = true;
+    }
+
+    void VulkanBaseRenderer::EndGpuFrameTiming(const VkCommandBuffer commandBuffer)
+    {
+        if (!gpuFrameTiming_.frameActive)
+        {
+            return;
+        }
+
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, gpuFrameTiming_.queryPool,
+                            kGpuFrameEndQuery);
+        gpuFrameTiming_.pending = true;
+        gpuFrameTiming_.frameActive = false;
+    }
+
+    void VulkanBaseRenderer::DeleteGpuFrameTiming()
+    {
+        if (gpuFrameTiming_.queryPool != VK_NULL_HANDLE && ctx_.device)
+        {
+            vkDestroyQueryPool(ctx_.device->Handle(), gpuFrameTiming_.queryPool, nullptr);
+        }
+        gpuFrameTiming_ = {};
+    }
+
+    void VulkanBaseRenderer::BeginAmbientBakeFrameTiming(const VkCommandBuffer commandBuffer)
+    {
+        ambient_.timingFrameActive = false;
+        ambient_.timingBakeDispatched = false;
+        if (!ActiveRendererRequirements().requestAmbientCube || ShouldSkipAmbientCubeUpdates())
+        {
+            return;
+        }
+
+        if (ambient_.timingQueryPool == VK_NULL_HANDLE)
+        {
+            const auto queueFamilies = GetEnumerateVector(
+                ctx_.device->PhysicalDevice(), vkGetPhysicalDeviceQueueFamilyProperties);
+            const uint32_t queueFamily = ctx_.device->GraphicsFamilyIndex();
+            const double timestampPeriod = ctx_.device->DeviceProperties().limits.timestampPeriod;
+            if (queueFamily >= queueFamilies.size() || queueFamilies[queueFamily].timestampValidBits == 0u ||
+                timestampPeriod <= 0.0)
+            {
+                return;
+            }
+
+            VkQueryPoolCreateInfo createInfo{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+            createInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
+            createInfo.queryCount = kAmbientBakeTimestampQueryCount;
+            if (vkCreateQueryPool(ctx_.device->Handle(), &createInfo, nullptr, &ambient_.timingQueryPool) != VK_SUCCESS)
+            {
+                SPDLOG_WARN("Ambient bake timing disabled: failed to create timestamp query pool");
+                ambient_.timingQueryPool = VK_NULL_HANDLE;
+                return;
+            }
+            ambient_.timestampValidBits = std::min(queueFamilies[queueFamily].timestampValidBits, 64u);
+            ambient_.timestampPeriodNanoseconds = timestampPeriod;
+        }
+
+        if (ambient_.timingPending)
+        {
+            std::array<uint64_t, kAmbientBakeTimestampQueryCount * 2u> results{};
+            const VkResult result = vkGetQueryPoolResults(
+                ctx_.device->Handle(), ambient_.timingQueryPool, 0u, kAmbientBakeTimestampQueryCount,
+                sizeof(results), results.data(), sizeof(uint64_t) * 2u,
+                VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+            if (result == VK_SUCCESS && results[kAmbientBakeFrameStartQuery * 2u + 1u] != 0u &&
+                results[kAmbientBakeStartQuery * 2u + 1u] != 0u &&
+                results[kAmbientBakeEndQuery * 2u + 1u] != 0u &&
+                results[kAmbientBakeFrameEndQuery * 2u + 1u] != 0u)
+            {
+                double totalMilliseconds = 0.0;
+                double bakeMilliseconds = 0.0;
+                if (TryGetElapsedMilliseconds(results[kAmbientBakeFrameStartQuery * 2u],
+                                               results[kAmbientBakeFrameEndQuery * 2u],
+                                               ambient_.timestampPeriodNanoseconds, ambient_.timestampValidBits,
+                                               totalMilliseconds) &&
+                    TryGetElapsedMilliseconds(results[kAmbientBakeStartQuery * 2u],
+                                               results[kAmbientBakeEndQuery * 2u],
+                                               ambient_.timestampPeriodNanoseconds, ambient_.timestampValidBits,
+                                               bakeMilliseconds) &&
+                    bakeMilliseconds > 0.0 && ambient_.lastDispatchedGroups > 0u)
+                {
+                    constexpr double smoothing = 0.2;
+                    const double millisecondsPerGroup = bakeMilliseconds / ambient_.lastDispatchedGroups;
+                    const double nonBakeMilliseconds = std::max(0.0, totalMilliseconds - bakeMilliseconds);
+                    ambient_.lastBakeMilliseconds = bakeMilliseconds;
+                    ambient_.smoothedMillisecondsPerGroup = ambient_.smoothedMillisecondsPerGroup > 0.0
+                        ? ambient_.smoothedMillisecondsPerGroup * (1.0 - smoothing) + millisecondsPerGroup * smoothing
+                        : millisecondsPerGroup;
+                    ambient_.smoothedNonBakeMilliseconds = ambient_.smoothedNonBakeMilliseconds > 0.0
+                        ? ambient_.smoothedNonBakeMilliseconds * (1.0 - smoothing) + nonBakeMilliseconds * smoothing
+                        : nonBakeMilliseconds;
+                }
+                ambient_.timingPending = false;
+            }
+            else if (result != VK_NOT_READY)
+            {
+                SPDLOG_WARN("Ambient bake timing disabled: timestamp query failed ({})", static_cast<int>(result));
+                DeleteAmbientBakeFrameTiming();
+                return;
+            }
+            else
+            {
+                // The frame fence normally guarantees readiness. Do not reset a query pool whose
+                // results are unexpectedly still in flight.
+                return;
+            }
+        }
+
+        vkCmdResetQueryPool(commandBuffer, ambient_.timingQueryPool, 0u, kAmbientBakeTimestampQueryCount);
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, ambient_.timingQueryPool,
+                            kAmbientBakeFrameStartQuery);
+        ambient_.timingFrameActive = true;
+    }
+
+    void VulkanBaseRenderer::EndAmbientBakeFrameTiming(const VkCommandBuffer commandBuffer)
+    {
+        if (!ambient_.timingFrameActive)
+        {
+            return;
+        }
+
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, ambient_.timingQueryPool,
+                            kAmbientBakeFrameEndQuery);
+        ambient_.timingPending = ambient_.timingBakeDispatched;
+        ambient_.timingFrameActive = false;
+    }
+
+    void VulkanBaseRenderer::DeleteAmbientBakeFrameTiming()
+    {
+        if (ambient_.timingQueryPool != VK_NULL_HANDLE && ctx_.device)
+        {
+            vkDestroyQueryPool(ctx_.device->Handle(), ambient_.timingQueryPool, nullptr);
+        }
+        ambient_.timingQueryPool = VK_NULL_HANDLE;
+        ambient_.timestampValidBits = 0u;
+        ambient_.timestampPeriodNanoseconds = 0.0;
+        ambient_.lastBakeMilliseconds = 0.0;
+        ambient_.timingFrameActive = false;
+        ambient_.timingBakeDispatched = false;
+        ambient_.timingPending = false;
+    }
+
     void VulkanBaseRenderer::HandleAmbientCubeCacheInvalidation(VkCommandBuffer commandBuffer, uint32_t imageIndex)
     {
         if (!ActiveRendererRequirements().requestAmbientCube || ShouldSkipAmbientCubeUpdates())
@@ -138,16 +382,12 @@ namespace Vulkan
                         dirtyRevision, dirtyBrickTotal, useHardware ? "hardware" : "software");
         }
 
-        const double frameSeconds = NextEngine::GetInstance()->GetDeltaSeconds();
-        if (std::isfinite(frameSeconds) && frameSeconds > 0.0)
+        if (ambient_.smoothedMillisecondsPerGroup > 0.0 && ambient_.smoothedNonBakeMilliseconds >= 0.0)
         {
-            constexpr double smoothing = 0.2;
-            ambient_.smoothedFrameTimeSeconds = ambient_.smoothedFrameTimeSeconds > 0.0
-                ? ambient_.smoothedFrameTimeSeconds * (1.0 - smoothing) + frameSeconds * smoothing
-                : frameSeconds;
             ambient_.groupsPerFrame = AmbientBake::PlanNextDispatchGroups(
                 ambient_.groupsPerFrame,
-                ambient_.smoothedFrameTimeSeconds,
+                ambient_.smoothedMillisecondsPerGroup,
+                ambient_.smoothedNonBakeMilliseconds,
                 NextEngine::GetInstance()->GetUserSettings().AmbientCubeBakeTargetFps);
         }
 
@@ -236,7 +476,19 @@ namespace Vulkan
 
         vkCmdPushConstants(commandBuffer, pipeline->PipelineLayout().Handle(),
                            VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Assets::GPUScene), &gpuScene);
+        if (ambient_.timingFrameActive)
+        {
+            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, ambient_.timingQueryPool,
+                                kAmbientBakeStartQuery);
+        }
         vkCmdDispatch(commandBuffer, dispatchGroupCount, 1, 1);
+        if (ambient_.timingFrameActive)
+        {
+            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, ambient_.timingQueryPool,
+                                kAmbientBakeEndQuery);
+            ambient_.timingBakeDispatched = true;
+            ambient_.lastDispatchedGroups = dispatchGroupCount;
+        }
 
         ambient_.nextGroup[cascadeIndex] = offset + dispatchGroupCount;
         if (ambient_.nextGroup[cascadeIndex] >= totalGroups)
@@ -285,6 +537,14 @@ namespace Vulkan
         progress.completedDispatchGroups = std::min(progress.completedDispatchGroups, progress.totalDispatchGroups);
         progress.active = progress.totalDispatchGroups > 0u;
         return progress;
+    }
+
+    FGpuFrameTiming VulkanBaseRenderer::GetGpuFrameTiming() const
+    {
+        return {
+            .milliseconds = gpuFrameTiming_.lastMilliseconds,
+            .valid = gpuFrameTiming_.lastMilliseconds > 0.0,
+        };
     }
 
 }

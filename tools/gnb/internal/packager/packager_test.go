@@ -1,6 +1,7 @@
 package packager
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -316,5 +317,57 @@ func TestSmokeTargetsReadsPackageManifest(t *testing.T) {
 	}
 	if len(targets) != 1 || targets[0] != "MagicaLego" {
 		t.Fatalf("smoke targets = %v, want [MagicaLego]", targets)
+	}
+}
+
+func TestLooseAssetsPreserveSameBasenamesInBothPackageModes(t *testing.T) {
+	for _, precise := range []bool{false, true} {
+		t.Run(fmt.Sprint("precise=", precise), func(t *testing.T) {
+			root := t.TempDir()
+			build := filepath.Join(root, "build")
+			files := []string{
+				"bin/ScadLibrary" + platformExeExt(),
+				"assets/scad/lib/shared.scad",
+				"assets/scad/source/shared.scad",
+				"assets/scad/lib/catalog.json",
+				"assets/configs/game.json",
+			}
+			for _, rel := range files {
+				path := filepath.Join(build, filepath.FromSlash(rel))
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte(rel), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			preset := Preset{Name: "test", Targets: []string{"ScadLibrary"}, ExtraFiles: []string{"assets/scad", "assets/configs"}}
+			var preciseAssets []entry
+			if precise {
+				preciseAssets = []entry{{name: "assets/paks/runtime.pak"}}
+			}
+			entries, err := collectDesktopEntries(root, build, "linux", "test", preset, preciseAssets, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			counts := map[string]int{}
+			for _, item := range entries {
+				counts[item.name]++
+				if counts[item.name] > 1 {
+					t.Fatalf("duplicate archive path: %s", item.name)
+				}
+			}
+			for _, rel := range files {
+				if counts[rel] != 1 {
+					t.Errorf("missing required file: %s", rel)
+				}
+			}
+			if err := os.RemoveAll(filepath.Join(build, "assets", "scad")); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := collectDesktopEntries(root, build, "linux", "test", preset, preciseAssets, false); err == nil {
+				t.Fatal("missing required loose assets must fail packaging")
+			}
+		})
 	}
 }

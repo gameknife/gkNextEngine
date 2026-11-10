@@ -1,0 +1,343 @@
+{
+  "name": "nextdayz-debug-expedition",
+  "target": "NextDayz",
+  "scene": "assets/scad/proc/nextdayz/cz_loket_riverbend/published/v3/scene.scad",
+  "viewport": {
+    "width": 1600,
+    "height": 900
+  },
+  "defaults": {
+    "waitFrames": 2,
+    "stepTimeoutMs": 120000
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 120000
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignPath",
+      "set": "out/nextdayz-validation/debug-expedition.json"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignFresh",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaign",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.deployMap",
+      "set": "cz_loket_riverbend"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "deploy"
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignInField",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.addBackpack",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "food_can:2"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.god",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.freezeNeeds",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.panel",
+      "set": true
+    },
+    {
+      "type": "key",
+      "code": "F9",
+      "action": "press"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.expedition",
+      "set": "rescue-kit"
+    },
+    {
+      "type": "assert",
+      "query": "game.signalFlares",
+      "op": "eq",
+      "value": 2
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryContents",
+      "op": "contains",
+      "value": "food_can"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.expedition",
+      "set": "spawn"
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignSorties",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.expedition",
+      "set": "bravo"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "call"
+    },
+    {
+      "type": "assert",
+      "query": "game.flightPhase",
+      "op": "eq",
+      "value": "Inbound"
+    },
+    {
+      "type": "assert",
+      "query": "game.signalFlares",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.expedition",
+      "set": "alpha"
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignInField",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.expedition",
+      "set": "save"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.expedition",
+      "set": "reload"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.mapLoading",
+      "op": "eq",
+      "value": false,
+      "timeoutMs": 120000
+    },
+    {
+      "type": "assert",
+      "query": "game.sceneGeneration",
+      "op": "eq",
+      "value": 2
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignInField",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "assert",
+      "query": "game.flightPhase",
+      "op": "eq",
+      "value": "Inbound"
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignExtractions",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignSorties",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryContents",
+      "op": "contains",
+      "value": "food_can"
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignSaveBlocked",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "assert",
+      "query": "game.debugVisible",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "assert",
+      "query": "game.debugCursor",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "wait-frames",
+      "n": 8
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/debug-expedition-shortcuts",
+      "ui": true
+    },
+    {
+      "type": "click",
+      "at": {
+        "px": [
+          110,
+          130
+        ]
+      },
+      "button": "left"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.campaignInField",
+      "op": "eq",
+      "value": false,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "assert",
+      "query": "game.debugVisible",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "assert",
+      "query": "game.flightPhase",
+      "op": "eq",
+      "value": "Idle"
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignExtractions",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignSorties",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "assert",
+      "query": "game.currentMapSorties",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignStorage",
+      "op": "ge",
+      "value": 4
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignSaveBlocked",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "assert",
+      "query": "game.mouseCaptured",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "assert",
+      "query": "game.debugCursor",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "assert",
+      "query": "game.mouseCaptured",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.expedition",
+      "set": "return"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "reload"
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignInField",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignExtractions",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignSorties",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignStorage",
+      "op": "ge",
+      "value": 4
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/debug-return-safehouse",
+      "ui": true
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

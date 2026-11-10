@@ -1,0 +1,386 @@
+{
+  "_comment": "关卡表，按顺序串成一局：打完最后一关的 endsStage BOSS 就是 All Clear。关卡沿 SCAD +Y 生长，引擎里就是 -Z，所以 endZ 比 startZ 更负；所有波次放完、所有 BOSS 打完、相机走到 endZ，才算过关。triggerTime 用的是关卡秒数，和 *_waves.json 同一把尺。",
+  "stages": [
+    {
+      "id": "airfield",
+      "displayName": "机场突入",
+      "scene": "assets/scad/source/next_raiden/stage1_airfield.scad",
+      "waves": "assets/configs/nextraiden/stage1_waves.json",
+      "seed": 20260916,
+      "scrollSpeed": 12.0,
+      "startZ": -22.0,
+      "endZ": -1900.0,
+      "bosses": [
+        {
+          "_comment": "中BOSS：旋翼炮艇。两阶段，后半加环形弹幕并甩掉两侧挂架。",
+          "id": "rotor_midboss",
+          "rig": "assets/scad/characters/next_raiden_rotor.scad",
+          "entryClip": "hover",
+          "triggerTime": 72.0,
+          "hitPoints": 900.0,
+          "radius": 5.0,
+          "score": 20000,
+          "debrisPieces": 8,
+          "holdDepth": 17.6,
+          "entrySeconds": 2.2,
+          "moveAmplitude": 14.4,
+          "movePeriod": 4.2,
+          "drop": "option",
+          "endsStage": false,
+          "phases": [
+            {
+              "hpFraction": 1.0,
+              "clip": "fire",
+              "move": "strafe",
+              "moveSpeedScale": 1.0,
+              "fire": {
+                "pattern": "stream",
+                "burst": 3,
+                "burstGap": 0.11,
+                "interval": 1.4,
+                "bullet": "boltHostile",
+                "speed": 38.4,
+                "lead": 0.15
+              }
+            },
+            {
+              "hpFraction": 0.5,
+              "clip": "fire",
+              "move": "strafe",
+              "moveSpeedScale": 1.7,
+              "shedBones": [
+                "bone_pod_l",
+                "bone_pod_r"
+              ],
+              "fire": {
+                "pattern": "stream",
+                "burst": 4,
+                "burstGap": 0.09,
+                "interval": 1.2,
+                "bullet": "boltHostile",
+                "speed": 41.6,
+                "lead": 0.15
+              },
+              "fire2": {
+                "pattern": "ring",
+                "count": 10,
+                "spinDegrees": 11.0,
+                "interval": 1.6,
+                "bullet": "orb",
+                "speed": 20.8
+              }
+            }
+          ]
+        },
+        {
+          "_comment": "关底 BOSS：倾转翼炮艇。三阶段，末段打掉一侧引擎并转为环形+冲刺。",
+          "id": "gunship_boss",
+          "rig": "assets/scad/characters/next_raiden_gunship.scad",
+          "entryClip": "deploy",
+          "triggerTime": 152.0,
+          "hitPoints": 2200.0,
+          "radius": 6.5,
+          "score": 50000,
+          "debrisPieces": 12,
+          "holdDepth": 20.8,
+          "entrySeconds": 2.6,
+          "moveAmplitude": 16.0,
+          "movePeriod": 5.0,
+          "endsStage": true,
+          "phases": [
+            {
+              "hpFraction": 1.0,
+              "clip": "fire",
+              "move": "strafe",
+              "moveSpeedScale": 1.0,
+              "fire": {
+                "pattern": "spread",
+                "count": 5,
+                "arcDegrees": 36.0,
+                "interval": 1.5,
+                "bullet": "boltHostile",
+                "speed": 35.2,
+                "lead": 0.1
+              }
+            },
+            {
+              "hpFraction": 0.65,
+              "clip": "fire",
+              "move": "strafe",
+              "moveSpeedScale": 1.5,
+              "shedBones": [
+                "bone_pod_l",
+                "bone_pod_r"
+              ],
+              "fire": {
+                "pattern": "spread",
+                "count": 7,
+                "arcDegrees": 48.0,
+                "interval": 1.3,
+                "bullet": "boltHostile",
+                "speed": 36.8,
+                "lead": 0.1
+              },
+              "fire2": {
+                "pattern": "aimed",
+                "interval": 0.9,
+                "bullet": "needle",
+                "speed": 51.2,
+                "lead": 0.22
+              }
+            },
+            {
+              "hpFraction": 0.3,
+              "clip": "bank_left",
+              "move": "charge",
+              "moveSpeedScale": 1.8,
+              "shedBones": [
+                "bone_engine_l",
+                "bone_tip_l"
+              ],
+              "fire": {
+                "pattern": "ring",
+                "count": 12,
+                "spinDegrees": 14.0,
+                "interval": 1.1,
+                "bullet": "orb",
+                "speed": 22.4
+              },
+              "fire2": {
+                "pattern": "stream",
+                "burst": 3,
+                "burstGap": 0.08,
+                "interval": 1.0,
+                "bullet": "needle",
+                "speed": 54.4,
+                "lead": 0.2
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "harbor",
+      "displayName": "军港破袭",
+      "scene": "assets/scad/source/next_raiden/stage2_harbor.scad",
+      "waves": "assets/configs/nextraiden/stage2_waves.json",
+      "seed": 20260917,
+      "scrollSpeed": 12.0,
+      "startZ": -22.0,
+      "endZ": -2200.0,
+      "bosses": [
+        {
+          "_comment": "中BOSS：倾转翼炮艇，关卡 1 关底那台的强化档——血量翻倍、多一门扫射炮。",
+          "id": "gunship_midboss",
+          "rig": "assets/scad/characters/next_raiden_gunship.scad",
+          "entryClip": "deploy",
+          "triggerTime": 82.0,
+          "hitPoints": 1600.0,
+          "radius": 6.5,
+          "score": 35000,
+          "debrisPieces": 10,
+          "holdDepth": 19.2,
+          "entrySeconds": 2.4,
+          "moveAmplitude": 17.6,
+          "movePeriod": 4.4,
+          "drop": "option",
+          "endsStage": false,
+          "phases": [
+            {
+              "hpFraction": 1.0,
+              "clip": "fire",
+              "move": "strafe",
+              "moveSpeedScale": 1.2,
+              "fire": {
+                "pattern": "spread",
+                "count": 7,
+                "arcDegrees": 44,
+                "interval": 1.2,
+                "bullet": "boltHostile",
+                "speed": 38.4,
+                "lead": 0.1
+              },
+              "fire2": {
+                "pattern": "sweep",
+                "rateDegreesPerSec": 150,
+                "sweepDegrees": 44,
+                "interval": 0.3,
+                "bullet": "needle",
+                "speed": 52.0,
+                "lead": 0.05
+              }
+            },
+            {
+              "hpFraction": 0.5,
+              "clip": "bank_left",
+              "move": "charge",
+              "moveSpeedScale": 1.6,
+              "shedBones": [
+                "bone_pod_l",
+                "bone_pod_r"
+              ],
+              "fire": {
+                "pattern": "ring",
+                "count": 14,
+                "spinDegrees": 13,
+                "interval": 1.1,
+                "bullet": "orb",
+                "speed": 23.2
+              },
+              "fire2": {
+                "pattern": "stream",
+                "burst": 4,
+                "burstGap": 0.08,
+                "interval": 0.95,
+                "bullet": "needle",
+                "speed": 55.2,
+                "lead": 0.2
+              }
+            }
+          ]
+        },
+        {
+          "_comment": "关底 BOSS：要塞。四阶段，两段开舱门露反应堆——弱点窗口是这场仗的节奏，关门段硬碰硬，开门段抢输出。",
+          "id": "fortress_boss",
+          "rig": "assets/scad/characters/next_raiden_fortress.scad",
+          "entryClip": "idle",
+          "triggerTime": 180.0,
+          "hitPoints": 4000.0,
+          "radius": 7.5,
+          "score": 120000,
+          "debrisPieces": 16,
+          "holdDepth": 22.4,
+          "entrySeconds": 3.0,
+          "moveAmplitude": 17.6,
+          "movePeriod": 5.4,
+          "endsStage": true,
+          "phases": [
+            {
+              "_comment": "舱门关着，只能硬打。",
+              "hpFraction": 1.0,
+              "clip": "fire",
+              "move": "strafe",
+              "moveSpeedScale": 1.0,
+              "fire": {
+                "pattern": "spread",
+                "count": 7,
+                "arcDegrees": 46,
+                "interval": 1.3,
+                "bullet": "boltHostile",
+                "speed": 36.8,
+                "lead": 0.1
+              },
+              "fire2": {
+                "pattern": "stream",
+                "burst": 4,
+                "burstGap": 0.09,
+                "interval": 1.1,
+                "bullet": "needle",
+                "speed": 52.8,
+                "lead": 0.2
+              }
+            },
+            {
+              "_comment": "第一个弱点窗口：舱门打开，它停下来用螺旋弹幕护住自己。",
+              "hpFraction": 0.75,
+              "clip": "open",
+              "move": "hold",
+              "moveSpeedScale": 1.0,
+              "shedBones": [
+                "bone_pod_l",
+                "bone_pod_r"
+              ],
+              "weakPoint": {
+                "_comment": "反应堆。舱门打开的那两段才在外面，打中它三倍伤害、打别处只剩一小半——这就是这场仗要不要瞄准的分界线。",
+                "bone": "bone_reactor",
+                "radius": 3.0,
+                "multiplier": 3.0,
+                "bodyMultiplier": 0.35
+              },
+              "fire": {
+                "pattern": "spiral",
+                "count": 5,
+                "rateDegreesPerSec": 200,
+                "interval": 0.18,
+                "bullet": "orb",
+                "speed": 24.0
+              },
+              "fire2": {
+                "pattern": "aimed",
+                "interval": 1.0,
+                "bullet": "needle",
+                "speed": 56.0,
+                "lead": 0.22
+              }
+            },
+            {
+              "_comment": "舱门关上，横移加速——没抢够输出的话，这一段会很长。",
+              "hpFraction": 0.5,
+              "clip": "close",
+              "move": "strafe",
+              "moveSpeedScale": 1.6,
+              "shedBones": [
+                "bone_armour_l0",
+                "bone_armour_r0"
+              ],
+              "fire": {
+                "pattern": "ring",
+                "count": 16,
+                "spinDegrees": 15,
+                "interval": 1.05,
+                "bullet": "orb",
+                "speed": 24.0
+              },
+              "fire2": {
+                "pattern": "spread",
+                "count": 9,
+                "arcDegrees": 56,
+                "interval": 1.2,
+                "bullet": "boltHostile",
+                "speed": 38.4,
+                "lead": 0.1
+              }
+            },
+            {
+              "_comment": "舱门机构打坏了，反应堆再也关不上：弱点常驻，但它开始冲脸。",
+              "hpFraction": 0.25,
+              "clip": "core_exposed",
+              "move": "charge",
+              "moveSpeedScale": 1.8,
+              "shedBones": [
+                "bone_engine_l2",
+                "bone_engine_r2",
+                "bone_outrigger_l"
+              ],
+              "weakPoint": {
+                "_comment": "反应堆。舱门打开的那两段才在外面，打中它三倍伤害、打别处只剩一小半——这就是这场仗要不要瞄准的分界线。",
+                "bone": "bone_reactor",
+                "radius": 3.0,
+                "multiplier": 3.0,
+                "bodyMultiplier": 0.5
+              },
+              "fire": {
+                "pattern": "spiral",
+                "count": 6,
+                "rateDegreesPerSec": 240,
+                "interval": 0.16,
+                "bullet": "orb",
+                "speed": 24.8
+              },
+              "fire2": {
+                "pattern": "stream",
+                "burst": 5,
+                "burstGap": 0.07,
+                "interval": 0.9,
+                "bullet": "needle",
+                "speed": 57.6,
+                "lead": 0.2
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

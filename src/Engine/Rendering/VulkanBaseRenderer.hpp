@@ -50,6 +50,8 @@ namespace Vulkan::PipelineCommon
 
 namespace Vulkan
 {
+    class AutoExposurePass;
+
     struct FFrameRenderSettings
     {
         Runtime::Config::UserSettings userSettings{};
@@ -57,6 +59,12 @@ namespace Vulkan
         bool offlineProgressivePathTracing = false;
         uint32_t progressiveAccumulatedFrames = 0;
         uint32_t progressiveTargetFrames = 1;
+    };
+
+    struct FGpuFrameTiming
+    {
+        double milliseconds = 0.0;
+        bool valid = false;
     };
 
     struct FAmbientBakeProgress
@@ -353,6 +361,7 @@ namespace Vulkan
         FRendererRequirements RegisteredRendererRequirements() const;
         bool ShouldSkipAmbientCubeUpdates() const;
         FAmbientBakeProgress GetAmbientBakeProgress();
+        FGpuFrameTiming GetGpuFrameTiming() const;
         // Drop the baked cube radiance. The scene calls this whenever the probe grid moves under it,
         // because radiance baked for the previous grid would otherwise persist at the new positions.
         void RequestClearAmbientCubeCache() { ambient_.requestClearCache = true; }
@@ -513,11 +522,19 @@ namespace Vulkan
         {
             std::unique_ptr<RayTracing::RayTracingProperties> properties;
 
+            // One BLAS per populated LOD level of every model, levels of a model contiguous:
+            // model m's level l is blas[blasLodBase[m] + min(l, blasLodCount[m] - 1)].
             std::vector<RayTracing::BottomLevelAccelerationStructure> blas;
+            std::vector<uint32_t> blasLodBase;
+            std::vector<uint32_t> blasLodCount;
             std::unique_ptr<Buffer> blasBuffer;
             std::unique_ptr<DeviceMemory> blasMemory;
             std::unique_ptr<Buffer> blasScratch;
             std::unique_ptr<DeviceMemory> blasScratchMemory;
+            // The same mapping as device addresses, MAX_MODEL_LOD_COUNT slots per model.
+            std::unique_ptr<Buffer> blasAddressBuffer;
+            std::unique_ptr<DeviceMemory> blasAddressMemory;
+            bool hasSimplifiedBlas = false;
 
             std::vector<RayTracing::TopLevelAccelerationStructure> tlas;
             std::unique_ptr<Buffer> tlasBuffer;
@@ -525,13 +542,35 @@ namespace Vulkan
             std::unique_ptr<Buffer> tlasScratch;
             std::unique_ptr<DeviceMemory> tlasScratchMemory;
 
+            // CPU-written instance template (LOD0 BLAS in every slot). The TLAS never reads it
+            // directly: the LOD select pass copies it into lodInstancesBuffer with each instance
+            // pointed at the level chosen for this frame.
             std::unique_ptr<Buffer> instancesBuffer;
             std::unique_ptr<DeviceMemory> instancesMemory;
+            std::unique_ptr<Buffer> lodInstancesBuffer;
+            std::unique_ptr<DeviceMemory> lodInstancesMemory;
+            std::unique_ptr<Buffer> lodResourcesBuffer;
+            std::unique_ptr<DeviceMemory> lodResourcesMemory;
 
             std::unique_ptr<PipelineCommon::ZeroBindWithTLASPipeline> directLightGenPipeline;
+            std::unique_ptr<PipelineCommon::ZeroBindPipeline> lodSelectPipeline;
 
             int tlasUpdateRequest = 0;
+            uint32_t tlasInstanceCount = 0;
             uint32_t tlasInstanceCapacity = 0;
+
+            // Inputs the LOD select pass resolved its levels from. The TLAS is rebuilt when they
+            // change even if no node did, because a moving camera moves proxies across levels.
+            struct FLodSelectionKey
+            {
+                glm::mat4 viewProjection{0.0f};
+                glm::vec2 viewportSize{0.0f};
+                float baseThreshold = -1.0f;
+                uint32_t settings = ~0u;
+
+                bool operator==(const FLodSelectionKey&) const = default;
+            };
+            FLodSelectionKey lodSelectionKey;
         };
 
         struct AmbientCubePipelines
@@ -545,7 +584,26 @@ namespace Vulkan
             std::array<uint32_t, Assets::CUBE_CASCADE_MAX> completedPasses{};
             uint32_t nextCascade = 0;
             uint32_t groupsPerFrame = 1;
-            double smoothedFrameTimeSeconds = 0.0;
+            VkQueryPool timingQueryPool = VK_NULL_HANDLE;
+            uint32_t timestampValidBits = 0;
+            double timestampPeriodNanoseconds = 0.0;
+            uint32_t lastDispatchedGroups = 0;
+            double lastBakeMilliseconds = 0.0;
+            double smoothedMillisecondsPerGroup = 0.0;
+            double smoothedNonBakeMilliseconds = 0.0;
+            bool timingFrameActive = false;
+            bool timingBakeDispatched = false;
+            bool timingPending = false;
+        };
+
+        struct GpuFrameTimingState
+        {
+            VkQueryPool queryPool = VK_NULL_HANDLE;
+            uint32_t timestampValidBits = 0;
+            double timestampPeriodNanoseconds = 0.0;
+            double lastMilliseconds = 0.0;
+            bool frameActive = false;
+            bool pending = false;
         };
 
         struct SkinnedMeshResources
@@ -610,6 +668,7 @@ namespace Vulkan
         struct OverlayPipelines
         {
             std::unique_ptr<PipelineCommon::GraphicsPipeline> wireframePipeline;
+            std::unique_ptr<PipelineCommon::GraphicsPipeline> wireframeXrayPipeline;
             std::unique_ptr<PipelineCommon::VisibilityPipeline> visibilityPipeline;
             std::unique_ptr<Shadow::ShadowMapPass> sunShadowPass;
             std::vector<std::unique_ptr<IExternalRenderPass>> externalPasses;
@@ -705,10 +764,12 @@ namespace Vulkan
         std::unique_ptr<AmbientCubeBaker> ambientCubeBaker_;
         std::unique_ptr<GpuDrivenPasses> gpuDrivenPasses_;
         std::unique_ptr<LightGridBuilder> lightGridBuilder_;
+        GpuFrameTimingState gpuFrameTiming_;
         ScreenshotResources screenshot_;
         FrameGenerationResources frameGeneration_;
         TemporalPostFilterResources temporalPostFilter_;
         LateToneMappingResources lateToneMapping_;
+        std::unique_ptr<AutoExposurePass> autoExposure_;
         AmbientCubePipelines ambient_;
         OverlayPipelines overlay_;
         ShadowCameraFamilyCache shadowCameraFamilyCache_;
@@ -731,6 +792,10 @@ namespace Vulkan
         bool surfaceLost_ = false;
         bool deferSceneChainForStartup_ = true;
         bool resetUpscalerHistory_ = true;
+        // The temporal provider's history belongs to the primary RenderView.  Keep the
+        // generation that was last consumed by a successful resolve so a renderer switch
+        // cannot lose its reset request when a frame is submitted without resolving.
+        uint64_t upscalerHistoryGeneration_ = 0;
         Rendering::Upscaler::EUpscalerType activeUpscalerType_ =
             Rendering::Upscaler::EUpscalerType::None;
         bool temporalSuperResolutionActive_ = false;
@@ -841,9 +906,16 @@ namespace Vulkan
             VkImageLayout swapchainLayout);
 
         // Pre-render passes
-        void UpdateAccelerationStructuresTop(VkCommandBuffer commandBuffer);
+        void UpdateAccelerationStructuresTop(VkCommandBuffer commandBuffer, uint32_t imageIndex);
         void UpdateAccelerationStructuresBottom(VkCommandBuffer commandBuffer);
+        void DispatchRayTracingLodSelect(VkCommandBuffer commandBuffer, uint32_t imageIndex, uint32_t lodSettings);
         void HandleAmbientCubeCacheInvalidation(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+        void BeginGpuFrameTiming(VkCommandBuffer commandBuffer);
+        void EndGpuFrameTiming(VkCommandBuffer commandBuffer);
+        void DeleteGpuFrameTiming();
+        void BeginAmbientBakeFrameTiming(VkCommandBuffer commandBuffer);
+        void EndAmbientBakeFrameTiming(VkCommandBuffer commandBuffer);
+        void DeleteAmbientBakeFrameTiming();
         void DispatchSkinning(VkCommandBuffer commandBuffer, uint32_t imageIndex);
         void DispatchGpuCulling(VkCommandBuffer commandBuffer, uint32_t imageIndex);
         void DispatchLightGridBuild(VkCommandBuffer commandBuffer, uint32_t imageIndex);
@@ -863,6 +935,7 @@ namespace Vulkan
         void DeleteAccelerationStructures();
         void CreateBottomLevelStructures(VkCommandBuffer commandBuffer);
         void CreateTopLevelStructures(VkCommandBuffer commandBuffer);
+        void CreateRayTracingLodResources();
     };
     
     class LogicRendererBase

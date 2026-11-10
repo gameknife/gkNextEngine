@@ -91,6 +91,8 @@ Options::Options(const int argc, const char* argv[])
         ("vulkan-driver", "Vulkan driver selection: native, lvp (Windows/Linux), or dozen (Windows).", cxxopts::value<std::string>(VulkanDriver)->default_value("native"))
         ("renderdoc", "Capture the first ready scene frame and open it in RenderDoc if available.", cxxopts::value<bool>(RenderDoc)->default_value("false")->implicit_value("true"))
         ("hidden-window", "Create the window hidden: no popup and no focus steal.", cxxopts::value<bool>(HiddenWindow)->default_value("false")->implicit_value("true"))
+        ("dedicated", "Dedicated server: tick the game without drawing or presenting. Implies --hidden-window.", cxxopts::value<bool>(Dedicated)->default_value("false")->implicit_value("true"))
+        ("dedicated-tick-rate", "Game ticks per second in --dedicated mode.", cxxopts::value<uint32_t>(DedicatedTickRate)->default_value("30"))
         ("headless-surface", "Use VK_EXT_headless_surface and skip SDL window creation. Intended for headless-path testing.", cxxopts::value<bool>(HeadlessSurface)->default_value("false")->implicit_value("true"))
         ("benchmark-config", "Load a gkNextMotionBenchmark orchestration JSON.", cxxopts::value<std::string>(BenchmarkConfig)->default_value(""));
 
@@ -133,8 +135,15 @@ Options::Options(const int argc, const char* argv[])
         {
             Validation = true;
         }
-        DisableStreamline = DisableStreamline || disableStreamlineForApplication || AgentValidation;
-        DisableFidelityFX = DisableFidelityFX || AgentValidation;
+        if (Dedicated)
+        {
+            // Nobody looks at a dedicated server's frames.
+            HiddenWindow = true;
+            ForceNoRT = true;
+            DedicatedTickRate = std::clamp<uint32_t>(DedicatedTickRate, 1, 240);
+        }
+        DisableStreamline = DisableStreamline || disableStreamlineForApplication || AgentValidation || Dedicated;
+        DisableFidelityFX = DisableFidelityFX || AgentValidation || Dedicated;
 
         if (VulkanDriver != "native" && VulkanDriver != "lvp" && VulkanDriver != "dozen")
         {

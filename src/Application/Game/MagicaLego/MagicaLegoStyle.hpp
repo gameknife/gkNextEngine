@@ -11,10 +11,10 @@ namespace MagicaLego::Style
     inline constexpr ImVec4 TireGray(0.15f, 0.15f, 0.15f, 1.0f); // Dark gray for background
 
     // Glassmorphism
-    inline constexpr ImVec4 GlassBackground(0.1f, 0.1f, 0.1f, 0.6f); // Semi-transparent black
-    inline constexpr float WindowRounding = 12.0f;
-    inline constexpr float FrameRounding = 6.0f;
-    inline constexpr float PopupRounding = 8.0f;
+    inline constexpr ImVec4 GlassBackground(0.09f, 0.10f, 0.12f, 0.88f); // Neutral dark surface
+    inline constexpr float WindowRounding = 7.0f;
+    inline constexpr float FrameRounding = 5.0f;
+    inline constexpr float PopupRounding = 6.0f;
     
     // Application function
     void ApplyStyle();

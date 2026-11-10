@@ -1,0 +1,20 @@
+{
+  "name": "nextdayz-net-hits",
+  "description": "Lag-compensated hit checks. Needs `gnb ds --clients 0`. A hit reported 5 m beside the nearest infected is refused by the server (no damage notice); a hit on its chest as the server last saw it is accepted.",
+  "target": "NextDayz",
+  "args": ["--disable-streamline", "--cvar", "nextdayz.net.mode client", "--cvar", "nextdayz.net.name marksman"],
+  "defaults": { "waitFrames": 2, "stepTimeoutMs": 120000 },
+  "steps": [
+    { "type": "wait-until", "query": "game.sceneReady", "op": "eq", "value": true, "timeoutMs": 180000 },
+    { "type": "wait-until", "query": "game.netOnline", "op": "eq", "value": true, "timeoutMs": 60000 },
+    { "type": "wait-until", "query": "game.netInfected", "op": "ge", "value": 1, "timeoutMs": 90000 },
+    { "type": "wait-ms", "ms": 1000 },
+    { "type": "cvar", "name": "nextdayz.validation.netShoot", "set": 2 },
+    { "type": "wait-ms", "ms": 2000 },
+    { "type": "assert", "query": "game.netMyHits", "op": "eq", "value": 0 },
+    { "type": "cvar", "name": "nextdayz.validation.netShoot", "set": 1 },
+    { "type": "wait-until", "query": "game.netMyHits", "op": "ge", "value": 1, "timeoutMs": 5000 },
+    { "type": "screenshot", "out": "screenshots/nextdayz_net_hits", "ui": true },
+    { "type": "quit" }
+  ]
+}

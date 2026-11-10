@@ -4,6 +4,9 @@ plugins {
 
 def releaseSigningPropertiesPath = '@GK_ANDROID_SIGNING_PROPERTIES@'
 def gkNextSourceAssetRoot = file('@GK_REPO_ROOT@/assets')
+// Game projects (manifest + Content/ + C# Scripts/) live beside assets/ and are copied into the
+// generated asset tree under assets/projects, so they are just as much an input of the native build.
+def gkNextSourceProjectRoot = file('@GK_REPO_ROOT@/projects')
 def releaseSigningPropertiesFile = releaseSigningPropertiesPath ? file(releaseSigningPropertiesPath) : null
 def releaseSigningProperties = new Properties()
 def releaseSigningEnabled = releaseSigningPropertiesFile != null && releaseSigningPropertiesFile.isFile()
@@ -18,7 +21,7 @@ android {
     ndkPath '@GK_ANDROID_NDK_ROOT@'
 
     defaultConfig {
-        applicationId 'com.gknext.renderer'
+        applicationId '@GK_ANDROID_APPLICATION_ID@'
         minSdk 21
         targetSdk 35
         versionCode 1
@@ -28,10 +31,18 @@ android {
             abiFilters '@GK_ANDROID_ABI@'
         }
 
+        // Which .so the activity loads. The Java package is shared by every application, so the
+        // library name is the only thing that tells one APK's activity from another's.
+        buildConfigField 'String', 'GK_NATIVE_LIBRARY', '"@GK_ANDROID_APP@"'
+
         externalNativeBuild {
             cmake {
-                targets 'gkNextRenderer'
-                arguments '-DANDROID_STL=c++_shared',
+                targets '@GK_ANDROID_APP@'
+                // GK_MOBILE_APP is what makes the engine configure declare this application at
+                // all: an Android configure adds exactly one application directory, so asking
+                // Gradle for a target the configure was not told about would find nothing.
+                arguments '-DGK_MOBILE_APP=@GK_ANDROID_APP@',
+                        '-DANDROID_STL=c++_shared',
                         '-DANDROID_PLATFORM=android-33',
                         '-DANDROID_NATIVE_API_LEVEL=33',
                         '-DVCPKG_CMAKE_SYSTEM_VERSION=33',
@@ -39,6 +50,7 @@ android {
                         '-DCMAKE_TOOLCHAIN_FILE=@GK_VCPKG_TOOLCHAIN@',
                         '-DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=@GK_NDK_TOOLCHAIN@',
                         '-DGK_ANDROID_ASSET_OUTPUT_DIR=@GK_ANDROID_ASSET_OUTPUT_DIR@',
+                        '-DGK_ANDROID_JNILIBS_DIR=@GK_JNILIBS_DIR@',
                         '-DVulkan_SLANGC=@GK_SLANGC@'
             }
         }
@@ -54,6 +66,10 @@ android {
     sourceSets {
         main {
             assets.srcDirs = [file('@GK_ASSET_ROOT@')]
+            // The NativeAOT managed runtime is produced by `dotnet publish`, not by CMake, so AGP
+            // never sees it as a native build output and would leave it out of the APK. Staging it
+            // as a jniLib is what gets it packaged next to the library that depends on it.
+            jniLibs.srcDirs = [file('@GK_JNILIBS_DIR@')]
         }
     }
 
@@ -124,11 +140,18 @@ afterEvaluate {
             // invalidates the external native build task. This includes untracked
             // files in the current working tree; Git commits are not build inputs.
             inputs.dir(gkNextSourceAssetRoot)
+            inputs.dir(gkNextSourceProjectRoot)
         }
         tasks.named("merge${variantName}Assets").configure {
             dependsOn nativeBuildTask
             // The input directory is populated by nativeBuildTask. Force a fresh
             // snapshot after it completes so newly generated assets reach the APK.
+            outputs.upToDateWhen { false }
+        }
+        // Same ordering problem for the managed runtime: the CMake build is what publishes it
+        // into the jniLibs staging tree, so merging has to wait for that build to finish.
+        tasks.named("merge${variantName}JniLibFolders").configure {
+            dependsOn nativeBuildTask
             outputs.upToDateWhen { false }
         }
     }

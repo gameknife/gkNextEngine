@@ -8,9 +8,13 @@ namespace Modules::NextDotNet
 {
     struct FManagedGameHostOptions
     {
-        /// Manifest of the single game this host runs. Empty starts the host idle, which is what
-        /// gkNextLauncher does before the player picks something.
+        /// Manifest of the single game this host runs. Retained for hosts that explicitly load a
+        /// file; standalone applications normally select by gameId instead.
         std::string manifestPath;
+
+        /// Stable manifest id of the game linked into this application. This keeps CMake's NativeAOT
+        /// project selection independent from a manifest filename or project-directory convention.
+        std::string gameId;
 
         /// Window used when there is no manifest to take one from.
         FManagedGameManifest::FWindow window;
@@ -45,6 +49,7 @@ namespace Modules::NextDotNet
         bool OnRenderUI() override;
         bool OnKey(SDL_Event& event) override;
         bool OnMouseButton(SDL_Event& event) override;
+        bool OnTouch(SDL_Event& event) override;
         bool OnGamepadInput(int16_t leftStickX,
                             int16_t leftStickY,
                             int16_t rightStickX,
@@ -75,8 +80,30 @@ namespace Modules::NextDotNet
         const std::optional<FManagedGameManifest>& GetBootManifest() const { return bootManifest_; }
 
     private:
+        std::optional<FManagedGameManifest> LoadBootManifest() const;
+
+        static int16_t ToGamepadAxis(float value);
+        static int16_t CombineGamepadAxes(int16_t physical, int16_t touch);
+        bool UsesDualStickTouch() const;
+        void SetTouchStick(float deltaX, float deltaY, int16_t& outX, int16_t& outY) const;
+        void PublishGamepadInput();
+
         FManagedGameHostOptions hostOptions_;
         std::optional<FManagedGameManifest> bootManifest_;
         ManagedGameSession session_;
+        uint64_t moveFinger_ = 0;
+        uint64_t lookFinger_ = 0;
+        glm::dvec2 moveCenter_{};
+        glm::dvec2 lookCenter_{};
+        int16_t touchLeftX_ = 0;
+        int16_t touchLeftY_ = 0;
+        int16_t touchRightX_ = 0;
+        int16_t touchRightY_ = 0;
+        int16_t physicalLeftX_ = 0;
+        int16_t physicalLeftY_ = 0;
+        int16_t physicalRightX_ = 0;
+        int16_t physicalRightY_ = 0;
+        int16_t physicalLeftTrigger_ = 0;
+        int16_t physicalRightTrigger_ = 0;
     };
 }

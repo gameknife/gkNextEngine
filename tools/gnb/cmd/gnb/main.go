@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -18,8 +17,11 @@ import (
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/config"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/console"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/fetcher"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/i18n"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/icons"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/ios"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/loc"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/mobileapps"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/packager"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/paks"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/platform"
@@ -62,11 +64,17 @@ func main() {
 	if explicit := explicitPreset(); explicit != "" {
 		preset = explicit
 	}
+	lang := i18n.Resolve(i18n.Input{
+		Flag:   explicitLang(),
+		Env:    os.Getenv("GNB_LANG"),
+		Config: cfg.GNB.Lang,
+	})
+	i18n.Set(lang)
 	ctx := appContext{repoRoot: repoRoot, cfg: cfg, preset: preset}
 
 	root := &cobra.Command{
 		Use:           "gnb",
-		Short:         "gkNextRenderer build helper",
+		Short:         tr("cli.root.short"),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -78,6 +86,8 @@ func main() {
 	root.PersistentFlags().StringVar(&repoRootFlag, "repo-root", "", "explicit repository root (also GNB_REPO_ROOT)")
 	var presetFlag string
 	root.PersistentFlags().StringVar(&presetFlag, "preset", "", "CMake preset to use instead of the host default")
+	var langFlag string
+	root.PersistentFlags().StringVar(&langFlag, "lang", "", tr("cli.lang"))
 	// Commands listed here run without a discovered repository — everything
 	// else fails fast with a friendly hint instead of crashing inside a
 	// command implementation that assumed a repo root.
@@ -86,6 +96,7 @@ func main() {
 		"help":       true,
 		"version":    true,
 		"completion": true,
+		"master":     true, // Deployed server bundles do not contain a source repository.
 	}
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if repoErr == nil {
@@ -101,7 +112,7 @@ func main() {
 		}
 		console.Error("%s", repoErr)
 		fmt.Println()
-		console.Info("cd into a gkNextEngine checkout, or run `gnb init` to clone one.")
+		console.Info("%s", tr("cli.norepo"))
 		return repoErr
 	}
 	root.AddCommand(newInfoCommand(ctx))
@@ -112,12 +123,15 @@ func main() {
 	root.AddCommand(newGraphCommand(ctx))
 	root.AddCommand(newRunCommand(ctx))
 	root.AddCommand(newRemoteCommand(ctx))
+	root.AddCommand(newDSCommand(ctx))
+	root.AddCommand(newMasterCommand(ctx))
 	root.AddCommand(newTestCommand(ctx))
 	root.AddCommand(newVisualCommand(ctx))
 	root.AddCommand(newShotCommand(ctx))
 	root.AddCommand(newScadCommand(ctx))
 	root.AddCommand(newGeoCommand(ctx))
 	root.AddCommand(newValidateCommand(ctx))
+	root.AddCommand(newValidationCommand(ctx))
 	root.AddCommand(newTuiCommand(ctx))
 	root.AddCommand(newEditorCommand(ctx))
 	root.AddCommand(newAndroidCommand(ctx))
@@ -142,6 +156,7 @@ func main() {
 	root.AddCommand(newWebsiteCommand(ctx))
 	root.AddCommand(newLegacyAgentCommand(ctx))
 	root.AddCommand(newInitCommand())
+	root.AddCommand(newIconsCommand(ctx))
 
 	if err := root.Execute(); err != nil {
 		fatal(err)
@@ -179,7 +194,7 @@ func newInfoCommand(ctx appContext) *cobra.Command {
 	binCacheKey := false
 	cmd := &cobra.Command{
 		Use:   "info",
-		Short: "Print build environment information",
+		Short: tr("cli.info.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if binCacheKey {
 				fmt.Println(config.BinCacheKey(ctx.repoRoot, ctx.cfg, runtime.GOOS))
@@ -220,7 +235,7 @@ func resolvedVersion() string {
 func newDoctorCommand(ctx appContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
-		Short: "Check required build tools",
+		Short: tr("cli.doctor.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			checks := []string{"git"}
 			if runtime.GOOS == "linux" {
@@ -297,7 +312,7 @@ func newSetupCommand(ctx appContext) *cobra.Command {
 	refresh := false
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "Prepare vcpkg, external SDKs, and optional paks",
+		Short: tr("cli.setup.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := platform.EnsureLinuxPreparePackages(); err != nil {
 				return err
@@ -329,12 +344,12 @@ func newSetupCommand(ctx appContext) *cobra.Command {
 func newDepsCommand(ctx appContext) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "deps",
-		Short: "Fetch project-managed external toolchains",
+		Short: tr("cli.deps.short"),
 	}
 
 	fetch := &cobra.Command{
 		Use:   "fetch [all|vulkan|streamline|fidelityfx]",
-		Short: "Fetch one or more external dependencies",
+		Short: tr("cli.deps.fetch.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return fetcher.EnsureNamedExternal(ctx.repoRoot, ctx.cfg, args)
 		},
@@ -351,7 +366,7 @@ func newBuildCommand(ctx appContext) *cobra.Command {
 	tracyMode := ""
 	cmd := &cobra.Command{
 		Use:   "build [targets...]",
-		Short: "Configure and build the native project",
+		Short: tr("cli.build.short"),
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if tracyMode != "" {
@@ -406,6 +421,9 @@ func newBuildCommand(ctx appContext) *cobra.Command {
 				}
 				opts.MakeProgram = ninjaPath
 			}
+			if _, err := icons.EnsureIco(ctx.repoRoot, false); err != nil {
+				console.Warn("failed to synchronize icons: %v", err)
+			}
 			buildErr := cmakerun.BuildWithCMake(ctx.repoRoot, cmakePath, ctx.preset, opts)
 			if !opts.PrintCmd {
 				elapsed := time.Since(startTime)
@@ -441,7 +459,7 @@ func newGraphCommand(ctx appContext) *cobra.Command {
 	all := false
 	cmd := &cobra.Command{
 		Use:   "graph [target]",
-		Short: "Export a CMake target dependency graph",
+		Short: tr("cli.graph.short"),
 		Long: "Export CMake's target dependency graph as SVG/PNG/PDF/DOT.\n\n" +
 			"Examples:\n" +
 			"  gnb graph gkNextEditor\n" +
@@ -477,7 +495,7 @@ func newGraphCommand(ctx appContext) *cobra.Command {
 func newRunCommand(ctx appContext) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "run [gnb-flags] [target] [app-args]",
-		Short: "List runnable applications or run a built target",
+		Short: tr("cli.run.short"),
 		Long: "List runnable applications or run a built target.\n\n" +
 			"Arguments after the target are passed to the target executable, so `gnb run gkNextRenderer --help` prints the application help.",
 		Args:               cobra.ArbitraryArgs,
@@ -576,7 +594,7 @@ func newTestCommand(ctx appContext) *cobra.Command {
 	listTags := false
 	cmd := &cobra.Command{
 		Use:   "test [filter]",
-		Short: "Run Catch2 unit tests",
+		Short: tr("cli.test.short"),
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			runArgs := append([]string{}, args...)
@@ -597,7 +615,7 @@ func newTestCommand(ctx appContext) *cobra.Command {
 func newVisualCommand(ctx appContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "visual",
-		Short: "Run visual tests",
+		Short: tr("cli.visual.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runner.Run(ctx.repoRoot, runner.Options{Target: "gkNextVisualTest", Preset: ctx.preset, Args: args})
 		},
@@ -609,11 +627,15 @@ func newShotCommand(ctx appContext) *cobra.Command {
 	var target string
 	var frames int
 	var includeUI bool
+	var visible bool
 	var headless bool
+	var reason string
+	var rerunOf string
 	cmd := &cobra.Command{
-		Use:   "shot [--scene <path>] [--target <name>] [--frames N] [--ui] [--headless]",
-		Short: "Capture one validation screenshot, then auto-exit (no focus-stealing window)",
+		Use:   "shot [--scene <path>] [--target <name>] [--frames N] [--ui] [--visible] [--headless]",
+		Short: tr("cli.shot.short"),
 		Long: "Render a scene to a stable frame, capture a single screenshot to a fixed path, then exit.\n\n" +
+			"Waits for scene loading and texture uploads before counting warm-up frames.\n" +
 			"The window is hidden so it never pops to the foreground or steals focus during an agent\n" +
 			"dev loop, and the app exits on its own. Pass --ui to include ImGui in the capture.\n" +
 			"The screenshot path is printed when finished.\n\n" +
@@ -626,20 +648,36 @@ func newShotCommand(ctx appContext) *cobra.Command {
 			if headless {
 				args = append(args, "--headless-surface")
 			}
-			opts := validatepkg.Options{RepoRoot: ctx.repoRoot, Preset: ctx.preset, Target: target, Scene: scene, Args: args}
-			if err := validatepkg.Shot(context.Background(), opts, frames, includeUI, out); err != nil {
+			opts := validatepkg.Options{RepoRoot: ctx.repoRoot, Preset: ctx.preset, Target: target, Scene: scene, Visible: visible, Reason: reason, RerunOf: rerunOf, Args: args}
+			result, err := validatepkg.ShotWithResult(cmd.Context(), opts, frames, includeUI, out)
+			if result.RunID != "" {
+				console.Info("validation run: " + result.RunID)
+				console.Info("validation evidence: " + result.EvidenceDir)
+			}
+			if err != nil {
 				return err
 			}
 			shot := out + ".jpg"
+			if result.Screenshot != "" {
+				if ext := filepath.Ext(result.Screenshot); ext != "" {
+					shot = out + ext
+				}
+				if copyErr := copyValidationScreenshot(result.Screenshot, shot); copyErr != nil {
+					return fmt.Errorf("copy compatibility screenshot: %w", copyErr)
+				}
+			}
 			console.Info("screenshot: " + shot)
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&scene, "scene", "", "scene to load (file path or built-in .proc name)")
 	cmd.Flags().StringVar(&target, "target", "gkNextRenderer", "target executable to run")
-	cmd.Flags().IntVar(&frames, "frames", 0, "frames to render before capture (0 = engine default)")
+	cmd.Flags().IntVar(&frames, "frames", 0, "warm-up frames after scene and textures are ready (0 = 90)")
 	cmd.Flags().BoolVar(&includeUI, "ui", false, "include ImGui UI in the screenshot")
+	cmd.Flags().BoolVar(&visible, "visible", false, "show the desktop window while capturing")
 	cmd.Flags().BoolVar(&headless, "headless", false, "force VK_EXT_headless_surface (including on macOS)")
+	cmd.Flags().StringVar(&reason, "reason", "", "short description of why this screenshot is being captured")
+	cmd.Flags().StringVar(&rerunOf, "rerun-of", "", "associate this new run with an earlier validation run")
 	return cmd
 }
 
@@ -673,9 +711,11 @@ func newValidateCommand(ctx appContext) *cobra.Command {
 	var height int
 	var visible bool
 	var syncValidation bool
+	var reason string
+	var rerunOf string
 	cmd := &cobra.Command{
 		Use:   "validate --script <path> [--target <name>] [--scene <path>]",
-		Short: "Run an agent input validation script and write a JSON report",
+		Short: tr("cli.validate.short"),
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if script == "" {
@@ -716,8 +756,12 @@ func newValidateCommand(ctx appContext) *cobra.Command {
 				reportPath = filepath.Join(filepath.Dir(platform.BinDir(ctx.repoRoot, ctx.preset)), reportPath)
 			}
 			opts := validatepkg.Options{RepoRoot: ctx.repoRoot, Preset: ctx.preset, Target: target, Scene: scene,
-				Script: scriptPath, Report: reportPath, Width: width, Height: height, Visible: visible, SyncValidation: syncValidation, Args: args}
-			err := validatepkg.Run(context.Background(), opts)
+				Script: scriptPath, Report: reportPath, Width: width, Height: height, Visible: visible, SyncValidation: syncValidation, Reason: reason, RerunOf: rerunOf, Args: args}
+			result, err := validatepkg.RunWithResult(cmd.Context(), opts)
+			if result.RunID != "" {
+				console.Info("validation run: " + result.RunID)
+				console.Info("validation evidence: " + result.EvidenceDir)
+			}
 			console.Info("agent report: " + reportPath)
 			return err
 		},
@@ -730,6 +774,8 @@ func newValidateCommand(ctx appContext) *cobra.Command {
 	cmd.Flags().IntVar(&height, "height", 0, "window height (overrides script viewport.height)")
 	cmd.Flags().BoolVar(&visible, "visible", false, "show the desktop window while replaying the agent script")
 	cmd.Flags().BoolVar(&syncValidation, "sync-validation", false, "enable Vulkan core and synchronization validation")
+	cmd.Flags().StringVar(&reason, "reason", "", "short description of why this validation is being run")
+	cmd.Flags().StringVar(&rerunOf, "rerun-of", "", "associate this new run with an earlier validation run")
 	return cmd
 }
 
@@ -753,7 +799,7 @@ func newTuiCommand(ctx appContext) *cobra.Command {
 	var noInput bool
 	cmd := &cobra.Command{
 		Use:   "tui [--scene <path>] [--target <name>]",
-		Short: "Run a target in terminal TUI mode (hidden window + truecolor terminal blit)",
+		Short: tr("cli.tui.short"),
 		Long: "Render a target into a hidden swapchain and continuously blit the frames into the\n" +
 			"current terminal using truecolor half-block characters.\n\n" +
 			"Examples:\n" +
@@ -799,7 +845,7 @@ func newTuiCommand(ctx appContext) *cobra.Command {
 func newEditorCommand(ctx appContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "editor",
-		Short: "Run gkNextEditor",
+		Short: tr("cli.editor.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runner.Run(ctx.repoRoot, runner.Options{Target: "gkNextEditor", Preset: ctx.preset, Args: args})
 		},
@@ -809,23 +855,24 @@ func newEditorCommand(ctx appContext) *cobra.Command {
 func newAndroidCommand(ctx appContext) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "android",
-		Short: "Build and launch the Android app",
+		Short: tr("cli.android.short"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
 		},
 	}
 
+	buildApp := ""
 	build := &cobra.Command{
 		Use:   "build [relwithdebinfo|debug|release]",
-		Short: "Build an Android APK (default: release)",
+		Short: tr("cli.android.build.short"),
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			variant := ""
 			if len(args) == 1 {
 				variant = args[0]
 			}
-			artifact, err := android.Build(ctx.repoRoot, ctx.cfg, variant)
+			artifact, err := android.Build(ctx.repoRoot, ctx.cfg, variant, buildApp)
 			if err != nil {
 				return err
 			}
@@ -834,20 +881,23 @@ func newAndroidCommand(ctx appContext) *cobra.Command {
 			return nil
 		},
 	}
+	build.Flags().StringVar(&buildApp, "app", "",
+		mobileapps.FlagHelp(ctx.repoRoot, mobileapps.Android, "application to package"))
 	root.AddCommand(build)
 
 	serial := ""
 	avd := ""
+	runApp := ""
 	run := &cobra.Command{
 		Use:   "run [relwithdebinfo|debug|release]",
-		Short: "Install and launch a built Android APK on adb or a local AVD",
+		Short: tr("cli.android.run.short"),
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			variant := ""
 			if len(args) == 1 {
 				variant = args[0]
 			}
-			result, err := android.Run(ctx.repoRoot, variant, serial, avd)
+			result, err := android.Run(ctx.repoRoot, variant, runApp, serial, avd)
 			if err != nil {
 				return err
 			}
@@ -860,12 +910,14 @@ func newAndroidCommand(ctx appContext) *cobra.Command {
 	}
 	run.Flags().StringVar(&serial, "serial", "", "use this online adb device serial")
 	run.Flags().StringVar(&avd, "avd", "", "start this local AVD when no adb device is online")
+	run.Flags().StringVar(&runApp, "app", "",
+		mobileapps.FlagHelp(ctx.repoRoot, mobileapps.Android, "application to install"))
 	root.AddCommand(run)
 
 	captureSerial := ""
 	capture := &cobra.Command{
 		Use:   "capture",
-		Short: "Capture the existing shared release APK through RenderDoc and open the first capture",
+		Short: tr("cli.android.capture.short"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			result, err := android.Capture(ctx.repoRoot, ctx.cfg, captureSerial)
@@ -882,7 +934,7 @@ func newAndroidCommand(ctx appContext) *cobra.Command {
 	renderDocSerial := ""
 	renderDoc := &cobra.Command{
 		Use:   "renderdoc",
-		Short: "Open RenderDoc connected to an adb Android device",
+		Short: tr("cli.android.renderdoc.short"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			result, err := android.OpenRenderDoc(ctx.repoRoot, renderDocSerial)
@@ -898,7 +950,7 @@ func newAndroidCommand(ctx appContext) *cobra.Command {
 
 	connect := &cobra.Command{
 		Use:   "connect <host>:<port>",
-		Short: "Connect adb to a remote Android device",
+		Short: tr("cli.android.connect.short"),
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return android.Connect(ctx.repoRoot, args[0])
@@ -908,7 +960,7 @@ func newAndroidCommand(ctx appContext) *cobra.Command {
 
 	devices := &cobra.Command{
 		Use:   "devices",
-		Short: "List adb-connected Android devices",
+		Short: tr("cli.android.devices.short"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return android.ListDevices(ctx.repoRoot, cmd.OutOrStdout())
@@ -921,7 +973,7 @@ func newAndroidCommand(ctx appContext) *cobra.Command {
 func newIOSCommand(ctx appContext) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "ios",
-		Short: "Build the CMake-generated iOS device app",
+		Short: tr("cli.ios.short"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
@@ -931,9 +983,10 @@ func newIOSCommand(ctx appContext) *cobra.Command {
 	buildOpts := cmakerun.BuildOptions{}
 	teamID := ""
 	verbose := false
+	buildApp := ""
 	build := &cobra.Command{
 		Use:   "build",
-		Short: "Build gkNextRenderer for an arm64 iOS device",
+		Short: tr("cli.ios.build.short"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if _, err := os.Stat(vcpkg.Toolchain(ctx.repoRoot, ctx.cfg)); err != nil {
@@ -951,7 +1004,7 @@ func newIOSCommand(ctx appContext) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			staged, err := ios.Build(ctx.repoRoot, cmakePath, teamID, !verbose, buildOpts)
+			staged, err := ios.Build(ctx.repoRoot, cmakePath, teamID, buildApp, !verbose, buildOpts)
 			if err != nil {
 				return err
 			}
@@ -972,11 +1025,13 @@ func newIOSCommand(ctx appContext) *cobra.Command {
 	build.Flags().IntVar(&buildOpts.Jobs, "jobs", 0, "parallel build jobs")
 	build.Flags().StringVar(&teamID, "team-id", "", "Apple Developer Team ID for automatic device signing")
 	build.Flags().BoolVar(&verbose, "verbose", false, "show normal Xcode build progress output")
+	build.Flags().StringVar(&buildApp, "app", "",
+		mobileapps.FlagHelp(ctx.repoRoot, mobileapps.IOS, "application to bundle"))
 
 	root.AddCommand(build)
 	devices := &cobra.Command{
 		Use:   "device",
-		Short: "List available iOS run devices",
+		Short: tr("cli.ios.devices.short"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return ios.ListDevices(cmd.OutOrStdout())
@@ -987,7 +1042,7 @@ func newIOSCommand(ctx appContext) *cobra.Command {
 	requestedDevice := ""
 	run := &cobra.Command{
 		Use:   "run",
-		Short: "Install and launch the signed iOS app on a selected device",
+		Short: tr("cli.ios.run.short"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			artifact, device, err := ios.Run(ctx.repoRoot, requestedDevice, cmd.InOrStdin(), cmd.OutOrStdout())
@@ -1010,7 +1065,7 @@ func newIOSCommand(ctx appContext) *cobra.Command {
 	root.AddCommand(run)
 	teams := &cobra.Command{
 		Use:   "teams",
-		Short: "List locally provisioned Apple Developer teams",
+		Short: tr("cli.ios.teams.short"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			homeDir, err := os.UserHomeDir()
@@ -1043,11 +1098,11 @@ func newIOSCommand(ctx appContext) *cobra.Command {
 }
 
 func newPaksCommand(ctx appContext) *cobra.Command {
-	root := &cobra.Command{Use: "paks", Short: "Fetch, publish, or list optional pak assets"}
+	root := &cobra.Command{Use: "paks", Short: tr("cli.paks.short")}
 	force := false
 	fetch := &cobra.Command{
 		Use:   "fetch [groups...]",
-		Short: "Fetch optional pak assets",
+		Short: tr("cli.paks.fetch.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return paks.Fetch(ctx.repoRoot, ctx.cfg, args, force)
 		},
@@ -1057,7 +1112,7 @@ func newPaksCommand(ctx appContext) *cobra.Command {
 	dryRun := false
 	publish := &cobra.Command{
 		Use:   "publish [groups...]",
-		Short: "Publish optional pak assets to GitHub Releases",
+		Short: tr("cli.paks.publish.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return paks.Publish(ctx.repoRoot, ctx.cfg, args, dryRun, token)
 		},
@@ -1066,7 +1121,7 @@ func newPaksCommand(ctx appContext) *cobra.Command {
 	publish.Flags().BoolVar(&dryRun, "dry-run", false, "print upload plan")
 	list := &cobra.Command{
 		Use:   "list",
-		Short: "List pak manifest status",
+		Short: tr("cli.paks.list.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return paks.List(ctx.repoRoot, ctx.cfg)
 		},
@@ -1085,7 +1140,7 @@ func newPackageCommand(ctx appContext) *cobra.Command {
 	includeGNB := false
 	cmd := &cobra.Command{
 		Use:   "package <windows|linux|macos>",
-		Short: "Create a high-compression 7z release archive",
+		Short: tr("cli.package.short"),
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			preset, err := resolvePackagePreset(ctx.cfg, packagePresetName)
@@ -1105,6 +1160,7 @@ func newPackageCommand(ctx appContext) *cobra.Command {
 	cmd.Flags().StringVar(&runtimePak, "runtime-pak", "", "reuse a directory containing runtime.pak, runtime-assets.txt, and runtime.manifest.json")
 	cmd.Flags().IntVar(&traceFrames, "trace-frames", 120, "stable frames to sample per target with --trace-assets")
 	cmd.Flags().BoolVar(&includeGNB, "include-gnb", false, "include the gnb executable and agent manifest in the desktop package")
+	cmd.AddCommand(newNextDayzPackageCommand(ctx, false), newNextDayzPackageCommand(ctx, true))
 	return cmd
 }
 
@@ -1135,7 +1191,7 @@ func newSmokeCommand(ctx appContext) *cobra.Command {
 	timeoutSeconds := 90
 	cmd := &cobra.Command{
 		Use:   "smoke <package.7z>",
-		Short: "Extract a release archive into a clean directory and verify it runs out of the box",
+		Short: tr("cli.smoke.short"),
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			archive := args[0]
@@ -1156,7 +1212,7 @@ func newSmokeCommand(ctx appContext) *cobra.Command {
 func newCleanCommand(ctx appContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "clean [target]",
-		Short: "Clean build output",
+		Short: tr("cli.clean.short"),
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target := ""
@@ -1171,7 +1227,7 @@ func newCleanCommand(ctx appContext) *cobra.Command {
 func newInstallCommand(ctx appContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "install",
-		Short: "Install gnb to a user bin directory",
+		Short: tr("cli.install.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			exe, err := os.Executable()
 			if err != nil {
@@ -1211,7 +1267,7 @@ func newLocCommand(ctx appContext) *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "loc",
-		Short: "Print a line-of-code summary of src/, grouped by category and subproject",
+		Short: tr("cli.loc.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return loc.Run(loc.Options{
 				Root:              ctx.repoRoot,
@@ -1228,7 +1284,7 @@ func newLocCommand(ctx appContext) *cobra.Command {
 func newTyposCommand(ctx appContext) *cobra.Command {
 	return &cobra.Command{
 		Use:                "typos [flags]",
-		Short:              "Check first-party files for spelling mistakes",
+		Short:              tr("cli.typos.short"),
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			typosPath, err := exec.LookPath("typos")

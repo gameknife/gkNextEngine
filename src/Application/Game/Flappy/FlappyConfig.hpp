@@ -4,6 +4,6 @@
 
 namespace Flappy
 {
-    FGameplayConfig LoadGameplayConfig(const std::string& path = "assets/configs/flappy/gameplay.json");
-    FReplayConfig LoadReplayConfig(const std::string& path = "assets/configs/flappy/replay.json");
+    FGameplayConfig LoadGameplayConfig(const std::string& path = "assets/projects/Flappy/Content/configs/gameplay.json");
+    FReplayConfig LoadReplayConfig(const std::string& path = "assets/projects/Flappy/Content/configs/replay.json");
 }

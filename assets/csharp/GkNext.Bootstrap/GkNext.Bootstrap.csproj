@@ -14,6 +14,9 @@
          global property on every referenced project too, and restore fails with an ambiguous
          project name. -->
     <AssemblyName Condition="'$(GkNativeName)' != ''">$(GkNativeName)</AssemblyName>
+    <!-- Xcode exports TARGET_NAME to custom build phases. Pin the MSBuild output name after the
+         per-app AssemblyName override so that environment property cannot rename references. -->
+    <TargetName>$(AssemblyName)</TargetName>
     <OutputType>Library</OutputType>
     <EnableDynamicLoading>true</EnableDynamicLoading>
   </PropertyGroup>
@@ -27,6 +30,46 @@
     <InvariantTimezone>true</InvariantTimezone>
     <StackTraceSupport>false</StackTraceSupport>
   </PropertyGroup>
+
+  <!-- Android: NativeAOT cross-compiles from the desktop host to Android's bionic libc, published
+       under the linux-bionic-* RIDs. The SDK does not treat those as a first-class target, so the
+       normal AOT route has to be opted into by hand. -->
+  <PropertyGroup Condition="$(RuntimeIdentifier.StartsWith('linux-bionic'))">
+    <PublishAotUsingRuntimePack>true</PublishAotUsingRuntimePack>
+    <DisableUnsupportedError>true</DisableUnsupportedError>
+    <!-- Android's dynamic linker only loads lib*.so out of an APK, and it resolves a dependency by
+         the DT_SONAME recorded in it. The SDK writes neither on a Windows host targeting bionic:
+         the prefix has to be asked for, and the ELF soname is set for Apple platforms only. -->
+    <NativeBinaryPrefix>lib</NativeBinaryPrefix>
+  </PropertyGroup>
+
+  <!-- iOS NativeAOT is consumed by the C++ application linker, not by dyld. The runtime pack
+       supplies iOS code while ILCompiler itself continues to execute on the macOS build host. -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'ios-arm64'">
+    <PublishAotUsingRuntimePack>true</PublishAotUsingRuntimePack>
+    <DisableUnsupportedError>true</DisableUnsupportedError>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'ios-arm64'">
+    <PackageReference Include="runtime.$(NETCoreSdkPortableRuntimeIdentifier).Microsoft.DotNet.ILCompiler"
+                      Version="$(BundledNETCoreAppPackageVersion)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="$(RuntimeIdentifier.StartsWith('linux-bionic')) and '$(NativeLib)' == 'Shared'">
+    <LinkerArg Include="-Wl,-soname,lib$(TargetName).so" />
+    <!-- Match the engine's own Android link options. Devices with 16 KB pages refuse to load a
+         library laid out for 4 KB, and every .so in the APK has to agree. -->
+    <LinkerArg Include="-Wl,-z,max-page-size=16384" />
+    <LinkerArg Include="-Wl,-z,common-page-size=16384" />
+  </ItemGroup>
+
+  <!-- Cross-compiling means two ILCompiler packages: the runtime pack for the target RID, which the
+       SDK resolves, and the compiler that runs *here*, which it does not. Both are derived from the
+       SDK's own properties so the two can never drift to different versions. -->
+  <ItemGroup Condition="$(RuntimeIdentifier.StartsWith('linux-bionic'))">
+    <PackageReference Include="runtime.$(NETCoreSdkPortableRuntimeIdentifier).Microsoft.DotNet.ILCompiler"
+                      Version="$(BundledNETCoreAppPackageVersion)" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\GkNext.Engine\GkNext.Engine.csproj" />
@@ -54,6 +97,19 @@
     </PropertyGroup>
     <Copy SourceFiles="$(GkNativeImportLibrary)" DestinationFolder="$(PublishDir)"
           Condition="Exists('$(GkNativeImportLibrary)')" />
+  </Target>
+
+  <!-- NativeLib=Static intentionally leaves the runtime archives out of the published archive:
+       normally the SDK's native linker consumes them itself. Our C++ iOS application is that
+       linker, so stage its exact link inputs beside the managed archive for CMake to consume. -->
+  <Target Name="GkPublishIosStaticLinkInputs" AfterTargets="CopyNativeBinary"
+          Condition="'$(RuntimeIdentifier)' == 'ios-arm64' and '$(NativeLib)' == 'Static'">
+    <ItemGroup>
+      <GkIosStaticLinkInput Include="@(NativeLibrary)" />
+      <GkIosStaticLinkInput Include="$(IlcSdkPath)libbootstrapperdll.o" />
+    </ItemGroup>
+    <Copy SourceFiles="@(GkIosStaticLinkInput)" DestinationFolder="$(PublishDir)"
+          SkipUnchangedFiles="true" />
   </Target>
 
 </Project>

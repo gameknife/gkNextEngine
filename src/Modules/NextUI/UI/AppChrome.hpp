@@ -49,6 +49,7 @@ namespace NextUI::Foundation
         float height = 30.0f;
         float horizontalPadding = 10.0f;
         float verticalPadding = 4.0f;
+        float backgroundAlpha = 0.76f;
         float centerWidth = 0.0f;
         float rightWidth = 0.0f;
         std::function<void()> drawLeftContent;
@@ -56,6 +57,7 @@ namespace NextUI::Foundation
         std::function<void()> drawRightContent;
     };
 
+    void DrawBrandMark(ImDrawList* drawList, ImVec2 min, float size);
     FAppChromeResult DrawAppTitleBar(const FUiContext& context, const FAppTitleBarOptions& options);
     void DrawBottomBar(const FBottomBarOptions& options);
 }

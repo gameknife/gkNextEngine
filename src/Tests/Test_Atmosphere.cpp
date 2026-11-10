@@ -1,4 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
+
+#include "TestCommon.hpp"
 
 #include "Engine/Assets/GPU/UniformBuffer.hpp"
 #include "Engine/Assets/Core/Model.hpp"
@@ -57,4 +60,44 @@ TEST_CASE("Environment atmosphere features are disabled by default", "[Unit][Atm
     REQUIRE_FALSE(environment.AtmosphereEnabled);
     REQUIRE_FALSE(environment.AerialPerspectiveEnabled);
     REQUIRE_FALSE(environment.HeightFogEnabled);
+}
+
+TEST_CASE_METHOD(EngineTestFixture, "Atmosphere GI refreshes when irradiance changes at a stationary sun",
+                 "[GPU][Integration][Atmosphere]")
+{
+    // The fixture starts without a loaded scene, so supply a real camera before
+    // the atmosphere reads the previous frame's camera altitude.
+    auto& camera = engine_->GetScene().GetRenderCamera();
+    camera.ModelView = glm::lookAt(glm::vec3(0.0f, 2.0f, 5.0f), glm::vec3(0.0f, 2.0f, 0.0f),
+                                   glm::vec3(0.0f, 1.0f, 0.0f));
+    camera.FieldOfView = 60.0f;
+    camera.Aperture = 0.0f;
+    camera.FocalDistance = 5.0f;
+    Simulate(3);
+
+    auto& environment = engine_->GetScene().GetEnvSettings();
+    environment.AtmosphereEnabled = true;
+    environment.SunRotation = 0.3f;
+    environment.SunElevation = glm::radians(40.0f);
+    environment.SunIntensity = 200.0f;
+    environment.SunColor = glm::vec3(1.0f);
+    environment.Atmosphere.SkyLuminanceScale = 1.0f;
+    Simulate(3);
+
+    const auto& projectedSky = Assets::GlobalTexturePool::GetInstance()->GetHDRSphericalHarmonics()[
+        Assets::MAX_HDR_SH - 1];
+    const float initialRed = projectedSky.coefficients[0][0];
+    const float initialGreen = projectedSky.coefficients[1][0];
+    REQUIRE(initialRed > 0.0f);
+    REQUIRE(initialGreen > 0.0f);
+
+    environment.SunIntensity *= 2.0f;
+    Simulate(3);
+    CHECK(projectedSky.coefficients[0][0] == Catch::Approx(initialRed * 2.0f).epsilon(0.01f));
+    CHECK(projectedSky.coefficients[1][0] == Catch::Approx(initialGreen * 2.0f).epsilon(0.01f));
+
+    environment.SunColor.r = 0.5f;
+    Simulate(3);
+    CHECK(projectedSky.coefficients[0][0] == Catch::Approx(initialRed).epsilon(0.01f));
+    CHECK(projectedSky.coefficients[1][0] == Catch::Approx(initialGreen * 2.0f).epsilon(0.01f));
 }

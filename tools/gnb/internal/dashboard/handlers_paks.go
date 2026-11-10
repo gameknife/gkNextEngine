@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/pakbrowser"
 )
@@ -29,6 +30,19 @@ type pakTreeRowVM struct {
 	UncompressedSize uint64
 }
 
+const DefaultPakRowLimit = 100
+
+type cachedPakData struct {
+	modTime            time.Time
+	size               int64
+	archive            *pakbrowser.Archive
+	types              []pakTypeVM
+	rows               []pakTreeRowVM
+	uncompressedSize   uint64
+	compressedFiles    int
+	compressionSavings float64
+}
+
 type pakTypeVM struct {
 	Extension        string
 	FileCount        int
@@ -46,10 +60,93 @@ type paksVM struct {
 	CompressedFiles    int
 	CompressionSavings float64
 	Error              string
+	FilterQuery        string
+	TotalRows          int
+	DisplayedRows      int
+	Truncated          bool
+	Limit              int
+	NextLimit          int
 }
 
-func (s *Server) buildPaksVM(selectedPath string) paksVM {
-	vm := paksVM{}
+func parsePakLimit(val string) int {
+	if val == "all" || val == "-1" {
+		return -1
+	}
+	if val == "" {
+		return DefaultPakRowLimit
+	}
+	var limit int
+	if _, err := fmt.Sscanf(val, "%d", &limit); err == nil && limit > 0 {
+		return limit
+	}
+	return DefaultPakRowLimit
+}
+
+func (s *Server) getCachedPakData(absPath string) (*cachedPakData, error) {
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return nil, err
+	}
+
+	s.cacheMu.RLock()
+	cached := s.paksCache[absPath]
+	s.cacheMu.RUnlock()
+
+	if cached != nil && cached.size == info.Size() && cached.modTime.Equal(info.ModTime()) {
+		return cached, nil
+	}
+
+	archive, err := pakbrowser.Open(absPath)
+	if err != nil {
+		return nil, err
+	}
+
+	types := buildPakTypes(archive.Entries)
+	var uncompressedSize uint64
+	var compressedFiles int
+	for _, entry := range archive.Entries {
+		uncompressedSize += entry.UncompressedSize
+		if entry.Compressed() {
+			compressedFiles++
+		}
+	}
+	var compressionSavings float64
+	if uncompressedSize > 0 {
+		compressionSavings = (1 - float64(archive.StoredSize)/float64(uncompressedSize)) * 100
+	}
+
+	allRows, _, _ := buildPakTreeRows(archive.Entries, -1)
+
+	data := &cachedPakData{
+		modTime:            info.ModTime(),
+		size:               info.Size(),
+		archive:            archive,
+		types:              types,
+		rows:               allRows,
+		uncompressedSize:   uncompressedSize,
+		compressedFiles:    compressedFiles,
+		compressionSavings: compressionSavings,
+	}
+
+	s.cacheMu.Lock()
+	if s.paksCache == nil {
+		s.paksCache = make(map[string]*cachedPakData)
+	}
+	s.paksCache[absPath] = data
+	s.cacheMu.Unlock()
+
+	return data, nil
+}
+
+func (s *Server) buildPaksVM(selectedPath, query string, limit int) paksVM {
+	vm := paksVM{
+		FilterQuery: query,
+		Limit:       limit,
+	}
+	if limit == 0 {
+		limit = DefaultPakRowLimit
+		vm.Limit = limit
+	}
 	paths, err := discoverPakFiles(s.opts.RepoRoot, s.opts.Preset)
 	if err != nil {
 		vm.Error = err.Error()
@@ -95,22 +192,47 @@ func (s *Server) buildPaksVM(selectedPath string) paksVM {
 		return vm
 	}
 
-	archive, err := pakbrowser.Open(selectedAbs)
+	pakData, err := s.getCachedPakData(selectedAbs)
 	if err != nil {
 		vm.Error = fmt.Sprintf("解析 %s 失败：%v", selectedPath, err)
 		return vm
 	}
-	vm.Archive = archive
-	vm.Rows = buildPakTreeRows(archive.Entries)
-	vm.Types = buildPakTypes(archive.Entries)
-	for _, entry := range archive.Entries {
-		vm.UncompressedSize += entry.UncompressedSize
-		if entry.Compressed() {
-			vm.CompressedFiles++
+	vm.Archive = pakData.archive
+	vm.Types = pakData.types
+	vm.UncompressedSize = pakData.uncompressedSize
+	vm.CompressedFiles = pakData.compressedFiles
+	vm.CompressionSavings = pakData.compressionSavings
+
+	if query == "" {
+		totalRows := len(pakData.rows)
+		vm.TotalRows = totalRows
+		if limit > 0 && totalRows > limit {
+			vm.Rows = pakData.rows[:limit]
+			vm.Truncated = true
+			vm.NextLimit = limit + 100
+		} else {
+			vm.Rows = pakData.rows
+			vm.Truncated = false
+		}
+		vm.DisplayedRows = len(vm.Rows)
+		return vm
+	}
+
+	lowerQ := strings.ToLower(query)
+	filtered := make([]pakbrowser.Entry, 0, len(pakData.archive.Entries)/4)
+	for _, entry := range pakData.archive.Entries {
+		if strings.Contains(strings.ToLower(entry.Name), lowerQ) {
+			filtered = append(filtered, entry)
 		}
 	}
-	if vm.UncompressedSize > 0 {
-		vm.CompressionSavings = (1 - float64(archive.StoredSize)/float64(vm.UncompressedSize)) * 100
+
+	rows, totalRows, truncated := buildPakTreeRows(filtered, limit)
+	vm.Rows = rows
+	vm.TotalRows = totalRows
+	vm.DisplayedRows = len(rows)
+	vm.Truncated = truncated
+	if truncated && limit > 0 {
+		vm.NextLimit = limit + 100
 	}
 	return vm
 }
@@ -178,6 +300,7 @@ func defaultPakPath(repoRoot string, paths []string) string {
 
 type pakTreeNode struct {
 	name             string
+	lowerName        string
 	path             string
 	directory        bool
 	fileCount        int
@@ -186,22 +309,34 @@ type pakTreeNode struct {
 	children         map[string]*pakTreeNode
 }
 
-func buildPakTreeRows(entries []pakbrowser.Entry) []pakTreeRowVM {
+func buildPakTreeRows(entries []pakbrowser.Entry, limit int) ([]pakTreeRowVM, int, bool) {
 	root := &pakTreeNode{directory: true, children: make(map[string]*pakTreeNode)}
 	for _, entry := range entries {
-		parts := strings.Split(strings.Trim(entry.Name, "/"), "/")
-		if len(parts) == 0 {
+		rem := strings.Trim(entry.Name, "/")
+		if rem == "" {
 			continue
 		}
 		node := root
 		node.fileCount++
 		node.storedSize += entry.StoredSize
 		node.uncompressedSize += entry.UncompressedSize
-		for index, part := range parts {
+
+		for len(rem) > 0 {
+			slash := strings.IndexByte(rem, '/')
+			var part string
+			var isDirectory bool
+			if slash >= 0 {
+				part = rem[:slash]
+				rem = rem[slash+1:]
+				isDirectory = true
+			} else {
+				part = rem
+				rem = ""
+				isDirectory = false
+			}
 			if part == "" || part == "." {
 				continue
 			}
-			isDirectory := index < len(parts)-1
 			key := part
 			if !isDirectory {
 				key = "\x00" + part
@@ -212,7 +347,13 @@ func buildPakTreeRows(entries []pakbrowser.Entry) []pakTreeRowVM {
 				if node.path != "" {
 					childPath = node.path + "/" + part
 				}
-				child = &pakTreeNode{name: part, path: childPath, directory: isDirectory, children: make(map[string]*pakTreeNode)}
+				child = &pakTreeNode{
+					name:             part,
+					lowerName:        strings.ToLower(part),
+					path:             childPath,
+					directory:        isDirectory,
+					children:         make(map[string]*pakTreeNode),
+				}
 				node.children[key] = child
 			}
 			child.fileCount++
@@ -222,7 +363,12 @@ func buildPakTreeRows(entries []pakbrowser.Entry) []pakTreeRowVM {
 		}
 	}
 
-	rows := make([]pakTreeRowVM, 0, len(entries)*2)
+	capSize := 256
+	if limit > 0 && limit < capSize {
+		capSize = limit
+	}
+	rows := make([]pakTreeRowVM, 0, capSize)
+	totalRows := 0
 	var appendChildren func(*pakTreeNode, int)
 	appendChildren = func(parent *pakTreeNode, depth int) {
 		children := make([]*pakTreeNode, 0, len(parent.children))
@@ -233,25 +379,29 @@ func buildPakTreeRows(entries []pakbrowser.Entry) []pakTreeRowVM {
 			if children[i].directory != children[j].directory {
 				return children[i].directory
 			}
-			return strings.ToLower(children[i].name) < strings.ToLower(children[j].name)
+			return children[i].lowerName < children[j].lowerName
 		})
 		for _, child := range children {
-			rows = append(rows, pakTreeRowVM{
-				Name:             child.name,
-				Path:             child.path,
-				Depth:            depth,
-				Directory:        child.directory,
-				FileCount:        child.fileCount,
-				StoredSize:       child.storedSize,
-				UncompressedSize: child.uncompressedSize,
-			})
+			totalRows++
+			if limit <= 0 || len(rows) < limit {
+				rows = append(rows, pakTreeRowVM{
+					Name:             child.name,
+					Path:             child.path,
+					Depth:            depth,
+					Directory:        child.directory,
+					FileCount:        child.fileCount,
+					StoredSize:       child.storedSize,
+					UncompressedSize: child.uncompressedSize,
+				})
+			}
 			if child.directory {
 				appendChildren(child, depth+1)
 			}
 		}
 	}
 	appendChildren(root, 0)
-	return rows
+	truncated := limit > 0 && totalRows > limit
+	return rows, totalRows, truncated
 }
 
 func buildPakTypes(entries []pakbrowser.Entry) []pakTypeVM {

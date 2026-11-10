@@ -6,10 +6,11 @@ package dashboard
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/platform"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/remoteplay"
@@ -32,6 +33,10 @@ func (s *Server) handleJobStart(w http.ResponseWriter, r *http.Request) {
 		extraArgs := strings.Fields(r.FormValue("extraArgs"))
 		spec, err = s.runJobSpec(target, extraArgs)
 		if err != nil {
+			if r.Header.Get("HX-Request") != "" {
+				s.renderJobError(w, r, kind, target, err.Error())
+				return
+			}
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -50,6 +55,10 @@ func (s *Server) handleJobStart(w http.ResponseWriter, r *http.Request) {
 			Scene:         strings.TrimSpace(r.FormValue("scene")),
 		}, extraArgs)
 		if err != nil {
+			if r.Header.Get("HX-Request") != "" {
+				s.renderJobError(w, r, kind, target, err.Error())
+				return
+			}
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -57,6 +66,10 @@ func (s *Server) handleJobStart(w http.ResponseWriter, r *http.Request) {
 		var err error
 		spec, err = s.testJobSpec(target)
 		if err != nil {
+			if r.Header.Get("HX-Request") != "" {
+				s.renderJobError(w, r, kind, target, err.Error())
+				return
+			}
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -66,10 +79,38 @@ func (s *Server) handleJobStart(w http.ResponseWriter, r *http.Request) {
 	}
 	job, err := s.jobs.Start(spec)
 	if err != nil {
+		if r.Header.Get("HX-Request") != "" {
+			s.renderJobError(w, r, kind, target, err.Error())
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.render(w, "log_panel", s.jobSnapshot(job))
+	s.render(w, r, "log_panel", s.jobSnapshot(job))
+}
+
+func (s *Server) renderJobError(w http.ResponseWriter, r *http.Request, kind JobKind, target, errMsg string) {
+	now := time.Now()
+	var lines []string
+	for _, l := range strings.Split(errMsg, "\n") {
+		lines = append(lines, fmt.Sprintf(`<span style="color:#ef4444;font-weight:600">%s</span>`, escapeHTML(l)))
+	}
+	label := target
+	if label == "" {
+		label = string(kind)
+	}
+	snap := JobSnapshot{
+		ID:         fmt.Sprintf("err-%d", now.UnixNano()),
+		Kind:       kind,
+		Target:     label,
+		Command:    errMsg,
+		Status:     StatusFailed,
+		StartedAt:  now,
+		FinishedAt: now,
+		ExitNote:   "error",
+		Lines:      lines,
+	}
+	s.render(w, r, "log_panel", snap)
 }
 
 func (s *Server) handleJobCancel(w http.ResponseWriter, r *http.Request) {
@@ -83,7 +124,7 @@ func (s *Server) handleJobCancel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "job not found", http.StatusNotFound)
 		return
 	}
-	s.render(w, "log_panel", s.jobSnapshot(job))
+	s.render(w, r, "log_panel", s.jobSnapshot(job))
 }
 
 func (s *Server) jobSnapshot(job *Job) JobSnapshot {
@@ -146,6 +187,7 @@ func (s *Server) handleJobStream(w http.ResponseWriter, r *http.Request) {
 	if from > len(snap.Lines) {
 		from = len(snap.Lines)
 	}
+	lang := s.resolveLang(r)
 	if snap.Status != StatusRunning && from >= len(snap.Lines) {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -180,11 +222,11 @@ func (s *Server) handleJobStream(w http.ResponseWriter, r *http.Request) {
 		emit("line", line)
 	}
 	if snap.Status != StatusRunning {
-		emit("status", statusBadgeHTML(snap.Status, snap.ExitNote))
+		emit("status", statusBadgeHTML(snap.Status, snap.ExitNote, lang))
 		emit("done", fmt.Sprintf("%d", snap.FinishedAt.Unix()))
 		return
 	}
-	emit("status", statusBadgeHTML(snap.Status, snap.ExitNote))
+	emit("status", statusBadgeHTML(snap.Status, snap.ExitNote, lang))
 
 	ctx := r.Context()
 	for {
@@ -208,71 +250,50 @@ func (s *Server) buildJobSpec(target string, reconfigure bool) JobSpec {
 	if target == "" || target == "all" {
 		label = "all"
 	}
-	buildDir := filepath.Join(s.opts.RepoRoot, "out", "build", s.opts.Preset)
-	args := []string{"--build", buildDir}
-	if target != "" && target != "all" {
-		args = append(args, "--target", target)
+	// A dashboard build must use the same orchestration as `gnb build`, rather
+	// than invoking whichever cmake happens to be on PATH. Besides choosing the
+	// bundled CMake/Ninja, gnb prepares the MSVC environment on Windows. Skipping
+	// that setup can leave compiler include paths unavailable despite a successful
+	// build from the command line.
+	args := []string{"--repo-root", s.opts.RepoRoot, "--preset", s.opts.Preset, "build"}
+	if target == "" || target == "all" {
+		args = append(args, "--all")
+	} else {
+		args = append(args, target)
+	}
+	if reconfigure {
+		args = append(args, "--reconfigure")
 	}
 	env := []string{"CLICOLOR_FORCE=1", "FORCE_COLOR=1"}
-	if !reconfigure {
-		return JobSpec{
-			Kind:    JobBuild,
-			Target:  label,
-			Name:    "cmake",
-			Args:    args,
-			WorkDir: s.opts.RepoRoot,
-			Env:     env,
-		}
-	}
-	// Two-step run: configure first, then build. We model that as a shell
-	// invocation so the user gets one combined log stream. On Windows we
-	// fall back to PowerShell because cmd.exe lacks `&&` in CommandContext
-	// without a /c wrapper.
-	configureArgs := []string{"--preset", s.opts.Preset}
-	if runtime.GOOS == "windows" {
-		ps := fmt.Sprintf("cmake %s; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; cmake %s",
-			joinShell(configureArgs), joinShell(args))
-		return JobSpec{
-			Kind:    JobBuild,
-			Target:  label,
-			Name:    "powershell",
-			Args:    []string{"-NoProfile", "-Command", ps},
-			WorkDir: s.opts.RepoRoot,
-			Env:     env,
-		}
-	}
-	sh := fmt.Sprintf("cmake %s && cmake %s",
-		joinShell(configureArgs), joinShell(args))
 	return JobSpec{
 		Kind:    JobBuild,
 		Target:  label,
-		Name:    "sh",
-		Args:    []string{"-c", sh},
+		Name:    s.gnbPath(),
+		Args:    args,
 		WorkDir: s.opts.RepoRoot,
 		Env:     env,
 	}
 }
 
-// joinShell quotes args naively for human-readable shell strings. Inputs come
-// from preset name + target name, neither of which contains shell metacharacters
-// in this project, so we keep it simple.
-func joinShell(args []string) string {
-	out := ""
-	for i, a := range args {
-		if i > 0 {
-			out += " "
-		}
-		out += a
+func (s *Server) gnbPath() string {
+	if s.opts.GNBPath != "" {
+		return s.opts.GNBPath
 	}
-	return out
+	if executable, err := os.Executable(); err == nil {
+		return executable
+	}
+	return "gnb"
 }
 
 func (s *Server) runJobSpec(target string, extraArgs []string) (JobSpec, error) {
-	if target == "" {
-		return JobSpec{}, fmt.Errorf("请选择要运行的 target")
+	if target == "" || target == "all" {
+		return JobSpec{}, fmt.Errorf("请选择要运行的具体目标（不能为 all）")
 	}
 	binDir := platform.BinDir(s.opts.RepoRoot, s.opts.Preset)
 	exe := platform.ExecutablePath(binDir, target)
+	if _, err := os.Stat(exe); err != nil {
+		return JobSpec{}, fmt.Errorf("可执行文件尚未生成: %s\n该目标尚未编译，请先在左侧点击【构建】", target)
+	}
 	return JobSpec{
 		Kind:       JobRun,
 		Target:     target,
@@ -319,7 +340,10 @@ func (s *Server) remoteJobSpec(target string, opts remoteplay.Options, extraArgs
 func (s *Server) testJobSpec(name string) (JobSpec, error) {
 	binDir := platform.BinDir(s.opts.RepoRoot, s.opts.Preset)
 	exe := platform.ExecutablePath(binDir, "gkNextUnitTests")
-	args := []string{"--use-colour", "yes"}
+	if _, err := os.Stat(exe); err != nil {
+		return JobSpec{}, fmt.Errorf("测试程序尚未生成: %s\n请先在 Build 选项卡编译 gkNextUnitTests 目标", exe)
+	}
+	args := []string{"--colour-mode", "ansi"}
 	label := name
 	if name == "" || name == "all" {
 		label = "all"

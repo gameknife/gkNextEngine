@@ -27,7 +27,8 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         viewZenithCosine, 0.0f));
     const float distance = Atmosphere.RaySphereNearest(origin, direction, params.TopRadius);
     const float3 transmittance = distance > 0.0f
-        ? Atmosphere.IntegrateTransmittance(params, origin, direction, distance, 40)
+        ? Atmosphere.IntegrateTransmittance(
+            params, origin, direction, distance, Atmosphere.STEPS_TRANSMITTANCE)
         : float3(0.0f);
     Bindless.GetStorageTexture<float4>(params.TransmittanceLutId)[dispatchThreadId.xy] =
         float4(transmittance, 1.0f);

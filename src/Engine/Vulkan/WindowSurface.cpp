@@ -7,11 +7,15 @@
 #include "Engine/Common/CoreMinimal.hpp"
 #include "Engine/Options.hpp"
 #include "Engine/Utilities/FileHelper.hpp"
+#include "Engine/Runtime/Platform/PlatformCommon.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdlib>
+#include <fstream>
+#include <nlohmann/json.hpp>
 #include <SDL3/SDL_surface.h>
+#include <SDL3/SDL_video.h>
 
 namespace Vulkan
 {
@@ -62,6 +66,130 @@ namespace
         startupSplashStage = 0;
     }
 
+    std::filesystem::path ResolveApplicationIconPath(const std::string& explicitIconPath)
+    {
+        if (!explicitIconPath.empty())
+        {
+            const std::filesystem::path explicitPath = Utilities::FileHelper::GetRuntimeFilePath(explicitIconPath);
+            if (std::filesystem::exists(explicitPath))
+            {
+                return explicitPath;
+            }
+        }
+
+#ifdef GK_APP_ICON_NAME
+        {
+            const std::filesystem::path configuredPath = Utilities::FileHelper::GetRuntimeFilePath(
+                std::string("assets/icons/") + GK_APP_ICON_NAME + ".png");
+            if (std::filesystem::exists(configuredPath))
+            {
+                return configuredPath;
+            }
+        }
+#endif
+
+        const std::string appIdentity = NextRenderer::GetApplicationIdentity();
+        if (!appIdentity.empty())
+        {
+            const std::filesystem::path appIconPath = Utilities::FileHelper::GetRuntimeFilePath(
+                "assets/icons/" + appIdentity + ".png");
+            if (std::filesystem::exists(appIconPath))
+            {
+                return appIconPath;
+            }
+
+            const std::filesystem::path manifestPath = Utilities::FileHelper::GetRuntimeFilePath(
+                "assets/icons/manifest.json");
+            if (std::filesystem::exists(manifestPath))
+            {
+                try
+                {
+                    std::ifstream manifestFile(manifestPath);
+                    if (manifestFile.is_open())
+                    {
+                        nlohmann::json manifestJson;
+                        manifestFile >> manifestJson;
+                        if (manifestJson.contains("icons") && manifestJson["icons"].is_array())
+                        {
+                            for (const auto& item : manifestJson["icons"])
+                            {
+                                if (item.value("target", "") == appIdentity)
+                                {
+                                    const std::string fileStr = item.value("file", "");
+                                    if (!fileStr.empty())
+                                    {
+                                        const std::filesystem::path resolved =
+                                            Utilities::FileHelper::GetRuntimeFilePath("assets/icons/" + fileStr);
+                                        if (std::filesystem::exists(resolved))
+                                        {
+                                            return resolved;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (...)
+                {
+                }
+            }
+        }
+
+        const std::filesystem::path fallbackEnginePath = Utilities::FileHelper::GetRuntimeFilePath(
+            "assets/icons/gkNextEngine.png");
+        if (std::filesystem::exists(fallbackEnginePath))
+        {
+            return fallbackEnginePath;
+        }
+
+        const std::filesystem::path fallbackRendererPath = Utilities::FileHelper::GetRuntimeFilePath(
+            "assets/icons/gkNextRenderer.png");
+        if (std::filesystem::exists(fallbackRendererPath))
+        {
+            return fallbackRendererPath;
+        }
+
+        return Utilities::FileHelper::GetRuntimeFilePath("assets/brand/gknext_logo_icon_200.png");
+    }
+
+    void ApplyWindowIcon(SDL_Window* window, const std::string& explicitIconPath)
+    {
+        if (window == nullptr)
+        {
+            return;
+        }
+
+        const std::filesystem::path iconPath = ResolveApplicationIconPath(explicitIconPath);
+        if (!std::filesystem::exists(iconPath))
+        {
+            return;
+        }
+
+        int iconWidth = 0;
+        int iconHeight = 0;
+        if (stbi_uc* pixels = stbi_load(iconPath.string().c_str(), &iconWidth, &iconHeight, nullptr, STBI_rgb_alpha);
+            pixels != nullptr)
+        {
+            if (SDL_Surface* surface = SDL_CreateSurfaceFrom(
+                    iconWidth, iconHeight, SDL_PIXELFORMAT_RGBA32, pixels, iconWidth * 4);
+                surface != nullptr)
+            {
+                if (!SDL_SetWindowIcon(window, surface))
+                {
+                    SPDLOG_WARN("Failed to set window icon: {}", SDL_GetError());
+                }
+                else
+                {
+                    SPDLOG_INFO("Set window icon for {} from {}",
+                                NextRenderer::GetApplicationIdentity(), iconPath.string());
+                }
+                SDL_DestroySurface(surface);
+            }
+            stbi_image_free(pixels);
+        }
+    }
+
     void CreateStartupSplash()
     {
 #if ANDROID || IOS
@@ -93,8 +221,7 @@ namespace
 
         SDL_FillSurfaceRect(windowSurface, nullptr, SDL_MapSurfaceRGB(windowSurface, 19, 22, 29));
 
-        const std::filesystem::path logoPath = Utilities::FileHelper::GetRuntimeFilePath(
-            "assets/brand/gknext_logo_icon_200.png");
+        const std::filesystem::path logoPath = ResolveApplicationIconPath("");
         int logoWidth = 0;
         int logoHeight = 0;
         if (stbi_uc* pixels = stbi_load(logoPath.string().c_str(), &logoWidth, &logoHeight, nullptr,
@@ -422,6 +549,15 @@ Window::Window(const WindowConfig& config) :
     {
         flags |= SDL_WINDOW_BORDERLESS;
     }
+#if IOS
+    // UIKit measures windows in points, and without this flag SDL sizes the CAMetalLayer drawable
+    // in points too. On a 1080p iPhone 7 Plus that is a 414x736 swapchain the compositor then
+    // stretches back over 1080x1920 - every frame is a 2.6x blow-up of a third-resolution image.
+    // Take the native-density back buffer instead and handle the extra pixels the way the desktop
+    // high-DPI path does: Dear ImGui stays in point space and scales through
+    // DisplayFramebufferScale, while the scene's render resolution is the upscaler's decision.
+    flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
+#endif
     if (config.HiddenWindow || config.DeferShowUntilFirstPresent)
     {
         // Keep startup out of the way until the first rendered frame is ready. A permanently
@@ -499,6 +635,18 @@ Window::Window(const WindowConfig& config) :
         Throw(std::runtime_error("failed to init SDL Window."));
     }
 
+    ApplyWindowIcon(window_, config.IconPath);
+
+#if IOS
+    {
+        const VkExtent2D pointExtent = WindowSize();
+        const VkExtent2D pixelExtent = FramebufferSize();
+        SPDLOG_INFO("iOS window: {}x{} points, {}x{} pixels (density {:.3f})",
+                    pointExtent.width, pointExtent.height,
+                    pixelExtent.width, pixelExtent.height, PixelDensity());
+    }
+#endif
+
     if (config.HideTitleBar)
     {
         if (!SDL_SetWindowBordered(window_, false))
@@ -546,6 +694,16 @@ float Window::ContentScale() const
     return xscale;
 }
 
+float Window::PixelDensity() const
+{
+    if (config_.HeadlessSurface)
+    {
+        return 1.0f;
+    }
+    const float density = SDL_GetWindowPixelDensity(window_);
+    return std::isfinite(density) && density > 0.0f ? density : 1.0f;
+}
+
 VkExtent2D Window::FramebufferSize() const
 {
     if (config_.HeadlessSurface)
@@ -581,7 +739,31 @@ std::vector<const char*> Window::GetRequiredInstanceExtensions() const
 
 double Window::GetTime() const
 {
-    return SDL_GetTicks() / 1000.0;
+    // Nanoseconds, not SDL_GetTicks(): the same epoch, but a millisecond-quantised clock cannot
+    // measure a frame loop that runs faster than 1 kHz, and frame pacing reads this delta.
+    return static_cast<double>(SDL_GetTicksNS()) / 1'000'000'000.0;
+}
+
+float Window::DisplayRefreshRateHz() const
+{
+    if (config_.HeadlessSurface || window_ == nullptr)
+    {
+        return 0.0f;
+    }
+
+    const SDL_DisplayID display = SDL_GetDisplayForWindow(window_);
+    if (display == 0)
+    {
+        return 0.0f;
+    }
+
+    // A fullscreen window is scanned out at its own mode; a windowed one follows the desktop mode.
+    const SDL_DisplayMode* mode = SDL_GetWindowFullscreenMode(window_);
+    if (mode == nullptr)
+    {
+        mode = SDL_GetCurrentDisplayMode(display);
+    }
+    return mode != nullptr && mode->refresh_rate > 0.0f ? mode->refresh_rate : 0.0f;
 }
 
 void Window::Close()

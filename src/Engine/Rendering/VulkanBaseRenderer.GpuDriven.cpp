@@ -197,6 +197,23 @@ namespace Vulkan
 
             vkCmdFillBuffer(commandBuffer, scene.SoftMeshShaderCounterBuffer().Handle(), 0, VK_WHOLE_SIZE, 0);
 
+            // Reset the main GPU-driven stat block here rather than from the CPU readback. The
+            // readback maps host-visible memory without a fence, so clearing there raced the cull
+            // and could clear either side of an accumulation, making the overlay alternate between
+            // one and two frames' worth of counts. Clearing on the GPU timeline puts the reset and
+            // the accumulation in the same ordered stream, so a read sees at most one frame.
+            // Only the main block: shadow cascades are cleared per-cascade by ShadowMapPass, since
+            // an inactive cascade must retain its last values instead of reporting zero.
+            vkCmdFillBuffer(commandBuffer, scene.NodeMatrixBuffer().Handle(),
+                            Assets::GPU_SCENE_DYNAMIC_GPU_DRIVEN_STATS_OFFSET,
+                            sizeof(Assets::GPUDrivenStat), 0);
+
+            BufferMemoryBarrier::Insert(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                                        scene.NodeMatrixBuffer().Handle(), VK_ACCESS_TRANSFER_WRITE_BIT,
+                                        VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+                                        Assets::GPU_SCENE_DYNAMIC_GPU_DRIVEN_STATS_OFFSET,
+                                        sizeof(Assets::GPUDrivenStat));
+
             BufferMemoryBarrier::Insert(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                                         scene.SoftMeshShaderCounterBuffer().Handle(), VK_ACCESS_TRANSFER_WRITE_BIT,
                                         VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
@@ -512,6 +529,29 @@ commandBuffer, gpuScene, 0, indirectDrawBatchCount, maxSceneTriangles);
             vkCmdFillBuffer(commandBuffer, scene.SoftMeshShaderDrawArgBuffer().Handle(), sizeof(VkDrawIndirectCommand),
                             sizeof(VkDrawIndirectCommand) * Assets::Scene::kSunShadowCascadeCount, 0);
 
+            // Clear the stat block of each cascade this dispatch will actually rebuild. Cascades
+            // refresh on a rotating schedule, so clearing all four would zero the ones that are
+            // being skipped; leaving them uncleared (the previous behaviour) instead accumulated
+            // them without bound, and the overlay's shadow rows climbed for as long as the scene
+            // stayed loaded.
+            for (uint32_t cascade = 0; cascade < Assets::Scene::kSunShadowCascadeCount; ++cascade)
+            {
+                if ((activeCascadeMask & (1u << cascade)) == 0u)
+                {
+                    continue;
+                }
+                const VkDeviceSize statOffset =
+                    Assets::GPU_SCENE_DYNAMIC_SHADOW_GPU_DRIVEN_STATS_OFFSET +
+                    static_cast<VkDeviceSize>(cascade) * sizeof(Assets::GPUDrivenStat);
+                vkCmdFillBuffer(commandBuffer, scene.NodeMatrixBuffer().Handle(), statOffset,
+                                sizeof(Assets::GPUDrivenStat), 0);
+                BufferMemoryBarrier::Insert(
+                    commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    scene.NodeMatrixBuffer().Handle(), VK_ACCESS_TRANSFER_WRITE_BIT,
+                    VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, statOffset,
+                    sizeof(Assets::GPUDrivenStat));
+            }
+
             BufferMemoryBarrier::Insert(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, {
                 BufferMemoryBarrier::Make(scene.SoftMeshShaderCounterBuffer().Handle(), VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT),
                 BufferMemoryBarrier::Make(scene.SoftMeshShaderDrawArgBuffer().Handle(), VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
@@ -595,7 +635,11 @@ commandBuffer, gpuScene, 0, indirectDrawBatchCount, maxSceneTriangles);
 
     void VulkanBaseRenderer::DrawWireframeOverlay(VkCommandBuffer commandBuffer, uint32_t imageIndex)
     {
-        if (!overlay_.wireframePipeline || imageIndex >= overlay_.wireframeFrameBuffers.size())
+        // Depth-tested by default (edges sit on the surfaces they belong to); x-ray shows every
+        // edge including those behind geometry.
+        const bool xray = FrameSettings().userSettings.WireframeXRay;
+        auto* selectedPipeline = xray ? overlay_.wireframeXrayPipeline.get() : overlay_.wireframePipeline.get();
+        if (!selectedPipeline || imageIndex >= overlay_.wireframeFrameBuffers.size())
         {
             return;
         }
@@ -609,7 +653,7 @@ commandBuffer, gpuScene, 0, indirectDrawBatchCount, maxSceneTriangles);
 
         VkRenderPassBeginInfo renderPassInfo = {};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        auto& activeWireframePipeline = *overlay_.wireframePipeline;
+        auto& activeWireframePipeline = *selectedPipeline;
         renderPassInfo.renderPass = activeWireframePipeline.RenderPass().Handle();
         renderPassInfo.framebuffer = overlay_.wireframeFrameBuffers[imageIndex].Handle();
         renderPassInfo.renderArea.offset = {0, 0};
@@ -620,13 +664,16 @@ commandBuffer, gpuScene, 0, indirectDrawBatchCount, maxSceneTriangles);
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
         {
             const auto& scene = GetScene();
-            const Assets::GPUScene& gpuScene = scene.FetchGPUScene(imageIndex, ActiveViewBankBase());
+            Assets::GPUScene gpuScene = scene.FetchGPUScene(imageIndex, ActiveViewBankBase());
+            // Pass-local copy, so borrowing CustomData1 for the colour mode affects nothing else.
+            gpuScene.CustomData1 = FrameSettings().userSettings.WireframeColorMode;
 
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, activeWireframePipeline.Handle());
             activeWireframePipeline.PipelineLayout().BindDescriptorSets(
                 commandBuffer, 0, VK_PIPELINE_BIND_POINT_GRAPHICS);
             vkCmdPushConstants(commandBuffer, activeWireframePipeline.PipelineLayout().Handle(),
-                               VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Assets::GPUScene), &gpuScene);
+                               VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                               sizeof(Assets::GPUScene), &gpuScene);
             if (scene.GetIndirectDrawBatchCount() > 0)
             {
                 vkCmdDrawIndirect(commandBuffer, scene.SoftMeshShaderDrawArgBuffer().Handle(), 0,

@@ -6,6 +6,10 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   build:
     name: ${{ matrix.name }}
@@ -25,29 +29,18 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: '1.23.x'
+          cache-dependency-path: tools/gnb/go.sum
       - name: Install Ubuntu dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install curl unzip tar ninja-build libxi-dev libxinerama-dev libxcursor-dev libxrandr-dev wayland-protocols libxkbcommon-dev xorg-dev
-      - name: Cache key
-        id: gnb
-        shell: pwsh
-        run: |
-          if ("${{ runner.os }}" -eq "Windows") {
-            "key=$(.\gnb.bat info --bincache-key)" >> $env:GITHUB_OUTPUT
-          } else {
-            "key=$(./gnb.sh info --bincache-key)" >> $env:GITHUB_OUTPUT
-          }
-      - uses: actions/cache/restore@v6
-        id: cache-vcpkg-restore
-        with:
-          path: |
-            .vcpkg
-            .vcpkg_bincache
-          key: ${{ steps.gnb.outputs.key }}
+          sudo apt-get install -y curl unzip tar ninja-build libxi-dev libxinerama-dev libxcursor-dev libxrandr-dev wayland-protocols libxkbcommon-dev xorg-dev mono-complete
       - uses: microsoft/setup-msbuild@v3
         if: runner.os == 'Windows'
+      - name: Configure vcpkg binary cache
+        uses: ./.github/actions/vcpkg-cache
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup dependencies
         shell: pwsh
         run: |
@@ -60,7 +53,7 @@ jobs:
         shell: pwsh
         run: |
           if ("${{ runner.os }}" -eq "Windows") {
-            .\gnb.bat build
+            .\gnb.bat build --jobs $env:NUMBER_OF_PROCESSORS
           } else {
             ./gnb.sh build
           }
@@ -74,10 +67,3 @@ jobs:
           } else {
             ./gnb.sh test "~[GPU]"
           }
-      - uses: actions/cache/save@v6
-        if: steps.cache-vcpkg-restore.outputs.cache-hit != 'true'
-        with:
-          path: |
-            .vcpkg
-            .vcpkg_bincache
-          key: ${{ steps.gnb.outputs.key }}

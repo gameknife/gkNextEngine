@@ -11,7 +11,7 @@ import (
 )
 
 func newAICommand(ctx appContext) *cobra.Command {
-	root := &cobra.Command{Use: "ai", Short: "AI provider diagnostics and Engine bridge"}
+	root := &cobra.Command{Use: "ai", Short: tr("cli.ai.short")}
 	root.AddCommand(newAIDoctorCommand(ctx))
 	root.AddCommand(newAIBridgeCommand(ctx))
 	return root
@@ -26,7 +26,7 @@ func newLegacyAgentCommand(ctx appContext) *cobra.Command {
 
 func newAIBridgeCommand(ctx appContext) *cobra.Command {
 	var stdio bool
-	cmd := &cobra.Command{Use: "bridge", Short: "Run the Engine JSON-RPC AI bridge", RunE: func(cmd *cobra.Command, args []string) error {
+	cmd := &cobra.Command{Use: "bridge", Short: tr("cli.ai.bridge.short"), RunE: func(cmd *cobra.Command, args []string) error {
 		if !stdio {
 			return fmt.Errorf("only --stdio transport is currently supported")
 		}
@@ -43,7 +43,7 @@ func newAIBridgeCommand(ctx appContext) *cobra.Command {
 }
 
 func newAIDoctorCommand(ctx appContext) *cobra.Command {
-	return &cobra.Command{Use: "doctor", Short: "Validate AI profiles, providers, and credentials without inference", RunE: func(cmd *cobra.Command, args []string) error {
+	return &cobra.Command{Use: "doctor", Short: tr("cli.ai.doctor.short"), RunE: func(cmd *cobra.Command, args []string) error {
 		runtime, err := ai.NewRuntime(ctx.repoRoot, ctx.cfg)
 		if err != nil {
 			return err

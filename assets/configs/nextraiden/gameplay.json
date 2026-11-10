@@ -1,0 +1,238 @@
+{
+  "_comment": "NextRaiden 全局数值。取景与播放列的推导见 docs/projects/nextraiden/nextraiden-mvp-design.md 5.2。",
+  "screen": {
+    "_comment": "fieldOfView 是竖直视角：竖向取景由它决定，横向多出来的部分由 hudColumnFraction 两侧立柱盖住。cameraHeight 是整套尺度的唯一旋钮——它决定一块屏幕装下多少米世界，也就决定机体在屏幕上有多大。改它必须同步改所有'每秒多少米'和'多少米以内'的量，否则观感会整体走样。",
+    "cameraHeight": 75.0,
+    "cameraPitchDegrees": 15.0,
+    "fieldOfView": 50.0,
+    "nearPlane": 1.0,
+    "farPlane": 600.0,
+    "hudColumnFraction": 0.3
+  },
+  "playfield": {
+    "_comment": "aheadLimit/behindLimit 是相对相机中心的 Z 偏移，前方是 -Z。halfWidth 决定播放列有几个机身宽——这是街机竖版射击手感的关键指标：5.5 m 的机体配 ±21 m 就是 7.6 个机身宽，和原版雷电同量级；早期的 ±13 只有 4.7 个，挤得没法走位。",
+    "flightAltitude": 7.0,
+    "halfWidth": 21.0,
+    "aheadLimit": 16.0,
+    "behindLimit": 24.0
+  },
+  "player": {
+    "_comment": "hitRadius 远小于 5.5m 的机体宽度，这是街机手感的关键，不是笔误——而且它不随世界尺度缩放，因为变大的是世界不是机体。speed 乘的是 1.9 而不是世界尺度的 1.6：等比例只能保持原来的手感，而原来的手感就是偏慢。",
+    "speed": 34.0,
+    "slowScale": 0.5,
+    "hitRadius": 0.6,
+    "bankDegrees": 18.0,
+    "bankRateDegrees": 140.0,
+    "spawnBehind": 19.0
+  },
+  "weapon": {
+    "_comment": "等级是表不是公式：让 4 级像奖励，而不是 3 级乘以 1.25。arcDegrees 是整把扇形的总宽。",
+    "intervalSeconds": 0.11,
+    "bulletSpeed": 99.0,
+    "bulletRadius": 0.3,
+    "muzzleForward": 2.4,
+    "spreadOffset": 0.75,
+    "levels": [
+      {
+        "shots": 1,
+        "arcDegrees": 0.0,
+        "damage": 4.0
+      },
+      {
+        "shots": 2,
+        "arcDegrees": 0.0,
+        "damage": 4.0
+      },
+      {
+        "shots": 3,
+        "arcDegrees": 18.0,
+        "damage": 4.0
+      },
+      {
+        "shots": 5,
+        "arcDegrees": 34.0,
+        "damage": 4.0
+      }
+    ],
+    "optionIntervalSeconds": 0.16,
+    "optionBulletSpeed": 125.0,
+    "optionDamage": 3.0,
+    "optionOffsetX": 5.4,
+    "optionOffsetZ": 2.9,
+    "optionFollowRate": 7.0,
+    "autoFire": true,
+    "_comment_autoFire": "自动射击默认开。C 键切换，HUD 右栏显示 AUTO/MANUAL；关掉后回到按住 Z/空格开火。"
+  },
+  "survival": {
+    "_comment": "护盾扣完才掉一条命；死一次退一级火力——全退会让一次失误终结一局，不退则死亡没有代价。",
+    "lives": 3,
+    "shield": 3,
+    "bombs": 3,
+    "invulnerableSeconds": 1.5,
+    "respawnSeconds": 0.9,
+    "bombDamage": 400.0,
+    "bombInvulnerableSeconds": 1.2,
+    "powerLossOnDeath": 1
+  },
+  "score": {
+    "extendEvery": 100000
+  },
+  "enemies": {
+    "scout": {
+      "hitPoints": 12.0,
+      "radius": 1.7,
+      "speed": 22.4,
+      "score": 100,
+      "debrisPieces": 2
+    },
+    "interceptor": {
+      "hitPoints": 28.0,
+      "radius": 2.8,
+      "speed": 17.6,
+      "score": 250,
+      "debrisPieces": 3
+    },
+    "bomber": {
+      "hitPoints": 90.0,
+      "radius": 4.5,
+      "speed": 12.8,
+      "score": 800,
+      "debrisPieces": 5
+    }
+  },
+  "debris": {
+    "_comment": "物理碎片。budget 是同时活着的刚体上限，0 关掉整套。recycleMargin 是越过地面平面近端边界后再多走的距离——用地面那条线，不是飞行平面那条。",
+    "budget": 64,
+    "perPartPrefab": 10,
+    "minSpeed": 7.8,
+    "maxSpeed": 18.2,
+    "minLift": 4.6,
+    "maxLift": 10.3,
+    "spinRadiansPerSec": 6.0,
+    "maxAgeSeconds": 12.0,
+    "sleepSpeed": 0.35,
+    "recycleMargin": 6.4,
+    "killPlaneY": -5.0
+  },
+  "bullets": {
+    "_comment": "pool 是每种弹体克隆多少个节点；scale 是画多大。kit 按真实尺寸画弹药，47 米俯视下一发 20cm 炮弹只有三个像素——在弹幕游戏里这不是难，是不讲理。判定半径与 scale 无关，放大观感不会偷偷放大命中体积。",
+    "pool": {
+      "bolt": 64,
+      "boltHostile": 192,
+      "orb": 96,
+      "needle": 96,
+      "missile": 32,
+      "bomb": 24,
+      "laser": 8
+    },
+    "scale": {
+      "bolt": 3.64,
+      "boltHostile": 3.64,
+      "orb": 2.8,
+      "needle": 3.36,
+      "missile": 2.24,
+      "bomb": 1.96,
+      "laser": 1.68
+    }
+  },
+  "items": {
+    "_comment": "道具静止在世界里，靠相机滚动把它们送到玩家面前；靠近时被吸过来——看得见够不着的补给比不掉还糟。scale 和子弹一个道理：俯视下原尺寸的道具认不出来。",
+    "poolPerKind": 8,
+    "driftSpeed": 3.2,
+    "magnetRadius": 14.4,
+    "magnetSpeed": 35.2,
+    "pickupRadius": 4.2,
+    "spinDegreesPerSec": 90.0,
+    "scale": 3.1,
+    "medalValues": [
+      100,
+      200,
+      500,
+      1000
+    ],
+    "powerFullScore": 2000,
+    "optionFullScore": 3000
+  },
+  "flow": {
+    "_comment": "BOSS 战期间滚动停住（bossScrollScale=0），但不是硬切——BossIntro 这段里线性减速，硬停会被读成掉帧。",
+    "readySeconds": 1.6,
+    "bossIntroSeconds": 2.2,
+    "stageClearSeconds": 3.0,
+    "bossScrollScale": 0.0
+  },
+  "grounds": {
+    "_comment": "地面目标。血量分档与掉块用的是资产自己的 chunk metadata（releaseStage），这里只给总血量、开火方式和分数。fueldepot 不开火但会连锁殉爆。",
+    "nr_veh_tank": {
+      "hitPoints": 40.0,
+      "radius": 2.4,
+      "score": 300,
+      "debrisPieces": 3,
+      "fire": {
+        "pattern": "aimed",
+        "interval": 1.9,
+        "bullet": "boltHostile",
+        "speed": 28.8,
+        "lead": 0.1
+      }
+    },
+    "nr_prop_turret": {
+      "hitPoints": 55.0,
+      "radius": 2.2,
+      "score": 400,
+      "debrisPieces": 3,
+      "fire": {
+        "pattern": "stream",
+        "burst": 3,
+        "burstGap": 0.12,
+        "interval": 2.1,
+        "bullet": "boltHostile",
+        "speed": 35.2,
+        "lead": 0.15
+      }
+    },
+    "nr_veh_launcher": {
+      "hitPoints": 70.0,
+      "radius": 2.6,
+      "score": 600,
+      "debrisPieces": 4,
+      "fire": {
+        "pattern": "spread",
+        "count": 3,
+        "arcDegrees": 18.0,
+        "interval": 2.6,
+        "bullet": "missile",
+        "speed": 25.6,
+        "lead": 0.3
+      }
+    },
+    "nr_veh_patrolboat": {
+      "hitPoints": 90.0,
+      "radius": 3.2,
+      "score": 700,
+      "debrisPieces": 4,
+      "fire": {
+        "pattern": "spread",
+        "count": 3,
+        "arcDegrees": 24.0,
+        "interval": 2.2,
+        "bullet": "needle",
+        "speed": 44.8,
+        "lead": 0.2
+      }
+    },
+    "nr_bldg_bunker": {
+      "hitPoints": 60.0,
+      "radius": 3.0,
+      "score": 500,
+      "debrisPieces": 4
+    },
+    "nr_bldg_fueldepot": {
+      "hitPoints": 80.0,
+      "radius": 3.4,
+      "score": 1500,
+      "debrisPieces": 8,
+      "blastRadius": 14.0,
+      "blastDamage": 200.0
+    }
+  }
+}

@@ -4,19 +4,19 @@ category: project
 status: 现行架构
 owner: NextDayz
 created: 2026-07-26
-last_updated: 2026-07-26
+last_updated: 2026-11-06
 ---
 
 # NextDayz 复杂 3C 与 ScadRig 分层动画设计
 
-> 本文以 2026-07-26 的当前代码为基线，设计 NextDayz 的蹲姿、四方向移动、步行/跑步/冲刺、举枪瞄准、开火后坐力和 loot 动作。它取代
-> [NextDayz MVP 设计](nextdayz-mvp-design.md) 中 §5.1～§5.3 关于后续 3C/角色动画的简化方案，但不改变其地图、背包、昼夜和 HUD 边界。
-> 对应执行顺序见 [开发计划](nextdayz-3c-scadrig-development-plan.md)。
+> 本文记录 NextDayz 的蹲姿、四方向移动、步行/跑步/冲刺、举枪瞄准、开火后坐力和 loot 动作。
+> 生存、背包、昼夜与 HUD 的现行边界见 [PVE 生存循环产品化设计](nextdayz-productization-design.md)。
 >
-> **实现状态（2026-07-26）**：P0～P7 已落地。本文中的状态模型、动态胶囊、四层动画图、
-> shot event 和 loot 两阶段提交均为现行实现；NextDayz 专用资产为
-> `assets/scad/characters/nextdayz_survivor.scad`。应用内没有另设
-> `PlayerAnimationController`，动画图职责由 `PlayerRigVisual` 承担。
+> **实现状态（2026-11-03）**：P0～P7 已落地；随后做了"战术手感"重构（§15），其中的移动积分、
+> CoD 式冲刺规则、20 骨骼资产、程序化生成的 clip、混合空间 + 武器驱动 IK 的动画图、第一人称视图模型
+> 运动**取代**了 §3、§6.3、§8、§9 里与之冲突的描述。状态模型、动态胶囊、shot event 和 loot 两阶段
+> 提交保持不变。资产为 `assets/scad/characters/nextdayz_survivor.scad`（由
+> `assets/scad/lib/rig_humanoid.scad` 生成 clip）；动画图职责仍由 `PlayerRigVisual` 承担。
 
 ## 1. 目标与边界
 
@@ -73,10 +73,16 @@ last_updated: 2026-07-26
 | Run | 无速度修饰键时的默认步态 |
 | Sprint | 按住 `Shift`；仅站姿且未 ADS、未 loot 时允许 |
 | 四方向 Sprint | 支持 F/B/L/R clip；后退和侧向通过方向速度系数降低实际速度 |
-| ADS | 鼠标右键按住；ADS 将 Walk/Run/Sprint 解析结果限制为 Walk |
+| 瞄准 | 右键点按切换 FPS ADS，按住使用当前视角举枪；两种瞄准均将 Walk/Run/Sprint 解析结果限制为 Walk |
+| 第三人称环视 | 按住左/右 `Alt`，鼠标只旋转相机，角色朝向、瞄准方向和 WASD 移动基准保持不变；松开恢复原视角 |
 | 蹲姿移动 | 只有 crouch-walk 一档；方向速度系数仍生效 |
 | 蹲姿跳跃 | 拒绝；跳跃输入先请求站起，净空不足则本次跳跃失败 |
 | loot | E 开始，约 `0.9s`；`55%` 进度提交物品；提交前可由移动/跳跃取消 |
+
+第三人称环视使用独立的相机偏移角度，并复用原有俯仰限制和相机臂碰撞；环视期间隐藏准星。
+开火、瞄准、`V` 切换视角、打开界面或释放鼠标捕获会结束环视，避免射击与画面方向不一致。
+第一人称和瞄准期间不进入环视。验证脚本为 `assets/agentscripts/nextdayz-free-look.agentscript.json`，
+覆盖镜头转向、角色朝向与移动基准分离、左右 Alt 组合、松键恢复、碰撞及界面中断。
 
 建议初始数值：
 
@@ -474,7 +480,7 @@ bone_root                         # 足底世界锚点，不做水平 root motio
 约束：
 
 - `bone_weapon_socket` 不烘焙枪模型；当前装备的 TPS 武器 node 在运行时挂上去，并设为不可 raycast。
-- helmet 仍挂 `bone_head`，backpack 仍挂 `bone_torso`。
+- 衣物按实际装备实例切换：头盔挂 `bone_head`，外衣、护甲和背包挂 `bone_torso`；袖子、裤腿与靴子分别挂四肢骨骼。详见 §18。
 - 角色仍遵守 1 unit = 1 m、Z-up、面朝 SCAD −Y、root 落地。
 - locomotion clip 只做 in-place 动画；`bone_root` 的水平 position 偏移必须接近 0。
 
@@ -581,3 +587,391 @@ FPS 验收覆盖 ADS FOV、view-model 对齐、每发 kick 和平滑回正。
 5. 首期是否只做 rifle aim profile，还是同时制作 pistol/shotgun profile。
 
 若没有额外产品决定，按 §3 的默认值和 rifle-first profile 开发。
+
+## 15. 战术手感重构（2026-11-03）
+
+### 15.1 为什么
+
+旧实现"假、机械"的根因不在单个 clip，而在链路：速度每帧直接设成目标值（无加减速），动画读指令速度
+（撞墙原地跑）；四方向权重直接取 WASD 数字输入（换向一帧跳变）；walk/run/sprint 的骨盆高度是常量
+（没有起伏和重心转移）；上身被静态 `weapon_ready` 以权重 1 覆盖（跑动时上身僵死），手臂角度离线算好
+后在 clip 间混合，手会脱离武器；且 `_r` 骨骼实际在角色左侧，士兵是左手持枪而相机在右肩。
+
+### 15.2 移动（`PlayerController`）
+
+- 速度按加速度积分（`GroundAcceleration` / `SprintAcceleration` / `GroundDeceleration` /
+  `AirAcceleration`），自行积分重力后走 `UpdateWithVelocity`；空中松键保留动量。
+- 动画与相机读**实测**速度（位移 / dt，0.05 s 平滑）；正面撞墙时把指令速度收敛到实测速度。
+- 冲刺（取代 §3 的四方向冲刺默认值）：需要 `localMove.y >= SprintMinForwardInput`；瞄准或按住扳机
+  打断冲刺；`SprintAlpha` 是武器从冲刺姿势回到可射击的过渡，`WeaponReady()` 之前 `WeaponSystem` 不开火
+  （按住扳机会在就绪瞬间开第一枪）。
+- 第一人称相机：按距离推进的步幅相位驱动头部起伏和侧倾，平移时视角向移动方向轻微侧倾，落地下沉弹簧，
+  冲刺 FOV 增加。玩法用的 `EyePosition()` 不含这些偏移，射线不受影响。
+
+### 15.3 资产（取代 §9）
+
+- 20 根骨骼：§9.1 的 17 根 + `bone_ik_weapon`（躯干子骨骼）→ `bone_ik_hand_r` / `bone_ik_hand_l`。
+  `_r` 骨骼在 SCAD −X（角色右侧）；`bone_weapon_socket` 的 bind 是右手握把帧的逆。
+- 比例：腿 0.44 + 0.42、手臂 0.31 + 0.29，躯干相应缩短，总高不变。
+- 所有 clip 由 `rig_humanoid.scad` 生成（见 `docs/AGENT_GUIDE/ScadRig.md`）。新增 `weapon_sprint`
+  （步枪斜挎胸前、枪口朝支撑侧上方）与 `weapon_low`（枪口朝下）。持枪 clip 的躯干/头通道是侧身与转头，
+  运行时以 Additive 叠加。
+
+### 15.4 动画图（取代 §8）
+
+```text
+locomotion      FullBody  Override  18 clip：stand idle、walk/run/sprint × F/B/L/R、crouch idle、crouch walk × 4
+hold            手臂+IK    Override  weapon_ready / aim_rifle_center / weapon_sprint 静态混合
+hold_body       躯干+头    Additive  同一组样本（侧身、转头）
+weapon_action   手臂+IK    Override  reload / switch（权威时间手动采样）
+weapon_action_body 躯干+头 Additive  同上
+recoil          上身       Additive  每发重触发
+action          FullBody  Override  loot
+→ 程序化阶段 → Apply
+```
+
+- 混合空间：速度按 idle/walk/run/sprint 锚点（clip 作者速度）分段线性加权，方向取**躯干坐标系**下的
+  实测速度方向并平滑；蹲姿权重平滑过渡。所有样本固定在一个集合里只改权重，因此永不交叉淡入、相位连续。
+  播放速率由混合后的步频换算到主导 clip，超过最后一个锚点才加速。
+- 下半身朝向：移动时快速跟随相机 yaw；静止时扭转超过 `TurnInPlaceThresholdDegrees` 才原地转身。
+- 程序化阶段：整体倾斜（加速度驱动的阻尼弹簧，转弯侧倾、急停后仰）；相机俯仰/扭转按比例分给躯干和头，
+  剩余部分绕射击侧肩部旋转 `bone_ik_weapon`，枪口始终对准准星；步伐相位驱动武器起伏，冲刺时摆臂；
+  最后两骨 IK 把右手解到 `bone_ik_hand_r`、左手解到 `bone_ik_hand_l`（拾取与翻越时左手放开交给 clip）。
+- 手枪等非步枪握持通过 `HoldFor()` 调整模型偏移和左手目标；第三人称武器缩放 `TpsWeaponScale`。
+
+### 15.5 第一人称视图模型（`WeaponSystem::UpdateViewModelMotion`）
+
+8 字步伐晃动（冲刺放大、瞄准压到 10%）、视角角速度驱动的惯性摆动弹簧、平移倾斜与反向漂移、冲刺持枪
+姿势（压低、枪口左转、倾斜）、静止呼吸、落地冲击，以及以厘米计的后坐力抬枪。参数在
+`FWeaponFeelConfig`。
+
+### 15.6 观察与验证
+
+- 新增查询：`game.sceneReady`、`horizontalSpeed`、`sprintAlpha`、`weaponReady`、`bodyYawLag`、
+  `turningInPlace`、`leanRoll`、`gripError`（右手到握把目标的距离）、`recoilCamera` /
+  `recoilViewModel` / `recoilRig`。
+- 验证 cvar：`nextdayz.validation.lookYaw`（度）、`nextdayz.validation.thirdPerson`；调试环绕相机
+  `nextdayz.debug.orbit` / `orbitYaw` / `orbitDistance` / `orbitHeight`（从侧面、正面检查动作，开启时
+  隐藏第一人称视图模型）。
+- 验证模式帧率很高，按帧等待不再代表时间：NextDayz 脚本开头等待 `game.sceneReady`，locomotion 脚本
+  用 `wait-until game.baseAnim` 等待混合空间到位。
+
+### 15.7 第三人称相机防穿墙
+
+`PlayerController` 在移动、翻越与视角更新之后，用场景 CPU raycast 检查从角色焦点到相机的整条臂，
+包含肩部偏移。中心与周围八个采样覆盖镜头边缘；探测范围超过目标镜头位置，预留
+`TpsCollisionRadius`（0.20 m）与 `TpsCollisionPadding`（0.05 m）的安全距离。
+
+第三人称距离 `TpsDistance` 固定为原来的最近距离 1.5 m，滚轮不再调整臂长。
+遇障碍当帧收缩，离开障碍以 `TpsArmReturnSpeed`（5 m/s）伸回；碰撞允许缩到固定距离以下，
+肩部偏移随臂长一起缩短。角色部件与挂载物按各自世界位置到相机的
+距离渐隐：`TpsFadeFarDistance`（1.5 m）之外完全不透明，进入后 smoothstep 降低覆盖率，到
+`TpsFadeNearDistance`（0.35 m）完全淡出。较远的腿部仍保留；拉远后自然恢复，调试环绕关闭渐隐。
+
+覆盖率通过 `RenderComponent::SetMainOpacity` 传到 `NodeProxy.reserved2` 的高 16 位（反向 UNORM16，
+零值为不透明），不改变 GPU 布局；低位仍供 outline 使用。visibility fragment 使用固定屏幕空间 8×8
+Bayer 图案 discard，角色各部件与正反面共用像素阈值。被丢弃的片元不写深度或 visibility ID，后方表面
+直接成为后续 SurfaceBuild/光追的 primary hit。只改变 visibility 覆盖率，阴影与光追加速结构保留完整几何。
+
+查询 `game.cameraArmLength` / `cameraArmFraction`、`cameraPosX/Y/Z`、`playerRigVisible`、
+`playerRigOpacity`（可见部件最低覆盖率）可观察结果。
+`assets/agentscripts/nextdayz-camera-arm.agentscript.json` 使用独立几何 fixture 验证墙面、侧墙、细柱、
+目标位置外的安全间距、地面、滚轮不改变固定距离、平滑恢复和视角切换。
+
+## 16. 近战动作（2026-11-04）
+
+- 右键为近战戒备：抬刀、举撬棍或双手举斧，保留正常 FOV，移动使用瞄准时的步行规则。
+- 左键每次点击执行一次完整攻击，按住不自动连挥。收招末尾 0.20 秒内的点击可以缓存下一击；冲刺中的点击先退出冲刺，武器就绪后起手。
+- 刀为刺击（0.42 秒），撬棍为横扫（0.78 秒），斧头为双手劈砍（1.05 秒）。伤害分别在动作的 38%、42%、43% 时结算一次，使用当前玩家位置和朝向，仍检查世界遮挡。刀的判定较窄，撬棍较宽。
+- `WeaponSystem` 是权威计时来源；`weaponAction = melee` 和归一化时间驱动第三人称 `melee_<id>_attack` clip，第一人称也按相同接触帧采样起手、攻击与收招。两种视角都不触发枪械后坐力。
+- 每种武器各有 `melee_<id>_low` / `ready` 姿势；刀和撬棍的空闲手护胸，斧头双手握柄。打开背包、开始其他动作、翻越、死亡、换武器或丢弃武器会取消未完成的近战和缓存输入。
+- 验证：`gnb validate --script assets/agentscripts/nextdayz-melee.agentscript.json` 使用调试冻结与固定步进验证延迟命中、单击单次攻击、收招缓存、中断与枪械回归，同时保存 FPS/TPS 戒备和攻击截图。资产握持测试标签为 `[ScadRig][NextDayz][Melee]`。
+
+## 17. 战术翻越与攀爬（2026-11-04）
+
+跳跃键是情境动作：`QueueContextualJump` 先跑 `TryBeginTraversal`，没有可用动作才普通起跳；按下的同时开启
+空中抓沿窗口。四个动作（`EPlayerTraversalAction`，clip 名一一对应）：
+
+| 动作 | 适用 | 表现 |
+|---|---|---|
+| `vault` | 薄顶（≤ `MaxWallThickness` 1.0 m）且 ≤ `VaultMaxHeight` 1.15 m | 支撑手按顶，腿从射击侧横扫过去，落地继续跑（保留速度） |
+| `mantle` | 可站立顶面 ≤ `MantleMaxHeight` 1.60 m | 掌+握枪拳上顶（步枪横放在顶面），撑直手臂，右膝上顶，站起 |
+| `climb` | 可站立顶面 ≤ `ClimbMaxHeight` 2.70 m | 蓄力、脚蹬墙、双手抓沿、悬挂收脚、引体到胸、撑起、跪上、站起 |
+| `climb_over` | 薄墙 > 1.15 m | 抓沿或直接起撑，臀部坐上墙顶双腿从射击侧翻过，扶顶滑下落地 |
+
+### 17.1 探测（`TryBeginTraversal`）
+
+所有数字相对当前脚底，参数在 `FTraversalConfig`：
+
+1. **正面**：膝盖到头顶每 0.28 m 一条水平射线，距离 `ProbeDistance` 1.35 m + 速度 × `ProbeSpeedLookahead`
+   0.16 s（冲刺时约 2.4 m）。取最近的非地面/非底面命中；与朝向夹角超过 `MaxApproachDegrees` 55° 拒绝，
+   动作方向对齐墙面法线（身体正对墙）。
+2. **沿口**：从墙面前 `EaveMaxOverhang` 0.8 m（屋檐可能伸出墙外）到墙后 0.45 m 逐列向下探测，第一个
+   `SurfaceNormalMinY` 0.60 以上的面就是顶，在最后一个低列与它之间二分出沿口。CPU 射线会命中背面，因此
+   扫描原点必须在自由空间：头顶有遮挡就压到遮挡下方，同高度水平射线进入实体之后的列视为"更高的墙"。
+   **站在屋檐下**时列原点在檐下看不到屋面，改为沿 -dir 向后逐列向上探测，天空重新出现的位置就是檐口。
+3. **沿口净空**：沿口内 0.10 m 处先找到真实表面（坡屋顶会继续升高）再向上留 0.95 m。
+4. **墙后**：从 `topY + 0.9` 往下探测（不受檐下扫描原点限制）。`MaxWallThickness` 内顶面结束且后方有
+   落脚点（≤ `MaxDropBehind` 3.2 m、`LandingHeadroom` 1.25 m）为"薄"；沿口后 `radius + 0.14` 处三点
+   等高（`StandFlatness`）且坡度可站（`StandNormalMinY`）为"可站"，净空够站立就站立结束，只够蹲姿就
+   **以蹲姿结束**。净空射线每条都从自己的表面起算，坡屋顶不会从屋面内部起射。
+5. 手的落点：左掌在沿口内 `HandInset`、侧移 `HandSpread`，右拳（握枪）略高略深，各自向下探测真实顶面。
+
+**空中抓沿**（解决"离墙稍远就变成普通跳"和"小跳能上的高墙"）：起跳后在 `AirCatchWindowSeconds`
+0.4 s 内或一直按住跳跃且有前进输入时，每帧以空中参数重新探测：墙面进入 `AirCatchReach` 0.95 m 才抓
+（身体自己飞到墙边，不会隔空扑过去），沿口在脚上 `AirCatchMinHeight`..`AirCatchMaxHeight`（0.25..2.05 m）。
+低于 `AirMantleMaxHeight` 直接撑上（mantle/vault），否则进入悬挂（climb/climb_over）。跳跃顶点脚离地
+1.2 m，所以空中可抓到约 3.2 m 的沿口；更高的墙保持普通跳。原有的踢墙动作已移除。
+
+### 17.2 路径扭曲（`BuildTraversalPath`）
+
+控制器沿一组关键帧移动：每个关键帧是 (时间, 脚底位置, clip 相位, 眼高)。接触类关键帧放在**沿口坐标系**
+的固定位置（u 沿动作方向、v 相对顶面，如 mantle 撑起 (-0.30, -0.92)、climb 抓沿 (-0.32, -1.75)、
+跪上 (0.12, 0)），所以 clip 里手脚的位置对任何高度都落在真实几何上；只有接近与起跳段随高度伸缩。
+位置用逐轴单调三次插值（Fritsch–Butland，不会过冲进墙），端点切线取进入/退出速度，跑着进入、跑着出去；
+clip 相位在关键帧间线性推进。眼高同样插值：一人称镜头跟随身体折过沿口，而不是脚底 + 1.65 m 硬抬。
+坡屋顶上双手高于沿口时悬挂段整体抬高。`MoveTimeScale` 统一缩放所有分段时长。
+结束时：vault 把速度交还控制器继续跑，mantle/climb 静止站好（或蹲下），落差大的 vault/climb_over
+在半空结束交给重力，走正常的滞空 → 落地。
+
+### 17.3 表现
+
+- clip（`nextdayz_survivor.scad` 的 Traversal 段）由 `nd_tk` 关键帧经 Catmull-Rom 重采样（每 clip 24 个
+  求解键）再 IK 求解，四肢连续穿过接触点；文件头注释列出各动作的接触相位，与 `PlantWindow`
+  （`PlayerController.cpp`）一致。步枪始终在射击手：低位携行，或双手上顶时横放在顶面、拳头压在握把上。
+- `PlayerRigVisual`：动作期间身体朝向锁定 `traversalYaw`，躯干不再跟随相机扭转（平滑过渡）；
+  `traversalHand[]` 是世界坐标的手部落点，左手直接两骨 IK，右手通过平移武器框让握把落在落点上，
+  武器随手。`game.plantError` 报告完全按住时手到落点的最大误差。
+- 一人称：镜头按相位低头看沿口、抓沿时抬头、vault 向支撑手侧倾；武器不再隐藏，压低收向射击侧。
+- 调试：`game.traversalProbe` 给出 `accepted:*` / `rejected:*`，空中探测带 `air:` 前缀。
+
+### 17.4 验证
+
+`gnb validate --script assets/agentscripts/nextdayz-3c-traversal.agentscript.json`，fixture
+`assets/agentscripts/fixtures/nextdayz-traversal.scad`：1.0 m 薄墙 vault（落地仍在跑）、1.25 m 平台
+mantle、2.2 m 平台 climb、2.0 m 围墙与 1.4 m 院墙 climb_over、带 0.5 m 出檐的 2.5 m 农舍（檐外起跳与
+贴墙站在檐下两种）、3.6 m 墙保持普通跳、离 1.9 m 台子 3 m 起跳空中抓沿、头顶 1.5 m 的夹层 mantle 后
+蹲姿，以及一人称 mantle 截图；关键相位冻结后用调试环绕相机拍侧面图，并断言 `plantError < 0.05`。
+fixture 目录不在资产自动复制规则里，改完要手动拷到 `out/build/<preset>/assets/agentscripts/fixtures/`。
+teleport cvar 的 `"x,y"` 中 y 是 SCAD 北向，引擎 `z = -y`，lookYaw 0 朝 SCAD -y 走；同一个值连续设置
+不会触发回调。
+
+## 18. 装备驱动的刚体换装
+
+`nextdayz_survivor.scad` 只包含身体、白色短裤和现有 20 骨骼/动作；空装备时没有固定制服、护甲、帽子或鞋。
+`nextdayz_clothing.scad` 集中存放 30 件衣物，每个穿戴部位各 6 款。长裤同时提供对应的鞋靴，整体保持低饱和都市生存风格。
+
+| 部位 | 款式 |
+| --- | --- |
+| 头部 | 钢盔、针织帽、棒球帽、渔夫帽、战术头盔、护耳帽 |
+| 外衣 | 野战夹克、卫衣、羽绒夹克、雨衣、牛仔夹克、救援夹克 |
+| 护甲/背心 | 军用护甲、警用防弹衣、胸挂、狩猎背心、工具背心、反光安全背心 |
+| 裤装 | 工作裤、工装裤、牛仔裤、战术裤、防雨裤、雪地裤 |
+| 背包 | 小型背包、徒步背包、突击背包、邮差包、医疗背包、卷口背包 |
+
+款式区别包含帽檐/护耳、羽绒分仓/封闭拉链/反光带、开放胸挂/弹药环/工具袋、护膝/裤脚护套，以及不同背包轮廓。
+保暖、减伤和容量各有取舍，普通帽子和工具背心没有防弹属性。所有款式都在 `LootTables.cpp` 按地点配置正权重掉落，
+`nextdayz_loot_items.scad` 提供与穿戴款式对应的落地模型（服装折叠、背包立放），不使用未知物品纸箱兜底。
+
+衣物作者契约是 `bone_<物品 id>__<目标骨骼后缀>`，例如 `bone_jacket__forearm_l`；所有 bind TRS 为单位变换，
+几何直接处于目标骨骼的局部坐标。特殊后缀 `harness` 表示挂躯干的独立背带。加载时核对物品和骨骼是否存在，
+场景构建前一次性注入全部 96 个衣物部件，创建动态、不可射线命中的 render node 并登记到 scene。
+这些衣物没有自己的动画骨架；render node 直接跟随玩家骨骼，原有 clip、混合层、IK 和镜头淡出继续生效。
+
+`SyncClothingVisuals()` 使用 `Inventory::EquippedClothing()` 的真实物品 id，同步穿戴、替换、脱下、丢弃、拾取、
+重开及场景加载后的外观。外衣隐藏躯干和双臂对应的身体 render part；长裤隐藏短裤、双腿和裸脚，脱下时恢复。
+只隐藏 render part，不隐藏骨骼或其子树。单穿护甲仍保留裸露皮肤。
+
+防穿插分三层：身体覆盖区域剔除；外衣、护甲、背包使用逐层扩大的几何包络；背包本体、独立背带和背枪再依据
+当前外衣/护甲厚度调整深度，背枪放在所穿背包真实网格的左右两侧，深度取包体前后沿中点。袖子和裤腿在肘膝处约 1 cm 重叠，保持分段刚体活动时的连接；衣服下摆和口袋避开护甲下沿。
+这套规则提供固定款式之间的层次配合，不包含布料模拟。
+
+验证：`gnb validate --script assets/agentscripts/nextdayz-clothing.agentscript.json` 检查实际 render part 数量、换装后旧款消失、
+身体遮挡/恢复、重开归零，并生成正背面、蹲姿和跑动截图。`game.clothingVisuals` 返回实际可见的衣物及部件数，
+`game.bareTorsoVisible` / `game.shortsVisible` 查询身体显示状态。单测 `[ScadRig][NextDayz]` 另检查全部衣物均有模型、
+绑定坐标、材质槽、靴底高度和包络尺寸，以及原有步态与持枪契约。
+
+扩充款式回归：`gnb validate --script assets/agentscripts/nextdayz-clothing-variety.agentscript.json`，逐套穿过全部 30 件，
+检查旧款清除、身体覆盖、正背面与动作截图。`[NextDayz][Clothing][Loot]` 保障每部位至少 6 件且均可掉落；
+世界模型测试检查每件衣物恰好一个落地模型、材质槽不溢出、底面贴地。
+
+## 19. 双槽收枪与拔枪
+
+`1` / `2` 选择背后武器槽，`3` 选择右腰手枪槽；`Q` 优先切回上一把仍存在的武器，失效时跳过空槽寻找其他武器，只有一把时保持不动。
+切换默认耗时 0.85 秒，由 `FWeaponFeelConfig::SwitchSeconds` 控制；中点才切换活动槽，期间禁止开火和换弹并退出瞄准。
+归一化时间 0～0.53 收枪，0.47～1 拔出新武器，中段重叠 0.06（默认约 0.05 秒），没有双枪均停在背上的等待阶段。
+FPS 在 0.46～0.54 短暂隐藏单个视模以替换模型，再抬回持枪位；切换位移不经过滞后平滑。
+
+1 号槽位于角色背后左侧（躯干局部 +X），2 号槽位于右侧（-X）；枪口朝上，握把朝后。
+背包的网格横向包络决定枪位间距，换包和脱包时同步更新。TPS 的 `switch_weapon` 提供身体动作，
+`PlayerRigVisual::UpdateSwitchPose` 分别驱动两把枪：收枪沿肩上弧线，拔枪从腰侧下方握住背枪，再沿体侧低位弧线抬到胸前；左手携左槽、右手携右槽。
+拔左槽时左手先握低处握把，右手接上持枪后左手滑向护木。空闲手从下方提前伸向新枪，原枪归位后该手也沿低位路线回到新枪的支撑握点。切枪期间复用两个背枪节点独立移动，隐藏常规手持节点，
+从而在中点切换活动槽时保留两把枪连续的运动；动作结束后恢复右手 socket 的常规持枪节点。常规瞄准、近战继续使用原有 IK。
+收枪使用上抬、外展肘部 pole，低位拔枪保持肘部朝下、朝外；按弯曲平面重建上臂朝向，前臂只沿局部 -X 轴屈伸，
+求解范围为 5～150 度，与 `rh_arm_ik` 的单轴肘契约一致。越肩点保留手腕与肩膀间距，避免过度折叠或翻肘。
+
+验证：`gnb validate --script assets/agentscripts/nextdayz-weapon-switch.agentscript.json`，覆盖重复装备后 Q 互切、
+数字键切换、切换中重复输入、空槽、退出瞄准、0.85 秒完成、双枪同时离开背部插槽、实际可见性、握持误差、无背包/小背包/突击背包位置，
+另逐帧检查站姿和蹲姿双向切换的实际肘部单轴约束、屈伸范围和握持误差，检查左右拔枪手低于背部插槽的高度，并保存 TPS/FPS 及双侧关键帧截图。
+
+## 20. 蹲姿瞄准的前倾补偿
+
+蹲姿移动层的骨盆和躯干合计前倾约 30 度。举枪层覆盖手臂但保留躯干的加法姿态，直接继承该前倾会使 ADS 权重已满时枪口仍朝下。
+`PlayerRigVisual::UpdateProcedural` 在蹲姿枪械 ADS 时，以真实相机瞄准方向（包含后坐力）补偿枪械方向，
+围绕持枪肩部转动枪位，再求解双手 IK，保持握持距离。补偿随蹲姿/ADS 权重淡入淡出，动作锁定期间让位给换弹、切枪和攀爬；近战戒备继续使用原有姿态。
+
+验证：`gnb validate --script assets/agentscripts/nextdayz-crouch-aim.agentscript.json`，检查站蹲切换、蹲姿直接举枪、
+俯仰与转向、蹲走 ADS、后坐力及第一人称视模/FOV；通过实际枪口和相机方向夹角检查举枪，避免只检查 `aimWeight` 而漏掉姿态错误。
+
+## 21. 右键点按 ADS / 按住举枪
+
+右键按下立即按当前视角举枪；在 `FCameraConfig::AimTapSeconds`（默认 0.2 秒）内松开则切换保持式 FPS ADS，
+再次点按退出。在 TPS 下按住右键保持第三人称举枪，松开结束；从已保持的 ADS 长按右键时，超过阈值转为 TPS 举枪，松开结束。
+`V` 手动选择的 FPS 仍支持原有按住瞄准；ADS 只临时覆盖视角，退出时恢复原有视角（进出 ADS 的镜头推拉见 §26）。
+
+`Player/AimInput.hpp` 独立处理点按/长按，使用单调墙钟时间，与帧率、游戏时间缩放和调试单步解耦。
+`PlayerController::IsAiming()` 统一供移动、镜头 FOV、视模和骨骼使用；`IsAds()` 只表示点按保持的 ADS。
+切枪、换弹、搜刮、攀爬、死亡或释放鼠标给界面时调用 `CancelAiming()`，同时清除保持状态与未完成点按；
+随后收到的松键不会重新进入 ADS。近战右键仍是按住戒备，空槽和近战不允许点按进入枪械 ADS。
+
+验证：单测 `[NextDayz][AimInput]` 覆盖快速互切、长按、阈值边界、取消及重复输入；
+`gnb validate --script assets/agentscripts/nextdayz-ads-input.agentscript.json` 检查实际视角、视模、FOV、
+站蹲 ADS、长按、`V`、界面/切枪/换弹中断、近战及空槽，并保留 TPS/FPS 截图。
+
+## 22. ADS 瞄具贴眼与光学视野
+
+第一人称举枪不再使用统一的前伸握把偏移。`WeaponModelPoints` 保存照门 / 目镜的模型坐标和贴眼距离，
+由 `eyeRelief - rearSightForward * ViewModelScale` 推算握把前后位置，并把瞄准线高度移到眼睛高度。
+贴眼距离由每把枪的眼位（`eyeForward`，见 §26）推出，铁瞄直接使用模型上的照门与准星；
+举枪期间隐藏 HUD 十字与中心点，命中反馈保留。
+
+相机和视模共享包含横滚的正交坐标系，举枪时收敛腰射惯性 / 呼吸偏移，避免蹲走、转向时瞄具脱离屏幕中心。
+后坐力仍作用于相机和枪械，视模绕照门转动，恢复后回到同一条瞄准线。基础相机仍由角色控制，以保持碰撞和命中方向一致。
+第一人称近裁切距离为 0.02 米，避免近处机匣和目镜被切开；第三人称仍为 0.1 米。
+
+SVD 以 PSO-1 目镜为锚点，眼睛靠近目镜时隐藏空心镜筒视模，显示圆形镜内画面和中心尖角分划线（收拢过渡见 §26）。
+第一人称光学视野为 22 度（约 4 倍），第三人称按住举枪统一使用 62 度视野；退出 ADS、切枪、换弹和界面中断会退出镜内画面。
+
+验证：`gnb validate --script assets/agentscripts/nextdayz-ads-sight.agentscript.json`，逐枪检查真实视模照门到相机的距离、
+照门及瞄准轴相对相机的角误差，覆盖俯仰 / 转向 / 蹲走 / 后坐恢复及镜内画面退出，并保存靶场截图。
+
+## 23. 第一人称瞄具与相机同帧提交
+
+场景的异步节点更新在下一帧交接渲染代理，而相机 UBO 使用当前帧姿态。仅校验 CPU 节点会漏掉这一帧差：
+转向、移动和站蹲时，CPU 瞄具已对齐，上传的枪械仍处于上一帧位置。
+
+`WeaponSystem::Update` 在完成相机空间姿态后，仅修正上传快照中当前视模的全部模型分段，
+同步 `worldTS`、显示状态及用于运动矢量的 `combinedPrevTS`，通过 `Scene::RequestGpuNodeProxyUpload()` 同帧提交。
+普通世界节点继续异步更新。举枪权重超过 0.98 后固定瞄具锚点，取消剩余腰射惯性；抬枪过渡、切枪、近战与后坐力保留。
+
+验证：`gnb validate --script assets/agentscripts/nextdayz-ads-follow.agentscript.json`，
+对 AK、莫辛、霰弹枪和手枪分别执行鼠标转向、前进 / 横移、急停、站蹲切换。
+每次只模拟一帧，同时检查 CPU 瞄具和本次实际上传快照的瞄准误差；记录该次快照，避免之后的静止帧追平掩盖问题。
+
+## 24. 腰部手枪槽与上一把武器
+
+`WeaponSystem` 有三个槽：1 / 2 沿用背后左右插槽，3 只接受手枪。物品双击 / 使用手枪默认装备到 3，
+背包新增腰部卡片与右键装备入口，安全屋也支持装备到 3；保留旧 1 / 2 手枪绑定的兼容性。
+原四个物品快捷键顺延为 4–7，物品绑定内容不变。
+
+`previousSlot_` 在实际装备或切换提交时更新。`Q` 首先尝试有效的上一槽，失败后从当前槽循环查找其他已装备武器；
+所有其他槽为空时不会启动切换，也不会打断 ADS。数字键仍可选择空槽收枪。
+
+腰部手枪节点挂在骨盆右侧，枪口向下，随站蹲移动，穿外套时向外留出衣物间隙。
+切枪展示显式传递来源 / 目标槽，未参与切换的第三把保持在自己的插槽。
+手枪收拔使用右腰路径，手臂保持肘部单轴约束；同一只右手涉及背枪与手枪时，先收枪、移向另一个插槽、再拔枪，
+左手回胸前等待并重新辅助握持。两个背槽继续保留约 0.05 秒重叠，换枪总时长仍为 0.85 秒。
+FPS 也区分背部与右腰的下压 / 抬枪位置。
+
+存档格式升级到 v3，保存三槽、各枪弹匣、当前槽和上一槽；读取 v1 / v2 时追加空手枪槽，保留原装备与快捷物品。
+恢复时直接恢复当前 / 上一槽，不由加载顺序推导历史。
+
+验证：`gnb validate --script assets/agentscripts/nextdayz-sidearm.agentscript.json`，覆盖三槽分类、腰部朝向 / 外套间隙、
+站蹲四向收拔枪、握持与动作期间肘部约束、FPS 显隐、弹匣保留、Q 历史 / 缺失回退 / 单武器及空槽。
+存档单测覆盖三槽往返、弹匣和历史保存，以及 v1 / v2 兼容读取。
+
+## 25. 枪械配件、背包与瞄具 ADS
+
+每个枪械实例保存五个槽：瞄具、握把、弹匣、枪口、战术附件。松散配件是普通背包物品，
+具有体积、独立世界模型，可从军事区 / 警察局刷新、拾取、移动、丢弃与存入安全屋。
+安装消费一件松散配件；同槽替换将旧件退回背包。枪上的配件随枪械实例移动，不额外占用松散物品格。
+背包中的枪械卡片可展开配件面板，点击槽位选装 / 卸下，也接受拖放；枪械右键菜单和配件右键菜单提供同样的入口。
+双击松散配件会尝试安装到当前武器。近战武器不接受配件。
+
+| 配件 | 效果 |
+| --- | --- |
+| 红点 / 全息 | 1 倍瞄具，FPS ADS 使用 62 度视野；分别绘制红点、环形分划与中心点（§26） |
+| 4 倍镜 | FPS ADS 使用 22 度视野、圆形镜内遮罩与十字分划；贴眼后隐藏枪械视模 |
+| 垂直握把 | 相机、枪械及角色后坐力减少 25%，射击散布减少 15% |
+| 快速弹匣 | 换弹用时减少 30% |
+| 扩容弹匣 | 容量增加 50%（AK 45 / SVD 15 / 手枪 18 发），与快速弹匣互斥 |
+| 消音器 | 玩家枪声音量与感染者听觉警戒半径乘 0.25，枪口火焰缩为 0.15 |
+| 战术手电 | 保存装配状态、展示模型；本阶段没有照明或开关效果 |
+
+AK / SVD 接受全部配件；莫辛只接受 4 倍镜、消音器与手电；双管霰弹枪接受红点 / 全息、握把、
+消音器与手电；手枪接受红点 / 全息、弹匣、消音器与手电。未安装瞄具时沿用铁瞄，SVD 恢复原厂 PSO-1。
+TPS 按住右键的举枪视野统一为 62 度，瞄具只改变 FPS ADS 的视野与锚点。
+
+装卸使用库存事务；旧件放不下时保留原装配。卸下 / 替换扩容弹匣会把超出基础容量的子弹退回弹药储备，
+子弹放不下也整体拒绝。装卸前回写运行时弹匣，成功后立即刷新武器缓存并退出瞄准、取消该枪换弹，
+避免缩容后再次被旧缓存覆盖。枪械丢弃 / 拾取、安全屋存取和出售均保留或计入已装配件。
+存档升级到 v4：携带枪械、安全屋枪械、当前与离线地图中的掉落堆均保存配件；v1～v3 缺少字段时按空装配恢复。
+
+`nextdayz_attachments.scad` 提供八件配件与独立 PSO-1 模型；`WeaponAttachmentVisuals` 将它们挂到 FPS、TPS
+手持及三槽背负枪械。SVD 本体不再包含固定瞄具，避免替换时叠加两套镜体。节点离开场景后重新显示时必须恢复父子关系。
+FPS 的同帧代理修正同时覆盖枪械及所有配件模型分段，保留移动 / 转向时无一帧跟随延迟的 ADS。
+
+验证：`gnb validate --script assets/agentscripts/nextdayz-attachments.agentscript.json` 覆盖三种瞄具、镜体位置、
+同帧代理、握把参数、两种弹匣容量 / 换弹、消音状态、兼容性和 Q 切枪保留，并保存 TPS、ADS 与背包截图。
+单测 `[NextDayz][Attachments]` 覆盖实例隔离、消费 / 替换 / 卸下、满包回滚、缩容退弹、错误装配拒绝、配件模型、
+安全屋和掉落堆存档、v3 兼容与损坏字段拒绝；原换枪、腰部手枪、蹲姿与 ADS 脚本继续做回归验证。
+
+## 26. ADS 品质：举枪时间线、镜头推拉、第一人称手臂与瞄具画面
+
+对标 PUBG 的开镜手感。核心是一条时间线驱动所有表现，其余是取景、手臂和瞄具画面。
+
+**举枪时间线。** `PlayerController` 持有线性的 `aimProgress_`：举起用武器自己的时间
+（`WeaponAimSeconds`：手枪 0.15、霰弹枪 0.19、AK 0.20、莫辛 0.25、SVD 0.26 秒，倍镜再加 0.04），
+放下统一 `FCameraConfig::AimOutSeconds`（0.15 秒）。缓动后的 `AimBlend()` 同时驱动 FOV、视模举枪、
+TPS 肩后镜头与 HUD；视模举枪不再做指数平滑，到位即与瞄准线精确重合，到位瞬间给一个小的后坐弹簧冲量
+（贴腮“落位”），中途叠加一段先外倾再回正的弧线，而不是直线滑动。
+
+**TPS → ADS 镜头推拉。** 第三人称点按 ADS 时，`viewBlend_` 在同一时长内把相机从（经碰撞约束的）
+肩后位置沿直线推到眼睛，退出时反向拉回；`V` 切换视角仍是硬切。`AdsViewHandoff`（0.5）之后
+`IsFirstPerson()` 才为真：角色模型隐藏、第一人称枪械与手臂出现，避免镜头穿过正在溶解的头部。
+`WantsFirstPerson()` 表示逻辑视角（agent 查询 `game.firstPerson`），`IsFirstPerson()` 表示画面状态
+（`game.presentationFirstPerson`），另有 `game.viewBlend` / `game.aimProgress`。
+
+**视野与灵敏度。** FOV 在倍率（tan）空间插值，倍镜不会在最后几度突然冲过去。铁瞄只轻微放大
+（AK 64、莫辛 60、霰弹枪 68、手枪 66 度，基础 75 度），红点 / 全息 62 度，4 倍镜与 PSO-1 为 22 度；
+原先莫辛铁瞄 38 度约等于 2 倍镜。第三人称按住举枪：相机臂从 1.5 / 0.9 米收到 1.3 / 0.76 米，FOV 62 度。
+开镜时鼠标灵敏度按 `tan(fov/2) / tan(base/2)` 缩放（`AimSensitivityFovScale`，1 = 各倍率屏幕转速一致）。
+
+**眼位。** `FWeaponModelPoints::eyeForward` 是铁瞄与 1 倍镜的眼位：像 PUBG 一样位于机匣尾部附近，
+而不是旧固定贴眼距离推到的托底板上——75 度视野下眼睛越靠后，越会顺着整根枪托看出去。
+AK -0.165、莫辛 -0.25（拉机柄尾端落在画面下方）、霰弹枪 -0.13、手枪 -0.60（双臂伸直），SVD 的 1 倍镜 -0.11；
+霰弹枪视线高于顶筋约 1 cm，准星珠落在两只击锤之间的顶筋上。模型同步调整：AK-74 托顶自机匣尾明显下斜、
+双管猎枪托腮 / 托踵降低到真实落差，第一人称托面不再贴着视线。
+
+**第一人称手臂。** `Player/FirstPersonArms` 挂在视模节点下，与枪械、配件共用缩放、显隐和同帧代理提交。
+手是专用模型 `nextdayz_fps_hands.scad`（右手包住握把、食指沿扳机护圈，左手托护木，手掌 / 四指 / 拇指），
+按枪摆放：握把倾角（AK 13°、SVD 16°、霰弹枪半手枪握把 35°、莫辛直颈 35°、手枪 12°）和护木站位，
+手枪左手托在弹匣底部。前臂复用角色的前臂部件（裸臂或所穿外套的袖子），横截面收细到 0.58；
+上臂与角色的方块手不显示。每帧在“眼空间”（相机局部、角色单位）解双臂 IK：肩点固定在眼睛下后方
+（长枪：右肩靠后、左肩前送；手枪：等腰姿势），前臂末端对准手模的手腕点；左肘向外打开，
+开镜时前臂从画面左下斜入护木，而不是藏在机匣后面。腰射视模拉近到手臂够得着的位置
+（`ViewModelHipOffset` 0.115 / -0.132 / 0.212），右手出现在右下角。近战武器暂不显示手臂。
+`game.fpsArmParts`、`game.fpsArmGripError`、`game.fpsArmRenderedError` 检查显隐、手腕到位与同帧提交。
+
+**瞄具画面。** 倍镜：`ScopeBlend` 随举枪后段 0→1，镜体暗区带软边从屏幕边缘收拢到镜圈，
+越过 `kScopeMeshHide` 后空心镜筒模型换成镜内画面；镜圈有边缘暗化、镜筒内壁与左上角反光；
+分划（4 倍：黑色立柱 + 发光红色 V 形 + 弹道下坠刻度；PSO-1：V 形、测距刻度与测距曲线）
+随镜轴投影移动，后坐时随枪口上跳；眼盒随视角惯性漂移，转动时一侧出现镜内阴影。
+红点 / 全息：分划带辉光，只在镜片窗口内可见（按瞄具模型投影裁剪），镜片有淡色镀膜和反光。
+铁瞄与 1 倍镜开镜时四角轻微压暗，腰射准星随举枪淡出，TPS 举枪时收紧。
+
+验证：`gnb validate --script assets/agentscripts/nextdayz-ads-transition.agentscript.json` 逐帧检查
+TPS→ADS 推拉（四分之一处仍是角色、四分之三处已交接）、退出拉回、肩后举枪镜头、各枪腰射 / 开镜手臂到位
+与同帧提交、4 倍镜收拢与镜内画面，并保存各阶段截图；单测 `[NextDayz][ADS]` 覆盖眼位、视野与举枪时间。
+原 ADS 输入、瞄具对齐、同帧跟随、配件、蹲姿、近战、手枪、切枪、环视、相机臂、冲刺视野与攀爬脚本继续回归。
+

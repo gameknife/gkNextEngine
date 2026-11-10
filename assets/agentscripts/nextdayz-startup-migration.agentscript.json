@@ -1,0 +1,29 @@
+{
+  "name": "nextdayz-startup-migration",
+  "target": "NextDayz",
+  "defaults": { "stepTimeoutMs": 60000 },
+  "steps": [
+    { "type": "wait-until", "query": "game.sceneReady", "op": "eq", "value": true },
+    { "type": "assert", "query": "game.activeMapId", "op": "eq", "value": "cz_loket_riverbend" },
+    { "type": "cvar", "name": "nextdayz.validation.campaignPath", "set": "out/nextdayz-validation/startup-migration.json" },
+    { "type": "cvar", "name": "nextdayz.validation.campaign", "set": true },
+    { "type": "wait-frames", "n": 4 },
+    { "type": "assert", "query": "game.mapLoading", "op": "eq", "value": false },
+    { "type": "assert", "query": "game.sceneGeneration", "op": "eq", "value": 1 },
+    { "type": "assert", "query": "game.campaignInField", "op": "eq", "value": false },
+    { "type": "assert", "query": "game.campaignSaveBlocked", "op": "eq", "value": false },
+    { "type": "assert", "query": "game.campaignGold", "op": "eq", "value": 37 },
+    { "type": "assert", "query": "game.campaignSorties", "op": "eq", "value": 4 },
+    { "type": "assert", "query": "game.campaignExtractions", "op": "eq", "value": 1 },
+    { "type": "assert", "query": "game.campaignStorage", "op": "eq", "value": 1 },
+    { "type": "assert", "query": "game.currentMapSorties", "op": "eq", "value": 0 },
+    { "type": "assert", "query": "game.inventoryContents", "op": "contains", "value": "food_can" },
+    { "type": "assert", "query": "game.flightPhase", "op": "eq", "value": "Idle" },
+    { "type": "cvar", "name": "nextdayz.validation.campaignCommand", "set": "reload" },
+    { "type": "assert", "query": "game.campaignStorage", "op": "eq", "value": 1 },
+    { "type": "assert", "query": "game.campaignSorties", "op": "eq", "value": 4 },
+    { "type": "assert", "query": "game.campaignInField", "op": "eq", "value": false },
+    { "type": "screenshot", "out": "screenshots/nextdayz-migrated-startup", "ui": true },
+    { "type": "quit" }
+  ]
+}

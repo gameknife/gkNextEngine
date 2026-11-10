@@ -49,6 +49,15 @@ GK_API(Input, IsMouseButtonDown,     GkBool, (int32_t button))
 GK_API(Input, IsMouseButtonPressed,  GkBool, (int32_t button))
 GK_API(Input, IsGamepadButtonDown,   GkBool, (GkStr name))
 GK_API(Input, GetMousePosition,      void,   (FVec2* outPosition))
+// Accumulated SDL xrel/yrel since the previous Tick. First-person look reads this rather than
+// differencing cursor position, which is what makes pointer lock usable: the cursor no longer has
+// to travel across the window.
+GK_API(Input, GetMouseDelta,         void,   (FVec2* outDelta))
+// Pointer lock. The editor's eject switch (and a host that mutes input) releases the OS capture
+// without forgetting the request, so resuming Play locks the mouse again. Agent-validation
+// sessions never capture, so gnb shot / gnb validate keep a free cursor.
+GK_API(Input, SetRelativeMouseMode,  void,   (GkBool enabled))
+GK_API(Input, IsRelativeMouseMode,   GkBool, ())
 // SDL_GamepadAxis values: left X/Y, right X/Y, left/right trigger are 0..5. The returned value is
 // normalised to [-1, 1]; games own their dead-zone policy.
 GK_API(Input, GetGamepadAxis,        float,  (int32_t axis))
@@ -76,6 +85,41 @@ GK_API(Physics, MoveKinematicBody,  void,    (uint32_t bodyId, const FVec3* posi
 GK_API(Physics, SetBodyVelocity,    void,    (uint32_t bodyId, const FVec3* linearVelocity, const FVec3* angularVelocity))
 GK_API(Physics, AddForceToBody,     void,    (uint32_t bodyId, const FVec3* force))
 GK_API(Physics, GetBodyState,       void,    (uint32_t bodyId, FPhysicsBodyState* outState))
+
+// --- Character controllers -----------------------------------------------------------------
+// A walking capsule (Jolt CharacterVirtual) that collides with the scene's static and kinematic
+// bodies. Ids are opaque, 0 is "none". The game integrates its own velocity (gravity, jumps,
+// launches) and hands it to Move; inheritGround adds the velocity of whatever the character stands
+// on, which is how it rides a moving platform. Characters belong to the running game: unloading
+// it, or hot reloading its assembly, destroys every one it created.
+GK_API(Character, Create,      uint32_t, (const FCharacterSpec* spec))
+GK_API(Character, Destroy,     void,     (uint32_t characterId))
+GK_API(Character, Move,        void,     (uint32_t characterId, const FVec3* velocity, GkBool inheritGround, float deltaSeconds))
+GK_API(Character, SetPosition, void,     (uint32_t characterId, const FVec3* footPosition))
+GK_API(Character, GetState,    void,     (uint32_t characterId, FCharacterState* outState))
+
+// --- Character rigs ------------------------------------------------------------------------
+// ScadRig characters (docs/AGENT_GUIDE/ScadRig.md), through the NextRig subsystem. Pools and
+// instances are opaque uint32 handles; 0 is "none" for both, so a default-initialised handle is
+// not a live character.
+//
+// The lifecycle is the engine's, not a choice: DeclarePool only works from inside
+// BeforeSceneRebuild, because that is when the scene's model list exists and it is sized once.
+// Everything else works only after the scene is committed. IsAvailable is false in a host that
+// linked neither NextGameplay nor ScadLoader, which is why a game using rigs declares them in its
+// manifest's requiredModules.
+GK_API(Rig, IsAvailable,   GkBool,   ())
+GK_API(Rig, DeclarePool,   uint32_t, (GkStr rigPath, int32_t capacity))
+GK_API(Rig, HasClip,       GkBool,   (uint32_t poolId, GkStr clip))
+GK_API(Rig, Acquire,       uint32_t, (uint32_t poolId, const FVec3* position, float yawRadians, const FVec3* tint))
+GK_API(Rig, Release,       void,     (uint32_t instanceId))
+GK_API(Rig, IsAlive,       GkBool,   (uint32_t instanceId))
+GK_API(Rig, SetTransform,  void,     (uint32_t instanceId, const FVec3* position, float yawRadians))
+GK_API(Rig, SetVisible,    void,     (uint32_t instanceId, GkBool visible))
+GK_API(Rig, PlayClip,      void,     (uint32_t instanceId, GkStr clip, float fadeSeconds))  //= fadeSeconds:0.15f
+GK_API(Rig, SetPlaySpeed,  void,     (uint32_t instanceId, float speed))
+GK_API(Rig, GetRootNodeId, uint32_t, (uint32_t instanceId))
+GK_API(Rig, GetBoneNodeId, uint32_t, (uint32_t instanceId, GkStr boneName))
 
 // --- Immediate-mode UI ---------------------------------------------------------------------
 GK_API(UI, Begin,              GkBool, (GkStr name, int32_t flags))                                            //= flags:0
@@ -120,6 +164,9 @@ GK_API(Scene, SetNodeTransform,        void,     (const FNodeTransform* transfor
 GK_API(Scene, SetNodeTransforms,       void,     (const FNodeTransform* transforms, int32_t transformCount))
 GK_API(Scene, SetNodeVisible,          void,     (uint32_t nodeId, GkBool visible))
 GK_API(Scene, SetNodeVisibleRecursive, void,     (uint32_t nodeId, GkBool visible))
+// Whether ray queries (Scene.RayCast, picking, camera booms, NavGrid sampling) see a subtree. A
+// character's own parts usually should not: a camera boom cast from the player hits their head.
+GK_API(Scene, SetNodeRayCastVisibleRecursive, void, (uint32_t nodeId, GkBool visible))
 GK_API(Scene, SetNodeParent,           GkBool,   (uint32_t childId, uint32_t parentId))
 GK_API(Scene, SetNodePrimaryMaterial,  void,     (uint32_t nodeId, uint32_t materialId))
 GK_API(Scene, SetNodeMaterialRecursive,void,     (uint32_t nodeId, uint32_t materialId))
@@ -127,6 +174,28 @@ GK_API(Scene, SetNodeOutlineFlags,     void,     (uint32_t nodeId, uint32_t outl
 GK_API(Scene, AddLambertianMaterial,   uint32_t, (const FVec3* color))
 GK_API(Scene, AddDiffuseLightMaterial, uint32_t, (const FVec3* color, float intensity)) //= intensity:1.0f
 GK_API(Scene, BindPhysicsBody,          GkBool,   (uint32_t nodeId, uint32_t bodyId, GkNodeMobility mobility))
+// Turns the implicit static mesh body a loaded node collides with into a kinematic body of the
+// same shape and returns its id (PhysicsBodyIds.Invalid when the node draws nothing collidable,
+// e.g. collision = "none" in SCAD). Move it with Physics.MoveKinematicBody to the node's world
+// transform after animating the node; a character standing on it rides along. Not recursive:
+// a part whose geometry sits in child nodes needs a call per child.
+GK_API(Scene, MakeNodeKinematic,        uint32_t, (uint32_t nodeId))
+// Reading back what a loaded scene contains. A loader builds the node tree, so a game that loads a
+// file rather than building procedurally has to discover its nodes: DescribeNodes lists every node
+// whose name starts with namePrefix ("" for all), one per line in scene order, as
+//   id \t parentId \t name \t tag \t metadata
+// with parentId GK_INVALID_NODE_ID for roots. The SCAD loader names a node after the user module
+// that produced it, tags each top-level statement "scad-placement:<byte offset>" and puts the
+// call's named parameters in metadata ("k=v;k=v", vectors comma-joined). Built on demand, so call
+// it once after a load, not per frame.
+GK_API(Scene, DescribeNodes,           int32_t,  (GkStr namePrefix, char* buffer, int32_t capacity))
+GK_API(Scene, GetNodeWorldTransform,   void,     (uint32_t nodeId, FNodeTransform* outTransform))
+// Bounds of everything the subtree draws: in world space, or with local set, in the node's own
+// frame (an oriented box once the node's world transform is applied).
+GK_API(Scene, GetNodeBounds,           void,     (uint32_t nodeId, GkBool local, FBounds* outBounds))
+// CPU ray query against raycast-visible geometry (what the camera boom and picking use). direction
+// need not be normalised; maxDistance is in metres.
+GK_API(Scene, RayCast,                 void,     (const FVec3* origin, const FVec3* direction, float maxDistance, FRayHit* outHit))
 // The node carrying the scene's EnvironmentComponent, created if the scene has none — the same
 // on-demand behaviour C++ gameplay gets from Scene::GetEnvSettings(). A procedural scene built
 // from SceneBuild has no environment node, so without this there would be no way for managed code
@@ -158,6 +227,20 @@ GK_API(SceneBuild, BindPhysicsBody,          GkBool,   (uint32_t nodeId, uint32_
 GK_API(Paths,  GetProjectRoot, int32_t, (char* buffer, int32_t capacity))
 GK_API(Paths,  GetOutputDir,   int32_t, (char* buffer, int32_t capacity))
 GK_API(Assets, ReadFile,       int32_t, (GkStr path, uint8_t* buffer, int32_t capacity))
+// The running game project's Content/ directory as an asset path ("assets/projects/Flappy/Content"),
+// or empty when no game project is loaded. Prefix it onto a project-relative path to reach the
+// game's own content through every path-taking binding; GameContent.Path() does exactly that.
+GK_API(Assets, GetGameContentRoot, int32_t, (char* buffer, int32_t capacity))
+// Live scene sources. Loading a scene discards the current one before the replacement is parsed,
+// so a game that rebuilds its level whenever the file changes checks it first: CheckSceneSource
+// reads and parses the file and everything it includes without building anything (false for a
+// syntax error or a missing include, and for formats that have no check). The two report getters
+// return JSON -- {"ok","error","warnings","warning_count","dependencies","nodes","triangles","ms","serial"} --
+// for the last check, and for the last load of `path` (empty when that file was never loaded).
+// dependencies are absolute paths, main file first: the files to watch.
+GK_API(Assets, CheckSceneSource,     GkBool,  (GkStr path))
+GK_API(Assets, GetSceneCheckReport,  int32_t, (char* buffer, int32_t capacity))
+GK_API(Assets, GetSceneLoadReport,   int32_t, (GkStr path, char* buffer, int32_t capacity))
 
 // --- Component and node property access --------------------------------------------------------
 // Reflected properties, addressed by (nodeId, typeId, propId).

@@ -1,0 +1,22 @@
+<Project>
+
+  <!--
+    Shared settings for every game project under projects/.
+
+    A game's C# lives in projects/<Game>/Scripts/, outside the engine's assets/csharp tree, so
+    MSBuild's upward search for Directory.Build.props lands here instead of on the engine's. This
+    file only forwards to it: a game assembly must build with exactly the settings GkNext.Engine
+    and GkNext.Bootstrap build with (target framework, AOT analyzers, the GkAot switch), or the
+    CoreCLR/NativeAOT parity rule in docs/designs/dotnet-scripting-design.md stops holding.
+
+    $(GkEngineManagedRoot) is how a game csproj names the engine's managed projects, so the
+    reference does not depend on how deep the csproj sits below the repository root.
+  -->
+
+  <PropertyGroup>
+    <GkEngineManagedRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', 'assets', 'csharp'))</GkEngineManagedRoot>
+  </PropertyGroup>
+
+  <Import Project="$(GkEngineManagedRoot)Directory.Build.props" />
+
+</Project>

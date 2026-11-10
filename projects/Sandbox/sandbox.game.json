@@ -1,0 +1,24 @@
+{
+  "id": "sandbox",
+  "displayName": "Managed Sandbox",
+  "assembly": "game/GkNext.Game.dll",
+  "project": "../../assets/csharp/GkNext.Game/GkNext.Game.csproj",
+  "window": {
+    "title": "DotNetSandbox",
+    "width": 1280,
+    "height": 720,
+    "forceSDR": true
+  },
+  "requiredModules": [],
+  "initialScene": "Empty.proc",
+  "showFlags": {
+    "debugGraphicsPanel": false,
+    "overlay": false
+  },
+  "hotReload": true,
+  "compileManagedSources": true,
+
+  "_comment": "The smallest runnable managed game: no gameplay, just the binding layer running inside the real engine. Doubles as the launcher's minimal sample.",
+  "_comment_compileManagedSources": "The only game that rebuilds assets/csharp on start; this is the target used while iterating on the bindings themselves.",
+  "_comment_project": "The one project with no Scripts/ of its own. Its code is GkNext.Game, the engine's binding probe: GkNext.Bootstrap links it by default under NativeAOT and gnb dotnet probe builds it, so it stays with the engine in assets/csharp and this manifest points there."
+}

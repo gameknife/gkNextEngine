@@ -1,4 +1,5 @@
 #include "TestCommon.hpp"
+#include "Test_CPUAccelerationAccess.hpp"
 
 #include "Engine/Assets/Acceleration/CPUAccelerationStructure.hpp"
 #include "Engine/Assets/Acceleration/CPUAccelerationStructure.Internal.hpp"
@@ -6,26 +7,6 @@
 
 #include <atomic>
 #include <thread>
-
-namespace Assets::CPU
-{
-    struct FCPUAccelerationStructureTestAccess
-    {
-        static void Publish(FCPUAccelerationStructure& accelerationStructure,
-                            FCPUAccelerationStructure::SnapshotPtr snapshot)
-        {
-            accelerationStructure.blasSet_ = snapshot ? snapshot->blasSet : nullptr;
-            accelerationStructure.PublishSnapshot(std::move(snapshot));
-        }
-
-        static uint64_t Queue(FCPUAccelerationStructure& accelerationStructure,
-                              std::shared_ptr<FCPUTLASBuildInput> input)
-        {
-            input->epoch = accelerationStructure.buildEpoch_.load(std::memory_order_acquire);
-            return accelerationStructure.QueueBuildInput(std::move(input));
-        }
-    };
-}
 
 namespace
 {
@@ -166,6 +147,37 @@ TEST_CASE("CPU acceleration snapshot publish is safe with concurrent readers",
     FCPUAccelerationStructureTestAccess::Publish(
         accelerationStructure, std::make_shared<FCPUTLASSnapshot>());
     CHECK_FALSE(accelerationStructure.RayCastInCPU({0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, -1.0f}).Hit);
+}
+
+TEST_CASE("CPU acceleration pinned batch keeps its geometry after publication", "[Unit][CPUAccelerationSnapshot]")
+{
+    FCPUAccelerationStructure accelerationStructure;
+    const auto first = MakeSnapshot(31, 1);
+    FCPUAccelerationStructureTestAccess::Publish(accelerationStructure, first);
+    const auto pinned = accelerationStructure.AcquireSnapshot();
+    FCPUAccelerationStructureTestAccess::Publish(accelerationStructure, MakeSnapshot(32, 2));
+    const auto batchHit = FCPUAccelerationStructure::RayCastInSnapshot(*pinned, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, -1.0f});
+    const auto liveHit = accelerationStructure.RayCastInCPU({0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, -1.0f});
+    REQUIRE(batchHit.Hit);
+    REQUIRE(liveHit.Hit);
+    CHECK(batchHit.InstanceId == 31);
+    CHECK(batchHit.MaterialId == 1);
+    CHECK(liveHit.InstanceId == 32);
+    CHECK(liveHit.MaterialId == 2);
+    CHECK(batchHit.T == Catch::Approx(liveHit.T));
+    const auto back = FCPUAccelerationStructure::RayCastInSnapshot(*pinned, {0.0f, 0.0f, -1.0f}, {0.0f, 0.0f, 1.0f}, false);
+    const auto faced = FCPUAccelerationStructure::RayCastInSnapshot(*pinned, {0.0f, 0.0f, -1.0f}, {0.0f, 0.0f, 1.0f});
+    REQUIRE(back.Hit);
+    REQUIRE(faced.Hit);
+    CHECK(back.Normal.z > 0.0f);
+    CHECK(faced.Normal.z < 0.0f);
+    const auto shortMiss = FCPUAccelerationStructure::RayCastInSnapshot(*pinned,
+        {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, -1.0f}, true, 0.9f);
+    const auto shortHit = FCPUAccelerationStructure::RayCastInSnapshot(*pinned,
+        {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, -1.0f}, true, 1.1f);
+    CHECK_FALSE(shortMiss.Hit);
+    REQUIRE(shortHit.Hit);
+    CHECK(shortHit.T == Catch::Approx(1.0f));
 }
 
 TEST_CASE("CPU acceleration background build coalesces to the latest request",

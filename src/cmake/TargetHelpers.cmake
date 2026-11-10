@@ -128,7 +128,20 @@ function(gk_apply_target_defaults target)
     endif()
 
     if(MSVC)
-        target_compile_options(${target} PRIVATE /MP /utf-8 /WX /wd4200 /Zf)
+        target_compile_options(${target} PRIVATE /utf-8 /WX /wd4200 /Zf)
+        # Ninja already schedules one compiler process per source file. /MP adds
+        # no parallelism there and conflicts with PCH generation (/Yc).
+        if(NOT CMAKE_GENERATOR MATCHES "Ninja")
+            target_compile_options(${target} PRIVATE /MP)
+        endif()
+        # Avoid sharing a compiler PDB between parallel translation units. The
+        # linker can still generate a final PDB from the embedded debug info.
+        # Live++ requires /Zi; also honor an explicit toolchain/user selection.
+        if(NOT GK_ENABLE_CPP_LIVE_CODING AND
+           NOT DEFINED CMAKE_MSVC_DEBUG_INFORMATION_FORMAT)
+            set_property(TARGET ${target} PROPERTY MSVC_DEBUG_INFORMATION_FORMAT
+                "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>")
+        endif()
         if(GK_ENABLE_CPP_LIVE_CODING)
             target_compile_options(${target} PRIVATE /Zi /Gm- /Gy /Gw)
         endif()
@@ -377,4 +390,345 @@ function(gk_configure_android_runtime target)
     )
     gk_link_engine_feature_dependencies(${target})
     add_dependencies(${target} Assets)
+endfunction()
+
+# Builds one Android application library. Called through gk_add_application, never directly.
+#
+# Android has no static engine libraries: src/Engine, src/Modules and src/Gameplay are compiled
+# straight into the application's .so (see src/CMakeLists.txt), so every APK owns a full copy of
+# the engine and exactly one application is built per Gradle invocation. That is why the whole
+# source list is repeated per target instead of being linked, and why this function exists.
+#
+#   gk_add_android_application(<target> SOURCES <application sources> MODULES <runtime modules>
+#                              [ENTRY <entry point source>])
+function(gk_add_android_application target)
+    cmake_parse_arguments(ARG "" "ENTRY" "SOURCES;MODULES" ${ARGN})
+
+    # Unrequested modules are normally compiled in and left inert behind their GK_MODULE_* define.
+    # NextDotNet cannot be: its CoreCLR host includes hostfxr headers that only a .NET installation
+    # provides, so an application that does not host C# must not compile it at all.
+    set(moduleSources ${src_files_modules_all})
+    if(GK_DOTNET_ENABLED AND NOT "NextDotNet" IN_LIST ARG_MODULES)
+        list(REMOVE_ITEM moduleSources ${src_files_module_NextDotNet})
+    endif()
+
+    add_library(${target} SHARED
+        ${src_files_assets}
+        ${src_files_utilities}
+        ${src_files_engine}
+        ${src_files_vulkan}
+        ${src_files_rendering}
+        ${src_files_nextgameplay}
+        ${src_files_thirdparty}
+        ${moduleSources}
+        ${ARG_SOURCES}
+        ${ARG_ENTRY}
+    )
+    gk_configure_android_runtime(${target})
+    gk_target_runtime_modules(${target} MODULES ${ARG_MODULES})
+
+    # On desktop this comes from the NextDotNet module target, which Android does not build. It
+    # must not be missed: without it the sources fall back to the CoreCLR host, which needs
+    # hostfxr.h and a runtime the device does not have.
+    if(GK_DOTNET_ENABLED AND "NextDotNet" IN_LIST ARG_MODULES)
+        target_compile_definitions(${target} PRIVATE GK_DOTNET_USE_AOT=${GK_DOTNET_USE_AOT})
+    endif()
+endfunction()
+
+# Turns an executable into a launchable iOS application bundle. Called through gk_add_application,
+# never directly.
+#
+# Every identity here comes from the mobile application registry, so the bundle identifier CMake
+# stamps on the target and the one `gnb ios run` reads back out of the generated manifest cannot
+# drift apart.
+#
+# Do not hand any application the identifier com.tzy.gknext. It was previously shipped from another
+# checkout signed by a different Apple team, and macOS records the identity a bundle identifier is
+# expected to carry. Re-signing it with this team trips an AMFI launch constraint and the app is
+# refused at spawn ("Launch Constraint Violation", launchd job spawn failed, POSIX 162) even though
+# the signature and provisioning profile are perfectly valid.
+function(gk_configure_ios_application target)
+    set(bundleId "${GK_MOBILE_APP_${target}_IOS_BUNDLE_ID}")
+    set(bundleLabel "${GK_MOBILE_APP_${target}_LABEL}")
+    if(NOT bundleId OR NOT bundleLabel)
+        message(FATAL_ERROR
+            "${target} has no iOS identity. Add it to ${GK_MOBILE_APPLICATIONS_MANIFEST}.")
+    endif()
+
+    # An application may ship its own Info.plist; everything else gets the shared one, named after
+    # itself. GK_IOS_BUNDLE_DISPLAY_NAME is what the template substitutes.
+    set(infoPlist "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist")
+    if(NOT EXISTS "${infoPlist}")
+        set(GK_IOS_BUNDLE_DISPLAY_NAME "${bundleLabel}")
+        set(infoPlist "${CMAKE_CURRENT_BINARY_DIR}/Info.plist")
+        configure_file("${GK_SOURCE_ROOT}/Application/Info.plist.in" "${infoPlist}" @ONLY)
+    endif()
+
+    set_target_properties(${target} PROPERTIES
+        MACOSX_BUNDLE_INFO_PLIST "${infoPlist}"
+        MACOSX_BUNDLE_BUNDLE_NAME "${target}"
+        XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${bundleId}"
+        XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
+    )
+
+    if(IOS_DEVELOPMENT_TEAM)
+        set_target_properties(${target} PROPERTIES
+            XCODE_ATTRIBUTE_CODE_SIGN_STYLE "Automatic"
+            XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "${IOS_DEVELOPMENT_TEAM}"
+        )
+    else()
+        # CI builds have no signing certificate or provisioning profile. Without this Xcode still
+        # demands a development identity and fails the build. The resulting bundle compiles and
+        # links but cannot be launched.
+        set_target_properties(${target} PROPERTIES
+            XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO"
+            XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED "NO"
+        )
+    endif()
+
+    foreach(frameworkName IN ITEMS
+        AVFoundation
+        CoreAudio
+        CoreFoundation
+        CryptoKit
+        Foundation
+        GSS
+        AudioToolbox
+        ImageIO
+        Metal
+        Network
+        QuartzCore
+        CoreGraphics
+        IOSurface
+        UIKit
+    )
+        find_library(${frameworkName}_FRAMEWORK ${frameworkName} REQUIRED)
+        target_link_libraries(${target} PRIVATE ${${frameworkName}_FRAMEWORK})
+    endforeach()
+
+    add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${PROJECT_BINARY_DIR}/assets/assets
+            $<TARGET_BUNDLE_DIR:${target}>/assets
+        COMMENT "Copying assets to iOS bundle"
+    )
+
+    set(iosIconName "${GK_MOBILE_APP_${target}_ICON}")
+    if(NOT iosIconName)
+        if(EXISTS "${GK_REPO_ROOT}/assets/icons/${target}.png")
+            set(iosIconName "${target}")
+        else()
+            set(iosIconName "gkNextEngine")
+        endif()
+    endif()
+    set(iosIconSource "${GK_REPO_ROOT}/assets/icons/${iosIconName}.png")
+    if(NOT EXISTS "${iosIconSource}")
+        set(iosIconSource "${GK_REPO_ROOT}/assets/icons/gkNextEngine.png")
+    endif()
+
+    set(iosIconDir "${CMAKE_BINARY_DIR}/ios_icons/${target}")
+    find_program(GNB_EXECUTABLE NAMES gnb gnb.exe PATHS "${GK_REPO_ROOT}" "${GK_REPO_ROOT}/tools/gnb-bin" NO_DEFAULT_PATH)
+    if(GNB_EXECUTABLE)
+        execute_process(
+            COMMAND "${GNB_EXECUTABLE}" icons ios --app "${target}" --out "${iosIconDir}"
+            WORKING_DIRECTORY "${GK_REPO_ROOT}"
+        )
+    endif()
+
+    if(NOT EXISTS "${iosIconDir}/AppIcon.png" AND EXISTS "${iosIconSource}")
+        file(MAKE_DIRECTORY "${iosIconDir}")
+        set(iosStandardIconNames
+            AppIcon.png
+            AppIcon@2x.png
+            AppIcon@3x.png
+            AppIcon~ipad.png
+            AppIcon@2x~ipad.png
+            AppIcon60x60@2x.png
+            AppIcon60x60@3x.png
+            AppIcon76x76~ipad.png
+            AppIcon76x76@2x~ipad.png
+            AppIcon83.5x83.5@2x~ipad.png
+            AppIcon40x40.png
+            AppIcon40x40@2x.png
+            AppIcon40x40@3x.png
+            AppIcon40x40~ipad.png
+            AppIcon40x40@2x~ipad.png
+            AppIcon29x29.png
+            AppIcon29x29@2x.png
+            AppIcon29x29@3x.png
+            AppIcon29x29~ipad.png
+            AppIcon29x29@2x~ipad.png
+            AppIcon20x20.png
+            AppIcon20x20@2x.png
+            AppIcon20x20@3x.png
+            AppIcon20x20~ipad.png
+            AppIcon20x20@2x~ipad.png
+            AppIcon512.png
+            AppIcon1024.png
+        )
+        foreach(iconName IN LISTS iosStandardIconNames)
+            configure_file("${iosIconSource}" "${iosIconDir}/${iconName}" COPYONLY)
+        endforeach()
+    endif()
+
+    file(GLOB iosIconFiles "${iosIconDir}/*.png")
+    if(iosIconFiles)
+        set_source_files_properties(${iosIconFiles} PROPERTIES
+            MACOSX_PACKAGE_LOCATION "Resources"
+        )
+        target_sources(${target} PRIVATE ${iosIconFiles})
+    endif()
+
+    if(EXISTS "${iosIconDir}")
+        add_custom_command(TARGET ${target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${iosIconDir}"
+                "$<TARGET_BUNDLE_DIR:${target}>"
+            COMMENT "Ensuring app icons in iOS bundle for ${target}"
+        )
+    endif()
+
+    # What `gnb ios run` installs and launches. Exactly one application is configured per iOS build
+    # tree, so this manifest names it without any further selection.
+    file(GENERATE
+        OUTPUT "${PROJECT_BINARY_DIR}/ios-app-$<CONFIG>.json"
+        CONTENT "{\n  \"app\": \"${target}\",\n  \"bundle_path\": \"$<TARGET_BUNDLE_DIR:${target}>\",\n  \"bundle_id\": \"${bundleId}\"\n}\n"
+    )
+endfunction()
+
+# Applies the parts of a mobile application that are the same on both platforms. It has no command
+# line, so its identity is compiled in; its initial scene remains application-owned.
+function(gk_configure_mobile_application target)
+    if(NOT target IN_LIST GK_MOBILE_APPLICATIONS AND
+       NOT GK_MOBILE_APP_${target}_AUTO_MANAGED)
+        message(FATAL_ERROR
+            "${target} is not a mobile application. Add a native application to "
+            "${GK_MOBILE_APPLICATIONS_MANIFEST}, or select a C# project under projects/*/Scripts/.")
+    endif()
+
+    target_compile_definitions(${target} PRIVATE GK_APPLICATION_NAME="${target}")
+
+    if(IOS)
+        gk_configure_ios_application(${target})
+    endif()
+endfunction()
+
+# Declares one application, on whichever platform is being configured.
+#
+# This is the only way an application should be created. The three platforms disagree about what an
+# application even is — a desktop executable, an iOS bundle, or an Android shared library carrying
+# its own copy of the engine — and routing every application through here is what lets the mobile
+# registry package any of them instead of the one that happened to have a hand-written Android
+# branch.
+#
+#   gk_add_application(<target>
+#       SOURCES  <application sources>
+#       [MODULES <runtime modules>]   Optional engine modules, resolved per platform.
+#       [LINK    <libraries>]         Engine libraries (NextGameplay, ...) that Android compiles
+#                                     into the application instead of linking.
+#       [DEFINES <definitions>]       PRIVATE compile definitions.
+#       [INCLUDES <directories>]      PRIVATE include directories.
+#       [NO_DEFAULT_MAIN]             The application brings its own SDL entry point.
+#       [CORE_ONLY] [NO_UNITY] [NO_FAST_LINK] [MINIMAL_LINK])
+function(gk_add_application target)
+    cmake_parse_arguments(ARG
+        "CORE_ONLY;NO_UNITY;NO_FAST_LINK;MINIMAL_LINK;NO_DEFAULT_MAIN"
+        "ICON"
+        "SOURCES;MODULES;LINK;DEFINES;INCLUDES"
+        ${ARGN})
+
+    if(NOT ARG_SOURCES)
+        message(FATAL_ERROR "gk_add_application(${target}) requires SOURCES")
+    endif()
+
+    set(appIconName "${ARG_ICON}")
+    if(NOT appIconName AND GK_MOBILE_APP_${target}_ICON)
+        set(appIconName "${GK_MOBILE_APP_${target}_ICON}")
+    endif()
+    if(NOT appIconName)
+        if(EXISTS "${GK_ASSET_ROOT}/icons/${target}.png")
+            set(appIconName "${target}")
+        else()
+            set(appIconName "gkNextEngine")
+        endif()
+    endif()
+
+    set(entryPoint "")
+    if(NOT ARG_NO_DEFAULT_MAIN)
+        if(ANDROID)
+            set(entryPoint "${GK_SOURCE_ROOT}/AndroidMain.cpp")
+        else()
+            set(entryPoint "${GK_DESKTOP_MAIN_SOURCE}")
+        endif()
+    endif()
+
+    if(ANDROID)
+        gk_add_android_application(${target}
+            SOURCES ${ARG_SOURCES}
+            ENTRY ${entryPoint}
+            MODULES ${ARG_MODULES}
+        )
+    else()
+        set(bundleType "")
+        if(IOS)
+            set(bundleType MACOSX_BUNDLE)
+        endif()
+        add_executable(${target} ${bundleType} ${ARG_SOURCES} ${entryPoint})
+
+        set(configureOptions "")
+        foreach(optionName IN ITEMS CORE_ONLY NO_UNITY NO_FAST_LINK MINIMAL_LINK)
+            if(ARG_${optionName})
+                list(APPEND configureOptions ${optionName})
+            endif()
+        endforeach()
+        gk_configure_application(${target} ${configureOptions} MODULES ${ARG_MODULES})
+
+        if(WIN32)
+            set(appIcoFile "${GK_ASSET_ROOT}/icons/ico/${appIconName}.ico")
+            if(NOT EXISTS "${appIcoFile}")
+                find_program(GNB_EXECUTABLE NAMES gnb gnb.exe PATHS "${GK_REPO_ROOT}" "${GK_REPO_ROOT}/tools/gnb-bin" NO_DEFAULT_PATH)
+                if(GNB_EXECUTABLE)
+                    execute_process(COMMAND "${GNB_EXECUTABLE}" icons sync WORKING_DIRECTORY "${GK_REPO_ROOT}")
+                endif()
+            endif()
+            if(NOT EXISTS "${appIcoFile}")
+                set(appIcoFile "${GK_ASSET_ROOT}/icons/ico/gkNextEngine.ico")
+            endif()
+            if(NOT EXISTS "${appIcoFile}")
+                set(appIcoFile "${GK_ASSET_ROOT}/icons/ico/gkNextRenderer.ico")
+            endif()
+            if(EXISTS "${appIcoFile}")
+                file(TO_NATIVE_PATH "${appIcoFile}" appIcoNativePath)
+                string(REPLACE "\\" "\\\\" appIcoEscapedPath "${appIcoNativePath}")
+                set(rcContent "IDI_ICON1 ICON \"${appIcoEscapedPath}\"\n")
+                set(rcFilePath "${CMAKE_CURRENT_BINARY_DIR}/${target}_icon.rc")
+                file(WRITE "${rcFilePath}" "${rcContent}")
+                target_sources(${target} PRIVATE "${rcFilePath}")
+            endif()
+        endif()
+    endif()
+
+    # Engine libraries only exist where the engine is a library. Android compiles the same sources
+    # straight into the application, so there is nothing left to link there.
+    foreach(library IN LISTS ARG_LINK)
+        if(TARGET ${library})
+            target_link_libraries(${target} PRIVATE ${library})
+        elseif(NOT ANDROID)
+            message(FATAL_ERROR
+                "gk_add_application(${target}) links '${library}', which is not a target here")
+        endif()
+    endforeach()
+
+    target_compile_definitions(${target} PRIVATE GK_APP_ICON_NAME="${appIconName}")
+
+    if(ARG_DEFINES)
+        target_compile_definitions(${target} PRIVATE ${ARG_DEFINES})
+    endif()
+    if(ARG_INCLUDES)
+        target_include_directories(${target} PRIVATE ${ARG_INCLUDES})
+    endif()
+
+    if(ANDROID OR IOS)
+        gk_configure_mobile_application(${target})
+    endif()
 endfunction()

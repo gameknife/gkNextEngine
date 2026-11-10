@@ -32,6 +32,9 @@ void ShadeSwTracingPixel(int2 pixel)
         return;
     }
 
+    dIlluminator.EnableFoliageDirect = true;
+    dIlluminator.FoliageMaterialId = renderer.GetPrimaryVertex().MaterialIndex;
+
     float4 residencyDebugColor;
     if (TryAmbientResidencyDebug(renderer.GetPrimaryVertex().Position, residencyDebugColor))
     {

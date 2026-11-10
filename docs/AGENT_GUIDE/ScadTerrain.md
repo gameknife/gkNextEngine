@@ -1,7 +1,7 @@
 # SCAD Terrain（gk_terrain 低模可行走地形）
 
 语言/数据描述 → 连续 low-poly 高度场地形（山/河/湖/路/建筑基座）→ 可渲染、可寻路、可物理行走。
-设计：`docs/designs/scad-terrain-design.md`；执行记录：`docs/plans/scad-terrain-plan.md`。
+设计：`docs/designs/scad-terrain-design.md`。
 
 ## 三种用法（从高到低）
 
@@ -22,9 +22,34 @@ gnb shot --scene assets/scad/proc/terrain_layout_demo.scad   # 地形 + kit 贴�
 
 ```scad
 gk_terrain(TERR);                        // module：生成地形网格 + 半透明水面
+gk_terrain(TERR, water=[c|undef, roughness, metalness]);  // 可选：只给水面 gk_material 材质
+gk_terrain(TERR, detail=true);           // 可选：细节外观（地表印花 + 平滑道路带）
 h    = gk_terrain_height(TERR, x, y);    // 纯函数：地表高度（与渲染网格逐三角形一致）
 info = gk_terrain_info(TERR, x, y);      // [height, slopeDeg, water(0/1), biomeId]
 ```
+
+- `water=` 是渲染选择，不进 TERR：高度/信息查询与地形缓存键都不受影响。`c` 为 `undef` 时保留调色板
+  水色；不传时水面仍是旧的哑光 Lambertian。低 roughness（0.02–0.08）在路径追踪下给出 Fresnel 天空
+  与岸线反射；水体色要压暗（反照率 ~0.1），亮度交给反射。`gnb geo expedition` 的 recipe 用
+  `gameplay.water: {color, roughness, metalness}` 输出这个参数。
+- `detail=true` 同样是渲染选择、不进 TERR（高度/信息查询、碰撞、缓存键都不变），不传时外观与以前
+  逐字节一致，已发布的地图不受影响。打开后：
+  - **地表印花**：每个 biome 按材质名配一张 `gk_texture` 调制印花（草地 `meadow`、沙土 `dirt`、岩石
+    `rock`、河床 `gravel`、耕地 `dirt`、广场 pad `stone`），表在 `FScadEvaluator.Geometry.cpp`
+    `TerrainPrint()`。印花低对比、色阶化（单测守着均值 > 160、标准差 < 40），块面明暗仍然决定造型，
+    保留低模味道；不要为了"更真实"去拉高对比。印花也带法线起伏（草丛、土块、石面鼓起、岩层台阶），
+    地形统一用 `relief = 0.7`，且着色器在掠射角下淡出起伏——远处地面不会出摩尔纹，详见
+    [SCADLoader](SCADLoader.md) 的"印花的表面"。
+  - **道路带**：道路 feature 压出的路基面不再整格涂成路色（那会顺着网格走成横平竖直、斜走成锯齿），
+    而是保留原生地表（`FTerrainData::roadBedGeom`）；路面改由沿 Chaikin 平滑中心线生成的带状贴花
+    （`roadDecalGeom`）画出：路肩 + 路面（宽 ≥ 5.5 m 沥青、≥ 3.6 m 碎石、更窄是两道车辙中间夹草带的
+    土路），边缘用低频 1D 噪声轻微起伏，两端是圆头。每个带状三角形都按下面的地形三角面裁剪，贴在
+    面上抬高 2–6 cm，不穿插也不悬空；外缘压到面下 1 cm，与地面交成一条干净的线（抬起的边沿在视平线
+  上会露出阴影缝，读成一道黑边）；层按抬高排序（路肩 < 土路 < 碎石 < 沥青 < 草带），路口处
+    等级高的路面自然盖住低的。遇水格断开（桥面负责过河）。
+  - 贴花在 loader 里拆到 `<name>__decals` 子节点，rayCast 不可见、无碰撞——行走、寻路、草地生长
+    仍以路基（压平的地形）为准。
+  - `gnb geo expedition` 的 recipe 用 `gameplay.terrainDetail: true` 输出这个参数。
 
 TERR 编码（compose 自动生成，手写参考 `assets/scad/proc/terrain_demo.scad` 头注释）：
 
@@ -37,8 +62,9 @@ TERR = ["gkterr1", [sizeX, sizeY], [cellsX, cellsY], seed,
           ["lake",     [x,y], radius, depth],
           ["river",    [[x,y],...], width, depth],     // 上游→下游
           ["road",     [[x,y],...], width],            // 填方>0.9 的深沟留空给桥
-          ["pad",      [x,y], [w,d], rotDeg],          // 建筑基座压平
-          ["hmap",     path|[cols,rows][,grid], mode, zScale, zBias] ]];  // 采样高度场
+          ["pad",      [x,y], [w,d], rotDeg(, apron)(, "surface")],  // 建筑基座压平
+          ["hmap",     path|[cols,rows][,grid], mode, zScale, zBias],      // 采样高度场
+          ["paint",    [[x,y],...], "biome"(, ["alt", period, angleDeg])] ]];  // 土地覆盖涂色
 ```
 
 - features **按序作用**：hmap→山→河（下切+水面）→路（压平）→pad（最后压平）。
@@ -49,10 +75,24 @@ TERR = ["gkterr1", [sizeX, sizeY], [cellsX, cellsY], seed,
 - `urban` 另有一条 `minGreenRiseM = 40`：起伏不到 40m 就完全不上绿色。色带本来是"本块起伏的
   百分比"，这对城市问错了问题 —— 曼哈顿建成区总共只有 27m 起伏，55% 就是 15m，半个中城会被
   涂成山坡。
-- 调色板：`temperate` / `arid` / `alpine` / `urban`；biomeId 枚举见 `FScadTerrain.h`
+- 调色板：`temperate` / `arid` / `alpine` / `urban` / `continental`（中欧农林：偏深偏冷的草绿、
+  卡其色麦茬与褐色土路，与运行时草叶同色系；颜色只来自 paint，不随海拔变干、不下雪）；biomeId 枚举见 `FScadTerrain.h`
   `ETerrainBiome`（grass=0, grass_dark, dry_grass, sand, rock, rock_high, snow, bed, road, pad）。
   `urban` 把低平地染成混凝土、把高处染成绿坡并**彻底关掉雪线**（城市丘陵只有一两百米，
   用 temperate 会在山顶盖雪），给真实地理数据生成的城市关卡使用。
+
+### paint 与地块 pad（plot）
+
+- `paint`：闭合多边形内把自然地表改成指定 biome（`grass`/`grass_dark`/`dry_grass`/`sand`/`rock`/
+  `road`/`pad`…，不能是 `bed`），不改高度。水、道路、pad、陡崖与雪优先；后写的 paint 覆盖先写的。
+  `cellBiome` 跟着变，所以 `ter_scatter` 的 biome 过滤、运行时草地（只长在 grass/grass_dark/dry_grass）
+  都会尊重它：涂成 `road` 的翻耕地不长草。可选第四项 `["alt", period, angle]` 让多边形按平行条带在两种
+  地表间交替（条田、麦茬行）；period 小于约 4 个格会混叠成噪点。
+- `pad` 尾部可选操作数（顺序任意）：数字 = 缓坡宽度（默认 0.35×短边），字符串 = 渲染地表
+  （农家院用 `road` 夯土、花园用 `grass`）。地表只改颜色，格子仍是 pad 语义（不长草、植被避让）。
+- **带任一可选操作数的 pad 是地块（plot）**：平整区外扩一个网格对角线的"肩"，保证声明矩形在渲染网格上
+  逐三角形都平；且后写的地块不会改动先写地块的矩形与肩。所以不同高度的地块之间至少留 2 个肩宽
+  （256 格／1 km 时约 11 m，聚落规划取 12 m）。不带操作数的旧 pad 行为不变，已发布地图不受影响。
 
 ### hmap：把任意采样高度场喂进地形
 
@@ -143,6 +183,9 @@ gnb validate --script assets/agentscripts/scadlibrary-terrain-process.agentscrip
 - **TerrainComponent**（`src/Engine/Runtime/Components/TerrainComponent.hpp`，loader 自动挂在
   地形节点）：`SampleHeight/SampleNormal/SampleSlopeDegrees/IsWater/WaterSurface/IsWalkable/BiomeId`
   （引擎世界空间 XZ）。数据与渲染网格/物理网格来自同一份三角化结果，永不漂移。
+- **运行时草地**：`Runtime::FTerrainGrassSystem` 按 biome / 水域 / 道路 / pad 生长实体草，
+  近/中/远三档各共享 9 个风姿态 mesh/BLAS，风只改实例。NextDayz 默认覆盖到 192 m，不需要往 SCAD 写草。
+  接入方式与预算见 [运行时草地](../designs/runtime-terrain-grass.md)。
 - **物理**：地形自动获得静态 MeshBody；水面节点 rayCast 不可见 → **无碰撞体**（落水物沉底）。
   限制：单 Model 索引 ≥65535×3（约 6.5 万三角形 / 180² cells）时引擎跳过 MeshShape。
 - **寻路**（`src/Gameplay/AI/NavGrid.h`）：Build 后必须补水域语义否决（缓坡河岸挡不住涉水）：

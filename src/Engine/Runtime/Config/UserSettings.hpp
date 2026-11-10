@@ -38,6 +38,18 @@ struct UserSettings final
     uint32_t UpscalerJitterFrames = 16;
     bool UpscalerJitterInvertY = false;
     bool CheckerboardRendering = false;
+
+    // Frame pacing. Under a vsync present mode the interval a frame is on screen for is the display
+    // period, not the wall-clock gap between two CPU frames; the two only agree while the
+    // presentation path releases swapchain images one per vblank. See Runtime::FFramePacer.
+    bool FramePacing = true;
+    bool FramePacingLimitBurst = true;
+
+    // Wireframe overlay (show.wireframe). The pass draws the soft-mesh expanded primitive stream,
+    // so it shows exactly the geometry that survived culling, at the LOD it was drawn with.
+    bool WireframeXRay = false;
+    uint32_t WireframeColorMode = 0; // 0 = uniform, 1 = tint by LOD level
+
     // Camera
     int CameraIdx;
     float CameraFarPlane = Assets::defaultCameraFarPlane;
@@ -57,6 +69,27 @@ struct UserSettings final
     int GTAOQuality = 1;
     float GTAORadius = 1.0f;
     float GTAOStrength = 5.0f; // master sky-occlusion strength
+
+    // Projected pixel extent at or above which a proxy draws at LOD0; each further level halves it.
+    // 0 pins everything to LOD0, which is the A/B baseline for measuring what LOD actually buys.
+    float LodBaseThreshold = 64.0f;
+    // Multiplier applied to LodBaseThreshold for the sun shadow cascades. >1 makes shadows drop to
+    // coarser levels sooner than the main view, which is safe because a cascade only needs the
+    // silhouette, not surface detail.
+    //
+    // Defaults to 1 (same policy as the main view) because that is what was measured: in the scenes
+    // available here the cascades already resolve to the coarsest level at the main-view threshold,
+    // so raising this changes nothing. It is a knob for content that is not represented yet -- high
+    // poly assets shadowed at close range, where a cascade would otherwise hold LOD0.
+    float LodShadowThresholdScale = 1.0f;
+    // Hardware ray tracing traces each instance at the level the main view picked for it, so a
+    // primary hit from the visibility buffer lies exactly on the traced surface. Off pins every
+    // TLAS instance to LOD0 (the reference for what traced LOD costs or saves).
+    bool RayTracingLod = true;
+    // Extra levels the traced proxy drops below that choice: a coarser "RT proxy" for shadows, GI
+    // and reflections. 0 keeps traced and rasterised geometry identical in the main view; above
+    // that, primary origins are reconciled onto the coarser proxy before any ray leaves them.
+    uint32_t RayTracingLodBias = 0;
     float GTAOThickness = 0.5f;
     int GTAODebugMode = 0;
     bool LightObjectScreenSpaceShadow = false;
@@ -70,10 +103,23 @@ struct UserSettings final
     float LightGridBaseCellSize = 2.0f;
     float LightGridCullThreshold = 1.0e-4f;
 
+    // Master switch for the procedural atmosphere, independent of the per-scene
+    // EnvironmentSetting::AtmosphereEnabled. Turning it off makes the params address zero, which is
+    // the one condition every atmosphere shader already tests, so every consumer falls back to the
+    // legacy IBL sky in the same frame. It exists so a driver that mishandles the LUT path can be
+    // worked around at runtime instead of by commenting the shader out again.
+    bool AtmosphereEnable = true;
     float AtmosphereSkyViewLutScale = 1.0f;
     int AtmosphereDebugMode = 0;
 
     float PaperWhiteNit;
+    bool AutoExposure = false;
+    float AutoExposureTargetLuminance = 0.18f;
+    float AutoExposureMinEV = -2.0f;
+    float AutoExposureMaxEV = 4.0f;
+    float AutoExposureSpeedToDark = 1.0f;
+    float AutoExposureSpeedToLight = 3.0f;
+    float AutoExposureCompensationEV = 0.0f;
 
     bool TickPhysics = true;
     bool TickAnimation = true;
@@ -92,6 +138,7 @@ struct UserSettings final
     uint32_t AmbientCubeGraceFrames = 30;
     float AmbientCubeHitMarkTileRatio = 0.25f;
     int AmbientCubeResidencyDebug = 0;
+    bool AmbientCubeDiskCache = true;
     // Multiplier on the indirect term only (SHARC cache hit + ambient-cube path terminal).
     // 1 = physically accumulated GI; raise it to lift bounce light without touching direct/sky.
     float IndirectIntensity = 1.0f;

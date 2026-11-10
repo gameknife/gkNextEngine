@@ -57,7 +57,7 @@ func Open(path string) (*Archive, error) {
 		return nil, fmt.Errorf("pak is too small (%d bytes)", info.Size())
 	}
 
-	reader := bufio.NewReader(file)
+	reader := bufio.NewReaderSize(file, 512*1024)
 	header := make([]byte, len(magic))
 	if _, err := io.ReadFull(reader, header); err != nil {
 		return nil, fmt.Errorf("read pak header: %w", err)
@@ -67,9 +67,11 @@ func Open(path string) (*Archive, error) {
 	}
 
 	var entryCount uint32
-	if err := binary.Read(reader, binary.LittleEndian, &entryCount); err != nil {
+	var countBuf [4]byte
+	if _, err := io.ReadFull(reader, countBuf[:]); err != nil {
 		return nil, fmt.Errorf("read entry count: %w", err)
 	}
+	entryCount = binary.LittleEndian.Uint32(countBuf[:])
 	if entryCount > maxEntryCount {
 		return nil, fmt.Errorf("entry count %d exceeds safety limit", entryCount)
 	}
@@ -103,6 +105,11 @@ func Open(path string) (*Archive, error) {
 		return nil, fmt.Errorf("pak index ends at %d beyond file size %d", indexSize, fileSize)
 	}
 
+	metaBuf := make([]byte, int(entryCount)*entryIndexSize)
+	if _, err := io.ReadFull(reader, metaBuf); err != nil {
+		return nil, fmt.Errorf("read entry index table: %w", err)
+	}
+
 	archive := &Archive{
 		Path:      path,
 		FileSize:  fileSize,
@@ -110,16 +117,11 @@ func Open(path string) (*Archive, error) {
 		Entries:   make([]Entry, entryCount),
 	}
 	for i, name := range names {
-		var offset, storedSize, uncompressedSize uint32
-		if err := binary.Read(reader, binary.LittleEndian, &offset); err != nil {
-			return nil, fmt.Errorf("read entry %q offset: %w", name, err)
-		}
-		if err := binary.Read(reader, binary.LittleEndian, &storedSize); err != nil {
-			return nil, fmt.Errorf("read entry %q stored size: %w", name, err)
-		}
-		if err := binary.Read(reader, binary.LittleEndian, &uncompressedSize); err != nil {
-			return nil, fmt.Errorf("read entry %q original size: %w", name, err)
-		}
+		p := i * entryIndexSize
+		offset := binary.LittleEndian.Uint32(metaBuf[p : p+4])
+		storedSize := binary.LittleEndian.Uint32(metaBuf[p+4 : p+8])
+		uncompressedSize := binary.LittleEndian.Uint32(metaBuf[p+8 : p+12])
+
 		end := uint64(offset) + uint64(storedSize)
 		if uint64(offset) < indexSize || end > fileSize {
 			return nil, fmt.Errorf("entry %q payload [%d, %d) is outside pak data [%d, %d)", name, offset, end, indexSize, fileSize)
@@ -136,16 +138,12 @@ func Open(path string) (*Archive, error) {
 }
 
 func readName(reader *bufio.Reader) (string, error) {
-	name := make([]byte, 0, 128)
-	for len(name) <= maxEntryName {
-		value, err := reader.ReadByte()
-		if err != nil {
-			return "", err
-		}
-		if value == 0 {
-			return string(name), nil
-		}
-		name = append(name, value)
+	bytes, err := reader.ReadBytes(0)
+	if err != nil {
+		return "", err
 	}
-	return "", fmt.Errorf("name exceeds %d bytes", maxEntryName)
+	if len(bytes) > maxEntryName+1 {
+		return "", fmt.Errorf("name exceeds %d bytes", maxEntryName)
+	}
+	return string(bytes[:len(bytes)-1]), nil
 }

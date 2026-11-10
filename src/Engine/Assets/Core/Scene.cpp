@@ -98,7 +98,9 @@ namespace Assets
         static_assert(sizeof(Assets::GPUDrivenStat) == Assets::GPU_SCENE_GPU_DRIVEN_STAT_SIZE);
         static_assert(sizeof(Assets::VisibilityId) == 8);
         static_assert(sizeof(Assets::SoftMeshShaderVisibleItem) == 16);
-        static_assert(sizeof(Assets::SoftMeshShaderResources) == 64);
+        static_assert(sizeof(Assets::SoftMeshShaderResources) == 80);
+        static_assert(sizeof(Assets::FRayTracingLodResources) == 32);
+        static_assert(sizeof(Assets::ModelData) == 112);
         static_assert(sizeof(Assets::SphericalHarmonics) == Assets::GPU_SCENE_SPHERICAL_HARMONICS_SIZE);
         static_assert(sizeof(Assets::AmbientCube) == Assets::GPU_SCENE_AMBIENT_CUBE_SIZE);
         static_assert(sizeof(Assets::AmbientBrickResidency) == 16);
@@ -226,10 +228,12 @@ namespace Assets
     }
 
     Scene::Scene(Vulkan::CommandPool& commandPool, bool supportRayTracing,
-                 const bool allocateAmbientResources, const bool enableCpuAcceleration) :
+                 const bool allocateAmbientResources, const bool enableCpuAcceleration,
+                 const bool enablePhysics) :
         cpuAccelerationStructure_(std::make_unique<Assets::CPU::FCPUAccelerationStructure>()),
         allocateAmbientResources_(allocateAmbientResources),
         enableCpuAcceleration_(enableCpuAcceleration),
+        enablePhysics_(enablePhysics),
         commandPool_(&commandPool)
     {
         int flags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
@@ -469,6 +473,8 @@ namespace Assets
         softMeshShaderCounterBufferMemory_.reset();
         softMeshShaderResourcesBuffer_.reset();
         softMeshShaderResourcesBufferMemory_.reset();
+        rayTracingLodBuffer_.reset();
+        rayTracingLodBufferMemory_.reset();
 
         sceneDynamicBuffer_.reset();
         sceneDynamicBufferMemory_.reset();
@@ -611,7 +617,7 @@ namespace Assets
 
     void Scene::EnsureNodePhysicsBody(Node* node)
     {
-        if (!node)
+        if (!enablePhysics_ || !node)
         {
             return;
         }
@@ -1051,7 +1057,11 @@ namespace Assets
                 glm::vec3 localCenter = (model->GetLocalAABBMax() + model->GetLocalAABBMin()) * 0.5f;
                 center = glm::vec3(foundNode->WorldTransform() * glm::vec4(localCenter, 1.0f));
 
-                glm::vec3 extent = (model->GetLocalAABBMax() - model->GetLocalAABBMin()) * foundNode->WorldScale();
+                const auto& transform = foundNode->WorldTransform();
+                const glm::vec3 localExtent = model->GetLocalAABBMax() - model->GetLocalAABBMin();
+                const glm::vec3 extent = glm::abs(glm::vec3(transform[0])) * localExtent.x +
+                                         glm::abs(glm::vec3(transform[1])) * localExtent.y +
+                                         glm::abs(glm::vec3(transform[2])) * localExtent.z;
                 radius = glm::length(extent) * 0.5f;
                 return true;
             }

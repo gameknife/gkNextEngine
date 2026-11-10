@@ -81,7 +81,7 @@ func newWebsiteCommand(ctx appContext) *cobra.Command {
 	root := &cobra.Command{
 		Use:     "website [command]",
 		Aliases: []string{"site"},
-		Short:   "Develop, build, and preview the gkNextEngine official website",
+		Short:   tr("cli.website.short"),
 		Long: "Develop, build, and preview the gkNextEngine official website (VitePress).\n\n" +
 			"Examples:\n" +
 			"  gnb website             # Launch local dev server (hot-reload at http://localhost:5173)\n" +
@@ -107,7 +107,7 @@ func newWebsiteCommand(ctx appContext) *cobra.Command {
 
 	devCmd := &cobra.Command{
 		Use:   "dev",
-		Short: "Start local development server with hot module reload",
+		Short: tr("cli.website.dev.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			extraEnv := map[string]string{}
 			if githubPagesMode {
@@ -125,7 +125,7 @@ func newWebsiteCommand(ctx appContext) *cobra.Command {
 
 	buildCmd := &cobra.Command{
 		Use:   "build",
-		Short: "Build pure static SSG production website",
+		Short: tr("cli.website.build.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			extraEnv := map[string]string{}
 			if githubPagesMode {
@@ -139,7 +139,7 @@ func newWebsiteCommand(ctx appContext) *cobra.Command {
 
 	previewCmd := &cobra.Command{
 		Use:   "preview",
-		Short: "Preview the built static website locally",
+		Short: tr("cli.website.preview.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			extraEnv := map[string]string{}
 			if githubPagesMode {
@@ -158,7 +158,7 @@ func newWebsiteCommand(ctx appContext) *cobra.Command {
 	setupCmd := &cobra.Command{
 		Use:     "setup",
 		Aliases: []string{"install"},
-		Short:   "Install or update website Node dependencies",
+		Short:   tr("cli.website.setup.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			npmPath, err := findNpmExecutable()
 			if err != nil {

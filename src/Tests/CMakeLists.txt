@@ -1,8 +1,10 @@
 set(unitTestSources
     TestCommon.cpp
+    Test_SceneReadiness.cpp
     Test_PhysicsSync.cpp
     Test_Bindless3DTexture.cpp
     Test_Atmosphere.cpp
+    Test_AutoExposure.cpp
     Test_BindlessSlotRegistry.cpp
     Test_GltfSkinning.cpp
     Test_FileHelperTrace.cpp
@@ -18,17 +20,22 @@ set(unitTestSources
     Test_LDrawParser.cpp
     Test_LDrawConnectivity.cpp
     Test_CVarSystem.cpp
+    Test_NextDayzSessions.cpp
     Test_SceneList.cpp
     Test_SceneReference.cpp
     Test_ScadLoader.cpp
     Test_ScadTerrain.cpp
+    Test_TerrainGrass.cpp
     Test_ScadLibraryTerrainProcess.cpp
+    Test_ScadSceneDocument.cpp
     Test_TerrainWalkable.cpp
+    Test_NextDayzNavigation.cpp
     Test_GeoCityWalkable.cpp
     Test_GeoPoiSidecar.cpp
     Test_SimKit.cpp
     Test_ScadRig.cpp
     Test_RigAnimator.cpp
+    Test_RigPoseOps.cpp
     Test_RenderComponent.cpp
     Test_ImAnimIntegration.cpp
     Test_BrickPlayerSnapLogic.cpp
@@ -45,12 +52,15 @@ set(unitTestSources
     Test_NextTotalwarCombat.cpp
     Test_NextTotalwarProductization.cpp
     Test_NextDayzProductization.cpp
+    Test_NextDayzCampaign.cpp
+    Test_NextDayzWorldMaps.cpp
     Test_GnbAIClient.cpp
     Test_ScadPromptContext.cpp
     Test_ScadSessionStore.cpp
     Test_ScadAIController.cpp
     Test_ScadAIAdapters.cpp
     Test_ScadSourceIndex.cpp
+    Test_ScadLiveSource.cpp
     Test_ScadStudioSessionImporter.cpp
     Test_CharacterWorkbenchAI.cpp
     Test_Rgb9e5Pack.cpp
@@ -60,12 +70,17 @@ set(unitTestSources
     Test_SogLoader.cpp
     Test_TerminalBlitter.cpp
     Test_PhysicsComponent.cpp
+    Test_CharacterGroundVelocity.cpp
+    Test_NextAstrobot.cpp
+    Test_NextRaiden.cpp
     Test_CPUAccelerationSnapshot.cpp
     Test_AmbientBakeScheduler.cpp
+    Test_AmbientBakeCache.cpp
     ${GK_SOURCE_ROOT}/Application/Editor/ScadStudio/ScadOutline.cpp
     ${GK_SOURCE_ROOT}/Application/Editor/ScadStudio/ScadPromptContext.cpp
     ${GK_SOURCE_ROOT}/Application/Editor/ScadStudio/ScadSessionStore.cpp
     ${GK_SOURCE_ROOT}/Application/Editor/ScadLibrary/TerrainProcessDocument.cpp
+    ${GK_SOURCE_ROOT}/Application/Editor/ScadLibrary/ScadSceneDocument.cpp
     ${GK_SOURCE_ROOT}/Application/Editor/ScadLibrary/CharacterWorkbench.cpp
     ${GK_SOURCE_ROOT}/Application/Editor/ScadLibrary/AI/ScadAIContracts.cpp
     ${GK_SOURCE_ROOT}/Application/Editor/ScadLibrary/AI/ScadAIController.cpp
@@ -101,20 +116,56 @@ set(unitTestSources
     ${GK_SOURCE_ROOT}/Application/Game/NextTotalwar/AI/CommanderAI.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextTotalwar/Data/BattleData.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextTotalwar/Render/BattleCamera.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextAstrobot/Level/LevelFlow.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/NextRaidenTypes.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/NextRaidenConfig.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Combat/BulletPattern.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Level/WaveDirector.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Level/PatternJson.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Level/StageFlow.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Level/StageIndex.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/World/BossSystem.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/World/GroundTargetSystem.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/World/ItemSystem.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Combat/DebrisSystem.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Level/PrefabRack.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Combat/BulletPool.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/World/EnemyPool.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Player/ScrollCamera.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Data/ItemDefs.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Data/LootTables.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Inventory/Inventory.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Player/PlayerActionController.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Player/SurvivalSystem.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/World/LootDirector.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/World/Campaign.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/World/CampaignPersistence.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/World/ExpeditionMaps.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Combat/NoiseSystem.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Combat/CombatSystem.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Zombies/ZombieSystem.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/World/ZombieSpawnDirector.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/World/WorldAnchorRegistry.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Sim/WorldSim.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Sim/ItemLedger.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Sim/LagCompensation.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Zombies/ZombieVisualPool.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Debugger/DebugEventLog.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/UI/Localization.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Net/ServerDirectory.cpp
 )
+
+if("NextNet" IN_LIST GK_MODULE_NAMES)
+    list(APPEND unitTestSources
+        Test_NextNet.cpp
+        ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Net/NetProtocol.cpp
+        ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Net/MasterApi.cpp)
+endif()
 
 if(GK_DOTNET_ENABLED)
     list(APPEND unitTestSources Test_DotNetEngineApi.cpp)
+    list(APPEND unitTestSources Test_ManagedGameTemplate.cpp)
+    list(APPEND unitTestSources Test_TemplateRigClips.cpp)
     list(APPEND unitTestSources Test_ReflectionManifest.cpp)
 endif()
 
@@ -122,7 +173,17 @@ find_package(Catch2 3 REQUIRED)
 add_executable(gkNextUnitTests ${unitTestSources})
 
 gk_apply_target_defaults(gkNextUnitTests)
+gk_enable_unity_build(gkNextUnitTests 8)
 set_target_properties(gkNextUnitTests PROPERTIES FOLDER "Tests")
+# Reuse the common standard-library and Catch2 headers across test translation units.
+# Keep no-unity builds free of forced includes so they still detect missing includes.
+# MSVC uses PCH on Ninja, which schedules compilation without the /MP /Yc conflict.
+if(ENABLE_UNITY_BUILD AND (NOT MSVC OR CMAKE_GENERATOR MATCHES "Ninja"))
+    target_precompile_headers(gkNextUnitTests PRIVATE
+        "${GK_SOURCE_ROOT}/Engine/Common/CoreMinimal.hpp"
+        <catch2/catch_all.hpp>
+    )
+endif()
 # The reflection manifest test reads a committed source file, and the tests are launched from
 # whatever directory the caller happens to be in.
 target_compile_definitions(gkNextUnitTests PRIVATE GK_NEXT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
@@ -138,6 +199,9 @@ target_include_directories(gkNextUnitTests PRIVATE
     ${GK_SOURCE_ROOT}/Application/Game/NextTotalwar
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz
 )
+if(TARGET NextNet)
+    target_link_libraries(gkNextUnitTests PRIVATE NextNet)
+endif()
 target_link_libraries(gkNextUnitTests PRIVATE
     gkNextEngine
     NextGameplay

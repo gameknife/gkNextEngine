@@ -1,17 +1,449 @@
 #include "Engine/Common/CoreMinimal.hpp"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
+#include <span>
+#include <regex>
+#include <set>
+#include <fstream>
+
+#include <glm/glm.hpp>
+
 #include "Data/DeterministicRng.hpp"
+#include "Debugger/DebugEventLog.hpp"
+#include "Debugger/DebugHistory.hpp"
+#include "Data/LootTables.hpp"
+#include "Weapons/WeaponDefs.hpp"
 #include "Inventory/Inventory.hpp"
 #include "Player/PlayerActionController.hpp"
+#include "Player/AimInput.hpp"
 #include "Player/SurvivalSystem.hpp"
 #include "World/LootDirector.hpp"
 #include "Combat/CombatSystem.hpp"
 #include "Combat/NoiseSystem.hpp"
 #include "Zombies/ZombieSystem.hpp"
 #include "World/ZombieSpawnDirector.hpp"
+#include "Sim/WorldSim.hpp"
+#include "Sim/ItemLedger.hpp"
+#include "Sim/LagCompensation.hpp"
 #include "Zombies/ZombieVisualPool.hpp"
+#include "UI/Localization.hpp"
+
+namespace
+{
+    NextDayz::FItemInstanceId AttachmentTestAdd(NextDayz::Inventory& inventory, const char* id)
+    {
+        const auto* def = NextDayz::FindItemDef(id);
+        REQUIRE(def);
+        NextDayz::FItemInstanceId instance = 0;
+        REQUIRE(inventory.TryAdd(id, std::string(def->displayName), def->kind, 1, &instance));
+        return instance;
+    }
+}
+
+TEST_CASE("NextDayz sight pictures: eye stations, zoom and raise times", "[NextDayz][Attachments][ADS]")
+{
+    using namespace NextDayz;
+    const FWeaponAttachments iron{};
+    FWeaponAttachments redDot{};
+    redDot[0] = EWeaponAttachment::RedDot;
+    FWeaponAttachments scope{};
+    scope[0] = EWeaponAttachment::Scope4x;
+    for (const char* id : {"ak", "mosin", "shotgun", "pistol", "aks74u", "bizon", "aps", "svt40", "toz34"})
+    {
+        const FWeaponModelPoints points = WeaponModelPoints(id);
+        // The eye is behind the rear sight, and in front of where the old fixed
+        // relief left it (on or past the butt plate for every long gun).
+        CHECK(points.eyeForward < points.rearSightForward);
+        CHECK(points.adsEyeRelief ==
+              Catch::Approx((points.rearSightForward - points.eyeForward) * kViewModelScale));
+        // Iron sights only tighten the 75 degree view a little: well short of a 2x optic.
+        const float ironFov = WeaponAdsFov(id, iron);
+        CHECK(ironFov > 58.0f);
+        CHECK(ironFov < 75.0f);
+    }
+    CHECK(WeaponModelPoints("ak").adsEyeRelief < 0.25f);
+    CHECK(WeaponModelPoints("mosin").adsEyeRelief < 0.32f);
+    CHECK(WeaponModelPoints("shotgun").adsEyeRelief < 0.20f);
+    // 1x optics keep the eye station; the 4x puts the eye at its eyepiece.
+    CHECK(WeaponSightPoints("ak", redDot).adsEyeRelief < WeaponModelPoints("ak").adsEyeRelief);
+    CHECK(WeaponAdsFov("ak", redDot) == Catch::Approx(62.0f));
+    CHECK(WeaponAdsFov("ak", scope) == Catch::Approx(22.0f));
+    CHECK(WeaponAdsFov("svd", iron) == Catch::Approx(22.0f)); // factory PSO-1
+    // Light guns snap up, long rifles and magnified optics take longer.
+    CHECK(WeaponAimSeconds("pistol", iron) < WeaponAimSeconds("ak", iron));
+    CHECK(WeaponAimSeconds("ak", iron) < WeaponAimSeconds("mosin", iron));
+    CHECK(WeaponAimSeconds("ak", redDot) == Catch::Approx(WeaponAimSeconds("ak", iron)));
+    CHECK(WeaponAimSeconds("ak", scope) > WeaponAimSeconds("ak", iron));
+    CHECK(WeaponAimSeconds("svd", iron) > WeaponAimSeconds("mosin", iron));
+}
+
+TEST_CASE("NextDayz attachments fit firearm-specific slots and change sight landmarks", "[NextDayz][Attachments]")
+{
+    using namespace NextDayz;
+    for (const auto& part : kAttachments)
+    {
+        REQUIRE(FindItemDef(part.id)->kind == EItemKind::Attachment);
+        REQUIRE(SupportsAttachment("ak", part.type));
+        REQUIRE_FALSE(SupportsAttachment("knife", part.type));
+        REQUIRE_FALSE(SupportsAttachment("not-a-weapon", part.type));
+        REQUIRE(std::any_of(LootTable(ELootProfile::Military).begin(), LootTable(ELootProfile::Military).end(),
+                            [&](const auto& entry) { return entry.itemId == part.id; }));
+    }
+    REQUIRE_FALSE(SupportsAttachment("pistol", EWeaponAttachment::Scope4x));
+    REQUIRE_FALSE(SupportsAttachment("pistol", EWeaponAttachment::VerticalGrip));
+    REQUIRE_FALSE(SupportsAttachment("mosin", EWeaponAttachment::ExtendedMagazine));
+    REQUIRE_FALSE(SupportsAttachment("shotgun", EWeaponAttachment::QuickMagazine));
+    FWeaponAttachments parts{};
+    const auto iron = WeaponSightPoints("ak", parts);
+    parts[0] = EWeaponAttachment::RedDot;
+    const auto red = WeaponSightPoints("ak", parts);
+    REQUIRE(red.sightHeight > iron.sightHeight);
+    REQUIRE(red.scopeFov == 0.0f);
+    parts[0] = EWeaponAttachment::Holographic;
+    REQUIRE(WeaponSightPoints("ak", parts).sightHeight > red.sightHeight);
+    parts[0] = EWeaponAttachment::Scope4x;
+    REQUIRE(WeaponSightPoints("ak", parts).scopeFov == 22.0f);
+    REQUIRE(WeaponSightPoints("ak", parts).adsEyeRelief < red.adsEyeRelief);
+    parts[1] = EWeaponAttachment::VerticalGrip;
+    parts[2] = EWeaponAttachment::QuickMagazine;
+    parts[3] = EWeaponAttachment::Suppressor;
+    REQUIRE(WeaponStabilityScale(parts) == Catch::Approx(0.75f));
+    REQUIRE(WeaponReloadScale(parts) == Catch::Approx(0.70f));
+    REQUIRE(WeaponSuppressed(parts));
+    parts[2] = EWeaponAttachment::ExtendedMagazine;
+    REQUIRE(WeaponMagazineCapacity("ak", parts) == 45);
+    REQUIRE(WeaponMagazineCapacity("svd", parts) == 15);
+    REQUIRE(WeaponMagazineCapacity("pistol", parts) == 18);
+    REQUIRE(WeaponReloadScale(parts) == 1.0f);
+}
+
+TEST_CASE("NextDayz field kit with a documented past is complete, obtainable and fed by existing ammo",
+          "[NextDayz][Loot][Heritage]")
+{
+    using namespace NextDayz;
+    const std::array<std::string_view, 29> heritage = {
+        "aks74u", "bizon", "aps", "svt40", "toz34",
+        "hat_panama", "helmet_ssh68", "helmet_m56", "shirt_telnyashka", "jacket_afganka", "jacket_gorka",
+        "jacket_strichtarn", "vest_type56", "vest_6b3", "pants_afganka", "pants_gorka", "pants_strichtarn",
+        "backpack_rd54", "backpack_abalakov",
+        "helmet_pasgt", "hat_boonie_emr", "jacket_m81", "pants_m81", "jacket_emr", "pants_emr",
+        "jacket_dbdu", "pants_dbdu", "jacket_flora", "pants_flora"};
+    const auto obtainable = [](std::string_view id)
+    {
+        for (uint8_t index = 0; index < static_cast<uint8_t>(ELootProfile::Count); ++index)
+            for (const FLootTableEntry& entry : LootTable(static_cast<ELootProfile>(index)))
+                if (entry.itemId == id && entry.weight > 0) return true;
+        return false;
+    };
+    for (std::string_view id : heritage)
+    {
+        INFO(id);
+        const FItemDef* item = FindItemDef(id);
+        REQUIRE(item != nullptr);
+        CHECK_FALSE(item->lore.empty());
+        CHECK(obtainable(id));
+        if (item->kind != EItemKind::Weapon) continue;
+        const FWeaponDef* weapon = FindWeaponDef(item->weaponDefId);
+        REQUIRE(weapon != nullptr);
+        CHECK(weapon->id == item->id);
+        // Every new gun is fed by ammunition the world already drops.
+        CHECK(FindItemDef(AmmoItemId(weapon->ammo)) != nullptr);
+        CHECK(obtainable(AmmoItemId(weapon->ammo)));
+        CHECK((item->equipSlot == EEquipSlot::Sidearm) == weapon->IsSidearm());
+    }
+    CHECK(FindWeaponDef("aps")->IsSidearm());
+    CHECK(FindWeaponDef("aps")->fullAuto);
+    CHECK(FindWeaponDef("bizon")->magSize == 64);
+    CHECK(FindWeaponDef("bizon")->family == EWeaponFamily::Smg);
+    CHECK(FindWeaponDef("svt40")->family == EWeaponFamily::Marksman);
+    CHECK(FindWeaponDef("toz34")->family == EWeaponFamily::Shotgun);
+    CHECK(FindWeaponDef("toz34")->magSize == 2);
+    // The carbine is lighter in the hand and on the target than the full rifle.
+    CHECK(FindWeaponDef("aks74u")->baseDamage < FindWeaponDef("ak")->baseDamage);
+    CHECK(FindItemDef("aks74u")->size.width < FindItemDef("ak")->size.width);
+    // Mounts follow the real guns: wartime rifles take only the sniper scope,
+    // the helical drum is not swappable, a holster pistol takes no 4x.
+    CHECK(SupportsAttachment("svt40", EWeaponAttachment::Scope4x));
+    CHECK_FALSE(SupportsAttachment("svt40", EWeaponAttachment::RedDot));
+    CHECK_FALSE(SupportsAttachment("bizon", EWeaponAttachment::VerticalGrip));
+    CHECK_FALSE(SupportsAttachment("bizon", EWeaponAttachment::ExtendedMagazine));
+    CHECK_FALSE(SupportsAttachment("aps", EWeaponAttachment::Scope4x));
+    CHECK_FALSE(SupportsAttachment("toz34", EWeaponAttachment::Scope4x));
+    FWeaponAttachments extended{};
+    extended[static_cast<size_t>(EAttachmentSlot::Magazine)] = EWeaponAttachment::ExtendedMagazine;
+    CHECK(WeaponMagazineCapacity("aps", extended) == 30);
+    CHECK(SuppressorLength("aps") == Catch::Approx(SuppressorLength("pistol")));
+    CHECK(WeaponAimSeconds("aps", {}) > WeaponAimSeconds("pistol", {}));
+    // Titanium plates outrank the generic plate carrier; the telnyashka has no pockets.
+    CHECK(FindItemDef("vest_6b3")->armor > FindItemDef("vest_military")->armor);
+    CHECK(FindItemDef("shirt_telnyashka")->containerSize.Area() == 0);
+}
+
+TEST_CASE("NextDayz attachment installation consumes loose parts and preserves each gun", "[NextDayz][Attachments]")
+{
+    using namespace NextDayz;
+    Inventory inventory;
+    FItemInstanceId bag = 0;
+    REQUIRE(inventory.TryAdd("backpack_military", "Pack", EItemKind::Clothing, 1, &bag, kWornContainer));
+    const auto first = AttachmentTestAdd(inventory, "ak");
+    const auto second = AttachmentTestAdd(inventory, "ak");
+    REQUIRE(inventory.SetLoadedAmmo(first, 19));
+    for (const char* id : {"optic_red_dot", "grip_vertical", "mag_extended", "muzzle_suppressor", "tactical_flashlight"})
+    {
+        const auto part = AttachmentTestAdd(inventory, id);
+        REQUIRE(inventory.TryAttach(first, part));
+        REQUIRE_FALSE(inventory.FindInstance(part));
+        REQUIRE(inventory.CountOf(id) == 0);
+    }
+    const auto parts = inventory.FindInstance(first)->attachments;
+    REQUIRE(ValidAttachments("ak", parts));
+    REQUIRE(inventory.FindInstance(second)->attachments == FWeaponAttachments{});
+    REQUIRE(inventory.LoadedAmmo(first) == 19);
+    const auto holo = AttachmentTestAdd(inventory, "optic_holographic");
+    REQUIRE(inventory.TryAttach(first, holo));
+    REQUIRE(inventory.CountOf("optic_red_dot") == 1);
+    REQUIRE(inventory.TryDetach(first, EAttachmentSlot::Optic));
+    REQUIRE(inventory.CountOf("optic_holographic") == 1);
+    Inventory restored;
+    REQUIRE(restored.Restore(inventory.Capture()));
+    REQUIRE(restored.FindInstance(first)->attachments == inventory.FindInstance(first)->attachments);
+    const auto dropped = restored.TryRemove(first);
+    REQUIRE(dropped);
+    REQUIRE(dropped->attachments[2] == EWeaponAttachment::ExtendedMagazine);
+    REQUIRE(dropped->loadedAmmo == 19);
+    REQUIRE(restored.FindInstance(second));
+}
+
+TEST_CASE("NextDayz attachment swaps and magazine removal are atomic when cargo is full", "[NextDayz][Attachments]")
+{
+    using namespace NextDayz;
+    Inventory inventory;
+    const auto gun = AttachmentTestAdd(inventory, "ak");
+    REQUIRE(inventory.TryAttach(gun, AttachmentTestAdd(inventory, "optic_4x")));
+    const auto red = AttachmentTestAdd(inventory, "optic_red_dot");
+    while (inventory.TryAdd("map", "Map", EItemKind::Misc, 1)) {}
+    const auto before = inventory.Capture();
+    REQUIRE_FALSE(inventory.TryAttach(gun, red));
+    REQUIRE(inventory.FindInstance(gun)->attachments[0] == EWeaponAttachment::Scope4x);
+    REQUIRE(inventory.FindInstance(red));
+    REQUIRE(inventory.Capture().nextInstanceId == before.nextInstanceId);
+    REQUIRE_FALSE(inventory.TryDetach(gun, EAttachmentSlot::Optic));
+    REQUIRE(inventory.CountOf("optic_4x") == 0);
+
+    inventory.Clear();
+    const auto extendedGun = AttachmentTestAdd(inventory, "ak");
+    REQUIRE(inventory.TryAttach(extendedGun, AttachmentTestAdd(inventory, "mag_extended")));
+    REQUIRE(inventory.SetLoadedAmmo(extendedGun, 45));
+    while (inventory.TryAdd("map", "Map", EItemKind::Misc, 1)) {}
+    REQUIRE(inventory.Consume("map", 1) == 1);
+    // The magazine fits, but its extra 15 rounds don't: neither may be lost.
+    REQUIRE_FALSE(inventory.TryDetach(extendedGun, EAttachmentSlot::Magazine));
+    REQUIRE(inventory.LoadedAmmo(extendedGun) == 45);
+    REQUIRE(inventory.CountOf("mag_extended") == 0);
+    REQUIRE(inventory.CountOf("ammo_545") == 0);
+    REQUIRE(inventory.Consume("map", 1) == 1);
+    REQUIRE(inventory.TryDetach(extendedGun, EAttachmentSlot::Magazine));
+    REQUIRE(inventory.LoadedAmmo(extendedGun) == 30);
+    REQUIRE(inventory.CountOf("ammo_545") == 15);
+    REQUIRE(inventory.CountOf("mag_extended") == 1);
+}
+
+TEST_CASE("NextDayz invalid attachment loadouts are rejected without changing inventory", "[NextDayz][Attachments]")
+{
+    using namespace NextDayz;
+    Inventory inventory;
+    const auto pistol = AttachmentTestAdd(inventory, "pistol");
+    const auto scope = AttachmentTestAdd(inventory, "optic_4x");
+    REQUIRE_FALSE(inventory.TryAttach(pistol, scope));
+    const auto state = inventory.Capture();
+    auto corrupt = state;
+    corrupt.instances.front().attachments[0] = EWeaponAttachment::Scope4x;
+    REQUIRE_FALSE(inventory.Restore(corrupt));
+    corrupt = state;
+    corrupt.instances.front().attachments[1] = EWeaponAttachment::RedDot;
+    REQUIRE_FALSE(inventory.Restore(corrupt));
+    corrupt = state;
+    corrupt.instances.front().attachments[0] = static_cast<EWeaponAttachment>(255);
+    REQUIRE_FALSE(inventory.Restore(corrupt));
+    corrupt = state;
+    corrupt.instances.back().attachments[0] = EWeaponAttachment::RedDot;
+    REQUIRE_FALSE(inventory.Restore(corrupt));
+    REQUIRE(inventory.FindInstance(pistol)->attachments == FWeaponAttachments{});
+    REQUIRE(inventory.FindInstance(scope));
+}
+
+TEST_CASE("NextDayz aim taps toggle ADS and ignore duplicate release", "[NextDayz][AimInput]")
+{
+    NextDayz::AimInput aim;
+    aim.Press(0.0, true);
+    REQUIRE(aim.IsAiming());
+    REQUIRE_FALSE(aim.IsAds());
+    aim.Release(0.05, 0.2);
+    REQUIRE(aim.IsAds());
+    REQUIRE(aim.IsAiming());
+    aim.Release(0.06, 0.2);
+    REQUIRE(aim.IsAds());
+    aim.Press(0.10, true);
+    REQUIRE(aim.IsAds()); // clicking to exit must not flash TPS on button-down
+    aim.Release(0.15, 0.2);
+    REQUIRE_FALSE(aim.IsAds());
+    REQUIRE_FALSE(aim.IsAiming());
+}
+
+TEST_CASE("NextDayz aim holds use shoulder aim and can leave latched ADS", "[NextDayz][AimInput]")
+{
+    NextDayz::AimInput aim;
+    aim.Press(0.0, true);
+    aim.Update(0.25, 0.2);
+    REQUIRE(aim.IsAiming());
+    REQUIRE_FALSE(aim.IsAds());
+    aim.Release(0.30, 0.2);
+    REQUIRE_FALSE(aim.IsAiming());
+    aim.Press(1.0, true);
+    aim.Release(1.05, 0.2);
+    REQUIRE(aim.IsAds());
+    aim.Press(2.0, true);
+    aim.Update(2.25, 0.2);
+    REQUIRE_FALSE(aim.IsAds());
+    REQUIRE(aim.IsAiming());
+    aim.Release(2.30, 0.2);
+    REQUIRE_FALSE(aim.IsAiming());
+    // Release alone must classify a hold even if no simulation tick occurred.
+    aim.Press(3.0, true);
+    aim.Press(3.15, true);
+    aim.Release(3.21, 0.2);
+    REQUIRE_FALSE(aim.IsAiming());
+    REQUIRE_FALSE(aim.IsAds());
+}
+
+TEST_CASE("NextDayz cancelled aim and melee taps cannot latch ADS", "[NextDayz][AimInput]")
+{
+    NextDayz::AimInput aim;
+    aim.Press(0.0, true);
+    aim.Release(0.2, 0.2); // threshold belongs to hold, not tap
+    REQUIRE_FALSE(aim.IsAds());
+    aim.Press(1.0, true);
+    aim.Cancel();
+    aim.Release(1.05, 0.2);
+    REQUIRE_FALSE(aim.IsAiming());
+    aim.Press(2.0, true);
+    aim.Release(2.05, 0.2);
+    REQUIRE(aim.IsAds());
+    aim.Cancel();
+    REQUIRE_FALSE(aim.IsAds());
+    aim.Press(3.0, false);
+    REQUIRE(aim.IsAiming()); // melee guard remains a held action
+    aim.Release(3.05, 0.2);
+    REQUIRE_FALSE(aim.IsAiming());
+    REQUIRE_FALSE(aim.IsAds());
+}
+
+TEST_CASE("NextDayz language switches queued feedback and keeps debugger IDs stable", "[NextDayz][Localization]")
+{
+    using namespace NextDayz;
+    using namespace NextDayz::L10n;
+    Initialize(true);
+    const FText pickedUp = Message("Picked up {} x{}", "Water Bottle", 2);
+    Debug::EventLog events;
+    events.Push(Debug::EChannel::Hud, 0, pickedUp);
+    CHECK(pickedUp.Display() == "已拾取 瓶装水 x2");
+    CHECK(Format("Rescue: {} ({:.0f}s)", "Landing", 12.4f) == "救援：降落中（12秒）");
+    CHECK(Localize("Canned Beans x2 (+3 more)", ELanguage::Chinese) == "豆子罐头 x2（另有 3 项）");
+    CHECK(std::string(Tr("unknown_custom_item")) == "unknown_custom_item");
+    const std::string chineseTab = Label("Survival");
+    const std::string chineseWindow = Label("NextDayz Debug###NextDayzDebugger");
+    SetLanguage(ELanguage::English);
+    CHECK(pickedUp.Display() == "Picked up Water Bottle x2");
+    CHECK(events.Newest()->text.Display() == pickedUp.Display());
+    events.Push(Debug::EChannel::Hud, 0, Message("Picked up {} x{}", "Water Bottle", 2));
+    CHECK(events.Size() == 1);
+    CHECK(events.Newest()->repeats == 2);
+    CHECK(Format("Rescue: {} ({:.0f}s)", "Landing", 12.4f) == "Rescue: Landing (12s)");
+    const std::string englishTab = Label("Survival");
+    const std::string englishWindow = Label("NextDayz Debug###NextDayzDebugger");
+    CHECK(chineseTab != englishTab);
+    CHECK(chineseTab.substr(chineseTab.find("###")) == englishTab.substr(englishTab.find("###")));
+    CHECK(chineseWindow.substr(chineseWindow.find("###")) == englishWindow.substr(englishWindow.find("###")));
+    SetLanguage(ELanguage::Chinese);
+    CHECK(events.Newest()->text.Display() == "已拾取 瓶装水 x2");
+}
+
+TEST_CASE("NextDayz translations cover item descriptions and preserve format contracts", "[NextDayz][Localization]")
+{
+    using namespace NextDayz;
+    using namespace NextDayz::L10n;
+    const std::pair<std::string_view, std::string_view> translations[] = {
+#define ND_TEXT(en, zh) {en, zh},
+#include "UI/Translations.inl"
+#undef ND_TEXT
+    };
+    const std::regex placeholder(R"(\{[^}]*\}|%(?:[-+0-9.*]*)(?:ll|z)?[sdfiu])");
+    const auto placeholders = [&](std::string_view text)
+    {
+        const std::string copy(text);
+        std::vector<std::string> result;
+        for (auto it = std::sregex_iterator(copy.begin(), copy.end(), placeholder); it != std::sregex_iterator(); ++it)
+            result.push_back(it->str());
+        return result;
+    };
+    std::set<std::string_view> keys;
+    for (const auto& [english, chinese] : translations)
+    {
+        CAPTURE(english);
+        CHECK(keys.insert(english).second);
+        CHECK_FALSE(chinese.empty());
+        CHECK(placeholders(english) == placeholders(chinese));
+    }
+    const std::set<std::string_view> internationalNames = {"AK-74", "SVD", "5.45x39", "7.62x54", "9x18"};
+    for (const auto& item : AllItemDefs())
+    {
+        CAPTURE(item.id);
+        if (!internationalNames.contains(item.displayName))
+            CHECK(Translate(item.displayName, ELanguage::Chinese) != item.displayName);
+        CHECK(Translate(item.description, ELanguage::Chinese) != item.description);
+        if (!item.lore.empty())
+            CHECK(Translate(item.lore, ELanguage::Chinese) != item.lore);
+    }
+    const Inventory inventory;
+    for (const auto& container : inventory.Containers())
+        CHECK(Translate(container.displayName, ELanguage::Chinese) != container.displayName);
+}
+
+TEST_CASE("NextDayz persists language and isolates validation preferences", "[NextDayz][Localization]")
+{
+    using namespace NextDayz::L10n;
+    const auto path = std::filesystem::temp_directory_path() /
+        fmt::format("nextdayz-language-{}.json", std::chrono::steady_clock::now().time_since_epoch().count());
+    struct FPreferenceCleanup
+    {
+        std::filesystem::path path;
+        ~FPreferenceCleanup()
+        {
+            Initialize(true);
+            std::error_code error;
+            std::filesystem::remove(path, error);
+        }
+    } cleanup{path};
+    Initialize(false, path);
+    CHECK(Language() == ELanguage::Chinese);
+    SetLanguage(ELanguage::English);
+    Initialize(false, path);
+    CHECK(Language() == ELanguage::English);
+    Initialize(true, path);
+    CHECK(Language() == ELanguage::Chinese);
+    SetLanguage(ELanguage::Chinese);
+    Initialize(false, path);
+    CHECK(Language() == ELanguage::English);
+    {
+        std::ofstream corrupt(path);
+        corrupt << R"({"language": 42})";
+    }
+    Initialize(false, path);
+    CHECK(Language() == ELanguage::Chinese);
+}
 
 TEST_CASE("NextDayz deterministic RNG derives stable streams", "[NextDayz][Productization][Rng]")
 {
@@ -79,13 +511,13 @@ TEST_CASE("NextDayz equipped container cannot be removed without transfer space"
     FItemInstanceId backpackId = 0;
     REQUIRE(inventory.TryAdd("backpack", "Backpack", EItemKind::Clothing, 1, &backpackId));
     REQUIRE(inventory.TryEquip(backpackId));
-    REQUIRE(inventory.TotalCapacity() == 38);
+    REQUIRE(inventory.TotalCapacity() == 46);
     REQUIRE(inventory.TryAdd("fuel", "Fuel", EItemKind::Misc, 1));
     REQUIRE(inventory.TryAdd("radio", "Radio", EItemKind::Misc, 1));
     REQUIRE(inventory.TryAdd("medkit", "Medkit", EItemKind::Consumable, 1));
     REQUIRE_FALSE(inventory.TryUnequip(backpackId));
     REQUIRE(inventory.IsClothingEquipped("backpack"));
-    REQUIRE(inventory.TotalCapacity() == 38);
+    REQUIRE(inventory.TotalCapacity() == 46);
     REQUIRE(inventory.CountOf("fuel") == 1);
     REQUIRE(inventory.CountOf("medkit") == 1);
 }
@@ -101,6 +533,102 @@ TEST_CASE("NextDayz weapon instance retains magazine state through moves",
     const FContainerId destination = inventory.Containers().back().containerId;
     REQUIRE(inventory.TryMove(pistolId, destination));
     REQUIRE(inventory.LoadedAmmo(pistolId) == 7);
+}
+
+TEST_CASE("NextDayz targeted pickup respects container capacity and restrictions", "[NextDayz][Inventory]")
+{
+    using namespace NextDayz;
+    Inventory inventory;
+    const FContainerId shirt = inventory.Containers()[0].containerId;
+    const FContainerId trousers = inventory.Containers()[1].containerId;
+    const FContainerId sling = inventory.Containers()[2].containerId;
+    FItemInstanceId bandage = 0;
+    REQUIRE(inventory.TryAdd("bandage", "Bandage", EItemKind::Consumable, 3, &bandage, trousers));
+    REQUIRE(inventory.FindInstance(bandage)->containerId == trousers);
+    REQUIRE(inventory.TryAdd("bandage", "Bandage", EItemKind::Consumable, 1, nullptr, trousers));
+    REQUIRE(inventory.FindInstance(bandage)->count == 4);
+    REQUIRE(inventory.TryAdd("can_opener", "Opener", EItemKind::Misc, 3, nullptr, trousers));
+    REQUIRE(inventory.ContainerUsed(trousers) == 4);
+    REQUIRE(inventory.FitCount("bandage", 1, trousers) == 0);
+    REQUIRE_FALSE(inventory.TryAdd("bandage", "Bandage", EItemKind::Consumable, 1, nullptr, trousers));
+    REQUIRE_FALSE(inventory.TryAdd("bandage", "Bandage", EItemKind::Consumable, 1, nullptr, sling));
+    REQUIRE_FALSE(inventory.TryAdd("bandage", "Bandage", EItemKind::Consumable, 1, nullptr, 12345));
+    REQUIRE(inventory.CountOf("bandage") == 4);
+
+    // Moving onto the current full container is a harmless no-op, not a capacity failure.
+    REQUIRE(inventory.TryMove(bandage, trousers));
+    REQUIRE(inventory.TryMove(bandage, shirt));
+    REQUIRE(inventory.FindInstance(bandage)->containerId == shirt);
+    REQUIRE(inventory.TryMove(bandage, trousers));
+    REQUIRE(inventory.FindInstance(bandage)->containerId == trousers);
+}
+
+TEST_CASE("NextDayz ground clothing equips with full pockets and failed swaps roll back", "[NextDayz][Inventory]")
+{
+    using namespace NextDayz;
+    Inventory inventory;
+    REQUIRE(inventory.TryAdd("medkit", "Medkit", EItemKind::Consumable, 1));
+    REQUIRE(inventory.TryAdd("fuel", "Fuel", EItemKind::Misc, 1));
+    REQUIRE(inventory.TryAdd("radio", "Radio", EItemKind::Misc, 1));
+    REQUIRE(inventory.TryAdd("bandage", "Bandage", EItemKind::Consumable, 1));
+    REQUIRE(inventory.FreeCapacity() == 0);
+    REQUIRE_FALSE(inventory.CanAdd("backpack"));
+    FItemInstanceId backpack = 0;
+    REQUIRE(inventory.TryAdd("backpack", "Backpack", EItemKind::Clothing, 1, &backpack, kWornContainer));
+    REQUIRE(inventory.IsWorn(backpack));
+    REQUIRE(inventory.TotalCapacity() == 46);
+    const FContainerId cargo = inventory.ContainerOwnedBy(backpack)->containerId;
+    REQUIRE_FALSE(inventory.TryMove(backpack, cargo));
+    // Fill the pack with nine non-weapon 2x2 items (slings cannot hold them).
+    REQUIRE(inventory.TryAdd("fuel", "Fuel", EItemKind::Misc, 9, nullptr, cargo));
+    REQUIRE(inventory.FreeCapacity() == 0);
+    REQUIRE_FALSE(inventory.TryAdd("backpack_small", "Small Backpack", EItemKind::Clothing,
+                                    1, nullptr, kWornContainer));
+    REQUIRE(inventory.WornInSlot(EEquipSlot::Back) == backpack);
+    REQUIRE(inventory.CountOf("backpack_small") == 0);
+    REQUIRE(inventory.CountOf("fuel") == 10);
+    REQUIRE(inventory.ContainerUsed(cargo) == 36);
+    REQUIRE_FALSE(inventory.TryMove(backpack, inventory.Containers()[0].containerId));
+    REQUIRE(inventory.IsWorn(backpack));
+
+    // A larger replacement can hold both the old bag and its contents.
+    FItemInstanceId replacement = 0;
+    REQUIRE(inventory.TryAdd("backpack_military", "Assault Pack", EItemKind::Clothing,
+                             1, &replacement, kWornContainer));
+    REQUIRE(inventory.IsWorn(replacement));
+    REQUIRE_FALSE(inventory.IsWorn(backpack));
+    REQUIRE(inventory.ContainerOwnedBy(backpack) == nullptr);
+    REQUIRE(inventory.CountOf("fuel") == 10);
+    REQUIRE(inventory.TotalCapacity() == 58);
+}
+
+TEST_CASE("NextDayz cargo clothing swaps use the space freed by equipping", "[NextDayz][Inventory]")
+{
+    using namespace NextDayz;
+    Inventory inventory;
+    FItemInstanceId hoodie = 0;
+    REQUIRE(inventory.TryAdd("hoodie", "Hoodie", EItemKind::Clothing, 1, &hoodie, kWornContainer));
+    FItemInstanceId jacket = 0;
+    const FContainerId shirt = inventory.Containers()[0].containerId;
+    const FContainerId trousers = inventory.Containers()[1].containerId;
+    REQUIRE(inventory.TryAdd("jacket", "Field Jacket", EItemKind::Clothing, 1, &jacket, trousers));
+    REQUIRE(inventory.TryAdd("medkit", "Medkit", EItemKind::Consumable, 1, nullptr, shirt));
+    REQUIRE(inventory.TryAdd("radio", "Radio", EItemKind::Misc, 1, nullptr, shirt));
+    REQUIRE(inventory.TryAdd("fuel", "Fuel", EItemKind::Misc,
+                             2, nullptr, inventory.ContainerOwnedBy(hoodie)->containerId));
+    REQUIRE(inventory.TryEquip(jacket));
+    REQUIRE(inventory.IsWorn(jacket));
+    REQUIRE_FALSE(inventory.IsWorn(hoodie));
+    REQUIRE(inventory.CountOf("fuel") == 2);
+    REQUIRE(inventory.TotalCapacity() == 22);
+
+    // Worn gear can also be dragged straight into a chosen cargo container.
+    REQUIRE(inventory.Consume("fuel", 2) == 2);
+    REQUIRE(inventory.TryDrop(hoodie));
+    REQUIRE(inventory.TryMove(jacket, trousers));
+    REQUIRE_FALSE(inventory.IsWorn(jacket));
+    REQUIRE(inventory.FindInstance(jacket)->containerId == trousers);
+    REQUIRE(inventory.ContainerOwnedBy(jacket) == nullptr);
 }
 
 TEST_CASE("NextDayz survival metabolism uses simulation seconds and sprint multipliers",
@@ -231,6 +759,63 @@ TEST_CASE("NextDayz zombies hear investigate chase attack and respect stale hand
     const auto damage = zombies.ConsumePlayerDamageRequests();
     REQUIRE(damage.size() == 1);
     REQUIRE(damage.front().source == attacker);
+    REQUIRE(damage.front().targetId == kLocalPlayerTargetId);
+}
+
+TEST_CASE("NextDayz zombies hunt one of several survivors and strike only that one",
+          "[NextDayz][Productization][Zombie][Multiplayer]")
+{
+    using namespace NextDayz;
+    const auto clearSight = [](const glm::vec3&, const glm::vec3&) { return true; };
+    ZombieSystem zombies(1);
+    const FZombieHandle handle = zombies.Spawn(EZombieProfile::Civilian, {});
+    zombies.Resolve(handle)->forward = {0.0f, 0.0f, 1.0f};
+
+    // Survivor 7 is nearer and in view: it becomes the target.
+    std::array<FZombieTarget, 2> targets{{{3, {0.0f, 0.0f, 6.0f}, true, 1.0f},
+                                          {7, {0.0f, 0.0f, 1.0f}, true, 1.0f}}};
+    zombies.Update(0.1f, targets, clearSight, {});
+    REQUIRE(zombies.Resolve(handle)->targetId == 7);
+    REQUIRE(zombies.Resolve(handle)->seesPlayer);
+
+    // Loyalty: a closer survivor appearing does not steal it while 7 is still seen.
+    targets[0].position = {0.45f, 0.0f, 0.8f};
+    zombies.Update(0.05f, targets, clearSight, {});
+    REQUIRE(zombies.Resolve(handle)->targetId == 7);
+
+    // The strike lands on the survivor it was hunting, not the bystander.
+    zombies.Update(0.45f, targets, clearSight, {});
+    const auto damage = zombies.ConsumePlayerDamageRequests();
+    REQUIRE(damage.size() == 1);
+    REQUIRE(damage.front().targetId == 7);
+
+    // A dead target is no longer seen: it turns to the other survivor in view.
+    targets[1].alive = false;
+    zombies.Update(0.05f, targets, clearSight, {});
+    REQUIRE(zombies.Resolve(handle)->targetId == 3);
+}
+
+TEST_CASE("NextDayz zombies turn on the survivor who shot them",
+          "[NextDayz][Productization][Zombie][Multiplayer]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(1);
+    const FZombieHandle handle = zombies.Spawn(EZombieProfile::Civilian, {});
+    FZombieDamage damage;
+    damage.amount = 5.0f;
+    damage.source = {20.0f, 0.0f, 0.0f};
+    damage.attackerId = 42;
+    REQUIRE(zombies.ApplyDamage(handle, damage).applied);
+    REQUIRE(zombies.Resolve(handle)->targetId == 42);
+    REQUIRE(zombies.Resolve(handle)->lastKnownPlayerPosition == damage.source);
+
+    // With nobody in sight it heads for the shooter, not the bystander next to it.
+    const std::array<FZombieTarget, 2> targets{{{9, {1.0f, 0.0f, -1.0f}, true, 1.0f},
+                                                {42, {20.0f, 0.0f, 0.0f}, true, 1.0f}}};
+    const auto blind = [](const glm::vec3&, const glm::vec3&) { return false; };
+    zombies.Update(0.5f, targets, blind, {});
+    REQUIRE(zombies.Resolve(handle)->targetId == 42);
+    REQUIRE(zombies.Resolve(handle)->position.x > 0.0f);
 }
 
 TEST_CASE("NextDayz combat resolves hit zones and invalidates recycled proxies",
@@ -271,6 +856,14 @@ TEST_CASE("NextDayz zombie navigation caches paths and replans after target move
         return std::vector<glm::vec3>{from, to};
     };
     glm::vec3 player(0.0f, 0.0f, 10.0f);
+    // Spotted at 10 m it screams first; the chase (and the route) starts after.
+    for (int tick = 0; tick < 20 && zombies.Resolve(handle)->state != EZombieState::Chase; ++tick)
+    {
+        zombies.Update(0.1f, player, {0.0f, 0.0f, -1.0f}, true,
+                       [](const glm::vec3&, const glm::vec3&) { return true; }, {}, resolvePath);
+    }
+    REQUIRE(zombies.Resolve(handle)->state == EZombieState::Chase);
+    pathRequests = 0;
     for (int tick = 0; tick < 5; ++tick)
     {
         zombies.Update(0.1f, player, {0.0f, 0.0f, -1.0f}, true,
@@ -283,6 +876,308 @@ TEST_CASE("NextDayz zombie navigation caches paths and replans after target move
     zombies.Update(0.1f, player, {0.0f, 0.0f, -1.0f}, true,
                    [](const glm::vec3&, const glm::vec3&) { return true; }, {}, resolvePath);
     CHECK(pathRequests == 2);
+}
+
+namespace
+{
+    bool AlwaysVisible(const glm::vec3&, const glm::vec3&)
+    {
+        return true;
+    }
+
+    NextDayz::FZombieDamage Round(float amount, NextDayz::EHitZone zone, const glm::vec3& direction,
+                                  float impact)
+    {
+        NextDayz::FZombieDamage damage;
+        damage.amount = amount;
+        damage.zone = zone;
+        damage.direction = direction;
+        damage.source = -direction * 10.0f;
+        damage.impact = impact;
+        return damage;
+    }
+}
+
+TEST_CASE("NextDayz pursuit stays fast while searching after losing sight", "[NextDayz][Zombie][Navigation]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(1);
+    const auto handle = zombies.Spawn(EZombieProfile::Civilian, {});
+    auto& zombie = *zombies.Resolve(handle);
+    zombie.state = EZombieState::Chase;
+    zombie.aware = true;
+    zombie.variant.lame = false;
+    zombie.variant.speedScale = 1.0f;
+    const glm::vec3 player(0.0f, 0.0f, 30.0f);
+    for (int tick = 0; tick < 90; ++tick)
+    {
+        zombies.Update(1.0f / 60.0f, player, {}, true, AlwaysVisible, {});
+    }
+    CHECK(zombie.Speed() > FPlayerConfig{}.StandRunSpeed);
+    CHECK(zombie.Speed() < FPlayerConfig{}.StandSprintSpeed);
+    const auto blocked = [](const glm::vec3&, const glm::vec3&) { return false; };
+    for (int tick = 0; tick < 90; ++tick)
+    {
+        zombies.Update(1.0f / 60.0f, player, {}, true, blocked, {});
+    }
+    CHECK(zombie.state == EZombieState::Investigate);
+    CHECK(zombie.Speed() > FPlayerConfig{}.StandRunSpeed);
+}
+
+TEST_CASE("NextDayz exhausted routes stop without climbing toward the target", "[NextDayz][Zombie][Navigation]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(1);
+    const auto handle = zombies.Spawn(EZombieProfile::Civilian, {});
+    auto& zombie = *zombies.Resolve(handle);
+    zombie.state = EZombieState::Chase;
+    zombie.aware = true;
+    const glm::vec3 player(0.0f, 1.5f, 2.0f);
+    const auto route = [](const glm::vec3& from, const glm::vec3&)
+    {
+        return std::vector<glm::vec3>{from}; // no reachable continuation onto the ledge
+    };
+    for (int tick = 0; tick < 120; ++tick)
+    {
+        zombies.Update(1.0f / 60.0f, player, {}, true, AlwaysVisible, {}, route);
+    }
+    CHECK(zombie.position.z == Catch::Approx(0.0f));
+    CHECK(zombie.position.y == Catch::Approx(0.0f));
+    CHECK(zombies.ConsumePlayerDamageRequests().empty());
+}
+
+TEST_CASE("NextDayz attack cannot land through a wall or above its reach", "[NextDayz][Zombie][Navigation]")
+{
+    using namespace NextDayz;
+    for (const bool wall : {false, true})
+    {
+        ZombieSystem zombies(1);
+        const auto handle = zombies.Spawn(EZombieProfile::Civilian, {});
+        auto& zombie = *zombies.Resolve(handle);
+        zombie.state = EZombieState::Attack;
+        const auto visible = [wall](const glm::vec3&, const glm::vec3&) { return !wall; };
+        zombies.Update(zombies.AttackStrikeTime(zombie.attack) + 0.01f,
+                       {0.0f, wall ? 0.0f : 1.5f, 1.0f}, {}, true, visible, {});
+        CHECK(zombies.ConsumePlayerDamageRequests().empty());
+    }
+}
+
+TEST_CASE("NextDayz infected steer like bodies: limited turn rate and acceleration",
+          "[NextDayz][Productization][Zombie]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(1);
+    const FZombieHandle handle = zombies.Spawn(EZombieProfile::Civilian, {});
+    FZombieRuntime& zombie = *zombies.Resolve(handle);
+    zombie.forward = {0.0f, 0.0f, 1.0f};
+    zombie.state = EZombieState::Chase;
+    zombie.aware = true;
+    // Prey directly behind: one 0.1 s tick cannot turn it around.
+    const glm::vec3 player(0.0f, 0.0f, -8.0f);
+    zombie.lastKnownPlayerPosition = player;
+    zombies.Update(0.1f, player, {}, true, AlwaysVisible, {});
+    const float turned = glm::degrees(std::acos(glm::clamp(glm::dot(zombie.forward, glm::vec3(0, 0, 1)), -1.0f, 1.0f)));
+    CHECK(turned > 5.0f);
+    CHECK(turned <= zombies.Config().ChaseTurnDegreesPerSecond * 0.1f + 0.5f);
+    CHECK(zombie.Speed() < 1.0f);
+    for (int tick = 0; tick < 30; ++tick)
+    {
+        zombies.Update(0.05f, player, {}, true, AlwaysVisible, {});
+    }
+    CHECK(glm::dot(zombie.forward, glm::vec3(0, 0, -1)) > 0.95f);
+    CHECK(zombie.Speed() > 2.0f);
+    CHECK(zombie.Speed() <= ZombieDef(EZombieProfile::Civilian).chaseSpeed * 1.2f);
+}
+
+TEST_CASE("NextDayz infected scream before a distant chase but bite at once up close",
+          "[NextDayz][Productization][Zombie]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(2);
+    const FZombieHandle distantZombie = zombies.Spawn(EZombieProfile::Civilian, {0.0f, 0.0f, 0.0f});
+    zombies.Resolve(distantZombie)->forward = {0.0f, 0.0f, 1.0f};
+    zombies.Update(0.05f, {0.0f, 0.0f, 12.0f}, {}, true, AlwaysVisible, {});
+    REQUIRE(zombies.Resolve(distantZombie)->state == EZombieState::Alert);
+    CHECK(zombies.AlertedCount() == 1);
+    for (int tick = 0; tick < 20; ++tick)
+    {
+        zombies.Update(0.05f, {0.0f, 0.0f, 12.0f}, {}, true, AlwaysVisible, {});
+    }
+    CHECK(zombies.Resolve(distantZombie)->state == EZombieState::Chase);
+
+    zombies.Reset();
+    const FZombieHandle nearbyZombie = zombies.Spawn(EZombieProfile::Civilian, {});
+    zombies.Resolve(nearbyZombie)->forward = {0.0f, 0.0f, 1.0f};
+    zombies.Update(0.05f, {0.0f, 0.0f, 1.0f}, {}, true, AlwaysVisible, {});
+    CHECK(zombies.Resolve(nearbyZombie)->state == EZombieState::Attack);
+}
+
+TEST_CASE("NextDayz infected attacks commit on the strike frame and whiff a late sidestep",
+          "[NextDayz][Productization][Zombie]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(1);
+    const FZombieHandle handle = zombies.Spawn(EZombieProfile::Civilian, {});
+    FZombieRuntime& zombie = *zombies.Resolve(handle);
+    zombie.forward = {0.0f, 0.0f, 1.0f};
+    glm::vec3 player(0.0f, 0.0f, 1.0f);
+    zombies.Update(0.05f, player, {}, true, AlwaysVisible, {});
+    REQUIRE(zombie.state == EZombieState::Attack);
+    const float strike = zombies.AttackStrikeTime(zombie.attack);
+    // Tracking is locked just before the strike: step out of reach behind it.
+    while (zombie.attackTimer < strike - zombies.Config().TrackingLockLeadSeconds + 0.01f)
+    {
+        zombies.Update(0.02f, player, {}, true, AlwaysVisible, {});
+    }
+    player = {2.5f, 0.0f, -1.0f};
+    for (int tick = 0; tick < 20; ++tick)
+    {
+        zombies.Update(0.02f, player, {}, true, AlwaysVisible, {});
+    }
+    CHECK(zombie.attackCommitted);
+    CHECK(zombies.ConsumePlayerDamageRequests().empty());
+}
+
+TEST_CASE("NextDayz infected flinch under fire, stagger on broken poise, and cannot be stun-locked",
+          "[NextDayz][Productization][Zombie][Combat]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(1);
+    const FZombieHandle handle = zombies.Spawn(EZombieProfile::Military, {});
+    FZombieRuntime& zombie = *zombies.Resolve(handle);
+    zombie.forward = {0.0f, 0.0f, 1.0f};
+    const glm::vec3 fromFront(0.0f, 0.0f, -1.0f);
+
+    // One rifle round: a flinch, a brief slow-down, no stagger.
+    FZombieDamageResult result = zombies.ApplyDamage(handle, Round(34.0f, EHitZone::Torso, fromFront, 17.0f));
+    CHECK(result.applied);
+    CHECK_FALSE(result.staggered);
+    CHECK(zombie.flinchSeconds > 0.0f);
+    CHECK(zombie.state == EZombieState::Chase);   // being shot wakes it
+    CHECK(zombie.aware);
+
+    // A heavy round breaks poise and knocks it back along the shot.
+    result = zombies.ApplyDamage(handle, Round(60.0f, EHitZone::Torso, fromFront, 70.0f));
+    REQUIRE(result.staggered);
+    CHECK(zombie.state == EZombieState::Stagger);
+    const float before = zombie.position.z;
+    zombies.Update(0.2f, {0.0f, 0.0f, 10.0f}, {}, true, AlwaysVisible, {});
+    CHECK(zombie.position.z < before);
+
+    // Immunity: another heavy hit right away does not restart the stagger.
+    zombies.Update(0.8f, {0.0f, 0.0f, 10.0f}, {}, true, AlwaysVisible, {});
+    REQUIRE(zombie.state != EZombieState::Stagger);
+    result = zombies.ApplyDamage(handle, Round(1.0f, EHitZone::Torso, fromFront, 90.0f));
+    CHECK_FALSE(result.staggered);
+    CHECK(zombies.StaggerCount() == 1);
+}
+
+TEST_CASE("NextDayz infected legs cripple and the fall reads the killing hit",
+          "[NextDayz][Productization][Zombie][Combat]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(3);
+    const FZombieHandle legged = zombies.Spawn(EZombieProfile::Military, {});
+    zombies.Resolve(legged)->variant.lame = false;
+    const glm::vec3 fromFront(0.0f, 0.0f, -1.0f);
+    FZombieDamageResult result = zombies.ApplyDamage(legged, Round(40.0f, EHitZone::Leg, fromFront, 10.0f));
+    CHECK_FALSE(result.crippled);
+    result = zombies.ApplyDamage(legged, Round(40.0f, EHitZone::Leg, fromFront, 10.0f));
+    CHECK(result.crippled);
+    CHECK(zombies.Resolve(legged)->Lame());
+
+    // Headshot on a standing body: it drops where it stands.
+    const FZombieHandle head = zombies.Spawn(EZombieProfile::Civilian, {5.0f, 0.0f, 0.0f});
+    zombies.Resolve(head)->forward = {0.0f, 0.0f, 1.0f};
+    result = zombies.ApplyDamage(head, Round(34.0f, EHitZone::Head, fromFront, 17.0f));
+    CHECK(result.killed);   // x3 on the head: one rifle round
+    CHECK(zombies.Resolve(head)->death == EZombieDeath::Crumple);
+
+    // Shot in the chest while charging: momentum pitches it forward and carries it.
+    const FZombieHandle runner = zombies.Spawn(EZombieProfile::Civilian, {-5.0f, 0.0f, 0.0f});
+    FZombieRuntime& charging = *zombies.Resolve(runner);
+    charging.forward = {0.0f, 0.0f, 1.0f};
+    charging.velocity = {0.0f, 0.0f, 3.0f};
+    result = zombies.ApplyDamage(runner, Round(200.0f, EHitZone::Torso, fromFront, 34.0f));
+    REQUIRE(result.killed);
+    CHECK(charging.death == EZombieDeath::Forward);
+    const float fallStart = charging.position.z;
+    zombies.Update(0.3f, {0.0f, 0.0f, 30.0f}, {}, true, AlwaysVisible, {});
+    CHECK(charging.position.z > fallStart);
+    CHECK(zombies.KillCount() == 2);
+}
+
+TEST_CASE("NextDayz infected keep apart and out of the player's capsule",
+          "[NextDayz][Productization][Zombie]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(2);
+    const FZombieHandle a = zombies.Spawn(EZombieProfile::Civilian, {0.0f, 0.0f, 0.0f});
+    const FZombieHandle b = zombies.Spawn(EZombieProfile::Civilian, {0.05f, 0.0f, 0.0f});
+    for (int tick = 0; tick < 30; ++tick)
+    {
+        zombies.Update(0.05f, {0.0f, 0.0f, 0.4f}, {}, false, {}, {});
+    }
+    const glm::vec3 pa = zombies.Resolve(a)->position;
+    const glm::vec3 pb = zombies.Resolve(b)->position;
+    CHECK(glm::length(glm::vec2(pa.x - pb.x, pa.z - pb.z)) > zombies.Config().SeparationRadius * 0.9f);
+    for (const glm::vec3& p : {pa, pb})
+    {
+        CHECK(glm::length(glm::vec2(p.x, p.z - 0.4f)) > zombies.Config().PlayerPersonalSpace * 0.9f);
+    }
+}
+
+TEST_CASE("NextDayz hitbox traces pick the nearest capsule and its zone",
+          "[NextDayz][Productization][Combat]")
+{
+    using namespace NextDayz;
+    FHitCapsule head{{0.0f, 1.6f, 5.0f}, {0.0f, 1.75f, 5.0f}, 0.12f, EHitZone::Head};
+    FHitCapsule torso{{0.0f, 1.0f, 5.0f}, {0.0f, 1.4f, 5.0f}, 0.18f, EHitZone::Torso};
+    const glm::vec3 forward(0.0f, 0.0f, 1.0f);
+    REQUIRE(RayCapsuleDistance({0.0f, 1.2f, 0.0f}, forward, torso).has_value());
+    CHECK(*RayCapsuleDistance({0.0f, 1.2f, 0.0f}, forward, torso) == Catch::Approx(5.0f - 0.18f).margin(1e-3));
+    CHECK_FALSE(RayCapsuleDistance({0.5f, 1.2f, 0.0f}, forward, torso).has_value());
+    // End caps count, and a ray straight down the axis hits the near cap.
+    CHECK(RayCapsuleDistance({0.0f, 1.86f, 0.0f}, forward, head).has_value());
+    CHECK(RayCapsuleDistance({0.0f, 3.0f, 5.0f}, {0.0f, -1.0f, 0.0f}, head).has_value());
+
+    ZombieSystem zombies(2);
+    CombatSystem combat(zombies);
+    const FZombieHandle front = zombies.Spawn(EZombieProfile::Civilian, {0.0f, 0.0f, 5.0f});
+    const FZombieHandle behind = zombies.Spawn(EZombieProfile::Civilian, {0.0f, 0.0f, 9.0f});
+    const std::array<FHitCapsule, 2> frontBody = {head, torso};
+    FHitCapsule farTorso = torso;
+    farTorso.a.z = farTorso.b.z = 9.0f;
+    combat.SetHitboxes(front, frontBody);
+    combat.SetHitboxes(behind, std::span<const FHitCapsule>(&farTorso, 1));
+
+    const std::optional<FHitboxHit> headshot = combat.TraceHitboxes({0.0f, 1.68f, 0.0f}, forward, 100.0f);
+    REQUIRE(headshot.has_value());
+    CHECK(headshot->zombie == front);
+    CHECK(headshot->zone == EHitZone::Head);
+    CHECK(headshot->normal.z < -0.9f);
+    // A wall at 3 m stops the round before any body.
+    CHECK_FALSE(combat.TraceHitboxes({0.0f, 1.2f, 0.0f}, forward, 3.0f).has_value());
+
+    FWeaponHitEvent event;
+    event.sequence = 7;
+    event.origin = {0.0f, 1.68f, 0.0f};
+    event.direction = forward;
+    event.hitPoint = headshot->point;
+    event.baseDamage = 34.0f;
+    event.impactScale = 0.5f;
+    event.zombie = headshot->zombie;
+    event.zone = headshot->zone;
+    REQUIRE(combat.ProcessHit(event, 110.0f));
+    const std::vector<FDamageEvent> damage = combat.ConsumeDamageEvents();
+    REQUIRE(damage.size() == 1);
+    CHECK(damage.front().hitZone == EHitZone::Head);
+    CHECK(damage.front().killed);
+    CHECK(combat.HeadshotCount() == 1);
+    // The dead no longer catch rounds: the next one reaches the body behind.
+    const std::optional<FHitboxHit> through = combat.TraceHitboxes({0.0f, 1.2f, 0.0f}, forward, 100.0f);
+    REQUIRE(through.has_value());
+    CHECK(through->zombie == behind);
 }
 
 TEST_CASE("NextDayz spawn director filters safe distance visibility navigation and cap",
@@ -318,4 +1213,774 @@ TEST_CASE("NextDayz zombie visual pool is fixed capacity and reusable",
     REQUIRE(pool.Release(first));
     REQUIRE(pool.Acquire(second) != nullptr);
     REQUIRE(pool.Capacity() == 1);
+}
+
+TEST_CASE("NextDayz offers six obtainable clothing choices in every wearable slot", "[NextDayz][Clothing][Loot]")
+{
+    using namespace NextDayz;
+    for (EEquipSlot slot : {EEquipSlot::Head, EEquipSlot::Torso, EEquipSlot::Vest, EEquipSlot::Legs, EEquipSlot::Back})
+    {
+        size_t choices = 0;
+        for (const FItemDef& definition : AllItemDefs())
+        {
+            if (definition.kind != EItemKind::Clothing || definition.equipSlot != slot) continue;
+            INFO(definition.id);
+            ++choices;
+            bool obtainable = false;
+            for (uint8_t index = 0; index < static_cast<uint8_t>(ELootProfile::Count); ++index)
+            {
+                for (const FLootTableEntry& entry : LootTable(static_cast<ELootProfile>(index)))
+                {
+                    obtainable |= entry.itemId == definition.id && entry.weight > 0;
+                }
+            }
+            CHECK(obtainable);
+        }
+        CHECK(choices >= 6);
+    }
+}
+
+TEST_CASE("NextDayz loot tables roll known items deterministically and respect category filters",
+          "[NextDayz][Productization][Loot]")
+{
+    using namespace NextDayz;
+    for (uint8_t index = 0; index < static_cast<uint8_t>(ELootProfile::Count); ++index)
+    {
+        const ELootProfile profile = static_cast<ELootProfile>(index);
+        REQUIRE(ParseLootProfile(LootProfileName(profile)) == profile);
+        for (const FLootTableEntry& entry : LootTable(profile))
+        {
+            INFO(LootProfileName(profile) << " / " << entry.itemId);
+            REQUIRE(FindItemDef(entry.itemId) != nullptr);
+            REQUIRE(entry.minCount <= entry.maxCount);
+        }
+        for (uint32_t roll = 0; roll < 64; ++roll)
+        {
+            const FLootStack a = RollLoot(profile, roll * 7919u);
+            const FLootStack b = RollLoot(profile, roll * 7919u);
+            REQUIRE(a.itemId == b.itemId);
+            REQUIRE(a.count == b.count);
+            REQUIRE(a.count >= 1);
+        }
+    }
+    // Restricted rolls stay in the category when the table has one.
+    for (uint32_t roll = 0; roll < 64; ++roll)
+    {
+        REQUIRE(CategoryOfItem(RollLoot(ELootProfile::Military, roll * 31u, ELootCategory::Ammo).itemId) ==
+                ELootCategory::Ammo);
+        REQUIRE(CategoryOfItem(RollLoot(ELootProfile::Residential, roll * 31u, ELootCategory::FoodWater).itemId) ==
+                ELootCategory::FoodWater);
+    }
+    // Guns come part-loaded, never over a full magazine.
+    bool sawPartial = false;
+    for (uint32_t roll = 0; roll < 400; ++roll)
+    {
+        const FLootStack stack = RollLoot(ELootProfile::Military, roll * 104729u, ELootCategory::Weapon);
+        const FItemDef* item = FindItemDef(stack.itemId);
+        REQUIRE(item != nullptr);
+        if (const FWeaponDef* weapon = FindWeaponDef(item->weaponDefId); weapon && weapon->magSize > 0)
+        {
+            REQUIRE(stack.loadedAmmo >= 0);
+            REQUIRE(stack.loadedAmmo <= weapon->magSize);
+            sawPartial = sawPartial || (stack.loadedAmmo > 0 && stack.loadedAmmo < weapon->magSize);
+        }
+    }
+    REQUIRE(sawPartial);
+}
+
+TEST_CASE("NextDayz worn clothing frees cargo, swaps by slot and drops without its contents",
+          "[NextDayz][Productization][Inventory]")
+{
+    using namespace NextDayz;
+    Inventory inventory;
+    FItemInstanceId jacketId = 0;
+    REQUIRE(inventory.TryAdd("jacket", "Field Jacket", EItemKind::Clothing, 1, &jacketId));
+    REQUIRE(inventory.UsedCapacity() == 4);
+    REQUIRE(inventory.TryEquip(jacketId));
+    REQUIRE(inventory.UsedCapacity() == 0);             // worn items take no cargo space
+    REQUIRE(inventory.TotalCapacity() == 22);           // pockets 10 + jacket 12
+    REQUIRE(inventory.Warmth() > 0.5f);
+
+    // Wearing a hoodie takes the jacket off into cargo (a swap).
+    FItemInstanceId hoodieId = 0;
+    REQUIRE(inventory.TryAdd("hoodie", "Hoodie", EItemKind::Clothing, 1, &hoodieId));
+    REQUIRE(inventory.TryEquip(hoodieId));
+    REQUIRE(inventory.IsWorn(hoodieId));
+    REQUIRE_FALSE(inventory.IsWorn(jacketId));
+    REQUIRE(inventory.WornInSlot(EEquipSlot::Torso) == hoodieId);
+
+    // Dropping worn armour hands it back; what was in its pouches stays.
+    FItemInstanceId vestId = 0;
+    REQUIRE(inventory.TryAdd("vest_military", "Military Vest", EItemKind::Clothing, 1, &vestId));
+    REQUIRE(inventory.TryEquip(vestId));
+    REQUIRE(inventory.Armor() == Catch::Approx(0.3f));
+    FItemInstanceId bandageId = 0;
+    REQUIRE(inventory.TryAdd("bandage", "Bandage", EItemKind::Consumable, 2, &bandageId));
+    REQUIRE(inventory.TryMove(bandageId, inventory.ContainerOwnedBy(vestId)->containerId));
+    const std::optional<FItemInstance> dropped = inventory.TryRemove(vestId);
+    REQUIRE(dropped.has_value());
+    REQUIRE(dropped->defId == "vest_military");
+    REQUIRE(inventory.CountOf("bandage") == 2);
+    REQUIRE(inventory.Armor() == Catch::Approx(0.0f));
+
+    // Melee weapons ride in the weapon slings like guns, and a blade opens cans.
+    FItemInstanceId axeId = 0;
+    REQUIRE_FALSE(inventory.CanOpenCans());
+    REQUIRE(inventory.TryAdd("axe", "Fire Axe", EItemKind::Melee, 1, &axeId));
+    REQUIRE(inventory.FindContainer(inventory.FindInstance(axeId)->containerId)->weaponOnly);
+    REQUIRE(inventory.CanOpenCans());
+}
+
+TEST_CASE("NextDayz infected wounds bleed until dressed; armour, painkillers and cans behave",
+          "[NextDayz][Productization][Survival]")
+{
+    using namespace NextDayz;
+    FSurvivalConfig tuning;
+    SurvivalSystem survival;
+    survival.Configure(tuning);
+    survival.Reset();
+    survival.SetNeeds(100.0f, 50.0f, 50.0f);
+
+    // A low roll opens a wound; armour absorbs part of the blow.
+    REQUIRE(survival.ApplyInfectedHit(20.0f, 0.3f, 0.0f));
+    REQUIRE(survival.Snapshot().health == Catch::Approx(86.0f));
+    REQUIRE(survival.Snapshot().bleedingWounds == 1);
+    survival.Update(10.0f, false);
+    REQUIRE(survival.Snapshot().health < 86.0f);
+    REQUIRE(survival.Snapshot().lastDamageSource == "blood loss");
+
+    Inventory inventory;
+    FItemInstanceId ragId = 0;
+    REQUIRE(inventory.TryAdd("rag", "Rags", EItemKind::Consumable, 1, &ragId));
+    std::string message;
+    REQUIRE(survival.TryUseItem(inventory, ragId, &message));
+    REQUIRE(survival.Snapshot().bleedingWounds == 0);
+    REQUIRE_FALSE(message.empty());
+
+    // Painkillers heal over their duration, not at once.
+    survival.SetNeeds(50.0f, 50.0f, 50.0f);
+    FItemInstanceId pillsId = 0;
+    REQUIRE(inventory.TryAdd("painkillers", "Painkillers", EItemKind::Consumable, 1, &pillsId));
+    REQUIRE(survival.TryUseItem(inventory, pillsId));
+    REQUIRE(survival.Snapshot().health == Catch::Approx(50.0f));
+    survival.Update(tuning.PainkillerSeconds, false);
+    REQUIRE(survival.Snapshot().health == Catch::Approx(50.0f + tuning.PainkillerHeal).margin(0.5f));
+
+    // A can without an opener spills; with one it does not.
+    survival.SetNeeds(100.0f, 20.0f, 100.0f);
+    FItemInstanceId canId = 0;
+    REQUIRE(inventory.TryAdd("food_can", "Canned Beans", EItemKind::Consumable, 2, &canId));
+    REQUIRE(survival.TryUseItem(inventory, canId, &message));
+    REQUIRE(survival.Snapshot().hunger == Catch::Approx(20.0f + 32.0f * tuning.UnopenedCanShare));
+    REQUIRE(inventory.TryAdd("can_opener", "Can Opener", EItemKind::Misc, 1));
+    survival.SetNeeds(100.0f, 20.0f, 100.0f);
+    REQUIRE(survival.TryUseItem(inventory, inventory.FindFirst("food_can")->instanceId));
+    REQUIRE(survival.Snapshot().hunger == Catch::Approx(52.0f));
+
+    // Drinking leaves the bottle to refill.
+    FItemInstanceId bottleId = 0;
+    REQUIRE(inventory.TryAdd("water_bottle", "Water Bottle", EItemKind::Consumable, 1, &bottleId));
+    REQUIRE(survival.TryUseItem(inventory, bottleId));
+    REQUIRE(inventory.CountOf("water_bottle_empty") == 1);
+
+    // Starved: too weak to sprint. Resting needs closed wounds.
+    survival.SetNeeds(60.0f, 5.0f, 50.0f);
+    REQUIRE(survival.IsWeak());
+    survival.SetBleeding(1);
+    REQUIRE_FALSE(survival.Rest());
+    survival.SetBleeding(0);
+    REQUIRE(survival.Rest());
+}
+
+TEST_CASE("NextDayz cold burns food faster", "[NextDayz][Productization][Survival]")
+{
+    using namespace NextDayz;
+    FSurvivalConfig tuning;
+    tuning.StartingHunger = 100.0f;
+    SurvivalSystem warm;
+    SurvivalSystem cold;
+    warm.Configure(tuning);
+    cold.Configure(tuning);
+    warm.Reset();
+    cold.Reset();
+    cold.SetCold(1.0f);
+    warm.Update(120.0f, false);
+    cold.Update(120.0f, false);
+    REQUIRE(cold.Snapshot().hunger < warm.Snapshot().hunger);
+}
+
+TEST_CASE("NextDayz loot director shortens a scarce category cooldown", "[NextDayz][Productization][Loot]")
+{
+    using namespace NextDayz;
+    FLootRespawnTuning tuning;
+    tuning.foodWaterSeconds = 100.0;
+    tuning.minimumOffscreenSeconds = 1.0;
+    LootDirector director;
+    director.Configure(tuning);
+    director.Reset(1, 5);
+    const FLootSlotHandle handle = director.AddSlot({}, ELootProfile::Residential, ELootCategory::FoodWater);
+    REQUIRE(director.Reserve(handle));
+    REQUIRE(director.Commit(handle, 0.0));
+    REQUIRE_FALSE(director.EvaluateRespawn(handle, 40.0, 200.0f, false, 0, 10));
+    director.SetCooldownScale(ELootCategory::FoodWater, 0.35f);
+    REQUIRE(director.EvaluateRespawn(handle, 41.5, 200.0f, false, 0, 10));
+}
+
+TEST_CASE("NextDayz spawn director brings groups and respects the cap", "[NextDayz][Productization][Zombie]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(8);
+    ZombieSpawnDirector director;
+    director.Reset(7);
+    director.SetGlobalCap(4);
+    FZombieSpawnPoint horde{{60.0f, 0.0f, 0.0f}, EZombieProfile::Civilian};
+    horde.groupSize = 3;
+    FZombieSpawnPoint pair{{0.0f, 0.0f, 70.0f}, EZombieProfile::Military};
+    pair.groupSize = 2;
+    director.SetPoints({horde, pair});
+    director.Update(1.0f, {}, zombies, {}, {});
+    REQUIRE(zombies.ActiveCount() == 4);
+    REQUIRE(director.SpawnCount() == 4);
+}
+
+TEST_CASE("NextDayz spawn director records why each point did or did not spawn", "[NextDayz][Productization][Debug]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(8);
+    ZombieSpawnDirector director;
+    director.Reset(42);
+    director.SetPoints({
+        {{10.0f, 0.0f, 0.0f}, EZombieProfile::Civilian},     // inside the safe distance
+        {{300.0f, 0.0f, 0.0f}, EZombieProfile::Civilian},    // beyond activation
+        {{50.0f, 0.0f, 0.0f}, EZombieProfile::Military},     // in view
+        {{70.0f, 0.0f, 0.0f}, EZombieProfile::Industrial},   // off the nav grid
+        {{0.0f, 0.0f, 90.0f}, EZombieProfile::Wilderness},   // fine
+    });
+    const auto visible = [](const glm::vec3& position) { return position.x == 50.0f; };
+    const auto navigable = [](const glm::vec3& position) { return position.x != 70.0f; };
+    director.Update(2.0f, {}, zombies, visible, navigable);
+    const auto& points = director.Points();
+    CHECK(points[0].verdict == ESpawnVerdict::TooClose);
+    CHECK(points[1].verdict == ESpawnVerdict::TooFar);
+    CHECK(points[2].verdict == ESpawnVerdict::Visible);
+    CHECK(points[3].verdict == ESpawnVerdict::NotNavigable);
+    REQUIRE(points[4].verdict == ESpawnVerdict::Spawned);
+    CHECK(points[4].playerDistance == Catch::Approx(90.0f));
+
+    director.Update(1.0f, {}, zombies, visible, navigable);
+    CHECK(points[4].verdict == ESpawnVerdict::Populated);
+
+    // A full cap stops the pass before any distance check.
+    director.SetGlobalCap(1);
+    director.Update(1.0f, {}, zombies, visible, navigable);
+    CHECK(points[0].verdict == ESpawnVerdict::CapReached);
+
+    // The group is gone: the point cools down.
+    REQUIRE(zombies.Recycle(points[4].active[0]));
+    director.Update(1.0f, {}, zombies, visible, navigable);
+    CHECK(points[4].verdict == ESpawnVerdict::Cooldown);
+    CHECK(std::string_view(SpawnVerdictName(points[4].verdict)) == "Cooldown");
+}
+
+TEST_CASE("NextDayz spawn director measures every point against the nearest survivor",
+          "[NextDayz][Productization][Zombie][Multiplayer]")
+{
+    using namespace NextDayz;
+    ZombieSystem zombies(8);
+    ZombieSpawnDirector director;
+    director.Reset(42);
+    director.SetPoints({
+        {{10.0f, 0.0f, 0.0f}, EZombieProfile::Civilian},     // on top of survivor A
+        {{510.0f, 0.0f, 0.0f}, EZombieProfile::Civilian},    // on top of survivor B
+        {{0.0f, 0.0f, 90.0f}, EZombieProfile::Civilian},     // near A only
+        {{500.0f, 0.0f, 90.0f}, EZombieProfile::Civilian},   // near B only
+        {{250.0f, 0.0f, 0.0f}, EZombieProfile::Civilian},    // far from both
+    });
+    const std::array<glm::vec3, 2> survivors{glm::vec3(0.0f), glm::vec3(500.0f, 0.0f, 0.0f)};
+    director.UpdateForSurvivors(2.0f, survivors, zombies, {}, {});
+    const auto& points = director.Points();
+    CHECK(points[0].verdict == ESpawnVerdict::TooClose);
+    CHECK(points[1].verdict == ESpawnVerdict::TooClose);
+    CHECK(points[2].verdict == ESpawnVerdict::Spawned);
+    CHECK(points[3].verdict == ESpawnVerdict::Spawned);
+    CHECK(points[3].playerDistance == Catch::Approx(90.0f));
+    CHECK(points[4].verdict == ESpawnVerdict::TooFar);
+
+    // Nobody in the world: nothing spawns, everything reads as too far.
+    ZombieSystem empty(4);
+    ZombieSpawnDirector idle;
+    idle.Reset(1);
+    idle.SetPoints({{{0.0f, 0.0f, 90.0f}, EZombieProfile::Civilian}});
+    idle.UpdateForSurvivors(2.0f, {}, empty, {}, {});
+    CHECK(empty.ActiveCount() == 0);
+    CHECK(idle.Points()[0].verdict == ESpawnVerdict::TooFar);
+}
+
+TEST_CASE("NextDayz loot director records what holds a restock back", "[NextDayz][Productization][Debug]")
+{
+    using namespace NextDayz;
+    FLootRespawnTuning tuning;
+    tuning.foodWaterSeconds = 10.0;
+    tuning.minimumOffscreenSeconds = 5.0;
+    LootDirector director;
+    director.Configure(tuning);
+    director.Reset(1, 77);
+    const FLootSlotHandle handle = director.AddSlot({}, ELootProfile::Residential, ELootCategory::FoodWater);
+    REQUIRE(director.Reserve(handle));
+    REQUIRE(director.Commit(handle, 0.0));
+    CHECK(director.ReadyAt(handle) == Catch::Approx(10.0));
+    director.SetCooldownScale(ELootCategory::FoodWater, 0.5f);
+    CHECK(director.ReadyAt(handle) == Catch::Approx(5.0));
+    director.SetCooldownScale(ELootCategory::FoodWater, 1.0f);
+
+    const auto block = [&] { return director.Resolve(handle)->block; };
+    REQUIRE_FALSE(director.EvaluateRespawn(handle, 12.0, 80.0f, true, 0, 4));
+    CHECK(block() == ELootRespawnBlock::Watched);
+    REQUIRE_FALSE(director.EvaluateRespawn(handle, 12.0, 20.0f, false, 0, 4));
+    CHECK(block() == ELootRespawnBlock::PlayerNear);
+    REQUIRE_FALSE(director.EvaluateRespawn(handle, 6.0, 80.0f, false, 0, 4));
+    CHECK(block() == ELootRespawnBlock::Cooling);
+    REQUIRE_FALSE(director.EvaluateRespawn(handle, 12.0, 20.0f, false, 0, 4));
+    REQUIRE_FALSE(director.EvaluateRespawn(handle, 12.0, 80.0f, false, 0, 4));
+    CHECK(block() == ELootRespawnBlock::Offscreen);
+    REQUIRE_FALSE(director.EvaluateRespawn(handle, 18.0, 80.0f, false, 4, 4));
+    CHECK(block() == ELootRespawnBlock::CategoryFull);
+    REQUIRE(director.EvaluateRespawn(handle, 18.0, 80.0f, false, 3, 4));
+    CHECK(block() == ELootRespawnBlock::None);
+    CHECK(director.ReadyAt(handle) == Catch::Approx(0.0));
+}
+
+TEST_CASE("NextDayz infected report perception and route budget for the debugger", "[NextDayz][Productization][Debug]")
+{
+    using namespace NextDayz;
+    FZombieConfig config;
+    config.MaxPathSolvesPerUpdate = 1;
+    ZombieSystem zombies(2);
+    zombies.Configure(config);
+    const FZombieHandle first = zombies.Spawn(EZombieProfile::Civilian, {0.0f, 0.0f, 0.0f});
+    const FZombieHandle second = zombies.Spawn(EZombieProfile::Civilian, {1.0f, 0.0f, 0.0f});
+    zombies.Resolve(first)->forward = {0.0f, 0.0f, 1.0f};
+    zombies.Resolve(second)->forward = {0.0f, 0.0f, 1.0f};
+    const ZombieSystem::FPathResolver route = [](const glm::vec3& from, const glm::vec3& to)
+    {
+        return std::vector<glm::vec3>{from, to};
+    };
+    const glm::vec3 player(0.0f, 0.0f, 10.0f);
+    const auto clear = [](const glm::vec3&, const glm::vec3&) { return true; };
+
+    zombies.Update(0.1f, player, {0.0f, 0.0f, -1.0f}, true, clear, {}, route);
+    CHECK(zombies.Resolve(first)->seesPlayer);
+    for (int tick = 0; tick < 20 && (zombies.Resolve(first)->state != EZombieState::Chase ||
+                                     zombies.Resolve(second)->state != EZombieState::Chase); ++tick)
+    {
+        zombies.Update(0.1f, player, {0.0f, 0.0f, -1.0f}, true, clear, {}, route);
+    }
+    REQUIRE(zombies.Resolve(first)->state == EZombieState::Chase);
+    REQUIRE(zombies.Resolve(second)->state == EZombieState::Chase);
+    // Both want a route on their first chase update; the budget plans one.
+    zombies.Update(0.1f, player, {0.0f, 0.0f, -1.0f}, true, clear, {}, route);
+    CHECK(zombies.PathSolvesLastUpdate() == 1);
+    CHECK(zombies.PathDeferredLastUpdate() == 1);
+    zombies.Update(0.1f, player, {0.0f, 0.0f, -1.0f}, true, clear, {}, route);
+    CHECK(zombies.PathSolvesLastUpdate() == 1);
+    CHECK(zombies.PathDeferredLastUpdate() == 0);
+    CHECK(zombies.Resolve(first)->pathSolves == 1);
+    CHECK(zombies.Resolve(second)->pathSolves == 1);
+    CHECK_FALSE(zombies.Resolve(first)->pathFailed);
+
+    // Out of sight it no longer sees; a fresh noise in range is heard once.
+    const auto blocked = [](const glm::vec3&, const glm::vec3&) { return false; };
+    FNoiseEvent shot;
+    shot.sequence = 7;
+    shot.position = {0.0f, 0.0f, 5.0f};
+    shot.radius = 20.0f;
+    shot.strength = 1.0f;
+    shot.type = ENoiseType::Rifle;
+    shot.remainingSeconds = 1.0f;
+    const std::array<FNoiseEvent, 1> noise = {shot};
+    zombies.Update(0.1f, player, {0.0f, 0.0f, -1.0f}, true, blocked, noise, route);
+    CHECK_FALSE(zombies.Resolve(first)->seesPlayer);
+    CHECK(zombies.Resolve(first)->heardNoise > 0.0f);
+    zombies.Update(0.1f, player, {0.0f, 0.0f, -1.0f}, true, blocked, noise, route);
+    CHECK(zombies.Resolve(first)->heardNoise == 0.0f);
+}
+
+TEST_CASE("NextDayz debug event log folds repeats and keeps the newest", "[NextDayz][Productization][Debug]")
+{
+    using namespace NextDayz::Debug;
+    EventLog log(3);
+    log.SetClock(1, 0.5);
+    log.Push(EChannel::Weapon, 0, "Fired ak");
+    log.Push(EChannel::Weapon, 0, "Fired ak");
+    REQUIRE(log.Size() == 1);
+    CHECK(log.At(0).repeats == 2);
+    CHECK(log.TotalPushed() == 1);
+    CHECK(log.ChannelCount(EChannel::Weapon) == 2);
+
+    log.Push(EChannel::Infected, 1, "a");
+    log.Push(EChannel::Loot, 0, "b");
+    log.SetClock(9, 4.0);
+    log.Push(EChannel::Noise, 0, "c");
+    REQUIRE(log.Size() == 3);
+    CHECK(log.At(0).text == "a");
+    CHECK(log.Newest()->text == "c");
+    CHECK(log.Newest()->frame == 9);
+    CHECK(log.TotalPushed() == 4);
+
+    const glm::vec3 where(1.0f, 2.0f, 3.0f);
+    log.Push(EChannel::Noise, 2, "c", &where);
+    CHECK(log.Size() == 3);
+    CHECK(log.Newest()->repeats == 2);
+    CHECK(log.Newest()->severity == 2);
+    CHECK(log.Newest()->hasPosition);
+
+    log.Clear();
+    CHECK(log.Size() == 0);
+    CHECK(log.ChannelCount(EChannel::Noise) == 0);
+    CHECK(log.TotalPushed() == 4);   // serials stay unique across a clear
+
+    TSeries<4> series;
+    for (int value = 1; value <= 5; ++value)
+    {
+        series.Push(static_cast<float>(value));
+    }
+    CHECK(series.Count() == 4);
+    CHECK(series.At(0) == 2.0f);
+    CHECK(series.Latest() == 5.0f);
+    CHECK(series.Back(2) == 3.0f);
+    CHECK(series.Min() == 2.0f);
+    CHECK(series.Max() == 5.0f);
+    CHECK(series.PlotValues()[series.PlotOffset()] == 2.0f);
+}
+
+
+TEST_CASE("NextDayz grid footprints are defined for the complete loot catalog", "[NextDayz][InventoryGrid]")
+{
+    using namespace NextDayz;
+    for (const auto& def : AllItemDefs())
+    {
+        INFO(def.id);
+        REQUIRE(def.size.IsValid());
+        REQUIRE(def.maxStack > 0);
+        REQUIRE((def.containerSize == FGridSize{0, 0} || def.containerSize.IsValid()));
+    }
+    CHECK((FindItemDef("pistol")->size == FGridSize{2, 1}));
+    CHECK((FindItemDef("ak")->size == FGridSize{4, 1}));
+    CHECK((FindItemDef("mag_quick")->size == FGridSize{1, 2}));
+    CHECK((FindItemDef("backpack_military")->containerSize == FGridSize{6, 8}));
+}
+
+TEST_CASE("NextDayz fragmented pockets reject shapes despite sufficient free cells", "[NextDayz][InventoryGrid]")
+{
+    using namespace NextDayz;
+    Inventory inventory;
+    const auto shirt = inventory.Containers()[0].containerId;
+    FItemInstanceId a = 0, b = 0, c = 0;
+    REQUIRE(inventory.TryAddAt("bandage", 1, shirt, {0, 0, false}, &a));
+    REQUIRE(inventory.TryAddAt("bandage", 1, shirt, {2, 0, false}, &b));
+    REQUIRE(inventory.TryAddAt("bandage", 1, shirt, {4, 0, false}, &c));
+    REQUIRE(inventory.ContainerUsed(shirt) == 3);
+    REQUIRE_FALSE(inventory.CanAdd("water_bottle", 1, shirt));
+    REQUIRE_FALSE(inventory.TryAddAt("water_bottle", 1, shirt, {1, 0, true}));
+    REQUIRE(inventory.CountOf("water_bottle") == 0);
+    REQUIRE(inventory.TryPlace(b, shirt, {1, 0, false}));
+    FItemInstanceId bottle = 0;
+    REQUIRE(inventory.TryAdd("water_bottle", "Water", EItemKind::Consumable, 1, &bottle, shirt));
+    REQUIRE((inventory.FindInstance(bottle)->placement == FGridPlacement{2, 0, true}));
+    REQUIRE((Inventory::InstanceSize(*inventory.FindInstance(bottle)) == FGridSize{2, 1}));
+}
+
+TEST_CASE("NextDayz exact placement and rotation reject overlap and bounds atomically", "[NextDayz][InventoryGrid]")
+{
+    using namespace NextDayz;
+    Inventory inventory;
+    const auto trousers = inventory.Containers()[1].containerId;
+    FItemInstanceId pistol = 0, bandage = 0;
+    REQUIRE(inventory.TryAddAt("pistol", 1, trousers, {0, 0, false}, &pistol));
+    REQUIRE(inventory.SetLoadedAmmo(pistol, 7));
+    REQUIRE(inventory.TryAddAt("bandage", 1, trousers, {1, 1, false}, &bandage));
+    REQUIRE(inventory.TryPlace(pistol, trousers, {0, 0, true}));
+    REQUIRE_FALSE(inventory.TryPlace(pistol, trousers, {0, 1, false}));
+    REQUIRE_FALSE(inventory.TryPlace(pistol, trousers, {-1, 0, false}));
+    REQUIRE_FALSE(inventory.TryPlace(pistol, trousers, {2, 0, true}));
+    REQUIRE((inventory.FindInstance(pistol)->placement == FGridPlacement{0, 0, true}));
+    REQUIRE(inventory.LoadedAmmo(pistol) == 7);
+    const auto state = inventory.Capture();
+    Inventory restored;
+    REQUIRE(restored.Restore(state));
+    auto overlap = state;
+    overlap.instances.back().placement = {0, 0, false};
+    REQUIRE_FALSE(restored.Restore(overlap));
+    REQUIRE(restored.LoadedAmmo(pistol) == 7);
+    auto outside = state;
+    outside.instances.front().placement.x = 100;
+    REQUIRE_FALSE(restored.Restore(outside));
+}
+
+TEST_CASE("NextDayz splitting needs another rectangle and merging frees it", "[NextDayz][InventoryGrid]")
+{
+    using namespace NextDayz;
+    Inventory inventory;
+    FItemInstanceId ammo = 0, split = 0;
+    const auto shirt = inventory.Containers()[0].containerId;
+    const auto trousers = inventory.Containers()[1].containerId;
+    REQUIRE(inventory.TryAddAt("ammo_545", 30, shirt, {0, 0, false}, &ammo));
+    REQUIRE(inventory.TryAddAt("food_crackers", 1, shirt, {2, 0, false}));
+    REQUIRE(inventory.TryAddAt("radio", 1, shirt, {4, 0, false}));
+    REQUIRE(inventory.TryAddAt("fuel", 1, trousers, {0, 0, false}));
+    REQUIRE_FALSE(inventory.TrySplit(ammo, 10, split));
+    REQUIRE(inventory.FindInstance(ammo)->count == 30);
+    REQUIRE(inventory.Consume("food_crackers", 1) == 1);
+    REQUIRE(inventory.TrySplit(ammo, 10, split));
+    REQUIRE(inventory.ContainerUsed(shirt) == 6);
+    REQUIRE(inventory.TryMerge(split, ammo));
+    REQUIRE(inventory.CountOf("ammo_545") == 30);
+    REQUIRE(inventory.FindInstance(split) == nullptr);
+    REQUIRE(inventory.ContainerUsed(shirt) == 4);
+}
+
+TEST_CASE("NextDayz spatial gear swaps preserve contents and reject self containment", "[NextDayz][InventoryGrid]")
+{
+    using namespace NextDayz;
+    Inventory inventory;
+    FItemInstanceId pack = 0;
+    REQUIRE(inventory.TryAdd("backpack", "Backpack", EItemKind::Clothing, 1, &pack, kWornContainer));
+    const auto cargo = inventory.ContainerOwnedBy(pack)->containerId;
+    REQUIRE(inventory.TryAddAt("medkit", 1, 1, {0, 0, false}));
+    REQUIRE(inventory.TryAddAt("food_crackers", 1, 1, {3, 0, false}));
+    REQUIRE(inventory.TryAddAt("bandage", 1, 1, {5, 0, false}));
+    REQUIRE(inventory.TryAddAt("fuel", 1, 2, {0, 0, false}));
+    REQUIRE(inventory.TryAddAt("water_bottle", 1, cargo, {0, 0, false}));
+    REQUIRE(inventory.TryAddAt("medkit", 1, cargo, {1, 0, false}));
+    REQUIRE_FALSE(inventory.TryPlace(pack, cargo, {3, 3, false}));
+    REQUIRE_FALSE(inventory.TryUnequip(pack));
+    REQUIRE(inventory.IsWorn(pack));
+    REQUIRE(inventory.CountOf("water_bottle") == 1);
+    FItemInstanceId replacement = 0;
+    REQUIRE(inventory.TryAdd("backpack_small", "Small Backpack", EItemKind::Clothing, 1, &replacement, kWornContainer));
+    REQUIRE(inventory.IsWorn(replacement));
+    REQUIRE_FALSE(inventory.IsWorn(pack));
+    REQUIRE(inventory.CountOf("medkit") == 2);
+    Inventory restored;
+    REQUIRE(restored.Restore(inventory.Capture()));
+}
+
+
+TEST_CASE("NextDayz ammunition and medical stacks merge up to their own limit", "[NextDayz][InventoryGrid][Stacks]")
+{
+    using namespace NextDayz;
+    for (const char* id : {"ammo_545", "ammo_762", "ammo_12g", "ammo_9mm", "rag", "bandage"})
+    {
+        INFO(id);
+        const auto& def = *FindItemDef(id);
+        Inventory inventory;
+        FItemInstanceId target = 0, source = 0;
+        REQUIRE(inventory.TryAddAt(id, def.maxStack - 2, 1, {0, 0, false}, &target));
+        REQUIRE(inventory.TryAddAt(id, 2, 1, {2, 0, false}, &source));
+        REQUIRE(inventory.TryMerge(source, target));
+        REQUIRE(inventory.FindInstance(source) == nullptr);
+        REQUIRE(inventory.FindInstance(target)->count == def.maxStack);
+        REQUIRE(inventory.Instances().size() == 1);
+        REQUIRE(inventory.ContainerUsed(1) == def.size.Area());
+        REQUIRE(inventory.TryAddAt(id, 3, 1, {2, 0, false}, &source));
+        REQUIRE_FALSE(inventory.TryMerge(source, target));
+        REQUIRE(inventory.FindInstance(source)->count == 3);
+        REQUIRE(inventory.TryConsumeInstance(target, 1));
+        REQUIRE(inventory.TryMerge(source, target));
+        REQUIRE(inventory.FindInstance(target)->count == def.maxStack);
+        REQUIRE(inventory.FindInstance(source)->count == 2);
+        REQUIRE(inventory.CountOf(id) == def.maxStack + 2);
+    }
+}
+
+TEST_CASE("NextDayz targeted stack pickup works in full cargo and is atomic over the limit", "[NextDayz][InventoryGrid][Stacks]")
+{
+    using namespace NextDayz;
+    for (const char* id : {"ammo_545", "ammo_762", "ammo_12g", "ammo_9mm", "rag", "bandage"})
+    {
+        INFO(id);
+        const auto& def = *FindItemDef(id);
+        Inventory inventory;
+        FItemInstanceId target = 0;
+        REQUIRE(inventory.TryAddAt(id, def.maxStack - 2, 1, {0, 0, false}, &target));
+        for (int x = def.size.width; x < 6; ++x)
+            REQUIRE(inventory.TryAddAt("can_opener", 1, 1, {x, 0, false}));
+        REQUIRE(inventory.TryAddAt("fuel", 1, 2, {0, 0, false}));
+        REQUIRE(inventory.FreeCapacity() == 0);
+        const FGridPlacement drop{def.size.width - 1, 0, true};
+        REQUIRE(inventory.FitCountAt(id, 5, 1, drop) == 2);
+        REQUIRE_FALSE(inventory.TryAddAt(id, 3, 1, drop));
+        REQUIRE(inventory.FindInstance(target)->count == def.maxStack - 2);
+        const auto slots = inventory.Instances().size();
+        FItemInstanceId added = 0;
+        REQUIRE(inventory.TryAddAt(id, 2, 1, drop, &added));
+        REQUIRE(added == target);
+        REQUIRE(inventory.Instances().size() == slots);
+        REQUIRE(inventory.FindInstance(target)->count == def.maxStack);
+        REQUIRE((inventory.FindInstance(target)->placement == FGridPlacement{0, 0, false}));
+        REQUIRE(inventory.FitCountAt(id, 1, 1, drop) == 0);
+        REQUIRE_FALSE(inventory.TryAddAt(id, 1, 1, drop));
+        Inventory restored;
+        REQUIRE(restored.Restore(inventory.Capture()));
+    }
+}
+
+TEST_CASE("NextDayz automatic container moves merge before asking for another rectangle", "[NextDayz][InventoryGrid][Stacks]")
+{
+    using namespace NextDayz;
+    for (const int targetCount : {25, 28})
+    {
+        Inventory inventory;
+        FItemInstanceId target = 0, source = 0;
+        REQUIRE(inventory.TryAddAt("ammo_545", targetCount, 1, {0, 0, false}, &target));
+        for (int x = 2; x < 6; ++x) REQUIRE(inventory.TryAddAt("can_opener", 1, 1, {x, 0, false}));
+        REQUIRE(inventory.TryAddAt("ammo_545", 5, 2, {0, 0, false}, &source));
+        if (targetCount == 25)
+        {
+            REQUIRE(inventory.TryMove(source, 1));
+            REQUIRE(inventory.FindInstance(source) == nullptr);
+            REQUIRE(inventory.FindInstance(target)->count == 30);
+        }
+        else
+        {
+            REQUIRE_FALSE(inventory.TryMove(source, 1));
+            REQUIRE(inventory.FindInstance(target)->count == 28);
+            REQUIRE(inventory.FindInstance(source)->count == 5);
+        }
+        REQUIRE(inventory.CountOf("ammo_545") == targetCount + 5);
+    }
+}
+
+TEST_CASE("NextDayz world sim hunts and strikes the right survivor among several",
+          "[NextDayz][Productization][Zombie][Multiplayer]")
+{
+    using namespace NextDayz;
+    WorldSim world;
+    world.Configure(FZombieConfig{});
+    world.ResetPopulation(7);
+
+    // Two survivors far apart, both looking north.
+    world.UpsertSurvivor({1, {0.0f, 0.0f, 0.0f}, {0.0f, 1.6f, 0.0f}, {0.0f, 0.0f, 1.0f}, true, 1.0f});
+    world.UpsertSurvivor({2, {300.0f, 0.0f, 0.0f}, {300.0f, 1.6f, 0.0f}, {0.0f, 0.0f, 1.0f}, true, 1.0f});
+    REQUIRE(world.Survivors().size() == 2);
+    world.UpsertSurvivor({2, {300.0f, 0.0f, 0.0f}, {300.0f, 1.6f, 0.0f}, {0.0f, 0.0f, 1.0f}, true, 1.0f});
+    REQUIRE(world.Survivors().size() == 2);
+
+    // Something just in front of either survivor is in view; behind them is not.
+    CHECK(world.VisibleToAnySurvivor({300.0f, 1.0f, 20.0f}));
+    CHECK_FALSE(world.VisibleToAnySurvivor({300.0f, 1.0f, -20.0f}));
+    CHECK_FALSE(world.VisibleToAnySurvivor({150.0f, 1.0f, -20.0f}));
+
+    // An infected right next to survivor 2, facing it.
+    const FZombieHandle handle = world.zombies.Spawn(EZombieProfile::Civilian, {300.0f, 0.0f, -1.0f});
+    world.zombies.Resolve(handle)->forward = {0.0f, 0.0f, 1.0f};
+    world.TickInfected(0.1f);
+    REQUIRE(world.zombies.Resolve(handle)->targetId == 2);
+    world.TickInfected(0.45f);
+    const auto hits = world.ConsumeSurvivorHits();
+    REQUIRE(hits.size() == 1);
+    CHECK(hits.front().targetId == 2);
+
+    // A survivor that leaves is no longer a target or a viewer.
+    world.RemoveSurvivor(2);
+    CHECK(world.FindSurvivor(2) == nullptr);
+    CHECK_FALSE(world.VisibleToAnySurvivor({300.0f, 1.0f, 20.0f}));
+}
+
+TEST_CASE("NextDayz item ledger lets survivors use, reload and convert but never create items",
+          "[NextDayz][Productization][Multiplayer]")
+{
+    using namespace NextDayz;
+    // The testing kit: AK with 30 loaded, 60 spare, a backpack, a bandage and an empty bottle.
+    FInventoryState kit;
+    kit.instances.push_back({1, "ak", 1, 0, 30});
+    kit.instances.push_back({2, "ammo_545", 60});
+    kit.instances.push_back({3, "backpack", 1});
+    kit.instances.push_back({4, "bandage", 1});
+    kit.instances.push_back({5, "water_bottle_empty", 1});
+    const FItemTotals carried = CountItems(kit);
+    CHECK(carried.at("ammo_545") == 90);
+    CHECK(CheckConservation(StartingKit(true), carried).accepted);
+    CHECK_FALSE(CheckConservation(StartingKit(false), carried).accepted);
+
+    // Firing and reloading: rounds move between magazine and stack, some are spent.
+    FInventoryState reloaded = kit;
+    reloaded.instances[0].loadedAmmo = 30;
+    reloaded.instances[1].count = 50;   // 10 fired, 10 reloaded
+    CHECK(CheckConservation(carried, CountItems(reloaded)).accepted);
+
+    // Filling the empty bottle at a well, then drinking it back to empty.
+    FInventoryState filled = kit;
+    filled.instances[4].defId = "water_bottle";
+    CHECK(CheckConservation(carried, CountItems(filled)).accepted);
+    CHECK(CheckConservation(CountItems(filled), CountItems(kit)).accepted);
+
+    // Fitting an attachment moves it from the bag onto the rifle.
+    FInventoryState withDot = kit;
+    withDot.instances.push_back({6, "optic_red_dot", 1});
+    FItemTotals withDotTotals = CountItems(withDot);
+    FInventoryState fitted = kit;
+    fitted.instances[0].attachments[0] = FindAttachmentDef("optic_red_dot")->type;
+    CHECK(CheckConservation(withDotTotals, CountItems(fitted)).accepted);
+
+    // Duplication is refused: a second bandage, extra rounds, a second bottle of water.
+    FInventoryState duplicated = kit;
+    duplicated.instances.push_back({7, "bandage", 1});
+    const FLedgerVerdict verdict = CheckConservation(carried, CountItems(duplicated));
+    CHECK_FALSE(verdict.accepted);
+    CHECK(verdict.reason.find("bandage") != std::string::npos);
+    FInventoryState moreAmmo = kit;
+    moreAmmo.instances[0].loadedAmmo = 31;
+    CHECK_FALSE(CheckConservation(carried, CountItems(moreAmmo)).accepted);
+    FInventoryState twoWaters = filled;
+    twoWaters.instances.push_back({8, "water_bottle", 1});
+    CHECK_FALSE(CheckConservation(carried, CountItems(twoWaters)).accepted);
+
+    // Grants and drops move totals; a drop of what you do not have is refused.
+    FItemTotals ledger = carried;
+    AddTotals(ledger, CountItems(std::vector<FLootStack>{{"food_can", 2, 0, {}}}));
+    CHECK(ledger.at("food_can") == 2);
+    CHECK(SubtractTotals(ledger, CountItems(std::vector<FLootStack>{{"ak", 1, 30, {}}})));
+    CHECK(ledger.at("ammo_545") == 60);
+    CHECK_FALSE(SubtractTotals(ledger, CountItems(std::vector<FLootStack>{{"ak", 1, 0, {}}})));
+    CHECK(InventoryAsStacks(kit).size() == kit.instances.size());
+}
+
+TEST_CASE("NextDayz lag history checks a hit against where the target stood when the shooter saw it",
+          "[NextDayz][Productization][Multiplayer]")
+{
+    using namespace NextDayz;
+    FLagHistory history(1.0);
+    std::array<FZombieRuntime, 1> zombies{};
+    zombies[0].handle = {0, 3};
+    zombies[0].active = true;
+    std::array<FSurvivorPresence, 1> survivors{{{5, {}, {}, {0.0f, 0.0f, 1.0f}, true, 1.0f}}};
+    // Both walk +x at 4 m/s, recorded at 30 Hz for two seconds.
+    for (int tick = 0; tick <= 60; ++tick)
+    {
+        const double time = tick / 30.0;
+        zombies[0].position = {4.0f * static_cast<float>(time), 0.0f, 0.0f};
+        survivors[0].feet = {4.0f * static_cast<float>(time), 0.0f, 10.0f};
+        history.Record(time, zombies, survivors);
+    }
+    CHECK(history.OldestTime() >= 1.0 - 1.0e-6);   // only the last second is kept
+
+    // At t = 1.8 s the infected stood at x = 7.2; now (t = 2) it is at x = 8.
+    const glm::vec3 chestThen(7.2f, 1.3f, 0.0f);
+    const auto then = history.ZombieDistance({0, 3}, chestThen, 1.8, 0.05);
+    REQUIRE(then);
+    CHECK(*then < 0.2f);
+    // Judged against the present instead, the same shot would be a 0.8 m miss.
+    CHECK(DistanceToBodyAxis(glm::vec3(8.0f, 0.0f, 0.0f), chestThen) == Catch::Approx(0.8f).margin(0.01f));
+    // A shot 5 m to the side is a miss at any moment of the window.
+    const auto wide = history.ZombieDistance({0, 3}, chestThen + glm::vec3(0.0f, 0.0f, 5.0f), 1.8, 0.15);
+    REQUIRE(wide);
+    CHECK(*wide > 4.0f);
+    // Too old, or a body never recorded: no answer, so no hit.
+    CHECK_FALSE(history.ZombieDistance({0, 3}, chestThen, 0.5, 0.05));
+    CHECK_FALSE(history.ZombieDistance({1, 1}, chestThen, 1.8, 0.05));
+    // Survivors the same way.
+    const auto survivor = history.SurvivorDistance(5, glm::vec3(6.0f, 1.5f, 10.0f), 1.5, 0.05);
+    REQUIRE(survivor);
+    CHECK(*survivor < 0.2f);
 }

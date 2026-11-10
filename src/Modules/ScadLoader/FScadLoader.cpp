@@ -6,6 +6,7 @@
 #include "Modules/ScadLoader/FScadEvaluator.h"
 #include "Modules/ScadLoader/FScadShared.h"
 #include "Modules/ScadLoader/FScadTerrain.h"
+#include "Engine/Assets/Loaders/LoaderRegistry.hpp"
 #include "Engine/Assets/Loaders/LoaderUtils.hpp"
 #include "Engine/Runtime/Components/RenderComponent.hpp"
 #include "Engine/Runtime/Components/TerrainComponent.hpp"
@@ -13,6 +14,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <map>
@@ -46,13 +48,22 @@ namespace Assets
                 material.Diffuse = glm::vec4(rgb, alpha);
                 return material;
             }
+            // A print brings its relief (normal map) to every model, and its
+            // roughness/metalness factors (MRA) to the specular ones.
+            const FProceduralTextureIds maps =
+                properties.texture ? ProceduralTexture::AcquireMaps(*properties.texture)
+                                   : FProceduralTextureIds{};
             if (roughness >= 0.999f && metalness <= 0.001f)
             {
-                return Material::Lambertian(rgb);
+                Material material = Material::Lambertian(rgb, maps.albedo);
+                material.NormalTextureId = maps.normal;
+                return material;
             }
 
-            Material material = Material::Mixture(rgb, roughness);
+            Material material = Material::Mixture(rgb, roughness, maps.albedo);
             material.Metalness = metalness;
+            material.MRATextureId = maps.mra;
+            material.NormalTextureId = maps.normal;
             return material;
         }
 
@@ -166,10 +177,11 @@ namespace Assets
         {
             const float effectiveRoughness =
                 color.a < 0.99f && !properties.explicitParameters ? 0.0f : properties.roughness;
-            const uint64_t colorKey =
+            const uint64_t colorKey = Scad::MixTextureIntoKey(
                 (static_cast<uint64_t>(QuantizeMaterialColor(color)) << 32u) |
                 (static_cast<uint64_t>(std::clamp(effectiveRoughness, 0.0f, 1.0f) * 65535.0f + 0.5f) << 16u) |
-                static_cast<uint64_t>(std::clamp(properties.metalness, 0.0f, 1.0f) * 65535.0f + 0.5f);
+                static_cast<uint64_t>(std::clamp(properties.metalness, 0.0f, 1.0f) * 65535.0f + 0.5f),
+                properties);
             auto found = cache.materialByProperties.find(colorKey);
             if (found != cache.materialByProperties.end())
             {
@@ -224,13 +236,23 @@ namespace Assets
                 // facets on gentle slopes into a soft gradient.
                 const float bucketSmoothAngle = bucket.faceted ? 0.0f : smoothAngleDegrees;
                 const std::vector<glm::vec3> normals = Scad::ScadComputeSmoothNormals(localPos, bucketSmoothAngle);
+                // gk_texture(): UVs come from the node-local SCAD positions (Z up), so
+                // the print keeps its size and stays on the object as it moves.
+                std::vector<glm::vec2> uvs(localPos.size(), glm::vec2(0.0f));
+                std::vector<glm::vec4> tangents(localPos.size(), glm::vec4(1, 0, 0, 1));
+                if (bucket.material.texture)
+                {
+                    ProceduralTexture::BoxProjectUVs(bucket.tris, bucket.material.texture->scale, uvs);
+                    ProceduralTexture::BoxProjectTangents(
+                        bucket.tris, glm::mat3(Scad::ScadToWorldBasis(1.0)), normals, tangents);
+                }
 
                 const uint32_t vertexOffset = static_cast<uint32_t>(vertices.size());
                 vertices.reserve(vertices.size() + localPos.size());
                 indices.reserve(indices.size() + localPos.size());
                 for (uint32_t i = 0; i < static_cast<uint32_t>(localPos.size()); ++i)
                 {
-                    vertices.push_back(Vertex{localPos[i], normals[i], glm::vec4(1, 0, 0, 1), glm::vec2(0, 0), sectionIndex});
+                    vertices.push_back(Vertex{localPos[i], normals[i], tangents[i], uvs[i], sectionIndex});
                     indices.push_back(vertexOffset + i);
                 }
 
@@ -284,28 +306,148 @@ namespace Assets
             return true;
         }
 
+        // One element of a flat vector parameter, or false when the element has no
+        // comma-free single-token spelling (a nested vector, a range, or a string
+        // that would collide with the record's own separators).
+        bool SerializeScadMetadataElement(const Scad::Value& value, std::string& out)
+        {
+            switch (value.type)
+            {
+            case Scad::Value::Type::Number:
+                out = fmt::format("{:g}", value.num);
+                return true;
+            case Scad::Value::Type::Bool:
+                out = value.boolean ? "true" : "false";
+                return true;
+            case Scad::Value::Type::Str:
+                if (value.str.find_first_of(",;=") != std::string::npos)
+                {
+                    return false;
+                }
+                out = value.str;
+                return true;
+            default:
+                return false;
+            }
+        }
+
+        // Serializes the evaluated named parameters of a user-module call as
+        // "k=v;k=v" for Node::SetMetadata. Gameplay reads authoring intent (rail
+        // length, swing period, button index, which ids a door listens to, how far
+        // a lift travels) out of these. Scalars keep their natural spelling; a flat
+        // vector of scalars becomes its elements joined with ',' ("travel=0,0,3",
+        // "on=plate_a,plate_b"), so readers split on ',' to get it back. Nested
+        // vectors and ranges have no single-token spelling and are dropped. Empty
+        // when the module takes no serializable parameters.
+        std::string SerializeScadNodeMetadata(const Scad::SceneNode& sceneNode)
+        {
+            std::string out;
+            for (const auto& [key, value] : sceneNode.parameters)
+            {
+                std::string text;
+                switch (value.type)
+                {
+                case Scad::Value::Type::Number:
+                    text = fmt::format("{:g}", value.num);
+                    break;
+                case Scad::Value::Type::Bool:
+                    text = value.boolean ? "true" : "false";
+                    break;
+                case Scad::Value::Type::Str:
+                    // A ';' or '=' inside the string would corrupt the record; skip those.
+                    if (value.str.find_first_of(";=") != std::string::npos)
+                    {
+                        continue;
+                    }
+                    text = value.str;
+                    break;
+                case Scad::Value::Type::Vec:
+                {
+                    bool flat = true;
+                    std::string element;
+                    for (size_t index = 0; index < value.vec.size() && flat; ++index)
+                    {
+                        flat = SerializeScadMetadataElement(value.vec[index], element);
+                        if (flat)
+                        {
+                            if (index > 0)
+                            {
+                                text.push_back(',');
+                            }
+                            text.append(element);
+                        }
+                    }
+                    if (!flat)
+                    {
+                        continue;
+                    }
+                    break;
+                }
+                default:
+                    continue;
+                }
+                if (!out.empty())
+                {
+                    out.push_back(';');
+                }
+                out.append(key);
+                out.push_back('=');
+                out.append(text);
+            }
+            return out;
+        }
+
+        // `collision = "none"` on a user module opts that call's whole subtree out of
+        // collision: its meshes are built raycast-invisible, which is what keeps the
+        // scene from giving them an implicit static physics body and keeps them out
+        // of CPU ray queries (camera booms, picking, NavGrid sampling). Pickups,
+        // trigger volumes and decoration use it; anything else collides as before.
+        bool ScadNodeDisablesCollision(const Scad::SceneNode& sceneNode)
+        {
+            for (const auto& [key, value] : sceneNode.parameters)
+            {
+                if (key == "collision")
+                {
+                    return value.type == Scad::Value::Type::Str && value.str == "none";
+                }
+            }
+            return false;
+        }
+
         void BuildScadSceneNodeRecursive(
             const Scad::SceneNode& sceneNode,
             const std::shared_ptr<Node>& parent,
             const glm::dmat4& parentWorld,
             double scale,
             float smoothAngleDegrees,
+            bool collisionEnabled,
             std::vector<std::shared_ptr<Node>>& nodes,
             std::vector<Model>& models,
             std::vector<FMaterial>& materials,
             ScadBuildCache& cache)
         {
+            collisionEnabled = collisionEnabled && !ScadNodeDisablesCollision(sceneNode);
             glm::vec3 localTranslation(0.0f);
             glm::quat localRotation(1.0f, 0.0f, 0.0f, 0.0f);
             glm::vec3 localScale(1.0f);
             Scad::ScadLocalToEngineTRS(sceneNode.localTransform, scale, localTranslation, localRotation, localScale);
 
+            // The engine id is the node's index in the output, like every other node this loader
+            // makes. The evaluator's instanceId is 64-bit and, on the parallel top-level path, each
+            // statement's ids start at (k + 1) << 40: truncating it collided the nodes of different
+            // statements, and every id-keyed lookup (GetNodeByInstanceId, picking, the C# node
+            // bindings) could then land on the wrong node.
             auto node = Node::CreateNode(
                 sceneNode.name,
                 localTranslation,
                 localRotation,
                 localScale,
-                static_cast<uint32_t>(sceneNode.instanceId));
+                static_cast<uint32_t>(nodes.size()));
+            if (!parent && sceneNode.sourceLine > 0)
+            {
+                node->SetTag(Scad::ScadPlacementTag(sceneNode.sourceOffset));
+            }
+            node->SetMetadata(SerializeScadNodeMetadata(sceneNode));
             if (parent)
             {
                 node->SetParent(parent);
@@ -323,12 +465,16 @@ namespace Assets
                 // Terrain water surfaces get their own child node: translucent,
                 // and invisible to raycasts so NavGrid/picking hit the river bed
                 // (or a bridge deck) instead of the water plane.
+                // Draped overlays (terrain road ribbons) likewise: they float a
+                // few centimetres over the ground mesh, so they must neither
+                // collide nor answer ground raycasts.
                 std::vector<Scad::SceneMeshBucket> solidBuckets;
                 std::vector<Scad::SceneMeshBucket> waterBuckets;
+                std::vector<Scad::SceneMeshBucket> decalBuckets;
                 solidBuckets.reserve(sceneNode.meshes.size());
                 for (const Scad::SceneMeshBucket& bucket : sceneNode.meshes)
                 {
-                    (bucket.terrainWater ? waterBuckets : solidBuckets).push_back(bucket);
+                    (bucket.terrainWater ? waterBuckets : bucket.terrainDecal ? decalBuckets : solidBuckets).push_back(bucket);
                 }
 
                 constexpr size_t kMaxMaterialsPerNode = 16;
@@ -341,7 +487,7 @@ namespace Assets
                         kMaxMaterialsPerNode,
                         scale,
                         smoothAngleDegrees,
-                        true,
+                        collisionEnabled,
                         node,
                         models,
                         materials,
@@ -366,12 +512,36 @@ namespace Assets
                             kMaxMaterialsPerNode,
                             scale,
                             smoothAngleDegrees,
-                            true,
+                            collisionEnabled,
                             chunkNode,
                             models,
                             materials,
                             cache);
                     }
+                }
+
+                if (!decalBuckets.empty())
+                {
+                    auto decalNode = Node::CreateNode(
+                        fmt::format("{}__decals", sceneNode.name),
+                        glm::vec3(0.0f),
+                        glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
+                        glm::vec3(1.0f),
+                        static_cast<uint32_t>(nodes.size()));
+                    decalNode->SetParent(node);
+                    nodes.push_back(decalNode);
+                    AttachSceneMeshesToNode(
+                        fmt::format("{}__decals", sceneNode.name),
+                        decalBuckets,
+                        0,
+                        kMaxMaterialsPerNode,
+                        scale,
+                        smoothAngleDegrees,
+                        false,
+                        decalNode,
+                        models,
+                        materials,
+                        cache);
                 }
 
                 if (!waterBuckets.empty())
@@ -401,7 +571,8 @@ namespace Assets
 
             for (const Scad::SceneNode& child : sceneNode.children)
             {
-                BuildScadSceneNodeRecursive(child, node, nodeWorld, scale, smoothAngleDegrees, nodes, models, materials, cache);
+                BuildScadSceneNodeRecursive(child, node, nodeWorld, scale, smoothAngleDegrees, collisionEnabled, nodes, models,
+                                            materials, cache);
             }
         }
 
@@ -700,12 +871,20 @@ namespace Assets
         std::vector<Skeleton>& /*skeletons*/,
         const ScadLoadOptions& options)
     {
+        const auto loadStarted = std::chrono::steady_clock::now();
+        const size_t nodesBefore = nodes.size();
+        // Published on success and on failure: a host editing this file while it runs reads it
+        // back to tell the author what the build found.
+        FSceneSourceReport report;
+
         // ---- Resolve the use/include closure ----
         Scad::ScadProgram program;
         std::string programErr;
-        if (!Scad::LoadScadProgram(filename, program, programErr))
+        if (!Scad::LoadScadProgram(filename, program, programErr, &report.dependencies))
         {
             SPDLOG_ERROR("SCAD: {}", programErr);
+            report.error = programErr;
+            FLoaderRegistry::Get().PublishLoadReport(filename, std::move(report));
             return false;
         }
 
@@ -726,7 +905,8 @@ namespace Assets
         size_t rootCount = 0;
         for (const Scad::SceneNode& root : result.roots)
         {
-            BuildScadSceneNodeRecursive(root, nullptr, glm::dmat4(1.0), scale, options.smoothAngleDegrees, nodes, models, materials, buildCache);
+            BuildScadSceneNodeRecursive(root, nullptr, glm::dmat4(1.0), scale, options.smoothAngleDegrees, true, nodes, models,
+                                        materials, buildCache);
             ++rootCount;
         }
 
@@ -766,6 +946,15 @@ namespace Assets
 
         SPDLOG_INFO("SCAD: loaded {} -> {} root nodes, {} total nodes, {} triangles ({} warnings)",
                     filename, rootCount, nodes.size(), result.triangleCount, result.warningCount);
+
+        report.ok = true;
+        report.warnings = std::move(result.warnings);
+        report.warningCount = result.warningCount;
+        report.nodeCount = nodes.size() - nodesBefore;
+        report.triangleCount = result.triangleCount;
+        report.milliseconds =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - loadStarted).count();
+        FLoaderRegistry::Get().PublishLoadReport(filename, std::move(report));
         return true;
     }
 } // namespace Assets

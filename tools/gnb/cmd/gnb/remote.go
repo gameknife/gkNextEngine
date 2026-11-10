@@ -34,7 +34,7 @@ func newRemoteCommand(ctx appContext) *cobra.Command {
 	}
 	cmd := &cobra.Command{
 		Use:   "remote [--scene <path>] [--target <name>] [app-args]",
-		Short: "Run a target in WebRTC remote host mode",
+		Short: tr("cli.remote.short"),
 		Long: "Start a target with --remote, print the browser URLs, and keep the process attached.\n\n" +
 			"Examples:\n" +
 			"  gnb remote\n" +

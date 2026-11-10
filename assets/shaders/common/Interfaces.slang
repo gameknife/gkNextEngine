@@ -59,6 +59,12 @@ public interface IRayTracer
                                     float minimumNormalOffset);
     bool TraceAreaLightSegment(float3 rayOrigin, float3 rayTarget, float epsilon,
                                uint targetLightIndex);
+    // Where secondary rays from a primary vertex rebuilt out of the visibility sample at pixel
+    // should start. position sits surfaceOffset in front of the drawn surface along viewDirection,
+    // and normal is that surface's normal. A tracer whose geometry can differ from what the raster
+    // drew returns the matching point on its own surface; every other tracer returns position.
+    float3 ResolvePrimaryOrigin(int2 pixel, float3 position, float3 normal, float3 viewDirection,
+                                float surfaceOffset);
 }
 
 // direct illum

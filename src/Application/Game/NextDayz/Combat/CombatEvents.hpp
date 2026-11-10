@@ -12,8 +12,21 @@ namespace NextDayz
     {
         Head,
         Torso,
-        Limb,
+        Limb,   // arms
+        Leg,
     };
+
+    inline const char* HitZoneName(EHitZone zone)
+    {
+        switch (zone)
+        {
+        case EHitZone::Head: return "head";
+        case EHitZone::Torso: return "torso";
+        case EHitZone::Limb: return "limb";
+        case EHitZone::Leg: return "leg";
+        }
+        return "unknown";
+    }
 
     struct FZombieHandle
     {
@@ -22,6 +35,24 @@ namespace NextDayz
 
         bool IsValid() const { return generation != 0; }
         auto operator<=>(const FZombieHandle&) const = default;
+    };
+
+    // One capsule of an infected's hit body, in world space.
+    struct FHitCapsule
+    {
+        glm::vec3 a{};
+        glm::vec3 b{};
+        float radius = 0.0f;
+        EHitZone zone = EHitZone::Torso;
+    };
+
+    struct FHitboxHit
+    {
+        FZombieHandle zombie{};
+        EHitZone zone = EHitZone::Torso;
+        float distance = 0.0f;
+        glm::vec3 point{};
+        glm::vec3 normal{};
     };
 
     struct FWeaponHitEvent
@@ -33,6 +64,13 @@ namespace NextDayz
         uint32_t hitInstanceId = 0;
         glm::vec3 hitPoint{};
         float baseDamage = 0.0f;
+        float impactScale = 1.0f;
+        // Set when the round hit an infected's hitbox rather than the world.
+        FZombieHandle zombie{};
+        EHitZone zone = EHitZone::Torso;
+        glm::vec3 normal{};
+        // Survivor who fired (FZombieTarget::id); single player is always 1.
+        uint32_t shooterId = 1;
     };
 
     struct FWeaponTraceEvent
@@ -44,6 +82,9 @@ namespace NextDayz
         glm::vec3 endPoint{};
         uint32_t hitInstanceId = 0;
         bool hit = false;
+        bool hitZombie = false;
+        glm::vec3 normal{};
+        bool melee = false;     // a swing: no tracer, no muzzle
     };
 
     struct FDamageEvent
@@ -52,6 +93,11 @@ namespace NextDayz
         FZombieHandle target{};
         EHitZone hitZone = EHitZone::Torso;
         float amount = 0.0f;
+        float impact = 0.0f;
         glm::vec3 worldPoint{};
+        glm::vec3 direction{};
+        bool killed = false;
+        bool staggered = false;
+        bool crippled = false;
     };
 }

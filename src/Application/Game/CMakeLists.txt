@@ -9,6 +9,8 @@ add_subdirectory(Flappy)
 add_subdirectory(BrickPlayer)
 add_subdirectory(CharacterDemo)
 add_subdirectory(NextDayz)
+add_subdirectory(NextAstrobot)
+add_subdirectory(NextRaiden)
 add_subdirectory(TruckerDemo)
 add_subdirectory(StudioSim)
 add_subdirectory(AirportSim)
@@ -18,6 +20,12 @@ add_subdirectory(Voyage3D)
 add_subdirectory(NextTotalwar)
 if(GK_DOTNET_ENABLED)
     add_subdirectory(DotNetSandbox)
+    # TestFPS is a scratch game generated from a template; its project is not in the repository.
+    # Managed publishes are chained, so a target whose csproj is missing breaks every game after it.
+    if(EXISTS "${GK_GAME_PROJECTS_ROOT}/TestFPS/Scripts/TestFPS.csproj")
+        add_subdirectory(TestFPS)
+    endif()
+    add_subdirectory(ScadPlay)
 endif()
 # CoreCLR only: NativeAOT links one game into the binary, so a launcher there would have nothing
 # to choose between. Declared last so the managed publish targets it depends on already exist.

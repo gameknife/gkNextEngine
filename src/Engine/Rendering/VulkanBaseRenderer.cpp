@@ -46,6 +46,7 @@
 #include "Engine/Rendering/Interface/IAtmosphereSubsystem.hpp"
 #include "Engine/Rendering/Upscaler/IUpscaler.hpp"
 #include "Engine/Rendering/Upscaler/UpscalerRegistry.hpp"
+#include "Engine/Rendering/Exposure/AutoExposurePass.hpp"
 
 #include <algorithm>
 #include <limits>
@@ -489,6 +490,7 @@ namespace Vulkan
         logicRenderers_.renderers.clear();
         logicRenderers_.swapChainCreatedTypes.clear();
         restirDI_.reset();
+        autoExposure_.reset();
         renderViews_.reset();
         upscaler_.reset();
         ctx_.tracyGpuProfiler.reset();
@@ -851,7 +853,16 @@ namespace Vulkan
         {
             renderViewServices_->OnMainSceneChanged();
         }
-        RequestClearAmbientCubeCache();
+        // A scene that restored its bake from the disk cache already holds valid ambient cubes; the
+        // clear pass would wipe them on the first frame and re-open a bake that never needs to run.
+        if (scene && scene->ConsumeAmbientCacheRestored())
+        {
+            ambient_.requestClearCache = false;
+        }
+        else
+        {
+            RequestClearAmbientCubeCache();
+        }
         resetUpscalerHistory_ = true;
     }
 
@@ -898,7 +909,11 @@ namespace Vulkan
 
     bool VulkanBaseRenderer::IsReferenceViewAccumulationActive() const
     {
-        return GOption != nullptr && GOption->ReferenceMode && !ActiveRenderView().IsPrimary();
+        // Transient views are complete after their single scheduled render. In particular, editor
+        // thumbnails must not enter reference-mode progressive accumulation just because they use
+        // a secondary RT bank.
+        return GOption != nullptr && GOption->ReferenceMode && !ActiveRenderView().IsPrimary() &&
+            ActiveRenderView().Schedule() != EViewSchedule::Transient;
     }
 
     uint32_t VulkanBaseRenderer::ProgressiveSampleCountForActiveView() const
@@ -1599,7 +1614,10 @@ namespace Vulkan
         {
             atmosphere_->CreateSwapChainPipelines();
         }
-        overlay_.wireframePipeline.reset(new class PipelineCommon::GraphicsPipeline(SwapChain(), DepthBuffer(), UniformBuffers(), GetScene(), true));
+        overlay_.wireframePipeline.reset(new class PipelineCommon::GraphicsPipeline(SwapChain(), DepthBuffer(), UniformBuffers(), GetScene(), true, true));
+        // X-ray variant: identical except it ignores scene depth, so interior and back-facing
+        // edges stay visible. Shares the render pass layout, so both can use the same framebuffers.
+        overlay_.wireframeXrayPipeline.reset(new class PipelineCommon::GraphicsPipeline(SwapChain(), DepthBuffer(), UniformBuffers(), GetScene(), true, false));
         overlay_.wireframeFrameBuffers.clear();
         overlay_.wireframeFrameBuffers.reserve(frame_.swapChain->ImageViews().size());
         for (size_t i = 0; i < frame_.swapChain->ImageViews().size(); ++i)
@@ -1620,7 +1638,12 @@ namespace Vulkan
                 SwapChain(), "assets/shaders/Process.TemporalPostFilter.comp.slang.spv", 64));
         }
         overlay_.toneMappingPipeline.reset(new PipelineCommon::ZeroBindCustomPushConstantPipeline(
-            SwapChain(), "assets/shaders/Process.TonemapAfterUpscaler.comp.slang.spv", 52));
+            SwapChain(), "assets/shaders/Process.TonemapAfterUpscaler.comp.slang.spv", 64));
+        if (!autoExposure_)
+        {
+            autoExposure_ = std::make_unique<AutoExposurePass>(Device());
+        }
+        autoExposure_->CreatePipeline(SwapChain());
         overlay_.bufferClearPipeline.reset(new PipelineCommon::ZeroBindCustomPushConstantPipeline(*frame_.swapChain, "assets/shaders/Util.BufferClear.comp.slang.spv", 4));
         overlay_.checkerboardResolvePipeline.reset(new PipelineCommon::ZeroBindPipeline(
             *frame_.swapChain, "assets/shaders/Process.CheckerboardResolve.comp.slang.spv", GetScene()));
@@ -1636,6 +1659,11 @@ namespace Vulkan
                 rt_->directLightGenPipeline.reset(new PipelineCommon::ZeroBindWithTLASPipeline(
                     SwapChain(), "assets/shaders/Bake.HwAmbientCube.comp.slang.spv", GetScene(), ActiveTLASHandle()));
             }
+        }
+        if (caps_.supportRayTracing)
+        {
+            rt_->lodSelectPipeline.reset(new PipelineCommon::ZeroBindPipeline(
+                *frame_.swapChain, "assets/shaders/Task.RayTracingLodSelect.comp.slang.spv", GetScene()));
         }
         // Pick the subgroup (wave) fast-path of the GPU cull when the device supports it; otherwise the LDS variant.
         const char* gpuCullSpv = caps_.supportSubgroupCull
@@ -1754,6 +1782,14 @@ namespace Vulkan
             frameGenerationSwapchainRequested_
                 ? VK_PRESENT_MODE_IMMEDIATE_KHR
                 : presentMode_;
+        // Before the swapchain exists, and with the device idle: a frame-generation provider that
+        // proxies presentation (Streamline's DLFG) may only take or release that ownership here.
+        // Leaving it installed for a swapchain that never generates frames is not free -- the proxy
+        // hands images back in bursts, which a vsync-paced frame loop turns into visible judder.
+        if (upscaler_)
+        {
+            upscaler_->SetFrameGenerationFeatureEnabled(frameGenerationSwapchainRequested_);
+        }
         frame_.swapChain.reset(new class SwapChain(*ctx_.device, requestedPresentMode, forceSDR_));
         swapchainStateTracker_.Reset();
         auxiliaryImageStateTracker_.Reset();
@@ -1939,6 +1975,7 @@ namespace Vulkan
         overlay_.visibilityFrameBuffer.reset();
         overlay_.sunShadowPass.reset();
         overlay_.wireframeFrameBuffers.clear();
+        overlay_.wireframeXrayPipeline.reset();
         overlay_.wireframePipeline.reset();
         overlay_.bufferClearPipeline.reset();
         overlay_.checkerboardResolvePipeline.reset();
@@ -1947,6 +1984,7 @@ namespace Vulkan
         if (rt_)
         {
             rt_->directLightGenPipeline.reset();
+            rt_->lodSelectPipeline.reset();
         }
         overlay_.gpuCullCompactPipeline.reset();
         overlay_.softMeshShaderFinalizePipeline.reset();
@@ -1978,6 +2016,10 @@ namespace Vulkan
         if (atmosphere_)
         {
             atmosphere_->DestroySwapChainPipelines();
+        }
+        if (autoExposure_)
+        {
+            autoExposure_->DestroyPipeline();
         }
 
         if (upscaler_)
@@ -2031,15 +2073,19 @@ namespace Vulkan
         lateToneMapping_.outputInitialized = false;
         frame_.commandBuffers.reset();
         overlay_.wireframeFrameBuffers.clear();
+        overlay_.wireframeXrayPipeline.reset();
         overlay_.wireframePipeline.reset();
         overlay_.bufferClearPipeline.reset();
         overlay_.checkerboardResolvePipeline.reset();
         frame_.inFlightFenceSubmitSerials.clear();
+        DeleteGpuFrameTiming();
+        DeleteAmbientBakeFrameTiming();
         ambient_.softBake.reset();
         ambient_.clearCache.reset();
         if (rt_)
         {
             rt_->directLightGenPipeline.reset();
+            rt_->lodSelectPipeline.reset();
         }
         overlay_.gpuCullCompactPipeline.reset();
         overlay_.softMeshShaderFinalizePipeline.reset();
@@ -2453,6 +2499,8 @@ namespace Vulkan
 #if GK_TRACY_ENABLED
         GkProfiling::BeginGpuFrame(commandBuffer);
 #endif
+        BeginGpuFrameTiming(commandBuffer);
+        BeginAmbientBakeFrameTiming(commandBuffer);
 
         {
             SCOPED_GPU_TIMER("[gpu]");
@@ -2571,6 +2619,8 @@ namespace Vulkan
                 screenshot_.captureSubmitSerial = frame_.recordingSubmitSerial;
             }
         }
+        EndAmbientBakeFrameTiming(commandBuffer);
+        EndGpuFrameTiming(commandBuffer);
         frame_.commandBuffers->End(frame_.currentFrame);
 
         if (upscaler_ && frame_.streamlineFrameToken)
@@ -3020,6 +3070,26 @@ namespace Vulkan
                 VK_IMAGE_LAYOUT_GENERAL);
         }
 
+        RenderView* exposureView = &PrimaryView();
+        for (const auto& view : renderViews_->AdditionalViews())
+        {
+            if (view->RtBankBase() == sourceViewBankBase)
+            {
+                exposureView = view.get();
+                break;
+            }
+        }
+        const bool exposureEnabled = frameSettings_.userSettings.AutoExposure &&
+            !frameSettings_.offlineProgressivePathTracing && !outputUbo.ShowHeatmap &&
+            outputUbo.GTAODebugMode == 0 &&
+            outputUbo.BackgroundMode != static_cast<uint32_t>(Assets::EBackgroundMode::Studio);
+        const VkDeviceAddress exposureAddress = autoExposure_ ? autoExposure_->Update(
+            commandBuffer, exposureView->Handle(), SceneGeneration(),
+            sourceIsUpscaled ? inputIndex : sourceViewBankBase + inputIndex, inputExtent,
+            outputUbo.PaperWhiteNit, outputUbo.HDR != 0,
+            static_cast<float>(NextEngine::GetInstance()->GetDeltaSeconds()),
+            frameSettings_.userSettings, exposureEnabled) : 0;
+
         constexpr uint32_t outputIndex = Assets::Bindless::RT_TONEMAP_OUTPUT;
         RenderImage* offscreenOutput = lateToneMapping_.outputImage.get();
         const bool initialized = lateToneMapping_.outputInitialized;
@@ -3058,8 +3128,10 @@ namespace Vulkan
             uint32_t hdrOutputMode;
             uint32_t hdr;
             uint32_t hasSky;
+            uint32_t exposurePadding;
+            VkDeviceAddress exposureAddress;
         };
-        static_assert(sizeof(FPushConstants) == 52);
+        static_assert(sizeof(FPushConstants) == 64);
 
         const FPushConstants pushConstants{
             inputIndex,
@@ -3075,6 +3147,8 @@ namespace Vulkan
             outputUbo.HDROutputMode,
             outputUbo.HDR,
             outputUbo.HasSky,
+            0u,
+            exposureAddress,
         };
         overlay_.toneMappingPipeline->BindPipeline(commandBuffer, &pushConstants, sourceViewBankBase);
         vkCmdDispatch(
@@ -3198,6 +3272,13 @@ namespace Vulkan
                 inputs.depth.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
             }
             resolvedByUpscaler = upscaler_->Evaluate(inputs);
+            if (resolvedByUpscaler)
+            {
+                // Only acknowledge the generation after the provider has consumed the reset.
+                // In particular, a renderer without an active temporal resolve must not erase
+                // a pending reset left by the renderer that preceded it.
+                upscalerHistoryGeneration_ = PrimaryView().State().historyGeneration;
+            }
             if (typeInfo.leavesInputsShaderRead && resolvedByUpscaler)
             {
                 // FidelityFX registers external inputs only for this dispatch (the same
@@ -3642,7 +3723,13 @@ namespace Vulkan
         inputs.frameToken = frame_.streamlineFrameToken;
         inputs.frameIndex = static_cast<uint32_t>(frame_.frameCount);
         inputs.imageIndex = imageIndex;
-        inputs.reset = resetUpscalerHistory_ || frame_.frameCount < 2;
+        // A renderer switch invalidates the primary view and bumps this generation.  Do not
+        // rely solely on resetUpscalerHistory_: it is cleared after submission, including
+        // submissions that bypass temporal resolve.  Until a successful resolve records this
+        // generation, every provider must reject all reprojected colour history.
+        inputs.reset = resetUpscalerHistory_ ||
+            PrimaryView().State().historyGeneration != upscalerHistoryGeneration_ ||
+            frame_.frameCount < 2;
         inputs.upscalerType = temporalSuperResolutionActive_
             ? activeUpscalerType_
             : Rendering::Upscaler::EUpscalerType::None;
@@ -3729,7 +3816,9 @@ namespace Vulkan
         if (renderViews_)
         {
             renderViews_->ClearSchedule();
+            renderViews_->InvalidateAllTemporalHistory(EHistoryInvalidationReason::SceneChanged);
         }
+        resetUpscalerHistory_ = true;
         if (caps_.supportRayTracing)
         {
             DeleteAccelerationStructures();
@@ -3765,11 +3854,14 @@ namespace Vulkan
         for (size_t i = 0; i < nodeTrans.size(); i++)
         {
             auto& node = nodeTrans[i];
-            const size_t blasIndex = Assets::Scene::DecodeModelIndex(node.modelId);
-            if (blasIndex >= rt_->blas.size())
+            const size_t modelIndex = Assets::Scene::DecodeModelIndex(node.modelId);
+            if (modelIndex >= rt_->blasLodBase.size())
             {
-                SPDLOG_WARN("Skipping TLAS instance with stale model index {} (BLAS count {})", blasIndex,
-                            rt_->blas.size());
+                // Instance i must stay node i: ray hits resolve their NodeProxy and per-proxy LOD
+                // through the instance index. A null BLAS reference makes the slot inactive.
+                SPDLOG_WARN("Disabling TLAS instance with stale model index {} (model count {})", modelIndex,
+                            rt_->blasLodBase.size());
+                instances.push_back(VkAccelerationStructureInstanceKHR{});
                 continue;
             }
             const bool includeInGpuAs =
@@ -3783,8 +3875,9 @@ namespace Vulkan
                        ? rayMaskAll
                        : rayMaskNonShadowCaster)
                 : 0u;
+            // LOD0 here; Task.RayTracingLodSelect repoints the instance at this frame's level.
             instances.push_back(RayTracing::TopLevelAccelerationStructure::CreateInstance(
-                rt_->blas[blasIndex], glm::transpose(node.worldTS), node.instanceId, rayMask));
+                rt_->blas[rt_->blasLodBase[modelIndex]], glm::transpose(node.worldTS), node.instanceId, rayMask));
         }
 
         if (instances.size() > rt_->properties->MaxInstanceCount())

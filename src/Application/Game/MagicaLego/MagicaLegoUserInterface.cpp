@@ -10,6 +10,7 @@
 
 #include "Engine/Runtime/Interface/UserInterface.hpp"
 #include "Modules/NextUI/FontLoader.hpp"
+#include "Modules/NextUI/UI/DesktopUI.hpp"
 #include "Engine/Runtime/Platform/PlatformCommon.hpp"
 #include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 #include "Engine/Utilities/FileHelper.hpp"
@@ -20,6 +21,7 @@
 #include <imgui_internal.h>
 #include <imgui_stdlib.h>
 #include <spdlog/spdlog.h>
+#include <set>
 #include <utility>
 
 // ============================================================================
@@ -30,6 +32,20 @@ namespace
 {
     using namespace MagicaLego;
     using namespace MagicaLego::UIHelpers;
+
+    std::string ResolveMagicaLegoThumbnailPath(const FBasicBlock& block)
+    {
+        const std::string bundledRelativePath =
+            fmt::format("assets/textures/thumb/thumb_{}_{}.jpg", block.type, block.name);
+        const std::filesystem::path generatedPath = Utilities::FileHelper::ResolveWritablePath(
+            std::filesystem::path("thumbview") / fmt::format("thumb_{}_{}.jpg", block.type, block.name));
+        std::error_code errorCode;
+        if (std::filesystem::is_regular_file(generatedPath, errorCode))
+        {
+            return generatedPath.string();
+        }
+        return Utilities::FileHelper::GetPlatformFilePath(bundledRelativePath.c_str());
+    }
 
     // Layout constants (aliases for brevity)
     constexpr float titlebarSize = UI::TitleBarHeight;
@@ -197,10 +213,11 @@ void MagicaLegoUserInterface::OnInitUI()
 
 void MagicaLegoUserInterface::OnSceneLoaded()
 {
-    if (!std::filesystem::exists(Utilities::FileHelper::GetPlatformFilePath("bin/record.txt")))
+    const std::string recordPath = Utilities::FileHelper::GetWritableFilePath("bin/record.txt");
+    if (!std::filesystem::exists(recordPath))
     {
         // write the record.txt
-        std::ofstream recordFile(Utilities::FileHelper::GetPlatformFilePath("bin/record.txt"));
+        std::ofstream recordFile(recordPath);
         // write timestamp
         recordFile << fmt::format("{}", std::time(nullptr));
         recordFile.close();
@@ -236,194 +253,134 @@ void MagicaLegoUserInterface::OnSceneLoaded()
 
 void MagicaLegoUserInterface::DrawTitleBar()
 {
-    float dt = GetGameInstance()->GetEngine().GetDeltaSeconds();
-    bool isOpen = (uiStatus_ & EULUT_TitleBar) != 0;
-    float currentAnim = iam_tween_float(MakeAnimId("MagicaLego.TitleBarAlpha"), 0, isOpen ? 1.0f : 0.0f, 0.3f, {iam_ease_out_cubic}, iam_policy_crossfade, dt, 0.0f);
-
-    if (currentAnim <= 0.0f && !isOpen)
+    auto& engine = GetGameInstance()->GetEngine();
+    const bool isOpen = (uiStatus_ & EULUT_TitleBar) != 0;
+    if (!isOpen)
     {
-        GetGameInstance()->GetEngine().ConfigureCustomTitleBarDrag(false, 0.0f, 0.0f, 0.0f);
+        engine.ConfigureCustomTitleBarDrag(false, 0.0f, 0.0f, 0.0f);
         return;
     }
 
-    // 获取窗口的大小
-    ImVec2 windowSize = ImGui::GetMainViewport()->Size;
-    float titlebarLeftReservedWidth = 0.0f;
-    float titlebarRightReservedWidth = titlebarControlSize;
-
-    auto bgColor = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
-    bgColor.w = currentAnim * 0.6f;
-    
-    float animOffset = (1.0f - currentAnim) * (titlebarSize + 10.0f);
-    
-    ImGui::GetBackgroundDrawList()->AddRectFilled(ImVec2(0, -animOffset), ImVec2(windowSize.x, titlebarSize - animOffset), ImGui::ColorConvertFloat4ToU32(bgColor));
-
-    ImGui::PushFont(boldFont_);
-
-    auto textSize = ImGui::CalcTextSize("MagicaLEGO");
-    ImGui::GetForegroundDrawList()->AddText(ImVec2((windowSize.x - textSize.x) * 0.5f, (titlebarSize - textSize.y) * 0.5f - animOffset), IM_COL32(255, 255, 255, (int)(255 * currentAnim)), "MagicaLEGO");
-
-    ImGui::PopFont();
-
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-
-    ImGui::SetNextWindowPos(ImVec2(windowSize.x - titlebarControlSize, -animOffset), ImGuiCond_Always, ImVec2(0, 0));
-    ImGui::SetNextWindowSize(ImVec2(titlebarControlSize, titlebarSize));
-    ImGui::SetNextWindowBgAlpha(0.0f);
-
-    ImGui::Begin("TitleBarRight", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground);
-    titlebarRightReservedWidth = ImGui::GetWindowSize().x;
-    
-    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, currentAnim);
-
-    if (ImGui::Button(ICON_FA_MINUS, ImVec2(titlebarSize, titlebarSize)))
+    NextUI::Theme::FAppTitleBarConfig titleConfig{};
+    titleConfig.BrandWindowId = "TitleBarBrand##MagicaLego";
+    titleConfig.MenuWindowId = "TitleBarLeft##MagicaLego";
+    titleConfig.RightWindowId = "TitleBarRight##MagicaLego";
+    titleConfig.AppName = "MagicaLEGO";
+    titleConfig.Height = titlebarSize;
+    titleConfig.BrandIconSize = 28.0f;
+    titleConfig.TitleFont = boldFont_ != nullptr ? boldFont_ : ImGui::GetFont();
+    titleConfig.IsMaximized = engine.IsMaximized();
+    titleConfig.OnMinimize = [&engine]() { engine.RequestMinimize(); };
+    titleConfig.OnToggleMaximize = [&engine]() { engine.ToggleMaximize(); };
+    titleConfig.OnClose = [&engine]() { engine.RequestClose(); };
+    titleConfig.DrawMenuBar = [this, &engine]() -> float
     {
-        GetGameInstance()->GetEngine().RequestMinimize();
-    }
-    ImGui::SameLine();
-    if (ImGui::Button(GetGameInstance()->GetEngine().IsMaximized() ? ICON_FA_WINDOW_RESTORE : ICON_FA_SQUARE, ImVec2(titlebarSize, titlebarSize)))
-    {
-        GetGameInstance()->GetEngine().ToggleMaximize();
-    }
-    ImGui::SameLine();
-    if (ImGui::Button(ICON_FA_XMARK, ImVec2(titlebarSize, titlebarSize)))
-    {
-        GetGameInstance()->GetEngine().RequestClose();
-    }
-    ImGui::PopStyleVar();
-    ImGui::End();
-
-    ImGui::SetNextWindowPos(ImVec2(0, -animOffset), ImGuiCond_Always, ImVec2(0, 0));
-    ImGui::SetNextWindowSize(ImVec2(titlebarSize * 18, titlebarSize));
-    ImGui::SetNextWindowBgAlpha(0.0f);
-
-    ImGui::Begin("TitleBarLeft", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground);
-    
-    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, currentAnim);
-    
-    if (ImGui::Button(ICON_FA_GITHUB, ImVec2(titlebarSize, titlebarSize)))
-    {
-        NextRenderer::OSCommand("https://github.com/gameknife/gkNextRenderer");
-    }
-    BUTTON_TOOLTIP(LOCTEXT("Open Project Page in OS Browser"))
-    ImGui::SameLine();
-    if (ImGui::Button(ICON_FA_TWITTER, ImVec2(titlebarSize, titlebarSize)))
-    {
-        NextRenderer::OSCommand("https://x.com/gKNIFE_");
-    }
-    BUTTON_TOOLTIP(LOCTEXT("Open Twitter Page in OS Browser"))
-    ImGui::SameLine();
-    ImGui::GetForegroundDrawList()->AddLine(ImGui::GetCursorPos() + ImVec2(4, titlebarSize / 2 - 5), ImGui::GetCursorPos() + ImVec2(4, titlebarSize / 2 + 5), IM_COL32(255, 255, 255, 160), 2.0f);
-    ImGui::Dummy(ImVec2(10, 10));
-    ImGui::SameLine();
-    if (ImGui::Button(ICON_FA_CAMERA, ImVec2(titlebarSize, titlebarSize)))
-    {
-        static int counter = 0;
-        counter = 0;
-        // hide and request screenshot then un-hide
-        GetGameInstance()->GetEngine().AddTickedTask([this](double deltaSeconds)-> bool
+        const ImVec2 iconBtnSize(34.0f, 28.0f);
+        if (ImGui::Button(ICON_FA_GITHUB, iconBtnSize))
         {
-            counter++;
-            switch (counter)
+            NextRenderer::OSCommand("https://github.com/gameknife/gkNextRenderer");
+        }
+        BUTTON_TOOLTIP(LOCTEXT("Open Project Page in OS Browser"))
+        ImGui::SameLine(0.0f, 4.0f);
+        if (ImGui::Button(ICON_FA_TWITTER, iconBtnSize))
+        {
+            NextRenderer::OSCommand("https://x.com/gKNIFE_");
+        }
+        BUTTON_TOOLTIP(LOCTEXT("Open Twitter Page in OS Browser"))
+
+        ImGui::SameLine(0.0f, 10.0f);
+        if (ImGui::Button(ICON_FA_CAMERA, iconBtnSize))
+        {
+            static int counter = 0;
+            counter = 0;
+            engine.AddTickedTask([this](double deltaSeconds)-> bool
             {
-            case 1:
-                PushLayout(0x0);
-                GetGameInstance()->GetEngine().GetUserSettings().TemporalFrames = 512;
-                waiting_ = true;
-                waitingText_ = "Rendering...";
-                capture_ = true;
-                GetGameInstance()->SetCapturing(true);
-                return false;
-            case 512:
-                waiting_ = false;
-                return false;
-            case 513:
+                counter++;
+                switch (counter)
                 {
-                    std::string localPath = Utilities::FileHelper::GetPlatformFilePath("screenshots");
-                    Utilities::FileHelper::EnsureDirectoryExists(Utilities::FileHelper::GetAbsolutePath(localPath));
-                    auto time = std::time(nullptr);
-                    std::string filename = fmt::format("shot_{:%Y-%m-%d-%H-%M-%S}", *std::localtime(&time));
-                    GetGameInstance()->GetEngine().RequestScreenShot({.filename = localPath + "/" + filename});
+                case 1:
+                    PushLayout(0x0);
+                    GetGameInstance()->GetEngine().GetUserSettings().TemporalFrames = 512;
+                    waiting_ = true;
+                    waitingText_ = "Rendering...";
+                    capture_ = true;
+                    GetGameInstance()->SetCapturing(true);
+                    return false;
+                case 512:
+                    waiting_ = false;
+                    return false;
+                case 513:
+                    {
+                        const std::string localPath = Utilities::FileHelper::GetWritableDirectoryPath("screenshots").string();
+                        auto time = std::time(nullptr);
+                        std::string filename = fmt::format("shot_{:%Y-%m-%d-%H-%M-%S}", *std::localtime(&time));
+                        GetGameInstance()->GetEngine().RequestScreenShot({.filename = localPath + "/" + filename});
+                    }
+                    return false;
+                case 514:
+                    PopLayout();
+                    GetGameInstance()->GetEngine().GetUserSettings().TemporalFrames = 8;
+                    counter = 0;
+                    capture_ = false;
+                    GetGameInstance()->SetCapturing(false);
+                    ShowNotify("Screenshot captured, open in explorer?", []()-> void
+                    {
+                        const std::filesystem::path absPath =
+                            Utilities::FileHelper::GetWritableDirectoryPath("screenshots");
+
+                        NextRenderer::OSCommand(absPath.string().c_str());
+                    });
+                    return true;
+                default:
+                    return false;
                 }
-                return false;
-            case 514:
-                PopLayout();
-                GetGameInstance()->GetEngine().GetUserSettings().TemporalFrames = 8;
-                counter = 0;
-                capture_ = false;
-                GetGameInstance()->SetCapturing(false);
-                ShowNotify("Screenshot captured, open in explorer?", []()-> void
-                {
-                    std::string localPath = Utilities::FileHelper::GetPlatformFilePath("screenshots");
-                    auto absPath = Utilities::FileHelper::GetAbsolutePath(localPath);
-                    Utilities::FileHelper::EnsureDirectoryExists(absPath);
+            });
+        }
+        BUTTON_TOOLTIP(LOCTEXT("Take a Screenshot into the screenshots folder"))
 
-                    NextRenderer::OSCommand(absPath.string().c_str());
-                });
-                return true;
-            default:
-                return false;
-            }
-        });
-    }
-    BUTTON_TOOLTIP(LOCTEXT("Take a Screenshot into the screenshots folder"))
-    ImGui::SameLine();
-    std::string recordAText = ICON_FA_VIDEO " ";
-    recordAText += LOCTEXT("auto");
-    if (ImGui::Button(recordAText.c_str(), ImVec2(titlebarSize * 2, titlebarSize)))
-    {
-        RecordTimeline(true);
-    }
-    BUTTON_TOOLTIP(LOCTEXT("Record build timeline video, auto rotate"))
-    ImGui::SameLine();
-    std::string recordMText = ICON_FA_VIDEO " ";
-    recordMText += LOCTEXT("manual");
-    if (ImGui::Button(recordMText.c_str(), ImVec2(titlebarSize * 2, titlebarSize)))
-    {
-        RecordTimeline(false);
-    }
-    BUTTON_TOOLTIP(LOCTEXT("Record build timeline video, manual rotate"))
-    ImGui::SameLine();
-    ImGui::GetForegroundDrawList()->AddLine(ImGui::GetCursorPos() + ImVec2(4, titlebarSize / 2 - 5), ImGui::GetCursorPos() + ImVec2(4, titlebarSize / 2 + 5), IM_COL32(255, 255, 255, 160), 2.0f);
-    ImGui::Dummy(ImVec2(10, 10));
-    ImGui::SameLine();
-    bool paused = GetGameInstance()->IsBGMPaused();
-    if (ImGui::Button(paused ? ICON_FA_VOLUME_LOW : ICON_FA_VOLUME_XMARK, ImVec2(titlebarSize, titlebarSize)))
-    {
-        paused ? GetGameInstance()->PauseBGM(false) : GetGameInstance()->PauseBGM(true);
-    }
-    BUTTON_TOOLTIP(LOCTEXT("Toggle BGM"))
-    ImGui::SameLine();
-    if (ImGui::Button(ICON_FA_SHUFFLE, ImVec2(titlebarSize, titlebarSize)))
-    {
-        GetGameInstance()->PlayNextBGM();
-    }
-    BUTTON_TOOLTIP(LOCTEXT("Shuffle BGM"))
-    ImGui::SameLine();
-    ImGui::GetForegroundDrawList()->AddLine(ImGui::GetCursorPos() + ImVec2(4, titlebarSize / 2 - 5), ImGui::GetCursorPos() + ImVec2(4, titlebarSize / 2 + 5), IM_COL32(255, 255, 255, 160), 2.0f);
-    ImGui::Dummy(ImVec2(10, 10));
-    ImGui::SameLine();
-    if (ImGui::Button(ICON_FA_QUESTION, ImVec2(titlebarSize, titlebarSize)))
-    {
-        showHelp_ = !showHelp_;
-        GetGameInstance()->SetCapturing(showHelp_ || capture_);
-    }
-    BUTTON_TOOLTIP(LOCTEXT("Show Help"))
-    titlebarLeftReservedWidth = ImGui::GetItemRectMax().x + ImGui::GetStyle().ItemSpacing.x;
+        ImGui::SameLine(0.0f, 4.0f);
+        std::string recordAText = ICON_FA_VIDEO " ";
+        recordAText += LOCTEXT("auto");
+        if (ImGui::Button(recordAText.c_str(), ImVec2(68.0f, 28.0f)))
+        {
+            RecordTimeline(true);
+        }
+        BUTTON_TOOLTIP(LOCTEXT("Record build timeline video, auto rotate"))
 
-    ImGui::PopStyleVar();
-    ImGui::End();
+        ImGui::SameLine(0.0f, 4.0f);
+        std::string recordMText = ICON_FA_VIDEO " ";
+        recordMText += LOCTEXT("manual");
+        if (ImGui::Button(recordMText.c_str(), ImVec2(78.0f, 28.0f)))
+        {
+            RecordTimeline(false);
+        }
+        BUTTON_TOOLTIP(LOCTEXT("Record build timeline video, manual rotate"))
 
-    ImGui::PopStyleColor(2);
-    ImGui::PopStyleVar(5);
-    GetGameInstance()->GetEngine().ConfigureCustomTitleBarDrag(
-        isOpen, titlebarSize, titlebarLeftReservedWidth, titlebarRightReservedWidth);
+        ImGui::SameLine(0.0f, 10.0f);
+        bool paused = GetGameInstance()->IsBGMPaused();
+        if (ImGui::Button(paused ? ICON_FA_VOLUME_LOW : ICON_FA_VOLUME_XMARK, iconBtnSize))
+        {
+            paused ? GetGameInstance()->PauseBGM(false) : GetGameInstance()->PauseBGM(true);
+        }
+        BUTTON_TOOLTIP(LOCTEXT("Toggle BGM"))
+        ImGui::SameLine(0.0f, 4.0f);
+        if (ImGui::Button(ICON_FA_SHUFFLE, iconBtnSize))
+        {
+            GetGameInstance()->PlayNextBGM();
+        }
+        BUTTON_TOOLTIP(LOCTEXT("Shuffle BGM"))
+
+        ImGui::SameLine(0.0f, 10.0f);
+        if (ImGui::Button(ICON_FA_QUESTION, iconBtnSize))
+        {
+            showHelp_ = !showHelp_;
+            GetGameInstance()->SetCapturing(showHelp_ || capture_);
+        }
+        BUTTON_TOOLTIP(LOCTEXT("Show Help"))
+        return ImGui::GetItemRectMax().x;
+    };
+
+    NextUI::Theme::DrawAppTitleBar(engine, titleConfig);
 }
 
 void MagicaLegoUserInterface::DrawOpening() const 
@@ -692,10 +649,8 @@ void MagicaLegoUserInterface::RecordTimeline(bool autoRotate)
     auto maxStep = GetGameInstance()->GetMaxStep(); // add 5 step to stop the final still
     // round to latest 360 degree
     maxStep = maxStep + (autoRotate ? 360 : 30);
-    std::string localPath = Utilities::FileHelper::GetPlatformFilePath("captures");
-    std::string localTempPath = Utilities::FileHelper::GetPlatformFilePath("temps");
-    Utilities::FileHelper::EnsureDirectoryExists(Utilities::FileHelper::GetAbsolutePath(localPath));
-    Utilities::FileHelper::EnsureDirectoryExists(Utilities::FileHelper::GetAbsolutePath(localTempPath));
+    const std::string localPath = Utilities::FileHelper::GetWritableDirectoryPath("captures").string();
+    const std::string localTempPath = Utilities::FileHelper::GetWritableDirectoryPath("temps").string();
     auto time = std::time(nullptr);
     std::string filename = fmt::format("{}/magicalLego_{:%Y-%m-%d-%H-%M-%S}", localPath, *std::localtime(&time));
     PushLayout(0x0);
@@ -727,9 +682,8 @@ void MagicaLegoUserInterface::RecordTimeline(bool autoRotate)
 
             ShowNotify("Video recorded, open in explorer?", []()-> void
             {
-                std::string localPath = Utilities::FileHelper::GetPlatformFilePath("captures");
-                auto absPath = Utilities::FileHelper::GetAbsolutePath(localPath);
-                Utilities::FileHelper::EnsureDirectoryExists(absPath);
+                const std::filesystem::path absPath =
+                    Utilities::FileHelper::GetWritableDirectoryPath("captures");
                 NextRenderer::OSCommand(absPath.string().c_str());
             });
 
@@ -910,17 +864,29 @@ void MagicaLegoUserInterface::DrawLeftBar()
         static std::string newFilename = "magicalego";
         if (ImGui::BeginListBox("##listbox 2", ImVec2(-FLT_MIN, 8 * ImGui::GetTextLineHeightWithSpacing())))
         {
-            std::string path = Utilities::FileHelper::GetPlatformFilePath("assets/legos/");
-            Utilities::FileHelper::EnsureDirectoryExists(path);
-            for (const auto& entry : std::filesystem::directory_iterator(path))
+            std::set<std::string> saveNames;
+            for (const std::filesystem::path& path : {
+                     Utilities::FileHelper::GetRuntimeFilePath("assets/legos"),
+                     Utilities::FileHelper::ResolveWritablePath("assets/legos")})
             {
-                if (entry.path().extension() != ".mls")
+                std::error_code errorCode;
+                if (!std::filesystem::is_directory(path, errorCode))
                 {
                     continue;
                 }
-                std::string filename = entry.path().filename().string();
-                filename = filename.substr(0, filename.size() - 4);
+                for (const auto& entry : std::filesystem::directory_iterator(
+                         path, std::filesystem::directory_options::skip_permission_denied, errorCode))
+                {
+                    if (entry.path().extension() == ".mls")
+                    {
+                        std::string filename = entry.path().stem().string();
+                        saveNames.insert(std::move(filename));
+                    }
+                }
+            }
 
+            for (const std::string& filename : saveNames)
+            {
                 bool isSelected = (selectedFilename == filename);
                 ImGuiSelectableFlags flags = (selectedFilename == filename) ? ImGuiSelectableFlags_Highlight : 0;
                 if (ImGui::Selectable(filename.c_str(), isSelected, flags))
@@ -1045,7 +1011,7 @@ void MagicaLegoUserInterface::DrawRightBar()
 
             for (auto& block : basicBlocks)
             {
-                std::string filename = fmt::format("assets/textures/thumb/thumb_{}_{}.jpg", block.type, block.name);
+                const std::string filename = ResolveMagicaLegoThumbnailPath(block);
                 const NextUI::IUserInterface::FUiTextureHandle texture =
                     GetGameInstance()->GetEngine().GetUserInterface()->RequestUiTexture(filename);
                 ImTextureID id = texture.valid ? texture.textureId : static_cast<ImTextureID>(0);
@@ -1274,8 +1240,6 @@ void MagicaLegoUserInterface::DrawScriptLoadPopup()
 
         // List script files
         std::string scriptsPath = Utilities::FileHelper::GetPlatformFilePath("assets/scripts/");
-        Utilities::FileHelper::EnsureDirectoryExists(scriptsPath);
-
         if (ImGui::BeginListBox("##scriptlist", ImVec2(300, 8 * ImGui::GetTextLineHeightWithSpacing())))
         {
             try

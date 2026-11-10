@@ -23,6 +23,8 @@ type Config struct {
 
 type GNBConfig struct {
 	MinVersion string `toml:"min_version"`
+	// Lang is the default UI language: "zh", "en", or "auto"/empty for OS detect.
+	Lang string `toml:"lang"`
 }
 
 type VcpkgConfig struct {
@@ -32,7 +34,7 @@ type VcpkgConfig struct {
 }
 
 type ExternalConfig struct {
-	Streamline ExternalURLConfig `toml:"streamline"`
+	Streamline StreamlineConfig  `toml:"streamline"`
 	FidelityFX FidelityFXConfig  `toml:"fidelityfx"`
 	VulkanSDK  VulkanSDKConfig   `toml:"vulkansdk"`
 	LLM        LLMConfig         `toml:"llm"`
@@ -55,6 +57,11 @@ type DotNetConfig struct {
 }
 
 type FidelityFXConfig struct {
+	ExternalURLConfig
+	Version string `toml:"version"`
+}
+
+type StreamlineConfig struct {
 	ExternalURLConfig
 	Version string `toml:"version"`
 }

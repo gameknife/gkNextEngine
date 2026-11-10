@@ -6,13 +6,14 @@
   "viewport": { "width": 1600, "height": 900 },
   "steps": [
     { "type": "wait-until", "query": "engine.status", "op": "eq", "value": "Running", "timeoutMs": 20000 },
+    { "type": "wait-until", "query": "game.sceneReady", "op": "eq", "value": true, "timeoutMs": 30000 },
     { "type": "cvar", "name": "nextdayz.validation.loadout", "set": true },
     { "type": "wait-frames", "n": 60 },
 
     { "type": "log", "message": "M3: start armed with an AK and a full magazine" },
     { "type": "assert", "query": "game.equippedWeapon", "op": "eq", "value": "ak" },
     { "type": "assert", "query": "game.ammoInMag", "op": "eq", "value": 30 },
-    { "type": "assert", "query": "game.lootRemaining", "op": "eq", "value": 59 },
+    { "type": "assert", "query": "game.lootRemaining", "op": "eq", "value": 253 },
     { "type": "screenshot", "out": "screenshots/nextdayz_fps" },
 
     { "type": "log", "message": "M3: fire a burst -> magazine decrements" },
@@ -42,7 +43,7 @@
     { "type": "wait-frames", "n": 5 },
     { "type": "key", "code": "E", "action": "press" },
     { "type": "wait-ms", "ms": 1000 },
-    { "type": "assert", "query": "game.lootRemaining", "op": "lt", "value": 59 },
+    { "type": "assert", "query": "game.lootRemaining", "op": "lt", "value": 253 },
     { "type": "assert", "query": "game.inventoryCount", "op": "ge", "value": 2 },
 
     { "type": "log", "message": "M2: third person shows the soldier rig" },

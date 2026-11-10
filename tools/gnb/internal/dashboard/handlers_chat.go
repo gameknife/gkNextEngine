@@ -132,12 +132,12 @@ func (s *Server) buildChatVMSelection(sessionID, selectedOverride, providerOverr
 	return vm
 }
 
-func (s *Server) renderChatPanel(w http.ResponseWriter, sessionID string, errText string) {
-	s.render(w, "chat_panel", s.buildChatVM(sessionID, "", errText, ""))
+func (s *Server) renderChatPanel(w http.ResponseWriter, r *http.Request, sessionID string, errText string) {
+	s.render(w, r, "chat_panel", s.buildChatVM(sessionID, "", errText, ""))
 }
 
-func (s *Server) renderChatPanelFlash(w http.ResponseWriter, sessionID string, selectedModel string, flashText string) {
-	s.render(w, "chat_panel", s.buildChatVM(sessionID, selectedModel, "", flashText))
+func (s *Server) renderChatPanelFlash(w http.ResponseWriter, r *http.Request, sessionID string, selectedModel string, flashText string) {
+	s.render(w, r, "chat_panel", s.buildChatVM(sessionID, selectedModel, "", flashText))
 }
 
 func (s *Server) handleChatClear(w http.ResponseWriter, r *http.Request) {
@@ -151,16 +151,16 @@ func (s *Server) handleChatClear(w http.ResponseWriter, r *http.Request) {
 	modelID := strings.TrimSpace(r.FormValue("model"))
 	profileID, providerID, modelID, err := s.resolveChatSelection(r.FormValue("profile"), r.FormValue("provider"), modelID)
 	if err != nil {
-		s.renderChatPanel(w, r.FormValue("session_id"), err.Error())
+		s.renderChatPanel(w, r, r.FormValue("session_id"), err.Error())
 		return
 	}
 	sess := s.chats.ResetSelection(strings.TrimSpace(r.FormValue("session_id")), profileID, providerID, modelID)
-	s.renderChatPanel(w, sess.ID, "")
+	s.renderChatPanel(w, r, sess.ID, "")
 }
 
 func (s *Server) handleChatSession(w http.ResponseWriter, r *http.Request) {
 	sessionID := strings.TrimSpace(r.URL.Query().Get("id"))
-	s.render(w, "chat_panel", s.buildChatVMSelection(sessionID, "", strings.TrimSpace(r.URL.Query().Get("provider")), "", ""))
+	s.render(w, r, "chat_panel", s.buildChatVMSelection(sessionID, "", strings.TrimSpace(r.URL.Query().Get("provider")), "", ""))
 }
 
 func (s *Server) handleChatNew(w http.ResponseWriter, r *http.Request) {
@@ -174,11 +174,11 @@ func (s *Server) handleChatNew(w http.ResponseWriter, r *http.Request) {
 	modelID := strings.TrimSpace(r.FormValue("model"))
 	profileID, providerID, modelID, err := s.resolveChatSelection(r.FormValue("profile"), r.FormValue("provider"), modelID)
 	if err != nil {
-		s.renderChatPanel(w, r.FormValue("session_id"), err.Error())
+		s.renderChatPanel(w, r, r.FormValue("session_id"), err.Error())
 		return
 	}
 	sess := s.chats.CreateSelection(profileID, providerID, modelID)
-	s.renderChatPanel(w, sess.ID, "")
+	s.renderChatPanel(w, r, sess.ID, "")
 }
 
 func (s *Server) handleChatArchive(w http.ResponseWriter, r *http.Request) {
@@ -192,11 +192,11 @@ func (s *Server) handleChatArchive(w http.ResponseWriter, r *http.Request) {
 	modelID := strings.TrimSpace(r.FormValue("model"))
 	profileID, providerID, modelID, err := s.resolveChatSelection(r.FormValue("profile"), r.FormValue("provider"), modelID)
 	if err != nil {
-		s.renderChatPanel(w, r.FormValue("session_id"), err.Error())
+		s.renderChatPanel(w, r, r.FormValue("session_id"), err.Error())
 		return
 	}
 	sess := s.chats.ArchiveSelection(strings.TrimSpace(r.FormValue("session_id")), profileID, providerID, modelID)
-	s.renderChatPanel(w, sess.ID, "")
+	s.renderChatPanel(w, r, sess.ID, "")
 }
 
 func (s *Server) handleChatServe(w http.ResponseWriter, r *http.Request) {
@@ -210,16 +210,16 @@ func (s *Server) handleChatServe(w http.ResponseWriter, r *http.Request) {
 	profileID := strings.TrimSpace(r.FormValue("profile"))
 	profileID, providerID, modelID, err := s.resolveChatSelection(profileID, providerID, modelID)
 	if err != nil {
-		s.renderChatPanel(w, sessionID, err.Error())
+		s.renderChatPanel(w, r, sessionID, err.Error())
 		return
 	}
 	if providerID != "localllm" {
-		s.renderChatPanel(w, sessionID, "Serve 仅适用于 LocalLlama provider")
+		s.renderChatPanel(w, r, sessionID, "Serve 仅适用于 LocalLlama provider")
 		return
 	}
 	cfg, err := llm.SelectModel(s.opts.Config.External.LLM, modelID)
 	if err != nil {
-		s.renderChatPanel(w, sessionID, err.Error())
+		s.renderChatPanel(w, r, sessionID, err.Error())
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
@@ -227,10 +227,10 @@ func (s *Server) handleChatServe(w http.ResponseWriter, r *http.Request) {
 	srv := llm.NewServer(s.opts.RepoRoot, cfg)
 	info, err := srv.EnsureRunning(ctx)
 	if err != nil {
-		s.renderChatPanel(w, sessionID, "启动 LLM 失败: "+err.Error())
+		s.renderChatPanel(w, r, sessionID, "启动 LLM 失败: "+err.Error())
 		return
 	}
-	s.renderChatPanelFlash(w, sessionID, cfg.ActiveModel().ID, fmt.Sprintf("llama-server running pid=%d model=%s", info.PID, info.Model))
+	s.renderChatPanelFlash(w, r, sessionID, cfg.ActiveModel().ID, fmt.Sprintf("llama-server running pid=%d model=%s", info.PID, info.Model))
 }
 
 func (s *Server) handleChatStop(w http.ResponseWriter, r *http.Request) {
@@ -242,10 +242,10 @@ func (s *Server) handleChatStop(w http.ResponseWriter, r *http.Request) {
 	modelID := strings.TrimSpace(r.FormValue("model"))
 	srv := llm.NewServer(s.opts.RepoRoot, s.opts.Config.External.LLM)
 	if err := srv.Stop(); err != nil {
-		s.renderChatPanel(w, sessionID, "停止 LLM 失败: "+err.Error())
+		s.renderChatPanel(w, r, sessionID, "停止 LLM 失败: "+err.Error())
 		return
 	}
-	s.renderChatPanelFlash(w, sessionID, modelID, "llama-server stopped")
+	s.renderChatPanelFlash(w, r, sessionID, modelID, "llama-server stopped")
 }
 
 func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request) {
@@ -265,12 +265,12 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	toolProbe := r.FormValue("tool_probe") == "1"
 	maxTokens := parseChatMaxTokens(r.FormValue("max_tokens"))
 	if userText == "" {
-		s.renderChatPanel(w, sessionID, "请输入要发送的内容")
+		s.renderChatPanel(w, r, sessionID, "请输入要发送的内容")
 		return
 	}
 	profileID, providerID, modelID, err := s.resolveChatSelection(profileID, providerID, modelID)
 	if err != nil {
-		s.renderChatPanel(w, sessionID, err.Error())
+		s.renderChatPanel(w, r, sessionID, err.Error())
 		return
 	}
 	sess := s.chats.Get(sessionID, modelID)
@@ -282,7 +282,7 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	runtime, err := ai.NewRuntime(s.opts.RepoRoot, s.opts.Config)
 	if err != nil {
-		s.renderChatPanel(w, sess.ID, "AI runtime 失败: "+err.Error())
+		s.renderChatPanel(w, r, sess.ID, "AI runtime 失败: "+err.Error())
 		return
 	}
 	converted := make([]protocol.Message, len(messages))
@@ -297,11 +297,11 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request) {
 		result, _, err = runtime.Router.Chat(ctx, router.Overrides{Profile: profileID, Provider: providerID, Model: modelID}, request, nil)
 	}
 	if err != nil {
-		s.renderChatPanel(w, sess.ID, "LLM 请求失败: "+err.Error())
+		s.renderChatPanel(w, r, sess.ID, "LLM 请求失败: "+err.Error())
 		return
 	}
 	sess = s.chats.AppendExchangeSelection(sess.ID, profileID, providerID, modelID, userText, strings.TrimSpace(result.Content))
-	s.renderChatPanel(w, sess.ID, "")
+	s.renderChatPanel(w, r, sess.ID, "")
 }
 
 func (s *Server) handleChatSendStream(w http.ResponseWriter, r *http.Request) {

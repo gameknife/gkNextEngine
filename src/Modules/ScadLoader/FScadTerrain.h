@@ -20,8 +20,19 @@
 //   ["lake",     [x,y], radius, depth]
 //   ["river",    [[x,y],...], width, depth]     // carve + water surface
 //   ["road",     [[x,y],...], width]            // flatten + dirt color
-//   ["pad",      [x,y], [w,d], rotDeg]          // flat build site
+//   ["pad",      [x,y], [w,d], rotDeg(, apron)(, "biome")]  // flat build site
 //   ["hmap",     path|[cols,rows][,grid], mode, zScale, zBias]  // sampled DEM
+//   ["paint",    [[x,y],...], "biome"(, ["alt", period, angleDeg])]  // land cover (no height)
+//
+// pad's optional trailing operands: a number overrides the blend apron width
+// (metres outside the rectangle), a biome name changes only the rendered
+// surface (a farmyard of trodden earth or a lawn instead of grey paving); the
+// cell keeps its pad semantics for queries, vegetation and grass. paint
+// recolours natural ground inside a closed polygon (fields, forest floor,
+// meadows). Water, roads, pads, cliffs and snow keep priority; later paints
+// win over earlier ones. The optional stripe operand alternates the polygon
+// between two surfaces in parallel bands (ploughed strips, stubble rows);
+// periods below ~4 terrain cells alias into noise.
 //
 // The hmap operator stamps a sampled heightfield (real-world elevation, a
 // sculpted mask, ...) into the field. Two source forms:
@@ -49,24 +60,12 @@
 
 #include "Modules/ScadLoader/FScadGeometry.h"
 #include "Modules/ScadLoader/FScadTypes.h"
+#include "Engine/Runtime/Components/TerrainBiome.hpp"
 
 namespace Assets::Scad
 {
     // Stable biome ids (returned by gk_terrain_info and stored per cell).
-    enum class ETerrainBiome : uint8_t
-    {
-        Grass = 0,
-        GrassDark = 1,
-        DryGrass = 2,
-        Sand = 3,
-        Rock = 4,
-        RockHigh = 5,
-        Snow = 6,
-        Bed = 7,  // river/lake bed (under water)
-        Road = 8,
-        Pad = 9,
-        Count
-    };
+    using ETerrainBiome = Runtime::ETerrainBiome;
 
     // Sampled heightfield backing an ["hmap", ...] feature. Either decoded from
     // a .hmap side-car asset or built from an inline TERR literal. Immutable and
@@ -95,7 +94,8 @@ namespace Assets::Scad
             River,
             Road,
             Pad,
-            Hmap
+            Hmap,
+            Paint
         };
 
         EType type = EType::Mountain;
@@ -107,7 +107,12 @@ namespace Assets::Scad
         double depth = 0.0;        // lake/river
         double width = 0.0;        // ridge/river/road
         double rugged = 0.0;       // mountain noise perturbation [0..1]
-        std::vector<glm::dvec2> pts; // ridge/river/road polyline
+        double apron = -1.0;       // pad blend width override (<0 => derived from size)
+        int biome = -1;            // paint biome / pad rendered surface (<0 => default)
+        int stripeBiome = -1;      // paint: alternate biome of parallel bands (<0 => solid)
+        double stripePeriod = 0.0; // paint: band pair width in metres
+        double stripeAngle = 0.0;  // paint: band direction, degrees from +x
+        std::vector<glm::dvec2> pts; // ridge/river/road polyline, paint ring
 
         // hmap
         std::string path;   // runtime-root-relative .hmap ("" => inline literal)
@@ -164,8 +169,20 @@ namespace Assets::Scad
             std::string materialName;
             TriSoup tris; // SCAD space (Z-up)
         };
-        std::vector<ColoredTris> landGeom;  // land + skirt + bottom, per color
+        std::vector<ColoredTris> landGeom;  // land + skirt + bottom, per color (minus road beds)
         std::vector<ColoredTris> waterGeom; // translucent water surfaces
+        // Faces a road feature turned into road, grouped by the surface they
+        // would have without it (natural colour + material name). The default
+        // look paints them roadColor: one staircase of 3-4 m cells, the jagged
+        // edge of a diagonal road. gk_terrain(..., detail = true) keeps their
+        // natural surface and lays the road down as roadDecalGeom instead.
+        std::vector<ColoredTris> roadBedGeom;
+        glm::vec4 roadColor{0.5f, 0.5f, 0.5f, 1.0f};
+        // Road ribbons draped a few centimetres over the mesh along each
+        // (smoothed) road polyline: a verge, the surface (asphalt / gravel /
+        // track by width) and the grass strip of a track, with noise-wobbled
+        // edges. Drawn only in the detailed look; never collided or ray-cast.
+        std::vector<ColoredTris> roadDecalGeom;
 
         static constexpr uint8_t kFlagWater = 1u << 0;
         static constexpr uint8_t kFlagRoad = 1u << 1;

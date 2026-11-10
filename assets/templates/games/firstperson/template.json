@@ -1,0 +1,16 @@
+{
+  "id": "firstperson",
+  "displayName": "First-Person Shooter",
+  "description": "A first-person arena: pointer-locked look, WASD, hitscan fire, and infected that walk you down. The camera is the player; the enemies are real ScadRig characters.",
+  "sortOrder": 40,
+  "highlights": [
+    "Pointer-locked yaw/pitch look, camera driven by OnOverrideCamera",
+    "Hitscan fire with tracers, an enemy pool, health, ammo and reload",
+    "ScadRig infected: pools declared at scene build, clips played per state"
+  ],
+  "requiredModules": ["ScadLoader", "NextGameplay"],
+  "initialScene": "Empty.proc",
+  "window": { "width": 1280, "height": 720, "forceSDR": true },
+  "showFlags": { "debugGraphicsPanel": false, "overlay": false },
+  "hotReload": true
+}

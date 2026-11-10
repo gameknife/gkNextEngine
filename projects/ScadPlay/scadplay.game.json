@@ -1,0 +1,24 @@
+{
+  "id": "scadplay",
+  "displayName": "ScadPlay",
+  "assembly": "scadplay/ScadPlay.dll",
+  "project": "Scripts/ScadPlay.csproj",
+  "window": {
+    "title": "ScadPlay",
+    "width": 1600,
+    "height": 900,
+    "forceSDR": true
+  },
+  "requiredModules": ["ScadLoader", "NextPhysics", "NextGameplay"],
+  "initialScene": "",
+  "showFlags": {
+    "debugGraphicsPanel": false,
+    "debugPhysicsOverlay": false,
+    "overlay": false
+  },
+  "hotReload": true,
+  "compileManagedSources": false,
+
+  "_comment_initialScene": "Empty: the game resolves its level itself (Content/configs/scadplay.json, or SCADPLAY_LEVEL) and loads the source-tree copy so edits apply live.",
+  "_comment_hotReload": "Gameplay is meant to be rewritten while the game runs. A reloaded instance restores the player and mechanism state from out/scadplay/session.json and rebuilds the level."
+}

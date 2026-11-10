@@ -231,6 +231,12 @@ namespace Assets
         defaultWhiteTexture_.reset();
         textureImages_.clear();
         descriptorSetManager_.reset();
+        // Loaders reach the pool through GetInstance(); a torn-down engine (tests, tools that
+        // restart the renderer) must not leave them a dangling pointer.
+        if (instance_ == this)
+        {
+            instance_ = nullptr;
+        }
     }
 
     void GlobalTexturePool::BindTexture(uint32_t textureIdx, const TextureImage& textureImage)
@@ -753,8 +759,10 @@ namespace Assets
                         GlobalTexturePool::GetInstance()->hdrShUpdatedCallback_();
                     }
                 }
+                pendingTextureLoads_.fetch_sub(1, std::memory_order_release);
             };
 
+        pendingTextureLoads_.fetch_add(1, std::memory_order_relaxed);
         if (textureWorkerUploadEnabled_)
         {
             Tasks::TaskCoordinator::GetInstance()->AddTask(
@@ -910,8 +918,10 @@ namespace Assets
                 {
                     GlobalTexturePool::GetInstance()->hdrShUpdatedCallback_();
                 }
+                pendingTextureLoads_.fetch_sub(1, std::memory_order_release);
             };
 
+        pendingTextureLoads_.fetch_add(1, std::memory_order_relaxed);
         if (textureWorkerUploadEnabled_)
         {
             Tasks::TaskCoordinator::GetInstance()->AddTask(

@@ -49,6 +49,7 @@
 
 #define BUILDVER(X) std::string buildver(#X);
 #include "Engine/Runtime/Subsystems/NextPhysics.hpp"
+#include "Engine/Runtime/Subsystems/NextRig.hpp"
 #include "Engine/Runtime/Platform/PlatformCommon.hpp"
 #include "build.version"
 
@@ -140,13 +141,17 @@ namespace
     {
         if (!requestedFilename.empty())
         {
-            return requestedFilename;
+            const std::filesystem::path requestedPath(requestedFilename);
+            const std::filesystem::path resolvedPath = requestedPath.is_absolute()
+                ? requestedPath.lexically_normal()
+                : Utilities::FileHelper::ResolveWritablePath(requestedPath);
+            Utilities::FileHelper::EnsureDirectoryExists(resolvedPath.parent_path());
+            return resolvedPath.string();
         }
 
         const auto now = std::time(nullptr);
         const std::string filename = fmt::format("{}_{:%Y-%m-%d-%H-%M-%S}", defaultPrefix, *std::localtime(&now));
-        const std::string directory = Utilities::FileHelper::GetWritableFilePath("screenshots");
-        Utilities::FileHelper::EnsureDirectoryExists(directory);
+        const std::string directory = Utilities::FileHelper::GetWritableDirectoryPath("screenshots").string();
         return (std::filesystem::path(directory) / filename).string();
     }
 } // namespace
@@ -384,6 +389,13 @@ NextEngine::NextEngine(Runtime::Config::Options& options, void* userdata)
     services_.cvarSystem->ExecuteCommand("r.rendererType 5");
     services_.cvarSystem->ExecuteCommand("r.samples 1");
     services_.cvarSystem->ExecuteCommand("r.upscaler.qualityMode 1");
+#elif IOS
+    // The swapchain is now the panel's native pixel count, not UIKit's point count, so the
+    // default output extent jumped by the square of the display's pixel density (a 1080p phone
+    // goes from ~0.3MP to ~2.1MP). Auto would still resolve that to Native at exactly 1080p;
+    // pick the same balanced upscale Android uses and let the upscaler own the render extent.
+    // An archived user setting still overrides this below.
+    services_.cvarSystem->ExecuteCommand("r.upscaler.qualityMode 1");
 #endif
     services_.cvarSystem->LoadUserFiles();
     
@@ -408,6 +420,38 @@ NextEngine::NextEngine(Runtime::Config::Options& options, void* userdata)
     services_.localization->LoadFromTxt(fmt::format("assets/locale/{}.txt", options_->locale), options_->locale);
 
     GK_LOG_STAGE("---- Next Engine Initialized in {}", stopwatch.elapsed_ms());
+}
+
+void NextEngine::UpdateFramePacerConfig()
+{
+    Runtime::FFramePacer::FConfig config{};
+    config.paceDelta = config_.userSettings.FramePacing;
+    config.limitBurst = config_.userSettings.FramePacingLimitBurst;
+    // Only a vsync present mode has a cadence to pace against. Immediate and Mailbox loops are
+    // meant to run free, and their wall-clock delta is already the interval the frame is shown for.
+    if (renderer_ && renderer_->HasSwapChain())
+    {
+        const VkPresentModeKHR presentMode = renderer_->SwapChain().PresentMode();
+        config.vsyncPresentMode = presentMode == VK_PRESENT_MODE_FIFO_KHR ||
+            presentMode == VK_PRESENT_MODE_FIFO_RELAXED_KHR;
+    }
+    config.displayRefreshHz = window_ ? window_->DisplayRefreshRateHz() : 0.0;
+
+    // Whether the simulation is following the display cadence is exactly the question to ask when
+    // a build judders, so say it out loud whenever the answer changes rather than leaving it to be
+    // rediscovered with a profiler.
+    const auto& previous = framePacer_.Config();
+    if (config.paceDelta != previous.paceDelta || config.limitBurst != previous.limitBurst ||
+        config.vsyncPresentMode != previous.vsyncPresentMode ||
+        config.displayRefreshHz != previous.displayRefreshHz)
+    {
+        SPDLOG_INFO("Frame pacing: delta={} burstLimit={} presentMode={} display={:.2f}Hz",
+                    config.paceDelta ? "display cadence" : "wall clock",
+                    config.limitBurst ? "on" : "off",
+                    config.vsyncPresentMode ? "vsync" : "unsynchronized",
+                    config.displayRefreshHz);
+    }
+    framePacer_.Configure(config);
 }
 
 void NextEngine::TickHotReload()
@@ -549,6 +593,12 @@ void NextEngine::Start()
         }
     }
 
+    // Optional character rigs (NextGameplay). Applications without characters never install one.
+    if (rigFactory_)
+    {
+        services_.rig = rigFactory_();
+    }
+
     // Optional audio module.
     if (audioFactory_)
     {
@@ -599,7 +649,16 @@ void NextEngine::Start()
             return true;
         });
 
-    StartPipelineWarmup();
+    if (options_->Dedicated)
+    {
+        // Nothing will be drawn, so no pipeline needs warming (warm-up advances on presents).
+        status_ = NextRenderer::EApplicationStatus::Running;
+        SPDLOG_INFO("Dedicated mode: ticking at {} Hz, nothing is drawn", options_->DedicatedTickRate);
+    }
+    else
+    {
+        StartPipelineWarmup();
+    }
 
     GK_LOG_STAGE("---- Next Engine Started in {}", stopwatch.elapsed_ms());
 }
@@ -656,10 +715,7 @@ bool NextEngine::HandleEvent(SDL_Event& event)
 
     const bool globalCaptureShortcut = HandleGlobalCaptureShortcut(event);
 
-    if (userInterface_)
-    {
-        userInterface_->HandleEvent(&event);
-    }
+    const bool uiConsumed = userInterface_ && userInterface_->HandleEvent(&event);
     const bool rmlUiConsumed = uiOverlay_ && uiOverlay_->HandleEvent(event);
 
 #if IOS || ANDROID
@@ -687,6 +743,16 @@ bool NextEngine::HandleEvent(SDL_Event& event)
         case SDL_EVENT_GAMEPAD_BUTTON_UP:
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         case SDL_EVENT_MOUSE_BUTTON_UP:
+            if (!rmlUiConsumed && !uiConsumed)
+            {
+                scriptRuntime_->HandleEvent(event);
+            }
+            break;
+        case SDL_EVENT_MOUSE_MOTION:
+            // Motion is accumulated as a delta for pointer-locked look. It is forwarded even
+            // when ImGui consumed the event: the editor's panels sit around the play viewport,
+            // and a grabbed cursor would otherwise stop turning the view the moment it is
+            // reported over a docked window.
             if (!rmlUiConsumed)
             {
                 scriptRuntime_->HandleEvent(event);
@@ -723,7 +789,7 @@ bool NextEngine::HandleEvent(SDL_Event& event)
     case SDL_EVENT_KEY_UP:
     case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
     case SDL_EVENT_GAMEPAD_BUTTON_UP:
-        if (!rmlUiConsumed && !globalCaptureShortcut)
+        if (!rmlUiConsumed && !uiConsumed && !globalCaptureShortcut)
         {
             OnKey(event);
         }
@@ -834,11 +900,24 @@ bool NextEngine::Tick(bool forcingDelta)
         // delta time calc
         {
             const auto prevTime = frameState_.time;
+            // Held before the timestamp is taken: the wait belongs to this frame's period, not the
+            // next one's. On a loop the presentation path is pacing correctly this does nothing.
+            UpdateFramePacerConfig();
+            if (!forcingDelta)
+            {
+                SCOPED_CPU_TIMER("frame pacing");
+                framePacer_.Hold();
+            }
             double currentTime = GetWindow().GetTime();
             double minimumTickInterval = 0.0;
             if (window_ && window_->IsMinimized())
             {
                 minimumTickInterval = minimizedTickIntervalSeconds;
+            }
+            if (options_->Dedicated)
+            {
+                // No present paces a dedicated server: sleep to its tick rate instead.
+                minimumTickInterval = 1.0 / static_cast<double>(options_->DedicatedTickRate);
             }
             if (!forcingDelta && minimumTickInterval > 0.0)
             {
@@ -853,9 +932,17 @@ bool NextEngine::Tick(bool forcingDelta)
                 }
             }
             frameState_.time = currentTime;
-            frameState_.deltaSeconds = frameState_.time - prevTime;
+            frameState_.rawDeltaSeconds = frameState_.time - prevTime;
+            frameState_.deltaSeconds = frameState_.rawDeltaSeconds;
             if (forcingDelta)
+            {
                 frameState_.deltaSeconds = 1.0 / 30.0;
+                framePacer_.Reset();
+            }
+            else
+            {
+                frameState_.deltaSeconds = framePacer_.Pace(frameState_.rawDeltaSeconds);
+            }
             float invDelta = static_cast<float>(frameState_.deltaSeconds) / 60.0f;
             frameState_.smoothedDeltaSeconds =
                 glm::mix(frameState_.smoothedDeltaSeconds, frameState_.deltaSeconds, invDelta * 100.0f);
@@ -943,6 +1030,14 @@ bool NextEngine::Tick(bool forcingDelta)
             }
         }
 
+        // Before StartUpdateNodes: an animator writes bone TRS and refreshes its subtree, so it
+        // has to have run by the time the scene's node update is kicked off.
+        if (services_.rig)
+        {
+            SCOPED_CPU_TIMER("rig animation");
+            services_.rig->Tick(static_cast<float>(frameState_.deltaSeconds));
+        }
+
         if (config_.userSettings.TickPhysics && services_.physics)
         {
             SCOPED_CPU_TIMER("physics kick");
@@ -953,6 +1048,14 @@ bool NextEngine::Tick(bool forcingDelta)
         // 到这里，这一帧的nodes操作已经结束，这里可以发起Scene Nodes的多线程更新
         if (scene_) scene_->StartUpdateNodes();
         
+        if (options_->Dedicated)
+        {
+            // Nothing is drawn, but finished background work (scene loads) still
+            // completes on this thread, as it would before a frame.
+            OnRendererBeforeNextFrame();
+            ++dedicatedTicks_;
+        }
+        else
         {
             SCOPED_CPU_TIMER("draw frame");
             if (ShouldCaptureScreenShotThisFrame())
@@ -961,7 +1064,7 @@ bool NextEngine::Tick(bool forcingDelta)
             }
             renderer_->DrawFrame();
         }
-        frameState_.totalFrames = renderer_->FrameCount();
+        frameState_.totalFrames = options_->Dedicated ? dedicatedTicks_ : renderer_->FrameCount();
         if (options_->ExitAfterFrames > 0 && frameState_.totalFrames >= options_->ExitAfterFrames)
         {
             RequestExit(0);
@@ -1703,12 +1806,6 @@ void NextEngine::OnRendererAfterSubmit()
             SCOPED_CPU_TIMER("cvar editor ui");
             debugUiProvider_->DrawCVarEditor(*this, config_.showFlags.DebugCVarPanel);
         }
-        if (debugUiProvider_ && config_.showFlags.DebugProfileOverlay)
-        {
-            SCOPED_CPU_TIMER("profile debug ui");
-            debugUiProvider_->DrawProfileOverlay(*this, stats,
-                                                 gameInstance_->GetGraphicsDebugPanelTopOffset());
-        }
     }
     const NextUI::EUiDeveloperLayer developerLayers =
         uiResult.requestedDeveloperLayers & uiContext.policy.allowedDeveloperLayers;
@@ -1716,7 +1813,7 @@ void NextEngine::OnRendererAfterSubmit()
     {
         SCOPED_CPU_TIMER("overlay ui");
         NextUI::FUiFrameDispatcher::DrawDeveloperLayers(
-            *this, stats, developerLayers, config_.showFlags.DebugProfileOverlay);
+            *this, stats, developerLayers, false);
     }
     if (debugUiProvider_)
     {

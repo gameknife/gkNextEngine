@@ -9,7 +9,8 @@ namespace Assets::Scad
         public:
             Parser(const std::vector<Token>& tokens) : tokens_(tokens) {}
 
-            bool ParseProgram(Scope& outScope, std::string& outError)
+            bool ParseProgram(Scope& outScope, std::string& outError,
+                              std::vector<FScadTopLevelSpan>* outTopLevelSpans)
             {
                 while (!Check(Tok::Eof) && !failed_)
                 {
@@ -18,6 +19,7 @@ namespace Assets::Scad
                         Advance();
                         continue;
                     }
+                    const size_t firstToken = pos_;
                     StmtPtr s = ParseStatement();
                     if (failed_)
                     {
@@ -26,6 +28,17 @@ namespace Assets::Scad
                     if (s)
                     {
                         outScope.push_back(s);
+                        if (outTopLevelSpans)
+                        {
+                            // pos_ now sits one past the statement's last token.
+                            const size_t lastToken = pos_ > firstToken ? pos_ - 1 : firstToken;
+                            FScadTopLevelSpan span;
+                            span.begin = tokens_[firstToken].begin;
+                            span.end = tokens_[lastToken].end;
+                            span.line = tokens_[firstToken].line;
+                            span.endLine = tokens_[lastToken].line;
+                            outTopLevelSpans->push_back(span);
+                        }
                     }
                 }
                 if (failed_)
@@ -113,6 +126,7 @@ namespace Assets::Scad
                 auto s = std::make_shared<Stmt>();
                 s->kind = StmtKind::ModuleDef;
                 s->line = Cur().line;
+                s->sourceOffset = Cur().begin;
                 Advance(); // 'module'
                 if (!Check(Tok::Ident))
                 {
@@ -132,6 +146,7 @@ namespace Assets::Scad
                 auto s = std::make_shared<Stmt>();
                 s->kind = StmtKind::FunctionDef;
                 s->line = Cur().line;
+                s->sourceOffset = Cur().begin;
                 Advance(); // 'function'
                 if (!Check(Tok::Ident))
                 {
@@ -153,6 +168,7 @@ namespace Assets::Scad
                 auto s = std::make_shared<Stmt>();
                 s->kind = StmtKind::Assign;
                 s->line = Cur().line;
+                s->sourceOffset = Cur().begin;
                 s->name = Advance().text; // ident or special
                 Expect(Tok::Assign, "'='");
                 s->value = ParseExpr();
@@ -184,6 +200,7 @@ namespace Assets::Scad
                     s->kind = StmtKind::Instance;
                     s->name = "union";
                     s->line = Cur().line;
+                    s->sourceOffset = Cur().begin;
                     s->modifiers = modifiers;
                     s->children = ParseChild();
                     return s;
@@ -198,6 +215,7 @@ namespace Assets::Scad
                 auto s = std::make_shared<Stmt>();
                 s->kind = StmtKind::Instance;
                 s->line = Cur().line;
+                s->sourceOffset = Cur().begin;
                 s->name = Advance().text;
                 s->modifiers = modifiers;
 
@@ -669,11 +687,16 @@ namespace Assets::Scad
         };
     } // namespace
 
-    bool ScadParser::Parse(const std::vector<Token>& tokens, Scope& outScope, std::string& outError)
+    bool ScadParser::Parse(const std::vector<Token>& tokens, Scope& outScope, std::string& outError,
+                           std::vector<FScadTopLevelSpan>* outTopLevelSpans)
     {
         outScope.clear();
         outError.clear();
+        if (outTopLevelSpans)
+        {
+            outTopLevelSpans->clear();
+        }
         Parser parser(tokens);
-        return parser.ParseProgram(outScope, outError);
+        return parser.ParseProgram(outScope, outError, outTopLevelSpans);
     }
 } // namespace Assets::Scad

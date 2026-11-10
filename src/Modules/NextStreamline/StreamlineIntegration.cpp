@@ -657,14 +657,14 @@ namespace
             pref.pathsToPlugins = {};
             pref.numPathsToPlugins = 0;
             pref.pathToLogsAndData = {};
-            pref.logLevel = sl::LogLevel::eDefault;
+            pref.logLevel = sl::LogLevel::eOff;
             pref.logMessageCallback = OnStreamlineLog;
             pref.applicationId = 12345678;
             pref.engine = sl::EngineType::eCustom;
             pref.engineVersion = "1.0.0";
             pref.projectId = "36cf6361-1044-4603-9ef3-066606660666";
             pref.renderAPI = sl::RenderAPI::eVulkan;
-            pref.flags = sl::PreferenceFlags::eUseFrameBasedResourceTagging;
+            pref.flags =  sl::PreferenceFlags::eDisableCLStateTracking | sl::PreferenceFlags::eDisableDebugText | sl::PreferenceFlags::eUseFrameBasedResourceTagging;
 
             static constexpr sl::Feature kFeatures[] = {
                 sl::kFeatureDLSS,
@@ -998,6 +998,46 @@ namespace
             return hooks_;
         }
 
+        // Loading the DLSS-G plugin is what installs Streamline's DLFG proxy swapchain, and the
+        // proxy owns presentation from then on -- with frame generation off it still releases
+        // swapchain images in bursts of three instead of one per vblank, which turns a FIFO loop
+        // into three ~0.7ms frames followed by a ~60ms stall on the frame fence. Keep the plugin
+        // unloaded unless this swapchain lifetime actually generates frames.
+        //
+        // Must be called with the device idle and no swapchain alive: slSetFeatureLoaded requires
+        // a created device and no concurrent Vulkan work.
+        void SetFrameGenerationFeatureLoaded(bool loaded)
+        {
+            EnsureInitialized();
+
+            std::lock_guard lock(mutex_);
+            if (!initialized_ || !deviceReady_ || dlssgFeatureLoaded_ == loaded)
+            {
+                return;
+            }
+
+            const sl::Result result = slSetFeatureLoaded(sl::kFeatureDLSS_G, loaded);
+            if (result != sl::Result::eOk)
+            {
+                SPDLOG_WARN("Streamline slSetFeatureLoaded(DLSS-G, {}) failed: {}",
+                            loaded, static_cast<int>(result));
+                return;
+            }
+
+            dlssgFeatureLoaded_ = loaded;
+            SPDLOG_INFO("Streamline DLSS-G plugin {}; presentation runs on {}",
+                        loaded ? "loaded" : "unloaded",
+                        loaded ? "the DLFG proxy swapchain" : "the native swapchain");
+        }
+
+        bool IsFrameGenerationFeatureLoaded()
+        {
+            EnsureInitialized();
+
+            std::lock_guard lock(mutex_);
+            return dlssgFeatureLoaded_;
+        }
+
     private:
         void RefreshRequirements()
         {
@@ -1063,8 +1103,15 @@ namespace
                 caps_.supportedTypes, Rendering::Upscaler::EUpscalerType::DLSSRayReconstruction,
                 slIsFeatureSupported(sl::kFeatureDLSS_RR, adapterInfo) == sl::Result::eOk);
             caps_.supportReflex = slIsFeatureSupported(sl::kFeatureReflex, adapterInfo) == sl::Result::eOk;
-            const bool supportFrameGeneration = caps_.supportReflex &&
-                slIsFeatureSupported(sl::kFeatureDLSS_G, adapterInfo) == sl::Result::eOk;
+            // Asked once, while the plugin is still loaded: slIsFeatureSupported reports an
+            // unloaded feature as missing, and the engine unloads DLSS-G whenever a swapchain
+            // lifetime is not going to generate frames.
+            if (!dlssgSupportChecked_)
+            {
+                dlssgSupportChecked_ = true;
+                dlssgSupported_ = slIsFeatureSupported(sl::kFeatureDLSS_G, adapterInfo) == sl::Result::eOk;
+            }
+            const bool supportFrameGeneration = caps_.supportReflex && dlssgSupported_;
             Rendering::Upscaler::SetUpscalerTypeSupport(
                 caps_.frameGenerationTypes, Rendering::Upscaler::EUpscalerType::DLSS,
                 supportFrameGeneration && Rendering::Upscaler::SupportsUpscalerType(
@@ -1087,6 +1134,13 @@ namespace
         bool initialized_ = false;
         bool deviceReady_ = false;
         bool requirementsLoaded_ = false;
+        // slInit loads every requested feature, so the DLSS-G plugin -- and with it the DLFG proxy
+        // swapchain -- starts out owning presentation until the renderer says otherwise.
+        bool dlssgFeatureLoaded_ = true;
+        // Support is a property of the adapter and the driver, not of what is currently loaded.
+        // Latch it so unloading the plugin cannot make the frame-generation toggle disappear.
+        bool dlssgSupported_ = false;
+        bool dlssgSupportChecked_ = false;
         VkInstance proxyInstance_ = VK_NULL_HANDLE;
         VkDevice proxyDevice_ = VK_NULL_HANDLE;
         Rendering::Upscaler::FFeatureCaps caps_{};
@@ -1129,6 +1183,13 @@ namespace
                     SPDLOG_WARN("Streamline slPCLSetOptions failed: {}", static_cast<int>(result));
                 }
             }
+        }
+
+        // Called from CreateSwapChain with the device idle and no swapchain alive -- the only point
+        // at which Streamline's DLFG proxy swapchain can be installed or removed.
+        void SetFrameGenerationFeatureEnabled(bool enabled) override
+        {
+            StreamlineContext().SetFrameGenerationFeatureLoaded(enabled);
         }
 
         void OnSwapChainDestroyed() override
@@ -1356,6 +1417,13 @@ namespace
                 return;
             }
 
+            // The swapchain this frame renders into was created with the DLSS-G plugin unloaded,
+            // so there is no DLFG instance to configure or tag until the next swapchain rebuild.
+            if (!StreamlineContext().IsFrameGenerationFeatureLoaded())
+            {
+                return;
+            }
+
             const bool hdrFormatSupported =
                 IsHDRFormatSupportedForDLSSG(inputs.swapchainFormat, inputs.hdrOutput);
             if (inputs.enableFrameGeneration && inputs.hdrOutput && !hdrFormatSupported &&
@@ -1438,7 +1506,7 @@ namespace
         void UpdateFrameGenerationState() override
         {
             const auto caps = StreamlineContext().Caps();
-            if (caps.frameGenerationTypes == 0)
+            if (caps.frameGenerationTypes == 0 || !StreamlineContext().IsFrameGenerationFeatureLoaded())
             {
                 frameGenerationState_ = {};
                 return;
@@ -1517,11 +1585,12 @@ namespace
             {
                 sl::DLSSDOptions options{};
                 options.mode = ToDLSSMode(inputs.superResolutionMode);
-                options.dlaaPreset = sl::DLSSDPreset::ePresetE;
-                options.qualityPreset = sl::DLSSDPreset::ePresetE;
-                options.balancedPreset = sl::DLSSDPreset::ePresetE;
-                options.performancePreset = sl::DLSSDPreset::ePresetE;
-                options.ultraPerformancePreset = sl::DLSSDPreset::ePresetE;
+                // Preset F is the Streamline 2.14 Ray Reconstruction transformer (DLSS 4.5).
+                options.dlaaPreset = sl::DLSSDPreset::ePresetF;
+                options.qualityPreset = sl::DLSSDPreset::ePresetF;
+                options.balancedPreset = sl::DLSSDPreset::ePresetF;
+                options.performancePreset = sl::DLSSDPreset::ePresetF;
+                options.ultraPerformancePreset = sl::DLSSDPreset::ePresetF;
                 options.outputWidth = inputs.outputExtent.width;
                 options.outputHeight = inputs.outputExtent.height;
                 options.colorBuffersHDR = (inputs.inputColorIsLinear || inputs.hdrOutput)
@@ -1543,11 +1612,13 @@ namespace
             options.outputHeight = inputs.outputExtent.height;
             options.colorBuffersHDR = (inputs.inputColorIsLinear || inputs.hdrOutput)
                 ? sl::Boolean::eTrue : sl::Boolean::eFalse;
+            // NVIDIA's per-mode recommendation since DLSS 4.5: K where quality headroom exists,
+            // the second-generation transformer presets where the input resolution is low.
             options.dlaaPreset = sl::DLSSPreset::ePresetK;
             options.qualityPreset = sl::DLSSPreset::ePresetK;
             options.balancedPreset = sl::DLSSPreset::ePresetK;
-            options.performancePreset = sl::DLSSPreset::ePresetK;
-            options.ultraPerformancePreset = sl::DLSSPreset::ePresetK;
+            options.performancePreset = sl::DLSSPreset::ePresetM;
+            options.ultraPerformancePreset = sl::DLSSPreset::ePresetL;
 
             const sl::Result result = slDLSSSetOptions(viewport, options);
             if (result != sl::Result::eOk)

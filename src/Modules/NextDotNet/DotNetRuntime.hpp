@@ -74,6 +74,12 @@ namespace Modules::NextDotNet
         void SetInputEnabled(bool enabled);
         bool IsInputEnabled() const { return inputEnabled_; }
 
+        /// Pointer lock requested by the running game. The OS capture is applied only while input
+        /// is enabled: ejecting a Play session must free the cursor so the editor can be used,
+        /// without the game having to know it was ejected. Unloading always clears the request.
+        void SetRelativeMouseRequested(bool enabled);
+        bool IsRelativeMouseRequested() const { return relativeMouseRequested_; }
+
         /// Pauses or resumes game tick execution. While paused, the managed game's Tick is skipped,
         /// freezing entity movement, physics updates and gameplay logic.
         void SetPaused(bool paused);
@@ -96,11 +102,16 @@ namespace Modules::NextDotNet
         /// Static because callers need it before — and after — any runtime exists.
         static std::filesystem::path ManagedRoot();
 
+        /// The engine's managed *source* tree (assets/csharp), or empty when this build cannot reach
+        /// one — which is the normal state of an installed build, where only published assemblies
+        /// were shipped. Game projects are not in here; see GameProjectsSourceRoot().
+        static std::filesystem::path ManagedSourceRoot();
+
         /// Publishes a managed project into the managed root, the way CMake does at build time.
         /// Development-only: it needs the .NET SDK and the source tree, and does nothing useful in
         /// an installed build. Returns false and fills outError when the SDK is missing or the
         /// publish fails, leaving the previously published assemblies untouched.
-        static bool PublishProject(const std::string& projectRelativeToManagedSources,
+        static bool PublishProject(const std::filesystem::path& projectFile,
                                    const std::string& outputSubdirectory,
                                    std::string& outError);
 
@@ -121,6 +132,9 @@ namespace Modules::NextDotNet
         bool hotReloadEnabled_ = false;
         bool inputEnabled_ = true;
         bool isPaused_ = false;
+        bool relativeMouseRequested_ = false;
+
+        void ApplyRelativeMouseMode();
         uint32_t unloadPendingStreak_ = 0;
     };
 }

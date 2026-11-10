@@ -1,0 +1,21 @@
+{
+  "name": "nextdayz-net-loot-bravo",
+  "description": "Shared loot, survivor B. Runs with nextdayz-net-loot-alpha against one server. After A has taken the loot nearest the safe point, B asks for the same entry: the server must refuse, B must see it gone, and B must see the bandage A dropped.",
+  "target": "NextDayz",
+  "args": ["--disable-streamline", "--cvar", "nextdayz.net.mode client", "--cvar", "nextdayz.net.name bravo"],
+  "defaults": { "waitFrames": 2, "stepTimeoutMs": 120000 },
+  "steps": [
+    { "type": "wait-until", "query": "game.sceneReady", "op": "eq", "value": true, "timeoutMs": 180000 },
+    { "type": "wait-until", "query": "game.netOnline", "op": "eq", "value": true, "timeoutMs": 60000 },
+    { "type": "wait-until", "query": "game.netLootSynced", "op": "eq", "value": true, "timeoutMs": 30000 },
+    { "type": "wait-until", "query": "game.netVisibleRemotes", "op": "ge", "value": 1, "timeoutMs": 120000 },
+    { "type": "wait-ms", "ms": 9000 },
+    { "type": "cvar", "name": "nextdayz.validation.netTake", "set": 2 },
+    { "type": "wait-until", "query": "game.netTakeResult", "op": "ge", "value": 1, "timeoutMs": 20000 },
+    { "type": "assert", "query": "game.netTakeResult", "op": "eq", "value": 2 },
+    { "type": "assert", "query": "game.netTakeTargetOnGround", "op": "eq", "value": false },
+    { "type": "wait-until", "query": "game.lootPiles", "op": "ge", "value": 1, "timeoutMs": 20000 },
+    { "type": "screenshot", "out": "screenshots/nextdayz_net_loot_bravo", "ui": true },
+    { "type": "quit" }
+  ]
+}

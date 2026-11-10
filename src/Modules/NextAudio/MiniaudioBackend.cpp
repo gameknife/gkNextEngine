@@ -34,7 +34,6 @@ namespace Modules::Audio
 
     void FMiniaudioBackend::Stop()
     {
-        soundDataMaps_.clear();
         for (auto& [name, sound] : soundMaps_)
         {
             ma_sound_uninit(sound.get());
@@ -45,6 +44,9 @@ namespace Modules::Audio
         }
         soundMaps_.clear();
         soundDecoderMaps_.clear();
+        // Memory decoders borrow these buffers, including on the audio thread.
+        // Release the sounds and decoders before freeing their backing data.
+        soundDataMaps_.clear();
 
         if (audioEngine_)
         {

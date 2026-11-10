@@ -8,13 +8,13 @@
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
           </svg>
         </span>
-        项目信息
+        {{T "todo.project_info"}}
       </h2>
       <div class="info-row">
         <span class="k">repo</span>
         <span class="v" title="{{.RepoRoot}}">
           {{.RepoRoot}}
-          <button class="copy-btn" type="button" onclick="navigator.clipboard.writeText('{{.RepoRoot}}')" title="copy">
+          <button class="copy-btn" type="button" onclick="navigator.clipboard.writeText('{{.RepoRoot}}')" title="{{T "common.copy"}}">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           </button>
         </span>
@@ -24,12 +24,12 @@
         <span class="k">git</span>
         <span class="v">
           {{shortHash .Version}}
-          <button class="copy-btn" type="button" onclick="navigator.clipboard.writeText('{{.Version}}')" title="copy">
+          <button class="copy-btn" type="button" onclick="navigator.clipboard.writeText('{{.Version}}')" title="{{T "common.copy"}}">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           </button>
         </span>
       </div>
-      <div class="info-row"><span class="k">最近完成</span><span class="v">{{.RecentSize}} 条</span></div>
+      <div class="info-row"><span class="k">{{T "todo.recent_done"}}</span><span class="v">{{T "todo.recent_count" .RecentSize}}</span></div>
     </div>
 
     <div class="card">
@@ -39,31 +39,31 @@
             <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
         </span>
-        添加任务
+        {{T "todo.add_task"}}
       </h2>
       <form hx-post="/task/add" hx-target="#todo-panel" hx-swap="innerHTML" hx-on::after-request="this.reset()">
         <div class="form-field">
-          <label>标题</label>
-          <input class="input" name="title" placeholder="请输入任务标题" required>
+          <label>{{T "todo.title"}}</label>
+          <input class="input" name="title" placeholder="{{T "todo.title_placeholder"}}" required>
         </div>
         <div class="form-row">
           <div class="form-field" style="margin: 0;">
-            <label>type</label>
+            <label>{{T "todo.type"}}</label>
             <div class="select-with-dot">
               <select class="select" name="type" required>
-                <option value="IDEA">IDEA 想法</option>
-                <option value="BUG">BUG 缺陷</option>
-                <option value="FEAT">FEAT 功能</option>
-                <option value="SPIKE">SPIKE 探针</option>
-                <option value="REFACTOR">REFACTOR 重构</option>
-                <option value="DOC">DOC 文档</option>
+                <option value="IDEA">{{T "todo.type.idea"}}</option>
+                <option value="BUG">{{T "todo.type.bug"}}</option>
+                <option value="FEAT">{{T "todo.type.feat"}}</option>
+                <option value="SPIKE">{{T "todo.type.spike"}}</option>
+                <option value="REFACTOR">{{T "todo.type.refactor"}}</option>
+                <option value="DOC">{{T "todo.type.doc"}}</option>
               </select>
             </div>
           </div>
           <div class="form-field" style="margin: 0;">
-            <label>priority</label>
+            <label>{{T "todo.priority"}}</label>
             <select class="select" name="priority">
-              <option value="">priority</option>
+              <option value="">{{T "todo.priority"}}</option>
               <option>P0</option>
               <option>P1</option>
               <option>P2</option>
@@ -71,13 +71,13 @@
           </div>
         </div>
         <div class="form-field">
-          <label>section</label>
+          <label>{{T "todo.section"}}</label>
           <select class="select" name="section">
-            <option value="next">下一步</option>
-            <option value="backlog">待规划</option>
+            <option value="next">{{T "section.next"}}</option>
+            <option value="backlog">{{T "section.backlog"}}</option>
           </select>
         </div>
-        <button class="btn-primary" type="submit">添加任务</button>
+        <button class="btn-primary" type="submit">{{T "todo.add"}}</button>
       </form>
     </div>
 
@@ -92,7 +92,7 @@
   </section>
 
   <section class="col" id="detail-panel">
-    <div class="card detail-empty">点击任意任务查看详情（spec / journal / blocker）。</div>
+    <div class="card detail-empty">{{T "todo.empty_detail"}}</div>
   </section>
 </div>
 {{end}}
@@ -101,7 +101,7 @@
 {{define "todo_panel"}}
 {{if gt .RecentSize 10}}
 <div class="archive-hint">
-  最近完成 已有 {{.RecentSize}} 条，建议在终端运行 <code>gnb todo archive</code> 归档。
+  {{T "todo.archive_hint" .RecentSize "<code>gnb todo archive</code>" | safeHTML}}
 </div>
 {{end}}
 
@@ -117,13 +117,12 @@
     </h2>
     <form hx-post="/todo/cleanup" hx-target="#todo-panel" hx-swap="innerHTML" style="margin: 0;">
       <button class="btn-secondary" type="submit" style="width: auto; padding: 7px 12px;">
-        整理已完成
+        {{T "todo.cleanup"}}
       </button>
     </form>
   </div>
 
   {{range .Sections}}
-  {{$secHeading := .Heading}}
   {{$secSlug := sectionSlug .Kind}}
   {{$draggable := or (eq $secSlug "next") (eq $secSlug "backlog")}}
   <div style="margin-bottom: 18px;">
@@ -131,7 +130,7 @@
       <span class="ico" style="background: {{sectionTint .Kind}}; color: {{sectionColor .Kind}};">
         {{sectionIcon .Kind | safeHTML}}
       </span>
-      {{.Heading}}
+      {{T (printf "section.%s" $secSlug)}}
       <span class="count">{{len .Tasks}}</span>
     </h2>
     {{if .Tasks}}
@@ -144,7 +143,7 @@
                hx-get="/task/{{printf "%05d" .ID}}"
                hx-target="#detail-panel"
                hx-swap="innerHTML">
-            <span class="dot {{if eq $secHeading "待规划"}}backlog-dot{{end}}"></span>
+            <span class="dot {{if eq $secSlug "backlog"}}backlog-dot{{end}}"></span>
             <div class="body">
               <div class="head">
                 <span class="tid">#{{printf "%05d" .ID}}</span>
@@ -154,31 +153,31 @@
               </div>
             </div>
             <div class="menu" onclick="event.stopPropagation()">
-              <button class="menu-btn" type="button" title="操作">
+              <button class="menu-btn" type="button" title="{{T "todo.actions"}}">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
               </button>
               <div class="menu-dropdown">
                 {{if eq (printf "%s" .Status) " "}}
                   <button type="button"
                           hx-get="/task/{{printf "%05d" .ID}}/edit"
-                          hx-target="closest .task" hx-swap="outerHTML">编辑</button>
+                          hx-target="closest .task" hx-swap="outerHTML">{{T "common.edit"}}</button>
                 {{end}}
                 {{if ne (printf "%s" .Status) "x"}}
                   <button type="button"
                           hx-post="/task/{{printf "%05d" .ID}}/done"
                           hx-target="#todo-panel" hx-swap="innerHTML"
-                          hx-confirm="标 #{{printf "%05d" .ID}} 为完成？">标为完成</button>
+                          hx-confirm="{{T "todo.confirm_done" (printf "%05d" .ID)}}">{{T "todo.mark_done"}}</button>
                 {{end}}
                 {{if and (ne (printf "%s" .Status) "!") (ne (printf "%s" .Status) "x")}}
                   <button type="button" class="danger"
                           hx-post="/task/{{printf "%05d" .ID}}/block"
                           hx-target="#todo-panel" hx-swap="innerHTML"
-                          hx-confirm="标 #{{printf "%05d" .ID}} 为卡住？">标为卡住</button>
+                          hx-confirm="{{T "todo.confirm_blocked" (printf "%05d" .ID)}}">{{T "todo.mark_blocked"}}</button>
                 {{end}}
                 <button type="button" class="danger"
                         hx-post="/task/{{printf "%05d" .ID}}/delete"
                         hx-target="#todo-panel" hx-swap="innerHTML"
-                        hx-confirm="确认删除 #{{printf "%05d" .ID}} ？同时会删除 specs/{{printf "%05d" .ID}}.md（如存在）">删除任务</button>
+                        hx-confirm="{{T "todo.confirm_delete" (printf "%05d" .ID) (printf "%05d" .ID)}}">{{T "todo.delete_task"}}</button>
               </div>
             </div>
           </div>
@@ -195,7 +194,7 @@
       <span class="ico">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4V4z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/></svg>
       </span>
-      最新 JOURNAL
+      {{T "todo.latest_journal"}}
     </h2>
     {{if .Journals}}
       <div class="journal-list">
@@ -218,7 +217,7 @@
         {{end}}
       </div>
     {{else}}
-      <div class="empty-row">尚无最近完成的任务</div>
+      <div class="empty-row">{{T "todo.no_recent_journals"}}</div>
     {{end}}
   </div>
 </div>
@@ -228,7 +227,7 @@
 {{define "task_detail"}}
 <div class="card detail-card" data-selected-id="{{printf "%05d" .Task.ID}}">
   <div class="detail-head">
-    <button class="back" type="button" onclick="document.getElementById('detail-panel').innerHTML='<div class=\'card detail-empty\'>点击任意任务查看详情（spec / journal / blocker）。</div>'; document.querySelectorAll('.task.selected').forEach(t=>t.classList.remove('selected'));" title="返回">
+    <button class="back" type="button" data-empty="{{T "todo.empty_detail"}}" onclick="document.getElementById('detail-panel').innerHTML='<div class=\'card detail-empty\'>'+this.dataset.empty+'</div>'; document.querySelectorAll('.task.selected').forEach(t=>t.classList.remove('selected'));" title="{{T "common.back"}}">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
     </button>
     <div class="head-body">
@@ -246,10 +245,10 @@
       </div>
     </div>
     <div class="actions">
-      <button class="action-btn danger" type="button" title="删除任务"
+      <button class="action-btn danger" type="button" title="{{T "todo.delete_task"}}"
               hx-post="/task/{{printf "%05d" .Task.ID}}/delete"
               hx-target="#todo-panel" hx-swap="innerHTML"
-              hx-confirm="确认删除 #{{printf "%05d" .Task.ID}} ？同时会删除 specs/{{printf "%05d" .Task.ID}}.md（如存在）">
+              hx-confirm="{{T "todo.confirm_delete" (printf "%05d" .Task.ID) (printf "%05d" .Task.ID)}}">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
       </button>
     </div>
@@ -276,13 +275,13 @@
       <span class="label">spec</span>
       <span style="margin-left:auto;">
         {{if .EditingSpec}}
-        <button class="btn-secondary small" type="button"
+        <button class="btn-ghost small" type="button"
                 hx-get="/task/{{printf "%05d" .Task.ID}}"
-                hx-target="#detail-panel" hx-swap="innerHTML">取消</button>
+                hx-target="#detail-panel" hx-swap="innerHTML">{{T "common.cancel"}}</button>
         {{else}}
-        <button class="btn-secondary small" type="button"
+        <button class="btn-ghost small primary" type="button"
                 hx-get="/task/{{printf "%05d" .Task.ID}}/spec/edit"
-                hx-target="#detail-panel" hx-swap="innerHTML">编辑</button>
+                hx-target="#detail-panel" hx-swap="innerHTML">{{T "common.edit"}}</button>
         {{end}}
       </span>
     </div>
@@ -292,8 +291,8 @@
           hx-target="#detail-panel" hx-swap="innerHTML">
       <textarea name="body" rows="18" spellcheck="false">{{.SpecBody}}</textarea>
       <div class="spec-form-actions">
-        <span class="muted">直接编辑 `.spec/specs/{{printf "%05d" .Task.ID}}.md` 原文。</span>
-        <button type="submit" class="btn-primary small">保存 spec</button>
+        <span class="muted">{{T "todo.spec_edit_hint" (printf "%05d" .Task.ID)}}</span>
+        <button type="submit" class="btn-primary small">{{T "todo.save_spec"}}</button>
       </div>
     </form>
     {{else}}
@@ -321,23 +320,23 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
       </span>
       <span class="label">spec</span>
-      <span class="hint">这个任务还没有 spec，写点背景信息把它创建出来 →</span>
+      <span class="hint">{{T "todo.spec_hint"}}</span>
     </div>
     <form class="spec-form"
           hx-post="/task/{{printf "%05d" .Task.ID}}/spec"
           hx-target="#detail-panel" hx-swap="innerHTML">
-      <textarea name="body" rows="6" placeholder="## 背景&#10;&#10;…&#10;&#10;## 目标&#10;&#10;- …"></textarea>
+      <textarea name="body" rows="6" placeholder="{{T "todo.spec_placeholder"}}"></textarea>
       <div class="spec-form-actions">
-        <span class="muted">留空则使用默认模板（背景/目标/执行细节/验收）</span>
-        <button type="submit" class="btn-primary small">创建 spec</button>
+        <span class="muted">{{T "todo.spec_empty_hint"}}</span>
+        <button type="submit" class="btn-primary small">{{T "todo.create_spec"}}</button>
       </div>
     </form>
   </div>
   {{end}}
 
   <div class="detail-foot">
-    <span>创建于 {{or .Task.Paren "—"}}</span>
-    <span>更新时间 {{or .Task.Paren "—"}}</span>
+    <span>{{T "todo.created" (or .Task.Paren "—")}}</span>
+    <span>{{T "todo.updated" (or .Task.Paren "—")}}</span>
   </div>
 </div>
 {{end}}
@@ -352,7 +351,7 @@
     </div>
     <label class="docs-search">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-      <input type="search" placeholder="Search docs..." data-docs-search autocomplete="off">
+      <input type="search" placeholder="{{T "docs.search"}}" data-docs-search autocomplete="off">
       <kbd>Ctrl K</kbd>
     </label>
       {{if .DocsVM.Files}}
@@ -361,14 +360,14 @@
         <details class="docs-folder {{if .Active}}active{{end}}"
                  data-doc-folder="{{.Dir}}"
                  {{if .Active}}open{{end}}>
-          <summary class="docs-folder-summary">
+          <summary class="docs-folder-summary" title="{{.Dir}}">
             <span class="docs-folder-chevron">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="9 18 15 12 9 6"/></svg>
             </span>
             <span class="docs-folder-icon">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
             </span>
-            <span class="docs-folder-name">{{.Dir}}</span>
+            <span class="docs-folder-name">{{if .DisplayName}}{{.DisplayName}}{{else}}{{.Dir}}{{end}}</span>
             <span class="docs-folder-count">{{len .Files}}</span>
           </summary>
           <div class="docs-folder-files">
@@ -379,7 +378,7 @@
                     hx-target="#tab-content"
                     hx-swap="innerHTML"
                     title="{{.RelPath}}"
-                    {{if $.DocsVM.Editing}}hx-confirm="当前编辑未保存，切换文档将丢失修改，确定继续？"{{end}}>
+                    {{if $.DocsVM.Editing}}hx-confirm="{{T "docs.unsaved"}}"{{end}}>
               <span class="docs-file-icon">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               </span>
@@ -391,7 +390,7 @@
         {{end}}
       </div>
       {{else}}
-      <div class="empty-row">docs/ 下暂无 markdown 文档</div>
+      <div class="empty-row">{{T "docs.empty"}}</div>
       {{end}}
   </aside>
 
@@ -408,25 +407,59 @@
             <span class="sep">/</span>
             <strong>{{.DocsVM.Selected.Name}}</strong>
           </div>
-          <div class="docs-updated">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-            Updated {{date .DocsVM.Selected.UpdatedAt}}
+          <div class="docs-head-meta">
+            <div class="docs-updated">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+              Updated {{date .DocsVM.Selected.UpdatedAt}}
+            </div>
+            {{if and .DocsVM.Meta.HasMeta (not .DocsVM.Editing)}}
+            <div class="docs-meta-bar">
+              {{if .DocsVM.Meta.Status}}
+              <span class="docs-meta-chip status {{if or (eq .DocsVM.Meta.Status "现行") (eq .DocsVM.Meta.Status "active")}}active{{end}}">
+                <span class="docs-meta-dot"></span>
+                {{.DocsVM.Meta.Status}}
+              </span>
+              {{end}}
+              {{if .DocsVM.Meta.Category}}
+              <span class="docs-meta-chip category">
+                {{.DocsVM.Meta.Category}}
+              </span>
+              {{end}}
+              {{if .DocsVM.Meta.Owner}}
+              <span class="docs-meta-chip owner" title="Owner: {{.DocsVM.Meta.Owner}}">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                {{.DocsVM.Meta.Owner}}
+              </span>
+              {{end}}
+              {{if .DocsVM.Meta.LastUpdated}}
+              <span class="docs-meta-chip date" title="Last updated: {{.DocsVM.Meta.LastUpdated}}">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                {{.DocsVM.Meta.LastUpdated}}
+              </span>
+              {{else if .DocsVM.Meta.Created}}
+              <span class="docs-meta-chip date" title="Created: {{.DocsVM.Meta.Created}}">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                {{.DocsVM.Meta.Created}}
+              </span>
+              {{end}}
+            </div>
+            {{end}}
           </div>
         </div>
         <div class="commit-card-actions">
           {{if .DocsVM.Editing}}
-          <button class="btn-secondary" type="button"
+          <button class="btn-ghost" type="button"
                   hx-get="/tab/docs?file={{urlquery .DocsVM.Selected.RelPath}}"
                   hx-target="#tab-content"
                   hx-swap="innerHTML">
-            取消
+            {{T "common.cancel"}}
           </button>
           {{else}}
-          <button class="btn-secondary" type="button"
+          <button class="btn-ghost primary" type="button"
                   hx-get="/tab/docs?file={{urlquery .DocsVM.Selected.RelPath}}&edit=1"
                   hx-target="#tab-content"
                   hx-swap="innerHTML">
-            编辑
+            {{T "common.edit"}}
           </button>
           {{end}}
         </div>
@@ -440,15 +473,15 @@
         <input type="hidden" name="path" value="{{.DocsVM.Selected.RelPath}}">
         <textarea name="body">{{.DocsVM.EditorBody}}</textarea>
         <div class="spec-form-actions">
-          <span class="muted">保存后会直接回到预览模式。</span>
-          <button type="submit" class="btn-primary small">保存文档</button>
+          <span class="muted">{{T "docs.save_hint"}}</span>
+          <button type="submit" class="btn-primary small">{{T "docs.save"}}</button>
         </div>
       </form>
       {{else}}
       <div class="md-content docs-preview" data-md data-doc-path="{{.DocsVM.Selected.RelPath}}">{{.DocsVM.Content}}</div>
       {{end}}
       {{else}}
-      <div class="empty-row" style="height: 100%;">选择左侧文档开始阅读或编辑。</div>
+      <div class="empty-row" style="height: 100%;">{{T "docs.pick"}}</div>
       {{end}}
     </div>
   </section>
@@ -584,9 +617,47 @@
     gap: 12px;
     margin-bottom: 12px;
   }
-  .docs-head-main {
-    min-width: 0;
-    flex: 1;
+  .docs-head-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    margin-top: 5px;
+  }
+  .docs-meta-inline {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+  }
+  .docs-meta-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3.5px;
+    font-size: 10px;
+    line-height: 1.2;
+    padding: 1px 6px;
+    border-radius: var(--radius-sm, 4px);
+    background: var(--bg-card-hover, rgba(255,255,255,0.06));
+    color: var(--fg-mute);
+    border: 1px solid var(--border);
+  }
+  .docs-meta-chip.status.active {
+    background: rgba(34, 197, 94, 0.12);
+    color: #4ade80;
+    border-color: rgba(34, 197, 94, 0.3);
+  }
+  .docs-meta-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .docs-meta-chip.category {
+    text-transform: uppercase;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
   }
   .docs-preview {
     flex: 1 1 auto;
@@ -780,7 +851,7 @@
     display: flex;
     flex-direction: column;
     border-right: 1px solid var(--border);
-    background: #151617;
+    background: var(--bg-panel);
   }
   .docs-sidebar-head {
     display: flex;
@@ -863,6 +934,7 @@
     min-width: 21px;
     padding: 0 6px;
     border: 1px solid var(--border);
+    border-radius: 999px;
     background: transparent;
     font-size: 9.5px;
   }
@@ -875,7 +947,7 @@
     min-height: 27px;
     padding: 4px 7px;
     gap: 7px;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
   }
   .docs-file-item:hover {
     background: var(--bg-card);
@@ -892,7 +964,7 @@
     min-width: 0;
     min-height: 0;
     overflow: hidden;
-    background: #121314;
+    background: var(--bg);
   }
   .docs-card {
     border: 0;
@@ -901,25 +973,29 @@
     background: transparent;
   }
   .docs-head {
-    min-height: 68px;
+    min-height: 52px;
     margin: 0;
-    padding: 12px 24px 10px;
+    padding: 10px 24px 9px;
     border-bottom: 1px solid var(--border);
-    background: #141516;
+    background: var(--bg-panel);
+    align-items: center;
   }
   .breadcrumb {
     color: var(--fg-dim);
     font-family: var(--font-mono);
     font-size: 10.5px;
+    line-height: 1.2;
   }
   .breadcrumb strong { color: var(--fg); font-weight: 550; }
   .docs-updated {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 5px;
-    margin-top: 7px;
+    gap: 4px;
+    margin-top: 0;
     color: var(--fg-dim);
     font-size: 9.5px;
+    font-family: var(--font-mono);
+    line-height: 1;
   }
   .docs-head .btn-secondary {
     padding: 5px 10px;
@@ -948,12 +1024,12 @@
   .docs-preview h3 { margin-top: 20px; color: var(--fg); }
   .docs-preview p, .docs-preview li { color: #c7c8ca; }
   .docs-preview table {
-    background: #151617;
+    background: var(--bg-panel);
   }
-  .docs-preview th { background: #1a1b1d; }
+  .docs-preview th { background: var(--bg-card); }
   .docs-preview pre {
     border-radius: 5px;
-    background: #151617;
+    background: var(--bg-panel);
   }
   .docs-edit-form { padding: 18px 24px 24px; }
   .docs-source-panel-host:empty { display: none; }
@@ -970,12 +1046,12 @@
     border-left: 1px solid var(--border);
     border-radius: 0;
     box-shadow: none;
-    background: #111213;
+    background: var(--bg);
   }
   .docs-source-head {
     min-height: 50px;
     padding: 9px 14px;
-    background: #151617;
+    background: var(--bg-panel);
   }
   .docs-source-title strong { font-size: 11.5px; }
   .docs-source-title span { font-size: 9px; }
@@ -1013,10 +1089,10 @@
 <div class="docs-source-panel" data-docs-source-panel data-focus-line="{{.Line}}">
   <div class="docs-source-head">
     <div class="docs-source-title">
-      <strong>{{if .Name}}{{.Name}}{{else}}文件预览{{end}}</strong>
-      <span>{{if .RelPath}}{{.RelPath}}{{if .Line}}:{{.Line}}{{end}}{{else}}无法打开文件{{end}}</span>
+      <strong>{{if .Name}}{{.Name}}{{else}}{{T "docs.preview"}}{{end}}</strong>
+      <span>{{if .RelPath}}{{.RelPath}}{{if .Line}}:{{.Line}}{{end}}{{else}}{{T "docs.cannot_open"}}{{end}}</span>
     </div>
-    <button class="docs-source-close" type="button" data-docs-source-close title="关闭">×</button>
+    <button class="docs-source-close" type="button" data-docs-source-close title="{{T "common.close"}}">×</button>
   </div>
   {{if .Error}}
   <div class="chat-error docs-source-error">{{.Error}}</div>
@@ -1036,7 +1112,7 @@
 
 
 {{define "tab_build"}}
-<div class="tab-build-run">
+<div class="tab-build-run" data-build-pane>
   <aside class="tab-side">
     <div class="card build-run-target-card">
       <h2 class="card-title">
@@ -1051,51 +1127,86 @@
           <span class="name">all targets</span>
           <span class="tag-mini">build all</span>
         </div>
-        {{range .BuildVM.Targets}}
-        <div class="target-item" data-target="{{.Name}}" data-runnable="{{.Runnable}}">
-          <span class="name">{{.Name}}</span>
-          {{if .Built}}<span class="target-built" title="已构建">ready</span>{{end}}
+        {{range .BuildVM.TargetGroups}}
+        <div class="target-group" data-target-group="{{.Name}}">
+          <div class="target-group-header" data-toggle-target-group="{{.Name}}">
+            <span class="collapse-arrow">▼</span>
+            <span class="group-name">{{.Name}}</span>
+            <span class="tag-mini group-count">{{len .Targets}}</span>
+          </div>
+          <div class="target-group-items">
+            {{range .Targets}}
+            <div class="target-item" data-target="{{.Name}}" data-runnable="{{.Runnable}}" data-built="{{if .Built}}1{{else}}0{{end}}">
+              <span class="name">{{.Name}}</span>
+              {{if .Built}}<span class="target-built" title="{{T "build.built"}}">ready</span>{{end}}
+            </div>
+            {{end}}
+          </div>
         </div>
         {{end}}
       </div>
       <div class="build-run-controls">
-        <form data-build-run-form hx-post="/jobs/build" hx-target="#log-panel-host" hx-swap="innerHTML">
-          <input type="hidden" name="target" value="all">
-          <label class="build-opt compact" title="构建前重新运行 CMake configure">
-            <input type="checkbox" name="reconfigure" value="1">
+        <div class="selected-target-bar" id="selected-target-bar" title="当前选中的目标">
+          <span class="bar-label">Target:</span>
+          <span class="bar-target-name" id="selected-target-name">all targets</span>
+          <span class="bar-status-badge all" id="selected-target-status">build all</span>
+        </div>
+        <div class="build-opt-row">
+          <label class="build-opt compact" title="{{T "build.reconfigure"}}">
+            <input type="checkbox" id="build-reconfigure-checkbox" value="1">
             <span>Reconfigure</span>
           </label>
-          <button class="btn-secondary build-run-button" type="submit">构建</button>
-        </form>
-        <form data-build-run-form hx-post="/jobs/run" hx-target="#log-panel-host" hx-swap="innerHTML">
-          <input type="hidden" name="target" value="all">
-          <input type="hidden" name="extraArgs" value="" id="run-extra-args">
-          <button class="btn-primary build-run-button" type="submit" data-run-button disabled>运行</button>
-        </form>
+        </div>
+        <div class="build-run-actions">
+          <form data-build-run-form hx-post="/jobs/build" hx-target="#build-log-panel-host" hx-swap="innerHTML">
+            <input type="hidden" name="target" value="all">
+            <input type="hidden" name="reconfigure" value="0" id="build-reconfigure-hidden">
+            <button class="btn-secondary build-run-button" type="submit" data-build-button title="编译选中目标">{{T "build.build"}}</button>
+          </form>
+          <form data-build-run-form hx-post="/jobs/run" hx-target="#build-log-panel-host" hx-swap="innerHTML">
+            <input type="hidden" name="target" value="all">
+            <input type="hidden" name="extraArgs" value="" id="run-extra-args">
+            <button class="btn-primary build-run-button" type="submit" data-run-button disabled title="运行选中目标">{{T "build.run"}}</button>
+          </form>
+        </div>
       </div>
     </div>
   </aside>
 
   <aside class="tab-side run-args-col">
-    <div class="card">
-      <h2 class="card-title">
-        <span class="ico">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-        </span>
-        命令行参数
-      </h2>
+    <div class="card run-args-card">
+      <div class="run-args-head">
+        <h2 class="card-title" style="margin-bottom:0;">
+          <span class="ico">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          </span>
+          {{T "build.args"}}
+        </h2>
+        <button type="button" class="btn-mini-reset" id="reset-run-args-btn" title="重置当前目标的运行参数">重置</button>
+      </div>
+
+      <div class="run-custom-args-box">
+        <label for="custom-run-args-input" class="custom-args-label">自定义额外参数 (Extra CLI Args)</label>
+        <input type="text" id="custom-run-args-input" class="custom-args-input" placeholder="例如: --cvar &quot;r.upscaler.type 1&quot;">
+      </div>
+
       <div id="run-args-list">
-        <div class="run-args-empty">选择可运行的 target 后显示参数</div>
+        <div class="run-args-empty">{{T "build.args_empty"}}</div>
+      </div>
+
+      <div class="run-cmd-preview" id="run-cmd-preview-box">
+        <div class="preview-title">运行命令预览:</div>
+        <div class="cmd-preview-code" id="run-cmd-preview-code">gnb run</div>
       </div>
     </div>
   </aside>
 
   <section class="tab-main">
-    <div id="log-panel-host" style="display: contents;">
+    <div id="build-log-panel-host" style="display: contents;">
       {{if .BuildVM.HasJob}}
         {{template "log_panel" .BuildVM.Latest}}
       {{else}}
-        {{template "log_panel_empty" "build / run"}}
+        {{template "log_panel_empty" "job.kind.build_run"}}
       {{end}}
     </div>
   </section>
@@ -1104,7 +1215,7 @@
 <style>
   .tab-build-run {
     display: grid;
-    grid-template-columns: 270px 330px minmax(0, 1fr);
+    grid-template-columns: 270px 380px minmax(0, 1fr);
     gap: 16px;
     padding: 16px;
     height: 100%;
@@ -1115,51 +1226,242 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
-    gap: 1px;
+    gap: 2px;
     padding-right: 3px;
   }
   #tab-content .build-run-targets .target-item {
-    height: 36px;
-    min-height: 36px;
+    height: 34px;
+    min-height: 34px;
     margin: 0;
     padding: 0 9px;
     gap: 6px;
+    cursor: pointer;
   }
-  .build-run-targets .target-item .name { font-size: 12.5px; }
+  .build-run-targets .target-item .name { font-size: 12px; }
   .target-built {
     color: var(--green);
     font-family: var(--font-mono);
     font-size: 9.5px;
-    opacity: .75;
+    opacity: .85;
+    background: rgba(34, 197, 94, 0.12);
+    padding: 1px 5px;
+    border-radius: 4px;
   }
+
+  /* Target 分组与折叠样式 */
+  .target-group {
+    display: flex;
+    flex-direction: column;
+    margin-top: 4px;
+  }
+  .target-group-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--fg-dim);
+    border-radius: var(--radius-sm);
+    transition: background 0.15s, color 0.15s;
+  }
+  .target-group-header:hover {
+    background: var(--bg-hover);
+    color: var(--fg);
+  }
+  .target-group-header .collapse-arrow {
+    font-size: 8px;
+    display: inline-block;
+    transition: transform 0.15s ease;
+    width: 10px;
+    text-align: center;
+  }
+  .target-group-header .group-name {
+    flex: 1 1 auto;
+  }
+  .target-group-header .group-count {
+    margin-left: auto;
+    font-size: 10px;
+  }
+  .target-group.collapsed .target-group-header .collapse-arrow {
+    transform: rotate(-90deg);
+  }
+  .target-group.collapsed .target-group-items {
+    display: none;
+  }
+  .target-group-items {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding-left: 2px;
+  }
+
+  /* 选中的 Target 信息条 */
+  .selected-target-bar {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    overflow: hidden;
+  }
+  .selected-target-bar .bar-label {
+    color: var(--fg-dim);
+    font-weight: 500;
+    flex: 0 0 auto;
+  }
+  .selected-target-bar .bar-target-name {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--fg);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .selected-target-bar .bar-status-badge {
+    flex: 0 0 auto;
+    font-size: 9.5px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+  }
+  .selected-target-bar .bar-status-badge.ready {
+    color: var(--green);
+    background: rgba(34, 197, 94, 0.15);
+  }
+  .selected-target-bar .bar-status-badge.all {
+    color: var(--accent);
+    background: rgba(59, 130, 246, 0.15);
+  }
+  .selected-target-bar .bar-status-badge.unbuilt {
+    color: var(--fg-dim);
+    background: var(--bg-card);
+  }
+
   .build-run-controls {
     flex: 0 0 auto;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
     gap: 7px;
     padding-top: 9px;
     border-top: 1px solid var(--border);
   }
-  .build-run-controls form { min-width: 0; margin: 0; }
-  .build-run-controls form:first-child { display: contents; }
-  .build-run-controls form:last-child { display: contents; }
-  .build-run-button { width: 100%; margin: 0 !important; }
+  .build-opt-row {
+    display: flex;
+    align-items: center;
+  }
   .build-opt.compact {
-    grid-column: 1 / -1;
-    padding: 0 1px 2px;
+    padding: 0 1px;
     justify-content: flex-start;
     border: 0;
     background: transparent;
     font-size: 10.5px;
     color: var(--fg-dim);
+    margin: 0;
+    cursor: pointer;
+  }
+  .build-run-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 7px;
+    width: 100%;
+  }
+  .build-run-actions form {
+    min-width: 0;
+    margin: 0;
+    display: flex;
+    width: 100%;
+  }
+  .build-run-button {
+    width: 100%;
+    height: 34px;
+    min-height: 34px;
+    max-height: 34px;
+    box-sizing: border-box !important;
+    padding: 0 12px !important;
+    font-size: 12.5px !important;
+    font-weight: 600 !important;
+    line-height: 1 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: var(--radius-md) !important;
+    margin: 0 !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .build-run-button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
   .run-args-col { overflow: hidden; gap: 0; }
-  .run-args-col .card {
+  .run-args-card {
     flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    gap: 10px;
+  }
+  .run-args-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .btn-mini-reset {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--fg-dim);
+    font-size: 11px;
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn-mini-reset:hover {
+    color: var(--fg);
+    border-color: var(--accent);
+    background: var(--bg-hover);
+  }
+  .run-custom-args-box {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 10px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+  }
+  .custom-args-label {
+    font-size: 11px;
+    color: var(--fg-dim);
+    font-weight: 500;
+  }
+  .custom-args-input {
+    width: 100%;
+    background: var(--bg-input);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .custom-args-input:focus {
+    border-color: var(--accent);
   }
   #run-args-list {
     flex: 1 1 auto;
@@ -1167,257 +1469,156 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 6px;
+    padding-right: 2px;
   }
-  .run-args-empty { color: var(--fg-dim); font-size: 12px; font-style: italic; padding: 6px 2px; }
+  .run-args-empty {
+    color: var(--fg-dim);
+    font-size: 12px;
+    font-style: italic;
+    padding: 16px 4px;
+    text-align: center;
+  }
+
+  /* Command 参数面板分类折叠 */
+  .arg-category-group {
+    display: flex;
+    flex-direction: column;
+  }
+  .arg-category-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--fg-dim);
+    padding: 5px 6px;
+    cursor: pointer;
+    user-select: none;
+    border-radius: var(--radius-sm);
+    transition: background 0.15s, color 0.15s;
+    border-bottom: 1px solid var(--border);
+  }
+  .arg-category-header:hover {
+    background: var(--bg-hover);
+    color: var(--fg);
+  }
+  .arg-category-header .collapse-arrow {
+    font-size: 8px;
+    display: inline-block;
+    transition: transform 0.15s ease;
+    width: 10px;
+    text-align: center;
+  }
+  .arg-category-header .cat-title {
+    flex: 1 1 auto;
+  }
+  .arg-category-header .cat-count {
+    margin-left: auto;
+    font-size: 10px;
+  }
+  .arg-category-group.collapsed .arg-category-header .collapse-arrow {
+    transform: rotate(-90deg);
+  }
+  .arg-category-group.collapsed .arg-category-items {
+    display: none;
+  }
+  .arg-category-items {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px 0 2px;
+  }
+
   .arg-item {
-    display: flex; align-items: flex-start; gap: 8px;
-    padding: 5px 8px;
-    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    transition: border-color 0.15s, background 0.15s;
   }
-  .arg-item input[type="checkbox"] { accent-color: var(--accent); width: 13px; height: 13px; flex: 0 0 auto; margin-top: 2px; }
-  .arg-item .arg-body { flex: 1; min-width: 0; }
-  .arg-item .arg-flag { font-family: var(--font-mono); font-size: 11.5px; color: var(--fg); display: block; }
-  .arg-item .arg-desc { font-size: 10.5px; color: var(--fg-dim); display: block; margin-top: 1px; }
-  .arg-item .arg-val { margin-top: 5px; }
+  .arg-item:hover {
+    border-color: var(--border-hover, var(--border));
+    background: var(--bg-hover, var(--bg-card));
+  }
+  .arg-item input[type="checkbox"] {
+    accent-color: var(--accent);
+    width: 14px;
+    height: 14px;
+    flex: 0 0 auto;
+    margin-top: 2px;
+    cursor: pointer;
+  }
+  .arg-item .arg-body {
+    flex: 1;
+    min-width: 0;
+    cursor: pointer;
+  }
+  .arg-item .arg-flag {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--fg);
+    display: block;
+    font-weight: 600;
+  }
+  .arg-item .arg-desc {
+    font-size: 10.5px;
+    color: var(--fg-dim);
+    display: block;
+    margin-top: 1px;
+    line-height: 1.35;
+  }
+  .arg-item .arg-val {
+    margin-top: 5px;
+  }
   .arg-item .arg-val input {
-    width: 100%; background: var(--bg-input); color: var(--fg);
-    border: 1px solid var(--border); border-radius: 4px;
-    padding: 3px 6px; font-size: 12px; font-family: var(--font-mono); outline: none;
+    width: 100%;
+    background: var(--bg-input);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 11.5px;
+    font-family: var(--font-mono);
+    outline: none;
+    transition: border-color 0.15s;
   }
-  .arg-item .arg-val input:focus { border-color: var(--accent); }
+  .arg-item .arg-val input:focus {
+    border-color: var(--accent);
+  }
+  .run-cmd-preview {
+    flex: 0 0 auto;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .preview-title {
+    font-size: 10.5px;
+    color: var(--fg-dim);
+    font-weight: 600;
+  }
+  .cmd-preview-code {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--green, #22c55e);
+    word-break: break-all;
+    line-height: 1.35;
+    max-height: 52px;
+    overflow-y: auto;
+  }
 </style>
-
-<script>
-(function() {
-  // Actual args from src/Options.cpp (cxxopts definitions).
-  // Common args shared by gkNextRenderer, gkNextEditor, MagicaLego, gkNextBenchmark, gkNextVisualTest.
-  const COMMON_ARGS = [
-    { flag: '--width',                    desc: '帧缓冲宽度',                           hasVal: true,  valDefault: '1920' },
-    { flag: '--height',                   desc: '帧缓冲高度',                           hasVal: true,  valDefault: '1080' },
-    { flag: '--load-scene',               desc: '加载场景（绝对路径或相对项目根目录）', hasVal: true,  valDefault: ''     },
-    { flag: '--hdri',                     desc: '加载 HDRI 文件路径',                   hasVal: true,  valDefault: ''     },
-    { flag: '--gpu',                      desc: '指定 GPU 索引',                        hasVal: true,  valDefault: '0'    },
-    { flag: '--present-mode',             desc: '呈现模式 (0=Immediate 1=Mailbox 2=FIFO 3=FIFORelaxed)', hasVal: true, valDefault: '3' },
-    { flag: '--locale',                   desc: '区域设置 (en / zhCN / RU)',            hasVal: true,  valDefault: 'en'   },
-    { flag: '--fullscreen',               desc: '切换全屏模式',                         hasVal: false                     },
-    { flag: '--savefile',                 desc: '基准测试完成后保存截图',               hasVal: false                     },
-    { flag: '--renderdoc',                desc: '抓取首个稳定场景帧并打开 RenderDoc（如可用）', hasVal: false                     },
-    { flag: '--forcesdr',                 desc: '即使支持 HDR 也强制使用 SDR',          hasVal: false                     },
-    { flag: '--reference',                desc: '开启参考渲染器对比模式',              hasVal: false                     },
-    { flag: '--forcenort',                desc: '强制不使用硬件光追',                   hasVal: false                     },
-    { flag: '--forcesoftgen',             desc: '强制环境立方体使用软件光追',           hasVal: false                     },
-    { flag: '--validation',               desc: '开启 Vulkan 校验层',                  hasVal: false                     },
-    { flag: '--no-shader-hotreload',      desc: '关闭 Slang 着色器热重载',             hasVal: false                     },
-    { flag: '--shader-hotreload-interval',desc: '着色器热重载轮询间隔（秒）',          hasVal: true,  valDefault: '0.5'  },
-    { flag: '--agent-validation',         desc: '开启 Agent 校验（自动截图）',         hasVal: false                     },
-    { flag: '--flappy-replay',            desc: '运行 Flappy 确定性回放',              hasVal: false                     },
-    { flag: '--test-gltf',                desc: '运行 glTF 健壮性测试',               hasVal: false                     },
-    { flag: '--test-gltf-filter',         desc: 'glTF 测试过滤器（部分名称匹配）',    hasVal: true,  valDefault: ''     },
-    { flag: '--update-baseline',          desc: '更新视觉测试基准图片',               hasVal: false                     },
-  ];
-
-  function lsKey(target) { return 'gnb-run-args-' + target; }
-
-  function loadSaved(target) {
-    try { return JSON.parse(localStorage.getItem(lsKey(target)) || '{}'); } catch { return {}; }
-  }
-
-  function saveCurrent(target) {
-    const saved = {};
-    document.querySelectorAll('#run-args-list .arg-item').forEach(item => {
-      const flag = item.dataset.flag;
-      const cb = item.querySelector('input[type="checkbox"]');
-      const valInput = item.querySelector('.arg-val input');
-      saved[flag] = { checked: cb.checked, val: valInput ? valInput.value : '' };
-    });
-    localStorage.setItem(lsKey(target), JSON.stringify(saved));
-    rebuildExtraArgs();
-  }
-
-  function rebuildExtraArgs() {
-    const parts = [];
-    document.querySelectorAll('#run-args-list .arg-item').forEach(item => {
-      const cb = item.querySelector('input[type="checkbox"]');
-      if (!cb.checked) return;
-      parts.push(item.dataset.flag);
-      const valInput = item.querySelector('.arg-val input');
-      if (valInput && valInput.value.trim()) parts.push(valInput.value.trim());
-    });
-    const el = document.getElementById('run-extra-args');
-    if (el) el.value = parts.join(' ');
-  }
-
-  function renderArgsPanel(target) {
-    const list = document.getElementById('run-args-list');
-    if (!list) return;
-    const defs = target && target !== 'all' && target !== 'Packager' && target !== 'gkNextUnitTests'
-      ? COMMON_ARGS
-      : null;
-    if (!defs || defs.length === 0) {
-      list.innerHTML = '<div class="run-args-empty" style="color:var(--fg-dim);font-size:12px;font-style:italic;">该 target 无可配置参数</div>';
-      return;
-    }
-    const saved = loadSaved(target);
-    list.innerHTML = '';
-    defs.forEach(def => {
-      const s = saved[def.flag] || {};
-      const checked = s.checked || false;
-      const val = s.val !== undefined ? s.val : (def.valDefault || '');
-      const item = document.createElement('div');
-      item.className = 'arg-item';
-      item.dataset.flag = def.flag;
-      const valHtml = def.hasVal
-        ? '<div class="arg-val"><input type="text" value="' + val.replace(/&/g,'&amp;').replace(/"/g,'&quot;') + '" placeholder="值"></div>'
-        : '';
-      item.innerHTML =
-        '<input type="checkbox"' + (checked ? ' checked' : '') + '>' +
-        '<div class="arg-body">' +
-          '<span class="arg-flag">' + def.flag + '</span>' +
-          '<span class="arg-desc">' + def.desc + '</span>' +
-          valHtml +
-        '</div>';
-      item.querySelector('input[type="checkbox"]').addEventListener('change', () => saveCurrent(target));
-      if (def.hasVal) item.querySelector('.arg-val input').addEventListener('input', () => saveCurrent(target));
-      list.appendChild(item);
-    });
-    rebuildExtraArgs();
-  }
-
-  function syncBuildRunTarget(item) {
-    const page = item?.closest('.tab-build-run');
-    if (!page) return;
-    const target = item.dataset.target;
-    page.querySelectorAll('input[name="target"]').forEach(input => { input.value = target; });
-    const runnable = item.dataset.runnable === 'true';
-    const runButton = page.querySelector('[data-run-button]');
-    if (runButton) runButton.disabled = !runnable;
-    renderArgsPanel(runnable ? target : '');
-  }
-
-  document.body.addEventListener('click', e => {
-    const item = e.target.closest('.tab-build-run .target-item');
-    if (!item) return;
-    setTimeout(() => syncBuildRunTarget(item), 0);
-  });
-
-  document.body.addEventListener('htmx:afterSwap', event => {
-    const page = event.detail.target?.querySelector?.('.tab-build-run') ||
-      (event.detail.target?.matches?.('.tab-build-run') ? event.detail.target : null);
-    if (!page) return;
-    const selected = page.querySelector('.target-item.selected');
-    if (selected) syncBuildRunTarget(selected);
-  });
-})();
-</script>
 {{end}}
 
 
 {{define "tab_remote"}}
 <div class="tab-build-run tab-remote">
-  <aside class="tab-side">
-    <div class="card build-run-target-card">
-      <h2 class="card-title">
-        <span class="ico">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-        </span>
-        Target
-        <span class="tag-mini" style="margin-left:auto;">{{len .RemoteVM.Targets}}</span>
-      </h2>
-      <div class="target-list build-run-targets">
-        {{range $index, $target := .RemoteVM.Targets}}
-        <div class="target-item {{if eq $target.Name $.RemoteVM.DefaultTarget}}selected{{else if and (eq $.RemoteVM.DefaultTarget "") (eq $index 0)}}selected{{end}}"
-             data-target="{{$target.Name}}" data-runnable="true">
-          <span class="name">{{$target.Name}}</span>
-          {{if $target.Built}}<span class="target-built" title="已构建">ready</span>{{end}}
-        </div>
-        {{end}}
-      </div>
-      <div class="archive-hint" style="margin-top: 10px;">
-        仅支持 Vulkan Video 硬件编码设备；不再回退 OpenH264。
-      </div>
-    </div>
-  </aside>
-
-  <aside class="tab-side run-args-col">
-    <div class="card remote-config-card">
-      <h2 class="card-title">
-        <span class="ico">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M7 19h10"/><path d="M12 17v2"/></svg>
-        </span>
-        Remote 启动
-      </h2>
-      <form class="remote-form" hx-post="/jobs/remote" hx-target="#log-panel-host" hx-swap="innerHTML">
-        <input type="hidden" name="target" value="{{.RemoteVM.DefaultTarget}}">
-        <div class="form-field">
-          <label for="remote-scene">scene</label>
-          <input id="remote-scene" class="input" type="text" name="scene" value="{{.RemoteVM.DefaultScene}}" placeholder="assets/models/playground.glb">
-        </div>
-        <div class="remote-grid two">
-          <div class="form-field">
-            <label for="remote-bind">bind</label>
-            <input id="remote-bind" class="input" type="text" name="bind" value="{{.RemoteVM.DefaultBind}}" placeholder="0.0.0.0">
-          </div>
-          <div class="form-field">
-            <label for="remote-http-port">http port</label>
-            <input id="remote-http-port" class="input" type="number" min="1" max="65535" name="httpPort" value="{{.RemoteVM.HTTPPort}}">
-          </div>
-        </div>
-        <div class="remote-grid two">
-          <div class="form-field">
-            <label for="remote-signal-port">signal port</label>
-            <input id="remote-signal-port" class="input" type="number" min="1" max="65535" name="signalingPort" value="{{.RemoteVM.SignalingPort}}">
-          </div>
-          <div class="form-field">
-            <label for="remote-fps">fps</label>
-            <input id="remote-fps" class="input" type="number" min="1" max="240" name="fps" value="{{.RemoteVM.Fps}}">
-          </div>
-        </div>
-        <div class="remote-grid two">
-          <div class="form-field">
-            <label for="remote-res">encode res</label>
-            <input id="remote-res" class="input" type="text" name="resolution" value="{{.RemoteVM.DefaultRes}}" placeholder="1280x720">
-          </div>
-          <div class="form-field">
-            <label for="remote-bitrate">bitrate kbps</label>
-            <input id="remote-bitrate" class="input" type="number" min="0" step="500" name="bitrateKbps" value="{{.RemoteVM.BitrateKbps}}" placeholder="0 = auto">
-          </div>
-        </div>
-        <div class="remote-grid two">
-          <div class="form-field">
-            <label for="remote-encoder">encoder</label>
-            <select id="remote-encoder" class="select" name="encoder">
-              <option value="auto" {{if eq .RemoteVM.DefaultEncoder "auto"}}selected{{end}}>auto</option>
-              <option value="vulkan" {{if eq .RemoteVM.DefaultEncoder "vulkan"}}selected{{end}}>vulkan</option>
-            </select>
-          </div>
-          <div class="form-field remote-toggle-wrap">
-            <label class="build-opt compact remote-toggle" title="调试时保留本地窗口可见">
-              <input type="checkbox" name="showWindow" value="1">
-              <span>show window</span>
-            </label>
-          </div>
-        </div>
-        <div class="form-field">
-          <label for="remote-extra-args">extra args</label>
-          <input id="remote-extra-args" class="input" type="text" name="extraArgs" value="" placeholder="--validation --gpu 1">
-        </div>
-        <div class="archive-hint remote-note">
-          远端浏览器只连接 dashboard 启动出来的 target；主机需要让 <code>{{.RemoteVM.HTTPPort}}</code> / <code>{{.RemoteVM.SignalingPort}}</code> 端口在局域网内可达。
-        </div>
-        <div class="remote-preview" data-local-hosts="{{range $index, $host := .RemoteVM.LocalHosts}}{{if $index}},{{end}}{{$host}}{{end}}">
-          <div class="remote-preview-head">访问地址</div>
-          <div class="remote-preview-list" data-remote-url-preview>
-            {{range .RemoteVM.URLPreview}}
-            <code>{{.}}</code>
-            {{end}}
-          </div>
-        </div>
-        <button class="btn-primary" type="submit">启动 Remote</button>
-      </form>
-    </div>
-  </aside>
-
   <section class="tab-main remote-main">
     <div class="remote-surface-card">
       <div class="remote-surface-head">
@@ -1425,26 +1626,13 @@
           <span class="ico">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M7 19h10"/><path d="M12 17v2"/></svg>
           </span>
-          内嵌串流
+          {{T "remote.embed"}}
+          <span class="remote-connection-state" data-remote-diag-client>{{T "remote.not_connected"}}</span>
         </div>
-        <div class="remote-surface-actions">
-          <button class="btn-secondary remote-embed-btn" type="button" data-remote-action="connect">连接</button>
-          <button class="btn-secondary remote-embed-btn" type="button" data-remote-action="refresh">刷新</button>
-          <button class="btn-secondary remote-embed-btn" type="button" data-remote-action="clear">清空</button>
-        </div>
-      </div>
-      <div class="remote-surface-note">
-        在 dashboard 内直接操作 remote client。先点击画面获取焦点，键盘、鼠标和右键 pointer-lock 都会发到远端。
-      </div>
-      <div class="remote-diag" data-remote-diag>
-        <div class="remote-diag-row"><span class="k">mode</span><span class="v" data-remote-diag-mode>dashboard proxy client</span></div>
-        <div class="remote-diag-row"><span class="k">target</span><span class="v" data-remote-diag-url>尚未连接</span></div>
-        <div class="remote-diag-row"><span class="k">client</span><span class="v" data-remote-diag-client>idle</span></div>
-        <div class="remote-diag-row"><span class="k">config</span><span class="v" data-remote-diag-config>idle</span></div>
       </div>
       <div class="remote-frame-shell">
         <div class="remote-frame-placeholder" data-remote-placeholder>
-          启动 Remote 后，会在这里自动嵌入串流页面。
+          {{T "remote.placeholder"}}
         </div>
         <iframe
           class="remote-frame"
@@ -1452,125 +1640,99 @@
           title="gkNext Remote Play"
           loading="eager"
           referrerpolicy="no-referrer"
-          allow="autoplay; fullscreen; pointer-lock; gamepad"
+          allow="autoplay; fullscreen; gamepad"
           allowfullscreen></iframe>
       </div>
     </div>
 
-    <div class="remote-log-host">
-      <div id="log-panel-host" style="display: contents;">
-        {{if .RemoteVM.HasJob}}
-          {{template "log_panel" .RemoteVM.Latest}}
-        {{else}}
-          {{template "log_panel_empty" "remote"}}
-        {{end}}
-      </div>
+    <div class="remote-dock remote-bottom-grid">
+      <form class="remote-form" hx-post="/jobs/remote" hx-target="#remote-log-panel-host" hx-swap="innerHTML">
+        <section class="remote-dock-card remote-source-card">
+          <h3>运行目标</h3>
+          <label class="remote-compact-field" for="remote-target">
+            <span>target</span>
+            <select id="remote-target" class="select" name="target">
+              {{range $index, $target := .RemoteVM.Targets}}
+              <option value="{{$target.Name}}" {{if or (eq $target.Name $.RemoteVM.DefaultTarget) (and (eq $.RemoteVM.DefaultTarget "") (eq $index 0))}}selected{{end}}>{{$target.Name}}</option>
+              {{end}}
+            </select>
+          </label>
+          <label class="remote-compact-field remote-scene-field" for="remote-scene">
+            <span>scene</span>
+            <input id="remote-scene" class="input" type="text" name="scene" value="{{.RemoteVM.DefaultScene}}" placeholder="assets/models/playground.glb">
+          </label>
+        </section>
+        <section class="remote-dock-card remote-settings-card">
+          <h3>串流参数</h3>
+          <div class="remote-settings-primary">
+            <label class="remote-compact-field" for="remote-fps"><span>fps</span><input id="remote-fps" class="input" type="number" min="1" max="240" name="fps" value="{{.RemoteVM.Fps}}"></label>
+            <label class="remote-compact-field" for="remote-res"><span>encode res</span><input id="remote-res" class="input" type="text" name="resolution" value="{{.RemoteVM.DefaultRes}}" placeholder="1280x720"></label>
+            <label class="remote-compact-field" for="remote-bitrate"><span>bitrate</span><input id="remote-bitrate" class="input" type="number" min="0" step="500" name="bitrateKbps" value="{{.RemoteVM.BitrateKbps}}" placeholder="auto"></label>
+            <label class="remote-compact-field" for="remote-encoder"><span>encoder</span><select id="remote-encoder" class="select" name="encoder"><option value="auto" {{if eq .RemoteVM.DefaultEncoder "auto"}}selected{{end}}>auto</option><option value="vulkan" {{if eq .RemoteVM.DefaultEncoder "vulkan"}}selected{{end}}>vulkan</option></select></label>
+          </div>
+          <details class="remote-advanced">
+            <summary>网络与调试</summary>
+            <div class="remote-advanced-grid">
+              <label class="remote-compact-field" for="remote-bind"><span>bind</span><input id="remote-bind" class="input" type="text" name="bind" value="{{.RemoteVM.DefaultBind}}" placeholder="0.0.0.0"></label>
+              <label class="remote-compact-field" for="remote-http-port"><span>http</span><input id="remote-http-port" class="input" type="number" min="1" max="65535" name="httpPort" value="{{.RemoteVM.HTTPPort}}"></label>
+              <label class="remote-compact-field" for="remote-signal-port"><span>signal</span><input id="remote-signal-port" class="input" type="number" min="1" max="65535" name="signalingPort" value="{{.RemoteVM.SignalingPort}}"></label>
+              <label class="remote-toggle" title="{{T "remote.show_window"}}"><input type="checkbox" name="showWindow" value="1"><span>show window</span></label>
+              <label class="remote-compact-field remote-extra-field" for="remote-extra-args"><span>extra args</span><input id="remote-extra-args" class="input" type="text" name="extraArgs" value="" placeholder="--validation --gpu 1"></label>
+            </div>
+          </details>
+        </section>
+        <section class="remote-dock-card remote-controls-card">
+          <h3>控制</h3>
+          <button class="btn-primary remote-start-btn" type="submit" data-remote-start>{{T "remote.start"}}</button>
+          <div class="remote-control-actions">
+            <button class="btn-ghost remote-embed-btn" type="button" data-remote-action="connect">{{T "remote.connect"}}</button>
+            <button class="btn-ghost remote-embed-btn" type="button" data-remote-action="refresh">{{T "remote.refresh"}}</button>
+            <button class="btn-ghost remote-embed-btn danger" type="button" data-remote-action="clear">{{T "remote.clear"}}</button>
+          </div>
+        </section>
+      </form>
     </div>
+    <details class="remote-log-drawer">
+      <summary title="调试日志" aria-label="调试日志">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      </summary>
+      <section class="remote-log-popover">
+        <div class="remote-log-popover-head">调试日志</div>
+        <div id="remote-log-panel-host" class="remote-log-host">
+          {{if .RemoteVM.HasJob}}
+            {{template "log_panel" .RemoteVM.Latest}}
+          {{else}}
+            {{template "log_panel_empty" "job.kind.remote"}}
+          {{end}}
+        </div>
+      </section>
+    </details>
   </section>
 </div>
 
 <style>
   .tab-remote {
-    display: grid;
-    grid-template-columns: 270px 380px minmax(0, 1fr);
-    gap: 16px;
-    padding: 16px;
+    display: block;
+    padding: 8px;
     height: 100%;
     overflow: hidden;
   }
-  .tab-remote > aside,
   .tab-remote > section,
-  .tab-remote .tab-side,
   .tab-remote .tab-main {
     min-height: 0;
     overflow: hidden;
   }
-  .tab-remote .build-run-target-card,
-  .tab-remote .remote-config-card {
+  .tab-remote .remote-main {
+    position: relative;
     display: flex;
     flex-direction: column;
-    flex: 1 1 auto;
     min-height: 0;
+    height: 100%;
     overflow: hidden;
-  }
-  .tab-remote .build-run-target-card {
-    padding-bottom: 10px;
-  }
-  .tab-remote .build-run-targets {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    gap: 1px;
-    padding-right: 3px;
-  }
-  #tab-content .tab-remote .build-run-targets .target-item {
-    height: 36px;
-    min-height: 36px;
-    margin: 0;
-    padding: 0 9px;
     gap: 6px;
   }
-  .tab-remote .build-run-targets .target-item .name {
-    font-size: 12.5px;
-  }
-  .tab-remote .target-built {
-    color: var(--green);
-    font-family: var(--font-mono);
-    font-size: 9.5px;
-    opacity: .75;
-  }
-  .tab-remote .run-args-col {
-    overflow: hidden;
-    gap: 0;
-  }
-  .tab-remote .remote-main {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
-    gap: 0;
-  }
   .tab-remote .remote-form {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    padding-right: 4px;
-  }
-  .tab-remote .remote-grid {
-    display: grid;
-    gap: 10px;
-  }
-  .tab-remote .remote-grid.two {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-  .tab-remote .remote-toggle-wrap {
-    justify-content: flex-end;
-    margin-bottom: 0;
-  }
-  .tab-remote .remote-toggle {
-    display: flex;
-    gap: 8px;
-    width: 100%;
-    min-height: 38px;
-    justify-content: flex-start;
-    align-items: center;
-    padding: 8px 10px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--bg-input);
-  }
-  .tab-remote .remote-toggle input[type="checkbox"] {
-    accent-color: var(--accent);
-  }
-  .tab-remote .remote-note {
-    margin-bottom: 12px;
-  }
-  .tab-remote .btn-primary[type="submit"] {
-    margin-top: auto;
-    flex: 0 0 auto;
+    display: contents;
   }
   .tab-remote .remote-surface-card {
     display: flex;
@@ -1579,12 +1741,106 @@
     overflow: hidden;
     flex: 1 1 auto;
   }
+  .tab-remote .remote-dock {
+    display: grid;
+    grid-template-columns: minmax(220px, 1.15fr) minmax(280px, 1.45fr) minmax(180px, .75fr);
+    flex: 0 0 122px;
+    min-height: 0;
+    gap: 6px;
+  }
+  .tab-remote .remote-dock-card {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    gap: 6px;
+    padding: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-card);
+  }
+  .tab-remote .remote-dock-card h3 {
+    margin: 0;
+    color: var(--fg-dim);
+    font: 10px var(--font-mono);
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .tab-remote .remote-compact-field {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: var(--fg-dim);
+    font: 10px var(--font-mono);
+  }
+  .tab-remote .remote-compact-field .input,
+  .tab-remote .remote-compact-field .select {
+    min-width: 0;
+    height: 30px;
+    padding: 4px 7px;
+  }
+  .tab-remote .remote-source-card .remote-compact-field {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+  .tab-remote .remote-settings-primary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 5px 8px;
+  }
+  .tab-remote .remote-start-btn {
+    width: 100%;
+    min-height: 30px;
+    padding: 5px 14px;
+  }
+  .tab-remote .remote-advanced {
+    color: var(--fg-dim);
+    font-size: 11px;
+  }
+  .tab-remote .remote-advanced summary {
+    width: max-content;
+    margin-top: 0;
+    cursor: pointer;
+    user-select: none;
+  }
+  .tab-remote .remote-advanced-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 5px 8px;
+    margin-top: 6px;
+  }
+  .tab-remote .remote-advanced-grid .remote-extra-field {
+    grid-column: span 2;
+  }
+  .tab-remote .remote-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 30px;
+    color: var(--fg);
+    font-size: 11px;
+  }
+  .tab-remote .remote-toggle input[type="checkbox"] {
+    accent-color: var(--accent);
+  }
+  .tab-remote .remote-control-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+  }
+  .tab-remote .remote-control-actions .danger {
+    grid-column: 1 / -1;
+  }
   .tab-remote .remote-surface-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    margin-bottom: 8px;
+    min-height: 30px;
+    margin-bottom: 0;
   }
   .tab-remote .remote-surface-head .title {
     display: inline-flex;
@@ -1594,54 +1850,38 @@
     font-weight: 600;
     color: var(--fg);
   }
-  .tab-remote .remote-surface-actions {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
+  .tab-remote .remote-connection-state {
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 2px 7px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--fg-mute);
+    font: 10px var(--font-mono);
+    font-weight: 400;
   }
   .tab-remote .remote-embed-btn {
     width: auto;
-    padding: 6px 10px;
-    font-size: 12px;
-  }
-  .tab-remote .remote-surface-note {
-    margin-bottom: 10px;
-    color: var(--fg-dim);
+    min-height: 26px;
+    padding: 4px 7px;
     font-size: 11px;
-  }
-  .tab-remote .remote-diag {
-    margin-bottom: 10px;
-    padding: 8px 10px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.02);
-  }
-  .tab-remote .remote-diag-row {
-    display: grid;
-    grid-template-columns: 56px minmax(0, 1fr);
-    gap: 10px;
-    padding: 3px 0;
-    font-size: 11px;
-  }
-  .tab-remote .remote-diag-row .k {
-    color: var(--fg-mute);
-    text-transform: lowercase;
-  }
-  .tab-remote .remote-diag-row .v {
-    color: var(--fg);
-    overflow-wrap: anywhere;
   }
   .tab-remote .remote-frame-shell {
     position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     flex: 1 1 auto;
-    min-height: 320px;
+    min-height: 0;
     overflow: hidden;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: #05070a;
   }
   .tab-remote .remote-frame {
+    display: block;
     width: 100%;
     height: 100%;
     border: 0;
@@ -1664,66 +1904,86 @@
   .tab-remote .remote-frame-shell.ready .remote-frame-placeholder {
     display: none;
   }
-  .tab-remote .remote-log-host {
-    flex: 0 0 230px;
-    min-height: 0;
-    overflow: hidden;
-    border-top: 1px solid var(--border);
-  }
   .tab-remote .remote-log-host .log-panel,
   .tab-remote .remote-log-host .log-empty {
-    height: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
   }
-  .tab-remote .remote-preview {
-    margin-bottom: 12px;
-    padding: 10px;
+  .tab-remote .remote-settings-card {
+    overflow-y: auto;
+  }
+  .tab-remote .remote-log-drawer {
+    position: absolute;
+    z-index: 5;
+    top: 42px;
+    right: 12px;
+  }
+  .tab-remote .remote-log-drawer > summary {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    list-style: none;
+    cursor: pointer;
+    color: var(--fg-dim);
     border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--bg-card);
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--bg-card) 88%, transparent);
   }
-  .tab-remote .remote-preview-head {
-    margin-bottom: 8px;
-    font-size: 11px;
-    color: var(--fg-mute);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+  .tab-remote .remote-log-drawer > summary::-webkit-details-marker {
+    display: none;
   }
-  .tab-remote .remote-preview-list {
+  .tab-remote .remote-log-drawer[open] > summary,
+  .tab-remote .remote-log-drawer > summary:hover {
+    color: var(--fg);
+    border-color: var(--accent);
+  }
+  .tab-remote .remote-log-popover {
+    position: absolute;
+    top: 38px;
+    right: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    width: min(560px, calc(100vw - 64px));
+    height: 270px;
+    padding: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--bg-card);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, .38);
   }
-  .tab-remote .remote-preview-list code {
-    display: block;
-    padding: 6px 8px;
-    border-radius: 4px;
-    background: rgba(255, 255, 255, 0.03);
-    color: var(--fg);
-    overflow-x: auto;
-    white-space: nowrap;
+  .tab-remote .remote-log-popover-head {
+    flex: 0 0 auto;
+    padding: 0 2px 6px;
+    color: var(--fg-dim);
+    font: 10px var(--font-mono);
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
   }
-  @media (max-width: 1380px) {
-    .tab-remote {
-      grid-template-columns: 270px minmax(320px, 1fr) minmax(0, 1fr);
-    }
-    .tab-remote .remote-grid.two {
-      grid-template-columns: minmax(0, 1fr);
-    }
+  .tab-remote .remote-log-host {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
   }
   @media (max-width: 1120px) {
-    .tab-remote {
-      grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+    .tab-remote .remote-dock {
+      grid-template-columns: minmax(220px, 1fr) minmax(260px, 1.25fr) minmax(180px, .8fr);
+      flex-basis: 122px;
     }
-    .tab-remote .tab-main {
-      grid-column: 1 / -1;
-    }
-    .tab-remote .remote-log-host {
-      flex-basis: 210px;
+  }
+  @media (max-width: 720px) {
+    .tab-remote .remote-dock {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      flex-basis: 178px;
     }
   }
 </style>
 
-<script>
+<!-- Remote controls live in layout.html so HTMX tab swaps and Wails share one lifecycle. -->
+<script type="application/x-gnb-remote-legacy">
 (function() {
   const REMOTE_URL_STORAGE_KEY = 'gnb-remote-embed-url';
   const remoteRetryTimers = new WeakMap();
@@ -1807,7 +2067,16 @@
   function remoteFrameUrl(url) {
     url = normalizeEmbedUrl(url);
     if (!url) return '';
-    return `/remote/client?remoteBase=${encodeURIComponent(url)}&_ts=${Date.now()}`;
+    // Load the client from the remote host itself.  The dashboard runs under
+    // Wails' virtual origin, while the remote HTTP and signaling services are
+    // ordinary loopback/LAN origins.  Serving a copy through the dashboard
+    // turns /config and the WebSocket handshake into cross-origin requests;
+    // WebView2 can reject those even though opening the host page directly
+    // works.  A direct frame keeps the page, /config and ws:// service in one
+    // origin, just like the standalone browser flow.
+    const remoteURL = new URL(url);
+    remoteURL.searchParams.set('_ts', String(Date.now()));
+    return remoteURL.toString();
   }
 
   function loadRemoteFrame(page, url, persist) {
@@ -1832,8 +2101,8 @@
       delete shell.dataset.remoteUrl;
     }
     if (frame) frame.removeAttribute('src');
-    setRemotePlaceholder(page, '启动 Remote 后，会在这里自动嵌入串流页面。');
-    setRemoteDiag(page, 'url', '尚未连接');
+    setRemotePlaceholder(page, t('remote.placeholder'));
+    setRemoteDiag(page, 'url', t('remote.not_connected'));
     setRemoteDiag(page, 'client', 'idle');
     setRemoteDiag(page, 'config', 'idle');
     if (removeStorage) localStorage.removeItem(REMOTE_URL_STORAGE_KEY);
@@ -1861,7 +2130,7 @@
     const url = options.url || currentRemoteUrl(page);
     if (!url) return;
     stopRemoteRetry(page);
-    setRemotePlaceholder(page, '正在等待 remote host 就绪并嵌入到 dashboard ...');
+    setRemotePlaceholder(page, t('remote.waiting'));
     setRemoteDiag(page, 'client', 'waiting for iframe load');
     loadRemoteFrame(page, url, options.persist !== false);
     probeRemoteConfig(page, url);
@@ -1875,7 +2144,7 @@
       attempts += 1;
       if (attempts > 16) {
         stopRemoteRetry(page);
-        setRemotePlaceholder(page, `未等到 remote host 响应，可点“刷新”重试：${url}`);
+        setRemotePlaceholder(page, t('remote.timeout', url));
         setRemoteDiag(page, 'client', 'timeout waiting for iframe/client ready');
         return;
       }
@@ -1914,7 +2183,8 @@
 
   function initRemoteTab(root) {
     const page = root?.querySelector?.('.tab-remote') || (root?.matches?.('.tab-remote') ? root : null);
-    if (!page) return;
+    if (!page || page.dataset.remoteInitialized === 'true') return;
+    page.dataset.remoteInitialized = 'true';
     const selected = page.querySelector('.target-item.selected');
     const hiddenTarget = page.querySelector('input[name="target"]');
     if (selected && hiddenTarget) hiddenTarget.value = selected.dataset.target || '';
@@ -1926,7 +2196,7 @@
     bindRemoteActions(page);
     const storedUrl = normalizeEmbedUrl(localStorage.getItem(REMOTE_URL_STORAGE_KEY));
     if (storedUrl) {
-      setRemotePlaceholder(page, '正在恢复上一次的 remote 串流页 ...');
+      setRemotePlaceholder(page, t('remote.restoring'));
       connectRemoteFrame(page, { url: storedUrl, persist: false });
     }
   }
@@ -1950,54 +2220,79 @@
     });
   });
 
-  document.body.addEventListener('htmx:afterSwap', event => initRemoteTab(event.detail.target));
-  document.addEventListener('DOMContentLoaded', () => initRemoteTab(document));
+  // tab_remote is normally inserted through an HTMX swap.  Registering an
+  // htmx:afterSwap listener here is too late: that swap has already completed,
+  // leaving Connect and Refresh without handlers.  Initialise immediately for
+  // dynamic insertion, while retaining the DOM-ready path for a direct page
+  // load.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => initRemoteTab(document), { once: true });
+  } else {
+    initRemoteTab(document);
+  }
 })();
 </script>
 {{end}}
 
 
 {{define "tab_test"}}
-<div class="tab-jobs">
-  <aside class="tab-side">
+<div class="tab-jobs test-page">
+  <aside class="tab-side test-side">
     <div class="card">
-      <h2 class="card-title">
-        <span class="ico">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 2v8L4 20a2 2 0 0 0 1.7 3h12.6A2 2 0 0 0 20 20l-5-10V2"/><line x1="9" y1="2" x2="15" y2="2"/></svg>
-        </span>
-        Test case
-      </h2>
+      <div class="test-header">
+        <h2 class="card-title" style="margin-bottom: 0;">
+          <span class="ico">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 2v8L4 20a2 2 0 0 0 1.7 3h12.6A2 2 0 0 0 20 20l-5-10V2"/><line x1="9" y1="2" x2="15" y2="2"/></svg>
+          </span>
+          Test case
+        </h2>
+        <span class="test-count-badge" id="test-count-badge" title="当前显示的测试用例数量">{{len .TestVM.Tests}}</span>
+      </div>
       {{if not .TestVM.BinExists}}
-        <div class="archive-hint" style="margin-bottom: 10px;">
-          未找到 <code>gkNextUnitTests</code>，请先在 Build 页构建该 target。
+        <div class="archive-hint" style="margin-top: 8px; margin-bottom: 10px;">
+          {{T "test.missing"}}
           {{if .TestVM.ListErr}}<br><span style="opacity:0.7; font-size: 11px;">{{.TestVM.ListErr}}</span>{{end}}
         </div>
       {{end}}
-      <form data-job-form hx-post="/jobs/test" hx-target="#log-panel-host" hx-swap="innerHTML">
+
+      <div class="test-filter-box" style="margin-top: 10px; margin-bottom: 10px;">
+        <div class="test-filter-row">
+          <select class="select test-category-select" id="test-category-filter" title="按分类筛选">
+            <option value="">{{T "test.all_categories"}} ({{len .TestVM.Tests}})</option>
+            {{range .TestVM.Categories}}
+            <option value="{{.Name}}">{{.Name}} ({{.Count}})</option>
+            {{end}}
+          </select>
+        </div>
+        <div class="test-filter-row" style="margin-top: 6px;">
+          <input type="text" class="input test-search-input" id="test-search-filter" placeholder="{{T "test.search_placeholder"}}" autocomplete="off">
+        </div>
+      </div>
+
+      <form data-job-form hx-post="/jobs/test" hx-target="#test-log-panel-host" hx-swap="innerHTML">
         <input type="hidden" name="target" value="all">
-        <div class="target-list" style="margin-bottom: 12px;">
-          <div class="target-item selected" data-target="all">
-            <span class="name">all tests</span>
-            <span class="tag-mini">run all</span>
+        <div class="target-list test-target-list" style="margin-bottom: 12px;">
+          <div class="target-item selected" data-target="all" id="test-target-all-item">
+            <span class="name">{{T "test.run_all"}}</span>
+            <span class="tag-mini">all</span>
           </div>
           {{range .TestVM.Tests}}
-          <div class="target-item" data-target="{{.Name}}" title="{{.Tags}}">
+          <div class="target-item test-target-item" data-target="{{.Name}}" data-categories="{{range .Categories}}{{.}} {{end}}" title="{{.Name}}{{if .Tags}} ({{.Tags}}){{end}}">
             <span class="name">{{.Name}}</span>
-            {{if .Tags}}<span class="tag-mini">{{.Tags}}</span>{{end}}
           </div>
           {{end}}
         </div>
-        <button class="btn-primary" type="submit" {{if not .TestVM.BinExists}}disabled style="opacity:0.5; cursor:not-allowed"{{end}}>运行测试</button>
+        <button class="btn-primary" type="submit" {{if not .TestVM.BinExists}}disabled style="opacity:0.5; cursor:not-allowed"{{end}}>{{T "test.run"}}</button>
       </form>
     </div>
   </aside>
 
   <section class="tab-main">
-    <div id="log-panel-host" style="display: contents;">
+    <div id="test-log-panel-host" style="display: contents;">
       {{if .TestVM.HasJob}}
         {{template "log_panel" .TestVM.Latest}}
       {{else}}
-        {{template "log_panel_empty" "test"}}
+        {{template "log_panel_empty" "job.kind.test"}}
       {{end}}
     </div>
   </section>
@@ -2027,13 +2322,13 @@
       {{if jobIsRunning .}}
       <button class="action-btn danger" type="button"
               hx-post="/jobs/{{.ID}}/cancel"
-              hx-target="#log-panel-host" hx-swap="innerHTML"
-              hx-confirm="终止当前任务？"
-              title="终止">
+              hx-target="closest .log-panel" hx-swap="outerHTML"
+              hx-confirm="{{T "job.cancel_confirm"}}"
+              title="{{T "job.cancel"}}">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
       </button>
       {{end}}
-      <button class="action-btn" type="button" title="清空显示" onclick="this.closest('.log-panel').querySelector('.log-body').innerHTML='';">
+      <button class="action-btn" type="button" title="{{T "job.clear"}}" onclick="this.closest('.log-panel').querySelector('.log-body').innerHTML='';">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
       </button>
     </div>
@@ -2050,12 +2345,298 @@
       <span class="ico">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
       </span>
-      {{.}}
+      {{T .}}
     </div>
     <span class="spacer"></span>
-    <div class="meta"><span>暂无任务</span></div>
+    <div class="meta"><span>{{T "job.none"}}</span></div>
   </div>
-  <div class="log-empty">选择左侧 target 后点击按钮开始 —— 日志会在这里实时显示（带 ANSI 颜色）。</div>
+  <div class="log-empty">{{T "job.log_empty"}}</div>
+</div>
+{{end}}
+
+
+{{define "tab_validation"}}
+<div class="validation-page">
+  <div class="validation-head">
+    <div>
+      <h1>{{T "validation.title"}}</h1>
+      <p>{{T "validation.blurb"}}</p>
+    </div>
+    <div class="validation-stats">
+      <div class="validation-stat"><span>{{T "validation.running"}}</span><strong>{{.ValidationVM.RunningCount}}</strong></div>
+      <div class="validation-stat danger"><span>{{T "validation.failed"}}</span><strong>{{.ValidationVM.FailedCount}}</strong></div>
+      <div class="validation-stat warning"><span>{{T "validation.pending"}}</span><strong>{{.ValidationVM.PendingCount}}</strong></div>
+      <div class="validation-stat issue"><span>{{T "validation.issue"}}</span><strong>{{.ValidationVM.IssueCount}}</strong></div>
+    </div>
+  </div>
+
+  {{if .ValidationVM.Flash}}<div class="validation-flash">{{.ValidationVM.Flash}}</div>{{end}}
+  {{if .ValidationVM.Error}}<div class="validation-error">{{T "validation.read_error" .ValidationVM.Error}}</div>{{end}}
+
+  <div class="validation-layout">
+    <section class="validation-script-col">
+      <div class="card validation-scripts-card">
+        <div class="validation-card-title"><h2 class="card-title">{{T "validation.scripts"}}</h2><span class="tag-mini">{{len .ValidationVM.Scripts}}</span></div>
+        <div class="validation-script-hint">{{T "validation.script_hint"}}</div>
+        <form class="validation-script-filter" hx-get="/tab/validation" hx-target="#tab-content" hx-swap="innerHTML">
+          <input type="hidden" name="target" value="{{.ValidationVM.Target}}">
+          <input type="hidden" name="status" value="{{.ValidationVM.Status}}">
+          <label>{{T "validation.by_target"}}
+            <select class="select" name="script-target" onchange="this.form.requestSubmit()">
+              <option value="">{{T "validation.all_targets"}}</option>
+              {{range .ValidationVM.ScriptTargets}}<option value="{{.}}" {{if eq . $.ValidationVM.ScriptTarget}}selected{{end}}>{{.}}</option>{{end}}
+            </select>
+          </label>
+        </form>
+        {{if .ValidationVM.ScriptsError}}
+        <div class="validation-error">{{T "validation.scripts_error" .ValidationVM.ScriptsError}}</div>
+        {{else if .ValidationVM.Scripts}}
+        <div class="validation-script-list">
+          {{range .ValidationVM.Scripts}}
+          <div class="validation-script {{if not .Runnable}}disabled{{end}}">
+            <div class="validation-script-head"><strong title="{{.Path}}">{{.Name}}</strong><span class="validation-badge">{{.Target}}</span></div>
+            <div class="validation-script-meta"><code>{{.Path}}</code>{{if .Scene}}<span title="{{.Scene}}">{{.Scene}}</span>{{end}}{{if .StepCount}}<span>{{T "validation.steps" .StepCount}}</span>{{end}}</div>
+            {{if .Runnable}}
+            <div class="validation-script-actions">
+              <form hx-post="/validation/run-script" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="script" value="{{.Path}}"><input type="hidden" name="target" value="{{$.ValidationVM.Target}}"><input type="hidden" name="status" value="{{$.ValidationVM.Status}}"><input type="hidden" name="script-target" value="{{$.ValidationVM.ScriptTarget}}"><button class="btn-secondary small" type="submit">{{T "validation.bg"}}</button></form>
+              <form hx-post="/validation/run-script" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="script" value="{{.Path}}"><input type="hidden" name="visible" value="1"><input type="hidden" name="target" value="{{$.ValidationVM.Target}}"><input type="hidden" name="status" value="{{$.ValidationVM.Status}}"><input type="hidden" name="script-target" value="{{$.ValidationVM.ScriptTarget}}"><button class="btn-primary small" type="submit">{{T "validation.visible"}}</button></form>
+            </div>
+            {{else}}
+            <div class="validation-script-error">{{or .Error (T "validation.unavailable")}}</div>
+            {{end}}
+          </div>
+          {{end}}
+        </div>
+        {{else}}
+        <div class="validation-muted">{{T "validation.no_scripts"}}</div>
+        {{end}}
+      </div>
+    </section>
+
+    <section class="validation-list-col">
+      <div class="card validation-filter-card">
+        <form class="validation-filters" hx-get="/tab/validation" hx-target="#tab-content" hx-swap="innerHTML">
+          <input type="hidden" name="script-target" value="{{.ValidationVM.ScriptTarget}}">
+          <label>target <input class="input" name="target" value="{{.ValidationVM.Target}}" placeholder="{{T "validation.all_targets"}}"></label>
+          <label>{{T "validation.status"}}
+            <select class="select" name="status">
+              <option value="">{{T "validation.status.all"}}</option>
+              <option value="running" {{if eq .ValidationVM.Status "running"}}selected{{end}}>{{T "validation.status.running"}}</option>
+              <option value="passed" {{if eq .ValidationVM.Status "passed"}}selected{{end}}>{{T "validation.status.passed"}}</option>
+              <option value="failed" {{if eq .ValidationVM.Status "failed"}}selected{{end}}>{{T "validation.status.failed"}}</option>
+              <option value="canceled" {{if eq .ValidationVM.Status "canceled"}}selected{{end}}>{{T "validation.status.canceled"}}</option>
+              <option value="interrupted" {{if eq .ValidationVM.Status "interrupted"}}selected{{end}}>{{T "validation.status.interrupted"}}</option>
+              <option value="actionable" {{if eq .ValidationVM.Status "actionable"}}selected{{end}}>{{T "validation.status.actionable"}}</option>
+            </select>
+          </label>
+          <button class="btn-ghost small" type="submit">{{T "validation.filter"}}</button>
+        </form>
+      </div>
+
+      <div class="card validation-runs-card">
+        <div class="validation-card-title"><h2 class="card-title">{{T "validation.runs"}}</h2><span class="tag-mini">{{len .ValidationVM.Runs}}</span></div>
+        {{if .ValidationVM.Runs}}
+        <div class="validation-run-list">
+          {{range .ValidationVM.Runs}}
+          <a class="validation-run {{if eq .Record.RunID $.ValidationVM.SelectedID}}selected{{end}} status-{{.Record.Status}}"
+             href="/?tab=validation&run={{.Record.RunID}}&target={{$.ValidationVM.Target}}&status={{$.ValidationVM.Status}}&script-target={{$.ValidationVM.ScriptTarget}}"
+             hx-get="/tab/validation?run={{.Record.RunID}}&target={{$.ValidationVM.Target}}&status={{$.ValidationVM.Status}}&script-target={{$.ValidationVM.ScriptTarget}}"
+             hx-target="#tab-content" hx-swap="innerHTML">
+            <div class="validation-run-top"><strong>{{.Record.Name}}</strong><span class="validation-badge">{{.StatusLabel}}</span></div>
+            <div class="validation-run-meta"><span>{{.Record.Target}}</span><span>{{.Duration}}</span><span>{{.StartedLabel}}</span></div>
+            <div class="validation-run-reason">{{or .Record.Reason "—"}}</div>
+            {{if .CurrentStepText}}<div class="validation-run-step">{{.CurrentStepText}}</div>{{end}}
+            {{if .FailureSummary}}<div class="validation-run-failure">{{.FailureSummary}}</div>{{end}}
+          </a>
+          {{end}}
+        </div>
+        {{else}}
+        <div class="validation-empty">
+          <strong>{{T "validation.empty"}}</strong>
+          <span>{{T "validation.empty_hint" "<code>gnb validate --script assets/agentscripts/smoke.agentscript.json</code>" | safeHTML}}</span>
+        </div>
+        {{end}}
+        {{if .ValidationVM.HasMore}}
+        <a class="btn-secondary validation-more" href="/?tab=validation&target={{.ValidationVM.Target}}&status={{.ValidationVM.Status}}&script-target={{.ValidationVM.ScriptTarget}}&offset={{add .ValidationVM.Offset 50}}">{{T "validation.more"}}</a>
+        {{end}}
+        {{if gt .ValidationVM.UnreadableCount 0}}<div class="validation-unreadable">{{T "validation.unreadable" .ValidationVM.UnreadableCount}}</div>{{end}}
+      </div>
+    </section>
+
+    <section class="validation-detail-col">
+      {{if .ValidationVM.Selected}}
+      <div class="card validation-detail-card">
+        <div class="validation-detail-head">
+          <div><div class="validation-kicker">{{.ValidationVM.Selected.Record.Kind}} · {{.ValidationVM.Selected.Record.RunID}}</div><h2>{{.ValidationVM.Selected.Record.Name}}</h2></div>
+          <span class="validation-badge large status-{{.ValidationVM.Selected.Record.Status}}">{{.ValidationVM.Selected.StatusLabel}}</span>
+        </div>
+        <div class="validation-detail-meta"><span>target <code>{{.ValidationVM.Selected.Record.Target}}</code></span><span>{{T "validation.started"}} {{.ValidationVM.Selected.StartedLabel}}</span><span>{{T "validation.duration"}} {{.ValidationVM.Selected.Duration}}</span></div>
+
+        {{if .ValidationVM.Selected.FailureSummary}}
+        <div class="validation-failure-box"><div class="validation-section-label">{{T "validation.failure" .ValidationVM.Selected.Record.Phase}}</div><pre>{{.ValidationVM.Selected.FailureSummary}}</pre></div>
+        {{end}}
+
+        {{if .ValidationVM.Selected.Review.Message}}
+        <div class="validation-review-box {{if .ValidationVM.Selected.HasIssue}}issue{{end}}"><div class="validation-section-label">{{T "validation.review_notes" .ValidationVM.Selected.ReviewLabel}}</div><p>{{.ValidationVM.Selected.Review.Message}}</p><small>{{.ValidationVM.Selected.Review.Author}} · {{.ValidationVM.Selected.Review.UpdatedAt.Local.Format "2006-01-02 15:04"}}</small></div>
+        {{end}}
+
+        {{if ne .ValidationVM.Selected.Record.Status "running"}}
+        <div class="validation-actions">
+          <form hx-post="/validation/{{.ValidationVM.Selected.Record.RunID}}/rerun" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="target" value="{{.ValidationVM.Target}}"><input type="hidden" name="status" value="{{.ValidationVM.Status}}"><input type="hidden" name="script-target" value="{{.ValidationVM.ScriptTarget}}"><button class="btn-secondary" type="submit">{{T "validation.rerun_bg"}}</button></form>
+          <form hx-post="/validation/{{.ValidationVM.Selected.Record.RunID}}/rerun" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="visible" value="1"><input type="hidden" name="target" value="{{.ValidationVM.Target}}"><input type="hidden" name="status" value="{{.ValidationVM.Status}}"><input type="hidden" name="script-target" value="{{.ValidationVM.ScriptTarget}}"><button class="btn-primary" type="submit">{{T "validation.rerun_vis"}}</button></form>
+        </div>
+        {{end}}
+
+        <div class="validation-review-panel">
+          <div class="validation-section-label">{{T "validation.review" .ValidationVM.Selected.ReviewLabel}}</div>
+          <div class="validation-review-actions">
+            <form hx-post="/validation/{{.ValidationVM.Selected.Record.RunID}}/review" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="status" value="accepted"><button class="btn-ghost small primary" type="submit">{{T "validation.accept"}}</button></form>
+            <form class="validation-issue-form" hx-post="/validation/{{.ValidationVM.Selected.Record.RunID}}/review" hx-target="#tab-content" hx-swap="innerHTML"><input type="hidden" name="status" value="issue">{{if .ValidationVM.Selected.Screenshots}}<select class="select" name="screenshot"><option value="">{{T "validation.link_shot"}}</option>{{range .ValidationVM.Selected.Screenshots}}<option value="{{.Path}}">{{.Name}}</option>{{end}}</select>{{end}}<input class="input" name="message" value="" placeholder="{{T "validation.issue_ph"}}"><button class="btn-ghost small danger" type="submit">{{T "validation.record_issue"}}</button></form>
+          </div>
+        </div>
+
+        {{template "validation_steps_panel" .ValidationVM.Selected}}
+
+        {{if .ValidationVM.Selected.Screenshots}}
+        <div class="validation-section-label">{{T "validation.shots"}}</div>
+        <div class="validation-screenshots">{{range .ValidationVM.Selected.Screenshots}}<a href="{{.URL}}" target="_blank"><img src="{{.URL}}" alt="{{.Name}}"><span>{{.Name}}</span></a>{{end}}</div>
+        {{end}}
+
+        <details class="validation-log"><summary>{{T "validation.log" (or (and .ValidationVM.Selected.LogError (T "validation.log.unreadable")) (T "validation.log.readonly"))}}</summary>{{if .ValidationVM.Selected.LogError}}<div class="validation-muted">{{.ValidationVM.Selected.LogError}}</div>{{else}}<pre>{{.ValidationVM.Selected.LogTail}}</pre>{{end}}<a href="/validation/{{.ValidationVM.Selected.Record.RunID}}/log">{{T "validation.log_download"}}</a></details>
+        <details class="validation-technical"><summary>{{T "validation.tech"}}</summary><div class="validation-code-block"><div>evidence: {{.ValidationVM.Selected.EvidenceDir}}</div>{{range .ValidationVM.Selected.Record.Parameters}}<code>{{.}}</code> {{end}}</div></details>
+      </div>
+      {{else}}
+      <div class="card validation-empty validation-detail-empty"><strong>{{T "validation.pick"}}</strong><span>{{T "validation.pick_hint"}}</span></div>
+      {{end}}
+    </section>
+  </div>
+</div>
+
+<style>
+  .validation-page { height: 100%; min-height: 0; overflow: hidden; padding: 0; display: flex; flex-direction: column; background: var(--bg); }
+  .validation-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; min-height: 42px; padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--bg-panel); flex: 0 0 42px; }
+  .validation-head h1 { margin: 0; font-size: 13px; font-weight: 650; display: inline-block; }
+  .validation-head p { margin: 0; color: var(--fg-dim); font-size: 11px; display: inline-block; margin-left: 10px; }
+  .validation-stats { display: flex; align-items: center; gap: 8px; }
+  .validation-stat { display: flex; align-items: center; gap: 6px; padding: 3px 9px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-card); font-size: 11px; }
+  .validation-stat span { color: var(--fg-mute); }
+  .validation-stat strong { font-weight: 600; font-family: var(--font-mono); font-size: 12px; }
+  .validation-stat.danger strong, .validation-run-failure, .validation-failure-box { color: var(--red); }
+  .validation-stat.warning strong { color: var(--yellow); }
+  .validation-stat.issue strong { color: #f97316; }
+  .validation-flash, .validation-error { margin: 8px 12px 0; padding: 7px 12px; border: 1px solid rgba(34,197,94,.35); border-radius: 6px; background: var(--green-soft); color: var(--green); font-size: 11.5px; }
+  .validation-error { border-color: rgba(239,68,68,.35); background: rgba(239,68,68,.1); color: var(--red); }
+  .validation-layout { display: grid; grid-template-columns: 280px 320px minmax(0, 1fr); gap: 0; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+  .validation-script-col, .validation-list-col, .validation-detail-col { display: flex; flex-direction: column; gap: 0; min-width: 0; min-height: 0; overflow: hidden; padding: 12px; }
+  .validation-script-col { border-right: 1px solid var(--border); background: var(--bg-panel); }
+  .validation-list-col { border-right: 1px solid var(--border); background: var(--bg-panel); }
+  .validation-detail-col { background: var(--bg); overflow-y: auto; padding: 16px; }
+  .validation-scripts-card { height: 100%; flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+  .validation-script-hint { margin: -2px 0 8px; color: var(--fg-dim); font-size: 10.5px; }
+  .validation-script-filter { display: flex; align-items: end; gap: 7px; margin-bottom: 8px; }
+  .validation-script-filter label { min-width: 0; flex: 1; color: var(--fg-dim); font-size: 10.5px; }
+  .validation-script-filter .select { display: block; width: 100%; margin-top: 3px; padding: 5px 7px; font-size: 11px; }
+  .validation-script-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 3px; }
+  .validation-script { padding: 8px 9px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg); }
+  .validation-script + .validation-script { margin-top: 5px; }
+  .validation-script.disabled { opacity: .62; }
+  .validation-script-head, .validation-script-meta, .validation-script-actions { display: flex; align-items: center; gap: 6px; }
+  .validation-script-head strong { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+  .validation-script-meta { margin-top: 3px; color: var(--fg-dim); font: 9px var(--font-mono); }
+  .validation-script-meta code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .validation-script-meta span { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .validation-script-actions { margin-top: 7px; }
+  .validation-script-actions form { margin: 0; }
+  .validation-script-error { margin-top: 5px; color: var(--yellow); font-size: 10px; }
+  .validation-filter-card { padding: 10px; }
+  .validation-filters { display: flex; gap: 8px; align-items: end; }
+  .validation-filters label { flex: 1; color: var(--fg-dim); font-size: 10px; }
+  .validation-filters .input, .validation-filters .select { display: block; width: 100%; margin-top: 3px; padding: 6px 8px; font-size: 11px; }
+  .validation-runs-card, .validation-detail-card { min-height: 0; }
+  .validation-runs-card { flex: 1 1 auto; overflow: hidden; display: flex; flex-direction: column; }
+  .validation-card-title { display: flex; align-items: center; justify-content: space-between; }
+  .validation-card-title .card-title { margin-bottom: 10px; }
+  .validation-run-list { display: flex; flex-direction: column; gap: 5px; min-height: 0; overflow-y: auto; }
+  .validation-run { display: block; padding: 10px 11px; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--fg); text-decoration: none; background: var(--bg); }
+  .validation-run:hover, .validation-run.selected { border-color: var(--accent-ring); background: var(--bg-card-hover); }
+  .validation-run-top, .validation-run-meta, .validation-detail-head, .validation-detail-meta, .validation-actions, .validation-review-actions { display: flex; align-items: center; gap: 8px; }
+  .validation-run-top strong { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+  .validation-run-meta { margin-top: 3px; color: var(--fg-dim); font: 10px var(--font-mono); }
+  .validation-run-reason { margin-top: 5px; color: var(--fg-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+  .validation-run-step { margin-top: 4px; color: var(--accent); font-size: 10px; }
+  .validation-run-failure { margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+  .validation-badge { padding: 2px 6px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--fg-mute); font-size: 10px; white-space: nowrap; }
+  .validation-badge.large { padding: 4px 8px; }
+  .status-running .validation-badge { color: var(--accent); border-color: var(--accent-ring); }
+  .status-failed .validation-badge, .status-interrupted .validation-badge { color: var(--red); border-color: rgba(239,68,68,.4); }
+  .status-passed .validation-badge { color: var(--green); border-color: rgba(34,197,94,.4); }
+  .validation-more { display: block; margin-top: 10px; text-align: center; text-decoration: none; }
+  .validation-unreadable { margin-top: 8px; color: var(--yellow); font-size: 10px; }
+  .validation-empty { display: flex; flex-direction: column; gap: 7px; align-items: center; justify-content: center; min-height: 170px; color: var(--fg-mute); text-align: center; font-size: 12px; }
+  .validation-empty strong { color: var(--fg); font-size: 14px; }
+  .validation-detail-empty { min-height: 350px; }
+  .validation-detail-card { height: 100%; overflow: hidden; display: flex; flex-direction: column; }
+  .validation-steps-card { display: flex; flex: 1 1 260px; flex-direction: column; min-width: 0; min-height: 120px; overflow: hidden; }
+  .validation-detail-head { justify-content: space-between; align-items: flex-start; }
+  .validation-detail-head h2 { margin: 2px 0 0; font-size: 18px; }
+  .validation-kicker { color: var(--fg-dim); font: 10px var(--font-mono); word-break: break-all; }
+  .validation-detail-meta { flex-wrap: wrap; margin: 9px 0 14px; color: var(--fg-mute); font-size: 11px; }
+  .validation-failure-box, .validation-review-box { margin-bottom: 13px; padding: 10px 11px; border: 1px solid rgba(239,68,68,.35); border-radius: var(--radius-lg); background: rgba(239,68,68,.08); }
+  .validation-failure-box pre, .validation-log pre { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .validation-section-label { margin: 13px 0 7px; color: var(--fg-mute); font-size: 11px; font-weight: 600; }
+  .validation-review-box { border-color: rgba(234,179,8,.35); background: rgba(234,179,8,.08); color: var(--fg); }
+  .validation-review-box.issue { border-color: rgba(249,115,22,.4); background: rgba(249,115,22,.08); }
+  .validation-review-box p { margin: 5px 0; white-space: pre-wrap; }
+  .validation-review-box small { color: var(--fg-dim); }
+  .validation-actions { padding: 9px 0 11px; border-bottom: 1px solid var(--border); }
+  .validation-actions form, .validation-review-actions form { margin: 0; }
+  .validation-review-panel { margin-top: 2px; }
+  .validation-review-actions { align-items: stretch; flex-wrap: wrap; }
+  .validation-issue-form { display: flex; flex: 1; min-width: 230px; gap: 6px; }
+  .validation-issue-form .select { flex: 0 0 110px; min-width: 0; padding: 5px 7px; }
+  .validation-issue-form .input { min-width: 0; flex: 1; padding: 5px 7px; }
+  .validation-step { display: flex; align-items: flex-start; gap: 8px; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg); }
+  .validation-step + .validation-step { margin-top: 4px; }
+  .validation-step-icon { width: 16px; height: 16px; flex: 0 0 auto; border-radius: 50%; background: var(--green-soft); color: var(--green); text-align: center; font-size: 10px; line-height: 16px; }
+  .validation-step.failed .validation-step-icon { background: rgba(239,68,68,.15); color: var(--red); }
+  .validation-step-body { flex: 1; min-width: 0; font-size: 11px; }
+  .validation-step-description { margin-left: 8px; color: var(--fg-mute); }
+  .validation-assert, .validation-step-message { margin-top: 4px; color: var(--fg-mute); overflow-wrap: anywhere; }
+  .validation-step-message { color: var(--red); }
+  .validation-step-time { color: var(--fg-dim); font: 10px var(--font-mono); white-space: nowrap; }
+  .validation-steps { flex: 1 1 260px; min-height: 120px; overflow-y: auto; padding: 1px 5px 4px 0; overscroll-behavior: contain; }
+  .validation-screenshots { display: flex; gap: 8px; overflow-x: auto; }
+  .validation-screenshots a { display: flex; flex-direction: column; gap: 3px; min-width: 130px; color: var(--fg-mute); text-decoration: none; font-size: 10px; }
+  .validation-screenshots img { width: 130px; height: 78px; object-fit: cover; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg); }
+  .validation-log, .validation-technical { margin-top: 13px; padding-top: 9px; border-top: 1px solid var(--border); color: var(--fg-mute); font-size: 11px; }
+  .validation-log summary, .validation-technical summary { cursor: pointer; }
+  .validation-log pre { max-height: 260px; overflow: auto; padding: 8px; color: var(--fg-mute); background: var(--bg-code); }
+  .validation-log a { display: inline-block; margin-top: 7px; color: var(--accent); }
+  .validation-code-block { margin-top: 7px; padding: 8px; overflow-wrap: anywhere; color: var(--fg-mute); background: var(--bg-code); }
+  .validation-muted { color: var(--fg-dim); font-size: 11px; }
+  @media (max-width: 1250px) { .validation-layout { grid-template-columns: minmax(220px, .72fr) minmax(260px, .82fr) minmax(0, 1.35fr); } }
+  @media (max-width: 1050px) { .validation-head { flex-direction: column; } .validation-page { overflow: hidden; } .validation-layout { display: flex; flex-direction: column; overflow-y: auto; } .validation-script-col, .validation-list-col, .validation-detail-col { flex: 0 0 auto; overflow: visible; } .validation-scripts-card { height: 360px; } .validation-list-col { min-height: 500px; } .validation-detail-col { min-height: 500px; } }
+</style>
+{{end}}
+
+
+{{define "validation_steps_panel"}}
+<div id="validation-steps-card" class="validation-steps-card"
+     {{if eq .Record.Status "running"}}hx-get="/validation/{{.Record.RunID}}/steps" hx-trigger="every 1s" hx-target="this" hx-swap="outerHTML"{{end}}>
+  <div class="validation-section-label">{{T "validation.steps_label"}}{{if .Record.CurrentStage}} · {{.Record.CurrentStage}}{{end}}</div>
+  {{if .Record.Steps}}
+  <div class="validation-steps">
+    {{range .Record.Steps}}
+    <div class="validation-step {{if .Passed}}passed{{else}}failed{{end}}">
+      <span class="validation-step-icon">{{if .Passed}}✓{{else}}!{{end}}</span>
+      <div class="validation-step-body"><div><strong>#{{add .Index 1}} {{.Type}}</strong>{{if .Description}}<span class="validation-step-description">{{.Description}}</span>{{end}}</div>
+        {{if .Query}}<div class="validation-assert"><code>{{.Query}}</code> <code>{{.Op}}</code> expected <code>{{printf "%v" .Expected}}</code> actual <code>{{printf "%v" .Actual}}</code></div>{{end}}
+        {{if .Message}}<div class="validation-step-message">{{.Message}}</div>{{end}}
+      </div><span class="validation-step-time">{{.DurationMs}} ms</span>
+    </div>
+    {{end}}
+  </div>
+  {{else}}<div class="validation-muted">{{T "validation.no_steps"}}</div>{{end}}
 </div>
 {{end}}
 
@@ -2105,13 +2686,13 @@
                 hx-include="#chat-provider,#chat-profile,#chat-model,#chat-session-id"
                 hx-target="#chat-panel"
                 hx-swap="outerHTML">
-            <button class="btn-secondary" type="submit" title="启动或切换到当前选择的模型">Serve</button>
+            <button class="btn-secondary" type="submit" title="{{T "chat.serve"}}">Serve</button>
           </form>
           <form hx-post="/chat/stop"
                 hx-include="#chat-provider,#chat-profile,#chat-model,#chat-session-id"
                 hx-target="#chat-panel"
                 hx-swap="outerHTML">
-            <button class="btn-secondary danger" type="submit" title="停止后台 llama-server" {{if not .ServerRunning}}disabled{{end}}>Stop</button>
+            <button class="btn-secondary danger" type="submit" title="{{T "chat.stop"}}" {{if not .ServerRunning}}disabled{{end}}>Stop</button>
           </form>
         </div>
 
@@ -2139,7 +2720,7 @@
                 hx-include="#chat-provider,#chat-profile,#chat-model"
                 hx-target="#chat-panel"
                 hx-swap="outerHTML">
-            <button class="icon-btn" type="submit" title="新建对话" aria-label="新建对话">+</button>
+            <button class="icon-btn" type="submit" title="{{T "chat.new"}}" aria-label="{{T "chat.new"}}">+</button>
           </form>
         </h2>
         <div class="chat-session-list">
@@ -2162,14 +2743,14 @@
                 <input type="hidden" name="model" value="{{$.SelectedModel}}">
 				<input type="hidden" name="provider" value="{{$.SelectedProvider}}">
 				<input type="hidden" name="profile" value="{{$.SelectedProfile}}">
-                <button class="icon-btn" type="submit" title="归档对话" aria-label="归档对话">
+                <button class="icon-btn" type="submit" title="{{T "chat.archive"}}" aria-label="{{T "chat.archive"}}">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
                 </button>
               </form>
             </div>
             {{end}}
           {{else}}
-            <div class="chat-session-empty">暂无历史对话</div>
+            <div class="chat-session-empty">{{T "chat.empty_sessions"}}</div>
           {{end}}
         </div>
       </div>
@@ -2200,7 +2781,7 @@
             </div>
           {{end}}
         {{else}}
-          <div class="chat-empty">选择 provider 和模型后直接提问；LocalLlama 会按需启动。</div>
+          <div class="chat-empty">{{T "chat.empty"}}</div>
         {{end}}
       </div>
 
@@ -2215,22 +2796,22 @@
             class="chat-composer"
             data-chat-form>
         <input id="chat-session-id" type="hidden" name="session_id" value="{{.SessionID}}">
-        <textarea id="chat-input" class="input" name="message" placeholder="输入消息" required></textarea>
+        <textarea id="chat-input" class="input" name="message" placeholder="{{T "chat.placeholder"}}" required></textarea>
         <div class="chat-actions">
-          <button class="btn-primary" type="submit">发送</button>
+          <button class="btn-primary" type="submit">{{T "chat.send"}}</button>
           <label class="chat-thinking-opt">
             <input id="chat-thinking" type="checkbox" name="thinking" value="1">
-            <span>思考模式</span>
+            <span>{{T "chat.thinking"}}</span>
           </label>
-          <label class="chat-thinking-opt" title="仅调用固定内存诊断工具，不访问仓库、Shell、网络或场景">
+          <label class="chat-thinking-opt" title="{{T "chat.tool_probe"}}">
             <input id="chat-tool-probe" type="checkbox" name="tool_probe" value="1">
             <span>Tool Call Smoke</span>
           </label>
           <label class="chat-token-opt">
-            <span>输出上限</span>
+            <span>{{T "chat.max_tokens"}}</span>
             <input id="chat-max-tokens" type="number" name="max_tokens" min="256" max="32768" step="256" value="4096">
           </label>
-          <div class="chat-context-compact" data-chat-context title="包含 AGENTS.md 标准上下文的估算 token 用量">
+          <div class="chat-context-compact" data-chat-context title="{{T "chat.context"}}">
             <div class="chat-context-ring" data-chat-context-fill style="--ctx-pct: {{.Context.Percent}}%;">
               <span>{{.Context.Percent}}%</span>
             </div>
@@ -2263,16 +2844,16 @@
         <span class="ico">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4V4z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/></svg>
         </span>
-        最近提交
+        {{T "git.recent"}}
         <span class="count">{{len .GitVM.Commits}}</span>
         {{if .GitVM.RemoteCommits}}
-          <span class="remote-commit-count">远端 +{{len .GitVM.RemoteCommits}}</span>
+          <span class="remote-commit-count">{{T "git.remote_ahead" (len .GitVM.RemoteCommits)}}</span>
         {{end}}
       </h2>
       {{if or .GitVM.RemoteCommits .GitVM.Status.Dirty .GitVM.Commits}}
         <div class="commit-list">
           {{if .GitVM.RemoteCommits}}
-          <div class="commit-list-label">远端未拉取 · {{.GitVM.Status.Upstream}}</div>
+          <div class="commit-list-label">{{T "git.remote_unpulled" .GitVM.Status.Upstream}}</div>
           {{range .GitVM.RemoteCommits}}
           <div class="commit-row remote-commit-row"
                data-git-selectable
@@ -2285,12 +2866,12 @@
             <span class="author">{{.Author}}</span>
             <span class="subject">{{.Subject}}</span>
             <button class="commit-reset" type="button"
-                    title="reset --hard 到此远端提交"
-                    aria-label="reset --hard 到提交 {{.Hash}}"
+                    title="{{T "git.reset_remote"}}"
+                    aria-label="{{T "git.reset_remote_aria" .Hash}}"
                     hx-post="/git/reset"
                     hx-vals='{"ref":"{{.Full}}"}'
                     hx-target="#git-tab-body" hx-swap="innerHTML"
-                    hx-confirm="⚠️ 执行 git reset --hard {{.Hash}}？这会让当前分支直接指向这个远端提交，并丢弃当前未提交改动。">
+                    hx-confirm="{{T "git.reset_remote_confirm" .Hash}}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
@@ -2302,7 +2883,7 @@
           {{end}}
 
           {{if .GitVM.Status.Dirty}}
-          <div class="commit-list-label">本地工作区</div>
+          <div class="commit-list-label">{{T "git.local_worktree"}}</div>
           <div class="commit-row local-change-row selected"
                data-git-selectable
                hx-get="/git/local-changes"
@@ -2311,13 +2892,13 @@
             <span class="hash">LOCAL</span>
             <span class="date">{{if .GitVM.Status.Branch}}{{.GitVM.Status.Branch}}{{else}}detached{{end}}</span>
             <span class="author">working tree</span>
-            <span class="subject">本地修改 · {{len .GitVM.Status.DirtyFiles}} files · {{dirtySummary .GitVM.Status.DirtyFiles}}</span>
+            <span class="subject">{{T "git.local_changes" (len .GitVM.Status.DirtyFiles) (dirtySummary .GitVM.Status.DirtyFiles)}}</span>
             <span class="commit-row-spacer"></span>
           </div>
           {{end}}
 
           {{if .GitVM.Commits}}
-          <div class="commit-list-label">本地提交</div>
+          <div class="commit-list-label">{{T "git.local_commits"}}</div>
           {{range .GitVM.Commits}}
           <div class="commit-row"
                data-git-selectable
@@ -2330,12 +2911,12 @@
             <span class="author">{{.Author}}</span>
             <span class="subject">{{.Subject}}</span>
             <button class="commit-reset" type="button"
-                    title="reset --hard 到此提交"
-                    aria-label="reset --hard 到提交 {{.Hash}}"
+                    title="{{T "git.reset_local"}}"
+                    aria-label="{{T "git.reset_local_aria" .Hash}}"
                     hx-post="/git/reset"
                     hx-vals='{"ref":"{{.Full}}"}'
                     hx-target="#git-tab-body" hx-swap="innerHTML"
-                    hx-confirm="⚠️ 执行 git reset --hard {{.Hash}}？这会丢弃当前分支所有未提交改动以及 HEAD 之后到此 commit 之间的所有提交。">
+                    hx-confirm="{{T "git.reset_local_confirm" .Hash}}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
@@ -2347,7 +2928,7 @@
           {{end}}
         </div>
       {{else}}
-        <div class="empty-row">暂无提交</div>
+        <div class="empty-row">{{T "git.no_commits"}}</div>
       {{end}}
     </div>
   </section>
@@ -2357,7 +2938,7 @@
       {{if .GitVM.Status.Dirty}}
         {{template "git_commit_card" .}}
       {{else}}
-      <div class="card detail-empty">点击 hash 或 subject 查看完整 message；点击 ⤺ 重置 HEAD。</div>
+      <div class="card detail-empty">{{T "git.commit_hint"}}</div>
       {{end}}
     </div>
   </section>
@@ -2371,22 +2952,22 @@
     <span class="ico" style="background: rgba(99, 102, 241, 0.12); color: var(--accent);">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><line x1="2" y1="12" x2="8" y2="12"/><line x1="16" y1="12" x2="22" y2="12"/></svg>
     </span>
-    新提交
+    {{T "git.new_commit"}}
     {{if .GitVM.Status.Dirty}}
       <span class="count">{{len .GitVM.Status.DirtyFiles}}</span>
     {{end}}
   </h2>
 
   {{if .GitVM.Status.Dirty}}
-    <div class="commit-card-hint">分支 <code>{{if .GitVM.Status.Branch}}{{.GitVM.Status.Branch}}{{else}}(detached){{end}}</code> · 工作区 <span class="dirty">dirty</span>（{{.GitVM.Status.DirtyHint}}）</div>
+    <div class="commit-card-hint">{{T "git.branch"}} <code>{{if .GitVM.Status.Branch}}{{.GitVM.Status.Branch}}{{else}}(detached){{end}}</code> · {{T "git.worktree"}} <span class="dirty">dirty</span>（{{.GitVM.Status.DirtyHint}}）</div>
   {{else}}
-    <div class="commit-card-hint">分支 <code>{{if .GitVM.Status.Branch}}{{.GitVM.Status.Branch}}{{else}}(detached){{end}}</code> · 工作区 <span class="clean">clean</span></div>
+    <div class="commit-card-hint">{{T "git.branch"}} <code>{{if .GitVM.Status.Branch}}{{.GitVM.Status.Branch}}{{else}}(detached){{end}}</code> · {{T "git.worktree"}} <span class="clean">clean</span></div>
   {{end}}
 
   {{if .GitVM.Status.Dirty}}
   <div class="stage-panel">
     <div class="stage-panel-head">
-      <span>文件 stage</span>
+      <span>{{T "git.stage_files"}}</span>
       <span>{{dirtySummary .GitVM.Status.DirtyFiles}}</span>
     </div>
     <div class="stage-actions">
@@ -2423,11 +3004,11 @@
   {{end}}
 
   <form class="commit-card-form" onsubmit="return false;">
-    <textarea id="commit-msg-textarea" name="message" class="input commit-msg-textarea" rows="10" placeholder="点击 AI 补全让本地 LLM 根据 diff 生成；也可手动编辑"></textarea>
+    <textarea id="commit-msg-textarea" name="message" class="input commit-msg-textarea" rows="10" placeholder="{{T "git.msg_placeholder"}}"></textarea>
 
     <label class="build-opt commit-card-opt">
       <input type="checkbox" name="stage_all" value="1">
-      <span>提交前 <code>git add -A</code></span>
+      <span>{{T "git.stage_all"}}</span>
     </label>
 
     <div class="commit-card-actions">
@@ -2437,16 +3018,16 @@
               hx-swap="outerHTML"
               hx-disabled-elt="this"
               hx-indicator=".commit-ai-indicator"
-              title="调用本地 LLM 根据 diff 生成 commit message（首次会加载模型）">
-        <span class="ai-btn-label">✨ AI 补全</span>
-        <span class="commit-ai-indicator htmx-indicator">生成中…</span>
+              title="{{T "git.ai"}}">
+        <span class="ai-btn-label">{{T "git.ai"}}</span>
+        <span class="commit-ai-indicator htmx-indicator">{{T "git.ai_working"}}</span>
       </button>
       <button class="btn-primary small" type="button"
               hx-post="/git/commit"
               hx-include="closest form"
               hx-target="#git-tab-body" hx-swap="innerHTML"
-              hx-confirm="使用当前 commit message 创建提交？"
-              {{if not .GitVM.Status.Dirty}}disabled title="工作区无改动"{{end}}>
+              hx-confirm="{{T "git.commit_confirm"}}"
+              {{if not .GitVM.Status.Dirty}}disabled title="{{T "git.clean_title"}}"{{end}}>
         Commit
       </button>
     </div>
@@ -2468,16 +3049,16 @@
     <span class="ico">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M6 15V9a6 6 0 0 1 6-6"/><path d="M18 9v3a6 6 0 0 1-6 6"/></svg>
     </span>
-    当前状态
+    {{T "git.status"}}
   </h2>
-  <div class="git-status-row"><span class="k">分支</span><span class="v">{{if .GitVM.Status.Branch}}{{.GitVM.Status.Branch}}{{else}}(detached){{end}}</span></div>
+  <div class="git-status-row"><span class="k">{{T "git.branch"}}</span><span class="v">{{if .GitVM.Status.Branch}}{{.GitVM.Status.Branch}}{{else}}(detached){{end}}</span></div>
   <div class="git-status-row"><span class="k">HEAD</span><span class="v">{{.GitVM.Status.Head}}</span></div>
   {{if .GitVM.Status.Upstream}}
   <div class="git-status-row"><span class="k">upstream</span><span class="v">{{.GitVM.Status.Upstream}}</span></div>
   <div class="git-status-row"><span class="k">ahead / behind</span><span class="v">+{{.GitVM.Status.Ahead}} / -{{.GitVM.Status.Behind}}</span></div>
   {{end}}
   <div class="git-status-row">
-    <span class="k">工作区</span>
+    <span class="k">{{T "git.worktree"}}</span>
     {{if .GitVM.Status.Dirty}}
       <span class="v dirty">dirty ({{.GitVM.Status.DirtyHint}})</span>
     {{else}}
@@ -2489,7 +3070,7 @@
     <button class="btn-primary small" type="button"
             hx-post="/git/pull"
             hx-target="#git-tab-body" hx-swap="innerHTML"
-            hx-confirm="对当前分支执行 git pull --ff-only？">Pull (--ff-only)</button>
+            hx-confirm="{{T "git.pull_confirm"}}">Pull (--ff-only)</button>
     <button class="btn-secondary" type="button"
             hx-post="/git/fetch"
             hx-target="#git-tab-body" hx-swap="innerHTML">Fetch</button>
@@ -2501,7 +3082,7 @@
     <span class="ico">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="6" y1="9" x2="6" y2="15"/><path d="M9 6h7a3 3 0 0 1 3 3v3"/><path d="M19 21l3-3-3-3"/></svg>
     </span>
-    本地分支
+    {{T "git.local_branches"}}
     <span class="count">{{len .GitVM.Branches}}</span>
   </h2>
   {{range .GitVM.Branches}}
@@ -2514,7 +3095,7 @@
             hx-post="/git/switch"
             hx-vals='{"branch":"{{.Name}}"}'
             hx-target="#git-tab-body" hx-swap="innerHTML"
-            hx-confirm="切换到分支 {{.Name}}？（脏工作区会被拒绝）">switch</button>
+            hx-confirm="{{T "git.switch_confirm" .Name}}">switch</button>
     {{end}}
   </div>
   {{end}}
@@ -2522,7 +3103,7 @@
         hx-post="/git/create-branch"
         hx-target="#git-tab-body" hx-swap="innerHTML"
         hx-on::after-request="this.reset()">
-    <input class="input" type="text" name="name" placeholder="新分支名" required style="flex: 1; min-width: 0; padding: 6px 8px; font-size: 12px;">
+    <input class="input" type="text" name="name" placeholder="{{T "git.new_branch_ph"}}" required style="flex: 1; min-width: 0; padding: 6px 8px; font-size: 12px;">
     <button class="btn-secondary" type="submit" style="padding: 6px 10px;">new</button>
   </form>
 </div>
@@ -2533,7 +3114,7 @@
     <span class="ico">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12a10 10 0 1 0 20 0 10 10 0 0 0-20 0z"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
     </span>
-    远程分支
+    {{T "git.remote_branches"}}
     <span class="count">{{len .GitVM.RemoteBranches}}</span>
   </h2>
   {{range .GitVM.RemoteBranches}}
@@ -2541,13 +3122,13 @@
     <span style="width:8px;"></span>
     <span class="name"><code>{{.FullName}}</code></span>
     {{if .HasLocal}}
-      <span class="remote">本地已存在</span>
+      <span class="remote">{{T "git.exists_local"}}</span>
     {{else}}
     <button type="button"
             hx-post="/git/switch-remote"
             hx-vals='{"ref":"{{.FullName}}"}'
             hx-target="#git-tab-body" hx-swap="innerHTML"
-            hx-confirm="基于 {{.FullName}} 创建本地分支 {{.ShortName}} 并切换？（脏工作区会被拒绝）">track</button>
+            hx-confirm="{{T "git.track_confirm" .ShortName .FullName}}">track</button>
     {{end}}
   </div>
   {{end}}
@@ -2564,7 +3145,7 @@
   </h2>
   {{if .GitVM.Status.Dirty}}
   <div class="dirty-files">
-    <div class="dirty-files-head">工作区改动 <span class="count">{{len .GitVM.Status.DirtyFiles}}</span></div>
+    <div class="dirty-files-head">{{T "git.dirty_files"}} <span class="count">{{len .GitVM.Status.DirtyFiles}}</span></div>
     <div class="dirty-files-list">
       {{range .GitVM.Status.DirtyFiles}}
       <div class="dirty-file" title="{{.Code}} {{.Path}}">
@@ -2579,11 +3160,11 @@
   <div class="branch-row stash-row">
     <span class="name" title="{{.Message}}"><code>{{.Ref}}</code> {{.Message}}</span>
     <div class="stash-actions">
-      <button type="button" title="Pop：应用并移除 {{.Ref}}" aria-label="应用并移除 {{.Ref}}"
+      <button type="button" title="{{T "git.stash_pop" .Ref}}" aria-label="{{T "git.stash_pop_aria" .Ref}}"
               hx-post="/git/stash/pop"
               hx-vals='{"ref":"{{.Ref}}"}'
               hx-target="#git-tab-body" hx-swap="innerHTML"
-              hx-confirm="弹出并应用 {{.Ref}}？">
+              hx-confirm="{{T "git.stash_pop_confirm" .Ref}}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -2591,11 +3172,11 @@
           <path d="M12 15V3"/>
         </svg>
       </button>
-      <button type="button" title="Apply：应用并保留 {{.Ref}}" aria-label="应用并保留 {{.Ref}}"
+      <button type="button" title="{{T "git.stash_apply" .Ref}}" aria-label="{{T "git.stash_apply_aria" .Ref}}"
               hx-post="/git/stash/apply"
               hx-vals='{"ref":"{{.Ref}}"}'
               hx-target="#git-tab-body" hx-swap="innerHTML"
-              hx-confirm="仅应用 {{.Ref}}（保留 stash）？">
+              hx-confirm="{{T "git.stash_apply_confirm" .Ref}}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M12 3v12"/>
@@ -2603,11 +3184,11 @@
           <path d="M5 21h14"/>
         </svg>
       </button>
-      <button type="button" title="Drop：删除 {{.Ref}}" aria-label="删除 {{.Ref}}"
+      <button type="button" title="{{T "git.stash_drop" .Ref}}" aria-label="{{T "git.stash_drop_aria" .Ref}}"
               hx-post="/git/stash/drop"
               hx-vals='{"ref":"{{.Ref}}"}'
               hx-target="#git-tab-body" hx-swap="innerHTML"
-              hx-confirm="删除 {{.Ref}}？此操作不可恢复。">
+              hx-confirm="{{T "git.stash_drop_confirm" .Ref}}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M3 6h18"/>
@@ -2623,10 +3204,10 @@
         hx-post="/git/stash/push"
         hx-target="#git-tab-body" hx-swap="innerHTML"
         hx-on::after-request="this.reset()">
-    <input class="input" type="text" name="message" placeholder="stash 说明（可选）" style="margin-bottom: 6px; padding: 6px 8px; font-size: 12px;">
+    <input class="input" type="text" name="message" placeholder="{{T "git.stash_msg"}}" style="margin-bottom: 6px; padding: 6px 8px; font-size: 12px;">
     <label class="build-opt" style="margin-bottom: 6px;">
       <input type="checkbox" name="untracked" value="1">
-      <span>包含未跟踪文件 (<code>-u</code>)</span>
+      <span>{{T "git.stash_untracked"}}</span>
     </label>
     <button class="btn-secondary" type="submit" style="width: 100%;">stash push</button>
   </form>
@@ -2651,7 +3232,7 @@
       hx-target="#todo-panel" hx-swap="innerHTML"
       onclick="event.stopPropagation()">
   <div class="form-field">
-    <label>标题 · #{{printf "%05d" .ID}}</label>
+    <label>{{T "todo.title"}} · #{{printf "%05d" .ID}}</label>
     <input class="input" name="title" value="{{.Title}}" required autofocus>
   </div>
   <div class="row">
@@ -2673,8 +3254,8 @@
   </div>
   <div class="actions">
     <button type="button" class="btn-secondary"
-            hx-get="/todo-panel" hx-target="#todo-panel" hx-swap="innerHTML">取消</button>
-    <button type="submit" class="btn-primary small">保存</button>
+            hx-get="/todo-panel" hx-target="#todo-panel" hx-swap="innerHTML">{{T "common.cancel"}}</button>
+    <button type="submit" class="btn-primary small">{{T "common.save"}}</button>
   </div>
 </form>
 {{end}}
@@ -2683,20 +3264,29 @@
 {{define "tab_settings"}}
 <div class="settings-tab" data-display-settings>
   <aside class="settings-nav">
-    <div class="settings-kicker">Preferences</div>
-    <h1>显示设置</h1>
-    <p>调整 dashboard 的阅读尺寸和信息密度。设置保存在当前浏览器中，并会即时应用到所有页面。</p>
+    <div class="settings-kicker">{{T "settings.kicker"}}</div>
+    <h1>{{T "settings.title"}}</h1>
+    <p>{{T "settings.blurb"}}</p>
   </aside>
 
   <section class="settings-main">
     <div class="settings-group">
-      <h2>Typography</h2>
-      <p>控制普通界面与代码区域的字号。</p>
+      <h2>{{T "settings.language"}}</h2>
+      <p>{{T "settings.language_help"}}</p>
+      <form class="lang-switch" method="post" action="/settings/lang" style="width:max-content;margin-top:8px;">
+        <button class="lang-btn {{if eq (Lang) "zh"}}active{{end}}" type="submit" name="lang" value="zh">{{T "lang.zh"}}</button>
+        <button class="lang-btn {{if eq (Lang) "en"}}active{{end}}" type="submit" name="lang" value="en">{{T "lang.en"}}</button>
+      </form>
+    </div>
+
+    <div class="settings-group">
+      <h2>{{T "settings.typography"}}</h2>
+      <p>{{T "settings.typography_help"}}</p>
 
       <label class="setting-row">
         <span class="setting-label">
-          <strong>界面字号</strong>
-          <span>导航、按钮、表格和正文的基础字号。</span>
+          <strong>{{T "settings.ui_font"}}</strong>
+          <span>{{T "settings.ui_font_help"}}</span>
         </span>
         <span class="setting-control">
           <input type="range" min="13" max="18" step="0.5" data-display-setting="uiFontSize">
@@ -2706,8 +3296,8 @@
 
       <label class="setting-row">
         <span class="setting-label">
-          <strong>代码字号</strong>
-          <span>源码预览、日志与 Markdown 代码框。</span>
+          <strong>{{T "settings.code_font"}}</strong>
+          <span>{{T "settings.code_font_help"}}</span>
         </span>
         <span class="setting-control">
           <input type="range" min="11" max="17" step="0.5" data-display-setting="codeFontSize">
@@ -2717,13 +3307,13 @@
     </div>
 
     <div class="settings-group">
-      <h2>Layout</h2>
-      <p>调整导航宽度和页面留白。</p>
+      <h2>{{T "settings.layout"}}</h2>
+      <p>{{T "settings.layout_help"}}</p>
 
       <label class="setting-row">
         <span class="setting-label">
-          <strong>导航宽度</strong>
-          <span>左侧主导航的占用空间。</span>
+          <strong>{{T "settings.nav_width"}}</strong>
+          <span>{{T "settings.nav_width_help"}}</span>
         </span>
         <span class="setting-control">
           <input type="range" min="104" max="168" step="4" data-display-setting="navWidth">
@@ -2733,30 +3323,30 @@
 
       <label class="setting-row">
         <span class="setting-label">
-          <strong>信息密度</strong>
-          <span>控制面板内边距和表单间距。</span>
+          <strong>{{T "settings.density"}}</strong>
+          <span>{{T "settings.density_help"}}</span>
         </span>
         <span class="setting-control">
           <select class="select" data-display-setting="density">
-            <option value="compact">紧凑</option>
-            <option value="comfortable">舒适</option>
-            <option value="spacious">宽松</option>
+            <option value="compact">{{T "settings.density.compact"}}</option>
+            <option value="comfortable">{{T "settings.density.comfortable"}}</option>
+            <option value="spacious">{{T "settings.density.spacious"}}</option>
           </select>
         </span>
       </label>
     </div>
 
     <div class="settings-actions">
-      <button class="btn-secondary" type="button" data-display-reset>恢复默认</button>
+      <button class="btn-ghost" type="button" data-display-reset>{{T "settings.reset"}}</button>
     </div>
   </section>
 
   <aside class="settings-preview">
     <div class="settings-preview-box">
-      <div class="settings-preview-head">实时预览</div>
+      <div class="settings-preview-head">{{T "settings.preview"}}</div>
       <div class="settings-preview-body">
         <h3>gkNextEngine Dashboard</h3>
-        <p>界面字号会影响正文和操作控件，代码字号独立控制等宽内容。</p>
+        <p>{{T "settings.preview_body"}}</p>
         <pre><code class="language-cpp">struct RenderSettings
 {
     float exposure = 1.0f; // 中文注释
@@ -2926,7 +3516,7 @@
       text-align: right;
     }
     .hourly-y-axis::after {
-      content: '提交数';
+      content: attr(data-label);
       position: absolute;
       top: 50%;
       left: -2px;
@@ -3062,7 +3652,7 @@
 
   {{with .LocVM}}
     {{if .Error}}
-      <div class="loc-col"><div class="loc-error">LOC 扫描失败：{{.Error}}</div></div>
+      <div class="loc-col"><div class="loc-error">{{T "loc.scan_failed" .Error}}</div></div>
     {{else}}
       <div class="loc-activity">
         <div class="loc-contributions">
@@ -3121,15 +3711,15 @@
 
         <div class="loc-hourly">
           <div class="hourly-head">
-            <h2>每日提交时段热度</h2>
-            <span>过去一年 · 当地时间</span>
+            <h2>{{T "loc.hourly_title"}}</h2>
+            <span>{{T "loc.hourly_sub"}}</span>
           </div>
           {{if .HourlyCommits.Error}}
             <div class="hourly-error">Unable to load hourly git history: {{.HourlyCommits.Error}}</div>
           {{else}}
             {{$hourlyMax := .HourlyCommits.Max}}
-            <div class="hourly-chart" aria-label="按当地时间统计的每小时提交数量">
-              <div class="hourly-y-axis">
+            <div class="hourly-chart" aria-label="{{T "loc.hourly_aria"}}">
+              <div class="hourly-y-axis" data-label="{{T "loc.commits"}}">
                 <span>{{intCommas .HourlyCommits.Max}}</span>
                 <span>{{intCommas .HourlyCommits.Mid}}</span>
                 <span>0</span>
@@ -3142,7 +3732,7 @@
                 </div>
                 <div class="hourly-bars">
                   {{range .HourlyCommits.Hours}}
-                    <span class="hourly-bar{{if eq .Count 0}} zero{{end}}" style="height: {{locBarPct .Count $hourlyMax}}%;" title="{{.RangeLabel}}（当地时间）：{{.Count}} 次提交"></span>
+                    <span class="hourly-bar{{if eq .Count 0}} zero{{end}}" style="height: {{locBarPct .Count $hourlyMax}}%;" title="{{T "loc.hourly_bar" .RangeLabel .Count}}"></span>
                   {{end}}
                 </div>
                 <div class="hourly-labels" aria-hidden="true">
@@ -3152,15 +3742,15 @@
                 </div>
               </div>
             </div>
-            <div class="hourly-foot">{{intCommas .HourlyCommits.Total}} 次提交 · 06:00 → 次日 06:00</div>
+            <div class="hourly-foot">{{T "loc.hourly_foot" (intCommas .HourlyCommits.Total)}}</div>
           {{end}}
         </div>
       </div>
 
       <section class="loc-col">
         <div class="loc-summary">
-          <div class="loc-stat"><div class="k">文件数</div><div class="v">{{intCommas .Snapshot.TotalFiles}}</div></div>
-          <div class="loc-stat"><div class="k">代码行</div><div class="v">{{intCommas .Snapshot.TotalLines}}</div></div>
+          <div class="loc-stat"><div class="k">{{T "loc.files"}}</div><div class="v">{{intCommas .Snapshot.TotalFiles}}</div></div>
+          <div class="loc-stat"><div class="k">{{T "loc.lines"}}</div><div class="v">{{intCommas .Snapshot.TotalLines}}</div></div>
         </div>
 
         <div class="card">
@@ -3168,17 +3758,17 @@
             <span class="ico">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="20" x2="4" y2="10"/><line x1="10" y1="20" x2="10" y2="4"/><line x1="16" y1="20" x2="16" y2="14"/></svg>
             </span>
-            类别行数对比
+            {{T "loc.category_compare"}}
             <span style="margin-left:auto; display:inline-flex; gap:12px; align-items:center;">
               <form class="loc-toolbar" hx-get="/tab/loc" hx-target="#tab-content" hx-swap="innerHTML" hx-trigger="change">
-                <select name="depth" aria-label="LOC 目录深度">
+                <select name="depth" aria-label="{{T "loc.depth_aria"}}">
                   {{range .DepthOptions}}
-                    <option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>
+                    <option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{T "loc.depth" .Value}}</option>
                   {{end}}
                 </select>
                 <label class="tp-opt" style="display:inline-flex;align-items:center;gap:6px;color:var(--fg-mute);font-size:12px;cursor:pointer;">
                   <input type="checkbox" name="thirdparty" value="1" {{if .IncludeThirdParty}}checked{{end}}>
-                  <span>包含 ThirdParty</span>
+                  <span>{{T "loc.third_party"}}</span>
                 </label>
               </form>
             </span>
@@ -3209,15 +3799,15 @@
             <span class="ico">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
             </span>
-            分类明细
+            {{T "loc.breakdown"}}
           </h2>
           <table class="loc-table">
             <thead>
               <tr>
-                <th>目录</th>
-                <th class="num" style="text-align:right;">文件</th>
-                <th class="num" style="text-align:right;">行数</th>
-                <th class="num" style="text-align:right;">占比</th>
+                <th>{{T "loc.col.dir"}}</th>
+                <th class="num" style="text-align:right;">{{T "loc.col.files"}}</th>
+                <th class="num" style="text-align:right;">{{T "loc.col.lines"}}</th>
+                <th class="num" style="text-align:right;">{{T "loc.col.share"}}</th>
               </tr>
             </thead>
             <tbody>
@@ -3252,42 +3842,125 @@
     }
     .pak-sidebar {
       min-height: 0;
-      padding: 16px 12px;
+      padding: 12px;
       overflow: hidden;
       display: flex;
       flex-direction: column;
       border-right: 1px solid var(--border);
-      background: #151617;
+      background: var(--bg-panel);
     }
     .pak-sidebar-head { display: flex; align-items: center; gap: 8px; padding: 0 3px 12px; }
     .pak-sidebar-head h2 { margin: 0; font-size: 13px; font-weight: 650; }
     .pak-sidebar-head .tag-mini { margin-left: auto; }
-    .pak-file-list { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
+    .pak-file-list { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
     .pak-file-item {
       width: 100%;
       min-width: 0;
-      display: grid;
-      grid-template-columns: 18px minmax(0, 1fr) auto;
+      display: flex;
       align-items: center;
-      gap: 7px;
-      padding: 8px 8px;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 7px 10px;
       border: 1px solid transparent;
-      border-radius: 5px;
+      border-radius: 4px;
       background: transparent;
       color: var(--fg-mute);
       text-align: left;
       cursor: pointer;
+      font-size: 11.5px;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
     }
     .pak-file-item:hover { background: var(--bg-card); color: var(--fg); }
-    .pak-file-item.selected { border-color: rgba(79,140,255,.7); background: rgba(79,140,255,.14); color: var(--fg); }
-    .pak-file-icon { color: #d1a827; }
-    .pak-file-label { min-width: 0; display: flex; align-items: baseline; gap: 6px; }
-    .pak-file-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
-    .pak-file-location { color: var(--fg-dim); font: 8px var(--font-mono); text-transform: uppercase; }
-    .pak-file-size { color: var(--fg-dim); font: 9.5px var(--font-mono); white-space: nowrap; }
+    .pak-file-item.selected {
+      border-color: transparent;
+      border-left: 3px solid var(--accent);
+      background: rgba(79,140,255,.12);
+      color: var(--fg);
+      font-weight: 500;
+    }
+    .pak-file-item.htmx-request {
+      opacity: 0.7;
+      pointer-events: none;
+    }
+    .pak-file-main {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow: hidden;
+    }
+    .pak-file-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+    }
+    .pak-file-badge {
+      font-size: 8.5px;
+      padding: 1px 4px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--fg-dim);
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .pak-file-size {
+      color: var(--fg-dim);
+      font: 9.5px var(--font-mono);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
     .pak-file-path { display: block; padding: 10px 3px 0; color: var(--fg-dim); font: 9px/1.5 var(--font-mono); overflow-wrap: anywhere; }
     .pak-empty { margin: 4px 2px; padding: 12px; border: 1px dashed var(--border); border-radius: 6px; color: var(--fg-dim); font-size: 11px; line-height: 1.6; }
-    .pak-main { min-width: 0; min-height: 0; overflow-y: auto; padding: 16px; }
+    .pak-main {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 16px;
+    }
+    .pak-loading-overlay {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 17, 21, 0.72);
+      z-index: 50;
+      align-items: center;
+      justify-content: center;
+    }
+    .pak-loading-overlay.htmx-request {
+      display: flex;
+    }
+    .pak-loading-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 22px 32px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg, 8px);
+      box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+    }
+    .pak-spinner {
+      width: 28px;
+      height: 28px;
+      border: 2.5px solid rgba(79, 140, 255, 0.2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: pakSpin 0.7s linear infinite;
+    }
+    @keyframes pakSpin {
+      to { transform: rotate(360deg); }
+    }
+    .pak-loading-text {
+      font-size: 12px;
+      color: var(--fg);
+      font-weight: 500;
+      letter-spacing: 0.2px;
+    }
     .pak-error { padding: 12px 14px; border: 1px solid rgba(239,68,68,.32); border-radius: 6px; background: rgba(239,68,68,.08); color: var(--red); font-size: 12px; }
     .pak-heading { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 14px; }
     .pak-heading h2 { margin: 0; color: var(--fg); font: 600 16px/1.3 var(--font-sans); }
@@ -3303,20 +3976,56 @@
     .pak-card-head h3 { margin: 0; font-size: 12px; font-weight: 600; }
     .pak-search { margin-left: auto; width: min(260px, 42%); padding: 6px 9px; border: 1px solid var(--border); border-radius: 5px; outline: 0; background: var(--bg-input); color: var(--fg); font-size: 10.5px; }
     .pak-search:focus { border-color: var(--accent); }
-    .pak-table-wrap { overflow: auto; max-height: calc(100vh - 245px); }
+    .pak-search.htmx-request { opacity: 0.7; }
+    .pak-table-wrap { overflow: auto; max-height: calc(100vh - 245px); contain: content; }
+    .pak-table-wrap.htmx-request { opacity: 0.6; pointer-events: none; }
     .pak-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .pak-table tr { contain: layout style; }
     .pak-table th { position: sticky; top: 0; z-index: 1; padding: 7px 10px; border-bottom: 1px solid var(--border); background: #191a1c; color: var(--fg-mute); font-size: 9.5px; font-weight: 500; text-align: right; }
     .pak-table th:first-child { width: 48%; text-align: left; }
     .pak-table td { padding: 6px 10px; border-bottom: 1px solid rgba(53,57,62,.65); color: var(--fg-mute); font: 10.5px var(--font-mono); text-align: right; }
     .pak-table td:first-child { text-align: left; }
     .pak-tree-name { min-width: 0; display: flex; align-items: center; gap: 6px; padding-left: calc(var(--depth) * 16px); }
-    .pak-tree-name svg { width: 13px; height: 13px; flex: 0 0 13px; color: var(--fg-dim); }
-    .pak-tree-name.dir { color: var(--fg); font-weight: 600; }
-    .pak-tree-name.dir svg { color: #d1a827; }
+    .pak-tree-icon { width: 13px; height: 13px; flex: 0 0 13px; color: var(--fg-dim); }
+    .pak-tree-icon.dir { color: #d1a827; }
     .pak-tree-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .pak-size-cell { position: relative; }
     .pak-size-bar { position: absolute; inset: 4px auto 4px 0; max-width: 100%; border-radius: 2px; background: rgba(79,140,255,.10); pointer-events: none; }
     .pak-size-value { position: relative; }
+    .pak-tree-truncated-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+      background: var(--bg-card);
+      font-size: 11px;
+    }
+    .pak-truncated-hint {
+      color: var(--fg-dim);
+    }
+    .pak-truncated-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .pak-load-btn {
+      padding: 4px 10px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg-input);
+      color: var(--fg);
+      font-size: 10.5px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .pak-load-btn:hover {
+      background: rgba(79,140,255,0.15);
+      border-color: var(--accent);
+      color: var(--fg);
+    }
     .pak-type-list { max-height: calc(100vh - 245px); overflow-y: auto; }
     .pak-type-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px 12px; padding: 9px 12px; border-bottom: 1px solid rgba(53,57,62,.65); }
     .pak-type-ext { color: var(--fg); font: 600 11px var(--font-mono); }
@@ -3331,30 +4040,51 @@
     }
   </style>
 
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+    <symbol id="pak-icon-dir" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 6h7l2 2h9v11H3z"/>
+    </symbol>
+    <symbol id="pak-icon-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5"/>
+    </symbol>
+  </svg>
+
   {{with .PaksVM}}
   <aside class="pak-sidebar">
     <div class="pak-sidebar-head">
-      <h2>Pak 文件</h2>
+      <h2>{{T "paks.files"}}</h2>
       <span class="tag-mini">{{len .Files}}</span>
     </div>
     {{if .Files}}
     <div class="pak-file-list">
       {{range .Files}}
       <button class="pak-file-item {{if .Selected}}selected{{end}}" type="button" title="{{.RelPath}}"
-              hx-get="/tab/paks?file={{urlquery .RelPath}}" hx-target="#tab-content" hx-swap="innerHTML">
-        <svg class="pak-file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16v13H4z"/><path d="M7 4h10l3 3H4z"/></svg>
-        <span class="pak-file-label"><span class="pak-file-name">{{.Name}}</span><span class="pak-file-location">{{.Location}}</span></span>
+              hx-get="/tab/paks?file={{urlquery .RelPath}}"
+              hx-target="closest .tab-paks"
+              hx-swap="outerHTML"
+              hx-indicator="#pak-loading-overlay">
+        <div class="pak-file-main">
+          <span class="pak-file-name">{{.Name}}</span>
+          <span class="pak-file-badge">{{.Location}}</span>
+        </div>
         <span class="pak-file-size">{{byteSize .Size}}</span>
       </button>
       {{end}}
     </div>
     {{if .SelectedPath}}<span class="pak-file-path">{{.SelectedPath}}</span>{{end}}
     {{else}}
-    <div class="pak-empty">未找到 Pak。<br>扫描范围：<code>assets/paks</code> 与当前 preset 的构建输出。</div>
+    <div class="pak-empty">{{T "paks.empty"}}<br>{{T "paks.empty_hint"}} <code>assets/paks</code></div>
     {{end}}
   </aside>
 
   <section class="pak-main">
+    <div id="pak-loading-overlay" class="pak-loading-overlay">
+      <div class="pak-loading-box">
+        <div class="pak-spinner"></div>
+        <div class="pak-loading-text">{{T "paks.loading"}}</div>
+      </div>
+    </div>
+
     {{if .Error}}
       <div class="pak-error">{{.Error}}</div>
     {{else if .Archive}}
@@ -3365,56 +4095,79 @@
         </div>
       </div>
       <div class="pak-summary">
-        <div class="pak-stat"><div class="k">文件数</div><div class="v">{{intCommas (len .Archive.Entries)}}</div><div class="sub">{{.CompressedFiles}} 个有效压缩</div></div>
-        <div class="pak-stat"><div class="k">Pak 尺寸</div><div class="v">{{byteSize .Archive.FileSize}}</div><div class="sub">含索引与数据</div></div>
-        <div class="pak-stat"><div class="k">存储尺寸</div><div class="v">{{byteSize .Archive.StoredSize}}</div><div class="sub">压缩后 payload</div></div>
-        <div class="pak-stat"><div class="k">原始尺寸</div><div class="v">{{byteSize .UncompressedSize}}</div><div class="sub">解压后的文件总量</div></div>
-        <div class="pak-stat"><div class="k">节省空间</div><div class="v">{{printf "%.1f%%" .CompressionSavings}}</div><div class="sub">相对原始尺寸</div></div>
+        <div class="pak-stat"><div class="k">{{T "paks.file_count"}}</div><div class="v">{{intCommas (len .Archive.Entries)}}</div><div class="sub">{{T "paks.compressed" .CompressedFiles}}</div></div>
+        <div class="pak-stat"><div class="k">{{T "paks.pak_size"}}</div><div class="v">{{byteSize .Archive.FileSize}}</div><div class="sub">{{T "paks.pak_size_sub"}}</div></div>
+        <div class="pak-stat"><div class="k">{{T "paks.stored"}}</div><div class="v">{{byteSize .Archive.StoredSize}}</div><div class="sub">{{T "paks.stored_sub"}}</div></div>
+        <div class="pak-stat"><div class="k">{{T "paks.raw"}}</div><div class="v">{{byteSize .UncompressedSize}}</div><div class="sub">{{T "paks.raw_sub"}}</div></div>
+        <div class="pak-stat"><div class="k">{{T "paks.saved"}}</div><div class="v">{{printf "%.1f%%" .CompressionSavings}}</div><div class="sub">{{T "paks.saved_sub"}}</div></div>
       </div>
 
       <div class="pak-analysis">
         <section class="card pak-card">
           <div class="pak-card-head">
-            <h3>文件组织结构</h3>
-            <input class="pak-search" type="search" placeholder="按路径筛选…" data-pak-filter>
+            <h3>{{T "paks.tree"}}</h3>
+            <input class="pak-search" type="search" placeholder="{{T "paks.filter"}}" value="{{.FilterQuery}}"
+                   name="q"
+                   hx-get="/tab/paks?file={{urlquery $.PaksVM.SelectedPath}}"
+                   hx-trigger="input changed delay:200ms, search"
+                   hx-target="#pak-table-wrap"
+                   hx-select="#pak-table-wrap"
+                   hx-swap="outerHTML">
           </div>
-          <div class="pak-table-wrap">
-            <table class="pak-table">
-              <thead><tr><th>路径</th><th>文件</th><th>存储</th><th>原始</th><th>占比</th></tr></thead>
-              <tbody data-pak-rows>
-                {{$total := .Archive.StoredSize}}
-                {{range .Rows}}
-                <tr data-pak-row data-path="{{.Path}}">
-                  <td title="{{.Path}}">
-                    <div class="pak-tree-name {{if .Directory}}dir{{end}}" style="--depth:{{.Depth}}">
-                      {{if .Directory}}
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h7l2 2h9v11H3z"/></svg>
-                      {{else}}
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5"/></svg>
-                      {{end}}
-                      <span class="pak-tree-label">{{.Name}}</span>
-                    </div>
-                  </td>
-                  <td>{{if .Directory}}{{intCommas .FileCount}}{{else}}—{{end}}</td>
-                  <td class="pak-size-cell"><span class="pak-size-bar" style="width:{{sizeShare .StoredSize $total}}%"></span><span class="pak-size-value">{{byteSize .StoredSize}}</span></td>
-                  <td>{{byteSize .UncompressedSize}}</td>
-                  <td>{{sizeShare .StoredSize $total}}%</td>
-                </tr>
-                {{end}}
-              </tbody>
-            </table>
+          <div id="pak-table-wrap" class="pak-table-wrap">
+            {{if eq (len .Rows) 0}}
+              <div class="pak-empty" style="margin: 20px;">{{T "paks.no_match"}}</div>
+            {{else}}
+              <table class="pak-table">
+                <thead><tr><th>{{T "paks.col.path"}}</th><th>{{T "paks.col.files"}}</th><th>{{T "paks.col.stored"}}</th><th>{{T "paks.col.raw"}}</th><th>{{T "paks.col.share"}}</th></tr></thead>
+                <tbody data-pak-rows>
+                  {{$total := .Archive.StoredSize}}
+                  {{range .Rows}}
+                  <tr data-pak-row data-path="{{.Path}}">
+                    <td title="{{.Path}}">
+                      <div class="pak-tree-name {{if .Directory}}dir{{end}}" style="--depth:{{.Depth}}">
+                        <svg class="pak-tree-icon {{if .Directory}}dir{{end}}"><use href="{{if .Directory}}#pak-icon-dir{{else}}#pak-icon-file{{end}}"/></svg>
+                        <span class="pak-tree-label">{{.Name}}</span>
+                      </div>
+                    </td>
+                    <td>{{if .Directory}}{{intCommas .FileCount}}{{else}}—{{end}}</td>
+                    <td class="pak-size-cell"><span class="pak-size-bar" style="width:{{sizeShare .StoredSize $total}}%"></span><span class="pak-size-value">{{byteSize .StoredSize}}</span></td>
+                    <td>{{byteSize .UncompressedSize}}</td>
+                    <td>{{sizeShare .StoredSize $total}}%</td>
+                  </tr>
+                  {{end}}
+                </tbody>
+              </table>
+              {{if .Truncated}}
+              <div class="pak-tree-truncated-banner">
+                <span class="pak-truncated-hint">{{T "paks.truncated" .DisplayedRows (intCommas .TotalRows)}}</span>
+                <div class="pak-truncated-actions">
+                  <button type="button" class="pak-load-btn"
+                          hx-get="/tab/paks?file={{urlquery $.PaksVM.SelectedPath}}&q={{urlquery $.PaksVM.FilterQuery}}&limit={{.NextLimit}}"
+                          hx-target="#pak-table-wrap" hx-select="#pak-table-wrap" hx-swap="outerHTML">
+                    {{T "paks.load_more" 100}}
+                  </button>
+                  <button type="button" class="pak-load-btn"
+                          hx-get="/tab/paks?file={{urlquery $.PaksVM.SelectedPath}}&q={{urlquery $.PaksVM.FilterQuery}}&limit=-1"
+                          hx-target="#pak-table-wrap" hx-select="#pak-table-wrap" hx-swap="outerHTML">
+                    {{T "paks.load_all" (intCommas .TotalRows)}}
+                  </button>
+                </div>
+              </div>
+              {{end}}
+            {{end}}
           </div>
         </section>
 
         <section class="card pak-card">
-          <div class="pak-card-head"><h3>文件类型</h3><span class="tag-mini" style="margin-left:auto">{{len .Types}}</span></div>
+          <div class="pak-card-head"><h3>{{T "paks.types"}}</h3><span class="tag-mini" style="margin-left:auto">{{len .Types}}</span></div>
           <div class="pak-type-list">
             {{$total := .Archive.StoredSize}}
             {{range .Types}}
             <div class="pak-type-row">
               <div><span class="pak-type-ext">{{.Extension}}</span> <span class="pak-type-count">× {{intCommas .FileCount}}</span></div>
               <div class="pak-type-size">{{byteSize .StoredSize}}</div>
-              <div class="pak-type-meta">原始 {{byteSize .UncompressedSize}}</div>
+              <div class="pak-type-meta">{{T "paks.type_raw" (byteSize .UncompressedSize)}}</div>
               <div class="pak-type-meta" style="text-align:right">{{sizeShare .StoredSize $total}}%</div>
               <div class="pak-type-track"><div class="pak-type-fill" style="width:{{sizeShare .StoredSize $total}}%"></div></div>
             </div>
@@ -3423,21 +4176,20 @@
         </section>
       </div>
     {{else}}
-      <div class="pak-empty">选择左侧 Pak 查看文件组织与尺寸分析。</div>
+      <div class="pak-empty">{{T "paks.pick"}}</div>
     {{end}}
   </section>
   {{end}}
 </div>
 <script>
 (function () {
-  const input = document.querySelector('.tab-paks [data-pak-filter]');
+  const input = document.querySelector('.tab-paks [name="q"]');
   if (!input) return;
-  input.addEventListener('input', function () {
-    const query = this.value.trim().toLowerCase();
-    document.querySelectorAll('.tab-paks [data-pak-row]').forEach(row => {
-      row.hidden = query !== '' && !row.dataset.path.toLowerCase().includes(query);
-    });
-  });
+  if (input.value) {
+    input.focus();
+    const len = input.value.length;
+    try { input.setSelectionRange(len, len); } catch (_) {}
+  }
 })();
 </script>
 {{end}}
@@ -3447,10 +4199,10 @@
   <style>
     .target-graph-tab {
       display: grid;
-      grid-template-columns: 280px minmax(0, 1fr) 320px;
-      height: calc(100vh - 132px);
-      min-height: 620px;
-      border-top: 1px solid var(--border);
+      grid-template-columns: 280px minmax(0, 1fr) 300px;
+      height: 100%;
+      min-height: 0;
+      border-top: 0;
       background: var(--bg);
       user-select: none;
       -webkit-user-select: none;
@@ -3458,7 +4210,7 @@
     .graph-sidebar, .graph-inspector {
       min-width: 0;
       border-right: 1px solid var(--border);
-      background: var(--bg-soft);
+      background: var(--bg-panel);
       overflow: hidden;
       display: flex;
       flex-direction: column;
@@ -3599,44 +4351,44 @@
   <aside class="graph-sidebar">
     <div class="graph-panel-head">
       <div>
-        <div class="graph-panel-title">Target Graph</div>
-        <div class="graph-muted">Preset: {{.GraphVM.Preset}}</div>
+        <div class="graph-panel-title">{{T "graph.title"}}</div>
+        <div class="graph-muted">{{T "graph.preset" .GraphVM.Preset}}</div>
       </div>
-      <input class="graph-search" type="search" placeholder="Filter targets" data-graph-search>
+      <input class="graph-search" type="search" placeholder="{{T "graph.filter"}}" data-graph-search>
     </div>
     <div class="graph-target-list" data-graph-target-list></div>
   </aside>
   <section class="graph-main">
     <div class="graph-toolbar">
-      <button class="btn" type="button" data-graph-refresh>Refresh</button>
-      <button class="btn secondary" type="button" data-graph-fit>Fit</button>
-      <button class="btn secondary" type="button" data-graph-depth="1">1-hop</button>
-      <button class="btn secondary" type="button" data-graph-depth="2">2-hop</button>
-      <button class="btn secondary" type="button" data-graph-depth="99">All</button>
+      <button class="btn" type="button" data-graph-refresh>{{T "graph.refresh"}}</button>
+      <button class="btn secondary" type="button" data-graph-fit>{{T "graph.fit"}}</button>
+      <button class="btn secondary" type="button" data-graph-depth="1">{{T "graph.hop1"}}</button>
+      <button class="btn secondary" type="button" data-graph-depth="2">{{T "graph.hop2"}}</button>
+      <button class="btn secondary" type="button" data-graph-depth="99">{{T "graph.all"}}</button>
       <span class="spacer"></span>
-      <span class="graph-muted" data-graph-status>Loading graph...</span>
+      <span class="graph-muted" data-graph-status>{{T "graph.loading"}}</span>
     </div>
     <div class="graph-canvas" data-graph-canvas>
-      <svg class="graph-svg" data-graph-svg role="img" aria-label="Target dependency graph"></svg>
-      <div class="graph-empty" data-graph-empty>Loading graph...</div>
+      <svg class="graph-svg" data-graph-svg role="img" aria-label="{{T "graph.aria"}}"></svg>
+      <div class="graph-empty" data-graph-empty>{{T "graph.loading"}}</div>
     </div>
   </section>
   <aside class="graph-inspector">
     <div class="graph-panel-head">
-      <div class="graph-panel-title" data-graph-selected-title>No target selected</div>
-      <div class="graph-muted" data-graph-selected-kind>Select a node or target.</div>
+      <div class="graph-panel-title" data-graph-selected-title>{{T "graph.none"}}</div>
+      <div class="graph-muted" data-graph-selected-kind>{{T "graph.pick"}}</div>
     </div>
     <div class="graph-inspector-body">
       <div class="graph-stat-grid">
-        <div class="graph-stat"><b data-graph-dep-count>0</b><span class="graph-muted">Dependencies</span></div>
-        <div class="graph-stat"><b data-graph-user-count>0</b><span class="graph-muted">Dependers</span></div>
+        <div class="graph-stat"><b data-graph-dep-count>0</b><span class="graph-muted">{{T "graph.deps"}}</span></div>
+        <div class="graph-stat"><b data-graph-user-count>0</b><span class="graph-muted">{{T "graph.users"}}</span></div>
       </div>
       <div class="graph-section">
-        <h3>Direct Dependencies</h3>
+        <h3>{{T "graph.direct_deps"}}</h3>
         <div class="graph-link-list" data-graph-deps></div>
       </div>
       <div class="graph-section">
-        <h3>Direct Dependers</h3>
+        <h3>{{T "graph.direct_users"}}</h3>
         <div class="graph-link-list" data-graph-users></div>
       </div>
     </div>

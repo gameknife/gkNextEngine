@@ -14,6 +14,18 @@ public static const int MAX_RENDER_PROXIES = 131072;
 public static const int MAX_MATERIALS = 16384;
 public static const int MAX_HDR_SH = 100;
 
+// Discrete LOD levels per model section, including LOD0. Every section owns exactly this many
+// consecutive ModelLod entries so a shader can index by level without a per-model table offset.
+public static const int MAX_MODEL_LOD_COUNT = 4;
+
+// ModelData entries reserved per model: NodeProxy::modelId is modelIndex * MODEL_SECTION_STRIDE +
+// section. Shared so a shader can recover the model index without a side table.
+public static const int MODEL_SECTION_STRIDE = 10;
+
+// Per-cascade sun shadow map edge. Shared so the shadow cull pass can size a proxy's projected
+// extent in shadow-map pixels using the same number the pass actually renders at.
+public static const int SUN_SHADOW_RESOLUTION = 1024;
+
 public static const int HDR_OUTPUT_MODE_SDR = 0;
 public static const int HDR_OUTPUT_MODE_HDR10_ST2084 = 1;
 public static const int HDR_OUTPUT_MODE_EXTENDED_SRGB_LINEAR = 2;
@@ -109,8 +121,15 @@ public struct ALIGN_16 GPUDrivenStat
     public uint TriangleCount;
     public uint CulledTriangleCount;
     public uint MaxVisibleProxyIndex;
-    public uint ReservedAlign2;
-    public uint ReservedAlign3;
+    // What TriangleCount would have been with every proxy pinned to LOD0. The difference between
+    // the two is the geometry discrete LOD removed this frame, which is otherwise invisible: a
+    // scene that halves its triangles looks identical to one that simply culled more.
+    public uint Lod0TriangleCount;
+    // Frame index the cull pass stamped when it populated this block. The reset that precedes the
+    // pass zeroes it, so a CPU reader that sees 0 knows it caught the window between the reset and
+    // the accumulation and must keep its previous values instead of reporting an empty frame. The
+    // readback is deliberately fenceless, so that window is reachable.
+    public uint FrameStamp;
 };
 
 // Logical visibility identity shared by the expanded primitive stream and visibility consumers.
@@ -140,6 +159,22 @@ public struct ALIGN_16 SoftMeshShaderResources
     public uint64_t Counters;
     public uint64_t Lights;
     public uint64_t LightGrid;
+    // uint per proxy: the LOD level its TLAS instance holds this frame, written by
+    // Task.RayTracingLodSelect. Hardware ray hits decode their triangle through it, and a
+    // visibility-buffer origin compares its own level against it before tracing.
+    public uint64_t RayTracingLods;
+    public uint64_t Reserved0;
+};
+
+// Task.RayTracingLodSelect's resource table, reached through GPUScene.ReservedAddress0. Owned by
+// the renderer and rebuilt with the acceleration structures.
+public struct ALIGN_16 FRayTracingLodResources
+{
+    public uint64_t TemplateInstances; // VkAccelerationStructureInstanceKHR[], CPU-written, LOD0 BLAS
+    public uint64_t Instances;         // VkAccelerationStructureInstanceKHR[], what the TLAS builds from
+    public uint64_t BlasAddresses;     // uint64_t[ModelCount * MAX_MODEL_LOD_COUNT]
+    public uint ModelCount;
+    public uint Reserved0;
 };
 
 public struct ALIGN_16 UniformBufferObject
@@ -245,7 +280,22 @@ public struct ALIGN_16 UniformBufferObject
     // The visible camera background is independent from sky lighting: Studio keeps SkyIdx for
     // irradiance/specular/path-tracing misses while replacing only the primary-ray presentation.
     public uint BackgroundMode;
+
+    // Projected pixel extent at or above which a proxy draws at LOD0; each further level halves it.
+    // 0 pins everything to LOD0. Lives here rather than in a pass CustomData word because all three
+    // of those are already claimed by the cull passes, and because shadow and main cull must agree
+    // on the policy even though they run with different viewports.
+    public float LodBaseThreshold;
+    // The same policy for the sun shadow cascades, pre-multiplied on the CPU. A shadow only needs
+    // enough geometry for its silhouette, so this is normally the larger of the two -- a larger
+    // threshold means a proxy has to project bigger before it earns full detail.
+    public float LodShadowThreshold;
 };
+
+// reserved2's low bits are outline state; the upper UNORM16 stores 1 - main opacity.
+// Zero-initialized proxies remain opaque without changing the shared GPU layout.
+public static const uint NODE_PROXY_MAIN_TRANSPARENCY_SHIFT = 16u;
+public static const uint NODE_PROXY_MAIN_TRANSPARENCY_MAX = 65535u;
 
 public struct ALIGN_16 NodeProxy
 {
@@ -263,8 +313,22 @@ public struct ALIGN_16 NodeProxy
     public uint excludeFromAS;  // 1 for non-first sections of multi-section models: only
                                 // section 0 becomes a TLAS instance (its BLAS covers the model)
     public uint reserved1;
-    public uint reserved2;
+    public uint reserved2;      // outline flags [0:2], visibility transparency [16:31]
 };
+
+#ifndef __cplusplus
+// Inverse-transpose up to a positive scalar, valid for TRS, nonuniform scale and shear.
+// Kept in Types so the fixed-descriptor compatibility rasterizer uses the same normal transform.
+public float3 TransformAffineNormal(float4x4 world, float3 normal)
+{
+    const float3 x = mul(world, float4(1, 0, 0, 0)).xyz;
+    const float3 y = mul(world, float4(0, 1, 0, 0)).xyz;
+    const float3 z = mul(world, float4(0, 0, 1, 0)).xyz;
+    const float3 cofactorX = cross(y, z);
+    const float orientation = dot(x, cofactorX) < 0.0f ? -1.0f : 1.0f;
+    return (cofactorX * normal.x + cross(z, x) * normal.y + cross(x, y) * normal.z) * orientation;
+}
+#endif
 
 public struct ALIGN_16 ModelData
 {
@@ -279,7 +343,24 @@ public struct ALIGN_16 ModelData
     public uint modelType;
     public uint voxelDataIdx;
     public uint reorderOffset;
-    public uint reserved2;
+    // Populated LOD levels for this section, always >= 1. Sections that never got simplified
+    // report 1, which makes every LOD query resolve back to level 0.
+    public uint lodCount;
+
+    // Discrete levels of detail, embedded rather than kept in a side buffer: GPUScene already sits
+    // exactly at the 128-byte push-constant floor and has no address slot left, and both the cull
+    // and vertex stages load ModelData anyway, so a level costs no extra fetch.
+    //
+    // Simplified levels only ever add index data -- meshopt_simplify emits indices into the
+    // existing vertex range, and the flat-shaded case that needs fresh normals appends its
+    // vertices to the same model -- so vertexOffset never varies by level. Entry 0 mirrors
+    // indexOffset/indexCount above so a shader can index by level without branching.
+    public uint lodIndexOffset[MAX_MODEL_LOD_COUNT];
+    public uint lodIndexCount[MAX_MODEL_LOD_COUNT];
+    // Object-space bound on how far each level strays from LOD0 (0 for LOD0 itself), so two
+    // levels of one section are at most lodError[a] + lodError[b] apart. That is the window a ray
+    // tracer searches when it reconciles a surface drawn at one level with a proxy traced at another.
+    public float lodError[MAX_MODEL_LOD_COUNT];
 };
 
 // size = 10 x 4 bytes, 40 bytes
@@ -667,6 +748,10 @@ public struct ALIGN_8 GPUScene
     {
         get { return (LightObject*)SoftMeshShader.Lights; }
     }
+    public property uint* RayTracingLods
+    {
+        get { return (uint*)SoftMeshShader.RayTracingLods; }
+    }
 
     public RaytracingAccelerationStructure GetTLAS() {
 		return RaytracingAccelerationStructure(TLAS);
@@ -830,6 +915,10 @@ public struct ALIGN_8 GPUScene
     public property LightObject* Lights
     {
         get { return (LightObject*)SoftMeshShader.Lights; }
+    }
+    public property uint* RayTracingLods
+    {
+        get { return (uint*)SoftMeshShader.RayTracingLods; }
     }
 
     public RaytracingAccelerationStructure GetTLAS() {

@@ -1,0 +1,34 @@
+{
+  "name": "nextdayz-session-offline-fallback",
+  "target": "NextDayz",
+  "viewport": {
+    "width": 1600,
+    "height": 900
+  },
+  "args": [
+    "--cvar",
+    "nextdayz.net.mode client",
+    "--cvar",
+    "nextdayz.net.master http://127.0.0.1:17889",
+    "--cvar",
+    "nextdayz.net.name fallback-check",
+    "--cvar",
+    "nextdayz.net.autoDeploy true"
+  ],
+  "defaults": {
+    "stepTimeoutMs": 180000
+  },
+  "steps": [
+    {"type": "wait-until", "query": "game.cabinScene", "op": "eq", "value": true, "timeoutMs": 30000, "fatal": true},
+    {"type": "wait-frames", "n": 180},
+    {"type": "assert", "query": "game.loggedIn", "op": "eq", "value": false, "fatal": true},
+    {"type": "assert", "query": "game.sessionMode", "op": "eq", "value": "master", "fatal": true},
+    {"type": "click", "at": {"norm": [0.13125, 0.653333]}, "button": "left"},
+    {"type": "wait-frames", "n": 4},
+    {"type": "wait-until", "query": "game.activeMapId", "op": "eq", "value": "training_ground", "timeoutMs": 180000, "fatal": true},
+    {"type": "assert", "query": "game.sessionMode", "op": "eq", "value": "training", "fatal": true},
+    {"type": "assert", "query": "game.loggedIn", "op": "eq", "value": false, "fatal": true},
+    {"type": "screenshot", "out": "screenshots/session-unreachable-master-training", "ui": true},
+    {"type": "quit"}
+  ]
+}

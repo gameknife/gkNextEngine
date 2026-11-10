@@ -61,13 +61,14 @@ void NextRendererGameInstance::DrawTitleBar(const FGameUiFrameContext& context, 
     config.DrawMenuBar = [&]() -> float
     {
         float menuRight = ImGui::GetCursorScreenPos().x;
+        NextUI::Theme::FMainMenuGhostScope mainMenuStyle;
 
         const auto UpdateMenuRight = [&menuRight]()
         {
             menuRight = std::max(menuRight, ImGui::GetItemRectMax().x);
         };
 
-        if (ImGui::BeginMenu("File"))
+        if (mainMenuStyle.BeginMenu("File"))
         {
             UpdateMenuRight();
             if (ImGui::MenuItem("Project Page"))
@@ -87,12 +88,15 @@ void NextRendererGameInstance::DrawTitleBar(const FGameUiFrameContext& context, 
             UpdateMenuRight();
         }
 
-        if (ImGui::BeginMenu("View"))
+        if (mainMenuStyle.BeginMenu("View"))
         {
             UpdateMenuRight();
             auto& showFlags = GetEngine().GetShowFlags();
-            Utilities::UI::DrawShowFlagsCommon(showFlags);
-            ImGui::MenuItem("Statistics Overlay", nullptr, &GetEngine().GetUserSettings().ShowOverlay);
+            Utilities::UI::DrawShowFlagsCommon(showFlags, &GetEngine().GetUserSettings());
+            if (ImGui::MenuItem("Statistics Overlay", "F3", &GetEngine().GetUserSettings().ShowOverlay))
+            {
+                GetEngine().GetShowFlags().DebugProfileOverlay = GetEngine().GetUserSettings().ShowOverlay;
+            }
 #if GK_WITH_VITURE
             if (HasVitureDebugPanel())
             {
@@ -106,7 +110,7 @@ void NextRendererGameInstance::DrawTitleBar(const FGameUiFrameContext& context, 
             UpdateMenuRight();
         }
 
-        if (ImGui::BeginMenu("Screenshot"))
+        if (mainMenuStyle.BeginMenu("Screenshot"))
         {
             UpdateMenuRight();
             if (ImGui::MenuItem("Screenshot"))
@@ -126,7 +130,7 @@ void NextRendererGameInstance::DrawTitleBar(const FGameUiFrameContext& context, 
             UpdateMenuRight();
         }
 
-        if (ImGui::BeginMenu("Renderer"))
+        if (mainMenuStyle.BeginMenu("Renderer"))
         {
             UpdateMenuRight();
             Runtime::GraphicsDebugPanel::DrawRendererSelector(GetEngine(), GetEngine().GetUserSettings(),
@@ -143,11 +147,14 @@ void NextRendererGameInstance::DrawTitleBar(const FGameUiFrameContext& context, 
             UpdateMenuRight();
         }
 
-        if (ImGui::BeginMenu("Settings"))
+        if (mainMenuStyle.BeginMenu("Settings"))
         {
             UpdateMenuRight();
             ImGui::MenuItem("Render Settings", nullptr, &uiState.showSettings);
-            ImGui::MenuItem("Stats Overlay", nullptr, &GetEngine().GetUserSettings().ShowOverlay);
+            if (ImGui::MenuItem("Stats Overlay", "F3", &GetEngine().GetUserSettings().ShowOverlay))
+            {
+                GetEngine().GetShowFlags().DebugProfileOverlay = GetEngine().GetUserSettings().ShowOverlay;
+            }
             ImGui::EndMenu();
         }
         else
@@ -155,7 +162,7 @@ void NextRendererGameInstance::DrawTitleBar(const FGameUiFrameContext& context, 
             UpdateMenuRight();
         }
 
-        if (ImGui::BeginMenu("Help"))
+        if (mainMenuStyle.BeginMenu("Help"))
         {
             UpdateMenuRight();
             if (ImGui::MenuItem("Keyboard & Mouse"))

@@ -36,19 +36,6 @@ namespace ScadLibrary
             return value;
         }
 
-        std::vector<size_t> BuildLineOffsets(const std::string& source)
-        {
-            std::vector<size_t> offsets{0};
-            for (size_t index = 0; index < source.size(); ++index)
-            {
-                if (source[index] == '\n')
-                {
-                    offsets.push_back(index + 1);
-                }
-            }
-            return offsets;
-        }
-
         size_t FindMatchingParen(const std::string& source, size_t openParen)
         {
             int depth = 0;
@@ -117,123 +104,6 @@ namespace ScadLibrary
                 }
             }
             return std::string::npos;
-        }
-
-        size_t FindStatementEnd(const std::string& source, size_t begin)
-        {
-            int parenDepth = 0;
-            int bracketDepth = 0;
-            int braceDepth = 0;
-            bool sawBrace = false;
-            bool lineComment = false;
-            bool blockComment = false;
-            bool stringLiteral = false;
-            bool escaped = false;
-            for (size_t index = begin; index < source.size(); ++index)
-            {
-                const char character = source[index];
-                const char next = index + 1 < source.size() ? source[index + 1] : '\0';
-                if (lineComment)
-                {
-                    if (character == '\n')
-                    {
-                        lineComment = false;
-                    }
-                    continue;
-                }
-                if (blockComment)
-                {
-                    if (character == '*' && next == '/')
-                    {
-                        ++index;
-                        blockComment = false;
-                    }
-                    continue;
-                }
-                if (stringLiteral)
-                {
-                    if (!escaped && character == '"')
-                    {
-                        stringLiteral = false;
-                    }
-                    escaped = !escaped && character == '\\';
-                    if (character != '\\')
-                    {
-                        escaped = false;
-                    }
-                    continue;
-                }
-                if (character == '/' && next == '/')
-                {
-                    ++index;
-                    lineComment = true;
-                    continue;
-                }
-                if (character == '/' && next == '*')
-                {
-                    ++index;
-                    blockComment = true;
-                    continue;
-                }
-                if (character == '"')
-                {
-                    stringLiteral = true;
-                    continue;
-                }
-
-                if (character == '(')
-                    ++parenDepth;
-                else if (character == ')')
-                    --parenDepth;
-                else if (character == '[')
-                    ++bracketDepth;
-                else if (character == ']')
-                    --bracketDepth;
-                else if (character == '{')
-                {
-                    ++braceDepth;
-                    sawBrace = true;
-                }
-                else if (character == '}')
-                {
-                    --braceDepth;
-                    if (sawBrace && parenDepth == 0 && bracketDepth == 0 && braceDepth == 0)
-                    {
-                        size_t end = index + 1;
-                        while (end < source.size() && (source[end] == ' ' || source[end] == '\t'))
-                        {
-                            ++end;
-                        }
-                        if (end < source.size() && source[end] == ';')
-                        {
-                            ++end;
-                        }
-                        return end;
-                    }
-                }
-                else if (character == ';' && parenDepth == 0 && bracketDepth == 0 && braceDepth == 0)
-                {
-                    return index + 1;
-                }
-            }
-            return std::string::npos;
-        }
-
-        FSourceSpan FindStatementSpan(const std::string& source, const std::vector<size_t>& lineOffsets, int line,
-                                      const std::string& token)
-        {
-            if (line <= 0 || static_cast<size_t>(line) > lineOffsets.size())
-            {
-                return {};
-            }
-            const size_t lineBegin = lineOffsets[static_cast<size_t>(line) - 1];
-            const size_t lineEnd = source.find('\n', lineBegin);
-            const size_t tokenBegin = source.find(token, lineBegin);
-            if (tokenBegin == std::string::npos || (lineEnd != std::string::npos && tokenBegin >= lineEnd))
-            {
-                return {};
-            }
-            return {tokenBegin, FindStatementEnd(source, tokenBegin)};
         }
 
         std::optional<Value> LiteralValue(const ExprPtr& expression)
@@ -552,6 +422,13 @@ namespace ScadLibrary
             return escaped;
         }
 
+        const char* SurfaceName(int biome)
+        {
+            static const char* names[] = {"grass", "grass_dark", "dry_grass", "sand", "rock",
+                                          "rock_high", "snow", "bed", "road", "pad"};
+            return biome >= 0 && biome < static_cast<int>(std::size(names)) ? names[biome] : "pad";
+        }
+
         std::string SerializeTerrain(const std::string& variable, const Assets::Scad::FTerrainSpec& terrain)
         {
             std::ostringstream source;
@@ -597,6 +474,16 @@ namespace ScadLibrary
                 case EType::Pad:
                     source << FormatPoint(feature.at) << ", " << FormatPoint(feature.size) << ", "
                            << FormatNumber(feature.rot);
+                    if (feature.apron > 0.0) source << ", " << FormatNumber(feature.apron);
+                    if (feature.biome >= 0) source << ", \"" << SurfaceName(feature.biome) << "\"";
+                    break;
+                case EType::Paint:
+                    source << FormatPoints(feature.pts) << ", \"" << SurfaceName(feature.biome) << "\"";
+                    if (feature.stripeBiome >= 0 && feature.stripePeriod > 0.0)
+                    {
+                        source << ", [\"" << SurfaceName(feature.stripeBiome) << "\", "
+                               << FormatNumber(feature.stripePeriod) << ", " << FormatNumber(feature.stripeAngle) << "]";
+                    }
                     break;
                 case EType::Hmap:
                     // Sampled heightfields are data, not editable geometry: the
@@ -902,12 +789,14 @@ namespace ScadLibrary
         }
     } // namespace
 
-    bool FTerrainProcessDocument::Parse(const std::string& source, const Assets::Scad::Scope& topLevel,
+    bool FTerrainProcessDocument::Parse(const std::string& source, const Assets::Scad::FScadSourceIndex& index,
                                         const std::map<std::string, Assets::Scad::Value>& topLevelVariables,
                                         std::string& outError, std::vector<std::string>& outWarnings)
     {
+        const Assets::Scad::Scope& topLevel = index.topLevel;
         source_ = source;
         terrain_ = {};
+        parsedTerrainSerialization_.clear();
         rules_.clear();
         terrainAssignmentBegin_ = std::string::npos;
         terrainAssignmentEnd_ = std::string::npos;
@@ -944,16 +833,16 @@ namespace ScadLibrary
             return false;
         }
 
-        const std::vector<size_t> lineOffsets = BuildLineOffsets(source);
-        for (const Assets::Scad::StmtPtr& statement : topLevel)
+        for (size_t statementIndex = 0; statementIndex < topLevel.size(); ++statementIndex)
         {
-            if (!statement)
+            const Assets::Scad::StmtPtr& statement = topLevel[statementIndex];
+            if (!statement || statementIndex >= index.statements.size())
             {
                 continue;
             }
+            const FSourceSpan span{index.statements[statementIndex].begin, index.statements[statementIndex].end};
             if (statement->kind == StmtKind::Assign && statement->name == terrainVariable_)
             {
-                const FSourceSpan span = FindStatementSpan(source, lineOffsets, statement->line, statement->name);
                 if (span.Valid())
                 {
                     terrainAssignmentBegin_ = span.begin;
@@ -963,7 +852,6 @@ namespace ScadLibrary
             }
             if (statement.get() == terrainCall)
             {
-                const FSourceSpan span = FindStatementSpan(source, lineOffsets, statement->line, statement->name);
                 if (span.Valid())
                 {
                     insertionPoint_ = span.end;
@@ -985,7 +873,6 @@ namespace ScadLibrary
                 continue;
             }
 
-            const FSourceSpan span = FindStatementSpan(source, lineOffsets, statement->line, statement->name);
             FTerrainProcessRule rule;
             const bool parsed = heightAnchor ? ReadHeightAnchor(*statement, terrainVariable_, source, span, rule)
                                              : ReadRule(*statement, terrainVariable_, source, span, rule);
@@ -993,6 +880,7 @@ namespace ScadLibrary
             {
                 insertionPoint_ =
                     insertionPoint_ == std::string::npos ? rule.sourceEnd : std::max(insertionPoint_, rule.sourceEnd);
+                rule.parsedSerialization = SerializeRule(terrainVariable_, rule);
                 rules_.push_back(std::move(rule));
             }
             else
@@ -1012,6 +900,7 @@ namespace ScadLibrary
         {
             insertionPoint_ = terrainAssignmentEnd_;
         }
+        parsedTerrainSerialization_ = SerializeTerrain(terrainVariable_, terrain_);
         return true;
     }
 
@@ -1068,17 +957,19 @@ namespace ScadLibrary
             std::count_if(rules_.begin(), rules_.end(), [](const FTerrainProcessRule& rule) { return !rule.removed; }));
     }
 
-    std::string FTerrainProcessDocument::BuildSource() const
+    void FTerrainProcessDocument::CollectEdits(std::vector<Assets::Scad::FScadSourceEdit>& outEdits) const
     {
-        struct FReplacement
+        if (terrainAssignmentBegin_ == std::string::npos || terrainAssignmentEnd_ == std::string::npos)
         {
-            size_t begin = 0;
-            size_t end = 0;
-            std::string source;
-        };
-        std::vector<FReplacement> replacements;
-        replacements.push_back(
-            {terrainAssignmentBegin_, terrainAssignmentEnd_, SerializeTerrain(terrainVariable_, terrain_)});
+            return;
+        }
+        // Only statements the user actually changed are rewritten; the rest of
+        // the file (including terrain statements) keeps its exact bytes.
+        std::string terrainSource = SerializeTerrain(terrainVariable_, terrain_);
+        if (terrainSource != parsedTerrainSerialization_)
+        {
+            outEdits.push_back({terrainAssignmentBegin_, terrainAssignmentEnd_, std::move(terrainSource)});
+        }
 
         std::string additions;
         for (const FTerrainProcessRule& rule : rules_)
@@ -1092,27 +983,28 @@ namespace ScadLibrary
                 }
                 continue;
             }
-            replacements.push_back({rule.sourceBegin, rule.sourceEnd,
-                                    rule.removed ? std::string{} : SerializeRule(terrainVariable_, rule)});
-        }
-        if (!additions.empty())
-        {
-            replacements.push_back({insertionPoint_, insertionPoint_, std::move(additions)});
-        }
-
-        std::sort(replacements.begin(), replacements.end(),
-                  [](const FReplacement& left, const FReplacement& right) { return left.begin > right.begin; });
-        std::string result = source_;
-        for (const FReplacement& replacement : replacements)
-        {
-            if (replacement.begin == std::string::npos || replacement.end == std::string::npos ||
-                replacement.begin > replacement.end || replacement.end > result.size())
+            if (rule.removed)
             {
+                outEdits.push_back({rule.sourceBegin, rule.sourceEnd, std::string{}});
                 continue;
             }
-            result.replace(replacement.begin, replacement.end - replacement.begin, replacement.source);
+            std::string ruleSource = SerializeRule(terrainVariable_, rule);
+            if (ruleSource != rule.parsedSerialization)
+            {
+                outEdits.push_back({rule.sourceBegin, rule.sourceEnd, std::move(ruleSource)});
+            }
         }
-        return result;
+        if (!additions.empty() && insertionPoint_ != std::string::npos)
+        {
+            outEdits.push_back({insertionPoint_, insertionPoint_, std::move(additions)});
+        }
+    }
+
+    std::string FTerrainProcessDocument::BuildSource() const
+    {
+        std::vector<Assets::Scad::FScadSourceEdit> edits;
+        CollectEdits(edits);
+        return Assets::Scad::ApplyScadSourceEdits(source_, std::move(edits));
     }
 
     const char* FTerrainProcessDocument::FeatureTypeName(Assets::Scad::FTerrainFeature::EType type)
@@ -1136,6 +1028,8 @@ namespace ScadLibrary
             return "pad";
         case EType::Hmap:
             return "hmap";
+        case EType::Paint:
+            return "paint";
         }
         return "unknown";
     }

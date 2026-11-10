@@ -57,6 +57,13 @@ function(gk_compile_slang_shader shader outputVar)
     if(ANDROID)
         list(APPEND slangc_args -DPLATFORM_ANDROID)
     endif()
+    # PLATFORM_APPLE is true on macOS *and* iOS, so it cannot answer "is this a phone".
+    # PLATFORM_MOBILE is the tile-GPU / thermal-budget switch; it mirrors the `IOS || ANDROID`
+    # condition the C++ side already uses, so a shader constant and its C++ counterpart cannot
+    # disagree about which platform they are on.
+    if(ANDROID OR IOS)
+        list(APPEND slangc_args -DPLATFORM_MOBILE)
+    endif()
 
     if(file_name STREQUAL "Core.SharcUpdate.comp.slang")
         list(APPEND slangc_args -DGK_ENABLE_OFFICIAL_SHARC -DSHARC_UPDATE=1 -DSHARC_QUERY=0)

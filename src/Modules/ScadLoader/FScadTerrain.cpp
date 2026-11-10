@@ -286,7 +286,29 @@ namespace Assets::Scad
                 // rise, which is what keeps a city with no hills in it grey.
                 4.0, 36.0, 0.55, 3000.0, 40.0};
 
+            // Central European farmland and forest: deeper, cooler greens that
+            // sit with the runtime grass blades, khaki stubble and brown earth.
+            // Colour comes from painted land cover, never from altitude: the
+            // dry band and snow line are pushed out of reach.
+            static const FPaletteDef continental = {
+                {
+                    {0.22f, 0.29f, 0.16f, 1.0f}, // Grass     -> meadow
+                    {0.16f, 0.22f, 0.13f, 1.0f}, // GrassDark -> forest floor
+                    {0.36f, 0.33f, 0.21f, 1.0f}, // DryGrass  -> stubble / fallow
+                    {0.40f, 0.36f, 0.25f, 1.0f}, // Sand      -> gravel bank / straw rows
+                    {0.32f, 0.30f, 0.28f, 1.0f}, // Rock
+                    {0.40f, 0.39f, 0.37f, 1.0f}, // RockHigh
+                    {0.82f, 0.84f, 0.88f, 1.0f}, // Snow (unreachable)
+                    {0.29f, 0.26f, 0.19f, 1.0f}, // Bed
+                    {0.29f, 0.24f, 0.18f, 1.0f}, // Road      -> earth track / ploughland
+                    {0.31f, 0.30f, 0.28f, 1.0f}, // Pad       -> cobbles / concrete
+                },
+                {0.17f, 0.32f, 0.36f, 1.0f},
+                {0.26f, 0.23f, 0.19f, 1.0f},
+                4.0, 38.0, 4.0, 3000.0};
+
             if (name == "temperate") return &temperate;
+            if (name == "continental") return &continental;
             if (name == "arid") return &arid;
             if (name == "alpine") return &alpine;
             if (name == "urban") return &urban;
@@ -307,6 +329,8 @@ namespace Assets::Scad
             double padTarget = 0.0;      // pad flatten height
             double cosR = 1.0;
             double sinR = 0.0;
+            size_t index = 0;            // position in the ordered feature list
+            bool plot = false;           // pad with explicit apron/surface operands
             glm::dvec2 bboxMin{-1e30, -1e30};
             glm::dvec2 bboxMax{1e30, 1e30};
 
@@ -324,6 +348,11 @@ namespace Assets::Scad
                 const double minSize = std::min(spec.size.x, spec.size.y);
                 baseFreq_ = 1.0 / std::max(1.0, minSize / (3.0 + 5.0 * Clamp01(spec.roughness)));
                 baseOctaves_ = 2 + static_cast<int>(std::lround(Clamp01(spec.roughness) * 2.0));
+                // One cell diagonal: a triangle touching a plot's rectangle never
+                // reaches further than this, so the rectangle is flat on the mesh.
+                const double cellX = spec.size.x / std::max(1, spec.cells.x);
+                const double cellY = spec.size.y / std::max(1, spec.cells.y);
+                shoulder_ = std::sqrt(cellX * cellX + cellY * cellY) + 0.05;
             }
 
             void Compile()
@@ -335,6 +364,8 @@ namespace Assets::Scad
                     FCompiledFeature c;
                     c.src = &f;
                     c.seed = HashMix(spec_.seed ^ (0xF00D0000ULL + i * 0x9E3779B97F4A7C15ULL));
+                    c.index = compiled_.size();
+                    c.plot = f.type == FTerrainFeature::EType::Pad && (f.apron >= 0.0 || f.biome >= 0);
                     CompileFeature(f, c, compiled_.size());
                     compiled_.push_back(std::move(c));
                 }
@@ -419,8 +450,9 @@ namespace Assets::Scad
                     {
                         glm::dvec2 local;
                         PadLocal(c, f, p, local);
-                        if (std::abs(local.x) < f.size.x * 0.5 + margin &&
-                            std::abs(local.y) < f.size.y * 0.5 + margin)
+                        const double grow = margin + (c.plot ? shoulder_ : 0.0);
+                        if (std::abs(local.x) < f.size.x * 0.5 + grow &&
+                            std::abs(local.y) < f.size.y * 0.5 + grow)
                         {
                             return true;
                         }
@@ -442,18 +474,79 @@ namespace Assets::Scad
 
             bool OnPad(const glm::dvec2& p) const
             {
-                for (const FCompiledFeature& c : compiled_)
+                int surface = -1;
+                return PadSurfaceAt(p, surface);
+            }
+
+            // Rendered surface of the pad that owns p: the last pad covering it
+            // wins, matching the height order. outSurface < 0 means grey paving.
+            bool PadSurfaceAt(const glm::dvec2& p, int& outSurface) const
+            {
+                for (auto it = compiled_.rbegin(); it != compiled_.rend(); ++it)
                 {
-                    const FTerrainFeature& f = *c.src;
+                    const FTerrainFeature& f = *it->src;
                     if (f.type != FTerrainFeature::EType::Pad) continue;
                     glm::dvec2 local;
-                    PadLocal(c, f, p, local);
-                    if (std::abs(local.x) <= f.size.x * 0.5 && std::abs(local.y) <= f.size.y * 0.5) return true;
+                    PadLocal(*it, f, p, local);
+                    if (std::abs(local.x) <= f.size.x * 0.5 && std::abs(local.y) <= f.size.y * 0.5)
+                    {
+                        outSurface = f.biome;
+                        return true;
+                    }
                 }
                 return false;
             }
 
+            // Land cover painted over natural ground; the last polygon wins.
+            int PaintAt(const glm::dvec2& p) const
+            {
+                for (auto it = compiled_.rbegin(); it != compiled_.rend(); ++it)
+                {
+                    const FTerrainFeature& f = *it->src;
+                    if (f.type != FTerrainFeature::EType::Paint || it->Rejects(p)) continue;
+                    bool inside = false;
+                    for (size_t i = 0, j = f.pts.size() - 1; i < f.pts.size(); j = i++)
+                    {
+                        const glm::dvec2& a = f.pts[i];
+                        const glm::dvec2& b = f.pts[j];
+                        if ((a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x)
+                        {
+                            inside = !inside;
+                        }
+                    }
+                    if (!inside) continue;
+                    if (f.stripeBiome >= 0 && f.stripePeriod > 0.0)
+                    {
+                        const double a = f.stripeAngle * kDeg2Rad;
+                        // Distance across the bands (bands run along the angle).
+                        const double across = -p.x * std::sin(a) + p.y * std::cos(a);
+                        const long band = static_cast<long>(std::floor(across / (0.5 * f.stripePeriod)));
+                        if (band % 2 != 0) return f.stripeBiome;
+                    }
+                    return f.biome;
+                }
+                return -1;
+            }
+
         private:
+            // True when p lies on an earlier plot (its rectangle plus shoulder).
+            bool InsideEarlierPlot(size_t index, const glm::dvec2& p) const
+            {
+                for (size_t i = 0; i < index && i < compiled_.size(); ++i)
+                {
+                    const FCompiledFeature& e = compiled_[i];
+                    if (!e.plot || e.Rejects(p)) continue;
+                    glm::dvec2 local;
+                    PadLocal(e, *e.src, p, local);
+                    if (std::abs(local.x) <= e.src->size.x * 0.5 + shoulder_ &&
+                        std::abs(local.y) <= e.src->size.y * 0.5 + shoulder_)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
             static void PadLocal(const FCompiledFeature& c, const FTerrainFeature& f,
                                  const glm::dvec2& p, glm::dvec2& outLocal)
             {
@@ -546,12 +639,26 @@ namespace Assets::Scad
                     }
                     break;
                 }
+                case FTerrainFeature::EType::Paint:
+                {
+                    glm::dvec2 lo(1e30), hi(-1e30);
+                    for (const glm::dvec2& q : f.pts)
+                    {
+                        lo = glm::min(lo, q);
+                        hi = glm::max(hi, q);
+                    }
+                    c.bboxMin = lo;
+                    c.bboxMax = hi;
+                    break;
+                }
                 case FTerrainFeature::EType::Pad:
                 {
                     const double rad = f.rot * kDeg2Rad;
                     c.cosR = std::cos(rad);
                     c.sinR = std::sin(rad);
-                    const double pad = 0.5 * std::max(f.size.x, f.size.y) * 1.6 + 2.0;
+                    const double pad = std::max(0.5 * std::max(f.size.x, f.size.y) * 1.6 + 2.0,
+                                                0.71 * std::max(f.size.x, f.size.y) + std::max(0.0, f.apron) + 1.0 +
+                                                    (c.plot ? shoulder_ : 0.0));
                     c.bboxMin = f.at - glm::dvec2(pad);
                     c.bboxMax = f.at + glm::dvec2(pad);
                     double sum = EvalHeight(f.at.x, f.at.y, priorCount);
@@ -692,22 +799,28 @@ namespace Assets::Scad
                     PadLocal(c, f, p, local);
                     const double hx = f.size.x * 0.5;
                     const double hy = f.size.y * 0.5;
-                    const double apron = std::max(1.5, 0.35 * std::min(f.size.x, f.size.y));
+                    const double apron = f.apron > 0.0 ? f.apron : std::max(1.5, 0.35 * std::min(f.size.x, f.size.y));
                     const double dx = std::abs(local.x) - hx;
                     const double dy = std::abs(local.y) - hy;
                     const double outside = std::max(dx, dy);
-                    if (outside >= apron) return;
-                    if (outside <= 0.0)
+                    // Plots keep a flat shoulder so their whole rectangle is flat
+                    // on the rendered mesh, and never disturb an earlier plot.
+                    const double shoulder = c.plot ? shoulder_ : 0.0;
+                    if (outside >= shoulder + apron) return;
+                    if (c.plot && InsideEarlierPlot(c.index, p)) return;
+                    if (outside <= shoulder)
                     {
                         h = c.padTarget;
                     }
                     else
                     {
-                        const double s = SmoothStep01(outside / apron);
+                        const double s = SmoothStep01((outside - shoulder) / apron);
                         h = c.padTarget + s * (h - c.padTarget);
                     }
                     return;
                 }
+                case FTerrainFeature::EType::Paint:
+                    return; // surface only
                 }
             }
 
@@ -715,6 +828,7 @@ namespace Assets::Scad
             double baseFreq_ = 0.01;
             int baseOctaves_ = 3;
             std::vector<FCompiledFeature> compiled_;
+            double shoulder_ = 0.0;
         };
 
         double Area2(const glm::dvec2& a, const glm::dvec2& b, const glm::dvec2& c)
@@ -774,6 +888,23 @@ namespace Assets::Scad
             char buf[40];
             std::snprintf(buf, sizeof(buf), "%.17g,", v);
             key += buf;
+        }
+
+        // Surface names a paint/pad operand may use. "bed" is the water floor
+        // and never painted onto dry land.
+        int PaintableBiome(const std::string& name)
+        {
+            static const std::pair<const char*, ETerrainBiome> names[] = {
+                {"grass", ETerrainBiome::Grass},       {"grass_dark", ETerrainBiome::GrassDark},
+                {"dry_grass", ETerrainBiome::DryGrass}, {"sand", ETerrainBiome::Sand},
+                {"rock", ETerrainBiome::Rock},          {"rock_high", ETerrainBiome::RockHigh},
+                {"snow", ETerrainBiome::Snow},          {"road", ETerrainBiome::Road},
+                {"pad", ETerrainBiome::Pad}};
+            for (const auto& [text, biome] : names)
+            {
+                if (name == text) return static_cast<int>(biome);
+            }
+            return -1;
         }
     } // namespace
 
@@ -1194,6 +1325,49 @@ namespace Assets::Scad
                 ok = fv.vec.size() >= 3 && ReadVec2(fv.vec[1], f.at) && ReadVec2(fv.vec[2], f.size);
                 f.rot = num(3, 0.0);
                 ok = ok && f.size.x > 0.0 && f.size.y > 0.0;
+                // Optional trailing operands, in any order: a number is the
+                // blend apron, a string is the rendered surface.
+                for (size_t i = 4; ok && i < fv.vec.size(); ++i)
+                {
+                    if (fv.vec[i].type == Value::Type::Str)
+                    {
+                        f.biome = PaintableBiome(fv.vec[i].str);
+                        if (f.biome < 0) outWarnings.push_back("pad surface '" + fv.vec[i].str + "' unknown (using pad)");
+                    }
+                    else if (fv.vec[i].IsNumber())
+                    {
+                        f.apron = std::clamp(fv.vec[i].num, 0.5, 60.0);
+                    }
+                }
+            }
+            else if (kind == "paint")
+            {
+                f.type = FTerrainFeature::EType::Paint;
+                ok = fv.vec.size() >= 3 && ReadPoints(fv.vec[1], f.pts) && f.pts.size() >= 3 &&
+                     fv.vec[2].type == Value::Type::Str;
+                if (ok)
+                {
+                    f.biome = PaintableBiome(fv.vec[2].str);
+                    if (f.biome < 0 || f.biome == static_cast<int>(ETerrainBiome::Bed))
+                    {
+                        outWarnings.push_back("paint biome '" + fv.vec[2].str + "' unknown; skipped");
+                        continue;
+                    }
+                    // Optional ["alt", period, angleDeg]: parallel bands.
+                    if (fv.vec.size() >= 4 && fv.vec[3].type == Value::Type::Vec && fv.vec[3].vec.size() >= 2 &&
+                        fv.vec[3].vec[0].type == Value::Type::Str)
+                    {
+                        f.stripeBiome = PaintableBiome(fv.vec[3].vec[0].str);
+                        f.stripePeriod = std::max(0.0, fv.vec[3].vec[1].AsNumber(0.0));
+                        f.stripeAngle = fv.vec[3].vec.size() > 2 ? fv.vec[3].vec[2].AsNumber(0.0) : 0.0;
+                        if (f.stripeBiome < 0 || f.stripePeriod <= 0.0)
+                        {
+                            outWarnings.push_back("paint stripes need [biome, period>0, angle]; drawn solid");
+                            f.stripeBiome = -1;
+                            f.stripePeriod = 0.0;
+                        }
+                    }
+                }
             }
             else if (kind == "hmap")
             {
@@ -1318,6 +1492,16 @@ namespace Assets::Scad
             AppendKeyNumber(key, f.depth);
             AppendKeyNumber(key, f.width);
             AppendKeyNumber(key, f.rugged);
+            // Appended only when set, so existing TERR literals keep their keys.
+            if (f.apron >= 0.0 || f.biome >= 0)
+            {
+                key += 'o';
+                AppendKeyNumber(key, f.apron);
+                AppendKeyNumber(key, static_cast<double>(f.biome));
+                AppendKeyNumber(key, static_cast<double>(f.stripeBiome));
+                AppendKeyNumber(key, f.stripePeriod);
+                AppendKeyNumber(key, f.stripeAngle);
+            }
             if (f.type == FTerrainFeature::EType::Hmap)
             {
                 key += f.path;
@@ -1503,21 +1687,23 @@ namespace Assets::Scad
             return false;
         };
 
-        auto classifyFace = [&](int i, int j, const glm::dvec3& a, const glm::dvec3& b,
-                                const glm::dvec3& c) -> ETerrainBiome
+        // The surface a face has without any road feature over it. A face the
+        // road claims keeps this as its "natural" biome, so the detailed look
+        // can show grass under a smooth road ribbon instead of a staircase.
+        auto naturalFace = [&](int i, int j, const glm::dvec3& a, const glm::dvec3& b,
+                               const glm::dvec3& c) -> ETerrainBiome
         {
             const size_t cell = static_cast<size_t>(j) * cx + i;
             const uint8_t flags = data->cellFlags[cell];
             if (flags & FTerrainData::kFlagWater) return ETerrainBiome::Bed;
 
             const glm::dvec3 centroid = (a + b + c) / 3.0;
-            // Road and pad masks are sampled per face, like the natural
-            // biomes below.  Using the cell-center flags here made both
-            // triangles of every touched cell share one material, producing
-            // visibly axis-aligned, square feature boundaries.
             const glm::dvec2 centroidXY(centroid.x, centroid.y);
-            if (field.OnRoad(centroidXY)) return ETerrainBiome::Road;
-            if (field.OnPad(centroidXY)) return ETerrainBiome::Pad;
+            int padSurface = -1;
+            if (field.PadSurfaceAt(centroidXY, padSurface))
+            {
+                return padSurface >= 0 ? static_cast<ETerrainBiome>(padSurface) : ETerrainBiome::Pad;
+            }
 
             glm::dvec3 n = glm::cross(b - a, c - a);
             const double len = glm::length(n);
@@ -1533,6 +1719,9 @@ namespace Assets::Scad
             }
             if (snowEligible && centroid.z > snowLine) return ETerrainBiome::Snow;
 
+            const int painted = field.PaintAt(centroidXY);
+            if (painted >= 0) return static_cast<ETerrainBiome>(painted);
+
             double waterLevel = 0.0;
             if (cellHasWaterNeighbor(i, j, waterLevel) && centroid.z < waterLevel + 0.5)
             {
@@ -1544,10 +1733,25 @@ namespace Assets::Scad
             return patch > 0.15 ? ETerrainBiome::GrassDark : ETerrainBiome::Grass;
         };
 
+        auto classifyFace = [&](int i, int j, const glm::dvec3& a, const glm::dvec3& b,
+                                const glm::dvec3& c, ETerrainBiome& outNatural) -> ETerrainBiome
+        {
+            outNatural = naturalFace(i, j, a, b, c);
+            if (outNatural == ETerrainBiome::Bed) return ETerrainBiome::Bed;
+            // Road and pad masks are sampled per face, like the natural
+            // biomes.  Using the cell-center flags here made both
+            // triangles of every touched cell share one material, producing
+            // visibly axis-aligned, square feature boundaries.
+            const glm::dvec3 centroid = (a + b + c) / 3.0;
+            if (field.OnRoad(glm::dvec2(centroid.x, centroid.y))) return ETerrainBiome::Road;
+            return outNatural;
+        };
+
         struct FClassifiedFace
         {
             size_t vertex[3]{};
             ETerrainBiome biome = ETerrainBiome::Grass;
+            ETerrainBiome natural = ETerrainBiome::Grass;
         };
         std::vector<FClassifiedFace> faces;
         faces.reserve(static_cast<size_t>(cx) * cy * 2);
@@ -1573,10 +1777,12 @@ namespace Assets::Scad
                     t0[0] = a; t0[1] = b; t0[2] = d;
                     t1[0] = b; t1[1] = c; t1[2] = d;
                 }
-                faces.push_back({{t0[0], t0[1], t0[2]},
-                                 classifyFace(i, j, data->verts[t0[0]], data->verts[t0[1]], data->verts[t0[2]])});
-                faces.push_back({{t1[0], t1[1], t1[2]},
-                                 classifyFace(i, j, data->verts[t1[0]], data->verts[t1[1]], data->verts[t1[2]])});
+                FClassifiedFace f0{{t0[0], t0[1], t0[2]}};
+                f0.biome = classifyFace(i, j, data->verts[t0[0]], data->verts[t0[1]], data->verts[t0[2]], f0.natural);
+                faces.push_back(f0);
+                FClassifiedFace f1{{t1[0], t1[1], t1[2]}};
+                f1.biome = classifyFace(i, j, data->verts[t1[0]], data->verts[t1[1]], data->verts[t1[2]], f1.natural);
+                faces.push_back(f1);
             }
         }
 
@@ -1643,12 +1849,278 @@ namespace Assets::Scad
             }
         }
 
+        // Road-coloured faces that are road only because a road feature claims
+        // them (not ploughland painted "road") form the road bed: the default
+        // look paints them road colour exactly as before, the detailed look
+        // shows their natural surface under a ribbon.
+        std::map<uint32_t, FTerrainData::ColoredTris> roadBedByColor;
+        data->roadColor = pal.biomeColors[static_cast<size_t>(ETerrainBiome::Road)];
         for (size_t faceIndex = 0; faceIndex < faces.size(); ++faceIndex)
         {
             FClassifiedFace& face = faces[faceIndex];
             face.biome = regularized[faceIndex];
-            emitLand(face.biome, data->verts[face.vertex[0]], data->verts[face.vertex[1]],
-                     data->verts[face.vertex[2]]);
+            const glm::dvec3& a = data->verts[face.vertex[0]];
+            const glm::dvec3& b = data->verts[face.vertex[1]];
+            const glm::dvec3& c = data->verts[face.vertex[2]];
+            if (face.biome == ETerrainBiome::Road && face.natural != ETerrainBiome::Road &&
+                face.natural != ETerrainBiome::Bed)
+            {
+                const glm::vec4 color = pal.biomeColors[static_cast<size_t>(face.natural)];
+                FTerrainData::ColoredTris& bed = roadBedByColor[colorKeyOf(color)];
+                bed.color = color;
+                if (bed.materialName.empty()) bed.materialName = BiomeMaterialName(face.natural);
+                bed.tris.push_back(a);
+                bed.tris.push_back(b);
+                bed.tris.push_back(c);
+                continue;
+            }
+            emitLand(face.biome, a, b, c);
+        }
+        for (auto& entry : roadBedByColor)
+        {
+            data->roadBedGeom.push_back(std::move(entry.second));
+        }
+
+        // ---- Road ribbons (detailed look) ----
+        // Each road feature's smoothed polyline becomes a few draped strips: a
+        // verge, the running surface and, for a field track, a grass strip
+        // down the middle. Edges wobble with slow 1D noise so a road reads as
+        // laid and worn by hand, not ruled, and both ends are rounded. Every
+        // strip triangle is clipped against the terrain triangles under it, so
+        // each piece lies on its facet plus a few centimetres: the strip follows
+        // every fold of the low-poly ground without poking through. The outer
+        // edges dip a centimetre under the facet, so the strip meets the ground
+        // on a crisp line instead of a lifted lip (whose shaded gap and contact
+        // shadow read as a dark seam at eye height). Layers stack by lift
+        // (verge < track < gravel < asphalt < grass strip), so where roads meet
+        // the better surface wins without z-fighting.
+        {
+            enum class ESurface { Asphalt, Gravel, Track };
+            struct FLayer
+            {
+                const char* name;
+                glm::vec4 color;
+                double halfScale; // of the road half width
+                double wobble;    // relative edge noise amplitude
+                double lift;      // metres over the facet
+            };
+            const glm::vec4 grass = pal.biomeColors[static_cast<size_t>(ETerrainBiome::Grass)];
+            const glm::vec4 earth = pal.biomeColors[static_cast<size_t>(ETerrainBiome::Road)];
+            const glm::vec4 verge = glm::mix(grass, earth, 0.45f);
+            const glm::vec4 asphalt(0.17f, 0.17f, 0.165f, 1.0f);
+            const glm::vec4 gravel(0.33f, 0.31f, 0.26f, 1.0f);
+            std::map<std::string, FTerrainData::ColoredTris> ribbons;
+            const uint64_t ribbonSeed = HashMix(spec.seed ^ 0x51DE57A1ULL);
+
+            // Clips a CCW triangle (XY) to the terrain facets beneath it and
+            // emits the pieces on the facet planes, lifted by the triangle's
+            // per-corner lift interpolated across it.
+            const auto drape = [&](FTerrainData::ColoredTris& out, const glm::dvec2& p0, const glm::dvec2& p1,
+                                   const glm::dvec2& p2, double l0, double l1, double l2)
+            {
+                const double minX = std::min({p0.x, p1.x, p2.x});
+                const double maxX = std::max({p0.x, p1.x, p2.x});
+                const double minY = std::min({p0.y, p1.y, p2.y});
+                const double maxY = std::max({p0.y, p1.y, p2.y});
+                // Jittered vertices move less than half a cell: one cell of margin.
+                const int i0 = std::max(0, static_cast<int>(std::floor((minX + hx) / dx)) - 1);
+                const int i1 = std::min(cx - 1, static_cast<int>(std::floor((maxX + hx) / dx)) + 1);
+                const int j0 = std::max(0, static_cast<int>(std::floor((minY + hy) / dy)) - 1);
+                const int j1 = std::min(cy - 1, static_cast<int>(std::floor((maxY + hy) / dy)) + 1);
+                const auto cross2 = [](const glm::dvec2& a, const glm::dvec2& b) { return a.x * b.y - a.y * b.x; };
+                const double ribbonArea = cross2(p1 - p0, p2 - p0);
+                if (std::abs(ribbonArea) < 1e-9) return;
+                const auto liftAt = [&](const glm::dvec2& p)
+                {
+                    const double w1 = cross2(p - p0, p2 - p0) / ribbonArea;
+                    const double w2 = cross2(p1 - p0, p - p0) / ribbonArea;
+                    return (1.0 - w1 - w2) * l0 + w1 * l1 + w2 * l2;
+                };
+                std::vector<glm::dvec2> poly;
+                std::vector<glm::dvec2> next;
+                for (int j = j0; j <= j1; ++j)
+                {
+                    for (int i = i0; i <= i1; ++i)
+                    {
+                        const size_t cell = static_cast<size_t>(j) * cx + i;
+                        // Never over water: a bridge deck carries the road there.
+                        if ((data->cellFlags[cell] & FTerrainData::kFlagWater) != 0) continue;
+                        const size_t a = static_cast<size_t>(j) * vx + i;
+                        const size_t b = a + 1;
+                        const size_t d = static_cast<size_t>(j + 1) * vx + i;
+                        const size_t c = d + 1;
+                        const size_t facets[2][3] = {
+                            {a, b, data->cellDiagFlip[cell] == 0 ? c : d},
+                            {data->cellDiagFlip[cell] == 0 ? a : b, c, d}};
+                        for (const auto& facet : facets)
+                        {
+                            const glm::dvec3& va = data->verts[facet[0]];
+                            const glm::dvec3& vb = data->verts[facet[1]];
+                            const glm::dvec3& vc = data->verts[facet[2]];
+                            const glm::dvec2 fa = XY(va), fb = XY(vb), fc = XY(vc);
+                            if (std::max({fa.x, fb.x, fc.x}) <= minX || std::min({fa.x, fb.x, fc.x}) >= maxX ||
+                                std::max({fa.y, fb.y, fc.y}) <= minY || std::min({fa.y, fb.y, fc.y}) >= maxY)
+                                continue;
+                            const double area = cross2(fb - fa, fc - fa);
+                            if (std::abs(area) < 1e-12) continue;
+                            // Sutherland-Hodgman against the facet's three edges.
+                            poly = {p0, p1, p2};
+                            const glm::dvec2 edges[3][2] = {{fa, fb}, {fb, fc}, {fc, fa}};
+                            for (const auto& edge : edges)
+                            {
+                                const glm::dvec2 e = edge[1] - edge[0];
+                                const auto side = [&](const glm::dvec2& p) { return cross2(e, p - edge[0]) * area; };
+                                next.clear();
+                                for (size_t k = 0; k < poly.size(); ++k)
+                                {
+                                    const glm::dvec2& cur = poly[k];
+                                    const glm::dvec2& nxt = poly[(k + 1) % poly.size()];
+                                    const double sc = side(cur);
+                                    const double sn = side(nxt);
+                                    if (sc >= 0.0) next.push_back(cur);
+                                    if ((sc >= 0.0) != (sn >= 0.0)) next.push_back(cur + (nxt - cur) * (sc / (sc - sn)));
+                                }
+                                poly.swap(next);
+                                if (poly.size() < 3) break;
+                            }
+                            if (poly.size() < 3) continue;
+                            // The facet plane: barycentric height of each clipped point.
+                            const auto lifted = [&](const glm::dvec2& p)
+                            {
+                                const double wb = cross2(p - fa, fc - fa) / area;
+                                const double wc = cross2(fb - fa, p - fa) / area;
+                                const double wa = 1.0 - wb - wc;
+                                return glm::dvec3(p.x, p.y, wa * va.z + wb * vb.z + wc * vc.z + liftAt(p));
+                            };
+                            const glm::dvec3 root = lifted(poly[0]);
+                            for (size_t k = 1; k + 1 < poly.size(); ++k)
+                            {
+                                if (std::abs(cross2(poly[k] - poly[0], poly[k + 1] - poly[0])) < 1e-6) continue;
+                                out.tris.push_back(root);
+                                out.tris.push_back(lifted(poly[k]));
+                                out.tris.push_back(lifted(poly[k + 1]));
+                            }
+                        }
+                    }
+                }
+            };
+
+            size_t roadIndex = 0;
+            for (const FCompiledFeature& road : field.Features())
+            {
+                if (road.src->type != FTerrainFeature::EType::Road || road.pts.size() < 2) continue;
+                const double half = road.src->width * 0.5;
+                const ESurface surface = road.src->width >= 5.5 ? ESurface::Asphalt
+                                       : road.src->width >= 3.6 ? ESurface::Gravel : ESurface::Track;
+                std::vector<FLayer> layers;
+                layers.push_back({"terrain_road_verge", verge, 1.12, surface == ESurface::Asphalt ? 0.08 : 0.16, 0.02});
+                if (surface == ESurface::Asphalt) layers.push_back({"terrain_road_asphalt", asphalt, 0.94, 0.03, 0.05});
+                if (surface == ESurface::Gravel) layers.push_back({"terrain_road_gravel", gravel, 0.90, 0.10, 0.04});
+                if (surface == ESurface::Track)
+                {
+                    layers.push_back({"terrain_road_track", earth, 0.86, 0.14, 0.035});
+                    layers.push_back({"terrain_road_strip", grass, 0.24, 0.35, 0.06});
+                }
+
+                // Resample the polyline every ~1.5 m with tangents. `cap` runs
+                // over (-1, 0) before the start and (0, 1) past the end: a
+                // half-disc of each layer's own radius.
+                struct FSample { glm::dvec2 p; glm::dvec2 t; double s; double cap; };
+                std::vector<FSample> samples;
+                double travelled = 0.0;
+                for (size_t k = 0; k + 1 < road.pts.size(); ++k)
+                {
+                    const glm::dvec2 a = road.pts[k];
+                    const glm::dvec2 b = road.pts[k + 1];
+                    const double len = glm::length(b - a);
+                    if (len < 1e-6) continue;
+                    const glm::dvec2 dir = (b - a) / len;
+                    const int steps = std::max(1, static_cast<int>(std::ceil(len / 1.5)));
+                    for (int st = 0; st < steps; ++st)
+                    {
+                        const double f = static_cast<double>(st) / steps;
+                        samples.push_back({a + dir * (len * f), dir, travelled + len * f, 0.0});
+                    }
+                    travelled += len;
+                    if (k + 2 == road.pts.size()) samples.push_back({b, dir, travelled, 0.0});
+                }
+                if (samples.size() < 2) continue;
+                // Smooth tangents across the Chaikin corners.
+                for (size_t k = 1; k + 1 < samples.size(); ++k)
+                {
+                    const glm::dvec2 t = samples[k - 1].t + samples[k].t * 2.0 + samples[k + 1].t;
+                    if (glm::length(t) > 1e-9) samples[k].t = glm::normalize(t);
+                }
+                {
+                    constexpr double capSteps[] = {0.97, 0.85, 0.62, 0.32};
+                    const FSample first = samples.front();
+                    const FSample last = samples.back();
+                    std::vector<FSample> capped;
+                    capped.reserve(samples.size() + 8);
+                    for (double u : capSteps) capped.push_back({first.p, first.t, first.s, -u});
+                    capped.insert(capped.end(), samples.begin(), samples.end());
+                    for (auto it = std::rbegin(capSteps); it != std::rend(capSteps); ++it)
+                        capped.push_back({last.p, last.t, last.s, *it});
+                    samples.swap(capped);
+                }
+
+                const auto isWet = [&](const glm::dvec2& p)
+                {
+                    const int cell = data->CellIndexAt(p.x, p.y);
+                    return cell >= 0 && (data->cellFlags[static_cast<size_t>(cell)] & FTerrainData::kFlagWater) != 0;
+                };
+
+                for (size_t layerIndex = 0; layerIndex < layers.size(); ++layerIndex)
+                {
+                    const FLayer& layer = layers[layerIndex];
+                    FTerrainData::ColoredTris& out = ribbons[layer.name];
+                    out.color = layer.color;
+                    out.materialName = layer.name;
+                    const uint64_t seedL = HashMix(ribbonSeed + roadIndex * 131 + layerIndex * 17);
+                    const uint64_t seedR = HashMix(seedL ^ 0xA5A5A5ULL);
+                    // Cross-section, right edge to left: buried edge, full lift
+                    // a short inset inside, buried edge.
+                    constexpr double bury = -0.01;
+                    const double lifts[4] = {bury, layer.lift, layer.lift, bury};
+                    bool havePrevious = false;
+                    glm::dvec2 previous[4];
+                    for (const FSample& sample : samples)
+                    {
+                        const glm::dvec2 n(-sample.t.y, sample.t.x); // left
+                        const double radius = half * layer.halfScale;
+                        const double taper = std::sqrt(std::max(0.0, 1.0 - sample.cap * sample.cap));
+                        const glm::dvec2 centre = sample.p + sample.t * (sample.cap * radius);
+                        const double hl = radius * taper * (1.0 + layer.wobble * ValueNoise(seedL, sample.s / 9.0, 0.5));
+                        const double hr = radius * taper * (1.0 + layer.wobble * ValueNoise(seedR, sample.s / 9.0, 0.5));
+                        const glm::dvec2 left = centre + n * hl;
+                        const glm::dvec2 right = centre - n * hr;
+                        // Water breaks the strip: a bridge carries the road there.
+                        if (isWet(left) || isWet(right) || isWet(centre))
+                        {
+                            havePrevious = false;
+                            continue;
+                        }
+                        const double inset = std::min(0.3, 0.3 * std::min(hl, hr));
+                        const glm::dvec2 current[4] = {right, right + n * inset, left - n * inset, left};
+                        if (havePrevious)
+                        {
+                            // Counter-clockwise from above.
+                            for (int k = 0; k < 3; ++k)
+                            {
+                                drape(out, previous[k], current[k], previous[k + 1], lifts[k], lifts[k], lifts[k + 1]);
+                                drape(out, previous[k + 1], current[k], current[k + 1], lifts[k + 1], lifts[k], lifts[k + 1]);
+                            }
+                        }
+                        std::copy(std::begin(current), std::end(current), std::begin(previous));
+                        havePrevious = true;
+                    }
+                }
+                ++roadIndex;
+            }
+            for (auto& entry : ribbons)
+            {
+                if (!entry.second.tris.empty()) data->roadDecalGeom.push_back(std::move(entry.second));
+            }
         }
 
         for (int j = 0; j < cy; ++j)

@@ -1,0 +1,137 @@
+{
+  "version": 1,
+  "state": {
+    "map": "assets/scad/proc/coldwar/riverland_1km.scad",
+    "campaign": {
+      "inField": true,
+      "gold": 37,
+      "sorties": 4,
+      "extractions": 1,
+      "nextStorageId": 2,
+      "storage": [
+        {
+          "instanceId": 1,
+          "defId": "bandage",
+          "count": 2,
+          "containerId": 0,
+          "loadedAmmo": 0
+        }
+      ],
+      "flight": {
+        "phase": 1,
+        "pointId": "riverland_pad",
+        "pad": [
+          0,
+          0,
+          0
+        ],
+        "remaining": 12,
+        "boarded": false
+      }
+    },
+    "inventory": {
+      "instances": [
+        {
+          "instanceId": 1,
+          "defId": "food_can",
+          "count": 2,
+          "containerId": 1,
+          "loadedAmmo": 0
+        }
+      ],
+      "containers": [
+        {
+          "containerId": 1,
+          "ownerItemInstanceId": 0,
+          "displayName": "Basic shirt pockets",
+          "capacity": 6,
+          "active": true,
+          "weaponOnly": false
+        },
+        {
+          "containerId": 2,
+          "ownerItemInstanceId": 0,
+          "displayName": "Basic trouser pockets",
+          "capacity": 4,
+          "active": true,
+          "weaponOnly": false
+        },
+        {
+          "containerId": 3,
+          "ownerItemInstanceId": 0,
+          "displayName": "Primary weapon sling",
+          "capacity": 10,
+          "active": true,
+          "weaponOnly": true
+        },
+        {
+          "containerId": 4,
+          "ownerItemInstanceId": 0,
+          "displayName": "Secondary weapon sling",
+          "capacity": 10,
+          "active": true,
+          "weaponOnly": true
+        }
+      ],
+      "nextContainerId": 5,
+      "nextInstanceId": 2
+    },
+    "world": {
+      "seconds": 123,
+      "directorRng": 1,
+      "rollRng": 2,
+      "pileSerial": 0,
+      "entries": []
+    },
+    "survival": {
+      "health": 75,
+      "hunger": 50,
+      "hydration": 60,
+      "bleedingWounds": 1,
+      "cold": 0,
+      "painkillerSeconds": 0,
+      "lifeState": 0,
+      "damageSequence": 0,
+      "woundSequence": 1,
+      "lastDamageSource": "infected"
+    },
+    "time": {
+      "minutes": 555,
+      "nextWeatherChange": 630,
+      "weatherRng": 1,
+      "weather": 0,
+      "blend": 0
+    },
+    "position": [
+      3,
+      10,
+      24
+    ],
+    "yaw": 40,
+    "pitch": -5,
+    "firstPerson": true,
+    "weaponSlots": [
+      0,
+      0
+    ],
+    "activeSlot": 0,
+    "survivalSeconds": 20,
+    "sessionRng": 1,
+    "survivalRng": 1,
+    "quickSlots": [
+      "bandage",
+      "water_bottle",
+      "food_can",
+      ""
+    ],
+    "lanternLit": false,
+    "lanternSeconds": 0,
+    "hasCacheMarker": true,
+    "cacheMarker": [
+      50,
+      10,
+      50
+    ],
+    "cacheSeconds": 60
+  }
+}

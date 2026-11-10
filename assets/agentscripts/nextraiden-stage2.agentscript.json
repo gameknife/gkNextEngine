@@ -1,0 +1,577 @@
+{
+  "_comment": "关卡 2 与全局流程验证。两件别处没覆盖的事：一局从关卡 1 自动串到关卡 2 再到 All Clear，以及要塞 BOSS 的四个阶段与反应堆弱点的开合。",
+  "_comment_method": "BOSS 战用 nr.bossHp 推进，不靠真打。脚本能断言的是状态机和数值，断言不了『玩家的弹道有没有正好扫到弱点』——那是手感，只能人工试玩。nr.invincible 同理：它不是为了赢，是因为一个被打死的玩家会让 BOSS 战停在那里，后面的阶段断言就永远等不到。",
+  "name": "nextraiden-stage2",
+  "target": "NextRaiden",
+  "viewport": {
+    "width": 1600,
+    "height": 900
+  },
+  "defaults": {
+    "waitFrames": 2,
+    "stepTimeoutMs": 20000
+  },
+  "steps": [
+    {
+      "type": "log",
+      "message": "关卡 1 起手。这条脚本不打杂兵，它验的是两关怎么串起来、以及要塞的四个阶段"
+    },
+    {
+      "type": "wait-until",
+      "query": "engine.status",
+      "op": "eq",
+      "value": "Running"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.state",
+      "op": "eq",
+      "value": "playing",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "assert",
+      "query": "game.stage",
+      "op": "eq",
+      "value": "airfield"
+    },
+    {
+      "type": "assert",
+      "query": "game.stageIndex",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "assert",
+      "query": "game.stageCount",
+      "op": "eq",
+      "value": 2
+    },
+    {
+      "type": "assert",
+      "query": "game.bossesTotal",
+      "op": "eq",
+      "value": 2
+    },
+    {
+      "type": "cvar",
+      "name": "nr.invincible",
+      "set": "true"
+    },
+    {
+      "type": "log",
+      "message": "关卡 1 中BOSS：跳到 BOSS 触发时刻，等它滑到位"
+    },
+    {
+      "type": "cvar",
+      "name": "nr.spawnBoss",
+      "set": "true"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossActive",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "assert",
+      "query": "game.bossesFought",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossVulnerable",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "assert",
+      "query": "game.bossPhase",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nr.bossHp",
+      "set": "0.4"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossPhase",
+      "op": "eq",
+      "value": 1,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "assert",
+      "query": "game.bossWeakPoint",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "log",
+      "message": "关卡 1 中BOSS：血量归零，走通常的击破流程"
+    },
+    {
+      "type": "cvar",
+      "name": "nr.bossHp",
+      "set": "0"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossActive",
+      "op": "eq",
+      "value": false,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "assert",
+      "query": "game.bossesFought",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "wait-until",
+      "query": "game.state",
+      "op": "eq",
+      "value": "playing",
+      "timeoutMs": 20000
+    },
+    {
+      "type": "log",
+      "message": "关卡 1 关底 BOSS：跳到 BOSS 触发时刻，等它滑到位"
+    },
+    {
+      "type": "cvar",
+      "name": "nr.spawnBoss",
+      "set": "true"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossActive",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "assert",
+      "query": "game.bossesFought",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossVulnerable",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "assert",
+      "query": "game.bossPhase",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nr.bossHp",
+      "set": "0.6"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossPhase",
+      "op": "eq",
+      "value": 1,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "assert",
+      "query": "game.bossWeakPoint",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "cvar",
+      "name": "nr.bossHp",
+      "set": "0.2"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossPhase",
+      "op": "eq",
+      "value": 2,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "assert",
+      "query": "game.bossWeakPoint",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "log",
+      "message": "关卡 1 关底 BOSS：血量归零，走通常的击破流程"
+    },
+    {
+      "type": "cvar",
+      "name": "nr.bossHp",
+      "set": "0"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossActive",
+      "op": "eq",
+      "value": false,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "assert",
+      "query": "game.bossesFought",
+      "op": "eq",
+      "value": 2
+    },
+    {
+      "type": "log",
+      "message": "关底 BOSS 倒下 -> StageClear -> 自动载入关卡 2。这一步是 P3 的主干"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.stage",
+      "op": "eq",
+      "value": "harbor",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.state",
+      "op": "eq",
+      "value": "ready",
+      "timeoutMs": 40000
+    },
+    {
+      "type": "assert",
+      "query": "game.stageIndex",
+      "op": "eq",
+      "value": 2
+    },
+    {
+      "type": "assert",
+      "query": "game.hostileBullets",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "assert",
+      "query": "game.itemsAlive",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "assert",
+      "query": "game.enemiesAlive",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "log",
+      "message": "关卡 2 清单：146 行景观、76 个地面目标、41 波、2 个 BOSS"
+    },
+    {
+      "type": "assert",
+      "query": "game.prefabs",
+      "op": "eq",
+      "value": 28
+    },
+    {
+      "type": "assert",
+      "query": "game.sceneryRows",
+      "op": "eq",
+      "value": 146
+    },
+    {
+      "type": "assert",
+      "query": "game.groundTotal",
+      "op": "eq",
+      "value": 76
+    },
+    {
+      "type": "assert",
+      "query": "game.bossesTotal",
+      "op": "eq",
+      "value": 2
+    },
+    {
+      "type": "assert",
+      "query": "game.wavesTotal",
+      "op": "ge",
+      "value": 38
+    },
+    {
+      "type": "assert",
+      "query": "game.score",
+      "op": "ge",
+      "value": 0
+    },
+    {
+      "type": "wait-until",
+      "query": "game.state",
+      "op": "eq",
+      "value": "playing",
+      "timeoutMs": 20000
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextraiden_stage2_open",
+      "ui": true
+    },
+    {
+      "type": "cvar",
+      "name": "nr.invincible",
+      "set": "true"
+    },
+    {
+      "type": "log",
+      "message": "关卡 2 中BOSS（炮艇强化档）：跳到 BOSS 触发时刻，等它滑到位"
+    },
+    {
+      "type": "cvar",
+      "name": "nr.spawnBoss",
+      "set": "true"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossActive",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "assert",
+      "query": "game.bossesFought",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossVulnerable",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "assert",
+      "query": "game.bossPhase",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "cvar",
+      "name": "nr.bossHp",
+      "set": "0.4"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossPhase",
+      "op": "eq",
+      "value": 1,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "assert",
+      "query": "game.bossWeakPoint",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "log",
+      "message": "关卡 2 中BOSS（炮艇强化档）：血量归零，走通常的击破流程"
+    },
+    {
+      "type": "cvar",
+      "name": "nr.bossHp",
+      "set": "0"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossActive",
+      "op": "eq",
+      "value": false,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "assert",
+      "query": "game.bossesFought",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "wait-until",
+      "query": "game.state",
+      "op": "eq",
+      "value": "playing",
+      "timeoutMs": 20000
+    },
+    {
+      "type": "log",
+      "message": "要塞：四阶段，舱门开合决定反应堆在不在外面"
+    },
+    {
+      "type": "cvar",
+      "name": "nr.spawnBoss",
+      "set": "true"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossActive",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossVulnerable",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "assert",
+      "query": "game.bossPhase",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "assert",
+      "query": "game.bossWeakPoint",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "log",
+      "message": "阶段 2：舱门打开，反应堆暴露"
+    },
+    {
+      "type": "cvar",
+      "name": "nr.bossHp",
+      "set": "0.7"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossPhase",
+      "op": "eq",
+      "value": 1,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "assert",
+      "query": "game.bossWeakPoint",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextraiden_stage2_core",
+      "ui": true
+    },
+    {
+      "type": "log",
+      "message": "阶段 3：舱门关上，弱点收回去"
+    },
+    {
+      "type": "cvar",
+      "name": "nr.bossHp",
+      "set": "0.4"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossPhase",
+      "op": "eq",
+      "value": 2,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "assert",
+      "query": "game.bossWeakPoint",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "log",
+      "message": "阶段 4：舱门机构打坏，弱点常驻"
+    },
+    {
+      "type": "cvar",
+      "name": "nr.bossHp",
+      "set": "0.2"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossPhase",
+      "op": "eq",
+      "value": 3,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "assert",
+      "query": "game.bossWeakPoint",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "log",
+      "message": "打完要塞 = 最后一关的 endsStage BOSS = All Clear"
+    },
+    {
+      "type": "cvar",
+      "name": "nr.bossHp",
+      "set": "0"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.bossActive",
+      "op": "eq",
+      "value": false,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.state",
+      "op": "eq",
+      "value": "allClear",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "assert",
+      "query": "game.stageIndex",
+      "op": "eq",
+      "value": 2
+    },
+    {
+      "type": "assert",
+      "query": "game.hostileBullets",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "log",
+      "message": "弹幕峰值（性能基线，写进 plan 的 P3 验收记录）"
+    },
+    {
+      "type": "assert",
+      "query": "game.bulletsPeak",
+      "op": "gt",
+      "value": 0
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextraiden_stage2_allclear",
+      "ui": true
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

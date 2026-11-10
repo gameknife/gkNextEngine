@@ -25,7 +25,7 @@ import (
 func newScadCommand(ctx appContext) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "scad",
-		Short: "SCAD kit utilities (catalog + scene compose, see docs/designs/scad-scene-compose-design.md)",
+		Short: tr("cli.scad.short"),
 	}
 	cmd.AddCommand(newScadCatalogCommand(ctx))
 	cmd.AddCommand(newScadComposeCommand(ctx))
@@ -43,7 +43,7 @@ func newScadGenerateCommand(ctx appContext) *cobra.Command {
 	var debug bool
 	cmd := &cobra.Command{
 		Use:   "generate <场景描述>",
-		Short: "通过 AI provider 从自然语言生成 scene spec 并展开为 .scad",
+		Short: tr("cli.scad.gen.short"),
 		Long: "把 kit catalog 作为零件菜单注入 prompt，让配置的 AI provider 输出 scene\n" +
 			"spec JSON；compose 校验失败会把错误回喂给模型自修复。成功后写\n" +
 			"assets/scad/specs/<name>.json，并按结构写入 source/generated 或 proc/generated。",
@@ -121,7 +121,7 @@ func newScadComposeCommand(ctx appContext) *cobra.Command {
 	var outPath string
 	cmd := &cobra.Command{
 		Use:   "compose --spec <spec.json> [-o <out.scad>]",
-		Short: "Expand a JSON scene spec into its classified generated directory",
+		Short: tr("cli.scad.compose.short"),
 		Long: "Validates the spec against assets/scad/lib/catalog.json (module names, kit\n" +
 			"ownership, layout matrix shape, scaleClass mixing) and expands it into a plain\n" +
 			"top-level .scad built on the kit_layout combinators. Deterministic: the same\n" +
@@ -201,7 +201,7 @@ func newScadCatalogCommand(ctx appContext) *cobra.Command {
 	var fn int
 	cmd := &cobra.Command{
 		Use:   "catalog",
-		Short: "Regenerate assets/scad/lib/catalog.json from the kit libraries",
+		Short: tr("cli.scad.catalog.short"),
 		Long: "Runs the ScadCatalog tool (build it first: gnb build ScadCatalog) against the\n" +
 			"source-tree kit libraries, then mirrors the catalog into the build assets so\n" +
 			"already-built binaries (ScadLibrary etc.) pick it up without a rebuild.",

@@ -203,17 +203,43 @@ UserInterface::UserInterface(NextEngine* engine, Vulkan::CommandPool& commandPoo
     // PreRender maps that coordinate space onto the DPI-sized framebuffer and
     // normalizes input to the same space.
     const float scaleFactor = std::max(1.0f, window.ContentScale());
+#elif IOS
+    // SDL hands Dear ImGui a point-sized DisplaySize with a DisplayFramebufferScale equal to the
+    // window's pixel density.
+    // On iPhones (phones, min dimension < 600pt), 3x/2.61x magnification makes panels oversized.
+    // We target ~1.5x net magnification so the UI layout fits comfortably.
+    // On iPads (tablets, min dimension >= 600pt), the screen is already large (>= 744pt) and
+    // uses @2x density (2.0). Halving it drops DisplayFramebufferScale to 1.0 (microscopic 1:1 pixels).
+    // Keep full native density (2.0) on tablets so UI elements and touch targets retain proper physical sizing.
+    const float density = window.PixelDensity();
+    const VkExtent2D pointSize = window.WindowSize();
+    const bool isTablet = (std::min(pointSize.width, pointSize.height) >= 600);
+    const float targetMagnification = isTablet ? density : 1.5f;
+    const float iosUiScale = density > 0.0f ? (targetMagnification / density) : 1.0f;
+    const float scaleFactor = iosUiScale;
 #else
     const float scaleFactor = 1.0f;
 #endif
     uiScale_ = scaleFactor;
+    // Glyph density is deliberately decoupled from uiScale_ on iOS. Glyphs go into one static
+    // atlas (this renderer backend does not advertise ImGuiBackendFlags_RendererHasTextures) and
+    // the default font carries the full Chinese range: raising the density to match the window's
+    // pixel density overflows the atlas and crashes, while following the 0.5 UI scale would bake
+    // half-size glyphs only to magnify them again. Bake iOS at 1x and accept text softened by
+    // DisplayFramebufferScale; a sharper result needs a smaller glyph set or dynamic font
+    // textures, not a different density.
+#if IOS
+    constexpr float fontRasterizerDensity = 1.0f;
+#else
+    const float fontRasterizerDensity = scaleFactor;
+#endif
     constexpr float fontSize = 16.0f;
 
     NextUI::Foundation::ApplyTheme();
 // The high-DPI path below reduces DisplaySize and scales the framebuffer
 // transform, which scales every ImGui primitive (including text) uniformly.
 // Do not additionally scale style metrics on those platforms.
-#if !WIN32 && !ANDROID
+#if !WIN32 && !ANDROID && !IOS
     ImGui::GetStyle().ScaleAllSizes(scaleFactor);
 #endif
 
@@ -225,108 +251,23 @@ UserInterface::UserInterface(NextEngine* engine, Vulkan::CommandPool& commandPoo
     //     : GOption->locale == "zhCN"                     ? io.Fonts->GetGlyphRangesChineseFull()
     //                                                     : io.Fonts->GetGlyphRangesDefault();
 
-    defaultFont_ = NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
-            .filePath = "assets/fonts/Roboto-Regular.ttf",
-            .pixelSize = fontSize,
-            .includeChineseFull = true,
-            .rasterizerDensity = scaleFactor,
-        });
+    defaultFont_ = NextUI::FontLoader::LoadDefaultUiFont(
+        "assets/fonts/Roboto-Regular.ttf", fontSize, fontRasterizerDensity, true);
     if (defaultFont_ == nullptr)
     {
         Throw(std::runtime_error("failed to load basic ImGui Text font"));
     }
-    io.FontDefault = defaultFont_;
-
-    static const ImWchar iconRange[] = {
-        ICON_MIN_FA,
-        ICON_MAX_FA, // Basic Latin + Latin Supplement
-        0,
-    };
-    ImFontConfig config;
-    config.MergeMode = true;
-    config.GlyphMinAdvanceX = fontSize;
-    config.GlyphOffset = ImVec2(0, 0);
-
-    NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
-        .filePath = "assets/fonts/fa-regular-400.ttf",
-        .pixelSize = fontSize - 2,
-        .includeChineseFull = false,
-        .glyphRanges = iconRange,
-        .fontConfig = &config,
-        .rasterizerDensity = scaleFactor,
-        .warnOnFailure = false,
-    });
-    NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
-        .filePath = "assets/fonts/fa-solid-900.ttf",
-        .pixelSize = fontSize - 2,
-        .includeChineseFull = false,
-        .glyphRanges = iconRange,
-        .fontConfig = &config,
-        .rasterizerDensity = scaleFactor,
-        .warnOnFailure = false,
-    });
-    NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
-        .filePath = "assets/fonts/fa-brands-400.ttf",
-        .pixelSize = fontSize - 2,
-        .includeChineseFull = false,
-        .glyphRanges = iconRange,
-        .fontConfig = &config,
-        .rasterizerDensity = scaleFactor,
-        .warnOnFailure = false,
-    });
-
-    ImFontConfig configLocale;
-    configLocale.MergeMode = true;
-    NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
-        .filePath = "assets/fonts/DroidSansFallback.ttf",
-        .pixelSize = fontSize,
-        .glyphRanges = io.Fonts->GetGlyphRangesChineseSimplifiedCommon(),
-        .fontConfig = &configLocale,
-        .rasterizerDensity = scaleFactor,
-        .warnOnFailure = false,
-    });
 
     constexpr float titleFontSize = 18.0f;
     titleBarFont_ = NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
         .filePath = "assets/fonts/Roboto-BoldCondensed.ttf",
         .pixelSize = titleFontSize,
         .includeChineseFull = false,
-        .extraGlyphsUtf8 = "gkNextRenderer gkNextEditor SCAD Studio SCAD Library",
+        .rasterizerDensity = fontRasterizerDensity,
     });
     if (titleBarFont_ != nullptr)
     {
-        ImFontConfig titleIconConfig;
-        titleIconConfig.MergeMode = true;
-        titleIconConfig.GlyphMinAdvanceX = titleFontSize;
-        titleIconConfig.GlyphOffset = ImVec2(0, 0);
-
-        NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
-            .filePath = "assets/fonts/fa-regular-400.ttf",
-            .pixelSize = titleFontSize - 2.0f,
-            .includeChineseFull = false,
-            .glyphRanges = iconRange,
-            .fontConfig = &titleIconConfig,
-            .rasterizerDensity = scaleFactor,
-            .warnOnFailure = false,
-        });
-        NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
-            .filePath = "assets/fonts/fa-solid-900.ttf",
-            .pixelSize = titleFontSize - 2.0f,
-            .includeChineseFull = false,
-            .glyphRanges = iconRange,
-            .fontConfig = &titleIconConfig,
-            .rasterizerDensity = scaleFactor,
-            .warnOnFailure = false,
-        });
-        NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
-            .filePath = "assets/fonts/fa-brands-400.ttf",
-            .pixelSize = titleFontSize - 2.0f,
-            .includeChineseFull = false,
-            .glyphRanges = iconRange,
-            .fontConfig = &titleIconConfig,
-            .rasterizerDensity = scaleFactor,
-            .warnOnFailure = false,
-        });
+        NextUI::FontLoader::MergeFontAwesomeIcons(titleFontSize, fontRasterizerDensity);
     }
 
     if (funcInit != nullptr)
@@ -876,7 +817,6 @@ void UserInterface::PreRender()
     BeginRendererBackendFrame();
     if (sdlPlatformBackendInitialized_)
     {
-        ImGui_ImplSDL3_SetFramebufferScaleBias(Vulkan::SwapChain::UiContentScale());
         ImGui_ImplSDL3_NewFrame();
     }
     else
@@ -887,9 +827,9 @@ void UserInterface::PreRender()
         io.DisplayFramebufferScale = ImVec2(1.0f, 1.0f);
         io.DeltaTime = 1.0f / 60.0f;
     }
-#if WIN32 || ANDROID
+#if WIN32 || ANDROID || IOS
     auto& io = ImGui::GetIO();
-#if ANDROID
+#if ANDROID || IOS
     if (uiScale_ != 1.0f)
 #else
     if (uiScale_ > 1.0f)
@@ -1038,18 +978,18 @@ void UserInterface::RenderPreparedDrawData(VkCommandBuffer commandBuffer, const 
     }
 }
 
-void UserInterface::HandleEvent(const SDL_Event* event)
+bool UserInterface::HandleEvent(const SDL_Event* event)
 {
     if (!event)
     {
-        return;
+        return false;
     }
 
     if (Runtime::IDebugUiProvider* provider = GetEngine().GetDebugUiProvider())
     {
         if (provider->HandleUiEvent(*event))
         {
-            return;
+            return true;
         }
     }
 
@@ -1076,10 +1016,13 @@ void UserInterface::HandleEvent(const SDL_Event* event)
                                        ? ImGuiMouseSource_TouchScreen
                                        : ImGuiMouseSource_Mouse);
             io.AddMousePosEvent(logicalPosition.x, logicalPosition.y);
-            return;
+            return false;
         }
     }
-#elif ANDROID
+#elif ANDROID || IOS
+    // Touches arrive as SDL's synthesized mouse stream, in window coordinates. PreRender rescaled
+    // the ImGui coordinate space by uiScale_, so the pointer has to be rescaled the same way or it
+    // lands on the wrong widget.
     if (uiScale_ != 1.0f && event->type == SDL_EVENT_MOUSE_MOTION)
     {
         SDL_Window* window = SDL_GetWindowFromID(event->motion.windowID);
@@ -1090,7 +1033,7 @@ void UserInterface::HandleEvent(const SDL_Event* event)
                                        ? ImGuiMouseSource_TouchScreen
                                        : ImGuiMouseSource_Mouse);
             io.AddMousePosEvent(event->motion.x / uiScale_, event->motion.y / uiScale_);
-            return;
+            return false;
         }
     }
 #endif
@@ -1098,6 +1041,7 @@ void UserInterface::HandleEvent(const SDL_Event* event)
     {
         ImGui_ImplSDL3_ProcessEvent(event);
     }
+    return false;
 }
 
 bool UserInterface::WantsToCaptureKeyboard() const { return contextHost_->WantsToCaptureKeyboard(); }

@@ -1,0 +1,25 @@
+name: Configure vcpkg GitHub Packages cache
+description: Use GitHub Packages as the only vcpkg binary cache on CI
+inputs:
+  token:
+    description: GitHub token with package read/write access (read-only for fork PRs)
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Install Mono on macOS
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        brew install mono
+        echo "$(brew --prefix mono)/bin" >> "$GITHUB_PATH"
+    - name: Bootstrap vcpkg and configure NuGet
+      shell: pwsh
+      env:
+        FEED_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+        NUGET_USER: ${{ github.actor }}
+        NUGET_TOKEN: ${{ inputs.token }}
+        IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
+        REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
+      run: |
+        & "${{ github.action_path }}/setup.ps1"

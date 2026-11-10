@@ -17,6 +17,12 @@
 [Dd]ebugPublic/
 [Rr]elease/
 [Rr]eleases/
+!/tools/release/
+/tools/release/*
+!/tools/release/verify-package.py
+!/docs/releases/
+/docs/releases/*
+!/docs/releases/next-release.md
 ./[Bb]in/
 [Oo]bj/
 [Ll]og/
@@ -402,12 +408,15 @@ assets/textures/umhlanga_sunrise_1k.hdr
 tools/optional-pak/output/
 tools/brotato3d-pak/output/
 tools/magicalego-pak/output/
+# NextDayz SFX are local only: nextdayz_sfx.py or nextdayz_dayz_trial.py; never commit samples.
+assets/sounds/nextdayz/
 
 # third party libraries
 # ffmpeg binaries are fetched locally and never committed; release packages ship without them.
 src/ThirdParty/*/bin/
-# AI assistant local files
-.claude/
+# AI assistant local files (shared skills under .claude/skills are tracked)
+.claude/*
+!.claude/skills/
 .mimocode/
 .skills/
 /lib/
@@ -451,3 +460,7 @@ assets/omr/outer
 website/node_modules/
 website/.vitepress/dist/
 website/.vitepress/cache/
+
+# Application icon design master files (1024x1024) and generated Windows ICO files
+design/
+assets/icons/ico/

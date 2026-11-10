@@ -102,7 +102,28 @@ namespace Modules::NextDotNet
             return false;
         }
 
-        return DotNetRuntime::PublishProject(manifest.project, subdirectory, outError);
+        // The manifest was read from its runtime copy, which has no Scripts/; the project file is
+        // relative to the real project directory in the source tree.
+        const std::filesystem::path projectDirectory = ResolveProjectSourceDirectory(manifest);
+        if (projectDirectory.empty())
+        {
+            outError = "no source directory for '" + manifest.id + "' is reachable from this build";
+            return false;
+        }
+
+        if (!DotNetRuntime::PublishProject(projectDirectory / manifest.project, subdirectory, outError))
+        {
+            return false;
+        }
+
+        // A rebuild is "make my edits live", and the edits are as often to Content/ as to C#. Without
+        // this, a changed config would only reach the running host after a C++ build copied it.
+        std::string syncError;
+        if (!SyncProjectContentToRuntime(manifest, syncError))
+        {
+            SPDLOG_WARN("[game] rebuilt '{}', but its content was not refreshed: {}", manifest.id, syncError);
+        }
+        return true;
     }
 
     const FManagedGameManifest* ManagedGameSession::GetActiveManifest() const
@@ -228,10 +249,15 @@ namespace Modules::NextDotNet
         state_ = EGameSessionState::Loading;
         CaptureBaseline();
 
+        // Before the assembly loads, not after: loading constructs the game, and a game is entitled
+        // to read its content from a constructor or a field initialiser.
+        GGameContentRoot = manifest.ContentRoot();
+
         if (!runtime->LoadGameAssembly(manifest.assembly, manifest.hotReload))
         {
             lastError_ = "failed to load " + manifest.assembly;
             state_ = EGameSessionState::Idle;
+            GGameContentRoot.clear();
             RestoreBaseline();
             return;
         }
@@ -279,6 +305,7 @@ namespace Modules::NextDotNet
 
         RestoreBaseline();
         ClearUiCanvas();
+        GGameContentRoot.clear();
         activeManifest_.reset();
         state_ = EGameSessionState::Idle;
 

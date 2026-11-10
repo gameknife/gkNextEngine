@@ -1,6 +1,7 @@
 // NextEngine scene loading pipeline: load requests, async parse task and
 // GPU upload. Split from Engine.cpp; same class, separate TU.
 #include "Engine/Runtime/Engine.hpp"
+#include "Engine/Runtime/Subsystems/NextRig.hpp"
 #include "Engine/Common/CoreMinimal.hpp"
 #include "Engine/Assets/Core/Model.hpp"
 #include "Engine/Assets/Core/Node.hpp"
@@ -74,8 +75,19 @@ namespace
     }
 }
 
+bool NextEngine::IsSceneReady() const
+{
+    const auto* texturePool = Assets::GlobalTexturePool::GetInstance();
+    return status_ == NextRenderer::EApplicationStatus::Running && pendingSceneLoads_ == 0 &&
+        sceneLoadError_.empty() && renderer_ && !renderer_->PipelineWarmupProgress().active &&
+        texturePool && texturePool->PendingTextureLoads() == 0;
+}
+
 void NextEngine::RequestLoadScene(FSceneLoadRequest request)
 {
+    // Running can briefly describe the startup scene while this request is still queued.
+    ++pendingSceneLoads_;
+    sceneLoadError_.clear();
     AddTickedTask(
         [this, request = std::move(request)](double deltaSeconds) -> bool
         {
@@ -262,8 +274,10 @@ void NextEngine::LaunchLoadSceneTask(std::string sceneFileName, std::function<vo
             else
             {
                 SPDLOG_ERROR("failed to load scene [{}]", std::filesystem::path(sceneFileName).filename().string());
+                sceneLoadError_ = "failed to load scene [" + sceneFileName + "]";
             }
 
+            --pendingSceneLoads_;
             status_ = NextRenderer::EApplicationStatus::Running;
         },
         1,
@@ -272,6 +286,7 @@ void NextEngine::LaunchLoadSceneTask(std::string sceneFileName, std::function<vo
 
 void NextEngine::LoadScene(const FSceneLoadRequest& request)
 {
+    sceneLoadError_.clear();
     if (!request.append)
     {
         scene_->CleanUp();
@@ -290,6 +305,16 @@ void NextEngine::LoadScene(const FSceneLoadRequest& request)
             
             Tasks::TaskCoordinator::GetInstance()->WaitForAllTasks();
             PrepareRendererForSceneMutation();
+
+            // Before the game declares anything, not after: rig pools are declared from inside
+            // BeforeSceneRebuild (that is where the models vector exists), and OnSceneUnloaded —
+            // the intuitive place to drop them — runs *after* it and would throw the new
+            // declarations away with the old world's.
+            if (services_.rig && !request.append)
+            {
+                services_.rig->Clear();
+            }
+
             gameInstance_->BeforeSceneRebuild(*ctx.nodes, *ctx.models, *ctx.materials, *ctx.lights, *ctx.tracks);
 
             if (!request.append)
@@ -310,6 +335,13 @@ void NextEngine::LoadScene(const FSceneLoadRequest& request)
                 config_.userSettings.CameraIdx = 0;
                 assert(!scene_->GetEnvSettings().cameras.empty());
                 scene_->GetRenderCamera() = scene_->GetEnvSettings().cameras[0];
+
+                // Instantiated before the game's own hook, so a game can acquire characters from
+                // inside OnSceneLoaded — which is the only place it has node ids to work with.
+                if (services_.rig)
+                {
+                    services_.rig->OnSceneLoaded(*scene_);
+                }
                 gameInstance_->OnSceneLoaded();
             }
             else

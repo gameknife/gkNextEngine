@@ -1,0 +1,24 @@
+{
+  "name": "nextdayz-net-survival",
+  "description": "The server keeps each survivor's body. Needs `gnb ds --clients 0 --cheats`. Damage the server applies reaches the client; needs the client edits locally are put back by the server; the server, not the client, decides the death and leaves the body.",
+  "target": "NextDayz",
+  "args": ["--disable-streamline", "--cvar", "nextdayz.net.mode client", "--cvar", "nextdayz.net.name body"],
+  "defaults": { "waitFrames": 2, "stepTimeoutMs": 120000 },
+  "steps": [
+    { "type": "wait-until", "query": "game.sceneReady", "op": "eq", "value": true, "timeoutMs": 180000 },
+    { "type": "wait-until", "query": "game.netOnline", "op": "eq", "value": true, "timeoutMs": 60000 },
+    { "type": "wait-until", "query": "game.netLootSynced", "op": "eq", "value": true, "timeoutMs": 30000 },
+    { "type": "wait-ms", "ms": 1500 },
+    { "type": "assert", "query": "game.health", "op": "ge", "value": 99 },
+    { "type": "cvar", "name": "nextdayz.validation.damagePlayer", "set": 30 },
+    { "type": "wait-until", "query": "game.health", "op": "le", "value": 75, "timeoutMs": 5000 },
+    { "type": "cvar", "name": "nextdayz.validation.hunger", "set": 5 },
+    { "type": "wait-ms", "ms": 1500 },
+    { "type": "assert", "query": "game.hunger", "op": "ge", "value": 50 },
+    { "type": "cvar", "name": "nextdayz.validation.damagePlayer", "set": 200 },
+    { "type": "wait-until", "query": "game.health", "op": "le", "value": 0, "timeoutMs": 5000 },
+    { "type": "wait-until", "query": "game.lootPiles", "op": "ge", "value": 1, "timeoutMs": 10000 },
+    { "type": "screenshot", "out": "screenshots/nextdayz_net_survival", "ui": true },
+    { "type": "quit" }
+  ]
+}

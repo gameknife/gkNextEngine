@@ -9,6 +9,7 @@ struct VertexOutput
     float4 position : SV_Position;
     [[vk::location(0)]] nointerpolation uint2 visibility_id : VISIBILITY_ID;
     [[vk::location(1)]] nointerpolation uint material_model : MATERIAL_MODEL;
+    [[vk::location(2)]] nointerpolation float main_opacity : MAIN_OPACITY;
 };
 
 [shader("vertex")]
@@ -21,10 +22,12 @@ VertexOutput main(uint vertexIndex: SV_VertexID)
     uint2 visibilityId = Visibility.LoadExpandedPrimitive(softMeshShader.Prim, vertexIndex / 3);
     uint corner = vertexIndex % 3;
 
-    NodeProxy proxy = scene.Nodes[visibilityId.x - 1];
+    NodeProxy proxy = scene.Nodes[Visibility.ProxyIndex(visibilityId)];
     ModelData model = scene.Offsets[proxy.modelId];
 
-    uint localVertex = scene.Indices[model.indexOffset + visibilityId.y * 3 + corner];
+    // The level the cull pass chose travels in the id, so the triangle ordinal is resolved against
+    // that level's index range rather than LOD0's.
+    uint localVertex = scene.Indices[model.lodIndexOffset[Visibility.LodLevel(visibilityId)] + visibilityId.y * 3 + corner];
     uint vertexAddress = model.vertexOffset + localVertex;
     GPUVertex packedVertex;
     if (proxy.skinId != 0xFFFFFFFF)
@@ -41,6 +44,8 @@ VertexOutput main(uint vertexIndex: SV_VertexID)
     Vertex vertex = UnpackVertex(packedVertex);
     const uint materialId = FetchMaterialId(proxy, vertex.MaterialIndex);
     output.material_model = scene.GetMaterial(materialId).MaterialModel;
+    output.main_opacity = 1.0f - float(proxy.reserved2 >> NODE_PROXY_MAIN_TRANSPARENCY_SHIFT) /
+                                     float(NODE_PROXY_MAIN_TRANSPARENCY_MAX);
     output.visibility_id = visibilityId;
     return output;
 }

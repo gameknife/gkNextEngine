@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/dashboard"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/i18n"
 	"github.com/spf13/cobra"
 )
 
@@ -23,6 +25,10 @@ func runDashboard(ctx appContext, opts dashboardCmdOpts) error {
 	if opts.NoOpen && opts.Browser {
 		return fmt.Errorf("--browser and --no-open cannot be used together")
 	}
+	gnbPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolve gnb executable: %w", err)
+	}
 	srv, err := dashboard.New(dashboard.Options{
 		RepoRoot: ctx.repoRoot,
 		Port:     opts.Port,
@@ -30,6 +36,8 @@ func runDashboard(ctx appContext, opts dashboardCmdOpts) error {
 		Version:  resolvedVersion(),
 		Preset:   ctx.preset,
 		Config:   ctx.cfg,
+		GNBPath:  gnbPath,
+		Lang:     i18n.Current(),
 	})
 	if err != nil {
 		return err
@@ -46,11 +54,11 @@ func newDashboardCommand(ctx appContext) *cobra.Command {
 	opts := dashboardCmdOpts{}
 	cmd := &cobra.Command{
 		Use:   "dashboard",
-		Short: "Launch the native desktop dashboard for .spec/ workflow",
+		Short: tr("cli.dashboard.short"),
 		Long: "Launch a Wails desktop window backed by the local dashboard server.\n" +
-			"It visualizes .spec/TODO.md,\n" +
-			"task journals, and blocker reports. Supports adding tasks and marking done/blocked.\n" +
-			"The dashboard reads and writes the same files as `gnb todo`.\n" +
+			"It visualizes .spec/TODO.md, task journals, blocker reports, and persisted gnb validation runs.\n" +
+			"Supports adding tasks, marking done/blocked, reviewing validation screenshots, and rerunning terminal validations.\n" +
+			"The dashboard reads and writes the same files as `gnb todo`; validation execution does not require the dashboard to be open.\n" +
 			"Use --browser for the legacy external-browser UI or --no-open for server-only mode.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDashboard(ctx, opts)

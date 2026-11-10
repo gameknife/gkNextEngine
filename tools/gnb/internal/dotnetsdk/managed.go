@@ -13,9 +13,16 @@ const (
 	GameAssembly      = "GkNext.Game"
 )
 
-// SourceDir is the managed source tree, the C# counterpart of the deleted assets/typescript.
+// SourceDir is the engine's managed source tree, the C# counterpart of the deleted
+// assets/typescript. Game projects are not in it; see ProjectsDir.
 func SourceDir(repoRoot string) string {
 	return filepath.Join(repoRoot, "assets", "csharp")
+}
+
+// ProjectsDir holds the game projects: projects/<Game>/ with a manifest, Content/ and the C# under
+// Scripts/. Its Directory.Build.props is what connects a game's csproj to SourceDir.
+func ProjectsDir(repoRoot string) string {
+	return filepath.Join(repoRoot, "projects")
 }
 
 // ProjectPath returns the .csproj for a managed assembly.
@@ -87,7 +94,9 @@ func NativeBootstrapLibrary(publishDir string) (string, error) {
 	case "windows":
 		candidates = []string{BootstrapAssembly + ".lib"}
 	case "darwin":
-		candidates = []string{"lib" + BootstrapAssembly + ".dylib", "lib" + BootstrapAssembly + ".a"}
+		// NativeAOT names the macOS shared library after the assembly directly;
+		// unlike ELF output it does not prepend "lib".
+		candidates = []string{BootstrapAssembly + ".dylib", BootstrapAssembly + ".a"}
 	default:
 		candidates = []string{"lib" + BootstrapAssembly + ".so", "lib" + BootstrapAssembly + ".a"}
 	}

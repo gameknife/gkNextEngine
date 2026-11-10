@@ -62,6 +62,7 @@ namespace Runtime
         float WaterSurface(float worldX, float worldZ) const; // world Y; only valid when IsWater
         bool IsWalkable(float worldX, float worldZ, float maxSlopeDeg = 45.0f) const;
         uint8_t BiomeId(float worldX, float worldZ) const;
+        uint8_t SurfaceFlags(float worldX, float worldZ) const;
 
         // True when the point is inside this terrain's domain rather than being
         // clamped to its border. Every query above clamps silently, which is

@@ -238,6 +238,14 @@ namespace Runtime
         return cell >= 0 ? data_->biome[cell] : 0;
     }
 
+    uint8_t TerrainComponent::SurfaceFlags(float worldX, float worldZ) const
+    {
+        glm::dvec2 local;
+        if (!WorldToLocal(worldX, worldZ, local)) return 0;
+        const int cell = CellIndexAt(local);
+        return cell >= 0 ? data_->flags[cell] : 0;
+    }
+
     bool TerrainComponent::ContainsWorld(float worldX, float worldZ) const
     {
         glm::dvec2 local;

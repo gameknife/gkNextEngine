@@ -184,7 +184,7 @@ func collectDesktopEntries(repoRoot, buildRoot, variant, version string, preset 
 			return nil, fmt.Errorf("release target %q missing from %s: build it before packaging", name, binDir)
 		}
 		entries = append(entries, entry{source: path, name: "bin/" + name})
-		found[name] = true
+		found["bin/"+name] = true
 	}
 
 	// Runtime sidecars: shared libraries and vendor license files. The optional
@@ -199,11 +199,11 @@ func collectDesktopEntries(repoRoot, buildRoot, variant, version string, preset 
 			continue
 		}
 		name := item.Name()
-		if found[name] || !isRuntimeSidecar(name, includeGnb) {
+		if found["bin/"+name] || !isRuntimeSidecar(name, includeGnb) {
 			continue
 		}
 		entries = append(entries, entry{source: filepath.Join(binDir, name), name: "bin/" + name})
-		found[name] = true
+		found["bin/"+name] = true
 	}
 
 	if variant == "macos" {
@@ -214,16 +214,24 @@ func collectDesktopEntries(repoRoot, buildRoot, variant, version string, preset 
 		entries = append(entries, vulkanRuntime...)
 	}
 
+	// Explicit asset additions are release requirements, unlike optional tools.
+	for _, rel := range preset.ExtraFiles {
+		if strings.HasPrefix(filepath.ToSlash(rel), "assets/") {
+			if _, err := os.Stat(filepath.Join(buildRoot, filepath.FromSlash(rel))); err != nil {
+				return nil, fmt.Errorf("required loose assets %q: %w", rel, err)
+			}
+		}
+	}
 	extraFiles, err := collectPaths(buildRoot, preset.ExtraFiles)
 	if err != nil {
 		return nil, err
 	}
 	for _, item := range extraFiles {
-		if found[filepath.Base(item.name)] {
+		if found[item.name] {
 			continue
 		}
 		entries = append(entries, item)
-		found[filepath.Base(item.name)] = true
+		found[item.name] = true
 	}
 
 	if len(preciseAssets) > 0 {
@@ -233,7 +241,12 @@ func collectDesktopEntries(repoRoot, buildRoot, variant, version string, preset 
 		if err != nil {
 			return nil, err
 		}
-		entries = append(entries, assets...)
+		for _, item := range assets {
+			if !found[item.name] {
+				entries = append(entries, item)
+				found[item.name] = true
+			}
+		}
 	}
 
 	docs, err := collectReleaseDocs(repoRoot, buildRoot, variant, version, preset)
@@ -614,6 +627,15 @@ func releaseReadme(variant string, version string, preset Preset) string {
 	}
 	for _, target := range preset.Targets {
 		lines = append(lines, "  bin/"+target+exeExt)
+	}
+	for _, target := range preset.Targets {
+		if target == "ScadLibrary" {
+			lines = append(lines,
+				"  assets/scad/                   Complete editable SCAD source tree.",
+				"    Includes lib/catalog.json, kits, characters, terrain and game levels.",
+				"    Edit the loose files with ScadLibrary or a text editor; no pak extraction needed.",
+			)
+		}
 	}
 	lines = append(lines,
 		"  assets/                        Runtime assets. Keep next to bin/.",

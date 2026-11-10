@@ -51,6 +51,11 @@ public:
     std::string AgentControlToken;
     uint32_t ExitAfterFrames{};
     bool HiddenWindow{};
+    // Dedicated server: the game ticks at DedicatedTickRate and nothing is drawn
+    // or presented. Implies a hidden window, no Streamline/FidelityFX and no
+    // hardware ray tracing. Scenes still load (the device holds their meshes).
+    bool Dedicated{};
+    uint32_t DedicatedTickRate{30};
     // Force VK_EXT_headless_surface instead of creating an SDL window. Intended
     // for validating the headless render path on hosts with a desktop session.
     bool HeadlessSurface{};

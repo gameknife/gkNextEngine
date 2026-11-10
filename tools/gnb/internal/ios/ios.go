@@ -17,11 +17,13 @@ import (
 	"text/tabwriter"
 
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/cmakerun"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/console"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/icons"
+	"github.com/gameknife/gknextrenderer/tools/gnb/internal/mobileapps"
 )
 
 const (
 	preset = "ios-device"
-	target = "gkNextRenderer"
 	// artifactConfiguration must match the configuration of the `ios-device`
 	// build preset in CMakePresets.json, which decides which manifest CMake
 	// generates for the bundle gnb launches.
@@ -63,20 +65,34 @@ type StagedApp struct {
 	Restaged bool
 }
 
-// Build compiles the device bundle and, when it is signed, stages it as a
-// Designed-for-iPad wrapper that macOS can launch.
-func Build(repoRoot, cmakePath, teamID string, quiet bool, opts cmakerun.BuildOptions) (StagedApp, error) {
+// Build compiles the device bundle for app and, when it is signed, stages it as a
+// Designed-for-iPad wrapper that macOS can launch. An empty app selects the first application the
+// mobile registry lists for iOS.
+//
+// An iOS configure declares exactly one application, so switching applications reconfigures rather
+// than adding a target to the existing Xcode project.
+func Build(repoRoot, cmakePath, teamID, app string, quiet bool, opts cmakerun.BuildOptions) (StagedApp, error) {
 	if runtime.GOOS != "darwin" {
 		return StagedApp{}, fmt.Errorf("iOS builds require macOS and Xcode; current host is %s", runtime.GOOS)
 	}
-	opts.Targets = []string{target}
+	resolved, err := mobileapps.Resolve(repoRoot, mobileapps.IOS, app)
+	if err != nil {
+		return StagedApp{}, err
+	}
+	iconDir := filepath.Join(repoRoot, "out", "build", preset, "ios_icons", resolved.Target)
+	if err := icons.GenerateIOSAppIcons(repoRoot, resolved.Target, iconDir); err != nil {
+		console.Warn("failed to generate iOS icons for %s: %v", resolved.Target, err)
+	}
+	opts.Targets = []string{resolved.Target}
 	if quiet {
 		opts.BuildToolArgs = append(opts.BuildToolArgs, "-quiet")
 	}
 	opts = withAutomaticProvisioningUpdates(teamID, opts)
 	// Always write the sole signing input so a previously signed cache cannot
 	// leak into a later unsigned build.
-	opts.ConfigureArgs = append(opts.ConfigureArgs, "-DIOS_DEVELOPMENT_TEAM="+teamID)
+	opts.ConfigureArgs = append(opts.ConfigureArgs,
+		"-DIOS_DEVELOPMENT_TEAM="+teamID,
+		"-DGK_MOBILE_APP="+resolved.Target)
 	if err := cmakerun.BuildWithCMake(repoRoot, cmakePath, preset, opts); err != nil {
 		return StagedApp{}, err
 	}
@@ -103,6 +119,7 @@ func withAutomaticProvisioningUpdates(teamID string, opts cmakerun.BuildOptions)
 
 // Artifact identifies the iOS application produced by the device build.
 type Artifact struct {
+	App        string `json:"app"`
 	BundlePath string `json:"bundle_path"`
 	BundleID   string `json:"bundle_id"`
 	// StagedApp is filled in when the app is staged for launch, not read from

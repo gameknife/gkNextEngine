@@ -12,6 +12,9 @@
 #include "Engine/Runtime/Interface/UserInterface.hpp"
 #include "Modules/NextUI/UI/DesktopUI.hpp"
 #include "Engine/Runtime/Reflection/PropertyAccessor.hpp"
+#include "EditorActionDispatcher.hpp"
+#include "Core/NodeClassification.hpp"
+#include "Modules/DevTools/Command/DeleteNodesCommand.hpp"
 
 #include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 
@@ -31,48 +34,12 @@ namespace Editor
             return std::min(static_cast<size_t>(model.MaterialSlotCount()), capacity);
         }
 
-        bool DrawAxisFloat3(const char* label, glm::vec3& value, float speed)
-        {
-            bool changed = false;
-            constexpr ImVec4 axisColors[] = {
-                ImVec4(0.90f, 0.20f, 0.18f, 1.0f),
-                ImVec4(0.22f, 0.78f, 0.34f, 1.0f),
-                ImVec4(0.24f, 0.48f, 0.95f, 1.0f),
-            };
-            constexpr const char* axisIds[] = {"##X", "##Y", "##Z"};
-            constexpr float axisAccentWidth = 3.0f;
-            constexpr float axisAccentInset = 3.0f;
-            constexpr float axisAccentGap = 4.0f;
+        // Scale is clamped away from zero (a zero-scaled node collapses and cannot be dragged back)
+        // but not capped at the top: scenes legitimately contain very large scales.
+        constexpr float kMinScale = 0.001f;
+        constexpr float kMaxScale = 1.0e6f;
 
-            ImGui::PushID(label);
-            NextUI::Theme::BeginFormRow(label, 0.22f, 70.0f, 70.0f);
-
-            const ImGuiStyle& style = ImGui::GetStyle();
-            const float spacing = style.ItemSpacing.x;
-            const float width = std::max(54.0f, (ImGui::GetContentRegionAvail().x - spacing * 2.0f) / 3.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
-                                ImVec2(style.FramePadding.x + axisAccentWidth + axisAccentGap, style.FramePadding.y));
-
-            for (int axis = 0; axis < 3; ++axis)
-            {
-                ImGui::SetNextItemWidth(width);
-                changed = ImGui::DragFloat(axisIds[axis], &value[axis], speed, 0.0f, 0.0f, "%.3f") || changed;
-                const ImVec2 itemMin = ImGui::GetItemRectMin();
-                const ImVec2 itemMax = ImGui::GetItemRectMax();
-                ImGui::GetWindowDrawList()->AddRectFilled(
-                    itemMin + ImVec2(axisAccentInset, axisAccentInset),
-                    ImVec2(itemMin.x + axisAccentInset + axisAccentWidth, itemMax.y - axisAccentInset),
-                    ImGui::GetColorU32(axisColors[axis]), 1.5f);
-                if (axis < 2)
-                {
-                    ImGui::SameLine(0.0f, spacing);
-                }
-            }
-
-            ImGui::PopStyleVar();
-            ImGui::PopID();
-            return changed;
-        }
+        using NextUI::Theme::Draw3AxisFloatDrag;
     } // namespace
 
     void DrawPropertiesPanel(EditorContext& ctx, EditorUiState& ui)
@@ -85,25 +52,48 @@ namespace Editor
                 selectedIds.push_back(ui.selected_obj_id);
             }
 
+            // ========================================================
+            // 1. Empty State
+            // ========================================================
             if (selectedIds.empty())
             {
                 const ImVec2 avail = ImGui::GetContentRegionAvail();
-                const char* line1 = ICON_FA_CIRCLE_INFO " No object selected";
-                const char* line2 = "Select an object from the Outliner or Viewport";
+                ImGui::Dummy(ImVec2(0.0f, std::max(20.0f, avail.y * 0.25f)));
+
+                NextUI::Theme::BeginCard("##EmptyPropsCard");
+                ImGui::Dummy(ImVec2(0.0f, 16.0f));
+
+                const char* iconStr = ICON_FA_ARROW_POINTER;
+                const char* line1 = "No Object Selected";
+                const char* line2 = "Select an object from the Outliner or click inside the Viewport to view properties.";
+
                 const ImVec2 textSize1 = ImGui::CalcTextSize(line1);
                 const ImVec2 textSize2 = ImGui::CalcTextSize(line2);
-                ImGui::SetCursorPos(ImVec2(
-                    (avail.x - textSize1.x) * 0.5f,
-                    (avail.y - textSize1.y - textSize2.y) * 0.5f));
-                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetColorU32(ImGuiCol_TextDisabled));
-                ImGui::TextUnformatted(line1);
-                ImGui::SetCursorPosX((avail.x - textSize2.x) * 0.5f);
-                ImGui::TextUnformatted(line2);
-                ImGui::PopStyleColor();
+                const float cardW = ImGui::GetContentRegionAvail().x;
+
+                ImGui::SetCursorPosX((cardW - ImGui::CalcTextSize(iconStr).x) * 0.5f);
+                ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::Accent, 0.70f), "%s", iconStr);
+                ImGui::Dummy(ImVec2(0.0f, 6.0f));
+
+                ImGui::SetCursorPosX((cardW - textSize1.x) * 0.5f);
+                ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::Text), "%s", line1);
+                ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+                ImGui::PushTextWrapPos(cardW - 10.0f);
+                ImGui::SetCursorPosX(16.0f);
+                ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::TextDim), "%s", line2);
+                ImGui::PopTextWrapPos();
+
+                ImGui::Dummy(ImVec2(0.0f, 16.0f));
+                NextUI::Theme::EndCard();
+
                 ImGui::End();
                 return;
             }
 
+            // ========================================================
+            // 2. Multi-Selection Mode
+            // ========================================================
             if (selectedIds.size() > 1)
             {
                 Assets::Node* activeObj = ctx.scene.GetNodeByInstanceId(ui.selected_obj_id);
@@ -127,9 +117,10 @@ namespace Editor
                     return;
                 }
 
-                ImGui::Text("%d Objects Selected", static_cast<int>(selectedIds.size()));
-                ImGui::TextDisabled("Active: %s", activeObj->GetName().c_str());
-                ImGui::Separator();
+                NextUI::Theme::BeginCard("##MultiSelectionCard");
+                ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::Accent), ICON_FA_OBJECT_GROUP "  %d Objects Selected", static_cast<int>(selectedIds.size()));
+                ImGui::TextDisabled("Active reference: %s", activeObj->GetName().c_str());
+                NextUI::Theme::EndCard();
 
                 auto applyTransformToSelection = [&](const std::function<void(Assets::Node&)>& apply)
                 {
@@ -152,76 +143,80 @@ namespace Editor
                     }
                 };
 
-                ImGui::Text(ICON_FA_LOCATION_ARROW " Transform");
-                ImGui::Separator();
-
-                glm::vec3 location = activeObj->Translation();
-                const glm::vec3 baseLocation = location;
-                if (ImGui::DragFloat3("##MultiLocation", &location.x, 0.1f))
+                if (NextUI::Theme::BeginSection(ICON_FA_LOCATION_ARROW, "Transform (Relative)", true))
                 {
-                    const glm::vec3 delta = location - baseLocation;
-                    applyTransformToSelection(
-                        [&](Assets::Node& node)
-                        {
-                            node.SetTranslation(node.Translation() + delta);
-                            node.RecalcTransform(true);
-                        });
-                }
-
-                glm::vec3 rotationEuler = glm::eulerAngles(activeObj->Rotation());
-                const glm::vec3 baseRotationEuler = rotationEuler;
-                if (ImGui::DragFloat3("##MultiRotation", &rotationEuler.x, 0.1f))
-                {
-                    const glm::vec3 delta = rotationEuler - baseRotationEuler;
-                    applyTransformToSelection(
-                        [&](Assets::Node& node)
-                        {
-                            glm::vec3 nodeEuler = glm::eulerAngles(node.Rotation()) + delta;
-                            node.SetRotation(glm::quat(nodeEuler));
-                            node.RecalcTransform(true);
-                        });
-                }
-
-                glm::vec3 scale = activeObj->Scale();
-                const glm::vec3 baseScale = scale;
-                if (ImGui::DragFloat3("##MultiScale", &scale.x, 0.1f))
-                {
-                    const glm::vec3 addDelta = scale - baseScale;
-                    glm::vec3 mulFactor(1.0f, 1.0f, 1.0f);
-                    for (int axis = 0; axis < 3; ++axis)
+                    glm::vec3 location = activeObj->Translation();
+                    const glm::vec3 baseLocation = location;
+                    if (Draw3AxisFloatDrag("Location", location))
                     {
-                        if (std::abs(baseScale[axis]) > 1e-4f)
-                        {
-                            mulFactor[axis] = scale[axis] / baseScale[axis];
-                        }
+                        const glm::vec3 delta = location - baseLocation;
+                        applyTransformToSelection(
+                            [&](Assets::Node& node)
+                            {
+                                node.SetTranslation(node.Translation() + delta);
+                                node.RecalcTransform(true);
+                            });
                     }
 
-                    applyTransformToSelection(
-                        [&](Assets::Node& node)
-                        {
-                            glm::vec3 nodeScale = node.Scale();
-                            for (int axis = 0; axis < 3; ++axis)
+                    glm::vec3 rotationEuler = glm::eulerAngles(activeObj->Rotation());
+                    const glm::vec3 baseRotationEuler = rotationEuler;
+                    if (Draw3AxisFloatDrag("Rotation", rotationEuler))
+                    {
+                        const glm::vec3 delta = rotationEuler - baseRotationEuler;
+                        applyTransformToSelection(
+                            [&](Assets::Node& node)
                             {
-                                if (std::abs(baseScale[axis]) > 1e-4f)
-                                {
-                                    nodeScale[axis] *= mulFactor[axis];
-                                }
-                                else
-                                {
-                                    nodeScale[axis] += addDelta[axis];
-                                }
+                                glm::vec3 nodeEuler = glm::eulerAngles(node.Rotation()) + delta;
+                                node.SetRotation(glm::quat(nodeEuler));
+                                node.RecalcTransform(true);
+                            });
+                    }
+
+                    glm::vec3 scale = activeObj->Scale();
+                    const glm::vec3 baseScale = scale;
+                    if (Draw3AxisFloatDrag("Scale", scale, 0.1f, kMinScale, kMaxScale, 1.0f))
+                    {
+                        const glm::vec3 addDelta = scale - baseScale;
+                        glm::vec3 mulFactor(1.0f, 1.0f, 1.0f);
+                        for (int axis = 0; axis < 3; ++axis)
+                        {
+                            if (std::abs(baseScale[axis]) > 1e-4f)
+                            {
+                                mulFactor[axis] = scale[axis] / baseScale[axis];
                             }
-                            node.SetScale(nodeScale);
-                            node.RecalcTransform(true);
-                        });
+                        }
+
+                        applyTransformToSelection(
+                            [&](Assets::Node& node)
+                            {
+                                glm::vec3 nodeScale = node.Scale();
+                                for (int axis = 0; axis < 3; ++axis)
+                                {
+                                    if (std::abs(baseScale[axis]) > 1e-4f)
+                                    {
+                                        nodeScale[axis] *= mulFactor[axis];
+                                    }
+                                    else
+                                    {
+                                        nodeScale[axis] += addDelta[axis];
+                                    }
+                                }
+                                node.SetScale(nodeScale);
+                                node.RecalcTransform(true);
+                            });
+                    }
+                    NextUI::Theme::EndSection();
                 }
 
-                ImGui::Separator();
-                ImGui::TextDisabled("Multi-selection mode: Mesh/Material/Components editing is disabled.");
+                ImGui::Dummy(ImVec2(0.0f, 6.0f));
+                ImGui::TextDisabled("Multi-selection mode: component inspection is disabled.");
                 ImGui::End();
                 return;
             }
 
+            // ========================================================
+            // 3. Single Selection Mode
+            // ========================================================
             Assets::Node* selectedObj = ctx.scene.GetNodeByInstanceId(selectedIds.front());
             if (selectedObj == nullptr)
             {
@@ -239,186 +234,214 @@ namespace Editor
                 ui.propertiesState.focusNameInput = false;
             }
 
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, 6.0f));
-
-            ImGui::PushFont(NextUI::Theme::GetTitleFont(ctx.engine));
-            bool enabled = render == nullptr || render->GetVisible();
-            const char* visibilityIcon = enabled ? ICON_FA_EYE : ICON_FA_EYE_SLASH;
-            if (render == nullptr) ImGui::BeginDisabled();
-            if (NextUI::Theme::IconButton(visibilityIcon, enabled ? "Visible" : "Hidden", false,
-                                          ImVec2(0.0f, ImGui::GetFrameHeight())) && render != nullptr)
+            // --- Entity Header Card ---
+            NextUI::Theme::BeginCard("##EntityHeaderCard");
             {
-                enabled = !enabled;
-                render->SetVisible(enabled);
-                ctx.scene.MarkDirty();
-            }
-            if (render == nullptr) ImGui::EndDisabled();
+                // Top Row: Type chip on the left, quick actions on the right. The chip comes from the
+                // same classifier the Outliner icon uses, so the two panels always agree.
+                const FNodeVisual& visual = ClassifyNode(*selectedObj);
+                NextUI::Theme::TagChip(fmt::format("{} {}", visual.icon, visual.label).c_str(), visual.tint,
+                                       visual.description);
 
-            ImGui::SameLine();
-            if (ui.propertiesState.renamingName)
-            {
-                ImGui::SetNextItemWidth(-FLT_MIN);
-                if (ui.propertiesState.focusNameInput)
+                // Quick Action Buttons on top-right: Visibility, Focus, Delete
+                constexpr float actBtnW = 26.0f;
+                constexpr float actBtnH = 22.0f;
+                constexpr float actSpacing = 4.0f;
+                const float topActionsWidth = actBtnW * 3.0f + actSpacing * 2.0f;
+                NextUI::Theme::SameLineRightAligned(topActionsWidth);
+
+                bool enabled = render == nullptr || render->GetVisible();
+                const char* visibilityIcon = enabled ? ICON_FA_EYE : ICON_FA_EYE_SLASH;
+                if (render == nullptr) ImGui::BeginDisabled();
+                if (NextUI::Theme::IconButton(visibilityIcon, enabled ? "Hide Object" : "Show Object", false, ImVec2(actBtnW, actBtnH)) && render != nullptr)
                 {
-                    ImGui::SetKeyboardFocusHere();
-                    ui.propertiesState.focusNameInput = false;
+                    render->SetVisible(!enabled);
+                    ctx.scene.MarkDirty();
+                }
+                if (render == nullptr) ImGui::EndDisabled();
+
+                ImGui::SameLine(0.0f, actSpacing);
+                if (NextUI::Theme::IconButton(ICON_FA_LOCATION_CROSSHAIRS "##Focus", "Focus in Viewport", false, ImVec2(actBtnW, actBtnH)))
+                {
+                    ctx.actions.Dispatch(ctx, EEditorAction::Camera_FocusSelected, std::to_string(selectedObj->GetInstanceId()));
                 }
 
-                const bool nameSubmitted =
-                    ImGui::InputText("##NodeRenameInput", &ui.propertiesState.editingName,
-                                     ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
-                const bool cancelRename = ImGui::IsKeyPressed(ImGuiKey_Escape);
-                const bool nameEditFinished = nameSubmitted || ImGui::IsItemDeactivated();
-                if (cancelRename)
+                ImGui::SameLine(0.0f, actSpacing);
+                if (NextUI::Theme::IconButton(ICON_FA_TRASH_CAN "##Delete", "Delete Object", false, ImVec2(actBtnW, actBtnH)))
                 {
-                    ui.propertiesState.editingName = selectedObj->GetName();
-                    ui.propertiesState.renamingName = false;
+                    ctx.engine.GetCommandHistory().Execute(
+                        std::make_unique<Runtime::Command::DeleteNodesCommand>(ctx.scene, std::vector<uint32_t>{selectedObj->GetInstanceId()}));
                 }
-                else if (nameEditFinished)
+
+                ImGui::Dummy(ImVec2(0.0f, 2.0f));
+
+                // Middle Row: Object Title with click-to-rename
+                ImGui::PushFont(NextUI::Theme::GetTitleFont(ctx.engine));
+                if (ui.propertiesState.renamingName)
                 {
-                    if (ui.propertiesState.editingName.empty())
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    if (ui.propertiesState.focusNameInput)
+                    {
+                        ImGui::SetKeyboardFocusHere();
+                        ui.propertiesState.focusNameInput = false;
+                    }
+
+                    const bool nameSubmitted =
+                        ImGui::InputText("##NodeRenameInput", &ui.propertiesState.editingName,
+                                         ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+                    const bool cancelRename = ImGui::IsKeyPressed(ImGuiKey_Escape);
+                    const bool nameEditFinished = nameSubmitted || ImGui::IsItemDeactivated();
+                    if (cancelRename)
                     {
                         ui.propertiesState.editingName = selectedObj->GetName();
+                        ui.propertiesState.renamingName = false;
                     }
-                    else if (ui.propertiesState.editingName != selectedObj->GetName())
+                    else if (nameEditFinished)
                     {
-                        ctx.engine.GetCommandHistory().Execute(std::make_unique<Runtime::Command::RenameNodeCommand>(
-                            ctx.scene, selectedObj->GetInstanceId(), ui.propertiesState.editingName));
-                    }
-                    ui.propertiesState.renamingName = false;
-                }
-            }
-            else
-            {
-                const std::string title = fmt::format("{}###ObjectTitle", selectedObj->GetName());
-                if (ImGui::Selectable(title.c_str(), false, ImGuiSelectableFlags_None,
-                                      ImVec2(0.0f, ImGui::GetFrameHeight())))
-                {
-                    ui.propertiesState.editingName = selectedObj->GetName();
-                    ui.propertiesState.renamingName = true;
-                    ui.propertiesState.focusNameInput = true;
-                }
-                NextUI::Theme::DrawTooltip("Click to rename");
-            }
-            ImGui::PopFont();
-
-            bool isStatic = physics == nullptr || physics->GetMobility() == Runtime::ENodeMobility::Static;
-
-            static constexpr const char* tagItems[] = {"Untagged", "Player", "Environment", "Interactable"};
-            static constexpr const char* layerItems[] = {"Default", "Gameplay", "Props", "Colliders", "Lighting"};
-            auto findItemIndex = [](const char* const* items, int count, const std::string& value)
-            {
-                for (int i = 0; i < count; ++i)
-                {
-                    if (value == items[i])
-                    {
-                        return i;
-                    }
-                }
-                return 0;
-            };
-            int tagIndex = findItemIndex(tagItems, IM_ARRAYSIZE(tagItems), selectedObj->GetTag());
-            int layerIndex = findItemIndex(layerItems, IM_ARRAYSIZE(layerItems), selectedObj->GetLayer());
-
-            constexpr ImGuiTableFlags summaryFlags =
-                ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoPadOuterX | ImGuiTableFlags_NoSavedSettings;
-            ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(2.0f, 2.0f));
-            if (ImGui::BeginTable("##ObjectClassification", 3, summaryFlags))
-            {
-                ImGui::TableSetupColumn("Mobility", ImGuiTableColumnFlags_WidthStretch, 0.75f);
-                ImGui::TableSetupColumn("Tag", ImGuiTableColumnFlags_WidthStretch, 1.15f);
-                ImGui::TableSetupColumn("Layer", ImGuiTableColumnFlags_WidthStretch, 0.90f);
-                ImGui::TableNextRow();
-
-                ImGui::TableSetColumnIndex(0);
-                ImGui::SetNextItemWidth(-FLT_MIN);
-                if (physics == nullptr) ImGui::BeginDisabled();
-                if (ImGui::BeginCombo("##MobilitySelector", isStatic ? "Static" : "Dynamic"))
-                {
-                    if (ImGui::Selectable(ICON_FA_LOCK " Static", isStatic))
-                    {
-                        physics->SetMobility(Runtime::ENodeMobility::Static);
-                        ctx.scene.MarkDirty();
-                    }
-                    if (ImGui::Selectable(ICON_FA_PERSON_RUNNING " Dynamic", !isStatic))
-                    {
-                        physics->SetMobility(Runtime::ENodeMobility::Dynamic);
-                        ctx.scene.MarkDirty();
-                    }
-                    ImGui::EndCombo();
-                }
-                NextUI::Theme::DrawTooltip("Mobility");
-                if (physics == nullptr) ImGui::EndDisabled();
-
-                ImGui::TableSetColumnIndex(1);
-                ImGui::SetNextItemWidth(-FLT_MIN);
-                if (ImGui::BeginCombo("##TagSelector", tagItems[tagIndex]))
-                {
-                    for (int i = 0; i < IM_ARRAYSIZE(tagItems); ++i)
-                    {
-                        if (ImGui::Selectable(tagItems[i], tagIndex == i))
+                        if (ui.propertiesState.editingName.empty())
                         {
-                            selectedObj->SetTag(tagItems[i]);
+                            ui.propertiesState.editingName = selectedObj->GetName();
+                        }
+                        else if (ui.propertiesState.editingName != selectedObj->GetName())
+                        {
+                            ctx.engine.GetCommandHistory().Execute(std::make_unique<Runtime::Command::RenameNodeCommand>(
+                                ctx.scene, selectedObj->GetInstanceId(), ui.propertiesState.editingName));
+                        }
+                        ui.propertiesState.renamingName = false;
+                    }
+                }
+                else
+                {
+                    const std::string title = fmt::format("{}###ObjectTitle", selectedObj->GetName());
+                    if (ImGui::Selectable(title.c_str(), false, ImGuiSelectableFlags_None,
+                                          ImVec2(0.0f, ImGui::GetFrameHeight())))
+                    {
+                        ui.propertiesState.editingName = selectedObj->GetName();
+                        ui.propertiesState.renamingName = true;
+                        ui.propertiesState.focusNameInput = true;
+                    }
+                    NextUI::Theme::DrawTooltip("Click to rename");
+                }
+                ImGui::PopFont();
+
+                ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+                // Bottom Row: Mobility, Tag, Layer
+                bool isStatic = physics == nullptr || physics->GetMobility() == Runtime::ENodeMobility::Static;
+                static constexpr const char* tagItems[] = {"Untagged", "Player", "Environment", "Interactable"};
+                static constexpr const char* layerItems[] = {"Default", "Gameplay", "Props", "Colliders", "Lighting"};
+                auto findItemIndex = [](const char* const* items, int count, const std::string& value)
+                {
+                    for (int i = 0; i < count; ++i)
+                    {
+                        if (value == items[i]) return i;
+                    }
+                    return 0;
+                };
+                int tagIndex = findItemIndex(tagItems, IM_ARRAYSIZE(tagItems), selectedObj->GetTag());
+                int layerIndex = findItemIndex(layerItems, IM_ARRAYSIZE(layerItems), selectedObj->GetLayer());
+
+                constexpr ImGuiTableFlags summaryFlags =
+                    ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoPadOuterX | ImGuiTableFlags_NoSavedSettings;
+                ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(3.0f, 2.0f));
+                if (ImGui::BeginTable("##ObjectClassification", 3, summaryFlags))
+                {
+                    ImGui::TableSetupColumn("Mobility", ImGuiTableColumnFlags_WidthStretch, 0.85f);
+                    ImGui::TableSetupColumn("Tag", ImGuiTableColumnFlags_WidthStretch, 1.10f);
+                    ImGui::TableSetupColumn("Layer", ImGuiTableColumnFlags_WidthStretch, 0.95f);
+                    ImGui::TableNextRow();
+
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    if (physics == nullptr) ImGui::BeginDisabled();
+                    if (ImGui::BeginCombo("##MobilitySelector", isStatic ? ICON_FA_LOCK " Static" : ICON_FA_PERSON_RUNNING " Dynamic"))
+                    {
+                        if (ImGui::Selectable(ICON_FA_LOCK " Static", isStatic))
+                        {
+                            physics->SetMobility(Runtime::ENodeMobility::Static);
                             ctx.scene.MarkDirty();
                         }
-                    }
-                    ImGui::EndCombo();
-                }
-                NextUI::Theme::DrawTooltip("Tag");
-
-                ImGui::TableSetColumnIndex(2);
-                ImGui::SetNextItemWidth(-FLT_MIN);
-                if (ImGui::BeginCombo("##LayerSelector", layerItems[layerIndex]))
-                {
-                    for (int i = 0; i < IM_ARRAYSIZE(layerItems); ++i)
-                    {
-                        if (ImGui::Selectable(layerItems[i], layerIndex == i))
+                        if (ImGui::Selectable(ICON_FA_PERSON_RUNNING " Dynamic", !isStatic))
                         {
-                            selectedObj->SetLayer(layerItems[i]);
+                            physics->SetMobility(Runtime::ENodeMobility::Dynamic);
                             ctx.scene.MarkDirty();
                         }
+                        ImGui::EndCombo();
                     }
-                    ImGui::EndCombo();
+                    NextUI::Theme::DrawTooltip("Mobility");
+                    if (physics == nullptr) ImGui::EndDisabled();
+
+                    ImGui::TableSetColumnIndex(1);
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    if (ImGui::BeginCombo("##TagSelector", tagItems[tagIndex]))
+                    {
+                        for (int i = 0; i < IM_ARRAYSIZE(tagItems); ++i)
+                        {
+                            if (ImGui::Selectable(tagItems[i], tagIndex == i))
+                            {
+                                selectedObj->SetTag(tagItems[i]);
+                                ctx.scene.MarkDirty();
+                            }
+                        }
+                        ImGui::EndCombo();
+                    }
+                    NextUI::Theme::DrawTooltip("Tag");
+
+                    ImGui::TableSetColumnIndex(2);
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    if (ImGui::BeginCombo("##LayerSelector", layerItems[layerIndex]))
+                    {
+                        for (int i = 0; i < IM_ARRAYSIZE(layerItems); ++i)
+                        {
+                            if (ImGui::Selectable(layerItems[i], layerIndex == i))
+                            {
+                                selectedObj->SetLayer(layerItems[i]);
+                                ctx.scene.MarkDirty();
+                            }
+                        }
+                        ImGui::EndCombo();
+                    }
+                    NextUI::Theme::DrawTooltip("Layer");
+
+                    ImGui::EndTable();
                 }
-                NextUI::Theme::DrawTooltip("Layer");
-
-                ImGui::EndTable();
+                ImGui::PopStyleVar();
             }
-            ImGui::PopStyleVar();
+            NextUI::Theme::EndCard();
 
-            ImGui::PopStyleVar();
-
-            NextUI::Theme::DrawThinSeparator();
-
+            // --- Transform Section ---
             if (NextUI::Theme::BeginSection(ICON_FA_LOCATION_ARROW, "Transform", true))
             {
-                if (DrawAxisFloat3("Location", selectedObj->Translation(), 0.1f))
+                if (Draw3AxisFloatDrag("Location", selectedObj->Translation()))
                 {
                     selectedObj->RecalcTransform(true);
                     ctx.scene.MarkDirty();
                 }
 
-                glm::vec3 eular = glm::eulerAngles(selectedObj->Rotation());
-                if (DrawAxisFloat3("Rotation", eular, 0.1f))
+                glm::vec3 euler = glm::eulerAngles(selectedObj->Rotation());
+                if (Draw3AxisFloatDrag("Rotation", euler))
                 {
-                    selectedObj->SetRotation(glm::quat(eular));
+                    selectedObj->SetRotation(glm::quat(euler));
                     selectedObj->RecalcTransform(true);
                     ctx.scene.MarkDirty();
                 }
 
-                if (DrawAxisFloat3("Scale", selectedObj->Scale(), 0.1f))
+                if (Draw3AxisFloatDrag("Scale", selectedObj->Scale(), 0.1f, kMinScale, kMaxScale, 1.0f))
                 {
                     selectedObj->RecalcTransform(true);
                     ctx.scene.MarkDirty();
                 }
                 NextUI::Theme::EndSection();
             }
-            int modelId = render ? render->GetModelId() : -1;
 
+            // --- Components Section ---
+            const int modelId = render ? render->GetModelId() : -1;
             if (NextUI::Theme::BeginSection(ICON_FA_PUZZLE_PIECE, "Components", true))
             {
+                ImGui::SetNextItemWidth(-FLT_MIN);
                 ui.propertiesState.propertyFilter.Draw(ICON_FA_MAGNIFYING_GLASS " Search##PropertiesSearch");
-                NextUI::Theme::DrawThinSeparator();
+                NextUI::Theme::DrawThinSeparator(0.50f);
+
                 const auto& components = selectedObj->GetComponents();
                 for (const auto& component : components)
                 {
@@ -446,10 +469,9 @@ namespace Editor
                             continue;
                     }
 
-                    std::string headerName = std::string(component->GetTypeName());
+                    std::string headerName = fmt::format(ICON_FA_CUBES "  {}", component->GetTypeName());
                     if (ImGui::CollapsingHeader(headerName.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
                     {
-                        //ImGui::Indent();
                         PropertyWidgets::WidgetConfig widgetConfig;
                         widgetConfig.modelAsset.titleFont = ctx.ui.GetTitleBarFont();
                         widgetConfig.materialAsset.titleFont = ctx.ui.GetTitleBarFont();
@@ -535,13 +557,17 @@ namespace Editor
                         {
                             ctx.scene.MarkDirty();
                         }
-                        //ImGui::Unindent();
                     }
                 }
-                if (ImGui::Button(ICON_FA_PLUS " Add Component", ImVec2(-FLT_MIN, 0.0f)))
+
+                ImGui::Dummy(ImVec2(0.0f, 4.0f));
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+                if (ImGui::Button(ICON_FA_PLUS "  Add Component", ImVec2(-FLT_MIN, 28.0f)))
                 {
                     ImGui::OpenPopup("AddComponentPopup");
                 }
+                ImGui::PopStyleVar();
+
                 if (ImGui::BeginPopup("AddComponentPopup"))
                 {
                     ImGui::MenuItem("Render Component", nullptr, false, false);

@@ -4,6 +4,7 @@
 
 namespace NextDayz
 {
+    // What kind of place a loot spot is; picks its weighted item table.
     enum class ELootProfile : uint8_t
     {
         Residential,
@@ -11,6 +12,10 @@ namespace NextDayz
         Military,
         Industrial,
         Wilderness,
+        Commercial,   // shops, supermarket, gas station
+        Farm,
+        Police,
+        Count,
     };
 
     enum class ELootCategory : uint8_t
@@ -21,18 +26,38 @@ namespace NextDayz
         Weapon,
         Clothing,
         Misc,
+        Count,
     };
+
+    inline const char* LootCategoryName(ELootCategory category)
+    {
+        switch (category)
+        {
+        case ELootCategory::FoodWater: return "Food/Water";
+        case ELootCategory::Medical: return "Medical";
+        case ELootCategory::Ammo: return "Ammo";
+        case ELootCategory::Weapon: return "Weapon";
+        case ELootCategory::Clothing: return "Clothing";
+        case ELootCategory::Misc: return "Misc";
+        case ELootCategory::Count: break;
+        }
+        return "Unknown";
+    }
 
     struct FLootRespawnTuning
     {
-        double foodWaterSeconds = 8.0 * 60.0;
-        double medicalSeconds = 12.0 * 60.0;
-        double ammoSeconds = 15.0 * 60.0;
-        double weaponSeconds = 30.0 * 60.0;
-        double clothingSeconds = 18.0 * 60.0;
-        double miscSeconds = 12.0 * 60.0;
+        double foodWaterSeconds = 6.0 * 60.0;
+        double medicalSeconds = 9.0 * 60.0;
+        double ammoSeconds = 12.0 * 60.0;
+        double weaponSeconds = 24.0 * 60.0;
+        double clothingSeconds = 14.0 * 60.0;
+        double miscSeconds = 10.0 * 60.0;
+        // A spot restocks only once the player has left its area (POI zone)
+        // by this much and has not been looking at the spot for a while.
         float minimumPlayerDistance = 60.0f;
         double minimumOffscreenSeconds = 20.0;
+        // Share of a category's spots that may be stocked at once.
+        float categoryStockShare = 0.8f;
     };
 
     inline double RespawnCooldown(ELootCategory category, const FLootRespawnTuning& tuning)
@@ -47,5 +72,34 @@ namespace NextDayz
         case ELootCategory::Misc:
         default: return tuning.miscSeconds;
         }
+    }
+
+    inline const char* LootProfileName(ELootProfile profile)
+    {
+        switch (profile)
+        {
+        case ELootProfile::Residential: return "residential";
+        case ELootProfile::Medical: return "medical";
+        case ELootProfile::Military: return "military";
+        case ELootProfile::Industrial: return "industrial";
+        case ELootProfile::Wilderness: return "wilderness";
+        case ELootProfile::Commercial: return "commercial";
+        case ELootProfile::Farm: return "farm";
+        case ELootProfile::Police: return "police";
+        default: return "unknown";
+        }
+    }
+
+    inline std::optional<ELootProfile> ParseLootProfile(std::string_view name)
+    {
+        for (uint8_t index = 0; index < static_cast<uint8_t>(ELootProfile::Count); ++index)
+        {
+            const ELootProfile profile = static_cast<ELootProfile>(index);
+            if (name == LootProfileName(profile))
+            {
+                return profile;
+            }
+        }
+        return std::nullopt;
     }
 }

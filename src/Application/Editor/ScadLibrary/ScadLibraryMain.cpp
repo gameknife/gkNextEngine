@@ -6,8 +6,9 @@
 #include "Engine/Runtime/Config/CVarSystem.hpp"
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/GameInstance.hpp"
-#include "Engine/Runtime/Interface/UserInterface.hpp"
 #include "Engine/Runtime/Utilities/NextEngineHelper.hpp"
+#include "Modules/DevTools/UiDevPanels.hpp"
+#include "Modules/NextUI/ImGuiScaling.hpp"
 #include "Modules/ScadLoader/ScadModule.hpp"
 
 #include <glm/glm.hpp>
@@ -162,6 +163,13 @@ bool ScadLibraryGameInstance::OnRenderUI()
     return true;
 }
 
+NextUI::FUiFrameResult ScadLibraryGameInstance::RenderUiFrame(const FGameUiFrameContext& context)
+{
+    (void)context;
+    OnRenderUI();
+    return {NextUI::EUiDeveloperLayer::Console};
+}
+
 void ScadLibraryGameInstance::FocusSelectedSceneObject()
 {
     glm::vec3 center;
@@ -171,10 +179,15 @@ void ScadLibraryGameInstance::FocusSelectedSceneObject()
         return;
     }
 
-    cameraController_.SetNavigationScale(radius);
+    // Scene loading uses a conservative 0.5m near plane for big scenes. A
+    // selected kit can be much smaller, so lower it before framing to avoid
+    // clipping the focused OBB away.
+    Assets::Camera& sceneCamera = GetEngine().GetScene().GetRenderCamera();
+    sceneCamera.NearPlane = std::min(sceneCamera.NearPlane, std::max(0.01f, radius * 0.08f));
+    cameraController_.SetNavigationScale(std::max(radius, 0.05f));
     cameraController_.SetOrbitTarget(center);
     cameraController_.SetAltPressed(true);
-    cameraController_.Focus(center, radius);
+    cameraController_.FocusImmediate(center, radius);
 }
 
 void ScadLibraryGameInstance::FrameAllSceneObjects()
@@ -207,6 +220,25 @@ bool ScadLibraryGameInstance::OverrideRenderCamera(Assets::Camera& outRenderCame
 
 bool ScadLibraryGameInstance::OnKey(SDL_Event& event)
 {
+    if (DevTools::FUiDevPanels::Get().IsConsoleOpen())
+    {
+        return true;
+    }
+
+    if (event.type == SDL_EVENT_KEY_DOWN &&
+        (event.key.key == SDLK_GRAVE || event.key.scancode == SDL_SCANCODE_GRAVE))
+    {
+        return true;
+    }
+
+    // The engine also forwards non-text shortcuts while an ImGui outliner row
+    // owns keyboard focus. Keep actual text editing isolated from camera/input
+    // handling when the focused widget is an InputText.
+    if (ImGui::GetIO().WantTextInput)
+    {
+        return true;
+    }
+
     const bool modeShortcut = event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
         (event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_GUI)) != 0 && !ImGui::GetIO().WantTextInput;
     if (modeShortcut)
@@ -240,7 +272,9 @@ bool ScadLibraryGameInstance::OnKey(SDL_Event& event)
 
     if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && !ImGui::GetIO().WantTextInput)
     {
-        if (event.key.key == SDLK_F && ui_->WorkspaceMode() == ScadLibrary::EWorkspaceMode::SceneAssembly)
+        if (event.key.key == SDLK_F &&
+            (ui_->WorkspaceMode() == ScadLibrary::EWorkspaceMode::SceneAssembly ||
+             ui_->WorkspaceMode() == ScadLibrary::EWorkspaceMode::KitBrowser))
         {
             FocusSelectedSceneObject();
             return true;
@@ -259,9 +293,16 @@ bool ScadLibraryGameInstance::OnKey(SDL_Event& event)
 
 bool ScadLibraryGameInstance::OnCursorPosition(double xpos, double ypos)
 {
+    if (DevTools::FUiDevPanels::Get().IsConsoleOpen())
+    {
+        return true;
+    }
+
     glm::vec3 center;
     float radius = 0.0f;
-    const bool hasSelectedSceneObject = ui_->WorkspaceMode() == ScadLibrary::EWorkspaceMode::SceneAssembly &&
+    const bool hasSelectedSceneObject =
+        (ui_->WorkspaceMode() == ScadLibrary::EWorkspaceMode::SceneAssembly ||
+         ui_->WorkspaceMode() == ScadLibrary::EWorkspaceMode::KitBrowser) &&
         ui_->GetSelectedSceneObjectBounds(center, radius);
     if (hasSelectedSceneObject || GetEngine().GetScene().GetSelectedNodeBounds(center, radius))
     {
@@ -277,6 +318,11 @@ bool ScadLibraryGameInstance::OnCursorPosition(double xpos, double ypos)
 
 bool ScadLibraryGameInstance::OnMouseButton(SDL_Event& event)
 {
+    if (DevTools::FUiDevPanels::Get().IsConsoleOpen())
+    {
+        return true;
+    }
+
     if (event.button.button == SDL_BUTTON_RIGHT)
     {
         cameraController_.OnMouseButton(event);
@@ -284,12 +330,11 @@ bool ScadLibraryGameInstance::OnMouseButton(SDL_Event& event)
     }
 
     const glm::vec2 mousePos = GetEngine().GetMousePos();
-    const NextUI::IUserInterface* userInterface = GetEngine().GetUserInterface();
-    const float uiScale = userInterface != nullptr ? userInterface->UiScale() : 1.0f;
     // SDL mouse coordinates are framebuffer pixels on DPI-aware Windows, while
     // IsViewportPoint stores the viewport and toolbar in ImGui logical pixels.
     // Keep mousePos unchanged for GetScreenToWorldRay, which consumes framebuffer pixels.
-    const glm::vec2 uiMousePos = mousePos / std::max(uiScale, 1.0f);
+    const ImVec2 uiMouse = NextUI::Scaling::MainFramebufferToImGuiPoint(ImVec2(mousePos.x, mousePos.y));
+    const glm::vec2 uiMousePos(uiMouse.x, uiMouse.y);
 
     // Don't start a pan drag or a scene pick when the cursor is over a panel/widget.
     if (ImGui::GetIO().WantCaptureMouse && event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
@@ -307,26 +352,20 @@ bool ScadLibraryGameInstance::OnMouseButton(SDL_Event& event)
     }
     cameraController_.OnMouseButton(event);
     if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT &&
-        ui_->WorkspaceMode() == ScadLibrary::EWorkspaceMode::SceneAssembly && !ui_->IsTerrainProcessAssembly() &&
+        ui_->WorkspaceMode() == ScadLibrary::EWorkspaceMode::SceneAssembly && !ui_->HasActiveProceduralHandles() &&
         ui_->IsViewportPoint(uiMousePos.x, uiMousePos.y))
     {
         glm::vec3 origin;
         glm::vec3 direction;
         Runtime::EngineHelper::GetScreenToWorldRay(mousePos, origin, direction);
-        GetEngine().RayCast(origin, direction,
-                            [this](Assets::RayCastResult result)
-                            {
-                                ui_->SelectSceneObjectFromViewport(result.Hit ? result.InstanceId
-                                                                              : std::numeric_limits<uint32_t>::max());
-                                return true;
-                            });
+        ui_->SelectSceneObjectFromViewport(origin, direction);
     }
     return true;
 }
 
 bool ScadLibraryGameInstance::OnScroll(double xoffset, double yoffset)
 {
-    if (ImGui::GetIO().WantCaptureMouse)
+    if (DevTools::FUiDevPanels::Get().IsConsoleOpen() || ImGui::GetIO().WantCaptureMouse)
     {
         return true;
     }

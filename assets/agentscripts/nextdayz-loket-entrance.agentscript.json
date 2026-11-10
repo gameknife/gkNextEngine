@@ -1,0 +1,132 @@
+{
+  "name": "nextdayz-loket-entrance",
+  "target": "NextDayz",
+  "scene": "assets/scad/proc/nextdayz/cz_loket_riverbend/scene.scad",
+  "defaults": {
+    "stepTimeoutMs": 180000
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.invulnerable",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "20,124"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookPitch",
+      "set": -5
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/loket-castle-gate",
+      "ui": true
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "lt",
+      "value": -149,
+      "timeoutMs": 12000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "gt",
+      "value": 18.6
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "lt",
+      "value": 21.4
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/loket-castle-courtyard",
+      "ui": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.teleport",
+      "set": "22,150"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.lookYaw",
+      "set": 180
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.posZ",
+      "op": "lt",
+      "value": -161.5,
+      "timeoutMs": 12000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "gt",
+      "value": 20.6
+    },
+    {
+      "type": "assert",
+      "query": "game.posX",
+      "op": "lt",
+      "value": 23.4
+    },
+    {
+      "type": "wait-frames",
+      "n": 32
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/loket-palace-interior",
+      "ui": true,
+      "accumulateFrames": 32
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

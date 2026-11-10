@@ -48,7 +48,7 @@ namespace
         }
     }
 
-    EvalResult EvalProgram(const std::string& src)
+    EvalResult EvalTerrainProgram(const std::string& src)
     {
         Scope top;
         std::unordered_map<std::string, StmtPtr> modules;
@@ -62,7 +62,7 @@ namespace
         return result;
     }
 
-    SceneEvalResult EvalSceneProgram(const std::string& src)
+    SceneEvalResult EvalTerrainSceneProgram(const std::string& src)
     {
         Scope top;
         std::unordered_map<std::string, StmtPtr> modules;
@@ -76,7 +76,7 @@ namespace
         return result;
     }
 
-    size_t TotalTriangles(const EvalResult& result)
+    size_t TerrainTotalTriangles(const EvalResult& result)
     {
         size_t tris = 0;
         for (const auto& entry : result.buckets)
@@ -182,13 +182,15 @@ namespace
             size_t vertex[3]{};
         };
         std::vector<Face> faces;
-        for (const FTerrainData::ColoredTris& bucket : data.landGeom)
+        // Road-bed faces render as "terrain_road" without detail = true; with
+        // it the road surface is a ribbon above them, so either way they are
+        // the road side of a material boundary.
+        const auto addFaces = [&](const FTerrainData::ColoredTris& bucket, const std::string& material)
         {
-            if (bucket.materialName == "terrain_skirt") continue;
             for (size_t tri = 0; tri + 2 < bucket.tris.size(); tri += 3)
             {
                 Face face;
-                face.material = bucket.materialName;
+                face.material = material;
                 for (int corner = 0; corner < 3; ++corner)
                 {
                     const auto vertex = std::find(data.verts.begin(), data.verts.end(), bucket.tris[tri + corner]);
@@ -197,7 +199,12 @@ namespace
                 }
                 faces.push_back(std::move(face));
             }
+        };
+        for (const FTerrainData::ColoredTris& bucket : data.landGeom)
+        {
+            if (bucket.materialName != "terrain_skirt") addFaces(bucket, bucket.materialName);
         }
+        for (const FTerrainData::ColoredTris& bucket : data.roadBedGeom) addFaces(bucket, "terrain_road");
 
         std::vector<std::vector<size_t>> neighbors(faces.size());
         std::map<std::pair<size_t, size_t>, size_t> edgeOwner;
@@ -238,16 +245,16 @@ namespace
         return tips;
     }
 
-    class ScopedDir
+    class ScopedTerrainDir
     {
     public:
-        ScopedDir()
+        ScopedTerrainDir()
         {
             const auto suffix = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
             dir_ = std::filesystem::temp_directory_path() / ("scad_terrain_test_" + suffix);
             std::filesystem::create_directories(dir_);
         }
-        ~ScopedDir()
+        ~ScopedTerrainDir()
         {
             std::error_code ec;
             std::filesystem::remove_all(dir_, ec);
@@ -602,25 +609,25 @@ TEST_CASE("ScadTerrain features: road and pad material boundaries use triangle m
     const auto data = ScadTerrain::Build(spec);
     std::vector<uint8_t> roadFaces(100, 0);
     std::vector<uint8_t> padFaces(100, 0);
-    for (const FTerrainData::ColoredTris& bucket : data->landGeom)
+    const auto countFaces = [&](const FTerrainData::ColoredTris& bucket, std::vector<uint8_t>& faceCounts)
     {
-        std::vector<uint8_t>* faceCounts = nullptr;
-        if (bucket.materialName == "terrain_road")
-            faceCounts = &roadFaces;
-        else if (bucket.materialName == "terrain_pad")
-            faceCounts = &padFaces;
-        else
-            continue;
-
         for (size_t tri = 0; tri + 2 < bucket.tris.size(); tri += 3)
         {
             const glm::dvec3 centroid =
                 (bucket.tris[tri] + bucket.tris[tri + 1] + bucket.tris[tri + 2]) / 3.0;
             const int cell = data->CellIndexAt(centroid.x, centroid.y);
             REQUIRE(cell >= 0);
-            ++(*faceCounts)[static_cast<size_t>(cell)];
+            ++faceCounts[static_cast<size_t>(cell)];
         }
+    };
+    for (const FTerrainData::ColoredTris& bucket : data->landGeom)
+    {
+        if (bucket.materialName == "terrain_pad") countFaces(bucket, padFaces);
     }
+    // Road-feature faces are the road bed: split out of the land so the
+    // detailed look can keep their natural surface under a ribbon.
+    REQUIRE_FALSE(data->roadBedGeom.empty());
+    for (const FTerrainData::ColoredTris& bucket : data->roadBedGeom) countFaces(bucket, roadFaces);
 
     // A boundary cell containing one feature face and one natural-biome face
     // proves that the mask can follow the cell diagonal instead of filling an
@@ -629,6 +636,138 @@ TEST_CASE("ScadTerrain features: road and pad material boundaries use triangle m
     CHECK(std::find(padFaces.begin(), padFaces.end(), 1) != padFaces.end());
     CHECK(CountMaterialTips(*data, "terrain_road") == 0);
     CHECK(CountMaterialTips(*data, "terrain_pad") == 0);
+}
+
+TEST_CASE("ScadTerrain paint and pad surfaces recolour ground without changing semantics",
+          "[Unit][Scad][ScadTerrain]")
+{
+    const Value terr = VecV({StrV("gkterr1"), PtV(60.0, 60.0), PtV(20.0, 20.0), NumV(5.0),
+        VecV({NumV(0.0), NumV(0.0), NumV(0.5)}), Value(), StrV("temperate"),
+        VecV({VecV({StrV("paint"), VecV({PtV(-28, -28), PtV(0, -28), PtV(0, 28), PtV(-28, 28)}), StrV("dry_grass")}),
+              VecV({StrV("paint"), VecV({PtV(-28, 0), PtV(0, 0), PtV(0, 28), PtV(-28, 28)}), StrV("grass_dark")}),
+              VecV({StrV("pad"), PtV(15.0, 10.0), PtV(12.0, 9.0), NumV(0.0), NumV(2.0), StrV("road")}),
+              VecV({StrV("paint"), VecV({PtV(1, 1), PtV(2, 1), PtV(2, 2)}), StrV("bed")})})});
+    FTerrainSpec spec;
+    std::string error;
+    std::vector<std::string> warnings;
+    REQUIRE(ScadTerrain::DecodeSpec(terr, spec, error, warnings));
+    // The water floor is never paintable; everything else decoded cleanly.
+    REQUIRE(warnings.size() == 1);
+    REQUIRE(spec.features.size() == 3);
+    CHECK(spec.features[0].type == FTerrainFeature::EType::Paint);
+    CHECK(spec.features[2].apron == Catch::Approx(2.0));
+    CHECK(spec.features[2].biome == static_cast<int>(ETerrainBiome::Road));
+
+    const auto data = ScadTerrain::Build(spec);
+    double h = 0.0, slope = 0.0;
+    bool water = false;
+    uint8_t biome = 0;
+    data->InfoAt(-14.0, -14.0, h, slope, water, biome);
+    CHECK(biome == static_cast<uint8_t>(ETerrainBiome::DryGrass));
+    data->InfoAt(-14.0, 14.0, h, slope, water, biome); // later paint wins
+    CHECK(biome == static_cast<uint8_t>(ETerrainBiome::GrassDark));
+    data->InfoAt(15.0, 10.0, h, slope, water, biome); // pad keeps its semantics
+    CHECK(biome == static_cast<uint8_t>(ETerrainBiome::Pad));
+    bool earthFace = false, pavedFace = false;
+    for (const FTerrainData::ColoredTris& bucket : data->landGeom)
+    {
+        for (size_t tri = 0; tri + 2 < bucket.tris.size(); tri += 3)
+        {
+            const glm::dvec3 c = (bucket.tris[tri] + bucket.tris[tri + 1] + bucket.tris[tri + 2]) / 3.0;
+            if (std::abs(c.x - 15.0) < 4.0 && std::abs(c.y - 10.0) < 3.0)
+            {
+                earthFace |= bucket.materialName == "terrain_road";
+                pavedFace |= bucket.materialName == "terrain_pad";
+            }
+        }
+    }
+    CHECK(earthFace);
+    CHECK_FALSE(pavedFace);
+    // Surface operands must not shift an existing key: a plain pad keys as before.
+    FTerrainSpec plain = spec;
+    plain.features[2].apron = -1.0;
+    plain.features[2].biome = -1;
+    CHECK(ScadTerrain::SpecCacheKey(plain) != ScadTerrain::SpecCacheKey(spec));
+    plain.features = {plain.features[2]};
+    CHECK(ScadTerrain::SpecCacheKey(plain).find('o') == std::string::npos);
+}
+
+TEST_CASE("ScadTerrain plot pads are flat on the mesh up to their edges and keep their neighbours",
+          "[Unit][Scad][ScadTerrain]")
+{
+    // A tilted ramp with two rotated plots 13 m apart: both rectangles must be
+    // exactly flat on the rendered triangles, edges included.
+    FTerrainSpec spec;
+    spec.size = {200.0, 200.0};
+    spec.cells = {50, 50};
+    spec.seed = 9;
+    spec.relief = 0.0;
+    FTerrainFeature ramp;
+    ramp.type = FTerrainFeature::EType::Hmap;
+    auto grid = std::make_shared<FHeightGrid>();
+    grid->cols = grid->rows = 2;
+    grid->origin = {-100.0, -100.0};
+    grid->cell = {200.0, 200.0};
+    grid->values = {0.0f, 30.0f, 0.0f, 30.0f};
+    ramp.grid = grid;
+    spec.features.push_back(ramp);
+    for (const glm::dvec2 at : {glm::dvec2(-20.0, 5.0), glm::dvec2(17.0, 9.0)})
+    {
+        FTerrainFeature plot;
+        plot.type = FTerrainFeature::EType::Pad;
+        plot.at = at;
+        plot.size = {22.0, 16.0};
+        plot.rot = 23.0;
+        plot.apron = 3.0;
+        plot.biome = static_cast<int>(ETerrainBiome::Road);
+        spec.features.push_back(plot);
+    }
+    const auto data = ScadTerrain::Build(spec);
+    double first = 0.0;
+    for (int k = 0; k < 2; ++k)
+    {
+        const FTerrainFeature& plot = spec.features[1 + k];
+        const double target = data->HeightAt(plot.at.x, plot.at.y);
+        if (k == 0) first = target;
+        const double c = std::cos(plot.rot * kDeg2Rad), s = std::sin(plot.rot * kDeg2Rad);
+        for (int i = -10; i <= 10; ++i)
+        {
+            for (int j = -10; j <= 10; ++j)
+            {
+                const double u = i * plot.size.x / 20.0, v = j * plot.size.y / 20.0;
+                INFO("plot " << k << " sample " << u << "," << v);
+                CHECK(data->HeightAt(plot.at.x + u * c - v * s, plot.at.y + u * s + v * c) ==
+                      Catch::Approx(target).margin(1e-6));
+            }
+        }
+    }
+    // The ramp puts the two plots at different datums; neither flattened the other.
+    CHECK(std::abs(data->HeightAt(17.0, 9.0) - first) > 3.0);
+}
+
+TEST_CASE("ScadTerrain paint stripes alternate surfaces in parallel bands", "[Unit][Scad][ScadTerrain]")
+{
+    const Value terr = VecV({StrV("gkterr1"), PtV(80.0, 80.0), PtV(40.0, 40.0), NumV(3.0),
+        VecV({NumV(0.0), NumV(0.0), NumV(0.5)}), Value(), StrV("continental"),
+        VecV({VecV({StrV("paint"), VecV({PtV(-38, -38), PtV(38, -38), PtV(38, 38), PtV(-38, 38)}), StrV("road"),
+                    VecV({StrV("dry_grass"), NumV(20.0), NumV(0.0)})})})});
+    FTerrainSpec spec;
+    std::string error;
+    std::vector<std::string> warnings;
+    REQUIRE(ScadTerrain::DecodeSpec(terr, spec, error, warnings));
+    REQUIRE(warnings.empty());
+    CHECK(spec.palette == "continental");
+    const auto data = ScadTerrain::Build(spec);
+    double h = 0.0, slope = 0.0;
+    bool water = false;
+    uint8_t biome = 0;
+    // Bands run along +x, 10 m each: y in [0,10) keeps the base, [10,20) alternates.
+    data->InfoAt(0.0, 5.0, h, slope, water, biome);
+    CHECK(biome == static_cast<uint8_t>(ETerrainBiome::Road));
+    data->InfoAt(0.0, 15.0, h, slope, water, biome);
+    CHECK(biome == static_cast<uint8_t>(ETerrainBiome::DryGrass));
+    data->InfoAt(0.0, -5.0, h, slope, water, biome);
+    CHECK(biome == static_cast<uint8_t>(ETerrainBiome::DryGrass));
 }
 
 TEST_CASE("ScadTerrain river: carves below a downstream-monotonic water line", "[Unit][Scad][ScadTerrain]")
@@ -672,23 +811,26 @@ TEST_CASE("ScadTerrain palette: bounded color bucket count", "[Unit][Scad][ScadT
     const auto data = ScadTerrain::Build(MakeTestSpec());
     CHECK(data->landGeom.size() <= 11);
     CHECK(data->landGeom.size() + data->waterGeom.size() <= 13);
+    CHECK(data->roadBedGeom.size() <= 8);
     REQUIRE_FALSE(data->waterGeom.empty()); // river + lake must produce water
     CHECK(data->waterGeom[0].color.b > data->waterGeom[0].color.r); // stylized blue
 }
 
 TEST_CASE("ScadTerrain eval: bad spec warns and produces nothing", "[Unit][Scad][ScadTerrain]")
 {
-    const EvalResult result = EvalProgram("gk_terrain(42);\n");
+    const EvalResult result = EvalTerrainProgram("gk_terrain(42);\n");
     CHECK(result.warningCount >= 1);
-    CHECK(TotalTriangles(result) == 0);
+    CHECK(TerrainTotalTriangles(result) == 0);
 }
 
 TEST_CASE("ScadTerrain eval: gk_terrain renders warning-free", "[Unit][Scad][ScadTerrain]")
 {
-    const EvalResult result = EvalProgram(std::string(kTerrScad) + "gk_terrain(TERR);\n");
+    std::string program(kTerrScad);
+    program.append("gk_terrain(TERR);\n");
+    const EvalResult result = EvalTerrainProgram(program);
     CHECK(result.warningCount == 0);
     // 60x50 cells => 6000 land triangles + skirt + water.
-    CHECK(TotalTriangles(result) > 6000);
+    CHECK(TerrainTotalTriangles(result) > 6000);
 }
 
 TEST_CASE("ScadTerrain eval: gk_terrain_height matches the built mesh", "[Unit][Scad][ScadTerrain]")
@@ -696,7 +838,7 @@ TEST_CASE("ScadTerrain eval: gk_terrain_height matches the built mesh", "[Unit][
     const auto data = ScadTerrain::Build(MakeTestSpec());
 
     const EvalResult result =
-        EvalProgram(std::string(kTerrScad) + "translate([12, 8, gk_terrain_height(TERR, 12, 8)]) cube(1);\n");
+        EvalTerrainProgram(std::string(kTerrScad) + "translate([12, 8, gk_terrain_height(TERR, 12, 8)]) cube(1);\n");
     CHECK(result.warningCount == 0);
     REQUIRE(result.buckets.size() == 1);
 
@@ -712,7 +854,7 @@ TEST_CASE("ScadTerrain eval: gk_terrain_height matches the built mesh", "[Unit][
 TEST_CASE("ScadTerrain eval: identity cache distinguishes multiple terrain values",
           "[Unit][Scad][ScadTerrain]")
 {
-    const SceneEvalResult result = EvalSceneProgram(
+    const SceneEvalResult result = EvalTerrainSceneProgram(
         "A = [\"gkterr1\", [4,4], [4,4], 1, [0,0,0], undef, \"temperate\", []];\n"
         "B = [\"gkterr1\", [4,4], [4,4], 2, [10,0,0], undef, \"temperate\", []];\n"
         "function sample(t) = gk_terrain_height(t, 0, 0);\n"
@@ -754,7 +896,7 @@ TEST_CASE("Scad normals: zero smoothing angle uses exact per-face normals", "[Un
 
 TEST_CASE("ScadTerrain scene: faceted + water flags and terrain payload", "[Unit][Scad][ScadTerrain]")
 {
-    const SceneEvalResult result = EvalSceneProgram(std::string(kTerrScad) +
+    const SceneEvalResult result = EvalTerrainSceneProgram(std::string(kTerrScad) +
                                                     "module ground() { gk_terrain(TERR); }\n"
                                                     "ground();\n");
     CHECK(result.warningCount == 0);
@@ -778,6 +920,145 @@ TEST_CASE("ScadTerrain scene: faceted + water flags and terrain payload", "[Unit
     }
     CHECK(sawFaceted);
     CHECK(sawWater);
+}
+
+TEST_CASE("ScadTerrain roads: beds keep the natural surface, ribbons drape along the centreline",
+          "[Unit][Scad][ScadTerrain]")
+{
+    const auto data = ScadTerrain::Build(MakeTestSpec());
+    REQUIRE_FALSE(data->roadBedGeom.empty());
+    for (const FTerrainData::ColoredTris& bed : data->roadBedGeom)
+    {
+        // Natural biomes only: the road colour is applied (or not) at render time.
+        CHECK(bed.materialName != "terrain_road");
+        CHECK(bed.materialName != "terrain_bed");
+    }
+    CHECK(data->roadColor.r > 0.0f);
+
+    REQUIRE_FALSE(data->roadDecalGeom.empty());
+    // The 3 m test road is a farm track: earth ruts with a grass strip.
+    bool sawTrack = false, sawStrip = false;
+    size_t vertices = 0;
+    for (const FTerrainData::ColoredTris& ribbon : data->roadDecalGeom)
+    {
+        sawTrack |= ribbon.materialName == "terrain_road_track";
+        sawStrip |= ribbon.materialName == "terrain_road_strip";
+        REQUIRE(ribbon.tris.size() % 3 == 0);
+        for (const glm::dvec3& v : ribbon.tris)
+        {
+            // Every vertex sits on the ground mesh: at most a few centimetres
+            // over it, and the buried outer edge only a centimetre under it.
+            const double ground = data->HeightAt(v.x, v.y);
+            CHECK(v.z >= ground - 0.0125);
+            CHECK(v.z <= ground + 0.0625);
+            ++vertices;
+        }
+        size_t lifted = 0;
+        for (size_t tri = 0; tri + 2 < ribbon.tris.size(); tri += 3)
+        {
+            // Counter-clockwise from above: ribbons face up.
+            const glm::dvec3 n = glm::cross(ribbon.tris[tri + 1] - ribbon.tris[tri], ribbon.tris[tri + 2] - ribbon.tris[tri]);
+            CHECK(n.z >= 0.0);
+            // Clipped to the facets: no triangle crosses a ground fold, so the
+            // centroid stays in the lift band too, and away from the buried
+            // edges it keeps the layer's full lift.
+            const glm::dvec3 centroid = (ribbon.tris[tri] + ribbon.tris[tri + 1] + ribbon.tris[tri + 2]) / 3.0;
+            const double lift = centroid.z - data->HeightAt(centroid.x, centroid.y);
+            CHECK(lift > -0.0125);
+            CHECK(lift < 0.0625);
+            lifted += lift > 0.015 ? 1 : 0;
+            // Never over water: the road crosses the river on a bridge.
+            double h = 0.0, slope = 0.0;
+            bool water = false;
+            uint8_t biome = 0;
+            data->InfoAt(centroid.x, centroid.y, h, slope, water, biome);
+            CHECK_FALSE(water);
+        }
+        CHECK(lifted * 3 > ribbon.tris.size() / 3);
+    }
+    CHECK(sawTrack);
+    CHECK(sawStrip);
+    CHECK(vertices > 0);
+
+    // Ribbon edges are not the cell staircase: some vertex lies off every
+    // grid line and off every cell diagonal.
+    const double cellX = 120.0 / 60.0, cellY = 100.0 / 50.0;
+    bool offGrid = false;
+    for (const glm::dvec3& v : data->roadDecalGeom[0].tris)
+    {
+        const double fx = (v.x + 60.0) / cellX, fy = (v.y + 50.0) / cellY;
+        const double gx = std::abs(fx - std::round(fx)), gy = std::abs(fy - std::round(fy));
+        const double diag = std::abs((fx - std::floor(fx)) - (fy - std::floor(fy)));
+        offGrid |= gx > 0.05 && gy > 0.05 && diag > 0.05;
+    }
+    CHECK(offGrid);
+}
+
+TEST_CASE("ScadTerrain eval: detail = true textures the ground and drapes road ribbons",
+          "[Unit][Scad][ScadTerrain]")
+{
+    const auto evalGround = [](const char* call)
+    {
+        std::string program(kTerrScad);
+        program.append("module ground() { ");
+        program.append(call);
+        program.append(" }\nground();\n");
+        return EvalTerrainSceneProgram(program);
+    };
+    const SceneEvalResult plain = evalGround("gk_terrain(TERR);");
+    const SceneEvalResult detail = evalGround("gk_terrain(TERR, detail=true);");
+    CHECK(plain.warningCount == 0);
+    CHECK(detail.warningCount == 0);
+
+    const auto ground = [](const SceneEvalResult& result) -> const SceneNode*
+    {
+        for (const SceneNode& root : result.roots)
+        {
+            if (root.name == "ground") return &root;
+        }
+        return nullptr;
+    };
+    const SceneNode* plainGround = ground(plain);
+    const SceneNode* detailGround = ground(detail);
+    REQUIRE(plainGround != nullptr);
+    REQUIRE(detailGround != nullptr);
+
+    // Without detail: no overlays, no prints, and the road reads as before.
+    bool plainRoad = false;
+    for (const SceneMeshBucket& bucket : plainGround->meshes)
+    {
+        CHECK_FALSE(bucket.terrainDecal);
+        CHECK(bucket.material.texture == nullptr);
+        plainRoad |= bucket.materialName == "terrain_road";
+    }
+    CHECK(plainRoad);
+
+    bool sawDecal = false, sawPrintedGround = false;
+    for (const SceneMeshBucket& bucket : detailGround->meshes)
+    {
+        if (bucket.terrainWater)
+        {
+            CHECK(bucket.material.texture == nullptr);
+            continue;
+        }
+        sawDecal |= bucket.terrainDecal;
+        if (!bucket.terrainDecal && bucket.materialName == "terrain_grass")
+        {
+            REQUIRE(bucket.material.texture != nullptr);
+            sawPrintedGround |= bucket.material.texture->pattern == "meadow";
+        }
+        if (bucket.terrainDecal)
+        {
+            CHECK(bucket.materialName.rfind("terrain_road_", 0) == 0);
+            CHECK(bucket.material.texture != nullptr);
+        }
+    }
+    CHECK(sawDecal);
+    CHECK(sawPrintedGround);
+    // The render option sits outside TERR: both share one built terrain.
+    REQUIRE(plain.terrains.size() == 1);
+    REQUIRE(detail.terrains.size() == 1);
+    CHECK(plain.terrains[0].data->verts.size() == detail.terrains[0].data->verts.size());
 }
 
 TEST_CASE("Scad gk_flatten: collapses a rule library's module calls into one node",
@@ -808,14 +1089,14 @@ TEST_CASE("Scad gk_flatten: collapses a rule library's module calls into one nod
 
     int looseNodes = 0;
     size_t looseVerts = 0;
-    const SceneEvalResult loose = EvalSceneProgram(std::string(kLib) + "loose();\n");
+    const SceneEvalResult loose = EvalTerrainSceneProgram(std::string(kLib) + "loose();\n");
     REQUIRE(loose.roots.size() == 1);
     walk(loose.roots[0], looseNodes, looseVerts);
     CHECK(looseNodes == 7); // loose() + one per piece()
 
     int packedNodes = 0;
     size_t packedVerts = 0;
-    const SceneEvalResult packed = EvalSceneProgram(std::string(kLib) + "packed();\n");
+    const SceneEvalResult packed = EvalTerrainSceneProgram(std::string(kLib) + "packed();\n");
     REQUIRE(packed.roots.size() == 1);
     walk(packed.roots[0], packedNodes, packedVerts);
     CHECK(packedNodes == 1);
@@ -827,7 +1108,7 @@ TEST_CASE("Scad gk_flatten: collapses a rule library's module calls into one nod
 
 TEST_CASE("ScadTerrain scene: non-terrain geometry keeps default flags", "[Unit][Scad][ScadTerrain]")
 {
-    const SceneEvalResult result = EvalSceneProgram("cube(1);\n");
+    const SceneEvalResult result = EvalTerrainSceneProgram("cube(1);\n");
     REQUIRE(result.roots.size() == 1);
     REQUIRE_FALSE(result.roots[0].meshes.empty());
     for (const SceneMeshBucket& bucket : result.roots[0].meshes)
@@ -838,9 +1119,62 @@ TEST_CASE("ScadTerrain scene: non-terrain geometry keeps default flags", "[Unit]
     CHECK(result.terrains.empty());
 }
 
+TEST_CASE("ScadTerrain scene: water argument sets only the water surface material", "[Unit][Scad][ScadTerrain]")
+{
+    auto collect = [](const SceneEvalResult& result, std::vector<SceneMeshBucket>& water,
+                      std::vector<SceneMeshBucket>& land)
+    {
+        for (const SceneNode& root : result.roots)
+        {
+            for (const SceneMeshBucket& bucket : root.meshes)
+            {
+                (bucket.terrainWater ? water : land).push_back(bucket);
+            }
+        }
+    };
+
+    std::vector<SceneMeshBucket> legacyWater;
+    std::vector<SceneMeshBucket> legacyLand;
+    collect(EvalTerrainSceneProgram(std::string(kTerrScad) + "gk_terrain(TERR);\n"), legacyWater, legacyLand);
+    REQUIRE_FALSE(legacyWater.empty());
+    for (const SceneMeshBucket& bucket : legacyWater)
+    {
+        CHECK_FALSE(bucket.material.explicitParameters);
+    }
+
+    // Glossy water with the palette colour kept (undef colour).
+    std::vector<SceneMeshBucket> glossyWater;
+    std::vector<SceneMeshBucket> glossyLand;
+    collect(EvalTerrainSceneProgram(std::string(kTerrScad) + "gk_terrain(TERR, water = [undef, 0.06, 0.1]);\n"),
+            glossyWater, glossyLand);
+    REQUIRE(glossyWater.size() == legacyWater.size());
+    for (size_t i = 0; i < glossyWater.size(); ++i)
+    {
+        CHECK(glossyWater[i].material.explicitParameters);
+        CHECK(glossyWater[i].material.roughness == Catch::Approx(0.06f));
+        CHECK(glossyWater[i].material.metalness == Catch::Approx(0.1f));
+        CHECK(glossyWater[i].color == legacyWater[i].color);
+        CHECK(glossyWater[i].materialName == "terrain_water");
+    }
+    for (const SceneMeshBucket& bucket : glossyLand)
+    {
+        CHECK_FALSE(bucket.material.explicitParameters);
+    }
+
+    // An explicit colour replaces the palette water colour.
+    std::vector<SceneMeshBucket> tintedWater;
+    std::vector<SceneMeshBucket> tintedLand;
+    collect(EvalTerrainSceneProgram(std::string(kTerrScad) + "gk_terrain(TERR, water = [[0.1, 0.2, 0.3], 0.05]);\n"),
+            tintedWater, tintedLand);
+    REQUIRE_FALSE(tintedWater.empty());
+    CHECK(tintedWater[0].color.r == Catch::Approx(0.1f));
+    CHECK(tintedWater[0].color.b == Catch::Approx(0.3f));
+    CHECK(tintedWater[0].material.metalness == Catch::Approx(0.0f));
+}
+
 TEST_CASE("ScadTerrain loader: water splits to a raycast-invisible node", "[Unit][Scad][ScadTerrain]")
 {
-    ScopedDir dir;
+    ScopedTerrainDir dir;
     const std::filesystem::path mainPath = dir.Write("terrain.scad", std::string(kTerrScad) + "gk_terrain(TERR);\n");
 
     Assets::EnvironmentSetting environment;
@@ -884,13 +1218,49 @@ TEST_CASE("ScadTerrain loader: water splits to a raycast-invisible node", "[Unit
     CHECK(sawWaterMaterial);
 }
 
+TEST_CASE("ScadTerrain loader: road ribbons split to a raycast-invisible node", "[Unit][Scad][ScadTerrain]")
+{
+    ScopedTerrainDir dir;
+    const std::filesystem::path mainPath =
+        dir.Write("terrain.scad", std::string(kTerrScad) + "gk_terrain(TERR, detail=true);\n");
+
+    Assets::EnvironmentSetting environment;
+    std::vector<std::shared_ptr<Assets::Node>> nodes;
+    std::vector<Assets::Model> models;
+    std::vector<Assets::FMaterial> materials;
+    std::vector<Assets::LightObject> lights;
+    std::vector<Assets::AnimationTrack> tracks;
+    std::vector<Assets::Skeleton> skeletons;
+
+    REQUIRE(Assets::FScadLoader::LoadScadScene(mainPath.string(), environment, nodes, models, materials, lights, tracks,
+                                               skeletons));
+
+    const std::shared_ptr<Assets::Node>* decalNode = nullptr;
+    for (const std::shared_ptr<Assets::Node>& node : nodes)
+    {
+        if (node->GetName().find("__decals") != std::string::npos)
+            decalNode = &node;
+    }
+    REQUIRE(decalNode != nullptr);
+    auto decalRender = (*decalNode)->GetComponent<Runtime::RenderComponent>();
+    REQUIRE(decalRender != nullptr);
+    CHECK_FALSE(decalRender->GetRayCastVisible());
+
+    bool sawRibbonMaterial = false;
+    for (const Assets::FMaterial& material : materials)
+    {
+        sawRibbonMaterial |= material.name_.rfind("terrain_road_", 0) == 0;
+    }
+    CHECK(sawRibbonMaterial);
+}
+
 TEST_CASE("ScadTerrain scatter: variants bound baked mesh diversity", "[Unit][Scad][ScadTerrain]")
 {
     const std::filesystem::path kitPath = FindSourceAsset("assets/scad/lib/kit_terrain.scad");
     REQUIRE(std::filesystem::is_regular_file(kitPath));
 
     const auto LoadScatterModelCount = [&](int variants) {
-        ScopedDir dir;
+        ScopedTerrainDir dir;
         const std::string source =
             fmt::format("use <{}>\n"
                         "TERR = [\"gkterr1\", [100,100], [10,10], 7, [0,0,0], undef, \"temperate\", []];\n"
@@ -926,7 +1296,7 @@ TEST_CASE("ScadTerrain scatter: variants bound baked mesh diversity", "[Unit][Sc
 
 TEST_CASE("ScadTerrain loader: TerrainComponent matches the evaluated heightfield", "[Unit][Scad][ScadTerrain]")
 {
-    ScopedDir dir;
+    ScopedTerrainDir dir;
     const std::filesystem::path mainPath = dir.Write("terrain.scad", std::string(kTerrScad) + "gk_terrain(TERR);\n");
 
     Assets::EnvironmentSetting environment;

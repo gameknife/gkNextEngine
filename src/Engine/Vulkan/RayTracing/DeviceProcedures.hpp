@@ -85,6 +85,14 @@ namespace Vulkan
             const VkAccelerationStructureDeviceAddressInfoKHR* pInfo)>
         vkGetAccelerationStructureDeviceAddressKHR;
 
+        // Buffer device address is core in Vulkan 1.2, but Android Vulkan 1.1 drivers expose
+        // the same command through VK_KHR_buffer_device_address. Resolve it through the device
+        // dispatch table so both entry-point names work.
+        const std::function<VkDeviceAddress(
+            VkDevice device,
+            const VkBufferDeviceAddressInfo* pInfo)>
+        vkGetBufferDeviceAddress;
+
         const std::function<void(
             VkCommandBuffer commandBuffer,
             uint32_t accelerationStructureCount,

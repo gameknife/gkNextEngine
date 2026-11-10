@@ -5,6 +5,7 @@ project(gkNextAndroidDriver LANGUAGES NONE)
 set(GK_ANDROID_VARIANT "release" CACHE STRING "Android build variant (relwithdebinfo, debug, or release)")
 set_property(CACHE GK_ANDROID_VARIANT PROPERTY STRINGS relwithdebinfo debug release)
 set(GK_ANDROID_ABI "arm64-v8a" CACHE STRING "Android ABI")
+set(GK_ANDROID_APP "" CACHE STRING "Application target packaged into the APK")
 set(GK_ANDROID_SDK_ROOT "" CACHE PATH "Android SDK root")
 set(GK_ANDROID_NDK_ROOT "" CACHE PATH "Android NDK root")
 set(GK_ANDROID_JAVA_HOME "" CACHE PATH "JDK root")
@@ -19,10 +20,26 @@ if(NOT GK_ANDROID_ABI STREQUAL "arm64-v8a")
 endif()
 
 get_filename_component(GK_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
+
+# Every application the APK can be built around, and the identity each one installs under, come
+# from the same registry the engine configure reads. Hard-coding them here is how the driver and
+# the engine used to disagree about which applications exist.
+#
+# Each application gets its own applicationId so a device can hold more than one of them, but they
+# all share the com.gknext.renderer Java package: the activity is identical, and only the native
+# library it loads differs. That split is why the manifest names an app id and the activity is
+# still addressed as com.gknext.renderer.GkNextActivity.
+include("${GK_REPO_ROOT}/src/cmake/MobileApplications.cmake")
+set_property(CACHE GK_ANDROID_APP PROPERTY STRINGS ${GK_ANDROID_APPLICATIONS})
+gk_resolve_mobile_application("android" "${GK_ANDROID_APP}" gkResolvedAndroidApp)
+set(GK_ANDROID_APP "${gkResolvedAndroidApp}")
+set(GK_ANDROID_APPLICATION_ID "${GK_MOBILE_APP_${GK_ANDROID_APP}_ANDROID_ID}")
+set(GK_ANDROID_APP_LABEL "${GK_MOBILE_APP_${GK_ANDROID_APP}_LABEL}")
 set(GK_GRADLE_DIR "${CMAKE_BINARY_DIR}/gradle")
 set(GK_NATIVE_DIR "${CMAKE_BINARY_DIR}/native")
 set(GK_ASSET_ROOT "${CMAKE_BINARY_DIR}/assets")
 set(GK_ANDROID_ASSET_OUTPUT_DIR "${GK_ASSET_ROOT}/assets")
+set(GK_JNILIBS_DIR "${CMAKE_BINARY_DIR}/jniLibs")
 set(GK_CACHE_DIR "${CMAKE_BINARY_DIR}/cache")
 set(GK_APK_DIR "${CMAKE_BINARY_DIR}/apk")
 
@@ -238,6 +255,27 @@ foreach(templatePath IN ITEMS
 endforeach()
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/templates/app/src" DESTINATION "${GK_GRADLE_DIR}/app")
 
+# Resolve and dynamically generate the application-specific launcher icon for Gradle
+set(appIconName "${GK_MOBILE_APP_${GK_ANDROID_APP}_ICON}")
+if(NOT appIconName)
+    if(EXISTS "${GK_REPO_ROOT}/assets/icons/${GK_ANDROID_APP}.png")
+        set(appIconName "${GK_ANDROID_APP}")
+    else()
+        set(appIconName "gkNextEngine")
+    endif()
+endif()
+find_program(GNB_EXECUTABLE NAMES gnb gnb.exe PATHS "${GK_REPO_ROOT}" "${GK_REPO_ROOT}/tools/gnb-bin" NO_DEFAULT_PATH)
+if(GNB_EXECUTABLE)
+    execute_process(
+        COMMAND "${GNB_EXECUTABLE}" icons android --app "${appIconName}" --out "${GK_GRADLE_DIR}/app/src/main/res"
+        WORKING_DIRECTORY "${GK_REPO_ROOT}"
+        RESULT_VARIABLE iconGenResult
+    )
+    if(iconGenResult EQUAL 0)
+        message(STATUS "Configured Android launcher icons for ${GK_ANDROID_APP} (icon: ${appIconName})")
+    endif()
+endif()
+
 set(GK_SDL_VERSION "3.4.10")
 set(GK_SDL_ARCHIVE_SHA256 "f676e29b1b4eb990e24862b6af5f327379dc496c9f5f3e3f48ab75837f95844e")
 set(GK_SDL_AAR_SHA256 "e80e8ab1bc969bed28192d34c2029f223ce06cf106aa3d1167220334b581ddb0")
@@ -253,6 +291,7 @@ foreach(pathVariable IN ITEMS
     GK_VCPKG_TOOLCHAIN
     GK_SLANGC
     GK_SDL_AAR
+    GK_JNILIBS_DIR
     GK_ANDROID_SIGNING_PROPERTIES
 )
     file(TO_CMAKE_PATH "${${pathVariable}}" ${pathVariable})
@@ -265,6 +304,11 @@ configure_file(
 configure_file(
     "${CMAKE_CURRENT_LIST_DIR}/templates/app/src/main/AndroidManifest.xml"
     "${GK_GRADLE_DIR}/app/src/main/AndroidManifest.xml"
+    @ONLY
+)
+configure_file(
+    "${CMAKE_CURRENT_LIST_DIR}/templates/app/src/main/res/values/strings.xml"
+    "${GK_GRADLE_DIR}/app/src/main/res/values/strings.xml"
     @ONLY
 )
 
@@ -294,7 +338,7 @@ else()
         set(gradleApk "${GK_GRADLE_DIR}/app/build/outputs/apk/release/app-release-unsigned.apk")
     endif()
 endif()
-set(archivedApk "${GK_APK_DIR}/gkNextRenderer-${GK_ANDROID_VARIANT}.apk")
+set(archivedApk "${GK_APK_DIR}/${GK_ANDROID_APP}-${GK_ANDROID_VARIANT}.apk")
 
 add_custom_command(
     OUTPUT "${CMAKE_BINARY_DIR}/android-prepare.stamp"
@@ -368,6 +412,7 @@ add_custom_target(android-logcat
     VERBATIM
 )
 
+message(STATUS "Android application: ${GK_ANDROID_APP} (${GK_ANDROID_APPLICATION_ID})")
 message(STATUS "Android driver variant: ${GK_ANDROID_VARIANT}")
 message(STATUS "Android SDK: ${GK_ANDROID_SDK_ROOT}")
 message(STATUS "Android NDK: ${GK_ANDROID_NDK_ROOT}")

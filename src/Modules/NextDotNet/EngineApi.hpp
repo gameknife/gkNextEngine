@@ -32,6 +32,9 @@ namespace Modules::NextDotNet
         std::unordered_set<uint8_t> gamepadButtonsPressed;
         std::array<int16_t, 6> gamepadAxes{};
         uint32_t pressedFrame = invalidPressedFrame;
+        /// SDL xrel/yrel accumulated this frame. Cleared at the end of Tick so look and HUD see
+        /// the same motion and a skipped UI hook cannot leak it into the next frame.
+        glm::vec2 mouseDelta{0.0f, 0.0f};
 
         void ClearPressed()
         {
@@ -64,6 +67,7 @@ namespace Modules::NextDotNet
             mouseButtonsDown.clear();
             gamepadButtonsDown.clear();
             gamepadAxes.fill(0);
+            mouseDelta = {};
             ClearPressed();
         }
     };
@@ -107,6 +111,20 @@ namespace Modules::NextDotNet
     extern FSceneBuildContext GSceneBuildContext;
     extern FInputState GInputState;
     extern FUiCanvas GUiCanvas;
+
+    /// The running game project's Content/ directory as a runtime asset path
+    /// ("assets/projects/Flappy/Content"), which is what Assets.GetGameContentRoot() returns and
+    /// GameContent.Path() prefixes. Set by ManagedGameSession before the game's assembly is loaded
+    /// and cleared when it is unloaded, so a game that reads its content from a constructor or a
+    /// static initialiser already sees it, and a game swapped in by the launcher never sees the
+    /// previous game's.
+    extern std::string GGameContentRoot;
+
+    /// Destroys every character controller managed code created through Character.Create. A game's
+    /// characters do not survive the game: the session calls this when it unloads the assembly and
+    /// the runtime when it hot reloads it, because the new instance has no ids for the old ones and
+    /// they would stand in the world as invisible obstacles.
+    void ReleaseManagedCharacters();
 
     /// Builds the table handed to managed code. Every def entry is filled; a binding declared
     /// without an implementation fails to compile.

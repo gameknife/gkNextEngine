@@ -9,6 +9,7 @@
   <PropertyGroup>
     <RootNamespace>GkNext</RootNamespace>
     <AssemblyName>GkNext.Engine</AssemblyName>
+    <TargetName>GkNext.Engine</TargetName>
   </PropertyGroup>
 
 </Project>

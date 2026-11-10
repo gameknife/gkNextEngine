@@ -1,0 +1,151 @@
+{
+  "name": "pathtracing-lod-rt-proxy",
+  "target": "gkNextRenderer",
+  "scene": "assets/models/playground.glb",
+  "defaults": {
+    "stepTimeoutMs": 120000
+  },
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "steps": [
+    {
+      "type": "log",
+      "message": "Discrete LOD under the hardware path tracer. The primary vertex is rebuilt from the visibility buffer, i.e. on the level the raster drew, and every secondary ray (sun shadow, NEE, bounces) leaves it through the TLAS. If the TLAS holds a different level for that proxy the rays start inside or just above it and shadow themselves: dark speckle and blotches on exactly the simplified models. Every capture below must match the LOD0 reference apart from silhouettes."
+    },
+    {
+      "type": "wait-until",
+      "query": "engine.status",
+      "op": "eq",
+      "value": "Running"
+    },
+    {
+      "type": "wait-until",
+      "query": "scene.nodeCount",
+      "op": "gt",
+      "value": 0
+    },
+    {
+      "type": "cvar",
+      "name": "sys.tickAnimation",
+      "set": false
+    },
+    {
+      "type": "cvar",
+      "name": "r.rendererType",
+      "comment": "PathTracing: visibility-buffer primary, ray-query secondaries.",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "r.lod.baseThreshold",
+      "set": 0
+    },
+    {
+      "type": "wait-frames",
+      "n": 180
+    },
+    {
+      "type": "assert",
+      "query": "engine.status",
+      "op": "eq",
+      "value": "Running"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_lod_reference.jpg",
+      "comment": "Reference: LOD0 drawn and traced everywhere."
+    },
+    {
+      "type": "cvar",
+      "name": "r.lod.baseThreshold",
+      "comment": "Deliberately extreme so playground's simplified models drop levels.",
+      "set": 512
+    },
+    {
+      "type": "cvar",
+      "name": "r.lod.rayTracing",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "r.lod.rayTracingBias",
+      "set": 0
+    },
+    {
+      "type": "wait-frames",
+      "n": 180
+    },
+    {
+      "type": "assert",
+      "query": "engine.status",
+      "op": "eq",
+      "value": "Running"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_lod_traced_matches_raster.jpg",
+      "comment": "Each TLAS instance holds the level the raster drew: primary hits lie exactly on traced triangles."
+    },
+    {
+      "type": "cvar",
+      "name": "r.lod.rayTracing",
+      "comment": "TLAS pinned to LOD0 while the raster still draws simplified levels -- the mismatch that used to self-shadow. ResolvePrimaryOrigin has to absorb it.",
+      "set": false
+    },
+    {
+      "type": "wait-frames",
+      "n": 180
+    },
+    {
+      "type": "assert",
+      "query": "engine.status",
+      "op": "eq",
+      "value": "Running"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_lod_traced_lod0.jpg"
+    },
+    {
+      "type": "cvar",
+      "name": "r.lod.rayTracing",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "r.lod.rayTracingBias",
+      "comment": "RT proxy: trace the coarsest level everywhere while the raster keeps its own choice.",
+      "set": 3
+    },
+    {
+      "type": "wait-frames",
+      "n": 180
+    },
+    {
+      "type": "assert",
+      "query": "engine.status",
+      "op": "eq",
+      "value": "Running"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_lod_rt_proxy.jpg",
+      "comment": "Shadow and bounce shapes may coarsen; no self-shadowing speckle on the drawn surfaces."
+    },
+    {
+      "type": "cvar",
+      "name": "r.lod.rayTracingBias",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "r.lod.baseThreshold",
+      "set": 64
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

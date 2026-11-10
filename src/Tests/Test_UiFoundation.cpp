@@ -1,8 +1,10 @@
 #include "Engine/Common/CoreMinimal.hpp"
 
 #include "Modules/NextUI/UI/AppChrome.hpp"
+#include "Modules/NextUI/UI/NotificationCenter.hpp"
 #include "Modules/NextUI/UI/UiContext.hpp"
 #include "Modules/NextUI/UI/UiContainers.hpp"
+#include "Modules/NextUI/UI/UiHud.hpp"
 #include "Engine/Runtime/Editor/UiFrame.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -47,6 +49,18 @@ TEST_CASE("UI scoped containers restore ImGui stacks", "[Unit][UI]")
         options.borderSize = 0.0f;
         NextUI::Foundation::FScopedOverlayPanel panel(options);
         CHECK(context->StyleVarStack.Size == initialStyleStack + 4);
+        CHECK(context->ColorStack.Size == initialColorStack + 2);
+    }
+    CHECK(context->StyleVarStack.Size == initialStyleStack);
+    CHECK(context->ColorStack.Size == initialColorStack);
+
+    {
+        NextUI::Foundation::ApplyTheme();
+        CHECK(ImGui::GetStyle().ChildBorderSize == 0.0f);
+        NextUI::Foundation::FScopedWindow hostWindow("InsetHostWindow");
+        NextUI::Foundation::FScopedInsetPanel inset("ScopedInsetTest", ImVec2(120.0f, 60.0f), true);
+        CHECK(ImGui::GetStyle().ChildBorderSize == 1.0f);
+        CHECK(context->StyleVarStack.Size == initialStyleStack + 2);
         CHECK(context->ColorStack.Size == initialColorStack + 2);
     }
     CHECK(context->StyleVarStack.Size == initialStyleStack);
@@ -112,4 +126,28 @@ TEST_CASE("Bottom bar stays attached to the main viewport", "[Unit][UI]")
     ImGui::EndFrame();
     ImGui::DestroyContext(context);
     ImGui::SetCurrentContext(previousContext);
+}
+
+TEST_CASE("UI HUD helpers and NotificationCenter work deterministically", "[Unit][UI]")
+{
+    using namespace NextUI;
+
+    const ImVec4 highHp = Hud::GetHealthColor(0.8f);
+    const ImVec4 midHp = Hud::GetHealthColor(0.4f);
+    const ImVec4 lowHp = Hud::GetHealthColor(0.1f);
+    const ImVec4 expectedHigh = Foundation::Color(Foundation::EColor::Success);
+    const ImVec4 expectedMid = Foundation::Color(Foundation::EColor::Warning);
+    const ImVec4 expectedLow = Foundation::Color(Foundation::EColor::Danger);
+
+    CHECK(highHp.x == expectedHigh.x);
+    CHECK(midHp.x == expectedMid.x);
+    CHECK(lowHp.x == expectedLow.x);
+
+    FNotificationCenter center;
+    center.Push("Scene saved", ENotificationKind::Info, 1000.0f);
+    CHECK(center.ActiveCount() == 1);
+    center.Update(500.0f);
+    CHECK(center.ActiveCount() == 1);
+    center.Update(600.0f);
+    CHECK(center.ActiveCount() == 0);
 }

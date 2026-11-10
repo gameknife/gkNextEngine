@@ -1,0 +1,28 @@
+{
+  "id": "cz_loket_riverbend",
+  "region": "bohemia",
+  "seed": 817,
+  "version": 8,
+  "gameplay": {
+    "controls": "assets/scad/specs/nextdayz/cz_loket_controls.scad",
+    "buildingBudget": 108,
+    "reliefScale": 0.4,
+    "roadLimit": 32,
+    "terrainDetail": true,
+    "roadClasses": [
+      "primary",
+      "secondary",
+      "tertiary",
+      "unclassified",
+      "residential"
+    ],
+    "water": {
+      "color": [
+        0.07,
+        0.1,
+        0.09
+      ],
+      "roughness": 0.04
+    }
+  }
+}

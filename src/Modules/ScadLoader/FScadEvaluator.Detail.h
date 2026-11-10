@@ -11,6 +11,7 @@
 #include "Modules/ScadLoader/FScadGeometry.h"
 #include "Modules/ScadLoader/FScadTerrain.h"
 #include "Modules/ScadLoader/FScadTess.h"
+#include "Modules/ScadLoader/FScadTexturePrints.h"
 #include "Modules/ScadLoader/FScadText.h"
 
 #include <algorithm>
@@ -40,6 +41,7 @@ namespace Assets::Scad
             bool hasColor = false;
             bool faceted = false; // terrain: keep flat shading in the loader
             bool terrainWater = false; // terrain water surface (dedicated node)
+            bool terrainDecal = false; // draped terrain overlay, e.g. road ribbons (dedicated node)
             std::string materialName;
             std::string groupName;
             uint64_t groupInstanceId = 0;
@@ -66,9 +68,10 @@ namespace Assets::Scad
             };
             const float effectiveRoughness =
                 c.a < 0.99f && !material.explicitParameters ? 0.0f : material.roughness;
-            return (static_cast<uint64_t>(QuantizeColor(c)) << 32u) |
-                   (q(effectiveRoughness) << 16u) |
-                   q(material.metalness);
+            return MixTextureIntoKey((static_cast<uint64_t>(QuantizeColor(c)) << 32u) |
+                                     (q(effectiveRoughness) << 16u) |
+                                     q(material.metalness),
+                                     material);
         }
 
         inline void AppendMove(GeomList& dst, GeomList&& src)
@@ -352,6 +355,17 @@ namespace Assets::Scad
                     }
                     sceneResult_->warningCount += partial.warningCount;
                     sceneResult_->triangleCount += partial.triangleCount;
+                    // Each worker warns once per kind on its own, so the same text can
+                    // arrive from several of them.
+                    for (std::string& warning : partial.warnings)
+                    {
+                        std::vector<std::string>& merged = sceneResult_->warnings;
+                        if (merged.size() < SceneEvalResult::kMaxRecordedWarnings &&
+                            std::find(merged.begin(), merged.end(), warning) == merged.end())
+                        {
+                            merged.push_back(std::move(warning));
+                        }
+                    }
                 }
             }
 
@@ -393,6 +407,7 @@ namespace Assets::Scad
                 uint64_t instanceId = 0;
                 glm::dmat4 localTransform = glm::dmat4(1.0);
                 int sourceLine = 0;
+                size_t sourceOffset = 0;
                 std::vector<std::pair<std::string, Value>> parameters;
                 glm::dvec4 callColor = glm::dvec4(0.78, 0.78, 0.78, 1.0);
                 bool hasCallColor = false;
@@ -442,6 +457,10 @@ namespace Assets::Scad
                 {
                     SPDLOG_WARN("SCAD: {}", msg);
                     ++count;
+                    if (sceneResult_ && sceneResult_->warnings.size() < SceneEvalResult::kMaxRecordedWarnings)
+                    {
+                        sceneResult_->warnings.push_back(msg);
+                    }
                 }
             }
 
@@ -501,6 +520,7 @@ namespace Assets::Scad
                 node->instanceId = nextGroupInstanceId_++;
                 node->localTransform = localTransform;
                 node->sourceLine = call.line;
+                node->sourceOffset = call.sourceOffset;
                 node->callColor = color;
                 node->hasCallColor = hasColor;
                 node->parameters.reserve(definition.params.size());
@@ -558,7 +578,10 @@ namespace Assets::Scad
                 for (const ColoredSoup& cs : geom)
                 {
                     const glm::vec4 c = cs.hasColor ? glm::vec4(cs.color) : glm::vec4(0.78f, 0.78f, 0.78f, 1.0f);
-                    SceneMeshBucket& bucket = owner->meshes[QuantizeMaterial(c, cs.material)];
+                    // Overlays never share a bucket with solid geometry of the
+                    // same material: they go to a node without collision.
+                    const uint64_t key = QuantizeMaterial(c, cs.material) ^ (cs.terrainDecal ? 0x6DECA1D0C0FFEE01ULL : 0ULL);
+                    SceneMeshBucket& bucket = owner->meshes[key];
                     bucket.color = c;
                     bucket.material = cs.material;
                     if (bucket.materialName.empty() && !cs.materialName.empty())
@@ -567,6 +590,7 @@ namespace Assets::Scad
                     }
                     bucket.faceted = bucket.faceted || cs.faceted;
                     bucket.terrainWater = bucket.terrainWater || cs.terrainWater;
+                    bucket.terrainDecal = bucket.terrainDecal || cs.terrainDecal;
                     bucket.tris.insert(bucket.tris.end(), cs.soup.begin(), cs.soup.end());
                     AddTriangleCount(cs.soup.size() / 3);
                 }
@@ -579,6 +603,7 @@ namespace Assets::Scad
                 node.instanceId = build.instanceId;
                 node.localTransform = build.localTransform;
                 node.sourceLine = build.sourceLine;
+                node.sourceOffset = build.sourceOffset;
                 node.parameters = build.parameters;
                 node.callColor = build.callColor;
                 node.hasCallColor = build.hasCallColor;
@@ -773,6 +798,11 @@ namespace Assets::Scad
                             Arg(inst, "roughness", 1).AsNumber(1.0), 0.0, 1.0));
                         material.metalness = static_cast<float>(std::clamp(
                             Arg(inst, "metalness", 2).AsNumber(0.0), 0.0, 1.0));
+                        // A surface change keeps an enclosing gk_texture() print.
+                        if (!materialPropertiesStack_.empty())
+                        {
+                            material.texture = materialPropertiesStack_.back().texture;
+                        }
                         materialNameStack_.push_back(ResolveColorName(inst));
                         materialPropertiesStack_.push_back(material);
                         GeomList result = EvalScope(inst.children, xform, c, true);
@@ -781,6 +811,63 @@ namespace Assets::Scad
                         return result;
                     }
                     return EvalScope(inst.children, xform, color, hasColor);
+                }
+                if (name == "gk_texture")
+                {
+                    // gk_texture(pattern | graph, palette = [[r,g,b], ...], scale = 0.5, seed = 0, relief = 1)
+                    // A procedural print (ProceduralTexture.hpp) on the children: the
+                    // loader box-projects UVs in object space and the material samples
+                    // the bake; final albedo = enclosing color x print. The print also
+                    // carries its relief (normal map, x relief; 0 = flat) and its
+                    // roughness/metalness factors, which multiply gk_material()'s.
+                    // A name is a print from the SCAD library (tex_<name>() in
+                    // gk_texgraph.scad); a list is a graph written inline. Either
+                    // way the print is a texture graph, compiled once.
+                    const Value patternValue = Arg(inst, "pattern", 0);
+                    std::shared_ptr<const FTextureGraph> graph;
+                    std::string graphError;
+                    if (patternValue.IsVec())
+                    {
+                        graph = FTextureGraph::Compile(ToTexExpr(patternValue), graphError);
+                    }
+                    else if (patternValue.type == Value::Type::Str)
+                    {
+                        graph = ResolveTexturePrint(patternValue.str, graphError);
+                    }
+                    else
+                    {
+                        graphError = "expects a print name or a texture graph (tx_surface(...))";
+                    }
+                    if (!graph)
+                    {
+                        Warn("gk_texture", "gk_texture(): " + graphError);
+                        return EvalScope(inst.children, xform, color, hasColor);
+                    }
+                    auto texture = std::make_shared<FProceduralTexture>();
+                    texture->pattern = patternValue.type == Value::Type::Str ? patternValue.str : std::string("graph");
+                    texture->graph = std::move(graph);
+                    const Value paletteValue = Arg(inst, "palette", 1);
+                    if (paletteValue.IsVec())
+                    {
+                        for (const Value& entry : paletteValue.vec)
+                        {
+                            glm::dvec3 rgb(0.0);
+                            if (entry.AsVec3(rgb))
+                            {
+                                texture->palette.push_back(glm::vec3(rgb));
+                            }
+                        }
+                    }
+                    texture->scale = static_cast<float>(std::clamp(Arg(inst, "scale", 2).AsNumber(0.5), 0.005, 1000.0));
+                    texture->seed = static_cast<uint32_t>(std::max(0.0, Arg(inst, "seed", 3).AsNumber(0.0)));
+                    texture->relief = static_cast<float>(std::clamp(Arg(inst, "relief", 4).AsNumber(1.0), 0.0, 3.0));
+                    ScadMaterialProperties material =
+                        materialPropertiesStack_.empty() ? ScadMaterialProperties{} : materialPropertiesStack_.back();
+                    material.texture = std::move(texture);
+                    materialPropertiesStack_.push_back(material);
+                    GeomList result = EvalScope(inst.children, xform, color, hasColor);
+                    materialPropertiesStack_.pop_back();
+                    return result;
                 }
                 if (name == "union" || name == "group" || name == "render")
                 {
@@ -1352,6 +1439,9 @@ namespace Assets::Scad
             Value EvalBinary(const ExprPtr& e);
 
             Value ScaleVec(const Value& v, double s);
+            // Element-wise +/-; nested vectors (matrices, [pos, euler] frames) recurse.
+            Value AddVec(const Value& a, const Value& b, double sign);
+            Value NegateVec(const Value& v);
 
             static std::string NumToStr(double v);
 

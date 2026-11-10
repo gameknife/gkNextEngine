@@ -78,6 +78,13 @@
             {"cvar": "r.sharc.updateSampleRatio", "label": "Update Ratio", "widget": "slider_float", "min": 0.01, "max": 1.0, "step": 0.01, "format": "%.2f"},
             {"cvar": "r.sharc.sceneScale", "label": "Scene Scale", "widget": "drag_float", "min": 1.0, "max": 1000.0, "step": 1.0, "format": "%.1f"}
           ]
+        },
+        {
+          "label": "Atmosphere",
+          "items": [
+            {"cvar": "r.atmosphere.enable", "label": "Atmosphere Supported", "widget": "checkbox"},
+            {"cvar": "r.atmosphere.skyViewLutScale", "label": "Sky LUT Scale", "widget": "slider_float", "min": 0.25, "max": 2.0, "step": 0.05, "format": "%.2fx"}
+          ]
         }
       ]
     },

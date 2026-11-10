@@ -15,7 +15,7 @@ func newCSharpGenCommand(ctx appContext) *cobra.Command {
 	var refresh bool
 	cmd := &cobra.Command{
 		Use:   "csharpgen",
-		Short: "Generate the managed binding layer from EngineApi.def.h and the reflection manifest",
+		Short: tr("cli.csharpgen.short"),
 		Long: "Expands src/Modules/NextDotNet/EngineApi.def.h into\n" +
 			"assets/csharp/GkNext.Engine/Engine.g.cs, and src/Modules/NextDotNet/ReflectionManifest.json\n" +
 			"into assets/csharp/GkNext.Engine/Components.g.cs. Both sources are authoritative and the\n" +

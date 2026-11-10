@@ -4,7 +4,7 @@ category: guide
 status: 现行
 owner: tools
 created: 2026-06-24
-last_updated: 2026-07-17
+last_updated: 2026-09-12
 ---
 
 # gnb 架构与代码导览
@@ -21,13 +21,15 @@ last_updated: 2026-07-17
 | `vcpkg`, `fetcher`, `paks`, `packager` | 依赖、可选资产与发布包 |
 | `android`, `ios` | 移动平台入口 |
 | `spec` | `.spec` TODO/archive/journal 解析与更新 |
-| `dashboard` | TODO、Build/Run/Test、Git、Chat、LOC 等本地 UI 与 streaming jobs |
+| `dashboard` | TODO、Build/Run/Test、验证中心、Git、Chat、LOC 等本地 UI 与 streaming jobs |
 | `validate` | `.agentscript.json` 编排、断言和报告 |
+| `validationstore` | 独立持久化验证运行、脚本快照、日志/截图索引和人工审阅 |
 | `remoteplay` | `gnb remote` 参数与访问 URL |
 | `scadcompose`, `scadgen` | SCAD catalog/spec 生成管线 |
 | `ai` | provider、profile、router、session、Bridge v2 与命名 workflow |
 | `llm` | llama.cpp/Gemma 下载、server 生命周期与兼容 client |
 | `gitops`, `loc`, `targetgraph` | Git、LOC 和 target graph 功能 |
+| `i18n` | Dashboard 与 CLI 帮助的中/英词表；语言来自 `--lang` / `GNB_LANG` / `gnb.toml [gnb].lang` / OS，Dashboard 可用 cookie 覆盖 |
 
 ## Dashboard
 
@@ -50,3 +52,5 @@ go vet ./...
 ```
 
 涉及 dashboard desktop build 时再按 `tools/gnb/README.md` 的 build tags 构建。普通 Go 改动不需要 C++ build。
+
+验证中心的运行目录是 `out/build/<preset>/validation_runs/<runId>/`。`validate` 和 `shot` 在读脚本、检查目标可执行文件前创建 `run.json`，随后原子更新步骤与心跳，并顺序追加 `runner.log`；`script.json` 是本次运行的快照，`review.json` 与机器状态分离。Dashboard 可以在 CLI 运行结束后再打开并发现历史记录，因此它不是验证执行的必需服务。图片和日志路由只允许访问已登记运行目录内的文件，并拒绝越界路径及逃逸符号链接。

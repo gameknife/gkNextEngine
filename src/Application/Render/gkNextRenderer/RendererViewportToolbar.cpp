@@ -45,10 +45,6 @@
 #include "Application/Common/DemoScenes.hpp"
 
 
-extern float TitlebarSize;
-extern float ModeRailWidth;
-extern float ModeRailButtonSize;
-
 namespace RendererViewportDetail
 {
 using NextUI::Theme::DrawFlatViewportButton;
@@ -57,50 +53,6 @@ using NextUI::Theme::PopViewportPopupStyle;
 using NextUI::Theme::PopViewportToolbarStyle;
 using NextUI::Theme::PushViewportPopupStyle;
 using NextUI::Theme::PushViewportToolbarStyle;
-
-enum class ESceneListGroup : uint8_t
-{
-    Procedural = 0,
-    Gltf = 1,
-    LDraw = 2,
-    Other = 3,
-};
-
-ESceneListGroup GetSceneListGroup(std::string_view scenePath)
-{
-    const std::string extension = std::filesystem::path(scenePath).extension().string();
-    if (extension == ".proc")
-    {
-        return ESceneListGroup::Procedural;
-    }
-    if (extension == ".glb" || extension == ".gltf")
-    {
-        return ESceneListGroup::Gltf;
-    }
-    if (extension == ".ldr" || extension == ".mpd")
-    {
-        return ESceneListGroup::LDraw;
-    }
-    return ESceneListGroup::Other;
-}
-
-const char* GetSceneListGroupLabel(ESceneListGroup group)
-{
-    switch (group)
-    {
-    case ESceneListGroup::Procedural:
-        return "Procedural";
-    case ESceneListGroup::Gltf:
-        return "glTF";
-    case ESceneListGroup::LDraw:
-        return "OMR/LDraw";
-    case ESceneListGroup::Other:
-    default:
-        return "Other";
-    }
-}
-
-
 } // namespace RendererViewportDetail
 
 void NextRendererGameInstance::DrawModeRail(FRendererUiState& uiState)
@@ -111,11 +63,13 @@ void NextRendererGameInstance::DrawModeRail(FRendererUiState& uiState)
     const ImVec2 railSize = ImVec2(ModeRailWidth, viewport->Size.y - TitlebarSize - 30.0f);
 
     ImDrawList* background = ImGui::GetBackgroundDrawList();
+    constexpr float railBackgroundAlpha = 0.70f;
     background->AddRectFilled(railPos, railPos + railSize,
-                              NextUI::Theme::ColorU32(NextUI::Theme::EColor::Background));
+                              NextUI::Theme::ColorU32(NextUI::Theme::EColor::Background,
+                                                      railBackgroundAlpha));
     background->AddLine(ImVec2(railPos.x + railSize.x - 1.0f, railPos.y),
                         ImVec2(railPos.x + railSize.x - 1.0f, railPos.y + railSize.y),
-                        NextUI::Theme::ColorU32(NextUI::Theme::EColor::Border));
+                        NextUI::Theme::ColorU32(NextUI::Theme::EColor::Border, 0.55f));
 
     ImGui::SetNextWindowPos(railPos, ImGuiCond_Always);
     ImGui::SetNextWindowSize(railSize, ImGuiCond_Always);
@@ -131,39 +85,78 @@ void NextRendererGameInstance::DrawModeRail(FRendererUiState& uiState)
 
     if (ImGui::Begin("##ModeRail", nullptr, flags))
     {
-        struct ModeEntry
+        // 1. Top View Control: Render (Clean Viewport Mode)
+        const bool renderActive = (uiState.workMode == EWorkMode::Render && !uiState.showSettings);
+        if (NextUI::Theme::ModeRailButton(ICON_FA_EYE, "Render View - Hide Panels", renderActive, ModeRailButtonSize))
         {
-            EWorkMode mode;
+            uiState.workMode = EWorkMode::Render;
+            uiState.showSettings = false;
+            uiState.lastWorkMode = EWorkMode::Count;
+        }
+
+        ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+        // 2. Settings Function Categories
+        struct CategoryEntry
+        {
+            ESettingsCategory category;
             const char* icon;
             const char* tooltip;
         };
-        const ModeEntry topEntries[] = {
-            {EWorkMode::Render,  ICON_FA_EYE,        "Render - Hide All Panels"},
-            {EWorkMode::Detail,  ICON_FA_SLIDERS,    "Detail - Renderer Settings"},
-            {EWorkMode::Profile, ICON_FA_CHART_LINE, "Statistics - Memory & Rendering"},
+        const CategoryEntry categoryEntries[] = {
+            {ESettingsCategory::Renderer,    ICON_FA_SLIDERS,              "Renderer - Pipeline & Presentation"},
+            {ESettingsCategory::Environment, ICON_FA_SUN,                  "Environment - Sun, Sky & Atmosphere"},
+            {ESettingsCategory::Camera,      ICON_FA_VIDEO,                "Camera - Optics & Navigation"},
+            {ESettingsCategory::Quality,     ICON_FA_WAND_MAGIC_SPARKLES,  "Quality - Ray Tracing & Upscaling"},
+            {ESettingsCategory::VoxelGI,     ICON_FA_CUBES,                "Voxel GI - Ambient Cube Grid"},
+            {ESettingsCategory::Scene,       ICON_FA_FOLDER_OPEN,          "Scene - Models & LOD"},
+            {ESettingsCategory::Animation,   ICON_FA_PERSON_RUNNING,       "Animation - Playback & Physics"},
+            {ESettingsCategory::PostProcess, ICON_FA_PALETTE,              "Post-Process - Color & Heatmap"},
         };
 
-        for (const auto& entry : topEntries)
+        for (const auto& entry : categoryEntries)
         {
-            const bool active = (entry.mode == uiState.workMode);
+            const bool active = uiState.showSettings && (uiState.settingsCategory == entry.category);
             if (NextUI::Theme::ModeRailButton(entry.icon, entry.tooltip, active, ModeRailButtonSize))
             {
-                uiState.workMode = entry.mode;
+                if (active)
+                {
+                    uiState.showSettings = false;
+                    uiState.workMode = EWorkMode::Render;
+                }
+                else
+                {
+                    uiState.showSettings = true;
+                    uiState.settingsCategory = entry.category;
+                    uiState.workMode = EWorkMode::Detail;
+                }
                 uiState.lastWorkMode = EWorkMode::Count;
             }
         }
 
-        // Push the CVar editor button to the bottom.
-        const float cvarButtonSize = ModeRailButtonSize;
-        const float spaceUntilBottom = ImGui::GetContentRegionAvail().y - cvarButtonSize - 6.0f;
+        // 3. Push diagnostic buttons (Profile & CVar) to bottom
+        constexpr float spacing = 6.0f;
+        const float bottomButtonsHeight = (ModeRailButtonSize + spacing) * 2.0f;
+        const float spaceUntilBottom = ImGui::GetContentRegionAvail().y - bottomButtonsHeight;
         if (spaceUntilBottom > 0.0f)
         {
             ImGui::Dummy(ImVec2(0.0f, spaceUntilBottom));
         }
+
+        // Statistics / Profile overlay button
+        const bool profileActive = GetEngine().GetUserSettings().ShowOverlay;
+        if (NextUI::Theme::ModeRailButton(ICON_FA_CHART_LINE, "Statistics - Performance & Memory",
+                                          profileActive, ModeRailButtonSize))
+        {
+            GetEngine().GetUserSettings().ShowOverlay = !GetEngine().GetUserSettings().ShowOverlay;
+            GetEngine().GetShowFlags().DebugProfileOverlay = GetEngine().GetUserSettings().ShowOverlay;
+        }
+
+        // CVar editor button
         const bool cvarActive = (uiState.workMode == EWorkMode::CVar) &&
             GetEngine().GetShowFlags().DebugCVarPanel;
-        if (NextUI::Theme::ModeRailButton(
-                ICON_FA_TERMINAL, "CVars - Runtime Configuration", cvarActive, cvarButtonSize))
+        if (NextUI::Theme::ModeRailButton(ICON_FA_TERMINAL, "CVars - Runtime Configuration",
+                                          cvarActive, ModeRailButtonSize))
         {
             uiState.workMode = cvarActive ? EWorkMode::Render : EWorkMode::CVar;
             uiState.lastWorkMode = EWorkMode::Count;
@@ -186,7 +179,7 @@ void NextRendererGameInstance::DrawViewportTopBar(
     const float toolbarHeight = std::ceil(ImGui::GetFontSize() + 22.0f);
     constexpr float rightToolbarWidth = 168.0f;
     const float leftEdge = viewport->Pos.x + ModeRailWidth +
-        (uiState.showSettings ? (360.0f + panelMargin * 2.0f) : panelMargin);
+        (uiState.showSettings ? (380.0f + panelMargin * 2.0f) : panelMargin);
     const float rightEdge = viewport->Pos.x + viewport->Size.x - panelMargin;
     const float topEdge = viewport->Pos.y + TitlebarSize + panelMargin;
     const float availableWidth = std::max(0.0f, rightEdge - leftEdge - rightToolbarWidth - panelMargin);

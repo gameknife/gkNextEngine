@@ -1,5 +1,7 @@
 #include "Engine/Assets/Acceleration/CPUAccelerationStructure.hpp"
 #include "Engine/Assets/Acceleration/CPUAccelerationStructure.Internal.hpp"
+#include "Engine/Assets/Acceleration/AmbientBakeCache.hpp"
+#include "Engine/Options.hpp"
 #include "Engine/Runtime/Subsystems/TaskCoordinator.hpp"
 #include "Engine/Vulkan/MemoryAndShader.hpp"
 #include "Engine/Assets/Core/Node.hpp"
@@ -259,6 +261,8 @@ std::shared_ptr<FCPUTLASBuildInput> FCPUAccelerationStructure::CaptureBuildInput
         {
             continue;
         }
+        // GPU-only decorations (wind grass, camera presentation) have no CPU ray/nav/bake role.
+        if (!render->GetRayCastVisible() && !render->GetReceiveGI()) continue;
 
         //node->RecalcTransform(true);
         const glm::mat4 nodeWorldTransform = node->WorldTransform();
@@ -391,12 +395,16 @@ void FCPUAccelerationStructure::RebuildBVHOnly(Scene& scene)
 
 RayCastResult FCPUAccelerationStructure::RayCastInCPU(vec3 rayOrigin, vec3 rayDir)
 {
-    RayCastResult result {};
     const SnapshotPtr snapshot = AcquireSnapshot();
+    return snapshot ? RayCastInSnapshot(*snapshot, rayOrigin, rayDir) : RayCastResult{};
+}
 
-    if (snapshot && !snapshot->instances.empty())
+RayCastResult FCPUAccelerationStructure::RayCastInSnapshot(const FCPUTLASSnapshot& snapshot, vec3 rayOrigin, vec3 rayDir,
+                                                          bool faceNormalTowardRay, float maxDistance)
+{
+    RayCastResult result {};
+    if (!snapshot.instances.empty())
     {
-        constexpr float maxDistance = 2000.0f;
         constexpr float skipEpsilon = 1e-3f;
         float accumulatedT = 0.0f;
         glm::vec3 currentOrigin = rayOrigin;
@@ -405,19 +413,19 @@ RayCastResult FCPUAccelerationStructure::RayCastInCPU(vec3 rayOrigin, vec3 rayDi
             const float remainingDistance = maxDistance - accumulatedT;
             tinybvh::Ray ray(tinybvh::bvhvec3(currentOrigin.x, currentOrigin.y, currentOrigin.z),
                              tinybvh::bvhvec3(rayDir.x, rayDir.y, rayDir.z), remainingDistance);
-            snapshot->tlas.Intersect(ray);
+            snapshot.tlas.Intersect(ray);
             if (ray.hit.t >= remainingDistance)
             {
                 break;
             }
 
             uint32_t primIdx = ray.hit.prim;
-            if (!snapshot->blasSet || ray.hit.inst >= snapshot->instances.size() || ray.hit.inst >= snapshot->contexts.size())
+            if (!snapshot.blasSet || ray.hit.inst >= snapshot.instances.size() || ray.hit.inst >= snapshot.contexts.size())
             {
                 break;
             }
-            const tinybvh::BLASInstance& instance = snapshot->instances[ray.hit.inst];
-            const FCPUTLASInstanceInfo& instContext = snapshot->contexts[ray.hit.inst];
+            const tinybvh::BLASInstance& instance = snapshot.instances[ray.hit.inst];
+            const FCPUTLASInstanceInfo& instContext = snapshot.contexts[ray.hit.inst];
             const float globalT = accumulatedT + ray.hit.t;
             vec3 hitPos = rayOrigin + rayDir * globalT;
             if (!instContext.rayCastVisible)
@@ -427,11 +435,11 @@ RayCastResult FCPUAccelerationStructure::RayCastInCPU(vec3 rayOrigin, vec3 rayDi
                 continue;
             }
 
-            if (instance.blasIdx >= snapshot->blasSet->contexts.size())
+            if (instance.blasIdx >= snapshot.blasSet->contexts.size())
             {
                 break;
             }
-            const FCPUBLASContext& context = snapshot->blasSet->contexts[instance.blasIdx];
+            const FCPUBLASContext& context = snapshot.blasSet->contexts[instance.blasIdx];
             if (primIdx >= context.extinfos.size())
             {
                 break;
@@ -439,14 +447,14 @@ RayCastResult FCPUAccelerationStructure::RayCastInCPU(vec3 rayOrigin, vec3 rayDi
             mat4* worldTS = (mat4*)instance.transform;
             vec4 normalWS = vec4( context.extinfos[primIdx].normal, 0.0f) * *worldTS;
             // Ensure normal faces toward the ray origin (flip if we hit a back face)
-            if (glm::dot(glm::vec3(normalWS), rayDir) > 0.0f)
+            if (faceNormalTowardRay && glm::dot(glm::vec3(normalWS), rayDir) > 0.0f)
                 normalWS = -normalWS;
             result.HitPoint = vec4(hitPos, 0);
             result.Normal = normalWS;
             result.Hit = true;
             result.T = globalT;
             result.InstanceId = instContext.nodeId;
-            result.MaterialId = FetchMaterialId(*snapshot, context.extinfos[primIdx].matIdx, ray.hit.inst);
+            result.MaterialId = FetchMaterialId(snapshot, context.extinfos[primIdx].matIdx, ray.hit.inst);
             break;
         }
     }
@@ -655,6 +663,32 @@ bool FCPUAccelerationStructure::AsyncProcessFull(Assets::Scene& scene, Vulkan::D
     const Runtime::Config::UserSettings& settings = NextEngine::GetInstance()->GetUserSettings();
     InitCascadeBakers(settings, scene.AmbientCubeCascadeCapacity());
 
+    ambientCacheKey_ = 0;
+    ambientCacheWriteArmed_ = false;
+    ambientCachePendingSave_ = false;
+    ambientCacheSaveFrame_ = 0;
+    ambientCacheSaveInFlight_.store(false, std::memory_order_release);
+    if (voxelGpuMemory != nullptr && IsAmbientBakeDiskCacheEnabled())
+    {
+        FAmbientBakeKeyInputs keyInputs;
+        keyInputs.baseUnit = committedAmbientGrid_.baseUnit;
+        keyInputs.offsetBias = committedAmbientGrid_.offsetBias;
+        keyInputs.cascadeCount = GetActiveCascadeCount();
+        keyInputs.cascadeRatio = committedAmbientGrid_.cascadeRatio;
+        keyInputs.poolBricksPerCascade = scene.AmbientPoolBricksPerCascade();
+        // Must match VulkanBaseRenderer::PostRender: the two bake pipelines do not produce
+        // identical cubes, so a cache written by one must never be read back by the other.
+        keyInputs.hardwareBake =
+            NextEngine::GetInstance()->GetRenderer().SupportsRayTracing() && !GOption->ForceSoftGen;
+        ambientCacheKey_ = ComputeAmbientBakeKey(scene, keyInputs);
+
+        if (ambientCacheKey_ != 0 && TryRestoreAmbientBakeCache(scene, voxelGpuMemory, ambientCacheKey_))
+        {
+            return true;
+        }
+        ambientCacheWriteArmed_ = ambientCacheKey_ != 0;
+    }
+
     for (uint32_t cascadeIndex = 0; cascadeIndex < GetActiveCascadeCount(); ++cascadeIndex)
     {
         FCPUProbeBaker& baker = cascadeBakers[cascadeIndex];
@@ -667,6 +701,187 @@ bool FCPUAccelerationStructure::AsyncProcessFull(Assets::Scene& scene, Vulkan::D
     ambientBakeIdle_ = false;
 
     return true;
+}
+
+bool FCPUAccelerationStructure::TryRestoreAmbientBakeCache(Scene& scene, Vulkan::DeviceMemory* arenaMemory,
+                                                           uint64_t key)
+{
+    const uint32_t cascadeCount = GetActiveCascadeCount();
+    const uint32_t cascadeCapacity = scene.AmbientCubeCascadeCapacity();
+    const uint32_t poolBricksPerCascade = scene.AmbientPoolBricksPerCascade();
+    if (cascadeCount == 0u || cascadeCapacity < cascadeCount)
+    {
+        return false;
+    }
+
+    const auto restoreStart = std::chrono::high_resolution_clock::now();
+    FAmbientBakeCachePayload payload;
+    if (!LoadAmbientBakeCache(key, payload))
+    {
+        return false;
+    }
+    if (payload.cascadeCount != cascadeCount || payload.cascadeCapacity != cascadeCapacity ||
+        payload.voxelCountPerCascade != kCascadeVoxelCount ||
+        payload.poolBricksPerCascade != poolBricksPerCascade)
+    {
+        SPDLOG_INFO("Ambient bake cache {:016x} ignored: grid does not match the current scene", key);
+        return false;
+    }
+
+    // CPU voxels. The distance-field seed is a pure function of occupancy, so it is rebuilt here
+    // rather than stored.
+    for (uint32_t cascadeIndex = 0; cascadeIndex < cascadeCount; ++cascadeIndex)
+    {
+        FCPUProbeBaker& baker = cascadeBakers[cascadeIndex];
+        const size_t voxelBase = static_cast<size_t>(cascadeIndex) * kCascadeVoxelCount;
+        std::memcpy(baker.voxels.data(), payload.voxels.data() + voxelBase,
+                    static_cast<size_t>(kCascadeVoxelCount) * sizeof(VoxelData));
+        for (size_t voxelIndex = 0; voxelIndex < baker.voxels.size(); ++voxelIndex)
+        {
+            baker.distanceToSolidSeeds[voxelIndex] =
+                baker.voxels[voxelIndex].matId > 0 ? uint8_t{0} : kMaxDistanceFieldSeed;
+        }
+        baker.UploadGPU(*arenaMemory, scene.AmbientVoxelsByteOffset(), cascadeIndex * kCascadeVoxelCount);
+    }
+
+    // The brick table has to come back verbatim: the cube pool below is indexed through it, so a
+    // recomputed slot assignment would scatter the restored lighting.
+    cpuBrickTable = {};
+    cpuBrickTable.brickTable = std::move(payload.brickTable);
+    cpuBrickTable.activeBrickList = std::move(payload.activeBrickList);
+    cpuBrickTable.activeBricksPerCascade = std::move(payload.activeBricksPerCascade);
+    cpuBrickTable.dirtyBricks.assign(cpuBrickTable.brickTable.size(), 0u);
+    cpuBrickTable.dirtyBricksPerCascade.assign(cascadeCapacity, 0u);
+    cpuBrickTable.candidateBricksPerCascade.assign(cascadeCapacity, 0u);
+    cpuBrickTable.recentlyHitBricksPerCascade.assign(cascadeCapacity, 0u);
+    cpuBrickTable.candidateFirstSeenFrames.assign(cpuBrickTable.brickTable.size(), 0u);
+    cpuBrickTable.activeBricksLastBuild = static_cast<uint32_t>(std::count_if(
+        cpuBrickTable.brickTable.begin(), cpuBrickTable.brickTable.end(),
+        [](uint32_t slot) { return slot != Assets::GPU_SCENE_AMBIENT_BRICK_INVALID; }));
+    // Nothing is dirty: revision 0 makes BakeAmbientCubeCascade return before it dispatches.
+    cpuBrickTable.dirtyRevision = 0;
+    cpuBrickTable.UploadGPU(*arenaMemory, scene.AmbientBrickTableByteOffset(),
+                            scene.AmbientActiveBrickListByteOffset());
+    scene.SetAmbientActiveBrickCounts(cpuBrickTable.activeBricksPerCascade);
+
+    cpuPageIndex.pageIndex = std::move(payload.pages);
+    cpuPageIndex.UploadGPU(*arenaMemory, scene.AmbientPagesByteOffset());
+
+    const size_t cubeBytes = payload.cubes.size() * sizeof(AmbientCube);
+    void* mapped = arenaMemory->Map(static_cast<VkDeviceSize>(scene.AmbientCubesByteOffset()),
+                                    static_cast<VkDeviceSize>(cubeBytes));
+    std::memcpy(mapped, payload.cubes.data(), cubeBytes);
+    arenaMemory->Unmap();
+
+    // Land in exactly the state a cold bake ends in once it converges.
+    fullProbeBakePending_ = false;
+    ambientBakeIdle_ = true;
+    needFlush = false;
+    distanceFieldRebuildScheduled_ = false;
+    distanceFieldRebuildTasks.clear();
+    totalVoxelGroups_ = 0;
+    completedVoxelGroups_.store(0, std::memory_order_release);
+    scene.MarkAmbientCacheRestored();
+
+    const double elapsedMs =
+        std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - restoreStart).count();
+    SPDLOG_INFO("Ambient bake cache hit {:016x}: restored {} cascades, {} active bricks in {:.2f}ms",
+                key, cascadeCount, cpuBrickTable.activeBricksLastBuild, elapsedMs);
+    return true;
+}
+
+void FCPUAccelerationStructure::FlushPendingAmbientBakeCacheSave(Scene& scene, Vulkan::DeviceMemory* arenaMemory)
+{
+    if (!ambientCachePendingSave_ ||
+        NextEngine::GetInstance()->GetTotalFrames() < ambientCacheSaveFrame_)
+    {
+        return;
+    }
+    ambientCachePendingSave_ = false;
+    ambientCacheWriteArmed_ = false;
+
+    if (arenaMemory == nullptr || ambientCacheKey_ == 0 || cascadeBakers.empty() ||
+        cpuBrickTable.brickTable.empty() || !IsAmbientBakeDiskCacheEnabled())
+    {
+        return;
+    }
+
+    const uint32_t cascadeCount = GetActiveCascadeCount();
+    const uint32_t cascadeCapacity = scene.AmbientCubeCascadeCapacity();
+    const uint32_t poolBricksPerCascade = scene.AmbientPoolBricksPerCascade();
+    if (cpuBrickTable.brickTable.size() !=
+            static_cast<size_t>(cascadeCapacity) * Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE ||
+        cpuBrickTable.activeBrickList.size() != static_cast<size_t>(cascadeCapacity) * poolBricksPerCascade)
+    {
+        return;
+    }
+
+    const size_t cubeCount = static_cast<size_t>(cascadeCapacity) * poolBricksPerCascade *
+                             Assets::GPU_SCENE_AMBIENT_BRICK_VOLUME;
+    const size_t cubesByteOffset = scene.AmbientCubesByteOffset();
+    const uint64_t key = ambientCacheKey_;
+
+    // Everything below runs on a worker: the cube pool lives in device-local host-visible memory,
+    // where a host read runs at BAR speed (~1 s for one cascade), and doing it here would stall the
+    // game thread for a whole second right after the bake finished.
+    //
+    // Reading the bake state off-thread is safe because the ambient pipeline is idle: convergence
+    // set ambientBakeIdle_, so neither the voxelization queue nor the residency rebuild touches
+    // cascadeBakers / cpuBrickTable / cpuPageIndex again. The only writer that could return is a new
+    // full bake, and both paths into one (Scene::CleanUp and ~Scene) call ClearAllTasks(), which
+    // waits for this task before any of that state -- or the arena itself -- goes away.
+    ambientCacheSaveInFlight_.store(true, std::memory_order_release);
+    Tasks::TaskCoordinator::GetInstance()->AddParralledTask(
+        [this, key, arenaMemory, cubesByteOffset, cubeCount, cascadeCount, cascadeCapacity,
+         poolBricksPerCascade](Tasks::ResTask& task)
+        {
+            const auto readStart = std::chrono::high_resolution_clock::now();
+
+            FAmbientBakeCachePayload payload;
+            payload.cascadeCount = cascadeCount;
+            payload.cascadeCapacity = cascadeCapacity;
+            payload.voxelCountPerCascade = kCascadeVoxelCount;
+            payload.poolBricksPerCascade = poolBricksPerCascade;
+            payload.voxels.resize(static_cast<size_t>(cascadeCount) * kCascadeVoxelCount);
+            for (uint32_t cascadeIndex = 0; cascadeIndex < cascadeCount; ++cascadeIndex)
+            {
+                std::memcpy(payload.voxels.data() + static_cast<size_t>(cascadeIndex) * kCascadeVoxelCount,
+                            cascadeBakers[cascadeIndex].voxels.data(),
+                            static_cast<size_t>(kCascadeVoxelCount) * sizeof(VoxelData));
+            }
+            payload.brickTable = cpuBrickTable.brickTable;
+            payload.activeBrickList = cpuBrickTable.activeBrickList;
+            payload.activeBricksPerCascade = cpuBrickTable.activeBricksPerCascade;
+            payload.pages = cpuPageIndex.pageIndex;
+
+            payload.cubes.resize(cubeCount);
+            const size_t cubeBytes = cubeCount * sizeof(AmbientCube);
+            const void* mapped = arenaMemory->Map(static_cast<VkDeviceSize>(cubesByteOffset),
+                                                  static_cast<VkDeviceSize>(cubeBytes));
+            std::memcpy(payload.cubes.data(), mapped, cubeBytes);
+            arenaMemory->Unmap();
+
+            const auto writeStart = std::chrono::high_resolution_clock::now();
+            const double readbackMs =
+                std::chrono::duration<double, std::milli>(writeStart - readStart).count();
+            const bool saved = SaveAmbientBakeCache(key, payload);
+            const double writeMs =
+                std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - writeStart)
+                    .count();
+            if (saved)
+            {
+                SPDLOG_INFO("Ambient bake cache written {:016x} (readback {:.0f}ms, compress+write {:.0f}ms, "
+                            "both off the game thread)",
+                            key, readbackMs, writeMs);
+            }
+            else
+            {
+                SPDLOG_WARN("Ambient bake cache write failed for {:016x}", key);
+            }
+            ambientCacheSaveInFlight_.store(false, std::memory_order_release);
+        },
+        nullptr,
+        "Ambient bake cache write");
 }
 
 void FCPUAccelerationStructure::AsyncProcessGroup(int xInMeter, int zInMeter, Scene& scene, ECubeProcType procType,
@@ -751,6 +966,11 @@ void FCPUAccelerationStructure::ClearAllTasks()
     distanceFieldRebuildScheduled_ = false;
     fullProbeBakePending_ = true;
     ambientBakeIdle_ = false;
+    ambientCacheKey_ = 0;
+    ambientCacheWriteArmed_ = false;
+    ambientCachePendingSave_ = false;
+    ambientCacheSaveFrame_ = 0;
+    ambientCacheSaveInFlight_.store(false, std::memory_order_release);
     totalVoxelGroups_ = 0;
     completedVoxelGroups_.store(0, std::memory_order_release);
     cpuBrickTable = {};
@@ -890,6 +1110,8 @@ bool FCPUAccelerationStructure::Tick(Scene& scene, Vulkan::DeviceMemory* gpuMemo
         rebuildBrickResidency();
     }
 
+    FlushPendingAmbientBakeCacheSave(scene, gpuMemory);
+
     return voxelUploadCompleted;
 }
 
@@ -914,6 +1136,10 @@ FProbeBakeProgress FCPUAccelerationStructure::GetProbeBakeProgress() const
     {
         progress.stage = EProbeBakeStage::DistanceField;
     }
+    else if (ambientCachePendingSave_ || ambientCacheSaveInFlight_.load(std::memory_order_acquire))
+    {
+        progress.stage = EProbeBakeStage::CacheSave;
+    }
 
     return progress;
 }
@@ -937,6 +1163,13 @@ void FCPUAccelerationStructure::AcknowledgeAmbientBake(uint64_t revision)
     if (revision == cpuBrickTable.dirtyRevision)
     {
         ambientBakeIdle_ = true;
+        // Converged. The GPU may still have the last dispatches in flight, so the readback waits
+        // for the next Tick rather than happening here on the render path. kFramesInFlight is 1 and
+        // every frame waits on the previous submit's fence before recording, so two frames on this
+        // frame's bake dispatches have certainly retired -- which is the whole reason the save path
+        // needs no vkDeviceWaitIdle and can therefore run entirely off the game thread.
+        ambientCachePendingSave_ = ambientCacheWriteArmed_;
+        ambientCacheSaveFrame_ = NextEngine::GetInstance()->GetTotalFrames() + 3u;
     }
 }
 

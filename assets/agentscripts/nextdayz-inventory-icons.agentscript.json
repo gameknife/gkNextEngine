@@ -1,0 +1,247 @@
+{
+  "name": "nextdayz-inventory-icons",
+  "target": "NextDayz",
+  "scene": "assets/scad/tests/nextdayz_melee.scad",
+  "args": [
+    "--system-dpi-scaling"
+  ],
+  "defaults": {
+    "waitFrames": 3,
+    "stepTimeoutMs": 20000
+  },
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.freezeNeeds",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.loadout",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.preloadItemIcons",
+      "set": true
+    },
+    {
+      "type": "key",
+      "code": "TAB",
+      "action": "press"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.inventoryIconCount",
+      "op": "eq",
+      "value": 101,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait-frames",
+      "n": 10
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "rag:6"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "bandage:3"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "food_can"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "food_apple"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "food_chocolate"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "water_bottle"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "mag_extended"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "optic_4x"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "knife"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "pistol"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "medkit"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "tactical_flashlight"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "jacket"
+    },
+    {
+      "type": "wait-frames",
+      "n": 12
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryPreviewReady",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryIconCount",
+      "op": "eq",
+      "value": 101
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.69,
+          0.075
+        ]
+      }
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_inventory_icons",
+      "ui": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.loadout",
+      "set": false
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.restart",
+      "set": true
+    },
+    {
+      "type": "key",
+      "code": "TAB",
+      "action": "press"
+    },
+    {
+      "type": "wait-frames",
+      "n": 10
+    },
+    {
+      "type": "log",
+      "message": "Drag the 2x1 empty bottle and rotate it into a 1x2 trouser slot; the icon must rotate with its footprint"
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.655,
+          0.446
+        ]
+      }
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "down"
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.655,
+          0.55
+        ]
+      }
+    },
+    {
+      "type": "key",
+      "code": "R",
+      "action": "press"
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_icon_rotated_drag",
+      "ui": true
+    },
+    {
+      "type": "mouse-button",
+      "button": "left",
+      "action": "up"
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryLayout",
+      "op": "contains",
+      "value": "water_bottle_empty@2:1,0:1x2:0;"
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.69,
+          0.075
+        ]
+      }
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_icon_rotated_placed",
+      "ui": true
+    },
+    {
+      "type": "wait-frames",
+      "n": 10
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

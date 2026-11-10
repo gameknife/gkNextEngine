@@ -360,6 +360,23 @@ function postToParent(type, payload = {}) {
   }
 }
 
+let lastReportedVideoSize = "";
+function reportVideoSize() {
+  const width = Number(videoEl.videoWidth || 0);
+  const height = Number(videoEl.videoHeight || 0);
+  if (width <= 0 || height <= 0) return;
+  const size = `${width}x${height}`;
+  if (size === lastReportedVideoSize) return;
+  lastReportedVideoSize = size;
+  // The dashboard uses this intrinsic aspect ratio to fit the iframe itself.
+  // Portrait streams therefore retain their full height and are pillarboxed
+  // instead of being horizontally stretched and vertically cropped.
+  postToParent("video-size", { width, height });
+}
+
+videoEl.addEventListener("loadedmetadata", reportVideoSize);
+videoEl.addEventListener("resize", reportVideoSize);
+
 function resolveRemoteURL(path) {
   if (!remoteBase) {
     return path;
@@ -869,46 +886,41 @@ document.addEventListener("keyup", event => {
 window.addEventListener("blur", () => {
   activeMods = 0;
 });
-// Absolute mode by default: keeps the OS cursor visible in the browser and lets
-// the server place the cursor at the reported window coordinate, which is what
-// UI / ImGui interaction needs. Hold the right mouse button to enter relative
-// (pointer-lock) mode for FPS-style camera look; releasing it exits lock.
-let inPointerLock = false;
-document.addEventListener("pointerlockchange", () => {
-  inPointerLock = document.pointerLockElement === videoEl;
-  inputState.textContent = inPointerLock ? "pointer-lock" : "open";
-  setPill(pillIn, inPointerLock);
-});
-videoEl.addEventListener("mousemove", event => {
-  if (inPointerLock) {
+// Absolute mode is the default for UI / ImGui interaction. Holding RMB uses
+// pointer capture plus relative deltas for camera look. Unlike Pointer Lock it
+// never triggers Chromium's built-in "press Esc to exit" permission hint.
+let relativePointerActive = false;
+videoEl.addEventListener("pointermove", event => {
+  if (relativePointerActive) {
     sendInput(packMouseMove(MoveMode.relative, event.movementX, event.movementY));
   } else {
     const p = scaleToVideo(event.clientX, event.clientY);
     sendInput(packMouseMove(MoveMode.absolute, p.x, p.y));
   }
 });
-videoEl.addEventListener("mousedown", event => {
+videoEl.addEventListener("pointerdown", event => {
   event.preventDefault();
   if (event.button === 2) {
-    // Right button: arm relative mode for camera look and still forward the
-    // button state so engine/editor camera controllers can latch RMB-held mode.
+    relativePointerActive = true;
+    videoEl.setPointerCapture?.(event.pointerId);
     sendInput(packMouseButton(event, true));
-    if (!inPointerLock) {
-      videoEl.requestPointerLock?.();
-    }
     return;
   }
   sendInput(packMouseButton(event, true));
 });
-videoEl.addEventListener("mouseup", event => {
+videoEl.addEventListener("pointerup", event => {
   event.preventDefault();
   if (event.button === 2) {
     sendInput(packMouseButton(event, false));
-    if (inPointerLock) {
-      document.exitPointerLock?.();
-    }
+    relativePointerActive = false;
+    if (videoEl.hasPointerCapture?.(event.pointerId)) videoEl.releasePointerCapture?.(event.pointerId);
     return;
   }
+  sendInput(packMouseButton(event, false));
+});
+videoEl.addEventListener("pointercancel", event => {
+  if (event.button !== 2 || !relativePointerActive) return;
+  relativePointerActive = false;
   sendInput(packMouseButton(event, false));
 });
 // This page is a dedicated remote surface, so suppress browser secondary-click

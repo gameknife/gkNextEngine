@@ -34,7 +34,7 @@ public class MySuperGame : NextGameInstance
 
 ## ⚡ 核心机制与开发规范
 
-1. **统一游戏配置声明**：每个 C# 游戏在 `assets/configs/games/<id>.game.json` 声明窗口标题、初始场景、模块需求与热重载策略。
+1. **一个游戏一个工程目录**：每个 C# 游戏是 `projects/<Game>/`——`<id>.game.json` 声明窗口标题、初始场景、模块需求与热重载策略，`Content/` 放游戏自己的配置与资源（C# 里用 `GameContent.Path(...)` 引用），`Scripts/` 放 C# 工程。
 2. **场景节点与组件访问**：
    ```csharp
    // 获取当前场景节点

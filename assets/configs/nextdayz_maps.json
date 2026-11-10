@@ -1,0 +1,38 @@
+{
+  "maps": [
+    {
+      "center": [
+        50.186,
+        12.754
+      ],
+      "description": "The Ohre loops around Loket's rock: a baroque square, a castle and a stepped lower street. Across the river lie a green village, spa villas, a porcelain works, a collective farm and cottages hidden in the spruce woods. Cross the bridges, search house by house, and keep a route out of the valley.",
+      "draftScene": "assets/scad/proc/nextdayz/cz_loket_riverbend/scene.scad",
+      "id": "cz_loket_riverbend",
+      "localName": "洛克特·河湾",
+      "mapVersion": 8,
+      "name": "LOKET / RIVERBEND",
+      "profile": "bohemian_decay",
+      "region": "CZECHIA / WEST BOHEMIA",
+      "scene": "assets/scad/proc/nextdayz/cz_loket_riverbend/published/v8/scene.scad",
+      "sizeM": 1000,
+      "status": "published",
+      "terrain": "RIVER VALLEY / HILLSIDE OLD TOWN"
+    },
+    {
+      "description": "An army training area behind a concrete gate. Every weapon, magazine and attachment lies in the armory, every garment in the quartermaster store, rations in the mess tent, medicine and tools in the field stores; take anything, it is back on the table a few seconds later. Zero rifles on the 300 m range, clear the shoot house, run the obstacle course, or try your aim on the infected penned east of the range.",
+      "draftScene": "assets/scad/proc/nextdayz/training_ground/scene.scad",
+      "id": "training_ground",
+      "kind": "training",
+      "localName": "训练场",
+      "mapVersion": 2,
+      "name": "TRAINING GROUND",
+      "profile": "training",
+      "region": "MILITARY TRAINING AREA",
+      "scene": "assets/scad/proc/nextdayz/training_ground/published/v2/scene.scad",
+      "sizeM": 800,
+      "status": "published",
+      "terrain": "FIRING RANGE / ARMORY / OBSTACLE COURSE"
+    }
+  ],
+  "version": 1
+}

@@ -1,0 +1,12 @@
+{
+  "name": "nextdayz-geography-overview",
+  "target": "gkNextRenderer",
+  "scene": "assets/scad/proc/nextdayz/cz_loket_riverbend/scene.scad",
+  "defaults": {"stepTimeoutMs": 180000},
+  "steps": [
+    {"type":"wait-until","query":"scene.nodeCount","op":"gt","value":100,"timeoutMs":180000},
+    {"type":"wait-frames","n":40},
+    {"type":"screenshot","out":"screenshots/geographic-overview","accumulateFrames":64},
+    {"type":"quit"}
+  ]
+}

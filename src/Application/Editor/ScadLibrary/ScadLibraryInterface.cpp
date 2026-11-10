@@ -10,9 +10,11 @@
 #include "AI/NextAIScadTransport.hpp"
 #include "AI/ScadAIController.hpp"
 #include "AI/ScadAIPanel.hpp"
+#include "Application/Editor/Common/Preview/AssetThumbnailRenderer.hpp"
 #include "Engine/Assets/Core/Node.hpp"
 #include "Engine/Assets/Core/Scene.hpp"
 #include "Engine/Rendering/VulkanBaseRenderer.hpp"
+#include "Engine/Runtime/Components/RenderComponent.hpp"
 #include "Modules/NextUI/ImGuiScaling.hpp"
 #include "Engine/Runtime/Interface/UserInterface.hpp"
 #include "Engine/Runtime/Engine.hpp"
@@ -21,6 +23,8 @@
 #include "Engine/Utilities/FileHelper.hpp"
 #include "Engine/Utilities/Math.hpp"
 #include "Engine/Vulkan/SwapChain.hpp"
+#include "Modules/DevTools/UiDevPanels.hpp"
+#include "Modules/NextUI/FontLoader.hpp"
 #include "Modules/NextUI/UI/DesktopUI.hpp"
 #include "Modules/ScadLoader/FScadEvaluator.h"
 #include "Modules/ScadLoader/FScadLexer.h"
@@ -30,11 +34,12 @@
 #include "ThirdParty/ImGuizmo/ImGuizmo.h"
 #include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 
+#include <SDL3/SDL_dialog.h>
 #include <imgui.h>
-#include <imgui_freetype.h>
 #include <imgui_stdlib.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <chrono>
 #include <cmath>
@@ -51,6 +56,8 @@
 #include <glm/gtx/norm.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <limits>
+#include <map>
+#include <numeric>
 #include <optional>
 #include <regex>
 #include <set>
@@ -67,8 +74,187 @@ namespace ScadLibrary
         constexpr float kTitleBarHeight = 48.0f;
         constexpr float kBottomBarHeight = 48.0f;
         constexpr float kCollapsedRailWidth = 46.0f;
+        constexpr float kKitBrowserHeaderHeight = 56.0f;
         constexpr int kBenchGridColumns = 6;
         constexpr float kBenchGridStep = 14.0f;
+        constexpr const char* kScadKitDragDropPayload = "SCAD_LIBRARY_KIT_MODULE";
+
+        using NextUI::Theme::BeginCard;
+        using NextUI::Theme::EndCard;
+        using NextUI::Theme::Draw3AxisFloatDrag;
+
+        void DrawCardHeader(const char* icon, const char* title, const char* badge = nullptr)
+        {
+            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::Blue), "%s  %s", icon ? icon : "", title ? title : "");
+            if (badge && badge[0] != '\0')
+            {
+                ImGui::SameLine();
+                ImGui::TextDisabled("·  %s", badge);
+            }
+            ImGui::Dummy(ImVec2(0.0f, 4.0f));
+        }
+
+        template <typename T>
+        bool DrawSegmentedPills(const char* id, const std::vector<std::pair<T, std::string>>& options,
+                                T* currentValue, float totalWidth = -1.0f, float itemHeight = 26.0f)
+        {
+            return NextUI::Theme::SegmentedPills(id, options, currentValue, totalWidth, itemHeight);
+        }
+
+        void DrawTagChip(const char* label, const ImVec4& color, const char* tooltip = nullptr)
+        {
+            NextUI::Theme::TagChip(label, color, tooltip);
+        }
+
+        struct FScadKitDragPayload
+        {
+            int32_t kitIndex = -1;
+            int32_t moduleIndex = -1;
+        };
+
+        struct FKitThumbnailControlResult
+        {
+            bool clicked = false;
+            bool hovered = false;
+        };
+
+        std::string KitThumbnailDisplayName(const std::string& name)
+        {
+            const size_t kitPrefixEnd = name.find('_');
+            if (kitPrefixEnd == std::string::npos)
+            {
+                return name;
+            }
+            const size_t categoryPrefixEnd = name.find('_', kitPrefixEnd + 1);
+            if (categoryPrefixEnd == std::string::npos || categoryPrefixEnd + 1 >= name.size())
+            {
+                return name;
+            }
+            return name.substr(categoryPrefixEnd + 1);
+        }
+
+        std::array<std::string, 2> MakeKitThumbnailLabel(
+            const std::string& name,
+            const float maxWidth,
+            const float fontScale)
+        {
+            std::array<std::string, 2> lines;
+            size_t sourceOffset = 0;
+            for (size_t lineIndex = 0; lineIndex < lines.size() && sourceOffset < name.size(); ++lineIndex)
+            {
+                std::string& line = lines[lineIndex];
+                while (sourceOffset < name.size())
+                {
+                    const std::string candidate = line + name[sourceOffset];
+                    if (!line.empty() && ImGui::CalcTextSize(candidate.c_str()).x * fontScale > maxWidth)
+                    {
+                        break;
+                    }
+                    line = candidate;
+                    ++sourceOffset;
+                }
+
+                if (line.empty())
+                {
+                    line.assign(1, name[sourceOffset++]);
+                }
+            }
+
+            if (sourceOffset < name.size())
+            {
+                std::string& lastLine = lines.back();
+                constexpr std::string_view ellipsis = "...";
+                while (!lastLine.empty() &&
+                       ImGui::CalcTextSize((lastLine + std::string(ellipsis)).c_str()).x * fontScale > maxWidth)
+                {
+                    lastLine.pop_back();
+                }
+                lastLine += ellipsis;
+            }
+            return lines;
+        }
+
+        FKitThumbnailControlResult DrawKitThumbnailControl(
+            const char* id,
+            const ImTextureID textureId,
+            const std::string& label,
+            const float thumbnailSize,
+            const bool selected)
+        {
+            const ImVec2 thumbnailPos = ImGui::GetCursorScreenPos();
+            ImGui::PushStyleColor(ImGuiCol_Button,
+                                  selected ? ImVec4(0.16f, 0.31f, 0.50f, 1.0f)
+                                           : ImVec4(0.10f, 0.12f, 0.15f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.39f, 0.60f, 1.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+            const bool clicked = textureId != 0
+                ? ImGui::ImageButton(id, textureId, ImVec2(thumbnailSize, thumbnailSize))
+                : ImGui::Button(ICON_FA_CUBES_STACKED, ImVec2(thumbnailSize, thumbnailSize));
+            const bool hovered = ImGui::IsItemHovered();
+            ImGui::PopStyleVar(2);
+            ImGui::PopStyleColor(2);
+
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            const ImVec2 thumbnailEnd = thumbnailPos + ImVec2(thumbnailSize, thumbnailSize);
+
+            constexpr float labelFontScale = 0.75f;
+            const std::string displayLabel = KitThumbnailDisplayName(label);
+            const std::array<std::string, 2> labelLines = MakeKitThumbnailLabel(
+                displayLabel, thumbnailSize - 8.0f, labelFontScale);
+            const int labelLineCount = labelLines[1].empty() ? 1 : 2;
+            const float textLineHeight = ImGui::GetTextLineHeight() * labelFontScale;
+            const float labelHeight = textLineHeight * static_cast<float>(labelLineCount) + 6.0f;
+            const ImVec2 labelMin(thumbnailPos.x + 1.0f, thumbnailEnd.y - labelHeight - 1.0f);
+            drawList->AddRectFilled(labelMin, thumbnailEnd - ImVec2(1.0f, 1.0f), IM_COL32(8, 10, 14, 210));
+            for (int lineIndex = 0; lineIndex < labelLineCount; ++lineIndex)
+            {
+                const ImVec2 textSize = ImGui::CalcTextSize(labelLines[lineIndex].c_str()) * labelFontScale;
+                drawList->AddText(
+                    ImGui::GetFont(), ImGui::GetFontSize() * labelFontScale,
+                    ImVec2(thumbnailPos.x + (thumbnailSize - textSize.x) * 0.5f,
+                           labelMin.y + 3.0f + textLineHeight * static_cast<float>(lineIndex)),
+                    ImGui::GetColorU32(ImGuiCol_Text), labelLines[lineIndex].c_str());
+            }
+
+            // Borders are deliberately emitted last so the label overlay can never hide interaction state.
+            drawList->AddRect(thumbnailPos + ImVec2(0.5f, 0.5f), thumbnailEnd - ImVec2(0.5f, 0.5f),
+                              IM_COL32(92, 104, 122, 210), 0.0f, 0, 1.0f);
+            if (selected || hovered)
+            {
+                const float stateBorderWidth = selected ? 2.0f : 1.0f;
+                const float stateInset = stateBorderWidth * 0.5f;
+                drawList->AddRect(
+                    thumbnailPos + ImVec2(stateInset, stateInset),
+                    thumbnailEnd - ImVec2(stateInset, stateInset),
+                    selected ? IM_COL32(91, 173, 255, 255) : IM_COL32(160, 205, 255, 235),
+                    0.0f, 0, stateBorderWidth);
+            }
+            return {.clicked = clicked, .hovered = hovered};
+        }
+
+        uint64_t Fnv1a64(std::string_view value)
+        {
+            uint64_t hash = 1469598103934665603ull;
+            for (const unsigned char character : value)
+            {
+                hash ^= character;
+                hash *= 1099511628211ull;
+            }
+            return hash;
+        }
+
+        std::string PreviewFileToken(std::string value)
+        {
+            for (char& character : value)
+            {
+                if (!std::isalnum(static_cast<unsigned char>(character)) && character != '_' && character != '-')
+                {
+                    character = '_';
+                }
+            }
+            return value;
+        }
 
         struct FScadRawArgument
         {
@@ -566,7 +752,10 @@ namespace ScadLibrary
         constexpr double kKitWatchPollIntervalSeconds = 0.5;
         constexpr std::chrono::milliseconds kKitWatchReloadDebounce{300};
 
-        std::optional<EScadSceneKind> SceneKindFromRelativePath(const std::filesystem::path& relativePath)
+        // The folder a scene is filed under. It is a browsing convention only:
+        // any of these directories may hold any mix of instances, terrain and
+        // free source, and every scene gets every editor it has content for.
+        std::optional<EScadSceneFolder> SceneFolderFromRelativePath(const std::filesystem::path& relativePath)
         {
             if (relativePath.empty())
             {
@@ -575,59 +764,222 @@ namespace ScadLibrary
             const std::string root = relativePath.begin()->string();
             if (root == "evaluated")
             {
-                return EScadSceneKind::Evaluated;
+                return EScadSceneFolder::Evaluated;
             }
             if (root == "source")
             {
-                return EScadSceneKind::Source;
+                return EScadSceneFolder::Source;
             }
             if (root == "proc")
             {
-                return EScadSceneKind::Procedural;
+                return EScadSceneFolder::Procedural;
             }
             return std::nullopt;
         }
 
-        const char* SceneKindLabel(EScadSceneKind kind)
+        // Kits and rigs are authored elsewhere; everything else under
+        // assets/scad is openable as a scene.
+        bool IsSceneAssemblyRelativePath(const std::filesystem::path& relativePath)
         {
-            switch (kind)
+            if (relativePath.empty())
             {
-            case EScadSceneKind::Evaluated:
+                return false;
+            }
+            const std::string root = relativePath.begin()->string();
+            return root != "lib" && root != "characters" && root != "specs";
+        }
+
+        const char* SceneFolderLabel(EScadSceneFolder folder)
+        {
+            switch (folder)
+            {
+            case EScadSceneFolder::Evaluated:
                 return "Evaluated";
-            case EScadSceneKind::Source:
+            case EScadSceneFolder::Source:
                 return "Source";
-            case EScadSceneKind::Procedural:
+            case EScadSceneFolder::Procedural:
                 return "Proc";
             }
             return "Scene";
         }
 
-        const char* SceneKindIcon(EScadSceneKind kind)
+        const char* SceneFolderIcon(EScadSceneFolder folder)
         {
-            switch (kind)
+            switch (folder)
             {
-            case EScadSceneKind::Evaluated:
+            case EScadSceneFolder::Evaluated:
                 return ICON_FA_CUBE;
-            case EScadSceneKind::Source:
+            case EScadSceneFolder::Source:
                 return ICON_FA_FILE_CODE;
-            case EScadSceneKind::Procedural:
+            case EScadSceneFolder::Procedural:
                 return ICON_FA_TROWEL_BRICKS;
             }
             return ICON_FA_FILE;
         }
 
-        ImVec4 SceneKindIconColor(EScadSceneKind kind)
+        ImVec4 SceneFolderIconColor(EScadSceneFolder folder)
         {
-            switch (kind)
+            switch (folder)
             {
-            case EScadSceneKind::Evaluated:
+            case EScadSceneFolder::Evaluated:
                 return ImVec4(1.0f, 0.68f, 0.25f, 1.0f);
-            case EScadSceneKind::Source:
+            case EScadSceneFolder::Source:
                 return ImVec4(0.36f, 0.70f, 1.0f, 1.0f);
-            case EScadSceneKind::Procedural:
+            case EScadSceneFolder::Procedural:
                 return ImVec4(0.40f, 0.86f, 0.56f, 1.0f);
             }
             return ImVec4(0.70f, 0.72f, 0.76f, 1.0f);
+        }
+
+        ImVec4 SegmentKindColor(EScadSegmentKind kind)
+        {
+            switch (kind)
+            {
+            case EScadSegmentKind::Instance:
+                return ImVec4(1.0f, 0.68f, 0.25f, 1.0f);
+            case EScadSegmentKind::Terrain:
+                return ImVec4(0.40f, 0.86f, 0.56f, 1.0f);
+            case EScadSegmentKind::TerrainRule:
+                return ImVec4(0.52f, 0.84f, 0.72f, 1.0f);
+            case EScadSegmentKind::Source:
+                return ImVec4(0.36f, 0.70f, 1.0f, 1.0f);
+            }
+            return ImVec4(0.70f, 0.72f, 0.76f, 1.0f);
+        }
+
+        const char* SegmentKindIcon(EScadSegmentKind kind)
+        {
+            switch (kind)
+            {
+            case EScadSegmentKind::Instance:
+                return ICON_FA_CUBE;
+            case EScadSegmentKind::Terrain:
+                return ICON_FA_MOUNTAIN_SUN;
+            case EScadSegmentKind::TerrainRule:
+                return ICON_FA_TROWEL_BRICKS;
+            case EScadSegmentKind::Source:
+                return ICON_FA_FILE_CODE;
+            }
+            return ICON_FA_FILE;
+        }
+
+        bool FindMatchingParenthesis(const std::string& source, size_t open, size_t& outClose)
+        {
+            int depth = 0;
+            for (size_t index = open; index < source.size(); ++index)
+            {
+                if (source[index] == '(')
+                {
+                    ++depth;
+                }
+                else if (source[index] == ')' && --depth == 0)
+                {
+                    outClose = index;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        std::vector<std::string> SplitScadArguments(std::string_view source)
+        {
+            std::vector<std::string> arguments;
+            size_t begin = 0;
+            int depth = 0;
+            for (size_t index = 0; index <= source.size(); ++index)
+            {
+                if (index < source.size() && (source[index] == '(' || source[index] == '[' || source[index] == '{'))
+                {
+                    ++depth;
+                }
+                else if (index < source.size() && (source[index] == ')' || source[index] == ']' || source[index] == '}'))
+                {
+                    --depth;
+                }
+                if (index == source.size() || (source[index] == ',' && depth == 0))
+                {
+                    arguments.push_back(TrimScadText(source.substr(begin, index - begin)));
+                    begin = index + 1;
+                }
+            }
+            return arguments;
+        }
+
+        bool ParseScadNumber(std::string_view source, double& outValue)
+        {
+            const std::string text = TrimScadText(source);
+            char* end = nullptr;
+            outValue = std::strtod(text.c_str(), &end);
+            return end != text.c_str() && TrimScadText(end).empty();
+        }
+
+        struct FLayScatterSource
+        {
+            int count = 10;
+            double x0 = -20.0;
+            double x1 = 20.0;
+            double y0 = -20.0;
+            double y1 = 20.0;
+            int seed = 0;
+            bool rotate = true;
+            std::string prefix;
+            std::string suffix;
+        };
+
+        bool ParseLayScatterSource(const std::string& source, FLayScatterSource& outValue)
+        {
+            const size_t name = source.find("lay_scatter");
+            const size_t open = name == std::string::npos ? std::string::npos : source.find('(', name + 11);
+            size_t close = std::string::npos;
+            if (open == std::string::npos || !FindMatchingParenthesis(source, open, close))
+            {
+                return false;
+            }
+            outValue.prefix = source.substr(0, name);
+            if (TrimScadText(outValue.prefix).starts_with("module"))
+            {
+                // A module declaration is library API, not a placed layout
+                // operator. Only edit call sites in a scene assembly here.
+                return false;
+            }
+            outValue.suffix = source.substr(close + 1);
+            const std::array<const char*, 7> ordered = {"n", "x0", "x1", "y0", "y1", "seed", "rot"};
+            size_t positional = 0;
+            for (const std::string& rawArgument : SplitScadArguments(std::string_view(source).substr(open + 1, close - open - 1)))
+            {
+                const size_t equals = rawArgument.find('=');
+                const std::string key = equals == std::string::npos
+                    ? (positional < ordered.size() ? ordered[positional++] : std::string())
+                    : TrimScadText(std::string_view(rawArgument).substr(0, equals));
+                const std::string value = TrimScadText(std::string_view(rawArgument).substr(
+                    equals == std::string::npos ? 0 : equals + 1));
+                double number = 0.0;
+                if ((key == "n" || key == "x0" || key == "x1" || key == "y0" || key == "y1" || key == "seed") &&
+                    !ParseScadNumber(value, number))
+                {
+                    return false;
+                }
+                if (key == "n") outValue.count = static_cast<int>(std::lround(number));
+                else if (key == "x0") outValue.x0 = number;
+                else if (key == "x1") outValue.x1 = number;
+                else if (key == "y0") outValue.y0 = number;
+                else if (key == "y1") outValue.y1 = number;
+                else if (key == "seed") outValue.seed = static_cast<int>(std::lround(number));
+                else if (key == "rot")
+                {
+                    if (value == "true" || value == "1") outValue.rotate = true;
+                    else if (value == "false" || value == "0") outValue.rotate = false;
+                    else return false;
+                }
+            }
+            return true;
+        }
+
+        std::string SerializeLayScatterSource(const FLayScatterSource& value)
+        {
+            return fmt::format("{}lay_scatter(n = {}, x0 = {:.6g}, x1 = {:.6g}, y0 = {:.6g}, y1 = {:.6g}, seed = {}, rot = {}){}",
+                               value.prefix, value.count, value.x0, value.x1, value.y0, value.y1, value.seed,
+                               value.rotate ? "true" : "false", value.suffix);
         }
 
         std::string LowercaseAscii(std::string value)
@@ -827,7 +1179,135 @@ namespace ScadLibrary
             }
         }
 
-        std::filesystem::path WorkspaceDir() { return std::filesystem::current_path() / "scad_library"; }
+        void AccumulateNodeLocalBounds(const Assets::Scene& scene, const Assets::Node& node,
+                                       const glm::mat4& rootWorldInverse, glm::vec3& minBounds,
+                                       glm::vec3& maxBounds, bool& found)
+        {
+            if (const auto render = node.GetComponent<Runtime::RenderComponent>())
+            {
+                if (const Assets::Model* model = scene.GetModel(render->GetModelId()))
+                {
+                    const glm::vec3 localMin = model->GetLocalAABBMin();
+                    const glm::vec3 localMax = model->GetLocalAABBMax();
+                    const glm::mat4 nodeToRoot = rootWorldInverse * node.WorldTransform();
+                    for (int corner = 0; corner < 8; ++corner)
+                    {
+                        const glm::vec3 point(
+                            (corner & 1) != 0 ? localMax.x : localMin.x,
+                            (corner & 2) != 0 ? localMax.y : localMin.y,
+                            (corner & 4) != 0 ? localMax.z : localMin.z);
+                        const glm::vec3 rootPoint = glm::vec3(nodeToRoot * glm::vec4(point, 1.0f));
+                        minBounds = glm::min(minBounds, rootPoint);
+                        maxBounds = glm::max(maxBounds, rootPoint);
+                        found = true;
+                    }
+                }
+            }
+
+            for (const std::shared_ptr<Assets::Node>& child : node.Children())
+            {
+                if (child != nullptr)
+                {
+                    AccumulateNodeLocalBounds(scene, *child, rootWorldInverse, minBounds, maxBounds, found);
+                }
+            }
+        }
+
+        bool GetNodeOrientedBounds(const Assets::Scene& scene, const Assets::Node& root, glm::vec3& localMin,
+                                   glm::vec3& localMax)
+        {
+            localMin = glm::vec3(FLT_MAX);
+            localMax = glm::vec3(-FLT_MAX);
+            bool found = false;
+            AccumulateNodeLocalBounds(scene, root, glm::inverse(root.WorldTransform()), localMin, localMax, found);
+            return found;
+        }
+
+        bool IntersectOrientedBox(const glm::vec3& rayOrigin, const glm::vec3& rayDirection,
+                                  const glm::mat4& worldTransform, const glm::vec3& localMin,
+                                  const glm::vec3& localMax, float& outDistance)
+        {
+            const glm::mat4 worldInverse = glm::inverse(worldTransform);
+            const glm::vec3 localOrigin = glm::vec3(worldInverse * glm::vec4(rayOrigin, 1.0f));
+            const glm::vec3 localDirection = glm::vec3(worldInverse * glm::vec4(rayDirection, 0.0f));
+            float entry = 0.0f;
+            float exit = std::numeric_limits<float>::max();
+            for (int axis = 0; axis < 3; ++axis)
+            {
+                if (std::abs(localDirection[axis]) < 1.0e-6f)
+                {
+                    if (localOrigin[axis] < localMin[axis] || localOrigin[axis] > localMax[axis])
+                    {
+                        return false;
+                    }
+                    continue;
+                }
+                float nearDistance = (localMin[axis] - localOrigin[axis]) / localDirection[axis];
+                float farDistance = (localMax[axis] - localOrigin[axis]) / localDirection[axis];
+                if (nearDistance > farDistance)
+                {
+                    std::swap(nearDistance, farDistance);
+                }
+                entry = std::max(entry, nearDistance);
+                exit = std::min(exit, farDistance);
+                if (entry > exit)
+                {
+                    return false;
+                }
+            }
+            outDistance = entry;
+            return true;
+        }
+
+        void DrawOrientedBoxOverlay(const Assets::UniformBufferObject& ubo, const ImVec2& viewportPos,
+                                    const ImVec2& viewportSize, const glm::mat4& worldTransform,
+                                    const glm::vec3& localMin, const glm::vec3& localMax, const ImU32 color)
+        {
+            ImVec2 corners[8];
+            bool projected[8]{};
+            for (int corner = 0; corner < 8; ++corner)
+            {
+                const glm::vec3 point(
+                    (corner & 1) != 0 ? localMax.x : localMin.x,
+                    (corner & 2) != 0 ? localMax.y : localMin.y,
+                    (corner & 4) != 0 ? localMax.z : localMin.z);
+                const glm::vec4 clip = ubo.ViewProjectionUnJit * worldTransform * glm::vec4(point, 1.0f);
+                if (clip.w <= 0.001f)
+                {
+                    continue;
+                }
+                const glm::vec3 ndc = glm::vec3(clip) / clip.w;
+                if (ndc.z < 0.0f || ndc.z > 1.0f)
+                {
+                    continue;
+                }
+                corners[corner] = {
+                    viewportPos.x + (ndc.x * 0.5f + 0.5f) * viewportSize.x,
+                    viewportPos.y + (ndc.y * 0.5f + 0.5f) * viewportSize.y,
+                };
+                projected[corner] = true;
+            }
+
+            constexpr uint32_t edges[][2] = {
+                {0, 1}, {1, 3}, {3, 2}, {2, 0}, {4, 5}, {5, 7},
+                {7, 6}, {6, 4}, {0, 4}, {1, 5}, {2, 6}, {3, 7},
+            };
+            ImDrawList* drawList = ImGui::GetForegroundDrawList();
+            drawList->PushClipRect(viewportPos, viewportPos + viewportSize, true);
+            for (const auto& edge : edges)
+            {
+                if (projected[edge[0]] && projected[edge[1]])
+                {
+                    drawList->AddLine(corners[edge[0]], corners[edge[1]], color, 2.0f);
+                }
+            }
+            drawList->PopClipRect();
+        }
+
+        std::filesystem::path WorkspaceDir()
+        {
+            return Utilities::FileHelper::GetWritableRuntimeRoot() / "scad_library";
+        }
 
         // Authoring tools must prefer the repository source tree even when the
         // executable is launched with out/build/<preset>/bin as its cwd. A
@@ -854,6 +1334,11 @@ namespace ScadLibrary
                     break;
                 }
                 cursor = parent;
+            }
+            const std::filesystem::path writablePath = Utilities::FileHelper::ResolveWritablePath(relativePath);
+            if (std::filesystem::exists(writablePath, ec))
+            {
+                return writablePath;
             }
             return Utilities::FileHelper::GetPlatformFilePath(relativePath.string().c_str());
         }
@@ -929,6 +1414,56 @@ namespace ScadLibrary
             }
             const std::filesystem::path relative = canonicalPath.lexically_relative(canonicalRoot);
             return !relative.empty() && *relative.begin() != "..";
+        }
+
+        std::filesystem::path WritableAuthoringPath(const std::filesystem::path& relativePath)
+        {
+            if (relativePath.is_absolute())
+            {
+                return relativePath;
+            }
+
+            const std::filesystem::path authoringPath = AuthoringPath(relativePath);
+            if (!IsPathWithin(authoringPath, Utilities::FileHelper::GetRuntimeRoot()))
+            {
+                // Keep the source-tree authoring workflow used by desktop development.
+                return authoringPath;
+            }
+            return Utilities::FileHelper::ResolveWritablePath(relativePath);
+        }
+
+        bool PrepareWritableAuthoringTree(const std::filesystem::path& relativePath)
+        {
+            const std::filesystem::path authoringPath = AuthoringPath(relativePath);
+            if (!IsPathWithin(authoringPath, Utilities::FileHelper::GetRuntimeRoot()))
+            {
+                return true;
+            }
+
+            const std::filesystem::path writablePath = Utilities::FileHelper::ResolveWritablePath(relativePath);
+            const std::filesystem::path sourcePath = Utilities::FileHelper::GetRuntimeFilePath(relativePath);
+            if (writablePath.lexically_normal() == sourcePath.lexically_normal())
+            {
+                return true;
+            }
+            std::error_code errorCode;
+            if (!std::filesystem::is_directory(sourcePath, errorCode))
+            {
+                SPDLOG_WARN("[ScadLibrary] authoring source directory is unavailable: {}", sourcePath.string());
+                return false;
+            }
+            errorCode.clear();
+            std::filesystem::copy(sourcePath, writablePath,
+                                  std::filesystem::copy_options::recursive |
+                                      std::filesystem::copy_options::skip_existing,
+                                  errorCode);
+            if (errorCode)
+            {
+                SPDLOG_WARN("[ScadLibrary] failed to seed writable authoring tree {}: {}",
+                            writablePath.string(), errorCode.message());
+                return false;
+            }
+            return true;
         }
 
         std::string ReadAssemblyTextFile(const std::filesystem::path& path)
@@ -1031,169 +1566,6 @@ namespace ScadLibrary
             default:
                 return "undef";
             }
-        }
-
-        std::vector<std::string> ExtractTerrainSources(const std::string& source)
-        {
-            // Preserve offsets while masking comments and strings so token
-            // positions still address the original source.
-            std::string searchable = source;
-            bool lineComment = false;
-            bool blockComment = false;
-            bool stringLiteral = false;
-            bool escaped = false;
-            for (size_t index = 0; index < searchable.size(); ++index)
-            {
-                const char character = searchable[index];
-                const char next = index + 1 < searchable.size() ? searchable[index + 1] : '\0';
-                if (lineComment)
-                {
-                    if (character == '\n')
-                    {
-                        lineComment = false;
-                    }
-                    else
-                    {
-                        searchable[index] = ' ';
-                    }
-                    continue;
-                }
-                if (blockComment)
-                {
-                    searchable[index] = character == '\n' ? '\n' : ' ';
-                    if (character == '*' && next == '/')
-                    {
-                        searchable[index + 1] = ' ';
-                        ++index;
-                        blockComment = false;
-                    }
-                    continue;
-                }
-                if (stringLiteral)
-                {
-                    if (!escaped && character == '"')
-                    {
-                        stringLiteral = false;
-                    }
-                    else
-                    {
-                        searchable[index] = character == '\n' ? '\n' : ' ';
-                    }
-                    escaped = !escaped && character == '\\';
-                    if (character != '\\')
-                    {
-                        escaped = false;
-                    }
-                    continue;
-                }
-                if (character == '/' && next == '/')
-                {
-                    searchable[index] = searchable[index + 1] = ' ';
-                    ++index;
-                    lineComment = true;
-                }
-                else if (character == '/' && next == '*')
-                {
-                    searchable[index] = searchable[index + 1] = ' ';
-                    ++index;
-                    blockComment = true;
-                }
-                else if (character == '"')
-                {
-                    stringLiteral = true;
-                }
-            }
-
-            std::vector<std::string> blocks;
-            static const std::regex terrainCallRegex(R"(\bgk_terrain\s*\()");
-            for (std::sregex_iterator it(searchable.begin(), searchable.end(), terrainCallRegex), terrainEnd;
-                 it != terrainEnd; ++it)
-            {
-                const size_t callPosition = static_cast<size_t>(it->position());
-                const size_t openParen = searchable.find('(', callPosition);
-                size_t closeParen = std::string::npos;
-                int depth = 0;
-                for (size_t cursor = openParen; cursor < searchable.size(); ++cursor)
-                {
-                    if (searchable[cursor] == '(')
-                    {
-                        ++depth;
-                    }
-                    else if (searchable[cursor] == ')' && --depth == 0)
-                    {
-                        closeParen = cursor;
-                        break;
-                    }
-                }
-                if (closeParen == std::string::npos)
-                {
-                    continue;
-                }
-                size_t statementEnd = closeParen + 1;
-                while (statementEnd < searchable.size() &&
-                       std::isspace(static_cast<unsigned char>(searchable[statementEnd])))
-                {
-                    ++statementEnd;
-                }
-                if (statementEnd < searchable.size() && searchable[statementEnd] == ';')
-                {
-                    ++statementEnd;
-                }
-
-                const size_t previousSemicolon =
-                    callPosition == 0 ? std::string::npos : searchable.rfind(';', callPosition - 1);
-                size_t statementStart = previousSemicolon == std::string::npos ? 0 : previousSemicolon + 1;
-                while (statementStart < callPosition &&
-                       std::isspace(static_cast<unsigned char>(source[statementStart])))
-                {
-                    ++statementStart;
-                }
-
-                size_t argumentStart = openParen + 1;
-                size_t argumentEnd = closeParen;
-                while (argumentStart < argumentEnd && std::isspace(static_cast<unsigned char>(source[argumentStart])))
-                {
-                    ++argumentStart;
-                }
-                while (argumentEnd > argumentStart && std::isspace(static_cast<unsigned char>(source[argumentEnd - 1])))
-                {
-                    --argumentEnd;
-                }
-                const std::string argument = source.substr(argumentStart, argumentEnd - argumentStart);
-
-                std::string block;
-                static const std::regex identifierRegex(R"([A-Za-z_][A-Za-z0-9_]*)");
-                if (std::regex_match(argument, identifierRegex))
-                {
-                    const std::regex assignmentRegex(fmt::format(R"((?:^|[;\n])\s*{}\s*=)", argument),
-                                                     std::regex_constants::ECMAScript);
-                    const std::string prefix = searchable.substr(0, callPosition);
-                    size_t assignmentStart = std::string::npos;
-                    size_t assignmentEnd = std::string::npos;
-                    for (std::sregex_iterator assignment(prefix.begin(), prefix.end(), assignmentRegex),
-                         assignmentEndIt;
-                         assignment != assignmentEndIt; ++assignment)
-                    {
-                        assignmentStart = static_cast<size_t>(assignment->position());
-                        if (prefix[assignmentStart] == ';' || prefix[assignmentStart] == '\n')
-                        {
-                            ++assignmentStart;
-                        }
-                        assignmentEnd = searchable.find(';', assignmentStart);
-                    }
-                    if (assignmentStart != std::string::npos && assignmentEnd != std::string::npos)
-                    {
-                        block = source.substr(assignmentStart, assignmentEnd - assignmentStart + 1);
-                        block += "\n";
-                    }
-                }
-                block += source.substr(statementStart, statementEnd - statementStart);
-                if (std::find(blocks.begin(), blocks.end(), block) == blocks.end())
-                {
-                    blocks.push_back(std::move(block));
-                }
-            }
-            return blocks;
         }
 
         // ------------------------------------------------------------------ kit file watch
@@ -1315,7 +1687,7 @@ namespace ScadLibrary
     void ScadLibraryInterface::Config()
     {
         ImGuiIO& io = ImGui::GetIO();
-        imguiIniPath_ = Utilities::FileHelper::GetPlatformFilePath("scadlibrary.ini");
+        imguiIniPath_ = Utilities::FileHelper::GetWritableFilePath("scadlibrary.ini");
         io.IniFilename = imguiIniPath_.c_str();
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags &= ~ImGuiConfigFlags_DockingEnable;
@@ -1324,38 +1696,7 @@ namespace ScadLibrary
     void ScadLibraryInterface::Init()
     {
         NextUI::Theme::ApplyProfessionalTheme();
-        // ScadLibrary uses a deliberately flatter editor treatment than the
-        // general-purpose engine UI: restrained rounding, quiet borders and
-        // denser controls keep the scene itself visually dominant.
-        ImGuiStyle& style = ImGui::GetStyle();
-        style.WindowRounding = 0.0f;
-        style.ChildRounding = 3.0f;
-        style.FrameRounding = 3.0f;
-        style.PopupRounding = 4.0f;
-        style.ScrollbarRounding = 3.0f;
-        style.GrabRounding = 3.0f;
-        style.TabRounding = 3.0f;
-        style.FrameBorderSize = 0.0f;
-        style.ChildBorderSize = 1.0f;
-        style.ItemSpacing = ImVec2(7.0f, 6.0f);
-        style.FramePadding = ImVec2(8.0f, 5.0f);
-        style.Colors[ImGuiCol_WindowBg] = ImVec4(0.075f, 0.083f, 0.094f, 0.985f);
-        style.Colors[ImGuiCol_ChildBg] = ImVec4(0.045f, 0.050f, 0.058f, 0.52f);
-        style.Colors[ImGuiCol_FrameBg] = ImVec4(0.045f, 0.050f, 0.058f, 0.96f);
-        style.Colors[ImGuiCol_Border] = ImVec4(0.20f, 0.22f, 0.25f, 0.72f);
-        ImGuiIO& io = ImGui::GetIO();
-        // The vcpkg imgui is built with the FreeType feature, so the font atlas must
-        // use the FreeType builder (matches ScadStudio/gkNextEditor).
-        io.Fonts->SetFontLoader(ImGuiFreeType::GetFontLoader());
-        io.Fonts->FontLoaderFlags = ImGuiFreeTypeLoaderFlags_NoHinting;
-
-        const std::string fontPath = Utilities::FileHelper::GetPlatformFilePath("assets/fonts/DroidSansFallback.ttf");
-        ImFont* font =
-            io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 18.0f, nullptr, io.Fonts->GetGlyphRangesChineseFull());
-        if (font == nullptr)
-        {
-            io.Fonts->AddFontDefault();
-        }
+        NextUI::FontLoader::LoadDefaultUiFont("assets/fonts/Roboto-Regular.ttf", 18.0f);
     }
 
     void ScadLibraryInterface::SetWorkspaceMode(EWorkspaceMode mode)
@@ -1370,11 +1711,7 @@ namespace ScadLibrary
         if (mode == EWorkspaceMode::SceneAssembly)
         {
             rigPreview_.SetActive(false);
-            if (assemblyProcedural_)
-            {
-                ReloadTerrainProcess();
-            }
-            else if (!bench_.empty())
+            if (document_.HasTerrain() || !Bench().empty() || document_.SourceSegmentCount() > 0)
             {
                 ReloadBench(false);
             }
@@ -1455,27 +1792,22 @@ namespace ScadLibrary
         const bool kitBrowserMode = workspaceMode_ == EWorkspaceMode::KitBrowser;
         if (kitBrowserMode)
         {
-            constexpr float kitBrowserHeaderHeight = 56.0f;
             constexpr float kitBrowserGap = 10.0f;
             const float kitBrowserLeftWidth = std::clamp(viewport->Size.x * 0.22f, 280.0f, 360.0f);
-            const float kitBrowserRightWidth = std::clamp(viewport->Size.x * 0.31f, 430.0f, 520.0f);
-            const ImVec2 kitBrowserViewportPos(
-                viewport->Pos.x + kitBrowserLeftWidth + kitBrowserGap, panelY + kitBrowserHeaderHeight);
+            const float kitBrowserContentHeight = std::max(1.0f, panelHeight - kKitBrowserHeaderHeight);
+            const float kitBrowserCatalogHeight = std::clamp(kitBrowserContentHeight * 0.42f, 220.0f, 420.0f);
+            const ImVec2 kitBrowserViewportPos(viewport->Pos.x,
+                                                panelY + kKitBrowserHeaderHeight + kitBrowserCatalogHeight +
+                                                    kitBrowserGap);
             const ImVec2 kitBrowserViewportSize(
-                std::max(1.0f, viewport->Size.x - kitBrowserLeftWidth - kitBrowserRightWidth - kitBrowserGap * 2.0f),
-                std::max(1.0f, panelHeight - kitBrowserHeaderHeight));
+                kitBrowserLeftWidth,
+                std::max(1.0f, kitBrowserContentHeight - kitBrowserCatalogHeight - kitBrowserGap));
             DrawKitBrowserPanel(ImVec2(viewport->Pos.x, panelY), ImVec2(viewport->Size.x, panelHeight));
             viewportPosition_ = {kitBrowserViewportPos.x, kitBrowserViewportPos.y};
             viewportSize_ = {kitBrowserViewportSize.x, kitBrowserViewportSize.y};
             sceneToolbarVisible_ = false;
             DrawViewportAxis(kitBrowserViewportPos, kitBrowserViewportSize);
-            const NextUI::Scaling::FViewportRect framebufferViewport =
-                NextUI::Scaling::ImGuiToMainFramebufferViewport(kitBrowserViewportPos, kitBrowserViewportSize);
-            engine_.GetRenderer().SwapChain().UpdateOutputViewport(
-                Utilities::Math::floorToInt(framebufferViewport.Position.x),
-                Utilities::Math::floorToInt(framebufferViewport.Position.y),
-                Utilities::Math::ceilToInt(framebufferViewport.Size.x),
-                Utilities::Math::ceilToInt(framebufferViewport.Size.y));
+            NextUI::Scaling::SyncImGuiViewportToSwapChain(engine_, kitBrowserViewportPos, kitBrowserViewportSize);
             return;
         }
 
@@ -1522,14 +1854,28 @@ namespace ScadLibrary
         {
             const ImVec2 sceneViewportPos(viewport->Pos.x + leftWidth, panelY);
             const ImVec2 sceneViewportSize(std::max(1.0f, viewport->Size.x - leftWidth - rightWidth), panelHeight);
-            if (assemblyProcedural_)
+            DrawKitDropTarget(sceneViewportPos, sceneViewportSize);
+            // Terrain operators are selected from the Structure outliner. The
+            // TERR tab edits only base data, while a selected operator keeps
+            // its visual handles visible in the viewport.
+            const bool structureTerrainSelection =
+                assemblyEditorTab_ == 3 && document_.HasTerrain() &&
+                selectedSegment_ >= 0 && selectedSegment_ < static_cast<int>(document_.Segments().size()) &&
+                (document_.Segments()[selectedSegment_].kind == EScadSegmentKind::Terrain ||
+                 document_.Segments()[selectedSegment_].kind == EScadSegmentKind::TerrainRule);
+            if (structureTerrainSelection)
             {
                 DrawTerrainFeatureToolbar(sceneViewportPos);
                 DrawTerrainFeatureOverlay(sceneViewportPos, sceneViewportSize);
             }
+            else if (assemblyEditorTab_ == 3 && HasActiveProceduralHandles())
+            {
+                DrawLayScatterOverlay(sceneViewportPos, sceneViewportSize);
+            }
             else
             {
                 DrawSceneGizmoToolbar(sceneViewportPos);
+                DrawSelectedStructureBounds(sceneViewportPos, sceneViewportSize);
                 DrawSceneObjectGizmo(sceneViewportPos, sceneViewportSize);
             }
         }
@@ -1540,14 +1886,10 @@ namespace ScadLibrary
 
         // Deferred bench reload: wait until the drag/edit is released so the scene
         // is not rebuilt on every mouse-move.
-        if (composeMode && assemblyProcedural_ && terrainProcessDirty_ && autoReload_ && !ImGui::IsAnyItemActive() &&
-            !terrainFeatureDragging_ && !terrainRuleDragging_)
+        if (composeMode && autoReload_ && (terrainProcessDirty_ || benchDirty_) && !ImGui::IsAnyItemActive() &&
+            !terrainFeatureDragging_ && !terrainRuleDragging_ && !layScatterDragging_)
         {
-            ReloadTerrainProcess();
-        }
-        else if (composeMode && benchDirty_ && autoReload_ && !ImGui::IsAnyItemActive())
-        {
-            ReloadBench();
+            ReloadCurrentAssemblyPreview();
         }
         if (workspaceMode_ == EWorkspaceMode::CharacterWorkbench && workbenchReloadRequested_ &&
             !ImGui::IsAnyItemActive())
@@ -1564,16 +1906,11 @@ namespace ScadLibrary
             ReloadDesigner();
         }
 
-        const NextUI::Scaling::FViewportRect framebufferViewport =
-            NextUI::Scaling::ImGuiToMainFramebufferViewport(
-                ImVec2(viewport->Pos.x + leftWidth, viewport->Pos.y + kTitleBarHeight),
-                ImVec2(std::max(1.0f, viewport->Size.x - leftWidth - rightWidth),
-                       std::max(1.0f, panelHeight - timelineHeight)));
-        engine_.GetRenderer().SwapChain().UpdateOutputViewport(
-            Utilities::Math::floorToInt(framebufferViewport.Position.x),
-            Utilities::Math::floorToInt(framebufferViewport.Position.y),
-            Utilities::Math::ceilToInt(framebufferViewport.Size.x),
-            Utilities::Math::ceilToInt(framebufferViewport.Size.y));
+        NextUI::Scaling::SyncImGuiViewportToSwapChain(
+            engine_,
+            ImVec2(viewport->Pos.x + leftWidth, viewport->Pos.y + kTitleBarHeight),
+            ImVec2(std::max(1.0f, viewport->Size.x - leftWidth - rightWidth),
+                   std::max(1.0f, panelHeight - timelineHeight)));
     }
 
     bool ScadLibraryInterface::ConsumeFocusSelectedRequest()
@@ -1612,7 +1949,8 @@ namespace ScadLibrary
         config.DrawMenuBar = [&]() -> float
         {
             float menuRight = ImGui::GetCursorScreenPos().x;
-            if (ImGui::BeginMenu("File"))
+            NextUI::Theme::FMainMenuGhostScope mainMenuStyle;
+            if (mainMenuStyle.BeginMenu("File"))
             {
                 if (ImGui::MenuItem("重新扫描场景与 Kit", "F5"))
                 {
@@ -1623,7 +1961,7 @@ namespace ScadLibrary
                 {
                     SaveAssembly(false);
                 }
-                if (ImGui::MenuItem("导出新场景", nullptr, false, !bench_.empty()))
+                if (ImGui::MenuItem("导出新场景", nullptr, false, !Bench().empty()))
                 {
                     ExportBench();
                 }
@@ -1636,7 +1974,7 @@ namespace ScadLibrary
             }
             menuRight = std::max(menuRight, ImGui::GetItemRectMax().x);
 
-            if (ImGui::BeginMenu("View"))
+            if (mainMenuStyle.BeginMenu("View"))
             {
                 if (workspaceMode_ == EWorkspaceMode::SceneAssembly)
                 {
@@ -1650,6 +1988,12 @@ namespace ScadLibrary
                 if (workspaceMode_ != EWorkspaceMode::KitBrowser && ImGui::MenuItem("Inspector", nullptr, inspectorOpen))
                 {
                     benchCollapsed_ = !benchCollapsed_;
+                }
+                ImGui::Separator();
+                const bool consoleOpen = DevTools::FUiDevPanels::Get().IsConsoleOpen();
+                if (ImGui::MenuItem("控制台", "`", consoleOpen))
+                {
+                    DevTools::FUiDevPanels::Get().ToggleConsole();
                 }
                 ImGui::EndMenu();
             }
@@ -1666,31 +2010,24 @@ namespace ScadLibrary
 
     void ScadLibraryInterface::DrawWorkspaceToolbar()
     {
-        constexpr float buttonWidth = 144.0f;
-        const float buttonHeight = std::max(32.0f, kBottomBarHeight - 8.0f);
-        const auto modeButton = [&](const char* label, const char* shortcut, EWorkspaceMode mode)
-        {
-            if (NextUI::Theme::ToolbarButton(label, shortcut, workspaceMode_ == mode,
-                                              ImVec2(buttonWidth, buttonHeight)))
-            {
-                SetWorkspaceMode(mode);
-            }
+        const std::vector<std::pair<EWorkspaceMode, std::string>> modes = {
+            {EWorkspaceMode::SceneAssembly, ICON_FA_CITY "  场景组装"},
+            {EWorkspaceMode::CharacterDesigner, ICON_FA_CUBES_STACKED "  角色合成"},
+            {EWorkspaceMode::CharacterWorkbench, ICON_FA_PERSON "  动作与装备"},
+            {EWorkspaceMode::KitBrowser, ICON_FA_BOOK_OPEN "  Kit 浏览"}
         };
-
-        modeButton(ICON_FA_PERSON "  动作与装备", "Ctrl+3", EWorkspaceMode::CharacterWorkbench);
-        ImGui::SameLine(0.0f, 4.0f);
-        modeButton(ICON_FA_CUBES_STACKED "  角色合成", "Ctrl+2", EWorkspaceMode::CharacterDesigner);
-        ImGui::SameLine(0.0f, 4.0f);
-        modeButton(ICON_FA_CITY "  场景组装", "Ctrl+1", EWorkspaceMode::SceneAssembly);
-        ImGui::SameLine(0.0f, 4.0f);
-        modeButton(ICON_FA_BOOK_OPEN "  Kit 浏览", "Ctrl+4", EWorkspaceMode::KitBrowser);
+        EWorkspaceMode currentMode = workspaceMode_;
+        if (DrawSegmentedPills("##WorkspaceTabs", modes, &currentMode, 580.0f, 32.0f))
+        {
+            SetWorkspaceMode(currentMode);
+        }
     }
 
     void ScadLibraryInterface::DrawActionToolbar()
     {
         constexpr float buttonWidth = 72.0f;
-        constexpr float buttonHeight = 40.0f;
-        constexpr float itemGap = 4.0f;
+        constexpr float buttonHeight = 32.0f;
+        constexpr float itemGap = 5.0f;
         const auto actionButton = [&](const char* label, const char* tooltip, bool active = false)
         {
             return NextUI::Theme::ToolbarButton(label, tooltip, active, ImVec2(buttonWidth, buttonHeight));
@@ -1698,15 +2035,27 @@ namespace ScadLibrary
 
         if (workspaceMode_ == EWorkspaceMode::SceneAssembly)
         {
+            const bool dirty = assemblySourceDirty_ || benchDirty_ || sourceBufferDirty_ || terrainProcessDirty_;
             ImGui::BeginDisabled(openedAssemblyPath_.empty());
-            if (actionButton(ICON_FA_FLOPPY_DISK " 保存", "保存当前场景"))
+            if (dirty)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::Accent, 0.85f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover));
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+            }
+            if (actionButton(ICON_FA_FLOPPY_DISK " 保存", dirty ? "保存修改 (Ctrl+S)" : "当前已是最新"))
             {
                 SaveAssembly(false);
             }
+            if (dirty)
+            {
+                ImGui::PopStyleColor(3);
+            }
             ImGui::EndDisabled();
+
             ImGui::SameLine(0.0f, itemGap);
-            ImGui::BeginDisabled(assemblySource_.empty() && bench_.empty());
-            if (actionButton(ICON_FA_PLAY " 预览", "预览当前未保存内容"))
+            ImGui::BeginDisabled(assemblySource_.empty() && Bench().empty());
+            if (actionButton(ICON_FA_PLAY " 预览", "预览当前未保存内容 (F5)"))
             {
                 PreviewAssemblySource();
             }
@@ -1749,26 +2098,56 @@ namespace ScadLibrary
                 aiOpenRequested_ = true;
             }
         }
+
+        ImGui::SameLine(0.0f, itemGap);
+        if (NextUI::Theme::ToolbarButton(ICON_FA_TERMINAL " 控制台", "切换控制台 (`)",
+                                         DevTools::FUiDevPanels::Get().IsConsoleOpen(),
+                                         ImVec2(78.0f, buttonHeight)))
+        {
+            DevTools::FUiDevPanels::Get().ToggleConsole();
+        }
+
         ImGui::SameLine(0.0f, 10.0f);
-        ImGui::TextDisabled("FPS %.0f", engine_.GetFrameRate());
+        const float fps = engine_.GetFrameRate();
+        const ImVec4 fpsColor = fps >= 55.0f ? NextUI::Theme::Color(NextUI::Theme::EColor::Success)
+                                            : (fps >= 30.0f ? NextUI::Theme::Color(NextUI::Theme::EColor::Warning)
+                                                            : NextUI::Theme::Color(NextUI::Theme::EColor::Danger));
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextColored(fpsColor, "%.0f FPS", fps);
     }
 
     void ScadLibraryInterface::DrawBottomBar()
     {
+        DevTools::FUiDevPanels::Get().SetBottomBarReservedHeight(kBottomBarHeight);
         NextUI::Theme::FBottomBarConfig config{};
         config.WindowId = "ScadLibraryBottomBar";
         config.Height = kBottomBarHeight;
         config.CenterWidth = 588.0f;
         config.RightWidth = workspaceMode_ == EWorkspaceMode::SceneAssembly ||
                 workspaceMode_ == EWorkspaceMode::CharacterDesigner
-            ? 300.0f
-            : (workspaceMode_ == EWorkspaceMode::CharacterWorkbench ? 220.0f : 160.0f);
+            ? 390.0f
+            : (workspaceMode_ == EWorkspaceMode::CharacterWorkbench ? 310.0f : 250.0f);
         config.DrawLeftContent = [&]()
         {
+            const bool dirty = (workspaceMode_ == EWorkspaceMode::SceneAssembly &&
+                                (assemblySourceDirty_ || benchDirty_ || sourceBufferDirty_ || terrainProcessDirty_)) ||
+                               (workspaceMode_ == EWorkspaceMode::CharacterDesigner && designerDirty_);
+            const ImU32 dotColor = statusError_
+                ? NextUI::Theme::ColorU32(NextUI::Theme::EColor::Danger)
+                : (dirty ? NextUI::Theme::ColorU32(NextUI::Theme::EColor::Warning)
+                         : NextUI::Theme::ColorU32(NextUI::Theme::EColor::Success));
+
+            const ImVec2 pos = ImGui::GetCursorScreenPos();
+            constexpr float radius = 4.0f;
+            const float centerY = pos.y + ImGui::GetFrameHeight() * 0.5f;
+            ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(pos.x + radius + 2.0f, centerY), radius, dotColor);
+            ImGui::Dummy(ImVec2(radius * 2.0f + 6.0f, 0.0f));
+            ImGui::SameLine();
+
             if (!statusLine_.empty())
             {
                 const ImVec4 color = statusError_ ? NextUI::Theme::Color(NextUI::Theme::EColor::Danger)
-                                                  : NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted);
+                                                  : NextUI::Theme::Color(NextUI::Theme::EColor::Text);
                 ImGui::TextColored(color, "%s", statusLine_.c_str());
             }
             else
@@ -1796,22 +2175,178 @@ namespace ScadLibrary
         NextUI::Theme::DrawBottomBar(config);
     }
 
+    void ScadLibraryInterface::DrawKitDropTarget(const ImVec2& pos, const ImVec2& size)
+    {
+        if (ImGui::GetDragDropPayload() == nullptr || size.x <= 0.0f || size.y <= 0.0f)
+        {
+            return;
+        }
+
+        ImGuiViewport* viewport = ImGui::GetMainViewport();
+        if (viewport == nullptr)
+        {
+            return;
+        }
+
+        ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
+        ImGui::SetNextWindowSize(size, ImGuiCond_Always);
+        ImGui::SetNextWindowViewport(viewport->ID);
+        ImGui::SetNextWindowBgAlpha(0.0f);
+        const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar |
+            ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+            ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollWithMouse |
+            ImGuiWindowFlags_NoBringToFrontOnFocus;
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+        if (ImGui::Begin("##ScadLibraryKitDropTarget", nullptr, flags))
+        {
+            ImGui::InvisibleButton("##ScadLibraryKitDropTargetButton", size);
+            if (ImGui::BeginDragDropTarget())
+            {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(
+                        kScadKitDragDropPayload, ImGuiDragDropFlags_AcceptBeforeDelivery))
+                {
+                    if (payload->DataSize == sizeof(FScadKitDragPayload))
+                    {
+                        const auto* data = static_cast<const FScadKitDragPayload*>(payload->Data);
+                        if (data->kitIndex >= 0 && data->kitIndex < static_cast<int>(kits_.size()) &&
+                            data->moduleIndex >= 0 &&
+                            data->moduleIndex < static_cast<int>(kits_[data->kitIndex].modules.size()))
+                        {
+                            glm::vec3 scadPosition;
+                            if (GetKitDropPlacement(scadPosition))
+                            {
+                                DrawKitDropPreview(kits_[data->kitIndex].modules[data->moduleIndex], scadPosition,
+                                                   pos, size);
+                            }
+                            if (payload->IsDelivery())
+                            {
+                                // PlaceKitFromDrop persists and reloads the structural edit so its
+                                // placement IDs are rebuilt against the scene that was just loaded.
+                                PlaceKitFromDrop(data->kitIndex, data->moduleIndex);
+                            }
+                        }
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+        }
+        ImGui::End();
+        ImGui::PopStyleVar(2);
+    }
+
+    bool ScadLibraryInterface::GetKitDropPlacement(glm::vec3& outScadPosition) const
+    {
+        // NextEngine keeps SDL input positions in framebuffer pixels. ImGui is
+        // scaled down to logical coordinates for the UI, but the unprojection
+        // path consumes framebuffer pixels, so applying UiScale here would
+        // shift the ray away from the cursor on high-DPI displays.
+        const glm::vec2 mousePosition = glm::vec2(engine_.GetMousePos());
+        glm::vec3 rayOrigin;
+        glm::vec3 rayDirection;
+        Runtime::EngineHelper::GetScreenToWorldRay(mousePosition, rayOrigin, rayDirection);
+
+        glm::vec3 worldPosition(0.0f);
+        bool hitSurface = false;
+        engine_.RayCast(rayOrigin, rayDirection, [&](Assets::RayCastResult result)
+        {
+            if (result.Hit)
+            {
+                worldPosition = glm::vec3(result.HitPoint);
+                hitSurface = true;
+            }
+            return true;
+        });
+
+        // An empty scene has no BVH hit yet. Use the SCAD ground plane in that
+        // case, which also gives a useful placement target when the view is
+        // aimed below the horizon.
+        if (!hitSurface && std::abs(rayDirection.y) > 1.0e-5f)
+        {
+            const float distance = -rayOrigin.y / rayDirection.y;
+            if (distance > 0.0f)
+            {
+                worldPosition = rayOrigin + rayDirection * distance;
+                hitSurface = true;
+            }
+        }
+
+        if (!hitSurface)
+        {
+            return false;
+        }
+
+        // SCAD is Z-up with +Y pointing toward the opposite engine-Z axis.
+        outScadPosition = glm::vec3(worldPosition.x, -worldPosition.z, worldPosition.y);
+        return true;
+    }
+
+    void ScadLibraryInterface::DrawKitDropPreview(const FKitModuleInfo& module, const glm::vec3& scadPosition,
+                                                   const ImVec2& viewportPos, const ImVec2& viewportSize) const
+    {
+        // catalog.json contains extents rather than the complete local bbox. Kit modules conventionally sit on
+        // the Z=0 plane, so use their footprint centered on the placement cursor and their measured height.
+        const float footprintX = module.hasMetrics ? std::max(module.footprintX, 0.25f) : 1.0f;
+        const float footprintY = module.hasMetrics ? std::max(module.footprintY, 0.25f) : 1.0f;
+        const float height = module.hasMetrics ? std::max(module.height, 0.25f) : 1.0f;
+        const glm::vec3 localMin(-footprintX * 0.5f, -footprintY * 0.5f, 0.0f);
+        const glm::vec3 localMax(footprintX * 0.5f, footprintY * 0.5f, height);
+        const float scale = engine_.GetUserSettings().ScadToWorldScale;
+        const glm::mat4 worldTransform = glm::mat4(Assets::Scad::ScadToWorldBasis(scale)) *
+            glm::translate(glm::mat4(1.0f), scadPosition);
+        DrawOrientedBoxOverlay(engine_.GetLastUniformBufferObject(), viewportPos, viewportSize, worldTransform,
+                               localMin, localMax, IM_COL32(255, 193, 74, 255));
+    }
+
+    bool ScadLibraryInterface::PlaceKitFromDrop(const int kitIndex, const int moduleIndex)
+    {
+        if (openedAssemblyPath_.empty())
+        {
+            statusLine_ = "请先打开一个场景，再从 Kit 库拖拽模块";
+            statusError_ = true;
+            return false;
+        }
+        if (kitIndex < 0 || kitIndex >= static_cast<int>(kits_.size()) || moduleIndex < 0 ||
+            moduleIndex >= static_cast<int>(kits_[kitIndex].modules.size()))
+        {
+            statusLine_ = "无法放置：Kit 模块已不存在，请先刷新资源库";
+            statusError_ = true;
+            return false;
+        }
+
+        glm::vec3 scadPosition;
+        if (!GetKitDropPlacement(scadPosition))
+        {
+            statusLine_ = "无法确定落点：请把 Kit 拖到场景几何体或地面方向";
+            statusError_ = true;
+            return false;
+        }
+
+        AddToBenchAt(kitIndex, kits_[kitIndex].modules[moduleIndex].name, scadPosition);
+        // A newly inserted statement changes source offsets for the placement
+        // index. Write the authoritative scene and rebuild its runtime roots
+        // now; a workspace-only preview would leave document and node IDs out
+        // of sync.
+        SaveAssembly(false);
+        return true;
+    }
+
     void ScadLibraryInterface::DrawKitBrowserPanel(const ImVec2& pos, const ImVec2& size)
     {
-        constexpr float headerHeight = 56.0f;
         constexpr float gap = 10.0f;
         const float leftWidth = std::clamp(size.x * 0.22f, 280.0f, 360.0f);
-        const float rightWidth = std::clamp(size.x * 0.31f, 430.0f, 520.0f);
-        const float contentHeight = std::max(1.0f, size.y - headerHeight);
-        const ImVec2 viewportPos(pos.x + leftWidth + gap, pos.y + headerHeight);
-        const ImVec2 viewportSize(std::max(1.0f, size.x - leftWidth - rightWidth - gap * 2.0f), contentHeight);
+        const float contentHeight = std::max(1.0f, size.y - kKitBrowserHeaderHeight);
+        const float catalogHeight = std::clamp(contentHeight * 0.42f, 220.0f, 420.0f);
+        const ImVec2 viewportPos(pos.x, pos.y + kKitBrowserHeaderHeight + catalogHeight + gap);
+        const ImVec2 viewportSize(leftWidth, std::max(1.0f, contentHeight - catalogHeight - gap));
+        const ImVec2 galleryPos(pos.x + leftWidth + gap, pos.y + kKitBrowserHeaderHeight);
+        const ImVec2 gallerySize(std::max(1.0f, size.x - leftWidth - gap), contentHeight);
         const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking |
             ImGuiWindowFlags_NoSavedSettings;
 
-        // Keep the central area uncovered so the renderer can show the selected module.
         ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(size.x, headerHeight), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(size.x, kKitBrowserHeaderHeight), ImGuiCond_Always);
         ImGui::SetNextWindowBgAlpha(0.98f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
@@ -1821,7 +2356,7 @@ namespace ScadLibrary
             ImGui::AlignTextToFramePadding();
             ImGui::TextUnformatted(ICON_FA_BOOK_OPEN "  Kit 浏览器");
             ImGui::SameLine();
-            ImGui::TextDisabled("%zu 个 Kit · 选择模块查看 3D 预览与详细信息", kits_.size());
+            ImGui::TextDisabled("%zu 个 Kit · 批量浏览并选择模块预览", kits_.size());
             ImGui::SameLine(ImGui::GetWindowWidth() - 54.0f);
             if (NextUI::Theme::IconButton(ICON_FA_ARROWS_ROTATE "##kit_browser_rescan", "重新扫描 Kit 目录", false,
                                           ImVec2(30.0f, 30.0f)))
@@ -1832,9 +2367,242 @@ namespace ScadLibrary
         ImGui::End();
         ImGui::PopStyleVar(3);
 
+        // The right side is a complete Kit gallery. Selecting any card drives the compact preview in the left rail.
+        ImGui::SetNextWindowPos(galleryPos, ImGuiCond_Always);
+        ImGui::SetNextWindowSize(gallerySize, ImGuiCond_Always);
+        ImGui::SetNextWindowBgAlpha(0.98f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f, 12.0f));
+        if (ImGui::Begin("##ScadLibraryKitGallery", nullptr, flags))
+        {
+            ImGui::TextUnformatted(ICON_FA_IMAGES "  全部 Kit 模块");
+            ImGui::SameLine();
+            ImGui::TextDisabled("%zu 个 Kit · %zu 个模块", kits_.size(),
+                                std::accumulate(kits_.begin(), kits_.end(), size_t{0},
+                                                [](const size_t total, const FKitInfo& kit)
+                                                {
+                                                    return total + kit.modules.size();
+                                                }));
+            ImGui::SetNextItemWidth(-1.0f);
+            ImGui::InputTextWithHint("##kit_browser_gallery_filter", ICON_FA_MAGNIFYING_GLASS " 搜索 Kit、模块或分类…",
+                                     kitBrowserGalleryFilterBuf_, sizeof(kitBrowserGalleryFilterBuf_));
+            std::map<std::string, size_t> galleryCategoryCounts;
+            for (const FKitInfo& kit : kits_)
+            {
+                for (const FKitModuleInfo& module : kit.modules)
+                {
+                    if (!module.category.empty())
+                    {
+                        ++galleryCategoryCounts[module.category];
+                    }
+                }
+            }
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, 2.0f));
+            const auto drawCategoryChip = [&](const char* label, const bool selected)
+            {
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 999.0f);
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 0.0f));
+                ImGui::PushStyleColor(ImGuiCol_Button,
+                                      selected ? ImVec4(0.18f, 0.42f, 0.70f, 1.0f) : ImVec4(0.12f, 0.15f, 0.20f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.49f, 0.78f, 1.0f));
+                const bool clicked = ImGui::Button(label);
+                ImGui::PopStyleColor(2);
+                ImGui::PopStyleVar(2);
+                return clicked;
+            };
+            
+            const float categoryRowRight = gallerySize.x * 3.0f;
+            float categoryRowUsedWidth = 0.0f;
+            const auto placeCategoryChip = [&](const std::string& label, const bool selected, const auto& onClick)
+            {
+                constexpr float chipGap = 6.0f;
+                const float chipWidth = ImGui::CalcTextSize(label.c_str()).x;
+                if (categoryRowUsedWidth > 0.0f)
+                {
+                    if (categoryRowUsedWidth > categoryRowRight)
+                    {
+                        ImGui::NewLine();
+                        categoryRowUsedWidth = 0.0f;
+                        ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight() * 0.8f);
+                    }
+                    else
+                    {
+                        ImGui::SameLine(0.0f, chipGap);
+                        categoryRowUsedWidth += chipGap;
+                    }
+                }
+                if (drawCategoryChip(label.c_str(), selected))
+                {
+                    onClick();
+                }
+                categoryRowUsedWidth += chipWidth;
+            };
+            placeCategoryChip("全部##kit_browser_category_all", kitBrowserGalleryCategory_.empty(), [&]()
+            {
+                kitBrowserGalleryCategory_.clear();
+            });
+            size_t rareCategoryCount = 0;
+            for (const auto& [category, count] : galleryCategoryCounts)
+            {
+                if (count <= 10)
+                {
+                    ++rareCategoryCount;
+                    continue;
+                }
+                placeCategoryChip(fmt::format("{}##kit_browser_category_{}", CategoryLabel(category), category),
+                                  kitBrowserGalleryCategory_ == category, [&]()
+                {
+                    kitBrowserGalleryCategory_ = category;
+                });
+            }
+            if (rareCategoryCount > 0)
+            {
+                placeCategoryChip(fmt::format("更多分类 ({})##kit_browser_category_more", rareCategoryCount),
+                                  kitBrowserShowRareCategories_, [&]()
+                {
+                    kitBrowserShowRareCategories_ = !kitBrowserShowRareCategories_;
+                });
+            }
+            if (kitBrowserShowRareCategories_)
+            {
+                for (const auto& [category, count] : galleryCategoryCounts)
+                {
+                    if (count > 10)
+                    {
+                        continue;
+                    }
+                    placeCategoryChip(fmt::format("{}##kit_browser_category_{}", CategoryLabel(category), category),
+                                      kitBrowserGalleryCategory_ == category, [&]()
+                    {
+                        kitBrowserGalleryCategory_ = category;
+                    });
+                }
+            }
+            ImGui::PopStyleVar();
+            ImGui::NewLine();
+            ImGui::Separator();
+
+            if (kits_.empty())
+            {
+                ImGui::TextDisabled("assets/scad/lib 下没有 Kit");
+            }
+            else
+            {
+                NextUI::IUserInterface* userInterface = engine_.GetUserInterface();
+                Vulkan::AssetThumbnailRenderer* thumbnails = userInterface != nullptr
+                    ? &EditorPreview::AssetThumbnails(engine_.GetRenderer())
+                    : nullptr;
+                constexpr float thumbnailGap = 10.0f;
+                constexpr float thumbnailSize = 96.0f;
+                const int columnCount = std::max(
+                    1, static_cast<int>((ImGui::GetContentRegionAvail().x + thumbnailGap) /
+                                         (thumbnailSize + thumbnailGap)));
+                const float rowHeight = thumbnailSize + thumbnailGap;
+
+                ImGui::BeginChild("##kit_browser_gallery_scroll", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None);
+                uint32_t thumbnailIndexBase = 0;
+                bool foundAnyModule = false;
+                for (int kitIndex = 0; kitIndex < static_cast<int>(kits_.size()); ++kitIndex)
+                {
+                    const FKitInfo& kit = kits_[kitIndex];
+                    std::vector<int> visibleModuleIndices;
+                    visibleModuleIndices.reserve(kit.modules.size());
+                    for (int moduleIndex = 0; moduleIndex < static_cast<int>(kit.modules.size()); ++moduleIndex)
+                    {
+                        const FKitModuleInfo& module = kit.modules[moduleIndex];
+                        const bool textMatches = kitBrowserGalleryFilterBuf_[0] == '\0' ||
+                            kit.name.find(kitBrowserGalleryFilterBuf_) != std::string::npos ||
+                            kit.scaleClass.find(kitBrowserGalleryFilterBuf_) != std::string::npos ||
+                            module.name.find(kitBrowserGalleryFilterBuf_) != std::string::npos ||
+                            module.category.find(kitBrowserGalleryFilterBuf_) != std::string::npos ||
+                            module.params.find(kitBrowserGalleryFilterBuf_) != std::string::npos;
+                        const bool categoryMatches = kitBrowserGalleryCategory_.empty() ||
+                            module.category == kitBrowserGalleryCategory_;
+                        if (textMatches && categoryMatches)
+                        {
+                            visibleModuleIndices.push_back(moduleIndex);
+                        }
+                    }
+                    if (!visibleModuleIndices.empty())
+                    {
+                        foundAnyModule = true;
+                        const std::string kitHeader = fmt::format(
+                            "{}  {} 个模块##kit_browser_gallery_group_{}", kit.name, visibleModuleIndices.size(), kitIndex);
+                        if (ImGui::CollapsingHeader(kitHeader.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+                        {
+                            const int rowCount =
+                                (static_cast<int>(visibleModuleIndices.size()) + columnCount - 1) / columnCount;
+                            ImGuiListClipper clipper;
+                            clipper.Begin(rowCount, rowHeight);
+                            while (clipper.Step())
+                            {
+                                for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row)
+                                {
+                                    for (int column = 0; column < columnCount; ++column)
+                                    {
+                                        const int visibleIndex = row * columnCount + column;
+                                        if (visibleIndex >= static_cast<int>(visibleModuleIndices.size()))
+                                        {
+                                            break;
+                                        }
+                                        const int moduleIndex = visibleModuleIndices[visibleIndex];
+                                        const FKitModuleInfo& module = kit.modules[moduleIndex];
+                                        if (column > 0)
+                                        {
+                                            ImGui::SameLine(0.0f, thumbnailGap);
+                                        }
+                                        ImGui::PushID(static_cast<int>(thumbnailIndexBase) + moduleIndex);
+                                        ImTextureID textureId = 0;
+                                        std::string thumbnailSource;
+                                        uint64_t thumbnailHash = 0;
+                                        if (thumbnails != nullptr &&
+                                            EnsureKitThumbnailSource(kitIndex, moduleIndex, thumbnailSource, thumbnailHash))
+                                        {
+                                            const uint32_t sampleSlot = thumbnails->RequestScadKitThumbnail(
+                                                thumbnailIndexBase + static_cast<uint32_t>(moduleIndex), thumbnailSource,
+                                                thumbnailHash);
+                                            if (sampleSlot != std::numeric_limits<uint32_t>::max())
+                                            {
+                                                textureId = userInterface->RequestImTextureIdRaw(sampleSlot);
+                                            }
+                                        }
+                                        const FKitThumbnailControlResult thumbnailControl = DrawKitThumbnailControl(
+                                            "##kit_browser_gallery_thumbnail", textureId, module.name, thumbnailSize,
+                                            kitBrowserSelectedKit_ == kitIndex && kitBrowserSelectedModule_ == moduleIndex);
+                                        if (thumbnailControl.clicked)
+                                        {
+                                            kitBrowserSelectedKit_ = kitIndex;
+                                            kitBrowserSelectedModule_ = moduleIndex;
+                                            PreviewModule(kitIndex, module.name);
+                                        }
+                                        if (thumbnailControl.hovered)
+                                        {
+                                            ImGui::SetTooltip("%s%s%s", module.name.c_str(),
+                                                              module.params.empty() ? "" : "\n参数：",
+                                                              module.params.empty() ? "" : module.params.c_str());
+                                        }
+                                        ImGui::PopID();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    thumbnailIndexBase += static_cast<uint32_t>(kit.modules.size());
+                }
+                if (!foundAnyModule)
+                {
+                    ImGui::TextDisabled("没有匹配的 Kit 模块");
+                }
+                ImGui::EndChild();
+            }
+        }
+        ImGui::End();
+        ImGui::PopStyleVar(3);
+
         // Kit catalog.
-        ImGui::SetNextWindowPos(ImVec2(pos.x, pos.y + headerHeight), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(leftWidth, contentHeight), ImGuiCond_Always);
+        ImGui::SetNextWindowPos(ImVec2(pos.x, pos.y + kKitBrowserHeaderHeight), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(leftWidth, catalogHeight), ImGuiCond_Always);
         ImGui::SetNextWindowBgAlpha(0.98f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
@@ -1951,199 +2719,6 @@ namespace ScadLibrary
         ImGui::End();
         ImGui::PopStyleVar(3);
 
-        // Selected Kit details and module list.
-        ImGui::SetNextWindowPos(ImVec2(pos.x + size.x - rightWidth, pos.y + headerHeight), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(rightWidth, contentHeight), ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(0.98f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f, 12.0f));
-        if (ImGui::Begin("##ScadLibraryKitDetails", nullptr, flags))
-        {
-            if (kits_.empty())
-            {
-                ImGui::TextDisabled("未找到 kit_*.scad。可以点击顶部刷新，或检查 assets/scad/lib。");
-                ImGui::End();
-                ImGui::PopStyleVar(3);
-                return;
-            }
-
-            kitBrowserSelectedKit_ = std::clamp(kitBrowserSelectedKit_, 0, static_cast<int>(kits_.size()) - 1);
-            const FKitInfo& selectedKit = kits_[kitBrowserSelectedKit_];
-            std::set<std::string> categories;
-            size_t metricCount = 0;
-            int triangleCount = 0;
-            float maxFootprintX = 0.0f;
-            float maxFootprintY = 0.0f;
-            float maxHeight = 0.0f;
-            for (const FKitModuleInfo& module : selectedKit.modules)
-            {
-                categories.insert(module.category);
-                if (module.hasMetrics)
-                {
-                    ++metricCount;
-                    triangleCount += module.triangles;
-                    maxFootprintX = std::max(maxFootprintX, module.footprintX);
-                    maxFootprintY = std::max(maxFootprintY, module.footprintY);
-                    maxHeight = std::max(maxHeight, module.height);
-                }
-            }
-
-            ImGui::Text(ICON_FA_CUBES_STACKED "  %s", selectedKit.name.c_str());
-            ImGui::TextDisabled("尺度分类：%s", selectedKit.scaleClass.empty() ? "未标注" : selectedKit.scaleClass.c_str());
-            ImGui::TextWrapped("文件：%s", selectedKit.filePath.c_str());
-            ImGui::Separator();
-            ImGui::Text("模块 %zu  ·  分类 %zu  ·  度量 %zu / %zu", selectedKit.modules.size(), categories.size(),
-                        metricCount, selectedKit.modules.size());
-            ImGui::Text("三角形 %d", triangleCount);
-            if (metricCount > 0)
-            {
-                ImGui::SameLine();
-                ImGui::TextDisabled("最大尺寸 %.1f × %.1f × %.1f", maxFootprintX, maxFootprintY, maxHeight);
-            }
-            ImGui::Separator();
-
-            ImGui::TextUnformatted("模块清单");
-            ImGui::SameLine();
-            ImGui::TextDisabled("（点击模块预览）");
-            ImGui::SetNextItemWidth(-1.0f);
-            ImGui::InputTextWithHint("##kit_browser_module_filter", ICON_FA_MAGNIFYING_GLASS " 搜索模块、分类或参数…",
-                                     kitBrowserModuleFilterBuf_, sizeof(kitBrowserModuleFilterBuf_));
-
-            if (kitBrowserSelectedModule_ >= 0 &&
-                kitBrowserSelectedModule_ < static_cast<int>(selectedKit.modules.size()))
-            {
-                const FKitModuleInfo& selectedModule = selectedKit.modules[kitBrowserSelectedModule_];
-                const std::string selectedModuleLabel = selectedModule.params.empty()
-                    ? selectedModule.name
-                    : fmt::format("{}({})", selectedModule.name, selectedModule.params);
-                ImGui::TextDisabled("当前模块：%s", selectedModuleLabel.c_str());
-            }
-
-            std::vector<int> visibleModuleIndices;
-            for (int moduleIndex = 0; moduleIndex < static_cast<int>(selectedKit.modules.size()); ++moduleIndex)
-            {
-                const FKitModuleInfo& module = selectedKit.modules[moduleIndex];
-                const bool matches = kitBrowserModuleFilterBuf_[0] == '\0' ||
-                    module.name.find(kitBrowserModuleFilterBuf_) != std::string::npos ||
-                    module.category.find(kitBrowserModuleFilterBuf_) != std::string::npos ||
-                    module.params.find(kitBrowserModuleFilterBuf_) != std::string::npos;
-                if (!matches)
-                {
-                    continue;
-                }
-                visibleModuleIndices.push_back(moduleIndex);
-            }
-
-            if (visibleModuleIndices.empty())
-            {
-                ImGui::TextDisabled("没有匹配的模块");
-            }
-            else if (ImGui::BeginTable("##kit_browser_module_table_v3", 5,
-                                       ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg |
-                                           ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuter |
-                                           ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Resizable |
-                                           ImGuiTableFlags_ScrollY,
-                                       ImVec2(0.0f, 0.0f)))
-            {
-                ImGui::TableSetupColumn("模块", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthFixed, 108.0f);
-                ImGui::TableSetupColumn("分类", ImGuiTableColumnFlags_WidthFixed, 40.0f);
-                ImGui::TableSetupColumn("行", ImGuiTableColumnFlags_WidthFixed, 40.0f);
-                ImGui::TableSetupColumn("尺寸", ImGuiTableColumnFlags_WidthFixed, 90.0f);
-                ImGui::TableSetupColumn("tris", ImGuiTableColumnFlags_WidthFixed, 38.0f);
-                ImGui::TableHeadersRow();
-
-                const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs();
-                if (sortSpecs != nullptr && sortSpecs->SpecsCount > 0)
-                {
-                    const ImGuiTableColumnSortSpecs& spec = sortSpecs->Specs[0];
-                    std::stable_sort(visibleModuleIndices.begin(), visibleModuleIndices.end(),
-                                     [&](int lhs, int rhs)
-                    {
-                        const FKitModuleInfo& leftModule = selectedKit.modules[lhs];
-                        const FKitModuleInfo& rightModule = selectedKit.modules[rhs];
-                        int result = 0;
-                        if (spec.ColumnIndex == 0)
-                        {
-                            result = leftModule.name.compare(rightModule.name);
-                        }
-                        else if (spec.ColumnIndex == 1)
-                        {
-                            result = leftModule.category.compare(rightModule.category);
-                        }
-                        else if (spec.ColumnIndex == 2)
-                        {
-                            result = leftModule.line < rightModule.line ? -1 : (leftModule.line > rightModule.line ? 1 : 0);
-                        }
-                        else if (spec.ColumnIndex == 3)
-                        {
-                            if (leftModule.hasMetrics != rightModule.hasMetrics)
-                            {
-                                result = leftModule.hasMetrics ? 1 : -1;
-                            }
-                            else
-                            {
-                                const float leftSize = leftModule.footprintX * leftModule.footprintY * leftModule.height;
-                                const float rightSize = rightModule.footprintX * rightModule.footprintY * rightModule.height;
-                                result = leftSize < rightSize ? -1 : (leftSize > rightSize ? 1 : 0);
-                            }
-                        }
-                        else
-                        {
-                            result = leftModule.triangles < rightModule.triangles
-                                ? -1
-                                : (leftModule.triangles > rightModule.triangles ? 1 : 0);
-                        }
-                        if (result == 0)
-                        {
-                            result = leftModule.name.compare(rightModule.name);
-                        }
-                        return spec.SortDirection == ImGuiSortDirection_Descending ? result > 0 : result < 0;
-                    });
-                }
-
-                for (const int moduleIndex : visibleModuleIndices)
-                {
-                    const FKitModuleInfo& module = selectedKit.modules[moduleIndex];
-                    ImGui::TableNextRow(ImGuiTableRowFlags_None, 32.0f);
-                    ImGui::TableSetColumnIndex(0);
-                    ImGui::PushID(moduleIndex);
-                    if (ImGui::Selectable(module.name.c_str(), kitBrowserSelectedModule_ == moduleIndex,
-                                          ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap,
-                                          ImVec2(0.0f, 0.0f)))
-                    {
-                        kitBrowserSelectedModule_ = moduleIndex;
-                        PreviewModule(kitBrowserSelectedKit_, module.name);
-                    }
-                    if (ImGui::IsItemHovered())
-                    {
-                        ImGui::SetTooltip("%s%s%s", module.name.c_str(), module.params.empty() ? "" : "\n参数：",
-                                          module.params.empty() ? "" : module.params.c_str());
-                    }
-                    ImGui::TableSetColumnIndex(1);
-                    ImGui::TextDisabled("%s", CategoryLabel(module.category));
-                    ImGui::TableSetColumnIndex(2);
-                    ImGui::TextDisabled("L%d", module.line);
-                    ImGui::TableSetColumnIndex(3);
-                    if (module.hasMetrics)
-                    {
-                        ImGui::TextDisabled("%.1f × %.1f × %.1f", module.footprintX, module.footprintY,
-                                           module.height);
-                    }
-                    else
-                    {
-                        ImGui::TextDisabled("—");
-                    }
-                    ImGui::TableSetColumnIndex(4);
-                    ImGui::TextDisabled("%d", module.triangles);
-                    ImGui::PopID();
-                }
-                ImGui::EndTable();
-            }
-        }
-        ImGui::End();
-        ImGui::PopStyleVar(3);
-
         // A small overlay keeps the viewport self-describing and exposes frame-all.
         ImGui::SetNextWindowPos(ImVec2(viewportPos.x + 12.0f, viewportPos.y + 12.0f), ImGuiCond_Always);
         ImGui::SetNextWindowBgAlpha(0.90f);
@@ -2176,22 +2751,16 @@ namespace ScadLibrary
 
     void ScadLibraryInterface::DrawBrowserPanel(const ImVec2& pos, const ImVec2& size)
     {
-        ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
-        ImGui::SetNextWindowSize(size, ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(0.96f);
-        const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking;
-
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, browserCollapsed_ ? ImVec2(7.0f, 8.0f) : ImVec2(12.0f, 12.0f));
-        if (!ImGui::Begin("##ScadLibraryBrowser", nullptr, flags))
+        NextUI::Theme::FCollapsibleSidePanelConfig sideConfig{};
+        sideConfig.WindowId = "##ScadLibraryBrowser";
+        sideConfig.Position = pos;
+        sideConfig.Size = size;
+        sideConfig.Collapsed = browserCollapsed_;
+        if (!NextUI::Theme::BeginCollapsibleSidePanel(sideConfig))
         {
-            ImGui::End();
-            ImGui::PopStyleVar(3);
+            NextUI::Theme::EndCollapsibleSidePanel();
             return;
         }
-        ImGui::PopStyleVar(3);
 
         if (browserCollapsed_)
         {
@@ -2199,7 +2768,7 @@ namespace ScadLibrary
             {
                 browserCollapsed_ = false;
             }
-            ImGui::End();
+            NextUI::Theme::EndCollapsibleSidePanel();
             return;
         }
 
@@ -2220,25 +2789,33 @@ namespace ScadLibrary
         }
         NextUI::Theme::DrawThinSeparator(0.72f);
 
-        if (ImGui::BeginTabBar("##library_tabs", ImGuiTabBarFlags_FittingPolicyResizeDown))
+        const std::vector<std::pair<int, std::string>> libraryTabs = {
+            {0, fmt::format(ICON_FA_CITY " 场景 ({})", assemblies_.size())},
+            {1, fmt::format(ICON_FA_CUBES_STACKED " Kit ({})", kits_.size())},
+            {2, fmt::format(ICON_FA_CODE_BRANCH " 结构 ({})", document_.Segments().size())}
+        };
+        DrawSegmentedPills("##library_tabs", libraryTabs, &libraryPrimaryTab_, -1.0f, 26.0f);
+        ImGui::Spacing();
+
+        if (libraryPrimaryTab_ == 0)
         {
-            if (ImGui::BeginTabItem(fmt::format(ICON_FA_CITY "  场景  {}", assemblies_.size()).c_str()))
-            {
                 ImGui::Spacing();
                 ImGui::SetNextItemWidth(-1.0f);
                 ImGui::InputTextWithHint("##assembly_filter", ICON_FA_MAGNIFYING_GLASS " 搜索场景路径或 Kit…",
                                          assemblyFilterBuf_, sizeof(assemblyFilterBuf_));
-                const size_t evaluatedCount =
-                    std::count_if(assemblies_.begin(), assemblies_.end(), [](const FSceneAssemblyInfo& scene)
-                                  { return scene.kind == EScadSceneKind::Evaluated; });
-                const size_t sourceCount =
-                    std::count_if(assemblies_.begin(), assemblies_.end(), [](const FSceneAssemblyInfo& scene)
-                                  { return scene.kind == EScadSceneKind::Source; });
-                const size_t procCount =
-                    std::count_if(assemblies_.begin(), assemblies_.end(), [](const FSceneAssemblyInfo& scene)
-                                  { return scene.kind == EScadSceneKind::Procedural; });
-                ImGui::TextDisabled("Evaluated %zu  ·  Source %zu  ·  Proc %zu", evaluatedCount, sourceCount,
-                                    procCount);
+                const size_t terrainCount =
+                    std::count_if(assemblies_.begin(), assemblies_.end(),
+                                  [](const FSceneAssemblyInfo& scene) { return scene.hasTerrain; });
+                const size_t structureCount =
+                    std::count_if(assemblies_.begin(), assemblies_.end(),
+                                  [](const FSceneAssemblyInfo& scene) { return scene.hasFreeStructure; });
+                ImGui::TextDisabled("%zu 个场景  ·  含地形 %zu  ·  含程序结构 %zu", assemblies_.size(), terrainCount,
+                                    structureCount);
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("目录只是归档方式。每个场景都能同时拥有实例、地形和源码结构，\n"
+                                      "打开后按节点分别编辑，无需整体转换。");
+                }
                 ImGui::Spacing();
                 ImGui::BeginChild("##assembly_files", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None);
 
@@ -2285,30 +2862,19 @@ namespace ScadLibrary
                     {
                         const FSceneAssemblyInfo& left = assemblies_[leftIndex];
                         const FSceneAssemblyInfo& right = assemblies_[rightIndex];
-                        if (left.kind != right.kind)
+                        if (left.folder != right.folder)
                         {
-                            return static_cast<int>(left.kind) < static_cast<int>(right.kind);
+                            return static_cast<int>(left.folder) < static_cast<int>(right.folder);
                         }
                         return left.relativePath < right.relativePath;
                     });
 
-                    size_t sourceInGroup = 0;
-                    size_t procInGroup = 0;
-                    size_t evaluatedInGroup = 0;
+                    size_t terrainInGroup = 0;
+                    size_t structureInGroup = 0;
                     for (const int index : group.indices)
                     {
-                        switch (assemblies_[index].kind)
-                        {
-                        case EScadSceneKind::Evaluated:
-                            ++evaluatedInGroup;
-                            break;
-                        case EScadSceneKind::Source:
-                            ++sourceInGroup;
-                            break;
-                        case EScadSceneKind::Procedural:
-                            ++procInGroup;
-                            break;
-                        }
+                        terrainInGroup += assemblies_[index].hasTerrain ? 1 : 0;
+                        structureInGroup += assemblies_[index].hasFreeStructure ? 1 : 0;
                     }
 
                     const std::string groupTitle = fmt::format("{}  {} 个场景##assembly_group_{}",
@@ -2319,23 +2885,22 @@ namespace ScadLibrary
                     {
                         continue;
                     }
-                    std::string kindSummary;
-                    auto appendKindCount = [&](const char* label, size_t count)
+                    std::string compositionSummary;
+                    auto appendCompositionCount = [&](const char* label, size_t count)
                     {
                         if (count == 0)
                         {
                             return;
                         }
-                        if (!kindSummary.empty())
+                        if (!compositionSummary.empty())
                         {
-                            kindSummary += "  ·  ";
+                            compositionSummary += "  ·  ";
                         }
-                        kindSummary += fmt::format("{} {}", label, count);
+                        compositionSummary += fmt::format("{} {}", label, count);
                     };
-                    appendKindCount("Evaluated", evaluatedInGroup);
-                    appendKindCount("Source", sourceInGroup);
-                    appendKindCount("Proc", procInGroup);
-                    ImGui::TextDisabled("%s", kindSummary.c_str());
+                    appendCompositionCount("含地形", terrainInGroup);
+                    appendCompositionCount("含程序结构", structureInGroup);
+                    ImGui::TextDisabled("%s", compositionSummary.c_str());
                     ImGui::Indent(8.0f);
                     for (const int index : group.indices)
                     {
@@ -2353,10 +2918,26 @@ namespace ScadLibrary
                         ImGui::SetCursorScreenPos(ImVec2(rowPosition.x + 8.0f,
                                                          rowPosition.y +
                                                              std::floor((rowHeight - ImGui::GetTextLineHeight()) * 0.5f)));
-                        ImGui::TextColored(SceneKindIconColor(assembly.kind), "%s", SceneKindIcon(assembly.kind));
+                        ImGui::TextColored(SceneFolderIconColor(assembly.folder), "%s",
+                                           SceneFolderIcon(assembly.folder));
                         ImGui::SameLine(0.0f, 7.0f);
                         const std::string pureName = std::filesystem::path(assembly.relativePath).stem().string();
                         ImGui::TextUnformatted(pureName.c_str());
+                        if (assembly.hasTerrain)
+                        {
+                            ImGui::SameLine(0.0f, 6.0f);
+                            DrawTagChip("地形", SegmentKindColor(EScadSegmentKind::Terrain), "含地形与过程规则");
+                        }
+                        if (assembly.hasFreeStructure)
+                        {
+                            ImGui::SameLine(0.0f, 4.0f);
+                            DrawTagChip("结构", SegmentKindColor(EScadSegmentKind::Source), "含程序/源码结构");
+                        }
+                        if (assembly.generated)
+                        {
+                            ImGui::SameLine(0.0f, 4.0f);
+                            DrawTagChip("Gen", NextUI::Theme::Color(NextUI::Theme::EColor::Warning), "由规格或工具生成");
+                        }
                         ImGui::SetCursorScreenPos(ImVec2(rowPosition.x,
                                                          rowPosition.y + rowHeight + ImGui::GetStyle().ItemSpacing.y));
 
@@ -2367,7 +2948,10 @@ namespace ScadLibrary
                         }
                         if (rowHovered)
                         {
-                            ImGui::SetTooltip("类别: %s\n依赖: %s%s", group.label.c_str(), dependencies.c_str(),
+                            ImGui::SetTooltip("类别: %s  ·  目录: %s\n依赖: %s%s%s%s", group.label.c_str(),
+                                              SceneFolderLabel(assembly.folder), dependencies.c_str(),
+                                              assembly.hasTerrain ? "\n含地形与过程规则" : "",
+                                              assembly.hasFreeStructure ? "\n含循环 / module 等程序结构" : "",
                                               assembly.generated ? "\n由规格或工具生成，手改可能被覆盖" : "");
                         }
                     }
@@ -2378,110 +2962,211 @@ namespace ScadLibrary
                     ImGui::TextDisabled(assemblies_.empty() ? "未找到引用 kit_*.scad 的场景" : "没有匹配的场景");
                 }
                 ImGui::EndChild();
-                ImGui::EndTabItem();
-            }
-
-            if (ImGui::BeginTabItem(fmt::format(ICON_FA_CUBES_STACKED "  Kit  {}", kits_.size()).c_str()))
-            {
+        }
+        else if (libraryPrimaryTab_ == 1)
+        {
                 ImGui::Spacing();
                 ImGui::SetNextItemWidth(-1.0f);
-                ImGui::InputTextWithHint("##filter", ICON_FA_MAGNIFYING_GLASS " 搜索模块…", filterBuf_,
+                ImGui::InputTextWithHint("##filter", ICON_FA_MAGNIFYING_GLASS " 搜索 Kit 或模块…", filterBuf_,
                                          sizeof(filterBuf_));
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextDisabled("布局:");
+                ImGui::SameLine();
+                const std::vector<std::pair<int, std::string>> colPills = {
+                    {2, "2列"}, {3, "3列"}, {4, "4列"}
+                };
+                DrawSegmentedPills("##kit_thumbnail_columns", colPills, &kitThumbnailColumns_, 140.0f, 22.0f);
+                ImGui::Spacing();
                 ImGui::Spacing();
 
-                ImGui::BeginChild("##kit_tree", ImVec2(0, 0), ImGuiChildFlags_None);
-                for (size_t k = 0; k < kits_.size(); ++k)
+                if (kitThumbnailExpanded_.size() != kits_.size())
                 {
-                    const FKitInfo& kit = kits_[k];
-                    if (!ImGui::CollapsingHeader(
-                            fmt::format("{}  {} 个模块##kit{}", kit.name, kit.modules.size(), k).c_str(),
-                            k == 0 ? ImGuiTreeNodeFlags_DefaultOpen : 0))
+                    kitThumbnailExpanded_.assign(kits_.size(), false);
+                }
+                if (kitThumbnailScrollY_ > 0.0f && kitThumbnailStickyKit_ >= 0 &&
+                    kitThumbnailStickyKit_ < static_cast<int>(kits_.size()))
+                {
+                    const FKitInfo& stickyKit = kits_[kitThumbnailStickyKit_];
+                    const std::string stickyHeader = fmt::format(
+                        "{}  {} 个模块##kit_thumbnail_sticky_header", stickyKit.name, stickyKit.modules.size());
+                    ImGui::SetNextItemOpen(kitThumbnailExpanded_[kitThumbnailStickyKit_], ImGuiCond_Always);
+                    kitThumbnailExpanded_[kitThumbnailStickyKit_] = ImGui::CollapsingHeader(stickyHeader.c_str());
+                }
+
+                ImGui::BeginChild("##kit_preview_library", ImVec2(0, 0), ImGuiChildFlags_None);
+                NextUI::IUserInterface* userInterface = engine_.GetUserInterface();
+                Vulkan::AssetThumbnailRenderer* thumbnails = nullptr;
+                if (userInterface != nullptr)
+                {
+                    thumbnails = &EditorPreview::AssetThumbnails(engine_.GetRenderer());
+                }
+
+                constexpr float cardGap = 8.0f;
+                const float availableWidth = std::max(1.0f, ImGui::GetContentRegionAvail().x);
+                const int columnCount = std::clamp(kitThumbnailColumns_, 2, 4);
+                const float thumbnailSize = std::max(
+                    1.0f, (availableWidth - cardGap * static_cast<float>(columnCount - 1)) /
+                              static_cast<float>(columnCount));
+                const float rowHeight = thumbnailSize + cardGap;
+                const float currentScrollY = ImGui::GetScrollY();
+                int stickyCandidate = -1;
+
+                uint32_t thumbnailIndexBase = 0;
+                for (int kitIndex = 0; kitIndex < static_cast<int>(kits_.size()); ++kitIndex)
+                {
+                    const FKitInfo& kit = kits_[kitIndex];
+                    std::vector<int> visibleModuleIndices;
+                    visibleModuleIndices.reserve(kit.modules.size());
+                    for (int moduleIndex = 0; moduleIndex < static_cast<int>(kit.modules.size()); ++moduleIndex)
                     {
+                        const FKitModuleInfo& module = kit.modules[moduleIndex];
+                        const bool matches = filterBuf_[0] == '\0' ||
+                            kit.name.find(filterBuf_) != std::string::npos ||
+                            PassesFilter(module, filterBuf_) ||
+                            module.params.find(filterBuf_) != std::string::npos;
+                        if (matches)
+                        {
+                            visibleModuleIndices.push_back(moduleIndex);
+                        }
+                    }
+
+                    if (visibleModuleIndices.empty())
+                    {
+                        thumbnailIndexBase += static_cast<uint32_t>(kit.modules.size());
                         continue;
                     }
-                    std::string currentCategory;
-                    bool categoryOpen = false;
-                    for (const FKitModuleInfo& moduleInfo : kit.modules)
+
+                    const std::string kitHeader =
+                        fmt::format("{}  {} 个模块##kit_thumbnail_group_{}", kit.name, visibleModuleIndices.size(), kitIndex);
+                    if (ImGui::GetCursorPosY() <= currentScrollY + 1.0f)
                     {
-                        if (!PassesFilter(moduleInfo, filterBuf_))
+                        stickyCandidate = kitIndex;
+                    }
+                    ImGui::SetNextItemOpen(kitThumbnailExpanded_[kitIndex], ImGuiCond_Always);
+                    kitThumbnailExpanded_[kitIndex] = ImGui::CollapsingHeader(kitHeader.c_str());
+                    if (!kitThumbnailExpanded_[kitIndex])
+                    {
+                        thumbnailIndexBase += static_cast<uint32_t>(kit.modules.size());
+                        continue;
+                    }
+
+                    ImGuiListClipper clipper;
+                    const int rowCount = (static_cast<int>(visibleModuleIndices.size()) + columnCount - 1) /
+                        columnCount;
+                    clipper.Begin(rowCount, rowHeight);
+                    while (clipper.Step())
+                    {
+                        for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row)
                         {
-                            continue;
-                        }
-                        if (moduleInfo.category != currentCategory)
-                        {
-                            if (categoryOpen)
+                            for (int column = 0; column < columnCount; ++column)
                             {
-                                ImGui::TreePop();
+                                const int visibleIndex = row * columnCount + column;
+                                if (visibleIndex >= static_cast<int>(visibleModuleIndices.size()))
+                                {
+                                    break;
+                                }
+                                const int moduleIndex = visibleModuleIndices[visibleIndex];
+                                const FKitModuleInfo& module = kit.modules[moduleIndex];
+                                const uint32_t thumbnailIndex = thumbnailIndexBase +
+                                    static_cast<uint32_t>(moduleIndex);
+                                if (column > 0)
+                                {
+                                    ImGui::SameLine(0.0f, cardGap);
+                                }
+
+                                ImGui::PushID(static_cast<int>(thumbnailIndex));
+                                ImGui::BeginGroup();
+                                const bool selected = selectedKit_ == kitIndex && selectedModule_ == module.name;
+                                ImTextureID textureId = 0;
+                                std::string thumbnailSource;
+                                uint64_t thumbnailHash = 0;
+                                if (thumbnails != nullptr &&
+                                    EnsureKitThumbnailSource(kitIndex, moduleIndex, thumbnailSource, thumbnailHash))
+                                {
+                                    const uint32_t sampleSlot = thumbnails->RequestScadKitThumbnail(
+                                        thumbnailIndex, thumbnailSource, thumbnailHash);
+                                    if (sampleSlot != std::numeric_limits<uint32_t>::max())
+                                    {
+                                        textureId = userInterface->RequestImTextureIdRaw(sampleSlot);
+                                    }
+                                }
+
+                                const FKitThumbnailControlResult thumbnailControl = DrawKitThumbnailControl(
+                                    "##kit_preview", textureId, module.name, thumbnailSize, selected);
+                                if (thumbnailControl.clicked)
+                                {
+                                    // Selecting a card is deliberately local to the library. The old
+                                    // PreviewModule() path remains available from the context menu for
+                                    // the standalone kit editor, but browsing must not replace the scene.
+                                    selectedKit_ = kitIndex;
+                                    selectedModule_ = module.name;
+                                }
+
+                                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+                                {
+                                    const FScadKitDragPayload payload{kitIndex, moduleIndex};
+                                    ImGui::SetDragDropPayload(kScadKitDragDropPayload, &payload, sizeof(payload));
+                                    if (textureId != 0)
+                                    {
+                                        ImGui::Image(textureId, ImVec2(64.0f, 64.0f));
+                                        ImGui::SameLine();
+                                    }
+                                    ImGui::TextUnformatted(module.name.c_str());
+                                    ImGui::TextDisabled("拖到中央视口放置");
+                                    ImGui::EndDragDropSource();
+                                }
+
+                                if (thumbnailControl.hovered)
+                                {
+                                    if (module.hasMetrics)
+                                    {
+                                        ImGui::SetTooltip("%s%s%s\n脚印 %.1f × %.1f  · 高 %.1f\n三角形 %d\n拖到中央视口即可放置",
+                                                          module.name.c_str(), module.params.empty() ? "" : "\n参数：",
+                                                          module.params.empty() ? "" : module.params.c_str(),
+                                                          module.footprintX, module.footprintY, module.height,
+                                                          module.triangles);
+                                    }
+                                    else
+                                    {
+                                        ImGui::SetTooltip("%s\n拖到中央视口即可放置", module.name.c_str());
+                                    }
+                                }
+                                if (ImGui::BeginPopupContextItem("##kit_module_context"))
+                                {
+                                    if (ImGui::MenuItem("AI 编辑此模块"))
+                                    {
+                                        PreviewModule(kitIndex, module.name);
+                                        inspectorPrimaryTab_ = 1;
+                                        aiOpenRequested_ = true;
+                                        benchCollapsed_ = false;
+                                    }
+                                    ImGui::EndPopup();
+                                }
+                                ImGui::EndGroup();
+                                ImGui::PopID();
                             }
-                            currentCategory = moduleInfo.category;
-                            categoryOpen = ImGui::TreeNodeEx(
-                                fmt::format("{}##cat_{}_{}", CategoryLabel(currentCategory), k, currentCategory)
-                                    .c_str(),
-                                filterBuf_[0] != '\0' ? ImGuiTreeNodeFlags_DefaultOpen : 0);
-                        }
-                        if (!categoryOpen)
-                        {
-                            continue;
-                        }
-                        const bool isSelected =
-                            selectedKit_ == static_cast<int>(k) && selectedModule_ == moduleInfo.name;
-                        if (ImGui::Selectable(
-                                fmt::format("{}##sel_{}_{}", moduleInfo.name, k, moduleInfo.name).c_str(), isSelected,
-                                0, ImVec2(ImGui::GetContentRegionAvail().x - 34.0f, 27.0f)))
-                        {
-                            PreviewModule(static_cast<int>(k), moduleInfo.name);
-                        }
-                        if (ImGui::IsItemHovered())
-                        {
-                            if (moduleInfo.hasMetrics)
-                            {
-                                ImGui::SetTooltip("%s(%s)\n脚印 %.1f x %.1f  高 %.1f  三角形 %d",
-                                                  moduleInfo.name.c_str(), moduleInfo.params.c_str(),
-                                                  moduleInfo.footprintX, moduleInfo.footprintY, moduleInfo.height,
-                                                  moduleInfo.triangles);
-                            }
-                            else if (!moduleInfo.params.empty())
-                            {
-                                ImGui::SetTooltip("%s(%s)", moduleInfo.name.c_str(), moduleInfo.params.c_str());
-                            }
-                        }
-                        if (ImGui::BeginPopupContextItem(
-                                fmt::format("##module_context_{}_{}", k, moduleInfo.name).c_str()))
-                        {
-                            if (ImGui::MenuItem("AI 编辑此模块"))
-                            {
-                                PreviewModule(static_cast<int>(k), moduleInfo.name);
-                                inspectorPrimaryTab_ = 1;
-                                aiOpenRequested_ = true;
-                                benchCollapsed_ = false;
-                            }
-                            ImGui::EndPopup();
-                        }
-                        ImGui::SameLine(ImGui::GetContentRegionAvail().x - 24.0f);
-                        if (ImGui::SmallButton(fmt::format(ICON_FA_PLUS "##add_{}_{}", k, moduleInfo.name).c_str()))
-                        {
-                            AddToBench(static_cast<int>(k), moduleInfo.name);
-                        }
-                        if (ImGui::IsItemHovered())
-                        {
-                            ImGui::SetTooltip("加入场景组装");
                         }
                     }
-                    if (categoryOpen)
-                    {
-                        ImGui::TreePop();
-                    }
+                    clipper.End();
+                    ImGui::Spacing();
+                    thumbnailIndexBase += static_cast<uint32_t>(kit.modules.size());
                 }
                 if (kits_.empty())
                 {
                     ImGui::TextDisabled("assets/scad/lib 下没有 kit_*.scad");
                 }
+                kitThumbnailScrollY_ = ImGui::GetScrollY();
+                if (stickyCandidate >= 0)
+                {
+                    kitThumbnailStickyKit_ = stickyCandidate;
+                }
                 ImGui::EndChild();
-                ImGui::EndTabItem();
-            }
-            ImGui::EndTabBar();
         }
-        ImGui::End();
+        else if (libraryPrimaryTab_ == 2)
+        {
+            DrawStructureOutliner();
+        }
+        NextUI::Theme::EndCollapsibleSidePanel();
     }
 
     void ScadLibraryInterface::DrawBoneHierarchyPanel(const ImVec2& pos, const ImVec2& size)
@@ -2628,22 +3313,16 @@ namespace ScadLibrary
 
     void ScadLibraryInterface::DrawModePanel(const ImVec2& pos, const ImVec2& size)
     {
-        ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
-        ImGui::SetNextWindowSize(size, ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(0.96f);
-        const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking;
-
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, benchCollapsed_ ? ImVec2(7.0f, 8.0f) : ImVec2(12.0f, 12.0f));
-        if (!ImGui::Begin("##ScadLibraryBench", nullptr, flags))
+        NextUI::Theme::FCollapsibleSidePanelConfig sideConfig{};
+        sideConfig.WindowId = "##ScadLibraryBench";
+        sideConfig.Position = pos;
+        sideConfig.Size = size;
+        sideConfig.Collapsed = benchCollapsed_;
+        if (!NextUI::Theme::BeginCollapsibleSidePanel(sideConfig))
         {
-            ImGui::End();
-            ImGui::PopStyleVar(3);
+            NextUI::Theme::EndCollapsibleSidePanel();
             return;
         }
-        ImGui::PopStyleVar(3);
 
         if (benchCollapsed_)
         {
@@ -2651,31 +3330,31 @@ namespace ScadLibrary
             {
                 benchCollapsed_ = false;
             }
-            ImGui::End();
+            NextUI::Theme::EndCollapsibleSidePanel();
             return;
         }
 
         ImGui::AlignTextToFramePadding();
         if (workspaceMode_ == EWorkspaceMode::SceneAssembly)
         {
-            if (assemblyProcedural_)
+            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover), "%s  场景检查器", ICON_FA_SLIDERS);
+            ImGui::SameLine();
+            if (document_.HasTerrain())
             {
-                ImGui::Text(ICON_FA_SLIDERS "  过程场景  ·  %zu 特征 / %zu 规则",
-                            terrainProcess_.Terrain().features.size(),
-                            terrainProcess_.ActiveRuleCount());
+                ImGui::TextDisabled("· %zu 对象 / %zu 特征", Bench().size(), TerrainProcess().Terrain().features.size());
             }
             else
             {
-                ImGui::Text(ICON_FA_SLIDERS "  场景属性  ·  %zu 对象", bench_.size());
+                ImGui::TextDisabled("· %zu 对象", Bench().size());
             }
         }
         else if (workspaceMode_ == EWorkspaceMode::CharacterDesigner)
         {
-            ImGui::TextUnformatted(ICON_FA_SLIDERS "  角色属性");
+            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover), "%s  角色属性", ICON_FA_SLIDERS);
         }
         else
         {
-            ImGui::TextUnformatted(ICON_FA_SLIDERS "  动作与装备属性");
+            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover), "%s  动作与装备属性", ICON_FA_SLIDERS);
         }
         ImGui::SameLine(ImGui::GetWindowWidth() - 43.0f);
         if (NextUI::Theme::IconButton(ICON_FA_CHEVRON_RIGHT "##collapse_bench", "收起属性面板", false,
@@ -2685,36 +3364,39 @@ namespace ScadLibrary
         }
         NextUI::Theme::DrawThinSeparator(0.72f);
 
-        if (ImGui::BeginTabBar("##inspector_primary_tabs"))
+        if (aiOpenRequested_)
         {
-            if (ImGui::BeginTabItem("属性"))
-            {
-                inspectorPrimaryTab_ = 0;
-                if (workspaceMode_ == EWorkspaceMode::SceneAssembly)
-                {
-                    DrawBenchContent();
-                }
-                else if (workspaceMode_ == EWorkspaceMode::CharacterDesigner)
-                {
-                    DrawDesignerContent();
-                }
-                else
-                {
-                    DrawWorkbenchContent();
-                }
-                ImGui::EndTabItem();
-            }
-            if (ImGui::BeginTabItem("AI", nullptr,
-                                    aiOpenRequested_ ? ImGuiTabItemFlags_SetSelected : 0))
-            {
-                inspectorPrimaryTab_ = 1;
-                DrawAIContent();
-                ImGui::EndTabItem();
-            }
-            ImGui::EndTabBar();
+            inspectorPrimaryTab_ = 1;
             aiOpenRequested_ = false;
         }
-        ImGui::End();
+
+        const std::vector<std::pair<int, std::string>> inspectorTabs = {
+            {0, ICON_FA_SLIDERS "  属性检查器"},
+            {1, ICON_FA_WAND_MAGIC_SPARKLES "  AI 创作助理"}
+        };
+        DrawSegmentedPills("##inspector_primary_tabs", inspectorTabs, &inspectorPrimaryTab_, -1.0f, 28.0f);
+        ImGui::Spacing();
+
+        if (inspectorPrimaryTab_ == 0)
+        {
+            if (workspaceMode_ == EWorkspaceMode::SceneAssembly)
+            {
+                DrawBenchContent();
+            }
+            else if (workspaceMode_ == EWorkspaceMode::CharacterDesigner)
+            {
+                DrawDesignerContent();
+            }
+            else
+            {
+                DrawWorkbenchContent();
+            }
+        }
+        else
+        {
+            DrawAIContent();
+        }
+        NextUI::Theme::EndCollapsibleSidePanel();
     }
 
     AI::FScadAIEditTarget ScadLibraryInterface::ResolveAITarget() const
@@ -2755,7 +3437,10 @@ namespace ScadLibrary
             target.primaryId = selectedModule_;
             return target;
         }
-        if (openedSceneKind_ == EScadSceneKind::Procedural)
+        // The AI target follows what the user is editing, not what kind of
+        // file it is: the same scene offers object, terrain and source editing
+        // and each tab hands the model the matching document view.
+        if (assemblyEditorTab_ == 2 && document_.HasTerrain())
         {
             target.kind = AI::EScadAIEditKind::TerrainProcess;
             target.documentKey = openedAssemblyPath_.empty() ? "draft:terrain" : openedAssemblyPath_;
@@ -2764,12 +3449,12 @@ namespace ScadLibrary
                                                        : fmt::format("f{}", selectedTerrainFeature_);
             return target;
         }
-        target.kind = openedSceneKind_ == EScadSceneKind::Evaluated ? AI::EScadAIEditKind::SceneObjects
-                                                                   : AI::EScadAIEditKind::SceneSource;
+        target.kind = (assemblyEditorTab_ == 0 && !Bench().empty()) ? AI::EScadAIEditKind::SceneObjects
+                                                                    : AI::EScadAIEditKind::SceneSource;
         target.documentKey = openedAssemblyPath_.empty() ? "draft:scene" : openedAssemblyPath_;
         target.displayName = std::filesystem::path(target.documentKey).filename().string();
         if (target.kind == AI::EScadAIEditKind::SceneObjects && selectedBenchItem_ >= 0 &&
-            selectedBenchItem_ < static_cast<int>(bench_.size()))
+            selectedBenchItem_ < static_cast<int>(Bench().size()))
         {
             target.primaryId = fmt::format("o{}", selectedBenchItem_);
         }
@@ -2793,9 +3478,9 @@ namespace ScadLibrary
         if (target.kind == Kind::SceneObjects)
         {
             nlohmann::json objects = nlohmann::json::array();
-            for (size_t index = 0; index < bench_.size(); ++index)
+            for (size_t index = 0; index < Bench().size(); ++index)
             {
-                const FBenchItem& item = bench_[index];
+                const FBenchItem& item = Bench()[index];
                 nlohmann::json object{
                     {"id", fmt::format("o{}", index)},
                     {"kitIndex", item.kitIndex},
@@ -2834,11 +3519,11 @@ namespace ScadLibrary
             return {{"objects", std::move(objects)}, {"catalog", std::move(catalog)},
                     {"selectedId", target.primaryId}, {"selectedObject", std::move(selectedObject)},
                     {"selectionScope", target.primaryId.empty() ? "scene" : "selected_instance"},
-                    {"showFloor", showFloor_}, {"fn", fnSegments_}};
+                    {"fn", fnSegments_}};
         }
         if (target.kind == Kind::TerrainProcess)
         {
-            const Assets::Scad::FTerrainSpec& terrain = terrainProcess_.Terrain();
+            const Assets::Scad::FTerrainSpec& terrain = TerrainProcess().Terrain();
             nlohmann::json terrainJson{
                 {"size", {terrain.size.x, terrain.size.y}},
                 {"cells", {terrain.cells.x, terrain.cells.y}},
@@ -2871,9 +3556,9 @@ namespace ScadLibrary
                 });
             }
             nlohmann::json rules = nlohmann::json::array();
-            for (size_t index = 0; index < terrainProcess_.Rules().size(); ++index)
+            for (size_t index = 0; index < TerrainProcess().Rules().size(); ++index)
             {
-                const FTerrainProcessRule& rule = terrainProcess_.Rules()[index];
+                const FTerrainProcessRule& rule = TerrainProcess().Rules()[index];
                 if (rule.removed) continue;
                 nlohmann::json points = nlohmann::json::array();
                 for (const glm::dvec2& point : rule.points) points.push_back({point.x, point.y});
@@ -2961,9 +3646,9 @@ namespace ScadLibrary
                                         target.primaryId.empty() ? "" : " · ", target.primaryId);
         if (target.kind == AI::EScadAIEditKind::SceneObjects)
         {
-            if (selectedBenchItem_ >= 0 && selectedBenchItem_ < static_cast<int>(bench_.size()))
+            if (selectedBenchItem_ >= 0 && selectedBenchItem_ < static_cast<int>(Bench().size()))
             {
-                const FBenchItem& selected = bench_[selectedBenchItem_];
+                const FBenchItem& selected = Bench()[selectedBenchItem_];
                 const std::string kitName = selected.kitIndex >= 0 &&
                         selected.kitIndex < static_cast<int>(kits_.size())
                     ? kits_[selected.kitIndex].name
@@ -3003,7 +3688,7 @@ namespace ScadLibrary
             if (ImGui::Button("扫描旧会话"))
             {
                 aiLegacySessions_ = AI::FScadStudioSessionImporter::Scan(
-                    std::filesystem::current_path() / "scad_studio", aiLegacyImportWarnings_);
+                    Utilities::FileHelper::GetWritableRuntimeRoot() / "scad_studio", aiLegacyImportWarnings_);
             }
             for (const std::string& warning : aiLegacyImportWarnings_)
             {
@@ -3017,19 +3702,11 @@ namespace ScadLibrary
                 ImGui::SameLine();
                 if (ImGui::SmallButton("导入为草稿"))
                 {
-                    assemblySource_ = candidate.source;
                     openedAssemblyPath_.clear();
                     RefreshAssemblyWatchBaseline();
-                    openedAssemblyKits_ = FindKitDependencies(assemblySource_);
+                    ReparseDocument(candidate.source, {});
                     assemblySourceDirty_ = true;
-                    assemblyStructured_ = false;
-                    assemblyEvaluated_ = false;
-                    assemblyProcedural_ = false;
-                    openedSceneKind_ = EScadSceneKind::Source;
                     aiKitContextActive_ = false;
-                    terrainProcessDirty_ = false;
-                    bench_.clear();
-                    selectedBenchItem_ = -1;
                     assemblyEditorTab_ = 1;
                     const std::string safeId = candidate.id.empty() ? "legacy" : candidate.id;
                     const std::string suggested = fmt::format("assets/scad/source/imported_{}.scad", safeId);
@@ -3123,17 +3800,12 @@ namespace ScadLibrary
             }
             if (target.kind == Kind::SceneSource)
             {
-                assemblySource_ = snapshot.at("source").get<std::string>();
+                // Rewriting the whole file re-derives every editor's view of
+                // it: instances, terrain and source come back classified.
+                ReparseDocument(snapshot.at("source").get<std::string>(), openedAssemblyPath_);
                 if (markDirty)
                 {
                     assemblySourceDirty_ = true;
-                    assemblyStructured_ = false;
-                    assemblyEvaluated_ = false;
-                    assemblyProcedural_ = false;
-                    terrainProcessDirty_ = false;
-                    bench_.clear();
-                    selectedBenchItem_ = -1;
-                    openedAssemblyKits_ = FindKitDependencies(assemblySource_);
                 }
                 return true;
             }
@@ -3166,13 +3838,40 @@ namespace ScadLibrary
                     }
                     candidate.push_back(std::move(item));
                 }
-                bench_ = std::move(candidate);
-                selectedBenchItem_ = bench_.empty() ? -1 : std::clamp(
-                    selectedBenchItem_, 0, static_cast<int>(bench_.size()) - 1);
+                // Objects the model dropped are spliced out of the file; the
+                // ones it kept or moved are rewritten in place, and everything
+                // else in the scene (terrain, loops, comments) is untouched.
+                for (FBenchItem& existing : Bench())
+                {
+                    existing.removed = true;
+                }
+                for (size_t index = 0; index < candidate.size(); ++index)
+                {
+                    if (index < Bench().size())
+                    {
+                        FBenchItem& target = Bench()[index];
+                        const size_t begin = target.sourceBegin;
+                        const size_t end = target.sourceEnd;
+                        const size_t insertAt = target.insertAt;
+                        const int segment = target.segmentIndex;
+                        const int origin = target.originSegment;
+                        target = candidate[index];
+                        target.sourceBegin = begin;
+                        target.sourceEnd = end;
+                        target.insertAt = insertAt;
+                        target.segmentIndex = segment;
+                        target.originSegment = origin;
+                        target.removed = false;
+                    }
+                    else
+                    {
+                        document_.AddInstance(candidate[index]);
+                    }
+                }
+                selectedBenchItem_ = Bench().empty() ? -1 : std::clamp(
+                    selectedBenchItem_, 0, static_cast<int>(Bench().size()) - 1);
                 if (markDirty)
                 {
-                    assemblyStructured_ = true;
-                    assemblyEvaluated_ = false;
                     benchDirty_ = true;
                     assemblySourceDirty_ = true;
                 }
@@ -3180,7 +3879,7 @@ namespace ScadLibrary
             }
             if (target.kind == Kind::TerrainProcess)
             {
-                Assets::Scad::FTerrainSpec& terrain = terrainProcess_.Terrain();
+                Assets::Scad::FTerrainSpec& terrain = TerrainProcess().Terrain();
                 const auto& terrainJson = snapshot.at("terrain");
                 terrain.size = {terrainJson.at("size").at(0).get<double>(),
                                 terrainJson.at("size").at(1).get<double>()};
@@ -3236,7 +3935,7 @@ namespace ScadLibrary
                     if (name == "ter_scatter") return ETerrainProcessRuleType::Scatter;
                     return ETerrainProcessRuleType::Place;
                 };
-                std::vector<FTerrainProcessRule> rules = terrainProcess_.Rules();
+                std::vector<FTerrainProcessRule> rules = TerrainProcess().Rules();
                 for (FTerrainProcessRule& existing : rules)
                 {
                     existing.removed = true;
@@ -3290,10 +3989,10 @@ namespace ScadLibrary
                     {
                         existingIndex = static_cast<size_t>(std::stoull(id.substr(1)));
                     }
-                    if (existingIndex < terrainProcess_.Rules().size())
+                    if (existingIndex < TerrainProcess().Rules().size())
                     {
-                        rule.sourceBegin = terrainProcess_.Rules()[existingIndex].sourceBegin;
-                        rule.sourceEnd = terrainProcess_.Rules()[existingIndex].sourceEnd;
+                        rule.sourceBegin = TerrainProcess().Rules()[existingIndex].sourceBegin;
+                        rule.sourceEnd = TerrainProcess().Rules()[existingIndex].sourceEnd;
                         rule.removed = false;
                         rules[existingIndex] = std::move(rule);
                     }
@@ -3303,11 +4002,11 @@ namespace ScadLibrary
                         rules.push_back(std::move(rule));
                     }
                 }
-                terrainProcess_.Rules() = std::move(rules);
+                TerrainProcess().Rules() = std::move(rules);
                 selectedTerrainFeature_ = terrain.features.empty() ? 0 : std::clamp(
                     selectedTerrainFeature_, 0, static_cast<int>(terrain.features.size()) - 1);
-                selectedTerrainRule_ = terrainProcess_.Rules().empty() ? 0 : std::clamp(
-                    selectedTerrainRule_, 0, static_cast<int>(terrainProcess_.Rules().size()) - 1);
+                selectedTerrainRule_ = TerrainProcess().Rules().empty() ? 0 : std::clamp(
+                    selectedTerrainRule_, 0, static_cast<int>(TerrainProcess().Rules().size()) - 1);
                 if (markDirty)
                 {
                     MarkTerrainProcessDirty();
@@ -3534,7 +4233,7 @@ namespace ScadLibrary
             {
                 return false;
             }
-            const std::string source = BuildBenchSource();
+            const std::string source = BuildAssemblyPreviewSource();
             ApplyAISnapshot(target, liveSnapshot, false);
             return WriteAndLoad("ai_scene_objects_preview.scad", source);
         }
@@ -3545,7 +4244,7 @@ namespace ScadLibrary
             {
                 return false;
             }
-            const std::string source = BuildTerrainProcessSource();
+            const std::string source = BuildAssemblyPreviewSource();
             ApplyAISnapshot(target, liveSnapshot, false);
             preserveCameraOnNextSceneLoad_ = true;
             return WriteAndLoad("ai_terrain_preview.scad", RewriteScadDependencyPaths(
@@ -3585,8 +4284,23 @@ namespace ScadLibrary
         {
             return;
         }
-        const std::filesystem::path libRoot = AuthoringPath("assets/scad/lib");
-        const std::filesystem::path kitPath = std::filesystem::path(aiKitDraftPath_).lexically_normal();
+        const std::filesystem::path originalLibRoot = AuthoringPath("assets/scad/lib");
+        if (!PrepareWritableAuthoringTree("assets/scad/lib"))
+        {
+            statusLine_ = "无法准备可写的 Kit 目录";
+            statusError_ = true;
+            return;
+        }
+        const std::filesystem::path libRoot = WritableAuthoringPath("assets/scad/lib");
+        std::filesystem::path kitPath = std::filesystem::path(aiKitDraftPath_).lexically_normal();
+        if (!kitPath.is_absolute())
+        {
+            kitPath = libRoot / kitPath;
+        }
+        else if (IsPathWithin(kitPath, originalLibRoot) && originalLibRoot != libRoot)
+        {
+            kitPath = libRoot / kitPath.lexically_relative(originalLibRoot);
+        }
         if (!IsPathWithin(kitPath, libRoot) || kitPath.extension() != ".scad")
         {
             statusLine_ = "Kit 草稿路径不在 assets/scad/lib";
@@ -3792,7 +4506,7 @@ namespace ScadLibrary
     void ScadLibraryInterface::DrawTerrainProcessContent()
     {
         bool changed = false;
-        Assets::Scad::FTerrainSpec& terrain = terrainProcess_.Terrain();
+        Assets::Scad::FTerrainSpec& terrain = TerrainProcess().Terrain();
 
         ImGui::Checkbox("自动刷新", &autoReload_);
         ImGui::SameLine();
@@ -3801,7 +4515,7 @@ namespace ScadLibrary
             ReloadTerrainProcess();
         }
         ImGui::SameLine();
-        ImGui::TextDisabled("只改写 TERR 与已识别的 ter_* 语句");
+        ImGui::TextDisabled("这里只编辑 TERR 基础参数；Features 与 ter_* 算子在“结构”Outliner 中编辑");
 
         for (const std::string& warning : terrainProcessWarnings_)
         {
@@ -3870,7 +4584,9 @@ namespace ScadLibrary
             }
         }
 
-        if (ImGui::CollapsingHeader("Terrain Features（按顺序作用）", ImGuiTreeNodeFlags_DefaultOpen))
+        // Operators now live in the Structure outliner, alongside the rest of
+        // the scene graph. This tab deliberately keeps only TERR base data.
+        if (false && ImGui::CollapsingHeader("Terrain Features（按顺序作用）", ImGuiTreeNodeFlags_DefaultOpen))
         {
             int removeFeature = -1;
             int moveFeature = -1;
@@ -3977,6 +4693,10 @@ namespace ScadLibrary
                         changed |= editNumber("高度缩放", feature.zScale);
                         changed |= editNumber("高度偏移", feature.zBias);
                         break;
+                    case EType::Paint:
+                        ImGui::TextDisabled("地表涂色多边形");
+                        changed |= editPoints(feature.pts);
+                        break;
                     }
                     ImGui::TreePop();
                 }
@@ -4051,11 +4771,11 @@ namespace ScadLibrary
             }
         }
 
-        if (ImGui::CollapsingHeader("贴地过程规则", ImGuiTreeNodeFlags_DefaultOpen))
+        if (false && ImGui::CollapsingHeader("贴地过程规则", ImGuiTreeNodeFlags_DefaultOpen))
         {
             int removeRule = -1;
             int duplicateRule = -1;
-            std::vector<FTerrainProcessRule>& rules = terrainProcess_.Rules();
+            std::vector<FTerrainProcessRule>& rules = TerrainProcess().Rules();
             for (size_t ruleIndex = 0; ruleIndex < rules.size(); ++ruleIndex)
             {
                 FTerrainProcessRule& rule = rules[ruleIndex];
@@ -4217,17 +4937,17 @@ namespace ScadLibrary
             }
             if (duplicateRule >= 0)
             {
-                terrainProcess_.DuplicateRule(static_cast<size_t>(duplicateRule));
-                selectedTerrainRule_ = static_cast<int>(terrainProcess_.Rules().size()) - 1;
+                TerrainProcess().DuplicateRule(static_cast<size_t>(duplicateRule));
+                selectedTerrainRule_ = static_cast<int>(TerrainProcess().Rules().size()) - 1;
                 terrainSelectionIsRule_ = true;
                 scrollToSelectedTerrainItem_ = true;
                 changed = true;
             }
             if (removeRule >= 0)
             {
-                terrainProcess_.RemoveRule(static_cast<size_t>(removeRule));
+                TerrainProcess().RemoveRule(static_cast<size_t>(removeRule));
                 selectedTerrainRule_ = std::clamp(selectedTerrainRule_, 0,
-                                                  std::max(0, static_cast<int>(terrainProcess_.Rules().size()) - 1));
+                                                  std::max(0, static_cast<int>(TerrainProcess().Rules().size()) - 1));
                 changed = true;
             }
 
@@ -4241,8 +4961,8 @@ namespace ScadLibrary
                 {
                     if (ImGui::MenuItem(label))
                     {
-                        terrainProcess_.AddRule(type);
-                        selectedTerrainRule_ = static_cast<int>(terrainProcess_.Rules().size()) - 1;
+                        TerrainProcess().AddRule(type);
+                        selectedTerrainRule_ = static_cast<int>(TerrainProcess().Rules().size()) - 1;
                         terrainSelectionIsRule_ = true;
                         scrollToSelectedTerrainItem_ = true;
                         changed = true;
@@ -4277,7 +4997,7 @@ namespace ScadLibrary
                 feature.size.x = std::max(0.1, feature.size.x);
                 feature.size.y = std::max(0.1, feature.size.y);
             }
-            for (FTerrainProcessRule& rule : terrainProcess_.Rules())
+            for (FTerrainProcessRule& rule : TerrainProcess().Rules())
             {
                 rule.step = std::max(0.01, rule.step);
                 rule.probe = std::max(0.01, rule.probe);
@@ -4301,14 +5021,255 @@ namespace ScadLibrary
         }
     }
 
+    bool ScadLibraryInterface::DrawTerrainFeatureDetails(int featureIndex)
+    {
+        Assets::Scad::FTerrainSpec& terrain = TerrainProcess().Terrain();
+        if (featureIndex < 0 || featureIndex >= static_cast<int>(terrain.features.size()))
+        {
+            return false;
+        }
+        Assets::Scad::FTerrainFeature& feature = terrain.features[featureIndex];
+        const auto editPoint = [](const char* label, glm::dvec2& point)
+        {
+            double value[2] = {point.x, point.y};
+            if (!ImGui::DragScalarN(label, ImGuiDataType_Double, value, 2, 0.5f))
+            {
+                return false;
+            }
+            point = {value[0], value[1]};
+            return true;
+        };
+        const auto editNumber = [](const char* label, double& value, float speed = 0.1f, const char* format = "%.3f")
+        { return ImGui::DragScalar(label, ImGuiDataType_Double, &value, speed, nullptr, nullptr, format); };
+        const auto editPoints = [&editPoint](std::vector<glm::dvec2>& points)
+        {
+            bool changed = false;
+            for (size_t pointIndex = 0; pointIndex < points.size(); ++pointIndex)
+            {
+                ImGui::PushID(static_cast<int>(pointIndex));
+                changed |= editPoint("折点 XY", points[pointIndex]);
+                ImGui::PopID();
+            }
+            if (ImGui::SmallButton(ICON_FA_PLUS " 添加折点"))
+            {
+                points.push_back(points.empty() ? glm::dvec2(0.0) : points.back() + glm::dvec2(5.0, 0.0));
+                changed = true;
+            }
+            return changed;
+        };
+
+        ImGui::Text("Feature %d · %s", featureIndex + 1, FTerrainProcessDocument::FeatureTypeName(feature.type));
+        ImGui::Separator();
+        using EType = Assets::Scad::FTerrainFeature::EType;
+        bool changed = false;
+        switch (feature.type)
+        {
+        case EType::Mountain:
+            changed |= editPoint("中心 XY", feature.at);
+            changed |= editNumber("半径", feature.radius);
+            changed |= editNumber("高度", feature.height);
+            changed |= editNumber("扰动强度", feature.rugged, 0.01f);
+            break;
+        case EType::Ridge:
+            changed |= editPoints(feature.pts);
+            changed |= editNumber("宽度", feature.width);
+            changed |= editNumber("高度", feature.height);
+            break;
+        case EType::Plateau:
+            changed |= editPoint("中心 XY", feature.at);
+            changed |= editNumber("半径", feature.radius);
+            changed |= editNumber("高度", feature.height);
+            break;
+        case EType::Lake:
+            changed |= editPoint("中心 XY", feature.at);
+            changed |= editNumber("半径", feature.radius);
+            changed |= editNumber("深度", feature.depth);
+            break;
+        case EType::River:
+            changed |= editPoints(feature.pts);
+            changed |= editNumber("宽度", feature.width);
+            changed |= editNumber("深度", feature.depth);
+            break;
+        case EType::Road:
+            changed |= editPoints(feature.pts);
+            changed |= editNumber("宽度", feature.width);
+            break;
+        case EType::Pad:
+            changed |= editPoint("中心 XY", feature.at);
+            changed |= editPoint("尺寸 XY", feature.size);
+            changed |= editNumber("旋转", feature.rot, 1.0f, "%.1f°");
+            break;
+        case EType::Hmap:
+            ImGui::TextDisabled("采样高度场%s", feature.path.empty() ? "（内联）" : "");
+            if (!feature.path.empty())
+            {
+                ImGui::TextWrapped("%s", feature.path.c_str());
+            }
+            changed |= editNumber("高度缩放", feature.zScale);
+            changed |= editNumber("高度偏移", feature.zBias);
+            break;
+        case EType::Paint:
+            ImGui::TextDisabled("地表涂色多边形");
+            changed |= editPoints(feature.pts);
+            break;
+        }
+        return changed;
+    }
+
+    bool ScadLibraryInterface::DrawTerrainRuleDetails(int ruleIndex)
+    {
+        std::vector<FTerrainProcessRule>& rules = TerrainProcess().Rules();
+        if (ruleIndex < 0 || ruleIndex >= static_cast<int>(rules.size()) || rules[ruleIndex].removed)
+        {
+            return false;
+        }
+        FTerrainProcessRule& rule = rules[ruleIndex];
+        const auto editPoint = [](const char* label, double& x, double& y)
+        {
+            double value[2] = {x, y};
+            if (!ImGui::DragScalarN(label, ImGuiDataType_Double, value, 2, 0.5f))
+            {
+                return false;
+            }
+            x = value[0];
+            y = value[1];
+            return true;
+        };
+        const auto editNumber = [](const char* label, double& value, float speed = 0.1f, const char* format = "%.3f")
+        { return ImGui::DragScalar(label, ImGuiDataType_Double, &value, speed, nullptr, nullptr, format); };
+
+        ImGui::Text("过程算子 %d · %s", ruleIndex + 1, FTerrainProcessDocument::RuleTypeName(rule.type));
+        ImGui::Separator();
+        bool changed = false;
+        if (rule.type == ETerrainProcessRuleType::HeightAnchor)
+        {
+            changed |= editPoint("摆放位置 XY", rule.x, rule.y);
+            changed |= editPoint("高度取样 XY", rule.sampleX, rule.sampleY);
+            changed |= editNumber("离地 dz", rule.dz);
+        }
+        else if (rule.type == ETerrainProcessRuleType::Place || rule.type == ETerrainProcessRuleType::PlaceTilt ||
+                 rule.type == ETerrainProcessRuleType::Snap)
+        {
+            changed |= editPoint(rule.type == ETerrainProcessRuleType::Snap ? "外层 at" : "位置 XY", rule.x, rule.y);
+            changed |= editNumber("离地 dz", rule.dz);
+        }
+        if (rule.type == ETerrainProcessRuleType::PlaceTilt)
+        {
+            changed |= editNumber("最大倾角", rule.maxTilt, 0.5f, "%.1f°");
+            changed |= editNumber("探针距离", rule.probe);
+        }
+        else if (rule.type == ETerrainProcessRuleType::Along)
+        {
+            for (size_t pointIndex = 0; pointIndex < rule.points.size(); ++pointIndex)
+            {
+                ImGui::PushID(static_cast<int>(pointIndex));
+                changed |= editPoint("沿线折点 XY", rule.points[pointIndex].x, rule.points[pointIndex].y);
+                ImGui::PopID();
+            }
+            changed |= editNumber("步距", rule.step);
+            changed |= ImGui::InputInt("Seed", &rule.seed);
+            changed |= editNumber("起始偏移", rule.offset);
+            changed |= editNumber("离地 dz", rule.dz);
+        }
+        else if (rule.type == ETerrainProcessRuleType::Scatter)
+        {
+            changed |= ImGui::InputInt("Seed", &rule.seed);
+            changed |= ImGui::DragInt("数量", &rule.count, 1.0f, 0, 100000);
+            if (ImGui::Checkbox("圆形区域", &rule.circularRegion))
+            {
+                changed = true;
+            }
+            if (rule.circularRegion)
+            {
+                changed |= editPoint("圆心 XY", rule.regionCenter.x, rule.regionCenter.y);
+                changed |= editNumber("半径", rule.regionRadius, 0.5f);
+            }
+            else
+            {
+                double region[4] = {rule.region.x, rule.region.y, rule.region.z, rule.region.w};
+                if (ImGui::DragScalarN("区域 x0/y0/x1/y1", ImGuiDataType_Double, region, 4, 0.5f))
+                {
+                    rule.region = {region[0], region[1], region[2], region[3]};
+                    changed = true;
+                }
+            }
+            changed |= editNumber("最低高度", rule.minHeight);
+            changed |= editNumber("最高高度", rule.maxHeight);
+            changed |= editNumber("最大坡度", rule.maxSlope, 0.5f, "%.1f°");
+            changed |= editNumber("避水距离", rule.avoidWater);
+            changed |= ImGui::Checkbox("随机旋转", &rule.randomRotation);
+            changed |= ImGui::DragInt("Mesh 变体数", &rule.variants, 1.0f, 0, 100000);
+            double scaleRange[2] = {rule.scaleRange.x, rule.scaleRange.y};
+            if (ImGui::DragScalarN("实例缩放 min/max", ImGuiDataType_Double, scaleRange, 2, 0.01f))
+            {
+                rule.scaleRange = {scaleRange[0], scaleRange[1]};
+                changed = true;
+            }
+            changed |= editNumber("离地 dz", rule.dz);
+        }
+        ImGui::TextDisabled("Child SCAD（模块调用、rotate 链或代码块）");
+        changed |= ImGui::InputTextMultiline("##terrain_rule_child", &rule.childSource, ImVec2(-1.0f, 88.0f),
+                                              ImGuiInputTextFlags_AllowTabInput);
+        return changed;
+    }
+
+    bool ScadLibraryInterface::DrawLayScatterDetails(size_t segmentIndex)
+    {
+        FLayScatterSource scatter;
+        if (!ParseLayScatterSource(document_.GetSegmentSource(segmentIndex), scatter))
+        {
+            ImGui::TextDisabled("lay_scatter 参数含变量或复杂表达式，保留源码编辑以避免改变语义。");
+            return false;
+        }
+
+        ImGui::TextDisabled("布局散布 · children 保持不变");
+        bool changed = false;
+        changed |= ImGui::DragInt("数量", &scatter.count, 1.0f, 0, 100000);
+        double region[4] = {scatter.x0, scatter.y0, scatter.x1, scatter.y1};
+        if (ImGui::DragScalarN("区域 x0/y0/x1/y1", ImGuiDataType_Double, region, 4, 0.5f))
+        {
+            scatter.x0 = region[0];
+            scatter.y0 = region[1];
+            scatter.x1 = region[2];
+            scatter.y1 = region[3];
+            changed = true;
+        }
+        changed |= ImGui::InputInt("Seed", &scatter.seed);
+        changed |= ImGui::Checkbox("随机朝向", &scatter.rotate);
+        if (!changed)
+        {
+            return false;
+        }
+        scatter.count = std::max(0, scatter.count);
+        if (scatter.x0 > scatter.x1)
+        {
+            std::swap(scatter.x0, scatter.x1);
+        }
+        if (scatter.y0 > scatter.y1)
+        {
+            std::swap(scatter.y0, scatter.y1);
+        }
+        return document_.ReplaceSegmentSource(segmentIndex, SerializeLayScatterSource(scatter));
+    }
+
     bool ScadLibraryInterface::DrawBenchItemParameters(FBenchItem& benchItem)
     {
+        if (!benchItem.catalogModuleName.empty())
+        {
+            ImGui::Text("本地模块：%s", benchItem.moduleName.c_str());
+            ImGui::TextDisabled("底层 Kit：%s", benchItem.catalogModuleName.c_str());
+            ImGui::TextWrapped("该无参包装模块的固定参数保留在 module 定义中；这里可编辑它的放置变换，"
+                               "不会把 Kit 参数错误写进包装调用。");
+            return false;
+        }
+
         const FKitModuleInfo* moduleInfo = nullptr;
         if (benchItem.kitIndex >= 0 && benchItem.kitIndex < static_cast<int>(kits_.size()))
         {
             const FKitInfo& kit = kits_[benchItem.kitIndex];
             const auto found = std::find_if(kit.modules.begin(), kit.modules.end(),
-                                            [&](const FKitModuleInfo& module) { return module.name == benchItem.moduleName; });
+                                            [&](const FKitModuleInfo& module)
+                                            { return module.name == benchItem.CatalogModuleName(); });
             if (found != kit.modules.end())
             {
                 moduleInfo = &*found;
@@ -4547,30 +5508,86 @@ namespace ScadLibrary
         return true;
     }
 
+    void ScadLibraryInterface::DrawSceneVariableProperties()
+    {
+        const std::vector<FScadSceneVariable>& variables = document_.SceneVariables();
+        if (variables.empty())
+        {
+            return;
+        }
+
+        ImGui::TextDisabled("场景变量与常量 · %zu 项", variables.size());
+        ImGui::TextWrapped("这里的数值会作用于整个场景。编辑表达式变量时，将把该赋值改为数值常量。"
+                           "引用它的 translate、过程规则和模块会一起重载。");
+        for (size_t index = 0; index < variables.size(); ++index)
+        {
+            const FScadSceneVariable& variable = variables[index];
+            double value = variable.value;
+            ImGui::PushID(static_cast<int>(index));
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(variable.name.c_str());
+            ImGui::SameLine(92.0f);
+            ImGui::SetNextItemWidth(-1.0f);
+            bool changed = false;
+            if (variable.name == "$fn")
+            {
+                int segments = std::max(3, static_cast<int>(std::lround(value)));
+                changed = ImGui::DragInt("##scene_variable", &segments, 1.0f, 3, 256);
+                value = static_cast<double>(segments);
+            }
+            else
+            {
+                changed = ImGui::DragScalar("##scene_variable", ImGuiDataType_Double, &value, 0.05f, nullptr,
+                                            nullptr, "%.4f");
+            }
+            if (changed)
+            {
+                if (document_.SetSceneVariableNumber(index, value))
+                {
+                    documentVariables_[variable.name] = Assets::Scad::Value::MakeNumber(value);
+                    assemblySourceDirty_ = true;
+                    benchDirty_ = true;
+                    terrainProcessDirty_ = document_.HasTerrain();
+                    sourceStructureBoundsDirty_ = true;
+                    statusLine_ = fmt::format("已更新场景变量 {} = {:.4g}", variable.name, value);
+                    statusError_ = false;
+                }
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("第 %d 行原表达式：%s", variable.line, variable.expression.c_str());
+            }
+            ImGui::PopID();
+        }
+        ImGui::Separator();
+    }
+
     void ScadLibraryInterface::DrawBenchContent()
     {
-        ImGui::Spacing();
-        ImGui::TextDisabled("资源文件");
+        BeginCard("##SceneFileCard");
+        DrawCardHeader(ICON_FA_FILE_CODE, "场景文件", openedAssemblyPath_.empty() ? "未加载" : nullptr);
+
         ImGui::SetNextItemWidth(-1.0f);
         ImGui::InputTextWithHint("##assembly_path", "assets/scad/evaluated/my_scene.scad", assemblyPathBuf_,
                                  sizeof(assemblyPathBuf_));
-        if (ImGui::Button(ICON_FA_FOLDER_OPEN " 打开"))
+
+        if (ImGui::Button(ICON_FA_FOLDER_OPEN " 打开", ImVec2(76.0f, 26.0f)))
         {
             OpenAssembly(assemblyPathBuf_);
         }
-        ImGui::SameLine();
-        ImGui::BeginDisabled(assemblySource_.empty() && bench_.empty());
-        if (ImGui::Button(ICON_FA_COPY " 另存为"))
+        ImGui::SameLine(0.0f, 6.0f);
+        ImGui::BeginDisabled(assemblySource_.empty() && Bench().empty());
+        if (ImGui::Button(ICON_FA_COPY " 另存为", ImVec2(86.0f, 26.0f)))
         {
             SaveAssembly(true);
         }
         ImGui::EndDisabled();
-        ImGui::SameLine();
-        ImGui::TextDisabled("保存与预览位于顶部工具栏");
 
         if (!openedAssemblyPath_.empty())
         {
-            ImGui::TextDisabled("%s%s", openedAssemblyPath_.c_str(), assemblySourceDirty_ ? "  *" : "");
+            ImGui::Spacing();
+            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted), "%s%s",
+                               openedAssemblyPath_.c_str(), assemblySourceDirty_ ? "  *" : "");
         }
         if (!openedAssemblyKits_.empty())
         {
@@ -4583,243 +5600,823 @@ namespace ScadLibrary
             ImGui::TextWrapped("generated/ 文件可能由 specs/ 重新生成；保存的手工修改可能被覆盖。");
             ImGui::PopStyleColor();
         }
-        if (openedSceneKind_ == EScadSceneKind::Source && !openedAssemblyPath_.empty())
+        ImGui::TextDisabled("节点: %zu 实例  ·  %zu 源码结构%s", Bench().size(), document_.SourceSegmentCount(),
+                            document_.HasTerrain() ? "  ·  含地形" : "");
+        for (const std::string& warning : terrainProcessWarnings_)
         {
             ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Theme::Color(NextUI::Theme::EColor::Warning));
-            ImGui::TextWrapped("Source 保留循环、条件和 module 调用，只使用源码 AI。转换为 Evaluated "
-                               "会把当前求值结果保存成结构不同的实例场景。");
+            ImGui::TextWrapped("%s", warning.c_str());
             ImGui::PopStyleColor();
-            if (ImGui::Button(ICON_FA_CODE_BRANCH " 转换为 Evaluated 副本"))
+        }
+        EndCard();
+
+        BeginCard("##SceneVariablesCard");
+        DrawCardHeader(ICON_FA_SLIDERS, "全局参数 ($fn)");
+        DrawSceneVariableProperties();
+        EndCard();
+
+        if (structureInspectorRequested_)
+        {
+            assemblyEditorTab_ = 3;
+            structureInspectorRequested_ = false;
+        }
+
+        std::vector<std::pair<int, std::string>> subTabs;
+        subTabs.push_back({3, ICON_FA_CIRCLE_INFO " 详情"});
+        if (document_.HasTerrain())
+        {
+            subTabs.push_back({2, fmt::format(ICON_FA_MOUNTAIN_SUN " 过程 ({}+{})",
+                                              TerrainProcess().Terrain().features.size(),
+                                              TerrainProcess().ActiveRuleCount())});
+        }
+        subTabs.push_back({1, ICON_FA_CODE " 源码"});
+
+        DrawSegmentedPills("##assembly_editor_tabs", subTabs, &assemblyEditorTab_, -1.0f, 26.0f);
+        ImGui::Spacing();
+
+        if (assemblyEditorTab_ == 2 && document_.HasTerrain())
+        {
+            DrawTerrainProcessContent();
+        }
+        else if (assemblyEditorTab_ == 1)
+        {
+            if (sourceBufferDirty_)
             {
-                ConvertSourceToEvaluated();
+                ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Theme::Color(NextUI::Theme::EColor::Warning));
+                ImGui::TextWrapped("源码已改动。预览或保存会重新解析，对象与地形面板随后刷新。");
+                ImGui::PopStyleColor();
+                ImGui::SameLine();
+                if (ImGui::SmallButton(ICON_FA_ROTATE_RIGHT " 立即解析"))
+                {
+                    ReparseDocument(assemblySource_, openedAssemblyPath_);
+                    assemblySourceDirty_ = true;
+                }
+            }
+            else
+            {
+                ImGui::TextDisabled("支持完整 SCAD；预览不会先覆盖源文件。");
+            }
+            if (ImGui::InputTextMultiline("##assembly_source", &assemblySource_, ImVec2(-1.0f, -1.0f),
+                                          ImGuiInputTextFlags_AllowTabInput))
+            {
+                assemblySourceDirty_ = true;
+                sourceBufferDirty_ = true;
             }
         }
+        else
+        {
+            assemblyEditorTab_ = 3;
+            DrawStructureContent();
+        }
+
+        if (benchDirty_)
+        {
+            assemblySourceDirty_ = true;
+        }
+    }
+
+    void ScadLibraryInterface::DrawStructureOutliner()
+    {
+        ImGui::TextDisabled("场景结构 · 选择节点后在右侧查看详情");
+        ImGui::SetNextItemWidth(-1.0f);
+        ImGui::InputTextWithHint("##left_outliner_filter", ICON_FA_MAGNIFYING_GLASS " 搜索节点", segmentFilterBuf_,
+                                 sizeof(segmentFilterBuf_));
         ImGui::Separator();
 
-        if (ImGui::BeginTabBar("##assembly_editor_tabs"))
+        const auto selectSegment = [this](int segmentIndex)
         {
-            if (assemblyProcedural_ &&
-                ImGui::BeginTabItem(fmt::format("过程 ({} + {})", terrainProcess_.Terrain().features.size(),
-                                                terrainProcess_.ActiveRuleCount())
-                                        .c_str()))
+            if (segmentIndex < 0 || segmentIndex >= static_cast<int>(document_.Segments().size()))
             {
-                assemblyEditorTab_ = 2;
-                DrawTerrainProcessContent();
-                ImGui::EndTabItem();
+                return;
             }
-
-            if (openedSceneKind_ == EScadSceneKind::Evaluated)
+            const FScadSceneSegment& segment = document_.Segments()[segmentIndex];
+            selectedSegment_ = segmentIndex;
+            scrollToSelectedSegment_ = true;
+            structureInspectorRequested_ = true;
+            assemblyEditorTab_ = 3;
+            if (segment.kind == EScadSegmentKind::Instance && segment.instanceIndex >= 0)
             {
-                const std::string objectTabLabel = assemblyTerrainSources_.empty()
-                    ? fmt::format("对象 ({})", bench_.size())
-                    : fmt::format("对象 ({}) · 地形 {}", bench_.size(), assemblyTerrainSources_.size());
-                if (ImGui::BeginTabItem(objectTabLabel.c_str()))
+                ClearSelectedStructureBounds();
+                selectedBenchItem_ = segment.instanceIndex;
+                FBenchItem& item = Bench()[selectedBenchItem_];
+                ResolveSceneObjectNode(item, SceneObjectWorldMatrix(item));
+                engine_.GetScene().ClearSelection();
+                engine_.GetShowFlags().ShowEdge = false;
+            }
+            else if (segment.kind == EScadSegmentKind::TerrainRule && segment.ruleIndex >= 0)
+            {
+                ClearEditableSceneSelection();
+                ClearSelectedStructureBounds();
+                selectedTerrainRule_ = segment.ruleIndex;
+                terrainSelectionIsRule_ = true;
+            }
+            else if (segment.kind == EScadSegmentKind::Terrain)
+            {
+                ClearEditableSceneSelection();
+                ClearSelectedStructureBounds();
+                terrainSelectionIsRule_ = false;
+                selectedTerrainFeature_ = -1;
+            }
+            else
+            {
+                ClearEditableSceneSelection();
+                if (segment.name == "lay_scatter")
                 {
-                    assemblyEditorTab_ = 0;
-                    ImGui::Checkbox("自动刷新", &autoReload_);
-                    ImGui::SameLine();
-                    ImGui::Checkbox("地板", &showFloor_);
-                    ImGui::SameLine();
-                    ImGui::SetNextItemWidth(90.0f);
-                    if (ImGui::SliderInt("$fn", &fnSegments_, 6, 32))
-                    {
-                        benchDirty_ = true;
-                    }
-                    if (!assemblyStructured_ && !assemblySource_.empty())
-                    {
-                        ImGui::TextDisabled("该场景包含自由 SCAD 结构；完整内容请在“源码”页编辑。");
-                    }
+                    ClearSelectedStructureBounds();
+                }
+                else
+                {
+                    UpdateSelectedStructureBounds();
+                }
+            }
+        };
 
-                    if (ImGui::Button(ICON_FA_ROTATE_RIGHT " 刷新对象"))
-                    {
-                        ReloadBench();
-                    }
-                    ImGui::SameLine();
-                    if (ImGui::Button(ICON_FA_TRASH " 清空") && !bench_.empty())
-                    {
-                        bench_.clear();
-                        selectedBenchItem_ = -1;
-                        engine_.GetScene().ClearSelection();
-                        engine_.GetShowFlags().ShowEdge = false;
-                        benchDirty_ = true;
-                    }
-                    ImGui::Separator();
-                    ImGui::SetNextItemWidth(-1.0f);
-                    ImGui::InputTextWithHint("##object_filter", "搜索对象模块或参数…", objectFilterBuf_,
-                                             sizeof(objectFilterBuf_));
+        ImGui::BeginChild("##left_structure_tree", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None);
+        const ImGuiTableFlags tableFlags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
+            ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp;
+        if (ImGui::BeginTable("##structure_table", 4, tableFlags, ImVec2(0.0f, 0.0f)))
+        {
+            ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 28.0f);
+            ImGui::TableSetupColumn("名称", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("类型", ImGuiTableColumnFlags_WidthFixed, 54.0f);
+            ImGui::TableSetupColumn("行", ImGuiTableColumnFlags_WidthFixed, 42.0f);
+            ImGui::TableHeadersRow();
 
-                    int removeIndex = -1;
-                    int duplicateIndex = -1;
-                    ImGui::BeginChild("##bench_list", ImVec2(0, -62.0f), ImGuiChildFlags_None);
-                    for (size_t i = 0; i < bench_.size(); ++i)
+            for (size_t segmentIndex = 0; segmentIndex < document_.Segments().size(); ++segmentIndex)
+            {
+                const FScadSceneSegment& segment = document_.Segments()[segmentIndex];
+                const FBenchItem* instance =
+                    segment.kind == EScadSegmentKind::Instance && segment.instanceIndex >= 0 &&
+                        segment.instanceIndex < static_cast<int>(Bench().size())
+                    ? &Bench()[segment.instanceIndex]
+                    : nullptr;
+                const FKitModuleInfo* moduleInfo = nullptr;
+                if (instance != nullptr && instance->kitIndex >= 0 && instance->kitIndex < static_cast<int>(kits_.size()))
+                {
+                    const std::vector<FKitModuleInfo>& modules = kits_[instance->kitIndex].modules;
+                    const auto module = std::find_if(modules.begin(), modules.end(), [&](const FKitModuleInfo& candidate)
+                                                     { return candidate.name == instance->CatalogModuleName(); });
+                    if (module != modules.end())
                     {
-                        FBenchItem& benchItem = bench_[i];
-                        if (objectFilterBuf_[0] != '\0' &&
-                            benchItem.moduleName.find(objectFilterBuf_) == std::string::npos &&
-                            std::string_view(benchItem.args).find(objectFilterBuf_) == std::string_view::npos)
+                        moduleInfo = &*module;
+                    }
+                }
+                const std::string& displayName = instance != nullptr
+                    ? instance->moduleName
+                    : (segment.name.empty() ? segment.label : segment.name);
+                const bool filterMiss = segmentFilterBuf_[0] != '\0' &&
+                    displayName.find(segmentFilterBuf_) == std::string::npos &&
+                    segment.label.find(segmentFilterBuf_) == std::string::npos &&
+                    (moduleInfo == nullptr || moduleInfo->category.find(segmentFilterBuf_) == std::string::npos);
+                if (segment.kind == EScadSegmentKind::TerrainRule || filterMiss)
+                {
+                    continue;
+                }
+
+                const bool layoutGenerator = segment.kind == EScadSegmentKind::Source && segment.name == "lay_scatter";
+                const bool procedural = segment.kind == EScadSegmentKind::Terrain || layoutGenerator;
+                const char* structureType = instance != nullptr ? "可编辑" : (procedural ? "过程" : "源码");
+                const char* icon = instance != nullptr ? ICON_FA_CUBE
+                    : (layoutGenerator ? ICON_FA_WAND_MAGIC_SPARKLES : SegmentKindIcon(segment.kind));
+                const ImVec4 iconColor = segment.disabled
+                    ? ImVec4(0.52f, 0.53f, 0.56f, 1.0f)
+                    : (procedural ? SegmentKindColor(EScadSegmentKind::TerrainRule) : SegmentKindColor(segment.kind));
+
+                ImGui::PushID(static_cast<int>(segmentIndex));
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextColored(iconColor, "%s", icon);
+                ImGui::TableSetColumnIndex(1);
+                if (ImGui::Selectable(fmt::format("{}##segment_{}", displayName, segmentIndex).c_str(),
+                                      selectedSegment_ == static_cast<int>(segmentIndex)))
+                {
+                    selectSegment(static_cast<int>(segmentIndex));
+                }
+                if (selectedSegment_ == static_cast<int>(segmentIndex) && scrollToSelectedSegment_)
+                {
+                    // Selection from the viewport may target a row outside the
+                    // current view, but clicking an already visible Outliner
+                    // row must not move the user's scroll position.
+                    if (!ImGui::IsItemVisible())
+                    {
+                        ImGui::SetScrollHereY(0.35f);
+                    }
+                    scrollToSelectedSegment_ = false;
+                }
+                if (instance != nullptr && ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("%s%s%s\n%s", instance->moduleName.c_str(), instance->catalogModuleName.empty()
+                                                                 ? ""
+                                                                 : "  → ",
+                                      instance->catalogModuleName.c_str(), moduleInfo == nullptr
+                                          ? "可编辑实例"
+                                          : fmt::format("{} · {}", CategoryLabel(moduleInfo->category), moduleInfo->params).c_str());
+                }
+                ImGui::TableSetColumnIndex(2);
+                ImGui::TextDisabled("%s", structureType);
+                ImGui::TableSetColumnIndex(3);
+                ImGui::TextDisabled("%s", segment.line > 0 ? fmt::format("L{}", segment.line).c_str() : "新增");
+
+                // The terrain assignment (for example `TERR = [...]`) and the
+                // gk_terrain(TERR) call are both top-level Terrain segments,
+                // but only the call owns the feature/rule children. Expanding
+                // both would render the same operators twice.
+                if (segment.kind == EScadSegmentKind::Terrain && segment.name == "gk_terrain")
+                {
+                    const Assets::Scad::FTerrainSpec& terrain = TerrainProcess().Terrain();
+                    for (size_t featureIndex = 0; featureIndex < terrain.features.size(); ++featureIndex)
+                    {
+                        ImGui::PushID(fmt::format("feature_{}", featureIndex).c_str());
+                        const bool selected = selectedSegment_ == static_cast<int>(segmentIndex) &&
+                            !terrainSelectionIsRule_ && selectedTerrainFeature_ == static_cast<int>(featureIndex);
+                        ImGui::TableNextRow();
+                        ImGui::TableSetColumnIndex(0);
+                        ImGui::TextColored(SegmentKindColor(EScadSegmentKind::TerrainRule), "%s", ICON_FA_MOUNTAIN_SUN);
+                        ImGui::TableSetColumnIndex(1);
+                        ImGui::Indent(14.0f);
+                        const bool clicked = ImGui::Selectable(
+                            fmt::format("{}##terrain_feature_{}", FTerrainProcessDocument::FeatureTypeName(terrain.features[featureIndex].type),
+                                        featureIndex).c_str(), selected);
+                        ImGui::Unindent(14.0f);
+                        if (clicked)
+                        {
+                            ClearEditableSceneSelection();
+                            ClearSelectedStructureBounds();
+                            selectedSegment_ = static_cast<int>(segmentIndex);
+                            selectedTerrainFeature_ = static_cast<int>(featureIndex);
+                            terrainSelectionIsRule_ = false;
+                            scrollToSelectedSegment_ = true;
+                            structureInspectorRequested_ = true;
+                            assemblyEditorTab_ = 3;
+                        }
+                        ImGui::TableSetColumnIndex(2);
+                        ImGui::TextDisabled("特征");
+                        ImGui::TableSetColumnIndex(3);
+                        ImGui::TextDisabled("—");
+                        ImGui::PopID();
+                    }
+                    const std::vector<FTerrainProcessRule>& rules = TerrainProcess().Rules();
+                    for (size_t ruleIndex = 0; ruleIndex < rules.size(); ++ruleIndex)
+                    {
+                        if (rules[ruleIndex].removed)
                         {
                             continue;
                         }
-                        ImGui::PushID(static_cast<int>(i));
-                        ImGuiTreeNodeFlags objectFlags =
-                            ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_FramePadding;
-                        if (bench_.size() <= 64)
+                        ImGui::PushID(fmt::format("rule_{}", ruleIndex).c_str());
+                        const bool selected = terrainSelectionIsRule_ && selectedTerrainRule_ == static_cast<int>(ruleIndex);
+                        ImGui::TableNextRow();
+                        ImGui::TableSetColumnIndex(0);
+                        ImGui::TextColored(SegmentKindColor(EScadSegmentKind::TerrainRule), "%s", ICON_FA_WAND_MAGIC_SPARKLES);
+                        ImGui::TableSetColumnIndex(1);
+                        ImGui::Indent(14.0f);
+                        const bool clicked = ImGui::Selectable(
+                            fmt::format("{}##terrain_rule_{}", FTerrainProcessDocument::RuleTypeName(rules[ruleIndex].type), ruleIndex).c_str(),
+                            selected);
+                        ImGui::Unindent(14.0f);
+                        if (clicked)
                         {
-                            objectFlags |= ImGuiTreeNodeFlags_DefaultOpen;
+                            const auto found = std::find_if(document_.Segments().begin(), document_.Segments().end(),
+                                                            [ruleIndex](const FScadSceneSegment& candidate)
+                                                            {
+                                                                return candidate.kind == EScadSegmentKind::TerrainRule &&
+                                                                    candidate.ruleIndex == static_cast<int>(ruleIndex);
+                                                            });
+                            ClearEditableSceneSelection();
+                            ClearSelectedStructureBounds();
+                            selectedSegment_ = found == document_.Segments().end()
+                                ? static_cast<int>(segmentIndex)
+                                : static_cast<int>(std::distance(document_.Segments().begin(), found));
+                            selectedTerrainRule_ = static_cast<int>(ruleIndex);
+                            terrainSelectionIsRule_ = true;
+                            scrollToSelectedSegment_ = true;
+                            structureInspectorRequested_ = true;
+                            assemblyEditorTab_ = 3;
                         }
-                        if (selectedBenchItem_ == static_cast<int>(i))
-                        {
-                            objectFlags |= ImGuiTreeNodeFlags_Selected;
-                            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.10f, 0.34f, 0.68f, 0.82f));
-                            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.14f, 0.42f, 0.80f, 0.92f));
-                            ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.16f, 0.48f, 0.92f, 1.0f));
-                        }
-                        const std::string objectLabel = benchItem.sourceLine > 0
-                            ? fmt::format("{} #{}  ·  L{}", benchItem.moduleName, i, benchItem.sourceLine)
-                            : fmt::format("{} #{}", benchItem.moduleName, i);
-                        const bool open = ImGui::TreeNodeEx(objectLabel.c_str(), objectFlags);
-                        if (selectedBenchItem_ == static_cast<int>(i))
-                        {
-                            ImGui::PopStyleColor(3);
-                            if (scrollToSelectedBenchItem_)
-                            {
-                                ImGui::SetScrollHereY(0.35f);
-                                scrollToSelectedBenchItem_ = false;
-                            }
-                        }
-                        if (ImGui::IsItemClicked())
-                        {
-                            selectedBenchItem_ = static_cast<int>(i);
-                            if (Assets::Node* selectedNode =
-                                    ResolveSceneObjectNode(benchItem, SceneObjectWorldMatrix(benchItem)))
-                            {
-                                engine_.GetScene().SetSelectedId(selectedNode->GetInstanceId());
-                                engine_.GetShowFlags().ShowEdge = true;
-                            }
-                        }
-                        ImGui::SameLine(ImGui::GetContentRegionAvail().x - 52.0f);
-                        if (ImGui::SmallButton(ICON_FA_COPY "##dup"))
-                        {
-                            duplicateIndex = static_cast<int>(i);
-                        }
-                        ImGui::SameLine();
-                        if (ImGui::SmallButton(ICON_FA_XMARK "##del"))
-                        {
-                            removeIndex = static_cast<int>(i);
-                        }
-                        if (open)
-                        {
-                            float position[3] = {benchItem.x, benchItem.y, benchItem.z};
-                            if (ImGui::DragFloat3("位置", position, 0.5f))
-                            {
-                                benchItem.x = position[0];
-                                benchItem.y = position[1];
-                                benchItem.z = position[2];
-                                benchDirty_ = true;
-                            }
-                            float rotation[3] = {benchItem.rotX, benchItem.rotY, benchItem.rotZ};
-                            if (ImGui::DragFloat3("旋转", rotation, 1.0f, -360.0f, 360.0f, "%.1f°"))
-                            {
-                                benchItem.rotX = rotation[0];
-                                benchItem.rotY = rotation[1];
-                                benchItem.rotZ = rotation[2];
-                                benchDirty_ = true;
-                            }
-                            float scale[3] = {benchItem.scale, benchItem.scaleY, benchItem.scaleZ};
-                            if (ImGui::DragFloat3("缩放", scale, 0.02f, 0.001f, 100.0f, "%.3f"))
-                            {
-                                benchItem.scale = scale[0];
-                                benchItem.scaleY = scale[1];
-                                benchItem.scaleZ = scale[2];
-                                benchDirty_ = true;
-                            }
-                            if (benchItem.hasColor && ImGui::ColorEdit4("颜色", benchItem.color))
-                            {
-                                benchDirty_ = true;
-                            }
-                            if (DrawBenchItemParameters(benchItem))
-                            {
-                                benchDirty_ = true;
-                            }
-                            ImGui::TreePop();
-                        }
+                        ImGui::TableSetColumnIndex(2);
+                        ImGui::TextDisabled("规则");
+                        ImGui::TableSetColumnIndex(3);
+                        ImGui::TextDisabled("—");
                         ImGui::PopID();
                     }
-                    if (bench_.empty())
-                    {
-                        ImGui::TextDisabled("从左侧 Kit 零件库点 \"+\" 添加模块，");
-                        ImGui::TextDisabled("在这里调整位置、角度和参数。");
-                    }
-                    ImGui::EndChild();
-
-                    if (removeIndex >= 0)
-                    {
-                        bench_.erase(bench_.begin() + removeIndex);
-                        if (selectedBenchItem_ == removeIndex)
-                        {
-                            selectedBenchItem_ = -1;
-                        }
-                        else if (selectedBenchItem_ > removeIndex)
-                        {
-                            --selectedBenchItem_;
-                        }
-                        benchDirty_ = true;
-                    }
-                    if (duplicateIndex >= 0)
-                    {
-                        FBenchItem copy = bench_[duplicateIndex];
-                        copy.x += kBenchGridStep * 0.5f;
-                        copy.y += kBenchGridStep * 0.5f;
-                        copy.runtimeNodeId = std::numeric_limits<uint32_t>::max();
-                        bench_.push_back(copy);
-                        selectedBenchItem_ = static_cast<int>(bench_.size()) - 1;
-                        benchDirty_ = true;
-                    }
-
-                    ImGui::Separator();
-                    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 116.0f);
-                    ImGui::InputTextWithHint("##export_name", "新场景文件名", exportNameBuf_, sizeof(exportNameBuf_));
-                    ImGui::SameLine();
-                    if (ImGui::Button(ICON_FA_FILE_EXPORT " 导出场景") && !bench_.empty())
-                    {
-                        ExportBench();
-                    }
-                    if (ImGui::IsItemHovered())
-                    {
-                        ImGui::SetTooltip("写入 assets/scad/evaluated/<名>.scad");
-                    }
-                    ImGui::EndTabItem();
                 }
+                ImGui::PopID();
             }
+            ImGui::EndTable();
+        }
+        if (document_.Segments().empty())
+        {
+            ImGui::TextDisabled("打开场景后显示结构。");
+        }
+        ImGui::EndChild();
+    }
 
-            if (openedSceneKind_ == EScadSceneKind::Source && ImGui::BeginTabItem("源码"))
+    void ScadLibraryInterface::DrawStructureContent()
+    {
+        int explodeRequest = -1;
+        int collapseRequest = -1;
+        int toggleRequest = -1;
+        int removeInstanceRequest = -1;
+        int duplicateInstanceRequest = -1;
+        bool toggleTo = false;
+
+        // The tree is hosted in the left resource sidebar. Keep this former
+        // inline implementation disabled while the right panel is the
+        // Inspector only.
+        if (false)
+        {
+        const float outlinerWidth = std::max(220.0f, ImGui::GetContentRegionAvail().x * 0.43f);
+        ImGui::BeginChild("##structure_outliner", ImVec2(outlinerWidth, 0.0f), ImGuiChildFlags_Borders);
+        for (size_t index = 0; index < document_.Segments().size(); ++index)
+        {
+            const FScadSceneSegment& segment = document_.Segments()[index];
+            // Process rules are children of the TERR node below, rather than
+            // a second flat list entry.
+            if (segment.kind == EScadSegmentKind::TerrainRule)
             {
-                assemblyEditorTab_ = 1;
-                ImGui::TextDisabled("支持完整 SCAD；预览不会先覆盖源文件。");
-                if (ImGui::InputTextMultiline("##assembly_source", &assemblySource_, ImVec2(-1.0f, -1.0f),
-                                              ImGuiInputTextFlags_AllowTabInput))
-                {
-                    assemblySourceDirty_ = true;
-                    assemblyStructured_ = false;
-                    assemblyEvaluated_ = false;
-                    assemblyProcedural_ = false;
-                    openedSceneKind_ = EScadSceneKind::Source;
-                    terrainProcessDirty_ = false;
-                    terrainProcessWarnings_.clear();
-                    bench_.clear();
-                    assemblyTerrainSources_.clear();
-                    selectedBenchItem_ = -1;
-                    benchDirty_ = false;
-                    openedAssemblyKits_ = FindKitDependencies(assemblySource_);
-                }
-                ImGui::EndTabItem();
+                continue;
             }
-            ImGui::EndTabBar();
+            if (segmentFilterBuf_[0] != '\0' && segment.name.find(segmentFilterBuf_) == std::string::npos &&
+                segment.label.find(segmentFilterBuf_) == std::string::npos)
+            {
+                continue;
+            }
+            ImGui::PushID(static_cast<int>(index));
+
+            const bool selected = selectedSegment_ == static_cast<int>(index);
+            const std::string lineLabel = segment.line > 0 ? fmt::format("L{}", segment.line) : "新增";
+            const std::string rowLabel = fmt::format("{}  {}  ·  {}##segment_{}", SegmentKindIcon(segment.kind),
+                                                     segment.name.empty() ? segment.label : segment.name, lineLabel,
+                                                     index);
+            ImGui::PushStyleColor(ImGuiCol_Text, segment.disabled
+                                                     ? ImVec4(0.52f, 0.53f, 0.56f, 1.0f)
+                                                     : SegmentKindColor(segment.kind));
+            if (ImGui::Selectable(rowLabel.c_str(), selected))
+            {
+                selectedSegment_ = static_cast<int>(index);
+                if (segment.kind == EScadSegmentKind::Instance && segment.instanceIndex >= 0)
+                {
+                    ClearSelectedStructureBounds();
+                    selectedBenchItem_ = segment.instanceIndex;
+                    scrollToSelectedBenchItem_ = true;
+                    FBenchItem& item = Bench()[selectedBenchItem_];
+                    ResolveSceneObjectNode(item, SceneObjectWorldMatrix(item));
+                    engine_.GetScene().ClearSelection();
+                    engine_.GetShowFlags().ShowEdge = false;
+                }
+                else if (segment.kind == EScadSegmentKind::TerrainRule && segment.ruleIndex >= 0)
+                {
+                    ClearEditableSceneSelection();
+                    ClearSelectedStructureBounds();
+                    terrainSelectionIsRule_ = true;
+                    selectedTerrainRule_ = segment.ruleIndex;
+                    scrollToSelectedTerrainItem_ = true;
+                }
+                else if (segment.kind == EScadSegmentKind::Terrain)
+                {
+                    ClearEditableSceneSelection();
+                    ClearSelectedStructureBounds();
+                    terrainSelectionIsRule_ = false;
+                    selectedTerrainFeature_ = -1;
+                }
+                else
+                {
+                    // Source constructs such as for()/if()/module cannot be
+                    // transformed as one object. Never leave the previous
+                    // instance's gizmo, OBB or outline on screen.
+                    ClearEditableSceneSelection();
+                    UpdateSelectedStructureBounds();
+                }
+            }
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered())
+            {
+                if (segment.line > 0)
+                {
+                    ImGui::SetTooltip("%s  ·  第 %d-%d 行%s\n%s", ScadSegmentKindLabel(segment.kind), segment.line,
+                                      segment.endLine, segment.disabled ? "  ·  已关闭" : "", segment.label.c_str());
+                }
+                else
+                {
+                    ImGui::SetTooltip("%s  ·  尚未保存的新节点%s\n%s", ScadSegmentKindLabel(segment.kind),
+                                      segment.disabled ? "  ·  已关闭" : "", segment.label.c_str());
+                }
+            }
+
+            if (segment.kind == EScadSegmentKind::Terrain && segment.name == "gk_terrain")
+            {
+                ImGui::Indent(18.0f);
+                Assets::Scad::FTerrainSpec& terrain = TerrainProcess().Terrain();
+                for (size_t featureIndex = 0; featureIndex < terrain.features.size(); ++featureIndex)
+                {
+                    ImGui::PushID(fmt::format("terrain_feature_{}", featureIndex).c_str());
+                    const bool featureSelected = selectedSegment_ == static_cast<int>(index) && !terrainSelectionIsRule_ &&
+                                                 selectedTerrainFeature_ == static_cast<int>(featureIndex);
+                    const std::string featureLabel = fmt::format("{}  {}", ICON_FA_MOUNTAIN_SUN,
+                                                                 FTerrainProcessDocument::FeatureTypeName(
+                                                                     terrain.features[featureIndex].type));
+                    if (ImGui::Selectable(featureLabel.c_str(), featureSelected))
+                    {
+                        ClearEditableSceneSelection();
+                        ClearSelectedStructureBounds();
+                        selectedSegment_ = static_cast<int>(index);
+                        selectedTerrainFeature_ = static_cast<int>(featureIndex);
+                        terrainSelectionIsRule_ = false;
+                    }
+                    ImGui::PopID();
+                }
+                const std::vector<FTerrainProcessRule>& rules = TerrainProcess().Rules();
+                for (size_t ruleIndex = 0; ruleIndex < rules.size(); ++ruleIndex)
+                {
+                    if (rules[ruleIndex].removed)
+                    {
+                        continue;
+                    }
+                    const auto segmentIt = std::find_if(
+                        document_.Segments().begin(), document_.Segments().end(), [ruleIndex](const FScadSceneSegment& candidate)
+                        { return candidate.kind == EScadSegmentKind::TerrainRule && candidate.ruleIndex == static_cast<int>(ruleIndex); });
+                    const int ruleSegmentIndex = segmentIt == document_.Segments().end()
+                        ? static_cast<int>(index)
+                        : static_cast<int>(std::distance(document_.Segments().begin(), segmentIt));
+                    ImGui::PushID(fmt::format("terrain_rule_{}", ruleIndex).c_str());
+                    const bool ruleSelected = terrainSelectionIsRule_ && selectedTerrainRule_ == static_cast<int>(ruleIndex);
+                    const std::string ruleLabel = fmt::format("{}  {}", ICON_FA_WAND_MAGIC_SPARKLES,
+                                                               FTerrainProcessDocument::RuleTypeName(rules[ruleIndex].type));
+                    if (ImGui::Selectable(ruleLabel.c_str(), ruleSelected))
+                    {
+                        ClearEditableSceneSelection();
+                        ClearSelectedStructureBounds();
+                        selectedSegment_ = ruleSegmentIndex;
+                        selectedTerrainRule_ = static_cast<int>(ruleIndex);
+                        terrainSelectionIsRule_ = true;
+                    }
+                    ImGui::PopID();
+                }
+                ImGui::Unindent(18.0f);
+            }
+
+            if (false && selected)
+            {
+                if (scrollToSelectedSegment_)
+                {
+                    ImGui::SetScrollHereY(0.35f);
+                    scrollToSelectedSegment_ = false;
+                }
+                ImGui::Indent(12.0f);
+                ImGui::TextDisabled("%s", segment.label.c_str());
+                if (segment.kind == EScadSegmentKind::Instance && segment.instanceIndex >= 0 &&
+                    segment.instanceIndex < static_cast<int>(Bench().size()))
+                {
+                    FBenchItem& item = Bench()[segment.instanceIndex];
+                    float position[3] = {item.x, item.y, item.z};
+                    if (ImGui::DragFloat3("位置", position, 0.5f))
+                    {
+                        item.x = position[0];
+                        item.y = position[1];
+                        item.z = position[2];
+                        benchDirty_ = true;
+                    }
+                    float rotation[3] = {item.rotX, item.rotY, item.rotZ};
+                    if (ImGui::DragFloat3("旋转", rotation, 1.0f, -360.0f, 360.0f, "%.1f°"))
+                    {
+                        item.rotX = rotation[0];
+                        item.rotY = rotation[1];
+                        item.rotZ = rotation[2];
+                        benchDirty_ = true;
+                    }
+                    float scale[3] = {item.scale, item.scaleY, item.scaleZ};
+                    if (ImGui::DragFloat3("缩放", scale, 0.02f, 0.001f, 100.0f, "%.3f"))
+                    {
+                        item.scale = scale[0];
+                        item.scaleY = scale[1];
+                        item.scaleZ = scale[2];
+                        benchDirty_ = true;
+                    }
+                    if (item.hasColor && ImGui::ColorEdit4("颜色", item.color))
+                    {
+                        benchDirty_ = true;
+                    }
+                    if (DrawBenchItemParameters(item))
+                    {
+                        benchDirty_ = true;
+                    }
+                    if (ImGui::SmallButton(ICON_FA_COPY " 复制节点"))
+                    {
+                        duplicateInstanceRequest = segment.instanceIndex;
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton(ICON_FA_TRASH " 删除节点"))
+                    {
+                        removeInstanceRequest = segment.instanceIndex;
+                    }
+                    ImGui::Separator();
+                }
+                if (document_.IsSwitchable(index))
+                {
+                    if (segment.disabled)
+                    {
+                        if (ImGui::SmallButton(ICON_FA_EYE " 启用"))
+                        {
+                            toggleRequest = static_cast<int>(index);
+                            toggleTo = false;
+                        }
+                    }
+                    else if (ImGui::SmallButton(ICON_FA_EYE_SLASH " 关闭"))
+                    {
+                        toggleRequest = static_cast<int>(index);
+                        toggleTo = true;
+                    }
+                    if (segment.kind == EScadSegmentKind::Source)
+                    {
+                        ImGui::SameLine();
+                        if (segment.explodedInstances > 0)
+                        {
+                            if (ImGui::SmallButton(ICON_FA_ARROWS_ROTATE " 撤销展开"))
+                            {
+                                collapseRequest = static_cast<int>(index);
+                            }
+                        }
+                        else if (!segment.disabled && ImGui::SmallButton(ICON_FA_CODE_BRANCH " 关闭并展开为实例"))
+                        {
+                            explodeRequest = static_cast<int>(index);
+                        }
+                        if (ImGui::IsItemHovered())
+                        {
+                            ImGui::SetTooltip("求值这一条结构，把它产生的 Kit 实例写进同一个文件，"
+                                              "并用 OpenSCAD 的 * 修饰符关闭原语句。\n"
+                                              "其余源码结构不受影响。");
+                        }
+                    }
+                }
+                else
+                {
+                    ImGui::TextDisabled("该节点由所属编辑器管理（地形面板或 module 定义），不能在这里开关。");
+                }
+                ImGui::Unindent(12.0f);
+            }
+            ImGui::PopID();
+        }
+        if (document_.Segments().empty())
+        {
+            ImGui::TextDisabled("打开一个场景后，这里会列出它的全部顶层节点。");
+        }
+        ImGui::EndChild();
         }
 
-        if ((assemblyStructured_ || assemblyEvaluated_) && benchDirty_)
+        ImGui::BeginChild("##structure_inspector", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None);
+        if (selectedSegment_ < 0 || selectedSegment_ >= static_cast<int>(document_.Segments().size()))
         {
+            BeginCard("##StructureEmptyCard");
+            DrawCardHeader(ICON_FA_CIRCLE_INFO, "节点检查器");
+            ImGui::TextDisabled("在左侧「结构」或视口中选择任意节点，\n即可在此处调整空间变换、模块参数与颜色。");
+            EndCard();
+        }
+        else
+        {
+            const FScadSceneSegment& selectedSegment = document_.Segments()[selectedSegment_];
+            const char* kindLabel = selectedSegment.kind == EScadSegmentKind::Source && selectedSegment.name == "lay_scatter"
+                                  ? "布局过程算子"
+                                  : ScadSegmentKindLabel(selectedSegment.kind);
+
+            BeginCard("##SelectedNodeHeaderCard");
+            DrawCardHeader(ICON_FA_CUBE, selectedSegment.label.c_str(), kindLabel);
+            EndCard();
+
+            if (selectedSegment.kind == EScadSegmentKind::Instance && selectedSegment.instanceIndex >= 0 &&
+                selectedSegment.instanceIndex < static_cast<int>(Bench().size()))
+            {
+                FBenchItem& item = Bench()[selectedSegment.instanceIndex];
+
+                BeginCard("##TransformCard");
+                DrawCardHeader(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT, "空间变换 (Transform)");
+                float position[3] = {item.x, item.y, item.z};
+                if (Draw3AxisFloatDrag("位置", position, 0.5f))
+                {
+                    item.x = position[0];
+                    item.y = position[1];
+                    item.z = position[2];
+                    benchDirty_ = true;
+                }
+                float rotation[3] = {item.rotX, item.rotY, item.rotZ};
+                if (Draw3AxisFloatDrag("旋转", rotation, 1.0f, -360.0f, 360.0f, "%.1f°"))
+                {
+                    item.rotX = rotation[0];
+                    item.rotY = rotation[1];
+                    item.rotZ = rotation[2];
+                    benchDirty_ = true;
+                }
+                float scale[3] = {item.scale, item.scaleY, item.scaleZ};
+                if (Draw3AxisFloatDrag("缩放", scale, 0.02f, 0.001f, 100.0f, "%.3f"))
+                {
+                    item.scale = scale[0];
+                    item.scaleY = scale[1];
+                    item.scaleZ = scale[2];
+                    benchDirty_ = true;
+                }
+                EndCard();
+
+                BeginCard("##ModuleParamsCard");
+                DrawCardHeader(ICON_FA_SLIDERS, "模块属性与参数");
+                if (item.hasColor && ImGui::ColorEdit4("颜色", item.color))
+                {
+                    benchDirty_ = true;
+                }
+                if (DrawBenchItemParameters(item))
+                {
+                    benchDirty_ = true;
+                }
+                ImGui::Spacing();
+                if (ImGui::Button(ICON_FA_COPY " 复制节点", ImVec2(96.0f, 26.0f)))
+                {
+                    duplicateInstanceRequest = selectedSegment.instanceIndex;
+                }
+                ImGui::SameLine(0.0f, 8.0f);
+                ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::Danger, 0.22f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::Danger, 0.45f));
+                ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Theme::Color(NextUI::Theme::EColor::Danger));
+                if (ImGui::Button(ICON_FA_TRASH " 删除节点", ImVec2(96.0f, 26.0f)))
+                {
+                    removeInstanceRequest = selectedSegment.instanceIndex;
+                }
+                ImGui::PopStyleColor(3);
+                EndCard();
+            }
+            else if ((selectedSegment.kind == EScadSegmentKind::TerrainRule && selectedSegment.ruleIndex >= 0) ||
+                     (selectedSegment.kind == EScadSegmentKind::Terrain && terrainSelectionIsRule_))
+            {
+                const int terrainRuleIndex = selectedSegment.kind == EScadSegmentKind::TerrainRule
+                    ? selectedSegment.ruleIndex
+                    : selectedTerrainRule_;
+                if (DrawTerrainRuleDetails(terrainRuleIndex))
+                {
+                    MarkTerrainProcessDirty();
+                }
+                if (ImGui::Button(ICON_FA_COPY " 复制过程算子"))
+                {
+                    TerrainProcess().DuplicateRule(static_cast<size_t>(terrainRuleIndex));
+                    selectedTerrainRule_ = static_cast<int>(TerrainProcess().Rules().size()) - 1;
+                    terrainSelectionIsRule_ = true;
+                    MarkTerrainProcessDirty();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button(ICON_FA_TRASH " 删除过程算子"))
+                {
+                    TerrainProcess().RemoveRule(static_cast<size_t>(terrainRuleIndex));
+                    terrainSelectionIsRule_ = false;
+                    selectedSegment_ = -1;
+                    MarkTerrainProcessDirty();
+                }
+            }
+            else if (selectedSegment.kind == EScadSegmentKind::Terrain)
+            {
+                Assets::Scad::FTerrainSpec& terrain = TerrainProcess().Terrain();
+                if (!terrainSelectionIsRule_ && selectedTerrainFeature_ >= 0 &&
+                    selectedTerrainFeature_ < static_cast<int>(terrain.features.size()))
+                {
+                    if (DrawTerrainFeatureDetails(selectedTerrainFeature_))
+                    {
+                        MarkTerrainProcessDirty();
+                    }
+                    if (ImGui::Button(ICON_FA_TRASH " 删除 Feature"))
+                    {
+                        terrain.features.erase(terrain.features.begin() + selectedTerrainFeature_);
+                        selectedTerrainFeature_ = -1;
+                        MarkTerrainProcessDirty();
+                    }
+                }
+                else
+                {
+                    ImGui::TextDisabled("TERR 基础信息在“过程”页编辑；这里管理其 Features 与 ter_* 算子。");
+                }
+                ImGui::Separator();
+                if (ImGui::Button(ICON_FA_PLUS " 添加山峰 Feature"))
+                {
+                    Assets::Scad::FTerrainFeature feature;
+                    feature.type = Assets::Scad::FTerrainFeature::EType::Mountain;
+                    feature.radius = 20.0;
+                    feature.height = 8.0;
+                    terrain.features.push_back(std::move(feature));
+                    selectedTerrainFeature_ = static_cast<int>(terrain.features.size()) - 1;
+                    terrainSelectionIsRule_ = false;
+                    MarkTerrainProcessDirty();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button(ICON_FA_PLUS " 添加 ter_place"))
+                {
+                    TerrainProcess().AddRule(ETerrainProcessRuleType::Place);
+                    selectedTerrainRule_ = static_cast<int>(TerrainProcess().Rules().size()) - 1;
+                    terrainSelectionIsRule_ = true;
+                    MarkTerrainProcessDirty();
+                }
+            }
+            else
+            {
+                if (selectedSegment.name == "lay_scatter")
+                {
+                    if (DrawLayScatterDetails(static_cast<size_t>(selectedSegment_)))
+                    {
+                        assemblySourceDirty_ = true;
+                        benchDirty_ = true;
+                        sourceStructureBoundsDirty_ = true;
+                    }
+                    ImGui::Separator();
+                }
+                if (selectedStructureBoundsValid_)
+                {
+                    ImGui::TextDisabled("视口中显示该结构的 AABB（不可移动）。");
+                }
+                else
+                {
+                    ImGui::TextDisabled("该源码节点不直接产生可编辑几何。");
+                }
+            }
+
+            if (document_.IsSwitchable(static_cast<size_t>(selectedSegment_)))
+            {
+                BeginCard("##NodeStateCard");
+                DrawCardHeader(ICON_FA_TOGGLE_ON, "节点状态控制");
+                if (selectedSegment.disabled)
+                {
+                    if (ImGui::Button(ICON_FA_EYE " 启用节点", ImVec2(96.0f, 26.0f)))
+                    {
+                        toggleRequest = selectedSegment_;
+                        toggleTo = false;
+                    }
+                }
+                else if (ImGui::Button(ICON_FA_EYE_SLASH " 禁用节点 (*)", ImVec2(106.0f, 26.0f)))
+                {
+                    toggleRequest = selectedSegment_;
+                    toggleTo = true;
+                }
+                if (selectedSegment.kind == EScadSegmentKind::Source)
+                {
+                    ImGui::SameLine();
+                    if (selectedSegment.explodedInstances > 0)
+                    {
+                        if (ImGui::Button(ICON_FA_ARROWS_ROTATE " 撤销展开", ImVec2(96.0f, 26.0f)))
+                        {
+                            collapseRequest = selectedSegment_;
+                        }
+                    }
+                    else if (!selectedSegment.disabled && ImGui::Button(ICON_FA_CODE_BRANCH " 展开为实例", ImVec2(106.0f, 26.0f)))
+                    {
+                        explodeRequest = selectedSegment_;
+                    }
+                }
+                EndCard();
+            }
+        }
+        ImGui::EndChild();
+
+        if (removeInstanceRequest >= 0)
+        {
+            document_.RemoveInstance(removeInstanceRequest);
+            ClearEditableSceneSelection();
+            selectedSegment_ = -1;
             assemblySourceDirty_ = true;
+            benchDirty_ = true;
+            // Deletion cannot be applied to an existing runtime node like a
+            // gizmo transform can. Persist the document edit and reload now,
+            // rather than merely waiting for optional auto-preview, so the
+            // object cannot reappear after reopening the scene.
+            SaveAssembly(false);
+        }
+        if (duplicateInstanceRequest >= 0 && duplicateInstanceRequest < static_cast<int>(Bench().size()))
+        {
+            FBenchItem copy = Bench()[duplicateInstanceRequest];
+            copy.x += kBenchGridStep * 0.5f;
+            copy.y += kBenchGridStep * 0.5f;
+            copy.runtimeNodeId = std::numeric_limits<uint32_t>::max();
+            selectedBenchItem_ = document_.AddInstance(std::move(copy));
+            selectedSegment_ = Bench()[selectedBenchItem_].segmentIndex;
+            scrollToSelectedSegment_ = true;
+            assemblySourceDirty_ = true;
+            benchDirty_ = true;
+            // Duplicating inserts a new statement, so rebuild the document
+            // index and runtime placement IDs from the saved scene.
+            SaveAssembly(false);
+        }
+
+        if (toggleRequest >= 0 && document_.SetSegmentDisabled(static_cast<size_t>(toggleRequest), toggleTo))
+        {
+            sourceStructureBoundsDirty_ = true;
+            assemblySourceDirty_ = true;
+            statusLine_ = toggleTo ? "已关闭该结构（写回时加 * 修饰符）" : "已重新启用该结构";
+            statusError_ = false;
+            ReloadCurrentAssemblyPreview();
+        }
+        if (collapseRequest >= 0 && document_.CollapseSegment(static_cast<size_t>(collapseRequest)))
+        {
+            selectedBenchItem_ = -1;
+            sourceStructureBoundsDirty_ = true;
+            assemblySourceDirty_ = true;
+            statusLine_ = "已撤销展开，恢复原结构";
+            statusError_ = false;
+            ReloadCurrentAssemblyPreview();
+        }
+        if (explodeRequest >= 0)
+        {
+            selectedSegment_ = explodeRequest;
+            ExplodeSelectedSegment();
         }
     }
 
@@ -4828,6 +6425,7 @@ namespace ScadLibrary
         const std::string libDir = AuthoringPath("assets/scad/lib").string();
         bool fromCatalog = false;
         kits_ = LoadKits(libDir, fromCatalog);
+        kitThumbnailSources_.clear();
         kitBrowserSelectedModule_ = -1;
         if (kits_.empty())
         {
@@ -4848,15 +6446,15 @@ namespace ScadLibrary
         SPDLOG_INFO("[ScadLibrary] kits loaded from {}: {} kits / {} modules",
                     fromCatalog ? "catalog.json" : "text scan", kits_.size(), moduleCount);
         // Bench items keep kit indices; a rescan can reorder them, so re-anchor by path.
-        for (FBenchItem& benchItem : bench_)
+        for (FBenchItem& benchItem : Bench())
         {
             if (benchItem.kitIndex >= static_cast<int>(kits_.size()))
             {
                 benchItem.kitIndex = -1;
             }
         }
-        bench_.erase(std::remove_if(bench_.begin(), bench_.end(), [](const FBenchItem& b) { return b.kitIndex < 0; }),
-                     bench_.end());
+        Bench().erase(std::remove_if(Bench().begin(), Bench().end(), [](const FBenchItem& b) { return b.kitIndex < 0; }),
+                     Bench().end());
 
         // Character designer feeds from the kit_char parts library.
         kitCharIndex_ = -1;
@@ -5019,7 +6617,7 @@ namespace ScadLibrary
                 {
                     return true;
                 }
-                for (const FBenchItem& benchItem : bench_)
+                for (const FBenchItem& benchItem : Bench())
                 {
                     if (benchItem.kitIndex >= 0 && benchItem.kitIndex < static_cast<int>(kits_.size()) &&
                         kits_[benchItem.kitIndex].filePath == changedPath)
@@ -5135,16 +6733,16 @@ namespace ScadLibrary
                 continue;
             }
             const std::filesystem::path relative = it->path().lexically_relative(scadRoot);
-            const std::optional<EScadSceneKind> kind = SceneKindFromRelativePath(relative);
+            const std::optional<EScadSceneFolder> folder = SceneFolderFromRelativePath(relative);
             if (it->is_directory())
             {
-                if (!kind && std::distance(relative.begin(), relative.end()) == 1)
+                if (!folder && std::distance(relative.begin(), relative.end()) == 1)
                 {
                     it.disable_recursion_pending();
                 }
                 continue;
             }
-            if (!kind || !it->is_regular_file() || it->path().extension() != ".scad")
+            if (!folder || !it->is_regular_file() || it->path().extension() != ".scad")
             {
                 continue;
             }
@@ -5154,7 +6752,15 @@ namespace ScadLibrary
             info.relativePath = (std::filesystem::path("assets/scad") / relative).generic_string();
             info.absolutePath = std::filesystem::absolute(it->path(), ec).string();
             info.kitDependencies = std::move(dependencies);
-            info.kind = *kind;
+            info.folder = *folder;
+            // Text-only hints for the browser badge. The authoritative
+            // per-statement classification happens when the scene is opened.
+            info.hasTerrain = source.find("gk_terrain") != std::string::npos;
+            info.hasProcRules = source.find("ter_place") != std::string::npos ||
+                source.find("ter_snap") != std::string::npos || source.find("ter_along") != std::string::npos ||
+                source.find("ter_scatter") != std::string::npos;
+            info.hasFreeStructure = source.find("module ") != std::string::npos ||
+                source.find("for (") != std::string::npos || source.find("for(") != std::string::npos;
             const auto secondPart = std::next(relative.begin());
             info.generated = secondPart != relative.end() && secondPart->string() == "generated";
             info.categoryKey = SceneCategoryKeyFromRelativePath(relative);
@@ -5164,9 +6770,9 @@ namespace ScadLibrary
         std::sort(assemblies_.begin(), assemblies_.end(),
                   [](const FSceneAssemblyInfo& a, const FSceneAssemblyInfo& b)
                   {
-                      if (a.kind != b.kind)
+                      if (a.folder != b.folder)
                       {
-                          return static_cast<int>(a.kind) < static_cast<int>(b.kind);
+                          return static_cast<int>(a.folder) < static_cast<int>(b.folder);
                       }
                       if (a.generated != b.generated)
                       {
@@ -5186,12 +6792,59 @@ namespace ScadLibrary
         }
     }
 
+    bool ScadLibraryInterface::EnsureKitThumbnailSource(
+        const int kitIndex,
+        const int moduleIndex,
+        std::string& outPath,
+        uint64_t& outHash)
+    {
+        if (kitIndex < 0 || kitIndex >= static_cast<int>(kits_.size()) || moduleIndex < 0 ||
+            moduleIndex >= static_cast<int>(kits_[kitIndex].modules.size()))
+        {
+            return false;
+        }
+
+        const FKitInfo& kit = kits_[kitIndex];
+        const FKitModuleInfo& module = kit.modules[moduleIndex];
+        const std::string key = kit.filePath + "#" + module.name;
+        const std::string source = BuildModulePreviewSource(kitIndex, module.name);
+        const uint64_t sourceHash = Fnv1a64(source);
+        auto cached = kitThumbnailSources_.find(key);
+        if (cached == kitThumbnailSources_.end() || cached->second.sourceHash != sourceHash ||
+            cached->second.path.empty())
+        {
+            const std::string fileName = fmt::format("kit_thumbnail_{}_{}.scad",
+                                                      PreviewFileToken(kit.name), PreviewFileToken(module.name));
+            std::string absolutePath;
+            if (!WriteWorkspaceFile(fileName, source, absolutePath))
+            {
+                return false;
+            }
+            cached = kitThumbnailSources_.insert_or_assign(
+                key, FKitThumbnailSource{std::move(absolutePath), sourceHash}).first;
+        }
+
+        std::error_code ec;
+        const auto stamp = std::filesystem::last_write_time(kit.filePath, ec);
+        const std::string stampText = ec ? "missing" : fmt::format("{}", stamp.time_since_epoch().count());
+        outPath = cached->second.path;
+        // The kit file timestamp is part of the thumbnail identity. A changed
+        // kit therefore invalidates the rendered image even though the tiny
+        // wrapper source itself is unchanged.
+        outHash = Fnv1a64(fmt::format("{}|{}|{}", sourceHash, kit.filePath, stampText));
+        return true;
+    }
+
     void ScadLibraryInterface::PreviewModule(int kitIndex, const std::string& moduleName)
     {
         if (kitIndex < 0 || kitIndex >= static_cast<int>(kits_.size()))
         {
             return;
         }
+        // A module preview replaces the assembly scene. Do not leave an old
+        // assembly item selected, otherwise the gizmo/focus code can resolve
+        // that stale item against the newly loaded preview scene.
+        ClearEditableSceneSelection();
         selectedKit_ = kitIndex;
         selectedModule_ = moduleName;
         aiKitContextActive_ = true;
@@ -5220,35 +6873,11 @@ namespace ScadLibrary
 
     void ScadLibraryInterface::AddToBench(int kitIndex, const std::string& moduleName)
     {
+        if (kitIndex < 0 || kitIndex >= static_cast<int>(kits_.size()))
+        {
+            return;
+        }
         aiKitContextActive_ = false;
-        if (openedSceneKind_ == EScadSceneKind::Source && !openedAssemblyPath_.empty())
-        {
-            statusLine_ = "Source 场景不能直接添加实例；请先显式转换为 Evaluated";
-            statusError_ = true;
-            return;
-        }
-        if (assemblyProcedural_)
-        {
-            FTerrainProcessRule& rule =
-                terrainProcess_.AddRule(ETerrainProcessRuleType::Place, fmt::format("{}();", moduleName));
-            rule.x = benchCursorX_;
-            rule.y = benchCursorY_;
-            benchCursorX_ += kBenchGridStep;
-            if (++benchColCount_ >= kBenchGridColumns)
-            {
-                benchCursorX_ = 0.0f;
-                benchCursorY_ += kBenchGridStep;
-                benchColCount_ = 0;
-            }
-            MarkTerrainProcessDirty();
-            statusLine_ = fmt::format("已添加 {} 为 ter_place 规则", moduleName);
-            statusError_ = false;
-            return;
-        }
-
-        FBenchItem benchItem;
-        benchItem.kitIndex = kitIndex;
-        benchItem.moduleName = moduleName;
 
         // Row cursor: advance by the module's catalog footprint so city blocks
         // and hand-scale props both land side by side without overlap.
@@ -5261,7 +6890,7 @@ namespace ScadLibrary
                 break;
             }
         }
-        if (bench_.empty())
+        if (Bench().empty())
         {
             benchCursorX_ = 0.0f;
             benchCursorY_ = 0.0f;
@@ -5275,39 +6904,96 @@ namespace ScadLibrary
             benchRowDepth_ = 0.0f;
             benchColCount_ = 0;
         }
-        benchItem.x = benchCursorX_;
-        benchItem.y = benchCursorY_;
+        const glm::vec3 placement(benchCursorX_, benchCursorY_, 0.0f);
         benchCursorX_ += step;
         benchRowDepth_ = std::max(benchRowDepth_, step);
         benchColCount_++;
 
-        bench_.push_back(std::move(benchItem));
-        selectedBenchItem_ = static_cast<int>(bench_.size()) - 1;
-        benchDirty_ = true;
+        AddToBenchAt(kitIndex, moduleName, placement);
     }
 
-    std::string ScadLibraryInterface::BuildBenchSource(const std::filesystem::path& outputPath) const
+    void ScadLibraryInterface::AddToBenchAt(
+        const int kitIndex,
+        const std::string& moduleName,
+        const glm::vec3& scadPosition)
     {
-        std::string source;
-        source += "// generated by ScadLibrary scene assembly\n";
-        source += "// This flat placement format can be reopened in the Scene Assembly object editor.\n";
-        source += fmt::format("$fn = {};\n", fnSegments_);
-
-        std::vector<int> usedKits;
-        for (const FBenchItem& benchItem : bench_)
+        if (kitIndex < 0 || kitIndex >= static_cast<int>(kits_.size()) ||
+            !std::any_of(kits_[kitIndex].modules.begin(), kits_[kitIndex].modules.end(),
+                         [&](const FKitModuleInfo& module) { return module.name == moduleName; }))
         {
-            if (std::find(usedKits.begin(), usedKits.end(), benchItem.kitIndex) == usedKits.end())
+            statusLine_ = "无法放置：Kit 模块已不存在，请先刷新资源库";
+            statusError_ = true;
+            return;
+        }
+
+        aiKitContextActive_ = false;
+        FBenchItem benchItem;
+        benchItem.kitIndex = kitIndex;
+        benchItem.moduleName = moduleName;
+        benchItem.x = scadPosition.x;
+        benchItem.y = scadPosition.y;
+        benchItem.z = scadPosition.z;
+        selectedBenchItem_ = document_.AddInstance(std::move(benchItem));
+        selectedSegment_ = Bench()[selectedBenchItem_].segmentIndex;
+        scrollToSelectedSegment_ = true;
+        assemblyEditorTab_ = 3;
+        benchDirty_ = true;
+        statusLine_ = fmt::format("已放置 {} · 可继续拖拽调整位置", moduleName);
+        statusError_ = false;
+    }
+
+    int ScadLibraryInterface::FindKitIndex(const std::string& moduleName) const
+    {
+        const auto hasModule = [&](int candidate)
+        {
+            return std::any_of(kits_[candidate].modules.begin(), kits_[candidate].modules.end(),
+                               [&](const FKitModuleInfo& module) { return module.name == moduleName; });
+        };
+        // Prefer a kit the scene already depends on, so a module name shared by
+        // two kits resolves to the one the file actually uses.
+        for (const std::string& dependency : openedAssemblyKits_)
+        {
+            for (int candidate = 0; candidate < static_cast<int>(kits_.size()); ++candidate)
             {
-                usedKits.push_back(benchItem.kitIndex);
+                if (kits_[candidate].name == dependency && hasModule(candidate))
+                {
+                    return candidate;
+                }
             }
         }
-        for (const int kitIndex : usedKits)
+        for (int candidate = 0; candidate < static_cast<int>(kits_.size()); ++candidate)
         {
-            if (kitIndex < 0 || kitIndex >= static_cast<int>(kits_.size()))
+            if (hasModule(candidate))
+            {
+                return candidate;
+            }
+        }
+        return -1;
+    }
+
+    bool ScadLibraryInterface::IsKitModuleName(const std::string& moduleName) const
+    {
+        return FindKitIndex(moduleName) >= 0;
+    }
+
+    std::vector<std::string> ScadLibraryInterface::RequiredKitUsePaths(const std::filesystem::path& outputPath) const
+    {
+        std::vector<std::string> paths;
+        for (const FBenchItem& item : Bench())
+        {
+            if (item.removed || item.kitIndex < 0 || item.kitIndex >= static_cast<int>(kits_.size()))
             {
                 continue;
             }
-            std::filesystem::path usePath = kits_[kitIndex].filePath;
+            // Kits the file already declares are skipped by name. Matching on
+            // the written path alone would miss them, because the file spells
+            // them relative to itself and this list may be absolute.
+            if (std::find(openedAssemblyKits_.begin(), openedAssemblyKits_.end(), kits_[item.kitIndex].name) !=
+                openedAssemblyKits_.end())
+            {
+                continue;
+            }
+            std::filesystem::path usePath = kits_[item.kitIndex].filePath;
             if (!outputPath.empty())
             {
                 const std::filesystem::path relative = usePath.lexically_relative(outputPath.parent_path());
@@ -5316,211 +7002,166 @@ namespace ScadLibrary
                     usePath = relative;
                 }
             }
-            source += fmt::format("use <{}>\n", usePath.generic_string());
-        }
-        source += "\n";
-
-        if (!assemblyTerrainSources_.empty())
-        {
-            source += "// preserved terrain payloads\n";
-            for (const std::string& terrainSource : assemblyTerrainSources_)
+            const std::string generic = usePath.generic_string();
+            if (std::find(paths.begin(), paths.end(), generic) == paths.end())
             {
-                source += terrainSource;
-                source += "\n";
+                paths.push_back(generic);
             }
-            source += "\n";
         }
-
-        if (showFloor_ && !bench_.empty())
-        {
-            float extent = 30.0f;
-            for (const FBenchItem& benchItem : bench_)
-            {
-                extent = std::max({extent, std::abs(benchItem.x) + 30.0f, std::abs(benchItem.y) + 30.0f});
-            }
-            source += fmt::format(
-                "color([0.50, 0.51, 0.53]) translate([0, 0, -0.15]) cube([{:.1f}, {:.1f}, 0.3], center = true);\n\n",
-                extent * 2.0f, extent * 2.0f);
-        }
-
-        for (const FBenchItem& benchItem : bench_)
-        {
-            const char* args = benchItem.args;
-            if (benchItem.hasColor)
-            {
-                source += fmt::format("color([{:.5f}, {:.5f}, {:.5f}, {:.5f}]) ", benchItem.color[0],
-                                      benchItem.color[1], benchItem.color[2], benchItem.color[3]);
-            }
-            source += fmt::format("translate([{:.4f}, {:.4f}, {:.4f}]) rotate([{:.4f}, {:.4f}, {:.4f}]) "
-                                  "scale([{:.5f}, {:.5f}, {:.5f}]) {}({});\n",
-                                  benchItem.x, benchItem.y, benchItem.z, benchItem.rotX, benchItem.rotY, benchItem.rotZ,
-                                  benchItem.scale, benchItem.scaleY, benchItem.scaleZ, benchItem.moduleName, args);
-        }
-        return source;
+        return paths;
     }
 
-    bool ScadLibraryInterface::ParseStructuredAssembly(const std::string& source)
+    bool ScadLibraryInterface::ReparseDocument(const std::string& source, const std::string& documentPath,
+                                               bool reevaluate, bool preserveRuntimeNodeLinks)
     {
-        const bool structured = source.find("generated by ScadLibrary scene assembly") != std::string::npos ||
-            source.find("generated by ScadLibrary compose bench") != std::string::npos;
-        if (!structured)
+        std::optional<FBenchItem> previousSelection;
+        if (selectedBenchItem_ >= 0 && selectedBenchItem_ < static_cast<int>(Bench().size()))
         {
+            previousSelection = Bench()[selectedBenchItem_];
+        }
+        // A gizmo write can reparse the bytes it just wrote while retaining
+        // the live scene. Keep links only in that narrow case. A subsequent
+        // scene reload assigns fresh instance IDs, so carrying them over would
+        // bind same-named modules to the wrong OBB and picker target.
+        const std::vector<FBenchItem> previousInstances = preserveRuntimeNodeLinks ? Bench() : std::vector<FBenchItem>{};
+
+        terrainProcessWarnings_.clear();
+
+        Assets::Scad::FScadSourceIndex index;
+        std::string error;
+        if (!Assets::Scad::BuildScadSourceIndex(source, index, error))
+        {
+            statusLine_ = fmt::format("SCAD 解析失败: {}", error);
+            statusError_ = true;
             return false;
         }
 
-        static const std::string number = R"([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)";
-        const std::regex itemRegex("^\\s*translate\\(\\[\\s*(" + number + ")\\s*,\\s*(" + number + ")\\s*,\\s*(" +
-                                       number + ")\\s*\\]\\)\\s*rotate\\(\\[\\s*(" + number + ")\\s*,\\s*(" + number +
-                                       ")\\s*,\\s*(" + number + ")\\s*\\]\\)\\s*scale\\(\\[\\s*(" + number +
-                                       ")\\s*,\\s*(" + number + ")\\s*,\\s*(" + number +
-                                       ")\\s*\\]\\)\\s*([A-Za-z_][A-Za-z0-9_]*)\\((.*)\\);\\s*$",
-                                   std::regex_constants::icase);
-        const std::regex colorRegex("^\\s*color\\(\\[\\s*(" + number + ")\\s*,\\s*(" + number + ")\\s*,\\s*(" + number +
-                                        ")\\s*,\\s*(" + number + ")\\s*\\]\\)\\s*(.*)$",
-                                    std::regex_constants::icase);
-        const std::regex fnRegex(R"(\$fn\s*=\s*(\d+)\s*;)");
-        std::smatch fnMatch;
-        if (std::regex_search(source, fnMatch, fnRegex))
+        // The statement index addresses this file's bytes; the evaluated
+        // top-level scope comes from the full use/include closure so terrain
+        // specs and variables defined in a kit still resolve.
+        std::map<std::string, Assets::Scad::Value> variables = documentVariables_;
+        if (reevaluate && !documentPath.empty())
         {
-            fnSegments_ = std::clamp(std::stoi(fnMatch[1].str()), 3, 128);
+            Assets::Scad::ScadProgram program;
+            std::string programError;
+            if (Assets::Scad::LoadScadProgram(documentPath, program, programError))
+            {
+                Assets::ScadLoadOptions options;
+                Assets::Scad::SceneEvalResult evaluated;
+                if (Assets::Scad::ScadEvaluator::EvaluateScene(program.mainTopLevel, program.modules, program.functions,
+                                                               options, evaluated, programError))
+                {
+                    variables = std::move(evaluated.topLevelVariables);
+                }
+                else
+                {
+                    SPDLOG_DEBUG("[ScadLibrary] evaluation for {} failed: {}", documentPath, programError);
+                }
+            }
+            else
+            {
+                SPDLOG_DEBUG("[ScadLibrary] program load for {} failed: {}", documentPath, programError);
+            }
         }
-        showFloor_ = source.find("cube([") != std::string::npos;
-        bench_.clear();
-        selectedBenchItem_ = -1;
 
-        std::istringstream lines(source);
-        std::string line;
-        while (std::getline(lines, line))
+        documentVariables_ = variables;
+        openedAssemblyKits_ = FindKitDependencies(source);
+        std::vector<std::string> warnings;
+        document_.Parse(source, index, variables,
+                        [this](const std::string& moduleName) { return IsKitModuleName(moduleName); }, warnings);
+        terrainProcessWarnings_ = std::move(warnings);
+
+        for (FBenchItem& item : document_.Instances())
         {
-            bool hasColor = false;
-            glm::vec4 color(0.78f, 0.78f, 0.78f, 1.0f);
-            std::smatch colorMatch;
-            if (std::regex_match(line, colorMatch, colorRegex))
-            {
-                hasColor = true;
-                color = glm::vec4(std::stof(colorMatch[1].str()), std::stof(colorMatch[2].str()),
-                                  std::stof(colorMatch[3].str()), std::stof(colorMatch[4].str()));
-                line = colorMatch[5].str();
-            }
-            std::smatch match;
-            if (!std::regex_match(line, match, itemRegex))
-            {
-                continue;
-            }
-            const std::string moduleName = match[10].str();
-            int kitIndex = -1;
-            const auto hasModule = [&](int candidate)
-            {
-                return std::any_of(kits_[candidate].modules.begin(), kits_[candidate].modules.end(),
-                                   [&](const FKitModuleInfo& module) { return module.name == moduleName; });
-            };
-            for (const std::string& dependency : openedAssemblyKits_)
-            {
-                for (int candidate = 0; candidate < static_cast<int>(kits_.size()); ++candidate)
-                {
-                    if (kits_[candidate].name == dependency && hasModule(candidate))
-                    {
-                        kitIndex = candidate;
-                        break;
-                    }
-                }
-                if (kitIndex >= 0)
-                {
-                    break;
-                }
-            }
-            if (kitIndex < 0)
-            {
-                for (int candidate = 0; candidate < static_cast<int>(kits_.size()); ++candidate)
-                {
-                    if (hasModule(candidate))
-                    {
-                        kitIndex = candidate;
-                        break;
-                    }
-                }
-            }
-            if (kitIndex < 0)
-            {
-                continue;
-            }
-            FBenchItem item;
-            item.kitIndex = kitIndex;
-            item.moduleName = moduleName;
-            item.x = std::stof(match[1].str());
-            item.y = std::stof(match[2].str());
-            item.z = std::stof(match[3].str());
-            item.rotX = std::stof(match[4].str());
-            item.rotY = std::stof(match[5].str());
-            item.rotZ = std::stof(match[6].str());
-            item.scale = std::stof(match[7].str());
-            item.scaleY = std::stof(match[8].str());
-            item.scaleZ = std::stof(match[9].str());
-            item.hasColor = hasColor;
-            item.color[0] = color.r;
-            item.color[1] = color.g;
-            item.color[2] = color.b;
-            item.color[3] = color.a;
-            std::snprintf(item.args, sizeof(item.args), "%s", match[11].str().c_str());
-            bench_.push_back(std::move(item));
+            item.kitIndex = FindKitIndex(item.CatalogModuleName());
+            item.evaluated = true;
         }
+        for (const FBenchItem& previous : previousInstances)
+        {
+            if (previous.runtimeNodeId == std::numeric_limits<uint32_t>::max())
+            {
+                continue;
+            }
+            const int matchingIndex = document_.FindMatchingInstance(previous);
+            if (matchingIndex >= 0)
+            {
+                FBenchItem& current = Bench()[matchingIndex];
+                // The live scene was not reloaded, so its root still carries
+                // the prior source-offset tag even if rewriting a numeric
+                // transform shifted the terminal call within the text.
+                current.placementId = previous.placementId;
+                current.runtimeNodeId = previous.runtimeNodeId;
+            }
+        }
+        assemblySource_ = document_.Source();
+        sourceBufferDirty_ = false;
+        terrainProcessDirty_ = false;
         benchDirty_ = false;
+        selectedBenchItem_ = previousSelection ? document_.FindMatchingInstance(*previousSelection) : -1;
+        selectedSegment_ = selectedBenchItem_ >= 0 ? Bench()[selectedBenchItem_].segmentIndex : -1;
+        scrollToSelectedBenchItem_ = selectedBenchItem_ >= 0;
+        scrollToSelectedSegment_ = selectedSegment_ >= 0;
+        ClearSelectedStructureBounds();
+        sourceStructureBounds_.clear();
+        sourceStructureBoundsDirty_ = true;
+        terrainFeatureOverlayCacheKey_.clear();
+        terrainFeatureOverlayData_.reset();
+        terrainFeatureDragging_ = false;
+        selectedTerrainFeature_ = std::clamp(selectedTerrainFeature_, 0,
+                                             std::max(0, static_cast<int>(TerrainProcess().Terrain().features.size()) - 1));
+        selectedTerrainRule_ =
+            std::clamp(selectedTerrainRule_, 0, std::max(0, static_cast<int>(TerrainProcess().Rules().size()) - 1));
         return true;
     }
 
-    bool ScadLibraryInterface::ImportEvaluatedAssembly(const std::string& sourcePath)
+    std::vector<FBenchItem> ScadLibraryInterface::EvaluateSegmentInstances(size_t segmentIndex,
+                                                                          std::string& outError) const
     {
-        Assets::Scad::ScadProgram program;
-        std::string error;
-        if (!Assets::Scad::LoadScadProgram(sourcePath, program, error))
+        std::vector<FBenchItem> produced;
+        if (segmentIndex >= document_.Segments().size())
         {
-            SPDLOG_WARN("[ScadLibrary] evaluated import parse failed for {}: {}", sourcePath, error);
-            return false;
+            outError = "无效的节点索引";
+            return produced;
+        }
+        const FScadSceneSegment& segment = document_.Segments()[segmentIndex];
+
+        // Evaluate the whole file: a structure normally depends on variables
+        // and modules declared before it, so a fragment cannot be evaluated on
+        // its own. The nodes are then attributed back by call-site line.
+        std::string workspacePath;
+        const std::string previewSource = BuildAssemblyPreviewSource();
+        if (!const_cast<ScadLibraryInterface*>(this)->WriteWorkspaceFile("segment_eval.scad", previewSource,
+                                                                        workspacePath))
+        {
+            outError = "无法写入临时求值文件";
+            return produced;
         }
 
-        showFloor_ = false;
+        Assets::Scad::ScadProgram program;
+        std::string error;
+        if (!Assets::Scad::LoadScadProgram(workspacePath, program, error))
+        {
+            outError = fmt::format("求值失败: {}", error);
+            return produced;
+        }
         Assets::ScadLoadOptions options;
         Assets::Scad::SceneEvalResult result;
         if (!Assets::Scad::ScadEvaluator::EvaluateScene(program.mainTopLevel, program.modules, program.functions,
                                                         options, result, error))
         {
-            SPDLOG_WARN("[ScadLibrary] evaluated import failed for {}: {}", sourcePath, error);
-            return false;
+            outError = fmt::format("求值失败: {}", error);
+            return produced;
         }
-
-        assemblyTerrainSources_ = ExtractTerrainSources(ReadAssemblyTextFile(sourcePath));
-
-        const auto findKitIndex = [&](const std::string& moduleName)
-        {
-            for (const std::string& dependency : openedAssemblyKits_)
-            {
-                for (int kitIndex = 0; kitIndex < static_cast<int>(kits_.size()); ++kitIndex)
-                {
-                    if (kits_[kitIndex].name != dependency)
-                    {
-                        continue;
-                    }
-                    const bool found =
-                        std::any_of(kits_[kitIndex].modules.begin(), kits_[kitIndex].modules.end(),
-                                    [&](const FKitModuleInfo& module) { return module.name == moduleName; });
-                    if (found)
-                    {
-                        return kitIndex;
-                    }
-                }
-            }
-            return -1;
-        };
 
         constexpr size_t maxEditableObjects = 5000;
         const auto collect = [&](auto&& self, const Assets::Scad::SceneNode& node, const glm::dmat4& parent) -> void
         {
-            if (bench_.size() >= maxEditableObjects)
+            if (produced.size() >= maxEditableObjects)
             {
                 return;
             }
             const glm::dmat4 world = parent * node.localTransform;
-            const int kitIndex = findKitIndex(node.name);
+            const int kitIndex = FindKitIndex(node.name);
             const bool layoutContainer = node.name.starts_with("lay_");
             if (kitIndex >= 0 && !layoutContainer)
             {
@@ -5566,7 +7207,7 @@ namespace ScadLibrary
                     arguments += fmt::format("{} = {}", name, ScadValueSource(value));
                 }
                 std::snprintf(item.args, sizeof(item.args), "%s", arguments.c_str());
-                bench_.push_back(std::move(item));
+                produced.push_back(std::move(item));
                 return;
             }
 
@@ -5576,42 +7217,61 @@ namespace ScadLibrary
             }
         };
 
-        bench_.clear();
-        selectedBenchItem_ = -1;
         for (const Assets::Scad::SceneNode& root : result.roots)
         {
+            // Every node a top-level statement creates has its call site inside
+            // that statement's own line range, so the roots partition cleanly.
+            if (root.sourceLine < segment.line || root.sourceLine > segment.endLine)
+            {
+                continue;
+            }
             collect(collect, root, glm::dmat4(1.0));
         }
-        benchDirty_ = false;
-        SPDLOG_INFO("[ScadLibrary] evaluated import {} -> {} editable kit objects ({} evaluated nodes)", sourcePath,
-                    bench_.size(), result.roots.size());
-        return !bench_.empty();
-    }
 
-    bool ScadLibraryInterface::ImportAssemblyTerrains(const std::string& source)
-    {
-        assemblyTerrainSources_ = ExtractTerrainSources(source);
-        if (!assemblyTerrainSources_.empty())
+        if (produced.empty())
         {
-            SPDLOG_INFO("[ScadLibrary] preserved {} terrain source block(s)", assemblyTerrainSources_.size());
+            outError = "该结构没有产生可编辑的 Kit 实例（只有图元或未知模块时无法展开）";
         }
-        return !assemblyTerrainSources_.empty();
+        return produced;
     }
 
-    bool ScadLibraryInterface::ImportTerrainProcessAssembly(const std::string& sourcePath, const std::string& source)
+    bool ScadLibraryInterface::ComputeSegmentWorldBounds(size_t segmentIndex, glm::vec3& outMin,
+                                                          glm::vec3& outMax)
     {
-        terrainProcessWarnings_.clear();
-        if (source.find("gk_terrain") == std::string::npos)
+        if (segmentIndex >= document_.Segments().size())
         {
             return false;
         }
+        if (!RefreshSourceStructureBounds() || segmentIndex >= sourceStructureBounds_.size() ||
+            !sourceStructureBounds_[segmentIndex].valid)
+        {
+            return false;
+        }
+
+        outMin = sourceStructureBounds_[segmentIndex].min;
+        outMax = sourceStructureBounds_[segmentIndex].max;
+        return true;
+    }
+
+    bool ScadLibraryInterface::RefreshSourceStructureBounds()
+    {
+        if (!sourceStructureBoundsDirty_ && sourceStructureBounds_.size() == document_.Segments().size())
+        {
+            return true;
+        }
+
+        std::string workspacePath;
+        if (!WriteWorkspaceFile("segment_bounds.scad", BuildAssemblyPreviewSource(), workspacePath))
+        {
+            return false;
+        }
+
         Assets::Scad::ScadProgram program;
         std::string error;
-        if (!Assets::Scad::LoadScadProgram(sourcePath, program, error))
+        if (!Assets::Scad::LoadScadProgram(workspacePath, program, error))
         {
             return false;
         }
-
         Assets::ScadLoadOptions options;
         Assets::Scad::SceneEvalResult result;
         if (!Assets::Scad::ScadEvaluator::EvaluateScene(program.mainTopLevel, program.modules, program.functions,
@@ -5620,22 +7280,93 @@ namespace ScadLibrary
             return false;
         }
 
-        if (!terrainProcess_.Parse(source, program.mainTopLevel, result.topLevelVariables, error,
-                                   terrainProcessWarnings_))
+        sourceStructureBounds_.assign(document_.Segments().size(), {});
+        std::vector<glm::dvec3> minBounds(document_.Segments().size(),
+                                          glm::dvec3(std::numeric_limits<double>::max()));
+        std::vector<glm::dvec3> maxBounds(document_.Segments().size(),
+                                          glm::dvec3(-std::numeric_limits<double>::max()));
+        const glm::dmat4 scadToWorld = Assets::Scad::ScadToWorldBasis(1.0);
+        const auto accumulate = [&](auto&& self, const Assets::Scad::SceneNode& node, const glm::dmat4& parent,
+                                    const size_t sourceSegmentIndex) -> void
         {
-            SPDLOG_DEBUG("[ScadLibrary] terrain process import skipped for {}: {}", sourcePath, error);
-            return false;
+            const glm::dmat4 world = parent * node.localTransform;
+            for (const Assets::Scad::SceneMeshBucket& mesh : node.meshes)
+            {
+                for (const glm::dvec3& vertex : mesh.tris)
+                {
+                    const glm::dvec3 point = glm::dvec3(scadToWorld * world * glm::dvec4(vertex, 1.0));
+                    minBounds[sourceSegmentIndex] = glm::min(minBounds[sourceSegmentIndex], point);
+                    maxBounds[sourceSegmentIndex] = glm::max(maxBounds[sourceSegmentIndex], point);
+                    sourceStructureBounds_[sourceSegmentIndex].valid = true;
+                }
+            }
+            for (const Assets::Scad::SceneNode& child : node.children)
+            {
+                self(self, child, world, sourceSegmentIndex);
+            }
+        };
+
+        for (const Assets::Scad::SceneNode& root : result.roots)
+        {
+            for (size_t sourceSegmentIndex = 0; sourceSegmentIndex < document_.Segments().size(); ++sourceSegmentIndex)
+            {
+                const FScadSceneSegment& segment = document_.Segments()[sourceSegmentIndex];
+                if (segment.kind == EScadSegmentKind::Source && root.sourceLine >= segment.line &&
+                    root.sourceLine <= segment.endLine)
+                {
+                    accumulate(accumulate, root, glm::dmat4(1.0), sourceSegmentIndex);
+                    break;
+                }
+            }
         }
-        assemblyTerrainSources_ = ExtractTerrainSources(source);
-        terrainProcessDirty_ = false;
-        terrainFeatureOverlayCacheKey_.clear();
-        terrainFeatureOverlayData_.reset();
-        terrainFeatureDragging_ = false;
-        selectedTerrainFeature_ = std::clamp(
-            selectedTerrainFeature_, 0, std::max(0, static_cast<int>(terrainProcess_.Terrain().features.size()) - 1));
-        SPDLOG_INFO("[ScadLibrary] terrain process import {} -> {} features / {} rules", sourcePath,
-                    terrainProcess_.Terrain().features.size(), terrainProcess_.ActiveRuleCount());
+        for (size_t sourceSegmentIndex = 0; sourceSegmentIndex < sourceStructureBounds_.size(); ++sourceSegmentIndex)
+        {
+            if (sourceStructureBounds_[sourceSegmentIndex].valid)
+            {
+                sourceStructureBounds_[sourceSegmentIndex].min = glm::vec3(minBounds[sourceSegmentIndex]);
+                sourceStructureBounds_[sourceSegmentIndex].max = glm::vec3(maxBounds[sourceSegmentIndex]);
+            }
+        }
+        sourceStructureBoundsDirty_ = false;
         return true;
+    }
+
+    void ScadLibraryInterface::ExplodeSelectedSegment()
+    {
+        if (selectedSegment_ < 0 || selectedSegment_ >= static_cast<int>(document_.Segments().size()))
+        {
+            statusLine_ = "请先在“结构”页选择一个源码节点";
+            statusError_ = true;
+            return;
+        }
+        if (sourceBufferDirty_ && !ReparseDocument(assemblySource_, openedAssemblyPath_))
+        {
+            return;
+        }
+        const size_t segmentIndex = static_cast<size_t>(selectedSegment_);
+
+        std::string error;
+        std::vector<FBenchItem> produced = EvaluateSegmentInstances(segmentIndex, error);
+        if (produced.empty())
+        {
+            statusLine_ = error;
+            statusError_ = true;
+            return;
+        }
+        if (!document_.ExplodeSegment(segmentIndex, std::move(produced), error))
+        {
+            statusLine_ = error;
+            statusError_ = true;
+            return;
+        }
+        assemblySourceDirty_ = true;
+        benchDirty_ = true;
+        assemblyEditorTab_ = 0;
+        statusLine_ = fmt::format("已关闭 {} 并展开为 {} 个可编辑实例",
+                                  document_.Segments()[segmentIndex].name,
+                                  document_.Segments()[segmentIndex].explodedInstances);
+        statusError_ = false;
+        ReloadCurrentAssemblyPreview();
     }
 
     bool ScadLibraryInterface::OpenAssembly(const std::string& path, bool preserveCamera)
@@ -5658,10 +7389,9 @@ namespace ScadLibrary
             return false;
         }
         const std::filesystem::path scadRelative = sourcePath.lexically_relative(scadRoot);
-        const std::optional<EScadSceneKind> sceneKind = SceneKindFromRelativePath(scadRelative);
-        if (!sceneKind)
+        if (!IsSceneAssemblyRelativePath(scadRelative))
         {
-            statusLine_ = "场景必须位于 assets/scad/evaluated、source 或 proc 目录";
+            statusLine_ = "assets/scad/lib 与 characters 下的文件是零件库与角色资产，不作为场景打开";
             statusError_ = true;
             return false;
         }
@@ -5683,42 +7413,20 @@ namespace ScadLibrary
         rigPreview_.SetActive(false);
         modulePreviewActive_ = false;
         openedAssemblyPath_ = sourcePath.string();
-        openedSceneKind_ = *sceneKind;
+        documentVariables_.clear();
         aiKitContextActive_ = false;
         aiController_->Reset();
-        assemblySource_ = source;
-        openedAssemblyKits_ = FindKitDependencies(source);
-        assemblySourceDirty_ = false;
-        bench_.clear();
         benchCursorX_ = 0.0f;
         benchCursorY_ = 0.0f;
         benchRowDepth_ = 0.0f;
         benchColCount_ = 0;
-        assemblyStructured_ = false;
-        assemblyProcedural_ = false;
-        assemblyEvaluated_ = false;
-        if (openedSceneKind_ == EScadSceneKind::Evaluated)
+
+        if (!ReparseDocument(source, openedAssemblyPath_))
         {
-            assemblyStructured_ = ParseStructuredAssembly(source);
-            if (!assemblyStructured_)
-            {
-                statusLine_ = fmt::format("Evaluated 场景不是可往返的实例结构: {}", path);
-                statusError_ = true;
-                return false;
-            }
-            ImportAssemblyTerrains(source);
+            return false;
         }
-        else if (openedSceneKind_ == EScadSceneKind::Procedural)
-        {
-            assemblyProcedural_ = ImportTerrainProcessAssembly(openedAssemblyPath_, source);
-            if (!assemblyProcedural_)
-            {
-                statusLine_ = fmt::format("Proc 场景无法解析为过程文档: {}", path);
-                statusError_ = true;
-                return false;
-            }
-            showFloor_ = false;
-        }
+        assemblySourceDirty_ = false;
+
         const std::filesystem::path repoRoot = scadRoot.parent_path().parent_path();
         const std::string relativePath = sourcePath.lexically_relative(repoRoot).generic_string();
         std::snprintf(assemblyPathBuf_, sizeof(assemblyPathBuf_), "%s", relativePath.c_str());
@@ -5732,83 +7440,60 @@ namespace ScadLibrary
         }
         RefreshAssemblyWatchBaseline();
         preserveCameraOnNextSceneLoad_ = preserveCamera;
+        if (!Bench().empty())
+        {
+            selectedBenchItem_ = 0;
+            if (Bench()[0].segmentIndex >= 0)
+            {
+                selectedSegment_ = Bench()[0].segmentIndex;
+            }
+        }
+        else if (!document_.Segments().empty())
+        {
+            selectedSegment_ = 0;
+        }
+        else
+        {
+            selectedSegment_ = -1;
+            selectedBenchItem_ = -1;
+        }
         engine_.RequestLoadScene({.filename = openedAssemblyPath_});
-        const char* editMode = openedSceneKind_ == EScadSceneKind::Evaluated
-            ? " · Evaluated 对象编辑"
-            : (openedSceneKind_ == EScadSceneKind::Procedural ? " · Proc 过程编辑" : " · Source 源码编辑");
-        statusLine_ = fmt::format("已打开 {} · {} 个 Kit{}", relativePath, openedAssemblyKits_.size(), editMode);
+        statusLine_ = fmt::format("已打开 {} · {} 个 Kit · {} 实例 / {} 源码结构{}", relativePath,
+                                  openedAssemblyKits_.size(), Bench().size(), document_.SourceSegmentCount(),
+                                  document_.HasTerrain() ? " / 含地形" : "");
         statusError_ = false;
         return true;
     }
 
-    void ScadLibraryInterface::ConvertSourceToEvaluated()
-    {
-        if (openedSceneKind_ != EScadSceneKind::Source || openedAssemblyPath_.empty())
-        {
-            statusLine_ = "只有已保存的 Source 场景可以转换为 Evaluated";
-            statusError_ = true;
-            return;
-        }
-        bench_.clear();
-        std::string conversionPath;
-        if (!WriteWorkspaceFile("source_conversion.scad", BuildAssemblyPreviewSource(), conversionPath) ||
-            !ImportEvaluatedAssembly(conversionPath))
-        {
-            statusLine_ = "Source 求值失败，未生成 Evaluated 副本";
-            statusError_ = true;
-            return;
-        }
-        assemblyEvaluated_ = true;
-        assemblyStructured_ = false;
-        const std::string suggested =
-            fmt::format("assets/scad/evaluated/{}_evaluated.scad",
-                        std::filesystem::path(openedAssemblyPath_).stem().string());
-        std::snprintf(assemblyPathBuf_, sizeof(assemblyPathBuf_), "%s", suggested.c_str());
-        SaveAssembly(true);
-    }
-
     std::string ScadLibraryInterface::BuildAssemblyPreviewSource() const
     {
-        if (assemblyProcedural_)
+        // Preview and save go through the same writer: whatever the object,
+        // terrain and structure editors changed is spliced into the opened
+        // file, and everything they did not touch keeps its bytes.
+        FScadSceneWriteOptions options;
+        options.requiredUsePaths = RequiredKitUsePaths(std::filesystem::path(openedAssemblyPath_));
+        const std::string source = document_.BuildSource(options);
+        if (openedAssemblyPath_.empty())
         {
-            const std::string source = BuildTerrainProcessSource();
-            if (openedAssemblyPath_.empty())
-            {
-                return source;
-            }
-            return RewriteScadDependencyPaths(source, std::filesystem::path(openedAssemblyPath_).parent_path(), {},
-                                              true);
+            return source;
         }
-        if (assemblyStructured_ || assemblyEvaluated_)
-        {
-            return BuildBenchSource();
-        }
-        if (assemblySource_.empty() || openedAssemblyPath_.empty())
-        {
-            return assemblySource_;
-        }
-
-        return RewriteScadDependencyPaths(assemblySource_, std::filesystem::path(openedAssemblyPath_).parent_path(), {},
-                                          true);
+        return RewriteScadDependencyPaths(source, std::filesystem::path(openedAssemblyPath_).parent_path(), {}, true);
     }
-
-    std::string ScadLibraryInterface::BuildTerrainProcessSource() const { return terrainProcess_.BuildSource(); }
 
     void ScadLibraryInterface::PreviewAssemblySource()
     {
         rigPreview_.SetActive(false);
         modulePreviewActive_ = false;
-        // Previewing edited assembly data is an in-place reload. Keep the
-        // current view for Source, Evaluated, and Proc alike; only opening a
-        // different assembly should perform the initial framing.
+        if (sourceBufferDirty_ && !ReparseDocument(assemblySource_, openedAssemblyPath_))
+        {
+            return;
+        }
+        // Previewing edited assembly data is an in-place reload; keep the view.
         preserveCameraOnNextSceneLoad_ = true;
         if (WriteAndLoad("assembly_preview.scad", BuildAssemblyPreviewSource()))
         {
-            statusLine_ = assemblyProcedural_
-                ? fmt::format("预览 {} 个地形特征 / {} 条过程规则", terrainProcess_.Terrain().features.size(),
-                              terrainProcess_.ActiveRuleCount())
-                : ((assemblyStructured_ || assemblyEvaluated_) ? fmt::format("预览 {} 个场景对象", bench_.size())
-                                                               : "预览未保存的 SCAD 源码");
+            statusLine_ = fmt::format("预览 {} 个实例 / {} 个地形特征 / {} 条过程规则", Bench().size(),
+                                      TerrainProcess().Terrain().features.size(), TerrainProcess().ActiveRuleCount());
             statusError_ = false;
             return;
         }
@@ -5817,13 +7502,18 @@ namespace ScadLibrary
 
     void ScadLibraryInterface::SaveAssembly(bool saveAs, bool reloadScene)
     {
-        if (assemblyEvaluated_ && !saveAs)
+        if (sourceBufferDirty_ && !ReparseDocument(assemblySource_, openedAssemblyPath_))
         {
-            statusLine_ = "求值展开的对象不能覆盖原始逻辑；请使用“另存为”创建可编辑副本";
+            return;
+        }
+        const std::filesystem::path originalScadRoot = AuthoringPath("assets/scad");
+        if (!PrepareWritableAuthoringTree("assets/scad"))
+        {
+            statusLine_ = "无法准备可写的 SCAD 目录";
             statusError_ = true;
             return;
         }
-        const std::filesystem::path scadRoot = AuthoringPath("assets/scad");
+        const std::filesystem::path scadRoot = WritableAuthoringPath("assets/scad");
         std::filesystem::path targetPath =
             saveAs ? std::filesystem::path(assemblyPathBuf_) : std::filesystem::path(openedAssemblyPath_);
         if (targetPath.empty())
@@ -5838,49 +7528,36 @@ namespace ScadLibrary
             constexpr std::string_view prefix = "assets/scad/";
             targetPath = generic.starts_with(prefix) ? scadRoot / generic.substr(prefix.size()) : scadRoot / targetPath;
         }
+        else if (IsPathWithin(targetPath, originalScadRoot) && originalScadRoot != scadRoot)
+        {
+            targetPath = scadRoot / targetPath.lexically_relative(originalScadRoot);
+        }
         if (targetPath.extension().empty())
         {
             targetPath += ".scad";
         }
         targetPath = targetPath.lexically_normal();
         const std::filesystem::path targetRelative = targetPath.lexically_relative(scadRoot);
-        const std::optional<EScadSceneKind> targetKind = SceneKindFromRelativePath(targetRelative);
-        if (!IsPathWithin(targetPath, scadRoot) || targetPath.extension() != ".scad" || !targetKind)
+        // Any scene directory accepts any scene: the editors a file gets are
+        // decided per statement, not by which folder it sits in.
+        if (!IsPathWithin(targetPath, scadRoot) || targetPath.extension() != ".scad" ||
+            !IsSceneAssemblyRelativePath(targetRelative))
         {
-            statusLine_ = "场景只能保存到 assets/scad/evaluated、source 或 proc 下";
-            statusError_ = true;
-            return;
-        }
-        const EScadSceneKind expectedKind = assemblyProcedural_
-            ? EScadSceneKind::Procedural
-            : ((assemblyStructured_ || assemblyEvaluated_) ? EScadSceneKind::Evaluated
-                                                           : EScadSceneKind::Source);
-        if (*targetKind != expectedKind)
-        {
-            statusLine_ = fmt::format("{} 编辑器只能保存到 assets/scad/{}/；Source 转换请使用显式转换按钮",
-                                      SceneKindLabel(expectedKind),
-                                      expectedKind == EScadSceneKind::Evaluated
-                                          ? "evaluated"
-                                          : (expectedKind == EScadSceneKind::Procedural ? "proc" : "source"));
+            statusLine_ = "场景只能保存到 assets/scad 下的场景目录（不含 lib 与 characters）";
             statusError_ = true;
             return;
         }
 
         std::error_code ec;
         std::filesystem::create_directories(targetPath.parent_path(), ec);
-        std::string source;
-        if (assemblyProcedural_)
+        FScadSceneWriteOptions options;
+        options.requiredUsePaths = RequiredKitUsePaths(targetPath);
+        std::string source = document_.BuildSource(options);
+        if (saveAs && !openedAssemblyPath_.empty() &&
+            std::filesystem::path(openedAssemblyPath_).parent_path() != targetPath.parent_path())
         {
-            source = BuildTerrainProcessSource();
-            if (saveAs && !openedAssemblyPath_.empty())
-            {
-                source = RewriteScadDependencyPaths(source, std::filesystem::path(openedAssemblyPath_).parent_path(),
-                                                    targetPath.parent_path(), false);
-            }
-        }
-        else
-        {
-            source = (assemblyStructured_ || assemblyEvaluated_) ? BuildBenchSource(targetPath) : assemblySource_;
+            source = RewriteScadDependencyPaths(source, std::filesystem::path(openedAssemblyPath_).parent_path(),
+                                                targetPath.parent_path(), false);
         }
         std::ofstream output(targetPath, std::ios::binary | std::ios::trunc);
         if (!output)
@@ -5893,20 +7570,14 @@ namespace ScadLibrary
         output.close();
 
         openedAssemblyPath_ = std::filesystem::absolute(targetPath, ec).string();
-        assemblySource_ = source;
-        openedAssemblyKits_ = FindKitDependencies(source);
-        assemblySourceDirty_ = false;
-        benchDirty_ = false;
-        terrainProcessDirty_ = false;
-        openedSceneKind_ = *targetKind;
         aiKitContextActive_ = false;
-        assemblyStructured_ = !assemblyProcedural_ && (assemblyStructured_ || assemblyEvaluated_);
-        assemblyEvaluated_ = false;
-        if (assemblyProcedural_)
-        {
-            assemblyProcedural_ = ImportTerrainProcessAssembly(openedAssemblyPath_, source);
-        }
         modulePreviewActive_ = false;
+        // Re-index the file we just wrote so every span the editors hold points
+        // at the bytes on disk again. The write came from the editors' own
+        // state, so the evaluated bindings are still valid and re-evaluating
+        // the use/include closure here would stall every gizmo release.
+        ReparseDocument(source, openedAssemblyPath_, false, !reloadScene);
+        assemblySourceDirty_ = false;
         RefreshAssemblyWatchBaseline();
         const std::filesystem::path repoRoot = scadRoot.parent_path().parent_path();
         const std::string relativePath = targetPath.lexically_relative(repoRoot).generic_string();
@@ -5914,7 +7585,7 @@ namespace ScadLibrary
         if (reloadScene)
         {
             // Saving and reloading the current assembly must not move the
-            // user's camera, including when an Evaluated scene is re-evaluated.
+            // user's camera.
             preserveCameraOnNextSceneLoad_ = true;
             engine_.RequestLoadScene({.filename = openedAssemblyPath_});
         }
@@ -5933,38 +7604,22 @@ namespace ScadLibrary
 
     void ScadLibraryInterface::ReloadTerrainProcess()
     {
-        if (!assemblyProcedural_)
+        if (!document_.HasTerrain())
         {
             return;
         }
-        rigPreview_.SetActive(false);
-        modulePreviewActive_ = false;
-        preserveCameraOnNextSceneLoad_ = true;
-        if (WriteAndLoad("terrain_process.scad", BuildAssemblyPreviewSource()))
-        {
-            terrainProcessDirty_ = false;
-            statusLine_ = fmt::format("已刷新 {} 个地形特征 / {} 条过程规则", terrainProcess_.Terrain().features.size(),
-                                      terrainProcess_.ActiveRuleCount());
-            statusError_ = false;
-            return;
-        }
-        preserveCameraOnNextSceneLoad_ = false;
+        terrainProcessDirty_ = false;
+        ReloadCurrentAssemblyPreview();
     }
 
     void ScadLibraryInterface::ReloadCurrentAssemblyPreview()
     {
-        if (assemblyProcedural_)
-        {
-            ReloadTerrainProcess();
-        }
-        else if (assemblyStructured_ || assemblyEvaluated_)
-        {
-            ReloadBench();
-        }
-        else
-        {
-            PreviewAssemblySource();
-        }
+        // One preview path for every editor: the whole document is written to
+        // the workspace and loaded, so instances, terrain rules and untouched
+        // source all appear together.
+        benchDirty_ = false;
+        terrainProcessDirty_ = false;
+        PreviewAssemblySource();
     }
 
     void ScadLibraryInterface::ReloadBench(bool preserveCamera)
@@ -5972,19 +7627,10 @@ namespace ScadLibrary
         benchDirty_ = false;
         rigPreview_.SetActive(false);
         modulePreviewActive_ = false;
-        if (bench_.empty())
-        {
-            statusLine_ = "场景对象为空";
-            statusError_ = false;
-            return;
-        }
-        // Parameter/transform edits in an Evaluated scene rebuild this preview
-        // scene. Preserve the camera while replacing the scene contents. A
-        // workspace switch passes false because it is a new preview context.
         preserveCameraOnNextSceneLoad_ = preserveCamera;
-        if (WriteAndLoad("bench.scad", BuildBenchSource()))
+        if (WriteAndLoad("bench.scad", BuildAssemblyPreviewSource()))
         {
-            statusLine_ = fmt::format("场景组装 {} 个对象已重载", bench_.size());
+            statusLine_ = fmt::format("场景 {} 个实例已重载", Bench().size());
             statusError_ = false;
             return;
         }
@@ -6010,7 +7656,13 @@ namespace ScadLibrary
         {
             cleanName = "my_scene";
         }
-        const std::filesystem::path sceneDir = AuthoringPath("assets/scad") / "evaluated";
+        if (!PrepareWritableAuthoringTree("assets/scad"))
+        {
+            statusLine_ = "无法准备可写的 SCAD 导出目录";
+            statusError_ = true;
+            return;
+        }
+        const std::filesystem::path sceneDir = WritableAuthoringPath("assets/scad") / "evaluated";
         std::error_code ec;
         std::filesystem::create_directories(sceneDir, ec);
         const std::filesystem::path outPath = sceneDir / (cleanName + ".scad");
@@ -6021,7 +7673,16 @@ namespace ScadLibrary
             statusError_ = true;
             return;
         }
-        out << BuildBenchSource(outPath);
+        FScadSceneWriteOptions exportOptions;
+        exportOptions.requiredUsePaths = RequiredKitUsePaths(outPath);
+        std::string exported = document_.BuildSource(exportOptions);
+        if (!openedAssemblyPath_.empty() &&
+            std::filesystem::path(openedAssemblyPath_).parent_path() != outPath.parent_path())
+        {
+            exported = RewriteScadDependencyPaths(exported, std::filesystem::path(openedAssemblyPath_).parent_path(),
+                                                  outPath.parent_path(), false);
+        }
+        out << exported;
         out.close();
         statusLine_ = fmt::format("已导出 {}", outPath.string());
         statusError_ = false;
@@ -6144,7 +7805,13 @@ namespace ScadLibrary
         {
             clean = "my_character";
         }
-        const std::filesystem::path charDir = AuthoringPath("assets/scad") / "characters";
+        if (!PrepareWritableAuthoringTree("assets/scad"))
+        {
+            statusLine_ = "无法准备可写的角色导出目录";
+            statusError_ = true;
+            return;
+        }
+        const std::filesystem::path charDir = WritableAuthoringPath("assets/scad") / "characters";
         std::error_code ec;
         std::filesystem::create_directories(charDir, ec);
         const std::filesystem::path outPath = charDir / (clean + ".scad");
@@ -6288,18 +7955,30 @@ namespace ScadLibrary
         workbenchReloadRequested_ = false;
         workbenchEquipmentRebuildRequested_ = false;
 
+        const std::filesystem::path originalScadRoot = AuthoringPath("assets/scad");
         const std::filesystem::path sourcePath = AuthoringPath(rigSourceBuf_);
+        if (!PrepareWritableAuthoringTree("assets/scad"))
+        {
+            statusLine_ = "无法准备可写的角色工作目录";
+            statusError_ = true;
+            return;
+        }
+        const std::filesystem::path writableScadRoot = WritableAuthoringPath("assets/scad");
+        const std::filesystem::path editableSourcePath =
+            IsPathWithin(sourcePath, originalScadRoot) && originalScadRoot != writableScadRoot
+                ? writableScadRoot / sourcePath.lexically_relative(originalScadRoot)
+                : sourcePath;
 
         std::string error;
         std::vector<std::string> warnings;
-        if (!rigPreview_.LoadRig(sourcePath.string(), error, &warnings))
+        if (!rigPreview_.LoadRig(editableSourcePath.string(), error, &warnings))
         {
             statusLine_ = fmt::format("角色载入失败: {}", error);
             statusError_ = true;
             rigPreview_.SetActive(false);
             return;
         }
-        if (!workbench_.CaptureRig(sourcePath.string(), rigPreview_.Asset(), error))
+        if (!workbench_.CaptureRig(editableSourcePath.string(), rigPreview_.Asset(), error))
         {
             statusLine_ = fmt::format("动作编辑器初始化失败: {}", error);
             statusError_ = true;
@@ -6314,6 +7993,12 @@ namespace ScadLibrary
                 if (kit.name == "kit_coldwar")
                 {
                     coldwarPath = kit.filePath;
+                    if (IsPathWithin(std::filesystem::path(coldwarPath), originalScadRoot) &&
+                        originalScadRoot != writableScadRoot)
+                    {
+                        coldwarPath = (writableScadRoot /
+                                       std::filesystem::path(coldwarPath).lexically_relative(originalScadRoot)).string();
+                    }
                     break;
                 }
             }
@@ -6341,7 +8026,7 @@ namespace ScadLibrary
                                         static_cast<int>(rigPreview_.Asset().bones.size()) - 1);
         }
         rigPreview_.SetActive(true);
-        rigPreview_.SetPaused(false);
+        rigPreview_.SetPaused(!timelineIsPlaying_);
         rigPreview_.SetPlaySpeed(1.0f);
         if (!workbench_.Clips().empty())
         {
@@ -6391,169 +8076,378 @@ namespace ScadLibrary
         rigPreview_.SetCurrentTime(std::min(rigPreview_.CurrentTime(), rigPreview_.CurrentDuration()));
     }
 
+    void ScadLibraryInterface::SelectWorkbenchClip(int clipIndex)
+    {
+        if (workbench_.Clips().empty())
+        {
+            return;
+        }
+        workbenchClip_ = std::clamp(clipIndex, 0, static_cast<int>(workbench_.Clips().size()) - 1);
+        timelineSelectedChannel_ = -1;
+        timelineSelectedKey_ = -1;
+        timelineDraggingKey_ = false;
+        timelineVisibleDuration_ = 0.0f;
+        if (!workbench_.Clips()[workbenchClip_].channels.empty())
+        {
+            timelineSelectedChannel_ = 0;
+            workbenchBone_ = std::clamp(workbench_.Clips()[workbenchClip_].channels.front().bone, 0,
+                                        static_cast<int>(rigPreview_.Asset().bones.size()) - 1);
+        }
+        const bool shouldPlay = timelineIsPlaying_;
+        rigPreview_.PlayClip(workbench_.Clips()[workbenchClip_].name);
+        rigPreview_.SetCurrentTime(0.0f);
+        rigPreview_.SetPaused(!shouldPlay);
+    }
+
+    void ScadLibraryInterface::OpenRigFileDialog()
+    {
+        struct FOpenRigDialogContext
+        {
+            ScadLibraryInterface* self = nullptr;
+        };
+
+        auto* dialogContext = new FOpenRigDialogContext{this};
+        constexpr SDL_DialogFileFilter kFilters[] = {
+            {"SCAD Character (*.scad)", "scad"},
+            {"All Files (*.*)", "*"}
+        };
+
+        std::string defaultLocation;
+        std::error_code ec;
+        const std::filesystem::path charDir = AuthoringPath("assets/scad/characters");
+        if (std::filesystem::exists(charDir, ec))
+        {
+            defaultLocation = charDir.string();
+        }
+
+        SDL_ShowOpenFileDialog(
+            [](void* userdata, const char* const* filelist, int /*filter*/)
+            {
+                std::unique_ptr<FOpenRigDialogContext> ctx(static_cast<FOpenRigDialogContext*>(userdata));
+                if (!ctx || !ctx->self)
+                {
+                    return;
+                }
+
+                if (filelist && filelist[0])
+                {
+                    SPDLOG_INFO("Open Rig File: {}", filelist[0]);
+                    std::scoped_lock lock(ctx->self->fileDialogMutex_);
+                    ctx->self->pendingRigSourcePath_ = filelist[0];
+                }
+                else
+                {
+                    SPDLOG_DEBUG("Open Rig File dialog cancelled");
+                }
+            },
+            dialogContext,
+            engine_.GetWindow().Handle(),
+            kFilters, 2, defaultLocation.empty() ? nullptr : defaultLocation.c_str(), false);
+    }
+
     void ScadLibraryInterface::DrawWorkbenchContent()
     {
-        ImGui::Spacing();
-        ImGui::SetNextItemWidth(-88.0f);
-        ImGui::InputTextWithHint("##rig_source", "ScadRig .scad 路径", rigSourceBuf_, sizeof(rigSourceBuf_));
-        ImGui::SameLine();
-        if (ImGui::Button("打开", ImVec2(80.0f, 0.0f)))
+        // 1. Process pending file dialog result safely on main thread
         {
-            workbenchReloadRequested_ = true;
+            std::scoped_lock lock(fileDialogMutex_);
+            if (!pendingRigSourcePath_.empty())
+            {
+                std::filesystem::path selected(pendingRigSourcePath_);
+                pendingRigSourcePath_.clear();
+
+                std::error_code ec;
+                std::filesystem::path root = std::filesystem::current_path();
+                while (!root.empty())
+                {
+                    if (std::filesystem::exists(root / "AGENTS.md", ec))
+                    {
+                        break;
+                    }
+                    const std::filesystem::path parent = root.parent_path();
+                    if (parent == root)
+                    {
+                        root.clear();
+                        break;
+                    }
+                    root = parent;
+                }
+                if (!root.empty())
+                {
+                    const auto rel = std::filesystem::relative(selected, root, ec);
+                    if (!ec && !rel.empty() && rel.string().rfind("..", 0) != 0)
+                    {
+                        selected = rel;
+                    }
+                }
+                const std::string pathStr = selected.generic_string();
+                std::strncpy(rigSourceBuf_, pathStr.c_str(), sizeof(rigSourceBuf_) - 1);
+                rigSourceBuf_[sizeof(rigSourceBuf_) - 1] = '\0';
+                workbenchReloadRequested_ = true;
+            }
         }
+
+        // 2. Character File & Status Card
+        BeginCard("WorkbenchFileCard");
+        {
+            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::Text), ICON_FA_USER_GEAR "  角色文件与配置");
+            ImGui::SameLine();
+            if (workbench_.RigDirty() || workbench_.EquipmentDirty())
+            {
+                DrawTagChip("未保存", NextUI::Theme::Color(NextUI::Theme::EColor::Warning), "动作或装备有未保存的修改");
+            }
+            else
+            {
+                DrawTagChip("已同步", NextUI::Theme::Color(NextUI::Theme::EColor::Success), "角色资源与磁盘一致");
+            }
+
+            ImGui::Spacing();
+            const float btnWidth = 68.0f;
+            const float openBtnWidth = 86.0f;
+            const float spacing = ImGui::GetStyle().ItemSpacing.x;
+            ImGui::SetNextItemWidth(std::max(120.0f, ImGui::GetContentRegionAvail().x - btnWidth - openBtnWidth - spacing * 2.0f));
+            if (ImGui::InputTextWithHint("##rig_source", "ScadRig .scad 路径", rigSourceBuf_, sizeof(rigSourceBuf_),
+                                         ImGuiInputTextFlags_EnterReturnsTrue))
+            {
+                workbenchReloadRequested_ = true;
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button(ICON_FA_FOLDER_OPEN " 打开…", ImVec2(openBtnWidth, 0.0f)))
+            {
+                OpenRigFileDialog();
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("从磁盘选择 .scad 角色文件并载入");
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button(ICON_FA_ROTATE " 重载", ImVec2(btnWidth, 0.0f)))
+            {
+                workbenchReloadRequested_ = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("从磁盘重新载入当前指定的角色模型");
+            }
+
+            if (workbenchEverLoaded_ && rigPreview_.HasRig())
+            {
+                ImGui::Spacing();
+                ImGui::TextDisabled(ICON_FA_FILE_CODE "  %s", workbench_.SourcePath().c_str());
+
+                ImGui::Spacing();
+                const float halfWidth = std::max(80.0f, (ImGui::GetContentRegionAvail().x - spacing) * 0.5f);
+                if (workbench_.RigDirty())
+                {
+                    ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::Accent));
+                }
+                if (ImGui::Button(workbench_.RigDirty() ? ICON_FA_FLOPPY_DISK " 保存动作 *" : ICON_FA_FLOPPY_DISK " 保存动作",
+                                  ImVec2(halfWidth, 0.0f)))
+                {
+                    std::string error;
+                    if (workbench_.SaveRig(error))
+                    {
+                        statusLine_ = fmt::format("动作已保存到 {}", workbench_.SourcePath());
+                        statusError_ = false;
+                    }
+                    else
+                    {
+                        statusLine_ = fmt::format("动作保存失败: {}", error);
+                        statusError_ = true;
+                    }
+                }
+                if (workbench_.RigDirty())
+                {
+                    ImGui::PopStyleColor();
+                }
+
+                ImGui::SameLine();
+                if (workbench_.EquipmentDirty())
+                {
+                    ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::Accent));
+                }
+                if (ImGui::Button(workbench_.EquipmentDirty() ? ICON_FA_SHIELD_HALVED " 保存装备 *" : ICON_FA_SHIELD_HALVED " 保存装备",
+                                  ImVec2(halfWidth, 0.0f)))
+                {
+                    std::string error;
+                    if (workbench_.SaveEquipment(error))
+                    {
+                        statusLine_ = fmt::format("装备已保存到 {}", workbench_.EquipmentPath());
+                        statusError_ = false;
+                    }
+                    else
+                    {
+                        statusLine_ = fmt::format("装备保存失败: {}", error);
+                        statusError_ = true;
+                    }
+                }
+                if (workbench_.EquipmentDirty())
+                {
+                    ImGui::PopStyleColor();
+                }
+            }
+        }
+        EndCard();
 
         if (!workbenchEverLoaded_ || !rigPreview_.HasRig() || workspaceMode_ != EWorkspaceMode::CharacterWorkbench)
         {
+            ImGui::Spacing();
             ImGui::TextDisabled("正在载入角色工作室…");
             return;
         }
 
-        ImGui::TextDisabled("%s", workbench_.SourcePath().c_str());
-        if (ImGui::Button(workbench_.RigDirty() ? "保存动作 *" : "保存动作"))
-        {
-            std::string error;
-            if (workbench_.SaveRig(error))
-            {
-                statusLine_ = fmt::format("动作已保存到 {}", workbench_.SourcePath());
-                statusError_ = false;
-            }
-            else
-            {
-                statusLine_ = fmt::format("动作保存失败: {}", error);
-                statusError_ = true;
-            }
-        }
-        ImGui::SameLine();
-        if (ImGui::Button(workbench_.EquipmentDirty() ? "保存装备 *" : "保存装备"))
-        {
-            std::string error;
-            if (workbench_.SaveEquipment(error))
-            {
-                statusLine_ = fmt::format("装备已保存到 {}", workbench_.EquipmentPath());
-                statusError_ = false;
-            }
-            else
-            {
-                statusLine_ = fmt::format("装备保存失败: {}", error);
-                statusError_ = true;
-            }
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("从磁盘重载"))
-        {
-            workbenchReloadRequested_ = true;
-        }
+        // 3. Segmented Pills for Subtabs: 动作列表 (N) vs 装备配件 (M)
+        ImGui::Spacing();
+        const std::vector<std::pair<int, std::string>> workbenchTabs = {
+            {0, fmt::format(ICON_FA_PERSON_RUNNING "  动作列表 ({})", workbench_.Clips().size())},
+            {1, fmt::format(ICON_FA_SHIELD_HALVED "  装备配件 ({})", workbench_.Equipment().size())}
+        };
+        DrawSegmentedPills("##workbench_sub_tabs", workbenchTabs, &workbenchEditorTab_, -1.0f, 28.0f);
+        ImGui::Spacing();
 
-        if (!workbench_.Clips().empty())
+        if (workbenchEditorTab_ == 0)
         {
-            workbenchClip_ = std::clamp(workbenchClip_, 0, static_cast<int>(workbench_.Clips().size()) - 1);
-            FEditableRigClip& clip = workbench_.Clips()[workbenchClip_];
-            if (ImGui::BeginCombo("动作", clip.name.c_str()))
+            // 4. Action Clips List Card
+            const float remaining = ImGui::GetContentRegionAvail().y;
+            const float clipsCardHeight = std::max(180.0f, remaining - 4.0f);
+
+            BeginCard("WorkbenchClipsCard", clipsCardHeight);
             {
-                for (int index = 0; index < static_cast<int>(workbench_.Clips().size()); ++index)
+                ImGui::SetNextItemWidth(-1.0f);
+                ImGui::InputTextWithHint("##clip_filter", ICON_FA_MAGNIFYING_GLASS "  搜索动作名称…", clipFilterBuf_, sizeof(clipFilterBuf_));
+                ImGui::Spacing();
+
+                if (ImGui::BeginChild("##WorkbenchClipsScroll", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None))
                 {
-                    const bool selected = index == workbenchClip_;
-                    if (ImGui::Selectable(workbench_.Clips()[index].name.c_str(), selected))
+                    std::string filter = clipFilterBuf_;
+                    std::transform(filter.begin(), filter.end(), filter.begin(), [](unsigned char c) { return std::tolower(c); });
+
+                    int visibleCount = 0;
+                    for (int index = 0; index < static_cast<int>(workbench_.Clips().size()); ++index)
                     {
-                        workbenchClip_ = index;
-                        timelineSelectedChannel_ = -1;
-                        timelineSelectedKey_ = -1;
-                        timelineDraggingKey_ = false;
-                        timelineVisibleDuration_ = 0.0f;
-                        if (!workbench_.Clips()[index].channels.empty())
+                        const FEditableRigClip& clip = workbench_.Clips()[index];
+                        if (!filter.empty())
                         {
-                            timelineSelectedChannel_ = 0;
-                            workbenchBone_ = std::clamp(workbench_.Clips()[index].channels.front().bone, 0,
-                                                        static_cast<int>(rigPreview_.Asset().bones.size()) - 1);
+                            std::string nameLower = clip.name;
+                            std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), [](unsigned char c) { return std::tolower(c); });
+                            if (nameLower.find(filter) == std::string::npos)
+                            {
+                                continue;
+                            }
                         }
-                        rigPreview_.PlayClip(workbench_.Clips()[index].name);
+                        visibleCount++;
+
+                        const bool isSelected = (index == workbenchClip_);
+                        const bool isPlaying = isSelected && !rigPreview_.Paused();
+                        constexpr float rowHeight = 30.0f;
+                        const float startY = ImGui::GetCursorPosY();
+                        const float rowWidth = ImGui::GetContentRegionAvail().x;
+
+                        ImGui::PushID(index);
+                        const bool rowClicked = ImGui::Selectable("##clip_row", isSelected, 0, ImVec2(rowWidth, rowHeight));
+                        const bool rowHovered = ImGui::IsItemHovered();
+
+                        const char* icon = isPlaying ? ICON_FA_CIRCLE_PLAY : (isSelected ? ICON_FA_PERSON_RUNNING : ICON_FA_PERSON);
+                        const ImVec4 iconColor = isSelected ? NextUI::Theme::Color(NextUI::Theme::EColor::Accent) : NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted);
+
+                        ImGui::SetCursorPosY(startY + std::floor((rowHeight - ImGui::GetTextLineHeight()) * 0.5f));
+                        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 8.0f);
+                        ImGui::TextColored(iconColor, "%s", icon);
+                        ImGui::SameLine(0.0f, 8.0f);
+
+                        if (isSelected)
+                        {
+                            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::Text), "%s", clip.name.c_str());
+                        }
+                        else
+                        {
+                            ImGui::TextUnformatted(clip.name.c_str());
+                        }
+
+                        const std::string durStr = fmt::format("{:.2f}s", clip.duration);
+                        const std::string chStr = fmt::format("{}轨", clip.channels.size());
+                        constexpr float badgeWidth = 105.0f;
+                        ImGui::SameLine(std::max(ImGui::GetCursorPosX(), rowWidth - badgeWidth));
+                        DrawTagChip(durStr.c_str(), NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover));
+                        ImGui::SameLine(0.0f, 4.0f);
+                        DrawTagChip(chStr.c_str(), NextUI::Theme::Color(NextUI::Theme::EColor::Blue));
+
+                        ImGui::SetCursorPosY(startY + rowHeight + ImGui::GetStyle().ItemSpacing.y);
+                        ImGui::Dummy(ImVec2(0.0f, 0.0f));
+
+                        if (rowClicked)
+                        {
+                            if (index == workbenchClip_)
+                            {
+                                timelineIsPlaying_ = !timelineIsPlaying_;
+                                rigPreview_.SetPaused(!timelineIsPlaying_);
+                                if (timelineIsPlaying_ && rigPreview_.CurrentTime() >= rigPreview_.CurrentDuration())
+                                {
+                                    rigPreview_.SetCurrentTime(0.0f);
+                                }
+                            }
+                            else
+                            {
+                                SelectWorkbenchClip(index);
+                            }
+                        }
+                        if (rowHovered)
+                        {
+                            ImGui::SetTooltip("动作: %s\n类型: %s\n时长: %.3f 秒\n轨道数: %zu 条\n点击切换动作%s",
+                                              clip.name.c_str(), clip.loop ? "循环动作" : "单次动作",
+                                              clip.duration, clip.channels.size(),
+                                              isSelected ? "（再次点击切换播放/暂停）" : "");
+                        }
+
+                        ImGui::PopID();
+                    }
+
+                    if (visibleCount == 0)
+                    {
+                        ImGui::Spacing();
+                        ImGui::TextDisabled("  无匹配的动作");
                     }
                 }
-                ImGui::EndCombo();
+                ImGui::EndChild();
             }
-
-            if (ImGui::Button(rigPreview_.Paused() ? "播放" : "暂停"))
-            {
-                rigPreview_.SetPaused(!rigPreview_.Paused());
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("回到开头"))
-            {
-                rigPreview_.SetPaused(true);
-                rigPreview_.SetCurrentTime(0.0f);
-            }
-            ImGui::SameLine();
-            float speed = rigPreview_.PlaySpeed();
-            ImGui::SetNextItemWidth(100.0f);
-            if (ImGui::DragFloat("速度", &speed, 0.05f, -3.0f, 3.0f, "%.2fx"))
-            {
-                rigPreview_.SetPlaySpeed(speed);
-            }
-            float time = rigPreview_.CurrentTime();
-            if (ImGui::SliderFloat("时间", &time, 0.0f, std::max(rigPreview_.CurrentDuration(), 0.001f), "%.3f s"))
-            {
-                rigPreview_.SetPaused(true);
-                rigPreview_.SetCurrentTime(time);
-            }
+            EndCard();
         }
-
-        ImGui::Separator();
-        if (ImGui::BeginTabBar("##workbench_modes"))
+        else
         {
-            if (ImGui::BeginTabItem("动作修改"))
-            {
-                workbenchEditorTab_ = 0;
-                ImGui::TextDisabled("关键帧编辑器已停靠在视口底部。");
-                if (!workbench_.Clips().empty())
-                {
-                    const FEditableRigClip& activeClip = workbench_.Clips()[workbenchClip_];
-                    ImGui::Spacing();
-                    ImGui::Text("%s", activeClip.name.c_str());
-                    ImGui::TextDisabled("%.3f 秒 / %zu 条轨道", activeClip.duration, activeClip.channels.size());
-                    ImGui::TextDisabled("左侧骨骼树选择骨骼，右侧时间轴编辑轨道。");
-                }
-                ImGui::EndTabItem();
-            }
-            if (ImGui::BeginTabItem(fmt::format("装备 ({})", workbench_.Equipment().size()).c_str()))
-            {
-                workbenchEditorTab_ = 1;
-                DrawEquipmentEditor();
-                ImGui::EndTabItem();
-            }
-            ImGui::EndTabBar();
+            // Equipment Subtab
+            DrawEquipmentEditor();
         }
     }
 
     void ScadLibraryInterface::DrawViewportToolbar(const ImVec2& viewportPos)
     {
-        ImGui::SetNextWindowPos(ImVec2(viewportPos.x + 12.0f, viewportPos.y + 12.0f), ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(0.94f);
+        ImGui::SetNextWindowPos(ImVec2(viewportPos.x + 14.0f, viewportPos.y + 14.0f), ImGuiCond_Always);
         const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking |
             ImGuiWindowFlags_AlwaysAutoResize;
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 5.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(5.0f, 5.0f));
+        NextUI::Theme::PushViewportToolbarStyle();
         if (ImGui::Begin("##ScadLibraryViewportToolbar", nullptr, flags))
         {
-            if (NextUI::Theme::ToolbarButton(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT, "移动骨骼", boneGizmoOperation_ == 0))
+            if (NextUI::Theme::ToolbarButton(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT, "移动骨骼 (W)", boneGizmoOperation_ == 0))
             {
                 boneGizmoOperation_ = 0;
             }
             ImGui::SameLine();
-            if (NextUI::Theme::ToolbarButton(ICON_FA_ROTATE, "旋转骨骼", boneGizmoOperation_ == 1))
+            if (NextUI::Theme::ToolbarButton(ICON_FA_ROTATE, "旋转骨骼 (E)", boneGizmoOperation_ == 1))
             {
                 boneGizmoOperation_ = 1;
             }
             ImGui::SameLine();
-            if (NextUI::Theme::ToolbarButton(ICON_FA_EXPAND, "缩放骨骼", boneGizmoOperation_ == 2))
+            if (NextUI::Theme::ToolbarButton(ICON_FA_EXPAND, "缩放骨骼 (R)", boneGizmoOperation_ == 2))
             {
                 boneGizmoOperation_ = 2;
             }
             NextUI::Theme::DrawVerticalSeparator(20.0f, 8.0f, 0.65f);
-            ImGui::TextDisabled("本地  ·  透视");
+            ImGui::TextDisabled("本地 · 透视");
         }
         ImGui::End();
-        ImGui::PopStyleVar(2);
+        NextUI::Theme::PopViewportToolbarStyle();
     }
 
     void ScadLibraryInterface::UpsertGizmoKey(EEditableRigChannel type, const glm::vec3& value)
@@ -6623,13 +8517,11 @@ namespace ScadLibrary
 
     void ScadLibraryInterface::DrawSceneGizmoToolbar(const ImVec2& viewportPos)
     {
-        ImGui::SetNextWindowPos(ImVec2(viewportPos.x + 12.0f, viewportPos.y + 12.0f), ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(0.94f);
+        ImGui::SetNextWindowPos(ImVec2(viewportPos.x + 14.0f, viewportPos.y + 14.0f), ImGuiCond_Always);
         const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
             ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
             ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings;
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 5.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(5.0f, 5.0f));
+        NextUI::Theme::PushViewportToolbarStyle();
         if (ImGui::Begin("##SceneObjectGizmoToolbar", nullptr, flags))
         {
             sceneToolbarVisible_ = true;
@@ -6654,28 +8546,77 @@ namespace ScadLibrary
             NextUI::Theme::DrawVerticalSeparator(20.0f, 8.0f, 0.65f);
             ImGui::SameLine();
 
-            if (NextUI::Theme::ToolbarButton(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT, "移动对象", sceneGizmoOperation_ == 0))
+            if (NextUI::Theme::ToolbarButton(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT, "移动对象 (W)", sceneGizmoOperation_ == 0))
             {
                 sceneGizmoOperation_ = 0;
             }
             ImGui::SameLine();
-            if (NextUI::Theme::ToolbarButton(ICON_FA_ROTATE, "旋转对象", sceneGizmoOperation_ == 1))
+            if (NextUI::Theme::ToolbarButton(ICON_FA_ROTATE, "旋转对象 (E)", sceneGizmoOperation_ == 1))
             {
                 sceneGizmoOperation_ = 1;
             }
             NextUI::Theme::DrawVerticalSeparator(20.0f, 8.0f, 0.65f);
-            if (selectedBenchItem_ >= 0 && selectedBenchItem_ < static_cast<int>(bench_.size()))
+            ImGui::SameLine();
+            if (selectedBenchItem_ >= 0 && selectedBenchItem_ < static_cast<int>(Bench().size()))
             {
-                ImGui::Text("%s", bench_[selectedBenchItem_].moduleName.c_str());
+                ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover));
+                ImGui::Text("%s  %s", ICON_FA_CUBE, Bench()[selectedBenchItem_].moduleName.c_str());
+                ImGui::PopStyleColor();
                 NextUI::Theme::DrawTooltip("松开鼠标后写回 SCAD");
             }
             else
             {
-                ImGui::TextDisabled("选择右侧对象以编辑");
+                ImGui::TextDisabled("无选中对象");
             }
         }
         ImGui::End();
-        ImGui::PopStyleVar(2);
+        NextUI::Theme::PopViewportToolbarStyle();
+    }
+
+    void ScadLibraryInterface::ClearEditableSceneSelection()
+    {
+        selectedBenchItem_ = -1;
+        sceneGizmoWasUsing_ = false;
+        sceneGizmoAwaitingPickRelease_ = false;
+        engine_.GetScene().ClearSelection();
+        engine_.GetShowFlags().ShowEdge = false;
+    }
+
+    void ScadLibraryInterface::ClearSelectedStructureBounds()
+    {
+        selectedStructureBoundsSegment_ = -1;
+        selectedStructureBoundsValid_ = false;
+    }
+
+    void ScadLibraryInterface::UpdateSelectedStructureBounds()
+    {
+        ClearSelectedStructureBounds();
+        if (selectedSegment_ < 0 || selectedSegment_ >= static_cast<int>(document_.Segments().size()) ||
+            document_.Segments()[selectedSegment_].kind != EScadSegmentKind::Source ||
+            document_.Segments()[selectedSegment_].name == "lay_scatter")
+        {
+            return;
+        }
+
+        glm::vec3 minBounds;
+        glm::vec3 maxBounds;
+        if (ComputeSegmentWorldBounds(static_cast<size_t>(selectedSegment_), minBounds, maxBounds))
+        {
+            selectedStructureBoundsSegment_ = selectedSegment_;
+            selectedStructureBoundsMin_ = minBounds;
+            selectedStructureBoundsMax_ = maxBounds;
+            selectedStructureBoundsValid_ = true;
+        }
+    }
+
+    void ScadLibraryInterface::DrawSelectedStructureBounds(const ImVec2& viewportPos, const ImVec2& viewportSize) const
+    {
+        if (!selectedStructureBoundsValid_ || selectedStructureBoundsSegment_ != selectedSegment_)
+        {
+            return;
+        }
+        DrawOrientedBoxOverlay(engine_.GetLastUniformBufferObject(), viewportPos, viewportSize, glm::mat4(1.0f),
+                               selectedStructureBoundsMin_, selectedStructureBoundsMax_, IM_COL32(88, 200, 255, 255));
     }
 
     void ScadLibraryInterface::DrawViewportAxis(const ImVec2& viewportPos, const ImVec2& viewportSize)
@@ -6745,20 +8686,20 @@ namespace ScadLibrary
 
     bool ScadLibraryInterface::TerrainFeatureConsumesMouse(double x, double y) const
     {
-        if (!IsTerrainProcessAssembly() || !showTerrainFeatureOverlay_)
+        if (!HasActiveProceduralHandles() || !showTerrainFeatureOverlay_)
         {
             return false;
         }
-        if (terrainFeatureDragging_ || terrainRuleDragging_)
+        if (terrainFeatureDragging_ || terrainRuleDragging_ || layScatterDragging_)
         {
             return true;
         }
 
         // Engine mouse events use framebuffer pixels, while the overlay handles
         // are stored in ImGui's logical coordinate space.
-        const NextUI::IUserInterface* ui = engine_.GetUserInterface();
-        const float uiScale = ui != nullptr ? ui->UiScale() : 1.0f;
-        const glm::vec2 mouse(static_cast<float>(x) / uiScale, static_cast<float>(y) / uiScale);
+        const ImVec2 uiMouse = NextUI::Scaling::MainFramebufferToImGuiPoint(
+            ImVec2(static_cast<float>(x), static_cast<float>(y)));
+        const glm::vec2 mouse(uiMouse.x, uiMouse.y);
         for (const FTerrainFeatureHandle& handle : terrainFeatureHandles_)
         {
             if (glm::distance2(mouse, handle.screen) <= 144.0f)
@@ -6773,7 +8714,180 @@ namespace ScadLibrary
                 return true;
             }
         }
+        for (const FLayScatterHandle& handle : layScatterHandles_)
+        {
+            if (glm::distance2(mouse, handle.screen) <= 144.0f)
+            {
+                return true;
+            }
+        }
         return false;
+    }
+
+    bool ScadLibraryInterface::HasActiveProceduralHandles() const
+    {
+        if (workspaceMode_ != EWorkspaceMode::SceneAssembly || selectedSegment_ < 0 ||
+            selectedSegment_ >= static_cast<int>(document_.Segments().size()))
+        {
+            return false;
+        }
+        const FScadSceneSegment& segment = document_.Segments()[selectedSegment_];
+        return segment.kind == EScadSegmentKind::Terrain || segment.kind == EScadSegmentKind::TerrainRule ||
+            (segment.kind == EScadSegmentKind::Source && segment.name == "lay_scatter");
+    }
+
+    void ScadLibraryInterface::DrawLayScatterOverlay(const ImVec2& viewportPos, const ImVec2& viewportSize)
+    {
+        layScatterHandles_.clear();
+        if (!showTerrainFeatureOverlay_ || !HasActiveProceduralHandles() || selectedSegment_ < 0 ||
+            document_.Segments()[selectedSegment_].name != "lay_scatter")
+        {
+            layScatterDragging_ = false;
+            return;
+        }
+
+        FLayScatterSource scatter;
+        if (!ParseLayScatterSource(document_.GetSegmentSource(static_cast<size_t>(selectedSegment_)), scatter))
+        {
+            return;
+        }
+
+        const Assets::UniformBufferObject& ubo = engine_.GetLastUniformBufferObject();
+        const auto project = [&](const glm::dvec2& point, ImVec2& outScreen, float& outWorldHeight)
+        {
+            const glm::vec3 world = Assets::Scad::ScadToWorldPos(glm::dvec3(point.x, point.y, 0.35), 1.0);
+            const glm::vec4 clip = ubo.ViewProjectionUnJit * glm::vec4(world, 1.0f);
+            if (clip.w <= 0.001f)
+            {
+                return false;
+            }
+            const glm::vec3 ndc = glm::vec3(clip) / clip.w;
+            if (ndc.z < 0.0f || ndc.z > 1.0f)
+            {
+                return false;
+            }
+            outScreen = {viewportPos.x + (ndc.x * 0.5f + 0.5f) * viewportSize.x,
+                         viewportPos.y + (ndc.y * 0.5f + 0.5f) * viewportSize.y};
+            outWorldHeight = world.y;
+            return true;
+        };
+
+        const std::array<glm::dvec2, 4> corners = {
+            glm::dvec2(scatter.x0, scatter.y0), glm::dvec2(scatter.x1, scatter.y0),
+            glm::dvec2(scatter.x1, scatter.y1), glm::dvec2(scatter.x0, scatter.y1),
+        };
+        std::array<ImVec2, 4> screen{};
+        std::array<float, 4> worldHeight{};
+        std::array<bool, 4> visible{};
+        for (int corner = 0; corner < 4; ++corner)
+        {
+            visible[corner] = project(corners[corner], screen[corner], worldHeight[corner]);
+            if (visible[corner])
+            {
+                layScatterHandles_.push_back(
+                    {corner, glm::vec2(screen[corner].x, screen[corner].y), worldHeight[corner]});
+            }
+        }
+
+        ImDrawList* drawList = ImGui::GetForegroundDrawList();
+        drawList->PushClipRect(viewportPos, viewportPos + viewportSize, true);
+        constexpr ImU32 color = IM_COL32(255, 191, 64, 255);
+        for (int corner = 0; corner < 4; ++corner)
+        {
+            const int next = (corner + 1) % 4;
+            if (visible[corner] && visible[next])
+            {
+                drawList->AddLine(screen[corner], screen[next], color, 2.2f);
+            }
+        }
+        const glm::dvec2 center((scatter.x0 + scatter.x1) * 0.5, (scatter.y0 + scatter.y1) * 0.5);
+        ImVec2 centerScreen;
+        float unusedHeight = 0.0f;
+        if (project(center, centerScreen, unusedHeight))
+        {
+            drawList->AddText(ImVec2(centerScreen.x + 8.0f, centerScreen.y - 18.0f), color,
+                              fmt::format("lay_scatter  n={}  seed={}", scatter.count, scatter.seed).c_str());
+        }
+
+        const glm::vec2 mouse(ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y);
+        int hovered = -1;
+        float nearest = 144.0f;
+        for (int index = 0; index < static_cast<int>(layScatterHandles_.size()); ++index)
+        {
+            const float distance = glm::distance2(mouse, layScatterHandles_[index].screen);
+            if (distance <= nearest)
+            {
+                hovered = index;
+                nearest = distance;
+            }
+        }
+        for (int index = 0; index < static_cast<int>(layScatterHandles_.size()); ++index)
+        {
+            const FLayScatterHandle& handle = layScatterHandles_[index];
+            const bool isHovered = index == hovered;
+            const float radius = isHovered ? 7.0f : 5.0f;
+            const ImVec2 handleScreen(handle.screen.x, handle.screen.y);
+            drawList->AddRectFilled(ImVec2(handleScreen.x - radius, handleScreen.y - radius),
+                                    ImVec2(handleScreen.x + radius, handleScreen.y + radius),
+                                    isHovered ? IM_COL32(255, 255, 255, 255) : color, 1.5f);
+            drawList->AddRect(ImVec2(handleScreen.x - radius, handleScreen.y - radius),
+                              ImVec2(handleScreen.x + radius, handleScreen.y + radius), IM_COL32(12, 18, 26, 230));
+        }
+
+        const bool mouseInside = mouse.x >= viewportPos.x && mouse.y >= viewportPos.y &&
+            mouse.x < viewportPos.x + viewportSize.x && mouse.y < viewportPos.y + viewportSize.y;
+        if (hovered >= 0 || layScatterDragging_)
+        {
+            ImGui::GetIO().WantCaptureMouse = true;
+        }
+        if (!layScatterDragging_ && hovered >= 0 && mouseInside && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
+            const FLayScatterHandle& handle = layScatterHandles_[hovered];
+            layScatterDragCorner_ = handle.corner;
+            layScatterDragPlaneHeight_ = handle.worldHeight;
+            layScatterDragging_ = true;
+        }
+        if (layScatterDragging_ && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        {
+            const ImVec2 framebufferMouse = NextUI::Scaling::ImGuiToMainFramebufferPoint(
+                ImVec2(mouse.x, mouse.y));
+            glm::vec3 rayOrigin;
+            glm::vec3 rayDirection;
+            Runtime::EngineHelper::GetScreenToWorldRay(
+                glm::vec2(framebufferMouse.x, framebufferMouse.y), rayOrigin, rayDirection);
+            if (std::abs(rayDirection.y) > 1.0e-5f)
+            {
+                const float distance = (layScatterDragPlaneHeight_ - rayOrigin.y) / rayDirection.y;
+                if (distance > 0.0f)
+                {
+                    const glm::vec3 hit = rayOrigin + rayDirection * distance;
+                    const glm::dvec2 point(hit.x, -hit.z);
+                    if (layScatterDragCorner_ == 0 || layScatterDragCorner_ == 3)
+                        scatter.x0 = point.x;
+                    else
+                        scatter.x1 = point.x;
+                    if (layScatterDragCorner_ == 0 || layScatterDragCorner_ == 1)
+                        scatter.y0 = point.y;
+                    else
+                        scatter.y1 = point.y;
+                    if (scatter.x0 > scatter.x1) std::swap(scatter.x0, scatter.x1);
+                    if (scatter.y0 > scatter.y1) std::swap(scatter.y0, scatter.y1);
+                    if (document_.ReplaceSegmentSource(static_cast<size_t>(selectedSegment_),
+                                                       SerializeLayScatterSource(scatter)))
+                    {
+                        assemblySourceDirty_ = true;
+                        benchDirty_ = true;
+                        sourceStructureBoundsDirty_ = true;
+                    }
+                }
+            }
+        }
+        if (layScatterDragging_ && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+        {
+            layScatterDragging_ = false;
+            layScatterDragCorner_ = -1;
+        }
+        drawList->PopClipRect();
     }
 
     bool ScadLibraryInterface::ConsumePreserveCameraOnNextSceneLoad()
@@ -6795,8 +8909,8 @@ namespace ScadLibrary
         {
             ImGui::Checkbox("Feature 轮廓", &showTerrainFeatureOverlay_);
             ImGui::SameLine();
-            const std::vector<Assets::Scad::FTerrainFeature>& features = terrainProcess_.Terrain().features;
-            const std::vector<FTerrainProcessRule>& rules = terrainProcess_.Rules();
+            const std::vector<Assets::Scad::FTerrainFeature>& features = TerrainProcess().Terrain().features;
+            const std::vector<FTerrainProcessRule>& rules = TerrainProcess().Rules();
             if (terrainSelectionIsRule_ && selectedTerrainRule_ >= 0 &&
                 selectedTerrainRule_ < static_cast<int>(rules.size()))
             {
@@ -6824,7 +8938,7 @@ namespace ScadLibrary
 
     void ScadLibraryInterface::RefreshTerrainFeatureOverlayCache()
     {
-        const Assets::Scad::FTerrainSpec& terrain = terrainProcess_.Terrain();
+        const Assets::Scad::FTerrainSpec& terrain = TerrainProcess().Terrain();
         const std::string cacheKey = Assets::Scad::ScadTerrain::SpecCacheKey(terrain);
         if (terrainFeatureOverlayData_ && terrainFeatureOverlayCacheKey_ == cacheKey)
         {
@@ -6843,6 +8957,7 @@ namespace ScadLibrary
     {
         terrainFeatureHandles_.clear();
         terrainRuleHandles_.clear();
+        layScatterHandles_.clear();
         if (!showTerrainFeatureOverlay_ || viewportSize.x <= 1.0f || viewportSize.y <= 1.0f)
         {
             terrainFeatureDragging_ = false;
@@ -6850,7 +8965,7 @@ namespace ScadLibrary
             return;
         }
 
-        Assets::Scad::FTerrainSpec& terrain = terrainProcess_.Terrain();
+        Assets::Scad::FTerrainSpec& terrain = TerrainProcess().Terrain();
         if (terrain.features.empty())
         {
             selectedTerrainFeature_ = -1;
@@ -6910,6 +9025,8 @@ namespace ScadLibrary
                 return IM_COL32(255, 108, 196, alpha);
             case EType::Hmap:
                 return IM_COL32(150, 160, 170, alpha);
+            case EType::Paint:
+                return IM_COL32(120, 200, 110, alpha);
             }
             return IM_COL32(255, 255, 255, alpha);
         };
@@ -7293,7 +9410,7 @@ namespace ScadLibrary
                                [&](const std::string& name) { return biomeId(name) == pointBiome; });
         };
 
-        std::vector<FTerrainProcessRule>& rules = terrainProcess_.Rules();
+        std::vector<FTerrainProcessRule>& rules = TerrainProcess().Rules();
         selectedTerrainRule_ = std::clamp(selectedTerrainRule_, 0, std::max(0, static_cast<int>(rules.size()) - 1));
         for (int ruleIndex = 0; ruleIndex < static_cast<int>(rules.size()); ++ruleIndex)
         {
@@ -7450,9 +9567,9 @@ namespace ScadLibrary
         }
 
         const glm::vec2 mouse(ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y);
-        const NextUI::IUserInterface* ui = engine_.GetUserInterface();
-        const float uiScale = ui != nullptr ? ui->UiScale() : 1.0f;
-        const glm::vec2 framebufferMouse = mouse * uiScale;
+        const ImVec2 framebufferMousePoint = NextUI::Scaling::ImGuiToMainFramebufferPoint(
+            ImVec2(mouse.x, mouse.y));
+        const glm::vec2 framebufferMouse(framebufferMousePoint.x, framebufferMousePoint.y);
         int hoveredHandle = -1;
         float nearestDistance = 144.0f;
         for (int handleIndex = 0; handleIndex < static_cast<int>(terrainFeatureHandles_.size()); ++handleIndex)
@@ -7645,7 +9762,7 @@ namespace ScadLibrary
                 if (terrainDragCopyRequested_ && !terrainDragCopied_ && selectedTerrainRule_ >= 0 &&
                     selectedTerrainRule_ < static_cast<int>(rules.size()))
                 {
-                    terrainProcess_.DuplicateRule(static_cast<size_t>(selectedTerrainRule_), false);
+                    TerrainProcess().DuplicateRule(static_cast<size_t>(selectedTerrainRule_), false);
                     selectedTerrainRule_ = static_cast<int>(rules.size()) - 1;
                     scrollToSelectedTerrainItem_ = true;
                     terrainDragCopied_ = true;
@@ -7730,18 +9847,15 @@ namespace ScadLibrary
         engine_.GetScene().MarkDirty();
         benchDirty_ = false;
         assemblySourceDirty_ = true;
-        if (assemblyEvaluated_)
-        {
-            SaveAssembly(true, false);
-            return;
-        }
-        if (assemblyStructured_ && !openedAssemblyPath_.empty())
+        // Releasing the gizmo writes the moved instance back into the file it
+        // came from. Only that statement is rewritten, so a scene that also
+        // holds loops, a terrain or comments keeps them byte for byte.
+        if (!openedAssemblyPath_.empty())
         {
             SaveAssembly(false, false);
             return;
         }
 
-        assemblyStructured_ = true;
         if (std::string_view(assemblyPathBuf_).empty())
         {
             std::snprintf(assemblyPathBuf_, sizeof(assemblyPathBuf_), "%s", "assets/scad/evaluated/my_scene.scad");
@@ -7751,156 +9865,151 @@ namespace ScadLibrary
 
     bool ScadLibraryInterface::GetSelectedSceneObjectBounds(glm::vec3& center, float& radius)
     {
+        // A standalone module preview has no FBenchItem. Its only editable
+        // selection is the module shown in the preview scene, so use that
+        // scene's bounds as the focus target.
+        if (modulePreviewActive_ &&
+            (workspaceMode_ == EWorkspaceMode::SceneAssembly || workspaceMode_ == EWorkspaceMode::KitBrowser))
+        {
+            const Assets::Scene& scene = engine_.GetScene();
+            const glm::vec3 minBounds = scene.GetSceneAABBMin();
+            const glm::vec3 maxBounds = scene.GetSceneAABBMax();
+            if (!glm::all(glm::lessThan(minBounds, maxBounds)))
+            {
+                return false;
+            }
+            center = (minBounds + maxBounds) * 0.5f;
+            radius = std::max(glm::length(maxBounds - minBounds) * 0.5f, 0.5f);
+            return true;
+        }
+
+        // Source/module rows in the structure Outliner are represented by a
+        // cached world-space OBB rather than an FBenchItem. The overlay already
+        // uses these bounds; use the same selection for F so both paths focus
+        // the object the user sees selected.
+        if (workspaceMode_ == EWorkspaceMode::SceneAssembly && selectedStructureBoundsValid_ &&
+            selectedStructureBoundsSegment_ == selectedSegment_)
+        {
+            center = (selectedStructureBoundsMin_ + selectedStructureBoundsMax_) * 0.5f;
+            radius = std::max(glm::length(selectedStructureBoundsMax_ - selectedStructureBoundsMin_) * 0.5f, 0.05f);
+            return true;
+        }
+
         if (workspaceMode_ != EWorkspaceMode::SceneAssembly || selectedBenchItem_ < 0 ||
-            selectedBenchItem_ >= static_cast<int>(bench_.size()))
+            selectedBenchItem_ >= static_cast<int>(Bench().size()))
         {
             return false;
         }
 
-        FBenchItem& item = bench_[selectedBenchItem_];
+        FBenchItem& item = Bench()[selectedBenchItem_];
         Assets::Node* selectedNode = ResolveSceneObjectNode(item, SceneObjectWorldMatrix(item));
         if (selectedNode == nullptr)
         {
-            return engine_.GetScene().GetSelectedNodeBounds(center, radius);
+            // The document selection is authoritative in ScadLibrary: the
+            // engine selection is intentionally cleared to suppress its edge
+            // outline. A temporarily unresolved runtime node should still let
+            // F frame the selected instance at its authored transform.
+            center = glm::vec3(SceneObjectWorldMatrix(item)[3]);
+            radius = 0.5f;
+            return true;
         }
 
-        glm::vec3 minBounds(FLT_MAX);
-        glm::vec3 maxBounds(-FLT_MAX);
-        bool found = false;
-        AccumulateNodeBounds(engine_.GetScene(), *selectedNode, minBounds, maxBounds, found);
-        if (!found)
+        glm::vec3 localMin;
+        glm::vec3 localMax;
+        if (!GetNodeOrientedBounds(engine_.GetScene(), *selectedNode, localMin, localMax))
         {
-            return engine_.GetScene().GetSelectedNodeBounds(center, radius);
+            center = glm::vec3(selectedNode->WorldTransform()[3]);
+            radius = 0.5f;
+            return true;
         }
 
-        center = (minBounds + maxBounds) * 0.5f;
-        radius = std::max(glm::length(maxBounds - minBounds) * 0.5f, 0.001f);
-
-        if (item.kitIndex >= 0 && item.kitIndex < static_cast<int>(kits_.size()))
+        const glm::mat4& world = selectedNode->WorldTransform();
+        center = glm::vec3(world * glm::vec4((localMin + localMax) * 0.5f, 1.0f));
+        radius = 0.001f;
+        for (int corner = 0; corner < 8; ++corner)
         {
-            const auto moduleIt = std::find_if(
-                kits_[item.kitIndex].modules.begin(), kits_[item.kitIndex].modules.end(),
-                [&item](const FKitModuleInfo& module) { return module.name == item.moduleName; });
-            if (moduleIt != kits_[item.kitIndex].modules.end() && moduleIt->hasMetrics)
-            {
-                const glm::vec3 scaledExtents(
-                    moduleIt->footprintX * std::abs(item.scale), moduleIt->footprintY * std::abs(item.scaleY),
-                    moduleIt->height * std::abs(item.scaleZ));
-                radius = std::max(glm::length(scaledExtents) * 0.5f, 0.001f);
-            }
+            const glm::vec3 localPoint((corner & 1) != 0 ? localMax.x : localMin.x,
+                                       (corner & 2) != 0 ? localMax.y : localMin.y,
+                                       (corner & 4) != 0 ? localMax.z : localMin.z);
+            const glm::vec3 worldPoint = glm::vec3(world * glm::vec4(localPoint, 1.0f));
+            radius = std::max(radius, glm::length(worldPoint - center));
         }
         return true;
     }
 
-    bool ScadLibraryInterface::SelectSceneObjectFromViewport(uint32_t hitInstanceId)
+    bool ScadLibraryInterface::SelectSceneObjectFromViewport(const glm::vec3& rayOrigin, const glm::vec3& rayDirection)
     {
-        if (workspaceMode_ != EWorkspaceMode::SceneAssembly || bench_.empty())
+        if (workspaceMode_ != EWorkspaceMode::SceneAssembly || Bench().empty())
         {
             return false;
         }
 
         Assets::Scene& scene = engine_.GetScene();
-        Assets::Node* hitNode = scene.GetNodeByInstanceId(hitInstanceId);
-        if (hitNode == nullptr)
+        int hitIndex = -1;
+        float nearestDistance = std::numeric_limits<float>::max();
+        for (int index = 0; index < static_cast<int>(Bench().size()); ++index)
         {
-            selectedBenchItem_ = -1;
-            scene.ClearSelection();
-            engine_.GetShowFlags().ShowEdge = false;
+            FBenchItem& item = Bench()[index];
+            Assets::Node* node = ResolveSceneObjectNode(item, SceneObjectWorldMatrix(item));
+            if (node == nullptr)
+            {
+                continue;
+            }
+
+            glm::vec3 localMin;
+            glm::vec3 localMax;
+            if (!GetNodeOrientedBounds(scene, *node, localMin, localMax))
+            {
+                continue;
+            }
+
+            float distance = 0.0f;
+            if (IntersectOrientedBox(rayOrigin, rayDirection, node->WorldTransform(), localMin, localMax, distance) &&
+                distance < nearestDistance)
+            {
+                hitIndex = index;
+                nearestDistance = distance;
+            }
+        }
+
+        if (hitIndex < 0)
+        {
+            ClearEditableSceneSelection();
+            ClearSelectedStructureBounds();
+            selectedSegment_ = -1;
+            statusLine_ = "未命中可编辑结构节点的 OBB";
+            statusError_ = false;
             return false;
         }
 
-        std::vector<Assets::Node*> ancestry;
-        for (Assets::Node* node = hitNode; node != nullptr; node = node->GetParent())
-        {
-            ancestry.push_back(node);
-        }
-        std::string ancestryNames;
-        for (const Assets::Node* ancestor : ancestry)
-        {
-            ancestryNames += ancestryNames.empty() ? ancestor->GetName() : fmt::format(" <- {}", ancestor->GetName());
-        }
-        SPDLOG_INFO("[ScadLibrary] viewport pick {} -> {}", hitInstanceId, ancestryNames);
-
-        // Evaluated files already carry deterministic loader instance IDs. This
-        // is the strongest match and handles Kit instances nested under layout
-        // modules without relying on names.
-        for (Assets::Node* ancestor : ancestry)
-        {
-            const auto found = std::find_if(bench_.begin(), bench_.end(), [&](const FBenchItem& item)
-                                            { return item.runtimeNodeId == ancestor->GetInstanceId(); });
-            if (found != bench_.end())
-            {
-                selectedBenchItem_ = static_cast<int>(std::distance(bench_.begin(), found));
-                scrollToSelectedBenchItem_ = true;
-                sceneGizmoAwaitingPickRelease_ = true;
-                scene.SetSelectedId(hitInstanceId);
-                engine_.GetShowFlags().ShowEdge = true;
-                statusLine_ = fmt::format("已从视口选择 {} #{}", found->moduleName, selectedBenchItem_);
-                statusError_ = false;
-                return true;
-            }
-        }
-
-        // Structured flat scenes do not carry evaluator IDs in their text
-        // parser. Walk from the root toward the hit render node, then identify
-        // the nearest same-name instance by its world transform.
-        for (auto ancestorIt = ancestry.rbegin(); ancestorIt != ancestry.rend(); ++ancestorIt)
-        {
-            Assets::Node* ancestor = *ancestorIt;
-            int nearestIndex = -1;
-            float nearestDistance = std::numeric_limits<float>::max();
-            for (int index = 0; index < static_cast<int>(bench_.size()); ++index)
-            {
-                FBenchItem& item = bench_[index];
-                if (item.moduleName != ancestor->GetName())
-                {
-                    continue;
-                }
-
-                const glm::mat4 expectedWorld = SceneObjectWorldMatrix(item);
-                float distance = 0.0f;
-                for (int column = 0; column < 4; ++column)
-                {
-                    const glm::vec4 delta = ancestor->WorldTransform()[column] - expectedWorld[column];
-                    distance += glm::dot(delta, delta);
-                }
-                if (distance < nearestDistance)
-                {
-                    nearestDistance = distance;
-                    nearestIndex = index;
-                }
-            }
-
-            if (nearestIndex >= 0)
-            {
-                FBenchItem& selected = bench_[nearestIndex];
-                selected.runtimeNodeId = ancestor->GetInstanceId();
-                selectedBenchItem_ = nearestIndex;
-                scrollToSelectedBenchItem_ = true;
-                sceneGizmoAwaitingPickRelease_ = true;
-                scene.SetSelectedId(hitInstanceId);
-                engine_.GetShowFlags().ShowEdge = true;
-                statusLine_ = fmt::format("已从视口选择 {} #{}", selected.moduleName, selectedBenchItem_);
-                statusError_ = false;
-                return true;
-            }
-        }
-
-        selectedBenchItem_ = -1;
+        FBenchItem& selected = Bench()[hitIndex];
+        ClearSelectedStructureBounds();
+        selectedBenchItem_ = hitIndex;
+        selectedSegment_ = selected.segmentIndex;
+        scrollToSelectedSegment_ = selectedSegment_ >= 0;
+        sceneGizmoAwaitingPickRelease_ = true;
         scene.ClearSelection();
         engine_.GetShowFlags().ShowEdge = false;
-        statusLine_ = "点选内容不属于可编辑 Kit 实例";
+        statusLine_ = fmt::format("已从视口选择结构节点 {}", selected.moduleName);
         statusError_ = false;
-        return false;
+        return true;
     }
 
     Assets::Node* ScadLibraryInterface::ResolveSceneObjectNode(FBenchItem& item, const glm::mat4& expectedWorld)
     {
         Assets::Scene& scene = engine_.GetScene();
+        const std::string placementTag = item.sourceLine > 0
+            ? Assets::Scad::ScadPlacementTag(item.placementId)
+            : std::string{};
+        const auto matchesPlacement = [&item, &placementTag](const Assets::Node& candidate)
+        {
+            return candidate.GetName() == item.moduleName &&
+                (placementTag.empty() || candidate.GetTag() == placementTag);
+        };
         if (item.runtimeNodeId != std::numeric_limits<uint32_t>::max())
         {
             Assets::Node* resolved = scene.GetNodeByInstanceId(item.runtimeNodeId);
-            if (resolved != nullptr && resolved->GetName() == item.moduleName)
+            if (resolved != nullptr && matchesPlacement(*resolved))
             {
                 return resolved;
             }
@@ -7912,6 +10021,19 @@ namespace ScadLibrary
         for (const std::shared_ptr<Assets::Node>& candidate : scene.Nodes())
         {
             if (candidate == nullptr || candidate->GetName() != item.moduleName)
+            {
+                continue;
+            }
+
+            // The SCAD loader tags each root with the terminal call's exact
+            // source offset. This is the authoritative placement identity:
+            // equal module names, parameters or matrices cannot collide.
+            if (!placementTag.empty() && candidate->GetTag() == placementTag)
+            {
+                item.runtimeNodeId = candidate->GetInstanceId();
+                return candidate.get();
+            }
+            if (!placementTag.empty())
             {
                 continue;
             }
@@ -7970,15 +10092,29 @@ namespace ScadLibrary
     void ScadLibraryInterface::DrawSceneObjectGizmo(const ImVec2& viewportPos, const ImVec2& viewportSize)
     {
         if (viewportSize.x <= 1.0f || viewportSize.y <= 1.0f || selectedBenchItem_ < 0 ||
-            selectedBenchItem_ >= static_cast<int>(bench_.size()))
+            selectedBenchItem_ >= static_cast<int>(Bench().size()))
         {
             sceneGizmoWasUsing_ = false;
             return;
         }
 
-        FBenchItem& item = bench_[selectedBenchItem_];
+        FBenchItem& item = Bench()[selectedBenchItem_];
         glm::mat4 worldMatrix = SceneObjectWorldMatrix(item);
-        ResolveSceneObjectNode(item, worldMatrix);
+        Assets::Node* selectedNode = ResolveSceneObjectNode(item, worldMatrix);
+        if (selectedNode != nullptr)
+        {
+            glm::vec3 localMin(FLT_MAX);
+            glm::vec3 localMax(-FLT_MAX);
+            bool foundBounds = false;
+            AccumulateNodeLocalBounds(engine_.GetScene(), *selectedNode,
+                                      glm::inverse(selectedNode->WorldTransform()), localMin, localMax, foundBounds);
+            if (foundBounds)
+            {
+                DrawOrientedBoxOverlay(engine_.GetLastUniformBufferObject(), viewportPos, viewportSize,
+                                       selectedNode->WorldTransform(), localMin, localMax,
+                                       IM_COL32(255, 184, 41, 255));
+            }
+        }
         if (sceneGizmoAwaitingPickRelease_)
         {
             if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
@@ -8083,6 +10219,7 @@ namespace ScadLibrary
             return;
         }
 
+        timelineIsPlaying_ = false;
         rigPreview_.SetPaused(true);
         glm::mat4 parentWorld(1.0f);
         if (Assets::Node* parent = boneNode->GetParent())
@@ -8105,17 +10242,20 @@ namespace ScadLibrary
             return;
         }
         rotation = glm::normalize(rotation);
-        if (boneGizmoOperation_ == 0)
+        if (timelineAutoKey_)
         {
-            UpsertGizmoKey(EEditableRigChannel::Position, FCharacterWorkbench::EnginePositionToScad(translation));
-        }
-        else if (boneGizmoOperation_ == 1)
-        {
-            UpsertGizmoKey(EEditableRigChannel::Rotation, FCharacterWorkbench::EngineRotationToScad(rotation));
-        }
-        else
-        {
-            UpsertGizmoKey(EEditableRigChannel::Scale, FCharacterWorkbench::EngineScaleToScad(scale));
+            if (boneGizmoOperation_ == 0)
+            {
+                UpsertGizmoKey(EEditableRigChannel::Position, FCharacterWorkbench::EnginePositionToScad(translation));
+            }
+            else if (boneGizmoOperation_ == 1)
+            {
+                UpsertGizmoKey(EEditableRigChannel::Rotation, FCharacterWorkbench::EngineRotationToScad(rotation));
+            }
+            else
+            {
+                UpsertGizmoKey(EEditableRigChannel::Scale, FCharacterWorkbench::EngineScaleToScad(scale));
+            }
         }
     }
 
@@ -8123,15 +10263,17 @@ namespace ScadLibrary
     {
         ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
         ImGui::SetNextWindowSize(size, ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(0.98f);
+        ImGui::SetNextWindowBgAlpha(0.96f);
         const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking;
+            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking |
+            ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 6.0f));
         if (!ImGui::Begin("##ScadLibraryAnimationTimeline", nullptr, flags))
         {
             ImGui::End();
-            ImGui::PopStyleVar(2);
+            ImGui::PopStyleVar(3);
             return;
         }
 
@@ -8139,7 +10281,7 @@ namespace ScadLibrary
         {
             ImGui::TextDisabled("当前角色没有可编辑动作或骨架。");
             ImGui::End();
-            ImGui::PopStyleVar(2);
+            ImGui::PopStyleVar(3);
             return;
         }
 
@@ -8175,307 +10317,755 @@ namespace ScadLibrary
             return channel.keys.back().value;
         };
 
-        ImGui::TextUnformatted(ICON_FA_FILM " 动作时间轴");
-        ImGui::SameLine();
-        ImGui::TextDisabled("%s  ·  %.3f 秒  ·  %zu 条轨道", clip.name.c_str(), clip.duration, clip.channels.size());
-        ImGui::SameLine();
-        ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(), ImGui::GetWindowWidth() - 244.0f));
-        if (ImGui::SmallButton(boneGizmoOperation_ == 0 ? "[移动]" : "移动"))
-        {
-            boneGizmoOperation_ = 0;
-        }
-        ImGui::SameLine();
-        if (ImGui::SmallButton(boneGizmoOperation_ == 1 ? "[旋转]" : "旋转"))
-        {
-            boneGizmoOperation_ = 1;
-        }
-        ImGui::SameLine();
-        if (ImGui::SmallButton(boneGizmoOperation_ == 2 ? "[缩放]" : "缩放"))
-        {
-            boneGizmoOperation_ = 2;
-        }
-        ImGui::SameLine();
-        ImGui::TextDisabled("拖动 Gizmo 自动 K 帧");
-        ImGui::Separator();
+        const float fps = static_cast<float>(std::max(1, timelineFps_));
+        const float currentTime = rigPreview_.CurrentTime();
+        const float clipDuration = std::max(clip.duration, 0.05f);
+        timelineVisibleDuration_ = std::max(timelineVisibleDuration_, std::max(clipDuration * 1.15f, 0.2f));
+        const float duration = timelineVisibleDuration_;
+        const int currentFrame = static_cast<int>(std::round(currentTime * fps));
+        const int totalFrames = static_cast<int>(std::round(clipDuration * fps));
 
         workbenchBone_ = std::clamp(workbenchBone_, 0, static_cast<int>(rigPreview_.Asset().bones.size()) - 1);
-        ImGui::BeginChild("##timeline_editor", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None);
+        const Assets::FRigBone& activeBone = rigPreview_.Asset().bones[workbenchBone_];
 
-        if (ImGui::SmallButton(ICON_FA_BACKWARD_STEP))
+        // Keyboard Shortcuts (Sequencer standard)
+        const bool panelFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+        if (panelFocused && !ImGui::GetIO().WantTextInput)
         {
-            rigPreview_.SetPaused(true);
-            rigPreview_.SetCurrentTime(0.0f);
+            if (ImGui::IsKeyPressed(ImGuiKey_Space))
+            {
+                const bool willPlay = rigPreview_.Paused();
+                timelineIsPlaying_ = willPlay;
+                rigPreview_.SetPaused(!willPlay);
+                if (willPlay && currentTime >= duration)
+                {
+                    rigPreview_.SetCurrentTime(0.0f);
+                }
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
+            {
+                timelineIsPlaying_ = false;
+                rigPreview_.SetPaused(true);
+                float t = std::max(0.0f, currentTime - 1.0f / fps);
+                if (timelineSnapToFrames_)
+                {
+                    t = std::round(t * fps) / fps;
+                }
+                rigPreview_.SetCurrentTime(t);
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_RightArrow))
+            {
+                timelineIsPlaying_ = false;
+                rigPreview_.SetPaused(true);
+                float t = std::min(duration, currentTime + 1.0f / fps);
+                if (timelineSnapToFrames_)
+                {
+                    t = std::round(t * fps) / fps;
+                }
+                rigPreview_.SetCurrentTime(t);
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_Home))
+            {
+                timelineIsPlaying_ = false;
+                rigPreview_.SetPaused(true);
+                rigPreview_.SetCurrentTime(0.0f);
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_End))
+            {
+                timelineIsPlaying_ = false;
+                rigPreview_.SetPaused(true);
+                rigPreview_.SetCurrentTime(clip.duration);
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_Delete) || ImGui::IsKeyPressed(ImGuiKey_Backspace))
+            {
+                if (timelineSelectedChannel_ >= 0 && timelineSelectedChannel_ < static_cast<int>(clip.channels.size()) &&
+                    timelineSelectedKey_ >= 0 &&
+                    timelineSelectedKey_ < static_cast<int>(clip.channels[timelineSelectedChannel_].keys.size()))
+                {
+                    clip.channels[timelineSelectedChannel_].keys.erase(
+                        clip.channels[timelineSelectedChannel_].keys.begin() + timelineSelectedKey_);
+                    timelineSelectedKey_ = -1;
+                    edited = true;
+                }
+            }
         }
-        ImGui::SameLine();
-        if (ImGui::SmallButton(rigPreview_.Paused() ? ICON_FA_PLAY : ICON_FA_PAUSE))
-        {
-            rigPreview_.SetPaused(!rigPreview_.Paused());
-        }
-        ImGui::SameLine();
-        if (ImGui::SmallButton(ICON_FA_STOP))
-        {
-            rigPreview_.SetPaused(true);
-        }
-        ImGui::SameLine();
-        if (ImGui::SmallButton(ICON_FA_FORWARD_STEP))
-        {
-            rigPreview_.SetPaused(true);
-            rigPreview_.SetCurrentTime(clip.duration);
-        }
-        ImGui::SameLine();
-        ImGui::TextDisabled("%.3f s", rigPreview_.CurrentTime());
-        ImGui::SameLine();
-        if (ImGui::Checkbox("循环", &clip.loop))
-        {
-            edited = true;
-        }
-        ImGui::SameLine();
-        ImGui::TextDisabled("%.3f s / %zu 通道", clip.duration, clip.channels.size());
 
-        const Assets::FRigBone& selectedBone = rigPreview_.Asset().bones[workbenchBone_];
-        ImGui::SameLine();
-        ImGui::TextDisabled("当前骨骼: %s", selectedBone.name.c_str());
-
-        bool hasPosition = false;
-        bool hasRotation = false;
-        bool hasScale = false;
-        for (const FEditableRigChannel& channel : clip.channels)
+        // Collect visible channels
+        std::vector<int> visibleChannels;
+        for (int chIdx = 0; chIdx < static_cast<int>(clip.channels.size()); ++chIdx)
         {
-            if (channel.bone != workbenchBone_)
+            const FEditableRigChannel& ch = clip.channels[chIdx];
+            if (!timelineShowAllBones_ && ch.bone != workbenchBone_)
             {
                 continue;
             }
-            hasPosition |= channel.type == EEditableRigChannel::Position;
-            hasRotation |= channel.type == EEditableRigChannel::Rotation;
-            hasScale |= channel.type == EEditableRigChannel::Scale;
+            if (timelineFilterBuf_[0] != '\0')
+            {
+                const std::string boneName = (ch.bone >= 0 && ch.bone < static_cast<int>(rigPreview_.Asset().bones.size()))
+                    ? rigPreview_.Asset().bones[ch.bone].name : "";
+                const char* typeName = FCharacterWorkbench::ChannelName(ch.type);
+                const std::string combined = boneName + " " + typeName;
+                auto toLower = [](std::string s) {
+                    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+                    return s;
+                };
+                if (toLower(combined).find(toLower(timelineFilterBuf_)) == std::string::npos)
+                {
+                    continue;
+                }
+            }
+            visibleChannels.push_back(chIdx);
         }
-
-        const auto addChannel = [&](const char* label, EEditableRigChannel type, bool exists)
-        {
-            if (exists)
-            {
-                ImGui::BeginDisabled();
-            }
-            const bool pressed = ImGui::SmallButton(label);
-            if (exists)
-            {
-                ImGui::EndDisabled();
-            }
-            if (pressed)
-            {
-                FEditableRigChannel channel;
-                channel.bone = workbenchBone_;
-                channel.type = type;
-                channel.keys.push_back({rigPreview_.CurrentTime(),
-                                        type == EEditableRigChannel::Scale ? glm::vec3(1.0f) : glm::vec3(0.0f)});
-                clip.channels.push_back(std::move(channel));
-                timelineSelectedChannel_ = static_cast<int>(clip.channels.size()) - 1;
-                timelineSelectedKey_ = 0;
-                edited = true;
-            }
-        };
-
-        ImGui::TextDisabled("添加轨道");
-        ImGui::SameLine();
-        addChannel("+ pos", EEditableRigChannel::Position, hasPosition);
-        ImGui::SameLine();
-        addChannel("+ rot", EEditableRigChannel::Rotation, hasRotation);
-        ImGui::SameLine();
-        addChannel("+ scale", EEditableRigChannel::Scale, hasScale);
 
         if (timelineSelectedChannel_ >= static_cast<int>(clip.channels.size()))
         {
             timelineSelectedChannel_ = -1;
             timelineSelectedKey_ = -1;
         }
-        if (timelineSelectedChannel_ >= 0 && clip.channels[timelineSelectedChannel_].bone != workbenchBone_)
+        if (timelineSelectedChannel_ >= 0 && !timelineShowAllBones_ &&
+            clip.channels[timelineSelectedChannel_].bone != workbenchBone_)
         {
             timelineSelectedChannel_ = -1;
             timelineSelectedKey_ = -1;
         }
-
-        std::vector<int> visibleChannels;
-        for (int channelIndex = 0; channelIndex < static_cast<int>(clip.channels.size()); ++channelIndex)
+        if (timelineSelectedChannel_ >= 0 &&
+            timelineSelectedKey_ >= static_cast<int>(clip.channels[timelineSelectedChannel_].keys.size()))
         {
-            if (clip.channels[channelIndex].bone == workbenchBone_)
+            timelineSelectedKey_ = -1;
+        }
+
+        // Stepping / Key search helper
+        const auto findPrevNextKey = [&](float curTime, float& outPrev, float& outNext) -> bool
+        {
+            outPrev = -1.0f;
+            outNext = std::numeric_limits<float>::max();
+            bool foundPrev = false;
+            bool foundNext = false;
+            const std::vector<int>& searchChannels =
+                (timelineSelectedChannel_ >= 0 ? std::vector<int>{timelineSelectedChannel_} : visibleChannels);
+            for (int chIdx : searchChannels)
             {
-                visibleChannels.push_back(channelIndex);
+                if (chIdx >= 0 && chIdx < static_cast<int>(clip.channels.size()))
+                {
+                    for (const FEditableRigKey& k : clip.channels[chIdx].keys)
+                    {
+                        if (k.time < curTime - 0.001f && k.time > outPrev)
+                        {
+                            outPrev = k.time;
+                            foundPrev = true;
+                        }
+                        if (k.time > curTime + 0.001f && k.time < outNext)
+                        {
+                            outNext = k.time;
+                            foundNext = true;
+                        }
+                    }
+                }
             }
+            return foundPrev || foundNext;
+        };
+
+        // Channel types for current bone
+        bool hasPosition = false;
+        bool hasRotation = false;
+        bool hasScale = false;
+        for (const FEditableRigChannel& ch : clip.channels)
+        {
+            if (ch.bone != workbenchBone_) continue;
+            hasPosition |= (ch.type == EEditableRigChannel::Position);
+            hasRotation |= (ch.type == EEditableRigChannel::Rotation);
+            hasScale |= (ch.type == EEditableRigChannel::Scale);
         }
 
-        ImGui::SameLine();
-        const bool hasSelectedTrack = timelineSelectedChannel_ >= 0;
-        if (!hasSelectedTrack)
+        constexpr float kBarItemH = 26.0f;
+        const auto addChannel = [&](const char* label, EEditableRigChannel type, bool exists, const ImVec4& color)
         {
-            ImGui::BeginDisabled();
-        }
-        if (ImGui::SmallButton(ICON_FA_PLUS " 关键帧"))
-        {
-            FEditableRigChannel& channel = clip.channels[timelineSelectedChannel_];
-            channel.keys.push_back({rigPreview_.CurrentTime(), sampleChannel(channel, rigPreview_.CurrentTime())});
-            timelineSelectedKey_ = static_cast<int>(channel.keys.size()) - 1;
-            edited = true;
-        }
-        if (!hasSelectedTrack)
-        {
-            ImGui::EndDisabled();
-        }
-
-        timelineVisibleDuration_ = std::max(timelineVisibleDuration_, std::max(clip.duration * 1.1f, 0.1f));
-        const float duration = timelineVisibleDuration_;
-        const float rowHeight = 28.0f;
-        const float rulerHeight = 30.0f;
-        const float labelWidth = 104.0f;
-        const ImU32 rulerColor = ImGui::GetColorU32(ImGuiCol_FrameBg);
-        const ImU32 rowColor = ImGui::GetColorU32(ImGuiCol_TableRowBg);
-        const ImU32 alternateRowColor = ImGui::GetColorU32(ImGuiCol_TableRowBgAlt);
-        const ImU32 gridColor = ImGui::GetColorU32(ImGuiCol_Border, 0.46f);
-        const ImU32 textColor = ImGui::GetColorU32(ImGuiCol_TextDisabled);
-        const ImU32 accentColor = ImGui::GetColorU32(NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover));
-        const ImU32 selectedColor = ImGui::GetColorU32(ImGuiCol_Text);
-
-        const ImVec2 rulerPos = ImGui::GetCursorScreenPos();
-        const float totalWidth = ImGui::GetContentRegionAvail().x;
-        const float timeWidth = std::max(totalWidth - labelWidth, 80.0f);
-        ImGui::InvisibleButton("##timeline_ruler", ImVec2(totalWidth, rulerHeight));
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        drawList->AddRectFilled(rulerPos, ImVec2(rulerPos.x + totalWidth, rulerPos.y + rulerHeight), rulerColor);
-        drawList->AddLine(ImVec2(rulerPos.x + labelWidth, rulerPos.y),
-                          ImVec2(rulerPos.x + labelWidth, rulerPos.y + rulerHeight), gridColor);
-        drawList->AddText(ImVec2(rulerPos.x + 7.0f, rulerPos.y + 7.0f), textColor, "属性轨道");
-
-        const float roughStep = duration / std::max(2.0f, std::floor(timeWidth / 75.0f));
-        const float tickOptions[] = {0.01f, 0.02f, 0.05f, 0.1f, 0.2f, 0.5f, 1.0f, 2.0f, 5.0f, 10.0f};
-        float tickStep = tickOptions[std::size(tickOptions) - 1];
-        for (float option : tickOptions)
-        {
-            if (option >= roughStep)
+            if (exists) ImGui::BeginDisabled();
+            ImGui::PushStyleColor(ImGuiCol_Text, exists ? ImVec4(0.5f, 0.5f, 0.5f, 0.6f) : color);
+            const bool pressed = ImGui::Button(label, ImVec2(50.0f, kBarItemH));
+            ImGui::PopStyleColor();
+            if (exists) ImGui::EndDisabled();
+            if (pressed)
             {
-                tickStep = option;
+                FEditableRigChannel ch;
+                ch.bone = workbenchBone_;
+                ch.type = type;
+                ch.keys.push_back({rigPreview_.CurrentTime(),
+                                   type == EEditableRigChannel::Scale ? glm::vec3(1.0f) : glm::vec3(0.0f)});
+                clip.channels.push_back(std::move(ch));
+                timelineSelectedChannel_ = static_cast<int>(clip.channels.size()) - 1;
+                timelineSelectedKey_ = 0;
+                edited = true;
+            }
+        };
+
+        // DCC Channel Colors
+        constexpr ImU32 dccColorPos = IM_COL32(239, 68, 68, 255);    // Red
+        constexpr ImU32 dccColorRot = IM_COL32(16, 185, 129, 255);   // Green
+        constexpr ImU32 dccColorScale = IM_COL32(59, 130, 246, 255);  // Blue
+        const auto getChannelColor = [](EEditableRigChannel type) -> ImU32
+        {
+            switch (type)
+            {
+            case EEditableRigChannel::Position: return dccColorPos;
+            case EEditableRigChannel::Rotation: return dccColorRot;
+            case EEditableRigChannel::Scale: return dccColorScale;
+            }
+            return IM_COL32(200, 200, 200, 255);
+        };
+        const auto getChannelIcon = [](EEditableRigChannel type) -> const char*
+        {
+            switch (type)
+            {
+            case EEditableRigChannel::Position: return ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT;
+            case EEditableRigChannel::Rotation: return ICON_FA_ROTATE_LEFT;
+            case EEditableRigChannel::Scale: return ICON_FA_EXPAND;
+            }
+            return ICON_FA_SLIDERS;
+        };
+
+        // ==========================================
+        // 1. TOP HEADER TOOLBAR (Sequencer Control Bar)
+        // ==========================================
+        {
+            const float startRowY = ImGui::GetCursorPosY();
+
+            // Left: Title & Track Scope
+            ImGui::SetCursorPosY(startRowY + std::floor((kBarItemH - ImGui::GetTextLineHeight()) * 0.5f));
+            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::Blue), "%s", ICON_FA_FILM);
+            ImGui::SameLine(0.0f, 6.0f);
+            ImGui::SetCursorPosY(startRowY);
+
+            // Scope Pills: [当前] [全部]
+            int scopeIndex = timelineShowAllBones_ ? 1 : 0;
+            const std::vector<std::pair<int, std::string>> scopeOptions = {
+                {0, "当前"}, {1, "全部"}
+            };
+            if (DrawSegmentedPills("##timeline_scope", scopeOptions, &scopeIndex, 90.0f, kBarItemH))
+            {
+                timelineShowAllBones_ = (scopeIndex == 1);
+            }
+
+            ImGui::SameLine(0.0f, 4.0f);
+            addChannel("+位移", EEditableRigChannel::Position, hasPosition, ImVec4(0.94f, 0.35f, 0.35f, 1.0f));
+            ImGui::SameLine(0.0f, 2.0f);
+            addChannel("+旋转", EEditableRigChannel::Rotation, hasRotation, ImVec4(0.20f, 0.85f, 0.45f, 1.0f));
+            ImGui::SameLine(0.0f, 2.0f);
+            addChannel("+缩放", EEditableRigChannel::Scale, hasScale, ImVec4(0.30f, 0.65f, 0.98f, 1.0f));
+
+            ImGui::SameLine(0.0f, 4.0f);
+            const bool canAddKey = timelineSelectedChannel_ >= 0 || !visibleChannels.empty();
+            if (!canAddKey) ImGui::BeginDisabled();
+            if (ImGui::Button(ICON_FA_KEY " K帧", ImVec2(52.0f, kBarItemH)))
+            {
+                if (timelineSelectedChannel_ >= 0 && timelineSelectedChannel_ < static_cast<int>(clip.channels.size()))
+                {
+                    FEditableRigChannel& channel = clip.channels[timelineSelectedChannel_];
+                    channel.keys.push_back({rigPreview_.CurrentTime(), sampleChannel(channel, rigPreview_.CurrentTime())});
+                    timelineSelectedKey_ = static_cast<int>(channel.keys.size()) - 1;
+                    edited = true;
+                }
+                else
+                {
+                    // Add key on all visible channels of the active bone
+                    for (int chIdx : visibleChannels)
+                    {
+                        FEditableRigChannel& channel = clip.channels[chIdx];
+                        channel.keys.push_back({rigPreview_.CurrentTime(), sampleChannel(channel, rigPreview_.CurrentTime())});
+                    }
+                    edited = true;
+                }
+            }
+            if (!canAddKey) ImGui::EndDisabled();
+
+            // Center: Media Transport
+            ImGui::SameLine(0.0f, 6.0f);
+            if (ImGui::Button(ICON_FA_BACKWARD_STEP "##first", ImVec2(26.0f, kBarItemH)))
+            {
+                timelineIsPlaying_ = false;
+                rigPreview_.SetPaused(true);
+                rigPreview_.SetCurrentTime(0.0f);
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("跳转到首帧 (Home)");
+
+            ImGui::SameLine(0.0f, 2.0f);
+            float prevKeyTime = 0.0f, nextKeyTime = 0.0f;
+            findPrevNextKey(currentTime, prevKeyTime, nextKeyTime);
+            if (prevKeyTime < 0.0f) ImGui::BeginDisabled();
+            if (ImGui::Button(ICON_FA_CHEVRON_LEFT "##prev_key", ImVec2(26.0f, kBarItemH)))
+            {
+                timelineIsPlaying_ = false;
+                rigPreview_.SetPaused(true);
+                rigPreview_.SetCurrentTime(prevKeyTime);
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("上一关键帧");
+            if (prevKeyTime < 0.0f) ImGui::EndDisabled();
+
+            ImGui::SameLine(0.0f, 2.0f);
+            if (ImGui::Button(ICON_FA_CARET_LEFT "##step_back", ImVec2(26.0f, kBarItemH)))
+            {
+                timelineIsPlaying_ = false;
+                rigPreview_.SetPaused(true);
+                float t = std::max(0.0f, currentTime - 1.0f / fps);
+                if (timelineSnapToFrames_) t = std::round(t * fps) / fps;
+                rigPreview_.SetCurrentTime(t);
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("后退 1 帧 (Left Arrow)");
+
+            ImGui::SameLine(0.0f, 2.0f);
+            const bool isPaused = rigPreview_.Paused();
+            ImGui::PushStyleColor(ImGuiCol_Button, isPaused ? NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceElevated, 0.7f)
+                                                            : NextUI::Theme::Color(NextUI::Theme::EColor::Accent, 0.85f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover));
+            if (ImGui::Button(isPaused ? ICON_FA_PLAY : ICON_FA_PAUSE, ImVec2(28.0f, kBarItemH)))
+            {
+                timelineIsPlaying_ = isPaused;
+                rigPreview_.SetPaused(!timelineIsPlaying_);
+                if (timelineIsPlaying_ && currentTime >= duration)
+                {
+                    rigPreview_.SetCurrentTime(0.0f);
+                }
+            }
+            ImGui::PopStyleColor(2);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip(isPaused ? "播放 (Space)" : "暂停 (Space)");
+
+            ImGui::SameLine(0.0f, 2.0f);
+            if (ImGui::Button(ICON_FA_CARET_RIGHT "##step_forward", ImVec2(26.0f, kBarItemH)))
+            {
+                timelineIsPlaying_ = false;
+                rigPreview_.SetPaused(true);
+                float t = std::min(duration, currentTime + 1.0f / fps);
+                if (timelineSnapToFrames_) t = std::round(t * fps) / fps;
+                rigPreview_.SetCurrentTime(t);
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("前进 1 帧 (Right Arrow)");
+
+            ImGui::SameLine(0.0f, 2.0f);
+            if (nextKeyTime >= std::numeric_limits<float>::max() - 1.0f) ImGui::BeginDisabled();
+            if (ImGui::Button(ICON_FA_CHEVRON_RIGHT "##next_key", ImVec2(26.0f, kBarItemH)))
+            {
+                timelineIsPlaying_ = false;
+                rigPreview_.SetPaused(true);
+                rigPreview_.SetCurrentTime(nextKeyTime);
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("下一关键帧");
+            if (nextKeyTime >= std::numeric_limits<float>::max() - 1.0f) ImGui::EndDisabled();
+
+            ImGui::SameLine(0.0f, 2.0f);
+            if (ImGui::Button(ICON_FA_FORWARD_STEP "##last", ImVec2(26.0f, kBarItemH)))
+            {
+                timelineIsPlaying_ = false;
+                rigPreview_.SetPaused(true);
+                rigPreview_.SetCurrentTime(clip.duration);
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("跳转到末尾 (End)");
+
+            ImGui::SameLine(0.0f, 3.0f);
+            ImGui::PushStyleColor(ImGuiCol_Button, clip.loop ? NextUI::Theme::Color(NextUI::Theme::EColor::Accent, 0.65f)
+                                                             : NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceElevated, 0.45f));
+            if (ImGui::Button(ICON_FA_REPEAT, ImVec2(26.0f, kBarItemH)))
+            {
+                clip.loop = !clip.loop;
+                edited = true;
+            }
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip(clip.loop ? "循环播放: 已开启" : "循环播放: 已关闭");
+
+            // Right Group: HUD, Snap, Gizmo, Auto-key Checkbox
+            const float rightGroupWidth = 328.0f;
+            const float cursorX = ImGui::GetCursorPosX();
+            const float rightTargetX = ImGui::GetWindowWidth() - rightGroupWidth - 12.0f;
+            if (rightTargetX > cursorX + 8.0f)
+            {
+                ImGui::SameLine(rightTargetX);
+            }
+            else
+            {
+                ImGui::SameLine(0.0f, 6.0f);
+            }
+
+            // Timecode HUD pill
+            const std::string hudText = fmt::format("{:.2f}s · {}/{}f", currentTime, currentFrame, totalFrames);
+            ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceElevated, 0.65f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceElevated, 0.85f));
+            ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover));
+            ImGui::Button(hudText.c_str(), ImVec2(105.0f, kBarItemH));
+            ImGui::PopStyleColor(3);
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("当前时间码与基准帧率 (%d FPS)", static_cast<int>(fps));
+            }
+
+            ImGui::SameLine(0.0f, 3.0f);
+            // Snapping toggle
+            ImGui::PushStyleColor(ImGuiCol_Button, timelineSnapToFrames_ ? NextUI::Theme::Color(NextUI::Theme::EColor::Accent, 0.75f)
+                                                                         : NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceElevated, 0.45f));
+            if (ImGui::Button(ICON_FA_MAGNET, ImVec2(26.0f, kBarItemH)))
+            {
+                timelineSnapToFrames_ = !timelineSnapToFrames_;
+            }
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip(timelineSnapToFrames_ ? "磁性吸附帧 (已开启)" : "磁性吸附帧 (已关闭)");
+
+            ImGui::SameLine(0.0f, 3.0f);
+            // Gizmo mode pills
+            int gizmoIdx = boneGizmoOperation_;
+            const std::vector<std::pair<int, std::string>> gizmoOptions = {
+                {0, "W"}, {1, "E"}, {2, "R"}
+            };
+            if (DrawSegmentedPills("##timeline_gizmo", gizmoOptions, &gizmoIdx, 66.0f, kBarItemH))
+            {
+                boneGizmoOperation_ = gizmoIdx;
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("视口操作 Gizmo: W 平移 / E 旋转 / R 缩放");
+
+            ImGui::SameLine(0.0f, 6.0f);
+            // Auto-key Checkbox switch with icon
+            const float cbHeight = ImGui::GetFrameHeight();
+            const float offsetY = std::floor((kBarItemH - cbHeight) * 0.5f);
+            const float beforeCbY = ImGui::GetCursorPosY();
+            ImGui::SetCursorPosY(beforeCbY + offsetY);
+
+            ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+            if (timelineAutoKey_)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.50f, 0.50f, 1.0f));
+            }
+            ImGui::Checkbox(ICON_FA_CIRCLE_DOT " 自动记录", &timelineAutoKey_);
+            if (timelineAutoKey_)
+            {
+                ImGui::PopStyleColor();
+            }
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("自动记录 (Auto-Key): 开启后，在视口拖动骨骼 Gizmo 或在检查器中调姿时，自动向当前时间插入/更新关键帧");
+            }
+
+            ImGui::SetCursorPosY(startRowY + kBarItemH + 4.0f);
+        }
+
+        ImGui::Separator();
+        ImGui::Dummy(ImVec2(0.0f, 2.0f));
+
+        // ==========================================
+        // 2. MIDDLE TRACK TREE & DOPE SHEET CANVAS
+        // ==========================================
+        const float detailHeight = (timelineSelectedChannel_ >= 0) ? 68.0f : 30.0f;
+        const float middleTotalHeight = std::max(120.0f, ImGui::GetContentRegionAvail().y - detailHeight - 4.0f);
+        const float rulerHeight = 26.0f;
+        const float tracksHeight = middleTotalHeight - rulerHeight;
+        const float trackHeaderWidth = std::clamp(timelineTrackHeaderWidth_, 180.0f, 260.0f);
+        const float totalAvailWidth = ImGui::GetContentRegionAvail().x;
+        const float canvasTimeWidth = std::max(totalAvailWidth - trackHeaderWidth, 80.0f);
+        const float rowHeight = 30.0f;
+
+        const ImU32 gridColor = ImGui::GetColorU32(ImGuiCol_Border, 0.30f);
+        const ImU32 majorGridColor = ImGui::GetColorU32(ImGuiCol_Border, 0.65f);
+        const ImU32 textDimColor = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+        const ImU32 accentColor = ImGui::GetColorU32(NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover));
+        const ImU32 playheadColor = IM_COL32(0, 229, 255, 255); // Vibrant Cyan
+
+        // A. RULER BAR
+        const ImVec2 rulerStartPos = ImGui::GetCursorScreenPos();
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+        // Ruler Left Header (Track Title & count)
+        const ImVec2 rulerHeaderPos = rulerStartPos;
+        drawList->AddRectFilled(rulerHeaderPos,
+                                ImVec2(rulerHeaderPos.x + trackHeaderWidth, rulerHeaderPos.y + rulerHeight),
+                                IM_COL32(22, 25, 33, 255));
+        drawList->AddLine(ImVec2(rulerHeaderPos.x + trackHeaderWidth, rulerHeaderPos.y),
+                          ImVec2(rulerHeaderPos.x + trackHeaderWidth, rulerHeaderPos.y + rulerHeight),
+                          majorGridColor);
+
+        const std::string trackCountStr = fmt::format("轨道 ({}) · {}", visibleChannels.size(), activeBone.name);
+        drawList->AddText(ImVec2(rulerHeaderPos.x + 8.0f, rulerHeaderPos.y + 6.0f),
+                          ImGui::GetColorU32(ImGuiCol_Text), trackCountStr.c_str());
+
+        // Ruler Right Canvas (Time & Frames)
+        const ImVec2 rulerCanvasPos(rulerStartPos.x + trackHeaderWidth, rulerStartPos.y);
+        drawList->AddRectFilled(rulerCanvasPos,
+                                ImVec2(rulerCanvasPos.x + canvasTimeWidth, rulerCanvasPos.y + rulerHeight),
+                                IM_COL32(18, 21, 28, 255));
+
+        // Active clip working region highlight
+        const float activeEndRatio = std::clamp(clipDuration / duration, 0.0f, 1.0f);
+        drawList->AddRectFilled(rulerCanvasPos,
+                                ImVec2(rulerCanvasPos.x + activeEndRatio * canvasTimeWidth, rulerCanvasPos.y + rulerHeight),
+                                IM_COL32(35, 48, 68, 120));
+
+        // Bracket markers [ and ]
+        drawList->AddText(ImVec2(rulerCanvasPos.x + 2.0f, rulerCanvasPos.y + 5.0f),
+                          IM_COL32(16, 185, 129, 255), "[");
+        const float bracketOutX = rulerCanvasPos.x + activeEndRatio * canvasTimeWidth;
+        drawList->AddText(ImVec2(bracketOutX - 6.0f, rulerCanvasPos.y + 5.0f),
+                          IM_COL32(239, 68, 68, 255), "]");
+
+        // Ruler ticks & frame numbers
+        const float roughTickStep = duration / std::max(2.0f, std::floor(canvasTimeWidth / 65.0f));
+        const float tickIntervals[] = {0.03333f, 0.06667f, 0.1f, 0.2f, 0.5f, 1.0f, 2.0f, 5.0f};
+        float chosenTick = tickIntervals[std::size(tickIntervals) - 1];
+        for (float interval : tickIntervals)
+        {
+            if (interval >= roughTickStep)
+            {
+                chosenTick = interval;
                 break;
             }
         }
-        for (float tick = 0.0f; tick <= duration + tickStep * 0.5f; tick += tickStep)
+
+        for (float tick = 0.0f; tick <= duration + chosenTick * 0.5f; tick += chosenTick)
         {
-            const float x = rulerPos.x + labelWidth + (tick / duration) * timeWidth;
-            drawList->AddLine(ImVec2(x, rulerPos.y + rulerHeight - 8.0f), ImVec2(x, rulerPos.y + rulerHeight),
-                              gridColor);
-            drawList->AddText(ImVec2(x + 3.0f, rulerPos.y + 5.0f), textColor, fmt::format("{:.2f}", tick).c_str());
-        }
-        const float currentTime = std::clamp(rigPreview_.CurrentTime(), 0.0f, duration);
-        const float rulerPlayheadX = rulerPos.x + labelWidth + (currentTime / duration) * timeWidth;
-        drawList->AddTriangleFilled(ImVec2(rulerPlayheadX - 5.0f, rulerPos.y),
-                                    ImVec2(rulerPlayheadX + 5.0f, rulerPos.y),
-                                    ImVec2(rulerPlayheadX, rulerPos.y + 8.0f), accentColor);
-        drawList->AddLine(ImVec2(rulerPlayheadX, rulerPos.y + 8.0f), ImVec2(rulerPlayheadX, rulerPos.y + rulerHeight),
-                          accentColor, 2.0f);
-        if (ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left) &&
-            ImGui::GetIO().MousePos.x >= rulerPos.x + labelWidth)
-        {
-            const float time =
-                std::clamp((ImGui::GetIO().MousePos.x - rulerPos.x - labelWidth) / timeWidth, 0.0f, 1.0f) * duration;
-            rigPreview_.SetPaused(true);
-            rigPreview_.SetCurrentTime(time);
+            const float x = rulerCanvasPos.x + (tick / duration) * canvasTimeWidth;
+            drawList->AddLine(ImVec2(x, rulerCanvasPos.y + rulerHeight - 7.0f),
+                              ImVec2(x, rulerCanvasPos.y + rulerHeight), majorGridColor);
+            const int frameNum = static_cast<int>(std::round(tick * fps));
+            const std::string tickLabel = fmt::format("{}f", frameNum);
+            drawList->AddText(ImVec2(x + 3.0f, rulerCanvasPos.y + 4.0f), textDimColor, tickLabel.c_str());
         }
 
-        const float detailHeight = timelineSelectedChannel_ >= 0 && timelineSelectedKey_ >= 0 ? 102.0f : 34.0f;
-        const float timelineHeight = std::max(88.0f, ImGui::GetContentRegionAvail().y - detailHeight);
-        ImGui::BeginChild("##timeline_tracks", ImVec2(0.0f, timelineHeight), ImGuiChildFlags_Borders,
+        // Invisible button over ruler for scrubbing
+        ImGui::SetCursorScreenPos(rulerStartPos);
+        ImGui::InvisibleButton("##timeline_ruler_btn", ImVec2(totalAvailWidth, rulerHeight));
+        if (ImGui::IsItemActive() && ImGui::GetIO().MousePos.x >= rulerCanvasPos.x)
+        {
+            float scrubbedTime =
+                std::clamp((ImGui::GetIO().MousePos.x - rulerCanvasPos.x) / canvasTimeWidth, 0.0f, 1.0f) * duration;
+            if (timelineSnapToFrames_)
+            {
+                scrubbedTime = std::round(scrubbedTime * fps) / fps;
+            }
+            timelineIsPlaying_ = false;
+            rigPreview_.SetPaused(true);
+            rigPreview_.SetCurrentTime(scrubbedTime);
+            ImGui::SetTooltip("%.3f s  (%d f)", scrubbedTime, static_cast<int>(std::round(scrubbedTime * fps)));
+        }
+
+        // Playhead Needle on ruler
+        const float playheadClampedTime = std::clamp(currentTime, 0.0f, duration);
+        const float playheadRulerX = rulerCanvasPos.x + (playheadClampedTime / duration) * canvasTimeWidth;
+        const ImVec2 needleHead[5] = {
+            ImVec2(playheadRulerX - 5.0f, rulerCanvasPos.y),
+            ImVec2(playheadRulerX + 5.0f, rulerCanvasPos.y),
+            ImVec2(playheadRulerX + 5.0f, rulerCanvasPos.y + 11.0f),
+            ImVec2(playheadRulerX, rulerCanvasPos.y + 19.0f),
+            ImVec2(playheadRulerX - 5.0f, rulerCanvasPos.y + 11.0f)
+        };
+        drawList->AddConvexPolyFilled(needleHead, 5, playheadColor);
+        drawList->AddPolyline(needleHead, 5, IM_COL32(255, 255, 255, 220), ImDrawFlags_Closed, 1.0f);
+        drawList->AddLine(ImVec2(playheadRulerX, rulerCanvasPos.y + 19.0f),
+                          ImVec2(playheadRulerX, rulerCanvasPos.y + rulerHeight), playheadColor, 1.5f);
+
+        // B. TRACKS SCROLLING BODY
+        ImGui::SetCursorScreenPos(ImVec2(rulerStartPos.x, rulerStartPos.y + rulerHeight));
+        ImGui::BeginChild("##timeline_tracks_canvas", ImVec2(0.0f, tracksHeight), ImGuiChildFlags_None,
                           ImGuiWindowFlags_AlwaysVerticalScrollbar);
+
         const ImVec2 canvasPos = ImGui::GetCursorScreenPos();
-        const float canvasWidth = ImGui::GetContentRegionAvail().x;
-        const float canvasTimeWidth = std::max(canvasWidth - labelWidth, 80.0f);
-        const float canvasHeight =
-            std::max(ImGui::GetContentRegionAvail().y, rowHeight * static_cast<float>(visibleChannels.size()));
-        ImGui::InvisibleButton("##timeline_canvas", ImVec2(canvasWidth, canvasHeight));
+        const float totalCanvasHeight = std::max(ImGui::GetContentRegionAvail().y,
+                                                 rowHeight * static_cast<float>(visibleChannels.size()));
+        ImGui::InvisibleButton("##timeline_tracks_interact", ImVec2(totalAvailWidth, totalCanvasHeight));
+        const bool canvasHovered = ImGui::IsItemHovered();
+        const ImVec2 mouse = ImGui::GetIO().MousePos;
         drawList = ImGui::GetWindowDrawList();
+
+        int channelToDelete = -1;
 
         for (int rowIndex = 0; rowIndex < static_cast<int>(visibleChannels.size()); ++rowIndex)
         {
             const int channelIndex = visibleChannels[rowIndex];
-            const FEditableRigChannel& channel = clip.channels[channelIndex];
+            FEditableRigChannel& channel = clip.channels[channelIndex];
             const float y = canvasPos.y + rowIndex * rowHeight;
-            const bool selectedTrack = channelIndex == timelineSelectedChannel_;
-            drawList->AddRectFilled(ImVec2(canvasPos.x, y), ImVec2(canvasPos.x + canvasWidth, y + rowHeight),
-                                    selectedTrack ? ImGui::GetColorU32(ImGuiCol_Header)
-                                                  : (rowIndex % 2 == 0 ? rowColor : alternateRowColor));
-            drawList->AddLine(ImVec2(canvasPos.x, y + rowHeight), ImVec2(canvasPos.x + canvasWidth, y + rowHeight),
-                              gridColor);
-            drawList->AddLine(ImVec2(canvasPos.x + labelWidth, y), ImVec2(canvasPos.x + labelWidth, y + rowHeight),
-                              gridColor);
+            const bool selectedTrack = (channelIndex == timelineSelectedChannel_);
+            const ImU32 chColor = getChannelColor(channel.type);
 
-            const std::string label = FCharacterWorkbench::ChannelName(channel.type);
-            drawList->PushClipRect(ImVec2(canvasPos.x, y), ImVec2(canvasPos.x + labelWidth - 4.0f, y + rowHeight),
-                                   true);
-            drawList->AddText(ImVec2(canvasPos.x + 7.0f, y + 6.0f), selectedTrack ? selectedColor : textColor,
-                              label.c_str());
+            // Left Header Area [canvasPos.x, canvasPos.x + trackHeaderWidth]
+            const ImVec2 headerMin(canvasPos.x, y);
+            const ImVec2 headerMax(canvasPos.x + trackHeaderWidth, y + rowHeight);
+
+            // Background
+            const ImU32 headerBg = selectedTrack
+                ? IM_COL32(35, 55, 85, 220)
+                : (rowIndex % 2 == 0 ? IM_COL32(25, 28, 35, 200) : IM_COL32(20, 23, 29, 200));
+            drawList->AddRectFilled(headerMin, headerMax, headerBg);
+            drawList->AddLine(ImVec2(headerMin.x, headerMax.y), headerMax, gridColor);
+            drawList->AddLine(ImVec2(headerMax.x, headerMin.y), headerMax, majorGridColor);
+
+            // Left accent color strip (3px)
+            drawList->AddRectFilled(headerMin, ImVec2(headerMin.x + 3.5f, headerMax.y), chColor);
+
+            // Icon & Channel Name
+            const char* icon = getChannelIcon(channel.type);
+            const char* typeName = FCharacterWorkbench::ChannelName(channel.type);
+            std::string displayName;
+            if (timelineShowAllBones_ && channel.bone >= 0 &&
+                channel.bone < static_cast<int>(rigPreview_.Asset().bones.size()))
+            {
+                displayName = fmt::format("{} · {}", rigPreview_.Asset().bones[channel.bone].name, typeName);
+            }
+            else
+            {
+                displayName = typeName;
+            }
+
+            drawList->PushClipRect(ImVec2(headerMin.x + 7.0f, headerMin.y),
+                                   ImVec2(headerMax.x - 70.0f, headerMax.y), true);
+            drawList->AddText(ImVec2(headerMin.x + 8.0f, headerMin.y + 6.0f), chColor, icon);
+            drawList->AddText(ImVec2(headerMin.x + 26.0f, headerMin.y + 6.0f),
+                              selectedTrack ? IM_COL32(255, 255, 255, 255) : ImGui::GetColorU32(ImGuiCol_Text),
+                              displayName.c_str());
             drawList->PopClipRect();
 
-            for (float tick = 0.0f; tick <= duration + tickStep * 0.5f; tick += tickStep)
+            // Right inline badges & actions in header
+            const std::string keyCountText = fmt::format("{}f", channel.keys.size());
+            const float countWidth = 24.0f;
+            const ImVec2 countMin(headerMax.x - countWidth - 4.0f, headerMin.y + 5.0f);
+            const ImVec2 countMax(headerMax.x - 4.0f, headerMin.y + 23.0f);
+            drawList->AddRectFilled(countMin, countMax, IM_COL32(40, 44, 55, 200), 3.0f);
+            drawList->AddText(ImVec2(countMin.x + 4.0f, countMin.y + 2.0f), textDimColor, keyCountText.c_str());
+
+            // Right Lane Area [canvasPos.x + trackHeaderWidth, canvasPos.x + totalAvailWidth]
+            const ImVec2 laneMin(canvasPos.x + trackHeaderWidth, y);
+            const ImVec2 laneMax(canvasPos.x + totalAvailWidth, y + rowHeight);
+
+            const ImU32 laneBg = rowIndex % 2 == 0 ? IM_COL32(18, 20, 26, 180) : IM_COL32(14, 16, 22, 180);
+            drawList->AddRectFilled(laneMin, laneMax, laneBg);
+            drawList->AddLine(ImVec2(laneMin.x, laneMax.y), laneMax, gridColor);
+
+            // Vertical tick lines in lane
+            for (float tick = 0.0f; tick <= duration + chosenTick * 0.5f; tick += chosenTick)
             {
-                const float x = canvasPos.x + labelWidth + (tick / duration) * canvasTimeWidth;
-                drawList->AddLine(ImVec2(x, y), ImVec2(x, y + rowHeight), gridColor);
+                const float x = laneMin.x + (tick / duration) * canvasTimeWidth;
+                drawList->AddLine(ImVec2(x, laneMin.y), ImVec2(x, laneMax.y), gridColor);
             }
-            for (int keyIndex = 0; keyIndex < static_cast<int>(channel.keys.size()); ++keyIndex)
+
+            // Active Span Ribbon between keys (UE Sequencer / Blender Dope Sheet standard)
+            if (channel.keys.size() >= 2)
             {
-                const FEditableRigKey& key = channel.keys[keyIndex];
-                const float x =
-                    canvasPos.x + labelWidth + (std::clamp(key.time, 0.0f, duration) / duration) * canvasTimeWidth;
-                const float centerY = y + rowHeight * 0.5f;
-                const bool selectedKey = channelIndex == timelineSelectedChannel_ && keyIndex == timelineSelectedKey_;
-                const ImU32 keyColor = selectedKey ? selectedColor : accentColor;
-                const ImVec2 points[] = {ImVec2(x, centerY - 6.0f), ImVec2(x + 6.0f, centerY),
-                                         ImVec2(x, centerY + 6.0f), ImVec2(x - 6.0f, centerY)};
-                drawList->AddConvexPolyFilled(points, 4, keyColor);
+                float minKeyTime = channel.keys.front().time;
+                float maxKeyTime = channel.keys.back().time;
+                for (const auto& k : channel.keys)
+                {
+                    minKeyTime = std::min(minKeyTime, k.time);
+                    maxKeyTime = std::max(maxKeyTime, k.time);
+                }
+                const float spanX1 = laneMin.x + (std::clamp(minKeyTime, 0.0f, duration) / duration) * canvasTimeWidth;
+                const float spanX2 = laneMin.x + (std::clamp(maxKeyTime, 0.0f, duration) / duration) * canvasTimeWidth;
+                if (spanX2 > spanX1 + 2.0f)
+                {
+                    const ImU32 spanBg = (chColor & 0x00FFFFFF) | 0x30000000;
+                    const ImU32 spanBorder = (chColor & 0x00FFFFFF) | 0x70000000;
+                    drawList->AddRectFilled(ImVec2(spanX1, y + 9.0f), ImVec2(spanX2, y + rowHeight - 9.0f), spanBg, 3.0f);
+                    drawList->AddRect(ImVec2(spanX1, y + 9.0f), ImVec2(spanX2, y + rowHeight - 9.0f), spanBorder, 3.0f);
+                }
+            }
+
+            // Keyframe Diamonds
+            for (int kIdx = 0; kIdx < static_cast<int>(channel.keys.size()); ++kIdx)
+            {
+                const FEditableRigKey& key = channel.keys[kIdx];
+                const float keyX = laneMin.x + (std::clamp(key.time, 0.0f, duration) / duration) * canvasTimeWidth;
+                const float keyCenterY = y + rowHeight * 0.5f;
+                const bool isKeySelected = (selectedTrack && kIdx == timelineSelectedKey_);
+
+                const float radius = isKeySelected ? 6.5f : 4.5f;
+                const ImVec2 diamondPts[4] = {
+                    ImVec2(keyX, keyCenterY - radius),
+                    ImVec2(keyX + radius, keyCenterY),
+                    ImVec2(keyX, keyCenterY + radius),
+                    ImVec2(keyX - radius, keyCenterY)
+                };
+
+                if (isKeySelected)
+                {
+                    // Glowing outer halo
+                    const ImVec2 haloPts[4] = {
+                        ImVec2(keyX, keyCenterY - radius - 2.5f),
+                        ImVec2(keyX + radius + 2.5f, keyCenterY),
+                        ImVec2(keyX, keyCenterY + radius + 2.5f),
+                        ImVec2(keyX - radius - 2.5f, keyCenterY)
+                    };
+                    drawList->AddConvexPolyFilled(haloPts, 4, IM_COL32(255, 230, 120, 90));
+                    drawList->AddConvexPolyFilled(diamondPts, 4, IM_COL32(255, 220, 80, 255));
+                    drawList->AddPolyline(diamondPts, 4, IM_COL32(255, 255, 255, 255), ImDrawFlags_Closed, 1.5f);
+                }
+                else
+                {
+                    drawList->AddConvexPolyFilled(diamondPts, 4, chColor);
+                    drawList->AddPolyline(diamondPts, 4, IM_COL32(20, 20, 20, 200), ImDrawFlags_Closed, 1.0f);
+                }
+
+                // Tooltip on hover
+                if (canvasHovered && std::abs(mouse.x - keyX) <= 8.0f && std::abs(mouse.y - keyCenterY) <= 8.0f)
+                {
+                    ImGui::SetTooltip("关键帧 #%d · %.3f s (%d f)\n数值: (%.2f, %.2f, %.2f)",
+                                      kIdx + 1, key.time, static_cast<int>(std::round(key.time * fps)),
+                                      key.value.x, key.value.y, key.value.z);
+                }
             }
         }
 
-        const float bodyPlayheadX = canvasPos.x + labelWidth + (currentTime / duration) * canvasTimeWidth;
-        drawList->AddLine(ImVec2(bodyPlayheadX, canvasPos.y), ImVec2(bodyPlayheadX, canvasPos.y + canvasHeight),
-                          accentColor, 2.0f);
+        // Vertical Playhead Line across all tracks
+        const float bodyPlayheadX = canvasPos.x + trackHeaderWidth + (playheadClampedTime / duration) * canvasTimeWidth;
+        drawList->AddLine(ImVec2(bodyPlayheadX, canvasPos.y), ImVec2(bodyPlayheadX, canvasPos.y + totalCanvasHeight),
+                          playheadColor, 1.5f);
 
-        const bool timelineHovered = ImGui::IsItemHovered();
-        if (timelineHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        // Canvas Interactions (Click, Drag, Double-click)
+        if (canvasHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
         {
-            const ImVec2 mouse = ImGui::GetIO().MousePos;
-            const int row = static_cast<int>(std::floor((mouse.y - canvasPos.y) / rowHeight));
-            if (row >= 0 && row < static_cast<int>(visibleChannels.size()))
+            const int clickedRow = static_cast<int>(std::floor((mouse.y - canvasPos.y) / rowHeight));
+            if (clickedRow >= 0 && clickedRow < static_cast<int>(visibleChannels.size()))
             {
-                timelineSelectedChannel_ = visibleChannels[row];
+                const int clickedChannel = visibleChannels[clickedRow];
+                timelineSelectedChannel_ = clickedChannel;
                 timelineSelectedKey_ = -1;
-                if (mouse.x >= canvasPos.x + labelWidth)
+                workbenchBone_ = clip.channels[clickedChannel].bone;
+
+                if (mouse.x >= canvasPos.x + trackHeaderWidth)
                 {
-                    const float clickedTime =
-                        std::clamp((mouse.x - canvasPos.x - labelWidth) / canvasTimeWidth, 0.0f, 1.0f) * duration;
-                    float nearestDistance = 9.0f;
-                    for (int keyIndex = 0;
-                         keyIndex < static_cast<int>(clip.channels[timelineSelectedChannel_].keys.size()); ++keyIndex)
+                    // Check if clicked directly on a keyframe
+                    float nearestDist = 9.0f;
+                    int nearestKeyIdx = -1;
+                    const FEditableRigChannel& ch = clip.channels[clickedChannel];
+                    for (int kIdx = 0; kIdx < static_cast<int>(ch.keys.size()); ++kIdx)
                     {
-                        const float keyX = canvasPos.x + labelWidth +
-                            (clip.channels[timelineSelectedChannel_].keys[keyIndex].time / duration) * canvasTimeWidth;
-                        const float distance = std::abs(mouse.x - keyX);
-                        if (distance < nearestDistance)
+                        const float kX = canvasPos.x + trackHeaderWidth +
+                            (std::clamp(ch.keys[kIdx].time, 0.0f, duration) / duration) * canvasTimeWidth;
+                        const float dist = std::abs(mouse.x - kX);
+                        if (dist < nearestDist)
                         {
-                            nearestDistance = distance;
-                            timelineSelectedKey_ = keyIndex;
+                            nearestDist = dist;
+                            nearestKeyIdx = kIdx;
                         }
                     }
-                    if (timelineSelectedKey_ >= 0)
+
+                    if (nearestKeyIdx >= 0)
                     {
+                        timelineSelectedKey_ = nearestKeyIdx;
                         timelineDraggingKey_ = true;
+                        timelineIsPlaying_ = false;
                         rigPreview_.SetPaused(true);
-                        rigPreview_.SetCurrentTime(
-                            clip.channels[timelineSelectedChannel_].keys[timelineSelectedKey_].time);
+                        rigPreview_.SetCurrentTime(ch.keys[nearestKeyIdx].time);
                     }
                     else
                     {
+                        float clickedTime =
+                            std::clamp((mouse.x - canvasPos.x - trackHeaderWidth) / canvasTimeWidth, 0.0f, 1.0f) * duration;
+                        if (timelineSnapToFrames_)
+                        {
+                            clickedTime = std::round(clickedTime * fps) / fps;
+                        }
+                        timelineIsPlaying_ = false;
                         rigPreview_.SetPaused(true);
                         rigPreview_.SetCurrentTime(clickedTime);
+
+                        // Double click inserts keyframe!
                         if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
                         {
-                            FEditableRigChannel& channel = clip.channels[timelineSelectedChannel_];
-                            channel.keys.push_back({clickedTime, sampleChannel(channel, clickedTime)});
-                            timelineSelectedKey_ = static_cast<int>(channel.keys.size()) - 1;
+                            FEditableRigChannel& chMutable = clip.channels[clickedChannel];
+                            chMutable.keys.push_back({clickedTime, sampleChannel(chMutable, clickedTime)});
+                            timelineSelectedKey_ = static_cast<int>(chMutable.keys.size()) - 1;
                             edited = true;
                         }
                     }
@@ -8483,6 +11073,7 @@ namespace ScadLibrary
             }
         }
 
+        // Key dragging in time
         if (timelineDraggingKey_ && timelineSelectedChannel_ >= 0 && timelineSelectedKey_ >= 0)
         {
             if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
@@ -8490,10 +11081,12 @@ namespace ScadLibrary
                 FEditableRigChannel& channel = clip.channels[timelineSelectedChannel_];
                 if (timelineSelectedKey_ < static_cast<int>(channel.keys.size()))
                 {
-                    const float draggedTime =
-                        std::clamp((ImGui::GetIO().MousePos.x - canvasPos.x - labelWidth) / canvasTimeWidth, 0.0f,
-                                   1.0f) *
-                        duration;
+                    float draggedTime =
+                        std::clamp((ImGui::GetIO().MousePos.x - canvasPos.x - trackHeaderWidth) / canvasTimeWidth, 0.0f, 1.0f) * duration;
+                    if (timelineSnapToFrames_)
+                    {
+                        draggedTime = std::round(draggedTime * fps) / fps;
+                    }
                     channel.keys[timelineSelectedKey_].time = draggedTime;
                     rigPreview_.SetCurrentTime(draggedTime);
                     edited = true;
@@ -8504,56 +11097,133 @@ namespace ScadLibrary
                 timelineDraggingKey_ = false;
             }
         }
+
         ImGui::EndChild();
 
-        if (timelineSelectedChannel_ >= 0)
+        // ==========================================
+        // 3. BOTTOM KEYFRAME INSPECTOR / DETAILS BAR
+        // ==========================================
+        ImGui::SetCursorPosY(ImGui::GetWindowHeight() - detailHeight - 4.0f);
+        if (timelineSelectedChannel_ >= 0 && timelineSelectedChannel_ < static_cast<int>(clip.channels.size()) &&
+            timelineSelectedKey_ >= 0 &&
+            timelineSelectedKey_ < static_cast<int>(clip.channels[timelineSelectedChannel_].keys.size()))
         {
             FEditableRigChannel& channel = clip.channels[timelineSelectedChannel_];
-            ImGui::Text("%s / %s", rigPreview_.Asset().bones[channel.bone].name.c_str(),
-                        FCharacterWorkbench::ChannelName(channel.type));
-            ImGui::SameLine();
-            if (timelineSelectedKey_ >= 0 && timelineSelectedKey_ < static_cast<int>(channel.keys.size()))
+            FEditableRigKey& key = channel.keys[timelineSelectedKey_];
+
+            BeginCard("##timeline_inspector_card", detailHeight);
+
+            // Row 1: Target Chips & Time Step
+            const std::string boneName = (channel.bone >= 0 && channel.bone < static_cast<int>(rigPreview_.Asset().bones.size()))
+                ? rigPreview_.Asset().bones[channel.bone].name : "bone";
+            DrawTagChip(boneName.c_str(), NextUI::Theme::Color(NextUI::Theme::EColor::Blue), "当前骨骼");
+            ImGui::SameLine(0.0f, 4.0f);
+            DrawTagChip(FCharacterWorkbench::ChannelName(channel.type),
+                        channel.type == EEditableRigChannel::Position ? ImVec4(0.9f, 0.3f, 0.3f, 1.0f)
+                        : (channel.type == EEditableRigChannel::Rotation ? ImVec4(0.2f, 0.8f, 0.4f, 1.0f)
+                                                                         : ImVec4(0.3f, 0.6f, 0.9f, 1.0f)),
+                        "当前属性轨道");
+            ImGui::SameLine(0.0f, 4.0f);
+            DrawTagChip(fmt::format("#{} / {}", timelineSelectedKey_ + 1, channel.keys.size()).c_str(),
+                        NextUI::Theme::Color(NextUI::Theme::EColor::Accent), "关键帧序号");
+
+            ImGui::SameLine(0.0f, 12.0f);
+            ImGui::SetNextItemWidth(100.0f);
+            if (ImGui::DragFloat("时间##sel_key_time", &key.time, 0.005f, 0.0f, std::max(clip.duration + 1.0f, 1.0f), "%.3f s"))
             {
-                ImGui::TextDisabled("关键帧 %d", timelineSelectedKey_ + 1);
-                FEditableRigKey& key = channel.keys[timelineSelectedKey_];
-                ImGui::SetNextItemWidth(112.0f);
-                if (ImGui::DragFloat("时间##selected_key", &key.time, 0.005f, 0.0f,
-                                     std::max(clip.duration + 2.0f, 2.0f), "%.3f s"))
+                if (timelineSnapToFrames_) key.time = std::round(key.time * fps) / fps;
+                rigPreview_.SetPaused(true);
+                rigPreview_.SetCurrentTime(key.time);
+                edited = true;
+            }
+
+            ImGui::SameLine(0.0f, 8.0f);
+            ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::Danger, 0.22f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::Danger, 0.85f));
+            if (ImGui::SmallButton(ICON_FA_TRASH " 删除关键帧"))
+            {
+                channel.keys.erase(channel.keys.begin() + timelineSelectedKey_);
+                timelineSelectedKey_ = -1;
+                edited = true;
+            }
+            ImGui::PopStyleColor(2);
+
+            // Row 2: 3-Axis RGB Styled Value Drag
+            const float speed = channel.type == EEditableRigChannel::Rotation ? 0.25f : 0.005f;
+            const char* valFormat = channel.type == EEditableRigChannel::Rotation ? "%.1f°" : "%.3f";
+            float vals[3] = { key.value.x, key.value.y, key.value.z };
+            if (Draw3AxisFloatDrag("关键帧数值", vals, speed, 0.0f, 0.0f, valFormat))
+            {
+                key.value = glm::vec3(vals[0], vals[1], vals[2]);
+                edited = true;
+            }
+
+            EndCard();
+        }
+        else if (timelineSelectedChannel_ >= 0 && timelineSelectedChannel_ < static_cast<int>(clip.channels.size()))
+        {
+            FEditableRigChannel& channel = clip.channels[timelineSelectedChannel_];
+            BeginCard("##timeline_inspector_track_card", detailHeight);
+
+            // Row 1: Info & Actions
+            const std::string boneName = (channel.bone >= 0 && channel.bone < static_cast<int>(rigPreview_.Asset().bones.size()))
+                ? rigPreview_.Asset().bones[channel.bone].name : "bone";
+            DrawTagChip(boneName.c_str(), NextUI::Theme::Color(NextUI::Theme::EColor::Blue), "当前骨骼");
+            ImGui::SameLine(0.0f, 4.0f);
+            DrawTagChip(FCharacterWorkbench::ChannelName(channel.type),
+                        channel.type == EEditableRigChannel::Position ? ImVec4(0.9f, 0.3f, 0.3f, 1.0f)
+                        : (channel.type == EEditableRigChannel::Rotation ? ImVec4(0.2f, 0.8f, 0.4f, 1.0f)
+                                                                         : ImVec4(0.3f, 0.6f, 0.9f, 1.0f)),
+                        "属性轨道");
+            ImGui::SameLine(0.0f, 4.0f);
+            DrawTagChip(fmt::format("共 {} 关键帧", channel.keys.size()).c_str(),
+                        NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceHover));
+
+            ImGui::SameLine(0.0f, 12.0f);
+            if (ImGui::SmallButton(ICON_FA_PLUS " 在当前游标打帧"))
+            {
+                channel.keys.push_back({rigPreview_.CurrentTime(), sampleChannel(channel, rigPreview_.CurrentTime())});
+                timelineSelectedKey_ = static_cast<int>(channel.keys.size()) - 1;
+                edited = true;
+            }
+
+            ImGui::SameLine(0.0f, 8.0f);
+            ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::Danger, 0.22f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::Danger, 0.85f));
+            if (ImGui::SmallButton(ICON_FA_TRASH " 删除整条轨道"))
+            {
+                clip.channels.erase(clip.channels.begin() + timelineSelectedChannel_);
+                timelineSelectedChannel_ = -1;
+                timelineSelectedKey_ = -1;
+                edited = true;
+            }
+            ImGui::PopStyleColor(2);
+
+            // Row 2: 3-Axis RGB Styled Value Drag (Live sample at currentTime!)
+            const float speed = channel.type == EEditableRigChannel::Rotation ? 0.25f : 0.005f;
+            const char* valFormat = channel.type == EEditableRigChannel::Rotation ? "%.1f°" : "%.3f";
+            glm::vec3 liveVal = sampleChannel(channel, currentTime);
+            float vals[3] = { liveVal.x, liveVal.y, liveVal.z };
+            if (Draw3AxisFloatDrag("当前游标数值", vals, speed, 0.0f, 0.0f, valFormat))
+            {
+                if (timelineAutoKey_)
                 {
-                    rigPreview_.SetPaused(true);
-                    rigPreview_.SetCurrentTime(key.time);
-                    edited = true;
-                }
-                ImGui::SameLine();
-                if (ImGui::SmallButton(ICON_FA_TRASH " 删除关键帧"))
-                {
-                    channel.keys.erase(channel.keys.begin() + timelineSelectedKey_);
-                    timelineSelectedKey_ = -1;
-                    edited = true;
-                }
-                const float dragSpeed = channel.type == EEditableRigChannel::Rotation ? 0.25f : 0.005f;
-                const char* format = channel.type == EEditableRigChannel::Rotation ? "%.2f deg" : "%.4f";
-                if (timelineSelectedKey_ >= 0 &&
-                    ImGui::DragFloat3("值##selected_key", &channel.keys[timelineSelectedKey_].value.x, dragSpeed, 0.0f,
-                                      0.0f, format))
-                {
+                    UpsertGizmoKey(channel.type, glm::vec3(vals[0], vals[1], vals[2]));
                     edited = true;
                 }
             }
-            else
-            {
-                ImGui::TextDisabled("点击菱形关键帧；双击轨道空白处创建");
-                ImGui::SameLine();
-                if (ImGui::SmallButton(ICON_FA_TRASH " 删除轨道"))
-                {
-                    clip.channels.erase(clip.channels.begin() + timelineSelectedChannel_);
-                    timelineSelectedChannel_ = -1;
-                    timelineSelectedKey_ = -1;
-                    edited = true;
-                }
-            }
+
+            EndCard();
+        }
+        else
+        {
+            // Nothing selected: Shortcut helper bar
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::TextDim),
+                               ICON_FA_KEYBOARD "  快捷操作: [Space] 播放/暂停  ·  [← / →] 单帧步进  ·  [Home / End] 起止跳转  ·  [Del] 删除帧  ·  [双击轨道] 快速插帧  ·  拖动视口 Gizmo 实时更新关键帧");
         }
 
+        // Post-edit commit & selection sync
         if (edited)
         {
             float selectedTime = -1.0f;
@@ -8580,9 +11250,9 @@ namespace ScadLibrary
                 }
             }
         }
-        ImGui::EndChild();
+
         ImGui::End();
-        ImGui::PopStyleVar(2);
+        ImGui::PopStyleVar(3);
     }
 
     void ScadLibraryInterface::DrawEquipmentEditor()

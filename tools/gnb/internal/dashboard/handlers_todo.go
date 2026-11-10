@@ -31,7 +31,7 @@ func (s *Server) handleTodoPanel(w http.ResponseWriter, r *http.Request) {
 		httpError(w, err)
 		return
 	}
-	s.render(w, "todo_panel", vm)
+	s.render(w, r, "todo_panel", vm)
 }
 
 func (s *Server) handleTodoCleanup(w http.ResponseWriter, r *http.Request) {
@@ -80,7 +80,7 @@ func (s *Server) renderTaskDetail(w http.ResponseWriter, r *http.Request, editin
 		BlockerBody: bBody, HasBlocker: hasB,
 		EditingSpec: editingSpec,
 	}
-	s.render(w, "task_detail", vm)
+	s.render(w, r, "task_detail", vm)
 }
 
 func (s *Server) handleTaskAdd(w http.ResponseWriter, r *http.Request) {
@@ -166,7 +166,7 @@ func (s *Server) handleTaskEditForm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "只能编辑未启动的任务", http.StatusBadRequest)
 		return
 	}
-	s.render(w, "task_edit_form", *t)
+	s.render(w, r, "task_edit_form", *t)
 }
 
 func (s *Server) handleTaskEdit(w http.ResponseWriter, r *http.Request) {
@@ -432,5 +432,5 @@ func (s *Server) respondTodoPanel(w http.ResponseWriter, r *http.Request) {
 		httpError(w, err)
 		return
 	}
-	s.render(w, "todo_panel", vm)
+	s.render(w, r, "todo_panel", vm)
 }

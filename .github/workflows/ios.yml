@@ -6,6 +6,10 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   build:
     runs-on: macos-latest
@@ -14,22 +18,9 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: '1.23.x'
-      - name: Cache key
-        id: gnb
-        run: echo "key=$(./gnb.sh info --bincache-key)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache/restore@v6
-        id: cache-vcpkg-restore
+      - name: Configure vcpkg binary cache
+        uses: ./.github/actions/vcpkg-cache
         with:
-          path: |
-            .vcpkg
-            .vcpkg_bincache
-          key: ${{ steps.gnb.outputs.key }}-ios-device
+          token: ${{ secrets.GITHUB_TOKEN }}
       - run: ./gnb.sh setup --skip-paks
       - run: ./gnb.sh ios build
-      - uses: actions/cache/save@v6
-        if: steps.cache-vcpkg-restore.outputs.cache-hit != 'true'
-        with:
-          path: |
-            .vcpkg
-            .vcpkg_bincache
-          key: ${{ steps.gnb.outputs.key }}-ios-device

@@ -84,6 +84,18 @@ namespace NextCVar
         GK_CVAR_UINT("r.maxBounces", settings, MaxNumberOfBounces, 10, ECVarFlags::Archive, "Maximum ray bounce count");
         GK_CVAR_BOOL("r.gtao.enable", settings, GTAOEnable, true, ECVarFlags::Archive, "Enable half-resolution GTAO for SoftwareModernNoAmbient sky lighting");
         GK_CVAR_INT("r.gtao.quality", settings, GTAOQuality, 1, ECVarFlags::Archive, "GTAO sampling quality (0=low 16 taps,1=medium 36 taps,2=high 64 taps,3=ultra 120 taps)");
+        GK_CVAR_FLOAT_RANGE("r.lod.baseThreshold", settings, LodBaseThreshold, 64.0f, ECVarFlags::Archive,
+                            "Projected pixel extent at or above which a mesh draws at LOD0; each further level halves it (0 = always LOD0)",
+                            0.0, 4096.0);
+        GK_CVAR_FLOAT_RANGE("r.lod.shadowThresholdScale", settings, LodShadowThresholdScale, 1.0f,
+                            ECVarFlags::Archive,
+                            "Multiplier on r.lod.baseThreshold for sun shadow cascades (1 = same as the main view)",
+                            0.0, 64.0);
+        GK_CVAR_BOOL("r.lod.rayTracing", settings, RayTracingLod, true, ECVarFlags::Archive,
+                     "Hardware ray tracing uses the LOD the main view picked per instance (0 = always trace LOD0)");
+        GK_CVAR_UINT_RANGE("r.lod.rayTracingBias", settings, RayTracingLodBias, 0, ECVarFlags::Archive,
+                           "Extra LOD levels the ray-traced proxy drops below the raster choice (0 = trace what is drawn)",
+                           0, Assets::MAX_MODEL_LOD_COUNT - 1);
         GK_CVAR_FLOAT("r.gtao.radius", settings, GTAORadius, 1.0f, ECVarFlags::Archive, "GTAO world-space sampling radius");
         GK_CVAR_FLOAT("r.gtao.strength", settings, GTAOStrength, 5.0f, ECVarFlags::Archive, "Master sky-occlusion strength: scales GTAO sky darkening (1=natural, lower=lighter)");
         GK_CVAR_FLOAT("r.gtao.thickness", settings, GTAOThickness, 0.5f, ECVarFlags::Archive, "GTAO depth-discontinuity thickness heuristic in world units");
@@ -95,6 +107,7 @@ namespace NextCVar
         GK_CVAR_INT_RANGE("r.lightGrid.cascades", settings, LightGridCascadeCount, 3, ECVarFlags::Archive, "Cascaded world-space light grid cascade count (0 = disabled, fall back to the global light CDF)", 0, 3);
         GK_CVAR_FLOAT_RANGE("r.lightGrid.cellSize", settings, LightGridBaseCellSize, 2.0f, ECVarFlags::Archive, "Cascade 0 cell size in world units; each further cascade is 4x coarser", 0.25, 32.0);
         GK_CVAR_FLOAT("r.lightGrid.cullThreshold", settings, LightGridCullThreshold, 1.0e-4f, ECVarFlags::Archive, "Minimum contribution a light must reach in a cell to be stored there");
+        GK_CVAR_BOOL("r.atmosphere.enable", settings, AtmosphereEnable, true, ECVarFlags::Archive, "Master switch for the procedural atmosphere; off falls every consumer back to the IBL sky");
         GK_CVAR_FLOAT_RANGE("r.atmosphere.skyViewLutScale", settings, AtmosphereSkyViewLutScale, 1.0f, ECVarFlags::Archive, "Sky-view LUT resolution scale", 0.25, 2.0);
         GK_CVAR_INT_RANGE("r.atmosphere.debugMode", settings, AtmosphereDebugMode, 0, ECVarFlags::None, "Atmosphere debug mode (0=off,1=in-scatter,2=transmittance,3=sky LUT)", 0, 3);
         GK_CVAR_UINT_CB("r.upscaler.qualityMode", settings, SuperResolution, 5, ECVarFlags::Archive, "Upscaler quality mode (0=Quality,1=Balanced,2=Performance,3=Ultra Performance,4=Native/DLAA,5=Auto)", std::bind(ApplyUpscalerIfPossible, engine));
@@ -110,12 +123,21 @@ namespace NextCVar
         GK_CVAR_BOOL_CB("r.frameGeneration", settings, FrameGeneration, false, ECVarFlags::Archive, "Enable frame generation for the selected upscaler type", std::bind(RequestSwapChainIfPossible, engine));
         GK_CVAR_UINT_CB("r.frameGeneration.multiplier", settings, FrameGenerationMultiplier, 2, ECVarFlags::Archive, "Frame generation multiplier (2-4 when supported)", std::bind(RequestSwapChainIfPossible, engine));
         GK_CVAR_UINT("r.frameGeneration.frameLimitFps", settings, FrameGenerationFrameLimitFps, 0, ECVarFlags::Archive, "Base frame-rate limit while frame generation is enabled (0=unlimited)");
+        GK_CVAR_BOOL("r.framePacing", settings, FramePacing, true, ECVarFlags::Archive, "Advance the simulation by the display period per presented frame instead of by the wall-clock loop period (vsync present modes only)");
+        GK_CVAR_BOOL("r.framePacing.limitBurst", settings, FramePacingLimitBurst, true, ECVarFlags::Archive, "Stop the frame loop from draining a burst of acquired swapchain images faster than the display can show them");
         GK_CVAR_UINT("r.upscaler.jitterFrames", settings, UpscalerJitterFrames, 16, ECVarFlags::Archive, "Fallback temporal upscaler projection jitter sequence length (clamped to 1-256)");
         GK_CVAR_BOOL("r.upscaler.jitterInvertY", settings, UpscalerJitterInvertY, false, ECVarFlags::Archive, "Invert temporal upscaler projection jitter Y for diagnostics");
         GK_CVAR_BOOL("r.checkerboardRendering", settings, CheckerboardRendering, false, ECVarFlags::Archive, "Shade one checkerboard pixel parity per frame and reconstruct the missing parity before temporal upscaling");
         GK_CVAR_BOOL("r.tracing.exitAfterFirst", settings, ExitAfterFirst, false, ECVarFlags::Archive, "Terminate tracing after the first non-dielectric surface hit");
         GK_CVAR_FLOAT("r.heatmapScale", settings, HeatmapScale, 1.0f, ECVarFlags::Archive, "Profiler heatmap scale");
         GK_CVAR_FLOAT("r.paperWhiteNit", settings, PaperWhiteNit, 600.0f, ECVarFlags::Archive, "Paper white nit");
+        GK_CVAR_BOOL("r.exposure.auto", settings, AutoExposure, false, ECVarFlags::Archive, "Adapt display exposure to scene luminance");
+        GK_CVAR_FLOAT_RANGE("r.exposure.target", settings, AutoExposureTargetLuminance, 0.18f, ECVarFlags::Archive, "Auto exposure middle-gray luminance", 0.01, 0.8);
+        GK_CVAR_FLOAT_RANGE("r.exposure.minEV", settings, AutoExposureMinEV, -2.0f, ECVarFlags::Archive, "Minimum auto exposure adjustment in stops", -8.0, 8.0);
+        GK_CVAR_FLOAT_RANGE("r.exposure.maxEV", settings, AutoExposureMaxEV, 4.0f, ECVarFlags::Archive, "Maximum auto exposure adjustment in stops", -8.0, 8.0);
+        GK_CVAR_FLOAT_RANGE("r.exposure.speedToDark", settings, AutoExposureSpeedToDark, 1.0f, ECVarFlags::Archive, "Adaptation rate when entering darkness (1/s)", 0.05, 20.0);
+        GK_CVAR_FLOAT_RANGE("r.exposure.speedToLight", settings, AutoExposureSpeedToLight, 3.0f, ECVarFlags::Archive, "Adaptation rate when entering light (1/s)", 0.05, 20.0);
+        GK_CVAR_FLOAT_RANGE("r.exposure.compensationEV", settings, AutoExposureCompensationEV, 0.0f, ECVarFlags::Archive, "Auto exposure brightness bias in stops", -4.0, 4.0);
         GK_CVAR_BOOL("ui.showOverlay", settings, ShowOverlay, true, ECVarFlags::Archive, "Show overlay");
         GK_CVAR_BOOL("sys.tickPhysics", settings, TickPhysics, true, ECVarFlags::Archive, "Tick physics system");
         GK_CVAR_BOOL("sys.tickAnimation", settings, TickAnimation, true, ECVarFlags::Archive, "Tick animation system");
@@ -139,6 +161,7 @@ namespace NextCVar
         GK_CVAR_UINT_RANGE("r.ambientCube.graceFrames", settings, AmbientCubeGraceFrames, 30, ECVarFlags::Archive, "Initial candidate residency grace period", 1, 600);
         GK_CVAR_FLOAT_RANGE("r.ambientCube.hitMarkTileRatio", settings, AmbientCubeHitMarkTileRatio, 0.25f, ECVarFlags::Archive, "Sparse query hit marking ratio", 0.01, 1.0);
         GK_CVAR_INT_RANGE("r.ambientCube.residencyDebug", settings, AmbientCubeResidencyDebug, 0, ECVarFlags::None, "Ambient residency debug (0=off,1=hit age,2=resident state)", 0, 2);
+        GK_CVAR_BOOL("r.ambientCube.diskCache", settings, AmbientCubeDiskCache, true, ECVarFlags::Archive, "Reuse the ambient bake from disk when the scene structure is unchanged; disable while iterating on the bake shaders");
         GK_CVAR_FLOAT_RANGE("r.gi.indirectIntensity", settings, IndirectIntensity, 1.0f, ECVarFlags::Archive, "Multiplier on the indirect term only (SHARC cache hit + ambient cube path terminal); direct sun/sky are untouched, so raising it strengthens bounce light without raising contrast", 0.0, 8.0);
         GK_CVAR_FLOAT_RANGE("r.gi.multiBounceIntensity", settings, MultiBounceIntensity, 1.0f, ECVarFlags::Archive, "Weight per bounce order past the first in the SHARC cache (order n scales by this^(n-1)); 0 leaves only once-bounced direct light, 1 is physical. PathTracing only", 0.0, 4.0);
         GK_CVAR_BOOL("sys.hdrTextureStreaming", settings, StreamHDRTextures, true, ECVarFlags::Archive, "Keep inactive HDR environment textures at their lowest mip and promote the active sky on demand");
@@ -174,6 +197,10 @@ namespace NextCVar
         GK_CVAR_BOOL("show.debugSkeleton", showFlags, ShowDebugSkeleton, false, ECVarFlags::None, "Show debug skeleton");
         GK_CVAR_BOOL("show.grid", showFlags, ShowGrid, true, ECVarFlags::None, "Show grid");
         GK_CVAR_BOOL("show.wireframe", showFlags, ShowWireframe, false, ECVarFlags::None, "Show wireframe");
+        GK_CVAR_BOOL("show.wireframe.xray", settings, WireframeXRay, false, ECVarFlags::Archive,
+                     "Draw wireframe edges through geometry instead of letting scene depth occlude them");
+        GK_CVAR_UINT("show.wireframe.colorMode", settings, WireframeColorMode, 0, ECVarFlags::Archive,
+                     "Wireframe colouring (0=uniform, 1=tint by LOD level)");
     }
 
 }

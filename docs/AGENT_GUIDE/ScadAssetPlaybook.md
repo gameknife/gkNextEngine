@@ -5,6 +5,8 @@
 语言面以 [SCADLoader.md](SCADLoader.md) 为准，地形以 [ScadTerrain.md](ScadTerrain.md) 为准；
 本文只讲**流程与经验**，与上述两文冲突时以它们为准。
 
+**真实地点的撤离地图**还必须遵守[世界派遣与地理关卡：新地点初始地图强制规则](../projects/nextdayz/nextdayz-world-map-design.md#新地点初始地图的强制规则)，按 skill `nextdayz-geomap`（`.agents/skills/nextdayz-geomap/SKILL.md`）执行：DEM／道路／建成区提供骨架，每个建成区按当地真实聚落形态展开（地块各自找平、间隔 12 m），建筑用该地域专属 kit，植被用土地覆盖多边形和行道树画出当地林相与田制；建筑预算和战术布局仍由控制点决定。统一走 `gnb geo expedition`，禁止按 OSM 逐栋复刻和生成普通实体路板；用 `tools/nextdayz/geomap_shots.py` 的总览／鸟瞰／街景截图验收。
+
 ## 0. 开工前侦查（先读后写，10 分钟）
 
 1. 读 `AGENT_GUIDE/SCADLoader.md`；要做地形地图再读 `AGENT_GUIDE/ScadTerrain.md`。
@@ -53,6 +55,27 @@ function cw_rnd(s, m) = cw_sq(cw_sq(((s % 65521) + 65521) % 65521) + 11) % m;
 - 半透明可用：alpha 0.45~0.5 的薄板（0.02 厚）渲染成"网面"，铁丝网/购物车筐/电话亭玻璃
   用它效果好且不爆噪。alpha < 0.99 走透明 Dielectric 路径。
 
+### 表面与细节标准（kit_bohemia / kit_training / kit_coldwar 现行写法）
+
+- **所有表面走 kit 自己的 `<prefix>_m_*` 材质包装**，不再裸 `color()`：多孔材料（抹灰、砖、混凝土、
+  木板、帆布、土）`roughness=1` + 低对比 `gk_texture` 印花；只有漆、釉、玻璃、水、金属带高光。
+  墙体 / 屋面按种类分发（`cw_m_wall(kind, c)` / `cw_m_roof(kind, c)`），建筑只传种类不选印花。
+- **大面积漆面不要用 `"chipped"`**：它的亮边掉漆点在车身、柜体、油桶上读作"斑点狗"。kit_coldwar
+  的 `cw_tex_paint()`（kit 内的纹理节点图）只给漆面加细微斑驳、积灰、流痕和零星深色锈点；
+  `"chipped"` 留给枪械、头盔这类小件。
+- **瓦楞铁皮 / 屋面用 `roughness=1`、低金属度、少量锈**：锈是电介质，粗糙度不够时会在掠射角把
+  天空反成一片片粉白斑。
+- **玻璃不透明高光**（`cw_m_glass`），窗洞里放窗扇变体（完好 / 碎一扇 / 钉木板 / 只剩框 / 拉窗帘），
+  碎窗下方的室内地面散落碎玻璃。
+- **可进入外壳带室内层**：石灰墙皮 + 齐腰油漆墙裙 + 顶棚 + 1 cm 地面装修（油地毡 / 木板 / 方砖 /
+  水泥）。地面装修只有 1 cm，家具与刷新点仍按 z=0 摆放，宿主 `nd_*` 组合件不用改。
+- **细节要讲故事，而不是平均撒小方块**：医院门口的检疫牌、担架、氧气瓶和墙边排着的尸袋，窗上写着
+  SOS 的床单；军营的消防板、晾衣绳、吸烟点；车顶捆着行李、车门敞开的弃车；被搬空的工具墙。
+  这些都放在门洞通道之外（碰撞按材质桶生成，横跨门洞的装饰会挡路）。
+- 三角面不必过省（kit_coldwar 升级后 Loket 草稿 +6%、训练场 +9%），但每张图的 parse 时间仍要
+  守住（见 `nextdayz-geomap` skill）。改完跑 `gnb build ScadCatalog` + `gnb scad catalog`，
+  确认该 kit 所有模块 0 warning。
+
 ### 几何技巧与反例
 
 - 坡屋顶用验证过的 polyhedron 模板（`cw_part_roof`：双坡/四坡/攒尖一个模块搞定），别手搓面序。
@@ -60,6 +83,14 @@ function cw_rnd(s, m) = cw_sq(cw_sq(((s % 65521) + 65521) % 65521) + 11) % m;
 - `difference` 只准出现在零件内部（女儿墙、轮胎、钢盔、井圈）；布局层一律 union。
 - **交叉杆件（拒马类）反例**：以原点为中心 rotate 建模会有一半埋进地下，必须整体
   `translate([0,0,h])` 抬到交点离地高度。写完在心里过一遍"最低点在哪"。
+- **`sphere` / `circle` 的半径必须具名写 `r = x`**：本 evaluator 只按名字解析半径，
+  `sphere(0.3)` 这种位置写法会静默退化成默认半径 1（catalog 不报错，footprint/zMin 会突然变大——
+  kit_astro 首版 65 处球体全部因此放大，是靠 catalog 的 zMin 异常抓出来的）。`cube`/`square` 的
+  位置尺寸参数正常，`cylinder` 也一律写 `h = / r = / r1 = / r2 =`。
+- **透明材质慎用**：`alpha < 0.99` 走透明 Dielectric，在 SCAD 默认的暗天空下玻璃球/水柱/激光束
+  会渲染成黑球黑线；玩具风格的玻璃、泡泡、光束用不透明高光色（roughness 0.05）表达更稳。
+- **PBR 金属在暗天空下发黑**：metalness 1.0 的金币/金属件只反射环境，默认暗天空里就是黑色；
+  要保留固有色就用半金属（metalness 0.5~0.6、roughness 0.3~0.4），见 `kit_astro` 的 `ab_gold`/`ab_metal`。
 
 #### 倾斜支腿的符号（塔/桁架/A 字腿，最容易系统性搞反）
 
@@ -197,6 +228,7 @@ gnb shot --scene assets/scad/xxx.scad              # 3. 截图肉眼验收（读
 - `ter_scatter` 按生物群系过滤：树只长缓坡草地
   `[0.5, 40, 26, 3, ["grass", "grass_dark"]]`（海拔带 / 坡度≤26° / 避水 3m）；
   岩块只在 `["rock", "rock_high"]`；枯草带放灌木枯树。
+- SCAD 调用链采用动态变量作用域：向 `ter_scatter` 子层传地域类型时，外层用 `flora` 等独立变量名，避免被组合子的 `region` 区域形参遮蔽。0 warning 也可能出现错用其他地域植被的逻辑错误，需同时检查实际植被类型和实景。
 - **密度基准：1km² 约 700~900 棵**（首版 320 棵太稀，一眼荒芜）。树要放大：
   s = 1.5~2.9（8~17m 高），showcase 用的 s=1 在大地图上是灌木。
 - 河谷两岸单独补一层疏林（渡河接近路线的掩体），北坡补密林带。

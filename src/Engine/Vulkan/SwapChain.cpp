@@ -15,8 +15,6 @@
 
 namespace Vulkan {
 
-float SwapChain::uiContentScale_ = 1.0f;
-
 namespace
 {
     VkCompositeAlphaFlagBitsKHR ChooseCompositeAlpha(VkCompositeAlphaFlagsKHR supported)
@@ -100,26 +98,8 @@ SwapChain::SwapChain(const class Device& device, const VkPresentModeKHR presentM
 
     const auto surfaceFormat = ChooseSwapSurfaceFormat(details.Formats, forceSDR);
     const auto actualPresentMode = ChooseSwapPresentMode(details.PresentModes, presentMode);
-    auto extent = ChooseSwapExtent(window, details.Capabilities);
+    const VkExtent2D extent = ChooseSwapExtent(window, details.Capabilities);
     const auto imageCount = ChooseImageCount(details.Capabilities, actualPresentMode);
-
-#if ANDROID
-    float aspect = extent.width / static_cast<float>(extent.height);
-    if( aspect < 1.0 )
-    {
-        uiContentScale_ = 1280.f / float(extent.height);
-        
-        extent.height = 1280;
-        extent.width = floorf(1280 * aspect);
-    }
-    else
-    {
-        uiContentScale_ = 1280.f / float(extent.width);
-        
-        extent.height = 1280;
-        extent.width = floorf(1280 / aspect);
-    }
-#endif
     
     VkSwapchainCreateInfoKHR createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -183,8 +163,9 @@ SwapChain::SwapChain(const class Device& device, const VkPresentModeKHR presentM
     renderExtent_ = extent_;
     renderOffset_ = {0,0};
 
-    SPDLOG_INFO("Swap Chain format: {} ({}) colorSpace: {} ({}) outputMode: {} usage: 0x{:x} compositeAlpha: 0x{:x}"
-                " (vkCreateSwapchainKHR {:.2f}ms)",
+    SPDLOG_INFO("Swap Chain extent: {}x{} format: {} ({}) colorSpace: {} ({}) outputMode: {} usage: 0x{:x}"
+                " compositeAlpha: 0x{:x} (vkCreateSwapchainKHR {:.2f}ms)",
+                extent_.width, extent_.height,
                 FormatName(format_), static_cast<int>(format_),
                 ColorSpaceName(colorSpace_), static_cast<int>(colorSpace_),
                 static_cast<int>(outputMode_), imageUsage_,

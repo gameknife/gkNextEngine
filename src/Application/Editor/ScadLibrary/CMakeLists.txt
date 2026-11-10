@@ -4,9 +4,12 @@ file(GLOB_RECURSE scadLibrarySources CONFIGURE_DEPENDS
     "*.h"
 )
 
-add_executable(ScadLibrary
-    ${scadLibrarySources}
-    ${GK_DESKTOP_MAIN_SOURCE}
+# Reuse the editor's offscreen asset-preview provider for SCAD kit thumbnails.
+# ScadLibrary already links ScadLoader, so the shared renderer can evaluate
+# generated one-module preview sources without changing the kit authoring path.
+list(APPEND scadLibrarySources
+    "${CMAKE_CURRENT_SOURCE_DIR}/../Common/Preview/AssetThumbnailRenderer.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../Common/Preview/AssetThumbnailRenderer.hpp"
 )
 
 # Viewport picking uses Scene's CPU acceleration structure. ScadLibrary does
@@ -15,8 +18,12 @@ add_executable(ScadLibrary
 set(scadLibraryRuntimeModules ${GK_STANDARD_RUNTIME_MODULES})
 list(REMOVE_ITEM scadLibraryRuntimeModules NextPhysics)
 
-gk_configure_application(ScadLibrary MODULES
-    ${scadLibraryRuntimeModules}
-    ScadLoader
+gk_add_application(ScadLibrary
+    ICON ScadStudio
+    SOURCES ${scadLibrarySources}
+    MODULES
+        ${scadLibraryRuntimeModules}
+        ScadLoader
+        NextAI
+    LINK NextGameplay
 )
-target_link_libraries(ScadLibrary PRIVATE NextGameplay NextAI)

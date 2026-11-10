@@ -8,6 +8,7 @@
 #include "Core/EditorLayoutConstants.hpp"
 #include "Core/SceneSavePolicy.hpp"
 #include "EditorUtils.h"
+#include "EditorMain.h"
 
 #include <spdlog/spdlog.h>
 #include <SDL3/SDL_dialog.h>
@@ -20,9 +21,6 @@
 #include "Engine/Runtime/Interface/UserInterface.hpp"
 #include "Modules/DevTools/UiDevPanels.hpp"
 #include "Modules/SceneExport/FSceneSaver.h"
-#if GK_WITH_VITURE
-#include "EditorMain.h"
-#endif
 
 namespace Editor
 {
@@ -105,10 +103,26 @@ namespace Editor
         config.DrawMenuBar = [&]() -> float
         {
             float menuRight = ImGui::GetCursorScreenPos().x;
-            bool fileMenuOpen = ImGui::BeginMenu("File");
+            NextUI::Theme::FMainMenuGhostScope mainMenuStyle;
+            bool fileMenuOpen = mainMenuStyle.BeginMenu("File");
             menuRight = std::max(menuRight, ImGui::GetItemRectMax().x);
             if (fileMenuOpen)
             {
+                if (ctx.editor != nullptr)
+                {
+                    Editor::FPlaySession& play = ctx.editor->GetPlaySession();
+                    const bool canCreateProject = play.CanCreateProject();
+                    if (ImGui::MenuItem("New Game Project...", nullptr, false, canCreateProject))
+                    {
+                        play.OpenNewProjectDialog();
+                    }
+                    if (!canCreateProject && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                    {
+                        ImGui::SetTooltip("%s", play.NewProjectUnavailableReason().c_str());
+                    }
+                    ImGui::Separator();
+                }
+
                 if (ImGui::MenuItem("Open Scene...", "Ctrl+O"))
                 {
                     auto* dialogContext = new FOpenSceneDialogContext{&ui};
@@ -213,7 +227,7 @@ namespace Editor
                 ImGui::EndMenu();
             }
 
-            bool editMenuOpen = ImGui::BeginMenu("Edit");
+            bool editMenuOpen = mainMenuStyle.BeginMenu("Edit");
             menuRight = std::max(menuRight, ImGui::GetItemRectMax().x);
             if (editMenuOpen)
             {
@@ -248,7 +262,7 @@ namespace Editor
                 ImGui::EndMenu();
             }
 
-            bool viewMenuOpen = ImGui::BeginMenu("View");
+            bool viewMenuOpen = mainMenuStyle.BeginMenu("View");
             menuRight = std::max(menuRight, ImGui::GetItemRectMax().x);
             if (viewMenuOpen)
             {
@@ -298,7 +312,7 @@ namespace Editor
                 ImGui::EndMenu();
             }
 
-            bool toolsMenuOpen = ImGui::BeginMenu("Tools");
+            bool toolsMenuOpen = mainMenuStyle.BeginMenu("Tools");
             menuRight = std::max(menuRight, ImGui::GetItemRectMax().x);
             if (toolsMenuOpen)
             {
@@ -331,7 +345,7 @@ namespace Editor
             // `gnb`, and "Launch Renderer" is the Play button in the toolbar. A menu of
             // permanently greyed items reads as a broken feature.
 
-            bool windowsMenuOpen = ImGui::BeginMenu("Windows");
+            bool windowsMenuOpen = mainMenuStyle.BeginMenu("Windows");
             menuRight = std::max(menuRight, ImGui::GetItemRectMax().x);
             if (windowsMenuOpen)
             {
@@ -363,7 +377,7 @@ namespace Editor
                 ImGui::EndMenu();
             }
 
-            bool helpMenuOpen = ImGui::BeginMenu("Help");
+            bool helpMenuOpen = mainMenuStyle.BeginMenu("Help");
             menuRight = std::max(menuRight, ImGui::GetItemRectMax().x);
             if (helpMenuOpen)
             {

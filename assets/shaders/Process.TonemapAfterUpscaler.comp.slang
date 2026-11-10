@@ -23,6 +23,8 @@ struct PushConsts
     uint HDROutputMode;
     uint HDR;
     uint HasSky;
+    uint ExposurePadding;
+    uint64_t ExposureAddress;
 };
 
 [[vk::push_constant]]
@@ -86,8 +88,10 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     const float4 sourceColor = SampleBilinear(
         Bindless.GetStorageTexture<float4>(sourceIndex), sourceSize, uv);
 
+    const float exposure = pushConsts.ExposureAddress != 0
+        ? exp2(((float4*)pushConsts.ExposureAddress)[0].x) : 1.0f;
     const float3 displayColor = EncodeDisplayColor(
-        sourceColor.rgb,
+        sourceColor.rgb * exposure,
         pushConsts.PaperWhiteNit,
         pushConsts.HDR,
         pushConsts.HDROutputMode);

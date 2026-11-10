@@ -36,11 +36,11 @@ namespace Assets
     {
     public:
         static constexpr uint32_t kSunShadowCascadeCount = 4;
-        static constexpr uint32_t kSunShadowResolution = 1024;
+        static constexpr uint32_t kSunShadowResolution = SUN_SHADOW_RESOLUTION;
         static constexpr uint32_t kRenderProxyCapacity = MAX_RENDER_PROXIES;
         static constexpr uint32_t kMaxTrianglesPerSection = 65535;
         static constexpr uint32_t kMaxLightCount = 1024;
-        static constexpr uint32_t kModelSectionStride = 10;
+        static constexpr uint32_t kModelSectionStride = MODEL_SECTION_STRIDE;
         static constexpr uint32_t kSoftMeshShaderDrawSlotCount = 1 + kSunShadowCascadeCount;
         static constexpr uint32_t kSunShadowCascadeMask = (1u << kSunShadowCascadeCount) - 1u;
         static constexpr uint32_t DecodeModelIndex(uint32_t encodedModelSection)
@@ -94,7 +94,8 @@ namespace Assets
         Scene& operator=(Scene&&) = delete;
 
         Scene(Vulkan::CommandPool& commandPool, bool supportRayTracing,
-              bool allocateAmbientResources = true, bool enableCpuAcceleration = true);
+              bool allocateAmbientResources = true, bool enableCpuAcceleration = true,
+              bool enablePhysics = true);
         ~Scene();
 
         void PostLoad(const std::vector<Skeleton>& skeletons);
@@ -163,6 +164,11 @@ namespace Assets
         int32_t FindNodeIdWithComponent(const std::string& componentType) const;
 
         const Assets::GPUDrivenStat& GetGpuDrivenStat() const { return gpuDrivenStat_; }
+        // Exponentially smoothed copy for display. The raw counters are read back without a fence,
+        // so even with the reset on the GPU timeline a sample can land mid-accumulation and read
+        // low; that is invisible in aggregate but makes an on-screen number twitch every frame.
+        // Measurement and assertions should keep using the raw stat above.
+        const Assets::GPUDrivenStat& GetSmoothedGpuDrivenStat() const { return smoothedGpuDrivenStat_; }
         const std::array<Assets::GPUDrivenStat, kSunShadowCascadeCount>& GetShadowGpuDrivenStats() const
         {
             return shadowGpuDrivenStats_;
@@ -196,6 +202,10 @@ namespace Assets
         void StartUpdateNodes();
         bool EndUpdateNodes();
         bool GPUUpdateNodes();
+        // Request the current node-proxy snapshot to be uploaded on this frame. This is for
+        // camera-relative presentation nodes that have already patched nodeProxiesBackup and
+        // must not wait for the normal asynchronous scene update handoff.
+        void RequestGpuNodeProxyUpload();
 
         Node* GetNode(const std::string& name);
         const Node* GetNode(const std::string& name) const;
@@ -273,6 +283,16 @@ namespace Assets
         uint32_t AmbientPoolBricksPerCascade() const { return poolBricksPerCascade_; }
         uint32_t AmbientActiveBrickCount(uint32_t cascade) const;
         void SetAmbientActiveBrickCounts(const std::vector<uint32_t>& counts);
+        // Set when the ambient bake was restored from the disk cache during RebuildMeshBuffer.
+        // SetScene() runs after that and would otherwise clear the freshly restored cube pool, so it
+        // consumes this flag to skip the clear pass exactly once.
+        void MarkAmbientCacheRestored() { ambientCacheRestored_ = true; }
+        bool ConsumeAmbientCacheRestored()
+        {
+            const bool restored = ambientCacheRestored_;
+            ambientCacheRestored_ = false;
+            return restored;
+        }
 
         TextureImage& ShadowMap() const;
         TextureImage& EnsureCpuShadowMap(Vulkan::CommandPool& commandPool);
@@ -351,6 +371,11 @@ namespace Assets
         std::unique_ptr<Vulkan::Buffer> softMeshShaderResourcesBuffer_;
         std::unique_ptr<Vulkan::DeviceMemory> softMeshShaderResourcesBufferMemory_;
 
+        // Per-proxy LOD of its TLAS instance (SoftMeshShaderResources::RayTracingLods). Scene-owned
+        // so it shares the proxy capacity and lifetime; the renderer's LOD select pass fills it.
+        std::unique_ptr<Vulkan::Buffer> rayTracingLodBuffer_;
+        std::unique_ptr<Vulkan::DeviceMemory> rayTracingLodBufferMemory_;
+
         std::unique_ptr<Vulkan::Buffer> ambientArenaBuffer_;
         std::unique_ptr<Vulkan::DeviceMemory> ambientArenaBufferMemory_;
 
@@ -413,6 +438,7 @@ namespace Assets
         // Set only by Reload(), i.e. a full level transition. Appending content or
         // ordinary scene edits must not schedule another full probe bake.
         bool levelVoxelBakePending_ = false;
+        bool ambientCacheRestored_ = false;
         bool sceneDirty_ = true;
         bool materialDirty_ = true;
         SceneRebuildProfile lastRebuildProfile_{};
@@ -440,8 +466,15 @@ namespace Assets
         std::unique_ptr<Assets::CPU::FCPUAccelerationStructure> cpuAccelerationStructure_;
         bool allocateAmbientResources_ = true;
         bool enableCpuAcceleration_ = true;
+        // Preview-only scenes are rendered but never simulated or queried for collisions. Keeping
+        // this separate from CPU acceleration lets thumbnails retain render proxies while
+        // skipping Jolt shape cooking, body creation and animation mobility setup.
+        bool enablePhysics_ = true;
 
         Assets::GPUDrivenStat gpuDrivenStat_;
+        Assets::GPUDrivenStat smoothedGpuDrivenStat_{};
+        bool smoothedGpuDrivenStatValid_ = false;
+        void UpdateSmoothedGpuDrivenStats();
         std::array<Assets::GPUDrivenStat, kSunShadowCascadeCount> shadowGpuDrivenStats_{};
         mutable Assets::GPUScene gpuScene_;
 

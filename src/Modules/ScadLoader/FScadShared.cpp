@@ -9,6 +9,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -198,7 +199,8 @@ namespace Assets::Scad
         return ScadReadBytes(fs::path(path).lexically_normal(), out);
     }
 
-    bool LoadScadProgram(const std::string& filename, ScadProgram& outProgram, std::string& outError)
+    bool LoadScadProgram(const std::string& filename, ScadProgram& outProgram, std::string& outError,
+                         std::vector<std::string>* outFiles)
     {
         fs::path mainPath = filename;
         if (mainPath.is_absolute())
@@ -246,6 +248,17 @@ namespace Assets::Scad
             else if (parsedDefinitions.count(key) != 0)
             {
                 continue;
+            }
+
+            if (outFiles)
+            {
+                const fs::path absolute =
+                    item.path.is_absolute() ? item.path : Utilities::FileHelper::GetRuntimeFilePath(item.path);
+                const std::string absoluteKey = absolute.lexically_normal().string();
+                if (std::find(outFiles->begin(), outFiles->end(), absoluteKey) == outFiles->end())
+                {
+                    outFiles->push_back(absoluteKey);
+                }
             }
 
             std::string source;
@@ -329,6 +342,11 @@ namespace Assets::Scad
         basis[2] = glm::dvec4(0.0, scale, 0.0, 0.0);
         basis[3] = glm::dvec4(0.0, 0.0, 0.0, 1.0);
         return basis;
+    }
+
+    std::string ScadPlacementTag(size_t sourceOffset)
+    {
+        return fmt::format("scad-placement:{}", sourceOffset);
     }
 
     void ScadLocalToEngineTRS(
@@ -422,5 +440,83 @@ namespace Assets::Scad
             out[i] = (len > 1e-12f) ? acc / len : fn;
         }
         return out;
+    }
+
+    // ------------------------------------------------------------------
+    // Node metadata (see FScadShared.h). The serialized form is produced by
+    // FScadLoader; these readers are what gameplay uses on the other side.
+    // ------------------------------------------------------------------
+
+    FMetadata ParseScadMetadata(std::string_view metadata)
+    {
+        FMetadata out;
+        size_t cursor = 0;
+        while (cursor < metadata.size())
+        {
+            const size_t end = std::min(metadata.find(';', cursor), metadata.size());
+            const std::string_view entry = metadata.substr(cursor, end - cursor);
+            cursor = end + 1;
+            const size_t equals = entry.find('=');
+            if (equals == std::string_view::npos || equals == 0)
+            {
+                continue;
+            }
+            out.emplace_back(std::string(entry.substr(0, equals)), std::string(entry.substr(equals + 1)));
+        }
+        return out;
+    }
+
+    namespace
+    {
+        const std::string* FindMetadataValue(const FMetadata& metadata, std::string_view key)
+        {
+            for (const auto& [entryKey, entryValue] : metadata)
+            {
+                if (entryKey == key)
+                {
+                    return &entryValue;
+                }
+            }
+            return nullptr;
+        }
+    }
+
+    double MetadataNumber(const FMetadata& metadata, std::string_view key, double fallback)
+    {
+        const std::string* value = FindMetadataValue(metadata, key);
+        if (!value || value->empty())
+        {
+            return fallback;
+        }
+        // The whole value must be the number: a vector parameter is spelled "1,2,3", and reading
+        // its first element as if it were a scalar would hide the authoring mistake.
+        char* parseEnd = nullptr;
+        const double parsed = std::strtod(value->c_str(), &parseEnd);
+        return (parseEnd && parseEnd != value->c_str() && *parseEnd == '\0' && std::isfinite(parsed)) ? parsed
+                                                                                                    : fallback;
+    }
+
+    bool MetadataBool(const FMetadata& metadata, std::string_view key, bool fallback)
+    {
+        const std::string* value = FindMetadataValue(metadata, key);
+        if (!value)
+        {
+            return fallback;
+        }
+        if (*value == "true" || *value == "1")
+        {
+            return true;
+        }
+        if (*value == "false" || *value == "0")
+        {
+            return false;
+        }
+        return fallback;
+    }
+
+    std::string MetadataString(const FMetadata& metadata, std::string_view key, std::string_view fallback)
+    {
+        const std::string* value = FindMetadataValue(metadata, key);
+        return value ? *value : std::string(fallback);
     }
 } // namespace Assets::Scad

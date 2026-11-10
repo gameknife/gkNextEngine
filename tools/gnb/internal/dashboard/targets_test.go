@@ -19,11 +19,12 @@ add_executable(
 `)
 	writeTargetFixture(t, filepath.Join(root, "nested", "targets.cmake"), `
 add_executable(AppOne duplicate.cpp)
+gk_add_application(AppApp SOURCES main.cpp)
 add_executable(Tool-Three tool.cpp)
 `)
 
 	got := discoverCMakeExecutables(root)
-	want := []string{"AppOne", "AppTwo", "Tool-Three"}
+	want := []string{"AppOne", "AppTwo", "AppApp", "Tool-Three"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("discoverCMakeExecutables() = %v, want %v", got, want)
 	}

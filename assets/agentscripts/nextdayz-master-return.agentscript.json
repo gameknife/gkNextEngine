@@ -1,0 +1,21 @@
+{
+  "name": "nextdayz-master-return",
+  "description": "Master sortie, part 2 (after nextdayz-master-leave, same Master). 'pilot' logs in again and returns to the field with what it carried, then extracts: the Master puts the gear in its storage and the lobby shows it.",
+  "target": "NextDayz",
+  "args": ["--disable-streamline", "--cvar", "nextdayz.net.mode client", "--cvar", "nextdayz.net.master http://127.0.0.1:7780",
+           "--cvar", "nextdayz.net.name pilot", "--cvar", "nextdayz.net.autoDeploy true"],
+  "defaults": { "waitFrames": 2, "stepTimeoutMs": 300000 },
+  "steps": [
+    { "type": "wait-until", "query": "game.sceneReady", "op": "eq", "value": true, "timeoutMs": 180000 },
+    { "type": "wait-until", "query": "game.netLobby", "op": "eq", "value": "playing", "timeoutMs": 300000 },
+    { "type": "wait-ms", "ms": 1500 },
+    { "type": "assert", "query": "game.netInventoryItems", "op": "ge", "value": 3 },
+    { "type": "assert", "query": "game.netInventoryFixes", "op": "eq", "value": 0 },
+    { "type": "cvar", "name": "nextdayz.validation.netExtract", "set": 1 },
+    { "type": "wait-until", "query": "game.netLobby", "op": "eq", "value": "profile", "timeoutMs": 40000 },
+    { "type": "assert", "query": "game.netExtractions", "op": "eq", "value": 1 },
+    { "type": "assert", "query": "game.netStorageStacks", "op": "ge", "value": 3 },
+    { "type": "screenshot", "out": "screenshots/nextdayz_master_lobby", "ui": true },
+    { "type": "quit" }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "id": "brotato3d",
+  "displayName": "Brotato 3D",
+  "icon": "assets/icons/Brotato3D.png",
+  "assembly": "brotato3d/Brotato3DCSharp.dll",
+  "project": "Scripts/Brotato3DCSharp.csproj",
+  "window": {
+    "title": "Brotato3DCSharp",
+    "width": 1920,
+    "height": 1080,
+    "forceSDR": true
+  },
+  "requiredModules": ["ScadLoader", "NextPhysics", "NextAudio"],
+  "initialScene": "",
+  "showFlags": {
+    "debugGraphicsPanel": false,
+    "debugPhysicsOverlay": false,
+    "overlay": false
+  },
+  "hotReload": false,
+  "compileManagedSources": false,
+
+  "_comment_hotReload": "Brotato owns thousands of node ids in managed pools. Reloading the assembly without a matching scene rebuild would leave a half-reloaded world, so this game deliberately keeps the restart-to-apply workflow.",
+  "_comment_initialScene": "Empty: the managed side picks its arena and calls Engine.RequestLoadScene itself."
+}

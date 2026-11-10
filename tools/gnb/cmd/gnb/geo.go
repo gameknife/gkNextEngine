@@ -149,7 +149,7 @@ func parseLatLon(s string) (float64, float64, error) {
 func newGeoCommand(ctx appContext) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "geo",
-		Short: "Generate a .scad city level from public elevation + OpenStreetMap data",
+		Short: tr("cli.geo.short"),
 		Long: "Staged, individually re-runnable steps (see\n" +
 			"docs/designs/geo-city-generation-design.md):\n" +
 			"  fetch  SRTM .hgt + Overpass JSON -> external/geocache/<tile>/\n" +
@@ -173,6 +173,30 @@ func newGeoCommand(ctx appContext) *cobra.Command {
 	cmd.AddCommand(newGeoMakeCommand(ctx))
 	cmd.AddCommand(newGeoGrowCommand(ctx))
 	cmd.AddCommand(newGeoPakCommand(ctx))
+	cmd.AddCommand(newGeoExpeditionCommand(ctx))
+	return cmd
+}
+
+func newGeoExpeditionCommand(ctx appContext) *cobra.Command {
+	var recipe string
+	var publish bool
+	cmd := &cobra.Command{
+		Use:   "expedition",
+		Short: "Build a playable abandoned-city SCAD kit map from cached geographic data",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path, report, err := geo.ExportExpedition(ctx.repoRoot, recipe, publish)
+			if err != nil {
+				return err
+			}
+			console.Info("expedition: %d tactical sites, %d kit buildings, %d safe spawns, %d rescue zones",
+				len(report.Sites), report.Buildings, len(report.Spawns), len(report.Extractions))
+			console.Info("%s", path)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&recipe, "recipe", "", "geographic game-map recipe JSON")
+	cmd.Flags().BoolVar(&publish, "publish", false, "freeze a new immutable version and register it for dispatch after playtest approval")
+	_ = cmd.MarkFlagRequired("recipe")
 	return cmd
 }
 
@@ -206,7 +230,7 @@ func newGeoFetchCommand(ctx appContext) *cobra.Command {
 	var f geoFlags
 	cmd := &cobra.Command{
 		Use:   "fetch",
-		Short: "Download the raw DEM and OSM data for every part (cached)",
+		Short: tr("cli.geo.fetch.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			m, err := f.mosaic()
 			if err != nil {
@@ -230,7 +254,7 @@ func newGeoBuildCommand(ctx appContext) *cobra.Command {
 	var f geoFlags
 	cmd := &cobra.Command{
 		Use:   "build",
-		Short: "Normalise the cached data into the IR and write every part's terrain.hmap",
+		Short: tr("cli.geo.build.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			m, err := f.mosaic()
 			if err != nil {
@@ -248,7 +272,7 @@ func newGeoScadCommand(ctx appContext) *cobra.Command {
 	var f geoFlags
 	cmd := &cobra.Command{
 		Use:   "scad",
-		Short: "Emit the .scad scene from the cached IRs + .hmaps",
+		Short: tr("cli.geo.scad.short"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			m, err := f.mosaic()
 			if err != nil {
@@ -265,7 +289,7 @@ func newGeoMakeCommand(ctx appContext) *cobra.Command {
 	var f geoFlags
 	cmd := &cobra.Command{
 		Use:   "make",
-		Short: "fetch + build + scad in one go",
+		Short: tr("cli.geo.gen.short"),
 		Example: "  gnb geo make --name hk_victoria --at 22.2855,114.1580 --size 1000 " +
 			"--profile hongkong\n" +
 			"  gnb geo make --name hk_victoria --at 22.2855,114.1580 --size 3000 " +
@@ -294,7 +318,7 @@ func newGeoGrowCommand(ctx appContext) *cobra.Command {
 	var f geoFlags
 	cmd := &cobra.Command{
 		Use:   "grow",
-		Short: "Resize an existing area, fetching only the parts it does not have",
+		Short: tr("cli.geo.grow.short"),
 		Example: "  gnb geo grow --name nyc_times_square --size 3000\n" +
 			"  gnb geo grow --name nyc_times_square --size 5000\n" +
 			"  gnb geo grow --name nyc_times_square --size 1000   # back down; nothing is deleted",
@@ -331,7 +355,7 @@ func newGeoPakCommand(ctx appContext) *cobra.Command {
 	var noCompress bool
 	cmd := &cobra.Command{
 		Use:   "pak",
-		Short: "Pack assets/geo into assets/paks/geo.pak",
+		Short: tr("cli.geo.pak.short"),
 		Long: "Packs every tile directory under assets/geo into one pak, keeping the\n" +
 			"entry names runtime-root-relative so a mounted pak resolves exactly the\n" +
 			"paths a loose checkout would (assets/geo/<tile>/<tile>.scad and friends).\n\n" +

@@ -25,6 +25,7 @@
 
 #include <glm/glm.hpp>
 
+#include "Engine/Assets/Loaders/ProceduralTexture.hpp"
 #include "Modules/ScadLoader/FScadTypes.h"
 
 namespace Assets::Scad
@@ -38,7 +39,25 @@ namespace Assets::Scad
         float roughness = 1.0f;
         float metalness = 0.0f;
         bool explicitParameters = false;
+        // gk_texture() print for this geometry (null = plain color). Shared, so
+        // copying properties through CSG and buckets stays cheap.
+        FProceduralTextureRef texture;
     };
+
+    // Folds a gk_texture() print into a color/surface bucket key: geometry with
+    // the same color but a different print must land in its own material slot.
+    inline uint64_t MixTextureIntoKey(uint64_t key, const ScadMaterialProperties& material)
+    {
+        if (!material.texture)
+        {
+            return key;
+        }
+        uint64_t h = material.texture->Hash() ^ (static_cast<uint64_t>(material.texture->scale * 4096.0f) << 1u);
+        h ^= h >> 33u;
+        h *= 0xff51afd7ed558ccdULL;
+        h ^= h >> 33u;
+        return key ^ (h | 1ULL);
+    }
 
     struct ColorBucket
     {
@@ -83,6 +102,7 @@ namespace Assets::Scad
         std::string materialName;
         std::vector<glm::dvec3> tris; // triangle soup (3N), local to the owning scene node
         bool faceted = false; // skip vertex-normal smoothing (terrain)
+        bool terrainDecal = false; // draped overlay (road ribbons): own node, no collision / raycast
         bool terrainWater = false; // translucent terrain water surface (split to a
                                    // dedicated node, no raycast visibility)
     };
@@ -93,6 +113,7 @@ namespace Assets::Scad
         uint64_t instanceId = 0;
         glm::dmat4 localTransform = glm::dmat4(1.0);
         int sourceLine = 0;
+        size_t sourceOffset = 0;
         std::vector<std::pair<std::string, Value>> parameters;
         glm::dvec4 callColor = glm::dvec4(0.78, 0.78, 0.78, 1.0);
         bool hasCallColor = false;
@@ -121,6 +142,11 @@ namespace Assets::Scad
         std::vector<SceneTerrain> terrains;
         int warningCount = 0;
         size_t triangleCount = 0;
+        // The text of the warnings that were also logged (each kind is logged a few
+        // times at most), capped at kMaxRecordedWarnings, so a host can show an author
+        // *which* module was unknown instead of only how many warnings there were.
+        std::vector<std::string> warnings;
+        static constexpr size_t kMaxRecordedWarnings = 32;
     };
 
     class ScadEvaluator

@@ -18,7 +18,7 @@ func newVisualStudioCommand(ctx appContext) *cobra.Command {
 	skipSetup := false
 	cmd := &cobra.Command{
 		Use:   "visualstudio",
-		Short: "Generate the Visual Studio solution and open it",
+		Short: tr("cli.vs.short"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if runtime.GOOS != "windows" {

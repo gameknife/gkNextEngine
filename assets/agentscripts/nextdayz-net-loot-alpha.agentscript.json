@@ -1,0 +1,24 @@
+{
+  "name": "nextdayz-net-loot-alpha",
+  "description": "Shared loot, survivor A. Needs `gnb ds --clients 0` (or any NextDayz server on 127.0.0.1:27015) and nextdayz-net-loot-bravo at the same time. A takes the loot nearest the safe point (granted), then drops a bandage that B must see.",
+  "target": "NextDayz",
+  "args": ["--disable-streamline", "--cvar", "nextdayz.net.mode client", "--cvar", "nextdayz.net.name alpha"],
+  "defaults": { "waitFrames": 2, "stepTimeoutMs": 120000 },
+  "steps": [
+    { "type": "wait-until", "query": "game.sceneReady", "op": "eq", "value": true, "timeoutMs": 180000 },
+    { "type": "wait-until", "query": "game.netOnline", "op": "eq", "value": true, "timeoutMs": 60000 },
+    { "type": "wait-until", "query": "game.netLootSynced", "op": "eq", "value": true, "timeoutMs": 30000 },
+    { "type": "wait-until", "query": "game.netVisibleRemotes", "op": "ge", "value": 1, "timeoutMs": 120000 },
+    { "type": "wait-ms", "ms": 2000 },
+    { "type": "cvar", "name": "nextdayz.validation.netTake", "set": 1 },
+    { "type": "wait-until", "query": "game.netTakeResult", "op": "ge", "value": 1, "timeoutMs": 20000 },
+    { "type": "assert", "query": "game.netTakeResult", "op": "eq", "value": 1 },
+    { "type": "wait-frames", "n": 10 },
+    { "type": "assert", "query": "game.netTakeTargetOnGround", "op": "eq", "value": false },
+    { "type": "cvar", "name": "nextdayz.validation.drop", "set": "bandage" },
+    { "type": "wait-until", "query": "game.lootPiles", "op": "ge", "value": 1, "timeoutMs": 10000 },
+    { "type": "screenshot", "out": "screenshots/nextdayz_net_loot_alpha", "ui": true },
+    { "type": "wait-ms", "ms": 15000 },
+    { "type": "quit" }
+  ]
+}

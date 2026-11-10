@@ -9,7 +9,7 @@ Always communicate with the user in Chinese (中文).
 
 ## Project Overview
 
-gkNextRenderer is a cross-platform 3D game engine built with modern C++20 and Vulkan, featuring hardware/software ray tracing, real-time global illumination, GPU-driven rendering, and GPU CSM shadows. The Engine core remains below the 50k LOC target (36,492 on 2026-08-08); all first-party Engine, Modules, Gameplay, applications and tests total 183,437 lines across 933 files. Treat these as snapshots and use `gnb loc` for the current count.
+gkNextRenderer is a cross-platform 3D game engine built with modern C++20 and Vulkan, featuring hardware/software ray tracing, real-time global illumination, GPU-driven rendering, and GPU CSM shadows. The Engine core follows a 50k LOC budget; use `gnb loc` for current counts instead of copying a dated snapshot into documentation.
 
 **Key Technologies:**
 - C++20/C11, Vulkan API, Slang shader language (ray query, not ray pipeline)
@@ -22,27 +22,42 @@ gkNextRenderer is a cross-platform 3D game engine built with modern C++20 and Vu
   gkNextStillBenchmark and gkNextMotionBenchmark (both under the `Render/gkNextBenchmark/` directory)
 - Editor: gkNextEditor (ImGui editor + node-based material editor + play-in-editor for C# games),
   ScadStudio, ScadLibrary
-- Game: MagicaLego, Brotato3D, KongLie3D, NextRA, NextDayz, NextTotalwar, BrickPlayer, CharacterDemo,
-  FlappyCpp/FlappyCSharp (`Game/Flappy/`), Brotato3DCSharp, DotNetSandbox, gkNextLauncher, TruckerDemo,
-  StudioSim, AirportSim, CitySolSim, NextWorldTravel, Voyage3D
+- Game: MagicaLego, Brotato3D, KongLie3D, NextRA, NextDayz, NextAstrobot, NextRaiden, NextTotalwar, BrickPlayer,
+  CharacterDemo, FlappyCpp/FlappyCSharp (`Game/Flappy/`), Brotato3DCSharp, DotNetSandbox, gkNextLauncher,
+  TruckerDemo, StudioSim, AirportSim, CitySolSim, NextWorldTravel, Voyage3D, ScadPlay
+  - `ScadPlay`（C#）是"边玩边让 agent 用自然语言搭关卡、改玩法"的游戏：关卡是 `.scad`，保存即原地重建；
+    玩法是 `projects/ScadPlay/Scripts` 的 C#（kit module 名 = C# 类），重新发布即热重载；两者都保留玩家和
+    机关状态。agent 读 `out/scadplay/context.json`、走 `scadplay` skill。见 [ScadPlay](docs/AGENT_GUIDE/ScadPlay.md)
   - `gkNextLauncher` 在同一个进程内加载/卸载任意 C# 游戏（Unity 的 Play 模型）；三个 C# 目标
-    与它共用 `ManagedGameHostInstance`，差异全部在 `assets/configs/games/*.game.json`。
-    `gkNextEditor` 用同一个 `ManagedGameSession` 实现 play-in-editor。CoreCLR 专属——
+    与它共用 `ManagedGameHostInstance`，差异全部在各自工程的 `projects/<Game>/<id>.game.json`。
+    `gkNextEditor` 用同一个 `ManagedGameSession` 实现 play-in-editor。两者都能从模板**新建**
+    C# 游戏项目（launcher 的 New Project 卡片 / 编辑器的 File > New Game Project），写到
+    `projects/<Name>/`；模板是 `assets/templates/games/` 下的内容目录，加模板不用改代码。CoreCLR 专属——
     launcher 在 AOT 配置下不构建，编辑器的 PIE 在 AOT 下报告不可用。见
     [托管游戏 Launcher](docs/designs/managed-game-launcher-design.md)
-- Util: Packager (asset paking), ScadCatalog
+- Util: Packager (asset paking), ScadCatalog, NextDayzBots (load-test clients for a NextDayz map server)
 
-**Release targets:** the desktop release ships exactly three of these —
-`gkNextRenderer`, `gkNextEditor`, `gkNextMotionBenchmark`. See `docs/guides/release-process.md`.
+**Release targets:** the desktop release ships exactly five of these —
+`gkNextRenderer`, `gkNextEditor`, `ScadLibrary`, `NextAstrobot`, `Brotato3D`.
+The complete `assets/scad/` authoring tree is shipped as loose, editable files. See `docs/guides/release-process.md`.
 
 ## Build Commands
 
 **Build (vcpkg is auto-bootstrapped on first run):**
 - Setup once: `./gnb.sh setup` (Windows: `gnb.bat setup`)
 - Core build (default): `./gnb.sh build` (Windows: `gnb.bat build` —— 默认仅构建核心目标 `gkNextRenderer` 与 `gkNextUnitTests`)
-- Full build (all targets): `./gnb.sh build --all` (Windows: `gnb.bat build --all` —— 构建全量 15+ 子项目)
+- Full build (all targets): `./gnb.sh build --all` (Windows: `gnb.bat build --all` —— 构建当前配置的全部目标)
 - Specific target: `./gnb.sh build gkNextEditor`
-- Android: `./gnb.sh android debug`（构建、安装、启动）或 `./gnb.sh android release`（仅生成 APK）
+- Android: `./gnb.sh android build debug` 生成 APK，`./gnb.sh android run debug` 装到设备并启动
+  - APK 里装哪个程序由 `--app` 决定，可选的是
+    [`src/Application/MobileApplications.json`](src/Application/MobileApplications.json) 里
+    列出的 application（默认取该文件第一条，即 `gkNextRenderer`），**不再只有固化的两个**。
+    每个 app 有各自的 applicationId、启动 label 与 build 目录，可同时装在一台设备上。
+  - `--app FlappyCSharp` 这类 C# 游戏托管层走 NativeAOT 交叉编译（`linux-bionic-arm64`）。
+- iOS: `./gnb.sh ios build [--app <target>] --team-id <TEAM_ID>` / `./gnb.sh ios run`
+  - 同一份注册表决定 iOS 能打哪些 application；bundle id 与显示名都取自那里。
+  - 移动端一次配置只声明一个 application（Android 的 .so 自带整份引擎，逐个声明代价太大），
+    换 app 会触发 reconfigure。
 - Clean rebuild: `./gnb.sh build --clean`
 - Force vcpkg update: `./gnb.sh setup --refresh`
 
@@ -75,13 +90,18 @@ because concurrent Windows builds can lock `.obj`, executables, or vcpkg state f
 - Editor shortcut: `./gnb.sh editor`
 - Visual test shortcut: `./gnb.sh visual`
 - TUI terminal mode: `./gnb.sh tui --scene assets/models/playground.glb`
-- Android: `./gnb.sh android debug` / `./gnb.sh android release`
+- Android: `./gnb.sh android build <variant> [--app <target>]` / `./gnb.sh android run <variant> [--app <target>]`
+- iOS: `./gnb.sh ios build [--app <target>]` / `./gnb.sh ios run`
 - Optional assets: `./gnb.sh paks fetch` / `./gnb.sh paks list`
 - Source-line stats: `./gnb.sh loc` (CLI) — also browsable in `./gnb.sh dashboard`
 - Managed bindings: `./gnb.sh csharpgen` (regenerate) / `./gnb.sh csharpgen --check` (CI guard)
 - .NET verification: `./gnb.sh dotnet probe` (two-backend ABI) / `./gnb.sh dotnet ci` (full)
 - Managed IDE solution: `./gnb.sh dotnet sln` (regenerate) / `./gnb.sh dotnet sln --check` (CI guard)
-- Dashboard: `./gnb.sh dashboard` (Wails window on Windows/macOS, browser fallback on Linux; todo/build/run/test/git/chat/LOC tabs)
+- Game templates: `./gnb.sh dotnet templates` (instantiate every `assets/templates/games/` template and build it)
+- NextDayz multiplayer: `./gnb.sh ds` (local dedicated server + 1 client; `--clients N --pvp`; logs in `out/build/<preset>/ds-runs/`);
+  `./gnb.sh ds --master` / `./gnb.sh master serve|status|kick|pvp|stop` (the Master: accounts, storage, map server fleet);
+  `./gnb.sh ds --bots 16 --minutes 30` (load test with `NextDayzBots`, non-zero exit on failure)
+- Dashboard: `./gnb.sh dashboard` (Wails window on Windows/macOS, browser fallback on Linux; todo/build/run/test/验证/git/chat/LOC tabs)
 
 Desktop binaries can be launched from any working directory; no `cd out/build/<preset>/bin` is required.
 
@@ -121,7 +141,7 @@ gnb shot --target AirportSim --ui  # 截图包含 ImGui，适合验证 HUD / 面
 ```
 
 机制（gnb 统一编排，所有 target 行为一致）：
-- gnb 启动目标并建立带一次性 token 的 loopback 控制通道，等待稳定帧后请求截图到**固定路径** `out/build/<preset>/screenshots/agent_validation.jpg`（覆盖式，无时间戳），确认落盘后请求退出。
+- gnb 启动目标并建立带一次性 token 的 loopback 控制通道，先等待 `scene.ready`（场景加载/提交、管线预热及纹理上传完成），再等待稳定帧后请求截图到**固定路径** `out/build/<preset>/screenshots/agent_validation.jpg`（覆盖式，无时间戳），确认落盘后请求退出。加载期间的空转帧不计入 `--frames`；就绪等待失败则终止并返回非零退出码。
 - 默认截图隐藏 ImGui；传 `gnb shot --ui` 让截图包含当帧 UI（gnb 在截图请求里带上 ui 参数）。
 - 窗口用 `SDL_WINDOW_HIDDEN` 创建：**不弹窗、不抢焦点**，不会打断你的 dev loop；present 自动切 immediate mode，渲染不受 vsync 限制，wall-clock 很快（几秒一张图）。
 - AGENT 读那张 `agent_validation.jpg` 即可肉眼判断。需要换帧数用 `--frames`;输出路径固定为上述 `agent_validation.jpg`。
@@ -130,6 +150,10 @@ gnb shot --target AirportSim --ui  # 截图包含 ImGui，适合验证 HUD / 面
 **何时用哪条路径：**
 - **改了某个场景/材质/光照/着色，只想看一眼对不对** → `gnb shot --scene <X>`（最轻、最快）。
 - **做渲染回归、需要和 baseline 对比 / 一次性扫多个场景** → 跑全量 `gkNextVisualTest`（生成 report + baseline diff + manifest，较重）。
+- **边玩 ScadPlay 边改（"在我前面加座桥""踩两个踏板才开门""加一种会弹人的蘑菇"）**：用 `scadplay` skill
+  （`.claude/skills/scadplay` → `.agents/skills/scadplay/SKILL.md`）。关卡改 `context.json` 里 `scene.source`
+  指向的 `.scad`（追加到 `// ==== Agent additions` 之后），玩法改 `projects/ScadPlay/Scripts`；用 skill 的
+  `wait_build.py` / `publish_scripts.py` 确认已生效，**不要**为此 `gnb build`、`gnb shot` 或重启游戏。
 - **SCAD 资产与 ScadLibrary 实时协作模式（极速原则）**：当用户正在运行 `ScadLibrary` / 场景编辑器查看修改时，AGENT **直接修改 `.scad` 文件并更新 `catalog.json` 即可**，不要额外执行 `gnb shot` 截图或全套单元测试，依靠实时热重载秒级反馈，保持极速迭代节奏。仅在离线/无界面自检时才调 `gnb shot`。
 
 ### DLSS / Streamline 验证限制
@@ -152,9 +176,10 @@ gnb validate --script assets/agentscripts/smoke.agentscript.json --visible  # �
 机制：
 - `gnb validate` 读取并解释脚本里的 `target` / `scene` / `viewport` 和步骤，命令行参数可覆盖；报告也由 gnb 写出。
 - gnb 用 `--agent-validation` 启动引擎以获得隐藏窗口、Immediate present、禁用 Streamline 等确定性语义，并通过原子控制端点驱动。需要显示窗口时传 `gnb validate --visible`。
+- 每次 `gnb validate` / `gnb shot` 都会登记到 `out/build/<preset>/validation_runs/<runId>/`，即使 Dashboard 没有启动也会保留 `run.json`、`script.json`、`runner.log` 和独立截图。CLI 会打印 runId 与证据目录；有截图的机器通过在 Dashboard 中仍显示为“待审阅”。可用 `gnb validation note <runId> --issue --message "…"` 记录视觉问题，审阅不会改写机器状态。
 - Agent 脚本鼠标移动只推送合成 `SDL_EVENT_MOUSE_MOTION`，不会 `SDL_WarpMouseInWindow` 移动系统光标；按键/鼠标按钮也只走 SDL 事件队列。
 - 支持步骤：`key` / `text` / `mouse-move` / `mouse-button` / `click` / `drag` / `scroll` / `wait-frames` / `wait-ms` / `wait-until` / `cvar` / `exec` / `assert` / `screenshot` / `log` / `quit`。
-- 内建查询：`engine.totalFrames`、`engine.frameRate`、`engine.time`、`engine.status`、`scene.nodeCount`、`scene.selectedId`、`scene.selectedCount`、`cvar.<name>`；游戏可通过 `RegisterAgentQueries` 暴露 `game.<name>`。
+- 内建查询：`engine.totalFrames`、`engine.frameRate`、`engine.time`、`engine.status`、`scene.ready`、`scene.nodeCount`、`scene.selectedId`、`scene.selectedCount`、`cvar.<name>`；游戏可通过 `RegisterAgentQueries` 暴露 `game.<name>`。
 - 结束会写 JSON report 到 `out/build/<preset>/agent_reports/<script-name>.json`；任一断言失败时进程返回非零退出码，CI 可直接判定失败。
 
 ## Linting
@@ -209,7 +234,7 @@ src/
 │   │   ├── Preview/         # RenderView services (thumbnails, offscreen cameras)
 │   │   └── Upscaler/        # IUpscaler abstraction (impl injected by NextStreamline)
 │   └── Utilities/           # Misc helpers
-├── Modules/                 # 18 optional engine modules (static libs, linked per app; see src/Modules/README.md)
+├── Modules/                 # 23 optional engine modules (static libs, linked per app; see src/Modules/README.md)
 │   ├── GltfLoader/, LDrawLoader/, ScadLoader/, SplatLoader/, SceneExport/  # Content pipelines
 │   ├── NextDotNet/, NextPhysics/, NextAudio/, NextAI/, NextRmlUi/          # Runtime capabilities
 │   ├── NextRemote/, NextStreamline/, NextFidelityFX/, NextTemporalUpscaler/,
@@ -228,12 +253,34 @@ assets/
 ├── geo/<tile>/              # Generated real-world city tiles (.scad + .hmap + poi.json);
 │                           # gitignored, shipped as assets/paks/geo.pak (`gnb geo pak`)
 ├── scripts/                 # Hand-maintained MagicaLego .mlscript files
-└── csharp/                  # Managed scripting sources (GkNext.Engine / .Bootstrap / .Game)
+└── csharp/                  # The engine's managed sources (GkNext.Engine / .Bootstrap / .Game)
+
+projects/                    # C# game projects, one per game: <id>.game.json + Content/ + Scripts/
+                             # (runtime copy: assets/projects/<Game>/; see projects/README.md)
 
 tools/gnb/                   # Project CLI (Go) — see "gnb" section below
 ```
 
 ## Key Architectural Patterns
+
+**Application targets (`gk_add_application`):**
+- 每个 application 的 `CMakeLists.txt` 只调用 `gk_add_application(<target> SOURCES ... MODULES ...
+  [LINK ...] [DEFINES ...] [INCLUDES ...])`。**不要**再手写 `add_executable` +
+  `gk_configure_application`：三个平台对"什么是一个 application"的答案不同（桌面 exe / iOS bundle /
+  Android 自带整份引擎的 .so），这个入口就是把差异收在一处的地方。
+- 桌面接 `DesktopMain.cpp`、Android 接 `AndroidMain.cpp`，由入口自动挑选；自带 `main()` 的程序
+  （`Packager`、`ScadCatalog`、`gkNextMinimalRenderer`）传 `NO_DEFAULT_MAIN`。
+- `MODULES` 走 `gk_target_runtime_modules`，三平台都可用；`LINK` 留给 `NextGameplay` 这类
+  **引擎库**——Android 把同样的源码直接编进 .so，所以那里会跳过链接。
+- 能上移动端的 application 列在
+  [`src/Application/MobileApplications.json`](src/Application/MobileApplications.json)：目录、
+  applicationId / bundle id、显示名、是否需要 .NET。不在表里 = 仅桌面。
+  `src/cmake/MobileApplications.cmake`、`tools/android/CMakeLists.txt` 和 gnb 读的都是这一份。
+- 移动端配置**只 add_subdirectory 被选中的那一个 application 目录**，所以每个 application 目录必须
+  自洽——不能依赖上层 `CMakeLists.txt` 设的变量（这就是 benchmark/editor/flappy 的 common 源码
+  globs 下沉到各自叶子目录的原因）。选谁由 `GK_MOBILE_APP` 决定，Gradle 与 `gnb ios build --app`
+  会传进来。
+- 详见 [移动端 application 目标设计](docs/designs/mobile-application-targets.md)。
 
 **Reflection System (entt::meta):**
 - Provides auto-generated editor UI via PropertyPanel
@@ -244,10 +291,18 @@ tools/gnb/                   # Project CLI (Go) — see "gnb" section below
 - Changing a reflection registration means `gnb csharpgen --refresh` (re-dumps the committed
   manifest and regenerates the C# wrappers). A stale manifest fails `Test_ReflectionManifest.cpp`.
 
-**C# Scripting (`Modules/NextDotNet` + `assets/csharp/`):**
-- Managed sources live in `assets/csharp/`: `GkNext.Engine` (contract + generated bindings),
-  `GkNext.Bootstrap` (never-unloaded entry, owns the `[UnmanagedCallersOnly]` export),
-  `GkNext.Game` (reloadable game code)
+**C# Scripting (`Modules/NextDotNet` + `assets/csharp/` + `projects/`):**
+- The engine's managed sources live in `assets/csharp/`: `GkNext.Engine` (contract + generated
+  bindings), `GkNext.Bootstrap` (never-unloaded entry, owns the `[UnmanagedCallersOnly]` export),
+  `GkNext.Game` (the binding probe, run as the `sandbox` game)
+- **Games live in `projects/<Game>/`, one directory per game**: `<id>.game.json` (manifest),
+  `Content/` (its configs/sounds/scenes) and `Scripts/` (its csproj + C#). Nothing a game owns goes
+  under `assets/`. At runtime CMake copies each manifest + `Content/` to `assets/projects/<Game>/`
+  (so paks/Android/iOS/asset trace carry it unchanged); C# reaches its own content with
+  `GameContent.Path("configs/x.json")` / `GameContent.ReadFile(...)`, engine assets keep their
+  `assets/...` path. The launcher's/editor's Rebuild republishes the C# *and* re-syncs `Content/`.
+  `FlappyCpp` and C++ `Brotato3D` read their C# twin's project content directly. See
+  `projects/README.md`
 - **Adding a binding is one line in `src/Modules/NextDotNet/EngineApi.def.h` plus one implementation
   function in `EngineApi.cpp`**, then `gnb csharpgen`. Never hand-edit `Engine.g.cs`.
   See `docs/AGENT_GUIDE/DotNetBindings.md`.
@@ -257,9 +312,21 @@ tools/gnb/                   # Project CLI (Go) — see "gnb" section below
   `GkBool`), no strings inside structs, no optional struct fields, colors as `GkColor32`
 - Backend: CMake option `GK_DOTNET_BACKEND=CoreCLR|AOT`, default CoreCLR. Managed code is identical
   under both; the only allowed difference is hot reload, which CoreCLR has and AOT does not.
-- `gnb dotnet ci` is the enforcement point: generated-file check, two-backend probe, and an engine
-  build under both backends. Run it when touching the ABI, the hosts, or the managed layer.
+- `gnb dotnet ci` is the enforcement point: generated-file check, game-template build, two-backend
+  probe, and an engine build under both backends. Run it when touching the ABI, the hosts, or the
+  managed layer.
+- **`GkNext.Engine/Gameplay/` is the shared gameplay layer** — `Rng` (deterministic xorshift),
+  `MoveAxis.Poll()` (normalised WASD + arrows + gamepad stick), `Mathx`/`Quat`, `Sky.Apply`,
+  `HudPalette` — plus `ManagedImGui` for HUD and `NextGameInstance.SceneReady`. Reach for these
+  before writing another RNG, key ladder or quaternion by hand; the templates are the worked
+  examples. Nothing there is privileged: it is ordinary C# over `Scene.*` / `Input.*` / `UI.*`.
+- Touching a template, or anything in `GkNext.Engine` a template uses, means `gnb dotnet templates`.
+  Nothing else in the tree compiles them.
 - `gnb dotnet setup|status|build|probe` drive the toolchain; `DotNetSandbox` is the reference host
+- **Android 上只有 NativeAOT**：`cmake/SetupDotNet.cmake` 在 Android 上强制 AOT 后端并交叉编译到
+  `linux-bionic-arm64`，产出的 `libGkNext.Bootstrap.<target>.so` 经 jniLibs 打进 APK。不托管 C#
+  的 Android 程序（如 `gkNextRenderer`）不会编译 NextDotNet 的源码——它的 CoreCLR host 需要设备上
+  不存在的 hostfxr 头。
 - **C# is edited through `assets/csharp/GkNextManaged.sln`**, not by opening a single csproj: with
   no solution an IDE never loads `GkNext.Engine` or the source generator alongside a game, and the
   game's code degrades to unhighlighted text even though `dotnet build` is fine. The solution is
@@ -268,8 +335,9 @@ tools/gnb/                   # Project CLI (Go) — see "gnb" section below
   generator emits the entry point, and a missing/duplicate/invalid one is a compile error.
   `docs/AGENT_GUIDE/CSharpGameDevelopment.md` is the getting-started guide; `FlappyCSharp` is its
   worked example.
-- **A C# game is a manifest plus a CMake target.** `assets/configs/games/<id>.game.json` declares the
-  window, assembly, required modules, initial scene and hot-reload policy;
+- **A C# game is a project directory plus (optionally) a CMake target.** `projects/<Game>/<id>.game.json`
+  declares the window, assembly, required modules, initial scene and hot-reload policy (its `project`
+  field is relative to the project directory, e.g. `Scripts/FlappyCSharp.csproj`);
   `Modules::NextDotNet::ManagedGameHostInstance` is the single shell that forwards every lifecycle
   hook, so the per-game `CreateGameInstance` is ~15 lines. Never hand-write hook forwarding again —
   that is how `FlappyCSharp` silently lost gamepad input.
@@ -278,8 +346,9 @@ tools/gnb/                   # Project CLI (Go) — see "gnb" section below
   back to the editor so the running game's scene can be inspected and edited through the Outliner
   and Properties panels. Editor Stop reloads the scene that was open before Play and keeps no edits
   made during it. See `docs/designs/managed-game-launcher-design.md`.
-- An application gets its C# through `gk_dotnet_managed_game(<target> PROJECT <csproj> DIR <dir>)`;
-  a target that links the module without hosting C# calls `gk_dotnet_stub_game(<target>)` instead
+- An application gets its C# through `gk_dotnet_managed_game(<target> PROJECT <csproj> DIR <dir>)`
+  (`PROJECT "${GK_GAME_PROJECTS_ROOT}/<Game>/Scripts/<Name>.csproj"`); a target that links the module
+  without hosting C# calls `gk_dotnet_stub_game(<target>)` instead
 - `FlappyCpp` vs `FlappyCSharp` replay parity is the binding regression — see
   `docs/projects/flappy-bird-parity/introduction.md`
 - Per-frame allocation is the realistic way this layer degrades frame time: set
@@ -330,13 +399,15 @@ tools/gnb/                   # Project CLI (Go) — see "gnb" section below
 
 - **`docs/README.md`** - 现行文档索引与生命周期规则；架构设计、项目说明和仍有效计划从这里进入
 - **`docs/AGENT_GUIDE/`** - Layered documentation:
-  - `core-patterns.md` / `contextual-rules.md` / `coding-standards.md` / `quick-commands.md` - General rules
+  - `coding-standards.md` - Detailed code-review and style guidance; build/verification rules live in this file
   - `ReflectionSystem.md` - entt::meta reflection (editor UI + generated C# wrappers)
   - `DotNetBindings.md` - C# binding surface: adding a function vs exposing a property
   - `CSharpGameDevelopment.md` - Writing an application in C# (start here for a new C# game)
   - `HotReload.md` - Shader/script hot reload mechanics
   - `LDrawLoader.md` - LDraw model loading (used by MagicaLego/BrickPlayer)
-  - `SCADLoader.md` - OpenSCAD (.scad) DSL loading (parser/evaluator/CSG via Manifold/text via FreeType)
+  - `SCADLoader.md` - OpenSCAD (.scad) DSL loading (parser/evaluator/CSG via Manifold/text via FreeType);
+    `gk_material` PBR layering (fabric stays Lambertian) and `gk_texture` procedural prints (albedo + relief normal + MRA);
+    new prints are written in SCAD as texture node graphs (`assets/scad/lib/gk_texgraph.scad`), no C++ change
   - `ScadTerrain.md` - gk_terrain low-poly walkable terrain (TERR spec, ter_* combinators, TerrainComponent)
   - `ScadAssetPlaybook.md` - SCAD 资产生成实战手册：kit → 场景 → 地形开放地图的流程、契约与验证闭环（新题材组件库/地图生成任务必读）
   - `../designs/geo-city-generation-design.md` - `gnb geo`：从 SRTM 高程 + OpenStreetMap 生成真实
@@ -344,12 +415,23 @@ tools/gnb/                   # Project CLI (Go) — see "gnb" section below
     （立面窗格 / 地域屋顶 / 人行道街具，`kit_geo_city.scad` + `kit_road.scad`），
     含"装饰不得越出 OSM 轮廓"这条可行走性硬规则；§7 是**大地块**：`--size 3000/5000` 由
     1km part 拼成，`gnb geo grow` 增量扩缩，地形整块算完再切片（否则接缝错台 1m）
+  - `../projects/nextdayz/nextdayz-world-map-design.md` - NextDayz 真实地点撤离地图：地理骨架 + 地域 kit +
+    聚落形态（村绿村、广场、街道、农庄、周末小屋、集体农场…）+ 土地覆盖。新建或改进这类地图走 skill
+    `nextdayz-geomap`（`.agents/skills/nextdayz-geomap/SKILL.md`），用 `tools/nextdayz/geomap_preview.py`
+    规划、`tools/nextdayz/geomap_shots.py` 截图验收
   - `NextWorldTravel.md` - 生成 tile 的浏览器：Walk / Aerial / Focus 三视图，`poi.json` 地点标签
     sidecar、鸟瞰 POI 地图与绕物取景、滑动 NavGrid 窗口、街面出生点选择
-  - `ScadRig.md` - ScadRig rigid-body character rigs (bone_ modules + anim_* clips, FRigAnimator runtime)
+  - `ScadRig.md` - ScadRig rigid-body character rigs (bone_ modules + anim_* clips, FRigAnimator
+    runtime)。角色也能从 C# 驱动：`NextRig` 子系统 + `Rig.*` 绑定，`tps` 模板是完整用例
   - `MagicaLego.md` - MagicaLego subproject notes
   - `Brotato3D.md` - Brotato3D code structure (god-class + per-system split, runtime data model, object pools)
   - `CharacterDemo.md` - CharacterDemo + NextGameplay shared layer (CharacterActor facade, ECS components, NavGrid A*, AI behavior tree)
+  - `NextAstrobot.md` - AstroBot 风格 3D 平台跳跃：`.scad` 关卡即运行时对象、kit_astro 活动件契约
+    （`ab_part_*` + `gk_flatten` 静态壳 + `Node::metadata` 玩法参数）、机关碰撞策略、帧顺序、
+    `UpdateWithVelocity` 地面速度继承、加一关的零代码路径
+  - `ScadPlay.md` - 边玩边改的 C# 游戏：`context.json` 协议、"前面/左边"怎么算、追加编辑规则、
+    kit_scadplay 玩法件契约（`id`/`on`/`any` 接线、`sp_part_*` 活动件）、加一种机关的三步、
+    关卡热重建与 C# 热重载的状态保留、为此加的引擎接口（源文件预检、加载报告、角色控制器绑定）
 - **README.en.md** - Project overview and quick start
 - **.clang-tidy** - Naming conventions (source of truth)
 

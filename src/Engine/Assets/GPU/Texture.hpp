@@ -7,6 +7,8 @@
 #include "Engine/Assets/GPU/UniformBuffer.hpp"
 #include "Engine/Vulkan/DescriptorSystem.hpp"
 
+#include <thread>
+
 namespace Assets
 {
     enum class ETextureStatus : uint8
@@ -132,6 +134,9 @@ namespace Assets
         ~GlobalTexturePool();
 
         const FBindlessProfile& Profile() const { return profile_; }
+        // The pool is built on the main thread, which owns GetMainThreadCommandPool():
+        // only there may a texture be created and registered synchronously.
+        bool IsOwnerThread() const { return std::this_thread::get_id() == ownerThread_; }
 
         VkDescriptorSetLayout Layout() const { return descriptorSetManager_->DescriptorSetLayout().Handle(); }
         VkDescriptorSet DescriptorSet(uint32_t index) const { return descriptorSetManager_->DescriptorSets().Handle(0); }
@@ -157,6 +162,9 @@ namespace Assets
                                            ETextureLifetime lifetime = ETextureLifetime::ETL_Transient);
         
         uint32_t TotalTextures() const {return static_cast<uint32_t>(textureImages_.size());}
+        // A worker finishing decode/upload is insufficient: the graphics layout transition and
+        // HDR updates must also have completed on the main thread before a capture can use it.
+        uint32_t PendingTextureLoads() const { return pendingTextureLoads_.load(std::memory_order_acquire); }
         const std::unordered_map<std::string, FTextureBindingGroup>& TotalTextureMap() {return textureNameMap_;}
 
         void FreeTransientTextures();
@@ -221,6 +229,7 @@ namespace Assets
         static GlobalTexturePool* instance_;
 
         const class Vulkan::Device& device_;
+        std::thread::id ownerThread_ = std::this_thread::get_id();
         Vulkan::CommandPool& commandPool_;
         Vulkan::CommandPool& mainThreadCommandPool_;
         bool textureWorkerUploadEnabled_ {};
@@ -228,6 +237,7 @@ namespace Assets
         // KTX2/Basis assets transcode to BC7 where the device can sample it and to plain RGBA
         // otherwise. Mobile and Apple GPUs take the second path.
         bool supportsBCTextures_ = true;
+        std::atomic<uint32_t> pendingTextureLoads_{0};
 
         std::vector<std::unique_ptr<TextureImage>> textureImages_;
         std::unordered_map<std::string, FTextureBindingGroup> textureNameMap_;

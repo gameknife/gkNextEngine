@@ -4,18 +4,20 @@ category: project
 status: 现行
 owner: NextDayz
 created: 2026-07-31
-last_updated: 2026-08-02
+last_updated: 2026-11-07
 ---
 
 # NextDayz PVE 生存循环产品化设计
 
-本文记录 `NextDayz` 单人 PVE 生存纵切的现行产品边界、运行时架构和验收契约。2026-08-02 已完成配套开发计划：容量化库存、生存代谢与水源、语义刷新点、感染者 AI/战斗/噪声、物资刷新、产品 HUD、死亡与同进程重开均已接入。复杂移动、ScadRig 分层动画的现行约束仍以 [复杂 3C 与 ScadRig 分层动画设计](nextdayz-3c-scadrig-design.md) 为准。
+本文记录 `NextDayz` 单人 PVE 生存纵切的现行产品边界、运行时架构和验收契约。2026-08-02 已完成配套开发计划：容量化库存、生存代谢与水源、语义刷新点、感染者 AI/战斗/噪声、物资刷新、产品 HUD、死亡与同进程重开均已接入。复杂移动、ScadRig 分层动画的现行约束仍以 [复杂 3C 与 ScadRig 分层动画设计](nextdayz-3c-scadrig-design.md) 为准。2026-11-03 以士兵战术动作为质量基线重做了感染者与枪战：程序化生成的感染者骨架与动作、带转向/加速/警觉/硬直/打腿/扑击的 AI、跟随骨架的胶囊命中盒与分部位伤害、准星命中标记与受伤反馈、枪口焰/曳光/血雾等特效和程序化音效（§8、§9.4）。2026-11-04 做了一轮"末日生存感"深化：地图扩到 22 个据点、相邻 60～120 m，每栋可进入建筑带家具和 loot 刷新点；loot 改为按 profile 抽表的刷新点 + 地图手摆物资 + 掉落堆三类来源，按 POI 区域聚类补货；42 种物品都有具体功能（开罐、止血、护甲、保暖、近战、指南针、地图、电台补给、提灯、鞭炮诱饵、休息）；背包重做为附近/装备/容器三栏；感染者上限 40（夜间 48）并成组刷新；加入天气循环、高度雾和环境音（§15）。
 
 ## 1. 决策摘要
 
 首个产品化版本是一局可重复游玩的单人 PVE 生存沙盒：玩家低配出生，必须在 1 km² Riverland 地图中寻找食物、饮水、衣物、背包、近战武器、枪械和弹药，管理饥饿、口渴、生命与容器容量，躲避或击杀由世界规则刷新的感染者，死亡后可重新开始一局。
 
-本期不做 PVP、联机同步、基地建造、载具、疾病、体温、复杂创伤、物品耐久和跨局持久化。它们不能阻塞“出生 → 搜刮 → 管理容量与生存值 → 遭遇感染者 → 战斗/逃跑 → 补给 → 死亡或继续生存”这一条主循环。
+2026-11-05 已在生存纵切上接入[持久世界与直升机撤离](nextdayz-extraction-design.md)：安全屋备装、随机 POI 部署、死亡掉落、信号枪呼叫、登机撤离、物资入库与出售换金。世界跨次保留，黄金没有购买用途；长线循环与存档契约以该文档为准。
+
+本期仍不做 PVP、联机同步、基地建造、可驾驶载具、疾病、体温、复杂创伤和物品耐久。
 
 ## 2. 实施基线（2026-07-31 历史快照）
 
@@ -70,7 +72,7 @@ last_updated: 2026-08-02
 
 ### 3.2 开局与软目标
 
-默认开局不再赠送 AK。玩家只获得基础衣物容器、一个绷带和一个空水瓶，出生在村庄或加油站外围的安全点。HUD 依次给出不强制的软目标：
+默认开局不赠送 AK。现行持久模式从安全屋开始，可携装或仅带基础衣物容器空手出击，从地图预设 POI 外围安全点随机部署，不赠送消耗品。HUD 依次给出不强制的软目标：
 
 1. 找到饮水或水井；
 2. 找到食物；
@@ -85,7 +87,7 @@ last_updated: 2026-08-02
 - PVP、联机服务器、反作弊和网络预测；
 - 温度、疾病、血型、骨折、复杂出血和药理；
 - 武器耐久、卡壳、附件改装和弹匣逐颗装填；
-- 基地建造、车辆、耕作、狩猎和跨局存档；
+- 基地建造、可驾驶车辆、耕作和狩猎；
 - 大规模感染者群。首版全图活跃上限以 24～32 只为目标。
 
 ## 4. 总体架构
@@ -145,52 +147,31 @@ src/Application/Game/NextDayz/
 
 纯数据和纯规则文件应加入 `gkNextUnitTests`；场景、物理、渲染和输入留在应用集成测试中。
 
-## 5. 物品、衣物与容量
+## 5. 物品、衣物与网格背包
 
-### 5.1 从字符串栈迁移到物品实例
+### 5.1 实例与物品占位
 
-每个物品定义使用稳定字符串 ID；运行时实例使用单调递增的 `instanceId`。可堆叠物品仍以栈保存，但枪械、衣物、背包和近战武器必须是离散实例。
-
-```text
-FItemDef
-  id / displayName / kind
-  volumePerUnit / maxStack
-  equipSlotMask
-  containerCapacity（非容器为 0）
-  hungerDelta / hydrationDelta / healthDelta
-  weaponDefId / worldVisualId
-
-FItemInstance
-  instanceId / defId / count
-  containerId
-  loadedAmmo（仅枪械）
-```
-
-首版容量使用整数“格”而不是公斤：一格是 UI 和平衡单位，不承诺真实体积。示例初值：绷带 1、罐头 2、水瓶 2、手枪 4、长枪 10、弹药栈 1～2。
+每个物品定义使用稳定字符串 ID，实例使用单调递增的 `instanceId`。`FItemDef::size` 定义每栈占位，
+`containerSize` 定义穿戴后提供的网格；`FItemInstance::placement` 保存格子坐标和旋转方向。
+手枪 2×1、步枪 4×1、弹匣 1×2；衣物、医疗和工具等全部物品也有明确尺寸。
+完整表及交互规则见 [网格背包设计](inventory-grid-design.md)。
 
 ### 5.2 容器模型
 
-固定装备槽：头部、躯干、腿部、背部、主武器、副武器、手持。可储物容器包括：
+开局有上衣口袋 6×1、裤袋 2×2，另有两条 4×2 武器背带。衣物提供额外网格：例如夹克 6×2、
+普通背包 6×6、突击背包 6×8。武器背带仅接受枪械和近战武器。
 
-| 容器 | 初始容量 | 说明 |
-| --- | ---: | --- |
-| 基础上衣口袋 | 6 | 开局拥有，不可丢弃的最低保障 |
-| 基础裤袋 | 4 | 开局拥有 |
-| 夹克 | 10～14 | 替换躯干衣物后提供容量 |
-| 工装裤 | 8～12 | 替换腿部衣物后提供容量 |
-| 小/中型背包 | 16 / 28 | 背部槽，TPS 显示现有 backpack 附件 |
-| 武器肩带 | 2 个离散槽 | 不占普通格，只接受长枪 |
-
-首版不允许容器嵌套。脱下容器前必须把内部物品转移到其他有空间的容器；无法转移时事务失败并显示缺少多少格。拾取也必须先执行 `CanAdd`，不能出现“地上物品消失但背包没收到”的情况。
+拾取会寻找空的矩形；手动拖放则检查指定位置。不能因为总空格足够而越界或覆盖其他物品。
+拖动时 R 旋转，绿色轮廓允许放置、红色轮廓表示冲突。拖到容器标题可自动找位。
 
 ### 5.3 事务不变量
 
-- `TryAdd/TryMove/TrySplit/TryConsume/TryEquip/TryUnequip/Drop` 要么完整成功，要么不改变任何状态。
-- 栈拆分和合并后总数量守恒。
-- `usedCapacity <= capacity` 永远成立。
-- 枪械弹匣状态属于枪械实例，备弹属于库存栈。
-- 换装导致容量减少时，必须先通过容量预检。
-- Loot 的 `Commit` 只有在库存事务成功后才能隐藏世界节点；容量不足则取消预留并保持世界物品可见。
+- 添加、移动、精确放置、拆分、合并和穿脱要么完整成功，要么保持原状。
+- 栈拆分和合并后数量守恒，拆分需要额外矩形。
+- 每个在容器中的物品都必须在边界内，所有矩形互不重叠。
+- 脱下容器必须转移其内容；不允许放进自身提供的网格。
+- 枪械装弹和配件跟随实例；世界 Loot 只有库存事务成功后才移除。
+- 存档版本 5 保存网格位置；旧版本迁移后放不下的物品进入安全屋仓库。
 
 ## 6. 生存状态与消耗品
 
@@ -214,113 +195,152 @@ hydration   0..100（100 为充分饮水）
 
 ### 6.3 死亡与重开
 
-生命归零进入 `Dead`，立即停止移动、攻击、拾取和 AI 仇恨更新，播放死亡反馈并显示本局存活时间、击杀数、访问 POI 数。玩家选择“重新开始”后重置运行时世界、库存、刷新计时和 RNG，重新部署而不重启可执行文件。
-
-首版不做死亡掉落和尸体回收，避免在持久世界尚不存在时引入半套规则。
+生命归零进入 `Dead`，停止移动、攻击与拾取。现行持久模式将随身物资留在原地供后续回收，玩家自动返回安全屋；仓库、黄金、世界物资与补货计时保留。下一次新出击随机选择安全落点。原先重置全图的重开流程仅保留为隔离的旧版 agent 验证入口，正式玩法不使用。
 
 ## 7. 世界语义、物资刷新与水源
 
 ### 7.1 地图标记契约
 
-现有拾取物节点继续作为首轮物资点。为感染者和可随机化物资增加只表达类别的 SCAD 标记模块；模块名携带 profile，世界变换携带位置，不依赖解析 SCAD 参数：
+地图手摆的 `cw_wpn_*` / `cw_item_*` 节点是"手摆物资"（首轮必有，补货时固定物品 + 可选按表抽取）。其余语义由地图里定义的极小标记模块表达，世界变换携带位置，具名参数经 `Node::metadata` 读取（`ParseScadMetadata`）：
 
 ```text
-nd_spawn_player_safe
-nd_spawn_zombie_civilian
-nd_spawn_zombie_military
-nd_spawn_zombie_industrial
-nd_spawn_zombie_wilderness
-nd_spawn_loot_residential
-nd_spawn_loot_medical
-nd_spawn_loot_military
-nd_spawn_loot_industrial
+nd_loot(p = "<profile>")              物资刷新点：residential / commercial / medical / military /
+                                      police / industrial / farm / wilderness
+nd_zed(p = "<profile>", group = n)    感染者刷新点：civilian / military / industrial / wilderness，n 只一组
+nd_poi(name = "...", kind = "...")    地图上的地名（M 键地图）
+nd_spawn_player_safe                  玩家安全出生点
+cw_prop_well / cw_prop_water_pump     水源（可饮用、可装瓶）
 ```
 
-标记可使用极小的调试几何，运行时扫描后必须隐藏、关闭 raycast，并只在 F5 世界调试中显示。不要把 POI 坐标硬编码进 C++。
+旧的 `nd_spawn_zombie_<profile>` / `nd_spawn_loot_<profile>` 名字仍被识别。标记运行时扫描后隐藏、关闭 raycast（不挡子弹和导航探测）。调用一律写具名参数。不要把 POI 坐标硬编码进 C++。
+
+地图用一组"建筑 + 家具 + 刷新点"组合件（`nd_house_rural`、`nd_house_two`、`nd_supermarket`、`nd_barracks` ……，定义在 `riverland_1km.scad` 顶部）：建筑与家具几何包在 `gk_flatten()` 里合成一个节点（控制节点数与碰撞体数量），刷新点和手摆物资**必须留在 `gk_flatten` 外面**，否则会被折进父节点、运行时找不到。家具靠后墙/侧墙，门洞一侧留通道；刷新点放在桌面、床面、货架层板或地面（翻倒的桌子由 `nd_table_top(seed)` 与 `cw_prop_table` 同一判定落到地面）。
 
 ### 7.2 POI 配置
 
-| POI | 物资侧重 | 感染者 profile | 风险/回报 |
+22 个据点，相邻 60～120 m（地图坐标为 SCAD 空间，+y 北）：
+
+| 区域 | 据点 | 物资侧重（刷新点 profile） | 感染者 |
 | --- | --- | --- | --- |
-| 西部村庄 | 食物、水井、基础衣物、猎枪 | civilian | 新手区，低密度 |
-| 桥西加油站 | 医疗、燃油、杂物 | civilian / industrial | 交通节点，中低风险 |
-| 桥东碉堡 | 弹药、头盔、步枪 | military | 小范围高风险 |
-| 军事基地 | 自动步枪、狙击枪、弹药、背包、医疗 | military | 最高密度与最长刷新 |
-| 东南小镇 | 食物、水、衣物、手枪、医疗 | civilian | 高密度但补给全面 |
-| 河畔工厂 | 工具、近战武器、猎枪、杂物 | industrial | 中风险 |
-| 通信站/坠机点 | 无线电、高级枪械、医疗 | military | 少量强感染者 |
-| 湖畔营地 | 食物、饮水、基础猎枪 | wilderness | 低密度、路程长 |
+| 主公路带 | 斯塔里萨德村（教堂、谷仓、水井+水泵） | residential / farm | civilian，新手区 |
+| | 曙光农场（谷仓、筒仓、农舍） | farm | civilian |
+| | 公路旅馆 + 餐馆 | residential / commercial | civilian |
+| | 波戈列洛夫卡（路边小村） | residential | civilian |
+| | 桥西加油站（便利店、修车库） | commercial / industrial | civilian / industrial |
+| | 桥头前哨（检疫关卡、医疗帐篷、营房） | military / medical | military |
+| | 新德沃尔（警察局小镇） | police / residential | civilian |
+| | 卡车站 / 修理厂 | industrial | industrial |
+| | 东/西公路口（军车残队、路障） | military / residential | military / civilian |
+| 南部 | 戈尔卡镇（板楼、超市、医院与失败的撤离点） | commercial / medical / residential / military | civilian 密集 + military |
+| | 戈尔卡火车站（铁路、货车车厢） | commercial / industrial | civilian |
+| | 红锻工厂 | industrial | industrial |
+| | 湖畔营地（木屋） | wilderness | wilderness |
+| 西北 | 老墓地（教堂、坟场、尸袋） | residential / medical | civilian 成群 |
+| | 锯木场 | industrial | industrial / wilderness |
+| | 西山电台 | military | military |
+| 北部 | 护林站、猎人小屋 | wilderness | wilderness |
+| | 坠机点（军方帐篷） | military / medical | military |
+| | 祖布尔要塞（棱堡城墙、营房、指挥所） | military | military 驻军 |
+| | 7 号检查站、军事基地 | military | military，最高密度 |
 
-### 7.3 LootDirector
+### 7.3 LootSystem / LootDirector
 
-每个刷新槽具有 `Available / Reserved / Cooldown` 三态、profile、最近一次消费时间和稳定 seed。首轮可沿用场景中 59 个物品；后续刷新从所在 profile 的加权表选择。
+物资有三类来源（`LootSystem.hpp`）：
 
-刷新约束：
+- **手摆物资**：地图节点按模块名对应固定物品（`cw_wpn_ak` → AK，`cw_item_crate_supply` → 按 commercial 表抽 3 件……），外观就是美术摆的模型；
+- **刷新点**：`nd_loot` 锚点，每次按 profile 加权表（`Data/LootTables.cpp`）抽一叠物品；外观是池化节点，换成该物品在 `characters/nextdayz_loot_items.scad`（ScadRig 格式，每根 `bone_item_<itemId>` 一件模型）里的模型；开局约 78% 的刷新点有货，其余错开 1～5 分钟补上；
+- **掉落堆**：玩家丢弃、玩家死亡和感染者尸体（35% 概率按 profile 掉一件）留下的东西；初始 32 个池化节点，满后扩展，不覆盖旧物资，捡走后不补货。内容与位置跨次保存。
 
-- 玩家距槽位至少 60 m，且槽位离开相机视锥/视线至少 20 秒；
-- 同一 POI 和全图都受 category 上限控制；
-- 食物/饮水基准 8～15 分钟，医疗 12～20 分钟，弹药 15～25 分钟，枪械 30～45 分钟；
-- 时间使用独立 world simulation clock，不因昼夜快进被批量刷新；
-- 读取稳定 seed，在 agent-validation 下同一局产生同一序列；
-- 场景重载和重开必须使旧 `FLootHandle` 失效。
+每个有补货的条目有 `Available / Reserved / Cooldown` 三态和稳定 roll。补货约束：
 
-若首期随机世界模型成本过高，可让槽位只重生原类别与原外观，但状态机和 profile 接口必须一次建对。
+- 条目按 28 m 单链接聚类成区域（≈POI），玩家要**离开整个区域**至少 60 m（而不只是离开那个货架），且 20 秒没看它；
+- 冷却按类别：食物/饮水 6 分钟、医疗 9、杂物 10、弹药 12、衣物 14、枪械 24；
+- 补货重新抽表，并受类别库存上限约束（同时有货的武器 ≤ 8%、弹药 ≤ 14% ……），超了改抽食物；
+- 保底：饥渴 < 30 时食物冷却 ×0.35、补货 60% 倾向食物；流血且身上没有包扎物时医疗冷却 ×0.5、40% 倾向医疗；
+- 拾取先放进能放下的部分（`Inventory::FitCount`），放不下的留在原地；枪械带着抽到的弹匣存量（25% 空仓，其余部分装填）；
+- 时间使用独立 world simulation clock，不因昼夜快进被批量刷新；读取稳定 seed，同一局产生同一序列；场景重载和重开使旧 `FLootHandle` 失效。
 
 ## 8. 感染者系统
 
 ### 8.1 运行时状态
 
-每个感染者使用带 generation 的稳定 handle，保存 pool slot、profile、生命、位置、状态、目标最后可见位置、路径、攻击/受击计时和所属刷新点。建议状态：
+每个感染者使用带 generation 的稳定 handle，保存 pool slot、profile、生命、位置、**速度与朝向**、状态、目标最后可见位置、路径、攻击/受击计时、poise、腿部伤害和所属刷新点。另有一份由 handle 哈希出的个体差异（`FZombieVariant`：速度系数、驼背、歪头、抬手积极度、步态相位、先天跛脚），同一次重放看起来完全一样。
 
 ```text
-Dormant → Wander → Investigate → Chase → Attack
-                    ↑              ↓       ↓
-                    └──── Lost ────┘    Stagger
-                                          ↓
-                                         Dead → Recycle
+Dormant → Wander ──→ Investigate ──→ Alert ──→ Chase ──→ Attack
+            ↑  （噪声）    ↑    （远处首次看见：嘶吼）  ↓  ↑      ↓
+            └── 搜索结束 ──┴──── 丢失视线 ──────────┘  └ 冷却 ┘
+            任意存活状态 ── poise 被打破 / 打残 ──→ Stagger ──→ Chase / Investigate
+            任意存活状态 ── 生命归零 ──→ Dead（Back / Forward / Crumple）→ Recycle
 ```
 
 ### 8.2 感知与行为
 
-- 视觉：35 m 基准距离、约 110° 水平视野，并通过 CPU raycast 验证无遮挡；
-- 听觉：冲刺脚步、小型近战、手枪、步枪/霰弹枪产生不同半径的 `FNoiseEvent`；
-- 追击：目标移动超过 2 m 或 0.6 秒后才重算路径，不能每帧 A*；
-- 丢失：失去视线后前往最后已知位置，搜索 6～10 秒后返回巡逻；
-- 攻击：进入约 1.25 m，0.45 秒前摇，命中时再次校验距离和朝向，随后约 1.1 秒冷却；
-- 群体：只做局部软分离，不做队形和群体寻路。
+数值全部在 `FZombieConfig`（`NextDayzConfig.hpp`），出手时机与 `nextdayz_infected.scad` 的 clip 对齐。
 
-感染者移动使用 NextGameplay `FNavGrid/FPathFollower` 思路，但不能直接用 `FCharacterPool` 的默认 0.45 m 全场网格；1 km² 地图首版使用约 1.5～2.0 m cell，并按玩家附近 active bubble 更新。河流需通过 `TerrainComponent::IsWater` 或等价语义屏蔽，桥面保持可走。
+- 视觉：35 m 基准距离、约 110° 水平视野，并通过 CPU raycast 验证无遮挡。玩家 rig 对射线不可见（它只负责表现，碰撞体是 Jolt 胶囊），否则玩家自己的步枪会挡住感染者视线；
+- 听觉：冲刺脚步、小型近战、手枪、步枪/霰弹枪产生不同半径的 `FNoiseEvent`；
+- 警觉：未察觉的感染者在 3 m 外第一次看到玩家时原地转身嘶吼 0.8 秒再追；贴脸时直接扑；被子弹打中会直接察觉射手位置；
+- 转向与速度：按转向角速度（游荡 100°/s、追击 220°/s）转身，健康感染者基础追击速度为 5.5～6.4 m/s，再乘个体速度差异；按加速度起步/刹车，急转弯会掉速——冲过来的感染者被侧闪后会冲过头；
+- 追击：目标移动超过 2 m 或 0.6 秒后才重算路径，不能每帧 A*；仅在视线畅通、脚下高差不超过台阶高度时，才在 2.5 m 内直接朝玩家转向；不会进入玩家 1 m 的个人空间；路径终点不可达时停在可达边界；
+- 游荡：在出生点 4 m 内按个体节奏散步，不再原地站桩；
+- 丢失：失去视线后继续向最后已知位置奔跑，前 8 秒保持追击速度；到达后搜索约 6 秒再回到游荡；
+- 攻击：进入攻击距离后交替使用扑咬（1.0 s，0.45 s 出手）与横扫（0.9 s，0.42 s 出手）；前摇中追踪并补近到 1.2 m，出手前 0.12 s 锁定朝向，出手帧再校验距离、正面、视线与高度，避免隔墙或隔高台伤人——这时侧闪能让它扑空；
+- 受击：每发命中都触发表现层 flinch 和 0.25 s 减速；冲击量（伤害 × 武器 `impactScale` × 部位系数）累积成 poise 伤害，超过 60 进入 0.9 s 硬直并沿弹道后退，随后 1.6 s 内不能再被硬直（自动武器不能把它控死）；硬直会打断正在前摇的攻击；
+- 打腿：腿部累计 45 伤害后永久跛行（追击速度 × 0.55，表现切换为跛行步态），打残那一下触发硬直；
+- 死亡：爆头且未在奔跑 → 原地瘫倒；被从背后打中或奔跑中被击杀 → 向前扑倒并带着动量滑行；其余 → 向后倒；
+- 群体：只做局部软分离（0.7 m），不做队形和群体寻路。
+
+感染者使用 NextGameplay `FNavGrid`：玩家周围 360 m 窗口、0.35 m cell，移动 40 m 后在后台增量更新。`BuildShifted` 复制重叠区域的采样，只重采新进入的边带；轴向移动时约复用 89% 的格子，并重新计算边界侵蚀。后台采样最多 2 个线程，首次加载最多 8 个线程；双缓冲在主线程交换，旧存储留给下次后台任务复用。场景卸载前等待后台采样结束，几何或采样策略变化后必须全量构建，不能跨场景复用。
+
+CPU BVH 实例包围盒先保守标记障碍物覆盖区域（包含角色半径和额外一格余量）。无其他几何的区域直接查询精确地形三角形的高度、法线和台阶差；建筑、屋顶、桥梁和细小障碍物附近仍做完整几何探测，不能仅靠高度图放行。地形快捷路径严格检查实际地形边界，不使用 `ContainsWorld` 为邻接 tile 提供的半格容差。采样相对地形从屋顶下方开始，记录室内地板；身体宽度、净空和薄墙探测使 0.95 m 窄门也可进入。批量射线固定同一份 CPU BVH snapshot，短射线限制到实际检测距离。水域语义屏蔽在每个新采样格中完成，桥面保持可走。路点只提供水平方向；普通移动、攻击前移、受击后退、尸体滑动和群体分离都检查实际几何，按短步扫掠并限制 0.25 m 台阶与 0.65 m 落差，不再从胸口向下探地或用路点高度抬升身体。
+
+`assets/agentscripts/nextdayz-nav-sprint.agentscript.json` 持续冲刺触发多次窗口更新，断言重采格数、构建耗时和主线程交换耗时，并通过 agent 专用 `nextdayz.validation.navProfile` 记录构建期间与空闲期间的真实墙钟帧间隔 P95。该数据包含渲染和线程争用，不用游戏 tick 平均耗时替代帧时间。室内追击与高台碰撞继续由僵尸行为脚本和 `Test_NextDayzNavigation.cpp` 验证。
 
 ### 8.3 刷新规则
 
-- `ZombieSpawnDirector` 每 2 秒评估一次，不在每帧扫描所有点；
-- 全图活跃上限 24，压力测试上限 32；每个 POI 通常 2～6；
-- 生成点距玩家 35～140 m、不可在视线内、必须可导航到所在 POI；
-- 玩家 180 m 外、未警觉且持续 30 秒的感染者可回收；尸体展示 20～30 秒后回收；
-- 同一刷新槽死亡后冷却 8～15 分钟，且玩家离开该 POI 后才可重生；
-- 军事/工业/平民 profile 先只改变生命、速度、感知和外观色，不引入特殊技能。
+- `ZombieSpawnDirector` 每 1 秒评估一次；锚点 `group` 决定一次刷几只（1～4，组员散在 2.5 m 内）；
+- 全图活跃上限白天 40、夜间 48（`ZombieSystem` 与视觉池容量 56）；
+- 生成点距玩家 30～160 m、不可在视线内、必须可导航；
+- 玩家 200 m 外、整组未警觉且持续 30 秒的感染者回收；
+- 整组死光后冷却 3～6 分钟；
+- 视距随环境缩放：夜里 ×0.55、蹲下 ×0.7、雾天 ×0.7；夜里点着提灯反而 ×1.4；
+- 寻路网格每格只存最高表面，所以高出地形 1.2 m 以上的格子（屋顶、雨棚、墙顶）被屏蔽，感染者绕开建筑；每帧向下射线把它们贴回实际地面（室内、雨棚下）；
+- 一声枪响会同时惊动一群：每帧最多解 4 条路径，A* 最多扩展 6000 格，超出时走到离目标最近处（`FNavGrid::FindPath` 的 `maxExpansions`）；网格采样按行多线程。
 
-### 8.4 视觉与命中代理
+### 8.4 视觉与命中盒
 
-新增 `nextdayz_infected.scad`，最少提供 idle、walk、run、attack、hit、die 六个 clip，并遵守现有 ScadRig 部件预算。视觉对象池启动时一次创建，运行中只 Acquire/Release。
+`nextdayz_infected.scad` 由 `rig_humanoid.scad` 程序化生成：17 根骨骼（与士兵同一套骨架约定，去掉武器骨骼，加一根下颌），蹒跚步 / 跛行步 / 冲刺 / 跛行冲刺四种步态（脚 IK 贴地），idle、只罩手臂的 reach、alert、扑咬、横扫、stagger 和三种死亡（停在最后一帧）。衬衫是 `ROLECOLOR`，每个视觉槽位穿一种调色板颜色。旧 C# 模板用到的 `walk / attack / hit / die` 名字保留。
 
-枪械命中不能依赖字符串猜测。感染者实例化时把所有可命中的 render node instance ID 注册到 `FHitProxyRegistry`，映射为 `{zombieHandle, hitZone}`。若动态 ScadRig 在 CPU acceleration structure 中的射线更新不能稳定通过技术尖刀，则退化为每只感染者一个跟随身体的低成本 kinematic capsule 命中代理；这项验证必须在开发第一阶段完成。
+`ZombieRigVisual` 是每只感染者的表现（分层图见 [ScadRig 指南](../../AGENT_GUIDE/ScadRig.md) 的运行时管线一节）。视觉对象池启动时一次创建，运行中只 Acquire/Release。
+
+命中不再走渲染节点：`ZombieRigVisual` 每帧从动画后的骨架输出 12 个世界空间胶囊（头、躯干、骨盆、上臂/前臂、大腿/小腿），`CombatSystem::SetHitboxes` 保存，武器在世界射线命中距离之内对胶囊做射线求交（`TraceHitboxes`，带包围球预剔除）。所以打到的就是屏幕上看到的那一帧姿态，跑动、扑咬、硬直时的头和腿都能单独命中；死者不再挡子弹。没有 rig 时退化为站立姿态的胶囊。`FHitProxyRegistry`（instance ID → zone）保留给以渲染节点注册的目标。
 
 ## 9. 战斗、噪声与伤害
 
 ### 9.1 统一命中事件
 
-`WeaponSystem` 继续负责射击手感和弹药，只产出 `FWeaponHitEvent`：武器 ID、射手、射线起点/方向、命中 instance ID、命中点、基础伤害、序号。`CombatSystem` 解析命中代理、距离衰减和 hit zone，并调用 `ZombieSystem::ApplyDamage`。
+`WeaponSystem` 继续负责射击手感和弹药，只产出 `FWeaponHitEvent`：武器 ID、射线起点/方向、命中 instance ID 或命中的感染者 handle 与部位、命中点与法线、基础伤害、冲击系数、序号。准星射线与每颗弹丸都先求世界命中，再把该距离作为上限追踪感染者命中盒。`CombatSystem` 计算距离衰减、调用 `ZombieSystem::ApplyDamage`，并为每次生效的伤害发出 `FDamageEvent`（部位、伤害、冲击、方向、是否击杀/硬直/打残），表现层只消费这个事件。
 
-推荐初始伤害语义：头部 2.0 倍、躯干 1.0 倍、四肢 0.65 倍；具体枪械伤害写入 `FWeaponDef`，不能散落在系统代码中。霰弹枪产生固定数量 pellet trace，并限制同一目标单发最大伤害，保证可调试。
+伤害语义：头部 3.0 倍（步枪一枪爆头）、躯干 1.0 倍、手臂 0.6 倍、腿 0.7 倍；头和腿的冲击另乘 1.5 / 1.3。具体枪械伤害与 `impactScale`（AK 0.5、手枪 0.6、SVD/莫辛/霰弹枪 1.0）写入 `FWeaponDef`，不能散落在系统代码中。霰弹枪产生固定数量 pellet trace，并限制同一目标单发最大伤害，保证可调试。
 
 ### 9.2 近战
 
-首版至少加入刀/斧或撬棍之一，使无枪开局可完成战斗。近战使用相机前方短距离 sweep/ray、攻击前摇、明确冷却和一次命中集合；一次挥击不能在多帧重复伤害同一目标。近战噪声远小于枪声，但会吸引近处感染者。
+猎刀（快、38 伤害、1.7 m）、撬棍（52、2.0 m、冲击大）、消防斧（85、2.1 m、慢）是 `kWeapons` 里 `meleeRange > 0` 的武器，走同一套槽位/视图模型：按住左键按挥击间隔连续挥砍，每次从眼睛向前扫一个扇面（水平 ±15°、向下约 22°——感染者驼背，眼平的射线会从头顶掠过），命中最近的命中盒；视图模型左右交替斜劈。噪声 6～9 m，只惊动近处。
 
 ### 9.3 噪声总线
 
 噪声是瞬时数据，不进入场景 ECS。每个事件包含位置、半径、强度、类型和序号；ZombieAI 在感知 tick 消费当前/最近事件。枪械半径示例：手枪 55 m、步枪 110 m、霰弹枪 130 m；数值由调参决定，不绑定渲染音效。
+
+### 9.4 命中反馈、特效与音效
+
+- HUD：准星命中标记（白色命中、琥珀色爆头、红色放大的击杀，一串连射合并成一个标记）；被抓伤时屏幕边缘红色晕影、准星周围指向攻击者的红色弧，镜头朝远离攻击方向抖一下；低血量时晕影脉动；
+- `CombatEffects`：枪口焰（第一/第三人称各自从看到的枪口出发）、曳光（340 m/s，霰弹枪每 3 颗弹丸显示 1 条）、命中感染者时入口血雾 + 沿弹道从背面喷出的血滴（爆头和击杀更多）、命中地面的尘土与火星、尸体下按地面法线铺开的不规则血泊。所有节点在 `BeforeSceneRebuild` 注入网格、加载场景时一次建好，空闲时停在地图下方，开火不分配、不重建场景。自发光材质的辐射亮度与太阳同量级（百级），个位数会显示成暗灰；
+- `NextDayzAudio`：枪声（步枪 / 狙击 / 霰弹 / 手枪各自多版本轮换）、空仓、换弹、切枪、肉体命中 / 爆头 / 击杀确认、地面弹着、玩家受伤，以及感染者游荡/追击的低吼、发现时的嘶吼、扑咬、死亡与倒地声。NextAudio 是 2D、一文件一个播放实例，所以变体轮换避免连发打断自己的尾音，距离只表现为音量衰减。默认音效由 `tools/audio/nextdayz_sfx.py` 用 numpy 程序化合成（无第三方采样，结果按种子固定）。生成的 `.wav` 不入库（`assets/sounds/nextdayz/` 在 `.gitignore` 中），每个 checkout 先运行一次 `python tools/audio/nextdayz_sfx.py`；缺文件时游戏照常运行、只是没有声音，NextAudio 每个缺失文件警告一次。
+
+本机录音素材试验：`python tools/audio/nextdayz_dayz_trial.py --dayz-root <DayZ安装目录>` 从本地 PBO 只读取选定 OGG，转为 44.1 kHz PCM16 WAV（战斗单声道、环境立体声），导入 77 个 cue。击杀提示和鞭炮保留合成音；爆头使用另外两条肉体弹着录音，感染者死亡使用重击人声并沿用延迟倒地声。原件备份、来源 SHA-256 清单、逐项先旧后新的 `before_after.wav` 对比试听均在 `out/audio/dayz/`，素材不提交、不发布。脚本同时同步已有桌面构建的音效目录，分别备份；`python tools/audio/nextdayz_dayz_trial.py --restore` 还原源码资源与运行副本（后续增加的 cue 也纳入恢复记录）。切换后重启 NextDayz（NextAudio 缓存解码结果）。这仍沿用现有 2D 音量衰减与消音器降音量逻辑，未引入 DayZ 的空间音频或独立消音采样。
+
+环境声按实际天气与时钟分层：清晨提高鸟鸣频率和音量；白天交替林间、草地底声，点缀六种鸟鸣和昼间昆虫；傍晚交叉混入蟋蟀与夜间底声；深夜切换三段夜野底声、夜虫和猫头鹰，停播白天鸟鸣。阴天减少生物声，增加阵风、树叶与树干吱响；雾天改为安静的轻风与稀疏鸟虫，不能因为 `Storm()` 更高就播放大风。当前天气只有晴/阴/雾，没有降雨状态，因此不播放雨声或雷声。八秒底声与风声均在两端淡入淡出两秒，每六秒调度，避免风声硬切和持续叠加；录音同时限制 RMS 与峰值，运行时轻风音量为 0.045、阴天阵风上限 0.115、雾天 0.018。`ambience_showcase.wav` 按清晨/正午/黄昏/深夜/阴天/雾天各十秒给出示意试听。`gnb validate --script assets/agentscripts/nextdayz-ambience.agentscript.json` 验证分层与切换；`game.ambienceDay/Evening/Night/Birds/Owls/Wind` 暴露当前混音权重。
 
 ## 10. 玩家界面
 
@@ -334,7 +354,11 @@ Dormant → Wander → Investigate → Chase → Attack
 
 ### 10.2 库存界面
 
-库存打开时显示 Nearby、角色装备和各容器三列。每个容器显示 `已用/总容量`；支持点击移动和 ImGui drag/drop，操作最终都调用同一事务 API。世界继续渲染但暂停玩家移动和攻击；单人首版可选择暂停感染者仿真，默认建议不暂停以保留风险，并在 UI 上明确提示。
+Tab 打开三栏：**附近**（伸手可及的物资，Take 或拖进背包；把物品拖到这一栏就是丢在地上）、**装备**（头/躯干/背心/腿/背 + 主副武器，护甲、保暖、载重汇总、携带的工具）、**容器**（每个口袋/背包一段，标题显示 `已用/总容量`）。双击执行默认动作（用/穿/装备），右键菜单有使用、穿戴、脱下、装备到 1/2、拆分、移动到某容器、绑定快捷栏、丢一个/全部；拖放到容器 = 移动，拖到装备槽 = 穿戴/装备。所有操作都走同一套库存事务。世界不暂停。
+
+穿戴的衣物不占容器容量；穿同一槽位的新衣服会先脱下旧的（需要地方放）；脱下/丢弃背包时里面的东西先转移到其他容器，放不下就拒绝。枪械的弹匣属于那把枪（切换、丢弃、捡回都保留）。
+
+快捷栏 3～6（默认绑定绷带/水/罐头），H 快速包扎，M 地图（需要地图），L 提灯，背包里右键可重新绑定。
 
 ### 10.3 局外状态
 
@@ -349,6 +373,9 @@ game.runState
 game.health / hunger / hydration
 game.inventoryUsed / inventoryCapacity
 game.activeZombies / alertedZombies / zombieKills
+game.zombieState / zombieHealth / zombieSpeed / zombieCrippled / zombieDeath（焦点感染者）
+game.zombieBaseClip / zombieActionClip / zombieFlinch / zombieStaggers / headshots / lastHitZone
+game.hitMarker / hitMarkerKill / hurt / fxParticles / fxTracers / fxMuzzleFlash / audioPlayed
 game.lastDamageSource / lastHitZombie
 game.lootAvailable / lootCooldown
 game.currentObjective
@@ -358,9 +385,9 @@ game.currentObjective
 
 ### 11.1 运行时调试视图
 
-`F5` 打开总调试面板和世界叠加层；`F6`、`F7`、`F8` 分别切换感染者 AI、物资刷新和命中代理/射线。感染者视图显示状态、生命、朝向、剩余路径、目标点、repath 与 stuck 计数；物资视图显示槽位类别、Available/Reserved/Cooldown 状态和冷却秒数，并在面板中按类别及关键物资报告 `MISSING`；命中视图按实际代理世界变换绘制包围盒，并区分代理是否进入 CPU acceleration structure，最近射线用绿色（感染者代理）、红色（世界阻挡）和黄色（未命中）显示。
+运行时调试由独立的游戏内调试器承担（`src/Application/Game/NextDayz/Debugger/`），完整说明见 [NextDayz 游戏内调试器](nextdayz-debugger.md)：`F5` 打开带 Overview / Player / Survival / Inventory / Weapons / Infected / Spawns / Loot / World / Combat / Log 标签的窗口和世界叠加层，`F6`/`F7`/`F8` 切换感染者 AI、物资、命中盒与射线图层，`F9` 释放调试光标并可在世界中点选，`F10` 冻结/单步。各系统记录"为什么没发生"的诊断字段（刷新点结论、物资补货受阻原因、感知与寻路预算），事件日志始终记录，`nextdayz.debug.dump` 写出全部系统的 JSON 快照。
 
-自动化验证使用 `assets/agentscripts/nextdayz-debug-visualization.agentscript.json`，相关查询包括 `game.debugZombieOverlay`、`game.debugLootOverlay`、`game.debugHitProxyOverlay`、`game.hitProxyRegistered`、`game.hitProxyCpuEligible`、`game.zombiePathSegments`、`game.lootMissingCategories`、`game.recentWeaponTraces` 和 `game.lastTraceResult`。
+自动化验证使用 `assets/agentscripts/nextdayz-debug-visualization.agentscript.json`，原有查询 `game.debugZombieOverlay`、`game.debugLootOverlay`、`game.debugHitProxyOverlay`、`game.hitProxyRegistered`、`game.hitProxyCpuEligible`、`game.zombiePathSegments`、`game.lootMissingCategories`、`game.recentWeaponTraces` 和 `game.lastTraceResult` 保持不变。
 
 ## 12. 性能预算
 
@@ -397,3 +424,35 @@ game.currentObjective
 | 物资经济失控 | 食物永久过剩或软锁死 | profile 上下限、保底计时和 director 统计；不通过全图统一随机率硬调 |
 | 库存迁移破坏现有枪械逻辑 | 换弹丢弹或枪械复制 | 先建事务单测与兼容适配层，再迁移 WeaponSystem |
 | UI 范围膨胀 | drag/drop 阻塞核心循环 | 先交付点击移动与容量反馈；拖拽是同一事务 API 的第二表现入口 |
+
+## 15. 2026-11-04 末日生存深化
+
+### 15.1 物品与功能
+
+42 种物品（`Data/ItemDefs.cpp`）每种都有用途：
+
+| 类别 | 物品 | 作用 |
+| --- | --- | --- |
+| 食物 | 罐头豆、金枪鱼、饼干、苹果、巧克力 | 饱食；罐头没有开罐器/刀/斧只吃到一半；饼干口渴 |
+| 饮水 | 水瓶、空瓶、汽水 | 喝完剩空瓶，可在水井/水泵装满（F） |
+| 医疗 | 绷带、碎布、急救包、止痛药 | 止血；急救包 +45；止痛药 30 秒内回 25 |
+| 衣物 | 头盔、夹克、卫衣、军用背心、工装裤、军裤、三种背包 | 护甲（头盔 15%、背心 30%）、保暖、容量 |
+| 武器 | 5 把枪 + 刀/撬棍/斧，4 种弹药 | 弹药按口径找，枪带随机存弹 |
+| 工具 | 开罐器、指南针、地图、电台+电池、提灯+燃料、铺盖、鞭炮 | 指南针显示顶部方位条；地图开 M；电台耗电池在 120 m 外一个军用刷新点刷出补给（步枪+弹药+急救包）并标在地图和指南针上 20 分钟；提灯每罐燃料烧 15 分钟、夜里提亮但让感染者看得更远；铺盖休息 +20 生命（流血时不行）；鞭炮扔出约 18 m，炸 4 声把感染者引过去 |
+
+### 15.2 身体状态
+
+`SurvivalSystem`：感染者每次命中先被护甲吸收一部分，再按 45%×(1−1.5×护甲) 的概率开一道伤口（最多 3 道），每道每秒掉 0.45 生命直到包扎；饥饿和口渴都 ≥70、没有流血、不冷时缓慢回血；夜晚与坏天气减去穿着保暖得到寒冷值，寒冷让饥饿最多加倍消耗；饥饿或口渴低于 12 时无法冲刺。死亡原因区分 blood loss / starvation / dehydration / infected。
+
+### 15.3 氛围
+
+- 天气：`TimeSystem` 按种子每 2.5～5.5 游戏小时在晴/阴/雾之间切换，G 键手动轮换。自动与手动切换共用连续状态，晴↔雾完整过渡默认 30 个真实秒（`FTimeConfig::WeatherTransitionSeconds`），中途改选天气从当前状态继续；阳光先淡出再关闭，漫射天光保持独立强度，雾密度、起始距离、遮蔽上限、环境声和感染者视距随当前天气渐变。阴天压暗和去饱和；雾天密度 0.065、起雾距离 2 m、最大遮蔽 99.5%，地面附近约 40～60 m 的远景明显隐去（随高度变化）；清晨另有薄雾；高度雾的颜色辐射亮度按白天 50、夜间 0.15 调（见 `FTimeConfig`）；`nextdayz-weather.agentscript.json` 验证双向过渡与中途反转；
+- 声音：`NextDayzAudio::UpdateAmbience` 按时间和晴/阴/雾天气混合昼夜林野底声、黄昏蟋蟀、鸟鸣、昼夜昆虫、猫头鹰、轻风/阵风和树叶树干声，另有稀疏乌鸦、远处枪声与夜间尖叫；`tools/audio/nextdayz_sfx.py` 提供完整合成后备，`tools/audio/nextdayz_dayz_trial.py` 安装本机录音试验（§9.4）；动作声含近战、鞭炮、拾取/丢弃/进食/饮水/包扎/电台/提灯；
+- 末日痕迹 kit：尸袋、血迹、垃圾堆、木板路障与钉死的窗、新泽西护栏、检疫告示牌、墙面涂鸦（"HELP" 等，`text()` 生成）、医疗帐篷、烧毁的车、货运车厢；
+- HUD：DayZ 式消息流（拾取、饥渴、流血、寒冷、电台播报……）、状态提示（流血闪烁、寒冷/冻僵、虚弱、回血、提灯剩余）、死亡总结（死因、存活时间、击杀数）。
+
+### 15.4 验证入口
+
+只在 `--agent-validation` 下生效的 cvar：`nextdayz.validation.give`（`id` 或 `id:count`）、`.use`（按 id 使用/穿戴/装备第一件）、`.drop`、`.bleed`、`.teleport`（`"x,y"` 地图坐标）；调试 cvar：`nextdayz.debug.hour`、`.weather`（0/1/2）、`.fogRadiance`、`.fogDensityScale`。新增查询：`game.lootSpots / lootPiles / lootZones / poiCount / zombieCap / zombieSpawnPoints / bleeding / cold / armor / weather / lanternLit / cacheMarked / showMap / lastNotification / itemCount / zombieOffset / lastTraceNode`。
+
+`assets/agentscripts/nextdayz-survival-depth.agentscript.json` 覆盖：据点/刷新点/感染者锚点规模、流血与 H 包扎、地图与电台补给、背心护甲、斧头近战击杀、丢弃成堆、背包界面、夜间提灯、雾天；并截图地图、背包、夜晚、雾天。开局有货数为 253（种子 1337），smoke / 3c-loot / loot-respawn / product-loop 断言随之更新。单测新增 loot 表、物品目录完整性（`[ScadRig][NextDayz]`）、穿戴/换装/丢弃、流血/护甲/止痛药/开罐器/休息、寒冷、补货冷却缩放、成组刷新。

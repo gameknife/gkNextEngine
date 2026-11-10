@@ -2,6 +2,7 @@
 
 #include "Engine/Assets/Core/Scene.hpp"
 #include "Engine/Rendering/VulkanBaseRenderer.hpp"
+#include "Modules/NextUI/FontLoader.hpp"
 #include "Modules/NextUI/UI/DesktopUI.hpp"
 #include "Modules/NextUI/ImGuiScaling.hpp"
 #include "Engine/Runtime/Interface/UserInterface.hpp"
@@ -13,7 +14,6 @@
 #include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 
 #include <imgui.h>
-#include <imgui_freetype.h>
 #include <imgui_internal.h>
 
 #include <algorithm>
@@ -445,7 +445,7 @@ namespace ScadStudio
     ScadStudioInterface::ScadStudioInterface(NextEngine& engine)
         : engine_(engine)
         , ai_(engine)
-        , store_(std::filesystem::current_path() / "scad_studio")
+        , store_(Utilities::FileHelper::GetWritableRuntimeRoot() / "scad_studio")
     {
         // Restore persisted sessions.
         sessions_ = store_.LoadAll();
@@ -479,7 +479,7 @@ namespace ScadStudio
     void ScadStudioInterface::Config()
     {
         ImGuiIO& io = ImGui::GetIO();
-        imguiIniPath_ = Utilities::FileHelper::GetPlatformFilePath("scadstudio.ini");
+        imguiIniPath_ = Utilities::FileHelper::GetWritableFilePath("scadstudio.ini");
         io.IniFilename = imguiIniPath_.c_str();
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags &= ~ImGuiConfigFlags_DockingEnable;
@@ -488,20 +488,7 @@ namespace ScadStudio
     void ScadStudioInterface::Init()
     {
         NextUI::Theme::ApplyProfessionalTheme();
-        ImGuiIO& io = ImGui::GetIO();
-        // The vcpkg imgui is built with the FreeType feature, so the font atlas must use
-        // the FreeType builder (matches gkNextEditor); otherwise atlas build crashes.
-        io.Fonts->SetFontLoader(ImGuiFreeType::GetFontLoader());
-        io.Fonts->FontLoaderFlags = ImGuiFreeTypeLoaderFlags_NoHinting;
-
-        const std::string fontPath =
-            Utilities::FileHelper::GetPlatformFilePath("assets/fonts/DroidSansFallback.ttf");
-        ImFont* font = io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 18.0f, nullptr,
-                                                    io.Fonts->GetGlyphRangesChineseFull());
-        if (font == nullptr)
-        {
-            io.Fonts->AddFontDefault();
-        }
+        NextUI::FontLoader::LoadDefaultUiFont("assets/fonts/Roboto-Regular.ttf", 18.0f);
     }
 
     void ScadStudioInterface::Render()
@@ -562,14 +549,7 @@ namespace ScadStudio
         const float viewportY = panelY;
         const float viewportW = std::max(1.0f, viewport->Size.x - leftWidth - rightWidth);
         const float viewportH = panelHeight;
-        const NextUI::Scaling::FViewportRect framebufferViewport =
-            NextUI::Scaling::ImGuiToMainFramebufferViewport(
-                ImVec2(viewportX, viewportY), ImVec2(viewportW, viewportH));
-        engine_.GetRenderer().SwapChain().UpdateOutputViewport(
-            Utilities::Math::floorToInt(framebufferViewport.Position.x),
-            Utilities::Math::floorToInt(framebufferViewport.Position.y),
-            Utilities::Math::ceilToInt(framebufferViewport.Size.x),
-            Utilities::Math::ceilToInt(framebufferViewport.Size.y));
+        NextUI::Scaling::SyncImGuiViewportToSwapChain(engine_, ImVec2(viewportX, viewportY), ImVec2(viewportW, viewportH));
     }
 
     void ScadStudioInterface::DrawTitleBar()
@@ -584,7 +564,8 @@ namespace ScadStudio
         config.DrawMenuBar = [&]() -> float
         {
             float menuRight = ImGui::GetCursorScreenPos().x;
-            if (ImGui::BeginMenu("File"))
+            NextUI::Theme::FMainMenuGhostScope mainMenuStyle;
+            if (mainMenuStyle.BeginMenu("File"))
             {
                 if (ImGui::MenuItem("New Model", "Ctrl+N"))
                 {
@@ -603,7 +584,7 @@ namespace ScadStudio
             }
             menuRight = std::max(menuRight, ImGui::GetItemRectMax().x);
 
-            if (ImGui::BeginMenu("View"))
+            if (mainMenuStyle.BeginMenu("View"))
             {
                 bool sessionsOpen = !sessionsCollapsed_;
                 bool chatOpen = !chatCollapsed_;
@@ -878,22 +859,16 @@ namespace ScadStudio
 
     void ScadStudioInterface::DrawSessionPanel(const ImVec2& pos, const ImVec2& size)
     {
-        ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
-        ImGui::SetNextWindowSize(size, ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(0.96f);
-        const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking;
-
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, sessionsCollapsed_ ? ImVec2(7.0f, 8.0f) : ImVec2(12.0f, 12.0f));
-        if (!ImGui::Begin("##ScadStudioSessions", nullptr, flags))
+        NextUI::Theme::FCollapsibleSidePanelConfig sideConfig{};
+        sideConfig.WindowId = "##ScadStudioSessions";
+        sideConfig.Position = pos;
+        sideConfig.Size = size;
+        sideConfig.Collapsed = sessionsCollapsed_;
+        if (!NextUI::Theme::BeginCollapsibleSidePanel(sideConfig))
         {
-            ImGui::End();
-            ImGui::PopStyleVar(3);
+            NextUI::Theme::EndCollapsibleSidePanel();
             return;
         }
-        ImGui::PopStyleVar(3);
 
         if (sessionsCollapsed_)
         {
@@ -915,7 +890,7 @@ namespace ScadStudio
             {
                 ImGui::SetTooltip("New model");
             }
-            ImGui::End();
+            NextUI::Theme::EndCollapsibleSidePanel();
             return;
         }
 
@@ -1105,27 +1080,21 @@ namespace ScadStudio
             ImGui::TextWrapped("No model yet. Click \"+ New Model\" and describe what you want.");
         }
 
-        ImGui::End();
+        NextUI::Theme::EndCollapsibleSidePanel();
     }
 
     void ScadStudioInterface::DrawChatPanel(const ImVec2& pos, const ImVec2& size)
     {
-        ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
-        ImGui::SetNextWindowSize(size, ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(0.96f);
-        const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking;
-
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, chatCollapsed_ ? ImVec2(7.0f, 8.0f) : ImVec2(12.0f, 12.0f));
-        if (!ImGui::Begin("##ScadStudioChat", nullptr, flags))
+        NextUI::Theme::FCollapsibleSidePanelConfig sideConfig{};
+        sideConfig.WindowId = "##ScadStudioChat";
+        sideConfig.Position = pos;
+        sideConfig.Size = size;
+        sideConfig.Collapsed = chatCollapsed_;
+        if (!NextUI::Theme::BeginCollapsibleSidePanel(sideConfig))
         {
-            ImGui::End();
-            ImGui::PopStyleVar(3);
+            NextUI::Theme::EndCollapsibleSidePanel();
             return;
         }
-        ImGui::PopStyleVar(3);
 
         if (chatCollapsed_)
         {
@@ -1139,7 +1108,7 @@ namespace ScadStudio
             }
             ImGui::Spacing();
             ImGui::TextUnformatted(ICON_FA_COMMENTS);
-            ImGui::End();
+            NextUI::Theme::EndCollapsibleSidePanel();
             return;
         }
 
@@ -1451,7 +1420,7 @@ namespace ScadStudio
             SubmitCurrentInput();
         }
 
-        ImGui::End();
+        NextUI::Theme::EndCollapsibleSidePanel();
     }
 
     void ScadStudioInterface::SubmitCurrentInput()
@@ -1890,12 +1859,15 @@ namespace ScadStudio
         {
             return;
         }
-        // Export next to the executable with a friendly name; the workspace copy stays.
+        // Keep exports in the application data directory. The executable/bundle directory
+        // is read-only on installed mobile builds; the workspace copy stays separate.
         std::error_code ec;
         if (session.files.empty())
         {
             const std::filesystem::path dest =
-                std::filesystem::current_path(ec) / (session.id + "_export.scad");
+                Utilities::FileHelper::GetWritableRuntimeRoot() / "exports" / "scad_studio" /
+                (session.id + "_export.scad");
+            std::filesystem::create_directories(dest.parent_path(), ec);
             std::ofstream out(dest, std::ios::binary | std::ios::trunc);
             if (out)
             {
@@ -1909,7 +1881,9 @@ namespace ScadStudio
         }
         else
         {
-            const std::filesystem::path destDir = std::filesystem::current_path(ec) / (session.id + "_export");
+            const std::filesystem::path destDir =
+                Utilities::FileHelper::GetWritableRuntimeRoot() / "exports" / "scad_studio" /
+                (session.id + "_export");
             std::filesystem::create_directories(destDir, ec);
             for (const FScadProjectFile& file : session.files)
             {

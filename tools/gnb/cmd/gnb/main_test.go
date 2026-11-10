@@ -339,3 +339,38 @@ func writeTestTODOFile(repoRoot string, nextSection string) error {
 `
 	return os.WriteFile(filepath.Join(specDir, "TODO.md"), []byte(todo), 0644)
 }
+
+func TestDSArgsHideServerAndPointClientsAtIt(t *testing.T) {
+	opts := dsOptions{Target: "NextDayz", Clients: 2, Port: 27100, Pvp: true}
+	server := strings.Join(dsServerArgs(opts), "|")
+	for _, want := range []string{"--dedicated", "nextdayz.net.mode server", "nextdayz.net.port 27100", "nextdayz.net.pvp true"} {
+		if !strings.Contains(server, want) {
+			t.Fatalf("server args %q missing %q", server, want)
+		}
+	}
+	client := strings.Join(dsClientArgs(opts, 2, []string{"--cvar", "nextdayz.net.kit false"}), "|")
+	for _, want := range []string{"nextdayz.net.mode client", "nextdayz.net.host 127.0.0.1", "nextdayz.net.port 27100", "nextdayz.net.name client2", "nextdayz.net.kit false"} {
+		if !strings.Contains(client, want) {
+			t.Fatalf("client args %q missing %q", client, want)
+		}
+	}
+	if !strings.Contains(client, "--disable-streamline") || !strings.Contains(server, "--disable-streamline") {
+		t.Fatalf("several clients must run without Streamline: client %q server %q", client, server)
+	}
+	if strings.Contains(strings.Join(dsClientArgs(dsOptions{Clients: 1, Port: 27015}, 1, nil), "|"), "--disable-streamline") {
+		t.Fatal("a single client keeps DLSS")
+	}
+	opts.ShowServer = true
+	opts.Scene = "assets/x.scad"
+	server = strings.Join(dsServerArgs(opts), "|")
+	if strings.Contains(server, "--dedicated") || !strings.Contains(server, "--load-scene=assets/x.scad") {
+		t.Fatalf("visible server with scene: %q", server)
+	}
+}
+
+func TestDSServerHasRoomForEveryBot(t *testing.T) {
+	server := strings.Join(dsServerArgs(dsOptions{Target: "NextDayz", Port: 27015, Bots: 16}), "|")
+	if !strings.Contains(server, "nextdayz.net.maxPlayers 16") {
+		t.Fatalf("16 bots need 16 places: %q", server)
+	}
+}

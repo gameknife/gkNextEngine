@@ -52,10 +52,11 @@ func Normalize(tile Tile, elements []osmElement, profile HeightProfile,
 			}
 			ir.Roads = append(ir.Roads, Road{
 				ID: e.ID, Name: tags["name"], Class: tags["highway"],
-				Lanes: atoiDefault(tags["lanes"], 0),
-				Width: roadWidth(tags),
-				Pts:   pts,
-				Nodes: nodes,
+				Lanes:  atoiDefault(tags["lanes"], 0),
+				Width:  roadWidth(tags),
+				Pts:    pts,
+				Nodes:  nodes,
+				Bridge: tags["bridge"] != "" && tags["bridge"] != "no",
 			})
 		case tags["natural"] == "coastline" && e.Type == "way":
 			pts := DedupeRing(project(e.Geometry), 0.2)

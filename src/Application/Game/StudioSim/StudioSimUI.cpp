@@ -1,6 +1,7 @@
 #include "StudioSimUI.h"
 #include "StudioSimLabels.hpp"
 #include "Gameplay/Sim/AnchorDebugOverlay.h"
+#include "Modules/NextUI/UI/UiHud.hpp"
 
 #include <fmt/format.h>
 #include <imgui.h>
@@ -85,42 +86,22 @@ namespace StudioSim
             return {0.92f, 0.92f, 0.92f, 1.0f};
         }
 
-        ImVec4 ToImVec4(const glm::vec4& color)
-        {
-            return ImVec4(color.r, color.g, color.b, color.a);
-        }
+        using NextUI::Hud::ToImVec4;
 
         ImU32 ColorToImU32(const glm::vec3& color)
         {
-            return IM_COL32(static_cast<int>(color.r * 255.0f), static_cast<int>(color.g * 255.0f),
-                            static_cast<int>(color.b * 255.0f), 255);
+            return NextUI::Hud::ToImU32(color);
         }
 
         ImU32 ColorToImU32(const glm::vec4& color)
         {
-            const auto channel = [](float value)
-            {
-                return static_cast<int>(std::clamp(value, 0.0f, 1.0f) * 255.0f);
-            };
-            return IM_COL32(channel(color.r), channel(color.g), channel(color.b), channel(color.a));
+            return NextUI::Hud::ToImU32(color);
         }
 
         bool ProjectWorld(const glm::mat4& viewProjection, const ImVec2& viewportPosition,
                           const ImVec2& viewportSize, const glm::vec3& worldPosition, ImVec2& outScreen)
         {
-            const glm::vec4 clip = viewProjection * glm::vec4(worldPosition, 1.0f);
-            if (clip.w <= 0.0f)
-            {
-                return false;
-            }
-            const glm::vec3 ndc = glm::vec3(clip) / clip.w;
-            if (ndc.x < -1.2f || ndc.x > 1.2f || ndc.y < -1.2f || ndc.y > 1.2f)
-            {
-                return false;
-            }
-            outScreen = ImVec2(viewportPosition.x + (ndc.x * 0.5f + 0.5f) * viewportSize.x,
-                               viewportPosition.y + (-ndc.y * 0.5f + 0.5f) * viewportSize.y);
-            return true;
+            return NextUI::Hud::TryProjectWorldToScreen(viewProjection, viewportPosition, viewportSize, worldPosition, outScreen);
         }
 
         const char* ProjectSizeTierLabelZh(EProjectSizeTier tier)
@@ -566,11 +547,7 @@ namespace StudioSim
 
             glm::vec4 color = particle.color;
             color.a *= std::clamp(1.0f - progress, 0.0f, 1.0f);
-            const ImVec2 textSize = ImGui::CalcTextSize(particle.text.c_str());
-            const ImVec2 textPosition(screen.x - textSize.x * 0.5f, screen.y - 24.0f);
-            drawList->AddText(ImVec2(textPosition.x + 1.0f, textPosition.y + 1.0f),
-                              IM_COL32(0, 0, 0, 180), particle.text.c_str());
-            drawList->AddText(textPosition, ColorToImU32(color), particle.text.c_str());
+            NextUI::Hud::DrawTextCentered(drawList, ImVec2(screen.x, screen.y - 16.0f), ColorToImU32(color), particle.text);
         }
     }
 

@@ -1,0 +1,171 @@
+{
+  "name": "nextdayz-persistence-prepare",
+  "target": "NextDayz",
+  "scene": "assets/scad/proc/coldwar/riverland_1km.scad",
+  "defaults": {
+    "waitFrames": 2,
+    "stepTimeoutMs": 30000
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignPath",
+      "set": "out/nextdayz-validation/persistence.json"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaign",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "new"
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignSaveBlocked",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "deploy"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.invulnerable",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "take-authored"
+    },
+    {
+      "type": "assert",
+      "query": "game.worldCooling",
+      "op": "eq",
+      "value": 45
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "pile-stress"
+    },
+    {
+      "type": "assert",
+      "query": "game.lootPiles",
+      "op": "eq",
+      "value": 40
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "reload"
+    },
+    {
+      "type": "assert",
+      "query": "game.lootPiles",
+      "op": "eq",
+      "value": 40
+    },
+    {
+      "type": "assert",
+      "query": "game.worldCooling",
+      "op": "eq",
+      "value": 45
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.damagePlayer",
+      "set": 200
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignInField",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "assert",
+      "query": "game.lootPiles",
+      "op": "eq",
+      "value": 41
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "deploy"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "recover-pile"
+    },
+    {
+      "type": "assert",
+      "query": "game.lootPiles",
+      "op": "eq",
+      "value": 40
+    },
+    {
+      "type": "assert",
+      "query": "game.inventoryCount",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "signal_flare"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "pad:1"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "call"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "flight:52"
+    },
+    {
+      "type": "assert",
+      "query": "game.flightPhase",
+      "op": "eq",
+      "value": "Landing"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.campaignCommand",
+      "set": "save"
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignSaveBlocked",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

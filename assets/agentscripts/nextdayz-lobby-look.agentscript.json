@@ -1,0 +1,77 @@
+{
+  "name": "nextdayz-lobby-look",
+  "target": "NextDayz",
+  "viewport": {
+    "width": 1600,
+    "height": 900
+  },
+  "args": [
+    "--cvar",
+    "nextdayz.validation.campaign true",
+    "--cvar",
+    "nextdayz.validation.campaignFresh true",
+    "--cvar",
+    "nextdayz.validation.campaignPath out/nextdayz-validation/lobby-look.json"
+  ],
+  "defaults": {
+    "waitFrames": 2,
+    "stepTimeoutMs": 60000
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "assert",
+      "query": "game.cabinScene",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "jacket"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "jacket"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "cargo_pants"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "cargo_pants"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.give",
+      "set": "vest_military"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.use",
+      "set": "vest_military"
+    },
+    {
+      "type": "wait-frames",
+      "n": 150
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_lobby_look",
+      "ui": true
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

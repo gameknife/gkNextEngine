@@ -103,7 +103,8 @@ section × 6: rawSize(u64) | compressedSize(u64) | lzav bytes
 
 `TryRestoreAmbientBakeCache` 让引擎落在**与冷启动收敛后完全相同**的状态：
 
-- 各级窗口必须与当前布局一致（原点、体素尺寸、wrap），否则视为未命中；
+- 各级体素尺寸必须与当前布局一致，否则视为未命中；窗口原点与 wrap 取快照里的值（保存时窗口可能已随相机
+  滚动），恢复后由滚动逻辑按当前焦点继续；
 - `cpuBrickTable` 的 brickTable / activeBricksPerCascade 按缓存原样恢复
   （**必须原样**：cube pool 是通过它索引的，重算 slot 分配会把恢复的光照打散），
   所有 brick 记为已收敛（`MarkConverged`），bake 队列为空 —— `BakeAmbientCubeCascade` 取不到 batch；

@@ -1,0 +1,344 @@
+{
+  "name": "ambientcube-clipmap-follow",
+  "target": "gkNextRenderer",
+  "scene": "assets/scad/proc/nextdayz/training_ground/scene.scad",
+  "args": [
+    "--cvar=r.rendererType 2",
+    "--cvar=sys.ambientCubeFollow true",
+    "--cvar=sys.ambientCubeCascadeCount 5"
+  ],
+  "defaults": {
+    "waitFrames": 2,
+    "stepTimeoutMs": 240000
+  },
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "scene.ready",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 240000
+    },
+    {
+      "type": "wait-until",
+      "query": "ambient.allocatedBricks",
+      "op": "gt",
+      "value": 0,
+      "timeoutMs": 120000
+    },
+    {
+      "type": "wait-until",
+      "query": "ambient.pendingBricks",
+      "op": "eq",
+      "value": 0,
+      "timeoutMs": 120000,
+      "comment": "The initial whole-map bake converges."
+    },
+    {
+      "type": "cvar",
+      "name": "camera.teleport",
+      "set": "0 32 -10 25 12 25",
+      "comment": "Teleport: camp."
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "wait-until",
+      "query": "ambient.voxelJobActive",
+      "op": "eq",
+      "value": false,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait-until",
+      "query": "ambient.unpublishedBricks",
+      "op": "eq",
+      "value": 0,
+      "timeoutMs": 30000,
+      "comment": "Near the camera everything is published again after a jump."
+    },
+    {
+      "type": "cvar",
+      "name": "r.ambientCube.debugView",
+      "set": 2
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/follow_camp_state"
+    },
+    {
+      "type": "cvar",
+      "name": "r.ambientCube.debugView",
+      "set": 0
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/follow_camp_lit"
+    },
+    {
+      "type": "cvar",
+      "name": "camera.teleport",
+      "set": "260 42 -240 290 16 -210",
+      "comment": "Teleport: east."
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "wait-until",
+      "query": "ambient.voxelJobActive",
+      "op": "eq",
+      "value": false,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait-until",
+      "query": "ambient.unpublishedBricks",
+      "op": "eq",
+      "value": 0,
+      "timeoutMs": 30000,
+      "comment": "Near the camera everything is published again after a jump."
+    },
+    {
+      "type": "cvar",
+      "name": "r.ambientCube.debugView",
+      "set": 2
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/follow_east_state"
+    },
+    {
+      "type": "cvar",
+      "name": "r.ambientCube.debugView",
+      "set": 0
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/follow_east_lit"
+    },
+    {
+      "type": "cvar",
+      "name": "camera.teleport",
+      "set": "-300 42 220 -270 16 250",
+      "comment": "Teleport: west."
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "wait-until",
+      "query": "ambient.voxelJobActive",
+      "op": "eq",
+      "value": false,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait-until",
+      "query": "ambient.unpublishedBricks",
+      "op": "eq",
+      "value": 0,
+      "timeoutMs": 30000,
+      "comment": "Near the camera everything is published again after a jump."
+    },
+    {
+      "type": "cvar",
+      "name": "r.ambientCube.debugView",
+      "set": 2
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/follow_west_state"
+    },
+    {
+      "type": "cvar",
+      "name": "r.ambientCube.debugView",
+      "set": 0
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/follow_west_lit"
+    },
+    {
+      "type": "cvar",
+      "name": "camera.teleport",
+      "set": "120 42 330 150 16 300",
+      "comment": "Teleport: north."
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "wait-until",
+      "query": "ambient.voxelJobActive",
+      "op": "eq",
+      "value": false,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait-until",
+      "query": "ambient.unpublishedBricks",
+      "op": "eq",
+      "value": 0,
+      "timeoutMs": 30000,
+      "comment": "Near the camera everything is published again after a jump."
+    },
+    {
+      "type": "cvar",
+      "name": "r.ambientCube.debugView",
+      "set": 2
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/follow_north_state"
+    },
+    {
+      "type": "cvar",
+      "name": "r.ambientCube.debugView",
+      "set": 0
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/follow_north_lit"
+    },
+    {
+      "type": "assert",
+      "query": "ambient.scrollCount",
+      "op": "ge",
+      "value": 4
+    },
+    {
+      "type": "mouse-move",
+      "to": {
+        "norm": [
+          0.5,
+          0.5
+        ]
+      }
+    },
+    {
+      "type": "mouse-button",
+      "button": "right",
+      "action": "down",
+      "at": {
+        "norm": [
+          0.5,
+          0.5
+        ]
+      }
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "down",
+      "comment": "Fly forward at the free-camera speed."
+    },
+    {
+      "type": "wait-ms",
+      "ms": 2500
+    },
+    {
+      "type": "assert",
+      "query": "ambient.unpublishedBricks",
+      "op": "lt",
+      "value": 2000
+    },
+    {
+      "type": "assert",
+      "query": "engine.frameRate",
+      "op": "gt",
+      "value": 30
+    },
+    {
+      "type": "wait-ms",
+      "ms": 2500
+    },
+    {
+      "type": "assert",
+      "query": "ambient.unpublishedBricks",
+      "op": "lt",
+      "value": 2000
+    },
+    {
+      "type": "assert",
+      "query": "ambient.lastScrollMs",
+      "op": "lt",
+      "value": 1000
+    },
+    {
+      "type": "key",
+      "code": "W",
+      "action": "up"
+    },
+    {
+      "type": "mouse-button",
+      "button": "right",
+      "action": "up"
+    },
+    {
+      "type": "wait-until",
+      "query": "ambient.unpublishedBricks",
+      "op": "eq",
+      "value": 0,
+      "timeoutMs": 30000,
+      "comment": "After stopping, the surroundings return to published."
+    },
+    {
+      "type": "cvar",
+      "name": "r.ambientCube.debugView",
+      "set": 2
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/follow_flight_state"
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

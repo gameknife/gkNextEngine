@@ -31,3 +31,16 @@ TEST_CASE("Ambient bake scheduler spends GPU slack on baking", "[Unit][AmbientBa
         CHECK(atTenFps > atSixtyFps);
     }
 }
+
+TEST_CASE("Ambient bake keeps a share of an over-budget frame while probes are unpublished",
+          "[Unit][AmbientBakeScheduler]")
+{
+    // A 25 ms frame is over a 60 FPS target, so the regular plan falls to the one-group minimum ...
+    CHECK(Vulkan::AmbientBake::PlanNextDispatchGroups(1u, 0.002, 25.0, 60u) ==
+          Vulkan::AmbientBake::minGroupsPerFrame);
+    // ... while the publish floor still grants a tenth of the frame.
+    CHECK(Vulkan::AmbientBake::PublishFloorGroups(0.002, 25.0) == 1250u);
+    // Without measurements the floor is the plain minimum.
+    CHECK(Vulkan::AmbientBake::PublishFloorGroups(0.0, 25.0) == Vulkan::AmbientBake::minGroupsPerFrame);
+    CHECK(Vulkan::AmbientBake::PublishFloorGroups(0.002, 0.0) == Vulkan::AmbientBake::minGroupsPerFrame);
+}

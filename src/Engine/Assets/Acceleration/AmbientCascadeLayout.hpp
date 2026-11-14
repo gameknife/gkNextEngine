@@ -122,6 +122,10 @@ namespace Assets
         return std::clamp(ratio, kAmbientFitRatioMin, kAmbientFitRatioMax);
     }
 
+    // A fit-scene window recentres on the focus once its snapped position is this many bricks away,
+    // i.e. once the focus is about one and a half bricks off centre.
+    inline constexpr int kAmbientScrollHysteresisBricks = 2;
+
     // Fraction of a window kept below the focus on axes where the window is smaller than the scene.
     // Horizontally the focus is centred; vertically most of what needs light is above the ground.
     inline constexpr float kAmbientFocusAnchor[3] = {0.5f, 0.25f, 0.5f};

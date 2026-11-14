@@ -1,7 +1,7 @@
 ---
 title: "大地图 GI 覆盖：Voxel / AmbientCube clipmap 开发计划"
 category: plan
-status: 阶段 1–2 已实施，阶段 3 待做
+status: 阶段 1–3 已实施，阶段 4（可选打磨）待定
 owner: engine/rendering
 created: 2026-11-14
 last_updated: 2026-11-14
@@ -250,6 +250,29 @@ voxel 格式、ambient cube 格式、DDA、烘焙着色器都不换，只改"寻
 
 验收：agent 脚本在地图上多点瞬移再连续移动，断言待烘焙队列有界；状态调试截图逐点审阅，地表不出现
 "窗口外"状态，视点周围在停下后回到"已发布"；冲刺时的帧时间与阶段 2 相比没有可见退步。
+
+实施记录（2026-11-14）：四步已落地，与上文的差异如下。
+
+- 滚动：`PlanAmbientScroll` 在空闲时对每级算出焦点对应的吸附原点（与初始布局同一个函数），偏差达到
+  2 个 brick（约 1.5 个 brick 的焦点偏离）才滚动。CPU 侧立即把 baker 移到新窗口，进入的 brick 体素化、
+  按轴分片重算距离场，`FinishVoxelJob` 在一帧内提交 voxel、brick 表和窗口。整窗跳跃（瞬移）走同一路径。
+  同一时刻只有一个 voxel job，包含当时所有要滚动的级。
+- 焦点的 Y 取相机正下方的地面（CPU 快照向下射线），不是相机本身：相机在空中时，按相机放的最细一级只有
+  空气。XZ 跟随相机。焦点用引擎的 active render camera，场景自带的文件相机只是兜底。
+- 滚动不阻塞 bake：GPU 上的 voxel、brick 表和窗口在提交前都是旧的一致状态，跨提交的 batch 由 generation
+  丢弃。只有整图烘焙期间不 bake。
+- 发布保底：有未发布 brick 时，bake 至少占帧时间的 10%（`AmbientBake::PublishFloorGroups`）。没有它，帧时间
+  超过 60 FPS 预算的视点（实测 25 ms 的林地）会退到每帧 1 个 group，滚进来的 brick 永远不发布。
+- 磁盘缓存：payload 存各级窗口与 wrap；恢复时只要求体素尺寸一致，窗口取快照里的值，之后由滚动接管。
+  缓存保存在读体素时会挡住滚动。key 仍由初始布局决定，与相机无关。
+- 统计：DevTools 图形面板显示队列、滚动次数与耗时、各级原点；agent 查询 `ambient.allocatedBricks`、
+  `ambient.pendingBricks`、`ambient.unpublishedBricks`、`ambient.scrollCount`、`ambient.lastScrollMs`、
+  `ambient.voxelJobActive`。gkNextRenderer 新增 `camera.teleport` CVar 供脚本瞬移相机。
+- 阶段 3.4 的 NextDayz 调参：桌面端默认 PathTracing（不走 AmbientCube），切到软件渲染器时使用 follow + 5 级，
+  本阶段未改其他参数。
+- 验收脚本 `assets/agentscripts/ambientcube-clipmap-follow.agentscript.json`（training_ground，SoftwareModern）：
+  四处瞬移后都回到"无未发布"，状态截图全图已发布；随后连续飞行 5 s，未发布 brick ≤ 336、42.5 fps、单次
+  滚动 365 ms，停下后回到全发布。瞬移的整窗重建三级约 2–3 s 体素化，期间由粗级兜底。
 
 ### 阶段 4：可选打磨
 

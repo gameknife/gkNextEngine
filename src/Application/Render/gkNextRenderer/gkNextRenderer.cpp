@@ -1,5 +1,6 @@
 #include "gkNextRenderer.hpp"
 
+#include <sstream>
 #include <imgui.h>
 #include <ThirdParty/fontawesome/IconsFontAwesome6.h>
 
@@ -299,6 +300,25 @@ void NextRendererGameInstance::OnTick(double deltaSeconds)
     {
         GetEngine().SetProgressiveRendering(GetEngine().GetUserSettings().ProgressiveRender && !arMoving);
         return;
+    }
+
+    if (!cameraTeleport_.empty())
+    {
+        glm::vec3 eye{0.0f};
+        glm::vec3 target{0.0f};
+        std::istringstream stream(cameraTeleport_);
+        if (stream >> eye.x >> eye.y >> eye.z >> target.x >> target.y >> target.z && glm::length(target - eye) > 1e-4f)
+        {
+            Assets::Camera camera = GetEngine().GetScene().GetRenderCamera();
+            camera.ModelView = glm::lookAtRH(eye, target, glm::vec3(0.0f, 1.0f, 0.0f));
+            modelViewController_.Reset(camera);
+        }
+        else
+        {
+            SPDLOG_WARN("camera.teleport expects \"eye.x eye.y eye.z target.x target.y target.z\", got \"{}\"",
+                        cameraTeleport_);
+        }
+        cameraTeleport_.clear();
     }
 
     const bool moving = modelViewController_.UpdateCamera(10.0f, deltaSeconds) || arMoving;
@@ -1242,6 +1262,8 @@ void NextRendererGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
                        "Muzzle pitch offset relative to the camera direction", refreshMuzzle, -45.0, 45.0);
     cvars.RegisterFloat("r.muzzle.yaw", 0.0f, &muzzleYawOffsetDegrees_, NextCVar::ECVarFlags::Archive,
                        "Muzzle yaw offset relative to the camera direction", refreshMuzzle, -45.0, 45.0);
+    cvars.RegisterString("camera.teleport", "", &cameraTeleport_, NextCVar::ECVarFlags::None,
+                         "Move the free camera: \"eye.x eye.y eye.z target.x target.y target.z\" (applied once, then cleared)");
     //cvars.SetDefaultFromString("r.upscaler.qualityMode", "4", &error);
 }
 

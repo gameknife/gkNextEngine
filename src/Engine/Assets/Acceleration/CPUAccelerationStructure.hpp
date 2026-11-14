@@ -207,8 +207,11 @@ struct FCPUBrickTable
     uint32_t activeBricksLastBuild = 0;
 
     // focus: world position whose nearby bricks get first claim on free slots when the pool is short.
+    // enteredBricks (per cascade, storage bricks): bricks that now hold a different part of the
+    // world than before, because their window scrolled. They never keep their old slot.
     bool UpdateData(const std::vector<FCPUProbeBaker>& bakers, uint32_t cascadeCapacity,
-                    uint32_t poolBricksPerCascade, const glm::vec3& focus);
+                    uint32_t poolBricksPerCascade, const glm::vec3& focus,
+                    const std::vector<std::vector<uint32_t>>* enteredBricks = nullptr);
     void UploadGPU(Vulkan::DeviceMemory& deviceMemory, size_t tableByteOffset) const;
 
     FAmbientBakeQueueStats QueueStats(uint32_t publishPasses) const;
@@ -231,6 +234,17 @@ struct FAmbientGridConfig
     glm::vec3 offsetBias{0.0f};
     // Cascade count, effective ratio and where every cascade's grid sits.
     Assets::FAmbientCascadeLayout layout;
+    // Box the fit-scene windows are clamped to (layout.followScene only).
+    glm::vec3 sceneMin{0.0f};
+    glm::vec3 sceneMax{0.0f};
+};
+
+// Window scrolling in fit-scene mode, for the debug panel and agent queries.
+struct FAmbientScrollStats
+{
+    uint32_t scrollCount = 0;
+    double lastScrollMilliseconds = 0.0;
+    bool voxelJobActive = false;
 };
 
 // UI-facing state for the CPU half of the ambient GI bake pipeline. Voxel work is counted in
@@ -290,6 +304,7 @@ public:
     bool IsAmbientBakeBatchCurrent(const FAmbientBakeBatch& batch) const { return batch.generation == brickTableGeneration_; }
     void ResetAmbientBakePasses();
     FAmbientBakeQueueStats GetAmbientBakeQueueStats() const;
+    FAmbientScrollStats GetAmbientScrollStats() const;
 
     // The grid the current voxel/cube data was produced with. False until the bakers exist, which is
     // the case for scenes created without CPU acceleration.
@@ -303,7 +318,10 @@ public:
 private:
     friend struct FCPUAccelerationStructureTestAccess;
 
-    bool InitCascadeBakers(const Runtime::Config::UserSettings& settings, const Assets::Scene& scene);
+    // keepWindows: leave a cascade where it is if only its window position would change, which is
+    // what scrolling does to it. Only a full bake may move every window back to the initial layout.
+    bool InitCascadeBakers(const Runtime::Config::UserSettings& settings, const Assets::Scene& scene,
+                           bool keepWindows = false);
     FAmbientGridConfig ResolveAmbientGridConfig(const Runtime::Config::UserSettings& settings,
                                                 const Assets::Scene& scene) const;
     uint32_t GetActiveCascadeCount() const { return static_cast<uint32_t>(cascadeBakers.size()); }
@@ -317,9 +335,12 @@ private:
     void StartBuild(std::shared_ptr<FCPUTLASBuildInput> input);
     void CancelRuntimeBuilds();
     void MergeNavDirtyBounds(const FCPUTLASBuildResult& result);
-    // Voxel pipeline: the bricks in voxelJobBricks_ are voxelized, the distance field is rebuilt
+    // Voxel pipeline: the bricks in voxelJob_ are voxelized, the distance field is rebuilt
     // around them, the touched bricks are uploaded and the brick table is reclassified.
     void StartVoxelJob();
+    // Fit-scene mode: moves every near cascade whose window lags the focus by the hysteresis or more
+    // and queues the bricks that enter it. Returns whether anything moved.
+    bool PlanAmbientScroll();
     void FinishVoxelJob(Assets::Scene& scene, Vulkan::DeviceMemory& arenaMemory);
     bool HasProbeVoxelizationWork() const;
     glm::vec3 ResolveAmbientFocus(const Assets::Scene& scene) const;
@@ -373,10 +394,22 @@ private:
         DistanceField,
     };
     EVoxelJobStage voxelJobStage_ = EVoxelJobStage::Idle;
-    // Per cascade: storage bricks waiting for / in the current voxel job.
-    std::vector<std::vector<uint32_t>> voxelJobBricks_;
-    // Per cascade: window-cell box the current job's distance field rebuild reported as rewritten.
-    std::vector<std::pair<glm::ivec3, glm::ivec3>> voxelJobOutputBoxes_;
+    // Per cascade part of the current voxel job.
+    struct FVoxelJobCascade
+    {
+        // Storage bricks to voxelize.
+        std::vector<uint32_t> bricks;
+        // Window-cell boxes whose occupancy changes, and the boxes the distance field then rewrote.
+        std::vector<std::pair<glm::ivec3, glm::ivec3>> changedBoxes;
+        std::vector<std::pair<glm::ivec3, glm::ivec3>> outputBoxes;
+        // The window moved: the baker already holds the new origin and wrap, and the job commits
+        // them to the shading layout when it lands.
+        bool scrolls = false;
+    };
+    std::vector<FVoxelJobCascade> voxelJob_;
+    std::chrono::steady_clock::time_point voxelJobStart_{};
+    uint32_t scrollCount_ = 0;
+    double lastScrollMilliseconds_ = 0.0;
     std::vector<uint32_t> voxelJobTasks_;
     uint32_t totalVoxelTasks_ = 0;
     std::atomic<uint32_t> completedVoxelTasks_{0};

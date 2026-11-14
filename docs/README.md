@@ -124,8 +124,8 @@
 
 ## 剩余计划
 
-- [大地图 GI 覆盖：Voxel / AmbientCube clipmap](plans/ambientcube-clipmap-plan.md)（阶段 1–2 已实施：
-  5 级贴合场景布局、表面壳层激活、probe 发布规则、DDA 多级行走、环形寻址、brick 粒度管线；阶段 3 近场跟随待做）
+- [大地图 GI 覆盖：Voxel / AmbientCube clipmap](plans/ambientcube-clipmap-plan.md)（阶段 1–3 已实施：
+  5 级贴合场景布局、probe 发布规则、DDA 多级行走、环形寻址、brick 粒度管线、近场跟随滚动；阶段 4 可选打磨待定）
 - [NextRaiden MVP](projects/nextraiden/nextraiden-mvp-plan.md)（实施中；P0–P2 已完成，P3/P4 待做）
 - [验证中心 MVP](plans/validation-center-mvp-plan.md)（待实施；CLI 自动留档、Dashboard 查看问题与可见重跑）
 - [iOS NativeAOT C# 真机支持](plans/ios-nativeaot-plan.md)（P0–P2 已完成；待真机验收）

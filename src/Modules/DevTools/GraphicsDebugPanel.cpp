@@ -43,6 +43,32 @@ namespace Runtime::GraphicsDebugPanel
             ImGui::TextColored(colLabel, "%s", LOCTEXT("AC Bricks"));
             ImGui::SameLine(0.0f, 4.0f);
             ImGui::TextColored(colVal, "%s", brickStats.c_str());
+
+            // Bake queue and window scrolling (docs/plans/ambientcube-clipmap-plan.md). The same
+            // numbers are agent queries (ambient.*) for gnb validate.
+            const auto& acceleration = scene.GetCPUAccelerationStructure();
+            const Assets::CPU::FAmbientBakeQueueStats bake = acceleration.GetAmbientBakeQueueStats();
+            const Assets::CPU::FAmbientScrollStats scroll = acceleration.GetAmbientScrollStats();
+            ImGui::TextColored(colLabel, "%s", LOCTEXT("AC Bake"));
+            ImGui::SameLine(0.0f, 4.0f);
+            ImGui::TextColored(colVal, "%u pending, %u unpublished", bake.pendingBricks, bake.unpublishedBricks);
+            ImGui::TextColored(colLabel, "%s", LOCTEXT("AC Scroll"));
+            ImGui::SameLine(0.0f, 4.0f);
+            ImGui::TextColored(colVal, "%u jobs, last %.1f ms%s", scroll.scrollCount, scroll.lastScrollMilliseconds,
+                               scroll.voxelJobActive ? ", running" : "");
+
+            Assets::CPU::FAmbientGridConfig grid;
+            if (acceleration.TryGetAmbientGridConfig(grid))
+            {
+                for (uint32_t cascadeIndex = 0; cascadeIndex < grid.layout.cascadeCount; ++cascadeIndex)
+                {
+                    const glm::vec3 origin = grid.layout.origins[cascadeIndex];
+                    ImGui::TextColored(colLabel, "  C%u %.2fm", cascadeIndex, grid.layout.units[cascadeIndex]);
+                    ImGui::SameLine(0.0f, 4.0f);
+                    ImGui::TextColored(colVal, "(%.0f, %.0f, %.0f)  %u bricks", origin.x, origin.y, origin.z,
+                                       scene.AmbientActiveBrickCount(cascadeIndex));
+                }
+            }
         }
     }
 

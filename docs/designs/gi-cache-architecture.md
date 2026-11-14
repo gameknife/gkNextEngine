@@ -50,6 +50,17 @@ active list 里存的是 storage brick，`DecodeAmbientActiveBrickProbe` 负责�
 shader 热路径（DDA 每步、gather 每个角）不能逐次从 UBO 和资源表重读 wrap、voxel 基址、pool 基址：
 `GetAmbientCascadeAddress` 每级解析一次，再往下传。逐次重读在本机让 VoxelTracing 慢了约 7%。
 
+## 窗口滚动
+
+`FCPUAccelerationStructure::PlanAmbientScroll` 在 voxel 管线空闲时为每级求焦点对应的吸附原点，偏差达到
+`kAmbientScrollHysteresisBricks`（2）就滚动：CPU 侧 baker 立即换到新窗口（`ShiftAmbientWindow`），进入的
+brick 走 voxel 管线（按轴分片的距离场子盒），`FinishVoxelJob` 在一帧内把 voxel、brick 表和窗口一起提交，
+shading 不会看到超前于数据的窗口。进入的 brick 不继承原存储位置的 slot（`UpdateData` 的 enteredBricks），
+其 cube 清零、遍数归零。缓存保存读体素期间不滚动；滚动本身不阻塞 bake。瞬移是同一路径，只是所有 brick 进入。
+
+有未发布 brick 时 bake 至少占帧时间的 10%（`AmbientBake::PublishFloorGroups`），否则超预算的帧只给 1 个
+group，滚进来的区域会长期停在粗级。`ambient.*` agent 查询和 DevTools 图形面板给出队列、滚动次数与耗时。
+
 ## Voxel 管线与 bake 队列
 
 更新粒度是"一组 brick"，各级独立（`FCPUAccelerationStructure::Tick` 每帧推进，空闲时不做事）：
@@ -81,8 +92,9 @@ clear pass）会把所有遍数归零。原来的 dirty revision / acknowledge �
 - `sys.ambientCubeFollow = 0`（默认）：固定锚点，第 i 级体素为 `unit × ratio^i`，窗口就是晶格原点，与改造前逐格一致。
 - `sys.ambientCubeFollow = 1`：贴合场景。比例按场景水平尺寸自适应（夹在 1.5 ~ 4），使最粗一级以
   180 格（两侧各留吸附误差 4 格 + 插值余量 2 格）盖住全图；各级 XZ 居中、Y 底面落在场景最低点下方一格，
-  原点吸附到该级 brick 的整数倍。NextDayz 桌面端默认开启并用 5 级。近场各级目前也静止在地图中心，
-  跟随视点是计划的阶段 3。
+  原点吸附到该级 brick 的整数倍。不能盖住整个场景的级别跟随焦点滚动：焦点 XZ 为当前渲染相机，Y 为相机
+  正下方的地面；窗口夹在场景包围盒内，偏差达到 2 个 brick 才滚动（见下方"窗口滚动"）。NextDayz 桌面端
+  默认开启并用 5 级。
 
 shading 必须读 bakers 实际采用的布局（`TryGetAmbientGridConfig`），不能读待生效的设置，否则在重烘焙
 完成前会用新网格去采旧数据。级数上限 `CUBE_CASCADE_MAX` 为 5，CPU 常量、`GPU_SCENE_AMBIENT_CASCADE_MAX`、
@@ -143,7 +155,8 @@ SHARC 使用 vendored NVIDIA header，经 `assets/shaders/common/Sharc.slang` �
 这些旧设计可以作为历史研究，但不是当前 roadmap。若重新立项，应先用现有 arena/brick/effective renderer contract 建立基线，不能从旧结构尺寸或旧阶段继续施工。
 
 第一项已按当前代码重新立项，见 [大地图 GI 覆盖开发计划](../plans/ambientcube-clipmap-plan.md)，阶段 1（全图底图）与
-阶段 2（DDA 多级行走、环形寻址、brick 粒度管线）已实施，本文已同步；近场跟随是阶段 3。第二项只列在该计划的可选阶段。
+阶段 2（DDA 多级行走、环形寻址、brick 粒度管线）与阶段 3（近场跟随）已实施，本文已同步；阶段 4 是可选打磨。
+第二项只列在该计划的可选阶段。
 
 ## DDA 多级行走
 

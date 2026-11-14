@@ -357,13 +357,21 @@ namespace Vulkan
         constexpr uint32_t groupsPerBrick =
             static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICK_VOLUME) / cubesPerGroup;
         auto& cpuAcceleration = GetScene().GetCPUAccelerationStructure();
+        // Unpublished bricks always make progress, even on a frame that is already over budget.
+        uint32_t groupsThisFrame = ambient_.groupsPerFrame;
+        if (cpuAcceleration.GetAmbientBakeQueueStats().unpublishedBricks > 0u)
+        {
+            groupsThisFrame = std::max(groupsThisFrame,
+                                       AmbientBake::PublishFloorGroups(ambient_.smoothedMillisecondsPerGroup,
+                                                                       ambient_.smoothedNonBakeMilliseconds));
+        }
         if (ambient_.batchActive && !cpuAcceleration.IsAmbientBakeBatchCurrent(ambient_.batch))
         {
             ambient_.batchActive = false;
         }
         if (!ambient_.batchActive)
         {
-            const uint32_t maxBricks = std::max(1u, ambient_.groupsPerFrame / groupsPerBrick);
+            const uint32_t maxBricks = std::max(1u, groupsThisFrame / groupsPerBrick);
             if (!cpuAcceleration.AcquireAmbientBakeBatch(GetScene(), maxBricks, ambient_.batch))
             {
                 return;
@@ -374,7 +382,7 @@ namespace Vulkan
         const uint32_t cascadeIndex = ambient_.batch.cascade;
         const uint32_t batchGroups = static_cast<uint32_t>(ambient_.batch.bricks.size()) * groupsPerBrick;
         const uint32_t firstGroup = ambient_.batchNextGroup;
-        const uint32_t dispatchGroupCount = std::min(std::max(ambient_.groupsPerFrame, 1u), batchGroups - firstGroup);
+        const uint32_t dispatchGroupCount = std::min(std::max(groupsThisFrame, 1u), batchGroups - firstGroup);
 
         const char* timerName = useHardware ? "hw-lightbake" : "sw-lightbake";
         SCOPED_GPU_TIMER(timerName);

@@ -270,6 +270,20 @@ namespace
             if (query == "scene.heightFogEnabled") return scene.GetEnvSettings().HeightFogEnabled;
             if (query == "scene.selectedId") return static_cast<int64_t>(scene.GetSelectedId());
             if (query == "scene.selectedCount") return static_cast<int64_t>(scene.GetSelectedIds().size());
+            if (query.rfind("ambient.", 0) == 0)
+            {
+                // Ambient GI pipeline state, for scripts that drive the camera and assert the bake
+                // keeps up (see docs/plans/ambientcube-clipmap-plan.md, phase 3).
+                const auto& acceleration = scene.GetCPUAccelerationStructure();
+                const Assets::CPU::FAmbientBakeQueueStats bake = acceleration.GetAmbientBakeQueueStats();
+                const Assets::CPU::FAmbientScrollStats scroll = acceleration.GetAmbientScrollStats();
+                if (query == "ambient.allocatedBricks") return static_cast<int64_t>(bake.allocatedBricks);
+                if (query == "ambient.pendingBricks") return static_cast<int64_t>(bake.pendingBricks);
+                if (query == "ambient.unpublishedBricks") return static_cast<int64_t>(bake.unpublishedBricks);
+                if (query == "ambient.scrollCount") return static_cast<int64_t>(scroll.scrollCount);
+                if (query == "ambient.lastScrollMs") return scroll.lastScrollMilliseconds;
+                if (query == "ambient.voxelJobActive") return scroll.voxelJobActive;
+            }
             if (query.rfind("cvar.", 0) == 0)
             {
                 bool found = false;

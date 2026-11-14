@@ -179,6 +179,9 @@ private:
     void DrawVitureDebugPanel();
 #endif
     Runtime::Camera::ModelViewController modelViewController_;
+    // "eye.x eye.y eye.z target.x target.y target.z": jumps the free camera there on the next tick and
+    // clears itself. For agent scripts and debugging; the free camera has no other absolute control.
+    std::string cameraTeleport_;
 #if IOS || ANDROID
     uint64_t mobilePanFinger_ = 0;
     uint64_t mobileRotateFinger_ = 0;

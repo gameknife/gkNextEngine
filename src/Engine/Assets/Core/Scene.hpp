@@ -301,6 +301,7 @@ namespace Assets
         const Vulkan::Sampler& SunShadowSampler() const { return *sunShadowSampler_; }
 
         Assets::CPU::FCPUAccelerationStructure& GetCPUAccelerationStructure() { return *cpuAccelerationStructure_; }
+        const Assets::CPU::FCPUAccelerationStructure& GetCPUAccelerationStructure() const { return *cpuAccelerationStructure_; }
         glm::vec3 GetSceneAABBMin() const { return sceneAABBMin_; }
         glm::vec3 GetSceneAABBMax() const { return sceneAABBMax_; }
 

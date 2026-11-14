@@ -311,6 +311,40 @@ TEST_CASE("Ambient bake queue serves unpublished, fine and near bricks first",
     CHECK(table.QueueStats(publishPasses).pendingBricks == 0u);
 }
 
+TEST_CASE("Ambient bricks that enter a scrolled window never inherit their storage slot",
+          "[Unit][CPUAccelerationSnapshot][AmbientBake]")
+{
+    FCPUProbeBaker baker;
+    baker.Init(0, 1.0f, glm::vec3(0.0f));
+    for (int x = 0; x < 48; ++x)
+        SetSolid(baker, x, 4, 4);
+    baker.RebuildDistanceField();
+
+    FCPUBrickTable table;
+    const uint32_t poolCapacity = static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE);
+    table.UpdateData({baker}, 1u, poolCapacity, glm::vec3(0.0f));
+    const FAmbientBakeBatch all{0u, [&] {
+        std::vector<uint32_t> bricks;
+        for (uint32_t b = 0; b < poolCapacity; ++b)
+            if (table.brickTable[b] != Assets::GPU_SCENE_AMBIENT_BRICK_INVALID) bricks.push_back(b);
+        return bricks; }()};
+    for (uint32_t pass = 0; pass < kAmbientBakeConvergencePasses; ++pass)
+        table.CompleteBakeBatch(all);
+    REQUIRE(table.QueueStats(0u).pendingBricks == 0u);
+
+    // Pretend the window scrolled so that storage brick 0 now holds new world content that is still
+    // wanted: it must lose its baked slot, start over, and the slot must be cleared.
+    const uint32_t entered = all.bricks.front();
+    const uint32_t oldSlot = table.brickTable[entered];
+    const std::vector<std::vector<uint32_t>> enteredBricks = {{entered}};
+    table.UpdateData({baker}, 1u, poolCapacity, glm::vec3(0.0f), &enteredBricks);
+    CHECK(table.brickTable[entered] != Assets::GPU_SCENE_AMBIENT_BRICK_INVALID);
+    CHECK(table.bakePasses[entered] == 0u);
+    CHECK(std::find(table.slotsToClear.begin(), table.slotsToClear.end(), oldSlot) != table.slotsToClear.end());
+    // Everything else keeps its slot and its passes.
+    CHECK(table.QueueStats(0u).pendingBricks == 1u);
+}
+
 TEST_CASE("Ambient ring storage keeps overlapping bricks in place when a window scrolls",
           "[Unit][CPUAccelerationSnapshot][AmbientBake]")
 {

@@ -18,7 +18,8 @@ namespace Assets::CPU
 using namespace Assets;
 
 bool FCPUBrickTable::UpdateData(const std::vector<FCPUProbeBaker>& bakers, uint32_t cascadeCapacity,
-                                uint32_t poolBricksPerCascade, const glm::vec3& focus)
+                                uint32_t poolBricksPerCascade, const glm::vec3& focus,
+                                const std::vector<std::vector<uint32_t>>* enteredBricks)
 {
     const uint32_t BPC = static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE);
     const uint32_t kInvalid = Assets::GPU_SCENE_AMBIENT_BRICK_INVALID;
@@ -38,6 +39,7 @@ bool FCPUBrickTable::UpdateData(const std::vector<FCPUProbeBaker>& bakers, uint3
     std::vector<uint32_t> oldOwner(poolBricksPerCascade, kInvalid);
     std::vector<uint32_t> newOwner(poolBricksPerCascade, kInvalid);
     std::vector<uint8_t> usedSlots(poolBricksPerCascade, 0u);
+    std::vector<uint8_t> entered(BPC, 0u);
     std::vector<std::pair<float, uint32_t>> pending;
     pending.reserve(BPC);
     for (uint32_t c = 0; c < cascadesToProcess; ++c)
@@ -70,7 +72,20 @@ bool FCPUBrickTable::UpdateData(const std::vector<FCPUProbeBaker>& bakers, uint3
         }
         candidateBricksPerCascade[c] = candidateCount;
 
-        // Wanted bricks keep the slot they had: their probes are already baked.
+        std::fill(entered.begin(), entered.end(), uint8_t(0));
+        if (enteredBricks != nullptr && c < enteredBricks->size())
+        {
+            for (uint32_t b : (*enteredBricks)[c])
+            {
+                if (b < BPC)
+                {
+                    entered[b] = 1u;
+                }
+            }
+        }
+
+        // Wanted bricks keep the slot they had: their probes are already baked. A brick that entered
+        // a scrolled window holds a different part of the world than the slot's owner did.
         const size_t cascadeBase = static_cast<size_t>(c) * BPC;
         std::fill(oldOwner.begin(), oldOwner.end(), kInvalid);
         std::fill(newOwner.begin(), newOwner.end(), kInvalid);
@@ -85,7 +100,7 @@ bool FCPUBrickTable::UpdateData(const std::vector<FCPUProbeBaker>& bakers, uint3
                     continue;
                 }
                 oldOwner[oldSlot] = b;
-                if (wanted[b])
+                if (wanted[b] && !entered[b])
                 {
                     brickTable[cascadeBase + b] = oldSlot;
                     newOwner[oldSlot] = b;
@@ -138,7 +153,7 @@ bool FCPUBrickTable::UpdateData(const std::vector<FCPUProbeBaker>& bakers, uint3
         // new owner is shaded (and its zero sample count keeps it unpublished until it is rebaked).
         for (uint32_t slot = 0; slot < poolBricksPerCascade; ++slot)
         {
-            if (oldOwner[slot] != newOwner[slot] && oldOwner[slot] != kInvalid)
+            if (oldOwner[slot] != kInvalid && (oldOwner[slot] != newOwner[slot] || entered[oldOwner[slot]]))
             {
                 slotsToClear.push_back(c * poolBricksPerCascade + slot);
             }

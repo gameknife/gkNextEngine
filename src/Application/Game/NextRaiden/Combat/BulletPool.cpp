@@ -14,7 +14,7 @@ namespace NextRaiden
 {
     namespace
     {
-        constexpr float kCullMargin = 8.0f;
+        constexpr float kBulletCullMargin = 8.0f;
         /// 比播放列宽出一截：敌弹会从立柱后面斜着飞进来，砍太早就是凭空消失。
         constexpr float kCullHalfWidth = 76.0f;
 
@@ -126,8 +126,8 @@ namespace NextRaiden
 
     void FBulletPool::Step(float deltaSeconds, const FScrollCamera& camera)
     {
-        const float nearZ = camera.FlightNearZ() + kCullMargin;
-        const float farZ = camera.FlightFarZ() - kCullMargin;
+        const float nearZ = camera.FlightNearZ() + kBulletCullMargin;
+        const float farZ = camera.FlightFarZ() - kBulletCullMargin;
 
         for (FBullet& bullet : bullets_)
         {

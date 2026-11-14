@@ -42,10 +42,10 @@ void main(uint3 DTid : SV_DispatchThreadID)
     FPrimarySurfaceSample surfaceSample = FPrimarySurfaceSample();
     if (rayCasterVoxel.TracePrimaryRay(ipos, size, RandomSeed, hitVertex, hitNode, rayDir, rayLength, pixelOffset, surfaceSample))
     {
-        float4 residencyDebugColor;
-        if (TryAmbientResidencyDebug(hitVertex.Position, residencyDebugColor))
+        float4 debugViewColor;
+        if (TryAmbientCubeDebugView(hitVertex.Position, debugViewColor))
         {
-            Bindless.GetViewStorageTexture<float4>(Bindless.RT_SCENE_COLOR)[ipos] = residencyDebugColor;
+            Bindless.GetViewStorageTexture<float4>(Bindless.RT_SCENE_COLOR)[ipos] = debugViewColor;
             END_SHADERCLOCK(ipos)
             return;
         }

@@ -215,19 +215,35 @@ TEST_CASE("CPU acceleration background build coalesces to the latest request",
     CHECK(stats.lastBuildToPublishMilliseconds >= stats.lastBuildMilliseconds);
 }
 
+namespace
+{
+    // Marks a voxel solid the way voxelization does (matId + distance-field seed); the caller runs
+    // RebuildDistanceField() once all solids are in.
+    void SetSolid(FCPUProbeBaker& baker, int x, int y, int z)
+    {
+        const uint32_t address = GetVoxelAddress(x, y, z);
+        baker.voxels[address].matId = 1u;
+        baker.distanceToSolidSeeds[address] = 0u;
+    }
+
+    uint32_t BrickIndex(uint32_t bx, uint32_t by, uint32_t bz)
+    {
+        return by * static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_X * Assets::GPU_SCENE_AMBIENT_BRICKS_Z) +
+               bz * static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_X) + bx;
+    }
+}
+
 TEST_CASE("Ambient brick table keeps newly dirty bricks at the front until acknowledged",
           "[Unit][CPUAccelerationSnapshot][AmbientBake]")
 {
     FCPUProbeBaker baker;
     baker.Init(0, 1.0f, glm::vec3(0.0f));
-    // Voxel storage is brick-swizzled; go through the shared mapping so this stays a test about
-    // brick dirtiness rather than a second copy of the address arithmetic.
-    const auto voxelIndex = [](int x, int y, int z) { return static_cast<size_t>(GetVoxelAddress(x, y, z)); };
+    SetSolid(baker, 4, 4, 4);
+    baker.RebuildDistanceField();
 
-    baker.voxels[voxelIndex(4, 4, 4)].matId = 1u;
     FCPUBrickTable table;
     const uint32_t poolCapacity = static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE);
-    REQUIRE(table.UpdateData({baker}, 1u, poolCapacity, 1, nullptr, 1u, false, false, 0u, 0u));
+    REQUIRE(table.UpdateData({baker}, 1u, poolCapacity, glm::vec3(0.0f)));
     REQUIRE(table.dirtyBricksPerCascade[0] > 0u);
     CHECK(table.dirtyBricksPerCascade[0] == table.activeBricksPerCascade[0]);
 
@@ -235,8 +251,9 @@ TEST_CASE("Ambient brick table keeps newly dirty bricks at the front until ackno
     table.AcknowledgeDirty(firstRevision);
     CHECK(table.dirtyBricksPerCascade[0] == 0u);
 
-    baker.voxels[voxelIndex(Assets::CUBE_SIZE_XY - 5, 4, Assets::CUBE_SIZE_XY - 5)].matId = 1u;
-    REQUIRE(table.UpdateData({baker}, 1u, poolCapacity, 1, nullptr, 2u, false, false, 0u, 0u));
+    SetSolid(baker, Assets::CUBE_SIZE_XY - 5, 4, Assets::CUBE_SIZE_XY - 5);
+    baker.RebuildDistanceField();
+    REQUIRE(table.UpdateData({baker}, 1u, poolCapacity, glm::vec3(0.0f)));
     const uint32_t dirtyCount = table.dirtyBricksPerCascade[0];
     REQUIRE(dirtyCount > 0u);
     CHECK(dirtyCount < table.activeBricksPerCascade[0]);
@@ -246,6 +263,76 @@ TEST_CASE("Ambient brick table keeps newly dirty bricks at the front until ackno
         REQUIRE(brick < table.dirtyBricks.size());
         CHECK(table.dirtyBricks[brick] != 0u);
     }
+}
+
+TEST_CASE("Ambient brick activation keeps the air shell over surfaces only",
+          "[Unit][CPUAccelerationSnapshot][AmbientBake]")
+{
+    CHECK(ResolveAmbientBrickShellCells(0.25f) == 8u);
+    CHECK(ResolveAmbientBrickShellCells(0.5f) == 4u);
+    CHECK(ResolveAmbientBrickShellCells(1.0f) == 2u);
+    CHECK(ResolveAmbientBrickShellCells(4.0f) == 2u);
+
+    // A solid block filling bricks x,z in [0,2), y in [0,2) of a 0.25 m cascade (8-cell shell).
+    FCPUProbeBaker baker;
+    baker.Init(0, 0.25f, glm::vec3(0.0f));
+    for (int y = 0; y < 16; ++y)
+        for (int z = 0; z < 16; ++z)
+            for (int x = 0; x < 16; ++x)
+                SetSolid(baker, x, y, z);
+    baker.RebuildDistanceField();
+
+    FCPUBrickTable table;
+    const uint32_t poolCapacity = static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE);
+    table.UpdateData({baker}, 1u, poolCapacity, glm::vec3(0.0f));
+    const auto allocated = [&](uint32_t bx, uint32_t by, uint32_t bz)
+    {
+        return table.brickTable[BrickIndex(bx, by, bz)] != Assets::GPU_SCENE_AMBIENT_BRICK_INVALID;
+    };
+
+    // Entirely solid: no probe in it can be used.
+    CHECK_FALSE(allocated(0, 0, 0));
+    CHECK_FALSE(allocated(1, 1, 1));
+    // The air right above and beside the block is within the shell.
+    CHECK(allocated(0, 2, 0));
+    CHECK(allocated(2, 0, 0));
+    CHECK(allocated(2, 1, 2));
+    // One more brick out the nearest air is 9 cells away, past the 8-cell shell.
+    CHECK_FALSE(allocated(0, 3, 0));
+    CHECK_FALSE(allocated(3, 0, 0));
+    CHECK(table.candidateBricksPerCascade[0] == table.activeBricksPerCascade[0]);
+    CHECK(table.overflowBricksPerCascade[0] == 0u);
+}
+
+TEST_CASE("Ambient brick pool goes to the bricks nearest the focus and keeps existing owners",
+          "[Unit][CPUAccelerationSnapshot][AmbientBake]")
+{
+    // A floor at y = 0 across the whole 1 m cascade: every brick of the lowest layer is wanted.
+    FCPUProbeBaker baker;
+    baker.Init(0, 1.0f, glm::vec3(0.0f));
+    for (int z = 0; z < Assets::CUBE_SIZE_XY; ++z)
+        for (int x = 0; x < Assets::CUBE_SIZE_XY; ++x)
+            SetSolid(baker, x, 0, z);
+    baker.RebuildDistanceField();
+
+    constexpr uint32_t poolCapacity = 8u;
+    FCPUBrickTable table;
+    table.UpdateData({baker}, 1u, poolCapacity, glm::vec3(4.0f, 0.0f, 4.0f));
+    const uint32_t wanted = table.candidateBricksPerCascade[0];
+    REQUIRE(wanted == static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_X * Assets::GPU_SCENE_AMBIENT_BRICKS_Z));
+    CHECK(table.activeBricksPerCascade[0] == poolCapacity);
+    CHECK(table.overflowBricksPerCascade[0] == wanted - poolCapacity);
+    // The focus sits in brick (0, 0, 0): it and its nearest neighbours win.
+    CHECK(table.brickTable[BrickIndex(0, 0, 0)] != Assets::GPU_SCENE_AMBIENT_BRICK_INVALID);
+    CHECK(table.brickTable[BrickIndex(1, 0, 0)] != Assets::GPU_SCENE_AMBIENT_BRICK_INVALID);
+    CHECK(table.brickTable[BrickIndex(0, 0, 1)] != Assets::GPU_SCENE_AMBIENT_BRICK_INVALID);
+    CHECK(table.brickTable[BrickIndex(23, 0, 23)] == Assets::GPU_SCENE_AMBIENT_BRICK_INVALID);
+
+    // Moving the focus does not evict bricks that are still wanted: their probes are baked.
+    const std::vector<uint32_t> before = table.brickTable;
+    table.UpdateData({baker}, 1u, poolCapacity, glm::vec3(188.0f, 0.0f, 188.0f));
+    CHECK(table.brickTable == before);
+    CHECK(table.slotsToClear.empty());
 }
 
 TEST_CASE("Parallel task cancellation discards queued work and drains completions",

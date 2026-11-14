@@ -23,14 +23,10 @@ void FCPUPageIndex::Init()
 }
 
 bool FCPUBrickTable::UpdateData(const std::vector<FCPUProbeBaker>& bakers, uint32_t cascadeCapacity,
-                                uint32_t poolBricksPerCascade, int dilationRadius,
-                                const std::vector<Assets::AmbientBrickResidency>* residency,
-                                uint32_t currentFrame, bool hitDriven, bool bounceHitAffectsResidency,
-                                uint32_t graceFrames, uint32_t evictFrames)
+                                uint32_t poolBricksPerCascade, const glm::vec3& focus)
 {
-    const int BX = Assets::GPU_SCENE_AMBIENT_BRICKS_X;
-    const int BY = Assets::GPU_SCENE_AMBIENT_BRICKS_Y;
-    const int BZ = Assets::GPU_SCENE_AMBIENT_BRICKS_Z;
+    const uint32_t BX = static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_X);
+    const uint32_t BZ = static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_Z);
     const uint32_t BPC = static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE);
     const uint32_t kInvalid = Assets::GPU_SCENE_AMBIENT_BRICK_INVALID;
 
@@ -42,112 +38,49 @@ bool FCPUBrickTable::UpdateData(const std::vector<FCPUProbeBaker>& bakers, uint3
     dirtyBricks.assign(static_cast<size_t>(cascadeCapacity) * BPC, 0u);
     dirtyBricksPerCascade.assign(cascadeCapacity, 0u);
     candidateBricksPerCascade.assign(cascadeCapacity, 0u);
-    recentlyHitBricksPerCascade.assign(cascadeCapacity, 0u);
+    overflowBricksPerCascade.assign(cascadeCapacity, 0u);
     slotsToClear.clear();
-    if (candidateFirstSeenFrames.size() != static_cast<size_t>(cascadeCapacity) * BPC)
-    {
-        candidateFirstSeenFrames.assign(static_cast<size_t>(cascadeCapacity) * BPC, 0u);
-    }
 
     const uint32_t cascadesToProcess = std::min<uint32_t>(cascadeCapacity, static_cast<uint32_t>(bakers.size()));
     uint32_t totalActive = 0;
-    uint32_t totalOverflow = 0;
-    std::vector<uint8_t> active(BPC, 0);
-    std::vector<uint8_t> occupied(BPC, 0);
-    std::vector<uint8_t> requested(BPC, 0);
+    std::vector<uint8_t> wanted(BPC, 0);
     std::vector<uint32_t> oldOwner(poolBricksPerCascade, kInvalid);
     std::vector<uint32_t> newOwner(poolBricksPerCascade, kInvalid);
     std::vector<uint8_t> usedSlots(poolBricksPerCascade, 0u);
+    std::vector<std::pair<float, uint32_t>> pending;
+    pending.reserve(BPC);
     for (uint32_t c = 0; c < cascadesToProcess; ++c)
     {
         const FCPUProbeBaker& baker = bakers[c];
-        std::fill(active.begin(), active.end(), uint8_t(0));
-        std::fill(occupied.begin(), occupied.end(), uint8_t(0));
+        const uint32_t shellCells = ResolveAmbientBrickShellCells(baker.UNIT_SIZE);
 
-        const uint32_t voxelCount = static_cast<uint32_t>(baker.voxels.size());
-        for (uint32_t v = 0; v < voxelCount; ++v)
-        {
-            if (baker.voxels[v].matId == 0)
-            {
-                continue;
-            }
-            // Voxel storage is brick-swizzled, so the brick a voxel belongs to is just its element
-            // index divided by the brick volume -- no coordinate round trip needed.
-            occupied[v / kVoxelBrickVolume] = 1;
-        }
-
-        for (uint32_t b = 0; b < BPC; ++b)
-        {
-            if (!occupied[b])
-            {
-                continue;
-            }
-
-            const int sby = static_cast<int>(b / (BX * BZ));
-            const int sbz = static_cast<int>((b - static_cast<uint32_t>(sby) * (BX * BZ)) / BX);
-            const int sbx = static_cast<int>(b - static_cast<uint32_t>(sby) * (BX * BZ) -
-                                             static_cast<uint32_t>(sbz) * BX);
-            const int yMin = std::max(0, sby - dilationRadius);
-            const int yMax = std::min(BY - 1, sby + dilationRadius);
-            const int zMin = std::max(0, sbz - dilationRadius);
-            const int zMax = std::min(BZ - 1, sbz + dilationRadius);
-            const int xMin = std::max(0, sbx - dilationRadius);
-            const int xMax = std::min(BX - 1, sbx + dilationRadius);
-
-            for (int y = yMin; y <= yMax; ++y)
-            {
-                const uint32_t yzBase = static_cast<uint32_t>(y) * (BX * BZ);
-                for (int z = zMin; z <= zMax; ++z)
-                {
-                    const uint32_t rowBase = yzBase + static_cast<uint32_t>(z) * BX;
-                    for (int x = xMin; x <= xMax; ++x)
-                    {
-                        active[rowBase + static_cast<uint32_t>(x)] = 1;
-                    }
-                }
-            }
-        }
-
-        const size_t cascadeBase = static_cast<size_t>(c) * BPC;
-        std::fill(requested.begin(), requested.end(), uint8_t(0));
+        // A brick is wanted when some empty voxel in it lies within the surface shell. Voxel storage
+        // is brick-swizzled, so brick b is the contiguous run [b * volume, (b + 1) * volume).
+        // Empty voxels only: a brick made entirely of solid holds no probe the gather can use.
         uint32_t candidateCount = 0;
-        uint32_t recentlyHitCount = 0;
         for (uint32_t b = 0; b < BPC; ++b)
         {
-            if (!active[b])
+            wanted[b] = 0u;
+            const size_t first = static_cast<size_t>(b) * kVoxelBrickVolume;
+            if (first + kVoxelBrickVolume > baker.voxels.size())
             {
-                candidateFirstSeenFrames[cascadeBase + b] = 0u;
                 continue;
             }
-
-            ++candidateCount;
-            uint32_t& firstSeen = candidateFirstSeenFrames[cascadeBase + b];
-            if (firstSeen == 0u)
+            for (uint32_t v = 0; v < kVoxelBrickVolume; ++v)
             {
-                firstSeen = currentFrame + 1u;
-            }
-
-            bool recentlyHit = false;
-            if (residency && cascadeBase + b < residency->size())
-            {
-                const AmbientBrickResidency& state = (*residency)[cascadeBase + b];
-                uint32_t lastHit = state.lastConsumerHitFrame;
-                if (bounceHitAffectsResidency)
+                const VoxelData& voxel = baker.voxels[first + v];
+                if (voxel.matId == 0 && (voxel.distanceToSolid & 0xFu) <= shellCells)
                 {
-                    lastHit = std::max(lastHit, state.lastBounceHitFrame);
+                    wanted[b] = 1u;
+                    ++candidateCount;
+                    break;
                 }
-                recentlyHit = lastHit != 0u && currentFrame >= lastHit && currentFrame - lastHit <= evictFrames;
             }
-            recentlyHitCount += recentlyHit ? 1u : 0u;
-
-            const uint32_t firstSeenFrame = firstSeen - 1u;
-            const bool inGrace = currentFrame >= firstSeenFrame && currentFrame - firstSeenFrame <= graceFrames;
-            requested[b] = (!hitDriven || inGrace || recentlyHit) ? 1u : 0u;
         }
-
         candidateBricksPerCascade[c] = candidateCount;
-        recentlyHitBricksPerCascade[c] = recentlyHitCount;
 
+        // Wanted bricks keep the slot they had: their probes are already baked.
+        const size_t cascadeBase = static_cast<size_t>(c) * BPC;
         std::fill(oldOwner.begin(), oldOwner.end(), kInvalid);
         std::fill(newOwner.begin(), newOwner.end(), kInvalid);
         std::fill(usedSlots.begin(), usedSlots.end(), uint8_t(0));
@@ -156,37 +89,55 @@ bool FCPUBrickTable::UpdateData(const std::vector<FCPUProbeBaker>& bakers, uint3
             for (uint32_t b = 0; b < BPC; ++b)
             {
                 const uint32_t oldSlot = oldBrickTable[cascadeBase + b];
-                if (oldSlot < poolBricksPerCascade)
+                if (oldSlot >= poolBricksPerCascade)
                 {
-                    oldOwner[oldSlot] = b;
-                    if (requested[b])
+                    continue;
+                }
+                oldOwner[oldSlot] = b;
+                if (wanted[b])
+                {
+                    brickTable[cascadeBase + b] = oldSlot;
+                    newOwner[oldSlot] = b;
+                    usedSlots[oldSlot] = 1u;
+                    if (cascadeBase + b < oldDirtyBricks.size())
                     {
-                        brickTable[cascadeBase + b] = oldSlot;
-                        newOwner[oldSlot] = b;
-                        usedSlots[oldSlot] = 1u;
-                        if (cascadeBase + b < oldDirtyBricks.size())
-                        {
-                            dirtyBricks[cascadeBase + b] = oldDirtyBricks[cascadeBase + b];
-                        }
+                        dirtyBricks[cascadeBase + b] = oldDirtyBricks[cascadeBase + b];
                     }
                 }
             }
         }
 
-        uint32_t nextFreeSlot = 0u;
+        // The rest take free slots nearest the focus first, so a pool too small for the whole
+        // cascade spends itself where the camera is. Ties fall back to the brick index, which keeps
+        // the assignment deterministic.
+        pending.clear();
+        const float brickSize = baker.UNIT_SIZE * static_cast<float>(kVoxelBrickEdge);
         for (uint32_t b = 0; b < BPC; ++b)
         {
-            if (!requested[b] || brickTable[cascadeBase + b] != kInvalid)
+            if (!wanted[b] || brickTable[cascadeBase + b] != kInvalid)
             {
                 continue;
             }
+            const uint32_t by = b / (BX * BZ);
+            const uint32_t bz = (b - by * BX * BZ) / BX;
+            const uint32_t bx = b - by * BX * BZ - bz * BX;
+            const glm::vec3 center = baker.CUBE_OFFSET + (glm::vec3(bx, by, bz) + 0.5f) * brickSize;
+            const glm::vec3 delta = center - focus;
+            pending.emplace_back(glm::dot(delta, delta), b);
+        }
+        std::sort(pending.begin(), pending.end());
+
+        uint32_t nextFreeSlot = 0u;
+        for (const auto& entry : pending)
+        {
+            const uint32_t b = entry.second;
             while (nextFreeSlot < poolBricksPerCascade && usedSlots[nextFreeSlot])
             {
                 ++nextFreeSlot;
             }
             if (nextFreeSlot >= poolBricksPerCascade)
             {
-                ++totalOverflow;
+                ++overflowBricksPerCascade[c];
                 continue;
             }
             brickTable[cascadeBase + b] = nextFreeSlot;
@@ -195,6 +146,8 @@ bool FCPUBrickTable::UpdateData(const std::vector<FCPUProbeBaker>& bakers, uint3
             MarkDirty(static_cast<uint32_t>(cascadeBase + b));
         }
 
+        // A slot that changed owner still holds the old owner's radiance; it is zeroed before the
+        // new owner is shaded (and its zero sample count keeps it unpublished until it is rebaked).
         for (uint32_t slot = 0; slot < poolBricksPerCascade; ++slot)
         {
             if (oldOwner[slot] != newOwner[slot] && oldOwner[slot] != kInvalid)
@@ -207,6 +160,8 @@ bool FCPUBrickTable::UpdateData(const std::vector<FCPUProbeBaker>& bakers, uint3
             brickTable.begin() + static_cast<std::ptrdiff_t>(cascadeBase),
             brickTable.begin() + static_cast<std::ptrdiff_t>(cascadeBase + BPC),
             [](uint32_t slot) { return slot != Assets::GPU_SCENE_AMBIENT_BRICK_INVALID; }));
+        SPDLOG_INFO("[AmbientBricks] cascade {} ({:.3f} m, shell {} cells): {} wanted, {} overflow",
+                    c, baker.UNIT_SIZE, shellCells, candidateCount, overflowBricksPerCascade[c]);
     }
 
     RebuildActiveBrickList(cascadeCapacity, poolBricksPerCascade);

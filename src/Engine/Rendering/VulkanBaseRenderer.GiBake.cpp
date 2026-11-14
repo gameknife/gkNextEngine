@@ -311,17 +311,13 @@ namespace Vulkan
         const uint32_t poolCubesPerCascade =
             GetScene().AmbientPoolBricksPerCascade() * static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICK_VOLUME);
         const uint32_t cubePoolTotal = clearCascadeCount * poolCubesPerCascade;
-        const uint32_t residencyTotal =
-            clearCascadeCount * static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE);
-        const uint32_t groupCount =
-            (std::max(cubePoolTotal, residencyTotal) + cubesPerGroup - 1) / cubesPerGroup;
+        const uint32_t groupCount = (cubePoolTotal + cubesPerGroup - 1) / cubesPerGroup;
 
         ambient_.clearCache->BindPipeline(commandBuffer, GetScene(), imageIndex);
 
         Assets::GPUScene gpuScene = GetScene().FetchGPUScene(imageIndex, 0);
         gpuScene.CustomData0 = cubePoolTotal;
         gpuScene.CustomData1 = 0;
-        gpuScene.CustomData2 = residencyTotal;
 
         vkCmdPushConstants(commandBuffer, ambient_.clearCache->PipelineLayout().Handle(),
                            VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Assets::GPUScene), &gpuScene);
@@ -330,8 +326,6 @@ namespace Vulkan
         BufferMemoryBarrier::Insert(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, {
             BufferMemoryBarrier::Make(GetScene().AmbientArenaBuffer().Handle(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
                                       GetScene().AmbientCubesByteOffset(), static_cast<VkDeviceSize>(cubePoolTotal) * sizeof(Assets::AmbientCube)),
-            BufferMemoryBarrier::Make(GetScene().AmbientArenaBuffer().Handle(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
-                                      GetScene().AmbientResidencyByteOffset(), static_cast<VkDeviceSize>(residencyTotal) * sizeof(Assets::AmbientBrickResidency)),
         });
     }
 

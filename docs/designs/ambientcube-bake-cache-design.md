@@ -53,7 +53,8 @@ FCPUAccelerationStructure::Tick(...)             // Scene 每 30 帧调一次
 1. `kCacheVersion` + `sizeof(VoxelData/AmbientCube/PageIndex)` + `CUBE_SIZE_XY/Z` +
    `GPU_SCENE_AMBIENT_BRICK_EDGE` + `BRICKS_PER_CASCADE` + `ACGI_PAGE_COUNT`
    —— 结构体或网格常量一改，全部缓存自动失效，不需要有人记得改版本号；
-2. 网格与后端：`baseUnit`、`offsetBias`、`cascadeCount`、`cascadeRatio`、`poolBricksPerCascade`、
+2. 网格与后端：`baseUnit`、`offsetBias`、`cascadeCount`、`cascadeRatio`、每级的体素尺寸与窗口原点
+   （`sys.ambientCubeFollow=1` 时它们由场景包围盒决定，而不是比例设置）、`poolBricksPerCascade`、
    `hardwareBake`（HW/SW bake 结果不同，必须分开）；
 3. 参与 GI 的实例：`modelId` + 世界矩阵 + `matIdxs`；
 4. 每个 `Model` 的顶点位置与索引数组；
@@ -96,8 +97,7 @@ section × 6: rawSize(u64) | compressedSize(u64) | lzav bytes
   但分开存才能保证 cube pool 的 brick→slot 映射不被重塑。
 - 压缩用 `lzav_compress_default`（**不是 `_hi`**，后者在 100MB 量级太慢）。
 - 写入先落 `.tmp` 再 rename，崩在半路不会在真实 key 下留残文件。
-- 不存的两项：`distanceToSolidSeeds`（恢复时按 `matId > 0 ? 0 : kMaxDistanceFieldSeed` 一趟重建）、
-  `residency`（arena 创建时已清零，与冷启动一致）。
+- 不存 `distanceToSolidSeeds`：恢复时按 `matId > 0 ? 0 : kMaxDistanceFieldSeed` 一趟重建。
 
 ## 5. 恢复后的状态
 
@@ -124,7 +124,7 @@ section × 6: rawSize(u64) | compressedSize(u64) | lzav bytes
 - **不需要 `vkDeviceWaitIdle`**：`kFramesInFlight == 1`，每帧开始都会等上一次提交的 fence，所以
   收敛帧之后再过 2 帧，那一帧的 bake dispatch 必然已经退休。`ambientCacheSaveFrame_ =
   totalFrames + 3` 就是这个门槛（`Tick` 30 帧一次，实际从不因此多等）。
-- **读 bake 状态不需要加锁**：收敛把 `ambientBakeIdle_` 置位，体素化队列和 residency 重建都不会再
+- **读 bake 状态不需要加锁**：收敛把 `ambientBakeIdle_` 置位，体素化队列和 brick 表重建都不会再
   碰 `cascadeBakers` / `cpuBrickTable` / `cpuPageIndex`；唯一可能回来的写者是新的完整 bake，而通往
   它的两条路（`Scene::CleanUp` 和 `~Scene`）都先调 `ClearAllTasks()`，那里会等这个任务结束，之后
   才动这些状态和 arena 本身。

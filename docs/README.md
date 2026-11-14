@@ -50,7 +50,6 @@
 - [SoftwareModern / SoftwareTracing 性能分析与优化方案](designs/software-modern-performance-analysis.md)（代码审计完成；优化待实施）
 - [大气散射与高度雾](designs/atmosphere-and-height-fog-design.md)
 - [GI 缓存与体素资源](designs/gi-cache-architecture.md)
-- [AmbientCube 命中驱动驻留](designs/ambientcube-hit-driven-residency-design.md)
 - [AmbientCube Bake 磁盘缓存](designs/ambientcube-bake-cache-design.md)
 - [CPU TLAS 快照与后台重建](designs/cpu-tlas-snapshot-architecture.md)
 - [RenderView 多视图](designs/multi-viewport-renderview-design.md)
@@ -125,6 +124,8 @@
 
 ## 剩余计划
 
+- [大地图 GI 覆盖：Voxel / AmbientCube clipmap](plans/ambientcube-clipmap-plan.md)（阶段 1 已实施：
+  hit-driven residency 已删除、5 级、贴合场景布局、表面壳层激活、probe 发布规则；阶段 2–3 待做）
 - [NextRaiden MVP](projects/nextraiden/nextraiden-mvp-plan.md)（实施中；P0–P2 已完成，P3/P4 待做）
 - [验证中心 MVP](plans/validation-center-mvp-plan.md)（待实施；CLI 自动留档、Dashboard 查看问题与可见重跑）
 - [iOS NativeAOT C# 真机支持](plans/ios-nativeaot-plan.md)（P0–P2 已完成；待真机验收）

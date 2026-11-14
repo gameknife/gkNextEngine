@@ -45,7 +45,7 @@ namespace Bindless
 
 static const int SPLAT_CUBE_SIZE_XY = 192;
 static const int SPLAT_CUBE_SIZE_Z = 48;
-static const uint SPLAT_CUBE_CASCADE_MAX = 4;
+static const uint SPLAT_CUBE_CASCADE_MAX = 5;
 
 struct VertexOutput
 {
@@ -173,27 +173,16 @@ uint GetSplatAmbientCubeCascadeCount()
     return min(count, SPLAT_CUBE_CASCADE_MAX);
 }
 
+// Same per-cascade grid the shading path reads (AmbientCubeCascadeGrid, filled from
+// FAmbientCascadeLayout): xyz = world position of cell (0,0,0), w = cell size.
 float GetSplatAmbientCubeUnitAtCascade(uint cascadeIndex)
 {
-    const UniformBufferObject camera = Bindless.GetGpuscene().Camera[0];
-    const float baseUnit = max(camera.AmbientCubeUnit, 0.0001);
-    const float ratio = max(camera.AmbientCubeCascadeParams.y, 1.0);
-    return baseUnit * pow(ratio, float(cascadeIndex));
-}
-
-float3 GetSplatAmbientCubeOffsetBias()
-{
-    const UniformBufferObject camera = Bindless.GetGpuscene().Camera[0];
-    const float3 baseOffset = float3(-SPLAT_CUBE_SIZE_XY / 2.0, -1.375, -SPLAT_CUBE_SIZE_XY / 2.0) *
-                              max(camera.AmbientCubeUnit, 0.0001);
-    return camera.AmbientCubeOffset - baseOffset;
+    return max(Bindless.GetGpuscene().Camera[0].AmbientCubeCascadeGrid[cascadeIndex].w, 0.0001);
 }
 
 float3 GetSplatAmbientCubeOffsetAtCascade(uint cascadeIndex)
 {
-    const float unit = GetSplatAmbientCubeUnitAtCascade(cascadeIndex);
-    return float3(-SPLAT_CUBE_SIZE_XY / 2.0, -1.375, -SPLAT_CUBE_SIZE_XY / 2.0) * unit +
-           GetSplatAmbientCubeOffsetBias();
+    return Bindless.GetGpuscene().Camera[0].AmbientCubeCascadeGrid[cascadeIndex].xyz;
 }
 
 uint SplatAmbientBrickSlot(uint cascadeIndex, int3 probePos)
@@ -309,7 +298,10 @@ float SampleSplatUpSkyVisibility(float3 worldPos)
             const int3 offset = int3(i & 1, (i >> 1) & 1, (i >> 2) & 1);
             const int3 probePos = baseIdx + offset;
             AmbientCube cube;
-            if (!SplatTryFetchCubePool(probePos, cascadeIndex, cube))
+            // Same publish rule as the shading gather: a probe with too few bake passes is skipped.
+            if (!SplatTryFetchCubePool(probePos, cascadeIndex, cube) ||
+                ((cube.SkyVisibilityPXNXS0S1 >> 16u) & 0xFFu) <
+                    uint(max(Bindless.GetGpuscene().Camera[0].AmbientCubeCascadeParams.z, 0.0)))
             {
                 continue;
             }

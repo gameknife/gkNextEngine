@@ -26,7 +26,7 @@ namespace
     // Bump when the bake itself changes meaning: bake shaders, the distance-field transform, the
     // convergence pass count, or the brick classification. Struct sizes and grid constants are
     // hashed directly below and need no bump.
-    constexpr uint32_t kCacheVersion = 1u;
+    constexpr uint32_t kCacheVersion = 2u;
 
     // Streaming XXH64 so a multi-million-vertex scene never needs a staging byte buffer.
     class FHashStream
@@ -210,6 +210,11 @@ uint64_t ComputeAmbientBakeKey(const Assets::Scene& scene, const FAmbientBakeKey
     stream.Add(inputs.offsetBias);
     stream.Add(inputs.cascadeCount);
     stream.Add(inputs.cascadeRatio);
+    for (uint32_t cascade = 0; cascade < inputs.cascadeCount && cascade < inputs.cascadeUnits.size(); ++cascade)
+    {
+        stream.Add(inputs.cascadeUnits[cascade]);
+        stream.Add(inputs.cascadeOrigins[cascade]);
+    }
     stream.Add(inputs.poolBricksPerCascade);
     stream.Add(static_cast<uint32_t>(inputs.hardwareBake ? 1u : 0u));
 

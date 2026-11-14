@@ -109,6 +109,11 @@ public struct FGpuProbeGenerator : IProbeGenerator
         scramble ^= AmbientBakeHash(AmbientBakeFaceId(basis) + bakeCascadeIndex * 17u);
         scramble ^= AmbientBakeHash(iterate * 131u + Camera.TotalFrames * 8191u);
 
+        // Bake rays reach a fixed number of cells rather than a fixed distance, so a coarse cascade
+        // still sees the occluders that are several of its cells away and every cascade pays about
+        // the same per ray. Cascade 0 at the default 0.25 m keeps the old 20 m reach.
+        float bakeRayLength = clamp(80.0f * GetAmbientCubeUnitAtCascade(bakeCascadeIndex), 20.0f, 200.0f);
+
         // 这个采样还是有点过重，可以考虑用probe间的光能传递来完成，而非直接tracing
         for (uint i = 0; i < AMBIENT_BAKE_FACE_TRACING; i++)
         {
@@ -120,7 +125,7 @@ public struct FGpuProbeGenerator : IProbeGenerator
             NodeProxy hitNode;
             float4 tempColor = float4(0.0);
             float hitDist = 0;
-            if (tracer.TraceRay(origin, rayDir, FAST_MAX_TRACE_DISTANCE, hitVertex, hitNode, tempColor, hitDist))
+            if (tracer.TraceRay(origin, rayDir, bakeRayLength, hitVertex, hitNode, tempColor, hitDist))
             {
                 Material hitMaterial = Bindless.GetGpuscene().GetMaterial(hitVertex.MaterialIndex);
                 float4 outAlbedo = hitMaterial.Diffuse;
@@ -136,7 +141,6 @@ public struct FGpuProbeGenerator : IProbeGenerator
                 }
                 else
                 {
-                    MarkAmbientBrickHitAtWorld(hitVertex.Position, true);
                     bounceColor += outAlbedo * interpolateAmbientCubesStable<DIAmbientCubeSampler>(hitVertex.Position, hitVertex.Normal, bakeCascadeIndex) * 2.0f; // magic bounce twice
                 }
             }

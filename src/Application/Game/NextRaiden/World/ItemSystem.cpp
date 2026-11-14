@@ -14,7 +14,7 @@ namespace NextRaiden
 {
     namespace
     {
-        constexpr float kCullMargin = 6.0f;
+        constexpr float kItemCullMargin = 6.0f;
 
         const char* PrefabForItem(EItemKind kind)
         {
@@ -135,7 +135,7 @@ namespace NextRaiden
     void FItemSystem::Step(float deltaSeconds, const FScrollCamera& camera, const glm::vec3& playerPosition,
                            std::vector<EItemKind>& outPickups)
     {
-        const float cullZ = camera.FlightNearZ() + kCullMargin;
+        const float cullZ = camera.FlightNearZ() + kItemCullMargin;
 
         for (FItem& item : items_)
         {

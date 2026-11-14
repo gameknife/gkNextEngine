@@ -36,10 +36,10 @@ void ShadeSwModernPixel(int2 pixel)
     dIlluminator.EnableFoliageDirect = true;
     dIlluminator.FoliageMaterialId = renderer.GetPrimaryVertex().MaterialIndex;
 
-    float4 residencyDebugColor;
-    if (TryAmbientResidencyDebug(renderer.GetPrimaryVertex().Position, residencyDebugColor))
+    float4 debugViewColor;
+    if (TryAmbientCubeDebugView(renderer.GetPrimaryVertex().Position, debugViewColor))
     {
-        renderer.WriteDebugColor(residencyDebugColor);
+        renderer.WriteDebugColor(debugViewColor);
         END_SHADERCLOCK(pixel)
         return;
     }

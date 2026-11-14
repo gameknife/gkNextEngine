@@ -10,10 +10,17 @@
 namespace Assets::CPU
 {
     constexpr uint32_t kCascadeVoxelCount = Assets::CUBE_SIZE_XY * Assets::CUBE_SIZE_XY * Assets::CUBE_SIZE_Z;
-    // Dilate the solid-brick set by this many bricks when classifying active cube bricks, so the
-    // near-surface shell the bake writes is fully covered.
-    constexpr int kAmbientBrickDilationRadius = 3;
     constexpr uint8_t kMaxDistanceFieldSeed = 15;
+
+    // Surface shell a cascade keeps cube bricks for, in cells of its distance field: about 2 m of air
+    // over every surface (character height) on the fine cascades, never thinner than 2 cells, and
+    // never more than one brick, so the coarse cascades keep only the layer that touches the ground.
+    inline uint32_t ResolveAmbientBrickShellCells(float unit)
+    {
+        constexpr float shellMeters = 2.0f;
+        const float cells = std::ceil(shellMeters / std::max(unit, 1e-4f));
+        return static_cast<uint32_t>(std::clamp(cells, 2.0f, 8.0f));
+    }
 
     // Voxel storage is brick-swizzled: the cascade array is tiled into GPU_SCENE_AMBIENT_BRICK_EDGE^3
     // blocks rather than stored as y * W * W + z * W + x. The shader DDA walks this array one cell at

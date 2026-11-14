@@ -139,7 +139,10 @@ bool InsideGeometry(const FCPUTLASSnapshot& snapshot, FLOAT3& origin, FLOAT3 ray
     uint tempMaterialId;
     uint tempInstanceId;
 
-    if (TraceRay(snapshot, origin, rayDir, cubeUnit * 64.0f, outNormal, tempMaterialId, outRayDist, tempInstanceId))
+    // Only a hit within one cell changes the voxel: anything farther clamps to the same "clear" 1.0
+    // in VoxelizeCube whether it is found or not. Tracing a hair past one cell instead of 64 keeps
+    // every output bit identical while the BVH walk stops at the first cell.
+    if (TraceRay(snapshot, origin, rayDir, cubeUnit * 1.01f, outNormal, tempMaterialId, outRayDist, tempInstanceId))
     {
         distance = outRayDist;
         if (distance <= cubeUnit)

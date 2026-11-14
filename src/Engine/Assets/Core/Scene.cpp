@@ -58,7 +58,6 @@ namespace Assets
             VkDeviceSize pongOffset;
             VkDeviceSize brickTableOffset;
             VkDeviceSize activeBrickListOffset;
-            VkDeviceSize residencyOffset;
             VkDeviceSize totalSize;
         };
 
@@ -85,11 +84,8 @@ namespace Assets
                 sizeof(uint32_t) * static_cast<VkDeviceSize>(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE) *
                     cascadeCapacity;
             // Phase 3c: per-cascade active brick list, one packed brick-linear id per pool slot.
-            layout.residencyOffset = layout.activeBrickListOffset +
+            layout.totalSize = layout.activeBrickListOffset +
                 sizeof(uint32_t) * static_cast<VkDeviceSize>(poolBricksPerCascade) * cascadeCapacity;
-            layout.totalSize = layout.residencyOffset +
-                sizeof(Assets::AmbientBrickResidency) *
-                    static_cast<VkDeviceSize>(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE) * cascadeCapacity;
             return layout;
         }
 
@@ -103,7 +99,6 @@ namespace Assets
         static_assert(sizeof(Assets::ModelData) == 112);
         static_assert(sizeof(Assets::SphericalHarmonics) == Assets::GPU_SCENE_SPHERICAL_HARMONICS_SIZE);
         static_assert(sizeof(Assets::AmbientCube) == Assets::GPU_SCENE_AMBIENT_CUBE_SIZE);
-        static_assert(sizeof(Assets::AmbientBrickResidency) == 16);
         static_assert(sizeof(Assets::AmbientResources) == 80);
         static_assert(sizeof(Assets::VoxelData) == Assets::GPU_SCENE_VOXEL_DATA_SIZE);
         static_assert(sizeof(Assets::PageIndex) == Assets::GPU_SCENE_PAGE_INDEX_SIZE);
@@ -242,7 +237,7 @@ namespace Assets
             (!NextEngine::GetInstance() ||
              NextEngine::GetInstance()->GetRenderer().RegisteredRendererRequirements().requestAmbientCube);
         // Phase 2 right-sizing: allocate Cubes/Voxels for the configured cascade count (default 3)
-        // rather than always CUBE_CASCADE_MAX (4). The capacity is fixed for this Scene's lifetime;
+        // rather than always CUBE_CASCADE_MAX (5). The capacity is fixed for this Scene's lifetime;
         // consumers clamp the effective cascade count to it (a runtime cvar increase only takes
         // effect after a scene reload, but never reads/writes outside the allocation).
         uint32_t configuredCascadeCount = Assets::CUBE_CASCADE_MAX;
@@ -266,7 +261,6 @@ namespace Assets
         ambientPongOffset_ = static_cast<size_t>(ambientLayout.pongOffset);
         ambientBrickTableOffset_ = static_cast<size_t>(ambientLayout.brickTableOffset);
         ambientActiveBrickListOffset_ = static_cast<size_t>(ambientLayout.activeBrickListOffset);
-        ambientResidencyOffset_ = static_cast<size_t>(ambientLayout.residencyOffset);
 
         Vulkan::BufferUtil::CreateDeviceBufferLocal(
             commandPool, "SceneDynamic", flags,
@@ -313,7 +307,6 @@ namespace Assets
                 const uint64_t activeListByteOffset =
                     static_cast<uint64_t>(ambientLayout.activeBrickListOffset - ambientLayout.brickTableOffset);
                 resources.PoolParams = (activeListByteOffset << 32u) | poolBricksPerCascade_;
-                resources.Residency = arenaBase + ambientLayout.residencyOffset;
             }
             const std::vector<AmbientResources> resourcesData = {resources};
             Vulkan::BufferUtil::CreateDeviceBuffer(commandPool, "AmbientResources", flags, resourcesData,
@@ -338,14 +331,6 @@ namespace Assets
             mapped = ambientArenaBufferMemory_->Map(static_cast<VkDeviceSize>(ambientActiveBrickListOffset_),
                                                     activeListCount * sizeof(uint32_t));
             std::memcpy(mapped, activeList.data(), activeListCount * sizeof(uint32_t));
-            ambientArenaBufferMemory_->Unmap();
-
-            const size_t residencyCount =
-                static_cast<size_t>(ambientCubeCascadeCapacity) * bricksPerCascade;
-            std::vector<AmbientBrickResidency> residency(residencyCount);
-            mapped = ambientArenaBufferMemory_->Map(static_cast<VkDeviceSize>(ambientResidencyOffset_),
-                                                    residencyCount * sizeof(AmbientBrickResidency));
-            std::memcpy(mapped, residency.data(), residencyCount * sizeof(AmbientBrickResidency));
             ambientArenaBufferMemory_->Unmap();
         }
 

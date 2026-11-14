@@ -648,13 +648,21 @@ void NextRendererGameInstance::DrawSettings(FRendererUiState& uiState)
         DrawFloatSetting("Cube Unit", &userSetting.AmbientCubeUnit, 0.02f, 2.0f, "%.3f m", 0.005f);
         DrawIntSetting("Cascades", &userSetting.AmbientCubeCascadeCount, 1, Assets::CUBE_CASCADE_MAX);
         DrawFloatSetting("Cascade Ratio", &userSetting.AmbientCubeCascadeRatio, 1.0f, 8.0f, "%.2f", 0.05f);
+        DrawSettingCheckboxRow("Fit To Scene", &userSetting.AmbientCubeFollow);
 
+        // Coverage of the grid actually in use; the edits above apply on the next level load.
         const float baseUnit = Assets::SanitizeAmbientCubeUnit(userSetting.AmbientCubeUnit);
-        const float ratio = Assets::SanitizeAmbientCubeCascadeRatio(userSetting.AmbientCubeCascadeRatio);
-        const uint32_t cascadeCount = std::min(
+        float ratio = Assets::SanitizeAmbientCubeCascadeRatio(userSetting.AmbientCubeCascadeRatio);
+        uint32_t cascadeCount = std::min(
             Assets::SanitizeAmbientCubeCascadeCount(userSetting.AmbientCubeCascadeCount),
             std::max(1u, scene.AmbientCubeCascadeCapacity()));
-        const float outerUnit = Assets::CalculateAmbientCubeCascadeUnit(baseUnit, ratio, cascadeCount - 1);
+        float outerUnit = Assets::CalculateAmbientCubeCascadeUnit(baseUnit, ratio, cascadeCount - 1);
+        Assets::CPU::FAmbientGridConfig committedGrid;
+        if (scene.GetCPUAccelerationStructure().TryGetAmbientGridConfig(committedGrid))
+        {
+            cascadeCount = committedGrid.layout.cascadeCount;
+            outerUnit = committedGrid.layout.units[cascadeCount - 1];
+        }
         DrawSettingRow("Coverage",
                        [&]()
                        {

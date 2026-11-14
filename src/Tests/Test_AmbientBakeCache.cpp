@@ -284,6 +284,11 @@ TEST_CASE_METHOD(EngineTestFixture, "Ambient bake key tracks the scene's initial
         other = inputs;
         other.hardwareBake = !inputs.hardwareBake;
         CHECK(ComputeAmbientBakeKey(scene, other) != baseline);
+
+        // In fit-scene mode a cascade's window, not the ratio setting, decides what it holds.
+        other = inputs;
+        other.cascadeOrigins[1] += glm::vec3(4.0f, 0.0f, 0.0f);
+        CHECK(ComputeAmbientBakeKey(scene, other) != baseline);
     }
 
     SECTION("Moving a node changes the key")

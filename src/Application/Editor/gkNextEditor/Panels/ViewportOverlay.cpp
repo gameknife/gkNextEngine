@@ -483,7 +483,7 @@ namespace Editor
         }
         NextUI::Theme::EndOverlayPanel();
 
-        // AmbientCube brick residency is an engine-internal diagnostic; it stays behind
+        // AmbientCube brick allocation is an engine-internal diagnostic; it stays behind
         // the graphics debug flag so the default viewport is free of internal counters.
         if (renderer.CurrentRendererRequirements().requestAmbientCube &&
             ctx.engine.GetShowFlags().DebugGraphicsPanel)
@@ -520,7 +520,7 @@ namespace Editor
                 ImGui::TextUnformatted("AC Bricks:");
                 NextUI::Theme::SameLineRightAligned(ambientBrickValueWidth, 0.0f);
                 ImGui::TextUnformatted(ambientBrickText.c_str());
-                NextUI::Theme::DrawTooltip("AmbientCube resident bricks / total bricks across allocated cascades");
+                NextUI::Theme::DrawTooltip("AmbientCube allocated bricks / total bricks across allocated cascades");
             }
             NextUI::Theme::EndOverlayPanel();
         }

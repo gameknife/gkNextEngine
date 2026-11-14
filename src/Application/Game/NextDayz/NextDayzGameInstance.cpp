@@ -286,6 +286,13 @@ void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
     cvars.SetDefaultFromString("r.upscaler.qualityMode", "0", &error);
     cvars.SetDefaultFromString("r.exposure.auto", "true", &error);
     cvars.SetDefaultFromString("r.exposure.maxEV", "3", &error);
+    // Expedition maps are ~1 km across: fit the voxel / ambient-cube cascades to the map so the
+    // coarsest one covers all of it. Five cascades cost ~270 MB of arena, which mobile cannot
+    // spare, so there the engine default (fixed anchor, 3 cascades) stays.
+#if !ANDROID && !IOS
+    cvars.SetDefaultFromString("sys.ambientCubeFollow", "true", &error);
+    cvars.SetDefaultFromString("sys.ambientCubeCascadeCount", "5", &error);
+#endif
 
     cvars.RegisterBool("nextdayz.grass.enabled", true, &grass_.settings.enabled, NextCVar::ECVarFlags::None,
                        "Grow runtime grass on grassland terrain biomes");

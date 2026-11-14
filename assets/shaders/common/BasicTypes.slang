@@ -58,7 +58,7 @@ public static const int GPU_SCENE_DYNAMIC_SIZE =
     GPU_SCENE_DYNAMIC_HDRSHS_OFFSET + GPU_SCENE_SPHERICAL_HARMONICS_SIZE * MAX_HDR_SH;
 
 public static const int GPU_SCENE_AMBIENT_PER_CASCADE_COUNT = 192 * 192 * 48;
-public static const int GPU_SCENE_AMBIENT_CASCADE_MAX = 4;
+public static const int GPU_SCENE_AMBIENT_CASCADE_MAX = 5;
 public static const int GPU_SCENE_AMBIENT_CUBE_SIZE = 40;
 public static const int GPU_SCENE_VOXEL_DATA_SIZE = 8;
 public static const int GPU_SCENE_PAGE_INDEX_SIZE = 16;
@@ -245,7 +245,12 @@ public struct ALIGN_16 UniformBufferObject
     public float3 AmbientCubeOffset;
     public float AmbientCubeOffsetPadding3;
 
+    // x = cascade count, y = cascade ratio (informational; the grids below are authoritative),
+    // z = probe publish threshold in bake passes, w = r.ambientCube.debugView.
     public float4 AmbientCubeCascadeParams;
+    // Per cascade: xyz = world position of grid cell (0,0,0), w = cell size. Filled from the grid the
+    // CPU bakers were built with (FAmbientCascadeLayout), never derived in the shader.
+    public float4 AmbientCubeCascadeGrid[GPU_SCENE_AMBIENT_CASCADE_MAX];
 
     public bool UpscalerInvalidMotionMask;
     public bool RayReconstruction;
@@ -402,14 +407,6 @@ public struct ALIGN_16 PageIndex
     public uint probeDataIdx;
 };
 
-public struct ALIGN_16 AmbientBrickResidency
-{
-    public uint lastConsumerHitFrame;
-    public uint lastBounceHitFrame;
-    public uint consumerHitCount;
-    public uint bounceHitCount;
-};
-
 // Ambient GI resource table. GPUScene is capped at 128B (push constant), so instead of inlining
 // every ambient region address it carries a single AmbientBase pointer to this table. Region
 // addresses are filled CPU-side (Scene.cpp) from the arena base, which decouples the GPU-visible
@@ -423,7 +420,7 @@ public struct ALIGN_16 AmbientResources
     public uint64_t CubesPong;   // ping-pong copy of the baking cascade's cubes (brick-organized in Phase 3)
     public uint64_t BrickTable;  // Phase 3: per-cascade brick -> pool slot table (uint per brick)
     public uint64_t PoolParams;  // Phase 3: low32 = pool bricks/cascade, high32 = active-list byte offset from BrickTable
-    public uint64_t Residency;   // per-cascade AmbientBrickResidency array
+    public uint64_t Reserved3;
     public uint64_t Reserved0;
     public uint64_t Reserved1;
     public uint64_t Reserved2;
@@ -715,10 +712,6 @@ public struct ALIGN_8 GPUScene
     {
         get { return uint(((AmbientResources*)AmbientBase)[0].PoolParams & 0xFFFFFFFF); }
     }
-    public property AmbientBrickResidency* AmbientResidency
-    {
-        get { return (AmbientBrickResidency*)((AmbientResources*)AmbientBase)[0].Residency; }
-    }
     public property SphericalHarmonics* HDRSHs
     {
         get { return (SphericalHarmonics*)(SceneDynamicBase + GPU_SCENE_DYNAMIC_HDRSHS_OFFSET); }
@@ -867,10 +860,6 @@ public struct ALIGN_8 GPUScene
     public property uint AmbientPoolBricksPerCascade
     {
         get { return uint(((AmbientResources*)Reserved_AmbientBase_Address.y)[0].PoolParams & 0xFFFFFFFF); }
-    }
-    public property AmbientBrickResidency* AmbientResidency
-    {
-        get { return (AmbientBrickResidency*)((AmbientResources*)Reserved_AmbientBase_Address.y)[0].Residency; }
     }
 
     uint64_t2 TLAS_SkinWeights_Address;

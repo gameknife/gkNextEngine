@@ -16,8 +16,8 @@ last_updated: 2026-09-14
 优先关注以下五点：
 
 1. **比较对象发生了收敛。** SoftwareTracing 不是逐像素追踪 primary ray 的传统软件路径追踪器：它同样从 Visibility/G-buffer 回放首交点，普通不透明材质在第一次反弹后就查询 AmbientCube 终止。
-2. **Modern 的探针查询并不便宜。** 默认每个间接样本先查原点，再在命中时查切平面 jitter 点；高光直射估计还可能额外查一至两次。每次都是带体素防漏光、稀疏页表和驻留原子写的八角插值。
-3. **有可定位的实现问题。** 驻留功能关闭时仍写原子标记；probe tracer 被用于要求真实几何交点的 glossy MIS；间接光强度控制在 Modern 路径未生效。前两项可能增加成本，后两项还影响画质和比较公平性。
+2. **Modern 的探针查询并不便宜。** 默认每个间接样本先查原点，再在命中时查切平面 jitter 点；高光直射估计还可能额外查一至两次。每次都是带体素防漏光和稀疏页表的八角插值。
+3. **有可定位的实现问题。** （已解决：驻留关闭时仍写原子标记，见 3.1）probe tracer 被用于要求真实几何交点的 glossy MIS；间接光强度控制在 Modern 路径未生效。前两项可能增加成本，后两项还影响画质和比较公平性。
 4. **公共工作和调度会掩盖优势。** 烘焙器以目标 GPU 帧时间分配剩余预算；默认 60 FPS 对应 17.5 ms 预算，Modern 省下的时间可能变成更多烘焙工作。公共前后处理、单帧在途以及 present 等待也可能压低整帧收益。
 5. **本机整帧 FPS 已出现测量上限。** 本轮隐藏窗口、720p、关闭 upscaler 的完整记录均接近 120 FPS；不能据此断言两种 shader 的 GPU 耗时相同。
 
@@ -64,20 +64,12 @@ Modern GPU  = 公共前处理 + 公共直射 + probe/jitter + 额外高光路径
 
 ## 3. 可以从代码确认的问题
 
-### 3.1 驻留未启用，shader 仍在写热点原子变量
+### 3.1 驻留标记的热点原子写（已解决）
 
-证据链：
-
-- [EngineCVars.cpp](../../src/Engine/Runtime/Config/EngineCVars.cpp)：`r.ambientCube.hitDrivenResidency` 和 `bounceHitAffectsResidency` 默认 false，`hitMarkTileRatio` 默认 0.25。
-- [Engine.CameraUbo.cpp](../../src/Engine/Runtime/Engine.CameraUbo.cpp)：`AmbientCubeCascadeParams.z` 无条件填入 clamp 到 `[0.01, 1]` 的标记比例，没有根据驻留开关清零。
-- [AmbientCube.slang](../../assets/shaders/common/AmbientCube.slang)：`gatherAmbientCubes` 调用 `MarkAmbientBrickHit`；后者只判断比例，最终对 `lastConsumerHitFrame` 或 `lastBounceHitFrame` 执行 `InterlockedMax`。
-- [BrickPageTable.cpp](../../src/Engine/Assets/Acceleration/BrickPageTable.cpp)：`requested[b] = (!hitDriven || inGrace || recentlyHit)`。驻留关闭时命中时间不影响保留决策，但仍可服务诊断统计。
-
-同一砖块、同一帧的 hash 相同：0.25 **不是每像素独立抽掉 75% 原子写**，而是抽到的砖块上所有查询都继续争用同一个地址。Modern 的原点/jitter/额外 glossy 查询会放大这一问题。当前已把每个角的标记合并为每次 gather 一次，不应把“八次改一次”再作为新优化。
-
-**建议：** 只有驻留策略或显式诊断需要时才开启标记；consumer 和 bounce 分别控制。若保留默认统计，应改为低成本汇总或按需统计，避免诊断反过来主导 shading。启用驻留时再评估同 brick 的 subgroup 去重，并保持移动相机下的覆盖和淘汰语义。
-
-这是确定的非必需工作；具体耗时要通过去除标记前后的 `shadingpass` 和 shader atomic/counter 观察确认。现有 CVar 最低为 0.01，**不能用设置 `hitMarkTileRatio=0` 作为当前版本的可靠消融实验**；需要增加调试开关或修正 UBO gating。
+审计时 `gatherAmbientCubes` 在驻留关闭的默认配置下仍对每次 gather 执行一次 `InterlockedMax`。
+[大地图 GI 覆盖计划](../plans/ambientcube-clipmap-plan.md) 阶段 1 已删除整个 hit-driven residency
+（arena 的 `Residency` 区、`MarkAmbientBrickHit*`、CPU 回读与五个相关 CVar），消费路径不再有原子写。
+做前后对比时注意同一阶段还改了 brick 激活规则和 probe 发布规则，二者都会改变 gather 的有效角数。
 
 ### 3.2 Probe tracer 不满足 glossy MIS 所需的交点契约
 
@@ -232,7 +224,7 @@ nextGroups ≈ bakeBudgetMs / measuredMsPerGroup
 | 优先级 | 改动 | 验证重点 | 主要边界 |
 | --- | --- | --- | --- |
 | P0 | 建立 GPU 分项基线、核实 WSI 等待、分离 bake 活跃/稳定状态 | 两 renderer 的 GPU ms、CPU wait 和实际 render extent | FPS 触顶的数据不能用来算 shader 加速比 |
-| P1 | 驻留/诊断关闭时跳过 consumer/bounce 标记 | GPU 原子工作减少；驻留开启时不误淘汰 | 显式诊断仍应可用 |
+| ~~P1~~ | ~~驻留/诊断关闭时跳过 consumer/bounce 标记~~ | 已随 residency 删除（3.1） | — |
 | P1 | 修正 Modern glossy direct 的 tracer/MIS 契约 | 高光能量正确，移除无效 probe proposal | 太阳盘、delta 反射/透射分别验证 |
 | P1 | 明确 probe 能量通道与 indirectIntensity 语义 | 天空/面光不重复计能量、间接系数一致 | 不能直接把 Full sampler 换成 ID |
 | P1 | 将双位置 probe gather 改为可控策略，复用原点插值 | query 次数、shading ms、薄墙漏光和闪烁 | 优先减少冗余，不删除防漏光约束 |
@@ -284,7 +276,7 @@ Visibility / 完整 Surface
 
 - primary direct / indirect probe / glossy proposal 的分项 shader 或计数器；
 - 原点/jitter query 数、平均有效角数、cascade fallback 数；
-- DDA 步数、光源候选数、驻留标记次数；
+- DDA 步数、光源候选数；
 - bake copy 与 bake trace 的独立 GPU 时间；
 - 等待 bake idle 的测量起点，以及固定视角/固定相机时间段模式。
 

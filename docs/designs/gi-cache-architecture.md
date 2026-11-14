@@ -4,7 +4,7 @@ category: design
 status: 现行
 owner: engine/rendering
 created: 2026-07-17
-last_updated: 2026-07-17
+last_updated: 2026-11-14
 ---
 
 # GI 缓存与体素资源架构
@@ -35,23 +35,53 @@ RGB9E5 是单个 32-bit radiance 值的编码选择，不是块压缩。它保�
 - `CubesPong`：仅一条 cascade 大小的 bake ping-pong scratch。
 - `BrickTable`：逻辑 brick → pool slot。
 - `ActiveBrickList`：本帧参与 bake 的逻辑 brick 列表。
-- `Residency`：consumer/bounce 最近命中帧与计数。
+
+`Pages` 计划在 [大地图 GI 覆盖](../plans/ambientcube-clipmap-plan.md) 阶段 2 随 DDA 多级行走删除。
+原先的 `Residency` 区已随 hit-driven residency 删除（阶段 1）。
 
 `VoxelData` 当前为 8 bytes：完整 `matId` 加一个打包的 8×4-bit distance/inside word。`AmbientCube` 为 40 bytes：六个方向色、sun direct、sky/emissive direct 以 RGB9E5 保存，另有六方向 8-bit sky visibility。不要引用旧文档中的 16-byte VoxelData、56-byte AmbientCube 或 RGBA8 face 布局。
+
+## Cascade 布局
+
+每级都是 `192×192×48` 的网格，落在自己的世界晶格上，晶格相位是 `CalculateAmbientCubeOffset(unit, offsetBias)`。
+网格在世界中的位置只由 `FAmbientCascadeLayout`（`Engine/Assets/Acceleration/AmbientCascadeLayout.hpp`）
+描述：每级一个"格子 (0,0,0) 的世界坐标 + 体素尺寸"。CPU 体素化按它写 voxel，camera UBO 的
+`AmbientCubeCascadeGrid[5]` 把同一组数交给 shading、bake 和 Splat；shader 不再由"基础 unit × 比例"推导同心网格。
+
+- `sys.ambientCubeFollow = 0`（默认）：固定锚点，第 i 级体素为 `unit × ratio^i`，窗口就是晶格原点，与改造前逐格一致。
+- `sys.ambientCubeFollow = 1`：贴合场景。比例按场景水平尺寸自适应（夹在 1.5 ~ 4），使最粗一级以
+  180 格（两侧各留吸附误差 4 格 + 插值余量 2 格）盖住全图；各级 XZ 居中、Y 底面落在场景最低点下方一格，
+  原点吸附到该级 brick 的整数倍。NextDayz 桌面端默认开启并用 5 级。近场各级目前也静止在地图中心，
+  跟随视点是计划的阶段 3。
+
+shading 必须读 bakers 实际采用的布局（`TryGetAmbientGridConfig`），不能读待生效的设置，否则在重烘焙
+完成前会用新网格去采旧数据。级数上限 `CUBE_CASCADE_MAX` 为 5，CPU 常量、`GPU_SCENE_AMBIENT_CASCADE_MAX`、
+`AmbientCube.slang` 与 Splat 的上限需同步。
 
 Scene 构造时按当时的 `sys.ambientCubeCascadeCount` 固定本 scene 的 cascade capacity；运行中把 CVar 调大不会越界，但新增 capacity 要到 scene reload 才分配。cube pool 大小由 `sys.ambientCubePoolBrickRatio` 转换成每 cascade 固定 slot 上限，因此同一配置下“更稀疏的场景”主要减少 active/bake 工作，不会继续缩小已经创建的 Vulkan allocation。评估显存必须看启动时 `[AmbientArena]` 日志，不能只看 active brick 数。
 
 ## 稀疏 brick 分配
 
-逻辑网格仍是 `192×192×48`，以 `8×8×8` probe 组成 brick。CPU 从占据 voxel 加 dilation 得到候选集，`FCPUBrickTable` 尽量保留旧 slot，再按稳定的逻辑 brick 顺序分配空 slot。slot owner 改变时必须清零对应 cube，防止新 brick 读到旧 owner 的 radiance。
+逻辑网格仍是 `192×192×48`，以 `8×8×8` probe 组成 brick。候选集直接读距离场：brick 内存在离实体不超过
+k 格的**空**体素即激活，k = `clamp(ceil(2 m / unit), 2, 8)`（`ResolveAmbientBrickShellCells`），细级留出
+角色高度的空气层，粗级只保留贴表面的一层；全实心的 brick 不激活。`FCPUBrickTable` 保留仍被需要的 brick
+的旧 slot，其余按到焦点（当前为渲染相机）的距离由近到远分配空 slot。slot owner 改变时必须清零对应 cube，
+防止新 brick 读到旧 owner 的 radiance；清零后采样遍数为 0，在重新烘焙到发布阈值前不会被插值使用。
 
-候选数超过固定 pool 时，未分配 brick 保持 invalid 并沿明确 fallback/更粗 cascade 取样；不能让 pool index wrap、覆盖已有 owner 或把缺页默认为一块随机旧 radiance。降低 pool ratio 是画质/显存取舍，不是无损压缩开关。
-
-命中驱动是可选的二次筛选，不改变候选集合定义；详细 grace/evict/marking 语义见 [AmbientCube 命中驱动驻留](ambientcube-hit-driven-residency-design.md)。当前没有 GPU free-list，也没有把 dense VoxelData 一起稀疏化。
+候选数超过固定 pool 时，未分配 brick 保持 invalid 并落到更粗 cascade 取样；不能让 pool index wrap、
+覆盖已有 owner 或把缺页默认为一块随机旧 radiance。降低 pool ratio 是画质/显存取舍，不是无损压缩开关。
+每次分类在日志打印 `[AmbientBricks]` 各级的 wanted / overflow 数。当前没有 GPU free-list，也没有把 dense
+VoxelData 一起稀疏化。
 
 ## Bake 与消费
 
-camera-independent scene prepare 每帧只运行一次。AmbientCube bake 每帧轮转一条 cascade，只 dispatch active brick 对应的 probes；hardware/soft bake 共用 active-list 解码。消费 shader 先由 cascade/逻辑 probe 找 `BrickTable`，缺页时使用明确 fallback，不能直接把逻辑 voxel index 当 pool index。
+camera-independent scene prepare 每帧只运行一次。AmbientCube bake 每帧轮转一条 cascade，只 dispatch active brick 对应的 probes；hardware/soft bake 共用 active-list 解码。bake 射线长度随级别缩放为 `clamp(80 × unit, 20 m, 200 m)`，各级单条射线跨过的格数相当。消费 shader 先由 cascade/逻辑 probe 找 `BrickTable`，缺页时使用明确 fallback，不能直接把逻辑 voxel index 当 pool index。
+
+发布规则：probe 的累计 bake 遍数（`SkyVisibilityPXNXS0S1` 的第 2 字节）不足 `r.ambientCube.publishPasses`
+（默认 4）时，插值把它当作缺失跳过；当前级没有有效权重就落到更粗一级，全部没有才是天空兜底。bake 自己的
+反弹查询走同一规则，所以新 brick 的第一遍反弹取自已收敛的粗一级。Splat 的天空可见度采样同样遵守。
+`r.ambientCube.debugView` 1 按最细命中级别着色，2 按状态着色（品红=不在任何窗口内，红=无 cube brick，
+黄=未发布，蓝=已发布）。
 
 AmbientCube 同时服务间接光、sky visibility、Splat 的可选场景光照以及 software tracing。修改 packed layout、brick edge 或 cascade 参数时必须同步 CPU static_assert、arena sizing、shader 寻址、readback 和 Splat consumer。
 
@@ -61,7 +91,7 @@ CPU voxelization、brick classification、flush 与首轮 bake 可能远晚于�
 
 `sys.hdrTextureStreaming=true` 时，HDR 环境贴图以 lowest mip 起步；当前 active `SkyIdx` 连续需求 8 帧后异步升为 full mip，离开 active 状态 180 帧后降回 lowest mip。bindless texture id 保持不变，payload/SH 在完成回调中刷新。关闭 streaming 会请求所有 HDR texture 升为 full mip。
 
-这套策略减少未使用 sky 的显存，与 AmbientCube brick residency 是两套独立状态机。修改阈值或异步替换时要验证当前 sky 不闪黑、SH 与 texture 同步、scene 切换和 shutdown；不要把 HDR texture 的“命中”接入 AmbientCube residency 计数。
+这套策略减少未使用 sky 的显存，与 AmbientCube 的 brick 分配无关。修改阈值或异步替换时要验证当前 sky 不闪黑、SH 与 texture 同步、scene 切换和 shutdown。
 
 ## SHARC 边界
 
@@ -81,6 +111,9 @@ SHARC 使用 vendored NVIDIA header，经 `assets/shaders/common/Sharc.slang` �
 - NoAmbient 的 voxel sky-visibility soft trace。
 
 这些旧设计可以作为历史研究，但不是当前 roadmap。若重新立项，应先用现有 arena/brick/effective renderer contract 建立基线，不能从旧结构尺寸或旧阶段继续施工。
+
+第一项已按当前代码重新立项，见 [大地图 GI 覆盖开发计划](../plans/ambientcube-clipmap-plan.md)，阶段 1（全图底图）已实施，本文已同步；
+环形寻址、增量管线与近场跟随是阶段 2–3。第二项只列在该计划的可选阶段。
 
 ## 磁盘缓存（计划中）
 

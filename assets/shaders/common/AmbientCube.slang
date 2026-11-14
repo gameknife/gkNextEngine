@@ -10,16 +10,11 @@ public static const float3 PAGE_OFFSET = float3(-512, 0, -512);
 
 public static const int CUBE_SIZE_XY = 192; // 256;
 public static const int CUBE_SIZE_Z = 48;
-public static const uint CUBE_CASCADE_MAX = 4;
+public static const uint CUBE_CASCADE_MAX = 5;
 
 float GetAmbientCubeUnit()
 {
     return max(Bindless.GetGpuscene().Camera[0].AmbientCubeUnit, 0.0001f);
-}
-
-float3 GetAmbientCubeOffset()
-{
-    return Bindless.GetGpuscene().Camera[0].AmbientCubeOffset;
 }
 
 public uint GetAmbientCubeCascadeCount()
@@ -28,59 +23,40 @@ public uint GetAmbientCubeCascadeCount()
     return min(count, CUBE_CASCADE_MAX);
 }
 
-public float GetAmbientCubeCascadeRatio()
-{
-    return max(Bindless.GetGpuscene().Camera[0].AmbientCubeCascadeParams.y, 1.0f);
-}
-
-public float3 GetAmbientCubeOffsetBias()
-{
-    float3 baseOffset = float3(-CUBE_SIZE_XY / 2.0f, -1.375f, -CUBE_SIZE_XY / 2.0f) * GetAmbientCubeUnit();
-    return GetAmbientCubeOffset() - baseOffset;
-}
-
-// Cascade N's cell size is baseUnit * ratio^N. cascadeIndex is always below CUBE_CASCADE_MAX (4),
-// so two selects replace pow() -- which the drivers lower to exp2/log2 and which used to run
-// several times per DDA step through the helpers below.
+// Each cascade's grid comes straight from the UBO (FAmbientCascadeLayout on the CPU): cell (0,0,0)
+// sits at AmbientCubeCascadeGrid[i].xyz and a cell is AmbientCubeCascadeGrid[i].w wide. Nothing
+// here derives one cascade from another, so a cascade can sit anywhere on its lattice.
 public float GetAmbientCubeUnitAtCascade(uint cascadeIndex)
 {
-    float ratio = GetAmbientCubeCascadeRatio();
-    float ratioSquared = ratio * ratio;
-    return GetAmbientCubeUnit() * ((cascadeIndex & 1u) != 0u ? ratio : 1.0f)
-                                * ((cascadeIndex & 2u) != 0u ? ratioSquared : 1.0f);
+    return max(Bindless.GetGpuscene().Camera[0].AmbientCubeCascadeGrid[cascadeIndex].w, 0.0001f);
 }
 
 public float3 GetAmbientCubeOffsetAtCascade(uint cascadeIndex)
 {
-    float unit = GetAmbientCubeUnitAtCascade(cascadeIndex);
-    return float3(-CUBE_SIZE_XY / 2.0f, -1.375f, -CUBE_SIZE_XY / 2.0f) * unit + GetAmbientCubeOffsetBias();
+    return Bindless.GetGpuscene().Camera[0].AmbientCubeCascadeGrid[cascadeIndex].xyz;
 }
 
-// Cascade + grid parameters for a world position in one pass. Callers that need both used to run
-// the search and then re-derive the unit and offset from scratch, re-reading the UBO each time.
+// Cascade + grid parameters for a world position in one pass: the finest cascade whose grid holds
+// the point, or the coarsest one (returning false) when none does.
 public bool GetAmbientCubeGridAtPosition(float3 worldPos, out uint cascadeIndex, out float unit, out float3 offset)
 {
     uint cascadeCount = GetAmbientCubeCascadeCount();
-    float ratio = GetAmbientCubeCascadeRatio();
-    float3 offsetBias = GetAmbientCubeOffsetBias();
-    const float3 cascadeCorner = float3(-CUBE_SIZE_XY / 2.0f, -1.375f, -CUBE_SIZE_XY / 2.0f);
-
-    unit = GetAmbientCubeUnit();
     for (cascadeIndex = 0; cascadeIndex < cascadeCount; ++cascadeIndex)
     {
-        offset = cascadeCorner * unit + offsetBias;
+        float4 grid = Bindless.GetGpuscene().Camera[0].AmbientCubeCascadeGrid[cascadeIndex];
+        unit = max(grid.w, 0.0001f);
+        offset = grid.xyz;
         float3 voxelPos = (worldPos - offset) / unit;
         if (voxelPos.x >= 0 && voxelPos.y >= 0 && voxelPos.z >= 0 && voxelPos.x <= CUBE_SIZE_XY - 1 &&
             voxelPos.y <= CUBE_SIZE_Z - 1 && voxelPos.z <= CUBE_SIZE_XY - 1)
         {
             return true;
         }
-        unit *= ratio;
     }
 
     cascadeIndex = cascadeCount - 1;
     unit = GetAmbientCubeUnitAtCascade(cascadeIndex);
-    offset = cascadeCorner * unit + offsetBias;
+    offset = GetAmbientCubeOffsetAtCascade(cascadeIndex);
     return false;
 }
 
@@ -381,65 +357,30 @@ public uint VoxelStorageIndex(int3 probePos)
          + AmbientBrickLocalOffset(probePos);
 }
 
-uint AmbientResidencyHash(uint value)
+// Bake passes a probe has accumulated (AdvanceAmbientCubeSampleCount, byte 2 of
+// SkyVisibilityPXNXS0S1). A slot that changed owner is zeroed, so a fresh probe reads 0.
+public uint AmbientCubeSampleCount(AmbientCube cube)
 {
-    value ^= value >> 16;
-    value *= 0x7feb352du;
-    value ^= value >> 15;
-    value *= 0x846ca68bu;
-    value ^= value >> 16;
-    return value;
+    return (cube.SkyVisibilityPXNXS0S1 >> 16u) & 0xFFu;
 }
 
-public void MarkAmbientBrickHit(uint cascadeIndex, int3 probePos, bool bounceHit)
+// A probe takes part in interpolation only once it has this many passes behind it. Until then the
+// gather skips it, and a cascade left with no weight falls through to the next coarser one, so a
+// bake that has not caught up shows coarser lighting rather than black or noisy probes.
+public uint GetAmbientCubePublishPasses()
 {
-    if (probePos.x < 0 || probePos.y < 0 || probePos.z < 0 ||
-        probePos.x >= CUBE_SIZE_XY || probePos.y >= CUBE_SIZE_Z || probePos.z >= CUBE_SIZE_XY)
-    {
-        return;
-    }
-
-    UniformBufferObject camera = Bindless.GetGpuscene().Camera[0];
-    float markRatio = saturate(camera.AmbientCubeCascadeParams.z);
-    if (markRatio <= 0.0f)
-    {
-        return;
-    }
-
-    uint brickLinear = AmbientBrickLinear(probePos);
-    uint hashValue = AmbientResidencyHash(
-        brickLinear + cascadeIndex * uint(GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE) +
-        camera.TotalFrames * 1664525u);
-    if (float(hashValue & 0xFFFFu) / 65535.0f > markRatio)
-    {
-        return;
-    }
-
-    // Only the last-hit frames drive eviction (FCPUBrickTable::UpdateData); the hit counters are
-    // written nowhere else and read by nothing, so they are left alone rather than costing a
-    // second atomic on an address the whole wave already contends for.
-    AmbientBrickResidency* residency = Bindless.GetGpuscene().AmbientResidency;
-    uint residencyIndex = cascadeIndex * uint(GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE) + brickLinear;
-    if (bounceHit)
-    {
-        InterlockedMax(residency[residencyIndex].lastBounceHitFrame, camera.TotalFrames);
-    }
-    else
-    {
-        InterlockedMax(residency[residencyIndex].lastConsumerHitFrame, camera.TotalFrames);
-    }
+    return uint(max(Bindless.GetGpuscene().Camera[0].AmbientCubeCascadeParams.z, 0.0f));
 }
 
-public void MarkAmbientBrickHitAtWorld(float3 worldPos, bool bounceHit)
+public bool IsAmbientCubePublished(AmbientCube cube)
 {
-    uint cascadeIndex = GetAmbientCubeCascadeAtPosition(worldPos);
-    float cubeUnit = GetAmbientCubeUnitAtCascade(cascadeIndex);
-    float3 cubeOffset = GetAmbientCubeOffsetAtCascade(cascadeIndex);
-    int3 probePos = int3(floor((worldPos - cubeOffset) / cubeUnit));
-    MarkAmbientBrickHit(cascadeIndex, probePos, bounceHit);
+    return AmbientCubeSampleCount(cube) >= GetAmbientCubePublishPasses();
 }
 
-public bool TryAmbientResidencyDebug(float3 worldPos, out float4 color)
+// r.ambientCube.debugView. 1 colours the surface by the cascade that lights it; 2 by what the
+// gather finds there: outside every cascade (magenta), no cube brick (red), probes not yet published
+// (yellow), published (blue). Both modes paint magenta outside every cascade window.
+public bool TryAmbientCubeDebugView(float3 worldPos, out float4 color)
 {
     uint debugMode = uint(Bindless.GetGpuscene().Camera[0].AmbientCubeCascadeParams.w);
     if (debugMode == 0u)
@@ -447,40 +388,70 @@ public bool TryAmbientResidencyDebug(float3 worldPos, out float4 color)
         color = float4(0.0f);
         return false;
     }
+    // The colours below are 0..255 display values; Compose multiplies scene radiance by
+    // PaperWhiteNit / 40000, so undo that here or every colour lands far past white.
+    float displayToRadiance =
+        0.6f / (255.0f * max(Bindless.GetGpuscene().Camera[0].PaperWhiteNit / 40000.0f, 1.0e-6f));
 
-    uint cascadeIndex = GetAmbientCubeCascadeAtPosition(worldPos);
-    float cubeUnit = GetAmbientCubeUnitAtCascade(cascadeIndex);
-    float3 cubeOffset = GetAmbientCubeOffsetAtCascade(cascadeIndex);
-    int3 probePos = int3(floor((worldPos - cubeOffset) / cubeUnit));
-    if (probePos.x < 0 || probePos.y < 0 || probePos.z < 0 ||
-        probePos.x >= CUBE_SIZE_XY || probePos.y >= CUBE_SIZE_Z || probePos.z >= CUBE_SIZE_XY)
+    // Report what the gather actually uses: the finest cascade with a published probe around the
+    // point. A cascade whose pool overflowed falls through to a coarser one there, and the views
+    // show that coarser cascade (mode 1) rather than a hole (mode 2).
+    uint cascadeCount = GetAmbientCubeCascadeCount();
+    bool inAnyWindow = false;
+    bool anyBrick = false;
+    uint finestContaining = cascadeCount;
+    uint servingCascade = cascadeCount;
+    for (uint cascadeIndex = 0; cascadeIndex < cascadeCount && servingCascade == cascadeCount; ++cascadeIndex)
     {
-        color = float4(180.0f, 0.0f, 180.0f, 1.0f);
+        float4 grid = Bindless.GetGpuscene().Camera[0].AmbientCubeCascadeGrid[cascadeIndex];
+        float cubeUnit = max(grid.w, 0.0001f);
+        float3 nearpos = (worldPos - grid.xyz) / cubeUnit;
+        if (any(nearpos < 0.0f) || nearpos.x > CUBE_SIZE_XY - 2 || nearpos.y > CUBE_SIZE_Z - 2 ||
+            nearpos.z > CUBE_SIZE_XY - 2)
+        {
+            continue;
+        }
+        inAnyWindow = true;
+        finestContaining = min(finestContaining, cascadeIndex);
+        int3 baseIdx = int3(floor(nearpos));
+        for (int i = 0; i < 8; i++)
+        {
+            AmbientCube cube;
+            if (TryFetchCubePool(baseIdx + int3(i & 1, (i >> 1) & 1, (i >> 2) & 1), cascadeIndex, cube))
+            {
+                anyBrick = true;
+                if (IsAmbientCubePublished(cube))
+                {
+                    servingCascade = cascadeIndex;
+                }
+            }
+        }
+    }
+
+    if (!inAnyWindow)
+    {
+        color = float4(float3(180.0f, 0.0f, 180.0f) * displayToRadiance, 1.0f);
         return true;
     }
 
-    uint brickLinear = AmbientBrickLinear(probePos);
-    uint residencyIndex = cascadeIndex * uint(GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE) + brickLinear;
-    AmbientBrickResidency residency = Bindless.GetGpuscene().AmbientResidency[residencyIndex];
     if (debugMode == 1u)
     {
-        uint lastHit = max(residency.lastConsumerHitFrame, residency.lastBounceHitFrame);
-        if (lastHit == 0u)
-        {
-            color = float4(28.0f, 28.0f, 28.0f, 1.0f);
-        }
-        else
-        {
-            float age = saturate(float(Bindless.GetGpuscene().Camera[0].TotalFrames - lastHit) / 180.0f);
-            color = float4(255.0f * age, 255.0f * (1.0f - age), 16.0f, 1.0f);
-        }
+        const float3 cascadeColors[5] = {
+            float3(230.0f, 60.0f, 50.0f),
+            float3(240.0f, 170.0f, 30.0f),
+            float3(60.0f, 200.0f, 70.0f),
+            float3(40.0f, 140.0f, 240.0f),
+            float3(150.0f, 80.0f, 230.0f),
+        };
+        uint shown = servingCascade < cascadeCount ? servingCascade : finestContaining;
+        color = float4(cascadeColors[min(shown, 4u)] * displayToRadiance, 1.0f);
         return true;
     }
 
-    uint slot = Bindless.GetGpuscene().AmbientBrickTable[residencyIndex];
-    color = slot == GPU_SCENE_AMBIENT_BRICK_INVALID
-        ? float4(255.0f, 18.0f, 18.0f, 1.0f)
-        : float4(18.0f, 90.0f, 255.0f, 1.0f);
+    float3 stateColor = !anyBrick ? float3(255.0f, 18.0f, 18.0f)
+                      : servingCascade == cascadeCount ? float3(240.0f, 220.0f, 20.0f)
+                      : float3(18.0f, 90.0f, 255.0f);
+    color = float4(stateColor * displayToRadiance, 1.0f);
     return true;
 }
 
@@ -614,15 +585,13 @@ float4 gatherAmbientCubes<T : IAmbientCubeSampler>(float3 inPos, float3 normal, 
 {
     VoxelData* Voxels = Bindless.GetGpuscene().Voxels;
     uint cascadeCount = GetAmbientCubeCascadeCount();
-    float ratio = GetAmbientCubeCascadeRatio();
-    float3 offsetBias = GetAmbientCubeOffsetBias();
-    const float3 cascadeCorner = float3(-CUBE_SIZE_XY / 2.0f, -1.375f, -CUBE_SIZE_XY / 2.0f);
-    float cubeUnit = GetAmbientCubeUnit();
+    uint publishPasses = GetAmbientCubePublishPasses();
 
-    for (uint cascadeIndex = 0; cascadeIndex < cascadeCount; ++cascadeIndex, cubeUnit *= ratio)
+    for (uint cascadeIndex = 0; cascadeIndex < cascadeCount; ++cascadeIndex)
     {
-        float3 cubeOffset = cascadeCorner * cubeUnit + offsetBias;
-        float3 nearpos = (inPos - cubeOffset) / cubeUnit;
+        float4 grid = Bindless.GetGpuscene().Camera[0].AmbientCubeCascadeGrid[cascadeIndex];
+        float cubeUnit = max(grid.w, 0.0001f);
+        float3 nearpos = (inPos - grid.xyz) / cubeUnit;
 
         if (nearpos.x < 0 || nearpos.y < 0 || nearpos.z < 0 || nearpos.x > CUBE_SIZE_XY - 2 || nearpos.y > CUBE_SIZE_Z - 2 ||
             nearpos.z > CUBE_SIZE_XY - 2)
@@ -633,11 +602,6 @@ float4 gatherAmbientCubes<T : IAmbientCubeSampler>(float3 inPos, float3 normal, 
         uint baseOffset = GetCascadeBaseOffset(cascadeIndex);
         int3 baseIdx = int3(floor(nearpos));
         float3 frac = frac(nearpos);
-
-        // The eight corners span a single cell and the residency dilation is 3 bricks wide, so one
-        // mark covers them all. Marking per corner meant eight hashes and eight atomics contending
-        // for what is almost always the same brick.
-        MarkAmbientBrickHit(cascadeIndex, baseIdx, false);
 
         float totalWeight = 0.0;
         float4 result = float4(0.0, 0.0, 0.0, 0.0);
@@ -687,7 +651,8 @@ float4 gatherAmbientCubes<T : IAmbientCubeSampler>(float3 inPos, float3 normal, 
             bool hasCube = (useStablePool && cascadeIndex == stableCascadeIndex)
                 ? TryFetchCubePongPool(probePos, cascadeIndex, cube)
                 : TryFetchCubePool(probePos, cascadeIndex, cube);
-            if (!hasCube)
+            // Unpublished probes (see GetAmbientCubePublishPasses) are skipped like missing ones.
+            if (!hasCube || AmbientCubeSampleCount(cube) < publishPasses)
             {
                 continue;
             }
@@ -707,10 +672,10 @@ float4 gatherAmbientCubes<T : IAmbientCubeSampler>(float3 inPos, float3 normal, 
 
 public float4 interpolateAmbientCubes<T : IAmbientCubeSampler>(float3 inPos, float3 normal)
 {
-    float4 residencyDebugColor;
-    if (TryAmbientResidencyDebug(inPos, residencyDebugColor))
+    float4 debugColor;
+    if (TryAmbientCubeDebugView(inPos, debugColor))
     {
-        return residencyDebugColor;
+        return debugColor;
     }
     return gatherAmbientCubes<T>(inPos, normal, false, 0u);
 }

@@ -1,0 +1,48 @@
+{
+  "name": "ambientcube-clipmap-coverage",
+  "target": "gkNextRenderer",
+  "scene": "assets/scad/proc/nextdayz/training_ground/scene.scad",
+  "args": [
+    "--cvar=r.rendererType 2",
+    "--cvar=sys.ambientCubeFollow true",
+    "--cvar=sys.ambientCubeCascadeCount 5"
+  ],
+  "defaults": { "waitFrames": 2, "stepTimeoutMs": 240000 },
+  "viewport": { "width": 1280, "height": 720 },
+  "steps": [
+    { "type": "wait-until", "query": "scene.nodeCount", "op": "gt", "value": 100, "timeoutMs": 240000 },
+    { "type": "wait-frames", "n": 2500, "comment": "Voxelize five cascades and let the bake converge." },
+
+    { "type": "cvar", "name": "r.ambientCube.debugView", "set": 2 },
+    { "type": "wait-frames", "n": 4 },
+    { "type": "screenshot", "out": "screenshots/ambientcube_spawn_state" },
+    { "type": "cvar", "name": "r.ambientCube.debugView", "set": 1 },
+    { "type": "wait-frames", "n": 4 },
+    { "type": "screenshot", "out": "screenshots/ambientcube_spawn_cascade" },
+    { "type": "cvar", "name": "r.ambientCube.debugView", "set": 0 },
+    { "type": "wait-frames", "n": 4 },
+    { "type": "screenshot", "out": "screenshots/ambientcube_spawn_lit" },
+
+    { "type": "mouse-move", "to": { "norm": [0.5, 0.5] } },
+    { "type": "mouse-button", "button": "right", "action": "down", "at": { "norm": [0.5, 0.5] } },
+    { "type": "wait-ms", "ms": 300 },
+    { "type": "key", "code": "W", "action": "down", "comment": "Fly in towards the camp for a closer look." },
+    { "type": "wait-ms", "ms": 9000 },
+    { "type": "key", "code": "W", "action": "up" },
+    { "type": "mouse-move", "relative": true, "to": [0, 120], "comment": "Pitch down towards the ground." },
+    { "type": "wait-ms", "ms": 600 },
+    { "type": "mouse-button", "button": "right", "action": "up" },
+    { "type": "wait-frames", "n": 30 },
+
+    { "type": "cvar", "name": "r.ambientCube.debugView", "set": 2 },
+    { "type": "wait-frames", "n": 4 },
+    { "type": "screenshot", "out": "screenshots/ambientcube_near_state" },
+    { "type": "cvar", "name": "r.ambientCube.debugView", "set": 1 },
+    { "type": "wait-frames", "n": 4 },
+    { "type": "screenshot", "out": "screenshots/ambientcube_near_cascade" },
+    { "type": "cvar", "name": "r.ambientCube.debugView", "set": 0 },
+    { "type": "wait-frames", "n": 4 },
+    { "type": "screenshot", "out": "screenshots/ambientcube_near_lit" },
+    { "type": "quit" }
+  ]
+}

@@ -2,6 +2,7 @@
 #include "Engine/Assets/AssetsFwd.hpp"
 #include "Engine/Common/CoreMinimal.hpp"
 #include "Engine/Assets/GPU/UniformBuffer.hpp"
+#include "Engine/Assets/Acceleration/AmbientCascadeLayout.hpp"
 #include "Engine/Runtime/RuntimeFwd.hpp"
 #include "Engine/Vulkan/VulkanFwd.hpp"
 #include <glm/glm.hpp>
@@ -186,29 +187,28 @@ struct FCPUPageIndex
     void UploadGPU(Vulkan::DeviceMemory& deviceMemory, size_t byteBaseOffset);
 };
 
-// Phase 3 sparse cube storage: per-cascade brick -> cube-pool slot table (GPU_SCENE_AMBIENT_BRICK_INVALID
-// when a brick is unallocated). Rebuilt from the CPU voxel occupancy each flush: bricks within
-// dilationRadius of a solid voxel get a compacted slot (capped at poolBricksPerCascade); far/empty
-// bricks stay INVALID so the GPU fetch returns zero there and no cube storage is spent on them.
+// Sparse cube storage: per-cascade brick -> cube-pool slot table (GPU_SCENE_AMBIENT_BRICK_INVALID
+// when a brick is unallocated). Rebuilt from the CPU distance field each flush: a brick is wanted
+// when one of its voxels lies within the cascade's surface shell (ResolveAmbientBrickShellCells),
+// wanted bricks keep their old slot, and new ones take free slots nearest the focus first.
+// Bricks left without a slot stay INVALID, and the gather falls through to a coarser cascade there.
 struct FCPUBrickTable
 {
     std::vector<uint32_t> brickTable;
     std::vector<uint32_t> activeBrickList;
     std::vector<uint32_t> activeBricksPerCascade;
+    // Bricks the activation rule wanted, and how many of them found no free slot.
     std::vector<uint32_t> candidateBricksPerCascade;
-    std::vector<uint32_t> recentlyHitBricksPerCascade;
-    std::vector<uint32_t> candidateFirstSeenFrames;
+    std::vector<uint32_t> overflowBricksPerCascade;
     std::vector<uint32_t> slotsToClear;
     std::vector<uint8_t> dirtyBricks;
     std::vector<uint32_t> dirtyBricksPerCascade;
     uint32_t activeBricksLastBuild = 0;
     uint64_t dirtyRevision = 0;
 
+    // focus: world position whose nearby bricks get first claim on free slots when the pool is short.
     bool UpdateData(const std::vector<FCPUProbeBaker>& bakers, uint32_t cascadeCapacity,
-                    uint32_t poolBricksPerCascade, int dilationRadius,
-                    const std::vector<Assets::AmbientBrickResidency>* residency,
-                    uint32_t currentFrame, bool hitDriven, bool bounceHitAffectsResidency,
-                    uint32_t graceFrames, uint32_t evictFrames);
+                    uint32_t poolBricksPerCascade, const glm::vec3& focus);
     void MarkAllActiveDirty();
     void MarkDirtyBounds(const std::vector<FCPUProbeBaker>& bakers,
                          const glm::vec3& worldMin, const glm::vec3& worldMax,
@@ -229,8 +229,8 @@ struct FAmbientGridConfig
 {
     float baseUnit = Assets::CUBE_UNIT;
     glm::vec3 offsetBias{0.0f};
-    uint32_t cascadeCount = 1;
-    float cascadeRatio = 2.0f;
+    // Cascade count, effective ratio and where every cascade's grid sits.
+    Assets::FAmbientCascadeLayout layout;
 };
 
 // UI-facing state for the CPU half of the ambient GI bake pipeline. Voxel work
@@ -299,9 +299,9 @@ public:
 private:
     friend struct FCPUAccelerationStructureTestAccess;
 
-    bool InitCascadeBakers(const Runtime::Config::UserSettings& settings, uint32_t maxCascadeCapacity);
-    static FAmbientGridConfig ResolveAmbientGridConfig(const Runtime::Config::UserSettings& settings,
-                                                       uint32_t maxCascadeCapacity);
+    bool InitCascadeBakers(const Runtime::Config::UserSettings& settings, const Assets::Scene& scene);
+    FAmbientGridConfig ResolveAmbientGridConfig(const Runtime::Config::UserSettings& settings,
+                                                const Assets::Scene& scene) const;
     uint32_t GetActiveCascadeCount() const { return static_cast<uint32_t>(cascadeBakers.size()); }
 
     void UpdateBVH(Assets::Scene& scene);

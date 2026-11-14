@@ -78,16 +78,50 @@ namespace
 using namespace Assets;
 
 FAmbientGridConfig FCPUAccelerationStructure::ResolveAmbientGridConfig(
-    const Runtime::Config::UserSettings& settings, uint32_t maxCascadeCapacity)
+    const Runtime::Config::UserSettings& settings, const Scene& scene) const
 {
     FAmbientGridConfig config;
     config.baseUnit = SanitizeAmbientCubeUnit(settings.AmbientCubeUnit);
     config.offsetBias =
         vec3(settings.AmbientCubeOffsetX, settings.AmbientCubeOffsetY, settings.AmbientCubeOffsetZ);
+
+    FAmbientCascadeLayoutInputs inputs;
+    inputs.baseUnit = config.baseUnit;
+    inputs.offsetBias = config.offsetBias;
     // Clamp to the GPU arena's allocated capacity so the per-cascade upload never writes out of bounds.
-    config.cascadeCount =
-        std::min(SanitizeAmbientCubeCascadeCount(settings.AmbientCubeCascadeCount), std::max(1u, maxCascadeCapacity));
-    config.cascadeRatio = SanitizeAmbientCubeCascadeRatio(settings.AmbientCubeCascadeRatio);
+    inputs.cascadeCount = std::min(SanitizeAmbientCubeCascadeCount(settings.AmbientCubeCascadeCount),
+                                   std::max(1u, scene.AmbientCubeCascadeCapacity()));
+    inputs.cascadeRatio = SanitizeAmbientCubeCascadeRatio(settings.AmbientCubeCascadeRatio);
+    inputs.followScene = settings.AmbientCubeFollow;
+
+    // Box and focus come from the CPU snapshot rather than Scene's render AABB: it holds exactly the
+    // geometry the voxelizer will see, and it is already current when the bakers are initialized
+    // (the render AABB is computed later in the same rebuild).
+    const SnapshotPtr snapshot = inputs.followScene ? AcquireSnapshot() : nullptr;
+    if (snapshot)
+    {
+        for (const FCPUTLASInstanceInfo& info : snapshot->contexts)
+        {
+            inputs.sceneMin = inputs.hasSceneBounds ? glm::min(inputs.sceneMin, info.worldBoundsMin) : info.worldBoundsMin;
+            inputs.sceneMax = inputs.hasSceneBounds ? glm::max(inputs.sceneMax, info.worldBoundsMax) : info.worldBoundsMax;
+            inputs.hasSceneBounds = true;
+        }
+    }
+    if (inputs.hasSceneBounds)
+    {
+        // Until the near cascades follow the camera they hold the ground at the middle of the map:
+        // a block terrain's skirt can reach far below the surface, so the box floor is no anchor.
+        const glm::vec3 center = 0.5f * (inputs.sceneMin + inputs.sceneMax);
+        const float drop = inputs.sceneMax.y - inputs.sceneMin.y + 2.0f;
+        const RayCastResult ground = RayCastInSnapshot(*snapshot, glm::vec3(center.x, inputs.sceneMax.y + 1.0f, center.z),
+                                                       glm::vec3(0.0f, -1.0f, 0.0f), true, drop);
+        if (ground.Hit)
+        {
+            inputs.hasFocus = true;
+            inputs.focus = glm::vec3(center.x, ground.HitPoint.y, center.z);
+        }
+    }
+    config.layout = ResolveAmbientCascadeLayout(inputs);
     return config;
 }
 
@@ -101,28 +135,17 @@ bool FCPUAccelerationStructure::TryGetAmbientGridConfig(FAmbientGridConfig& outC
     return true;
 }
 
-bool FCPUAccelerationStructure::InitCascadeBakers(const Runtime::Config::UserSettings& settings, uint32_t maxCascadeCapacity)
+bool FCPUAccelerationStructure::InitCascadeBakers(const Runtime::Config::UserSettings& settings, const Scene& scene)
 {
-    const FAmbientGridConfig requested = ResolveAmbientGridConfig(settings, maxCascadeCapacity);
-    const float baseUnit = requested.baseUnit;
-    const vec3 cubeOffsetBias = requested.offsetBias;
-    const uint32_t cascadeCount = requested.cascadeCount;
-    const float cascadeRatio = requested.cascadeRatio;
+    const FAmbientGridConfig requested = ResolveAmbientGridConfig(settings, scene);
+    const uint32_t cascadeCount = requested.layout.cascadeCount;
 
     bool needRebuild = cascadeBakers.size() != cascadeCount || !hasCommittedAmbientGrid_;
-    if (!needRebuild)
+    for (uint32_t i = 0; !needRebuild && i < cascadeCount; ++i)
     {
-        for (uint32_t i = 0; i < cascadeCount; ++i)
-        {
-            const float unit = CalculateAmbientCubeCascadeUnit(baseUnit, cascadeRatio, i);
-            const vec3 offset = CalculateAmbientCubeOffset(unit, cubeOffsetBias);
-            const FCPUProbeBaker& baker = cascadeBakers[i];
-            if (glm::abs(unit - baker.UNIT_SIZE) > 1e-6f || glm::length(offset - baker.CUBE_OFFSET) > 1e-6f)
-            {
-                needRebuild = true;
-                break;
-            }
-        }
+        const FCPUProbeBaker& baker = cascadeBakers[i];
+        needRebuild = glm::abs(requested.layout.units[i] - baker.UNIT_SIZE) > 1e-6f ||
+                      glm::length(requested.layout.origins[i] - baker.CUBE_OFFSET) > 1e-6f;
     }
 
     if (!needRebuild)
@@ -134,14 +157,27 @@ bool FCPUAccelerationStructure::InitCascadeBakers(const Runtime::Config::UserSet
     cascadeBakers.resize(cascadeCount);
     for (uint32_t i = 0; i < cascadeCount; ++i)
     {
-        const float unit = CalculateAmbientCubeCascadeUnit(baseUnit, cascadeRatio, i);
-        const vec3 offset = CalculateAmbientCubeOffset(unit, cubeOffsetBias);
-        cascadeBakers[i].Init(i, unit, offset);
+        cascadeBakers[i].Init(i, requested.layout.units[i], requested.layout.origins[i]);
     }
 
     // Publish only after the bakers exist: shading reads this to stay in step with the data.
     committedAmbientGrid_ = requested;
     hasCommittedAmbientGrid_ = true;
+    if (requested.layout.followScene)
+    {
+        SPDLOG_INFO("[AmbientGrid] fit to scene: {} cascades, ratio {:.3f}, cell {:.3f} .. {:.3f} m, "
+                    "coarsest covers {:.0f} m",
+                    cascadeCount, requested.layout.cascadeRatio, requested.layout.units[0],
+                    requested.layout.units[cascadeCount - 1],
+                    requested.layout.units[cascadeCount - 1] * static_cast<float>(CUBE_SIZE_XY));
+        for (uint32_t i = 0; i < cascadeCount; ++i)
+        {
+            const glm::vec3 lo = requested.layout.origins[i];
+            const glm::vec3 hi = lo + glm::vec3(CUBE_SIZE_XY, CUBE_SIZE_Z, CUBE_SIZE_XY) * requested.layout.units[i];
+            SPDLOG_INFO("[AmbientGrid]   cascade {}: ({:.1f}, {:.1f}, {:.1f}) .. ({:.1f}, {:.1f}, {:.1f})",
+                        i, lo.x, lo.y, lo.z, hi.x, hi.y, hi.z);
+        }
+    }
 
     cpuPageIndex.Init();
     return true;
@@ -211,10 +247,11 @@ void FCPUAccelerationStructure::InitBVH(Scene& scene)
 
     blasSet_ = std::move(blasSet);
     
-    const Runtime::Config::UserSettings& settings = NextEngine::GetInstance()->GetUserSettings();
-    InitCascadeBakers(settings, scene.AmbientCubeCascadeCapacity());
-
     UpdateBVH(scene);
+
+    // After UpdateBVH: a fit-scene grid is resolved from the snapshot it publishes.
+    const Runtime::Config::UserSettings& settings = NextEngine::GetInstance()->GetUserSettings();
+    InitCascadeBakers(settings, scene);
 }
 
 void FCPUAccelerationStructure::UpdateBVH(Scene& scene)
@@ -661,7 +698,7 @@ bool FCPUAccelerationStructure::AsyncProcessFull(Assets::Scene& scene, Vulkan::D
     distanceFieldRebuildTasks.clear();
 
     const Runtime::Config::UserSettings& settings = NextEngine::GetInstance()->GetUserSettings();
-    InitCascadeBakers(settings, scene.AmbientCubeCascadeCapacity());
+    InitCascadeBakers(settings, scene);
 
     ambientCacheKey_ = 0;
     ambientCacheWriteArmed_ = false;
@@ -674,7 +711,9 @@ bool FCPUAccelerationStructure::AsyncProcessFull(Assets::Scene& scene, Vulkan::D
         keyInputs.baseUnit = committedAmbientGrid_.baseUnit;
         keyInputs.offsetBias = committedAmbientGrid_.offsetBias;
         keyInputs.cascadeCount = GetActiveCascadeCount();
-        keyInputs.cascadeRatio = committedAmbientGrid_.cascadeRatio;
+        keyInputs.cascadeRatio = committedAmbientGrid_.layout.cascadeRatio;
+        keyInputs.cascadeUnits = committedAmbientGrid_.layout.units;
+        keyInputs.cascadeOrigins = committedAmbientGrid_.layout.origins;
         keyInputs.poolBricksPerCascade = scene.AmbientPoolBricksPerCascade();
         // Must match VulkanBaseRenderer::PostRender: the two bake pipelines do not produce
         // identical cubes, so a cache written by one must never be read back by the other.
@@ -753,8 +792,7 @@ bool FCPUAccelerationStructure::TryRestoreAmbientBakeCache(Scene& scene, Vulkan:
     cpuBrickTable.dirtyBricks.assign(cpuBrickTable.brickTable.size(), 0u);
     cpuBrickTable.dirtyBricksPerCascade.assign(cascadeCapacity, 0u);
     cpuBrickTable.candidateBricksPerCascade.assign(cascadeCapacity, 0u);
-    cpuBrickTable.recentlyHitBricksPerCascade.assign(cascadeCapacity, 0u);
-    cpuBrickTable.candidateFirstSeenFrames.assign(cpuBrickTable.brickTable.size(), 0u);
+    cpuBrickTable.overflowBricksPerCascade.assign(cascadeCapacity, 0u);
     cpuBrickTable.activeBricksLastBuild = static_cast<uint32_t>(std::count_if(
         cpuBrickTable.brickTable.begin(), cpuBrickTable.brickTable.end(),
         [](uint32_t slot) { return slot != Assets::GPU_SCENE_AMBIENT_BRICK_INVALID; }));
@@ -826,7 +864,7 @@ void FCPUAccelerationStructure::FlushPendingAmbientBakeCacheSave(Scene& scene, V
     // game thread for a whole second right after the bake finished.
     //
     // Reading the bake state off-thread is safe because the ambient pipeline is idle: convergence
-    // set ambientBakeIdle_, so neither the voxelization queue nor the residency rebuild touches
+    // set ambientBakeIdle_, so neither the voxelization queue nor the brick-table rebuild touches
     // cascadeBakers / cpuBrickTable / cpuPageIndex again. The only writer that could return is a new
     // full bake, and both paths into one (Scene::CleanUp and ~Scene) call ClearAllTasks(), which
     // waits for this task before any of that state -- or the arena itself -- goes away.
@@ -982,28 +1020,16 @@ void FCPUAccelerationStructure::ClearAllTasks()
 bool FCPUAccelerationStructure::Tick(Scene& scene, Vulkan::DeviceMemory* gpuMemory, Vulkan::DeviceMemory* voxelGpuMemory, Vulkan::DeviceMemory* pageIndexMemory)
 {
     bool voxelUploadCompleted = false;
-    NextEngine* engine = NextEngine::GetInstance();
-    const Runtime::Config::UserSettings& settings = engine->GetUserSettings();
-    const uint32_t currentFrame = engine->GetTotalFrames();
-    auto rebuildBrickResidency = [&]()
+    auto rebuildBrickTable = [&]()
     {
-        const uint32_t residencyCount =
-            scene.AmbientCubeCascadeCapacity() * static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE);
-        std::vector<Assets::AmbientBrickResidency> residency(residencyCount);
-        void* mapped = voxelGpuMemory->Map(scene.AmbientResidencyByteOffset(),
-                                          residency.size() * sizeof(Assets::AmbientBrickResidency));
-        std::memcpy(residency.data(), mapped, residency.size() * sizeof(Assets::AmbientBrickResidency));
-        voxelGpuMemory->Unmap();
-
-        cpuBrickTable.UpdateData(
-            cascadeBakers, scene.AmbientCubeCascadeCapacity(), scene.AmbientPoolBricksPerCascade(),
-            kAmbientBrickDilationRadius, &residency, currentFrame, settings.AmbientCubeHitDrivenResidency,
-            settings.AmbientCubeBounceHitAffectsResidency, settings.AmbientCubeGraceFrames,
-            settings.AmbientCubeEvictFrames);
+        // Free slots go to the bricks nearest the camera first when the pool runs short.
+        const glm::vec3 focus = glm::vec3(glm::inverse(scene.GetRenderCamera().ModelView)[3]);
+        cpuBrickTable.UpdateData(cascadeBakers, scene.AmbientCubeCascadeCapacity(),
+                                 scene.AmbientPoolBricksPerCascade(), focus);
 
         if (!cpuBrickTable.slotsToClear.empty())
         {
-            mapped = gpuMemory->Map(scene.AmbientCubesByteOffset(), scene.AmbientVoxelsByteOffset());
+            void* mapped = gpuMemory->Map(scene.AmbientCubesByteOffset(), scene.AmbientVoxelsByteOffset());
             auto* cubeBytes = static_cast<std::byte*>(mapped);
             constexpr size_t brickBytes =
                 static_cast<size_t>(Assets::GPU_SCENE_AMBIENT_BRICK_VOLUME) * sizeof(Assets::AmbientCube);
@@ -1013,10 +1039,6 @@ bool FCPUAccelerationStructure::Tick(Scene& scene, Vulkan::DeviceMemory* gpuMemo
             }
             gpuMemory->Unmap();
         }
-
-        scene.SetAmbientActiveBrickCounts(cpuBrickTable.activeBricksPerCascade);
-        cpuBrickTable.UploadGPU(*voxelGpuMemory, scene.AmbientBrickTableByteOffset(),
-                                scene.AmbientActiveBrickListByteOffset());
     };
 
     // Drive the voxelization queue before the flush below. Retiring the finished batch and popping
@@ -1087,7 +1109,7 @@ bool FCPUAccelerationStructure::Tick(Scene& scene, Vulkan::DeviceMemory* gpuMemo
             if (!cascadeBakers.empty())
             {
                 cpuPageIndex.UpdateData(cascadeBakers);
-                rebuildBrickResidency();
+                rebuildBrickTable();
                 if (fullProbeBakePending_)
                 {
                     cpuBrickTable.MarkAllActiveDirty();
@@ -1103,11 +1125,6 @@ bool FCPUAccelerationStructure::Tick(Scene& scene, Vulkan::DeviceMemory* gpuMemo
             distanceFieldRebuildTasks.clear();
             voxelUploadCompleted = true;
         }
-    }
-    else if (!ambientBakeIdle_ && !cpuBrickTable.brickTable.empty() &&
-             engine->GetRenderer().ActiveRendererRequirements().requestAmbientCube)
-    {
-        rebuildBrickResidency();
     }
 
     FlushPendingAmbientBakeCacheSave(scene, gpuMemory);

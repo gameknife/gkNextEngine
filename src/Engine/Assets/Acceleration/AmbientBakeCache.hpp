@@ -11,6 +11,7 @@
 #include "Engine/Assets/GPU/UniformBuffer.hpp"
 #include "Engine/Common/CoreMinimal.hpp"
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -26,14 +27,16 @@ namespace Assets::CPU
         glm::vec3 offsetBias{0.0f};
         uint32_t cascadeCount = 1;
         float cascadeRatio = 2.0f;
+        // Where each cascade's grid sits. In fit-scene mode this, not the ratio setting, decides
+        // which world cells a cascade holds.
+        std::array<float, Assets::CUBE_CASCADE_MAX> cascadeUnits{};
+        std::array<glm::vec3, Assets::CUBE_CASCADE_MAX> cascadeOrigins{};
         uint32_t poolBricksPerCascade = 0;
         bool hardwareBake = false;
     };
 
     // Everything a converged bake leaves behind. distanceToSolidSeeds is not stored: it is exactly
-    // `matId > 0 ? 0 : kMaxDistanceFieldSeed` and is rebuilt in one pass on load. The residency
-    // array is not stored either -- a restored bake starts from the same zeroed residency a cold
-    // one does.
+    // `matId > 0 ? 0 : kMaxDistanceFieldSeed` and is rebuilt in one pass on load.
     struct FAmbientBakeCachePayload
     {
         // Voxels follow the CPU bakers (one per active cascade); the brick table, active list and

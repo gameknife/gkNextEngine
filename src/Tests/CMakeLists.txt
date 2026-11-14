@@ -76,6 +76,7 @@ set(unitTestSources
     Test_CPUAccelerationSnapshot.cpp
     Test_AmbientBakeScheduler.cpp
     Test_AmbientBakeCache.cpp
+    Test_AmbientCascadeLayout.cpp
     ${GK_SOURCE_ROOT}/Application/Editor/ScadStudio/ScadOutline.cpp
     ${GK_SOURCE_ROOT}/Application/Editor/ScadStudio/ScadPromptContext.cpp
     ${GK_SOURCE_ROOT}/Application/Editor/ScadStudio/ScadSessionStore.cpp

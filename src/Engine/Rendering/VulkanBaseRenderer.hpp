@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Engine/Assets/Acceleration/AmbientBakeBatch.hpp"
 #include "Engine/Assets/AssetsFwd.hpp"
 #include "Engine/Vulkan/RenderingPipeline.hpp"
 #include "Engine/Vulkan/SyncAndTiming.hpp"
@@ -575,15 +576,14 @@ namespace Vulkan
 
         struct AmbientCubePipelines
         {
-            static constexpr uint32_t convergencePasses = 32u;
             std::unique_ptr<PipelineCommon::ZeroBindPipeline> softBake;
             std::unique_ptr<PipelineCommon::ZeroBindPipeline> clearCache;
             bool requestClearCache = true;
-            uint64_t dirtyRevision = 0;
-            std::array<uint32_t, Assets::CUBE_CASCADE_MAX> nextGroup{};
-            std::array<uint32_t, Assets::CUBE_CASCADE_MAX> completedPasses{};
-            uint32_t nextCascade = 0;
             uint32_t groupsPerFrame = 1;
+            // A batch larger than one frame's budget is dispatched over several frames.
+            Assets::CPU::FAmbientBakeBatch batch;
+            uint32_t batchNextGroup = 0;
+            bool batchActive = false;
             VkQueryPool timingQueryPool = VK_NULL_HANDLE;
             uint32_t timestampValidBits = 0;
             double timestampPeriodNanoseconds = 0.0;

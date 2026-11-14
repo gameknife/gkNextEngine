@@ -61,9 +61,7 @@ public static const int GPU_SCENE_AMBIENT_PER_CASCADE_COUNT = 192 * 192 * 48;
 public static const int GPU_SCENE_AMBIENT_CASCADE_MAX = 5;
 public static const int GPU_SCENE_AMBIENT_CUBE_SIZE = 40;
 public static const int GPU_SCENE_VOXEL_DATA_SIZE = 8;
-public static const int GPU_SCENE_PAGE_INDEX_SIZE = 16;
 public static const int GPU_SCENE_AMBIENT_SEED_SIZE = 16;
-public static const int GPU_SCENE_ACGI_PAGE_COUNT = 64;
 
 // Cascaded world-space light grid. Every light-sampling path resolves "which lights matter at this
 // world position" through it, so it must be world-space: a view-frustum cluster grid cannot answer
@@ -92,12 +90,9 @@ public static const int GPU_SCENE_AMBIENT_CUBES_OFFSET = 0;
 public static const int GPU_SCENE_AMBIENT_VOXELS_OFFSET =
     GPU_SCENE_AMBIENT_CUBES_OFFSET +
     GPU_SCENE_AMBIENT_CUBE_SIZE * GPU_SCENE_AMBIENT_PER_CASCADE_COUNT * GPU_SCENE_AMBIENT_CASCADE_MAX;
-public static const int GPU_SCENE_AMBIENT_PAGES_OFFSET =
+public static const int GPU_SCENE_AMBIENT_CUBES_PONG_OFFSET =
     GPU_SCENE_AMBIENT_VOXELS_OFFSET +
     GPU_SCENE_VOXEL_DATA_SIZE * GPU_SCENE_AMBIENT_PER_CASCADE_COUNT * GPU_SCENE_AMBIENT_CASCADE_MAX;
-public static const int GPU_SCENE_AMBIENT_CUBES_PONG_OFFSET =
-    GPU_SCENE_AMBIENT_PAGES_OFFSET +
-    GPU_SCENE_PAGE_INDEX_SIZE * GPU_SCENE_ACGI_PAGE_COUNT * GPU_SCENE_ACGI_PAGE_COUNT;
 public static const int GPU_SCENE_AMBIENT_SIZE =
     GPU_SCENE_AMBIENT_CUBES_PONG_OFFSET +
     GPU_SCENE_AMBIENT_CUBE_SIZE * GPU_SCENE_AMBIENT_PER_CASCADE_COUNT;
@@ -251,6 +246,10 @@ public struct ALIGN_16 UniformBufferObject
     // Per cascade: xyz = world position of grid cell (0,0,0), w = cell size. Filled from the grid the
     // CPU bakers were built with (FAmbientCascadeLayout), never derived in the shader.
     public float4 AmbientCubeCascadeGrid[GPU_SCENE_AMBIENT_CASCADE_MAX];
+    // Per cascade: xyz = ring offset of its brick storage, in bricks, each in [0, BRICKS_*). A
+    // window brick b lives in storage brick (b + wrap) mod BRICKS_*, so when the window scrolls
+    // the bricks it keeps stay where they are. Integers stored as floats (exact at this range).
+    public float4 AmbientCubeCascadeWrap[GPU_SCENE_AMBIENT_CASCADE_MAX];
 
     public bool UpscalerInvalidMotionMask;
     public bool RayReconstruction;
@@ -396,17 +395,6 @@ public struct ALIGN_8 VoxelData
     public uint distanceToSolid; // 0.0 - 1.0 quantized to 4 bits per channel
 };
 
-// PageIndexer is align with world, 16x16 meter per page
-// a 1km map is 64x64 pages, 4096 pages in total
-// now is used to boost the dda tracing performance
-public struct ALIGN_16 PageIndex
-{
-    public uint pageId;
-    public uint voxelCount;
-    public uint voxelDataIdx;
-    public uint probeDataIdx;
-};
-
 // Ambient GI resource table. GPUScene is capped at 128B (push constant), so instead of inlining
 // every ambient region address it carries a single AmbientBase pointer to this table. Region
 // addresses are filled CPU-side (Scene.cpp) from the arena base, which decouples the GPU-visible
@@ -416,7 +404,7 @@ public struct ALIGN_16 AmbientResources
 {
     public uint64_t Cubes;       // brick pool base (Phase 3) / dense cube array (pre-3a)
     public uint64_t Voxels;      // dense voxel array (kept dense; Phase 4 may sparsify)
-    public uint64_t Pages;
+    public uint64_t Reserved4;
     public uint64_t CubesPong;   // ping-pong copy of the baking cascade's cubes (brick-organized in Phase 3)
     public uint64_t BrickTable;  // Phase 3: per-cascade brick -> pool slot table (uint per brick)
     public uint64_t PoolParams;  // Phase 3: low32 = pool bricks/cascade, high32 = active-list byte offset from BrickTable
@@ -688,10 +676,6 @@ public struct ALIGN_8 GPUScene
     {
         get { return (VoxelData*)((AmbientResources*)AmbientBase)[0].Voxels; }
     }
-    public property PageIndex* Pages
-    {
-        get { return (PageIndex*)((AmbientResources*)AmbientBase)[0].Pages; }
-    }
     public property AmbientCube* CubesPong
     {
         get { return (AmbientCube*)((AmbientResources*)AmbientBase)[0].CubesPong; }
@@ -832,10 +816,6 @@ public struct ALIGN_8 GPUScene
         get { return (VoxelData*)((AmbientResources*)Reserved_AmbientBase_Address.y)[0].Voxels; }
     }
 
-    public property PageIndex* Pages
-    {
-        get { return (PageIndex*)((AmbientResources*)Reserved_AmbientBase_Address.y)[0].Pages; }
-    }
     public property SphericalHarmonics* HDRSHs
     {
         get { return (SphericalHarmonics*)(Camera_SceneDynamicBase_Address.y + GPU_SCENE_DYNAMIC_HDRSHS_OFFSET); }

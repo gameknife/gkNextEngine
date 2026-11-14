@@ -54,7 +54,6 @@ namespace Assets
         {
             VkDeviceSize cubesOffset;
             VkDeviceSize voxelsOffset;
-            VkDeviceSize pagesOffset;
             VkDeviceSize pongOffset;
             VkDeviceSize brickTableOffset;
             VkDeviceSize activeBrickListOffset;
@@ -72,11 +71,8 @@ namespace Assets
             layout.cubesOffset = 0;
             layout.voxelsOffset = layout.cubesOffset +
                 static_cast<VkDeviceSize>(Assets::GPU_SCENE_AMBIENT_CUBE_SIZE) * poolCubesPerCascade * cascadeCapacity;
-            layout.pagesOffset = layout.voxelsOffset +
+            layout.pongOffset = layout.voxelsOffset +
                 static_cast<VkDeviceSize>(Assets::GPU_SCENE_VOXEL_DATA_SIZE) * perAmbientCascadeCount * cascadeCapacity;
-            layout.pongOffset = layout.pagesOffset +
-                static_cast<VkDeviceSize>(Assets::GPU_SCENE_PAGE_INDEX_SIZE) * Assets::ACGI_PAGE_COUNT *
-                    Assets::ACGI_PAGE_COUNT;
             layout.brickTableOffset = layout.pongOffset +
                 static_cast<VkDeviceSize>(Assets::GPU_SCENE_AMBIENT_CUBE_SIZE) * poolCubesPerCascade;
             // Phase 3: per-cascade brick -> pool slot table (uint per brick), sized to the capacity.
@@ -101,10 +97,8 @@ namespace Assets
         static_assert(sizeof(Assets::AmbientCube) == Assets::GPU_SCENE_AMBIENT_CUBE_SIZE);
         static_assert(sizeof(Assets::AmbientResources) == 80);
         static_assert(sizeof(Assets::VoxelData) == Assets::GPU_SCENE_VOXEL_DATA_SIZE);
-        static_assert(sizeof(Assets::PageIndex) == Assets::GPU_SCENE_PAGE_INDEX_SIZE);
         static_assert(Assets::GPU_SCENE_AMBIENT_PER_CASCADE_COUNT == perAmbientCascadeCount);
         static_assert(Assets::GPU_SCENE_AMBIENT_CASCADE_MAX == Assets::CUBE_CASCADE_MAX);
-        static_assert(Assets::GPU_SCENE_ACGI_PAGE_COUNT == Assets::ACGI_PAGE_COUNT);
         // The runtime ComputeAmbientArenaLayout (which also covers the Phase 3 brick table) is now
         // the authoritative arena layout; the compile-time
         // GPU_SCENE_AMBIENT_* offsets remain only as a reference for the dense cube/voxel sub-regions.
@@ -257,7 +251,6 @@ namespace Assets
         const AmbientArenaLayout ambientLayout =
             ComputeAmbientArenaLayout(ambientCubeCascadeCapacity, poolBricksPerCascade_);
         ambientVoxelsOffset_ = static_cast<size_t>(ambientLayout.voxelsOffset);
-        ambientPagesOffset_ = static_cast<size_t>(ambientLayout.pagesOffset);
         ambientPongOffset_ = static_cast<size_t>(ambientLayout.pongOffset);
         ambientBrickTableOffset_ = static_cast<size_t>(ambientLayout.brickTableOffset);
         ambientActiveBrickListOffset_ = static_cast<size_t>(ambientLayout.activeBrickListOffset);
@@ -283,7 +276,7 @@ namespace Assets
                         ambientLayout.totalSize / mb, ambientCubeCascadeCapacity, poolBricksPerCascade_,
                         static_cast<uint32_t>(GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE),
                         (ambientLayout.voxelsOffset - ambientLayout.cubesOffset) / mb,
-                        (ambientLayout.pagesOffset - ambientLayout.voxelsOffset) / mb,
+                        (ambientLayout.pongOffset - ambientLayout.voxelsOffset) / mb,
                         (ambientLayout.brickTableOffset - ambientLayout.pongOffset) / mb);
         }
 
@@ -301,7 +294,6 @@ namespace Assets
             {
                 resources.Cubes = arenaBase + ambientLayout.cubesOffset;
                 resources.Voxels = arenaBase + ambientLayout.voxelsOffset;
-                resources.Pages = arenaBase + ambientLayout.pagesOffset;
                 resources.CubesPong = arenaBase + ambientLayout.pongOffset;
                 resources.BrickTable = arenaBase + ambientLayout.brickTableOffset;
                 const uint64_t activeListByteOffset =

@@ -39,8 +39,8 @@ namespace Assets::CPU
     // `matId > 0 ? 0 : kMaxDistanceFieldSeed` and is rebuilt in one pass on load.
     struct FAmbientBakeCachePayload
     {
-        // Voxels follow the CPU bakers (one per active cascade); the brick table, active list and
-        // cube pool follow the arena, which is laid out for the allocated cascade capacity. The two
+        // Voxels follow the CPU bakers (one per active cascade); the brick table and cube pool
+        // follow the arena, which is laid out for the allocated cascade capacity. The two
         // are normally equal, but they are stored separately so a mismatch cannot silently reshape
         // the brick -> pool slot mapping the cubes were baked into.
         uint32_t cascadeCount = 0;
@@ -49,9 +49,11 @@ namespace Assets::CPU
         uint32_t poolBricksPerCascade = 0;
         std::vector<Assets::VoxelData> voxels;          // cascadeCount * voxelCountPerCascade
         std::vector<uint32_t> brickTable;               // cascadeCapacity * BRICKS_PER_CASCADE
-        std::vector<uint32_t> activeBrickList;          // cascadeCapacity * poolBricksPerCascade
         std::vector<uint32_t> activeBricksPerCascade;   // cascadeCapacity
-        std::vector<Assets::PageIndex> pages;           // ACGI_PAGE_COUNT^2
+        // Where each cascade's grid sat when the bake was taken: xyz = origin, w = cell size,
+        // and the brick wrap of its ring storage. A restore must land on the same windows.
+        std::vector<glm::vec4> cascadeGrids;            // cascadeCount
+        std::vector<glm::ivec4> cascadeWraps;           // cascadeCount
         std::vector<Assets::AmbientCube> cubes;         // cascadeCapacity * poolBricks * BRICK_VOLUME
     };
 

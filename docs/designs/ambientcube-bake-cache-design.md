@@ -5,7 +5,7 @@
 
 ## 1. 边界
 
-- 缓存**只覆盖一次完整 bake 的产物**：voxels、brick table / active brick list、page index、
+- 缓存**只覆盖一次完整 bake 的产物**：voxels、brick table、各级窗口（原点、体素尺寸、环形 wrap）、
   ambient cube pool。
 - 有效性只由**一个 64 位 key** 决定，key 只 hash 场景的初始结构（见 §3）。key 不同 = 未命中 = 走
   原来的完整 bake。
@@ -24,14 +24,14 @@ AsyncProcessFull(scene, arenaMemory)
   ├── 命中 → TryRestoreAmbientBakeCache()  → 直接进入“已烘完”状态，函数返回
   └── 未命中 → 原完整 bake，ambientCacheWriteArmed_ = true
 
-AcknowledgeAmbientBake(revision)                 // GPU 32 轮收敛后由 BakeAmbientCubeCascade 调用
+CompleteAmbientBakeBatch(batch)                  // bake 队列在这一批之后清空时
   ├── ambientCachePendingSave_ = ambientCacheWriteArmed_   // 只置标志，不在渲染路径上读显存
   └── ambientCacheSaveFrame_ = totalFrames + 3             // 收敛帧的 dispatch 必须先退休
 
-FCPUAccelerationStructure::Tick(...)             // Scene 每 30 帧调一次
+FCPUAccelerationStructure::Tick(...)             // Scene 每帧调用
   └── FlushPendingAmbientBakeCacheSave()         // 主线程只做：帧号检查 + 尺寸校验 + 派发任务
         └── TaskCoordinator 后台任务（全部在子线程）：
-              ├── 拷 voxels / brick table / page index
+              ├── 拷 voxels / brick table / 各级窗口
               ├── Map + memcpy 读回 cube pool     // BAR 读，秒级，绝不能放主线程
               └── lzav 压缩 + 写文件（.tmp → rename）
 ```
@@ -50,8 +50,8 @@ FCPUAccelerationStructure::Tick(...)             // Scene 每 30 帧调一次
 
 `ComputeAmbientBakeKey` 用 XXH64 流式 hash 下列内容（顺序固定，实现见 AmbientBakeCache.cpp）：
 
-1. `kCacheVersion` + `sizeof(VoxelData/AmbientCube/PageIndex)` + `CUBE_SIZE_XY/Z` +
-   `GPU_SCENE_AMBIENT_BRICK_EDGE` + `BRICKS_PER_CASCADE` + `ACGI_PAGE_COUNT`
+1. `kCacheVersion`（当前 3）+ `sizeof(VoxelData/AmbientCube)` + `CUBE_SIZE_XY/Z` +
+   `GPU_SCENE_AMBIENT_BRICK_EDGE` + `BRICKS_PER_CASCADE`
    —— 结构体或网格常量一改，全部缓存自动失效，不需要有人记得改版本号；
 2. 网格与后端：`baseUnit`、`offsetBias`、`cascadeCount`、`cascadeRatio`、每级的体素尺寸与窗口原点
    （`sys.ambientCubeFollow=1` 时它们由场景包围盒决定，而不是比例设置）、`poolBricksPerCascade`、
@@ -85,11 +85,11 @@ FCPUAccelerationStructure::Tick(...)             // Scene 每 30 帧调一次
 header: magic 'GKAB' | version | key | cascadeCount | cascadeCapacity
         | voxelCountPerCascade | poolBricksPerCascade
 section × 6: rawSize(u64) | compressedSize(u64) | lzav bytes
-  voxels                  cascadeCount   * voxelCountPerCascade
+  voxels                  cascadeCount   * voxelCountPerCascade   (storage order)
   brickTable              cascadeCapacity * BRICKS_PER_CASCADE
-  activeBrickList         cascadeCapacity * poolBricksPerCascade
   activeBricksPerCascade  cascadeCapacity
-  pages                   ACGI_PAGE_COUNT^2
+  cascadeGrids            cascadeCount   (vec4: origin xyz, cell size)
+  cascadeWraps            cascadeCount   (ivec4: brick wrap xyz)
   cubes                   cascadeCapacity * poolBricksPerCascade * BRICK_VOLUME
 ```
 
@@ -103,11 +103,12 @@ section × 6: rawSize(u64) | compressedSize(u64) | lzav bytes
 
 `TryRestoreAmbientBakeCache` 让引擎落在**与冷启动收敛后完全相同**的状态：
 
-- `cpuBrickTable` 的 brickTable / activeBrickList / activeBricksPerCascade 按缓存原样恢复
+- 各级窗口必须与当前布局一致（原点、体素尺寸、wrap），否则视为未命中；
+- `cpuBrickTable` 的 brickTable / activeBricksPerCascade 按缓存原样恢复
   （**必须原样**：cube pool 是通过它索引的，重算 slot 分配会把恢复的光照打散），
-  dirtyBricks 全零，`dirtyRevision = 0` —— 于是 `BakeAmbientCubeCascade` 第一行就返回；
-- `fullProbeBakePending_ = false`、`ambientBakeIdle_ = true`、`needFlush = false`、
-  `totalVoxelGroups_ = 0`，进度 UI 显示 Idle 而不是闪一个假进度条；
+  所有 brick 记为已收敛（`MarkConverged`），bake 队列为空 —— `BakeAmbientCubeCascade` 取不到 batch；
+- `fullProbeBakePending_ = false`、`ambientBakeIdle_ = true`、voxel job 为空、
+  `totalVoxelTasks_ = 0`，进度 UI 显示 Idle 而不是闪一个假进度条；
 - `scene.MarkAmbientCacheRestored()`。
 
 **clear-pass 抑制是唯一的正确性陷阱**：`CommitSceneToRenderer` 的顺序是 `RebuildMeshBuffer()`
@@ -123,9 +124,9 @@ section × 6: rawSize(u64) | compressedSize(u64) | lzav bytes
 
 - **不需要 `vkDeviceWaitIdle`**：`kFramesInFlight == 1`，每帧开始都会等上一次提交的 fence，所以
   收敛帧之后再过 2 帧，那一帧的 bake dispatch 必然已经退休。`ambientCacheSaveFrame_ =
-  totalFrames + 3` 就是这个门槛（`Tick` 30 帧一次，实际从不因此多等）。
-- **读 bake 状态不需要加锁**：收敛把 `ambientBakeIdle_` 置位，体素化队列和 brick 表重建都不会再
-  碰 `cascadeBakers` / `cpuBrickTable` / `cpuPageIndex`；唯一可能回来的写者是新的完整 bake，而通往
+  totalFrames + 3` 就是这个门槛。
+- **读 bake 状态不需要加锁**：收敛把 `ambientBakeIdle_` 置位，voxel job 和 brick 表重建都不会再
+  碰 `cascadeBakers` / `cpuBrickTable` 的这些字段（bake 队列只改 `bakePasses`，不在 payload 里）；唯一可能回来的写者是新的完整 bake，而通往
   它的两条路（`Scene::CleanUp` 和 `~Scene`）都先调 `ClearAllTasks()`，那里会等这个任务结束，之后
   才动这些状态和 arena 本身。
 

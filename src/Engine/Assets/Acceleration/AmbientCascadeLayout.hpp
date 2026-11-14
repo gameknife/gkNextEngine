@@ -33,7 +33,56 @@ namespace Assets
         std::array<float, CUBE_CASCADE_MAX> units{};
         // World position of grid cell (0, 0, 0) for each cascade.
         std::array<glm::vec3, CUBE_CASCADE_MAX> origins{};
+        // Ring offset of each cascade's brick storage (see AmbientStorageBrick). Zero until a window
+        // scrolls; scrolling moves the origin and the wrap together (ShiftAmbientWindow).
+        std::array<glm::ivec3, CUBE_CASCADE_MAX> wraps{};
     };
+
+    // ---- Ring addressing -------------------------------------------------------------------------
+    // A cascade's voxel array, brick table and cube-pool slots are indexed by *storage* brick. Window
+    // brick b (b in [0, kAmbientCascadeBricks)) is stored at (b + wrap) mod kAmbientCascadeBricks.
+    // When the window moves by d bricks the wrap moves by d as well, so every brick that stays inside
+    // the window keeps its storage and only the bricks entering it reuse the storage of the ones
+    // leaving. AmbientStorageBrick() in common/AmbientCube.slang is the shader half of this.
+    inline const glm::ivec3 kAmbientCascadeBricks{GPU_SCENE_AMBIENT_BRICKS_X, GPU_SCENE_AMBIENT_BRICKS_Y,
+                                                 GPU_SCENE_AMBIENT_BRICKS_Z};
+
+    inline glm::ivec3 WrapAmbientBricks(const glm::ivec3& value)
+    {
+        return ((value % kAmbientCascadeBricks) + kAmbientCascadeBricks) % kAmbientCascadeBricks;
+    }
+
+    inline glm::ivec3 AmbientStorageBrick(const glm::ivec3& windowBrick, const glm::ivec3& wrap)
+    {
+        return WrapAmbientBricks(windowBrick + wrap);
+    }
+
+    inline glm::ivec3 AmbientWindowBrick(const glm::ivec3& storageBrick, const glm::ivec3& wrap)
+    {
+        return WrapAmbientBricks(storageBrick - wrap);
+    }
+
+    inline uint32_t AmbientBrickLinearIndex(const glm::ivec3& brick)
+    {
+        return static_cast<uint32_t>(brick.y * kAmbientCascadeBricks.x * kAmbientCascadeBricks.z +
+                                     brick.z * kAmbientCascadeBricks.x + brick.x);
+    }
+
+    inline glm::ivec3 AmbientBrickFromLinearIndex(uint32_t index)
+    {
+        const uint32_t perLayer = static_cast<uint32_t>(kAmbientCascadeBricks.x * kAmbientCascadeBricks.z);
+        const uint32_t y = index / perLayer;
+        const uint32_t z = (index - y * perLayer) / static_cast<uint32_t>(kAmbientCascadeBricks.x);
+        const uint32_t x = index - y * perLayer - z * static_cast<uint32_t>(kAmbientCascadeBricks.x);
+        return glm::ivec3(static_cast<int>(x), static_cast<int>(y), static_cast<int>(z));
+    }
+
+    // Moves a window by whole bricks: the origin by delta * brick size, the wrap by delta.
+    inline void ShiftAmbientWindow(glm::vec3& origin, glm::ivec3& wrap, const glm::ivec3& deltaBricks, float unit)
+    {
+        origin += glm::vec3(deltaBricks) * (unit * static_cast<float>(GPU_SCENE_AMBIENT_BRICK_EDGE));
+        wrap = WrapAmbientBricks(wrap + deltaBricks);
+    }
 
     struct FAmbientCascadeLayoutInputs
     {

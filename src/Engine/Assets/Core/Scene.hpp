@@ -265,11 +265,11 @@ namespace Assets
         Vulkan::Buffer* SkinnedVertexBuffer() const { return skinnedVertexBuffer_.get(); }
 
         const Vulkan::Buffer& AmbientArenaBuffer() const { return *ambientArenaBuffer_; }
+        Vulkan::DeviceMemory& AmbientArenaMemory() const { return *ambientArenaBufferMemory_; }
         // Runtime byte offsets into the arena, sized to the actual allocated cascade capacity (Phase 2)
         // rather than the compile-time GPU_SCENE_AMBIENT_*_OFFSET constants (which assume CASCADE_MAX).
         size_t AmbientCubesByteOffset() const { return 0; }
         size_t AmbientVoxelsByteOffset() const { return ambientVoxelsOffset_; }
-        size_t AmbientPagesByteOffset() const { return ambientPagesOffset_; }
         size_t AmbientCubesPongByteOffset() const { return ambientPongOffset_; }
         // Allocated cascade capacity for this Scene. The effective cascade count used by the bake,
         // the CPU baker and the UBO is clamped to this so a runtime cascade-count change never reads
@@ -387,7 +387,6 @@ namespace Assets
         // right-sizing). Set once at construction from the configured cascade count.
         uint32_t ambientCubeCascadeCapacity_ = 0;
         size_t ambientVoxelsOffset_ = 0;
-        size_t ambientPagesOffset_ = 0;
         size_t ambientPongOffset_ = 0;
         size_t ambientBrickTableOffset_ = 0;
         size_t ambientActiveBrickListOffset_ = 0;

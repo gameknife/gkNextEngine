@@ -1,7 +1,7 @@
 ---
 title: "大地图 GI 覆盖：Voxel / AmbientCube clipmap 开发计划"
 category: plan
-status: 阶段 1 已实施，阶段 2–3 待做
+status: 阶段 1–2 已实施，阶段 3 待做
 owner: engine/rendering
 created: 2026-11-14
 last_updated: 2026-11-14
@@ -224,6 +224,22 @@ voxel 格式、ambient cube 格式、DDA、烘焙着色器都不换，只改"寻
 
 单元测试：窗口平移后重叠 brick 的存储位置不变；进入 brick 集合的计算；子盒距离场在变化区域内与整级
 重算逐格相等、其余格子不大于整级重算值；烘焙队列的遍数统计与出队。
+
+实施记录（2026-11-14）：三步已落地，与上文的差异如下。
+
+- DDA：`TraceRayDDA` 即多级行走，`TraceRayDDAInCascade` 是单级行走；`PageIndex`（CPU、arena 区、shader、
+  缓存 payload）已删除，`Tick` 的两个空壳内存参数与 `ECubeProcType` / `EBakerType` 一并删除。
+- 环形寻址：wrap 放在 `FAmbientCascadeLayout::wraps`，UBO 增加 `AmbientCubeCascadeWrap[5]`。shader 用
+  `FAmbientCascadeAddress` 每级解析一次 wrap 与各基址再往下传；最初逐步从 UBO 重读 wrap，VoxelTracing
+  在本机慢约 7%，提升后反而比阶段 1 快。
+- 管线：bake 队列放进 `FCPUBrickTable`（每 brick 一个遍数），revision / acknowledge 协议删除，
+  `Scene::Tick` 每帧推进 voxel 管线。帧预算不足一个 brick 时一批跨帧派发，保持"超预算帧只付一个
+  dispatch group"的旧行为。缓存 `kCacheVersion` 升到 3，payload 去掉 pages 与 active list，增加各级窗口。
+- "进入 brick 集合的计算"要到阶段 3 才有调用方（窗口平移），本阶段只测了环形存储在平移下的不变性。
+- 性能（本机，SoftwareModern 之外的两个 DDA 用户，1280×720，阶段 1 → 阶段 2）：playground
+  SoftwareTracing 43.0 → 43.9 fps、VoxelTracing 42.4 → 43.4；training_ground（follow=1，5 级）132.6 → 138.9、
+  132.7 → 136.7。画面：training_ground 与阶段 1 的差只有逐像素采样噪声；playground 在该测量条件下 bake
+  不收敛，差异是 bake 噪声分布不同。
 
 ### 阶段 3：近场跟随
 

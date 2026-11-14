@@ -26,7 +26,7 @@ namespace
     // Bump when the bake itself changes meaning: bake shaders, the distance-field transform, the
     // convergence pass count, or the brick classification. Struct sizes and grid constants are
     // hashed directly below and need no bump.
-    constexpr uint32_t kCacheVersion = 2u;
+    constexpr uint32_t kCacheVersion = 3u;
 
     // Streaming XXH64 so a multi-million-vertex scene never needs a staging byte buffer.
     class FHashStream
@@ -198,12 +198,10 @@ uint64_t ComputeAmbientBakeKey(const Assets::Scene& scene, const FAmbientBakeKey
     stream.Add(kCacheVersion);
     stream.Add(static_cast<uint32_t>(sizeof(Assets::VoxelData)));
     stream.Add(static_cast<uint32_t>(sizeof(Assets::AmbientCube)));
-    stream.Add(static_cast<uint32_t>(sizeof(Assets::PageIndex)));
     stream.Add(static_cast<uint32_t>(Assets::CUBE_SIZE_XY));
     stream.Add(static_cast<uint32_t>(Assets::CUBE_SIZE_Z));
     stream.Add(static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICK_EDGE));
     stream.Add(static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE));
-    stream.Add(static_cast<uint32_t>(Assets::ACGI_PAGE_COUNT));
 
     // Grid, pool and bake backend.
     stream.Add(inputs.baseUnit);
@@ -323,9 +321,8 @@ bool LoadAmbientBakeCache(uint64_t key, FAmbientBakeCachePayload& outPayload)
 
     const size_t brickTableCount =
         static_cast<size_t>(cascadeCapacity) * Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE;
-    const size_t activeBrickListCount = static_cast<size_t>(cascadeCapacity) * poolBricksPerCascade;
-    const size_t pageCount = static_cast<size_t>(Assets::ACGI_PAGE_COUNT) * Assets::ACGI_PAGE_COUNT;
-    const size_t cubeCount = activeBrickListCount * Assets::GPU_SCENE_AMBIENT_BRICK_VOLUME;
+    const size_t cubeCount = static_cast<size_t>(cascadeCapacity) * poolBricksPerCascade *
+                             Assets::GPU_SCENE_AMBIENT_BRICK_VOLUME;
 
     FAmbientBakeCachePayload payload;
     payload.cascadeCount = cascadeCount;
@@ -334,9 +331,9 @@ bool LoadAmbientBakeCache(uint64_t key, FAmbientBakeCachePayload& outPayload)
     payload.poolBricksPerCascade = poolBricksPerCascade;
     if (!ReadSection(file, payload.voxels, static_cast<size_t>(cascadeCount) * voxelCountPerCascade) ||
         !ReadSection(file, payload.brickTable, brickTableCount) ||
-        !ReadSection(file, payload.activeBrickList, activeBrickListCount) ||
         !ReadSection(file, payload.activeBricksPerCascade, cascadeCapacity) ||
-        !ReadSection(file, payload.pages, pageCount) ||
+        !ReadSection(file, payload.cascadeGrids, cascadeCount) ||
+        !ReadSection(file, payload.cascadeWraps, cascadeCount) ||
         !ReadSection(file, payload.cubes, cubeCount))
     {
         return false;
@@ -363,8 +360,8 @@ bool SaveAmbientBakeCache(uint64_t key, const FAmbientBakeCachePayload& payload)
             WritePod(file, payload.cascadeCount) && WritePod(file, payload.cascadeCapacity) &&
             WritePod(file, payload.voxelCountPerCascade) && WritePod(file, payload.poolBricksPerCascade);
         if (!headerOk || !WriteSection(file, payload.voxels) || !WriteSection(file, payload.brickTable) ||
-            !WriteSection(file, payload.activeBrickList) ||
-            !WriteSection(file, payload.activeBricksPerCascade) || !WriteSection(file, payload.pages) ||
+            !WriteSection(file, payload.activeBricksPerCascade) || !WriteSection(file, payload.cascadeGrids) ||
+            !WriteSection(file, payload.cascadeWraps) ||
             !WriteSection(file, payload.cubes))
         {
             file.close();

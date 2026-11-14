@@ -31,13 +31,43 @@ RGB9E5 是单个 32-bit radiance 值的编码选择，不是块压缩。它保�
 
 - `Cubes`：每 cascade 的稀疏 AmbientCube brick pool。
 - `Voxels`：仍为每 cascade dense 的 VoxelData 数组。
-- `Pages`：software DDA 的 page index。
 - `CubesPong`：仅一条 cascade 大小的 bake ping-pong scratch。
 - `BrickTable`：逻辑 brick → pool slot。
-- `ActiveBrickList`：本帧参与 bake 的逻辑 brick 列表。
+- `ActiveBrickList`：每级一段，存本帧 bake batch 的 storage brick 号。
 
-`Pages` 计划在 [大地图 GI 覆盖](../plans/ambientcube-clipmap-plan.md) 阶段 2 随 DDA 多级行走删除。
-原先的 `Residency` 区已随 hit-driven residency 删除（阶段 1）。
+原先的 `Residency` 区（hit-driven residency）与 `Pages` 区（DDA 的 page index）已在
+[大地图 GI 覆盖](../plans/ambientcube-clipmap-plan.md) 阶段 1、2 删除。
+
+## 环形寻址
+
+每级的 voxel 数组、brick 表和 cube-pool slot 都按 **storage brick** 索引。窗口内的 brick b（`[0, 24×6×24)`）
+存在 `(b + wrap) mod (24, 6, 24)`；窗口平移 d 个 brick 时 wrap 同步加 d（`ShiftAmbientWindow`），留在窗口内的
+brick 存储位置不变，只有进入的 brick 复用离开的 brick 的存储。环绕只在两处实现：shader 的
+`AmbientBrickLinear`（经 `FAmbientCascadeAddress`）和 CPU 的 `GetVoxelAddress`；其余代码一律经过它们。
+wrap 由 `FAmbientCascadeLayout::wraps` 记录，经 UBO 的 `AmbientCubeCascadeWrap[5]` 交给 shader。
+active list 里存的是 storage brick，`DecodeAmbientActiveBrickProbe` 负责还原窗口坐标。
+
+shader 热路径（DDA 每步、gather 每个角）不能逐次从 UBO 和资源表重读 wrap、voxel 基址、pool 基址：
+`GetAmbientCascadeAddress` 每级解析一次，再往下传。逐次重读在本机让 VoxelTracing 慢了约 7%。
+
+## Voxel 管线与 bake 队列
+
+更新粒度是"一组 brick"，各级独立（`FCPUAccelerationStructure::Tick` 每帧推进，空闲时不做事）：
+
+1. 体素化：待处理 brick 按每任务 6 个 brick 分到并行任务（`FCPUProbeBaker::VoxelizeBrick`）。
+2. 距离场：只重算受影响的子盒。L∞、封顶 15 格，所以"变化区域外扩 2 个 brick"的输出盒在"再外扩 2 个
+   brick"的定义域上重算，与整级重算逐格相同（单测覆盖）。
+3. 上传：只上传输出盒覆盖的 brick，每个是连续的 4 KB。
+4. 分配：`FCPUBrickTable::UpdateData` 重新分类，换主人的 slot 清零。
+
+加载时的整图烘焙就是"所有 brick 进入"这一条路径。
+
+brick 表同时是 bake 队列：每个已分配 brick 记已烘遍数（`bakePasses`），新主人从 0 开始，到
+`kAmbientBakeConvergencePasses`（32）出队。每帧 `AcquireAmbientBakeBatch` 选一级、取一批 brick 写进该级的
+active list 段并 dispatch，录完后 `CompleteAmbientBakeBatch` 给它们的遍数加一。顺序：未发布的优先（低于
+`r.ambientCube.publishPasses`），细级优先，同级里遍数少的、离相机近的优先。帧预算不足一个 brick（8 个
+dispatch group）时，一批跨多帧派发完，超预算的帧仍只付一个 group 的代价。清空 cube 池（场景切换时的
+clear pass）会把所有遍数归零。原来的 dirty revision / acknowledge 协议已删除。
 
 `VoxelData` 当前为 8 bytes：完整 `matId` 加一个打包的 8×4-bit distance/inside word。`AmbientCube` 为 40 bytes：六个方向色、sun direct、sky/emissive direct 以 RGB9E5 保存，另有六方向 8-bit sky visibility。不要引用旧文档中的 16-byte VoxelData、56-byte AmbientCube 或 RGBA8 face 布局。
 
@@ -75,7 +105,7 @@ VoxelData 一起稀疏化。
 
 ## Bake 与消费
 
-camera-independent scene prepare 每帧只运行一次。AmbientCube bake 每帧轮转一条 cascade，只 dispatch active brick 对应的 probes；hardware/soft bake 共用 active-list 解码。bake 射线长度随级别缩放为 `clamp(80 × unit, 20 m, 200 m)`，各级单条射线跨过的格数相当。消费 shader 先由 cascade/逻辑 probe 找 `BrickTable`，缺页时使用明确 fallback，不能直接把逻辑 voxel index 当 pool index。
+camera-independent scene prepare 每帧只运行一次。AmbientCube bake 每帧从队列取一级的一批 brick，只 dispatch 这些 brick 的 probes；hardware/soft bake 共用 active-list 解码。bake 射线长度随级别缩放为 `clamp(80 × unit, 20 m, 200 m)`，各级单条射线跨过的格数相当。消费 shader 先由 cascade/逻辑 probe 找 `BrickTable`，缺页时使用明确 fallback，不能直接把逻辑 voxel index 当 pool index。
 
 发布规则：probe 的累计 bake 遍数（`SkyVisibilityPXNXS0S1` 的第 2 字节）不足 `r.ambientCube.publishPasses`
 （默认 4）时，插值把它当作缺失跳过；当前级没有有效权重就落到更粗一级，全部没有才是天空兜底。bake 自己的
@@ -112,12 +142,18 @@ SHARC 使用 vendored NVIDIA header，经 `assets/shaders/common/Sharc.slang` �
 
 这些旧设计可以作为历史研究，但不是当前 roadmap。若重新立项，应先用现有 arena/brick/effective renderer contract 建立基线，不能从旧结构尺寸或旧阶段继续施工。
 
-第一项已按当前代码重新立项，见 [大地图 GI 覆盖开发计划](../plans/ambientcube-clipmap-plan.md)，阶段 1（全图底图）已实施，本文已同步；
-环形寻址、增量管线与近场跟随是阶段 2–3。第二项只列在该计划的可选阶段。
+第一项已按当前代码重新立项，见 [大地图 GI 覆盖开发计划](../plans/ambientcube-clipmap-plan.md)，阶段 1（全图底图）与
+阶段 2（DDA 多级行走、环形寻址、brick 粒度管线）已实施，本文已同步；近场跟随是阶段 3。第二项只列在该计划的可选阶段。
+
+## DDA 多级行走
+
+`FHiVoxelDDARayTracer::TraceRayDDA` 总在"包含当前点的最细一级"里走：一段在射线离开该级窗口或进入更细一级
+窗口时结束，然后从那里换级继续；不在任何窗口内时跳到射线下一次进入的窗口。远处的行走落在粗级上，格子大，
+加上距离场跳跃，步数自然有界，不再需要 page index，任意大的地图都适用。`TraceRayDDAInCascade` 是单级行走。
 
 ## 磁盘缓存（计划中）
 
 voxelize / distance field / ambient cube 目前每次加载都完整重算，虽然在同一场景与同一网格配置下结果稳定。
 把这条链路做成 tile 级本地磁盘缓存的执行方案见 [GI Bake 磁盘缓存开发计划](../plans/gi-bake-disk-cache-plan.md)。
-其中两条约束会影响本文档描述的结构，改动这些区域前先读：distance field 是整 cascade 的 chamfer 扫描
-（不能按区块局部重算），cube pool slot 是每次分类压缩出来的运行时产物（缓存必须按 logical brick 索引）。
+该计划成文早于现在的结构：distance field 现在可以按子盒重算，brick 也已与各级世界晶格对齐，所以按世界 brick
+坐标存取的缓存可行；立项时以大地图计划阶段 4 为准，不沿用其中的约束。

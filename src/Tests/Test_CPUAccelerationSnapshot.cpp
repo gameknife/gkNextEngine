@@ -6,6 +6,9 @@
 #include "Engine/Runtime/Subsystems/TaskCoordinator.hpp"
 
 #include <atomic>
+#include <map>
+#include <set>
+#include <tuple>
 #include <thread>
 
 namespace
@@ -221,7 +224,7 @@ namespace
     // RebuildDistanceField() once all solids are in.
     void SetSolid(FCPUProbeBaker& baker, int x, int y, int z)
     {
-        const uint32_t address = GetVoxelAddress(x, y, z);
+        const uint32_t address = baker.VoxelAddress(x, y, z);
         baker.voxels[address].matId = 1u;
         baker.distanceToSolidSeeds[address] = 0u;
     }
@@ -233,36 +236,188 @@ namespace
     }
 }
 
-TEST_CASE("Ambient brick table keeps newly dirty bricks at the front until acknowledged",
+TEST_CASE("Ambient bake queue serves unpublished, fine and near bricks first",
           "[Unit][CPUAccelerationSnapshot][AmbientBake]")
 {
-    FCPUProbeBaker baker;
-    baker.Init(0, 1.0f, glm::vec3(0.0f));
-    SetSolid(baker, 4, 4, 4);
-    baker.RebuildDistanceField();
+    // Two 1 m cascades sharing an origin, each with a floor along z = 4 that spans x = 0..47:
+    // six bricks wanted per cascade.
+    std::vector<FCPUProbeBaker> bakers(2);
+    for (uint32_t c = 0; c < 2u; ++c)
+    {
+        bakers[c].Init(c, 1.0f, glm::vec3(0.0f));
+        for (int x = 0; x < 48; ++x)
+            SetSolid(bakers[c], x, 4, 4);
+        bakers[c].RebuildDistanceField();
+    }
 
     FCPUBrickTable table;
     const uint32_t poolCapacity = static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE);
-    REQUIRE(table.UpdateData({baker}, 1u, poolCapacity, glm::vec3(0.0f)));
-    REQUIRE(table.dirtyBricksPerCascade[0] > 0u);
-    CHECK(table.dirtyBricksPerCascade[0] == table.activeBricksPerCascade[0]);
+    table.UpdateData(bakers, 2u, poolCapacity, glm::vec3(0.0f));
+    const uint32_t perCascade = table.activeBricksPerCascade[0];
+    REQUIRE(perCascade > 0u);
+    REQUIRE(table.activeBricksPerCascade[1] == perCascade);
 
-    const uint64_t firstRevision = table.dirtyRevision;
-    table.AcknowledgeDirty(firstRevision);
-    CHECK(table.dirtyBricksPerCascade[0] == 0u);
+    constexpr uint32_t publishPasses = 4u;
+    FAmbientBakeQueueStats stats = table.QueueStats(publishPasses);
+    CHECK(stats.allocatedBricks == 2u * perCascade);
+    CHECK(stats.pendingBricks == 2u * perCascade);
+    CHECK(stats.unpublishedBricks == 2u * perCascade);
 
-    SetSolid(baker, Assets::CUBE_SIZE_XY - 5, 4, Assets::CUBE_SIZE_XY - 5);
-    baker.RebuildDistanceField();
-    REQUIRE(table.UpdateData({baker}, 1u, poolCapacity, glm::vec3(0.0f)));
-    const uint32_t dirtyCount = table.dirtyBricksPerCascade[0];
-    REQUIRE(dirtyCount > 0u);
-    CHECK(dirtyCount < table.activeBricksPerCascade[0]);
-    for (uint32_t listIndex = 0; listIndex < dirtyCount; ++listIndex)
+    // Finer cascade first, the brick nearest the focus first.
+    FAmbientBakeBatch batch;
+    REQUIRE(table.SelectBakeBatch(bakers, 1u, publishPasses, glm::vec3(44.0f, 4.0f, 4.0f), batch));
+    CHECK(batch.cascade == 0u);
+    REQUIRE(batch.bricks.size() == 1u);
+    CHECK(bakers[0].WindowBrick(batch.bricks[0]) == glm::ivec3(5, 0, 0));
+
+    // Cascade 0 is served until it is published, then cascade 1 is published before cascade 0 tops up.
+    for (uint32_t pass = 0; pass < publishPasses; ++pass)
     {
-        const uint32_t brick = table.activeBrickList[listIndex];
-        REQUIRE(brick < table.dirtyBricks.size());
-        CHECK(table.dirtyBricks[brick] != 0u);
+        REQUIRE(table.SelectBakeBatch(bakers, perCascade, publishPasses, glm::vec3(0.0f), batch));
+        CHECK(batch.cascade == 0u);
+        CHECK(batch.bricks.size() == perCascade);
+        table.CompleteBakeBatch(batch);
     }
+    REQUIRE(table.SelectBakeBatch(bakers, perCascade, publishPasses, glm::vec3(0.0f), batch));
+    CHECK(batch.cascade == 1u);
+    stats = table.QueueStats(publishPasses);
+    CHECK(stats.unpublishedBricks == perCascade);
+
+    // Everything converges after kAmbientBakeConvergencePasses and leaves the queue.
+    for (int guard = 0; guard < 1000 && table.SelectBakeBatch(bakers, poolCapacity, publishPasses, glm::vec3(0.0f), batch);
+         ++guard)
+    {
+        table.CompleteBakeBatch(batch);
+    }
+    stats = table.QueueStats(publishPasses);
+    CHECK(stats.pendingBricks == 0u);
+    CHECK(stats.completedPasses == stats.totalPasses);
+
+    // A brick that gains a slot starts from zero while the others keep their passes.
+    SetSolid(bakers[0], 100, 4, 100);
+    bakers[0].RebuildDistanceField();
+    table.UpdateData(bakers, 2u, poolCapacity, glm::vec3(0.0f));
+    stats = table.QueueStats(publishPasses);
+    CHECK(stats.pendingBricks == table.activeBricksPerCascade[0] - perCascade);
+    REQUIRE(table.SelectBakeBatch(bakers, poolCapacity, publishPasses, glm::vec3(0.0f), batch));
+    for (uint32_t brick : batch.bricks)
+    {
+        CHECK(bakers[0].WindowBrick(brick).x >= 11);
+    }
+
+    table.ResetBakePasses();
+    CHECK(table.QueueStats(publishPasses).pendingBricks == stats.allocatedBricks);
+    table.MarkConverged();
+    CHECK(table.QueueStats(publishPasses).pendingBricks == 0u);
+}
+
+TEST_CASE("Ambient ring storage keeps overlapping bricks in place when a window scrolls",
+          "[Unit][CPUAccelerationSnapshot][AmbientBake]")
+{
+    const glm::ivec3 dims = Assets::kAmbientCascadeBricks;
+    glm::vec3 origin(-24.0f, 4.0f, -24.0f);
+    glm::ivec3 wrap(0);
+    const float unit = 0.25f;
+    const float brickSize = unit * Assets::GPU_SCENE_AMBIENT_BRICK_EDGE;
+
+    // World brick of window brick b is origin / brickSize + b; record where each is stored.
+    const auto worldBrickOf = [&](const glm::ivec3& windowBrick)
+    {
+        return glm::ivec3(glm::round(origin / brickSize)) + windowBrick;
+    };
+    std::map<std::tuple<int, int, int>, uint32_t> before;
+    for (uint32_t b = 0; b < static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE); ++b)
+    {
+        const glm::ivec3 window = Assets::AmbientBrickFromLinearIndex(b);
+        const glm::ivec3 world = worldBrickOf(window);
+        before[{world.x, world.y, world.z}] =
+            Assets::AmbientBrickLinearIndex(Assets::AmbientStorageBrick(window, wrap));
+    }
+
+    const glm::ivec3 delta(3, -1, -10);
+    Assets::ShiftAmbientWindow(origin, wrap, delta, unit);
+    CHECK(glm::all(glm::greaterThanEqual(wrap, glm::ivec3(0))));
+    CHECK(glm::all(glm::lessThan(wrap, dims)));
+
+    uint32_t kept = 0;
+    std::set<uint32_t> storages;
+    for (uint32_t b = 0; b < static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE); ++b)
+    {
+        const glm::ivec3 window = Assets::AmbientBrickFromLinearIndex(b);
+        const glm::ivec3 world = worldBrickOf(window);
+        const uint32_t storage = Assets::AmbientBrickLinearIndex(Assets::AmbientStorageBrick(window, wrap));
+        storages.insert(storage);
+        CHECK(Assets::AmbientWindowBrick(Assets::AmbientBrickFromLinearIndex(storage), wrap) == window);
+        const auto previous = before.find({world.x, world.y, world.z});
+        if (previous != before.end())
+        {
+            CHECK(previous->second == storage);
+            ++kept;
+        }
+    }
+    // Storage stays a permutation, and exactly the overlap of the two windows was kept.
+    CHECK(storages.size() == static_cast<size_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE));
+    CHECK(kept == static_cast<uint32_t>((dims.x - 3) * (dims.y - 1) * (dims.z - 10)));
+}
+
+TEST_CASE("Ambient distance field is independent of the ring offset and of the rebuild box",
+          "[Unit][CPUAccelerationSnapshot][AmbientBake]")
+{
+    // Pseudo-random solids, the same window content in a plain and in a wrapped baker.
+    FCPUProbeBaker plain;
+    FCPUProbeBaker wrapped;
+    plain.Init(0, 1.0f, glm::vec3(0.0f));
+    wrapped.Init(0, 1.0f, glm::vec3(0.0f), glm::ivec3(5, 2, 17));
+    uint32_t state = 12345u;
+    const auto next = [&state]() { state = state * 1664525u + 1013904223u; return state >> 8; };
+    for (int i = 0; i < 4000; ++i)
+    {
+        const int x = static_cast<int>(next() % Assets::CUBE_SIZE_XY);
+        const int y = static_cast<int>(next() % Assets::CUBE_SIZE_Z);
+        const int z = static_cast<int>(next() % Assets::CUBE_SIZE_XY);
+        SetSolid(plain, x, y, z);
+        SetSolid(wrapped, x, y, z);
+    }
+    plain.RebuildDistanceField();
+    wrapped.RebuildDistanceField();
+
+    const auto sameEverywhere = [](const FCPUProbeBaker& a, const FCPUProbeBaker& b)
+    {
+        for (int y = 0; y < Assets::CUBE_SIZE_Z; ++y)
+            for (int z = 0; z < Assets::CUBE_SIZE_XY; ++z)
+                for (int x = 0; x < Assets::CUBE_SIZE_XY; ++x)
+                {
+                    if (a.voxels[a.VoxelAddress(x, y, z)].distanceToSolid !=
+                        b.voxels[b.VoxelAddress(x, y, z)].distanceToSolid)
+                    {
+                        return false;
+                    }
+                }
+        return true;
+    };
+    CHECK(sameEverywhere(plain, wrapped));
+
+    // Change one region, rebuild only around it, and compare with a whole-cascade rebuild.
+    const glm::ivec3 changedMin(64, 8, 120);
+    const glm::ivec3 changedMax(79, 23, 135);
+    for (int y = changedMin.y; y <= changedMax.y; ++y)
+        for (int z = changedMin.z; z <= changedMax.z; ++z)
+            for (int x = changedMin.x; x <= changedMax.x; ++x)
+            {
+                const bool solid = ((x + y * 3 + z * 7) % 11) == 0;
+                for (FCPUProbeBaker* baker : {&plain, &wrapped})
+                {
+                    const uint32_t address = baker->VoxelAddress(x, y, z);
+                    baker->voxels[address].matId = solid ? 1u : 0u;
+                    baker->distanceToSolidSeeds[address] = solid ? 0u : kMaxDistanceFieldSeed;
+                }
+            }
+    plain.RebuildDistanceField();
+    const auto [outMin, outMax] = wrapped.RebuildDistanceField(changedMin, changedMax);
+    CHECK(glm::all(glm::lessThanEqual(outMin, glm::max(changedMin - 15, glm::ivec3(0)))));
+    CHECK(glm::all(glm::greaterThanEqual(outMax, glm::min(changedMax + 15,
+        glm::ivec3(Assets::CUBE_SIZE_XY - 1, Assets::CUBE_SIZE_Z - 1, Assets::CUBE_SIZE_XY - 1)))));
+    CHECK(sameEverywhere(plain, wrapped));
 }
 
 TEST_CASE("Ambient brick activation keeps the air shell over surfaces only",

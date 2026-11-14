@@ -3,6 +3,7 @@
 #include "Engine/Common/CoreMinimal.hpp"
 #include "Engine/Assets/GPU/UniformBuffer.hpp"
 #include "Engine/Assets/Acceleration/AmbientCascadeLayout.hpp"
+#include "Engine/Assets/Acceleration/AmbientBakeBatch.hpp"
 #include "Engine/Runtime/RuntimeFwd.hpp"
 #include "Engine/Vulkan/VulkanFwd.hpp"
 #include <glm/glm.hpp>
@@ -39,18 +40,6 @@ namespace std {
 
 namespace Assets::CPU
 {
-
-enum class ECubeProcType : uint8_t
-{
-    ECPT_Clear,
-    ECPT_Fence,
-    ECPT_Voxelize,
-};
-
-enum class EBakerType : uint8_t
-{
-    EBT_Probe,
-};
 
 struct FCPUBLASVertInfo
 {
@@ -155,70 +144,81 @@ struct FCPUTLASBuildStats
     double buildToPublishP95Milliseconds = 0.0;
 };
 
-// A CPU baker owns an independent context and task-dispatch mechanism.
-// Its lifetime and execution are controlled by CpuAS.
+// CPU half of one cascade: its voxel array (in storage order, see AmbientStorageBrick) and the
+// distance-field seeds. Everything here works on whole bricks or on boxes of window cells, so a
+// caller can rebuild part of a cascade without touching the rest.
 struct FCPUProbeBaker
 {
     uint32_t cascadeIndex = 0;
-    float UNIT_SIZE;
-    glm::vec3 CUBE_OFFSET;
-    
+    float UNIT_SIZE = Assets::CUBE_UNIT;
+    // World position of window cell (0, 0, 0).
+    glm::vec3 CUBE_OFFSET{0.0f};
+    // Ring offset of the brick storage.
+    glm::ivec3 BRICK_WRAP{0};
+
     std::vector<Assets::VoxelData> voxels;
     std::vector<uint8_t> distanceToSolidSeeds;
 
-    void Init(uint32_t cascadeIdx, float unitSize, glm::vec3 offset);
-    void ProcessCube(int x, int y, int z, ECubeProcType procType,
-                     const std::shared_ptr<const FCPUTLASSnapshot>& snapshot);
+    void Init(uint32_t cascadeIdx, float unitSize, glm::vec3 offset, glm::ivec3 wrap = glm::ivec3(0));
+    uint32_t VoxelAddress(int x, int y, int z) const;
+    glm::ivec3 WindowBrick(uint32_t storageBrick) const;
+
+    // Voxelizes all 512 cells of one storage brick: material, per-face clearance and the seed the
+    // distance field is built from.
+    void VoxelizeBrick(uint32_t storageBrick, const FCPUTLASSnapshot& snapshot);
+    void ClearVoxels();
+
+    // The distance field is L-infinity and capped at kMaxDistanceFieldSeed, so a cell only depends
+    // on occupancy within that many cells. Given the window cells whose occupancy changed, this
+    // recomputes every cell that can depend on them (the box grown by two bricks) on a domain grown
+    // by two more, which reproduces a whole-cascade rebuild exactly inside the output box. Returns
+    // the output box (inclusive, window cells). The no-argument form rebuilds the whole cascade.
+    std::pair<glm::ivec3, glm::ivec3> RebuildDistanceField(const glm::ivec3& changedMin, const glm::ivec3& changedMax);
     void RebuildDistanceField();
-    void UploadGPU(Vulkan::DeviceMemory& voxelDeviceMemory);
+
+    // Storage bricks overlapping a box of window cells (inclusive).
+    std::vector<uint32_t> StorageBricksInBox(const glm::ivec3& cellMin, const glm::ivec3& cellMax) const;
+
     void UploadGPU(Vulkan::DeviceMemory& voxelDeviceMemory, size_t byteBaseOffset, uint32_t elementOffset);
-    void UploadGPU(Vulkan::DeviceMemory& voxelDeviceMemory, uint32_t elementOffset);
-    void ClearAmbientCubes();
+    // Uploads only the given storage bricks; each is one contiguous 4 KB run.
+    void UploadBricks(Vulkan::DeviceMemory& voxelDeviceMemory, size_t byteBaseOffset, uint32_t elementOffset,
+                      const std::vector<uint32_t>& storageBricks);
 };
 
-struct FCPUPageIndex
-{
-    std::vector<Assets::PageIndex> pageIndex;
-
-    void Init();
-    void UpdateData(const std::vector<FCPUProbeBaker>& bakers);
-    Assets::PageIndex& GetPage(glm::vec3 worldpos);
-    void UploadGPU(Vulkan::DeviceMemory& deviceMemory);
-    void UploadGPU(Vulkan::DeviceMemory& deviceMemory, size_t byteBaseOffset);
-};
-
-// Sparse cube storage: per-cascade brick -> cube-pool slot table (GPU_SCENE_AMBIENT_BRICK_INVALID
-// when a brick is unallocated). Rebuilt from the CPU distance field each flush: a brick is wanted
-// when one of its voxels lies within the cascade's surface shell (ResolveAmbientBrickShellCells),
-// wanted bricks keep their old slot, and new ones take free slots nearest the focus first.
-// Bricks left without a slot stay INVALID, and the gather falls through to a coarser cascade there.
+// Sparse cube storage: per-cascade storage brick -> cube-pool slot (GPU_SCENE_AMBIENT_BRICK_INVALID
+// when unallocated). Rebuilt from the CPU distance field after each voxel job: a brick is wanted
+// when one of its empty voxels lies within the cascade's surface shell (ResolveAmbientBrickShellCells),
+// wanted bricks keep their old slot, and new ones take free slots nearest the focus first. Bricks left
+// without a slot stay INVALID, and the gather falls through to a coarser cascade there.
+//
+// The table is also the bake queue: every allocated brick counts the bake passes its slot has had.
+// A brick whose slot is new starts at zero; the scheduler serves unpublished bricks first, finer
+// cascades first and bricks near the focus first, and a brick leaves the queue at
+// kAmbientBakeConvergencePasses.
 struct FCPUBrickTable
 {
     std::vector<uint32_t> brickTable;
-    std::vector<uint32_t> activeBrickList;
+    std::vector<uint8_t> bakePasses;
     std::vector<uint32_t> activeBricksPerCascade;
     // Bricks the activation rule wanted, and how many of them found no free slot.
     std::vector<uint32_t> candidateBricksPerCascade;
     std::vector<uint32_t> overflowBricksPerCascade;
     std::vector<uint32_t> slotsToClear;
-    std::vector<uint8_t> dirtyBricks;
-    std::vector<uint32_t> dirtyBricksPerCascade;
     uint32_t activeBricksLastBuild = 0;
-    uint64_t dirtyRevision = 0;
 
     // focus: world position whose nearby bricks get first claim on free slots when the pool is short.
     bool UpdateData(const std::vector<FCPUProbeBaker>& bakers, uint32_t cascadeCapacity,
                     uint32_t poolBricksPerCascade, const glm::vec3& focus);
-    void MarkAllActiveDirty();
-    void MarkDirtyBounds(const std::vector<FCPUProbeBaker>& bakers,
-                         const glm::vec3& worldMin, const glm::vec3& worldMax,
-                         uint32_t poolBricksPerCascade);
-    void AcknowledgeDirty(uint64_t revision);
-    void UploadGPU(Vulkan::DeviceMemory& deviceMemory, size_t tableByteOffset, size_t activeListByteOffset);
+    void UploadGPU(Vulkan::DeviceMemory& deviceMemory, size_t tableByteOffset) const;
 
-private:
-    void RebuildActiveBrickList(uint32_t cascadeCapacity, uint32_t poolBricksPerCascade);
-    bool MarkDirty(uint32_t globalBrickIndex);
+    FAmbientBakeQueueStats QueueStats(uint32_t publishPasses) const;
+    bool SelectBakeBatch(const std::vector<FCPUProbeBaker>& bakers, uint32_t maxBricks, uint32_t publishPasses,
+                         const glm::vec3& focus, FAmbientBakeBatch& outBatch) const;
+    void CompleteBakeBatch(const FAmbientBakeBatch& batch);
+    // The GPU cube pool was cleared: every allocated brick starts over.
+    void ResetBakePasses();
+    // The cube pool came back converged from the disk cache.
+    void MarkConverged();
 };
 
 // The ambient/voxel grid the cascade bakers were actually built with. User settings can change at
@@ -233,9 +233,8 @@ struct FAmbientGridConfig
     Assets::FAmbientCascadeLayout layout;
 };
 
-// UI-facing state for the CPU half of the ambient GI bake pipeline. Voxel work
-// is counted in 16x16 XZ groups; distance-field reconstruction runs once all
-// groups across the cascade set have completed.
+// UI-facing state for the CPU half of the ambient GI bake pipeline. Voxel work is counted in
+// voxelization tasks (a few bricks each); the distance field runs once every task of the job is done.
 enum class EProbeBakeStage : uint8_t
 {
     Idle,
@@ -274,18 +273,23 @@ public:
                                                    glm::vec3 rayOrigin, glm::vec3 rayDir,
                                                    bool faceNormalTowardRay = true, float maxDistance = 2000.0f);
     
+    // Full bake: every brick of every cascade enters the voxel pipeline (or the disk cache restores
+    // the whole result).
     bool AsyncProcessFull(Assets::Scene& scene, Vulkan::DeviceMemory* VoxelGPUMemory);
-    void AsyncProcessGroup(int xInMeter, int zInMeter, Assets::Scene& scene, ECubeProcType procType, EBakerType bakerType,
-                           uint32_t cascadeIndex);
-    
-    bool Tick(Assets::Scene& scene, Vulkan::DeviceMemory* GPUMemory, Vulkan::DeviceMemory* FarGPUMemory, Vulkan::DeviceMemory* PageIndexMemory);
+
+    // Advances the voxel pipeline. Cheap when idle; called every frame.
+    bool Tick(Assets::Scene& scene, Vulkan::DeviceMemory* arenaMemory);
     bool HasPendingWork() const;
 
     FProbeBakeProgress GetProbeBakeProgress() const;
 
-    uint64_t AmbientBakeDirtyRevision() const { return cpuBrickTable.dirtyRevision; }
-    uint32_t AmbientBakeDirtyBrickCount(uint32_t cascadeIndex) const;
-    void AcknowledgeAmbientBake(uint64_t revision);
+    // GPU bake queue. Acquire picks this frame's bricks and writes them into the cascade's active
+    // brick list; Complete records the pass once the dispatch has been recorded.
+    bool AcquireAmbientBakeBatch(Assets::Scene& scene, uint32_t maxBricks, FAmbientBakeBatch& outBatch);
+    void CompleteAmbientBakeBatch(const FAmbientBakeBatch& batch);
+    bool IsAmbientBakeBatchCurrent(const FAmbientBakeBatch& batch) const { return batch.generation == brickTableGeneration_; }
+    void ResetAmbientBakePasses();
+    FAmbientBakeQueueStats GetAmbientBakeQueueStats() const;
 
     // The grid the current voxel/cube data was produced with. False until the bakers exist, which is
     // the case for scenes created without CPU acceleration.
@@ -313,8 +317,12 @@ private:
     void StartBuild(std::shared_ptr<FCPUTLASBuildInput> input);
     void CancelRuntimeBuilds();
     void MergeNavDirtyBounds(const FCPUTLASBuildResult& result);
-    void QueueFullProbeBake();
+    // Voxel pipeline: the bricks in voxelJobBricks_ are voxelized, the distance field is rebuilt
+    // around them, the touched bricks are uploaded and the brick table is reclassified.
+    void StartVoxelJob();
+    void FinishVoxelJob(Assets::Scene& scene, Vulkan::DeviceMemory& arenaMemory);
     bool HasProbeVoxelizationWork() const;
+    glm::vec3 ResolveAmbientFocus(const Assets::Scene& scene) const;
 
     // Ambient bake disk cache. The key is computed once per full bake from the scene's initial
     // structure; a hit replaces the whole bake, a miss arms the write that happens after the GPU
@@ -358,17 +366,24 @@ private:
     // Set on the game thread when the write task is dispatched, cleared by that task. Atomic only
     // because GetProbeBakeProgress() reads it while the worker is running.
     std::atomic<bool> ambientCacheSaveInFlight_{false};
-    uint32_t totalVoxelGroups_ = 0;
-    std::atomic<uint32_t> completedVoxelGroups_{0};
-        
-    std::vector<uint32_t> lastBatchTasks;
-    std::vector<uint32_t> distanceFieldRebuildTasks;
+    enum class EVoxelJobStage : uint8_t
+    {
+        Idle,
+        Voxelizing,
+        DistanceField,
+    };
+    EVoxelJobStage voxelJobStage_ = EVoxelJobStage::Idle;
+    // Per cascade: storage bricks waiting for / in the current voxel job.
+    std::vector<std::vector<uint32_t>> voxelJobBricks_;
+    // Per cascade: window-cell box the current job's distance field rebuild reported as rewritten.
+    std::vector<std::pair<glm::ivec3, glm::ivec3>> voxelJobOutputBoxes_;
+    std::vector<uint32_t> voxelJobTasks_;
+    uint32_t totalVoxelTasks_ = 0;
+    std::atomic<uint32_t> completedVoxelTasks_{0};
+    glm::vec3 ambientFocus_{0.0f};
+    uint64_t brickTableGeneration_ = 1;
+    bool ambientBakeActiveLogged_ = false;
 
-    std::queue<std::tuple<glm::ivec3, ECubeProcType, EBakerType, uint32_t> > needUpdateGroups;
-
-    std::vector<float> shadowMapR32;
-    bool needFlush = false;
-    bool distanceFieldRebuildScheduled_ = false;
     bool hasNavRelevantDirtyBounds_ = false;
     glm::vec3 navRelevantDirtyWorldMin_{0.0f};
     glm::vec3 navRelevantDirtyWorldMax_{0.0f};
@@ -376,7 +391,6 @@ private:
     std::vector<FCPUProbeBaker> cascadeBakers;
     FAmbientGridConfig committedAmbientGrid_;
     bool hasCommittedAmbientGrid_ = false;
-    FCPUPageIndex cpuPageIndex;
     FCPUBrickTable cpuBrickTable;
 };
 

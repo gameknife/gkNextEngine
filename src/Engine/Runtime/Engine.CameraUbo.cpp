@@ -337,6 +337,7 @@ Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D 
     for (uint32_t cascade = 0; cascade < static_cast<uint32_t>(Assets::CUBE_CASCADE_MAX); ++cascade)
     {
         ubo.AmbientCubeCascadeGrid[cascade] = glm::vec4(ambientLayout.origins[cascade], ambientLayout.units[cascade]);
+        ubo.AmbientCubeCascadeWrap[cascade] = glm::vec4(glm::vec3(ambientLayout.wraps[cascade]), 0.0f);
     }
 
     // Other Setup

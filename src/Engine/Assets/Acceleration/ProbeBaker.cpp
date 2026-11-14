@@ -68,16 +68,23 @@ namespace
         FChamferNeighbor{1, 1, 1, 1.0f},
     };
 
-    void ApplyChamferPass(std::vector<float>& distanceField, const std::array<FChamferNeighbor, 13>& neighbors, bool reverseSweep)
+    // One raster sweep over a dense box of cells (x fastest, then z, then y), so the inner loop never
+    // goes through the ring-addressed storage.
+    void ApplyChamferPass(std::vector<float>& field, const glm::ivec3& dims,
+                          const std::array<FChamferNeighbor, 13>& neighbors, bool reverseSweep)
     {
-        const int xStart = reverseSweep ? Assets::CUBE_SIZE_XY - 1 : 0;
-        const int xEnd = reverseSweep ? -1 : Assets::CUBE_SIZE_XY;
+        const auto index = [&dims](int x, int y, int z)
+        {
+            return (static_cast<size_t>(y) * dims.z + static_cast<size_t>(z)) * dims.x + static_cast<size_t>(x);
+        };
+        const int xStart = reverseSweep ? dims.x - 1 : 0;
+        const int xEnd = reverseSweep ? -1 : dims.x;
         const int xStep = reverseSweep ? -1 : 1;
-        const int yStart = reverseSweep ? Assets::CUBE_SIZE_Z - 1 : 0;
-        const int yEnd = reverseSweep ? -1 : Assets::CUBE_SIZE_Z;
+        const int yStart = reverseSweep ? dims.y - 1 : 0;
+        const int yEnd = reverseSweep ? -1 : dims.y;
         const int yStep = reverseSweep ? -1 : 1;
-        const int zStart = reverseSweep ? Assets::CUBE_SIZE_XY - 1 : 0;
-        const int zEnd = reverseSweep ? -1 : Assets::CUBE_SIZE_XY;
+        const int zStart = reverseSweep ? dims.z - 1 : 0;
+        const int zEnd = reverseSweep ? -1 : dims.z;
         const int zStep = reverseSweep ? -1 : 1;
 
         for (int y = yStart; y != yEnd; y += yStep)
@@ -86,30 +93,30 @@ namespace
             {
                 for (int x = xStart; x != xEnd; x += xStep)
                 {
-                    const uint32_t voxelIndex = GetVoxelAddress(x, y, z);
-                    float bestDistance = distanceField[voxelIndex];
-
+                    float bestDistance = field[index(x, y, z)];
                     for (const FChamferNeighbor& neighbor : neighbors)
                     {
                         const int nx = x + neighbor.dx;
                         const int ny = y + neighbor.dy;
                         const int nz = z + neighbor.dz;
-                        if (nx < 0 || nx >= Assets::CUBE_SIZE_XY ||
-                            ny < 0 || ny >= Assets::CUBE_SIZE_Z ||
-                            nz < 0 || nz >= Assets::CUBE_SIZE_XY)
+                        if (nx < 0 || nx >= dims.x || ny < 0 || ny >= dims.y || nz < 0 || nz >= dims.z)
                         {
                             continue;
                         }
-
-                        const uint32_t neighborIndex = GetVoxelAddress(nx, ny, nz);
-                        bestDistance = std::min(bestDistance, distanceField[neighborIndex] + neighbor.weight);
+                        bestDistance = std::min(bestDistance, field[index(nx, ny, nz)] + neighbor.weight);
                     }
-
-                    distanceField[voxelIndex] = bestDistance;
+                    field[index(x, y, z)] = bestDistance;
                 }
             }
         }
     }
+
+    // A cell's distance only depends on solids within kMaxDistanceFieldSeed cells; two bricks covers
+    // that with room to spare and keeps the boxes brick-aligned.
+    constexpr int kDistanceFieldReach = 2 * static_cast<int>(Assets::GPU_SCENE_AMBIENT_BRICK_EDGE);
+    static_assert(kDistanceFieldReach > kMaxDistanceFieldSeed);
+
+    const glm::ivec3 kGridMaxCell(Assets::CUBE_SIZE_XY - 1, Assets::CUBE_SIZE_Z - 1, Assets::CUBE_SIZE_XY - 1);
 }
 
 using namespace Assets;
@@ -215,18 +222,87 @@ void VoxelizeCube(const FCPUTLASSnapshot& snapshot, VoxelData& cube, FLOAT3 orig
 #undef float3
 #undef float4
 
-void FCPUProbeBaker::Init(uint32_t cascadeIdx, float unitSize, vec3 offset)
+void FCPUProbeBaker::Init(uint32_t cascadeIdx, float unitSize, vec3 offset, glm::ivec3 wrap)
 {
     cascadeIndex = cascadeIdx;
     UNIT_SIZE = unitSize;
     CUBE_OFFSET = offset;
-    voxels.resize(kCascadeVoxelCount);
-    distanceToSolidSeeds.resize(kCascadeVoxelCount, kMaxDistanceFieldSeed);
+    BRICK_WRAP = wrap;
+    voxels.assign(kCascadeVoxelCount, VoxelData{});
+    distanceToSolidSeeds.assign(kCascadeVoxelCount, kMaxDistanceFieldSeed);
+    ClearVoxels();
 }
 
-void FCPUProbeBaker::UploadGPU(Vulkan::DeviceMemory& voxelGpuMemory, uint32_t elementOffset)
+uint32_t FCPUProbeBaker::VoxelAddress(int x, int y, int z) const
 {
-    UploadGPU(voxelGpuMemory, 0, elementOffset);
+    return GetVoxelAddress(x, y, z, BRICK_WRAP);
+}
+
+glm::ivec3 FCPUProbeBaker::WindowBrick(uint32_t storageBrick) const
+{
+    return AmbientWindowBrick(AmbientBrickFromLinearIndex(storageBrick), BRICK_WRAP);
+}
+
+void FCPUProbeBaker::VoxelizeBrick(uint32_t storageBrick, const FCPUTLASSnapshot& snapshot)
+{
+    const glm::ivec3 firstCell = WindowBrick(storageBrick) * static_cast<int>(kVoxelBrickEdge);
+    const size_t base = static_cast<size_t>(storageBrick) * kVoxelBrickVolume;
+    for (uint32_t local = 0; local < kVoxelBrickVolume; ++local)
+    {
+        // Same in-brick order as GetVoxelAddress: x fastest, then z, then y.
+        const glm::ivec3 cell = firstCell + glm::ivec3(static_cast<int>(local % kVoxelBrickEdge),
+                                                       static_cast<int>(local / (kVoxelBrickEdge * kVoxelBrickEdge)),
+                                                       static_cast<int>((local / kVoxelBrickEdge) % kVoxelBrickEdge));
+        VoxelData& voxel = voxels[base + local];
+        VoxelizeCube(snapshot, voxel, vec3(cell) * UNIT_SIZE + CUBE_OFFSET, UNIT_SIZE);
+        // Seed the transform from occupancy alone. The DDA only ever reports a hit on a voxel with
+        // matId != 0, so the distance to the nearest such voxel is exactly the clearance a ray is
+        // allowed to skip -- an axis-ray distance seed could only make the field smaller than that
+        // and cost traversal steps for nothing.
+        distanceToSolidSeeds[base + local] = voxel.matId > 0 ? uint8_t{0} : kMaxDistanceFieldSeed;
+    }
+}
+
+void FCPUProbeBaker::ClearVoxels()
+{
+    for (size_t voxelIndex = 0; voxelIndex < voxels.size(); ++voxelIndex)
+    {
+        VoxelData& voxel = voxels[voxelIndex];
+        voxel = {};
+        voxel.distanceToSolid = SetPackedNibbleX(voxel.distanceToSolid, kMaxDistanceFieldSeed);
+        distanceToSolidSeeds[voxelIndex] = kMaxDistanceFieldSeed;
+    }
+}
+
+std::vector<uint32_t> FCPUProbeBaker::StorageBricksInBox(const glm::ivec3& cellMin, const glm::ivec3& cellMax) const
+{
+    const glm::ivec3 edge(static_cast<int>(kVoxelBrickEdge));
+    const glm::ivec3 brickMin = glm::clamp(cellMin, glm::ivec3(0), kGridMaxCell) / edge;
+    const glm::ivec3 brickMax = glm::clamp(cellMax, glm::ivec3(0), kGridMaxCell) / edge;
+    std::vector<uint32_t> bricks;
+    for (int y = brickMin.y; y <= brickMax.y; ++y)
+        for (int z = brickMin.z; z <= brickMax.z; ++z)
+            for (int x = brickMin.x; x <= brickMax.x; ++x)
+                bricks.push_back(AmbientBrickLinearIndex(AmbientStorageBrick(glm::ivec3(x, y, z), BRICK_WRAP)));
+    return bricks;
+}
+
+void FCPUProbeBaker::UploadBricks(Vulkan::DeviceMemory& voxelGpuMemory, size_t byteBaseOffset, uint32_t elementOffset,
+                                  const std::vector<uint32_t>& storageBricks)
+{
+    if (storageBricks.empty())
+    {
+        return;
+    }
+    const size_t cascadeOffset = byteBaseOffset + static_cast<size_t>(elementOffset) * sizeof(VoxelData);
+    auto* mapped = static_cast<std::byte*>(voxelGpuMemory.Map(cascadeOffset, sizeof(VoxelData) * voxels.size()));
+    constexpr size_t brickBytes = static_cast<size_t>(kVoxelBrickVolume) * sizeof(VoxelData);
+    for (uint32_t brick : storageBricks)
+    {
+        std::memcpy(mapped + static_cast<size_t>(brick) * brickBytes,
+                    voxels.data() + static_cast<size_t>(brick) * kVoxelBrickVolume, brickBytes);
+    }
+    voxelGpuMemory.Unmap();
 }
 
 void FCPUProbeBaker::UploadGPU(Vulkan::DeviceMemory& voxelGpuMemory, size_t byteBaseOffset, uint32_t elementOffset)
@@ -239,76 +315,53 @@ void FCPUProbeBaker::UploadGPU(Vulkan::DeviceMemory& voxelGpuMemory, size_t byte
 
 void FCPUProbeBaker::RebuildDistanceField()
 {
+    RebuildDistanceField(glm::ivec3(0), kGridMaxCell);
+}
+
+std::pair<glm::ivec3, glm::ivec3> FCPUProbeBaker::RebuildDistanceField(const glm::ivec3& changedMin,
+                                                                       const glm::ivec3& changedMax)
+{
+    const glm::ivec3 outMin = glm::clamp(changedMin - kDistanceFieldReach, glm::ivec3(0), kGridMaxCell);
+    const glm::ivec3 outMax = glm::clamp(changedMax + kDistanceFieldReach, glm::ivec3(0), kGridMaxCell);
     if (voxels.empty() || distanceToSolidSeeds.size() != voxels.size())
     {
-        return;
+        return {outMin, outMax};
     }
 
-    std::vector<float> distanceField(voxels.size(), 0.0f);
-    for (size_t voxelIndex = 0; voxelIndex < voxels.size(); ++voxelIndex)
+    // Every output cell sees all solids within kMaxDistanceFieldSeed of it inside this domain, and
+    // values near the domain's own border can only come out too large, never too small, so the
+    // output box matches a whole-cascade rebuild exactly.
+    const glm::ivec3 domainMin = glm::clamp(outMin - kDistanceFieldReach, glm::ivec3(0), kGridMaxCell);
+    const glm::ivec3 domainMax = glm::clamp(outMax + kDistanceFieldReach, glm::ivec3(0), kGridMaxCell);
+    const glm::ivec3 dims = domainMax - domainMin + 1;
+    const auto local = [&dims, &domainMin](int x, int y, int z)
     {
-        distanceField[voxelIndex] = static_cast<float>(distanceToSolidSeeds[voxelIndex]);
-    }
+        return (static_cast<size_t>(y - domainMin.y) * dims.z + static_cast<size_t>(z - domainMin.z)) * dims.x +
+               static_cast<size_t>(x - domainMin.x);
+    };
+
+    std::vector<float> field(static_cast<size_t>(dims.x) * dims.y * dims.z);
+    for (int y = domainMin.y; y <= domainMax.y; ++y)
+        for (int z = domainMin.z; z <= domainMax.z; ++z)
+            for (int x = domainMin.x; x <= domainMax.x; ++x)
+                field[local(x, y, z)] = static_cast<float>(distanceToSolidSeeds[VoxelAddress(x, y, z)]);
 
     constexpr int kChamferPassCount = 2;
     for (int passIndex = 0; passIndex < kChamferPassCount; ++passIndex)
     {
-        ApplyChamferPass(distanceField, kForwardChamferNeighbors, false);
-        ApplyChamferPass(distanceField, kBackwardChamferNeighbors, true);
+        ApplyChamferPass(field, dims, kForwardChamferNeighbors, false);
+        ApplyChamferPass(field, dims, kBackwardChamferNeighbors, true);
     }
 
-    for (size_t voxelIndex = 0; voxelIndex < voxels.size(); ++voxelIndex)
-    {
-        const float clampedDistance = glm::clamp(distanceField[voxelIndex], 0.0f, 15.0f);
-        const uint8_t packedDistance = static_cast<uint8_t>(glm::floor(clampedDistance));
-        voxels[voxelIndex].distanceToSolid =
-            SetPackedNibbleX(voxels[voxelIndex].distanceToSolid, packedDistance);
-    }
-}
-
-void FCPUProbeBaker::ProcessCube(int x, int y, int z, ECubeProcType procType,
-                                const std::shared_ptr<const FCPUTLASSnapshot>& snapshot)
-{
-    vec3 probePos = vec3(x, y, z) * UNIT_SIZE + CUBE_OFFSET;
-    uint32_t addressIdx = GetVoxelAddress(x, y, z);
-    VoxelData& voxel = voxels[addressIdx];
-        
-    switch (procType)
-    {
-        case ECubeProcType::ECPT_Clear:
-            voxel = {};
-            voxel.distanceToSolid = SetPackedNibbleX(voxel.distanceToSolid, kMaxDistanceFieldSeed);
-            distanceToSolidSeeds[addressIdx] = kMaxDistanceFieldSeed;
-            break;
-        case ECubeProcType::ECPT_Fence:
-            break;
-        case ECubeProcType::ECPT_Voxelize:
-            if (snapshot)
+    for (int y = outMin.y; y <= outMax.y; ++y)
+        for (int z = outMin.z; z <= outMax.z; ++z)
+            for (int x = outMin.x; x <= outMax.x; ++x)
             {
-                VoxelizeCube(*snapshot, voxel, probePos, UNIT_SIZE);
+                const float clampedDistance = glm::clamp(field[local(x, y, z)], 0.0f, 15.0f);
+                VoxelData& voxel = voxels[VoxelAddress(x, y, z)];
+                voxel.distanceToSolid =
+                    SetPackedNibbleX(voxel.distanceToSolid, static_cast<uint8_t>(glm::floor(clampedDistance)));
             }
-            // Seed the transform from occupancy alone. The DDA only ever reports a hit on a
-            // voxel with matId != 0, so the distance to the nearest such voxel is exactly the
-            // clearance a ray is allowed to skip -- an axis-ray distance seed could only make
-            // the field smaller than that and cost traversal steps for nothing.
-            distanceToSolidSeeds[addressIdx] = voxel.matId > 0 ? uint8_t{0} : kMaxDistanceFieldSeed;
-            break;
-    }
-}
-
-void FCPUProbeBaker::UploadGPU(Vulkan::DeviceMemory& voxelGpuMemory)
-{
-    UploadGPU(voxelGpuMemory, 0);
-}
-
-void FCPUProbeBaker::ClearAmbientCubes()
-{
-    for (size_t voxelIndex = 0; voxelIndex < voxels.size(); ++voxelIndex)
-    {
-        VoxelData& voxel = voxels[voxelIndex];
-        voxel = {};
-        voxel.distanceToSolid = SetPackedNibbleX(voxel.distanceToSolid, kMaxDistanceFieldSeed);
-        distanceToSolidSeeds[voxelIndex] = kMaxDistanceFieldSeed;
-    }
+    return {outMin, outMax};
 }
 }

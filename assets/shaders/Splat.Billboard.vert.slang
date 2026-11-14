@@ -192,9 +192,11 @@ uint SplatAmbientBrickSlot(uint cascadeIndex, int3 probePos)
     {
         return GPU_SCENE_AMBIENT_BRICK_INVALID;
     }
-    const uint bx = uint(probePos.x / GPU_SCENE_AMBIENT_BRICK_EDGE);
-    const uint by = uint(probePos.y / GPU_SCENE_AMBIENT_BRICK_EDGE);
-    const uint bz = uint(probePos.z / GPU_SCENE_AMBIENT_BRICK_EDGE);
+    // Ring addressing, as AmbientStorageBrick() in common/AmbientCube.slang.
+    const uint3 wrap = uint3(Bindless.GetGpuscene().Camera[0].AmbientCubeCascadeWrap[cascadeIndex].xyz);
+    const uint bx = (uint(probePos.x / GPU_SCENE_AMBIENT_BRICK_EDGE) + wrap.x) % uint(GPU_SCENE_AMBIENT_BRICKS_X);
+    const uint by = (uint(probePos.y / GPU_SCENE_AMBIENT_BRICK_EDGE) + wrap.y) % uint(GPU_SCENE_AMBIENT_BRICKS_Y);
+    const uint bz = (uint(probePos.z / GPU_SCENE_AMBIENT_BRICK_EDGE) + wrap.z) % uint(GPU_SCENE_AMBIENT_BRICKS_Z);
     const uint brickLinear = by * uint(GPU_SCENE_AMBIENT_BRICKS_X * GPU_SCENE_AMBIENT_BRICKS_Z) +
                              bz * uint(GPU_SCENE_AMBIENT_BRICKS_X) + bx;
     return Bindless.GetGpuscene().AmbientBrickTable[

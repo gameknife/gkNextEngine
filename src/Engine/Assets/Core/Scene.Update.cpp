@@ -555,19 +555,22 @@ namespace Assets
             }
         }
 
-        if (enableCpuAcceleration_ && NextEngine::GetInstance()->GetTotalFrames() % 30 == 0)
+        if (enableCpuAcceleration_)
         {
             auto& renderer = NextEngine::GetInstance()->GetRenderer();
             // Voxelize whenever any renderer needs the voxel SDF, decoupled from ambient-cube baking.
+            // The voxel pipeline is checked every frame; with no job in flight the call does nothing.
             const bool shouldUpdateVoxel =
                 renderer.ActiveRendererRequirements().NeedsVoxelGeometry() && !renderer.ShouldSkipAmbientCubeUpdates();
 
             if (shouldUpdateVoxel && ambientArenaBufferMemory_)
             {
-                cpuAccelerationStructure_->Tick(
-                    *this, ambientArenaBufferMemory_.get(), ambientArenaBufferMemory_.get(), ambientArenaBufferMemory_.get());
+                cpuAccelerationStructure_->Tick(*this, ambientArenaBufferMemory_.get());
             }
+        }
 
+        if (enableCpuAcceleration_ && NextEngine::GetInstance()->GetTotalFrames() % 30 == 0)
+        {
             if (cpuBvhDirty_)
             {
                 cpuAccelerationStructure_->RebuildBVHOnly(*this);

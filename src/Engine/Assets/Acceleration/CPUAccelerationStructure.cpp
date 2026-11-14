@@ -13,6 +13,8 @@
 
 #include <atomic>
 #include <chrono>
+#include <climits>
+#include <numeric>
 #include <unordered_map>
 #include <xxhash.h>
 
@@ -145,7 +147,8 @@ bool FCPUAccelerationStructure::InitCascadeBakers(const Runtime::Config::UserSet
     {
         const FCPUProbeBaker& baker = cascadeBakers[i];
         needRebuild = glm::abs(requested.layout.units[i] - baker.UNIT_SIZE) > 1e-6f ||
-                      glm::length(requested.layout.origins[i] - baker.CUBE_OFFSET) > 1e-6f;
+                      glm::length(requested.layout.origins[i] - baker.CUBE_OFFSET) > 1e-6f ||
+                      requested.layout.wraps[i] != baker.BRICK_WRAP;
     }
 
     if (!needRebuild)
@@ -157,7 +160,7 @@ bool FCPUAccelerationStructure::InitCascadeBakers(const Runtime::Config::UserSet
     cascadeBakers.resize(cascadeCount);
     for (uint32_t i = 0; i < cascadeCount; ++i)
     {
-        cascadeBakers[i].Init(i, requested.layout.units[i], requested.layout.origins[i]);
+        cascadeBakers[i].Init(i, requested.layout.units[i], requested.layout.origins[i], requested.layout.wraps[i]);
     }
 
     // Publish only after the bakers exist: shading reads this to stay in step with the data.
@@ -179,7 +182,6 @@ bool FCPUAccelerationStructure::InitCascadeBakers(const Runtime::Config::UserSet
         }
     }
 
-    cpuPageIndex.Init();
     return true;
 }
 
@@ -646,56 +648,17 @@ FCPUTLASBuildStats FCPUAccelerationStructure::GetBuildStats() const
     return stats;
 }
 
-void FCPUAccelerationStructure::QueueFullProbeBake()
-{
-    constexpr int groupSize = 16;
-    const int lengthX = CUBE_SIZE_XY / groupSize;
-    const int lengthZ = CUBE_SIZE_XY / groupSize;
-
-    std::vector<std::pair<int, int>> coordinates;
-    coordinates.reserve(lengthX * lengthZ);
-    for (int x = 0; x < lengthX; ++x)
-    {
-        for (int z = 0; z < lengthZ; ++z)
-        {
-            coordinates.push_back({x, z});
-        }
-    }
-
-    totalVoxelGroups_ = static_cast<uint32_t>(coordinates.size()) * GetActiveCascadeCount();
-    completedVoxelGroups_.store(0, std::memory_order_release);
-
-    std::random_device rd;
-    std::mt19937 generator(rd());
-    std::shuffle(coordinates.begin(), coordinates.end(), generator);
-
-    for (uint32_t cascadeIndex = 0; cascadeIndex < GetActiveCascadeCount(); ++cascadeIndex)
-    {
-        for (const auto& [x, z] : coordinates)
-        {
-            needUpdateGroups.push({ivec3(x, 0, z), ECubeProcType::ECPT_Voxelize, EBakerType::EBT_Probe, cascadeIndex});
-        }
-        needUpdateGroups.push({ivec3(0), ECubeProcType::ECPT_Fence, EBakerType::EBT_Probe, cascadeIndex});
-    }
-}
-
 bool FCPUAccelerationStructure::AsyncProcessFull(Assets::Scene& scene, Vulkan::DeviceMemory* voxelGpuMemory)
 {
     if ( !Tasks::TaskCoordinator::GetInstance()->IsAllParralledTaskComplete() )
     {
         return false;
     }
-    // clean
-    while (!needUpdateGroups.empty())
-        needUpdateGroups.pop();
-    lastBatchTasks.clear();
-
-    // Drop the previous bake's flush state as well. Carrying a completed distance-field pass into
-    // the new bake makes Tick() take the "rebuild already done" branch on the first drained tick
-    // and upload the fresh voxels with the placeholder distance field, never rebuilding it.
-    needFlush = false;
-    distanceFieldRebuildScheduled_ = false;
-    distanceFieldRebuildTasks.clear();
+    // Drop whatever job the previous bake left behind: its bricks belong to the old grid.
+    voxelJobStage_ = EVoxelJobStage::Idle;
+    voxelJobTasks_.clear();
+    voxelJobBricks_.clear();
+    voxelJobOutputBoxes_.clear();
 
     const Runtime::Config::UserSettings& settings = NextEngine::GetInstance()->GetUserSettings();
     InitCascadeBakers(settings, scene);
@@ -728,16 +691,22 @@ bool FCPUAccelerationStructure::AsyncProcessFull(Assets::Scene& scene, Vulkan::D
         ambientCacheWriteArmed_ = ambientCacheKey_ != 0;
     }
 
+    // A full bake is every brick of every cascade entering the voxel pipeline at once.
+    voxelJobBricks_.assign(GetActiveCascadeCount(), {});
     for (uint32_t cascadeIndex = 0; cascadeIndex < GetActiveCascadeCount(); ++cascadeIndex)
     {
         FCPUProbeBaker& baker = cascadeBakers[cascadeIndex];
-        baker.ClearAmbientCubes();
+        baker.ClearVoxels();
         baker.UploadGPU(*voxelGpuMemory, scene.AmbientVoxelsByteOffset(), cascadeIndex * kCascadeVoxelCount);
+        std::vector<uint32_t>& bricks = voxelJobBricks_[cascadeIndex];
+        bricks.resize(GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE);
+        std::iota(bricks.begin(), bricks.end(), 0u);
     }
-
-    QueueFullProbeBake();
+    totalVoxelTasks_ = 0;
+    completedVoxelTasks_.store(0, std::memory_order_release);
     fullProbeBakePending_ = true;
     ambientBakeIdle_ = false;
+    ambientBakeActiveLogged_ = false;
 
     return true;
 }
@@ -759,7 +728,15 @@ bool FCPUAccelerationStructure::TryRestoreAmbientBakeCache(Scene& scene, Vulkan:
     {
         return false;
     }
-    if (payload.cascadeCount != cascadeCount || payload.cascadeCapacity != cascadeCapacity ||
+    bool windowsMatch = payload.cascadeGrids.size() == cascadeCount && payload.cascadeWraps.size() == cascadeCount;
+    for (uint32_t cascadeIndex = 0; windowsMatch && cascadeIndex < cascadeCount; ++cascadeIndex)
+    {
+        const glm::vec4 grid(committedAmbientGrid_.layout.origins[cascadeIndex],
+                             committedAmbientGrid_.layout.units[cascadeIndex]);
+        windowsMatch = glm::all(glm::lessThanEqual(glm::abs(payload.cascadeGrids[cascadeIndex] - grid), glm::vec4(1e-4f))) &&
+                       glm::ivec3(payload.cascadeWraps[cascadeIndex]) == committedAmbientGrid_.layout.wraps[cascadeIndex];
+    }
+    if (!windowsMatch || payload.cascadeCount != cascadeCount || payload.cascadeCapacity != cascadeCapacity ||
         payload.voxelCountPerCascade != kCascadeVoxelCount ||
         payload.poolBricksPerCascade != poolBricksPerCascade)
     {
@@ -787,23 +764,17 @@ bool FCPUAccelerationStructure::TryRestoreAmbientBakeCache(Scene& scene, Vulkan:
     // recomputed slot assignment would scatter the restored lighting.
     cpuBrickTable = {};
     cpuBrickTable.brickTable = std::move(payload.brickTable);
-    cpuBrickTable.activeBrickList = std::move(payload.activeBrickList);
     cpuBrickTable.activeBricksPerCascade = std::move(payload.activeBricksPerCascade);
-    cpuBrickTable.dirtyBricks.assign(cpuBrickTable.brickTable.size(), 0u);
-    cpuBrickTable.dirtyBricksPerCascade.assign(cascadeCapacity, 0u);
     cpuBrickTable.candidateBricksPerCascade.assign(cascadeCapacity, 0u);
     cpuBrickTable.overflowBricksPerCascade.assign(cascadeCapacity, 0u);
     cpuBrickTable.activeBricksLastBuild = static_cast<uint32_t>(std::count_if(
         cpuBrickTable.brickTable.begin(), cpuBrickTable.brickTable.end(),
         [](uint32_t slot) { return slot != Assets::GPU_SCENE_AMBIENT_BRICK_INVALID; }));
-    // Nothing is dirty: revision 0 makes BakeAmbientCubeCascade return before it dispatches.
-    cpuBrickTable.dirtyRevision = 0;
-    cpuBrickTable.UploadGPU(*arenaMemory, scene.AmbientBrickTableByteOffset(),
-                            scene.AmbientActiveBrickListByteOffset());
+    // Nothing left to bake.
+    cpuBrickTable.MarkConverged();
+    ++brickTableGeneration_;
+    cpuBrickTable.UploadGPU(*arenaMemory, scene.AmbientBrickTableByteOffset());
     scene.SetAmbientActiveBrickCounts(cpuBrickTable.activeBricksPerCascade);
-
-    cpuPageIndex.pageIndex = std::move(payload.pages);
-    cpuPageIndex.UploadGPU(*arenaMemory, scene.AmbientPagesByteOffset());
 
     const size_t cubeBytes = payload.cubes.size() * sizeof(AmbientCube);
     void* mapped = arenaMemory->Map(static_cast<VkDeviceSize>(scene.AmbientCubesByteOffset()),
@@ -814,11 +785,11 @@ bool FCPUAccelerationStructure::TryRestoreAmbientBakeCache(Scene& scene, Vulkan:
     // Land in exactly the state a cold bake ends in once it converges.
     fullProbeBakePending_ = false;
     ambientBakeIdle_ = true;
-    needFlush = false;
-    distanceFieldRebuildScheduled_ = false;
-    distanceFieldRebuildTasks.clear();
-    totalVoxelGroups_ = 0;
-    completedVoxelGroups_.store(0, std::memory_order_release);
+    voxelJobStage_ = EVoxelJobStage::Idle;
+    voxelJobBricks_.clear();
+    voxelJobTasks_.clear();
+    totalVoxelTasks_ = 0;
+    completedVoxelTasks_.store(0, std::memory_order_release);
     scene.MarkAmbientCacheRestored();
 
     const double elapsedMs =
@@ -848,8 +819,7 @@ void FCPUAccelerationStructure::FlushPendingAmbientBakeCacheSave(Scene& scene, V
     const uint32_t cascadeCapacity = scene.AmbientCubeCascadeCapacity();
     const uint32_t poolBricksPerCascade = scene.AmbientPoolBricksPerCascade();
     if (cpuBrickTable.brickTable.size() !=
-            static_cast<size_t>(cascadeCapacity) * Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE ||
-        cpuBrickTable.activeBrickList.size() != static_cast<size_t>(cascadeCapacity) * poolBricksPerCascade)
+        static_cast<size_t>(cascadeCapacity) * Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE)
     {
         return;
     }
@@ -864,8 +834,8 @@ void FCPUAccelerationStructure::FlushPendingAmbientBakeCacheSave(Scene& scene, V
     // game thread for a whole second right after the bake finished.
     //
     // Reading the bake state off-thread is safe because the ambient pipeline is idle: convergence
-    // set ambientBakeIdle_, so neither the voxelization queue nor the brick-table rebuild touches
-    // cascadeBakers / cpuBrickTable / cpuPageIndex again. The only writer that could return is a new
+    // set ambientBakeIdle_, the voxel job is empty and the bake queue has nothing left, so neither
+    // cascadeBakers nor cpuBrickTable is written again. The only writer that could return is a new
     // full bake, and both paths into one (Scene::CleanUp and ~Scene) call ClearAllTasks(), which
     // waits for this task before any of that state -- or the arena itself -- goes away.
     ambientCacheSaveInFlight_.store(true, std::memory_order_release);
@@ -886,11 +856,12 @@ void FCPUAccelerationStructure::FlushPendingAmbientBakeCacheSave(Scene& scene, V
                 std::memcpy(payload.voxels.data() + static_cast<size_t>(cascadeIndex) * kCascadeVoxelCount,
                             cascadeBakers[cascadeIndex].voxels.data(),
                             static_cast<size_t>(kCascadeVoxelCount) * sizeof(VoxelData));
+                payload.cascadeGrids.emplace_back(committedAmbientGrid_.layout.origins[cascadeIndex],
+                                                  committedAmbientGrid_.layout.units[cascadeIndex]);
+                payload.cascadeWraps.emplace_back(committedAmbientGrid_.layout.wraps[cascadeIndex], 0);
             }
             payload.brickTable = cpuBrickTable.brickTable;
-            payload.activeBrickList = cpuBrickTable.activeBrickList;
             payload.activeBricksPerCascade = cpuBrickTable.activeBricksPerCascade;
-            payload.pages = cpuPageIndex.pageIndex;
 
             payload.cubes.resize(cubeCount);
             const size_t cubeBytes = cubeCount * sizeof(AmbientCube);
@@ -922,234 +893,230 @@ void FCPUAccelerationStructure::FlushPendingAmbientBakeCacheSave(Scene& scene, V
         "Ambient bake cache write");
 }
 
-void FCPUAccelerationStructure::AsyncProcessGroup(int xInMeter, int zInMeter, Scene& scene, ECubeProcType procType,
-                                                  EBakerType bakerType, uint32_t cascadeIndex)
+void FCPUAccelerationStructure::StartVoxelJob()
 {
-    (void)bakerType;
+    // Voxelization reads the CPU snapshot; without one there is no geometry, and the job still runs
+    // to the end so the cleared voxels get their distance field and the table is rebuilt.
     const SnapshotPtr snapshot = AcquireSnapshot();
-    if (!snapshot || snapshot->instances.empty())
+    const bool hasGeometry = snapshot && !snapshot->instances.empty();
+
+    // A handful of bricks per task: each is 512 cells of six short rays, small enough to spread a
+    // cascade over every worker and large enough that task overhead stays out of the profile.
+    constexpr size_t kBricksPerTask = 6;
+    voxelJobTasks_.clear();
+    totalVoxelTasks_ = 0;
+    completedVoxelTasks_.store(0, std::memory_order_release);
+    for (uint32_t cascadeIndex = 0; cascadeIndex < voxelJobBricks_.size() && cascadeIndex < GetActiveCascadeCount();
+         ++cascadeIndex)
     {
-        return;
+        const std::vector<uint32_t>& bricks = voxelJobBricks_[cascadeIndex];
+        for (size_t first = 0; first < bricks.size(); first += kBricksPerTask)
+        {
+            std::vector<uint32_t> taskBricks(bricks.begin() + static_cast<std::ptrdiff_t>(first),
+                                             bricks.begin() + static_cast<std::ptrdiff_t>(
+                                                 std::min(bricks.size(), first + kBricksPerTask)));
+            ++totalVoxelTasks_;
+            const uint32_t taskId = Tasks::TaskCoordinator::GetInstance()->AddParralledTask(
+                [this, snapshot, hasGeometry, cascadeIndex, taskBricks = std::move(taskBricks)](Tasks::ResTask& task)
+                {
+                    if (!hasGeometry)
+                    {
+                        return;
+                    }
+                    FCPUProbeBaker& baker = cascadeBakers[cascadeIndex];
+                    for (uint32_t brick : taskBricks)
+                    {
+                        baker.VoxelizeBrick(brick, *snapshot);
+                    }
+                },
+                [this](Tasks::ResTask& task)
+                {
+                    completedVoxelTasks_.fetch_add(1, std::memory_order_release);
+                },
+                "Ambient voxelize bricks");
+            voxelJobTasks_.push_back(taskId);
+        }
     }
-
-    if (cascadeIndex >= cascadeBakers.size())
-    {
-        return;
-    }
-    
-    int groupSize = 16; // 4 x 4 x 40 a group
-    
-    int actualX = xInMeter * groupSize;
-    int actualZ = zInMeter * groupSize;
-
-    std::vector<vec3> lightPos;
-    std::vector<vec3> sunDir;
-    for( auto& light : scene.Lights() )
-    {
-        lightPos.push_back(mix(light.p1, light.p3, 0.5f));
-    }
-
-    if (scene.GetEnvSettings().HasSun)
-    {
-        sunDir.push_back(scene.GetEnvSettings().SunDirection());
-    }
-
-    uint32_t taskId = Tasks::TaskCoordinator::GetInstance()->AddParralledTask(
-                [this, snapshot, actualX, actualZ, groupSize, procType, cascadeIndex](Tasks::ResTask& task)
-            {
-                FCPUProbeBaker& baker = cascadeBakers[cascadeIndex];
-                for (int z = actualZ; z < actualZ + groupSize; z++)
-                    for (int y = 0; y < CUBE_SIZE_Z; y++)
-                        for (int x = actualX; x < actualX + groupSize; x++)
-                        {
-                            baker.ProcessCube(x, y, z, procType, snapshot);
-                        }
-            },
-            [this](Tasks::ResTask& task)
-            {
-                // flush here
-                //bakerType == EBakerType::EBT_Probe ? probeBaker.UploadGPU(*GPUMemory) : farProbeBaker.UploadGPU(*FarGPUMemory);
-                completedVoxelGroups_.fetch_add(1, std::memory_order_release);
-                needFlush = true;
-            },
-            "Ambient probe bake");
-
-    lastBatchTasks.push_back(taskId);
+    voxelJobStage_ = EVoxelJobStage::Voxelizing;
 }
+
+void FCPUAccelerationStructure::FinishVoxelJob(Scene& scene, Vulkan::DeviceMemory& arenaMemory)
+{
+    // Upload every brick whose voxels or distance field the job rewrote.
+    for (uint32_t cascadeIndex = 0; cascadeIndex < voxelJobOutputBoxes_.size() && cascadeIndex < GetActiveCascadeCount();
+         ++cascadeIndex)
+    {
+        if (voxelJobBricks_[cascadeIndex].empty())
+        {
+            continue;
+        }
+        FCPUProbeBaker& baker = cascadeBakers[cascadeIndex];
+        const auto& [outMin, outMax] = voxelJobOutputBoxes_[cascadeIndex];
+        baker.UploadBricks(arenaMemory, scene.AmbientVoxelsByteOffset(), cascadeIndex * kCascadeVoxelCount,
+                           baker.StorageBricksInBox(outMin, outMax));
+    }
+
+    // Reclassify and allocate. Slots that changed owner are zeroed so the new owner never shades
+    // with the old one's radiance; their zero sample count keeps them unpublished until rebaked.
+    cpuBrickTable.UpdateData(cascadeBakers, scene.AmbientCubeCascadeCapacity(), scene.AmbientPoolBricksPerCascade(),
+                             ambientFocus_);
+    if (!cpuBrickTable.slotsToClear.empty())
+    {
+        void* mapped = arenaMemory.Map(scene.AmbientCubesByteOffset(), scene.AmbientVoxelsByteOffset());
+        auto* cubeBytes = static_cast<std::byte*>(mapped);
+        constexpr size_t brickBytes =
+            static_cast<size_t>(Assets::GPU_SCENE_AMBIENT_BRICK_VOLUME) * sizeof(Assets::AmbientCube);
+        for (uint32_t globalSlot : cpuBrickTable.slotsToClear)
+        {
+            std::memset(cubeBytes + static_cast<size_t>(globalSlot) * brickBytes, 0, brickBytes);
+        }
+        arenaMemory.Unmap();
+    }
+    if (fullProbeBakePending_)
+    {
+        // The whole grid was rebuilt: every allocated brick bakes from scratch.
+        cpuBrickTable.ResetBakePasses();
+        fullProbeBakePending_ = false;
+    }
+    cpuBrickTable.UploadGPU(arenaMemory, scene.AmbientBrickTableByteOffset());
+    scene.SetAmbientActiveBrickCounts(cpuBrickTable.activeBricksPerCascade);
+    ++brickTableGeneration_;
+
+    voxelJobBricks_.clear();
+    voxelJobOutputBoxes_.clear();
+    voxelJobTasks_.clear();
+    voxelJobStage_ = EVoxelJobStage::Idle;
+}
+
 void FCPUAccelerationStructure::ClearAllTasks()
 {
     CancelRuntimeBuilds();
 
     // Discard queued voxelization work before waiting. A full ambient-cube bake
-    // contains many independent groups; dispatching its entire queue here makes
+    // contains many independent tasks; dispatching its entire queue here makes
     // LoadScene wait for obsolete work from the outgoing scene.
     Tasks::TaskCoordinator::GetInstance()->CancelAllParralledTasks();
 
-    // Wait for running groups and their main-thread completion callbacks before
+    // Wait for running tasks and their main-thread completion callbacks before
     // clearing the state those callbacks capture.
     Tasks::TaskCoordinator::GetInstance()->WaitForAllParralledTask();
-    
-    // Clear the pending-update queue.
-    while (!needUpdateGroups.empty())
-    {
-        needUpdateGroups.pop();
-    }
-    
-    // Clear the current batch's task list.
-    lastBatchTasks.clear();
-    distanceFieldRebuildTasks.clear();
-    
-    // Reset the refresh flag.
-    needFlush = false;
-    distanceFieldRebuildScheduled_ = false;
+
+    voxelJobStage_ = EVoxelJobStage::Idle;
+    voxelJobBricks_.clear();
+    voxelJobOutputBoxes_.clear();
+    voxelJobTasks_.clear();
+    totalVoxelTasks_ = 0;
+    completedVoxelTasks_.store(0, std::memory_order_release);
+
     fullProbeBakePending_ = true;
     ambientBakeIdle_ = false;
+    ambientBakeActiveLogged_ = false;
     ambientCacheKey_ = 0;
     ambientCacheWriteArmed_ = false;
     ambientCachePendingSave_ = false;
     ambientCacheSaveFrame_ = 0;
     ambientCacheSaveInFlight_.store(false, std::memory_order_release);
-    totalVoxelGroups_ = 0;
-    completedVoxelGroups_.store(0, std::memory_order_release);
     cpuBrickTable = {};
+    ++brickTableGeneration_;
     ClearNavRelevantDirtyBounds();
     PublishSnapshot(std::make_shared<FCPUTLASSnapshot>());
     blasSet_.reset();
 }
 
-bool FCPUAccelerationStructure::Tick(Scene& scene, Vulkan::DeviceMemory* gpuMemory, Vulkan::DeviceMemory* voxelGpuMemory, Vulkan::DeviceMemory* pageIndexMemory)
+glm::vec3 FCPUAccelerationStructure::ResolveAmbientFocus(const Scene& scene) const
 {
+    return glm::vec3(glm::inverse(scene.GetRenderCamera().ModelView)[3]);
+}
+
+bool FCPUAccelerationStructure::Tick(Scene& scene, Vulkan::DeviceMemory* arenaMemory)
+{
+    if (arenaMemory == nullptr)
+    {
+        return false;
+    }
+    ambientFocus_ = ResolveAmbientFocus(scene);
     bool voxelUploadCompleted = false;
-    auto rebuildBrickTable = [&]()
-    {
-        // Free slots go to the bricks nearest the camera first when the pool runs short.
-        const glm::vec3 focus = glm::vec3(glm::inverse(scene.GetRenderCamera().ModelView)[3]);
-        cpuBrickTable.UpdateData(cascadeBakers, scene.AmbientCubeCascadeCapacity(),
-                                 scene.AmbientPoolBricksPerCascade(), focus);
+    Tasks::TaskCoordinator* tasks = Tasks::TaskCoordinator::GetInstance();
 
-        if (!cpuBrickTable.slotsToClear.empty())
+    switch (voxelJobStage_)
+    {
+    case EVoxelJobStage::Idle:
+        if (std::any_of(voxelJobBricks_.begin(), voxelJobBricks_.end(),
+                        [](const std::vector<uint32_t>& bricks) { return !bricks.empty(); }))
         {
-            void* mapped = gpuMemory->Map(scene.AmbientCubesByteOffset(), scene.AmbientVoxelsByteOffset());
-            auto* cubeBytes = static_cast<std::byte*>(mapped);
-            constexpr size_t brickBytes =
-                static_cast<size_t>(Assets::GPU_SCENE_AMBIENT_BRICK_VOLUME) * sizeof(Assets::AmbientCube);
-            for (uint32_t globalSlot : cpuBrickTable.slotsToClear)
-            {
-                std::memset(cubeBytes + static_cast<size_t>(globalSlot) * brickBytes, 0, brickBytes);
-            }
-            gpuMemory->Unmap();
+            StartVoxelJob();
         }
-    };
+        break;
 
-    // Drive the voxelization queue before the flush below. Retiring the finished batch and popping
-    // the trailing fence here makes the drained state visible to the flush in this same tick;
-    // Scene::Tick only calls us every 30 frames, so each extra round trip costs half a second.
-    if (!lastBatchTasks.empty() && Tasks::TaskCoordinator::GetInstance()->IsAllTaskComplete(lastBatchTasks))
-    {
-        lastBatchTasks.clear();
-    }
-
-    if (lastBatchTasks.empty())
-    {
-        while (!needUpdateGroups.empty())
+    case EVoxelJobStage::Voxelizing:
+        if (tasks->IsAllTaskComplete(voxelJobTasks_))
         {
-            auto& group = needUpdateGroups.front();
-            ECubeProcType type = std::get<1>(group);
-            uint32_t cascadeIndex = std::get<3>(group);
-            if (type == ECubeProcType::ECPT_Fence)
+            // One distance-field task per touched cascade, over the box around its changed bricks.
+            voxelJobTasks_.clear();
+            voxelJobOutputBoxes_.assign(voxelJobBricks_.size(), {glm::ivec3(0), glm::ivec3(-1)});
+            for (uint32_t cascadeIndex = 0; cascadeIndex < voxelJobBricks_.size(); ++cascadeIndex)
             {
-                if (!Tasks::TaskCoordinator::GetInstance()->IsAllTaskComplete(lastBatchTasks))
+                const std::vector<uint32_t>& bricks = voxelJobBricks_[cascadeIndex];
+                if (bricks.empty())
                 {
-                    break;
+                    continue;
                 }
-                needUpdateGroups.pop();
-                continue;
-            }
-            AsyncProcessGroup(std::get<0>(group).x, std::get<0>(group).z, scene, std::get<1>(group), std::get<2>(group), cascadeIndex);
-            needUpdateGroups.pop();
-        }
-    }
-
-    // The distance field is a whole-cascade sweep over voxels that queued groups are still going to
-    // write, so it may only start once the queue is empty and every dispatched group has retired.
-    // Gating on the current batch alone scheduled it while the remaining cascades were still
-    // queued: their sweep ran on empty voxels, VoxelizeCube then overwrote the result with its
-    // placeholder seed, and the upload that clears needFlush shipped that placeholder to the GPU
-    // for good -- which is what left the far cascades with a uniform 15-cell clearance and let the
-    // DDA skip straight through their geometry.
-    const bool voxelizationDrained = needUpdateGroups.empty() && lastBatchTasks.empty();
-
-    if (needFlush && voxelizationDrained)
-    {
-        if (!distanceFieldRebuildScheduled_)
-        {
-            distanceFieldRebuildTasks.clear();
-            distanceFieldRebuildTasks.reserve(GetActiveCascadeCount());
-            for (uint32_t cascadeIndex = 0; cascadeIndex < GetActiveCascadeCount(); ++cascadeIndex)
-            {
-                const uint32_t taskId = Tasks::TaskCoordinator::GetInstance()->AddParralledTask(
-                    [this, cascadeIndex](Tasks::ResTask& task)
+                const FCPUProbeBaker& baker = cascadeBakers[cascadeIndex];
+                glm::ivec3 brickMin(INT_MAX);
+                glm::ivec3 brickMax(INT_MIN);
+                for (uint32_t brick : bricks)
+                {
+                    const glm::ivec3 window = baker.WindowBrick(brick);
+                    brickMin = glm::min(brickMin, window);
+                    brickMax = glm::max(brickMax, window);
+                }
+                const int edge = static_cast<int>(kVoxelBrickEdge);
+                const glm::ivec3 changedMin = brickMin * edge;
+                const glm::ivec3 changedMax = (brickMax + 1) * edge - 1;
+                voxelJobTasks_.push_back(tasks->AddParralledTask(
+                    [this, cascadeIndex, changedMin, changedMax](Tasks::ResTask& task)
                     {
-                        cascadeBakers[cascadeIndex].RebuildDistanceField();
+                        voxelJobOutputBoxes_[cascadeIndex] =
+                            cascadeBakers[cascadeIndex].RebuildDistanceField(changedMin, changedMax);
                     },
                     nullptr,
-                    "Distance field rebuild");
-                distanceFieldRebuildTasks.push_back(taskId);
+                    "Distance field rebuild"));
             }
-            distanceFieldRebuildScheduled_ = true;
+            voxelJobStage_ = EVoxelJobStage::DistanceField;
         }
-        else if (distanceFieldRebuildTasks.empty() || Tasks::TaskCoordinator::GetInstance()->IsAllTaskComplete(distanceFieldRebuildTasks))
+        break;
+
+    case EVoxelJobStage::DistanceField:
+        if (tasks->IsAllTaskComplete(voxelJobTasks_))
         {
-            // Upload to GPU, now entire range, optimize to partial upload later
-            for (uint32_t cascadeIndex = 0; cascadeIndex < GetActiveCascadeCount(); ++cascadeIndex)
-            {
-                cascadeBakers[cascadeIndex].UploadGPU(
-                    *voxelGpuMemory, scene.AmbientVoxelsByteOffset(), cascadeIndex * kCascadeVoxelCount);
-            }
-            if (!cascadeBakers.empty())
-            {
-                cpuPageIndex.UpdateData(cascadeBakers);
-                rebuildBrickTable();
-                if (fullProbeBakePending_)
-                {
-                    cpuBrickTable.MarkAllActiveDirty();
-                }
-                cpuBrickTable.UploadGPU(*voxelGpuMemory, scene.AmbientBrickTableByteOffset(),
-                                        scene.AmbientActiveBrickListByteOffset());
-                scene.SetAmbientActiveBrickCounts(cpuBrickTable.activeBricksPerCascade);
-                fullProbeBakePending_ = false;
-            }
-            cpuPageIndex.UploadGPU(*pageIndexMemory, scene.AmbientPagesByteOffset());
-            needFlush = false;
-            distanceFieldRebuildScheduled_ = false;
-            distanceFieldRebuildTasks.clear();
+            FinishVoxelJob(scene, *arenaMemory);
             voxelUploadCompleted = true;
         }
+        break;
     }
 
-    FlushPendingAmbientBakeCacheSave(scene, gpuMemory);
-
+    FlushPendingAmbientBakeCacheSave(scene, arenaMemory);
     return voxelUploadCompleted;
 }
 
 bool FCPUAccelerationStructure::HasPendingWork() const
 {
     std::lock_guard<std::mutex> lock(buildMutex_);
-    return buildInFlight_ || needFlush || !lastBatchTasks.empty() ||
-           !distanceFieldRebuildTasks.empty() || distanceFieldRebuildScheduled_ || !needUpdateGroups.empty();
+    return buildInFlight_ || HasProbeVoxelizationWork();
 }
 
 FProbeBakeProgress FCPUAccelerationStructure::GetProbeBakeProgress() const
 {
     FProbeBakeProgress progress;
-    progress.completedVoxelGroups = completedVoxelGroups_.load(std::memory_order_acquire);
-    progress.totalVoxelGroups = totalVoxelGroups_;
+    progress.completedVoxelGroups = completedVoxelTasks_.load(std::memory_order_acquire);
+    progress.totalVoxelGroups = totalVoxelTasks_;
 
-    if (!needUpdateGroups.empty() || !lastBatchTasks.empty())
+    if (voxelJobStage_ == EVoxelJobStage::Voxelizing ||
+        (voxelJobStage_ == EVoxelJobStage::Idle && HasProbeVoxelizationWork()))
     {
         progress.stage = EProbeBakeStage::VoxelData;
     }
-    else if (needFlush || distanceFieldRebuildScheduled_ || !distanceFieldRebuildTasks.empty())
+    else if (voxelJobStage_ == EVoxelJobStage::DistanceField)
     {
         progress.stage = EProbeBakeStage::DistanceField;
     }
@@ -1163,31 +1130,77 @@ FProbeBakeProgress FCPUAccelerationStructure::GetProbeBakeProgress() const
 
 bool FCPUAccelerationStructure::HasProbeVoxelizationWork() const
 {
-    return needFlush || !lastBatchTasks.empty() || !distanceFieldRebuildTasks.empty() ||
-           distanceFieldRebuildScheduled_ || !needUpdateGroups.empty();
+    return voxelJobStage_ != EVoxelJobStage::Idle ||
+           std::any_of(voxelJobBricks_.begin(), voxelJobBricks_.end(),
+                       [](const std::vector<uint32_t>& bricks) { return !bricks.empty(); });
 }
 
-uint32_t FCPUAccelerationStructure::AmbientBakeDirtyBrickCount(uint32_t cascadeIndex) const
+bool FCPUAccelerationStructure::AcquireAmbientBakeBatch(Scene& scene, uint32_t maxBricks, FAmbientBakeBatch& outBatch)
 {
-    return cascadeIndex < cpuBrickTable.dirtyBricksPerCascade.size()
-        ? cpuBrickTable.dirtyBricksPerCascade[cascadeIndex]
-        : 0u;
+    // Bricks whose voxels are still being rebuilt would bake against a half-written grid.
+    if (HasProbeVoxelizationWork() || cascadeBakers.empty() || cpuBrickTable.brickTable.empty())
+    {
+        return false;
+    }
+    const uint32_t publishPasses = NextEngine::GetInstance()->GetUserSettings().AmbientCubePublishPasses;
+    const uint32_t poolBricks = scene.AmbientPoolBricksPerCascade();
+    if (!cpuBrickTable.SelectBakeBatch(cascadeBakers, std::min(maxBricks, poolBricks), publishPasses, ambientFocus_,
+                                       outBatch))
+    {
+        return false;
+    }
+    outBatch.generation = brickTableGeneration_;
+    if (!ambientBakeActiveLogged_)
+    {
+        const FAmbientBakeQueueStats stats = cpuBrickTable.QueueStats(publishPasses);
+        SPDLOG_INFO("Ambient bake started: {} bricks queued, {} unpublished", stats.pendingBricks,
+                    stats.unpublishedBricks);
+        ambientBakeActiveLogged_ = true;
+        ambientBakeIdle_ = false;
+    }
+
+    // The cascade's active-list region is this frame's scratch list: the bake shader reads
+    // AmbientActiveBrickList[cascade * pool + i] for i < batch size.
+    const size_t listOffset = scene.AmbientActiveBrickListByteOffset() +
+                              static_cast<size_t>(outBatch.cascade) * poolBricks * sizeof(uint32_t);
+    const size_t bytes = outBatch.bricks.size() * sizeof(uint32_t);
+    void* mapped = scene.AmbientArenaMemory().Map(static_cast<VkDeviceSize>(listOffset), static_cast<VkDeviceSize>(bytes));
+    std::memcpy(mapped, outBatch.bricks.data(), bytes);
+    scene.AmbientArenaMemory().Unmap();
+    return true;
 }
 
-void FCPUAccelerationStructure::AcknowledgeAmbientBake(uint64_t revision)
+void FCPUAccelerationStructure::CompleteAmbientBakeBatch(const FAmbientBakeBatch& batch)
 {
-    cpuBrickTable.AcknowledgeDirty(revision);
-    if (revision == cpuBrickTable.dirtyRevision)
+    cpuBrickTable.CompleteBakeBatch(batch);
+    if (cpuBrickTable.QueueStats(0u).pendingBricks != 0u)
+    {
+        return;
+    }
+    SPDLOG_INFO("Ambient bake converged after {} passes; queue empty", kAmbientBakeConvergencePasses);
+    ambientBakeActiveLogged_ = false;
+    if (!ambientBakeIdle_)
     {
         ambientBakeIdle_ = true;
-        // Converged. The GPU may still have the last dispatches in flight, so the readback waits
-        // for the next Tick rather than happening here on the render path. kFramesInFlight is 1 and
-        // every frame waits on the previous submit's fence before recording, so two frames on this
-        // frame's bake dispatches have certainly retired -- which is the whole reason the save path
-        // needs no vkDeviceWaitIdle and can therefore run entirely off the game thread.
+        // Converged. The GPU may still have the last dispatches in flight, so the readback waits a
+        // few frames rather than happening here on the render path. Every frame waits on the
+        // previous submit's fence before recording, so two frames on, this frame's bake dispatches
+        // have certainly retired -- which is why the save needs no vkDeviceWaitIdle and can run
+        // entirely off the game thread.
         ambientCachePendingSave_ = ambientCacheWriteArmed_;
         ambientCacheSaveFrame_ = NextEngine::GetInstance()->GetTotalFrames() + 3u;
     }
+}
+
+void FCPUAccelerationStructure::ResetAmbientBakePasses()
+{
+    cpuBrickTable.ResetBakePasses();
+}
+
+FAmbientBakeQueueStats FCPUAccelerationStructure::GetAmbientBakeQueueStats() const
+{
+    const uint32_t publishPasses = NextEngine::GetInstance()->GetUserSettings().AmbientCubePublishPasses;
+    return cpuBrickTable.QueueStats(publishPasses);
 }
 
 bool FCPUAccelerationStructure::ConsumeNavRelevantDirtyBounds(glm::vec3& outWorldMin, glm::vec3& outWorldMax)

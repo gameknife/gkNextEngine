@@ -130,7 +130,6 @@ namespace
         const VkDeviceSize fullAmbientCubeAllocationSize =
             static_cast<VkDeviceSize>(cascadeCount) *
                 (perCascadeCount * sizeof(Assets::VoxelData) + poolCubesPerCascade * sizeof(Assets::AmbientCube)) +
-            static_cast<VkDeviceSize>(Assets::ACGI_PAGE_COUNT) * Assets::ACGI_PAGE_COUNT * sizeof(Assets::PageIndex) +
             poolCubesPerCascade * sizeof(Assets::AmbientCube) +
             perCascadeCount * sizeof(glm::u32vec4) +
             perCascadeCount * sizeof(glm::u32vec4);

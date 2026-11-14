@@ -3,7 +3,7 @@ implementing PathTracing;
 #include "PreProcessor.slang"
 
 // The four IRayTracer concrete strategies:
-//   - FHiVoxelDDARayTracer  : page-indexed voxel DDA + cascaded fallback
+//   - FHiVoxelDDARayTracer  : voxel DDA walking the cascades finest-first
 //   - FAmbientCubeRayTracer : probe-only fake "trace" for cheap GI lookups
 //   - FHardwareRayTracer    : RayQuery hardware ray tracing
 //   - FSoftwareRayTracer    : screen-space + DDA hybrid
@@ -86,16 +86,6 @@ public struct FHiVoxelDDARayTracer : IRayTracer
         return tExit > tEnter;
     }
 
-    // Finest cascade whose grid contains the point, falling back to the coarsest one. This runs once
-    // per page for the primary voxel ray, so it goes through the single-pass grid resolve rather
-    // than re-deriving each cascade's unit and offset from the UBO.
-    void SelectVoxelCascade(float3 position, out float cubeUnit, out float3 cubeOffset, out uint baseOffset)
-    {
-        uint cascadeIndex;
-        GetAmbientCubeGridAtPosition(position, cascadeIndex, cubeUnit, cubeOffset);
-        baseOffset = GetCascadeBaseOffset(cascadeIndex);
-    }
-
     float StepVoxelDDA(inout float3 voxelPos, inout float3 tMax, float3 tDelta, float3 stepSign, inout float3 normal)
     {
         normal = float3(0, 0, 0);
@@ -130,7 +120,7 @@ public struct FHiVoxelDDARayTracer : IRayTracer
     {
         Vertex outVertex;
         NodeProxy outNode;
-        return TraceRayDDA(rayOrigin, rayDir, maxDistance, float3(-1e5f), float3(1e5f), outVertex, outNode);
+        return TraceRayDDA(rayOrigin, rayDir, maxDistance, outVertex, outNode);
     }
 
     public bool TraceOcclusion(float3 rayOrigin, float3 rayDir)
@@ -230,30 +220,26 @@ public struct FHiVoxelDDARayTracer : IRayTracer
         return !IsTargetAreaLightHit(hitVertex, rayOrigin, rayDirection,
                                      rayLength, targetLightIndex);
     }
-    // Walks one cascade's voxel grid. The traversable span is the cascade volume intersected with
-    // `boxMin`/`boxMax` (pass a huge box for an unbounded walk) and with `maxDistance`; callers
-    // that only own part of a ray must pass the distance that is left, measured from `rayOrigin`.
-    public bool TraceRayDDA(float3 rayOrigin, float3 rayDir, float maxDistance, float3 boxMin, float3 boxMax,
-                            inout Vertex outVertex, inout NodeProxy outNode)
+    // Walks one cascade's voxel grid over the ray span [tMin, tMax], measured from `rayOrigin`.
+    // The span is further clipped to the cascade volume, so the caller can hand over whatever part
+    // of the ray it wants this cascade to cover.
+    bool TraceRayDDAInCascade(uint cascadeIndex, float3 rayOrigin, float3 rayDir, float tMin, float tMax,
+                              inout Vertex outVertex)
     {
         VoxelData* Voxels = Bindless.GetGpuscene().Voxels;
+        float cubeUnit = GetAmbientCubeUnitAtCascade(cascadeIndex);
+        float3 cubeOffset = GetAmbientCubeOffsetAtCascade(cascadeIndex);
+        FAmbientCascadeAddress address = GetAmbientCascadeAddress(cascadeIndex);
 
-        float cubeUnit;
-        float3 cubeOffset;
-        uint baseOffset;
-        SelectVoxelCascade(rayOrigin, cubeUnit, cubeOffset, baseOffset);
-
-        // Clip to the cascade volume up front rather than testing the bounds every step. Both
-        // boxes are convex, so a ray that leaves the span can never come back into it, and the
-        // cells outside are empty by construction — stepping through them can only burn budget.
+        // Clip to the cascade volume up front rather than testing the bounds every step. The box
+        // is convex, so a ray that leaves the span can never come back into it, and the cells
+        // outside are empty by construction -- stepping through them can only burn budget.
         float3 gridMin;
         float3 gridMax;
         GetVoxelGridBounds(cubeUnit, cubeOffset, gridMin, gridMax);
-        gridMin = max(gridMin, boxMin - float3(cubeUnit));
-        gridMax = min(gridMax, boxMax + float3(cubeUnit));
 
-        float tEnter = 0.0f;
-        float tExit = maxDistance;
+        float tEnter = tMin;
+        float tExit = tMax;
         if (!ClipRayToBox(rayOrigin, rayDir, gridMin, gridMax, tEnter, tExit))
         {
             return false;
@@ -261,18 +247,17 @@ public struct FHiVoxelDDARayTracer : IRayTracer
 
         float3 voxelPos = float3(0);
         float3 tDelta = float3(0, 0, 0);
-        float3 tMax = float3(0, 0, 0);
+        float3 tMaxAxis = float3(0, 0, 0);
         float3 stepSign = float3(0, 0, 0);
         // ddaBase is the travel distance the current DDA state was seeded at. Every tMax the walk
-        // yields is relative to it, so it has to be added back on each step — dropping it is what
+        // yields is relative to it, so it has to be added back on each step -- dropping it is what
         // made a second skip teleport the ray back towards its origin and lose the geometry ahead.
         float ddaBase = RebuildVoxelDDAState(rayOrigin, rayDir, tEnter, cubeUnit, cubeOffset,
-                                             voxelPos, tMax, tDelta, stepSign);
+                                             voxelPos, tMaxAxis, tDelta, stepSign);
 
         // A unit ray crosses at most sqrt(3) cell boundaries per cell of travel.
         uint maxSteps = min(uint((tExit - tEnter) / cubeUnit * 1.7321f) + 2u, kVoxelDDAMaxSteps);
 
-        bool hit = false;
         uint hitMatId = 0;
         float3 normal = float3(0, 0, 0);
         float travelDistance = ddaBase;
@@ -286,16 +271,15 @@ public struct FHiVoxelDDARayTracer : IRayTracer
 
             float offsetDist = 0;
             float clearanceVoxels = 1;
-            if (inSolid(voxelPos, rayDir, offsetDist, hitMatId, clearanceVoxels, Voxels, baseOffset, cubeUnit))
+            if (inSolid(voxelPos, rayDir, offsetDist, hitMatId, clearanceVoxels, Voxels, address, cubeUnit))
             {
-                hit = true;
                 outVertex.Normal = dot(normal, normal) > 0.0f ? normalize(normal) : normalize(-rayDir);
                 float3 voxelBoxMin = floor(voxelPos) * cubeUnit + cubeOffset - float3(0.01);
                 float3 voxelBoxMax = floor(voxelPos) * cubeUnit + cubeOffset + float3(cubeUnit);
                 outVertex.Position = Common.CalculateRayAABBEntry(rayOrigin, rayDir, voxelBoxMin, voxelBoxMax) + rayDir * offsetDist;
                 outVertex.MaterialIndex = hitMatId;
                 outVertex.TexCoord = float2(0.5, 0.5);
-                break;
+                return true;
             }
 
             // clearanceVoxels is an L-infinity distance in cells (see RebuildDistanceField in
@@ -308,99 +292,97 @@ public struct FHiVoxelDDARayTracer : IRayTracer
             if (safeSkipVoxels >= 1.0f)
             {
                 ddaBase = RebuildVoxelDDAState(rayOrigin, rayDir, travelDistance + safeSkipVoxels * cubeUnit,
-                                               cubeUnit, cubeOffset, voxelPos, tMax, tDelta, stepSign);
+                                               cubeUnit, cubeOffset, voxelPos, tMaxAxis, tDelta, stepSign);
                 travelDistance = ddaBase;
                 // The jump lands mid-cell, so there is no crossed face left to report as a normal.
                 normal = float3(0, 0, 0);
                 continue;
             }
 
-            travelDistance = ddaBase + StepVoxelDDA(voxelPos, tMax, tDelta, stepSign, normal);
+            travelDistance = ddaBase + StepVoxelDDA(voxelPos, tMaxAxis, tDelta, stepSign, normal);
         }
-        return hit;
+        return false;
+    }
+
+    // Walks the ray through the cascades, always in the finest one that holds the current point:
+    // a segment ends where the ray leaves that cascade or enters a finer one, and the walk resumes
+    // there. Far travel therefore happens in coarse cells, where the distance field skips whole
+    // metres per step, which is what bounds a long ray's cost now that there is no page index.
+    // Outside every cascade the walk jumps to the next cascade the ray enters, if any.
+    public bool TraceRayDDA(float3 rayOrigin, float3 rayDir, float maxDistance,
+                            inout Vertex outVertex, inout NodeProxy outNode)
+    {
+        uint cascadeCount = GetAmbientCubeCascadeCount();
+        // Every transition either leaves a cascade or enters a finer one, so a ray can make at most
+        // a couple per cascade before it is out of the grids for good.
+        uint maxSegments = cascadeCount * 2u + 2u;
+        float boundaryEpsilon = GetAmbientCubeUnitAtCascade(0) * 0.01f;
+
+        float t = 0.0f;
+        for (uint segment = 0; segment < maxSegments && t < maxDistance; ++segment)
+        {
+            float3 position = rayOrigin + rayDir * t;
+            uint walkCascade = cascadeCount;
+            float segmentEnd = maxDistance;
+            float nextEntry = maxDistance;
+            for (uint cascadeIndex = 0; cascadeIndex < cascadeCount; ++cascadeIndex)
+            {
+                float3 gridMin;
+                float3 gridMax;
+                GetVoxelGridBounds(GetAmbientCubeUnitAtCascade(cascadeIndex), GetAmbientCubeOffsetAtCascade(cascadeIndex),
+                                   gridMin, gridMax);
+                float tEnter = t;
+                float tExit = maxDistance;
+                if (!ClipRayToBox(rayOrigin, rayDir, gridMin, gridMax, tEnter, tExit))
+                {
+                    continue;
+                }
+                bool inside = all(position >= gridMin) && all(position <= gridMax);
+                if (inside && walkCascade == cascadeCount)
+                {
+                    // Finest cascade holding the point: walk it until the ray leaves it ...
+                    walkCascade = cascadeIndex;
+                    segmentEnd = min(segmentEnd, tExit);
+                }
+                else if (!inside && walkCascade == cascadeCount)
+                {
+                    // ... or until it enters a finer one (only cascades before walkCascade are finer).
+                    nextEntry = min(nextEntry, tEnter);
+                }
+            }
+
+            if (walkCascade == cascadeCount)
+            {
+                // Outside every cascade: resume where the ray first enters one, if it ever does.
+                if (nextEntry >= maxDistance)
+                {
+                    break;
+                }
+                t = nextEntry + boundaryEpsilon;
+                continue;
+            }
+
+            segmentEnd = min(segmentEnd, nextEntry);
+            if (TraceRayDDAInCascade(walkCascade, rayOrigin, rayDir, t, segmentEnd, outVertex))
+            {
+                return true;
+            }
+            t = segmentEnd + boundaryEpsilon;
+        }
+        return false;
     }
 
     public bool TraceRay(float3 rayOrigin, float3 rayDir, float maxDistance, inout Vertex outVertex, inout NodeProxy outNode, inout float4 inoutRayColor, out float outHitDist)
     {
-        PageIndex* Pages = Bindless.GetGpuscene().Pages;
         float startUnit = max(GetAmbientCubeUnitAtPosition(rayOrigin), 0.0001f);
-        // DDA voxel traversal
-        bool hit = false;
-        outHitDist = 0;
         rayOrigin = rayOrigin + rayDir * startUnit * 2;
-
-        // Short rays never leave their own neighbourhood; the page index would cost more than it saves.
-        if (maxDistance < PAGE_SIZE * 1.7)
+        outHitDist = 0;
+        if (!TraceRayDDA(rayOrigin, rayDir, maxDistance, outVertex, outNode))
         {
-            return TraceRayDDA(rayOrigin, rayDir, maxDistance, float3(-1e5f), float3(1e5f), outVertex, outNode);
+            return false;
         }
-
-        // Top-level page index. Pages are PAGE_COUNT^2 columns keyed on X/Z alone (FCPUPageIndex
-        // maps a world position to pageZ * PAGE_COUNT + pageX and drops Y), so the walk must not
-        // step vertically: a Y step lands on the same page and re-traces the column it just
-        // rejected. Leaving the page box unbounded in Y instead lets one local trace cover it.
-        float2 pagePos = float2(rayOrigin.x - PAGE_OFFSET.x, rayOrigin.z - PAGE_OFFSET.z) / PAGE_SIZE;
-        float2 pageStepSign = float2(sign(rayDir.x), sign(rayDir.z));
-        float2 pageDelta = abs(float2(PAGE_SIZE, PAGE_SIZE) / float2(rayDir.x, rayDir.z));
-        float2 pageTMax = float2(1e30f, 1e30f);
-        if (rayDir.x != 0) pageTMax.x = (pageStepSign.x > 0 ? ceil(pagePos.x) - pagePos.x : pagePos.x - floor(pagePos.x)) * pageDelta.x;
-        if (rayDir.z != 0) pageTMax.y = (pageStepSign.y > 0 ? ceil(pagePos.y) - pagePos.y : pagePos.y - floor(pagePos.y)) * pageDelta.y;
-        uint maxPageSteps = uint(maxDistance / PAGE_SIZE * 1.7) + 2u;
-
-        for (uint i = 0; i < maxPageSteps; i++)
-        {
-            int2 pageCoord = int2(floor(pagePos));
-
-            // Out-of-world columns are skipped rather than clamped: folding them onto a real page
-            // (as the old index did) meant tracing whichever page happened to sit at the clamp.
-            if (pageCoord.x >= 0 && pageCoord.x < PAGE_COUNT && pageCoord.y >= 0 && pageCoord.y < PAGE_COUNT)
-            {
-                uint pageIndex = uint(pageCoord.y) * uint(PAGE_COUNT) + uint(pageCoord.x);
-                if (Pages[pageIndex].voxelCount > 0)
-                {
-                    float3 boxMin = float3(float(pageCoord.x) * PAGE_SIZE + PAGE_OFFSET.x + 0.01f, -1e5f,
-                                           float(pageCoord.y) * PAGE_SIZE + PAGE_OFFSET.z + 0.01f);
-                    float3 boxMax = float3(float(pageCoord.x) * PAGE_SIZE + PAGE_OFFSET.x + PAGE_SIZE, 1e5f,
-                                           float(pageCoord.y) * PAGE_SIZE + PAGE_OFFSET.z + PAGE_SIZE);
-                    float3 localStartPos = Common.CalculateRayAABBEntry(rayOrigin, rayDir, boxMin, boxMax);
-
-                    // The local walk measures everything from the page entry, so the remaining
-                    // budget has to be rebased with it. Handing it the full maxDistance let a hit
-                    // past the end of the ray still count, which for TraceSegment means a light
-                    // shadowed by geometry sitting behind it.
-                    float pageEntryDistance = max(dot(localStartPos - rayOrigin, rayDir), 0.0f);
-                    if (pageEntryDistance > maxDistance)
-                    {
-                        break;
-                    }
-                    if (TraceRayDDA(localStartPos, rayDir, maxDistance - pageEntryDistance, boxMin, boxMax,
-                                    outVertex, outNode))
-                    {
-                        hit = true;
-                        outHitDist = distance(outVertex.Position, rayOrigin);
-                        break;
-                    }
-                }
-            }
-
-            // A ray with no horizontal component never leaves its column.
-            if (pageStepSign.x == 0.0f && pageStepSign.y == 0.0f)
-            {
-                break;
-            }
-
-            if (pageTMax.x < pageTMax.y)
-            {
-                pagePos.x += pageStepSign.x;
-                pageTMax.x += pageDelta.x;
-            }
-            else
-            {
-                pagePos.y += pageStepSign.y;
-                pageTMax.y += pageDelta.y;
-            }
-        }
-        return hit;
+        outHitDist = distance(outVertex.Position, rayOrigin);
+        return true;
     }
 }
 

@@ -4,10 +4,6 @@ implementing PathTracing;
 
 public static const int SHADOWMAP_SIZE = 4096;
 
-public static const int PAGE_COUNT = 64;  // 64x64
-public static const float PAGE_SIZE = 16; // 16m
-public static const float3 PAGE_OFFSET = float3(-512, 0, -512);
-
 public static const int CUBE_SIZE_XY = 192; // 256;
 public static const int CUBE_SIZE_Z = 48;
 public static const uint CUBE_CASCADE_MAX = 5;
@@ -322,19 +318,45 @@ public AmbientCube ZeroAmbientCube()
 static const uint kAmbientBrickEdgeShift = 3; // GPU_SCENE_AMBIENT_BRICK_EDGE == 8
 static const uint kAmbientBrickEdgeMask = uint(GPU_SCENE_AMBIENT_BRICK_EDGE) - 1u;
 
-uint AmbientBrickLinear(int3 probePos)
+// Everything needed to address one cascade's storage, resolved once per cascade so the DDA loop
+// and the gather corners do not reload it from the camera UBO and the resource table every time.
+public struct FAmbientCascadeAddress
 {
-    uint bx = uint(probePos.x) >> kAmbientBrickEdgeShift;
-    uint by = uint(probePos.y) >> kAmbientBrickEdgeShift;
-    uint bz = uint(probePos.z) >> kAmbientBrickEdgeShift;
-    return by * uint(GPU_SCENE_AMBIENT_BRICKS_X * GPU_SCENE_AMBIENT_BRICKS_Z)
-         + bz * uint(GPU_SCENE_AMBIENT_BRICKS_X) + bx;
+    public uint cascadeIndex;
+    public uint voxelBase;      // first VoxelData element of the cascade
+    public uint brickTableBase; // first brick-table entry of the cascade
+    public uint poolBrickBase;  // first cube-pool brick of the cascade
+    public uint3 wrap;          // ring offset of the brick storage
+};
+
+public FAmbientCascadeAddress GetAmbientCascadeAddress(uint cascadeIndex)
+{
+    FAmbientCascadeAddress address;
+    address.cascadeIndex = cascadeIndex;
+    address.voxelBase = GetCascadeBaseOffset(cascadeIndex);
+    address.brickTableBase = cascadeIndex * uint(GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE);
+    address.poolBrickBase = cascadeIndex * Bindless.GetGpuscene().AmbientPoolBricksPerCascade;
+    address.wrap = uint3(Bindless.GetGpuscene().Camera[0].AmbientCubeCascadeWrap[cascadeIndex].xyz);
+    return address;
 }
 
-uint AmbientBrickSlot(uint cascadeIndex, int3 probePos)
+// Ring addressing: window brick b of a cascade is stored at (b + wrap) mod BRICKS_*. This and
+// GetVoxelAddress() in CPUAccelerationStructure.Internal.hpp are the only places the wrap applies;
+// the brick table, voxel storage and cube-pool lookups all go through here.
+uint AmbientBrickLinear(FAmbientCascadeAddress address, int3 probePos)
 {
-    uint* table = Bindless.GetGpuscene().AmbientBrickTable;
-    return table[cascadeIndex * uint(GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE) + AmbientBrickLinear(probePos)];
+    uint3 brick = (uint3(probePos) >> kAmbientBrickEdgeShift) + address.wrap;
+    const uint3 dims = uint3(GPU_SCENE_AMBIENT_BRICKS_X, GPU_SCENE_AMBIENT_BRICKS_Y, GPU_SCENE_AMBIENT_BRICKS_Z);
+    brick.x -= brick.x >= dims.x ? dims.x : 0u;
+    brick.y -= brick.y >= dims.y ? dims.y : 0u;
+    brick.z -= brick.z >= dims.z ? dims.z : 0u;
+    return brick.y * uint(GPU_SCENE_AMBIENT_BRICKS_X * GPU_SCENE_AMBIENT_BRICKS_Z)
+         + brick.z * uint(GPU_SCENE_AMBIENT_BRICKS_X) + brick.x;
+}
+
+uint AmbientBrickSlot(FAmbientCascadeAddress address, int3 probePos)
+{
+    return Bindless.GetGpuscene().AmbientBrickTable[address.brickTableBase + AmbientBrickLinear(address, probePos)];
 }
 
 uint AmbientBrickLocalOffset(int3 probePos)
@@ -351,9 +373,9 @@ uint AmbientBrickLocalOffset(int3 probePos)
 // a single Y step landed ~2 MB away, so nearly every step missed cache. Tiled into 8^3 blocks an
 // entire neighbourhood is one 4 KB run. Must match GetVoxelAddress() in
 // Engine/Assets/Acceleration/CPUAccelerationStructure.Internal.hpp, which writes the array.
-public uint VoxelStorageIndex(int3 probePos)
+public uint VoxelStorageIndex(FAmbientCascadeAddress address, int3 probePos)
 {
-    return AmbientBrickLinear(probePos) * uint(GPU_SCENE_AMBIENT_BRICK_VOLUME)
+    return AmbientBrickLinear(address, probePos) * uint(GPU_SCENE_AMBIENT_BRICK_VOLUME)
          + AmbientBrickLocalOffset(probePos);
 }
 
@@ -413,11 +435,12 @@ public bool TryAmbientCubeDebugView(float3 worldPos, out float4 color)
         }
         inAnyWindow = true;
         finestContaining = min(finestContaining, cascadeIndex);
+        FAmbientCascadeAddress address = GetAmbientCascadeAddress(cascadeIndex);
         int3 baseIdx = int3(floor(nearpos));
         for (int i = 0; i < 8; i++)
         {
             AmbientCube cube;
-            if (TryFetchCubePool(baseIdx + int3(i & 1, (i >> 1) & 1, (i >> 2) & 1), cascadeIndex, cube))
+            if (TryFetchCubePool(baseIdx + int3(i & 1, (i >> 1) & 1, (i >> 2) & 1), address, cube))
             {
                 anyBrick = true;
                 if (IsAmbientCubePublished(cube))
@@ -456,19 +479,18 @@ public bool TryAmbientCubeDebugView(float3 worldPos, out float4 color)
 }
 
 // Global cube-pool element index for a cascade-local probe, or -1 if its brick is unallocated.
-public int AmbientCubePoolIndex(uint cascadeIndex, int3 probePos)
+public int AmbientCubePoolIndex(FAmbientCascadeAddress address, int3 probePos)
 {
-    uint slot = AmbientBrickSlot(cascadeIndex, probePos);
+    uint slot = AmbientBrickSlot(address, probePos);
     if (slot == GPU_SCENE_AMBIENT_BRICK_INVALID) return -1;
-    uint poolBricks = Bindless.GetGpuscene().AmbientPoolBricksPerCascade;
-    return int((cascadeIndex * poolBricks + slot) * uint(GPU_SCENE_AMBIENT_BRICK_VOLUME)
+    return int((address.poolBrickBase + slot) * uint(GPU_SCENE_AMBIENT_BRICK_VOLUME)
                + AmbientBrickLocalOffset(probePos));
 }
 
 // Pong pool index (single baking cascade, no cascade base) for a probe, or -1 if unallocated.
-public int AmbientCubePongPoolIndex(uint cascadeIndex, int3 probePos)
+public int AmbientCubePongPoolIndex(FAmbientCascadeAddress address, int3 probePos)
 {
-    uint slot = AmbientBrickSlot(cascadeIndex, probePos);
+    uint slot = AmbientBrickSlot(address, probePos);
     if (slot == GPU_SCENE_AMBIENT_BRICK_INVALID) return -1;
     return int(slot * uint(GPU_SCENE_AMBIENT_BRICK_VOLUME) + AmbientBrickLocalOffset(probePos));
 }
@@ -490,10 +512,15 @@ public bool DecodeAmbientActiveBrickProbe(uint cascadeIndex,
         return false;
     }
 
+    // The list holds storage bricks; undo the ring offset to get the window brick.
     uint bricksPerY = uint(GPU_SCENE_AMBIENT_BRICKS_X * GPU_SCENE_AMBIENT_BRICKS_Z);
-    uint by = packedBrick / bricksPerY;
-    uint bz = (packedBrick - by * bricksPerY) / uint(GPU_SCENE_AMBIENT_BRICKS_X);
-    uint bx = packedBrick - by * bricksPerY - bz * uint(GPU_SCENE_AMBIENT_BRICKS_X);
+    uint sy = packedBrick / bricksPerY;
+    uint sz = (packedBrick - sy * bricksPerY) / uint(GPU_SCENE_AMBIENT_BRICKS_X);
+    uint sx = packedBrick - sy * bricksPerY - sz * uint(GPU_SCENE_AMBIENT_BRICKS_X);
+    uint3 wrap = uint3(Bindless.GetGpuscene().Camera[0].AmbientCubeCascadeWrap[cascadeIndex].xyz);
+    uint bx = (sx + uint(GPU_SCENE_AMBIENT_BRICKS_X) - wrap.x) % uint(GPU_SCENE_AMBIENT_BRICKS_X);
+    uint by = (sy + uint(GPU_SCENE_AMBIENT_BRICKS_Y) - wrap.y) % uint(GPU_SCENE_AMBIENT_BRICKS_Y);
+    uint bz = (sz + uint(GPU_SCENE_AMBIENT_BRICKS_Z) - wrap.z) % uint(GPU_SCENE_AMBIENT_BRICKS_Z);
 
     uint ly = localProbeOffset / uint(GPU_SCENE_AMBIENT_BRICK_EDGE * GPU_SCENE_AMBIENT_BRICK_EDGE);
     uint lz = (localProbeOffset - ly * uint(GPU_SCENE_AMBIENT_BRICK_EDGE * GPU_SCENE_AMBIENT_BRICK_EDGE)) /
@@ -506,23 +533,18 @@ public bool DecodeAmbientActiveBrickProbe(uint cascadeIndex,
     uint z = bz * uint(GPU_SCENE_AMBIENT_BRICK_EDGE) + lz;
     probePos = int3(int(x), int(y), int(z));
 
-    voxelIdx = GetCascadeBaseOffset(cascadeIndex) + VoxelStorageIndex(probePos);
-    uint slot = AmbientBrickSlot(cascadeIndex, probePos);
+    voxelIdx = GetCascadeBaseOffset(cascadeIndex) + packedBrick * uint(GPU_SCENE_AMBIENT_BRICK_VOLUME) +
+               localProbeOffset;
+    uint slot = Bindless.GetGpuscene().AmbientBrickTable[cascadeIndex * uint(GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE) +
+                                                         packedBrick];
     cubeIdx = int((cascadeIndex * poolBricks + slot) * uint(GPU_SCENE_AMBIENT_BRICK_VOLUME) +
                   localProbeOffset);
     return true;
 }
 
-AmbientCube FetchCubePool(int3 probePos, uint cascadeIndex)
+bool TryFetchCubePool(int3 probePos, FAmbientCascadeAddress address, out AmbientCube cube)
 {
-    int idx = AmbientCubePoolIndex(cascadeIndex, probePos);
-    if (idx < 0) return ZeroAmbientCube();
-    return Bindless.GetGpuscene().Cubes[idx];
-}
-
-bool TryFetchCubePool(int3 probePos, uint cascadeIndex, out AmbientCube cube)
-{
-    int idx = AmbientCubePoolIndex(cascadeIndex, probePos);
+    int idx = AmbientCubePoolIndex(address, probePos);
     if (idx < 0)
     {
         cube = ZeroAmbientCube();
@@ -532,9 +554,9 @@ bool TryFetchCubePool(int3 probePos, uint cascadeIndex, out AmbientCube cube)
     return true;
 }
 
-bool TryFetchCubePongPool(int3 probePos, uint cascadeIndex, out AmbientCube cube)
+bool TryFetchCubePongPool(int3 probePos, FAmbientCascadeAddress address, out AmbientCube cube)
 {
-    int idx = AmbientCubePongPoolIndex(cascadeIndex, probePos);
+    int idx = AmbientCubePongPoolIndex(address, probePos);
     if (idx < 0)
     {
         cube = ZeroAmbientCube();
@@ -544,36 +566,9 @@ bool TryFetchCubePongPool(int3 probePos, uint cascadeIndex, out AmbientCube cube
     return true;
 }
 
-AmbientCube FetchCube(int3 probePos, in AmbientCube* Cubes)
+VoxelData FetchVoxel(int3 probePos, in VoxelData* Voxels, FAmbientCascadeAddress address)
 {
-    int idx = probePos.y * CUBE_SIZE_XY * CUBE_SIZE_XY + probePos.z * CUBE_SIZE_XY + probePos.x;
-    return Cubes[idx];
-}
-
-AmbientCube FetchCube(int3 probePos, in AmbientCube* Cubes, uint baseOffset)
-{
-    int idx = int(baseOffset) + probePos.y * CUBE_SIZE_XY * CUBE_SIZE_XY + probePos.z * CUBE_SIZE_XY + probePos.x;
-    return Cubes[idx];
-}
-
-AmbientCube FetchCubeStable(int3 probePos, in AmbientCube* Cubes, in AmbientCube* CubesPong, uint baseOffset,
-                              uint cascadeIndex, uint stableCascadeIndex)
-{
-    if (cascadeIndex == stableCascadeIndex)
-    {
-        return FetchCube(probePos, CubesPong);
-    }
-    return FetchCube(probePos, Cubes, baseOffset);
-}
-
-VoxelData FetchVoxel(int3 probePos, in VoxelData* Cubes)
-{
-    return Cubes[VoxelStorageIndex(probePos)];
-}
-
-VoxelData FetchVoxel(int3 probePos, in VoxelData* Cubes, uint baseOffset)
-{
-    return Cubes[baseOffset + VoxelStorageIndex(probePos)];
+    return Voxels[address.voxelBase + VoxelStorageIndex(address, probePos)];
 }
 
 // One trilinear probe gather, shared by the plain and the "stable" (pong pool) entry points.
@@ -599,7 +594,7 @@ float4 gatherAmbientCubes<T : IAmbientCubeSampler>(float3 inPos, float3 normal, 
             continue;
         }
 
-        uint baseOffset = GetCascadeBaseOffset(cascadeIndex);
+        FAmbientCascadeAddress address = GetAmbientCascadeAddress(cascadeIndex);
         int3 baseIdx = int3(floor(nearpos));
         float3 frac = frac(nearpos);
 
@@ -620,7 +615,7 @@ float4 gatherAmbientCubes<T : IAmbientCubeSampler>(float3 inPos, float3 normal, 
             }
 
             int3 probePos = baseIdx + offset;
-            uint packedDistance = FetchVoxel(probePos, Voxels, baseOffset).distanceToSolid;
+            uint packedDistance = FetchVoxel(probePos, Voxels, address).distanceToSolid;
 
             // Nibble y is the "inside geometry" marker; a probe buried in a solid contributes nothing.
             if (((packedDistance >> 4) & 0xFu) == 0u)
@@ -649,8 +644,8 @@ float4 gatherAmbientCubes<T : IAmbientCubeSampler>(float3 inPos, float3 normal, 
 
             AmbientCube cube;
             bool hasCube = (useStablePool && cascadeIndex == stableCascadeIndex)
-                ? TryFetchCubePongPool(probePos, cascadeIndex, cube)
-                : TryFetchCubePool(probePos, cascadeIndex, cube);
+                ? TryFetchCubePongPool(probePos, address, cube)
+                : TryFetchCubePool(probePos, address, cube);
             // Unpublished probes (see GetAmbientCubePublishPasses) are skipped like missing ones.
             if (!hasCube || AmbientCubeSampleCount(cube) < publishPasses)
             {
@@ -690,7 +685,7 @@ public float4 interpolateAmbientCubesStable<T : IAmbientCubeSampler>(float3 inPo
 // differs from this one by less than that on all three axes is guaranteed empty, which is what
 // lets the DDA jump ahead. See FCPUProbeBaker::RebuildDistanceField for how the field is built.
 public bool inSolid(float3 pos, float3 rayDir, inout float offsetDist, inout uint matId, inout float clearanceVoxels,
-                      in VoxelData* Cubes, uint baseOffset, float cubeUnit)
+                      in VoxelData* Cubes, FAmbientCascadeAddress address, float cubeUnit)
 {
     clearanceVoxels = 1;
     // Early out if position is outside the probe grid
@@ -702,7 +697,7 @@ public bool inSolid(float3 pos, float3 rayDir, inout float offsetDist, inout uin
 
     int3 baseIdx = int3(floor(pos));
 
-    VoxelData cube = FetchVoxel(baseIdx, Cubes, baseOffset);
+    VoxelData cube = FetchVoxel(baseIdx, Cubes, address);
     matId = cube.matId;
 
     uint4 unpack0 = UnpackNibblesLow(cube.distanceToSolid);
@@ -747,18 +742,6 @@ public bool inSolid(float3 pos, float3 rayDir, inout float offsetDist, inout uin
 
     clearanceVoxels = max(1.0f, float(unpack0.x));
     return false;
-}
-
-public bool inSolid(float3 pos, float3 rayDir, inout float offsetDist, inout uint matId, inout float clearanceVoxels,
-                      in VoxelData* Cubes)
-{
-    return inSolid(pos, rayDir, offsetDist, matId, clearanceVoxels, Cubes, 0, GetAmbientCubeUnit());
-}
-
-public bool inSolid(float3 pos, float3 rayDir, inout float offsetDist, inout uint matId, inout float clearanceVoxels,
-                      in VoxelData* Cubes, uint baseOffset)
-{
-    return inSolid(pos, rayDir, offsetDist, matId, clearanceVoxels, Cubes, baseOffset, GetAmbientCubeUnit());
 }
 
 public interface IProbeGenerator

@@ -37,10 +37,9 @@ namespace
         payload.brickTable.assign(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE,
                                   Assets::GPU_SCENE_AMBIENT_BRICK_INVALID);
         payload.brickTable[7] = 0u;
-        payload.activeBrickList.assign(1, 7u);
         payload.activeBricksPerCascade.assign(1, 1u);
-        payload.pages.resize(static_cast<size_t>(Assets::ACGI_PAGE_COUNT) * Assets::ACGI_PAGE_COUNT);
-        payload.pages[11].voxelCount = 1;
+        payload.cascadeGrids.assign(1, glm::vec4(-24.0f, 5.5f, -24.0f, 0.25f));
+        payload.cascadeWraps.assign(1, glm::ivec4(3, 1, 22, 0));
 
         payload.cubes.resize(static_cast<size_t>(Assets::GPU_SCENE_AMBIENT_BRICK_VOLUME));
         for (size_t i = 0; i < payload.cubes.size(); ++i)
@@ -189,11 +188,9 @@ TEST_CASE("Ambient bake cache round-trips a payload and rejects mismatches", "[U
         CHECK(std::memcmp(read.voxels.data(), written.voxels.data(),
                           written.voxels.size() * sizeof(Assets::VoxelData)) == 0);
         CHECK(read.brickTable == written.brickTable);
-        CHECK(read.activeBrickList == written.activeBrickList);
         CHECK(read.activeBricksPerCascade == written.activeBricksPerCascade);
-        REQUIRE(read.pages.size() == written.pages.size());
-        CHECK(std::memcmp(read.pages.data(), written.pages.data(),
-                          written.pages.size() * sizeof(Assets::PageIndex)) == 0);
+        CHECK(read.cascadeGrids == written.cascadeGrids);
+        CHECK(read.cascadeWraps == written.cascadeWraps);
         REQUIRE(read.cubes.size() == written.cubes.size());
         CHECK(std::memcmp(read.cubes.data(), written.cubes.data(),
                           written.cubes.size() * sizeof(Assets::AmbientCube)) == 0);
@@ -390,7 +387,7 @@ TEST_CASE_METHOD(EngineTestFixture, "Ambient bake cache replaces the bake on the
 
     Assets::CPU::FCPUAccelerationStructure& coldAcceleration =
         engine_->GetScene().GetCPUAccelerationStructure();
-    CHECK(coldAcceleration.AmbientBakeDirtyBrickCount(0) == 0);
+    CHECK(coldAcceleration.GetAmbientBakeQueueStats().pendingBricks == 0);
 
     // What landed on disk has to be the bake, not a zeroed arena: a readback at the wrong offset or
     // before the GPU finished would still produce a structurally valid file.
@@ -423,7 +420,7 @@ TEST_CASE_METHOD(EngineTestFixture, "Ambient bake cache replaces the bake on the
         const FProbeBakeProgress probeProgress = warmAcceleration.GetProbeBakeProgress();
         REQUIRE(probeProgress.stage == EProbeBakeStage::Idle);
         REQUIRE(probeProgress.totalVoxelGroups == 0);
-        REQUIRE(warmAcceleration.AmbientBakeDirtyRevision() == 0);
+        REQUIRE(warmAcceleration.GetAmbientBakeQueueStats().pendingBricks == 0);
         REQUIRE_FALSE(engine_->GetRenderer().GetAmbientBakeProgress().active);
     }
     // A hit must not write a second entry.

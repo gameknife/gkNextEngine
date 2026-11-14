@@ -29,35 +29,21 @@ namespace Assets::CPU
     // VoxelStorageIndex() in assets/shaders/common/AmbientCube.slang must match this exactly.
     constexpr uint32_t kVoxelBrickEdge = static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICK_EDGE);
     constexpr uint32_t kVoxelBrickVolume = static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICK_VOLUME);
-    constexpr uint32_t kVoxelBricksX = static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_X);
-    constexpr uint32_t kVoxelBricksZ = static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_Z);
 
-    constexpr uint32_t GetVoxelAddress(int x, int y, int z)
+    // x, y, z are window cells in [0, CUBE_SIZE). The brick part goes through the cascade's ring
+    // offset (AmbientStorageBrick); the cell inside the brick does not.
+    inline uint32_t GetVoxelAddress(int x, int y, int z, const glm::ivec3& wrap = glm::ivec3(0))
     {
         const uint32_t ux = static_cast<uint32_t>(x);
         const uint32_t uy = static_cast<uint32_t>(y);
         const uint32_t uz = static_cast<uint32_t>(z);
-        const uint32_t brickLinear = (uy / kVoxelBrickEdge) * (kVoxelBricksX * kVoxelBricksZ) +
-                                     (uz / kVoxelBrickEdge) * kVoxelBricksX + (ux / kVoxelBrickEdge);
+        const glm::ivec3 storage = AmbientStorageBrick(
+            glm::ivec3(static_cast<int>(ux / kVoxelBrickEdge), static_cast<int>(uy / kVoxelBrickEdge),
+                       static_cast<int>(uz / kVoxelBrickEdge)),
+            wrap);
         const uint32_t localOffset = (uy % kVoxelBrickEdge) * (kVoxelBrickEdge * kVoxelBrickEdge) +
                                      (uz % kVoxelBrickEdge) * kVoxelBrickEdge + (ux % kVoxelBrickEdge);
-        return brickLinear * kVoxelBrickVolume + localOffset;
-    }
-
-    // Inverse of GetVoxelAddress, for the passes that sweep the array and need the grid coordinate.
-    constexpr void DecodeVoxelAddress(uint32_t address, uint32_t& x, uint32_t& y, uint32_t& z)
-    {
-        const uint32_t brickLinear = address / kVoxelBrickVolume;
-        const uint32_t localOffset = address % kVoxelBrickVolume;
-        const uint32_t by = brickLinear / (kVoxelBricksX * kVoxelBricksZ);
-        const uint32_t bz = (brickLinear - by * (kVoxelBricksX * kVoxelBricksZ)) / kVoxelBricksX;
-        const uint32_t bx = brickLinear - by * (kVoxelBricksX * kVoxelBricksZ) - bz * kVoxelBricksX;
-        const uint32_t ly = localOffset / (kVoxelBrickEdge * kVoxelBrickEdge);
-        const uint32_t lz = (localOffset - ly * (kVoxelBrickEdge * kVoxelBrickEdge)) / kVoxelBrickEdge;
-        const uint32_t lx = localOffset - ly * (kVoxelBrickEdge * kVoxelBrickEdge) - lz * kVoxelBrickEdge;
-        x = bx * kVoxelBrickEdge + lx;
-        y = by * kVoxelBrickEdge + ly;
-        z = bz * kVoxelBrickEdge + lz;
+        return AmbientBrickLinearIndex(storage) * kVoxelBrickVolume + localOffset;
     }
 
     uint FetchMaterialId(const FCPUTLASSnapshot& snapshot, uint materialIdx, uint instanceId);

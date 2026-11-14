@@ -200,6 +200,8 @@ brick 与各级世界晶格对齐，所以内容只取决于场景、级别和�
   （`RestoreEnteringAmbientBricks`），已发布的不再进入未发布队列。
 - 淘汰：几何变化按脏盒外扩 2 个 brick（`EvictAmbientBrickCache`，在快照发布时做，不受
   `sys.ambientCubeDynamicUpdate` 影响）；清池（光照变化）、整图烘焙、缓存恢复和换场景整体清空。
+- 已知问题：恢复只在 brick 进入窗口时检查，池溢出时进入的 brick 常拿不到 slot，之后分到 slot 也不再查缓存，
+  来回移动时大部分没被恢复。见大地图计划第 7 节，未修。
 - 统计：DevTools 图形面板的 AC Brick Cache 行，agent 查询 `ambient.brickCacheEntries`、`ambient.brickCacheHits`、
   `ambient.lastScrollRestoredBricks`；每次滚动提交打一行 `[AmbientBricks] scroll:` 日志。
 

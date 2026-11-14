@@ -1,7 +1,7 @@
 ---
 title: "大地图 GI 覆盖：Voxel / AmbientCube clipmap 开发计划"
 category: plan
-status: 阶段 1–4 已实施（brick 缓存只做了内存层，落盘待定）
+status: 阶段 1–4 已实施（brick 缓存只做了内存层，落盘待定；已知问题见第 7 节）
 owner: engine/rendering
 created: 2026-11-14
 last_updated: 2026-11-14
@@ -334,4 +334,41 @@ voxel 格式、ambient cube 格式、DDA、烘焙着色器都不换，只改"寻
 - 着色器热路径多一次环绕，同时少了驻留的原子写，净效果以 benchmark 为准。
 - 修改寻址要同步所有消费者：software tracing、VoxelTracing、PathTracing 的 ambient terminal、Splat 的
   场景光照、CPU static_assert、arena sizing 和缓存读回。
-- 5 级的显存在移动端可能超预算，现有的预算检查会回退到 NoAmbient，移动端需要显式配置更少的级数。
+- 5 级的显存在移动端可能超预算。阶段 4 起放不下时逐级减少级数（`AmbientArenaBudget.hpp`），但尚未在真机上
+  验证实际降到几级。
+
+## 7. 已知问题与后续工作（2026-11-14 记录，未修）
+
+复现：training_ground，SoftwareModern，follow + 5 级，相机传送到北侧林地 `120 22 330 → 150 16 300`，按住 W
+飞 4 s、按住 S 飞回 4 s，重复两次，逐次滚动看 `[AmbientBricks] scroll:` 日志。实测（每段合计）：
+
+| 段 | 存入缓存 | 从缓存恢复 |
+|---|---|---|
+| A → B（第 1 次） | 2621 | 428 |
+| B → A（第 1 次） | 3461 | **398** |
+| A → B（第 2 次） | 2971 | 3770 |
+| B → A（第 2 次） | 1967 | **303** |
+
+缓存全程约 5700 条、0 淘汰，数据都在内存里，只是没被用上。这片区域池溢出约三分之一（0 级约 800/2550，
+1 级约 1000/2750）。按优先级：
+
+1. **恢复只在 brick 进入窗口的那一刻检查**（`RestoreEnteringAmbientBricks` 只看 `enteredBricks`）。溢出时
+   腾出的 slot 按离焦点的距离先分给窗口内更近、之前没分到的 brick，刚进入窗口的远端 brick 通常拿不到；
+   等它后来分到 slot 时已不算"进入"，于是从零重烘，表现为"来回移动缓存丢了"。修法：任何本次新分到 slot
+   的 brick（`UpdateData` 里 newOwner 与 oldOwner 不同的 slot）都查缓存。改动小，优先做。
+2. **溢出时已持有 slot 的 brick 永不让出**（`BrickPageTable.cpp` 的保留规则）。身后远处的 brick 占着 slot，
+   相机前方近处的反而分不到，落到粗级。修法：允许远处的 brick 把 slot 让给近处的，带迟滞（例如距离差超过
+   若干 brick 才换），让出前已发布的要先回读进 brick 缓存——和滚动一样，回读必须在 worker 上、在 slot 重分配
+   之前完成，所以换 slot 要么并入下一次 voxel job，要么单独起一个"先回读、后提交"的小任务。
+3. **补烘在超预算视点停住**。同一视点两分钟内待补烘 brick 一直约 6700，几乎不降：帧超出预算时每帧只给
+   1 个 group，阶段 3 的 10% 保底（`AmbientBake::PublishFloorGroups`）只对未发布 brick 生效，所以已发布的
+   brick 停在 4–31 遍的噪声水平。修法：有待补烘 brick 时也给一个较小的保底（例如帧时间的 2–3%），
+   仍让未发布优先。注意 agent 脚本里"等 `ambient.pendingBricks == 0`"在这类视点会超时，应改等
+   `ambient.unpublishedBricks == 0`。
+4. **brick 缓存落盘**：不是第 1 条的解法。价值在于跨会话的折返，以及走过的区域超出内存预算时把 LRU 淘汰项
+   溢写到磁盘作为第二层，按场景 key 分目录，失效规则与内存层相同（几何变化按脏盒、光照变化与整图烘焙全清）。
+   先修 1–3 再评估。
+5. 池溢出（远角 brick 拿不到 slot）造成的边界不在过渡带里，仍是硬边；第 2 条改善分配后再看是否需要
+   按"缺 brick"做过渡。
+6. Splat 的天空可见度采样（`Splat.Billboard.vert.slang`）没有级间过渡，仍按最细一级硬切。
+7. 移动端按显存降级数未在真机验证（见上方风险）。

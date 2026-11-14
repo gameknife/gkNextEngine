@@ -19,6 +19,7 @@
 #include "Engine/Vulkan/WindowSurface.hpp"
 
 #include "Engine/Assets/Core/Scene.hpp"
+#include "Engine/Assets/Core/AmbientArenaBudget.hpp"
 #include "Engine/Assets/GPU/UniformBuffer.hpp"
 #include "Engine/Assets/GPU/Texture.hpp"
 #include "Engine/Assets/Core/Node.hpp"
@@ -555,46 +556,34 @@ namespace Vulkan
 
         VkPhysicalDeviceFeatures deviceFeatures = {};
 
-        VkPhysicalDeviceMemoryProperties memoryProperties = {};
-        vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
-        VkDeviceSize largestDeviceLocalHeapSize = 0;
-        for (uint32_t heapIndex = 0; heapIndex < memoryProperties.memoryHeapCount; ++heapIndex)
-        {
-            if ((memoryProperties.memoryHeaps[heapIndex].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0)
-            {
-                largestDeviceLocalHeapSize =
-                    std::max(largestDeviceLocalHeapSize, memoryProperties.memoryHeaps[heapIndex].size);
-            }
-        }
-
-        const VkDeviceSize perCascadeCount =
-            static_cast<VkDeviceSize>(Assets::CUBE_SIZE_XY) * Assets::CUBE_SIZE_XY * Assets::CUBE_SIZE_Z;
-        uint32_t cascadeCount = Assets::CUBE_CASCADE_MAX;
-        float poolBrickRatio = 1.0f;
+        // At least one cascade has to fit; a device short of the configured count gets fewer
+        // cascades from Scene (FitAmbientCascadeCapacity) rather than the no-ambient fallback.
+        float poolBrickRatio = 0.66f;
+        uint32_t requestedCascades = Assets::CUBE_CASCADE_MAX;
         if (NextEngine::GetInstance())
         {
             const auto& settings = NextEngine::GetInstance()->GetUserSettings();
-            cascadeCount = Assets::SanitizeAmbientCubeCascadeCount(settings.AmbientCubeCascadeCount);
             poolBrickRatio = settings.AmbientCubePoolBrickRatio;
+            requestedCascades = Assets::SanitizeAmbientCubeCascadeCount(settings.AmbientCubeCascadeCount);
         }
-        const float clampedPoolBrickRatio = std::clamp(poolBrickRatio, 0.0f, 1.0f);
-        const auto poolBricksPerCascade = static_cast<VkDeviceSize>(std::max(
-            1.0f, std::ceil(static_cast<float>(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE) * clampedPoolBrickRatio)));
-        const VkDeviceSize poolCubesPerCascade =
-            poolBricksPerCascade * static_cast<VkDeviceSize>(Assets::GPU_SCENE_AMBIENT_BRICK_VOLUME);
-
-        const VkDeviceSize fullAmbientCubeAllocationSize =
-            static_cast<VkDeviceSize>(cascadeCount) *
-                (perCascadeCount * sizeof(Assets::VoxelData) + poolCubesPerCascade * sizeof(Assets::AmbientCube)) +
-            poolCubesPerCascade * sizeof(Assets::AmbientCube) +
-            perCascadeCount * sizeof(glm::u32vec4) +
-            perCascadeCount * sizeof(glm::u32vec4);
-        caps_.fullAmbientCubeBudget = largestDeviceLocalHeapSize >= fullAmbientCubeAllocationSize;
+        const uint32_t poolBricksPerCascade = Assets::ResolveAmbientPoolBricksPerCascade(poolBrickRatio);
+        const VkDeviceSize largestDeviceLocalHeapSize = Assets::LargestDeviceLocalHeapBytes(physicalDevice);
+        const VkDeviceSize ambientArenaBudget = Assets::AmbientArenaBudgetBytes(largestDeviceLocalHeapSize);
+        const uint32_t fittingCascades =
+            Assets::FitAmbientCascadeCapacity(requestedCascades, poolBricksPerCascade, ambientArenaBudget);
+        caps_.fullAmbientCubeBudget = fittingCascades > 0u;
         if (!caps_.fullAmbientCubeBudget)
         {
-            SPDLOG_WARN("Largest Vulkan device-local memory heap is {} MB, smaller than full ambient-cube allocation {} MB; ambient-cube renderers will use the no-ambient fallback",
+            SPDLOG_WARN("Ambient-cube budget is {} MB of a {} MB device-local heap, smaller than a one-cascade arena of {} MB; ambient-cube renderers will use the no-ambient fallback",
+                        static_cast<uint64_t>(ambientArenaBudget / (1024 * 1024)),
                         static_cast<uint64_t>(largestDeviceLocalHeapSize / (1024 * 1024)),
-                        static_cast<uint64_t>(fullAmbientCubeAllocationSize / (1024 * 1024)));
+                        static_cast<uint64_t>(Assets::ComputeAmbientArenaLayout(1u, poolBricksPerCascade).totalSize /
+                                              (1024 * 1024)));
+        }
+        else if (fittingCascades < requestedCascades)
+        {
+            SPDLOG_WARN("Ambient-cube budget is {} MB: {} of {} cascades fit",
+                        static_cast<uint64_t>(ambientArenaBudget / (1024 * 1024)), fittingCascades, requestedCascades);
         }
 
         // Resolved before any renderer decision below, and before any device resource is created:

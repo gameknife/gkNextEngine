@@ -314,6 +314,9 @@ Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D 
     float ambientCubeUnit = layoutInputs.baseUnit;
     glm::vec3 ambientCubeOffsetBias = layoutInputs.offsetBias;
     Assets::FAmbientCascadeLayout ambientLayout = Assets::ResolveAmbientCascadeLayout(layoutInputs);
+    bool ambientHasSceneBox = false;
+    glm::vec3 ambientSceneMin{0.0f};
+    glm::vec3 ambientSceneMax{0.0f};
     if (scene_)
     {
         Assets::CPU::FAmbientGridConfig committedGrid;
@@ -322,6 +325,9 @@ Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D 
             ambientCubeUnit = committedGrid.baseUnit;
             ambientCubeOffsetBias = committedGrid.offsetBias;
             ambientLayout = committedGrid.layout;
+            ambientHasSceneBox = committedGrid.layout.followScene;
+            ambientSceneMin = committedGrid.sceneMin;
+            ambientSceneMax = committedGrid.sceneMax;
         }
         // Never advertise more cascades than the arena was sized for.
         ambientLayout.cascadeCount = std::min(ambientLayout.cascadeCount, scene_->AmbientCubeCascadeCapacity());
@@ -337,7 +343,12 @@ Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D 
     for (uint32_t cascade = 0; cascade < static_cast<uint32_t>(Assets::CUBE_CASCADE_MAX); ++cascade)
     {
         ubo.AmbientCubeCascadeGrid[cascade] = glm::vec4(ambientLayout.origins[cascade], ambientLayout.units[cascade]);
-        ubo.AmbientCubeCascadeWrap[cascade] = glm::vec4(glm::vec3(ambientLayout.wraps[cascade]), 0.0f);
+        const uint32_t openFaces = cascade < ambientLayout.cascadeCount
+            ? Assets::AmbientCascadeOpenFaces(ambientLayout, cascade, ambientHasSceneBox, ambientSceneMin, ambientSceneMax)
+            : 0u;
+        ubo.AmbientCubeCascadeWrap[cascade] = glm::vec4(
+            glm::vec3(ambientLayout.wraps[cascade]),
+            Assets::PackAmbientCascadeBlend(openFaces, config_.userSettings.AmbientCubeBlendCells));
     }
 
     // Other Setup

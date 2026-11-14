@@ -31,7 +31,11 @@ RGB9E5 是单个 32-bit radiance 值的编码选择，不是块压缩。它保�
 
 - `Cubes`：每 cascade 的稀疏 AmbientCube brick pool。
 - `Voxels`：仍为每 cascade dense 的 VoxelData 数组。
-- `CubesPong`：仅一条 cascade 大小的 bake ping-pong scratch。
+- `CubesPong`：仅一条 cascade 大小的 bake ping-pong scratch。bake 第 c 级时反弹查询从 pong 读本级，dispatch 前
+  pong 必须等于 ping 的第 c 级。上一次 dispatch 烘的是同一级、brick 表未重建（generation 相同）、arena 未换时，
+  只拷上一批写过的 slot（`AmbientBake::PlanPongSync`，相邻 slot 合并成一个 copy region）；否则整级拷贝。
+  任何不经 bake 写 cube 池的路径（清池、slot 清零、缓存恢复、几何变化的采样数下调）都必须让 generation 变化
+  或令 `pong.valid = false`。
 - `BrickTable`：逻辑 brick → pool slot。
 - `ActiveBrickList`：每级一段，存本帧 bake batch 的 storage brick 号。
 
@@ -73,6 +77,15 @@ group，滚进来的区域会长期停在粗级。`ambient.*` agent 查询和 De
 
 加载时的整图烘焙就是"所有 brick 进入"这一条路径。
 
+几何变化走同一条管线：CPU 快照重建时（`Scene::MarkDirty` 之后，最多每 30 帧一次；逐帧移动只调
+`MarkTransformDirty`，不触发）`BuildSnapshot` 比较前后快照，把新增、删除、移动的实例的新旧包围盒记进
+`ambientDirtyBounds`，发布时并入待处理列表（超过 64 个合成一个并集）。voxel 管线空闲时
+`PlanAmbientDirtyRegions` 把它们换算成各级窗口内的 brick（外扩一格、按整 brick 取整）送去体素化；
+`FinishVoxelJob` 对距离场输出盒覆盖的已分配 brick 调 `FCPUBrickTable::RequeueBricks`：遍数降到发布阈值、
+GPU 上 probe 的采样数也降到发布阈值，于是保持已发布、旧光照还在，新样本以 1/(n+1) 的权重快速覆盖。
+整图烘焙与缓存恢复会丢弃待处理的盒子。`sys.ambientCubeDynamicUpdate=false` 关闭这条路径。材质换绑不改变
+包围盒，不会触发。
+
 brick 表同时是 bake 队列：每个已分配 brick 记已烘遍数（`bakePasses`），新主人从 0 开始，到
 `kAmbientBakeConvergencePasses`（32）出队。每帧 `AcquireAmbientBakeBatch` 选一级、取一批 brick 写进该级的
 active list 段并 dispatch，录完后 `CompleteAmbientBakeBatch` 给它们的遍数加一。顺序：未发布的优先（低于
@@ -100,7 +113,11 @@ shading 必须读 bakers 实际采用的布局（`TryGetAmbientGridConfig`），
 完成前会用新网格去采旧数据。级数上限 `CUBE_CASCADE_MAX` 为 5，CPU 常量、`GPU_SCENE_AMBIENT_CASCADE_MAX`、
 `AmbientCube.slang` 与 Splat 的上限需同步。
 
-Scene 构造时按当时的 `sys.ambientCubeCascadeCount` 固定本 scene 的 cascade capacity；运行中把 CVar 调大不会越界，但新增 capacity 要到 scene reload 才分配。cube pool 大小由 `sys.ambientCubePoolBrickRatio` 转换成每 cascade 固定 slot 上限，因此同一配置下“更稀疏的场景”主要减少 active/bake 工作，不会继续缩小已经创建的 Vulkan allocation。评估显存必须看启动时 `[AmbientArena]` 日志，不能只看 active brick 数。
+Scene 构造时按当时的 `sys.ambientCubeCascadeCount` 固定本 scene 的 cascade capacity，但不超过显存预算能容纳的
+级数（`Engine/Assets/Core/AmbientArenaBudget.hpp`）：预算是最大 device-local heap 乘以 `kAmbientArenaHeapShare`
+（桌面 1，iOS/Android 1/8，手机的 heap 是共享内存），`FitAmbientCascadeCapacity` 从配置级数往下找第一个放得下的。
+只有 1 级也放不下时，设备探测（Engine 与 VulkanBaseRenderer 用同一套计算）才把 ambient 渲染器换成 NoAmbient；
+降级会打 `[AmbientArena] N cascades requested, M fit` 警告。运行中把 CVar 调大不会越界，但新增 capacity 要到 scene reload 才分配。cube pool 大小由 `sys.ambientCubePoolBrickRatio` 转换成每 cascade 固定 slot 上限，因此同一配置下“更稀疏的场景”主要减少 active/bake 工作，不会继续缩小已经创建的 Vulkan allocation。评估显存必须看启动时 `[AmbientArena]` 日志，不能只看 active brick 数。
 
 ## 稀疏 brick 分配
 
@@ -122,8 +139,16 @@ camera-independent scene prepare 每帧只运行一次。AmbientCube bake 每帧
 发布规则：probe 的累计 bake 遍数（`SkyVisibilityPXNXS0S1` 的第 2 字节）不足 `r.ambientCube.publishPasses`
 （默认 4）时，插值把它当作缺失跳过；当前级没有有效权重就落到更粗一级，全部没有才是天空兜底。bake 自己的
 反弹查询走同一规则，所以新 brick 的第一遍反弹取自已收敛的粗一级。Splat 的天空可见度采样同样遵守。
-`r.ambientCube.debugView` 1 按最细命中级别着色，2 按状态着色（品红=不在任何窗口内，红=无 cube brick，
-黄=未发布，蓝=已发布）。
+`r.ambientCube.debugView` 1 按最细命中级别着色（过渡带按权重混合两级颜色），2 按状态着色（品红=不在任何
+窗口内，红=无 cube brick，黄=未发布，蓝=已发布）。
+
+级间过渡：每级窗口在"背后还有更粗一级"的面（`AmbientCascadeOpenFaces`：面在场景包围盒内一个 brick 以上，且不是
+最粗一级）前留 `r.ambientCube.blendCells`（默认 8 格，Y 取一半）的过渡带。带内的权重从 1 平滑降到 0，gather
+以 1 − 权重的概率把这次采样交给下一粗级（随机数取样本位置与帧号的 hash），由时域累积（bake 里是滑动平均）
+变成渐变。开放面与带宽打包在 UBO 的 `AmbientCubeCascadeWrap[i].w`。逐像素同时取两级再 lerp 的做法在本机
+每帧多 1.0–1.5 ms，现在是 0.4–0.6 ms（同一 warp 内选不同级的分歧）。8 角 gather 在 `gatherAmbientCubes`
+里只能写一份：bake 的每次反弹命中都调用它，抽成带 out 参数的辅助函数或内联两份都让 bake kernel 慢了约 85%。
+池溢出（远角 brick 拿不到 slot）造成的边界不在过渡带里，仍是硬边。
 
 AmbientCube 同时服务间接光、sky visibility、Splat 的可选场景光照以及 software tracing。修改 packed layout、brick edge 或 cascade 参数时必须同步 CPU static_assert、arena sizing、shader 寻址、readback 和 Splat consumer。
 
@@ -147,16 +172,14 @@ SHARC 使用 vendored NVIDIA header，经 `assets/shaders/common/Sharc.slang` �
 
 ## 明确未实现
 
-- 相机 recenter 的 ring-addressed unified voxel/AmbientCube clipmap。
-- BVH dirty-region 驱动的完整局部增量闭环。
 - VoxelData 内 sun visibility/emissive 的额外 GI-lite 字段。
 - NoAmbient 的 voxel sky-visibility soft trace。
 
 这些旧设计可以作为历史研究，但不是当前 roadmap。若重新立项，应先用现有 arena/brick/effective renderer contract 建立基线，不能从旧结构尺寸或旧阶段继续施工。
 
-第一项已按当前代码重新立项，见 [大地图 GI 覆盖开发计划](../plans/ambientcube-clipmap-plan.md)，阶段 1（全图底图）与
-阶段 2（DDA 多级行走、环形寻址、brick 粒度管线）与阶段 3（近场跟随）已实施，本文已同步；阶段 4 是可选打磨。
-第二项只列在该计划的可选阶段。
+原列表里的"相机 recenter 的 ring-addressed clipmap"与"BVH dirty-region 驱动的局部增量"已按当前代码在
+[大地图 GI 覆盖开发计划](../plans/ambientcube-clipmap-plan.md) 中实施（阶段 1–3 与阶段 4 的几何变化重体素化），
+本文已同步。
 
 ## DDA 多级行走
 
@@ -164,9 +187,25 @@ SHARC 使用 vendored NVIDIA header，经 `assets/shaders/common/Sharc.slang` �
 窗口时结束，然后从那里换级继续；不在任何窗口内时跳到射线下一次进入的窗口。远处的行走落在粗级上，格子大，
 加上距离场跳跃，步数自然有界，不再需要 page index，任意大的地图都适用。`TraceRayDDAInCascade` 是单级行走。
 
+## Brick 缓存（内存）
+
+`FAmbientBrickCache`（`Engine/Assets/Acceleration/AmbientBrickCache.hpp`）按"级 + 世界 brick 坐标"保存烘好的
+brick（512 个 AmbientCube 加遍数），LRU，预算 `sys.ambientCubeBrickCacheMB`（桌面 256、移动端 64，0 关闭）。
+brick 与各级世界晶格对齐，所以内容只取决于场景、级别和位置，与烘它时窗口在哪无关。
+
+- 存：滚动任务开始时（`StartAmbientBrickCapture`），离开窗口且已发布的 brick 仍占着原 slot，由 worker 与体素化
+  并行读到系统内存；提交时（`CommitAmbientBrickCapture`）放进缓存。回读必须在 worker 上、排在体素化任务前、
+  拆块、用流式加载：arena 是 write-combined 显存，游戏线程上读一次传送的量会卡几秒。
+- 取：同一次提交里 `UpdateData` 分完 slot 后，进入窗口且命中的 brick 直接写回 cube 并恢复遍数
+  （`RestoreEnteringAmbientBricks`），已发布的不再进入未发布队列。
+- 淘汰：几何变化按脏盒外扩 2 个 brick（`EvictAmbientBrickCache`，在快照发布时做，不受
+  `sys.ambientCubeDynamicUpdate` 影响）；清池（光照变化）、整图烘焙、缓存恢复和换场景整体清空。
+- 统计：DevTools 图形面板的 AC Brick Cache 行，agent 查询 `ambient.brickCacheEntries`、`ambient.brickCacheHits`、
+  `ambient.lastScrollRestoredBricks`；每次滚动提交打一行 `[AmbientBricks] scroll:` 日志。
+
 ## 磁盘缓存（计划中）
 
 voxelize / distance field / ambient cube 目前每次加载都完整重算，虽然在同一场景与同一网格配置下结果稳定。
 把这条链路做成 tile 级本地磁盘缓存的执行方案见 [GI Bake 磁盘缓存开发计划](../plans/gi-bake-disk-cache-plan.md)。
 该计划成文早于现在的结构：distance field 现在可以按子盒重算，brick 也已与各级世界晶格对齐，所以按世界 brick
-坐标存取的缓存可行；立项时以大地图计划阶段 4 为准，不沿用其中的约束。
+坐标存取的缓存可行，内存层已经是这样做的（见上节）；落盘时以它为基础，不沿用旧计划的约束。

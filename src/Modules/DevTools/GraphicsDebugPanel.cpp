@@ -56,6 +56,11 @@ namespace Runtime::GraphicsDebugPanel
             ImGui::SameLine(0.0f, 4.0f);
             ImGui::TextColored(colVal, "%u jobs, last %.1f ms%s", scroll.scrollCount, scroll.lastScrollMilliseconds,
                                scroll.voxelJobActive ? ", running" : "");
+            ImGui::TextColored(colLabel, "%s", LOCTEXT("AC Brick Cache"));
+            ImGui::SameLine(0.0f, 4.0f);
+            ImGui::TextColored(colVal, "%u bricks (%.0f MB), %llu hits, last scroll restored %u",
+                               scroll.brickCache.entries, static_cast<double>(scroll.brickCache.bytes) / (1024.0 * 1024.0),
+                               static_cast<unsigned long long>(scroll.brickCache.hits), scroll.lastScrollRestoredBricks);
 
             Assets::CPU::FAmbientGridConfig grid;
             if (acceleration.TryGetAmbientGridConfig(grid))

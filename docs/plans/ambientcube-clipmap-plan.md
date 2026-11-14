@@ -1,7 +1,7 @@
 ---
 title: "大地图 GI 覆盖：Voxel / AmbientCube clipmap 开发计划"
 category: plan
-status: 阶段 1–3 已实施，阶段 4（可选打磨）待定
+status: 阶段 1–4 已实施（brick 缓存只做了内存层，落盘待定）
 owner: engine/rendering
 created: 2026-11-14
 last_updated: 2026-11-14
@@ -284,6 +284,43 @@ voxel 格式、ambient cube 格式、DDA、烘焙着色器都不换，只改"寻
 - 动态几何的局部重体素化：把变化的包围盒换算成 brick 集合送进同一条管线。
 - 移动端按显存降级数。
 
+实施记录（2026-11-14）：五项均已落地（brick 缓存只在内存里），与上文的差异如下。
+
+- 过渡带：不是逐像素混合两级，而是按权重随机把采样交给下一粗级（`AmbientCascadeTransitionRandom`，样本位置
+  与帧号的 hash），由时域累积变成渐变。混合两级在本机每帧多 1.0–1.5 ms，随机选择是 0.4–0.6 ms（camp 视点
+  100.1 / 105.9 fps，east 59.9 / 61.5 fps，blendCells 8 / 0）。带宽 `r.ambientCube.blendCells` 默认 8 格，
+  Y 取一半；只在背后还有更粗一级、且在场景包围盒内的窗口面上开（`AmbientCascadeOpenFaces`），夹在地图边上的
+  面不损失细节。"新进入的 brick 落在权重为 0 的外圈"由发布规则承担，没有另设零权重外圈。
+- 8 角 gather 必须在 `gatherAmbientCubes` 里只写一份。抽成辅助函数（单调用点也一样）让 bake 冷收敛从 3.0 s
+  变成 5.6 s（training_ground，5 级），改回单份后为 3.0 s；被跳过的那一级靠循环多走一轮兜底。
+- pong：没有改成每级一份，而是记住 pong 里是哪一级、哪一代 brick 表，同级连续的 batch 只拷上一批写过的
+  slot（`AmbientBake::PlanPongSync`），其余情况整级拷贝。不加显存。本机冷烘焙收敛时间不变（bake 受 dispatch
+  本身限制），省下的是每次 34 MB 的拷贝带宽。
+- 动态几何：沿用快照重建时已有的前后对比（原来只给导航用），实例的新旧包围盒换算成各级 brick 进同一条 voxel
+  管线；周围的 brick 不清零，遍数与 GPU 采样数降到发布阈值后重新排队，保持已发布、快速收敛
+  （`FCPUBrickTable::RequeueBricks`）。只有 `MarkDirty` 触发的快照重建会走这条路径，逐帧的
+  `MarkTransformDirty` 不会。`sys.ambientCubeDynamicUpdate` 可关，agent 查询 `ambient.dirtyRevoxelCount` 计数。端到端单测：playground 上移动最小的物体，
+  998 个 brick 中 118 个重新排队、0 个变为未发布，0.5 s 收敛。
+- 降级数：不只移动端。三处重复的 arena 估算合并为 `AmbientArenaBudget.hpp`，Scene 分配与两处设备探测用同一
+  公式；预算为最大 device-local heap × `kAmbientArenaHeapShare`（桌面 1，iOS/Android 1/8），放不下配置级数就
+  逐级减少，只有 1 级也放不下才回退 NoAmbient（原来是配置级数放不下就回退）。
+- brick 缓存：先做内存层 `FAmbientBrickCache`（`AmbientBrickCache.hpp`），键为"级 + 世界 brick 坐标"，
+  LRU，`sys.ambientCubeBrickCacheMB`（桌面 256、移动端 64，0 关闭）。滚动任务开始时，离开窗口的已发布
+  brick 还占着原 slot，worker 与体素化并行把它们读到系统内存（连同遍数）；提交时放进缓存，再给进入窗口且命中
+  的 brick 直接写回 cube 并恢复遍数。几何变化按脏盒外扩 2 个 brick 淘汰；清池（光照变化）、整图烘焙、换场景
+  整体清空。没有落盘：首次加载已有整份快照缓存，落盘只多覆盖"跨会话的折返"。
+- 回读不能放在游戏线程：arena 是 write-combined 的显存，读一次传送的约 6600 个 brick 卡了好几秒，飞行相机
+  在那一帧跨出很远，滚进来几千个未发布 brick。改到 worker 后也要排在体素化任务之前并拆块（128 个一块），
+  否则在队尾单线程执行，传送任务拖到 9–10 s；读取用流式加载（`CopyFromDeviceMemory`，x86 上是 MOVNTDQA）。
+  每个 brick 的缓冲也在 worker 上分配，提交时只移动 vector：游戏线程的提交耗时从 67–70 ms 降到 2–8 ms。
+  代价是传送的体素任务从 2.7–5 s 变成 3.7–6.4 s（回读与体素化并行，但占 worker）。
+- 预算：256 MB 约 13000 个 brick，一次传送就会存下约 6600 个，所以只有最近一两处能保住；它服务的是折返与
+  沿原路回头，不是全图的长期记忆。
+- 验收：`ambientcube-clipmap-follow` 末尾新增"飞行后传送回起飞点"，断言 `ambient.brickCacheHits > 0`、
+  这次滚动恢复的 brick（`ambient.lastScrollRestoredBricks`）超过 100。实测：恢复 1968 个，103 ms 内回到
+  全发布；飞行 44.4 fps、未发布 0、滚动 516 ms。`coverage` 截图中窗口边界呈渐变，2、3 级池溢出造成的锯齿
+  边界仍是硬边（阶段 1 起就有）。
+
 ### 文档
 
 各阶段完成时同步更新 [GI 缓存与体素资源](../designs/gi-cache-architecture.md)（arena 的 region 列表、
@@ -293,7 +330,7 @@ voxel 格式、ambient cube 格式、DDA、烘焙着色器都不换，只改"寻
 ## 6. 风险
 
 - 粗级对小物体和薄墙会漏或变胖，这是远场低精度的固有代价。
-- 级边界处的精度跳变会随相机移动，阶段 4 的过渡带混合处理它；阶段 3 交付时可能可见。
+- 级边界处的精度跳变会随相机移动，阶段 4 的过渡带处理了窗口边界；池溢出处的边界仍是硬边。
 - 着色器热路径多一次环绕，同时少了驻留的原子写，净效果以 benchmark 为准。
 - 修改寻址要同步所有消费者：software tracing、VoxelTracing、PathTracing 的 ambient terminal、Splat 的
   场景光照、CPU static_assert、arena sizing 和缓存读回。

@@ -1,4 +1,5 @@
 #include "Engine/Assets/Core/Scene.hpp"
+#include "Engine/Assets/Core/AmbientArenaBudget.hpp"
 #include <glm/detail/type_half.hpp>
 #include <meshoptimizer.h>
 #include "Engine/Assets/GPU/TextureImage.hpp"
@@ -27,62 +28,10 @@ namespace Assets
 {
     namespace
     {
-        constexpr VkDeviceSize perAmbientCascadeCount =
-            static_cast<VkDeviceSize>(Assets::CUBE_SIZE_XY) * Assets::CUBE_SIZE_XY * Assets::CUBE_SIZE_Z;
-
-        uint32_t ResolveAmbientPoolBricksPerCascade(float poolBrickRatio)
-        {
-            const float clampedRatio = std::clamp(poolBrickRatio, 0.0f, 1.0f);
-            const auto requestedBricks = static_cast<uint32_t>(std::ceil(
-                static_cast<float>(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE) * clampedRatio));
-            return std::clamp(requestedBricks, 1u,
-                              static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE));
-        }
-
         const Assets::EnvironmentSetting& DefaultEnvironmentSettings()
         {
             static const Assets::EnvironmentSetting defaultSettings;
             return defaultSettings;
-        }
-
-        // Byte layout of the ambient arena for a given allocated cascade capacity. Cubes and Voxels
-        // scale with the capacity; Pages is a fixed world grid; CubesPong is a single cascade.
-        // With cascadeCapacity == CUBE_CASCADE_MAX this reproduces the
-        // compile-time GPU_SCENE_AMBIENT_*_OFFSET constants (asserted below), so right-sizing the
-        // capacity (Phase 2) only shrinks the arena without touching the GPU-visible struct layout.
-        struct AmbientArenaLayout
-        {
-            VkDeviceSize cubesOffset;
-            VkDeviceSize voxelsOffset;
-            VkDeviceSize pongOffset;
-            VkDeviceSize brickTableOffset;
-            VkDeviceSize activeBrickListOffset;
-            VkDeviceSize totalSize;
-        };
-
-        // poolBricksPerCascade sizes the sparse cube pool (Cubes) and its ping-pong copy (CubesPong);
-        // Voxels stay dense (full per-cascade). With poolBricksPerCascade == BRICKS_PER_CASCADE the
-        // cube pool equals the dense grid (Phase 3a behaviour).
-        constexpr AmbientArenaLayout ComputeAmbientArenaLayout(uint32_t cascadeCapacity, uint32_t poolBricksPerCascade)
-        {
-            const VkDeviceSize poolCubesPerCascade =
-                static_cast<VkDeviceSize>(poolBricksPerCascade) * Assets::GPU_SCENE_AMBIENT_BRICK_VOLUME;
-            AmbientArenaLayout layout{};
-            layout.cubesOffset = 0;
-            layout.voxelsOffset = layout.cubesOffset +
-                static_cast<VkDeviceSize>(Assets::GPU_SCENE_AMBIENT_CUBE_SIZE) * poolCubesPerCascade * cascadeCapacity;
-            layout.pongOffset = layout.voxelsOffset +
-                static_cast<VkDeviceSize>(Assets::GPU_SCENE_VOXEL_DATA_SIZE) * perAmbientCascadeCount * cascadeCapacity;
-            layout.brickTableOffset = layout.pongOffset +
-                static_cast<VkDeviceSize>(Assets::GPU_SCENE_AMBIENT_CUBE_SIZE) * poolCubesPerCascade;
-            // Phase 3: per-cascade brick -> pool slot table (uint per brick), sized to the capacity.
-            layout.activeBrickListOffset = layout.brickTableOffset +
-                sizeof(uint32_t) * static_cast<VkDeviceSize>(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE) *
-                    cascadeCapacity;
-            // Phase 3c: per-cascade active brick list, one packed brick-linear id per pool slot.
-            layout.totalSize = layout.activeBrickListOffset +
-                sizeof(uint32_t) * static_cast<VkDeviceSize>(poolBricksPerCascade) * cascadeCapacity;
-            return layout;
         }
 
         static_assert(sizeof(Assets::NodeProxy) == Assets::GPU_SCENE_NODE_PROXY_SIZE);
@@ -97,7 +46,7 @@ namespace Assets
         static_assert(sizeof(Assets::AmbientCube) == Assets::GPU_SCENE_AMBIENT_CUBE_SIZE);
         static_assert(sizeof(Assets::AmbientResources) == 80);
         static_assert(sizeof(Assets::VoxelData) == Assets::GPU_SCENE_VOXEL_DATA_SIZE);
-        static_assert(Assets::GPU_SCENE_AMBIENT_PER_CASCADE_COUNT == perAmbientCascadeCount);
+        static_assert(Assets::GPU_SCENE_AMBIENT_PER_CASCADE_COUNT == Assets::kAmbientVoxelsPerCascade);
         static_assert(Assets::GPU_SCENE_AMBIENT_CASCADE_MAX == Assets::CUBE_CASCADE_MAX);
         // The runtime ComputeAmbientArenaLayout (which also covers the Phase 3 brick table) is now
         // the authoritative arena layout; the compile-time
@@ -240,15 +189,31 @@ namespace Assets
             configuredCascadeCount = Assets::SanitizeAmbientCubeCascadeCount(
                 NextEngine::GetInstance()->GetUserSettings().AmbientCubeCascadeCount);
         }
-        const uint32_t ambientCubeCascadeCapacity = allocateAmbientCube ? configuredCascadeCount : 1u;
-        ambientCubeCascadeCapacity_ = ambientCubeCascadeCapacity;
         float poolBrickRatio = 0.66f;
         if (NextEngine::GetInstance())
         {
             poolBrickRatio = NextEngine::GetInstance()->GetUserSettings().AmbientCubePoolBrickRatio;
         }
         poolBricksPerCascade_ = ResolveAmbientPoolBricksPerCascade(poolBrickRatio);
-        const AmbientArenaLayout ambientLayout =
+        // Fewer cascades than configured when the arena would not fit the device's budget (mostly
+        // phones, see kAmbientArenaHeapShare). The renderer probe already refused ambient renderers
+        // when not even one cascade fits, so the floor of one only matters for direct Scene users.
+        uint32_t ambientCubeCascadeCapacity = 1u;
+        if (allocateAmbientCube)
+        {
+            const VkDeviceSize budget =
+                AmbientArenaBudgetBytes(LargestDeviceLocalHeapBytes(commandPool.Device().PhysicalDevice()));
+            ambientCubeCascadeCapacity =
+                std::max(1u, FitAmbientCascadeCapacity(configuredCascadeCount, poolBricksPerCascade_, budget));
+            if (ambientCubeCascadeCapacity < configuredCascadeCount)
+            {
+                SPDLOG_WARN("[AmbientArena] {} cascades requested, {} fit the {} MB budget",
+                            configuredCascadeCount, ambientCubeCascadeCapacity,
+                            static_cast<uint64_t>(budget / (1024 * 1024)));
+            }
+        }
+        ambientCubeCascadeCapacity_ = ambientCubeCascadeCapacity;
+        const FAmbientArenaLayout ambientLayout =
             ComputeAmbientArenaLayout(ambientCubeCascadeCapacity, poolBricksPerCascade_);
         ambientVoxelsOffset_ = static_cast<size_t>(ambientLayout.voxelsOffset);
         ambientPongOffset_ = static_cast<size_t>(ambientLayout.pongOffset);

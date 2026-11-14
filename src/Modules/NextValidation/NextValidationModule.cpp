@@ -283,6 +283,11 @@ namespace
                 if (query == "ambient.scrollCount") return static_cast<int64_t>(scroll.scrollCount);
                 if (query == "ambient.lastScrollMs") return scroll.lastScrollMilliseconds;
                 if (query == "ambient.voxelJobActive") return scroll.voxelJobActive;
+                if (query == "ambient.dirtyRevoxelCount") return static_cast<int64_t>(scroll.dirtyRevoxelCount);
+                if (query == "ambient.brickCacheEntries") return static_cast<int64_t>(scroll.brickCache.entries);
+                if (query == "ambient.brickCacheHits") return static_cast<int64_t>(scroll.brickCache.hits);
+                if (query == "ambient.lastScrollRestoredBricks")
+                    return static_cast<int64_t>(scroll.lastScrollRestoredBricks);
             }
             if (query.rfind("cvar.", 0) == 0)
             {

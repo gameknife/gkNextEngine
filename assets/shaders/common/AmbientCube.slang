@@ -467,7 +467,15 @@ public bool TryAmbientCubeDebugView(float3 worldPos, out float4 color)
             float3(150.0f, 80.0f, 230.0f),
         };
         uint shown = servingCascade < cascadeCount ? servingCascade : finestContaining;
-        color = float4(cascadeColors[min(shown, 4u)] * displayToRadiance, 1.0f);
+        float3 shownColor = cascadeColors[min(shown, 4u)];
+        if (shown + 1u < cascadeCount)
+        {
+            // Show the transition band the gather uses, fading toward the next coarser cascade.
+            float4 grid = Bindless.GetGpuscene().Camera[0].AmbientCubeCascadeGrid[shown];
+            float3 nearpos = (worldPos - grid.xyz) / max(grid.w, 0.0001f);
+            shownColor = lerp(cascadeColors[min(shown + 1u, 4u)], shownColor, AmbientCascadeBlendWeight(shown, nearpos));
+        }
+        color = float4(shownColor * displayToRadiance, 1.0f);
         return true;
     }
 
@@ -571,7 +579,55 @@ VoxelData FetchVoxel(int3 probePos, in VoxelData* Voxels, FAmbientCascadeAddress
     return Voxels[address.voxelBase + VoxelStorageIndex(address, probePos)];
 }
 
-// One trilinear probe gather, shared by the plain and the "stable" (pong pool) entry points.
+// Weight of a cascade at a point inside its window: 1 in the core, easing to 0 across the transition
+// band before each window face that a coarser cascade continues past (AmbientCascadeOpenFaces on the
+// CPU packs the faces and the band width into AmbientCubeCascadeWrap[i].w). Y bands are half width.
+public float AmbientCascadeBlendWeight(uint cascadeIndex, float3 nearpos)
+{
+    uint packed = uint(Bindless.GetGpuscene().Camera[0].AmbientCubeCascadeWrap[cascadeIndex].w);
+    uint openFaces = packed & 0x3Fu;
+    float band = float(packed >> 6u);
+    if (openFaces == 0u || band <= 0.0f)
+    {
+        return 1.0f;
+    }
+    float3 invBand = 1.0f / float3(band, max(band * 0.5f, 1.0f), band);
+    float3 low = nearpos * invBand;
+    float3 high = (float3(CUBE_SIZE_XY - 2, CUBE_SIZE_Z - 2, CUBE_SIZE_XY - 2) - nearpos) * invBand;
+    float edge = 1.0f;
+    if ((openFaces & 0x01u) != 0u) edge = min(edge, low.x);
+    if ((openFaces & 0x02u) != 0u) edge = min(edge, high.x);
+    if ((openFaces & 0x04u) != 0u) edge = min(edge, low.y);
+    if ((openFaces & 0x08u) != 0u) edge = min(edge, high.y);
+    if ((openFaces & 0x10u) != 0u) edge = min(edge, low.z);
+    if ((openFaces & 0x20u) != 0u) edge = min(edge, high.z);
+    return smoothstep(0.0f, 1.0f, saturate(edge));
+}
+
+// Per-sample uniform number for the cascade transition: a hash of the sample position and the frame,
+// so neighbouring pixels and successive frames draw differently and temporal accumulation (or, in the
+// bake, the running average) turns the selection into a gradient.
+float AmbientCascadeTransitionRandom(float3 inPos)
+{
+    uint value = asuint(inPos.x) ^ (asuint(inPos.y) * 0x9e3779b9u) ^ (asuint(inPos.z) * 0x85ebca6bu) ^
+                 (Bindless.GetGpuscene().Camera[0].TotalFrames * 0xc2b2ae35u);
+    value ^= value >> 16u;
+    value *= 0x7feb352du;
+    value ^= value >> 15u;
+    value *= 0x846ca68bu;
+    value ^= value >> 16u;
+    return float(value >> 8u) * (1.0f / 16777216.0f);
+}
+
+// One trilinear probe gather, shared by the plain and the "stable" (pong pool) entry points: the finest
+// cascade with a contributing probe lights the point. Inside a cascade's transition band
+// (AmbientCascadeBlendWeight) the sample goes to the next coarser cascade with probability 1 - weight
+// instead, so the switch is a gradient that costs one gather per sample, not two; a brick that just
+// scrolled into the outer edge of a window also only takes over gradually. Only one cascade is ever
+// passed over, and one extra iteration gathers it after all if no coarser cascade contributes.
+//
+// The corner gather is written out once, inside the loop. The bake calls this for every bounce hit,
+// and a second inlined copy (or a helper with an out parameter) measurably slowed the bake kernel.
 // The corner loop is ordered cheapest-first: the trilinear weight needs no memory at all, the
 // 8-byte VoxelData decides visibility, and only a corner that survives both pays for the 40-byte
 // AmbientCube fetch behind the sparse brick indirection.
@@ -582,8 +638,17 @@ float4 gatherAmbientCubes<T : IAmbientCubeSampler>(float3 inPos, float3 normal, 
     uint cascadeCount = GetAmbientCubeCascadeCount();
     uint publishPasses = GetAmbientCubePublishPasses();
 
-    for (uint cascadeIndex = 0; cascadeIndex < cascadeCount; ++cascadeIndex)
+    bool passedOver = false;
+    uint passedCascade = 0u;
+    float transitionRandom = -1.0f;
+    for (uint iteration = 0; iteration <= cascadeCount; ++iteration)
     {
+        // The extra last iteration revisits the cascade that was passed over, if any.
+        if (iteration == cascadeCount && !passedOver)
+        {
+            break;
+        }
+        uint cascadeIndex = iteration < cascadeCount ? iteration : passedCascade;
         float4 grid = Bindless.GetGpuscene().Camera[0].AmbientCubeCascadeGrid[cascadeIndex];
         float cubeUnit = max(grid.w, 0.0001f);
         float3 nearpos = (inPos - grid.xyz) / cubeUnit;
@@ -592,6 +657,24 @@ float4 gatherAmbientCubes<T : IAmbientCubeSampler>(float3 inPos, float3 normal, 
             nearpos.z > CUBE_SIZE_XY - 2)
         {
             continue;
+        }
+
+        if (!passedOver && iteration < cascadeCount)
+        {
+            float blendWeight = AmbientCascadeBlendWeight(cascadeIndex, nearpos);
+            if (blendWeight < 1.0f)
+            {
+                if (transitionRandom < 0.0f)
+                {
+                    transitionRandom = AmbientCascadeTransitionRandom(inPos);
+                }
+                if (transitionRandom >= blendWeight)
+                {
+                    passedOver = true;
+                    passedCascade = cascadeIndex;
+                    continue;
+                }
+            }
         }
 
         FAmbientCascadeAddress address = GetAmbientCascadeAddress(cascadeIndex);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine/Assets/Acceleration/AmbientBakeBatch.hpp"
+#include "Engine/Rendering/AmbientBakeScheduler.hpp"
 #include "Engine/Assets/AssetsFwd.hpp"
 #include "Engine/Vulkan/RenderingPipeline.hpp"
 #include "Engine/Vulkan/SyncAndTiming.hpp"
@@ -584,6 +585,8 @@ namespace Vulkan
             Assets::CPU::FAmbientBakeBatch batch;
             uint32_t batchNextGroup = 0;
             bool batchActive = false;
+            AmbientBake::FPongSyncState pong;
+            VkDeviceSize lastPongCopyBytes = 0;
             VkQueryPool timingQueryPool = VK_NULL_HANDLE;
             uint32_t timestampValidBits = 0;
             double timestampPeriodNanoseconds = 0.0;

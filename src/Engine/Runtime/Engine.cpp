@@ -4,6 +4,7 @@
 #include "Engine/Assets/Core/Model.hpp"
 #include "Engine/Assets/Core/Node.hpp"
 #include "Engine/Assets/Core/Scene.hpp"
+#include "Engine/Assets/Core/AmbientArenaBudget.hpp"
 #include "Engine/Assets/GPU/Texture.hpp"
 #include "Engine/Assets/GPU/UniformBuffer.hpp"
 #include "Engine/Runtime/GameInstance.hpp"
@@ -89,51 +90,19 @@ namespace
         return GetDriverId(physicalDevice) == kMesaKosmicKrispDriverId;
     }
 
+    // Whether the device can hold the ambient arena with at least one cascade. A device that cannot
+    // hold every configured cascade still gets the ambient renderers; Scene allocates fewer
+    // cascades (FitAmbientCascadeCapacity) instead of the renderer falling back to NoAmbient.
     bool HasFullAmbientCubeBudget(VkPhysicalDevice physicalDevice)
     {
-        VkPhysicalDeviceMemoryProperties memoryProperties = {};
-        vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
-
-        VkDeviceSize largestDeviceLocalHeapSize = 0;
-        for (uint32_t heapIndex = 0; heapIndex < memoryProperties.memoryHeapCount; ++heapIndex)
-        {
-            if ((memoryProperties.memoryHeaps[heapIndex].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0)
-            {
-                largestDeviceLocalHeapSize =
-                    std::max(largestDeviceLocalHeapSize, memoryProperties.memoryHeaps[heapIndex].size);
-            }
-        }
-
-        const VkDeviceSize perCascadeCount =
-            static_cast<VkDeviceSize>(Assets::CUBE_SIZE_XY) * Assets::CUBE_SIZE_XY * Assets::CUBE_SIZE_Z;
-        // Estimate against the configured cascade count (Phase 2 right-sizing), matching the arena
-        // layout in Scene.cpp, so devices that can hold the right-sized arena keep GI instead of
-        // falling back to NoAmbient. Cubes+Voxels scale with the count; Pages is fixed; pong+scratch
-        // are one cascade each.
-        uint32_t cascadeCount = Assets::CUBE_CASCADE_MAX;
-        if (NextEngine::GetInstance())
-        {
-            cascadeCount = Assets::SanitizeAmbientCubeCascadeCount(
-                NextEngine::GetInstance()->GetUserSettings().AmbientCubeCascadeCount);
-        }
-        float poolBrickRatio = 1.0f;
+        float poolBrickRatio = 0.66f;
         if (NextEngine::GetInstance())
         {
             poolBrickRatio = NextEngine::GetInstance()->GetUserSettings().AmbientCubePoolBrickRatio;
         }
-        const float clampedPoolBrickRatio = std::clamp(poolBrickRatio, 0.0f, 1.0f);
-        const auto poolBricksPerCascade = static_cast<VkDeviceSize>(std::max(
-            1.0f, std::ceil(static_cast<float>(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE) * clampedPoolBrickRatio)));
-        const VkDeviceSize poolCubesPerCascade =
-            poolBricksPerCascade * static_cast<VkDeviceSize>(Assets::GPU_SCENE_AMBIENT_BRICK_VOLUME);
-
-        const VkDeviceSize fullAmbientCubeAllocationSize =
-            static_cast<VkDeviceSize>(cascadeCount) *
-                (perCascadeCount * sizeof(Assets::VoxelData) + poolCubesPerCascade * sizeof(Assets::AmbientCube)) +
-            poolCubesPerCascade * sizeof(Assets::AmbientCube) +
-            perCascadeCount * sizeof(glm::u32vec4) +
-            perCascadeCount * sizeof(glm::u32vec4);
-        return largestDeviceLocalHeapSize >= fullAmbientCubeAllocationSize;
+        const VkDeviceSize budget = Assets::AmbientArenaBudgetBytes(Assets::LargestDeviceLocalHeapBytes(physicalDevice));
+        return Assets::FitAmbientCascadeCapacity(1u, Assets::ResolveAmbientPoolBricksPerCascade(poolBrickRatio),
+                                                 budget) > 0u;
     }
 
     std::string ResolveScreenShotFilename(const std::string& requestedFilename, const char* defaultPrefix)

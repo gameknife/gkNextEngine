@@ -425,4 +425,41 @@ TEST_CASE_METHOD(EngineTestFixture, "Ambient bake cache replaces the bake on the
     }
     // A hit must not write a second entry.
     CHECK(CountAmbientCacheFiles() == 1);
+
+    // ---- A geometry change re-voxelizes and rebakes only around it ----
+    Assets::Scene& warmScene = engine_->GetScene();
+    Assets::CPU::FCPUAccelerationStructure& acceleration = warmScene.GetCPUAccelerationStructure();
+    // The smallest GI object in the level, so the change is local.
+    Assets::Node* moved = nullptr;
+    float movedSize = std::numeric_limits<float>::max();
+    for (auto* render : warmScene.Components<Runtime::RenderComponent>())
+    {
+        if (render->GetOwner() != nullptr && render->GetVisible() && render->GetReceiveGI() &&
+            render->GetModelId() != static_cast<uint32_t>(-1))
+        {
+            const Assets::Model& model = warmScene.Models()[render->GetModelId()];
+            const float size = glm::length(model.GetLocalAABBMax() - model.GetLocalAABBMin()) *
+                               glm::length(glm::vec3(render->GetOwner()->WorldTransform()[0]));
+            if (size > 0.0f && size < movedSize)
+            {
+                movedSize = size;
+                moved = render->GetOwner();
+            }
+        }
+    }
+    REQUIRE(moved != nullptr);
+    const uint32_t revoxelsBefore = acceleration.GetAmbientScrollStats().dirtyRevoxelCount;
+    const uint32_t allocatedBefore = acceleration.GetAmbientBakeQueueStats().allocatedBricks;
+    moved->SetTranslation(moved->Translation() + glm::vec3(0.0f, 0.5f, 0.0f));
+    moved->RecalcTransform(true);
+    warmScene.MarkDirty();
+    // The CPU snapshot is rebuilt at most every 30 frames, then the voxel job runs on workers.
+    REQUIRE(waitFor([&] { return acceleration.GetAmbientScrollStats().dirtyRevoxelCount > revoxelsBefore; }, 600));
+    const FAmbientBakeQueueStats requeued = acceleration.GetAmbientBakeQueueStats();
+    CHECK(requeued.pendingBricks > 0u);
+    // Far from everything rebakes: the rest of the level keeps its converged probes.
+    CHECK(requeued.pendingBricks < allocatedBefore / 2u);
+    REQUIRE(waitFor([&] { return acceleration.GetAmbientBakeQueueStats().pendingBricks == 0u; }, 6000));
+    // The rebake is not a fresh full bake, so nothing new is written to the cache.
+    CHECK(CountAmbientCacheFiles() == 1);
 }

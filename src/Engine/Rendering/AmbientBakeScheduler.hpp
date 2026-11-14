@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <utility>
+#include <vector>
 
 namespace Vulkan::AmbientBake
 {
@@ -32,6 +34,46 @@ namespace Vulkan::AmbientBake
         const double groups = std::floor(nonBakeMilliseconds * publishMinFrameShare / millisecondsPerGroup);
         return static_cast<uint32_t>(std::clamp(groups, static_cast<double>(minGroupsPerFrame),
                                                 static_cast<double>(maxGroupsPerFrame)));
+    }
+
+    // What the stable pong copy of the cube pool holds. The bake of cascade c reads its own cascade
+    // from pong while writing ping, so pong must equal ping for that cascade before every dispatch.
+    // Copying the whole cascade (tens of MB) each time is the simple way; when the previous dispatch
+    // baked the same cascade against the same brick table, only the slots it wrote can differ.
+    struct FPongSyncState
+    {
+        bool valid = false;
+        uint32_t cascade = 0;
+        uint64_t generation = 0;
+        uint64_t arena = 0;
+        std::vector<uint32_t> dirtySlots;
+    };
+
+    // True when the whole cascade must be copied. Otherwise `runs` gets (first slot, slot count)
+    // ranges covering every dirty slot, adjacent slots merged into one copy region.
+    inline bool PlanPongSync(const FPongSyncState& state, uint32_t cascade, uint64_t generation, uint64_t arena,
+                             std::vector<std::pair<uint32_t, uint32_t>>& runs)
+    {
+        runs.clear();
+        if (!state.valid || state.cascade != cascade || state.generation != generation || state.arena != arena)
+        {
+            return true;
+        }
+        std::vector<uint32_t> slots = state.dirtySlots;
+        std::sort(slots.begin(), slots.end());
+        slots.erase(std::unique(slots.begin(), slots.end()), slots.end());
+        for (uint32_t slot : slots)
+        {
+            if (!runs.empty() && runs.back().first + runs.back().second == slot)
+            {
+                ++runs.back().second;
+            }
+            else
+            {
+                runs.emplace_back(slot, 1u);
+            }
+        }
+        return false;
     }
 
     // Plan from GPU timestamp measurements. Wall-clock frame time is deliberately not used: in a

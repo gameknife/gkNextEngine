@@ -1,6 +1,7 @@
 #include "TestCommon.hpp"
 
 #include "Engine/Assets/Acceleration/AmbientCascadeLayout.hpp"
+#include "Engine/Assets/Core/AmbientArenaBudget.hpp"
 
 #include <cmath>
 
@@ -140,4 +141,65 @@ TEST_CASE("Fit-scene ambient cascades smaller than the scene hold the ground at 
     const float coarseUnit = layout.units[4];
     CHECK(layout.origins[4].y <= inputs.sceneMin.y);
     CHECK(layout.origins[4].y + Assets::CUBE_SIZE_Z * coarseUnit >= inputs.sceneMax.y);
+}
+
+TEST_CASE("Ambient cascade transition bands open only on faces inside the scene", "[Unit][AmbientCascadeLayout]")
+{
+    Assets::FAmbientCascadeLayoutInputs inputs;
+    inputs.baseUnit = 0.25f;
+    inputs.cascadeCount = 5;
+    inputs.followScene = true;
+    inputs.hasSceneBounds = true;
+    inputs.sceneMin = glm::vec3(-400.0f, -10.0f, -400.0f);
+    inputs.sceneMax = glm::vec3(400.0f, 60.0f, 400.0f);
+    inputs.hasFocus = true;
+    inputs.focus = glm::vec3(0.0f, 0.0f, 0.0f);
+    const Assets::FAmbientCascadeLayout layout = Assets::ResolveAmbientCascadeLayout(inputs);
+
+    // The finest cascade sits in the middle of the map: every horizontal face has scene behind it.
+    const uint32_t fine = Assets::AmbientCascadeOpenFaces(layout, 0, true, inputs.sceneMin, inputs.sceneMax);
+    CHECK((fine & 0x33u) == 0x33u);
+
+    // The coarsest cascade has nothing coarser to fade into.
+    CHECK(Assets::AmbientCascadeOpenFaces(layout, 4, true, inputs.sceneMin, inputs.sceneMax) == 0u);
+
+    // A cascade clamped against the map edge keeps its detail there.
+    inputs.focus = glm::vec3(-399.0f, 0.0f, 0.0f);
+    const Assets::FAmbientCascadeLayout edgeLayout = Assets::ResolveAmbientCascadeLayout(inputs);
+    const uint32_t edge = Assets::AmbientCascadeOpenFaces(edgeLayout, 0, true, inputs.sceneMin, inputs.sceneMax);
+    CHECK((edge & 0x01u) == 0u);
+    CHECK((edge & 0x02u) != 0u);
+
+    // Without a scene box (fixed anchor) every face of a non-coarsest cascade fades.
+    CHECK(Assets::AmbientCascadeOpenFaces(layout, 1, false, inputs.sceneMin, inputs.sceneMax) == 0x3Fu);
+
+    // Packing: faces in the low bits, the band above, and nothing when no face is open.
+    CHECK(Assets::PackAmbientCascadeBlend(0x3Fu, 8u) == static_cast<float>(0x3Fu | (8u << 6u)));
+    CHECK(Assets::PackAmbientCascadeBlend(0u, 8u) == 0.0f);
+    CHECK(Assets::PackAmbientCascadeBlend(0x01u, 1000u) ==
+          static_cast<float>(0x01u | (Assets::kAmbientBlendCellsMax << 6u)));
+}
+
+TEST_CASE("Ambient arena budget drops cascades before dropping ambient GI", "[Unit][AmbientCascadeLayout]")
+{
+    const uint32_t pool = Assets::ResolveAmbientPoolBricksPerCascade(0.66f);
+    const VkDeviceSize one = Assets::ComputeAmbientArenaLayout(1u, pool).totalSize;
+    const VkDeviceSize three = Assets::ComputeAmbientArenaLayout(3u, pool).totalSize;
+    const VkDeviceSize five = Assets::ComputeAmbientArenaLayout(5u, pool).totalSize;
+    REQUIRE(one < three);
+    REQUIRE(three < five);
+
+    CHECK(Assets::FitAmbientCascadeCapacity(5u, pool, five) == 5u);
+    CHECK(Assets::FitAmbientCascadeCapacity(5u, pool, five - 1u) == 4u);
+    CHECK(Assets::FitAmbientCascadeCapacity(5u, pool, three) == 3u);
+    CHECK(Assets::FitAmbientCascadeCapacity(2u, pool, five) == 2u);
+    CHECK(Assets::FitAmbientCascadeCapacity(5u, pool, one) == 1u);
+    CHECK(Assets::FitAmbientCascadeCapacity(5u, pool, one - 1u) == 0u);
+
+    // The full 5-cascade layout still matches the compile-time reference offsets.
+    const Assets::FAmbientArenaLayout full = Assets::ComputeAmbientArenaLayout(
+        Assets::CUBE_CASCADE_MAX, Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE);
+    CHECK(full.voxelsOffset - full.cubesOffset ==
+          static_cast<VkDeviceSize>(Assets::GPU_SCENE_AMBIENT_CUBE_SIZE) * Assets::GPU_SCENE_AMBIENT_PER_CASCADE_COUNT *
+              Assets::CUBE_CASCADE_MAX);
 }

@@ -285,6 +285,25 @@ void FCPUBrickTable::ResetBakePasses()
     std::fill(bakePasses.begin(), bakePasses.end(), uint8_t(0));
 }
 
+std::vector<uint32_t> FCPUBrickTable::RequeueBricks(uint32_t cascade, const std::vector<uint32_t>& storageBricks,
+                                                    uint32_t poolBricksPerCascade, uint32_t publishPasses)
+{
+    std::vector<uint32_t> slots;
+    const size_t tableBase = static_cast<size_t>(cascade) * Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE;
+    const uint8_t keptPasses = static_cast<uint8_t>(std::min(publishPasses, kAmbientBakeConvergencePasses));
+    for (uint32_t brick : storageBricks)
+    {
+        const size_t entry = tableBase + brick;
+        if (entry >= brickTable.size() || brickTable[entry] == Assets::GPU_SCENE_AMBIENT_BRICK_INVALID)
+        {
+            continue;
+        }
+        bakePasses[entry] = std::min(bakePasses[entry], keptPasses);
+        slots.push_back(cascade * poolBricksPerCascade + brickTable[entry]);
+    }
+    return slots;
+}
+
 void FCPUBrickTable::MarkConverged()
 {
     bakePasses.assign(brickTable.size(), static_cast<uint8_t>(kAmbientBakeConvergencePasses));

@@ -187,4 +187,52 @@ namespace Assets
         }
         return layout;
     }
+
+    // Cascade transition band. Over this many cells before each window face where a coarser cascade
+    // takes over, the gather hands a growing share of samples to that coarser cascade (one gather per
+    // sample, selected at random), so the precision boundary does not show as a line that moves with
+    // the camera. Y windows are four times shallower than XZ, so they get half the band.
+    inline constexpr uint32_t kAmbientBlendCellsMax = 32u;
+
+    // Window faces of a cascade that lie inside the scene, as bits (-x, +x, -y, +y, -z, +z). A face at
+    // or past the scene box has nothing behind it, so fading there would only lose detail. The
+    // coarsest cascade has no coarser one to fade into. Without a scene box every face counts.
+    inline uint32_t AmbientCascadeOpenFaces(const FAmbientCascadeLayout& layout, uint32_t cascade, bool hasSceneBox,
+                                            const glm::vec3& sceneMin, const glm::vec3& sceneMax)
+    {
+        if (cascade + 1u >= layout.cascadeCount)
+        {
+            return 0u;
+        }
+        if (!hasSceneBox)
+        {
+            return 0x3Fu;
+        }
+        // A window clamped to the scene box still lands up to half a brick inside it after snapping,
+        // so a face counts as open only when it is more than a brick in.
+        const float unit = layout.units[cascade];
+        const float brick = unit * static_cast<float>(GPU_SCENE_AMBIENT_BRICK_EDGE);
+        const glm::vec3 lo = layout.origins[cascade];
+        const glm::vec3 hi = lo + unit * glm::vec3(CUBE_SIZE_XY - 2, CUBE_SIZE_Z - 2, CUBE_SIZE_XY - 2);
+        uint32_t faces = 0u;
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            if (lo[axis] > sceneMin[axis] + brick)
+            {
+                faces |= 1u << (axis * 2);
+            }
+            if (hi[axis] < sceneMax[axis] - brick)
+            {
+                faces |= 1u << (axis * 2 + 1);
+            }
+        }
+        return faces;
+    }
+
+    // AmbientCubeCascadeWrap[i].w: open faces in the low six bits, band width in cells above them.
+    inline float PackAmbientCascadeBlend(uint32_t openFaces, uint32_t blendCells)
+    {
+        const uint32_t band = openFaces == 0u ? 0u : std::min(blendCells, kAmbientBlendCellsMax);
+        return static_cast<float>((openFaces & 0x3Fu) | (band << 6u));
+    }
 }

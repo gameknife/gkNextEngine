@@ -267,6 +267,7 @@ void FCPUAccelerationStructure::UpdateBVH(Scene& scene)
     std::shared_ptr<FCPUTLASBuildResult> result = BuildSnapshot(*input);
     PublishSnapshot(result->snapshot);
     MergeNavDirtyBounds(*result);
+    MergeAmbientDirtyBounds(*result);
     publishedRevision_.store(result->snapshot->sceneRevision, std::memory_order_release);
     ++completedBuildCount_;
 }
@@ -382,6 +383,7 @@ std::shared_ptr<FCPUTLASBuildResult> FCPUAccelerationStructure::BuildSnapshot(FC
         if (previousIt == previousNavBounds.end())
         {
             AccumulateBounds(result->hasNavDirtyBounds, result->navDirtyWorldMin, result->navDirtyWorldMax, currentBounds);
+            result->ambientDirtyBounds.emplace_back(currentBounds.min, currentBounds.max);
             continue;
         }
 
@@ -389,6 +391,8 @@ std::shared_ptr<FCPUTLASBuildResult> FCPUAccelerationStructure::BuildSnapshot(FC
         {
             AccumulateBounds(result->hasNavDirtyBounds, result->navDirtyWorldMin, result->navDirtyWorldMax, currentBounds);
             AccumulateBounds(result->hasNavDirtyBounds, result->navDirtyWorldMin, result->navDirtyWorldMax, previousIt->second);
+            result->ambientDirtyBounds.emplace_back(currentBounds.min, currentBounds.max);
+            result->ambientDirtyBounds.emplace_back(previousIt->second.min, previousIt->second.max);
         }
     }
 
@@ -397,6 +401,7 @@ std::shared_ptr<FCPUTLASBuildResult> FCPUAccelerationStructure::BuildSnapshot(FC
         if (currentNavBounds.find(nodeId) == currentNavBounds.end())
         {
             AccumulateBounds(result->hasNavDirtyBounds, result->navDirtyWorldMin, result->navDirtyWorldMax, previousBounds);
+            result->ambientDirtyBounds.emplace_back(previousBounds.min, previousBounds.max);
         }
     }
 
@@ -429,6 +434,33 @@ void FCPUAccelerationStructure::MergeNavDirtyBounds(const FCPUTLASBuildResult& r
             navRelevantDirtyWorldMin_ = glm::min(navRelevantDirtyWorldMin_, result.navDirtyWorldMin);
             navRelevantDirtyWorldMax_ = glm::max(navRelevantDirtyWorldMax_, result.navDirtyWorldMax);
         }
+    }
+}
+
+void FCPUAccelerationStructure::MergeAmbientDirtyBounds(const FCPUTLASBuildResult& result)
+{
+    if (result.ambientDirtyBounds.empty())
+    {
+        return;
+    }
+    for (const auto& [boxMin, boxMax] : result.ambientDirtyBounds)
+    {
+        EvictAmbientBrickCache(boxMin, boxMax);
+    }
+    pendingAmbientDirtyBounds_.insert(pendingAmbientDirtyBounds_.end(), result.ambientDirtyBounds.begin(),
+                                      result.ambientDirtyBounds.end());
+    // Many scattered changes (a level streamed in) collapse into their union: one larger job costs
+    // less than walking hundreds of small boxes per cascade.
+    constexpr size_t kMaxAmbientDirtyBoxes = 64;
+    if (pendingAmbientDirtyBounds_.size() > kMaxAmbientDirtyBoxes)
+    {
+        std::pair<glm::vec3, glm::vec3> merged = pendingAmbientDirtyBounds_.front();
+        for (const auto& [boxMin, boxMax] : pendingAmbientDirtyBounds_)
+        {
+            merged.first = glm::min(merged.first, boxMin);
+            merged.second = glm::max(merged.second, boxMax);
+        }
+        pendingAmbientDirtyBounds_.assign(1, merged);
     }
 }
 
@@ -596,6 +628,7 @@ void FCPUAccelerationStructure::PollBVHBuild()
         const auto publishTime = std::chrono::steady_clock::now();
         PublishSnapshot(result->snapshot);
         MergeNavDirtyBounds(*result);
+        MergeAmbientDirtyBounds(*result);
         publishedRevision_.store(result->snapshot->sceneRevision, std::memory_order_release);
         {
             std::lock_guard<std::mutex> lock(buildMutex_);
@@ -659,7 +692,12 @@ bool FCPUAccelerationStructure::AsyncProcessFull(Assets::Scene& scene, Vulkan::D
     {
         return false;
     }
-    // Drop whatever job the previous bake left behind: its bricks belong to the old grid.
+    // Drop whatever job the previous bake left behind: its bricks belong to the old grid. A full bake
+    // (or the cache restore standing in for one) covers every geometry change made so far.
+    pendingAmbientDirtyBounds_.clear();
+    ambientBrickCache_.Clear();
+    ambientCaptureList_.clear();
+    ambientCaptureData_.reset();
     voxelJobStage_ = EVoxelJobStage::Idle;
     voxelJobTasks_.clear();
     voxelJob_.clear();
@@ -907,7 +945,7 @@ void FCPUAccelerationStructure::FlushPendingAmbientBakeCacheSave(Scene& scene, V
         "Ambient bake cache write");
 }
 
-void FCPUAccelerationStructure::StartVoxelJob()
+void FCPUAccelerationStructure::StartVoxelJob(Scene& scene, Vulkan::DeviceMemory& arenaMemory)
 {
     // Voxelization reads the CPU snapshot; without one there is no geometry, and the job still runs
     // to the end so the cleared voxels get their distance field and the table is rebuilt.
@@ -921,6 +959,7 @@ void FCPUAccelerationStructure::StartVoxelJob()
     totalVoxelTasks_ = 0;
     completedVoxelTasks_.store(0, std::memory_order_release);
     voxelJobStart_ = std::chrono::steady_clock::now();
+    StartAmbientBrickCapture(scene, arenaMemory);
     for (uint32_t cascadeIndex = 0; cascadeIndex < voxelJob_.size() && cascadeIndex < GetActiveCascadeCount();
          ++cascadeIndex)
     {
@@ -960,7 +999,9 @@ void FCPUAccelerationStructure::FinishVoxelJob(Scene& scene, Vulkan::DeviceMemor
     // Commit in one game-thread step: the touched bricks, the new windows and the brick table all
     // reach the GPU before the next frame's UBO, so shading never sees a window ahead of its data.
     std::vector<std::vector<uint32_t>> enteredBricks(GetActiveCascadeCount());
+    std::vector<std::vector<uint32_t>> requeueBricks(GetActiveCascadeCount());
     bool scrolled = false;
+    bool requeued = false;
     for (uint32_t cascadeIndex = 0; cascadeIndex < voxelJob_.size() && cascadeIndex < GetActiveCascadeCount();
          ++cascadeIndex)
     {
@@ -979,6 +1020,12 @@ void FCPUAccelerationStructure::FinishVoxelJob(Scene& scene, Vulkan::DeviceMemor
         std::sort(upload.begin(), upload.end());
         upload.erase(std::unique(upload.begin(), upload.end()), upload.end());
         baker.UploadBricks(arenaMemory, scene.AmbientVoxelsByteOffset(), cascadeIndex * kCascadeVoxelCount, upload);
+        if (job.requeue)
+        {
+            // Every probe the rebuilt distance field reaches sees different geometry now.
+            requeueBricks[cascadeIndex] = upload;
+            requeued = true;
+        }
         if (job.scrolls)
         {
             committedAmbientGrid_.layout.origins[cascadeIndex] = baker.CUBE_OFFSET;
@@ -1010,11 +1057,60 @@ void FCPUAccelerationStructure::FinishVoxelJob(Scene& scene, Vulkan::DeviceMemor
         }
         arenaMemory.Unmap();
     }
+    if (scrolled)
+    {
+        const size_t captured = ambientCaptureList_.size();
+        const auto captureCommitStart = std::chrono::steady_clock::now();
+        CommitAmbientBrickCapture();
+        lastScrollRestoredBricks_ = RestoreEnteringAmbientBricks(scene, arenaMemory, enteredBricks);
+        const FAmbientBrickCacheStats cacheStats = ambientBrickCache_.Stats();
+        SPDLOG_INFO("[AmbientBricks] scroll: {} bricks kept, {} restored from the brick cache ({:.1f} ms); "
+                    "cache {} bricks, {} hits, {} evictions",
+                    captured, lastScrollRestoredBricks_,
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - captureCommitStart).count(),
+                    cacheStats.entries, cacheStats.hits, cacheStats.evictions);
+    }
     if (fullProbeBakePending_)
     {
         // The whole grid was rebuilt: every allocated brick bakes from scratch.
         cpuBrickTable.ResetBakePasses();
         fullProbeBakePending_ = false;
+    }
+    else if (requeued)
+    {
+        // Rebake around a geometry change without dropping what is there: the bricks stay published
+        // and their probes' sample count drops to the publish threshold, so the running average the
+        // bake keeps (weight 1 / (count + 1)) moves to the new lighting within a few passes.
+        ++dirtyRevoxelCount_;
+        const uint32_t publishPasses = NextEngine::GetInstance()->GetUserSettings().AmbientCubePublishPasses;
+        const uint8_t keptSamples = static_cast<uint8_t>(std::clamp(publishPasses, 1u, 255u));
+        void* mapped = arenaMemory.Map(scene.AmbientCubesByteOffset(), scene.AmbientVoxelsByteOffset());
+        auto* cubes = static_cast<AmbientCube*>(mapped);
+        for (uint32_t cascadeIndex = 0; cascadeIndex < requeueBricks.size(); ++cascadeIndex)
+        {
+            if (requeueBricks[cascadeIndex].empty())
+            {
+                continue;
+            }
+            const std::vector<uint32_t> slots = cpuBrickTable.RequeueBricks(
+                cascadeIndex, requeueBricks[cascadeIndex], scene.AmbientPoolBricksPerCascade(), publishPasses);
+            for (uint32_t globalSlot : slots)
+            {
+                AmbientCube* brick = cubes + static_cast<size_t>(globalSlot) * Assets::GPU_SCENE_AMBIENT_BRICK_VOLUME;
+                for (uint32_t probe = 0; probe < static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICK_VOLUME); ++probe)
+                {
+                    // Byte 2 of SkyVisibilityPXNXS0S1 is the sample count (AmbientCubeSampleCount).
+                    const uint32_t packed = brick[probe].SkyVisibilityPXNXS0S1;
+                    const uint32_t samples = (packed >> 16u) & 0xFFu;
+                    if (samples > keptSamples)
+                    {
+                        brick[probe].SkyVisibilityPXNXS0S1 =
+                            (packed & ~0x00FF0000u) | (static_cast<uint32_t>(keptSamples) << 16u);
+                    }
+                }
+            }
+        }
+        arenaMemory.Unmap();
     }
     cpuBrickTable.UploadGPU(arenaMemory, scene.AmbientBrickTableByteOffset());
     scene.SetAmbientActiveBrickCounts(cpuBrickTable.activeBricksPerCascade);
@@ -1054,6 +1150,10 @@ void FCPUAccelerationStructure::ClearAllTasks()
     ambientCacheSaveInFlight_.store(false, std::memory_order_release);
     cpuBrickTable = {};
     ++brickTableGeneration_;
+    pendingAmbientDirtyBounds_.clear();
+    ambientBrickCache_.Clear();
+    ambientCaptureList_.clear();
+    ambientCaptureData_.reset();
     ClearNavRelevantDirtyBounds();
     PublishSnapshot(std::make_shared<FCPUTLASSnapshot>());
     blasSet_.reset();
@@ -1091,15 +1191,17 @@ bool FCPUAccelerationStructure::Tick(Scene& scene, Vulkan::DeviceMemory* arenaMe
         return false;
     }
     ambientFocus_ = ResolveAmbientFocus(scene);
+    ambientBrickCache_.SetBudgetBytes(
+        static_cast<uint64_t>(NextEngine::GetInstance()->GetUserSettings().AmbientCubeBrickCacheMB) * 1024u * 1024u);
     bool voxelUploadCompleted = false;
     Tasks::TaskCoordinator* tasks = Tasks::TaskCoordinator::GetInstance();
 
     switch (voxelJobStage_)
     {
     case EVoxelJobStage::Idle:
-        if (HasProbeVoxelizationWork() || PlanAmbientScroll())
+        if (HasProbeVoxelizationWork() || PlanAmbientScroll() || PlanAmbientDirtyRegions())
         {
-            StartVoxelJob();
+            StartVoxelJob(scene, *arenaMemory);
         }
         break;
 
@@ -1198,6 +1300,12 @@ bool FCPUAccelerationStructure::AcquireAmbientBakeBatch(Scene& scene, uint32_t m
         return false;
     }
     outBatch.generation = brickTableGeneration_;
+    outBatch.slots.resize(outBatch.bricks.size());
+    const size_t tableBase = static_cast<size_t>(outBatch.cascade) * Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE;
+    for (size_t i = 0; i < outBatch.bricks.size(); ++i)
+    {
+        outBatch.slots[i] = cpuBrickTable.brickTable[tableBase + outBatch.bricks[i]];
+    }
     if (!ambientBakeActiveLogged_)
     {
         const FAmbientBakeQueueStats stats = cpuBrickTable.QueueStats(publishPasses);
@@ -1243,6 +1351,9 @@ void FCPUAccelerationStructure::CompleteAmbientBakeBatch(const FAmbientBakeBatch
 void FCPUAccelerationStructure::ResetAmbientBakePasses()
 {
     cpuBrickTable.ResetBakePasses();
+    // The cube pool was cleared because the lighting changed (environment, sun): what the cache holds
+    // was lit the old way.
+    ambientBrickCache_.Clear();
 }
 
 bool FCPUAccelerationStructure::PlanAmbientScroll()
@@ -1331,12 +1442,253 @@ bool FCPUAccelerationStructure::PlanAmbientScroll()
     return any;
 }
 
+glm::ivec3 FCPUAccelerationStructure::AmbientOriginBrick(uint32_t cascade, const glm::vec3& origin) const
+{
+    // Windows are snapped to whole bricks of their lattice, so this is an exact integer.
+    const float unit = committedAmbientGrid_.layout.units[cascade];
+    const glm::vec3 lattice = CalculateAmbientCubeOffset(unit, committedAmbientGrid_.offsetBias);
+    return glm::ivec3(glm::round((origin - lattice) / (unit * static_cast<float>(kVoxelBrickEdge))));
+}
+
+void FCPUAccelerationStructure::StartAmbientBrickCapture(Scene& scene, Vulkan::DeviceMemory& arenaMemory)
+{
+    ambientCaptureList_.clear();
+    ambientCaptureData_.reset();
+    if (!ambientBrickCache_.Enabled() || cpuBrickTable.brickTable.empty())
+    {
+        return;
+    }
+    // Only bricks worth more than a fresh start: published ones. Their passes come along, so one
+    // still topping up carries on from there when it returns. The committed layout still holds the
+    // old windows -- the job has moved only the bakers -- which is where these bricks were.
+    const uint32_t publishPasses = std::max(1u, NextEngine::GetInstance()->GetUserSettings().AmbientCubePublishPasses);
+    const uint32_t poolBricks = scene.AmbientPoolBricksPerCascade();
+    for (uint32_t cascade = 0; cascade < voxelJob_.size() && cascade < GetActiveCascadeCount(); ++cascade)
+    {
+        const FVoxelJobCascade& job = voxelJob_[cascade];
+        if (!job.scrolls)
+        {
+            continue;
+        }
+        const glm::ivec3 originBrick = AmbientOriginBrick(cascade, committedAmbientGrid_.layout.origins[cascade]);
+        const glm::ivec3 wrap = committedAmbientGrid_.layout.wraps[cascade];
+        const size_t tableBase = static_cast<size_t>(cascade) * GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE;
+        for (uint32_t storageBrick : job.bricks)
+        {
+            const size_t entry = tableBase + storageBrick;
+            const uint32_t slot = cpuBrickTable.brickTable[entry];
+            if (slot == GPU_SCENE_AMBIENT_BRICK_INVALID || cpuBrickTable.bakePasses[entry] < publishPasses)
+            {
+                continue;
+            }
+            ambientCaptureList_.push_back(
+                {cascade, originBrick + AmbientWindowBrick(AmbientBrickFromLinearIndex(storageBrick), wrap),
+                 cascade * poolBricks + slot, cpuBrickTable.bakePasses[entry]});
+        }
+    }
+    if (ambientCaptureList_.empty())
+    {
+        return;
+    }
+
+    std::vector<uint32_t> slots;
+    slots.reserve(ambientCaptureList_.size());
+    for (const FAmbientBrickCapture& capture : ambientCaptureList_)
+    {
+        slots.push_back(capture.globalSlot);
+    }
+    ambientCaptureData_ = std::make_shared<std::vector<std::vector<AmbientCube>>>(slots.size());
+    // The slots keep their owners until the commit, and the bake may still be topping some of them
+    // up meanwhile; a copy a pass behind is as good as the pass count recorded with it. Queued ahead
+    // of the voxelization and split up, so the slow device-memory reads overlap it rather than
+    // trailing it, and each brick's buffer is allocated here rather than on the game thread.
+    const size_t cubesOffset = scene.AmbientCubesByteOffset();
+    const size_t cubesBytes = scene.AmbientVoxelsByteOffset();
+    const auto sharedSlots = std::make_shared<const std::vector<uint32_t>>(std::move(slots));
+    constexpr size_t kBricksPerCaptureTask = 128;
+    for (size_t first = 0; first < sharedSlots->size(); first += kBricksPerCaptureTask)
+    {
+        const size_t last = std::min(sharedSlots->size(), first + kBricksPerCaptureTask);
+        voxelJobTasks_.push_back(Tasks::TaskCoordinator::GetInstance()->AddParralledTask(
+            [&arenaMemory, cubesOffset, cubesBytes, first, last, slots = sharedSlots,
+             data = ambientCaptureData_](Tasks::ResTask&)
+            {
+                const auto* cubes = static_cast<const AmbientCube*>(arenaMemory.Map(cubesOffset, cubesBytes));
+                for (size_t i = first; i < last; ++i)
+                {
+                    std::vector<AmbientCube>& brick = (*data)[i];
+                    brick.resize(FAmbientBrickCache::kProbesPerBrick);
+                    CopyFromDeviceMemory(brick.data(),
+                                         cubes + static_cast<size_t>((*slots)[i]) * FAmbientBrickCache::kProbesPerBrick,
+                                         FAmbientBrickCache::kBytesPerEntry);
+                }
+                arenaMemory.Unmap();
+            },
+            nullptr,
+            "Ambient brick capture"));
+    }
+}
+
+void FCPUAccelerationStructure::CommitAmbientBrickCapture()
+{
+    if (ambientCaptureData_ && ambientCaptureData_->size() == ambientCaptureList_.size())
+    {
+        for (size_t i = 0; i < ambientCaptureList_.size(); ++i)
+        {
+            const FAmbientBrickCapture& capture = ambientCaptureList_[i];
+            // A task cancelled with the job leaves its bricks empty; Store ignores those.
+            ambientBrickCache_.Store(capture.cascade, capture.worldBrick, std::move((*ambientCaptureData_)[i]),
+                                     capture.passes);
+        }
+    }
+    ambientCaptureList_.clear();
+    ambientCaptureData_.reset();
+}
+
+uint32_t FCPUAccelerationStructure::RestoreEnteringAmbientBricks(
+    Scene& scene, Vulkan::DeviceMemory& arenaMemory, const std::vector<std::vector<uint32_t>>& enteredBricks)
+{
+    if (ambientBrickCache_.Stats().entries == 0u)
+    {
+        return 0u;
+    }
+    uint32_t restored = 0;
+    AmbientCube* cubes = nullptr;
+    for (uint32_t cascade = 0; cascade < enteredBricks.size(); ++cascade)
+    {
+        if (enteredBricks[cascade].empty())
+        {
+            continue;
+        }
+        const glm::ivec3 originBrick = AmbientOriginBrick(cascade, committedAmbientGrid_.layout.origins[cascade]);
+        const glm::ivec3 wrap = committedAmbientGrid_.layout.wraps[cascade];
+        const size_t tableBase = static_cast<size_t>(cascade) * GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE;
+        const size_t poolBase = static_cast<size_t>(cascade) * scene.AmbientPoolBricksPerCascade();
+        for (uint32_t storageBrick : enteredBricks[cascade])
+        {
+            const size_t entry = tableBase + storageBrick;
+            const uint32_t slot = cpuBrickTable.brickTable[entry];
+            if (slot == GPU_SCENE_AMBIENT_BRICK_INVALID)
+            {
+                continue;
+            }
+            const glm::ivec3 worldBrick =
+                originBrick + AmbientWindowBrick(AmbientBrickFromLinearIndex(storageBrick), wrap);
+            if (!ambientBrickCache_.Contains(cascade, worldBrick))
+            {
+                continue;
+            }
+            if (cubes == nullptr)
+            {
+                cubes = static_cast<AmbientCube*>(
+                    arenaMemory.Map(scene.AmbientCubesByteOffset(), scene.AmbientVoxelsByteOffset()));
+            }
+            uint8_t passes = 0;
+            ambientBrickCache_.Fetch(cascade, worldBrick, cubes + (poolBase + slot) * FAmbientBrickCache::kProbesPerBrick,
+                                     passes);
+            cpuBrickTable.bakePasses[entry] = passes;
+            ++restored;
+        }
+    }
+    if (cubes != nullptr)
+    {
+        arenaMemory.Unmap();
+    }
+    return restored;
+}
+
+void FCPUAccelerationStructure::EvictAmbientBrickCache(const glm::vec3& worldMin, const glm::vec3& worldMax)
+{
+    if (!hasCommittedAmbientGrid_ || ambientBrickCache_.Stats().entries == 0u)
+    {
+        return;
+    }
+    // A change reaches as far as the distance field it rewrites (16 cells, two bricks) on every
+    // cascade; light carried further than that is left to the next rebake of those bricks.
+    constexpr int kReachBricks = 2;
+    for (uint32_t cascade = 0; cascade < committedAmbientGrid_.layout.cascadeCount; ++cascade)
+    {
+        const float unit = committedAmbientGrid_.layout.units[cascade];
+        const float brick = unit * static_cast<float>(kVoxelBrickEdge);
+        const glm::vec3 lattice = CalculateAmbientCubeOffset(unit, committedAmbientGrid_.offsetBias);
+        const glm::ivec3 brickMin = glm::ivec3(glm::floor((worldMin - lattice) / brick)) - kReachBricks;
+        const glm::ivec3 brickMax = glm::ivec3(glm::floor((worldMax - lattice) / brick)) + kReachBricks;
+        ambientBrickCache_.EvictBox(cascade, brickMin, brickMax);
+    }
+}
+
+bool FCPUAccelerationStructure::PlanAmbientDirtyRegions()
+{
+    if (pendingAmbientDirtyBounds_.empty())
+    {
+        return false;
+    }
+    if (!NextEngine::GetInstance()->GetUserSettings().AmbientCubeDynamicUpdate)
+    {
+        pendingAmbientDirtyBounds_.clear();
+        return false;
+    }
+    // Same gates as scrolling: never during a full bake (which covers the change anyway) or while a
+    // cache save reads the voxel arrays.
+    if (!hasCommittedAmbientGrid_ || cascadeBakers.empty() || fullProbeBakePending_ ||
+        ambientCacheSaveInFlight_.load(std::memory_order_acquire) || ambientCachePendingSave_)
+    {
+        return false;
+    }
+
+    const int edge = static_cast<int>(kVoxelBrickEdge);
+    const glm::ivec3 lastCell(CUBE_SIZE_XY - 1, CUBE_SIZE_Z - 1, CUBE_SIZE_XY - 1);
+    std::vector<FVoxelJobCascade> job(GetActiveCascadeCount());
+    bool any = false;
+    for (uint32_t cascadeIndex = 0; cascadeIndex < GetActiveCascadeCount(); ++cascadeIndex)
+    {
+        const FCPUProbeBaker& baker = cascadeBakers[cascadeIndex];
+        FVoxelJobCascade& cascadeJob = job[cascadeIndex];
+        for (const auto& [worldMin, worldMax] : pendingAmbientDirtyBounds_)
+        {
+            // A voxel samples its whole cell, so a change touches every cell it overlaps plus one.
+            const glm::ivec3 cellMin = glm::ivec3(glm::floor((worldMin - baker.CUBE_OFFSET) / baker.UNIT_SIZE)) - 1;
+            const glm::ivec3 cellMax = glm::ivec3(glm::floor((worldMax - baker.CUBE_OFFSET) / baker.UNIT_SIZE)) + 1;
+            if (glm::any(glm::greaterThan(cellMin, lastCell)) || glm::any(glm::lessThan(cellMax, glm::ivec3(0))))
+            {
+                continue;
+            }
+            // Whole bricks are re-voxelized, so the occupancy change spans whole bricks too.
+            const glm::ivec3 brickMin = glm::clamp(cellMin, glm::ivec3(0), lastCell) / edge;
+            const glm::ivec3 brickMax = glm::clamp(cellMax, glm::ivec3(0), lastCell) / edge;
+            const std::vector<uint32_t> bricks = baker.StorageBricksInBox(brickMin * edge, brickMax * edge);
+            cascadeJob.bricks.insert(cascadeJob.bricks.end(), bricks.begin(), bricks.end());
+            cascadeJob.changedBoxes.push_back({brickMin * edge, glm::min(brickMax * edge + (edge - 1), lastCell)});
+        }
+        if (cascadeJob.bricks.empty())
+        {
+            continue;
+        }
+        std::sort(cascadeJob.bricks.begin(), cascadeJob.bricks.end());
+        cascadeJob.bricks.erase(std::unique(cascadeJob.bricks.begin(), cascadeJob.bricks.end()),
+                                cascadeJob.bricks.end());
+        cascadeJob.requeue = true;
+        any = true;
+    }
+    // The boxes are consumed whether or not a window held them: outside every window there is
+    // nothing to update, and a window that scrolls there later voxelizes from the current snapshot.
+    pendingAmbientDirtyBounds_.clear();
+    if (any)
+    {
+        voxelJob_ = std::move(job);
+    }
+    return any;
+}
+
 FAmbientScrollStats FCPUAccelerationStructure::GetAmbientScrollStats() const
 {
     FAmbientScrollStats stats;
     stats.scrollCount = scrollCount_;
     stats.lastScrollMilliseconds = lastScrollMilliseconds_;
     stats.voxelJobActive = HasProbeVoxelizationWork();
+    stats.dirtyRevoxelCount = dirtyRevoxelCount_;
+    stats.brickCache = ambientBrickCache_.Stats();
+    stats.lastScrollRestoredBricks = lastScrollRestoredBricks_;
     return stats;
 }
 

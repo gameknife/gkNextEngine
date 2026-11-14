@@ -15,6 +15,9 @@ struct FAmbientBakeBatch
 {
     uint32_t cascade = 0;
     std::vector<uint32_t> bricks;
+    // Cube-pool slot of each brick (same order). The bake writes exactly these slots, which is what
+    // lets the stable pong copy re-sync only them.
+    std::vector<uint32_t> slots;
     // Brick-table generation the batch was taken from. A batch spread over several frames is
     // dropped once the table it indexes has been rebuilt.
     uint64_t generation = 0;

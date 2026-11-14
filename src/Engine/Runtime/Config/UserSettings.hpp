@@ -133,11 +133,18 @@ struct UserSettings final
     // 0 = every cascade anchored on the world lattice origin; 1 = fit the cascades to the scene
     // (adaptive ratio, coarsest cascade covering the map). See FAmbientCascadeLayout.
     bool AmbientCubeFollow = false;
+    bool AmbientCubeDynamicUpdate = true;
+#if IOS || ANDROID
+    uint32_t AmbientCubeBrickCacheMB = 64;
+#else
+    uint32_t AmbientCubeBrickCacheMB = 256;
+#endif
     float AmbientCubePoolBrickRatio = 0.5f;
     uint32_t AmbientCubeBakeTargetFps = 60;
     // Bake passes a probe needs before interpolation uses it; 0 uses every allocated probe.
     uint32_t AmbientCubePublishPasses = 4;
     int AmbientCubeDebugView = 0;
+    uint32_t AmbientCubeBlendCells = 8;
     bool AmbientCubeDiskCache = true;
     // Multiplier on the indirect term only (SHARC cache hit + ambient-cube path terminal).
     // 1 = physically accumulated GI; raise it to lift bounce light without touching direct/sky.

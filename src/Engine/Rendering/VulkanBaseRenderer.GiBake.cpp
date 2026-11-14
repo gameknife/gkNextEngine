@@ -322,6 +322,8 @@ namespace Vulkan
         vkCmdPushConstants(commandBuffer, ambient_.clearCache->PipelineLayout().Handle(),
                            VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Assets::GPUScene), &gpuScene);
         vkCmdDispatch(commandBuffer, groupCount, 1, 1);
+        // The pool changed under the pong copy; the next bake copies its cascade in full.
+        ambient_.pong.valid = false;
         // Every cube is back to the sky prior with zero samples: every allocated brick bakes again.
         GetScene().GetCPUAccelerationStructure().ResetAmbientBakePasses();
 
@@ -398,16 +400,49 @@ namespace Vulkan
             static_cast<VkDeviceSize>(cascadeIndex) * poolCubesPerCascade * sizeof(Assets::AmbientCube);
         const VkDeviceSize pongByteOffset = GetScene().AmbientCubesPongByteOffset();
         const VkDeviceSize cascadeByteSize = poolCubesPerCascade * sizeof(Assets::AmbientCube);
+        constexpr VkDeviceSize brickBytes =
+            static_cast<VkDeviceSize>(Assets::GPU_SCENE_AMBIENT_BRICK_VOLUME) * sizeof(Assets::AmbientCube);
 
-        // ping (cube) -> pong copy with surrounding barriers
+        // ping (cube) -> pong copy with surrounding barriers. Back-to-back batches of the same cascade
+        // against the same brick table only re-sync the slots the previous dispatch wrote; anything
+        // else (another cascade, a table rebuild, a cleared or reloaded pool) copies the cascade whole.
         BufferMemoryBarrier::Insert(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                                     cubeBuffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, cascadeByteOffset, cascadeByteSize);
 
-        VkBufferCopy copyRegion{};
-        copyRegion.srcOffset = cascadeByteOffset;
-        copyRegion.dstOffset = pongByteOffset;
-        copyRegion.size = cascadeByteSize;
-        vkCmdCopyBuffer(commandBuffer, cubeBuffer, pongBuffer, 1, &copyRegion);
+        std::vector<std::pair<uint32_t, uint32_t>> pongRuns;
+        const uint64_t arenaId = reinterpret_cast<const uint64_t&>(cubeBuffer);
+        const bool fullPongCopy =
+            AmbientBake::PlanPongSync(ambient_.pong, cascadeIndex, ambient_.batch.generation, arenaId, pongRuns);
+        std::vector<VkBufferCopy> copyRegions;
+        if (fullPongCopy)
+        {
+            copyRegions.push_back({cascadeByteOffset, pongByteOffset, cascadeByteSize});
+        }
+        else
+        {
+            copyRegions.reserve(pongRuns.size());
+            for (const auto& [firstSlot, slotCount] : pongRuns)
+            {
+                copyRegions.push_back({cascadeByteOffset + firstSlot * brickBytes, pongByteOffset + firstSlot * brickBytes,
+                                       slotCount * brickBytes});
+            }
+        }
+        ambient_.lastPongCopyBytes = 0u;
+        for (const VkBufferCopy& region : copyRegions)
+        {
+            ambient_.lastPongCopyBytes += region.size;
+        }
+        if (!copyRegions.empty())
+        {
+            vkCmdCopyBuffer(commandBuffer, cubeBuffer, pongBuffer, static_cast<uint32_t>(copyRegions.size()),
+                            copyRegions.data());
+        }
+        // This dispatch writes the batch's slots, so they are what the next sync has to carry over.
+        ambient_.pong.valid = true;
+        ambient_.pong.cascade = cascadeIndex;
+        ambient_.pong.generation = ambient_.batch.generation;
+        ambient_.pong.arena = arenaId;
+        ambient_.pong.dirtySlots = ambient_.batch.slots;
 
         BufferMemoryBarrier::Insert(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, {
             BufferMemoryBarrier::Make(pongBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, pongByteOffset, cascadeByteSize),

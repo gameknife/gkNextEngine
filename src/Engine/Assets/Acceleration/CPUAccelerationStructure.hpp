@@ -4,6 +4,7 @@
 #include "Engine/Assets/GPU/UniformBuffer.hpp"
 #include "Engine/Assets/Acceleration/AmbientCascadeLayout.hpp"
 #include "Engine/Assets/Acceleration/AmbientBakeBatch.hpp"
+#include "Engine/Assets/Acceleration/AmbientBrickCache.hpp"
 #include "Engine/Runtime/RuntimeFwd.hpp"
 #include "Engine/Vulkan/VulkanFwd.hpp"
 #include <glm/glm.hpp>
@@ -129,6 +130,9 @@ struct FCPUTLASBuildResult
     bool hasNavDirtyBounds = false;
     glm::vec3 navDirtyWorldMin{0.0f};
     glm::vec3 navDirtyWorldMax{0.0f};
+    // World boxes whose geometry changed against the previous snapshot (an instance added, removed
+    // or moved: both its old and new bounds), kept apart so the ambient voxels re-voxelize only them.
+    std::vector<std::pair<glm::vec3, glm::vec3>> ambientDirtyBounds;
 };
 
 struct FCPUTLASBuildStats
@@ -222,6 +226,11 @@ struct FCPUBrickTable
     void ResetBakePasses();
     // The cube pool came back converged from the disk cache.
     void MarkConverged();
+    // The geometry around these storage bricks changed: an allocated one goes back into the queue
+    // with at most `publishPasses` passes, so it stays published while it rebakes. Returns the cube
+    // pool slots (global, cascade-major) of the bricks it requeued.
+    std::vector<uint32_t> RequeueBricks(uint32_t cascade, const std::vector<uint32_t>& storageBricks,
+                                        uint32_t poolBricksPerCascade, uint32_t publishPasses);
 };
 
 // The ambient/voxel grid the cascade bakers were actually built with. User settings can change at
@@ -245,6 +254,12 @@ struct FAmbientScrollStats
     uint32_t scrollCount = 0;
     double lastScrollMilliseconds = 0.0;
     bool voxelJobActive = false;
+    // Voxel jobs that re-voxelized bricks because scene geometry changed under them.
+    uint32_t dirtyRevoxelCount = 0;
+    // Baked bricks kept for windows that scroll back (FAmbientBrickCache).
+    FAmbientBrickCacheStats brickCache;
+    // Bricks the last scroll commit restored from the cache rather than leaving to the bake.
+    uint32_t lastScrollRestoredBricks = 0;
 };
 
 // UI-facing state for the CPU half of the ambient GI bake pipeline. Voxel work is counted in
@@ -335,12 +350,28 @@ private:
     void StartBuild(std::shared_ptr<FCPUTLASBuildInput> input);
     void CancelRuntimeBuilds();
     void MergeNavDirtyBounds(const FCPUTLASBuildResult& result);
+    void MergeAmbientDirtyBounds(const FCPUTLASBuildResult& result);
     // Voxel pipeline: the bricks in voxelJob_ are voxelized, the distance field is rebuilt
     // around them, the touched bricks are uploaded and the brick table is reclassified.
-    void StartVoxelJob();
+    void StartVoxelJob(Assets::Scene& scene, Vulkan::DeviceMemory& arenaMemory);
     // Fit-scene mode: moves every near cascade whose window lags the focus by the hysteresis or more
     // and queues the bricks that enter it. Returns whether anything moved.
     bool PlanAmbientScroll();
+    // Queues the bricks of every cascade that the pending geometry changes touch. Returns whether
+    // any brick was queued.
+    bool PlanAmbientDirtyRegions();
+    // World brick (on the cascade's own lattice) that window brick (0,0,0) sits on for `origin`.
+    glm::ivec3 AmbientOriginBrick(uint32_t cascade, const glm::vec3& origin) const;
+    // Scroll: when the job starts, the published bricks a window is leaving still own their slots
+    // (the commit reassigns them), so a worker reads them back alongside the voxelization -- the
+    // arena is write-combined device memory, and reading thousands of bricks on the game thread
+    // stalled a teleport for seconds. The commit files them into the cache, then refills the
+    // entering bricks the cache holds. Restore returns the bricks it refilled.
+    void StartAmbientBrickCapture(Assets::Scene& scene, Vulkan::DeviceMemory& arenaMemory);
+    void CommitAmbientBrickCapture();
+    uint32_t RestoreEnteringAmbientBricks(Assets::Scene& scene, Vulkan::DeviceMemory& arenaMemory,
+                                          const std::vector<std::vector<uint32_t>>& enteredBricks);
+    void EvictAmbientBrickCache(const glm::vec3& worldMin, const glm::vec3& worldMax);
     void FinishVoxelJob(Assets::Scene& scene, Vulkan::DeviceMemory& arenaMemory);
     bool HasProbeVoxelizationWork() const;
     glm::vec3 ResolveAmbientFocus(const Assets::Scene& scene) const;
@@ -405,6 +436,9 @@ private:
         // The window moved: the baker already holds the new origin and wrap, and the job commits
         // them to the shading layout when it lands.
         bool scrolls = false;
+        // Scene geometry changed inside these bricks. The window stays; the probes around the change
+        // rebake on top of their old lighting (FCPUBrickTable::RequeueBricks).
+        bool requeue = false;
     };
     std::vector<FVoxelJobCascade> voxelJob_;
     std::chrono::steady_clock::time_point voxelJobStart_{};
@@ -416,6 +450,22 @@ private:
     glm::vec3 ambientFocus_{0.0f};
     uint64_t brickTableGeneration_ = 1;
     bool ambientBakeActiveLogged_ = false;
+
+    std::vector<std::pair<glm::vec3, glm::vec3>> pendingAmbientDirtyBounds_;
+    uint32_t dirtyRevoxelCount_ = 0;
+    FAmbientBrickCache ambientBrickCache_;
+    uint32_t lastScrollRestoredBricks_ = 0;
+    struct FAmbientBrickCapture
+    {
+        uint32_t cascade = 0;
+        glm::ivec3 worldBrick{0};
+        uint32_t globalSlot = 0;
+        uint8_t passes = 0;
+    };
+    std::vector<FAmbientBrickCapture> ambientCaptureList_;
+    // One brick per entry, filled by the capture tasks; read on the game thread only once the job's
+    // tasks are done.
+    std::shared_ptr<std::vector<std::vector<AmbientCube>>> ambientCaptureData_;
 
     bool hasNavRelevantDirtyBounds_ = false;
     glm::vec3 navRelevantDirtyWorldMin_{0.0f};

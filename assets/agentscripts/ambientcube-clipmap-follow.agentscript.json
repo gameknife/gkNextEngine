@@ -338,6 +338,61 @@
       "out": "screenshots/follow_flight_state"
     },
     {
+      "type": "cvar",
+      "name": "r.ambientCube.debugView",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "camera.teleport",
+      "set": "120 42 330 150 16 300",
+      "comment": "Back to where the flight started: the bricks the windows left behind come from the brick cache."
+    },
+    {
+      "type": "wait-frames",
+      "n": 5
+    },
+    {
+      "type": "wait-until",
+      "query": "ambient.voxelJobActive",
+      "op": "eq",
+      "value": false,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "assert",
+      "query": "ambient.brickCacheHits",
+      "op": "gt",
+      "value": 0
+    },
+    {
+      "type": "assert",
+      "query": "ambient.lastScrollRestoredBricks",
+      "op": "gt",
+      "value": 100,
+      "comment": "The bricks the flight scrolled out of the windows are restored rather than rebaked."
+    },
+    {
+      "type": "wait-until",
+      "query": "ambient.unpublishedBricks",
+      "op": "eq",
+      "value": 0,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "cvar",
+      "name": "r.ambientCube.debugView",
+      "set": 2
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/follow_return_state"
+    },
+    {
       "type": "quit"
     }
   ]

@@ -3,6 +3,7 @@
 
 #include "Engine/Assets/Acceleration/CPUAccelerationStructure.hpp"
 #include "Engine/Assets/Acceleration/CPUAccelerationStructure.Internal.hpp"
+#include "Engine/Assets/Acceleration/AmbientBrickCache.hpp"
 #include "Engine/Runtime/Subsystems/TaskCoordinator.hpp"
 
 #include <atomic>
@@ -343,6 +344,105 @@ TEST_CASE("Ambient bricks that enter a scrolled window never inherit their stora
     CHECK(std::find(table.slotsToClear.begin(), table.slotsToClear.end(), oldSlot) != table.slotsToClear.end());
     // Everything else keeps its slot and its passes.
     CHECK(table.QueueStats(0u).pendingBricks == 1u);
+}
+
+TEST_CASE("Ambient bricks around a geometry change rebake without being unpublished",
+          "[Unit][CPUAccelerationSnapshot][AmbientBake]")
+{
+    FCPUProbeBaker baker;
+    baker.Init(0, 1.0f, glm::vec3(0.0f));
+    for (int x = 0; x < 48; ++x)
+        SetSolid(baker, x, 4, 4);
+    baker.RebuildDistanceField();
+
+    FCPUBrickTable table;
+    const uint32_t poolCapacity = static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE);
+    table.UpdateData({baker}, 1u, poolCapacity, glm::vec3(0.0f));
+    table.MarkConverged();
+    REQUIRE(table.QueueStats(0u).pendingBricks == 0u);
+
+    std::vector<uint32_t> allocated;
+    uint32_t unallocated = Assets::GPU_SCENE_AMBIENT_BRICK_INVALID;
+    for (uint32_t b = 0; b < poolCapacity; ++b)
+    {
+        if (table.brickTable[b] != Assets::GPU_SCENE_AMBIENT_BRICK_INVALID)
+            allocated.push_back(b);
+        else if (unallocated == Assets::GPU_SCENE_AMBIENT_BRICK_INVALID)
+            unallocated = b;
+    }
+    REQUIRE(allocated.size() >= 2u);
+    REQUIRE(unallocated != Assets::GPU_SCENE_AMBIENT_BRICK_INVALID);
+
+    constexpr uint32_t publishPasses = 4u;
+    const uint32_t cascade = 0u;
+    const std::vector<uint32_t> slots =
+        table.RequeueBricks(cascade, {allocated[0], allocated[1], unallocated}, 777u, publishPasses);
+    // Only allocated bricks have a slot to rebake; slots are global (cascade * pool + slot).
+    REQUIRE(slots.size() == 2u);
+    CHECK(slots[0] == table.brickTable[allocated[0]]);
+    CHECK(slots[1] == table.brickTable[allocated[1]]);
+
+    const FAmbientBakeQueueStats stats = table.QueueStats(publishPasses);
+    CHECK(stats.pendingBricks == 2u);
+    CHECK(stats.unpublishedBricks == 0u);
+    CHECK(table.bakePasses[allocated[0]] == publishPasses);
+}
+
+TEST_CASE("Ambient brick cache keeps baked bricks by world position", "[Unit][CPUAccelerationSnapshot][AmbientBake]")
+{
+    using Cache = FAmbientBrickCache;
+    std::vector<Assets::AmbientCube> brick(Cache::kProbesPerBrick);
+    const auto fill = [&](uint32_t value)
+    {
+        for (Assets::AmbientCube& cube : brick)
+        {
+            cube = {};
+            cube.PosY = value;
+        }
+    };
+
+    Cache cache;
+    // Disabled until it has room for one brick.
+    fill(1u);
+    cache.Store(0u, glm::ivec3(1, 2, 3), brick.data(), 4u);
+    CHECK(cache.Stats().entries == 0u);
+
+    cache.SetBudgetBytes(3u * Cache::kBytesPerEntry);
+    cache.Store(0u, glm::ivec3(1, 2, 3), brick.data(), 4u);
+    fill(2u);
+    cache.Store(1u, glm::ivec3(1, 2, 3), brick.data(), 32u); // same coordinates, another cascade
+    fill(3u);
+    cache.Store(0u, glm::ivec3(-5, 0, 7), brick.data(), 9u);
+    REQUIRE(cache.Stats().entries == 3u);
+
+    std::vector<Assets::AmbientCube> out(Cache::kProbesPerBrick);
+    uint8_t passes = 0;
+    REQUIRE(cache.Fetch(0u, glm::ivec3(1, 2, 3), out.data(), passes));
+    CHECK(passes == 4u);
+    CHECK(out.back().PosY == 1u);
+    REQUIRE(cache.Fetch(1u, glm::ivec3(1, 2, 3), out.data(), passes));
+    CHECK(passes == 32u);
+    CHECK(out.front().PosY == 2u);
+    CHECK_FALSE(cache.Fetch(2u, glm::ivec3(1, 2, 3), out.data(), passes));
+
+    // Over budget the least recently used brick goes: (-5,0,7) was never fetched.
+    fill(4u);
+    cache.Store(0u, glm::ivec3(9, 9, 9), brick.data(), 5u);
+    CHECK(cache.Stats().entries == 3u);
+    CHECK_FALSE(cache.Contains(0u, glm::ivec3(-5, 0, 7)));
+    CHECK(cache.Contains(0u, glm::ivec3(1, 2, 3)));
+
+    // A geometry change evicts one cascade's bricks inside the box only.
+    cache.EvictBox(0u, glm::ivec3(0), glm::ivec3(2, 2, 3));
+    CHECK_FALSE(cache.Contains(0u, glm::ivec3(1, 2, 3)));
+    CHECK(cache.Contains(1u, glm::ivec3(1, 2, 3)));
+    CHECK(cache.Contains(0u, glm::ivec3(9, 9, 9)));
+
+    // Negative coordinates do not alias positive ones.
+    CHECK(Cache::MakeKey(0u, glm::ivec3(-1, 0, 0)) != Cache::MakeKey(0u, glm::ivec3(1, 0, 0)));
+
+    cache.Clear();
+    CHECK(cache.Stats().entries == 0u);
 }
 
 TEST_CASE("Ambient ring storage keeps overlapping bricks in place when a window scrolls",

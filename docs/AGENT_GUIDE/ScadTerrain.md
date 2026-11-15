@@ -75,7 +75,7 @@ TERR = ["gkterr1", [sizeX, sizeY], [cellsX, cellsY], seed,
 - `urban` 另有一条 `minGreenRiseM = 40`：起伏不到 40m 就完全不上绿色。色带本来是"本块起伏的
   百分比"，这对城市问错了问题 —— 曼哈顿建成区总共只有 27m 起伏，55% 就是 15m，半个中城会被
   涂成山坡。
-- 调色板：`temperate` / `arid` / `alpine` / `urban` / `continental`（中欧农林：偏深偏冷的草绿、
+- 调色板：`temperate` / `arid` / `alpine` / `urban` / `savanna`（东非稀树草原：金色草地、漂白的过牧地、红土路与院落、深色河岸林下；同样只靠 paint 上色，且 `unpavedRoads`——细节道路带不出沥青，宽路是土色的 murram）/ `continental`（中欧农林：偏深偏冷的草绿、
   卡其色麦茬与褐色土路，与运行时草叶同色系；颜色只来自 paint，不随海拔变干、不下雪）；biomeId 枚举见 `FScadTerrain.h`
   `ETerrainBiome`（grass=0, grass_dark, dry_grass, sand, rock, rock_high, snow, bed, road, pad）。
   `urban` 把低平地染成混凝土、把高处染成绿坡并**彻底关掉雪线**（城市丘陵只有一两百米，

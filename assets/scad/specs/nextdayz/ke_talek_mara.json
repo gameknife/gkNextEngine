@@ -1,0 +1,39 @@
+{
+  "id": "ke_talek_mara",
+  "region": "savanna",
+  "seed": 2611,
+  "version": 1,
+  "gameplay": {
+    "controls": "assets/scad/specs/nextdayz/ke_talek_controls.scad",
+    "buildingBudget": 102,
+    "reliefScale": 1.0,
+    "roadLimit": 32,
+    "terrainDetail": true,
+    "roadClasses": [
+      "secondary",
+      "tertiary",
+      "unclassified",
+      "residential",
+      "track",
+      "service"
+    ],
+    "waterways": {
+      "river": {
+        "width": 16,
+        "depth": 2.2
+      },
+      "stream": {
+        "width": 9,
+        "dry": true
+      }
+    },
+    "water": {
+      "color": [
+        0.16,
+        0.13,
+        0.08
+      ],
+      "roughness": 0.06
+    }
+  }
+}

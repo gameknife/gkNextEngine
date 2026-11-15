@@ -27,6 +27,9 @@ type ExpeditionGameplay struct {
 	// textures per biome and draws roads as smooth draped ribbons instead of
 	// a staircase of road-coloured cells. Off keeps the flat-colour terrain.
 	TerrainDetail bool `json:"terrainDetail,omitempty"`
+	// How each OSM waterway class is realised (expedition_waterways.go): a
+	// carved TERR river or a dry sand bed. Classes left out are ignored.
+	Waterways map[string]ExpeditionWaterway `json:"waterways,omitempty"`
 }
 
 // ExpeditionWater is the gk_material() triple for the terrain water slab:
@@ -49,7 +52,10 @@ type ExpeditionRecipe struct {
 	Synthetic *ExpeditionSynthetic `json:"synthetic,omitempty"`
 }
 
-var expeditionRegions = map[string]bool{"bohemia": true, "hokkaido": true, "sichuan": true, "training": true}
+// Regions and their default terrain palette. A region is a kit + settlement
+// morphs + land cover + flora; its ground colours are part of that identity.
+var expeditionRegions = map[string]string{"bohemia": "continental", "hokkaido": "temperate", "sichuan": "temperate",
+	"training": "temperate", "savanna": "savanna"}
 
 type ExpeditionSite struct {
 	ID        string     `json:"id"`
@@ -92,7 +98,7 @@ func ExportExpedition(repoRoot, recipePath string, publish bool) (string, Expedi
 	if err := readJSON(recipePath, &recipe); err != nil {
 		return "", report, err
 	}
-	if !expeditionID.MatchString(recipe.ID) || !expeditionRegions[recipe.Region] || recipe.Version < 1 || recipe.Gameplay == nil {
+	if !expeditionID.MatchString(recipe.ID) || expeditionRegions[recipe.Region] == "" || recipe.Version < 1 || recipe.Gameplay == nil {
 		return "", report, fmt.Errorf("geographic extraction recipes require a region and gameplay PCG controls")
 	}
 	gp := recipe.Gameplay
@@ -122,6 +128,9 @@ func ExportExpedition(repoRoot, recipePath string, publish bool) (string, Expedi
 		if grid, err = DecodeHmap(blob); err != nil {
 			return "", report, err
 		}
+	}
+	if ir.channels, err = expeditionChannels(&ir, gp.Waterways); err != nil {
+		return "", report, err
 	}
 	meta := *ir.Terrain
 	datum := meta.BaseElevation
@@ -196,12 +205,14 @@ func ExportExpedition(repoRoot, recipePath string, publish bool) (string, Expedi
 	writeTerrain(&reference, tile, assetRoot+"/terrain.hmap", roads, ir.Terrain, scope{})
 	ref := strings.Replace(reference.String(), "TERR =", "GEO_TERR =", 1)
 	ref = strings.Replace(ref, "\"urban\"", fmt.Sprintf("%q", expeditionPalette(recipe)), 1)
-	out.WriteString(ref)
+	out.WriteString(insertExpeditionRivers(ref, ir.channels))
+	dryBeds := expeditionDryBeds(ir.channels)
+	out.WriteString(dryBeds)
 	landcover := "[]"
 	if len(report.Landcover) > 0 {
 		landcover = "PCG_LANDCOVER"
 	}
-	fmt.Fprintf(&out, "TERR=[\"gkterr1\",GEO_TERR[1],GEO_TERR[2],GEO_TERR[3],GEO_TERR[4],GEO_TERR[5],GEO_TERR[6],concat(GEO_TERR[7],PCG_PATHS,nd_pcg_terrain(PCG_SITES,PCG_SPAWNS,PCG_EXTRACTIONS,%d,%s))];\ngk_terrain(TERR%s);\nfunction nd_ground(x,y)=gk_terrain_height(TERR,x,y);\n", recipe.Seed, landcover, expeditionTerrainArgs(recipe))
+	fmt.Fprintf(&out, "TERR=[\"gkterr1\",GEO_TERR[1],GEO_TERR[2],GEO_TERR[3],GEO_TERR[4],GEO_TERR[5],GEO_TERR[6],concat(GEO_TERR[7],PCG_PATHS,nd_pcg_terrain(PCG_SITES,PCG_SPAWNS,PCG_EXTRACTIONS,%d,%s)%s)];\ngk_terrain(TERR%s);\nfunction nd_ground(x,y)=gk_terrain_height(TERR,x,y);\n", recipe.Seed, landcover, map[bool]string{true: ",GEO_DRYBEDS", false: ""}[dryBeds != ""], expeditionTerrainArgs(recipe))
 	if err = writeExpeditionBridges(&out, &ir, grid, recipe.Seed); err != nil {
 		return "", report, err
 	}
@@ -266,8 +277,8 @@ func expeditionPalette(recipe ExpeditionRecipe) string {
 	if recipe.Gameplay != nil && recipe.Gameplay.Palette != "" {
 		return recipe.Gameplay.Palette
 	}
-	if recipe.Region == "bohemia" {
-		return "continental"
+	if palette := expeditionRegions[recipe.Region]; palette != "" {
+		return palette
 	}
 	return "temperate"
 }
@@ -308,13 +319,17 @@ func expeditionTerrainArgs(recipe ExpeditionRecipe) string {
 // rises that far (Loket's Ohře meadows sit 0.16 m above it at relief 0.4),
 // to the first point that is dry. Only water on a whole side fails.
 func expeditionBridgeBanks(ir *IR, grid *HeightGrid, a, b [2]float64) ([2]float64, [2]float64, error) {
-	if !ir.Terrain.HasWater {
+	// A carved river (expedition_waterways.go) has no global water level: its
+	// banks are simply the ground a little outside the channel.
+	const riverBank = 3.0
+	inRiver := func(p [2]float64) bool { return wetChannelDistance(ir.channels, p) < riverBank }
+	if !ir.Terrain.HasWater && math.IsInf(wetChannelDistance(ir.channels, a), 1) {
 		return a, b, nil
 	}
 	length := math.Hypot(b[0]-a[0], b[1]-a[1])
 	dir := [2]float64{(b[0] - a[0]) / length, (b[1] - a[1]) / length}
 	bank := func(p [2]float64, side float64) ([2]float64, bool) {
-		if grid.Sample(p[0], p[1]) >= ir.Terrain.WaterLevel+0.1 {
+		if !inRiver(p) && (!ir.Terrain.HasWater || grid.Sample(p[0], p[1]) >= ir.Terrain.WaterLevel+0.1) {
 			return p, true
 		}
 		low, haveLow := p, false
@@ -322,6 +337,12 @@ func expeditionBridgeBanks(ir *IR, grid *HeightGrid, a, b [2]float64) ([2]float6
 			q := [2]float64{p[0] + side*dir[0]*distance, p[1] + side*dir[1]*distance}
 			if math.Abs(q[0]) > ir.SizeM/2-8 || math.Abs(q[1]) > ir.SizeM/2-8 {
 				break
+			}
+			if inRiver(q) {
+				continue
+			}
+			if !ir.Terrain.HasWater {
+				return q, true
 			}
 			h := grid.Sample(q[0], q[1])
 			if h >= ir.Terrain.WaterLevel+0.5 {
@@ -374,7 +395,13 @@ func writeExpeditionBridges(out *strings.Builder, ir *IR, grid *HeightGrid, seed
 		centers = append(centers, mid)
 		width := math.Max(3, r.Width)
 		angle := math.Atan2(b[1]-a[1], b[0]-a[0]) * 180 / math.Pi
-		fmt.Fprintf(out, "let(za=nd_ground(%s,%s)+0.06,zb=nd_ground(%s,%s)+0.06) translate([%s,%s,(za+zb)/2]) rotate([0,0,%s]) gk_flatten() az_prop_bridge(seed=%d,L=%s,W=%s,rise=zb-za,pierDepth=max(10,(za+zb)/2-%s+8));\n", fnum(a[0]), fnum(a[1]), fnum(b[0]), fnum(b[1]), fnum(mid[0]), fnum(mid[1]), fnum(angle), seed+len(centers), fnum(length+3), fnum(width), fnum(ir.Terrain.WaterLevel))
+		// Piers reach below the bed: under the water plane, or under a carved
+		// river whose surface follows the lower bank.
+		bed := ir.Terrain.WaterLevel
+		if !ir.Terrain.HasWater {
+			bed = math.Min(grid.Sample(a[0], a[1]), grid.Sample(b[0], b[1])) - 2
+		}
+		fmt.Fprintf(out, "let(za=nd_ground(%s,%s)+0.06,zb=nd_ground(%s,%s)+0.06) translate([%s,%s,(za+zb)/2]) rotate([0,0,%s]) gk_flatten() az_prop_bridge(seed=%d,L=%s,W=%s,rise=zb-za,pierDepth=max(10,(za+zb)/2-%s+8));\n", fnum(a[0]), fnum(a[1]), fnum(b[0]), fnum(b[1]), fnum(mid[0]), fnum(mid[1]), fnum(angle), seed+len(centers), fnum(length+3), fnum(width), fnum(bed))
 	}
 	return nil
 }
@@ -403,7 +430,11 @@ func publishExpedition(repoRoot, output, assetRoot string, recipe ExpeditionReci
 			return "", report, err
 		}
 	}
-	for _, name := range []string{"nextdayz_pcg.scad", "nextdayz_settlement.scad", "nextdayz_hokkaido.scad", "nextdayz_coldwar.scad", "nextdayz_training.scad", "kit_abandoned.scad", "kit_bohemia.scad", "kit_hokkaido.scad", "kit_training.scad", "kit_coldwar.scad", "gk_texgraph.scad", "nextdayz_geography.scad", "kit_road.scad", "gk_camera.scad", "kit_layout.scad", "kit_terrain.scad"} {
+	libraries, err := expeditionLibraries(repoRoot, output)
+	if err != nil {
+		return "", report, err
+	}
+	for _, name := range libraries {
 		data, err := os.ReadFile(filepath.Join(repoRoot, "assets/scad/lib", name))
 		if err != nil {
 			return "", report, err
@@ -439,4 +470,47 @@ func publishExpedition(repoRoot, output, assetRoot string, recipe ExpeditionReci
 		return "", report, err
 	}
 	return filepath.Join(destination, "scene.scad"), report, nil
+}
+
+var scadLibraryRef = regexp.MustCompile(`(?m)^\s*(?:use|include)\s*<([^>]+)>`)
+
+// expeditionLibraries is every assets/scad/lib file the level reaches through
+// use/include, plus the texture print library the loader resolves by name.
+// Following the references keeps a frozen snapshot complete when a region adds
+// its own kit; a hand-kept list silently published maps without their shells.
+func expeditionLibraries(repoRoot, output string) ([]string, error) {
+	seen := map[string]bool{"gk_texgraph.scad": true}
+	var visit func(path string, lib bool) error
+	visit = func(path string, lib bool) error {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, m := range scadLibraryRef.FindAllStringSubmatch(string(data), -1) {
+			ref := filepath.ToSlash(m[1])
+			name := filepath.Base(ref)
+			if !lib && !strings.Contains(ref, "lib/") {
+				continue // layout.scad and the other files of the level itself
+			}
+			if seen[name] {
+				continue
+			}
+			seen[name] = true
+			if err := visit(filepath.Join(repoRoot, "assets/scad/lib", name), true); err != nil {
+				return fmt.Errorf("library %s: %w", name, err)
+			}
+		}
+		return nil
+	}
+	for _, name := range []string{"scene.scad", "base.scad", "authoring.scad", "adjustments.scad"} {
+		if err := visit(filepath.Join(output, name), false); err != nil {
+			return nil, err
+		}
+	}
+	names := make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names, nil
 }

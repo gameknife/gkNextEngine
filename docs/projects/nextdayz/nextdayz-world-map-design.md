@@ -1,10 +1,10 @@
 ---
 title: "NextDayz 世界派遣与地理关卡"
 category: design
-status: 现行（一张地理地图 + 训练场）
+status: 现行（一张已发布地理地图 + 一张草稿地理地图 + 训练场）
 owner: NextDayz
 created: 2026-11-05
-last_updated: 2026-11-09
+last_updated: 2026-11-15
 ---
 
 # NextDayz 世界派遣与地理关卡
@@ -18,15 +18,16 @@ last_updated: 2026-11-09
 | 地图 | 生成中心（WGS84 纬度，经度） | 内容与体验 |
 | --- | --- | --- |
 | 洛克特·河湾 / Loket — Riverbend | 捷克洛克特，`50.1860, 12.7540` | 奥赫热河曲流环抱岩岬上的老城：广场连续市民房立面、鼠疫柱与洋葱顶教堂，下城沿街台地，城堡守住北坡。北岗是围绕村绿和池塘的农庄村，东岸是温泉别墅与瓷器厂，东南是战后小住宅区，南部台地是集体农场、营地与条田；西北云杉林里藏着周末小屋，西部有小蠹虫枯死林。强调过河、林间潜行与分散搜刮。 |
+| 塔勒克·马拉河畔 / Talek — Mara Edge（**草稿 v1**，未进入随机派遣） | 肯尼亚纳罗克郡塔勒克，`-1.4430, 35.2112` | 塔勒克河在无花果与黄皮金合欢的河岸林里曲折穿过地图，是马赛马拉保护区的边界。河东是社区土地：红土街两侧铁皮顶商铺的集市、教会小学、卫生中心、警察哨所，周围是散户院落、玉米地和三座荆棘圈起的马赛圈寨；河岸林里藏着两处帐篷营地。河西是保护区：唯一公路桥头的塔勒克大门（巡护办公室、Uniport 铁皮圆屋）、反盗猎哨所和开阔草原上的猎人营地。视野长、掩体少，三处过河点。 |
 | 训练场 / Training Ground | 无（合成地形，`kind: training`） | 东欧陆军训练区：水泥大门、靶场指挥部与阅兵场、军械库与开放式武器陈列棚、军需帐篷、食堂帐篷、野战物资帐篷、营房、300 m 步枪靶场与手枪靶位、障碍场、CQB 训练屋、车场、封闭的感染者围栏。**游戏里每一件物品都在这里陈列**，拿走后十几秒补回；靶子命中按距离报环数。供玩家练枪、试穿，也是开发者的快速测试场。 |
 
-洛克特为 **1 km × 1 km**，五个安全落点、两处撤离区；训练场 **800 m × 800 m**，四个落点（都在大门南侧来路上）、两处直升机撤离点。真实地理只提供环境骨架；荒废状态、敌人与物资分布属于游戏虚构。地理参考：[捷克国家旅游局](https://www.visitczechia.com/en-us/things-to-do/places/landmarks/cities/t-loket)。小樽·北运河与青龙湖·荒径因品质不足已于 2026-11-09 下线（目录、配方、脚本一并删除）；北海道 / 四川的地域 kit 仍留在共享库里，洛克特的冻结快照也各自带着一份。
+洛克特为 **1 km × 1 km**，五个安全落点、两处撤离区；训练场 **800 m × 800 m**，四个落点（都在大门南侧来路上）、两处直升机撤离点。真实地理只提供环境骨架；荒废状态、敌人与物资分布属于游戏虚构。塔勒克为 **1 km × 1 km**、16 个据点、102 栋建筑、五个落点、两处撤离区（保护区草原与北部牧场各一），真实起伏只有 16 m，`reliefScale=1.0`。它是第一张非温带地图，为此新增了 `savanna` 地域的全部基础件（见下文*新地域接入清单*）。地理参考：[捷克国家旅游局](https://www.visitczechia.com/en-us/things-to-do/places/landmarks/cities/t-loket)。小樽·北运河与青龙湖·荒径因品质不足已于 2026-11-09 下线（目录、配方、脚本一并删除）；北海道 / 四川的地域 kit 仍留在共享库里，洛克特的冻结快照也各自带着一份。
 
 **生产原则：地理提供骨架，地域知识决定长相，Coldwar 玩法决定节奏。** 高程、河流、主路和建成区来自真实地点；每个建成区按当地真实聚落形态（村绿村、广场、街道、独立农庄、周末小屋区、集体农场……）展开，建筑用该地域专属 kit，植被按当地真实的森林／田地／河岸格局绘制土地覆盖。建筑数量、入口、物资、感染者和风险收益由游戏设计决定；允许压缩高差、简化道路、移动据点，以保证可玩性。
 
 洛克特 v5 沿用 v4 的布局，只提升质感：`kit_bohemia` 的 PBR 材质与室内（见下文地域外壳段），奥赫热河水面用 recipe 的 `gameplay.water`（深绿褐水体、roughness 0.04）呈现反射。两座 v4 桥端落在水里的步桥延伸到干岸，其余桥不变。v4 使用 **15 个据点、108 栋建筑、5 个安全落点、2 个撤离区**：老城广场（22，含市政厅与教堂）、下城街（17）、城堡（3）、北岗村绿村（13，含小教堂、消防站、酒馆）、温泉别墅（6）、瓷器厂（4）、东南小住宅区（10）、两处独立农庄（3+3）、集体农场 JZD（6）、周末小屋区（8），以及桥头关卡、卫生站、林中电台和南部营地。19 块土地覆盖（云杉林、混交林、山毛榉林、松林、小蠹虫枯死林、三条河岸带、条田、草甸、果园）和 7 条行道树／树篱。OSM 原有多少栋建筑，不改变这份预算。v3 的散点场院布局保留在冻结快照中。
 
-地域外壳按地域分 kit：波希米亚走 `kit_bohemia.scad`（`bh_`：民间巴洛克、埃格兰半木构、连续立面市民房、洋葱顶教堂、JZD 与城堡，以及中欧小品和林木。表面按材质类走 `bh_m_*` 的 `gk_material`：石灰抹灰、陶瓦、石板、油漆门窗、锌皮檐沟与落水管、铜绿／锡皮洋葱顶、镀金十字架、不透明高光玻璃——路径追踪下透射玻璃在阴天会发黑。外观另有双扇外开／缺失／倒地的门、搪瓷门牌、墙基返潮与窗下雨痕；室内是石灰墙＋油漆墙裙（olejový sokl）、清漆木地板／方块拼花／metlach 地砖／抛光石材／混凝土、屋顶破洞下方的积水镜面、破窗下的碎玻璃、墙面水渍、农舍梁顶与釉面瓷砖炉。新增室内件只放在 coldwar 家具与物资点让开的位置）；北海道走 `kit_hokkaido.scad`（`hk_`：木骨石仓、金属顶木板住宅、两层店铺、石造航运办公室、平顶公寓和诊所、派出所、神社、鸟居、石灯笼、电杆、自动售货机与栎／榆／白桦／针叶树），全部北海道建筑优先分派到本地外壳；四川仍走 `kit_abandoned.scad`（`az_`）。`nextdayz_settlement.scad` 与 `nextdayz_hokkaido.scad` 把聚落据点展开成地块、街道和小品；`nextdayz_coldwar.scad` 提供家具和分类物资组合（按占地缩放的 `nd_shop`／`nd_pub`／`nd_office`／`nd_depot`／`nd_chapel`），`nextdayz_pcg.scad` 装配并散布土地覆盖。几何独立合并，物资／感染者语义锚点与水泵（水源锚点）留在合并之外；建模不以压低三角数量为目标。
+地域外壳按地域分 kit：波希米亚走 `kit_bohemia.scad`（`bh_`：民间巴洛克、埃格兰半木构、连续立面市民房、洋葱顶教堂、JZD 与城堡，以及中欧小品和林木。表面按材质类走 `bh_m_*` 的 `gk_material`：石灰抹灰、陶瓦、石板、油漆门窗、锌皮檐沟与落水管、铜绿／锡皮洋葱顶、镀金十字架、不透明高光玻璃——路径追踪下透射玻璃在阴天会发黑。外观另有双扇外开／缺失／倒地的门、搪瓷门牌、墙基返潮与窗下雨痕；室内是石灰墙＋油漆墙裙（olejový sokl）、清漆木地板／方块拼花／metlach 地砖／抛光石材／混凝土、屋顶破洞下方的积水镜面、破窗下的碎玻璃、墙面水渍、农舍梁顶与釉面瓷砖炉。新增室内件只放在 coldwar 家具与物资点让开的位置）；东非稀树草原走 `kit_savanna.scad`（`sv_`：抹灰砌块 + 搪瓷漆墙裙 + 单坡瓦楞铁皮顶 + 木柱檐廊的 duka 商铺，砌块／泥墙／铁皮墙的 mabati 住宅，茅草锥顶圆泥屋，马赛牛粪抹面矮屋，山墙开门的教会礼拜堂，带檐廊的长条教室／卫生所，橄榄绿巡护办公室与 Uniport 铁皮圆屋，石矮墙茅草顶的营地 banda 与帆布猎游帐篷；荆棘围栏与牛圈、粮仓、塑料水罐与水塔、集市摊、摩托、黄色水桶、保护区门楼、白蚁丘；伞形金合欢、黄皮金合欢、无花果、沙漠枣、烛台大戟、巴豆灌丛、剑麻、香蕉、玉米秆。室内家具与物资点在 `nextdayz_savanna.scad` 的 `nd_sv_*` 包装里）；北海道走 `kit_hokkaido.scad`（`hk_`：木骨石仓、金属顶木板住宅、两层店铺、石造航运办公室、平顶公寓和诊所、派出所、神社、鸟居、石灯笼、电杆、自动售货机与栎／榆／白桦／针叶树），全部北海道建筑优先分派到本地外壳；四川仍走 `kit_abandoned.scad`（`az_`）。`nextdayz_settlement.scad`、`nextdayz_hokkaido.scad` 与 `nextdayz_savanna.scad` 把聚落据点展开成地块、街道和小品；`nextdayz_coldwar.scad` 提供家具和分类物资组合（按占地缩放的 `nd_shop`／`nd_pub`／`nd_office`／`nd_depot`／`nd_chapel`），`nextdayz_pcg.scad` 装配并散布土地覆盖。几何独立合并，物资／感染者语义锚点与水泵（水源锚点）留在合并之外；建模不以压低三角数量为目标。
 
 ## 派遣、安全屋与存档
 
@@ -53,7 +54,7 @@ gnb.bat geo expedition --recipe assets/scad/specs/nextdayz/cz_loket_riverbend.js
 gnb.bat geo expedition --recipe assets/scad/specs/nextdayz/training_ground.json   # 合成地形，不需要 geo fetch/build
 ```
 
-配方在 `assets/scad/specs/nextdayz/`，声明地域、种子、发布版本和 `gameplay`：控制点模板路径、建筑预算、地形高差比例、参考道路数量；可选 `roadClasses` 选择参考路类，可选 `palette` 覆盖地域默认地表色板（波希米亚默认 `continental`，其余 `temperate`）。公园应纳入 `cycleway`／`footway`／`path`；城镇不要带 `service`／`footway`，否则拆掉建筑后只剩满地土路斑块。洛克特使用 `reliefScale=0.4`、`roadLimit=32` 和主次干路路类。含聚落据点的地图地形网格自动用 256×256（3.9 m 格）。
+配方在 `assets/scad/specs/nextdayz/`，声明地域、种子、发布版本和 `gameplay`：控制点模板路径、建筑预算、地形高差比例、参考道路数量；可选 `roadClasses` 选择参考路类，可选 `palette` 覆盖地域默认地表色板（波希米亚 `continental`，稀树草原 `savanna`，其余 `temperate`）。可选 `waterways` 声明 OSM 线状水系怎么落地：`{"river": {"width": 16, "depth": 2.2}, "stream": {"width": 9, "dry": true}}`——有水的类别导出成 TERR `river` 算子（引擎下切河道并铺沿河床走的水面，不需要全图水位），`dry` 的类别导出成盖在土地覆盖之上的沙色干河床；没写的类别忽略，不写这一段则重生成逐字节不变。公园应纳入 `cycleway`／`footway`／`path`；城镇不要带 `service`／`footway`，否则拆掉建筑后只剩满地土路斑块。洛克特使用 `reliefScale=0.4`、`roadLimit=32` 和主次干路路类。含聚落据点的地图地形网格自动用 256×256（3.9 m 格）。
 
 ### 新地点初始地图的强制规则
 
@@ -63,14 +64,32 @@ gnb.bat geo expedition --recipe assets/scad/specs/nextdayz/training_ground.json 
 | --- | --- | --- |
 | 地域调研 | 动手前写下本地域的建筑家族（屋顶形式与材料、山墙处理、墙面色系、地标类型）、聚落形态（每个真实建成区属于哪种）和土地覆盖（优势树种与林相、干扰如小蠹虫、田地制度、河岸带、行道树）。 | 调研结论要能在截图里逐条找到对应。 |
 | 地理骨架 | DEM 注入 TERR；按地点选 `roadClasses`，只保留主次道路映射为 `road` 算子。建筑轮廓聚合为街区覆盖率，用于判断建成区位置与形态。 | 普通道路没有实体路板；跨水保留桥面，不能填坝；没有拆房后残留的土路斑块。 |
-| 聚落规划 | 每个真实建成区一个聚落据点，选用匹配的形态（`naves` 村绿村／`square` 广场／`street` 街道／`suburb` 小住宅／`villas` 别墅／`homestead` 独立农庄／`chaty` 周末小屋／`jzd` 集体农场／`factory` 工厂／`hillcastle` 城堡；北海道另用 `hokkaido_lane` 住宅巷／`shotengai` 商街／`canal` 单侧石仓／`portyard` 货运场／`shrine` 神社），旋转对齐真实街道或村绿轴线。`military`／`checkpoint`／`medical` 等旧类型只用于游戏性营地。 | 鸟瞰：建筑沿街、沿村绿排布，有前院、后院、花园间隔与地标（教堂、小教堂、池塘、纪念碑、消防站）；不得出现"灰色大方块上两排房子"。 |
+| 聚落规划 | 每个真实建成区一个聚落据点，选用匹配的形态（`naves` 村绿村／`square` 广场／`street` 街道／`suburb` 小住宅／`villas` 别墅／`homestead` 独立农庄／`chaty` 周末小屋／`jzd` 集体农场／`factory` 工厂／`hillcastle` 城堡；北海道另用 `hokkaido_lane` 住宅巷／`shotengai` 商街／`canal` 单侧石仓／`portyard` 货运场／`shrine` 神社；稀树草原用 `sv_trading` 集市街／`sv_plots` 散户院落／`sv_boma` 马赛圈寨／`sv_shamba` 农家院／`sv_mission` 教会学校／`sv_clinic` 卫生所／`sv_gate` 保护区大门／`sv_post` 哨所／`sv_camp` 帐篷营地），旋转对齐真实街道或村绿轴线。`military`／`checkpoint`／`medical` 等旧类型只用于游戏性营地。 | 鸟瞰：建筑沿街、沿村绿排布，有前院、后院、花园间隔与地标（教堂、小教堂、池塘、纪念碑、消防站）；不得出现"灰色大方块上两排房子"。 |
 | 地块找平 | 聚落按地块找平：每个地块一个带地表与缓坡参数的 pad（plot），在 3.9 m 网格上平到边缘、且不被后续地块改动；不同高度的地块之间至少留 12 m（`nd_gap`），放花园、小路或村绿。单块 pad 只用于广场、JZD、工厂和城堡。 | 全占地和入口采样高度一致（`[Landscape]` 0.16 m 内）；禁止浮空、地形穿地板、入口高台；台地之间有可走的过渡。 |
 | 建筑与物资 | 每个地域有自己的 kit，覆盖聚落形态会生成的全部建筑种类，并在 `nd_pcg_building` 里按地域分派；不得借用别的地域外壳。室内用按占地缩放的家具组合与类型化 loot。 | 街景能认出地域：屋顶、山墙、色彩、门窗；物资落在家具或可搜寻地面，门洞与通道不被装饰横穿。 |
 | 土地覆盖与植被 | 用 `PCG_LANDCOVER` 多边形画出森林、条田、草甸、果园和河岸带（河岸带只在水边 15 m 内长树）；`PCG_ALLEYS` 画行道树与树篱；`PCG_VEGETATION` 只留稀疏荒草灌木。地表颜色来自土地覆盖的 `paint`，不靠海拔。 | 总览能分出深色林地、带条纹的田、绿色草甸、沿河树带；没有全图均匀撒树。自动排除水域、道路、地块、出生点、撤离区和视线走廊。 |
-| 评审截图 | `geomap_preview.py` 出规划图；`geomap_shots.py` 出总览、每个聚落的鸟瞰与街景，逐张对照上面各行的验收重点迭代。 | 草稿解析时间保持在 10 s 内（运行日志 `parsed scene ... on cpu`）。 |
+| 评审截图 | `geomap_preview.py --scout` 选点，`geomap_check.py` 一次列出全部据点的高差／离河距离／重叠，`geomap_preview.py` 出规划图；`geomap_shots.py` 出总览、每个聚落的鸟瞰与街景，逐张对照上面各行的验收重点迭代。颜色与室内用 `gnb validate` 在游戏里看。 | 草稿解析时间不明显高于已有地图（参考机上洛克特 24.7 s、塔勒克 22.8 s，运行日志 `parsed scene ... on cpu`）。 |
 | 试玩发布 | 重生成保留人工控制点，完成鸟瞰、地面进屋、跨桥及撤离流程检查后冻结新版本。 | kit 无新警告，正式快照包含全部 PCG 控制点与库；不可覆盖已发布版本。 |
 
 Go 验证建筑预算、各聚落形态的最小尺寸、水域、过大挖填（单块 12 m、分地块 20 m）、据点重叠、安全落点、土地覆盖与行道树参数和重生成保留。C++ `[NextDayz][Landscape]` 求值实际 SCAD，检查洛克特 108 栋建筑的全占地／入口贴地、多种建筑与 loot 类型、植被避让及道路语义；输入脚本另检查实际进屋、跨桥。自动检查不能替代风险收益和节奏的实玩调优。
+
+### 新地域接入清单
+
+塔勒克是第一张换气候带的地图。捷克流程的骨架（调研 → kit → 布局 → 生成 → 截图 → 单测 → 发布）原样成立，但"共享基础设置"里凡是默认了中欧的地方都要补一份。按顺序：
+
+| 层 | 新地域要提供什么 | 在哪里 | 塔勒克的教训 |
+| --- | --- | --- | --- |
+| 地域注册 | 地域名 → 默认色板 | `expedition.go` `expeditionRegions` | 一张表管两件事，新地域只加一行。 |
+| 地表色板 | 草地／深色林下／干草／沙／路／院落的颜色，路是否铺装 | `FScadTerrain.cpp` `FindPalette`（`unpavedRoads` 让宽路用土色而不是沥青） | 色板是地域身份的一半：金草 + 红土路一换，同一套地形立刻不像欧洲。室外正午下反照率 0.4 已经发白，色板与墙面都要压在这以下。 |
+| 水系 | 该地区的河是多边形还是中心线、常年有水还是干河床 | 配方 `gameplay.waterways` | OSM 在城市以外几乎只有中心线；管线原先只认水面多边形，塔勒克河整条"不存在"。 |
+| 建筑外壳 | 聚落会生成的每一种建筑 + 旧据点类型的兜底 | `kit_<region>.scad`，`nextdayz_<region>.scad` 的 `nd_<r>_building` | 兜底要写在地域分派里，否则 `police`／`warehouse` 这类旧类型会悄悄借到别的地域外壳。 |
+| 室内包装 | 现成 `nd_*` 包装摆不进去的平面（圆屋、帐篷、纵向礼拜堂、多间长条房） | `nextdayz_<region>.scad` | 家具位置按矩形的 L/D 比例写死，圆屋里床会穿墙。 |
+| 聚落形态 | 每种真实聚落一个纯函数 + Go 里的最小尺寸规则 | `nextdayz_<region>.scad` `sv_m_*`，`expedition_landscape.go` `settlementRules` | 两边的尺寸公式必须同步改；`geomap_check.py` 的 `TERRACED` 也要加上分地块的形态。 |
+| 植被与土地覆盖 | 物种分派 + 土地覆盖配方 + Go 白名单 | `nd_<r>_flora`、`<r>_lc_recipe`，`landcoverKinds` | 稀树草原的"森林类型"是树距：同一棵金合欢按 19 m／12.5 m 间距就是草原／林地。水边类（`gallery`）画成贴河的带状多边形，别画一个大框。 |
+| 样板与评审 | `source/<region>_showcase.scad` | — | 样板场景光照比游戏硬，只看轮廓；颜色到游戏里用验证脚本看。 |
+| 发布快照 | 无需改动 | `expeditionLibraries` 沿 `use`／`include` 收集依赖 | 原先是手写的库清单，新 kit 不在清单里就会发布出缺外壳的冻结版本。 |
+
+尚未解决、留给下一张图的问题：运行时草叶颜色是全局的橄榄／灰绿／卡其三色，落在金色草原上偏冷；`gnb shot` 的固定曝光让浅色地面偏白；`tex_plaster` 的剥落是按砖墙设计的，泥墙需要一张自己的印花。
 
 ### 无经纬度关卡：合成地形与训练场
 
@@ -131,7 +150,7 @@ PCG_SITES = [["village","Old quarter","village",[50,40],[100,68],0,8,1]];
 // 其他控制层：PCG_PATHS / PCG_SPAWNS / PCG_EXTRACTIONS /
 // PCG_VEGETATION / PCG_CLEAR。
 // 可选 PCG_BRIDGES = [[[岸点Ax,岸点Ay],[岸点Bx,岸点By],桥宽], ...];
-// 可选 PCG_LANDCOVER = [[id,"spruce|mixed|beech|pine|beetle|riparian|orchard|field|meadow|clearing|hokkaido_mixed|coastal_grass",[[x,y],...]], ...];
+// 可选 PCG_LANDCOVER = [[id,"spruce|mixed|beech|pine|beetle|riparian|orchard|field|meadow|clearing|hokkaido_mixed|coastal_grass|savanna|acacia_woodland|gallery|thicket|shamba|grazing|banana",[[x,y],...]], ...];
 // 可选 PCG_ALLEYS = [[[[x,y],...],"fruit|linden|hedge|...",间距,路肩偏移], ...];
 ```
 
@@ -176,11 +195,14 @@ gnb.bat validate --script assets/agentscripts/nextdayz-extraction.agentscript.js
 gnb.bat validate --script assets/agentscripts/nextdayz-loket-entrance.agentscript.json
 gnb.bat validate --script assets/agentscripts/nextdayz-loket-bridge.agentscript.json
 gnb.bat validate --script assets/agentscripts/nextdayz-training-ground.agentscript.json
+gnb.bat validate --script assets/agentscripts/nextdayz-talek-bridge.agentscript.json
 gnb.bat validate --script assets/agentscripts/nextdayz-zombie-indoor.agentscript.json
 ```
 
 前两份脚本顺序执行，分别覆盖多图、场景重建、撤离／死亡与跨进程恢复；`published-dispatch` 检查冻结场景的普通随机派遣，`extraction` 保留原撤离循环回归。桥梁脚本使用实际移动输入检查跨水通路；`world-maps` 的第二张图是训练场（点击坐标按 125% 界面缩放的窗口像素写死）。`training-ground` 检查 111 个陈列点、走进武器陈列棚 / 军需帐篷 / 食堂 / 物资帐篷，并在 25 m 靶位实际开枪确认报环；`zombie-indoor` 让感染者跟进军需帐篷。隔离测试不改正式存档；首份与正式派遣脚本会重建各自的测试进度，可重复执行。地形全景检查使用 `nextdayz-geography-overview.agentscript.json`，可通过 `--scene` 覆盖地图。
 
-规划与评审工具：`tools/nextdayz/geomap_preview.py`（俯视规划图：地形、坡度、水、OSM 与全部控制层）、`tools/nextdayz/geomap_shots.py`（直接渲染源码草稿的总览／鸟瞰／街景截图）。世界地图矢量数据更新工具为 `tools/nextdayz/fetch_world_atlas.py`。Natural Earth 为公有领域；OSM 与 SRTM 署名随关卡保留。
+`talek-bridge` 用实际移动输入走过塔勒克大门的公路桥（河道是导出时刻出来的，没有全图水位），再到集市街截图。
+
+规划与评审工具：`tools/nextdayz/geomap_preview.py`（俯视规划图：地形、坡度、水、OSM 与全部控制层；`--scout` 在配方和布局存在之前直接画 geocache 原始地块，用来选中心点和 `reliefScale`）、`tools/nextdayz/geomap_check.py`（一次列出全部据点、落点、撤离区、桥的高差／离河距离／重叠，`--probe` 试一个候选矩形）、`tools/nextdayz/geomap_shots.py`（直接渲染源码草稿的总览／鸟瞰／街景截图）。世界地图矢量数据更新工具为 `tools/nextdayz/fetch_world_atlas.py`。Natural Earth 为公有领域；OSM 与 SRTM 署名随关卡保留。
 
 当前边界：地形继承源高程误差，局部需要人工调整。首版提供可游玩的物资／威胁布局，建筑预算、据点节奏和风险收益仍需持续实玩调优；不包含全球流式地图、联机和复杂任务链。

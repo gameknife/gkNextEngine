@@ -24,6 +24,12 @@ type IR struct {
 	Buildings []Building `json:"buildings"`
 	Roads     []Road     `json:"roads"`
 	Waters    []Area     `json:"waters"`    // natural=water / riverbank polygons
+	// Waterways are river / stream centrelines in flow direction (OSM draws a
+	// waterway downstream). The city emitter ignores them; gameplay levels may
+	// carve them as TERR rivers or paint them as dry sand beds.
+	Waterways []Waterway `json:"waterways,omitempty"`
+	// channels are the waterways a gameplay recipe realises (expedition only).
+	channels []expeditionChannel
 	Coastline []Line     `json:"coastline"` // natural=coastline, sea on the right
 	Landuse   []Area     `json:"landuse"`   // parks, forest, industrial, ...
 	Piers     []Line     `json:"piers"`     // man_made=pier
@@ -105,6 +111,15 @@ type Road struct {
 	// consumed before any clipping or simplification breaks the alignment.
 	Nodes  []int64 `json:"nodes,omitempty"`
 	Bridge bool    `json:"bridge,omitempty"`
+}
+
+// Waterway is a linear watercourse: Class is the OSM waterway value.
+type Waterway struct {
+	ID           int64        `json:"id"`
+	Name         string       `json:"name,omitempty"`
+	Class        string       `json:"class"`
+	Intermittent bool         `json:"intermittent,omitempty"`
+	Pts          [][2]float64 `json:"pts"`
 }
 
 // Area is a tagged polygon (water, landuse, leisure).

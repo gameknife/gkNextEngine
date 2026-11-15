@@ -207,6 +207,9 @@ namespace Assets::Scad
             // half of whatever this tile happens to contain. 0 disables it,
             // which is what a natural palette wants.
             double minGreenRiseM = 0.0;
+            // No tarmac: wide roads are graded earth (murram) in the palette's
+            // road colour instead of asphalt. Detail ribbons only.
+            bool unpavedRoads = false;
         };
 
         const FPaletteDef* FindPalette(const std::string& name)
@@ -307,8 +310,29 @@ namespace Assets::Scad
                 {0.26f, 0.23f, 0.19f, 1.0f},
                 4.0, 38.0, 4.0, 3000.0};
 
+            // East African savanna: gold red-oat grassland, bleached overgrazed
+            // ground, red murram tracks, dark river-gallery floor. Colour comes
+            // from painted land cover like continental; no dry band, no snow.
+            static const FPaletteDef savanna = {
+                {
+                    {0.30f, 0.265f, 0.13f, 1.0f}, // Grass     -> red-oat grassland
+                    {0.16f, 0.20f, 0.10f, 1.0f},  // GrassDark -> gallery forest / irrigated
+                    {0.36f, 0.31f, 0.185f, 1.0f}, // DryGrass  -> overgrazed, stubble
+                    {0.40f, 0.34f, 0.24f, 1.0f},  // Sand      -> dry river bed (lugga)
+                    {0.30f, 0.27f, 0.24f, 1.0f},  // Rock      -> granite
+                    {0.36f, 0.33f, 0.30f, 1.0f},  // RockHigh
+                    {0.82f, 0.84f, 0.88f, 1.0f},  // Snow (unreachable)
+                    {0.25f, 0.20f, 0.14f, 1.0f},  // Bed       -> silt
+                    {0.33f, 0.17f, 0.10f, 1.0f},  // Road      -> red murram / ploughed red earth
+                    {0.34f, 0.25f, 0.17f, 1.0f},  // Pad       -> swept compound earth
+                },
+                {0.27f, 0.23f, 0.14f, 1.0f},
+                {0.30f, 0.20f, 0.14f, 1.0f},
+                4.0, 38.0, 4.0, 3000.0, 0.0, true};
+
             if (name == "temperate") return &temperate;
             if (name == "continental") return &continental;
+            if (name == "savanna") return &savanna;
             if (name == "arid") return &arid;
             if (name == "alpine") return &alpine;
             if (name == "urban") return &urban;
@@ -1908,7 +1932,8 @@ namespace Assets::Scad
             const glm::vec4 earth = pal.biomeColors[static_cast<size_t>(ETerrainBiome::Road)];
             const glm::vec4 verge = glm::mix(grass, earth, 0.45f);
             const glm::vec4 asphalt(0.17f, 0.17f, 0.165f, 1.0f);
-            const glm::vec4 gravel(0.33f, 0.31f, 0.26f, 1.0f);
+            const glm::vec4 gravel = pal.unpavedRoads ? glm::mix(earth, glm::vec4(0.33f, 0.31f, 0.26f, 1.0f), 0.2f)
+                                                      : glm::vec4(0.33f, 0.31f, 0.26f, 1.0f);
             std::map<std::string, FTerrainData::ColoredTris> ribbons;
             const uint64_t ribbonSeed = HashMix(spec.seed ^ 0x51DE57A1ULL);
 
@@ -2010,7 +2035,7 @@ namespace Assets::Scad
             {
                 if (road.src->type != FTerrainFeature::EType::Road || road.pts.size() < 2) continue;
                 const double half = road.src->width * 0.5;
-                const ESurface surface = road.src->width >= 5.5 ? ESurface::Asphalt
+                const ESurface surface = road.src->width >= 5.5 && !pal.unpavedRoads ? ESurface::Asphalt
                                        : road.src->width >= 3.6 ? ESurface::Gravel : ESurface::Track;
                 std::vector<FLayer> layers;
                 layers.push_back({"terrain_road_verge", verge, 1.12, surface == ESurface::Asphalt ? 0.08 : 0.16, 0.02});

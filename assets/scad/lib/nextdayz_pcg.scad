@@ -8,6 +8,7 @@ use <kit_bohemia.scad>
 use <kit_hokkaido.scad>
 use <nextdayz_coldwar.scad>
 use <nextdayz_settlement.scad>
+use <nextdayz_savanna.scad>
 use <nextdayz_training.scad>
 
 function nd_pcg_pads(sites,spawns,exits) = concat(
@@ -49,6 +50,9 @@ function nd_pcg_clear(t,x,y,sites,spawns,exits,paths,r) =
 // Settlement kinds have regional shells. Hokkaido is dispatched before the
 // legacy fallback so every port, medical and military shell stays regional.
 function nd_kind_profile(kind) =
+    kind=="manyatta" || kind=="rondavel" ? "farm" : kind=="duka" || kind=="bar" || kind=="butchery" || kind=="banda" ? "commercial" :
+    kind=="chemist" || kind=="clinic" ? "medical" : kind=="ranger" || kind=="uniport" || kind=="armoury" ? "military" :
+    kind=="store" ? "industrial" : kind=="tent" ? "wilderness" :
     kind=="barn" || kind=="stable" || kind=="cowshed" ? "farm" :
     kind=="shop" || kind=="pub" ? "commercial" : kind=="pharmacy" ? "medical" :
     kind=="townhall" || kind=="office" ? "police" : kind=="firestation" || kind=="factory" || kind=="warehouse" || kind=="workshop" ? "industrial" :
@@ -65,6 +69,7 @@ module nd_pcg_building(kind="cottage",seed=0,region="bohemia",L=10,D=8,p="reside
 {
     if(region=="training") nd_tg_building(kind,seed,L,D);
     else if(region=="hokkaido") nd_hk_building(kind,seed,L,D,p);
+    else if(region=="savanna") nd_sv_building(kind,seed,L,D,p);
     else if(region=="bohemia" && (kind=="farmhouse" || kind=="cottage"))
         nd_house_rural(seed,L,D,p) bh_bldg_farmhouse(seed,L,D,nd_opt(opt,0,1));
     else if(region=="bohemia" && kind=="egerland") nd_house_two(seed,L,D,p) bh_bldg_egerland(seed,L,D,nd_opt(opt,0,1));
@@ -227,7 +232,8 @@ module nd_pcg_prop(name="bench",seed=0,a=0,b=0)
     if(name=="pump") cw_prop_water_pump(seed);
     else gk_flatten()
     {
-        if(name=="hk_torii") hk_prop_torii(seed,a,b);
+        if(sv_is_prop(name)) nd_sv_prop(name,seed,a,b);
+        else if(name=="hk_torii") hk_prop_torii(seed,a,b);
         else if(name=="hk_pole") hk_prop_pole(seed);
         else if(name=="hk_bollard") hk_prop_bollard(seed);
         else if(name=="hk_vending") hk_prop_vending(seed);
@@ -259,6 +265,7 @@ module nd_site_plant(species="linden",variant=0,region="bohemia")
 {
     gk_flatten()
         if(region=="hokkaido") nd_hk_flora(species,variant*131+7);
+        else if(region=="savanna") nd_sv_flora(species,variant*131+7);
         else if(species=="linden") bh_nature_linden(variant*131+7);
         else if(species=="fruit") bh_nature_fruit(variant*131+11);
         else if(species=="willow") bh_nature_willow(variant*131+13);
@@ -342,6 +349,7 @@ module nd_pcg_plant(kind="tree",variant=0,seed=0,region="bohemia",species="")
             nd_bh_flora(species!="" ? species : kind=="dead" ? "spruce_dead" : kind=="shrub" ? ["hedge","weeds","fern"][variant%3] :
                         ["spruce","broadleaf","pine","spruce"][variant%4],seed);
         else if(region=="hokkaido") nd_hk_flora(species!="" ? species : kind=="shrub" ? "shrub" : kind=="dead" ? "dead" : "birch",seed);
+        else if(region=="savanna") nd_sv_flora(species!="" ? species : kind=="dead" ? "dead" : kind=="shrub" ? ["grass","thornbush","grass","croton"][variant%4] : "acacia",seed);
         else if(kind=="dead") cw_nature_tree_dead(seed=seed);
         else if(kind=="shrub") lay_pick(i=variant) { cw_nature_bush(seed=seed); cw_nature_grass_tuft(seed=seed); cw_nature_stump(seed=seed); }
         else if(kind=="bamboo") az_nature_bamboo(seed);
@@ -399,7 +407,7 @@ module nd_pcg_vegetation(t,layers,sites,spawns,exits,clear,seed=0,flora="bohemia
 // real landscape. Each kind paints the ground and grows a stand on a jittered
 // grid, thinned by a broad noise so forests keep glades and ragged edges.
 // recipe = [paint, spacing, slopeMax, keep, edgeShrub, [[species,kind,weight,s0,s1],...]]
-function nd_lc_recipe(k) =
+function nd_lc_recipe(k) = sv_lc_recipe(k)[1]>0 ? sv_lc_recipe(k) :
     k=="hokkaido_mixed" ? ["grass_dark",7.5,36,0.90,0.35,[["oak","tree",4,0.85,1.2],["elm","tree",3,0.85,1.15],["birch","tree",4,0.85,1.2],["spruce","tree",1,0.9,1.1]]] :
     k=="coastal_grass" ? ["dry_grass",12,30,0.5,0,[["reeds","shrub",3,0.9,1.3],["shrub","shrub",2,0.7,1.1]]] :
     k=="spruce" ? ["grass_dark",6.9,36,0.92,0.35,[["spruce","tree",10,0.85,1.2],["spruce_dead","dead",1,0.8,1.05],["birch","tree",1,0.8,1.1]]] :
@@ -418,7 +426,13 @@ function nd_lc_valid(k) = nd_lc_recipe(k)[1]>0;
 function nd_field_paint(poly,i) = let(a=atan2(poly[1][1]-poly[0][1],poly[1][0]-poly[0][0]),v=i%3)
     v==0 ? ["paint",poly,"dry_grass",["sand",26,a]] : v==1 ? ["paint",poly,"road",["dry_grass",30,a]] : ["paint",poly,"grass_dark"];
 function nd_pcg_landcover_paint(lc) = len(lc)==0 ? [] : [for(i=[0:len(lc)-1]) let(l=lc[i],r=nd_lc_recipe(l[1])) if(r[0]!="")
-    l[1]=="field" ? nd_field_paint(l[2],i) : ["paint",l[2],r[0]]];
+    l[1]=="field" || l[1]=="shamba" ? nd_field_paint(l[2],i) : ["paint",l[2],r[0]]];
+// Kinds that only grow beside water. With a global water level (lakes, wide
+// rivers from OSM polygons) low ground is tested first because it is cheap;
+// a carved TERR river has no such level, so only the wet-neighbour probe runs.
+function nd_lc_waterside(k) = k=="riparian" || k=="gallery";
+function nd_waterside_ok(t,x,y,wl,k) = k=="gallery" ? (nd_near_water(t,x,y,9) || nd_near_water(t,x,y,20)) :
+    (wl==undef || gk_terrain_height(t,x,y)<wl+3.5) && nd_near_water(t,x,y,12);
 
 function nd_bbox(p) = [min([for(q=p) q[0]]),min([for(q=p) q[1]]),max([for(q=p) q[0]]),max([for(q=p) q[1]])];
 function nd_in_poly(x,y,p,i=0,c=false) = i>=len(p) ? c :
@@ -440,12 +454,12 @@ function nd_cell_wet(t,x,y,c,wl) = min([for(q=[[0,0],[c,0],[0,c],[c,c],[c/2,c/2]
 
 // Accepted stand points [x,y,s] of one land-cover polygon (functions build no nodes).
 function nd_stand_points(t,lc,i,r,poly,bb,ls,lsp,lex,lcl,seed,wl) = let(sp=r[1],
-    cs=lc[1]=="riparian" ? 4*sp : (bb[2]-bb[0]+bb[3]-bb[1])+sp) [
-    for(cx=[bb[0]:cs:bb[2]],cy=[bb[1]:cs:bb[3]]) if(lc[1]!="riparian" || nd_cell_wet(t,cx,cy,cs,wl))
+    cs=lc[1]=="riparian" && wl!=undef ? 4*sp : (bb[2]-bb[0]+bb[3]-bb[1])+sp) [
+    for(cx=[bb[0]:cs:bb[2]],cy=[bb[1]:cs:bb[3]]) if(lc[1]!="riparian" || wl==undef || nd_cell_wet(t,cx,cy,cs,wl))
         for(gx=[cx+sp/2:sp:min(cx+cs,bb[2])],gy=[cy+sp/2:sp:min(cy+cs,bb[3])])
             let(s=seed*31+i*7919+round(gx*13)*3+round(gy*7)*11,x=gx+(nd_u(s,1)-0.5)*sp*0.85,y=gy+(nd_u(s,2)-0.5)*sp*0.85)
-            if(nd_u(s,3)<r[3]*(lc[1]=="orchard" || lc[1]=="field" ? 1 : 0.4+0.6*nd_patch(x,y,seed+i)) && nd_in_poly(x,y,poly) &&
-               (lc[1]!="riparian" || (gk_terrain_height(t,x,y)<wl+3.5 && nd_near_water(t,x,y,12))) &&
+            if(nd_u(s,3)<r[3]*(lc[1]=="orchard" || lc[1]=="field" || lc[1]=="shamba" || lc[1]=="banana" ? 1 : 0.4+0.6*nd_patch(x,y,seed+i)) && nd_in_poly(x,y,poly) &&
+               (!nd_lc_waterside(lc[1]) || nd_waterside_ok(t,x,y,wl,lc[1])) &&
                nd_pcg_clear(t,x,y,ls,lsp,lex,lcl,3) && nd_ground_ok(t,x,y,r[2])) [x,y,s]];
 
 module nd_pcg_landcover(t,landcover=[],sites=[],spawns=[],exits=[],clear=[],seed=0,region="bohemia")

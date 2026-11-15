@@ -65,6 +65,11 @@ func Normalize(tile Tile, elements []osmElement, profile HeightProfile,
 			}
 		case tags["natural"] == "water" || tags["waterway"] == "riverbank":
 			ir.Waters = append(ir.Waters, areasFrom(e, project, "natural=water")...)
+		case tags["waterway"] != "" && e.Type == "way":
+			if pts := DedupeRing(project(e.Geometry), 0.2); len(pts) >= 2 {
+				ir.Waterways = append(ir.Waterways, Waterway{ID: e.ID, Name: tags["name"], Class: tags["waterway"],
+					Intermittent: tags["intermittent"] == "yes" || tags["seasonal"] == "yes", Pts: pts})
+			}
 		case tags["man_made"] == "pier" && e.Type == "way":
 			// DedupeRing strips the repeated closing node, so detect closure on
 			// the raw geometry first: a closed pier way is a deck outline.
@@ -94,6 +99,7 @@ func Normalize(tile Tile, elements []osmElement, profile HeightProfile,
 	sort.SliceStable(ir.Buildings, func(i, j int) bool { return ir.Buildings[i].ID < ir.Buildings[j].ID })
 	sort.SliceStable(ir.Roads, func(i, j int) bool { return ir.Roads[i].ID < ir.Roads[j].ID })
 	sort.SliceStable(ir.Waters, func(i, j int) bool { return ir.Waters[i].ID < ir.Waters[j].ID })
+	sort.SliceStable(ir.Waterways, func(i, j int) bool { return ir.Waterways[i].ID < ir.Waterways[j].ID })
 	sort.SliceStable(ir.Coastline, func(i, j int) bool { return ir.Coastline[i].ID < ir.Coastline[j].ID })
 	sort.SliceStable(ir.Landuse, func(i, j int) bool { return ir.Landuse[i].ID < ir.Landuse[j].ID })
 

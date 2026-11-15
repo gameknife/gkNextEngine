@@ -136,7 +136,7 @@ TEST_CASE("NextDayz published revisions preserve shared progress and archive onl
 TEST_CASE("NextDayz PCG encounters have flat entrances native roads and clear vegetation", "[NextDayz][Landscape]")
 {
     struct MapCheck { const char* id; int sites, buildings, minTrees, minShrubs; };
-    for (const auto& map : {MapCheck{"cz_loket_riverbend",15,108,2000,400}})
+    for (const auto& map : {MapCheck{"cz_loket_riverbend",15,108,2000,400}, MapCheck{"ke_talek_mara",16,102,800,1000}})
     {
         INFO(map.id);
         Assets::EnvironmentSetting environment;
@@ -291,7 +291,7 @@ TEST_CASE("NextDayz geographic SCAD scenes retain finite bounded geometry and ga
     std::string error;
     REQUIRE(NextDayz::LoadExpeditionMaps(Utilities::FileHelper::ResolvePlatformFilePath(
         "assets/configs/nextdayz_maps.json"),maps,error));
-    REQUIRE(maps.size() == 2);
+    REQUIRE(maps.size() == 3);
     CHECK(std::count_if(maps.begin(), maps.end(), [](const auto& map) { return map.training; }) == 1);
     for (const auto& map : maps)
     {

@@ -1,0 +1,408 @@
+{
+  "mode": "geographic-skeleton/gameplay-pcg",
+  "buildings": 102,
+  "treeBudget": 0,
+  "shrubBudget": 240,
+  "referenceRoads": 17,
+  "sites": [
+    {
+      "id": "trading",
+      "name": "Talek trading centre",
+      "kind": "sv_trading",
+      "at": [
+        436,
+        108
+      ],
+      "size": [
+        190,
+        46
+      ],
+      "rotation": 96,
+      "buildings": 20,
+      "risk": 2
+    },
+    {
+      "id": "mission",
+      "name": "Talek primary school",
+      "kind": "sv_mission",
+      "at": [
+        330,
+        60
+      ],
+      "size": [
+        110,
+        80
+      ],
+      "rotation": 0,
+      "buildings": 6,
+      "risk": 1
+    },
+    {
+      "id": "clinic",
+      "name": "Talek health centre",
+      "kind": "sv_clinic",
+      "at": [
+        330,
+        -70
+      ],
+      "size": [
+        64,
+        52
+      ],
+      "rotation": 0,
+      "buildings": 4,
+      "risk": 2
+    },
+    {
+      "id": "police",
+      "name": "Talek police post",
+      "kind": "sv_post",
+      "at": [
+        440,
+        -110
+      ],
+      "size": [
+        64,
+        48
+      ],
+      "rotation": 0,
+      "buildings": 5,
+      "risk": 3
+    },
+    {
+      "id": "north_plots",
+      "name": "Olare plots",
+      "kind": "sv_plots",
+      "at": [
+        330,
+        330
+      ],
+      "size": [
+        110,
+        84
+      ],
+      "rotation": 0,
+      "buildings": 9,
+      "risk": 1
+    },
+    {
+      "id": "south_plots",
+      "name": "Riverside plots",
+      "kind": "sv_plots",
+      "at": [
+        390,
+        -300
+      ],
+      "size": [
+        84,
+        84
+      ],
+      "rotation": 0,
+      "buildings": 7,
+      "risk": 1
+    },
+    {
+      "id": "east_boma",
+      "name": "Ole Sopia boma",
+      "kind": "sv_boma",
+      "at": [
+        300,
+        -440
+      ],
+      "size": [
+        56,
+        56
+      ],
+      "rotation": 0,
+      "buildings": 8,
+      "risk": 1
+    },
+    {
+      "id": "north_boma",
+      "name": "Enkang Olkeju",
+      "kind": "sv_boma",
+      "at": [
+        60,
+        300
+      ],
+      "size": [
+        53,
+        53
+      ],
+      "rotation": 0,
+      "buildings": 7,
+      "risk": 1
+    },
+    {
+      "id": "mid_boma",
+      "name": "Enkang Naibor",
+      "kind": "sv_boma",
+      "at": [
+        -130,
+        125
+      ],
+      "size": [
+        50,
+        50
+      ],
+      "rotation": 0,
+      "buildings": 6,
+      "risk": 1
+    },
+    {
+      "id": "shamba_n",
+      "name": "Kisemei shamba",
+      "kind": "sv_shamba",
+      "at": [
+        185,
+        250
+      ],
+      "size": [
+        46,
+        44
+      ],
+      "rotation": 10,
+      "buildings": 4,
+      "risk": 1
+    },
+    {
+      "id": "shamba_s",
+      "name": "River shamba",
+      "kind": "sv_shamba",
+      "at": [
+        240,
+        -200
+      ],
+      "size": [
+        46,
+        44
+      ],
+      "rotation": -20,
+      "buildings": 3,
+      "risk": 1
+    },
+    {
+      "id": "gate",
+      "name": "Talek Gate",
+      "kind": "sv_gate",
+      "at": [
+        -435,
+        -4
+      ],
+      "size": [
+        64,
+        60
+      ],
+      "rotation": 0,
+      "buildings": 6,
+      "risk": 3
+    },
+    {
+      "id": "river_camp",
+      "name": "Mara river camp",
+      "kind": "sv_camp",
+      "at": [
+        -400,
+        262
+      ],
+      "size": [
+        60,
+        46
+      ],
+      "rotation": -90,
+      "buildings": 4,
+      "risk": 2
+    },
+    {
+      "id": "croc_camp",
+      "name": "Crocodile camp",
+      "kind": "sv_camp",
+      "at": [
+        -150,
+        -95
+      ],
+      "size": [
+        80,
+        46
+      ],
+      "rotation": 0,
+      "buildings": 6,
+      "risk": 2
+    },
+    {
+      "id": "outpost",
+      "name": "Anti-poaching outpost",
+      "kind": "sv_post",
+      "at": [
+        -300,
+        -330
+      ],
+      "size": [
+        60,
+        48
+      ],
+      "rotation": 20,
+      "buildings": 4,
+      "risk": 3
+    },
+    {
+      "id": "fly_camp",
+      "name": "Hunters' fly camp",
+      "kind": "sv_camp",
+      "at": [
+        -40,
+        -330
+      ],
+      "size": [
+        44,
+        46
+      ],
+      "rotation": 90,
+      "buildings": 3,
+      "risk": 2
+    }
+  ],
+  "spawns": [
+    [
+      -455,
+      -420
+    ],
+    [
+      470,
+      -430
+    ],
+    [
+      150,
+      450
+    ],
+    [
+      -215,
+      430
+    ],
+    [
+      465,
+      440
+    ]
+  ],
+  "extractions": [
+    [
+      -180,
+      -300
+    ],
+    [
+      -120,
+      300
+    ]
+  ],
+  "center": [
+    -1.443,
+    35.2112
+  ],
+  "sizeM": 1000,
+  "sourceDatumM": 1553.9847649102708,
+  "reliefScale": 1,
+  "gameplayBridges": 3,
+  "landcover": [
+    {
+      "id": "wood_sw",
+      "kind": "acacia_woodland",
+      "areaM2": 31404
+    },
+    {
+      "id": "plain_sw",
+      "kind": "savanna",
+      "areaM2": 180520
+    },
+    {
+      "id": "wood_w",
+      "kind": "acacia_woodland",
+      "areaM2": 17600
+    },
+    {
+      "id": "nw_thicket",
+      "kind": "thicket",
+      "areaM2": 15064
+    },
+    {
+      "id": "north_grazing",
+      "kind": "grazing",
+      "areaM2": 80430
+    },
+    {
+      "id": "lugga_thicket",
+      "kind": "thicket",
+      "areaM2": 14974
+    },
+    {
+      "id": "meander_plain",
+      "kind": "savanna",
+      "areaM2": 62125
+    },
+    {
+      "id": "mid_grazing",
+      "kind": "grazing",
+      "areaM2": 60850
+    },
+    {
+      "id": "shamba_n1",
+      "kind": "shamba",
+      "areaM2": 6725
+    },
+    {
+      "id": "shamba_n2",
+      "kind": "shamba",
+      "areaM2": 4465
+    },
+    {
+      "id": "shamba_n3",
+      "kind": "shamba",
+      "areaM2": 12320
+    },
+    {
+      "id": "shamba_s1",
+      "kind": "shamba",
+      "areaM2": 3395
+    },
+    {
+      "id": "shamba_s2",
+      "kind": "shamba",
+      "areaM2": 10150
+    },
+    {
+      "id": "banana_s",
+      "kind": "banana",
+      "areaM2": 1975
+    },
+    {
+      "id": "town_grazing",
+      "kind": "grazing",
+      "areaM2": 160634
+    },
+    {
+      "id": "se_plain",
+      "kind": "savanna",
+      "areaM2": 25760
+    },
+    {
+      "id": "east_bank",
+      "kind": "grazing",
+      "areaM2": 29980
+    },
+    {
+      "id": "gallery_0",
+      "kind": "gallery",
+      "areaM2": 45512
+    },
+    {
+      "id": "gallery_1",
+      "kind": "gallery",
+      "areaM2": 41150
+    },
+    {
+      "id": "gallery_2",
+      "kind": "gallery",
+      "areaM2": 31467
+    }
+  ],
+  "treeAlleys": 4
+}

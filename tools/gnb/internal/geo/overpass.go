@@ -97,6 +97,10 @@ func BuildOverpassQuery(b BBox) string {
 		`way["natural"="water"]`,
 		`relation["natural"="water"]`,
 		`way["waterway"="riverbank"]`,
+		// Linear waterways. Outside the well-mapped cities most rivers are a
+		// single centreline with no bank polygon (the Talek in the Maasai Mara
+		// is one way); without them the tile reads as having no water at all.
+		`way["waterway"~"^(river|stream|canal|ditch|drain)$"]`,
 		`way["landuse"]`,
 		`way["leisure"]`,
 		`way["man_made"="pier"]`,

@@ -285,7 +285,8 @@ func readExpeditionControls(path string, ir *IR, grid *HeightGrid, budget int) (
 				return report, fmt.Errorf("invalid PCG bridge span/width")
 			}
 			for _, p := range [][2]float64{a, b} {
-				if math.Abs(p[0]) > ir.SizeM/2-8 || math.Abs(p[1]) > ir.SizeM/2-8 || grid.Sample(p[0], p[1]) < ir.Terrain.WaterLevel+0.25 {
+				if math.Abs(p[0]) > ir.SizeM/2-8 || math.Abs(p[1]) > ir.SizeM/2-8 ||
+					(ir.Terrain.HasWater && grid.Sample(p[0], p[1]) < ir.Terrain.WaterLevel+0.25) || wetChannelDistance(ir.channels, p) < 2 {
 					return report, fmt.Errorf("PCG bridge must end on dry banks inside the map")
 				}
 			}
@@ -351,6 +352,36 @@ func terraceRow(houses int, plot float64) float64 {
 }
 
 var settlementRules = map[string]settlementRule{
+	// Savanna (nextdayz_savanna.scad).
+	"sv_trading": {4, 24, true, func(n int) (float64, float64) {
+		return 8 + float64((n+1)/2)*7.6 + settlementGap*float64(n/16), 44
+	}},
+	"sv_plots": {3, 14, true, func(n int) (float64, float64) {
+		side := 15 + settlementGap
+		cols := math.Ceil(math.Sqrt(float64(n)))
+		return side * cols, side * math.Ceil(float64(n)/cols)
+	}},
+	"sv_boma": {3, 10, false, func(n int) (float64, float64) {
+		side := 2*(6.5+float64(n)*1.8+4) + 6
+		return side, side
+	}},
+	"sv_shamba":  {1, 4, false, func(n int) (float64, float64) { return 44, 42 }},
+	"sv_mission": {2, 7, false, func(n int) (float64, float64) { return 100, 80 }},
+	"sv_clinic":  {1, 4, false, func(n int) (float64, float64) { return 60, 50 }},
+	"sv_gate": {2, 7, false, func(n int) (float64, float64) {
+		return math.Max(60, 28+8.2*float64(max(0, n-2))), 60
+	}},
+	"sv_post": {2, 7, false, func(n int) (float64, float64) {
+		return math.Max(60, 28+8.2*float64(max(0, n-2))), 46
+	}},
+	"sv_camp": {2, 8, true, func(n int) (float64, float64) {
+		tents := n - 1
+		if n >= 6 {
+			tents = n - 2
+			return math.Max(74, 14+20*float64(tents-1)), 46
+		}
+		return math.Max(40, 14+20*float64(tents-1)), 46
+	}},
 	"hokkaido_lane": {2, 20, true, func(n int) (float64, float64) {
 		groups := math.Ceil(math.Ceil(float64(n)/2) / 2)
 		return 8 + groups*26 + (groups-1)*settlementGap, 64
@@ -417,7 +448,8 @@ var trainingRules = map[string]trainingRule{
 
 var landcoverKinds = map[string]bool{"spruce": true, "mixed": true, "beech": true, "pine": true, "beetle": true,
 	"riparian": true, "orchard": true, "field": true, "meadow": true, "clearing": true,
-	"hokkaido_mixed": true, "coastal_grass": true}
+	"hokkaido_mixed": true, "coastal_grass": true,
+	"savanna": true, "acacia_woodland": true, "gallery": true, "thicket": true, "shamba": true, "grazing": true, "banana": true}
 
 func validateExpeditionPad(ir *IR, grid *HeightGrid, at, size [2]float64, angle float64) error {
 	return validateExpeditionPadSpan(ir, grid, at, size, angle, 12)
@@ -438,6 +470,9 @@ func validateExpeditionPadSpan(ir *IR, grid *HeightGrid, at, size [2]float64, an
 			hi = math.Max(hi, z)
 			if ir.Terrain.HasWater && z < ir.Terrain.WaterLevel+0.25 {
 				return fmt.Errorf("pad overlaps water at %.1f,%.1f", x, y)
+			}
+			if wetChannelDistance(ir.channels, [2]float64{x, y}) < 4 {
+				return fmt.Errorf("pad overlaps a river channel at %.1f,%.1f", x, y)
 			}
 		}
 	}

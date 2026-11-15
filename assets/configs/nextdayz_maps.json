@@ -32,6 +32,24 @@
       "sizeM": 800,
       "status": "published",
       "terrain": "FIRING RANGE / ARMORY / OBSTACLE COURSE"
+    },
+    {
+      "center": [
+        -1.443,
+        35.2112
+      ],
+      "description": "The Talek River loops through fig and fever-tree gallery on the edge of the Maasai Mara. East of it: a trading centre of tin-roofed dukas, a mission school, a health centre and a police post among maize shambas and thorn-ringed Maasai bomas. West of it the reserve begins - Talek Gate on the only road bridge, an anti-poaching outpost and a hunters' fly camp on the open plain. Long sightlines, little cover, three ways across the water.",
+      "draftScene": "assets/scad/proc/nextdayz/ke_talek_mara/scene.scad",
+      "id": "ke_talek_mara",
+      "localName": "塔勒克·马拉河畔",
+      "mapVersion": 1,
+      "name": "TALEK / MARA EDGE",
+      "profile": "savanna_decay",
+      "region": "KENYA / MAASAI MARA",
+      "scene": "assets/scad/proc/nextdayz/ke_talek_mara/scene.scad",
+      "sizeM": 1000,
+      "status": "draft",
+      "terrain": "SAVANNA / RIVER GALLERY / TRADING CENTRE"
     }
   ],
   "version": 1

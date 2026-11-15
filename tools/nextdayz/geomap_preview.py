@@ -7,6 +7,13 @@ real place before touching SCAD, and review the result afterwards.
 
     python tools/nextdayz/geomap_preview.py --map cz_loket_riverbend
     python tools/nextdayz/geomap_preview.py --map cz_loket_riverbend --no-osm --out out/nextdayz/plan.png
+    python tools/nextdayz/geomap_preview.py --map ke_talek_mara --scout     # before any layout exists
+
+--scout draws the raw geocache tile (`gnb geo fetch` + `gnb geo build`): real-metre
+relief, OSM buildings / roads / landuse / waterways and named places, and prints the
+numbers a recipe needs (relief range, building count, waterway classes). Use it to
+choose the tile centre and reliefScale; shift --at and re-fetch until the features you
+want sit inside the square.
 
 Grid lines every 100 m (labels in metres, +x east, +y north, origin = tile centre).
 Needs Pillow. Reads external/geocache/<map>/parts/p0_0/part.json when present.
@@ -26,6 +33,9 @@ LANDCOVER = {
     "beetle": (128, 92, 60), "riparian": (40, 110, 90), "orchard": (150, 170, 70), "field": (196, 176, 96),
     "meadow": (128, 170, 84), "clearing": (160, 140, 90),
     "hokkaido_mixed": (42, 100, 60), "coastal_grass": (160, 155, 100),
+    "savanna": (190, 170, 90), "acacia_woodland": (120, 130, 60), "gallery": (30, 100, 60),
+    "thicket": (90, 110, 60), "shamba": (200, 120, 70), "grazing": (210, 190, 140), "banana": (80, 160, 70),
+    "kopje": (130, 120, 115),
 }
 
 
@@ -49,18 +59,34 @@ def main():
     ap.add_argument("--out", default="")
     ap.add_argument("--px", type=float, default=1.4, help="pixels per metre")
     ap.add_argument("--no-osm", action="store_true", help="hide the OSM reference layer")
+    ap.add_argument("--scout", action="store_true", help="raw geocache tile, before a layout exists")
     args = ap.parse_args()
 
     mdir = ROOT / "assets/scad/proc/nextdayz" / args.map
-    gen = json.loads((mdir / "generation.json").read_text())
-    size = gen.get("sizeM", 1000)
-    half = size / 2
+    part = ROOT / "external/geocache" / args.map / "parts/p0_0/part.json"
     px = args.px
+    rivers = []
+    if args.scout:
+        osm = json.loads(part.read_text(encoding="utf-8"))
+        size = osm.get("sizeM", 1000)
+        water = osm["terrain"]["waterLevel"] if osm.get("terrain", {}).get("hasWater") else -1e9
+        cols, rows, ox, oy, cx, cy, H = read_hmap(ROOT / "assets/geo" / args.map / "terrain.hmap")
+        layout = ""
+    else:
+        gen = json.loads((mdir / "generation.json").read_text())
+        size = gen.get("sizeM", 1000)
+        base = (mdir / "base.scad").read_text()
+        m = re.search(r'"gkterr1",\s*\[[^\]]*\],\s*\[[^\]]*\],\s*-?\d+,\s*\[[^\]]*\],\s*([-\d.]+)', base)
+        water = float(m.group(1)) if m else -1e9
+        cols, rows, ox, oy, cx, cy, H = read_hmap(mdir / "terrain.hmap")
+        layout = (mdir / "layout.scad").read_text()
+        # Carved rivers (recipe `waterways`): ["river", [[x,y],...], width, depth].
+        for m in re.finditer(r'\["river",\s*(\[\[.*?\]\]),\s*([\d.]+),\s*([\d.]+)\]', base):
+            rivers.append((json.loads(m.group(1)), float(m.group(2))))
+        for m in re.finditer(r'\["paint",\s*(\[\[[^"]*?\]\]),\s*"sand"\]', base):
+            rivers.append((json.loads(m.group(1)), 0))
+    half = size / 2
     W = int(size * px)
-    base = (mdir / "base.scad").read_text()
-    m = re.search(r'"gkterr1",\s*\[[^\]]*\],\s*\[[^\]]*\],\s*-?\d+,\s*\[[^\]]*\],\s*([-\d.]+)', base)
-    water = float(m.group(1)) if m else -1e9
-    cols, rows, ox, oy, cx, cy, H = read_hmap(mdir / "terrain.hmap")
     lo, hi = min(H), max(H)
 
     def P(p):
@@ -88,18 +114,41 @@ def main():
             img.paste(tuple(int(min(255, v * shade)) for v in c), (int(x0 - cell / 2), int(y0 - cell / 2), int(x0 + cell / 2), int(y0 + cell / 2)))
     d = ImageDraw.Draw(img)
 
-    part = ROOT / "external/geocache" / args.map / "parts/p0_0/part.json"
+    for pts, width in rivers:
+        if width > 0:
+            d.line([P(q) for q in pts], fill=(50, 100, 170), width=max(2, int(width * px)), joint="curve")
+        else:
+            d.polygon([P(q) for q in pts], fill=(214, 190, 140))
     if part.exists() and not args.no_osm:
-        osm = json.loads(part.read_text())
-        for a in osm.get("landuse", []):
+        osm = json.loads(part.read_text(encoding="utf-8"))
+        for wwy in (osm.get("waterways") or []):
+            wet = wwy["class"] in ("river", "canal")
+            d.line([P(q) for q in wwy["pts"]], fill=(90, 170, 255) if wet else (150, 200, 235), width=3 if wet else 1)
+            mid = wwy["pts"][len(wwy["pts"]) // 2]
+            if abs(mid[0]) < half and abs(mid[1]) < half:
+                d.text(P(mid), wwy.get("name") or wwy["class"], fill=(200, 230, 255))
+        for a in (osm.get("landuse") or []):
             d.polygon([P(p) for p in a["outer"]], outline=(220, 220, 255))
-        for r in osm.get("roads", []):
+        for r in (osm.get("roads") or []):
             major = r["class"] in ("secondary", "tertiary", "residential", "unclassified", "living_street", "primary")
             d.line([P(p) for p in r["pts"]], fill=(235, 235, 235) if major else (150, 150, 150), width=2 if major else 1)
-        for b in osm.get("buildings", []):
+        for b in (osm.get("buildings") or []):
             d.polygon([P(p) for p in b["outer"]], fill=(170, 60, 50))
+        for poi in (osm.get("pois") or []) if args.scout else []:
+            q = P(poi["pos"]); d.ellipse([q[0] - 4, q[1] - 4, q[0] + 4, q[1] + 4], outline=(255, 255, 0), width=2)
+            d.text((q[0] + 6, q[1] - 6), f'{poi.get("name", "")} ({poi.get("tag", "")})', fill=(255, 255, 0))
+        if args.scout:
+            inside = [b for b in (osm.get("buildings") or []) if abs(b["outer"][0][0]) < half and abs(b["outer"][0][1]) < half]
+            classes = {}
+            for wwy in (osm.get("waterways") or []):
+                classes[wwy["class"]] = classes.get(wwy["class"], 0) + 1
+            roads = {}
+            for r in (osm.get("roads") or []):
+                roads[r["class"]] = roads.get(r["class"], 0) + 1
+            print(f"scout: {len(inside)} OSM buildings, roads {roads}, waterways {classes or 'none'}, "
+                  f"water polygons {len(osm.get('waters') or [])}, landuse {sorted({a['tag'] for a in (osm.get('landuse') or [])})}")
+            print(f"scout: real relief {hi - lo:.1f} m -> a reliefScale of {min(1.0, 30 / max(1.0, hi - lo)):.2f} keeps about 30 m of game relief")
 
-    layout = (mdir / "layout.scad").read_text()
     for lc in scad_array(layout, "PCG_LANDCOVER"):
         col = LANDCOVER.get(lc[1], (200, 200, 200))
         d.polygon([P(p) for p in lc[2]], outline=col + (255,), width=3)
@@ -132,7 +181,7 @@ def main():
         d.line([P([-half, k]), P([half, k])], fill=(0, 0, 0))
         d.text(P([k + 3, -half + 14]), str(k), fill=(0, 0, 0))
         d.text(P([-half + 3, k + 12]), str(k), fill=(0, 0, 0))
-    out = Path(args.out) if args.out else ROOT / "out/nextdayz" / f"{args.map}_plan.png"
+    out = Path(args.out) if args.out else ROOT / "out/nextdayz" / f"{args.map}_{'scout' if args.scout else 'plan'}.png"
     out.parent.mkdir(parents=True, exist_ok=True)
     img.save(out)
     print(f"{out}  (relief {lo:.1f}..{hi:.1f} m, water {water:.2f} m)")

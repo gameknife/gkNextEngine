@@ -42,10 +42,6 @@ void Brotato3DGameInstance::ApplyWeaponKnockback(Brotato3D::FEnemyRuntime& enemy
     }
 
     enemy.worldPos = ResolveEnemyGroundedPosition(enemy, enemy.worldPos + knockDir * effectiveKnockback);
-    if (enemy.node)
-    {
-        enemy.node->SetTranslation(enemy.worldPos);
-    }
     // Knockback is an instant positional snap; use a stable fallback step so Jolt derives a sane push velocity.
     SyncEnemyKinematicBody(enemy, 1.0 / 60.0);
 }
@@ -57,6 +53,10 @@ void Brotato3DGameInstance::UpdateWeapons(double deltaSeconds)
 {
     const float deltaMs = static_cast<float>(deltaSeconds * 1000.0);
     const Brotato3D::FPlayerStats effectiveStats = GetEffectiveStats();
+    if (validation_.holdFire)
+    {
+        return;
+    }
     for (auto& weapon : equippedWeapons_)
     {
         if (!weapon.def)
@@ -89,8 +89,23 @@ void Brotato3DGameInstance::UpdateWeapons(double deltaSeconds)
         }
         if (!target)
         {
+            weapon.focusTag = 0;
             continue;
         }
+        // Focus fire: stay on the zombie this weapon is already working on while it is still
+        // about as close as the nearest one. Spraying a fresh target every shot wounds a whole
+        // front rank and drops nobody.
+        if (weapon.focusTag != 0 && weapon.focusTag != target->runtimeTag && weapon.focusTag <= enemies_.size())
+        {
+            Brotato3D::FEnemyRuntime& focus = enemies_[weapon.focusTag - 1];
+            const float focusDistance = DistanceXZ(focus.worldPos, player_.worldPos);
+            if (focus.alive && focusDistance <= range && focusDistance <= bestDistance + FocusFireSlackMeters &&
+                !IsSegmentBlockedByExtractionVehicle(player_.worldPos, focus.worldPos, 0.05f))
+            {
+                target = &focus;
+            }
+        }
+        weapon.focusTag = target->runtimeTag;
 
         glm::vec3 dir = target->worldPos - player_.worldPos;
         dir.y = 0.0f;
@@ -98,20 +113,26 @@ void Brotato3DGameInstance::UpdateWeapons(double deltaSeconds)
 
         bool isCrit = false;
         const int weaponDamage = CalculateWeaponDamage(*weapon.def, isCrit);
-        const glm::vec3 muzzlePos = player_.worldPos + dir * 0.6f + glm::vec3(0.0f, 0.4f, 0.0f);
+        // The weapon in the hands is the first slot; the others fire from the same shoulder.
+        glm::vec3 muzzlePos = player_.worldPos + dir * 0.9f + glm::vec3(0.0f, PlayerMuzzleHeight - player_.worldPos.y, 0.0f);
+        if (&weapon == &equippedWeapons_.front())
+        {
+            playerRig_.MuzzleWorldPosition(muzzlePos);
+        }
+        playerRig_.NotifyFired();
         Brotato3D::PlayWeaponFireSfx(weapon.weaponId);
         PushMuzzleFlash(muzzlePos, weapon.def->projectileColor);
         SpawnTempLight(muzzlePos, weapon.def->projectileColor, 3.0f, 120.0f);
         if (weapon.def->instantHit)
         {
-            const glm::vec3 hitPos = target->worldPos + glm::vec3(0.0f, target->def ? target->def->size.y * 0.5f : 0.4f, 0.0f);
+            const glm::vec3 hitPos = target->worldPos + glm::vec3(0.0f, target->def ? target->def->size.y * 0.15f : 0.2f, 0.0f);
             target->lastHitDebrisDir = dir;
             ApplyWeaponKnockback(*target, dir, weapon.def->knockbackMeters);
             const uint32_t hitMaterialId = target->bossPhase2Active && target->phase2MaterialId != 0 ? target->phase2MaterialId :
                                                                                                         target->materialId;
             const int effectiveDamage = ApplyDamageToEnemy(*target, weaponDamage, isCrit);
             SpawnHitXpDebris(hitPos, dir, effectiveDamage, hitMaterialId);
-            PushLaserBeam(player_.worldPos + glm::vec3(0.0f, 0.25f, 0.0f),
+            PushLaserBeam(muzzlePos,
                           hitPos,
                           glm::vec4(weapon.def->projectileColor, 1.0f),
                           std::max(1.0f, weapon.def->beamDurationMs),
@@ -133,8 +154,10 @@ void Brotato3DGameInstance::UpdateWeapons(double deltaSeconds)
                     continue;
                 }
                 projectile.active = true;
-                projectile.worldPos = player_.worldPos + projectileDir * 0.5f;
-                projectile.worldPos.y = 0.5f;
+                // Rounds start inside the hero's own radius, not at the visible muzzle: a zombie
+                // already clawing at him must still be in the line of fire.
+                projectile.worldPos = player_.worldPos + projectileDir * 0.3f;
+                projectile.worldPos.y = PlayerMuzzleHeight;
                 projectile.lastWorldPos = projectile.worldPos;
                 projectile.velocity = projectileDir * weapon.def->projectileSpeed;
                 projectile.color = weapon.def->projectileColor;
@@ -254,6 +277,7 @@ void Brotato3DGameInstance::UpdateProjectiles(double deltaSeconds)
                                 const uint32_t aoeHitMaterialId = aoeEnemy.bossPhase2Active && aoeEnemy.phase2MaterialId != 0 ?
                                     aoeEnemy.phase2MaterialId :
                                     aoeEnemy.materialId;
+                                aoeEnemy.lastHitExplosive = true;
                                 const int effectiveAoeDamage = ApplyDamageToEnemy(aoeEnemy, projectile.explosionDamage, false);
                                 const glm::vec3 impactDir = glm::length(blastDir) > 0.001f ? blastDir : projectile.velocity;
                                 SpawnHitXpDebris(aoeEnemy.worldPos + glm::vec3(0.0f, aoeEnemy.def ? aoeEnemy.def->size.y * 0.45f : 0.35f, 0.0f),
@@ -316,7 +340,7 @@ void Brotato3DGameInstance::SpawnEnemyProjectile(const Brotato3D::FEnemyRuntime&
 
     const Brotato3D::FEnemyRangedDef& ranged = enemy.def->ranged;
     projectileIt->active = true;
-    projectileIt->worldPos = enemy.worldPos + glm::vec3(0.0f, enemy.def->size.y * 0.5f, 0.0f);
+    projectileIt->worldPos = enemy.worldPos + glm::vec3(0.0f, enemy.def->size.y * 0.3f, 0.0f);   // the mouth
     projectileIt->velocity = dir * ranged.speed;
     projectileIt->remainingLifetimeMs = ranged.lifetimeMs;
     projectileIt->damage = static_cast<int>(std::round(static_cast<float>(ranged.dmg) * Brotato3D::MasterDifficulty));

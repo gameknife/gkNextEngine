@@ -16,6 +16,10 @@ namespace
     constexpr float PlayerDashDurationMs = 140.0f;
     constexpr float PlayerDashCooldownMs = 1700.0f;
     constexpr float PlayerDashInputEpsilon = 0.001f;
+    // Velocity is integrated toward the input instead of snapping to it: a short ramp is
+    // enough to give starts and stops weight without costing responsiveness.
+    constexpr float PlayerAcceleration = 70.0f;
+    constexpr float PlayerDeceleration = 55.0f;
 
     glm::vec3 ResolveInputDirection(bool keyW, bool keyA, bool keyS, bool keyD, const glm::vec2& gamepadMoveInput)
     {
@@ -50,6 +54,12 @@ bool Brotato3DGameInstance::OnKey(SDL_Event& event)
                               ((event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN || event.type == SDL_EVENT_GAMEPAD_BUTTON_UP) &&
                                event.gbutton.button == SDL_GAMEPAD_BUTTON_WEST);
 
+    if (isDashButton || ((event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP) &&
+                         (event.key.key == SDLK_W || event.key.key == SDLK_A || event.key.key == SDLK_S ||
+                          event.key.key == SDLK_D)))
+    {
+        ++validation_.inputEvents;
+    }
     if (isDashButton)
     {
         if (pressed && appState_ == Brotato3D::EAppState::Playing)
@@ -163,6 +173,7 @@ bool Brotato3DGameInstance::OnGamepadInput(int16_t leftStickX,
         return false;
     }
 
+    ++validation_.inputEvents;
     gamepadMoveInput_ = rawInput * stickSensitivity;
     if (glm::length(gamepadMoveInput_) > 1.0f)
     {
@@ -199,13 +210,6 @@ void Brotato3DGameInstance::UpdatePlayer(double deltaSeconds)
     }
     glm::vec3 inputDir = ResolveInputDirection(keyW_, keyA_, keyS_, keyD_, gamepadMoveInput_);
 
-    if (glm::length(inputDir) > 0.001f)
-    {
-        if (equippedWeapons_.empty())
-        {
-            player_.facingDir = glm::normalize(inputDir);
-        }
-    }
 
     Brotato3D::FEnemyRuntime* aimTarget = nullptr;
     float bestDistance = FLT_MAX;
@@ -232,6 +236,16 @@ void Brotato3DGameInstance::UpdatePlayer(double deltaSeconds)
             aimTarget = &enemy;
         }
     }
+    // Look at what the weapon in hand is actually shooting.
+    if (aimTarget && !equippedWeapons_.empty())
+    {
+        const uint32_t focusTag = equippedWeapons_.front().focusTag;
+        if (focusTag != 0 && focusTag <= enemies_.size() && enemies_[focusTag - 1].alive &&
+            DistanceXZ(enemies_[focusTag - 1].worldPos, player_.worldPos) <= bestRange)
+        {
+            aimTarget = &enemies_[focusTag - 1];
+        }
+    }
     if (aimTarget)
     {
         glm::vec3 targetDir = aimTarget->worldPos - player_.worldPos;
@@ -242,6 +256,17 @@ void Brotato3DGameInstance::UpdatePlayer(double deltaSeconds)
             player_.facingDir = glm::normalize(glm::mix(player_.facingDir, glm::normalize(targetDir), aimLerp));
         }
     }
+    else if (glm::length(inputDir) > 0.001f)
+    {
+        // Nothing to shoot at: look where we are going.
+        const float turnLerp = 1.0f - std::exp(-10.0f * static_cast<float>(deltaSeconds));
+        const glm::vec3 blended = glm::mix(player_.facingDir, glm::normalize(inputDir), turnLerp);
+        if (glm::length(blended) > 0.001f)
+        {
+            player_.facingDir = glm::normalize(blended);
+        }
+    }
+    playerHasAimTarget_ = aimTarget != nullptr;
 
     const float speed = PlayerBaseSpeed * (1.0f + effectiveStats.moveSpeedPct);
     if (player_.dashRemainingMs > 0.0f)
@@ -253,6 +278,8 @@ void Brotato3DGameInstance::UpdatePlayer(double deltaSeconds)
                                         arenaHalfExtent_);
         player_.worldPos = ResolvePlayerObstacleCollision(player_.worldPos, player_.radius);
         player_.worldPos = ClampToArena(player_.worldPos, player_.radius, arenaHalfExtent_);
+        // Come out of the dash already running.
+        playerMoveVelocity_ = player_.dashDir * speed;
         if (player_.dashRemainingMs <= 0.0f)
         {
             FinishDash();
@@ -260,7 +287,14 @@ void Brotato3DGameInstance::UpdatePlayer(double deltaSeconds)
     }
     else
     {
-        player_.worldPos = ClampToArena(player_.worldPos + inputDir * speed * static_cast<float>(deltaSeconds),
+        const glm::vec3 desiredVelocity = inputDir * speed;
+        const glm::vec3 velocityError = desiredVelocity - playerMoveVelocity_;
+        const float errorLength = glm::length(velocityError);
+        const float maxStep = (glm::length(inputDir) > 0.001f ? PlayerAcceleration : PlayerDeceleration) *
+                              static_cast<float>(deltaSeconds);
+        playerMoveVelocity_ = errorLength <= maxStep ? desiredVelocity :
+                                                       playerMoveVelocity_ + velocityError * (maxStep / errorLength);
+        player_.worldPos = ClampToArena(player_.worldPos + playerMoveVelocity_ * static_cast<float>(deltaSeconds),
                                         player_.radius,
                                         arenaHalfExtent_);
         player_.worldPos = ResolvePlayerObstacleCollision(player_.worldPos, player_.radius);
@@ -274,40 +308,14 @@ void Brotato3DGameInstance::UpdatePlayer(double deltaSeconds)
         player_.bodyNode->SetTranslation(player_.worldPos);
     }
     SyncPlayerKinematicBody(deltaSeconds);
-    if (player_.facingNode)
-    {
-        const glm::vec3 localOffset = glm::vec3(player_.facingDir.x, 0.0f, player_.facingDir.z) * 0.45f;
-        player_.facingNode->SetTranslation(glm::vec3(localOffset.x, 0.62f, localOffset.z));
-    }
-
-    const glm::vec3 forward = glm::normalize(glm::vec3(player_.facingDir.x, 0.0f, player_.facingDir.z));
-    const glm::vec3 right = glm::normalize(glm::vec3(forward.z, 0.0f, -forward.x));
-    const glm::quat weaponRotation = glm::angleAxis(std::atan2(-forward.x, -forward.z), glm::vec3(0.0f, 1.0f, 0.0f));
-    const bool hasSmg = std::any_of(equippedWeapons_.begin(), equippedWeapons_.end(), [](const Brotato3D::FWeaponRuntime& weapon)
-    {
-        return weapon.weaponId == "smg";
-    });
-    const bool hasShotgun = std::any_of(equippedWeapons_.begin(), equippedWeapons_.end(), [](const Brotato3D::FWeaponRuntime& weapon)
-    {
-        return weapon.weaponId == "shotgun";
-    });
-    if (player_.smgWeaponNode)
-    {
-        const glm::vec3 smgOffset = forward * 0.54f - right * 0.18f;
-        player_.smgWeaponNode->SetTranslation(glm::vec3(smgOffset.x, 0.42f, smgOffset.z));
-        player_.smgWeaponNode->SetRotation(weaponRotation);
-        Assets::NodeUtils::SetVisible(player_.smgWeaponNode, hasSmg);
-    }
-    if (player_.shotgunWeaponNode)
-    {
-        const glm::vec3 shotgunOffset = forward * 0.62f + right * 0.24f;
-        player_.shotgunWeaponNode->SetTranslation(glm::vec3(shotgunOffset.x, 0.43f, shotgunOffset.z));
-        player_.shotgunWeaponNode->SetRotation(weaponRotation);
-        Assets::NodeUtils::SetVisible(player_.shotgunWeaponNode, hasShotgun);
-    }
-
-    const glm::vec3 playerFeet = player_.worldPos - glm::vec3(0.0f, player_.radius, 0.0f);
-    playerRig_.Update(playerFeet, playerVelocity_, player_.facingDir, static_cast<float>(deltaSeconds));
+    Brotato3D::FPlayerRigInput rigInput;
+    rigInput.feetPosition = player_.worldPos - glm::vec3(0.0f, player_.radius, 0.0f);
+    rigInput.velocity = playerVelocity_;
+    rigInput.facingDirection = player_.facingDir;
+    rigInput.aiming = playerHasAimTarget_;
+    rigInput.dashing = player_.dashRemainingMs > 0.0f;
+    playerRig_.SetWeapon(equippedWeapons_.empty() ? std::string{} : equippedWeapons_.front().weaponId);
+    playerRig_.Update(rigInput, static_cast<float>(deltaSeconds));
 
     if (player_.dashRemainingMs > 0.0f)
     {
@@ -357,7 +365,7 @@ void Brotato3DGameInstance::FinishDash()
 
 void Brotato3DGameInstance::DamagePlayer(int damage, float shakeMs, float flashMs)
 {
-    if (damage <= 0 || appState_ == Brotato3D::EAppState::Result || player_.dashRemainingMs > 0.0f)
+    if (damage <= 0 || appState_ == Brotato3D::EAppState::Result || player_.dashRemainingMs > 0.0f || validation_.god)
     {
         return;
     }
@@ -406,7 +414,6 @@ void Brotato3DGameInstance::ResetRuntimeState()
     {
         DeactivateEnemyKinematicBody(enemy);
         enemy.alive = false;
-        enemy.fading = false;
         enemy.hitFlashRemainingMs = 0.0f;
         enemy.deathFadeMs = 0.0f;
         enemy.contactCooldownMs = 0.0f;
@@ -426,8 +433,9 @@ void Brotato3DGameInstance::ResetRuntimeState()
         enemy.lanceDashDir = glm::vec3(0.0f);
         enemy.lanceDashStartPos = glm::vec3(0.0f);
         enemy.lanceDashRemainingDist = 0.0f;
-        SetEnemyVisualVisible(enemy, false);
-        enemy.node->SetScale(glm::vec3(1.0f));
+        enemy.crawling = false;
+        enemy.pulseScale = 1.0f;
+        HideEnemyVisual(enemy);
     }
     player_ = Brotato3D::FPlayerRuntime{};
     player_.bodyNode = playerBodyNode;
@@ -448,6 +456,8 @@ void Brotato3DGameInstance::ResetRuntimeState()
         projectile.node->SetTranslation(HiddenPosition);
     }
     ClearAllDebris(false);
+    ClearGore();
+    corpseCount_ = 0;
     floatingTexts_.clear();
     muzzleFlashes_.clear();
     explosionRings_.clear();
@@ -492,6 +502,8 @@ void Brotato3DGameInstance::ResetRuntimeState()
     totalMaterialsGained_ = 0;
     playerDead_ = false;
     playerVelocity_ = glm::vec3(0.0f);
+    playerMoveVelocity_ = glm::vec3(0.0f);
+    playerHasAimTarget_ = false;
     player_.dashCooldownMs = 0.0f;
     player_.dashRemainingMs = 0.0f;
     player_.dashDurationMs = 0.0f;

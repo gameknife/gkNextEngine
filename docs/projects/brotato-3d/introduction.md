@@ -3,7 +3,7 @@ title: Brotato3D 项目介绍
 category: project
 status: 现行
 owner: docs
-last_updated: 2026-07-17
+last_updated: 2026-11-15
 ---
 
 # Brotato3D 项目介绍
@@ -20,7 +20,7 @@ Brotato3D 是 gkNextEngine 内置的俯视角 3D 生存射击子项目。它参�
 - 运行方式：macOS/Linux 使用 `./gnb.sh run Brotato3D`，Windows 使用 `gnb.bat run Brotato3D`
 - 主要文档：`docs/projects/brotato-3d/developer-guide.md`
 
-游戏默认从主菜单进入角色选择，选择角色和竞技场后开始一局。玩家使用 WASD / 手柄左摇杆移动，武器自动锁敌开火；击杀与命中会喷出 XP / Material 碎块，靠近玩家后磁吸拾取。升级时进入三选一属性卡，波次间进入商店购买武器、被动物品或属性卡。最后一波为 Boss 波，击杀 Boss 后进入胜利结算。
+游戏默认从主菜单进入角色选择，选择角色和竞技场后开始一局。玩家使用 WASD / 手柄左摇杆移动（带加减速），身体转向正在射击的目标、双腿按移动方向侧移或后退，武器自动锁敌开火（同一目标打到倒下才换）；击杀与命中会喷出 XP / Material 碎块，靠近玩家后磁吸拾取。升级时进入三选一属性卡，波次间进入商店购买武器、被动物品或属性卡。最后一波为 Boss 波，击杀 Boss 后进入胜利结算。
 
 ## 玩法系统
 
@@ -28,8 +28,8 @@ Brotato3D 当前已经超过最初 MVP，核心系统包括：
 
 - 角色：`soldier`、`brawler`、`marksman` 三个起手角色，分别对应均衡、近战爆发、远程暴击取向。
 - 武器：SMG、Shotgun、Sniper、Flamethrower、Rocket、Laser，支持散射、穿透、爆炸、瞬发激光、击退和暴击。
-- 敌人：普通追击、远程、冲锋、自爆、治疗、迫击炮、长枪冲刺、Boss 二阶段等多种行为。
-- 波次：10 波配置，普通波之后进入 Dusk Surge 黄昏潮，玩家需要在撤离车区域内驻留完成撤离；Boss 波跳过撤离流程。
+- 敌人：九种人形僵尸（行尸、壮汉、喷吐者、奔跑者、橄榄球员、膨胀者、女巫、投掷者、防暴警 Boss），对应普通追击、远程、冲锋、自爆、治疗、迫击炮、长枪冲刺、Boss 二阶段等行为。中弹会踉跄、按血量断肢，断腿后趴地爬行；死法分倒地、爆头和解体，尸体留在地上。
+- 波次：10 波配置，普通波之后进入 Dusk Surge 黄昏潮，幸存者巴士驶来（沿途碾碎僵尸），玩家需要在车门外驻留完成撤离；Boss 波跳过撤离流程。
 - 构筑：升级卡、商店属性卡、武器购买与合并、被动 Item、低血触发、击杀触发、Dash 结束触发等。
 - 存档：记录总胜场、总击杀、最快通关时间和角色胜场。
 
@@ -41,7 +41,8 @@ Brotato3D 的意义不只是“复刻一个玩法”，而是提供一个高频�
 
 - 大量运行时节点：敌人、子弹、碎块、拾取物、地面警示、激光和临时光源都需要稳定创建、复用、隐藏和同步。
 - 物理反馈：XP / Material / 尸块碎片使用 Jolt 物理体与 kinematic body 同步，让战斗反馈从纯 UI 飘字扩展到真实空间。
-- 固定末日场景：竞技场直接加载基于 `kit_deadly.scad` 搭建的城镇、公路郊外和沙漠荒野，布局可持续人工修缮。
+- 固定末日场景：竞技场直接加载基于 `kit_deadly.scad` 搭建的城镇、公路郊外和沙漠荒野，再叠一层 `kit_deadly_wasteland.scad` 的“出过事”杂物（血迹、尸体、弃车、行李、警方路障），布局可持续人工修缮。
+- 刚体骨骼角色：主角沿用 NextDayz 的 20 骨骼人形骨架与分层动画（移动混合空间 + 持枪 IK + 后坐力），僵尸用 NextDayz 感染者的程序化步态，断肢是把真实骨骼子树甩出去做弹道。
 - ImGui 游戏 HUD：主菜单、角色选择、战斗 HUD、升级、商店、暂停、设置和结算都在 ImGui 中实现，覆盖较完整的游戏 UI 状态机。
 - 数据加载链路：JSON 配置加载、校验、结构化为运行时数据，并与 C++ 子系统保持清晰分工。
 - 音频与资源 fallback：占位音频、图标和字体通过统一路径解析，缺失资源不会阻断玩法运行。
@@ -53,9 +54,11 @@ Brotato3D 的意义不只是“复刻一个玩法”，而是提供一个高频�
 | 系统 | 关键文件 | 职责 |
 | --- | --- | --- |
 | 主状态机 | `Brotato3DGameInstance.cpp/.hpp` | 生命周期、状态切换、场景重建、存档、子系统编排 |
-| 玩家 | `Brotato3DPlayerSystem.cpp` | 移动、Dash、受伤、属性应用、角色初始化 |
+| 玩家 | `Brotato3DPlayerSystem.cpp`, `Brotato3DPlayerRigVisual.cpp` | 移动、Dash、受伤、属性应用、角色初始化；主角 ScadRig 动画图与手持武器 |
 | 武器 / 子弹 | `Brotato3DProjectileSystem.cpp` | 自动瞄准、开火、命中、暴击、爆炸、激光、武器合并 |
-| 敌人 | `Brotato3DEnemySystem.cpp` | 刷怪、追击、远程、冲锋、自爆、治疗、迫击炮、长枪、Boss |
+| 敌人 | `Brotato3DEnemySystem.cpp`, `Brotato3DZombieVisual.cpp` | 刷怪、追击、远程、冲锋、自爆、治疗、迫击炮、长枪、Boss、尸群挤压；僵尸 rig 的动画与断肢 |
+| 断肢 / 血 | `Brotato3DGoreSystem.cpp` | 按血量断肢、爬行、血泊与血块 |
+| 验证 | `Brotato3DValidation.cpp` | `brotato3d.validation.*` cvar 与 `game.*` agent 查询 |
 | 波次 | `Brotato3DWaveSystem.cpp/.hpp` | Active / DuskSurge / Intermission / Victory 状态机 |
 | 掉落 / 碎块 | `Brotato3DDebrisSystem.cpp` | 物理碎块池、拾取物、磁吸、掉落表现 |
 | 效果 | `Brotato3DEffectSystem.cpp` | 屏幕震动、临时光源、爆炸环、地面警示、相机覆盖 |
@@ -70,7 +73,7 @@ Brotato3D 的意义不只是“复刻一个玩法”，而是提供一个高频�
 | --- | --- |
 | `characters.json` | 角色、起手武器、起始属性 |
 | `weapons.json` | 武器伤害、射速、射程、弹丸、爆炸、激光、击退 |
-| `enemies.json` | 敌人 HP、速度、伤害、尺寸、掉落和 AI 子能力 |
+| `enemies.json` | 敌人 HP、速度、伤害、僵尸外形（`rig` / `rigScale` / `body` / `tints`）、断肢规则、掉落和 AI 子能力 |
 | `waves.json` | 波次时长、刷怪表、黄昏潮倍率、撤离参数、Boss 波 |
 | `upgrades.json` | 升级三选一卡池 |
 | `shop_items.json` | 商店属性卡、武器卡、被动 Item 入口 |

@@ -1,0 +1,42 @@
+{
+  "name": "brotato3d-extraction",
+  "target": "Brotato3D",
+  "defaults": { "waitFrames": 2, "stepTimeoutMs": 30000 },
+  "steps": [
+    { "type": "wait-until", "query": "engine.status", "op": "eq", "value": "Running", "timeoutMs": 30000 },
+    { "type": "wait-until", "query": "game.sceneReady", "op": "eq", "value": true, "timeoutMs": 60000 },
+    { "type": "cvar", "name": "brotato3d.validation.god", "set": true },
+    { "type": "cvar", "name": "brotato3d.validation.pauseWaves", "set": true },
+    { "type": "cvar", "name": "brotato3d.validation.autoUpgrade", "set": true },
+    { "type": "cvar", "name": "brotato3d.validation.holdFire", "set": true },
+    { "type": "cvar", "name": "brotato3d.validation.start", "set": true },
+    { "type": "wait-until", "query": "game.state", "op": "eq", "value": "playing", "timeoutMs": 10000 },
+
+    { "type": "log", "message": "a crowd around the player, then night falls and the bus drives through it" },
+    { "type": "cvar", "name": "brotato3d.validation.horde", "set": true },
+    { "type": "cvar", "name": "brotato3d.validation.freeze", "set": true },
+    { "type": "wait-ms", "ms": 300 },
+    { "type": "cvar", "name": "brotato3d.validation.dusk", "set": true },
+    { "type": "wait-until", "query": "game.waveState", "op": "eq", "value": "dusk", "timeoutMs": 5000 },
+    { "type": "assert", "query": "game.busVisible", "op": "eq", "value": true },
+    { "type": "wait-ms", "ms": 1300 },
+    { "type": "screenshot", "out": "screenshots/brotato3d_bus_arriving", "ui": true },
+    { "type": "wait-until", "query": "game.busArrived", "op": "eq", "value": true, "timeoutMs": 5000 },
+    { "type": "wait-ms", "ms": 600 },
+    { "type": "screenshot", "out": "screenshots/brotato3d_bus_parked", "ui": true },
+    { "type": "assert", "query": "game.corpses", "op": "ge", "value": 1 },
+    { "type": "cvar", "name": "brotato3d.validation.cameraHeight", "set": 7.0 },
+    { "type": "cvar", "name": "brotato3d.validation.cameraBack", "set": 13.0 },
+    { "type": "wait-ms", "ms": 400 },
+    { "type": "screenshot", "out": "screenshots/brotato3d_bus_close" },
+    { "type": "cvar", "name": "brotato3d.validation.cameraHeight", "set": 0 },
+
+    { "type": "log", "message": "board the bus: extraction completes and the shop opens" },
+    { "type": "assert", "query": "game.boarding", "op": "eq", "value": false },
+    { "type": "cvar", "name": "brotato3d.validation.pauseWaves", "set": false },
+    { "type": "cvar", "name": "brotato3d.validation.board", "set": true },
+    { "type": "wait-until", "query": "game.boarding", "op": "eq", "value": true, "timeoutMs": 3000 },
+    { "type": "wait-until", "query": "game.state", "op": "eq", "value": "shopping", "timeoutMs": 10000 },
+    { "type": "quit" }
+  ]
+}

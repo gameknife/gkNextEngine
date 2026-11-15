@@ -3,7 +3,7 @@ title: Brotato3D 开发者指南
 category: project
 status: 现行
 owner: docs
-last_updated: 2026-08-31
+last_updated: 2026-11-15
 ---
 
 # Brotato3D 开发者指南
@@ -86,7 +86,10 @@ Idle → Active → (waveTimeRemainingSec → 0) → DuskSurge → (玩家进入
 ```
 
 - **DuskSurge（黄昏潮）**：刷怪间隔 / `duskSpawnMultiplier`，并且**无视 spawn count 上限**（无限刷），直到玩家走进撤离车区域累计 `extractionRequiredSec` 秒。
-- **撤离车**：每波黄昏开始时一台车从场地外驶入；玩家进入半径 `extractionRadiusM` 内累计停留时间。撤离车本身有碰撞，会挡子弹和敌人。
+- **撤离巴士**：每波黄昏开始时，幸存者巴士（`brotato_vehicles.scad` 的 `bone_veh_bus`）从屏幕上方或左右两侧
+  驶入，停在玩家侧前方一个车道外，车门那一侧朝向玩家。撤离区是**车门外**半径 `extractionRadiusM` 的圈（不是车身中心），
+  巴士停稳后才开始计时；车顶灯把车门照亮。巴士开进来时会碾碎车道上的僵尸（Boss 除外）。停稳后车身是障碍，挡玩家、
+  敌人和敌方子弹。
 - **Intermission**：固定 5 秒倒计时（写死在 `EnterShop()`），同时弹出商店面板。
 
 ### 2.2 经验与升级
@@ -132,8 +135,12 @@ crit   = round(damage * critMultiplier) when rng < (critChancePct + weapon.critC
 **最小化模板（追击型）**：
 
 ```json
-"slime": {
-  "name": "Slime",
+"crawler": {
+  "name": "Crawler",
+  "rig": "walker",
+  "rigScale": 0.9,
+  "body": [0.30, 1.6],
+  "tints": [[0.36, 0.47, 0.62], [0.60, 0.30, 0.26]],
   "hp": 22,
   "moveSpeed": 1.8,
   "contactDamage": 4,
@@ -143,6 +150,16 @@ crit   = round(damage * critMultiplier) when rng < (critChancePct + weapon.critC
   "materialDrop": 1
 }
 ```
+
+| 字段 | 含义 |
+| --- | --- |
+| `rig` | 僵尸外形：`assets/scad/characters/brotato_zombie_<rig>.scad`（walker / brute / spitter / runner / linebacker / bloater / witch / hurler / warden） |
+| `rigScale` | 整只放大倍数（Brute 1.42、Boss 2.3）；步频按缩放后的步幅自动匹配 |
+| `body` | `[半径, 身高]`（米）：C++ 版的碰撞半径、受击高度、血条锚点都按它算 |
+| `tints` | 衣服颜色池，每次刷出随机取一个（只影响 kit 里标了 `bz_TINT()` 的衬衫/帽衫部分） |
+| `canLoseLimbs` | 默认 true；每掉 1/3 血条断一肢（先手臂，后腿） |
+| `canCrawl` | 默认 true；断腿后趴地爬行（移速 ×0.42）。Brute、Linebacker、Hurler、Boss 为 false |
+| `size` / `color` | C# 版 `Brotato3DCSharp` 仍用它画盒子；C++ 版里 `color` 只决定受击碎块的血肉色 |
 
 **赋予 AI 子能力**：在该敌人 JSON 上加可选块。可以多块组合，但同一帧 `mortar` 与 `lance` 互斥（只走第一个 enabled 的自定义 AI）。
 
@@ -175,7 +192,18 @@ crit   = round(damage * critMultiplier) when rng < (critChancePct + weapon.critC
 
 **让新敌人出场**：在 [waves.json](../../../projects/Brotato3D/Content/configs/waves.json) 对应波次的 `spawns` 数组里加 `{"enemyId":"slime","count":N,"intervalMs":M}`。
 
-**视觉**：当前所有敌人都是程序化盒子，模型是按 `size` 自动生成的（[Brotato3DEffectSystem.cpp:239](../../../src/Application/Game/Brotato3D/Brotato3DEffectSystem.cpp)）。颜色取自 `color`，并自动派生 4 个材质：基础 / 暗化 / 命中白闪 / 红色警告 / Boss 二阶段红。**不需要**自己写材质代码。
+**视觉**：敌人是人形僵尸 ScadRig（[Brotato3DZombieVisual.cpp](../../../src/Application/Game/Brotato3D/Brotato3DZombieVisual.cpp)）。
+命中白闪、预警红闪、Boss 二阶段暴怒色由运行时按部件生成，**不需要**自己写材质。新外形的做法：在
+[`kit_bzombie.scad`](../../../assets/scad/lib/kit_bzombie.scad) 的 `bz_spec()` 里加一个变体（体型、肤色、服装、发型），
+复制任一 `brotato_zombie_*.scad`（骨骼树别改：动作是从 walker 按骨骼名借来的），把 `V = "..."` 换成新变体名，
+JSON 里 `"rig"` 指过去。`gkNextUnitTests "[Brotato3D]"` 会检查新文件的骨架和 walker 一致。
+
+**表现层规则**（C++ 版）：
+- 每次命中：躯干按弹道方向 flinch，喷血；单发伤害 ≥ 1/4 血条或暴击 → 踉跄动作（Boss 除外）。
+- 每掉 1/3 血条断一肢，真实的那段肢体按弹道飞出、落地；断腿后改为爬行（`canCrawl`）。
+- 死法：普通击杀按受击方向前扑/后仰倒地；暴击击杀爆头；单发过量伤害（≥ 75% 血条）、爆炸、Boss、
+  被撤离巴士撞上 → 全身解体。尸体留 3.6 秒后沉入地面（同屏尸体超过 70 具时缩短到 1.3 秒）。
+- 设置面板"断肢与血迹"可关闭全部断肢、血迹和血块。
 
 **HUD 图标**（可选）：放置 `assets/textures/brotato3d/icons/enemies/<enemyId>.png`。文件不存在不会报错，只是 HUD 不显示。
 
@@ -250,7 +278,7 @@ crit   = round(damage * critMultiplier) when rng < (critChancePct + weapon.critC
 }
 ```
 
-`startStats` 字段集合见 [`ReadPlayerStats`](../../../src/Application/Game/Brotato3D/Brotato3DDataLoader.cpp)。`color` 同时用于角色模型主体材质、Dash 拖尾、玩家受伤碎块色（[Brotato3DPlayerSystem.cpp:555](../../../src/Application/Game/Brotato3D/Brotato3DPlayerSystem.cpp)）。
+`startStats` 字段集合见 [`ReadPlayerStats`](../../../src/Application/Game/Brotato3D/Brotato3DDataLoader.cpp)。`color` 同时用于主角夹克（`brotato_survivor.scad` 里的 `ROLECOLOR` 部分）、Dash 拖尾、玩家受伤碎块色。
 
 可选：`assets/textures/brotato3d/icons/characters/<id>.png` 用于角色选择面板。
 

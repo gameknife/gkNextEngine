@@ -16,6 +16,10 @@ namespace Brotato3DUtil
     inline constexpr const char* ItemsConfigPath = "assets/projects/Brotato3D/Content/configs/items.json";
     inline constexpr const char* CharactersConfigPath = "assets/projects/Brotato3D/Content/configs/characters.json";
     inline constexpr float PlayerBaseSpeed = 5.0f;
+    // How much farther than the nearest zombie a weapon's current target may be before it switches.
+    inline constexpr float FocusFireSlackMeters = 2.0f;
+    // Height the rounds of the hero leave and travel at: the chest of a standing zombie.
+    inline constexpr float PlayerMuzzleHeight = 1.25f;
     inline constexpr float PickupBaseRadius = 1.6f;
     inline constexpr float PickupXpRadius = 0.12f;
     inline constexpr float MagnetLerpSpeedXp = 8.0f;

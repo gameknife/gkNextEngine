@@ -9426,6 +9426,289 @@
       ]
     },
     {
+      "name": "kit_bzombie",
+      "file": "kit_bzombie.scad",
+      "prefix": "bz_",
+      "scaleClass": "mid",
+      "modules": [
+        {
+          "name": "bz_part_calf",
+          "category": "part",
+          "params": "v, torn = false",
+          "paramList": [
+            {
+              "name": "v"
+            },
+            {
+              "name": "torn",
+              "default": "false"
+            }
+          ],
+          "line": 389,
+          "footprint": [
+            0.12,
+            0.15
+          ],
+          "height": 0.05,
+          "zMin": -0.41,
+          "center": [
+            0.0,
+            0.01
+          ],
+          "triangles": 96,
+          "colors": 1,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bz_part_foot",
+          "category": "part",
+          "params": "v, bare = false",
+          "paramList": [
+            {
+              "name": "v"
+            },
+            {
+              "name": "bare",
+              "default": "false"
+            }
+          ],
+          "line": 404,
+          "footprint": [
+            0.16,
+            0.3
+          ],
+          "height": 0.12,
+          "zMin": 0.0,
+          "center": [
+            0.0,
+            -0.06
+          ],
+          "triangles": 112,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bz_part_forearm",
+          "category": "part",
+          "params": "v, bitten = false",
+          "paramList": [
+            {
+              "name": "v"
+            },
+            {
+              "name": "bitten",
+              "default": "false"
+            }
+          ],
+          "line": 353,
+          "footprint": [
+            0.13,
+            0.11
+          ],
+          "height": 0.04,
+          "zMin": -0.47,
+          "center": [
+            0.01,
+            -0.0
+          ],
+          "triangles": 200,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bz_part_head",
+          "category": "part",
+          "params": "v",
+          "paramList": [
+            {
+              "name": "v"
+            }
+          ],
+          "line": 245,
+          "footprint": [
+            0.21,
+            0.26
+          ],
+          "height": 0.28,
+          "zMin": -0.04,
+          "center": [
+            -0.0,
+            -0.01
+          ],
+          "triangles": 368,
+          "colors": 10,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bz_part_jaw",
+          "category": "part",
+          "params": "v",
+          "paramList": [
+            {
+              "name": "v"
+            }
+          ],
+          "line": 324,
+          "footprint": [
+            0.16,
+            0.14
+          ],
+          "height": 0.02,
+          "zMin": -0.05,
+          "center": [
+            0.0,
+            -0.08
+          ],
+          "triangles": 68,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bz_part_pelvis",
+          "category": "part",
+          "params": "v",
+          "paramList": [
+            {
+              "name": "v"
+            }
+          ],
+          "line": 146,
+          "footprint": [
+            0.34,
+            0.22
+          ],
+          "height": 0.12,
+          "zMin": -0.16,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 644,
+          "colors": 8,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bz_part_stump",
+          "category": "part",
+          "params": "r = 0.05, dir = [0, 0, -1]",
+          "paramList": [
+            {
+              "name": "r",
+              "default": "0.05"
+            },
+            {
+              "name": "dir",
+              "default": "[0, 0, -1]"
+            }
+          ],
+          "line": 74,
+          "footprint": [
+            0.1,
+            0.1
+          ],
+          "height": 0.04,
+          "zMin": -0.05,
+          "center": [
+            0.0,
+            0.0
+          ],
+          "triangles": 252,
+          "colors": 3,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bz_part_thigh",
+          "category": "part",
+          "params": "v, bloody = false",
+          "paramList": [
+            {
+              "name": "v"
+            },
+            {
+              "name": "bloody",
+              "default": "false"
+            }
+          ],
+          "line": 375,
+          "footprint": [
+            0.17,
+            0.18
+          ],
+          "height": 0.06,
+          "zMin": -0.48,
+          "center": [
+            0.0,
+            -0.0
+          ],
+          "triangles": 364,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bz_part_torso",
+          "category": "part",
+          "params": "v",
+          "paramList": [
+            {
+              "name": "v"
+            }
+          ],
+          "line": 157,
+          "footprint": [
+            0.55,
+            0.24
+          ],
+          "height": 0.61,
+          "zMin": -0.03,
+          "center": [
+            0.0,
+            -0.0
+          ],
+          "triangles": 1000,
+          "colors": 14,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "bz_part_upperarm",
+          "category": "part",
+          "params": "v, torn = false",
+          "paramList": [
+            {
+              "name": "v"
+            },
+            {
+              "name": "torn",
+              "default": "false"
+            }
+          ],
+          "line": 335,
+          "footprint": [
+            0.15,
+            0.16
+          ],
+          "height": 0.08,
+          "zMin": -0.36,
+          "center": [
+            0.01,
+            0.0
+          ],
+          "triangles": 364,
+          "colors": 4,
+          "warnings": 0,
+          "ok": true
+        }
+      ]
+    },
+    {
       "name": "kit_char",
       "file": "kit_char.scad",
       "prefix": "ch_",
@@ -23532,6 +23815,476 @@
           ],
           "triangles": 444,
           "colors": 16,
+          "warnings": 0,
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "kit_deadly_wasteland",
+      "file": "kit_deadly_wasteland.scad",
+      "prefix": "dw_",
+      "scaleClass": "mid",
+      "modules": [
+        {
+          "name": "dw_ground_blood",
+          "category": "ground",
+          "params": "seed = 0, r = 1.0, z = 0.12",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "r",
+              "default": "1.0"
+            },
+            {
+              "name": "z",
+              "default": "0.12"
+            }
+          ],
+          "line": 32,
+          "footprint": [
+            2.15,
+            1.9
+          ],
+          "height": 0.15,
+          "zMin": 0.14,
+          "center": [
+            0.08,
+            -0.01
+          ],
+          "triangles": 192,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "dw_ground_blood_drag",
+          "category": "ground",
+          "params": "seed = 0, len = 2.4, z = 0.12",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "len",
+              "default": "2.4"
+            },
+            {
+              "name": "z",
+              "default": "0.12"
+            }
+          ],
+          "line": 46,
+          "footprint": [
+            2.3,
+            0.6
+          ],
+          "height": 0.15,
+          "zMin": 0.14,
+          "center": [
+            1.19,
+            -0.01
+          ],
+          "triangles": 60,
+          "colors": 5,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "dw_ground_litter",
+          "category": "ground",
+          "params": "seed = 0, r = 1.4, z = 0.12",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "r",
+              "default": "1.4"
+            },
+            {
+              "name": "z",
+              "default": "0.12"
+            }
+          ],
+          "line": 58,
+          "footprint": [
+            2.22,
+            2.1
+          ],
+          "height": 0.14,
+          "zMin": 0.14,
+          "center": [
+            0.39,
+            0.41
+          ],
+          "triangles": 72,
+          "colors": 6,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "dw_ground_road_clutter",
+          "category": "ground",
+          "params": "L = 100, W = 8, seed = 0, step = 9, cars = true, z = 0.12",
+          "paramList": [
+            {
+              "name": "L",
+              "default": "100"
+            },
+            {
+              "name": "W",
+              "default": "8"
+            },
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "step",
+              "default": "9"
+            },
+            {
+              "name": "cars",
+              "default": "true"
+            },
+            {
+              "name": "z",
+              "default": "0.12"
+            }
+          ],
+          "line": 231,
+          "footprint": [
+            92.09,
+            8.29
+          ],
+          "height": 1.56,
+          "zMin": -0.03,
+          "center": [
+            1.14,
+            0.08
+          ],
+          "triangles": 3912,
+          "colors": 128,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "dw_ground_scorch",
+          "category": "ground",
+          "params": "seed = 0, r = 2.6, z = 0.12",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "r",
+              "default": "2.6"
+            },
+            {
+              "name": "z",
+              "default": "0.12"
+            }
+          ],
+          "line": 77,
+          "footprint": [
+            5.2,
+            3.77
+          ],
+          "height": 0.15,
+          "zMin": 0.14,
+          "center": [
+            0.0,
+            0.12
+          ],
+          "triangles": 192,
+          "colors": 2,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "dw_ground_skid",
+          "category": "ground",
+          "params": "seed = 0, len = 9, z = 0.12",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "len",
+              "default": "9"
+            },
+            {
+              "name": "z",
+              "default": "0.12"
+            }
+          ],
+          "line": 67,
+          "footprint": [
+            9.1,
+            1.83
+          ],
+          "height": 0.14,
+          "zMin": 0.14,
+          "center": [
+            0.0,
+            -0.04
+          ],
+          "triangles": 72,
+          "colors": 6,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "dw_prop_cart",
+          "category": "prop",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 147,
+          "footprint": [
+            0.93,
+            0.56
+          ],
+          "height": 0.94,
+          "zMin": 0.0,
+          "center": [
+            -0.04,
+            0.0
+          ],
+          "triangles": 168,
+          "colors": 14,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "dw_prop_corpse",
+          "category": "prop",
+          "params": "seed = 0, z = 0.12",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "z",
+              "default": "0.12"
+            }
+          ],
+          "line": 92,
+          "footprint": [
+            2.04,
+            1.35
+          ],
+          "height": 0.35,
+          "zMin": 0.14,
+          "center": [
+            -0.38,
+            -0.05
+          ],
+          "triangles": 312,
+          "colors": 12,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "dw_prop_luggage",
+          "category": "prop",
+          "params": "seed = 0, z = 0.12",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            },
+            {
+              "name": "z",
+              "default": "0.12"
+            }
+          ],
+          "line": 131,
+          "footprint": [
+            1.78,
+            1.72
+          ],
+          "height": 0.48,
+          "zMin": 0.07,
+          "center": [
+            0.43,
+            -0.1
+          ],
+          "triangles": 84,
+          "colors": 7,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "dw_prop_roadblock",
+          "category": "prop",
+          "params": "W = 9, seed = 0",
+          "paramList": [
+            {
+              "name": "W",
+              "default": "9"
+            },
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 213,
+          "footprint": [
+            11.69,
+            8.89
+          ],
+          "height": 1.64,
+          "zMin": -0.01,
+          "center": [
+            -2.96,
+            0.22
+          ],
+          "triangles": 3132,
+          "colors": 127,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "dw_prop_trash_bags",
+          "category": "prop",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 121,
+          "footprint": [
+            1.64,
+            1.4
+          ],
+          "height": 0.5,
+          "zMin": -0.02,
+          "center": [
+            0.08,
+            -0.12
+          ],
+          "triangles": 552,
+          "colors": 7,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "dw_veh_abandoned",
+          "category": "veh",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 166,
+          "footprint": [
+            5.42,
+            2.59
+          ],
+          "height": 1.48,
+          "zMin": 0.0,
+          "center": [
+            -0.68,
+            -0.23
+          ],
+          "triangles": 672,
+          "colors": 32,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "dw_veh_burnt",
+          "category": "veh",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 203,
+          "footprint": [
+            5.6,
+            4.06
+          ],
+          "height": 1.56,
+          "zMin": 0.04,
+          "center": [
+            0.0,
+            0.13
+          ],
+          "triangles": 636,
+          "colors": 18,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "dw_veh_police",
+          "category": "veh",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 184,
+          "footprint": [
+            4.24,
+            2.14
+          ],
+          "height": 1.64,
+          "zMin": 0.0,
+          "center": [
+            0.07,
+            0.0
+          ],
+          "triangles": 528,
+          "colors": 20,
+          "warnings": 0,
+          "ok": true
+        },
+        {
+          "name": "dw_veh_survivor_bus",
+          "category": "veh",
+          "params": "seed = 0",
+          "paramList": [
+            {
+              "name": "seed",
+              "default": "0"
+            }
+          ],
+          "line": 273,
+          "footprint": [
+            11.57,
+            3.44
+          ],
+          "height": 4.0,
+          "zMin": 0.0,
+          "center": [
+            0.38,
+            -0.37
+          ],
+          "triangles": 3384,
+          "colors": 116,
           "warnings": 0,
           "ok": true
         }

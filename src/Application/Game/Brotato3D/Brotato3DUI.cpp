@@ -1272,7 +1272,7 @@ namespace Brotato3D
         {
             ImVec2 center{};
             ImVec2 edge{};
-            const glm::vec3 vehiclePos = gameInstance.GetExtractionVehiclePos();
+            const glm::vec3 vehiclePos = gameInstance.GetExtractionZonePos();
             const float extractionRadius = gameInstance.GetExtractionRadius();
             if (Runtime::EngineHelper::TryProjectWorldToScreenForGame(gameInstance, vehiclePos, center) &&
                 Runtime::EngineHelper::TryProjectWorldToScreenForGame(gameInstance, vehiclePos + glm::vec3(extractionRadius, 0.0f, 0.0f), edge))
@@ -1310,7 +1310,7 @@ namespace Brotato3D
                 continue;
             }
             ImVec2 screen{};
-            if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(gameInstance, enemy.worldPos + glm::vec3(0.0f, enemy.def->size.y + 0.2f, 0.0f), screen))
+            if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(gameInstance, enemy.worldPos + glm::vec3(0.0f, enemy.def->size.y * 0.5f + 0.3f, 0.0f), screen))
             {
                 continue;
             }
@@ -1946,6 +1946,7 @@ namespace Brotato3D
             }
             ImGui::Checkbox(Tr(gameInstance, "settings.shake", "启用屏幕震动").c_str(), &Brotato3D::ScreenShakeEnabled);
             ImGui::Checkbox(Tr(gameInstance, "settings.hp_bars", "显示敌人 HP 条").c_str(), &Brotato3D::ShowEnemyHpBars);
+            ImGui::Checkbox(Tr(gameInstance, "settings.gore", "断肢与血迹").c_str(), &Brotato3D::GoreEnabled);
             ImGui::SliderFloat("MasterDifficulty", &Brotato3D::MasterDifficulty, 0.5f, 1.5f, "%.2f");
             Brotato3D::MasterDifficulty = std::clamp(Brotato3D::MasterDifficulty, 0.5f, 1.5f);
             ImGui::Dummy(Scale(0.0f, 20.0f, uiScale));
@@ -1963,6 +1964,7 @@ namespace Brotato3D
                 Brotato3D::MusicVolume = 0.5f;
                 Brotato3D::ScreenShakeEnabled = true;
                 Brotato3D::ShowEnemyHpBars = true;
+                Brotato3D::GoreEnabled = true;
                 Brotato3D::MasterDifficulty = 1.0f;
                 Brotato3D::RefreshBgmVolume();
             }

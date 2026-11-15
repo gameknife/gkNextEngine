@@ -55,6 +55,14 @@ namespace Brotato3D
         int xpDrop = 1;
         int materialDrop = 1;
         float kitingDistance = 0.0f;
+        // Presentation: which zombie rig (assets/scad/characters/brotato_zombie_<rig>.scad),
+        // its world scale, and the shirt colours a spawn picks from.
+        std::string rig = "walker";
+        float rigScale = 1.0f;
+        std::vector<glm::vec3> tints;
+        // Dismemberment: limbs lost per third of HP, and whether losing a leg drops it to a crawl.
+        bool canLoseLimbs = true;
+        bool canCrawl = true;
         FEnemyRangedDef ranged{};
         FMortarDef mortar{};
         FLanceDef lance{};

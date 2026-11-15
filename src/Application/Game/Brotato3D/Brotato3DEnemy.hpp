@@ -11,12 +11,7 @@ namespace Assets
 
 namespace Brotato3D
 {
-    struct FEnemyBodyBlockRuntime
-    {
-        std::shared_ptr<::Assets::Node> node;
-        glm::vec3 localOffset = glm::vec3(0.0f);
-        bool visible = true;
-    };
+    class FZombieRigVisual;
 
     enum class ELanceState : uint8_t
     {
@@ -62,10 +57,21 @@ namespace Brotato3D
         uint32_t hitFlashMaterialId = 0;
         uint32_t warningMaterialId = 0;
         uint32_t phase2MaterialId = 0;
-        std::vector<FEnemyBodyBlockRuntime> bodyBlocks;
-        int bodyBlocksLost = 0;
         NextBodyID kinematicBodyId{};
         bool kinematicBodyActive = false;
-        std::shared_ptr<::Assets::Node> node;
+
+        // Presentation. The body is a pooled ScadRig (Brotato3DZombieVisual.hpp); a dead
+        // enemy keeps it as a corpse while `fading`, then the slot is free again.
+        std::shared_ptr<FZombieRigVisual> visual;
+        float yaw = 0.0f;               // facing, radians around +Y (atan2(x, z))
+        float moveSpeedNow = 0.0f;      // ground speed this frame, drives the gait
+        float pulseScale = 1.0f;        // bloater swelling before it bursts
+        float attackAnimCooldownMs = 0.0f;
+        float corpseMs = 0.0f;          // time left as a corpse (counts down while fading)
+        bool crawling = false;          // a leg is gone: prone, slow, still biting
+        int limbStage = 0;              // how many HP thresholds have already cost a limb
+        bool lastHitCrit = false;
+        bool lastHitExplosive = false;
+        int lastHitDamage = 0;
     };
 }

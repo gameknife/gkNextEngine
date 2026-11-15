@@ -70,6 +70,32 @@ namespace Brotato3D
             def.xpDrop = enemyJson.value("xpDrop", 1);
             def.materialDrop = enemyJson.value("materialDrop", 1);
             def.kitingDistance = enemyJson.value("kitingDistance", 0.0f);
+            // "body": [radius, height] of the humanoid rig. It replaces the legacy box `size`
+            // (which the C# twin still draws) for collision, hit points and HUD anchors here.
+            if (enemyJson.contains("body") && enemyJson.at("body").is_array() && enemyJson.at("body").size() >= 2)
+            {
+                const float radius = enemyJson.at("body")[0].get<float>();
+                const float height = enemyJson.at("body")[1].get<float>();
+                def.size = glm::vec3(radius * 2.0f, height, radius * 2.0f);
+            }
+            def.rig = enemyJson.value("rig", std::string("walker"));
+            def.rigScale = enemyJson.value("rigScale", 1.0f);
+            def.canLoseLimbs = enemyJson.value("canLoseLimbs", true);
+            def.canCrawl = enemyJson.value("canCrawl", true);
+            if (enemyJson.contains("tints") && enemyJson.at("tints").is_array())
+            {
+                for (const json& tint : enemyJson.at("tints"))
+                {
+                    if (tint.is_array() && tint.size() >= 3)
+                    {
+                        def.tints.emplace_back(tint[0].get<float>(), tint[1].get<float>(), tint[2].get<float>());
+                    }
+                }
+            }
+            if (def.tints.empty())
+            {
+                def.tints.push_back(def.color);
+            }
             if (enemyJson.contains("ranged") && enemyJson.at("ranged").is_object())
             {
                 const json& rangedJson = enemyJson.at("ranged");

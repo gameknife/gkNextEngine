@@ -14,6 +14,7 @@
 #include "Engine/Runtime/Subsystems/NextPhysics.hpp"
 #include "Engine/Utilities/FileHelper.hpp"
 #include "Modules/ScadLoader/ScadModule.hpp"
+#include "Modules/ScadLoader/FScadRig.h"
 
 #include <filesystem>
 #include <fstream>
@@ -25,7 +26,9 @@ namespace
 {
     constexpr const char* ArenasConfigPath = "assets/projects/Brotato3D/Content/configs/arenas.json";
     constexpr const char* I18nConfigPath = "assets/projects/Brotato3D/Content/configs/i18n.json";
-    constexpr float CameraFollowSharpness = 8.0f;
+    constexpr float CameraFollowSharpness = 6.0f;
+    constexpr float CameraVelocityLead = 0.28f;
+    constexpr float CameraAimLead = 1.4f;
     constexpr float CameraClampHalfViewX = 32.0f;
     constexpr float CameraClampHalfViewZ = 38.0f;
     constexpr float WaveSpawnDistanceMin = 42.0f;
@@ -108,7 +111,8 @@ Brotato3DGameInstance::Brotato3DGameInstance(Vulkan::WindowConfig& config, Runti
 void Brotato3DGameInstance::OnInit()
 {
     GOption->KeepCPUMeshData = true;
-    if (!playerRig_.LoadRig("assets/scad/characters/brotato_player.scad"))
+    if (!playerRig_.LoadRig("assets/scad/characters/brotato_survivor.scad",
+                            "assets/scad/characters/brotato_weapons.scad"))
     {
         spdlog::warn("[Brotato3D] ScadRig player unavailable; gameplay will continue without a player visual");
     }
@@ -123,6 +127,17 @@ void Brotato3DGameInstance::OnInit()
         !Brotato3D::LoadArenas(ArenasConfigPath, arenaDefs_))
     {
         throw std::runtime_error("Brotato3D failed to load required data");
+    }
+    LoadZombieRigs();
+    {
+        std::string error;
+        std::vector<std::string> warnings;
+        vehicleCatalogLoaded_ = Assets::FScadRigLoader::LoadRig("assets/scad/characters/brotato_vehicles.scad", {},
+                                                                vehicleCatalog_, error, &warnings);
+        if (!vehicleCatalogLoaded_)
+        {
+            spdlog::warn("[Brotato3D] vehicle catalog unavailable ({}); the bus falls back to boxes", error);
+        }
     }
     if (NextLocalization* localization = GetEngine().GetLocalization())
     {
@@ -226,6 +241,10 @@ void Brotato3DGameInstance::OnInitUI()
 void Brotato3DGameInstance::OnTick(double deltaSeconds)
 {
     const float deltaMs = static_cast<float>(deltaSeconds * 1000.0);
+    if (validation_.autoUpgrade && appState_ == Brotato3D::EAppState::LevelUpPicking && !currentUpgradeChoices_.empty())
+    {
+        SelectUpgrade(0);
+    }
     SetWorldPhysicsPaused(ShouldPauseWorldPhysics());
     if (appState_ == Brotato3D::EAppState::Paused ||
         appState_ == Brotato3D::EAppState::MainMenu ||
@@ -280,7 +299,7 @@ void Brotato3DGameInstance::OnTick(double deltaSeconds)
             ProcessItemTriggers(effectiveDt);
             UpdateExtractionVehicle(deltaSeconds);
 
-            const double waveDt = bossVictoryDelayMs_ <= 0.0f ? deltaSeconds : 0.0;
+            const double waveDt = bossVictoryDelayMs_ <= 0.0f && !validation_.pauseWaves ? deltaSeconds : 0.0;
             waveSystem_.Update(waveDt, [this](const std::string& enemyId, glm::vec3 pos)
             {
                 glm::vec2 spawnDirection(pos.x, pos.z);
@@ -362,6 +381,8 @@ void Brotato3DGameInstance::OnDestroy()
     groundIndicators_.clear();
     ResetExtractionVehicle();
     playerLightNode_.reset();
+    busLightNode_.reset();
+    busLightComponent_.reset();
     tempLightPool_.clear();
     enemyKinematicBodyPools_.clear();
 }
@@ -376,7 +397,13 @@ void Brotato3DGameInstance::UpdateCameraTracking(double deltaSeconds)
         return;
     }
 
-    const glm::vec3 desired(player_.worldPos.x, 0.0f, player_.worldPos.z);
+    // Look ahead of the run and toward what is being shot at, so the threat is on screen.
+    glm::vec3 desired(player_.worldPos.x, 0.0f, player_.worldPos.z);
+    desired += glm::vec3(playerVelocity_.x, 0.0f, playerVelocity_.z) * CameraVelocityLead;
+    if (playerHasAimTarget_)
+    {
+        desired += glm::vec3(player_.facingDir.x, 0.0f, player_.facingDir.z) * CameraAimLead;
+    }
     const float lerpK = 1.0f - std::exp(-CameraFollowSharpness * static_cast<float>(deltaSeconds));
     cameraSmoothedTarget_ = glm::mix(cameraSmoothedTarget_, desired, lerpK);
 

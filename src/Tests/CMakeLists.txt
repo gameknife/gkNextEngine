@@ -34,6 +34,7 @@ set(unitTestSources
     Test_GeoPoiSidecar.cpp
     Test_SimKit.cpp
     Test_ScadRig.cpp
+    Test_Brotato3DRigs.cpp
     Test_RigAnimator.cpp
     Test_RigPoseOps.cpp
     Test_RenderComponent.cpp

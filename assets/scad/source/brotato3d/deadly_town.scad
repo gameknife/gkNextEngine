@@ -26,6 +26,7 @@
 // =====================================================================================
 
 use <../../lib/kit_deadly.scad>
+use <../../lib/kit_deadly_wasteland.scad>
 use <../../lib/kit_layout.scad>
 
 $fn = 12;
@@ -529,3 +530,15 @@ lay_scatter(12, -190, 190, 109, 123, seed = 334) dd_prop_debris(seed = $seed);
 lay_scatter(12, -190, 190, -123, -109, seed = 335) dd_prop_debris(seed = $seed);
 lay_scatter(30, -250, 250, -150, 150, seed = 336) dd_nature_grass(seed = $seed);
 lay_scatter(18, -250, 250, -150, 150, seed = 337) dd_ground_puddle(s = lay_randr($seed, 5, 0.8, 1.6), seed = $seed);
+
+// ================= 末日后（kit_deadly_wasteland）：路面上的血、尸体、弃物与弃车 =================
+// 每条路一段 gk_flatten 杂物带。主街中段已经摆好了翻覆校车/残骸车阵，所以主街不再放车。
+dw_ground_road_clutter(L = 540, W = 10, seed = 1, step = 8, cars = false);
+rotate([0, 0, 90]) dw_ground_road_clutter(L = 340, W = 9, seed = 2, step = 9);
+for (y = [-116, -58, 58, 116]) translate([0, y, 0]) dw_ground_road_clutter(L = 390, W = 7.5, seed = 10 + y, step = 11);
+for (x = [-195, -130, -65, 65, 130, 195])
+    translate([x, 0, 0]) rotate([0, 0, 90]) dw_ground_road_clutter(L = 250, W = 7.5, seed = 20 + x, step = 11);
+// 警方没守住的路障：主街东西两头各一道
+translate([150, 0, 0]) dw_prop_roadblock(W = 10, seed = 5);
+translate([-160, 0, 0]) rotate([0, 0, 180]) dw_prop_roadblock(W = 10, seed = 6);
+translate([0, -88, 0]) rotate([0, 0, 90]) dw_prop_roadblock(W = 9, seed = 7);

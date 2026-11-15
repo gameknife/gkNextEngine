@@ -23,6 +23,7 @@
 // =====================================================================================
 
 use <../../lib/kit_deadly.scad>
+use <../../lib/kit_deadly_wasteland.scad>
 use <../../lib/kit_overhill.scad>   // 沙漠植被：oh_nature_cactus / oh_nature_deadtree
 use <../../lib/kit_layout.scad>
 
@@ -394,3 +395,10 @@ translate([-322, 14, 0]) dd_prop_billboard(seed = 291);
 translate([322, -14, 0]) rotate([0, 0, 180]) dd_prop_billboard(seed = 292);
 translate([-300, -8, 0]) dd_prop_sign_fallen(seed = 293);
 translate([300, 10, 0]) rotate([0, 0, 180]) dd_prop_sign(seed = 294);
+
+// ================= 末日后（kit_deadly_wasteland）：沙漠公路上的逃难车流 =================
+dw_ground_road_clutter(L = 720, W = 9, seed = 70, step = 9);
+translate([-120, 60, 0]) rotate([0, 0, 90]) dw_ground_road_clutter(L = 120, W = 7, seed = 71, step = 12);
+translate([210, -70, 0]) rotate([0, 0, 90]) dw_ground_road_clutter(L = 140, W = 7, seed = 72, step = 12);
+translate([20, 70, 0]) rotate([0, 0, 90]) dw_ground_road_clutter(L = 140, W = 6.5, seed = 73, step = 12);
+translate([90, 0, 0]) dw_prop_roadblock(W = 9, seed = 21);

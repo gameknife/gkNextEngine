@@ -12,6 +12,7 @@ namespace Brotato3D
     inline float SfxVolume = 0.7f;
     inline float MusicVolume = 0.5f;
     inline bool ScreenShakeEnabled = true;
+    inline bool GoreEnabled = true;   // dismemberment + blood (settings toggle)
     inline bool ShowEnemyHpBars = true;
     inline float MasterDifficulty = 1.0f;
 

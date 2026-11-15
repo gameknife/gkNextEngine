@@ -21,8 +21,8 @@ int Brotato3DGameInstance::ApplyDamageToEnemy(Brotato3D::FEnemyRuntime& enemy, i
     enemy.currentHp -= effectiveDamage;
     Brotato3D::PlayHitSfx(effectiveDamage, isCrit);
     enemy.hitFlashRemainingMs = 80.0f;
-    SetEnemyVisualMaterial(enemy, enemy.hitFlashMaterialId);
-    BreakEnemyBodyBlocks(enemy, effectiveDamage);
+    enemy.lastHitCrit = isCrit;
+    ReactEnemyToDamage(enemy, effectiveDamage, isCrit);
     PushFloatingText(enemy.worldPos + glm::vec3(0.0f, 0.8f, 0.0f),
                      isCrit ? fmt::format("!{}", effectiveDamage) : fmt::format("-{}", effectiveDamage),
                      isCrit ? glm::vec4(1.0f, 0.78f, 0.12f, 1.0f) : glm::vec4(1.0f, 0.25f, 0.18f, 1.0f),
@@ -213,8 +213,9 @@ void Brotato3DGameInstance::ApplyItemExplosionDamage(const glm::vec3& worldPos, 
             enemy.lastHitDebrisDir = glm::normalize(blastDir);
         }
         enemy.hitFlashRemainingMs = 80.0f;
-        SetEnemyVisualMaterial(enemy, enemy.hitFlashMaterialId);
-        BreakEnemyBodyBlocks(enemy, effectiveDamage);
+        enemy.lastHitCrit = false;
+        enemy.lastHitExplosive = true;
+        ReactEnemyToDamage(enemy, effectiveDamage, false);
         PushFloatingText(enemy.worldPos + glm::vec3(0.0f, 0.8f, 0.0f), fmt::format("-{}", effectiveDamage),
                          glm::vec4(1.0f, 0.5f, 0.18f, 1.0f), 600.0f, 1.15f);
         if (enemy.currentHp <= 0)

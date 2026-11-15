@@ -251,7 +251,7 @@ void Brotato3DGameInstance::BuildKinematicCollisionBodies(std::vector<Assets::Mo
     for (const auto& [enemyId, def] : enemyDefs_)
     {
         const int count = def.boss.enabled ? BossKinematicBodyCount :
-                          (def.name == "Rat" ? RatKinematicBodyCount : EnemyKinematicBodyCount);
+                          (enemyId == "rat" ? RatKinematicBodyCount : EnemyKinematicBodyCount);
         std::vector<NextBodyID>& pool = enemyKinematicBodyPools_[enemyId];
         pool.reserve(static_cast<size_t>(count));
         const glm::vec3 extent = glm::max(def.size, glm::vec3(0.2f));
@@ -629,7 +629,8 @@ void Brotato3DGameInstance::SpawnHitXpDebris(const glm::vec3& worldPos,
                 glm::vec3(spawnPos.x, std::max(0.25f, spawnPos.y), spawnPos.z),
                 impulseDir,
                 HitXpSpeed,
-                materialId != 0 ? materialId : (xpDebrisMatId_ != 0 ? xpDebrisMatId_ : debrisFallbackTinyMatId_),
+                // XP always reads as XP: tinting it with the victim made it indistinguishable from gore.
+                xpDebrisMatId_ != 0 ? xpDebrisMatId_ : (materialId != 0 ? materialId : debrisFallbackTinyMatId_),
                 count,
                 HitXpConeRad,
                 Brotato3D::EDebrisPayload::Xp,
@@ -735,7 +736,7 @@ void Brotato3DGameInstance::SyncEnemyKinematicBody(Brotato3D::FEnemyRuntime& ene
         return;
     }
 
-    const glm::quat targetRot = enemy.node ? enemy.node->WorldRotation() : glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+    const glm::quat targetRot(1.0f, 0.0f, 0.0f, 0.0f);
     if (!enemy.kinematicBodyActive)
     {
         physics->SetBodyTransform(enemy.kinematicBodyId, enemy.worldPos, targetRot, true);

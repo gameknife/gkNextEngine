@@ -45,6 +45,14 @@ namespace Brotato3D
         void EnterShop();
         void EndIntermissionAndAdvance();
         void ForceAllCleared();
+        // Validation: end the current wave's clock now (the next Update enters dusk / the shop).
+        void SkipWaveClock()
+        {
+            if (state_ == EWaveState::Active)
+            {
+                waveTimeRemainingSec_ = 0.0f;
+            }
+        }
 
     private:
         struct FSpawnRuntime

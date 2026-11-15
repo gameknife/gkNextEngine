@@ -199,6 +199,12 @@ NextDayz 感染者（`Zombies/ZombieRigVisual.*`）是"不拿武器"的参考：
 受击 flinch：每次命中按方向、命中点和冲击量踢一下阻尼弹簧，所以中弹可叠加、可按伤害缩放、并且不打断
 腿部动作。它同时按骨骼输出胶囊命中盒，子弹打的是动画后的骨架而不是渲染网格。
 
+Brotato3D 的九种僵尸（`brotato_zombie_*.scad`，部件库 `kit_bzombie.scad`）沿用同一套骨架与 clip：只有
+`brotato_zombie_walker.scad` 生成动作，其余变体不带 `anim_*`，加载后按**骨骼名**把 walker 的 clip 拷过来
+（`Brotato3DZombieVisual.cpp` 的 `FZombieRigResource::Load`）——所以变体之间只能换部件，不能挪枢轴，
+`gkNextUnitTests "[Brotato3D]"` 守着这一点。断肢是让某根骨骼的子树脱离骨架、在世界空间自己做弹道，
+伤口几何藏在相邻部件的关节里（`bz_part_stump`）。
+
 ## 程序化 clip 作者库 rig_humanoid（推荐给复杂人形）
 
 `assets/scad/lib/rig_humanoid.scad`（前缀 `rh_`）在 SCAD 里从"意图"生成 clip，输出仍是普通 `anim_*`

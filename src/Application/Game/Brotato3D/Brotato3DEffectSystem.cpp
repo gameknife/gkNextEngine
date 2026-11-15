@@ -13,12 +13,21 @@ using namespace Brotato3DUtil;
 
 namespace
 {
-    constexpr float ExtractionVehicleObstacleHalfX = 1.45f;
-    constexpr float ExtractionVehicleObstacleHalfZ = 0.78f;
-    constexpr float ExtractionVehicleApproachDistance = 18.0f;
-    constexpr float ExtractionVehicleStopDistance = 8.0f;
+    // The survivors' bus (brotato_vehicles.scad): ~11.4 x 2.6 m with its plough, door on its
+    // right toward the front. It drives in along one axis and pulls up level with the player,
+    // a lane to the side, so the door is a short dash away rather than right underfoot.
+    constexpr float BusHalfLength = 5.75f;
+    constexpr float BusHalfWidth = 1.35f;
+    constexpr float BusDoorForward = 3.25f;     // door centre ahead of the bus centre
+    constexpr float BusDoorStandOff = 1.25f;    // extraction zone centre outside the door
+    constexpr float BusStopAhead = 10.0f;       // bus centre this far from the player along its axis
+    constexpr float BusLaneOffset = 3.6f;       // and this far to the side
+    constexpr float BusApproachDistance = 34.0f;
+    constexpr float BusArriveMs = 2300.0f;
+    constexpr float BusLightRadius = 7.0f;
+    constexpr float BusLightHeight = 4.2f;
     constexpr float SegmentEpsilon = 0.0001f;
-    constexpr float NightSkyIntensity = 5.0f;
+    constexpr float NightSkyIntensity = 7.0f;   // dark enough to read as night, light enough to fight in
     constexpr float DaySkyIntensity = 30.0f;
     constexpr float DaySunIntensity = 360.0f;
     constexpr float SunRotationPerSecond = 0.0035f;
@@ -158,6 +167,11 @@ void Brotato3DGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<Asset
                                           true);
     playerLightComponent_ = playerLight.first;
     playerLightNode_ = playerLight.second;
+    // The bus brings its own light: at dusk the door has to be the brightest spot on screen.
+    const auto busLight = addAreaLight("Brotato3D_BusFloodLight", HiddenPosition, BusLightRadius,
+                                       addLightMaterial(glm::vec3(1.0f, 0.80f, 0.52f), 240.0f), false);
+    busLightComponent_ = busLight.first;
+    busLightNode_ = busLight.second;
     tempLightPool_.reserve(32);
     for (int index = 0; index < 32; ++index)
     {
@@ -193,94 +207,65 @@ void Brotato3DGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<Asset
     player_.facingNode->SetParent(player_.bodyNode);
     nodes.push_back(player_.facingNode);
 
-    models.push_back(Assets::FProcModel::CreateBox(glm::vec3(-0.06f, -0.05f, -0.24f), glm::vec3(0.06f, 0.05f, 0.24f)));
-    const uint32_t smgWeaponModelId = static_cast<uint32_t>(models.size() - 1);
-    const uint32_t smgWeaponMaterialId = Assets::SceneBuilder::AddLambertianMaterial(materials, glm::vec3(1.0f, 0.85f, 0.2f));
-    player_.smgWeaponNode = Assets::SceneBuilder::CreateRenderNode("Brotato3D_PlayerWeapon_SMG", glm::vec3(-0.18f, 0.42f, -0.54f),
-                                             glm::vec3(1.0f), static_cast<uint32_t>(nodes.size()), smgWeaponModelId,
-                                             smgWeaponMaterialId);
-    player_.smgWeaponNode->SetParent(player_.bodyNode);
-    nodes.push_back(player_.smgWeaponNode);
-
-    models.push_back(Assets::FProcModel::CreateBox(glm::vec3(-0.11f, -0.06f, -0.34f), glm::vec3(0.11f, 0.06f, 0.34f)));
-    const uint32_t shotgunWeaponModelId = static_cast<uint32_t>(models.size() - 1);
-    const uint32_t shotgunWeaponMaterialId = Assets::SceneBuilder::AddLambertianMaterial(materials, glm::vec3(1.0f, 0.4f, 0.2f));
-    player_.shotgunWeaponNode = Assets::SceneBuilder::CreateRenderNode("Brotato3D_PlayerWeapon_Shotgun", glm::vec3(0.24f, 0.43f, -0.62f),
-                                                 glm::vec3(1.0f), static_cast<uint32_t>(nodes.size()),
-                                                 shotgunWeaponModelId, shotgunWeaponMaterialId);
-    player_.shotgunWeaponNode->SetParent(player_.bodyNode);
-    nodes.push_back(player_.shotgunWeaponNode);
-
     extractionVehicleNodes_.clear();
     extractionVehicleRootNode_.reset();
-    extractionVehicleMaterialId_ = Assets::SceneBuilder::AddLambertianMaterial(materials, glm::vec3(0.18f, 0.22f, 0.25f));
-    extractionVehicleActiveMaterialId_ = Assets::SceneBuilder::AddLambertianMaterial(materials, glm::vec3(0.85f, 0.68f, 0.25f));
-    const uint32_t extractionWheelMaterialId = Assets::SceneBuilder::AddLambertianMaterial(materials, glm::vec3(0.04f, 0.04f, 0.05f));
-    auto addTruckPart = [&models, &nodes, this](const std::string& name,
-                                                const glm::vec3& min,
-                                                const glm::vec3& max,
-                                                const glm::vec3& localPos,
-                                                uint32_t materialId,
-                                                bool root) -> std::shared_ptr<Assets::Node>
+    extractionBeaconNode_.reset();
+    extractionVehicleMaterialId_ = Assets::SceneBuilder::AddLambertianMaterial(materials, glm::vec3(0.55f, 0.36f, 0.08f));
+    extractionVehicleActiveMaterialId_ = Assets::SceneBuilder::AddLambertianMaterial(materials, glm::vec3(0.30f, 1.0f, 0.45f));
+    extractionVehicleRootNode_ = Assets::Node::CreateNode("Brotato3D_ExtractionBus", HiddenPosition,
+                                                          glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(1.0f),
+                                                          static_cast<uint32_t>(nodes.size()));
+    nodes.push_back(extractionVehicleRootNode_);
+    auto addBusNode = [&nodes, this](const std::string& name, uint32_t modelId,
+                                     const std::array<uint32_t, 16>& sectionMaterials, const glm::vec3& localPos)
     {
-        models.push_back(Assets::FProcModel::CreateBox(min, max));
-        auto node = Assets::SceneBuilder::CreateRenderNode(name,
-                                                   root ? HiddenPosition : localPos,
-                                                   glm::vec3(1.0f),
-                                                   static_cast<uint32_t>(nodes.size()),
-                                                   static_cast<uint32_t>(models.size() - 1),
-                                                   materialId,
-                                                   false);
-        if (!root && extractionVehicleRootNode_)
+        auto node = Assets::SceneBuilder::CreateRenderNode(name, localPos, glm::vec3(1.0f),
+                                                           static_cast<uint32_t>(nodes.size()), modelId,
+                                                           sectionMaterials[0], false);
+        if (auto render = node->GetComponent<Runtime::RenderComponent>())
         {
-            node->SetParent(extractionVehicleRootNode_);
+            render->SetMaterials(sectionMaterials);
         }
+        node->SetParent(extractionVehicleRootNode_);
         nodes.push_back(node);
         extractionVehicleNodes_.push_back(node);
         return node;
     };
-    extractionVehicleRootNode_ = addTruckPart("Brotato3D_ExtractionTruck_Body",
-                                              glm::vec3(-1.3f, 0.0f, -0.55f),
-                                              glm::vec3(1.3f, 0.55f, 0.55f),
-                                              glm::vec3(0.0f),
-                                              extractionVehicleMaterialId_,
-                                              true);
-    addTruckPart("Brotato3D_ExtractionTruck_Cab",
-                 glm::vec3(-0.45f, 0.0f, -0.48f),
-                 glm::vec3(0.45f, 0.72f, 0.48f),
-                 glm::vec3(0.72f, 0.36f, 0.0f),
-                 extractionVehicleMaterialId_,
-                 false);
-    addTruckPart("Brotato3D_ExtractionTruck_Beacon",
-                 glm::vec3(-0.16f, 0.0f, -0.16f),
-                 glm::vec3(0.16f, 0.18f, 0.16f),
-                 glm::vec3(0.72f, 1.0f, 0.0f),
-                 extractionVehicleActiveMaterialId_,
-                 false);
-    addTruckPart("Brotato3D_ExtractionTruck_WheelA",
-                 glm::vec3(-0.22f, -0.22f, -0.08f),
-                 glm::vec3(0.22f, 0.22f, 0.08f),
-                 glm::vec3(-0.85f, 0.04f, -0.62f),
-                 extractionWheelMaterialId,
-                 false);
-    addTruckPart("Brotato3D_ExtractionTruck_WheelB",
-                 glm::vec3(-0.22f, -0.22f, -0.08f),
-                 glm::vec3(0.22f, 0.22f, 0.08f),
-                 glm::vec3(0.85f, 0.04f, -0.62f),
-                 extractionWheelMaterialId,
-                 false);
-    addTruckPart("Brotato3D_ExtractionTruck_WheelC",
-                 glm::vec3(-0.22f, -0.22f, -0.08f),
-                 glm::vec3(0.22f, 0.22f, 0.08f),
-                 glm::vec3(-0.85f, 0.04f, 0.62f),
-                 extractionWheelMaterialId,
-                 false);
-    addTruckPart("Brotato3D_ExtractionTruck_WheelD",
-                 glm::vec3(-0.22f, -0.22f, -0.08f),
-                 glm::vec3(0.22f, 0.22f, 0.08f),
-                 glm::vec3(0.85f, 0.04f, 0.62f),
-                 extractionWheelMaterialId,
-                 false);
+    bool busBuilt = false;
+    if (vehicleCatalogLoaded_)
+    {
+        const int32_t busBone = vehicleCatalog_.FindBone("bone_veh_bus");
+        for (const Assets::FRigPart& part : vehicleCatalog_.parts)
+        {
+            if (part.bone != busBone || part.modelIndex < 0)
+            {
+                continue;
+            }
+            models.push_back(vehicleCatalog_.partModels[part.modelIndex]);
+            std::array<uint32_t, 16> sectionMaterials{};
+            for (size_t section = 0; section < part.sectionColors.size() && section < sectionMaterials.size(); ++section)
+            {
+                sectionMaterials[section] = Assets::SceneBuilder::AddRigSectionMaterial(materials, part, section);
+            }
+            addBusNode(fmt::format("Brotato3D_ExtractionBus_Part{}", extractionVehicleNodes_.size()),
+                       static_cast<uint32_t>(models.size() - 1), sectionMaterials, glm::vec3(0.0f));
+            busBuilt = true;
+        }
+    }
+    if (!busBuilt)
+    {
+        models.push_back(Assets::FProcModel::CreateBox(glm::vec3(-BusHalfWidth, 0.0f, -BusHalfLength),
+                                                       glm::vec3(BusHalfWidth, 2.8f, BusHalfLength)));
+        std::array<uint32_t, 16> bodyMaterials{};
+        bodyMaterials.fill(extractionVehicleMaterialId_);
+        addBusNode("Brotato3D_ExtractionBus_Fallback", static_cast<uint32_t>(models.size() - 1), bodyMaterials, glm::vec3(0.0f));
+    }
+    // The beacon on the roof turns green while the player is boarding.
+    models.push_back(Assets::FProcModel::CreateBox(glm::vec3(-0.22f, 0.0f, -0.22f), glm::vec3(0.22f, 0.3f, 0.22f)));
+    std::array<uint32_t, 16> beaconMaterials{};
+    beaconMaterials.fill(extractionVehicleMaterialId_);
+    extractionBeaconNode_ = addBusNode("Brotato3D_ExtractionBus_Beacon", static_cast<uint32_t>(models.size() - 1),
+                                       beaconMaterials, glm::vec3(0.0f, 3.0f, -1.2f));
 
     enemyVisuals_.clear();
     for (const auto& [enemyId, def] : enemyDefs_)
@@ -288,15 +273,20 @@ void Brotato3DGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<Asset
         models.push_back(Assets::FProcModel::CreateBox(-def.size * 0.5f, def.size * 0.5f));
         FEnemyVisualResource visual{};
         visual.modelId = static_cast<uint32_t>(models.size() - 1);
-        models.push_back(Assets::FProcModel::CreateBox(glm::vec3(-0.5f), glm::vec3(0.5f)));
-        visual.bodyBlockModelId = static_cast<uint32_t>(models.size() - 1);
-        visual.materialId = Assets::SceneBuilder::AddLambertianMaterial(materials, def.color);
-        visual.darkMaterialId = Assets::SceneBuilder::AddLambertianMaterial(materials, def.color * 0.4f);
+        // The box is only the hidden proxy of the kinematic push body; the zombie itself is a
+        // ScadRig. These two are what flies off it when hit: flesh in the type's colour, and gore.
+        const glm::vec3 flesh = glm::mix(def.color, glm::vec3(0.62f, 0.06f, 0.05f), 0.55f);
+        visual.materialId = Assets::SceneBuilder::AddLambertianMaterial(materials, flesh);
+        visual.darkMaterialId = Assets::SceneBuilder::AddLambertianMaterial(materials, flesh * 0.45f);
         visual.hitFlashMaterialId = Assets::SceneBuilder::AddLambertianMaterial(materials, glm::vec3(1.0f));
         visual.warningMaterialId = Assets::SceneBuilder::AddLambertianMaterial(materials, glm::vec3(1.0f, 0.08f, 0.06f));
         visual.phase2MaterialId = Assets::SceneBuilder::AddLambertianMaterial(materials, glm::vec3(0.95f, 0.20f, 0.10f));
         visual.baseColor = def.color;
         enemyVisuals_[enemyId] = visual;
+        if (const auto rigIt = zombieRigs_.find(enemyId); rigIt != zombieRigs_.end() && rigIt->second)
+        {
+            rigIt->second->Inject(models, materials, def.tints);
+        }
     }
 
     projectilePool_.clear();
@@ -356,6 +346,7 @@ void Brotato3DGameInstance::BeforeSceneRebuild(std::vector<std::shared_ptr<Asset
     }
 
     BuildDebrisPool(models, materials, nodes);
+    BuildGorePool(models, materials, nodes);
     BuildArenaWallBodies();
     BuildKinematicCollisionBodies(models, materials, nodes);
 
@@ -372,7 +363,12 @@ bool Brotato3DGameInstance::OverrideRenderCamera(Assets::Camera& outRenderCamera
     glm::vec3 cameraTarget = cameraSmoothedTarget_;
     // A slightly flatter angle keeps the arena readable while exposing the
     // ScadRig hero's upper/lower-body pose instead of collapsing it top-down.
-    glm::vec3 cameraPosition = cameraTarget + glm::vec3(0.0f, 14.0f, 11.0f);
+    glm::vec3 cameraPosition = cameraTarget + glm::vec3(0.0f, 13.0f, 10.0f);
+    if (validation_.cameraHeight > 0.0f)
+    {
+        cameraTarget.y = 0.9f;
+        cameraPosition = cameraTarget + glm::vec3(0.0f, validation_.cameraHeight, validation_.cameraBack);
+    }
     if (Brotato3D::ScreenShakeEnabled && screenShakeMs_ > 0.0f)
     {
         const float strength = std::min(0.25f, screenShakeIntensity_ * 0.05f);
@@ -399,6 +395,9 @@ void Brotato3DGameInstance::OnSceneUnloaded()
 {
     sceneReady_ = false;
     playerRig_.OnSceneUnloaded();
+    // Zombie bodies are scene nodes: they do not survive a scene swap.
+    enemies_.clear();
+    corpseCount_ = 0;
 }
 
 void Brotato3DGameInstance::SetExtractionVehicleVisible(bool visible)
@@ -415,6 +414,15 @@ void Brotato3DGameInstance::SetExtractionVehicleVisible(bool visible)
     {
         extractionVehicleRootNode_->SetTranslation(HiddenPosition);
     }
+    if (busLightNode_)
+    {
+        Assets::NodeUtils::SetVisible(busLightNode_, visible);
+        if (!visible)
+        {
+            UpdateLightArea(busLightComponent_.get(), HiddenPosition, 0.01f, 0.0f);
+            busLightNode_->SetTranslation(HiddenPosition);
+        }
+    }
 }
 
 void Brotato3DGameInstance::ResetExtractionVehicle()
@@ -427,6 +435,15 @@ void Brotato3DGameInstance::ResetExtractionVehicle()
     SetExtractionVehicleVisible(false);
 }
 
+glm::vec3 Brotato3DGameInstance::GetExtractionZonePos() const
+{
+    const glm::vec3 right = glm::cross(extractionVehicleForward_, glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::vec3 zone = extractionVehiclePos_ + extractionVehicleForward_ * BusDoorForward +
+                     right * (BusHalfWidth + BusDoorStandOff);
+    zone.y = 0.05f;
+    return zone;
+}
+
 void Brotato3DGameInstance::BeginDuskSurge()
 {
     const int side = std::uniform_int_distribution<int>(0, 3)(rng_);
@@ -436,33 +453,50 @@ void Brotato3DGameInstance::BeginDuskSurge()
         glm::vec3(-1.0f, 0.0f, 0.0f),
         glm::vec3(1.0f, 0.0f, 0.0f),
     };
-    glm::vec3 outward = OutwardDirections[side];
-
-    const float availableDistance = outward.x > 0.0f ? arenaHalfExtent_.x - player_.worldPos.x :
-        outward.x < 0.0f ? arenaHalfExtent_.x + player_.worldPos.x :
-        outward.z > 0.0f ? arenaHalfExtent_.y - player_.worldPos.z :
-                           arenaHalfExtent_.y + player_.worldPos.z;
-    if (availableDistance < ExtractionVehicleApproachDistance)
+    // The camera looks north from the south, so only ~8 m of ground shows below the player:
+    // the bus comes from the north, east or west, and from the south only when it has to.
+    const auto availableDistance = [this](const glm::vec3& dir)
     {
-        outward = -outward;
+        return dir.x > 0.0f ? arenaHalfExtent_.x - player_.worldPos.x :
+               dir.x < 0.0f ? arenaHalfExtent_.x + player_.worldPos.x :
+               dir.z > 0.0f ? arenaHalfExtent_.y - player_.worldPos.z :
+                              arenaHalfExtent_.y + player_.worldPos.z;
+    };
+    glm::vec3 outward = OutwardDirections[1];
+    bool placed = false;
+    for (int attempt = 0; attempt < 3 && !placed; ++attempt)
+    {
+        // OutwardDirections: [0] north (-Z), [1] south (+Z), [2] west, [3] east.
+        static constexpr std::array<int, 3> onScreen = {0, 2, 3};
+        const glm::vec3 candidate = OutwardDirections[onScreen[(side + attempt) % 3]];
+        if (availableDistance(candidate) >= BusStopAhead + BusHalfLength + 2.0f)
+        {
+            outward = candidate;
+            placed = true;
+        }
     }
 
-    extractionVehicleStartPos_ = ClampToArena(
-        player_.worldPos + outward * ExtractionVehicleApproachDistance,
-        ExtractionVehicleObstacleHalfX,
-        arenaHalfExtent_);
+    // The bus drives toward the player (forward = -outward) and stops a lane to the side with
+    // its right flank - and the door - facing them.
+    extractionVehicleForward_ = -outward;
+    const glm::vec3 right = glm::cross(extractionVehicleForward_, glm::vec3(0.0f, 1.0f, 0.0f));
+    extractionVehicleHalfExtent_ = std::abs(outward.x) > 0.5f ? glm::vec2(BusHalfLength, BusHalfWidth) :
+                                                                 glm::vec2(BusHalfWidth, BusHalfLength);
     extractionVehicleTargetPos_ = ClampToArena(
-        player_.worldPos + outward * ExtractionVehicleStopDistance,
-        ExtractionVehicleObstacleHalfX,
-        arenaHalfExtent_);
-    extractionVehicleStartPos_.y = 0.02f;
-    extractionVehicleTargetPos_.y = 0.02f;
+        player_.worldPos + outward * BusStopAhead - right * BusLaneOffset, BusHalfLength, arenaHalfExtent_);
+    extractionVehicleStartPos_ = ClampToArena(
+        extractionVehicleTargetPos_ + outward * BusApproachDistance, BusHalfLength, arenaHalfExtent_);
+    extractionVehicleStartPos_.y = 0.0f;
+    extractionVehicleTargetPos_.y = 0.0f;
     extractionVehiclePos_ = extractionVehicleStartPos_;
-    extractionVehicleAnimTotalMs_ = 1500.0f;
+    extractionVehicleAnimTotalMs_ = BusArriveMs;
     extractionVehicleAnimMs_ = extractionVehicleAnimTotalMs_;
     if (extractionVehicleRootNode_)
     {
-        extractionVehicleRootNode_->SetTranslation(extractionVehiclePos_);
+        extractionVehicleRootNode_->SetTransform(
+            extractionVehiclePos_,
+            glm::angleAxis(std::atan2(extractionVehicleForward_.x, extractionVehicleForward_.z), glm::vec3(0.0f, 1.0f, 0.0f)),
+            glm::vec3(1.0f));
     }
     SetExtractionVehicleVisible(true);
     SetSkyIntensityTarget(NightSkyIntensity, 1500.0f);
@@ -484,11 +518,39 @@ void Brotato3DGameInstance::UpdateExtractionVehicle(double deltaSeconds)
     {
         extractionVehicleAnimMs_ = std::max(0.0f, extractionVehicleAnimMs_ - static_cast<float>(deltaSeconds * 1000.0));
         const float t = 1.0f - extractionVehicleAnimMs_ / std::max(1.0f, extractionVehicleAnimTotalMs_);
-        const float eased = t * t * (3.0f - 2.0f * t);
+        // Arrives fast and brakes hard: ease-out, not a symmetric smoothstep.
+        const float eased = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
         extractionVehiclePos_ = glm::mix(extractionVehicleStartPos_, extractionVehicleTargetPos_, eased);
         if (extractionVehicleRootNode_)
         {
             extractionVehicleRootNode_->SetTranslation(extractionVehiclePos_);
+        }
+        // Roadkill: whatever stands in the lane while the bus is still rolling comes apart.
+        int flattened = 0;
+        const glm::vec3 right = glm::cross(extractionVehicleForward_, glm::vec3(0.0f, 1.0f, 0.0f));
+        for (Brotato3D::FEnemyRuntime& enemy : enemies_)
+        {
+            if (!enemy.alive || !enemy.def || enemy.def->boss.enabled)
+            {
+                continue;
+            }
+            const glm::vec2 offset(enemy.worldPos.x - extractionVehiclePos_.x, enemy.worldPos.z - extractionVehiclePos_.z);
+            if (std::abs(offset.x) > extractionVehicleHalfExtent_.x + enemy.radius ||
+                std::abs(offset.y) > extractionVehicleHalfExtent_.y + enemy.radius)
+            {
+                continue;
+            }
+            const float side = glm::dot(glm::vec3(offset.x, 0.0f, offset.y), right) >= 0.0f ? 1.0f : -1.0f;
+            enemy.lastHitDebrisDir = glm::normalize(extractionVehicleForward_ * 1.6f + right * side);
+            enemy.lastHitExplosive = true;
+            enemy.lastHitDamage = std::max(1, enemy.currentHp);
+            enemy.currentHp = 0;
+            KillEnemy(enemy, true);
+            ++flattened;
+        }
+        if (flattened > 0)
+        {
+            StartScreenShake(120.0f, std::min(3.5f, 1.2f + 0.4f * static_cast<float>(flattened)));
         }
     }
     else
@@ -498,13 +560,20 @@ void Brotato3DGameInstance::UpdateExtractionVehicle(double deltaSeconds)
 
     const Brotato3D::FWaveDef* waveDef = waveSystem_.GetCurrentWaveDef();
     const float radius = waveDef ? waveDef->extractionRadiusM : 2.5f;
-    const bool inZone = extractionVehicleVisible_ &&
-                        DistanceXZ(player_.worldPos, extractionVehiclePos_) <= radius;
+    const bool arrived = extractionVehicleAnimMs_ <= 0.0f;
+    const bool inZone = extractionVehicleVisible_ && arrived &&
+                        DistanceXZ(player_.worldPos, GetExtractionZonePos()) <= radius;
     waveSystem_.NotifyPlayerInExtractionZone(inZone);
     const uint32_t materialId = inZone ? extractionVehicleActiveMaterialId_ : extractionVehicleMaterialId_;
-    if (extractionVehicleRootNode_ && materialId != 0)
+    if (extractionBeaconNode_ && materialId != 0)
     {
-        Assets::NodeUtils::SetPrimaryMaterial(extractionVehicleRootNode_, materialId);
+        Assets::NodeUtils::SetPrimaryMaterial(extractionBeaconNode_, materialId);
+    }
+    if (busLightNode_)
+    {
+        const glm::vec3 lightPos = GetExtractionZonePos() + glm::vec3(0.0f, BusLightHeight, 0.0f);
+        UpdateLightArea(busLightComponent_.get(), lightPos, BusLightRadius, 1.0f);
+        busLightNode_->SetTranslation(lightPos);
     }
 }
 
@@ -521,7 +590,7 @@ glm::vec3 Brotato3DGameInstance::ResolveExtractionVehicleCollision(const glm::ve
         resolved = ResolveAabbCollisionXZ(resolved,
                                           radius,
                                           extractionVehiclePos_,
-                                          glm::vec2(ExtractionVehicleObstacleHalfX, ExtractionVehicleObstacleHalfZ));
+                                          extractionVehicleHalfExtent_);
     }
 
     return resolved;
@@ -535,7 +604,7 @@ glm::vec3 Brotato3DGameInstance::ResolvePlayerObstacleCollision(const glm::vec3&
         resolved = ResolveAabbCollisionXZ(resolved,
                                           radius,
                                           extractionVehiclePos_,
-                                          glm::vec2(ExtractionVehicleObstacleHalfX, ExtractionVehicleObstacleHalfZ));
+                                          extractionVehicleHalfExtent_);
     }
 
     return resolved;
@@ -550,10 +619,10 @@ bool Brotato3DGameInstance::IsSegmentBlockedByExtractionVehicle(const glm::vec3&
     const glm::vec2 toXZ(to.x, to.z);
     if (IsExtractionVehicleObstacleActive())
     {
-        const glm::vec2 minBounds(extractionVehiclePos_.x - ExtractionVehicleObstacleHalfX - padding,
-                                  extractionVehiclePos_.z - ExtractionVehicleObstacleHalfZ - padding);
-        const glm::vec2 maxBounds(extractionVehiclePos_.x + ExtractionVehicleObstacleHalfX + padding,
-                                  extractionVehiclePos_.z + ExtractionVehicleObstacleHalfZ + padding);
+        const glm::vec2 minBounds(extractionVehiclePos_.x - extractionVehicleHalfExtent_.x - padding,
+                                  extractionVehiclePos_.z - extractionVehicleHalfExtent_.y - padding);
+        const glm::vec2 maxBounds(extractionVehiclePos_.x + extractionVehicleHalfExtent_.x + padding,
+                                  extractionVehiclePos_.z + extractionVehicleHalfExtent_.y + padding);
         if (SegmentIntersectsAabb2D(fromXZ, toXZ, minBounds, maxBounds))
         {
             return true;

@@ -11,6 +11,7 @@
 #include "Brotato3DShop.hpp"
 #include "Brotato3DWaveSystem.hpp"
 #include "Brotato3DWeapon.hpp"
+#include "Brotato3DZombieVisual.hpp"
 
 #include <glm/ext.hpp>
 #include <random>
@@ -18,6 +19,7 @@
 struct ImVec2;
 struct ImFont;
 namespace Runtime { class LightComponent; }
+namespace NextCVar { class FCVarSystem; }
 
 namespace Brotato3D
 {
@@ -86,6 +88,8 @@ public:
                             std::vector<::Assets::LightObject>& lights,
                             std::vector<::Assets::AnimationTrack>& tracks) override;
     bool OverrideRenderCamera(::Assets::Camera& outRenderCamera) const override;
+    void ConfigureCVars(NextCVar::FCVarSystem& cvars) override;
+    void RegisterAgentQueries(Runtime::Agent::FAgentQueryRegistry& reg) override;
 
     Brotato3D::FPlayerRuntime& GetPlayer() { return player_; }
     const Brotato3D::FPlayerRuntime& GetPlayer() const { return player_; }
@@ -110,6 +114,8 @@ public:
     const std::string& GetWeaponMergeBannerText() const { return weaponMergeBannerText_; }
     bool IsExtractionVehicleVisible() const { return extractionVehicleVisible_; }
     glm::vec3 GetExtractionVehiclePos() const { return extractionVehiclePos_; }
+    // Where the player has to stand: beside the bus door, not at its centre.
+    glm::vec3 GetExtractionZonePos() const;
     float GetExtractionRadius() const;
     ImFont* GetBigFont() const { return bigFont_; }
     bool IsPlayerDead() const { return playerDead_; }
@@ -155,7 +161,6 @@ private:
         uint32_t hitFlashMaterialId = 0;
         uint32_t warningMaterialId = 0;
         uint32_t phase2MaterialId = 0;
-        uint32_t bodyBlockModelId = 0;
         glm::vec3 baseColor = glm::vec3(1.0f);
     };
 
@@ -177,14 +182,26 @@ private:
     int CalculateWeaponDamage(const Brotato3D::FWeaponDef& weaponDef, bool& outIsCrit);
     int ApplyDamageToEnemy(Brotato3D::FEnemyRuntime& enemy, int damage, bool isCrit);
     void ApplyWeaponKnockback(Brotato3D::FEnemyRuntime& enemy, const glm::vec3& direction, float knockbackMeters);
-    void CreateEnemyBodyBlocks(Brotato3D::FEnemyRuntime& enemy,
-                               const FEnemyVisualResource& visual,
-                               const std::string& enemyId);
-    void ResetEnemyBodyBlocks(Brotato3D::FEnemyRuntime& enemy);
-    void SetEnemyVisualVisible(Brotato3D::FEnemyRuntime& enemy, bool visible);
-    void SetEnemyVisualMaterial(const Brotato3D::FEnemyRuntime& enemy, uint32_t materialId);
-    void SetEnemyVisualOutlineFlags(const Brotato3D::FEnemyRuntime& enemy, uint32_t outlineFlags);
-    void BreakEnemyBodyBlocks(Brotato3D::FEnemyRuntime& enemy, int damage);
+    // --- zombie bodies, dismemberment and gore (Brotato3DEnemySystem.cpp / Brotato3DGoreSystem.cpp)
+    void LoadZombieRigs();
+    std::shared_ptr<Brotato3D::FZombieRigVisual> CreateZombieVisual(const std::string& enemyId, size_t serial);
+    void UpdateEnemyBehaviour(Brotato3D::FEnemyRuntime& enemy, double deltaSeconds, float deltaMs);
+    void UpdateEnemyPresentation(Brotato3D::FEnemyRuntime& enemy, const glm::vec3& previousPos, double deltaSeconds);
+    void SeparateEnemies(double deltaSeconds);
+    void UpdateEnemyCorpse(Brotato3D::FEnemyRuntime& enemy, double deltaSeconds);
+    void BeginEnemyCorpse(Brotato3D::FEnemyRuntime& enemy, bool gib);
+    void HideEnemyVisual(Brotato3D::FEnemyRuntime& enemy);
+    void PlayEnemyAction(Brotato3D::FEnemyRuntime& enemy, Brotato3D::EZombieAction action, float playRate = 1.0f);
+    // Called for every hit after HP was deducted: flinch, blood, and limbs lost at HP thresholds.
+    void ReactEnemyToDamage(Brotato3D::FEnemyRuntime& enemy, int damage, bool isCrit);
+    bool SeverEnemyLimb(Brotato3D::FEnemyRuntime& enemy, Brotato3D::EZombieLimb limb, const glm::vec3& direction, float force);
+    bool SeverRandomEnemyLimb(Brotato3D::FEnemyRuntime& enemy, const glm::vec3& direction, bool preferLeg);
+    void BuildGorePool(std::vector<::Assets::Model>& models,
+                       std::vector<::Assets::FMaterial>& materials,
+                       std::vector<std::shared_ptr<::Assets::Node>>& nodes);
+    void SpawnBloodBurst(const glm::vec3& worldPos, const glm::vec3& direction, int count, float speed = 5.0f);
+    void SpawnBloodDecal(const glm::vec3& worldPos, float radius);
+    void ClearGore();
     void DamagePlayer(int damage, float shakeMs, float flashMs);
     void BuildDebrisPool(std::vector<::Assets::Model>& models,
                          std::vector<::Assets::FMaterial>& materials,
@@ -312,6 +329,39 @@ private:
     Brotato3D::FBestRecord bestRecord_{};
     std::vector<Brotato3D::FWaveDef> waveDefs_;
     std::map<std::string, FEnemyVisualResource> enemyVisuals_;
+    // One rig resource per enemy id; unique_ptr keeps FRigAsset addresses stable for the animators.
+    std::map<std::string, std::unique_ptr<Brotato3D::FZombieRigResource>> zombieRigs_;
+    struct FBloodDecal
+    {
+        std::shared_ptr<::Assets::Node> node;
+    };
+    std::vector<FBloodDecal> bloodDecals_;
+    size_t nextBloodDecal_ = 0;
+    uint32_t bloodMatId_ = 0;
+    uint32_t bloodDarkMatId_ = 0;
+    int corpseCount_ = 0;
+    // Agent validation switches (Brotato3DValidation.cpp).
+    struct FValidation
+    {
+        bool start = false;
+        bool lineup = false;
+        bool horde = false;
+        bool sever = false;
+        bool killAll = false;
+        bool clear = false;
+        bool dusk = false;
+        bool board = false;
+        bool god = false;
+        bool freeze = false;
+        bool holdFire = false;
+        bool pauseWaves = false;
+        bool autoUpgrade = false;
+        std::string arena;
+        float cameraHeight = 0.0f;
+        int inputEvents = 0;          // movement / dash key and pad events received (diagnostics)
+        float cameraBack = 0.0f;
+    } validation_{};
+    size_t zombieVisualSerial_ = 0;
     std::vector<Brotato3D::FEnemyRuntime> enemies_;
     std::vector<Brotato3D::FWeaponRuntime> equippedWeapons_;
     std::vector<Brotato3D::FProjectileRuntime> projectilePool_;
@@ -344,6 +394,8 @@ private:
     };
     std::shared_ptr<Runtime::LightComponent> playerLightComponent_;
     std::shared_ptr<::Assets::Node> playerLightNode_;
+    std::shared_ptr<Runtime::LightComponent> busLightComponent_;   // the bus floodlight over the door
+    std::shared_ptr<::Assets::Node> busLightNode_;
     std::vector<FTempLightRuntime> tempLightPool_;
     uint32_t debrisTinyModelId_ = 0;
     uint32_t debrisChunkModelId_ = 0;
@@ -361,6 +413,11 @@ private:
     std::map<std::string, uint32_t> characterMaterialIds_;
     std::vector<std::shared_ptr<::Assets::Node>> extractionVehicleNodes_;
     std::shared_ptr<::Assets::Node> extractionVehicleRootNode_;
+    std::shared_ptr<::Assets::Node> extractionBeaconNode_;
+    ::Assets::FRigAsset vehicleCatalog_{};   // brotato_vehicles.scad (static models packed as a rig)
+    bool vehicleCatalogLoaded_ = false;
+    glm::vec3 extractionVehicleForward_ = glm::vec3(0.0f, 0.0f, 1.0f);
+    glm::vec2 extractionVehicleHalfExtent_ = glm::vec2(1.45f, 0.78f);   // world XZ half size of the obstacle
     uint32_t extractionVehicleMaterialId_ = 0;
     uint32_t extractionVehicleActiveMaterialId_ = 0;
     bool keyW_ = false;
@@ -372,6 +429,8 @@ private:
     std::mt19937 rng_{std::random_device{}()};
     glm::vec3 cameraSmoothedTarget_ = glm::vec3(0.0f);
     glm::vec3 playerVelocity_ = glm::vec3(0.0f);
+    glm::vec3 playerMoveVelocity_ = glm::vec3(0.0f);   // commanded, accelerated toward the input
+    bool playerHasAimTarget_ = false;
     glm::vec3 extractionVehiclePos_ = glm::vec3(0.0f, -100.0f, 0.0f);
     glm::vec3 extractionVehicleStartPos_ = glm::vec3(0.0f, -100.0f, 0.0f);
     glm::vec3 extractionVehicleTargetPos_ = glm::vec3(0.0f, -100.0f, 0.0f);

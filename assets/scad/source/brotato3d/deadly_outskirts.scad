@@ -22,6 +22,7 @@
 // =====================================================================================
 
 use <../../lib/kit_deadly.scad>
+use <../../lib/kit_deadly_wasteland.scad>
 use <../../lib/kit_layout.scad>
 
 $fn = 12;
@@ -470,3 +471,14 @@ lay_scatter(9, -190, 190, 60, 96, seed = 388)
 lay_scatter(8, -120, 180, -80, -40, seed = 389)
     dd_ground_dirt(L = lay_randr($seed, 5, 8, 16), D = lay_randr($seed, 6, 6, 11), seed = $seed);
 lay_scatter(7, -320, 320, -170, 170, seed = 390) dd_ground_puddle(s = lay_randr($seed, 5, 1.0, 2.0), seed = $seed);
+
+// ================= 末日后（kit_deadly_wasteland）：逃难车流停在了公路上 =================
+// 分离式公路两幅路面都铺一层，弃车更密——这是出城的那条路。
+for (sy = [-1, 1]) translate([0, sy * 7.5, 0]) dw_ground_road_clutter(L = 680, W = 9, seed = 40 + sy, step = 8);
+translate([-220, 40, 0]) rotate([0, 0, 90]) dw_ground_road_clutter(L = 140, W = 7.5, seed = 51, step = 11);
+translate([-220, -60, 0]) rotate([0, 0, 90]) dw_ground_road_clutter(L = 120, W = 7.5, seed = 52, step = 11);
+translate([0, 90, 0]) rotate([0, 0, 90]) dw_ground_road_clutter(L = 140, W = 7.5, seed = 53, step = 11);
+translate([0, -80, 0]) rotate([0, 0, 90]) dw_ground_road_clutter(L = 120, W = 7.5, seed = 54, step = 11);
+translate([-300, 96, 0]) dw_ground_road_clutter(L = 170, W = 7, seed = 55, step = 10);
+translate([110, 7.5, 0]) dw_prop_roadblock(W = 9, seed = 11);
+translate([-120, -7.5, 0]) rotate([0, 0, 180]) dw_prop_roadblock(W = 9, seed = 12);

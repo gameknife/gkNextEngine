@@ -134,3 +134,87 @@ TEST_CASE("Brotato3D hero, weapon and vehicle catalogs carry what the game looks
     CHECK(size.z < 12.5f);
     CHECK(size.x < 3.5f);
 }
+
+// ---------------------------------------------------------------------------------------------
+// FArenaNav: buildings are rasterised from their wall triangles, interiors get sealed, bodies
+// are pushed out, sight lines stop at walls, and the flow field walks around a building.
+// ---------------------------------------------------------------------------------------------
+
+#include "Application/Game/Brotato3D/Brotato3DArenaNav.hpp"
+
+namespace
+{
+    // A closed 10 x 6 m building centred at `c`, given only as its four vertical walls:
+    // each wall triangle projects onto a line, like a real wall seen from above.
+    void AddWallBuilding(Brotato3D::FArenaNav& nav, const glm::vec2& c)
+    {
+        const glm::vec2 corners[4] = {c + glm::vec2(-5, -3), c + glm::vec2(5, -3), c + glm::vec2(5, 3), c + glm::vec2(-5, 3)};
+        for (int i = 0; i < 4; ++i)
+        {
+            const glm::vec2 a = corners[i];
+            const glm::vec2 b = corners[(i + 1) % 4];
+            nav.BlockTriangle(a, b, b);
+            nav.BlockTriangle(a, a, b);
+        }
+    }
+}
+
+TEST_CASE("Brotato3D arena nav seals interiors, resolves bodies and blocks sight", "[Unit][Brotato3D]")
+{
+    Brotato3D::FArenaNav nav;
+    nav.Reset(glm::vec2(40.0f, 30.0f), 0.5f);
+    AddWallBuilding(nav, glm::vec2(0.0f, 0.0f));
+    CHECK_FALSE(nav.IsBlocked(glm::vec3(0.0f)));   // before sealing: only the walls
+    nav.FinishBuild(glm::vec2(20.0f, 20.0f));
+    CHECK(nav.IsBlocked(glm::vec3(0.0f)));         // the inside is solid now
+    CHECK(nav.IsBlocked(glm::vec3(5.0f, 0.0f, 0.0f)));
+    CHECK_FALSE(nav.IsBlocked(glm::vec3(7.0f, 0.0f, 0.0f)));
+
+    // A body walking into the east wall stops outside it.
+    const glm::vec3 pushed = nav.ResolveCircle(glm::vec3(5.6f, 0.0f, 1.0f), 0.6f);
+    CHECK(pushed.x >= 5.7f);
+    // One spawned inside the building is moved out.
+    const glm::vec3 freed = nav.FindNearestFree(glm::vec3(0.0f), 0.5f, 10.0f);
+    CHECK_FALSE(nav.IsBlocked(freed));
+
+    CHECK_FALSE(nav.HasLineOfSight(glm::vec3(-10.0f, 0.0f, 0.0f), glm::vec3(10.0f, 0.0f, 0.0f)));
+    CHECK(nav.HasLineOfSight(glm::vec3(-10.0f, 0.0f, 6.0f), glm::vec3(10.0f, 0.0f, 6.0f)));
+    const float t = nav.TraceSegment(glm::vec3(-10.0f, 0.0f, 0.0f), glm::vec3(10.0f, 0.0f, 0.0f));
+    CHECK(t > 0.2f);
+    CHECK(t < 0.3f);   // the west wall is a quarter of the way along
+}
+
+TEST_CASE("Brotato3D arena flow field routes around a building", "[Unit][Brotato3D]")
+{
+    Brotato3D::FArenaNav nav;
+    nav.Reset(glm::vec2(40.0f, 30.0f), 0.5f);
+    AddWallBuilding(nav, glm::vec2(0.0f, 0.0f));
+    nav.FinishBuild(glm::vec2(20.0f, 20.0f));
+
+    const glm::vec3 target(12.0f, 0.0f, 0.0f);
+    nav.UpdateFlowField(target, 30.0f);
+    REQUIRE(nav.HasFlowField());
+
+    // Start straight behind the building: walking downhill must go round it, never through.
+    glm::vec3 position(-12.0f, 0.0f, 0.0f);
+    bool reached = false;
+    for (int step = 0; step < 400 && !reached; ++step)
+    {
+        glm::vec3 direction(0.0f);
+        if (nav.HasLineOfSight(position, target))
+        {
+            direction = glm::normalize(target - position);
+        }
+        else
+        {
+            REQUIRE(nav.FlowDirection(position, direction));
+        }
+        position = nav.ResolveCircle(position + direction * 0.25f, 0.35f);
+        CHECK_FALSE(nav.IsBlocked(position));
+        reached = glm::length(position - target) < 0.5f;
+    }
+    CHECK(reached);
+    // Outside the window there is no flow, and the caller falls back to a straight chase.
+    glm::vec3 unused(0.0f);
+    CHECK_FALSE(nav.FlowDirection(glm::vec3(-39.0f, 0.0f, -29.0f), unused));
+}

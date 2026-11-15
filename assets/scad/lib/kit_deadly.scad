@@ -1113,7 +1113,7 @@ module dd_bldg_block(seed = 0, L = 14, D = 10, floors = 2)
 // 工业厂房/仓库：波纹金属墙 + 缓坡顶带亮色天窗带 + 两樘卷帘门 + 装卸平台 + 屋顶通风球
 module dd_bldg_warehouse(seed = 0, L = 26, D = 16)
 {
-    wh = 6.4;
+    wh = 4.4;   // 俯视镜头下 6 m 以上的墙会整片挡住街道（Brotato3D 的竞技场就是这么用的）
     wc = [[0.46, 0.47, 0.45], [0.42, 0.44, 0.46], [0.48, 0.44, 0.38]][dd_rnd(seed, 3)];
     wd = [wc[0] * 0.82, wc[1] * 0.82, wc[2] * 0.82];
     color(dd_CONCD()) dd_slab(L + 0.8, D + 0.8, 0.3);
@@ -1134,13 +1134,13 @@ module dd_bldg_warehouse(seed = 0, L = 26, D = 16)
     // 卷帘门 + 装卸平台
     for (sx = [-1, 1])
     {
-        color(dd_METALD()) translate([sx * L * 0.24, -D / 2 - 0.06, 2.3]) dd_boxc([4.2, 0.12, 4.4]);
-        color([0.56, 0.57, 0.55]) for (k = [0 : 5])
-            translate([sx * L * 0.24, -D / 2 - 0.13, 0.7 + k * 0.72]) dd_boxc([4.0, 0.04, 0.1]);
+        color(dd_METALD()) translate([sx * L * 0.24, -D / 2 - 0.06, (wh - 0.5) / 2 + 0.1]) dd_boxc([4.2, 0.12, wh - 0.5]);
+        color([0.56, 0.57, 0.55]) for (k = [0 : 4])
+            translate([sx * L * 0.24, -D / 2 - 0.13, 0.7 + k * (wh - 1.3) / 4]) dd_boxc([4.0, 0.04, 0.1]);
     }
     color(dd_CONCC()) translate([0, -D / 2 - 1.6, 0]) dd_slab(L * 0.72, 3.2, 1.2);
     color(dd_CONCD()) translate([0, -D / 2 - 3.3, 0]) dd_slab(2.6, 1.4, 0.6);
-    color(dd_TRIMW()) translate([0, -D / 2 - 0.2, 5.6]) dd_boxc([L * 0.34, 0.1, 0.9]);   // 厂名牌
+    color(dd_TRIMW()) translate([0, -D / 2 - 0.2, wh + 0.5]) dd_boxc([L * 0.34, 0.1, 0.9]);   // 厂名牌
 }
 
 // 加油站：便利店 + 大雨棚 + 两组加油岛 + 价格牌。公路题材第一地标。

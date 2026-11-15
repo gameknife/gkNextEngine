@@ -21846,14 +21846,14 @@
             26.9,
             20.4
           ],
-          "height": 8.75,
+          "height": 6.75,
           "zMin": 0.0,
           "center": [
             0.0,
             -1.8
           ],
-          "triangles": 552,
-          "colors": 35,
+          "triangles": 528,
+          "colors": 33,
           "warnings": 0,
           "ok": true
         },

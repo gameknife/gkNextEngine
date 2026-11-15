@@ -363,7 +363,7 @@ bool Brotato3DGameInstance::OverrideRenderCamera(Assets::Camera& outRenderCamera
     glm::vec3 cameraTarget = cameraSmoothedTarget_;
     // A slightly flatter angle keeps the arena readable while exposing the
     // ScadRig hero's upper/lower-body pose instead of collapsing it top-down.
-    glm::vec3 cameraPosition = cameraTarget + glm::vec3(0.0f, 13.0f, 10.0f);
+    glm::vec3 cameraPosition = cameraTarget + glm::vec3(0.0f, CameraHeight, CameraBack);
     if (validation_.cameraHeight > 0.0f)
     {
         cameraTarget.y = 0.9f;
@@ -388,6 +388,7 @@ void Brotato3DGameInstance::OnSceneLoaded()
     playerRig_.OnSceneLoaded(GetEngine().GetScene());
     playerRig_.SetVisible(appState_ != Brotato3D::EAppState::MainMenu &&
                           appState_ != Brotato3D::EAppState::CharacterSelect);
+    BuildArenaObstacles();
     sceneReady_ = true;
 }
 
@@ -395,6 +396,7 @@ void Brotato3DGameInstance::OnSceneUnloaded()
 {
     sceneReady_ = false;
     playerRig_.OnSceneUnloaded();
+    ClearArenaObstacles();
     // Zombie bodies are scene nodes: they do not survive a scene swap.
     enemies_.clear();
     corpseCount_ = 0;
@@ -462,17 +464,62 @@ void Brotato3DGameInstance::BeginDuskSurge()
                dir.z > 0.0f ? arenaHalfExtent_.y - player_.worldPos.z :
                               arenaHalfExtent_.y + player_.worldPos.z;
     };
-    glm::vec3 outward = OutwardDirections[1];
-    bool placed = false;
-    for (int attempt = 0; attempt < 3 && !placed; ++attempt)
+    // Where the bus would park for a given approach and stop distance, and whether it fits:
+    // body, door and the walk to the door all on open ground.
+    const auto parking = [this](const glm::vec3& out, float stopAhead)
     {
-        // OutwardDirections: [0] north (-Z), [1] south (+Z), [2] west, [3] east.
-        static constexpr std::array<int, 3> onScreen = {0, 2, 3};
-        const glm::vec3 candidate = OutwardDirections[onScreen[(side + attempt) % 3]];
-        if (availableDistance(candidate) >= BusStopAhead + BusHalfLength + 2.0f)
+        const glm::vec3 forward = -out;
+        const glm::vec3 right = glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f));
+        return player_.worldPos + out * stopAhead - right * BusLaneOffset;
+    };
+    const auto fits = [this](const glm::vec3& out, const glm::vec3& center)
+    {
+        if (!arenaNav_.IsBuilt())
         {
-            outward = candidate;
-            placed = true;
+            return true;
+        }
+        const glm::vec3 forward = -out;
+        const glm::vec3 right = glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f));
+        for (float along = -BusHalfLength - 0.5f; along <= BusHalfLength + 0.5f; along += 1.0f)
+        {
+            for (float across = -BusHalfWidth - 0.3f; across <= BusHalfWidth + 0.31f; across += 0.75f)
+            {
+                if (arenaNav_.IsBlocked(center + forward * along + right * across))
+                {
+                    return false;
+                }
+            }
+        }
+        const glm::vec3 door = center + forward * BusDoorForward + right * (BusHalfWidth + BusDoorStandOff);
+        return !arenaNav_.IsBlocked(door) && arenaNav_.HasLineOfSight(player_.worldPos, door);
+    };
+    // OutwardDirections: [0] north (-Z), [1] south (+Z), [2] west, [3] east.
+    static constexpr std::array<int, 3> onScreen = {0, 2, 3};
+    static constexpr std::array<float, 4> stopDistances = {BusStopAhead, BusStopAhead - 3.0f, BusStopAhead + 3.0f,
+                                                           BusStopAhead + 6.0f};
+    glm::vec3 outward = OutwardDirections[1];
+    float stopAhead = BusStopAhead;
+    bool placed = false;
+    for (int pass = 0; pass < 2 && !placed; ++pass)
+    {
+        for (int attempt = 0; attempt < 3 && !placed; ++attempt)
+        {
+            const glm::vec3 candidate = OutwardDirections[onScreen[(side + attempt) % 3]];
+            if (availableDistance(candidate) < BusStopAhead + BusHalfLength + 2.0f)
+            {
+                continue;
+            }
+            for (const float stop : stopDistances)
+            {
+                // First pass wants open ground; the second takes any approach with room.
+                if (pass == 1 || fits(candidate, parking(candidate, stop)))
+                {
+                    outward = candidate;
+                    stopAhead = stop;
+                    placed = true;
+                    break;
+                }
+            }
         }
     }
 
@@ -483,7 +530,7 @@ void Brotato3DGameInstance::BeginDuskSurge()
     extractionVehicleHalfExtent_ = std::abs(outward.x) > 0.5f ? glm::vec2(BusHalfLength, BusHalfWidth) :
                                                                  glm::vec2(BusHalfWidth, BusHalfLength);
     extractionVehicleTargetPos_ = ClampToArena(
-        player_.worldPos + outward * BusStopAhead - right * BusLaneOffset, BusHalfLength, arenaHalfExtent_);
+        player_.worldPos + outward * stopAhead - right * BusLaneOffset, BusHalfLength, arenaHalfExtent_);
     extractionVehicleStartPos_ = ClampToArena(
         extractionVehicleTargetPos_ + outward * BusApproachDistance, BusHalfLength, arenaHalfExtent_);
     extractionVehicleStartPos_.y = 0.0f;
@@ -598,7 +645,7 @@ glm::vec3 Brotato3DGameInstance::ResolveExtractionVehicleCollision(const glm::ve
 
 glm::vec3 Brotato3DGameInstance::ResolvePlayerObstacleCollision(const glm::vec3& pos, float radius)
 {
-    glm::vec3 resolved = pos;
+    glm::vec3 resolved = arenaNav_.ResolveCircle(pos, radius);
     if (IsExtractionVehicleObstacleActive())
     {
         resolved = ResolveAabbCollisionXZ(resolved,
@@ -610,10 +657,14 @@ glm::vec3 Brotato3DGameInstance::ResolvePlayerObstacleCollision(const glm::vec3&
     return resolved;
 }
 
-bool Brotato3DGameInstance::IsSegmentBlockedByExtractionVehicle(const glm::vec3& from,
+bool Brotato3DGameInstance::IsSegmentBlocked(const glm::vec3& from,
                                                                 const glm::vec3& to,
                                                                 float radius) const
 {
+    if (arenaNav_.IsBuilt() && !arenaNav_.HasLineOfSight(from, to))
+    {
+        return true;
+    }
     const float padding = std::max(0.0f, radius);
     const glm::vec2 fromXZ(from.x, from.z);
     const glm::vec2 toXZ(to.x, to.z);
@@ -636,6 +687,8 @@ glm::vec3 Brotato3DGameInstance::ResolveEnemyGroundedPosition(const Brotato3D::F
 {
     candidate = ClampToArena(candidate, enemy.radius, arenaHalfExtent_);
     candidate = ResolveExtractionVehicleCollision(candidate, enemy.radius);
+    // Big bodies are resolved as a smaller circle so a Brute still fits down an alley.
+    candidate = arenaNav_.ResolveCircle(candidate, std::min(enemy.radius, 0.6f));
     candidate = ClampToArena(candidate, enemy.radius, arenaHalfExtent_);
     if (enemy.def)
     {

@@ -265,6 +265,7 @@ void Brotato3DGameInstance::OnTick(double deltaSeconds)
     UpdateSunLighting(deltaSeconds);
     UpdateWaveBanner(deltaSeconds);
     UpdateCameraTracking(deltaSeconds);
+    UpdateOccluderFade(deltaSeconds);
 
     if (timeScaleRecoveryMs_ > 0.0f)
     {
@@ -294,6 +295,7 @@ void Brotato3DGameInstance::OnTick(double deltaSeconds)
             UpdatePlayer(deltaSeconds);
             UpdateWeapons(deltaSeconds);
             UpdateProjectiles(effectiveDt);
+            UpdateArenaNavigation(effectiveDt);
             UpdateEnemies(effectiveDt);
             UpdateEnemyProjectiles(effectiveDt);
             ProcessItemTriggers(effectiveDt);

@@ -20,6 +20,9 @@ namespace Brotato3DUtil
     inline constexpr float FocusFireSlackMeters = 2.0f;
     // Height the rounds of the hero leave and travel at: the chest of a standing zombie.
     inline constexpr float PlayerMuzzleHeight = 1.25f;
+    // Gameplay camera: this far above and behind (+Z) the tracked point, looking at it.
+    inline constexpr float CameraHeight = 13.0f;
+    inline constexpr float CameraBack = 10.0f;
     inline constexpr float PickupBaseRadius = 1.6f;
     inline constexpr float PickupXpRadius = 0.12f;
     inline constexpr float MagnetLerpSpeedXp = 8.0f;

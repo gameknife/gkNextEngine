@@ -233,6 +233,24 @@ void Brotato3DGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegi
     reg.Add("busVisible", [this]() -> Value { return extractionVehicleVisible_; });
     reg.Add("busArrived", [this]() -> Value { return extractionVehicleVisible_ && extractionVehicleAnimMs_ <= 0.0f; });
     reg.Add("boarding", [this]() -> Value { return waveSystem_.IsPlayerInExtractionZone(); });
+    reg.Add("arenaSolidPct", [this]() -> Value { return static_cast<double>(arenaNav_.BlockedFraction() * 100.0f); });
+    reg.Add("playerInWall", [this]() -> Value { return arenaNav_.IsBlocked(player_.worldPos); });
+    reg.Add("zombiesInWalls", [countEnemies, this]() -> Value
+    {
+        return countEnemies([this](const Brotato3D::FEnemyRuntime& enemy) { return enemy.alive && arenaNav_.IsBlocked(enemy.worldPos); });
+    });
+    reg.Add("zombiesNearPlayer", [countEnemies, this]() -> Value
+    {
+        return countEnemies([this](const Brotato3D::FEnemyRuntime& enemy)
+        {
+            return enemy.alive && DistanceXZ(enemy.worldPos, player_.worldPos) < 2.5f;
+        });
+    });
+    reg.Add("occludersFaded", [this]() -> Value
+    {
+        return static_cast<int64_t>(std::count_if(occluders_.begin(), occluders_.end(),
+                                                   [](const FOccluder& occluder) { return occluder.opacity < 0.9f; }));
+    });
     reg.Add("arena", [this]() -> Value { return selectedArenaId_; });
     reg.Add("wave", [this]() -> Value { return static_cast<int64_t>(waveSystem_.GetCurrentWaveIndex() + 1); });
 }

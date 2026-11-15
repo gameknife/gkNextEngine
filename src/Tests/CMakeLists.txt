@@ -134,6 +134,7 @@ set(unitTestSources
     ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Combat/BulletPool.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/World/EnemyPool.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Player/ScrollCamera.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/Brotato3D/Brotato3DArenaNav.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Data/ItemDefs.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Data/LootTables.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Inventory/Inventory.cpp

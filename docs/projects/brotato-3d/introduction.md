@@ -41,7 +41,7 @@ Brotato3D 的意义不只是“复刻一个玩法”，而是提供一个高频�
 
 - 大量运行时节点：敌人、子弹、碎块、拾取物、地面警示、激光和临时光源都需要稳定创建、复用、隐藏和同步。
 - 物理反馈：XP / Material / 尸块碎片使用 Jolt 物理体与 kinematic body 同步，让战斗反馈从纯 UI 飘字扩展到真实空间。
-- 固定末日场景：竞技场直接加载基于 `kit_deadly.scad` 搭建的城镇、公路郊外和沙漠荒野，再叠一层 `kit_deadly_wasteland.scad` 的“出过事”杂物（血迹、尸体、弃车、行李、警方路障），布局可持续人工修缮。
+- 固定末日场景：建筑与车辆是实心的（按 SCAD 模块名从场景里自动提取占地），僵尸用流场绕楼包抄，子弹和视线被墙挡住，挡住玩家的建筑会半透明。竞技场直接加载基于 `kit_deadly.scad` 搭建的城镇、公路郊外和沙漠荒野，再叠一层 `kit_deadly_wasteland.scad` 的“出过事”杂物（血迹、尸体、弃车、行李、警方路障），布局可持续人工修缮。
 - 刚体骨骼角色：主角沿用 NextDayz 的 20 骨骼人形骨架与分层动画（移动混合空间 + 持枪 IK + 后坐力），僵尸用 NextDayz 感染者的程序化步态，断肢是把真实骨骼子树甩出去做弹道。
 - ImGui 游戏 HUD：主菜单、角色选择、战斗 HUD、升级、商店、暂停、设置和结算都在 ImGui 中实现，覆盖较完整的游戏 UI 状态机。
 - 数据加载链路：JSON 配置加载、校验、结构化为运行时数据，并与 C++ 子系统保持清晰分工。
@@ -58,6 +58,7 @@ Brotato3D 的意义不只是“复刻一个玩法”，而是提供一个高频�
 | 武器 / 子弹 | `Brotato3DProjectileSystem.cpp` | 自动瞄准、开火、命中、暴击、爆炸、激光、武器合并 |
 | 敌人 | `Brotato3DEnemySystem.cpp`, `Brotato3DZombieVisual.cpp` | 刷怪、追击、远程、冲锋、自爆、治疗、迫击炮、长枪、Boss、尸群挤压；僵尸 rig 的动画与断肢 |
 | 断肢 / 血 | `Brotato3DGoreSystem.cpp` | 按血量断肢、爬行、血泊与血块 |
+| 阻挡 / 寻路 | `Brotato3DArenaNav.cpp`, `Brotato3DArenaSystem.cpp` | 从场景提取建筑占地、碰撞、流场绕障、视线、遮挡物淡化 |
 | 验证 | `Brotato3DValidation.cpp` | `brotato3d.validation.*` cvar 与 `game.*` agent 查询 |
 | 波次 | `Brotato3DWaveSystem.cpp/.hpp` | Active / DuskSurge / Intermission / Victory 状态机 |
 | 掉落 / 碎块 | `Brotato3DDebrisSystem.cpp` | 物理碎块池、拾取物、磁吸、掉落表现 |

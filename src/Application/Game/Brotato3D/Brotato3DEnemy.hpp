@@ -72,6 +72,10 @@ namespace Brotato3D
         int limbStage = 0;              // how many HP thresholds have already cost a limb
         bool lastHitCrit = false;
         bool lastHitExplosive = false;
+        // Navigation: the steered walking direction, and whether the player was in plain sight
+        // this frame (if not, the zombie follows the arena flow field around the buildings).
+        glm::vec3 navDir = glm::vec3(0.0f);
+        bool seesPlayer = true;
         int lastHitDamage = 0;
     };
 }

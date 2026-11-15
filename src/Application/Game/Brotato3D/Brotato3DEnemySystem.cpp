@@ -21,7 +21,8 @@ namespace
     constexpr float EnemyTurnRate = 9.0f;
     constexpr float AttackAnimIntervalMs = 950.0f;
     constexpr float SeparationRadiusScale = 0.9f;   // bodies may overlap a little: a press, not a grid
-    constexpr float SeparationMaxSpeed = 3.0f;      // m/s a body can be shouldered aside
+    constexpr float SeparationMaxSpeed = 6.0f;      // m/s a body can be shouldered aside
+    constexpr float ContactStandOff = 0.92f;        // stop at this share of the contact distance and claw
 
     glm::vec3 ResolveEnemyDebrisDir(const Brotato3D::FEnemyRuntime& enemy, const glm::vec3& fallbackDir)
     {
@@ -116,7 +117,9 @@ void Brotato3DGameInstance::SpawnEnemy(const std::string& enemyId, const glm::ve
 
     const Brotato3D::FEnemyDef& def = defIt->second;
     const FEnemyVisualResource& visual = visualIt->second;
-    const glm::vec3 spawnPos(worldPos.x, def.size.y * 0.5f, worldPos.z);
+    // Never inside a building: the wave director picks points blind.
+    const glm::vec3 open = arenaNav_.FindNearestFree(worldPos, std::max(def.size.x, def.size.z) * 0.5f, 24.0f);
+    const glm::vec3 spawnPos(open.x, def.size.y * 0.5f, open.z);
     auto reusableEnemy = std::find_if(enemies_.begin(), enemies_.end(),
                                       [&def](const Brotato3D::FEnemyRuntime& enemy)
                                       {
@@ -303,6 +306,11 @@ void Brotato3DGameInstance::UpdateEnemyPresentation(Brotato3D::FEnemyRuntime& en
     if (enemy.def->lance.enabled && enemy.lanceState == Brotato3D::ELanceState::Dashing)
     {
         facing = enemy.lanceDashDir;
+    }
+    else if (!enemy.seesPlayer && enemy.moveSpeedNow > 0.2f && glm::length(enemy.navDir) > 0.5f)
+    {
+        // Rounding a corner: look where the feet go, not through the wall.
+        facing = enemy.navDir;
     }
     if (glm::length(glm::vec2(facing.x, facing.z)) > 0.05f)
     {
@@ -498,7 +506,7 @@ void Brotato3DGameInstance::UpdateEnemyBehaviour(Brotato3D::FEnemyRuntime& enemy
 
         if (!customEnemyHandled)
         {
-            glm::vec3 moveDir = toPlayerDir;
+            glm::vec3 moveDir = ChaseDirection(enemy, toPlayerDir, deltaSeconds);
             float moveSpeed = enemy.def->moveSpeed;
             if (enemy.bossPhase2Active)
             {
@@ -512,7 +520,8 @@ void Brotato3DGameInstance::UpdateEnemyBehaviour(Brotato3D::FEnemyRuntime& enemy
             }
             if (enemy.def->charge.enabled && !enemy.crawling)
             {
-                if (!enemy.charging && enemy.chargeCooldownMs <= 0.0f && playerDistance <= enemy.def->charge.triggerDistance)
+                if (!enemy.charging && enemy.chargeCooldownMs <= 0.0f && playerDistance <= enemy.def->charge.triggerDistance &&
+                    enemy.seesPlayer)
                 {
                     enemy.charging = true;
                     enemy.chargeRampMs = enemy.def->charge.chargeRampSec * 1000.0f;
@@ -549,7 +558,7 @@ void Brotato3DGameInstance::UpdateEnemyBehaviour(Brotato3D::FEnemyRuntime& enemy
                 }
 
                 if (enemy.rangedFireCooldownMs <= 0.0f &&
-                    !IsSegmentBlockedByExtractionVehicle(enemy.worldPos, player_.worldPos, enemy.def->ranged.size))
+                    !IsSegmentBlocked(enemy.worldPos, player_.worldPos, enemy.def->ranged.size))
                 {
                     SpawnEnemyProjectile(enemy, toPlayerDir);
                     PlayEnemyAction(enemy, Brotato3D::EZombieAction::Alert, 2.2f);
@@ -559,6 +568,13 @@ void Brotato3DGameInstance::UpdateEnemyBehaviour(Brotato3D::FEnemyRuntime& enemy
             if (enemy.crawling)
             {
                 moveSpeed *= CrawlSpeedScale;
+            }
+            // Arrived: claw at the player instead of walking into them. Without this the whole
+            // horde compresses onto one point faster than it can shoulder itself apart.
+            if (enemy.seesPlayer && moveDir == enemy.navDir &&
+                playerDistance < (enemy.radius + player_.radius) * ContactStandOff && !enemy.charging)
+            {
+                moveSpeed = 0.0f;
             }
 
             if (moveSpeed > 0.0f)
@@ -662,7 +678,7 @@ bool Brotato3DGameInstance::UpdateMortarTank(Brotato3D::FEnemyRuntime& enemy,
         return true;
     }
 
-    glm::vec3 moveDir = toPlayerDir;
+    glm::vec3 moveDir = ChaseDirection(enemy, toPlayerDir, deltaSeconds);
     float moveSpeed = 0.0f;
     if (playerDistance < mortar.throwRangeMin)
     {
@@ -696,7 +712,8 @@ bool Brotato3DGameInstance::UpdateLanceCharger(Brotato3D::FEnemyRuntime& enemy,
     switch (enemy.lanceState)
     {
     case Brotato3D::ELanceState::Idle:
-        if (enemy.lanceCooldownMs <= 0.0f && playerDistance <= lance.windupRangeMin)
+        if (enemy.lanceCooldownMs <= 0.0f && playerDistance <= lance.windupRangeMin &&
+            !IsSegmentBlocked(enemy.worldPos, player_.worldPos, enemy.radius))
         {
             enemy.lanceState = Brotato3D::ELanceState::Telegraph;
             enemy.lanceStateMs = std::max(1.0f, lance.telegraphMs);
@@ -721,7 +738,9 @@ bool Brotato3DGameInstance::UpdateLanceCharger(Brotato3D::FEnemyRuntime& enemy,
             PushGroundIndicator(indicator);
             return true;
         }
-        enemy.worldPos = ResolveEnemyGroundedPosition(enemy, enemy.worldPos + toPlayerDir * enemy.def->moveSpeed * static_cast<float>(deltaSeconds));
+        enemy.worldPos = ResolveEnemyGroundedPosition(
+            enemy, enemy.worldPos + ChaseDirection(enemy, toPlayerDir, deltaSeconds) * enemy.def->moveSpeed *
+                                        static_cast<float>(deltaSeconds));
         return true;
 
     case Brotato3D::ELanceState::Telegraph:

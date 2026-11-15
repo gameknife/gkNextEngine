@@ -12,13 +12,14 @@
 #include "Brotato3DWaveSystem.hpp"
 #include "Brotato3DWeapon.hpp"
 #include "Brotato3DZombieVisual.hpp"
+#include "Brotato3DArenaNav.hpp"
 
 #include <glm/ext.hpp>
 #include <random>
 
 struct ImVec2;
 struct ImFont;
-namespace Runtime { class LightComponent; }
+namespace Runtime { class LightComponent; class RenderComponent; }
 namespace NextCVar { class FCVarSystem; }
 
 namespace Brotato3D
@@ -202,6 +203,12 @@ private:
     void SpawnBloodBurst(const glm::vec3& worldPos, const glm::vec3& direction, int count, float speed = 5.0f);
     void SpawnBloodDecal(const glm::vec3& worldPos, float radius);
     void ClearGore();
+    // --- arena obstacles, navigation and sight lines (Brotato3DArenaSystem.cpp)
+    void BuildArenaObstacles();
+    void ClearArenaObstacles();
+    void UpdateArenaNavigation(double deltaSeconds);
+    void UpdateOccluderFade(double deltaSeconds);
+    glm::vec3 ChaseDirection(Brotato3D::FEnemyRuntime& enemy, const glm::vec3& toPlayerDir, double deltaSeconds);
     void DamagePlayer(int damage, float shakeMs, float flashMs);
     void BuildDebrisPool(std::vector<::Assets::Model>& models,
                          std::vector<::Assets::FMaterial>& materials,
@@ -294,7 +301,8 @@ private:
     bool IsExtractionVehicleObstacleActive() const;
     glm::vec3 ResolveExtractionVehicleCollision(const glm::vec3& pos, float radius) const;
     glm::vec3 ResolvePlayerObstacleCollision(const glm::vec3& pos, float radius);
-    bool IsSegmentBlockedByExtractionVehicle(const glm::vec3& from, const glm::vec3& to, float radius) const;
+    // True when the extraction bus or a building stands between the two points.
+    bool IsSegmentBlocked(const glm::vec3& from, const glm::vec3& to, float radius) const;
     // Clamps a candidate enemy position to the arena, pushes it out of the extraction truck,
     // re-clamps, then snaps it onto the flat gameplay plane shared by the fixed SCAD scenes.
     glm::vec3 ResolveEnemyGroundedPosition(const Brotato3D::FEnemyRuntime& enemy, glm::vec3 candidate) const;
@@ -340,6 +348,16 @@ private:
     uint32_t bloodMatId_ = 0;
     uint32_t bloodDarkMatId_ = 0;
     int corpseCount_ = 0;
+    Brotato3D::FArenaNav arenaNav_;
+    float flowRefreshMs_ = 0.0f;
+    struct FOccluder
+    {
+        std::vector<Runtime::RenderComponent*> renders;
+        glm::vec3 boundsMin{0.0f};
+        glm::vec3 boundsMax{0.0f};
+        float opacity = 1.0f;
+    };
+    std::vector<FOccluder> occluders_;
     // Agent validation switches (Brotato3DValidation.cpp).
     struct FValidation
     {

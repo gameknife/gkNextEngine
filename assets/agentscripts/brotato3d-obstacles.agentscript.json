@@ -1,0 +1,45 @@
+{
+  "name": "brotato3d-obstacles",
+  "target": "Brotato3D",
+  "defaults": { "waitFrames": 2, "stepTimeoutMs": 30000 },
+  "steps": [
+    { "type": "wait-until", "query": "engine.status", "op": "eq", "value": "Running", "timeoutMs": 30000 },
+    { "type": "wait-until", "query": "game.sceneReady", "op": "eq", "value": true, "timeoutMs": 60000 },
+    { "type": "log", "message": "the town has solid buildings" },
+    { "type": "assert", "query": "game.arenaSolidPct", "op": "ge", "value": 5 },
+    { "type": "assert", "query": "game.arenaSolidPct", "op": "le", "value": 60 },
+    { "type": "cvar", "name": "brotato3d.validation.god", "set": true },
+    { "type": "cvar", "name": "brotato3d.validation.pauseWaves", "set": true },
+    { "type": "cvar", "name": "brotato3d.validation.autoUpgrade", "set": true },
+    { "type": "cvar", "name": "brotato3d.validation.holdFire", "set": true },
+    { "type": "cvar", "name": "brotato3d.validation.start", "set": true },
+    { "type": "wait-until", "query": "game.state", "op": "eq", "value": "playing", "timeoutMs": 10000 },
+    { "type": "assert", "query": "game.playerInWall", "op": "eq", "value": false },
+
+    { "type": "log", "message": "walking into the bank north of the crossing stops at its wall" },
+    { "type": "key", "code": "W", "action": "down" },
+    { "type": "wait-ms", "ms": 3000 },
+    { "type": "key", "code": "W", "action": "up" },
+    { "type": "assert", "query": "game.playerInWall", "op": "eq", "value": false },
+    { "type": "assert", "query": "game.playerZ", "op": "ge", "value": -20 },
+    { "type": "screenshot", "out": "screenshots/brotato3d_wall_stop", "ui": true },
+
+    { "type": "log", "message": "walking south between the buildings fades what hides the player" },
+    { "type": "key", "code": "S", "action": "down" },
+    { "type": "wait-ms", "ms": 4500 },
+    { "type": "key", "code": "S", "action": "up" },
+    { "type": "wait-ms", "ms": 300 },
+    { "type": "screenshot", "out": "screenshots/brotato3d_occluder_fade", "ui": true },
+
+    { "type": "log", "message": "a horde all around: they come round the buildings, none walks through them" },
+    { "type": "cvar", "name": "brotato3d.validation.horde", "set": true },
+    { "type": "wait-ms", "ms": 1500 },
+    { "type": "assert", "query": "game.zombiesInWalls", "op": "eq", "value": 0 },
+    { "type": "wait-ms", "ms": 6000 },
+    { "type": "assert", "query": "game.zombiesInWalls", "op": "eq", "value": 0 },
+    { "type": "assert", "query": "game.zombiesNearPlayer", "op": "ge", "value": 6 },
+    { "type": "screenshot", "out": "screenshots/brotato3d_horde_around", "ui": true },
+    { "type": "assert", "query": "game.occludersFaded", "op": "ge", "value": 0 },
+    { "type": "quit" }
+  ]
+}

@@ -17,6 +17,7 @@ void Brotato3DGameInstance::StartNewRun()
     Brotato3D::StopBgm();
     ResetRuntimeState();
     ApplySelectedCharacter();
+    player_.worldPos = arenaNav_.FindNearestFree(player_.worldPos, player_.radius + 0.5f, 40.0f);
     player_.worldPos.y = player_.radius;
     SetSkyIntensityTarget(30.0f, 0.0f);
     if (player_.bodyNode)

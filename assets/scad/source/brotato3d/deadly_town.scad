@@ -67,7 +67,7 @@ module dt_shops(n = 4, seed = 0, step = 16, fmax = 3)
 {
     lay_row(n, step, 0, seed = seed)
         translate([0, 12.9 + lay_randr($seed, 5, -0.4, 0.4), 0])
-            dd_bldg_block(seed = $seed, L = step - 0.7, D = 11, floors = 1 + lay_randi($seed, 6, fmax));
+            dd_bldg_block(seed = $seed, L = step - 0.7, D = 11, floors = 1);   // 俯视镜头：一律单层，不挡视野
 }
 
 // 街道人行道对（沿 x 铺在路两侧）
@@ -102,11 +102,11 @@ for (x = [-65, 0, 65])
 // 主街北侧联排商业（正脸朝镜头）
 translate([-54, 0, 0]) dt_shops(n = 4, seed = 21, step = 14, fmax = 3);
 translate([13, 0, 0]) dt_shops(n = 3, seed = 22, step = 16, fmax = 3);
-translate([-4, 16, 0]) dd_bldg_block(seed = 23, L = 12, D = 12, floors = 3);   // 转角银行
+translate([-4, 16, 0]) dd_bldg_block(seed = 23, L = 12, D = 12, floors = 1);   // 转角银行
 // 主街南侧：屋顶与背立面朝镜头，用低矮体量 + 大面积铺装承接
-translate([-14, -18, 0]) rotate([0, 0, 180]) dd_bldg_block(seed = 24, L = 16, D = 12, floors = 2);
+translate([-14, -18, 0]) rotate([0, 0, 180]) dd_bldg_block(seed = 24, L = 16, D = 12, floors = 1);
 translate([30, -18, 0]) rotate([0, 0, 180]) dd_bldg_block(seed = 25, L = 14, D = 12, floors = 1);
-translate([50, -18.5, 0]) rotate([0, 0, 180]) dd_bldg_block(seed = 26, L = 13, D = 12, floors = 2);
+translate([50, -18.5, 0]) rotate([0, 0, 180]) dd_bldg_block(seed = 26, L = 13, D = 12, floors = 1);
 
 // 街坊内部停车场（把"街坊背面"变成有用途的开阔战斗场）
 translate([-34, 38, 0]) dd_ground_lot(L = 52, D = 26, seed = 31, bands = 2);
@@ -178,7 +178,7 @@ translate([62, -54, 0]) rotate([0, 0, 90]) dd_prop_hedge(len = 18, h = 1.3, seed
 // ================= 教堂区与西部商业（x -130..-65） =================
 
 translate([-117, 0, 0]) dt_shops(n = 3, seed = 81, step = 18, fmax = 2);
-translate([-70, -14, 0]) rotate([0, 0, 180]) dd_bldg_block(seed = 82, L = 15, D = 12, floors = 2);
+translate([-70, -14, 0]) rotate([0, 0, 180]) dd_bldg_block(seed = 82, L = 15, D = 12, floors = 1);
 translate([-96, -16, 0]) rotate([0, 0, 180]) dd_bldg_block(seed = 83, L = 14, D = 11, floors = 1);
 translate([-112, -34, 0]) dd_ground_lot(L = 30, D = 18, seed = 84, bands = 2);
 lay_scatter(6, -124, -100, -40, -28, seed = 85)
@@ -243,7 +243,7 @@ lay_scatter(10, -196, -70, 84, 90, seed = 143)
 
 // ================= 学校（x 65..130, y -116..-58） =================
 
-translate([98, -100, 0]) dd_bldg_block(seed = 151, L = 46, D = 14, floors = 2);
+translate([98, -100, 0]) dd_bldg_block(seed = 151, L = 46, D = 14, floors = 1);
 translate([98, -78, 0]) dd_ground_lot(L = 52, D = 20, seed = 152, bands = 2);
 translate([76, -70, 0]) rotate([0, 0, 4]) dd_veh_bus(seed = 153);
 translate([76, -76, 0]) rotate([0, 0, -3]) dd_veh_bus(seed = 154);
@@ -290,7 +290,7 @@ translate([98, 62, 0]) dd_ground_track(L = 52, W = 3.0, seed = 183);
 // ================= 诊所与药房街坊（x 65..130, y -58..0） =================
 // 主街南侧的救护据点：分诊帐篷 + 隔离墩 + 救护车，是全图第二个"人类还在抵抗"的点。
 
-translate([98, -22, 0]) rotate([0, 0, 180]) dd_bldg_block(seed = 401, L = 32, D = 14, floors = 2);
+translate([98, -22, 0]) rotate([0, 0, 180]) dd_bldg_block(seed = 401, L = 32, D = 14, floors = 1);
 translate([98, -6, 0]) dd_ground_concrete(L = 40, D = 12, seed = 402);
 translate([98, -42, 0]) dd_ground_lot(L = 44, D = 18, seed = 403, bands = 2);
 translate([82, -9, 0]) rotate([0, 0, 174]) dd_veh_van(seed = 404);
@@ -322,7 +322,7 @@ translate([162, 22, 0]) dd_bldg_motel(seed = 191, units = 8);
 translate([162, 10, 0]) dd_ground_lot(L = 40, D = 12, seed = 192, bands = 1);
 lay_scatter(6, 146, 180, 8, 14, seed = 193)
     lay_pick($seed) { dd_veh_sedan(seed = $seed); dd_veh_pickup(seed = $seed); dd_veh_van(seed = $seed); }
-translate([138, 44, 0]) dd_bldg_block(seed = 194, L = 14, D = 11, floors = 2);
+translate([138, 44, 0]) dd_bldg_block(seed = 194, L = 14, D = 11, floors = 1);
 translate([176, 46, 0]) dd_bldg_house(seed = 195, L = 10, D = 8);
 translate([160, -22, 0]) dd_ground_lot(L = 54, D = 26, seed = 196, bands = 3);    // 二手车行
 lay_scatter(16, 136, 184, -32, -12, seed = 197)

@@ -81,7 +81,7 @@ void Brotato3DGameInstance::UpdateWeapons(double deltaSeconds)
             const float distance = DistanceXZ(enemy.worldPos, player_.worldPos);
             if (distance <= range &&
                 distance < bestDistance &&
-                !IsSegmentBlockedByExtractionVehicle(player_.worldPos, enemy.worldPos, 0.05f))
+                !IsSegmentBlocked(player_.worldPos, enemy.worldPos, 0.05f))
             {
                 bestDistance = distance;
                 target = &enemy;
@@ -100,7 +100,7 @@ void Brotato3DGameInstance::UpdateWeapons(double deltaSeconds)
             Brotato3D::FEnemyRuntime& focus = enemies_[weapon.focusTag - 1];
             const float focusDistance = DistanceXZ(focus.worldPos, player_.worldPos);
             if (focus.alive && focusDistance <= range && focusDistance <= bestDistance + FocusFireSlackMeters &&
-                !IsSegmentBlockedByExtractionVehicle(player_.worldPos, focus.worldPos, 0.05f))
+                !IsSegmentBlocked(player_.worldPos, focus.worldPos, 0.05f))
             {
                 target = &focus;
             }
@@ -200,7 +200,7 @@ void Brotato3DGameInstance::UpdateProjectiles(double deltaSeconds)
                           std::abs(projectile.worldPos.z) > arenaHalfExtent_.y + 1.0f;
 
         if (!deactivate &&
-            IsSegmentBlockedByExtractionVehicle(projectile.lastWorldPos, projectile.worldPos, projectile.radius))
+            IsSegmentBlocked(projectile.lastWorldPos, projectile.worldPos, projectile.radius))
         {
             if (projectile.explosionRadius > 0.0f && projectile.explosionDamage > 0)
             {
@@ -373,7 +373,7 @@ void Brotato3DGameInstance::UpdateEnemyProjectiles(double deltaSeconds)
                           std::abs(projectile.worldPos.z) > arenaHalfExtent_.y + 1.0f;
 
         if (!deactivate &&
-            IsSegmentBlockedByExtractionVehicle(previousPos, projectile.worldPos, projectile.radius))
+            IsSegmentBlocked(previousPos, projectile.worldPos, projectile.radius))
         {
             PushMuzzleFlash(projectile.worldPos, glm::vec3(0.55f, 0.95f, 0.20f));
             deactivate = true;

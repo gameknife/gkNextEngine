@@ -1947,6 +1947,7 @@ namespace Brotato3D
             ImGui::Checkbox(Tr(gameInstance, "settings.shake", "启用屏幕震动").c_str(), &Brotato3D::ScreenShakeEnabled);
             ImGui::Checkbox(Tr(gameInstance, "settings.hp_bars", "显示敌人 HP 条").c_str(), &Brotato3D::ShowEnemyHpBars);
             ImGui::Checkbox(Tr(gameInstance, "settings.gore", "断肢与血迹").c_str(), &Brotato3D::GoreEnabled);
+            ImGui::Checkbox(Tr(gameInstance, "settings.fade_occluders", "遮挡物半透明").c_str(), &Brotato3D::FadeOccluders);
             ImGui::SliderFloat("MasterDifficulty", &Brotato3D::MasterDifficulty, 0.5f, 1.5f, "%.2f");
             Brotato3D::MasterDifficulty = std::clamp(Brotato3D::MasterDifficulty, 0.5f, 1.5f);
             ImGui::Dummy(Scale(0.0f, 20.0f, uiScale));
@@ -1965,6 +1966,7 @@ namespace Brotato3D
                 Brotato3D::ScreenShakeEnabled = true;
                 Brotato3D::ShowEnemyHpBars = true;
                 Brotato3D::GoreEnabled = true;
+                Brotato3D::FadeOccluders = true;
                 Brotato3D::MasterDifficulty = 1.0f;
                 Brotato3D::RefreshBgmVolume();
             }

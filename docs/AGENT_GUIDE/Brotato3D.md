@@ -23,6 +23,7 @@ Brotato3DGameInstance  (类声明集中在 Brotato3DGameInstance.hpp)
    ├── Brotato3DDebrisSystem.cpp     物理碎块池、拾取磁吸、kinematic body 池、竞技场墙体
    ├── Brotato3DEffectSystem.cpp     场景重建(!)、灯光、屏幕震动、撤离巴士、天空过渡
    ├── Brotato3DShopSystem.cpp       商店购买、属性卡应用、被动加成
+   ├── Brotato3DArenaSystem.cpp      从 SCAD 场景提取障碍、流场刷新、僵尸绕障转向、遮挡物淡化
    └── Brotato3DValidation.cpp       brotato3d.validation.* cvar 与 game.* agent 查询
 ```
 
@@ -51,6 +52,8 @@ Brotato3DGameInstance  (类声明集中在 Brotato3DGameInstance.hpp)
 | `Brotato3DZombieVisual.{hpp,cpp}` | 僵尸表现 | `FZombieRigResource`（加载、借 walker 的动作、按部件注入色调材质）、`FZombieRigVisual`（动画层、断肢） |
 | `Brotato3DPlayerRigVisual.{hpp,cpp}` | 主角表现 | `FPlayerRigVisual`：移动混合空间、持枪层、后坐力、冲刺、倾斜；武器挂 `bone_weapon_socket` |
 | `Brotato3DGoreSystem.cpp` | 断肢与血 | `ReactEnemyToDamage`、`SeverEnemyLimb`、血泊贴花环形池 |
+| `Brotato3DArenaNav.{hpp,cpp}` | 阻挡与寻路（纯逻辑，有单测） | `FArenaNav`：0.5 m 阻挡网格、封闭室内填实、圆形推出、视线、就近空位、1 m 流场 |
+| `Brotato3DArenaSystem.cpp` | 障碍与遮挡 | `BuildArenaObstacles`、`ChaseDirection`、`UpdateOccluderFade` |
 | `Brotato3DValidation.cpp` | 自动化验证 | `ConfigureCVars` / `RegisterAgentQueries` |
 | `Brotato3DProjectile.hpp` | 投射物/特效数据 | `FProjectileRuntime`、`FEnemyProjectileRuntime`、`FExpandingRing`、`FLaserBeam`、`FGroundIndicator` |
 | `Brotato3DWeapon.hpp` | 武器数据 | `FWeaponRuntime`（含 `tieredDef` 副本） |
@@ -211,6 +214,28 @@ glm::vec3 Brotato3DGameInstance::ResolveEnemyGroundedPosition(
   玩家以南只有约 8 m 可见），停在玩家侧前方一个车道外、车门朝向玩家；撤离区在车门外（`GetExtractionZonePos`），
   停稳后才计时；驶入途中碾碎车道上的僵尸；车门上方一盏面光源保证黄昏下可读。
 
+### 5.7 建筑阻挡、绕障寻路与遮挡淡化
+
+建筑是实心的，僵尸会绕着走，挡住玩家的东西会变半透明。数据全部来自已加载的 SCAD 场景，不用另外标注：
+
+- **认出障碍**：SCAD 加载器按模块调用给节点命名，`BuildArenaObstacles`（`OnSceneLoaded`）按名字前缀认障碍——
+  `dd_bldg_*`、`dd_veh_*` / `dw_veh_*`、集装箱 / 储罐 / 垃圾箱 / 隔离墩 / 沙袋 / 倒塌风机 / 广告牌、警方路障、路面杂物带、
+  沙漠岩丘与方山（清单在 `Brotato3DArenaSystem.cpp` 的 `blockingModules`）。树、栅栏、绿篱、路灯不挡，场地要留给尸群。
+- **占地 = 膝盖到头顶那一层**：只取障碍几何里与 0.45–1.6 m 高度带相交的三角形，按 XZ 投影光栅化进 0.5 m 网格
+  （竖直的墙投影成线，按边光栅化）。所以雨棚、屋檐、加油站顶棚下面能走，路缘、尸体、血迹、纸片不挡，路边弃车、
+  购物车挡。之后从场地边缘和出生点泛洪，泛不到的空格（建筑室内、封死的院子）一律填实。
+- **碰撞**：玩家（`ResolvePlayerObstacleCollision`）和僵尸（`ResolveEnemyGroundedPosition`，大体型按 0.6 m 处理，
+  Brute 也钻得过小巷）都是圆被推出实心格；冲刺、击退、尸群互推都走这两个入口。刷怪点、出生点落在墙里时就近挪出。
+- **寻路**：每 250 ms 以玩家为中心、±56 m 窗口算一次 Dijkstra 流场（1 m 格，贴墙格加代价，禁止切角），整群僵尸
+  共用。看得见玩家就直扑，看不见就沿流场下坡走，方向平滑转向、身体朝向脚下的路。窗口外直线追击，进窗口后接管。
+  僵尸到接触距离就停步攻击，不往玩家身上挤。奔跑者看见玩家才冲刺，橄榄球员视线通畅才起手冲锋。
+- **视线**：`IsSegmentBlocked` 同时检查撤离巴士和建筑：自动锁定只选看得见的目标，玩家子弹、敌方吐液撞墙即止
+  （火箭撞墙照样爆炸），远程僵尸隔墙不开火。迫击炮是抛射，不受影响。
+- **撤离巴士**的停车点也要落在空地上：车身、车门和玩家走到车门的路都不能被挡，否则换方向 / 换停车距离。
+- **遮挡淡化**：高于 2.6 m 的障碍和树冠，在相机到玩家的视线穿过它（加 0.9 m 余量）时淡到 28% 覆盖率
+  （`RenderComponent::SetMainOpacity` 的屏幕抖动镂空），离开后淡回。设置面板"遮挡物半透明"可关。
+- 城镇约 470 个障碍模块、11% 场地实心；提取耗时 40–50 ms，只在加载场景时做一次。
+
 ---
 
 ## 6. 约定速查
@@ -237,7 +262,8 @@ C# 两版共用；地图本身仍在 SCAD 资产树里，因为它们按相对�
 | 相机 = 目标 + (0, 13, 10)，FOV 60°，target 被 clamp 到 `halfExtent - (32, 38)`，并朝跑动 / 射击方向前瞻 | `OverrideRenderCamera` / `UpdateCameraTracking` | **`halfExtent` 之外永远看不见，往外堆几何是纯浪费**；玩家以南只露约 8 m，以北约 22 m |
 | 世界 `z = -scad_y` | ScadLoader 的 Z-up→Y-up | 相机从 SCAD 的 -y 往 +y 看，**kit 的 front = -y 正对镜头** |
 | 单屏地面 ≈ 66 m (x) x 41 m (y) | 由上面两条推出 | 设计粒度：**每 66x41 m 至少要有一处结构** |
-| 建筑不参与碰撞（只有撤离车是障碍） | `ResolvePlayerObstacleCollision` | 街区的价值是**可读的规划 + 方位地标**，不是阻挡 |
+| 建筑、车辆等是实心障碍（按模块名认，见 5.7），树 / 栅栏 / 绿篱不挡 | `BuildArenaObstacles` | 街道和空地就是战场：**别把路口、街道堵死**；新件要挡路就把前缀加进 `blockingModules` |
+| 建筑一律单层（≈4 m），仓库墙高 4.4 m；水塔、筒仓、信号塔、教堂尖顶是细高地标 | 俯视镜头 | 6 m 以上的墙会整片挡住街道；地标挡住玩家时会被淡化 |
 
 写地图的方法（三张图都按这个来的，改图/加图照抄）：
 
@@ -277,7 +303,8 @@ gnb.bat build Brotato3D      # Windows
 gnb validate --script assets/agentscripts/brotato3d-zombies.agentscript.json     # 九种僵尸特写、断肢、爬行、战斗、三种死法
 gnb validate --script assets/agentscripts/brotato3d-extraction.agentscript.json  # 黄昏、巴士碾压、停车、上车、进商店
 gnb validate --script assets/agentscripts/brotato3d-arenas.agentscript.json      # 三张竞技场依次加载并开打
-gkNextUnitTests "[Brotato3D]"                                                    # 角色资产契约（共用骨架、必需动作 / 骨骼）
+gnb validate --script assets/agentscripts/brotato3d-obstacles.agentscript.json   # 撞墙停住、遮挡淡化、尸群绕楼且无一穿墙
+gkNextUnitTests "[Brotato3D]"                                                    # 角色资产契约 + FArenaNav（封闭填实、推出、视线、流场绕楼）
 ```
 
 `brotato3d.validation.*` cvar 能开局、刷九种僵尸一排 / 一圈尸群、断肢、全杀、清场、入夜、上车、切竞技场、

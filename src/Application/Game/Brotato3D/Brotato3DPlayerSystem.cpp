@@ -230,7 +230,7 @@ void Brotato3DGameInstance::UpdatePlayer(double deltaSeconds)
         const float distance = DistanceXZ(enemy.worldPos, player_.worldPos);
         if (distance <= bestRange &&
             distance < bestDistance &&
-            !IsSegmentBlockedByExtractionVehicle(player_.worldPos, enemy.worldPos, 0.05f))
+            !IsSegmentBlocked(player_.worldPos, enemy.worldPos, 0.05f))
         {
             bestDistance = distance;
             aimTarget = &enemy;

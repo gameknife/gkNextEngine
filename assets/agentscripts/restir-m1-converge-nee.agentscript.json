@@ -13,7 +13,7 @@
   "steps": [
     { "type": "wait-until", "query": "engine.status", "op": "eq", "value": "Running", "timeoutMs": 20000 },
     { "type": "cvar", "name": "r.restir.enable", "set": false },
-    { "type": "cvar", "name": "r.temporalFrames", "set": 1024 },
+    { "type": "cvar", "name": "r.temporalFrames", "set": 0 },
     { "type": "wait-frames", "n": 20 },
     { "type": "log", "message": "Bias reference: classic NEE accumulated 600 frames, static camera" },
     { "type": "wait-frames", "n": 600 },

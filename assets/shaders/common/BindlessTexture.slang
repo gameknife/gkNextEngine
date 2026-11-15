@@ -115,15 +115,21 @@ namespace Bindless
     public static const int RT_SHADER_TIMER = 8;
     public static const int RT_SCENE_COLOR = 9;
     public static const int RT_PREV_DEPTHBUFFER = 10;
-    // Slot 11 is intentionally unused; keep later slots stable for the bindless layout.
+    // Previous frame's RT_HISTORY_AGE, copied alongside RT_OBJECTID_1 at the end of the view.
+    public static const int RT_HISTORY_AGE_PREV = 11;
     public static const int RT_SINGLE_SPECULAR = 12;
     // material index + effective metalness for BSDF-aware ReSTIR reconstruction
     public static const int RT_BSDF_DATA = 13;
-    public static const int RT_MOTIONMOMENT = 14;
+    // Frames this pixel's reprojected history has stayed valid (0 = just disoccluded).
+    // Written by Core.SurfaceBuild; see Shader/SurfaceBuffer.slang.
+    public static const int RT_HISTORY_AGE = 14;
     public static const int RT_DIFFUSE_HITDIST = 15;
     public static const int RT_SPECULAR_HITDIST = 16;
     public static const int RT_SPECULAR_ALBEDO = 17;
     public static const int RT_VISIBILITY_TRIANGLE = 18;
+    // Ping-pong planes of Process.DisocclusionFilter (render resolution, current frame only).
+    public static const int RT_DISOCCLUSION_PING = 19;
+    public static const int RT_DISOCCLUSION_PONG = 20;
 
     public static const int RT_VISIBILITY_INSTANCE_DRAW = 23;
     public static const int RT_VISIBILITY_TRIANGLE_DRAW = 24;

@@ -39,6 +39,20 @@ namespace Surface
     // Specular albedo is material data that only the tracing renderers consume, so a light
     // consumer (SoftwareModernNoAmbient) does not pay for it.
     public static const uint kBuildWriteSpecularAlbedo = 1u << 0u;
+    // RT_HISTORY_AGE saturates here. Background pixels are written at the cap: the sky has no
+    // stochastic lighting to reconverge.
+    public static const uint kHistoryAgeMax = 255u;
+
+    // RT_HISTORY_AGE_PREV value meaning "no history". The host clears the previous-age plane to it
+    // whenever the view's temporal history is invalidated (camera cut, resize, renderer or scene
+    // change, reset), so every surface restarts at age 0 exactly when the upscaler and ReSTIR drop
+    // their history. Must equal kSurfaceHistoryAgeInvalid in SurfaceBufferLayout.hpp.
+    public static const uint kHistoryAgeInvalid = 0xFFFFu;
+
+    // Instance identity bits of a Common.EncodeObjectId payload (valid flag + instance index; the
+    // selection/hover flags are presentation state and must not reset history). Must equal
+    // OBJECT_ID_FLAG_VALID | OBJECT_ID_INSTANCE_MASK in common/Interfaces.slang.
+    static const uint kObjectIdIdentityMask = 0x80000000u | 0x07FFFFFFu;
 
     // --- Payloads -----------------------------------------------------------------------------
 
@@ -167,6 +181,22 @@ namespace Surface
         return Bindless.GetStorageTexture<uint2>(Bindless.ViewRT(viewBase, Bindless.RT_BSDF_DATA));
     }
 
+    RWTexture2D<uint> HistoryAgePlane(uint viewBase)
+    {
+        return Bindless.GetStorageTexture<uint>(Bindless.ViewRT(viewBase, Bindless.RT_HISTORY_AGE));
+    }
+
+    RWTexture2D<uint> HistoryAgePrevPlane(uint viewBase)
+    {
+        return Bindless.GetStorageTexture<uint>(
+            Bindless.ViewRT(viewBase, Bindless.RT_HISTORY_AGE_PREV));
+    }
+
+    RWTexture2D<uint> ObjectIdPrevPlane(uint viewBase)
+    {
+        return Bindless.GetStorageTexture<uint>(Bindless.ViewRT(viewBase, Bindless.RT_OBJECTID_1));
+    }
+
     public uint2 Dimensions(uint viewBase)
     {
         return Bindless.GetStorageTextureDimensions<float>(
@@ -241,6 +271,18 @@ namespace Surface
         return DepthPlane(viewBase)[pixel];
     }
 
+    public uint LoadObjectId(uint viewBase, int2 pixel)
+    {
+        return ObjectIdPlane(viewBase)[pixel];
+    }
+
+    // The part of an object id that names the surface (valid flag + instance); selection and
+    // hover flags are presentation state.
+    public uint ObjectIdentity(uint objectId)
+    {
+        return objectId & kObjectIdIdentityMask;
+    }
+
     public uint LoadMaterialId(uint viewBase, int2 pixel)
     {
         return BsdfPlane(viewBase)[pixel].x;
@@ -261,5 +303,75 @@ namespace Surface
     public float4 LoadAlbedo(uint viewBase, int2 pixel)
     {
         return AlbedoPlane(viewBase)[pixel];
+    }
+
+    // --- History age --------------------------------------------------------------------------
+    // RT_HISTORY_AGE counts the frames a pixel's reprojected history has stayed valid: 0 right
+    // after a disocclusion, +1 per frame while the surface under it keeps reprojecting onto
+    // itself, saturating at kHistoryAgeMax. It is geometry-only bookkeeping (like RT_OBJECTID_1),
+    // never color. Whoever writes the surface (Core.SurfaceBuild, or the PathTracing primary hit,
+    // which resolves its own surface) reads the previous frame's age and object id and writes the
+    // current age to a separate plane; the end-of-view history copy then moves it into
+    // RT_HISTORY_AGE_PREV.
+
+    // motionPixels is this pixel's render-pixel motion (previous - current).
+    public uint ReprojectHistoryAge(uint viewBase, int2 pixel, uint2 size, uint objectId,
+                                    float2 motionPixels)
+    {
+        // Bilinear footprint of the previous-frame position, in texel-centre space. Only taps that
+        // actually carry weight are tested, so a static camera does not read across silhouettes.
+        const float2 prevPosition = float2(pixel) + motionPixels;
+        const int2 base = int2(floor(prevPosition));
+        const float2 f = prevPosition - float2(base);
+        const float4 weights = float4(
+            (1.0f - f.x) * (1.0f - f.y), f.x * (1.0f - f.y), (1.0f - f.x) * f.y, f.x * f.y);
+
+        const uint identity = ObjectIdentity(objectId);
+        float matchedWeight = 0.0f;
+        float nearestWeight = 0.0f;
+        uint nearestAge = kHistoryAgeInvalid;
+        [unroll]
+        for (uint i = 0u; i < 4u; ++i)
+        {
+            if (weights[i] <= 1.0e-3f)
+            {
+                continue;
+            }
+            const int2 tap = base + int2(int(i & 1u), int(i >> 1u));
+            if (any(tap < int2(0, 0)) || any(tap >= int2(size)))
+            {
+                continue;
+            }
+            if (ObjectIdentity(ObjectIdPrevPlane(viewBase)[tap]) != identity)
+            {
+                continue;
+            }
+            matchedWeight += weights[i];
+            // The age is inherited from the nearest matching tap, not the footprint minimum. A
+            // minimum is a min-filter applied once per frame: under any sub-pixel motion the zero
+            // ages at a silhouette erode inward by a pixel a frame, until a moving object or a
+            // panning view reads as freshly disoccluded everywhere. Validity stays conservative
+            // through the coverage test below.
+            if (weights[i] > nearestWeight)
+            {
+                nearestWeight = weights[i];
+                nearestAge = HistoryAgePrevPlane(viewBase)[tap];
+            }
+        }
+        // Most of the footprint must have been this same instance last frame; anything less is a
+        // disocclusion (or the surface came from off-screen). A cleared history matches nothing.
+        return matchedWeight >= 0.5f && nearestAge < kHistoryAgeInvalid
+            ? min(nearestAge + 1u, kHistoryAgeMax)
+            : 0u;
+    }
+
+    public void StoreHistoryAge(uint viewBase, int2 pixel, uint age)
+    {
+        HistoryAgePlane(viewBase)[pixel] = age;
+    }
+
+    public uint LoadHistoryAge(uint viewBase, int2 pixel)
+    {
+        return HistoryAgePlane(viewBase)[pixel];
     }
 }

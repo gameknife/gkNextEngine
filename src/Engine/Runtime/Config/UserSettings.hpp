@@ -32,6 +32,11 @@ struct UserSettings final
     float TemporalUpscalerPostFilterLumaSigma = 0.10f;
     float TemporalUpscalerFireflySigma = 2.5f;
     bool ComposeFireflyClamp = true;
+    // Process.DisocclusionFilter: spatial filter on pixels whose upscaler history is younger than
+    // DisocclusionFilterFrames (RT_HISTORY_AGE). Off = the pass does not run at all.
+    bool DisocclusionFilter = true;
+    uint32_t DisocclusionFilterFrames = 20;
+    uint32_t DisocclusionFilterPasses = 5;
     bool FrameGeneration = false;
     uint32_t FrameGenerationMultiplier = 2;
     uint32_t FrameGenerationFrameLimitFps = 0;
@@ -62,7 +67,9 @@ struct UserSettings final
     bool BorderlessFullscreen = false;
 
     // Performance
+    // History age below which a pixel is treated as disoccluded (RT_HISTORY_AGE).
     uint32_t TemporalFrames;
+    uint32_t LowHistorySampleScale = 4;
 
     // SwModernNoAmbient screen-space sky occlusion.
     bool GTAOEnable = true;

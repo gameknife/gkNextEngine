@@ -53,7 +53,12 @@ namespace Vulkan::PathTracing
                 {Assets::Bindless::RT_NORMAL, PipelineCommon::ERenderStage::Compute, PipelineCommon::EResourceAccess::ShaderRead},
                 {Assets::Bindless::RT_OBJECTID_0, PipelineCommon::ERenderStage::Compute, PipelineCommon::EResourceAccess::ShaderRead},
                 {Assets::Bindless::RT_MOTIONVECTOR, PipelineCommon::ERenderStage::Compute, PipelineCommon::EResourceAccess::ShaderRead},
-                {Assets::Bindless::RT_MOTIONMOMENT, PipelineCommon::ERenderStage::Compute, PipelineCommon::EResourceAccess::ShaderRead},
+                // History age: read from Core.SurfaceBuild, or derived and written here when the
+                // primary hit resolves its own surface (reprojected through the previous planes).
+                {Assets::Bindless::RT_HISTORY_AGE, PipelineCommon::ERenderStage::Compute,
+                 PipelineCommon::EResourceAccess::ShaderRead | PipelineCommon::EResourceAccess::ShaderWrite},
+                {Assets::Bindless::RT_HISTORY_AGE_PREV, PipelineCommon::ERenderStage::Compute, PipelineCommon::EResourceAccess::ShaderRead},
+                {Assets::Bindless::RT_OBJECTID_1, PipelineCommon::ERenderStage::Compute, PipelineCommon::EResourceAccess::ShaderRead},
                 {Assets::Bindless::RT_BSDF_DATA, PipelineCommon::ERenderStage::Compute, PipelineCommon::EResourceAccess::ShaderRead},
                 {Assets::Bindless::RT_ALBEDO, PipelineCommon::ERenderStage::Compute,
                  PipelineCommon::EResourceAccess::ShaderRead | PipelineCommon::EResourceAccess::ShaderWrite},

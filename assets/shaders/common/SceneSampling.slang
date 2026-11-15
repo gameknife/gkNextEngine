@@ -83,32 +83,27 @@ namespace Common
         return rayOrigin + rayDir * tEntry;
     }
 
-    public float2 CalculateMotionVector(in UniformBufferObject Camera, NodeProxy node, Vertex v, int2 ipos )
+    // Pure function: previous-minus-current unjittered position in half-NDC units (callers scale
+    // by the render size to get render-pixel motion). History validity lives in RT_HISTORY_AGE,
+    // which Core.SurfaceBuild derives from this vector and the previous frame's object ids.
+    public float2 CalculateMotionVector(in UniformBufferObject Camera, NodeProxy node, Vertex v)
     {
-        // motion info
         float4 currFrameHPos = mul(Camera.ViewProjectionUnJit, float4(v.Position, 1));
         float2 currfpos = currFrameHPos.xy / currFrameHPos.w * 0.5;
         float4 prevFrameHPos = mul(mul(Camera.PrevViewProjectionUnJit, node.combinedPrevTS), float4(v.Position, 1));
         float2 prevfpos = prevFrameHPos.xy / prevFrameHPos.w * 0.5;
+        return prevfpos - currfpos;
+    }
 
-        let MotionMoment = Bindless.GetViewStorageTexture<uint>(Bindless.RT_MOTIONMOMENT);
-        
-
-        float4 prevPos = mul(node.combinedPrevTS, float4(v.Position, 1));
-        if( distance(v.Position.xyz, prevPos.xyz) > 0.02)
-        {
-            MotionMoment[ipos] = Bindless.GetGpuscene().Camera[0].TemporalFrames;
-        }
-        else
-        {
-            MotionMoment[ipos] = MotionMoment[ipos] > 0 ? MotionMoment[ipos] - 1 : 0;
-        }
-
-        float2 motion = prevfpos - currfpos;
-        // Some upscalers require moving-object vectors to be explicitly marked invalid.
-        return Camera.UpscalerInvalidMotionMask && !Camera.RayReconstruction && MotionMoment[ipos] > 0
-            ? float2(3.40282346638528859811704183484516925440e38f)
-            : motion;
+    // Samples-per-pixel multiplier for a freshly disoccluded pixel: its upscaler history is gone,
+    // so for the first Camera.TemporalFrames frames of history age (RT_HISTORY_AGE) it takes
+    // Camera.LowHistorySampleScale times the samples. TemporalFrames 0 disables the boost.
+    public int DisocclusionSampleMultiplier(uint historyAge)
+    {
+        let Camera = Bindless.GetGpuscene().Camera[0];
+        return historyAge < Camera.TemporalFrames
+            ? int(clamp(Camera.LowHistorySampleScale, 1u, 16u))
+            : 1;
     }
 
     public float2 CalculateSkyMotionVector(in UniformBufferObject Camera, float3 worldRayDirection)

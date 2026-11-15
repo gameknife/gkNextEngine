@@ -416,12 +416,6 @@ namespace Vulkan
                 Rendering::Upscaler::GetUpscalerTypeInfo(
                     static_cast<uint32_t>(activeUpscalerType_)).requiresRayReconstruction;
         }
-        bool RequiresInvalidMotionMask() const
-        {
-            return temporalSuperResolutionActive_ &&
-                Rendering::Upscaler::GetUpscalerTypeInfo(
-                    static_cast<uint32_t>(activeUpscalerType_)).requiresInvalidMotionMask;
-        }
         uint32_t TemporalJitterFrameCount() const;
         uint32_t EffectiveSuperResolutionMode() const { return effectiveSuperResolutionMode_; }
         Rendering::Upscaler::FFrameGenerationState GetFrameGenerationState() const;
@@ -931,6 +925,7 @@ namespace Vulkan
         void BakeAmbientCubeCascade(VkCommandBuffer commandBuffer, uint32_t imageIndex, bool useHardware);
         void DispatchVisualDebugger(VkCommandBuffer commandBuffer, uint32_t imageIndex);
         void CopyObjectIdHistory(VkCommandBuffer commandBuffer);
+        void ResetHistoryAgeIfInvalidated(VkCommandBuffer commandBuffer, RenderView& view);
         void DrawWireframeOverlay(VkCommandBuffer commandBuffer, uint32_t imageIndex);
 
         // Acceleration structure lifecycle

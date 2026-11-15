@@ -18,9 +18,8 @@ namespace Vulkan::PipelineCommon
         const char* semantic;
     };
 
-    // Everything Core.SurfaceBuild writes. RT_MOTIONMOMENT is written indirectly, as the
-    // read-modify-write side effect inside Common.CalculateMotionVector; ownership of that side
-    // effect moves to Build along with the motion vector itself, so it belongs in this table.
+    // Everything Core.SurfaceBuild writes. RT_HISTORY_AGE is derived from the motion vector and
+    // the previous frame's RT_OBJECTID_1 / RT_HISTORY_AGE_PREV, which Build only reads.
     inline constexpr std::array<FSurfacePlaneDesc, 7> kPrimarySurfacePlanes = {{
         {Assets::Bindless::RT_PREV_DEPTHBUFFER, VK_FORMAT_R32_SFLOAT, "NDC depth"},
         {Assets::Bindless::RT_NORMAL, VK_FORMAT_R16G16B16A16_SFLOAT, "xyz world normal, w roughness"},
@@ -28,7 +27,7 @@ namespace Vulkan::PipelineCommon
         {Assets::Bindless::RT_OBJECTID_0, VK_FORMAT_R32_UINT, "encoded object id"},
         {Assets::Bindless::RT_MOTIONVECTOR, VK_FORMAT_R32G32_SFLOAT, "render-pixel motion"},
         {Assets::Bindless::RT_BSDF_DATA, VK_FORMAT_R32G32_UINT, "x material id, y f16 metalness | flags"},
-        {Assets::Bindless::RT_MOTIONMOMENT, VK_FORMAT_R16_UINT, "motion discontinuity counter"},
+        {Assets::Bindless::RT_HISTORY_AGE, VK_FORMAT_R16_UINT, "frames of valid reprojected history"},
     }};
 
     // Written only when a consumer asks for it (kSurfaceBuildWriteSpecularAlbedo).
@@ -55,4 +54,9 @@ namespace Vulkan::PipelineCommon
 
     // GPUScene.CustomData1 bits for Core.SurfaceBuild; must equal Surface.kBuildWrite*.
     inline constexpr uint32_t kSurfaceBuildWriteSpecularAlbedo = 1u << 0u;
+
+    // RT_HISTORY_AGE saturation; must equal Surface.kHistoryAgeMax.
+    inline constexpr uint32_t kSurfaceHistoryAgeMax = 255u;
+    // RT_HISTORY_AGE_PREV "no history" sentinel; must equal Surface.kHistoryAgeInvalid.
+    inline constexpr uint32_t kSurfaceHistoryAgeInvalid = 0xFFFFu;
 }

@@ -95,6 +95,11 @@ namespace Vulkan
         mutable bool resetHistory = true;
         mutable uint64_t historyGeneration = 1;
         mutable EHistoryInvalidationReason historyInvalidationReason = EHistoryInvalidationReason::Initial;
+
+        // historyGeneration RT_HISTORY_AGE_PREV was last valid for. On a mismatch the base
+        // renderer clears that plane to "no history" before the view renders, so every surface
+        // restarts at age 0 (VulkanBaseRenderer::ResetHistoryAgeIfInvalidated).
+        mutable uint64_t historyAgeGeneration = 0;
     };
 
     // Description used to create a RenderView.

@@ -120,6 +120,9 @@ float SampleBilinear(RWTexture2D<float> image, float2 uv)
     Bindless.GetStorageTexture<float4>(pushConsts.OutputIndex)[ipos] = float4(color, 1.0);} \
 }
 
+// RT_HISTORY_AGE as a ramp: red = just disoccluded (age 0), yellow = 16, green = 32+ frames.
+#define DRAWHISTORYAGE(IMAGE, quadx, quady, divider, ipos, isize) {                                                          int2 uv = int2(0, 0);                                         if (DrawQuad(quadx, quady, divider, ipos, isize, uv)) {                                                                 int2 ssize;                                                   IMAGE.GetDimensions(ssize.x, ssize.y);     const float t = saturate(float(IMAGE[uv * ssize / isize]) / 32.0f);     Bindless.GetStorageTexture<float4>(pushConsts.OutputIndex)[ipos] = float4(saturate(2.0f - 2.0f * t), saturate(2.0f * t), 0.0f, 1.0);} }
+
 #define DRAWVISIBILITYINSTANCE(quadx, quady, divider, ipos, isize) {                                                  \
         int2 uv = int2(0, 0);                                 \
         if (DrawQuad(quadx, quady, divider, ipos, isize, uv)) {                                                     \
@@ -211,5 +214,5 @@ void main(uint3 DTid : SV_DispatchThreadID)
     DRAW(Bindless.GetStorageTexture<float4>(Bindless.ViewRT(pushConsts._ViewHdr_CustomData0, Bindless.RT_DIFFUSE_HITDIST)), 0, 3, 4, ipos, isize, 0.005);
     DRAWVISIBILITYINSTANCE(1, 3, 4, ipos, isize);
     DRAWVISIBILITYTRIANGLE(2, 3, 4, ipos, isize);
-    DRAWINT(Bindless.GetStorageTexture<uint>(Bindless.ViewRT(pushConsts._ViewHdr_CustomData0, Bindless.RT_MOTIONMOMENT)), 3, 3, 4, ipos, isize);
+    DRAWHISTORYAGE(Bindless.GetStorageTexture<uint>(Bindless.ViewRT(pushConsts._ViewHdr_CustomData0, Bindless.RT_HISTORY_AGE)), 3, 3, 4, ipos, isize);
 }

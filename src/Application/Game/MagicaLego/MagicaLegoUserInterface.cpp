@@ -300,6 +300,8 @@ void MagicaLegoUserInterface::DrawTitleBar()
                 {
                 case 1:
                     PushLayout(0x0);
+                    // Above the history-age cap: every pixel takes the disocclusion sample boost
+                    // for the whole capture.
                     GetGameInstance()->GetEngine().GetUserSettings().TemporalFrames = 512;
                     waiting_ = true;
                     waitingText_ = "Rendering...";

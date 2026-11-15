@@ -766,6 +766,7 @@ public struct FPathTracingRenderer{
                 // stays in the lighting resolve set while the other surface RTs leave it.
                 OutAlbedo.Store(pixel_, float4(1, 1, 1, 1));
             }
+            primaryHistoryAge_ = Surface.kHistoryAgeMax;
             if (writeSurface)
             {
                 OutMotionVector.Store(pixel_, float4(skyMotionPixels, 0, 0));
@@ -773,6 +774,7 @@ public struct FPathTracingRenderer{
                 OutObjectID.Store(pixel_, 0);
                 OutSpecularAlbedo.Store(pixel_, float4(0, 0, 0, 0));
                 OutBSDFData.Store(pixel_, uint2(Surface.kInvalidMaterialId, 0u));
+                Surface.StoreHistoryAge(Bindless.GetGpuscene().CustomData0, pixel_, primaryHistoryAge_);
             }
 
             return false;
@@ -786,6 +788,8 @@ public struct FPathTracingRenderer{
             primaryRoughness_ = surfaceSample.Roughness;
             primaryMetalness_ = surfaceSample.Metalness;
             primaryMotionPixels_ = surfaceSample.MotionPixels;
+            // Core.SurfaceBuild already derived the age; this is a plain cross-pass read.
+            primaryHistoryAge_ = Surface.LoadHistoryAge(Bindless.GetGpuscene().CustomData0, pixel_);
             outputContext = BuildBSDFContextFromSurface(
                 hitPrimaryVertex_.Position, hitPrimaryVertex_.Normal, primaryRayDir_, material,
                 primaryAlbedo_.rgb, primaryRoughness_, primaryMetalness_);
@@ -794,7 +798,7 @@ public struct FPathTracingRenderer{
         {
             float4 clipPos = mul(Camera.ViewProjectionUnJit, float4(hitPrimaryVertex_.Position, 1.0));
             float ndcDepth = clipPos.z / clipPos.w;
-            float2 motion = Common.CalculateMotionVector(Camera, hitPrimaryNode_, hitPrimaryVertex_, pixel_);
+            float2 motion = Common.CalculateMotionVector(Camera, hitPrimaryNode_, hitPrimaryVertex_);
             primaryMotionPixels_ = motion * size_;
             float4 gbuffer = float4(0, 0, 0, 0);
             Common.FetchGBuffer(hitPrimaryVertex_, material, hitPrimaryNode_, primaryRayDir_, primaryAlbedo_, gbuffer);
@@ -809,7 +813,8 @@ public struct FPathTracingRenderer{
                 const bool hovered = (hitPrimaryNode_.reserved2 & 1u) != 0;
                 const bool locked = (hitPrimaryNode_.reserved2 & 2u) != 0;
                 const bool danger = (hitPrimaryNode_.reserved2 & 4u) != 0;
-                OutObjectID.Store(pixel_, Common.EncodeObjectId(hitPrimaryNode_.instanceId, selected, hovered, locked, danger));
+                const uint objectId = Common.EncodeObjectId(hitPrimaryNode_.instanceId, selected, hovered, locked, danger);
+                OutObjectID.Store(pixel_, objectId);
                 // The engine-wide upscaler contract stores motion in render-pixel
                 // units. Streamline and FidelityFX can therefore both use a 1:1
                 // motion-vector scale.
@@ -820,6 +825,13 @@ public struct FPathTracingRenderer{
                 OutBSDFData.Store(pixel_, uint2(hitPrimaryVertex_.MaterialIndex,
                                                Surface.PackBsdfWord(outputContext.Metalness,
                                                                     Common.MakeSurfaceFlags(material))));
+                // This pass resolves its own surface, so it also owns the history age (the same
+                // reprojection Core.SurfaceBuild runs). The age is kept in renderer state: the
+                // sample count below must not read back what this invocation just wrote.
+                const uint viewBase = Bindless.GetGpuscene().CustomData0;
+                primaryHistoryAge_ = Surface.ReprojectHistoryAge(
+                    viewBase, pixel_, size_, objectId, primaryMotionPixels_);
+                Surface.StoreHistoryAge(viewBase, pixel_, primaryHistoryAge_);
             }
         }
 
@@ -867,6 +879,8 @@ public struct FPathTracingRenderer{
     // this state must come from the renderer, never from the output textures.
     public uint GetPrimaryInstanceId() { return hitPrimaryNode_.instanceId; }
     public float2 GetPrimaryMotionPixels() { return primaryMotionPixels_; }
+    // Frames of valid reprojected history at the primary hit (RT_HISTORY_AGE semantics).
+    public uint GetPrimaryHistoryAge() { return primaryHistoryAge_; }
 
     // Debug write that only replaces the lighting color and leaves the real G-buffer
     // (object id, motion, normals) intact. Debug overlays that run every frame must use
@@ -931,6 +945,9 @@ public struct FPathTracingRenderer{
         primaryRoughness_ = 0.0f;
         primaryMetalness_ = 0.0f;
         hasPrimarySurface_ = false;
+        // Treated as converged unless PrimaryHit derives a real age (e.g. the SHARC update pass,
+        // which writes no outputs, never boosts its sample count).
+        primaryHistoryAge_ = Surface.kHistoryAgeMax;
 
         OutAlbedo = Bindless.GetViewStorageTexture<float4>(Bindless.RT_ALBEDO);
         OutNormal = Bindless.GetViewStorageTexture<float4>(Bindless.RT_NORMAL);
@@ -963,6 +980,7 @@ public struct FPathTracingRenderer{
     float primaryRoughness_;
     float primaryMetalness_;
     bool hasPrimarySurface_;
+    uint primaryHistoryAge_;
 
     RWTexture2D<float4> OutAlbedo;
     RWTexture2D<float4> OutNormal;

@@ -11,6 +11,7 @@
 #include "Engine/Assets/GPU/UniformBuffer.hpp"
 #include "Engine/Options.hpp"
 #include "Engine/Rendering/PipelineCommon/CommonComputePipeline.hpp"
+#include "Engine/Rendering/PipelineCommon/SurfaceBufferLayout.hpp"
 #include "Engine/Rendering/PipelineCommon/VisibilityBufferLayout.hpp"
 #include "Engine/Rendering/Shadow/ShadowMapPass.hpp"
 #include "Engine/Runtime/Components/RenderComponent.hpp"
@@ -773,35 +774,75 @@ commandBuffer, gpuScene, 0, indirectDrawBatchCount, maxSceneTriangles);
             "visual debugger present");
     }
 
+    // Whenever the view's temporal history is invalidated, the previous frame's ages describe a
+    // history the upscaler and ReSTIR have just discarded. Clearing RT_HISTORY_AGE_PREV to the
+    // "no history" sentinel makes the next age build restart every surface at 0, whichever pass
+    // writes it (Core.SurfaceBuild or the PathTracing primary hit).
+    void VulkanBaseRenderer::ResetHistoryAgeIfInvalidated(VkCommandBuffer commandBuffer, RenderView& view)
+    {
+        const FViewRenderState& state = view.State();
+        if (state.historyAgeGeneration == state.historyGeneration)
+        {
+            return;
+        }
+        state.historyAgeGeneration = state.historyGeneration;
+
+        using PipelineCommon::ERenderStage;
+        using PipelineCommon::EResourceAccess;
+        TransitionActiveViewImages(commandBuffer, {
+            {Assets::Bindless::RT_HISTORY_AGE_PREV, ERenderStage::Transfer,
+             EResourceAccess::TransferWrite, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
+        }, "history age reset");
+        VkClearColorValue clearValue{};
+        clearValue.uint32[0] = PipelineCommon::kSurfaceHistoryAgeInvalid;
+        const VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        vkCmdClearColorImage(commandBuffer,
+            GetViewStorageImage(Assets::Bindless::RT_HISTORY_AGE_PREV)->GetImage().Handle(),
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &range);
+    }
+
+    // Copies this frame's object ids and history age into their previous-frame slots. The two
+    // travel together: Core.SurfaceBuild reprojects the age through the object ids, so one without
+    // the other would pair an age with the wrong surface.
     void VulkanBaseRenderer::CopyObjectIdHistory(VkCommandBuffer commandBuffer)
     {
         SCOPED_GPU_TIMER("objectid copy");
+        using PipelineCommon::ERenderStage;
+        using PipelineCommon::EResourceAccess;
         TransitionActiveViewImages(commandBuffer, {
-            {Assets::Bindless::RT_OBJECTID_0, PipelineCommon::ERenderStage::Transfer,
-             PipelineCommon::EResourceAccess::TransferRead, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL},
-            {Assets::Bindless::RT_OBJECTID_1, PipelineCommon::ERenderStage::Transfer,
-             PipelineCommon::EResourceAccess::TransferWrite, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
+            {Assets::Bindless::RT_OBJECTID_0, ERenderStage::Transfer,
+             EResourceAccess::TransferRead, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL},
+            {Assets::Bindless::RT_OBJECTID_1, ERenderStage::Transfer,
+             EResourceAccess::TransferWrite, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
+            {Assets::Bindless::RT_HISTORY_AGE, ERenderStage::Transfer,
+             EResourceAccess::TransferRead, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL},
+            {Assets::Bindless::RT_HISTORY_AGE_PREV, ERenderStage::Transfer,
+             EResourceAccess::TransferWrite, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
         }, "object id history copy");
 
-        VkImageCopy copyRegion;
-        copyRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        copyRegion.srcOffset = {0, 0, 0};
-        copyRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        copyRegion.dstOffset = {0, 0, 0};
-        copyRegion.extent = {
-            GetViewStorageImage(Assets::Bindless::RT_OBJECTID_0)->GetImage().Extent().width,
-            GetViewStorageImage(Assets::Bindless::RT_OBJECTID_0)->GetImage().Extent().height, 1};
+        const auto copyPlane = [&](const uint32_t source, const uint32_t destination)
+        {
+            const auto& sourceImage = GetViewStorageImage(source)->GetImage();
+            VkImageCopy copyRegion;
+            copyRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            copyRegion.srcOffset = {0, 0, 0};
+            copyRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            copyRegion.dstOffset = {0, 0, 0};
+            copyRegion.extent = {sourceImage.Extent().width, sourceImage.Extent().height, 1};
+            vkCmdCopyImage(commandBuffer,
+                sourceImage.Handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                GetViewStorageImage(destination)->GetImage().Handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1, &copyRegion);
+        };
+        copyPlane(Assets::Bindless::RT_OBJECTID_0, Assets::Bindless::RT_OBJECTID_1);
+        copyPlane(Assets::Bindless::RT_HISTORY_AGE, Assets::Bindless::RT_HISTORY_AGE_PREV);
 
-        vkCmdCopyImage(commandBuffer,
-            GetViewStorageImage(Assets::Bindless::RT_OBJECTID_0)->GetImage().Handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            GetViewStorageImage(Assets::Bindless::RT_OBJECTID_1)->GetImage().Handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1, &copyRegion);
-
+        constexpr auto shaderReadWrite = EResourceAccess::ShaderRead | EResourceAccess::ShaderWrite;
         TransitionActiveViewImages(commandBuffer, {
-            {Assets::Bindless::RT_OBJECTID_0, PipelineCommon::ERenderStage::Compute,
-             PipelineCommon::EResourceAccess::ShaderRead | PipelineCommon::EResourceAccess::ShaderWrite},
-            {Assets::Bindless::RT_OBJECTID_1, PipelineCommon::ERenderStage::Compute,
-             PipelineCommon::EResourceAccess::ShaderRead | PipelineCommon::EResourceAccess::ShaderWrite},
+            {Assets::Bindless::RT_OBJECTID_0, ERenderStage::Compute, shaderReadWrite},
+            {Assets::Bindless::RT_OBJECTID_1, ERenderStage::Compute, shaderReadWrite},
+            {Assets::Bindless::RT_HISTORY_AGE, ERenderStage::Compute, shaderReadWrite},
+            {Assets::Bindless::RT_HISTORY_AGE_PREV, ERenderStage::Compute, shaderReadWrite},
         }, "object id history ready");
     }
 }

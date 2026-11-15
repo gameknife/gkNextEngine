@@ -211,6 +211,8 @@ public struct ALIGN_16 UniformBufferObject
 
     public bool HasSky;
     public bool ShowHeatmap;
+    // Age (RT_HISTORY_AGE, frames of continuously valid reprojection) below which a pixel counts
+    // as freshly disoccluded and gets LowHistorySampleScale times the samples. 0 disables it.
     public uint TemporalFrames;
     public bool HasSun;
 
@@ -251,7 +253,9 @@ public struct ALIGN_16 UniformBufferObject
     // the bricks it keeps stay where they are. Integers stored as floats (exact at this range).
     public float4 AmbientCubeCascadeWrap[GPU_SCENE_AMBIENT_CASCADE_MAX];
 
-    public bool UpscalerInvalidMotionMask;
+    // Sample multiplier for pixels whose reprojected history is younger than TemporalFrames
+    // (RT_HISTORY_AGE). Occupies the 4 bytes the retired DLSS invalid-motion mask used.
+    public uint LowHistorySampleScale;
     public bool RayReconstruction;
     public float GTAORadius;
     public float GTAOStrength;

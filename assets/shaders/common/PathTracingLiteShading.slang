@@ -51,10 +51,8 @@ void ShadePathTracingLitePixel(int2 pixel)
     }
 
     FNullRadianceCache cache;
-    // Moving pixels get more samples. The moment counter is Core.SurfaceBuild's output now, so this
-    // is a plain cross-pass read instead of a read-back of what this invocation just wrote.
-    const int sampleMultiplier =
-        Bindless.GetViewStorageTexture<uint>(Bindless.RT_MOTIONMOMENT)[pixel] > 0 ? 4 : 1;
+    // Freshly disoccluded pixels get more samples (RT_HISTORY_AGE, from Core.SurfaceBuild).
+    const int sampleMultiplier = Common.DisocclusionSampleMultiplier(renderer.GetPrimaryHistoryAge());
     renderer.Render(tracer, dIlluminator, cache, sampleMultiplier);
     END_SHADERCLOCK(pixel)
 }

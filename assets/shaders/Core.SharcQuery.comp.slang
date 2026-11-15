@@ -89,7 +89,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
     cache.RoughnessMin = params.QueryRoughnessMin;
     cache.MinBounce = params.QueryMinBounce;
     cache.DebugMode = params.DebugMode;
-    int sampleMultiplier = Bindless.GetViewStorageTexture<uint>(Bindless.RT_MOTIONMOMENT)[pixel] > 0 ? 4 : 1;
+    const int sampleMultiplier = Common.DisocclusionSampleMultiplier(renderer.GetPrimaryHistoryAge());
     renderer.Render(tracer, dIlluminator, cache, sampleMultiplier);
     END_SHADERCLOCK(pixel)
 }

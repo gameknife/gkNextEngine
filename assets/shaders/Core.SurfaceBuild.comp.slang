@@ -15,6 +15,9 @@ import Shader.SurfaceBuffer;
 // and neighbour-copied depth / motion / object id is semantically wrong surface data at every
 // silhouette and depth discontinuity. Only lighting is ever reconstructed.
 //
+// Build also owns RT_HISTORY_AGE (frames of continuously valid reprojection), derived from the
+// motion vector it just computed and the previous frame's object ids.
+//
 // Build does no lighting, no ray traversal and no compose. Contract: Shader/SurfaceBuffer.slang.
 
 [shader("compute")]
@@ -66,6 +69,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
             vBuffer, origin.xyz, primaryRayDir, nodes, models, vertices, indices, hitVertex))
     {
         Surface.Store(viewBase, pixel, surface, writeSpecularAlbedo);
+        Surface.StoreHistoryAge(viewBase, pixel, Surface.kHistoryAgeMax);
         return;
     }
 
@@ -112,10 +116,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
         material.MaterialModel == MaterialMetallic ? albedo : float4(1, 1, 1, 1);
     surface.ObjectId =
         Common.EncodeObjectId(hitNode.instanceId, selected, hovered, locked, danger);
-    // CalculateMotionVector also owns the RT_MOTIONMOMENT read-modify-write; that side effect
-    // belongs to whoever owns motion, which is now Build.
-    surface.Motion =
-        Common.CalculateMotionVector(Camera, hitNode, hitVertex, pixel) * float2(size);
+    surface.Motion = Common.CalculateMotionVector(Camera, hitNode, hitVertex) * float2(size);
     surface.MaterialId = hitVertex.MaterialIndex;
     surface.Metalness = metalness;
     surface.Flags = Common.MakeSurfaceFlags(material);
@@ -127,4 +128,8 @@ void main(uint3 DTid : SV_DispatchThreadID)
     }
 
     Surface.Store(viewBase, pixel, surface, writeSpecularAlbedo);
+    // Reads RT_OBJECTID_1 / RT_HISTORY_AGE_PREV and writes RT_HISTORY_AGE: three distinct planes,
+    // so neighbouring threads never observe a half-written age.
+    Surface.StoreHistoryAge(viewBase, pixel,
+        Surface.ReprojectHistoryAge(viewBase, pixel, size, surface.ObjectId, surface.Motion));
 }

@@ -275,8 +275,9 @@ public void RestirPrimaryGather(inout uint4 randomSeed, int2 pixel, FBSDFContext
     combined.Merge(reservoir, reservoir.TargetLum, RandomFloat(randomSeed));
 
     // Temporal reuse: reproject via the motion vector into the previous frame's FINAL
-    // reservoirs (post-spatial, post-visibility). Off-screen, object-id mismatch and
-    // moving-object (MotionMoment) pixels drop reservoir history.
+    // reservoirs (post-spatial, post-visibility). Off-screen and object-id mismatch drop
+    // reservoir history; a moving object's own pixels keep it, because the light sample is
+    // re-evaluated (target function and, in the shade pass, visibility) at this pixel anyway.
     // The history sample's target function is re-evaluated at this pixel before merging; an
     // invalid-here sample still contributes M (biased-mode accounting, per design).
     if ((params.Flags & RESTIR_FLAG_TEMPORAL_ENABLE) != 0 &&
@@ -284,15 +285,14 @@ public void RestirPrimaryGather(inout uint4 randomSeed, int2 pixel, FBSDFContext
     {
         // Current-pixel primary data (instance id, motion) comes from the renderer state:
         // this invocation just wrote those textures and reading them back is not coherent.
-        // ObjectId1 and MotionMoment were written by previous passes, so reading them is safe.
+        // ObjectId1 was written by a previous pass, so reading it is safe.
         let ObjectId1 = Bindless.GetViewStorageTexture<uint>(Bindless.RT_OBJECTID_1);
-        let MotionMoment = Bindless.GetViewStorageTexture<uint>(Bindless.RT_MOTIONMOMENT);
 
         const int2 prevPixel = int2(floor(float2(pixel) + motionPixels));
         const bool inside = all(prevPixel >= int2(0, 0)) &&
                             uint(prevPixel.x) < params.ReservoirWidth &&
                             uint(prevPixel.y) < params.ReservoirHeight;
-        if (inside && MotionMoment[pixel] == 0)
+        if (inside)
         {
             const uint currPrim = primaryInstanceId & RESTIR_OBJID_INSTANCE_MASK;
             const uint prevPrim = RestirFetchPrimitiveIndex(ObjectId1[prevPixel]);

@@ -33,10 +33,12 @@ namespace Vulkan::PipelineCommon
     FSamplePostSettings MakeSamplePostSettings(const VulkanBaseRenderer& baseRenderer);
 
     // Converts the current renderer sample directly into scene color. The history paths retained
-    // here are explicit non-reprojected progressive accumulations of linear radiance;
-    // realtime rendering never reprojects or spatially filters the sample before a temporal
-    // upscaler consumes it. Compose pre-exposes the result so display white is near 1.0;
-    // display encoding is applied by the final output pass.
+    // here are explicit non-reprojected progressive accumulations of linear radiance; realtime
+    // rendering never reprojects the sample before a temporal upscaler consumes it. The one
+    // spatial step is the disocclusion filter, which touches only pixels the upscaler has no
+    // history for (RT_HISTORY_AGE) and leaves every other pixel bit-for-bit unchanged. Compose
+    // pre-exposes the result so display white is near 1.0; display encoding is applied by the
+    // final output pass.
     class SamplePostChain final
     {
     public:
@@ -46,7 +48,11 @@ namespace Vulkan::PipelineCommon
                  uint32_t imageIndex, const FSamplePostSettings& settings) const;
 
     private:
+        void RunDisocclusionFilter(VulkanBaseRenderer& baseRenderer, VkCommandBuffer commandBuffer,
+                                   uint32_t imageIndex) const;
+
         std::unique_ptr<ZeroBindPipeline> progressiveAccumulatePipeline_;
+        std::unique_ptr<ZeroBindPipeline> disocclusionFilterPipeline_;
         std::unique_ptr<ZeroBindPipeline> composePipeline_;
     };
 }

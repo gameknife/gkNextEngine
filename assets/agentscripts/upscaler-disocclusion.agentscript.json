@@ -1,0 +1,489 @@
+{
+  "name": "upscaler-disocclusion",
+  "target": "gkNextRenderer",
+  "scene": "assets/models/playground.glb",
+  "defaults": {
+    "waitFrames": 1,
+    "stepTimeoutMs": 60000
+  },
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "engine.status",
+      "op": "eq",
+      "value": "Running",
+      "timeoutMs": 20000
+    },
+    {
+      "type": "wait-until",
+      "query": "scene.ready",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "cvar",
+      "name": "r.rendererType",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "r.checkerboardRendering",
+      "set": false,
+      "comment": "sparse checkerboard turns every pixel into reconstruction noise and disables the filter"
+    },
+    {
+      "type": "cvar",
+      "name": "r.exposure.auto",
+      "set": false,
+      "comment": "auto exposure drifts between shots and between the stream and the progressive reference"
+    },
+    {
+      "type": "cvar",
+      "name": "r.samples",
+      "set": 8,
+      "comment": "fixed sample count so runs on different machines/configs are comparable"
+    },
+    {
+      "type": "cvar",
+      "name": "r.upscaler.qualityMode",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "r.upscaler.postFilter",
+      "set": false
+    },
+    {
+      "type": "log",
+      "message": "phase taau: upscaler 4, r.temporalFrames 16, r.disocclusionFilter True"
+    },
+    {
+      "type": "cvar",
+      "name": "r.upscaler.type",
+      "set": 4
+    },
+    {
+      "type": "cvar",
+      "name": "r.temporalFrames",
+      "set": 16
+    },
+    {
+      "type": "cvar",
+      "name": "r.disocclusionFilter",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "sys.tickAnimation",
+      "set": true
+    },
+    {
+      "type": "wait-frames",
+      "n": 150,
+      "comment": "let the animation run and the upscaler settle"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/taau_moving",
+      "comment": "object positions just before the freeze; trail mask source"
+    },
+    {
+      "type": "wait-frames",
+      "n": 6
+    },
+    {
+      "type": "cvar",
+      "name": "sys.tickAnimation",
+      "set": false
+    },
+    {
+      "type": "assert",
+      "query": "engine.totalFrames",
+      "op": "gt",
+      "value": 0,
+      "comment": "freeze frame index"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/taau_f01"
+    },
+    {
+      "type": "wait-frames",
+      "n": 3
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/taau_f04"
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/taau_f08"
+    },
+    {
+      "type": "wait-frames",
+      "n": 8
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/taau_f16"
+    },
+    {
+      "type": "wait-frames",
+      "n": 48
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/taau_f64"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/taau_ref",
+      "accumulateFrames": 256,
+      "comment": "progressive ground truth of the frozen scene; the RMSE reference"
+    },
+    {
+      "type": "log",
+      "message": "phase sgsr2: upscaler 5, r.temporalFrames 16, r.disocclusionFilter True"
+    },
+    {
+      "type": "cvar",
+      "name": "r.upscaler.type",
+      "set": 5
+    },
+    {
+      "type": "cvar",
+      "name": "r.temporalFrames",
+      "set": 16
+    },
+    {
+      "type": "cvar",
+      "name": "r.disocclusionFilter",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "sys.tickAnimation",
+      "set": true
+    },
+    {
+      "type": "wait-frames",
+      "n": 150,
+      "comment": "let the animation run and the upscaler settle"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/sgsr2_moving",
+      "comment": "object positions just before the freeze; trail mask source"
+    },
+    {
+      "type": "wait-frames",
+      "n": 6
+    },
+    {
+      "type": "cvar",
+      "name": "sys.tickAnimation",
+      "set": false
+    },
+    {
+      "type": "assert",
+      "query": "engine.totalFrames",
+      "op": "gt",
+      "value": 0,
+      "comment": "freeze frame index"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/sgsr2_f01"
+    },
+    {
+      "type": "wait-frames",
+      "n": 3
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/sgsr2_f04"
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/sgsr2_f08"
+    },
+    {
+      "type": "wait-frames",
+      "n": 8
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/sgsr2_f16"
+    },
+    {
+      "type": "wait-frames",
+      "n": 48
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/sgsr2_f64"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/sgsr2_ref",
+      "accumulateFrames": 256,
+      "comment": "progressive ground truth of the frozen scene; the RMSE reference"
+    },
+    {
+      "type": "log",
+      "message": "phase taau_nofilter: upscaler 4, r.temporalFrames 16, r.disocclusionFilter False"
+    },
+    {
+      "type": "cvar",
+      "name": "r.upscaler.type",
+      "set": 4
+    },
+    {
+      "type": "cvar",
+      "name": "r.temporalFrames",
+      "set": 16
+    },
+    {
+      "type": "cvar",
+      "name": "r.disocclusionFilter",
+      "set": false
+    },
+    {
+      "type": "cvar",
+      "name": "sys.tickAnimation",
+      "set": true
+    },
+    {
+      "type": "wait-frames",
+      "n": 150,
+      "comment": "let the animation run and the upscaler settle"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/taau_nofilter_moving",
+      "comment": "object positions just before the freeze; trail mask source"
+    },
+    {
+      "type": "wait-frames",
+      "n": 6
+    },
+    {
+      "type": "cvar",
+      "name": "sys.tickAnimation",
+      "set": false
+    },
+    {
+      "type": "assert",
+      "query": "engine.totalFrames",
+      "op": "gt",
+      "value": 0,
+      "comment": "freeze frame index"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/taau_nofilter_f01"
+    },
+    {
+      "type": "wait-frames",
+      "n": 3
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/taau_nofilter_f04"
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/taau_nofilter_f08"
+    },
+    {
+      "type": "wait-frames",
+      "n": 8
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/taau_nofilter_f16"
+    },
+    {
+      "type": "wait-frames",
+      "n": 48
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/taau_nofilter_f64"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/taau_nofilter_ref",
+      "accumulateFrames": 256,
+      "comment": "progressive ground truth of the frozen scene; the RMSE reference"
+    },
+    {
+      "type": "log",
+      "message": "phase taau_tf0_nofilter: upscaler 4, r.temporalFrames 0, r.disocclusionFilter False"
+    },
+    {
+      "type": "cvar",
+      "name": "r.upscaler.type",
+      "set": 4
+    },
+    {
+      "type": "cvar",
+      "name": "r.temporalFrames",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "r.disocclusionFilter",
+      "set": false
+    },
+    {
+      "type": "cvar",
+      "name": "sys.tickAnimation",
+      "set": true
+    },
+    {
+      "type": "wait-frames",
+      "n": 150,
+      "comment": "let the animation run and the upscaler settle"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/taau_tf0_nofilter_moving",
+      "comment": "object positions just before the freeze; trail mask source"
+    },
+    {
+      "type": "wait-frames",
+      "n": 6
+    },
+    {
+      "type": "cvar",
+      "name": "sys.tickAnimation",
+      "set": false
+    },
+    {
+      "type": "assert",
+      "query": "engine.totalFrames",
+      "op": "gt",
+      "value": 0,
+      "comment": "freeze frame index"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/taau_tf0_nofilter_f01"
+    },
+    {
+      "type": "wait-frames",
+      "n": 3
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/taau_tf0_nofilter_f04"
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/taau_tf0_nofilter_f08"
+    },
+    {
+      "type": "wait-frames",
+      "n": 8
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/taau_tf0_nofilter_f16"
+    },
+    {
+      "type": "wait-frames",
+      "n": 48
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/taau_tf0_nofilter_f64"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/taau_tf0_nofilter_ref",
+      "accumulateFrames": 256,
+      "comment": "progressive ground truth of the frozen scene; the RMSE reference"
+    },
+    {
+      "type": "log",
+      "message": "restore Archive cvars to defaults"
+    },
+    {
+      "type": "cvar",
+      "name": "r.samples",
+      "set": 2
+    },
+    {
+      "type": "cvar",
+      "name": "r.exposure.auto",
+      "set": true,
+      "comment": "restore to what this machine's cvar_user.json held when the script was written; adjust if yours differs"
+    },
+    {
+      "type": "cvar",
+      "name": "sys.tickAnimation",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "r.temporalFrames",
+      "set": 16
+    },
+    {
+      "type": "cvar",
+      "name": "r.disocclusionFilter",
+      "set": true
+    },
+    {
+      "type": "cvar",
+      "name": "r.upscaler.type",
+      "set": 4
+    },
+    {
+      "type": "cvar",
+      "name": "r.upscaler.qualityMode",
+      "set": 5
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

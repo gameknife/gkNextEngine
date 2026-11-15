@@ -33,6 +33,7 @@ namespace Vulkan::PipelineCommon
 
         constexpr auto compute = ERenderStage::Compute;
         constexpr auto shaderWrite = EResourceAccess::ShaderWrite;
+        constexpr auto shaderRead = EResourceAccess::ShaderRead;
         baseRender.TransitionActiveViewImages(commandBuffer, {
             {Assets::Bindless::RT_PREV_DEPTHBUFFER, compute, shaderWrite},
             {Assets::Bindless::RT_NORMAL, compute, shaderWrite},
@@ -40,9 +41,10 @@ namespace Vulkan::PipelineCommon
             {Assets::Bindless::RT_OBJECTID_0, compute, shaderWrite},
             {Assets::Bindless::RT_MOTIONVECTOR, compute, shaderWrite},
             {Assets::Bindless::RT_BSDF_DATA, compute, shaderWrite},
-            // Common.CalculateMotionVector read-modify-writes the moment counter.
-            {Assets::Bindless::RT_MOTIONMOMENT, compute,
-             EResourceAccess::ShaderRead | EResourceAccess::ShaderWrite},
+            // History age: reprojected from the previous frame's object ids and ages.
+            {Assets::Bindless::RT_HISTORY_AGE, compute, shaderWrite},
+            {Assets::Bindless::RT_OBJECTID_1, compute, shaderRead},
+            {Assets::Bindless::RT_HISTORY_AGE_PREV, compute, shaderRead},
         }, "primary surface build");
         if (writeSpecularAlbedo)
         {

@@ -90,7 +90,7 @@ namespace Vulkan
             ubo.MaxNumberOfBounces = 1;
             ubo.NumberOfSamples = 64;
             ubo.NumberOfBounces = 2;
-            ubo.TemporalFrames = 1;
+            ubo.TemporalFrames = 0; // no disocclusion sample boost off the realtime path
             ubo.TotalFrames = totalFrames;
             ubo.PrimaryRayJitter = false;
             ubo.ProgressiveRender = false;
@@ -148,7 +148,7 @@ namespace Vulkan
         }
         else
         {
-            ubo.TemporalFrames = 1;
+            ubo.TemporalFrames = 0; // no disocclusion sample boost off the realtime path
             ubo.TotalFrames = std::max(1u, request.baseUbo != nullptr ? request.baseUbo->TotalFrames : request.totalFrames);
             ubo.PrimaryRayJitter = false;
             ubo.ProgressiveRender = false;

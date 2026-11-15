@@ -71,7 +71,6 @@ namespace Rendering::Upscaler
         bool requiresDepthAndMotion = false;
         bool requiresRayReconstruction = false;
         bool supportsTemporalPostFilter = false;
-        bool requiresInvalidMotionMask = false;
         bool requiresStorageOutput = false;
         bool frameGenerationRequiresReadableDepth = false;
         bool leavesInputsShaderRead = false;
@@ -80,12 +79,12 @@ namespace Rendering::Upscaler
     inline const FUpscalerTypeInfo& GetUpscalerTypeInfo(uint32_t rawType)
     {
         static constexpr FUpscalerTypeInfo kTypes[] = {
-            {EUpscalerType::None, "none", "None", false, false, false, false, false, false, false},
-            {EUpscalerType::DLSS, "dlss", "DLSS", true, false, false, true, false, false, false},
-            {EUpscalerType::DLSSRayReconstruction, "dlss-ray-reconstruction", "DLSS Ray Reconstruction", true, true, false, false, false, false, false},
-            {EUpscalerType::FidelityFXFSR, "fidelityfx-fsr", "FidelityFX FSR", true, false, true, false, true, true, true},
-            {EUpscalerType::NativeTAAU, "native-taau", "Native TAAU", true, false, true, false, true, false, false},
-            {EUpscalerType::SnapdragonGSR2, "sgsr2", "SGSR2 (2-pass CS)", true, false, true, false, true, false, false},
+            {EUpscalerType::None, "none", "None", false, false, false, false, false, false},
+            {EUpscalerType::DLSS, "dlss", "DLSS", true, false, false, false, false, false},
+            {EUpscalerType::DLSSRayReconstruction, "dlss-ray-reconstruction", "DLSS Ray Reconstruction", true, true, false, false, false, false},
+            {EUpscalerType::FidelityFXFSR, "fidelityfx-fsr", "FidelityFX FSR", true, false, true, true, true, true},
+            {EUpscalerType::NativeTAAU, "native-taau", "Native TAAU", true, false, true, true, false, false},
+            {EUpscalerType::SnapdragonGSR2, "sgsr2", "SGSR2 (2-pass CS)", true, false, true, true, false, false},
         };
         static_assert(std::size(kTypes) == static_cast<size_t>(EUpscalerType::Count));
         return rawType < std::size(kTypes) ? kTypes[rawType] : kTypes[0];

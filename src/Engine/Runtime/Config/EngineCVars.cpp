@@ -73,7 +73,10 @@ namespace NextCVar
     void RegisterEngineCVars(FCVarSystem& cvars, Runtime::Config::UserSettings& settings, Runtime::Config::ShowFlags& showFlags, NextEngine* engine)
     {
         Runtime::Config::Options& options = engine->GetOptions();
-        GK_CVAR_UINT("r.temporalFrames", settings, TemporalFrames, 16, ECVarFlags::Archive, "Moving-object history rejection frames");
+        GK_CVAR_UINT("r.temporalFrames", settings, TemporalFrames, 16, ECVarFlags::Archive,
+                     "History age (frames) below which a disoccluded pixel gets extra samples; 0 disables");
+        GK_CVAR_UINT("r.lowHistorySampleScale", settings, LowHistorySampleScale, 4, ECVarFlags::Archive,
+                     "Sample multiplier for pixels younger than r.temporalFrames (1-16)");
         GK_CVAR_INT("r.samples", settings, NumberOfSamples, 2, ECVarFlags::Archive, "Samples per pixel");
         GK_CVAR_FLOAT_RANGE("r.camera.farPlane", settings, CameraFarPlane, Assets::defaultCameraFarPlane, ECVarFlags::Archive,
                             "Global camera far clip plane in meters", 1.0, 100000000.0);
@@ -119,6 +122,12 @@ namespace NextCVar
         GK_CVAR_FLOAT_RANGE("r.upscaler.postFilterStrength", settings, TemporalUpscalerPostFilterStrength, 0.65f, ECVarFlags::Archive, "Temporal upscaler post-filter blend strength", 0.0, 1.0);
         GK_CVAR_FLOAT_RANGE("r.upscaler.postFilterLumaSigma", settings, TemporalUpscalerPostFilterLumaSigma, 0.10f, ECVarFlags::Archive, "Temporal upscaler post-filter compressed-domain color/luminance edge threshold", 0.01, 0.5);
         GK_CVAR_FLOAT_RANGE("r.upscaler.fireflySigma", settings, TemporalUpscalerFireflySigma, 0.5f, ECVarFlags::Archive, "Temporal upscaler and compose isolated highlight rejection threshold in neighborhood standard deviations", 0.1, 8.0);
+        GK_CVAR_BOOL("r.disocclusionFilter", settings, DisocclusionFilter, true, ECVarFlags::Archive,
+                     "Spatially filter diffuse lighting where the temporal upscaler has no history yet (not under Ray Reconstruction)");
+        GK_CVAR_UINT("r.disocclusionFilter.frames", settings, DisocclusionFilterFrames, 20, ECVarFlags::Archive,
+                     "History age (frames) at which the disocclusion filter has faded out completely");
+        GK_CVAR_UINT("r.disocclusionFilter.passes", settings, DisocclusionFilterPasses, 5, ECVarFlags::Archive,
+                     "A-trous passes for a just-disoccluded pixel (2-5; radius doubles per pass)");
         GK_CVAR_BOOL("r.compose.fireflyClamp", settings, ComposeFireflyClamp, true, ECVarFlags::Archive, "Reject isolated render-resolution fireflies before temporal upscaling (disabled for progressive reference rendering)");
         GK_CVAR_BOOL_CB("r.frameGeneration", settings, FrameGeneration, false, ECVarFlags::Archive, "Enable frame generation for the selected upscaler type", std::bind(RequestSwapChainIfPossible, engine));
         GK_CVAR_UINT_CB("r.frameGeneration.multiplier", settings, FrameGenerationMultiplier, 2, ECVarFlags::Archive, "Frame generation multiplier (2-4 when supported)", std::bind(RequestSwapChainIfPossible, engine));

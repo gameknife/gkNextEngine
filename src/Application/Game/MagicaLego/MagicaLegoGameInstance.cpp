@@ -1363,7 +1363,8 @@ void MagicaLegoGameInstance::GenerateThumbnail()
     cameraArm_ = 0.7f;
     cameraCenter_ = glm::vec3(0, 0.045f, 0);
     realCameraCenter_ = cameraCenter_;
-    GetEngine().GetUserSettings().TemporalFrames = 8;
+    // Thumbnails already take 256 spp; no extra disocclusion boost when a new block appears.
+    GetEngine().GetUserSettings().TemporalFrames = 0;
     GetEngine().GetUserSettings().NumberOfSamples = 256;
     GetEngine().GetRenderer().SwapChain().UpdateRenderViewport(1920 / 2 - thumbSize / 2, 960 / 2 - thumbSize / 2, thumbSize, thumbSize);
     PlaceDynamicBlock({{0, 0, 0}, EOrientation::EO_North, 0, BasicNodes[0].brushId_, 0, 0});

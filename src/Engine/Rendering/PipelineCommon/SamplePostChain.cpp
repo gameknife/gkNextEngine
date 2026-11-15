@@ -11,6 +11,8 @@ namespace Vulkan::PipelineCommon
     {
         progressiveAccumulatePipeline_ = std::make_unique<ZeroBindPipeline>(
             swapChain, "assets/shaders/Process.ProgressiveAccumulate.comp.slang.spv", scene);
+        disocclusionFilterPipeline_ = std::make_unique<ZeroBindPipeline>(
+            swapChain, "assets/shaders/Process.DisocclusionFilter.comp.slang.spv", scene);
         composePipeline_ = std::make_unique<ZeroBindPipeline>(
             swapChain, "assets/shaders/Process.Compose.comp.slang.spv", scene);
     }
@@ -18,7 +20,68 @@ namespace Vulkan::PipelineCommon
     void SamplePostChain::DeleteSwapChain()
     {
         progressiveAccumulatePipeline_.reset();
+        disocclusionFilterPipeline_.reset();
         composePipeline_.reset();
+    }
+
+    namespace
+    {
+        // The filter stands in for history the temporal upscaler does not have yet, so it only
+        // makes sense where such an upscaler accumulates the realtime sample, and RT_HISTORY_AGE
+        // is only meaningful on a view that keeps object-id history. Ray Reconstruction denoises
+        // the raw diffuse/specular itself and must see them unfiltered. Sparse checkerboard
+        // lighting leaves half the pixels unwritten for Native TAAU, so a tap there is garbage.
+        bool ShouldRunDisocclusionFilter(const VulkanBaseRenderer& baseRenderer,
+                                         const FSamplePostSettings& settings)
+        {
+            const auto& userSettings = baseRenderer.FrameSettings().userSettings;
+            const RenderView& view = baseRenderer.ActiveRenderView();
+            return userSettings.DisocclusionFilter && userSettings.DisocclusionFilterFrames > 0 &&
+                !settings.progressiveRender && view.IsPrimary() && view.CopyObjectIdHistory() &&
+                baseRenderer.IsTemporalSuperResolutionActive() &&
+                !baseRenderer.IsRayReconstructionActive() &&
+                !baseRenderer.IsSparseCheckerboardLightingActive();
+        }
+    }
+
+    void SamplePostChain::RunDisocclusionFilter(
+        VulkanBaseRenderer& baseRenderer,
+        VkCommandBuffer commandBuffer,
+        const uint32_t imageIndex) const
+    {
+        SCOPED_GPU_TIMER("disocclusion filter");
+        const auto& userSettings = baseRenderer.FrameSettings().userSettings;
+        // At least two passes: the last one writes RT_SINGLE_DIFFUSE in place, which is only
+        // race-free when its taps come from a ping-pong plane (see the shader header).
+        const uint32_t passCount = std::clamp(userSettings.DisocclusionFilterPasses, 2u, 5u);
+        const uint32_t fullFrames = std::min(userSettings.DisocclusionFilterFrames, 0xFFFFu);
+        const VkExtent2D extent = baseRenderer.ActiveViewRenderExtent();
+        const Assets::GPUScene gpuScene =
+            baseRenderer.GetScene().FetchGPUScene(imageIndex, baseRenderer.ActiveViewBankBase());
+
+        constexpr auto compute = ERenderStage::Compute;
+        constexpr auto shaderRead = EResourceAccess::ShaderRead;
+        constexpr auto shaderReadWrite = EResourceAccess::ShaderRead | EResourceAccess::ShaderWrite;
+        for (uint32_t pass = 0; pass < passCount; ++pass)
+        {
+            // Every pass both reads and writes the ping-pong planes and RT_SINGLE_DIFFUSE, so the
+            // tracker places a full write->read barrier between consecutive passes.
+            baseRenderer.TransitionActiveViewImages(commandBuffer, {
+                {Assets::Bindless::RT_SINGLE_DIFFUSE, compute, shaderReadWrite},
+                {Assets::Bindless::RT_DISOCCLUSION_PING, compute, shaderReadWrite},
+                {Assets::Bindless::RT_DISOCCLUSION_PONG, compute, shaderReadWrite},
+                {Assets::Bindless::RT_HISTORY_AGE, compute, shaderRead},
+                {Assets::Bindless::RT_PREV_DEPTHBUFFER, compute, shaderRead},
+                {Assets::Bindless::RT_NORMAL, compute, shaderRead},
+                {Assets::Bindless::RT_OBJECTID_0, compute, shaderRead},
+                {Assets::Bindless::RT_BSDF_DATA, compute, shaderRead},
+            }, "disocclusion filter");
+            const uint32_t params = pass | (passCount << 8u) | (fullFrames << 16u);
+            disocclusionFilterPipeline_->BindPipeline(
+                commandBuffer, gpuScene, baseRenderer.ActiveViewBankBase(), params, 0u);
+            vkCmdDispatch(commandBuffer, Utilities::Math::GetSafeDispatchCount(extent.width, 8),
+                          Utilities::Math::GetSafeDispatchCount(extent.height, 8), 1);
+        }
     }
 
     FSamplePostSettings MakeSamplePostSettings(const VulkanBaseRenderer& baseRenderer)
@@ -40,6 +103,11 @@ namespace Vulkan::PipelineCommon
         const FSamplePostSettings& settings) const
     {
         const VkExtent2D extent = baseRenderer.ActiveViewRenderExtent();
+        if (ShouldRunDisocclusionFilter(baseRenderer, settings))
+        {
+            RunDisocclusionFilter(baseRenderer, commandBuffer, imageIndex);
+        }
+
         if (settings.progressiveRender)
         {
             baseRenderer.EnsureProgressiveRenderTarget();

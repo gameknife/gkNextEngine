@@ -887,11 +887,15 @@ void NextRendererGameInstance::DrawSettings(FRendererUiState& uiState)
         }
         DrawFloatSetting("Time Scaling", &userSetting.HeatmapScale, 0.10f, 2.0f, "%.2f", 0.05f);
 
-        uint32_t tmin = 8, tmax = 32;
         int temporalFrames = static_cast<int>(userSetting.TemporalFrames);
-        if (DrawIntSetting("Motion History", &temporalFrames, static_cast<int>(tmin), static_cast<int>(tmax)))
+        if (DrawIntSetting("Disocclusion Boost Frames", &temporalFrames, 0, 32))
         {
             userSetting.TemporalFrames = static_cast<uint32_t>(temporalFrames);
+        }
+        int lowHistoryScale = static_cast<int>(userSetting.LowHistorySampleScale);
+        if (DrawIntSetting("Disocclusion Sample Scale", &lowHistoryScale, 1, 16))
+        {
+            userSetting.LowHistorySampleScale = static_cast<uint32_t>(lowHistoryScale);
         }
         EndCard();
 

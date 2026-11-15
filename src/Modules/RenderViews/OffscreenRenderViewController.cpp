@@ -266,7 +266,7 @@ namespace Vulkan
         // Stochastic renderers consume one decorrelated sample per frame through their own
         // progressive path; deterministic renderers can present this view directly.
         ubo.NumberOfSamples = 1;
-        ubo.TemporalFrames = 1;
+        ubo.TemporalFrames = 0; // one sample per frame: never boost disoccluded pixels
         ubo.PrimaryRayJitter = true;
         ubo.ProgressiveRender = true;
         bool cameraChanged = false;

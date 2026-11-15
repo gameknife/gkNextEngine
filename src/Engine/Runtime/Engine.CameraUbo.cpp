@@ -93,7 +93,7 @@ Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D 
 
     ubo.ExitAfterFirst = config_.userSettings.ExitAfterFirst;
     ubo.SuperResolution = GOption->ReferenceMode ? 2 : renderer_->EffectiveSuperResolutionMode();
-    ubo.UpscalerInvalidMotionMask = renderer_->RequiresInvalidMotionMask();
+    ubo.LowHistorySampleScale = std::clamp(config_.userSettings.LowHistorySampleScale, 1u, 16u);
     ubo.RayReconstruction = renderer_->IsRayReconstructionActive();
     ubo.CheckerboardSparseLighting = renderer_->IsSparseCheckerboardLightingActive();
 
@@ -267,9 +267,11 @@ Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D 
     ubo.HeatmapScale = config_.userSettings.HeatmapScale;
     ubo.DebugDraw_Lighting = config_.showFlags.DebugDraw_Lighting;
     ubo.ForceBlackBackground = false;
-    ubo.TemporalFrames = noAmbientRenderer
-        ? 1u
-        : (progressiveRender_.enabled ? FProgressiveRenderState::TargetFrames : config_.userSettings.TemporalFrames);
+    // Progressive accumulation takes exactly one independent sample per frame, so it never boosts
+    // freshly disoccluded pixels; the realtime path boosts until the history is TemporalFrames old.
+    ubo.TemporalFrames = noAmbientRenderer || progressiveSampling
+        ? 0u
+        : config_.userSettings.TemporalFrames;
     ubo.HDR = renderer_->SwapChain().IsHDR();
     ubo.HDROutputMode = renderer_->SwapChain().HDROutputMode();
 

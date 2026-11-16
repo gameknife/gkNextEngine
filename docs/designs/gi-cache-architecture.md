@@ -4,7 +4,7 @@ category: design
 status: 现行
 owner: engine/rendering
 created: 2026-07-17
-last_updated: 2026-11-14
+last_updated: 2026-11-16
 ---
 
 # GI 缓存与体素资源架构
@@ -49,7 +49,9 @@ RGB9E5 是单个 32-bit radiance 值的编码选择，不是块压缩。它保�
 brick 存储位置不变，只有进入的 brick 复用离开的 brick 的存储。环绕只在两处实现：shader 的
 `AmbientBrickLinear`（经 `FAmbientCascadeAddress`）和 CPU 的 `GetVoxelAddress`；其余代码一律经过它们。
 wrap 由 `FAmbientCascadeLayout::wraps` 记录，经 UBO 的 `AmbientCubeCascadeWrap[5]` 交给 shader。
-active list 里存的是 storage brick，`DecodeAmbientActiveBrickProbe` 负责还原窗口坐标。
+active list 每项的低 16 位是 storage brick，高 16 位是该 brick 的 CPU bake 遍数；
+`DecodeAmbientActiveBrickProbe` 负责还原窗口坐标和遍数。GPU bake 用 CPU 遍数限制旧 probe 的累计样本数，
+让动态几何重烘快速更新，同时避免主线程逐 probe 读写映射显存。
 
 shader 热路径（DDA 每步、gather 每个角）不能逐次从 UBO 和资源表重读 wrap、voxel 基址、pool 基址：
 `GetAmbientCascadeAddress` 每级解析一次，再往下传。逐次重读在本机让 VoxelTracing 慢了约 7%。
@@ -81,8 +83,9 @@ group，滚进来的区域会长期停在粗级。`ambient.*` agent 查询和 De
 `MarkTransformDirty`，不触发）`BuildSnapshot` 比较前后快照，把新增、删除、移动的实例的新旧包围盒记进
 `ambientDirtyBounds`，发布时并入待处理列表（超过 64 个合成一个并集）。voxel 管线空闲时
 `PlanAmbientDirtyRegions` 把它们换算成各级窗口内的 brick（外扩一格、按整 brick 取整）送去体素化；
-`FinishVoxelJob` 对距离场输出盒覆盖的已分配 brick 调 `FCPUBrickTable::RequeueBricks`：遍数降到发布阈值、
-GPU 上 probe 的采样数也降到发布阈值，于是保持已发布、旧光照还在，新样本以 1/(n+1) 的权重快速覆盖。
+`FinishVoxelJob` 对距离场输出盒覆盖的已分配 brick 调 `FCPUBrickTable::RequeueBricks`，遍数降到发布阈值；
+GPU 在下一次 bake 读取 active list 中的遍数，将 probe 采样数限制到该遍数后累积新样本；主线程不回读 cube。
+于是保持已发布、旧光照还在，新样本以 1/(n+1) 的权重快速覆盖。
 整图烘焙与缓存恢复会丢弃待处理的盒子。`sys.ambientCubeDynamicUpdate=false` 关闭这条路径。材质换绑不改变
 包围盒，不会触发。
 

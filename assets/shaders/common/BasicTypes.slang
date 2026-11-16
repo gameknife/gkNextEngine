@@ -107,6 +107,10 @@ public static const int GPU_SCENE_AMBIENT_BRICKS_Y = 6;
 public static const int GPU_SCENE_AMBIENT_BRICKS_Z = 24;
 public static const int GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE = 3456; // BRICKS_X * BRICKS_Y * BRICKS_Z
 public static const uint GPU_SCENE_AMBIENT_BRICK_INVALID = 0xffffffffu;
+// Active-list entries pack the storage brick in the low 16 bits and its CPU bake passes above.
+// A geometry requeue lowers those passes; the GPU applies the limit when it next bakes the probe.
+public static const uint GPU_SCENE_AMBIENT_ACTIVE_BRICK_MASK = 0xffffu;
+public static const uint GPU_SCENE_AMBIENT_ACTIVE_PASSES_SHIFT = 16u;
 
 public struct ALIGN_16 GPUDrivenStat
 {

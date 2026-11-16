@@ -6,6 +6,11 @@ namespace Assets::CPU
 {
     struct FCPUAccelerationStructureTestAccess
     {
+        static FCPUBrickTable& BrickTable(FCPUAccelerationStructure& accelerationStructure)
+        {
+            return accelerationStructure.cpuBrickTable;
+        }
+
         static void Publish(FCPUAccelerationStructure& accelerationStructure,
                             FCPUAccelerationStructure::SnapshotPtr snapshot)
         {

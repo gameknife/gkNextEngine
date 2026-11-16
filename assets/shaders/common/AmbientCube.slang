@@ -508,10 +508,12 @@ public bool DecodeAmbientActiveBrickProbe(uint cascadeIndex,
                                           uint localProbeOffset,
                                           out int3 probePos,
                                           out uint voxelIdx,
-                                          out int cubeIdx)
+                                          out int cubeIdx,
+                                          out uint bakePasses)
 {
     uint poolBricks = Bindless.GetGpuscene().AmbientPoolBricksPerCascade;
     uint packedBrick = Bindless.GetGpuscene().AmbientActiveBrickList[cascadeIndex * poolBricks + activeBrickIndex];
+    bakePasses = packedBrick >> GPU_SCENE_AMBIENT_ACTIVE_PASSES_SHIFT;
     if (packedBrick == GPU_SCENE_AMBIENT_BRICK_INVALID)
     {
         probePos = int3(0, 0, 0);
@@ -520,7 +522,8 @@ public bool DecodeAmbientActiveBrickProbe(uint cascadeIndex,
         return false;
     }
 
-    // The list holds storage bricks; undo the ring offset to get the window brick.
+    packedBrick &= GPU_SCENE_AMBIENT_ACTIVE_BRICK_MASK;
+    // The list holds storage bricks and CPU bake passes; undo the ring offset to get the window brick.
     uint bricksPerY = uint(GPU_SCENE_AMBIENT_BRICKS_X * GPU_SCENE_AMBIENT_BRICKS_Z);
     uint sy = packedBrick / bricksPerY;
     uint sz = (packedBrick - sy * bricksPerY) / uint(GPU_SCENE_AMBIENT_BRICKS_X);
@@ -830,7 +833,8 @@ public bool inSolid(float3 pos, float3 rayDir, inout float offsetDist, inout uin
 public interface IProbeGenerator
 {
     void Render(IRayTracer tracer, float3 origin, int cubeIdx, uint voxelIdx, inout uint4 RandomSeed);
-    void RenderAmbientCubeOnly(IRayTracer tracer, float3 origin, int cubeIdx, uint voxelIdx, inout uint4 RandomSeed);
+    void RenderAmbientCubeOnly(IRayTracer tracer, float3 origin, int cubeIdx, uint voxelIdx, uint bakePasses,
+                              inout uint4 RandomSeed);
 }
 
 // Bake-side logic (FGpuProbeGenerator) lives in AmbientCubeBaker.slang.

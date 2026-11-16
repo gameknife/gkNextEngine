@@ -15,7 +15,8 @@ void main(uint3 DTid : SV_DispatchThreadID)
     int3 probePos;
     uint voxelIdx;
     int cubeIdx;
-    if (!DecodeAmbientActiveBrickProbe(cascadeIndex, activeBrickIndex, localProbeOffset, probePos, voxelIdx, cubeIdx))
+    uint bakePasses;
+    if (!DecodeAmbientActiveBrickProbe(cascadeIndex, activeBrickIndex, localProbeOffset, probePos, voxelIdx, cubeIdx, bakePasses))
     {
         return;
     }
@@ -25,5 +26,5 @@ void main(uint3 DTid : SV_DispatchThreadID)
     uint4 RandomSeed = InitRandomSeed(uint(probePos.x + probePos.y), uint(probePos.y + probePos.z), camera.TotalFrames);
     float3 origin = float3(probePos) * cubeUnit + GetAmbientCubeOffsetAtCascade(cascadeIndex);
 
-    probeGen.RenderAmbientCubeOnly(tracer, origin, cubeIdx, voxelIdx, RandomSeed);
+    probeGen.RenderAmbientCubeOnly(tracer, origin, cubeIdx, voxelIdx, bakePasses, RandomSeed);
 }

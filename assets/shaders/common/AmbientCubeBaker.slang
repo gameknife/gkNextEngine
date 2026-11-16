@@ -310,7 +310,8 @@ public struct FGpuProbeGenerator : IProbeGenerator
         }
     }
 
-    public void RenderAmbientCubeOnly(IRayTracer tracer, float3 origin, int cubeIdx, uint voxelIdx, inout uint4 RandomSeed)
+    public void RenderAmbientCubeOnly(IRayTracer tracer, float3 origin, int cubeIdx, uint voxelIdx, uint bakePasses,
+                                      inout uint4 RandomSeed)
     {
         AmbientCube* Cubes = Bindless.GetGpuscene().Cubes;
         VoxelData* Voxels = Bindless.GetGpuscene().Voxels;
@@ -323,7 +324,10 @@ public struct FGpuProbeGenerator : IProbeGenerator
             uint bakeCascadeIndex = Bindless.GetGpuscene().CustomData1;
             uint4 skyvis_pznzpyny = UnpackBytes(Cubes[cubeIdx].SkyVisibilityPZNZPYNY);
             uint4 skyvis_pxnxs0s1 = UnpackBytes(Cubes[cubeIdx].SkyVisibilityPXNXS0S1);
-            uint sampleCount = skyvis_pxnxs0s1.z;
+            // A geometry requeue lowers the CPU passes while keeping the old radiance published.
+            // Apply that limit here, where the probe is already in GPU memory. Never increase a
+            // fresh/previously skipped probe's count; it still needs its first real samples.
+            uint sampleCount = min(skyvis_pxnxs0s1.z, max(bakePasses, 1u));
             float currWeight = AmbientCubeAccumulationWeight(sampleCount);
             float4 faceSun;
             float4 faceSkyEmissive;

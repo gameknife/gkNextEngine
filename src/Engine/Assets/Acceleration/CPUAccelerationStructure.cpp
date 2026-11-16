@@ -1080,37 +1080,20 @@ void FCPUAccelerationStructure::FinishVoxelJob(Scene& scene, Vulkan::DeviceMemor
     {
         // Rebake around a geometry change without dropping what is there: the bricks stay published
         // and their probes' sample count drops to the publish threshold, so the running average the
-        // bake keeps (weight 1 / (count + 1)) moves to the new lighting within a few passes.
+        // bake keeps (weight 1 / (count + 1)) moves to the new lighting within a few passes. Send the
+        // lowered passes with the next GPU bake batch instead of reading/modifying each probe in
+        // write-combined device memory here: those uncached host reads stall the game thread.
         ++dirtyRevoxelCount_;
         const uint32_t publishPasses = NextEngine::GetInstance()->GetUserSettings().AmbientCubePublishPasses;
-        const uint8_t keptSamples = static_cast<uint8_t>(std::clamp(publishPasses, 1u, 255u));
-        void* mapped = arenaMemory.Map(scene.AmbientCubesByteOffset(), scene.AmbientVoxelsByteOffset());
-        auto* cubes = static_cast<AmbientCube*>(mapped);
         for (uint32_t cascadeIndex = 0; cascadeIndex < requeueBricks.size(); ++cascadeIndex)
         {
             if (requeueBricks[cascadeIndex].empty())
             {
                 continue;
             }
-            const std::vector<uint32_t> slots = cpuBrickTable.RequeueBricks(
-                cascadeIndex, requeueBricks[cascadeIndex], scene.AmbientPoolBricksPerCascade(), publishPasses);
-            for (uint32_t globalSlot : slots)
-            {
-                AmbientCube* brick = cubes + static_cast<size_t>(globalSlot) * Assets::GPU_SCENE_AMBIENT_BRICK_VOLUME;
-                for (uint32_t probe = 0; probe < static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICK_VOLUME); ++probe)
-                {
-                    // Byte 2 of SkyVisibilityPXNXS0S1 is the sample count (AmbientCubeSampleCount).
-                    const uint32_t packed = brick[probe].SkyVisibilityPXNXS0S1;
-                    const uint32_t samples = (packed >> 16u) & 0xFFu;
-                    if (samples > keptSamples)
-                    {
-                        brick[probe].SkyVisibilityPXNXS0S1 =
-                            (packed & ~0x00FF0000u) | (static_cast<uint32_t>(keptSamples) << 16u);
-                    }
-                }
-            }
+            cpuBrickTable.RequeueBricks(cascadeIndex, requeueBricks[cascadeIndex],
+                                        scene.AmbientPoolBricksPerCascade(), publishPasses);
         }
-        arenaMemory.Unmap();
     }
     cpuBrickTable.UploadGPU(arenaMemory, scene.AmbientBrickTableByteOffset());
     scene.SetAmbientActiveBrickCounts(cpuBrickTable.activeBricksPerCascade);
@@ -1301,10 +1284,15 @@ bool FCPUAccelerationStructure::AcquireAmbientBakeBatch(Scene& scene, uint32_t m
     }
     outBatch.generation = brickTableGeneration_;
     outBatch.slots.resize(outBatch.bricks.size());
+    std::vector<uint32_t> activeBricks(outBatch.bricks.size());
+    static_assert(GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE <= GPU_SCENE_AMBIENT_ACTIVE_BRICK_MASK);
     const size_t tableBase = static_cast<size_t>(outBatch.cascade) * Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE;
     for (size_t i = 0; i < outBatch.bricks.size(); ++i)
     {
         outBatch.slots[i] = cpuBrickTable.brickTable[tableBase + outBatch.bricks[i]];
+        activeBricks[i] = outBatch.bricks[i] |
+            (static_cast<uint32_t>(cpuBrickTable.bakePasses[tableBase + outBatch.bricks[i]]) <<
+             GPU_SCENE_AMBIENT_ACTIVE_PASSES_SHIFT);
     }
     if (!ambientBakeActiveLogged_)
     {
@@ -1316,12 +1304,13 @@ bool FCPUAccelerationStructure::AcquireAmbientBakeBatch(Scene& scene, uint32_t m
     }
 
     // The cascade's active-list region is this frame's scratch list: the bake shader reads
-    // AmbientActiveBrickList[cascade * pool + i] for i < batch size.
+    // AmbientActiveBrickList[cascade * pool + i] for i < batch size. Each entry carries the CPU pass
+    // count so a geometry requeue limits accumulation on the GPU, without any host probe readback.
     const size_t listOffset = scene.AmbientActiveBrickListByteOffset() +
                               static_cast<size_t>(outBatch.cascade) * poolBricks * sizeof(uint32_t);
     const size_t bytes = outBatch.bricks.size() * sizeof(uint32_t);
     void* mapped = scene.AmbientArenaMemory().Map(static_cast<VkDeviceSize>(listOffset), static_cast<VkDeviceSize>(bytes));
-    std::memcpy(mapped, outBatch.bricks.data(), bytes);
+    std::memcpy(mapped, activeBricks.data(), bytes);
     scene.AmbientArenaMemory().Unmap();
     return true;
 }

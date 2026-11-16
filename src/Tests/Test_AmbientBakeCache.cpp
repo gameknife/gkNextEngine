@@ -1,5 +1,6 @@
 #include <catch2/catch_all.hpp>
 #include "TestCommon.hpp"
+#include "Test_CPUAccelerationAccess.hpp"
 
 #include "Engine/Assets/Acceleration/AmbientBakeCache.hpp"
 #include "Engine/Assets/Acceleration/CPUAccelerationStructure.hpp"
@@ -7,11 +8,14 @@
 #include "Engine/Assets/Core/Scene.hpp"
 #include "Engine/Rendering/VulkanBaseRenderer.hpp"
 #include "Engine/Runtime/Components/RenderComponent.hpp"
+#include "Engine/Vulkan/Device.hpp"
+#include "Engine/Vulkan/MemoryAndShader.hpp"
 
 #include <filesystem>
 #include <fstream>
 #include <algorithm>
 #include <functional>
+#include <thread>
 
 using namespace Assets::CPU;
 
@@ -118,7 +122,10 @@ namespace
               rendererType_(engine.GetUserSettings().RendererType),
               cascadeCount_(engine.GetUserSettings().AmbientCubeCascadeCount),
               bakeTargetFps_(engine.GetUserSettings().AmbientCubeBakeTargetFps),
-              diskCache_(engine.GetUserSettings().AmbientCubeDiskCache)
+              diskCache_(engine.GetUserSettings().AmbientCubeDiskCache),
+              tickAnimation_(engine.GetUserSettings().TickAnimation),
+              follow_(engine.GetUserSettings().AmbientCubeFollow),
+              publishPasses_(engine.GetUserSettings().AmbientCubePublishPasses)
         {
         }
 
@@ -127,6 +134,9 @@ namespace
             settings_.AmbientCubeCascadeCount = cascadeCount_;
             settings_.AmbientCubeBakeTargetFps = bakeTargetFps_;
             settings_.AmbientCubeDiskCache = diskCache_;
+            settings_.TickAnimation = tickAnimation_;
+            settings_.AmbientCubeFollow = follow_;
+            settings_.AmbientCubePublishPasses = publishPasses_;
             engine_.RequestRendererType(static_cast<Vulkan::ERendererType>(rendererType_));
             settings_.RendererType = rendererType_;
         }
@@ -137,6 +147,9 @@ namespace
         int cascadeCount_;
         uint32_t bakeTargetFps_;
         bool diskCache_;
+        bool tickAnimation_;
+        bool follow_;
+        uint32_t publishPasses_;
     };
 
     // The ambient cache is a cache: clearing it costs a re-bake, not data. The end-to-end test
@@ -328,6 +341,105 @@ TEST_CASE_METHOD(EngineTestFixture, "Ambient bake key tracks the scene's initial
         env.SunRotation = originalRotation;
         CHECK(ComputeAmbientBakeKey(scene, inputs) == baseline);
     }
+}
+
+// Exercise the active-list pass limit in both GPU bake kernels, including probes whose individual
+// sample count is lower than their brick's CPU pass count.
+TEST_CASE_METHOD(EngineTestFixture, "Ambient geometry requeue limits GPU accumulation without publishing fresh probes",
+                 "[GPU][Integration][AmbientBake]")
+{
+    const FScopedSettings settingsGuard(*engine_);
+    auto& settings = engine_->GetUserSettings();
+    settings.AmbientCubeCascadeCount = 1;
+    settings.AmbientCubeFollow = false;
+    settings.AmbientCubeDiskCache = false;
+    settings.AmbientCubeBakeTargetFps = 1;
+    settings.AmbientCubePublishPasses = 4;
+    settings.TickAnimation = false;
+    engine_->RequestRendererType(Vulkan::ERT_SoftwareModern);
+
+    SECTION("Hardware bake when available")
+    {
+        options_->ForceSoftGen = false;
+    }
+    SECTION("Software bake")
+    {
+        options_->ForceSoftGen = true;
+    }
+
+    engine_->RequestLoadScene({.filename = "assets/models/playground.glb"});
+    Assets::Scene& scene = engine_->GetScene();
+    FCPUAccelerationStructure& acceleration = scene.GetCPUAccelerationStructure();
+    bool converged = false;
+    for (uint32_t frame = 0; frame < 6000; ++frame)
+    {
+        Simulate(1);
+        const auto stats = acceleration.GetAmbientBakeQueueStats();
+        if (engine_->IsSceneReady() && stats.allocatedBricks > 0u && stats.pendingBricks == 0u)
+        {
+            converged = true;
+            break;
+        }
+        std::this_thread::yield();
+    }
+    REQUIRE(converged);
+    engine_->GetRenderer().Device().WaitIdle();
+
+    FCPUBrickTable& table = FCPUAccelerationStructureTestAccess::BrickTable(acceleration);
+    std::vector<Assets::AmbientCube> probes(FAmbientBrickCache::kProbesPerBrick);
+    std::vector<uint32_t> sampled;
+    uint32_t brick = 0;
+    size_t cubeOffset = 0;
+    for (; brick < table.brickTable.size(); ++brick)
+    {
+        const uint32_t slot = table.brickTable[brick];
+        if (slot == Assets::GPU_SCENE_AMBIENT_BRICK_INVALID)
+        {
+            continue;
+        }
+        cubeOffset = scene.AmbientCubesByteOffset() + static_cast<size_t>(slot) * FAmbientBrickCache::kBytesPerEntry;
+        const void* mapped = scene.AmbientArenaMemory().Map(cubeOffset, FAmbientBrickCache::kBytesPerEntry);
+        CopyFromDeviceMemory(probes.data(), mapped, FAmbientBrickCache::kBytesPerEntry);
+        scene.AmbientArenaMemory().Unmap();
+        sampled.clear();
+        for (uint32_t probe = 0; probe < probes.size(); ++probe)
+        {
+            if (((probes[probe].SkyVisibilityPXNXS0S1 >> 16u) & 0xFFu) >= 16u)
+            {
+                sampled.push_back(probe);
+            }
+        }
+        if (sampled.size() >= 3u)
+        {
+            break;
+        }
+    }
+    REQUIRE(sampled.size() >= 3u);
+    // The same batch contains a converged probe, a fresh one and one still below the publish
+    // threshold. The CPU pass limit must accelerate the first without increasing the latter two.
+    const auto setSamples = [&](uint32_t probe, uint32_t count)
+    {
+        probes[probe].SkyVisibilityPXNXS0S1 =
+            (probes[probe].SkyVisibilityPXNXS0S1 & ~0x00FF0000u) | (count << 16u);
+    };
+    setSamples(sampled[0], 32u);
+    setSamples(sampled[1], 0u);
+    setSamples(sampled[2], 2u);
+    void* mapped = scene.AmbientArenaMemory().Map(cubeOffset, FAmbientBrickCache::kBytesPerEntry);
+    std::memcpy(mapped, probes.data(), FAmbientBrickCache::kBytesPerEntry);
+    scene.AmbientArenaMemory().Unmap();
+
+    constexpr uint32_t publishPasses = 4u;
+    table.RequeueBricks(0u, {brick}, scene.AmbientPoolBricksPerCascade(), publishPasses);
+    Simulate(1);
+    REQUIRE(table.bakePasses[brick] == publishPasses + 1u);
+    engine_->GetRenderer().Device().WaitIdle();
+    mapped = scene.AmbientArenaMemory().Map(cubeOffset, FAmbientBrickCache::kBytesPerEntry);
+    CopyFromDeviceMemory(probes.data(), mapped, FAmbientBrickCache::kBytesPerEntry);
+    scene.AmbientArenaMemory().Unmap();
+    CHECK(((probes[sampled[0]].SkyVisibilityPXNXS0S1 >> 16u) & 0xFFu) == 5u);
+    CHECK(((probes[sampled[1]].SkyVisibilityPXNXS0S1 >> 16u) & 0xFFu) == 1u);
+    CHECK(((probes[sampled[2]].SkyVisibilityPXNXS0S1 >> 16u) & 0xFFu) == 3u);
 }
 
 // End to end: a cold load bakes and writes the cache, a second load of the same scene restores it

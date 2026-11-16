@@ -108,6 +108,8 @@
   [世界派遣与地理关卡](projects/nextdayz/nextdayz-world-map-design.md) ·
   [游戏内调试器](projects/nextdayz/nextdayz-debugger.md) ·
   [启动模式与多人联机](projects/nextdayz/nextdayz-multiplayer-design.md) ·
+  [Web 客户端架构设计](projects/nextdayz/nextdayz-web-client-design.md)（已核对，未实施） ·
+  [Web 客户端开发计划](projects/nextdayz/nextdayz-web-client-plan.md)（已核对，未开始） ·
   [服务器打包与部署](guides/nextdayz-server-deployment.md) ·
   [客户端打包与分发](guides/nextdayz-client-package.md)
 - NextRaiden：[竖版街机射击 MVP 设计](projects/nextraiden/nextraiden-mvp-design.md) ·

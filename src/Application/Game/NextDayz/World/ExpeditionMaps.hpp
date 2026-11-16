@@ -49,4 +49,8 @@ namespace NextDayz
     std::string RetiredExpeditionMapId(const std::vector<FExpeditionMap>& maps, std::string_view scene);
     bool UpgradeExpeditionCampaign(FCampaignSave& saved, const FExpeditionMap& map,
                                    const FMapWorldSave& freshWorld, const glm::vec3& safePosition);
+    // Training is practice, never a campaign sortie. Older builds could deploy the
+    // campaign into it and the safehouse then only offered "continue". Brings such a
+    // save home with its carried gear; returns false for any other save.
+    bool ReleaseTrainingDeployment(FCampaignSave& saved, const std::vector<FExpeditionMap>& maps);
 }

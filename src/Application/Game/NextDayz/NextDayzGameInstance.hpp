@@ -156,7 +156,11 @@ private:
     std::string ActiveMapId() const;
     void RequestExpeditionMap(const NextDayz::FExpeditionMap& map, bool deploy);
     void DrawWorldOperations();
-    void DrawWorldAtlas(const std::vector<const NextDayz::FExpeditionMap*>& visible, float availableHeight);
+    // Returns true when a location on the atlas was clicked this frame (selectedWorldMap_ changed).
+    bool DrawWorldAtlas(const std::vector<const NextDayz::FExpeditionMap*>& visible, float availableHeight);
+    // The offline destination the next DEPLOY flies to; nullptr = random assignment.
+    const NextDayz::FExpeditionMap* ChosenDeployMap() const;
+    void BrowseWorldMap(const NextDayz::FExpeditionMap& map);
     void LoadWorldAtlas();
     void TickMapAuthoring();
     enum class ESafehouseReturn
@@ -389,6 +393,7 @@ private:
     std::string validationDeployMap_;
     int safehouseTab_ = -1; // -1 cabin, 0 world map, 1 storage
     int selectedWorldMap_ = 0;
+    std::string deployMapChoice_;   // offline campaign destination id; empty = random assignment
     float atlasZoom_ = 1.0f;
     glm::vec2 atlasPan_{};
     std::vector<std::vector<glm::vec2>> atlasPolygons_;

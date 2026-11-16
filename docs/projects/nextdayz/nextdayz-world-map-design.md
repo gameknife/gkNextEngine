@@ -9,7 +9,7 @@ last_updated: 2026-11-15
 
 # NextDayz 世界派遣与地理关卡
 
-**安全屋整备 → 接受目的地保密的回收委托 → 随机地区部署 → 搜刮／生存／撤离 → 返回安全屋查看世界足迹。**
+**安全屋整备 → 在世界地图上选定地区（或接受随机分配）→ 部署 → 搜刮／生存／撤离 → 返回安全屋查看世界足迹。**
 
 撤离、仓库与出售机制见[持久世界与直升机撤离](nextdayz-extraction-design.md)。本层增加真实地理关卡、分图持久化、离线矢量世界地图，以及草稿试玩到正式化的制作流程。
 
@@ -31,10 +31,12 @@ last_updated: 2026-11-15
 
 ## 派遣、安全屋与存档
 
-- 从 `assets/configs/nextdayz_maps.json` 中的 `published` 地图等概率随机派遣，再随机选该图的安全落点。世界地图用于浏览，不指定下次任务地点。`"kind": "training"` 的地图（训练场）不参与派遣、不画在世界地图上、不作为启动默认地图，也不需要 `center`；安全屋左侧列表照常列出，并有专门的 `ENTER TRAINING GROUND` 按钮。
+- 单机出发目的地：在世界页左侧列表或世界地图上点选一个 `published` 地区即把它设为目的地（`DEPLOYMENT DESTINATION`，按钮变为 `DEPLOY TO DESTINATION`），机舱主菜单的 `DEPLOY` 同样飞往该地；点 `RANDOM ASSIGNMENT` 回到随机分配，即从 `assets/configs/nextdayz_maps.json` 的 `published` 地图等概率抽取。两种方式都再随机选该图的安全落点。目的地只在本次运行内记住（`game.deployDestination` 查询，`random` 表示随机）。`"kind": "training"` 的地图（训练场）不参与派遣、不能成为目的地、不画在世界地图上、不作为启动默认地图，也不需要 `center`；安全屋左侧列表照常列出，`ENTER TRAINING GROUND` 进入独立的离线训练会话（`StartTraining`），**从不携带或改动战役存档**。非创作模式下 `Deploy`／`RequestExpeditionMap` 拒绝把战役送进训练场。
+- 旧版本可能把战役部署进训练场，之后机舱只剩“继续行动”、反复回到训练场。读档时 `ReleaseTrainingDeployment` 把这类存档带回安全屋：随身装备、仓库、金币与历史次数保留，结果记为 `RETURNED FROM TRAINING`。
+- Master 大厅的世界地图点击地点与左侧列表等价，都会设定本次出击地图（`mapChoice`）。
 - 存档所在地区已从注册表删除（`assets/scad/proc/nextdayz/<旧 id>/...` 且注册表没有该 id）时，读档按 Riverland 退役的方式处理：原存档备份为 `save.json.retired-<id>-backup`，旧世界状态存到 `maps[<id>]`，玩家回到当前地图的安全屋，随身装备、仓库、金币和历史次数保留。
 - 安全屋分为世界／任务页与仓库／携装页。世界地图用 Natural Earth 陆地矢量直接绘制，支持缩放、拖动、点击地点，显示简介和各图出击次数；完全离线。
-- 临时测试入口：在左侧列表或世界地图选中地区后，点击 `ENTER SELECTED MAP (TEST)` 直接部署到该图。沿用正式出击、携装与存档规则；原有 `ACCEPT & DEPLOY` 继续随机派遣。
+- 临时测试入口（创作模式或 agent 验证）：`ENTER SELECTED MAP (TEST)` 直接部署到所浏览的图，沿用正式出击、携装与存档规则。
 - 成功进入地图才计一次新出击，死亡也计入；加载失败、续接、热重建和重复结算不重复累计。返程显示地区和结果。
 - 仓库与黄金共享；物资、掉落、补货计时和世界时间按稳定 `mapId` 保存。只推进正在游玩的地图，局外、离线和其他地图暂停。死亡装备留在原图，之后再次派到那里才能回收。
 - 存档 v2 在同一快照里保存各图状态、地图版本、当前地图、玩家、航班与唯一出击序号；兼容原单图 v1 存档。已发布地区升级时，保留迁移前快照及 `mapId@v旧版本` 世界记录，将玩家带回安全屋；携装、仓库、金币、历史次数与其他地区保留，升级地区使用新的物资／地形布局。拒绝向旧版本降级。
@@ -190,6 +192,7 @@ python tools/nextdayz/check_legacy_startup.py
 python tools/nextdayz/check_region_upgrade.py
 gnb.bat validate --script assets/agentscripts/nextdayz-world-maps.agentscript.json
 gnb.bat validate --script assets/agentscripts/nextdayz-world-resume.agentscript.json
+gnb.bat validate --script assets/agentscripts/nextdayz-world-select.agentscript.json
 gnb.bat validate --script assets/agentscripts/nextdayz-published-dispatch.agentscript.json
 gnb.bat validate --script assets/agentscripts/nextdayz-extraction.agentscript.json
 gnb.bat validate --script assets/agentscripts/nextdayz-loket-entrance.agentscript.json
@@ -200,6 +203,8 @@ gnb.bat validate --script assets/agentscripts/nextdayz-zombie-indoor.agentscript
 ```
 
 前两份脚本顺序执行，分别覆盖多图、场景重建、撤离／死亡与跨进程恢复；`published-dispatch` 检查冻结场景的普通随机派遣，`extraction` 保留原撤离循环回归。桥梁脚本使用实际移动输入检查跨水通路；`world-maps` 的第二张图是训练场（点击坐标按 125% 界面缩放的窗口像素写死）。`training-ground` 检查 111 个陈列点、走进武器陈列棚 / 军需帐篷 / 食堂 / 物资帐篷，并在 25 m 靶位实际开枪确认报环；`zombie-indoor` 让感染者跟进军需帐篷。隔离测试不改正式存档；首份与正式派遣脚本会重建各自的测试进度，可重复执行。地形全景检查使用 `nextdayz-geography-overview.agentscript.json`，可通过 `--scene` 覆盖地图。
+
+`world-select` 在机舱里用真实点击覆盖地图点选、切回随机、列表选择、浏览训练场不改目的地、部署到所选地区、调试返回后目的地保留，以及世界页进入训练场为独立会话。
 
 `talek-bridge` 用实际移动输入走过塔勒克大门的公路桥（河道是导出时刻出来的，没有全图水位），再到集市街截图。
 

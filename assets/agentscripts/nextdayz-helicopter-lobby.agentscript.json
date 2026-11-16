@@ -252,7 +252,7 @@
     {
       "type": "cvar",
       "name": "nextdayz.validation.deployMap",
-      "set": "training_ground"
+      "set": "cz_loket_riverbend"
     },
     {
       "type": "cvar",
@@ -282,7 +282,7 @@
       "type": "assert",
       "query": "game.activeMapId",
       "op": "eq",
-      "value": "training_ground"
+      "value": "cz_loket_riverbend"
     },
     {
       "type": "assert",

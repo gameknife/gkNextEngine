@@ -1104,6 +1104,10 @@ void NextDayzGameInstance::NetPoll()
                 if (remote.rig >= 0) remoteRigs_[remote.rig]->SetVisible(false);
             net.remotes.clear();
             world_.zombies.ApplyReplicas({});
+            // A new connection is a new survivor on the server: ask for its loot again.
+            net.lootRequestedScene = 0;
+            net.lootSyncedScene = 0;
+            net.pendingTakes.clear();
             SPDLOG_WARN("[NextDayz][net] {}", net.status);
             if (net.master && (net.lobby == FNetSession::ELobby::Playing || net.lobby == FNetSession::ELobby::Joining))
             {
@@ -1132,6 +1136,20 @@ void NextDayzGameInstance::NetPoll()
                 loadingMapPath_ = welcome.scene;
                 loadingCabin_ = false;
                 GetEngine().RequestLoadScene({.filename = welcome.scene});
+                if (!net.master)
+                {
+                    // Committing a map blocks this thread for longer than ENet's
+                    // timeout. Leave before loading and come back with the map ready,
+                    // as the Master flow does; a survivor that never reported a
+                    // position leaves no body on the server.
+                    net.host.Shutdown();
+                    net.connected = false;
+                    net.survivorId = 0;
+                    net.connectWhenReady = true;
+                    net.status = "loading the server's map";
+                    SPDLOG_INFO("[NextDayz][net] loading '{}' before joining", welcome.scene);
+                    return;
+                }
             }
             else if (sceneReady_)
             {
@@ -1468,6 +1486,12 @@ void NextDayzGameInstance::NetClientSend(float dt)
     if (net.master && !net.connected)
     {
         return;   // a Master client reconnects through the lobby
+    }
+    if (net.connectWhenReady)
+    {
+        if (!sceneReady_ || cabinScene_ || !loadingMapPath_.empty()) return;
+        net.connectWhenReady = false;
+        net.reconnectTimer = kReconnectSeconds;   // the map is ready: connect now
     }
     if (!net.host.IsOpen() || (!net.connected && net.rejected.empty() && net.status == "disconnected"))
     {
@@ -2557,7 +2581,13 @@ bool NextDayzGameInstance::DrawLobby()
         if (ImGui::Button(Label("PREPARE LOADOUT"), ImVec2(-1,32))) safehouseTab_ = 1;
         ImGui::EndChild();
         ImGui::SameLine();
-        DrawWorldAtlas(visible, height);
+        // Clicking a region on the atlas chooses it, same as its row in the list.
+        if (DrawWorldAtlas(visible, height) && ready)
+        {
+            const auto& id = visible[selectedWorldMap_]->id;
+            const auto found = std::find_if(profile.maps.begin(), profile.maps.end(), [&](const auto& map) { return map.id == id; });
+            if (found != profile.maps.end()) net.mapChoice = static_cast<int>(found - profile.maps.begin()) + 1;
+        }
     }
     else if (!ready) ImGui::TextWrapped("%s", Tr("Log in to prepare your next expedition."));
     else if (!profile.playing.empty())

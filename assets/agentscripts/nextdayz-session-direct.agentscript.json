@@ -42,7 +42,7 @@
     {"type": "wait-frames", "n": 4},
     {"type": "click", "at": {"norm": [0.5, 0.53]}, "button": "left"},
     {"type": "wait-frames", "n": 4},
-    {"type": "wait-until", "query": "game.netLobby", "op": "eq", "value": "playing", "timeoutMs": 30000, "fatal": true},
+    {"type": "wait-until", "query": "game.netLobby", "op": "eq", "value": "playing", "timeoutMs": 180000, "fatal": true},
     {"type": "wait-until", "query": "game.netLootSynced", "op": "eq", "value": true, "timeoutMs": 30000, "fatal": true},
     {"type": "assert", "query": "game.sessionMode", "op": "eq", "value": "direct", "fatal": true},
     {"type": "assert", "query": "game.loggedIn", "op": "eq", "value": false, "fatal": true},

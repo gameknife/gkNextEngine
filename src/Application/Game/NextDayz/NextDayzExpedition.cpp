@@ -102,6 +102,8 @@ void NextDayzGameInstance::InitializeCampaign()
         bool retiredRegion = false;
         bool upgraded = false;
         const bool read = NextDayz::ReadCampaignSave(campaignPath_, saved, error);
+        if (read && NextDayz::ReleaseTrainingDeployment(saved, expeditionMaps_))
+            SPDLOG_INFO("[NextDayz] campaign was deployed into the training ground; returned it to the safehouse");
         const auto* savedMap = read ? NextDayz::FindExpeditionMap(expeditionMaps_,saved.map) : nullptr;
         if (savedMap && saved.mapVersion < savedMap->version)
         {
@@ -384,11 +386,18 @@ void NextDayzGameInstance::Deploy()
         !NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_);
     if (!legacyFixture && !available.empty())
     {
+        // The draw always happens so a chosen destination leaves the RNG sequence unchanged.
         const auto* selected = available[sessionRng_.Range(static_cast<uint32_t>(available.size()))];
+        if (const auto* chosen = ChosenDeployMap()) selected = chosen;
         if (authoringMode_) selected = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_);
         if (GOption->AgentValidation && !validationDeployMap_.empty())
             selected = NextDayz::FindExpeditionMap(expeditionMaps_, validationDeployMap_);
         if (!selected) { campaignMessage_ = "No available assignment"; return; }
+        if (selected->training && !authoringMode_)
+        {
+            campaignMessage_ = "The training ground is practice only. Enter it from the safehouse.";
+            return;
+        }
         const std::string& targetScene = authoringMode_ ? selected->draftScene : selected->scene;
         if (targetScene != campaignMap_ || cabinScene_)
         {
@@ -404,9 +413,28 @@ void NextDayzGameInstance::Deploy()
     CompleteDeployment();
 }
 
+const NextDayz::FExpeditionMap* NextDayzGameInstance::ChosenDeployMap() const
+{
+    if (deployMapChoice_.empty() || authoringMode_) return nullptr;
+    const auto* map = NextDayz::FindExpeditionMap(expeditionMaps_, deployMapChoice_);
+    return map && NextDayz::IsDispatchable(*map, false) ? map : nullptr;
+}
+
+void NextDayzGameInstance::BrowseWorldMap(const NextDayz::FExpeditionMap& map)
+{
+    // Browsing a region in the offline campaign picks it as the next destination.
+    if (!authoringMode_ && NextDayz::IsDispatchable(map, false)) deployMapChoice_ = map.id;
+}
+
 void NextDayzGameInstance::RequestExpeditionMap(const NextDayz::FExpeditionMap& map, bool deploy)
 {
     if (pendingCampaign_ || campaignSaveBlocked_) return;
+    if (map.training && !authoringMode_)
+    {
+        // Practice never carries the campaign: it is its own isolated session.
+        StartTraining();
+        return;
+    }
     const std::string& targetScene = authoringMode_ ? map.draftScene : map.scene;
     if (!std::filesystem::exists(Utilities::FileHelper::ResolvePlatformFilePath(targetScene.c_str())))
     {

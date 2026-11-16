@@ -161,6 +161,12 @@ void NextDayzGameInstance::InitializeCabinCampaign()
         if (const auto* map = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_))
             cabinCampaign_->mapVersion = map->version;
     }
+    const bool releasedTraining = NextDayz::ReleaseTrainingDeployment(*cabinCampaign_, expeditionMaps_);
+    if (releasedTraining)
+    {
+        campaignMessage_ = "Training is practice only. Your survivor is back in the safehouse with the gear they carried.";
+        SPDLOG_INFO("[NextDayz] campaign was deployed into the training ground; returned it to the safehouse");
+    }
     const auto& saved = *cabinCampaign_;
     campaignMap_ = saved.map;
     campaign_ = saved.campaign;
@@ -186,7 +192,7 @@ void NextDayzGameInstance::InitializeCabinCampaign()
         : "Prepare your equipment. The helicopter is ready when you are.";
     // World, clock and survivor coordinates stay in cabinCampaign_. Merely
     // opening the lobby must never replace them with the cabin's empty world.
-    if (!exists && !fresh) SaveCampaign();
+    if ((!exists && !fresh) || releasedTraining) SaveCampaign();
 }
 
 void NextDayzGameInstance::TickCabin(float dt)

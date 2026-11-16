@@ -59,6 +59,22 @@ namespace NextDayz
         return true;
     }
 
+    bool ReleaseTrainingDeployment(FCampaignSave& saved, const std::vector<FExpeditionMap>& maps)
+    {
+        const auto* map = FindExpeditionMap(maps, saved.map);
+        if (!map || !IsTrainingMap(*map) || !saved.campaign.inField) return false;
+        saved.campaign.inField = false;
+        saved.campaign.flight = {};
+        saved.campaign.lastMapId = map->id;
+        saved.campaign.lastOutcome = "RETURNED FROM TRAINING";
+        saved.survival = {};
+        saved.survivalSeconds = 0.0;
+        saved.hasCacheMarker = false;
+        saved.cacheSeconds = 0.0f;
+        saved.lanternLit = false;
+        return true;
+    }
+
     bool MigrateRiverlandCampaign(FCampaignSave& saved, const FExpeditionMap& map,
                                  const FMapWorldSave& freshWorld, const glm::vec3& safePosition)
     {

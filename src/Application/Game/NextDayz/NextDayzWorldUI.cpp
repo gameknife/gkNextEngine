@@ -53,6 +53,13 @@ void NextDayzGameInstance::DrawWorldOperations()
     for (const auto& map : expeditionMaps_)
         if (map.published || authoringMode_) visible.push_back(&map);
     selectedWorldMap_ = std::clamp(selectedWorldMap_, 0, std::max(0, static_cast<int>(visible.size()) - 1));
+    // Open on the chosen destination rather than whichever region was browsed last.
+    if (const auto* chosen = ChosenDeployMap(); chosen && !visible.empty() &&
+        visible[selectedWorldMap_] != chosen && !visible[selectedWorldMap_]->training)
+    {
+        const auto found = std::find(visible.begin(), visible.end(), chosen);
+        if (found != visible.end()) selectedWorldMap_ = static_cast<int>(found - visible.begin());
+    }
     const float availableWidth = ImGui::GetContentRegionAvail().x;
     const float availableHeight = ImGui::GetContentRegionAvail().y;
     const float sidebarWidth = std::clamp(availableWidth * 0.25f, 245.0f, 340.0f);
@@ -78,8 +85,14 @@ void NextDayzGameInstance::DrawWorldOperations()
         const auto title = map.training
             ? NextDayz::L10n::Format("{}\n{}  |  practice, never assigned", map.name, map.region)
             : NextDayz::L10n::Format("{}\n{}  |  {} deployments", map.name, map.region, sorties);
+        const bool destination = !authoringMode_ && ChosenDeployMap() == &map;
+        if (destination) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.89f,0.71f,0.40f,1));
         if (ImGui::Selectable(title.c_str(), selectedWorldMap_ == static_cast<int>(index), 0, ImVec2(0, 62)))
+        {
             selectedWorldMap_ = static_cast<int>(index);
+            BrowseWorldMap(map);
+        }
+        if (destination) ImGui::PopStyleColor();
         ImGui::PopID();
     }
     ImGui::Spacing();
@@ -92,8 +105,21 @@ void NextDayzGameInstance::DrawWorldOperations()
         ImGui::TextColored(ImVec4(0.7f,0.78f,0.64f,1), "%s", NextDayz::L10n::Tr(campaign_.lastOutcome));
         ImGui::Spacing();
     }
-    ImGui::TextDisabled("%s", NextDayz::L10n::Tr("CLASSIFIED RECOVERY CONTRACT"));
-    ImGui::TextWrapped("%s", NextDayz::L10n::Tr("Destination assigned on departure. The map is your field record; browsing a region does not select your next assignment."));
+    const auto* destination = ChosenDeployMap();
+    if (!authoringMode_)
+    {
+        ImGui::TextDisabled("%s", NextDayz::L10n::Tr("DEPLOYMENT DESTINATION"));
+        if (destination)
+        {
+            ImGui::TextColored(ImVec4(0.89f,0.71f,0.40f,1), "%s", NextDayz::L10n::Tr(destination->name));
+            ImGui::TextDisabled("%s", NextDayz::L10n::Tr(destination->region));
+        }
+        else
+        {
+            ImGui::TextColored(ImVec4(0.89f,0.71f,0.40f,1), "%s", NextDayz::L10n::Tr("RANDOM ASSIGNMENT"));
+            ImGui::TextWrapped("%s", NextDayz::L10n::Tr("Destination revealed on departure. Pick a region in the list or on the map to fly there instead."));
+        }
+    }
     ImGui::Spacing();
     ImGui::Text(NextDayz::L10n::Tr("Carried gear: %zu stacks"), inventory_.Instances().size());
     ImGui::Text(NextDayz::L10n::Tr("Free space: %d"), inventory_.TotalCapacity() - inventory_.UsedCapacity());
@@ -101,9 +127,12 @@ void NextDayzGameInstance::DrawWorldOperations()
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.46f,0.33f,0.16f,1));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.60f,0.44f,0.23f,1));
     ImGui::BeginDisabled(visible.empty() || pendingCampaign_.has_value());
-    if (ImGui::Button(authoringMode_ ? NextDayz::L10n::Tr("PLAYTEST CURRENT MAP") : NextDayz::L10n::Tr("ACCEPT & DEPLOY"), ImVec2(-1, 48))) Deploy();
+    const char* deployLabel = authoringMode_ ? NextDayz::L10n::Tr("PLAYTEST CURRENT MAP")
+        : destination ? NextDayz::L10n::Tr("DEPLOY TO DESTINATION") : NextDayz::L10n::Tr("ACCEPT & DEPLOY");
+    if (ImGui::Button(deployLabel, ImVec2(-1, 48))) Deploy();
     ImGui::EndDisabled();
     ImGui::PopStyleColor(2);
+    if (destination && ImGui::Button(NextDayz::L10n::Label("RANDOM ASSIGNMENT"), ImVec2(-1, 30))) deployMapChoice_.clear();
     if (ImGui::Button(NextDayz::L10n::Label("PREPARE LOADOUT"), ImVec2(-1, 30))) safehouseTab_ = 1;
     ImGui::Spacing();
     if (authoringMode_ || GOption->AgentValidation)
@@ -126,21 +155,19 @@ void NextDayzGameInstance::DrawWorldOperations()
     {
         ImGui::Spacing();
         ImGui::BeginDisabled(pendingCampaign_.has_value() || campaignSaveBlocked_);
-        if (ImGui::Button(NextDayz::L10n::Tr("ENTER TRAINING GROUND"), ImVec2(-1, 32)))
-        {
-            if ((*training)->scene == campaignMap_ && !cabinScene_) CompleteDeployment();
-            else RequestExpeditionMap(**training, true);
-        }
+        // Practice is its own offline session: it never carries or changes the campaign.
+        if (ImGui::Button(NextDayz::L10n::Tr("ENTER TRAINING GROUND"), ImVec2(-1, 32))) StartTraining();
         ImGui::EndDisabled();
     }
     ImGui::EndChild();
     ImGui::SameLine();
 
-    DrawWorldAtlas(visible, availableHeight);
+    if (DrawWorldAtlas(visible, availableHeight)) BrowseWorldMap(*visible[selectedWorldMap_]);
 }
 
-void NextDayzGameInstance::DrawWorldAtlas(const std::vector<const NextDayz::FExpeditionMap*>& visible, float availableHeight)
+bool NextDayzGameInstance::DrawWorldAtlas(const std::vector<const NextDayz::FExpeditionMap*>& visible, float availableHeight)
 {
+    bool picked = false;
     LoadWorldAtlas();
     selectedWorldMap_ = std::clamp(selectedWorldMap_, 0, std::max(0, static_cast<int>(visible.size()) - 1));
     ImGui::BeginChild("world_atlas_panel", ImVec2(0, availableHeight), false);
@@ -207,7 +234,11 @@ void NextDayzGameInstance::DrawWorldAtlas(const std::vector<const NextDayz::FExp
         if (hovered && distance < 18.0f)
         {
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) selectedWorldMap_ = static_cast<int>(index);
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                selectedWorldMap_ = static_cast<int>(index);
+                picked = true;
+            }
         }
         if (selected)
         {
@@ -247,4 +278,5 @@ void NextDayzGameInstance::DrawWorldAtlas(const std::vector<const NextDayz::FExp
     }
     ImGui::TextDisabled("%s", NextDayz::L10n::Tr("Made with Natural Earth."));
     ImGui::EndChild();
+    return picked;
 }

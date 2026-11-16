@@ -3495,6 +3495,8 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
             }
         return std::string{};
     });
+    reg.Add("deployDestination", [this]() -> Runtime::Agent::FAgentQueryValue
+    { const auto* map = ChosenDeployMap(); return map ? map->id : std::string("random"); });
     reg.Add("safeSpawns", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(world_.anchors.Count(NextDayz::EWorldAnchorType::PlayerSafe)); });
     reg.Add("campaignInField", [this]() -> Runtime::Agent::FAgentQueryValue { return campaign_.inField; });
     reg.Add("campaignGold", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.gold); });

@@ -1,0 +1,292 @@
+{
+  "name": "nextdayz-world-select",
+  "target": "NextDayz",
+  "comment": "Offline campaign: pick a region on the world atlas or in the field records and deploy there; training stays its own session. Click positions are framebuffer pixels at 125% UI scale (1600x900 viewport).",
+  "viewport": {
+    "width": 1600,
+    "height": 900
+  },
+  "args": [
+    "--cvar",
+    "nextdayz.validation.campaign true",
+    "--cvar",
+    "nextdayz.validation.campaignFresh true",
+    "--cvar",
+    "nextdayz.validation.campaignPath out/nextdayz-validation/world-select.json"
+  ],
+  "defaults": {
+    "waitFrames": 2,
+    "stepTimeoutMs": 180000
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "assert",
+      "query": "game.cabinScene",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignSaveBlocked",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "key",
+      "code": "M",
+      "action": "press"
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "assert",
+      "query": "game.cabinPanel",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "assert",
+      "query": "game.deployDestination",
+      "op": "eq",
+      "value": "random"
+    },
+    {
+      "type": "click",
+      "at": {
+        "px": [
+          1259,
+          371
+        ]
+      },
+      "button": "left",
+      "comment": "Loket marker on the atlas"
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "assert",
+      "query": "game.deployDestination",
+      "op": "eq",
+      "value": "cz_loket_riverbend"
+    },
+    {
+      "type": "assert",
+      "query": "game.browsedMapId",
+      "op": "eq",
+      "value": "cz_loket_riverbend"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz-world-select-destination",
+      "ui": true
+    },
+    {
+      "type": "click",
+      "at": {
+        "px": [
+          346,
+          721
+        ]
+      },
+      "button": "left",
+      "comment": "RANDOM ASSIGNMENT under the deploy button"
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "assert",
+      "query": "game.deployDestination",
+      "op": "eq",
+      "value": "random"
+    },
+    {
+      "type": "click",
+      "at": {
+        "px": [
+          345,
+          330
+        ]
+      },
+      "button": "left",
+      "comment": "Loket row in the field records"
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "assert",
+      "query": "game.deployDestination",
+      "op": "eq",
+      "value": "cz_loket_riverbend"
+    },
+    {
+      "type": "click",
+      "at": {
+        "px": [
+          345,
+          415
+        ]
+      },
+      "button": "left",
+      "comment": "Training ground row: browsing it keeps the destination"
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "assert",
+      "query": "game.browsedMapId",
+      "op": "eq",
+      "value": "training_ground"
+    },
+    {
+      "type": "assert",
+      "query": "game.deployDestination",
+      "op": "eq",
+      "value": "cz_loket_riverbend"
+    },
+    {
+      "type": "click",
+      "at": {
+        "px": [
+          346,
+          666
+        ]
+      },
+      "button": "left",
+      "comment": "DEPLOY TO DESTINATION"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.campaignInField",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "assert",
+      "query": "game.cabinScene",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "assert",
+      "query": "game.activeMapId",
+      "op": "eq",
+      "value": "cz_loket_riverbend"
+    },
+    {
+      "type": "assert",
+      "query": "game.currentMapSorties",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "assert",
+      "query": "game.sessionMode",
+      "op": "eq",
+      "value": "offline"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.debug.expedition",
+      "set": "return"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.cabinScene",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignInField",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "assert",
+      "query": "game.campaignSorties",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "key",
+      "code": "M",
+      "action": "press"
+    },
+    {
+      "type": "wait-frames",
+      "n": 4
+    },
+    {
+      "type": "assert",
+      "query": "game.deployDestination",
+      "op": "eq",
+      "value": "cz_loket_riverbend"
+    },
+    {
+      "type": "click",
+      "at": {
+        "px": [
+          346,
+          926
+        ]
+      },
+      "button": "left",
+      "comment": "ENTER TRAINING GROUND on the world page"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.sessionMode",
+      "op": "eq",
+      "value": "training",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.activeMapId",
+      "op": "eq",
+      "value": "training_ground",
+      "timeoutMs": 180000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "assert",
+      "query": "game.activeMapId",
+      "op": "eq",
+      "value": "training_ground"
+    },
+    {
+      "type": "assert",
+      "query": "game.cabinScene",
+      "op": "eq",
+      "value": false
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

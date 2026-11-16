@@ -384,6 +384,55 @@ TEST_CASE("NextDayz retired regions return their saves to a safehouse", "[NextDa
     CHECK(carried.CountOf("ak") == 1);
 }
 
+TEST_CASE("NextDayz campaigns deployed into the training ground return to the safehouse", "[NextDayz][Startup][Training]")
+{
+    using namespace NextDayz;
+    FExpeditionMap loket;
+    loket.id = "cz_loket_riverbend";
+    loket.scene = "assets/scad/proc/nextdayz/cz_loket_riverbend/published/v8/scene.scad";
+    loket.draftScene = "assets/scad/proc/nextdayz/cz_loket_riverbend/scene.scad";
+    loket.version = 8;
+    loket.published = true;
+    FExpeditionMap training = loket;
+    training.id = "training_ground";
+    training.scene = "assets/scad/proc/nextdayz/training_ground/published/v2/scene.scad";
+    training.draftScene = "assets/scad/proc/nextdayz/training_ground/scene.scad";
+    training.version = 2;
+    training.training = true;
+    const std::vector<FExpeditionMap> maps{loket, training};
+
+    FCampaignSave saved;
+    saved.map = training.scene;
+    saved.mapVersion = training.version;
+    saved.campaign.inField = true;
+    saved.campaign.gold = 7;
+    saved.campaign.sorties = 30;
+    saved.campaign.flight = {EFlightPhase::Inbound, "pad", {}, 3, false};
+    saved.survivalSeconds = 120.0;
+    Inventory inventory;
+    REQUIRE(inventory.TryAdd("ak", "AK", EItemKind::Weapon, 1));
+    saved.inventory = inventory.Capture();
+
+    REQUIRE(ReleaseTrainingDeployment(saved, maps));
+    CHECK_FALSE(saved.campaign.inField);
+    CHECK(saved.campaign.flight.phase == EFlightPhase::Idle);
+    CHECK(saved.campaign.lastMapId == "training_ground");
+    CHECK(saved.campaign.lastOutcome == "RETURNED FROM TRAINING");
+    CHECK(saved.campaign.gold == 7);
+    CHECK(saved.campaign.sorties == 30);
+    CHECK(saved.survivalSeconds == 0.0);
+    Inventory carried;
+    REQUIRE(carried.Restore(saved.inventory));
+    CHECK(carried.CountOf("ak") == 1);
+    CHECK_FALSE(ReleaseTrainingDeployment(saved, maps));   // already home
+
+    FCampaignSave field;
+    field.map = loket.scene;
+    field.campaign.inField = true;
+    CHECK_FALSE(ReleaseTrainingDeployment(field, maps));    // real expeditions stay in the field
+    CHECK(field.campaign.inField);
+}
+
 TEST_CASE("NextDayz training ground displays every item and scores the range", "[NextDayz][Landscape][Training]")
 {
     Assets::EnvironmentSetting environment;

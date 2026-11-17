@@ -118,7 +118,7 @@ module nd_tg_building(kind="tg_hq",seed=0,L=12,D=8)
         w=(D-2)/2;
         gk_flatten()
         {
-            for(sx=[-1,1]) translate([sx*(w/2+1),0,0]) rotate([0,0,90]) tg_tent(seed+sx,L,w,2.0,1.8,true);
+            for(sx=[-1,1]) translate([sx*(w/2+1),0,0]) rotate([0,0,90]) tg_tent(seed+sx,L,w,2.3,1.8,true);
             translate([0,-L/2-0.4,2.4]) tg_plate("QUARTERMASTER  -  TRY IT ON",3.0,0.3,0.14,tg_yellow(),tg_black(),0.02);
             for(sx=[-1,1]) translate([sx*(w/2+1),L/2-1.2,0.08]) tg_mannequin(seed+sx,tg_canvas(seed+sx));
         }
@@ -133,7 +133,7 @@ module nd_tg_building(kind="tg_hq",seed=0,L=12,D=8)
         // Army tent turned end-on: rations on the serving table, benches.
         gk_flatten()
         {
-            rotate([0,0,90]) tg_tent(seed,L,D,1.9,1.4,true);
+            rotate([0,0,90]) tg_tent(seed,L,D,2.3,1.4,true);
             for(i=[0:2]) translate([1.6,-L/2+4+i*3.2,0.08]) rotate([0,0,90])
             {
                 cw_prop_table(seed+i,1.8,0.8);
@@ -148,7 +148,7 @@ module nd_tg_building(kind="tg_hq",seed=0,L=12,D=8)
     {
         gk_flatten()
         {
-            rotate([0,0,90]) tg_tent(seed,L,D,2.0,1.8,true);
+            rotate([0,0,90]) tg_tent(seed,L,D,2.3,1.8,true);
             for(i=[0:2]) translate([D/2-1.0,-L/2+3+i*2.6,0.08]) rotate([0,0,90]) tg_shelf(seed+i,2.2,0.55,4);
             for(i=[0:1]) translate([D/2-1.1,-L/2+3+i*2.6,0.08+tg_shelf_z(1)]) rotate([0,0,90]) tg_crate(seed+i,0.8,0.4,0.35);
             translate([D/2-1.4,L/2-2.2,0.08]) rotate([0,0,-90]) cw_prop_workbench(seed);
@@ -164,7 +164,7 @@ module nd_tg_building(kind="tg_hq",seed=0,L=12,D=8)
             tg_bldg_hq(seed,L,D);
             for(sx=[-1,1]) translate([sx*L*0.3,1.2,0.12]) { cw_prop_table(seed+sx,1.6,0.8); translate([0,0.75,0]) cw_prop_chair(seed+sx); }
             translate([0,1.5,0.12]) { tg_table_display(seed,2.6,1.6); translate([0,0,0.87]) tg_m_paper([0.36,0.38,0.30]) tg_box([2.3,1.3,0.005]); }
-            translate([0,D/2-0.6,0.12]) rotate([0,0,180]) tg_notice_board(seed,"TRAINING SCHEDULE");
+            translate([-3.2,D/2-0.6,0.12]) rotate([0,0,180]) tg_notice_board(seed,"TRAINING SCHEDULE");   // beside the back door, not in it
             for(sx=[-1,1]) translate([sx*(L/2-0.8),D/2-0.7,0.12]) cw_prop_locker(seed+sx,2);
             translate([L*0.3,1.2,0.95]) cw_item_radio();
         }

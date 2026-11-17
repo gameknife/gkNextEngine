@@ -1,0 +1,284 @@
+{
+  "mode": "synthetic-terrain/gameplay-pcg",
+  "buildings": 21,
+  "treeBudget": 0,
+  "shrubBudget": 260,
+  "referenceRoads": 0,
+  "sites": [
+    {
+      "id": "gate",
+      "name": "Main gate",
+      "kind": "tg_gate",
+      "at": [
+        -60,
+        -260
+      ],
+      "size": [
+        70,
+        50
+      ],
+      "rotation": 0,
+      "buildings": 2,
+      "risk": 1
+    },
+    {
+      "id": "hq",
+      "name": "Range control and parade ground",
+      "kind": "tg_hq",
+      "at": [
+        -60,
+        -175
+      ],
+      "size": [
+        110,
+        70
+      ],
+      "rotation": 0,
+      "buildings": 2,
+      "risk": 1
+    },
+    {
+      "id": "armory",
+      "name": "Armory",
+      "kind": "tg_armory",
+      "at": [
+        -165,
+        -90
+      ],
+      "size": [
+        60,
+        48
+      ],
+      "rotation": 0,
+      "buildings": 2,
+      "risk": 1
+    },
+    {
+      "id": "quartermaster",
+      "name": "Quartermaster store",
+      "kind": "tg_quartermaster",
+      "at": [
+        -85,
+        -90
+      ],
+      "size": [
+        64,
+        60
+      ],
+      "rotation": 0,
+      "buildings": 1,
+      "risk": 1
+    },
+    {
+      "id": "mess",
+      "name": "Mess tent and field kitchen",
+      "kind": "tg_mess",
+      "at": [
+        -165,
+        -15
+      ],
+      "size": [
+        56,
+        48
+      ],
+      "rotation": 0,
+      "buildings": 1,
+      "risk": 1
+    },
+    {
+      "id": "stores",
+      "name": "Field stores",
+      "kind": "tg_stores",
+      "at": [
+        -85,
+        -15
+      ],
+      "size": [
+        56,
+        48
+      ],
+      "rotation": 0,
+      "buildings": 1,
+      "risk": 1
+    },
+    {
+      "id": "barracks",
+      "name": "Barracks",
+      "kind": "tg_barracks",
+      "at": [
+        -110,
+        75
+      ],
+      "size": [
+        140,
+        80
+      ],
+      "rotation": 0,
+      "buildings": 4,
+      "risk": 1
+    },
+    {
+      "id": "range",
+      "name": "Rifle range",
+      "kind": "tg_range",
+      "at": [
+        60,
+        120
+      ],
+      "size": [
+        110,
+        380
+      ],
+      "rotation": 0,
+      "buildings": 3,
+      "risk": 1
+    },
+    {
+      "id": "obstacle",
+      "name": "Obstacle course",
+      "kind": "tg_obstacle",
+      "at": [
+        -270,
+        0
+      ],
+      "size": [
+        60,
+        170
+      ],
+      "rotation": 0,
+      "buildings": 1,
+      "risk": 1
+    },
+    {
+      "id": "killhouse",
+      "name": "Shoot house",
+      "kind": "tg_killhouse",
+      "at": [
+        -50,
+        182
+      ],
+      "size": [
+        50,
+        46
+      ],
+      "rotation": 0,
+      "buildings": 1,
+      "risk": 1
+    },
+    {
+      "id": "motorpool",
+      "name": "Motor pool",
+      "kind": "tg_motorpool",
+      "at": [
+        -200,
+        -175
+      ],
+      "size": [
+        90,
+        70
+      ],
+      "rotation": 0,
+      "buildings": 2,
+      "risk": 1
+    },
+    {
+      "id": "pen",
+      "name": "Infected pen",
+      "kind": "tg_pen",
+      "at": [
+        290,
+        200
+      ],
+      "size": [
+        60,
+        60
+      ],
+      "rotation": 0,
+      "buildings": 1,
+      "risk": 3
+    }
+  ],
+  "spawns": [
+    [
+      -60,
+      -350
+    ],
+    [
+      20,
+      -340
+    ],
+    [
+      -150,
+      -335
+    ],
+    [
+      100,
+      -310
+    ]
+  ],
+  "extractions": [
+    [
+      200,
+      -150
+    ],
+    [
+      -300,
+      250
+    ]
+  ],
+  "center": [
+    0,
+    0
+  ],
+  "sizeM": 800,
+  "sourceDatumM": 40,
+  "reliefScale": 1,
+  "landcover": [
+    {
+      "id": "west_pines",
+      "kind": "pine",
+      "areaM2": 62720
+    },
+    {
+      "id": "north_spruce",
+      "kind": "spruce",
+      "areaM2": 50688
+    },
+    {
+      "id": "east_mixed",
+      "kind": "mixed",
+      "areaM2": 42720
+    },
+    {
+      "id": "sw_pines",
+      "kind": "pine",
+      "areaM2": 21624
+    },
+    {
+      "id": "se_mixed",
+      "kind": "mixed",
+      "areaM2": 45239
+    },
+    {
+      "id": "nw_spruce",
+      "kind": "spruce",
+      "areaM2": 37145
+    },
+    {
+      "id": "range_east_pines",
+      "kind": "pine",
+      "areaM2": 32750
+    },
+    {
+      "id": "pen_clearing",
+      "kind": "clearing",
+      "areaM2": 20240
+    },
+    {
+      "id": "east_clearing",
+      "kind": "clearing",
+      "areaM2": 43920
+    }
+  ],
+  "treeAlleys": 2
+}

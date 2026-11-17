@@ -159,15 +159,17 @@ module tg_window(seed=0,w=1.2,h=1.3,t=0.3,v=0)
     }
 }
 
-// Door frame + leaf at a front opening (y=0 wall face), leaf swung open inward.
-module tg_door(seed=0,w=1.0,h=2.1,t=0.3,steel=false,open=70)
+// Door frame + leaf at a front opening (y=0 wall face, outside -y). The leaf
+// is hinged on the inner face and swung into the room (+y), nearly flush with
+// the jamb, so it never stands in the doorway the player walks through.
+module tg_door(seed=0,w=1.0,h=2.1,t=0.3,steel=false,open=85)
 {
     tg_m_paint(tg_green(seed+3))
     {
         for(sx=[-1,1]) translate([sx*(w/2+0.04),0,h/2]) tg_box([0.08,t+0.04,h]);
         translate([0,0,h+0.04]) tg_box([w+0.16,t+0.04,0.08]);
     }
-    translate([w/2-0.02,t/2,0]) rotate([0,0,open]) translate([-w/2+0.04,0.03,h/2-0.01])
+    translate([w/2-0.02,t/2,0]) rotate([0,0,-open]) translate([-w/2+0.04,0.03,h/2-0.01])
         if(steel) tg_m_steel(tg_green(seed+5)) tg_box([w-0.08,0.05,h-0.04]);
         else tg_m_paint(tg_green(seed+5)) { tg_box([w-0.08,0.045,h-0.04]); translate([w*0.35,-0.05,0]) tg_m_zinc() tg_box([0.12,0.03,0.03]); }
     tg_m_concrete(tg_concrete(seed)) translate([0,-t/2-0.3,0]) tg_slab(w+0.6,0.6,0.12);
@@ -221,7 +223,7 @@ module tg_shell(seed=0,L=12,D=8,H=3.2,wall="brick",roof=1,wins=[],swins=[],door=
     for(x=wins) for(sy=[-1,1]) translate([x,sy*(D/2-t/2),wz+wh/2]) rotate([0,0,sy<0?0:180]) tg_window(seed+x*7+sy,ww,wh,t,wv==-1 ? tg_rnd(seed+x*13+sy,5) : wv);
     for(y=swins) for(sx=[-1,1]) translate([sx*(L/2-t/2),y,wz+wh/2]) rotate([0,0,sx<0?-90:90]) tg_window(seed+y*5+sx,ww,wh,t,wv==-1 ? tg_rnd(seed+y*17+sx,5) : wv);
     translate([0,-D/2+t/2,0.12]) tg_door(seed,door,2.1,t,steeldoor);
-    if(backdoor) translate([0,D/2-t/2,0.12]) rotate([0,0,180]) tg_door(seed+1,door,2.1,t,steeldoor,60);
+    if(backdoor) translate([0,D/2-t/2,0.12]) rotate([0,0,180]) tg_door(seed+1,door,2.1,t,steeldoor);
     // roof
     if(roof==0)
     {
@@ -289,13 +291,16 @@ module tg_bldg_nissen(seed=0,L=16,D=8)
 
 // Army canvas tent (UST-56 style): walls 1.8 m, ridge roof, front and back
 // doorway flaps rolled up, timber floor. Interior L x D.
+// open=true rolls the side walls up to the eave, so every bay between the
+// posts is a walk-in opening: give such a tent wallH >= 2.3 to keep the
+// valance and the roll above a standing player (1.8 m capsule).
 module tg_tent(seed=0,L=10,D=5.5,wallH=1.8,rise=1.3,open=false)
 {
     c=tg_canvas(seed);
     tg_m_canvas(c)
     {
-        // side walls, or with open=true rolled up under a short valance
-        if(open) for(sy=[-1,1]) { translate([0,sy*(D/2),wallH-0.2]) tg_box([L,0.04,0.4]); translate([0,sy*(D/2+0.06),wallH-0.5]) rotate([0,90,0]) cylinder(h=L-0.4,r=0.11,center=true,$fn=8); }
+        // side walls, or with open=true rolled up tight under a short valance
+        if(open) for(sy=[-1,1]) { translate([0,sy*(D/2),wallH-0.12]) tg_box([L,0.04,0.24]); translate([0,sy*(D/2+0.08),wallH-0.14]) rotate([0,90,0]) cylinder(h=L-0.4,r=0.1,center=true,$fn=8); }
         else for(sy=[-1,1]) translate([0,sy*(D/2),wallH/2]) tg_box([L,0.04,wallH]);
         difference()
         {

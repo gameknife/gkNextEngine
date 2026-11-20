@@ -1,11 +1,11 @@
 #pragma once
 
 // ============================================================================
-// NetHost.hpp - A UDP endpoint (ENet underneath) that is either a server
+// NetHost.hpp - Game-facing endpoint that is either a server
 // listening for many peers or a client with one connection. Two channels:
 // reliable-ordered for events and requests, unreliable-sequenced for state
-// that the next packet supersedes. Single-threaded: call Poll() once per frame
-// from the thread that owns the host; nothing runs in the background.
+// that the next packet supersedes. Call Poll() once per frame from the thread that owns the host.
+// Transport workers never access game state.
 // See docs/projects/nextdayz/nextdayz-multiplayer-design.md.
 // ============================================================================
 
@@ -46,7 +46,7 @@ namespace NextNet
         float packetLoss = 0.0f;   // 0..1
     };
 
-    // Everything this host sent and received (payload bytes, before ENet headers).
+    // Everything this host sent and received (payload bytes, before transport framing).
     struct FTrafficStats
     {
         uint64_t bytesSent = 0;
@@ -79,6 +79,10 @@ namespace NextNet
         bool Listen(uint16_t port, size_t maxPeers, std::string& error);
         // Client: starts connecting; a Connected event arrives from Poll().
         bool Connect(const std::string& host, uint16_t port, std::string& error);
+
+        // Optional WebRTC client path used by the NextDayz load-test runner.
+        bool ConnectWebRTC(const std::string& signalUrl, std::string& error);
+        static bool WebRTCAvailable();
 
         // Delivers everything that arrived since the last call, and sends queued packets.
         void Poll(std::vector<FNetEvent>& outEvents);

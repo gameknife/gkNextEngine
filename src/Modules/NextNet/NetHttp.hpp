@@ -5,7 +5,7 @@
 // single background thread sends requests in the order they were queued (so a
 // later checkpoint never overtakes an earlier one); results come back through
 // Pump() on the thread that owns the worker. Built on cpp-httplib where it is
-// available (Windows/Linux); elsewhere every request fails with an error.
+// available on desktop; builds without it return an explicit error.
 // ============================================================================
 
 #include <condition_variable>

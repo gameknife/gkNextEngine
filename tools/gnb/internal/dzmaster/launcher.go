@@ -47,6 +47,12 @@ func (l execLauncher) Launch(server *Server, args []string, logPath string) (Pro
 	if runtime.GOOS == "linux" {
 		cmd.Env = append(os.Environ(), "LD_LIBRARY_PATH="+cmd.Dir+":"+os.Getenv("LD_LIBRARY_PATH"))
 	}
+	if len(server.env) != 0 {
+		if cmd.Env == nil {
+			cmd.Env = os.Environ()
+		}
+		cmd.Env = append(cmd.Env, server.env...)
+	}
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	if err := cmd.Start(); err != nil {

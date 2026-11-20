@@ -53,6 +53,12 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: '1.23.x'
+      - uses: actions/setup-node@v4
+        if: runner.os == 'Linux'
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/nextdayz/package-lock.json
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -78,33 +84,68 @@ jobs:
         uses: ./.github/actions/vcpkg-cache
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Upgrade Lavapipe for headless validation
+      - name: Verify Lavapipe for headless validation
         if: runner.os == 'Linux'
         run: |
-          sudo add-apt-repository --yes ppa:kisak/kisak-mesa
-          sudo apt-get update
-          sudo apt-get install --only-upgrade --yes mesa-vulkan-drivers libgbm1 libgl1-mesa-dri
           lavapipe_icd="$(find /usr/share/vulkan/icd.d -maxdepth 1 -type f -name 'lvp_icd*.json' -print -quit)"
           test -n "$lavapipe_icd"
+          export VK_ICD_FILENAMES="$lavapipe_icd" VK_DRIVER_FILES="$lavapipe_icd"
+          if ! vulkaninfo > /tmp/nextdayz-vulkaninfo.txt || ! grep --fixed-strings --quiet VK_EXT_headless_surface /tmp/nextdayz-vulkaninfo.txt; then
+            sudo add-apt-repository --yes ppa:kisak/kisak-mesa
+            sudo apt-get update
+            sudo apt-get install --only-upgrade --yes mesa-vulkan-drivers libgbm1 libgl1-mesa-dri
+            vulkaninfo > /tmp/nextdayz-vulkaninfo.txt
+            grep --fixed-strings --quiet VK_EXT_headless_surface /tmp/nextdayz-vulkaninfo.txt
+          fi
           echo "VK_ICD_FILENAMES=$lavapipe_icd" >> "$GITHUB_ENV"
           echo "VK_DRIVER_FILES=$lavapipe_icd" >> "$GITHUB_ENV"
-          VK_ICD_FILENAMES="$lavapipe_icd" VK_DRIVER_FILES="$lavapipe_icd" vulkaninfo > /tmp/nextdayz-vulkaninfo.txt
-          grep --fixed-strings --quiet VK_EXT_headless_surface /tmp/nextdayz-vulkaninfo.txt
       - name: Set up build dependencies
         shell: pwsh
         run: |
           & '${{ matrix.entry }}' setup
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Build and package native server and client
+      - name: Build native targets
         shell: pwsh
         run: |
           "BUILDVER($env:PACKAGE_VERSION)" | Set-Content src/build.version -NoNewline
-          & '${{ matrix.entry }}' package nextdayz-server --version "$env:PACKAGE_VERSION"
+          $targets = @('NextDayz', 'Packager')
+          if ($IsLinux) { $targets += 'NextDayzBake' }
+          & '${{ matrix.entry }}' build @targets --tracy off
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Bake published Web maps
+        if: runner.os == 'Linux'
+        run: |
+          ./gnb.sh web icons
+          ./gnb.sh web bake --rigs
+      - name: Verify native NextDayzCore protocol
+        if: runner.os == 'Linux'
+        run: |
+          ./gnb.sh build NextDayzProtocolGolden NextDayzCoreRules
+          out/build/linux/bin/NextDayzProtocolGolden > out/nextdayz-protocol-native.txt
+          diff -u src/Application/Web/NextDayzWebCore/protocol-golden.txt out/nextdayz-protocol-native.txt
+          out/build/linux/bin/NextDayzCoreRules
+      - name: Build and verify the WASM core and browser
+        if: runner.os == 'Linux'
+        run: |
+          ./gnb.sh web setup
+          ./gnb.sh web build
+          ./gnb.sh web test
+      - name: Check the Web map manifest
+        if: runner.os == 'Linux'
+        run: ./gnb.sh web bake --rigs --check
+      - name: Package server and desktop client
+        shell: pwsh
+        run: |
+          & '${{ matrix.entry }}' package nextdayz-server --skip-build --version "$env:PACKAGE_VERSION"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $clientArgs = @('package', 'nextdayz-client', '--skip-build', '--version', $env:PACKAGE_VERSION)
           if ($env:NEXTDAYZ_MASTER_URL) { $clientArgs += @('--master-url', $env:NEXTDAYZ_MASTER_URL) }
           & '${{ matrix.entry }}' @clientArgs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Install Chromium for the package smoke test
+        if: runner.os == 'Linux'
+        working-directory: web/nextdayz
+        run: npx playwright install --with-deps chromium
       - name: Verify relocated package and Master
         if: runner.os == 'Windows'
         shell: pwsh
@@ -113,9 +154,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/nextdayz/smoke_client_package.py "out/dist/nextdayz/NextDayz-client_win64_$env:PACKAGE_VERSION.zip"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Verify relocated package and all real map servers
+      - name: Play the relocated Linux package in Chromium
         if: runner.os == 'Linux'
-        run: python tools/nextdayz/smoke_server_package.py "out/dist/nextdayz/NextDayz-server_linux64_${PACKAGE_VERSION}.tar.gz" --launch-ds --timeout 300
+        run: python tools/nextdayz/smoke_server_package.py "out/dist/nextdayz/NextDayz-server_linux64_${PACKAGE_VERSION}.tar.gz" --launch-ds --web --timeout 300
       - name: Verify relocated client rendering and training UI
         if: runner.os == 'Linux'
         run: python tools/nextdayz/smoke_client_package.py "out/dist/nextdayz/NextDayz-client_linux64_${PACKAGE_VERSION}.tar.gz" --launch --gnb "$PWD/gnb" --timeout 300
@@ -148,6 +189,7 @@ jobs:
           path: |
             out/server-smoke-evidence/**/master*.log
             out/server-smoke-evidence/**/data/**
+            out/server-smoke-evidence/**/browser-*.png
             out/server-smoke-evidence/**/client*.log
             out/server-smoke-evidence/**/agent_reports/**
             out/server-smoke-evidence/**/validation_runs/**
@@ -204,7 +246,8 @@ jobs:
 
             Both Windows x64 and Linux x86_64 packages are included. Each archive has a matching SHA-256 checksum.
             Client: extract and launch start-client.bat / start-client.sh.
-            Server: extract and run start-master.bat / start-master.sh with --listen and --public-host.
+            Server: extract and run start-master.bat / start-master.sh.
+            The Linux server bundle serves the built-in Web client and includes its published maps. See DEPLOYMENT.md for HTTPS and UDP configuration.
             See the README/DEPLOYMENT guides inside each package for configuration and runtime requirements.
           files: |
             release-packages/NextDayz-server_win64_${{ env.PACKAGE_VERSION }}.zip

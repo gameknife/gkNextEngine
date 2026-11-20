@@ -281,10 +281,15 @@ gnb master kick <playerId> / pvp <dsId> --on=false / stop <dsId>
 Master 已知限制：昵称即身份（无密码）；只在本机/局域网使用（HTTP 明文、管理接口无鉴权）；没有交易与出售；
 登出不留尸体（可以借下线躲避战斗）；同一地图只开一个服务器实例的拆分规则（满员才开下一个）。
 
+本机 WebRTC 直连可以用 `gnb ds --web` 打开，Master 可以用 `--rtc-port-base` 给地图服务器分配专用 UDP 端口段。
+桌面 ENet 和浏览器 WebRTC 进入同一个 DS，共用原有 NextDayz 协议。Master 转发 WebRTC 信令时校验登录账号和
+本次派遣票据，游戏握手继续用同一票据认证。[Web 客户端信令设计](nextdayz-web-client-design.md#72-信令经-master-转发一次往返)
+
 ## 9. 工具与压测（M6，当前可运行）
 
 ```powershell
-gnb ds --bots 16 --minutes 30 --bot-latency 80 --bot-loss 2   # 一个 DS + 16 个 bot，结束后给出结论
+gnb ds --bots 16 --minutes 30 --bot-latency 80 --bot-loss 2  # 一个 DS + 16 个 ENet bot
+gnb ds --bots 16 --web-bots 8 --minutes 30 --bot-latency 80 --bot-loss 2  # 一个 DS，8 个 ENet + 8 个 WebRTC
 gnb run NextDayz -- --cvar nextdayz.net.stats=1               # 客户端/服务器的联机面板
 ```
 
@@ -299,7 +304,8 @@ gnb run NextDayz -- --cvar nextdayz.net.stats=1               # 客户端/服务
   （走回溯命中校验），死亡后重新出生。每 `--report` 秒打印一次总览，最后一行是
   `RESULT ok|FAIL online=… refusals=… disconnects=…`：全部在线、无被拒、无掉线才算通过。
 - **`gnb ds --bots N`**：服务器的 `maxPlayers` 至少容纳全部 bot；bot 跑满 `--minutes` 后 gnb 读出 RESULT 与服务器
-  最后一行统计，失败时返回非零。`--bot-latency` / `--bot-loss` 给 bot 加链路模拟。
+  最后一行统计，失败时返回非零。`--web-bots N` 指定其中的 WebRTC 数量。`--bot-latency` /
+  `--bot-loss` 给 bot 加发送侧链路模拟。
 
 压测结果（Windows 开发机，DS 为 `--dedicated` 30 Hz，bot 80 ms 延迟 + 2% 丢包）：
 
@@ -308,6 +314,10 @@ gnb run NextDayz -- --cvar nextdayz.net.stats=1               # 客户端/服务
 | 8 bot × 3 分钟 | 8/8 在线 | 5.6 ms / 12.5 ms | 389 KB/s | ~2.5 KB |
 | 16 bot × 3 分钟 | 16/16 在线，0 被拒，0 掉线 | 4.5 ms / 10.7 ms | 1.08 MB/s | ~3.4 KB |
 | 16 bot × 30 分钟 | 16/16 在线，0 被拒，0 掉线；拾取 1028 次、死亡重生 20 次 | 5.7 ms / 22.1 ms（全程 180 次采样） | ~1.0 MB/s | ~3.3 KB |
+
+2026-11-18 在 macOS arm64 另跑了 16 个纯 ENet bot（3 分钟）与 8 个 ENet + 8 个 WebRTC bot
+（30 分钟）。两组开启相同的发送侧链路模拟，均 16/16 在线、0 拒绝、0 掉线。
+[W1 实测与复现](nextdayz-web-client-design.md#71-ds一个-fnethost两种传输)
 
 服务器统计里的"refused hits"是 bot 故意乱射被回溯校验拒掉的命中（bot 只按距离判断目标，不做视线），不是错误。
 出流量随人数近似平方增长（每人一份含全部相关幸存者的快照），16 人约 1 MB/s，局域网内无压力；公网部署前应做

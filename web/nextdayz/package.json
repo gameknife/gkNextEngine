@@ -1,0 +1,21 @@
+{
+  "name": "nextdayz-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run check && vite build",
+    "check": "tsc --noEmit",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "three": "0.187.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.187.0",
+    "node-datachannel": "0.33.6",
+    "playwright": "1.65.1",
+    "typescript": "5.9.3",
+    "vite": "8.3.8"
+  }
+}

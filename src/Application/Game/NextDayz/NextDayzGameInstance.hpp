@@ -94,6 +94,7 @@ private:
     int sessionMenuTab_ = 0;
     int directPort_ = 27015;
     std::array<char, 64> survivorNameInput_{};
+    std::array<char, 73> masterPasswordInput_{};
     std::array<char, 256> masterUrlInput_{};
     std::array<char, 128> masterNameInput_{};
     std::array<char, 256> directHostInput_{};
@@ -281,7 +282,7 @@ private:
     bool NetLoggedIn() const;
     std::string NetAccountName() const;
     std::string NetLobbyStatus() const;
-    void LoginToMaster(const std::string& url, const std::string& name);
+    void LoginToMaster(const std::string& url, const std::string& name, std::string_view password);
     void ConnectDirect(const std::string& host, int port, const std::string& name);
     std::string netModeCvar_ = "off";
     std::string netHostCvar_ = "127.0.0.1";

@@ -73,6 +73,8 @@
     {"type": "wait-until", "query": "game.baseAnim", "op": "eq", "value": "stand_idle", "timeoutMs": 10000},
     {"type": "wait-frames", "n": 30},
     {"type": "cvar", "name": "nextdayz.debug.orbitYaw", "set": 160},
+    {"type": "cvar", "name": "nextdayz.validation.give", "set": "backpack_small"},
+    {"type": "cvar", "name": "nextdayz.validation.use", "set": "backpack_small"},
     {"type": "cvar", "name": "nextdayz.validation.give", "set": "jacket_puffer"},
     {"type": "cvar", "name": "nextdayz.validation.use", "set": "jacket_puffer"},
     {"type": "cvar", "name": "nextdayz.validation.give", "set": "backpack_military"},

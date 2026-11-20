@@ -129,7 +129,7 @@ namespace NextDayz
         struct FClips
         {
             // Blend-space order: stand idle, walk/run/sprint x (f, b, l, r), crouch idle, crouch walk x 4.
-            std::vector<const Assets::FRigClip*> locomotion;
+            std::array<const Assets::FRigClip*, 18> locomotion;
             const Assets::FRigClip* ready = nullptr;
             const Assets::FRigClip* aim = nullptr;
             const Assets::FRigClip* sprint = nullptr;

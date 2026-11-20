@@ -38,6 +38,9 @@ namespace
         std::string host = "127.0.0.1";
         uint16_t port = Net::kDefaultPort;
         int bots = 8;
+        int webBots = 0;
+        bool webRtcOnly = false;
+        std::string signalUrl = "http://127.0.0.1:7781";
         double seconds = 120.0;
         double reportSeconds = 10.0;
         uint32_t latencyMs = 0;
@@ -55,6 +58,7 @@ namespace
     struct FBot
     {
         int index = 0;
+        bool webRtc = false;
         NextNet::FNetHost host;
         std::mt19937 rng;
         uint32_t survivorId = 0;
@@ -284,6 +288,14 @@ namespace
             const auto value = [&]() -> const char* { return i + 1 < argc ? argv[++i] : ""; };
             if (arg == "--host") options.host = value();
             else if (arg == "--port") options.port = static_cast<uint16_t>(std::atoi(value()));
+            else if (arg == "--transport")
+            {
+                const std::string_view transport = value();
+                if (transport != "webrtc" && transport != "enet") return false;
+                options.webRtcOnly = transport == "webrtc";
+            }
+            else if (arg == "--web-bots") options.webBots = std::atoi(value());
+            else if (arg == "--signal-url") options.signalUrl = value();
             else if (arg == "--bots") options.bots = std::max(1, std::atoi(value()));
             else if (arg == "--seconds") options.seconds = std::atof(value());
             else if (arg == "--report") options.reportSeconds = std::max(1.0, std::atof(value()));
@@ -291,11 +303,12 @@ namespace
             else if (arg == "--loss") options.lossPercent = static_cast<float>(std::atof(value()));
             else
             {
-                std::printf("NextDayzBots --host H --port P --bots N --seconds S [--report S] [--latency MS] [--loss PCT]\n");
+                std::printf("NextDayzBots --host H --port P --bots N --seconds S [--report S] [--latency MS] [--loss PCT] [--transport enet|webrtc] [--web-bots N] [--signal-url URL]\n");
                 return false;
             }
         }
-        return true;
+        if (options.webRtcOnly) options.webBots = options.bots;
+        return options.webBots >= 0 && options.webBots <= options.bots;
     }
 }
 
@@ -308,17 +321,26 @@ int main(int argc, char** argv)
     {
         auto bot = std::make_unique<FBot>();
         bot->index = index;
+        bot->webRtc = index >= options.bots - options.webBots;
         bot->rng.seed(0x9e3779b9u + static_cast<uint32_t>(index) * 7919u);
         bot->host.SetLinkSimulation({options.latencyMs, options.latencyMs / 5, options.lossPercent});
         std::string error;
-        if (!bot->host.Connect(options.host, options.port, error))
+        const bool started = bot->webRtc
+            ? bot->host.ConnectWebRTC(options.signalUrl, error)
+            : bot->host.Connect(options.host, options.port, error);
+        if (!started)
         {
             std::printf("bot %d: %s\n", index, error.c_str());
             return 1;
         }
         bots.push_back(std::move(bot));
     }
-    std::printf("NextDayzBots: %d bots -> %s:%u for %.0f s\n", options.bots, options.host.c_str(), options.port, options.seconds);
+    std::printf("NextDayzBots: %d ENet and %d WebRTC bots for %.0f s\n",
+                options.bots - options.webBots, options.webBots, options.seconds);
+    if (options.webBots < options.bots)
+    {
+        std::printf("ENet target: %s:%u\n", options.host.c_str(), options.port);
+    }
     std::fflush(stdout);
 
     using Clock = std::chrono::steady_clock;
@@ -373,6 +395,7 @@ int main(int argc, char** argv)
             NextNet::FTrafficStats traffic{};
             uint32_t rttSum = 0;
             int online = 0;
+            int webOnline = 0;
             for (const auto& bot : bots)
             {
                 const NextNet::FTrafficStats t = bot->host.Traffic();
@@ -381,15 +404,16 @@ int main(int argc, char** argv)
                 if (bot->survivorId != 0)
                 {
                     ++online;
+                    if (bot->webRtc) ++webOnline;
                     const uint32_t rtt = bot->host.Stats(bot->host.ServerPeer()).roundTripMs;
                     rttSum += rtt;
                     maxRtt = std::max(maxRtt, rtt);
                 }
             }
             const double window = options.reportSeconds;
-            std::printf("[%5.0fs] online %d/%d  in %.1f KB/s  out %.1f KB/s  rtt avg %u ms  snapshots %llu  "
+            std::printf("[%5.0fs] online %d/%d (ENet %d, WebRTC %d)  in %.1f KB/s  out %.1f KB/s  rtt avg %u ms  snapshots %llu  "
                         "takes %llu/%llu  hits %llu/%llu  deaths %llu  refusals %llu\n",
-                        std::chrono::duration<double>(now - start).count(), online, options.bots,
+                        std::chrono::duration<double>(now - start).count(), online, options.bots, online - webOnline, webOnline,
                         (traffic.bytesReceived - lastTraffic.bytesReceived) / 1024.0 / window,
                         (traffic.bytesSent - lastTraffic.bytesSent) / 1024.0 / window, online ? rttSum / online : 0,
                         static_cast<unsigned long long>(totals([](const FBot& b) { return b.snapshots; })),
@@ -405,17 +429,23 @@ int main(int argc, char** argv)
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
     int online = 0;
-    for (const auto& bot : bots) online += bot->survivorId != 0 ? 1 : 0;
+    int webOnline = 0;
+    for (const auto& bot : bots)
+    {
+        if (bot->survivorId == 0) continue;
+        ++online;
+        if (bot->webRtc) ++webOnline;
+    }
     const uint64_t refusals = totals([](const FBot& b) { return b.refusals; });
     const uint64_t disconnects = totals([](const FBot& b) { return b.disconnects; });
     const bool ok = online == options.bots && refusals == 0 && disconnects == 0;
-    std::printf("RESULT %s online=%d/%d refusals=%llu disconnects=%llu deaths=%llu takes=%llu hits=%llu/%llu maxRtt=%u\n",
+    std::printf("RESULT %s online=%d/%d refusals=%llu disconnects=%llu deaths=%llu takes=%llu hits=%llu/%llu maxRtt=%u enet=%d webrtc=%d\n",
                 ok ? "ok" : "FAIL", online, options.bots, static_cast<unsigned long long>(refusals),
                 static_cast<unsigned long long>(disconnects),
                 static_cast<unsigned long long>(totals([](const FBot& b) { return b.deaths; })),
                 static_cast<unsigned long long>(totals([](const FBot& b) { return b.granted; })),
                 static_cast<unsigned long long>(totals([](const FBot& b) { return b.hits; })),
-                static_cast<unsigned long long>(totals([](const FBot& b) { return b.shots; })), maxRtt);
+                static_cast<unsigned long long>(totals([](const FBot& b) { return b.shots; })), maxRtt, online - webOnline, webOnline);
     for (auto& bot : bots) bot->host.Shutdown();
     return ok ? 0 : 1;
 }

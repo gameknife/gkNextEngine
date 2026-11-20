@@ -18,6 +18,8 @@
 // player is starving. Picking up takes whatever fits; the rest stays.
 // ============================================================================
 
+#include "Application/Game/NextDayz/Inventory/LootHandle.hpp"
+#include "Application/Game/NextDayz/Inventory/LootReplica.hpp"
 #include <string>
 #include <optional>
 #include <span>
@@ -61,13 +63,6 @@ namespace NextDayz
         float yaw = 0.0f;
     };
 
-    enum class ELootSource : uint8_t
-    {
-        Authored,
-        Spot,
-        Pile,
-    };
-
     struct FLootEntry
     {
         enum class EState
@@ -97,17 +92,6 @@ namespace NextDayz
         uint64_t revision = 0;     // LootSystem::Revision() when it last appeared or vanished
     };
 
-    // One loot entry as a network client needs it: where, what, and whether it is there.
-    struct FLootReplica
-    {
-        std::string id;            // FLootEntry::persistentId
-        ELootSource source = ELootSource::Spot;
-        glm::vec3 position{};
-        float yaw = 0.0f;
-        bool available = false;
-        std::vector<FLootStack> contents;
-    };
-
     struct FSavedLootEntry
     {
         std::string id;
@@ -133,15 +117,6 @@ namespace NextDayz
         glm::vec3 center{0.0f};
         float radius = 0.0f;
         int entries = 0;
-    };
-
-    struct FLootHandle
-    {
-        uint32_t index = 0;
-        uint32_t nodeInstanceId = 0;
-        uint32_t generation = 0;
-
-        bool IsValid() const { return generation != 0; }
     };
 
     struct FLootCommitResult

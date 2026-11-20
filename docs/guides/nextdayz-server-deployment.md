@@ -1,8 +1,8 @@
 # NextDayz 最小服务器包
 
 服务器包包含 Master（`bin/gnb`）、DS（`bin/NextDayz`）、实际链接的运行库、已发布地图与角色的
-递归依赖、启动脚本、许可证、文件清单和 SHA-256 校验值。不包含客户端分发内容、其他游戏、源码、
-调试符号、地图草稿、历史发布版本、音频、编辑器或 .NET。远端不需要 Git、Go、CMake 或 vcpkg。
+递归依赖、启动脚本、许可证、文件清单和 SHA-256 校验值。Linux 包还包含生产版 Web 客户端、WASM 和已发布地图的烘焙资产。
+远端无需源码、Git、Go、Node.js、CMake 或 vcpkg。
 
 DS 仍使用引擎的 Vulkan 场景/GPU 资源。`--dedicated` 不绘制、不播放声音，**尚不是纯 CPU 服务器**。
 引擎初始化仍需要 shader、字体和公共 HDR，因此也保留在 `runtime.pak` 中。
@@ -21,9 +21,10 @@ Linux x86_64：
 ./gnb.sh package nextdayz-server --version dev-001
 ```
 
-默认自动定向构建 `NextDayz`、`Packager`，关闭 Tracy，然后重新编译随包 CLI 并打包。
-首次使用按仓库常规流程执行 `gnb setup`；打包需 Go，缺少公共 HDR 时执行 `gnb paks fetch optional`。
-已有构建时可加 `--skip-build`；输出目录可用 `--output <dir>` 指定。
+默认定向构建 `NextDayz`、`Packager` 并关闭 Tracy。Linux 还构建 `NextDayzBake`、烘焙地图、构建
+WASM 和网页，再把这一整套产物打包。初次打包还会用 Vulkan 导出物品图标。构建机需 Go 和 Node.js 24，首次先执行 `gnb setup`。
+缺少公共 HDR 时执行 `gnb paks fetch optional`。已有完整产物时可加 `--skip-build`；此时 Linux 打包
+仍会校验地图资产清单及 WASM 构建标识。输出目录可用 `--output <dir>` 指定。
 
 输出到 `out/dist/nextdayz/`：
 
@@ -57,20 +58,39 @@ Windows/Linux matrix 并行构建，每个平台的客户端、服务器与校�
 请用 `vulkaninfo` 检查设备和 `VK_EXT_headless_surface`。需要更新 Mesa 时参考
 `.github/workflows/nextdayz-server.yml` 的同名步骤。软件 Vulkan 会增加 CPU/内存开销。
 
-## 解压与启动
+## Linux 浏览器联机部署
 
 先校验压缩包，完整解压，保持 `bin/` 与 `assets/` 相邻。无需进入特定工作目录。
 
-Linux：
+在 Ubuntu 24.04 x86_64 主机准备上一节的 Vulkan 环境，并安装 Caddy 或配置现有 HTTPS 代理。
+将域名指向服务器的公网 IP，开放 TCP 80/443 和 UDP 27200–27203。
 
 ```sh
 sha256sum -c NextDayz-server_linux64_dev-001.tar.gz.sha256
 mkdir -p /srv/nextdayz
 tar -xzf NextDayz-server_linux64_dev-001.tar.gz -C /srv/nextdayz
-/srv/nextdayz/start-master.sh --listen 0.0.0.0:7780 --public-host game.example.com --max-servers 4
+/srv/nextdayz/start-master.sh --public-host game.example.com --max-servers 4 --trust-local-proxy
 ```
 
-Windows：
+启动脚本默认监听本机 TCP 7780，自动托管包内 `web/`，启用账号口令和 WebRTC UDP 27200 起始端口。
+将包内 `Caddyfile.nextdayz` 的 `game.example.com` 换成实际域名，合并到 Caddy 的配置并重载。示例
+配置仅转发网页、资源和客户端 API，并覆盖 `X-Real-IP`，以便 Master 按玩家 IP 限速。使用其他
+同机代理时也要覆盖该头，或去掉 `--trust-local-proxy`。保持 TCP 7780 仅本机可达。
+
+在浏览器打开 `https://game.example.com/`，输入昵称和账号口令，选地图并出击。这个 Master 上的
+新昵称首次登录设置口令。原有无口令账号会在首次设置时认领，旧登录凭据随即失效。正式迁移前应
+先让旧玩家在可信环境完成认领，再对外开放入口。开发机可通过 SSH 转发 TCP 7780 查看网页，本机浏览器
+要实际连入远程地图时仍须能直达 DS 的 WebRTC UDP 端口。
+
+`--public-host` 填客户端能直达的 IP 或 DNS 名，WebRTC 媒体流量直接连接 DS。
+有 NAT 时把 WebRTC UDP 段原样转发到主机。可用 `--rtc-port-base` 调整起始端口，范围是
+`rtc-port-base .. rtc-port-base + max-servers - 1`。如同时提供桌面联机，还需开放 ENet UDP
+27100–27103（同样随 `--port-base` 和 `--max-servers` 变化），桌面客户端也使用 HTTPS Master 地址。
+
+本机部署可以直接打开 `http://127.0.0.1:7780/`。其他机器访问时用 HTTPS，浏览器需要安全上下文
+才能校验烘焙资源。受限网络若封锁 UDP，当前 WebRTC 连接可能无法建立。
+
+## Windows 桌面联机部署
 
 ```powershell
 Get-FileHash .\NextDayz-server_win64_dev-001.zip -Algorithm SHA256
@@ -80,7 +100,7 @@ C:\NextDayz\start-master.bat --listen 0.0.0.0:7780 --public-host game.example.co
 
 `--public-host` 填客户端可达的公网 IP 或域名，不能填 `0.0.0.0`。Master 与 DS 位于同机，
 DS 回连 Master 使用本机地址，客户端收到的 DS 地址使用 `--public-host`。
-默认仅监听 `127.0.0.1:7780`，公网部署需显式传入上述参数。
+默认仅监听 `127.0.0.1:7780`。
 
 防火墙/云安全组开放 TCP 7780，以及 UDP `port-base .. port-base + max-servers - 1`。
 例如 `--port-base 27100 --max-servers 4` 对应 UDP 27100–27103；默认上限为 32 台 DS。
@@ -103,8 +123,7 @@ DS 回连 Master 使用本机地址，客户端收到的 DS 地址使用 `--publ
 管理 API `/admin/*` 只接受本机 loopback 请求，远程管理请通过 SSH 在服务器上执行。
 不要将公网反向代理直接转发到全部 Master 路径：代理只发布客户端需要的 `/api/*`，
 不要转发 `/admin/*`；DS 的 `/ds/*` 留给同机进程。
-当前账户登录沿用游戏的 MVP 名称登录协议，传输是 HTTP，未增加正式账号身份认证；
-对外运营前仍需补齐认证与 HTTPS。
+`--require-password` 可以启用带口令的登录；公网使用 HTTPS 代理终结 TLS。
 
 默认持久化到包根目录 `data/`：`master.json` 保存账户/仓库/世界检查点，`logs/` 保存 DS 日志。
 可用 `--data /srv/nextdayz-data` 将状态移到独立目录。引擎自身日志/缓存仍在系统的每用户应用数据目录。
@@ -123,7 +142,7 @@ Wants=network-online.target
 Type=simple
 User=nextdayz
 WorkingDirectory=/srv/nextdayz
-ExecStart=/srv/nextdayz/start-master.sh --listen 0.0.0.0:7780 --public-host game.example.com --max-servers 4 --data /srv/nextdayz-data
+ExecStart=/srv/nextdayz/start-master.sh --public-host game.example.com --max-servers 4 --trust-local-proxy --data /srv/nextdayz-data
 Restart=on-failure
 KillMode=mixed
 TimeoutStopSec=45
@@ -138,11 +157,14 @@ Windows 可以先用前台脚本运行，通过 Ctrl+C 停机；脚本本身不�
 ## 验收
 
 ```sh
-python tools/nextdayz/smoke_server_package.py out/dist/nextdayz/NextDayz-server_linux64_dev-001.tar.gz --launch-ds
+python tools/nextdayz/smoke_server_package.py out/dist/nextdayz/NextDayz-server_linux64_dev-001.tar.gz --launch-ds --web
 ```
 
 脚本校验 SHA-256 和文件清单，在**仓库之外**解压并启动包内 Master，验证登录、地图列表、默认
 数据目录；`--launch-ds` 逐张派遣全部已发布地图，等待真实 DS 心跳进入 `ready`，验证管理员停服及
 Master 收到停机信号后回收最后一台 DS；随后重启 Master 验证账号持久化。
 证据目录打印为 `nextdayz-server-smoke-*`，包含 Master 和 DS 日志；不使用桌面截图或假 DS 代替注册验证。
-Windows 无 GPU 的 Actions runner 仅验证 Master；Linux Lavapipe job 执行完整 DS 验证。
+`--web` 还会从解压后的包打开正式页面，用真实 Chromium 验证账号口令、旧版本拒绝出击、WebRTC
+进服、拾取、返回大厅后回归、撤离和仓库持久化。执行该测试前，在 `web/nextdayz` 运行
+`npm ci` 和 `npx playwright install --with-deps chromium`。Windows CI 验证 Master 与包结构，Linux
+Lavapipe CI 执行地图与浏览器测试。验收公网部署时，用另一台机器打开 HTTPS 域名并实际出击。

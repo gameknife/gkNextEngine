@@ -3,8 +3,11 @@
 #include "Engine/Common/CoreMinimal.hpp"
 
 #include <glm/vec3.hpp>
+#include <span>
 
 class NextEngine;
+class NextPhysics;
+namespace Assets { class Node; }
 
 namespace NextDayz
 {
@@ -43,6 +46,7 @@ namespace NextDayz
     {
     public:
         void Scan(NextEngine& engine);
+        void Scan(std::span<const std::shared_ptr<Assets::Node>> nodes, NextPhysics* physics = nullptr);
         void Clear();
 
         const FWorldAnchor* Resolve(FWorldAnchorHandle handle) const;

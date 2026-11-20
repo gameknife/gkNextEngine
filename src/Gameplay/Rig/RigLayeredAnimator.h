@@ -8,8 +8,13 @@
 // one-shots without changing the FRigAsset / SCAD clip format.
 // ============================================================================
 
-#include "Engine/Assets/AssetsFwd.hpp"
-#include "Engine/Assets/Data/RigAsset.hpp"
+#include "Engine/Assets/Data/RigDefinition.hpp"
+
+namespace Assets
+{
+    class Node;
+    struct FRigAsset;
+}
 
 #include <cstdint>
 #include <limits>
@@ -54,11 +59,11 @@ namespace NextGameplay
     {
         std::vector<float> weights;
 
-        static FRigBoneMask FullBody(const Assets::FRigAsset& asset);
-        static FRigBoneMask FromSubtree(const Assets::FRigAsset& asset, std::string_view rootBone,
+        static FRigBoneMask FullBody(const Assets::FRigDefinition& asset);
+        static FRigBoneMask FromSubtree(const Assets::FRigDefinition& asset, std::string_view rootBone,
                                         float weight = 1.0f);
 
-        bool SetBoneWeight(const Assets::FRigAsset& asset, std::string_view boneName, float weight);
+        bool SetBoneWeight(const Assets::FRigDefinition& asset, std::string_view boneName, float weight);
         float Weight(size_t boneIndex) const;
     };
 
@@ -82,6 +87,8 @@ namespace NextGameplay
     public:
         void Bind(const Assets::FRigAsset* asset, std::vector<Assets::Node*> boneNodes, Assets::Node* root);
 
+        void BindPose(const Assets::FRigDefinition* asset);
+
         FRigLayerHandle CreateLayer(std::string name, ERigLayerBlendMode blendMode, FRigBoneMask mask);
         bool SetLayerWeight(FRigLayerHandle layer, float weight, float fadeSeconds = 0.0f);
 
@@ -100,8 +107,8 @@ namespace NextGameplay
         bool IsOneShotComplete(FRigLayerHandle layer) const;
         const Assets::FRigClip* DominantClip(FRigLayerHandle layer) const;
         float NormalizedTime(FRigLayerHandle layer) const;
-        bool IsBound() const { return asset_ != nullptr && !boneNodes_.empty(); }
-        const Assets::FRigAsset* Asset() const { return asset_; }
+        bool IsBound() const { return asset_ != nullptr && bindingCount_ != 0; }
+        const Assets::FRigDefinition* Asset() const { return asset_; }
 
         // Update = Evaluate + Apply. Split them to run procedural steps (IK,
         // aim offsets, see RigPoseOps.h) on the blended pose before it reaches
@@ -178,9 +185,11 @@ namespace NextGameplay
         void SampleBlend(const FBlendState& state, FRigPose& outPose);
         void BlendTransitions(const FRigPose& previous, const FRigPose& current, float weight, FRigPose& outPose);
         void ApplyLayer(const FLayer& layer, const FRigPose& layerPose, float layerWeight);
+        void ResetBinding(const Assets::FRigDefinition* asset, size_t count);
         void ApplyPose();
 
-        const Assets::FRigAsset* asset_ = nullptr;
+        const Assets::FRigDefinition* asset_ = nullptr;
+        size_t bindingCount_ = 0;
         std::vector<Assets::Node*> boneNodes_;
         Assets::Node* root_ = nullptr;
         std::vector<FLayer> layers_;

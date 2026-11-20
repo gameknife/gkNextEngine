@@ -1,0 +1,19 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "nextdayz-wasm",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/../../../../out/web/nextdayz/core",
+      "toolchainFile": "$env{ND_EMSCRIPTEN_TOOLCHAIN}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ND_CORE_HEADERS": "$env{ND_CORE_HEADERS}",
+        "ND_JOLT_SOURCE": "$env{ND_JOLT_SOURCE}"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "nextdayz-wasm", "configurePreset": "nextdayz-wasm", "targets": ["ndcore", "NextDayzProtocolProbe", "NextDayzCoreRules", "NextDayzRigPoseProbe"] }
+  ]
+}

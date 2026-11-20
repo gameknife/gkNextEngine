@@ -217,7 +217,7 @@ void NextDayzGameInstance::DrawSessionMenu()
                 if (ImGui::Button(Label("SAVE SERVER"), ImVec2(140,0)))
                 {
                     std::string url;
-                    if (!NextDayz::NormalizeMasterUrl(masterUrlInput_.data(), url)) sessionMenuMessage_ = "Enter an HTTP Master address, for example http://127.0.0.1:7780.";
+                    if (!NextDayz::NormalizeMasterUrl(masterUrlInput_.data(), url)) sessionMenuMessage_ = "Enter a Master address, for example http://127.0.0.1:7780.";
                     else
                     {
                         const auto found = std::find_if(masterServers_.begin(), masterServers_.end(), [&](const auto& entry) { return entry.url == url; });
@@ -251,9 +251,19 @@ void NextDayzGameInstance::DrawSessionMenu()
             ImGui::TextUnformatted(Tr("Survivor name"));
             ImGui::SetNextItemWidth(-1);
             ImGui::InputText("##session_survivor", survivorNameInput_.data(), survivorNameInput_.size());
+            if (sessionMenuTab_ == 1)
+            {
+                ImGui::TextUnformatted(Tr("Account password"));
+                ImGui::SetNextItemWidth(-1);
+                ImGui::InputText("##master_password", masterPasswordInput_.data(), masterPasswordInput_.size(), ImGuiInputTextFlags_Password);
+            }
             if (ImGui::Button(Label(sessionMenuTab_ == 1 ? "LOG IN TO MASTER" : "CONNECT TO SERVER"), ImVec2(-1,40)))
             {
-                if (sessionMenuTab_ == 1) LoginToMaster(masterUrlInput_.data(), survivorNameInput_.data());
+                if (sessionMenuTab_ == 1)
+                {
+                    LoginToMaster(masterUrlInput_.data(), survivorNameInput_.data(), masterPasswordInput_.data());
+                    masterPasswordInput_.fill(0);
+                }
                 else ConnectDirect(directHostInput_.data(), directPort_, survivorNameInput_.data());
             }
             ImGui::EndDisabled();

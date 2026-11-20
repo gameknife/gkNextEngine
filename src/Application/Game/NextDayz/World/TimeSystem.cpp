@@ -7,8 +7,6 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
 
-#include "Engine/Assets/Core/Model.hpp"
-#include "Engine/Assets/Core/Scene.hpp"
 
 namespace NextDayz
 {
@@ -97,7 +95,7 @@ namespace NextDayz
         nextWeatherChange_ = gameMinutes_ + hours * 60.0;
     }
 
-    void TimeSystem::Tick(double deltaRealSeconds, Assets::Scene& scene)
+    void TimeSystem::Advance(double deltaRealSeconds)
     {
         gameMinutes_ += deltaRealSeconds * timeScale_;
         if (gameMinutes_ >= nextWeatherChange_)
@@ -110,62 +108,61 @@ namespace NextDayz
         const float step = static_cast<float>(std::max(deltaRealSeconds, 0.0)) *
             0.8f / std::max(config_.WeatherTransitionSeconds, 0.001f);
         weatherBlend_ += std::clamp(target - weatherBlend_, -step, step);
-        ApplyEnvironment(scene);
+        daylight_ = SampleEnvironment().daylight;
     }
 
-    void TimeSystem::ApplyEnvironment(Assets::Scene& scene)
+    FTimeEnvironment TimeSystem::SampleEnvironment() const
     {
         const float hour = static_cast<float>(Hour());
 
         // Dawn 05:00-07:00 rise, dusk 17:00-19:00 fall.
         const float rise = SmoothStep(5.0f, 7.0f, hour);
         const float set = 1.0f - SmoothStep(17.0f, 19.0f, hour);
-        daylight_ = std::min(rise, set);
+        const float daylight = std::min(rise, set);
 
         const float gloom = SmoothStep(0.0f, 0.6f, weatherBlend_);
         const float dim = glm::mix(1.0f, config_.OvercastFactor, gloom);
         const float skyDim = glm::mix(1.0f, config_.OvercastSkyFactor, gloom);
         const float nightFloor = config_.NightSkyFraction + config_.LanternNightLift * lanternLight_;
-        const float skyLight = nightFloor + (1.0f - nightFloor) * daylight_;
+        const float skyLight = nightFloor + (1.0f - nightFloor) * daylight;
 
-        auto& env = scene.GetEnvSettings();
-        env.AtmosphereEnabled = true;
-        env.AerialPerspectiveEnabled = true;
+        FTimeEnvironment env;
+        env.daylight = daylight;
         // 06:00 -> 18:00 sweeps half a turn (east rise, west set).
-        env.SunRotation = std::clamp((hour - 6.0f) / 12.0f, 0.0f, 1.0f);
-        env.HasSun = daylight_ > 0.02f && gloom < 1.0f;
+        env.sunRotation = std::clamp((hour - 6.0f) / 12.0f, 0.0f, 1.0f);
+        env.hasSun = daylight > 0.02f && gloom < 1.0f;
         // Procedural sky is driven by sun irradiance, not SkyIntensity. Keep the
         // night/lantern floor in that source; HasSun still gates direct sunlight.
-        const float sunLight = std::max(daylight_, nightFloor);
+        const float sunLight = std::max(daylight, nightFloor);
         // Fade the direct sun before disabling it. Keep a tiny nonzero source
         // for the procedural sky, whose radiance is compensated below.
         const float sunFade = glm::mix(1.0f, 0.001f, gloom);
-        env.SunIntensity = config_.DaySunIntensity * sunLight * dim * sunFade;
-        env.SkyIntensity = config_.DaySkyIntensity * skyLight * skyDim;
+        env.sunIntensity = config_.DaySunIntensity * sunLight * dim * sunFade;
+        env.skyIntensity = config_.DaySkyIntensity * skyLight * skyDim;
         // The procedural source shares SunIntensity, so cancel its weather dimming
         // here before applying the independently tuned diffuse sky intensity.
-        env.Atmosphere.SkyLuminanceScale = config_.DaySkyLuminanceScale * skyLight * skyDim /
+        env.skyLuminanceScale = config_.DaySkyLuminanceScale * skyLight * skyDim /
             std::max(sunLight * dim * sunFade, 0.000001f);
         // Low sun burns orange; bad weather drains the colour out of everything.
         const float noon = std::sin(glm::pi<float>() * std::clamp((hour - 6.0f) / 12.0f, 0.0f, 1.0f));
         const float warm = 1.0f - std::clamp(noon * 2.2f, 0.0f, 1.0f);
-        env.SunColor = glm::mix(glm::vec3(1.0f, 0.97f, 0.92f), glm::vec3(1.0f, 0.62f, 0.38f), warm);
-        env.SkyColor = glm::mix(glm::vec3(0.92f, 0.95f, 1.0f), glm::vec3(0.80f, 0.82f, 0.84f), gloom);
+        env.sunColor = glm::mix(glm::vec3(1.0f, 0.97f, 0.92f), glm::vec3(1.0f, 0.62f, 0.38f), warm);
+        env.skyColor = glm::mix(glm::vec3(0.92f, 0.95f, 1.0f), glm::vec3(0.80f, 0.82f, 0.84f), gloom);
 
         // Height fog. Mist settles at dawn; dense fog obscures distant silhouettes.
         float density = glm::mix(config_.ClearFogDensity, config_.OvercastFogDensity, gloom);
         const float fogShare = Fog();
         density = glm::mix(density, config_.FogWeatherDensity, fogShare);
         const float mist = SmoothStep(4.0f, 6.0f, hour) * (1.0f - SmoothStep(7.5f, 9.5f, hour));
-        density += config_.DawnMistDensity * mist + config_.NightFogDensity * (1.0f - daylight_);
-        env.HeightFogEnabled = true;
-        env.Atmosphere.FogDensity = density * fogDensityScale_;
-        env.Atmosphere.FogHeightFalloff = config_.FogHeightFalloff;
-        env.Atmosphere.FogBaseHeight = 0.0f;
-        env.Atmosphere.FogStartDistance = glm::mix(8.0f, 2.0f, fogShare);
-        env.Atmosphere.FogMaxOpacity = glm::mix(0.85f, 0.995f, fogShare);
-        const float radiance = glm::mix(config_.FogNightRadiance, config_.FogDayRadiance, daylight_) * dim;
-        const glm::vec3 tint = glm::mix(config_.FogColor, glm::vec3(0.78f, 0.62f, 0.50f), warm * daylight_ * 0.5f);
-        env.Atmosphere.FogInscatteringColor = tint * radiance;
+        density += config_.DawnMistDensity * mist + config_.NightFogDensity * (1.0f - daylight);
+        env.fogDensity = density * fogDensityScale_;
+        env.fogHeightFalloff = config_.FogHeightFalloff;
+        env.fogBaseHeight = 0.0f;
+        env.fogStartDistance = glm::mix(8.0f, 2.0f, fogShare);
+        env.fogMaxOpacity = glm::mix(0.85f, 0.995f, fogShare);
+        const float radiance = glm::mix(config_.FogNightRadiance, config_.FogDayRadiance, daylight) * dim;
+        const glm::vec3 tint = glm::mix(config_.FogColor, glm::vec3(0.78f, 0.62f, 0.50f), warm * daylight * 0.5f);
+        env.fogColor = tint * radiance;
+        return env;
     }
 }

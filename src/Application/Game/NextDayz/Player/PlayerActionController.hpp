@@ -2,7 +2,8 @@
 
 #include <optional>
 
-#include "Application/Game/NextDayz/Inventory/LootSystem.hpp"
+#include "Application/Game/NextDayz/Inventory/LootHandle.hpp"
+#include "Application/Game/NextDayz/Inventory/Inventory.hpp"
 #include "Application/Game/NextDayz/NextDayzConfig.hpp"
 #include "Application/Game/NextDayz/Player/PlayerState.hpp"
 

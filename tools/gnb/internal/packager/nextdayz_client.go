@@ -50,7 +50,7 @@ func normalizeNextDayzMasterURL(input string) (string, error) {
 		input = "http://" + input
 	}
 	// Match the game's current HTTP-only ServerDirectory contract.
-	if !regexp.MustCompile(`^http://(\[[0-9a-fA-F:]+\]|[a-zA-Z0-9._-]+)(:[0-9]{1,5})?/?$`).MatchString(input) {
+	if !regexp.MustCompile(`^https?://(\[[0-9a-fA-F:]+\]|[a-zA-Z0-9._-]+)(:[0-9]{1,5})?/?$`).MatchString(input) {
 		return "", fmt.Errorf("--master-url must be an HTTP host[:port] without credentials, path, query or fragment")
 	}
 	parsed, err := url.Parse(input)

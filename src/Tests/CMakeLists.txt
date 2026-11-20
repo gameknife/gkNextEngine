@@ -135,11 +135,7 @@ set(unitTestSources
     ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/World/EnemyPool.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextRaiden/Player/ScrollCamera.cpp
     ${GK_SOURCE_ROOT}/Application/Game/Brotato3D/Brotato3DArenaNav.cpp
-    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Data/ItemDefs.cpp
-    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Data/LootTables.cpp
-    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Inventory/Inventory.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Player/PlayerActionController.cpp
-    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Player/SurvivalSystem.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/World/LootDirector.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/World/Campaign.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/World/CampaignPersistence.cpp
@@ -150,7 +146,6 @@ set(unitTestSources
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/World/ZombieSpawnDirector.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/World/WorldAnchorRegistry.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Sim/WorldSim.cpp
-    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Sim/ItemLedger.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Sim/LagCompensation.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Zombies/ZombieVisualPool.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Debugger/DebugEventLog.cpp
@@ -159,10 +154,7 @@ set(unitTestSources
 )
 
 if("NextNet" IN_LIST GK_MODULE_NAMES)
-    list(APPEND unitTestSources
-        Test_NextNet.cpp
-        ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Net/NetProtocol.cpp
-        ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Net/MasterApi.cpp)
+    list(APPEND unitTestSources Test_NextNet.cpp)
 endif()
 
 if(GK_DOTNET_ENABLED)
@@ -208,6 +200,7 @@ endif()
 target_link_libraries(gkNextUnitTests PRIVATE
     gkNextEngine
     NextGameplay
+    NextDayzCore
     Catch2::Catch2WithMain
     NextAI
     nlohmann_json::nlohmann_json

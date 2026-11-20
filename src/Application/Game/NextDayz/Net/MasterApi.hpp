@@ -103,7 +103,7 @@ namespace NextDayz::Master
     };
 
     // --- requests ---
-    std::string LoginRequest(std::string_view name);
+    std::string LoginRequest(std::string_view name, std::string_view password = {});
     std::string DeployRequest(std::string_view mapId, const std::vector<FBring>& bring);
     std::string RegisterRequest(std::string_view dsId, std::string_view key, uint16_t port, std::string_view map);
     std::string HeartbeatRequest(std::string_view dsId, std::string_view key, const std::vector<uint64_t>& players,

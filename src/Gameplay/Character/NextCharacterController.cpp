@@ -1,22 +1,25 @@
 #include "Gameplay/Character/NextCharacterController.h"
 
-#include "Engine/Runtime/Subsystems/NextPhysics.hpp"
+#include <utility>
 
 NextCharacterController::NextCharacterController() = default;
 NextCharacterController::~NextCharacterController() = default;
 
-void NextCharacterController::Create(NextPhysics* physics, const FCharacterControllerSettings& settings)
+void NextCharacterController::Create(const FCharacterControllerFactory& factory,
+                                     std::function<void()> synchronize,
+                                     const FCharacterControllerSettings& settings)
 {
-    physics_ = physics;
+    Destroy();
+    synchronize_ = std::move(synchronize);
     settings_ = settings;
-    backend_ = physics ? physics->CreateCharacterController(settings) : nullptr;
+    backend_ = factory ? factory(settings) : nullptr;
 }
 
 void NextCharacterController::Destroy()
 {
     CompletePhysics();
     backend_.reset();
-    physics_ = nullptr;
+    synchronize_ = {};
 }
 
 void NextCharacterController::Update(const glm::vec3& inputDirection, float speed, bool jump, float deltaSeconds)
@@ -113,8 +116,8 @@ bool NextCharacterController::IsValid() const
 
 void NextCharacterController::CompletePhysics() const
 {
-    if (physics_)
+    if (synchronize_)
     {
-        physics_->CompleteTick();
+        synchronize_();
     }
 }

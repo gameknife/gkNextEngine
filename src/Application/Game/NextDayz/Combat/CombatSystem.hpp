@@ -9,6 +9,7 @@
 // flinches, blood, audio).
 // ============================================================================
 
+#include "Application/Game/NextDayz/Combat/HitGeometry.hpp"
 #include "Engine/Common/CoreMinimal.hpp"
 
 #include <array>
@@ -39,8 +40,6 @@ namespace NextDayz
     };
 
     // Nearest hit of a ray against a capsule, or nothing (origin inside counts as a miss).
-    std::optional<float> RayCapsuleDistance(const glm::vec3& origin, const glm::vec3& direction,
-                                            const FHitCapsule& capsule);
 
     class CombatSystem
     {

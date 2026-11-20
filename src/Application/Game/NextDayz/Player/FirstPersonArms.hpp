@@ -25,7 +25,7 @@
 #include <glm/glm.hpp>
 
 #include "Engine/Assets/Data/RigAsset.hpp"
-#include "Gameplay/Rig/RigLayeredAnimator.h"
+#include "Application/Game/NextDayz/Player/FirstPersonArmPose.hpp"
 
 namespace Assets
 {
@@ -76,16 +76,10 @@ namespace NextDayz
         const std::array<std::shared_ptr<Assets::Node>, 2>& HandNodes() const { return hands_; }
 
     private:
-        struct FBones
-        {
-            int32_t upperArmL = -1, foreArmL = -1, handL = -1;
-            int32_t upperArmR = -1, foreArmR = -1, handR = -1;
-        };
-
         bool PartWanted(const FFirstPersonArmPart& part, bool supportHand) const;
 
         FFirstPersonArmAssets assets_;
-        FBones bones_{};
+        FFirstPersonArmBones bones_{};
         bool valid_ = false;
         Assets::Scene* scene_ = nullptr;
         std::weak_ptr<Assets::Node> parent_;
@@ -94,8 +88,7 @@ namespace NextDayz
         std::array<std::shared_ptr<Assets::Node>, 2> hands_{};
         std::vector<std::string> equipped_;
         bool coat_ = false;
-        NextGameplay::FRigPose pose_;
-        std::vector<glm::mat4> transforms_;
+        FFirstPersonArmPose armPose_;
         float gripError_ = 0.0f;
     };
 }

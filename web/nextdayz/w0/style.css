@@ -1,0 +1,57 @@
+:root {
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color-scheme: dark;
+  color: #edf1e7;
+  background: #131712;
+  --panel: #1d231b;
+  --line: #363f33;
+  --muted: #aeb9a7;
+  --accent: #d6e486;
+}
+body { margin: 0; }
+main { max-width: 1250px; margin: auto; padding: 24px 24px 40px; }
+header { display: flex; align-items: baseline; gap: 20px; margin-bottom: 18px; }
+.brand { color: var(--accent); font-size: 19px; font-weight: 800; letter-spacing: .16em; }
+.brand span { color: var(--muted); font-size: 12px; letter-spacing: .08em; }
+h1 { font-size: 18px; font-weight: 550; margin: 0; }
+h2 { font-size: 17px; margin: 0 0 4px; }
+p { margin: 0; color: var(--muted); }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 12px 16px; }
+#maps, .actions { display: flex; align-items: center; gap: 8px; }
+label { color: var(--muted); }
+button, select {
+  font: inherit;
+  padding: 6px 11px;
+  color: inherit;
+  background: #272f23;
+  border: 1px solid #505e48;
+  border-radius: 5px;
+}
+button { cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button:disabled { opacity: .55; cursor: wait; }
+#viewport { position: relative; height: clamp(300px, 60vh, 720px); background: #111811; }
+canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+#scene-status {
+  position: absolute; inset: 50% auto auto 50%; translate: -50% -50%;
+  color: #fff; padding: 10px 14px; background: #141812dd; border-radius: 5px;
+}
+#scene-controls { position: absolute; right: 12px; top: 12px; }
+#scene-controls button { background: #182018e8; margin-left: 5px; }
+kbd { padding: 1px 4px; margin-right: 4px; border: 1px solid #52634d; border-radius: 4px; color: #ecf1e6; }
+.footer { border-bottom: 1px solid var(--line); }
+output, dd { font-variant-numeric: tabular-nums; }
+.metrics { display: flex; flex-wrap: wrap; gap: 10px 30px; padding: 0 16px; }
+.metrics dt { color: var(--muted); font-size: 13px; }
+.metrics dd { margin: 0; font-size: 16px; font-weight: 600; }
+.checks { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+.checks section { padding: 14px 16px; }
+.checks p, .actions { margin-bottom: 10px; }
+summary { cursor: pointer; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+@media (max-width: 700px) {
+  main { padding: 16px; }
+  .checks { grid-template-columns: 1fr; }
+}

@@ -195,18 +195,14 @@ endif()
 gk_collect_vulkan_sdk_candidates(vulkanSdkCandidates)
 list(APPEND slangHintDirs ${vulkanSdkCandidates})
 
-# tools/slang is populated by the Linux ARM64 setup path. It contains a
-# host-specific executable, so never let it shadow the native slangc bundled
-# with the macOS Vulkan SDK in a workspace shared by both hosts.
+# The bundled slangc is an ARM64 Linux host tool. Other hosts use their SDK.
 set(localSlangHintDirs "")
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
     list(APPEND localSlangHintDirs "${CMAKE_SOURCE_DIR}/tools/slang")
-endif()
-
-if(DEFINED Vulkan_SLANGC AND Vulkan_SLANGC AND NOT EXISTS "${Vulkan_SLANGC}")
+elseif(DEFINED Vulkan_SLANGC AND Vulkan_SLANGC MATCHES "/tools/slang/")
     unset(Vulkan_SLANGC CACHE)
 endif()
-if(APPLE AND DEFINED Vulkan_SLANGC AND Vulkan_SLANGC MATCHES "/tools/slang/")
+if(DEFINED Vulkan_SLANGC AND Vulkan_SLANGC AND NOT EXISTS "${Vulkan_SLANGC}")
     unset(Vulkan_SLANGC CACHE)
 endif()
 find_program(Vulkan_SLANGC

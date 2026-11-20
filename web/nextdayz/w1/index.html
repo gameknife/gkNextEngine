@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NextDayz Web · W1 验收</title>
+  <style>
+    :root { color-scheme: dark; background: #131712; color: #edf1e7; font: 16px/1.5 system-ui, sans-serif; }
+    main { max-width: 840px; margin: 54px auto; padding: 0 20px; }
+    header p:first-child { color: #d6e486; letter-spacing: .15em; font-size: .88rem; font-weight: 800; }
+    h1 { font-size: clamp(1.75rem, 4vw, 2.75rem); margin: 0 0 .4rem; letter-spacing: -.025em; }
+    p, label, dt { color: #aeb9a7; }
+    section { background: #1d231b; border: 1px solid #363f33; border-radius: 8px; padding: 22px; margin-top: 24px; }
+    form { display: flex; gap: .7rem; align-items: center; flex-wrap: wrap; }
+    input, button { font: inherit; color: inherit; padding: 8px 12px; border-radius: 5px; border: 1px solid #505e48; background: #151b13; }
+    button { cursor: pointer; }
+    button[type="submit"] { color: #1b2314; background: #d6e486; font-weight: 650; }
+    button:disabled { opacity: .5; cursor: default; }
+    output { display: block; margin-top: 1rem; color: #d6e486; }
+    dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem; margin: 20px 0 0; }
+    dt { font-size: .85rem; }
+    dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+    dl div { padding: 12px 0; border-top: 1px solid #363f33; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p>NEXTDAYZ WEB</p>
+      <h1>W1 联机验收</h1>
+      <p>通过 WebRTC 加入本机 NextDayz 服务器，查看真实物资同步和同服幸存者快照。</p>
+    </header>
+    <section aria-label="连接与同服数据">
+      <form>
+        <label for="name">幸存者昵称</label>
+        <input id="name" type="text" maxlength="32" value="web-review" required>
+        <button type="submit">加入服务器</button>
+        <button id="disconnect" type="button" disabled>离开</button>
+      </form>
+      <output id="status" role="status">就绪</output>
+      <dl>
+        <div><dt>幸存者 ID</dt><dd id="survivor">—</dd></div>
+        <div><dt>地图</dt><dd id="scene">—</dd></div>
+        <div><dt>协议版本</dt><dd id="protocol">—</dd></div>
+        <div><dt>已收快照</dt><dd id="snapshots">—</dd></div>
+        <div><dt>同服幸存者 ID</dt><dd id="others">—</dd></div>
+        <div><dt>物资全量同步</dt><dd id="loot">—</dd></div>
+      </dl>
+    </section>
+  </main>
+  <script type="module" src="/review.mjs"></script>
+</body>
+</html>

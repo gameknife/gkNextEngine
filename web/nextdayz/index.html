@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="nextdayz-build" content="NEXTDAYZ_RELEASE_BUILD">
+    <meta name="theme-color" content="#151a15">
+    <link rel="icon" href="data:,">
+    <title>NextDayz · 联机大厅</title>
+    <link rel="stylesheet" href="/src/style.css">
+    <script type="module" src="/src/main.ts"></script>
+</head>
+<body>
+    <header class="bar">
+        <a class="logo" href="./" aria-label="NextDayz">NEXT<span>DAYZ</span></a>
+        <div class="bar-tools"><span id="network-label">正在初始化内核</span><button id="settings-button" class="quiet" type="button">设置</button></div>
+    </header>
+    <main id="lobby">
+        <form id="login">
+            <h1 id="lobby-title">联机大厅</h1>
+            <label id="name-label" for="name">幸存者昵称</label>
+            <input id="name" name="name" required maxlength="40" autocomplete="nickname" autofocus>
+            <label id="password-label" for="password" hidden>账号口令</label>
+            <input id="password" name="password" type="password" maxlength="72" autocomplete="current-password" hidden>
+            <label id="server-label" for="server">服务器</label>
+            <select id="server">
+                <option value="master">本地 Master</option>
+                <option value="direct">开发直连</option>
+            </select>
+            <button type="submit" id="login-button" disabled>进入大厅</button>
+        </form>
+
+        <section id="profile" hidden>
+            <div class="heading">
+                <div>
+                    <h1 id="profile-name"></h1>
+                    <p id="profile-activity"></p>
+                </div>
+                <button id="logout" class="quiet" type="button">切换幸存者</button>
+            </div>
+            <div class="loadout">
+                <section>
+                    <h2><span id="storage-title">仓库</span> <small id="bring-count"></small></h2>
+                    <div id="storage"></div>
+                </section>
+                <section>
+                    <h2 id="deploy-title">出击地图</h2>
+                    <div id="maps" role="radiogroup" aria-label="出击地图"></div>
+                    <p id="carry-hint"></p>
+                    <button id="deploy" type="button">出击</button>
+                </section>
+            </div>
+        </section>
+
+        <section class="loading" id="loading" hidden>
+            <h1 id="loading-title">正在派遣</h1>
+            <p id="loading-detail"></p>
+            <progress id="progress" aria-label="地图下载进度"></progress>
+        </section>
+
+        <p id="notice" role="status"></p>
+    </main>
+
+    <main id="field" hidden>
+        <div id="viewport"></div>
+        <aside class="field-card">
+            <strong id="map-name"></strong>
+            <span id="world-clock"></span>
+            <span id="identity"></span>
+            <span id="vitals"></span>
+            <span id="sync"></span>
+            <span id="pvp-status"></span>
+        </aside>
+        <div id="compass" aria-label="罗盘"></div>
+        <aside id="weapon-hud" aria-live="off"><span id="weapon-name"></span><strong id="ammo"></strong><span id="weapon-action"></span></aside>
+        <div id="damage-hud" aria-hidden="true"></div>
+        <div id="hit-marker" aria-hidden="true" hidden>×</div>
+        <section id="menu" aria-label="视角菜单">
+            <button id="capture" type="button">进入操控</button>
+            <button id="pack-button" class="quiet" type="button">随身装备</button>
+            <button id="map-button" class="quiet" type="button">地图</button>
+            <button id="course" class="quiet" type="button" hidden>前往障碍场</button>
+            <button id="range" class="quiet" type="button" hidden>前往靶场</button>
+            <button id="pen" class="quiet" type="button" hidden>前往感染者围栏</button>
+            <button id="spawn" class="quiet" type="button">幸存者视角</button>
+            <button id="overview" class="quiet" type="button">俯瞰地图</button>
+            <button id="detail" class="quiet" type="button">核心区</button>
+            <select id="quality" aria-label="画质">
+                <option value="balanced">均衡</option>
+                <option value="shadows">级联阴影</option>
+            </select>
+            <button id="leave" class="quiet" type="button">返回大厅</button>
+        </section>
+        <section id="pack" aria-label="随身装备" hidden>
+            <div class="heading"><strong id="pack-title">随身装备</strong><button id="close-pack" class="quiet" type="button">关闭</button></div>
+            <p id="pack-notice" role="status" hidden></p>
+            <div id="items"></div>
+        </section>
+        <section id="map-panel" hidden>
+            <div class="heading"><strong id="map-title">行动地图</strong><button id="close-map" class="quiet" type="button">关闭</button></div>
+            <canvas id="map-canvas" width="760" height="660" aria-label="行动地图"></canvas>
+            <p id="map-legend"></p>
+        </section>
+        <section id="death-panel" hidden>
+            <h2 id="death-title">幸存者已死亡</h2>
+            <p id="death-detail"></p>
+            <button id="respawn" type="button">返回大厅并重新出击</button>
+        </section>
+        <p id="field-hint" aria-live="polite" hidden></p>
+        <div id="aim-point" aria-hidden="true" hidden></div>
+        <p id="controls" hidden>WASD 移动 · X 慢走 · Shift 冲刺 · C 蹲伏 · 空格 跳跃 / 翻越 · V 切换视角 · Alt 自由观察 · E 拾取 · Tab 装备 · Esc 菜单</p>
+    </main>
+    <dialog id="settings-dialog">
+        <form method="dialog">
+            <div class="heading"><h2 id="settings-title">设置</h2><button id="close-settings" class="quiet">关闭</button></div>
+        </form>
+        <div id="settings-content"></div>
+    </dialog>
+</body>
+</html>

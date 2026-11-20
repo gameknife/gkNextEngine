@@ -30,57 +30,6 @@ namespace NextDayz
         return it == proxies_.end() ? std::nullopt : std::optional<FHitProxy>(it->second);
     }
 
-    std::optional<float> RayCapsuleDistance(const glm::vec3& origin, const glm::vec3& direction,
-                                            const FHitCapsule& capsule)
-    {
-        // Cylinder body first, then whichever end cap the ray meets.
-        const glm::vec3 ba = capsule.b - capsule.a;
-        const glm::vec3 oa = origin - capsule.a;
-        const float baba = glm::dot(ba, ba);
-        const float bard = glm::dot(ba, direction);
-        const float baoa = glm::dot(ba, oa);
-        const float rdoa = glm::dot(direction, oa);
-        const float oaoa = glm::dot(oa, oa);
-        const float r2 = capsule.radius * capsule.radius;
-        const float a = baba - bard * bard;
-        if (a > 1.0e-8f)
-        {
-            const float b = baba * rdoa - baoa * bard;
-            const float c = baba * oaoa - baoa * baoa - r2 * baba;
-            const float h = b * b - a * c;
-            if (h < 0.0f)
-            {
-                return std::nullopt;
-            }
-            const float t = (-b - std::sqrt(h)) / a;
-            const float y = baoa + t * bard;
-            if (y > 0.0f && y < baba)
-            {
-                return t >= 0.0f ? std::optional<float>(t) : std::nullopt;
-            }
-        }
-        const auto sphere = [&](const glm::vec3& center) -> std::optional<float>
-        {
-            const glm::vec3 oc = origin - center;
-            const float b = glm::dot(direction, oc);
-            const float c = glm::dot(oc, oc) - r2;
-            const float h = b * b - c;
-            if (h < 0.0f)
-            {
-                return std::nullopt;
-            }
-            const float t = -b - std::sqrt(h);
-            return t >= 0.0f ? std::optional<float>(t) : std::nullopt;
-        };
-        const std::optional<float> capA = sphere(capsule.a);
-        const std::optional<float> capB = sphere(capsule.b);
-        if (capA && capB)
-        {
-            return std::min(*capA, *capB);
-        }
-        return capA ? capA : capB;
-    }
-
     CombatSystem::CombatSystem(ZombieSystem& zombies)
         : zombies_(zombies), hitboxes_(zombies.Capacity())
     {

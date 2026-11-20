@@ -5,12 +5,9 @@
 #include <cmath>
 #include <chrono>
 #include <optional>
+#include <utility>
 
 #include <glm/gtc/matrix_transform.hpp>
-
-#include "Engine/Assets/GPU/UniformBuffer.hpp"
-#include "Engine/Runtime/Engine.hpp"
-#include "Engine/Runtime/Subsystems/NextPhysics.hpp"
 
 namespace NextDayz
 {
@@ -21,21 +18,12 @@ namespace NextDayz
             return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
         }
 
-        std::optional<Assets::RayCastResult> RaycastWithin(NextEngine& engine,
-                                                           const glm::vec3& origin,
-                                                           const glm::vec3& direction,
-                                                           float maxDistance)
+        std::optional<FWorldRayHit> RaycastWithin(const FWorldRayQuery& raycast,
+                                                  const glm::vec3& origin, const glm::vec3& direction,
+                                                  float maxDistance)
         {
-            std::optional<Assets::RayCastResult> hit;
-            engine.RayCast(origin, glm::normalize(direction), [&](Assets::RayCastResult result)
-            {
-                if (result.Hit && result.T >= 0.0f && result.T <= maxDistance)
-                {
-                    hit = result;
-                }
-                return true;
-            });
-            return hit;
+            if (maxDistance <= 0.0f) return std::nullopt;
+            return raycast(origin, glm::normalize(direction), maxDistance);
         }
 
         float Smooth01(float value)
@@ -66,11 +54,11 @@ namespace NextDayz
             float normalY = 1.0f;
         };
 
-        FColumn ProbeColumn(NextEngine& engine, const glm::vec3& at, float originY, float depth, float minTopY,
+        FColumn ProbeColumn(const FWorldRayQuery& raycast, const glm::vec3& at, float originY, float depth, float minTopY,
                             float minNormalY)
         {
             FColumn column;
-            const auto hit = RaycastWithin(engine, glm::vec3(at.x, originY, at.z), glm::vec3(0.0f, -1.0f, 0.0f), depth);
+            const auto hit = RaycastWithin(raycast, glm::vec3(at.x, originY, at.z), glm::vec3(0.0f, -1.0f, 0.0f), depth);
             if (!hit)
             {
                 return column;
@@ -168,7 +156,8 @@ namespace NextDayz
         }
     }
 
-    void PlayerController::Create(NextPhysics* physics, const glm::vec3& spawnPosition, const FConfig& config)
+    void PlayerController::Create(const FCharacterControllerFactory& factory, std::function<void()> synchronize,
+                                  const glm::vec3& spawnPosition, const FConfig& config)
     {
         config_ = config;
         CancelAiming();
@@ -221,7 +210,7 @@ namespace NextDayz
         settings.maxStepHeight = config_.Player.MaxStepHeight;
         settings.maxSlopeAngle = config_.Player.MaxSlopeAngle;
         settings.initialPosition = spawnPosition;
-        controller_.Create(physics, settings);
+        controller_.Create(factory, std::move(synchronize), settings);
     }
 
     void PlayerController::Destroy()
@@ -413,7 +402,7 @@ namespace NextDayz
         return desiredLength > 0.0f ? CameraArmLength() / desiredLength : 0.0f;
     }
 
-    void PlayerController::UpdateCameraArm(float deltaSeconds, NextEngine& engine)
+    void PlayerController::UpdateCameraArm(float deltaSeconds, const FWorldRayQuery& raycast)
     {
         const glm::vec3 offset = ThirdPersonOffset();
         const float desiredLength = glm::length(offset);
@@ -440,7 +429,7 @@ namespace NextDayz
             for (float y : {-1.0f, 0.0f, 1.0f})
             {
                 const glm::vec3 origin = focus + (right * x + up * y) * camera.TpsCollisionRadius;
-                const auto hit = RaycastWithin(engine, origin, direction, desiredLength + clearance);
+                const auto hit = RaycastWithin(raycast, origin, direction, desiredLength + clearance);
                 if (hit)
                 {
                     clearLength = std::min(clearLength, std::max(0.0f, hit->T - clearance));
@@ -500,7 +489,7 @@ namespace NextDayz
                glm::dot(cameraRecoilVelocity_, cameraRecoilVelocity_) > 0.0001f;
     }
 
-    void PlayerController::QueueContextualJump(NextEngine& engine)
+    void PlayerController::QueueContextualJump(const FWorldRayQuery& raycast)
     {
         if (IsTraversing())
         {
@@ -513,7 +502,7 @@ namespace NextDayz
         {
             return;
         }
-        if (!TryBeginTraversal(engine, false))
+        if (!TryBeginTraversal(raycast, false))
         {
             jumpQueued_ = true;
         }
@@ -540,7 +529,7 @@ namespace NextDayz
     // The CPU raycast reports back faces, so every downward column starts
     // from a point kept in free space: under the ceiling above the head, and
     // cut off where a horizontal ray at that height enters something taller.
-    bool PlayerController::TryBeginTraversal(NextEngine& engine, bool airborne)
+    bool PlayerController::TryBeginTraversal(const FWorldRayQuery& raycast, bool airborne)
     {
         const std::string prefix = airborne ? "air:" : "";
         const auto reject = [&](const char* reason)
@@ -581,10 +570,10 @@ namespace NextDayz
 
         // --- 1. the face -----------------------------------------------------
         const float reach = std::min(tc.ProbeDistance + speed * tc.ProbeSpeedLookahead, tc.ProbeMaxDistance);
-        std::optional<Assets::RayCastResult> face;
+        std::optional<FWorldRayHit> face;
         for (float h = 0.30f; h <= maxTop - 0.04f; h += 0.28f)
         {
-            const auto hit = RaycastWithin(engine, feet + up * h, heading, reach);
+            const auto hit = RaycastWithin(raycast, feet + up * h, heading, reach);
             if (!hit || std::abs(glm::vec3(hit->Normal).y) > 0.70f)
             {
                 continue; // nothing, or a ramp / underside
@@ -622,7 +611,7 @@ namespace NextDayz
         // --- 2. the lip ------------------------------------------------------
         float originY = feet.y + maxTop + 0.20f;
         bool overhead = false; // an eave, porch roof or balcony above the head
-        if (const auto ceiling = RaycastWithin(engine, feet + up * 1.0f, up, originY - feet.y - 0.95f))
+        if (const auto ceiling = RaycastWithin(raycast, feet + up * 1.0f, up, originY - feet.y - 0.95f))
         {
             originY = std::min(originY, static_cast<float>(ceiling->HitPoint.y) - 0.05f);
             overhead = true;
@@ -633,14 +622,14 @@ namespace NextDayz
         }
         const float scanEndNominal = faceDist + 0.45f;
         float coveredFrom = scanEndNominal + 1.0f;
-        if (const auto cover = RaycastWithin(engine, glm::vec3(feet.x, originY, feet.z), dir, coveredFrom))
+        if (const auto cover = RaycastWithin(raycast, glm::vec3(feet.x, originY, feet.z), dir, coveredFrom))
         {
             coveredFrom = cover->T - 0.02f;
         }
         const float columnDepth = originY - feet.y + 0.6f;
         const auto column = [&](float s)
         {
-            return ProbeColumn(engine, feet + dir * s, originY, columnDepth, feet.y + minTop, tc.SurfaceNormalMinY);
+            return ProbeColumn(raycast, feet + dir * s, originY, columnDepth, feet.y + minTop, tc.SurfaceNormalMinY);
         };
 
         float edgeS = 0.0f;
@@ -706,7 +695,7 @@ namespace NextDayz
             const float underReach = maxTop - 1.2f + 0.05f;
             const auto underside = [&](float s) -> std::optional<float>
             {
-                const auto hit = RaycastWithin(engine, feet + dir * s + up * 1.2f, up, underReach);
+                const auto hit = RaycastWithin(raycast, feet + dir * s + up * 1.2f, up, underReach);
                 return hit ? std::optional<float>(static_cast<float>(hit->HitPoint.y)) : std::nullopt;
             };
             float covered = 0.0f;
@@ -729,7 +718,7 @@ namespace NextDayz
                 }
                 const auto soffit = underside(covered + 0.02f);
                 const glm::vec3 at = feet + dir * (covered + 0.04f);
-                const auto hit = soffit ? RaycastWithin(engine, glm::vec3(at.x, *soffit + 0.80f, at.z), -up, 1.0f)
+                const auto hit = soffit ? RaycastWithin(raycast, glm::vec3(at.x, *soffit + 0.80f, at.z), -up, 1.0f)
                                         : std::nullopt;
                 if (hit && glm::vec3(hit->Normal).y >= tc.SurfaceNormalMinY &&
                     static_cast<float>(hit->HitPoint.y) - *soffit < 0.45f)
@@ -759,10 +748,10 @@ namespace NextDayz
         // surface just past it (a pitched roof rises from the lip).
         {
             const glm::vec3 crest = edge + dir * 0.10f;
-            const auto surface = RaycastWithin(engine, crest + up * 1.0f, -up, 1.3f);
+            const auto surface = RaycastWithin(raycast, crest + up * 1.0f, -up, 1.3f);
             const float surfaceY = surface ? static_cast<float>(surface->HitPoint.y) : topY;
             if (surfaceY > topY + 0.35f ||
-                RaycastWithin(engine, glm::vec3(crest.x, surfaceY + 0.04f, crest.z), up, 0.95f))
+                RaycastWithin(raycast, glm::vec3(crest.x, surfaceY + 0.04f, crest.z), up, 0.95f))
             {
                 return reject("no_crest_headroom");
             }
@@ -777,11 +766,11 @@ namespace NextDayz
             {
                 const glm::vec3 p = at + offset;
                 float baseY = at.y;
-                if (const auto ground = RaycastWithin(engine, p + up * 0.45f, -up, 0.90f))
+                if (const auto ground = RaycastWithin(raycast, p + up * 0.45f, -up, 0.90f))
                 {
                     baseY = static_cast<float>(ground->HitPoint.y);
                 }
-                if (RaycastWithin(engine, glm::vec3(p.x, baseY + 0.04f, p.z), up, headroom - (baseY - at.y)))
+                if (RaycastWithin(raycast, glm::vec3(p.x, baseY + 0.04f, p.z), up, headroom - (baseY - at.y)))
                 {
                     return false;
                 }
@@ -798,7 +787,7 @@ namespace NextDayz
         {
             const auto onTop = [&](float s)
             {
-                return ProbeColumn(engine, feet + dir * s, probeY, probeY - (topY - 0.30f), topY - 0.30f, 0.0f).kind !=
+                return ProbeColumn(raycast, feet + dir * s, probeY, probeY - (topY - 0.30f), topY - 0.30f, 0.0f).kind !=
                        EColumn::Low;
             };
             float previous = edgeS + 0.04f;
@@ -830,12 +819,12 @@ namespace NextDayz
                 const float s = farS + radius + 0.08f + 0.15f * static_cast<float>(k);
                 const glm::vec3 at = feet + dir * s;
                 // The way down the far side must be open (no building right behind the wall).
-                if (RaycastWithin(engine, glm::vec3(feet.x, topY + 0.25f, feet.z) + dir * (farS - 0.05f), dir,
+                if (RaycastWithin(raycast, glm::vec3(feet.x, topY + 0.25f, feet.z) + dir * (farS - 0.05f), dir,
                                   s - farS + 0.05f + radius))
                 {
                     break;
                 }
-                const auto hit = RaycastWithin(engine, glm::vec3(at.x, topY + 0.50f, at.z), -up, 0.50f + tc.MaxDropBehind);
+                const auto hit = RaycastWithin(raycast, glm::vec3(at.x, topY + 0.50f, at.z), -up, 0.50f + tc.MaxDropBehind);
                 if (!hit || glm::vec3(hit->Normal).y < tc.StandNormalMinY)
                 {
                     continue;
@@ -861,7 +850,7 @@ namespace NextDayz
             for (size_t i = 0; i < lateral.size() && ok; ++i)
             {
                 const glm::vec3 p = at + right * lateral[i];
-                const auto hit = RaycastWithin(engine, glm::vec3(p.x, probeY, p.z), -up, probeY - (topY - 0.40f));
+                const auto hit = RaycastWithin(raycast, glm::vec3(p.x, probeY, p.z), -up, probeY - (topY - 0.40f));
                 ok = hit && glm::vec3(hit->Normal).y >= tc.StandNormalMinY;
                 heights[i] = ok ? static_cast<float>(hit->HitPoint.y) : 0.0f;
             }
@@ -933,7 +922,7 @@ namespace NextDayz
         const auto plantAt = [&](float lateral, float inset, float lift)
         {
             const glm::vec3 p = edge + dir * inset + right * lateral;
-            const auto hit = RaycastWithin(engine, glm::vec3(p.x, topY + 0.40f, p.z), -up, 0.70f);
+            const auto hit = RaycastWithin(raycast, glm::vec3(p.x, topY + 0.40f, p.z), -up, 0.70f);
             const float y = hit && std::abs(static_cast<float>(hit->HitPoint.y) - topY) < 0.25f
                                 ? static_cast<float>(hit->HitPoint.y)
                                 : topY;
@@ -950,7 +939,7 @@ namespace NextDayz
             plan.hands[1] = plantAt(tc.HandSpread, tc.HandInset + 0.03f, 0.09f);
         }
 
-        if (!BuildTraversalPath(engine, plan, feet, planar + up * (airborne ? verticalVelocity_ : 0.0f)))
+        if (!BuildTraversalPath(raycast, plan, feet, planar + up * (airborne ? verticalVelocity_ : 0.0f)))
         {
             return reject("no_path");
         }
@@ -965,7 +954,7 @@ namespace NextDayz
     // hand and foot placements meet the real geometry; only the free segments
     // (approach, jump) stretch with it. Clip phases match the contact markers
     // in nextdayz_survivor.scad.
-    bool PlayerController::BuildTraversalPath(NextEngine& engine, FTraversalPlan& plan, const glm::vec3& feet,
+    bool PlayerController::BuildTraversalPath(const FWorldRayQuery& raycast, FTraversalPlan& plan, const glm::vec3& feet,
                                               const glm::vec3& velocity) const
     {
         const FTraversalConfig& tc = config_.Traversal;
@@ -1043,12 +1032,12 @@ namespace NextDayz
                 plan.impactSpeed = 2.2f;
                 // Stride out on the far side, as far as the ground allows.
                 float stride = std::min(exitSpeed * 0.14f, 0.55f);
-                if (const auto block = RaycastWithin(engine, touch + up * 0.5f, plan.dir, stride + config_.Player.ControllerRadius))
+                if (const auto block = RaycastWithin(raycast, touch + up * 0.5f, plan.dir, stride + config_.Player.ControllerRadius))
                 {
                     stride = std::max(0.0f, block->T - config_.Player.ControllerRadius - 0.05f);
                 }
                 glm::vec3 recover = touch + plan.dir * stride;
-                const auto ground = RaycastWithin(engine, recover + up * 0.6f, -up, 1.0f);
+                const auto ground = RaycastWithin(raycast, recover + up * 0.6f, -up, 1.0f);
                 if (!ground || std::abs(static_cast<float>(ground->HitPoint.y) - touch.y) > 0.25f)
                 {
                     recover = touch;
@@ -1448,7 +1437,7 @@ namespace NextDayz
         return measured;
     }
 
-    void PlayerController::Update(float deltaSeconds, NextEngine& engine)
+    void PlayerController::Update(float deltaSeconds, const FWorldRayQuery& raycast)
     {
         aimInput_.Update(AimInputTime(), config_.Camera.AimTapSeconds);
         lookDelta_ = lookDeltaAccum_;
@@ -1459,7 +1448,7 @@ namespace NextDayz
         // any lip that comes within reach of the hands on the way up or down.
         if (!IsTraversing() && WantsAirCatch())
         {
-            TryBeginTraversal(engine, true);
+            TryBeginTraversal(raycast, true);
         }
         if (IsTraversing())
         {
@@ -1467,7 +1456,7 @@ namespace NextDayz
             UpdateTraversal(deltaSeconds);
             UpdateMotion(deltaSeconds, previousPosition);
             UpdateView(deltaSeconds);
-            UpdateCameraArm(deltaSeconds, engine);
+            UpdateCameraArm(deltaSeconds, raycast);
             return;
         }
         locomotion_.traversalAction = EPlayerTraversalAction::None;
@@ -1713,7 +1702,7 @@ namespace NextDayz
         }
 
         UpdateView(deltaSeconds);
-        UpdateCameraArm(deltaSeconds, engine);
+        UpdateCameraArm(deltaSeconds, raycast);
     }
 
     void PlayerController::FillCamera(glm::mat4& outModelView, float& outFov) const

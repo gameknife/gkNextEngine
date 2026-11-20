@@ -161,6 +161,7 @@ namespace Assets
 
         struct ScadBuildCache
         {
+            std::vector<FProceduralTextureRef>* materialTextures = nullptr;
             std::unordered_map<uint64_t, uint32_t> materialByProperties;
             std::unordered_map<ScadMeshFingerprint, std::vector<uint32_t>, ScadMeshFingerprintHash> modelByMesh;
             // Scene-eval instanceId -> engine node + accumulated engine-space
@@ -190,6 +191,11 @@ namespace Assets
 
             const uint32_t materialIdx = static_cast<uint32_t>(materials.size());
             materials.push_back({ScadMaterialFromColor(color, properties), ScadMaterialName(color, sourceName)});
+            if (cache.materialTextures)
+            {
+                cache.materialTextures->resize(materials.size());
+                cache.materialTextures->back() = properties.texture;
+            }
             cache.materialByProperties[colorKey] = materialIdx;
             return materialIdx;
         }
@@ -869,7 +875,8 @@ namespace Assets
         std::vector<LightObject>& /*lights*/,
         std::vector<AnimationTrack>& tracks,
         std::vector<Skeleton>& /*skeletons*/,
-        const ScadLoadOptions& options)
+        const ScadLoadOptions& options,
+        std::vector<FProceduralTextureRef>* materialTextures)
     {
         const auto loadStarted = std::chrono::steady_clock::now();
         const size_t nodesBefore = nodes.size();
@@ -902,6 +909,7 @@ namespace Assets
 
         // ---- Recreate the SCAD user-module hierarchy ----
         ScadBuildCache buildCache;
+        buildCache.materialTextures = materialTextures;
         size_t rootCount = 0;
         for (const Scad::SceneNode& root : result.roots)
         {

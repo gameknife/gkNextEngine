@@ -8,11 +8,11 @@ Windows 包还带渲染器动态加载的 Streamline/DLSS 插件及许可证。�
 ## 打包
 
 ```powershell
-.\gnb.bat package nextdayz-client --version dev-001 --master-url http://game.example.com:7780
+.\gnb.bat package nextdayz-client --version dev-001 --master-url https://game.example.com
 ```
 
 ```sh
-./gnb.sh package nextdayz-client --version dev-001 --master-url http://game.example.com:7780
+./gnb.sh package nextdayz-client --version dev-001 --master-url https://game.example.com
 ```
 
 默认构建 `NextDayz`、`Packager` 后出包；已有构建可用 `--skip-build`。首次使用按仓库常规流程
@@ -50,7 +50,7 @@ Linux 执行 `./start-client.sh`，脚本会设置随包动态库路径。启动
 {
   "version": 1,
   "servers": [
-    {"name": "Public Master", "url": "http://game.example.com:7780"}
+    {"name": "Public Master", "url": "https://game.example.com"}
   ]
 }
 ```

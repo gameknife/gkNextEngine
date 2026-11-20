@@ -95,9 +95,11 @@ namespace NextDayz::Master
         }
     }
 
-    std::string LoginRequest(std::string_view name)
+    std::string LoginRequest(std::string_view name, std::string_view password)
     {
-        return json{{"name", name}}.dump();
+        json request{{"name", name}};
+        if (!password.empty()) request["password"] = password;
+        return request.dump();
     }
 
     std::string DeployRequest(std::string_view mapId, const std::vector<FBring>& bring)

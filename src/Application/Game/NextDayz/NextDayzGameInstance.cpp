@@ -3545,6 +3545,11 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
         const auto* provider = GetEngine().GetRenderer().ViewServices().FindProvider("NextDayzItemIcons");
         return int64_t(provider ? static_cast<const NextDayz::ItemIconCache*>(provider)->ReadyCount() : 0);
     });
+    reg.Add("inventoryIconsReady", [this]() -> Runtime::Agent::FAgentQueryValue
+    {
+        const auto* provider = GetEngine().GetRenderer().ViewServices().FindProvider("NextDayzItemIcons");
+        return provider && static_cast<const NextDayz::ItemIconCache*>(provider)->ReadyCount() == NextDayz::AllItemDefs().size();
+    });
     reg.Add("inventoryIconsRendered", [this]() -> Runtime::Agent::FAgentQueryValue
     {
         const auto* provider = GetEngine().GetRenderer().ViewServices().FindProvider("NextDayzItemIcons");

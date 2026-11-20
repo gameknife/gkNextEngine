@@ -13,7 +13,7 @@ namespace NextDayz
         if (first == std::string::npos) return false;
         input = input.substr(first, input.find_last_not_of(" \t\r\n") - first + 1);
         if (input.find("://") == std::string::npos) input = "http://" + input;
-        static const std::regex address(R"(^http://(\[[0-9a-fA-F:]+\]|[a-zA-Z0-9._-]+)(:([0-9]{1,5}))?/?$)");
+        static const std::regex address(R"(^https?://(\[[0-9a-fA-F:]+\]|[a-zA-Z0-9._-]+)(:([0-9]{1,5}))?/?$)");
         std::smatch match;
         if (!std::regex_match(input, match, address)) return false;
         if (match[3].matched)

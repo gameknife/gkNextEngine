@@ -13,6 +13,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <unordered_set>
 
 #include <fmt/format.h>
@@ -27,16 +28,17 @@ namespace Assets::Scad
     {
         namespace fs = std::filesystem;
 
+        fs::path looseSourceRoot;
+        std::mutex sidecarMutex;
+        std::vector<std::string> sidecarPaths;
+
         bool ScadReadBytes(const fs::path& path, std::vector<uint8_t>& data)
         {
-            if (auto* package = Utilities::Package::FPackageFileSystem::TryGetInstance())
+            if (auto* package = Utilities::Package::FPackageFileSystem::TryGetInstance(); package && looseSourceRoot.empty())
             {
                 return package->LoadFile(path.generic_string(), data);
             }
-            const fs::path loosePath = path.is_absolute()
-                ? path
-                : Utilities::FileHelper::GetRuntimeFilePath(path);
-            std::ifstream file(loosePath, std::ios::binary);
+            std::ifstream file(ResolveScadLoosePath(path), std::ios::binary);
             if (!file.is_open())
             {
                 return false;
@@ -193,17 +195,44 @@ namespace Assets::Scad
         };
     } // namespace
 
+    fs::path ResolveScadLoosePath(const fs::path& path)
+    {
+        return looseSourceRoot.empty() ? Utilities::FileHelper::GetRuntimeFilePath(path)
+                                       : (looseSourceRoot / path).lexically_normal();
+    }
+
+    void SetLooseSourceRoot(fs::path root)
+    {
+        looseSourceRoot = std::move(root);
+    }
+
+    std::vector<std::string> LooseSourceSidecars()
+    {
+        const std::lock_guard lock(sidecarMutex);
+        return sidecarPaths;
+    }
+
     bool ScadReadAsset(const std::string& path, std::vector<uint8_t>& out)
     {
+        const auto source = fs::path(path).lexically_normal();
+        if (!looseSourceRoot.empty())
+        {
+            const auto absolute = ResolveScadLoosePath(source).string();
+            const std::lock_guard lock(sidecarMutex);
+            if (std::ranges::find(sidecarPaths, absolute) == sidecarPaths.end())
+            {
+                sidecarPaths.push_back(absolute);
+            }
+        }
         out.clear();
-        return ScadReadBytes(fs::path(path).lexically_normal(), out);
+        return ScadReadBytes(source, out);
     }
 
     bool LoadScadProgram(const std::string& filename, ScadProgram& outProgram, std::string& outError,
                          std::vector<std::string>* outFiles)
     {
         fs::path mainPath = filename;
-        if (mainPath.is_absolute())
+        if (mainPath.is_absolute() && looseSourceRoot.empty())
         {
             std::error_code ec;
             const std::array<fs::path, 2> roots = {
@@ -253,7 +282,7 @@ namespace Assets::Scad
             if (outFiles)
             {
                 const fs::path absolute =
-                    item.path.is_absolute() ? item.path : Utilities::FileHelper::GetRuntimeFilePath(item.path);
+                    ResolveScadLoosePath(item.path);
                 const std::string absoluteKey = absolute.lexically_normal().string();
                 if (std::find(outFiles->begin(), outFiles->end(), absoluteKey) == outFiles->end())
                 {

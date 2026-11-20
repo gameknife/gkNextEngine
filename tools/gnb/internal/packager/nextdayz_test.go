@@ -163,7 +163,7 @@ func TestNextDayzAssetsPublishedDependencyClosure(t *testing.T) {
 }
 
 func TestNextDayzClientMasterConfiguration(t *testing.T) {
-	for _, input := range []string{"https://game.example.com:7780", "http://host:0", "http://host:65536", "http://user:password@host", "http://host/api", "http://host?token=secret"} {
+	for _, input := range []string{"ftp://game.example.com:7780", "http://host:0", "http://host:65536", "http://user:password@host", "http://host/api", "http://host?token=secret"} {
 		if _, err := normalizeNextDayzMasterURL(input); err == nil {
 			t.Fatalf("accepted %q", input)
 		}

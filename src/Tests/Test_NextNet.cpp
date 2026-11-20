@@ -1,6 +1,7 @@
 #include "Engine/Common/CoreMinimal.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <chrono>
 #include <thread>
@@ -9,7 +10,10 @@
 
 #include "Modules/NextNet/NetBuffer.hpp"
 #include "Modules/NextNet/NetHost.hpp"
+#include "Modules/NextNet/NetRtcFraming.hpp"
+#include "Modules/NextNet/NetWebRTC.hpp"
 #include "Application/Game/NextDayz/Net/NetProtocol.hpp"
+#include "Application/Game/NextDayz/Zombies/ZombieSystem.hpp"
 #include "Application/Game/NextDayz/Sim/ItemLedger.hpp"
 #include "Application/Game/NextDayz/Net/MasterApi.hpp"
 #include <nlohmann/json.hpp>
@@ -444,4 +448,114 @@ TEST_CASE("NextNet link simulation delays everything and drops only unreliable m
     CHECK(client.Traffic().simulatedDrops == 1);
     CHECK(client.Traffic().messagesSent >= 2);
     CHECK(server.Traffic().bytesReceived >= sizeof(uint32_t));
+}
+
+TEST_CASE("NextNet WebRTC snapshots discard stale and duplicate sequences across wraparound", "[Unit][NextNet][WebRTC]")
+{
+    using namespace NextNet;
+    FRtcFraming decoder;
+    const auto read = [&](uint16_t sequence, int byte, ERtcPayload expected)
+    {
+        std::vector<std::byte> frame{static_cast<std::byte>(sequence & 0xff),
+                                     static_cast<std::byte>(sequence >> 8), static_cast<std::byte>(byte)};
+        std::vector<std::byte> message;
+        CHECK(decoder.Read(frame, EDelivery::Unreliable, message) == expected);
+        if (expected == ERtcPayload::Ready) CHECK(message == std::vector<std::byte>{static_cast<std::byte>(byte)});
+    };
+    read(65534, 1, ERtcPayload::Ready);
+    read(0, 2, ERtcPayload::Ready);
+    read(65535, 3, ERtcPayload::Pending);
+    read(0, 4, ERtcPayload::Pending);
+    read(1, 5, ERtcPayload::Ready);
+}
+
+TEST_CASE("NextNet ENet and WebRTC keep large reliable messages ordered on a simulated link", "[Unit][NextNet][WebRTC]")
+{
+    using namespace NextNet;
+    const bool rtc = GENERATE(false, true);
+    CAPTURE(rtc);
+    if (rtc && !FNetHost::WebRTCAvailable()) SKIP("libdatachannel is unavailable");
+    constexpr uint16_t enetPort = 47913;
+    constexpr uint16_t rtcPort = 47914;
+    constexpr uint16_t signalPort = 47915;
+    std::string error;
+    FRtcServerOptions config;
+    config.port = rtcPort;
+    config.signalPort = signalPort;
+    auto server = rtc ? ListenWebRtc(config, 2, error) : ListenENet(enetPort, 2, error);
+    INFO(error);
+    REQUIRE(server);
+    FNetHost client;
+    const bool started = rtc
+        ? client.ConnectWebRTC(fmt::format("http://127.0.0.1:{}", signalPort), error)
+        : client.Connect("127.0.0.1", enetPort, error);
+    INFO(error);
+    REQUIRE(started);
+
+    using Clock = std::chrono::steady_clock;
+    std::vector<FNetEvent> serverEvents;
+    std::vector<FNetEvent> clientEvents;
+    const auto pump = [&](const auto& done)
+    {
+        const auto deadline = Clock::now() + std::chrono::seconds(10);
+        while (!done() && Clock::now() < deadline)
+        {
+            server->Poll(serverEvents);
+            client.Poll(clientEvents);
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        return done();
+    };
+    REQUIRE(pump([&] { return client.ServerPeer() != kInvalidPeer && !serverEvents.empty(); }));
+    REQUIRE(serverEvents.front().type == FNetEvent::EType::Connected);
+    const FPeerId local = serverEvents.front().peer;
+    serverEvents.clear();
+
+    // The large packet spans several WebRTC frames (or ENet fragments). Small
+    // reliable packets must still be observed before and after it in order.
+    const std::vector<std::byte> before{std::byte{1}};
+    std::vector<std::byte> large(128 * 1024, std::byte{2});
+    for (size_t i = 0; i < large.size(); ++i) large[i] = static_cast<std::byte>(i % 251);
+    const std::vector<std::byte> after{std::byte{3}};
+    client.SetLinkSimulation({200, 40, 1.0f});
+    const auto sent = Clock::now();
+    REQUIRE(client.Send(client.ServerPeer(), before, EDelivery::Reliable));
+    REQUIRE(client.Send(client.ServerPeer(), large, EDelivery::Reliable));
+    REQUIRE(client.Send(client.ServerPeer(), after, EDelivery::Reliable));
+    const std::vector<std::byte> snapshot{std::byte{4}};
+    for (int i = 0; i < 300; ++i)
+    {
+        REQUIRE(client.Send(client.ServerPeer(), snapshot, EDelivery::Unreliable));
+    }
+    const auto reliableCount = [&]
+    {
+        return std::ranges::count_if(serverEvents, [&](const auto& event)
+        {
+            return event.type == FNetEvent::EType::Message && event.payload != snapshot;
+        });
+    };
+    REQUIRE(pump([&] { return reliableCount() >= 3; }));
+    CHECK(Clock::now() - sent >= std::chrono::milliseconds(150));
+    CHECK(client.Traffic().simulatedDrops > 0);
+    std::vector<std::vector<std::byte>> got;
+    for (auto& event : serverEvents)
+    {
+        if (event.type == FNetEvent::EType::Message && event.payload != snapshot) got.push_back(std::move(event.payload));
+    }
+    CHECK(got == std::vector<std::vector<std::byte>>{before, large, after});
+
+    clientEvents.clear();
+    REQUIRE(server->Send(local, large, EDelivery::Reliable));
+    server->Disconnect(local);
+    REQUIRE(pump([&]
+    {
+        return std::ranges::any_of(clientEvents, [](const auto& event)
+        {
+            return event.type == FNetEvent::EType::Disconnected;
+        });
+    }));
+    REQUIRE(clientEvents.size() >= 2);
+    CHECK(clientEvents[0].type == FNetEvent::EType::Message);
+    CHECK(clientEvents[0].payload == large);
+    CHECK(clientEvents.back().type == FNetEvent::EType::Disconnected);
 }

@@ -1,7 +1,7 @@
 #include "Modules/ScadLoader/FScadText.h"
 
 #include "Modules/ScadLoader/FScadTess.h"
-#include "Engine/Utilities/FileHelper.hpp"
+#include "Modules/ScadLoader/FScadShared.h"
 
 #ifndef GK_WITH_FREETYPE
 #define GK_WITH_FREETYPE 0
@@ -101,8 +101,10 @@ namespace Assets::Scad
             std::call_once(g_initOnce, []()
             {
                 if (FT_Init_FreeType(&Lib()) != 0) return;
-                const std::string path = Utilities::FileHelper::GetPlatformFilePath("assets/fonts/DroidSansFallback.ttf");
-                if (FT_New_Face(Lib(), path.c_str(), 0, &Face()) != 0) return;
+                // FreeType borrows the bytes for the lifetime of the face.
+                static std::vector<uint8_t> fontBytes;
+                if (!ScadReadAsset("assets/fonts/DroidSansFallback.ttf", fontBytes)) return;
+                if (FT_New_Memory_Face(Lib(), fontBytes.data(), static_cast<FT_Long>(fontBytes.size()), 0, &Face()) != 0) return;
                 g_ready = true;
             });
         }

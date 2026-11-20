@@ -1,5 +1,4 @@
 import Shader.Bindless;
-import Shader.GpuScene;
 
 struct ResolveParams
 {
@@ -24,8 +23,8 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     if (any(dispatchThreadId.xy >= params.OutputExtent)) return;
 
     const int2 pixel = int2(dispatchThreadId.xy);
-    let color = Bindless.GetViewStorageTexture<float4>(Bindless.RT_SCENE_COLOR);
-    let objectIds = Bindless.GetViewStorageTexture<uint>(Bindless.RT_OBJECTID_0);
+    let color = Bindless.GetStorageTexture<float4>(Bindless.ViewRT(params._ViewHdr_CustomData0, Bindless.RT_SCENE_COLOR));
+    let objectIds = Bindless.GetStorageTexture<uint>(Bindless.ViewRT(params._ViewHdr_CustomData0, Bindless.RT_OBJECTID_0));
     const int2 sourceBase = params.SourceOffset + pixel * int(params.SampleScale);
     float3 colorSum = float3(0.0f);
     uint covered = 0;
@@ -41,7 +40,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
             }
         }
     }
-    Bindless.GetViewStorageTexture<float4>(Bindless.RT_SINGLE_DIFFUSE)[pixel] = covered > 0u
+    Bindless.GetStorageTexture<float4>(Bindless.ViewRT(params._ViewHdr_CustomData0, Bindless.RT_SINGLE_DIFFUSE))[pixel] = covered > 0u
         ? float4(colorSum / float(covered), float(covered) / float(params.SampleScale * params.SampleScale))
         : float4(0.0f);
 }

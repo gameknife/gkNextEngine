@@ -88,9 +88,16 @@ namespace NextDayz
 
     void WorldAnchorRegistry::Scan(NextEngine& engine)
     {
-        Clear();
         Assets::Scene& scene = engine.GetScene();
-        for (const auto& node : scene.Nodes())
+        Scan(scene.Nodes(), engine.GetPhysicsEngine());
+        scene.MarkDirty();
+        SPDLOG_INFO("[NextDayz] registered {} world anchors (generation {})", anchors_.size(), generation_);
+    }
+
+    void WorldAnchorRegistry::Scan(std::span<const std::shared_ptr<Assets::Node>> nodes, NextPhysics* physics)
+    {
+        Clear();
+        for (const auto& node : nodes)
         {
             if (!node)
             {
@@ -133,11 +140,9 @@ namespace NextDayz
             anchors_.push_back(std::move(anchor));
             if (parsed->first != EWorldAnchorType::Well)
             {
-                DisableMarker(node.get(), engine.GetPhysicsEngine());
+                DisableMarker(node.get(), physics);
             }
         }
-        scene.MarkDirty();
-        SPDLOG_INFO("[NextDayz] registered {} world anchors (generation {})", anchors_.size(), generation_);
     }
 
     void WorldAnchorRegistry::Clear()

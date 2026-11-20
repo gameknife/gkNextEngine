@@ -38,7 +38,11 @@ type dsOptions struct {
 	Minutes      float64 // how long the bots play
 	BotLatency   int     // link simulation on the bots (ms)
 	BotLoss      float64 // and unreliable loss (%)
-	MasterData   string  // the Master's data directory (default: a fresh one per run)
+	Web          bool
+	RtcPort      int
+	SignalPort   int
+	WebBots      int
+	MasterData   string // the Master's data directory (default: a fresh one per run)
 	ReadyTimeout time.Duration
 	DryRun       bool
 }
@@ -49,7 +53,7 @@ const (
 )
 
 func newDSCommand(ctx appContext) *cobra.Command {
-	opts := dsOptions{Target: "NextDayz", Clients: 1, Port: 27015, ReadyTimeout: 5 * time.Minute}
+	opts := dsOptions{Target: "NextDayz", Clients: 1, Port: 27015, RtcPort: 28015, SignalPort: 7781, ReadyTimeout: 5 * time.Minute}
 	cmd := &cobra.Command{
 		Use:   "ds [flags] [-- client-args]",
 		Short: tr("cli.ds.short"),
@@ -71,6 +75,10 @@ func newDSCommand(ctx appContext) *cobra.Command {
 	cmd.Flags().IntVar(&opts.Port, "port", opts.Port, "UDP port of the server")
 	cmd.Flags().BoolVar(&opts.Pvp, "pvp", false, "allow survivors to hurt each other")
 	cmd.Flags().IntVar(&opts.Bots, "bots", 0, "load test: run this many NextDayzBots against the server, then stop (non-zero exit on failure)")
+	cmd.Flags().BoolVar(&opts.Web, "web", false, "enable WebRTC beside ENet")
+	cmd.Flags().IntVar(&opts.RtcPort, "rtc-port", opts.RtcPort, "WebRTC UDP port (port base with --master)")
+	cmd.Flags().IntVar(&opts.SignalPort, "signal-port", opts.SignalPort, "loopback HTTP port for WebRTC direct-connect")
+	cmd.Flags().IntVar(&opts.WebBots, "web-bots", 0, "how many of --bots use WebRTC (implies --web)")
 	cmd.Flags().Float64Var(&opts.Minutes, "minutes", 2, "with --bots: how long they play")
 	cmd.Flags().IntVar(&opts.BotLatency, "bot-latency", 0, "with --bots: simulated latency (ms) on what each bot sends")
 	cmd.Flags().Float64Var(&opts.BotLoss, "bot-loss", 0, "with --bots: simulated loss (%) of each bot's unreliable messages")
@@ -136,13 +144,16 @@ type dsProcess struct {
 	done chan error
 }
 
-func startDSProcess(name, exe string, args []string, logPath string, onLine func(string)) (*dsProcess, error) {
+func startDSProcess(name, exe string, args []string, logPath string, onLine func(string), env ...string) (*dsProcess, error) {
 	logFile, err := os.Create(logPath)
 	if err != nil {
 		return nil, err
 	}
 	cmd := exec.Command(exe, args...)
 	cmd.Dir = filepath.Dir(exe)
+	if len(env) != 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	pipeReader, pipeWriter := io.Pipe()
 	cmd.Stdout = pipeWriter
 	cmd.Stderr = pipeWriter
@@ -151,7 +162,9 @@ func startDSProcess(name, exe string, args []string, logPath string, onLine func
 		return nil, err
 	}
 	p := &dsProcess{name: name, cmd: cmd, log: logFile, done: make(chan error, 1)}
+	scanned := make(chan struct{})
 	go func() {
+		defer close(scanned)
 		scanner := bufio.NewScanner(pipeReader)
 		scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 		for scanner.Scan() {
@@ -165,13 +178,14 @@ func startDSProcess(name, exe string, args []string, logPath string, onLine func
 	go func() {
 		err := cmd.Wait()
 		pipeWriter.Close()
+		<-scanned
 		p.done <- err
 	}()
 	return p, nil
 }
 
 func (p *dsProcess) stop() {
-	if p.cmd.ProcessState == nil && p.cmd.Process != nil {
+	if p.cmd.Process != nil {
 		_ = p.cmd.Process.Kill()
 	}
 }
@@ -194,7 +208,27 @@ func dsTrimLogPrefix(line string) string {
 	return line
 }
 
+// Each run owns its logs even if two servers are started in the same second.
+func createDSRunDir(binDir string) (string, error) {
+	parent := filepath.Join(filepath.Dir(binDir), "ds-runs")
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return "", err
+	}
+	return os.MkdirTemp(parent, time.Now().Format("20060102-150405")+"-")
+}
+
 func runDS(ctx appContext, opts dsOptions, clientExtra []string) error {
+	if opts.WebBots < 0 || opts.WebBots > opts.Bots {
+		return fmt.Errorf("--web-bots must be between 0 and --bots")
+	}
+	opts.Web = opts.Web || opts.WebBots > 0
+	if opts.Web && (opts.RtcPort < 1 || opts.RtcPort > 65535 || opts.RtcPort == opts.Port ||
+		opts.SignalPort < 1 || opts.SignalPort > 65535) {
+		return fmt.Errorf("invalid --rtc-port or --signal-port; ENet and WebRTC need distinct UDP ports")
+	}
+	if opts.Master && opts.Bots > 0 {
+		return fmt.Errorf("--bots currently requires a direct-connect DS")
+	}
 	if opts.Master {
 		return runDSMaster(ctx, opts, clientExtra)
 	}
@@ -207,6 +241,16 @@ func runDS(ctx appContext, opts dsOptions, clientExtra []string) error {
 	console.Header("Dedicated server test")
 	console.Label("server", fmt.Sprintf("%s  UDP %d  friendly fire %t", opts.Target, opts.Port, opts.Pvp))
 	console.Label("clients", fmt.Sprintf("%d", opts.Clients))
+	var serverEnv []string
+	if opts.Web {
+		console.Label("webrtc", fmt.Sprintf("UDP %d · http://127.0.0.1:%d/", opts.RtcPort, opts.SignalPort))
+		serverEnv = append(serverEnv, fmt.Sprintf("GK_NEXTNET_RTC_PORT=%d", opts.RtcPort),
+			fmt.Sprintf("GK_NEXTNET_RTC_SIGNAL_PORT=%d", opts.SignalPort))
+		webRoot := filepath.Join(ctx.repoRoot, "out", "web", "nextdayz", "w1")
+		if _, err := os.Stat(filepath.Join(webRoot, "index.html")); err == nil {
+			serverEnv = append(serverEnv, "GK_NEXTNET_RTC_WEB_ROOT="+webRoot)
+		}
+	}
 	if opts.DryRun {
 		console.CommandLine(exe + " " + dsQuoteArgs(serverArgs))
 		for index := 1; index <= opts.Clients; index++ {
@@ -217,20 +261,27 @@ func runDS(ctx appContext, opts dsOptions, clientExtra []string) error {
 	if _, err := os.Stat(exe); err != nil {
 		return fmt.Errorf("executable not found: %s\n请先运行 `gnb build %s`", exe, opts.Target)
 	}
-	runDir := filepath.Join(filepath.Dir(binDir), "ds-runs", time.Now().Format("20060102-150405"))
-	if err := os.MkdirAll(runDir, 0o755); err != nil {
+	runDir, err := createDSRunDir(binDir)
+	if err != nil {
 		return err
 	}
 	console.Label("logs", runDir)
 
 	var readyOnce sync.Once
 	ready := make(chan struct{})
+	startError := make(chan error, 1)
 	var listening bool
 	var mu sync.Mutex
 	echo := dsEcho("[ds]")
 	console.CommandLine(exe + " " + dsQuoteArgs(serverArgs))
 	server, err := startDSProcess("ds", exe, serverArgs, filepath.Join(runDir, "server.log"), func(line string) {
 		echo(line)
+		if strings.Contains(line, "[NextDayz][net] server:") {
+			select {
+			case startError <- fmt.Errorf("%s", dsTrimLogPrefix(line)):
+			default:
+			}
+		}
 		mu.Lock()
 		defer mu.Unlock()
 		if strings.Contains(line, dsListeningLine) {
@@ -239,7 +290,7 @@ func runDS(ctx appContext, opts dsOptions, clientExtra []string) error {
 		if listening && strings.Contains(line, dsReadyLine) {
 			readyOnce.Do(func() { close(ready) })
 		}
-	})
+	}, serverEnv...)
 	if err != nil {
 		return fmt.Errorf("start server: %w", err)
 	}
@@ -254,6 +305,8 @@ func runDS(ctx appContext, opts dsOptions, clientExtra []string) error {
 	select {
 	case <-ready:
 		console.Success("server ready on UDP %d", opts.Port)
+	case err := <-startError:
+		return err
 	case err := <-server.done:
 		return fmt.Errorf("server exited before it was ready (%v); see %s", err, filepath.Join(runDir, "server.log"))
 	case <-time.After(opts.ReadyTimeout):
@@ -264,7 +317,7 @@ func runDS(ctx appContext, opts dsOptions, clientExtra []string) error {
 	}
 
 	if opts.Bots > 0 {
-		return runDSBots(ctx, opts, runDir, server)
+		return runDSBots(ctx, opts, runDir, server, interrupt)
 	}
 
 	clients := make([]*dsProcess, 0, opts.Clients)
@@ -345,14 +398,8 @@ func dsMasterClientArgs(masterURL string, index int, extra []string) []string {
 func runDSMaster(ctx appContext, opts dsOptions, clientExtra []string) error {
 	binDir := platform.BinDir(ctx.repoRoot, ctx.preset)
 	exe := platform.ExecutablePath(binDir, opts.Target)
-	runDir := filepath.Join(filepath.Dir(binDir), "ds-runs", time.Now().Format("20060102-150405"))
-	data := opts.MasterData
-	if data == "" {
-		data = filepath.Join(runDir, "master")
-	}
 	console.Header("NextDayz Master test")
 	console.Label("master", "http://127.0.0.1:7780")
-	console.Label("data", data)
 	console.Label("clients", fmt.Sprintf("%d", opts.Clients))
 	if opts.DryRun {
 		for index := 1; index <= opts.Clients; index++ {
@@ -360,11 +407,21 @@ func runDSMaster(ctx appContext, opts dsOptions, clientExtra []string) error {
 		}
 		return nil
 	}
-	if err := os.MkdirAll(runDir, 0o755); err != nil {
+	runDir, err := createDSRunDir(binDir)
+	if err != nil {
 		return err
 	}
+	data := opts.MasterData
+	if data == "" {
+		data = filepath.Join(runDir, "master")
+	}
+	console.Label("data", data)
+	rtcPortBase := 0
+	if opts.Web {
+		rtcPortBase = opts.RtcPort
+	}
 	m, err := newMaster(ctx, masterOptions{Listen: "127.0.0.1:7780", DataDir: data, PortBase: opts.Port,
-		MaxPlayers: 16, IdleSeconds: 120, Pvp: opts.Pvp, Cheats: opts.Cheats})
+		RtcPortBase: rtcPortBase, MaxPlayers: 16, IdleSeconds: 120, Pvp: opts.Pvp, Cheats: opts.Cheats})
 	if err != nil {
 		return err
 	}
@@ -433,7 +490,7 @@ func runDSMaster(ctx appContext, opts dsOptions, clientExtra []string) error {
 
 // runDSBots plays NextDayzBots against the running server and reports how it
 // went: the bots' RESULT line, and the server's last statistics line.
-func runDSBots(ctx appContext, opts dsOptions, runDir string, server *dsProcess) error {
+func runDSBots(ctx appContext, opts dsOptions, runDir string, server *dsProcess, interrupt <-chan os.Signal) error {
 	binDir := platform.BinDir(ctx.repoRoot, ctx.preset)
 	exe := platform.ExecutablePath(binDir, "NextDayzBots")
 	if _, err := os.Stat(exe); err != nil {
@@ -441,6 +498,9 @@ func runDSBots(ctx appContext, opts dsOptions, runDir string, server *dsProcess)
 	}
 	args := []string{"--port", fmt.Sprint(opts.Port), "--bots", fmt.Sprint(opts.Bots),
 		"--seconds", fmt.Sprintf("%.0f", opts.Minutes*60), "--report", "30"}
+	if opts.WebBots > 0 {
+		args = append(args, "--web-bots", fmt.Sprint(opts.WebBots), "--signal-url", fmt.Sprintf("http://127.0.0.1:%d", opts.SignalPort))
+	}
 	if opts.BotLatency > 0 {
 		args = append(args, "--latency", fmt.Sprint(opts.BotLatency))
 	}
@@ -461,11 +521,17 @@ func runDSBots(ctx appContext, opts dsOptions, runDir string, server *dsProcess)
 		return err
 	}
 	defer bots.log.Close()
+	defer bots.stop()
 	var botErr error
 	select {
 	case botErr = <-bots.done:
+	case <-interrupt:
+		bots.stop()
+		<-bots.done
+		return fmt.Errorf("load test interrupted")
 	case err := <-server.done:
 		bots.stop()
+		<-bots.done
 		return fmt.Errorf("the server exited during the load test (%v); see %s", err, filepath.Join(runDir, "server.log"))
 	}
 	stats := lastLineContaining(filepath.Join(runDir, "server.log"), "] stats:")

@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include <filesystem>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
@@ -38,6 +39,12 @@ namespace Assets::Scad
     // live editor watching these paths sees the fix for a broken include too.
     bool LoadScadProgram(const std::string& filename, ScadProgram& outProgram, std::string& outError,
                          std::vector<std::string>* outFiles = nullptr);
+
+    // Offline tools can opt into the source checkout instead of the engine's
+    // staged assets. Configure once at startup, before any evaluator starts.
+    void SetLooseSourceRoot(std::filesystem::path root);
+    std::filesystem::path ResolveScadLoosePath(const std::filesystem::path& path);
+    std::vector<std::string> LooseSourceSidecars();
 
     // Reads a runtime-root-relative asset as raw bytes through the package file
     // system (with a loose-file fallback). Same resolution the use/include

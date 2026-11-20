@@ -1,12 +1,14 @@
 {
   "name": "nextdayz-3c-locomotion",
   "target": "NextDayz",
-  "scene": "assets/scad/proc/coldwar/riverland_1km.scad",
+  "scene": "assets/agentscripts/fixtures/nextdayz-traversal.scad",
   "defaults": { "waitFrames": 2, "stepTimeoutMs": 20000 },
   "viewport": { "width": 1600, "height": 900 },
   "steps": [
     { "type": "wait-until", "query": "engine.status", "op": "eq", "value": "Running", "timeoutMs": 20000 },
     { "type": "wait-until", "query": "game.sceneReady", "op": "eq", "value": true, "timeoutMs": 30000 },
+    { "type": "cvar", "name": "nextdayz.validation.teleport", "set": "-18,2" },
+    { "type": "cvar", "name": "nextdayz.validation.lookYaw", "set": 0 },
     { "type": "wait-frames", "n": 60 },
     { "type": "key", "code": "V", "action": "press" },
     { "type": "wait-frames", "n": 20 },

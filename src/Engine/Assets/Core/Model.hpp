@@ -1,4 +1,5 @@
 #pragma once
+#include "Engine/Assets/Data/AnimationChannel.hpp"
 #include "Engine/Assets/Data/Vertex.hpp"
 #include "Engine/Assets/GPU/Texture.hpp"
 #include "Engine/Assets/GPU/UniformBuffer.hpp"
@@ -185,24 +186,6 @@ namespace Assets
 
         std::vector<Camera> cameras;
     };
-
-    template <typename T>
-    struct AnimationKey
-    {
-        float Time;
-        T Value;
-    };
-
-    template <typename T>
-    struct AnimationChannel
-    {
-        std::vector<AnimationKey<T>> Keys;
-        T Sample(float time) const;
-    };
-
-    template <>
-    glm::quat AnimationChannel<glm::quat>::Sample(float time) const;
-    extern template glm::vec3 AnimationChannel<glm::vec3>::Sample(float time) const;
 
     struct AnimationTrack
     {

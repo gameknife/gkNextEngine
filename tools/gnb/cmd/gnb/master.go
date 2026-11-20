@@ -26,17 +26,21 @@ import (
 // See docs/projects/nextdayz/nextdayz-multiplayer-design.md.
 
 type masterOptions struct {
-	Listen      string
-	PublicHost  string
-	DataDir     string
-	PortBase    int
-	MaxPlayers  int
-	MaxServers  int
-	IdleSeconds int
-	Pvp         bool
-	Cheats      bool
-	RuntimeRoot string
-	Headless    bool
+	Listen          string
+	PublicHost      string
+	DataDir         string
+	PortBase        int
+	RtcPortBase     int
+	MaxPlayers      int
+	MaxServers      int
+	IdleSeconds     int
+	Pvp             bool
+	Cheats          bool
+	RuntimeRoot     string
+	Headless        bool
+	WebRoot         string
+	RequirePassword bool
+	TrustLocalProxy bool
 }
 
 func newMasterCommand(ctx appContext) *cobra.Command {
@@ -49,6 +53,9 @@ func newMasterCommand(ctx appContext) *cobra.Command {
 		Use:   "serve",
 		Short: "Run the NextDayz Master; it starts map servers (NextDayz --dedicated) on demand",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if opts.WebRoot != "" && !cmd.Flags().Changed("rtc-port-base") {
+				opts.RtcPortBase = 27200
+			}
 			m, err := newMaster(ctx, opts)
 			if err != nil {
 				return err
@@ -62,6 +69,7 @@ func newMasterCommand(ctx appContext) *cobra.Command {
 	serve.Flags().StringVar(&opts.PublicHost, "public-host", "", "host clients are told to connect their map server to (default: the listen host)")
 	serve.Flags().StringVar(&opts.DataDir, "data", "", "directory for master.json and server logs (default out/build/<preset>/master)")
 	serve.Flags().IntVar(&opts.PortBase, "port-base", opts.PortBase, "first UDP port given to a map server")
+	serve.Flags().IntVar(&opts.RtcPortBase, "rtc-port-base", 0, "first WebRTC UDP port given to a map server (0 disables WebRTC)")
 	serve.Flags().IntVar(&opts.MaxPlayers, "max-players", opts.MaxPlayers, "survivors per map server")
 	serve.Flags().IntVar(&opts.MaxServers, "max-servers", opts.MaxServers, "maximum concurrent DS processes; UDP range is port-base through port-base + max-servers - 1")
 	serve.Flags().IntVar(&opts.IdleSeconds, "idle", opts.IdleSeconds, "seconds an empty map server lives")
@@ -69,6 +77,10 @@ func newMasterCommand(ctx appContext) *cobra.Command {
 	serve.Flags().BoolVar(&opts.Cheats, "cheats", false, "map servers honour clients' test hooks (automated tests)")
 	serve.Flags().StringVar(&opts.RuntimeRoot, "runtime-root", "", "standalone server bundle root (auto-detected beside bin/gnb)")
 	serve.Flags().BoolVar(&opts.Headless, "headless", opts.Headless, "DS uses VK_EXT_headless_surface without a desktop (default on Linux)")
+
+	serve.Flags().StringVar(&opts.WebRoot, "web", "", "serve a packaged NextDayz Web release directory")
+	serve.Flags().BoolVar(&opts.RequirePassword, "require-password", false, "require an account password at login")
+	serve.Flags().BoolVar(&opts.TrustLocalProxy, "trust-local-proxy", false, "trust X-Real-IP set by a loopback reverse proxy")
 
 	var url string
 	status := &cobra.Command{
@@ -176,7 +188,8 @@ func newMaster(ctx appContext, opts masterOptions) (*dzmaster.Master, error) {
 	}
 	return dzmaster.New(dzmaster.Config{
 		Listen: opts.Listen, PublicHost: publicHost, DataDir: opts.DataDir, Exe: exe, Maps: maps,
-		PortBase: opts.PortBase, MaxPlayers: opts.MaxPlayers, MaxServers: opts.MaxServers, IdleSeconds: opts.IdleSeconds, Pvp: opts.Pvp,
+		PortBase: opts.PortBase, RtcPortBase: opts.RtcPortBase, MaxPlayers: opts.MaxPlayers, MaxServers: opts.MaxServers, IdleSeconds: opts.IdleSeconds, Pvp: opts.Pvp,
+		WebRoot: opts.WebRoot, RequirePassword: opts.RequirePassword, TrustLocalProxy: opts.TrustLocalProxy,
 		DSArgs: dsArgs, Launch: dzmaster.ExecLauncher(exe),
 		Logf: func(format string, args ...any) { console.Info("[master] "+format, args...) },
 	})

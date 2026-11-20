@@ -14,7 +14,7 @@
 // honoured by forward kinematics but never solved for.
 // ============================================================================
 
-#include "Engine/Assets/Data/RigAsset.hpp"
+#include "Engine/Assets/Data/RigDefinition.hpp"
 #include "Gameplay/Rig/RigLayeredAnimator.h"
 
 #include <vector>
@@ -24,12 +24,12 @@ namespace NextGameplay
     glm::mat4 RigBoneLocalMatrix(const Assets::FRigBone& bone, const FRigBonePose& pose);
 
     // Fills `out` (one matrix per bone) from the pose.
-    void ComputeRigComponentTransforms(const Assets::FRigAsset& asset, const FRigPose& pose,
+    void ComputeRigComponentTransforms(const Assets::FRigDefinition& asset, const FRigPose& pose,
                                        std::vector<glm::mat4>& out);
 
     // Recomputes `bone` and every later bone. Bones are stored parents-first, so
     // this refreshes the subtree after an edit without a child walk.
-    void RefreshRigComponentTransforms(const Assets::FRigAsset& asset, const FRigPose& pose, int32_t bone,
+    void RefreshRigComponentTransforms(const Assets::FRigDefinition& asset, const FRigPose& pose, int32_t bone,
                                        std::vector<glm::mat4>& transforms);
 
     glm::vec3 RigBonePosition(const std::vector<glm::mat4>& transforms, int32_t bone);
@@ -39,13 +39,13 @@ namespace NextGameplay
     glm::quat RigRotationBetween(const glm::vec3& from, const glm::vec3& to);
 
     // Pose edits. Each marks the component authored, then refreshes the subtree.
-    void SetRigBoneComponentRotation(const Assets::FRigAsset& asset, FRigPose& pose,
+    void SetRigBoneComponentRotation(const Assets::FRigDefinition& asset, FRigPose& pose,
                                      std::vector<glm::mat4>& transforms, int32_t bone,
                                      const glm::quat& componentRotation, float weight = 1.0f);
-    void RotateRigBoneInComponentSpace(const Assets::FRigAsset& asset, FRigPose& pose,
+    void RotateRigBoneInComponentSpace(const Assets::FRigDefinition& asset, FRigPose& pose,
                                        std::vector<glm::mat4>& transforms, int32_t bone,
                                        const glm::quat& componentDelta, float weight = 1.0f);
-    void SetRigBoneComponentPosition(const Assets::FRigAsset& asset, FRigPose& pose,
+    void SetRigBoneComponentPosition(const Assets::FRigDefinition& asset, FRigPose& pose,
                                      std::vector<glm::mat4>& transforms, int32_t bone,
                                      const glm::vec3& componentPosition, float weight = 1.0f);
 
@@ -58,7 +58,7 @@ namespace NextGameplay
     // Places `end`'s pivot at `target` by rotating `upper` and `lower`. The chain
     // bends toward `poleTarget` (a point, e.g. behind the elbow). `end`'s own
     // rotation is not touched; set it afterwards when the hand/foot must match.
-    FRigTwoBoneIKResult SolveRigTwoBoneIK(const Assets::FRigAsset& asset, FRigPose& pose,
+    FRigTwoBoneIKResult SolveRigTwoBoneIK(const Assets::FRigDefinition& asset, FRigPose& pose,
                                           std::vector<glm::mat4>& transforms, int32_t upper, int32_t lower,
                                           int32_t end, const glm::vec3& target, const glm::vec3& poleTarget,
                                           float weight = 1.0f);

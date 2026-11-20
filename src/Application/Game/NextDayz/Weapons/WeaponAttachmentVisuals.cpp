@@ -1,5 +1,6 @@
 #include "Engine/Common/CoreMinimal.hpp"
 #include "WeaponAttachmentVisuals.hpp"
+#include "WeaponMounts.hpp"
 
 #include "Engine/Assets/Core/Node.hpp"
 #include "Engine/Assets/Core/Scene.hpp"
@@ -53,7 +54,6 @@ namespace NextDayz
     void WeaponAttachmentVisuals::Update(std::string_view weaponId, const FWeaponAttachments& attachments, bool visible)
     {
         if (!scene_) return;
-        const auto points = WeaponModelPoints(weaponId);
         for (size_t slot = 0; slot < nodes_.size(); ++slot)
         {
             auto& node = nodes_[slot];
@@ -84,30 +84,9 @@ namespace NextDayz
                 inScene_[slot] = show;
                 scene_->MarkDirty();
             }
-            const FWeaponDef* weapon = FindWeaponDef(weaponId);
-            const bool pistol = weapon && weapon->IsSidearm();
-            glm::vec3 position(0.0f);
-            switch (static_cast<EAttachmentSlot>(slot))
-            {
-            case EAttachmentSlot::Optic:
-                if (index != 8) position = {0.0f, WeaponOpticRailHeight(weaponId), WeaponOpticRailForward(weaponId)};
-                break;
-            case EAttachmentSlot::Grip:
-                position = {0.0f, points.boreHeight - 0.040f, weaponId == "svd" ? 0.36f : 0.28f};
-                break;
-            case EAttachmentSlot::Magazine:
-                if (weaponId == "aps") position = {0.0f, -0.135f, -0.05f};
-                else if (weaponId == "svt40") position = {0.0f, -0.14f, 0.09f};
-                else position = {0.0f, pistol ? -0.115f : weaponId == "svd" ? -0.15f : -0.19f, pistol ? -0.04f : 0.15f};
-                break;
-            case EAttachmentSlot::Muzzle: position = {0.0f, points.boreHeight, points.muzzleForward}; break;
-            case EAttachmentSlot::Tactical:
-                position = {pistol ? 0.0f : -0.045f, points.boreHeight - (pistol ? 0.05f : 0.015f), pistol ? 0.11f : 0.30f};
-                break;
-            default: break;
-            }
-            node->Translation() = position;
-            node->Scale() = glm::vec3(show ? (pistol && slot == static_cast<size_t>(EAttachmentSlot::Muzzle) ? 0.7f : 1.0f) : 0.0f);
+            const auto mount = WeaponMount(weaponId, static_cast<EAttachmentSlot>(slot), index == 8);
+            node->Translation() = mount.position;
+            node->Scale() = glm::vec3(show ? mount.scale : 0.f);
             node->RecalcTransform(true);
         }
     }

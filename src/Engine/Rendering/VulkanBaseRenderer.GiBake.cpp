@@ -28,6 +28,8 @@
 #include "Engine/Vulkan/SyncAndTiming.hpp"
 #include "Engine/Runtime/Profiling/ProfilerMacros.hpp"
 
+#include <bit>
+
 namespace Vulkan
 {
     namespace
@@ -410,7 +412,7 @@ namespace Vulkan
                                     cubeBuffer, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, cascadeByteOffset, cascadeByteSize);
 
         std::vector<std::pair<uint32_t, uint32_t>> pongRuns;
-        const uint64_t arenaId = reinterpret_cast<const uint64_t&>(cubeBuffer);
+        const uint64_t arenaId = std::bit_cast<uint64_t>(cubeBuffer);
         const bool fullPongCopy =
             AmbientBake::PlanPongSync(ambient_.pong, cascadeIndex, ambient_.batch.generation, arenaId, pongRuns);
         std::vector<VkBufferCopy> copyRegions;

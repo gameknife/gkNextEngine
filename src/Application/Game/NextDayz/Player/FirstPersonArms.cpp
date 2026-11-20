@@ -21,53 +21,6 @@ namespace NextDayz
 {
     namespace
     {
-        // Wrist centres of the two hand models (nextdayz_fps_hands.scad).
-        const glm::vec3 kWristGrip(-0.012f, -0.030f, -0.070f);
-        const glm::vec3 kWristSupport(0.012f, -0.062f, -0.050f);
-        // The rig's forearm block is ~11 cm thick: right for a figure seen
-        // from metres away, a plank next to the eye. Slim its cross-section.
-        const glm::vec3 kForearmSlim(0.58f, 1.0f, 0.58f);
-
-        // A hand model in weapon-model space (+X left, +Y up, +Z muzzle).
-        struct FHandPlacement
-        {
-            glm::vec3 position{0.0f};
-            float rakeDegrees = 0.0f; // grip axis tipped back from vertical
-        };
-
-        // Right hand: on the pistol grip / wrist the gun is built around
-        // (nextdayz_weapons.scad origin), its axis raked back like the grip.
-        FHandPlacement GripPlacement(std::string_view weaponId)
-        {
-            if (weaponId == "pistol" || weaponId == "aps") return {{0.0f, -0.020f, -0.021f}, 12.0f};
-            if (weaponId == "svd") return {{0.0f, -0.022f, -0.012f}, 16.0f};
-            if (weaponId == "mosin") return {{0.0f, 0.004f, -0.035f}, 35.0f};   // straight wrist
-            if (weaponId == "svt40") return {{0.0f, 0.002f, -0.034f}, 32.0f};   // semi-pistol wrist
-            if (weaponId == "shotgun" || weaponId == "toz34") return {{0.0f, 0.002f, -0.030f}, 35.0f}; // semi-pistol grip
-            return {{0.0f, -0.020f, -0.006f}, 13.0f};                          // AK-74 family
-        }
-
-        // Left hand: under the handguard / forend; under the magazine base
-        // (cup and saucer) for the pistol.
-        FHandPlacement SupportPlacement(std::string_view weaponId)
-        {
-            if (weaponId == "pistol" || weaponId == "aps") return {{0.004f, -0.062f, -0.012f}, 0.0f};
-            if (weaponId == "svd") return {{0.0f, 0.062f, 0.340f}, 0.0f};
-            if (weaponId == "mosin") return {{0.0f, 0.048f, 0.280f}, 0.0f};
-            if (weaponId == "svt40") return {{0.0f, 0.052f, 0.340f}, 0.0f};
-            if (weaponId == "shotgun") return {{0.0f, 0.040f, 0.250f}, 0.0f};
-            if (weaponId == "toz34") return {{0.0f, 0.036f, 0.250f}, 0.0f};
-            if (weaponId == "aks74u") return {{0.0f, 0.054f, 0.270f}, 0.0f};  // short handguard
-            if (weaponId == "bizon") return {{0.0f, 0.030f, 0.290f}, 0.0f};   // around the helical drum
-            return {{0.0f, 0.058f, 0.300f}, 0.0f};
-        }
-
-        glm::mat4 PlacementMatrix(const FHandPlacement& placement)
-        {
-            return glm::translate(glm::mat4(1.0f), placement.position) *
-                   glm::mat4_cast(glm::angleAxis(glm::radians(placement.rakeDegrees), glm::vec3(1.0f, 0.0f, 0.0f)));
-        }
-
         glm::quat RotationOf(const glm::mat4& matrix)
         {
             return glm::normalize(glm::quat_cast(glm::mat3(glm::normalize(glm::vec3(matrix[0])),
@@ -75,29 +28,7 @@ namespace NextDayz
                                                            glm::normalize(glm::vec3(matrix[2])))));
         }
 
-        // Eye space (camera-local, +X left, +Y up, +Z forward), rig units.
-        struct FArmStance
-        {
-            glm::vec3 shoulderR;
-            glm::vec3 shoulderL;
-            glm::vec3 elbowPoleR; // relative to the shoulder
-            glm::vec3 elbowPoleL;
-        };
 
-        FArmStance StanceFor(std::string_view weaponId)
-        {
-            // Pistol: isosceles stance, both shoulders square to the target.
-            if (weaponId == "pistol" || weaponId == "aps")
-                return {{-0.165f, -0.215f, -0.03f}, {0.165f, -0.215f, -0.03f},
-                        {-0.30f, -0.55f, 0.15f}, {0.30f, -0.55f, 0.15f}};
-            // Long guns: bladed body, firing shoulder back under the stock, the
-            // support shoulder rolled forward. Firing elbow out and down (its
-            // forearm stays below the sight picture); support
-            // elbow well out to the left, so its forearm climbs in from the lower
-            // left corner instead of hiding behind the receiver.
-            return {{-0.185f, -0.205f, -0.10f}, {0.200f, -0.220f, 0.06f},
-                    {-0.40f, -0.45f, 0.05f}, {0.50f, -0.35f, 0.10f}};
-        }
     }
 
     void FirstPersonArms::SetAssets(FFirstPersonArmAssets assets)
@@ -219,53 +150,26 @@ namespace NextDayz
         if (dirty) scene_->MarkDirty();
         if (!visible || viewModelScale <= 0.0f) return;
 
-        // Hands sit on the gun (weapon-model space, under the view model).
-        const glm::mat4 grip = PlacementMatrix(GripPlacement(weaponId));
-        const glm::mat4 support = PlacementMatrix(SupportPlacement(weaponId));
+        armPose_.Solve(*assets_.rig, bones_, weaponId, weaponInEye, assets_.weaponScale, viewModelScale, supportHand);
+        gripError_ = armPose_.gripError;
         for (int side = 0; side < 2; ++side)
         {
             Assets::Node& hand = *hands_[side];
-            const glm::mat4& placement = side == 0 ? grip : support;
+            const glm::mat4& placement = armPose_.hands[side];
             hand.Translation() = glm::vec3(placement[3]);
             hand.Rotation() = RotationOf(placement);
             hand.Scale() = glm::vec3(1.0f);
             hand.RecalcTransform(true);
         }
 
-        // The weapon in eye space at body scale: the rig carries its weapon at
-        // weaponScale, the view model at viewModelScale.
-        const Assets::FRigAsset& rig = *assets_.rig;
-        const glm::mat4 weaponInBody =
-            glm::scale(glm::mat4(1.0f), glm::vec3(assets_.weaponScale / viewModelScale)) * weaponInEye;
-        const glm::vec3 wristR(weaponInBody * grip * glm::vec4(kWristGrip, 1.0f));
-        const glm::vec3 wristL(weaponInBody * support * glm::vec4(kWristSupport, 1.0f));
-
-        using namespace NextGameplay;
-        pose_.Reset(rig.bones.size());
-        ComputeRigComponentTransforms(rig, pose_, transforms_);
-        const FArmStance stance = StanceFor(weaponId);
-        SetRigBoneComponentPosition(rig, pose_, transforms_, bones_.upperArmR, stance.shoulderR);
-        SetRigBoneComponentPosition(rig, pose_, transforms_, bones_.upperArmL, stance.shoulderL);
-        SolveRigTwoBoneIK(rig, pose_, transforms_, bones_.upperArmR, bones_.foreArmR, bones_.handR, wristR,
-                          stance.shoulderR + stance.elbowPoleR);
-        gripError_ = glm::length(RigBonePosition(transforms_, bones_.handR) - wristR);
-        if (supportHand)
-        {
-            SolveRigTwoBoneIK(rig, pose_, transforms_, bones_.upperArmL, bones_.foreArmL, bones_.handL, wristL,
-                              stance.shoulderL + stance.elbowPoleL);
-            gripError_ = std::max(gripError_, glm::length(RigBonePosition(transforms_, bones_.handL) - wristL));
-        }
-
-        // Forearm parts hang under the view model too, i.e. in weapon-model space.
-        const glm::mat4 bodyInWeapon = glm::inverse(weaponInBody);
         for (size_t index = 0; index < partCount; ++index)
         {
             if (!inScene_[index]) continue;
-            const glm::mat4 local = bodyInWeapon * transforms_[assets_.parts[index].bone];
+            const glm::mat4 local = armPose_.Forearm(assets_.parts[index].bone);
             Assets::Node& node = *nodes_[index];
             node.Translation() = glm::vec3(local[3]);
             node.Rotation() = RotationOf(local);
-            node.Scale() = glm::length(glm::vec3(local[0])) * kForearmSlim;
+            node.Scale() = FFirstPersonArmPose::ForearmScale(local);
             node.RecalcTransform(true);
         }
     }

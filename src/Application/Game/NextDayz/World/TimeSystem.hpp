@@ -37,6 +37,24 @@ namespace NextDayz
         }
     }
 
+    struct FTimeEnvironment
+    {
+        float daylight{};
+        float sunRotation{};
+        bool hasSun{};
+        float sunIntensity{};
+        float skyIntensity{};
+        float skyLuminanceScale{};
+        glm::vec3 sunColor{};
+        glm::vec3 skyColor{};
+        float fogDensity{};
+        float fogHeightFalloff{};
+        float fogBaseHeight{};
+        float fogStartDistance{};
+        float fogMaxOpacity{};
+        glm::vec3 fogColor{};
+    };
+
     class TimeSystem
     {
     public:
@@ -59,6 +77,8 @@ namespace NextDayz
             weatherBlend_ = state.blend;
         }
 
+        void Advance(double deltaRealSeconds);
+        FTimeEnvironment SampleEnvironment() const;
         void Tick(double deltaRealSeconds, Assets::Scene& scene);
         void Skip(double gameMinutes) { gameMinutes_ += gameMinutes; }
         void SetHour(double hour) { gameMinutes_ = std::floor(gameMinutes_ / 1440.0) * 1440.0 + hour * 60.0; }
@@ -95,7 +115,6 @@ namespace NextDayz
         void SetLanternLight(float light) { lanternLight_ = light; }
 
     private:
-        void ApplyEnvironment(Assets::Scene& scene);
         void AdvanceWeather();
 
         FTimeConfig config_{};

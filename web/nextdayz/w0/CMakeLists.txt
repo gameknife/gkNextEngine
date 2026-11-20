@@ -1,0 +1,23 @@
+cmake_minimum_required(VERSION 3.22)
+project(NextDayzWebProbes LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 20)
+
+if(EMSCRIPTEN)
+    set(JOLT_SOURCE "" CACHE PATH "JoltPhysics 5.4.0 source directory")
+    set(ENABLE_ALL_WARNINGS OFF CACHE BOOL "")
+    set(INTERPROCEDURAL_OPTIMIZATION OFF CACHE BOOL "")
+    set(GENERATE_DEBUG_SYMBOLS OFF CACHE BOOL "")
+    set(USE_WASM_SIMD ON CACHE BOOL "")
+    add_subdirectory("${JOLT_SOURCE}/Build" jolt EXCLUDE_FROM_ALL)
+    add_executable(collision CollisionProbe.cpp)
+    target_link_libraries(collision PRIVATE Jolt)
+    target_link_options(collision PRIVATE
+        -sMODULARIZE=1 -sEXPORT_ES6=1 -sENVIRONMENT=web,node -sALLOW_MEMORY_GROWTH=1
+        -sEXPORTED_FUNCTIONS=_malloc,_free -sEXPORTED_RUNTIME_METHODS=HEAPF32,HEAPU8)
+    set_target_properties(collision PROPERTIES SUFFIX ".mjs")
+else()
+    find_package(LibDataChannel CONFIG REQUIRED)
+    find_package(nlohmann_json CONFIG REQUIRED)
+    add_executable(rtc-probe RtcProbe.cpp)
+    target_link_libraries(rtc-probe PRIVATE LibDataChannel::LibDataChannel nlohmann_json::nlohmann_json)
+endif()

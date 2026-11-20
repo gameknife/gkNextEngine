@@ -1,5 +1,7 @@
 #include "Engine/Common/CoreMinimal.hpp"
+#include "LootTransfer.hpp"
 #include "LootSystem.hpp"
+#include "MapLootKeys.hpp"
 
 #include <algorithm>
 #include <limits>
@@ -23,10 +25,6 @@ namespace NextDayz
 {
     namespace
     {
-        std::string LootKey(std::string_view type, const glm::vec3& position)
-        {
-            return fmt::format("{}:{:.3f}:{:.3f}:{:.3f}", type, position.x, position.y, position.z);
-        }
         constexpr size_t kPileCount = 32;
         constexpr float kZoneLinkDistance = 28.0f;
         constexpr float kRestockInterval = 1.0f;
@@ -39,51 +37,6 @@ namespace NextDayz
         // Restocking never fills more than this share of all entries with one category.
         constexpr std::array<float, static_cast<size_t>(ELootCategory::Count)> kCategoryStockCap = {
             0.45f, 0.20f, 0.14f, 0.08f, 0.15f, 0.25f};
-
-        // Map nodes the artist placed as specific loot. Fixed items are always
-        // there; rolled ones come from a profile table each time it restocks.
-        struct FAuthoredLoot
-        {
-            std::string_view displayName;
-            std::array<std::string_view, 2> fixed{};
-            ELootProfile rollProfile = ELootProfile::Military;
-            ELootCategory rollCategory = ELootCategory::Count;
-            int rolls = 0;
-        };
-
-        const std::unordered_map<std::string, FAuthoredLoot>& AuthoredTable()
-        {
-            using P = ELootProfile;
-            using C = ELootCategory;
-            static const std::unordered_map<std::string, FAuthoredLoot> table = {
-                {"cw_wpn_ak",            {"AK-74", {"ak"}}},
-                {"cw_wpn_svd",           {"SVD", {"svd"}}},
-                {"cw_wpn_mosin",         {"Mosin", {"mosin"}}},
-                {"cw_wpn_shotgun",       {"Shotgun", {"shotgun"}}},
-                {"cw_wpn_pistol",        {"Makarov", {"pistol"}}},
-                {"cw_wpn_crate",         {"Weapon Crate", {"ak"}, P::Military, C::Ammo, 2}},
-                {"cw_prop_crate_ammo",   {"Ammo Crate", {}, P::Military, C::Ammo, 2}},
-                {"cw_item_ammobox",      {"Ammo Box", {}, P::Military, C::Ammo, 1}},
-                {"cw_item_helmet",       {"Helmet", {"helmet"}}},
-                {"cw_item_backpack",     {"Backpack", {"backpack"}}},
-                {"cw_item_medkit",       {"First Aid Kit", {"medkit"}}},
-                {"cw_item_can",          {"Canned Beans", {"food_can"}}},
-                {"cw_item_jerrycan",     {"Fuel Canister", {"fuel"}}},
-                {"cw_item_radio",        {"Field Radio", {"radio", "battery"}}},
-                {"cw_item_crate_supply", {"Supply Crate", {}, P::Commercial, C::Count, 3}},
-                {"cw_item_bedroll",      {"Bedroll", {"bedroll"}}},
-                {"cw_item_lantern",      {"Kerosene Lantern", {"lantern"}}},
-                {"cw_item_water_bottle", {"Water Bottle", {"water_bottle"}}},
-                {"cw_item_axe",          {"Fire Axe", {"axe"}}},
-                {"cw_item_crowbar",      {"Crowbar", {"crowbar"}}},
-                {"cw_item_knife",        {"Hunting Knife", {"knife"}}},
-                {"cw_item_vest",         {"Military Vest", {"vest_military"}}},
-                {"cw_item_jacket",       {"Field Jacket", {"jacket"}}},
-                {"cw_item_medical_bag",  {"Medical Bag", {}, P::Medical, C::Medical, 3}},
-                {"cw_item_toolbox",      {"Toolbox", {}, P::Industrial, C::Count, 2}},
-            };
-            return table;
-        }
 
         std::vector<std::pair<std::string, const FAuthoredLoot*>> AuthoredByIndex()
         {
@@ -355,9 +308,7 @@ namespace NextDayz
             entry.profile = seed.profile;
             entry.fixedItem = seed.itemId;
             entry.fixedCount = seed.count;
-            entry.persistentId = entry.fixedItem.empty()
-                ? LootKey(fmt::format("spot:{}", static_cast<int>(seed.profile)), entry.worldPos)
-                : LootKey(fmt::format("item:{}", entry.fixedItem), entry.worldPos);
+            entry.persistentId = SpotLootKey(seed.profile, entry.fixedItem, entry.worldPos);
             entry.directorHandle = director_.AddSlot(entry.worldPos, entry.profile, ELootCategory::Misc);
             const uint32_t roll = director_.Resolve(entry.directorHandle)->roll;
             entry.yaw = entry.fixedItem.empty() ? static_cast<float>(MixRoll(roll, 90) % 6283u) * 0.001f : seed.yaw;
@@ -386,8 +337,7 @@ namespace NextDayz
         {
             if (entry.source != ELootSource::Pile)
             {
-                const int ordinal = occurrences[entry.persistentId]++;
-                entry.persistentId += fmt::format(":{}", ordinal);
+                NumberLootKey(entry.persistentId, occurrences);
             }
         }
         CreatePoolNodes(scene, reuseNodes);
@@ -856,42 +806,7 @@ namespace NextDayz
                                                        std::optional<FGridPlacement> placement,
                                                        std::vector<FLootStack>& left)
     {
-        std::vector<FLootStack> taken;
-        bool firstStack = true;
-        for (const FLootStack& stack : contents)
-        {
-            const FItemDef* definition = FindItemDef(stack.itemId);
-            const bool matchesSlot = destination != kWornContainer ||
-                (definition && definition->kind == EItemKind::Clothing && definition->equipSlot == equipSlot);
-            int fit = definition && matchesSlot ? inventory.FitCount(stack.itemId, stack.count, destination) : 0;
-            if (placement)
-                fit = firstStack ? inventory.FitCountAt(stack.itemId, stack.count, destination, *placement) : 0;
-            if (fit > 0)
-            {
-                FItemInstanceId instanceId = 0;
-                Inventory transaction = inventory;
-                const bool added = placement
-                    ? transaction.TryAddAt(stack.itemId, fit, destination, *placement, &instanceId)
-                    : transaction.TryAdd(stack.itemId, std::string(definition->displayName), definition->kind, fit,
-                                         &instanceId, destination);
-                if (added &&
-                    (definition->kind != EItemKind::Weapon || transaction.SetWeaponState(instanceId, stack.loadedAmmo, stack.attachments)))
-                {
-                    inventory = std::move(transaction);
-                    taken.push_back({stack.itemId, fit, stack.loadedAmmo, stack.attachments});
-                }
-                else
-                {
-                    fit = 0;
-                }
-            }
-            if (fit < stack.count)
-            {
-                left.push_back({stack.itemId, stack.count - fit, stack.loadedAmmo, stack.attachments});
-            }
-            firstStack = false;
-        }
-        return taken;
+        return AddLootToInventory(contents, inventory, destination, equipSlot, placement, left);
     }
 
     int LootSystem::FindEntry(std::string_view persistentId) const

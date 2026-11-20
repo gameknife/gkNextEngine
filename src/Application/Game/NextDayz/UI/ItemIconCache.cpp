@@ -13,15 +13,25 @@
 #include "Engine/Utilities/FileHelper.hpp"
 #include "Engine/Vulkan/GpuResources.hpp"
 
+#include <cstdlib>
 #include <deque>
 #include <filesystem>
 #include <fstream>
 
 namespace NextDayz
 {
+    struct FItemIconCacheHeader
+    {
+        static constexpr uint64_t formatMagic = 0x314e4f43495a444eull; // NDZICON1
+        uint64_t magic = formatMagic;
+        uint64_t contentHash = 0;
+        uint32_t width = 0;
+        uint32_t height = 0;
+        uint64_t pixelHash = 0;
+    };
+
     namespace
     {
-        constexpr uint64_t cacheMagic = 0x314e4f43495a444eull; // NDZICON1
         constexpr uint32_t iconRevision = 6;
         constexpr float iconFaceTiltDegrees = 6.0f;
         constexpr uint32_t pixelsPerCell = 64;
@@ -35,16 +45,29 @@ namespace NextDayz
             return hash;
         }
 
-        struct FCacheHeader
-        {
-            uint64_t magic = cacheMagic;
-            uint64_t contentHash = 0;
-            uint32_t width = 0;
-            uint32_t height = 0;
-            uint64_t pixelHash = 0;
-        };
-
         size_t PixelBytes(VkExtent2D extent) { return size_t(extent.width) * extent.height * 8u; }
+
+        void SaveIconPixels(const std::filesystem::path& path, const FItemIconCacheHeader& header, const void* pixels, size_t size)
+        {
+            auto temporary = path;
+            temporary += ".tmp";
+            std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
+            output.write(reinterpret_cast<const char*>(&header), sizeof(header));
+            output.write(static_cast<const char*>(pixels), size);
+            output.close();
+            std::error_code error;
+            if (output)
+            {
+                std::filesystem::remove(path, error);
+                error.clear();
+                std::filesystem::rename(temporary, path, error);
+            }
+            if (!output || error)
+            {
+                SPDLOG_WARN("[NextDayz] cannot save item icon at {}", path.string());
+                std::filesystem::remove(temporary, error);
+            }
+        }
 
         glm::vec3 IconViewDirection(std::string_view itemId)
         {
@@ -111,7 +134,8 @@ namespace NextDayz
             std::unique_ptr<Vulkan::Buffer> buffer;
             uint64_t submitSerial = 0;
             std::filesystem::path path;
-            FCacheHeader header;
+            std::filesystem::path exportPath;
+            FItemIconCacheHeader header;
         };
 
         struct FRetiredScene
@@ -120,7 +144,25 @@ namespace NextDayz
             uint64_t submitSerial;
         };
 
-        explicit FState(Vulkan::VulkanBaseRenderer& source) : renderer(source) {}
+        explicit FState(Vulkan::VulkanBaseRenderer& source) : renderer(source)
+        {
+            if (const char* folder = std::getenv("NEXTDAYZ_ICON_EXPORT"); folder && *folder)
+            {
+                exportDirectory = folder;
+                std::error_code error;
+                std::filesystem::create_directories(exportDirectory, error);
+                if (error)
+                {
+                    SPDLOG_ERROR("[NextDayz] cannot create icon export directory: {}", error.message());
+                    exportDirectory.clear();
+                }
+            }
+        }
+
+        std::filesystem::path ExportPath(const FSlot& slot) const
+        {
+            return exportDirectory.empty() ? std::filesystem::path{} : exportDirectory / (slot.itemId + ".thumb");
+        }
 
         Vulkan::VulkanBaseRenderer& renderer;
         Vulkan::FRenderViewHandle view;
@@ -132,6 +174,7 @@ namespace NextDayz
         std::unordered_map<std::string, uint32_t> lookup;
         std::deque<uint32_t> pending;
         std::vector<FTransfer> transfers;
+        std::filesystem::path exportDirectory;
         uint32_t rendered = 0;
         uint32_t cacheHits = 0;
 
@@ -164,24 +207,33 @@ namespace NextDayz
             transfer.memory = std::make_unique<Vulkan::DeviceMemory>(transfer.buffer->AllocateMemory(
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
             transfer.submitSerial = renderer.RecordingSubmitSerial();
-            if (download) transfer.path = slot.path;
-            transfer.header = {cacheMagic, slot.hash, slot.extent.width, slot.extent.height, 0};
+            if (download)
+            {
+                transfer.path = slot.path;
+                transfer.exportPath = ExportPath(slot);
+            }
+            transfer.header = {FItemIconCacheHeader::formatMagic, slot.hash, slot.extent.width, slot.extent.height, 0};
             return transfer;
         }
 
         bool LoadCached(FSlot& slot, VkCommandBuffer commandBuffer)
         {
             std::ifstream input(slot.path, std::ios::binary | std::ios::ate);
-            if (!input || input.tellg() != static_cast<std::streamoff>(sizeof(FCacheHeader) + PixelBytes(slot.extent)))
+            if (!input || input.tellg() != static_cast<std::streamoff>(sizeof(FItemIconCacheHeader) + PixelBytes(slot.extent)))
                 return false;
             input.seekg(0);
-            FCacheHeader header;
+            FItemIconCacheHeader header;
             input.read(reinterpret_cast<char*>(&header), sizeof(header));
-            if (header.magic != cacheMagic || header.contentHash != slot.hash ||
+            if (header.magic != FItemIconCacheHeader::formatMagic || header.contentHash != slot.hash ||
                 header.width != slot.extent.width || header.height != slot.extent.height) return false;
             std::vector<uint8_t> pixels(PixelBytes(slot.extent));
             if (!input.read(reinterpret_cast<char*>(pixels.data()), pixels.size()) ||
                 HashBytes(pixels.data(), pixels.size()) != header.pixelHash) return false;
+
+            if (const auto exportPath = ExportPath(slot); !exportPath.empty())
+            {
+                SaveIconPixels(exportPath, header, pixels.data(), pixels.size());
+            }
 
             auto transfer = MakeTransfer(slot, false);
             void* mapped = transfer.memory->Map(0, pixels.size());
@@ -238,27 +290,12 @@ namespace NextDayz
                     const size_t bytes = PixelBytes({transfer.header.width, transfer.header.height});
                     void* pixels = transfer.memory->Map(0, bytes);
                     transfer.header.pixelHash = HashBytes(pixels, bytes);
-                    auto temporary = transfer.path;
-                    temporary += ".tmp";
-                    std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
-                    output.write(reinterpret_cast<const char*>(&transfer.header), sizeof(transfer.header));
-                    output.write(static_cast<const char*>(pixels), bytes);
+                    SaveIconPixels(transfer.path, transfer.header, pixels, bytes);
+                    if (!transfer.exportPath.empty())
+                    {
+                        SaveIconPixels(transfer.exportPath, transfer.header, pixels, bytes);
+                    }
                     transfer.memory->Unmap();
-                    output.close();
-                    std::error_code error;
-                    if (output)
-                    {
-                        // Replace a rejected/corrupt cache entry on Windows as well.
-                        std::filesystem::remove(transfer.path, error);
-                        error.clear();
-                        std::filesystem::rename(temporary, transfer.path, error);
-                    }
-                    if (!output || error)
-                    {
-                        // A read-only/full cache must not prevent the GPU icon from being used.
-                        SPDLOG_WARN("[NextDayz] cannot cache item icon at {}", transfer.path.string());
-                        std::filesystem::remove(temporary, error);
-                    }
                 }
                 return true;
             });

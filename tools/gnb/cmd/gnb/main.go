@@ -125,6 +125,7 @@ func main() {
 	root.AddCommand(newRemoteCommand(ctx))
 	root.AddCommand(newDSCommand(ctx))
 	root.AddCommand(newMasterCommand(ctx))
+	root.AddCommand(newWebCommand(ctx))
 	root.AddCommand(newTestCommand(ctx))
 	root.AddCommand(newVisualCommand(ctx))
 	root.AddCommand(newShotCommand(ctx))

@@ -1,7 +1,7 @@
 #include "Engine/Common/CoreMinimal.hpp"
 #include "Application/Game/NextDayz/Net/NetProtocol.hpp"
+#include "WireLayouts.hpp"
 
-#if GK_MODULE_NEXTNET
 
 namespace NextDayz::Net
 {
@@ -114,7 +114,10 @@ namespace NextDayz::Net
                     .Write(item.containerId)
                     .Write<int32_t>(item.loadedAmmo)
                     .Write(item.attachments)
-                    .Write(item.placement);
+                    .Write<int32_t>(item.placement.x)
+                    .Write<int32_t>(item.placement.y)
+                    .Write<uint8_t>(item.placement.rotated ? 1 : 0)
+                    .Write(std::array<uint8_t, 3>{});
             }
             writer.Write(static_cast<uint16_t>(std::min<size_t>(state.containers.size(), kMaxInventoryEntries)));
             for (size_t index = 0; index < state.containers.size() && index < kMaxInventoryEntries; ++index)
@@ -142,7 +145,10 @@ namespace NextDayz::Net
                 reader.Read(item.containerId);
                 item.loadedAmmo = reader.Read<int32_t>();
                 reader.Read(item.attachments);
-                reader.Read(item.placement);
+                item.placement.x = reader.Read<int32_t>();
+                item.placement.y = reader.Read<int32_t>();
+                item.placement.rotated = reader.Read<uint8_t>() != 0;
+                reader.Read<std::array<uint8_t, 3>>();
             }
             const auto containers = reader.Read<uint16_t>();
             if (reader.Failed() || containers > kMaxInventoryEntries) return false;
@@ -622,5 +628,3 @@ namespace NextDayz::Net
         return !reader.Failed();
     }
 }
-
-#endif

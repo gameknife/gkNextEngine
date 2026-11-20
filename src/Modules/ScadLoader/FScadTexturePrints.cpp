@@ -6,11 +6,11 @@
 #include "Modules/ScadLoader/FScadEvaluator.h"
 #include "Modules/ScadLoader/FScadLexer.h"
 #include "Modules/ScadLoader/FScadParser.h"
+#include "Modules/ScadLoader/FScadShared.h"
 
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
-#include <fstream>
 #include <map>
 #include <mutex>
 
@@ -43,23 +43,11 @@ namespace Assets::Scad
             return library;
         }
 
-        fs::path LoosePath()
-        {
-            return Utilities::FileHelper::GetRuntimeFilePath(kTexturePrintLibrary);
-        }
-
         bool ReadLibrary(std::string& text)
         {
             std::vector<uint8_t> data;
-            if (auto* package = Utilities::Package::FPackageFileSystem::TryGetInstance())
-            {
-                if (!package->LoadFile(kTexturePrintLibrary, data)) return false;
-                text.assign(reinterpret_cast<const char*>(data.data()), data.size());
-                return true;
-            }
-            std::ifstream file(LoosePath(), std::ios::binary);
-            if (!file.is_open()) return false;
-            text.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+            if (!ScadReadAsset(kTexturePrintLibrary, data)) return false;
+            text.assign(data.begin(), data.end());
             return true;
         }
 
@@ -72,7 +60,7 @@ namespace Assets::Scad
             library.checked = now;
             std::error_code ec;
             const bool packaged = Utilities::Package::FPackageFileSystem::TryGetInstance() != nullptr;
-            const fs::file_time_type stamp = packaged ? fs::file_time_type{} : fs::last_write_time(LoosePath(), ec);
+            const fs::file_time_type stamp = packaged ? fs::file_time_type{} : fs::last_write_time(ResolveScadLoosePath(kTexturePrintLibrary), ec);
             if (library.loaded && stamp == library.stamp) return;
 
             library = FLibrary{};

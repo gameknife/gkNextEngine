@@ -17,7 +17,7 @@ namespace NextGameplay
             return bone >= 0 && bone < static_cast<int32_t>(transforms.size());
         }
 
-        glm::mat4 ParentTransform(const Assets::FRigAsset& asset, const std::vector<glm::mat4>& transforms,
+        glm::mat4 ParentTransform(const Assets::FRigDefinition& asset, const std::vector<glm::mat4>& transforms,
                                   int32_t bone)
         {
             const int32_t parent = asset.bones[bone].parent;
@@ -46,14 +46,14 @@ namespace NextGameplay
                glm::scale(glm::mat4(1.0f), bone.bindS * pose.s);
     }
 
-    void ComputeRigComponentTransforms(const Assets::FRigAsset& asset, const FRigPose& pose,
+    void ComputeRigComponentTransforms(const Assets::FRigDefinition& asset, const FRigPose& pose,
                                        std::vector<glm::mat4>& out)
     {
         out.resize(std::min(asset.bones.size(), pose.bones.size()));
         RefreshRigComponentTransforms(asset, pose, 0, out);
     }
 
-    void RefreshRigComponentTransforms(const Assets::FRigAsset& asset, const FRigPose& pose, int32_t bone,
+    void RefreshRigComponentTransforms(const Assets::FRigDefinition& asset, const FRigPose& pose, int32_t bone,
                                        std::vector<glm::mat4>& transforms)
     {
         const int32_t count = static_cast<int32_t>(std::min(transforms.size(), pose.bones.size()));
@@ -96,7 +96,7 @@ namespace NextGameplay
         return glm::normalize(glm::quat(1.0f + cosine, axis.x, axis.y, axis.z));
     }
 
-    void SetRigBoneComponentRotation(const Assets::FRigAsset& asset, FRigPose& pose,
+    void SetRigBoneComponentRotation(const Assets::FRigDefinition& asset, FRigPose& pose,
                                      std::vector<glm::mat4>& transforms, int32_t bone,
                                      const glm::quat& componentRotation, float weight)
     {
@@ -119,7 +119,7 @@ namespace NextGameplay
         RefreshRigComponentTransforms(asset, pose, bone, transforms);
     }
 
-    void RotateRigBoneInComponentSpace(const Assets::FRigAsset& asset, FRigPose& pose,
+    void RotateRigBoneInComponentSpace(const Assets::FRigDefinition& asset, FRigPose& pose,
                                        std::vector<glm::mat4>& transforms, int32_t bone,
                                        const glm::quat& componentDelta, float weight)
     {
@@ -131,7 +131,7 @@ namespace NextGameplay
                                     glm::normalize(componentDelta * RigBoneRotation(transforms, bone)), weight);
     }
 
-    void SetRigBoneComponentPosition(const Assets::FRigAsset& asset, FRigPose& pose,
+    void SetRigBoneComponentPosition(const Assets::FRigDefinition& asset, FRigPose& pose,
                                      std::vector<glm::mat4>& transforms, int32_t bone,
                                      const glm::vec3& componentPosition, float weight)
     {
@@ -151,7 +151,7 @@ namespace NextGameplay
         RefreshRigComponentTransforms(asset, pose, bone, transforms);
     }
 
-    FRigTwoBoneIKResult SolveRigTwoBoneIK(const Assets::FRigAsset& asset, FRigPose& pose,
+    FRigTwoBoneIKResult SolveRigTwoBoneIK(const Assets::FRigDefinition& asset, FRigPose& pose,
                                           std::vector<glm::mat4>& transforms, int32_t upper, int32_t lower,
                                           int32_t end, const glm::vec3& target, const glm::vec3& poleTarget,
                                           float weight)

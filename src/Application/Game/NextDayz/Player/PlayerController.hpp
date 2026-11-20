@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <optional>
 #include <string>
 
 // ============================================================================
@@ -23,10 +24,24 @@ class NextEngine;
 
 namespace NextDayz
 {
+    struct FWorldRayHit
+    {
+        glm::vec3 HitPoint;
+        glm::vec3 Normal;
+        float T;
+        uint32_t InstanceId = 0;
+    };
+
+    using FWorldRayQuery = std::function<std::optional<FWorldRayHit>(const glm::vec3&, const glm::vec3&, float)>;
+
+    FWorldRayQuery MakeDesktopPlayerRayQuery(NextEngine& engine);
+
     class PlayerController
     {
     public:
         void Create(NextPhysics* physics, const glm::vec3& spawnPosition, const FConfig& config);
+        void Create(const FCharacterControllerFactory& factory, std::function<void()> synchronize,
+                    const glm::vec3& spawnPosition, const FConfig& config);
         void Destroy();
         bool IsValid() const { return controller_.IsValid(); }
 
@@ -40,6 +55,7 @@ namespace NextDayz
         // otherwise a jump that keeps looking for a ledge to catch while the
         // key is held (or for AirCatchWindowSeconds after the press).
         void QueueContextualJump(NextEngine& engine);
+        void QueueContextualJump(const FWorldRayQuery& raycast);
         void SetJumpHeld(bool held) { jumpHeld_ = held; }
         void QueueCrouchToggle() { crouchToggleQueued_ = true; }
         void SetAimButton(bool pressed, bool allowAds);
@@ -71,6 +87,7 @@ namespace NextDayz
 
         // --- per-frame update ---
         void Update(float deltaSeconds, NextEngine& engine);
+        void Update(float deltaSeconds, const FWorldRayQuery& raycast);
 
         // --- queries ---
         glm::vec3 Position() const { return controller_.GetPosition(); }
@@ -157,8 +174,8 @@ namespace NextDayz
             bool endAirborne = false;           // path ends above the landing; gravity finishes it
         };
 
-        bool TryBeginTraversal(NextEngine& engine, bool airborne);
-        bool BuildTraversalPath(NextEngine& engine, FTraversalPlan& plan, const glm::vec3& feet,
+        bool TryBeginTraversal(const FWorldRayQuery& raycast, bool airborne);
+        bool BuildTraversalPath(const FWorldRayQuery& raycast, FTraversalPlan& plan, const glm::vec3& feet,
                                 const glm::vec3& velocity) const;
         void BeginTraversal(const FTraversalPlan& plan);
         void UpdateTraversal(float deltaSeconds);
@@ -166,7 +183,7 @@ namespace NextDayz
         glm::vec3 MoveForward() const; // horizontal (yaw only)
         glm::vec3 UpdateMotion(float deltaSeconds, const glm::vec3& previousPosition); // returns raw measured velocity
         void UpdateView(float deltaSeconds);
-        void UpdateCameraArm(float deltaSeconds, NextEngine& engine);
+        void UpdateCameraArm(float deltaSeconds, const FWorldRayQuery& raycast);
         glm::vec3 ThirdPersonFocus() const;
         glm::vec3 ThirdPersonOffset() const;
         glm::vec3 FirstPersonEye() const;

@@ -4,7 +4,9 @@
 #include <glm/glm.hpp>
 #include <glm/detail/type_quat.hpp>
 
-#include "Engine/Runtime/Subsystems/NextPhysics.hpp"
+#include "Engine/Runtime/Subsystems/CharacterPhysics.hpp"
+
+class NextPhysics;
 
 class NextCharacterController final
 {
@@ -14,6 +16,9 @@ public:
 
     /// Create the character. Must be called after NextPhysics::Start().
     void Create(NextPhysics* physics, const FCharacterControllerSettings& settings);
+
+    void Create(const FCharacterControllerFactory& factory, std::function<void()> synchronize,
+                const FCharacterControllerSettings& settings);
 
     /// Destroy the character virtual.
     void Destroy();
@@ -53,7 +58,7 @@ public:
 private:
     void CompletePhysics() const;
 
-    NextPhysics* physics_ = nullptr;
+    std::function<void()> synchronize_;
     std::unique_ptr<INextCharacterControllerBackend> backend_;
     FCharacterControllerSettings settings_{};
 };

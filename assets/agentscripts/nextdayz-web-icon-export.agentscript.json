@@ -1,0 +1,13 @@
+{
+  "name": "nextdayz-web-icon-export",
+  "target": "NextDayz",
+  "scene": "assets/scad/tests/nextdayz_melee.scad",
+  "viewport": { "width": 640, "height": 480 },
+  "steps": [
+    { "type": "wait-until", "query": "game.sceneReady", "op": "eq", "value": true, "timeoutMs": 60000, "fatal": true },
+    { "type": "cvar", "name": "nextdayz.validation.preloadItemIcons", "set": true, "fatal": true },
+    { "type": "wait-until", "query": "game.inventoryIconsReady", "op": "eq", "value": true, "timeoutMs": 240000, "fatal": true },
+    { "type": "wait-frames", "n": 10 },
+    { "type": "quit" }
+  ]
+}

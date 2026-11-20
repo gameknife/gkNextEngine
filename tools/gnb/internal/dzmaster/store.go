@@ -47,16 +47,17 @@ type Character struct {
 }
 
 type Account struct {
-	ID          uint64     `json:"id"`
-	Name        string     `json:"name"`
-	Token       string     `json:"token"`
-	Gold        int64      `json:"gold"`
-	Storage     []Stack    `json:"storage"`
-	Character   *Character `json:"character,omitempty"`
-	Sorties     uint64     `json:"sorties"`
-	Extractions uint64     `json:"extractions"`
-	Deaths      uint64     `json:"deaths"`
-	LastOutcome string     `json:"lastOutcome,omitempty"`
+	ID           uint64     `json:"id"`
+	Name         string     `json:"name"`
+	Token        string     `json:"token"`
+	PasswordHash string     `json:"passwordHash,omitempty"`
+	Gold         int64      `json:"gold"`
+	Storage      []Stack    `json:"storage"`
+	Character    *Character `json:"character,omitempty"`
+	Sorties      uint64     `json:"sorties"`
+	Extractions  uint64     `json:"extractions"`
+	Deaths       uint64     `json:"deaths"`
+	LastOutcome  string     `json:"lastOutcome,omitempty"`
 }
 
 // World is a map's persistent state as its DS last committed it (opaque JSON).
@@ -119,13 +120,17 @@ func (s *Store) Update(fn func(*State) error) error {
 	if err != nil {
 		return err
 	}
-	if err := fn(&s.state); err != nil {
+	err = fn(&s.state)
+	if err == nil {
+		err = s.saveLocked()
+	}
+	if err != nil {
 		var restored State
 		_ = json.Unmarshal(snapshot, &restored)
 		s.state = restored
 		return err
 	}
-	return s.saveLocked()
+	return nil
 }
 
 // View runs fn under the store lock without committing.

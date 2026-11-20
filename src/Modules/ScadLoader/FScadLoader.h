@@ -16,6 +16,7 @@
 #include "Engine/Assets/AssetsFwd.hpp"
 #include "Engine/Assets/Core/Model.hpp"
 #include "Engine/Assets/Data/Skeleton.hpp"
+#include "Engine/Assets/Loaders/ProceduralTexture.hpp"
 #include "Modules/ScadLoader/FScadTypes.h"
 
 namespace Assets
@@ -32,6 +33,7 @@ namespace Assets
             std::vector<LightObject>& lights,
             std::vector<AnimationTrack>& tracks,
             std::vector<Skeleton>& skeletons,
-            const ScadLoadOptions& options = {});
+            const ScadLoadOptions& options = {},
+            std::vector<FProceduralTextureRef>* materialTextures = nullptr);
     };
 } // namespace Assets

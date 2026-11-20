@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"runtime"
 
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/packager"
@@ -23,12 +24,43 @@ func newNextDayzPackageCommand(ctx appContext, client bool) *cobra.Command {
 			if runtime.GOARCH != "amd64" || (runtime.GOOS != "windows" && runtime.GOOS != "linux") {
 				return fmt.Errorf("NextDayz packaging supports native Windows/Linux amd64 only")
 			}
+			web := !client && runtime.GOOS == "linux"
 			if !skipBuild {
 				build := newBuildCommand(ctx)
 				if err := build.Flags().Set("tracy", "off"); err != nil {
 					return err
 				}
-				if err := build.RunE(build, []string{"NextDayz", "Packager"}); err != nil {
+				targets := []string{"NextDayz", "Packager"}
+				if web {
+					targets = append(targets, "NextDayzBake")
+				}
+				if err := build.RunE(build, targets); err != nil {
+					return err
+				}
+			}
+			if web {
+				assets := filepath.Join(webOutput(ctx), "assets")
+				if !skipBuild {
+					if err := setupWebSDK(cmd, ctx); err != nil {
+						return err
+					}
+					if err := exportWebIcons(cmd.Context(), ctx); err != nil {
+						return err
+					}
+					if err := bakeWebAssets(cmd.Context(), ctx, assets, "", false, true, true, cmd.OutOrStdout()); err != nil {
+						return err
+					}
+					if err := buildWebCore(cmd, ctx); err != nil {
+						return err
+					}
+					if err := webInstall(cmd.Context(), cmd, ctx); err != nil {
+						return err
+					}
+					if err := webNPM(cmd.Context(), cmd, ctx, "run", "build"); err != nil {
+						return err
+					}
+				}
+				if err := bakeWebAssets(cmd.Context(), ctx, assets, "", true, true, true, cmd.OutOrStdout()); err != nil {
 					return err
 				}
 			}
@@ -39,7 +71,7 @@ func newNextDayzPackageCommand(ctx appContext, client bool) *cobra.Command {
 	cmd.Flags().StringVar(&opts.Version, "version", "local", "version embedded in the archive and manifest")
 	cmd.Flags().StringVar(&opts.Output, "output", "out/dist/nextdayz", "archive output directory")
 	if client {
-		cmd.Flags().StringVar(&opts.MasterURL, "master-url", "", "preconfigure a public Master HTTP URL in the editable server list")
+		cmd.Flags().StringVar(&opts.MasterURL, "master-url", "", "preconfigure a Master HTTP(S) URL in the editable server list")
 	}
 	return cmd
 }

@@ -101,11 +101,12 @@
         "ws",
         "srtp"
       ],
-      "platform": "!(android | ios | osx)"
+      "platform": "!(android | ios)"
     },
     {
       "name": "cpp-httplib",
-      "platform": "!(android | ios | osx)"
+      "features": ["openssl"],
+      "platform": "!(android | ios)"
     },
     {
       "name": "enet",

@@ -53,6 +53,12 @@ func PackageNextDayz(repoRoot, preset string, opts NextDayzOptions) error {
 		return err
 	}
 
+	if !opts.Client && runtime.GOOS == "linux" {
+		if err := StageNextDayzWeb(filepath.Join(repoRoot, "out", "web", "nextdayz"), filepath.Join(stage, "web")); err != nil {
+			return err
+		}
+	}
+
 	if opts.Client {
 		if err := collectNextDayzClientPlugins(binDir, stage); err != nil {
 			return err
@@ -130,22 +136,25 @@ func PackageNextDayz(repoRoot, preset string, opts NextDayzOptions) error {
 	// The Go Master reads the registry directly. Everything the engine needs is
 	// in runtime.pak; loose authoring files, source paks and caches stay behind.
 	var entries []entry
-	err = filepath.WalkDir(filepath.Join(stage, "bin"), func(path string, item os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if item.IsDir() {
+	dirs := []string{"bin"}
+	if !opts.Client && runtime.GOOS == "linux" {
+		dirs = append(dirs, "web")
+	}
+	for _, dir := range dirs {
+		err = filepath.WalkDir(filepath.Join(stage, dir), func(path string, item os.DirEntry, err error) error {
+			if err != nil || item.IsDir() {
+				return err
+			}
+			rel, err := filepath.Rel(stage, path)
+			if err != nil {
+				return err
+			}
+			entries = append(entries, entry{source: path, name: filepath.ToSlash(rel)})
 			return nil
-		}
-		rel, err := filepath.Rel(stage, path)
+		})
 		if err != nil {
 			return err
 		}
-		entries = append(entries, entry{source: path, name: filepath.ToSlash(rel)})
-		return nil
-	})
-	if err != nil {
-		return err
 	}
 	loose := []string{"assets/paks/runtime.pak", "runtime-assets.txt", "runtime.manifest.json"}
 	bundleFiles := serverBundleFiles()
@@ -165,6 +174,20 @@ func PackageNextDayz(repoRoot, preset string, opts NextDayzOptions) error {
 	}
 	for _, name := range loose {
 		entries = append(entries, entry{source: filepath.Join(stage, filepath.FromSlash(name)), name: name})
+	}
+	if !opts.Client && runtime.GOOS == "linux" {
+		bundleFiles["Caddyfile.nextdayz"] = `game.example.com {
+	@client path / /index.html /assets/* /ndcore/* /game-assets/* /api/*
+	handle @client {
+		reverse_proxy 127.0.0.1:7780 {
+			header_up X-Real-IP {remote_host}
+		}
+	}
+	handle {
+		respond 404
+	}
+}
+`
 	}
 	for name, content := range bundleFiles {
 		path := filepath.Join(stage, name)
@@ -415,7 +438,7 @@ func copyServerFile(source, destination string, mode os.FileMode) error {
 
 func serverBundleFiles() map[string]string {
 	return map[string]string{
-		"start-master.sh":  "#!/bin/sh\nset -eu\nroot=$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\nexport LD_LIBRARY_PATH=\"$root/bin${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\"\nexec \"$root/bin/gnb\" master serve --runtime-root \"$root\" \"$@\"\n",
+		"start-master.sh":  "#!/bin/sh\nset -eu\nroot=$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\nexport LD_LIBRARY_PATH=\"$root/bin${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\"\nexec \"$root/bin/gnb\" master serve --runtime-root \"$root\" --web \"$root/web\" --rtc-port-base 27200 --require-password \"$@\"\n",
 		"start-master.bat": "@echo off\r\n\"%~dp0bin\\gnb.exe\" master serve --runtime-root \"%~dp0.\" %*\r\nexit /b %errorlevel%\r\n",
 	}
 }

@@ -1,4 +1,6 @@
 #include "ZombieRigVisual.hpp"
+#include "Application/Game/NextDayz/Combat/HitGeometry.hpp"
+#include "Application/Game/NextDayz/Core/CharacterPoseGraph.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -253,47 +255,8 @@ namespace NextDayz
     {
         const FClips& clips = *clips_;
 
-        // Base: idle -> walk -> run by the simulated speed.
-        const bool lame = zombie.Lame();
-        const Assets::FRigClip* walk = lame ? clips.walkLimp : clips.walk;
-        const Assets::FRigClip* run = lame ? clips.hobble : clips.run;
-        const float walkSpeed = lame ? config.LimpAuthoredSpeed : config.WalkAuthoredSpeed;
-        const float runSpeed = lame ? config.HobbleAuthoredSpeed : config.RunAuthoredSpeed;
-        const float speed = zombie.Speed();
-        float idleWeight = 0.0f;
-        float walkWeight = 0.0f;
-        float runWeight = 0.0f;
-        if (speed < walkSpeed)
-        {
-            walkWeight = speed / walkSpeed;
-            idleWeight = 1.0f - walkWeight;
-        }
-        else if (speed < runSpeed)
-        {
-            runWeight = (speed - walkSpeed) / (runSpeed - walkSpeed);
-            walkWeight = 1.0f - runWeight;
-        }
-        else
-        {
-            runWeight = 1.0f;
-        }
-        // Cadence-match the gait clips to the ground speed so the feet plant.
-        const float gaitWeight = walkWeight + runWeight;
-        float playRate = 1.0f;
-        if (gaitWeight > 1.0e-3f && walk && run)
-        {
-            const float cadence = (walkWeight / walk->duration + runWeight / run->duration) / gaitWeight;
-            const float authored = (walkWeight * walkSpeed + runWeight * runSpeed) / gaitWeight;
-            const float overspeed = std::clamp(speed / std::max(authored, 0.01f), config.MinPlayRate, config.MaxPlayRate);
-            const Assets::FRigClip* dominant =
-                idleWeight > std::max(walkWeight, runWeight) ? clips.idle : (runWeight > walkWeight ? run : walk);
-            playRate = cadence * overspeed * (dominant ? dominant->duration : 1.0f);
-        }
-        animator_.SetLoopBlend(baseLayer_, {{clips.idle, idleWeight}, {walk, walkWeight}, {run, runWeight}}, "gait",
-                               playRate, 0.2f);
-        baseClipName_ = runWeight > std::max(walkWeight, idleWeight)
-            ? (lame ? "hobble" : "run")
-            : (walkWeight > idleWeight ? (lame ? "walk_limp" : "walk") : "idle");
+        baseClipName_ = UpdateInfectedLocomotion(animator_, baseLayer_, clips.idle, clips.walk, clips.walkLimp,
+                                                   clips.run, clips.hobble, zombie.Speed(), zombie.Lame(), config);
 
         // Reach: the arms come up as a chase closes in.
         const float distance = glm::length(glm::vec2(lookTarget.x - zombie.position.x, lookTarget.z - zombie.position.z));
@@ -444,30 +407,9 @@ namespace NextDayz
 
     void ZombieRigVisual::UpdateHitboxes()
     {
-        hitboxCount_ = 0;
         const glm::mat4 world = glm::translate(glm::mat4(1.0f), worldNode_->Translation()) *
                                 glm::mat4_cast(glm::angleAxis(yaw_, kAxisY));
-        const auto add = [&](int32_t bone, const glm::vec3& a, const glm::vec3& b, float radius, EHitZone zone)
-        {
-            if (bone < 0 || bone >= static_cast<int32_t>(transforms_.size()) || hitboxCount_ >= hitboxes_.size())
-            {
-                return;
-            }
-            const glm::mat4 m = world * transforms_[bone];
-            hitboxes_[hitboxCount_++] = {glm::vec3(m * glm::vec4(a, 1.0f)), glm::vec3(m * glm::vec4(b, 1.0f)), radius,
-                                         zone};
-        };
-        add(bones_.head, {0.0f, 0.07f, 0.0f}, {0.0f, 0.21f, 0.0f}, 0.12f, EHitZone::Head);
-        add(bones_.torso, {0.0f, 0.10f, 0.0f}, {0.0f, 0.40f, 0.0f}, 0.17f, EHitZone::Torso);
-        add(bones_.pelvis, {0.0f, -0.02f, 0.0f}, {0.0f, 0.05f, 0.0f}, 0.16f, EHitZone::Torso);
-        add(bones_.upperArmL, {0.0f, -0.02f, 0.0f}, {0.0f, -0.30f, 0.0f}, 0.065f, EHitZone::Limb);
-        add(bones_.upperArmR, {0.0f, -0.02f, 0.0f}, {0.0f, -0.30f, 0.0f}, 0.065f, EHitZone::Limb);
-        add(bones_.foreArmL, {0.0f, -0.01f, 0.0f}, {0.0f, -0.36f, 0.0f}, 0.055f, EHitZone::Limb);
-        add(bones_.foreArmR, {0.0f, -0.01f, 0.0f}, {0.0f, -0.36f, 0.0f}, 0.055f, EHitZone::Limb);
-        add(bones_.thighL, {0.0f, -0.03f, 0.0f}, {0.0f, -0.42f, 0.0f}, 0.09f, EHitZone::Leg);
-        add(bones_.thighR, {0.0f, -0.03f, 0.0f}, {0.0f, -0.42f, 0.0f}, 0.09f, EHitZone::Leg);
-        add(bones_.calfL, {0.0f, -0.02f, 0.0f}, {0.0f, -0.40f, 0.0f}, 0.075f, EHitZone::Leg);
-        add(bones_.calfR, {0.0f, -0.02f, 0.0f}, {0.0f, -0.40f, 0.0f}, 0.075f, EHitZone::Leg);
+        hitboxCount_ = BuildInfectedHitboxes(*asset_, transforms_, world, hitboxes_);
     }
 
     size_t ZombieRigVisual::StandingHitboxes(const glm::vec3& position, const glm::vec3& forward,

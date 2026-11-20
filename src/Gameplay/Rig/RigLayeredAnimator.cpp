@@ -1,7 +1,5 @@
 #include "Gameplay/Rig/RigLayeredAnimator.h"
 
-#include "Engine/Assets/Core/Node.hpp"
-
 #include <algorithm>
 #include <cmath>
 
@@ -22,14 +20,14 @@ namespace NextGameplay
         std::fill(bones.begin(), bones.end(), FRigBonePose{});
     }
 
-    FRigBoneMask FRigBoneMask::FullBody(const Assets::FRigAsset& asset)
+    FRigBoneMask FRigBoneMask::FullBody(const Assets::FRigDefinition& asset)
     {
         FRigBoneMask mask;
         mask.weights.assign(asset.bones.size(), 1.0f);
         return mask;
     }
 
-    FRigBoneMask FRigBoneMask::FromSubtree(const Assets::FRigAsset& asset, std::string_view rootBone, float weight)
+    FRigBoneMask FRigBoneMask::FromSubtree(const Assets::FRigDefinition& asset, std::string_view rootBone, float weight)
     {
         FRigBoneMask mask;
         mask.weights.assign(asset.bones.size(), 0.0f);
@@ -58,7 +56,7 @@ namespace NextGameplay
         return mask;
     }
 
-    bool FRigBoneMask::SetBoneWeight(const Assets::FRigAsset& asset, std::string_view boneName, float weight)
+    bool FRigBoneMask::SetBoneWeight(const Assets::FRigDefinition& asset, std::string_view boneName, float weight)
     {
         const int32_t boneIndex = asset.FindBone(boneName);
         if (boneIndex < 0 || boneIndex >= static_cast<int32_t>(weights.size()))
@@ -74,15 +72,19 @@ namespace NextGameplay
         return boneIndex < weights.size() ? std::clamp(weights[boneIndex], 0.0f, 1.0f) : 0.0f;
     }
 
-    void FRigLayeredAnimator::Bind(const Assets::FRigAsset* asset, std::vector<Assets::Node*> boneNodes,
-                                   Assets::Node* root)
+    void FRigLayeredAnimator::BindPose(const Assets::FRigDefinition* asset)
+    {
+        boneNodes_.clear();
+        root_ = nullptr;
+        ResetBinding(asset, asset ? asset->bones.size() : 0);
+    }
+
+    void FRigLayeredAnimator::ResetBinding(const Assets::FRigDefinition* asset, size_t count)
     {
         asset_ = asset;
-        boneNodes_ = std::move(boneNodes);
-        root_ = root;
+        bindingCount_ = count;
         layers_.clear();
-
-        const size_t boneCount = asset_ ? std::min(asset_->bones.size(), boneNodes_.size()) : 0;
+        const size_t boneCount = asset_ ? std::min(asset_->bones.size(), bindingCount_) : 0;
         workingPose_.Reset(boneCount);
         currentPose_.Reset(boneCount);
         previousPose_.Reset(boneCount);
@@ -94,10 +96,10 @@ namespace NextGameplay
     FRigLayerHandle FRigLayeredAnimator::CreateLayer(std::string name, ERigLayerBlendMode blendMode,
                                                      FRigBoneMask mask)
     {
-        if (!IsBound() || mask.weights.size() != boneNodes_.size())
+        if (!IsBound() || mask.weights.size() != bindingCount_)
         {
             SPDLOG_WARN("RIG: cannot create layer '{}' with {} mask weights for {} bones", name,
-                        mask.weights.size(), boneNodes_.size());
+                        mask.weights.size(), bindingCount_);
             return invalidRigLayerHandle;
         }
         FLayer layer;
@@ -584,53 +586,10 @@ namespace NextGameplay
         }
     }
 
-    void FRigLayeredAnimator::ApplyPose()
-    {
-        if (!asset_)
-        {
-            return;
-        }
-        for (size_t i = 0; i < workingPose_.bones.size(); ++i)
-        {
-            Assets::Node* node = boneNodes_[i];
-            if (!node)
-            {
-                continue;
-            }
-            const Assets::FRigBone& bone = asset_->bones[i];
-            const FRigBonePose& pose = workingPose_.bones[i];
-            node->Translation() = bone.bindT + bone.bindR * (bone.bindS * pose.t);
-            node->Rotation() = glm::normalize(bone.bindR * pose.r);
-            node->Scale() = bone.bindS * pose.s;
-        }
-        if (root_)
-        {
-            root_->RecalcTransform(true);
-        }
-    }
-
     float FRigLayeredAnimator::NormalizedTime(FRigLayerHandle handle) const
     {
         const FLayer* layer = Layer(handle);
         return layer && layer->hasCurrent ? layer->current.normalizedTime : 0.0f;
-    }
-
-    void FRigLayeredAnimator::Update(float deltaSeconds)
-    {
-        if (!IsBound())
-        {
-            return;
-        }
-        Evaluate(deltaSeconds);
-        Apply();
-    }
-
-    void FRigLayeredAnimator::Apply()
-    {
-        if (IsBound())
-        {
-            ApplyPose();
-        }
     }
 
     void FRigLayeredAnimator::Evaluate(float deltaSeconds)
@@ -640,7 +599,7 @@ namespace NextGameplay
             return;
         }
 
-        workingPose_.Reset(std::min(asset_->bones.size(), boneNodes_.size()));
+        workingPose_.Reset(std::min(asset_->bones.size(), bindingCount_));
         for (FLayer& layer : layers_)
         {
             if (layer.weightFadeRemaining > 0.0f)

@@ -69,19 +69,23 @@ type Launcher interface {
 }
 
 type Config struct {
-	Listen      string // address the Master serves on, e.g. 127.0.0.1:7780
-	PublicHost  string // host clients are told to connect their DS to
-	DataDir     string // master.json, DS logs
-	Exe         string // the NextDayz executable a DS runs
-	Maps        []MapInfo
-	PortBase    int      // first UDP port handed to a DS
-	MaxPlayers  int      // survivors per DS
-	MaxServers  int      // bounds the DS UDP port range and process count
-	IdleSeconds int      // an empty DS is stopped after this long
-	Pvp         bool     // friendly fire on new servers
-	DSArgs      []string // extra arguments for every DS
-	Launch      Launcher // nil: run Exe
-	Logf        func(format string, args ...any)
+	Listen          string // address the Master serves on, e.g. 127.0.0.1:7780
+	PublicHost      string // host clients are told to connect their DS to
+	DataDir         string // master.json, DS logs
+	Exe             string // the NextDayz executable a DS runs
+	Maps            []MapInfo
+	PortBase        int      // first ENet UDP port handed to a DS
+	RtcPortBase     int      // first WebRTC UDP port; zero disables WebRTC
+	MaxPlayers      int      // survivors per DS
+	MaxServers      int      // bounds the DS UDP port range and process count
+	IdleSeconds     int      // an empty DS is stopped after this long
+	Pvp             bool     // friendly fire on new servers
+	DSArgs          []string // extra arguments for every DS
+	Launch          Launcher // nil: run Exe
+	Logf            func(format string, args ...any)
+	WebRoot         string
+	RequirePassword bool
+	TrustLocalProxy bool
 }
 
 const (
@@ -106,6 +110,7 @@ type Server struct {
 	Map        string    `json:"map"`
 	Scene      string    `json:"scene"`
 	Port       int       `json:"port"`
+	RtcPort    int       `json:"rtcPort,omitempty"`
 	State      string    `json:"state"`
 	Players    []uint64  `json:"players"`
 	Pvp        bool      `json:"pvp"`
@@ -117,6 +122,8 @@ type Server struct {
 	kick       []uint64
 	stopAt     time.Time
 	proc       Process
+	rtcNotify  chan struct{}
+	env        []string
 }
 
 type ticket struct {
@@ -127,14 +134,18 @@ type ticket struct {
 }
 
 type Master struct {
-	cfg     Config
-	store   *Store
-	mu      sync.Mutex
-	servers map[string]*Server
-	leases  map[uint64]string // survivor -> DS holding them
-	tickets map[string]*ticket
-	nextDS  int
-	http    *http.Server
+	cfg           Config
+	store         *Store
+	mu            sync.Mutex
+	servers       map[string]*Server
+	leases        map[uint64]string // survivor -> DS holding them
+	tickets       map[string]*ticket
+	rtcJobs       map[string]*rtcJob
+	nextDS        int
+	http          *http.Server
+	web           *webRelease
+	loginMu       sync.Mutex
+	loginFailures map[string]loginFailures
 }
 
 func New(cfg Config) (*Master, error) {
@@ -156,6 +167,11 @@ func New(cfg Config) (*Master, error) {
 	if cfg.MaxServers < 1 || cfg.PortBase < 1 || cfg.PortBase > 65535 || cfg.MaxServers > 65536-cfg.PortBase {
 		return nil, errors.New("invalid DS port range: port-base + max-servers must fit UDP ports 1..65535")
 	}
+	if cfg.RtcPortBase != 0 && (cfg.RtcPortBase < 1 || cfg.RtcPortBase > 65535 ||
+		cfg.MaxServers > 65536-cfg.RtcPortBase ||
+		(cfg.RtcPortBase < cfg.PortBase+cfg.MaxServers && cfg.PortBase < cfg.RtcPortBase+cfg.MaxServers)) {
+		return nil, errors.New("WebRTC needs a valid UDP range disjoint from the ENet range")
+	}
 	if cfg.IdleSeconds == 0 {
 		cfg.IdleSeconds = 300
 	}
@@ -168,12 +184,24 @@ func New(cfg Config) (*Master, error) {
 	if len(cfg.Maps) == 0 {
 		return nil, errors.New("no maps")
 	}
+	var web *webRelease
+	if cfg.WebRoot != "" {
+		if cfg.RtcPortBase == 0 {
+			return nil, errors.New("Web hosting requires a WebRTC UDP range (--rtc-port-base)")
+		}
+		var err error
+		web, err = openWebRelease(cfg.WebRoot)
+		if err != nil {
+			return nil, err
+		}
+	}
 	store, err := OpenStore(filepath.Join(cfg.DataDir, "master.json"))
 	if err != nil {
 		return nil, err
 	}
 	return &Master{cfg: cfg, store: store, servers: map[string]*Server{}, leases: map[uint64]string{},
-		tickets: map[string]*ticket{}, nextDS: 1}, nil
+		tickets: map[string]*ticket{}, rtcJobs: map[string]*rtcJob{}, nextDS: 1,
+		web: web, loginFailures: make(map[string]loginFailures)}, nil
 }
 
 // DS processes run on this machine. Wildcard bind addresses are not callback hosts.
@@ -195,6 +223,8 @@ func (m *Master) Handler() http.Handler {
 	mux.HandleFunc("/api/login", m.handleLogin)
 	mux.HandleFunc("/api/profile", m.handleProfile)
 	mux.HandleFunc("/api/deploy", m.handleDeploy)
+	mux.HandleFunc("/api/rtc/offer", m.handleRtcOffer)
+	mux.HandleFunc("/ds/signal", m.handleDsSignal)
 	mux.HandleFunc("/ds/register", m.handleRegister)
 	mux.HandleFunc("/ds/heartbeat", m.handleHeartbeat)
 	mux.HandleFunc("/ds/world", m.handleWorld)
@@ -204,10 +234,13 @@ func (m *Master) Handler() http.Handler {
 	mux.HandleFunc("/admin/pvp", m.handleAdminPvp)
 	mux.HandleFunc("/admin/kick", m.handleAdminKick)
 	mux.HandleFunc("/admin/stop", m.handleAdminStop)
+	if m.web != nil {
+		m.web.routes(mux, m.cfg.RequirePassword)
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/admin/") {
 			host, _, err := net.SplitHostPort(r.RemoteAddr)
-			if err != nil || !net.ParseIP(host).IsLoopback() {
+			if err != nil || !net.ParseIP(host).IsLoopback() || r.Header.Get("Origin") != "" {
 				httpError(w, http.StatusForbidden, "admin API is loopback-only")
 				return
 			}
@@ -241,37 +274,6 @@ func (m *Master) Run(ctx context.Context) error {
 }
 
 // ---------------------------------------------------------------- client API
-
-func (m *Master) handleLogin(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Name string `json:"name"`
-	}
-	if !decode(w, r, &req) {
-		return
-	}
-	name := strings.TrimSpace(req.Name)
-	if name == "" || len(name) > 32 {
-		httpError(w, http.StatusBadRequest, "a name of 1-32 characters is needed")
-		return
-	}
-	var account Account
-	err := m.store.Update(func(st *State) error {
-		a := st.AccountByName(name)
-		if a == nil {
-			a = &Account{ID: st.NextID, Name: name, Token: randomHex(16)}
-			st.NextID++
-			st.Accounts[a.ID] = a
-			m.cfg.Logf("account %d %q created", a.ID, name)
-		}
-		account = *a
-		return nil
-	})
-	if err != nil {
-		httpError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	reply(w, map[string]any{"playerId": account.ID, "token": account.Token})
-}
 
 func (m *Master) account(r *http.Request) *Account {
 	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -313,10 +315,15 @@ func (m *Master) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Map   string  `json:"map"`
-		Bring []Bring `json:"bring"`
+		Map      string  `json:"map"`
+		Bring    []Bring `json:"bring"`
+		WebBuild string  `json:"webBuild"`
 	}
 	if !decode(w, r, &req) {
+		return
+	}
+	if m.web != nil && (req.WebBuild != "" || r.Header.Get("Origin") != "") && req.WebBuild != m.web.manifest.Build {
+		httpError(w, http.StatusConflict, "Web client version changed. Refresh the page before deploying.")
 		return
 	}
 	m.mu.Lock()
@@ -379,8 +386,12 @@ func (m *Master) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	if server.State == stateReady {
 		state = stateReady
 	}
-	reply(w, map[string]any{"state": state, "server": server.ID, "host": m.cfg.PublicHost, "port": server.Port,
-		"ticket": token, "map": mapInfo.ID, "scene": mapInfo.Scene, "resume": !character.Fresh})
+	dispatch := map[string]any{"state": state, "server": server.ID, "host": m.cfg.PublicHost, "port": server.Port,
+		"ticket": token, "map": mapInfo.ID, "scene": mapInfo.Scene, "resume": !character.Fresh}
+	if server.RtcPort != 0 {
+		dispatch["rtcPort"] = server.RtcPort
+	}
+	reply(w, dispatch)
 }
 
 func (m *Master) pickMap(requested string) (MapInfo, error) {
@@ -464,6 +475,15 @@ func (m *Master) launchLocked(mapInfo MapInfo) (*Server, error) {
 	server := &Server{ID: fmt.Sprintf("ds%d", m.nextDS), Map: mapInfo.ID, Scene: mapInfo.Scene, Port: port,
 		State: stateStarting, Pvp: m.cfg.Pvp, StartedAt: time.Now(), key: randomHex(16)}
 	m.nextDS++
+	if m.cfg.RtcPortBase != 0 {
+		server.RtcPort = m.cfg.RtcPortBase + (port - m.cfg.PortBase)
+		server.rtcNotify = make(chan struct{}, 1)
+		server.env = []string{
+			fmt.Sprintf("GK_NEXTNET_RTC_PORT=%d", server.RtcPort),
+			"GK_NEXTNET_RTC_MASTER=" + m.URL(), "GK_NEXTNET_RTC_DS_ID=" + server.ID,
+			"GK_NEXTNET_RTC_DS_KEY=" + server.key, "GK_NEXTNET_RTC_PUBLIC_HOST=" + m.cfg.PublicHost,
+		}
+	}
 	args := append([]string{
 		"--dedicated", "--disable-streamline", "--width=320", "--height=180",
 		"--cvar", "r.rendererType 4", "--cvar", "r.upscaler.type 0",
@@ -842,6 +862,12 @@ func (m *Master) stopLocked(s *Server, why string) {
 // markDeadLocked forgets a DS. Survivors it held resume later from its last
 // checkpoint, together with the world it last committed.
 func (m *Master) markDeadLocked(s *Server, why string) {
+	for id, job := range m.rtcJobs {
+		if job.server == s.ID {
+			delete(m.rtcJobs, id)
+			job.answer <- rtcAnswer{Error: "map server went offline"}
+		}
+	}
 	s.State = stateDead
 	if s.proc != nil {
 		_ = s.proc.Kill()

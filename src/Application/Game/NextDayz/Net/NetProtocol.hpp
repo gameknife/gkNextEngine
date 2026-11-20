@@ -7,24 +7,22 @@
 // See docs/projects/nextdayz/nextdayz-multiplayer-design.md.
 // ============================================================================
 
-#include "Engine/Common/CoreMinimal.hpp"
+#include "ProtocolVersion.hpp"
 
-#if GK_MODULE_NEXTNET
 
 #include "Modules/NextNet/NetBuffer.hpp"
 
 #include "Application/Game/NextDayz/Combat/CombatEvents.hpp"
-#include "Application/Game/NextDayz/Combat/NoiseSystem.hpp"
-#include "Application/Game/NextDayz/Inventory/LootSystem.hpp"
+#include "Application/Game/NextDayz/Combat/NoiseType.hpp"
+#include "Application/Game/NextDayz/Inventory/LootReplica.hpp"
 #include "Application/Game/NextDayz/Player/PlayerState.hpp"
 #include "Application/Game/NextDayz/Player/SurvivalSystem.hpp"
-#include "Application/Game/NextDayz/Sim/WorldSim.hpp"
+#include "Application/Game/NextDayz/Player/SurvivorPresence.hpp"
 #include "Application/Game/NextDayz/World/TimeSystem.hpp"
-#include "Application/Game/NextDayz/Zombies/ZombieSystem.hpp"
+#include "Application/Game/NextDayz/Zombies/ZombieState.hpp"
 
 namespace NextDayz::Net
 {
-    inline constexpr uint16_t kProtocolVersion = 5;
     inline constexpr uint16_t kDefaultPort = 27015;
     // Survivor 1 is single player's local survivor; network survivors start here.
     inline constexpr uint32_t kFirstSurvivorId = 2;
@@ -261,5 +259,3 @@ namespace NextDayz::Net
     bool Read(NextNet::FNetReader& reader, FExtractState& out);
     bool Read(NextNet::FNetReader& reader, FFarewell& out);
 }
-
-#endif

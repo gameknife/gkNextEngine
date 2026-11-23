@@ -1,0 +1,104 @@
+name: NextDayz Web
+
+# Per-commit gates from the Web client design (§5.4, §10): the NextDayzCore
+# include boundary, the protocol golden on x86_64 and wasm32, the shared rules
+# probe, the browser build and its unit tests. Map baking needs Vulkan and stays
+# in the release workflow (nextdayz-server.yml).
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/Application/Game/NextDayz/**'
+      - 'src/Application/Web/**'
+      - 'src/Gameplay/Rig/**'
+      - 'src/Gameplay/Character/**'
+      - 'src/Modules/NextNet/NetBuffer.hpp'
+      - 'src/Modules/NextPhysics/JoltCharacter.*'
+      - 'src/Engine/Common/CoreMinimal.hpp'
+      - 'src/Engine/Assets/Data/AnimationChannel.hpp'
+      - 'src/Engine/Assets/Data/RigDefinition.hpp'
+      - 'src/Engine/Runtime/Subsystems/CharacterPhysics.hpp'
+      - 'src/Engine/Runtime/Subsystems/NextPhysicsTypes.hpp'
+      - 'web/nextdayz/**'
+      - 'tools/gnb/cmd/gnb/web*.go'
+      - 'tools/gnb/internal/dzmaster/**'
+      - 'vcpkg.json'
+      - '.github/workflows/nextdayz-web.yml'
+  push:
+    branches: [main, dev]
+    paths:
+      - 'src/Application/Game/NextDayz/**'
+      - 'src/Application/Web/**'
+      - 'src/Gameplay/Rig/**'
+      - 'src/Gameplay/Character/**'
+      - 'src/Modules/NextNet/NetBuffer.hpp'
+      - 'src/Modules/NextPhysics/JoltCharacter.*'
+      - 'src/Engine/Common/CoreMinimal.hpp'
+      - 'src/Engine/Assets/Data/AnimationChannel.hpp'
+      - 'src/Engine/Assets/Data/RigDefinition.hpp'
+      - 'src/Engine/Runtime/Subsystems/CharacterPhysics.hpp'
+      - 'src/Engine/Runtime/Subsystems/NextPhysicsTypes.hpp'
+      - 'web/nextdayz/**'
+      - 'tools/gnb/cmd/gnb/web*.go'
+      - 'tools/gnb/internal/dzmaster/**'
+      - 'vcpkg.json'
+      - '.github/workflows/nextdayz-web.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: nextdayz-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: NextDayzCore, WASM and browser client
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: tools/gnb/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/nextdayz/package-lock.json
+      - name: Install Ubuntu dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl unzip tar ninja-build libxi-dev libxinerama-dev libxcursor-dev libxrandr-dev wayland-protocols libxkbcommon-dev xorg-dev mono-complete
+      - name: Configure vcpkg binary cache
+        uses: ./.github/actions/vcpkg-cache
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up build dependencies
+        run: ./gnb.sh setup
+      - name: Test Master signalling and gnb web commands
+        working-directory: tools/gnb
+        run: go test ./internal/dzmaster ./cmd/gnb
+      - name: Check the native protocol golden and rules
+        run: |
+          ./gnb.sh build NextDayzProtocolGolden NextDayzCoreRules
+          out/build/linux/bin/NextDayzProtocolGolden > "$RUNNER_TEMP/nextdayz-protocol-native.txt"
+          diff -u src/Application/Web/NextDayzWebCore/protocol-golden.txt "$RUNNER_TEMP/nextdayz-protocol-native.txt"
+          out/build/linux/bin/NextDayzCoreRules
+      - name: Cache the pinned Emscripten SDK
+        uses: actions/cache@v6
+        with:
+          path: out/web/nextdayz/emsdk
+          key: nextdayz-emsdk-4.0.23-${{ runner.os }}
+      # gnb web build: WASM core, include boundary, WASM protocol golden,
+      # rules probe in Node, then tsc and vite build.
+      - name: Build and check the WASM core and browser client
+        run: |
+          ./gnb.sh web setup
+          ./gnb.sh web build
+      - name: Test the browser client
+        run: ./gnb.sh web test

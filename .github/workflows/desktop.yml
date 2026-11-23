@@ -67,3 +67,24 @@ jobs:
           } else {
             ./gnb.sh test "~[GPU]"
           }
+      # Desktop and Web clients share one DS, so NextDayzCore must encode the
+      # same protocol bytes on every compiler and architecture. The NextDayz Web
+      # workflow checks the wasm32 side against the same golden file.
+      - name: NextDayz protocol golden
+        shell: pwsh
+        run: |
+          $gnb = if ($IsWindows) { '.\gnb.bat' } else { './gnb.sh' }
+          $preset = if ($IsWindows) { 'windows' } elseif ($IsMacOS) { 'macos-arm64' } else { 'linux' }
+          & $gnb build NextDayzProtocolGolden NextDayzCoreRules
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $bin = "out/build/$preset/bin"
+          $actual = @(& "$bin/NextDayzProtocolGolden")
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $expected = @(Get-Content src/Application/Web/NextDayzWebCore/protocol-golden.txt)
+          $diff = Compare-Object $expected $actual -SyncWindow 0 -CaseSensitive
+          if ($diff) {
+            $diff | Format-Table -AutoSize | Out-String -Width 400 | Write-Host
+            throw 'NextDayz protocol bytes differ from protocol-golden.txt'
+          }
+          & "$bin/NextDayzCoreRules"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

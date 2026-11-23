@@ -1,0 +1,47 @@
+:root {
+    color-scheme: dark;
+    font: 15px/1.5 system-ui, sans-serif;
+    background: #191c19;
+    color: #efefe5;
+}
+body { margin: 0; }
+main { width: min(1240px, 100% - 40px); margin: 24px auto 32px; }
+header { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin-bottom: 16px; }
+h1 { font-size: clamp(24px, 3vw, 34px); line-height: 1.15; margin: 3px 0; font-weight: 650; }
+.project { margin: 0; font: 11px/1.4 ui-monospace, monospace; color: #b9c2a0; letter-spacing: .15em; }
+button {
+    appearance: none;
+    font: inherit;
+    color: #eeefe5;
+    padding: 7px 13px;
+    border: 1px solid #5f6657;
+    border-radius: 5px;
+    background: #2a3028;
+    cursor: pointer;
+}
+button:hover:not(:disabled) { background: #444d3d; }
+button:disabled { opacity: .62; cursor: default; }
+.viewport { position: relative; overflow: hidden; border: 1px solid #454c43; border-radius: 9px; background: #292f29; }
+canvas { display: block; width: 100%; height: clamp(340px, 66vh, 740px); touch-action: none; }
+#status, .hint, .scene-controls { position: absolute; margin: 0; }
+#status, .hint { border-radius: 4px; background: #20261fe8; padding: 5px 10px; white-space: pre-wrap; }
+#status { top: 12px; left: 12px; max-width: calc(100% - 48px); overflow-wrap: anywhere; }
+#status[data-state="ready"] { color: #cfe4b2; }
+#status[data-state="error"] { color: #ffc7b1; }
+.scene-controls { display: flex; gap: 6px; bottom: 12px; left: 12px; }
+.hint { bottom: 12px; right: 12px; font-size: 12px; pointer-events: none; }
+.metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin: 12px 0 0;
+}
+.metrics div { padding: 12px 14px; border: 1px solid #363d34; border-radius: 6px; background: #222720; }
+dt { color: #b8c2b0; font-size: 12px; }
+dd { margin: 3px 0 0; font-size: 19px; font-variant-numeric: tabular-nums; }
+details { margin-top: 14px; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 560px) {
+    main { width: calc(100% - 24px); }
+    .hint { display: none; }
+}

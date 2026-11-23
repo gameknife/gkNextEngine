@@ -43,6 +43,7 @@ namespace Assets::Scad
     // Offline tools can opt into the source checkout instead of the engine's
     // staged assets. Configure once at startup, before any evaluator starts.
     void SetLooseSourceRoot(std::filesystem::path root);
+    bool ScadHasPackage();
     std::filesystem::path ResolveScadLoosePath(const std::filesystem::path& path);
     std::vector<std::string> LooseSourceSidecars();
 
@@ -78,6 +79,10 @@ namespace Assets::Scad
     std::vector<glm::vec3> ScadComputeSmoothNormals(const std::vector<glm::vec3>& pos, float angleThresholdDeg);
 
     // ------------------------------------------------------------------
+    struct SceneNode;
+    std::string SerializeScadNodeMetadata(const SceneNode& sceneNode);
+    bool ScadNodeDisablesCollision(const SceneNode& sceneNode);
+
     // Node metadata: the evaluated named parameters of a user-module call,
     // serialized as "k=v;k=v" into Assets::Node::SetMetadata by the scene
     // loader. Numbers use %g, bools "true"/"false", strings are copied

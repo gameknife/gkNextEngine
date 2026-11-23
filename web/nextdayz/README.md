@@ -63,6 +63,31 @@ VITE_ND_REVIEW=1 ND_WEB_PORT=4182 ND_MASTER_URL=http://127.0.0.1:7797 ./gnb.sh w
 浏览器的「开发直连」走 `ND_DIRECT_URL`，默认信令地址为 `http://127.0.0.1:7781`。
 `gnb web dev` 监视地图烘焙输入，并在清单更新后刷新浏览器。
 
+## 浏览器现场生成验收
+
+`./gnb.sh web scad-probe` 用 Emscripten 构建 SCAD 求值器并启动[训练场大门预览](http://127.0.0.1:4184/scad-review/)。
+首次运行前需要用 `./gnb.sh web setup` 安装 SDK，并用 `./gnb.sh build NextDayz` 准备 vcpkg 头文件。
+预览使用已发布的训练场 v3 源文件，执行原始地形语句和大门据点，渲染大门附近约 96 × 100 米的几何。当前预览使用顶点颜色。
+
+求值器与源文件的下载量取自浏览器收到的压缩正文，页面和 Three.js 单独加载。
+生成耗时包括 SCAD 解析、求值和预览网格整理，内存峰值统计 WASM 线性内存。
+运行 `node web/nextdayz/test/scad-review.mjs` 可复测冷启动和重新生成，记录写入 `out/web/nextdayz/scad-probe/evidence/`。
+
+### 完整训练场联机
+
+在启动本机 Master 后，用下面的命令开训练场现场生成验收站点。准备游戏内核、角色和共享资产的方法见上文。
+
+```sh
+VITE_ND_SCAD_TRAINING=1 VITE_ND_REVIEW=1 ND_MASTER_URL=http://127.0.0.1:7797 \
+  ./gnb.sh web scad-probe --port 4185
+```
+
+打开[训练场联机验收页](http://127.0.0.1:4185/)，登录后选训练场出击。Worker 用地图源文件生成网格、程序化贴图、
+碰撞和锚点，再由浏览器通过 WebRTC 加入 Master 分配的地图服务器。角色和装备仍使用现行资产包。
+
+`node web/nextdayz/test/scad-level.mjs` 会核对下载、桌面地图统计、移动、岗亭碰撞和撤离。
+测试需要开启快捷入口并让 Master 带 `--cheats`，记录写入 `out/web/nextdayz/scad-level/`。
+
 ## 自动验证
 
 下列命令在原生版的障碍夹具上检查 WASM 的角色控制器。第一条命令使用 macOS 构建目录，其他平台可替换为对应的 preset。

@@ -2,7 +2,9 @@
 
 #include "Engine/Common/CoreMinimal.hpp"
 
+#include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
+#include <optional>
 #include <span>
 
 class NextEngine;
@@ -41,6 +43,10 @@ namespace NextDayz
         int count = 1;
         float yaw = 0.0f;           // world yaw of the anchor (displays keep their layout)
     };
+
+    bool IsWorldAnchor(std::string_view name);
+    std::optional<FWorldAnchor> ReadWorldAnchor(std::string_view name, std::string_view metadata,
+                                               const glm::mat4& world, uint32_t id);
 
     class WorldAnchorRegistry
     {

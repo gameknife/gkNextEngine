@@ -312,114 +312,6 @@ namespace Assets
             return true;
         }
 
-        // One element of a flat vector parameter, or false when the element has no
-        // comma-free single-token spelling (a nested vector, a range, or a string
-        // that would collide with the record's own separators).
-        bool SerializeScadMetadataElement(const Scad::Value& value, std::string& out)
-        {
-            switch (value.type)
-            {
-            case Scad::Value::Type::Number:
-                out = fmt::format("{:g}", value.num);
-                return true;
-            case Scad::Value::Type::Bool:
-                out = value.boolean ? "true" : "false";
-                return true;
-            case Scad::Value::Type::Str:
-                if (value.str.find_first_of(",;=") != std::string::npos)
-                {
-                    return false;
-                }
-                out = value.str;
-                return true;
-            default:
-                return false;
-            }
-        }
-
-        // Serializes the evaluated named parameters of a user-module call as
-        // "k=v;k=v" for Node::SetMetadata. Gameplay reads authoring intent (rail
-        // length, swing period, button index, which ids a door listens to, how far
-        // a lift travels) out of these. Scalars keep their natural spelling; a flat
-        // vector of scalars becomes its elements joined with ',' ("travel=0,0,3",
-        // "on=plate_a,plate_b"), so readers split on ',' to get it back. Nested
-        // vectors and ranges have no single-token spelling and are dropped. Empty
-        // when the module takes no serializable parameters.
-        std::string SerializeScadNodeMetadata(const Scad::SceneNode& sceneNode)
-        {
-            std::string out;
-            for (const auto& [key, value] : sceneNode.parameters)
-            {
-                std::string text;
-                switch (value.type)
-                {
-                case Scad::Value::Type::Number:
-                    text = fmt::format("{:g}", value.num);
-                    break;
-                case Scad::Value::Type::Bool:
-                    text = value.boolean ? "true" : "false";
-                    break;
-                case Scad::Value::Type::Str:
-                    // A ';' or '=' inside the string would corrupt the record; skip those.
-                    if (value.str.find_first_of(";=") != std::string::npos)
-                    {
-                        continue;
-                    }
-                    text = value.str;
-                    break;
-                case Scad::Value::Type::Vec:
-                {
-                    bool flat = true;
-                    std::string element;
-                    for (size_t index = 0; index < value.vec.size() && flat; ++index)
-                    {
-                        flat = SerializeScadMetadataElement(value.vec[index], element);
-                        if (flat)
-                        {
-                            if (index > 0)
-                            {
-                                text.push_back(',');
-                            }
-                            text.append(element);
-                        }
-                    }
-                    if (!flat)
-                    {
-                        continue;
-                    }
-                    break;
-                }
-                default:
-                    continue;
-                }
-                if (!out.empty())
-                {
-                    out.push_back(';');
-                }
-                out.append(key);
-                out.push_back('=');
-                out.append(text);
-            }
-            return out;
-        }
-
-        // `collision = "none"` on a user module opts that call's whole subtree out of
-        // collision: its meshes are built raycast-invisible, which is what keeps the
-        // scene from giving them an implicit static physics body and keeps them out
-        // of CPU ray queries (camera booms, picking, NavGrid sampling). Pickups,
-        // trigger volumes and decoration use it; anything else collides as before.
-        bool ScadNodeDisablesCollision(const Scad::SceneNode& sceneNode)
-        {
-            for (const auto& [key, value] : sceneNode.parameters)
-            {
-                if (key == "collision")
-                {
-                    return value.type == Scad::Value::Type::Str && value.str == "none";
-                }
-            }
-            return false;
-        }
-
         void BuildScadSceneNodeRecursive(
             const Scad::SceneNode& sceneNode,
             const std::shared_ptr<Node>& parent,
@@ -432,7 +324,7 @@ namespace Assets
             std::vector<FMaterial>& materials,
             ScadBuildCache& cache)
         {
-            collisionEnabled = collisionEnabled && !ScadNodeDisablesCollision(sceneNode);
+            collisionEnabled = collisionEnabled && !Scad::ScadNodeDisablesCollision(sceneNode);
             glm::vec3 localTranslation(0.0f);
             glm::quat localRotation(1.0f, 0.0f, 0.0f, 0.0f);
             glm::vec3 localScale(1.0f);
@@ -453,7 +345,7 @@ namespace Assets
             {
                 node->SetTag(Scad::ScadPlacementTag(sceneNode.sourceOffset));
             }
-            node->SetMetadata(SerializeScadNodeMetadata(sceneNode));
+            node->SetMetadata(Scad::SerializeScadNodeMetadata(sceneNode));
             if (parent)
             {
                 node->SetParent(parent);

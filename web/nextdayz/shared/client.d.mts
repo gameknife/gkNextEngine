@@ -1,4 +1,5 @@
 import type { Anchor, Cargo, Clock, Frame, GroundItem, Item, Loot, Presentation, Profile, XYZ } from "../src/types";
+import type { LevelCollision } from "./collision.mjs";
 
 interface TransportOptions {
     fetchMaster(request: string, body: string, token: string): Promise<Response>;
@@ -8,8 +9,8 @@ export function loopbackMaster(address: string, directAddress?: string): Transpo
 
 export class Client {
     constructor(wasm: unknown, options: TransportOptions & {
-        loadMap(scene: string): Promise<{ spawn: XYZ; collision?: ArrayBuffer; sites?: Anchor[] }>;
-        installCollision?(bytes: ArrayBuffer, client: Client): void;
+        loadMap(scene: string): Promise<{ spawn: XYZ; collision?: LevelCollision; sites?: Anchor[] }>;
+        installCollision?(bytes: LevelCollision, client: Client): void;
         present?(event: Presentation): void;
         onClose?(reason: string): void;
     });

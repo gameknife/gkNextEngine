@@ -47,6 +47,7 @@ const settingsDialog = element<HTMLDialogElement>("settings-dialog");
 const deathPanel = element("death-panel");
 const hitMarker = element("hit-marker");
 const reviewEnabled = import.meta.env.DEV && import.meta.env.VITE_ND_REVIEW === "1";
+const trainingScad = import.meta.env.DEV && import.meta.env.VITE_ND_SCAD_TRAINING === "1";
 const deployButton = element<HTMLButtonElement>("deploy");
 const weather = { Clear: ["晴朗", "Clear"], Overcast: ["阴天", "Overcast"], Fog: ["雾天", "Fog"] } as const;
 let client: Client;
@@ -177,11 +178,19 @@ async function prepare(scene: string) {
     element("loading-detail").textContent = text("正在读取地图清单", "Reading the map manifest");
     progress.removeAttribute("value");
     try {
-        loaded = await loadLevel(bundle, (done, total) => {
-            progress.max = total;
-            progress.value = done;
-            element("loading-detail").textContent = text(`正在下载并验证资源 · ${done} / ${total}`, `Downloading and checking assets · ${done} / ${total}`);
-        });
+        if (trainingScad && bundle.map.id === "training_ground") {
+            element("loading-detail").textContent = text("正在读取 SCAD 源文件", "Reading SCAD sources");
+            const { loadScadLevel } = await import("./scadLevel");
+            loaded = await loadScadLevel(scene, () => {
+                element("loading-detail").textContent = text("正在生成地图、材质与碰撞", "Generating terrain, materials and collision");
+            });
+        } else {
+            loaded = await loadLevel(bundle, (done, total) => {
+                progress.max = total;
+                progress.value = done;
+                element("loading-detail").textContent = text(`正在下载并验证资源 · ${done} / ${total}`, `Downloading and checking assets · ${done} / ${total}`);
+            });
+        }
         (world ??= new World(element("viewport"), actorAssets, locked => {
             menu.hidden = locked;
             controls.hidden = !locked;
@@ -577,6 +586,7 @@ async function init() {
             nextdayzReview: () => ({
                 frame: client.read(), profile: client.read("profile"), cargo: client.read("cargo"),
                 cacheHits: loaded?.cacheHits ?? 0, drawCalls: world?.drawCalls ?? 0, triangles: world?.triangles ?? 0,
+                scad: loaded?.scad,
             }),
             nextdayzLightPreview: (minutes?: number, mode = 0) => {
                 lightPreview = minutes === undefined ? undefined : client.previewClock(minutes, mode);

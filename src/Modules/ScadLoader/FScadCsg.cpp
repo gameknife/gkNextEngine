@@ -36,7 +36,7 @@ namespace Assets::Scad
         {
             size_t operator()(const VKey& k) const
             {
-                size_t h = 1469598103934665603ull;
+                size_t h = static_cast<size_t>(1469598103934665603ull);
                 const int64_t values[3] = {k.x, k.y, k.z};
                 for (int64_t v : values)
                 {

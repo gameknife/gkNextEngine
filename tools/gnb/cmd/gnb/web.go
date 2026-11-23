@@ -107,7 +107,7 @@ func newWebCommand(ctx appContext) *cobra.Command {
 	bake.Flags().BoolVar(&rigs, "rigs", false, "Include character rigs and shared client assets")
 	bake.Flags().BoolVar(&check, "check", false, "Fail if the manifest, source inputs or output file hashes are stale")
 	bake.Flags().BoolVar(&watch, "watch", false, "Watch published SCAD dependencies and update changed bundles")
-	root.AddCommand(bake)
+	root.AddCommand(bake, newWebScadProbeCommand(ctx))
 	addWebCoreCommands(root, ctx)
 	return root
 }

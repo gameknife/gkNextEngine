@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repo = fileURLToPath(new URL("../../..", import.meta.url));
-const evidence = resolve(repo, "out/web/nextdayz/w7-evidence");
+const evidence = resolve(repo, process.env.ND_TEST_EVIDENCE ?? "out/web/nextdayz/w7-evidence");
 const site = process.env.ND_TEST_SITE ?? "http://127.0.0.1:4182";
 const master = process.env.ND_TEST_MASTER ?? "http://127.0.0.1:7797";
 const name = process.env.ND_TEST_RESUME_NAME ?? `W7 Mixed Browser ${Date.now()}`;

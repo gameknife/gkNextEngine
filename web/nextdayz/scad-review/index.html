@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" href="data:,">
+    <title>训练场大门 · NextDayz SCAD 验收</title>
+</head>
+<body>
+    <main>
+        <header>
+            <div>
+                <p class="project">NEXTDAYZ · SCAD</p>
+                <h1>训练场大门</h1>
+            </div>
+            <button id="regenerate" type="button" disabled>重新生成</button>
+        </header>
+        <section class="viewport" aria-label="训练场三维预览">
+            <canvas id="scene"></canvas>
+            <p id="status" role="status">读取 SCAD 求值器与源文件…</p>
+            <div class="scene-controls" aria-label="视角">
+                <button id="overview" type="button" disabled>全景</button>
+                <button id="sign" type="button" disabled>门牌特写</button>
+            </div>
+            <p class="hint">拖动旋转 · 滚轮缩放 · 右键平移</p>
+        </section>
+        <dl class="metrics">
+            <div><dt>求值器下载</dt><dd id="evaluator-bytes">—</dd></div>
+            <div><dt>场景源文件下载</dt><dd id="source-bytes">—</dd></div>
+            <div><dt>SCAD 生成耗时</dt><dd id="evaluate-ms">—</dd></div>
+            <div><dt>WASM 线性内存峰值</dt><dd id="wasm-memory">—</dd></div>
+            <div><dt>可见三角形</dt><dd id="triangles">—</dd></div>
+        </dl>
+        <details id="diagnostics" hidden>
+            <summary>SCAD 求值日志 <span id="warning-count"></span></summary>
+            <pre id="warnings"></pre>
+        </details>
+    </main>
+    <script type="module" src="../src/scad-review/main.ts"></script>
+</body>
+</html>

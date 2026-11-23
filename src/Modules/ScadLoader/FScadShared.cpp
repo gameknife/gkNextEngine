@@ -1,8 +1,11 @@
 #include "Modules/ScadLoader/FScadShared.h"
 
+#include "Modules/ScadLoader/FScadEvaluator.h"
 #include "Modules/ScadLoader/FScadLexer.h"
 #include "Modules/ScadLoader/FScadParser.h"
+#if !defined(__EMSCRIPTEN__)
 #include "Engine/Utilities/FileHelper.hpp"
+#endif
 
 #include <algorithm>
 #include <array>
@@ -34,10 +37,12 @@ namespace Assets::Scad
 
         bool ScadReadBytes(const fs::path& path, std::vector<uint8_t>& data)
         {
+#if !defined(__EMSCRIPTEN__)
             if (auto* package = Utilities::Package::FPackageFileSystem::TryGetInstance(); package && looseSourceRoot.empty())
             {
                 return package->LoadFile(path.generic_string(), data);
             }
+#endif
             std::ifstream file(ResolveScadLoosePath(path), std::ios::binary);
             if (!file.is_open())
             {
@@ -184,7 +189,7 @@ namespace Assets::Scad
                 std::memcpy(&bits[0], &k.x, sizeof(float));
                 std::memcpy(&bits[1], &k.y, sizeof(float));
                 std::memcpy(&bits[2], &k.z, sizeof(float));
-                size_t h = 1469598103934665603ull;
+                size_t h = static_cast<size_t>(1469598103934665603ull);
                 for (uint32_t b : bits)
                 {
                     h ^= static_cast<size_t>(b);
@@ -197,8 +202,21 @@ namespace Assets::Scad
 
     fs::path ResolveScadLoosePath(const fs::path& path)
     {
+#if defined(__EMSCRIPTEN__)
+        return (looseSourceRoot / path).lexically_normal();
+#else
         return looseSourceRoot.empty() ? Utilities::FileHelper::GetRuntimeFilePath(path)
                                        : (looseSourceRoot / path).lexically_normal();
+#endif
+    }
+
+    bool ScadHasPackage()
+    {
+#if defined(__EMSCRIPTEN__)
+        return false;
+#else
+        return Utilities::Package::FPackageFileSystem::TryGetInstance() != nullptr;
+#endif
     }
 
     void SetLooseSourceRoot(fs::path root)
@@ -232,6 +250,7 @@ namespace Assets::Scad
                          std::vector<std::string>* outFiles)
     {
         fs::path mainPath = filename;
+#if !defined(__EMSCRIPTEN__)
         if (mainPath.is_absolute() && looseSourceRoot.empty())
         {
             std::error_code ec;
@@ -250,6 +269,7 @@ namespace Assets::Scad
                 ec.clear();
             }
         }
+#endif
         mainPath = mainPath.lexically_normal();
 
         std::unordered_set<std::string> parsedDefinitions;
@@ -475,6 +495,114 @@ namespace Assets::Scad
     // Node metadata (see FScadShared.h). The serialized form is produced by
     // FScadLoader; these readers are what gameplay uses on the other side.
     // ------------------------------------------------------------------
+
+    // One element of a flat vector parameter, or false when the element has no
+    // comma-free single-token spelling (a nested vector, a range, or a string
+    // that would collide with the record's own separators).
+    static bool SerializeScadMetadataElement(const Value& value, std::string& out)
+    {
+        switch (value.type)
+        {
+        case Value::Type::Number:
+            out = fmt::format("{:g}", value.num);
+            return true;
+        case Value::Type::Bool:
+            out = value.boolean ? "true" : "false";
+            return true;
+        case Value::Type::Str:
+            if (value.str.find_first_of(",;=") != std::string::npos)
+            {
+                return false;
+            }
+            out = value.str;
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    // Serializes the evaluated named parameters of a user-module call as
+    // "k=v;k=v" for Node::SetMetadata. Gameplay reads authoring intent (rail
+    // length, swing period, button index, which ids a door listens to, how far
+    // a lift travels) out of these. Scalars keep their natural spelling; a flat
+    // vector of scalars becomes its elements joined with ',' ("travel=0,0,3",
+    // "on=plate_a,plate_b"), so readers split on ',' to get it back. Nested
+    // vectors and ranges have no single-token spelling and are dropped. Empty
+    // when the module takes no serializable parameters.
+    std::string SerializeScadNodeMetadata(const SceneNode& sceneNode)
+    {
+        std::string out;
+        for (const auto& [key, value] : sceneNode.parameters)
+        {
+            std::string text;
+            switch (value.type)
+            {
+            case Value::Type::Number:
+                text = fmt::format("{:g}", value.num);
+                break;
+            case Value::Type::Bool:
+                text = value.boolean ? "true" : "false";
+                break;
+            case Value::Type::Str:
+                // A ';' or '=' inside the string would corrupt the record; skip those.
+                if (value.str.find_first_of(";=") != std::string::npos)
+                {
+                    continue;
+                }
+                text = value.str;
+                break;
+            case Value::Type::Vec:
+            {
+                bool flat = true;
+                std::string element;
+                for (size_t index = 0; index < value.vec.size() && flat; ++index)
+                {
+                    flat = SerializeScadMetadataElement(value.vec[index], element);
+                    if (flat)
+                    {
+                        if (index > 0)
+                        {
+                            text.push_back(',');
+                        }
+                        text.append(element);
+                    }
+                }
+                if (!flat)
+                {
+                    continue;
+                }
+                break;
+            }
+            default:
+                continue;
+            }
+            if (!out.empty())
+            {
+                out.push_back(';');
+            }
+            out.append(key);
+            out.push_back('=');
+            out.append(text);
+        }
+        return out;
+    }
+
+    // `collision = "none"` on a user module opts that call's whole subtree out of
+    // collision: its meshes are built raycast-invisible, which is what keeps the
+    // scene from giving them an implicit static physics body and keeps them out
+    // of CPU ray queries (camera booms, picking, NavGrid sampling). Pickups,
+    // trigger volumes and decoration use it; anything else collides as before.
+    bool ScadNodeDisablesCollision(const SceneNode& sceneNode)
+    {
+        for (const auto& [key, value] : sceneNode.parameters)
+        {
+            if (key == "collision")
+            {
+                return value.type == Value::Type::Str && value.str == "none";
+            }
+        }
+        return false;
+    }
 
     FMetadata ParseScadMetadata(std::string_view metadata)
     {

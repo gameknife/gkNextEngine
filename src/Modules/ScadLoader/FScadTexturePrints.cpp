@@ -2,7 +2,6 @@
 
 #include "Modules/ScadLoader/FScadTexturePrints.h"
 
-#include "Engine/Utilities/FileHelper.hpp"
 #include "Modules/ScadLoader/FScadEvaluator.h"
 #include "Modules/ScadLoader/FScadLexer.h"
 #include "Modules/ScadLoader/FScadParser.h"
@@ -59,7 +58,7 @@ namespace Assets::Scad
             if (library.loaded && now - library.checked < std::chrono::seconds(1)) return;
             library.checked = now;
             std::error_code ec;
-            const bool packaged = Utilities::Package::FPackageFileSystem::TryGetInstance() != nullptr;
+            const bool packaged = ScadHasPackage();
             const fs::file_time_type stamp = packaged ? fs::file_time_type{} : fs::last_write_time(ResolveScadLoosePath(kTexturePrintLibrary), ec);
             if (library.loaded && stamp == library.stamp) return;
 

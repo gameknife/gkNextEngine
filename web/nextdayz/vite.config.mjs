@@ -8,6 +8,7 @@ const output = fileURLToPath(new URL("../../out/web/nextdayz/", import.meta.url)
 const mime = {
     ".mjs": "text/javascript", ".wasm": "application/wasm", ".json": "application/json",
     ".webp": "image/webp", ".glb": "model/gltf-binary", ".bin": "application/octet-stream", ".wav": "audio/wav",
+    ".scad": "text/plain", ".hmap": "application/octet-stream", ".ttf": "font/ttf",
 };
 function sendFiles(prefix, root) {
     return async (request, response, next) => {
@@ -22,11 +23,12 @@ function sendFiles(prefix, root) {
                 return;
             }
             const immutable = prefix === "/game-assets/" && relative !== "manifest.json";
+            const useCompression = immutable || prefix === "/scad-probe/";
             const acceptsGzip = (request.headers["accept-encoding"] ?? "").split(",").some(value => {
                 const [token, ...options] = value.trim().split(";");
                 return token === "gzip" && !options.some(option => /^\s*q\s*=\s*0(?:\.0*)?\s*$/.test(option));
             });
-            const compressed = immutable && acceptsGzip && await stat(file + ".gz").then(f => f.isFile(), () => false);
+            const compressed = useCompression && acceptsGzip && await stat(file + ".gz").then(f => f.isFile(), () => false);
             const path = compressed ? file + ".gz" : file;
             const info = await stat(path);
             if (!info.isFile()) {
@@ -37,7 +39,7 @@ function sendFiles(prefix, root) {
                 "Content-Type": mime[extension],
                 "Content-Length": info.size,
                 "Cache-Control": immutable ? "public, max-age=31536000, immutable" : "no-store",
-                ...(immutable && { Vary: "Accept-Encoding" }),
+                ...(useCompression && { Vary: "Accept-Encoding" }),
                 ...(compressed && { "Content-Encoding": "gzip" }),
             });
             if (request.method === "HEAD") response.end();
@@ -51,6 +53,7 @@ function sendFiles(prefix, root) {
 function middleware(server) {
     server.middlewares.use(sendFiles("/ndcore/", resolve(output, "core")));
     server.middlewares.use(sendFiles("/game-assets/", resolve(output, "assets")));
+    server.middlewares.use(sendFiles("/scad-probe/", resolve(output, "scad-probe", "public")));
 }
 const proxy = {
     "/api/": { target: process.env.ND_MASTER_URL ?? "http://127.0.0.1:7784" },

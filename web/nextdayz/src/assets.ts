@@ -2,6 +2,8 @@ import { LoadingManager, Group } from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import type { Anchor, AssetFile, Manifest, MapBundle, XYZ } from "./types";
+import type { LevelCollision } from "../shared/collision.mjs";
+import type { ScadLevelMetrics } from "./scadLevel";
 
 export const assetURL = (path: string) => "/game-assets/" + path;
 const cacheKey = "nextdayz-map-assets-v1";
@@ -14,8 +16,9 @@ export interface Level {
     batches: number;
     sunElevation: number;
     cacheHits: number;
-    collision: ArrayBuffer;
+    collision: LevelCollision;
     anchors: Anchor[];
+    scad?: ScadLevelMetrics;
 }
 
 interface MapStats { chunks: { file: string }[]; bounds: [XYZ, XYZ]; batches: number }

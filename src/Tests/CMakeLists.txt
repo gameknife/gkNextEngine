@@ -145,6 +145,7 @@ set(unitTestSources
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Zombies/ZombieSystem.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/World/ZombieSpawnDirector.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/World/WorldAnchorRegistry.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/World/WorldAnchorData.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Sim/WorldSim.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Sim/LagCompensation.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Zombies/ZombieVisualPool.cpp

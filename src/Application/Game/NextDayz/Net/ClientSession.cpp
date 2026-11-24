@@ -114,6 +114,12 @@ namespace NextDayz::Net
         connected = false;
         survivorId = 0;
         lastInventorySync.clear();
+        pendingTakes.clear();
+        lootSynced = false;
+        extract = {};
+        extracting = false;
+        snapshots = hits = kills = 0;
+        outbox.clear();
         sendTimer_ = inventoryTimer_ = 0.f;
     }
 

@@ -1,8 +1,8 @@
 name: NextDayz Web
 
 # Per-commit gates from the Web client design (§5.4, §10): the NextDayzCore
-# include boundary, the protocol golden on x86_64 and wasm32, the shared rules
-# probe, the browser build and its unit tests. Map baking needs Vulkan and stays
+# include boundary, the protocol and client replay goldens on x86_64 and
+# wasm32, the shared rules probe, the browser build and its unit tests. Map baking needs Vulkan and stays
 # in the release workflow (nextdayz-server.yml).
 
 on:
@@ -83,11 +83,13 @@ jobs:
       - name: Test Master signalling and gnb web commands
         working-directory: tools/gnb
         run: go test ./internal/dzmaster ./cmd/gnb
-      - name: Check the native protocol golden and rules
+      - name: Check the native protocol and client replay goldens and rules
         run: |
-          ./gnb.sh build NextDayzProtocolGolden NextDayzCoreRules
+          ./gnb.sh build NextDayzProtocolGolden NextDayzCoreRules NextDayzClientReplay
           out/build/linux/bin/NextDayzProtocolGolden > "$RUNNER_TEMP/nextdayz-protocol-native.txt"
           diff -u src/Application/Web/NextDayzWebCore/protocol-golden.txt "$RUNNER_TEMP/nextdayz-protocol-native.txt"
+          out/build/linux/bin/NextDayzClientReplay > "$RUNNER_TEMP/nextdayz-client-replay-native.txt"
+          diff -u src/Application/Web/NextDayzWebCore/client-replay-golden.txt "$RUNNER_TEMP/nextdayz-client-replay-native.txt"
           out/build/linux/bin/NextDayzCoreRules
       - name: Cache the pinned Emscripten SDK
         uses: actions/cache@v6

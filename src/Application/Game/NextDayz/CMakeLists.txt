@@ -27,6 +27,11 @@ if(NOT ANDROID AND NOT IOS)
     add_executable(NextDayzCoreRules EXCLUDE_FROM_ALL
         "${GK_SOURCE_ROOT}/Application/Web/NextDayzWebCore/CoreRulesProbe.cpp")
     target_link_libraries(NextDayzCoreRules PRIVATE NextDayzCore)
+    # The shared client session replayed natively; the WASM build prints the same lines.
+    add_executable(NextDayzClientReplay EXCLUDE_FROM_ALL
+        "${GK_SOURCE_ROOT}/Application/Web/NextDayzWebCore/ClientReplayProbe.cpp"
+        "${GK_SOURCE_ROOT}/Gameplay/Character/NextCharacterController.cpp")
+    target_link_libraries(NextDayzClientReplay PRIVATE NextDayzCore)
     add_executable(NextDayzRigPoseProbe EXCLUDE_FROM_ALL
         "${GK_SOURCE_ROOT}/Application/Web/NextDayzWebCore/RigPoseProbe.cpp")
     target_sources(NextDayzRigPoseProbe PRIVATE

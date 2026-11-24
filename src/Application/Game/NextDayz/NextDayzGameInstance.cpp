@@ -1185,24 +1185,11 @@ void NextDayzGameInstance::SimulateFrame(float dt)
         }
     }
 
-    const bool actionLocked = actions_.IsActive();
-    const bool traversalLocked = player_.IsTraversing();
-    const bool dead = !survival_.IsAlive();
     section.emplace(timers, ETimer::Player);
-    player_.SetMovementLocked(actionLocked || traversalLocked || showInventory_ || showMap_ || dead);
-    player_.SetMeleeEquipped(weapons_.ActiveIsMelee());
-    // Traversal keeps the first-person weapon: WeaponSystem tucks it down and
-    // out of the way while the hands are on the obstacle.
-    weapons_.SetPresentationSuppressed(actionLocked || dead || knobs.orbit);
-    if (!weapons_.HasActiveWeapon() && player_.IsAds()) player_.CancelAiming();
-    if (actionLocked || traversalLocked || showInventory_ || showMap_ || dead)
-    {
-        player_.CancelAiming();
-        weapons_.SetTriggerDown(false);
-        weapons_.CancelMelee();
-    }
-    player_.SetSprintBlocked((weapons_.TriggerDown() && weapons_.HasActiveWeapon()) || weapons_.IsSwinging() ||
-                             weapons_.MeleeInputPending() || survival_.IsWeak());
+    // The same gate as the Web client: busy hands, a vault, an open menu or death
+    // lock movement and drop the aim, trigger and swing.
+    NextDayz::Net::FClientSession::LockFrame(player_, LocalSurvivorParts(), showInventory_ || showMap_);
+    if (knobs.orbit) weapons_.SetPresentationSuppressed(true);
     player_.Update(dt, GetEngine());
     section.emplace(timers, ETimer::Survival);
     // Cold: night and bad weather against whatever the player is wearing.
@@ -1269,14 +1256,12 @@ void NextDayzGameInstance::SimulateFrame(float dt)
         lastShotMelee_ = shot.melee;
         debugger_.Log(NextDayz::Debug::EChannel::Weapon, 0,
                       NextDayz::L10n::Message("{} {}", shot.melee ? "Swung" : "Fired", shot.weaponId));
+        const auto noise = NextDayz::Net::FClientSession::ShotNoise(shot, player_.Position());
+        if (noise) world_.noise.Emit(noise->position, noise->radius, noise->strength, noise->type);
         if (shot.melee)
         {
             // Dedicated melee clips own the body and weapon; no firearm recoil.
             audio_.MeleeSwing();
-            if (const NextDayz::FWeaponDef* definition = NextDayz::FindWeaponDef(shot.weaponId))
-            {
-                world_.noise.Emit(player_.Position(), definition->noiseRadius, 0.5f, NextDayz::ENoiseType::Melee);
-            }
             continue;
         }
         const NextDayz::FWeaponDef* shotWeapon = NextDayz::FindWeaponDef(shot.weaponId);
@@ -1292,13 +1277,6 @@ void NextDayzGameInstance::SimulateFrame(float dt)
         audio_.Shot(shot.weaponId, shot.suppressed);
         player_.ApplyCameraRecoil(shot.cameraImpulseRadians);
         rig_.TriggerRecoil(shot.rigRecoilScale);
-        if (shotWeapon)
-        {
-            const NextDayz::ENoiseType noiseType = shotFamily == NextDayz::EWeaponFamily::Shotgun ? NextDayz::ENoiseType::Shotgun
-                : shotFamily == NextDayz::EWeaponFamily::Sidearm || shotFamily == NextDayz::EWeaponFamily::Smg
-                    ? NextDayz::ENoiseType::Pistol : NextDayz::ENoiseType::Rifle;
-            world_.noise.Emit(player_.Position(), shotWeapon->noiseRadius * (shot.suppressed ? 0.25f : 1.0f), 1.0f, noiseType);
-        }
     }
 
     const float zombieDt = dt * knobs.zombieTimeScale;
@@ -1804,10 +1782,15 @@ void NextDayzGameInstance::Notify(NextDayz::L10n::FText text, int severity)
     }
 }
 
+NextDayz::Net::FLocalSurvivor NextDayzGameInstance::LocalSurvivorParts()
+{
+    return {inventory_, weapons_, survival_, actions_};
+}
+
 void NextDayzGameInstance::StartNewLife()
 {
     ++netLife_;
-    netDeathDropped_ = false;
+    NetBeginLife();
     quickSlots_ = {"bandage", "water_bottle", "food_can", ""};
     notifications_.clear();
     firecrackers_.clear();
@@ -2458,7 +2441,6 @@ void NextDayzGameInstance::ResetSession()
         loot_.ResetSession(GetEngine());
         time_.Reset(config_.Time, sessionRng_.Derive(0x57454154ULL).Seed());
     }
-    netDeathDropped_ = false;
     player_.Destroy();
     player_.Create(GetEngine().GetPhysicsEngine(), ResolveSpawnPosition(), config_);
     if ((validationLoadout_ && GOption->AgentValidation) || (netMode_ == ENetMode::Client && netKitCvar_ && !NetUsesMaster()))
@@ -3392,18 +3374,12 @@ bool NextDayzGameInstance::OnMouseButton(SDL_Event& event)
         }
         if (event.button.button == SDL_BUTTON_LEFT)
         {
-            player_.SetFreeLook(false);
-            weapons_.SetTriggerDown(true);
+            NextDayz::Net::FClientSession::PressTrigger(true, player_, LocalSurvivorParts());
             return true;
         }
         if (event.button.button == SDL_BUTTON_RIGHT)
         {
-            if (player_.IsTraversing() || weapons_.IsReloading() || weapons_.IsSwitching())
-            {
-                player_.CancelAiming();
-                return true;
-            }
-            player_.SetAimButton(true, weapons_.HasActiveWeapon() && !weapons_.ActiveIsMelee());
+            NextDayz::Net::FClientSession::PressAim(true, player_, LocalSurvivorParts());
             return true;
         }
     }
@@ -3411,12 +3387,12 @@ bool NextDayzGameInstance::OnMouseButton(SDL_Event& event)
     {
         if (event.button.button == SDL_BUTTON_LEFT)
         {
-            weapons_.SetTriggerDown(false);
+            NextDayz::Net::FClientSession::PressTrigger(false, player_, LocalSurvivorParts());
             return true;
         }
         if (event.button.button == SDL_BUTTON_RIGHT)
         {
-            player_.SetAimButton(false, false);
+            NextDayz::Net::FClientSession::PressAim(false, player_, LocalSurvivorParts());
             return true;
         }
     }

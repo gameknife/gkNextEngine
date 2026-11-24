@@ -47,9 +47,6 @@ namespace
     constexpr float kSnapshotSeconds = 0.05f;      // 20 Hz world state
     constexpr float kReconnectSeconds = 3.0f;
     constexpr float kRemoteEaseRate = 14.0f;       // 1/s toward the newest snapshot
-    // Friendly fire is softer than the infected's flesh: survivors carry 100 HP.
-    constexpr float kPvpDamageScale = 0.6f;
-    constexpr float kSurvivorRadius = 0.32f;
     // What each client is told about: survivors within sight (scopes reach far),
     // infected around where they spawn and hunt.
     constexpr float kSurvivorRelevance = 500.0f;
@@ -70,42 +67,6 @@ namespace
     {
         const FItemDef* definition = FindItemDef(itemId);
         return definition ? std::string(definition->displayName) : std::string(itemId);
-    }
-
-    // Closest distance between segments p0-p1 and q0-q1; s is the parameter on p.
-    float SegmentDistance(const glm::vec3& p0, const glm::vec3& p1, const glm::vec3& q0, const glm::vec3& q1, float& s)
-    {
-        const glm::vec3 d1 = p1 - p0;
-        const glm::vec3 d2 = q1 - q0;
-        const glm::vec3 r = p0 - q0;
-        const float a = glm::dot(d1, d1);
-        const float e = glm::dot(d2, d2);
-        const float f = glm::dot(d2, r);
-        float t = 0.0f;
-        s = 0.0f;
-        if (a <= 1.0e-8f && e <= 1.0e-8f) return glm::length(r);
-        if (a <= 1.0e-8f)
-        {
-            t = std::clamp(f / e, 0.0f, 1.0f);
-        }
-        else
-        {
-            const float c = glm::dot(d1, r);
-            if (e <= 1.0e-8f)
-            {
-                s = std::clamp(-c / a, 0.0f, 1.0f);
-            }
-            else
-            {
-                const float b = glm::dot(d1, d2);
-                const float denominator = a * e - b * b;
-                s = denominator != 0.0f ? std::clamp((b * f - c * e) / denominator, 0.0f, 1.0f) : 0.0f;
-                t = (b * s + f) / e;
-                if (t < 0.0f) { t = 0.0f; s = std::clamp(-c / a, 0.0f, 1.0f); }
-                else if (t > 1.0f) { t = 1.0f; s = std::clamp((b - c) / a, 0.0f, 1.0f); }
-            }
-        }
-        return glm::length((p0 + d1 * s) - (q0 + d2 * t));
     }
 }
 
@@ -200,7 +161,6 @@ struct NextDayzGameInstance::FNetSession : Net::FClientSession
     // --- client ---
     float reconnectTimer = 0.0f;
     uint64_t lastNoiseSequence = 0;
-    uint32_t snapshots = 0;
     std::optional<std::vector<FZombieRuntime>> pendingZombies;
     struct FEase
     {
@@ -227,19 +187,19 @@ struct NextDayzGameInstance::FNetSession : Net::FClientSession
         remotes.clear();
     }
 
-    // Loot: synced once per loaded map; pick-ups wait here for the server's answer.
-    uint64_t lootSyncedScene = 0;
+    // Loot: synced once per loaded map; the reserved entry of each pick-up the server has yet to answer.
     uint64_t lootRequestedScene = 0;
-    uint32_t nextTakeRequest = 1;
-    struct FPendingTake
+    std::unordered_map<uint32_t, FLootHandle> takeHandles;
+
+    // Sends what the shared session queued; a closed connection drops it.
+    void Flush()
     {
-        FLootHandle handle;
-        FLootReplica entry;
-        FContainerId destination = 0;
-        EEquipSlot equipSlot = EEquipSlot::None;
-        std::optional<FGridPlacement> placement;
-    };
-    std::unordered_map<uint32_t, FPendingTake> pendingTakes;
+        const FPeerId server = host.ServerPeer();
+        for (const Net::FOutgoing& packet : std::exchange(outbox, {}))
+        {
+            if (connected) host.Send(server, packet.bytes, packet.reliable ? EDelivery::Reliable : EDelivery::Unreliable);
+        }
+    }
     // --- Master (both roles) ---
     std::unique_ptr<NextNet::FHttpWorker> master;
     // server
@@ -267,9 +227,8 @@ struct NextDayzGameInstance::FNetSession : Net::FClientSession
     int profileAttempts = 0;
     float profileRetrySeconds = 0.0f;
     std::array<char, 64> nameBuffer{};
+    // The survivor is already restored; this places it once the map is in.
     std::optional<Net::FCharacterSpawn> pendingSpawn;
-    Net::FExtractState extract{};
-    bool extracting = false;
 
     // A Master survivor's sortie changed: remember it for the next checkpoint.
     void RecordOutcome(FClient& client, Master::EOutcome outcome)
@@ -285,9 +244,6 @@ struct NextDayzGameInstance::FNetSession : Net::FClientSession
         if (outcome != Master::EOutcome::Dead) c.inventory = InventoryAsStacks(client.inventory);
         outcomes.push_back(std::move(c));
     }
-
-    uint32_t fixes = 0;
-    uint32_t myHits = 0;          // damage notices for our own rounds
 
     // --- statistics (the network panel and the server's periodic log line) ---
     struct FStats
@@ -529,6 +485,7 @@ void NextDayzGameInstance::StartNetwork()
         return;
     }
     net_.reset(new FNetSession());
+    net_->BeginLife(netLife_);
     ApplyLinkSimulation();
     std::string error;
     const auto port = static_cast<uint16_t>(netPortCvar_);
@@ -1100,8 +1057,7 @@ void NextDayzGameInstance::NetPoll()
             world_.zombies.ApplyReplicas({});
             // A new connection is a new survivor on the server: ask for its loot again.
             net.lootRequestedScene = 0;
-            net.lootSyncedScene = 0;
-            net.pendingTakes.clear();
+            net.takeHandles.clear();
             SPDLOG_WARN("[NextDayz][net] {}", net.status);
             if (net.master && (net.lobby == FNetSession::ELobby::Playing || net.lobby == FNetSession::ELobby::Joining))
             {
@@ -1110,11 +1066,15 @@ void NextDayzGameInstance::NetPoll()
             }
             continue;
         }
-        auto packet = Net::FClientSession::Decode(event.payload);
+        // The shared session applies the message to our survivor; what remains here is
+        // showing it: the map, the loot on the ground, the HUD, sound and the other bodies.
+        Net::FClientNews news = net.Receive(event.payload, LocalSurvivorParts(), time_);
+        net.Flush();
+        auto& packet = news.packet;
+        if (!news.applied) continue;
         if (auto* payload = std::get_if<Net::FWelcome>(&packet))
         {
             auto& welcome = *payload;
-            if (!net.ApplyWelcome(welcome)) continue;
             net.status = "online";
             SPDLOG_INFO("[NextDayz][net] joined as survivor {} on '{}', friendly fire {}", welcome.survivorId,
                         welcome.scene, welcome.pvp ? "ON" : "OFF");
@@ -1147,66 +1107,54 @@ void NextDayzGameInstance::NetPoll()
         else if (auto* payload = std::get_if<Net::FLootState>(&packet))
         {
             auto& state = *payload;
-            if (!sceneReady_) continue;
-            // Changes before the full picture are already part of it.
-            if (!state.full && net.lootSyncedScene != geographySceneGeneration_) continue;
+            // Only the map we asked about; a full picture replaces what we rolled ourselves.
+            if (!sceneReady_ || net.lootRequestedScene != geographySceneGeneration_) continue;
             for (const FLootReplica& entry : state.entries) loot_.ApplyReplica(entry, GetEngine());
-            if (state.full)
-            {
-                net.lootSyncedScene = geographySceneGeneration_;
-                SPDLOG_INFO("[NextDayz][net] loot synced: {} entries", state.entries.size());
-            }
+            if (state.full) SPDLOG_INFO("[NextDayz][net] loot synced: {} entries", state.entries.size());
         }
-        else if (auto* payload = std::get_if<Net::FLootGrant>(&packet))
+        else if (std::holds_alternative<Net::FLootGrant>(packet))
         {
-            auto& grant = *payload;
-            const auto it = net.pendingTakes.find(grant.request);
-            if (it == net.pendingTakes.end()) continue;
-            FNetSession::FPendingTake pending = std::move(it->second);
-            net.pendingTakes.erase(it);
-            if (pending.entry.id == validationNetTakeId_) validationNetTakeResult_ = grant.granted ? 1 : 2;
+            const auto& grant = std::get<Net::FLootGrant>(packet);
+            const auto& spot = news.take->spot;
+            const auto handle = net.takeHandles.extract(news.request);
+            if (spot.id == validationNetTakeId_) validationNetTakeResult_ = grant.granted ? 1 : 2;
             if (!grant.granted)
             {
-                loot_.Cancel(pending.handle);
+                if (handle) loot_.Cancel(handle.mapped());
                 Notify("Someone else got there first", 1);
                 continue;
             }
             // It is ours: gone from the ground at once, here and (by the server) everywhere.
-            FLootReplica gone = pending.entry;
+            FLootReplica gone = spot;
             gone.available = false;
             loot_.ApplyReplica(gone, GetEngine());
-            std::vector<FLootStack> left;
-            const std::vector<FLootStack> taken = LootSystem::AddToInventory(
-                grant.contents, inventory_, pending.destination, pending.equipSlot, pending.placement, left);
-            if (!taken.empty())
+            if (!news.taken.empty())
             {
                 SyncClothingVisuals();
                 audio_.Pickup();
-                for (const FLootStack& stack : taken)
+                for (const FLootStack& stack : news.taken)
                 {
                     Notify(stack.count > 1 ? L10n::Message("Picked up {} x{}", ItemDisplayName(stack.itemId), stack.count)
                                            : L10n::Message("Picked up {}", ItemDisplayName(stack.itemId)));
                 }
             }
-            if (!left.empty())
+            if (!news.left.empty())
             {
-                PlacePile(std::move(left), pending.entry.position, pending.entry.yaw);
-                Notify(taken.empty() ? "Not enough space - drop something or find a bigger bag"
-                                     : "No room for the rest - it stays here", 1);
+                Notify(news.taken.empty() ? "Not enough space - drop something or find a bigger bag"
+                                          : "No room for the rest - it stays here", 1);
             }
         }
         else if (auto* payload = std::get_if<Net::FCharacterSpawn>(&packet))
         {
-            auto& spawn = *payload;
-            // Mid map change the survivor is placed once the new map is in.
-            net.pendingSpawn = std::move(spawn);
+            // Gear and body are ours already; mid map change the survivor is placed once the new map is in.
+            netLife_ = net.life;
+            SyncClothingVisuals();
+            net.pendingSpawn = std::move(*payload);
             if (sceneReady_ && campaignMap_ == net.deploy.scene) NetAfterSceneLoaded();
         }
         else if (auto* payload = std::get_if<Net::FExtractState>(&packet))
         {
             auto& state = *payload;
-            net.extract = state;
-            net.extracting = !state.done && !state.broken;
             if (state.broken) Notify("Extraction broken off - stay at the point", 1);
             if (state.done)
             {
@@ -1220,56 +1168,36 @@ void NextDayzGameInstance::NetPoll()
             SPDLOG_INFO("[NextDayz][net] the server says goodbye: {}", farewell.message);
             if (farewell.reason != Net::EFarewell::Extracted) net.lobbyMessage = farewell.message;
         }
-        else if (auto* payload = std::get_if<Net::FSurvivalState>(&packet))
-        {
-            auto& state = *payload;
-            if (state.life != netLife_) continue;
-            survival_.Restore(state.body);
-        }
         else if (auto* payload = std::get_if<Net::FInventoryFix>(&packet))
         {
-            auto& fix = *payload;
-            if (fix.life != netLife_ || !survival_.IsAlive()) continue;
-            ++net.fixes;
-            if (inventory_.Restore(fix.inventory))
-            {
-                weapons_.ResetRuntime();
-                SyncClothingVisuals();
-            }
-            SPDLOG_WARN("[NextDayz][net] the server corrected our inventory: {}", fix.reason);
+            if (news.replaced) SyncClothingVisuals();
+            SPDLOG_WARN("[NextDayz][net] the server corrected our inventory: {}", payload->reason);
             Notify("The server corrected your inventory", 2);
         }
-        else if (const auto* update = std::get_if<Net::FServerReject>(&packet))
+        else if (std::holds_alternative<Net::FServerReject>(packet))
         {
-            net.rejected = update->reason;
             SPDLOG_ERROR("[NextDayz][net] server refused: {}", net.rejected);
         }
-        else if (const auto* update = std::get_if<Net::FServerPvp>(&packet))
+        else if (std::holds_alternative<Net::FServerPvp>(packet))
         {
-            net.pvp = update->enabled;
             Notify(net.pvp ? "Friendly fire is ON" : "Friendly fire is OFF", 1);
         }
         else if (auto* payload = std::get_if<Net::FSnapshot>(&packet))
         {
-            auto& snapshot = *payload;
-            ++net.snapshots;
             ++net.stats.snapshotsThisWindow;
             net.stats.snapshotBytes += event.payload.size();
             ++net.stats.snapshotCount;
-            Net::FClientSession::ReconcileClock(time_, snapshot.time);
-            net.pendingZombies = std::move(snapshot.zombies);
-            for (const auto id : net.SynchronizeRemotes(snapshot.survivors)) net.HideRemote(id, remoteRigs_);
+            net.pendingZombies = std::move(payload->zombies);
+            for (const auto id : news.removed) net.HideRemote(id, remoteRigs_);
         }
-        else if (const auto* update = std::get_if<Net::FPlayerLeft>(&packet))
+        else if (std::holds_alternative<Net::FPlayerLeft>(packet))
         {
-            net.HideRemote(update->id, remoteRigs_);
-            net.remotes.erase(update->id);
+            for (const auto id : news.removed) net.HideRemote(id, remoteRigs_);
         }
         else if (auto* payload = std::get_if<Net::FDamageNotice>(&packet))
         {
             auto& notice = *payload;
             netDamage_.push_back({notice.damage, notice.shooterId == net.survivorId});
-            if (notice.shooterId == net.survivorId) ++net.myHits;
         }
         else if (auto* payload = std::get_if<Net::FSurvivorStrike>(&packet))
         {
@@ -1444,15 +1372,12 @@ void NextDayzGameInstance::NetClientSend(float dt)
     {
         return;
     }
-    const FPeerId server = net.host.ServerPeer();
     if (sceneReady_ && net.lootRequestedScene != geographySceneGeneration_)
     {
         // A freshly loaded map: the server's loot replaces our own roll of it.
         net.lootRequestedScene = geographySceneGeneration_;
-        net.pendingTakes.clear();
-        FNetWriter writer;
-        Net::WriteLootSync(writer);
-        net.host.Send(server, writer.Bytes(), EDelivery::Reliable);
+        net.takeHandles.clear();
+        net.RequestLoot();
     }
     if (net.ShouldSendPresence(dt))
     {
@@ -1461,27 +1386,18 @@ void NextDayzGameInstance::NetClientSend(float dt)
         state.presence.id = net.survivorId;
         state.presentation = LocalPresentation();
         state.clothing = inventory_.EquippedClothing();
-        FNetWriter writer;
-        Net::Write(writer, state);
-        net.host.Send(server, writer.Bytes(), EDelivery::Unreliable);
+        net.Queue(state, false);
     }
     // What we carry, whenever it changed (the server's ledger checks it).
-    if (net.ShouldSyncInventory(dt, sceneReady_ && survival_.IsAlive() && net.pendingTakes.empty()))
-    {
-        weapons_.CopyMagazinesTo(inventory_);
-        FNetWriter writer;
-        if (net.WriteInventoryIfChanged(writer, netLife_, inventory_.Capture()))
-            net.host.Send(server, writer.Bytes(), EDelivery::Reliable);
-    }
-    // Our shots and footfalls are what the server's infected hear.
+    net.SyncInventory(dt, sceneReady_, LocalSurvivorParts());
+    // Our shots and swings are what the server's infected hear.
     for (const FNoiseEvent& noise : world_.noise.Events())
     {
         if (noise.sequence <= net.lastNoiseSequence) continue;
         net.lastNoiseSequence = noise.sequence;
-        FNetWriter writer;
-        Net::Write(writer, Net::FNoise{noise.position, noise.radius, noise.strength, noise.type});
-        net.host.Send(server, writer.Bytes(), EDelivery::Reliable);
+        net.Queue(Net::FNoise{noise.position, noise.radius, noise.strength, noise.type});
     }
+    net.Flush();
 }
 
 void NextDayzGameInstance::TickServerLoot(float dt)
@@ -1520,12 +1436,10 @@ void NextDayzGameInstance::NetRequestTake(const FLootHandle& handle, FContainerI
     }
     FNetSession& net = *net_;
     const FLootEntry& entry = loot_.Entries()[handle.index];
-    const uint32_t request = net.nextTakeRequest++;
-    net.pendingTakes[request] = {handle, {entry.persistentId, entry.source, entry.worldPos, entry.yaw, true, entry.contents},
-                                 destination, equipSlot, placement};
-    FNetWriter writer;
-    Net::Write(writer, Net::FLootTake{request, entry.persistentId});
-    net.host.Send(net.host.ServerPeer(), writer.Bytes(), EDelivery::Reliable);
+    const uint32_t request = net.RequestTake({entry.persistentId, entry.source, entry.worldPos, entry.yaw, true, entry.contents},
+                                             {destination, equipSlot, placement});
+    net.takeHandles[request] = handle;
+    net.Flush();
 }
 
 bool NextDayzGameInstance::PlacePile(std::vector<FLootStack> contents, const glm::vec3& position, float yaw)
@@ -1538,30 +1452,23 @@ bool NextDayzGameInstance::PlacePile(std::vector<FLootStack> contents, const glm
     {
         return false;
     }
-    FNetWriter writer;
-    Net::Write(writer, Net::FLootDrop{position, yaw, std::move(contents)});
-    return net_->host.Send(net_->host.ServerPeer(), writer.Bytes(), EDelivery::Reliable);
+    net_->Queue(Net::FLootDrop{position, yaw, std::move(contents)});
+    net_->Flush();
+    return true;
 }
 
 void NextDayzGameInstance::NetDropOnDeath()
 {
-    if (netDeathDropped_)
+    if (net_ && net_->ReportDeath(LocalSurvivorParts()))
     {
-        return;
+        net_->Flush();
+        SyncClothingVisuals();
     }
-    netDeathDropped_ = true;
-    if (!net_ || net_->survivorId == 0)
-    {
-        return;
-    }
-    // The server drops the body from its own ledger; we only let go of it here.
-    FNetWriter writer;
-    Net::Write(writer, Net::FInventorySync{netLife_, false, {}});
-    net_->host.Send(net_->host.ServerPeer(), writer.Bytes(), EDelivery::Reliable);
-    net_->lastInventorySync.clear();
-    inventory_.Clear();
-    weapons_.ResetRuntime();
-    SyncClothingVisuals();
+}
+
+void NextDayzGameInstance::NetBeginLife()
+{
+    if (net_) net_->BeginLife(netLife_);
 }
 
 void NextDayzGameInstance::NetSurvivalAction(uint8_t action, FItemInstanceId instanceId, float amount)
@@ -1588,47 +1495,18 @@ void NextDayzGameInstance::NetSendWeaponHit(const FWeaponHitEvent& hit)
 
 void NextDayzGameInstance::NetCheckPvp(const FWeaponTraceEvent& trace)
 {
-    if (!net_ || !net_->pvp || net_->survivorId == 0)
-    {
-        return;
-    }
     const FWeaponDef* definition = FindWeaponDef(weapons_.ActiveWeaponId());
-    if (!definition)
+    const auto hit = net_ && definition ? net_->FindPvpHit(trace, *definition) : std::nullopt;
+    if (!hit)
     {
         return;
     }
-    // The round stops at whatever it hit first: the world or an infected.
-    const float reach = glm::distance(trace.origin, trace.endPoint);
-    const glm::vec3 end = trace.origin + trace.direction * reach;
-    uint32_t victim = 0;
-    float bestAlong = std::numeric_limits<float>::max();
-    glm::vec3 point{};
-    for (const auto& [id, remote] : net_->remotes)
-    {
-        if (!remote.alive) continue;
-        float along = 0.0f;
-        const glm::vec3 low = remote.feet + glm::vec3(0.0f, kSurvivorRadius, 0.0f);
-        const glm::vec3 high = remote.feet + glm::vec3(0.0f, 1.75f - kSurvivorRadius, 0.0f);
-        if (SegmentDistance(trace.origin, end, low, high, along) <= kSurvivorRadius && along < bestAlong)
-        {
-            bestAlong = along;
-            victim = id;
-            point = trace.origin + (end - trace.origin) * along;
-        }
-    }
-    if (victim == 0)
-    {
-        return;
-    }
-    const float height = point.y - net_->remotes[victim].feet.y;
-    const float zone = height > 1.45f ? 2.0f : height < 0.9f ? 0.6f : 1.0f;
-    Net::FPvpHit hit{victim, definition->baseDamage * zone * kPvpDamageScale, trace.origin, point};
-    FNetWriter writer;
-    Net::Write(writer, hit);
-    net_->host.Send(net_->host.ServerPeer(), writer.Bytes(), EDelivery::Reliable);
-    effects_.BloodHit(point, trace.direction, -trace.direction, height > 1.45f ? EHitZone::Head : EHitZone::Torso, false);
+    net_->Queue(*hit);
+    net_->Flush();
+    const bool head = hit->point.y - net_->remotes.at(hit->survivorId).feet.y > 1.45f;
+    effects_.BloodHit(hit->point, trace.direction, -trace.direction, head ? EHitZone::Head : EHitZone::Torso, false);
     hitMarkerKill_ = false;
-    hitMarkerHead_ = height > 1.45f;
+    hitMarkerHead_ = head;
     hitMarkerSeconds_ = 0.12f;
 }
 
@@ -1720,12 +1598,12 @@ void NextDayzGameInstance::RegisterNetQueries(Runtime::Agent::FAgentQueryRegistr
     reg.Add("netClients", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->clients.size() : 0); });
     reg.Add("netLootSynced", [this]() -> FAgentQueryValue
     {
-        return net_ && net_->lootSyncedScene != 0 && net_->lootSyncedScene == geographySceneGeneration_;
+        return net_ && net_->lootSynced && net_->lootRequestedScene == geographySceneGeneration_;
     });
     reg.Add("netPendingTakes", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->pendingTakes.size() : 0); });
     reg.Add("netTakeResult", [this]() -> FAgentQueryValue { return int64_t(validationNetTakeResult_); });
     reg.Add("netInventoryFixes", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->fixes : 0); });
-    reg.Add("netMyHits", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->myHits : 0); });
+    reg.Add("netMyHits", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->hits : 0); });
     reg.Add("netLobby", [this]() -> FAgentQueryValue
     {
         if (!net_) return std::string("off");
@@ -2167,7 +2045,7 @@ void NextDayzGameInstance::DrawNetPanel()
         ImGui::Text("RTT %u ms   loss %.1f%%", peerStats.roundTripMs, peerStats.packetLoss * 100.0f);
         ImGui::Text("Snapshots %u/s   avg %u B", net.stats.snapshotsPerSecond, net.stats.snapshotAvgShown);
         ImGui::Text("Others %zu   infected %d", net.remotes.size(), world_.zombies.ActiveCount());
-        ImGui::Text("My hits %u   inventory fixes %u", net.myHits, net.fixes);
+        ImGui::Text("My hits %u   inventory fixes %u", net.hits, net.fixes);
     }
     ImGui::Separator();
     ImGui::Text("In %.1f KB/s   out %.1f KB/s", net.stats.inKBps, net.stats.outKBps);
@@ -2202,13 +2080,10 @@ void NextDayzGameInstance::NetReturnToLobby(std::string message)
     net.host.Shutdown();
     net.ResetConnection();
     net.ClearRemotes(remoteRigs_);
-    net.pendingTakes.clear();
+    net.takeHandles.clear();
     net.pendingSpawn.reset();
     net.connectWhenReady = false;
-    net.extracting = false;
     net.lootRequestedScene = 0;
-    net.lootSyncedScene = 0;
-    net.lastInventorySync.clear();
     world_.zombies.ApplyReplicas({});
     inventory_.Clear();
     weapons_.ResetRuntime();
@@ -2241,10 +2116,8 @@ bool NextDayzGameInstance::NetRequestExtract()
         Notify("No extraction point here - find a marked [H] helipad", 1);
         return false;
     }
-    FNetWriter writer;
-    Net::WriteExtract(writer, !net_->extracting);
-    net_->host.Send(net_->host.ServerPeer(), writer.Bytes(), EDelivery::Reliable);
-    net_->extracting = !net_->extracting;
+    net_->RequestExtract(!net_->extracting);
+    net_->Flush();
     Notify(net_->extracting ? "Hold the extraction point..." : "Extraction cancelled", 0);
     return true;
 }
@@ -2255,27 +2128,12 @@ void NextDayzGameInstance::NetAfterSceneLoaded()
     {
         return;
     }
-    // Our survivor as the Master kept them: gear, body, place.
+    // Our survivor as the Master kept them: the session restored gear and body
+    // when the message came; here it is put where it stood.
     Net::FCharacterSpawn spawn = std::move(*net_->pendingSpawn);
     net_->pendingSpawn.reset();
-    netLife_ = spawn.life;
-    netDeathDropped_ = false;
-    if (inventory_.Restore(spawn.inventory))
-    {
-        weapons_.ResetRuntime();
-        for (const FItemInstance& item : inventory_.Instances())
-        {
-            if (FindWeaponDef(item.defId))
-            {
-                weapons_.EquipInstance(0, inventory_, item.instanceId);
-                break;
-            }
-        }
-    }
-    survival_.Restore(spawn.body);
     TeleportPlayer(spawn.feet - glm::vec3(0.0f, 1.0f, 0.0f));
     SyncClothingVisuals();
-    net_->lastInventorySync.clear();
     net_->lobby = FNetSession::ELobby::Playing;
     net_->lobbyMessage.clear();
     paused_ = false;
@@ -2382,13 +2240,8 @@ void NextDayzGameInstance::TickLobby(float dt)
             }
         std::vector<FLootStack> leftover;
         inventory_.Restore(BuildInventory(stacks, !net.profile.character, leftover));
-        weapons_.ResetRuntime();
-        int slot = 0;
-        for (const auto& item : inventory_.Instances())
-            if (FindWeaponDef(item.defId) && slot < kWeaponSlotCount)
-            {
-                if (weapons_.EquipInstance(slot, inventory_, item.instanceId)) ++slot;
-            }
+        // Shown as the survivor will spawn with it.
+        Net::FClientSession::EquipCarried(weapons_, inventory_);
         SyncClothingVisuals();
     }
     // Automation: deploy once, with everything in storage, as soon as the profile is in.
@@ -2589,6 +2442,7 @@ bool NextDayzGameInstance::PlacePile(std::vector<NextDayz::FLootStack> contents,
 }
 void NextDayzGameInstance::TickServerLoot(float) {}
 void NextDayzGameInstance::NetDropOnDeath() {}
+void NextDayzGameInstance::NetBeginLife() {}
 void NextDayzGameInstance::NetSurvivalAction(uint8_t, NextDayz::FItemInstanceId, float) {}
 bool NextDayzGameInstance::NetInLobby() const { return false; }
 bool NextDayzGameInstance::DrawLobby() { return false; }

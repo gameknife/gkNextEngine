@@ -36,6 +36,7 @@
 #include "Application/Game/NextDayz/World/Campaign.hpp"
 #include "Application/Game/NextDayz/World/ExpeditionMaps.hpp"
 #include "Application/Game/NextDayz/World/RescueHelicopter.hpp"
+#include "Application/Game/NextDayz/Net/ClientSession.hpp"
 #include "Application/Game/NextDayz/Net/ServerDirectory.hpp"
 
 #include <future>
@@ -256,10 +257,13 @@ private:
     void TickServerLoot(float dt);
     // Client death: everything carried falls where the survivor fell (once per life).
     void NetDropOnDeath();
+    // A life this client started itself: the server's ledger starts afresh with it.
+    void NetBeginLife();
+    // The parts of our survivor the shared client session works on.
+    NextDayz::Net::FLocalSurvivor LocalSurvivorParts();
     // Client: the server keeps the body; these tell it what we did to it.
     void NetSurvivalAction(uint8_t action, NextDayz::FItemInstanceId instanceId = 0, float amount = 0.0f);
     bool NetOwnsSurvival() const { return netMode_ == ENetMode::Client; }
-    bool netDeathDropped_ = false;
     // This survivor's life number: the server's item ledger starts afresh with each.
     uint32_t netLife_ = 0;
     int32_t validationNetTake_ = 0;

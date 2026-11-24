@@ -162,6 +162,9 @@ export class World {
         });
         if (this.aiming) flags |= 1 << 8;
         if (this.firing) flags |= 1 << 12;
+        // Without pointer lock a panel, the map or a menu is open: the survivor stands still
+        // and lowers the weapon, as on desktop.
+        if (!this.locked) flags |= 1 << 19;
         send(flags, this.lookX * settings.sensitivity, this.lookY * settings.sensitivity);
         this.lookX = this.lookY = this.actions = 0;
     }

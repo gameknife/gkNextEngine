@@ -54,6 +54,11 @@ target_link_libraries(NextDayzCoreRules PRIVATE NextDayzCore)
 target_link_options(NextDayzCoreRules PRIVATE -fexceptions "-sENVIRONMENT=node")
 set_target_properties(NextDayzCoreRules PROPERTIES SUFFIX ".cjs")
 
+add_executable(NextDayzClientReplay ClientReplayProbe.cpp)
+target_link_libraries(NextDayzClientReplay PRIVATE NextDayzCore)
+target_link_options(NextDayzClientReplay PRIVATE -fexceptions "-sENVIRONMENT=node")
+set_target_properties(NextDayzClientReplay PROPERTIES SUFFIX ".cjs")
+
 
 add_executable(NextDayzRigPoseProbe RigPoseProbe.cpp)
 target_link_libraries(NextDayzRigPoseProbe PRIVATE NextDayzCore)

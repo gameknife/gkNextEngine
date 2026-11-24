@@ -6,6 +6,7 @@ add_library(NextDayzCore STATIC
     "${nextdayz}/Data/LootTables.cpp"
     "${nextdayz}/Inventory/Inventory.cpp"
     "${nextdayz}/Inventory/LootTransfer.cpp"
+    "${nextdayz}/Net/ClientPlay.cpp"
     "${nextdayz}/Net/ClientSession.cpp"
     "${nextdayz}/Net/MasterApi.cpp"
     "${nextdayz}/Net/NetProtocol.cpp"

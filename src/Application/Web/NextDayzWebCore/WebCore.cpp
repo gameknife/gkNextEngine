@@ -25,7 +25,6 @@ namespace
     using namespace NextDayz;
     using namespace NextDayz::Net;
     using Json = nlohmann::json;
-    using NextNet::FNetWriter;
 
     auto V3(const glm::vec3& vector) { return std::array{vector.x, vector.y, vector.z}; }
 
@@ -111,25 +110,7 @@ namespace
         Jump = 1u << 9, Crouch = 1u << 10, ToggleView = 1u << 11,
         Trigger = 1u << 12, TriggerPress = 1u << 13, Reload = 1u << 14,
         SlotOne = 1u << 15, SlotTwo = 1u << 16, SlotThree = 1u << 17, PreviousWeapon = 1u << 18,
-    };
-
-    struct FLootDestination
-    {
-        FContainerId container = 0;
-        EEquipSlot slot = EEquipSlot::None;
-        std::optional<FGridPlacement> placement;
-    };
-
-    struct FPendingLoot
-    {
-        FLootReplica spot;
-        FLootDestination destination;
-    };
-
-    struct FPacket
-    {
-        bool reliable;
-        std::vector<std::byte> bytes;
+        Menu = 1u << 19,   // the pointer is free: a panel, the map or a menu is open
     };
 
     template<class Graph>
@@ -181,6 +162,7 @@ namespace
 
         void Controls(uint32_t flags, float movementX, float movementY)
         {
+            menuOpen_ = (flags & Menu) != 0;
             if (!InWorld() || !physics_ || !alive_) return;
             if (std::isfinite(movementX) && std::isfinite(movementY))
                 player_.OnLook(std::clamp(movementX, -1800.f, 1800.f), std::clamp(movementY, -1800.f, 1800.f));
@@ -193,7 +175,7 @@ namespace
             if (aim != aimHeld_)
             {
                 aimHeld_ = aim;
-                player_.SetAimButton(aim, weapons_.HasActiveWeapon() && !weapons_.ActiveIsMelee() && !actions_.IsActive());
+                FClientSession::PressAim(aim, player_, Survivor());
             }
             if (flags & (MoveForward | MoveBack | MoveLeft | MoveRight | Jump)) actions_.RequestCancel();
             if (flags & Jump && !actions_.IsActive()) player_.QueueContextualJump(rayQuery_);
@@ -203,8 +185,13 @@ namespace
             for (int slot = 0; slot < kWeaponSlotCount; ++slot)
                 if (flags & (SlotOne << slot)) weapons_.SwitchSlot(slot);
             if (flags & PreviousWeapon) weapons_.SwitchPrevious();
-            triggerHeld_ = (flags & Trigger) != 0;
-            triggerPress_ = triggerPress_ || (flags & TriggerPress) != 0;
+            // The button as desktop sees it: down on the press, up on the release. A click
+            // shorter than a frame is let go only after the weapon has seen it.
+            const bool trigger = (flags & Trigger) != 0;
+            if (flags & TriggerPress) FClientSession::PressTrigger(true, player_, Survivor());
+            if (trigger) releaseTrigger_ = false;
+            else if (triggerHeld_ || (flags & TriggerPress)) releaseTrigger_ = true;
+            triggerHeld_ = trigger;
         }
 
         void Command(const Json& command)
@@ -272,7 +259,7 @@ namespace
                 if (mapReady_ && session_.deploy.ticket.empty() && !spawned_)
                 {
                     feet_ = ReadVec(command.at("spawn"));
-                    life_ = 1;
+                    session_.BeginLife(1);
                     body_.Reset();
                     spawned_ = true;
                 }
@@ -292,7 +279,8 @@ namespace
                 aimHeld_ = false;
                 actions_.Reset();
                 actionLoot_.clear();
-                triggerHeld_ = triggerPress_ = false;
+                triggerHeld_ = releaseTrigger_ = false;
+                weapons_.SetTriggerDown(false);
             }
             else if (action == "reviewCrowd" && InWorld() && physics_)
             {
@@ -315,7 +303,7 @@ namespace
                 }
             }
             else if (action == "target" && InWorld() && !physics_) target_ = ReadVec(command.at("position"));
-            else if ((action == "equip" || action == "unequip") && InWorld() && pendingTakes_.empty())
+            else if ((action == "equip" || action == "unequip") && InWorld() && session_.pendingTakes.empty())
             {
                 const auto instance = command.at("instance").get<FItemInstanceId>();
                 const auto* item = inventory_.FindInstance(instance);
@@ -347,7 +335,7 @@ namespace
                     actions_.BeginUse(EPlayerAction::DrinkFromWell);
             }
             else if (action == "cancelAction" && InWorld()) actions_.RequestCancel();
-            else if (action == "inventory" && InWorld() && alive_ && pendingTakes_.empty())
+            else if (action == "inventory" && InWorld() && alive_ && session_.pendingTakes.empty())
                 EditInventory(command);
             else if (action == "take" && InWorld())
             {
@@ -365,8 +353,8 @@ namespace
                     BeginTake(id, destination);
                 }
             }
-            else if (action == "drop" && InWorld() && pendingTakes_.empty()) Drop(command.at("instance").get<FItemInstanceId>());
-            else if (action == "use" && InWorld() && pendingTakes_.empty())
+            else if (action == "drop" && InWorld() && session_.pendingTakes.empty()) Drop(command.at("instance").get<FItemInstanceId>());
+            else if (action == "use" && InWorld() && session_.pendingTakes.empty())
             {
                 const auto item = command.at("instance").get<FItemInstanceId>();
                 if (!physics_) UseItem(item);
@@ -379,18 +367,22 @@ namespace
             }
             else if (action == "extract" && InWorld())
             {
-                FNetWriter writer;
                 const bool begin = command.value("begin", true);
                 if (physics_ && begin && (!alive_ || !Near(extractions_, feet_, 12.f))) return;
-                WriteExtract(writer, begin);
-                Push(writer, true);
+                session_.RequestExtract(begin);
             }
         }
 
         void Receive(std::span<const std::byte> bytes)
         {
-            auto packet = FClientSession::Decode(bytes);
-            std::visit([this](auto& message) { Apply(message); }, packet);
+            // The shared session applies it to the survivor; here it is only shown.
+            auto news = session_.Receive(bytes, Survivor(), time_);
+            if (!news.applied)
+            {
+                if (std::holds_alternative<FWelcome>(news.packet)) RefuseServer();
+                return;
+            }
+            std::visit([this, &news](auto& message) { Show(message, news); }, news.packet);
         }
 
         void Advance(float dt)
@@ -402,10 +394,12 @@ namespace
                 if (retrySeconds_ <= 0.f) RequestDeploy();
             }
             if (!InWorld()) return;
+            if (!body_.IsAlive()) session_.ReportDeath(Survivor());
 
             time_.Advance(dt);
             session_.StepRemotes(dt);
-            if (extract_.secondsLeft > 0.f) extract_.secondsLeft = std::max(.01f, extract_.secondsLeft - dt);
+            auto& extract = session_.extract;
+            if (extract.secondsLeft > 0.f) extract.secondsLeft = std::max(.01f, extract.secondsLeft - dt);
             zombieStep_ += dt;
             hitMarker_ = std::max(0.f, hitMarker_ - dt);
             hurtMarker_ = std::max(0.f, hurtMarker_ - dt);
@@ -415,24 +409,19 @@ namespace
             {
                 constexpr float stepSeconds = 1.f / 60.f;
                 AdvanceActions(dt);
-                player_.SetMovementLocked(actions_.IsActive());
                 physicsTime_ += dt;
                 while (physicsTime_ >= stepSeconds)
                 {
                     if (alive_)
                     {
-                        const bool attacking = !actions_.IsActive() && !player_.IsTraversing() &&
-                            (triggerHeld_ || triggerPress_);
-                        weapons_.SetTriggerDown(attacking);
-                        player_.SetMeleeEquipped(weapons_.ActiveIsMelee());
-                        player_.SetSprintBlocked((attacking && weapons_.HasActiveWeapon()) || weapons_.IsSwinging() ||
-                                                 weapons_.MeleeInputPending() || body_.IsWeak());
+                        // Desktop's frame order, one fixed step at a time.
+                        FClientSession::LockFrame(player_, Survivor(), menuOpen_);
                         player_.Update(stepSeconds, rayQuery_);
                         weapons_.Update(stepSeconds, player_, inventory_, rayQuery_);
                         weapons_.CopyMagazinesTo(inventory_);
                         if (weapons_.IsReloading() || weapons_.IsSwitching()) player_.CancelAiming();
                         ConsumeWeaponEvents(stepSeconds);
-                        triggerPress_ = false;
+                        if (std::exchange(releaseTrigger_, false)) FClientSession::PressTrigger(false, player_, Survivor());
                     }
                     physicsTime_ -= stepSeconds;
                 }
@@ -476,12 +465,7 @@ namespace
             }
 
             AdvancePoses(dt);
-
-            if (session_.ShouldSyncInventory(dt, alive_ && pendingTakes_.empty()))
-            {
-                FNetWriter writer;
-                if (session_.WriteInventoryIfChanged(writer, life_, inventory_.Capture())) Push(writer, true);
-            }
+            session_.SyncInventory(dt, true, Survivor());
         }
 
         std::string Frame() const
@@ -523,15 +507,16 @@ namespace
             return Json{
                 {"phase", Phase()}, {"message", message_}, {"scene", scene_}, {"id", session_.survivorId},
                 {"feet", V3(feet_)}, {"eye", V3(Eye())}, {"forward", V3(Forward())}, {"yaw", yaw_},
-                {"combat", {{"shots", weapons_.LastShotSequence()}, {"hits", hits_}, {"kills", kills_},
+                {"combat", {{"shots", weapons_.LastShotSequence()}, {"hits", session_.hits}, {"kills", session_.kills},
                     {"hitMarker", hitMarker_}, {"hurt", hurtMarker_}, {"headshot", headshot_}, {"kill", killMarker_},
                     {"weapon", weapon ? weapon->displayName : std::string_view{}}, {"magazine", weapons_.AmmoInMag()},
                     {"reserve", weapons_.AmmoReserve(inventory_)}, {"capacity", weapons_.MagazineCapacity()},
                     {"action", static_cast<int>(weapons_.PresentationAction())}, {"progress", weapons_.PresentationActionTime()}}},
-                {"snapshots", snapshots_}, {"remotes", remotes}, {"zombies", zombies}, {"camera", camera}, {"pose", pose}, {"lootCount", loot_.size()}, {"lootReady", lootReady_},
-                {"moving", target_.has_value()}, {"alive", alive_}, {"pvp", session_.pvp}, {"fixes", fixes_},
-                {"takes", takes_}, {"denials", denials_}, {"drops", drops_}, {"lastFix", lastFix_}, {"extracted", extracted_},
-                {"extractSeconds", extract_.secondsLeft}, {"extractBroken", extract_.broken},
+                {"snapshots", session_.snapshots}, {"remotes", remotes}, {"zombies", zombies}, {"camera", camera}, {"pose", pose},
+                {"lootCount", loot_.size()}, {"lootReady", session_.lootSynced}, {"moving", target_.has_value()}, {"alive", alive_},
+                {"pvp", session_.pvp}, {"fixes", session_.fixes}, {"takes", session_.takes}, {"denials", session_.denials},
+                {"drops", drops_}, {"lastFix", session_.lastFix}, {"extracted", session_.extracted},
+                {"extractSeconds", session_.extract.secondsLeft}, {"extractBroken", session_.extract.broken},
                 {"nearExtraction", Near(extractions_, feet_, 12.f)}, {"nearWell", Near(wells_, Eye(), config_.Loot.ReachMeters)},
                 {"body", {{"health", body.health}, {"hunger", body.hunger}, {"hydration", body.hydration},
                     {"bleeding", body.bleedingWounds}, {"cold", body.cold}, {"healing", body.healing}, {"cause", body.lastDamageSource}}},
@@ -634,6 +619,7 @@ namespace
 
         bool PopPacket()
         {
+            for (auto& packet : std::exchange(session_.outbox, {})) packets_.push_back(std::move(packet));
             if (packets_.empty()) return false;
             outgoing = std::move(packets_.front());
             packets_.pop_front();
@@ -641,10 +627,11 @@ namespace
         }
 
         std::string result;
-        FPacket outgoing;
+        FOutgoing outgoing;
 
     private:
         bool InWorld() const { return session_.lobby == FClientSession::ELobby::Playing && session_.connected; }
+        FLocalSurvivor Survivor() { return {inventory_, weapons_, body_, actions_}; }
         glm::vec3 Eye() const
         {
             return physics_ && InWorld() ? player_.EyePosition() : feet_ + glm::vec3(0.f, config_.Player.StandingEyeHeight, 0.f);
@@ -682,21 +669,6 @@ namespace
             return state;
         }
 
-        void RestoreWeapons()
-        {
-            weapons_.ResetRuntime();
-            int first = -1;
-            for (const auto& item : inventory_.Instances())
-            {
-                const auto* info = FindItemDef(item.defId);
-                if (!info || !IsWieldable(*info)) continue;
-                const auto slot = PreferredWeaponSlot(*info);
-                if (!weapons_.SlotInstance(slot) && weapons_.EquipInstance(slot, inventory_, item.instanceId) && first < 0)
-                    first = slot;
-            }
-            weapons_.RestoreSelection(first, -1);
-        }
-
         std::optional<FHitboxHit> TraceInfected(const glm::vec3& origin, const glm::vec3& direction, float distance) const
         {
             std::optional<FHitboxHit> nearest;
@@ -727,25 +699,11 @@ namespace
         void CheckPvp(const FWeaponTraceEvent& trace)
         {
             const auto* definition = weapons_.ActiveWeapon();
-            if (!session_.pvp || !definition) return;
-            float distance = glm::distance(trace.origin, trace.endPoint);
-            uint32_t victim = 0;
-            for (const auto& [id, survivor] : session_.remotes)
+            if (!definition) return;
+            if (const auto hit = session_.FindPvpHit(trace, *definition))
             {
-                if (!survivor.alive) continue;
-                constexpr float radius = .32f;
-                const auto hit = RayCapsuleDistance(trace.origin, trace.direction,
-                    {survivor.feet + glm::vec3(0.f, radius, 0.f),
-                     survivor.feet + glm::vec3(0.f, 1.75f - radius, 0.f), radius});
-                if (!hit || *hit > distance) continue;
-                victim = id;
-                distance = *hit;
+                Send(*hit);
             }
-            if (!victim) return;
-            const auto point = trace.origin + trace.direction * distance;
-            const float height = point.y - session_.remotes.at(victim).feet.y;
-            const float zone = height > 1.45f ? 2.f : height < .9f ? .6f : 1.f;
-            Send(FPvpHit{victim, definition->baseDamage * zone * .6f, trace.origin, point});
         }
 
         void Present(std::string_view kind, const glm::vec3& position, Json data = Json::object())
@@ -776,14 +734,9 @@ namespace
             }
             for (const auto& shot : weapons_.ConsumeShotEvents())
             {
-                const auto* definition = FindWeaponDef(shot.weaponId);
-                if (!definition) continue;
-                const auto family = definition->family;
-                const ENoiseType kind = shot.melee ? ENoiseType::Melee : family == EWeaponFamily::Shotgun
-                    ? ENoiseType::Shotgun : family == EWeaponFamily::Sidearm || family == EWeaponFamily::Smg
-                    ? ENoiseType::Pistol : ENoiseType::Rifle;
-                Send(FNoise{player_.Position(), definition->noiseRadius * (shot.suppressed ? .25f : 1.f),
-                    shot.melee ? .5f : 1.f, kind}, false);
+                const auto noise = FClientSession::ShotNoise(shot, player_.Position());
+                if (!noise) continue;
+                Send(*noise);
                 const auto up = glm::normalize(glm::cross(player_.Right(), player_.Forward()));
                 const auto muzzle = player_.EyePosition() + player_.Forward() * .58f + player_.Right() * .13f - up * .09f;
                 Present(shot.melee ? "melee" : "shot", muzzle,
@@ -939,6 +892,12 @@ namespace
             }
         }
 
+        void RefuseServer()
+        {
+            message_ = "The DS returned a different map or protocol";
+            effects_.push_back({{"type", "disconnect"}});
+        }
+
         void CloseConnection()
         {
             session_.ResetConnection();
@@ -946,7 +905,7 @@ namespace
             session_.rejected.clear();
             scene_.clear();
             expectedScene_.clear();
-            mapReady_ = spawned_ = lootReady_ = alive_ = false;
+            mapReady_ = spawned_ = alive_ = false;
             session_.remotes.clear();
             zombies_.clear();
             reviewCrowd_.clear();
@@ -960,19 +919,15 @@ namespace
             actionLoot_.clear();
             physics_.reset();
             physicsTime_ = 0.f;
-            aimHeld_ = false;
-            triggerHeld_ = triggerPress_ = false;
+            aimHeld_ = menuOpen_ = false;
+            triggerHeld_ = releaseTrigger_ = false;
             weapons_.ResetRuntime();
-            hits_ = kills_ = 0;
             viewKick_ = hitMarker_ = hurtMarker_ = 0.f;
             lastWeaponAction_ = EWeaponPresentationAction::None;
             loot_.clear();
-            pendingTakes_.clear();
             packets_.clear();
             target_.reset();
-            extract_ = {};
             inventory_.Clear();
-            snapshots_ = 0;
             if (session_.token.empty()) session_.lobby = FClientSession::ELobby::Login;
             else RequestProfile();
         }
@@ -991,24 +946,11 @@ namespace
             }
             session_.lobby = FClientSession::ELobby::Playing;
             alive_ = body_.IsAlive();
-            FNetWriter writer;
-            WriteLootSync(writer);
-            Push(writer, true);
+            session_.RequestLoot();
         }
 
         template <class Message>
-        void Send(const Message& message, bool reliable = true)
-        {
-            FNetWriter writer;
-            Write(writer, message);
-            Push(writer, reliable);
-        }
-
-        void Push(const FNetWriter& writer, bool reliable)
-        {
-            const auto bytes = writer.Bytes();
-            packets_.push_back({reliable, {bytes.begin(), bytes.end()}});
-        }
+        void Send(const Message& message, bool reliable = true) { session_.Queue(message, reliable); }
 
         static bool Near(const std::vector<glm::vec3>& sites, const glm::vec3& point, float reach)
         {
@@ -1039,7 +981,7 @@ namespace
         void BeginTake(const std::string& id, const FLootDestination& destination = {})
         {
             const auto entry = loot_.find(id);
-            if (player_.IsTraversing() || !pendingTakes_.empty() || entry == loot_.end() || !entry->second.available ||
+            if (player_.IsTraversing() || !session_.pendingTakes.empty() || entry == loot_.end() || !entry->second.available ||
                 glm::distance(entry->second.position, Eye()) > config_.Loot.ReachMeters) return;
             if (actions_.BeginLoot({0, 0, 1}))
             {
@@ -1132,12 +1074,10 @@ namespace
 
         void Take(const std::string& id, const FLootDestination& destination = {})
         {
-            if (!pendingTakes_.empty()) return;
+            if (!session_.pendingTakes.empty()) return;
             const auto entry = loot_.find(id);
             if (entry == loot_.end() || !entry->second.available) return;
-            const auto request = nextTake_++;
-            pendingTakes_.emplace(request, FPendingLoot{entry->second, destination});
-            Send(FLootTake{request, id});
+            session_.RequestTake(entry->second, destination);
         }
 
         void Drop(FItemInstanceId instance)
@@ -1149,110 +1089,51 @@ namespace
             if (physics_) Present("drop", feet_);
         }
 
-        template<class Message> void Apply(Message&) {}
+        template<class Message> void Show(Message&, const FClientNews&) {}
 
-        void Apply(FWelcome& welcome)
+        void Show(FWelcome& welcome, const FClientNews&)
         {
-            if (!session_.ApplyWelcome(welcome) || (!expectedScene_.empty() && expectedScene_ != welcome.scene))
-            {
-                message_ = "The DS returned a different map or protocol";
-                effects_.push_back({{"type", "disconnect"}});
-                return;
-            }
+            if (!expectedScene_.empty() && expectedScene_ != welcome.scene) return RefuseServer();
             scene_ = welcome.scene;
             effects_.push_back({{"type", "map"}, {"scene", scene_}});
         }
 
-        void Apply(FCharacterSpawn& spawn)
+        void Show(FCharacterSpawn& spawn, const FClientNews&)
         {
-            if (!inventory_.Restore(spawn.inventory)) return;
-            RestoreWeapons();
-            body_.Restore(spawn.body);
-            life_ = spawn.life;
             feet_ = spawn.feet;
             yaw_ = spawn.yaw;
             spawned_ = true;
-            session_.lastInventorySync.clear();
             TryEnter();
         }
 
-        void Apply(FSnapshot& snapshot)
+        void Show(FSnapshot& snapshot, const FClientNews&)
         {
-            ++snapshots_;
-            if (physics_)
+            if (!physics_) return;
+            zombies_ = std::move(snapshot.zombies);
+            zombieStep_ = 0.f;
+        }
+
+        void Show(FLootState& state, const FClientNews&)
+        {
+            if (state.full) loot_.clear();
+            for (auto& entry : state.entries)
             {
-                zombies_ = std::move(snapshot.zombies);
-                zombieStep_ = 0.f;
+                auto id = entry.id;
+                loot_.insert_or_assign(std::move(id), std::move(entry));
             }
-            FClientSession::ReconcileClock(time_, snapshot.time, snapshots_ == 1);
-            session_.SynchronizeRemotes(snapshot.survivors);
         }
 
-        void Apply(FLootState& state)
+        void Show(FLootGrant& grant, const FClientNews& news)
         {
-            if (state.full)
-            {
-                loot_.clear();
-                lootReady_ = true;
-            }
-            if (lootReady_)
-                for (auto& entry : state.entries)
-                {
-                    auto id = entry.id;
-                    loot_.insert_or_assign(std::move(id), std::move(entry));
-                }
+            if (!grant.granted) return;
+            if (auto found = loot_.find(news.take->spot.id); found != loot_.end()) found->second.available = false;
+            if (!news.taken.empty() && physics_) Present("pickup", Eye());
+            if (!news.left.empty()) message_ = "Item does not fit";
         }
 
-        void Apply(FLootGrant& grant)
-        {
-            const auto pending = pendingTakes_.find(grant.request);
-            if (pending == pendingTakes_.end()) return;
-            if (grant.granted)
-            {
-                const auto& [spot, destination] = pending->second;
-                if (auto found = loot_.find(spot.id); found != loot_.end()) found->second.available = false;
-                std::vector<FLootStack> left;
-                if (!AddLootToInventory(grant.contents, inventory_, destination.container, destination.slot,
-                                        destination.placement, left).empty())
-                {
-                    ++takes_;
-                    if (physics_)
-                    {
-                        Present("pickup", Eye());
-                        for (const auto& item : inventory_.Instances())
-                        {
-                            const auto* def = FindItemDef(item.defId);
-                            if (def && IsWieldable(*def) && !weapons_.SlotInstance(PreferredWeaponSlot(*def)))
-                                weapons_.EquipInstance(PreferredWeaponSlot(*def), inventory_, item.instanceId);
-                        }
-                    }
-                }
-                if (!left.empty())
-                {
-                    Send(FLootDrop{spot.position, spot.yaw, std::move(left)});
-                    message_ = "Item does not fit";
-                }
-            }
-            else ++denials_;
-            pendingTakes_.erase(pending);
-        }
+        void Show(FSurvivalState&, const FClientNews&) { alive_ = body_.IsAlive(); }
 
-        void Apply(FInventoryFix& fix)
-        {
-            if (fix.life != life_) return;
-            ++fixes_;
-            lastFix_ = fix.reason;
-            if (inventory_.Restore(fix.inventory)) RestoreWeapons();
-        }
-
-        void Apply(FSurvivalState& state)
-        {
-            if (state.life != life_) return;
-            body_.Restore(state.body);
-            alive_ = body_.IsAlive();
-        }
-
-        void Apply(FNoise& noise)
+        void Show(FNoise& noise, const FClientNews&)
         {
             if (noise.type == ENoiseType::Melee) Present("melee", noise.position);
             else if (noise.type == ENoiseType::Rifle || noise.type == ENoiseType::Shotgun || noise.type == ENoiseType::Pistol)
@@ -1260,46 +1141,39 @@ namespace
                     {{"weapon", noise.type == ENoiseType::Shotgun ? "shotgun" : noise.type == ENoiseType::Pistol ? "pistol" : "ak"}});
         }
 
-        void Apply(FDamageNotice& notice)
+        void Show(FDamageNotice& notice, const FClientNews&)
         {
             Present("blood", notice.damage.worldPoint, {{"killed", notice.damage.killed}});
             if (notice.shooterId != session_.survivorId) return;
-            ++hits_;
-            if (notice.damage.killed) ++kills_;
             hitMarker_ = .26f;
             killMarker_ = notice.damage.killed;
             headshot_ = notice.damage.hitZone == EHitZone::Head;
             Present(killMarker_ ? "kill" : headshot_ ? "headshot" : "hit", Eye());
         }
 
-        void Apply(FSurvivorStrike& strike)
+        void Show(FSurvivorStrike& strike, const FClientNews&)
         {
             hurtMarker_ = .55f;
             Present("hurt", strike.source);
         }
 
-        void Apply(FPvpHit& hit)
+        void Show(FPvpHit& hit, const FClientNews&)
         {
             hurtMarker_ = .55f;
             Present("hurt", hit.source);
         }
 
-        void Apply(FExtractState& state)
+        void Show(FExtractState& state, const FClientNews&)
         {
-            extract_ = state;
-            if (state.done)
-            {
-                extracted_ = true;
-                message_ = "Extracted. What you carried is in your storage.";
-            }
+            if (state.done) message_ = "Extracted. What you carried is in your storage.";
         }
-        void Apply(FFarewell& farewell)
+
+        void Show(FFarewell& farewell, const FClientNews&)
         {
             if (farewell.reason != EFarewell::Extracted) message_ = farewell.message;
         }
-        void Apply(FServerReject& reject) { message_ = reject.reason; }
-        void Apply(FServerPvp& pvp) { session_.pvp = pvp.enabled; }
-        void Apply(FPlayerLeft& left) { session_.remotes.erase(left.id); }
+
+        void Show(FServerReject& reject, const FClientNews&) { message_ = reject.reason; }
 
         std::unique_ptr<FWebPhysics> physics_;
         PlayerController player_;
@@ -1320,11 +1194,10 @@ namespace
         std::vector<FZombieRuntime> zombies_, reviewCrowd_;
         float zombieStep_ = 0.f;
         float physicsTime_ = 0.f;
-        bool aimHeld_ = false;
-        bool triggerHeld_ = false, triggerPress_ = false;
+        bool aimHeld_ = false, menuOpen_ = false;
+        bool triggerHeld_ = false, releaseTrigger_ = false;
         WeaponRuntime weapons_;
         EWeaponPresentationAction lastWeaponAction_ = EWeaponPresentationAction::None;
-        uint32_t hits_ = 0, kills_ = 0;
         float viewKick_ = 0.f, hitMarker_ = 0.f, hurtMarker_ = 0.f;
         bool killMarker_ = false, headshot_ = false;
         FClientSession session_;
@@ -1334,19 +1207,16 @@ namespace
         Inventory inventory_;
         std::vector<glm::vec3> wells_, extractions_;
         std::map<std::string, FLootReplica> loot_;
-        std::map<uint32_t, FPendingLoot> pendingTakes_;
-        uint32_t nextTake_ = 1;
         std::vector<Master::FBring> bring_;
         Json effects_ = Json::array();
-        std::deque<FPacket> packets_;
-        std::string name_, scene_, expectedScene_, map_, message_, lastFix_;
+        std::deque<FOutgoing> packets_;
+        std::string name_, scene_, expectedScene_, map_, message_;
         glm::vec3 feet_{};
         std::optional<glm::vec3> target_;
         float yaw_ = 0.f;
         float retrySeconds_ = 0.f;
-        uint32_t life_ = 0, snapshots_ = 0, fixes_ = 0, takes_ = 0, drops_ = 0, denials_ = 0;
-        bool mapReady_ = false, spawned_ = false, lootReady_ = false, alive_ = false, extracted_ = false;
-        FExtractState extract_{};
+        uint32_t drops_ = 0;
+        bool mapReady_ = false, spawned_ = false, alive_ = false;
     };
 }
 

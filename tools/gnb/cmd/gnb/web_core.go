@@ -205,24 +205,38 @@ func buildWebCore(cmd *cobra.Command, ctx appContext) error {
 	if err := checkWebCoreIncludes(dir, filepath.Join(ctx.repoRoot, "src")); err != nil {
 		return err
 	}
-	probe, err := webChild(cmd.Context(), dir, nil, nil, cmd.ErrOrStderr(),
-		"node", "NextDayzProtocolProbe.cjs").Output()
-	if err != nil {
+	if err := checkWebGolden(cmd, dir, source, "NextDayzProtocolProbe.cjs", "protocol-golden.txt"); err != nil {
 		return err
-	}
-	golden, err := os.ReadFile(filepath.Join(source, "protocol-golden.txt"))
-	if err != nil {
-		return err
-	}
-	if !bytes.Equal(bytes.ReplaceAll(probe, []byte("\r\n"), []byte("\n")), bytes.ReplaceAll(golden, []byte("\r\n"), []byte("\n"))) {
-		return errors.New("WASM protocol bytes differ from protocol-golden.txt")
 	}
 	if err := webChild(cmd.Context(), dir, nil, cmd.OutOrStdout(), cmd.ErrOrStderr(),
 		"node", "NextDayzCoreRules.cjs").Run(); err != nil {
 		return fmt.Errorf("WASM rules check: %w", err)
 	}
-	fmt.Fprintln(cmd.OutOrStdout(), "NextDayzCore include boundary and protocol golden OK")
+	// The shared client session must treat a DS message stream exactly as the
+	// native build does: the desktop client prints the same file.
+	if err := checkWebGolden(cmd, dir, source, "NextDayzClientReplay.cjs", "client-replay-golden.txt"); err != nil {
+		return err
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), "NextDayzCore include boundary, protocol and client replay goldens OK")
 	return stampWebKernel(ctx)
+}
+
+// checkWebGolden runs a WASM probe in Node and compares its output with a
+// golden file that the native build of the same probe must also print.
+func checkWebGolden(cmd *cobra.Command, dir, source, probe, golden string) error {
+	actual, err := webChild(cmd.Context(), dir, nil, nil, cmd.ErrOrStderr(), "node", probe).Output()
+	if err != nil {
+		return fmt.Errorf("%s: %w", probe, err)
+	}
+	expected, err := os.ReadFile(filepath.Join(source, golden))
+	if err != nil {
+		return err
+	}
+	normalize := func(text []byte) []byte { return bytes.ReplaceAll(text, []byte("\r\n"), []byte("\n")) }
+	if !bytes.Equal(normalize(actual), normalize(expected)) {
+		return fmt.Errorf("WASM output of %s differs from %s", probe, golden)
+	}
+	return nil
 }
 
 func webNPM(runCtx context.Context, cmd *cobra.Command, ctx appContext, args ...string) error {

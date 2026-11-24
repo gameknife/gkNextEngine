@@ -151,7 +151,7 @@ namespace NextDayzBake
             for (size_t index = 0; index < nodes.size(); ++index)
             {
                 const auto& node = nodes[index];
-                if (node->GetName() == "nd_target") targets.emplace(node.get(), index);
+                if (node->GetName() == "nd_target") targets.emplace(node.get(), static_cast<uint32_t>(index));
                 const auto* render = node->GetComponent<Runtime::RenderComponent>();
                 if (render && node->GetComponent<Runtime::TerrainComponent>())
                 {
@@ -183,7 +183,7 @@ namespace NextDayzBake
                     glm::length(scale) > 0.01f && glm::all(glm::greaterThan(glm::abs(scale), glm::vec3(0.001f)));
                 if (!ray && !body) continue;
                 const uint32_t bodyFlag = mobility == Assets::Node::ENodeMobility::Static ? 2u : 4u;
-                const auto [found, inserted] = meshIndexes.try_emplace(model, meshModels.size());
+                const auto [found, inserted] = meshIndexes.try_emplace(model, static_cast<uint32_t>(meshModels.size()));
                 if (inserted) meshModels.push_back(model);
 
                 uint32_t target = UINT32_MAX;

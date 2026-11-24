@@ -245,6 +245,11 @@ function session() {
 login.addEventListener("submit", event => {
     event.preventDefault();
     if (!account.value.trim()) return;
+    // The Master's rule (and desktop's): 1-32 bytes of UTF-8, so a Chinese character counts three.
+    if (new TextEncoder().encode(account.value.trim()).length > 32) {
+        state(tr("Enter a survivor name of 1-32 bytes."));
+        return;
+    }
     localStorage.setItem("nextdayz.survivor", account.value.trim());
     command({ type: server.value === "direct" ? "direct" : "login", name: account.value.trim(), password: password.value });
     password.value = "";

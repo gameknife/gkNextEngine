@@ -2,10 +2,8 @@
 
 #include "Engine/Assets/Core/Scene.hpp"
 #include "Engine/Rendering/VulkanBaseRenderer.hpp"
-#include "Modules/NextUI/FontLoader.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
-#include "Modules/NextUI/ImGuiScaling.hpp"
-#include "Engine/Runtime/Interface/UserInterface.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Utilities/FileHelper.hpp"
 #include "Engine/Utilities/Math.hpp"
@@ -487,13 +485,14 @@ namespace ScadStudio
 
     void ScadStudioInterface::Init()
     {
-        NextUI::Theme::ApplyProfessionalTheme();
-        NextUI::FontLoader::LoadDefaultUiFont("assets/fonts/Roboto-Regular.ttf", 18.0f);
+        NextUI::ApplyTheme();
+        const float density = engine_.GetUiHost() ? engine_.GetUiHost()->GetUiScale() : 1.0f;
+        NextUI::LoadDefaultUiFont("assets/fonts/Roboto-Regular.ttf", 18.0f, density);
     }
 
     void ScadStudioInterface::Render()
     {
-        NextUI::IUserInterface* uiSys = engine_.GetUserInterface();
+        Runtime::IUiHost* uiSys = engine_.GetUiHost();
         if (uiSys == nullptr)
         {
             return;
@@ -549,12 +548,12 @@ namespace ScadStudio
         const float viewportY = panelY;
         const float viewportW = std::max(1.0f, viewport->Size.x - leftWidth - rightWidth);
         const float viewportH = panelHeight;
-        NextUI::Scaling::SyncImGuiViewportToSwapChain(engine_, ImVec2(viewportX, viewportY), ImVec2(viewportW, viewportH));
+        NextUI::SyncImGuiViewportToSwapChain(engine_, ImVec2(viewportX, viewportY), ImVec2(viewportW, viewportH));
     }
 
     void ScadStudioInterface::DrawTitleBar()
     {
-        NextUI::Theme::FAppTitleBarConfig config{};
+        NextUI::FAppTitleBarConfig config{};
         config.BrandWindowId = "ScadStudioBrand";
         config.MenuWindowId = "ScadStudioMenu";
         config.RightWindowId = "ScadStudioWindowControls";
@@ -564,7 +563,7 @@ namespace ScadStudio
         config.DrawMenuBar = [&]() -> float
         {
             float menuRight = ImGui::GetCursorScreenPos().x;
-            NextUI::Theme::FMainMenuGhostScope mainMenuStyle;
+            NextUI::FMainMenuGhostScope mainMenuStyle;
             if (mainMenuStyle.BeginMenu("File"))
             {
                 if (ImGui::MenuItem("New Model", "Ctrl+N"))
@@ -607,9 +606,9 @@ namespace ScadStudio
         {
             ImGui::SetCursorPosY(std::floor((kTitleBarHeight - ImGui::GetTextLineHeight()) * 0.5f));
             const char* status = ai_.IsGenerating() ? "Generating" : (ai_.IsConfigured() ? "Ready" : "Offline");
-            const ImVec4 color = ai_.IsGenerating() ? NextUI::Theme::Color(NextUI::Theme::EColor::Warning)
-                                : (ai_.IsConfigured() ? NextUI::Theme::Color(NextUI::Theme::EColor::Success)
-                                                      : NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted));
+            const ImVec4 color = ai_.IsGenerating() ? NextUI::Color(NextUI::EColor::Warning)
+                                : (ai_.IsConfigured() ? NextUI::Color(NextUI::EColor::Success)
+                                                      : NextUI::Color(NextUI::EColor::TextMuted));
             ImGui::TextColored(color, "%s", status);
             ImGui::SameLine();
             ImGui::TextDisabled("%s", ai_.ProviderName().c_str());
@@ -618,12 +617,12 @@ namespace ScadStudio
         config.OnMinimize = [&]() { engine_.RequestMinimize(); };
         config.OnToggleMaximize = [&]() { engine_.ToggleMaximize(); };
         config.OnClose = [&]() { engine_.RequestClose(); };
-        NextUI::Theme::DrawAppTitleBar(engine_, config);
+        NextUI::DrawAppTitleBar(engine_, config);
     }
 
     void ScadStudioInterface::DrawBottomBar()
     {
-        NextUI::Theme::FBottomBarConfig config{};
+        NextUI::FBottomBarConfig config{};
         config.WindowId = "ScadStudioBottomBar";
         config.Height = kBottomBarHeight;
         config.RightWidth = 170.0f;
@@ -648,7 +647,7 @@ namespace ScadStudio
         {
             ImGui::TextDisabled("FPS %.0f", engine_.GetFrameRate());
         };
-        NextUI::Theme::DrawBottomBar(config);
+        NextUI::DrawBottomBar(config);
     }
 
     FScadSession& ScadStudioInterface::NewSession()
@@ -859,14 +858,14 @@ namespace ScadStudio
 
     void ScadStudioInterface::DrawSessionPanel(const ImVec2& pos, const ImVec2& size)
     {
-        NextUI::Theme::FCollapsibleSidePanelConfig sideConfig{};
+        NextUI::FCollapsibleSidePanelConfig sideConfig{};
         sideConfig.WindowId = "##ScadStudioSessions";
         sideConfig.Position = pos;
         sideConfig.Size = size;
         sideConfig.Collapsed = sessionsCollapsed_;
-        if (!NextUI::Theme::BeginCollapsibleSidePanel(sideConfig))
+        if (!NextUI::BeginCollapsibleSidePanel(sideConfig))
         {
-            NextUI::Theme::EndCollapsibleSidePanel();
+            NextUI::EndCollapsibleSidePanel();
             return;
         }
 
@@ -890,7 +889,7 @@ namespace ScadStudio
             {
                 ImGui::SetTooltip("New model");
             }
-            NextUI::Theme::EndCollapsibleSidePanel();
+            NextUI::EndCollapsibleSidePanel();
             return;
         }
 
@@ -1080,19 +1079,19 @@ namespace ScadStudio
             ImGui::TextWrapped("No model yet. Click \"+ New Model\" and describe what you want.");
         }
 
-        NextUI::Theme::EndCollapsibleSidePanel();
+        NextUI::EndCollapsibleSidePanel();
     }
 
     void ScadStudioInterface::DrawChatPanel(const ImVec2& pos, const ImVec2& size)
     {
-        NextUI::Theme::FCollapsibleSidePanelConfig sideConfig{};
+        NextUI::FCollapsibleSidePanelConfig sideConfig{};
         sideConfig.WindowId = "##ScadStudioChat";
         sideConfig.Position = pos;
         sideConfig.Size = size;
         sideConfig.Collapsed = chatCollapsed_;
-        if (!NextUI::Theme::BeginCollapsibleSidePanel(sideConfig))
+        if (!NextUI::BeginCollapsibleSidePanel(sideConfig))
         {
-            NextUI::Theme::EndCollapsibleSidePanel();
+            NextUI::EndCollapsibleSidePanel();
             return;
         }
 
@@ -1108,7 +1107,7 @@ namespace ScadStudio
             }
             ImGui::Spacing();
             ImGui::TextUnformatted(ICON_FA_COMMENTS);
-            NextUI::Theme::EndCollapsibleSidePanel();
+            NextUI::EndCollapsibleSidePanel();
             return;
         }
 
@@ -1420,7 +1419,7 @@ namespace ScadStudio
             SubmitCurrentInput();
         }
 
-        NextUI::Theme::EndCollapsibleSidePanel();
+        NextUI::EndCollapsibleSidePanel();
     }
 
     void ScadStudioInterface::SubmitCurrentInput()

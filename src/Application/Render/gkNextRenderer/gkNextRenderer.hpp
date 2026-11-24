@@ -75,9 +75,7 @@ public:
     void OnSceneLoaded() override;
 
     void OnPreConfigUI() override;
-    bool OnRenderUI() override;
-    bool OnRenderUI(const FGameUiFrameContext& context) override;
-    NextUI::FUiFrameResult RenderUiFrame(const FGameUiFrameContext& context) override;
+    Runtime::FUiFrameResult RenderUiFrame(const Runtime::FUiFrameContext& context) override;
     void OnInitUI() override;
     void OnRemoteUiSessionClosed(std::string_view sessionId) override;
 
@@ -160,15 +158,15 @@ private:
     glm::vec3 MuzzleMouthPosition() const;
     glm::vec3 MuzzleDirection() const;
 
-    bool DrawRendererUi(const FGameUiFrameContext& context, FRendererUiState& uiState);
+    bool DrawRendererUi(const Runtime::FUiFrameContext& context, FRendererUiState& uiState);
     FRendererUiState& GetRemoteUiState(std::string_view sessionId);
     void DrawSettings(FRendererUiState& uiState);
-    void DrawTitleBar(const FGameUiFrameContext& context, FRendererUiState& uiState);
+    void DrawTitleBar(const Runtime::FUiFrameContext& context, FRendererUiState& uiState);
     void DrawBottomStatusBar();
     void DrawModeRail(FRendererUiState& uiState);
-    void DrawViewportTopBar(const FGameUiFrameContext& context, FRendererUiState& uiState);
+    void DrawViewportTopBar(const Runtime::FUiFrameContext& context, FRendererUiState& uiState);
     void DrawViewportCheatSheet(FRendererUiState& uiState);
-    void DrawShootHint(const FGameUiFrameContext& context);
+    void DrawShootHint(const Runtime::FUiFrameContext& context);
     void UpdateMuzzleTransform();
     void RefreshMuzzleTransform();
     void RequestScreenshot(bool openFolder, const std::string& tag);

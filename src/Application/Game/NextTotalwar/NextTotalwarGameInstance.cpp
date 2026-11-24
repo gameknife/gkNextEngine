@@ -13,7 +13,8 @@
 #include "Engine/Runtime/Scene/SceneBuilder.hpp"
 #include "Engine/Runtime/Utilities/NextEngineHelper.hpp"
 #include "Gameplay/Rig/RigInstance.h"
-#include "Modules/NextUI/ImGuiScaling.hpp"
+#include "Modules/NextUI/Hud.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include "Modules/ScadLoader/FScadRig.h"
 #include "Modules/ScadLoader/ScadModule.hpp"
 
@@ -533,7 +534,7 @@ namespace NextTotalwar
         // Agent 输入协议本身使用 viewport 逻辑坐标，不再重复缩放。
         if (!GOption->AgentValidation)
         {
-            const ImVec2 logical = NextUI::Scaling::MainFramebufferToImGuiPoint(
+            const ImVec2 logical = NextUI::MainFramebufferToImGuiPoint(
                 ImVec2(static_cast<float>(x), static_cast<float>(y)));
             return {logical.x, logical.y};
         }
@@ -545,7 +546,7 @@ namespace NextTotalwar
     {
         // EngineHelper::GetScreenToWorldRay uses SwapChain OutputExtent and
         // therefore needs framebuffer pixels.
-        const ImVec2 framebuffer = NextUI::Scaling::ImGuiToMainFramebufferPoint(
+        const ImVec2 framebuffer = NextUI::ImGuiToMainFramebufferPoint(
             ImVec2(static_cast<float>(logicalMouse.x), static_cast<float>(logicalMouse.y)));
         return {framebuffer.x, framebuffer.y};
     }
@@ -1063,7 +1064,7 @@ namespace NextTotalwar
                 Formation::SlotWorld(regiment.anchor, regiment.facing, corners[index]);
             world.y = GroundHeight(world.x, world.z) + 0.08f;
             ImVec2 screen{};
-            if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(*this, world, screen))
+            if (!NextUI::Hud::TryProjectWorldToScreen(*this, world, screen))
             {
                 return false;
             }
@@ -1098,7 +1099,7 @@ namespace NextTotalwar
             }
 
             ImVec2 anchor{};
-            if (Runtime::EngineHelper::TryProjectWorldToScreenForGame(*this, regiment.anchor, anchor))
+            if (NextUI::Hud::TryProjectWorldToScreen(*this, regiment.anchor, anchor))
             {
                 const float distance = glm::distance(point, glm::vec2(anchor.x, anchor.y));
                 if (distance < nearbyDistance)
@@ -1144,7 +1145,7 @@ namespace NextTotalwar
         {
             if (regiment.faction != playerFaction_ || !IsRegimentSelectable(regiment)) continue;
             ImVec2 projected;
-            if (Runtime::EngineHelper::TryProjectWorldToScreenForGame(*this, regiment.anchor, projected) &&
+            if (NextUI::Hud::TryProjectWorldToScreen(*this, regiment.anchor, projected) &&
                 projected.x >= minX && projected.x <= maxX && projected.y >= minY && projected.y <= maxY)
             {
                 regiment.selected = true;
@@ -1966,7 +1967,7 @@ namespace NextTotalwar
                 {
                     glm::vec3 world = Formation::SlotWorld(anchor, facing, corners[index]);
                     world.y = GroundHeight(world.x, world.z) + 0.08f;
-                    valid &= Runtime::EngineHelper::TryProjectWorldToScreenForGame(*this, world, projected[index]);
+                    valid &= NextUI::Hud::TryProjectWorldToScreen(*this, world, projected[index]);
                 }
                 if (!valid) return;
 
@@ -1990,7 +1991,7 @@ namespace NextTotalwar
                 {
                     glm::vec3 world = Formation::SlotWorld(anchor, facing, arrowLocal[index]);
                     world.y = GroundHeight(world.x, world.z) + 0.1f;
-                    if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(*this, world, arrow[index])) return;
+                    if (!NextUI::Hud::TryProjectWorldToScreen(*this, world, arrow[index])) return;
                 }
                 draw->AddLine(arrow[0], arrow[1], outlineColor, 2.5f);
                 draw->AddTriangleFilled(arrow[1], arrow[2], arrow[3], outlineColor);
@@ -2017,7 +2018,7 @@ namespace NextTotalwar
             previousWorld.y = GroundHeight(previousWorld.x, previousWorld.z) + 0.14f;
             ImVec2 previous{};
             bool previousValid =
-                Runtime::EngineHelper::TryProjectWorldToScreenForGame(*this, previousWorld, previous);
+                NextUI::Hud::TryProjectWorldToScreen(*this, previousWorld, previous);
             const ImU32 routeColor =
                 FactionOutlineColor(regiment.faction, regiment.selected ? 235 : 125);
 
@@ -2028,7 +2029,7 @@ namespace NextTotalwar
                 nodeWorld.y = GroundHeight(nodeWorld.x, nodeWorld.z) + 0.14f;
                 ImVec2 node{};
                 const bool nodeValid =
-                    Runtime::EngineHelper::TryProjectWorldToScreenForGame(*this, nodeWorld, node);
+                    NextUI::Hud::TryProjectWorldToScreen(*this, nodeWorld, node);
                 const bool finalSegment = nodeIndex + 1 == regiment.path.size();
                 const ImU32 segmentColor =
                     finalSegment ? IM_COL32(255, 220, 70, 245) : routeColor;
@@ -2142,7 +2143,7 @@ namespace NextTotalwar
             }
 
             ImVec2 target;
-            if (Runtime::EngineHelper::TryProjectWorldToScreenForGame(*this, rightTarget_, target))
+            if (NextUI::Hud::TryProjectWorldToScreen(*this, rightTarget_, target))
             {
                 draw->AddCircle(target, 12.0f, IM_COL32(255, 225, 80, 240), 24, 2.5f);
                 draw->AddLine(target, ImVec2(static_cast<float>(mousePos_.x), static_cast<float>(mousePos_.y)),
@@ -2192,7 +2193,7 @@ namespace NextTotalwar
 
                 const glm::vec3 cellWorld = navGrid_.GetCellWorldPosition(gx, gz);
                 ImVec2 projectedCenter{};
-                if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(
+                if (!NextUI::Hud::TryProjectWorldToScreen(
                         *this, {cellWorld.x, cellWorld.y + liftY, cellWorld.z}, projectedCenter))
                 {
                     continue;
@@ -2212,7 +2213,7 @@ namespace NextTotalwar
                     const glm::vec2 offset = cornerOffsets[cornerIndex];
                     const glm::vec3 cornerWorld(
                         cellWorld.x + offset.x, cellWorld.y + liftY, cellWorld.z + offset.y);
-                    if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(
+                    if (!NextUI::Hud::TryProjectWorldToScreen(
                             *this, cornerWorld, projectedCorners[cornerIndex]))
                     {
                         visible = false;

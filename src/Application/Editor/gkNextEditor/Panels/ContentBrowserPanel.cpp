@@ -10,8 +10,8 @@
 #include "Application/Editor/Common/Preview/AssetThumbnailRenderer.hpp"
 #include "Engine/Runtime/Engine.hpp"
 #include "Modules/SceneContent/SceneList.hpp"
-#include "Engine/Runtime/Interface/UserInterface.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 #include "Engine/Utilities/FileHelper.hpp"
 
@@ -460,7 +460,7 @@ namespace Editor
                                        DirectoryVisibilityCache& visibilityCache)
         {
             (void)ui;
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, NextUI::Theme::Color(NextUI::Theme::EColor::Background, 0.40f));
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, NextUI::Color(NextUI::EColor::Background, 0.40f));
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 8.0f));
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 4.0f));
             ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 14.0f);
@@ -493,20 +493,20 @@ namespace Editor
             // 返回上一级
             const bool hasParent = currentPath != rootPath;
             ImGui::BeginDisabled(!hasParent);
-            if (NextUI::Theme::GhostButton(ICON_FA_ARROW_UP, "Go Up One Directory"))
+            if (NextUI::GhostButton(ICON_FA_ARROW_UP, "Go Up One Directory"))
             {
                 currentPath = currentPath.parent_path();
             }
             ImGui::EndDisabled();
 
             ImGui::SameLine();
-            if (NextUI::Theme::GhostButton(ICON_FA_HOUSE, "Assets Root"))
+            if (NextUI::GhostButton(ICON_FA_HOUSE, "Assets Root"))
             {
                 currentPath = rootPath;
             }
 
             ImGui::SameLine();
-            if (NextUI::Theme::GhostButton(ICON_FA_ROTATE, "Refresh Directory Cache"))
+            if (NextUI::GhostButton(ICON_FA_ROTATE, "Refresh Directory Cache"))
             {
                 directoryCache.clear();
                 visibilityCache.clear();
@@ -519,7 +519,7 @@ namespace Editor
                 for (const auto& part : rel)
                 {
                     ImGui::SameLine();
-                    ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted, 0.7f));
+                    ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Color(NextUI::EColor::TextMuted, 0.7f));
                     ImGui::TextUnformatted(ICON_FA_CHEVRON_RIGHT);
                     ImGui::PopStyleColor();
                     ImGui::SameLine();
@@ -535,9 +535,9 @@ namespace Editor
                     const bool isCurrentLeaf = (crumbPath == currentPath);
                     if (isCurrentLeaf)
                     {
-                        ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Theme::Color(NextUI::Theme::EColor::Accent));
+                        ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Color(NextUI::EColor::Accent));
                     }
-                    if (NextUI::Theme::GhostButton(label.c_str()))
+                    if (NextUI::GhostButton(label.c_str()))
                     {
                         currentPath = crumbPath;
                     }
@@ -578,7 +578,7 @@ namespace Editor
                 statusRight - settingsButtonWidth,
                 ImGui::GetItemRectMin().y);
             ImGui::SetCursorScreenPos(settingsPosition);
-            if (NextUI::Theme::GhostButton(settingsButtonLabel, "Content Browser Settings"))
+            if (NextUI::GhostButton(settingsButtonLabel, "Content Browser Settings"))
             {
                 ImGui::OpenPopup("ContentBrowserSettingsPopup");
             }
@@ -615,12 +615,12 @@ namespace Editor
                 {EBrowserSection::Mesh, ICON_FA_BOXES_PACKING, "Mesh Buffers"},
             }};
 
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, NextUI::Theme::Color(NextUI::Theme::EColor::Background, 0.40f));
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, NextUI::Color(NextUI::EColor::Background, 0.40f));
             ImGui::BeginChild("ContentBrowserModeSidebar", ImVec2(kContentModeRailWidth, 0.0f), false);
 
             for (const auto& entry : entries)
             {
-                if (NextUI::Theme::ModeRailButton(entry.icon, entry.tooltip, section == entry.section,
+                if (NextUI::ModeRailButton(entry.icon, entry.tooltip, section == entry.section,
                                                   kContentModeRailButtonSize))
                 {
                     section = entry.section;
@@ -679,7 +679,7 @@ namespace Editor
                     materialIndex, material);
             return sampleSlot == std::numeric_limits<uint32_t>::max()
                 ? 0
-                : ctx.ui.RequestImTextureIdRaw(sampleSlot);
+                : NextUI::ToImTextureId(ctx.ui.ResolveRawSlotId(sampleSlot));
         }
 
         ImTextureID RequestMeshPreviewTexture(EditorContext& ctx, uint32_t modelIndex, const Assets::Model& model)
@@ -688,7 +688,7 @@ namespace Editor
                 EditorPreview::AssetThumbnails(ctx.engine.GetRenderer()).RequestMeshThumbnail(modelIndex, model);
             return sampleSlot == std::numeric_limits<uint32_t>::max()
                 ? 0
-                : ctx.ui.RequestImTextureIdRaw(sampleSlot);
+                : NextUI::ToImTextureId(ctx.ui.ResolveRawSlotId(sampleSlot));
         }
 
         void DrawGeneralContentBrowser(EditorContext& ctx, EditorUiState& ui, uint32_t& selectionId, bool iconOrTex,
@@ -710,16 +710,18 @@ namespace Editor
             // 卡片整体底色
             drawList->AddRectFilled(
                 cardMin, cardMax,
-                NextUI::Theme::ColorU32(NextUI::Theme::EColor::Background, 0.84f),
+                NextUI::ColorU32(NextUI::EColor::Background, 0.84f),
                 6.0f);
 
             // 预览按钮/图标
-            ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::Background));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceHover));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceHover));
+            ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Color(NextUI::EColor::Background));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Color(NextUI::EColor::SurfaceHover));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Color(NextUI::EColor::SurfaceHover));
             ImGui::PushID(static_cast<int>(globalId));
             
-            ImTextureID textureId = thumbnailTextureId != 0 ? thumbnailTextureId : ctx.ui.RequestImTextureId(globalId);
+            ImTextureID textureId = thumbnailTextureId != 0
+                ? thumbnailTextureId
+                : NextUI::ToImTextureId(ctx.ui.ResolveTextureId(globalId));
             if ((iconOrTex && thumbnailTextureId == 0) || textureId == 0)
             {
                 if (ui.bigIcon)
@@ -776,9 +778,9 @@ namespace Editor
             // 卡片下半部底色（文字托盘）
             drawList->AddRectFilled(
                 cardMid, cardMax,
-                selected ? NextUI::Theme::ColorU32(NextUI::Theme::EColor::Accent, 0.72f)
-                         : hovered ? NextUI::Theme::ColorU32(NextUI::Theme::EColor::SurfaceHover)
-                                   : NextUI::Theme::ColorU32(NextUI::Theme::EColor::SurfaceElevated),
+                selected ? NextUI::ColorU32(NextUI::EColor::Accent, 0.72f)
+                         : hovered ? NextUI::ColorU32(NextUI::EColor::SurfaceHover)
+                                   : NextUI::ColorU32(NextUI::EColor::SurfaceElevated),
                 6.0f, ImDrawFlags_RoundCornersBottom);
 
             // 中间装饰条：根据类型的颜色展示
@@ -790,7 +792,7 @@ namespace Editor
             // 选中或悬停时的焦点轮廓
             if (selected)
             {
-                drawList->AddRect(cardMin, cardMax, NextUI::Theme::ColorU32(NextUI::Theme::EColor::AccentHover, 0.95f), 6.0f, 0, 1.4f);
+                drawList->AddRect(cardMin, cardMax, NextUI::ColorU32(NextUI::EColor::AccentHover, 0.95f), 6.0f, 0, 1.4f);
             }
             else if (hovered)
             {
@@ -800,22 +802,22 @@ namespace Editor
             // 核心修复：文字严格截断并限制在卡片内部，绝对不溢出破坏 Grid
             constexpr float textPadX = 5.0f;
             const float maxTextW = GContentBrowserIconSize - textPadX * 2.0f;
-            const std::string truncatedName = NextUI::Theme::TruncateWithEllipsis(name, maxTextW);
+            const std::string truncatedName = NextUI::TruncateWithEllipsis(name, maxTextW);
             const ImVec2 textSize = ImGui::CalcTextSize(truncatedName.c_str());
             const float textX = cardMin.x + std::floor((GContentBrowserIconSize - textSize.x) * 0.5f);
             const float textY = cardMid.y + 7.0f;
 
             drawList->PushClipRect(cardMid, cardMax, true);
             drawList->AddText(ImVec2(textX, textY),
-                              selected ? NextUI::Theme::ColorU32(NextUI::Theme::EColor::Text)
-                                       : hovered ? NextUI::Theme::ColorU32(NextUI::Theme::EColor::Text)
-                                                 : NextUI::Theme::ColorU32(NextUI::Theme::EColor::Text, 0.90f),
+                              selected ? NextUI::ColorU32(NextUI::EColor::Text)
+                                       : hovered ? NextUI::ColorU32(NextUI::EColor::Text)
+                                                 : NextUI::ColorU32(NextUI::EColor::Text, 0.90f),
                               truncatedName.c_str());
             drawList->PopClipRect();
 
             if (hovered)
             {
-                NextUI::Theme::DrawTooltip(name.c_str());
+                NextUI::ShowHoveredTooltip(name.c_str());
             }
 
             // 恢复光标到卡片精确尺寸，绝不对外溢出任何像素
@@ -967,7 +969,7 @@ namespace Editor
     {
         ImGui::Begin("Mesh Browser", nullptr);
         {
-            NextUI::Theme::DrawPanelHeader(ICON_FA_BOXES_PACKING, "Meshes", "Scene model buffers");
+            NextUI::DrawPanelHeader(ICON_FA_BOXES_PACKING, "Meshes", "Scene model buffers");
             DrawMeshBrowserContents(ctx, ui, nullptr);
         }
         ImGui::End();
@@ -977,7 +979,7 @@ namespace Editor
     {
         ImGui::Begin("Material Browser", nullptr);
         {
-            NextUI::Theme::DrawPanelHeader(ICON_FA_CIRCLE_HALF_STROKE, "Materials", "Drag materials onto viewport objects");
+            NextUI::DrawPanelHeader(ICON_FA_CIRCLE_HALF_STROKE, "Materials", "Drag materials onto viewport objects");
             DrawMaterialBrowserContents(ctx, ui, nullptr);
         }
         ImGui::End();
@@ -987,7 +989,7 @@ namespace Editor
     {
         ImGui::Begin("Texture Browser", nullptr);
         {
-            NextUI::Theme::DrawPanelHeader(ICON_FA_IMAGE, "Textures", "Loaded GPU textures");
+            NextUI::DrawPanelHeader(ICON_FA_IMAGE, "Textures", "Loaded GPU textures");
             DrawTextureBrowserContents(ctx, ui, nullptr);
         }
         ImGui::End();
@@ -1016,7 +1018,7 @@ namespace Editor
             browserState.currentSection = static_cast<int>(currentSection);
             ImGui::SameLine();
 
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, NextUI::Theme::Color(NextUI::Theme::EColor::Background, 0.28f));
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, NextUI::Color(NextUI::EColor::Background, 0.28f));
             {
                 DrawContentBrowserSidebar(ui, rootPath, browserState.currentPath, directoryCache, visibilityCache);
                 ImGui::SameLine();
@@ -1033,7 +1035,7 @@ namespace Editor
 
                     ImDrawList* dl = ImGui::GetWindowDrawList();
                     dl->AddRectFilled(navBarMin, navBarMax,
-                        NextUI::Theme::ColorU32(NextUI::Theme::EColor::SurfaceElevated, 1.0f), 6.0f);
+                        NextUI::ColorU32(NextUI::EColor::SurfaceElevated, 1.0f), 6.0f);
 
                     ImGui::SetCursorScreenPos(navBarMin + ImVec2(6.0f, 4.0f));
                     ImGui::BeginGroup();
@@ -1052,13 +1054,13 @@ namespace Editor
                         ImGui::SameLine();
                     }
                     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-                    ImGui::PushStyleColor(ImGuiCol_FrameBg, NextUI::Theme::Color(NextUI::Theme::EColor::Background, 0.75f));
+                    ImGui::PushStyleColor(ImGuiCol_FrameBg, NextUI::Color(NextUI::EColor::Background, 0.75f));
                     ImGui::SetNextItemWidth(searchWidth);
                     browserState.contentFilter.Draw("##ContentBrowserFilter", searchWidth);
                     if (!ImGui::IsItemActive() && browserState.contentFilter.InputBuf[0] == '\0')
                     {
                         const ImVec2 hintMin = ImGui::GetItemRectMin() + ImVec2(7.0f, 3.5f);
-                        dl->AddText(hintMin, NextUI::Theme::ColorU32(NextUI::Theme::EColor::TextDim), ICON_FA_MAGNIFYING_GLASS " Search...");
+                        dl->AddText(hintMin, NextUI::ColorU32(NextUI::EColor::TextDim), ICON_FA_MAGNIFYING_GLASS " Search...");
                     }
                     ImGui::PopStyleColor();
                     ImGui::PopStyleVar();
@@ -1093,10 +1095,10 @@ namespace Editor
                         ImTextureID thumbnailTextureId = 0;
                         if (visual.kind == EContentAssetKind::Texture)
                         {
-                            const NextUI::IUserInterface::FUiTextureHandle texture = ctx.ui.RequestUiTexture(assetPath);
+                            const Runtime::FUiTextureHandle texture = ctx.ui.RequestTexture(assetPath);
                             if (texture.valid)
                             {
-                                thumbnailTextureId = texture.textureId;
+                                thumbnailTextureId = NextUI::ToImTextureId(texture.id);
                             }
                         }
 

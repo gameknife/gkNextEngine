@@ -19,11 +19,11 @@
 #include "Engine/Runtime/Interface/ScreenShotService.hpp"
 #include "Engine/Runtime/Subsystems/NextPhysics.hpp"
 #include "Engine/Runtime/GameInstance.hpp"
-#include "Modules/NextUI/ImGuiScaling.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include "Engine/Rendering/RendererChoices.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
 #include "Modules/DevTools/UI/DeveloperStatusBar.hpp"
-#include "Engine/Runtime/Interface/UserInterface.hpp"
+
 #include "Engine/Runtime/Scene/SceneBuilder.hpp"
 #include "Engine/Runtime/Utilities/NextEngineHelper.hpp"
 #include "Modules/DevTools/GraphicsDebugPanel.hpp"
@@ -32,8 +32,8 @@
 #include "Modules/LiveCoding/LiveCodingModule.hpp"
 #include "Engine/Utilities/Localization.hpp"
 #include "Engine/Utilities/Format.hpp"
-#include "Engine/Utilities/AboutDialog.hpp"
-#include "Engine/Utilities/ImGui.hpp"
+
+
 
 #include <SDL3/SDL_misc.h>
 #include "Engine/Runtime/Platform/PlatformCommon.hpp"
@@ -56,12 +56,12 @@
 namespace
 {
 using Utilities::FormatBytes;
-using NextUI::Theme::DrawFlatViewportButton;
-using NextUI::Theme::DrawViewportComboOption;
-using NextUI::Theme::PopViewportPopupStyle;
-using NextUI::Theme::PopViewportToolbarStyle;
-using NextUI::Theme::PushViewportPopupStyle;
-using NextUI::Theme::PushViewportToolbarStyle;
+using NextUI::GhostButton;
+using NextUI::ComboOption;
+using NextUI::PopViewportPopupStyle;
+using NextUI::PopViewportToolbarStyle;
+using NextUI::PushViewportPopupStyle;
+using NextUI::PushViewportToolbarStyle;
 
 constexpr uint32_t dropSphereGridSize = 20;
 constexpr uint32_t dropSphereCount = dropSphereGridSize * dropSphereGridSize;
@@ -522,29 +522,12 @@ void NextRendererGameInstance::OnPreConfigUI()
     NextGameInstanceBase::OnPreConfigUI();
 }
 
-bool NextRendererGameInstance::OnRenderUI()
+Runtime::FUiFrameResult NextRendererGameInstance::RenderUiFrame(const Runtime::FUiFrameContext& context)
 {
-    FGameUiFrameContext context;
-    const auto& swapChain = GetEngine().GetRenderer().SwapChain();
-    context.surfaceKind = FGameUiFrameContext::ESurfaceKind::MainWindow;
-    context.framebufferExtent = swapChain.OutputExtent();
-    context.viewCamera = &GetEngine().GetScene().GetRenderCamera();
-    context.allowWindowCommands = true;
-    return DrawRendererUi(context, mainUiState_);
-}
-
-bool NextRendererGameInstance::OnRenderUI(const FGameUiFrameContext& context)
-{
-    if (context.surfaceKind == FGameUiFrameContext::ESurfaceKind::RemoteView)
-    {
-        return DrawRendererUi(context, GetRemoteUiState(context.sessionId));
-    }
-    return OnRenderUI();
-}
-
-NextUI::FUiFrameResult NextRendererGameInstance::RenderUiFrame(const FGameUiFrameContext& context)
-{
-    return NextUI::FUiFrameResult::FromLegacyHandled(OnRenderUI(context));
+    const bool handled = (context.surfaceKind == Runtime::EUiSurfaceKind::RemoteView)
+        ? DrawRendererUi(context, GetRemoteUiState(context.sessionId))
+        : DrawRendererUi(context, mainUiState_);
+    return Runtime::FUiFrameResult::ForApplicationHandled(handled);
 }
 
 void NextRendererGameInstance::OnRemoteUiSessionClosed(std::string_view sessionId)
@@ -557,10 +540,10 @@ NextRendererGameInstance::FRendererUiState& NextRendererGameInstance::GetRemoteU
     return remoteUiStates_[std::string(sessionId)];
 }
 
-bool NextRendererGameInstance::DrawRendererUi(const FGameUiFrameContext& context, FRendererUiState& uiState)
+bool NextRendererGameInstance::DrawRendererUi(const Runtime::FUiFrameContext& context, FRendererUiState& uiState)
 {
     if ((isTakingScreenshot_ || isRecordingVideo_) &&
-        context.surfaceKind == FGameUiFrameContext::ESurfaceKind::MainWindow)
+        context.surfaceKind == Runtime::EUiSurfaceKind::MainWindow)
     {
         return true;
     }
@@ -619,7 +602,7 @@ bool NextRendererGameInstance::DrawRendererUi(const FGameUiFrameContext& context
 
     DrawTitleBar(context, uiState);
 #if GK_WITH_VITURE
-    if (context.surfaceKind == FGameUiFrameContext::ESurfaceKind::MainWindow)
+    if (context.surfaceKind == Runtime::EUiSurfaceKind::MainWindow)
     {
         DrawVitureDebugPanel();
     }
@@ -630,14 +613,14 @@ bool NextRendererGameInstance::DrawRendererUi(const FGameUiFrameContext& context
     DrawViewportCheatSheet(uiState);
     DrawShootHint(context);
     DrawBottomStatusBar();
-    Utilities::UI::ShowAboutDialog(uiState.showAbout);
+    NextUI::ShowAboutDialog(uiState.showAbout);
 
-    if (context.surfaceKind == FGameUiFrameContext::ESurfaceKind::MainWindow && ImGui::GetCurrentContext() != nullptr)
+    if (context.surfaceKind == Runtime::EUiSurfaceKind::MainWindow && ImGui::GetCurrentContext() != nullptr)
     {
         auto& swapChain = GetEngine().GetRenderer().SwapChain();
         const auto offset = swapChain.OutputOffset();
         const auto extent = swapChain.OutputExtent();
-        const NextUI::Scaling::FViewportRect viewport = NextUI::Scaling::MainFramebufferToImGuiViewport(
+        const NextUI::FViewportRect viewport = NextUI::MainFramebufferToImGuiViewport(
             ImVec2(static_cast<float>(offset.x), static_cast<float>(offset.y)),
             ImVec2(static_cast<float>(extent.width), static_cast<float>(extent.height)));
         uiState.gizmoController.Draw(GetEngine(),
@@ -684,9 +667,9 @@ void NextRendererGameInstance::OnInitUI()
     NextGameInstanceBase::OnInitUI();
 }
 
-void NextRendererGameInstance::DrawShootHint(const FGameUiFrameContext& context)
+void NextRendererGameInstance::DrawShootHint(const Runtime::FUiFrameContext& context)
 {
-    if (context.surfaceKind != FGameUiFrameContext::ESurfaceKind::MainWindow ||
+    if (context.surfaceKind != Runtime::EUiSurfaceKind::MainWindow ||
         shootHintRemainingSeconds_ <= 0.0f || ImGui::GetCurrentContext() == nullptr)
     {
         return;
@@ -728,36 +711,36 @@ void NextRendererGameInstance::DrawShootHint(const FGameUiFrameContext& context)
     ImDrawList* drawList = ImGui::GetForegroundDrawList(viewport);
     drawList->AddRectFilled(
         panelMin, panelMax,
-        NextUI::Theme::ColorU32(NextUI::Theme::EColor::SurfaceElevated, 0.94f * alpha),
+        NextUI::ColorU32(NextUI::EColor::SurfaceElevated, 0.94f * alpha),
         8.0f * scale);
     drawList->AddRect(
         panelMin, panelMax,
-        NextUI::Theme::ColorU32(NextUI::Theme::EColor::BorderStrong, 0.9f * alpha),
+        NextUI::ColorU32(NextUI::EColor::BorderStrong, 0.9f * alpha),
         8.0f * scale, 0, 1.0f * scale);
 
     float cursorX = panelMin.x + paddingX;
     drawList->AddText(
         ImVec2(cursorX, textY),
-        NextUI::Theme::ColorU32(NextUI::Theme::EColor::Text, alpha), prefix);
+        NextUI::ColorU32(NextUI::EColor::Text, alpha), prefix);
     cursorX += prefixSize.x + gap;
 
     const ImVec2 keyMin(cursorX, panelCenter.y - keyHeight * 0.5f);
     const ImVec2 keyMax(keyMin.x + keyWidth, keyMin.y + keyHeight);
     drawList->AddRectFilled(
         keyMin, keyMax,
-        NextUI::Theme::ColorU32(NextUI::Theme::EColor::Accent, 0.95f * alpha),
+        NextUI::ColorU32(NextUI::EColor::Accent, 0.95f * alpha),
         5.0f * scale);
     drawList->AddRect(
         keyMin, keyMax,
-        NextUI::Theme::ColorU32(NextUI::Theme::EColor::AccentHover, alpha),
+        NextUI::ColorU32(NextUI::EColor::AccentHover, alpha),
         5.0f * scale, 0, 1.0f * scale);
     drawList->AddText(
         ImVec2(keyMin.x + keyPaddingX, keyMin.y + keyPaddingY),
-        NextUI::Theme::ColorU32(NextUI::Theme::EColor::Text, alpha), key);
+        NextUI::ColorU32(NextUI::EColor::Text, alpha), key);
     cursorX = keyMax.x + gap;
     drawList->AddText(
         ImVec2(cursorX, textY),
-        NextUI::Theme::ColorU32(NextUI::Theme::EColor::TextMuted, alpha), suffix);
+        NextUI::ColorU32(NextUI::EColor::TextMuted, alpha), suffix);
 }
 
 void NextRendererGameInstance::UpdateMuzzleTransform()

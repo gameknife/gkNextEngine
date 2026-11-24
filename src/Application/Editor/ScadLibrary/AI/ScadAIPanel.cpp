@@ -1,7 +1,7 @@
 #include "Engine/Common/CoreMinimal.hpp"
 #include "ScadAIPanel.hpp"
 
-#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 
 #include <imgui.h>
 
@@ -104,7 +104,7 @@ namespace ScadLibrary::AI
 
         if (!configurationError_.empty())
         {
-            ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Theme::Color(NextUI::Theme::EColor::Warning));
+            ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Color(NextUI::EColor::Warning));
             ImGui::TextWrapped("%s", configurationError_.c_str());
             ImGui::PopStyleColor();
             ImGui::SameLine();
@@ -170,8 +170,8 @@ namespace ScadLibrary::AI
         for (const FScadAIValidationIssue& issue : proposal.issues)
         {
             const ImVec4 color = issue.severity == EScadAIValidationSeverity::Error
-                ? NextUI::Theme::Color(NextUI::Theme::EColor::Danger)
-                : NextUI::Theme::Color(NextUI::Theme::EColor::Warning);
+                ? NextUI::Color(NextUI::EColor::Danger)
+                : NextUI::Color(NextUI::EColor::Warning);
             ImGui::PushStyleColor(ImGuiCol_Text, color);
             ImGui::TextWrapped("[%s] %s", issue.code.c_str(), issue.message.c_str());
             ImGui::PopStyleColor();

@@ -80,11 +80,9 @@ function(gk_apply_target_defaults target)
         ${TINYGLTF_INCLUDE_DIRS}
         ${CPP_BASE64_INCLUDE_DIRS}
         ${GK_SOURCE_ROOT}/ThirdParty/ozz/include
-        ${GK_SOURCE_ROOT}/ThirdParty/ImAnim
     )
 
     target_compile_definitions(${target} PUBLIC
-        IMGUI_DEFINE_MATH_OPERATORS
         MA_NO_ENCODING
         MA_NO_FLAC
         GK_ENABLE_HOT_RELOAD=$<BOOL:${GK_ENABLE_HOT_RELOAD}>
@@ -363,8 +361,10 @@ function(gk_configure_android_runtime target)
     set_target_properties(${target} PROPERTIES FOLDER "Programs")
     target_include_directories(${target} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
+        ${GK_SOURCE_ROOT}/ThirdParty/ImAnim
         $<TARGET_PROPERTY:Jolt::Jolt,INTERFACE_INCLUDE_DIRECTORIES>
     )
+    target_compile_definitions(${target} PRIVATE IMGUI_DEFINE_MATH_OPERATORS)
     target_link_options(${target} PRIVATE
         -Wl,-z,max-page-size=16384
         -Wl,-z,common-page-size=16384

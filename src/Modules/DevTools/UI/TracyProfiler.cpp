@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <cctype>
 
-namespace Runtime::DevToolsUI
+namespace DevTools
 {
     namespace
     {

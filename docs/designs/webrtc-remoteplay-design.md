@@ -37,7 +37,7 @@ Remote Play 由 `src/Modules/NextRemote/` 实现，通过 HTTP 提供内嵌浏�
 ### MultiView（`--remote-multiview`）
 
 - 每个 session 获得独立 `RenderView` slot、`ModelViewController`、ImGui context、合成目标和 `VideoPipeline`。
-- `CloudInputRouter` 按 session 路由输入；应用可通过 `OnRemoteViewAction` 与 `FGameUiFrameContext::RemoteView` 提供每客户端逻辑/UI 状态。
+- `CloudInputRouter` 按 session 路由输入；应用可通过 `OnRemoteViewAction` 与 `Runtime::EUiSurfaceKind::RemoteView` 提供每客户端逻辑/UI 状态。
 - 引擎当前保留 3 个 secondary-camera view slot，因此 `--remote-max-clients` 的有效上限是 3；初始化失败还会进一步收紧容量。
 
 RenderView 的资源所有权和调度见 [多视图架构](multi-viewport-renderview-design.md)。不要恢复已删除的“共享 renderer 全局参数快照/回滚”方案。
@@ -48,7 +48,7 @@ RenderView 的资源所有权和调度见 [多视图架构](multi-viewport-rende
 
 每个 session 的输入先送入自己的 `RemoteImGuiSession`。ImGui 的 `WantCaptureKeyboard` / `WantCaptureMouse` 会阻断相应的游戏相机与 action 路径；相对鼠标移动和 gamepad 按当前代码的独立规则处理。新增输入类型时必须同时明确 UI capture 语义，不能直接旁路到全局 SDL 状态。
 
-每个 session 具有独立 ImGui context、IO、渲染缓存、窗口状态和 `VideoPipeline`。产品 UI 若持有可变状态，必须以 `FGameUiFrameContext::sessionId` 分区；实际 renderer 选择和 `UserSettings` 仍是进程级全局状态，当前没有为远端 view 做 snapshot/rollback。不得把“独立 UI”误写成“每客户端拥有完整独立引擎配置”。
+每个 session 具有独立 ImGui context、IO、渲染缓存、窗口状态和 `VideoPipeline`。产品 UI 若持有可变状态，必须以 `Runtime::FUiFrameContext::sessionId` 分区；实际 renderer 选择和 `UserSettings` 仍是进程级全局状态，当前没有为远端 view 做 snapshot/rollback。不得把“独立 UI”误写成“每客户端拥有完整独立引擎配置”。
 
 session 建立、场景变更或 swapchain 失效后，相应 pipeline 会重新请求关键帧。不要把多个 session 合并到一个带共享编码状态的 pipeline。
 

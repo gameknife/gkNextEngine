@@ -16,6 +16,7 @@
 #include "Application/Game/NextDayz/Weapons/WeaponSystem.hpp"
 #include "HUDTheme.hpp"
 #include "HUDWidgets.hpp"
+#include "Modules/NextUI/Widgets.hpp"
 
 namespace NextDayz::NextDayzHUD
 {
@@ -97,16 +98,9 @@ namespace NextDayz::NextDayzHUD
                 cellSize > 0.0f ? std::clamp(static_cast<int>((mouse.y - origin.y) / cellSize), 0, size.height - 1) : 0};
         }
 
-        std::string FitText(std::string text, float width)
+        std::string FitText(std::string_view text, float width)
         {
-            if (ImGui::CalcTextSize(text.c_str()).x <= width) return text;
-            while (!text.empty() && ImGui::CalcTextSize((text + "…").c_str()).x > width)
-            {
-                size_t last = text.size() - 1;
-                while (last > 0 && (static_cast<unsigned char>(text[last]) & 0xc0) == 0x80) --last;
-                text.resize(last);
-            }
-            return text + "…";
+            return NextUI::TruncateWithEllipsis(text, width);
         }
 
         bool DrawItemIcon(const FHudContext& context, std::string_view id, ImVec2 min, ImVec2 max, bool rotated = false)

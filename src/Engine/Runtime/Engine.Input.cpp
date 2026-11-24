@@ -12,10 +12,9 @@
 #include "Engine/Runtime/RemoteProtocol.hpp"
 #include "Engine/Runtime/Interface/ScreenShotService.hpp"
 #include "Engine/Runtime/Interface/DebugUiProvider.hpp"
-#include "Engine/Runtime/Interface/UiOverlay.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
 #include "Engine/Runtime/Config/CVarSystem.hpp"
 #include "Engine/Runtime/Config/UserSettings.hpp"
-#include "Engine/Runtime/Interface/UserInterface.hpp"
 #include "Engine/Runtime/Subsystems/TaskCoordinator.hpp"
 #include "Engine/Runtime/Platform/PlatformCommon.hpp"
 #include "Engine/Vulkan/SwapChain.hpp"
@@ -66,8 +65,7 @@ void NextEngine::OnKey(SDL_Event& event)
         }
     }
 
-    if (((userInterface_ && userInterface_->WantsToCaptureKeyboard()) ||
-         (uiOverlay_ && uiOverlay_->WantsToCaptureKeyboard())) &&
+    if (uiHost_ && uiHost_->WantsToCaptureKeyboard() &&
         !gameInstance_->WantsKeyboardInputWhenUiCaptures())
     {
         return;
@@ -246,13 +244,12 @@ bool NextEngine::HandleDebugShortcut(SDL_Keycode key)
 void NextEngine::OnTouch(SDL_Event& event)
 {
     const bool touchEnded = event.type == SDL_EVENT_FINGER_UP || event.type == SDL_EVENT_FINGER_CANCELED;
-    if (!renderer_->HasSwapChain() ||
-        (!touchEnded && uiOverlay_ && uiOverlay_->WantsToCaptureMouse()))
+    if (!renderer_->HasSwapChain())
     {
         return;
     }
 
-    if (!touchEnded && userInterface_ && userInterface_->WantsToCaptureMouse() &&
+    if (!touchEnded && uiHost_ && uiHost_->WantsToCaptureMouse() &&
         !gameInstance_->WantsMouseInputWhenUiCaptures())
     {
         return;
@@ -269,15 +266,14 @@ void NextEngine::InjectRelativeMouse(float dx, float dy)
 
 void NextEngine::OnCursorPosition(const double xpos, const double ypos)
 {
-    if (!renderer_->HasSwapChain() ||
-        (uiOverlay_ && (uiOverlay_->WantsToCaptureKeyboard() || uiOverlay_->WantsToCaptureMouse())))
+    if (!renderer_->HasSwapChain())
     {
         return;
     }
 
     const bool wantsMouseThroughUi = gameInstance_->WantsMouseInputWhenUiCaptures();
-    if (userInterface_ &&
-        (userInterface_->WantsToCaptureKeyboard() || userInterface_->WantsToCaptureMouse()) && !wantsMouseThroughUi)
+    if (uiHost_ &&
+        (uiHost_->WantsToCaptureKeyboard() || uiHost_->WantsToCaptureMouse()) && !wantsMouseThroughUi)
     {
         return;
     }
@@ -290,12 +286,12 @@ void NextEngine::OnCursorPosition(const double xpos, const double ypos)
 
 void NextEngine::OnMouseButton(SDL_Event& event)
 {
-    if (!renderer_->HasSwapChain() || (uiOverlay_ && uiOverlay_->WantsToCaptureMouse()))
+    if (!renderer_->HasSwapChain())
     {
         return;
     }
 
-    if (userInterface_ && userInterface_->WantsToCaptureMouse() &&
+    if (uiHost_ && uiHost_->WantsToCaptureMouse() &&
         !gameInstance_->WantsMouseInputWhenUiCaptures())
     {
         return;
@@ -309,12 +305,12 @@ void NextEngine::OnMouseButton(SDL_Event& event)
 
 void NextEngine::OnScroll(const double xoffset, const double yoffset)
 {
-    if (!renderer_->HasSwapChain() || (uiOverlay_ && uiOverlay_->WantsToCaptureMouse()))
+    if (!renderer_->HasSwapChain())
     {
         return;
     }
 
-    if (userInterface_ && userInterface_->WantsToCaptureMouse() &&
+    if (uiHost_ && uiHost_->WantsToCaptureMouse() &&
         !gameInstance_->WantsMouseInputWhenUiCaptures())
     {
         return;

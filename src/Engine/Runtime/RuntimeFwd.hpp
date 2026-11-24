@@ -12,21 +12,16 @@ namespace NextCVar
     class FCVarSystem;
 }
 
-namespace NextUI
-{
-    class IUserInterface;
-    class IMultiViewportBackend;
-    class UserInterface;
-    struct Statistics;
-}
-
 namespace Runtime
 {
     class IDebugUiProvider;
     class IRenderFrameConsumer;
     class IScreenShotService;
     class IScriptRuntime;
-    class IUiOverlay;
+    class IUiHost;
+    class IUiLayer;
+    struct FUiFrameContext;
+    struct FUiStatistics;
 }
 
 namespace Runtime::Config

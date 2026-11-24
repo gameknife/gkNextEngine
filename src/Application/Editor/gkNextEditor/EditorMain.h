@@ -48,12 +48,10 @@ public:
                         int16_t leftTrigger, int16_t rightTrigger) override;
 
     void OnPreConfigUI() override;
-    bool OnRenderUI() override;
-    bool OnRenderUI(const FGameUiFrameContext& context) override;
-    NextUI::FUiFrameResult RenderUiFrame(const FGameUiFrameContext& context) override;
+    bool EnableMultiViewportUi() const override;
+    Runtime::FUiFrameResult RenderUiFrame(const Runtime::FUiFrameContext& context) override;
     void OnInitUI() override;
     void OnRemoteUiSessionClosed(std::string_view sessionId) override;
-    std::unique_ptr<NextUI::IMultiViewportBackend> CreateMultiViewportBackend() override;
 
 #if GK_WITH_VITURE
     bool HasVitureDebugPanel() const { return headPoseTracker_ != nullptr; }

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Engine/Common/CoreMinimal.hpp"
-#include "Modules/DevTools/NotificationCenter.h"
+#include "Modules/NextUI/Hud.hpp"
 
 namespace KongLie3D
 {

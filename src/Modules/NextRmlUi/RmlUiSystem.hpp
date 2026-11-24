@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Engine/Common/CoreMinimal.hpp"
-#include "Engine/Runtime/Interface/UiOverlay.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
 
 #include <functional>
 #include <string>
@@ -18,18 +18,26 @@ class NextEngine;
 
 namespace NextUI
 {
-    class RmlUiSystem final : public Runtime::IUiOverlay
+    class RmlUiSystem final : public Runtime::IUiLayer
     {
     public:
+        static constexpr std::string_view LayerId = "rmlui";
+
         GK_NON_COPIABLE(RmlUiSystem)
 
         explicit RmlUiSystem(NextEngine& engine);
         ~RmlUiSystem() override;
 
-        bool IsAvailable() const;
+        // Runtime::IUiLayer
+        std::string_view GetLayerId() const override { return LayerId; }
+        int32_t GetOrder() const override { return static_cast<int32_t>(Runtime::EUiLayerOrder::Document); }
         bool HandleEvent(const SDL_Event& event) override;
-        void BeginFrame() override;
-        void RenderFrame() override;
+        void BeginFrame(glm::vec2 logicalSize, float dpiScale) override;
+        void RenderLayer(NextEngine& engine) override;
+        bool WantsToCaptureMouse() const override;
+        bool WantsToCaptureKeyboard() const override;
+
+        bool IsAvailable() const;
         void Shutdown();
 
         Rml::ElementDocument* EnsureDocument(const std::string& documentId, const std::string& rmlSource);
@@ -38,9 +46,6 @@ namespace NextUI
         void SetDocumentVisible(const std::string& documentId, bool visible);
         void ClearEventListeners();
         bool ListenClick(const std::string& documentId, const std::string& elementId, std::function<void()> callback);
-
-        bool WantsToCaptureMouse() const override;
-        bool WantsToCaptureKeyboard() const override;
 
     private:
         struct Impl;

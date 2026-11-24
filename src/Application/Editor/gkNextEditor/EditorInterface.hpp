@@ -24,7 +24,7 @@ public:
     void Config();
     void Init();
     void Render();
-    void Render(const NextGameInstanceBase::FGameUiFrameContext& context);
+    void Render(const Runtime::FUiFrameContext& context);
     void OnRemoteUiSessionClosed(std::string_view sessionId);
 
     Editor::EditorUiState& GetEditorUiState() { return uiState_; }

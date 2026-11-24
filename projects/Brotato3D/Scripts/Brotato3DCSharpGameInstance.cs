@@ -28,7 +28,7 @@ public sealed partial class Brotato3DCSharpGameInstance : NextGameInstance
     private const int GamepadButtonDpadLeft = 13;
     private const int GamepadButtonDpadRight = 14;
 
-    private readonly ManagedImGui gui = new();
+    private readonly UiCanvas gui = new();
     private readonly EnemyRuntime[] enemies = new EnemyRuntime[MaxEnemies];
     private readonly ProjectileRuntime[] projectiles = new ProjectileRuntime[MaxProjectiles];
     private readonly PickupRuntime[] pickups = new PickupRuntime[MaxPickups];

@@ -9,8 +9,7 @@
 #include "Engine/Rendering/Upscaler/UpscalerTypes.hpp"
 #include "Engine/Utilities/FileHelper.hpp"
 #include "Modules/DevTools/CVarEditorPanel.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
-#include "Modules/NextUI/UI/UiWidgets.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 
 #include <imgui.h>
@@ -231,7 +230,7 @@ namespace Editor
                 return;
             }
             const std::string valueText = cvars.GetValueString(item.cvar);
-            NextUI::Theme::BeginFormRow(item.label.c_str(), 0.45f, 150.0f, 220.0f);
+            NextUI::LabeledRow(item.label.c_str(), 0.45f, 150.0f, 220.0f);
             ImGui::PushID(item.cvar.c_str());
             ImGui::SetNextItemWidth(-1.0f);
 
@@ -295,7 +294,7 @@ namespace Editor
                 ImGui::TextUnformatted(valueText.c_str());
             }
 
-            NextUI::Foundation::Tooltip(item.tooltip.c_str());
+            NextUI::Tooltip(item.tooltip.c_str());
             if (item.requiresRestart)
             {
                 ImGui::SameLine();
@@ -332,16 +331,16 @@ namespace Editor
             std::clamp(panelState.selectedCategory, 0, static_cast<int>(layout.categories.size()) - 1);
 
         ImGui::SetNextWindowSize(ImVec2(920.0f, 650.0f), ImGuiCond_FirstUseEver);
-        NextUI::Theme::PushToolWindowStyle();
+        NextUI::PushToolWindowStyle();
         if (!ImGui::Begin("Settings / Preferences", &ui.settingsPanel))
         {
             ImGui::End();
-            NextUI::Theme::PopToolWindowStyle();
+            NextUI::PopToolWindowStyle();
             return;
         }
-        NextUI::Theme::PushToolWindowContentStyle();
+        NextUI::PushToolWindowContentStyle();
 
-        NextUI::Theme::DrawPanelHeader(
+        NextUI::DrawPanelHeader(
             ICON_FA_GEAR, "Preferences", "Editor and renderer settings apply immediately");
 
         ImGui::SetNextItemWidth(320.0f);
@@ -358,7 +357,7 @@ namespace Editor
         }
 
         const float footerHeight = ImGui::GetFrameHeightWithSpacing() + 10.0f;
-        NextUI::Theme::BeginInsetPanel("##SettingsCategories", ImVec2(200.0f, -footerHeight));
+        NextUI::BeginInsetPanel("##SettingsCategories", ImVec2(200.0f, -footerHeight));
         for (int i = 0; i < static_cast<int>(layout.categories.size()); ++i)
         {
             const bool isSelected = (panelState.selectedCategory == i);
@@ -373,14 +372,14 @@ namespace Editor
             {
                 ImGui::GetWindowDrawList()->AddRectFilled(
                     itemPos, itemPos + ImVec2(itemWidth, itemHeight),
-                    NextUI::Theme::ColorU32(NextUI::Theme::EColor::Accent, 0.18f),
+                    NextUI::ColorU32(NextUI::EColor::Accent, 0.18f),
                     4.0f);
-                NextUI::Theme::DrawSelectionAccentStrip(itemPos, itemPos + ImVec2(itemWidth, itemHeight));
+                NextUI::DrawSelectionAccentStrip(itemPos, itemPos + ImVec2(itemWidth, itemHeight));
             }
 
             ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0, 0, 0, 0));
-            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceHover, 0.4f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderActive, NextUI::Theme::Color(NextUI::Theme::EColor::Accent, 0.3f));
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, NextUI::Color(NextUI::EColor::SurfaceHover, 0.4f));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, NextUI::Color(NextUI::EColor::Accent, 0.3f));
 
             if (ImGui::Selectable(fmt::format("##Cat_{}", i).c_str(), isSelected, ImGuiSelectableFlags_None, ImVec2(itemWidth, itemHeight)))
             {
@@ -390,13 +389,13 @@ namespace Editor
             ImGui::PopStyleColor(3);
 
             ImGui::GetWindowDrawList()->AddText(itemPos + ImVec2(10.0f, 7.0f),
-                isSelected ? NextUI::Theme::ColorU32(NextUI::Theme::EColor::AccentHover) : NextUI::Theme::ColorU32(NextUI::Theme::EColor::Text),
+                isSelected ? NextUI::ColorU32(NextUI::EColor::AccentHover) : NextUI::ColorU32(NextUI::EColor::Text),
                 itemText.c_str());
         }
-        NextUI::Theme::EndInsetPanel();
+        NextUI::EndInsetPanel();
         ImGui::SameLine();
 
-        NextUI::Theme::BeginInsetPanel("##SettingsContent", ImVec2(0.0f, -footerHeight));
+        NextUI::BeginInsetPanel("##SettingsContent", ImVec2(0.0f, -footerHeight));
         const FSettingsCategory& category = layout.categories[panelState.selectedCategory];
         for (const FSettingsGroup& group : category.groups)
         {
@@ -404,7 +403,7 @@ namespace Editor
             {
                 continue;
             }
-            if (!NextUI::Theme::BeginSection(nullptr, group.label.c_str()))
+            if (!NextUI::BeginSection(nullptr, group.label.c_str()))
             {
                 continue;
             }
@@ -422,13 +421,13 @@ namespace Editor
                 }
                 DrawItem(ctx.engine, cvars, item);
             }
-            NextUI::Theme::EndSection();
+            NextUI::EndSection();
         }
-        NextUI::Theme::EndInsetPanel();
+        NextUI::EndInsetPanel();
 
-        ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::Accent, 0.85f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Theme::Color(NextUI::Theme::EColor::Accent, 0.65f));
+        ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Color(NextUI::EColor::Accent, 0.85f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Color(NextUI::EColor::AccentHover));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Color(NextUI::EColor::Accent, 0.65f));
         if (ImGui::Button(ICON_FA_FLOPPY_DISK " Apply & Save"))
         {
             if (!cvars.SaveUserFiles())
@@ -450,9 +449,9 @@ namespace Editor
         }
         ImGui::SameLine();
         ImGui::TextDisabled("Changes apply immediately to active session");
-        NextUI::Theme::PopToolWindowContentStyle();
+        NextUI::PopToolWindowContentStyle();
         ImGui::End();
-        NextUI::Theme::PopToolWindowStyle();
+        NextUI::PopToolWindowStyle();
 
         if (panelState.showAllCVars)
         {

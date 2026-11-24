@@ -7,7 +7,23 @@ foreach(gkModule IN LISTS GK_MODULE_NAMES)
 endforeach()
 
 if(TARGET NextUI)
-    target_link_libraries(NextUI PRIVATE SDL3::SDL3 imgui::imgui)
+    if(IOS OR (WIN32 AND WITH_STREAMLINE))
+        get_target_property(imguiInterfaces imgui::imgui INTERFACE_LINK_LIBRARIES)
+        if(imguiInterfaces)
+            list(REMOVE_ITEM imguiInterfaces Vulkan::Vulkan)
+            set_target_properties(imgui::imgui PROPERTIES
+                INTERFACE_LINK_LIBRARIES "${imguiInterfaces}"
+            )
+        endif()
+    endif()
+    target_link_libraries(NextUI PUBLIC imgui::imgui PRIVATE SDL3::SDL3)
+    target_include_directories(NextUI PUBLIC ${GK_SOURCE_ROOT}/ThirdParty/ImAnim)
+    target_compile_definitions(NextUI PUBLIC IMGUI_DEFINE_MATH_OPERATORS)
+    if(MSVC)
+        set_source_files_properties(${src_files_nextui_thirdparty} PROPERTIES COMPILE_OPTIONS /W0)
+    else()
+        set_source_files_properties(${src_files_nextui_thirdparty} PROPERTIES COMPILE_OPTIONS -w)
+    endif()
 endif()
 
 if(TARGET NextNet)
@@ -191,7 +207,7 @@ endif()
 
 if(TARGET NextRmlUi)
     find_package(RmlUi CONFIG REQUIRED)
-    target_link_libraries(NextRmlUi PRIVATE RmlUi::RmlUi)
+    target_link_libraries(NextRmlUi PRIVATE RmlUi::RmlUi NextUI)
 endif()
 
 if(TARGET NextStreamline AND WITH_STREAMLINE)

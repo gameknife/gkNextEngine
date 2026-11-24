@@ -4,6 +4,7 @@
 
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/Utilities/NextEngineHelper.hpp"
+#include "Modules/NextUI/Hud.hpp"
 #include "Voyage3DCommon.hpp"
 #include "Voyage3DGameInstance.hpp"
 
@@ -52,7 +53,7 @@ namespace
         for (const Voyage3D::FPortRuntime& port : gameInstance.GetPorts())
         {
             ImVec2 screen{};
-            if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(gameInstance, port.worldPos + glm::vec3(0.0f, 2.8f, 0.0f), screen))
+            if (!NextUI::Hud::TryProjectWorldToScreen(gameInstance, port.worldPos + glm::vec3(0.0f, 2.8f, 0.0f), screen))
             {
                 continue;
             }
@@ -75,7 +76,7 @@ namespace
         for (const Voyage3D::FMuzzleFlash& flash : gameInstance.GetMuzzleFlashes())
         {
             ImVec2 center{};
-            if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(gameInstance, flash.worldPos, center))
+            if (!NextUI::Hud::TryProjectWorldToScreen(gameInstance, flash.worldPos, center))
             {
                 continue;
             }
@@ -87,7 +88,7 @@ namespace
         {
             const float progress = 1.0f - std::clamp(text.remainingMs / text.lifeMs, 0.0f, 1.0f);
             ImVec2 screen{};
-            if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(gameInstance, text.worldPos + glm::vec3(0.0f, progress * 1.0f, 0.0f), screen))
+            if (!NextUI::Hud::TryProjectWorldToScreen(gameInstance, text.worldPos + glm::vec3(0.0f, progress * 1.0f, 0.0f), screen))
             {
                 continue;
             }
@@ -103,8 +104,8 @@ namespace
             const float progress = 1.0f - std::clamp(ring.remainingMs / ring.lifeMs, 0.0f, 1.0f);
             ImVec2 center{};
             ImVec2 edge{};
-            if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(gameInstance, ring.worldPos, center) ||
-                !Runtime::EngineHelper::TryProjectWorldToScreenForGame(gameInstance, ring.worldPos + glm::vec3(ring.maxRadius * progress, 0.0f, 0.0f), edge))
+            if (!NextUI::Hud::TryProjectWorldToScreen(gameInstance, ring.worldPos, center) ||
+                !NextUI::Hud::TryProjectWorldToScreen(gameInstance, ring.worldPos + glm::vec3(ring.maxRadius * progress, 0.0f, 0.0f), edge))
             {
                 continue;
             }

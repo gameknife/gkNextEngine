@@ -39,7 +39,7 @@ public sealed class {{ProjectName}}Game : NextGameInstance
     private const float DeadHitStopSeconds = 0.6f;
 
     private readonly Rng rng = new(RngSeed);
-    private readonly ManagedImGui gui = new();
+    private readonly UiCanvas gui = new();
     private readonly ObstacleField obstacles =
         new(ObstacleCount, ObstacleSpacing, ObstacleGapHeight, ObstacleWallWidth, WorldHalfHeight);
 
@@ -191,24 +191,24 @@ public sealed class {{ProjectName}}Game : NextGameInstance
         gui.BeginFrame();
         float middle = gui.ScreenSize.Y * 0.5f;
 
-        gui.DrawTextCenteredX($"{score}", 36.0f, HudPalette.Text, 2.2f, shadow: true);
+        gui.DrawTextCenteredX($"{score}", 36.0f, UiPalette.Text, 2.2f, shadow: true);
 
         switch (state)
         {
             case RunState.Ready:
                 gui.PanelCenteredX(420.0f, middle - 70.0f, 140.0f);
-                gui.DrawTextCenteredX("{{DisplayName}}", middle - 46.0f, HudPalette.Highlight, 1.6f);
-                gui.DrawTextCenteredX("W / S or the arrow keys to steer", middle - 6.0f, HudPalette.Muted);
-                gui.DrawTextCenteredX("PRESS ANY KEY TO START", middle + 26.0f, HudPalette.Accent, 1.1f);
+                gui.DrawTextCenteredX("{{DisplayName}}", middle - 46.0f, UiPalette.Highlight, 1.6f);
+                gui.DrawTextCenteredX("W / S or the arrow keys to steer", middle - 6.0f, UiPalette.Muted);
+                gui.DrawTextCenteredX("PRESS ANY KEY TO START", middle + 26.0f, UiPalette.Accent, 1.1f);
                 break;
 
             case RunState.Dead:
                 gui.PanelCenteredX(400.0f, middle - 62.0f, 128.0f);
-                gui.DrawTextCenteredX("CRASHED", middle - 40.0f, HudPalette.Danger, 1.7f);
-                gui.DrawTextCenteredX($"score {score}    best {best}", middle, HudPalette.Text, 1.1f);
+                gui.DrawTextCenteredX("CRASHED", middle - 40.0f, UiPalette.Danger, 1.7f);
+                gui.DrawTextCenteredX($"score {score}    best {best}", middle, UiPalette.Text, 1.1f);
                 if (deadTimer >= DeadHitStopSeconds)
                 {
-                    gui.DrawTextCenteredX("PRESS ANY KEY TO RETRY", middle + 32.0f, HudPalette.Accent);
+                    gui.DrawTextCenteredX("PRESS ANY KEY TO RETRY", middle + 32.0f, UiPalette.Accent);
                 }
                 break;
         }

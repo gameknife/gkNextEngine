@@ -16,11 +16,10 @@
 #include "Engine/Runtime/Interface/ScreenShotService.hpp"
 #include "Engine/Runtime/Subsystems/NextPhysics.hpp"
 #include "Engine/Runtime/GameInstance.hpp"
-#include "Modules/NextUI/ImGuiScaling.hpp"
 #include "Engine/Rendering/RendererChoices.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include "Modules/DevTools/UI/DeveloperStatusBar.hpp"
-#include "Engine/Runtime/Interface/UserInterface.hpp"
 #include "Engine/Runtime/Scene/SceneBuilder.hpp"
 #include "Engine/Runtime/Utilities/NextEngineHelper.hpp"
 #include "Modules/DevTools/GraphicsDebugPanel.hpp"
@@ -30,8 +29,6 @@
 #include "Engine/Utilities/Localization.hpp"
 #include "Engine/Utilities/Format.hpp"
 #include "Engine/Utilities/Math.hpp"
-#include "Engine/Utilities/AboutDialog.hpp"
-#include "Engine/Utilities/ImGui.hpp"
 
 #include <SDL3/SDL_misc.h>
 #include "Engine/Runtime/Platform/PlatformCommon.hpp"
@@ -48,9 +45,9 @@
 extern float TitlebarSize;
 extern float TitlebarRightInfoWidth;
 
-void NextRendererGameInstance::DrawTitleBar(const FGameUiFrameContext& context, FRendererUiState& uiState)
+void NextRendererGameInstance::DrawTitleBar(const Runtime::FUiFrameContext& context, FRendererUiState& uiState)
 {
-    NextUI::Theme::FAppTitleBarConfig config{};
+    NextUI::FAppTitleBarConfig config{};
     config.BrandWindowId = "RendererBrand";
     config.MenuWindowId = "RendererMenuBar";
     config.RightWindowId = "RendererWindowControls";
@@ -61,7 +58,7 @@ void NextRendererGameInstance::DrawTitleBar(const FGameUiFrameContext& context, 
     config.DrawMenuBar = [&]() -> float
     {
         float menuRight = ImGui::GetCursorScreenPos().x;
-        NextUI::Theme::FMainMenuGhostScope mainMenuStyle;
+        NextUI::FMainMenuGhostScope mainMenuStyle;
 
         const auto UpdateMenuRight = [&menuRight]()
         {
@@ -92,7 +89,7 @@ void NextRendererGameInstance::DrawTitleBar(const FGameUiFrameContext& context, 
         {
             UpdateMenuRight();
             auto& showFlags = GetEngine().GetShowFlags();
-            Utilities::UI::DrawShowFlagsCommon(showFlags, &GetEngine().GetUserSettings());
+            NextUI::DrawShowFlagsCommon(showFlags, &GetEngine().GetUserSettings());
             if (ImGui::MenuItem("Statistics Overlay", "F3", &GetEngine().GetUserSettings().ShowOverlay))
             {
                 GetEngine().GetShowFlags().DebugProfileOverlay = GetEngine().GetUserSettings().ShowOverlay;
@@ -171,11 +168,11 @@ void NextRendererGameInstance::DrawTitleBar(const FGameUiFrameContext& context, 
             }
             if (ImGui::MenuItem("Documentation"))
             {
-                SDL_OpenURL(Utilities::UI::ProjectDocsUrl);
+                SDL_OpenURL(NextUI::ProjectDocsUrl);
             }
             if (ImGui::MenuItem("Report an Issue"))
             {
-                SDL_OpenURL(Utilities::UI::ProjectIssuesUrl);
+                SDL_OpenURL(NextUI::ProjectIssuesUrl);
             }
             ImGui::Separator();
             if (ImGui::MenuItem("About gkNextRenderer"))
@@ -197,12 +194,12 @@ void NextRendererGameInstance::DrawTitleBar(const FGameUiFrameContext& context, 
                                                           : std::function<void()>();
     config.OnClose = context.allowWindowCommands ? std::function<void()>([&]() { GetEngine().RequestClose(); })
                                                  : std::function<void()>();
-    NextUI::Theme::DrawAppTitleBar(GetEngine(), config);
+    NextUI::DrawAppTitleBar(GetEngine(), config);
 }
 
 void NextRendererGameInstance::DrawBottomStatusBar()
 {
-    Runtime::DevToolsUI::DrawDeveloperStatusBar(GetEngine(), "RendererStatusBar", 30.0f,
+    DevTools::DrawDeveloperStatusBar(GetEngine(), "RendererStatusBar", 30.0f,
                                          []() { Modules::LiveCoding::RequestCppReload(); },
                                          Modules::LiveCoding::IsCppLiveCodingAvailable(), false);
 }

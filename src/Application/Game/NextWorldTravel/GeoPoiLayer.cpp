@@ -5,6 +5,7 @@
 #include "Engine/Common/CoreMinimal.hpp"
 #include "Engine/Runtime/Components/TerrainComponent.hpp"
 #include "Engine/Runtime/Utilities/NextEngineHelper.hpp"
+#include "Modules/NextUI/Hud.hpp"
 
 #include <imgui.h>
 
@@ -307,7 +308,7 @@ namespace NextWorldTravel
             const FGeoPoi& poi = pois[static_cast<size_t>(index)];
             const glm::vec3 anchor = LabelAnchor(poi);
             ImVec2 screen;
-            if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(gameInstance, anchor, screen))
+            if (!NextUI::Hud::TryProjectWorldToScreen(gameInstance, anchor, screen))
             {
                 continue;
             }
@@ -416,7 +417,7 @@ namespace NextWorldTravel
             const FGeoPoi& poi = pois[static_cast<size_t>(index)];
             const glm::vec3 anchor = LabelAnchor(poi);
             ImVec2 screen;
-            if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(gameInstance, anchor, screen))
+            if (!NextUI::Hud::TryProjectWorldToScreen(gameInstance, anchor, screen))
             {
                 continue;
             }

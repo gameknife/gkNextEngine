@@ -39,7 +39,6 @@
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/Profiling/ProfilerMacros.hpp"
 #include "Engine/Runtime/Profiling/TracyIntegration.hpp"
-#include "Engine/Runtime/Interface/UserInterface.hpp"
 #include "Engine/Rendering/PipelineCommon/CommonComputePipeline.hpp"
 #include "Engine/Rendering/PipelineCommon/VisibilityBufferLayout.hpp"
 #include "Engine/Rendering/PipelineCommon/RestirDI.hpp"

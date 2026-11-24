@@ -5,13 +5,17 @@
 #include "Engine/Runtime/RuntimeFwd.hpp"
 #include <glm/glm.hpp>
 
-struct ImVec2;
-
 namespace Runtime::EngineHelper
 {
-    bool TryProjectWorldToScreen(const glm::vec3& worldPos, ImVec2& outImGuiPos);
-    bool TryProjectWorldToScreenWithCamera(const Assets::Camera& camera, const glm::vec3& worldPos, ImVec2& outImGuiPos);
-    bool TryProjectWorldToScreenForGame(const NextGameInstanceBase& gameInstance, const glm::vec3& worldPos, ImVec2& outImGuiPos);
+    bool TryProjectWorldToViewportUv(const glm::vec3& worldPos, glm::vec2& outViewportUv);
+    bool TryProjectWorldToViewportUvWithCamera(const Assets::Camera& camera,
+                                               float aspectRatio,
+                                               const glm::vec3& worldPos,
+                                               glm::vec2& outViewportUv);
+    bool TryProjectWorldToViewportUvForGame(const NextGameInstanceBase& gameInstance,
+                                            float aspectRatio,
+                                            const glm::vec3& worldPos,
+                                            glm::vec2& outViewportUv);
     void GetScreenToWorldRay(glm::vec2 locationSS, glm::vec3& origin, glm::vec3& dir);
     void GetScreenToWorldRayWithCamera(const Assets::Camera& camera, glm::vec2 locationSS, glm::vec2 viewportPos,
                                        glm::vec2 viewportSize, glm::vec3& origin, glm::vec3& dir);

@@ -2,8 +2,7 @@
 #include "Modules/DevTools/Command/PropertyCommand.hpp"
 #include "Engine/Runtime/Reflection/ReflectionMacros.hpp"
 #include "ThirdParty/fontawesome/IconsFontAwesome6.h"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
-#include "Modules/NextUI/UI/UiWidgets.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 
 #include <imgui_stdlib.h>
 #include <imgui_internal.h>
@@ -91,7 +90,7 @@ namespace Editor
                 onReset();
                 changed = true;
             }
-            NextUI::Foundation::Tooltip("Reset to default");
+            NextUI::Tooltip("Reset to default");
             if (isDefault) ImGui::EndDisabled();
             ImGui::PopID();
         }
@@ -167,7 +166,7 @@ namespace Editor
 
         ImGui::SetCursorScreenPos(ImVec2(panelMinX, buttonRowY));
         if (readOnly || selected == invalidId) ImGui::BeginDisabled();
-        if (NextUI::Theme::IconButton(ICON_FA_ARROW_LEFT, "Assign the asset selected in Content Browser"))
+        if (NextUI::IconButton(ICON_FA_ARROW_LEFT, "Assign the asset selected in Content Browser"))
         {
             value = selected;
             changed = true;
@@ -176,13 +175,13 @@ namespace Editor
 
         ImGui::SameLine(0.0f, actionSpacing);
         if (!config.locateAsset) ImGui::BeginDisabled();
-        if (NextUI::Theme::IconButton(ICON_FA_MAGNIFYING_GLASS, "Locate this asset in Content Browser")) config.locateAsset(value);
+        if (NextUI::IconButton(ICON_FA_MAGNIFYING_GLASS, "Locate this asset in Content Browser")) config.locateAsset(value);
         if (!config.locateAsset) ImGui::EndDisabled();
 
         if (config.editAsset)
         {
             ImGui::SameLine(0.0f, actionSpacing);
-            if (NextUI::Theme::IconButton(ICON_FA_PEN_TO_SQUARE, "Open this material in Material Editor")) config.editAsset(value);
+            if (NextUI::IconButton(ICON_FA_PEN_TO_SQUARE, "Open this material in Material Editor")) config.editAsset(value);
         }
 
         // Return the cursor to the reserved card bounds before the next property.

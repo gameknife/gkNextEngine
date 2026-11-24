@@ -14,7 +14,7 @@
 #include "Engine/Runtime/Interface/DebugDraw.hpp"
 #include "Engine/Runtime/Interface/ScreenShotService.hpp"
 #include "Engine/Runtime/Interface/SceneContent.hpp"
-#include "Engine/Runtime/Interface/UserInterface.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
 #include "Engine/Runtime/Interface/ScriptRuntime.hpp"
 #include "Engine/Runtime/Interface/ShaderHotReload.hpp"
 #include "Engine/Runtime/Config/ShowFlags.hpp"
@@ -110,8 +110,8 @@ public:
     const Runtime::Config::Options& GetOptions() const { return *options_; }
 
     // Runtime services
-    NextUI::IUserInterface* GetUserInterface() { return userInterface_.get(); }
-    Runtime::IUiOverlay* GetUiOverlay() { return uiOverlay_.get(); }
+    Runtime::IUiHost* GetUiHost() { return uiHost_.get(); }
+    const Runtime::IUiHost* GetUiHost() const { return uiHost_.get(); }
     Runtime::IScreenShotService& GetScreenShotService()
     {
         if (!screenShotService_)
@@ -246,19 +246,25 @@ public:
         shaderHotReloaderFactory_ = std::move(factory);
     }
     
-    void SetUiOverlayFactory(std::function<std::unique_ptr<Runtime::IUiOverlay>(NextEngine&)> factory)
+    void SetUiHostFactory(Runtime::UiHostFactory factory)
     {
-        uiOverlayFactory_ = std::move(factory);
+        uiHostFactory_ = std::move(factory);
     }
 
-    using UserInterfaceFactory = std::function<std::unique_ptr<NextUI::IUserInterface>(
-        NextEngine&,
-        std::function<void()>,
-        std::function<void()>,
-        std::unique_ptr<NextUI::IMultiViewportBackend>)>;
-    void SetUserInterfaceFactory(UserInterfaceFactory factory)
+    void RegisterUiLayerFactory(Runtime::UiLayerFactory factory)
     {
-        userInterfaceFactory_ = std::move(factory);
+        if (!factory)
+        {
+            return;
+        }
+        if (uiHost_)
+        {
+            uiHost_->AddLayer(factory(*this));
+        }
+        else
+        {
+            uiLayerFactories_.push_back(std::move(factory));
+        }
     }
 
     void SetScreenShotService(std::unique_ptr<Runtime::IScreenShotService> service)
@@ -479,10 +485,9 @@ private:
     std::string sceneLoadError_;
 
     // Runtime services and UI
-    std::unique_ptr<NextUI::IUserInterface> userInterface_;
-    UserInterfaceFactory userInterfaceFactory_;
-    std::unique_ptr<Runtime::IUiOverlay> uiOverlay_;
-    std::function<std::unique_ptr<Runtime::IUiOverlay>(NextEngine&)> uiOverlayFactory_;
+    std::unique_ptr<Runtime::IUiHost> uiHost_;
+    Runtime::UiHostFactory uiHostFactory_;
+    std::vector<Runtime::UiLayerFactory> uiLayerFactories_;
     std::vector<std::unique_ptr<Runtime::IRenderFrameConsumer>> renderFrameConsumers_{};
     Runtime::ScriptRuntimeFactory scriptRuntimeFactory_;
     Runtime::ShaderHotReloaderFactory shaderHotReloaderFactory_;

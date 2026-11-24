@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Runtime::DevToolsUI
+namespace DevTools
 {
     bool IsTracyProfilerAvailable();
     bool LaunchTracyProfiler();

@@ -9,10 +9,8 @@
 #include "QueueSystem.h"
 #include "TimeSystem.h"
 #include "Gameplay/Sim/AnchorDebugOverlay.h"
-#include "Modules/NextUI/ImGuiScaling.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
-#include "Modules/NextUI/UI/UiHud.hpp"
-#include "Modules/NextUI/UI/UiTheme.hpp"
+#include "Modules/NextUI/Hud.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -43,7 +41,7 @@ namespace AirportSim
 
         float UiScale()
         {
-            return NextUI::Scaling::GetUiScale();
+            return NextUI::GetUiScale();
         }
 
         void PushProductTheme()
@@ -56,17 +54,17 @@ namespace AirportSim
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f, 12.0f));
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 7.0f));
             ImGui::PushStyleColor(ImGuiCol_WindowBg, kPanelBg);
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, NextUI::Theme::Color(NextUI::Foundation::EColor::Surface, 0.82f));
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, NextUI::Color(NextUI::EColor::Surface, 0.82f));
             ImGui::PushStyleColor(ImGuiCol_Border, kBorder);
             ImGui::PushStyleColor(ImGuiCol_Text, kText);
             ImGui::PushStyleColor(ImGuiCol_TextDisabled, kMuted);
-            ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Foundation::EColor::SurfaceElevated));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Foundation::EColor::SurfaceHover));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Theme::Color(NextUI::Foundation::EColor::AccentHover));
-            ImGui::PushStyleColor(ImGuiCol_Header, NextUI::Theme::Color(NextUI::Foundation::EColor::Accent, 0.45f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, NextUI::Theme::Color(NextUI::Foundation::EColor::AccentHover, 0.72f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderActive, NextUI::Theme::Color(NextUI::Foundation::EColor::Accent, 0.90f));
-            ImGui::PushStyleColor(ImGuiCol_TableRowBgAlt, NextUI::Theme::Color(NextUI::Foundation::EColor::SurfaceElevated, 0.35f));
+            ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Color(NextUI::EColor::SurfaceElevated));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Color(NextUI::EColor::SurfaceHover));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Color(NextUI::EColor::AccentHover));
+            ImGui::PushStyleColor(ImGuiCol_Header, NextUI::Color(NextUI::EColor::Accent, 0.45f));
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, NextUI::Color(NextUI::EColor::AccentHover, 0.72f));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, NextUI::Color(NextUI::EColor::Accent, 0.90f));
+            ImGui::PushStyleColor(ImGuiCol_TableRowBgAlt, NextUI::Color(NextUI::EColor::SurfaceElevated, 0.35f));
             ImGui::PushStyleColor(ImGuiCol_Separator, kBorder);
         }
 
@@ -270,7 +268,7 @@ namespace AirportSim
                 }
             }
         }
-        if (NextUI::Theme::SegmentedPillsIndexed("##AirportSpeedPills", labels, selectedSpeedIndex,
+        if (NextUI::SegmentedPillsIndexed("##AirportSpeedPills", labels, selectedSpeedIndex,
                                                  controlWidth * 3.0f + ImGui::GetStyle().ItemSpacing.x * 2.0f,
                                                  32.0f * scale) &&
             selectedSpeedIndex >= 0)

@@ -17,11 +17,11 @@
 #include "Engine/Runtime/Interface/ScreenShotService.hpp"
 #include "Engine/Runtime/Subsystems/NextPhysics.hpp"
 #include "Engine/Runtime/GameInstance.hpp"
-#include "Modules/NextUI/ImGuiScaling.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include "Engine/Rendering/RendererChoices.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
 #include "Modules/DevTools/UI/DeveloperStatusBar.hpp"
-#include "Engine/Runtime/Interface/UserInterface.hpp"
+
 #include "Engine/Runtime/Scene/SceneBuilder.hpp"
 #include "Engine/Runtime/Utilities/NextEngineHelper.hpp"
 #include "Modules/DevTools/GraphicsDebugPanel.hpp"
@@ -30,8 +30,8 @@
 #include "Modules/LiveCoding/LiveCodingModule.hpp"
 #include "Engine/Utilities/Localization.hpp"
 #include "Engine/Utilities/Format.hpp"
-#include "Engine/Utilities/AboutDialog.hpp"
-#include "Engine/Utilities/ImGui.hpp"
+
+
 
 #include <SDL3/SDL_misc.h>
 #include "Engine/Runtime/Platform/PlatformCommon.hpp"
@@ -47,12 +47,12 @@
 
 namespace RendererViewportDetail
 {
-using NextUI::Theme::DrawFlatViewportButton;
-using NextUI::Theme::DrawViewportComboOption;
-using NextUI::Theme::PopViewportPopupStyle;
-using NextUI::Theme::PopViewportToolbarStyle;
-using NextUI::Theme::PushViewportPopupStyle;
-using NextUI::Theme::PushViewportToolbarStyle;
+using NextUI::GhostButton;
+using NextUI::ComboOption;
+using NextUI::PopViewportPopupStyle;
+using NextUI::PopViewportToolbarStyle;
+using NextUI::PushViewportPopupStyle;
+using NextUI::PushViewportToolbarStyle;
 } // namespace RendererViewportDetail
 
 void NextRendererGameInstance::DrawModeRail(FRendererUiState& uiState)
@@ -65,11 +65,11 @@ void NextRendererGameInstance::DrawModeRail(FRendererUiState& uiState)
     ImDrawList* background = ImGui::GetBackgroundDrawList();
     constexpr float railBackgroundAlpha = 0.70f;
     background->AddRectFilled(railPos, railPos + railSize,
-                              NextUI::Theme::ColorU32(NextUI::Theme::EColor::Background,
+                              NextUI::ColorU32(NextUI::EColor::Background,
                                                       railBackgroundAlpha));
     background->AddLine(ImVec2(railPos.x + railSize.x - 1.0f, railPos.y),
                         ImVec2(railPos.x + railSize.x - 1.0f, railPos.y + railSize.y),
-                        NextUI::Theme::ColorU32(NextUI::Theme::EColor::Border, 0.55f));
+                        NextUI::ColorU32(NextUI::EColor::Border, 0.55f));
 
     ImGui::SetNextWindowPos(railPos, ImGuiCond_Always);
     ImGui::SetNextWindowSize(railSize, ImGuiCond_Always);
@@ -87,7 +87,7 @@ void NextRendererGameInstance::DrawModeRail(FRendererUiState& uiState)
     {
         // 1. Top View Control: Render (Clean Viewport Mode)
         const bool renderActive = (uiState.workMode == EWorkMode::Render && !uiState.showSettings);
-        if (NextUI::Theme::ModeRailButton(ICON_FA_EYE, "Render View - Hide Panels", renderActive, ModeRailButtonSize))
+        if (NextUI::ModeRailButton(ICON_FA_EYE, "Render View - Hide Panels", renderActive, ModeRailButtonSize))
         {
             uiState.workMode = EWorkMode::Render;
             uiState.showSettings = false;
@@ -117,7 +117,7 @@ void NextRendererGameInstance::DrawModeRail(FRendererUiState& uiState)
         for (const auto& entry : categoryEntries)
         {
             const bool active = uiState.showSettings && (uiState.settingsCategory == entry.category);
-            if (NextUI::Theme::ModeRailButton(entry.icon, entry.tooltip, active, ModeRailButtonSize))
+            if (NextUI::ModeRailButton(entry.icon, entry.tooltip, active, ModeRailButtonSize))
             {
                 if (active)
                 {
@@ -145,7 +145,7 @@ void NextRendererGameInstance::DrawModeRail(FRendererUiState& uiState)
 
         // Statistics / Profile overlay button
         const bool profileActive = GetEngine().GetUserSettings().ShowOverlay;
-        if (NextUI::Theme::ModeRailButton(ICON_FA_CHART_LINE, "Statistics - Performance & Memory",
+        if (NextUI::ModeRailButton(ICON_FA_CHART_LINE, "Statistics - Performance & Memory",
                                           profileActive, ModeRailButtonSize))
         {
             GetEngine().GetUserSettings().ShowOverlay = !GetEngine().GetUserSettings().ShowOverlay;
@@ -155,7 +155,7 @@ void NextRendererGameInstance::DrawModeRail(FRendererUiState& uiState)
         // CVar editor button
         const bool cvarActive = (uiState.workMode == EWorkMode::CVar) &&
             GetEngine().GetShowFlags().DebugCVarPanel;
-        if (NextUI::Theme::ModeRailButton(ICON_FA_TERMINAL, "CVars - Runtime Configuration",
+        if (NextUI::ModeRailButton(ICON_FA_TERMINAL, "CVars - Runtime Configuration",
                                           cvarActive, ModeRailButtonSize))
         {
             uiState.workMode = cvarActive ? EWorkMode::Render : EWorkMode::CVar;
@@ -168,7 +168,7 @@ void NextRendererGameInstance::DrawModeRail(FRendererUiState& uiState)
 }
 
 void NextRendererGameInstance::DrawViewportTopBar(
-    const FGameUiFrameContext&, FRendererUiState& uiState)
+    const Runtime::FUiFrameContext&, FRendererUiState& uiState)
 {
     using namespace RendererViewportDetail;
     Runtime::Config::UserSettings& userSetting = GetEngine().GetUserSettings();
@@ -243,7 +243,7 @@ void NextRendererGameInstance::DrawViewportTopBar(
         samplesWidth + upscalerWidth +
         (showSceneSelector ? 4.0f : 0.0f) + (showUpscalerSelector ? 4.0f : 0.0f) + 12.0f;
 
-    NextUI::Theme::FOverlayPanelConfig leftConfig{};
+    NextUI::FOverlayPanelConfig leftConfig{};
     leftConfig.WindowId = "##ViewportRenderToolbar";
     leftConfig.Position = ImVec2(leftEdge, topEdge);
     leftConfig.Size = ImVec2(std::min(leftToolbarWidth, availableWidth), toolbarHeight);
@@ -252,7 +252,7 @@ void NextRendererGameInstance::DrawViewportTopBar(
     leftConfig.Rounding = 5.0f;
     leftConfig.BackgroundAlpha = 0.74f;
 
-    if (NextUI::Theme::BeginOverlayPanel(leftConfig))
+    if (NextUI::BeginOverlayPanel(leftConfig))
     {
         PushViewportToolbarStyle();
         if (showSceneSelector)
@@ -283,7 +283,7 @@ void NextRendererGameInstance::DrawViewportTopBar(
 
                     const bool selected = sceneIdx == userSetting.SceneIndex;
                     const std::string label = std::filesystem::path(scenePath).filename().string();
-                    if (DrawViewportComboOption(label.c_str(), selected))
+                    if (ComboOption(label.c_str(), selected))
                     {
                         userSetting.SceneIndex = sceneIdx;
                         GetEngine().RequestLoadScene({.filename = scenePath});
@@ -296,7 +296,7 @@ void NextRendererGameInstance::DrawViewportTopBar(
                 ImGui::EndCombo();
             }
             PopViewportPopupStyle();
-            NextUI::Theme::DrawTooltip("Scene");
+            NextUI::Tooltip("Scene");
             ImGui::SameLine();
         }
 
@@ -307,7 +307,7 @@ void NextRendererGameInstance::DrawViewportTopBar(
             // has nothing to switch to. Show what is running rather than an empty combo.
             ImGui::TextDisabled("%s",
                                 Runtime::GraphicsDebugPanel::GetCurrentRendererLabel(GetEngine(), userSetting));
-            NextUI::Theme::DrawTooltip("Renderer (no alternative on this GPU)");
+            NextUI::Tooltip("Renderer (no alternative on this GPU)");
             ImGui::SameLine();
         }
         else
@@ -329,7 +329,7 @@ void NextRendererGameInstance::DrawViewportTopBar(
                 for (int rendererIndex = 0; rendererIndex < rendererOptionCount; ++rendererIndex)
                 {
                     const bool selected = rendererIndex == currentRendererIndex;
-                    if (DrawViewportComboOption(
+                    if (ComboOption(
                             Runtime::GraphicsDebugPanel::GetRendererOption(GetEngine(), rendererIndex).displayName, selected))
                     {
                         GetEngine().RequestRendererType(
@@ -343,12 +343,12 @@ void NextRendererGameInstance::DrawViewportTopBar(
                 ImGui::EndCombo();
             }
             PopViewportPopupStyle();
-            NextUI::Theme::DrawTooltip("Renderer");
+            NextUI::Tooltip("Renderer");
             ImGui::SameLine();
         }
 
         const char* renderModeLabel = userSetting.ProgressiveRender ? "Progressive" : "Realtime";
-        if (DrawFlatViewportButton(
+        if (GhostButton(
                 renderModeLabel, "Toggle realtime / progressive rendering",
                 userSetting.ProgressiveRender, ImVec2(renderModeWidth, ImGui::GetFrameHeight())))
         {
@@ -366,7 +366,7 @@ void NextRendererGameInstance::DrawViewportTopBar(
             for (int samples = 1; samples <= 16; ++samples)
             {
                 const bool selected = samples == userSetting.NumberOfSamples;
-                if (DrawViewportComboOption(
+                if (ComboOption(
                         fmt::format("{} spp/frame", samples).c_str(), selected))
                 {
                     userSetting.NumberOfSamples = samples;
@@ -380,7 +380,7 @@ void NextRendererGameInstance::DrawViewportTopBar(
         }
         ImGui::EndDisabled();
         PopViewportPopupStyle();
-        NextUI::Theme::DrawTooltip(userSetting.ProgressiveRender
+        NextUI::Tooltip(userSetting.ProgressiveRender
             ? "Progressive rendering always uses 1 spp per frame"
             : "Samples traced per pixel, per rendered frame");
 
@@ -401,7 +401,7 @@ void NextRendererGameInstance::DrawViewportTopBar(
                         GetEngine().GetRenderer().SupportsUpscaler(typeInfo.type);
                     const bool selected = rawType == static_cast<uint32_t>(userSetting.UpscalerType);
                     ImGui::BeginDisabled(!supported);
-                    if (DrawViewportComboOption(typeInfo.name, selected))
+                    if (ComboOption(typeInfo.name, selected))
                     {
                         GetEngine().SetUpscalerConfiguration(typeInfo.type, userSetting.SuperResolution);
                     }
@@ -416,7 +416,7 @@ void NextRendererGameInstance::DrawViewportTopBar(
                 {
                     const auto& modeInfo = Rendering::Upscaler::GetUpscaleModeInfo(rawMode);
                     const bool selected = rawMode == userSetting.SuperResolution;
-                    if (DrawViewportComboOption(modeInfo.name, selected))
+                    if (ComboOption(modeInfo.name, selected))
                     {
                         GetEngine().SetUpscalerConfiguration(
                             static_cast<Rendering::Upscaler::EUpscalerType>(userSetting.UpscalerType), rawMode);
@@ -425,13 +425,13 @@ void NextRendererGameInstance::DrawViewportTopBar(
                 ImGui::EndCombo();
             }
             PopViewportPopupStyle();
-            NextUI::Theme::DrawTooltip("Upscaler and quality mode");
+            NextUI::Tooltip("Upscaler and quality mode");
         }
         PopViewportToolbarStyle();
     }
-    NextUI::Theme::EndOverlayPanel();
+    NextUI::EndOverlayPanel();
 
-    NextUI::Theme::FOverlayPanelConfig rightConfig{};
+    NextUI::FOverlayPanelConfig rightConfig{};
     rightConfig.WindowId = "##ViewportActionToolbar";
     rightConfig.Position = ImVec2(rightEdge - rightToolbarWidth, topEdge);
     rightConfig.Size = ImVec2(rightToolbarWidth, toolbarHeight);
@@ -440,10 +440,10 @@ void NextRendererGameInstance::DrawViewportTopBar(
     rightConfig.Rounding = 5.0f;
     rightConfig.BackgroundAlpha = 0.74f;
 
-    if (NextUI::Theme::BeginOverlayPanel(rightConfig))
+    if (NextUI::BeginOverlayPanel(rightConfig))
     {
         PushViewportToolbarStyle();
-        if (DrawFlatViewportButton(
+        if (GhostButton(
                 ICON_FA_ROTATE_LEFT, "Reset camera to the scene view", false, ImVec2(28.0f, 22.0f)))
         {
             modelViewController_.Reset(GetEngine().GetScene().GetRenderCamera());
@@ -454,7 +454,7 @@ void NextRendererGameInstance::DrawViewportTopBar(
         float focusRadius = 0.0f;
         const bool hasSelection = GetEngine().GetScene().GetSelectedNodeBounds(focusCenter, focusRadius);
         ImGui::BeginDisabled(!hasSelection);
-        if (DrawFlatViewportButton(
+        if (GhostButton(
                 ICON_FA_CROSSHAIRS, "Focus selected object", false, ImVec2(28.0f, 22.0f)))
         {
             modelViewController_.Focus(focusCenter, focusRadius);
@@ -462,19 +462,19 @@ void NextRendererGameInstance::DrawViewportTopBar(
         ImGui::EndDisabled();
         ImGui::SameLine();
 
-        if (DrawFlatViewportButton(
+        if (GhostButton(
                 ICON_FA_CAMERA, "Take screenshot", false, ImVec2(28.0f, 22.0f)))
         {
             RequestScreenshot(false, "");
         }
         ImGui::SameLine();
-        if (DrawFlatViewportButton(
+        if (GhostButton(
                 ICON_FA_CHEVRON_DOWN, "More capture options", false, ImVec2(24.0f, 22.0f)))
         {
             ImGui::OpenPopup("##ViewportCaptureMenu");
         }
         ImGui::SameLine();
-        if (DrawFlatViewportButton(
+        if (GhostButton(
                 ICON_FA_KEYBOARD, "Toggle shortcut cheat sheet",
                 uiState.showCheatSheet, ImVec2(28.0f, 22.0f)))
         {
@@ -497,7 +497,7 @@ void NextRendererGameInstance::DrawViewportTopBar(
         PopViewportPopupStyle();
         PopViewportToolbarStyle();
     }
-    NextUI::Theme::EndOverlayPanel();
+    NextUI::EndOverlayPanel();
 }
 
 namespace RendererViewportDetail
@@ -561,7 +561,7 @@ void NextRendererGameInstance::DrawViewportCheatSheet(FRendererUiState& uiState)
         viewport->Pos.y + viewport->Size.y - bottomBarHeight - panelMargin - topEdge);
     const float panelHeight = std::min(naturalHeight, availableHeight);
 
-    NextUI::Theme::FOverlayPanelConfig config{};
+    NextUI::FOverlayPanelConfig config{};
     config.WindowId = "##ViewportShortcutCheatSheet";
     config.Position = ImVec2(rightEdge - panelWidth, topEdge);
     config.Size = ImVec2(panelWidth, panelHeight);
@@ -570,23 +570,23 @@ void NextRendererGameInstance::DrawViewportCheatSheet(FRendererUiState& uiState)
     config.Rounding = 6.0f;
     config.BackgroundAlpha = 0.90f;
 
-    if (NextUI::Theme::BeginOverlayPanel(config))
+    if (NextUI::BeginOverlayPanel(config))
     {
         ImGui::TextColored(
-            NextUI::Theme::Color(NextUI::Theme::EColor::Text),
+            NextUI::Color(NextUI::EColor::Text),
             "%s  Keyboard & Mouse", ICON_FA_KEYBOARD);
 
         const float closeButtonWidth = 24.0f;
         ImGui::SameLine(ImGui::GetContentRegionMax().x - closeButtonWidth);
         PushViewportToolbarStyle();
-        if (DrawFlatViewportButton(
+        if (GhostButton(
                 ICON_FA_XMARK, "Close shortcut cheat sheet", false, ImVec2(closeButtonWidth, 22.0f)))
         {
             uiState.showCheatSheet = false;
         }
         PopViewportToolbarStyle();
 
-        NextUI::Theme::DrawThinSeparator();
+        NextUI::DrawThinSeparator();
         ImGui::Dummy(ImVec2(0.0f, 3.0f));
 
         const auto DrawSection = [](const char* title)
@@ -595,9 +595,9 @@ void NextRendererGameInstance::DrawViewportCheatSheet(FRendererUiState& uiState)
             ImGui::TableSetColumnIndex(0);
             ImGui::TableSetBgColor(
                 ImGuiTableBgTarget_RowBg0,
-                NextUI::Theme::ColorU32(NextUI::Theme::EColor::Surface, 0.55f));
+                NextUI::ColorU32(NextUI::EColor::Surface, 0.55f));
             ImGui::TextColored(
-                NextUI::Theme::Color(NextUI::Theme::EColor::TextDim), "%s", title);
+                NextUI::Color(NextUI::EColor::TextDim), "%s", title);
             ImGui::TableSetColumnIndex(1);
             ImGui::TextUnformatted("");
         };
@@ -607,10 +607,10 @@ void NextRendererGameInstance::DrawViewportCheatSheet(FRendererUiState& uiState)
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
             ImGui::TextColored(
-                NextUI::Theme::Color(NextUI::Theme::EColor::Text), "%s", shortcut);
+                NextUI::Color(NextUI::EColor::Text), "%s", shortcut);
             ImGui::TableSetColumnIndex(1);
             ImGui::TextColored(
-                NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted), "%s", action);
+                NextUI::Color(NextUI::EColor::TextMuted), "%s", action);
         };
 
         ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(8.0f, cellPaddingY));
@@ -643,5 +643,5 @@ void NextRendererGameInstance::DrawViewportCheatSheet(FRendererUiState& uiState)
         ImGui::EndChild();
         ImGui::PopStyleVar();
     }
-    NextUI::Theme::EndOverlayPanel();
+    NextUI::EndOverlayPanel();
 }

@@ -1,29 +1,23 @@
+#include "Engine/Common/CoreMinimal.hpp"
+
 #include "Modules/NextUI/NextUIModule.hpp"
 
 #include "Engine/Runtime/Engine.hpp"
-#include "Modules/NextUI/UserInterface.hpp"
+#include "Modules/NextUI/UiSystem.hpp"
 
 namespace Modules::NextUI
 {
     void Install(NextEngine& engine)
     {
-        engine.SetUserInterfaceFactory(
-            [](NextEngine& owner,
-               std::function<void()> preConfig,
-               std::function<void()> initialize,
-               std::unique_ptr<::NextUI::IMultiViewportBackend> multiViewportBackend)
-                -> std::unique_ptr<::NextUI::IUserInterface>
+        engine.SetUiHostFactory(
+            [](NextEngine& owner, Runtime::FUiHostConfig config) -> std::unique_ptr<Runtime::IUiHost>
             {
-                auto& renderer = owner.GetRenderer();
-                return std::make_unique<::NextUI::UserInterface>(
-                    &owner,
-                    renderer.CommandPool(),
-                    renderer.SwapChain(),
-                    renderer.DepthBuffer(),
-                    owner.GetUserSettings(),
-                    std::move(preConfig),
-                    std::move(initialize),
-                    std::move(multiViewportBackend));
+                return std::make_unique<::NextUI::FUiSystem>(owner, std::move(config));
             });
+    }
+
+    ::NextUI::FUiSystem* Get(NextEngine& engine)
+    {
+        return static_cast<::NextUI::FUiSystem*>(engine.GetUiHost());
     }
 }

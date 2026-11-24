@@ -1,7 +1,7 @@
 #include "EditorUi.hpp"
 
 #include "Engine/Runtime/Engine.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include "Modules/LiveCoding/LiveCodingModule.hpp"
 #include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 
@@ -43,7 +43,7 @@ namespace Editor
             options.ShaderHotReloadInterval = shaderInterval;
         }
 
-        if (NextUI::Theme::IconButton(
+        if (NextUI::IconButton(
                 ICON_FA_WAND_MAGIC_SPARKLES "##RebuildShaders",
                 "Rebuild shaders now"))
         {
@@ -53,7 +53,7 @@ namespace Editor
         ImGui::SameLine();
         const bool cppLiveCodingAvailable = Modules::LiveCoding::IsCppLiveCodingAvailable();
         ImGui::BeginDisabled(!cppLiveCodingAvailable);
-        if (NextUI::Theme::IconButton(
+        if (NextUI::IconButton(
                 ICON_FA_HAMMER "##CompileCppLiveCoding",
                 cppLiveCodingAvailable
                     ? "Compile C++ changes with Live++"

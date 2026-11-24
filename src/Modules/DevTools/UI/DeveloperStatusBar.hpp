@@ -4,7 +4,7 @@
 
 class NextEngine;
 
-namespace Runtime::DevToolsUI
+namespace DevTools
 {
     void DrawDeveloperStatusBar(NextEngine& engine,
                                 const char* windowId = "AppBottomBar",

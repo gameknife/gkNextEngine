@@ -8,7 +8,7 @@
 #include "Engine/Runtime/GameInstance.hpp"
 #include "Engine/Runtime/Utilities/NextEngineHelper.hpp"
 #include "Modules/DevTools/UiDevPanels.hpp"
-#include "Modules/NextUI/ImGuiScaling.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include "Modules/ScadLoader/ScadModule.hpp"
 
 #include <glm/glm.hpp>
@@ -149,8 +149,9 @@ void ScadLibraryGameInstance::OnPreConfigUI() { ui_->Config(); }
 
 void ScadLibraryGameInstance::OnInitUI() { ui_->Init(); }
 
-bool ScadLibraryGameInstance::OnRenderUI()
+Runtime::FUiFrameResult ScadLibraryGameInstance::RenderUiFrame(const Runtime::FUiFrameContext& context)
 {
+    (void)context;
     ui_->Render();
     if (ui_->ConsumeFrameAllRequest())
     {
@@ -160,14 +161,7 @@ bool ScadLibraryGameInstance::OnRenderUI()
     {
         FocusSelectedSceneObject();
     }
-    return true;
-}
-
-NextUI::FUiFrameResult ScadLibraryGameInstance::RenderUiFrame(const FGameUiFrameContext& context)
-{
-    (void)context;
-    OnRenderUI();
-    return {NextUI::EUiDeveloperLayer::Console};
+    return {Runtime::EUiDeveloperLayer::Console};
 }
 
 void ScadLibraryGameInstance::FocusSelectedSceneObject()
@@ -333,7 +327,7 @@ bool ScadLibraryGameInstance::OnMouseButton(SDL_Event& event)
     // SDL mouse coordinates are framebuffer pixels on DPI-aware Windows, while
     // IsViewportPoint stores the viewport and toolbar in ImGui logical pixels.
     // Keep mousePos unchanged for GetScreenToWorldRay, which consumes framebuffer pixels.
-    const ImVec2 uiMouse = NextUI::Scaling::MainFramebufferToImGuiPoint(ImVec2(mousePos.x, mousePos.y));
+    const ImVec2 uiMouse = NextUI::MainFramebufferToImGuiPoint(ImVec2(mousePos.x, mousePos.y));
     const glm::vec2 uiMousePos(uiMouse.x, uiMouse.y);
 
     // Don't start a pan drag or a scene pick when the cursor is over a panel/widget.

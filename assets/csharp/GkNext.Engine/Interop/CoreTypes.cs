@@ -65,6 +65,13 @@ public readonly struct Color(float r, float g, float b, float a = 1.0f)
     public static Color FromBytes(byte r, byte g, byte b, byte a = 255)
         => new(r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f);
 
+    /// <summary>Unpacks from IM_COL32 / RGBA8 layout: 0xAABBGGRR.</summary>
+    public static Color FromPacked(uint packed)
+        => FromBytes((byte)(packed & 0xFFu),
+                     (byte)((packed >> 8) & 0xFFu),
+                     (byte)((packed >> 16) & 0xFFu),
+                     (byte)((packed >> 24) & 0xFFu));
+
     /// <summary>Packs into IM_COL32 layout: 0xAABBGGRR.</summary>
     public uint ToPacked()
     {

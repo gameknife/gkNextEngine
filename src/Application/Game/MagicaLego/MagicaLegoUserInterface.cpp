@@ -8,13 +8,11 @@
 #include "MagicaLegoStyle.hpp"
 #include "MagicaLegoUIHelpers.hpp"
 
-#include "Engine/Runtime/Interface/UserInterface.hpp"
-#include "Modules/NextUI/FontLoader.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include "Engine/Runtime/Platform/PlatformCommon.hpp"
 #include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 #include "Engine/Utilities/FileHelper.hpp"
-#include "Engine/Utilities/ImGui.hpp"
 #include "Engine/Utilities/Localization.hpp"
 
 #include <fmt/chrono.h>
@@ -72,7 +70,7 @@ namespace
 
         bool clicked = ImGui::InvisibleButton("##Hit", standardSize);
         bool hovered = ImGui::IsItemHovered();
-        BUTTON_TOOLTIP( LOCTEXT(tooltip) )
+        NextUI::Tooltip(LOCTEXT(tooltip));
         ImGui::PopID();
 
         float hoverFactor = iam_tween_float(id, 0, hovered ? 1.0f : 0.0f, 0.1f, {iam_ease_out_cubic}, iam_policy_crossfade, dt);
@@ -104,7 +102,7 @@ namespace
         ImVec2 textPos = p_min + (p_max - p_min - textSize) * 0.5f;
         ImGui::GetWindowDrawList()->AddText(textPos, ImGui::GetColorU32(ImGuiCol_Text), label);
 
-        ImVec2 cursor = Utilities::UI::TextCentered(shortcut, iconSize);
+        ImVec2 cursor = NextUI::TextCentered(shortcut, iconSize);
         ImGui::GetForegroundDrawList()->AddRect(
             cursor - ImVec2(shortcutSize, shortcutSize),
             cursor + ImVec2(shortcutSize, shortcutSize),
@@ -151,7 +149,7 @@ namespace
             drawList->AddImage(texId, p_min, p_max);
         }
 
-        Utilities::UI::TextCentered(block.name, paletteSize);
+        NextUI::TextCentered(block.name, paletteSize);
 
         ImGui::EndGroup();
 
@@ -190,7 +188,7 @@ void MagicaLegoUserInterface::OnInitUI()
 
     if (bigFont_ == nullptr)
     {
-        bigFont_ = NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
+        bigFont_ = NextUI::LoadFont(NextUI::FFontRequest{
             .filePath = "assets/fonts/Roboto-BoldCondensed.ttf",
             .pixelSize = 72.0f,
             .includeChineseFull = false,
@@ -200,7 +198,7 @@ void MagicaLegoUserInterface::OnInitUI()
 
     if (boldFont_ == nullptr)
     {
-        boldFont_ = NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
+        boldFont_ = NextUI::LoadFont(NextUI::FFontRequest{
             .filePath = "assets/fonts/Roboto-BoldCondensed.ttf",
             .pixelSize = 20.0f,
             .includeChineseFull = false,
@@ -261,7 +259,7 @@ void MagicaLegoUserInterface::DrawTitleBar()
         return;
     }
 
-    NextUI::Theme::FAppTitleBarConfig titleConfig{};
+    NextUI::FAppTitleBarConfig titleConfig{};
     titleConfig.BrandWindowId = "TitleBarBrand##MagicaLego";
     titleConfig.MenuWindowId = "TitleBarLeft##MagicaLego";
     titleConfig.RightWindowId = "TitleBarRight##MagicaLego";
@@ -280,13 +278,13 @@ void MagicaLegoUserInterface::DrawTitleBar()
         {
             NextRenderer::OSCommand("https://github.com/gameknife/gkNextRenderer");
         }
-        BUTTON_TOOLTIP(LOCTEXT("Open Project Page in OS Browser"))
+        NextUI::Tooltip(LOCTEXT("Open Project Page in OS Browser"));
         ImGui::SameLine(0.0f, 4.0f);
         if (ImGui::Button(ICON_FA_TWITTER, iconBtnSize))
         {
             NextRenderer::OSCommand("https://x.com/gKNIFE_");
         }
-        BUTTON_TOOLTIP(LOCTEXT("Open Twitter Page in OS Browser"))
+        NextUI::Tooltip(LOCTEXT("Open Twitter Page in OS Browser"));
 
         ImGui::SameLine(0.0f, 10.0f);
         if (ImGui::Button(ICON_FA_CAMERA, iconBtnSize))
@@ -338,7 +336,7 @@ void MagicaLegoUserInterface::DrawTitleBar()
                 }
             });
         }
-        BUTTON_TOOLTIP(LOCTEXT("Take a Screenshot into the screenshots folder"))
+        NextUI::Tooltip(LOCTEXT("Take a Screenshot into the screenshots folder"));
 
         ImGui::SameLine(0.0f, 4.0f);
         std::string recordAText = ICON_FA_VIDEO " ";
@@ -347,7 +345,7 @@ void MagicaLegoUserInterface::DrawTitleBar()
         {
             RecordTimeline(true);
         }
-        BUTTON_TOOLTIP(LOCTEXT("Record build timeline video, auto rotate"))
+        NextUI::Tooltip(LOCTEXT("Record build timeline video, auto rotate"));
 
         ImGui::SameLine(0.0f, 4.0f);
         std::string recordMText = ICON_FA_VIDEO " ";
@@ -356,7 +354,7 @@ void MagicaLegoUserInterface::DrawTitleBar()
         {
             RecordTimeline(false);
         }
-        BUTTON_TOOLTIP(LOCTEXT("Record build timeline video, manual rotate"))
+        NextUI::Tooltip(LOCTEXT("Record build timeline video, manual rotate"));
 
         ImGui::SameLine(0.0f, 10.0f);
         bool paused = GetGameInstance()->IsBGMPaused();
@@ -364,13 +362,13 @@ void MagicaLegoUserInterface::DrawTitleBar()
         {
             paused ? GetGameInstance()->PauseBGM(false) : GetGameInstance()->PauseBGM(true);
         }
-        BUTTON_TOOLTIP(LOCTEXT("Toggle BGM"))
+        NextUI::Tooltip(LOCTEXT("Toggle BGM"));
         ImGui::SameLine(0.0f, 4.0f);
         if (ImGui::Button(ICON_FA_SHUFFLE, iconBtnSize))
         {
             GetGameInstance()->PlayNextBGM();
         }
-        BUTTON_TOOLTIP(LOCTEXT("Shuffle BGM"))
+        NextUI::Tooltip(LOCTEXT("Shuffle BGM"));
 
         ImGui::SameLine(0.0f, 10.0f);
         if (ImGui::Button(ICON_FA_QUESTION, iconBtnSize))
@@ -378,11 +376,11 @@ void MagicaLegoUserInterface::DrawTitleBar()
             showHelp_ = !showHelp_;
             GetGameInstance()->SetCapturing(showHelp_ || capture_);
         }
-        BUTTON_TOOLTIP(LOCTEXT("Show Help"))
+        NextUI::Tooltip(LOCTEXT("Show Help"));
         return ImGui::GetItemRectMax().x;
     };
 
-    NextUI::Theme::DrawAppTitleBar(engine, titleConfig);
+    NextUI::DrawAppTitleBar(engine, titleConfig);
 }
 
 void MagicaLegoUserInterface::DrawOpening() const 
@@ -771,19 +769,19 @@ void MagicaLegoUserInterface::DrawMainToolBar()
         {
             DirectSetLayout(uiStatus_ ^ EULUT_LeftBar);
         }
-        BUTTON_TOOLTIP("Open Build Window")
+        NextUI::Tooltip("Open Build Window");
         ImGui::SameLine();
         if (ImGui::Button(ICON_FA_SQUARE_CARET_DOWN, ImVec2(buttonSize, buttonSize)))
         {
             DirectSetLayout(uiStatus_ ^ EULUT_Timeline);
         }
-        BUTTON_TOOLTIP("Open Timeline Window")
+        NextUI::Tooltip("Open Timeline Window");
         ImGui::SameLine();
         if (ImGui::Button(ICON_FA_SQUARE_CARET_RIGHT, ImVec2(buttonSize, buttonSize)))
         {
             DirectSetLayout(uiStatus_ ^ EULUT_RightBar);
         }
-        BUTTON_TOOLTIP("Open Brush Window")
+        NextUI::Tooltip("Open Brush Window");
     }
     ImGui::PopStyleColor();
 
@@ -905,24 +903,24 @@ void MagicaLegoUserInterface::DrawLeftBar()
         {
             GetGameInstance()->CleanUp();
         }
-        BUTTON_TOOLTIP(LOCTEXT("New scene"))
+        NextUI::Tooltip(LOCTEXT("New scene"));
         ImGui::SameLine();
         if (ImGui::Button(ICON_FA_FOLDER_OPEN, ImVec2(buttonSize, buttonSize)))
         {
             GetGameInstance()->LoadRecord(selectedFilename);
         }
-        BUTTON_TOOLTIP(LOCTEXT("Open select scene"))
+        NextUI::Tooltip(LOCTEXT("Open select scene"));
         ImGui::SameLine();
         if (ImGui::Button(ICON_FA_FLOPPY_DISK, ImVec2(buttonSize, buttonSize)))
         {
             if (selectedFilename != "") GetGameInstance()->SaveRecord(selectedFilename);
         }
-        BUTTON_TOOLTIP(LOCTEXT("Save current scene"))
+        NextUI::Tooltip(LOCTEXT("Save current scene"));
         ImGui::SameLine();
         // 模态新保存
         if (ImGui::Button(ICON_FA_DOWNLOAD, ImVec2(buttonSize, buttonSize)))
             ImGui::OpenPopup(ICON_FA_DOWNLOAD);
-        BUTTON_TOOLTIP(LOCTEXT("Save as..."))
+        NextUI::Tooltip(LOCTEXT("Save as..."));
 
         ImVec2 center = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
@@ -955,7 +953,7 @@ void MagicaLegoUserInterface::DrawLeftBar()
         {
             showConsoleWindow_ = !showConsoleWindow_;
         }
-        BUTTON_TOOLTIP(LOCTEXT("Open AI Assistant and Console window"))
+        NextUI::Tooltip(LOCTEXT("Open AI Assistant and Console window"));
     }
     ImGui::End();
 
@@ -1014,9 +1012,10 @@ void MagicaLegoUserInterface::DrawRightBar()
             for (auto& block : basicBlocks)
             {
                 const std::string filename = ResolveMagicaLegoThumbnailPath(block);
-                const NextUI::IUserInterface::FUiTextureHandle texture =
-                    GetGameInstance()->GetEngine().GetUserInterface()->RequestUiTexture(filename);
-                ImTextureID id = texture.valid ? texture.textureId : static_cast<ImTextureID>(0);
+                Runtime::IUiHost* uiHost = GetGameInstance()->GetEngine().GetUiHost();
+                const Runtime::FUiTextureHandle texture =
+                    uiHost ? uiHost->RequestTexture(filename) : Runtime::FUiTextureHandle{};
+                ImTextureID id = texture.valid ? NextUI::ToImTextureId(texture.id) : static_cast<ImTextureID>(0);
                 if (MaterialButton(block, id, windowWidth, GetGameInstance()->GetCurrentBrushIdx() == block.brushId_))
                 {
                     GetGameInstance()->SetCurrentBrushIdx(block.brushId_);
@@ -1213,7 +1212,7 @@ void MagicaLegoUserInterface::DrawConsole()
             scrollToBottom_ = true;
         }
     }
-    BUTTON_TOOLTIP(LOCTEXT("Execute command"))
+    NextUI::Tooltip(LOCTEXT("Execute command"));
 
     // Script load button
     std::string loadScriptLabel = std::string(ICON_FA_FILE_CODE) + " " + LOCTEXT("Load Script");
@@ -1221,7 +1220,7 @@ void MagicaLegoUserInterface::DrawConsole()
     {
         showScriptPopup_ = true;
     }
-    BUTTON_TOOLTIP(LOCTEXT("Load and execute a .mlscript file"))
+    NextUI::Tooltip(LOCTEXT("Load and execute a .mlscript file"));
 }
 
 void MagicaLegoUserInterface::DrawScriptLoadPopup()
@@ -1678,9 +1677,9 @@ void MagicaLegoUserInterface::DrawAISection()
     }
 
 
-    BUTTON_TOOLTIP(aiBuildOnExisting_
+    NextUI::Tooltip(aiBuildOnExisting_
         ? LOCTEXT("AI will enhance your existing build based on the description (Ctrl+Enter)")
-        : LOCTEXT("AI will generate a new build from scratch (Ctrl+Enter)"))
+        : LOCTEXT("AI will generate a new build from scratch (Ctrl+Enter)"));
 
     // Show last generated script in a collapsible section
     if (!lastGeneratedScript_.empty())
@@ -1708,7 +1707,7 @@ void MagicaLegoUserInterface::DrawAISection()
             {
                 ImGui::SetClipboardText(lastGeneratedScript_.c_str());
             }
-            BUTTON_TOOLTIP(LOCTEXT("Copy script to clipboard"))
+            NextUI::Tooltip(LOCTEXT("Copy script to clipboard"));
         }
     }
 }

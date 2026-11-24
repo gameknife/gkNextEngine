@@ -19,6 +19,7 @@ gk_add_application(gkNextStillBenchmark MINIMAL_LINK
     MODULES
         SceneContent
         NextValidation
+        NextUI
         NextCapture
         NextPhysics
         NextTemporalUpscaler

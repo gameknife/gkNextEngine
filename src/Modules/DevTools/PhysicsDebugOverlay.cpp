@@ -13,8 +13,7 @@
 #include "Engine/Runtime/Subsystems/NextPhysics.hpp"
 #include "Engine/Runtime/Utilities/NextEngineHelper.hpp"
 #include "Engine/Utilities/Localization.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
-#include "Modules/NextUI/UI/UiTheme.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include <ThirdParty/fontawesome/IconsFontAwesome6.h>
 
 namespace
@@ -107,7 +106,7 @@ namespace
                                   viewport->Pos.y + distance + 44.0f);
         const float panelHeight = std::max(420.0f, viewport->Size.y - distance - 86.0f);
 
-        NextUI::Theme::FDetailPanelConfig panelConfig{};
+        NextUI::FDetailPanelConfig panelConfig{};
         panelConfig.WindowId = "##PhysicsDebugPanel";
         panelConfig.ContentWindowId = "##PhysicsDebugContent";
         panelConfig.Icon = ICON_FA_ATOM;
@@ -116,28 +115,28 @@ namespace
         panelConfig.Position = pos;
         panelConfig.Size = ImVec2(panelWidth, panelHeight);
 
-        if (!NextUI::Theme::BeginDetailPanel(panelConfig))
+        if (!NextUI::BeginDetailPanel(panelConfig))
         {
             return;
         }
 
         auto BeginCard = [](const char* id, float height = 0.0f, ImGuiWindowFlags extraFlags = 0)
         {
-            NextUI::Theme::BeginCard(id, height, extraFlags, 4.0f);
+            NextUI::BeginCard(id, height, extraFlags, 4.0f);
         };
 
         auto EndCard = []()
         {
-            NextUI::Theme::EndCard();
+            NextUI::EndCard();
         };
 
-        const ImVec4 colHeader = NextUI::Theme::Color(NextUI::Theme::EColor::Blue);
-        const ImVec4 colLabel = NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted);
-        const ImVec4 colVal = NextUI::Theme::Color(NextUI::Theme::EColor::Text);
+        const ImVec4 colHeader = NextUI::Color(NextUI::EColor::Blue);
+        const ImVec4 colLabel = NextUI::Color(NextUI::EColor::TextMuted);
+        const ImVec4 colVal = NextUI::Color(NextUI::EColor::Text);
 
         auto CompactStat = [](const char* label, const std::string& value)
         {
-            NextUI::Theme::CompactStat(label, value.c_str());
+            NextUI::CompactStat(label, value.c_str());
         };
 
         // 1. Bodies & Layers Card
@@ -257,7 +256,7 @@ namespace
         ImGui::TextDisabled("[F1] %s", LOCTEXT("Toggle Physics Debug"));
         EndCard();
 
-        NextUI::Theme::EndDetailPanel();
+        NextUI::EndDetailPanel();
     }
 }
 

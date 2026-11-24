@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Runtime::DevToolsUI
+namespace DevTools
 {
     void DrawUiCatalog(bool& open);
 }

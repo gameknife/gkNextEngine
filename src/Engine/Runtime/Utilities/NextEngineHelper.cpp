@@ -3,40 +3,30 @@
 #include "Engine/Assets/Core/Model.hpp"
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/GameInstance.hpp"
-#include "Engine/Runtime/Interface/UserInterface.hpp"
 #include "Engine/Utilities/Math.hpp"
 #include "Engine/Vulkan/Device.hpp"
 #include "Engine/Vulkan/Instance.hpp"
 #include "Engine/Vulkan/SwapChain.hpp"
 #include "Engine/Vulkan/WindowSurface.hpp"
 
-#include <imgui.h>
-
 namespace
 {
-    bool TryNdcToImGuiPos(const glm::vec3& ndc, ImVec2& outImGuiPos, bool invertY)
+    bool TryNdcToViewportUv(const glm::vec3& ndc, glm::vec2& outViewportUv, const bool invertY)
     {
         if (ndc.z < -1.0f || ndc.z > 1.0f || ndc.x < -1.2f || ndc.x > 1.2f || ndc.y < -1.2f || ndc.y > 1.2f)
         {
             return false;
         }
 
-        const ImGuiViewport* viewport = ImGui::GetMainViewport();
-        if (!viewport || viewport->Size.x <= 1.0f || viewport->Size.y <= 1.0f)
-        {
-            return false;
-        }
-
-        outImGuiPos.x = viewport->Pos.x + (ndc.x * 0.5f + 0.5f) * viewport->Size.x;
         const float yNdc = invertY ? -ndc.y : ndc.y;
-        outImGuiPos.y = viewport->Pos.y + (yNdc * 0.5f + 0.5f) * viewport->Size.y;
+        outViewportUv = glm::vec2(ndc.x * 0.5f + 0.5f, yNdc * 0.5f + 0.5f);
         return true;
     }
 }
 
 namespace Runtime::EngineHelper
 {
-    bool TryProjectWorldToScreen(const glm::vec3& worldPos, ImVec2& outImGuiPos)
+    bool TryProjectWorldToViewportUv(const glm::vec3& worldPos, glm::vec2& outViewportUv)
     {
         NextEngine* engine = NextEngine::GetInstance();
         if (!engine)
@@ -57,21 +47,22 @@ namespace Runtime::EngineHelper
             return false;
         }
 
-        return TryNdcToImGuiPos(ndc, outImGuiPos, false);
+        return TryNdcToViewportUv(ndc, outViewportUv, false);
     }
 
-    bool TryProjectWorldToScreenWithCamera(const Assets::Camera& camera, const glm::vec3& worldPos, ImVec2& outImGuiPos)
+    bool TryProjectWorldToViewportUvWithCamera(const Assets::Camera& camera,
+                                               const float aspectRatio,
+                                               const glm::vec3& worldPos,
+                                               glm::vec2& outViewportUv)
     {
-        const ImGuiViewport* viewport = ImGui::GetMainViewport();
-        if (!viewport || viewport->Size.x <= 1.0f || viewport->Size.y <= 1.0f)
+        if (aspectRatio <= 1e-4f)
         {
             return false;
         }
 
-        const float aspect = viewport->Size.x / viewport->Size.y;
         const float fov = camera.FieldOfView > 1.0f ? camera.FieldOfView : 60.0f;
         const glm::mat4 projection = Utilities::Math::ReverseZPerspective(
-            glm::radians(fov), aspect, std::max(0.05f, camera.NearPlane), camera.FarPlane);
+            glm::radians(fov), aspectRatio, std::max(0.05f, camera.NearPlane), camera.FarPlane);
         const glm::mat4 viewProjection = projection * camera.ModelView;
         const glm::vec4 clip = viewProjection * glm::vec4(worldPos, 1.0f);
         if (clip.w <= 0.0f)
@@ -79,18 +70,21 @@ namespace Runtime::EngineHelper
             return false;
         }
 
-        return TryNdcToImGuiPos(glm::vec3(clip) / clip.w, outImGuiPos, true);
+        return TryNdcToViewportUv(glm::vec3(clip) / clip.w, outViewportUv, true);
     }
 
-    bool TryProjectWorldToScreenForGame(const NextGameInstanceBase& gameInstance, const glm::vec3& worldPos, ImVec2& outImGuiPos)
+    bool TryProjectWorldToViewportUvForGame(const NextGameInstanceBase& gameInstance,
+                                            const float aspectRatio,
+                                            const glm::vec3& worldPos,
+                                            glm::vec2& outViewportUv)
     {
         Assets::Camera camera{};
         if (!gameInstance.OverrideRenderCamera(camera))
         {
-            return TryProjectWorldToScreen(worldPos, outImGuiPos);
+            return TryProjectWorldToViewportUv(worldPos, outViewportUv);
         }
 
-        return TryProjectWorldToScreenWithCamera(camera, worldPos, outImGuiPos);
+        return TryProjectWorldToViewportUvWithCamera(camera, aspectRatio, worldPos, outViewportUv);
     }
 
     void GetScreenToWorldRay(glm::vec2 locationSS, glm::vec3& org, glm::vec3& dir)

@@ -5,8 +5,8 @@
 #include "CityTimeSystem.h"
 #include "TrafficSystem.h"
 #include "Gameplay/Sim/AnchorDebugOverlay.h"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
-#include "Modules/NextUI/UI/UiHud.hpp"
+#include "Modules/NextUI/Hud.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -107,7 +107,7 @@ namespace CitySolSim
                 break;
             }
         }
-        if (NextUI::Theme::SegmentedPillsIndexed("##CitySpeedPills", speedLabels, selectedSpeedIndex, 130.0f, 24.0f) &&
+        if (NextUI::SegmentedPillsIndexed("##CitySpeedPills", speedLabels, selectedSpeedIndex, 130.0f, 24.0f) &&
             selectedSpeedIndex >= 0)
         {
             time.TimeScaleRef() = speeds[selectedSpeedIndex];

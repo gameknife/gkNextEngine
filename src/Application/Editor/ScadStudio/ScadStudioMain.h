@@ -22,7 +22,7 @@ public:
     void OnInit() override;
     void OnTick(double deltaSeconds) override;
     void OnDestroy() override;
-    bool OnRenderUI() override;
+    Runtime::FUiFrameResult RenderUiFrame(const Runtime::FUiFrameContext& context) override;
     void OnPreConfigUI() override;
     void OnInitUI() override;
     void OnSceneLoaded() override;

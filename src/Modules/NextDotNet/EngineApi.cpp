@@ -12,7 +12,8 @@
 #include "Engine/Runtime/GameInstance.hpp"
 #include "Engine/Runtime/Components/PhysicsComponent.hpp"
 #include "Engine/Runtime/Components/RenderComponent.hpp"
-#include "Engine/Runtime/Interface/UserInterface.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
+#include "Modules/NextUI/Theme.hpp"
 #include "Engine/Runtime/Reflection/PropertyAccessor.hpp"
 #include "Engine/Runtime/Scene/NodeUtils.hpp"
 #include "Engine/Runtime/Scene/SceneBuilder.hpp"
@@ -954,18 +955,38 @@ namespace Modules::NextDotNet
             }
             *outTexture = FUiTexture{};
             auto* engine = NextEngine::GetInstance();
-            NextUI::IUserInterface* ui = engine != nullptr ? engine->GetUserInterface() : nullptr;
+            Runtime::IUiHost* ui = engine != nullptr ? engine->GetUiHost() : nullptr;
             if (ui == nullptr)
             {
                 return;
             }
-            const NextUI::FUiTextureHandle texture = ui->RequestUiTexture(
+            const Runtime::FUiTextureHandle texture = ui->RequestTexture(
                 ToString(path),
                 srgb != 0,
-                persistent != 0 ? NextUI::EUiTextureLifetime::Persistent : NextUI::EUiTextureLifetime::Transient);
-            outTexture->Handle = static_cast<uint64_t>(texture.textureId);
+                persistent != 0 ? Runtime::EUiTextureLifetime::Persistent : Runtime::EUiTextureLifetime::Transient);
+            outTexture->Handle = texture.id;
             outTexture->PixelSize = FVec2{texture.pixelSize.x, texture.pixelSize.y};
             outTexture->Valid = texture.valid ? 1 : 0;
+        }
+
+        void UI_ClaimInputCapture(GkBool captureMouse, GkBool captureKeyboard)
+        {
+            if (auto* engine = NextEngine::GetInstance())
+            {
+                if (Runtime::IUiHost* ui = engine->GetUiHost())
+                {
+                    ui->ClaimInputCapture(captureMouse != 0, captureKeyboard != 0);
+                }
+            }
+        }
+
+        GkColor32 UI_GetThemeColor(int32_t colorToken, float alpha)
+        {
+            if (colorToken < 0 || colorToken >= static_cast<int32_t>(NextUI::EColor::Count))
+            {
+                colorToken = 0;
+            }
+            return NextUI::PackRgba8(static_cast<NextUI::EColor>(colorToken), std::clamp(alpha, 0.0f, 1.0f));
         }
 
         bool IsValidUiRange(int32_t offset, int32_t count, int32_t total)
@@ -1083,7 +1104,7 @@ namespace Modules::NextDotNet
                 case EUiDrawCommandType::Image:
                     if (command.TextureHandle != 0)
                     {
-                        drawList->AddImage(static_cast<ImTextureID>(command.TextureHandle),
+                        drawList->AddImage(NextUI::ToImTextureId(command.TextureHandle),
                                            p0,
                                            p1,
                                            ImVec2(command.Uv0.X, command.Uv0.Y),

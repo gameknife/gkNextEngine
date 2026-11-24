@@ -15,8 +15,7 @@
 #include "Engine/Assets/Core/Scene.hpp"
 #include "Engine/Rendering/VulkanBaseRenderer.hpp"
 #include "Engine/Runtime/Components/RenderComponent.hpp"
-#include "Modules/NextUI/ImGuiScaling.hpp"
-#include "Engine/Runtime/Interface/UserInterface.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/Subsystems/TaskCoordinator.hpp"
 #include "Engine/Runtime/Utilities/NextEngineHelper.hpp"
@@ -24,8 +23,7 @@
 #include "Engine/Utilities/Math.hpp"
 #include "Engine/Vulkan/SwapChain.hpp"
 #include "Modules/DevTools/UiDevPanels.hpp"
-#include "Modules/NextUI/FontLoader.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include "Modules/ScadLoader/FScadEvaluator.h"
 #include "Modules/ScadLoader/FScadLexer.h"
 #include "Modules/ScadLoader/FScadParser.h"
@@ -79,13 +77,13 @@ namespace ScadLibrary
         constexpr float kBenchGridStep = 14.0f;
         constexpr const char* kScadKitDragDropPayload = "SCAD_LIBRARY_KIT_MODULE";
 
-        using NextUI::Theme::BeginCard;
-        using NextUI::Theme::EndCard;
-        using NextUI::Theme::Draw3AxisFloatDrag;
+        using NextUI::BeginCard;
+        using NextUI::EndCard;
+        using NextUI::Draw3AxisFloatDrag;
 
         void DrawCardHeader(const char* icon, const char* title, const char* badge = nullptr)
         {
-            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::Blue), "%s  %s", icon ? icon : "", title ? title : "");
+            ImGui::TextColored(NextUI::Color(NextUI::EColor::Blue), "%s  %s", icon ? icon : "", title ? title : "");
             if (badge && badge[0] != '\0')
             {
                 ImGui::SameLine();
@@ -98,12 +96,12 @@ namespace ScadLibrary
         bool DrawSegmentedPills(const char* id, const std::vector<std::pair<T, std::string>>& options,
                                 T* currentValue, float totalWidth = -1.0f, float itemHeight = 26.0f)
         {
-            return NextUI::Theme::SegmentedPills(id, options, currentValue, totalWidth, itemHeight);
+            return NextUI::SegmentedPills(id, options, currentValue, totalWidth, itemHeight);
         }
 
         void DrawTagChip(const char* label, const ImVec4& color, const char* tooltip = nullptr)
         {
-            NextUI::Theme::TagChip(label, color, tooltip);
+            NextUI::TagChip(label, color, tooltip);
         }
 
         struct FScadKitDragPayload
@@ -1695,8 +1693,9 @@ namespace ScadLibrary
 
     void ScadLibraryInterface::Init()
     {
-        NextUI::Theme::ApplyProfessionalTheme();
-        NextUI::FontLoader::LoadDefaultUiFont("assets/fonts/Roboto-Regular.ttf", 18.0f);
+        NextUI::ApplyTheme();
+        const float density = engine_.GetUiHost() ? engine_.GetUiHost()->GetUiScale() : 1.0f;
+        NextUI::LoadDefaultUiFont("assets/fonts/Roboto-Regular.ttf", 18.0f, density);
     }
 
     void ScadLibraryInterface::SetWorkspaceMode(EWorkspaceMode mode)
@@ -1807,7 +1806,7 @@ namespace ScadLibrary
             viewportSize_ = {kitBrowserViewportSize.x, kitBrowserViewportSize.y};
             sceneToolbarVisible_ = false;
             DrawViewportAxis(kitBrowserViewportPos, kitBrowserViewportSize);
-            NextUI::Scaling::SyncImGuiViewportToSwapChain(engine_, kitBrowserViewportPos, kitBrowserViewportSize);
+            NextUI::SyncImGuiViewportToSwapChain(engine_, kitBrowserViewportPos, kitBrowserViewportSize);
             return;
         }
 
@@ -1906,7 +1905,7 @@ namespace ScadLibrary
             ReloadDesigner();
         }
 
-        NextUI::Scaling::SyncImGuiViewportToSwapChain(
+        NextUI::SyncImGuiViewportToSwapChain(
             engine_,
             ImVec2(viewport->Pos.x + leftWidth, viewport->Pos.y + kTitleBarHeight),
             ImVec2(std::max(1.0f, viewport->Size.x - leftWidth - rightWidth),
@@ -1939,7 +1938,7 @@ namespace ScadLibrary
 
     void ScadLibraryInterface::DrawTitleBar()
     {
-        NextUI::Theme::FAppTitleBarConfig config{};
+        NextUI::FAppTitleBarConfig config{};
         config.BrandWindowId = "ScadLibraryBrand";
         config.MenuWindowId = "ScadLibraryMenu";
         config.RightWindowId = "ScadLibraryWindowControls";
@@ -1949,7 +1948,7 @@ namespace ScadLibrary
         config.DrawMenuBar = [&]() -> float
         {
             float menuRight = ImGui::GetCursorScreenPos().x;
-            NextUI::Theme::FMainMenuGhostScope mainMenuStyle;
+            NextUI::FMainMenuGhostScope mainMenuStyle;
             if (mainMenuStyle.BeginMenu("File"))
             {
                 if (ImGui::MenuItem("重新扫描场景与 Kit", "F5"))
@@ -2005,7 +2004,7 @@ namespace ScadLibrary
         config.OnMinimize = [&]() { engine_.RequestMinimize(); };
         config.OnToggleMaximize = [&]() { engine_.ToggleMaximize(); };
         config.OnClose = [&]() { engine_.RequestClose(); };
-        NextUI::Theme::DrawAppTitleBar(engine_, config);
+        NextUI::DrawAppTitleBar(engine_, config);
     }
 
     void ScadLibraryInterface::DrawWorkspaceToolbar()
@@ -2030,7 +2029,7 @@ namespace ScadLibrary
         constexpr float itemGap = 5.0f;
         const auto actionButton = [&](const char* label, const char* tooltip, bool active = false)
         {
-            return NextUI::Theme::ToolbarButton(label, tooltip, active, ImVec2(buttonWidth, buttonHeight));
+            return NextUI::ToolbarButton(label, tooltip, active, ImVec2(buttonWidth, buttonHeight));
         };
 
         if (workspaceMode_ == EWorkspaceMode::SceneAssembly)
@@ -2039,8 +2038,8 @@ namespace ScadLibrary
             ImGui::BeginDisabled(openedAssemblyPath_.empty());
             if (dirty)
             {
-                ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::Accent, 0.85f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover));
+                ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Color(NextUI::EColor::Accent, 0.85f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Color(NextUI::EColor::AccentHover));
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
             }
             if (actionButton(ICON_FA_FLOPPY_DISK " 保存", dirty ? "保存修改 (Ctrl+S)" : "当前已是最新"))
@@ -2091,7 +2090,7 @@ namespace ScadLibrary
         if (workspaceMode_ != EWorkspaceMode::KitBrowser)
         {
             ImGui::SameLine(0.0f, itemGap);
-            if (NextUI::Theme::ToolbarButton(ICON_FA_WAND_MAGIC_SPARKLES " AI", "打开 AI 创作面板",
+            if (NextUI::ToolbarButton(ICON_FA_WAND_MAGIC_SPARKLES " AI", "打开 AI 创作面板",
                                              inspectorPrimaryTab_ == 1, ImVec2(58.0f, buttonHeight)))
             {
                 benchCollapsed_ = false;
@@ -2100,7 +2099,7 @@ namespace ScadLibrary
         }
 
         ImGui::SameLine(0.0f, itemGap);
-        if (NextUI::Theme::ToolbarButton(ICON_FA_TERMINAL " 控制台", "切换控制台 (`)",
+        if (NextUI::ToolbarButton(ICON_FA_TERMINAL " 控制台", "切换控制台 (`)",
                                          DevTools::FUiDevPanels::Get().IsConsoleOpen(),
                                          ImVec2(78.0f, buttonHeight)))
         {
@@ -2109,9 +2108,9 @@ namespace ScadLibrary
 
         ImGui::SameLine(0.0f, 10.0f);
         const float fps = engine_.GetFrameRate();
-        const ImVec4 fpsColor = fps >= 55.0f ? NextUI::Theme::Color(NextUI::Theme::EColor::Success)
-                                            : (fps >= 30.0f ? NextUI::Theme::Color(NextUI::Theme::EColor::Warning)
-                                                            : NextUI::Theme::Color(NextUI::Theme::EColor::Danger));
+        const ImVec4 fpsColor = fps >= 55.0f ? NextUI::Color(NextUI::EColor::Success)
+                                            : (fps >= 30.0f ? NextUI::Color(NextUI::EColor::Warning)
+                                                            : NextUI::Color(NextUI::EColor::Danger));
         ImGui::AlignTextToFramePadding();
         ImGui::TextColored(fpsColor, "%.0f FPS", fps);
     }
@@ -2119,7 +2118,7 @@ namespace ScadLibrary
     void ScadLibraryInterface::DrawBottomBar()
     {
         DevTools::FUiDevPanels::Get().SetBottomBarReservedHeight(kBottomBarHeight);
-        NextUI::Theme::FBottomBarConfig config{};
+        NextUI::FBottomBarConfig config{};
         config.WindowId = "ScadLibraryBottomBar";
         config.Height = kBottomBarHeight;
         config.CenterWidth = 588.0f;
@@ -2133,9 +2132,9 @@ namespace ScadLibrary
                                 (assemblySourceDirty_ || benchDirty_ || sourceBufferDirty_ || terrainProcessDirty_)) ||
                                (workspaceMode_ == EWorkspaceMode::CharacterDesigner && designerDirty_);
             const ImU32 dotColor = statusError_
-                ? NextUI::Theme::ColorU32(NextUI::Theme::EColor::Danger)
-                : (dirty ? NextUI::Theme::ColorU32(NextUI::Theme::EColor::Warning)
-                         : NextUI::Theme::ColorU32(NextUI::Theme::EColor::Success));
+                ? NextUI::ColorU32(NextUI::EColor::Danger)
+                : (dirty ? NextUI::ColorU32(NextUI::EColor::Warning)
+                         : NextUI::ColorU32(NextUI::EColor::Success));
 
             const ImVec2 pos = ImGui::GetCursorScreenPos();
             constexpr float radius = 4.0f;
@@ -2146,8 +2145,8 @@ namespace ScadLibrary
 
             if (!statusLine_.empty())
             {
-                const ImVec4 color = statusError_ ? NextUI::Theme::Color(NextUI::Theme::EColor::Danger)
-                                                  : NextUI::Theme::Color(NextUI::Theme::EColor::Text);
+                const ImVec4 color = statusError_ ? NextUI::Color(NextUI::EColor::Danger)
+                                                  : NextUI::Color(NextUI::EColor::Text);
                 ImGui::TextColored(color, "%s", statusLine_.c_str());
             }
             else
@@ -2172,7 +2171,7 @@ namespace ScadLibrary
         };
         config.DrawCenterContent = [&]() { DrawWorkspaceToolbar(); };
         config.DrawRightContent = [&]() { DrawActionToolbar(); };
-        NextUI::Theme::DrawBottomBar(config);
+        NextUI::DrawBottomBar(config);
     }
 
     void ScadLibraryInterface::DrawKitDropTarget(const ImVec2& pos, const ImVec2& size)
@@ -2358,7 +2357,7 @@ namespace ScadLibrary
             ImGui::SameLine();
             ImGui::TextDisabled("%zu 个 Kit · 批量浏览并选择模块预览", kits_.size());
             ImGui::SameLine(ImGui::GetWindowWidth() - 54.0f);
-            if (NextUI::Theme::IconButton(ICON_FA_ARROWS_ROTATE "##kit_browser_rescan", "重新扫描 Kit 目录", false,
+            if (NextUI::IconButton(ICON_FA_ARROWS_ROTATE "##kit_browser_rescan", "重新扫描 Kit 目录", false,
                                           ImVec2(30.0f, 30.0f)))
             {
                 RescanKits();
@@ -2489,8 +2488,8 @@ namespace ScadLibrary
             }
             else
             {
-                NextUI::IUserInterface* userInterface = engine_.GetUserInterface();
-                Vulkan::AssetThumbnailRenderer* thumbnails = userInterface != nullptr
+                Runtime::IUiHost* uiHost = engine_.GetUiHost();
+                Vulkan::AssetThumbnailRenderer* thumbnails = uiHost != nullptr
                     ? &EditorPreview::AssetThumbnails(engine_.GetRenderer())
                     : nullptr;
                 constexpr float thumbnailGap = 10.0f;
@@ -2564,7 +2563,7 @@ namespace ScadLibrary
                                                 thumbnailHash);
                                             if (sampleSlot != std::numeric_limits<uint32_t>::max())
                                             {
-                                                textureId = userInterface->RequestImTextureIdRaw(sampleSlot);
+                                                textureId = NextUI::ToImTextureId(uiHost->ResolveRawSlotId(sampleSlot));
                                             }
                                         }
                                         const FKitThumbnailControlResult thumbnailControl = DrawKitThumbnailControl(
@@ -2729,7 +2728,7 @@ namespace ScadLibrary
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(5.0f, 5.0f));
         if (ImGui::Begin("##ScadLibraryKitPreviewToolbar", nullptr, toolbarFlags))
         {
-            if (NextUI::Theme::ToolbarButton(ICON_FA_ROTATE_LEFT, "回到全览视图", false))
+            if (NextUI::ToolbarButton(ICON_FA_ROTATE_LEFT, "回到全览视图", false))
             {
                 frameAllRequested_ = true;
             }
@@ -2751,14 +2750,14 @@ namespace ScadLibrary
 
     void ScadLibraryInterface::DrawBrowserPanel(const ImVec2& pos, const ImVec2& size)
     {
-        NextUI::Theme::FCollapsibleSidePanelConfig sideConfig{};
+        NextUI::FCollapsibleSidePanelConfig sideConfig{};
         sideConfig.WindowId = "##ScadLibraryBrowser";
         sideConfig.Position = pos;
         sideConfig.Size = size;
         sideConfig.Collapsed = browserCollapsed_;
-        if (!NextUI::Theme::BeginCollapsibleSidePanel(sideConfig))
+        if (!NextUI::BeginCollapsibleSidePanel(sideConfig))
         {
-            NextUI::Theme::EndCollapsibleSidePanel();
+            NextUI::EndCollapsibleSidePanel();
             return;
         }
 
@@ -2768,26 +2767,26 @@ namespace ScadLibrary
             {
                 browserCollapsed_ = false;
             }
-            NextUI::Theme::EndCollapsibleSidePanel();
+            NextUI::EndCollapsibleSidePanel();
             return;
         }
 
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted(ICON_FA_FOLDER_TREE "  资源库");
         ImGui::SameLine(ImGui::GetWindowWidth() - 82.0f);
-        if (NextUI::Theme::IconButton(ICON_FA_ARROWS_ROTATE "##rescan", "重新扫描场景与 Kit", false,
+        if (NextUI::IconButton(ICON_FA_ARROWS_ROTATE "##rescan", "重新扫描场景与 Kit", false,
                                       ImVec2(28.0f, 28.0f)))
         {
             RescanKits();
             RescanAssemblies();
         }
         ImGui::SameLine();
-        if (NextUI::Theme::IconButton(ICON_FA_CHEVRON_LEFT "##collapse_browser", "收起资源库", false,
+        if (NextUI::IconButton(ICON_FA_CHEVRON_LEFT "##collapse_browser", "收起资源库", false,
                                       ImVec2(28.0f, 28.0f)))
         {
             browserCollapsed_ = true;
         }
-        NextUI::Theme::DrawThinSeparator(0.72f);
+        NextUI::DrawThinSeparator(0.72f);
 
         const std::vector<std::pair<int, std::string>> libraryTabs = {
             {0, fmt::format(ICON_FA_CITY " 场景 ({})", assemblies_.size())},
@@ -2936,7 +2935,7 @@ namespace ScadLibrary
                         if (assembly.generated)
                         {
                             ImGui::SameLine(0.0f, 4.0f);
-                            DrawTagChip("Gen", NextUI::Theme::Color(NextUI::Theme::EColor::Warning), "由规格或工具生成");
+                            DrawTagChip("Gen", NextUI::Color(NextUI::EColor::Warning), "由规格或工具生成");
                         }
                         ImGui::SetCursorScreenPos(ImVec2(rowPosition.x,
                                                          rowPosition.y + rowHeight + ImGui::GetStyle().ItemSpacing.y));
@@ -2994,9 +2993,9 @@ namespace ScadLibrary
                 }
 
                 ImGui::BeginChild("##kit_preview_library", ImVec2(0, 0), ImGuiChildFlags_None);
-                NextUI::IUserInterface* userInterface = engine_.GetUserInterface();
+                Runtime::IUiHost* uiHost = engine_.GetUiHost();
                 Vulkan::AssetThumbnailRenderer* thumbnails = nullptr;
-                if (userInterface != nullptr)
+                if (uiHost != nullptr)
                 {
                     thumbnails = &EditorPreview::AssetThumbnails(engine_.GetRenderer());
                 }
@@ -3087,7 +3086,7 @@ namespace ScadLibrary
                                         thumbnailIndex, thumbnailSource, thumbnailHash);
                                     if (sampleSlot != std::numeric_limits<uint32_t>::max())
                                     {
-                                        textureId = userInterface->RequestImTextureIdRaw(sampleSlot);
+                                        textureId = NextUI::ToImTextureId(uiHost->ResolveRawSlotId(sampleSlot));
                                     }
                                 }
 
@@ -3166,7 +3165,7 @@ namespace ScadLibrary
         {
             DrawStructureOutliner();
         }
-        NextUI::Theme::EndCollapsibleSidePanel();
+        NextUI::EndCollapsibleSidePanel();
     }
 
     void ScadLibraryInterface::DrawBoneHierarchyPanel(const ImVec2& pos, const ImVec2& size)
@@ -3313,14 +3312,14 @@ namespace ScadLibrary
 
     void ScadLibraryInterface::DrawModePanel(const ImVec2& pos, const ImVec2& size)
     {
-        NextUI::Theme::FCollapsibleSidePanelConfig sideConfig{};
+        NextUI::FCollapsibleSidePanelConfig sideConfig{};
         sideConfig.WindowId = "##ScadLibraryBench";
         sideConfig.Position = pos;
         sideConfig.Size = size;
         sideConfig.Collapsed = benchCollapsed_;
-        if (!NextUI::Theme::BeginCollapsibleSidePanel(sideConfig))
+        if (!NextUI::BeginCollapsibleSidePanel(sideConfig))
         {
-            NextUI::Theme::EndCollapsibleSidePanel();
+            NextUI::EndCollapsibleSidePanel();
             return;
         }
 
@@ -3330,14 +3329,14 @@ namespace ScadLibrary
             {
                 benchCollapsed_ = false;
             }
-            NextUI::Theme::EndCollapsibleSidePanel();
+            NextUI::EndCollapsibleSidePanel();
             return;
         }
 
         ImGui::AlignTextToFramePadding();
         if (workspaceMode_ == EWorkspaceMode::SceneAssembly)
         {
-            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover), "%s  场景检查器", ICON_FA_SLIDERS);
+            ImGui::TextColored(NextUI::Color(NextUI::EColor::AccentHover), "%s  场景检查器", ICON_FA_SLIDERS);
             ImGui::SameLine();
             if (document_.HasTerrain())
             {
@@ -3350,19 +3349,19 @@ namespace ScadLibrary
         }
         else if (workspaceMode_ == EWorkspaceMode::CharacterDesigner)
         {
-            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover), "%s  角色属性", ICON_FA_SLIDERS);
+            ImGui::TextColored(NextUI::Color(NextUI::EColor::AccentHover), "%s  角色属性", ICON_FA_SLIDERS);
         }
         else
         {
-            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover), "%s  动作与装备属性", ICON_FA_SLIDERS);
+            ImGui::TextColored(NextUI::Color(NextUI::EColor::AccentHover), "%s  动作与装备属性", ICON_FA_SLIDERS);
         }
         ImGui::SameLine(ImGui::GetWindowWidth() - 43.0f);
-        if (NextUI::Theme::IconButton(ICON_FA_CHEVRON_RIGHT "##collapse_bench", "收起属性面板", false,
+        if (NextUI::IconButton(ICON_FA_CHEVRON_RIGHT "##collapse_bench", "收起属性面板", false,
                                       ImVec2(28.0f, 28.0f)))
         {
             benchCollapsed_ = true;
         }
-        NextUI::Theme::DrawThinSeparator(0.72f);
+        NextUI::DrawThinSeparator(0.72f);
 
         if (aiOpenRequested_)
         {
@@ -3396,7 +3395,7 @@ namespace ScadLibrary
         {
             DrawAIContent();
         }
-        NextUI::Theme::EndCollapsibleSidePanel();
+        NextUI::EndCollapsibleSidePanel();
     }
 
     AI::FScadAIEditTarget ScadLibraryInterface::ResolveAITarget() const
@@ -4519,7 +4518,7 @@ namespace ScadLibrary
 
         for (const std::string& warning : terrainProcessWarnings_)
         {
-            ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Theme::Color(NextUI::Theme::EColor::Warning));
+            ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Color(NextUI::EColor::Warning));
             ImGui::TextWrapped("%s", warning.c_str());
             ImGui::PopStyleColor();
         }
@@ -5586,7 +5585,7 @@ namespace ScadLibrary
         if (!openedAssemblyPath_.empty())
         {
             ImGui::Spacing();
-            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted), "%s%s",
+            ImGui::TextColored(NextUI::Color(NextUI::EColor::TextMuted), "%s%s",
                                openedAssemblyPath_.c_str(), assemblySourceDirty_ ? "  *" : "");
         }
         if (!openedAssemblyKits_.empty())
@@ -5596,7 +5595,7 @@ namespace ScadLibrary
         if (openedAssemblyPath_.find("/generated/") != std::string::npos ||
             openedAssemblyPath_.find("\\generated\\") != std::string::npos)
         {
-            ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Theme::Color(NextUI::Theme::EColor::Warning));
+            ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Color(NextUI::EColor::Warning));
             ImGui::TextWrapped("generated/ 文件可能由 specs/ 重新生成；保存的手工修改可能被覆盖。");
             ImGui::PopStyleColor();
         }
@@ -5604,7 +5603,7 @@ namespace ScadLibrary
                             document_.HasTerrain() ? "  ·  含地形" : "");
         for (const std::string& warning : terrainProcessWarnings_)
         {
-            ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Theme::Color(NextUI::Theme::EColor::Warning));
+            ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Color(NextUI::EColor::Warning));
             ImGui::TextWrapped("%s", warning.c_str());
             ImGui::PopStyleColor();
         }
@@ -5642,7 +5641,7 @@ namespace ScadLibrary
         {
             if (sourceBufferDirty_)
             {
-                ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Theme::Color(NextUI::Theme::EColor::Warning));
+                ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Color(NextUI::EColor::Warning));
                 ImGui::TextWrapped("源码已改动。预览或保存会重新解析，对象与地形面板随后刷新。");
                 ImGui::PopStyleColor();
                 ImGui::SameLine();
@@ -6230,9 +6229,9 @@ namespace ScadLibrary
                     duplicateInstanceRequest = selectedSegment.instanceIndex;
                 }
                 ImGui::SameLine(0.0f, 8.0f);
-                ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::Danger, 0.22f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::Danger, 0.45f));
-                ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Theme::Color(NextUI::Theme::EColor::Danger));
+                ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Color(NextUI::EColor::Danger, 0.22f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Color(NextUI::EColor::Danger, 0.45f));
+                ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Color(NextUI::EColor::Danger));
                 if (ImGui::Button(ICON_FA_TRASH " 删除节点", ImVec2(96.0f, 26.0f)))
                 {
                     removeInstanceRequest = selectedSegment.instanceIndex;
@@ -8189,15 +8188,15 @@ namespace ScadLibrary
         // 2. Character File & Status Card
         BeginCard("WorkbenchFileCard");
         {
-            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::Text), ICON_FA_USER_GEAR "  角色文件与配置");
+            ImGui::TextColored(NextUI::Color(NextUI::EColor::Text), ICON_FA_USER_GEAR "  角色文件与配置");
             ImGui::SameLine();
             if (workbench_.RigDirty() || workbench_.EquipmentDirty())
             {
-                DrawTagChip("未保存", NextUI::Theme::Color(NextUI::Theme::EColor::Warning), "动作或装备有未保存的修改");
+                DrawTagChip("未保存", NextUI::Color(NextUI::EColor::Warning), "动作或装备有未保存的修改");
             }
             else
             {
-                DrawTagChip("已同步", NextUI::Theme::Color(NextUI::Theme::EColor::Success), "角色资源与磁盘一致");
+                DrawTagChip("已同步", NextUI::Color(NextUI::EColor::Success), "角色资源与磁盘一致");
             }
 
             ImGui::Spacing();
@@ -8240,7 +8239,7 @@ namespace ScadLibrary
                 const float halfWidth = std::max(80.0f, (ImGui::GetContentRegionAvail().x - spacing) * 0.5f);
                 if (workbench_.RigDirty())
                 {
-                    ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::Accent));
+                    ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Color(NextUI::EColor::Accent));
                 }
                 if (ImGui::Button(workbench_.RigDirty() ? ICON_FA_FLOPPY_DISK " 保存动作 *" : ICON_FA_FLOPPY_DISK " 保存动作",
                                   ImVec2(halfWidth, 0.0f)))
@@ -8265,7 +8264,7 @@ namespace ScadLibrary
                 ImGui::SameLine();
                 if (workbench_.EquipmentDirty())
                 {
-                    ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::Accent));
+                    ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Color(NextUI::EColor::Accent));
                 }
                 if (ImGui::Button(workbench_.EquipmentDirty() ? ICON_FA_SHIELD_HALVED " 保存装备 *" : ICON_FA_SHIELD_HALVED " 保存装备",
                                   ImVec2(halfWidth, 0.0f)))
@@ -8349,7 +8348,7 @@ namespace ScadLibrary
                         const bool rowHovered = ImGui::IsItemHovered();
 
                         const char* icon = isPlaying ? ICON_FA_CIRCLE_PLAY : (isSelected ? ICON_FA_PERSON_RUNNING : ICON_FA_PERSON);
-                        const ImVec4 iconColor = isSelected ? NextUI::Theme::Color(NextUI::Theme::EColor::Accent) : NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted);
+                        const ImVec4 iconColor = isSelected ? NextUI::Color(NextUI::EColor::Accent) : NextUI::Color(NextUI::EColor::TextMuted);
 
                         ImGui::SetCursorPosY(startY + std::floor((rowHeight - ImGui::GetTextLineHeight()) * 0.5f));
                         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 8.0f);
@@ -8358,7 +8357,7 @@ namespace ScadLibrary
 
                         if (isSelected)
                         {
-                            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::Text), "%s", clip.name.c_str());
+                            ImGui::TextColored(NextUI::Color(NextUI::EColor::Text), "%s", clip.name.c_str());
                         }
                         else
                         {
@@ -8369,9 +8368,9 @@ namespace ScadLibrary
                         const std::string chStr = fmt::format("{}轨", clip.channels.size());
                         constexpr float badgeWidth = 105.0f;
                         ImGui::SameLine(std::max(ImGui::GetCursorPosX(), rowWidth - badgeWidth));
-                        DrawTagChip(durStr.c_str(), NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover));
+                        DrawTagChip(durStr.c_str(), NextUI::Color(NextUI::EColor::AccentHover));
                         ImGui::SameLine(0.0f, 4.0f);
-                        DrawTagChip(chStr.c_str(), NextUI::Theme::Color(NextUI::Theme::EColor::Blue));
+                        DrawTagChip(chStr.c_str(), NextUI::Color(NextUI::EColor::Blue));
 
                         ImGui::SetCursorPosY(startY + rowHeight + ImGui::GetStyle().ItemSpacing.y);
                         ImGui::Dummy(ImVec2(0.0f, 0.0f));
@@ -8426,28 +8425,28 @@ namespace ScadLibrary
         const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking |
             ImGuiWindowFlags_AlwaysAutoResize;
-        NextUI::Theme::PushViewportToolbarStyle();
+        NextUI::PushViewportToolbarStyle();
         if (ImGui::Begin("##ScadLibraryViewportToolbar", nullptr, flags))
         {
-            if (NextUI::Theme::ToolbarButton(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT, "移动骨骼 (W)", boneGizmoOperation_ == 0))
+            if (NextUI::ToolbarButton(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT, "移动骨骼 (W)", boneGizmoOperation_ == 0))
             {
                 boneGizmoOperation_ = 0;
             }
             ImGui::SameLine();
-            if (NextUI::Theme::ToolbarButton(ICON_FA_ROTATE, "旋转骨骼 (E)", boneGizmoOperation_ == 1))
+            if (NextUI::ToolbarButton(ICON_FA_ROTATE, "旋转骨骼 (E)", boneGizmoOperation_ == 1))
             {
                 boneGizmoOperation_ = 1;
             }
             ImGui::SameLine();
-            if (NextUI::Theme::ToolbarButton(ICON_FA_EXPAND, "缩放骨骼 (R)", boneGizmoOperation_ == 2))
+            if (NextUI::ToolbarButton(ICON_FA_EXPAND, "缩放骨骼 (R)", boneGizmoOperation_ == 2))
             {
                 boneGizmoOperation_ = 2;
             }
-            NextUI::Theme::DrawVerticalSeparator(20.0f, 8.0f, 0.65f);
+            NextUI::DrawVerticalSeparator(20.0f, 8.0f, 0.65f);
             ImGui::TextDisabled("本地 · 透视");
         }
         ImGui::End();
-        NextUI::Theme::PopViewportToolbarStyle();
+        NextUI::PopViewportToolbarStyle();
     }
 
     void ScadLibraryInterface::UpsertGizmoKey(EEditableRigChannel type, const glm::vec3& value)
@@ -8521,13 +8520,13 @@ namespace ScadLibrary
         const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
             ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
             ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings;
-        NextUI::Theme::PushViewportToolbarStyle();
+        NextUI::PushViewportToolbarStyle();
         if (ImGui::Begin("##SceneObjectGizmoToolbar", nullptr, flags))
         {
             sceneToolbarVisible_ = true;
             sceneToolbarPosition_ = {ImGui::GetWindowPos().x, ImGui::GetWindowPos().y};
             sceneToolbarSize_ = {ImGui::GetWindowSize().x, ImGui::GetWindowSize().y};
-            if (NextUI::Theme::ToolbarButton(ICON_FA_ROTATE_LEFT, "回到全览视图", false))
+            if (NextUI::ToolbarButton(ICON_FA_ROTATE_LEFT, "回到全览视图", false))
             {
                 frameAllRequested_ = true;
             }
@@ -8537,32 +8536,32 @@ namespace ScadLibrary
             float selectedRadius = 0.0f;
             const bool hasSelection = GetSelectedSceneObjectBounds(selectedCenter, selectedRadius);
             ImGui::BeginDisabled(!hasSelection);
-            if (NextUI::Theme::ToolbarButton(ICON_FA_CROSSHAIRS, "聚焦选中 Kit（F）", false))
+            if (NextUI::ToolbarButton(ICON_FA_CROSSHAIRS, "聚焦选中 Kit（F）", false))
             {
                 focusSelectedRequested_ = true;
             }
             ImGui::EndDisabled();
             ImGui::SameLine();
-            NextUI::Theme::DrawVerticalSeparator(20.0f, 8.0f, 0.65f);
+            NextUI::DrawVerticalSeparator(20.0f, 8.0f, 0.65f);
             ImGui::SameLine();
 
-            if (NextUI::Theme::ToolbarButton(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT, "移动对象 (W)", sceneGizmoOperation_ == 0))
+            if (NextUI::ToolbarButton(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT, "移动对象 (W)", sceneGizmoOperation_ == 0))
             {
                 sceneGizmoOperation_ = 0;
             }
             ImGui::SameLine();
-            if (NextUI::Theme::ToolbarButton(ICON_FA_ROTATE, "旋转对象 (E)", sceneGizmoOperation_ == 1))
+            if (NextUI::ToolbarButton(ICON_FA_ROTATE, "旋转对象 (E)", sceneGizmoOperation_ == 1))
             {
                 sceneGizmoOperation_ = 1;
             }
-            NextUI::Theme::DrawVerticalSeparator(20.0f, 8.0f, 0.65f);
+            NextUI::DrawVerticalSeparator(20.0f, 8.0f, 0.65f);
             ImGui::SameLine();
             if (selectedBenchItem_ >= 0 && selectedBenchItem_ < static_cast<int>(Bench().size()))
             {
-                ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover));
+                ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Color(NextUI::EColor::AccentHover));
                 ImGui::Text("%s  %s", ICON_FA_CUBE, Bench()[selectedBenchItem_].moduleName.c_str());
                 ImGui::PopStyleColor();
-                NextUI::Theme::DrawTooltip("松开鼠标后写回 SCAD");
+                NextUI::Tooltip("松开鼠标后写回 SCAD");
             }
             else
             {
@@ -8570,7 +8569,7 @@ namespace ScadLibrary
             }
         }
         ImGui::End();
-        NextUI::Theme::PopViewportToolbarStyle();
+        NextUI::PopViewportToolbarStyle();
     }
 
     void ScadLibraryInterface::ClearEditableSceneSelection()
@@ -8697,7 +8696,7 @@ namespace ScadLibrary
 
         // Engine mouse events use framebuffer pixels, while the overlay handles
         // are stored in ImGui's logical coordinate space.
-        const ImVec2 uiMouse = NextUI::Scaling::MainFramebufferToImGuiPoint(
+        const ImVec2 uiMouse = NextUI::MainFramebufferToImGuiPoint(
             ImVec2(static_cast<float>(x), static_cast<float>(y)));
         const glm::vec2 mouse(uiMouse.x, uiMouse.y);
         for (const FTerrainFeatureHandle& handle : terrainFeatureHandles_)
@@ -8849,7 +8848,7 @@ namespace ScadLibrary
         }
         if (layScatterDragging_ && ImGui::IsMouseDown(ImGuiMouseButton_Left))
         {
-            const ImVec2 framebufferMouse = NextUI::Scaling::ImGuiToMainFramebufferPoint(
+            const ImVec2 framebufferMouse = NextUI::ImGuiToMainFramebufferPoint(
                 ImVec2(mouse.x, mouse.y));
             glm::vec3 rayOrigin;
             glm::vec3 rayDirection;
@@ -9567,7 +9566,7 @@ namespace ScadLibrary
         }
 
         const glm::vec2 mouse(ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y);
-        const ImVec2 framebufferMousePoint = NextUI::Scaling::ImGuiToMainFramebufferPoint(
+        const ImVec2 framebufferMousePoint = NextUI::ImGuiToMainFramebufferPoint(
             ImVec2(mouse.x, mouse.y));
         const glm::vec2 framebufferMouse(framebufferMousePoint.x, framebufferMousePoint.y);
         int hoveredHandle = -1;
@@ -10532,7 +10531,7 @@ namespace ScadLibrary
 
             // Left: Title & Track Scope
             ImGui::SetCursorPosY(startRowY + std::floor((kBarItemH - ImGui::GetTextLineHeight()) * 0.5f));
-            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::Blue), "%s", ICON_FA_FILM);
+            ImGui::TextColored(NextUI::Color(NextUI::EColor::Blue), "%s", ICON_FA_FILM);
             ImGui::SameLine(0.0f, 6.0f);
             ImGui::SetCursorPosY(startRowY);
 
@@ -10614,9 +10613,9 @@ namespace ScadLibrary
 
             ImGui::SameLine(0.0f, 2.0f);
             const bool isPaused = rigPreview_.Paused();
-            ImGui::PushStyleColor(ImGuiCol_Button, isPaused ? NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceElevated, 0.7f)
-                                                            : NextUI::Theme::Color(NextUI::Theme::EColor::Accent, 0.85f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover));
+            ImGui::PushStyleColor(ImGuiCol_Button, isPaused ? NextUI::Color(NextUI::EColor::SurfaceElevated, 0.7f)
+                                                            : NextUI::Color(NextUI::EColor::Accent, 0.85f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Color(NextUI::EColor::AccentHover));
             if (ImGui::Button(isPaused ? ICON_FA_PLAY : ICON_FA_PAUSE, ImVec2(28.0f, kBarItemH)))
             {
                 timelineIsPlaying_ = isPaused;
@@ -10661,8 +10660,8 @@ namespace ScadLibrary
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("跳转到末尾 (End)");
 
             ImGui::SameLine(0.0f, 3.0f);
-            ImGui::PushStyleColor(ImGuiCol_Button, clip.loop ? NextUI::Theme::Color(NextUI::Theme::EColor::Accent, 0.65f)
-                                                             : NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceElevated, 0.45f));
+            ImGui::PushStyleColor(ImGuiCol_Button, clip.loop ? NextUI::Color(NextUI::EColor::Accent, 0.65f)
+                                                             : NextUI::Color(NextUI::EColor::SurfaceElevated, 0.45f));
             if (ImGui::Button(ICON_FA_REPEAT, ImVec2(26.0f, kBarItemH)))
             {
                 clip.loop = !clip.loop;
@@ -10686,9 +10685,9 @@ namespace ScadLibrary
 
             // Timecode HUD pill
             const std::string hudText = fmt::format("{:.2f}s · {}/{}f", currentTime, currentFrame, totalFrames);
-            ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceElevated, 0.65f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceElevated, 0.85f));
-            ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover));
+            ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Color(NextUI::EColor::SurfaceElevated, 0.65f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Color(NextUI::EColor::SurfaceElevated, 0.85f));
+            ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Color(NextUI::EColor::AccentHover));
             ImGui::Button(hudText.c_str(), ImVec2(105.0f, kBarItemH));
             ImGui::PopStyleColor(3);
             if (ImGui::IsItemHovered())
@@ -10698,8 +10697,8 @@ namespace ScadLibrary
 
             ImGui::SameLine(0.0f, 3.0f);
             // Snapping toggle
-            ImGui::PushStyleColor(ImGuiCol_Button, timelineSnapToFrames_ ? NextUI::Theme::Color(NextUI::Theme::EColor::Accent, 0.75f)
-                                                                         : NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceElevated, 0.45f));
+            ImGui::PushStyleColor(ImGuiCol_Button, timelineSnapToFrames_ ? NextUI::Color(NextUI::EColor::Accent, 0.75f)
+                                                                         : NextUI::Color(NextUI::EColor::SurfaceElevated, 0.45f));
             if (ImGui::Button(ICON_FA_MAGNET, ImVec2(26.0f, kBarItemH)))
             {
                 timelineSnapToFrames_ = !timelineSnapToFrames_;
@@ -10763,7 +10762,7 @@ namespace ScadLibrary
         const ImU32 gridColor = ImGui::GetColorU32(ImGuiCol_Border, 0.30f);
         const ImU32 majorGridColor = ImGui::GetColorU32(ImGuiCol_Border, 0.65f);
         const ImU32 textDimColor = ImGui::GetColorU32(ImGuiCol_TextDisabled);
-        const ImU32 accentColor = ImGui::GetColorU32(NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover));
+        const ImU32 accentColor = ImGui::GetColorU32(NextUI::Color(NextUI::EColor::AccentHover));
         const ImU32 playheadColor = IM_COL32(0, 229, 255, 255); // Vibrant Cyan
 
         // A. RULER BAR
@@ -11116,7 +11115,7 @@ namespace ScadLibrary
             // Row 1: Target Chips & Time Step
             const std::string boneName = (channel.bone >= 0 && channel.bone < static_cast<int>(rigPreview_.Asset().bones.size()))
                 ? rigPreview_.Asset().bones[channel.bone].name : "bone";
-            DrawTagChip(boneName.c_str(), NextUI::Theme::Color(NextUI::Theme::EColor::Blue), "当前骨骼");
+            DrawTagChip(boneName.c_str(), NextUI::Color(NextUI::EColor::Blue), "当前骨骼");
             ImGui::SameLine(0.0f, 4.0f);
             DrawTagChip(FCharacterWorkbench::ChannelName(channel.type),
                         channel.type == EEditableRigChannel::Position ? ImVec4(0.9f, 0.3f, 0.3f, 1.0f)
@@ -11125,7 +11124,7 @@ namespace ScadLibrary
                         "当前属性轨道");
             ImGui::SameLine(0.0f, 4.0f);
             DrawTagChip(fmt::format("#{} / {}", timelineSelectedKey_ + 1, channel.keys.size()).c_str(),
-                        NextUI::Theme::Color(NextUI::Theme::EColor::Accent), "关键帧序号");
+                        NextUI::Color(NextUI::EColor::Accent), "关键帧序号");
 
             ImGui::SameLine(0.0f, 12.0f);
             ImGui::SetNextItemWidth(100.0f);
@@ -11138,8 +11137,8 @@ namespace ScadLibrary
             }
 
             ImGui::SameLine(0.0f, 8.0f);
-            ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::Danger, 0.22f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::Danger, 0.85f));
+            ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Color(NextUI::EColor::Danger, 0.22f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Color(NextUI::EColor::Danger, 0.85f));
             if (ImGui::SmallButton(ICON_FA_TRASH " 删除关键帧"))
             {
                 channel.keys.erase(channel.keys.begin() + timelineSelectedKey_);
@@ -11168,7 +11167,7 @@ namespace ScadLibrary
             // Row 1: Info & Actions
             const std::string boneName = (channel.bone >= 0 && channel.bone < static_cast<int>(rigPreview_.Asset().bones.size()))
                 ? rigPreview_.Asset().bones[channel.bone].name : "bone";
-            DrawTagChip(boneName.c_str(), NextUI::Theme::Color(NextUI::Theme::EColor::Blue), "当前骨骼");
+            DrawTagChip(boneName.c_str(), NextUI::Color(NextUI::EColor::Blue), "当前骨骼");
             ImGui::SameLine(0.0f, 4.0f);
             DrawTagChip(FCharacterWorkbench::ChannelName(channel.type),
                         channel.type == EEditableRigChannel::Position ? ImVec4(0.9f, 0.3f, 0.3f, 1.0f)
@@ -11177,7 +11176,7 @@ namespace ScadLibrary
                         "属性轨道");
             ImGui::SameLine(0.0f, 4.0f);
             DrawTagChip(fmt::format("共 {} 关键帧", channel.keys.size()).c_str(),
-                        NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceHover));
+                        NextUI::Color(NextUI::EColor::SurfaceHover));
 
             ImGui::SameLine(0.0f, 12.0f);
             if (ImGui::SmallButton(ICON_FA_PLUS " 在当前游标打帧"))
@@ -11188,8 +11187,8 @@ namespace ScadLibrary
             }
 
             ImGui::SameLine(0.0f, 8.0f);
-            ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::Danger, 0.22f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::Danger, 0.85f));
+            ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Color(NextUI::EColor::Danger, 0.22f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Color(NextUI::EColor::Danger, 0.85f));
             if (ImGui::SmallButton(ICON_FA_TRASH " 删除整条轨道"))
             {
                 clip.channels.erase(clip.channels.begin() + timelineSelectedChannel_);
@@ -11219,7 +11218,7 @@ namespace ScadLibrary
         {
             // Nothing selected: Shortcut helper bar
             ImGui::AlignTextToFramePadding();
-            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::TextDim),
+            ImGui::TextColored(NextUI::Color(NextUI::EColor::TextDim),
                                ICON_FA_KEYBOARD "  快捷操作: [Space] 播放/暂停  ·  [← / →] 单帧步进  ·  [Home / End] 起止跳转  ·  [Del] 删除帧  ·  [双击轨道] 快速插帧  ·  拖动视口 Gizmo 实时更新关键帧");
         }
 

@@ -181,7 +181,7 @@ csproj 里只有一处不能改：对 `GkNext.Engine` 的引用必须带 `<Priva
 | `Mathx` | `Clamp` / `Saturate` / `Lerp` / `MoveTowards` / `TurnTowards` / `LengthXZ` / `OverlapsXZ` | `TurnTowards` 是**角度**插值：不绕最短路径的话，角色在 ±π 附近会几乎转一整圈，这是角色控制器最经典的 bug |
 | `Quat` | `Identity` / `AroundY` / `AroundAxis` / `LookAlong` | 否则每个想转个盒子的游戏都要在调用点手写半角三角函数 |
 | `Sky.Apply(...)` | 给程序化场景加天空和太阳 | 程序化场景默认没有 environment 节点，不设就是"我的材质怎么全黑" |
-| `ManagedImGui` + `HudPalette` | HUD：面板、按钮、进度条、带描边的文字 | 见 §7 |
+| `UiCanvas` + `UiPalette` | HUD：面板、按钮、滑块、进度条、9 向锚点、带阴影文字 | 见 §7 |
 | `NextGameInstance.SceneReady` | 场景是否已提交、节点 id 是否可用 | 见 §4 |
 
 这一层是**可选的**：它没有任何特权，全部是 `Scene.*` / `Input.*` / `UI.*` 之上的普通 C#。看不顺眼就
@@ -414,38 +414,38 @@ protected override bool OnRenderUI()
 
 `Color` 是 0..1 的 float，`Color.FromBytes(r, g, b, a)` 接受 0..255。
 
-### 实际画 HUD 用 `ManagedImGui`
+### 实际画 HUD 用 `UiCanvas`
 
-上面那组 `UI.Draw*` 是最底层的原语，每次调用都过一次 ABI。真要画 HUD 用 `ManagedImGui`：它把一帧的
-命令攒进一个 C# 侧的 draw list，**整帧只过一次边界**，而且带控件——`Button` / `Checkbox` /
-`SliderFloat` / `ProgressBar` 都在里面，`UI.Draw*` 一个都没有。所有模板和 `Brotato3DCSharp` 用的都是它。
+上面那组 `UI.Draw*` 是最底层的原语，每次调用都过一次 ABI。真要画 HUD 用 `UiCanvas`：它把一帧的
+命令攒进一个 C# 侧的 `UiDrawList`，**整帧只过一次边界**，带完整的 `HotId`/`ActiveId` 按下拖拽交互状态机、
+自动输入捕获上报（`UI.ClaimInputCapture`）与 9 向锚点零分配布局（`UiRect.FromAnchor` / `Split*`），而且内置了常用控件——
+`Button` / `Checkbox` / `SliderFloat` / `ProgressBar` 都在里面。所有模板和 `Brotato3DCSharp` 用的都是它。
 
 ```csharp
-private readonly ManagedImGui gui = new();
+private readonly UiCanvas gui = new();
 
 protected override bool OnRenderUI()
 {
     gui.BeginFrame();                                    // 必须成对
     gui.Panel(new UiRect(20, 20, 260, 92), rounding: 10.0f);
-    gui.ProgressBar(new UiRect(36, 36, 228, 14), healthFraction, HudPalette.Bar(healthFraction));
-    gui.DrawText($"score {score}", 36, 60, HudPalette.Text);
+    gui.ProgressBar(new UiRect(36, 36, 228, 14), healthFraction, UiPalette.Bar(healthFraction));
+    gui.DrawText($"score {score}", 36, 60, UiPalette.Text);
 
     // 居中面板：返回它占的矩形，内容照着排
     UiRect panel = gui.PanelCenteredX(width: 400, y: 240, height: 132);
-    gui.DrawTextCenteredX("GAME OVER", panel.Y + 22, HudPalette.Danger, 1.7f);
+    gui.DrawTextCenteredX("GAME OVER", panel.Y + 22, UiPalette.Danger, 1.7f);
 
     if (gui.Button(1, new UiRect(panel.X + 40, panel.Y + 70, 320, 44), "RETRY"))
     {
         ResetRun();
     }
-    gui.EndFrame();                                      // 这里才真正提交
+    gui.EndFrame();                                      // 自动同步输入捕获并一次性提交 DrawList
     return false;
 }
 ```
 
-`HudPalette` 是一组**按用途命名**的颜色（`Text` / `Muted` / `Accent` / `Highlight` / `Danger` /
-`Bar(fraction)`）。用它而不是到处写 `Color.FromBytes(124, 230, 168)`，换配色时改一个文件而不是四十个
-调用点。
+`UiPalette` 是一组**按用途命名**且与原生 `NextUI::EColor` 1:1 实时同步的颜色（`Text` / `Muted` / `Accent` /
+`Highlight` / `Danger` / `Bar(fraction)`）。用它而不是到处写 `Color.FromBytes(124, 230, 168)`，主题调整时 C++ 与 C# 自动保持一致。
 
 `gui.DrawText(..., shadow: true)` 会先画一层深色偏移副本。画在场景之上的文字都该开：HUD 压着的是相机
 当时正好看到的东西，浅色文字压在浅色墙上就是不存在。
@@ -628,14 +628,14 @@ GK_DOTNET_ALLOC_BUDGET=8192    # 可调
 | 完整 C# 玩法纵切 | `projects/Brotato3D/`（`Scripts/` + `Content/configs/`） |
 | 程序化建场景 | 同上，`BeforeSceneRebuild` |
 | HUD | 同上，`OnRenderUI` |
-| HUD / C# drawlist 控件 | `assets/csharp/GkNext.Engine/ManagedImGui.cs` |
+| HUD / C# 画布与布局控件 | `assets/csharp/GkNext.Engine/UiCanvas.cs` |
 | 固定物理池 / kinematic 推挤 | `projects/Brotato3D/Scripts/BrotatoPhysicsSystem.cs` |
 | 定步长模拟 | 同上，`OnTick` + `FixedStep` |
 | AOT 安全的 JSON 配置 | `projects/Flappy/Scripts/FlappyConfig.cs`（读的是 `projects/Flappy/Content/configs/`） |
 | 工程目录布局 / 引用自己的内容 | [projects/README.md](../../projects/README.md)、`GameContent`（`assets/csharp/GkNext.Engine/GameContent.cs`） |
 | 确定性随机 | `Rng`（`assets/csharp/GkNext.Engine/Gameplay/Rng.cs`）；`Flappy` 自带一份是因为要逐位复刻 C++ 的序列 |
 | 移动输入 / 定步长 / 对象池 | `assets/templates/games/arcade2d/`、`topdown3d/` |
-| gameplay 工具层 | `assets/csharp/GkNext.Engine/Gameplay/`（`Rng` / `Mathx` / `Quat` / `MoveAxis` / `Sky` / `HudPalette`）|
+| gameplay 工具层 | `assets/csharp/GkNext.Engine/Gameplay/`（`Rng` / `Mathx` / `Quat` / `MoveAxis` / `Sky` / `UiPalette`）|
 | 纯逻辑对象 | `FlappyBird.cs` / `FlappyPipes.cs` / `FlappyParallax.cs` |
 | C++ 壳（15 行的全部） | `src/Application/Game/Flappy/FlappyCSharp/FlappyCSharpMain.cpp` |
 | 游戏清单 | `projects/Flappy/flappy.game.json` |

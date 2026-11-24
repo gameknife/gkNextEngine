@@ -7,7 +7,7 @@
 #include "Engine/Runtime/Components/RenderComponent.hpp"
 #include "Modules/DevTools/Command/DuplicateNodesCommand.hpp"
 #include "Engine/Runtime/Engine.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include "Modules/DevTools/Command/TransformNodesCommand.hpp"
 #include "ThirdParty/ImGuizmo/ImGuizmo.h"
 #include "ThirdParty/fontawesome/IconsFontAwesome6.h"
@@ -194,8 +194,8 @@ void GizmoController::DrawSelectionInfo(const std::string& objectName, const std
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 5.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(kToolbarPadX, kToolbarPadY));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, Theme::Color(Theme::EColor::Background, 0.74f));
-    ImGui::PushStyleColor(ImGuiCol_Border, Theme::Color(Theme::EColor::BorderStrong, 0.56f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, Color(EColor::Background, 0.74f));
+    ImGui::PushStyleColor(ImGuiCol_Border, Color(EColor::BorderStrong, 0.56f));
     ImGui::Begin("GizmoSelectionInfo", nullptr,
         ImGuiWindowFlags_NoDecoration |
         ImGuiWindowFlags_AlwaysAutoResize |
@@ -206,9 +206,9 @@ void GizmoController::DrawSelectionInfo(const std::string& objectName, const std
 
     const auto DrawSelectionValue = [](const char* label, const std::string& value)
     {
-        ImGui::TextColored(Theme::Color(Theme::EColor::TextDim), "%s", label);
+        ImGui::TextColored(Color(EColor::TextDim), "%s", label);
         ImGui::SameLine(0.0f, 4.0f);
-        ImGui::TextColored(Theme::Color(Theme::EColor::Text), "%s", value.c_str());
+        ImGui::TextColored(Color(EColor::Text), "%s", value.c_str());
     };
     DrawSelectionValue("Object", objectName);
     ImGui::SameLine(0.0f, 12.0f);
@@ -230,8 +230,8 @@ void GizmoController::DrawToolbar()
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(kToolbarPadX, kToolbarPadY));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 0.0f));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, Theme::Color(Theme::EColor::Background, 0.74f));
-    ImGui::PushStyleColor(ImGuiCol_Border, Theme::Color(Theme::EColor::BorderStrong, 0.56f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, Color(EColor::Background, 0.74f));
+    ImGui::PushStyleColor(ImGuiCol_Border, Color(EColor::BorderStrong, 0.56f));
     ImGui::Begin("GizmoToolbar", nullptr,
         ImGuiWindowFlags_NoDecoration |
         ImGuiWindowFlags_NoSavedSettings |
@@ -239,7 +239,7 @@ void GizmoController::DrawToolbar()
         ImGuiWindowFlags_NoNav |
         ImGuiWindowFlags_NoDocking);
 
-    Theme::PushViewportToolbarStyle();
+    PushViewportToolbarStyle();
 
     const float buttonHeight = ImGui::GetFontSize() + kToolbarButtonHeight;
     const ImVec2 selectionButtonSize(84.0f, buttonHeight);
@@ -251,13 +251,13 @@ void GizmoController::DrawToolbar()
     const ImVec2 localButtonSize(76.0f, buttonHeight);
     const ImVec2 worldButtonSize(80.0f, buttonHeight);
 
-    if (Theme::DrawFlatViewportButton(
+    if (GhostButton(
             ICON_FA_ARROW_POINTER " Select", "Selection mode (Q)", selectionMode_, selectionButtonSize))
     {
         selectionMode_ = true;
     }
     ImGui::SameLine();
-    if (Theme::DrawFlatViewportButton(
+    if (GhostButton(
             ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT " Move", "Translate (W)",
             !selectionMode_ && operation_ == static_cast<int>(ImGuizmo::TRANSLATE), moveButtonSize))
     {
@@ -265,7 +265,7 @@ void GizmoController::DrawToolbar()
         selectionMode_ = false;
     }
     ImGui::SameLine();
-    if (Theme::DrawFlatViewportButton(
+    if (GhostButton(
             ICON_FA_ROTATE " Rotate", "Rotate (E)",
             !selectionMode_ && operation_ == static_cast<int>(ImGuizmo::ROTATE), rotateButtonSize))
     {
@@ -273,7 +273,7 @@ void GizmoController::DrawToolbar()
         selectionMode_ = false;
     }
     ImGui::SameLine();
-    if (Theme::DrawFlatViewportButton(
+    if (GhostButton(
             ICON_FA_EXPAND " Scale", "Scale (R)",
             !selectionMode_ && operation_ == static_cast<int>(ImGuizmo::SCALE), scaleButtonSize))
     {
@@ -281,8 +281,8 @@ void GizmoController::DrawToolbar()
         selectionMode_ = false;
     }
 
-    Theme::DrawVerticalSeparator(buttonHeight, 5.0f, 0.65f);
-    if (Theme::DrawFlatViewportButton(
+    DrawVerticalSeparator(buttonHeight, 5.0f, 0.65f);
+    if (GhostButton(
             ICON_FA_LOCATION_CROSSHAIRS " Pivot", "Use individual pivot for each selected node",
             pivotMode_ == static_cast<int>(EGizmoPivotMode::Pivot), pivotButtonSize))
     {
@@ -290,7 +290,7 @@ void GizmoController::DrawToolbar()
         selectionMode_ = false;
     }
     ImGui::SameLine();
-    if (Theme::DrawFlatViewportButton(
+    if (GhostButton(
             ICON_FA_CROP_SIMPLE " Bounds", "Use combined selection bounds as pivot",
             pivotMode_ == static_cast<int>(EGizmoPivotMode::SelectionBounds), boundsButtonSize))
     {
@@ -298,8 +298,8 @@ void GizmoController::DrawToolbar()
         selectionMode_ = false;
     }
 
-    Theme::DrawVerticalSeparator(buttonHeight, 5.0f, 0.65f);
-    if (Theme::DrawFlatViewportButton(
+    DrawVerticalSeparator(buttonHeight, 5.0f, 0.65f);
+    if (GhostButton(
             ICON_FA_CUBE " Local", "Local axes",
             mode_ == static_cast<int>(ImGuizmo::LOCAL), localButtonSize))
     {
@@ -307,7 +307,7 @@ void GizmoController::DrawToolbar()
         selectionMode_ = false;
     }
     ImGui::SameLine();
-    if (Theme::DrawFlatViewportButton(
+    if (GhostButton(
             ICON_FA_GLOBE " World", "World axes",
             mode_ == static_cast<int>(ImGuizmo::WORLD), worldButtonSize))
     {
@@ -315,7 +315,7 @@ void GizmoController::DrawToolbar()
         selectionMode_ = false;
     }
 
-    Theme::PopViewportToolbarStyle();
+    PopViewportToolbarStyle();
 
     ImGui::End();
     ImGui::PopStyleColor(2);

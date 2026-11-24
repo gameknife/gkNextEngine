@@ -6,7 +6,7 @@
 
 #include "Engine/Assets/Core/Node.hpp"
 #include "Engine/Assets/Loaders/FProcModel.hpp"
-#include "Modules/NextUI/FontLoader.hpp"
+#include "Modules/NextUI/FontAtlas.hpp"
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/Scene/NodeUtils.hpp"
 #include "Engine/Runtime/Scene/SceneBuilder.hpp"
@@ -103,14 +103,14 @@ void Voyage3DGameInstance::OnInitUI()
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
-    ImFont* bodyFont = NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
+    ImFont* bodyFont = NextUI::LoadFont(NextUI::FFontRequest{
         .filePath = "assets/fonts/DroidSansFallback.ttf",
         .pixelSize = 17.0f,
         .includeChineseFull = true,
         .extraGlyphsUtf8 = Voyage3D::U8Text(u8"✓"),
         .setAsDefault = true,
     });
-    titleFont_ = NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
+    titleFont_ = NextUI::LoadFont(NextUI::FFontRequest{
         .filePath = "assets/fonts/DroidSansFallback.ttf",
         .pixelSize = 34.0f,
         .includeChineseFull = false,

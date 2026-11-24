@@ -6,9 +6,7 @@
 
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Utilities/Localization.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
-#include "Modules/NextUI/UI/UiTheme.hpp"
-#include "UI/DiagnosticWidgets.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include <ThirdParty/fontawesome/IconsFontAwesome6.h>
 
 namespace Runtime::GraphicsDebugPanel
@@ -38,8 +36,8 @@ namespace Runtime::GraphicsDebugPanel
             const uint32_t totalBricks =
                 cascadeCapacity * static_cast<uint32_t>(Assets::GPU_SCENE_AMBIENT_BRICKS_PER_CASCADE);
             const std::string brickStats = fmt::format("{} / {}", activeBricks, totalBricks);
-            const ImVec4 colLabel = NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted);
-            const ImVec4 colVal = NextUI::Theme::Color(NextUI::Theme::EColor::Text);
+            const ImVec4 colLabel = NextUI::Color(NextUI::EColor::TextMuted);
+            const ImVec4 colVal = NextUI::Color(NextUI::EColor::Text);
             ImGui::TextColored(colLabel, "%s", LOCTEXT("AC Bricks"));
             ImGui::SameLine(0.0f, 4.0f);
             ImGui::TextColored(colVal, "%s", brickStats.c_str());
@@ -288,7 +286,7 @@ namespace Runtime::GraphicsDebugPanel
                                   viewport->Pos.y + distance + (topOffset > 0.0f ? topOffset : 44.0f));
         const float panelHeight = std::max(420.0f, viewport->Size.y - distance - 86.0f);
 
-        NextUI::Theme::FDetailPanelConfig panelConfig{};
+        NextUI::FDetailPanelConfig panelConfig{};
         panelConfig.WindowId = "##GraphicsDebugPanel";
         panelConfig.ContentWindowId = "##GraphicsDebugContent";
         panelConfig.Icon = ICON_FA_MICROCHIP;
@@ -297,28 +295,28 @@ namespace Runtime::GraphicsDebugPanel
         panelConfig.Position = pos;
         panelConfig.Size = ImVec2(panelWidth, panelHeight);
 
-        if (!NextUI::Theme::BeginDetailPanel(panelConfig))
+        if (!NextUI::BeginDetailPanel(panelConfig))
         {
             return;
         }
 
         auto BeginCard = [](const char* id, float height = 0.0f, ImGuiWindowFlags extraFlags = 0)
         {
-            NextUI::Theme::BeginCard(id, height, extraFlags, 4.0f);
+            NextUI::BeginCard(id, height, extraFlags, 4.0f);
         };
 
         auto EndCard = []()
         {
-            NextUI::Theme::EndCard();
+            NextUI::EndCard();
         };
 
-        const ImVec4 colHeader = NextUI::Theme::Color(NextUI::Theme::EColor::Blue);
-        const ImVec4 colLabel = NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted);
-        const ImVec4 colWarn = NextUI::Theme::Color(NextUI::Theme::EColor::Warning);
+        const ImVec4 colHeader = NextUI::Color(NextUI::EColor::Blue);
+        const ImVec4 colLabel = NextUI::Color(NextUI::EColor::TextMuted);
+        const ImVec4 colWarn = NextUI::Color(NextUI::EColor::Warning);
 
         auto CompactStat = [](const char* label, const std::string& value)
         {
-            NextUI::Theme::CompactStat(label, value.c_str());
+            NextUI::CompactStat(label, value.c_str());
         };
 
         const EViewMode currentViewMode = ResolveViewMode(showFlags);
@@ -353,15 +351,15 @@ namespace Runtime::GraphicsDebugPanel
                 ImGui::PushID(index);
                 if (isActive)
                 {
-                    ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::Accent, 0.45f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover, 0.65f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover, 0.85f));
+                    ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Color(NextUI::EColor::Accent, 0.45f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Color(NextUI::EColor::AccentHover, 0.65f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Color(NextUI::EColor::AccentHover, 0.85f));
                 }
                 else
                 {
-                    ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceElevated, 0.25f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceHover, 0.50f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceHover, 0.80f));
+                    ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Color(NextUI::EColor::SurfaceElevated, 0.25f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Color(NextUI::EColor::SurfaceHover, 0.50f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Color(NextUI::EColor::SurfaceHover, 0.80f));
                 }
                 const std::string btnText = fmt::format("{}  {}{}",
                     isActive ? ICON_FA_CIRCLE_CHECK : ICON_FA_CIRCLE,
@@ -395,15 +393,15 @@ namespace Runtime::GraphicsDebugPanel
                 ImGui::PushID(index);
                 if (isActive)
                 {
-                    ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::Accent, 0.45f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover, 0.65f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover, 0.85f));
+                    ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Color(NextUI::EColor::Accent, 0.45f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Color(NextUI::EColor::AccentHover, 0.65f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Color(NextUI::EColor::AccentHover, 0.85f));
                 }
                 else
                 {
-                    ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceElevated, 0.25f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceHover, 0.50f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceHover, 0.80f));
+                    ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Color(NextUI::EColor::SurfaceElevated, 0.25f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Color(NextUI::EColor::SurfaceHover, 0.50f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Color(NextUI::EColor::SurfaceHover, 0.80f));
                 }
                 const std::string label = fmt::format("[{}] {}", index + 1, LOCTEXT(ViewModeLabels[index]));
                 if (ImGui::Button(label.c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 26.0f)))
@@ -451,6 +449,6 @@ namespace Runtime::GraphicsDebugPanel
         }
         EndCard();
 
-        NextUI::Theme::EndDetailPanel();
+        NextUI::EndDetailPanel();
     }
 }

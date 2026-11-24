@@ -3,11 +3,7 @@
 #include "DeveloperStatusBar.hpp"
 #include "TracyProfiler.hpp"
 
-#include "Modules/NextUI/UI/AppChrome.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
-#include "Modules/NextUI/UI/UiScopes.hpp"
-#include "Modules/NextUI/UI/UiTheme.hpp"
-#include "Modules/NextUI/UI/UiWidgets.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include "Engine/Assets/Acceleration/CPUAccelerationStructure.hpp"
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/Subsystems/TaskCoordinator.hpp"
@@ -19,7 +15,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace Runtime::DevToolsUI
+namespace DevTools
 {
     namespace
     {
@@ -30,25 +26,25 @@ namespace Runtime::DevToolsUI
             ImGui::GetWindowDrawList()->AddLine(
                 ImVec2(position.x, position.y + 3.0f),
                 ImVec2(position.x, position.y + 17.0f),
-                NextUI::Foundation::ColorU32(NextUI::Foundation::EColor::Border, 0.72f));
+                NextUI::ColorU32(NextUI::EColor::Border, 0.72f));
             ImGui::Dummy(ImVec2(1.0f, 20.0f));
             ImGui::SameLine(0.0f, 10.0f);
         }
 
         bool StatusButton(const char* label, const char* tooltip, const bool active, const ImVec2 size)
         {
-            NextUI::Foundation::FButtonOptions options;
-            options.variant = NextUI::Foundation::EButtonVariant::Ghost;
+            NextUI::FButtonOptions options;
+            options.variant = NextUI::EButtonVariant::Ghost;
             options.size = size;
             options.tooltip = tooltip;
             options.active = active;
-            return NextUI::Foundation::Button(label, options);
+            return NextUI::Button(label, options);
         }
 
         bool StatusIconButton(const char* icon, const char* tooltip, const bool active, const ImVec2 size,
                               const bool activeUnderline = false)
         {
-            return NextUI::Foundation::IconButton(icon, tooltip, active, size, activeUnderline);
+            return NextUI::IconButton(icon, tooltip, active, size, activeUnderline);
         }
 
         enum class EBakeStatus
@@ -78,7 +74,7 @@ namespace Runtime::DevToolsUI
         constexpr float kStatusPillDotX = 10.0f;
 
         FStatusPillMetrics DrawStatusPillChrome(const char* label, float labelToContentGap, float contentWidth,
-                                                float trailingWidth, NextUI::Foundation::EColor statusColor,
+                                                float trailingWidth, NextUI::EColor statusColor,
                                                 bool busy)
         {
             ImFont* font = ImGui::GetFont();
@@ -98,7 +94,7 @@ namespace Runtime::DevToolsUI
 
             ImDrawList* drawList = ImGui::GetWindowDrawList();
             drawList->AddRectFilled(metrics.position, metrics.position + metrics.size,
-                                    NextUI::Foundation::ColorU32(NextUI::Foundation::EColor::SurfaceElevated,
+                                    NextUI::ColorU32(NextUI::EColor::SurfaceElevated,
                                                                  metrics.hovered ? 0.85f : 0.45f),
                                     kStatusPillRounding);
 
@@ -106,12 +102,12 @@ namespace Runtime::DevToolsUI
                                    metrics.position.y + kStatusPillHeight * 0.5f);
             if (busy)
             {
-                drawList->AddCircleFilled(dotCenter, 4.2f, NextUI::Foundation::ColorU32(statusColor, 0.25f));
+                drawList->AddCircleFilled(dotCenter, 4.2f, NextUI::ColorU32(statusColor, 0.25f));
             }
-            drawList->AddCircleFilled(dotCenter, 2.5f, NextUI::Foundation::ColorU32(statusColor, 0.90f));
+            drawList->AddCircleFilled(dotCenter, 2.5f, NextUI::ColorU32(statusColor, 0.90f));
 
             drawList->AddText(font, textSize, ImVec2(metrics.position.x + kStatusPillLabelX, metrics.textY),
-                              NextUI::Foundation::ColorU32(NextUI::Foundation::EColor::TextMuted), label);
+                              NextUI::ColorU32(NextUI::EColor::TextMuted), label);
             return metrics;
         }
 
@@ -124,11 +120,11 @@ namespace Runtime::DevToolsUI
                 constexpr float progressHeight = 3.5f;
                 constexpr float contentGap = 7.0f;
 
-                const NextUI::Foundation::EColor statusColor = status == EBakeStatus::Disabled
-                    ? NextUI::Foundation::EColor::TextDim
+                const NextUI::EColor statusColor = status == EBakeStatus::Disabled
+                    ? NextUI::EColor::TextDim
                     : status == EBakeStatus::Complete
-                        ? NextUI::Foundation::EColor::Success
-                        : NextUI::Foundation::EColor::AccentHover;
+                        ? NextUI::EColor::Success
+                        : NextUI::EColor::AccentHover;
 
                 ImFont* font = ImGui::GetFont();
                 const float probeSize = ImGui::GetFontSize() * kStatusPillTextScale;
@@ -147,8 +143,8 @@ namespace Runtime::DevToolsUI
                 const ImVec2 progressMax(progressMin.x + progressWidth, progressMin.y + progressHeight);
 
                 drawList->AddRectFilled(progressMin, progressMax,
-                                        NextUI::Foundation::ColorU32(
-                                            NextUI::Foundation::EColor::Background, 0.85f),
+                                        NextUI::ColorU32(
+                                            NextUI::EColor::Background, 0.85f),
                                         progressHeight * 0.5f);
 
                 if (status != EBakeStatus::Disabled && indeterminate)
@@ -160,7 +156,7 @@ namespace Runtime::DevToolsUI
                     drawList->PushClipRect(progressMin, progressMax, true);
                     drawList->AddRectFilled(ImVec2(segmentStart, progressMin.y),
                                             ImVec2(segmentStart + segmentWidth, progressMax.y),
-                                            NextUI::Foundation::ColorU32(statusColor),
+                                            NextUI::ColorU32(statusColor),
                                             progressHeight * 0.5f);
                     drawList->PopClipRect();
                 }
@@ -169,16 +165,16 @@ namespace Runtime::DevToolsUI
                     const float fillWidth = std::max(
                         progressHeight, progressWidth * std::clamp(fraction, 0.0f, 1.0f));
                     drawList->AddRectFilled(progressMin, ImVec2(progressMin.x + fillWidth, progressMax.y),
-                                            NextUI::Foundation::ColorU32(statusColor, status == EBakeStatus::Complete ? 0.70f : 0.95f),
+                                            NextUI::ColorU32(statusColor, status == EBakeStatus::Complete ? 0.70f : 0.95f),
                                             progressHeight * 0.5f);
                 }
 
                 drawList->AddText(font, textSize, ImVec2(progressMax.x + contentGap, textY),
-                                  NextUI::Foundation::ColorU32(statusColor), value);
+                                  NextUI::ColorU32(statusColor), value);
 
                 if (isHovered && tooltip)
                 {
-                    NextUI::Theme::DrawTooltip(tooltip);
+                    NextUI::ShowHoveredTooltip(tooltip);
                 }
             };
 
@@ -255,11 +251,11 @@ namespace Runtime::DevToolsUI
                 {
                     return thread.running || thread.queued > 0u;
                 });
-            const NextUI::Foundation::EColor statusColor = statuses.empty()
-                ? NextUI::Foundation::EColor::TextDim
+            const NextUI::EColor statusColor = statuses.empty()
+                ? NextUI::EColor::TextDim
                 : hasActiveThread
-                    ? NextUI::Foundation::EColor::Warning
-                    : NextUI::Foundation::EColor::Success;
+                    ? NextUI::EColor::Warning
+                    : NextUI::EColor::Success;
 
             ImGui::SameLine(0.0f, 6.0f);
             const FStatusPillMetrics pill = DrawStatusPillChrome("Tasks", contentGap, dotsWidth, 8.0f,
@@ -280,15 +276,15 @@ namespace Runtime::DevToolsUI
                 {
                     // Active running/queued worker: energetic warning glow + full dot
                     drawList->AddCircleFilled(threadDotCenter, dotRadius + 1.2f,
-                                              NextUI::Foundation::ColorU32(NextUI::Foundation::EColor::Warning, 0.30f));
+                                              NextUI::ColorU32(NextUI::EColor::Warning, 0.30f));
                     drawList->AddCircleFilled(threadDotCenter, dotRadius,
-                                              NextUI::Foundation::ColorU32(NextUI::Foundation::EColor::Warning, 0.95f));
+                                              NextUI::ColorU32(NextUI::EColor::Warning, 0.95f));
                 }
                 else
                 {
                     // Idle worker: calm, subtle translucent success dot with no border
                     drawList->AddCircleFilled(threadDotCenter, dotRadius,
-                                              NextUI::Foundation::ColorU32(NextUI::Foundation::EColor::Success, 0.40f));
+                                              NextUI::ColorU32(NextUI::EColor::Success, 0.40f));
                 }
             }
 
@@ -308,7 +304,7 @@ namespace Runtime::DevToolsUI
                             : (thread.queued > 0u ? "Queued" : "Idle");
                         const std::string tooltip = fmt::format(
                             "{}\nStatus: {}\nQueued: {}", thread.name, state, thread.queued);
-                        NextUI::Theme::DrawTooltip(tooltip.c_str());
+                        NextUI::ShowHoveredTooltip(tooltip.c_str());
                         hitSpecificThread = true;
                         break;
                     }
@@ -323,7 +319,7 @@ namespace Runtime::DevToolsUI
                     const std::string summaryTooltip = fmt::format(
                         "Task Thread Pool\nThreads: {} ({} active, {} idle)",
                         statuses.size(), activeCount, statuses.size() - activeCount);
-                    NextUI::Theme::DrawTooltip(summaryTooltip.c_str());
+                    NextUI::ShowHoveredTooltip(summaryTooltip.c_str());
                 }
             }
         }
@@ -359,16 +355,16 @@ namespace Runtime::DevToolsUI
         const float rightWidth = consoleWidth + toolWidth * (3.0f + (renderDocSupported ? 1.0f : 0.0f)) +
             fpsWidth + memoryWidth + 98.0f + (renderDocSupported ? 20.0f : 0.0f);
 
-        NextUI::Foundation::FBottomBarOptions options;
-        options.windowId = windowId;
-        options.height = height;
-        options.rightWidth = rightWidth;
-        options.drawLeftContent = [&engine]()
+        NextUI::FBottomBarConfig options;
+        options.WindowId = windowId;
+        options.Height = height;
+        options.RightWidth = rightWidth;
+        options.DrawLeftContent = [&engine]()
         {
             DrawBakeActivity(engine);
             DrawTaskThreads();
         };
-        options.drawRightContent = [&]()
+        options.DrawRightContent = [&]()
         {
             DevTools::FUiDevPanels& panels = DevTools::FUiDevPanels::Get();
             panels.SetStatisticsDetachedViewport(detachedStatisticsViewport);
@@ -386,7 +382,7 @@ namespace Runtime::DevToolsUI
             }
             ImGui::SameLine(0.0f, 4.0f);
             {
-                NextUI::Foundation::FScopedDisabled disabled(!cppLiveCodingAvailable || !onCppReloadClicked);
+                NextUI::FScopedDisabled disabled(!cppLiveCodingAvailable || !onCppReloadClicked);
                 if (StatusIconButton(ICON_FA_HAMMER "##BottomBarCompileCpp",
                                      cppLiveCodingAvailable ? "Compile C++ changes" : "Live++ is unavailable",
                                      cppLiveCodingAvailable, ImVec2(toolWidth, buttonHeight)) && onCppReloadClicked)
@@ -397,7 +393,7 @@ namespace Runtime::DevToolsUI
             ImGui::SameLine(0.0f, 4.0f);
             {
                 const bool tracyAvailable = IsTracyProfilerAvailable();
-                NextUI::Foundation::FScopedDisabled disabled(!tracyAvailable);
+                NextUI::FScopedDisabled disabled(!tracyAvailable);
                 if (StatusIconButton(ICON_FA_CHART_LINE "##BottomBarTracy",
                                      tracyAvailable ? "Start Tracy and connect to 127.0.0.1:8086"
                                                     : "Tracy is unavailable; run `gnb tracy fetch`",
@@ -409,7 +405,7 @@ namespace Runtime::DevToolsUI
 
             ImGui::SameLine(0.0f, 4.0f);
             {
-                NextUI::Foundation::FScopedDisabled disabled(!renderDocSupported);
+                NextUI::FScopedDisabled disabled(!renderDocSupported);
                 if (StatusIconButton(ICON_FA_CAMERA "##BottomBarRenderDocCapture",
                                      renderDocSupported ? "Capture frame and open RenderDoc"
                                                          : "RenderDoc is unavailable; launch with --renderdoc",
@@ -441,6 +437,6 @@ namespace Runtime::DevToolsUI
                 panels.ToggleMemoryStatistics();
             }
         };
-        NextUI::Foundation::DrawBottomBar(options);
+        NextUI::DrawBottomBar(options);
     }
 }

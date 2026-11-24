@@ -4,9 +4,9 @@
 #include <fmt/printf.h>
 
 #include "Engine/Runtime/Engine.hpp"
-#include "Engine/Utilities/AboutDialog.hpp"
-#include "Engine/Utilities/ImGui.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
+// (migrated to NextUI)
+// (migrated to NextUI)
+#include "Modules/NextUI/NextUI.hpp"
 #include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 
 #include <SDL3/SDL_misc.h>
@@ -145,11 +145,11 @@ void utils::ShowResourcesWindow(bool *childResources)
     // links carried over from an ImGui starter template and had nothing to do with
     // this engine.
     ImGui::SetNextWindowSize(ImVec2(420, 260), ImGuiCond_Once);
-    NextUI::Theme::PushToolWindowStyle();
+    NextUI::PushToolWindowStyle();
     if (ImGui::Begin("Resources", childResources, ImGuiWindowFlags_NoCollapse))
     {
-        NextUI::Theme::PushToolWindowContentStyle();
-        NextUI::Theme::DrawPanelHeader(
+        NextUI::PushToolWindowContentStyle();
+        NextUI::DrawPanelHeader(
             ICON_FA_BOOK_OPEN, "Resources", "Documentation and support for gkNextRenderer");
 
         const auto Link = [](const char* label, const char* url)
@@ -164,9 +164,9 @@ void utils::ShowResourcesWindow(bool *childResources)
             }
         };
 
-        Link("Project page", Utilities::UI::ProjectHomeUrl);
-        Link("Documentation", Utilities::UI::ProjectDocsUrl);
-        Link("Report an issue", Utilities::UI::ProjectIssuesUrl);
+        Link("Project page", NextUI::ProjectHomeUrl);
+        Link("Documentation", NextUI::ProjectDocsUrl);
+        Link("Report an issue", NextUI::ProjectIssuesUrl);
 
         ImGui::Spacing();
         ImGui::Separator();
@@ -174,17 +174,17 @@ void utils::ShowResourcesWindow(bool *childResources)
         ImGui::TextWrapped(
             "Keyboard and mouse bindings are listed in the renderer's shortcut panel "
             "and in docs/AGENT_GUIDE/quick-commands.md.");
-        NextUI::Theme::PopToolWindowContentStyle();
+        NextUI::PopToolWindowContentStyle();
     }
     ImGui::End();
-    NextUI::Theme::PopToolWindowStyle();
+    NextUI::PopToolWindowStyle();
 }
 void utils::ShowAboutWindow(bool *childAbout)
 {
     // Shared with gkNextRenderer so both targets report the same information.
-    NextUI::Theme::PushToolWindowStyle();
-    NextUI::Theme::PushToolWindowContentStyle();
-    Utilities::UI::ShowAboutDialog(*childAbout);
-    NextUI::Theme::PopToolWindowContentStyle();
-    NextUI::Theme::PopToolWindowStyle();
+    NextUI::PushToolWindowStyle();
+    NextUI::PushToolWindowContentStyle();
+    NextUI::ShowAboutDialog(*childAbout);
+    NextUI::PopToolWindowContentStyle();
+    NextUI::PopToolWindowStyle();
 }

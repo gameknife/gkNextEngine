@@ -4,10 +4,10 @@
 #include "Engine/Runtime/Interface/RenderFrameConsumer.hpp"
 #include "Gameplay/Camera/ModelViewController.hpp"
 #include "Engine/Runtime/GameInstance.hpp"
-#include "Engine/Runtime/Editor/MultiViewportBackend.hpp"
 #include "Modules/NextRemote/CloudInputRouter.hpp"
 #include "Modules/NextRemote/RemoteImGuiSession.hpp"
 #include "Modules/NextRemote/VideoEncoder.hpp"
+#include "Modules/NextUI/UiRenderer.hpp"
 
 #include <vulkan/vulkan.h>
 
@@ -92,7 +92,7 @@ namespace Runtime::Remote
             std::unique_ptr<Vulkan::RenderImage> compositeImage;
             std::unique_ptr<Vulkan::FrameBuffer> compositeFramebuffer;
             std::unique_ptr<Vulkan::RenderPass> compositeRenderPass;
-            std::vector<NextUI::UiRenderBuffer> uiRenderBuffers;
+            std::vector<NextUI::FUiRenderBuffer> uiRenderBuffers;
             VkPipeline compositeUiPipeline = VK_NULL_HANDLE;
             VkExtent2D compositeExtent{0, 0};
             VkImageLayout compositeLayout = VK_IMAGE_LAYOUT_UNDEFINED;

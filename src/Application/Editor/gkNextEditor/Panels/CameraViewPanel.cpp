@@ -1,7 +1,8 @@
 #include "EditorUi.hpp"
 
 #include "Engine/Runtime/Engine.hpp"
-#include "Engine/Runtime/Interface/UserInterface.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
+#include "Modules/NextUI/Theme.hpp"
 #include "Modules/RenderViews/OffscreenRenderViewController.hpp"
 #include "EditorMain.h"
 
@@ -81,8 +82,8 @@ namespace Editor
 
                 if (offscreenViews.IsReady(static_cast<uint32_t>(viewIndex)))
                 {
-                    const ImTextureID tex =
-                        ctx.ui.RequestImTextureIdRawOutput(offscreenViews.SampleSlot(static_cast<uint32_t>(viewIndex)));
+                    const ImTextureID tex = NextUI::ToImTextureId(
+                        ctx.ui.ResolveRawSlotId(offscreenViews.SampleSlot(static_cast<uint32_t>(viewIndex)), true));
                     if (avail.x > 1.0f && avail.y > 1.0f)
                     {
                         const ImVec2 imageMin = ImGui::GetCursorScreenPos();

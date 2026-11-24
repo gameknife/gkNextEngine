@@ -19,7 +19,7 @@ class GizmoController
 {
 public:
     // viewportPos/viewportSize are ImGui logical screen coordinates. Convert
-    // framebuffer-pixel rectangles with Scaling::MainFramebufferToImGuiViewport first.
+    // framebuffer-pixel rectangles with NextUI::MainFramebufferToImGuiViewport first.
     void Draw(NextEngine& engine, const glm::vec2& viewportPos, const glm::vec2& viewportSize,
               bool snapEnabled = false, float translateSnap = 1.0f, int defaultOperation = 0,
               const Assets::UniformBufferObject* viewUbo = nullptr, ImGuiWindow* alternativeWindow = nullptr);

@@ -5,6 +5,7 @@
 #include <imgui.h>
 
 #include "Engine/Runtime/Utilities/NextEngineHelper.hpp"
+#include "Modules/NextUI/Hud.hpp"
 
 namespace TruckerDemo
 {
@@ -84,7 +85,7 @@ namespace TruckerDemo
 
         ImVec2 targetScreen;
         if (!state.missionAvailable && !state.missionComplete &&
-            Runtime::EngineHelper::TryProjectWorldToScreenForGame(game, state.targetPosition + glm::vec3(0, 2.5f, 0), targetScreen))
+            NextUI::Hud::TryProjectWorldToScreen(game, state.targetPosition + glm::vec3(0, 2.5f, 0), targetScreen))
         {
             drawList->AddCircleFilled(targetScreen, 13.0f, IM_COL32(255, 190, 35, 80), 24);
             drawList->AddCircle(targetScreen, 13.0f, IM_COL32(255, 220, 80, 255), 24, 3.0f);

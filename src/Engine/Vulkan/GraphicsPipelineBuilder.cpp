@@ -21,9 +21,16 @@ namespace Vulkan
                                                                      const VkVertexInputAttributeDescription* attributes,
                                                                      uint32_t attributeCount)
     {
-        vertexBinding_ = binding;
-        vertexAttributes_.assign(attributes, attributes + attributeCount);
-        hasVertexInput_ = true;
+        return SetVertexInput(std::span<const VkVertexInputBindingDescription>(&binding, 1),
+                              std::span<const VkVertexInputAttributeDescription>(attributes, attributeCount));
+    }
+
+    GraphicsPipelineBuilder& GraphicsPipelineBuilder::SetVertexInput(
+        std::span<const VkVertexInputBindingDescription> bindings,
+        std::span<const VkVertexInputAttributeDescription> attributes)
+    {
+        vertexBindings_.assign(bindings.begin(), bindings.end());
+        vertexAttributes_.assign(attributes.begin(), attributes.end());
         return *this;
     }
 
@@ -67,8 +74,20 @@ namespace Vulkan
     GraphicsPipelineBuilder& GraphicsPipelineBuilder::SetAlphaBlend(VkBlendFactor srcAlphaFactor, VkBlendFactor dstAlphaFactor)
     {
         blendEnable_ = true;
+        srcColorBlendFactor_ = VK_BLEND_FACTOR_SRC_ALPHA;
+        dstColorBlendFactor_ = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
         srcAlphaBlendFactor_ = srcAlphaFactor;
         dstAlphaBlendFactor_ = dstAlphaFactor;
+        return *this;
+    }
+
+    GraphicsPipelineBuilder& GraphicsPipelineBuilder::SetPremultipliedAlphaBlend()
+    {
+        blendEnable_ = true;
+        srcColorBlendFactor_ = VK_BLEND_FACTOR_ONE;
+        dstColorBlendFactor_ = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        srcAlphaBlendFactor_ = VK_BLEND_FACTOR_ONE;
+        dstAlphaBlendFactor_ = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
         return *this;
     }
 
@@ -82,10 +101,10 @@ namespace Vulkan
     {
         VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        if (hasVertexInput_)
+        if (!vertexBindings_.empty())
         {
-            vertexInputInfo.vertexBindingDescriptionCount = 1;
-            vertexInputInfo.pVertexBindingDescriptions = &vertexBinding_;
+            vertexInputInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(vertexBindings_.size());
+            vertexInputInfo.pVertexBindingDescriptions = vertexBindings_.data();
             vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertexAttributes_.size());
             vertexInputInfo.pVertexAttributeDescriptions = vertexAttributes_.data();
         }
@@ -137,8 +156,8 @@ namespace Vulkan
         colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                                               VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
         colorBlendAttachment.blendEnable = blendEnable_ ? VK_TRUE : VK_FALSE;
-        colorBlendAttachment.srcColorBlendFactor = blendEnable_ ? VK_BLEND_FACTOR_SRC_ALPHA : VK_BLEND_FACTOR_ONE;
-        colorBlendAttachment.dstColorBlendFactor = blendEnable_ ? VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA : VK_BLEND_FACTOR_ZERO;
+        colorBlendAttachment.srcColorBlendFactor = blendEnable_ ? srcColorBlendFactor_ : VK_BLEND_FACTOR_ONE;
+        colorBlendAttachment.dstColorBlendFactor = blendEnable_ ? dstColorBlendFactor_ : VK_BLEND_FACTOR_ZERO;
         colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
         colorBlendAttachment.srcAlphaBlendFactor = srcAlphaBlendFactor_;
         colorBlendAttachment.dstAlphaBlendFactor = dstAlphaBlendFactor_;

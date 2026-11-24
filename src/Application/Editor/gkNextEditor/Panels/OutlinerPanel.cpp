@@ -10,8 +10,7 @@
 #include "Modules/DevTools/Command/DeleteNodesCommand.hpp"
 #include "Modules/DevTools/Command/RenameNodeCommand.hpp"
 #include "Engine/Runtime/Engine.hpp"
-#include "Engine/Utilities/ImGui.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 
 #include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 #include <imgui_stdlib.h>
@@ -344,7 +343,7 @@ namespace Editor
 
         // Row toggle (visibility, lock) drawn as an icon over a full-cell hit box, so the highlight
         // and the clickable area are the same rectangle.
-        bool RowToggleIcon(const char* icon, NextUI::Theme::EColor tint, float tintAlpha, float cellWidth,
+        bool RowToggleIcon(const char* icon, NextUI::EColor tint, float tintAlpha, float cellWidth,
                            const char* tooltip, bool& outHovered)
         {
             const ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -358,8 +357,8 @@ namespace Editor
             }
 
             const ImU32 color = outHovered
-                ? NextUI::Theme::ColorU32(NextUI::Theme::EColor::Text)
-                : NextUI::Theme::ColorU32(tint, tintAlpha);
+                ? NextUI::ColorU32(NextUI::EColor::Text)
+                : NextUI::ColorU32(tint, tintAlpha);
             const ImVec2 iconSize = ImGui::CalcTextSize(icon);
             ImGui::GetWindowDrawList()->AddText(
                 origin + ImVec2(std::floor((cellWidth - iconSize.x) * 0.5f),
@@ -407,7 +406,7 @@ namespace Editor
             {
                 const bool clicked = RowToggleIcon(
                     visible ? ICON_FA_EYE : ICON_FA_EYE_SLASH,
-                    visible ? NextUI::Theme::EColor::TextMuted : NextUI::Theme::EColor::Danger,
+                    visible ? NextUI::EColor::TextMuted : NextUI::EColor::Danger,
                     visible ? 0.50f : 0.75f, kOutlinerToggleCellWidth,
                     visible ? "Click to hide node" : "Click to show node", cellHovered);
                 if (clicked)
@@ -428,7 +427,7 @@ namespace Editor
             }
             else
             {
-                RowToggleIcon(ICON_FA_EYE, NextUI::Theme::EColor::TextDim, 0.35f, kOutlinerToggleCellWidth,
+                RowToggleIcon(ICON_FA_EYE, NextUI::EColor::TextDim, 0.35f, kOutlinerToggleCellWidth,
                               nullptr, cellHovered);
             }
             if (cellHovered)
@@ -439,7 +438,7 @@ namespace Editor
             // 2. Column 1: Lock
             ImGui::TableSetColumnIndex(1);
             if (RowToggleIcon(locked ? ICON_FA_LOCK : ICON_FA_LOCK_OPEN,
-                              locked ? NextUI::Theme::EColor::Warning : NextUI::Theme::EColor::TextDim,
+                              locked ? NextUI::EColor::Warning : NextUI::EColor::TextDim,
                               locked ? 0.85f : 0.30f, kOutlinerToggleCellWidth,
                               locked ? "Click to unlock node" : "Click to lock node", cellHovered))
             {
@@ -493,9 +492,9 @@ namespace Editor
             const FNodeVisual& visual = ClassifyNode(node);
             const std::string label = fmt::format("{}  {}###Node_{}", visual.icon, node.GetName(), node.GetInstanceId());
 
-            const ImVec4 textVecColor = !visible ? NextUI::Theme::Color(NextUI::Theme::EColor::TextDim)
+            const ImVec4 textVecColor = !visible ? NextUI::Color(NextUI::EColor::TextDim)
                                                  : selected ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f)
-                                                            : NextUI::Theme::Color(NextUI::Theme::EColor::Text);
+                                                            : NextUI::Color(NextUI::EColor::Text);
             ImGui::PushStyleColor(ImGuiCol_Text, textVecColor);
             const bool opened = ImGui::TreeNodeEx(label.c_str(), flag);
             const bool treeNodeHovered = ImGui::IsItemHovered();
@@ -508,7 +507,7 @@ namespace Editor
             // Draw left accent bar for selected row
             if (selected)
             {
-                NextUI::Theme::DrawSelectionAccentStrip(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+                NextUI::DrawSelectionAccentStrip(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
             }
 
             // Draw indentation guide lines
@@ -518,7 +517,7 @@ namespace Editor
                 const ImVec2 rMin = ImGui::GetItemRectMin();
                 const ImVec2 rMax = ImGui::GetItemRectMax();
                 ImDrawList* dl = ImGui::GetWindowDrawList();
-                const ImU32 lineCol = NextUI::Theme::ColorU32(NextUI::Theme::EColor::Border, 0.28f);
+                const ImU32 lineCol = NextUI::ColorU32(NextUI::EColor::Border, 0.28f);
                 for (int d = 1; d <= depth; ++d)
                 {
                     const float lineX = rMin.x - (static_cast<float>(depth - d + 1) * indentStep) + 8.0f;
@@ -688,7 +687,7 @@ namespace Editor
                     }
                     if (partiallyVisible)
                     {
-                        ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted));
+                        ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Color(NextUI::EColor::TextMuted));
                     }
                     if (ImGui::SmallButton(allDrawableVisible ? ICON_FA_EYE : ICON_FA_EYE_SLASH))
                     {
@@ -710,7 +709,7 @@ namespace Editor
                     ImGui::TableSetColumnIndex(3);
                     if (partiallyLocked)
                     {
-                        ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted));
+                        ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Color(NextUI::EColor::TextMuted));
                     }
                     if (ImGui::SmallButton(allLocked ? ICON_FA_LOCK : ICON_FA_LOCK_OPEN))
                     {
@@ -750,12 +749,12 @@ namespace Editor
         ImGui::Begin("Outliner", nullptr);
         {
             // 1. Top Mode Tabs (Scene vs Layers)
-            static constexpr NextUI::Theme::FPillOption kModeOptions[] = {
+            static constexpr NextUI::FPillOption kModeOptions[] = {
                 {static_cast<int>(EOutlinerTab::SceneGraph), ICON_FA_SITEMAP " Scene Graph"},
                 {static_cast<int>(EOutlinerTab::Layers), ICON_FA_LAYER_GROUP " Layers"},
             };
             int currentTab = static_cast<int>(state.currentTab);
-            if (NextUI::Theme::SegmentedPills("##OutlinerTopTabs", kModeOptions, currentTab, -1.0f, 24.0f))
+            if (NextUI::SegmentedPills("##OutlinerTopTabs", kModeOptions, currentTab, -1.0f, 24.0f))
             {
                 state.currentTab = static_cast<EOutlinerTab>(currentTab);
             }
@@ -773,52 +772,52 @@ namespace Editor
                 }
 
                 ImGui::AlignTextToFramePadding();
-                ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted), "%s", badgeText.c_str());
+                ImGui::TextColored(NextUI::Color(NextUI::EColor::TextMuted), "%s", badgeText.c_str());
 
                 // Action buttons on the right
                 constexpr float btnW = 26.0f;
                 constexpr float btnH = 22.0f;
                 constexpr float btnSpacing = 3.0f;
                 const float rightButtonsWidth = btnW * 4.0f + btnSpacing * 3.0f;
-                NextUI::Theme::SameLineRightAligned(rightButtonsWidth, 40.0f);
+                NextUI::SameLineRightAligned(rightButtonsWidth, 40.0f);
 
                 const bool autoScrollWasEnabled = ctx.settings.outlinerAutoScroll;
-                if (NextUI::Theme::IconButton(ICON_FA_LOCATION_CROSSHAIRS "##AutoScroll",
+                if (NextUI::IconButton(ICON_FA_LOCATION_CROSSHAIRS "##AutoScroll",
                                               "Auto Scroll To Selection", autoScrollWasEnabled,
                                               ImVec2(btnW, btnH)))
                 {
                     ctx.settings.outlinerAutoScroll = !ctx.settings.outlinerAutoScroll;
                 }
                 ImGui::SameLine(0.0f, btnSpacing);
-                if (NextUI::Theme::IconButton(ICON_FA_FOLDER_OPEN "##ExpandAll", "Expand All Subtrees", false, ImVec2(btnW, btnH)))
+                if (NextUI::IconButton(ICON_FA_FOLDER_OPEN "##ExpandAll", "Expand All Subtrees", false, ImVec2(btnW, btnH)))
                 {
                     state.expandAllRequested = true;
                 }
                 ImGui::SameLine(0.0f, btnSpacing);
-                if (NextUI::Theme::IconButton(ICON_FA_FOLDER_CLOSED "##CollapseAll", "Collapse All Subtrees", false, ImVec2(btnW, btnH)))
+                if (NextUI::IconButton(ICON_FA_FOLDER_CLOSED "##CollapseAll", "Collapse All Subtrees", false, ImVec2(btnW, btnH)))
                 {
                     state.collapseAllRequested = true;
                 }
                 ImGui::SameLine(0.0f, btnSpacing);
-                NextUI::Theme::IconButton(ICON_FA_PLUS "##CreateActor", "Create Actor (placeholder)", false, ImVec2(btnW, btnH));
+                NextUI::IconButton(ICON_FA_PLUS "##CreateActor", "Create Actor (placeholder)", false, ImVec2(btnW, btnH));
 
                 // Search Filter Input
                 ImGui::SetNextItemWidth(-FLT_MIN);
                 state.nodeFilter.Draw(ICON_FA_MAGNIFYING_GLASS " Search##OutlinerFilter");
 
                 // Quick Type Filter Pills
-                static constexpr NextUI::Theme::FPillOption kTypeOptions[] = {
+                static constexpr NextUI::FPillOption kTypeOptions[] = {
                     {static_cast<int>(ENodeKind::All), "All"},
                     {static_cast<int>(ENodeKind::Mesh), ICON_FA_CUBE " Mesh"},
                     {static_cast<int>(ENodeKind::Light), ICON_FA_LIGHTBULB " Light"},
                     {static_cast<int>(ENodeKind::Camera), ICON_FA_VIDEO " Cam"},
                 };
                 int typeFilter = static_cast<int>(state.typeFilter);
-                if (NextUI::Theme::SegmentedPills("##OutlinerTypePills", kTypeOptions, typeFilter, -1.0f, 20.0f))
+                if (NextUI::SegmentedPills("##OutlinerTypePills", kTypeOptions, typeFilter, -1.0f, 20.0f))
                 {
                     state.typeFilter = static_cast<ENodeKind>(typeFilter);
                 }
-                NextUI::Theme::DrawThinSeparator(0.50f);
+                NextUI::DrawThinSeparator(0.50f);
 
                 const uint32_t currentSelectionId = ctx.scene.GetSelectedId();
                 if (ctx.settings.outlinerAutoScroll)
@@ -841,7 +840,7 @@ namespace Editor
                 state.prevAutoScrollEnabled = ctx.settings.outlinerAutoScroll;
                 state.lastSelectionId = currentSelectionId;
 
-                NextUI::Theme::BeginInsetPanel("ListBox", ImVec2(0.0f, 0.0f), false, 0,
+                NextUI::BeginInsetPanel("ListBox", ImVec2(0.0f, 0.0f), false, 0,
                                                ImGui::GetStyle().WindowPadding, 0.42f);
 
                 if (ImGui::BeginTable("NodesList", 3, ImGuiTableFlags_NoBordersInBodyUntilResize | ImGuiTableFlags_RowBg))
@@ -885,15 +884,15 @@ namespace Editor
                     ImGui::EndTable();
                 }
 
-                NextUI::Theme::EndInsetPanel();
+                NextUI::EndInsetPanel();
             }
             else
             {
                 // Layers Tab view: full height
-                NextUI::Theme::BeginInsetPanel("LayersBox", ImVec2(0.0f, 0.0f), false, 0,
+                NextUI::BeginInsetPanel("LayersBox", ImVec2(0.0f, 0.0f), false, 0,
                                                ImGui::GetStyle().WindowPadding, 0.42f);
                 DrawLayersPanel(ctx);
-                NextUI::Theme::EndInsetPanel();
+                NextUI::EndInsetPanel();
             }
 
             // Consumed once the tree has been walked. Reset unconditionally so a request raised while
@@ -1031,7 +1030,7 @@ namespace Editor
                 state.openRenamePopup = false;
             }
 
-            if (Utilities::UI::BeginAnchoredPopupModal("Rename Node", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+            if (NextUI::BeginAnchoredModal("Rename Node", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
             {
                 Assets::Node* targetNode = ctx.scene.GetNodeByInstanceId(state.renameTargetId);
                 if (targetNode == nullptr)
@@ -1085,7 +1084,7 @@ namespace Editor
                     }
                 }
 
-                ImGui::EndPopup();
+                NextUI::EndAnchoredModal();
             }
 
             if ((ImGui::GetIO().KeyAlt) && (ImGui::IsKeyPressed(ImGuiKey_F4)))

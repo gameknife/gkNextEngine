@@ -17,11 +17,9 @@
 #include "Engine/Runtime/Interface/ScreenShotService.hpp"
 #include "Engine/Runtime/Subsystems/NextPhysics.hpp"
 #include "Engine/Runtime/GameInstance.hpp"
-#include "Modules/NextUI/ImGuiScaling.hpp"
 #include "Engine/Rendering/RendererChoices.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
-#include "Modules/DevTools/UI/DeveloperStatusBar.hpp"
-#include "Engine/Runtime/Interface/UserInterface.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include "Engine/Runtime/Scene/SceneBuilder.hpp"
 #include "Engine/Runtime/Utilities/NextEngineHelper.hpp"
 #include "Modules/DevTools/GraphicsDebugPanel.hpp"
@@ -30,8 +28,6 @@
 #include "Modules/LiveCoding/LiveCodingModule.hpp"
 #include "Engine/Utilities/Localization.hpp"
 #include "Engine/Utilities/Format.hpp"
-#include "Engine/Utilities/AboutDialog.hpp"
-#include "Engine/Utilities/ImGui.hpp"
 
 #include <SDL3/SDL_misc.h>
 #include "Engine/Runtime/Platform/PlatformCommon.hpp"
@@ -49,16 +45,16 @@ constexpr float SettingsPanelWidth = 380.0f;
 
 namespace RendererSettingsDetail
 {
-using NextUI::Theme::BeginCard;
-using NextUI::Theme::DrawCheckboxSettingRow;
-using NextUI::Theme::DrawComboSettingRow;
-using NextUI::Theme::DrawFloatSettingRow;
-using NextUI::Theme::DrawIntSettingRow;
-using NextUI::Theme::DrawSettingRow;
-using NextUI::Theme::DrawSettingSliderRow;
-using NextUI::Theme::EndCard;
-using NextUI::Theme::PresetPills;
-using NextUI::Theme::SegmentedPills;
+using NextUI::BeginCard;
+using NextUI::DrawCheckboxSettingRow;
+using NextUI::DrawComboSettingRow;
+using NextUI::DrawFloatSettingRow;
+using NextUI::DrawIntSettingRow;
+using NextUI::DrawSettingRow;
+using NextUI::DrawSettingSliderRow;
+using NextUI::EndCard;
+using NextUI::PresetPills;
+using NextUI::SegmentedPills;
 
 const char* GetPresentModeLabel(VkPresentModeKHR presentMode)
 {
@@ -112,7 +108,7 @@ FCategoryMeta GetCategoryMeta(NextRendererGameInstance::ESettingsCategory catego
 
 void DrawCardHeader(const char* icon, const char* title)
 {
-    ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover), "%s  %s", icon ? icon : "", title);
+    ImGui::TextColored(NextUI::Color(NextUI::EColor::AccentHover), "%s  %s", icon ? icon : "", title);
     ImGui::Dummy(ImVec2(0.0f, 4.0f));
 }
 
@@ -183,7 +179,7 @@ void NextRendererGameInstance::DrawSettings(FRendererUiState& uiState)
 
     const auto categoryMeta = GetCategoryMeta(uiState.settingsCategory);
 
-    NextUI::Theme::FDetailPanelConfig panelConfig{};
+    NextUI::FDetailPanelConfig panelConfig{};
     panelConfig.WindowId = "##RendererSettingsPanel";
     panelConfig.ContentWindowId = "##RendererSettingsContent";
     panelConfig.Icon = categoryMeta.icon;
@@ -191,7 +187,7 @@ void NextRendererGameInstance::DrawSettings(FRendererUiState& uiState)
     panelConfig.Open = &uiState.showSettings;
     panelConfig.Position = panelPos;
     panelConfig.Size = panelSize;
-    if (!NextUI::Theme::BeginDetailPanel(panelConfig))
+    if (!NextUI::BeginDetailPanel(panelConfig))
     {
         return;
     }
@@ -228,24 +224,24 @@ void NextRendererGameInstance::DrawSettings(FRendererUiState& uiState)
             const bool active = (uiState.settingsCategory == items[i].cat);
             if (active)
             {
-                ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::Accent, 0.75f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Theme::Color(NextUI::Theme::EColor::Accent));
+                ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Color(NextUI::EColor::Accent, 0.75f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Color(NextUI::EColor::AccentHover));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Color(NextUI::EColor::Accent));
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
             }
             else
             {
-                ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceElevated, 0.45f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceHover, 0.70f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceHover));
-                ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted));
+                ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Color(NextUI::EColor::SurfaceElevated, 0.45f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Color(NextUI::EColor::SurfaceHover, 0.70f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, NextUI::Color(NextUI::EColor::SurfaceHover));
+                ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Color(NextUI::EColor::TextMuted));
             }
 
             if (ImGui::Button(items[i].icon, ImVec2(btnWidth, btnHeight)))
             {
                 uiState.settingsCategory = items[i].cat;
             }
-            NextUI::Theme::DrawTooltip(items[i].tooltip);
+            NextUI::Tooltip(items[i].tooltip);
             ImGui::PopStyleColor(4);
         }
         ImGui::PopStyleVar();
@@ -801,7 +797,7 @@ void NextRendererGameInstance::DrawSettings(FRendererUiState& uiState)
             {
                 hasSkinnedMeshes = true;
                 ImGui::PushID(node->GetName().c_str());
-                ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::Text), "%s", node->GetName().c_str());
+                ImGui::TextColored(NextUI::Color(NextUI::EColor::Text), "%s", node->GetName().c_str());
                 auto animNames = skinnedMesh->GetAnimationNames();
                 if (!animNames.empty())
                 {
@@ -928,5 +924,5 @@ void NextRendererGameInstance::DrawSettings(FRendererUiState& uiState)
         break;
     }
 
-    NextUI::Theme::EndDetailPanel();
+    NextUI::EndDetailPanel();
 }

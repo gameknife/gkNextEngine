@@ -3,7 +3,7 @@
 #include "Engine/Common/CoreMinimal.hpp"
 #include "Engine/Assets/AssetsFwd.hpp"
 #include "Engine/Runtime/RuntimeFwd.hpp"
-#include "Engine/Runtime/Editor/UiFrame.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
 
 #include <SDL3/SDL_keycode.h>
 
@@ -23,19 +23,16 @@ namespace Runtime
         virtual void DrawPhysicsOverlay(const Assets::Scene& scene, const Assets::Camera& camera) = 0;
         virtual void DrawGraphicsPanel(NextEngine& engine, bool& panelVisible, float topOffset) = 0;
         virtual void DrawCVarEditor(NextEngine& engine, bool& panelVisible) = 0;
-        virtual void DrawProfileOverlay(NextEngine& engine, const NextUI::Statistics& statistics,
-                                        float topOffset) = 0;
         virtual bool HandleRendererShortcut(SDL_Keycode key, bool pressed, bool panelVisible, NextEngine& engine) = 0;
         virtual bool HandleViewModeShortcut(SDL_Keycode key, bool pressed, bool panelVisible,
                                             Runtime::Config::ShowFlags& showFlags) = 0;
 
-        // Per-frame developer panels (statistics overlay, console). Called from
-        // the core ImGui backend inside the frame.
-        virtual void DrawUiPanels(NextEngine& engine, const NextUI::Statistics& statistics,
-                                  NextUI::EUiDeveloperLayer layers, bool suppressStatsOverlay) {}
+        // Per-frame developer panels (statistics overlay, console, memory).
+        virtual void DrawUiPanels(NextEngine& engine, const FUiStatistics& statistics,
+                                  EUiDeveloperLayer layers, bool suppressStatsOverlay) {}
 
         // First-chance UI event hook (e.g. grave-key console toggle); return
-        // true to consume the event before ImGui sees it.
+        // true to consume the event before UI widgets see it.
         virtual bool HandleUiEvent(const SDL_Event& event) { return false; }
     };
 }

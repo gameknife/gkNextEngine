@@ -1,18 +1,18 @@
 #include "Engine/Common/CoreMinimal.hpp"
+
 #include "Modules/DevTools/DevToolsDebugUiProvider.hpp"
-#include "Modules/DevTools/GraphicsDebugPanel.hpp"
-#include "Modules/DevTools/PhysicsDebugOverlay.hpp"
-#include "Modules/DevTools/ProfileDebugOverlay.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
-#include "Modules/DevTools/ConsoleLogBuffer.hpp"
-#include "Modules/DevTools/UiDevPanels.hpp"
-#include "Modules/DevTools/CVarEditorPanel.hpp"
+
+#include "Engine/Rendering/ExternalPassRegistry.hpp"
+#include "Engine/Runtime/Config/CVarSystem.hpp"
+#include "Engine/Runtime/Engine.hpp"
 #include "Modules/DevTools/AuxDrawPass.hpp"
 #include "Modules/DevTools/AuxDrawSystem.hpp"
+#include "Modules/DevTools/CVarEditorPanel.hpp"
+#include "Modules/DevTools/ConsoleLogBuffer.hpp"
+#include "Modules/DevTools/GraphicsDebugPanel.hpp"
+#include "Modules/DevTools/PhysicsDebugOverlay.hpp"
 #include "Modules/DevTools/UI/UiCatalog.hpp"
-#include "Engine/Runtime/Engine.hpp"
-#include "Engine/Runtime/Config/CVarSystem.hpp"
-#include "Engine/Rendering/ExternalPassRegistry.hpp"
+#include "Modules/DevTools/UiDevPanels.hpp"
 
 namespace DevTools
 {
@@ -42,28 +42,28 @@ namespace DevTools
         public:
             FDebugUiProvider()
             {
-                // Capture logs into the console buffer from the moment the
-                // provider exists (the entry point creates it before the engine).
                 Runtime::Editor::AttachConsoleLogSinkToDefaultLogger();
             }
 
-            void DrawUiPanels(NextEngine& engine, const NextUI::Statistics& statistics,
-                              NextUI::EUiDeveloperLayer layers, bool suppressStatsOverlay) override
+            void DrawUiPanels(NextEngine& engine,
+                              const Runtime::FUiStatistics& statistics,
+                              const Runtime::EUiDeveloperLayer layers,
+                              const bool suppressStatsOverlay) override
             {
                 FUiDevPanels& panels = FUiDevPanels::Get();
-                if (NextUI::HasUiLayer(layers, NextUI::EUiDeveloperLayer::Statistics) && !suppressStatsOverlay)
+                if (Runtime::HasUiLayer(layers, Runtime::EUiDeveloperLayer::Statistics) && !suppressStatsOverlay)
                 {
                     panels.DrawOverlay(statistics);
                 }
-                if (NextUI::HasUiLayer(layers, NextUI::EUiDeveloperLayer::Console))
+                if (Runtime::HasUiLayer(layers, Runtime::EUiDeveloperLayer::Console))
                 {
                     panels.RenderConsoleOverlay();
                 }
-                if (NextUI::HasUiLayer(layers, NextUI::EUiDeveloperLayer::Memory))
+                if (Runtime::HasUiLayer(layers, Runtime::EUiDeveloperLayer::Memory))
                 {
                     panels.DrawMemoryStatisticsPanel(engine);
                 }
-                Runtime::DevToolsUI::DrawUiCatalog(uiCatalogOpen);
+                DrawUiCatalog(uiCatalogOpen);
             }
 
             bool HandleUiEvent(const SDL_Event& event) override
@@ -86,20 +86,14 @@ namespace DevTools
                 DrawCVarEditorPanel(engine, panelVisible);
             }
 
-            void DrawProfileOverlay(NextEngine& engine, const NextUI::Statistics& statistics,
-                                    float topOffset) override
-            {
-                (void)engine;
-                (void)statistics;
-                (void)topOffset;
-            }
-
             bool HandleRendererShortcut(SDL_Keycode key, bool pressed, bool panelVisible, NextEngine& engine) override
             {
                 return Runtime::GraphicsDebugPanel::TryHandleRendererShortcut(key, pressed, panelVisible, engine);
             }
 
-            bool HandleViewModeShortcut(SDL_Keycode key, bool pressed, bool panelVisible,
+            bool HandleViewModeShortcut(SDL_Keycode key,
+                                        bool pressed,
+                                        bool panelVisible,
                                         Runtime::Config::ShowFlags& showFlags) override
             {
                 return Runtime::GraphicsDebugPanel::TryHandleViewModeShortcut(key, pressed, panelVisible, showFlags);
@@ -113,7 +107,6 @@ namespace DevTools
         static bool auxDrawRegistered = false;
         if (!auxDrawRegistered)
         {
-            // GPU aux drawing (debug lines/points) renders as an external overlay pass.
             Vulkan::RegisterExternalPassFactory(
                 /*priority*/ 20,
                 [](Vulkan::VulkanBaseRenderer& renderer) -> std::unique_ptr<Vulkan::IExternalRenderPass>

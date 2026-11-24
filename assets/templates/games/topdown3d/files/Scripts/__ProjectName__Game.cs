@@ -34,7 +34,7 @@ public sealed class {{ProjectName}}Game : NextGameInstance
     private const uint RngSeed = 20260828u;
 
     private readonly Rng rng = new(RngSeed);
-    private readonly ManagedImGui gui = new();
+    private readonly UiCanvas gui = new();
     private readonly EnemySwarm enemies = new(EnemyCapacity, EnemyRadius);
 
     private uint playerNode = NodeIds.Invalid;
@@ -196,17 +196,17 @@ public sealed class {{ProjectName}}Game : NextGameInstance
         float healthFraction = health / MaxHealth;
         gui.Panel(new UiRect(20.0f, 20.0f, 260.0f, 92.0f), 10.0f);
         gui.ProgressBar(new UiRect(36.0f, 36.0f, 228.0f, 14.0f), healthFraction,
-                        HudPalette.Bar(healthFraction));
-        gui.DrawText($"survived {survivedSeconds:F1}s", 36.0f, 60.0f, HudPalette.Text);
-        gui.DrawText($"cleared {score}    swarm {enemies.AliveCount}", 36.0f, 84.0f, HudPalette.Muted);
+                        UiPalette.Bar(healthFraction));
+        gui.DrawText($"survived {survivedSeconds:F1}s", 36.0f, 60.0f, UiPalette.Text);
+        gui.DrawText($"cleared {score}    swarm {enemies.AliveCount}", 36.0f, 84.0f, UiPalette.Muted);
 
         if (!alive)
         {
             float y = gui.ScreenSize.Y * 0.5f - 66.0f;
             gui.PanelCenteredX(400.0f, y, 132.0f, 16.0f);
-            gui.DrawTextCenteredX("OVERRUN", y + 22.0f, HudPalette.Danger, 1.7f);
-            gui.DrawTextCenteredX($"cleared {score}    best {best}", y + 64.0f, HudPalette.Text, 1.1f);
-            gui.DrawTextCenteredX("SPACE TO RESTART", y + 98.0f, HudPalette.Accent);
+            gui.DrawTextCenteredX("OVERRUN", y + 22.0f, UiPalette.Danger, 1.7f);
+            gui.DrawTextCenteredX($"cleared {score}    best {best}", y + 64.0f, UiPalette.Text, 1.1f);
+            gui.DrawTextCenteredX("SPACE TO RESTART", y + 98.0f, UiPalette.Accent);
         }
 
         gui.EndFrame();

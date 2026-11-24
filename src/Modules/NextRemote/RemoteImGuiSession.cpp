@@ -1,11 +1,15 @@
+#include "Engine/Common/CoreMinimal.hpp"
+
 #include "Modules/NextRemote/RemoteImGuiSession.hpp"
 
-#include "Engine/Runtime/Interface/DebugUiProvider.hpp"
-#include "Engine/Runtime/Interface/UserInterface.hpp"
-#include "Modules/NextUI/UI/UiTheme.hpp"
 #include "Engine/Runtime/Engine.hpp"
+#include "Engine/Runtime/Interface/DebugUiProvider.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
 #include "Engine/Runtime/RemoteProtocol.hpp"
 #include "Engine/Utilities/Exception.hpp"
+#include "Modules/NextUI/NextUIModule.hpp"
+#include "Modules/NextUI/Theme.hpp"
+#include "Modules/NextUI/UiSystem.hpp"
 
 #include <SDL3/SDL_keycode.h>
 #include <SDL3/SDL_scancode.h>
@@ -93,14 +97,14 @@ namespace Runtime::Remote
         : engine_(engine)
         , sessionId_(std::move(sessionId))
     {
-        NextUI::IUserInterface* userInterface = engine_.GetUserInterface();
-        if (userInterface == nullptr)
+        NextUI::FUiSystem* uiSystem = Modules::NextUI::Get(engine_);
+        if (uiSystem == nullptr)
         {
-            Throw(std::runtime_error("remote imgui session requires an initialized UserInterface"));
+            Throw(std::runtime_error("remote imgui session requires an initialized FUiSystem"));
         }
 
         const FRemoteImGuiConfig config = CaptureRemoteImGuiConfig();
-        context_ = ImGui::CreateContext(userInterface->GetFontAtlas());
+        context_ = ImGui::CreateContext(uiSystem->GetFontAtlas());
         ConfigureContext(config.configFlags, config.moveWindowsFromTitleBarOnly);
     }
 
@@ -112,13 +116,13 @@ namespace Runtime::Remote
         }
 
         FContextScope scope(context_);
-        if (NextUI::IUserInterface* userInterface = engine_.GetUserInterface())
+        if (NextUI::FUiSystem* uiSystem = Modules::NextUI::Get(engine_))
         {
             auto& io = ImGui::GetIO();
             io.BackendRendererName = nullptr;
             io.BackendRendererUserData = nullptr;
             io.BackendFlags &= ~ImGuiBackendFlags_RendererHasVtxOffset;
-            (void)userInterface;
+            (void)uiSystem;
         }
         ImGuiContext* destroyContext = context_;
         context_ = nullptr;
@@ -137,11 +141,11 @@ namespace Runtime::Remote
         io.ConfigFlags &= ~ImGuiConfigFlags_ViewportsEnable;
         io.ConfigWindowsMoveFromTitleBarOnly = moveWindowsFromTitleBarOnly;
         io.BackendPlatformName = "gk_remote_headless";
-        if (NextUI::IUserInterface* userInterface = engine_.GetUserInterface())
+        if (NextUI::FUiSystem* uiSystem = Modules::NextUI::Get(engine_))
         {
-            userInterface->AttachRendererBackendToCurrentContext();
+            uiSystem->AttachRendererBackendToCurrentContext();
         }
-        NextUI::Foundation::ApplyTheme();
+        NextUI::ApplyTheme();
     }
 
     void FRemoteImGuiSession::HandleInputEvents(const std::vector<FCloudInputEvent>& events, const VkExtent2D extent)
@@ -196,22 +200,22 @@ namespace Runtime::Remote
         io.DisplayFramebufferScale = ImVec2(1.0f, 1.0f);
         io.DeltaTime = std::max(1.0f / 240.0f, static_cast<float>(engine_.GetDeltaSeconds()));
 
-        if (NextUI::IUserInterface* userInterface = engine_.GetUserInterface())
+        if (NextUI::FUiSystem* uiSystem = Modules::NextUI::Get(engine_))
         {
-            userInterface->AttachRendererBackendToCurrentContext();
+            uiSystem->AttachRendererBackendToCurrentContext();
         }
 
         ImGui::NewFrame();
         if (NextGameInstanceBase* gameInstance = engine_.GetGameInstance())
         {
-            NextGameInstanceBase::FGameUiFrameContext context;
-            context.surfaceKind = NextGameInstanceBase::FGameUiFrameContext::ESurfaceKind::RemoteView;
+            Runtime::FUiFrameContext context;
+            context.surfaceKind = Runtime::EUiSurfaceKind::RemoteView;
             context.sessionId = sessionId_;
             context.framebufferExtent = extent;
             context.viewCamera = &camera;
             context.allowWindowCommands = false;
-            context.policy.allowedDeveloperLayers = NextUI::EUiDeveloperLayer::None;
-            const NextUI::FUiFrameResult result = gameInstance->RenderUiFrame(context);
+            context.policy.allowedDeveloperLayers = Runtime::EUiDeveloperLayer::None;
+            const Runtime::FUiFrameResult result = gameInstance->RenderUiFrame(context);
             (void)(result.requestedDeveloperLayers & context.policy.allowedDeveloperLayers);
         }
         ImGui::Render();

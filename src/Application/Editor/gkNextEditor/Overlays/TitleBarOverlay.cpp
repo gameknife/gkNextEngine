@@ -15,10 +15,10 @@
 
 #include "Engine/Runtime/Engine.hpp"
 #include "Modules/DevTools/GraphicsDebugPanel.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include "Modules/DevTools/UI/DeveloperStatusBar.hpp"
 #include "Modules/LiveCoding/LiveCodingModule.hpp"
-#include "Engine/Runtime/Interface/UserInterface.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
 #include "Modules/DevTools/UiDevPanels.hpp"
 #include "Modules/SceneExport/FSceneSaver.h"
 
@@ -93,7 +93,7 @@ namespace Editor
 
         ImGuiViewport* viewport = ImGui::GetMainViewport();
 
-        NextUI::Theme::FAppTitleBarConfig config{};
+        NextUI::FAppTitleBarConfig config{};
         config.BrandWindowId = "EditorBrand";
         config.MenuWindowId = "EditorMenuBar";
         config.RightWindowId = "EditorWindowControls";
@@ -103,7 +103,7 @@ namespace Editor
         config.DrawMenuBar = [&]() -> float
         {
             float menuRight = ImGui::GetCursorScreenPos().x;
-            NextUI::Theme::FMainMenuGhostScope mainMenuStyle;
+            NextUI::FMainMenuGhostScope mainMenuStyle;
             bool fileMenuOpen = mainMenuStyle.BeginMenu("File");
             menuRight = std::max(menuRight, ImGui::GetItemRectMax().x);
             if (fileMenuOpen)
@@ -402,9 +402,9 @@ namespace Editor
         {
             ctx.actions.Dispatch(ctx, EEditorAction::System_RequestExit);
         };
-        NextUI::Theme::DrawAppTitleBar(ctx.engine, config);
+        NextUI::DrawAppTitleBar(ctx.engine, config);
 
-        Runtime::DevToolsUI::DrawDeveloperStatusBar(
+        DevTools::DrawDeveloperStatusBar(
             ctx.engine, "Footer", kFooterHeight,
             []() { Modules::LiveCoding::RequestCppReload(); },
             Modules::LiveCoding::IsCppLiveCodingAvailable(), true);

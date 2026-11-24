@@ -25,14 +25,13 @@
 #include "EditorUtils.h"
 #include "Engine/Options.hpp"
 #include "Engine/Rendering/VulkanBaseRenderer.hpp"
-#include "Modules/NextUI/ImGuiScaling.hpp"
-#include "Engine/Runtime/Interface/UserInterface.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
-#include "Modules/NextUI/UI/UiWidgets.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
+#include "Modules/NextUI/NextUI.hpp"
+#include "Modules/NextUI/NextUIModule.hpp"
+#include "Modules/NextUI/UiSystem.hpp"
 #include "Modules/DevTools/GraphicsDebugPanel.hpp"
 #include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 #include "Engine/Utilities/FileHelper.hpp"
-#include "Engine/Utilities/ImGui.hpp"
 #include "Engine/Utilities/Localization.hpp"
 #include "Engine/Utilities/Math.hpp"
 
@@ -86,23 +85,6 @@ namespace
         SDL_DestroyProcess(process);
     }
 
-    void CheckVulkanResultCallback(const VkResult err)
-    {
-        if (err != VK_SUCCESS)
-        {
-            Throw(std::runtime_error(std::string("ImGui Vulkan error (") + Vulkan::ToString(err) + ")"));
-        }
-    }
-
-    const ImWchar* GetGlyphRangesFontAwesome()
-    {
-        static const ImWchar ranges[] = {
-            ICON_MIN_FA,
-            ICON_MAX_FA, // Basic Latin + Latin Supplement
-            0,
-        };
-        return &ranges[0];
-    }
 } // namespace
 
 EditorInterface::EditorInterface(class EditorGameInstance* editor) : editor_(editor) {}
@@ -126,20 +108,18 @@ void EditorInterface::Config()
 
 void EditorInterface::Init()
 {
-    auto& io = ImGui::GetIO();
+    float rasterizerDensity = 1.0f;
+    if (NextUI::FUiSystem* uiSystem = Modules::NextUI::Get(editor_->GetEngine()))
+    {
+        rasterizerDensity = uiSystem->GetRasterizerDensity();
+    }
 
-    // Window scaling and style.
-    const auto scaleFactor = 1.0;
-    // ImGui::GetStyle().ScaleAllSizes(scaleFactor);
-
-    io.Fonts->SetFontLoader(ImGuiFreeType::GetFontLoader());
-    io.Fonts->FontLoaderFlags = ImGuiFreeTypeLoaderFlags_NoHinting;
-    const ImWchar* iconRange = GetGlyphRangesFontAwesome();
-    ImFont* fontBigIcon = io.Fonts->AddFontFromFileTTF(
-        Utilities::FileHelper::GetPlatformFilePath("assets/fonts/fa-solid-900.ttf").c_str(), 32 * scaleFactor, nullptr,
-        iconRange);
-
-    uiState_.bigIcon = fontBigIcon;
+    uiState_.bigIcon = NextUI::LoadFont(NextUI::FFontRequest{
+        .filePath = "assets/fonts/fa-solid-900.ttf",
+        .pixelSize = 32.0f,
+        .glyphRanges = NextUI::GetFontAwesomeGlyphRanges(),
+        .rasterizerDensity = rasterizerDensity,
+    });
     Editor::LoadRecentScenes(uiState_);
     firstRun_ = true;
 }
@@ -254,7 +234,7 @@ void EditorInterface::ToolbarUI(EditorContext& ctx, Editor::EditorUiState& uiSta
     const ImVec2 toolbarMin = ImGui::GetWindowPos();
     const ImVec2 toolbarMax = toolbarMin + ImGui::GetWindowSize();
     toolbarDrawList->AddLine(ImVec2(toolbarMin.x, toolbarMax.y - 1.0f), toolbarMax,
-                             NextUI::Theme::ColorU32(NextUI::Theme::EColor::Border, 0.18f), 1.0f);
+                             NextUI::ColorU32(NextUI::EColor::Border, 0.18f), 1.0f);
 
     constexpr float kControlHeight = 28.0f;
     const float cursorY = (kToolbarSize - kControlHeight) * 0.5f;
@@ -323,7 +303,7 @@ void EditorInterface::ToolbarUI(EditorContext& ctx, Editor::EditorUiState& uiSta
     constexpr float kPadY = 3.0f;
     const ImVec2 capMin(toolbarMin.x + centerX - kPadX, toolbarMin.y + cursorY - kPadY);
     const ImVec2 capMax(toolbarMin.x + centerX + centerGroupWidth + kPadX, toolbarMin.y + cursorY + kControlHeight + kPadY);
-    toolbarDrawList->AddRectFilled(capMin, capMax, NextUI::Theme::ColorU32(NextUI::Theme::EColor::SurfaceElevated, 0.88f), 6.0f);
+    toolbarDrawList->AddRectFilled(capMin, capMax, NextUI::ColorU32(NextUI::EColor::SurfaceElevated, 0.88f), 6.0f);
 
     // Position cursor at center capsule
     ImGui::SetCursorPos(ImVec2(centerX, cursorY));
@@ -369,18 +349,18 @@ void EditorInterface::ToolbarUI(EditorContext& ctx, Editor::EditorUiState& uiSta
     }
 
     {
-        const ImU32 accentCol = playing ? NextUI::Theme::ColorU32(NextUI::Theme::EColor::Danger)
-                                        : NextUI::Theme::ColorU32(NextUI::Theme::EColor::Success);
-        const ImU32 bgCol = playDisabled ? NextUI::Theme::ColorU32(NextUI::Theme::EColor::Surface, 0.5f)
-                                         : (isPlayHovered ? (playing ? NextUI::Theme::ColorU32(NextUI::Theme::EColor::Danger, 0.28f)
-                                                                     : NextUI::Theme::ColorU32(NextUI::Theme::EColor::Success, 0.28f))
-                                                          : (playing ? NextUI::Theme::ColorU32(NextUI::Theme::EColor::Danger, 0.16f)
-                                                                     : NextUI::Theme::ColorU32(NextUI::Theme::EColor::Success, 0.16f)));
-        const ImU32 borderCol = playDisabled ? NextUI::Theme::ColorU32(NextUI::Theme::EColor::Border, 0.4f)
-                                             : (isPlayHovered ? (playing ? NextUI::Theme::ColorU32(NextUI::Theme::EColor::Danger, 0.85f)
-                                                                         : NextUI::Theme::ColorU32(NextUI::Theme::EColor::Success, 0.85f))
-                                                              : (playing ? NextUI::Theme::ColorU32(NextUI::Theme::EColor::Danger, 0.55f)
-                                                                         : NextUI::Theme::ColorU32(NextUI::Theme::EColor::Success, 0.55f)));
+        const ImU32 accentCol = playing ? NextUI::ColorU32(NextUI::EColor::Danger)
+                                        : NextUI::ColorU32(NextUI::EColor::Success);
+        const ImU32 bgCol = playDisabled ? NextUI::ColorU32(NextUI::EColor::Surface, 0.5f)
+                                         : (isPlayHovered ? (playing ? NextUI::ColorU32(NextUI::EColor::Danger, 0.28f)
+                                                                     : NextUI::ColorU32(NextUI::EColor::Success, 0.28f))
+                                                          : (playing ? NextUI::ColorU32(NextUI::EColor::Danger, 0.16f)
+                                                                     : NextUI::ColorU32(NextUI::EColor::Success, 0.16f)));
+        const ImU32 borderCol = playDisabled ? NextUI::ColorU32(NextUI::EColor::Border, 0.4f)
+                                             : (isPlayHovered ? (playing ? NextUI::ColorU32(NextUI::EColor::Danger, 0.85f)
+                                                                         : NextUI::ColorU32(NextUI::EColor::Success, 0.85f))
+                                                              : (playing ? NextUI::ColorU32(NextUI::EColor::Danger, 0.55f)
+                                                                         : NextUI::ColorU32(NextUI::EColor::Success, 0.55f)));
 
         toolbarDrawList->AddRectFilled(playBtnMin, playBtnMax, bgCol, 4.0f);
         toolbarDrawList->AddRect(playBtnMin, playBtnMax, borderCol, 4.0f, 0, 1.0f);
@@ -395,8 +375,8 @@ void EditorInterface::ToolbarUI(EditorContext& ctx, Editor::EditorUiState& uiSta
         const float startX = playBtnMin.x + (playBtnSize.x - totalContentW) * 0.5f;
         const float textCenterY = playBtnMin.y + (playBtnSize.y - iconTextSize.y) * 0.5f;
 
-        const ImU32 iconColor = playDisabled ? NextUI::Theme::ColorU32(NextUI::Theme::EColor::TextDim) : accentCol;
-        const ImU32 labelColor = playDisabled ? NextUI::Theme::ColorU32(NextUI::Theme::EColor::TextDim) : NextUI::Theme::ColorU32(NextUI::Theme::EColor::Text);
+        const ImU32 iconColor = playDisabled ? NextUI::ColorU32(NextUI::EColor::TextDim) : accentCol;
+        const ImU32 labelColor = playDisabled ? NextUI::ColorU32(NextUI::EColor::TextDim) : NextUI::ColorU32(NextUI::EColor::Text);
 
         toolbarDrawList->AddText(ImVec2(startX, textCenterY), iconColor, iconStr);
         toolbarDrawList->AddText(ImVec2(startX + iconTextSize.x + gap, textCenterY), labelColor, textStr);
@@ -434,9 +414,9 @@ void EditorInterface::ToolbarUI(EditorContext& ctx, Editor::EditorUiState& uiSta
             }
         }
 
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, NextUI::Theme::Color(NextUI::Theme::EColor::Surface, 0.95f));
-        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceHover));
-        ImGui::PushStyleColor(ImGuiCol_Border, NextUI::Theme::Color(NextUI::Theme::EColor::Border, 0.70f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, NextUI::Color(NextUI::EColor::Surface, 0.95f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, NextUI::Color(NextUI::EColor::SurfaceHover));
+        ImGui::PushStyleColor(ImGuiCol_Border, NextUI::Color(NextUI::EColor::Border, 0.70f));
 
         if (ImGui::BeginCombo("##pieGame", previewText.c_str()))
         {
@@ -481,9 +461,9 @@ void EditorInterface::ToolbarUI(EditorContext& ctx, Editor::EditorUiState& uiSta
         if (canRebuild)
         {
             ImGui::SameLine();
-            ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Theme::Color(NextUI::Theme::EColor::Surface, 0.95f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceHover));
-            ImGui::PushStyleColor(ImGuiCol_Border, NextUI::Theme::Color(NextUI::Theme::EColor::Border, 0.70f));
+            ImGui::PushStyleColor(ImGuiCol_Button, NextUI::Color(NextUI::EColor::Surface, 0.95f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Color(NextUI::EColor::SurfaceHover));
+            ImGui::PushStyleColor(ImGuiCol_Border, NextUI::Color(NextUI::EColor::Border, 0.70f));
 
             if (ImGui::Button(ICON_FA_HAMMER " Rebuild C#", ImVec2(rebuildButtonWidth, kControlHeight)))
             {
@@ -512,10 +492,10 @@ void EditorInterface::ToolbarUI(EditorContext& ctx, Editor::EditorUiState& uiSta
         // both the fill and the outline are pushed together with the border size they need.
         ImGui::SameLine();
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, paused ? 1.0f : 0.0f);
-        ImGui::PushStyleColor(ImGuiCol_Button, paused ? NextUI::Theme::Color(NextUI::Theme::EColor::Warning, 0.25f)
-                                                       : NextUI::Theme::Color(NextUI::Theme::EColor::Surface, 0.95f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceHover));
-        ImGui::PushStyleColor(ImGuiCol_Border, NextUI::Theme::Color(NextUI::Theme::EColor::Warning, 0.75f));
+        ImGui::PushStyleColor(ImGuiCol_Button, paused ? NextUI::Color(NextUI::EColor::Warning, 0.25f)
+                                                       : NextUI::Color(NextUI::EColor::Surface, 0.95f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Color(NextUI::EColor::SurfaceHover));
+        ImGui::PushStyleColor(ImGuiCol_Border, NextUI::Color(NextUI::EColor::Warning, 0.75f));
 
         const char* pauseLabel = paused ? ICON_FA_PLAY " Resume" : ICON_FA_PAUSE " Pause";
         if (ImGui::Button(pauseLabel, ImVec2(pauseButtonWidth, kControlHeight)))
@@ -531,10 +511,10 @@ void EditorInterface::ToolbarUI(EditorContext& ctx, Editor::EditorUiState& uiSta
 
         ImGui::SameLine();
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, ejected ? 1.0f : 0.0f);
-        ImGui::PushStyleColor(ImGuiCol_Button, ejected ? NextUI::Theme::Color(NextUI::Theme::EColor::Success, 0.22f)
-                                                       : NextUI::Theme::Color(NextUI::Theme::EColor::Surface, 0.95f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Theme::Color(NextUI::Theme::EColor::SurfaceHover));
-        ImGui::PushStyleColor(ImGuiCol_Border, NextUI::Theme::Color(NextUI::Theme::EColor::Success, 0.65f));
+        ImGui::PushStyleColor(ImGuiCol_Button, ejected ? NextUI::Color(NextUI::EColor::Success, 0.22f)
+                                                       : NextUI::Color(NextUI::EColor::Surface, 0.95f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, NextUI::Color(NextUI::EColor::SurfaceHover));
+        ImGui::PushStyleColor(ImGuiCol_Border, NextUI::Color(NextUI::EColor::Success, 0.65f));
 
         const char* ejectLabel = ejected ? ICON_FA_GAMEPAD " Eject: Off" : ICON_FA_ARROW_POINTER " Eject";
         if (ImGui::Button(ejectLabel, ImVec2(ejectButtonWidth, kControlHeight)))
@@ -565,9 +545,9 @@ void EditorInterface::ToolbarUI(EditorContext& ctx, Editor::EditorUiState& uiSta
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(kRightItemGap, 0.0f));
 
     // Detached Launch button
-    if (NextUI::Foundation::Button(
+    if (NextUI::Button(
             ICON_FA_UP_RIGHT_FROM_SQUARE " Detached",
-            {.variant = NextUI::Foundation::EButtonVariant::Secondary,
+            {.variant = NextUI::EButtonVariant::Secondary,
              .size = ImVec2(launchButtonWidth, kControlHeight),
              .tooltip = "Launch current scene in standalone gkNextRenderer process"}))
     {
@@ -576,7 +556,7 @@ void EditorInterface::ToolbarUI(EditorContext& ctx, Editor::EditorUiState& uiSta
 
     // Reset Layout button
     ImGui::SameLine();
-    if (NextUI::Theme::ToolbarButton(ICON_FA_ROTATE_LEFT, "Reset Layout to Default", false,
+    if (NextUI::ToolbarButton(ICON_FA_ROTATE_LEFT, "Reset Layout to Default", false,
                                      ImVec2(kToolbarIconWidth, kControlHeight)))
     {
         uiState.dockResetRequested = true;
@@ -584,7 +564,7 @@ void EditorInterface::ToolbarUI(EditorContext& ctx, Editor::EditorUiState& uiSta
 
     // Settings / Preferences button
     ImGui::SameLine();
-    if (NextUI::Theme::ToolbarButton(ICON_FA_GEAR, "Editor Preferences", uiState.settingsPanel,
+    if (NextUI::ToolbarButton(ICON_FA_GEAR, "Editor Preferences", uiState.settingsPanel,
                                      ImVec2(kToolbarIconWidth, kControlHeight)))
     {
         uiState.settingsPanel = !uiState.settingsPanel;
@@ -606,9 +586,9 @@ void EditorInterface::Render()
     Render(uiState_);
 }
 
-void EditorInterface::Render(const NextGameInstanceBase::FGameUiFrameContext& context)
+void EditorInterface::Render(const Runtime::FUiFrameContext& context)
 {
-    if (context.surfaceKind == NextGameInstanceBase::FGameUiFrameContext::ESurfaceKind::RemoteView)
+    if (context.surfaceKind == Runtime::EUiSurfaceKind::RemoteView)
     {
         Render(GetRemoteUiState(context.sessionId));
         return;
@@ -619,7 +599,7 @@ void EditorInterface::Render(const NextGameInstanceBase::FGameUiFrameContext& co
 
 void EditorInterface::Render(Editor::EditorUiState& uiState)
 {
-    NextUI::IUserInterface* ui = editor_->GetEngine().GetUserInterface();
+    Runtime::IUiHost* ui = editor_->GetEngine().GetUiHost();
     if (ui == nullptr)
     {
         return;
@@ -704,8 +684,8 @@ void EditorInterface::Render(Editor::EditorUiState& uiState)
 
         if (uiState.viewportOnMainViewport && node->Size.x >= 1.0f && node->Size.y >= 1.0f)
         {
-            const NextUI::Scaling::FViewportRect framebufferViewport =
-                NextUI::Scaling::ImGuiToMainFramebufferViewport(node->Pos, node->Size);
+            const NextUI::FViewportRect framebufferViewport =
+                NextUI::ImGuiToMainFramebufferViewport(node->Pos, node->Size);
             const int32_t outputX = Utilities::Math::floorToInt(framebufferViewport.Position.x);
             const int32_t outputY = Utilities::Math::floorToInt(framebufferViewport.Position.y);
             const uint32_t outputWidth = Utilities::Math::ceilToInt(framebufferViewport.Size.x);

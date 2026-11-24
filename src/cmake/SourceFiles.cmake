@@ -39,13 +39,16 @@ file(GLOB_RECURSE src_files_thirdparty CONFIGURE_DEPENDS
     "ThirdParty/miniaudio/*.h"
     "ThirdParty/lzav/*.h"
     "ThirdParty/tinybvh/*.h"
+    "ThirdParty/ozz/*.h"
+)
+
+file(GLOB_RECURSE src_files_nextui_thirdparty CONFIGURE_DEPENDS
     "ThirdParty/ImGuizmo/*.cpp"
     "ThirdParty/ImGuizmo/*.h"
     "ThirdParty/ImAnim/*.cpp"
     "ThirdParty/ImAnim/*.h"
     "ThirdParty/imgui-custom/imgui_impl_sdl3_custom.cpp"
     "ThirdParty/imgui-custom/imgui_impl_sdl3_custom.h"
-    "ThirdParty/ozz/*.h"
 )
 
 # --- Engine Core ---
@@ -88,6 +91,10 @@ foreach(gk_module IN LISTS GK_MODULE_NAMES)
         "Modules/${gk_module}/*.h"
     )
 endforeach()
+
+if(src_files_module_NextUI)
+    list(APPEND src_files_module_NextUI ${src_files_nextui_thirdparty})
+endif()
 
 # Two NextDotNet subdirectories are deliberately not part of the module library: Probe/ is a
 # standalone acceptance harness with its own main() and CMake project, and Stub/ is linked only

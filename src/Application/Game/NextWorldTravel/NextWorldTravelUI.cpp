@@ -6,7 +6,7 @@
 #include "Engine/Rendering/RendererChoices.hpp"
 #include "Engine/Rendering/Upscaler/UpscalerTypes.hpp"
 #include "Engine/Runtime/Engine.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 
 #include <imgui.h>
 #include <ThirdParty/fontawesome/IconsFontAwesome6.h>
@@ -57,7 +57,7 @@ namespace NextWorldTravel
         const float toolbarHeight = std::ceil(ImGui::GetFontSize() + 22.0f);
         const float tileWidth = std::clamp(ImGui::CalcTextSize(tileLabel).x + 54.0f, 150.0f, 250.0f);
 
-        NextUI::Theme::FOverlayPanelConfig navigationConfig{};
+        NextUI::FOverlayPanelConfig navigationConfig{};
         navigationConfig.WindowId = "##NextWorldTravelNavigation";
         navigationConfig.Position = viewport->Pos + ImVec2(margin, margin);
         navigationConfig.Size = ImVec2(tileWidth + 160.0f, toolbarHeight);
@@ -65,17 +65,17 @@ namespace NextWorldTravel
         navigationConfig.ItemSpacing = ImVec2(4.0f, 0.0f);
         navigationConfig.Rounding = 5.0f;
         navigationConfig.BackgroundAlpha = 0.80f;
-        if (NextUI::Theme::BeginOverlayPanel(navigationConfig))
+        if (NextUI::BeginOverlayPanel(navigationConfig))
         {
-            NextUI::Theme::PushViewportToolbarStyle();
+            NextUI::PushViewportToolbarStyle();
             ImGui::SetNextItemWidth(tileWidth);
-            NextUI::Theme::PushViewportPopupStyle();
+            NextUI::PushViewportPopupStyle();
             if (ImGui::BeginCombo("##TravelTile", tileLabel))
             {
                 for (size_t i = 0; i < tiles.size(); ++i)
                 {
                     const bool selected = static_cast<int>(i) == context.activeTile;
-                    if (NextUI::Theme::DrawViewportComboOption(tiles[i].name.c_str(), selected) && !selected)
+                    if (NextUI::ComboOption(tiles[i].name.c_str(), selected) && !selected)
                     {
                         request.loadTileIndex = static_cast<int>(i);
                     }
@@ -86,13 +86,13 @@ namespace NextWorldTravel
                 }
                 ImGui::EndCombo();
             }
-            NextUI::Theme::PopViewportPopupStyle();
-            NextUI::Theme::DrawTooltip("Choose a generated world tile");
-            NextUI::Theme::DrawVerticalSeparator(ImGui::GetFrameHeight(), 7.0f);
+            NextUI::PopViewportPopupStyle();
+            NextUI::Tooltip("Choose a generated world tile");
+            NextUI::DrawVerticalSeparator(ImGui::GetFrameHeight(), 7.0f);
 
             const auto selectView = [&](const char* label, const char* tooltip, EViewMode mode)
             {
-                if (NextUI::Theme::DrawFlatViewportButton(
+                if (NextUI::GhostButton(
                         label, tooltip, context.viewMode == mode, ImVec2(28.0f, 22.0f)) &&
                     context.viewMode != mode)
                 {
@@ -105,12 +105,12 @@ namespace NextWorldTravel
             selectView(ICON_FA_MAP "##Aerial", "Aerial map view (2 or V)", EViewMode::Aerial);
             selectView(ICON_FA_LOCATION_CROSSHAIRS "##Focus", "Focus the current place (3 or G)", EViewMode::Focus);
             ImGui::Dummy(ImVec2(0.0f, 0.0f));
-            NextUI::Theme::PopViewportToolbarStyle();
+            NextUI::PopViewportToolbarStyle();
         }
-        NextUI::Theme::EndOverlayPanel();
+        NextUI::EndOverlayPanel();
 
         constexpr float actionWidth = 250.0f;
-        NextUI::Theme::FOverlayPanelConfig actionConfig{};
+        NextUI::FOverlayPanelConfig actionConfig{};
         actionConfig.WindowId = "##NextWorldTravelViewportTools";
         actionConfig.Position = ImVec2(viewport->Pos.x + viewport->Size.x - margin - actionWidth,
                                        viewport->Pos.y + margin);
@@ -119,10 +119,10 @@ namespace NextWorldTravel
         actionConfig.ItemSpacing = ImVec2(4.0f, 0.0f);
         actionConfig.Rounding = 5.0f;
         actionConfig.BackgroundAlpha = 0.80f;
-        if (NextUI::Theme::BeginOverlayPanel(actionConfig))
+        if (NextUI::BeginOverlayPanel(actionConfig))
         {
-            NextUI::Theme::PushViewportToolbarStyle();
-            if (NextUI::Theme::DrawFlatViewportButton(
+            NextUI::PushViewportToolbarStyle();
+            if (NextUI::GhostButton(
                     ICON_FA_TAGS "##Labels", "Show or hide place labels (L)", poiLayer.ShowLabels(),
                     ImVec2(28.0f, 22.0f)))
             {
@@ -132,7 +132,7 @@ namespace NextWorldTravel
 
             const bool canToggleFollow = context.camera != nullptr && context.viewMode == EViewMode::Walk;
             ImGui::BeginDisabled(!canToggleFollow);
-            if (NextUI::Theme::DrawFlatViewportButton(
+            if (NextUI::GhostButton(
                     ICON_FA_COMPASS "##Follow", "Switch between follow and free camera (C)",
                     context.followCamera, ImVec2(28.0f, 22.0f)))
             {
@@ -141,7 +141,7 @@ namespace NextWorldTravel
             ImGui::EndDisabled();
             ImGui::SameLine();
 
-            if (NextUI::Theme::DrawFlatViewportButton(
+            if (NextUI::GhostButton(
                     ICON_FA_ARROWS_ROTATE "##Tour", "Start or stop the landmark tour (T)", context.tourActive,
                     ImVec2(28.0f, 22.0f)))
             {
@@ -149,34 +149,34 @@ namespace NextWorldTravel
             }
             ImGui::SameLine();
 
-            if (NextUI::Theme::DrawFlatViewportButton(
+            if (NextUI::GhostButton(
                     ICON_FA_ARROWS_ROTATE "##Reset", "Reset the current viewport", false, ImVec2(28.0f, 22.0f)))
             {
                 request.resetViewport = true;
             }
             ImGui::SameLine();
-            if (NextUI::Theme::DrawFlatViewportButton(
+            if (NextUI::GhostButton(
                     ICON_FA_CAMERA "##Capture", "Capture a screenshot (F9)", false, ImVec2(28.0f, 22.0f)))
             {
                 request.takeScreenshot = true;
             }
             ImGui::SameLine();
-            if (NextUI::Theme::DrawFlatViewportButton(
+            if (NextUI::GhostButton(
                     ICON_FA_SLIDERS "##Explorer", "Show or hide the world explorer", showExplorer_,
                     ImVec2(28.0f, 22.0f)))
             {
                 showExplorer_ = !showExplorer_;
             }
             ImGui::SameLine();
-            if (NextUI::Theme::DrawFlatViewportButton(
+            if (NextUI::GhostButton(
                     ICON_FA_KEYBOARD "##Shortcuts", "Show viewport shortcuts", showShortcutSheet_,
                     ImVec2(28.0f, 22.0f)))
             {
                 showShortcutSheet_ = !showShortcutSheet_;
             }
-            NextUI::Theme::PopViewportToolbarStyle();
+            NextUI::PopViewportToolbarStyle();
         }
-        NextUI::Theme::EndOverlayPanel();
+        NextUI::EndOverlayPanel();
     }
 
     void FNextWorldTravelUI::DrawShortcutSheet()
@@ -190,7 +190,7 @@ namespace NextWorldTravel
         constexpr float margin = 12.0f;
         constexpr float panelWidth = 370.0f;
         const float toolbarHeight = std::ceil(ImGui::GetFontSize() + 22.0f);
-        NextUI::Theme::FOverlayPanelConfig config{};
+        NextUI::FOverlayPanelConfig config{};
         config.WindowId = "##NextWorldTravelShortcuts";
         config.Position = ImVec2(viewport->Pos.x + viewport->Size.x - margin - panelWidth,
                                  viewport->Pos.y + margin + toolbarHeight + 8.0f);
@@ -199,19 +199,19 @@ namespace NextWorldTravel
         config.ItemSpacing = ImVec2(6.0f, 5.0f);
         config.Rounding = 6.0f;
         config.BackgroundAlpha = 0.92f;
-        if (NextUI::Theme::BeginOverlayPanel(config))
+        if (NextUI::BeginOverlayPanel(config))
         {
-            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::Text),
+            ImGui::TextColored(NextUI::Color(NextUI::EColor::Text),
                                "%s  Viewport shortcuts", ICON_FA_KEYBOARD);
             ImGui::SameLine(ImGui::GetContentRegionMax().x - 24.0f);
-            NextUI::Theme::PushViewportToolbarStyle();
-            if (NextUI::Theme::DrawFlatViewportButton(
+            NextUI::PushViewportToolbarStyle();
+            if (NextUI::GhostButton(
                     ICON_FA_XMARK "##CloseShortcuts", "Close shortcuts", false, ImVec2(24.0f, 22.0f)))
             {
                 showShortcutSheet_ = false;
             }
-            NextUI::Theme::PopViewportToolbarStyle();
-            NextUI::Theme::DrawThinSeparator();
+            NextUI::PopViewportToolbarStyle();
+            NextUI::DrawThinSeparator();
 
             struct FShortcut
             {
@@ -238,14 +238,14 @@ namespace NextWorldTravel
                 {
                     ImGui::TableNextRow();
                     ImGui::TableSetColumnIndex(0);
-                    ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::Text), "%s", shortcut.key);
+                    ImGui::TextColored(NextUI::Color(NextUI::EColor::Text), "%s", shortcut.key);
                     ImGui::TableSetColumnIndex(1);
-                    ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted), "%s", shortcut.action);
+                    ImGui::TextColored(NextUI::Color(NextUI::EColor::TextMuted), "%s", shortcut.action);
                 }
                 ImGui::EndTable();
             }
         }
-        NextUI::Theme::EndOverlayPanel();
+        NextUI::EndOverlayPanel();
     }
 
     void FNextWorldTravelUI::DrawWalkPanel(const FNextWorldTravelUIContext& context, FNextWorldTravelUIRequest& request)
@@ -376,7 +376,7 @@ namespace NextWorldTravel
 
     void FNextWorldTravelUI::DrawRenderingPanel(const FNextWorldTravelUIContext& context)
     {
-        if (context.engine == nullptr || !NextUI::Theme::BeginPanelSection("Rendering", true))
+        if (context.engine == nullptr || !NextUI::BeginPanelSection("Rendering", true))
         {
             return;
         }
@@ -396,13 +396,13 @@ namespace NextWorldTravel
 
         ImGui::TextDisabled("Renderer");
         ImGui::SetNextItemWidth(-1.0f);
-        NextUI::Theme::PushViewportPopupStyle();
+        NextUI::PushViewportPopupStyle();
         if (ImGui::BeginCombo("##NextWorldTravelRenderer", rendererLabel))
         {
             for (const Rendering::FRendererChoice* choice : availableRenderers)
             {
                 const bool selected = choice->type == currentRenderer;
-                if (NextUI::Theme::DrawViewportComboOption(choice->displayName, selected))
+                if (NextUI::ComboOption(choice->displayName, selected))
                 {
                     engine.RequestRendererType(choice->type);
                 }
@@ -413,7 +413,7 @@ namespace NextWorldTravel
             }
             ImGui::EndCombo();
         }
-        NextUI::Theme::PopViewportPopupStyle();
+        NextUI::PopViewportPopupStyle();
 
         const uint32_t currentUpscaler = settings.UpscalerType >= 0
             ? static_cast<uint32_t>(settings.UpscalerType)
@@ -422,7 +422,7 @@ namespace NextWorldTravel
 
         ImGui::TextDisabled("Upscaler");
         ImGui::SetNextItemWidth(-1.0f);
-        NextUI::Theme::PushViewportPopupStyle();
+        NextUI::PushViewportPopupStyle();
         if (ImGui::BeginCombo("##NextWorldTravelUpscaler", currentUpscalerInfo.name))
         {
             for (uint32_t rawType = 0;
@@ -434,7 +434,7 @@ namespace NextWorldTravel
                     renderer.SupportsUpscaler(typeInfo.type);
                 const bool selected = rawType == currentUpscaler;
                 ImGui::BeginDisabled(!supported);
-                if (NextUI::Theme::DrawViewportComboOption(typeInfo.name, selected))
+                if (NextUI::ComboOption(typeInfo.name, selected))
                 {
                     engine.SetUpscalerConfiguration(typeInfo.type, settings.SuperResolution);
                 }
@@ -446,11 +446,11 @@ namespace NextWorldTravel
             }
             ImGui::EndCombo();
         }
-        NextUI::Theme::PopViewportPopupStyle();
+        NextUI::PopViewportPopupStyle();
         ImGui::TextDisabled("Mode: %s",
                             Rendering::Upscaler::GetUpscaleModeInfo(settings.SuperResolution).name);
 
-        NextUI::Theme::EndPanelSection();
+        NextUI::EndPanelSection();
     }
 
     FNextWorldTravelUIRequest FNextWorldTravelUI::Draw(const FNextWorldTravelUIContext& context, FGeoPoiLayer& poiLayer)
@@ -470,7 +470,7 @@ namespace NextWorldTravel
 
         const std::vector<FGeoTile>& tiles = *context.tiles;
         ImGuiViewport* viewport = ImGui::GetMainViewport();
-        NextUI::Theme::FDetailPanelConfig panelConfig{};
+        NextUI::FDetailPanelConfig panelConfig{};
         panelConfig.WindowId = "##NextWorldTravelExplorer";
         panelConfig.ContentWindowId = "##NextWorldTravelExplorerContent";
         panelConfig.Icon = ICON_FA_MAP_LOCATION_DOT;
@@ -478,7 +478,7 @@ namespace NextWorldTravel
         panelConfig.Open = &showExplorer_;
         panelConfig.Position = viewport->Pos + ImVec2(16.0f, std::ceil(ImGui::GetFontSize() + 42.0f));
         panelConfig.Size = ImVec2(390.0f, 690.0f);
-        if (!NextUI::Theme::BeginDetailPanel(panelConfig))
+        if (!NextUI::BeginDetailPanel(panelConfig))
         {
             return request;
         }
@@ -490,7 +490,7 @@ namespace NextWorldTravel
                                    : nullptr;
         if (tile != nullptr)
         {
-            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted),
+            ImGui::TextColored(NextUI::Color(NextUI::EColor::TextMuted),
                                 "%.5f, %.5f  ·  %.0f m  ·  %zu places",
                                 tile->center.x, tile->center.y, tile->sizeM, tile->pois.size());
             if (!tile->loadError.empty())
@@ -499,9 +499,9 @@ namespace NextWorldTravel
             }
         }
 
-        NextUI::Theme::DrawThinSeparator();
+        NextUI::DrawThinSeparator();
         DrawRenderingPanel(context);
-        NextUI::Theme::DrawThinSeparator();
+        NextUI::DrawThinSeparator();
         switch (context.viewMode)
         {
         case EViewMode::Aerial: DrawAerialPanel(context, poiLayer, request); break;
@@ -509,12 +509,12 @@ namespace NextWorldTravel
         case EViewMode::Walk:
         default: DrawWalkPanel(context, request); break;
         }
-        ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted),
+        ImGui::TextColored(NextUI::Color(NextUI::EColor::TextMuted),
                            "%.1f ms/frame", context.frameMs);
-        NextUI::Theme::DrawThinSeparator();
+        NextUI::DrawThinSeparator();
 
         // ---- Labels -------------------------------------------------------
-        if (NextUI::Theme::BeginPanelSection("Labels", true))
+        if (NextUI::BeginPanelSection("Labels", true))
         {
             ImGui::Checkbox("Show labels (L)", &poiLayer.ShowLabels());
             ImGui::SameLine();
@@ -530,21 +530,21 @@ namespace NextWorldTravel
                 ImGui::Checkbox(PoiCategory::kAll[static_cast<size_t>(i)], &poiLayer.CategoryEnabled(i));
                 ImGui::PopStyleColor();
             }
-            NextUI::Theme::EndPanelSection();
+            NextUI::EndPanelSection();
         }
 
         // ---- Places -------------------------------------------------------
-        if (tile != nullptr && NextUI::Theme::BeginPanelSection("Places", true))
+        if (tile != nullptr && NextUI::BeginPanelSection("Places", true))
         {
             const glm::vec3 from = context.walker != nullptr && context.walker->IsSpawned()
                                        ? context.walker->Position()
                                        : (context.cameraPosition != nullptr ? *context.cameraPosition
                                                                             : glm::vec3(0.0f));
             DrawPlaceList(*tile, poiLayer, context, from, request);
-            NextUI::Theme::EndPanelSection();
+            NextUI::EndPanelSection();
         }
 
-        NextUI::Theme::EndDetailPanel();
+        NextUI::EndDetailPanel();
         return request;
     }
 

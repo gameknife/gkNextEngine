@@ -2,12 +2,9 @@
 
 #include "UiCatalog.hpp"
 
-#include "Modules/NextUI/UI/UiContainers.hpp"
-#include "Modules/NextUI/UI/UiScopes.hpp"
-#include "Modules/NextUI/UI/UiTheme.hpp"
-#include "Modules/NextUI/UI/UiWidgets.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 
-namespace Runtime::DevToolsUI
+namespace DevTools
 {
     void DrawUiCatalog(bool& open)
     {
@@ -15,7 +12,7 @@ namespace Runtime::DevToolsUI
         {
             return;
         }
-        NextUI::Foundation::FScopedWindow window("UI Foundation Catalog###UiFoundationCatalog", &open);
+        NextUI::FScopedWindow window("UI Foundation Catalog###UiFoundationCatalog", &open);
         if (!window)
         {
             return;
@@ -23,39 +20,38 @@ namespace Runtime::DevToolsUI
 
         ImGui::TextUnformatted("Semantic buttons");
         for (const auto variant : {
-                 NextUI::Foundation::EButtonVariant::Primary,
-                 NextUI::Foundation::EButtonVariant::Secondary,
-                 NextUI::Foundation::EButtonVariant::Ghost,
-                 NextUI::Foundation::EButtonVariant::Toolbar,
-                 NextUI::Foundation::EButtonVariant::Danger})
+                 NextUI::EButtonVariant::Primary,
+                 NextUI::EButtonVariant::Secondary,
+                 NextUI::EButtonVariant::Ghost,
+                 NextUI::EButtonVariant::Toolbar,
+                 NextUI::EButtonVariant::Danger})
         {
-            NextUI::Foundation::FButtonOptions options;
+            NextUI::FButtonOptions options;
             options.variant = variant;
             options.tooltip = "Unified tooltip, including disabled hover";
-            NextUI::Foundation::Button("Button", options);
+            NextUI::Button("Button", options);
             ImGui::SameLine();
         }
         ImGui::NewLine();
-        NextUI::Foundation::Button("Active", {.variant = NextUI::Foundation::EButtonVariant::Toolbar,
-                                               .active = true});
+        NextUI::Button("Active", {.variant = NextUI::EButtonVariant::Toolbar, .active = true});
         ImGui::SameLine();
-        NextUI::Foundation::Button("Disabled", {.tooltip = "Disabled reason", .disabled = true});
+        NextUI::Button("Disabled", {.tooltip = "Disabled reason", .disabled = true});
 
         ImGui::SeparatorText("Containers");
         {
-            NextUI::Foundation::FScopedToolbar toolbar("##CatalogToolbar", ImVec2(0.0f, 38.0f));
+            NextUI::FScopedToolbar toolbar("##CatalogToolbar", ImVec2(0.0f, 38.0f));
             if (toolbar)
             {
-                NextUI::Foundation::IconButton("A", "Toolbar icon");
+                NextUI::IconButton("A", "Toolbar icon");
                 ImGui::SameLine();
-                NextUI::Foundation::IconButton("B", "Selected toolbar icon", true);
+                NextUI::IconButton("B", "Selected toolbar icon", true);
             }
         }
         {
-            NextUI::Foundation::FScopedInsetPanel inset("##CatalogInset", ImVec2(0.0f, 90.0f));
+            NextUI::FScopedInsetPanel inset("##CatalogInset", ImVec2(0.0f, 90.0f));
             if (inset)
             {
-                NextUI::Foundation::LabeledRow("Labeled row");
+                NextUI::LabeledRow("Labeled row");
                 ImGui::SetNextItemWidth(-1.0f);
                 static char catalogText[32] = "Value";
                 ImGui::InputText("##CatalogText", catalogText, sizeof(catalogText));
@@ -65,8 +61,8 @@ namespace Runtime::DevToolsUI
         ImGui::SeparatorText("Combo option");
         if (ImGui::BeginCombo("##CatalogCombo", "Selected"))
         {
-            NextUI::Foundation::ComboOption("Selected", true);
-            NextUI::Foundation::ComboOption("Alternative", false);
+            NextUI::ComboOption("Selected", true);
+            NextUI::ComboOption("Alternative", false);
             ImGui::EndCombo();
         }
     }

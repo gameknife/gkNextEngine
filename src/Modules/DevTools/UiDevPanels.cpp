@@ -1,17 +1,17 @@
 #include "Engine/Common/CoreMinimal.hpp"
 #include "Modules/DevTools/UiDevPanels.hpp"
 #include "Modules/DevTools/ConsoleLogBuffer.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/Config/CVarSystem.hpp"
 #include "Engine/Runtime/Config/UserSettings.hpp"
-#include "Engine/Runtime/Interface/UserInterface.hpp"
+// (migrated to IUiHost)
 #include "Engine/Runtime/Subsystems/TaskCoordinator.hpp"
 #include "Engine/Rendering/VulkanBaseRenderer.hpp"
 #include "Engine/Vulkan/Device.hpp"
 #include "Engine/Vulkan/SwapChain.hpp"
-#include "Engine/Utilities/ImGui.hpp"
+// (migrated to NextUI)
 #include "Engine/Utilities/Math.hpp"
 #include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 
@@ -542,7 +542,7 @@ void FUiDevPanels::DrawConsoleLogOutputInternal(const char* childId, const ImVec
                 ImGui::TextUnformatted(prefix);
                 ImGui::PopStyleColor();
                 ImGui::SameLine();
-                ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Theme::Color(NextUI::Theme::EColor::Text));
+                ImGui::PushStyleColor(ImGuiCol_Text, NextUI::Color(NextUI::EColor::Text));
                 ImGui::TextUnformatted(payloadStart, payloadEnd);
                 ImGui::PopStyleColor();
             }
@@ -583,7 +583,7 @@ void FUiDevPanels::RenderConsoleOverlay()
     DrawConsoleWindow();
 }
 
-void FUiDevPanels::DrawOverlay(const NextUI::Statistics& statistics)
+void FUiDevPanels::DrawOverlay(const Runtime::FUiStatistics& statistics)
 {
     static bool lastDebugProfileOverlay = false;
     static bool lastShowOverlay = false;
@@ -627,7 +627,7 @@ void FUiDevPanels::DrawOverlay(const NextUI::Statistics& statistics)
                               viewport->Pos.y + distance + 44.0f);
     const float panelHeight = std::max(420.0f, viewport->Size.y - distance - 86.0f);
 
-    NextUI::Theme::FDetailPanelConfig panelConfig{};
+    NextUI::FDetailPanelConfig panelConfig{};
     panelConfig.WindowId = "##ProfilerPanel";
     panelConfig.ContentWindowId = "##ProfilerContent";
     panelConfig.Icon = ICON_FA_CHART_LINE;
@@ -636,7 +636,7 @@ void FUiDevPanels::DrawOverlay(const NextUI::Statistics& statistics)
     panelConfig.Position = pos;
     panelConfig.Size = ImVec2(panelWidth, panelHeight);
     panelConfig.DetachedViewport = statisticsDetachedViewport_;
-    if (!NextUI::Theme::BeginDetailPanel(panelConfig))
+    if (!NextUI::BeginDetailPanel(panelConfig))
     {
         Engine().GetShowFlags().DebugProfileOverlay = Engine().GetUserSettings().ShowOverlay;
         lastDebugProfileOverlay = Engine().GetShowFlags().DebugProfileOverlay;
@@ -653,14 +653,14 @@ void FUiDevPanels::DrawOverlay(const NextUI::Statistics& statistics)
 
     auto BeginCard = [&](const char* id, float height = 0.0f, ImGuiWindowFlags extraFlags = 0)
     {
-        NextUI::Theme::BeginCard(id, height, extraFlags, 4.0f);
+        NextUI::BeginCard(id, height, extraFlags, 4.0f);
         ImGui::SetWindowFontScale(panelFontScale);
     };
 
     auto EndCard = [&]()
     {
         ImGui::SetWindowFontScale(1.0f);
-        NextUI::Theme::EndCard();
+        NextUI::EndCard();
     };
 
     auto BuildOrdered = [&](const std::array<float, kOverlaySparklineSampleCount>& src,
@@ -692,12 +692,12 @@ void FUiDevPanels::DrawOverlay(const NextUI::Statistics& statistics)
     BuildOrdered(frameTimeSamples_, orderedFt, orderedCount);
     BuildOrdered(gpuTimeSamples_, orderedGpu, orderedCount);
 
-    const ImVec4 colHeader = NextUI::Theme::Color(NextUI::Theme::EColor::Blue);
-    const ImVec4 colLabel = NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted);
-    const ImVec4 colVal = NextUI::Theme::Color(NextUI::Theme::EColor::Text);
-    const ImVec4 colGood = NextUI::Theme::Color(NextUI::Theme::EColor::Success);
-    const ImVec4 colWarn = NextUI::Theme::Color(NextUI::Theme::EColor::Warning);
-    const ImVec4 colBad = NextUI::Theme::Color(NextUI::Theme::EColor::Danger);
+    const ImVec4 colHeader = NextUI::Color(NextUI::EColor::Blue);
+    const ImVec4 colLabel = NextUI::Color(NextUI::EColor::TextMuted);
+    const ImVec4 colVal = NextUI::Color(NextUI::EColor::Text);
+    const ImVec4 colGood = NextUI::Color(NextUI::EColor::Success);
+    const ImVec4 colWarn = NextUI::Color(NextUI::EColor::Warning);
+    const ImVec4 colBad = NextUI::Color(NextUI::EColor::Danger);
 
     auto CompactStat = [&](const char* label, const std::string& value)
     {
@@ -746,14 +746,14 @@ void FUiDevPanels::DrawOverlay(const NextUI::Statistics& statistics)
             ImGui::TextColored(colVal, "%s", deviceProperties.deviceName);
             if (!driverName.empty())
             {
-                ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted, 0.72f), "%s", driverName.c_str());
+                ImGui::TextColored(NextUI::Color(NextUI::EColor::TextMuted, 0.72f), "%s", driverName.c_str());
             }
 
             ImGui::TableNextColumn();
             ImGui::TextColored(colHeader, "Resolution");
             ImGui::TextColored(colVal, "%ux%u", statistics.FramebufferSize.width,
                                statistics.FramebufferSize.height);
-            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted, 0.72f), "%ux%u", statistics.RenderSize.width,
+            ImGui::TextColored(NextUI::Color(NextUI::EColor::TextMuted, 0.72f), "%ux%u", statistics.RenderSize.width,
                               statistics.RenderSize.height);
             ImGui::EndTable();
         }
@@ -761,7 +761,7 @@ void FUiDevPanels::DrawOverlay(const NextUI::Statistics& statistics)
         ImGui::Dummy(ImVec2(0.0f, 6.0f));
         ImGui::TextColored(colHeader, "Frame Rate");
         ImGui::TextColored(fpsColor, "%s", fpsText.c_str());
-        NextUI::Theme::Sparkline(orderedFps.data(), orderedCount,
+        NextUI::Sparkline(orderedFps.data(), orderedCount,
                                  ImVec2(ImGui::GetContentRegionAvail().x, 26.0f), colGood, FLT_MAX, FLT_MAX, true);
 
         ImGui::Dummy(ImVec2(0.0f, 4.0f));
@@ -774,15 +774,15 @@ void FUiDevPanels::DrawOverlay(const NextUI::Statistics& statistics)
             ImGui::TableSetColumnIndex(0);
             ImGui::TextColored(colHeader, "GPU Time");
             ImGui::TextColored(colVal, "%s", gpuText.c_str());
-            NextUI::Theme::Sparkline(orderedGpu.data(), orderedCount,
+            NextUI::Sparkline(orderedGpu.data(), orderedCount,
                                      ImVec2(ImGui::GetContentRegionAvail().x, 26.0f), colWarn, FLT_MAX, FLT_MAX, true);
 
             ImGui::TableSetColumnIndex(1);
             ImGui::TextColored(colHeader, "Frame Time");
             ImGui::TextColored(colVal, "%s", ftText.c_str());
-            NextUI::Theme::Sparkline(orderedFt.data(), orderedCount,
+            NextUI::Sparkline(orderedFt.data(), orderedCount,
                                      ImVec2(ImGui::GetContentRegionAvail().x, 26.0f),
-                                     NextUI::Theme::Color(NextUI::Theme::EColor::Blue),
+                                     NextUI::Color(NextUI::EColor::Blue),
                                      FLT_MAX, FLT_MAX, true);
             ImGui::EndTable();
         }
@@ -953,7 +953,7 @@ void FUiDevPanels::DrawOverlay(const NextUI::Statistics& statistics)
     EndCard();
 
     ImGui::SetWindowFontScale(1.0f);
-    NextUI::Theme::EndDetailPanel();
+    NextUI::EndDetailPanel();
     Engine().GetShowFlags().DebugProfileOverlay = Engine().GetUserSettings().ShowOverlay;
     lastDebugProfileOverlay = Engine().GetShowFlags().DebugProfileOverlay;
     lastShowOverlay = Engine().GetUserSettings().ShowOverlay;

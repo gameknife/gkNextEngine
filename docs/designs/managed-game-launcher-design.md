@@ -287,7 +287,7 @@ canvas 未设置（尺寸为 0）时每个绑定的行为与从前逐字节相�
 编辑器只在画游戏 UI 的那一刻设置它，画完立即清除，免得同一帧里别的 ImGui 使用者也被平移。
 
 已知边界：`UI_Begin` 开出来的是真正的 ImGui 窗口，位置由 ImGui 和 dock 管理，canvas 管不到它。目前
-所有 C# 游戏的 HUD 都走 drawlist 路径（`ManagedImGui` 与 Flappy/Brotato 都是），所以还没有必要处理。
+所有 C# 游戏的 HUD 都走 drawlist 路径（`UiCanvas` 与 Flappy/Brotato 都是），所以还没有必要处理。
 
 **这个 PIE 是刻意窄的。** Stop **不保留** Play 之前的编辑状态：它按路径重新加载 Play 前打开的那个场景，
 选择集、undo 历史、相机都从头开始，Play 期间对场景做的任何修改都会丢失。要跨 Play 会话保留编辑，需要

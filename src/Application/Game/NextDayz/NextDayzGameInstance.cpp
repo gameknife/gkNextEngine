@@ -40,7 +40,8 @@
 #include "Modules/ScadLoader/FScadShared.h"
 #include "Zombies/ZombieMovement.hpp"
 #include "Modules/ScadLoader/ScadModule.hpp"
-#include "Modules/NextUI/FontLoader.hpp"
+#include "Modules/NextUI/Hud.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 
 #include "Application/Game/NextDayz/UI/NextDayzHUD.hpp"
 
@@ -107,7 +108,7 @@ void NextDayzGameInstance::OnInitUI()
     NextGameInstanceBase::OnInitUI();
     const float density = ImGui::GetIO().FontDefault->Sources[0]->RasterizerDensity;
     constexpr float titleSize = 28.0f;
-    inventoryTitleFont_ = NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
+    inventoryTitleFont_ = NextUI::LoadFont(NextUI::FFontRequest{
         .filePath = "assets/fonts/Roboto-BoldCondensed.ttf",
         .pixelSize = titleSize,
         .rasterizerDensity = density,
@@ -117,7 +118,7 @@ void NextDayzGameInstance::OnInitUI()
         // Pair the Title face with the localized heading's Chinese glyphs.
         ImFontConfig fallback;
         fallback.MergeMode = true;
-        NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
+        NextUI::LoadFont(NextUI::FFontRequest{
             .filePath = "assets/fonts/DroidSansFallback.ttf",
             .pixelSize = titleSize,
             .extraGlyphsUtf8 = NextDayz::L10n::Translate("Inventory", NextDayz::L10n::ELanguage::Chinese).data(),
@@ -1682,13 +1683,13 @@ bool NextDayzGameInstance::OnRenderUI()
             auto& icons = NextDayz::GetItemIconCache(GetEngine().GetRenderer());
             const uint32_t slot = icons.Request(id, loot_.VisualForItem(id));
             return slot != std::numeric_limits<uint32_t>::max()
-                ? GetEngine().GetUserInterface()->RequestImTextureIdRaw(slot) : 0;
+                ? NextUI::ToImTextureId(GetEngine().GetUiHost()->ResolveRawSlotId(slot)) : static_cast<ImTextureID>(0);
         };
         ctx.characterPreview = [this](glm::vec2 size, float yaw, float distance) -> uint64_t
         {
             auto& preview = NextDayz::GetInventoryPreview(GetEngine().GetRenderer());
             preview.Request(rig_.WorldRoot(), {static_cast<uint32_t>(size.x), static_cast<uint32_t>(size.y)}, yaw, distance);
-            return preview.IsReady() ? GetEngine().GetUserInterface()->RequestImTextureIdRaw(preview.SampleSlot()) : 0;
+            return preview.IsReady() ? NextUI::ToImTextureId(GetEngine().GetUiHost()->ResolveRawSlotId(preview.SampleSlot())) : static_cast<ImTextureID>(0);
         };
     }
     ctx.equipWeapon = [this, &hudRequests](NextDayz::FItemInstanceId id, int slot)
@@ -2850,7 +2851,7 @@ void NextDayzGameInstance::BindDebugger()
     commands.project = [this](const glm::vec3& world, glm::vec2& screen)
     {
         ImVec2 projected;
-        if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(*this, world, projected))
+        if (!NextUI::Hud::TryProjectWorldToScreen(*this, world, projected))
         {
             return false;
         }

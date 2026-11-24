@@ -2,8 +2,7 @@
 
 #include "Engine/Runtime/Engine.hpp"
 #include "Modules/NextDotNet/ManagedGameSession.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
-#include "Modules/NextUI/UI/UiTheme.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 
 #include <fmt/format.h>
@@ -15,11 +14,11 @@
 
 namespace Modules::NextDotNet
 {
-    using NextUI::Foundation::Color;
-    using NextUI::Foundation::ColorU32;
-    using NextUI::Foundation::DrawAnimatedProgressBar;
-    using NextUI::Foundation::DrawSmoothSpinner;
-    using NextUI::Foundation::EColor;
+    using NextUI::Color;
+    using NextUI::ColorU32;
+    using NextUI::DrawAnimatedProgressBar;
+    using NextUI::DrawSmoothSpinner;
+    using NextUI::EColor;
 
     namespace
     {
@@ -153,7 +152,7 @@ namespace Modules::NextDotNet
         ImFont* titleFont = nullptr;
         if (NextEngine* engine = NextEngine::GetInstance())
         {
-            titleFont = NextUI::Theme::GetTitleFont(*engine);
+            titleFont = NextUI::GetTitleFont(*engine);
         }
         if (titleFont == nullptr)
         {
@@ -267,14 +266,14 @@ namespace Modules::NextDotNet
             const float errPanelWidth = std::min(440.0f, cardWidth - 32.0f);
             ImGui::SetCursorPosX(centerX - errPanelWidth * 0.5f);
 
-            if (NextUI::Theme::BeginInsetPanel("##BuildErrDetails", ImVec2(errPanelWidth, 76.0f), true, 0,
+            if (NextUI::BeginInsetPanel("##BuildErrDetails", ImVec2(errPanelWidth, 76.0f), true, 0,
                                                ImVec2(10.0f, 8.0f), 0.50f))
             {
                 ImGui::PushStyleColor(ImGuiCol_Text, Color(EColor::Danger));
                 ImGui::TextWrapped("%s", err.c_str());
                 ImGui::PopStyleColor();
             }
-            NextUI::Theme::EndInsetPanel();
+            NextUI::EndInsetPanel();
         }
     }
 
@@ -320,7 +319,7 @@ namespace Modules::NextDotNet
         bool stayOpen = true;
         bool dismissed = false;
 
-        NextUI::Theme::FModernModalConfig modalConfig{};
+        NextUI::FModalConfig modalConfig{};
         modalConfig.PopupId = popupId;
         modalConfig.TargetSize = ImVec2(kModalWidth, kModalHeight);
         modalConfig.Padding = ImVec2(20.0f, 18.0f);
@@ -328,7 +327,7 @@ namespace Modules::NextDotNet
         modalConfig.Open = &stayOpen;
         modalConfig.ExtraFlags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
 
-        if (NextUI::Theme::BeginModernModal(modalConfig))
+        if (NextUI::BeginModal(modalConfig))
         {
             const float availWidth = ImGui::GetContentRegionAvail().x;
             DrawProgressCore(availWidth, false);
@@ -378,7 +377,7 @@ namespace Modules::NextDotNet
                 ImGui::TextColored(Color(EColor::TextDim), ICON_FA_ROTATE "  Compiling in background...");
             }
 
-            NextUI::Theme::EndModernModal();
+            NextUI::EndModal();
         }
 
         return dismissed;

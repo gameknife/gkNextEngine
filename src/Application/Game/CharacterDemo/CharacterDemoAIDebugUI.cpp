@@ -6,7 +6,7 @@
 #include "Engine/Assets/Core/Model.hpp"
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Utilities/Math.hpp"
-#include "Modules/NextUI/UI/UiHud.hpp"
+#include "Modules/NextUI/Hud.hpp"
 
 namespace CharacterDemoAIDebugUI
 {

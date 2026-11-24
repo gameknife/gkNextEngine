@@ -7,9 +7,13 @@ class NextEngine;
 class EditorActionDispatcher;
 class EditorGameInstance;
 
+namespace Runtime
+{
+    class IUiHost;
+}
+
 namespace NextUI
 {
-    class IUserInterface;
     class GizmoController;
 }
 
@@ -22,7 +26,7 @@ struct EditorContext final
 {
     NextEngine& engine;
     Assets::Scene& scene;
-    NextUI::IUserInterface& ui;
+    Runtime::IUiHost& ui;
     EditorActionDispatcher& actions;
     Editor::EditorSettings& settings;
     NextUI::GizmoController* gizmoController = nullptr;

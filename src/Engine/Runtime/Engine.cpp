@@ -15,9 +15,7 @@
 #include "Engine/Runtime/Subsystems/NextLocalization.hpp"
 #include "Engine/Runtime/Interface/ScreenShotService.hpp"
 #include <cstdlib>
-#include "Engine/Runtime/Interface/UserInterface.hpp"
-#include "Engine/Runtime/Editor/UiFrameDispatcher.hpp"
-#include "Engine/Runtime/Interface/UiOverlay.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
 #include "Engine/Runtime/Config/UserSettings.hpp"
 #include "Engine/Runtime/Interface/DebugUiProvider.hpp"
 #include "Engine/Vulkan/Device.hpp"
@@ -481,8 +479,7 @@ NextEngine::~NextEngine()
         instance_ = nullptr;
     }
 
-    uiOverlay_.reset();
-    userInterface_.reset();
+    uiHost_.reset();
     scene_.reset();
     renderer_.reset();
     // Scene and renderer teardown may still drain or query task state. Destroying
@@ -646,10 +643,9 @@ void NextEngine::StartPipelineWarmup()
         // Prepare the dedicated warm-up overlay before DrawFrame records its first submit.
         // Otherwise the first useful UI is produced only after the first present, and the Core
         // scene-pipeline compile can leave a cold-start window black for several seconds.
-        if (userInterface_)
+        if (uiHost_)
         {
-            userInterface_->PreRender();
-            userInterface_->PrepareDrawData();
+            uiHost_->BuildWarmupFrame(*this);
         }
     }
 }
@@ -663,7 +659,7 @@ void NextEngine::PumpPipelineWarmupAfterPresent()
 
     // With a UI, defer the first compile until its loading popup was submitted and presented.
     // On a headless target there is no popup to wait for, so make forward progress immediately.
-    if (userInterface_ && !pipelineWarmupUiPresented_)
+    if (uiHost_ && !pipelineWarmupUiPresented_)
     {
         return;
     }
@@ -683,8 +679,7 @@ bool NextEngine::HandleEvent(SDL_Event& event)
 
     const bool globalCaptureShortcut = HandleGlobalCaptureShortcut(event);
 
-    const bool uiConsumed = userInterface_ && userInterface_->HandleEvent(&event);
-    const bool rmlUiConsumed = uiOverlay_ && uiOverlay_->HandleEvent(event);
+    const bool uiConsumed = uiHost_ && uiHost_->HandleEvent(event);
 
 #if IOS || ANDROID
     // SDL also synthesizes mouse events for touches. Mobile camera gestures
@@ -711,17 +706,15 @@ bool NextEngine::HandleEvent(SDL_Event& event)
         case SDL_EVENT_GAMEPAD_BUTTON_UP:
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         case SDL_EVENT_MOUSE_BUTTON_UP:
-            if (!rmlUiConsumed && !uiConsumed)
+            if (!uiConsumed)
             {
                 scriptRuntime_->HandleEvent(event);
             }
             break;
         case SDL_EVENT_MOUSE_MOTION:
-            // Motion is accumulated as a delta for pointer-locked look. It is forwarded even
-            // when ImGui consumed the event: the editor's panels sit around the play viewport,
-            // and a grabbed cursor would otherwise stop turning the view the moment it is
-            // reported over a docked window.
-            if (!rmlUiConsumed)
+            // Motion is accumulated as a delta for pointer-locked look. It is forwarded unless an
+            // explicit overlay layer consumed it.
+            if (!uiConsumed)
             {
                 scriptRuntime_->HandleEvent(event);
             }
@@ -757,7 +750,7 @@ bool NextEngine::HandleEvent(SDL_Event& event)
     case SDL_EVENT_KEY_UP:
     case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
     case SDL_EVENT_GAMEPAD_BUTTON_UP:
-        if (!rmlUiConsumed && !uiConsumed && !globalCaptureShortcut)
+        if (!uiConsumed && !globalCaptureShortcut)
         {
             OnKey(event);
         }
@@ -777,23 +770,19 @@ bool NextEngine::HandleEvent(SDL_Event& event)
                 inputState_.mouseButtons &= ~mask;
             }
         }
-        if (!rmlUiConsumed)
+        if (!uiConsumed)
         {
             OnMouseButton(event);
         }
         break;
     case SDL_EVENT_MOUSE_MOTION:
-        if (rmlUiConsumed)
+        if (uiConsumed)
         {
             break;
         }
         if (event.motion.which == Runtime::Remote::remoteMouseId)
         {
             inputState_.mousePos += glm::dvec2(event.motion.xrel, event.motion.yrel);
-            // Remote relative input arrives as deltas from the browser's
-            // pointer-lock path, but most game/editor controllers interpret
-            // OnCursorPosition() as an absolute cursor stream and compute their
-            // own delta internally. Feed the accumulated absolute position here.
             OnCursorPosition(inputState_.mousePos.x, inputState_.mousePos.y);
             break;
         }
@@ -809,7 +798,7 @@ bool NextEngine::HandleEvent(SDL_Event& event)
         }
         break;
     case SDL_EVENT_MOUSE_WHEEL:
-        if (!rmlUiConsumed)
+        if (!uiConsumed)
         {
             OnScroll(event.wheel.x, event.wheel.y);
         }
@@ -818,7 +807,7 @@ bool NextEngine::HandleEvent(SDL_Event& event)
     case SDL_EVENT_FINGER_MOTION:
     case SDL_EVENT_FINGER_UP:
     case SDL_EVENT_FINGER_CANCELED:
-        if (!rmlUiConsumed || event.type == SDL_EVENT_FINGER_UP || event.type == SDL_EVENT_FINGER_CANCELED)
+        if (!uiConsumed || event.type == SDL_EVENT_FINGER_UP || event.type == SDL_EVENT_FINGER_CANCELED)
         {
             OnTouch(event);
         }
@@ -1115,7 +1104,7 @@ void NextEngine::End()
     {
         renderer_->End();
     }
-    userInterface_.reset();
+    uiHost_.reset();
 
     if (services_.localization)
     {
@@ -1572,34 +1561,32 @@ void NextEngine::OnRendererCreateSwapChain()
     }
     if (window_ && window_->IsHeadless())
     {
-        SPDLOG_INFO("Headless agent validation enables ImGui rendering without an SDL platform backend");
+        SPDLOG_INFO("Headless agent validation enables UI rendering without an SDL platform backend");
     }
-    if (userInterface_.get() == nullptr)
+    if (uiHost_ == nullptr && uiHostFactory_)
     {
-        // ImGui platform viewports create additional SDL windows and Vulkan surfaces.
-        // A VK_EXT_headless_surface has neither, so retain the main-swapchain UI
-        // but do not initialize an application's multi-viewport backend.
-        auto multiViewportBackend = window_->IsHeadless()
-            ? std::unique_ptr<NextUI::IMultiViewportBackend>{}
-            : gameInstance_->CreateMultiViewportBackend();
-        if (userInterfaceFactory_)
+        Runtime::FUiHostConfig hostConfig;
+        hostConfig.enableMultiViewport = !window_->IsHeadless() && gameInstance_->EnableMultiViewportUi();
+        hostConfig.onPreConfig = [this]() { gameInstance_->OnPreConfigUI(); };
+        hostConfig.onInit = [this]() { gameInstance_->OnInitUI(); };
+        uiHost_ = uiHostFactory_(*this, std::move(hostConfig));
+        if (uiHost_)
         {
-            userInterface_ = userInterfaceFactory_(
-                *this,
-                [this]() { gameInstance_->OnPreConfigUI(); },
-                [this]() { gameInstance_->OnInitUI(); },
-                std::move(multiViewportBackend));
+            for (const auto& layerFactory : uiLayerFactories_)
+            {
+                if (layerFactory)
+                {
+                    uiHost_->AddLayer(layerFactory(*this));
+                }
+            }
+            uiLayerFactories_.clear();
         }
     }
-    if (!userInterface_)
+    if (!uiHost_)
     {
         return;
     }
-    if (uiOverlay_.get() == nullptr && uiOverlayFactory_)
-    {
-        uiOverlay_ = uiOverlayFactory_(*this);
-    }
-    userInterface_->OnCreateSurface(renderer_->SwapChain(), renderer_->DepthBuffer());
+    uiHost_->OnCreateSurface(renderer_->SwapChain());
 }
 
 void NextEngine::OnRendererDeleteSwapChain()
@@ -1611,9 +1598,9 @@ void NextEngine::OnRendererDeleteSwapChain()
         screenShot_.captureSubmitted = false;
         screenShot_.captureSubmitSerial = 0;
     }
-    if (userInterface_.get() != nullptr)
+    if (uiHost_ != nullptr)
     {
-        userInterface_->OnDestroySurface();
+        uiHost_->OnDestroySurface();
     }
     for (const auto& consumer : renderFrameConsumers_)
     {
@@ -1636,10 +1623,10 @@ void NextEngine::OnRendererPostRender(VkCommandBuffer commandBuffer, uint32_t im
         (screenShot_.pending.forceUiHidden ||
          !gameInstance_ || !gameInstance_->ShouldRenderUiDuringScreenshot());
 
-    if (userInterface_)
+    if (uiHost_)
     {
-        SCOPED_CPU_TIMER("imgui record");
-        userInterface_->RenderPreparedDrawData(commandBuffer, renderer_->SwapChain(), imageIndex, suppressAllUi);
+        SCOPED_CPU_TIMER("ui record");
+        uiHost_->RecordRender(commandBuffer, renderer_->SwapChain(), imageIndex, suppressAllUi);
     }
 
     if (!renderFrameConsumers_.empty())
@@ -1667,7 +1654,7 @@ void NextEngine::OnRendererAfterSubmit()
     // cold vkCreate*Pipelines call is in progress, then prepare the next frame with fresh state.
     PumpPipelineWarmupAfterPresent();
 
-    if (!userInterface_)
+    if (!uiHost_)
     {
         return;
     }
@@ -1684,29 +1671,22 @@ void NextEngine::OnRendererAfterSubmit()
         frameState_.frameRate = static_cast<float>(30 / timeDelta);
     }
 
-    // While shader warm-up is active, the only ImGui output is the dedicated text overlay.
-    // Do not build game, overlay, physics, or developer UI behind it.
+    // While shader warm-up is active, the only UI output is the dedicated text overlay.
     if (renderer_ && renderer_->PipelineWarmupProgress().active)
     {
-        userInterface_->PreRender();
-        userInterface_->PrepareDrawData();
+        uiHost_->BuildWarmupFrame(*this);
         pipelineWarmupUiPresented_ = true;
         return;
     }
 
-    // Render the UI
-    NextUI::Statistics stats = {};
-
+    Runtime::FUiStatistics stats = {};
     stats.FrameTime = static_cast<float>((now - lastTimestamp) * 1000.0);
     lastTimestamp = now;
-
     stats.Stats["gpu"] = renderer_->Device().DeviceProperties().deviceName;
-
     stats.FramebufferSize = GetWindow().FramebufferSize();
     stats.RenderSize = renderer_->SwapChain().RenderExtent();
     stats.FrameRate = frameState_.frameRate;
     stats.RenderTime = GetTime();
-
     stats.TotalFrames = frameState_.totalFrames;
     stats.InstanceCount = static_cast<uint32_t>(scene_->GetNodeProxies().size());
     stats.NodeCount = static_cast<uint32_t>(scene_->Nodes().size());
@@ -1725,74 +1705,21 @@ void NextEngine::OnRendererAfterSubmit()
     GkProfiling::Plot("Triangles", static_cast<int64_t>(visibleTriangleCount));
     GkProfiling::Plot("VRAM used", static_cast<int64_t>(memoryStats.deviceLocalUsageBytes));
 
-    // Renderer::visualDebug_ = config_.userSettings.ShowVisualDebug;
-    {
-        SCOPED_CPU_TIMER("pre render");
-        userInterface_->PreRender();
-        if (uiOverlay_)
-        {
-            uiOverlay_->BeginFrame();
-        }
-    }
     const bool suppressAllUi = ShouldCaptureScreenShotThisFrame() && !screenShot_.pending.includeUi &&
         (screenShot_.pending.forceUiHidden ||
          !gameInstance_ || !gameInstance_->ShouldRenderUiDuringScreenshot());
-    NextUI::FUiFrameResult uiResult{NextUI::EUiDeveloperLayer::None};
-    NextGameInstanceBase::FGameUiFrameContext uiContext;
-    uiContext.surfaceKind = NextGameInstanceBase::FGameUiFrameContext::ESurfaceKind::MainWindow;
+
+    Runtime::FUiFrameContext uiContext;
+    uiContext.surfaceKind = Runtime::EUiSurfaceKind::MainWindow;
     uiContext.framebufferExtent = renderer_->SwapChain().OutputExtent();
     uiContext.viewCamera = &scene_->GetRenderCamera();
     uiContext.allowWindowCommands = true;
     uiContext.policy.allowApplicationUi = !suppressAllUi;
     uiContext.policy.allowedDeveloperLayers = suppressAllUi
-        ? NextUI::EUiDeveloperLayer::None
-        : NextUI::EUiDeveloperLayer::All;
-    if (uiContext.policy.allowApplicationUi)
-    {
-        SCOPED_CPU_TIMER("game ui");
-        uiResult = gameInstance_->RenderUiFrame(uiContext);
-    }
-    if (uiOverlay_ && !suppressAllUi)
-    {
-        SCOPED_CPU_TIMER("overlay render");
-        uiOverlay_->RenderFrame();
-    }
-    {
-        if (config_.showFlags.DebugPhysicsOverlay)
-        {
-            SCOPED_CPU_TIMER("physics debug ui");
-            Assets::Camera debugCamera = scene_->GetRenderCamera();
-            gameInstance_->OverrideRenderCamera(debugCamera);
-            if (debugUiProvider_)
-            {
-                debugUiProvider_->DrawPhysicsOverlay(*scene_, debugCamera);
-            }
-            gameInstance_->DrawAdditionalPhysicsDebugOverlay(debugCamera);
-        }
-        if (debugUiProvider_ && config_.showFlags.DebugCVarPanel)
-        {
-            SCOPED_CPU_TIMER("cvar editor ui");
-            debugUiProvider_->DrawCVarEditor(*this, config_.showFlags.DebugCVarPanel);
-        }
-    }
-    const NextUI::EUiDeveloperLayer developerLayers =
-        uiResult.requestedDeveloperLayers & uiContext.policy.allowedDeveloperLayers;
-    if (developerLayers != NextUI::EUiDeveloperLayer::None)
-    {
-        SCOPED_CPU_TIMER("overlay ui");
-        NextUI::FUiFrameDispatcher::DrawDeveloperLayers(
-            *this, stats, developerLayers, false);
-    }
-    if (debugUiProvider_)
-    {
-        SCOPED_CPU_TIMER("graphics debug ui");
-        debugUiProvider_->DrawGraphicsPanel(*this, config_.showFlags.DebugGraphicsPanel,
-                                            gameInstance_->GetGraphicsDebugPanelTopOffset());
-    }
-    {
-        SCOPED_CPU_TIMER("imgui prepare draw data");
-        userInterface_->PrepareDrawData();
-    }
+        ? Runtime::EUiDeveloperLayer::None
+        : Runtime::EUiDeveloperLayer::All;
+
+    uiHost_->BuildFrame(*this, uiContext, stats);
     if (renderer_ && renderer_->PipelineWarmupProgress().active)
     {
         pipelineWarmupUiPresented_ = true;

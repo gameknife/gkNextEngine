@@ -7,8 +7,8 @@
 #include "KongLie3DGameInstance.hpp"
 #include "KongLie3DStyle.hpp"
 #include "Engine/Runtime/Utilities/NextEngineHelper.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
-#include "Modules/NextUI/UI/UiHud.hpp"
+#include "Modules/NextUI/Hud.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 
 namespace
 {
@@ -274,8 +274,8 @@ namespace
     {
         ImVec2 centerScreen{};
         ImVec2 edgeScreen{};
-        if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(gameInstance, centerWorld, centerScreen) ||
-            !Runtime::EngineHelper::TryProjectWorldToScreenForGame(gameInstance, centerWorld + glm::vec3(radiusWorld, 0.0f, 0.0f), edgeScreen))
+        if (!NextUI::Hud::TryProjectWorldToScreen(gameInstance, centerWorld, centerScreen) ||
+            !NextUI::Hud::TryProjectWorldToScreen(gameInstance, centerWorld + glm::vec3(radiusWorld, 0.0f, 0.0f), edgeScreen))
         {
             return false;
         }
@@ -298,7 +298,7 @@ namespace
             const float angle = glm::two_pi<float>() * (static_cast<float>(index) / static_cast<float>(segments));
             const glm::vec3 pointWorld = centerWorld + glm::vec3(std::cos(angle) * radiusWorld, 0.0f, std::sin(angle) * radiusWorld);
             ImVec2 pointScreen{};
-            if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(gameInstance, pointWorld, pointScreen))
+            if (!NextUI::Hud::TryProjectWorldToScreen(gameInstance, pointWorld, pointScreen))
             {
                 outPoints.clear();
                 return false;
@@ -315,7 +315,7 @@ namespace
     {
         for (size_t index = 0; index < corners.size(); ++index)
         {
-            if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(gameInstance, corners[index], outScreenCorners[index]))
+            if (!NextUI::Hud::TryProjectWorldToScreen(gameInstance, corners[index], outScreenCorners[index]))
             {
                 return false;
             }
@@ -534,8 +534,8 @@ namespace
         {
             ImVec2 from{};
             ImVec2 to{};
-            if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(gameInstance, attackTrace.from, from) ||
-                !Runtime::EngineHelper::TryProjectWorldToScreenForGame(gameInstance, attackTrace.to, to))
+            if (!NextUI::Hud::TryProjectWorldToScreen(gameInstance, attackTrace.from, from) ||
+                !NextUI::Hud::TryProjectWorldToScreen(gameInstance, attackTrace.to, to))
             {
                 continue;
             }
@@ -611,8 +611,8 @@ namespace
             {
                 ImVec2 from{};
                 ImVec2 to{};
-                if (Runtime::EngineHelper::TryProjectWorldToScreenForGame(gameInstance, effect.from, from) &&
-                    Runtime::EngineHelper::TryProjectWorldToScreenForGame(gameInstance, effect.to, to))
+                if (NextUI::Hud::TryProjectWorldToScreen(gameInstance, effect.from, from) &&
+                    NextUI::Hud::TryProjectWorldToScreen(gameInstance, effect.to, to))
                 {
                     drawList->AddLine(from, to, ImGui::ColorConvertFloat4ToU32(ImVec4(effect.color.r, effect.color.g, effect.color.b, 1.0f)),
                                       5.0f);
@@ -1255,7 +1255,7 @@ namespace
                     break;
                 }
             }
-            if (NextUI::Theme::SegmentedPillsIndexed(id, labels, selectedIndex, -1.0f, Ui(28.0f)) &&
+            if (NextUI::SegmentedPillsIndexed(id, labels, selectedIndex, -1.0f, Ui(28.0f)) &&
                 selectedIndex >= 0)
             {
                 KongLie3D::PlayUiClickSfx();

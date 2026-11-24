@@ -7,8 +7,8 @@
 #include "Application/Editor/Common/Preview/AssetThumbnailRenderer.hpp"
 #include "Engine/Runtime/Command/ICommand.hpp"
 #include "Engine/Runtime/Engine.hpp"
-#include "Engine/Runtime/Interface/UserInterface.hpp"
-#include "Engine/Utilities/ImGui.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
@@ -287,7 +287,7 @@ namespace Editor
             ImGui::SeparatorText(label);
             if (textureId >= 0)
             {
-                ImTextureID tex = ctx.ui.RequestImTextureId(static_cast<uint32_t>(textureId));
+                ImTextureID tex = NextUI::ToImTextureId(ctx.ui.ResolveTextureId(static_cast<uint32_t>(textureId)));
                 if (tex != 0)
                 {
                     ImGui::Image(tex, ImVec2(64.0f, 64.0f));
@@ -447,7 +447,7 @@ namespace Editor
 
             if (preview.IsReady())
             {
-                ImTextureID tex = ctx.ui.RequestImTextureIdRaw(preview.SampleSlot());
+                ImTextureID tex = NextUI::ToImTextureId(ctx.ui.ResolveRawSlotId(preview.SampleSlot()));
                 ImGui::Image(tex, ImVec2(size, size));
             }
             else
@@ -535,7 +535,7 @@ namespace Editor
                 ImGui::EndMenu();
             }
 
-            if (Utilities::UI::BeginAnchoredPopupModal(
+            if (NextUI::BeginAnchoredModal(
                     "DeleteMaterialConfirm", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
             {
                 ImGui::TextUnformatted("Delete this material and remap references to the default material?");
@@ -549,7 +549,7 @@ namespace Editor
                 {
                     ImGui::CloseCurrentPopup();
                 }
-                ImGui::EndPopup();
+                NextUI::EndAnchoredModal();
             }
         }
 

@@ -6,8 +6,8 @@
 // "one independent view of a scene": its own screen-space RT bank, depth, camera UBO and
 // temporal history, rendered through the same logic-renderer code as the primary window.
 //
-// NOTE: this is NOT the ImGui platform multi-viewport backend
-// (src/Application/Editor/Common/MultiViewportBackend.*). That tears docking panels into OS
+// NOTE: this is NOT the UI platform multi-viewport backend
+// (src/Modules/NextUI/Platform/UiMultiViewport.*). That tears docking panels into OS
 // windows; this is scene/render multi-viewport. Names here are deliberately RenderView* to
 // avoid confusion — do not reuse the MultiViewport* names.
 //

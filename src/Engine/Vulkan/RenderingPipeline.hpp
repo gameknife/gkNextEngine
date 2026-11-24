@@ -22,6 +22,7 @@ namespace Vulkan
 
         VULKAN_NON_COPIABLE(RenderPass)
 
+        RenderPass(const SwapChain& swapChain, VkAttachmentLoadOp colorBufferLoadOp);
         RenderPass(const SwapChain& swapChain, const class DepthBuffer& depthBuffer, VkAttachmentLoadOp colorBufferLoadOp);
         RenderPass(const SwapChain& swapChain, const DepthBuffer& depthBuffer, VkAttachmentLoadOp colorBufferLoadOp, VkAttachmentLoadOp depthBufferLoadOp);
         RenderPass(const SwapChain& swapChain, VkFormat format, const DepthBuffer& depthBuffer,
@@ -45,7 +46,7 @@ namespace Vulkan
         ~RenderPass();
 
         const class SwapChain& SwapChain() const { return swapChain_; }
-        const class DepthBuffer& DepthBuffer() const { return depthBuffer_; }
+        const class DepthBuffer& DepthBuffer() const { return *depthBuffer_; }
 
         void SetDebugName(const std::string& name);
     private:
@@ -65,7 +66,7 @@ namespace Vulkan
         void Init(const FRenderPassSpec& spec);
 
         const class SwapChain& swapChain_;
-        const class DepthBuffer& depthBuffer_;
+        const class DepthBuffer* depthBuffer_ = nullptr;
 
         VULKAN_HANDLE(VkRenderPass, renderPass_)
     };

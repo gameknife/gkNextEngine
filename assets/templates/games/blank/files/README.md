@@ -47,7 +47,7 @@ per game meant writing the same bug per game:
 | `MoveAxis.Poll()` | WASD, arrows and the gamepad stick as one normalised stick. |
 | `Mathx` / `Quat` | `Clamp`, `Lerp`, `TurnTowards` (shortest way round an angle), `Quat.AroundY`, `Quat.LookAlong`. |
 | `Sky.Apply(...)` | Sky and sun for a procedurally built scene, which starts with neither. |
-| `ManagedImGui` + `HudPalette` | Panels, buttons, progress bars, shadowed text — one draw list per frame. |
+| `UiCanvas` + `UiPalette` | Panels, buttons, progress bars, shadowed text — one draw list per frame. |
 | `GameContent` | This project's `Content/`, as paths every engine API accepts. |
 | `SceneReady` | On `NextGameInstance`. False until the scene is committed and node ids resolve. |
 

@@ -4,7 +4,7 @@
 
 #include "Engine/Runtime/Config/CVarSystem.hpp"
 #include "Engine/Runtime/Engine.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 
 #include <imgui.h>
 
@@ -175,15 +175,15 @@ namespace DevTools
     void DrawCVarEditorPanel(NextEngine& engine, bool& panelVisible)
     {
         ImGui::SetNextWindowSize(ImVec2(980.0f, 700.0f), ImGuiCond_FirstUseEver);
-        NextUI::Theme::PushToolWindowStyle();
+        NextUI::PushToolWindowStyle();
         if (!ImGui::Begin("CVar Editor", &panelVisible))
         {
             ImGui::End();
-            NextUI::Theme::PopToolWindowStyle();
+            NextUI::PopToolWindowStyle();
             return;
         }
         // Keep the roomier title bar while using medium-sized controls in the content area.
-        NextUI::Theme::PushToolWindowContentStyle();
+        NextUI::PushToolWindowContentStyle();
 
         auto& cvars = engine.GetCVarSystem();
         static char search[128]{};
@@ -223,7 +223,7 @@ namespace DevTools
             {
                 continue;
             }
-            ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted), "%.*s",
+            ImGui::TextColored(NextUI::Color(NextUI::EColor::TextMuted), "%.*s",
                                static_cast<int>(presentation.description.size()), presentation.description.data());
             ImGui::Dummy(ImVec2(0.0f, 2.0f));
 
@@ -246,7 +246,7 @@ namespace DevTools
                 ImGui::TableSetColumnIndex(0);
                 if (!info.isDefault)
                 {
-                    ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::Accent), "%s", info.name.c_str());
+                    ImGui::TextColored(NextUI::Color(NextUI::EColor::Accent), "%s", info.name.c_str());
                 }
                 else
                 {
@@ -270,8 +270,8 @@ namespace DevTools
             ImGui::EndTable();
             ImGui::Dummy(ImVec2(0.0f, 6.0f));
         }
-        NextUI::Theme::PopToolWindowContentStyle();
+        NextUI::PopToolWindowContentStyle();
         ImGui::End();
-        NextUI::Theme::PopToolWindowStyle();
+        NextUI::PopToolWindowStyle();
     }
 }

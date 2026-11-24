@@ -83,10 +83,11 @@ void ScadStudioGameInstance::OnPreConfigUI() { ui_->Config(); }
 
 void ScadStudioGameInstance::OnInitUI() { ui_->Init(); }
 
-bool ScadStudioGameInstance::OnRenderUI()
+Runtime::FUiFrameResult ScadStudioGameInstance::RenderUiFrame(const Runtime::FUiFrameContext& context)
 {
+    (void)context;
     ui_->Render();
-    return true;
+    return Runtime::FUiFrameResult::ForApplicationHandled();
 }
 
 bool ScadStudioGameInstance::OverrideRenderCamera(Assets::Camera& outRenderCamera) const

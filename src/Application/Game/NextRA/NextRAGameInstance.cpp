@@ -9,6 +9,7 @@
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/Scene/SceneBuilder.hpp"
 #include "Engine/Runtime/Utilities/NextEngineHelper.hpp"
+#include "Modules/NextUI/Hud.hpp"
 #include "Sim/SyncHash.h"
 #include "Sim/Systems/OrderApplySystem.h"
 
@@ -798,7 +799,7 @@ void NextRAGameInstance::SelectInRect(const glm::dvec2& a, const glm::dvec2& b, 
         }
 
         ImVec2 screen;
-        if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(*this, ToRenderVec3(transform->pos), screen))
+        if (!NextUI::Hud::TryProjectWorldToScreen(*this, ToRenderVec3(transform->pos), screen))
         {
             continue;
         }
@@ -1124,8 +1125,8 @@ void NextRAGameInstance::DrawSelectionOverlay() const
         ImVec2 center;
         ImVec2 edge;
         const glm::vec3 world = ToRenderVec3(transform->pos);
-        if (Runtime::EngineHelper::TryProjectWorldToScreenForGame(*this, world, center) &&
-            Runtime::EngineHelper::TryProjectWorldToScreenForGame(*this, world + glm::vec3(0.75f, 0.0f, 0.0f), edge))
+        if (NextUI::Hud::TryProjectWorldToScreen(*this, world, center) &&
+            NextUI::Hud::TryProjectWorldToScreen(*this, world + glm::vec3(0.75f, 0.0f, 0.0f), edge))
         {
             drawList->AddCircle(center, std::max(8.0f, std::abs(edge.x - center.x)), IM_COL32(80, 220, 255, 230), 32, 2.0f);
         }
@@ -1141,7 +1142,7 @@ void NextRAGameInstance::DrawSelectionOverlay() const
         }
 
         ImVec2 center;
-        if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(*this, ToRenderVec3(transform->pos) + glm::vec3(0.0f, 0.9f, 0.0f), center))
+        if (!NextUI::Hud::TryProjectWorldToScreen(*this, ToRenderVec3(transform->pos) + glm::vec3(0.0f, 0.9f, 0.0f), center))
         {
             continue;
         }
@@ -1184,8 +1185,8 @@ void NextRAGameInstance::DrawDebugGridOverlay() const
     {
         ImVec2 a;
         ImVec2 b;
-        if (Runtime::EngineHelper::TryProjectWorldToScreenForGame(*this, ToRenderVec3(NextRA::Sim::WPos::FromCells(origin.x, z)), a) &&
-            Runtime::EngineHelper::TryProjectWorldToScreenForGame(*this, ToRenderVec3(NextRA::Sim::WPos::FromCells(origin.x + width, z)), b))
+        if (NextUI::Hud::TryProjectWorldToScreen(*this, ToRenderVec3(NextRA::Sim::WPos::FromCells(origin.x, z)), a) &&
+            NextUI::Hud::TryProjectWorldToScreen(*this, ToRenderVec3(NextRA::Sim::WPos::FromCells(origin.x + width, z)), b))
         {
             drawList->AddLine(a, b, IM_COL32(255, 255, 255, 32), 1.0f);
         }
@@ -1194,8 +1195,8 @@ void NextRAGameInstance::DrawDebugGridOverlay() const
     {
         ImVec2 a;
         ImVec2 b;
-        if (Runtime::EngineHelper::TryProjectWorldToScreenForGame(*this, ToRenderVec3(NextRA::Sim::WPos::FromCells(x, origin.z)), a) &&
-            Runtime::EngineHelper::TryProjectWorldToScreenForGame(*this, ToRenderVec3(NextRA::Sim::WPos::FromCells(x, origin.z + height)), b))
+        if (NextUI::Hud::TryProjectWorldToScreen(*this, ToRenderVec3(NextRA::Sim::WPos::FromCells(x, origin.z)), a) &&
+            NextUI::Hud::TryProjectWorldToScreen(*this, ToRenderVec3(NextRA::Sim::WPos::FromCells(x, origin.z + height)), b))
         {
             drawList->AddLine(a, b, IM_COL32(255, 255, 255, 32), 1.0f);
         }
@@ -1212,7 +1213,7 @@ void NextRAGameInstance::DrawDebugGridOverlay() const
             }
 
             ImVec2 center;
-            if (Runtime::EngineHelper::TryProjectWorldToScreenForGame(*this, ToRenderVec3(NextRA::Sim::WPos::FromCells(x, z)), center))
+            if (NextUI::Hud::TryProjectWorldToScreen(*this, ToRenderVec3(NextRA::Sim::WPos::FromCells(x, z)), center))
             {
                 drawList->AddCircleFilled(center, 5.0f, IM_COL32(255, 220, 80, 170), 12);
             }
@@ -1223,8 +1224,8 @@ void NextRAGameInstance::DrawDebugGridOverlay() const
     {
         ImVec2 a;
         ImVec2 b;
-        if (Runtime::EngineHelper::TryProjectWorldToScreenForGame(*this, ToRenderVec3(NextRA::Sim::WPos::FromCells(debugPath_[index - 1].x, debugPath_[index - 1].z)), a) &&
-            Runtime::EngineHelper::TryProjectWorldToScreenForGame(*this, ToRenderVec3(NextRA::Sim::WPos::FromCells(debugPath_[index].x, debugPath_[index].z)), b))
+        if (NextUI::Hud::TryProjectWorldToScreen(*this, ToRenderVec3(NextRA::Sim::WPos::FromCells(debugPath_[index - 1].x, debugPath_[index - 1].z)), a) &&
+            NextUI::Hud::TryProjectWorldToScreen(*this, ToRenderVec3(NextRA::Sim::WPos::FromCells(debugPath_[index].x, debugPath_[index].z)), b))
         {
             drawList->AddLine(a, b, IM_COL32(80, 240, 255, 220), 3.0f);
         }

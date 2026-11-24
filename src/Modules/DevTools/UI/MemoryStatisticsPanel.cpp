@@ -10,7 +10,7 @@
 #include <tuple>
 
 #include "Engine/Runtime/Engine.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include "Engine/Utilities/Format.hpp"
 #include "Engine/Vulkan/Device.hpp"
 
@@ -31,8 +31,8 @@ void DrawMemoryMetricCard(const char* label, const std::string& value, const std
     const ImVec2 size(width, height);
     ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-    drawList->AddRectFilled(pos, pos + size, NextUI::Theme::ColorU32(NextUI::Theme::EColor::Background, 0.86f), 7.0f);
-    drawList->AddRect(pos, pos + size, NextUI::Theme::ColorU32(NextUI::Theme::EColor::Border, 0.82f), 7.0f);
+    drawList->AddRectFilled(pos, pos + size, NextUI::ColorU32(NextUI::EColor::Background, 0.86f), 7.0f);
+    drawList->AddRect(pos, pos + size, NextUI::ColorU32(NextUI::EColor::Border, 0.82f), 7.0f);
     drawList->AddRectFilled(pos, ImVec2(pos.x + 3.0f, pos.y + size.y),
                             ImGui::GetColorU32(ImVec4(accentColor.x, accentColor.y, accentColor.z, 0.82f)),
                             7.0f, ImDrawFlags_RoundCornersLeft);
@@ -42,10 +42,10 @@ void DrawMemoryMetricCard(const char* label, const std::string& value, const std
     const float lineHeight = ImGui::GetTextLineHeight();
     const float valueY = pos.y + pad.y + lineHeight + 8.0f;
     const float subValueY = valueY + lineHeight + 6.0f;
-    drawList->AddText(pos + pad, NextUI::Theme::ColorU32(NextUI::Theme::EColor::TextMuted), label);
+    drawList->AddText(pos + pad, NextUI::ColorU32(NextUI::EColor::TextMuted), label);
     drawList->PushClipRect(pos + pad, ImVec2(textRight, pos.y + size.y - pad.y), true);
-    drawList->AddText(ImVec2(pos.x + pad.x, valueY), NextUI::Theme::ColorU32(NextUI::Theme::EColor::Text), value.c_str());
-    drawList->AddText(ImVec2(pos.x + pad.x, subValueY), NextUI::Theme::ColorU32(NextUI::Theme::EColor::TextDim),
+    drawList->AddText(ImVec2(pos.x + pad.x, valueY), NextUI::ColorU32(NextUI::EColor::Text), value.c_str());
+    drawList->AddText(ImVec2(pos.x + pad.x, subValueY), NextUI::ColorU32(NextUI::EColor::TextDim),
                       subValue.c_str());
     drawList->PopClipRect();
     ImGui::Dummy(size);
@@ -69,32 +69,32 @@ bool IsAllocationType(const Vulkan::MemoryAllocationStats& allocation, std::stri
 
 void DrawAllocationTypeText(const Vulkan::MemoryAllocationStats& allocation)
 {
-    const NextUI::Theme::EColor color = allocation.free ? NextUI::Theme::EColor::TextDim
-        : (IsAllocationType(allocation, "IMAGE") ? NextUI::Theme::EColor::Blue
-                                                 : NextUI::Theme::EColor::Success);
-    ImGui::TextColored(NextUI::Theme::Color(color), "%s", allocation.type.empty() ? "UNKNOWN" : allocation.type.c_str());
+    const NextUI::EColor color = allocation.free ? NextUI::EColor::TextDim
+        : (IsAllocationType(allocation, "IMAGE") ? NextUI::EColor::Blue
+                                                 : NextUI::EColor::Success);
+    ImGui::TextColored(NextUI::Color(color), "%s", allocation.type.empty() ? "UNKNOWN" : allocation.type.c_str());
 }
 
 ImVec4 AllocationColor(const Vulkan::MemoryAllocationStats& allocation, float alpha = 1.0f)
 {
-    NextUI::Theme::EColor color = NextUI::Theme::EColor::TextDim;
+    NextUI::EColor color = NextUI::EColor::TextDim;
     if (allocation.free)
     {
-        color = NextUI::Theme::EColor::TextDim;
+        color = NextUI::EColor::TextDim;
     }
     else if (IsAllocationType(allocation, "IMAGE"))
     {
-        color = NextUI::Theme::EColor::Blue;
+        color = NextUI::EColor::Blue;
     }
     else if (IsAllocationType(allocation, "BUFFER"))
     {
-        color = NextUI::Theme::EColor::Success;
+        color = NextUI::EColor::Success;
     }
     else
     {
-        color = NextUI::Theme::EColor::Warning;
+        color = NextUI::EColor::Warning;
     }
-    return NextUI::Theme::Color(color, alpha);
+    return NextUI::Color(color, alpha);
 }
 
 struct FAllocationTile final
@@ -143,7 +143,7 @@ void DrawAllocationLegendItem(const char* label, ImVec4 color)
                             ImGui::GetColorU32(color), 2.0f);
     ImGui::Dummy(ImVec2(swatchSize.x + 4.0f, lineHeight));
     ImGui::SameLine(0.0f, 2.0f);
-    ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted), "%s", label);
+    ImGui::TextColored(NextUI::Color(NextUI::EColor::TextMuted), "%s", label);
 }
 
 void DrawMemoryAllocationTileGrid(const Vulkan::MemoryStatsSnapshot& memoryStats)
@@ -172,7 +172,7 @@ void DrawMemoryAllocationTileGrid(const Vulkan::MemoryStatsSnapshot& memoryStats
 
     if (tiles.empty())
     {
-        ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted), "No allocation ranges in VMA details.");
+        ImGui::TextColored(NextUI::Color(NextUI::EColor::TextMuted), "No allocation ranges in VMA details.");
         return;
     }
 
@@ -198,7 +198,7 @@ void DrawMemoryAllocationTileGrid(const Vulkan::MemoryStatsSnapshot& memoryStats
                                 ImGui::GetColorU32(AllocationColor(allocation, allocation.free ? 0.24f : 0.86f)),
                                 3.0f);
         drawList->AddRect(rectMin, rectMax,
-                          NextUI::Theme::ColorU32(NextUI::Theme::EColor::Border, allocation.free ? 0.22f : 0.44f),
+                          NextUI::ColorU32(NextUI::EColor::Border, allocation.free ? 0.22f : 0.44f),
                           3.0f);
 
         ImGui::SetCursorScreenPos(rectMin);
@@ -217,7 +217,7 @@ void DrawMemoryBlockDetails(const Vulkan::MemoryStatsSnapshot& memoryStats)
 {
     if (memoryStats.blocks.empty())
     {
-        ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted),
+        ImGui::TextColored(NextUI::Color(NextUI::EColor::TextMuted),
                            "No VMA block details available. Named allocations appear after DeviceMemory::SetName().");
         return;
     }
@@ -271,7 +271,7 @@ void DevTools::FUiDevPanels::DrawMemoryStatisticsPanel(NextEngine& engine)
     }
     const ImVec2 panelSize(panelWidth, panelHeight);
 
-    NextUI::Theme::FDetailPanelConfig panelConfig{};
+    NextUI::FDetailPanelConfig panelConfig{};
     panelConfig.WindowId = "##DeveloperMemoryStats";
     panelConfig.ContentWindowId = "##MemoryStatsContent";
     panelConfig.Icon = ICON_FA_CHART_COLUMN;
@@ -280,7 +280,7 @@ void DevTools::FUiDevPanels::DrawMemoryStatisticsPanel(NextEngine& engine)
     panelConfig.Position = panelPos;
     panelConfig.Size = panelSize;
     panelConfig.Pivot = panelPivot;
-    if (!NextUI::Theme::BeginDetailPanel(panelConfig))
+    if (!NextUI::BeginDetailPanel(panelConfig))
     {
         return;
     }
@@ -294,9 +294,9 @@ void DevTools::FUiDevPanels::DrawMemoryStatisticsPanel(NextEngine& engine)
     const float cardGap = 12.0f;
     const float cardWidth = (ImGui::GetContentRegionAvail().x - cardGap * 2.0f) / 3.0f;
     const ImVec4 vramColor = vramUsageFraction > 0.85f
-        ? NextUI::Theme::Color(NextUI::Theme::EColor::Danger)
-        : (vramUsageFraction > 0.70f ? NextUI::Theme::Color(NextUI::Theme::EColor::Warning)
-                                     : NextUI::Theme::Color(NextUI::Theme::EColor::Blue));
+        ? NextUI::Color(NextUI::EColor::Danger)
+        : (vramUsageFraction > 0.70f ? NextUI::Color(NextUI::EColor::Warning)
+                                     : NextUI::Color(NextUI::EColor::Blue));
 
     DrawMemoryMetricCard("VRAM usage",
                          fmt::format("{} / {}", FormatBytes(memoryStats.deviceLocalUsageBytes),
@@ -308,20 +308,20 @@ void DevTools::FUiDevPanels::DrawMemoryStatisticsPanel(NextEngine& engine)
                          fmt::format("{} / {}", FormatBytes(memoryStats.deviceLocalAllocationBytes),
                                      FormatBytes(memoryStats.deviceLocalBlockBytes)),
                          fmt::format("{:.1f}% committed", managedFraction * 100.0f),
-                         cardWidth, NextUI::Theme::Color(NextUI::Theme::EColor::AccentHover));
+                         cardWidth, NextUI::Color(NextUI::EColor::AccentHover));
     ImGui::SameLine(0.0f, cardGap);
     DrawMemoryMetricCard("Heaps",
                          fmt::format("{}", memoryStats.heaps.size()),
                          fmt::format("{} total", FormatBytes(memoryStats.totalHeapSizeBytes)),
-                         cardWidth, NextUI::Theme::Color(NextUI::Theme::EColor::Success));
+                         cardWidth, NextUI::Color(NextUI::EColor::Success));
 
     ImGui::Dummy(ImVec2(0.0f, 14.0f));
-    NextUI::Theme::DrawProgressBar(vramUsageFraction, vramColor, ImVec2(ImGui::GetContentRegionAvail().x, 9.0f));
+    NextUI::DrawProgressBar(vramUsageFraction, vramColor, ImVec2(ImGui::GetContentRegionAvail().x, 9.0f));
     ImGui::Dummy(ImVec2(0.0f, 12.0f));
-    NextUI::Theme::DrawThinSeparator();
+    NextUI::DrawThinSeparator();
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
-    ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted), "Heap summary");
+    ImGui::TextColored(NextUI::Color(NextUI::EColor::TextMuted), "Heap summary");
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(10.0f, 8.0f));
@@ -345,9 +345,9 @@ void DevTools::FUiDevPanels::DrawMemoryStatisticsPanel(NextEngine& engine)
             ImGui::Text("Heap %u", heap.heapIndex);
 
             ImGui::TableSetColumnIndex(1);
-            ImGui::TextColored(NextUI::Theme::Color(heap.deviceLocal
-                                   ? NextUI::Theme::EColor::Success
-                                   : NextUI::Theme::EColor::TextMuted),
+            ImGui::TextColored(NextUI::Color(heap.deviceLocal
+                                   ? NextUI::EColor::Success
+                                   : NextUI::EColor::TextMuted),
                                "%s", heap.deviceLocal ? "Local" : "Shared");
 
             ImGui::TableSetColumnIndex(2);
@@ -368,23 +368,23 @@ void DevTools::FUiDevPanels::DrawMemoryStatisticsPanel(NextEngine& engine)
     ImGui::PopStyleVar();
 
     ImGui::Dummy(ImVec2(0.0f, 12.0f));
-    ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::TextMuted), "Allocation map");
+    ImGui::TextColored(NextUI::Color(NextUI::EColor::TextMuted), "Allocation map");
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
-    DrawAllocationLegendItem("Buffer", NextUI::Theme::Color(NextUI::Theme::EColor::Success, 0.82f));
+    DrawAllocationLegendItem("Buffer", NextUI::Color(NextUI::EColor::Success, 0.82f));
     ImGui::SameLine(0.0f, 14.0f);
-    DrawAllocationLegendItem("Image", NextUI::Theme::Color(NextUI::Theme::EColor::Blue, 0.82f));
+    DrawAllocationLegendItem("Image", NextUI::Color(NextUI::EColor::Blue, 0.82f));
     ImGui::SameLine(0.0f, 14.0f);
-    DrawAllocationLegendItem("Other", NextUI::Theme::Color(NextUI::Theme::EColor::Warning, 0.82f));
+    DrawAllocationLegendItem("Other", NextUI::Color(NextUI::EColor::Warning, 0.82f));
     ImGui::SameLine(0.0f, 14.0f);
-    DrawAllocationLegendItem("Free", NextUI::Theme::Color(NextUI::Theme::EColor::TextDim, 0.28f));
+    DrawAllocationLegendItem("Free", NextUI::Color(NextUI::EColor::TextDim, 0.28f));
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
-    if (NextUI::Theme::BeginInsetPanel("##MemoryBlockDetailsPanel", ImVec2(0.0f, 0.0f), false,
+    if (NextUI::BeginInsetPanel("##MemoryBlockDetailsPanel", ImVec2(0.0f, 0.0f), false,
                                        ImGuiWindowFlags_AlwaysVerticalScrollbar, ImVec2(12.0f, 10.0f), 0.18f))
     {
         DrawMemoryBlockDetails(memoryStats);
     }
-    NextUI::Theme::EndInsetPanel();
+    NextUI::EndInsetPanel();
 
-    NextUI::Theme::EndDetailPanel();
+    NextUI::EndDetailPanel();
 
 }

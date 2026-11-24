@@ -3,11 +3,7 @@
 #include "Engine/Runtime/Engine.hpp"
 #include "Modules/NextDotNet/DotNetRuntime.hpp"
 #include "Modules/NextDotNet/ManagedGameSession.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
-#include "Modules/NextUI/UI/UiContainers.hpp"
-#include "Modules/NextUI/UI/UiScopes.hpp"
-#include "Modules/NextUI/UI/UiTheme.hpp"
-#include "Modules/NextUI/UI/UiWidgets.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 
 #include <fmt/format.h>
@@ -21,9 +17,9 @@
 
 namespace Modules::NextDotNet
 {
-    using NextUI::Foundation::Color;
-    using NextUI::Foundation::ColorU32;
-    using NextUI::Foundation::EColor;
+    using NextUI::Color;
+    using NextUI::ColorU32;
+    using NextUI::EColor;
 
     namespace
     {
@@ -89,10 +85,10 @@ namespace Modules::NextDotNet
 
         void DrawBadge(const char* icon, const char* label, ImVec4 bgCol, ImVec4 textCol, ImVec4 borderCol)
         {
-            NextUI::Foundation::DrawPillBadge(icon, label, bgCol, textCol, borderCol, 5.0f, ImVec2(8.0f, 4.0f));
+            NextUI::DrawPillBadge(icon, label, bgCol, textCol, borderCol, 5.0f, ImVec2(8.0f, 4.0f));
         }
 
-        using NextUI::Foundation::DrawCodeBadge;
+        using NextUI::DrawCodeBadge;
     }
 
     std::string FNewGameProjectDialog::UnavailableReason()
@@ -240,14 +236,14 @@ namespace Modules::NextDotNet
         }
 
         bool stayOpen = true;
-        NextUI::Theme::FModernModalConfig modalConfig{};
+        NextUI::FModalConfig modalConfig{};
         modalConfig.PopupId = kPopupTitle;
         modalConfig.TargetSize = ImVec2(880.0f, 620.0f);
         modalConfig.Padding = ImVec2(0.0f, 0.0f);
         modalConfig.Rounding = 8.0f;
         modalConfig.Open = &stayOpen;
 
-        if (!NextUI::Theme::BeginModernModal(modalConfig))
+        if (!NextUI::BeginModal(modalConfig))
         {
             open_ = false;
             builder_.Reset();
@@ -259,7 +255,7 @@ namespace Modules::NextDotNet
             ImGui::CloseCurrentPopup();
             open_ = false;
             builder_.Reset();
-            NextUI::Theme::EndModernModal();
+            NextUI::EndModal();
             return outcome;
         }
 
@@ -267,8 +263,8 @@ namespace Modules::NextDotNet
         ImFont* defaultFont = ImGui::GetFont();
         if (NextEngine* engine = NextEngine::GetInstance())
         {
-            titleFont = NextUI::Theme::GetTitleFont(*engine);
-            if (ImFont* df = NextUI::Theme::GetDefaultFont(*engine))
+            titleFont = NextUI::GetTitleFont(*engine);
+            if (ImFont* df = NextUI::GetDefaultFont(*engine))
             {
                 defaultFont = df;
             }
@@ -286,7 +282,7 @@ namespace Modules::NextDotNet
         // 1. Header Bar
         // ==========================================
         constexpr float kHeaderHeight = 56.0f;
-        if (NextUI::Theme::DrawModalHeader(
+        if (NextUI::DrawModalHeader(
                 ICON_FA_FOLDER_PLUS, "Create New Game Project",
                 "Initialize a new .NET 9 managed C# gameplay project from a template",
                 titleFont, true) &&
@@ -326,14 +322,14 @@ namespace Modules::NextDotNet
 
             const float panelWidth = std::min(620.0f, ImGui::GetContentRegionAvail().x - 40.0f);
             ImGui::SetCursorPosX((ImGui::GetWindowWidth() - panelWidth) * 0.5f);
-            if (NextUI::Theme::BeginInsetPanel("##UnavReasonBox", ImVec2(panelWidth, 100.0f), true, 0,
+            if (NextUI::BeginInsetPanel("##UnavReasonBox", ImVec2(panelWidth, 100.0f), true, 0,
                                                ImVec2(18.0f, 16.0f), 0.40f))
             {
                 ImGui::PushStyleColor(ImGuiCol_Text, Color(EColor::TextMuted));
                 ImGui::TextWrapped("%s", unavailableReason_.c_str());
                 ImGui::PopStyleColor();
             }
-            NextUI::Theme::EndInsetPanel();
+            NextUI::EndInsetPanel();
             ImGui::EndGroup();
 
             ImGui::EndChild();
@@ -367,7 +363,7 @@ namespace Modules::NextDotNet
             const float contentWidth = dialogSize.x - 56.0f;
 
             // Details Inset Panel with Table layout (no hardcoded SameLine)
-            if (NextUI::Theme::BeginInsetPanel("##DoneDetails", ImVec2(contentWidth, 136.0f), true, 0,
+            if (NextUI::BeginInsetPanel("##DoneDetails", ImVec2(contentWidth, 136.0f), true, 0,
                                                ImVec2(18.0f, 14.0f), 0.35f))
             {
                 if (ImGui::BeginTable("##DoneDetailsTable", 2, ImGuiTableFlags_NoSavedSettings))
@@ -414,13 +410,13 @@ namespace Modules::NextDotNet
                     ImGui::EndTable();
                 }
             }
-            NextUI::Theme::EndInsetPanel();
+            NextUI::EndInsetPanel();
 
             ImGui::Dummy(ImVec2(0.0f, 12.0f));
             ImGui::SetCursorPosX(28.0f);
 
             // Guidance Inset Panel with structured steps and code badges
-            if (NextUI::Theme::BeginInsetPanel("##DoneGuidance", ImVec2(contentWidth, 144.0f), true, 0,
+            if (NextUI::BeginInsetPanel("##DoneGuidance", ImVec2(contentWidth, 144.0f), true, 0,
                                                ImVec2(18.0f, 14.0f), 0.25f))
             {
                 ImGui::TextColored(Color(EColor::AccentHover), ICON_FA_LIGHTBULB "  Next Steps");
@@ -447,7 +443,7 @@ namespace Modules::NextDotNet
                 ImGui::SameLine(0.0f, 8.0f);
                 ImGui::TextColored(Color(EColor::Text), "Launch directly from gkNextLauncher or Play-In-Editor in gkNextEditor.");
             }
-            NextUI::Theme::EndInsetPanel();
+            NextUI::EndInsetPanel();
 
             ImGui::EndChild();
             ImGui::PopStyleVar();
@@ -477,8 +473,8 @@ namespace Modules::NextDotNet
                 ImGui::PushID(static_cast<int>(i));
 
                 constexpr float kCardHeight = 54.0f;
-                const NextUI::Theme::FInteractiveCardState cardState =
-                    NextUI::Theme::DrawInteractiveCard(NextUI::Theme::FInteractiveCardConfig{
+                const NextUI::FInteractiveCardState cardState =
+                    NextUI::DrawInteractiveCard(NextUI::FInteractiveCardConfig{
                         .Id = "##TemplateCard",
                         .Size = ImVec2(0.0f, kCardHeight),
                         .Selected = isSelected,
@@ -546,7 +542,7 @@ namespace Modules::NextDotNet
             if (selectedTmpl != nullptr)
             {
                 // Top: Template Overview Inset Panel (compact, sleek, no scrollbar)
-                if (NextUI::Theme::BeginInsetPanel("##TmplOverview", ImVec2(0.0f, 86.0f), true,
+                if (NextUI::BeginInsetPanel("##TmplOverview", ImVec2(0.0f, 86.0f), true,
                                                    ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse,
                                                    ImVec2(14.0f, 10.0f), 0.28f))
                 {
@@ -582,7 +578,7 @@ namespace Modules::NextDotNet
                         ImGui::TextColored(Color(EColor::Text), "%s", selectedTmpl->highlights[0].c_str());
                     }
                 }
-                NextUI::Theme::EndInsetPanel();
+                NextUI::EndInsetPanel();
 
                 ImGui::Dummy(ImVec2(0.0f, 10.0f));
 
@@ -655,7 +651,7 @@ namespace Modules::NextDotNet
                 if (session != nullptr)
                 {
                     ImGui::Dummy(ImVec2(0.0f, 10.0f));
-                    if (NextUI::Theme::BeginInsetPanel("##PublishOptCard", ImVec2(0.0f, 52.0f), true,
+                    if (NextUI::BeginInsetPanel("##PublishOptCard", ImVec2(0.0f, 52.0f), true,
                                                        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse,
                                                        ImVec2(12.0f, 7.0f), 0.35f))
                     {
@@ -669,7 +665,7 @@ namespace Modules::NextDotNet
                         ImGui::TextColored(Color(EColor::TextDim),
                                            "Compiles C# assemblies with .NET SDK so the game is ready on completion.");
                     }
-                    NextUI::Theme::EndInsetPanel();
+                    NextUI::EndInsetPanel();
                 }
 
                 // Real-time Request Validation
@@ -685,14 +681,14 @@ namespace Modules::NextDotNet
                 if (!validationError_.empty())
                 {
                     ImGui::Dummy(ImVec2(0.0f, 10.0f));
-                    if (NextUI::Theme::BeginInsetPanel("##ValidationAlert", ImVec2(0.0f, 36.0f), true, 0,
+                    if (NextUI::BeginInsetPanel("##ValidationAlert", ImVec2(0.0f, 36.0f), true, 0,
                                                        ImVec2(12.0f, 8.0f), 0.20f))
                     {
                         ImGui::PushStyleColor(ImGuiCol_Text, Color(EColor::Danger));
                         ImGui::Text(ICON_FA_CIRCLE_EXCLAMATION "  %s", validationError_.c_str());
                         ImGui::PopStyleColor();
                     }
-                    NextUI::Theme::EndInsetPanel();
+                    NextUI::EndInsetPanel();
                 }
             }
 
@@ -796,7 +792,7 @@ namespace Modules::NextDotNet
         ImGui::EndChild();
         ImGui::PopStyleVar();
 
-        NextUI::Theme::EndModernModal();
+        NextUI::EndModal();
 
         return outcome;
     }

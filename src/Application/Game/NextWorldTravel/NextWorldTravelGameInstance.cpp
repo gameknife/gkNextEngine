@@ -15,7 +15,8 @@
 #include "Engine/Runtime/Interface/ScreenShotService.hpp"
 #include "Engine/Runtime/Utilities/NextEngineHelper.hpp"
 #include "Engine/Utilities/FileHelper.hpp"
-#include "Modules/NextUI/ImGuiScaling.hpp"
+#include "Modules/NextUI/Hud.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include "Modules/ScadLoader/ScadModule.hpp"
 
 #include <imgui.h>
@@ -883,7 +884,7 @@ void NextWorldTravelGameInstance::DrawWalkerMarker() const
     }
     const glm::vec3 head = walker_.Position() + glm::vec3(0.0f, Config::kCharacterHeight, 0.0f);
     ImVec2 screen;
-    if (!Runtime::EngineHelper::TryProjectWorldToScreenForGame(*this, head, screen))
+    if (!NextUI::Hud::TryProjectWorldToScreen(*this, head, screen))
     {
         return;
     }
@@ -1081,7 +1082,7 @@ bool NextWorldTravelGameInstance::OnMouseButton(SDL_Event& event)
     const glm::vec2 eventPosition(event.button.x, event.button.y);
     const ImVec2 logicalMouse = GOption != nullptr && GOption->AgentValidation
         ? ImVec2(eventPosition.x, eventPosition.y)
-        : NextUI::Scaling::MainFramebufferToImGuiPoint(ImVec2(eventPosition.x, eventPosition.y));
+        : NextUI::MainFramebufferToImGuiPoint(ImVec2(eventPosition.x, eventPosition.y));
     const int picked = poiLayer_.PickAt(glm::vec2(logicalMouse.x, logicalMouse.y));
     if (picked < 0)
     {

@@ -5,8 +5,7 @@
 #include "Engine/Runtime/Interface/AgentQueries.hpp"
 #include "Engine/Utilities/FileHelper.hpp"
 #include "Modules/NextDotNet/DotNetRuntime.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
-#include "Modules/NextUI/UI/UiTheme.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include "ThirdParty/fontawesome/IconsFontAwesome6.h"
 
 #include <imgui.h>
@@ -18,9 +17,9 @@
 
 using Modules::NextDotNet::EGameSessionState;
 using Modules::NextDotNet::FManagedGameManifest;
-using NextUI::Foundation::EColor;
-using NextUI::Foundation::Color;
-using NextUI::Foundation::ColorU32;
+using NextUI::EColor;
+using NextUI::Color;
+using NextUI::ColorU32;
 
 namespace
 {
@@ -374,7 +373,7 @@ bool LauncherGameInstance::OnHostRenderUI()
 
 void LauncherGameInstance::DrawMenu()
 {
-    NextUI::Foundation::ApplyTheme();
+    NextUI::ApplyTheme();
 
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos, ImGuiCond_Always);
@@ -403,8 +402,8 @@ void LauncherGameInstance::DrawMenu()
     bgDrawList->AddCircleFilled(ImVec2(winPos.x + 120.0f, winPos.y + 60.0f), 240.0f, ColorU32(EColor::Accent, 0.035f), 32);
     bgDrawList->AddCircleFilled(ImVec2(winPos.x + winSize.x - 120.0f, winPos.y + winSize.y - 60.0f), 220.0f, ColorU32(EColor::Brand, 0.030f), 32);
 
-    ImFont* titleFont = NextUI::Theme::GetTitleFont(GetEngine());
-    ImFont* defaultFont = NextUI::Theme::GetDefaultFont(GetEngine());
+    ImFont* titleFont = NextUI::GetTitleFont(GetEngine());
+    ImFont* defaultFont = NextUI::GetDefaultFont(GetEngine());
     if (defaultFont == nullptr)
     {
         defaultFont = ImGui::GetFont();
@@ -460,7 +459,7 @@ void LauncherGameInstance::DrawMenu()
     ImGui::EndGroup();
 
     ImGui::Spacing();
-    NextUI::Theme::DrawThinSeparator(0.40f);
+    NextUI::DrawThinSeparator(0.40f);
     ImGui::Spacing();
 
     // Leak Alert Warning
@@ -659,7 +658,7 @@ void LauncherGameInstance::DrawMenu()
     // ==========================================
     // 3. Minimal Footer Bar
     // ==========================================
-    NextUI::Theme::DrawThinSeparator(0.40f);
+    NextUI::DrawThinSeparator(0.40f);
     ImGui::Spacing();
 
     ImGui::BeginGroup();
@@ -741,7 +740,7 @@ bool LauncherGameInstance::DrawNewProjectCard(float cardWidth, float cardHeight,
                       active ? ColorU32(EColor::AccentHover, 0.85f) : ColorU32(EColor::Border, 0.45f), 8.0f, 0,
                       active ? 1.5f : 1.0f);
 
-    ImFont* titleFont = NextUI::Theme::GetTitleFont(GetEngine());
+    ImFont* titleFont = NextUI::GetTitleFont(GetEngine());
     if (titleFont == nullptr)
     {
         titleFont = ImGui::GetFont();

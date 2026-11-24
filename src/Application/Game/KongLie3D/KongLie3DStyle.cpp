@@ -1,5 +1,5 @@
 #include "KongLie3DStyle.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 
 namespace KongLie3D::KongLieFonts
 {
@@ -12,7 +12,7 @@ namespace KongLie3D
 {
     void ApplyKongLieImGuiStyle()
     {
-        NextUI::Theme::ApplyProfessionalTheme();
+        NextUI::ApplyTheme();
     }
 
     void PushPanelStyle()

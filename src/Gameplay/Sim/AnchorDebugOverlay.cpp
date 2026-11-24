@@ -1,7 +1,7 @@
 #include "Engine/Common/CoreMinimal.hpp"
 
 #include "AnchorDebugOverlay.h"
-#include "Modules/NextUI/UI/UiHud.hpp"
+#include "Modules/NextUI/Hud.hpp"
 
 #include <fmt/format.h>
 #include <imgui.h>

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine/Vulkan/DebugUtilities.hpp"
+#include <span>
 #include <vector>
 
 namespace Vulkan
@@ -21,12 +22,15 @@ namespace Vulkan
         GraphicsPipelineBuilder& SetVertexInput(const VkVertexInputBindingDescription& binding,
                                                 const VkVertexInputAttributeDescription* attributes,
                                                 uint32_t attributeCount);
+        GraphicsPipelineBuilder& SetVertexInput(std::span<const VkVertexInputBindingDescription> bindings,
+                                                std::span<const VkVertexInputAttributeDescription> attributes);
         GraphicsPipelineBuilder& SetFixedViewport(VkOffset2D offset, VkExtent2D extent);
         GraphicsPipelineBuilder& SetDynamicViewportAndScissor();
         GraphicsPipelineBuilder& SetPolygonMode(VkPolygonMode mode);
         GraphicsPipelineBuilder& SetDepthBias(float constantFactor, float slopeFactor);
         GraphicsPipelineBuilder& SetDepth(bool testEnable, bool writeEnable, VkCompareOp compareOp);
         GraphicsPipelineBuilder& SetAlphaBlend(VkBlendFactor srcAlphaFactor, VkBlendFactor dstAlphaFactor);
+        GraphicsPipelineBuilder& SetPremultipliedAlphaBlend();
         GraphicsPipelineBuilder& SetColorAttachmentCount(uint32_t count); // 0 = depth-only pass
 
         VkPipeline Build(VkPipelineLayout pipelineLayout, VkRenderPass renderPass, const char* errorLabel) const;
@@ -35,9 +39,8 @@ namespace Vulkan
         const Device& device_;
 
         std::vector<VkPipelineShaderStageCreateInfo> shaderStages_;
-        VkVertexInputBindingDescription vertexBinding_{};
+        std::vector<VkVertexInputBindingDescription> vertexBindings_;
         std::vector<VkVertexInputAttributeDescription> vertexAttributes_;
-        bool hasVertexInput_ = false;
         VkViewport viewport_{};
         VkRect2D scissor_{};
         bool dynamicViewport_ = false;
@@ -49,6 +52,8 @@ namespace Vulkan
         bool depthWriteEnable_ = false;
         VkCompareOp depthCompareOp_ = VK_COMPARE_OP_LESS;
         bool blendEnable_ = false;
+        VkBlendFactor srcColorBlendFactor_ = VK_BLEND_FACTOR_ONE;
+        VkBlendFactor dstColorBlendFactor_ = VK_BLEND_FACTOR_ZERO;
         VkBlendFactor srcAlphaBlendFactor_ = VK_BLEND_FACTOR_ONE;
         VkBlendFactor dstAlphaBlendFactor_ = VK_BLEND_FACTOR_ZERO;
         uint32_t colorAttachmentCount_ = 1;

@@ -9,8 +9,8 @@
 #include "Application/Editor/Common/Preview/AssetThumbnailRenderer.hpp"
 #include "Modules/DevTools/Command/RenameNodeCommand.hpp"
 #include "Engine/Runtime/Engine.hpp"
-#include "Engine/Runtime/Interface/UserInterface.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
+#include "Modules/NextUI/NextUI.hpp"
 #include "Engine/Runtime/Reflection/PropertyAccessor.hpp"
 #include "EditorActionDispatcher.hpp"
 #include "Core/NodeClassification.hpp"
@@ -39,7 +39,7 @@ namespace Editor
         constexpr float kMinScale = 0.001f;
         constexpr float kMaxScale = 1.0e6f;
 
-        using NextUI::Theme::Draw3AxisFloatDrag;
+        using NextUI::Draw3AxisFloatDrag;
     } // namespace
 
     void DrawPropertiesPanel(EditorContext& ctx, EditorUiState& ui)
@@ -60,7 +60,7 @@ namespace Editor
                 const ImVec2 avail = ImGui::GetContentRegionAvail();
                 ImGui::Dummy(ImVec2(0.0f, std::max(20.0f, avail.y * 0.25f)));
 
-                NextUI::Theme::BeginCard("##EmptyPropsCard");
+                NextUI::BeginCard("##EmptyPropsCard");
                 ImGui::Dummy(ImVec2(0.0f, 16.0f));
 
                 const char* iconStr = ICON_FA_ARROW_POINTER;
@@ -72,20 +72,20 @@ namespace Editor
                 const float cardW = ImGui::GetContentRegionAvail().x;
 
                 ImGui::SetCursorPosX((cardW - ImGui::CalcTextSize(iconStr).x) * 0.5f);
-                ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::Accent, 0.70f), "%s", iconStr);
+                ImGui::TextColored(NextUI::Color(NextUI::EColor::Accent, 0.70f), "%s", iconStr);
                 ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
                 ImGui::SetCursorPosX((cardW - textSize1.x) * 0.5f);
-                ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::Text), "%s", line1);
+                ImGui::TextColored(NextUI::Color(NextUI::EColor::Text), "%s", line1);
                 ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
                 ImGui::PushTextWrapPos(cardW - 10.0f);
                 ImGui::SetCursorPosX(16.0f);
-                ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::TextDim), "%s", line2);
+                ImGui::TextColored(NextUI::Color(NextUI::EColor::TextDim), "%s", line2);
                 ImGui::PopTextWrapPos();
 
                 ImGui::Dummy(ImVec2(0.0f, 16.0f));
-                NextUI::Theme::EndCard();
+                NextUI::EndCard();
 
                 ImGui::End();
                 return;
@@ -117,10 +117,10 @@ namespace Editor
                     return;
                 }
 
-                NextUI::Theme::BeginCard("##MultiSelectionCard");
-                ImGui::TextColored(NextUI::Theme::Color(NextUI::Theme::EColor::Accent), ICON_FA_OBJECT_GROUP "  %d Objects Selected", static_cast<int>(selectedIds.size()));
+                NextUI::BeginCard("##MultiSelectionCard");
+                ImGui::TextColored(NextUI::Color(NextUI::EColor::Accent), ICON_FA_OBJECT_GROUP "  %d Objects Selected", static_cast<int>(selectedIds.size()));
                 ImGui::TextDisabled("Active reference: %s", activeObj->GetName().c_str());
-                NextUI::Theme::EndCard();
+                NextUI::EndCard();
 
                 auto applyTransformToSelection = [&](const std::function<void(Assets::Node&)>& apply)
                 {
@@ -143,7 +143,7 @@ namespace Editor
                     }
                 };
 
-                if (NextUI::Theme::BeginSection(ICON_FA_LOCATION_ARROW, "Transform (Relative)", true))
+                if (NextUI::BeginSection(ICON_FA_LOCATION_ARROW, "Transform (Relative)", true))
                 {
                     glm::vec3 location = activeObj->Translation();
                     const glm::vec3 baseLocation = location;
@@ -205,7 +205,7 @@ namespace Editor
                                 node.RecalcTransform(true);
                             });
                     }
-                    NextUI::Theme::EndSection();
+                    NextUI::EndSection();
                 }
 
                 ImGui::Dummy(ImVec2(0.0f, 6.0f));
@@ -235,12 +235,12 @@ namespace Editor
             }
 
             // --- Entity Header Card ---
-            NextUI::Theme::BeginCard("##EntityHeaderCard");
+            NextUI::BeginCard("##EntityHeaderCard");
             {
                 // Top Row: Type chip on the left, quick actions on the right. The chip comes from the
                 // same classifier the Outliner icon uses, so the two panels always agree.
                 const FNodeVisual& visual = ClassifyNode(*selectedObj);
-                NextUI::Theme::TagChip(fmt::format("{} {}", visual.icon, visual.label).c_str(), visual.tint,
+                NextUI::TagChip(fmt::format("{} {}", visual.icon, visual.label).c_str(), visual.tint,
                                        visual.description);
 
                 // Quick Action Buttons on top-right: Visibility, Focus, Delete
@@ -248,12 +248,12 @@ namespace Editor
                 constexpr float actBtnH = 22.0f;
                 constexpr float actSpacing = 4.0f;
                 const float topActionsWidth = actBtnW * 3.0f + actSpacing * 2.0f;
-                NextUI::Theme::SameLineRightAligned(topActionsWidth);
+                NextUI::SameLineRightAligned(topActionsWidth);
 
                 bool enabled = render == nullptr || render->GetVisible();
                 const char* visibilityIcon = enabled ? ICON_FA_EYE : ICON_FA_EYE_SLASH;
                 if (render == nullptr) ImGui::BeginDisabled();
-                if (NextUI::Theme::IconButton(visibilityIcon, enabled ? "Hide Object" : "Show Object", false, ImVec2(actBtnW, actBtnH)) && render != nullptr)
+                if (NextUI::IconButton(visibilityIcon, enabled ? "Hide Object" : "Show Object", false, ImVec2(actBtnW, actBtnH)) && render != nullptr)
                 {
                     render->SetVisible(!enabled);
                     ctx.scene.MarkDirty();
@@ -261,13 +261,13 @@ namespace Editor
                 if (render == nullptr) ImGui::EndDisabled();
 
                 ImGui::SameLine(0.0f, actSpacing);
-                if (NextUI::Theme::IconButton(ICON_FA_LOCATION_CROSSHAIRS "##Focus", "Focus in Viewport", false, ImVec2(actBtnW, actBtnH)))
+                if (NextUI::IconButton(ICON_FA_LOCATION_CROSSHAIRS "##Focus", "Focus in Viewport", false, ImVec2(actBtnW, actBtnH)))
                 {
                     ctx.actions.Dispatch(ctx, EEditorAction::Camera_FocusSelected, std::to_string(selectedObj->GetInstanceId()));
                 }
 
                 ImGui::SameLine(0.0f, actSpacing);
-                if (NextUI::Theme::IconButton(ICON_FA_TRASH_CAN "##Delete", "Delete Object", false, ImVec2(actBtnW, actBtnH)))
+                if (NextUI::IconButton(ICON_FA_TRASH_CAN "##Delete", "Delete Object", false, ImVec2(actBtnW, actBtnH)))
                 {
                     ctx.engine.GetCommandHistory().Execute(
                         std::make_unique<Runtime::Command::DeleteNodesCommand>(ctx.scene, std::vector<uint32_t>{selectedObj->GetInstanceId()}));
@@ -276,7 +276,7 @@ namespace Editor
                 ImGui::Dummy(ImVec2(0.0f, 2.0f));
 
                 // Middle Row: Object Title with click-to-rename
-                ImGui::PushFont(NextUI::Theme::GetTitleFont(ctx.engine));
+                ImGui::PushFont(NextUI::GetTitleFont(ctx.engine));
                 if (ui.propertiesState.renamingName)
                 {
                     ImGui::SetNextItemWidth(-FLT_MIN);
@@ -320,7 +320,7 @@ namespace Editor
                         ui.propertiesState.renamingName = true;
                         ui.propertiesState.focusNameInput = true;
                     }
-                    NextUI::Theme::DrawTooltip("Click to rename");
+                    NextUI::Tooltip("Click to rename");
                 }
                 ImGui::PopFont();
 
@@ -368,7 +368,7 @@ namespace Editor
                         }
                         ImGui::EndCombo();
                     }
-                    NextUI::Theme::DrawTooltip("Mobility");
+                    NextUI::Tooltip("Mobility");
                     if (physics == nullptr) ImGui::EndDisabled();
 
                     ImGui::TableSetColumnIndex(1);
@@ -385,7 +385,7 @@ namespace Editor
                         }
                         ImGui::EndCombo();
                     }
-                    NextUI::Theme::DrawTooltip("Tag");
+                    NextUI::Tooltip("Tag");
 
                     ImGui::TableSetColumnIndex(2);
                     ImGui::SetNextItemWidth(-FLT_MIN);
@@ -401,16 +401,16 @@ namespace Editor
                         }
                         ImGui::EndCombo();
                     }
-                    NextUI::Theme::DrawTooltip("Layer");
+                    NextUI::Tooltip("Layer");
 
                     ImGui::EndTable();
                 }
                 ImGui::PopStyleVar();
             }
-            NextUI::Theme::EndCard();
+            NextUI::EndCard();
 
             // --- Transform Section ---
-            if (NextUI::Theme::BeginSection(ICON_FA_LOCATION_ARROW, "Transform", true))
+            if (NextUI::BeginSection(ICON_FA_LOCATION_ARROW, "Transform", true))
             {
                 if (Draw3AxisFloatDrag("Location", selectedObj->Translation()))
                 {
@@ -431,16 +431,16 @@ namespace Editor
                     selectedObj->RecalcTransform(true);
                     ctx.scene.MarkDirty();
                 }
-                NextUI::Theme::EndSection();
+                NextUI::EndSection();
             }
 
             // --- Components Section ---
             const int modelId = render ? render->GetModelId() : -1;
-            if (NextUI::Theme::BeginSection(ICON_FA_PUZZLE_PIECE, "Components", true))
+            if (NextUI::BeginSection(ICON_FA_PUZZLE_PIECE, "Components", true))
             {
                 ImGui::SetNextItemWidth(-FLT_MIN);
                 ui.propertiesState.propertyFilter.Draw(ICON_FA_MAGNIFYING_GLASS " Search##PropertiesSearch");
-                NextUI::Theme::DrawThinSeparator(0.50f);
+                NextUI::DrawThinSeparator(0.50f);
 
                 const auto& components = selectedObj->GetComponents();
                 for (const auto& component : components)
@@ -473,8 +473,8 @@ namespace Editor
                     if (ImGui::CollapsingHeader(headerName.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
                     {
                         PropertyWidgets::WidgetConfig widgetConfig;
-                        widgetConfig.modelAsset.titleFont = ctx.ui.GetTitleBarFont();
-                        widgetConfig.materialAsset.titleFont = ctx.ui.GetTitleBarFont();
+                        widgetConfig.modelAsset.titleFont = NextUI::GetTitleFont(ctx.engine);
+                        widgetConfig.materialAsset.titleFont = NextUI::GetTitleFont(ctx.engine);
                         if (component.get() == render)
                         {
                             if (modelId >= 0 && modelId < static_cast<int>(ctx.scene.Models().size()))
@@ -489,7 +489,7 @@ namespace Editor
                                     .RequestMeshThumbnail(id, ctx.scene.Models()[id]);
                                 return sampleSlot == std::numeric_limits<uint32_t>::max()
                                     ? 0
-                                    : ctx.ui.RequestImTextureIdRaw(sampleSlot);
+                                    : NextUI::ToImTextureId(ctx.ui.ResolveRawSlotId(sampleSlot));
                             };
                             widgetConfig.modelAsset.name = [&ctx](const uint32_t id)
                             {
@@ -519,7 +519,7 @@ namespace Editor
                                     .RequestMaterialThumbnail(id, ctx.scene.Materials()[id]);
                                 return sampleSlot == std::numeric_limits<uint32_t>::max()
                                     ? 0
-                                    : ctx.ui.RequestImTextureIdRaw(sampleSlot);
+                                    : NextUI::ToImTextureId(ctx.ui.ResolveRawSlotId(sampleSlot));
                             };
                             widgetConfig.materialAsset.name = [&ctx](const uint32_t id)
                             {
@@ -576,7 +576,7 @@ namespace Editor
                     ImGui::MenuItem("Script Component", nullptr, false, false);
                     ImGui::EndPopup();
                 }
-                NextUI::Theme::EndSection();
+                NextUI::EndSection();
             }
         }
 

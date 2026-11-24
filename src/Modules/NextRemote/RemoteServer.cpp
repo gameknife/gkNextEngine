@@ -1,7 +1,8 @@
 #include "Engine/Common/CoreMinimal.hpp"
 #include "Engine/Assets/GPU/Texture.hpp"
 #include "Engine/Runtime/Engine.hpp"
-#include "Engine/Runtime/Interface/UserInterface.hpp"
+#include "Modules/NextUI/NextUIModule.hpp"
+#include "Modules/NextUI/UiSystem.hpp"
 #include "Engine/Runtime/GameInstance.hpp"
 #include "Engine/Runtime/RemoteProtocol.hpp"
 #include "Modules/RenderViews/OffscreenRenderViewController.hpp"
@@ -576,9 +577,9 @@ namespace Runtime::Remote
     {
         if (NextEngine* engine = NextEngine::GetInstance())
         {
-            if (NextUI::IUserInterface* userInterface = engine->GetUserInterface())
+            if (NextUI::FUiSystem* uiSystem = Modules::NextUI::Get(*engine))
             {
-                userInterface->DestroyViewportPipeline(clientView.compositeUiPipeline);
+                uiSystem->GetRenderer().DestroyPipeline(engine->GetRenderer().Device(), clientView.compositeUiPipeline);
             }
         }
         clientView.compositeUiPipeline = VK_NULL_HANDLE;
@@ -643,10 +644,10 @@ namespace Runtime::Remote
 
         if (NextEngine* engine = NextEngine::GetInstance())
         {
-            if (NextUI::IUserInterface* userInterface = engine->GetUserInterface())
+            if (NextUI::FUiSystem* uiSystem = Modules::NextUI::Get(*engine))
             {
-                clientView.compositeUiPipeline =
-                    userInterface->CreateViewportPipeline(clientView.compositeRenderPass->Handle());
+                clientView.compositeUiPipeline = uiSystem->GetRenderer().CreatePipelineForRenderPass(
+                    renderer.Device(), clientView.compositeRenderPass->Handle());
             }
         }
         clientView.uiRenderBuffers.resize(renderer.SwapChain().Images().size());
@@ -729,15 +730,16 @@ namespace Runtime::Remote
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
         if (NextEngine* engine = NextEngine::GetInstance())
         {
-            if (NextUI::IUserInterface* userInterface = engine->GetUserInterface())
+            if (NextUI::FUiSystem* uiSystem = Modules::NextUI::Get(*engine))
             {
                 const uint32_t bufferIndex = imageIndex % static_cast<uint32_t>(clientView.uiRenderBuffers.size());
-                userInterface->RenderViewportDrawData(drawData,
-                                                      commandBuffer,
-                                                      clientView.uiRenderBuffers[bufferIndex],
-                                                      clientView.compositeExtent,
-                                                      renderer.SwapChain().HDROutputMode(),
-                                                      clientView.compositeUiPipeline);
+                uiSystem->GetRenderer().RecordOffscreenDrawData(commandBuffer,
+                                                                renderer.Device(),
+                                                                clientView.uiRenderBuffers[bufferIndex],
+                                                                clientView.compositeExtent,
+                                                                renderer.SwapChain().HDROutputMode(),
+                                                                clientView.compositeUiPipeline,
+                                                                drawData);
             }
         }
         vkCmdEndRenderPass(commandBuffer);

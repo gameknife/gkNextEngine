@@ -13,7 +13,7 @@
 #include "Engine/Assets/Loaders/FProcModel.hpp"
 #include "Engine/Runtime/Components/PhysicsComponent.hpp"
 #include "Engine/Runtime/Config/CVarSystem.hpp"
-#include "Modules/NextUI/FontLoader.hpp"
+#include "Modules/NextUI/FontAtlas.hpp"
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/Scene/NodeUtils.hpp"
 #include "Engine/Runtime/Scene/SceneBuilder.hpp"
@@ -304,7 +304,7 @@ void KongLie3DGameInstance::OnInitUI()
 
     auto loadFont = [&](float size, std::string_view tag, bool includeChineseFull)
     {
-        ImFont* font = NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
+        ImFont* font = NextUI::LoadFont(NextUI::FFontRequest{
             .filePath = "assets/fonts/DroidSansFallback.ttf",
             .pixelSize = size,
             .includeChineseFull = includeChineseFull,

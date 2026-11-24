@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine/Common/CoreMinimal.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
 
 #include <imgui.h>
 
@@ -20,13 +21,13 @@ namespace NextCVar
 
 namespace NextUI
 {
-    struct Statistics;
+
 }
 
 namespace DevTools
 {
     // Developer console + statistics overlay, extracted from the engine core
-    // ImGui backend (NextUI::IUserInterface). Driven per-frame through the
+    // Driven per-frame through IDebugUiProvider.
     // IDebugUiProvider hooks in DevToolsDebugUiProvider.
     class FUiDevPanels final
     {
@@ -46,7 +47,7 @@ namespace DevTools
         void SetBottomBarReservedHeight(float height) { bottomBarReservedHeight_ = height; }
 
         // Statistics overlay
-        void DrawOverlay(const NextUI::Statistics& statistics);
+        void DrawOverlay(const Runtime::FUiStatistics& statistics);
         void SetStatisticsDetachedViewport(bool detached) { statisticsDetachedViewport_ = detached; }
 
         // Memory statistics

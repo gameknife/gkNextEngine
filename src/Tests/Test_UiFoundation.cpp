@@ -1,18 +1,16 @@
 #include "Engine/Common/CoreMinimal.hpp"
 
-#include "Modules/NextUI/UI/AppChrome.hpp"
-#include "Modules/NextUI/UI/NotificationCenter.hpp"
-#include "Modules/NextUI/UI/UiContext.hpp"
-#include "Modules/NextUI/UI/UiContainers.hpp"
-#include "Modules/NextUI/UI/UiHud.hpp"
-#include "Engine/Runtime/Editor/UiFrame.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
+#include "Modules/NextUI/Hud.hpp"
+#include "Modules/NextUI/NextUI.hpp"
+#include "Modules/NextUI/UiRenderer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <imgui_internal.h>
 
 TEST_CASE("UI metrics scale deterministically", "[Unit][UI]")
 {
-    using NextUI::Foundation::FUiMetrics;
+    using NextUI::FUiMetrics;
     const FUiMetrics one = FUiMetrics::FromScale(1.0f);
     const FUiMetrics oneAndHalf = FUiMetrics::FromScale(1.5f);
     const FUiMetrics two = FUiMetrics::FromScale(2.0f);
@@ -21,6 +19,30 @@ TEST_CASE("UI metrics scale deterministically", "[Unit][UI]")
     CHECK(oneAndHalf.titleBarHeight == 72.0f);
     CHECK(two.toolbarHeight == 76.0f);
     CHECK(two.spacing == 12.0f);
+}
+
+TEST_CASE("UI renderer texture handle encoding preserves slot and blend flags", "[Unit][UI]")
+{
+    using namespace NextUI;
+
+    uint32_t textureIndex = 0;
+    uint32_t flags = 0;
+    CHECK_FALSE(FUiRenderer::DecodeTextureHandle(0, textureIndex, flags));
+
+    const uint64_t straight = FUiRenderer::EncodeTextureHandle(42u, UI_BATCH_FLAG_STRAIGHT_ALPHA);
+    CHECK(FUiRenderer::DecodeTextureHandle(straight, textureIndex, flags));
+    CHECK(textureIndex == 42u);
+    CHECK(flags == UI_BATCH_FLAG_STRAIGHT_ALPHA);
+
+    const uint64_t premul = FUiRenderer::EncodeTextureHandle(1024u, UI_BATCH_FLAG_NONE);
+    CHECK(FUiRenderer::DecodeTextureHandle(premul, textureIndex, flags));
+    CHECK(textureIndex == 1024u);
+    CHECK(flags == UI_BATCH_FLAG_NONE);
+
+    const uint64_t rawHdr = FUiRenderer::EncodeTextureHandle(7u, UI_BATCH_FLAG_STRAIGHT_ALPHA | UI_BATCH_FLAG_RAW_OUTPUT);
+    CHECK(FUiRenderer::DecodeTextureHandle(rawHdr, textureIndex, flags));
+    CHECK(textureIndex == 7u);
+    CHECK(flags == (UI_BATCH_FLAG_STRAIGHT_ALPHA | UI_BATCH_FLAG_RAW_OUTPUT));
 }
 
 TEST_CASE("UI scoped containers restore ImGui stacks", "[Unit][UI]")
@@ -41,13 +63,13 @@ TEST_CASE("UI scoped containers restore ImGui stacks", "[Unit][UI]")
     const int initialColorStack = context->ColorStack.Size;
     const int initialStyleStack = context->StyleVarStack.Size;
     {
-        NextUI::Foundation::FOverlayPanelOptions options;
-        options.windowId = "ScopedOverlayTest";
-        options.position = ImVec2(10.0f, 10.0f);
-        options.size = ImVec2(240.0f, 120.0f);
-        options.padding = ImVec2(11.0f, 7.0f);
-        options.borderSize = 0.0f;
-        NextUI::Foundation::FScopedOverlayPanel panel(options);
+        NextUI::FOverlayPanelConfig config;
+        config.WindowId = "ScopedOverlayTest";
+        config.Position = ImVec2(10.0f, 10.0f);
+        config.Size = ImVec2(240.0f, 120.0f);
+        config.Padding = ImVec2(11.0f, 7.0f);
+        config.BorderSize = 0.0f;
+        NextUI::FScopedOverlayPanel panel(config);
         CHECK(context->StyleVarStack.Size == initialStyleStack + 4);
         CHECK(context->ColorStack.Size == initialColorStack + 2);
     }
@@ -55,10 +77,10 @@ TEST_CASE("UI scoped containers restore ImGui stacks", "[Unit][UI]")
     CHECK(context->ColorStack.Size == initialColorStack);
 
     {
-        NextUI::Foundation::ApplyTheme();
+        NextUI::ApplyTheme();
         CHECK(ImGui::GetStyle().ChildBorderSize == 0.0f);
-        NextUI::Foundation::FScopedWindow hostWindow("InsetHostWindow");
-        NextUI::Foundation::FScopedInsetPanel inset("ScopedInsetTest", ImVec2(120.0f, 60.0f), true);
+        NextUI::FScopedWindow hostWindow("InsetHostWindow");
+        NextUI::FScopedInsetPanel inset("ScopedInsetTest", ImVec2(120.0f, 60.0f), true);
         CHECK(ImGui::GetStyle().ChildBorderSize == 1.0f);
         CHECK(context->StyleVarStack.Size == initialStyleStack + 2);
         CHECK(context->ColorStack.Size == initialColorStack + 2);
@@ -73,7 +95,7 @@ TEST_CASE("UI scoped containers restore ImGui stacks", "[Unit][UI]")
 
 TEST_CASE("UI frame layers are explicit and policy composable", "[Unit][UI]")
 {
-    using namespace NextUI;
+    using namespace Runtime;
     const FUiFrameResult editorResult{EUiDeveloperLayer::Console};
     CHECK(HasUiLayer(editorResult.requestedDeveloperLayers, EUiDeveloperLayer::Console));
     CHECK_FALSE(HasUiLayer(editorResult.requestedDeveloperLayers, EUiDeveloperLayer::Statistics));
@@ -88,8 +110,7 @@ TEST_CASE("UI frame layers are explicit and policy composable", "[Unit][UI]")
                                       .allowedDeveloperLayers = EUiDeveloperLayer::None};
     CHECK((editorResult.requestedDeveloperLayers & remotePolicy.allowedDeveloperLayers) ==
           EUiDeveloperLayer::None);
-    CHECK(FUiFrameResult::FromLegacyHandled(false).requestedDeveloperLayers == EUiDeveloperLayer::All);
-    CHECK(FUiFrameResult::FromLegacyHandled(true).requestedDeveloperLayers == EUiDeveloperLayer::None);
+    CHECK(FUiFrameResult::ForApplicationHandled().requestedDeveloperLayers == EUiDeveloperLayer::None);
 }
 
 TEST_CASE("Bottom bar stays attached to the main viewport", "[Unit][UI]")
@@ -108,13 +129,13 @@ TEST_CASE("Bottom bar stays attached to the main viewport", "[Unit][UI]")
     ImGui::NewFrame();
 
     bool contentDrawn = false;
-    NextUI::Foundation::FBottomBarOptions options;
-    options.windowId = "BottomBarViewportTest";
-    options.height = 30.0f;
-    options.drawLeftContent = [&contentDrawn]() { contentDrawn = true; };
-    NextUI::Foundation::DrawBottomBar(options);
+    NextUI::FBottomBarConfig config;
+    config.WindowId = "BottomBarViewportTest";
+    config.Height = 30.0f;
+    config.DrawLeftContent = [&contentDrawn]() { contentDrawn = true; };
+    NextUI::DrawBottomBar(config);
 
-    ImGuiWindow* window = ImGui::FindWindowByName(options.windowId);
+    ImGuiWindow* window = ImGui::FindWindowByName(config.WindowId);
     REQUIRE(window != nullptr);
     CHECK(contentDrawn);
     CHECK(window->Viewport == ImGui::GetMainViewport());
@@ -135,9 +156,9 @@ TEST_CASE("UI HUD helpers and NotificationCenter work deterministically", "[Unit
     const ImVec4 highHp = Hud::GetHealthColor(0.8f);
     const ImVec4 midHp = Hud::GetHealthColor(0.4f);
     const ImVec4 lowHp = Hud::GetHealthColor(0.1f);
-    const ImVec4 expectedHigh = Foundation::Color(Foundation::EColor::Success);
-    const ImVec4 expectedMid = Foundation::Color(Foundation::EColor::Warning);
-    const ImVec4 expectedLow = Foundation::Color(Foundation::EColor::Danger);
+    const ImVec4 expectedHigh = Color(EColor::Success);
+    const ImVec4 expectedMid = Color(EColor::Warning);
+    const ImVec4 expectedLow = Color(EColor::Danger);
 
     CHECK(highHp.x == expectedHigh.x);
     CHECK(midHp.x == expectedMid.x);

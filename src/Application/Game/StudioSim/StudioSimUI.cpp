@@ -1,7 +1,7 @@
 #include "StudioSimUI.h"
 #include "StudioSimLabels.hpp"
 #include "Gameplay/Sim/AnchorDebugOverlay.h"
-#include "Modules/NextUI/UI/UiHud.hpp"
+#include "Modules/NextUI/Hud.hpp"
 
 #include <fmt/format.h>
 #include <imgui.h>

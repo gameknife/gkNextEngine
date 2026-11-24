@@ -85,6 +85,8 @@ namespace GkNext.Interop
         public delegate* unmanaged<float, float, float, float, uint, float, float, void> UI_DrawRect;
         public delegate* unmanaged<GkStr, int, int, UiTexture*, void> UI_RequestTexture;
         public delegate* unmanaged<UiDrawCommand*, int, Vector2*, int, byte*, int, void> UI_SubmitDrawList;
+        public delegate* unmanaged<int, int, void> UI_ClaimInputCapture;
+        public delegate* unmanaged<int, float, uint> UI_GetThemeColor;
         public delegate* unmanaged<uint> Scene_GetIndicesCount;
         public delegate* unmanaged<GkStr, uint> Scene_FindNodeIdWithComponent;
         public delegate* unmanaged<GkStr, RenderNodeSpec*, uint> Scene_AddRenderNode;
@@ -151,7 +153,7 @@ namespace GkNext.Interop
     /// <summary>Number of bindings in the table, checked against the native side.</summary>
     public static class EngineApiInfo
     {
-        public const int EntryCount = 128;
+        public const int EntryCount = 130;
     }
 }
 
@@ -741,6 +743,16 @@ namespace GkNext
                     }
                 }
             }
+        }
+
+        public static void ClaimInputCapture(bool captureMouse, bool captureKeyboard = false)
+        {
+            Api.Table->UI_ClaimInputCapture(captureMouse ? 1 : 0, captureKeyboard ? 1 : 0);
+        }
+
+        public static uint GetThemeColor(int colorToken, float alpha = 1.0f)
+        {
+            return Api.Table->UI_GetThemeColor(colorToken, alpha);
         }
     }
 

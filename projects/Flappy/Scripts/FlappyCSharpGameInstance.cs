@@ -31,7 +31,7 @@ public sealed class FlappyCSharpGameInstance : NextGameInstance
     private readonly XorShift32 rng = new();
     private readonly FlappyBird bird = new();
     private readonly FlappyPipes pipes = new();
-    private readonly ManagedImGui gui = new();
+    private readonly UiCanvas gui = new();
     private ParallaxLayer mountains = new(0.0f, 1.0f, 0.0f);
     private ParallaxLayer vegetation = new(0.0f, 1.0f, 0.0f);
     private ParallaxLayer clouds = new(0.0f, 1.0f, 0.0f);
@@ -303,28 +303,28 @@ public sealed class FlappyCSharpGameInstance : NextGameInstance
 
         float scoreWidth = 136.0f + Math.Max(0, score / 10) * 18.0f;
         gui.PanelCenteredX(scoreWidth, 24.0f, 56.0f);
-        gui.DrawTextCenteredX($"{score}", 31.0f, HudPalette.Text, 2.05f, shadow: true);
+        gui.DrawTextCenteredX($"{score}", 31.0f, UiPalette.Text, 2.05f, shadow: true);
 
         if (state == GameState.Ready)
         {
             float panelWidth = Math.Max(280.0f, Math.Min(520.0f, screen.X - 48.0f));
             float panelY = centerY - 96.0f;
             gui.PanelCenteredX(panelWidth, panelY, 178.0f);
-            gui.DrawTextCenteredX("FLAPPY", panelY + 26.0f, HudPalette.Highlight, 2.0f, shadow: true);
+            gui.DrawTextCenteredX("FLAPPY", panelY + 26.0f, UiPalette.Highlight, 2.0f, shadow: true);
             gui.DrawTextCenteredX("Thread the gap. Keep the rhythm.", panelY + 76.0f,
-                                  HudPalette.Muted, 1.0f, shadow: true);
+                                  UiPalette.Muted, 1.0f, shadow: true);
             gui.DrawTextCenteredX("SPACE / CLICK / GAMEPAD A", panelY + 121.0f,
-                                  HudPalette.Success, 1.1f, shadow: true);
+                                  UiPalette.Success, 1.1f, shadow: true);
         }
         else if (state == GameState.Dead)
         {
             float panelWidth = Math.Max(280.0f, Math.Min(500.0f, screen.X - 48.0f));
             float panelY = centerY - 88.0f;
             gui.PanelCenteredX(panelWidth, panelY, 166.0f);
-            gui.DrawTextCenteredX("GAME OVER", panelY + 24.0f, HudPalette.Danger, 1.75f, shadow: true);
-            gui.DrawTextCenteredX($"Score {score}", panelY + 73.0f, HudPalette.Text, 1.25f, shadow: true);
+            gui.DrawTextCenteredX("GAME OVER", panelY + 24.0f, UiPalette.Danger, 1.75f, shadow: true);
+            gui.DrawTextCenteredX($"Score {score}", panelY + 73.0f, UiPalette.Text, 1.25f, shadow: true);
             gui.DrawTextCenteredX("PRESS ANY KEY TO RESTART", panelY + 116.0f,
-                                  HudPalette.Success, 1.0f, shadow: true);
+                                  UiPalette.Success, 1.0f, shadow: true);
         }
 
         gui.EndFrame();

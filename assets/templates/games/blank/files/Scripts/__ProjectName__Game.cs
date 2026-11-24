@@ -21,7 +21,7 @@ public sealed class {{ProjectName}}Game : NextGameInstance
     private const float CubeHeight = 1.0f;
 
     /// <summary>The HUD layer. One draw list, submitted to the engine once per frame.</summary>
-    private readonly ManagedImGui gui = new();
+    private readonly UiCanvas gui = new();
 
     // Tuning, read from Content/configs/tuning.json. The defaults are what the game does when the
     // file is missing or leaves a value out, so a half-written config still runs.
@@ -127,11 +127,11 @@ public sealed class {{ProjectName}}Game : NextGameInstance
         gui.BeginFrame();
 
         gui.Panel(new UiRect(20.0f, 20.0f, 300.0f, 96.0f), 10.0f);
-        gui.DrawText("{{DisplayName}}", 36.0f, 34.0f, HudPalette.Text, 1.2f);
-        gui.DrawText($"time {elapsedSeconds:F1}s", 36.0f, 62.0f, HudPalette.Muted);
+        gui.DrawText("{{DisplayName}}", 36.0f, 34.0f, UiPalette.Text, 1.2f);
+        gui.DrawText($"time {elapsedSeconds:F1}s", 36.0f, 62.0f, UiPalette.Muted);
         gui.DrawText(spinning ? "SPACE: pause spin" : "SPACE: resume spin", 36.0f, 84.0f,
-                     HudPalette.Accent);
-        gui.DrawTextBottomRight("ESC quits", 18.0f, HudPalette.Muted);
+                     UiPalette.Accent);
+        gui.DrawTextBottomRight("ESC quits", 18.0f, UiPalette.Muted);
 
         gui.EndFrame();
         return false;

@@ -236,7 +236,7 @@ src/
 │   └── Utilities/           # Misc helpers
 ├── Modules/                 # 23 optional engine modules (static libs, linked per app; see src/Modules/README.md)
 │   ├── GltfLoader/, LDrawLoader/, ScadLoader/, SplatLoader/, SceneExport/  # Content pipelines
-│   ├── NextDotNet/, NextPhysics/, NextAudio/, NextAI/, NextRmlUi/          # Runtime capabilities
+│   ├── NextUI/, NextDotNet/, NextPhysics/, NextAudio/, NextAI/, NextRmlUi/ # UI & runtime capabilities
 │   ├── NextRemote/, NextStreamline/, NextFidelityFX/, NextTemporalUpscaler/,
 │   │   NextTui/, RenderViews/                                              # Presentation / streaming
 │   └── DevTools/, LiveCoding/                                              # Development tooling
@@ -317,7 +317,7 @@ tools/gnb/                   # Project CLI (Go) — see "gnb" section below
   managed layer.
 - **`GkNext.Engine/Gameplay/` is the shared gameplay layer** — `Rng` (deterministic xorshift),
   `MoveAxis.Poll()` (normalised WASD + arrows + gamepad stick), `Mathx`/`Quat`, `Sky.Apply`,
-  `HudPalette` — plus `ManagedImGui` for HUD and `NextGameInstance.SceneReady`. Reach for these
+  `UiPalette` — plus `UiCanvas` for HUD and `NextGameInstance.SceneReady`. Reach for these
   before writing another RNG, key ladder or quaternion by hand; the templates are the worked
   examples. Nothing there is privileged: it is ordinary C# over `Scene.*` / `Input.*` / `UI.*`.
 - Touching a template, or anything in `GkNext.Engine` a template uses, means `gnb dotnet templates`.

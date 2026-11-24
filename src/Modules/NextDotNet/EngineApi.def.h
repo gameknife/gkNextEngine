@@ -136,8 +136,10 @@ GK_API(UI, DrawRect,           void,   (float x, float y, float width, float hei
 // Managed code owns immediate-mode widgets and composes a complete draw list. Native receives the
 // three borrowed spans once per frame and only translates primitive commands to ImDrawList; no
 // ImGui window/control/style API is mirrored across the ABI.
-GK_API(UI, RequestTexture,     void,   (GkStr path, GkBool srgb, GkBool persistent, FUiTexture* outTexture)) //= srgb:true, persistent:true
-GK_API(UI, SubmitDrawList,     void,   (const FUiDrawCommand* commands, int32_t commandCount, const FVec2* points, int32_t pointCount, const uint8_t* utf8, int32_t utf8Length))
+GK_API(UI, RequestTexture,     void,      (GkStr path, GkBool srgb, GkBool persistent, FUiTexture* outTexture)) //= srgb:true, persistent:true
+GK_API(UI, SubmitDrawList,     void,      (const FUiDrawCommand* commands, int32_t commandCount, const FVec2* points, int32_t pointCount, const uint8_t* utf8, int32_t utf8Length))
+GK_API(UI, ClaimInputCapture,  void,      (GkBool captureMouse, GkBool captureKeyboard))                        //= captureKeyboard:false
+GK_API(UI, GetThemeColor,      GkColor32, (int32_t colorToken, float alpha))                                    //= alpha:1.0f
 
 // --- Live scene ----------------------------------------------------------------------------
 // These address nodes by instance id and are only valid once a scene is committed. Inside the

@@ -17,7 +17,7 @@ public sealed class Hud
     private const float Margin = 16.0f;
     private const float RightColumnWidth = 380.0f;
 
-    private readonly ManagedImGui gui = new();
+    private readonly UiCanvas gui = new();
     private readonly Dictionary<(string, int), List<string>> wrapCache = [];
 
     public bool ShowLabels { get; set; }
@@ -49,17 +49,17 @@ public sealed class Hud
         UiRect panel = new(Margin, Margin, 360.0f, hasGoal ? 92.0f : 66.0f);
         gui.Panel(panel, 9.0f);
         float y = panel.Y + 10.0f;
-        gui.DrawText(title, panel.X + 14.0f, y, HudPalette.Text, 1.3f);
+        gui.DrawText(title, panel.X + 14.0f, y, UiPalette.Text, 1.3f);
         y += 26.0f;
         if (hasGoal)
         {
-            gui.DrawText(world.LevelGoal, panel.X + 14.0f, y, HudPalette.Muted);
+            gui.DrawText(world.LevelGoal, panel.X + 14.0f, y, UiPalette.Muted);
             y += 24.0f;
         }
         string stats = world.CoinsTotal > 0
             ? $"金币 {world.Coins}/{world.CoinsTotal}    死亡 {world.Deaths}    {world.LevelTime:F1} 秒"
             : $"死亡 {world.Deaths}    {world.LevelTime:F1} 秒";
-        gui.DrawText(stats, panel.X + 14.0f, y, world.State == PlayState.Won ? HudPalette.Success : HudPalette.Highlight);
+        gui.DrawText(stats, panel.X + 14.0f, y, world.State == PlayState.Won ? UiPalette.Success : UiPalette.Highlight);
     }
 
     private void DrawLiveStatus(ScadPlayGame game)
@@ -69,23 +69,23 @@ public sealed class Hud
         float y = Margin;
 
         string mode = live.IsLive ? "实时" : "只读";
-        Color dot = live.Building ? HudPalette.Highlight : live.Ok ? HudPalette.Success : HudPalette.Danger;
+        Color dot = live.Building ? UiPalette.Highlight : live.Ok ? UiPalette.Success : UiPalette.Danger;
         string state = live.Building ? "构建中…" : live.Ok ? $"成功 {live.Milliseconds / 1000.0:F2} 秒" : "失败";
         UiRect header = new(x, y, RightColumnWidth, 34.0f);
         gui.Panel(header, 8.0f);
         gui.DrawList.AddCircleFilled(new Vector2(header.X + 16.0f, header.Y + 17.0f), 5.0f, dot);
         gui.DrawText($"{live.LevelName}.scad · {mode} · 构建 #{live.Serial} {state}", header.X + 28.0f, header.Y + 8.0f,
-                     HudPalette.Text, 0.95f);
+                     UiPalette.Text, 0.95f);
         y = header.Bottom + 6.0f;
 
         if (!live.Ok && live.Error.Length > 0)
         {
-            y = DrawNote(x, y, live.HasScene ? "构建失败，保留上一版关卡：" : "构建失败：", live.Error, HudPalette.Danger, 6);
+            y = DrawNote(x, y, live.HasScene ? "构建失败，保留上一版关卡：" : "构建失败：", live.Error, UiPalette.Danger, 6);
         }
         if (live.WarningCount > 0)
         {
             string first = live.Warnings.Count > 0 ? live.Warnings[0] : string.Empty;
-            y = DrawNote(x, y, $"{live.WarningCount} 条 SCAD 警告：", first, HudPalette.Warning, 3);
+            y = DrawNote(x, y, $"{live.WarningCount} 条 SCAD 警告：", first, UiPalette.Warning, 3);
         }
         World? world = game.World;
         if (world != null)
@@ -94,19 +94,19 @@ public sealed class Hud
             {
                 if (mechanism.Fault != null)
                 {
-                    y = DrawNote(x, y, $"{Mechanism.Describe(mechanism.Node)} 出错：", mechanism.Fault, HudPalette.Danger, 3);
+                    y = DrawNote(x, y, $"{Mechanism.Describe(mechanism.Node)} 出错：", mechanism.Fault, UiPalette.Danger, 3);
                     break;
                 }
             }
             if (world.Unbound.Count > 0)
             {
-                y = DrawNote(x, y, "没有 C# 类的玩法件：", string.Join("、", world.Unbound), HudPalette.Warning, 2);
+                y = DrawNote(x, y, "没有 C# 类的玩法件：", string.Join("、", world.Unbound), UiPalette.Warning, 2);
             }
         }
         if (game.ScriptSerial > 0)
         {
             gui.DrawText($"C# 第 {game.ScriptSerial} 次热重载 · {game.ScriptLoadedAt.ToLocalTime():HH:mm:ss}", x + 4.0f, y,
-                         HudPalette.Muted, 0.9f, shadow: true);
+                         UiPalette.Muted, 0.9f, shadow: true);
         }
     }
 
@@ -122,7 +122,7 @@ public sealed class Hud
         for (int i = 0; i < shown; i++)
         {
             string line = i == maxLines - 1 && lines.Count > maxLines ? lines[i] + " …" : lines[i];
-            gui.DrawText(line, rect.X + 14.0f, rect.Y + 28.0f + i * 18.0f, HudPalette.Text, 0.9f);
+            gui.DrawText(line, rect.X + 14.0f, rect.Y + 28.0f + i * 18.0f, UiPalette.Text, 0.9f);
         }
         return rect.Bottom + 6.0f;
     }
@@ -134,9 +134,9 @@ public sealed class Hud
         {
             Color color = kind switch
             {
-                ToastKind.Good => HudPalette.Success,
-                ToastKind.Bad => HudPalette.Danger,
-                _ => HudPalette.Text,
+                ToastKind.Good => UiPalette.Success,
+                ToastKind.Bad => UiPalette.Danger,
+                _ => UiPalette.Text,
             };
             float alpha = Math.Clamp(remaining * 2.0f, 0.0f, 1.0f);
             gui.DrawTextCenteredX(text, y, new Color(color.R, color.G, color.B, alpha), 1.7f, shadow: true);
@@ -154,7 +154,7 @@ public sealed class Hud
             UiRect panel = gui.PanelCenteredX(720.0f, y - height, height, 9.0f);
             for (int i = 0; i < lines.Count; i++)
             {
-                gui.DrawText(lines[i], panel.X + 20.0f, panel.Y + 10.0f + i * 22.0f, HudPalette.Text, 1.05f);
+                gui.DrawText(lines[i], panel.X + 20.0f, panel.Y + 10.0f + i * 22.0f, UiPalette.Text, 1.05f);
             }
             y = panel.Y - 10.0f;
         }
@@ -180,9 +180,9 @@ public sealed class Hud
         else if (world.State == PlayState.Won)
         {
             UiRect panel = gui.PanelCenteredX(420.0f, gui.ScreenSize.Y * 0.38f, 96.0f, 12.0f);
-            gui.DrawTextCentered("通关！", new UiRect(panel.X, panel.Y + 10.0f, panel.Width, 40.0f), HudPalette.Success, 1.8f);
+            gui.DrawTextCentered("通关！", new UiRect(panel.X, panel.Y + 10.0f, panel.Width, 40.0f), UiPalette.Success, 1.8f);
             gui.DrawTextCentered($"{world.LevelTime:F1} 秒 · 金币 {world.Coins}/{world.CoinsTotal} · 按 R 重开",
-                                 new UiRect(panel.X, panel.Y + 54.0f, panel.Width, 30.0f), HudPalette.Muted);
+                                 new UiRect(panel.X, panel.Y + 54.0f, panel.Width, 30.0f), UiPalette.Muted);
         }
     }
 
@@ -232,7 +232,7 @@ public sealed class Hud
             {
                 if (world.Find(id) is Mechanism source && anchors.TryGetValue(source, out Vector2 from))
                 {
-                    Color wire = source.Active ? HudPalette.Success : HudPalette.Highlight;
+                    Color wire = source.Active ? UiPalette.Success : UiPalette.Highlight;
                     gui.DrawList.AddLine(from, pixel, new Color(wire.R, wire.G, wire.B, 0.8f), 2.0f);
                 }
             }
@@ -244,10 +244,10 @@ public sealed class Hud
             string text = $"{name} · {(mechanism.Fault != null ? "出错" : mechanism.Describe())}";
             Vector2 size = UI.CalcTextSize(text, 0.85f);
             UiRect box = new(pixel.X - size.X * 0.5f - 6.0f, pixel.Y - size.Y - 6.0f, size.X + 12.0f, size.Y + 6.0f);
-            Color edge = mechanism.Fault != null ? HudPalette.Danger : mechanism.Active ? HudPalette.Success : HudPalette.Border;
+            Color edge = mechanism.Fault != null ? UiPalette.Danger : mechanism.Active ? UiPalette.Success : UiPalette.Border;
             gui.DrawList.AddRectFilled(box, Color.FromBytes(20, 22, 26, 200), 4.0f);
             gui.DrawList.AddRect(box, edge, 4.0f, 1.5f);
-            gui.DrawText(text, box.X + 6.0f, box.Y + 3.0f, HudPalette.Text, 0.85f);
+            gui.DrawText(text, box.X + 6.0f, box.Y + 3.0f, UiPalette.Text, 0.85f);
         }
     }
 

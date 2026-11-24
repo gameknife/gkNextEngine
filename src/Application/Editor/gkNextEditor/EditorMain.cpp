@@ -31,7 +31,6 @@
 #endif
 #include "Application/Common/DemoScenes.hpp"
 #include "Gameplay/Rig/RigSubsystem.h"
-#include "Application/Editor/Common/MultiViewportBackend.hpp"
 
 #include <algorithm>
 #include <cfloat>
@@ -89,12 +88,12 @@ EditorGameInstance::EditorGameInstance(Vulkan::WindowConfig& config, Runtime::Co
     options.HighPrecisionProgressiveHistory = true;
 }
 
-std::unique_ptr<NextUI::IMultiViewportBackend> EditorGameInstance::CreateMultiViewportBackend()
+bool EditorGameInstance::EnableMultiViewportUi() const
 {
 #if IOS
-    return nullptr;
+    return false;
 #else
-    return std::make_unique<NextUI::MultiViewportBackend>(GetEngine());
+    return true;
 #endif
 }
 
@@ -524,18 +523,6 @@ void EditorGameInstance::SetSceneViewportFieldOfView(const float fieldOfView)
 
 void EditorGameInstance::OnPreConfigUI() { editorUserInterface_->Config(); }
 
-bool EditorGameInstance::OnRenderUI()
-{
-    editorUserInterface_->Render();
-#if GK_WITH_VITURE
-    DrawVitureDebugPanel();
-#endif
-    // After the editor, so a game HUD sits on top of the viewport rather than under the panels.
-    // Suppressed while ejected — see FPlaySession::OnRenderGameUI.
-    RenderPlaySessionUI();
-    return true;
-}
-
 void EditorGameInstance::RenderPlaySessionUI()
 {
     // The game's screen is the viewport panel, not the editor window. Without this a HUD written
@@ -545,34 +532,22 @@ void EditorGameInstance::RenderPlaySessionUI()
                                 ui.viewportContentSize.x, ui.viewportContentSize.y);
 }
 
-bool EditorGameInstance::OnRenderUI(const FGameUiFrameContext& context)
+Runtime::FUiFrameResult EditorGameInstance::RenderUiFrame(const Runtime::FUiFrameContext& context)
 {
     editorUserInterface_->Render(context);
 #if GK_WITH_VITURE
-    if (context.surfaceKind == FGameUiFrameContext::ESurfaceKind::MainWindow)
+    if (context.surfaceKind == Runtime::EUiSurfaceKind::MainWindow)
     {
         DrawVitureDebugPanel();
     }
 #endif
-    return true;
-}
-
-NextUI::FUiFrameResult EditorGameInstance::RenderUiFrame(const FGameUiFrameContext& context)
-{
-    editorUserInterface_->Render(context);
-#if GK_WITH_VITURE
-    if (context.surfaceKind == FGameUiFrameContext::ESurfaceKind::MainWindow)
-    {
-        DrawVitureDebugPanel();
-    }
-#endif
-    if (context.surfaceKind == FGameUiFrameContext::ESurfaceKind::MainWindow)
+    if (context.surfaceKind == Runtime::EUiSurfaceKind::MainWindow)
     {
         // Only on the main window: a remote view renders the same scene but must not receive a
         // second copy of the game's immediate-mode UI.
         RenderPlaySessionUI();
     }
-    return {NextUI::EUiDeveloperLayer::All};
+    return {Runtime::EUiDeveloperLayer::All};
 }
 
 void EditorGameInstance::OnInitUI() { editorUserInterface_->Init(); }

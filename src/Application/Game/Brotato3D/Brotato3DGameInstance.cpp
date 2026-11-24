@@ -7,7 +7,7 @@
 #include <spdlog/spdlog.h>
 
 #include "Brotato3DUI.hpp"
-#include "Modules/NextUI/FontLoader.hpp"
+#include "Modules/NextUI/FontAtlas.hpp"
 #include "Engine/Options.hpp"
 #include "Engine/Runtime/Platform/UserPaths.hpp"
 #include "Engine/Runtime/Subsystems/NextLocalization.hpp"
@@ -206,7 +206,7 @@ void Brotato3DGameInstance::OnInitUI()
             displayFont = fallbackChineseFont;
         }
 
-        ImFont* uiFont = NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
+        ImFont* uiFont = NextUI::LoadFont(NextUI::FFontRequest{
             .filePath = displayFont,
             .pixelSize = 16.0f,
             .extraGlyphsUtf8 = uiGlyphs.c_str(),
@@ -215,7 +215,7 @@ void Brotato3DGameInstance::OnInitUI()
 
         const bool hasPlaceholderBigFont = Utilities::FileHelper::IsAssetAvailable(placeholderBigFont);
         const std::string bigFontPath = hasPlaceholderBigFont ? placeholderBigFont : displayFont;
-        bigFont_ = NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
+        bigFont_ = NextUI::LoadFont(NextUI::FFontRequest{
             .filePath = bigFontPath,
             .pixelSize = 32.0f,
             .extraGlyphsUtf8 = uiGlyphs.c_str(),
@@ -224,7 +224,7 @@ void Brotato3DGameInstance::OnInitUI()
         {
             ImFontConfig mergeConfig;
             mergeConfig.MergeMode = true;
-            NextUI::FontLoader::Load(NextUI::FontLoader::FFontRequest{
+            NextUI::LoadFont(NextUI::FFontRequest{
                 .filePath = displayFont,
                 .pixelSize = 32.0f,
                 .extraGlyphsUtf8 = uiGlyphs.c_str(),

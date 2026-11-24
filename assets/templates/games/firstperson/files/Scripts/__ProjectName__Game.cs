@@ -53,7 +53,7 @@ public sealed class {{ProjectName}}Game : NextGameInstance
     private const int RightMouseButton = 3;
 
     private readonly Rng rng = new(RngSeed);
-    private readonly ManagedImGui gui = new();
+    private readonly UiCanvas gui = new();
     private readonly LookController look = new(LookSensitivity);
     private readonly EnemySquad enemies = new(EnemyCapacity);
     private readonly Rifle rifle = new(magazineSize: 12, fireInterval: 0.16f, reloadSeconds: 1.7f);
@@ -279,30 +279,30 @@ public sealed class {{ProjectName}}Game : NextGameInstance
         float healthFraction = health / MaxHealth;
         gui.Panel(new UiRect(20.0f, 20.0f, 268.0f, 96.0f), 10.0f);
         gui.ProgressBar(new UiRect(36.0f, 36.0f, 236.0f, 14.0f), healthFraction,
-                        HudPalette.Bar(healthFraction));
+                        UiPalette.Bar(healthFraction));
         if (rifle.IsReloading)
         {
             gui.ProgressBar(new UiRect(36.0f, 58.0f, 236.0f, 16.0f), rifle.ReloadProgress,
-                            HudPalette.Highlight, "RELOADING");
+                            UiPalette.Highlight, "RELOADING");
         }
         else
         {
             gui.DrawText($"AMMO {rifle.Ammo} / {rifle.MagazineSize}", 36.0f, 60.0f,
-                         rifle.IsEmpty ? HudPalette.Danger : HudPalette.Text);
+                         rifle.IsEmpty ? UiPalette.Danger : UiPalette.Text);
         }
         gui.DrawText($"kills {kills}    infected {enemies.AliveCount}    {survivedSeconds:F0}s",
-                     36.0f, 84.0f, HudPalette.Muted);
+                     36.0f, 84.0f, UiPalette.Muted);
 
         gui.DrawTextCenteredX("WASD move   SHIFT sprint   LMB fire   RMB zoom   R reload",
-                              gui.ScreenSize.Y - 38.0f, HudPalette.Muted, 1.0f, shadow: true);
+                              gui.ScreenSize.Y - 38.0f, UiPalette.Muted, 1.0f, shadow: true);
 
         if (!alive)
         {
             float y = gui.ScreenSize.Y * 0.5f - 70.0f;
             gui.PanelCenteredX(420.0f, y, 140.0f, 16.0f);
-            gui.DrawTextCenteredX("YOU DIED", y + 24.0f, HudPalette.Danger, 1.8f);
-            gui.DrawTextCenteredX($"kills {kills}    best {best}", y + 70.0f, HudPalette.Text, 1.15f);
-            gui.DrawTextCenteredX("SPACE TO TRY AGAIN", y + 104.0f, HudPalette.Accent);
+            gui.DrawTextCenteredX("YOU DIED", y + 24.0f, UiPalette.Danger, 1.8f);
+            gui.DrawTextCenteredX($"kills {kills}    best {best}", y + 70.0f, UiPalette.Text, 1.15f);
+            gui.DrawTextCenteredX("SPACE TO TRY AGAIN", y + 104.0f, UiPalette.Accent);
         }
 
         gui.EndFrame();
@@ -324,9 +324,9 @@ public sealed class {{ProjectName}}Game : NextGameInstance
         float centerY = MathF.Floor(gui.ScreenSize.Y * 0.5f);
         bool aiming = Input.IsMouseButtonDown(RightMouseButton);
         float gap = aiming ? 5.0f : 9.0f;
-        Color mark = aiming ? HudPalette.Highlight : Color.White;
+        Color mark = aiming ? UiPalette.Highlight : Color.White;
 
-        DrawCrosshairPass(centerX, centerY, gap - 1.0f, 4.0f, HudPalette.Shadow);
+        DrawCrosshairPass(centerX, centerY, gap - 1.0f, 4.0f, UiPalette.Shadow);
         DrawCrosshairPass(centerX, centerY, gap, 2.0f, mark);
     }
 

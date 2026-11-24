@@ -51,7 +51,6 @@ target_link_libraries(gkNextEngine PRIVATE
     meshoptimizer::meshoptimizer
     fmt::fmt
     glm::glm
-    imgui::imgui
     draco::draco
     WebP::webp
     WebP::libwebpmux
@@ -65,18 +64,8 @@ if(NOT IOS)
 endif()
 
 if(IOS)
-    get_target_property(imguiInterfaces imgui::imgui INTERFACE_LINK_LIBRARIES)
-    list(REMOVE_ITEM imguiInterfaces Vulkan::Vulkan)
-    set_target_properties(imgui::imgui PROPERTIES
-        INTERFACE_LINK_LIBRARIES "${imguiInterfaces}"
-    )
     target_link_libraries(gkNextEngine PRIVATE ${MOLTENVK_LIBRARY})
 elseif(WIN32 AND WITH_STREAMLINE)
-    get_target_property(imguiInterfaces imgui::imgui INTERFACE_LINK_LIBRARIES)
-    list(REMOVE_ITEM imguiInterfaces Vulkan::Vulkan)
-    set_target_properties(imgui::imgui PROPERTIES
-        INTERFACE_LINK_LIBRARIES "${imguiInterfaces}"
-    )
     target_link_directories(gkNextEngine PRIVATE ${STREAMLINE_LIB_DIR})
     target_link_libraries(gkNextEngine PRIVATE
         "${STREAMLINE_LIB_DIR}/sl.interposer.lib"

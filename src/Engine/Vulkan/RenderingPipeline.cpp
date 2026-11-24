@@ -13,9 +13,17 @@ namespace Vulkan
 // RenderPass
 // ============================================================================
 
+RenderPass::RenderPass(const Vulkan::SwapChain& swapChain, VkAttachmentLoadOp colorBufferLoadOp) :
+    swapChain_(swapChain),
+    depthBuffer_(nullptr)
+{
+    Init({.colorFormats = {swapChain.Format()},
+          .colorLoadOp = colorBufferLoadOp});
+}
+
 RenderPass::RenderPass(const Vulkan::SwapChain& swapChain, const class DepthBuffer& depthBuffer, VkAttachmentLoadOp colorBufferLoadOp) :
     swapChain_(swapChain),
-    depthBuffer_(depthBuffer)
+    depthBuffer_(&depthBuffer)
 {
     Init({.colorFormats = {swapChain.Format()},
           .colorLoadOp = colorBufferLoadOp});
@@ -27,7 +35,7 @@ RenderPass::RenderPass(
     const VkAttachmentLoadOp colorBufferLoadOp,
     const VkAttachmentLoadOp depthBufferLoadOp) :
     swapChain_(swapChain),
-    depthBuffer_(depthBuffer)
+    depthBuffer_(&depthBuffer)
 {
     Init({.colorFormats = {swapChain.Format()},
           .hasDepth = true,
@@ -38,7 +46,7 @@ RenderPass::RenderPass(
 
 RenderPass::RenderPass(const Vulkan::SwapChain& swapChain, VkFormat format, const Vulkan::DepthBuffer& depthBuffer,
                        VkAttachmentLoadOp colorBufferLoadOp, VkImageLayout colorInitialLayout,
-                       VkImageLayout colorFinalLayout) : swapChain_(swapChain), depthBuffer_(depthBuffer)
+                       VkImageLayout colorFinalLayout) : swapChain_(swapChain), depthBuffer_(&depthBuffer)
 {
     Init({.colorFormats = {format},
           .colorLoadOp = colorBufferLoadOp,
@@ -54,7 +62,7 @@ RenderPass::RenderPass(
     VkAttachmentLoadOp colorBufferLoadOp,
     VkAttachmentLoadOp depthBufferLoadOp,
     VkImageLayout colorInitialLayout,
-    VkImageLayout colorFinalLayout) : swapChain_(swapChain), depthBuffer_(depthBuffer)
+    VkImageLayout colorFinalLayout) : swapChain_(swapChain), depthBuffer_(&depthBuffer)
 {
     Init({.colorFormats = {format},
           .hasDepth = true,
@@ -67,7 +75,7 @@ RenderPass::RenderPass(
 }
 
 RenderPass::RenderPass(const Vulkan::SwapChain& swapChain, VkFormat format, const Vulkan::DepthBuffer& depthBuffer,
-                       VkAttachmentLoadOp colorBufferLoadOp, VkAttachmentLoadOp depthBufferLoadOp) : swapChain_(swapChain), depthBuffer_(depthBuffer)
+                       VkAttachmentLoadOp colorBufferLoadOp, VkAttachmentLoadOp depthBufferLoadOp) : swapChain_(swapChain), depthBuffer_(&depthBuffer)
 {
     Init({.colorFormats = {format},
           .hasDepth = true,
@@ -78,7 +86,7 @@ RenderPass::RenderPass(const Vulkan::SwapChain& swapChain, VkFormat format, cons
 }
 
 RenderPass::RenderPass(const Vulkan::SwapChain& swapChain, VkFormat format, VkFormat format1, VkFormat format2,
-                       const Vulkan::DepthBuffer& depthBuffer, VkAttachmentLoadOp colorBufferLoadOp, VkAttachmentLoadOp depthBufferLoadOp) : swapChain_(swapChain), depthBuffer_(depthBuffer)
+                       const Vulkan::DepthBuffer& depthBuffer, VkAttachmentLoadOp colorBufferLoadOp, VkAttachmentLoadOp depthBufferLoadOp) : swapChain_(swapChain), depthBuffer_(&depthBuffer)
 {
     Init({.colorFormats = {format, format1, format2},
           .hasDepth = true,
@@ -89,7 +97,7 @@ RenderPass::RenderPass(const Vulkan::SwapChain& swapChain, VkFormat format, VkFo
 
 RenderPass::RenderPass(const Vulkan::SwapChain& swapChain, std::span<const VkFormat> colorFormats,
                        const Vulkan::DepthBuffer& depthBuffer, VkAttachmentLoadOp colorBufferLoadOp,
-                       VkAttachmentLoadOp depthBufferLoadOp) : swapChain_(swapChain), depthBuffer_(depthBuffer)
+                       VkAttachmentLoadOp depthBufferLoadOp) : swapChain_(swapChain), depthBuffer_(&depthBuffer)
 {
     FRenderPassSpec spec;
     spec.colorFormats.assign(colorFormats.begin(), colorFormats.end());
@@ -104,7 +112,7 @@ RenderPass::RenderPass(const Vulkan::SwapChain& swapChain, std::span<const VkFor
 RenderPass::RenderPass(const Vulkan::SwapChain& swapChain, std::span<const VkFormat> colorFormats,
                        const Vulkan::DepthBuffer& depthBuffer, const VkAttachmentLoadOp colorBufferLoadOp,
                        const VkAttachmentLoadOp depthBufferLoadOp, const VkImageLayout colorInitialLayout,
-                       const VkImageLayout colorFinalLayout) : swapChain_(swapChain), depthBuffer_(depthBuffer)
+                       const VkImageLayout colorFinalLayout) : swapChain_(swapChain), depthBuffer_(&depthBuffer)
 {
     FRenderPassSpec spec;
     spec.colorFormats.assign(colorFormats.begin(), colorFormats.end());
@@ -147,7 +155,7 @@ void RenderPass::Init(const FRenderPassSpec& spec)
     if (spec.hasDepth)
     {
         VkAttachmentDescription depthAttachment = {};
-        depthAttachment.format = depthBuffer_.Format();
+        depthAttachment.format = depthBuffer_->Format();
         depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
         depthAttachment.loadOp = spec.depthLoadOp;
         depthAttachment.storeOp = spec.depthStoreOp;

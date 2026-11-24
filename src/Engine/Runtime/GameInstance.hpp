@@ -4,8 +4,7 @@
 #include "Engine/Common/CoreMinimal.hpp"
 #include "Engine/Options.hpp"
 #include "Engine/Runtime/RuntimeFwd.hpp"
-#include "Engine/Runtime/Editor/MultiViewportBackend.hpp"
-#include "Engine/Runtime/Editor/UiFrame.hpp"
+#include "Engine/Runtime/Interface/UiHost.hpp"
 #include "Engine/Utilities/Glm.hpp"
 #include "Engine/Vulkan/WindowSurface.hpp"
 
@@ -17,21 +16,7 @@ namespace Runtime::Agent
 class NextGameInstanceBase
 {
 public:
-    struct FGameUiFrameContext
-    {
-        enum class ESurfaceKind : uint8_t
-        {
-            MainWindow,
-            RemoteView,
-        };
-
-        ESurfaceKind surfaceKind = ESurfaceKind::MainWindow;
-        std::string_view sessionId{};
-        VkExtent2D framebufferExtent{};
-        const Assets::Camera* viewCamera = nullptr;
-        bool allowWindowCommands = true;
-        NextUI::FUiFramePolicy policy{};
-    };
+    using FGameUiFrameContext = Runtime::FUiFrameContext;
 
     struct FRemoteViewActionContext
     {
@@ -51,21 +36,21 @@ public:
     virtual void OnInit() = 0;
     virtual void OnTick(double deltaSeconds) = 0;
     virtual void OnDestroy() = 0;
-    virtual bool OnRenderUI() = 0;
-    virtual bool OnRenderUI(const FGameUiFrameContext& context)
+
+    // Simple games override OnRenderUI() (return true to suppress default engine stats overlay).
+    // Multi-surface hosts (editor / renderer) override RenderUiFrame(context) directly.
+    virtual bool OnRenderUI() { return false; }
+    virtual Runtime::FUiFrameResult RenderUiFrame(const Runtime::FUiFrameContext& context)
     {
         (void)context;
-        return OnRenderUI();
+        return Runtime::FUiFrameResult::ForApplicationHandled(OnRenderUI());
     }
-    virtual NextUI::FUiFrameResult RenderUiFrame(const FGameUiFrameContext& context)
-    {
-        return NextUI::FUiFrameResult::FromLegacyHandled(OnRenderUI(context));
-    }
+
     virtual bool ShouldRenderUiDuringScreenshot() const { return false; }
+    virtual bool EnableMultiViewportUi() const { return false; }
     virtual void OnPreConfigUI() {}
     virtual void OnInitUI() {}
     virtual void OnRemoteUiSessionClosed(std::string_view sessionId) { (void)sessionId; }
-    virtual std::unique_ptr<NextUI::IMultiViewportBackend> CreateMultiViewportBackend() { return nullptr; }
     virtual void OnRayHitResponse(Assets::RayCastResult& result) {}
     virtual void ConfigureCVars(NextCVar::FCVarSystem& cvars) {}
     virtual void RegisterAgentQueries(Runtime::Agent::FAgentQueryRegistry& reg) { (void)reg; }
@@ -96,7 +81,7 @@ public:
     virtual bool IsAppDebugShortcutActive(SDL_Keycode key) const { return false; }
     virtual bool SetAppDebugShortcutActive(SDL_Keycode key, bool active) { return false; }
     virtual bool WantsMouseInputWhenUiCaptures() const { return false; }
-    // Some editor-level shortcuts remain meaningful when a non-text ImGui
+    // Some editor-level shortcuts remain meaningful when a non-text UI
     // widget (for example an outliner row) has keyboard focus.
     virtual bool WantsKeyboardInputWhenUiCaptures() const { return false; }
     virtual bool OnKey(SDL_Event& event) { return false; }
@@ -154,7 +139,6 @@ public:
     void OnInit() override {}
     void OnTick(double deltaSeconds) override {}
     void OnDestroy() override {}
-    bool OnRenderUI() override { return false; }
 };
 
 extern std::unique_ptr<NextGameInstanceBase> CreateGameInstance(Vulkan::WindowConfig& config,

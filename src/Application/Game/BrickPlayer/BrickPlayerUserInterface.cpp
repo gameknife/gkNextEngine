@@ -1,8 +1,9 @@
 #include "BrickPlayerUserInterface.hpp"
 #include "BrickPlayerGameInstance.hpp"
 #include "Engine/Runtime/Interface/ScreenShotService.hpp"
-#include "Engine/Utilities/ImGui.hpp"
-#include "Modules/NextUI/UI/DesktopUI.hpp"
+#include "Modules/NextUI/NextUI.hpp"
+#include "ThirdParty/fontawesome/IconsFontAwesome6.h"
+#include <imgui.h>
 #include <imgui_internal.h>
 
 namespace
@@ -19,7 +20,7 @@ BrickPlayerUserInterface::BrickPlayerUserInterface(BrickPlayerGameInstance* game
 
 void BrickPlayerUserInterface::ApplyStyle()
 {
-    NextUI::Theme::ApplyProfessionalTheme();
+    NextUI::ApplyTheme();
 }
 
 void BrickPlayerUserInterface::Render()
@@ -45,7 +46,7 @@ void BrickPlayerUserInterface::Render()
 void BrickPlayerUserInterface::RenderTitleBar()
 {
     auto& engine = gameInstance_->GetEngine();
-    NextUI::Theme::FAppTitleBarConfig config{};
+    NextUI::FAppTitleBarConfig config{};
     config.BrandWindowId = "##BrickPlayerTitleBarBrand";
     config.MenuWindowId = "##BrickPlayerTitleBarLeft";
     config.RightWindowId = "##BrickPlayerTitleBarRight";
@@ -86,7 +87,7 @@ void BrickPlayerUserInterface::RenderTitleBar()
 
             if (gameInstance_->HasBuildSteps())
             {
-                NextUI::Theme::DrawVerticalSeparator(14.0f, 8.0f);
+                NextUI::DrawVerticalSeparator(14.0f, 8.0f);
 
                 bool perPart = gameInstance_->IsPerPartMode();
                 if (ImGui::Button(perPart ? ICON_FA_CUBE : ICON_FA_LAYER_GROUP, btnSize))
@@ -97,7 +98,7 @@ void BrickPlayerUserInterface::RenderTitleBar()
                     ImGui::SetTooltip(perPart ? "Part Mode (click for Step Mode)" : "Step Mode (click for Part Mode)");
             }
 
-            NextUI::Theme::DrawVerticalSeparator(14.0f, 8.0f);
+            NextUI::DrawVerticalSeparator(14.0f, 8.0f);
 
             bool debugOn = gameInstance_->IsShowPhysicsDebug();
             if (debugOn)
@@ -137,7 +138,7 @@ void BrickPlayerUserInterface::RenderTitleBar()
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Snap Debug (F7)");
 
-            NextUI::Theme::DrawVerticalSeparator(14.0f, 8.0f);
+            NextUI::DrawVerticalSeparator(14.0f, 8.0f);
 
             bool horizontalDrag = gameInstance_->IsHorizontalDragPlane();
             if (horizontalDrag)
@@ -177,7 +178,7 @@ void BrickPlayerUserInterface::RenderTitleBar()
         }
         return ImGui::GetItemRectMax().x;
     };
-    NextUI::Theme::DrawAppTitleBar(engine, config);
+    NextUI::DrawAppTitleBar(engine, config);
 }
 
 void BrickPlayerUserInterface::RenderTimeline()

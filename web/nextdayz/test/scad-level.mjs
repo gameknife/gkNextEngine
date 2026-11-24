@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { openPage } from "./harness.mjs";
 
 const repo = fileURLToPath(new URL("../../..", import.meta.url));
 const evidence = resolve(repo, "out/web/nextdayz/scad-level");
@@ -15,7 +16,7 @@ await mkdir(evidence, { recursive: true });
 
 const browser = await chromium.launch({ channel: "chrome", args: ["--enable-webgl", "--ignore-gpu-blocklist"] });
 try {
-    const page = await browser.newPage({ viewport: { width: 1390, height: 900 } });
+    const page = await openPage(browser, { viewport: { width: 1390, height: 900 } });
     const errors = [];
     const requests = [];
     page.on("pageerror", error => errors.push(error.message));
@@ -62,6 +63,11 @@ try {
     assert.equal(scad.collisionInstances, reference.collisionInstances);
     assert.deepEqual(scad.bounds, reference.bounds);
     assert.equal(scad.anchors, Object.values(reference.anchorCounts).reduce((sum, count) => sum + count, 0));
+    // Item by item, not just the count: type, label, profile, and position to 0.1 mm.
+    const bakedAnchors = JSON.parse(await readFile(resolve(baked, map.files["anchors.json"].path), "utf8")).anchors;
+    const generatedAnchors = await page.evaluate(() => window.nextdayzReviewAnchors());
+    const anchorKey = anchor => `${anchor.type}|${anchor.label ?? ""}|${anchor.profile ?? ""}|${anchor.position.map(value => value.toFixed(4)).join(",")}`;
+    assert.deepEqual(generatedAnchors.map(anchorKey).sort(), bakedAnchors.map(anchorKey).sort());
     assert.equal(scad.terrainCount, 1);
     assert.equal(scad.warningCount, 0);
     const scadRequests = requests.filter(request => request.path.startsWith("/scad-probe/"));
@@ -111,10 +117,46 @@ try {
     const { profile } = await read();
     assert.equal(profile.extractions, 1);
     assert.deepEqual(errors, []);
+    // Design D2: an evaluation that fails leaves the player on the baked map, not on an error.
+    const fallback = await browser.newContext({ viewport: { width: 1390, height: 900 } });
+    const other = await openPage(fallback);
+    let fallbackReport;
+    try {
+        const otherErrors = [];
+        const baked = [];
+        other.on("pageerror", error => otherErrors.push(error.message));
+        other.on("response", response => {
+            if (new URL(response.url()).pathname.startsWith(`/game-assets/${map.directory}/`)) baked.push(response.url());
+        });
+        await other.route(/\/scad-probe\/ndscad\.wasm/, route => route.abort());
+        await other.goto(site.href);
+        await other.locator("#name").fill(`SCAD Fallback ${Date.now()}`);
+        await other.locator("#login-button").click();
+        await other.locator('input[name=map][value="training_ground"]').check();
+        const fallbackBegan = Date.now();
+        await other.locator("#deploy").click();
+        await other.locator("#field").waitFor({ timeout: 120000 });
+        await other.waitForFunction(() => window.nextdayzReview().frame.snapshots >= 4 && window.nextdayzReview().frame.lootReady,
+            undefined, { timeout: 30000 });
+        const state = await other.evaluate(() => window.nextdayzReview());
+        assert(state.scadFallback, "the blocked evaluator was reported");
+        assert.equal(state.scad, undefined, "the level came from the baked assets");
+        assert(baked.length > 0, "the baked map was downloaded");
+        assert.deepEqual(otherErrors, []);
+        fallbackReport = { reason: state.scadFallback, joinMs: Date.now() - fallbackBegan, bakedFiles: baked.length };
+        await other.locator("#leave").click();
+        await other.locator("#profile").waitFor({ timeout: 30000 });
+    } catch (error) {
+        await other.screenshot({ path: resolve(evidence, "fallback-failure.png") });
+        throw error;
+    } finally {
+        await fallback.close();
+    }
+
     const report = { browser: browser.version(), name, firstJoinMs, scad, spawn: frame.feet, moved, wall,
-        extractions: profile.extractions, requests, errors };
+        extractions: profile.extractions, fallback: fallbackReport, requests, errors };
     await writeFile(resolve(evidence, "browser.json"), JSON.stringify(report, null, 2) + "\n");
-    console.log(JSON.stringify({ firstJoinMs, scad, wall, extractions: profile.extractions }));
+    console.log(JSON.stringify({ firstJoinMs, scad, wall, extractions: profile.extractions, fallback: fallbackReport }));
 } finally {
     await browser.close();
 }

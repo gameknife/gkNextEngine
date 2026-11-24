@@ -1422,6 +1422,7 @@ ND_TEXT("Web assets for this map are missing", "这张地图的 Web 资产尚未
 ND_TEXT("Reading the map manifest", "正在读取地图清单")
 ND_TEXT("Reading SCAD sources", "正在读取 SCAD 源文件")
 ND_TEXT("Generating terrain, materials and collision", "正在生成地图、材质与碰撞")
+ND_TEXT("SCAD evaluation failed. Loading the baked map", "SCAD 求值失败，改为加载烘焙地图")
 ND_TEXT("Map ready. Joining the server", "地图就绪，正在加入 DS")
 ND_TEXT("Join map server", "连接地图服务器")
 ND_TEXT("Enter lobby", "进入大厅")

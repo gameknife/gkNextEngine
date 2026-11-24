@@ -54,6 +54,8 @@ let frame: Frame;
 let assets: Manifest;
 let actorAssets: ActorAssets;
 let loaded: Level | undefined;
+// Why the last in-browser SCAD evaluation gave way to the baked map (review only).
+let scadFallback: string | undefined;
 let world: World | undefined;
 let app: unknown;
 let phase = "";
@@ -175,19 +177,27 @@ async function prepare(scene: string) {
     element("loading-detail").textContent = tr("Reading the map manifest");
     progress.removeAttribute("value");
     try {
+        let generated: Level | undefined;
+        scadFallback = undefined;
         if (trainingScad && bundle.map.id === "training_ground") {
             element("loading-detail").textContent = tr("Reading SCAD sources");
-            const { loadScadLevel } = await import("./scadLevel");
-            loaded = await loadScadLevel(scene, () => {
-                element("loading-detail").textContent = tr("Generating terrain, materials and collision");
-            });
-        } else {
-            loaded = await loadLevel(bundle, (done, total) => {
-                progress.max = total;
-                progress.value = done;
-                element("loading-detail").textContent = tr("Downloading and checking assets · {} / {}", done, total);
-            });
+            try {
+                const { loadScadLevel } = await import("./scadLevel");
+                generated = await loadScadLevel(scene, () => {
+                    element("loading-detail").textContent = tr("Generating terrain, materials and collision");
+                });
+            } catch (error) {
+                // Evaluating in the browser is a trial (design D2); the baked map is always published.
+                scadFallback = error instanceof Error ? error.message : String(error);
+                console.warn(`SCAD evaluation failed, loading the baked map: ${scadFallback}`);
+                element("loading-detail").textContent = tr("SCAD evaluation failed. Loading the baked map");
+            }
         }
+        loaded = generated ?? await loadLevel(bundle, (done, total) => {
+            progress.max = total;
+            progress.value = done;
+            element("loading-detail").textContent = tr("Downloading and checking assets · {} / {}", done, total);
+        });
         (world ??= new World(element("viewport"), actorAssets, locked => {
             menu.hidden = locked;
             controls.hidden = !locked;
@@ -565,13 +575,15 @@ async function init() {
         if (reviewEnabled) Object.assign(window, {
             nextdayzReviewPlace: place,
             nextdayzReviewCrowd: (count: number) => command({ type: "reviewCrowd", count }),
+            // The level's anchor table, to hold an in-browser SCAD evaluation against the bake.
+            nextdayzReviewAnchors: () => loaded?.anchors,
         });
         Object.assign(window, {
             nextdayzReview: () => ({
                 frame: client.read(), profile: client.read("profile"), cargo: client.read("cargo"),
                 cacheHits: loaded?.cacheHits ?? 0, drawCalls: world?.drawCalls ?? 0, triangles: world?.triangles ?? 0,
                 workMs: [...work], wasmBytes: (app as { HEAPU8?: Uint8Array })?.HEAPU8?.length ?? 0,
-                scad: loaded?.scad,
+                scad: loaded?.scad, scadFallback,
             }),
             nextdayzLightPreview: (minutes?: number, mode = 0) => {
                 lightPreview = minutes === undefined ? undefined : client.previewClock(minutes, mode);

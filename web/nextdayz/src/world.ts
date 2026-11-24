@@ -3,7 +3,7 @@ import { CSM } from "three/addons/csm/CSM.js";
 import { Sky } from "three/addons/objects/Sky.js";
 import { dispose, type Level } from "./assets";
 import { Actors, GroundModels, ViewModel, type ActorAssets } from "./actors";
-import { matches, settings, type Binding } from "./settings";
+import { matches, settings, tr, type Binding } from "./settings";
 import { FieldEffects } from "./fieldEffects";
 import type { Clock, Frame, GroundItem, Presentation } from "./types";
 
@@ -47,7 +47,7 @@ export class World {
         renderer.outputColorSpace = THREE.SRGBColorSpace;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.shadowMap.type = THREE.PCFShadowMap;
-        renderer.domElement.setAttribute("aria-label", "地图视窗");
+        renderer.domElement.setAttribute("aria-label", tr("Game view"));
         renderer.domElement.tabIndex = 0;
         host.append(renderer.domElement);
         this.actors = new Actors(assets, scene);

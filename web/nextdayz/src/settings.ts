@@ -42,10 +42,18 @@ export function saveSettings() {
     document.documentElement.lang = settings.language;
 }
 
-export function text(zh: string, en: string) { return settings.language === "en" ? en : zh; }
+// UI text comes from the translation table baked from the desktop's UI/Translations.inl and
+// is keyed by its English source. `{}` placeholders are filled in order, as on desktop. Until
+// the table has loaded, the English source is shown.
+let translations: Record<string, string> = {};
+export function useTranslations(table: Record<string, string>) { translations = table; }
+export function tr(source: string, ...args: (string | number)[]) {
+    const translated = settings.language === "en" ? source : translations[source] || source;
+    return translated.split("{}").reduce((out, part, index) => out + (index ? String(args[index - 1] ?? "") : "") + part, "");
+}
 
 export function keyName(code: string) {
-    if (code === "Space") return text("空格", "Space");
+    if (code === "Space") return tr("Space");
     return code.replace(/^Key|^Digit/, "").replace(/Left$|Right$/, "");
 }
 
@@ -57,13 +65,13 @@ export function matches(binding: Binding, code: string) {
 
 export function translateBindings() {
     const names: Record<Binding, string> = {
-        forward: text("前进", "Forward"), back: text("后退", "Back"), left: text("左移", "Left"), right: text("右移", "Right"),
-        walk: text("慢走", "Walk"), sprint: text("冲刺", "Sprint"), jump: text("跳跃 / 翻越", "Jump / vault"),
-        freeLook: text("自由观察", "Free look"), crouch: text("蹲伏", "Crouch"), view: text("切换视角", "Camera"),
-        reload: text("换弹", "Reload"), slot1: text("主武器", "Primary"), slot2: text("副武器", "Secondary"),
-        slot3: text("手枪", "Sidearm"), previous: text("切回上一把", "Previous weapon"),
-        interact: text("交互", "Interact"), inventory: text("背包", "Inventory"), map: text("地图", "Map"),
-        extract: text("撤离", "Extract"),
+        forward: tr("Move forward"), back: tr("Move back"), left: tr("Move left"), right: tr("Move right"),
+        walk: tr("Walk"), sprint: tr("Sprint"), jump: tr("Jump / vault"),
+        freeLook: tr("Free look"), crouch: tr("Crouch"), view: tr("Toggle view"),
+        reload: tr("Reload"), slot1: tr("Primary"), slot2: tr("Secondary"),
+        slot3: tr("Sidearm"), previous: tr("Previous weapon"),
+        interact: tr("Interact"), inventory: tr("Inventory"), map: tr("Map"),
+        extract: tr("Extract"),
     };
     return names;
 }

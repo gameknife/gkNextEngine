@@ -30,7 +30,8 @@ const manifestUrl = new URL("manifest.json", root).href;
 
 async function fetchFile(url: string) {
     const response = await fetch(url);
-    if (!response.ok) throw new Error(`读取失败（HTTP ${response.status}） ${new URL(url).pathname}`);
+    if (!response.ok) // Runs in a worker, which has no translation table: the message stays English.
+    throw new Error(`Read failed (HTTP ${response.status}) ${new URL(url).pathname}`);
     return response;
 }
 

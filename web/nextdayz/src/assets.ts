@@ -4,6 +4,7 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import type { Anchor, AssetFile, Manifest, MapBundle, XYZ } from "./types";
 import type { LevelCollision } from "../shared/collision.mjs";
 import type { ScadLevelMetrics } from "./scadLevel";
+import { tr } from "./settings";
 
 export const assetURL = (path: string) => "/game-assets/" + path;
 const cacheKey = "nextdayz-map-assets-v1";
@@ -27,15 +28,15 @@ interface Environment { sun: { elevation: number }; profile: string }
 
 export async function manifest(): Promise<Manifest> {
     const response = await fetch(assetURL("manifest.json"), { cache: "no-store" });
-    if (!response.ok) throw Error("找不到 Web 资产清单，请先烘焙已发布地图");
+    if (!response.ok) throw Error(tr("The Web asset manifest is missing. Bake the published maps first."));
     return response.json();
 }
 
 async function verify(bytes: ArrayBuffer, file: AssetFile) {
-    if (bytes.byteLength !== file.bytes) throw Error(`资源长度不一致 · ${file.path}`);
+    if (bytes.byteLength !== file.bytes) throw Error(tr("Asset size mismatch · {}", file.path));
     const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
     const hash = Array.from(digest, value => value.toString(16).padStart(2, "0")).join("");
-    if (hash !== file.sha256) throw Error(`资源校验失败 · ${file.path}`);
+    if (hash !== file.sha256) throw Error(tr("Asset checksum failed · {}", file.path));
 }
 
 export class Assets {
@@ -57,7 +58,7 @@ export class Assets {
             }
         }
         const response = await fetch(path);
-        if (!response.ok) throw Error(`资源下载失败 · ${response.status} · ${file.path}`);
+        if (!response.ok) throw Error(tr("Asset download failed · {} · {}", response.status, file.path));
         const bytes = await response.arrayBuffer();
         await verify(bytes, file);
         if (cache) {
@@ -96,7 +97,7 @@ export async function loadLevel(bundle: MapBundle, progress: (done: number, tota
         cache.read(bundle.files["collision.bin"]), MeshoptDecoder.ready,
     ]);
     const spawn = anchors.anchors.find(anchor => anchor.type === "playerSafe")?.position;
-    if (!spawn) throw Error("地图缺少安全落点");
+    if (!spawn) throw Error(tr("The map has no safe spawn point"));
 
     const textures = Object.keys(bundle.files).filter(name => name.endsWith(".webp"));
     const images = new Map<string, string>();

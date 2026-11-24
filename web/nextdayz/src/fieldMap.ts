@@ -1,6 +1,6 @@
 import type { Level } from "./assets";
 import type { Frame, XYZ } from "./types";
-import { text } from "./settings";
+import { tr } from "./settings";
 
 export function drawFieldMap(canvas: HTMLCanvasElement, level: Level, frame: Frame, backdrop?: HTMLImageElement) {
     const ctx = canvas.getContext("2d");
@@ -47,8 +47,8 @@ export function drawFieldMap(canvas: HTMLCanvasElement, level: Level, frame: Fra
     };
     for (const anchor of level.anchors) {
         if (anchor.type === "poi") marker(anchor.position, "#e7ddaa", anchor.label);
-        if (anchor.type === "well") marker(anchor.position, "#7bd4dc", anchor.label || text("水源", "Water"));
-        if (anchor.type === "extraction") marker(anchor.position, "#bade8e", anchor.label || text("撤离", "Extraction"), 6);
+        if (anchor.type === "well") marker(anchor.position, "#7bd4dc", anchor.label || tr("Water"));
+        if (anchor.type === "extraction") marker(anchor.position, "#bade8e", anchor.label || tr("Extraction"), 6);
     }
     const [px, py] = point(frame.feet);
     ctx.save();
@@ -65,14 +65,14 @@ export function drawFieldMap(canvas: HTMLCanvasElement, level: Level, frame: Fra
     ctx.fill();
     ctx.restore();
     ctx.fillStyle = "#e4ebd8";
-    ctx.fillText(text("北 ↑", "N ↑"), 20, 29);
+    ctx.fillText(tr("N ↑"), 20, 29);
     ctx.fillRect(18, height - 28, 100 * scale, 2);
     ctx.fillText("100 m", 18, height - 34);
 }
 
 export function compass(yaw: number) {
     const heading = ((180 - yaw * 180 / Math.PI) % 360 + 360) % 360;
-    const labels = text("北 东北 东 东南 南 西南 西 西北", "N NE E SE S SW W NW").split(" ");
+    const labels = tr("N NE E SE S SW W NW").split(" ");
     const index = Math.round(heading / 45);
     return { heading: Math.round(heading) % 360, label: labels[index % 8],
         left: labels[(index + 7) % 8], right: labels[(index + 1) % 8] };

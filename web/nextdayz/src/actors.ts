@@ -3,6 +3,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import type { Client } from "../shared/client.mjs";
 import { Assets, assetURL } from "./assets";
+import { tr } from "./settings";
 import type { AssetFile, Frame, GroundItem, Manifest, Mount, Pose, XYZ } from "./types";
 
 interface Part {
@@ -63,7 +64,7 @@ export async function loadActors(manifest: Manifest) {
     const cache = new Assets();
     const load = (name: string) => {
         const entry = manifest.rigs?.[name];
-        if (!entry) throw Error("缺少角色资产，请先运行 gnb web bake --rigs");
+        if (!entry) throw Error(tr("Character assets are missing. Run gnb web bake --rigs first."));
         return readRig(name, entry.files, cache);
     };
     const [survivor, infected, clothes, weapon, hands, mounts, ground] = await Promise.all([

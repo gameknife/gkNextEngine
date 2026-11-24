@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { dispose, type Level } from "./assets";
 import type { LevelWorkerMessage } from "./scadLevel.worker";
 import type { Anchor, XYZ } from "./types";
+import { tr } from "./settings";
 import type { GeneratedCollision, WordRange } from "../shared/collision.mjs";
 
 interface TextureIndex {
@@ -176,7 +177,7 @@ export async function loadScadLevel(scene: string, onEvaluate: () => void): Prom
             worker.postMessage(scene);
         });
         const spawn = index.anchors.find(anchor => anchor.type === "playerSafe")?.position;
-        if (!spawn) throw Error("地图缺少安全落点");
+        if (!spawn) throw Error(tr("The map has no safe spawn point"));
         const group = buildScene(packet, index);
         metrics.prepareMs = performance.now() - start;
         return {

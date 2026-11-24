@@ -1,4 +1,4 @@
-import { bindings, keyName, saveSettings, settings, text, translateBindings, type Binding } from "./settings";
+import { bindings, keyName, saveSettings, settings, tr, translateBindings, type Binding } from "./settings";
 
 export function renderOptions(panel: HTMLElement, changed: () => void) {
     const general = document.createElement("div");
@@ -25,12 +25,12 @@ export function renderOptions(panel: HTMLElement, changed: () => void) {
         node.addEventListener("change", changed);
         return node;
     };
-    entry(text("语言", "Language"), select([["zh-CN", "简体中文"], ["en", "English"]], settings.language,
+    entry(tr("Language"), select([["zh-CN", "简体中文"], ["en", "English"]], settings.language,
         value => { settings.language = value === "en" ? "en" : "zh-CN"; }));
-    entry(text("画质", "Graphics"), select([["balanced", text("均衡", "Balanced")], ["shadows", text("级联阴影", "Cascaded shadows")]],
+    entry(tr("Graphics"), select([["balanced", tr("Balanced")], ["shadows", tr("Cascaded shadows")]],
         settings.quality, value => { settings.quality = value === "shadows" ? "shadows" : "balanced"; }));
-    entry(text("鼠标灵敏度", "Mouse sensitivity"), slider(settings.sensitivity, .15, 3, value => { settings.sensitivity = value; }));
-    entry(text("音量", "Volume"), slider(settings.volume, 0, 1, value => { settings.volume = value; }));
+    entry(tr("Mouse sensitivity"), slider(settings.sensitivity, .15, 3, value => { settings.sensitivity = value; }));
+    entry(tr("Volume"), slider(settings.volume, 0, 1, value => { settings.volume = value; }));
 
     const keys = document.createElement("div");
     keys.className = "key-bindings";
@@ -46,7 +46,7 @@ export function renderOptions(panel: HTMLElement, changed: () => void) {
         button.setAttribute("aria-label", names[key]);
         button.addEventListener("click", () => {
             button.dataset.waiting = "yes";
-            button.textContent = text("按下新键", "Press a key");
+            button.textContent = tr("Press a key");
         });
         button.addEventListener("blur", () => {
             delete button.dataset.waiting;
@@ -70,7 +70,7 @@ export function renderOptions(panel: HTMLElement, changed: () => void) {
     const reset = document.createElement("button");
     reset.type = "button";
     reset.className = "quiet";
-    reset.textContent = text("恢复默认键位", "Reset key bindings");
+    reset.textContent = tr("Reset key bindings");
     reset.addEventListener("click", () => { settings.keys = { ...bindings }; changed(); });
     panel.replaceChildren(general, keys, reset);
 }

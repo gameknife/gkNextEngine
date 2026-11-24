@@ -7,7 +7,7 @@ import { FieldAudio } from "./audio";
 import { compass, drawFieldMap } from "./fieldMap";
 import { Pack } from "./pack";
 import { renderOptions } from "./optionsPanel";
-import { keyName, matches, saveSettings, settings, text, type Binding } from "./settings";
+import { keyName, matches, saveSettings, settings, tr, useTranslations, type Binding } from "./settings";
 import type { Clock, Frame, Loot, Manifest, Profile, XYZ } from "./types";
 
 function element<T extends HTMLElement>(id: string): T {
@@ -49,7 +49,6 @@ const hitMarker = element("hit-marker");
 const reviewEnabled = import.meta.env.DEV && import.meta.env.VITE_ND_REVIEW === "1";
 const trainingScad = import.meta.env.DEV && import.meta.env.VITE_ND_SCAD_TRAINING === "1";
 const deployButton = element<HTMLButtonElement>("deploy");
-const weather = { Clear: ["晴朗", "Clear"], Overcast: ["阴天", "Overcast"], Fog: ["雾天", "Fog"] } as const;
 let client: Client;
 let frame: Frame;
 let assets: Manifest;
@@ -68,19 +67,17 @@ let lightPreview: Clock | undefined;
 let nearby: Loot | null = null;
 let inventoryPanel: Pack;
 let audio: FieldAudio;
-let translations: Record<string, string> = {};
 let mapImage: HTMLImageElement | undefined;
 let groundAt = 0;
 const hotkey = (binding: Binding) => keyName(settings.keys[binding]);
-const itemName = (source: string) => settings.language === "en" ? source : translations[source] || source;
+const itemName = (source: string) => tr(source);
+// Map names come from the map registry, which carries the Chinese name beside the English one.
+const mapTitle = (map: { name: string; localName?: string }) => settings.language === "en" ? map.name : map.localName || map.name;
 const bring: HTMLInputElement[] = [];
 
 function state(message: string) {
     const translated = itemName(message);
     notice.textContent = translated;
-    if (message === "Web client version changed. Refresh the page before deploying.") {
-        notice.textContent = text("Web 客户端已更新，请刷新页面后再出击。", message);
-    }
     const local = element("pack-notice");
     local.hidden = !translated;
     local.textContent = translated;
@@ -94,19 +91,19 @@ function updateBring() {
         input.value = String(count);
         total += count;
     }
-    element("bring-count").textContent = total ? text(`带出 ${total} 件`, `Bringing ${total} items`) : "";
+    element("bring-count").textContent = total ? tr("Bringing {} items", total) : "";
 }
 
 function showProfile(data: Profile) {
     profile = data;
     element("profile-name").textContent = profile.name;
-    element("profile-activity").textContent = text(`出击 ${profile.sorties} · 撤离 ${profile.extractions} · 死亡 ${profile.deaths}`, `Sorties ${profile.sorties} · Extractions ${profile.extractions} · Deaths ${profile.deaths}`);
+    element("profile-activity").textContent = tr("Sorties {} · Extractions {} · Deaths {}", profile.sorties, profile.extractions, profile.deaths);
     storage.replaceChildren();
     bring.length = 0;
     const catalog = assets.shared?.files ?? {};
     if (!profile.storage.length) {
         const empty = document.createElement("p");
-        empty.textContent = text("仓库暂无物品", "Storage is empty");
+        empty.textContent = tr("Storage is empty");
         storage.append(empty);
     }
     for (const item of profile.storage) {
@@ -125,7 +122,7 @@ function showProfile(data: Profile) {
         const name = document.createElement("span");
         name.textContent = itemName(item.name);
         const count = document.createElement("small");
-        count.textContent = text(`库存 ${item.count}`, `Stored ${item.count}`);
+        count.textContent = tr("Stored {}", item.count);
         label.append(name, count);
         if (item.description) label.title = itemName(item.description);
         const input = document.createElement("input");
@@ -134,7 +131,7 @@ function showProfile(data: Profile) {
         input.max = String(item.count);
         input.value = "0";
         input.disabled = Boolean(profile.character);
-        input.setAttribute("aria-label", text(`带出 ${itemName(item.name)} 的数量`, `Quantity to bring for ${item.name}`));
+        input.setAttribute("aria-label", tr("Quantity to bring for {}", itemName(item.name)));
         input.addEventListener("change", updateBring);
         bring.push(input);
         row.append(icon, label, input);
@@ -153,42 +150,42 @@ function showProfile(data: Profile) {
         radio.checked = !radio.disabled && !selected;
         selected ||= radio.checked;
         const title = document.createElement("span");
-        title.textContent = text(entry?.map.localName || map.name, map.name);
+        title.textContent = entry ? mapTitle(entry.map) : map.name;
         const subtitle = document.createElement("small");
-        subtitle.textContent = entry ? `${map.name} · v${entry.map.mapVersion}` : text("Web 地图资产待发布", "Web assets pending");
+        subtitle.textContent = entry ? `${map.name} · v${entry.map.mapVersion}` : tr("Web assets pending");
         title.append(subtitle);
         label.append(radio, title);
         maps.append(label);
     }
     deployButton.disabled = !selected || Boolean(profile.playing);
-    deployButton.textContent = profile.character ? text("回到野外", "Resume expedition") : text("出击", "Deploy");
+    deployButton.textContent = profile.character ? tr("Resume expedition") : tr("Deploy");
     element("carry-hint").textContent = profile.playing
-        ? text("幸存者仍由 DS 保管，正在刷新状态", "The map server is saving your survivor")
-        : profile.character ? text("当前幸存者将带着原有装备返回地图", "Resume with your current equipment")
-            : text("按需从仓库选择带出数量", "Choose what to bring from storage");
+        ? tr("The map server is saving your survivor")
+        : profile.character ? tr("Resume with your current equipment")
+            : tr("Choose what to bring from storage");
     updateBring();
 }
 
 async function prepare(scene: string) {
     const bundle = Object.values(assets.maps).find(entry => entry.map.scene === scene);
-    if (!bundle) throw Error(text("这张地图的 Web 资产尚未发布", "Web assets for this map are missing"));
+    if (!bundle) throw Error(tr("Web assets for this map are missing"));
     mapLoading = true;
-    const title = text(bundle.map.localName || bundle.map.name, bundle.map.name);
+    const title = mapTitle(bundle.map);
     element("loading-title").textContent = title;
-    element("loading-detail").textContent = text("正在读取地图清单", "Reading the map manifest");
+    element("loading-detail").textContent = tr("Reading the map manifest");
     progress.removeAttribute("value");
     try {
         if (trainingScad && bundle.map.id === "training_ground") {
-            element("loading-detail").textContent = text("正在读取 SCAD 源文件", "Reading SCAD sources");
+            element("loading-detail").textContent = tr("Reading SCAD sources");
             const { loadScadLevel } = await import("./scadLevel");
             loaded = await loadScadLevel(scene, () => {
-                element("loading-detail").textContent = text("正在生成地图、材质与碰撞", "Generating terrain, materials and collision");
+                element("loading-detail").textContent = tr("Generating terrain, materials and collision");
             });
         } else {
             loaded = await loadLevel(bundle, (done, total) => {
                 progress.max = total;
                 progress.value = done;
-                element("loading-detail").textContent = text(`正在下载并验证资源 · ${done} / ${total}`, `Downloading and checking assets · ${done} / ${total}`);
+                element("loading-detail").textContent = tr("Downloading and checking assets · {} / {}", done, total);
             });
         }
         (world ??= new World(element("viewport"), actorAssets, locked => {
@@ -203,7 +200,7 @@ async function prepare(scene: string) {
         })).setLevel(loaded);
         world.setQuality(settings.quality);
         mapImage = undefined;
-        element("loading-detail").textContent = text("地图就绪，正在加入 DS", "Map ready. Joining the server");
+        element("loading-detail").textContent = tr("Map ready. Joining the server");
         const sites = loaded.anchors.filter(anchor => anchor.type === "well" || anchor.type === "extraction");
         return { spawn: loaded.spawn, collision: loaded.collision, sites };
     } finally {
@@ -246,7 +243,7 @@ server.addEventListener("change", () => {
     const showPassword = server.value === "master";
     password.hidden = element("password-label").hidden = !showPassword;
     password.required = showPassword && passwordRequired;
-    loginButton.textContent = server.value === "direct" ? text("连接地图服务器", "Join map server") : text("进入大厅", "Enter lobby");
+    loginButton.textContent = server.value === "direct" ? tr("Join map server") : tr("Enter lobby");
 });
 element("logout").addEventListener("click", () => {
     state("");
@@ -294,38 +291,18 @@ function showMap(show: boolean) {
 
 function localize() {
     saveSettings();
-    element("network-label").textContent = phase === "playing" ? text("已连接 · WebRTC", "Connected · WebRTC") :
-        phase === "profile" ? text("Master 已登录", "Signed into Master") : text("NextDayz 联机", "NextDayz online");
-    const copies: Record<string, [string, string]> = {
-        "settings-button": ["设置", "Settings"], "settings-title": ["设置", "Settings"],
-        "close-settings": ["关闭", "Close"], "capture": ["进入操控", "Take control"],
-        "pack-button": ["随身装备", "Inventory"], "pack-title": ["随身装备", "Inventory"], "close-pack": ["关闭", "Close"],
-        "map-button": ["地图", "Map"], "map-title": ["行动地图", "Field map"], "close-map": ["关闭", "Close"],
-        "course": ["前往障碍场", "Go to obstacle course"], "range": ["前往靶场", "Go to firing range"],
-        "pen": ["前往感染者围栏", "Go to infected pen"], "spawn": ["幸存者视角", "Survivor view"],
-        "overview": ["俯瞰地图", "Overview"], "detail": ["核心区", "Central area"],
-        "leave": ["返回大厅", "Return to lobby"], "logout": ["切换幸存者", "Switch survivor"],
-        "death-title": ["幸存者已死亡", "Survivor died"], "respawn": ["返回大厅并重新出击", "Return and deploy again"],
-        "map-legend": ["浅蓝 当前位置 · 绿色 撤离点 · 蓝色 水源", "Light blue: you · Green: extraction · Blue: water"],
-    };
-    for (const [id, pair] of Object.entries(copies)) element(id).textContent = text(...pair);
-    element("lobby-title").textContent = text("联机大厅", "Multiplayer lobby");
-    element("name-label").textContent = text("幸存者昵称", "Survivor name");
-    element("password-label").textContent = text("账号口令", "Account password");
-    element("server-label").textContent = text("服务器", "Server");
-    server.options[0].text = text("当前服务器", "Current server");
-    server.options[1].text = text("开发直连", "Direct connection");
-    element("storage-title").textContent = text("仓库", "Storage");
-    element("deploy-title").textContent = text("出击地图", "Deployment map");
+    element("network-label").textContent = phase === "playing" ? tr("Connected · WebRTC") :
+        phase === "profile" ? tr("Signed into Master") : tr("NextDayz online");
+    // Static text in index.html carries its English key in data-i18n / data-i18n-label.
+    document.title = tr("NextDayz · Multiplayer lobby");
+    for (const node of document.querySelectorAll<HTMLElement>("[data-i18n]")) node.textContent = tr(node.dataset.i18n ?? "");
+    for (const node of document.querySelectorAll<HTMLElement>("[data-i18n-label]"))
+        node.setAttribute("aria-label", tr(node.dataset.i18nLabel ?? ""));
     server.dispatchEvent(new Event("change"));
-    const quality = element<HTMLSelectElement>("quality");
-    quality.options[0].text = text("均衡", "Balanced");
-    quality.options[1].text = text("级联阴影", "Cascaded shadows");
-    quality.value = settings.quality;
-    quality.setAttribute("aria-label", text("画质", "Graphics"));
-    controls.textContent = text(
-        `${hotkey("forward")}${hotkey("left")}${hotkey("back")}${hotkey("right")} 移动 · 左键 开火 · 右键 瞄准 · ${hotkey("reload")} 换弹 · ${hotkey("jump")} 跳跃 / 翻越 · ${hotkey("inventory")} 背包 · ${hotkey("map")} 地图 · Esc 菜单`,
-        `${hotkey("forward")}${hotkey("left")}${hotkey("back")}${hotkey("right")} Move · LMB Fire · RMB Aim · ${hotkey("reload")} Reload · ${hotkey("jump")} Jump / vault · ${hotkey("inventory")} Inventory · ${hotkey("map")} Map · Esc Menu`);
+    element<HTMLSelectElement>("quality").value = settings.quality;
+    controls.textContent = tr("{}{}{}{} Move · LMB Fire · RMB Aim · {} Reload · {} Jump / vault · {} Inventory · {} Map · Esc Menu",
+        hotkey("forward"), hotkey("left"), hotkey("back"), hotkey("right"), hotkey("reload"), hotkey("jump"),
+        hotkey("inventory"), hotkey("map"));
 }
 
 function applySettings() {
@@ -410,21 +387,21 @@ function updateField() {
     e.textContent = c.right;
     direction.replaceChildren(w, m, e);
     const { combat, body } = frame;
-    element("weapon-name").textContent = itemName(combat.weapon) || text("徒手", "Unarmed");
+    element("weapon-name").textContent = itemName(combat.weapon) || tr("Unarmed");
     element("ammo").textContent = combat.capacity ? `${combat.magazine} / ${combat.reserve}` : "";
-    const action = [[], ["换弹", "Reloading"], ["切换武器", "Switching"], ["近战", "Melee"]][combat.action];
-    element("weapon-action").textContent = action?.length ? `${text(action[0], action[1])} ${Math.round(combat.progress * 100)}%` : "";
+    const action = ["", "Reloading", "Switching", "Melee"][combat.action];
+    element("weapon-action").textContent = action ? `${tr(action)} ${Math.round(combat.progress * 100)}%` : "";
     hitMarker.hidden = !combat.hitMarker;
     hitMarker.classList.toggle("head", combat.headshot);
     hitMarker.classList.toggle("kill", combat.kill);
     element("damage-hud").style.opacity = String(combat.hurt * .9);
-    element("pvp-status").textContent = frame.pvp ? text("友伤开启", "Friendly fire on") : text("友伤关闭", "Friendly fire off");
+    element("pvp-status").textContent = frame.pvp ? tr("Friendly fire on") : tr("Friendly fire off");
     deathPanel.hidden = frame.alive;
     if (!frame.alive) {
         world?.release();
         showPack(false);
         showMap(false);
-        element("death-detail").textContent = itemName(body.cause) || text("可以返回大厅重新派遣。", "Return to the lobby to redeploy.");
+        element("death-detail").textContent = itemName(body.cause) || tr("Return to the lobby to redeploy.");
     }
 }
 
@@ -440,16 +417,16 @@ function refresh(timestamp: number) {
         loading.hidden = !["waiting", "deploying", "joining"].includes(phase);
         if (phase === "profile") showProfile(client.read("profile"));
         if (phase === "waiting" || phase === "deploying") {
-            element("loading-title").textContent = phase === "deploying" ? text("正在派遣", "Deploying") : profile ? text("正在联系 Master", "Contacting Master") : text("正在登录", "Signing in");
-            element("loading-detail").textContent = phase === "deploying" ? text("正在等待地图服务器就绪", "Waiting for map server") : text("正在同步幸存者档案", "Syncing survivor profile");
+            element("loading-title").textContent = phase === "deploying" ? tr("Deploying") : profile ? tr("Contacting Master") : tr("Signing in");
+            element("loading-detail").textContent = phase === "deploying" ? tr("Waiting for map server") : tr("Syncing survivor profile");
             progress.removeAttribute("value");
         }
         if (phase === "joining" && !mapLoading) {
-            element("loading-title").textContent = text("正在加入地图服务器", "Joining map server");
-            element("loading-detail").textContent = text("正在建立 WebRTC 连接", "Connecting WebRTC");
+            element("loading-title").textContent = tr("Joining map server");
+            element("loading-detail").textContent = tr("Connecting WebRTC");
         }
-        element("network-label").textContent = playing ? text("已连接 · WebRTC", "Connected · WebRTC")
-            : phase === "profile" ? text("Master 已登录", "Signed into Master") : text("NextDayz 联机", "NextDayz online");
+        element("network-label").textContent = playing ? tr("Connected · WebRTC")
+            : phase === "profile" ? tr("Signed into Master") : tr("NextDayz online");
     }
     if (playing && world && loaded) {
         if (!viewShown) {
@@ -458,21 +435,19 @@ function refresh(timestamp: number) {
             viewShown = true;
         }
         const bundle = Object.values(assets.maps).find(entry => entry.map.scene === frame.scene);
-        element("map-name").textContent = bundle ? `${text(bundle.map.localName || bundle.map.name, bundle.map.name)} · v${bundle.map.mapVersion}` : frame.scene;
+        element("map-name").textContent = bundle ? `${mapTitle(bundle.map)} · v${bundle.map.mapVersion}` : frame.scene;
         course.hidden = range.hidden = pen.hidden = !reviewEnabled || bundle?.map.id !== "training_ground" || !frame.alive;
         const { health, hunger, hydration, bleeding, cold } = frame.body;
-        const conditions = [bleeding ? text(`流血 ${bleeding}`, `Bleeding ${bleeding}`) : "",
-            cold > .55 ? text("寒冷", "Cold") : ""].filter(Boolean);
-        element("vitals").textContent = text(
-            `生命 ${Math.ceil(health)} · 饱食 ${Math.ceil(hunger)} · 水分 ${Math.ceil(hydration)}`,
-            `HP ${Math.ceil(health)} · Food ${Math.ceil(hunger)} · Water ${Math.ceil(hydration)}`) +
+        const conditions = [bleeding ? tr("Bleeding {}", bleeding) : "",
+            cold > .55 ? tr("Cold") : ""].filter(Boolean);
+        element("vitals").textContent = tr("HP {} · Food {} · Water {}", Math.ceil(health), Math.ceil(hunger), Math.ceil(hydration)) +
             (conditions.length ? " · " + conditions.join(" · ") : "");
         nearby = frame.alive ? client.read("nearby") : null;
         const verb = hotkey("interact");
-        const hint = frame.extractSeconds > 0 ? text(`撤离中 · ${frame.extractSeconds.toFixed(1)} 秒`, `Extracting · ${frame.extractSeconds.toFixed(1)} s`)
-            : frame.nearExtraction && world.locked ? text(`${hotkey("extract")} 开始撤离`, `${hotkey("extract")} Extract`)
-            : nearby && world.locked ? text(`${verb} 拾取`, `${verb} Take`) + " · " + nearby.contents.slice(0, 3).map(item => itemName(item.name)).join(text("、", ", "))
-            : frame.nearWell && world.locked ? text(`${verb} 喝井水`, `${verb} Drink from well`) : "";
+        const hint = frame.extractSeconds > 0 ? tr("Extracting · {} s", frame.extractSeconds.toFixed(1))
+            : frame.nearExtraction && world.locked ? tr("{} Extract", hotkey("extract"))
+            : nearby && world.locked ? tr("{} Take", verb) + " · " + nearby.contents.slice(0, 3).map(item => itemName(item.name)).join(tr(", "))
+            : frame.nearWell && world.locked ? tr("{} Drink from well", verb) : "";
         fieldHint.hidden = !hint || !frame.alive;
         fieldHint.textContent = hint;
         if (!pack.hidden) inventoryPanel.refresh(client.read("cargo"), nearby);
@@ -486,10 +461,10 @@ function refresh(timestamp: number) {
         const clock = lightPreview ?? frame.clock;
         const minutes = Math.floor(clock.minutes % 1440);
         const time = [Math.floor(minutes / 60), minutes % 60].map(value => String(value).padStart(2, "0")).join(":");
-        element("world-clock").textContent = `${time} · ${text(weather[clock.weather][0], weather[clock.weather][1])}${lightPreview ? text(" · 光照对照", " · Lighting preview") : ""}`;
-        const peers = frame.remotes.map(remote => `#${remote.id}`).join("、");
-        element("identity").textContent = text(`幸存者 #${frame.id}${peers ? ` · 同服 ${peers}` : ""}`, `Survivor #${frame.id}${peers ? ` · Online ${peers}` : ""}`);
-        element("sync").textContent = text(`快照 ${frame.snapshots.toLocaleString()} · 物资 ${frame.lootReady ? frame.lootCount : "同步中"}`, `Snapshots ${frame.snapshots.toLocaleString()} · Loot ${frame.lootReady ? frame.lootCount : "syncing"}`);
+        element("world-clock").textContent = `${time} · ${tr(clock.weather)}${lightPreview ? tr(" · Lighting preview") : ""}`;
+        const peers = frame.remotes.map(remote => `#${remote.id}`).join(tr(", "));
+        element("identity").textContent = tr("Survivor #{}", frame.id) + (peers ? tr(" · Online {}", peers) : "");
+        element("sync").textContent = tr("Snapshots {} · Loot {}", frame.snapshots.toLocaleString(), frame.lootReady ? frame.lootCount : tr("syncing"));
     } else if (viewShown) {
         world?.leave();
         audio.stop();
@@ -511,13 +486,13 @@ function refresh(timestamp: number) {
 async function init() {
     account.value = localStorage.getItem("nextdayz.survivor") ?? "";
     if (!globalThis.isSecureContext) {
-        throw Error(text("请通过 HTTPS 打开此游戏。", "Open this game over HTTPS."));
+        throw Error(tr("Open this game over HTTPS."));
     }
     if (packaged) {
         const response = await fetch("/api/web/manifest", { cache: "no-store" });
-        if (!response.ok) throw Error(text("无法读取服务器版本。", "Cannot read the server version."));
+        if (!response.ok) throw Error(tr("Cannot read the server version."));
         const release = await response.json();
-        if (release.build !== pageBuild) throw Error("Web client version changed. Refresh the page before deploying.");
+        if (release.build !== pageBuild) throw Error(tr("Web client version changed. Refresh the page before deploying."));
         passwordRequired = release.passwordRequired;
         server.hidden = element("server-label").hidden = true;
     }
@@ -527,13 +502,15 @@ async function init() {
     const shared = assets.shared?.files ?? {};
     audio = new FieldAudio(shared);
     const locale = shared["i18n/zh-CN.json"];
-    [app, actorAssets, translations] = await Promise.all([
+    let table: Record<string, string>;
+    [app, actorAssets, table] = await Promise.all([
         core.default(), loadActors(assets), locale ? new Assets().json<Record<string, string>>(locale) : {},
     ]);
+    useTranslations(table);
     inventoryPanel = new Pack(items, shared, command, itemName);
     localize();
     session();
-    if (client.protocol !== assets.protocol) throw Error("Web 地图和内核的协议版本不一致，请重新烘焙");
+    if (client.protocol !== assets.protocol) throw Error(tr("The Web maps and the kernel use different protocol versions. Bake again."));
     loginButton.disabled = false;
 
     let hiddenAt: number | undefined;

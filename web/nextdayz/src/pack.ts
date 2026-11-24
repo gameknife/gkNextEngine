@@ -1,5 +1,5 @@
 import { assetURL } from "./assets";
-import { text } from "./settings";
+import { settings, tr } from "./settings";
 import type { AssetFile, Cargo, CargoBox, CargoItem, Item, Loot } from "./types";
 
 type Command = (input: Record<string, unknown>) => void;
@@ -34,7 +34,7 @@ export class Pack {
         this.cargo = cargo;
         this.ground = ground;
         if (this.dragging || this.groundDrag) return;
-        const key = JSON.stringify([text("zh", "en"), this.selected, this.rotated, cargo, ground]);
+        const key = JSON.stringify([settings.language, this.selected, this.rotated, cargo, ground]);
         if (key === this.current) return;
         this.current = key;
         this.draw();
@@ -170,7 +170,7 @@ export class Pack {
         this.details.replaceChildren();
         const item = this.cargo?.items.find(row => row.instance === this.selected);
         if (!item) {
-            this.details.textContent = text("选择物品查看详情。拖到空格移动，R 旋转。", "Select an item for details. Drag to place it, R to rotate.");
+            this.details.textContent = tr("Select an item for details. Drag to place it, R to rotate.");
             return;
         }
         const heading = document.createElement("h3");
@@ -181,22 +181,22 @@ export class Pack {
         const actions = document.createElement("div");
         actions.className = "pack-actions";
         const run = (type: string, extra: Record<string, unknown> = {}) => this.send({ type, instance: item.instance, ...extra });
-        if (item.wearable) actions.append(button(item.worn ? text("卸下", "Unequip") : text("装备", "Equip"),
+        if (item.wearable) actions.append(button(item.worn ? tr("Unequip") : tr("Equip"),
             () => run(item.worn ? "unequip" : "equip")));
-        if (item.usable) actions.append(button(text("使用", "Use"), () => run("use")));
-        actions.append(button(text("旋转", "Rotate") + (this.rotated ? " ↻" : ""), () => this.rotate()));
-        if (item.count > 1) actions.append(button(text("拆分一半", "Split in half"),
+        if (item.usable) actions.append(button(tr("Use"), () => run("use")));
+        actions.append(button(tr("Rotate") + (this.rotated ? " ↻" : ""), () => this.rotate()));
+        if (item.count > 1) actions.append(button(tr("Split in half"),
             () => this.change("split", item.instance, { count: Math.floor(item.count / 2) })));
-        actions.append(button(text("丢弃", "Drop"), () => run("drop")));
+        actions.append(button(tr("Drop"), () => run("drop")));
         this.details.append(actions);
         if (item.wieldable) {
             item.attachments.forEach((type, slot) => {
-                if (type) this.details.append(button(text("卸下", "Detach") + " " + this.name(attachNames[type] ?? ""),
+                if (type) this.details.append(button(tr("Detach") + " " + this.name(attachNames[type] ?? ""),
                     () => this.change("detach", item.instance, { slot })));
             });
         } else if (item.attachable) {
             for (const weapon of this.cargo?.items.filter(row => row.wieldable) ?? []) {
-                this.details.append(button(text("安装到", "Mount on") + " " + this.name(weapon.name),
+                this.details.append(button(tr("Mount on") + " " + this.name(weapon.name),
                     () => this.change("attach", item.instance, { target: weapon.instance })));
             }
         }
@@ -206,11 +206,11 @@ export class Pack {
         const cargo = this.cargo;
         if (!cargo) return;
         if (!cargo.items.some(item => item.instance === this.selected)) this.selected = 0;
-        const wear = this.section(text("装备槽", "Equipment"));
+        const wear = this.section(tr("Equipment"));
         const equipment = [
-            [1, text("头部", "Head")], [2, text("上衣", "Torso")], [3, text("背心", "Vest")],
-            [4, text("腿部", "Legs")], [5, text("背包", "Back")],
-            [6, text("主武器", "Primary")], [7, text("副武器", "Secondary")], [9, text("手枪", "Sidearm")],
+            [1, tr("Head")], [2, tr("Torso")], [3, tr("Vest")],
+            [4, tr("Legs")], [5, tr("Backpack")],
+            [6, tr("Primary")], [7, tr("Secondary")], [9, tr("Sidearm")],
         ] as const;
         const rack = document.createElement("div");
         rack.className = "equip-rack";
@@ -224,7 +224,7 @@ export class Pack {
             name.textContent = label;
             pocket.append(name);
             if (item) pocket.append(this.tile(item, true));
-            else pocket.append(button(text("空", "Empty")));
+            else pocket.append(button(tr("Empty")));
             pocket.addEventListener("dragover", event => event.preventDefault());
             pocket.addEventListener("drop", event => {
                 event.preventDefault();
@@ -239,7 +239,7 @@ export class Pack {
             rack.append(pocket);
         }
         wear.append(rack);
-        const ground = this.section(text("附近物资", "Nearby loot"));
+        const ground = this.section(tr("Nearby loot"));
         if (this.ground) {
             for (const item of this.ground.contents) {
                 const row = document.createElement("p");
@@ -247,7 +247,7 @@ export class Pack {
                 ground.append(row);
             }
             const id = this.ground.id;
-            const take = button(text("拾取", "Take"), () => this.send({ type: "take", id }));
+            const take = button(tr("Take"), () => this.send({ type: "take", id }));
             take.draggable = true;
             take.addEventListener("dragstart", event => {
                 this.groundDrag = id;
@@ -255,7 +255,7 @@ export class Pack {
             });
             take.addEventListener("dragend", () => { this.groundDrag = ""; this.invalidate(); });
             ground.append(take);
-        } else ground.append(document.createTextNode(text("附近没有可拾取的物资", "Nothing within reach")));
+        } else ground.append(document.createTextNode(tr("Nothing within reach")));
         const containers = document.createElement("div");
         containers.className = "cargo-containers";
         for (const box of cargo.containers) containers.append(this.grid(box, cargo));

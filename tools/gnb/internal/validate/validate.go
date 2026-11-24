@@ -143,6 +143,7 @@ func run(ctx context.Context, o Options, s Script, scriptData []byte, loadErr er
 	if o.Scene == "" {
 		o.Scene = s.Scene
 	}
+	o.Scene = resolveFixtureScene(o.RepoRoot, o.Scene)
 	if o.Width == 0 {
 		o.Width = s.Viewport.Width
 	}
@@ -688,6 +689,9 @@ func execute(ctx context.Context, c *client, st map[string]any, s Script, o Opti
 	case "key", "text", "mouse-move", "mouse-button", "click", "drag", "scroll":
 		p := clone(st)
 		delete(p, "type")
+		if er := resolveTargets(c, p); er != nil {
+			return e, er
+		}
 		normalizePoints(p, o.Width, o.Height)
 		_, er := c.call(typ, p)
 		return e, er
@@ -827,6 +831,21 @@ func errorsIsContext(ctx context.Context) bool {
 	return ctx != nil && ctx.Err() != nil
 }
 
+// Test fixtures live beside the scripts in assets/agentscripts, which is not one of the
+// runtime asset folders the build copies (assets/cmake/RuntimeAssets.cmake). Hand the game
+// their path in the repository instead.
+func resolveFixtureScene(repoRoot, scene string) string {
+	if repoRoot == "" || scene == "" || filepath.IsAbs(scene) ||
+		!strings.HasPrefix(filepath.ToSlash(scene), "assets/agentscripts/") {
+		return scene
+	}
+	path := filepath.Join(repoRoot, filepath.FromSlash(scene))
+	if _, err := os.Stat(path); err != nil {
+		return scene
+	}
+	return filepath.ToSlash(path)
+}
+
 func query(c *client, q string) (any, error) { return c.call("query", map[string]any{"query": q}) }
 func poll(d time.Duration, f func() (bool, error)) error {
 	return pollContext(context.Background(), d, f)
@@ -873,6 +892,59 @@ func compare(a any, op string, b any) bool {
 	}
 	return false
 }
+// resolveTargets turns a named point, {"target": "cell:1:0:0"}, into a normalized one
+// using the game's own list of named targets ("name=x,y,visible;", x/y in 0..1). The
+// list comes from game.inventoryTargets unless the point names another "query".
+func resolveTargets(c *client, p map[string]any) error {
+	for _, k := range []string{"to", "at", "from"} {
+		v, ok := p[k].(map[string]any)
+		if !ok {
+			continue
+		}
+		name, ok := v["target"].(string)
+		if !ok {
+			continue
+		}
+		q := "game.inventoryTargets"
+		if s, ok := v["query"].(string); ok && s != "" {
+			q = s
+		}
+		raw, err := query(c, q)
+		if err != nil {
+			return err
+		}
+		x, y, visible, found := findTarget(fmt.Sprint(raw), name)
+		if !found {
+			return fmt.Errorf("target %q is not drawn (%s)", name, q)
+		}
+		if !visible {
+			return fmt.Errorf("target %q is scrolled out of view; reveal it first", name)
+		}
+		p[k] = map[string]any{"norm": []any{x, y}}
+	}
+	return nil
+}
+
+func findTarget(list, name string) (x, y float64, visible, found bool) {
+	for _, entry := range strings.Split(list, ";") {
+		key, value, ok := strings.Cut(entry, "=")
+		if !ok || key != name {
+			continue
+		}
+		parts := strings.Split(value, ",")
+		if len(parts) < 2 {
+			return 0, 0, false, false
+		}
+		x, errX := strconv.ParseFloat(parts[0], 64)
+		y, errY := strconv.ParseFloat(parts[1], 64)
+		if errX != nil || errY != nil {
+			return 0, 0, false, false
+		}
+		return x, y, len(parts) < 3 || parts[2] != "0", true
+	}
+	return 0, 0, false, false
+}
+
 func normalizePoints(p map[string]any, w, h int) {
 	for _, k := range []string{"to", "at", "from"} {
 		v, ok := p[k].(map[string]any)

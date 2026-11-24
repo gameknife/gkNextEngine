@@ -158,5 +158,13 @@ namespace NextDayz
     namespace NextDayzHUD
     {
         void Draw(const FHudContext& context);
+        void DrawFrame(const FHudContext& context);
+        // Agent validation: the inventory's drop targets as last drawn, by name
+        // ("cell:<container>:<x>:<y>", "wear:torso", "weapon:0", "rail:0:0", "loot:0",
+        // "take:0", "drop", "menu:<English label>"), as "name=x,y,visible;" with x/y
+        // in 0..1 of the display.
+        std::string AgentTargets();
+        // Scrolls the named target into view the next time it is drawn.
+        void RevealAgentTarget(std::string key);
     }
 }

@@ -555,6 +555,9 @@ void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
                       {
                           if (validationReady()) survival_.SetBleeding(validationBleed_);
                       }, 0, 3);
+    cvars.RegisterString("nextdayz.validation.reveal", "", &validationReveal_, NextCVar::ECVarFlags::None,
+                         "Agent-only: scroll the named inventory target (see game.inventoryTargets) into view",
+                         [this]() { if (!validationReveal_.empty()) NextDayz::NextDayzHUD::RevealAgentTarget(validationReveal_); });
     cvars.RegisterString("nextdayz.validation.give", "", &validationGive_, NextCVar::ECVarFlags::None,
                          "Agent-only: add an item by id (\"id\" or \"id:count\")", [this, validationReady]()
                          {
@@ -3576,6 +3579,8 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     reg.Add("seed", [this]() -> Runtime::Agent::FAgentQueryValue {
         return static_cast<int64_t>(config_.Seed);
     });
+    // Named drop targets, for scripts that drag by "cell:1:0:0" instead of by pixel.
+    reg.Add("inventoryTargets", []() -> Runtime::Agent::FAgentQueryValue { return NextDayz::NextDayzHUD::AgentTargets(); });
     reg.Add("inventoryLayout", [this]() -> Runtime::Agent::FAgentQueryValue
     {
         std::string layout;

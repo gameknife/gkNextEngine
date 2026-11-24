@@ -208,3 +208,35 @@ func TestRunMissingExecutableCreatesLaunchFailureRecord(t *testing.T) {
 		t.Fatalf("run = %+v", run)
 	}
 }
+
+func TestResolveFixtureScene(t *testing.T) {
+	root := t.TempDir()
+	fixture := filepath.Join(root, "assets", "agentscripts", "fixtures", "wall.scad")
+	if err := os.MkdirAll(filepath.Dir(fixture), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fixture, []byte("cube(1);"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := resolveFixtureScene(root, "assets/agentscripts/fixtures/wall.scad"); got != filepath.ToSlash(fixture) {
+		t.Fatalf("fixture resolved to %q", got)
+	}
+	for _, scene := range []string{"assets/scad/tests/a.scad", "assets/agentscripts/fixtures/missing.scad", ""} {
+		if got := resolveFixtureScene(root, scene); got != scene {
+			t.Fatalf("%q changed to %q", scene, got)
+		}
+	}
+}
+
+func TestFindTarget(t *testing.T) {
+	list := "cell:1:0:0=0.62500,0.44600,1;menu:Drop All=0.5,0.2,1;cell:6:5:7=0.7,1.4,0;"
+	if x, y, visible, found := findTarget(list, "menu:Drop All"); !found || !visible || x != 0.5 || y != 0.2 {
+		t.Fatalf("menu target: %v %v %v %v", x, y, visible, found)
+	}
+	if _, _, visible, found := findTarget(list, "cell:6:5:7"); !found || visible {
+		t.Fatal("an off-screen cell must be found but not visible")
+	}
+	if _, _, _, found := findTarget(list, "cell:1:0"); found {
+		t.Fatal("a prefix must not match")
+	}
+}

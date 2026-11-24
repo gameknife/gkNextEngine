@@ -47,10 +47,7 @@
     {
       "type": "mouse-move",
       "to": {
-        "norm": [
-          0.726,
-          0.17
-        ]
+        "target": "cell:1:1:0"
       }
     },
     {
@@ -61,10 +58,7 @@
     {
       "type": "mouse-move",
       "to": {
-        "norm": [
-          0.726,
-          0.27
-        ]
+        "target": "cell:2:1:0"
       }
     },
     {
@@ -107,10 +101,7 @@
     {
       "type": "mouse-move",
       "to": {
-        "norm": [
-          0.726,
-          0.27
-        ]
+        "target": "cell:2:1:0"
       }
     },
     {
@@ -121,10 +112,7 @@
     {
       "type": "mouse-move",
       "to": {
-        "norm": [
-          0.726,
-          0.315
-        ]
+        "target": "cell:2:1:1"
       }
     },
     {
@@ -158,10 +146,7 @@
     {
       "type": "mouse-move",
       "to": {
-        "norm": [
-          0.701,
-          0.17
-        ]
+        "target": "cell:1:0:0"
       }
     },
     {
@@ -172,10 +157,7 @@
     {
       "type": "mouse-move",
       "to": {
-        "norm": [
-          0.826,
-          0.17
-        ]
+        "target": "cell:1:5:0"
       }
     },
     {
@@ -204,10 +186,7 @@
     {
       "type": "mouse-move",
       "to": {
-        "norm": [
-          0.826,
-          0.17
-        ]
+        "target": "cell:1:5:0"
       }
     },
     {
@@ -218,10 +197,7 @@
     {
       "type": "mouse-move",
       "to": {
-        "norm": [
-          0.701,
-          0.315
-        ]
+        "target": "cell:2:0:1"
       }
     },
     {
@@ -264,10 +240,7 @@
     {
       "type": "mouse-move",
       "to": {
-        "norm": [
-          0.1,
-          0.132
-        ]
+        "target": "loot:0"
       }
     },
     {
@@ -278,10 +251,7 @@
     {
       "type": "mouse-move",
       "to": {
-        "norm": [
-          0.801,
-          0.17
-        ]
+        "target": "cell:1:4:0"
       }
     },
     {
@@ -479,5 +449,6 @@
     {
       "type": "quit"
     }
-  ]
+  ],
+  "description": "Drags address the inventory by name (game.inventoryTargets), not by screen position."
 }

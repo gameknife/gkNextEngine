@@ -1,4 +1,5 @@
 #include "Engine/Common/CoreMinimal.hpp"
+#include <map>
 #include "Application/Game/NextDayz/UI/Localization.hpp"
 #include "NextDayzHUD.hpp"
 
@@ -32,6 +33,57 @@ namespace NextDayz::NextDayzHUD
             int anchorY = 0;
         };
         FInventoryDrag InventoryDrag;
+
+        // Agent validation addresses the inventory by name instead of by pixel: every
+        // drop target records where it was drawn this frame (see NextDayzHUD::AgentTargets).
+        struct FAgentTarget
+        {
+            ImVec2 min;
+            ImVec2 max;
+            bool visible = true;
+        };
+        std::map<std::string, FAgentTarget> AgentTargetsDrawing;
+        std::map<std::string, FAgentTarget> AgentTargetsShown;
+        ImVec2 AgentDisplay(1.0f, 1.0f);
+        std::string AgentReveal;
+
+        void MarkTarget(const std::string& key, const ImVec2& min, const ImVec2& max)
+        {
+            const ImVec2 center((min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f);
+            const ImDrawList* draw = ImGui::GetWindowDrawList();
+            const ImVec2 clipMin = draw->GetClipRectMin();
+            const ImVec2 clipMax = draw->GetClipRectMax();
+            AgentTargetsDrawing[key] = {min, max, center.x >= clipMin.x && center.x <= clipMax.x &&
+                                                  center.y >= clipMin.y && center.y <= clipMax.y};
+            if (key == AgentReveal)
+            {
+                ImGui::SetScrollFromPosY(center.y - ImGui::GetWindowPos().y, 0.5f);
+                AgentReveal.clear();
+            }
+        }
+
+        void MarkLastItem(const std::string& key) { MarkTarget(key, ImGui::GetItemRectMin(), ImGui::GetItemRectMax()); }
+
+        // A menu entry agent scripts can find by its English label ("menu:Drop All").
+        bool TargetMenuItem(const char* source, bool enabled = true)
+        {
+            const bool chosen = ImGui::MenuItem(L10n::Label(source), nullptr, false, enabled);
+            MarkLastItem(std::string("menu:") + source);
+            return chosen;
+        }
+
+        const char* EquipTargetName(EEquipSlot slot)
+        {
+            switch (slot)
+            {
+            case EEquipSlot::Head: return "head";
+            case EEquipSlot::Torso: return "torso";
+            case EEquipSlot::Vest: return "vest";
+            case EEquipSlot::Legs: return "legs";
+            case EEquipSlot::Back: return "backpack";
+            default: return "gear";
+            }
+        }
 
         void StartItemDrag(const FItemInstance& item, ImVec2 origin, float cellSize = 0.0f)
         {
@@ -1073,7 +1125,7 @@ namespace NextDayz::NextDayzHUD
         void DrawAttachmentOptions(const FHudContext& context, const FItemInstance& gun, EAttachmentSlot slot)
         {
             const auto installed = AttachmentAt(gun.attachments, slot);
-            if (installed != EWeaponAttachment::None && context.removeAttachment && ImGui::MenuItem(L10n::Label("Remove attachment")))
+            if (installed != EWeaponAttachment::None && context.removeAttachment && TargetMenuItem("Remove attachment"))
                 context.removeAttachment(gun.instanceId, slot);
             bool any = false;
             for (const auto& item : context.inventory->Instances())
@@ -1219,8 +1271,7 @@ namespace NextDayz::NextDayzHUD
                     const bool hasMatching = std::any_of(context.inventory->Instances().begin(),
                         context.inventory->Instances().end(), [&](const auto& other)
                         { return other.instanceId != instance.instanceId && other.defId == instance.defId; });
-                    if (ImGui::MenuItem(L10n::Label("Merge matching stacks"), nullptr, false,
-                                       hasMatching && instance.count < def->maxStack))
+                    if (TargetMenuItem("Merge matching stacks", hasMatching && instance.count < def->maxStack))
                     {
                         int room = def->maxStack - instance.count;
                         for (const auto& other : context.inventory->Instances())
@@ -1233,19 +1284,19 @@ namespace NextDayz::NextDayzHUD
                 }
                 FGridPlacement rotated = instance.placement;
                 rotated.rotated = !rotated.rotated;
-                if (ImGui::MenuItem(L10n::Label("Rotate"), nullptr, false,
-                    context.inventory->CanPlace(instance.instanceId, instance.containerId, rotated)) && context.placeItem)
+                if (TargetMenuItem("Rotate", context.inventory->CanPlace(instance.instanceId, instance.containerId, rotated)) &&
+                    context.placeItem)
                     context.placeItem(instance.instanceId, instance.containerId, rotated);
                 if ((def->kind == EItemKind::Consumable || def->use != EItemUse::None) && context.useItem &&
-                    ImGui::MenuItem(NextDayz::L10n::Label("Use")))
+                    TargetMenuItem("Use"))
                 {
                     context.useItem(instance.instanceId);
                 }
-                if (def->kind == EItemKind::Clothing && !inEquipmentSlot && context.wear && ImGui::MenuItem(NextDayz::L10n::Label("Wear")))
+                if (def->kind == EItemKind::Clothing && !inEquipmentSlot && context.wear && TargetMenuItem("Wear"))
                 {
                     context.wear(instance.instanceId);
                 }
-                if (inEquipmentSlot && context.takeOff && ImGui::MenuItem(NextDayz::L10n::Label("Take off")))
+                if (inEquipmentSlot && context.takeOff && TargetMenuItem("Take off"))
                 {
                     context.takeOff(instance.instanceId);
                 }
@@ -1274,7 +1325,7 @@ namespace NextDayz::NextDayzHUD
                     }
                     ImGui::EndMenu();
                 }
-                if (instance.count > 1 && context.splitItem && ImGui::MenuItem(NextDayz::L10n::Label("Split stack")))
+                if (instance.count > 1 && context.splitItem && TargetMenuItem("Split stack"))
                 {
                     context.splitItem(instance.instanceId);
                 }
@@ -1294,11 +1345,11 @@ namespace NextDayz::NextDayzHUD
                 ImGui::Separator();
                 if (context.dropItem)
                 {
-                    if (instance.count > 1 && ImGui::MenuItem(NextDayz::L10n::Label("Drop One")))
+                    if (instance.count > 1 && TargetMenuItem("Drop One"))
                     {
                         context.dropItem(instance.instanceId, 1);
                     }
-                    if (ImGui::MenuItem(instance.count > 1 ? NextDayz::L10n::Tr("Drop All") : NextDayz::L10n::Tr("Drop")))
+                    if (TargetMenuItem(instance.count > 1 ? "Drop All" : "Drop"))
                     {
                         context.dropItem(instance.instanceId, -1);
                     }
@@ -1326,6 +1377,7 @@ namespace NextDayz::NextDayzHUD
 
             ImGui::PushID(label);
             ImGui::InvisibleButton("##eq_btn", ImVec2(slotW, slotH));
+            MarkLastItem(std::string("wear:") + EquipTargetName(slot));
             const bool hovered = ImGui::IsItemHovered();
 
             // Background slot frame & corner ticks
@@ -1452,6 +1504,7 @@ namespace NextDayz::NextDayzHUD
 
             ImGui::PushID(slot + 2000);
             ImGui::InvisibleButton("##wp_slot_btn", ImVec2(instance ? slotW - 74.0f : slotW, slotH));
+            MarkLastItem(fmt::format("weapon:{}", slot));
             const bool hovered = ImGui::IsItemHovered();
 
             UIWidgets::DrawSlotFrame(draw, pos, max, instance != nullptr, hovered, false, false, 3.0f);
@@ -1539,6 +1592,7 @@ namespace NextDayz::NextDayzHUD
 
                         ImGui::PushID(static_cast<int>(index * 100 + slot));
                         ImGui::InvisibleButton("##rail_btn", ImVec2(railW, railH));
+                        MarkLastItem(fmt::format("rail:{}:{}", slot, index));
                         const bool rHovered = ImGui::IsItemHovered();
 
                         // Slot frame
@@ -1568,7 +1622,7 @@ namespace NextDayz::NextDayzHUD
                             // Right-click to detach
                             if (ImGui::BeginPopupContextItem("##part_menu"))
                             {
-                                if (ImGui::MenuItem(L10n::Label("Detach Attachment")) && context.removeAttachment)
+                                if (TargetMenuItem("Detach Attachment") && context.removeAttachment)
                                 {
                                     context.removeAttachment(instance->instanceId, kind);
                                 }
@@ -1647,6 +1701,7 @@ namespace NextDayz::NextDayzHUD
                     const ImVec2 b(a.x + cell - 2.0f, a.y + cell - 2.0f);
                     UIWidgets::DrawSlotFrame(draw, a, b, false, false, false, false, 2.0f);
                     const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+                    MarkTarget(fmt::format("cell:{}:{}:{}", container.containerId, x, y), a, b);
                     draw->AddLine(ImVec2(c.x - 2.0f, c.y), ImVec2(c.x + 2.0f, c.y), UITheme::Colors::GridCrossDot, 1.0f);
                     draw->AddLine(ImVec2(c.x, c.y - 2.0f), ImVec2(c.x, c.y + 2.0f), UITheme::Colors::GridCrossDot, 1.0f);
                 }
@@ -2035,16 +2090,21 @@ namespace NextDayz::NextDayzHUD
             }
             else
             {
+                int lootRow = 0;
                 for (const FHudNearbyLoot& loot : context.nearby)
                 {
+                    const int row = lootRow++;
                     ImGui::PushID(loot.index);
                     const ImVec2 lootPos = ImGui::GetCursorScreenPos();
                     const float cardW = ImGui::GetContentRegionAvail().x;
                     const float cardH = 44.0f;
                     const ImVec2 cardMax(lootPos.x + cardW, lootPos.y + cardH);
 
+                    // The drag area stops short of the Take button: ImGui gives an overlap to
+                    // the item submitted first, which would swallow every click on Take.
                     ImGui::SetCursorScreenPos(ImVec2(lootPos.x + 58.0f, lootPos.y));
-                    ImGui::InvisibleButton("##loot_card", ImVec2(cardW - 58.0f, cardH));
+                    ImGui::InvisibleButton("##loot_card", ImVec2(std::max(1.0f, cardW - 58.0f - 62.0f), cardH));
+                    MarkLastItem(fmt::format("loot:{}", row));
                     const bool hovered = ImGui::IsItemHovered();
 
                     if (ImGui::BeginDragDropSource())
@@ -2067,7 +2127,9 @@ namespace NextDayz::NextDayzHUD
 
                     // Quick Take Button on left/mid
                     ImGui::SetCursorScreenPos(ImVec2(cardMax.x - 56.0f, lootPos.y + 8.0f));
-                    if (ImGui::Button(NextDayz::L10n::Label("Take"), ImVec2(50.0f, 26.0f)) && context.takeLoot)
+                    const bool take = ImGui::Button(NextDayz::L10n::Label("Take"), ImVec2(50.0f, 26.0f));
+                    MarkLastItem(fmt::format("take:{}", row));
+                    if (take && context.takeLoot)
                     {
                         context.takeLoot(loot.index, 0, EEquipSlot::None);
                     }
@@ -2095,6 +2157,7 @@ namespace NextDayz::NextDayzHUD
             ImDrawList* dDraw = ImGui::GetWindowDrawList();
 
             ImGui::InvisibleButton("##drop_zone_btn", ImVec2(dropW, dropH));
+            MarkLastItem("drop");
             const bool dHovered = ImGui::IsItemHovered();
 
             bool activeDrop = false;
@@ -2404,7 +2467,29 @@ namespace NextDayz::NextDayzHUD
     // ========================================================================
     // MAIN DRAW ENTRY POINT
     // ========================================================================
+    std::string AgentTargets()
+    {
+        std::string out;
+        for (const auto& [key, target] : AgentTargetsShown)
+        {
+            const float x = (target.min.x + target.max.x) * 0.5f / std::max(AgentDisplay.x, 1.0f);
+            const float y = (target.min.y + target.max.y) * 0.5f / std::max(AgentDisplay.y, 1.0f);
+            out += fmt::format("{}={:.5f},{:.5f},{};", key, x, y, target.visible ? 1 : 0);
+        }
+        return out;
+    }
+
+    void RevealAgentTarget(std::string key) { AgentReveal = std::move(key); }
+
     void Draw(const FHudContext& context)
+    {
+        AgentTargetsDrawing.clear();
+        DrawFrame(context);
+        AgentTargetsShown = std::move(AgentTargetsDrawing);
+        AgentDisplay = ImGui::GetIO().DisplaySize;
+    }
+
+    void DrawFrame(const FHudContext& context)
     {
         if (!context.sessionLabel.empty())
         {

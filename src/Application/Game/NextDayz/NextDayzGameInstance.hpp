@@ -539,6 +539,7 @@ private:
     float debugFogRadiance_ = -1.0f;
     float debugFogDensityScale_ = 1.0f;
     std::string validationGive_;
+    std::string validationReveal_;
     std::string validationUse_;
     std::string validationEquip_;
     std::string validationAttachment_;

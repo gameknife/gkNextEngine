@@ -178,3 +178,9 @@
 - `gnb.bat validate --script assets/agentscripts/nextdayz-inventory-grid.agentscript.json`
 
 交互回放覆盖精确落格、旋转、越界拒绝和地面拾取；单元测试覆盖碎片空间、拆分/合并、换装事务及存档迁移。
+
+背包脚本按名字指向界面元素，不写屏幕坐标。HUD 每帧把画出来的格子和按钮登记成命名目标，经
+`game.inventoryTargets` 交给 `gnb validate`，步骤里写 `{"target": "cell:backpack:0:0"}` 即可。名字有
+`cell:<容器>:<x>:<y>`、`wear:<head|torso|vest|legs|backpack>`、`weapon:<槽>`、`rail:<槽>:<序号>`、
+`loot:<行>`、`take:<行>`、`drop` 和 `menu:<英文菜单项>`。目标在滚动区外时，先把 cvar
+`nextdayz.validation.reveal` 设为空、再设为目标名，HUD 会把它滚进视野。背包布局变了，脚本不用改。

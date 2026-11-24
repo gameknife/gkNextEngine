@@ -109,7 +109,7 @@
   [游戏内调试器](projects/nextdayz/nextdayz-debugger.md) ·
   [启动模式与多人联机](projects/nextdayz/nextdayz-multiplayer-design.md) ·
   [Web 客户端架构设计](projects/nextdayz/nextdayz-web-client-design.md)（已实施，文中“现状”标出差距） ·
-  [Web 客户端剩余计划](projects/nextdayz/nextdayz-web-client-plan.md)（联机客户端合一、混合客户端自动化、多浏览器性能） ·
+  [Web 客户端剩余计划](projects/nextdayz/nextdayz-web-client-plan.md)（中档独显与 Firefox/Safari 实测、浏览器内 SCAD 定论、e2e 接入 CI） ·
   [Web 客户端开发指南](guides/nextdayz-web-client.md) ·
   [服务器打包与部署](guides/nextdayz-server-deployment.md) ·
   [客户端打包与分发](guides/nextdayz-client-package.md)

@@ -1,10 +1,10 @@
 ---
 title: "NextDayz Web 客户端：同源内核 + three.js 表现层"
 category: project
-status: 现行（已实施；W8-3、W8-5 与 5.3 的收尾未完成）
+status: 现行（已实施；剩余项需中档独显笔记本、Firefox 与 Safari 实测）
 owner: NextDayz
 created: 2026-11-16
-last_updated: 2026-11-23
+last_updated: 2026-11-24
 ---
 
 # NextDayz Web 客户端：同源内核 + three.js 表现层
@@ -15,9 +15,9 @@ DS，并与桌面客户端在同一个世界里游玩。剩余工作见
 [Web 客户端开发指南](../../guides/nextdayz-web-client.md)；联机现状见
 [启动模式与多人联机](nextdayz-multiplayer-design.md)。
 
-> D1–D8 已确认并实施。W0–W7 与 W8-0、W8-1、W8-2、W8-4 已验收，实测并入 5.4、7.1、8.1、9 与 10。
-> 与设计仍有差距的地方就地标为“现状”：5.3 的联机客户端仍有两份，8.1 缺中档独显和 Firefox/Safari 的
-> 完整实测，8.2 的界面文案未全部走翻译表。D2 的浏览器内求值仍在试验中。
+> D1–D8 已确认并实施。W0–W8 在本机能完成的部分都已验收，实测并入 5.3、5.4、7.1、8.1、9 与 10；
+> 联机客户端和第三人称姿态各只有一份实现（5.3）。剩下的都要换硬件实测：中档独显笔记本上的 1080p、
+> Firefox 与 Safari 的完整对局（8.1），以及据此决定 D2 的浏览器内求值是否转为默认路径。
 
 ## 0. 一页结论
 
@@ -120,6 +120,21 @@ B 不再是并行选项，只作为记录保留：若 W0-1 的实验否定了 A�
   2. 求值器（含 Manifold、FreeType）加源文件的压缩下载量，再加角色与共享资产，明显低于烘焙整张图。
   3. 在中档独显笔记本上，求值耗时和 WASM 线性内存峰值有记录，从点击出击到可操作仍不超过 20 秒。
      求值失败时能回退到烘焙资产。
+
+  **2026-11-24 实测**（Windows 11、Ryzen 9 5900X、RTX 4070、Chrome 158，`web/nextdayz/test/scad-level.mjs`）：
+  1. 一致性：渲染三角形 3,187,393、碰撞三角形 3,108,200、195 个碰撞网格、3,746 个实例和包围盒，都与训练场 v3
+     的烘焙统计相同；132 个锚点按类型、名称、配置和位置（精确到 0.1 mm）逐项一致；求值无告警。物资持久 id
+     由 DS 自己求值得出，浏览器这条路径既不产生也不使用它，客户端只认服务器下发的编号，所以这一项由 DS 与
+     烘焙的一致性保证（`gnb web bake --check`）。
+  2. 下载量：求值器（`ndscad.mjs` 加 `ndscad.wasm`，gzip）0.67 MiB，源文件 1.98 MiB，合计约 2.7 MiB；同一
+     地图的烘焙产物 gzip 后 29.38 MiB。角色与共享资产（37.69 MiB）两条路径相同。
+  3. 耗时与内存：SCAD 求值 2.6 s，加上网格、程序化贴图与碰撞共 10.2 s，都在 Worker 里；WASM 线性内存峰值
+     583 MiB，交给主线程的数据包 162 MiB。从点击出击到可操作测了两次，12.4 s 与 29.4 s：生成与 Master
+     启动地图服务器同时进行，两次的 SCAD 部分都是 10.2 s，差额在进服阶段，原因还没查。拦截
+     `ndscad.wasm` 时页面改用烘焙资产，2.5 s 进图。
+
+  结论：判据 1、2 满足。判据 3 的回退已实现；耗时在这台台式机上达标，但 583 MiB 的内存峰值和 10 s 的
+  生成时间在中档笔记本上可能超出预算，转为默认路径前要在那类机器上实测（计划 R5 余项）。
 - 否决：TS 重写 SCAD 求值器。1 万行求值/CSG/地形/纹理图代码的第二实现，直接违反"完全对应"。
 
 ### D3 浏览器与 DS 之间的传输 —— 已确认：WebRTC DataChannel
@@ -273,18 +288,55 @@ Web 客户端就是"客户端"这一格的另一种实现，其中玩法部分�
 应用到 `Assets::Scene`、ImGui 和 NextAudio。过渡期允许桌面继续直接调用各子系统，但**每个子系统
 只能有一份实现**。
 
-**现状（2026-11-23）**。`FClientSession`（`Net/ClientSession.*`）目前只负责 Master 登录、档案、出击、
-进服握手、在场与背包上报的节流、远端插值和时钟校正。DS 消息怎么应用、每帧按什么顺序推进各子系统，
-仍然写了两份：桌面在 `NextDayzNetwork.cpp` 与 `NextDayzGameInstance.cpp`，Web 在
-`src/Application/Web/NextDayzWebCore/WebCore.cpp`。两份之间已经出现分歧：
+**现行实现（2026-11-23）**。联机客户端只有一份，在 `FClientSession`（`Net/ClientSession.*` 与
+`Net/ClientPlay.cpp`）里：
 
-- 拾取到可持握的武器后，Web 会把它装进首选武器槽，桌面不会；
-- 收到服务器的背包纠正（`InventoryFix`）时，桌面在角色死亡后忽略它，Web 不检查生死；
-- 打开背包或地图、翻越中、死亡时，桌面会锁定移动，并取消瞄准、扳机和近战；Web 只在动作进行中锁定移动；
-- 出生时怎么装备武器，两边规则不同。
+- Master 登录、档案、出击、进服握手、在场与背包上报的节流、远端插值、时钟校正。
+- DS 消息对本地幸存者的作用。`Receive` 解码一条消息，改库存、武器槽、身体、生命编号、待决的拾取、
+  撤离状态和计数，再用 `FClientNews` 告诉表现层发生了什么：拾到了什么、什么放不下已退回地面、哪些远端
+  幸存者离开了。
+- 客户端帧的闸门。`LockFrame` 在角色移动之前，按“动作进行中、翻越中、菜单打开、死亡”锁定移动，并放下
+  瞄准、扳机与近战；`PressTrigger`、`PressAim` 是两端共用的鼠标按键语义。
+- 武器槽。出生时用 `EquipCarried`：每把武器进它的首选槽，拔出编号最小的那一槽。背包被纠正后用
+  `KeepCarried`：仍在身上的武器留在原槽，弹匣数按服务器给的。
+- 要发给 DS 的字节先进 `outbox`，桌面经 ENet、Web 经 DataChannel 发出。
 
-这违反了"每个子系统只能有一份实现"，收尾任务见开发计划。另外，Web 每帧经 `NdRead` 以 JSON 读取帧状态，
-只有骨骼矩阵走共享内存，还没达到"热路径不经 JSON"。
+两端只剩适配层：桌面的 `NextDayzNetwork.cpp` 处理场景里的物资、远端角色、通知与音效，Web 的
+`WebCore.cpp` 填帧状态与表现事件。Web 用控制位 `Menu`（指针未锁定，即面板、地图或菜单打开）告诉内核
+菜单状态。
+
+收拢前两端有四处分歧，原则是以桌面为准，除非桌面是错的：
+
+- 拾到武器后不自动装备，按桌面。
+- 死亡后忽略背包纠正，按桌面。
+- 锁定条件与取消项按桌面。
+- 出生装备按 Web 原来的规则。桌面原来只把第一把武器装进 0 号槽，副武器留在背包里，与它自己的大厅预览
+  也不一致，属于缺陷；大厅预览现在也用 `EquipCarried`。
+
+收拢时还发现并统一了以下差异：
+
+- 背包纠正后，桌面原来清空全部武器槽，纠正一次就等于缴械；现在两端都用 `KeepCarried`。
+- 被感染者或幸存者击中会打断当前动作，Web 原来不打断。
+- 死亡后向服务器报告一次并放下随身物品，Web 原来不报告。
+- 射击与近战的噪声由同一个函数算出，并可靠发送；Web 原来不可靠发送。
+- 互伤命中用同一段线段距离算法；Web 原来用射线与胶囊求交。
+- 每次连接的第一个快照强制对齐时钟，桌面原来不强制。
+
+`ClientReplayProbe` 检查两端一致。它把一段脚本构造的 DS 消息序列和客户端帧逐条喂给 `FClientSession`，
+每步打印库存、武器槽、身体、锁定与待发消息。序列依次覆盖：出生、物资同步、拾取与拒绝、过期与当前的纠正、
+互伤、菜单与动作锁定、受击、撤离、死亡、重生。原生的 `NextDayzClientReplay` 与 WASM 版的输出都必须与
+`client-replay-golden.txt` 逐字一致。消息经过真实的编解码，但不是从运行中的 DS 录下来的。
+
+**现状**。Web 每帧经 `NdRead` 以 JSON 读取帧状态，只有骨骼矩阵走共享内存，还没达到“热路径不经 JSON”。
+
+**第三人称姿态（2026-11-24）**。桌面 `PlayerRigVisual` 里的第三人称动画图和程序化处理（瞄准、握枪、脚步
+贴地、肘部约束、后坐力、切枪与背枪位）移进内核的 `FSurvivorPoseGraph`（`Core/SurvivorPoseGraph.*`）。
+桌面把它绑到场景节点后调用 `Apply`。Web 的 `FWebSurvivorPose` 用同一个图，每帧输出骨骼矩阵和 4 个挂件矩阵
+（手上的武器和 3 个背枪位），表现层只按矩阵摆放。两端的姿态差异随之消失，因为跑的是同一段代码。
+
+**验收内核**。传送和刷感染者这两条验收指令（`reviewPlace`、`reviewCrowd`）只编进 `ndcore-review`
+（`ND_REVIEW_COMMANDS=1`），正式的 `ndcore.wasm` 里没有。开发服务器带 `VITE_ND_REVIEW=1` 时加载验收内核；
+`client.test.mjs` 检查正式内核里找不到这两条指令的名字。
 
 ### 5.4 守住内核边界的三道闸
 
@@ -297,10 +349,12 @@ Web 客户端就是"客户端"这一格的另一种实现，其中玩法部分�
 
 现行实现：`gnb web build` 在 WASM 构建之后，用 `ninja -t deps` 核对内核的全部依赖。规则比第 1 条更严：
 除少数白名单文件外，`Engine/`、`Gameplay/`、`Modules/` 下的任何头文件都不得进入。接着它把 WASM 的
-协议字节与 `protocol-golden.txt` 比对，并在 Node 里跑规则探针 `NextDayzCoreRules`。CI 的 `NextDayz Web`
-工作流在改到内核、Web 或相关模块的提交上运行这一整套，并在 Linux x86_64 上对原生的
-`NextDayzProtocolGolden` 和 `NextDayzCoreRules` 做同样检查。`Desktop CI` 在 Windows、Linux 和
-macOS arm64 上也跑原生金标。2026-11-23 首次在 Windows MSVC x86_64 上核对，11 行金标逐字一致，规则探针通过。
+协议字节与 `protocol-golden.txt` 比对，在 Node 里跑规则探针 `NextDayzCoreRules`，再把客户端回放
+`NextDayzClientReplay` 的输出与 `client-replay-golden.txt` 比对（5.3）。CI 的 `NextDayz Web` 工作流在改到
+内核、Web 或相关模块的提交上运行这一整套，并在 Linux x86_64 上对原生的 `NextDayzProtocolGolden`、
+`NextDayzClientReplay` 和 `NextDayzCoreRules` 做同样检查。`Desktop CI` 在 Windows、Linux 和 macOS arm64
+上也跑这两份原生金标。2026-11-23 在 Windows MSVC x86_64 上核对：11 行协议金标与 45 行回放金标逐字一致，
+规则探针通过。
 
 **W0-1 实测（2026-11-18）**。macOS arm64、Rosetta x86_64 和 Node 26.13 的 wasm32 使用
 `NetProtocol.cpp`、`Inventory.cpp`、`ItemDefs.cpp`，五条消息 `Hello`、`PlayerState`、`Snapshot`、
@@ -426,7 +480,8 @@ W3 机器人复用。
 开发直连使用 `gnb ds --web`。DS 在回环地址监听信令 HTTP（默认 TCP 7781），WebRTC 使用单独的 UDP 端口
 （默认 28015）。`gnb master serve --rtc-port-base <port>` 为每个 DS 分配 ENet 之外的 UDP 端口，
 派遣结果通过 `rtcPort` 返回。DS 用自身 ID 和密钥轮询 `/ds/signal`，Master 校验账号、票据有效期和目标 DS。
-信令交换期间票据仍由 DS 的游戏握手兑换。两条路径的本机复现见 [W1 联机验收页](../../../web/nextdayz/w1/README.md)。
+信令交换期间票据仍由 DS 的游戏握手兑换。两条路径的本机复现见开发指南的
+[日常开发](../../guides/nextdayz-web-client.md#日常开发)；浏览器侧的分帧与重组在 `web/nextdayz/shared/transport.mjs`。
 
 ### 7.3 Master 的改动
 
@@ -521,9 +576,32 @@ gzip 体积包含碰撞、地形和地图元数据。W4 的 20 秒首屏预算�
 | 洛克特核心区 | 685 | 1,429 | 两档中位数约 16.7 ms |
 | 训练场 48 只感染者固定队列（240 帧） | 434 | — | 中位数与 P95 均为 16.7 ms |
 
-**现状**：级联阴影档已接近 1,500 次绘制的上限。预算规定的中档独显笔记本 1080p，以及 Firefox、Safari
-的完整对局都还没测（W8-5），也还没有低画质档。内核以固定 1/60 s 步进，渲染没有插值，在 120/144 Hz
-显示器上可能出现顿挫，需要实机确认。
+**W8-5（2026-11-24）**。新增“低”档：像素比上限 0.75，远裁剪面 320 m，雾的密度不低于 0.0065，用雾遮住
+远处。内核仍以 1/60 s 步进；本地角色和相机现在画在最近两步之间的插值位置，传送和出生时不插值。
+
+`gnb web test --e2e --scenario perf` 在训练场放 48 只感染者，每档采 240 帧。本机为 Windows 11、Ryzen 9 5900X、
+RTX 4070、120 Hz 显示器，视口 1920×1080。“每帧工作”是页面每帧的 JS 加 WASM 耗时，不含 GPU。
+
+| 浏览器 | 档位 | 帧间隔 中位 / P95 | 每帧工作 中位 / P95 | 绘制 | 三角形 |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Chrome 158 | 低 | 8.3 / 8.4 ms | 2.4 / 3.3 ms | 406 | 1.94 M |
+| Chrome 158 | 均衡 | 8.3 / 8.4 ms | 2.4 / 3.3 ms | 408 | 1.95 M |
+| Chrome 158 | 级联阴影 | 8.3 / 8.4 ms | 4.6 / 5.9 ms | 1,416 | 6.37 M |
+| Edge 158 | 低 | 8.3 / 8.4 ms | 2.6 / 3.3 ms | 406 | 1.94 M |
+| Edge 158 | 均衡 | 8.3 / 8.4 ms | 2.9 / 3.9 ms | 408 | 1.95 M |
+| Edge 158 | 级联阴影 | 8.3 / 8.4 ms | 5.1 / 7.2 ms | 1,416 | 6.32 M |
+
+WASM 堆 70.6 MiB，JS 堆约 220 MiB。从打开页面到进入战场：第一个浏览器 20.5 s，这次出击要等 Master 启动
+地图服务器；第二个 3.5 s，服务器已在运行。
+
+三档都跑满了 120 Hz，所以这台机器上看不出 GPU 余量。“低”档省的是填充率，要在中档独显上才看得出效果。
+每帧工作最多 7.2 ms，在 60 fps 的预算内。级联阴影档 1,416 次绘制，贴近 1,500 的上限。
+
+**现状**（仍缺）：
+- 中档独显笔记本 1080p：还没测。
+- Firefox：Playwright 自带的 Firefox 在这台 Windows 上起不来（side-by-side 配置错误），没测到。
+- Safari：Playwright 的 Windows 版 WebKit 没有 `RTCPeerConnection`，连不上地图服务器，它也不等于 Safari；
+  要在 macOS 上用 Safari 测。
 
 ### 8.2 界面（DOM）
 
@@ -535,8 +613,10 @@ gzip 体积包含碰撞、地形和地图元数据。W4 的 20 秒首屏预算�
 - 背包：网格拖拽、旋转、装备槽、容器、配件、使用、丢弃、物品说明；
 - 地图界面、死亡界面、Esc 菜单、设置（灵敏度、音量、键位、画质档位）。
 
-文案来自烘焙导出的同一张翻译表。**现状**：只有物品名和内核给出的提示语查这张表。其余约 77 处界面文字仍是
-`web/nextdayz/src` 里 `text("中文", "English")` 形式的写死字符串。
+文案来自烘焙导出的同一张翻译表。界面文字一律经 `tr("English", …)` 查表，`{}` 是参数占位；`index.html`
+里的静态文字用 `data-i18n`、`data-i18n-label` 标出，切换语言时整页重填。Web 新增的文案和桌面一样加进
+`Translations.inl`，重烘共享资产后生效。`test/i18n.test.mjs` 检查每个 `tr` 键和 `data-i18n` 键都在表里，
+并且 `src/*.ts` 里除了语言名“简体中文”没有中文字面量。
 
 ### 8.3 音频与输入
 
@@ -576,15 +656,21 @@ Chromium 经 HTTPS 代理登录、经 UDP 进入训练场，依次验证了口�
 | 结构 | 内核包含检查；桌面 + WASM 双目标构建 | 每次提交 | `NextDayz Web` 工作流（`gnb web build`） |
 | 协议 | 结构体布局断言；三平台编码字节金标 | 每次提交 | wasm32 与 Linux x86_64 在 `NextDayz Web`；Windows x86_64、macOS arm64 在 `Desktop CI` |
 | 规则 | 同一组规则用例在原生与 WASM 各跑一遍（`NextDayzCoreRules`）；Web 客户端单测（`gnb web test`） | 每次提交 | `NextDayz Web` |
+| 联机客户端 | 同一段 DS 消息序列在原生与 WASM 的 `FClientSession` 上回放，库存、武器槽、身体、锁定与待发消息逐步一致（`NextDayzClientReplay`） | 每次提交 | wasm32 与 Linux x86_64 在 `NextDayz Web`；Windows x86_64、macOS arm64 在 `Desktop CI` |
 | 资产 | 烘焙统计与桌面加载统计比对；rig 金标姿态（同一 clip 同一时刻，桌面与 WASM 的骨骼矩阵误差在 1e-4 内）；地图版本与烘焙清单一致 | 每次提交 / 发布 | 清单一致性（`gnb web bake --check`）在发布工作流；rig 金标（`NextDayzRigPoseProbe`）手动 |
 | 联机（无浏览器） | **Web 机器人**：在 Node 里运行 `ndcore.wasm`，经真实的 WebRTC 传输连 DS，行为与 `NextDayzBots` 相同，输出同样的 `RESULT ok|FAIL` | 每次提交跑短时；发布前 16 个 × 30 分钟，80 ms 延迟 + 2% 丢包 | 手动（`gnb web test --bots`）；需要带 Vulkan 的 DS，尚未进 CI |
-| 联机（混合客户端） | 一个桌面客户端（`gnb validate`）加一个真实浏览器（自动化驱动页面，内核把与桌面相同的 `game.*` 查询暴露给页面）。复刻现有 `nextdayz-net-*` 场景：互见与互伤、抢物资、账本纠正、命中接受与拒绝、身体结算，以及 Master 的离开—回归—撤离 | 每日 / 发布前 | 手动脚本 `web/nextdayz/test/w7-*.mjs`；自动编排与每日任务是 W8-3 |
+| 联机（混合客户端） | 一个桌面客户端（`gnb validate`）加一个真实浏览器（自动化驱动页面，内核把与桌面相同的 `game.*` 查询暴露给页面）。复刻现有 `nextdayz-net-*` 场景：互见与互伤、抢物资、账本纠正、命中接受与拒绝、身体结算，以及 Master 的离开—回归—撤离 | 每日 / 发布前 | 手动（`gnb web test --e2e`，自行启动 Master 与验收站点，跑完停掉地图服务器）；还没进 CI，需要能跑 DS 的 runner |
+| 性能 | 各浏览器、各画质档在 48 只感染者场景下的帧间隔、每帧工作、绘制、内存与进图时间 | 发布前 | 手动（`gnb web test --e2e --scenario perf`） |
 | 手感 | 人工对照清单：同一地点、同一装备，在桌面与 Web 各走一遍移动、翻越、开火、换弹、搜刮 | 里程碑验收 | 里程碑验收 |
 
 **已有实测**。两个 rig 共 8,204 个骨骼矩阵，原生与 WASM 的最大误差约 4.2×10⁻⁷。16 个 Web 机器人在
 80 ms 延迟、2% 丢包下跑满 30 分钟，全部撤离，共拾取 155 次、丢弃 18 次，协议拒绝 0 次。混合客户端用例
 覆盖了：互伤关时桌面幸存者生命保持 100、打开后 Web 能击倒桌面幸存者、服务器收回客户端虚增的库存、
 两个 Web 客户端抢同一件物品只有一人成功，以及撤离入库、死亡后重新出击。
+
+2026-11-24 在 Windows 上用 `gnb web test --e2e` 跑全部 5 个场景，全部通过；`w7-mixed` 另外单独重复两次，
+都通过（20 发里分别有 17、18 发作为互伤命中发出）。新增的 `e2e-return` 覆盖拾到的枪不自动拔出、离场后带枪
+回归且枪在主武器槽、撤离后枪进仓库。
 
 ## 11. 风险
 

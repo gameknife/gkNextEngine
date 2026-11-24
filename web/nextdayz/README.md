@@ -7,7 +7,7 @@
 第一次进入会下载并校验地图、碰撞和角色资源，随后通过 WebRTC 加入地图服务器。
 
 在本机验收模式下，可用「前往靶场」「前往障碍场」「前往感染者围栏」跳到三个练习区。
-靶场入口旁能拾取武器和弹药。围栏入口先到外围，等服务器生成感染者，再次点击可走到近期目标前方。
+靶场入口旁能拾取武器和弹药；与桌面相同，拾到的武器先进背包，要在背包里装备后才能使用。围栏入口先到外围，等服务器生成感染者，再次点击可走到近期目标前方。
 也可登录已经带枪的验收账号 `W7 Mixed Browser 1794996018121` 并恢复出击。
 
 | 操作 | 默认键位 |
@@ -17,7 +17,7 @@
 | 开火或近战、瞄准、换弹 | 左键、右键、R |
 | 主武器、副武器、手枪、上一把武器 | 1、2、3、Q |
 | 拾取、喝井水、开启或取消撤离 | E、E、G |
-| 随身装备、行动地图、菜单 | Tab、M、Esc |
+| 背包、行动地图、菜单 | Tab、M、Esc |
 
 背包里可以拖动或选中物品再点击空格。按 R 或点击「旋转」改变放置方向，拖到对应装备槽穿戴，
 拖到武器上安装配件。动作由内核校验，放置失败时物品留在原处。设置支持中英切换，鼠标灵敏度、音量、
@@ -44,7 +44,8 @@ Linux x86_64 服务器包自带 Web 客户端，解压后由包内 Master 托管
 ./gnb.sh web build
 ```
 
-在两个终端分别启动 Master 和开发服务器。验收快捷入口由 `VITE_ND_REVIEW` 启用。
+在两个终端分别启动 Master 和开发服务器。验收快捷入口由 `VITE_ND_REVIEW` 启用，此时页面加载带验收指令的
+`ndcore-review`；正式内核不含这些指令。
 
 ```sh
 ./gnb.sh master serve --listen 127.0.0.1:7797 --port-base 27700 --rtc-port-base 28700 \
@@ -88,7 +89,8 @@ VITE_ND_SCAD_TRAINING=1 VITE_ND_REVIEW=1 ND_MASTER_URL=http://127.0.0.1:7797 \
 打开[训练场联机验收页](http://127.0.0.1:4185/)，登录后选训练场出击。Worker 用地图源文件生成网格、程序化贴图、
 碰撞和锚点，再由浏览器通过 WebRTC 加入 Master 分配的地图服务器。角色和装备仍使用现行资产包。
 
-`node web/nextdayz/test/scad-level.mjs` 会核对下载、桌面地图统计、移动、岗亭碰撞和撤离。
+`node web/nextdayz/test/scad-level.mjs` 会核对下载、桌面地图统计、逐项锚点、移动、岗亭碰撞和撤离，
+再拦掉求值器确认页面会回退到烘焙资产。
 测试需要开启快捷入口并让 Master 带 `--cheats`，记录写入 `out/web/nextdayz/scad-level/`。
 
 ## 自动验证
@@ -99,14 +101,13 @@ VITE_ND_SCAD_TRAINING=1 VITE_ND_REVIEW=1 ND_MASTER_URL=http://127.0.0.1:7797 \
 ./out/build/macos-arm64/bin/NextDayzBake map assets/agentscripts/fixtures/nextdayz-traversal.scad out/web/nextdayz/w5-evidence/traversal
 node web/nextdayz/test/character.mjs
 ./gnb.sh web test
-node web/nextdayz/test/w7.mjs
-node web/nextdayz/test/w7-mixed.mjs
-node web/nextdayz/test/w7-loot.mjs
-node web/nextdayz/test/w7-respawn.mjs
+./gnb.sh web test --e2e
 ```
 
-W7 自动化使用真实地图服务器。界面脚本检查装备拖放、配件、武器状态和设置持久化，混合客户端脚本检查
-友伤和库存纠正，另外两项检查抢物资、撤离入库和死亡后重新出击。截图与结果写入 `out/web/nextdayz/w7-evidence/`。
+`--e2e` 自己启动 Master 和验收站点，使用真实地图服务器。界面脚本检查装备拖放、配件、武器状态和设置持久化，
+混合客户端脚本检查友伤和库存纠正，其余几项检查抢物资、撤离入库、死亡后重新出击，以及离开—回归—撤离。
+截图与结果写入 `out/web/nextdayz/e2e/<时间>/`。也可以对上面手动启动的环境单独运行
+`node web/nextdayz/test/w7.mjs` 等脚本。
 测试账号和地上物资会留在该服务器的数据目录中，重复验证拾取时可使用独立的 Master 数据目录和端口。
 W5 的 `NextDayzRigPoseProbe` 可读取同一个 `.rig.bin` 并输出骨骼矩阵供逐元素对比。
 

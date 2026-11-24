@@ -496,7 +496,8 @@ async function init() {
         passwordRequired = release.passwordRequired;
         server.hidden = element("server-label").hidden = true;
     }
-    const coreUrl = "/ndcore/ndcore.mjs";
+    // The review shortcuts exist only in the review build of the kernel.
+    const coreUrl = reviewEnabled ? "/ndcore/ndcore-review.mjs" : "/ndcore/ndcore.mjs";
     const [config, core] = await Promise.all([manifest(), import(/* @vite-ignore */ coreUrl)]);
     assets = config;
     const shared = assets.shared?.files ?? {};

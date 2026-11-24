@@ -28,21 +28,28 @@ else()
     FetchContent_MakeAvailable(JoltPhysics)
 endif()
 
-add_executable(ndcore WebCore.cpp WebPhysics.cpp WebCharacters.cpp)
-target_sources(ndcore PRIVATE ../../../Modules/NextPhysics/JoltCharacter.cpp)
-target_link_libraries(ndcore PRIVATE NextDayzCore Jolt)
-target_compile_options(ndcore PRIVATE -fexceptions)
-target_link_options(ndcore PRIVATE
-    --no-entry
-    -fexceptions
-    "-sMODULARIZE=1"
-    "-sEXPORT_ES6=1"
-    "-sENVIRONMENT=web,node"
-    "-sALLOW_MEMORY_GROWTH=1"
-    "-sEXPORTED_FUNCTIONS=['_malloc','_free']"
-    "-sEXPORTED_RUNTIME_METHODS=['HEAPU8','UTF8ToString']"
-)
-set_target_properties(ndcore PROPERTIES SUFFIX ".mjs")
+# ndcore is the release kernel. ndcore-review is the same kernel plus the review
+# shortcuts (teleport, a crowd of infected) for gnb web dev and the Playwright scripts.
+function(nd_add_kernel name)
+    add_executable(${name} WebCore.cpp WebPhysics.cpp WebCharacters.cpp)
+    target_sources(${name} PRIVATE ../../../Modules/NextPhysics/JoltCharacter.cpp)
+    target_link_libraries(${name} PRIVATE NextDayzCore Jolt)
+    target_compile_options(${name} PRIVATE -fexceptions)
+    target_link_options(${name} PRIVATE
+        --no-entry
+        -fexceptions
+        "-sMODULARIZE=1"
+        "-sEXPORT_ES6=1"
+        "-sENVIRONMENT=web,node"
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sEXPORTED_FUNCTIONS=['_malloc','_free']"
+        "-sEXPORTED_RUNTIME_METHODS=['HEAPU8','UTF8ToString']"
+    )
+    set_target_properties(${name} PROPERTIES SUFFIX ".mjs")
+endfunction()
+nd_add_kernel(ndcore)
+nd_add_kernel(ndcore-review)
+target_compile_definitions(ndcore-review PRIVATE ND_REVIEW_COMMANDS=1)
 
 add_executable(NextDayzProtocolProbe ProtocolProbe.cpp)
 target_link_libraries(NextDayzProtocolProbe PRIVATE NextDayzCore)

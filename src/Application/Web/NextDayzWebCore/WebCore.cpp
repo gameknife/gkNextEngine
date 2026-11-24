@@ -265,6 +265,9 @@ namespace
                 }
                 TryEnter();
             }
+#if ND_REVIEW_COMMANDS
+            // Review shortcuts: only the ndcore-review build (gnb web dev with VITE_ND_REVIEW=1,
+            // Playwright review scripts) handles them; the release kernel has no trace of them.
             else if (action == "reviewPlace" && InWorld() && physics_ && alive_)
             {
                 const auto position = ReadVec(command.at("position"));
@@ -302,6 +305,7 @@ namespace
                     reviewCrowd_.push_back(std::move(zombie));
                 }
             }
+#endif
             else if (action == "target" && InWorld() && !physics_) target_ = ReadVec(command.at("position"));
             else if ((action == "equip" || action == "unequip") && InWorld() && session_.pendingTakes.empty())
             {

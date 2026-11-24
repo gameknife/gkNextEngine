@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import createModule from "../../../out/web/nextdayz/core/ndcore.mjs";
 import { Client } from "../shared/client.mjs";
@@ -46,5 +47,14 @@ test("the WASM client authenticates, loads storage, and asks again while the DS 
         assert.deepEqual(calls.at(-1).body, { map: map.id, bring: [{ index: 0, count: 1 }] });
     } finally {
         client.destroy();
+    }
+});
+
+test("only the review kernel knows the review shortcuts", async () => {
+    const core = new URL("../../../out/web/nextdayz/core/", import.meta.url);
+    const [release, review] = await Promise.all([readFile(new URL("ndcore.wasm", core)), readFile(new URL("ndcore-review.wasm", core))]);
+    for (const command of ["reviewPlace", "reviewCrowd"]) {
+        assert.equal(release.includes(command), false, `release kernel handles ${command}`);
+        assert.equal(review.includes(command), true, `review kernel lacks ${command}`);
     }
 });

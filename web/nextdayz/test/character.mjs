@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
-import createModule from "../../../out/web/nextdayz/core/ndcore.mjs";
+import createModule from "../../../out/web/nextdayz/core/ndcore-review.mjs";
 import { Client } from "../shared/client.mjs";
 import { installCollision } from "../shared/collision.mjs";
 

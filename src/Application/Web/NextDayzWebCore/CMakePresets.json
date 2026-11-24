@@ -14,6 +14,6 @@
     }
   ],
   "buildPresets": [
-    { "name": "nextdayz-wasm", "configurePreset": "nextdayz-wasm", "targets": ["ndcore", "NextDayzProtocolProbe", "NextDayzCoreRules", "NextDayzClientReplay", "NextDayzRigPoseProbe"] }
+    { "name": "nextdayz-wasm", "configurePreset": "nextdayz-wasm", "targets": ["ndcore", "ndcore-review", "NextDayzProtocolProbe", "NextDayzCoreRules", "NextDayzClientReplay", "NextDayzRigPoseProbe"] }
   ]
 }

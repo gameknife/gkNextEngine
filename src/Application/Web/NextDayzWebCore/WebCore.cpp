@@ -281,13 +281,14 @@ namespace
             {
                 const auto position = ReadVec(command.at("position"));
                 const float yaw = command.value("yaw", 0.f);
-                if (!std::isfinite(yaw)) throw std::runtime_error("Invalid heading");
+                const float pitch = command.value("pitch", 0.f);
+                if (!std::isfinite(yaw) || !std::isfinite(pitch)) throw std::runtime_error("Invalid heading");
                 const auto floor = rayQuery_(position, glm::vec3(0.f, -1.f, 0.f), 60.f);
                 if (!floor || floor->Normal.y < 0.55f) throw std::runtime_error("No walkable surface at review position");
                 player_.Create([this](const FCharacterControllerSettings& settings)
                     { return physics_->CreateCharacter(settings); }, {}, floor->HitPoint + glm::vec3(0.f, .06f, 0.f), config_);
                 player_.SetYaw(yaw);
-                player_.SetPitch(0.f);
+                player_.SetPitch(std::clamp(pitch, -1.2f, 1.2f));
                 aimHeld_ = false;
                 actions_.Reset();
                 actionLoot_.clear();
@@ -524,6 +525,7 @@ namespace
                 {"phase", Phase()}, {"message", message_}, {"scene", scene_}, {"id", session_.survivorId},
                 {"feet", V3(feet_)}, {"eye", V3(Eye())}, {"forward", V3(Forward())}, {"yaw", yaw_},
                 {"combat", {{"shots", weapons_.LastShotSequence()}, {"hits", session_.hits}, {"kills", session_.kills},
+                    {"pvpSent", pvpSent_},
                     {"hitMarker", hitMarker_}, {"hurt", hurtMarker_}, {"headshot", headshot_}, {"kill", killMarker_},
                     {"weapon", weapon ? weapon->displayName : std::string_view{}}, {"magazine", weapons_.AmmoInMag()},
                     {"reserve", weapons_.AmmoReserve(inventory_)}, {"capacity", weapons_.MagazineCapacity()},
@@ -719,6 +721,7 @@ namespace
             if (const auto hit = session_.FindPvpHit(trace, *definition))
             {
                 Send(*hit);
+                ++pvpSent_;
             }
         }
 
@@ -1232,7 +1235,7 @@ namespace
         std::optional<glm::vec3> target_;
         float yaw_ = 0.f;
         float retrySeconds_ = 0.f;
-        uint32_t drops_ = 0;
+        uint32_t drops_ = 0, pvpSent_ = 0;
         bool mapReady_ = false, spawned_ = false, alive_ = false;
     };
 }

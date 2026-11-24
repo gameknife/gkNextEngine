@@ -1,23 +1,17 @@
 import assert from "node:assert/strict";
-import { chromium } from "playwright";
-import { mkdir, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { evidence as evidenceDir, launchBrowser, openPage, site } from "./harness.mjs";
 
-const repo = fileURLToPath(new URL("../../..", import.meta.url));
-const evidence = resolve(repo, "out/web/nextdayz/w7-evidence");
-const site = process.env.ND_TEST_SITE ?? "http://127.0.0.1:4182";
-const browser = await chromium.launch({
-    channel: "chrome", args: ["--enable-webgl", "--ignore-gpu-blocklist", "--disable-background-timer-throttling"],
-});
+const evidence = await evidenceDir("out/web/nextdayz/w7-evidence");
+const browser = await launchBrowser(["--disable-background-timer-throttling"]);
 const names = [`W7 Race A ${Date.now()}`, `W7 Race B ${Date.now()}`];
 const review = page => page.evaluate(() => window.nextdayzReview());
 const wait = (page, predicate, arg, timeout = 20000) => page.waitForFunction(predicate, arg, { timeout });
 const place = (page, position, yaw) => page.evaluate(data => window.nextdayzReviewPlace(data.position, data.yaw), { position, yaw });
 
 try {
-    await mkdir(evidence, { recursive: true });
-    const pages = await Promise.all(names.map(() => browser.newPage({ viewport: { width: 1280, height: 720 } })));
+    const pages = await Promise.all(names.map(() => openPage(browser, { viewport: { width: 1280, height: 720 } })));
     await Promise.all(pages.map(async (page, index) => {
         await page.goto(site);
         await page.locator("#name").fill(names[index]);

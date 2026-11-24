@@ -348,7 +348,7 @@ window.addEventListener("keydown", event => {
     }
 });
 
-const place = (position: XYZ, yaw: number) => command({ type: "reviewPlace", position, yaw });
+const place = (position: XYZ, yaw: number, pitch = 0) => command({ type: "reviewPlace", position, yaw, pitch });
 course.addEventListener("click", () => {
     if (reviewEnabled) {
         showPack(false);

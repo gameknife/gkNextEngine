@@ -1,22 +1,18 @@
 import assert from "node:assert/strict";
-import { chromium } from "playwright";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { equip, evidence as evidenceDir, launchBrowser, openPage, repo, site } from "./harness.mjs";
 
-const repo = fileURLToPath(new URL("../../..", import.meta.url));
-const evidence = resolve(repo, "out/web/nextdayz/w7-evidence");
-const site = process.env.ND_TEST_SITE ?? "http://127.0.0.1:4182";
+const evidence = await evidenceDir("out/web/nextdayz/w7-evidence");
 const map = "training_ground";
 const manifestRoot = resolve(repo, "out/web/nextdayz/assets");
 const manifest = JSON.parse(await readFile(resolve(manifestRoot, "manifest.json"), "utf8"));
 const { anchors } = JSON.parse(await readFile(resolve(manifestRoot, manifest.maps[map].files["anchors.json"].path), "utf8"));
-const browser = await chromium.launch({ channel: "chrome", args: ["--enable-webgl", "--ignore-gpu-blocklist"] });
+const browser = await launchBrowser();
 const result = {};
-await mkdir(evidence, { recursive: true });
 
 try {
-    const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    const page = await openPage(browser, { viewport: { width: 1280, height: 720 } });
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
     const read = () => page.evaluate(() => window.nextdayzReview());
@@ -55,6 +51,7 @@ try {
     await wait(() => window.nextdayzReview().frame.lootReady);
     await page.evaluate(() => window.nextdayzLightPreview(540, 0));
     if (!(await read()).cargo.items.some(item => item.id === "ak")) await take("ak", [0, 1], 1);
+    if (!(await read()).cargo.items.some(item => item.id === "ak" && item.weaponSlot >= 0)) await equip(page, "ak");
     if (!(await read()).cargo.items.some(item => item.id === "ammo_545")) await take("ammo_545", [0, 1], 1);
     console.log("joined and armed");
 

@@ -1,34 +1,26 @@
 import assert from "node:assert/strict";
-import { spawn, execFileSync } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { chromium } from "playwright";
+import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { equip, evidence as evidenceDir, launchBrowser, master, masterAdmin, openPage, preset, repo, site, spawnGnb } from "./harness.mjs";
 
-const repo = fileURLToPath(new URL("../../..", import.meta.url));
-const evidence = resolve(repo, process.env.ND_TEST_EVIDENCE ?? "out/web/nextdayz/w7-evidence");
-const site = process.env.ND_TEST_SITE ?? "http://127.0.0.1:4182";
-const master = process.env.ND_TEST_MASTER ?? "http://127.0.0.1:7797";
+const evidence = await evidenceDir("out/web/nextdayz/w7-evidence");
 const name = process.env.ND_TEST_RESUME_NAME ?? `W7 Mixed Browser ${Date.now()}`;
-const preset = process.env.ND_TEST_PRESET ?? "macos-arm64";
-const gnb = resolve(repo, "gnb.sh");
 const map = "training_ground";
-const browser = await chromium.launch({ channel: "chrome", args: ["--enable-webgl", "--ignore-gpu-blocklist"] });
-const readMaster = (...args) => JSON.parse(execFileSync(gnb, ["master", ...args, "--url", master], { cwd: repo, encoding: "utf8" }));
-const pvp = (server, on) => execFileSync(gnb, ["master", "pvp", server, `--on=${on}`, "--url", master], { cwd: repo });
+const browser = await launchBrowser();
+const pvp = (server, on) => masterAdmin("/admin/pvp", { server, on });
 const result = {};
-await mkdir(evidence, { recursive: true });
 let serverId;
 let observer;
 let log = "";
 
 try {
-    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    const page = await openPage(browser, { viewport: { width: 1440, height: 900 } });
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
     const review = () => page.evaluate(() => window.nextdayzReview());
     const wait = (probe, args, timeout = 20000) => page.waitForFunction(probe, args, { timeout });
-    const place = (position, yaw) => page.evaluate(data => window.nextdayzReviewPlace(data.position, data.yaw), { position, yaw });
+    const place = (position, yaw, pitch = 0) => page.evaluate(data => window.nextdayzReviewPlace(data.position, data.yaw, data.pitch),
+        { position, yaw, pitch });
     const capture = async () => {
         await page.locator("#capture").click();
         await wait(() => Boolean(document.pointerLockElement));
@@ -51,11 +43,11 @@ try {
     await page.locator("#field").waitFor({ timeout: 120000 });
     await page.evaluate(() => window.nextdayzLightPreview(540, 0));
     await wait(() => window.nextdayzReview().frame.snapshots >= 8);
-    const status = readMaster("status");
+    const status = await masterAdmin("/admin/status");
     const account = status.accounts.find(entry => entry.name === name);
     serverId = status.servers.find(server => server.players.includes(account?.id))?.id;
     assert(serverId);
-    pvp(serverId, false);
+    await pvp(serverId, false);
     const take = async (id, position) => {
         if ((await review()).cargo.items.some(item => item.id === id)) return;
         await place(position, Math.PI);
@@ -67,6 +59,9 @@ try {
     };
     await take("ak", [57.875, 11.45, 58.45]);
     await take("ammo_545", [58.8, 11.45, 61.45]);
+    // Picked up into the bag, as on desktop; drawn only once equipped.
+    assert.equal((await review()).frame.combat.weapon, "");
+    await equip(page, "ak");
     assert.equal((await review()).frame.combat.weapon, "AK-74");
 
     const cvar = (key, set) => ({ type: "cvar", name: `nextdayz.validation.${key}`, set });
@@ -78,7 +73,9 @@ try {
     const desktopTest = "nextdayz-w7-mixed-desktop";
     const script = {
         name: desktopTest, target: "NextDayz", viewport: { width: 1280, height: 720 },
-        args: ["--cvar", "nextdayz.net.mode client", "--cvar", `nextdayz.net.master ${master}`,
+        // A runner without a display (gnb web test --e2e --software-gl) renders to a headless surface.
+        args: [...(process.env.ND_TEST_HEADLESS === "1" ? ["--headless-surface"] : []),
+            "--cvar", "nextdayz.net.mode client", "--cvar", `nextdayz.net.master ${master}`,
             "--cvar", `nextdayz.net.name W7 Desktop ${Date.now()}`, "--cvar", "nextdayz.net.autoDeploy true",
             "--cvar", `nextdayz.net.autoMap ${map}`],
         steps: [
@@ -93,7 +90,7 @@ try {
     };
     const desktopPath = resolve(evidence, desktopTest + ".agentscript.json");
     await writeFile(desktopPath, JSON.stringify(script));
-    observer = spawn(gnb, ["validate", "--script", desktopPath], { cwd: repo, stdio: ["ignore", "pipe", "pipe"] });
+    observer = spawnGnb(["validate", "--script", desktopPath], { stdio: ["ignore", "pipe", "pipe"] });
     observer.stdout.on("data", chunk => { log += chunk; });
     observer.stderr.on("data", chunk => { log += chunk; });
     const exited = new Promise(done => observer.once("exit", done));
@@ -111,15 +108,42 @@ try {
     await shot(260);
     assert.equal((await review()).frame.pvp, false);
     await page.waitForTimeout(450);
-    pvp(serverId, true);
+    await pvp(serverId, true);
     await wait(() => window.nextdayzReview().frame.pvp);
+    // Aim at the chest, not level at eye height: recoil then climbs through the torso
+    // instead of over the head after the first round. Positive pitch looks down (desktop's
+    // convention); 0.12 rad drops the line about half a metre over the 4.5 m gap.
+    await release();
+    await place([-270, 11, 76.5], 0, .12);
+    await wait(() => Math.abs(window.nextdayzReview().frame.feet[2] - 76.5) < .2);
+    await capture();
     // Aim at the relatively stationary desktop survivor, who is 4.5 m in
     // front of the browser, during the dedicated verification pause.
+    const before = (await review()).frame;
     await shot(1750);
-    await wait(id => window.nextdayzReview().frame.remotes.some(remote => remote.id === id && !remote.alive), peer.id, 10000);
+    const after = (await review()).frame;
+    // Evidence for a miss: rounds fired, where the shooter and the target stood.
+    result.shooting = { shots: after.combat.shots - before.combat.shots, pvpSent: after.combat.pvpSent - before.combat.pvpSent,
+        firstPerson: after.camera?.firstPerson, arm: after.camera?.arm, eye: after.eye, magazine: after.combat.magazine,
+        feet: after.feet, forward: after.forward, target: after.remotes.find(remote => remote.id === peer.id)?.position };
+    console.log(JSON.stringify(result.shooting));
+    const down = id => window.nextdayzReview().frame.remotes.some(remote => remote.id === id && !remote.alive);
+    // A player keeps firing until the target drops; a second burst, then it must be down.
+    if (!(await page.evaluate(down, peer.id))) {
+        await page.waitForTimeout(1500);
+        if (!(await page.evaluate(down, peer.id))) {
+            if ((await review()).frame.combat.magazine < 8) {
+                await page.keyboard.press("r");
+                await page.waitForTimeout(2500);
+            }
+            await shot(1750);
+            result.shooting.secondBurst = true;
+        }
+    }
+    await wait(down, peer.id, 10000);
     result.pvp = { desktopId: peer.id, deathReplicated: true, toggled: true };
     await page.screenshot({ path: resolve(evidence, "friendly-fire.png") });
-    pvp(serverId, false);
+    await pvp(serverId, false);
     await release();
     await exited;
     await writeFile(resolve(evidence, "mixed-desktop.log"), log);
@@ -134,7 +158,7 @@ try {
     console.log(JSON.stringify(result));
 } finally {
     if (serverId) {
-        try { pvp(serverId, false); } catch { /* Server may already be idle. */ }
+        try { await pvp(serverId, false); } catch { /* Server may already be idle. */ }
     }
     if (observer?.exitCode === null && observer.signalCode === null) observer.kill("SIGINT");
     if (log) await writeFile(resolve(evidence, "mixed-desktop.log"), log);

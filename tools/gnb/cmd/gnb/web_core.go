@@ -339,8 +339,16 @@ func addWebCoreCommands(root *cobra.Command, ctx appContext) {
 	var bots, latency, seconds int
 	var loss float64
 	var master, mapID string
-	test := &cobra.Command{Use: "test", Short: "Run NextDayz web tests and WebRTC bots", Args: cobra.NoArgs,
+	var e2e bool
+	e2eOpts := webE2EOptions{}
+	test := &cobra.Command{Use: "test", Short: "Run NextDayz web tests, WebRTC bots or the mixed-client end-to-end run", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if e2e {
+				if len(e2eOpts.Scenarios) == 0 {
+					e2eOpts.Scenarios = webE2EScenarios
+				}
+				return runWebE2E(cmd, ctx, e2eOpts)
+			}
 			if err := webInstall(cmd.Context(), cmd, ctx); err != nil {
 				return err
 			}
@@ -357,6 +365,14 @@ func addWebCoreCommands(root *cobra.Command, ctx appContext) {
 	test.Flags().Float64Var(&loss, "loss", 0, "Percentage of outgoing unreliable packets to drop")
 	test.Flags().StringVar(&master, "master", "http://127.0.0.1:7784", "Master URL for the bots")
 	test.Flags().StringVar(&mapID, "map", "training_ground", "Map for the bot script")
+	test.Flags().BoolVar(&e2e, "e2e", false, "Start a Master and the review site, then run desktop + browser scenarios (web/nextdayz/test)")
+	test.Flags().StringSliceVar(&e2eOpts.Scenarios, "scenario", nil, "With --e2e: run only these scenarios (default: all)")
+	test.Flags().StringVar(&e2eOpts.Browser, "browser", "chrome", "With --e2e: chrome, msedge, or chromium (Playwright's own)")
+	test.Flags().BoolVar(&e2eOpts.SoftwareGL, "software-gl", false, "With --e2e: GPU-less runner (WebGL on the CPU, desktop client on a headless surface)")
+	test.Flags().IntVar(&e2eOpts.MasterPort, "e2e-master-port", 7798, "With --e2e: Master HTTP port")
+	test.Flags().IntVar(&e2eOpts.SitePort, "e2e-site-port", 4186, "With --e2e: review site port")
+	test.Flags().IntVar(&e2eOpts.PortBase, "e2e-port-base", 27800, "With --e2e: first ENet port for map servers")
+	test.Flags().IntVar(&e2eOpts.RtcBase, "e2e-rtc-port-base", 28800, "With --e2e: first WebRTC port for map servers")
 	stage := &cobra.Command{Use: "stage", Short: "Prepare the production web directory for gnb master serve --web", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			output := webOutput(ctx)

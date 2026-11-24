@@ -1,17 +1,13 @@
 import assert from "node:assert/strict";
-import { chromium } from "playwright";
-import { mkdir, writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { evidence as evidenceDir, launchBrowser, openPage, site } from "./harness.mjs";
 
-const repo = fileURLToPath(new URL("../../..", import.meta.url));
-const evidence = resolve(repo, "out/web/nextdayz/w7-evidence");
-const site = process.env.ND_TEST_SITE ?? "http://127.0.0.1:4182";
-const browser = await chromium.launch({ channel: "chrome", args: ["--enable-webgl", "--ignore-gpu-blocklist"] });
+const evidence = await evidenceDir("out/web/nextdayz/w7-evidence");
+const browser = await launchBrowser();
 
 try {
-    await mkdir(evidence, { recursive: true });
-    const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    const page = await openPage(browser, { viewport: { width: 1280, height: 720 } });
     const review = () => page.evaluate(() => window.nextdayzReview());
     const deploy = async () => {
         await page.locator("input[name=map][value=training_ground]").check();
@@ -30,8 +26,11 @@ try {
     const infected = frame.zombies.find(zombie => zombie.state !== 7);
     await page.evaluate(p => window.nextdayzReviewPlace([p[0], p[1] + 1.1, p[2] + 1.5], Math.PI), infected.position);
     await page.locator("#death-panel").waitFor({ timeout: 50000 });
-    const death = (await review()).frame;
+    const dead = await review();
+    const death = dead.frame;
     assert.equal(death.body.health, 0);
+    // The client told the server once and let go of what it carried, as desktop does.
+    await page.waitForFunction(() => window.nextdayzReview().cargo.items.length === 0, null, { timeout: 5000 });
     await page.screenshot({ path: resolve(evidence, "death-panel.png") });
     await page.locator("#respawn").click();
     await page.locator("#profile").waitFor();

@@ -825,7 +825,11 @@ void NextDayzGameInstance::NetPoll()
                 if (!Net::Read(reader, hit) || !net.pvp || hit.survivorId == client.survivorId) break;
                 FNetSession::FClient* victim = net.ClientBySurvivor(hit.survivorId);
                 if (!victim || !victim->hasState || !victim->state.presence.alive) break;
-                if (glm::distance(hit.source, client.state.presence.eye) > 4.0f) break;
+                if (glm::distance(hit.source, client.state.presence.eye) > 4.0f)
+                {
+                    rejectHit(client, "the shot starts away from the shooter");
+                    break;
+                }
                 const std::optional<float> miss = net.history.SurvivorDistance(hit.survivorId, hit.point,
                                                                                shooterTime(client), kRewindWindowSeconds);
                 if (!miss || *miss > kHitToleranceMeters) { rejectHit(client, "no survivor stood there"); break; }

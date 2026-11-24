@@ -1,4 +1,4 @@
-import { connectRtc } from "../w1/transport.mjs";
+import { connectRtc } from "./transport.mjs";
 
 const views = { frame: 0, profile: 1, effects: 2, loot: 3, inventory: 4, nearby: 5, cargo: 6, ground: 7 };
 const utf8 = new TextEncoder();

@@ -246,10 +246,6 @@ func runDS(ctx appContext, opts dsOptions, clientExtra []string) error {
 		console.Label("webrtc", fmt.Sprintf("UDP %d · http://127.0.0.1:%d/", opts.RtcPort, opts.SignalPort))
 		serverEnv = append(serverEnv, fmt.Sprintf("GK_NEXTNET_RTC_PORT=%d", opts.RtcPort),
 			fmt.Sprintf("GK_NEXTNET_RTC_SIGNAL_PORT=%d", opts.SignalPort))
-		webRoot := filepath.Join(ctx.repoRoot, "out", "web", "nextdayz", "w1")
-		if _, err := os.Stat(filepath.Join(webRoot, "index.html")); err == nil {
-			serverEnv = append(serverEnv, "GK_NEXTNET_RTC_WEB_ROOT="+webRoot)
-		}
 	}
 	if opts.DryRun {
 		console.CommandLine(exe + " " + dsQuoteArgs(serverArgs))

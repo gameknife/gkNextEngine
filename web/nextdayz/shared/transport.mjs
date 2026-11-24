@@ -1,4 +1,5 @@
-// W1 framing is local to WebRTC. The NextDayz payload is handled by C++/WASM.
+// WebRTC framing for NextDayz: reliable messages are split into frames and reassembled,
+// unreliable ones carry a sequence number. The payload itself is handled by C++/WASM.
 const final = 0
 const more = 1
 const ping = 2

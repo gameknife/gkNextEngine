@@ -7,18 +7,9 @@
 //   OnInit LoadRig -> BeforeSceneRebuild InjectAssets -> OnSceneLoaded Instantiate
 // OnSceneUnloaded only clears runtime pointers (never the injected assets).
 //
-// Animation graph, evaluated once per frame:
-//   clip layers (FRigLayeredAnimator::Evaluate)
-//     locomotion   full body   18-clip blend space: stance x speed x direction
-//     hold         arms + IK   ready / aim / sprint carry weapon frames
-//     hold_body    torso+head  the same clips, additive: blade and head turn
-//     weapon_*     reload / switch, same split as hold
-//     recoil       upper body  additive per-shot kick
-//     action       full body   loot
-//   procedural pass (RigPoseOps on the blended pose)
-//     whole-body lean into acceleration, aim pitch / twist split across
-//     torso, head and weapon, weapon bob and turn sway, then both arms
-//     IK-solved onto bone_ik_hand_r/l so the hands never leave the weapon.
+// The animation graph itself is Core/SurvivorPoseGraph, shared with the Web
+// client; this class places it in the scene and dresses it (clothing, weapon
+// and holster models, attachments, camera fade).
 // ============================================================================
 
 #include <array>
@@ -29,7 +20,7 @@
 #include <glm/glm.hpp>
 
 #include "Engine/Assets/Data/RigAsset.hpp"
-#include "Gameplay/Rig/RigLayeredAnimator.h"
+#include "Application/Game/NextDayz/Core/SurvivorPoseGraph.hpp"
 
 #include "Application/Game/NextDayz/NextDayzConfig.hpp"
 #include "Application/Game/NextDayz/Player/FirstPersonArms.hpp"
@@ -79,7 +70,7 @@ namespace NextDayz
         glm::vec3 HolsterPosition(int slot) const;
         float WeaponDistanceFromHolster(int slot) const;
         float HolsteredMuzzleVertical(int slot) const;
-        float HandHeightInTorso(int slot) const;
+        float HandHeightInTorso(int slot) const { return graph_.HandHeightInTorso(slot); }
 
         // Drives world transform + animation for the frame. The body yaw lags
         // state.aimYawRadians; the upper body twists to cover the difference.
@@ -91,56 +82,26 @@ namespace NextDayz
         const std::shared_ptr<Assets::Node>& WorldRoot() const { return worldNode_; }
         bool IsVisible() const { return visible_; }
         float CameraOpacity() const { return cameraOpacity_; }
-        const std::string& CurrentBaseClipName() const { return baseClipName_; }
-        const std::string& CurrentWeaponActionClipName() const { return weaponActionClipName_; }
-        float AimWeight() const { return aimWeight_; }
-        float WeaponActionWeight() const { return weaponActionWeight_; }
-        float BodyYaw() const { return bodyYaw_; }
-        float LeanRollDegrees() const { return lean_.x; }
-        bool TurningInPlace() const { return turningInPlace_; }
-        bool RecoilActive() const;
+        const std::string& CurrentBaseClipName() const { return graph_.CurrentBaseClipName(); }
+        const std::string& CurrentWeaponActionClipName() const { return graph_.CurrentWeaponActionClipName(); }
+        float AimWeight() const { return graph_.AimWeight(); }
+        float WeaponActionWeight() const { return graph_.WeaponActionWeight(); }
+        float BodyYaw() const { return graph_.BodyYaw(); }
+        float LeanRollDegrees() const { return graph_.LeanRollDegrees(); }
+        bool TurningInPlace() const { return graph_.TurningInPlace(); }
+        bool RecoilActive() const { return graph_.RecoilActive(); }
         // World-space barrel tip and direction of the held weapon; false when none.
         bool WeaponMuzzle(glm::vec3& outPosition, glm::vec3& outForward) const;
         // Distance from the right hand to its grip target (m); 0 when no weapon.
-        float GripError() const { return gripError_; }
+        float GripError() const { return graph_.GripError(); }
         // Actual pose deviation from a forward-only elbow hinge (degrees).
-        float ElbowConstraintErrorDegrees() const;
+        float ElbowConstraintErrorDegrees() const { return graph_.ElbowConstraintErrorDegrees(); }
         // Worst distance (m) of a fully planted traversal hand from its lip target; 0 when none is planted.
-        float PlantError() const { return plantError_; }
+        float PlantError() const { return graph_.PlantError(); }
 
     private:
-        struct FBones
-        {
-            int32_t root = -1;
-            int32_t pelvis = -1;
-            int32_t torso = -1;
-            int32_t head = -1;
-            int32_t upperArmL = -1;
-            int32_t foreArmL = -1;
-            int32_t handL = -1;
-            int32_t upperArmR = -1;
-            int32_t foreArmR = -1;
-            int32_t handR = -1;
-            int32_t ikWeapon = -1;
-            int32_t ikHandL = -1;
-            int32_t ikHandR = -1;
-        };
-
-        struct FClips
-        {
-            // Blend-space order: stand idle, walk/run/sprint x (f, b, l, r), crouch idle, crouch walk x 4.
-            std::array<const Assets::FRigClip*, 18> locomotion;
-            const Assets::FRigClip* ready = nullptr;
-            const Assets::FRigClip* aim = nullptr;
-            const Assets::FRigClip* sprint = nullptr;
-            const Assets::FRigClip* recoil = nullptr;
-        };
-
         Assets::Node* BoneNode(std::string_view boneName);
         void ResolveRig();
-        void UpdateLocomotion(const FPlayerPresentationState& state, float deltaSeconds);
-        void UpdateProcedural(const FPlayerPresentationState& state, float deltaSeconds);
-        void UpdateSwitchPose(const FPlayerPresentationState& state);
         void UpdateAttachments(const FPlayerPresentationState& state);
         void ApplyClothing();
 
@@ -162,8 +123,6 @@ namespace NextDayz
         std::vector<FClothingPart> clothingParts_;
         std::vector<std::string> equippedClothing_;
         bool hasRig_ = false;
-        FBones bones_{};
-        FClips clips_{};
 
         // injection results (recorded in InjectAssets, valid for the next scene)
         std::vector<uint32_t> partModelIds_;
@@ -182,24 +141,11 @@ namespace NextDayz
         std::array<WeaponAttachmentVisuals, kWeaponSlotCount> holsteredAttachments_;
         FWeaponAttachments heldLoadout_{};
         std::array<std::shared_ptr<Assets::Node>, kWeaponSlotCount> holsteredWeaponNodes_;
-        std::array<glm::vec3, kWeaponSlotCount> holsterPositions_{};
-        NextGameplay::FRigLayeredAnimator animator_;
-        NextGameplay::FRigLayerHandle locomotionLayer_ = NextGameplay::invalidRigLayerHandle;
-        NextGameplay::FRigLayerHandle holdLayer_ = NextGameplay::invalidRigLayerHandle;
-        NextGameplay::FRigLayerHandle holdBodyLayer_ = NextGameplay::invalidRigLayerHandle;
-        NextGameplay::FRigLayerHandle weaponActionLayer_ = NextGameplay::invalidRigLayerHandle;
-        NextGameplay::FRigLayerHandle weaponActionBodyLayer_ = NextGameplay::invalidRigLayerHandle;
-        NextGameplay::FRigLayerHandle recoilLayer_ = NextGameplay::invalidRigLayerHandle;
-        NextGameplay::FRigLayerHandle actionLayer_ = NextGameplay::invalidRigLayerHandle;
-        bool bound_ = false;
-        std::vector<glm::mat4> transforms_;
-
+        FSurvivorPoseGraph graph_;
         bool visible_ = true;
         float cameraOpacity_ = 1.0f;
         FAnimationConfig animationConfig_{};
         float weaponScale_ = 1.0f;
-        std::string baseClipName_;
-        std::string weaponActionClipName_;
         std::array<uint32_t, kWeapons.size()> weaponModelIds_{};
         std::array<FWeaponMaterialSlots, kWeapons.size()> weaponMaterialIds_{};
         int weaponVisualIndex_ = -1;
@@ -208,28 +154,5 @@ namespace NextDayz
         bool weaponVisible_ = false;
         std::array<bool, kWeaponSlotCount> holsteredWeaponVisible_{};
 
-        // graph state
-        bool yawInitialized_ = false;
-        float bodyYaw_ = 0.0f;
-        float previousAimYaw_ = 0.0f;
-        bool turningInPlace_ = false;
-        float crouchWeight_ = 0.0f;
-        glm::vec2 moveDirection_{0.0f, 1.0f};   // body-relative: x=right, y=forward
-        float aimWeight_ = 0.0f;
-        float sprintHoldWeight_ = 0.0f;
-        float holdWeight_ = 0.0f;
-        float weaponWeight_ = 0.0f;              // weapon in hand at all
-        float freeHandWeight_ = 0.0f;            // support hand off the weapon (loot, traversal)
-        float traverseWeight_ = 0.0f;            // smoothed "in a traversal": torso stops tracking the camera
-        float weaponActionWeight_ = 0.0f;
-        float actionWeight_ = 0.0f;
-        float movingWeight_ = 0.0f;
-        glm::vec3 previousVelocity_{0.0f};
-        glm::vec2 lean_{0.0f};                   // degrees: x=roll (top to the right), y=pitch (top forward)
-        glm::vec2 leanVelocity_{0.0f};
-        float turnSway_ = 0.0f;                  // radians the weapon lags behind a turn
-        bool recoilActive_ = false;
-        float gripError_ = 0.0f;
-        float plantError_ = 0.0f;
     };
 }

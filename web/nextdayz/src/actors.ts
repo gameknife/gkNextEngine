@@ -10,6 +10,7 @@ interface Part {
     bone: number;
     name: string;
     object: THREE.Object3D;
+    gear?: number; // weapon models: 0 held, 1 + slot holstered; matrices follow the bones
 }
 
 interface RigParts {
@@ -165,15 +166,15 @@ class Survivor {
             const lower = part.name === "bone_pelvis" || /bone_(thigh|calf|foot)_/.test(part.name);
             part.object.visible = !(coat && upper) && !(trousers && lower);
         }
-        const weapon = this.assets.weapon.parts.find(part => part.name === "bone_wpn_" + pose.weapon);
-        if (weapon) {
-            const socket = this.assets.survivorBones.indexOf("bone_weapon_socket");
-            if (socket >= 0) {
-                const part = this.attach(weapon, this.group, socket);
-                fitMounts(part.object, this.assets, pose.slots[pose.activeSlot]?.mounts ?? []);
-                this.gear.push(part);
-            }
-        }
+        const weaponModel = (id: string, mounts: Mount[], gear: number) => {
+            const weapon = this.assets.weapon.parts.find(part => part.name === "bone_wpn_" + id);
+            if (!weapon) return;
+            const part = { ...this.attach(weapon, this.group), gear };
+            fitMounts(part.object, this.assets, mounts);
+            this.gear.push(part);
+        };
+        weaponModel(pose.weapon, pose.slots[pose.activeSlot]?.mounts ?? [], 0);
+        pose.slots.forEach((slot, index) => { if (slot.id) weaponModel(slot.id, slot.mounts, index + 1); });
     }
 
     update(position: XYZ, yaw: number, visible: boolean, pose: Pose, offset: number, matrices: Float32Array) {
@@ -184,7 +185,12 @@ class Survivor {
         this.group.rotation.y = this.lastYaw;
         this.dress(pose);
         for (const part of this.body.concat(this.gear)) {
-            part.object.matrix.fromArray(matrices, offset + part.bone * 16);
+            if (part.gear === undefined) part.object.matrix.fromArray(matrices, offset + part.bone * 16);
+            else {
+                part.object.visible = pose.gearOffset >= 0 &&
+                    (part.gear === 0 ? pose.heldVisible : pose.holsterVisible[part.gear - 1] ?? false);
+                if (part.object.visible) part.object.matrix.fromArray(matrices, pose.gearOffset + part.gear * 16);
+            }
             part.object.matrixWorldNeedsUpdate = true;
         }
     }

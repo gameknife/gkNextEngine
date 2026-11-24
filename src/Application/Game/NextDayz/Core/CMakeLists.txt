@@ -1,6 +1,7 @@
 set(nextdayz "${CMAKE_CURRENT_LIST_DIR}/..")
 add_library(NextDayzCore STATIC
     CharacterPoseGraph.cpp
+    SurvivorPoseGraph.cpp
     "${nextdayz}/Combat/HitGeometry.cpp"
     "${nextdayz}/Data/ItemDefs.cpp"
     "${nextdayz}/Data/LootTables.cpp"

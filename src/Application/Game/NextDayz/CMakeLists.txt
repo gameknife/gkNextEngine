@@ -2,7 +2,7 @@ add_subdirectory(Core)
 
 file(GLOB_RECURSE nextDayzSources CONFIGURE_DEPENDS "*.cpp" "*.hpp" "*.h")
 list(FILTER nextDayzSources EXCLUDE REGEX
-    "/(Combat/HitGeometry|Core/CharacterPoseGraph|Data/(ItemDefs|LootTables)|Inventory/(Inventory|LootTransfer)|Net/(ClientSession|MasterApi|NetProtocol)|Player/(SurvivalSystem|PlayerController|PlayerActionController|FirstPersonArmPose)|Sim/ItemLedger|Weapons/WeaponRuntime|World/TimeSystem)\\.cpp$")
+    "/(Combat/HitGeometry|Core/(CharacterPoseGraph|SurvivorPoseGraph)|Data/(ItemDefs|LootTables)|Inventory/(Inventory|LootTransfer)|Net/(ClientPlay|ClientSession|MasterApi|NetProtocol)|Player/(SurvivalSystem|PlayerController|PlayerActionController|FirstPersonArmPose)|Sim/ItemLedger|Weapons/WeaponRuntime|World/TimeSystem)\\.cpp$")
 # The game host owns the async navigation worker; compiling this large TU
 # separately keeps MSVC unity objects below their section-count limit.
 set_source_files_properties(NextDayzGameInstance.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)

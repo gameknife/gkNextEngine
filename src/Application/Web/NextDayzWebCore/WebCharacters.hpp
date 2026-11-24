@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Application/Game/NextDayz/Core/CharacterPoseGraph.hpp"
+#include "Application/Game/NextDayz/Core/SurvivorPoseGraph.hpp"
 #include "Application/Game/NextDayz/Zombies/ZombieState.hpp"
 #include "Gameplay/Rig/RigPoseOps.h"
 
@@ -12,23 +12,28 @@ namespace NextDayz
     {
         size_t offset = 0; // In float32 elements, in the current frame.
         float yaw = 0.f;
+        // Survivors only: four more matrices after the bones, the held weapon
+        // then one per holster slot, and which of them the desktop rig shows.
+        size_t gearOffset = 0;
+        bool heldVisible = false;
+        std::array<bool, kWeaponSlotCount> holsterVisible{};
     };
 
+    // The desktop's third-person graph (Core/SurvivorPoseGraph), streamed as matrices.
     class FWebSurvivorPose
     {
     public:
-        void Bind(const Assets::FRigDefinition& asset);
-        FWebCharacterPose Advance(const FPlayerPresentationState& state, const FAnimationConfig& config,
-                                  float dt, std::vector<float>& output);
+        void Bind(const Assets::FRigDefinition& asset, const FAnimationConfig& animation, float weaponScale);
+        FWebCharacterPose Advance(const glm::vec3& feet, const FPlayerPresentationState& state, float dt,
+                                  std::vector<float>& output);
+        void TriggerRecoil(float scale) { graph_.TriggerRecoil(scale); }
 
     private:
-        NextGameplay::FRigLayeredAnimator animator_;
-        FSurvivorLocomotionClips clips_{};
-        NextGameplay::FRigLayerHandle locomotion_, hold_, holdBody_, weaponAction_, weaponActionBody_, lootAction_;
-        glm::vec2 direction_{0.f, 1.f};
-        float crouch_ = 0.f, moving_ = 0.f, holdWeight_ = 0.f, aim_ = 0.f, yaw_ = 0.f;
-        bool yawInitialized_ = false, turning_ = false;
-        std::string baseClip_;
+        FSurvivorPoseGraph graph_;
+        const Assets::FRigDefinition* asset_ = nullptr;
+        float weaponScale_ = 1.f;
+        int32_t socket_ = -1;
+        std::array<int32_t, kWeaponSlotCount> holsterParents_{};
         std::vector<glm::mat4> transforms_;
     };
 

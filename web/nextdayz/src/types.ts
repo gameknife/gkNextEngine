@@ -117,6 +117,10 @@ export interface Pose {
     viewModelOffset: number;
     viewModelArms: boolean;
     matrixOffset: number;
+    // Held weapon then one matrix per holster slot, placed by the kernel as the desktop rig places them.
+    gearOffset: number;
+    heldVisible: boolean;
+    holsterVisible: boolean[];
 }
 
 export interface Frame {

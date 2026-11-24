@@ -1,6 +1,5 @@
 #include "Engine/Common/CoreMinimal.hpp"
 #include "PlayerRigVisual.hpp"
-#include "Application/Game/NextDayz/Core/CharacterPoseGraph.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -32,29 +31,9 @@ namespace NextDayz
         const glm::vec3 kAxisX(1.0f, 0.0f, 0.0f);
         const glm::vec3 kAxisY(0.0f, 1.0f, 0.0f);
         const glm::vec3 kAxisZ(0.0f, 0.0f, 1.0f);
-        const glm::quat kBackWeaponRotation = glm::angleAxis(glm::pi<float>(), kAxisY) *
-                                              glm::angleAxis(glm::radians(-90.0f), kAxisX);
-        const glm::quat kWaistWeaponRotation = glm::angleAxis(glm::radians(90.0f), kAxisX);
-
-        // Elbow pole points in torso space (engine axes: +Z forward, -X right):
-        // firing elbow down and out, support elbow down under the handguard.
-        const glm::vec3 kPoleRight(-0.50f, 0.12f, -0.08f);
-        const glm::vec3 kPoleLeft(0.45f, 0.08f, 0.15f);
 
         // Weapons that are not held like the rifle the rig's grips were built for.
         FWeaponRigHold HoldFor(std::string_view weaponId) { return WeaponRigHoldFor(weaponId); }
-
-        float Approach(float current, float target, float seconds, float dt)
-        {
-            return seconds > 0.0f ? glm::mix(current, target, 1.0f - std::exp(-dt / seconds)) : target;
-        }
-
-        float WrapAngle(float radians)
-        {
-            return std::remainder(radians, glm::two_pi<float>());
-        }
-
-
     }
 
     bool PlayerRigVisual::LoadRig(const std::string& scadPath)
@@ -120,39 +99,13 @@ namespace NextDayz
 
     void PlayerRigVisual::ResolveRig()
     {
-        bones_.root = asset_.FindBone("bone_root");
-        bones_.pelvis = asset_.FindBone("bone_pelvis");
-        bones_.torso = asset_.FindBone("bone_torso");
-        bones_.head = asset_.FindBone("bone_head");
-        bones_.upperArmL = asset_.FindBone("bone_upperarm_l");
-        bones_.foreArmL = asset_.FindBone("bone_forearm_l");
-        bones_.handL = asset_.FindBone("bone_hand_l");
-        bones_.upperArmR = asset_.FindBone("bone_upperarm_r");
-        bones_.foreArmR = asset_.FindBone("bone_forearm_r");
-        bones_.handR = asset_.FindBone("bone_hand_r");
-        bones_.ikWeapon = asset_.FindBone("bone_ik_weapon");
-        bones_.ikHandL = asset_.FindBone("bone_ik_hand_l");
-        bones_.ikHandR = asset_.FindBone("bone_ik_hand_r");
-
-        clips_ = {};
+        // The pose graph resolves bones and clips itself; say here what the rig lacks.
         const auto clip = [this](const std::string& name)
         {
-            const Assets::FRigClip* found = asset_.FindClip(name);
-            if (!found)
-            {
-                SPDLOG_WARN("[NextDayz] rig is missing clip '{}'", name);
-            }
-            return found;
+            if (!asset_.FindClip(name)) SPDLOG_WARN("[NextDayz] rig is missing clip '{}'", name);
         };
-        clips_.locomotion = ResolveSurvivorLocomotionClips(asset_);
-        for (size_t i = 0; i < clips_.locomotion.size(); ++i)
-        {
-            if (!clips_.locomotion[i]) SPDLOG_WARN("[NextDayz] rig is missing clip '{}'", survivorLocomotionNames[i]);
-        }
-        clips_.ready = clip("weapon_ready");
-        clips_.aim = clip("aim_rifle_center");
-        clips_.sprint = clip("weapon_sprint");
-        clips_.recoil = clip("recoil_rifle");
+        for (const auto name : survivorLocomotionNames) clip(std::string(name));
+        for (const char* name : {"weapon_ready", "aim_rifle_center", "weapon_sprint", "recoil_rifle"}) clip(name);
         for (const char* weapon : {"knife", "crowbar", "axe"})
         {
             for (const char* action : {"low", "ready", "attack"})
@@ -160,7 +113,8 @@ namespace NextDayz
                 clip(fmt::format("melee_{}_{}", weapon, action));
             }
         }
-        if (bones_.ikWeapon < 0 || bones_.ikHandL < 0 || bones_.ikHandR < 0)
+        if (asset_.FindBone("bone_ik_weapon") < 0 || asset_.FindBone("bone_ik_hand_l") < 0 ||
+            asset_.FindBone("bone_ik_hand_r") < 0)
         {
             SPDLOG_WARN("[NextDayz] rig has no bone_ik_* targets; arms follow the clips only");
         }
@@ -228,8 +182,11 @@ namespace NextDayz
         arms.weaponScale = weaponScale_;
         const auto isArm = [this](int32_t bone)
         {
-            return bone >= 0 && (bone == bones_.upperArmL || bone == bones_.foreArmL || bone == bones_.handL ||
-                                 bone == bones_.upperArmR || bone == bones_.foreArmR || bone == bones_.handR);
+            if (bone < 0) return false;
+            for (const char* name : {"bone_upperarm_l", "bone_forearm_l", "bone_hand_l",
+                                     "bone_upperarm_r", "bone_forearm_r", "bone_hand_r"})
+                if (bone == asset_.FindBone(name)) return true;
+            return false;
         };
         for (size_t index = 0; index < asset_.parts.size() && index < partModelIds_.size(); ++index)
         {
@@ -344,14 +301,12 @@ namespace NextDayz
                 {
                     // Character left is +X. Keep the barrels up and the
                     // grips (-Y in weapon space) pointing back (-Z).
-                    const float side = slot == 0 ? 1.0f : -1.0f;
                     const bool waist = slot == kSidearmSlot;
-                    holsterPositions_[slot] = waist ? glm::vec3(-0.235f, 0.08f, 0.04f)
-                                                    : glm::vec3(side * 0.20f, 0.24f, -0.20f);
+                    const FSurvivorPoseGraph::FHolster rest = FSurvivorPoseGraph::RestingHolster(slot);
                     holsteredWeaponNodes_[slot] = Assets::SceneBuilder::CreateRenderNode(
-                        fmt::format("nd_player/weapon_holster_{}", slot), holsterPositions_[slot],
+                        fmt::format("nd_player/weapon_holster_{}", slot), rest.position,
                         glm::vec3(weaponScale_), scene.GenerateInstanceId(), weaponModelIds_[0],
-                        weaponMaterialIds_[0], false, waist ? kWaistWeaponRotation : kBackWeaponRotation, false);
+                        weaponMaterialIds_[0], false, rest.rotation, false);
                     Assets::Node* parent = waist ? BoneNode("bone_pelvis") : torso;
                     holsteredWeaponNodes_[slot]->SetParent(parent->shared_from_this());
                     scene.AddNode(holsteredWeaponNodes_[slot]);
@@ -367,60 +322,11 @@ namespace NextDayz
         ApplyClothing();
         Assets::NodeUtils::SetRayCastVisibleRecursive(worldNode_, false);
         worldNode_->RecalcTransform(true);
-        animator_.Bind(&asset_, boneNodes_, worldNode_.get());
-        using NextGameplay::ERigLayerBlendMode;
-        using NextGameplay::FRigBoneMask;
-        locomotionLayer_ =
-            animator_.CreateLayer("locomotion", ERigLayerBlendMode::Override, FRigBoneMask::FullBody(asset_));
-
-        // Holds own the arms and the IK frames; their torso/head channels (the
-        // blade) are added on top of the gait so the walk keeps its swing.
-        FRigBoneMask armsMask = FRigBoneMask::FromSubtree(asset_, "bone_ik_weapon");
-        for (const char* bone : {"bone_upperarm_l", "bone_forearm_l", "bone_hand_l", "bone_upperarm_r",
-                                 "bone_forearm_r", "bone_hand_r", "bone_weapon_socket"})
+        graph_.Bind(asset_, animationConfig_, [this](NextGameplay::FRigLayeredAnimator& animator)
         {
-            armsMask.SetBoneWeight(asset_, bone, 1.0f);
-        }
-        FRigBoneMask bodyMask = FRigBoneMask::FromSubtree(asset_, "bone_head");
-        bodyMask.SetBoneWeight(asset_, "bone_torso", 1.0f);
-
-        holdLayer_ = animator_.CreateLayer("hold", ERigLayerBlendMode::Override, armsMask);
-        holdBodyLayer_ = animator_.CreateLayer("hold_body", ERigLayerBlendMode::Additive, bodyMask);
-        weaponActionLayer_ = animator_.CreateLayer("weapon_action", ERigLayerBlendMode::Override, armsMask);
-        weaponActionBodyLayer_ = animator_.CreateLayer("weapon_action_body", ERigLayerBlendMode::Additive, bodyMask);
-
-        FRigBoneMask recoilMask = FRigBoneMask::FromSubtree(asset_, "bone_torso");
-        recoilMask.SetBoneWeight(asset_, "bone_head", 0.0f);
-        recoilLayer_ = animator_.CreateLayer("recoil", ERigLayerBlendMode::Additive, recoilMask);
-        actionLayer_ = animator_.CreateLayer("action", ERigLayerBlendMode::Override, FRigBoneMask::FullBody(asset_));
-
-        for (const NextGameplay::FRigLayerHandle layer :
-             {holdLayer_, holdBodyLayer_, weaponActionLayer_, weaponActionBodyLayer_, recoilLayer_, actionLayer_})
-        {
-            animator_.SetLayerWeight(layer, 0.0f);
-        }
-        if (clips_.locomotion.front())
-        {
-            animator_.SetLoopBlend(locomotionLayer_, {{clips_.locomotion.front(), 1.0f}}, "locomotion", 1.0f, 0.0f);
-            baseClipName_ = clips_.locomotion.front()->name;
-        }
-        animator_.Update(0.0f);
-        bound_ = true;
-        yawInitialized_ = false;
-        aimWeight_ = 0.0f;
-        sprintHoldWeight_ = 0.0f;
-        holdWeight_ = 0.0f;
-        weaponWeight_ = 0.0f;
-        freeHandWeight_ = 0.0f;
-        traverseWeight_ = 0.0f;
-        weaponActionWeight_ = 0.0f;
-        weaponActionClipName_.clear();
-        actionWeight_ = 0.0f;
-        movingWeight_ = 0.0f;
-        lean_ = glm::vec2(0.0f);
-        leanVelocity_ = glm::vec2(0.0f);
-        turnSway_ = 0.0f;
-        recoilActive_ = false;
+            animator.Bind(&asset_, boneNodes_, worldNode_.get());
+        });
+        graph_.Animator().Apply();
         scene.MarkDirty();
     }
 
@@ -428,17 +334,7 @@ namespace NextDayz
     {
         // Only clear per-scene runtime state; injected models/materials belong to
         // the incoming scene rebuild and must survive (the AirportSim lesson).
-        animator_ = NextGameplay::FRigLayeredAnimator{};
-        locomotionLayer_ = NextGameplay::invalidRigLayerHandle;
-        holdLayer_ = NextGameplay::invalidRigLayerHandle;
-        holdBodyLayer_ = NextGameplay::invalidRigLayerHandle;
-        weaponActionLayer_ = NextGameplay::invalidRigLayerHandle;
-        weaponActionBodyLayer_ = NextGameplay::invalidRigLayerHandle;
-        recoilLayer_ = NextGameplay::invalidRigLayerHandle;
-        actionLayer_ = NextGameplay::invalidRigLayerHandle;
-        bound_ = false;
-        baseClipName_.clear();
-        weaponActionClipName_.clear();
+        graph_.Unbind();
         scene_ = nullptr;
         worldNode_.reset();
         bodyPartNodes_.clear();
@@ -452,11 +348,6 @@ namespace NextDayz
         weaponVisible_ = false;
         holsteredWeaponVisible_.fill(false);
         boneNodes_.clear();
-        transforms_.clear();
-        aimWeight_ = 0.0f;
-        weaponActionWeight_ = 0.0f;
-        actionWeight_ = 0.0f;
-        recoilActive_ = false;
     }
 
     void PlayerRigVisual::SetVisible(bool visible)
@@ -552,9 +443,10 @@ namespace NextDayz
         {
             if (holsteredWeaponNodes_[slot])
             {
-                holsterPositions_[slot] = slot == kSidearmSlot ? glm::vec3(coat ? -0.26f : -0.235f, 0.08f, 0.04f)
-                    : glm::vec3(slot == 0 ? stowedSide : -stowedSide, 0.24f, -stowedDepth);
-                holsteredWeaponNodes_[slot]->Translation() = holsterPositions_[slot];
+                graph_.SetRestingHolster(static_cast<int>(slot), slot == kSidearmSlot
+                    ? glm::vec3(coat ? -0.26f : -0.235f, 0.08f, 0.04f)
+                    : glm::vec3(slot == 0 ? stowedSide : -stowedSide, 0.24f, -stowedDepth));
+                holsteredWeaponNodes_[slot]->Translation() = graph_.Resting(static_cast<int>(slot)).position;
             }
         }
         if (scene_)
@@ -571,20 +463,13 @@ namespace NextDayz
 
     glm::vec3 PlayerRigVisual::HolsterPosition(int slot) const
     {
-        return holsterPositions_[slot];
+        return graph_.Resting(slot).position;
     }
 
     float PlayerRigVisual::WeaponDistanceFromHolster(int slot) const
     {
         return holsteredWeaponNodes_[slot]
-            ? glm::distance(holsteredWeaponNodes_[slot]->Translation(), holsterPositions_[slot]) : 0.0f;
-    }
-
-    float PlayerRigVisual::HandHeightInTorso(int slot) const
-    {
-        const int32_t hand = slot == 0 ? bones_.handL : bones_.handR;
-        if (bones_.torso < 0 || hand < 0 || hand >= static_cast<int32_t>(transforms_.size())) return 0.0f;
-        return glm::vec3(glm::inverse(transforms_[bones_.torso]) * transforms_[hand][3]).y;
+            ? glm::distance(holsteredWeaponNodes_[slot]->Translation(), HolsterPosition(slot)) : 0.0f;
     }
 
     std::string PlayerRigVisual::ClothingVisuals() const
@@ -618,13 +503,7 @@ namespace NextDayz
 
     void PlayerRigVisual::TriggerRecoil(float scale)
     {
-        if (!bound_)
-        {
-            return;
-        }
-        animator_.SetLayerWeight(recoilLayer_, glm::clamp(scale, 0.0f, 1.0f));
-        animator_.PlayOneShot(recoilLayer_, clips_.recoil, 1.0f, 0.0f, animationConfig_.RecoilFadeOutSeconds, true);
-        recoilActive_ = true;
+        graph_.TriggerRecoil(scale);
     }
 
     bool PlayerRigVisual::WeaponMuzzle(glm::vec3& outPosition, glm::vec3& outForward) const
@@ -640,400 +519,6 @@ namespace NextDayz
             points.muzzleForward + (WeaponSuppressed(heldLoadout_) ? SuppressorLength(kWeapons[weaponVisualIndex_].id) : 0.0f), 1.0f));
         outForward = glm::normalize(glm::vec3(world[2]));
         return true;
-    }
-
-    bool PlayerRigVisual::RecoilActive() const
-    {
-        return recoilActive_;
-    }
-
-    void PlayerRigVisual::UpdateLocomotion(const FPlayerPresentationState& state, float dt)
-    {
-        UpdateSurvivorLocomotion(asset_, animator_, locomotionLayer_, clips_.locomotion,
-                                 state.locomotion, animationConfig_, bodyYaw_, crouchWeight_, dt,
-                                 moveDirection_, movingWeight_, baseClipName_);
-    }
-
-    float PlayerRigVisual::ElbowConstraintErrorDegrees() const
-    {
-        const auto& pose = animator_.Pose();
-        float error = 0.0f;
-        for (int32_t bone : {bones_.foreArmL, bones_.foreArmR})
-        {
-            if (bone < 0 || bone >= static_cast<int32_t>(pose.bones.size())) continue;
-            glm::quat rotation = glm::normalize(pose.bones[bone].r);
-            if (rotation.w < 0.0f) rotation = -rotation;
-            const float flex = glm::degrees(-2.0f * std::atan2(rotation.x, rotation.w));
-            const float offAxis = glm::degrees(std::acos(glm::clamp(glm::dot(rotation * kAxisX, kAxisX), -1.0f, 1.0f)));
-            // The released hand can retain the authored near-straight hold;
-            // only backwards flexion, over-folding and off-axis twist fail.
-            error = std::max({error, offAxis, -flex, flex - 150.0f});
-        }
-        return error;
-    }
-
-    void PlayerRigVisual::UpdateSwitchPose(const FPlayerPresentationState& state)
-    {
-        using namespace NextGameplay;
-        FRigPose& pose = animator_.MutablePose();
-        const glm::mat4 torso = transforms_[bones_.torso];
-        const glm::mat4 toTorso = glm::inverse(torso);
-        const glm::quat torsoRotation = RigBoneRotation(transforms_, bones_.torso);
-        const glm::vec3 readyPosition(toTorso * glm::vec4(RigBonePosition(transforms_, bones_.ikWeapon), 1.0f));
-        const glm::quat readyRotation = glm::inverse(torsoRotation) * RigBoneRotation(transforms_, bones_.ikWeapon);
-        const float time = state.weaponActionTime01;
-        const int oldSlot = state.switchSourceSlot;
-        const int newSlot = state.switchTargetSlot;
-        const bool sidearmSwitch = oldSlot == kSidearmSlot || newSlot == kSidearmSlot;
-        // A shared right hand must finish stowing before reaching the other
-        // holster. Opposite back slots retain their short two-hand overlap.
-        const float stowEnd = sidearmSwitch ? 0.44f : kWeaponStowTime;
-        const float drawStart = sidearmSwitch ? 0.56f : kWeaponDrawTime;
-        const int oldHand = oldSlot == 0 ? 0 : 1;
-        const int newHand = newSlot == 0 ? 0 : 1;
-        const glm::mat4 pelvisToTorso = toTorso * transforms_[bones_.pelvis];
-        const glm::quat pelvisInTorso = glm::inverse(torsoRotation) * RigBoneRotation(transforms_, bones_.pelvis);
-        struct FSwitchPose
-        {
-            glm::vec3 position;
-            glm::quat rotation;
-            float release = 0.0f;
-        };
-        const auto sample = [&](int slot, float travel, bool fromBelow = false)
-        {
-            travel = glm::clamp(travel, 0.0f, 1.0f);
-            const bool waist = slot == kSidearmSlot;
-            const glm::quat holsterRotation = waist ? pelvisInTorso * kWaistWeaponRotation : kBackWeaponRotation;
-            const glm::vec3 holsterPosition = waist ? glm::vec3(pelvisToTorso * glm::vec4(holsterPositions_[slot], 1.0f))
-                                                    : holsterPositions_[slot];
-            const glm::vec3 backPosition = holsterPosition - holsterRotation * HoldFor(state.slotWeaponIds[slot]).modelOffset;
-            // Stow over the shoulder; draw around the waist. Keep the lower
-            // route outside the pack and within a bent arm's reach.
-            const float side = slot == 0 ? 1.0f : -1.0f;
-            const glm::vec3 waypoint = waist ? glm::mix(readyPosition, backPosition, 0.6f) + glm::vec3(-0.05f, 0.10f, 0.12f)
-                : fromBelow ? glm::vec3(side * std::max(0.36f, std::abs(holsterPositions_[slot].x) + 0.10f), 0.12f, 0.16f)
-                            : glm::vec3(side * 0.36f, 0.74f, 0.18f);
-            const glm::quat waypointRotation = glm::slerp(readyRotation, holsterRotation, waist ? 0.35f : fromBelow ? 0.55f : 0.75f);
-            FSwitchPose frame;
-            if (travel < 0.5f)
-            {
-                const float blend = glm::smoothstep(0.0f, 0.5f, travel);
-                frame.position = glm::mix(readyPosition, waypoint, blend);
-                frame.rotation = glm::slerp(readyRotation, waypointRotation, blend);
-            }
-            else
-            {
-                const float blend = glm::smoothstep(0.5f, 1.0f, travel);
-                frame.position = glm::mix(waypoint, backPosition, blend);
-                frame.rotation = glm::slerp(waypointRotation, holsterRotation, blend);
-            }
-            // Below-waist reaching keeps the elbow down and out.
-            frame.release = waist || fromBelow ? 0.0f : glm::smoothstep(0.0f, 0.5f, travel);
-            return frame;
-        };
-        std::array<FSwitchPose, kWeaponSlotCount> frames;
-        for (int slot = 0; slot < kWeaponSlotCount; ++slot) frames[slot] = sample(slot, 1.0f);
-        frames[oldSlot] = sample(oldSlot, time / stowEnd);
-        frames[newSlot] = sample(newSlot, (1.0f - time) / (1.0f - drawStart), true);
-        // Both existing back nodes become independent moving weapons. During
-        // the overlap neither model is replaced or teleported to the other hand.
-        for (int slot = 0; slot < kWeaponSlotCount; ++slot)
-        {
-            const glm::mat4 toParent = slot == kSidearmSlot ? glm::inverse(pelvisToTorso) : glm::mat4(1.0f);
-            holsteredWeaponNodes_[slot]->Translation() = glm::vec3(toParent * glm::vec4(frames[slot].position +
-                frames[slot].rotation * HoldFor(state.slotWeaponIds[slot]).modelOffset, 1.0f));
-            holsteredWeaponNodes_[slot]->Rotation() = slot == kSidearmSlot
-                ? glm::inverse(pelvisInTorso) * frames[slot].rotation : frames[slot].rotation;
-        }
-        const auto wrist = [&](const FSwitchPose& frame, int slot, bool left)
-        {
-            const auto& grip = asset_.bones[left ? bones_.ikHandL : bones_.ikHandR];
-            const FWeaponRigHold hold = HoldFor(state.slotWeaponIds[slot]);
-            glm::vec3 local = left && hold.overrideSupport ? hold.supportWrist : grip.bindT;
-            if (left && slot == 0 && slot == newSlot)
-            {
-                // Fetch the left-slot gun by its low grip too, then slide to
-                // the handguard as the right hand takes the firing grip.
-                local = glm::mix(asset_.bones[bones_.ikHandR].bindT, local, glm::smoothstep(0.78f, 1.0f, time));
-            }
-            return FSwitchPose{frame.position + frame.rotation * local, frame.rotation * grip.bindR, frame.release};
-        };
-        std::array<FSwitchPose, 2> hands;
-        hands[oldHand] = wrist(frames[oldSlot], oldSlot, oldHand == 0);
-        hands[newHand] = wrist(frames[newSlot], newSlot, newHand == 0);
-        // The incoming hand reaches its own socket while the other hand is
-        // still stowing. Once stowed, the outgoing hand returns to support the
-        // new gun. Free hands travel below the socket, clear of the torso.
-        if (oldHand != newHand && time < drawStart)
-        {
-            FSwitchPose& hand = hands[newHand];
-            hand = wrist(sample(newSlot, time / drawStart, true), newSlot, newHand == 0);
-            const FSwitchPose start = wrist(sample(oldSlot, 0.0f), oldSlot, newHand == 0);
-            const float blend = glm::smoothstep(0.0f, drawStart * 0.35f, time);
-            hand.position = glm::mix(start.position, hand.position, blend);
-            hand.rotation = glm::slerp(start.rotation, hand.rotation, blend);
-        }
-        if (oldHand != newHand && time > stowEnd)
-        {
-            FSwitchPose& hand = hands[oldHand];
-            hand = wrist(sample(oldSlot, (1.0f - time) / (1.0f - stowEnd), true), oldSlot, oldHand == 0);
-            const FSwitchPose support = wrist(frames[newSlot], newSlot, oldHand == 0);
-            const float blend = glm::smoothstep(0.75f, 1.0f, time);
-            hand.position = glm::mix(hand.position, support.position, blend);
-            hand.rotation = glm::slerp(hand.rotation, support.rotation, blend);
-        }
-        if (oldHand == newHand)
-        {
-            const FSwitchPose stowed = wrist(frames[oldSlot], oldSlot, false);
-            const FSwitchPose drawn = wrist(frames[newSlot], newSlot, false);
-            const float transfer = glm::smoothstep(stowEnd, drawStart, time);
-            hands[1] = {glm::mix(stowed.position, drawn.position, transfer),
-                        glm::slerp(stowed.rotation, drawn.rotation, transfer),
-                        glm::mix(stowed.release, drawn.release, transfer)};
-            const FSwitchPose start = wrist(sample(oldSlot, 0.0f), oldSlot, true);
-            const FSwitchPose finish = wrist(frames[newSlot], newSlot, true);
-            const glm::vec3 resting(0.12f, 0.20f, 0.25f);
-            const float lower = glm::smoothstep(0.0f, 0.25f, time);
-            const float support = glm::smoothstep(0.75f, 1.0f, time);
-            hands[0] = {glm::mix(glm::mix(start.position, resting, lower), finish.position, support),
-                        glm::slerp(start.rotation, finish.rotation, support), 0.0f};
-        }
-        const FSwitchPose& activeFrame = frames[state.activeWeaponSlot];
-        SetRigBoneComponentRotation(asset_, pose, transforms_, bones_.ikWeapon, torsoRotation * activeFrame.rotation);
-        SetRigBoneComponentPosition(asset_, pose, transforms_, bones_.ikWeapon,
-                                    glm::vec3(torso * glm::vec4(activeFrame.position, 1.0f)));
-        const auto solve = [&](int32_t upper, int32_t lower, int32_t hand, int slot)
-        {
-            const FSwitchPose& target = hands[slot];
-            const glm::vec3 goal(torso * glm::vec4(target.position, 1.0f));
-            const glm::quat handRotation = torsoRotation * target.rotation;
-            const glm::vec3 pole = glm::mix(slot == 0 ? kPoleLeft : kPoleRight,
-                                           glm::vec3(slot == 0 ? 0.65f : -0.65f, 0.75f, 0.30f), target.release);
-            const glm::vec3 shoulder = RigBonePosition(transforms_, upper);
-            const float upperLength = glm::length(RigBonePosition(transforms_, lower) - shoulder);
-            const float lowerLength = glm::length(RigBonePosition(transforms_, hand) - RigBonePosition(transforms_, lower));
-            const glm::vec3 reach = goal - shoulder;
-            if (glm::length(reach) <= 1.0e-4f || upperLength <= 1.0e-4f || lowerLength <= 1.0e-4f) return;
-            const glm::vec3 direction = glm::normalize(reach);
-            const glm::vec3 poleOffset = glm::vec3(torso * glm::vec4(pole, 1.0f)) - shoulder;
-            glm::vec3 bend = poleOffset - direction * glm::dot(poleOffset, direction);
-            if (glm::length(bend) <= 1.0e-4f)
-            {
-                const glm::vec3 outward = torsoRotation * glm::vec3(upper == bones_.upperArmL ? 1.0f : -1.0f, 0.0f, 0.0f);
-                bend = outward - direction * glm::dot(outward, direction);
-            }
-            bend = glm::normalize(bend);
-            // NextDayz's arm bones point down local -Y and the elbow is a
-            // -X hinge, matching rh_arm_ik in rig_humanoid.scad. Rebuild the
-            // upper-arm basis from the bend plane instead of preserving its
-            // old twist with an unconstrained shortest-arc rotation.
-            const float cosineFlex = glm::clamp(
-                (glm::dot(reach, reach) - upperLength * upperLength - lowerLength * lowerLength) /
-                    (2.0f * upperLength * lowerLength),
-                std::cos(glm::radians(150.0f)), std::cos(glm::radians(5.0f)));
-            const float distance = std::sqrt(upperLength * upperLength + lowerLength * lowerLength +
-                                             2.0f * upperLength * lowerLength * cosineFlex);
-            const float cosine = glm::clamp((upperLength * upperLength + distance * distance - lowerLength * lowerLength) /
-                                               (2.0f * upperLength * distance), -1.0f, 1.0f);
-            const float sine = std::sqrt(std::max(0.0f, 1.0f - cosine * cosine));
-            const glm::vec3 upperDirection = direction * cosine + bend * sine;
-            const glm::vec3 elbowPlane = bend * cosine - direction * sine;
-            const glm::quat upperRotation = glm::quat_cast(glm::mat3(glm::cross(upperDirection, elbowPlane),
-                                                                    -upperDirection, -elbowPlane));
-            SetRigBoneComponentRotation(asset_, pose, transforms_, upper, upperRotation);
-            auto& forearm = pose.bones[lower];
-            forearm.r = glm::angleAxis(-std::acos(cosineFlex), kAxisX);
-            forearm.Mark(ERigPoseComponent::Rotation);
-            RefreshRigComponentTransforms(asset_, pose, lower, transforms_);
-            SetRigBoneComponentRotation(asset_, pose, transforms_, hand, handRotation);
-            const bool carrying = (slot == oldHand && time <= stowEnd && !state.slotWeaponIds[oldSlot].empty()) ||
-                                  (slot == newHand && time >= drawStart && !state.slotWeaponIds[newSlot].empty());
-            if (carrying)
-            {
-                gripError_ = std::max(gripError_, glm::length(RigBonePosition(transforms_, hand) - goal));
-            }
-        };
-        solve(bones_.upperArmR, bones_.foreArmR, bones_.handR, 1);
-        solve(bones_.upperArmL, bones_.foreArmL, bones_.handL, 0);
-    }
-
-    void PlayerRigVisual::UpdateProcedural(const FPlayerPresentationState& state, float dt)
-    {
-        using namespace NextGameplay;
-        const FAnimationConfig& anim = animationConfig_;
-        FRigPose& pose = animator_.MutablePose();
-        ComputeRigComponentTransforms(asset_, pose, transforms_);
-        const auto valid = [this](int32_t bone) { return bone >= 0 && bone < static_cast<int32_t>(transforms_.size()); };
-
-        // Whole-body lean, pivoting at the feet.
-        if (valid(bones_.root) && (lean_.x != 0.0f || lean_.y != 0.0f))
-        {
-            RotateRigBoneInComponentSpace(asset_, pose, transforms_, bones_.root,
-                                          glm::angleAxis(glm::radians(lean_.x), kAxisZ) *
-                                              glm::angleAxis(glm::radians(lean_.y), kAxisX));
-        }
-
-        // Aim offsets: torso and head take a share of the camera pitch and of
-        // the twist between camera and lower body.
-        const float busy = std::max(actionWeight_, state.locomotion.traversalAction != EPlayerTraversalAction::None
-                                                       ? 1.0f
-                                                       : 0.0f);
-        const float pitchLimit = glm::radians(std::max(anim.AimPitchLimitDegrees, 1.0f));
-        const float pitch = glm::clamp(state.aimPitchRadians, -pitchLimit, pitchLimit) * (1.0f - busy) *
-                            (1.0f - 0.5f * sprintHoldWeight_);
-        // In a traversal the body is squared to the obstacle; the torso stops
-        // turning after the camera so the hands meet the lip.
-        const float twist = WrapAngle(state.aimYawRadians - bodyYaw_) * (1.0f - traverseWeight_);
-        const auto offset = [](float yaw, float pitchAmount)
-        {
-            return glm::angleAxis(yaw, kAxisY) * glm::angleAxis(pitchAmount, kAxisX);
-        };
-        if (valid(bones_.torso))
-        {
-            RotateRigBoneInComponentSpace(asset_, pose, transforms_, bones_.torso,
-                                          offset(twist * anim.TwistTorsoShare, pitch * anim.AimPitchTorsoShare));
-        }
-        if (valid(bones_.head))
-        {
-            RotateRigBoneInComponentSpace(asset_, pose, transforms_, bones_.head,
-                                          offset(twist * anim.TwistHeadShare, pitch * anim.AimPitchHeadShare));
-        }
-
-        gripError_ = 0.0f;
-        if (state.weaponAction == EWeaponPresentationAction::Switch && valid(bones_.torso) &&
-            valid(bones_.ikWeapon) && valid(bones_.ikHandR) && valid(bones_.ikHandL) &&
-            holsteredWeaponNodes_[0] && holsteredWeaponNodes_[1] && holsteredWeaponNodes_[2] &&
-            state.switchSourceSlot >= 0 && state.switchTargetSlot >= 0)
-        {
-            UpdateSwitchPose(state);
-            return;
-        }
-        // Traversal hand plants, world -> component space. The clip already
-        // places the hands near the lip; this pins them onto the real top
-        // whatever its height, so palms never float or sink into the wall.
-        const FPlayerLocomotionState& locomotion = state.locomotion;
-        const bool planting = locomotion.traversalAction != EPlayerTraversalAction::None;
-        const glm::mat4 toComponent = glm::inverse(worldNode_->WorldTransform());
-        const std::array<float, 2> plantWeight = {planting ? locomotion.traversalHandWeight[0] : 0.0f,
-                                                  planting ? locomotion.traversalHandWeight[1] : 0.0f};
-        const std::array<glm::vec3, 2> plantTarget = {
-            glm::vec3(toComponent * glm::vec4(locomotion.traversalHand[0], 1.0f)),
-            glm::vec3(toComponent * glm::vec4(locomotion.traversalHand[1], 1.0f))};
-        const auto plantHand = [&](int32_t upper, int32_t lower, int32_t hand, int side)
-        {
-            const float weight = plantWeight[side];
-            if (weight <= 1.0e-3f || !valid(upper) || !valid(lower) || !valid(hand))
-            {
-                return;
-            }
-            // Elbows out and back, like pushing down on a wall top.
-            const glm::mat4 torsoFrame = valid(bones_.torso) ? transforms_[bones_.torso] : glm::mat4(1.0f);
-            const glm::vec3 pole(torsoFrame * glm::vec4(side == 0 ? 0.60f : -0.60f, 0.05f, -0.40f, 1.0f));
-            const glm::quat rotation = RigBoneRotation(transforms_, hand);
-            const glm::vec3 goal = glm::mix(RigBonePosition(transforms_, hand), plantTarget[side], weight);
-            SolveRigTwoBoneIK(asset_, pose, transforms_, upper, lower, hand, goal, pole, 1.0f);
-            SetRigBoneComponentRotation(asset_, pose, transforms_, hand, rotation, 1.0f);
-        };
-        // Measured after every solve, so a planted hand that cannot reach shows up.
-        const auto measurePlants = [&]()
-        {
-            plantError_ = 0.0f;
-            const std::array<int32_t, 2> hands = {bones_.handL, bones_.handR};
-            for (int side = 0; side < 2; ++side)
-            {
-                if (plantWeight[side] > 0.98f && valid(hands[side]))
-                {
-                    plantError_ = std::max(plantError_,
-                                           glm::length(RigBonePosition(transforms_, hands[side]) - plantTarget[side]));
-                }
-            }
-        };
-
-        if (weaponWeight_ <= 1.0e-3f || !valid(bones_.ikWeapon) || !valid(bones_.ikHandR) || !valid(bones_.ikHandL))
-        {
-            // Empty hands: both plant directly.
-            plantHand(bones_.upperArmL, bones_.foreArmL, bones_.handL, 0);
-            plantHand(bones_.upperArmR, bones_.foreArmR, bones_.handR, 1);
-            measurePlants();
-            return;
-        }
-
-        // The weapon takes the rest of the aim about the firing shoulder, so
-        // the muzzle lands on the crosshair however the body is turned.
-        const FWeaponRigHold hold = HoldFor(state.weaponId);
-        const float carry = 1.0f - sprintHoldWeight_;
-        const float aimAmount = holdWeight_ * (1.0f - busy);
-        const glm::quat aim = glm::angleAxis((twist * (1.0f - anim.TwistTorsoShare) - turnSway_) * aimAmount, kAxisY) *
-                              glm::angleAxis(pitch * (1.0f - anim.AimPitchTorsoShare) * carry * aimAmount, kAxisX);
-        const glm::vec3 pivot = RigBonePosition(transforms_, bones_.upperArmR);
-        glm::vec3 weaponPosition = pivot + aim * (RigBonePosition(transforms_, bones_.ikWeapon) - pivot);
-        glm::quat weaponRotation = aim * RigBoneRotation(transforms_, bones_.ikWeapon);
-
-        // Gait bob on top of the torso's own motion: a dip per step and a sway
-        // per stride; at a sprint the arms pump the carried rifle instead.
-        const float phase = animator_.NormalizedTime(locomotionLayer_);
-        const float stepDip = 0.5f - 0.5f * std::cos(2.0f * glm::two_pi<float>() * phase);
-        const float strideSway = std::sin(glm::two_pi<float>() * phase);
-        const float bob = movingWeight_ * holdWeight_;
-        weaponPosition += glm::vec3(-anim.WeaponBobSide * strideSway * carry * bob,
-                                    -anim.WeaponBobHeight * stepDip * carry * bob +
-                                        anim.SprintPumpHeight * std::sin(2.0f * glm::two_pi<float>() * phase) *
-                                            sprintHoldWeight_ * bob,
-                                    0.0f);
-        weaponRotation = weaponRotation * glm::angleAxis(glm::radians(anim.SprintPumpRollDegrees) * strideSway *
-                                                             sprintHoldWeight_ * bob,
-                                                         kAxisZ);
-        weaponPosition += weaponRotation * glm::vec3(0.0f, 0.0f, hold.extend * aimWeight_);
-        // Crouch locomotion pitches pelvis + torso forward by about 30 degrees.
-        // Its additive body pose must not drag ADS down with it. Rotate about
-        // the firing shoulder, preserving the grip reach, then solve both arms
-        // onto the raised weapon. Actual camera aim retains the recoil kick.
-        const float crouchAim = crouchWeight_ * aimWeight_ * (1.0f - busy) * (1.0f - weaponActionWeight_);
-        if (const FWeaponDef* weapon = FindWeaponDef(state.weaponId);
-            weapon && !weapon->IsMelee() && crouchAim > 1.0e-3f)
-        {
-            const glm::vec3 direction = glm::inverse(worldNode_->Rotation()) * state.aimDirection;
-            const glm::quat correction = glm::slerp(glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
-                RigRotationBetween(weaponRotation * kAxisZ, direction), crouchAim);
-            weaponPosition = pivot + correction * (weaponPosition - pivot);
-            weaponRotation = correction * weaponRotation;
-        }
-        // The firing hand plants with the weapon in it: slide the weapon frame
-        // so its grip lands on the plant, the hand IK below follows the grip.
-        if (plantWeight[1] > 1.0e-3f)
-        {
-            const glm::vec3 gripLocal = glm::vec3(glm::inverse(transforms_[bones_.ikWeapon]) *
-                                                  glm::vec4(RigBonePosition(transforms_, bones_.ikHandR), 1.0f));
-            const glm::vec3 grip = weaponPosition + weaponRotation * gripLocal;
-            weaponPosition += (plantTarget[1] - grip) * plantWeight[1];
-        }
-        SetRigBoneComponentRotation(asset_, pose, transforms_, bones_.ikWeapon, weaponRotation);
-        SetRigBoneComponentPosition(asset_, pose, transforms_, bones_.ikWeapon, weaponPosition);
-        if (hold.overrideSupport)
-        {
-            SetRigBoneComponentPosition(asset_, pose, transforms_, bones_.ikHandL,
-                                        glm::vec3(transforms_[bones_.ikWeapon] * glm::vec4(hold.supportWrist, 1.0f)));
-        }
-
-        // Both hands onto the weapon frame. The socket's bind is the inverse
-        // of the right grip, so a solved right hand carries the weapon exactly.
-        const glm::mat4 torso = valid(bones_.torso) ? transforms_[bones_.torso] : glm::mat4(1.0f);
-        const glm::vec3 gripR = RigBonePosition(transforms_, bones_.ikHandR);
-        const glm::quat gripRotationR = RigBoneRotation(transforms_, bones_.ikHandR);
-        const glm::vec3 gripL = RigBonePosition(transforms_, bones_.ikHandL);
-        const glm::quat gripRotationL = RigBoneRotation(transforms_, bones_.ikHandL);
-
-        SolveRigTwoBoneIK(asset_, pose, transforms_, bones_.upperArmR, bones_.foreArmR, bones_.handR, gripR,
-                          glm::vec3(torso * glm::vec4(kPoleRight, 1.0f)), weaponWeight_);
-        SetRigBoneComponentRotation(asset_, pose, transforms_, bones_.handR, gripRotationR, weaponWeight_);
-        gripError_ = glm::length(RigBonePosition(transforms_, bones_.handR) - gripR);
-
-        const float support = weaponWeight_ * (1.0f - freeHandWeight_);
-        SolveRigTwoBoneIK(asset_, pose, transforms_, bones_.upperArmL, bones_.foreArmL, bones_.handL, gripL,
-                          glm::vec3(torso * glm::vec4(kPoleLeft, 1.0f)), support);
-        SetRigBoneComponentRotation(asset_, pose, transforms_, bones_.handL, gripRotationL, support);
-        plantHand(bones_.upperArmL, bones_.foreArmL, bones_.handL, 0);
-        measurePlants();
     }
 
     void PlayerRigVisual::UpdateAttachments(const FPlayerPresentationState& state)
@@ -1080,11 +565,9 @@ namespace NextDayz
             {
                 continue;
             }
-            if (!switching)
-            {
-                holstered->Translation() = holsterPositions_[slot];
-                holstered->Rotation() = slot == kSidearmSlot ? kWaistWeaponRotation : kBackWeaponRotation;
-            }
+            // At rest on the body, or travelling between holster and hand during a switch.
+            holstered->Translation() = graph_.Holsters()[slot].position;
+            holstered->Rotation() = graph_.Holsters()[slot].rotation;
             const int weaponIndex = WeaponIndex(state.slotWeaponIds[slot]);
             if (weaponIndex >= 0 && weaponIndex != holsteredWeaponVisualIndices_[slot])
             {
@@ -1119,184 +602,37 @@ namespace NextDayz
     void PlayerRigVisual::UpdateSeated(const glm::vec3& origin, const FPlayerPresentationState& equipment,
                                       float deltaSeconds)
     {
-        if (!bound_ || !worldNode_) return;
+        if (!graph_.IsBound() || !worldNode_) return;
         worldNode_->Translation() = origin;
         worldNode_->Rotation() = glm::quat(1,0,0,0);
         worldNode_->RecalcTransform(true);
-        for (auto layer : {holdLayer_, holdBodyLayer_, weaponActionLayer_, weaponActionBodyLayer_, recoilLayer_, actionLayer_})
-            animator_.SetLayerWeight(layer, 0.0f);
-        animator_.SetLayerWeight(locomotionLayer_, 1.0f);
-        const auto* seated = asset_.FindClip("cabin_seated");
-        animator_.SetLoopBlend(locomotionLayer_, {{seated, 1.0f}}, "cabin", 1.0f, 0.0f);
-        baseClipName_ = seated ? seated->name : "";
+        graph_.Seated(deltaSeconds);
         // Stow every weapon while seated. The Switch presentation flag exposes
         // all holsters without moving the hands away from the seated clip.
         auto stowed = equipment;
         stowed.hasWeapon = false;
         stowed.weaponAction = EWeaponPresentationAction::Switch;
         UpdateAttachments(stowed);
-        animator_.Update(std::max(0.0f, deltaSeconds));
+        graph_.Animator().Apply();
         if (scene_) scene_->MarkTransformDirty();
     }
 
     void PlayerRigVisual::Update(const glm::vec3& feetPosition, const FPlayerPresentationState& state,
                                  float deltaSeconds)
     {
-        if (!bound_ || !worldNode_)
+        if (!graph_.IsBound() || !worldNode_)
         {
             return;
         }
-        const float dt = std::max(deltaSeconds, 0.0f);
-        const FAnimationConfig& anim = animationConfig_;
-        const FPlayerLocomotionState& locomotion = state.locomotion;
-        const bool traversing = locomotion.traversalAction != EPlayerTraversalAction::None;
-        const bool looting = state.action == EPlayerAction::LootGround;
-
-        // Lower body follows the camera: quickly while moving, by a
-        // turn-in-place step once the upper body has twisted too far.
-        if (!yawInitialized_)
-        {
-            bodyYaw_ = state.aimYawRadians;
-            previousAimYaw_ = state.aimYawRadians;
-            yawInitialized_ = true;
-        }
-        const float yawDiff = WrapAngle(state.aimYawRadians - bodyYaw_);
-        const bool moving = locomotion.horizontalSpeed > anim.MoveThreshold;
-        if (traversing)
-        {
-            // Square up to the obstacle for the whole move, whatever the camera does.
-            bodyYaw_ += WrapAngle(locomotion.traversalYaw - bodyYaw_) * (1.0f - std::exp(-dt / 0.06f));
-            turningInPlace_ = false;
-        }
-        else if (moving || looting || !locomotion.onGround)
-        {
-            bodyYaw_ += yawDiff * (1.0f - std::exp(-dt / std::max(anim.BodyYawFollowSeconds, 1.0e-3f)));
-            turningInPlace_ = false;
-        }
-        else
-        {
-            if (std::abs(yawDiff) > glm::radians(anim.TurnInPlaceThresholdDegrees))
-            {
-                turningInPlace_ = true;
-            }
-            if (turningInPlace_)
-            {
-                const float step = glm::radians(anim.TurnInPlaceRateDegrees) * dt;
-                bodyYaw_ += glm::clamp(yawDiff, -step, step);
-                turningInPlace_ = std::abs(WrapAngle(state.aimYawRadians - bodyYaw_)) > glm::radians(4.0f);
-            }
-        }
-        bodyYaw_ = WrapAngle(bodyYaw_);
-
-        const float yawRate = dt > 0.0f ? WrapAngle(state.aimYawRadians - previousAimYaw_) / dt : 0.0f;
-        previousAimYaw_ = state.aimYawRadians;
-        const float swayLimit = glm::radians(anim.TurnSwayMaxDegrees);
-        turnSway_ = Approach(turnSway_,
-                             glm::clamp(yawRate * glm::radians(anim.TurnSwayDegreesPerRadPerSecond), -swayLimit,
-                                        swayLimit) *
-                                 (1.0f - 0.7f * aimWeight_),
-                             0.08f, dt);
-
-        // Lean into acceleration on a damped spring: bank into turns, rock back
-        // on a hard stop, settle with a little overshoot.
-        const glm::vec3 velocity(locomotion.worldVelocity.x, 0.0f, locomotion.worldVelocity.z);
-        const glm::vec3 acceleration = dt > 0.0f ? (velocity - previousVelocity_) / dt : glm::vec3(0.0f);
-        previousVelocity_ = velocity;
-        const glm::vec3 bodyForward(std::sin(bodyYaw_), 0.0f, std::cos(bodyYaw_));
-        const glm::vec3 bodyRight(-std::cos(bodyYaw_), 0.0f, std::sin(bodyYaw_));
-        glm::vec2 leanTarget(0.0f);
-        if (locomotion.onGround && !traversing && !looting)
-        {
-            const float scale = 1.0f - 0.5f * aimWeight_;
-            leanTarget.x = glm::clamp(glm::dot(acceleration, bodyRight) * anim.LeanRollPerMps2, -anim.LeanMaxRollDegrees,
-                                      anim.LeanMaxRollDegrees) * scale;
-            leanTarget.y = glm::clamp(glm::dot(acceleration, bodyForward) * anim.LeanPitchPerMps2,
-                                      -anim.LeanMaxPitchDegrees, anim.LeanMaxPitchDegrees) * scale;
-        }
-        const float springDt = std::min(dt, 0.05f);
-        leanVelocity_ += (anim.LeanSpring * (leanTarget - lean_) - anim.LeanDamping * leanVelocity_) * springDt;
-        lean_ += leanVelocity_ * springDt;
-
+        // The pose is the shared graph's (the Web client runs the same one);
+        // here it is placed in the scene and written onto the bone nodes.
+        graph_.Advance(feetPosition, state, deltaSeconds);
         const glm::vec3 pos = visible_ ? feetPosition : glm::vec3(feetPosition.x, kParkedY, feetPosition.z);
         worldNode_->Translation() = pos;
-        worldNode_->Rotation() = glm::angleAxis(bodyYaw_, kAxisY);
+        worldNode_->Rotation() = glm::angleAxis(graph_.BodyYaw(), kAxisY);
         worldNode_->RecalcTransform(true);
-
-        // Layer weights.
-        crouchWeight_ = Approach(crouchWeight_, locomotion.actualStance == EPlayerStance::Crouched ? 1.0f : 0.0f,
-                                 anim.StanceBlendSeconds * 0.5f, dt);
-        const bool holding = (state.hasWeapon || state.weaponAction == EWeaponPresentationAction::Switch) &&
-                             !looting && !traversing;
-        weaponWeight_ = Approach(weaponWeight_, state.hasWeapon ? 1.0f : 0.0f, 0.06f, dt);
-        holdWeight_ = Approach(holdWeight_, holding ? 1.0f : 0.0f, anim.HoldFadeSeconds * 0.5f, dt);
-        freeHandWeight_ = Approach(freeHandWeight_, looting || traversing ? 1.0f : 0.0f, 0.05f, dt);
-        traverseWeight_ = Approach(traverseWeight_, traversing ? 1.0f : 0.0f, traversing ? 0.04f : 0.12f, dt);
-        const bool weaponActionActive = holding && state.weaponAction != EWeaponPresentationAction::None;
-        aimWeight_ = Approach(aimWeight_, holding && !weaponActionActive ? glm::clamp(state.aimWeight, 0.0f, 1.0f) : 0.0f,
-                              anim.AimFadeSeconds * 0.5f, dt);
-        sprintHoldWeight_ = Approach(sprintHoldWeight_, glm::clamp(state.sprintAlpha, 0.0f, 1.0f),
-                                     anim.SprintHoldFadeSeconds * 0.3f, dt) ;
-        weaponActionWeight_ = Approach(weaponActionWeight_, weaponActionActive ? 1.0f : 0.0f,
-                                       anim.HoldFadeSeconds * 0.5f, dt);
-        actionWeight_ = Approach(actionWeight_, looting ? 1.0f : 0.0f, anim.LocomotionFadeSeconds * 0.5f, dt);
-
-        const FWeaponDef* weapon = FindWeaponDef(state.weaponId);
-        const bool melee = weapon && weapon->IsMelee();
-        const float sprint = sprintHoldWeight_ * (1.0f - aimWeight_);
-        std::vector<NextGameplay::FRigClipBlendSample> holdSamples = {
-            {clips_.ready, std::max(0.0f, 1.0f - aimWeight_ - sprint)},
-            {clips_.aim, aimWeight_},
-            {clips_.sprint, sprint},
-        };
-        if (melee)
-        {
-            holdSamples = {
-                {asset_.FindClip(fmt::format("melee_{}_low", state.weaponId)), 1.0f - aimWeight_},
-                {asset_.FindClip(fmt::format("melee_{}_ready", state.weaponId)), aimWeight_},
-            };
-        }
-        animator_.SetStaticBlend(holdLayer_, holdSamples, 0.0f);
-        animator_.SetStaticBlend(holdBodyLayer_, std::move(holdSamples), 0.0f);
-        animator_.SetLayerWeight(holdLayer_, holdWeight_);
-        animator_.SetLayerWeight(holdBodyLayer_, holdWeight_ * (1.0f - weaponActionWeight_));
-
-        if (weaponActionActive)
-        {
-            const std::string clipName = state.weaponAction == EWeaponPresentationAction::Melee
-                ? fmt::format("melee_{}_attack", state.weaponId)
-                : state.weaponAction == EWeaponPresentationAction::Reload ? "reload_rifle" : "switch_weapon";
-            weaponActionClipName_ = clipName;
-            const float time = glm::clamp(state.weaponActionTime01, 0.0f, 1.0f);
-            animator_.SetManualBlend(weaponActionLayer_, {{asset_.FindClip(clipName), 1.0f}}, time);
-            animator_.SetManualBlend(weaponActionBodyLayer_, {{asset_.FindClip(clipName), 1.0f}}, time);
-            animator_.SetLayerWeight(recoilLayer_, 0.0f);
-            recoilActive_ = false;
-        }
-        else if (weaponActionWeight_ < 0.001f)
-        {
-            weaponActionClipName_.clear();
-        }
-        animator_.SetLayerWeight(weaponActionLayer_, weaponActionWeight_);
-        animator_.SetLayerWeight(weaponActionBodyLayer_, weaponActionWeight_);
-
-        animator_.SetLayerWeight(actionLayer_, actionWeight_);
-        if (looting)
-        {
-            animator_.SetManualBlend(actionLayer_, {{asset_.FindClip("loot_ground"), 1.0f}}, state.actionTime01);
-            animator_.SetLayerWeight(recoilLayer_, 0.0f);
-            recoilActive_ = false;
-        }
-
         UpdateAttachments(state);
-        UpdateLocomotion(state, dt);
-
-        animator_.Evaluate(dt);
-        UpdateProcedural(state, dt);
-        animator_.Apply();
-        if (recoilActive_ && animator_.IsOneShotComplete(recoilLayer_))
-        {
-            recoilActive_ = false;
-        }
+        graph_.Animator().Apply();
         if (scene_)
         {
             scene_->MarkTransformDirty();

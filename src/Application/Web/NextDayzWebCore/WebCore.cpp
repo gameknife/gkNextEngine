@@ -103,6 +103,15 @@ namespace
                 {"pitch", state.aimPitchRadians}, {"aim", state.aimWeight}, {"weapon", state.weaponId}, {"clothing", clothing}};
     }
 
+    // Where the weapon models hang this frame (see FWebSurvivorPose), or nothing before the first pose.
+    Json DescribeGear(const FWebCharacterPose& pose, bool posed)
+    {
+        Json holsters = Json::array();
+        for (const bool visible : pose.holsterVisible) holsters.push_back(visible);
+        return {{"gearOffset", posed ? static_cast<int>(pose.gearOffset) : -1}, {"heldVisible", pose.heldVisible},
+                {"holsterVisible", holsters}};
+    }
+
     enum EWebControl : uint32_t
     {
         MoveForward = 1u << 0, MoveBack = 1u << 1, MoveLeft = 1u << 2, MoveRight = 1u << 3,
@@ -478,10 +487,12 @@ namespace
             for (const auto& [id, remote] : session_.remotes)
             {
                 const auto animated = remotePoses_.find(id);
+                auto pose = DescribePose(remote.presentation, remote.clothing);
+                pose.update(animated == remotePoses_.end() ? DescribeGear({}, false) : DescribeGear(animated->second.pose, true));
                 remotes.push_back({{"id", id}, {"position", V3(remote.feet)}, {"alive", remote.alive},
                     {"yaw", animated == remotePoses_.end() ? remote.presentation.aimYawRadians : animated->second.pose.yaw},
                     {"matrixOffset", animated == remotePoses_.end() ? -1 : static_cast<int>(animated->second.pose.offset)},
-                    {"pose", DescribePose(remote.presentation, remote.clothing)}});
+                    {"pose", std::move(pose)}});
             }
             Json camera, pose;
             if (physics_ && InWorld())
@@ -495,6 +506,7 @@ namespace
                 pose["viewModelArms"] = viewModelArms_;
                 pose["bodyYaw"] = localPose_.pose.yaw;
                 pose["matrixOffset"] = localPose_.lastFrame ? static_cast<int>(localPose_.pose.offset) : -1;
+                pose.update(DescribeGear(localPose_.pose, localPose_.lastFrame != 0));
             }
             Json zombies = Json::array();
             for (const auto& zombie : VisibleInfected())
@@ -747,6 +759,7 @@ namespace
                         {{"weapon", shot.weaponId}, {"suppressed", shot.suppressed}});
                 if (!shot.melee)
                 {
+                    if (localPose_.lastFrame) localPose_.graph.TriggerRecoil(shot.rigRecoilScale);
                     player_.ApplyCameraRecoil(shot.cameraImpulseRadians);
                     viewKick_ += shot.viewModelImpulse * .6f;
                 }
@@ -764,9 +777,9 @@ namespace
             if (!survivorRig_ || !infectedRig_ || !physics_) return;
             ++poseFrame_;
             poseFloats_.clear();
-            if (!localPose_.lastFrame) localPose_.graph.Bind(*survivorRig_);
+            if (!localPose_.lastFrame) localPose_.graph.Bind(*survivorRig_, config_.Animation, config_.Weapon.TpsWeaponScale);
             const auto local = LocalPresentation();
-            localPose_.pose = localPose_.graph.Advance(local, config_.Animation, dt, poseFloats_);
+            localPose_.pose = localPose_.graph.Advance(feet_, local, dt, poseFloats_);
             viewModelOffset_ = -1;
             viewModelArms_ = false;
             if (alive_ && player_.IsFirstPerson() && !player_.IsTraversing() && local.hasWeapon &&
@@ -777,8 +790,8 @@ namespace
             {
                 auto [it, added] = remotePoses_.try_emplace(id);
                 auto& entry = it->second;
-                if (added) entry.graph.Bind(*survivorRig_);
-                entry.pose = entry.graph.Advance(remote.presentation, config_.Animation, dt, poseFloats_);
+                if (added) entry.graph.Bind(*survivorRig_, config_.Animation, config_.Weapon.TpsWeaponScale);
+                entry.pose = entry.graph.Advance(remote.feet, remote.presentation, dt, poseFloats_);
                 entry.lastFrame = poseFrame_;
             }
             for (const auto& zombie : VisibleInfected())

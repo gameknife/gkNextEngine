@@ -3,7 +3,9 @@
 
 #include <algorithm>
 #include <glm/gtc/constants.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include "Application/Game/NextDayz/Player/WeaponRigHold.hpp"
 
 namespace NextDayz
 {
@@ -11,11 +13,6 @@ namespace NextDayz
 
     namespace
     {
-        float Blend(float value, float target, float seconds, float dt)
-        {
-            return seconds > 0.f ? glm::mix(value, target, 1.f - std::exp(-dt / seconds)) : target;
-        }
-
         FWebCharacterPose WritePose(FRigLayeredAnimator& animator, float dt, float yaw,
                                     std::vector<glm::mat4>& transforms, std::vector<float>& output)
         {
@@ -31,97 +28,48 @@ namespace NextDayz
         }
     }
 
-    void FWebSurvivorPose::Bind(const Assets::FRigDefinition& asset)
+    void FWebSurvivorPose::Bind(const Assets::FRigDefinition& asset, const FAnimationConfig& animation, float weaponScale)
     {
-        animator_.BindPose(&asset);
-        clips_ = ResolveSurvivorLocomotionClips(asset);
-        locomotion_ = animator_.CreateLayer("locomotion", ERigLayerBlendMode::Override, FRigBoneMask::FullBody(asset));
-        auto arms = FRigBoneMask::FromSubtree(asset, "bone_ik_weapon");
-        for (const auto* bone : {"bone_upperarm_l", "bone_forearm_l", "bone_hand_l", "bone_upperarm_r",
-                                 "bone_forearm_r", "bone_hand_r", "bone_weapon_socket"})
-            arms.SetBoneWeight(asset, bone, 1.f);
-        auto body = FRigBoneMask::FromSubtree(asset, "bone_head");
-        body.SetBoneWeight(asset, "bone_torso", 1.f);
-        hold_ = animator_.CreateLayer("hold", ERigLayerBlendMode::Override, arms);
-        holdBody_ = animator_.CreateLayer("hold_body", ERigLayerBlendMode::Additive, body);
-        weaponAction_ = animator_.CreateLayer("weapon_action", ERigLayerBlendMode::Override, std::move(arms));
-        weaponActionBody_ = animator_.CreateLayer("weapon_action_body", ERigLayerBlendMode::Additive, std::move(body));
-        lootAction_ = animator_.CreateLayer("loot", ERigLayerBlendMode::Override, FRigBoneMask::FullBody(asset));
-        animator_.SetLoopBlend(locomotion_, {{clips_.front(), 1.f}}, "locomotion", 1.f, 0.f);
+        asset_ = &asset;
+        weaponScale_ = weaponScale;
+        socket_ = asset.FindBone("bone_weapon_socket");
+        for (int slot = 0; slot < kWeaponSlotCount; ++slot) holsterParents_[slot] = FSurvivorPoseGraph::HolsterParentBone(asset, slot);
+        graph_.Bind(asset, animation, [&asset](FRigLayeredAnimator& animator) { animator.BindPose(&asset); });
     }
 
-    FWebCharacterPose FWebSurvivorPose::Advance(const FPlayerPresentationState& state,
-        const FAnimationConfig& config, float dt, std::vector<float>& output)
+    FWebCharacterPose FWebSurvivorPose::Advance(const glm::vec3& feet, const FPlayerPresentationState& state, float dt,
+                                                std::vector<float>& output)
     {
-        const auto& asset = *animator_.Asset();
-        const auto& move = state.locomotion;
-        const bool traversing = move.traversalAction != EPlayerTraversalAction::None;
-        if (!yawInitialized_)
+        graph_.Advance(feet, state, dt);
+        ComputeRigComponentTransforms(*asset_, graph_.Animator().Pose(), transforms_);
+        const auto append = [&output](const glm::mat4& matrix)
         {
-            yaw_ = state.aimYawRadians;
-            yawInitialized_ = true;
-        }
-        const auto angle = [](float value) { return std::remainder(value, glm::two_pi<float>()); };
-        const auto yawDiff = angle(state.aimYawRadians - yaw_);
-        if (traversing)
-        {
-            yaw_ += Blend(0.f, angle(move.traversalYaw - yaw_), .06f, dt);
-            turning_ = false;
-        }
-        else if (move.horizontalSpeed > config.MoveThreshold || !move.onGround)
-        {
-            yaw_ += Blend(0.f, yawDiff, config.BodyYawFollowSeconds, dt);
-            turning_ = false;
-        }
-        else
-        {
-            if (std::abs(yawDiff) > glm::radians(config.TurnInPlaceThresholdDegrees)) turning_ = true;
-            if (turning_)
-            {
-                const float step = glm::radians(config.TurnInPlaceRateDegrees) * dt;
-                yaw_ += glm::clamp(yawDiff, -step, step);
-                turning_ = std::abs(angle(state.aimYawRadians - yaw_)) > glm::radians(4.f);
-            }
-        }
-        yaw_ = angle(yaw_);
-        crouch_ = Blend(crouch_, move.actualStance == EPlayerStance::Crouched ? 1.f : 0.f, config.StanceBlendSeconds * .5f, dt);
-        UpdateSurvivorLocomotion(asset, animator_, locomotion_, clips_, move, config, yaw_, crouch_, dt,
-                                 direction_, moving_, baseClip_);
-
-        const bool looting = state.action == EPlayerAction::LootGround;
-        const bool holding = (state.hasWeapon || state.weaponAction == EWeaponPresentationAction::Switch) && !traversing && !looting;
-        aim_ = Blend(aim_, holding ? glm::clamp(state.aimWeight, 0.f, 1.f) : 0.f, config.AimFadeSeconds * .5f, dt);
-        holdWeight_ = Blend(holdWeight_, holding ? 1.f : 0.f, config.HoldFadeSeconds * .5f, dt);
-        const float sprint = glm::clamp(state.sprintAlpha, 0.f, 1.f) * (1.f - aim_);
-        std::vector<FRigClipBlendSample> hold = {
-            {asset.FindClip("weapon_ready"), (1.f - aim_) - sprint},
-            {asset.FindClip("aim_rifle_center"), aim_},
-            {asset.FindClip("weapon_sprint"), sprint},
+            const auto* data = glm::value_ptr(matrix);
+            output.insert(output.end(), data, data + 16);
         };
-        if (state.weaponId == "knife" || state.weaponId == "crowbar" || state.weaponId == "axe")
+        FWebCharacterPose pose{output.size(), graph_.BodyYaw()};
+        for (const auto& matrix : transforms_) append(matrix);
+
+        // The weapon models hang where the desktop rig hangs them: under the
+        // socket with the weapon's own offset, in the holsters, at rig scale.
+        pose.gearOffset = output.size();
+        const auto at = [this](int32_t bone)
         {
-            const auto prefix = "melee_" + state.weaponId;
-            hold = {{asset.FindClip(prefix + "_low"), 1.f - aim_}, {asset.FindClip(prefix + "_ready"), aim_}};
-        }
-        animator_.SetStaticBlend(hold_, hold, 0.f);
-        animator_.SetStaticBlend(holdBody_, std::move(hold), 0.f);
-        animator_.SetLayerWeight(hold_, holdWeight_);
-        const bool usingWeapon = holding && state.weaponAction != EWeaponPresentationAction::None;
-        animator_.SetLayerWeight(holdBody_, usingWeapon ? 0.f : holdWeight_);
-        animator_.SetLayerWeight(weaponAction_, usingWeapon ? 1.f : 0.f);
-        animator_.SetLayerWeight(weaponActionBody_, usingWeapon ? 1.f : 0.f);
-        if (usingWeapon)
+            return bone >= 0 && bone < static_cast<int32_t>(transforms_.size()) ? transforms_[bone] : glm::mat4(1.f);
+        };
+        const glm::mat4 scale = glm::scale(glm::mat4(1.f), glm::vec3(weaponScale_));
+        append(at(socket_) * glm::translate(glm::mat4(1.f), WeaponRigHoldFor(state.weaponId).modelOffset) * scale);
+        for (int slot = 0; slot < kWeaponSlotCount; ++slot)
         {
-            const std::string clip = state.weaponAction == EWeaponPresentationAction::Melee
-                ? "melee_" + state.weaponId + "_attack" : state.weaponAction == EWeaponPresentationAction::Reload
-                ? "reload_rifle" : "switch_weapon";
-            const auto* selected = asset.FindClip(clip);
-            animator_.SetManualBlend(weaponAction_, {{selected, 1.f}}, state.weaponActionTime01);
-            animator_.SetManualBlend(weaponActionBody_, {{selected, 1.f}}, state.weaponActionTime01);
+            const auto& holster = graph_.Holsters()[slot];
+            append(at(holsterParents_[slot]) * glm::translate(glm::mat4(1.f), holster.position) *
+                   glm::mat4_cast(holster.rotation) * scale);
         }
-        animator_.SetLayerWeight(lootAction_, looting ? 1.f : 0.f);
-        if (looting) animator_.SetManualBlend(lootAction_, {{asset.FindClip("loot_ground"), 1.f}}, state.actionTime01);
-        return WritePose(animator_, dt, yaw_, transforms_, output);
+        const bool switching = state.weaponAction == EWeaponPresentationAction::Switch;
+        pose.heldVisible = state.hasWeapon && !switching;
+        for (int slot = 0; slot < kWeaponSlotCount; ++slot)
+            pose.holsterVisible[slot] = !state.slotWeaponIds[slot].empty() && (switching || slot != state.activeWeaponSlot);
+        return pose;
     }
 
     void FWebInfectedPose::Bind(const Assets::FRigDefinition& asset)

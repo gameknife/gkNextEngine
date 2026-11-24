@@ -27,8 +27,8 @@ export function renderOptions(panel: HTMLElement, changed: () => void) {
     };
     entry(tr("Language"), select([["zh-CN", "简体中文"], ["en", "English"]], settings.language,
         value => { settings.language = value === "en" ? "en" : "zh-CN"; }));
-    entry(tr("Graphics"), select([["balanced", tr("Balanced")], ["shadows", tr("Cascaded shadows")]],
-        settings.quality, value => { settings.quality = value === "shadows" ? "shadows" : "balanced"; }));
+    entry(tr("Graphics"), select([["low", tr("Low")], ["balanced", tr("Balanced")], ["shadows", tr("Cascaded shadows")]],
+        settings.quality, value => { settings.quality = value === "shadows" || value === "low" ? value : "balanced"; }));
     entry(tr("Mouse sensitivity"), slider(settings.sensitivity, .15, 3, value => { settings.sensitivity = value; }));
     entry(tr("Volume"), slider(settings.volume, 0, 1, value => { settings.volume = value; }));
 

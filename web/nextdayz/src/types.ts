@@ -125,6 +125,8 @@ export interface Pose {
 
 export interface Frame {
     phase: "login" | "waiting" | "profile" | "deploying" | "joining" | "playing";
+    // Where to draw the local survivor: between the last two 60 Hz steps (feet is the latest).
+    drawFeet?: XYZ;
     message: string;
     scene: string;
     id: number;

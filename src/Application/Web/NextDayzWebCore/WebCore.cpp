@@ -289,6 +289,7 @@ namespace
                     { return physics_->CreateCharacter(settings); }, {}, floor->HitPoint + glm::vec3(0.f, .06f, 0.f), config_);
                 player_.SetYaw(yaw);
                 player_.SetPitch(std::clamp(pitch, -1.2f, 1.2f));
+                ResetDrawBlend();
                 aimHeld_ = false;
                 actions_.Reset();
                 actionLoot_.clear();
@@ -426,6 +427,9 @@ namespace
                 physicsTime_ += dt;
                 while (physicsTime_ >= stepSeconds)
                 {
+                    // What the last step started from: the page draws between it and the result.
+                    previousFeet_ = player_.Position();
+                    previousCamera_ = player_.CameraPosition();
                     if (alive_)
                     {
                         // Desktop's frame order, one fixed step at a time.
@@ -441,6 +445,7 @@ namespace
                 }
                 feet_ = player_.Position();
                 yaw_ = player_.Yaw();
+                stepBlend_ = std::clamp(physicsTime_ / stepSeconds, 0.f, 1.f);
             }
             else if (target_)
             {
@@ -498,7 +503,9 @@ namespace
             Json camera, pose;
             if (physics_ && InWorld())
             {
-                camera = {{"position", V3(player_.CameraPosition())}, {"forward", V3(player_.CameraForward())},
+                // The 60 Hz simulation drawn at the display's rate: between the last two steps.
+                camera = {{"position", V3(glm::mix(previousCamera_, player_.CameraPosition(), stepBlend_))},
+                          {"forward", V3(player_.CameraForward())},
                           {"up", V3(player_.CameraUp())}, {"fov", player_.CurrentFov()},
                           {"firstPerson", player_.IsFirstPerson()}, {"arm", player_.CameraArmLength()}};
                 pose = DescribePose(LocalPresentation(), inventory_.EquippedClothing());
@@ -523,7 +530,8 @@ namespace
             const auto weapon = weapons_.ActiveWeapon();
             return Json{
                 {"phase", Phase()}, {"message", message_}, {"scene", scene_}, {"id", session_.survivorId},
-                {"feet", V3(feet_)}, {"eye", V3(Eye())}, {"forward", V3(Forward())}, {"yaw", yaw_},
+                {"feet", V3(feet_)}, {"drawFeet", V3(physics_ && InWorld() ? glm::mix(previousFeet_, feet_, stepBlend_) : feet_)},
+                {"eye", V3(Eye())}, {"forward", V3(Forward())}, {"yaw", yaw_},
                 {"combat", {{"shots", weapons_.LastShotSequence()}, {"hits", session_.hits}, {"kills", session_.kills},
                     {"pvpSent", pvpSent_},
                     {"hitMarker", hitMarker_}, {"hurt", hurtMarker_}, {"headshot", headshot_}, {"kill", killMarker_},
@@ -650,6 +658,12 @@ namespace
     private:
         bool InWorld() const { return session_.lobby == FClientSession::ELobby::Playing && session_.connected; }
         FLocalSurvivor Survivor() { return {inventory_, weapons_, body_, actions_}; }
+        void ResetDrawBlend()
+        {
+            previousFeet_ = player_.Position();
+            previousCamera_ = player_.CameraPosition();
+            stepBlend_ = 1.f;
+        }
         glm::vec3 Eye() const
         {
             return physics_ && InWorld() ? player_.EyePosition() : feet_ + glm::vec3(0.f, config_.Player.StandingEyeHeight, 0.f);
@@ -963,6 +977,7 @@ namespace
                 player_.SetYaw(yaw_);
                 player_.SetPitch(0.f);
                 player_.Update(1.f / 60.f, rayQuery_);
+                ResetDrawBlend();
             }
             session_.lobby = FClientSession::ELobby::Playing;
             alive_ = body_.IsAlive();
@@ -1214,6 +1229,8 @@ namespace
         std::vector<FZombieRuntime> zombies_, reviewCrowd_;
         float zombieStep_ = 0.f;
         float physicsTime_ = 0.f;
+        float stepBlend_ = 1.f;
+        glm::vec3 previousFeet_{}, previousCamera_{};
         bool aimHeld_ = false, menuOpen_ = false;
         bool triggerHeld_ = false, releaseTrigger_ = false;
         WeaponRuntime weapons_;

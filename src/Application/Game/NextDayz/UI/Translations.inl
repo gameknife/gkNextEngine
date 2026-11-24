@@ -1480,3 +1480,4 @@ ND_TEXT("The Master could not complete the request", "Master 无法完成该请�
 ND_TEXT("Removed from the server by an admin", "已被管理员移出服务器")
 ND_TEXT("The server is shutting down", "服务器正在关闭")
 ND_TEXT("the Master did not admit you", "Master 未允许你进入")
+ND_TEXT("Low", "低")

@@ -343,7 +343,7 @@ export class Actors {
 
     render(frame: Frame, matrices: Float32Array, firstPerson: boolean) {
         if (frame.pose)
-            this.survivor.update(frame.feet, frame.pose.bodyYaw, frame.alive && !firstPerson,
+            this.survivor.update(frame.drawFeet ?? frame.feet, frame.pose.bodyYaw, frame.alive && !firstPerson,
                 frame.pose, frame.pose.matrixOffset, matrices);
         const seen = new Set<number>();
         for (const remote of frame.remotes) {

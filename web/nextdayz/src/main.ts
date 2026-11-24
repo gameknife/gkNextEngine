@@ -539,11 +539,15 @@ async function init() {
     document.addEventListener("visibilitychange", visibilityChanged);
     visibilityChanged();
 
+    // Time the client itself spends per frame (kernel tick, frame read, scene submission),
+    // for the review hook: rAF intervals alone are capped at the display's rate.
+    const work: number[] = [];
     const animate = (timestamp: number) => {
         if (document.hidden) {
             requestAnimationFrame(animate);
             return;
         }
+        const begin = performance.now();
         const dt = latestFrame ? Math.min((timestamp - latestFrame) / 1000, .15) : 0;
         latestFrame = timestamp;
         if (viewShown && world) world.sendControls((flags, dx, dy) => client.controls(flags, dx, dy));
@@ -553,6 +557,8 @@ async function init() {
             refreshAt = Math.max(refreshAt, timestamp + 105);
         }
         if (viewShown && world) world.render(client.read(), client.poseMatrices(), lightPreview);
+        work.push(performance.now() - begin);
+        if (work.length > 240) work.shift();
         requestAnimationFrame(animate);
     };
     if (import.meta.env.DEV) {
@@ -564,6 +570,7 @@ async function init() {
             nextdayzReview: () => ({
                 frame: client.read(), profile: client.read("profile"), cargo: client.read("cargo"),
                 cacheHits: loaded?.cacheHits ?? 0, drawCalls: world?.drawCalls ?? 0, triangles: world?.triangles ?? 0,
+                workMs: [...work], wasmBytes: (app as { HEAPU8?: Uint8Array })?.HEAPU8?.length ?? 0,
                 scad: loaded?.scad,
             }),
             nextdayzLightPreview: (minutes?: number, mode = 0) => {

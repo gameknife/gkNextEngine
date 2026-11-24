@@ -8,7 +8,10 @@ import { FieldEffects } from "./fieldEffects";
 import type { Clock, Frame, GroundItem, Presentation } from "./types";
 
 type View = "survivor" | "overview" | "detail";
-export type Quality = "balanced" | "shadows";
+export type Quality = "low" | "balanced" | "shadows";
+// The low tier draws 0.75x the pixels and nothing past this many metres; fog closes the gap.
+const lowFar = 320;
+const lowFogDensity = 0.0065;
 
 export class World {
     private scene = new THREE.Scene();
@@ -278,7 +281,11 @@ export class World {
         if (width <= 0 || height <= 0) return;
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
-        this.renderer.setPixelRatio(Math.min(devicePixelRatio, this.quality === "shadows" ? 1.5 : 1));
+        this.renderer.setPixelRatio(Math.min(devicePixelRatio, this.quality === "shadows" ? 1.5 : this.quality === "low" ? .75 : 1));
+        this.camera.far = this.quality === "low" ? lowFar : 5000;
+        this.camera.updateProjectionMatrix();
+        // The sky box follows the camera and must sit inside the far plane.
+        this.sky.scale.setScalar(this.quality === "low" ? lowFar * 1.1 : 2300);
         this.renderer.setSize(width, height, false);
         this.csm?.updateFrustums();
     }
@@ -299,7 +306,8 @@ export class World {
         this.hemisphere.color.fromArray(clock.skyColor);
         this.hemisphere.intensity = Math.max(.14, clock.skyIntensity / 64);
         const altitude = Math.max(0, this.position.y - (this.world?.bounds[0][1] ?? 0));
-        this.fog.density = Math.min(.008, clock.fogDensity * .13 / (1 + altitude / 180));
+        this.fog.density = Math.max(Math.min(.008, clock.fogDensity * .13 / (1 + altitude / 180)),
+            this.quality === "low" ? lowFogDensity : 0);
         const fogBase = new THREE.Color(cloudy ? 0xafbac2 : 0xa5bac6);
         const fogLight = new THREE.Color().fromArray(clock.fogColor).multiplyScalar(1 / Math.max(1, ...clock.fogColor));
         this.fog.color.copy(fogBase).lerp(fogLight, .16 * day).lerp(new THREE.Color(0x122337), dawn * .9);

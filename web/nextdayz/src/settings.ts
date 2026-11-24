@@ -12,7 +12,7 @@ export interface Settings {
     language: Language;
     sensitivity: number;
     volume: number;
-    quality: "balanced" | "shadows";
+    quality: "low" | "balanced" | "shadows";
     keys: Record<Binding, string>;
 }
 
@@ -23,7 +23,7 @@ function readSettings(): Settings {
     try {
         const prior = JSON.parse(localStorage.getItem(storageKey) ?? "{}") as Partial<Settings>;
         if (prior.language === "en") defaults.language = "en";
-        if (prior.quality === "shadows") defaults.quality = "shadows";
+        if (prior.quality === "shadows" || prior.quality === "low") defaults.quality = prior.quality;
         if (typeof prior.sensitivity === "number" && prior.sensitivity >= .15 && prior.sensitivity <= 3)
             defaults.sensitivity = prior.sensitivity;
         if (typeof prior.volume === "number" && prior.volume >= 0 && prior.volume <= 1) defaults.volume = prior.volume;

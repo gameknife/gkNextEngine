@@ -233,6 +233,7 @@ Options::Options(const int argc, const char* argv[])
 
         {"Automation", "agent-validation", '\0', "Agent validation mode: hidden window, immediate present, deterministic pacing.", EOptKind::Bool, &AgentValidation},
         {"Automation", "agent-visible-window", '\0', "Keep the window visible during agent validation.", EOptKind::Bool, &AgentVisibleWindow},
+        {"Automation", "agent-watch", '\0', "Agent validation a person watches: visible window, vsync, step captions, real input ignored.", EOptKind::Bool, &AgentWatch},
         {"Automation", "agent-control", '\0', "Loopback endpoint for gnb runtime control (host:port).", EOptKind::String, &AgentControl},
         {"Automation", "agent-control-token", '\0', "One-time token for gnb runtime control.", EOptKind::String, &AgentControlToken},
         {"Automation", "exit-after-frames", '\0', "Request a clean exit after this many rendered frames (0 disables).", EOptKind::UInt32, &ExitAfterFrames},
@@ -400,6 +401,11 @@ Options::Options(const int argc, const char* argv[])
         HiddenWindow = true;
         ForceNoRT = true;
         DedicatedTickRate = std::clamp<uint32_t>(DedicatedTickRate, 1, 240);
+    }
+    if (AgentWatch)
+    {
+        AgentValidation = true;
+        AgentVisibleWindow = true;
     }
     DisableStreamline = DisableStreamline || disableStreamlineForApplication || AgentValidation || Dedicated;
     DisableFidelityFX = DisableFidelityFX || AgentValidation || Dedicated;

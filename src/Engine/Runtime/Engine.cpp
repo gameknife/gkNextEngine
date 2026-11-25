@@ -346,6 +346,9 @@ NextEngine::NextEngine(Runtime::Config::Options& options, void* userdata)
     
     // cvars
     services_.cvarSystem = std::make_unique<NextCVar::FCVarSystem>();
+    // An agent validation run must not depend on, or change, the user's saved settings:
+    // a script that switched r.rendererType used to leave every later run on that renderer.
+    services_.cvarSystem->SetUserFilesEnabled(!options.AgentValidation);
     NextCVar::RegisterEngineCVars(*services_.cvarSystem, config_.userSettings, config_.showFlags, this);
     services_.cvarSystem->LoadDefaultFile("assets/configs/cvar_default.json");
     gameInstance_->ConfigureCVars(*services_.cvarSystem);
@@ -498,8 +501,11 @@ void NextEngine::Start()
     spdlog::stopwatch stopwatch;
 
     // Initialize Renderer
-    const VkPresentModeKHR presentMode = options_->AgentValidation || options_->Tui ? VK_PRESENT_MODE_IMMEDIATE_KHR
-                                             : static_cast<VkPresentModeKHR>(options_->PresentMode);
+    // Watch mode presents at the display rate so frame-based waits take real time a person can follow.
+    const bool uncappedPresent = (options_->AgentValidation && !options_->AgentWatch) || options_->Tui;
+    const VkPresentModeKHR presentMode = uncappedPresent ? VK_PRESENT_MODE_IMMEDIATE_KHR
+                                         : options_->AgentWatch ? VK_PRESENT_MODE_FIFO_KHR
+                                         : static_cast<VkPresentModeKHR>(options_->PresentMode);
     config_.userSettings.PresentMode = static_cast<uint32_t>(presentMode);
     // The constructor has completed core initialization; turn on the first startup light before
     // entering the Vulkan/device startup path.
@@ -672,6 +678,12 @@ void NextEngine::PumpPipelineWarmupAfterPresent()
 
 bool NextEngine::HandleEvent(SDL_Event& event)
 {
+    // Agent watch mode: the run owns input, so a person watching cannot nudge it.
+    if (agentControl_ && agentControl_->ShouldDropEvent(event))
+    {
+        return false;
+    }
+
     if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP)
     {
         SDL_SetModState(static_cast<SDL_Keymod>(event.key.mod));

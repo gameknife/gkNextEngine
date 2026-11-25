@@ -115,6 +115,11 @@ namespace NextCVar
         void RegisterUserFileChannel(std::string prefix, std::string path);
         bool LoadUserFiles();
         bool SaveUserFiles() const;
+        // When disabled, user files are neither read nor written: loads report nothing
+        // loaded and saves succeed without touching disk. Agent validation disables them
+        // so a run starts from defaults on every machine and leaves no settings behind.
+        void SetUserFilesEnabled(bool enabled) { userFilesEnabled_ = enabled; }
+        bool AreUserFilesEnabled() const { return userFilesEnabled_; }
 
         FConsoleResult ExecuteCommand(const std::string& line);
 
@@ -159,6 +164,7 @@ namespace NextCVar
         std::string defaultConfigPath_;
         std::string userConfigPath_ = "assets/configs/cvar_user.json";
         std::vector<std::pair<std::string, std::string>> userFileChannels_;
+        bool userFilesEnabled_ = true;
 
         static std::string Trim(const std::string& input);
         static std::vector<std::string> Split(const std::string& input);

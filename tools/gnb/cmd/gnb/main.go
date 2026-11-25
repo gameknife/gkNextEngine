@@ -631,6 +631,9 @@ func newShotCommand(ctx appContext) *cobra.Command {
 	var headless bool
 	var reason string
 	var rerunOf string
+	var verbose bool
+	var build bool
+	var watch bool
 	cmd := &cobra.Command{
 		Use:   "shot [--scene <path>] [--target <name>] [--frames N] [--ui] [--visible] [--headless]",
 		Short: tr("cli.shot.short"),
@@ -641,14 +644,19 @@ func newShotCommand(ctx appContext) *cobra.Command {
 			"The screenshot path is printed when finished.\n\n" +
 			"Examples:\n" +
 			"  gnb shot --scene assets/models/playground.glb\n" +
-			"  gnb shot --target ScadStudio --scene assets/scad/source/beer_cup.scad --frames 60\n" +
+			"  gnb shot --target ScadStudio --scene assets/scad/source/island_showcase.scad --frames 60\n" +
 			"  gnb shot --target AirportSim --ui",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := filepath.Join(filepath.Dir(platform.BinDir(ctx.repoRoot, ctx.preset)), "screenshots", "agent_validation")
 			if headless {
 				args = append(args, "--headless-surface")
 			}
-			opts := validatepkg.Options{RepoRoot: ctx.repoRoot, Preset: ctx.preset, Target: target, Scene: scene, Visible: visible, Reason: reason, RerunOf: rerunOf, Args: args}
+			if build {
+				if err := buildValidationTarget(ctx, target); err != nil {
+					return err
+				}
+			}
+			opts := validatepkg.Options{RepoRoot: ctx.repoRoot, Preset: ctx.preset, Target: target, Scene: scene, Visible: visible, Reason: reason, RerunOf: rerunOf, Args: args, Verbose: verbose, Watch: watch}
 			result, err := validatepkg.ShotWithResult(cmd.Context(), opts, frames, includeUI, out)
 			if result.RunID != "" {
 				console.Info("validation run: " + result.RunID)
@@ -678,6 +686,9 @@ func newShotCommand(ctx appContext) *cobra.Command {
 	cmd.Flags().BoolVar(&headless, "headless", false, "force VK_EXT_headless_surface (including on macOS)")
 	cmd.Flags().StringVar(&reason, "reason", "", "short description of why this screenshot is being captured")
 	cmd.Flags().StringVar(&rerunOf, "rerun-of", "", "associate this new run with an earlier validation run")
+	cmd.Flags().BoolVar(&verbose, "verbose", false, "also stream the target's log to the terminal")
+	cmd.Flags().BoolVar(&build, "build", false, "build the target (incrementally) before capturing")
+	cmd.Flags().BoolVar(&watch, "watch", false, "show the window, capture, and keep it open until you close it")
 	return cmd
 }
 
@@ -713,11 +724,28 @@ func newValidateCommand(ctx appContext) *cobra.Command {
 	var syncValidation bool
 	var reason string
 	var rerunOf string
+	var lint bool
+	var verbose bool
+	var build bool
+	var watch bool
+	var pace time.Duration
 	cmd := &cobra.Command{
-		Use:   "validate --script <path> [--target <name>] [--scene <path>]",
+		Use:   "validate --script <path> [--target <name>] [--scene <path>] | validate --lint [paths...]",
 		Short: tr("cli.validate.short"),
-		Args:  cobra.ArbitraryArgs,
+		Long: "Run an agent script against a target and write a JSON report.\n\n" +
+			"The script is checked before anything is launched: unknown fields, unknown step types and\n" +
+			"coordinates that cannot resolve are errors. The run then waits for scene.ready (opt out with\n" +
+			"\"waitReady\": false), executes the steps, quits the target if the script did not, and prints\n" +
+			"a summary. The engine log goes to the run's runner.log; --verbose also streams it.\n\n" +
+			"--watch runs it for a person to follow: visible window at display rate, a caption per step,\n" +
+			"a pause after each action (--pace), a cursor that glides to its target, keyboard and mouse\n" +
+			"input ignored, and the window left open at the end until you close it.\n\n" +
+			"--lint only checks scripts (default: assets/agentscripts) and launches nothing.",
+		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if lint {
+				return runValidateLint(ctx, args)
+			}
 			if script == "" {
 				return fmt.Errorf("--script is required")
 			}
@@ -755,8 +783,14 @@ func newValidateCommand(ctx appContext) *cobra.Command {
 			} else if !filepath.IsAbs(reportPath) {
 				reportPath = filepath.Join(filepath.Dir(platform.BinDir(ctx.repoRoot, ctx.preset)), reportPath)
 			}
+			if build {
+				if err := buildValidationTarget(ctx, target); err != nil {
+					return err
+				}
+			}
 			opts := validatepkg.Options{RepoRoot: ctx.repoRoot, Preset: ctx.preset, Target: target, Scene: scene,
-				Script: scriptPath, Report: reportPath, Width: width, Height: height, Visible: visible, SyncValidation: syncValidation, Reason: reason, RerunOf: rerunOf, Args: args}
+				Script: scriptPath, Report: reportPath, Width: width, Height: height, Visible: visible, SyncValidation: syncValidation, Reason: reason, RerunOf: rerunOf, Args: args, Verbose: verbose,
+				Watch: watch, Pace: pace}
 			result, err := validatepkg.RunWithResult(cmd.Context(), opts)
 			if result.RunID != "" {
 				console.Info("validation run: " + result.RunID)
@@ -776,7 +810,54 @@ func newValidateCommand(ctx appContext) *cobra.Command {
 	cmd.Flags().BoolVar(&syncValidation, "sync-validation", false, "enable Vulkan core and synchronization validation")
 	cmd.Flags().StringVar(&reason, "reason", "", "short description of why this validation is being run")
 	cmd.Flags().StringVar(&rerunOf, "rerun-of", "", "associate this new run with an earlier validation run")
+	cmd.Flags().BoolVar(&lint, "lint", false, "only check scripts (positional args: files or directories; default assets/agentscripts)")
+	cmd.Flags().BoolVar(&verbose, "verbose", false, "also stream the target's log to the terminal")
+	cmd.Flags().BoolVar(&build, "build", false, "build the target (incrementally) before running")
+	cmd.Flags().BoolVar(&watch, "watch", false, "run it for a person to watch: paced, captioned, window kept open")
+	cmd.Flags().DurationVar(&pace, "pace", 0, "watch mode: pause after each action (default 700ms)")
 	return cmd
+}
+
+// buildValidationTarget runs `gnb build <target>` so a validation never runs a
+// binary older than the shaders and sources it is meant to check.
+func buildValidationTarget(ctx appContext, target string) error {
+	b := newBuildCommand(ctx)
+	return b.RunE(b, []string{target})
+}
+
+func runValidateLint(ctx appContext, paths []string) error {
+	if len(paths) == 0 {
+		paths = []string{filepath.Join(ctx.repoRoot, "assets", "agentscripts")}
+	}
+	results, err := validatepkg.LintPaths(paths, ctx.repoRoot)
+	if err != nil {
+		return err
+	}
+	errorCount, warningCount := 0, 0
+	for _, file := range results {
+		if len(file.Issues) == 0 {
+			continue
+		}
+		name := file.Path
+		if rel, relErr := filepath.Rel(ctx.repoRoot, file.Path); relErr == nil {
+			name = filepath.ToSlash(rel)
+		}
+		console.Info("%s", name)
+		for _, issue := range file.Issues {
+			if issue.Error {
+				errorCount++
+			} else {
+				warningCount++
+			}
+			console.Muted("  %s", issue.String())
+		}
+	}
+	summary := fmt.Sprintf("%d scripts checked: %d errors, %d warnings", len(results), errorCount, warningCount)
+	if errorCount > 0 {
+		return fmt.Errorf("%s", summary)
+	}
+	console.Success("%s", summary)
+	return nil
 }
 
 func loadValidateScriptHints(scriptPath string) validateScriptHints {

@@ -25,4 +25,14 @@ namespace Runtime::Input::Synthetic
     void PushMouseMove(SDL_Window* window, FPoint from, FPoint to);
     void PushMouseButton(SDL_WindowID windowId, FPoint at, Uint8 button, bool down, Uint8 clicks = 1);
     void PushMouseWheel(SDL_WindowID windowId, FPoint at, float x, float y);
+
+    // Device ids stamped on every synthetic event so watch mode can tell them from real input.
+    inline constexpr SDL_MouseID syntheticMouseId = 0x676B6E78u;
+    inline constexpr SDL_KeyboardID syntheticKeyboardId = 0x676B6E78u;
+
+    // Keyboard, text, mouse button/motion and wheel events: what a person could inject.
+    bool IsUserInputEvent(const SDL_Event& event);
+    // True for events this module pushed. Text events carry no device id, so each
+    // pushed text event is counted and the check consumes one count.
+    bool ClaimSyntheticEvent(const SDL_Event& event);
 }

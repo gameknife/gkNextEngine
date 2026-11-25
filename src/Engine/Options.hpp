@@ -40,6 +40,9 @@ public:
     bool FastExit{true};
     bool AgentValidation{};
     bool AgentVisibleWindow{};
+    // Watch mode: a person follows the run. Visible window, vsync, on-screen step
+    // captions, and real keyboard/mouse input ignored. Implies agent validation.
+    bool AgentWatch{};
 #if GK_WITH_VITURE
     bool ArMode{};
     float ArWorldUnitsPerMeter{1.0f};

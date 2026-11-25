@@ -38,7 +38,7 @@ func TestValidationTabRendersRunsAndFailureEvidence(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("status = %d (%s)", rec.Code, rec.Body.String())
 	}
-	for _, want := range []string{"验证中心", "assertion failed", "scene.nodeCount", "failure.jpg", "可见重跑"} {
+	for _, want := range []string{"验证中心", "assertion failed", "scene.nodeCount", "failure.jpg", "观看重跑"} {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Fatalf("validation page missing %q:\n%s", want, rec.Body.String())
 		}

@@ -136,7 +136,7 @@ Tests no longer require the current working directory to be `bin`; launch them v
 ```bash
 # 渲染一个场景到稳定帧 → 截一张图 → 自动退出。完成后会打印截图绝对路径。
 gnb shot --scene assets/models/playground.glb
-gnb shot --target ScadStudio --scene assets/scad/source/beer_cup.scad --frames 60
+gnb shot --target ScadStudio --scene assets/scad/source/island_showcase.scad --frames 60
 gnb shot --target AirportSim --ui  # 截图包含 ImGui，适合验证 HUD / 面板
 ```
 
@@ -170,16 +170,28 @@ gnb shot --target AirportSim --ui  # 截图包含 ImGui，适合验证 HUD / 面
 ```bash
 gnb validate --script assets/agentscripts/smoke.agentscript.json
 gnb validate --script assets/agentscripts/smoke.agentscript.json --target gkNextRenderer --scene assets/models/playground.glb
-gnb validate --script assets/agentscripts/smoke.agentscript.json --visible  # 显示窗口，便于人工观察回放
+gnb validate --script <path> --watch   # 观看模式：给人看的回放（见下）
+gnb validate --script <path> --build   # 先增量构建目标再跑（目标程序比 shader 产物旧时 gnb 会警告）
+gnb validate --lint                    # 只检查脚本、不启动任何程序；写完或改完脚本先跑这一条
 ```
 
+**默认在后台跑**（隐藏窗口、不封顶帧率、不抢焦点）。用户说想看着跑、想看看效果时用 `--watch`，并先告诉
+用户会弹出窗口、跑完窗口会一直开着、要由用户自己关掉：窗口按显示器刷新率运行，每个动作后停顿一下
+（`--pace`，默认 700ms），底部字幕显示第几步、在做什么，光标会平滑移到目标并标出点击位置和按键，
+用户的键鼠输入被忽略，结束或失败时停在最后的画面上。`gnb shot --watch` 截完图也保留窗口。
+Dashboard 验证页的"观看验证 / 观看重跑"就是 `--watch`。
+
 机制：
+- 写脚本前查 [agentscript 字段参考](docs/guides/agentscript-reference.md)。启动前 gnb 会按字段表检查脚本，拼错的字段、未知步骤、取值不在枚举里都会直接报错，不会再静默变成默认值。
+- 坐标优先用 `norm`：gnb 按目标报告的真实窗口尺寸换算（Windows 125% 缩放下 1280×720 的窗口坐标是 1600×900），`px` 不会随缩放调整。
+- 默认先等 `scene.ready` 再执行第一步，脚本不必再写 `engine.status == Running` 加固定帧数，也不必以 `quit` 结尾。终端只打印结果摘要（失败步骤、原因、失败截图、引擎错误行），完整引擎日志在 `runner.log`，`--verbose` 才同时打到终端。
+- 验证运行不读也不写用户配置 `cvar_user.json`，每次都从默认值开始，脚本改过的 cvar 不会留到之后的运行里。
 - `gnb validate` 读取并解释脚本里的 `target` / `scene` / `viewport` 和步骤，命令行参数可覆盖；报告也由 gnb 写出。
-- gnb 用 `--agent-validation` 启动引擎以获得隐藏窗口、Immediate present、禁用 Streamline 等确定性语义，并通过原子控制端点驱动。需要显示窗口时传 `gnb validate --visible`。
+- gnb 用 `--agent-validation` 启动引擎以获得隐藏窗口、Immediate present、禁用 Streamline 等确定性语义，并通过原子控制端点驱动。只想显示窗口、不要观看模式的节奏和字幕时传 `--visible`。
 - 每次 `gnb validate` / `gnb shot` 都会登记到 `out/build/<preset>/validation_runs/<runId>/`，即使 Dashboard 没有启动也会保留 `run.json`、`script.json`、`runner.log` 和独立截图。CLI 会打印 runId 与证据目录；有截图的机器通过在 Dashboard 中仍显示为“待审阅”。可用 `gnb validation note <runId> --issue --message "…"` 记录视觉问题，审阅不会改写机器状态。
 - Agent 脚本鼠标移动只推送合成 `SDL_EVENT_MOUSE_MOTION`，不会 `SDL_WarpMouseInWindow` 移动系统光标；按键/鼠标按钮也只走 SDL 事件队列。
 - 支持步骤：`key` / `text` / `mouse-move` / `mouse-button` / `click` / `drag` / `scroll` / `wait-frames` / `wait-ms` / `wait-until` / `cvar` / `exec` / `assert` / `screenshot` / `log` / `quit`。
-- 内建查询：`engine.totalFrames`、`engine.frameRate`、`engine.time`、`engine.status`、`scene.ready`、`scene.nodeCount`、`scene.selectedId`、`scene.selectedCount`、`cvar.<name>`；游戏可通过 `RegisterAgentQueries` 暴露 `game.<name>`。
+- 内建查询（完整列表见字段参考）：`engine.*`、`scene.*`、`ambient.*`、`cvar.<name>`；游戏可通过 `RegisterAgentQueries` 暴露 `game.<name>`。
 - 结束会写 JSON report 到 `out/build/<preset>/agent_reports/<script-name>.json`；任一断言失败时进程返回非零退出码，CI 可直接判定失败。
 
 ## Linting

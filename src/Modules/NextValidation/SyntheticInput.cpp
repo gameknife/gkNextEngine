@@ -139,10 +139,17 @@ namespace Runtime::Input::Synthetic
         return SDL_BUTTON_LEFT;
     }
 
+    namespace
+    {
+        // Main-thread only: pushes happen in the control Pump, checks in the event handler.
+        int pendingSyntheticText = 0;
+    }
+
     void PushKey(SDL_WindowID windowId, SDL_Keycode key, SDL_Scancode scancode, SDL_Keymod mods, bool down)
     {
         SDL_Event event{};
         event.type = down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
+        event.key.which = syntheticKeyboardId;
         event.key.windowID = windowId;
         event.key.key = key;
         event.key.scancode = scancode;
@@ -164,13 +171,17 @@ namespace Runtime::Input::Synthetic
         event.type = SDL_EVENT_TEXT_INPUT;
         event.text.windowID = windowId;
         event.text.text = SDL_strdup(utf8.c_str());
-        SDL_PushEvent(&event);
+        if (SDL_PushEvent(&event))
+        {
+            ++pendingSyntheticText;
+        }
     }
 
     void PushMouseMove(SDL_Window* window, FPoint from, FPoint to)
     {
         SDL_Event event{};
         event.type = SDL_EVENT_MOUSE_MOTION;
+        event.motion.which = syntheticMouseId;
         event.motion.windowID = window ? SDL_GetWindowID(window) : 0;
         event.motion.x = to.x;
         event.motion.y = to.y;
@@ -183,6 +194,7 @@ namespace Runtime::Input::Synthetic
     {
         SDL_Event event{};
         event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
+        event.button.which = syntheticMouseId;
         event.button.windowID = windowId;
         event.button.button = button;
         event.button.down = down;
@@ -196,11 +208,55 @@ namespace Runtime::Input::Synthetic
     {
         SDL_Event event{};
         event.type = SDL_EVENT_MOUSE_WHEEL;
+        event.wheel.which = syntheticMouseId;
         event.wheel.windowID = windowId;
         event.wheel.x = x;
         event.wheel.y = y;
         event.wheel.mouse_x = at.x;
         event.wheel.mouse_y = at.y;
         SDL_PushEvent(&event);
+    }
+
+    bool IsUserInputEvent(const SDL_Event& event)
+    {
+        switch (event.type)
+        {
+        case SDL_EVENT_KEY_DOWN:
+        case SDL_EVENT_KEY_UP:
+        case SDL_EVENT_TEXT_INPUT:
+        case SDL_EVENT_MOUSE_MOTION:
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+        case SDL_EVENT_MOUSE_WHEEL:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    bool ClaimSyntheticEvent(const SDL_Event& event)
+    {
+        switch (event.type)
+        {
+        case SDL_EVENT_KEY_DOWN:
+        case SDL_EVENT_KEY_UP:
+            return event.key.which == syntheticKeyboardId;
+        case SDL_EVENT_MOUSE_MOTION:
+            return event.motion.which == syntheticMouseId;
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+            return event.button.which == syntheticMouseId;
+        case SDL_EVENT_MOUSE_WHEEL:
+            return event.wheel.which == syntheticMouseId;
+        case SDL_EVENT_TEXT_INPUT:
+            if (pendingSyntheticText > 0)
+            {
+                --pendingSyntheticText;
+                return true;
+            }
+            return false;
+        default:
+            return false;
+        }
     }
 }

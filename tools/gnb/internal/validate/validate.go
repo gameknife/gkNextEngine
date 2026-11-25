@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -35,7 +36,19 @@ type Options struct {
 	RerunOf                                         string
 	Args                                            []string
 	Env                                             []string
+	// Verbose streams the target's stdout/stderr to the terminal. By default it
+	// only goes to the run's runner.log and failures print a short summary.
+	Verbose bool
+	// Watch runs for a person to follow: visible window at display rate, an
+	// on-screen caption per step, a pause of Pace after each action, a cursor that
+	// glides to its target, real input ignored, and the window kept open at the
+	// end (and on failure) until the person closes it.
+	Watch bool
+	Pace  time.Duration
 }
+
+// defaultWatchPace is how long watch mode lingers after each action.
+const defaultWatchPace = 700 * time.Millisecond
 type Script struct {
 	Name, Target, Scene string
 	// Extra engine arguments the script cannot do without, so a scenario that only exists under a
@@ -44,13 +57,18 @@ type Script struct {
 	Args     []string
 	Defaults struct{ WaitFrames, StepTimeoutMs int }
 	Viewport struct{ Width, Height int }
-	Steps    []map[string]any
+	// WaitReady (default true) makes `gnb validate` wait for scene.ready and a few
+	// warm-up frames before the first step. Set it to false for scripts that test
+	// startup or loading itself.
+	WaitReady *bool
+	Steps     []map[string]any
 }
 type Report struct {
 	Name        string           `json:"name"`
 	Passed      bool             `json:"passed"`
 	StartedAt   string           `json:"startedAt"`
 	FinishedAt  string           `json:"finishedAt"`
+	Error       string           `json:"error,omitempty"`
 	Steps       []map[string]any `json:"steps"`
 	Screenshots []string         `json:"screenshots"`
 }
@@ -69,7 +87,40 @@ type client struct {
 	rw    *bufio.ReadWriter
 	token string
 	next  int
+	// dead is set once the control connection fails at the transport level,
+	// which in practice means the target process exited or crashed.
+	dead bool
+	// pointer is the last absolute cursor position sent, so watch mode can glide
+	// from there to the next target instead of jumping.
+	pointer *[2]float64
+	// windowW/windowH are the target's window size in the coordinate space of
+	// mouse events, as the engine reports it. On a scaled Windows display it is
+	// larger than the script viewport (1280x720 at 125% is 1600x900), so "norm"
+	// points resolve against this. Zero when the target does not report it.
+	windowW, windowH int
 }
+
+// readWindowSize asks the target for its window size; older targets do not
+// know the query and the script viewport is used instead.
+func (c *client) readWindowSize() {
+	w, errW := query(c, "engine.windowWidth")
+	h, errH := query(c, "engine.windowHeight")
+	if errW == nil && errH == nil && num(w) > 0 && num(h) > 0 {
+		c.windowW, c.windowH = int(num(w)), int(num(h))
+	}
+}
+
+// pointSpace is the size "norm" coordinates scale to.
+func (c *client) pointSpace(o Options) (int, int) {
+	if c.windowW > 0 && c.windowH > 0 {
+		return c.windowW, c.windowH
+	}
+	return o.Width, o.Height
+}
+
+// errControlLost marks a transport failure on the control channel, as opposed to
+// an error the engine returned for a request.
+var errControlLost = errors.New("control channel lost (target process exited or crashed)")
 
 func Run(ctx context.Context, o Options) error {
 	_, err := RunWithResult(ctx, o)
@@ -87,6 +138,24 @@ func RunWithResult(ctx context.Context, o Options) (Result, error) {
 			s.Name = strings.TrimSuffix(filepath.Base(o.Script), filepath.Ext(o.Script))
 		} else {
 			s.Name = "validation"
+		}
+	}
+	if readErr == nil {
+		lintOpts := LintOptions{}
+		if o.Scene == "" {
+			lintOpts.RepoRoot = o.RepoRoot
+		}
+		issues := Lint(data, lintOpts)
+		var problems []string
+		for _, issue := range issues {
+			if issue.Error {
+				problems = append(problems, "  "+issue.String())
+			} else {
+				console.Warn("%s", issue.String())
+			}
+		}
+		if len(problems) > 0 {
+			readErr = fmt.Errorf("script check failed (nothing was launched):\n%s", strings.Join(problems, "\n"))
 		}
 	}
 	return run(ctx, o, s, data, readErr, "validate")
@@ -134,6 +203,12 @@ func Trace(ctx context.Context, o Options, frames int) error {
 }
 
 func run(ctx context.Context, o Options, s Script, scriptData []byte, loadErr error, kind string) (result Result, retErr error) {
+	if o.Watch {
+		o.Visible = true
+		if o.Pace <= 0 {
+			o.Pace = defaultWatchPace
+		}
+	}
 	if o.Target == "" {
 		o.Target = s.Target
 	}
@@ -247,6 +322,10 @@ func run(ctx context.Context, o Options, s Script, scriptData []byte, loadErr er
 		finish(validationstore.StatusFailed, "launch", err, nil)
 		return result, err
 	}
+	staleWarning := staleTargetWarning(exe, o.Target, filepath.Join(filepath.Dir(bin), "assets", "shaders"))
+	if staleWarning != "" {
+		console.Warn("%s", staleWarning)
+	}
 	if recording {
 		_ = store.Update(record.RunID, func(r *validationstore.Record) error {
 			r.Phase = "launch"
@@ -267,6 +346,9 @@ func run(ctx context.Context, o Options, s Script, scriptData []byte, loadErr er
 	args := []string{"--agent-validation", "--agent-control=" + endpoint, "--agent-control-token=" + token}
 	if o.Visible {
 		args = append(args, "--agent-visible-window")
+	}
+	if o.Watch {
+		args = append(args, "--agent-watch")
 	}
 	if o.SyncValidation {
 		args = append(args, "--sync-validation")
@@ -306,8 +388,16 @@ func run(ctx context.Context, o Options, s Script, scriptData []byte, loadErr er
 		}
 		defer logFile.Close()
 		_, _ = logFile.WriteString("command: " + exe + " " + strings.Join(displayArgs, " ") + "\n")
-		cmd.Stdout = io.MultiWriter(os.Stdout, logFile)
-		cmd.Stderr = io.MultiWriter(os.Stderr, logFile)
+		if staleWarning != "" {
+			_, _ = logFile.WriteString("warning: " + staleWarning + "\n")
+		}
+		if o.Verbose {
+			cmd.Stdout = io.MultiWriter(os.Stdout, logFile)
+			cmd.Stderr = io.MultiWriter(os.Stderr, logFile)
+		} else {
+			// The engine log stays in runner.log; the terminal gets a summary.
+			cmd.Stdout, cmd.Stderr = logFile, logFile
+		}
 	} else {
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	}
@@ -379,10 +469,70 @@ func run(ctx context.Context, o Options, s Script, scriptData []byte, loadErr er
 		}
 		return result, err
 	}
+	c.readWindowSize()
 	rep := Report{Name: s.Name, Passed: true, StartedAt: time.Now().Format(time.RFC3339), Steps: []map[string]any{}, Screenshots: []string{}}
 	var compatibilityCopies []screenshotCopy
-	failureStepIndex := -1
-	for i, step := range s.Steps {
+	// captureFailure saves the screen at the moment something went wrong, before
+	// later steps (usually the final quit) change or end it.
+	failureCaptured := false
+	captureFailure := func(label string, stepIndex int) {
+		if failureCaptured || c.dead || errorsIsContext(ctx) {
+			return
+		}
+		failureCaptured = true
+		captureEntry, captureErr := execute(ctx, c, map[string]any{"type": "screenshot", "out": "failure_" + label}, s, o, len(s.Steps))
+		path, _ := captureEntry["out"].(string)
+		if captureErr != nil || path == "" {
+			return
+		}
+		rep.Screenshots = append(rep.Screenshots, path)
+		if !recording {
+			return
+		}
+		rel := filepath.ToSlash(path)
+		if relative, relErr := filepath.Rel(result.EvidenceDir, filepath.FromSlash(path)); relErr == nil {
+			rel = filepath.ToSlash(relative)
+		}
+		_ = store.Update(record.RunID, func(r *validationstore.Record) error {
+			r.Screenshots = append(r.Screenshots, rel)
+			if stepIndex >= 0 && stepIndex < len(r.Steps) && r.Steps[stepIndex].Screenshot == "" {
+				r.Steps[stepIndex].Screenshot = rel
+			}
+			return nil
+		})
+	}
+	steps := s.Steps
+	c.annotate(o, map[string]any{"caption": "Loading " + s.Name, "detail": "waiting for the scene to be ready", "status": "running"})
+	if kind == "validate" && (s.WaitReady == nil || *s.WaitReady) {
+		// Engine status "Running" and node counts do not prove the scene finished
+		// loading; scene.ready does. Do it here once instead of in every script.
+		if recording {
+			_ = store.Update(record.RunID, func(r *validationstore.Record) error {
+				r.CurrentStage = "等待场景就绪"
+				return nil
+			})
+		}
+		ready := Script{Name: s.Name}
+		ready.Defaults.StepTimeoutMs = 300000
+		for _, step := range []map[string]any{
+			{"type": "wait-until", "query": "scene.ready", "value": true},
+			{"type": "wait-frames", "n": 3, "readyQuery": "scene.ready"},
+		} {
+			if _, e := execute(ctx, c, step, ready, o, -1); e != nil {
+				rep.Passed = false
+				if c.dead {
+					rep.Error = "target process exited unexpectedly while waiting for scene.ready; no steps were run"
+				} else {
+					rep.Error = "scene never became ready: " + e.Error()
+				}
+				captureFailure("ready", -1)
+				steps = nil
+				break
+			}
+		}
+	}
+	quitSent := false
+	for i, step := range steps {
 		startedAt := time.Now().UTC()
 		if recording {
 			_ = store.Update(record.RunID, func(r *validationstore.Record) error {
@@ -391,12 +541,46 @@ func run(ctx context.Context, o Options, s Script, scriptData []byte, loadErr er
 				return nil
 			})
 		}
-		entry, e := execute(ctx, c, step, s, o, i)
-		entry["idx"] = i
-		if e != nil {
-			if failureStepIndex < 0 {
-				failureStepIndex = i
+		typ := str(step, "type", "")
+		c.annotate(o, stepAnnotation(i, len(steps), step))
+		runStep := step
+		if o.Watch {
+			// The person closes the window when they are done looking, so the
+			// script's own exit is skipped and captures keep the window alive.
+			if typ == "screenshot" && boolv(step, "quitAfterCapture", false) {
+				runStep = clone(step)
+				runStep["quitAfterCapture"] = false
 			}
+			if typ == "screenshot" && boolv(step, "ui", false) {
+				c.annotate(o, map[string]any{"hidden": true})
+			}
+		} else if typ == "quit" || (typ == "screenshot" && boolv(step, "quitAfterCapture", false)) {
+			quitSent = true
+		}
+		var entry map[string]any
+		var e error
+		if o.Watch && typ == "quit" {
+			entry = map[string]any{"type": typ, "passed": true, "skipped": "watch mode keeps the window open"}
+		} else {
+			entry, e = execute(ctx, c, runStep, s, o, i)
+		}
+		if o.Watch {
+			if typ == "screenshot" && boolv(step, "ui", false) {
+				c.annotate(o, map[string]any{"hidden": false})
+			}
+			switch {
+			case e != nil:
+				c.annotate(o, map[string]any{"status": "fail", "detail": describeStep(step) + "  —  " + e.Error()})
+			case typ == "assert" || typ == "wait-until":
+				c.annotate(o, map[string]any{"status": "pass"})
+			}
+			sleepContext(ctx, watchPauseAfter(typ, o.Pace))
+		}
+		entry["idx"] = i
+		if note := str(step, "description", str(step, "comment", "")); note != "" {
+			entry["description"] = note
+		}
+		if e != nil {
 			entry["passed"] = false
 			entry["message"] = e.Error()
 			rep.Passed = false
@@ -423,47 +607,72 @@ func run(ctx context.Context, o Options, s Script, scriptData []byte, loadErr er
 				compatibilityCopies = append(compatibilityCopies, screenshotCopy{source: p, requested: requested})
 			}
 		}
+		if e != nil {
+			captureFailure(fmt.Sprintf("%03d", i), i)
+		}
+		if c.dead && !quitSent {
+			// Every later step would fail the same way; say what happened instead.
+			rep.Passed = false
+			rep.Error = fmt.Sprintf("target process exited unexpectedly during step #%d (%s); %d later steps were not run",
+				i, typ, len(steps)-i-1)
+			break
+		}
 		if e != nil && boolv(step, "fatal", false) {
 			break
 		}
 	}
+	exitTimeout := 30 * time.Second
+	summaryPrinted := false
+	if o.Watch && !c.dead {
+		// Leave the result on screen and in the terminal, then wait for the
+		// person to close the window.
+		failedSteps := 0
+		for _, entry := range rep.Steps {
+			if entry["passed"] != true {
+				failedSteps++
+			}
+		}
+		final := map[string]any{"status": "done", "detail": "Close the window when you are done."}
+		if rep.Passed {
+			final["caption"] = fmt.Sprintf("Finished: %d/%d steps passed", len(rep.Steps), len(s.Steps))
+		} else {
+			final["status"] = "failed"
+			final["caption"] = fmt.Sprintf("Failed: %d of %d steps", failedSteps, len(s.Steps))
+			if rep.Error != "" {
+				final["detail"] = rep.Error + "  —  close the window when you are done."
+			}
+		}
+		c.annotate(o, final)
+		printRunSummary(kind, rep, len(s.Steps), result.EvidenceDir)
+		summaryPrinted = true
+		console.Info("watch mode: the window stays open; close it to finish")
+		exitTimeout = 24 * time.Hour
+	} else if rep.Passed && !quitSent && !c.dead {
+		// Scripts no longer need to end with "quit"; without it the passing run
+		// used to sit until the exit timeout and then fail.
+		_, _ = c.call("quit", map[string]any{"exitCode": 0})
+	}
 	rep.FinishedAt = time.Now().Format(time.RFC3339)
 	if !rep.Passed {
 		err = fmt.Errorf("agent validation failed")
-		// Keep one best-effort capture of the failed state while the control
-		// channel is still available. This is evidence, not a replacement for
-		// the original assertion/connection error.
-		if failureStepIndex >= 0 && !errorsIsContext(ctx) {
-			captureEntry, captureErr := execute(ctx, c, map[string]any{
-				"type": "screenshot",
-				"out":  fmt.Sprintf("failure_%03d", failureStepIndex),
-			}, s, o, len(s.Steps))
-			if captureErr == nil {
-				if path, ok := captureEntry["out"].(string); ok && path != "" {
-					rep.Screenshots = append(rep.Screenshots, path)
-					if recording {
-						rel := filepath.ToSlash(path)
-						if relative, relErr := filepath.Rel(result.EvidenceDir, filepath.FromSlash(path)); relErr == nil {
-							rel = filepath.ToSlash(relative)
-						}
-						_ = store.Update(record.RunID, func(r *validationstore.Record) error {
-							r.Screenshots = append(r.Screenshots, rel)
-							if failureStepIndex < len(r.Steps) && r.Steps[failureStepIndex].Screenshot == "" {
-								r.Steps[failureStepIndex].Screenshot = rel
-							}
-							return nil
-						})
-					}
+		if rep.Error != "" {
+			err = fmt.Errorf("agent validation failed: %s", rep.Error)
+		}
+		if cmd.Process != nil && !processWaited {
+			if o.Watch && !c.dead {
+				_ = waitForProcessExit(ctx, cmd, exitTimeout)
+				processWaited = true
+			} else {
+				_ = cmd.Process.Kill()
+				exitErr := cmd.Wait()
+				processWaited = true
+				if exitErr != nil && c.dead && !quitSent {
+					err = fmt.Errorf("%w (target %v)", err, exitErr)
 				}
 			}
 		}
-		if cmd.Process != nil && !processWaited {
-			_ = cmd.Process.Kill()
-			exitErr := cmd.Wait()
-			processWaited = true
-			if exitErr != nil {
-				err = fmt.Errorf("%w: %v", err, exitErr)
-			}
+		if !summaryPrinted {
+			printRunSummary(kind, rep, len(s.Steps), result.EvidenceDir)
 		}
 		copyScreenshotCompatibility(cmd.Dir, compatibilityCopies)
 		if o.Report != "" {
@@ -486,7 +695,7 @@ func run(ctx context.Context, o Options, s Script, scriptData []byte, loadErr er
 	// close request. Waiting here lets the application finish that tick and exit
 	// with its requested code instead of being unconditionally SIGKILLed by the
 	// cleanup defer above.
-	err = waitForProcessExit(ctx, cmd, 30*time.Second)
+	err = waitForProcessExit(ctx, cmd, exitTimeout)
 	processWaited = true
 	if err != nil {
 		err = fmt.Errorf("agent process exit: %w", err)
@@ -528,6 +737,9 @@ func run(ctx context.Context, o Options, s Script, scriptData []byte, loadErr er
 	if len(rep.Screenshots) > 0 {
 		result.Screenshot = rep.Screenshots[0]
 	}
+	if !summaryPrinted {
+		printRunSummary(kind, rep, len(s.Steps), result.EvidenceDir)
+	}
 	finish(validationstore.StatusPassed, "complete", nil, processExitCode(cmd))
 	return result, nil
 }
@@ -553,6 +765,13 @@ func waitForProcessExit(ctx context.Context, cmd *exec.Cmd, timeout time.Duratio
 }
 
 func (c *client) call(method string, params any) (any, error) {
+	if c.dead {
+		return nil, errControlLost
+	}
+	lost := func(err error) error {
+		c.dead = true
+		return fmt.Errorf("%w: %v", errControlLost, err)
+	}
 	// Software Vulkan ICDs (notably Lavapipe) may need much longer than a hardware
 	// driver for first-pipeline compilation and a single validation frame.
 	_ = c.conn.SetDeadline(time.Now().Add(2 * time.Minute))
@@ -560,21 +779,21 @@ func (c *client) call(method string, params any) (any, error) {
 	req := map[string]any{"id": strconv.Itoa(c.next), "token": c.token, "method": method, "params": params}
 	b, _ := json.Marshal(req)
 	if _, err := c.rw.Write(append(b, '\n')); err != nil {
-		return nil, err
+		return nil, lost(err)
 	}
 	if err := c.rw.Flush(); err != nil {
-		return nil, err
+		return nil, lost(err)
 	}
 	line, err := c.rw.ReadBytes('\n')
 	if err != nil {
-		return nil, err
+		return nil, lost(err)
 	}
 	var r struct {
 		Result any `json:"result"`
 		Error  any `json:"error"`
 	}
 	if err = json.Unmarshal(line, &r); err != nil {
-		return nil, err
+		return nil, lost(err)
 	}
 	if r.Error != nil {
 		return nil, fmt.Errorf("%v", r.Error)
@@ -623,20 +842,32 @@ func execute(ctx context.Context, c *client, st map[string]any, s Script, o Opti
 			return e, ctx.Err()
 		}
 	case "wait-until", "assert":
-		v, er := query(c, str(st, "query", ""))
+		q, op := str(st, "query", ""), str(st, "op", "eq")
+		v, er := query(c, q)
 		e["actual"] = v
 		e["expected"] = st["value"]
-		if er == nil && compare(v, str(st, "op", "eq"), st["value"]) {
+		if er == nil && compare(v, op, st["value"]) {
 			return e, nil
 		}
+		if er != nil {
+			// An unknown query name or a failed scene load: report the engine's
+			// reason rather than a bare "actual=<nil>".
+			return e, fmt.Errorf("query %s: %w", q, er)
+		}
 		if typ == "assert" {
-			return e, fmt.Errorf("assertion failed: actual=%v", v)
+			return e, fmt.Errorf("assertion failed: %s %s %v, actual %v", q, op, st["value"], v)
 		}
 		er = pollContext(ctx, timeout, func() (bool, error) {
-			v, x := query(c, str(st, "query", ""))
+			v, x := query(c, q)
 			e["actual"] = v
-			return compare(v, str(st, "op", "eq"), st["value"]), x
+			return compare(v, op, st["value"]), x
 		})
+		if er != nil && !errors.Is(er, errControlLost) && !errorsIsContext(ctx) {
+			if strings.HasPrefix(er.Error(), "timed out") {
+				return e, fmt.Errorf("wait-until %s %s %v %s, last actual %v", q, op, st["value"], er, e["actual"])
+			}
+			return e, fmt.Errorf("query %s: %w", q, er)
+		}
 		return e, er
 	case "screenshot":
 		requested := str(st, "out", fmt.Sprintf("screenshots/%s_step", s.Name))
@@ -692,7 +923,12 @@ func execute(ctx context.Context, c *client, st map[string]any, s Script, o Opti
 		if er := resolveTargets(c, p); er != nil {
 			return e, er
 		}
-		normalizePoints(p, o.Width, o.Height)
+		width, height := c.pointSpace(o)
+		if hasNormPoint(p) && (width <= 0 || height <= 0) {
+			return e, fmt.Errorf("%s: norm coordinates need the window size; this target does not report it, so set \"viewport\" or pass --width/--height", typ)
+		}
+		normalizePoints(p, width, height)
+		c.watchGlide(ctx, o, typ, p)
 		_, er := c.call(typ, p)
 		return e, er
 	default:
@@ -704,6 +940,9 @@ func launchParameters(o Options, s Script) []string {
 	args := []string{"--agent-validation"}
 	if o.Visible {
 		args = append(args, "--agent-visible-window")
+	}
+	if o.Watch {
+		args = append(args, "--agent-watch")
 	}
 	if o.SyncValidation {
 		args = append(args, "--sync-validation")
@@ -943,6 +1182,15 @@ func findTarget(list, name string) (x, y float64, visible, found bool) {
 		return x, y, len(parts) < 3 || parts[2] != "0", true
 	}
 	return 0, 0, false, false
+}
+
+func hasNormPoint(p map[string]any) bool {
+	for _, k := range []string{"to", "at", "from"} {
+		if v, ok := p[k].(map[string]any); ok && v["norm"] != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizePoints(p map[string]any, w, h int) {

@@ -37,6 +37,11 @@ jobs:
           sudo apt-get install -y curl unzip tar ninja-build libxi-dev libxinerama-dev libxcursor-dev libxrandr-dev wayland-protocols libxkbcommon-dev xorg-dev mono-complete
       - uses: microsoft/setup-msbuild@v3
         if: runner.os == 'Windows'
+      # Agent scripts are forwarded to the engine verbatim, so a misspelled field
+      # silently becomes a default. This check launches nothing and needs no GPU.
+      - name: Check agent scripts
+        if: runner.os == 'Linux'
+        run: ./gnb.sh validate --lint
       - name: Configure vcpkg binary cache
         uses: ./.github/actions/vcpkg-cache
         with:

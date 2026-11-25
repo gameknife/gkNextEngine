@@ -494,7 +494,8 @@ func (s *Server) validationScriptArgs(script validationScriptVM, visible bool, r
 		args = append(args, "--height", strconv.Itoa(script.Height))
 	}
 	if visible {
-		args = append(args, "--visible")
+		// A run someone asked to see is paced and captioned for them to follow.
+		args = append(args, "--watch")
 	}
 	return args
 }
@@ -723,7 +724,9 @@ func (s *Server) validationRerunArgs(store validationstore.Store, record validat
 		if record.IncludeUI {
 			args = append(args, "--ui")
 		}
-		if record.Visible || visible {
+		if visible {
+			args = append(args, "--watch")
+		} else if record.Visible {
 			args = append(args, "--visible")
 		}
 	} else {
@@ -737,7 +740,9 @@ func (s *Server) validationRerunArgs(store validationstore.Store, record validat
 		if record.Height > 0 {
 			args = append(args, "--height", strconv.Itoa(record.Height))
 		}
-		if record.Visible || visible {
+		if visible {
+			args = append(args, "--watch")
+		} else if record.Visible {
 			args = append(args, "--visible")
 		}
 		if record.SyncValidation {

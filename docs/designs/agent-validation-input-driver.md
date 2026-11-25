@@ -25,6 +25,13 @@ last_updated: 2026-09-14
 
 `--agent-validation` 会启用隐藏窗口、确定性 pacing、Immediate present，并禁用 Streamline。`gnb validate --visible` 只改变窗口可见性，不改变脚本语义。
 
+`--agent-watch`（`gnb validate --watch`）是给人看的变体：隐含 `--agent-validation` 与可见窗口，改用 FIFO
+present；`NextValidation` 注册一个 `IUiLayer`（[`WatchOverlay`](../../src/Modules/NextValidation/WatchOverlay.cpp)，
+在所有应用/开发者图层之上）画底部字幕、合成光标、按键提示和断言结果；`IAgentControlService::ShouldDropEvent`
+让 `NextEngine::HandleEvent` 丢掉真实键鼠事件——合成事件带专用设备 id（`syntheticMouseId` /
+`syntheticKeyboardId`），文本事件按推送计数认领。节奏、光标平滑移动、跳过 `quit` 和结束后保留窗口都在 gnb
+（[`watch.go`](../../tools/gnb/internal/validate/watch.go)），引擎只多一个 `annotate` 原语。
+
 ## 脚本与查询
 
 **逐字段的完整表在 [agentscript 脚本字段参考](../guides/agentscript-reference.md)**，写脚本查那一页；
@@ -39,11 +46,14 @@ last_updated: 2026-09-14
 查询表在 `NextValidationModule.cpp` 的 `Query`，分 `engine.*`、`scene.*`（含 GPU-driven 统计）、
 `cvar.<name>` 和 `game.<name>` 四类；游戏查询注册时不带 `game.` 前缀。
 
-比较操作为 `eq/ne/gt/ge/lt/le/contains`。坐标可写像素值，也可在 `norm` 中写 0..1 归一化坐标；归一化换算依赖脚本或命令行提供的 viewport。
+比较操作为 `eq/ne/gt/ge/lt/le/contains`。坐标可写窗口坐标，也可在 `norm` 中写 0..1 归一化坐标。gnb 握手后
+查询 `engine.windowWidth/Height`，按真实窗口坐标尺寸换算 `norm`；Windows 显示缩放不是 100% 时它大于脚本
+viewport，老程序不报告时才退回 viewport。
 
-脚本**没有 schema 校验**，而且输入步骤是由 gnb 整体透传给引擎的：引擎按 `params.value(key, default)`
-取值，拼错的可选字段静默变默认值而不报错。这是字段参考页存在的理由，不是可以顺手改掉的小毛病——
-真要加校验，得先决定这套协议要不要承担版本兼容承诺（见"约束"）。
+输入步骤由 gnb 整体透传给引擎，引擎按 `params.value(key, default)` 取值，拼错的字段在引擎侧只会
+静默变默认值。所以校验放在 gnb：启动目标之前，[`lint.go`](../../tools/gnb/internal/validate/lint.go)
+按每种步骤允许的字段表检查脚本，有错误就不启动（`gnb validate --lint` 只检查，CI 对全部脚本跑这一条）。
+字段表是 gnb 一侧的约定，不是引擎协议的版本承诺；查询名不在表里，写错时由引擎在运行时报出原因。
 
 ## 控制协议与线程模型
 
@@ -59,12 +69,12 @@ gnb 先占用一个随机 `127.0.0.1` 端口并生成一次性随机 token，再
 
 ```bash
 ./gnb.sh shot --scene assets/models/playground.glb
-./gnb.sh shot --target ScadStudio --scene assets/scad/source/beer_cup.scad --frames 60 --ui
+./gnb.sh shot --target ScadStudio --scene assets/scad/source/island_showcase.scad --frames 60 --ui
 ./gnb.sh validate --script assets/agentscripts/smoke.agentscript.json
 ./gnb.sh validate --script assets/agentscripts/smoke.agentscript.json --visible
 ```
 
-`shot` 复用同一控制通道，固定执行 wait-running → wait-frames → screenshot → quit。默认截图为 `out/build/<preset>/screenshots/agent_validation.jpg`；`validate` 默认报告在 `out/build/<preset>/agent_reports/`。
+`shot` 复用同一控制通道，固定执行 wait scene.ready → wait-frames → screenshot（截完即退出）。默认截图为 `out/build/<preset>/screenshots/agent_validation.jpg`；`validate` 默认报告在 `out/build/<preset>/agent_reports/`。
 
 每次 `shot`/`validate` 还会创建 `out/build/<preset>/validation_runs/<runId>/`。`run.json` 的机器状态使用 `running/passed/failed/canceled/interrupted`；有截图的 `passed` 运行在 Dashboard 中显示为“采集完成、待审阅”，不等同于画面正确。`script.json` 保存本次解析输入，`runner.log` 保存目标 stdout/stderr 与执行器诊断，截图存放在该运行的 `screenshots/` 下。`review.json` 只保存最后一次 `pending/accepted/issue` 结论，CLI 可用 `gnb validation note <runId>` 写入。Dashboard 关闭期间 CLI 仍照常运行，重新打开后从目录轮询发现记录。
 

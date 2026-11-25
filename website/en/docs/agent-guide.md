@@ -20,7 +20,7 @@ gkNextEngine is designed from the ground up for **AI-Native Workflows** and **Au
 gnb shot --scene assets/models/playground.glb
 
 # Validate procedural SCAD model
-gnb shot --target ScadStudio --scene assets/scad/source/beer_cup.scad --frames 60
+gnb shot --target ScadStudio --scene assets/scad/source/island_showcase.scad --frames 60
 
 # Capture with ImGui UI overlay
 gnb shot --target AirportSim --ui

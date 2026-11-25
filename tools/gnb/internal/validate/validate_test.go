@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/validationstore"
 )
@@ -191,7 +192,7 @@ func TestRunMissingExecutableCreatesLaunchFailureRecord(t *testing.T) {
 	root := t.TempDir()
 	storeRoot := filepath.Join(root, "validation-runs")
 	script := filepath.Join(root, "smoke.json")
-	if err := os.WriteFile(script, []byte(`{"name":"smoke","steps":[]}`), 0o644); err != nil {
+	if err := os.WriteFile(script, []byte(`{"name":"smoke","steps":[{"type":"quit"}]}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	result, err := RunWithResult(context.Background(), Options{
@@ -206,6 +207,60 @@ func TestRunMissingExecutableCreatesLaunchFailureRecord(t *testing.T) {
 	}
 	if run.Status != validationstore.StatusFailed || run.Phase != "launch" {
 		t.Fatalf("run = %+v", run)
+	}
+}
+
+func TestRunRejectsAScriptThatFailsTheCheckBeforeLaunching(t *testing.T) {
+	root := t.TempDir()
+	storeRoot := filepath.Join(root, "validation-runs")
+	script := filepath.Join(root, "typo.json")
+	if err := os.WriteFile(script, []byte(`{"name":"typo","steps":[{"type":"click","x":1,"y":2}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := RunWithResult(context.Background(), Options{
+		RepoRoot: root, Preset: "test", Script: script, ValidationRoot: storeRoot,
+	})
+	if err == nil || !strings.Contains(err.Error(), `click: unknown field "x"`) {
+		t.Fatalf("err = %v, want the lint error", err)
+	}
+	run, loadErr := validationstore.NewAt(storeRoot).Load(result.RunID)
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	if run.Status != validationstore.StatusFailed || run.Phase != "parse" {
+		t.Fatalf("run = %+v, want a parse failure (nothing launched)", run)
+	}
+}
+
+func TestStaleTargetWarning(t *testing.T) {
+	root := t.TempDir()
+	exe := filepath.Join(root, "Game.exe")
+	shaders := filepath.Join(root, "shaders")
+	if err := os.MkdirAll(shaders, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	spv := filepath.Join(shaders, "a.spv")
+	for _, path := range []string{exe, spv} {
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	now := time.Now()
+	if err := os.Chtimes(exe, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(spv, now.Add(time.Minute), now.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if warning := staleTargetWarning(exe, "Game", shaders); warning != "" {
+		t.Fatalf("shaders compiled right after the build should not warn: %s", warning)
+	}
+	old := now.Add(-100 * 24 * time.Hour)
+	if err := os.Chtimes(exe, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if warning := staleTargetWarning(exe, "Game", shaders); !strings.Contains(warning, "gnb build Game") {
+		t.Fatalf("an old binary should warn, got %q", warning)
 	}
 }
 

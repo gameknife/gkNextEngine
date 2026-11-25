@@ -25,7 +25,7 @@
     { "type": "log", "message": "Camera motion: reuse must reproject without lag/ghost, then recover" },
     { "type": "mouse-move", "to": { "norm": [0.5, 0.5] } },
     { "type": "mouse-button", "button": "right", "action": "down", "at": { "norm": [0.5, 0.5] } },
-    { "type": "mouse-move", "relative": true, "to": [150, 0], "durationFrames": 30 },
+    { "type": "mouse-move", "relative": true, "to": [150, 0] },
     { "type": "screenshot", "out": "screenshots/restir_m2_during_motion" },
     { "type": "mouse-button", "button": "right", "action": "up" },
     { "type": "wait-frames", "n": 30 },

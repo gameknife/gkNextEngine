@@ -24,7 +24,7 @@ gkNextEngine 是首批专为 **AI Native 工作流** 与 **自动化 Agent 验�
 gnb shot --scene assets/models/playground.glb
 
 # 验证 SCAD 程序化模型
-gnb shot --target ScadStudio --scene assets/scad/source/beer_cup.scad --frames 60
+gnb shot --target ScadStudio --scene assets/scad/source/island_showcase.scad --frames 60
 
 # 包含 ImGui UI 截图
 gnb shot --target AirportSim --ui

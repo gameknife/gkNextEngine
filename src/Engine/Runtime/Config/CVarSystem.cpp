@@ -169,6 +169,10 @@ namespace NextCVar
     bool FCVarSystem::LoadUserFile(const std::string& path)
     {
         userConfigPath_ = path;
+        if (!userFilesEnabled_)
+        {
+            return false;
+        }
         return ForEachJsonConfigEntry(path, [this](const std::string& name, const std::string& valueText)
         {
             std::string error;
@@ -178,6 +182,10 @@ namespace NextCVar
 
     bool FCVarSystem::SaveUserFile(const std::string& path) const
     {
+        if (!userFilesEnabled_)
+        {
+            return true;
+        }
         std::string outputPath = path.empty() ? userConfigPath_ : path;
         if (outputPath.empty())
         {
@@ -221,6 +229,10 @@ namespace NextCVar
 
     bool FCVarSystem::SaveUserFiles() const
     {
+        if (!userFilesEnabled_)
+        {
+            return true;
+        }
         bool success = SaveEntries(userConfigPath_,
                                    [this](const std::string& name)
                                    {

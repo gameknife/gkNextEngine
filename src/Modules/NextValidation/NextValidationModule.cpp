@@ -9,6 +9,7 @@
 #include "Engine/Utilities/FileHelper.hpp"
 #include "Modules/NextValidation/AgentControlServer.hpp"
 #include "Modules/NextValidation/SyntheticInput.hpp"
+#include "Modules/NextValidation/WatchOverlay.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -30,9 +31,27 @@ namespace
             {
                 SPDLOG_INFO("[AgentControl] listening on {}", options.AgentControl);
             }
+            if (options.AgentWatch)
+            {
+                watch_ = std::make_shared<Modules::NextValidation::FWatchState>();
+                watch_->caption = "Starting...";
+#if GK_VALIDATION_WATCH_OVERLAY
+                engine_.RegisterUiLayerFactory([state = watch_](NextEngine&)
+                {
+                    return Modules::NextValidation::CreateWatchOverlayLayer(state);
+                });
+#endif
+                SPDLOG_INFO("[AgentControl] watch mode: real keyboard and mouse input is ignored");
+            }
         }
 
         bool IsRunning() const override { return server_.IsRunning(); }
+
+        bool ShouldDropEvent(const SDL_Event& event) const override
+        {
+            using namespace Runtime::Input::Synthetic;
+            return watch_ && IsUserInputEvent(event) && !ClaimSyntheticEvent(event);
+        }
 
         void Pump() override
         {
@@ -56,6 +75,64 @@ namespace
             return {value[0].get<float>(), value[1].get<float>()};
         }
 
+        // Watch overlay bookkeeping; no-ops outside watch mode.
+        void WatchPointer(FPoint at)
+        {
+            if (watch_)
+            {
+                watch_->hasPointer = true;
+                watch_->pointerX = at.x;
+                watch_->pointerY = at.y;
+            }
+        }
+
+        void WatchRipple(FPoint at, bool secondary)
+        {
+            if (watch_)
+            {
+                watch_->ripples.push_back({at.x, at.y, Modules::NextValidation::WatchNow(), secondary});
+            }
+        }
+
+        void WatchKey(std::string label)
+        {
+            if (watch_)
+            {
+                watch_->keyLabel = std::move(label);
+                watch_->keyTime = Modules::NextValidation::WatchNow();
+            }
+        }
+
+        static std::string KeyLabel(const std::string& code, const std::vector<std::string>& mods, const std::string& action)
+        {
+            std::string label;
+            for (const std::string& mod : mods)
+            {
+                label += mod + "+";
+            }
+            label += code;
+            if (action == "down") label += "  (hold)";
+            else if (action == "up") label += "  (release)";
+            return label;
+        }
+
+        nlohmann::json Annotate(const nlohmann::json& params)
+        {
+            if (!watch_)
+            {
+                return {{"ok", true}, {"watch", false}};
+            }
+            if (params.contains("caption")) watch_->caption = params.value("caption", "");
+            if (params.contains("detail")) watch_->detail = params.value("detail", "");
+            if (params.contains("hidden")) watch_->hidden = params.value("hidden", false);
+            if (params.contains("status"))
+            {
+                watch_->status = params.value("status", "running");
+                watch_->statusTime = Modules::NextValidation::WatchNow();
+            }
+            return {{"ok", true}, {"watch", true}};
+        }
+
         nlohmann::json HandleCommand(const std::string& method, const nlohmann::json& params)
         {
             using namespace Runtime::Input::Synthetic;
@@ -68,7 +145,12 @@ namespace
             if (method == "handshake")
             {
                 return {{"protocolVersion", 1},
-                        {"capabilities", {"input", "query", "cvar", "exec", "screenshot", "quit"}}};
+                        {"capabilities", {"input", "query", "cvar", "exec", "screenshot", "quit", "annotate"}},
+                        {"watch", watch_ != nullptr}};
+            }
+            if (method == "annotate")
+            {
+                return Annotate(params);
             }
             if (method == "query")
             {
@@ -82,23 +164,35 @@ namespace
                 const auto key = ResolveKeyCode(code);
                 if (key == SDLK_UNKNOWN) throw std::runtime_error("unknown key");
                 const auto scan = ResolveScanCode(key, code);
-                const auto modifiers = ResolveModifiers(params.value("mods", std::vector<std::string>{}));
+                const auto modNames = params.value("mods", std::vector<std::string>{});
+                const auto modifiers = ResolveModifiers(modNames);
                 const std::string action = params.value("action", "press");
                 if (action == "down") PushKey(windowId, key, scan, modifiers, true);
                 else if (action == "up") PushKey(windowId, key, scan, modifiers, false);
                 else PushKeyPress(windowId, key, scan, modifiers);
+                WatchKey(KeyLabel(code, modNames, action));
                 return {{"ok", true}};
             }
             if (method == "text")
             {
-                PushText(windowId, params.value("value", ""));
+                const std::string value = params.value("value", "");
+                PushText(windowId, value);
+                WatchKey("\"" + (value.size() > 24 ? value.substr(0, 24) + "..." : value) + "\"");
                 return {{"ok", true}};
             }
             if (method == "mouse-move")
             {
                 const FPoint to = ReadPoint(params.at("to"));
-                if (params.value("relative", false)) engine_.InjectRelativeMouse(to.x, to.y);
-                else PushMouseMove(window, current, to);
+                if (params.value("relative", false))
+                {
+                    engine_.InjectRelativeMouse(to.x, to.y);
+                    if (watch_) watch_->lookTime = Modules::NextValidation::WatchNow();
+                }
+                else
+                {
+                    PushMouseMove(window, current, to);
+                    WatchPointer(to);
+                }
                 return {{"ok", true}};
             }
             if (method == "mouse-button" || method == "click")
@@ -110,6 +204,8 @@ namespace
                 const std::string action = method == "click" ? "press" : params.value("action", "press");
                 if (action != "up") PushMouseButton(windowId, at, button, true, clicks);
                 if (action != "down") PushMouseButton(windowId, at, button, false, clicks);
+                WatchPointer(at);
+                if (action != "up") WatchRipple(at, button != SDL_BUTTON_LEFT);
                 return {{"ok", true}};
             }
             if (method == "drag")
@@ -121,11 +217,15 @@ namespace
                 PushMouseButton(windowId, from, button, true);
                 PushMouseMove(window, from, to);
                 PushMouseButton(windowId, to, button, false);
+                WatchRipple(from, button != SDL_BUTTON_LEFT);
+                WatchPointer(to);
                 return {{"ok", true}};
             }
             if (method == "scroll")
             {
-                PushMouseWheel(windowId, current, params.value("x", 0.0f), params.value("y", 0.0f));
+                const float scrollY = params.value("y", 0.0f);
+                PushMouseWheel(windowId, current, params.value("x", 0.0f), scrollY);
+                WatchKey(scrollY >= 0.0f ? "scroll up" : "scroll down");
                 return {{"ok", true}};
             }
             if (method == "cvar")
@@ -195,6 +295,19 @@ namespace
 
         std::optional<Runtime::Agent::FAgentQueryValue> Query(const std::string& query) const
         {
+            if (query == "engine.windowWidth" || query == "engine.windowHeight")
+            {
+                // Window coordinates, the space synthetic mouse events use. On a scaled Windows
+                // display this is larger than the requested logical size (1280x720 at 125% is
+                // 1600x900), so gnb resolves "norm" points against this, not the script viewport.
+                int width = 0;
+                int height = 0;
+                if (SDL_Window* window = engine_.GetWindow().Handle())
+                {
+                    SDL_GetWindowSize(window, &width, &height);
+                }
+                return static_cast<int64_t>(query == "engine.windowWidth" ? width : height);
+            }
             if (query == "engine.totalFrames") return static_cast<int64_t>(engine_.GetTotalFrames());
             if (query == "engine.frameRate") return static_cast<double>(engine_.GetFrameRate());
             if (query == "engine.time") return engine_.GetTime();
@@ -301,6 +414,8 @@ namespace
 
         NextEngine& engine_;
         Runtime::Agent::FAgentControlServer server_;
+        // Present only under --agent-watch; shared with the overlay layer.
+        std::shared_ptr<Modules::NextValidation::FWatchState> watch_;
     };
 }
 

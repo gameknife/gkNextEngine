@@ -1,6 +1,9 @@
 #include <catch2/catch_all.hpp>
 #include <fmt/format.h>
 
+#include <filesystem>
+#include <fstream>
+
 #include "Engine/Runtime/Config/CVarSystem.hpp"
 
 TEST_CASE("CVar complete supports case-insensitive prefix and substring lookup", "[Unit][CVar]")
@@ -91,4 +94,35 @@ TEST_CASE("CVar change callback only runs for actual value changes", "[Unit][CVa
     CHECK(callbackCount == 1);
     REQUIRE(cvars.SetValueFromString("r.enabled", "true", NextCVar::ECVarSetBy::Console, &error));
     CHECK(callbackCount == 1);
+}
+
+TEST_CASE("CVar user files can be disabled for agent validation", "[Unit][CVar]")
+{
+    NextCVar::FCVarSystem cvars;
+    int32_t quality = 2;
+    REQUIRE(cvars.RegisterInt("r.quality", quality, &quality, NextCVar::ECVarFlags::Archive,
+                              "Quality", nullptr, 0, 4));
+
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "gknext_cvar_user_files_test";
+    std::filesystem::create_directories(dir);
+    const std::filesystem::path userFile = dir / "cvar_user.json";
+    {
+        std::ofstream out(userFile);
+        out << R"({ "r.quality": 3 })";
+    }
+    const std::filesystem::path untouched = dir / "never_written.json";
+    std::filesystem::remove(untouched);
+
+    cvars.SetUserFilesEnabled(false);
+    CHECK_FALSE(cvars.AreUserFilesEnabled());
+    CHECK_FALSE(cvars.LoadUserFile(userFile.string()));
+    CHECK(quality == 2);
+
+    std::string error;
+    REQUIRE(cvars.SetValueFromString("r.quality", "4", NextCVar::ECVarSetBy::Console, &error));
+    CHECK(cvars.SaveUserFile(untouched.string()));
+    CHECK(cvars.SaveUserFiles());
+    CHECK_FALSE(std::filesystem::exists(untouched));
+
+    std::filesystem::remove_all(dir);
 }

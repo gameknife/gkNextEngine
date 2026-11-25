@@ -4,7 +4,7 @@ category: guide
 status: 现行
 owner: engine/tools
 created: 2026-09-14
-last_updated: 2026-09-14
+last_updated: 2026-11-25
 ---
 
 # agentscript 脚本字段参考
@@ -13,12 +13,21 @@ last_updated: 2026-09-14
 [Agent 输入驱动验证架构](../designs/agent-validation-input-driver.md)；本页只回答"这个字段叫什么、
 写错了会怎样"。
 
-**没有 schema 校验。** gnb 把输入步骤整体转发给引擎，引擎用 `params.value(key, default)` 读取，
-因此**拼错的可选字段既不报错也不生效，只是静默变成默认值**。这是本页存在的唯一理由——先查表，
-不要照着记忆写。
+**脚本在启动目标之前先做检查。** gnb 把输入步骤整体转发给引擎，引擎用 `params.value(key, default)`
+读取，拼错的字段在引擎那边只会静默变成默认值；所以 gnb 先按下面的字段表检查脚本：未知字段、未知
+步骤类型、缺必填字段、取值不在枚举里、没有 viewport 却用 `norm` 坐标，都是错误，**什么都不会启动**。
+以 `_` 开头的键（如 `"_comment"`）任何位置都允许，当注释用。只检查不运行：
 
-权威来源共三处，本页与它们不一致时以代码为准：
+```bash
+gnb validate --lint                      # 检查 assets/agentscripts 下全部脚本（CI 也跑这一条）
+gnb validate --lint path/to/x.agentscript.json
+```
 
+检查管不到的是**查询名**：查询表在引擎里（见"内建查询"），写错的查询名在运行时失败，报错里带引擎给的原因。
+
+权威来源，本页与它们不一致时以代码为准：
+
+- [`lint.go`](../../tools/gnb/internal/validate/lint.go) 的 `stepFields` — 每种步骤允许的字段
 - [`validate.go`](../../tools/gnb/internal/validate/validate.go) 的 `execute` — 顶层字段、
   等待/断言/截图步骤、比较运算
 - [`NextValidationModule.cpp`](../../src/Modules/NextValidation/NextValidationModule.cpp) 的
@@ -48,9 +57,13 @@ last_updated: 2026-09-14
 | `defaults.waitFrames` | int | 1 | `wait-frames` 省略 `n` 时的帧数 |
 | `defaults.stepTimeoutMs` | int | 8000 | 每步超时；省略或 ≤0 时是 8000，**不是无限** |
 | `viewport.width/height` | int | 引擎默认 | 窗口尺寸，也是 `norm` 坐标的换算基准；`--width/--height` 覆盖 |
+| `waitReady` | bool | `true` | 第一步之前先等 `scene.ready` 再预热 3 帧（最长 300 秒）。只有测启动或加载过程本身的脚本才设成 `false` |
 | `steps` | array | — | 见下 |
 
-每个步骤都可以带 `comment`（或 `description`，两者都在时 `description` 优先）做说明，会写进验证记录。
+每个步骤都可以带 `comment`（或 `description`，两者都在时 `description` 优先）做说明，会写进验证记录，
+失败时也会出现在终端摘要里。
+
+**脚本不必以 `quit` 结尾**：最后一步执行完，gnb 会自动让目标退出。
 
 `timeoutMs` 覆盖该步的 `defaults.stepTimeoutMs`，但**只对会轮询的步骤有意义**：`wait-frames`、
 `wait-ms`、`wait-until` 和等待文件落盘的 `screenshot`。`assert` 只判定一次，输入步骤是一次性 RPC，
@@ -75,23 +88,15 @@ last_updated: 2026-09-14
 
 | type | 字段 | 说明 |
 |---|---|---|
-| `cvar` | `name`, `set`（可选） | 带 `set` 是写入，省略是读取。写入走 `ECVarSetBy::Console`。cvar 不存在或值非法会抛错。**带 `Archive` 标志的 cvar 会被持久化**，见下面的警告 |
+| `cvar` | `name`, `set`（可选） | 带 `set` 是写入，省略是读取。写入走 `ECVarSetBy::Console`。cvar 不存在或值非法会抛错 |
 | `exec` | `line` | 执行一条控制台命令行 |
 | `log` | `message`（或 `text`） | 只写进 report，不与引擎交互 |
 | `quit` | — | 请求引擎退出，exitCode 恒为 0 |
 | `screenshot` | 见下 | |
 
-> **脚本改过的 `Archive` cvar 会留在你的机器上。** 它们写进
-> `~/Library/Application Support/gkNext/<target>/assets/configs/cvar_user.json`
-> （Windows 在 `%LOCALAPPDATA%`），**进程退出后依然生效**，于是污染之后每一次 `gnb shot` /
-> `gnb validate` / 手动运行。`r.rendererType` 是最典型的一个：一个切渲染器的脚本跑完，
-> 后续所有运行都还停在它最后设的那个渲染器上。
->
-> 2026-09-14 这件事真实发生过：一个验证脚本把 `r.rendererType` 留在 3（VoxelTracing），
-> 导致之后的"改动前后对比"实际上是在拿两个不同渲染器的画面比，白查了一轮。
->
-> 想避免就在脚本末尾把改过的 `Archive` cvar 设回默认值（默认值见
-> `assets/configs/cvar_default.json`）。排查"画面莫名其妙变了"时，先看那个文件。
+验证运行（`--agent-validation`）**不读也不写**用户配置 `cvar_user.json`：每次都从
+`assets/configs/cvar_default.json` 的默认值开始，脚本改过的 `Archive` cvar 也不会留到之后的运行或
+你手动启动的程序里。脚本末尾不需要再把 cvar 设回去。
 
 `screenshot` 字段：
 
@@ -122,23 +127,24 @@ last_updated: 2026-09-14
 `to` / `at` / `from` 三种写法，**推荐 `norm`**（现有脚本里 68 处用 `norm`、12 处用裸数组）：
 
 ```json
-{ "type": "click", "at": { "norm": [0.5, 0.3] } }   // 归一化，按 viewport 换算，改分辨率不失效
-{ "type": "click", "at": { "px": [640, 360] } }     // 像素
-{ "type": "click", "at": [640, 360] }               // 像素，简写
+{ "type": "click", "at": { "norm": [0.5, 0.3] } }   // 归一化，按真实窗口尺寸换算，改分辨率/缩放不失效
+{ "type": "click", "at": { "px": [640, 360] } }     // 窗口坐标
+{ "type": "click", "at": [640, 360] }               // 窗口坐标，简写
 ```
 
-### 三个真实踩过的坑
+`norm` 按目标报告的**窗口坐标尺寸**（`engine.windowWidth/Height`）换算，而不是脚本的 `viewport`：
+Windows 上显示缩放不是 100% 时两者不同（125% 下 1280×720 的窗口坐标是 1600×900），以前按 viewport
+换算，`norm [0.5, 0.5]` 实际点在 40% 处。不报告窗口尺寸的老程序退回用 `viewport`；两者都没有时该步
+直接报错。`px` 和裸数组是窗口坐标，不随缩放调整，所以优先用 `norm`。
 
-1. **坐标字段不是 `x`/`y`。** 写 `{"type":"click","x":100,"y":200}` **不会报错**——`at` 缺失时引擎
-   回退到"当前光标位置"（`params.contains("at") ? ... : current`），于是点在了别处。
-   而 `mouse-move` / `drag` 用 `params.at()` 读 `to`/`from`，缺了会抛
-   `key 'to' not found`，反而是能发现的。唯一真正用 `x`/`y` 的是 `scroll`，且语义是滚动量。
+### 检查会拦下的老坑
 
-2. **`key` 的字段是 `code` 不是 `key`。** 写成 `key` 会得到 `unknown key`——因为
-   `params.value("code","")` 读到空串。
+下面几种写法过去不报错、静默出错，现在启动前就会被检查拦下，报错里带正确写法：
 
-3. **`mouse-move` 的 `durationFrames` 是空操作。** 有三个现存脚本在写它，但代码里根本没有这个字段，
-   转发过去被忽略。要分帧平滑移动就写多个 `mouse-move` 步骤。
+1. **点击坐标写成 `x`/`y`。** 坐标在 `at` 里；`at` 缺失时引擎回退到"当前光标位置"，于是点在了别处。
+   唯一真正用 `x`/`y` 的是 `scroll`，且语义是滚动量。
+2. **`key` 的字段写成 `key`。** 键名在 `code` 里。
+3. **`mouse-move` 写 `durationFrames`。** 没有这个字段；要分帧平滑移动就写多个 `mouse-move` 步骤。
 
 ### 键名
 
@@ -162,13 +168,17 @@ last_updated: 2026-09-14
 
 - **引擎**：`engine.totalFrames`、`engine.frameRate`、`engine.time`、`engine.status`
   （`Starting`/`Running`/`Loading`/`AsyncPreparing`）、`engine.rendererType`、
-  `engine.checkerboardActive`、`engine.sparseCheckerboardActive`
+  `engine.checkerboardActive`、`engine.sparseCheckerboardActive`、`engine.windowWidth`、`engine.windowHeight`
+  （窗口坐标尺寸，`norm` 换算用的就是它）
 - **场景**：`scene.ready`、`scene.nodeCount`、`scene.selectedId`、`scene.selectedCount`、`scene.sunElevation`、
   `scene.atmosphereEnabled`、`scene.aerialPerspectiveEnabled`、`scene.heightFogEnabled`
 - **GPU-driven 统计**：`scene.renderProxyCount`、`scene.maxVisibleProxyIndex`、
   `scene.drawnTriangleCount`、`scene.drawnProxyCount`、`scene.lod0TriangleCount`、
   `scene.culledTriangleCount`、`scene.culledProxyCount`、`scene.shadowVisibleTriangleCount`、
   `scene.drawnTrianglesPerProxy`
+- **AmbientCube GI 管线**：`ambient.allocatedBricks`、`ambient.pendingBricks`、`ambient.unpublishedBricks`、
+  `ambient.scrollCount`、`ambient.lastScrollMs`、`ambient.voxelJobActive`、`ambient.dirtyRevoxelCount`、
+  `ambient.brickCacheEntries`、`ambient.brickCacheHits`、`ambient.lastScrollRestoredBricks`
 - **CVar**：`cvar.<名字>`，例如 `cvar.r.rendererType`。**返回字符串**，见上面的比较说明
 - **游戏**：`game.<名字>`，由 `GameInstance::RegisterAgentQueries` 注册，注册时不带 `game.` 前缀
 
@@ -180,7 +190,8 @@ last_updated: 2026-09-14
 
 ## 惯用写法
 
-**等场景真正就绪再预热**（启动空场景也有根节点，`Running` 和节点数都不能证明加载完成）：
+**等场景就绪**：启动时的那一次 gnb 已经替你等了（`waitReady`），不用再写 `engine.status == Running`
+加固定帧数——那两样都不能证明加载完成。只有脚本中途又加载了新场景（切关卡、打开文件）时，才需要自己等：
 
 ```json
 { "type": "wait-until", "query": "scene.ready", "value": true, "timeoutMs": 300000, "fatal": true },
@@ -204,16 +215,36 @@ last_updated: 2026-09-14
 { "type": "assert", "query": "cvar.r.atmosphere.enable", "op": "eq", "value": true }
 ```
 
+## 观看模式（`--watch`）
+
+`gnb validate --script <path> --watch` 是给人看的回放，脚本不用改：
+
+- 窗口可见，按显示器刷新率呈现（vsync），所以按帧数的等待也会花真实时间。
+- 每个动作后停顿 `--pace`（默认 700ms）；`log` 步骤停两倍时间，等待类步骤不额外停。
+- 画面底部有字幕：第几步、在做什么、步骤的 `comment`；断言通过闪绿框，失败闪红框。
+- 光标从上一个位置平滑移到目标（合成光标用圆环标出，点击有波纹），按键在字幕上方显示。
+- 你的键盘和鼠标输入会被忽略，不会干扰回放；关窗口不受影响。直接轮询 OS 键鼠状态的代码看不到这种过滤。
+- 脚本里的 `quit` 和截图的 `quitAfterCapture` 在观看模式下跳过：跑完或失败后停在最后的画面，
+  字幕显示结果，**关掉窗口才结束**。`ui: true` 的截图会临时隐藏叠加层，截不到字幕。
+
+只想显示窗口、不要节奏和字幕时用 `--visible`。
+
 ## 调试脚本本身
 
+- **终端只给摘要**：通过时一行 `N/N steps passed`；失败时列出每个失败步骤（步号、类型、原因、注释）、
+  失败截图路径，以及 `runner.log` 里最后几行引擎错误。引擎日志只写进 `runner.log`，要同时打到终端加
+  `--verbose`。
+- **失败截图在出错的那一刻截**（`failure_<步号>`），不会等后面的步骤（通常是退出）把画面换掉。
+- **目标进程崩溃或退出时立即停下**，报"目标进程在第 N 步意外退出"并附退出码，不再把剩下每一步都报成连接错误。
+- **程序比 shader 产物旧时会警告**：shader 编译在所有目标共用的目录里，构建别的目标后，这个目标可能
+  和新 shader 不匹配（8 月的程序配 11 月的 shader 会直接丢设备）。加 `--build` 先增量构建目标再跑。
 - report 在 `out/build/<preset>/agent_reports/<name>.json`，每步都有 `passed` 和失败时的 `message`。
 - 完整证据在 `out/build/<preset>/validation_runs/<runId>/`：`script.json`（本次解析到的输入）、
   `runner.log`（目标 stdout/stderr）、`screenshots/`。
-- 脚本路径不必在 `assets/agentscripts/` 下，临时脚本写 `/tmp` 里跑完即弃是可以的；要长期保留的
+- 脚本路径不必在 `assets/agentscripts/` 下，临时脚本写在临时目录里跑完即弃是可以的；要长期保留的
   才放进仓库。
 - 断言失败会让 `gnb validate` 返回非零退出码，CI 可直接据此判定。
-- **一步失败不会中断脚本**，后续步骤照常执行，report 里逐步标 `passed`。所以一次运行就能看到
-  所有问题，不用逐个修、逐次重跑。
+- **一步失败不会中断脚本**（除非该步 `"fatal": true`），后续步骤照常执行，report 里逐步标 `passed`。
+  所以一次运行就能看到所有问题，不用逐个修、逐次重跑。
 
-本页的字段、默认值和上面三个坑的报错文案，都在 2026-09-14 用一份把每种写法各跑一遍的脚本
-实测过（包括故意写错的那几条）。改动 `execute`、`HandleCommand` 或 `Query` 时请同步这里。
+改动 `lint.go` 的字段表、`execute`、`HandleCommand` 或 `Query` 时请同步这里。

@@ -101,7 +101,10 @@
     "lantern": 15,
     "fuel": 5,
     "bedroll": 15,
-    "firecrackers": 5
+    "firecrackers": 5,
+    "contract_parcel": 0,
+    "contract_documents": 0,
+    "contract_blackbox": 0
   },
   "buyMarkup": 3.0,
   "trader": [
@@ -131,16 +134,175 @@
     "insertionFee": 40,
     "warehouse": {
       "base": 40,
-      "steps": [
-        [60, 300],
-        [90, 800],
-        [130, 2000]
-      ]
+      "steps": [[60, 300], [90, 800], [130, 2000]]
     }
   },
   "reputation": {
     "tiers": [0, 3, 8, 15],
     "gain": [1, 2, 3],
     "penalty": 1
-  }
+  },
+  "board": {
+    "slots": [3, 3, 4, 4],
+    "replaceAfter": 2,
+    "expireAfter": 3,
+    "maxActive": 2,
+    "deliverMultiplier": 1.6
+  },
+  "contracts": [
+    {
+      "id": "med_dressings",
+      "issuer": "medical",
+      "title": "Field dressings",
+      "type": "deliver",
+      "tier": 1,
+      "weight": 3,
+      "items": [["bandage", 3, 6]],
+      "bonus": 20
+    },
+    {
+      "id": "field_rations",
+      "issuer": "quartermaster",
+      "title": "Field rations",
+      "type": "deliver",
+      "tier": 1,
+      "weight": 2,
+      "items": [["food_can", 3, 6], ["water_bottle", 1, 2]],
+      "bonus": 20
+    },
+    {
+      "id": "relay_batteries",
+      "issuer": "radio",
+      "title": "Batteries for the relay",
+      "type": "deliver",
+      "tier": 1,
+      "weight": 2,
+      "items": [["battery", 2, 4]],
+      "bonus": 20
+    },
+    {
+      "id": "recon_settlement",
+      "issuer": "radio",
+      "title": "Is anyone still there?",
+      "type": "recon",
+      "tier": 1,
+      "weight": 3,
+      "poi": { "kind": ["village", "farm", "town"], "risk": [1, 2] },
+      "reward": [100, 140]
+    },
+    {
+      "id": "recon_works",
+      "issuer": "radio",
+      "title": "Check the works",
+      "type": "recon",
+      "tier": 1,
+      "weight": 2,
+      "poi": { "kind": ["industrial", "hospital"], "risk": [1, 2] },
+      "reward": [110, 150]
+    },
+    {
+      "id": "med_kits",
+      "issuer": "medical",
+      "title": "First aid kits",
+      "type": "deliver",
+      "tier": 2,
+      "weight": 2,
+      "items": [["medkit", 2, 3]],
+      "bonus": 40
+    },
+    {
+      "id": "rifle_rounds",
+      "issuer": "quartermaster",
+      "title": "5.45 resupply",
+      "type": "deliver",
+      "tier": 2,
+      "weight": 2,
+      "items": [["ammo_545", 30, 60]],
+      "bonus": 40
+    },
+    {
+      "id": "collector_afghanka",
+      "issuer": "collector",
+      "title": "The Afghanka set",
+      "type": "deliver",
+      "tier": 2,
+      "weight": 1,
+      "items": [["jacket_afganka", 1, 1], ["pants_afganka", 1, 1]],
+      "bonus": 40
+    },
+    {
+      "id": "recon_sweep",
+      "issuer": "radio",
+      "title": "Two-site sweep",
+      "type": "recon",
+      "tier": 2,
+      "weight": 2,
+      "poi": { "count": 2, "risk": [1, 2] },
+      "reward": [220, 280]
+    },
+    {
+      "id": "fetch_records",
+      "issuer": "medical",
+      "title": "Lost patient records",
+      "type": "fetch",
+      "tier": 2,
+      "weight": 2,
+      "poi": { "kind": ["hospital", "town"], "risk": [2, 2] },
+      "reward": [240, 320],
+      "parcel": "contract_documents"
+    },
+    {
+      "id": "fetch_consignment",
+      "issuer": "quartermaster",
+      "title": "Abandoned consignment",
+      "type": "fetch",
+      "tier": 2,
+      "weight": 2,
+      "poi": { "kind": ["village", "farm", "industrial", "town"], "risk": [1, 2] },
+      "reward": [240, 320],
+      "parcel": "contract_parcel"
+    },
+    {
+      "id": "working_rifle",
+      "issuer": "quartermaster",
+      "title": "A working rifle",
+      "type": "deliver",
+      "tier": 3,
+      "weight": 1,
+      "items": [["ak", 1, 1], ["ammo_545", 30, 30]],
+      "bonus": 80
+    },
+    {
+      "id": "collector_armour",
+      "issuer": "collector",
+      "title": "Soviet armour",
+      "type": "deliver",
+      "tier": 3,
+      "weight": 1,
+      "items": [["vest_6b3", 1, 1], ["helmet_ssh68", 1, 1]],
+      "bonus": 80
+    },
+    {
+      "id": "recon_garrison",
+      "issuer": "radio",
+      "title": "Eyes on the garrison",
+      "type": "recon",
+      "tier": 3,
+      "weight": 2,
+      "poi": { "kind": ["military", "fortress"], "risk": [3, 3] },
+      "reward": [300, 380]
+    },
+    {
+      "id": "fetch_recorder",
+      "issuer": "quartermaster",
+      "title": "The flight recorder",
+      "type": "fetch",
+      "tier": 3,
+      "weight": 2,
+      "poi": { "kind": ["military", "fortress"], "risk": [3, 3] },
+      "reward": [450, 600],
+      "parcel": "contract_blackbox",
+      "itemReward": ["optic_4x", "muzzle_suppressor", "vest_6b3", "helmet_m56"]
+    }
+  ]
 }

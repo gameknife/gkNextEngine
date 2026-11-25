@@ -89,12 +89,17 @@ namespace NextDayz
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FSavedLootEntry, id, source, position, yaw, contents, state, slot)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FLootWorldState, seconds, directorRng, rollRng, pileSerial, entries)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FFlightState, phase, pointId, pad, remaining, boarded)
-    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FSortieState, spent, insertionMap, insertionPoint, insertionPaid)
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FSortieState, spent, insertionMap, insertionPoint, insertionPaid, visitedPois,
+                                     contractGold, contractsCompleted)
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FContractItem, item, count)
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FContract, id, templateId, type, tier, mapId, targets, items, parcel, reward,
+                                     itemReward, offeredAt, acceptedAt, state)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FSortieRecord, sortieId, mapId, outcome, seconds, deathCause, extractedValue,
                                      spentBefore, contractGold, contractsCompleted, reputationAfter, visitedPois)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FCampaign, inField, gold, sorties, extractions, nextStorageId, storage, flight,
                                      mapSorties, lastMapId, lastOutcome, sortieId, reputation, traderStock, traderCycle,
-                                     sortie, history)
+                                     sortie, history, boardRng, boardCycle, contractSerial, board, contracts,
+                                     contractsCompleted)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FSurvivalSnapshot, health, hunger, hydration, bleedingWounds, cold,
                                      painkillerSeconds, lifeState, damageSequence, woundSequence, lastDamageSource)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(TimeSystem::FState, minutes, nextWeatherChange, weatherRng, weather, blend)
@@ -219,6 +224,26 @@ namespace NextDayz
                 (sortie.insertionMap.empty() && sortie.insertionPaid != 0) || sortie.insertionPaid > sortie.spent) return false;
             for (const auto& record : campaign.history)
                 if (!std::isfinite(record.seconds) || record.seconds < 0) return false;
+            std::unordered_set<uint64_t> contractIds;
+            std::unordered_set<std::string> parcels;
+            for (const auto* list : {&campaign.board, &campaign.contracts})
+                for (const auto& contract : *list)
+                {
+                    const bool field = contract.type == EContractType::Recon || contract.type == EContractType::Fetch;
+                    const bool accepted = list == &campaign.contracts;
+                    if (contract.id == 0 || contract.id > campaign.contractSerial || !contractIds.insert(contract.id).second ||
+                        contract.type > EContractType::Fetch || contract.tier < 1 || contract.tier > 3 ||
+                        contract.state != (accepted ? EContractState::Accepted : EContractState::Offered) ||
+                        (accepted && !field) || field != !contract.targets.empty() || field == contract.mapId.empty() ||
+                        (contract.type == EContractType::Fetch) != !contract.parcel.empty() ||
+                        (!contract.itemReward.empty() && !FindItemDef(contract.itemReward))) return false;
+                    if (!contract.parcel.empty() && (!IsContractItem(contract.parcel) || !FindItemDef(contract.parcel) ||
+                                                     !parcels.insert(contract.parcel).second)) return false;
+                    for (const auto& item : contract.items)
+                        if (!FindItemDef(item.item) || item.count <= 0) return false;
+                }
+            for (const auto& item : campaign.storage)
+                if (IsContractItem(item.defId)) return false;
             uint64_t counted = 0;
             for (const auto& [id, count] : saved.campaign.mapSorties)
             {
@@ -236,7 +261,7 @@ namespace NextDayz
                 std::ifstream stream(path, std::ios::binary);
                 auto document = nlohmann::json::parse(stream);
                 const int version = document.at("version").get<int>();
-                if (version < 1 || version > 6) throw std::runtime_error("Unsupported save version");
+                if (version < 1 || version > 7) throw std::runtime_error("Unsupported save version");
                 if (version == 1)
                 {
                     auto& state = document.at("state");
@@ -266,6 +291,21 @@ namespace NextDayz
                     campaign["traderCycle"] = 0;
                     campaign["sortie"] = FSortieState{};
                     campaign["history"] = nlohmann::json::array();
+                }
+                if (version < 7)
+                {
+                    // The contract board starts empty and fills on the first safehouse visit.
+                    auto& campaign = document.at("state").at("campaign");
+                    if (version == 6)
+                    {
+                        auto& sortie = campaign.at("sortie");
+                        sortie["visitedPois"] = nlohmann::json::array();
+                        sortie["contractGold"] = 0;
+                        sortie["contractsCompleted"] = 0;
+                    }
+                    for (const auto* key : {"boardRng", "boardCycle", "contractSerial", "contractsCompleted"}) campaign[key] = 0;
+                    campaign["board"] = nlohmann::json::array();
+                    campaign["contracts"] = nlohmann::json::array();
                 }
                 auto candidate = document.at("state").get<FCampaignSave>();
                 if (version < 5)
@@ -322,7 +362,7 @@ namespace NextDayz
             {
                 std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
                 stream.exceptions(std::ios::failbit | std::ios::badbit);
-                stream << nlohmann::json{{"version", 6}, {"state", save}}.dump(2);
+                stream << nlohmann::json{{"version", 7}, {"state", save}}.dump(2);
                 stream.flush();
                 stream.close();
             }

@@ -583,6 +583,18 @@ namespace NextDayz::NextDayzHUD
                                   ImVec2(x, center.y + 4.0f), color, 1.5f);
                 }
             }
+            for (const auto& [position, label] : context.objectives)
+            {
+                const glm::vec3 delta3 = position - context.playerPosition;
+                const float bearing = glm::degrees(std::atan2(delta3.x, -delta3.z));
+                const float delta = std::clamp(std::remainder(bearing - heading, 360.0f), -60.0f, 60.0f);
+                const float x = center.x + delta * pxPerDegree;
+                draw->AddTriangleFilled(ImVec2(x - 6, center.y + 16), ImVec2(x + 6, center.y + 16), ImVec2(x, center.y + 8),
+                                        IM_COL32(240, 180, 60, 240));
+                char text[128];
+                std::snprintf(text, sizeof(text), "%.0fm", glm::length(glm::vec2(delta3.x, delta3.z)));
+                draw->AddText(ImVec2(x - 14.0f, center.y + 17.0f), IM_COL32(245, 200, 110, 230), text);
+            }
             if (context.cacheMarker)
             {
                 const glm::vec3 delta3 = *context.cacheMarker - context.playerPosition;
@@ -1025,6 +1037,12 @@ namespace NextDayz::NextDayzHUD
                 draw->AddRectFilled(ImVec2(p.x - 4, p.y - 4), ImVec2(p.x + 4, p.y + 4),
                                     danger ? IM_COL32(150, 40, 30, 255) : IM_COL32(50, 46, 40, 255));
                 draw->AddText(ImVec2(p.x + 7, p.y - 7), IM_COL32(30, 28, 24, 255), NextDayz::L10n::Tr(poi.name));
+            }
+            for (const auto& [position, label] : context.objectives)
+            {
+                const ImVec2 p = toScreen(position.x, position.z);
+                draw->AddCircle(p, 12.0f, IM_COL32(200, 130, 20, 255), 20, 3.0f);
+                draw->AddText(ImVec2(p.x + 14, p.y + 2), IM_COL32(150, 90, 10, 255), label.c_str());
             }
             if (context.cacheMarker)
             {

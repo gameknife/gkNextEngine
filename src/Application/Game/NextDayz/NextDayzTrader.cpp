@@ -40,10 +40,25 @@ void NextDayzGameInstance::DrawTrader()
         ImGui::SameLine(0, 30);
         ImGui::TextDisabled("%s", Format("Next tier at {}", economy_.reputationTiers[tier + 1]).c_str());
     }
-    ImGui::TextDisabled("%s", Tr("Shelves restock after every expedition, whether you extract or not."));
+    ImGui::TextDisabled("%s", Tr("Shelves and the contract board renew after every expedition, whether you extract or not."));
     ImGui::Separator();
-
-    if (ImGui::BeginTable("trader_layout", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable))
+    if (!ImGui::BeginTabBar("trader_pages"))
+    {
+        ApplySafehouseRequests(requests);
+        return;
+    }
+    const auto pageFlags = [this](int page)
+    { return traderPageForced_ && traderPage_ == page ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None; };
+    if (ImGui::BeginTabItem(Label("CONTRACTS"), nullptr, pageFlags(0)))
+    {
+        if (!traderPageForced_) traderPage_ = 0;
+        DrawContracts();
+        ImGui::EndTabItem();
+    }
+    const bool shelves = ImGui::BeginTabItem(Label("TRADER & SERVICES"), nullptr, pageFlags(1));
+    if (shelves && !traderPageForced_) traderPage_ = 1;
+    traderPageForced_ = false;
+    if (shelves && ImGui::BeginTable("trader_layout", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable))
     {
         ImGui::TableSetupColumn("shelves", ImGuiTableColumnFlags_WidthStretch, 0.62f);
         ImGui::TableSetupColumn("services", ImGuiTableColumnFlags_WidthStretch, 0.38f);
@@ -126,11 +141,13 @@ void NextDayzGameInstance::DrawTrader()
             ImGui::TextUnformatted(Format("#{}  {}", record.sortieId, map ? map->name : record.mapId).c_str());
             ImGui::SameLine();
             ImGui::TextColored(record.outcome == "died" ? traderWarning : traderSage, "%s", Tr(OutcomeLabel(record.outcome)));
-            ImGui::TextDisabled("%s", Format("Brought home {}  /  spent {}  /  net {:+}", record.extractedValue,
-                                             record.spentBefore, net).c_str());
+            ImGui::TextDisabled("%s", Format("Brought home {}  /  contracts {}  /  spent {}  /  net {:+}", record.extractedValue,
+                                             record.contractGold, record.spentBefore, net).c_str());
         }
         ImGui::EndTable();
     }
+    if (shelves) ImGui::EndTabItem();
+    ImGui::EndTabBar();
     ApplySafehouseRequests(requests);
 }
 

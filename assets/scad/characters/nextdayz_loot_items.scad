@@ -180,6 +180,26 @@ module bone_item_lantern() { cw_item_lantern(1); }
 module bone_item_fuel() { cw_item_jerrycan(1); }
 module bone_item_bedroll() { cw_item_bedroll(1); }
 module bone_item_firecrackers() { cw_item_firecrackers(); }
+// ---- 合同包裹（取件合同专用，只在合同目标据点出现）----
+module bone_item_contract_parcel()
+{
+    color([0.62, 0.50, 0.33]) translate([0, 0, 0.09]) cube([0.30, 0.30, 0.18], center = true);
+    color([0.86, 0.82, 0.70]) translate([0, 0, 0.09]) cube([0.31, 0.03, 0.185], center = true);
+    color([0.86, 0.82, 0.70]) translate([0, 0, 0.09]) cube([0.03, 0.31, 0.185], center = true);
+    color([0.80, 0.12, 0.10]) translate([0, 0, 0.184]) cylinder(h = 0.006, r = 0.035);
+}
+module bone_item_contract_documents()
+{
+    color([0.70, 0.58, 0.36]) translate([0, 0, 0.012]) cube([0.24, 0.32, 0.024], center = true);
+    color([0.93, 0.91, 0.84]) translate([0.01, 0.01, 0.027]) cube([0.21, 0.29, 0.006], center = true);
+    color([0.75, 0.15, 0.12]) translate([-0.06, 0.10, 0.031]) cube([0.07, 0.04, 0.002], center = true);
+}
+module bone_item_contract_blackbox()
+{
+    color([0.95, 0.42, 0.06]) translate([0, 0, 0.10]) cube([0.28, 0.20, 0.20], center = true);
+    color([0.90, 0.90, 0.88]) for (x = [-0.10, 0.10]) translate([x, 0, 0.10]) cube([0.025, 0.205, 0.205], center = true);
+    color([0.12, 0.12, 0.13]) translate([0, 0, 0.205]) cube([0.10, 0.03, 0.02], center = true);
+}
 // 未登记物品的兜底外观：一个旧纸箱
 module bone_item_unknown()
 {
@@ -239,6 +259,7 @@ module bone_root()
     bone_item_pants_m81(); bone_item_pants_emr(); bone_item_pants_dbdu(); bone_item_pants_flora();
     bone_item_backpack_rd54(); bone_item_backpack_abalakov();
     bone_item_signal_flare();
+    bone_item_contract_parcel(); bone_item_contract_documents(); bone_item_contract_blackbox();
     bone_item_unknown();
 }
 

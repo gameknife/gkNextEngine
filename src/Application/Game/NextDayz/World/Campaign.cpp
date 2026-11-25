@@ -21,6 +21,7 @@ namespace NextDayz
     bool FCampaign::Store(Inventory& inventory, FItemInstanceId id, int count)
     {
         if (inField || nextStorageId == std::numeric_limits<uint64_t>::max()) return false;
+        if (const auto* item = inventory.FindInstance(id); !item || IsContractItem(item->defId)) return false;
         auto removed = inventory.TryRemove(id, count);
         if (!removed) return false;
         removed->instanceId = nextStorageId++;
@@ -53,6 +54,8 @@ namespace NextDayz
         // Container cargo is flattened in storage; wearing the clothing again recreates its capacity.
         for (auto item : inventory.Instances())
         {
+            // Contract parcels are settled before this; one left over has no contract.
+            if (IsContractItem(item.defId)) continue;
             item.instanceId = nextStorageId++;
             item.containerId = 0;
             storage.push_back(std::move(item));

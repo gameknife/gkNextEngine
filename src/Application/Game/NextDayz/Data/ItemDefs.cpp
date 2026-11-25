@@ -386,6 +386,13 @@ namespace NextDayz
             FItemDef{.id = "firecrackers", .displayName = "Firecrackers", .kind = EItemKind::Misc, .size = {1, 1},
                      .maxStack = 3, .use = EItemUse::Firecrackers,
                      .description = "Throw ahead: the bangs lure the infected away from you."},
+            // ---- contract parcels: worthless to traders, cannot be stored, one live contract each ----
+            FItemDef{.id = "contract_parcel", .displayName = "Sealed Parcel", .kind = EItemKind::Misc, .size = {2, 2},
+                     .description = "Contract delivery. Carry it out on the rescue helicopter; it cannot be stored or sold."},
+            FItemDef{.id = "contract_documents", .displayName = "Medical Records", .kind = EItemKind::Misc, .size = {1, 2},
+                     .description = "Contract delivery. Carry it out on the rescue helicopter; it cannot be stored or sold."},
+            FItemDef{.id = "contract_blackbox", .displayName = "Flight Recorder", .kind = EItemKind::Misc, .size = {2, 2},
+                     .description = "Contract delivery. Carry it out on the rescue helicopter; it cannot be stored or sold."},
         };
     }
 

@@ -82,8 +82,12 @@ void NextDayzGameInstance::DrawWorldOperations()
         const uint64_t sorties = count == campaign_.mapSorties.end() ? 0 : count->second;
         ImGui::PushID(static_cast<int>(index));
         ImGui::Spacing();
+        const auto contracts = std::count_if(campaign_.contracts.begin(), campaign_.contracts.end(),
+            [&](const auto& contract) { return contract.mapId == map.id; });
         const auto title = map.training
             ? NextDayz::L10n::Format("{}\n{}  |  practice, never assigned", map.name, map.region)
+            : contracts > 0
+            ? NextDayz::L10n::Format("{}\n{}  |  {} deployments  |  {} contracts", map.name, map.region, sorties, contracts)
             : NextDayz::L10n::Format("{}\n{}  |  {} deployments", map.name, map.region, sorties);
         const bool destination = !authoringMode_ && ChosenDeployMap() == &map;
         if (destination) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.89f,0.71f,0.40f,1));

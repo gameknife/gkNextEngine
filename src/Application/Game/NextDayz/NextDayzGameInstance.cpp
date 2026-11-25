@@ -1615,6 +1615,7 @@ bool NextDayzGameInstance::OnRenderUI()
     ctx.yawRadians = player_.Yaw();
     ctx.playerPosition = player_.Position();
     ctx.cacheMarker = cacheMarker_;
+    ctx.objectives = ContractMarkers();
     ctx.quickSlots = quickSlots_;
     ctx.notifications = notifications_;
     if (showMap_)
@@ -2474,6 +2475,7 @@ std::string NextDayzGameInstance::CurrentObjective() const
         if (campaign_.flight.phase != NextDayz::EFlightPhase::Idle)
             return NextDayz::L10n::Format("Rescue: {} ({:.0f}s)", NextDayz::FlightPhaseName(campaign_.flight.phase),
                                campaign_.flight.remaining);
+        // Priority (design §9): bleeding > flight > flare holder heads out > field contract > survival goals.
         if (inventory_.CountOf("signal_flare") > 0)
         {
             const NextDayz::FWorldAnchor* nearest = nullptr;
@@ -2488,6 +2490,7 @@ std::string NextDayzGameInstance::CurrentObjective() const
                 return NextDayz::L10n::Format("Reach {} ({:.0f}m {}) | [B] Fire signal", nearest->label, distance,
                                    CompassWord(nearest->worldPos - player_.Position()));
         }
+        if (auto contract = ContractObjective(); !contract.empty()) return contract;
     }
     if (inventory_.CountOf("water_bottle") == 0 && inventory_.CountOf("drink_soda") == 0)
     {
@@ -3509,6 +3512,38 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     { return int64_t(campaign_.history.empty() ? 0 : campaign_.history.back().extractedValue); });
     reg.Add("lastSortieSpent", [this]() -> Runtime::Agent::FAgentQueryValue
     { return int64_t(campaign_.history.empty() ? 0 : campaign_.history.back().spentBefore); });
+    // Contracts (economy design §5, §8).
+    reg.Add("contractBoard", [this]() -> Runtime::Agent::FAgentQueryValue
+    {
+        std::string ids;
+        for (const auto& contract : campaign_.board) ids += (ids.empty() ? "" : ",") + contract.templateId;
+        return ids;
+    });
+    reg.Add("contractBoardSize", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.board.size()); });
+    reg.Add("contractBoardTypes", [this]() -> Runtime::Agent::FAgentQueryValue
+    {
+        std::string types;
+        for (const auto& contract : campaign_.board) types += (types.empty() ? "" : ",") + std::string(NextDayz::ContractTypeName(contract.type));
+        return types;
+    });
+    reg.Add("contractsActive", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.contracts.size()); });
+    reg.Add("contractsCompleted", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.contractsCompleted); });
+    reg.Add("lastContractGold", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(lastContractReport_.gold); });
+    reg.Add("lastContractsExpired", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(lastContractReport_.expired.size()); });
+    reg.Add("visitedSites", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.sortie.visitedPois.size()); });
+    reg.Add("contractObjective", [this]() -> Runtime::Agent::FAgentQueryValue { return ContractObjective(); });
+    reg.Add("contractMarkers", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(ContractMarkers().size()); });
+    reg.Add("parcelCarried", [this]() -> Runtime::Agent::FAgentQueryValue
+    {
+        return std::any_of(inventory_.Instances().begin(), inventory_.Instances().end(),
+                           [](const auto& item) { return NextDayz::IsContractItem(item.defId); });
+    });
+    reg.Add("parcelInWorld", [this]() -> Runtime::Agent::FAgentQueryValue
+    {
+        for (const auto& item : NextDayz::AllItemDefs())
+            if (NextDayz::IsContractItem(item.id) && loot_.FindItem(item.id)) return true;
+        return false;
+    });
     reg.Add("lastSortieNet", [this]() -> Runtime::Agent::FAgentQueryValue
     { return campaign_.history.empty() ? int64_t(0) : NextDayz::SortieNet(campaign_.history.back()); });
     reg.Add("campaignStorage", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.storage.size()); });

@@ -48,7 +48,7 @@ TEST_CASE("NextDayz economy table prices every item and never lets a trade loop 
     {
         CAPTURE(item.id);
         REQUIRE(defs.sell.contains(std::string(item.id)));
-        CHECK(defs.sell.at(std::string(item.id)) > 0);
+        CHECK((defs.sell.at(std::string(item.id)) > 0) != IsContractItem(item.id));
     }
     CHECK(defs.sell.size() == AllItemDefs().size());
     // Prices players already know carry over from the old extraction table.
@@ -278,7 +278,7 @@ TEST_CASE("NextDayz save v6 keeps the economy and migrates v5 saves with default
 
     nlohmann::json document;
     { std::ifstream stream(path); stream >> document; }
-    REQUIRE(document.at("version") == 6);
+    REQUIRE(document.at("version") == 7);
     document["version"] = 5;
     auto& campaign = document["state"]["campaign"];
     for (const auto* key : {"reputation", "traderStock", "traderCycle", "sortie", "history"}) campaign.erase(key);

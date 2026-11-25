@@ -203,6 +203,14 @@ namespace NextDayz
         // Restocks one military spot far from `from` right now with a rifle and
         // ammo (radio supply cache). Returns its position.
         std::optional<glm::vec3> PlantCache(const glm::vec3& from, float minDistance, NextEngine& engine);
+        // Contract parcels (economy design §5.4): stocks the loot spot nearest
+        // `centerXZ` within `radius` with only `item`. The spot then holds the
+        // parcel until it is taken; the radio cache never picks it.
+        std::optional<glm::vec3> PlantItem(const glm::vec2& centerXZ, float radius, std::string_view item, NextEngine& engine);
+        // Where an available entry holds `item` (a spot or a pile), if anywhere.
+        std::optional<glm::vec3> FindItem(std::string_view item) const;
+        // Removes `item` from every entry; emptied spots cool down, emptied piles vanish.
+        int PurgeItem(std::string_view item, NextEngine& engine);
 
         int RemainingCount() const;
         int CooldownCount() const;

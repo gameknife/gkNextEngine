@@ -16,6 +16,51 @@ namespace NextDayz
         uint64_t buy = 0;
     };
 
+    enum class EContractType : uint8_t
+    {
+        Deliver,   // hand items in from storage, in the safehouse
+        Recon,     // visit 1-2 sites on a map and extract
+        Fetch,     // bring a parcel planted at a site home on the helicopter
+    };
+
+    struct FContractItemRange
+    {
+        std::string item;
+        int min = 1;
+        int max = 1;
+    };
+
+    // A contract the board can offer (economy design §5, §6.1). Values are
+    // rolled with the board's random numbers when the contract is offered.
+    struct FContractTemplate
+    {
+        std::string id;
+        std::string issuer;          // medical | quartermaster | collector | radio
+        std::string title;           // English; the translation key
+        EContractType type = EContractType::Deliver;
+        uint32_t tier = 1;           // 1..3: needs reputation tier >= this (tier 0 offers tier 1)
+        uint32_t weight = 1;
+        std::vector<FContractItemRange> items;   // deliver
+        uint64_t bonus = 0;                      // deliver: added to the items' value
+        std::vector<std::string> poiKinds;       // recon / fetch; empty = any kind
+        uint32_t poiCount = 1;
+        uint32_t riskMin = 1;
+        uint32_t riskMax = 3;
+        std::string parcel;                      // fetch: a contract_* item
+        uint64_t rewardMin = 0;                  // recon / fetch
+        uint64_t rewardMax = 0;
+        std::vector<std::string> itemRewards;    // one is rolled, if any
+    };
+
+    struct FBoardRules
+    {
+        std::vector<uint32_t> slots{3};   // offered contracts per reputation tier
+        uint32_t replaceAfter = 2;        // unaccepted offers leave after this many finished sorties
+        uint32_t expireAfter = 3;         // accepted field contracts expire after this many
+        uint32_t maxActive = 2;           // accepted field contracts at once
+        double deliverMultiplier = 1.6;   // deliver reward = items' sell value x this + bonus
+    };
+
     struct FWarehouseStep
     {
         uint32_t capacity = 0;
@@ -39,6 +84,8 @@ namespace NextDayz
         // Reputation gained for a completed contract of tier 1, 2, 3.
         std::vector<uint32_t> reputationGain;
         uint32_t reputationPenalty = 1;
+        FBoardRules board;
+        std::vector<FContractTemplate> contracts;
     };
 
     // Parses and validates the table: every item definition has an explicit sell
@@ -48,4 +95,6 @@ namespace NextDayz
     bool ParseEconomyDefs(std::string_view json, FEconomyDefs& defs, std::string& error);
     bool LoadEconomyDefs(const std::filesystem::path& path, FEconomyDefs& defs, std::string& error);
     const FTraderEntry* FindTraderEntry(const FEconomyDefs& defs, std::string_view item);
+    const FContractTemplate* FindContractTemplate(const FEconomyDefs& defs, std::string_view id);
+    const char* ContractTypeName(EContractType type);
 }

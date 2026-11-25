@@ -1,7 +1,7 @@
 ---
 title: "NextDayz 局外经济与合同任务"
 category: project
-status: 实施中（E1 价目表与商人已于 2026-11-25 完成；E2～E5 未开始）
+status: 实施中（E1 价目表与商人、E2 单机合同已于 2026-11-25 完成；E3～E5 未开始）
 owner: NextDayz
 created: 2026-11-25
 last_updated: 2026-11-25
@@ -244,6 +244,10 @@ stateDiagram-v2
 
 ### 6.2 据点索引 `pois.json`
 
+> **E2 实施时的调整：** 没有新增 `pois.json`。已发布目录里的 `generation.json` 已经带着每个据点的 id、名字、
+> 类型、中心、地块尺寸和风险，`World/PoiIndex` 直接读它（类型按 `nd_poi_kind` 映射，中心转成游戏坐标，半径 =
+> 半对角线 + 10 m）。洛克特 v8 因此不需要补写，冻结的发布目录保持不变；Master 在 E4 读同一个文件。下面是原计划。
+
 `gnb geo expedition --publish` 在 `published/v<N>/` 旁边写出 `pois.json`：
 
 ```json
@@ -273,6 +277,10 @@ stateDiagram-v2
 能直接进 `gkNextUnitTests`，以后也可以并入 `NextDayzCore`。
 
 ### 6.4 存档 v6 / v7
+
+> v7 已随 E2 落地：`FCampaign` 新增 `boardRng`、`boardCycle`、`contractSerial`、`board`、`contracts`、
+> `contractsCompleted`，`sortie` 新增 `visitedPois`、`contractGold`、`contractsCompleted`。`FContract` 没有
+> `parcelKey`（见 §10.2）。仓库档位仍待 E3。
 
 E1 落地的 v6 只含 E1 用到的字段：`reputation`、`traderStock`、`traderCycle`、`sortie { spent, insertionMap,
 insertionPoint, insertionPaid }`、`history`。合同板、已接合同、包裹与仓库档位随 E2 / E3 进入 v7，迁移同样全部取
@@ -386,7 +394,7 @@ contractGold, contractsCompleted, reputationAfter, visitedPois
 
 | 内容 | 实现 |
 | --- | --- |
-| 价目表 | `assets/configs/nextdayz_economy.json`：101 种物品的显式售价（原 `sellPrices` 覆盖价与按种类默认价原样保留，部分历史装备、配件和杂物按单项调整），`buyMarkup` 3，21 个货架条目，服务与信誉阈值。`nextdayz_extraction.json` 不再有 `sellPrices`。合同模板与 `board` 段随 E2 加入，解析器对未知键报错 |
+| 价目表 | `assets/configs/nextdayz_economy.json`：101 种物品的显式售价（E2 起加上 3 种售价为 0 的合同包裹；原 `sellPrices` 覆盖价与按种类默认价原样保留，部分历史装备、配件和杂物按单项调整），`buyMarkup` 3，21 个货架条目，服务与信誉阈值。`nextdayz_extraction.json` 不再有 `sellPrices`。合同模板与 `board` 段随 E2 加入，解析器对未知键报错 |
 | C++ | `Data/EconomyDefs`（解析与校验）、`World/Economy`（售价、买价、补货周期、购买、合并入库、付费落点、出击记录）。两者不依赖引擎，已加入 `gkNextUnitTests` |
 | 周期 | 周期号 = 已结束出击数 + 1，由 `sorties` 与 `inField` 推出；`traderCycle` 记录库存所属周期，0 表示从未补货，所以新档和迁移档进机舱就是满货 |
 | 商人 | 机舱第三页签 “商人 / 服务”（`T` 键或机舱菜单按钮）：货架、档位锁、本周期剩余、购买；右侧是付费落点状态、仓库堆数和最近十条战报。购买直接进仓库，与同种无装弹无配件的堆合并 |
@@ -405,6 +413,38 @@ contractGold, contractsCompleted, reputationAfter, visitedPois
   调试返回，战报记下花费 195、带回 5、净 −190，货架回满。
 
 已知限制：信誉在 E2 之前没有来源，所以 E1 里只有 0 档货架可买；落点名称用的是 `generation.json` 里的英文据点名。
+
+### 10.2 E2 落地记录（2026-11-25）
+
+| 内容 | 实现 |
+| --- | --- |
+| 数据 | `nextdayz_economy.json` 新增 `board`（每档空位 3/3/4/4、`replaceAfter` 2、`expireAfter` 3、`maxActive` 2、交付系数 1.6）和 15 个合同模板：T1 三个交付 + 两个侦察，T2 三个交付 + 一个双据点侦察 + 两个取件，T3 两个交付 + 一个侦察 + 一个带物品奖励的取件。每个模板有 `title`（翻译键）。解析器校验发布者、类型、据点种类、风险区间、包裹与奖励物品 |
+| 据点 | `World/PoiIndex` 读已发布的 `generation.json`（§6.2 的调整）。`[NextDayz][Landscape][Contracts]` 求值已发布场景，检查每个据点都有同名 `nd_poi` 锚点、距离 < 2 m、种类一致 |
+| 合同 | `World/Contracts`：`RefreshBoard`（每周期一次，先下架过期报价再按权重补满；没有外勤合同时下一份必定是外勤；模板不重复，交付物品不重叠，同种包裹只有一份）、`AcceptContract`、`AbandonContract`、`HandInContract`、`SettleContracts`、`ExpireContracts`、`PurgeItemFromWorld`。合同档位 = max(1, 信誉档)；地点按模板的种类与风险区间筛选 |
+| 包裹 | 三种 `contract_*` 物品（售价 0，不能入库或出售，训练场陈列测试把它们列为例外，`nextdayz_loot_items.scad` 有各自模型）。**没有存物资键**：部署到合同地图时，如果包裹既不在背包也不在这张图的任何物资里，就放进目标据点范围内离中心最近的刷新点（`LootSystem::PlantItem`）。所以首次部署、地图升级后都会自动放置，尸体堆里的包裹不会被重复放置。电台补给不会选中放着包裹的刷新点 |
+| 清除 | 合同过期或放弃时，从背包、当前加载的世界、`mapStates_` 和机舱里保存的世界中删除该包裹；接下取件合同时也先清一次旧副本。部署时顺带清掉没有对应合同的包裹 |
+| 侦察 | 野外每 0.5 秒检查玩家所在的据点并记入 `sortie.visitedPois`；进入侦察目标时提示 |
+| 结算顺序 | 撤离（以及调试返回）时先 `SettleContracts`（侦察：同地图且目标全到过；取件：背包里有包裹，结算时取走），再离开野外、`ExpireContracts`、`FinishSortie`、`RefreshBoard`、清除包裹。死亡不结算，合同保持有效 |
+| 界面 | 商人页签分成“合同”和“商人与服务”两页。合同页左边是合同板（发布者、档位、标题、交付清单与仓库现有数、目标与地区、报酬、剩余次数、交付 / 接下按钮），右边是进行中的合同和放弃按钮。世界页地区列表显示该地区的合同数。HUD 目标行在“持信号枪找撤离点”之后显示合同目标（距离 + 方向，或“包裹已在背包”），指南针和地图用琥珀色标记最多 3 个目标。回舱消息附带结算摘要，战报加上合同收入 |
+| 查询与验证命令 | `game.contractBoard`、`contractBoardSize`、`contractBoardTypes`、`contractsActive`、`contractsCompleted`、`lastContractGold`、`lastContractsExpired`、`visitedSites`、`contractObjective`、`contractMarkers`、`parcelCarried`、`parcelInWorld`；`contract-offer:<模板>`、`contract-accept:<类型>`、`contract-abandon:<类型>`、`contract-fill`、`contract-handin`、`contract-reroll`、`reputation:<n>`、`goto-target`、`take-item:<物品>`、`page:<0/1>` |
+
+验证：
+
+- 单测 `[NextDayz][Contracts]`：模板与据点加载、每个外勤模板都能放到已发布地图上、合同板可复现且守规则
+  （60 个种子）、同周期刷新不变、交付即时结算、侦察“先结算再过期”与死亡不失败、三次后过期且扣信誉不跌档、
+  外勤上限与未接报价轮换、取件结算取走包裹并发放物品奖励、放弃后从世界里清掉包裹、包裹不能入库或出售、
+  v7 往返与 v6 迁移。
+- `assets/agentscripts/nextdayz-contracts.agentscript.json`：交付即时结算 → 接侦察、部署洛克特、传送到目标、
+  乘直升机撤离、结算 → 接取件、包裹已放置、拿到后死亡、回去从尸体堆捡回、撤离、结算 → 接另一个取件后放弃，
+  信誉从 4 降到 3 但不跌档。`nextdayz-economy`、`nextdayz-helicopter-lobby`、`nextdayz-extraction`、
+  `nextdayz-inventory-icons`（期望物品数改为 104）同时通过。
+
+与计划的差异和遗留：
+
+- 限定撤离点修饰（§5.1，+30%）没有做，留到 E3 或 E5 依据试玩决定。
+- 调试返回也按撤离结算合同，避免包裹被 `StoreAll` 丢弃。
+- 包裹刷新点只按“离据点中心最近”选，没有区分室内 / 地面；§11 的“不可达”降级仍待试玩数据。
+- 侦察目标与包裹的据点名、HUD 标签都是 `generation.json` 里的英文名。
 
 依赖关系：E1 → E2 → E3。E4 在 E2 完成后即可开始，与 E3 并行。E5 的记录结构随 E1 一起落地，调参放在最后。
 每期合入前都要通过现有的 NextDayz 桌面闸门（[Web 客户端开发计划 §3](nextdayz-web-client-plan.md#3-闸门)）。

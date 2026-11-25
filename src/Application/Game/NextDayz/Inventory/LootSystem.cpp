@@ -1024,7 +1024,9 @@ namespace NextDayz
         for (FLootEntry& entry : entries_)
         {
             if (entry.source != ELootSource::Spot || entry.profile != ELootProfile::Military ||
-                entry.state == FLootEntry::EState::Reserved || !entry.fixedItem.empty())
+                entry.state == FLootEntry::EState::Reserved || !entry.fixedItem.empty() ||
+                std::any_of(entry.contents.begin(), entry.contents.end(),
+                            [](const FLootStack& stack) { return IsContractItem(stack.itemId); }))
             {
                 continue;
             }
@@ -1052,6 +1054,81 @@ namespace NextDayz
         best->state = FLootEntry::EState::Available;
         ShowEntry(*best, engine.GetScene(), &engine);
         return best->worldPos;
+    }
+
+    std::optional<glm::vec3> LootSystem::PlantItem(const glm::vec2& centerXZ, float radius, std::string_view item,
+                                                    NextEngine& engine)
+    {
+        FLootEntry* best = nullptr;
+        float bestDistance = radius;
+        for (FLootEntry& entry : entries_)
+        {
+            if (entry.source != ELootSource::Spot || entry.state == FLootEntry::EState::Reserved || !entry.fixedItem.empty() ||
+                std::any_of(entry.contents.begin(), entry.contents.end(),
+                            [](const FLootStack& stack) { return IsContractItem(stack.itemId); }))
+            {
+                continue;
+            }
+            const float distance = glm::distance(glm::vec2(entry.worldPos.x, entry.worldPos.z), centerXZ);
+            if (distance <= bestDistance)
+            {
+                bestDistance = distance;
+                best = &entry;
+            }
+        }
+        if (!best || !director_.ForceAvailable(best->directorHandle))
+        {
+            return std::nullopt;
+        }
+        best->contents = {{std::string(item), 1, 0}};
+        best->displayName = DescribeContents(best->contents);
+        best->category = ELootCategory::Misc;
+        director_.SetCategory(best->directorHandle, best->category);
+        best->state = FLootEntry::EState::Available;
+        ShowEntry(*best, engine.GetScene(), &engine);
+        return best->worldPos;
+    }
+
+    std::optional<glm::vec3> LootSystem::FindItem(std::string_view item) const
+    {
+        for (const FLootEntry& entry : entries_)
+        {
+            if (entry.state != FLootEntry::EState::Available && entry.state != FLootEntry::EState::Reserved) continue;
+            for (const FLootStack& stack : entry.contents)
+                if (stack.itemId == item) return entry.worldPos;
+        }
+        return std::nullopt;
+    }
+
+    int LootSystem::PurgeItem(std::string_view item, NextEngine& engine)
+    {
+        int removed = 0;
+        for (size_t index = 0; index < entries_.size(); ++index)
+        {
+            FLootEntry& entry = entries_[index];
+            const size_t before = entry.contents.size();
+            std::erase_if(entry.contents, [item](const FLootStack& stack) { return stack.itemId == item; });
+            if (entry.contents.size() == before) continue;
+            removed += static_cast<int>(before - entry.contents.size());
+            if (!entry.contents.empty())
+            {
+                if (entry.source != ELootSource::Authored) entry.displayName = DescribeContents(entry.contents);
+                ShowEntry(entry, engine.GetScene(), &engine);
+                continue;
+            }
+            HideEntry(entry, engine.GetScene(), &engine);
+            if (entry.source == ELootSource::Pile)
+            {
+                entry.state = FLootEntry::EState::Empty;
+            }
+            else
+            {
+                if (entry.directorHandle.IsValid()) director_.Commit(entry.directorHandle, worldSeconds_);
+                entry.state = FLootEntry::EState::Cooldown;
+            }
+            if (hoveredIndex_ == static_cast<int>(index)) hoveredIndex_ = -1;
+        }
+        return removed;
     }
 
     int LootSystem::CategoryCap(ELootCategory category) const

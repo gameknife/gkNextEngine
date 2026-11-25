@@ -200,6 +200,9 @@ namespace NextDayz
     void FinishSortie(FCampaign& campaign, const FEconomyDefs& defs, FSortieRecord record)
     {
         record.spentBefore = campaign.sortie.spent;
+        record.contractGold = campaign.sortie.contractGold;
+        record.contractsCompleted = campaign.sortie.contractsCompleted;
+        record.visitedPois = campaign.sortie.visitedPois;
         record.reputationAfter = campaign.reputation;
         campaign.history.push_back(std::move(record));
         if (campaign.history.size() > kSortieHistory)

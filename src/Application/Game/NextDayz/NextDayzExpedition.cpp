@@ -218,6 +218,7 @@ void NextDayzGameInstance::InitializeCampaign()
         SaveCampaign();
     }
     if (!campaign_.inField || campaignSaveBlocked_) SetMouseCaptured(false);
+    if (!campaignSaveBlocked_ && !pendingCampaign_ && RefreshContractBoard()) SaveCampaign();
     SPDLOG_INFO("[NextDayz] campaign {} ({})", campaignPath_.string(), campaign_.inField ? "field" : "safehouse");
 }
 
@@ -536,6 +537,7 @@ void NextDayzGameInstance::CompleteDeployment()
     ++campaign_.sorties;
     ++campaign_.sortieId;
     ++campaign_.mapSorties[ActiveMapId()];
+    PlantContractParcels();
     campaign_.lastMapId = ActiveMapId();
     campaign_.lastOutcome = "DEPLOYED";
     paused_ = showMap_ = showInventory_ = false;
@@ -557,6 +559,7 @@ void NextDayzGameInstance::ReturnToSafehouse(ESafehouseReturn reason)
     record.outcome = died ? "died" : reason == ESafehouseReturn::Debug ? "debug" : "extracted";
     record.seconds = survivalSeconds_;
     if (died) record.deathCause = survival_.Snapshot().lastDamageSource;
+    NextDayz::FContractReport contractReport;
     if (died)
     {
         weapons_.CopyMagazinesTo(inventory_);
@@ -576,6 +579,9 @@ void NextDayzGameInstance::ReturnToSafehouse(ESafehouseReturn reason)
     else
     {
         weapons_.CopyMagazinesTo(inventory_);
+        // Settle before anything expires: a parcel carried home on the last sortie still counts.
+        // A debug return settles like an extraction so a parcel never reaches storage.
+        contractReport = NextDayz::SettleContracts(campaign_, economy_, inventory_, ActiveMapId());
         record.extractedValue = NextDayz::SellValue(inventory_.Instances(), economy_);
         campaign_.StoreAll(inventory_);
         campaignMessage_ = reason == ESafehouseReturn::Debug
@@ -583,12 +589,17 @@ void NextDayzGameInstance::ReturnToSafehouse(ESafehouseReturn reason)
             : "Extraction successful. Everything you carried is now in your safehouse.";
     }
     campaign_.inField = false;
+    NextDayz::ExpireContracts(campaign_, economy_, contractReport);
     NextDayz::FinishSortie(campaign_, economy_, std::move(record));
+    RefreshContractBoard();
+    PurgeParcels(contractReport.purgeParcels);
+    lastContractReport_ = contractReport;
     if (reason == ESafehouseReturn::Debug) debugger_.SetVisible(false);
     campaign_.lastOutcome = died ? "MISSING / GEAR LEFT IN FIELD"
         : reason == ESafehouseReturn::Debug ? "DEBUG RETURN / GEAR STORED" : "EXTRACTED";
     if (const auto* map = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_))
         campaignMessage_ += NextDayz::L10n::Message(" Assignment region: {} / {}", map->name, map->region);
+    campaignMessage_ += ContractReportText(contractReport);
     campaign_.flight = {};
     actions_.Reset();
     weapons_.ResetRuntime();
@@ -648,6 +659,7 @@ void NextDayzGameInstance::DebugExpeditionAction(NextDayz::Debug::EExpeditionAct
 
 void NextDayzGameInstance::AdvanceExtraction(float dt)
 {
+    TrackContractSites(dt);
     const auto before = campaign_.flight.phase;
     if (campaign_.TickFlight(dt, extractionConfig_))
     {
@@ -928,6 +940,7 @@ void NextDayzGameInstance::CampaignValidationCommand()
         loot_.ResetSession(GetEngine());
         campaignSaveBlocked_ = false;
         saveError_.clear();
+        RefreshContractBoard();
         SaveCampaign();
         SetMouseCaptured(false);
     }
@@ -975,6 +988,97 @@ void NextDayzGameInstance::CampaignValidationCommand()
         }
     }
     else if (command == "insert-cancel") { NextDayz::CancelInsertion(campaign_); SaveCampaign(); }
+    else if (command.starts_with("reputation:")) { campaign_.reputation = static_cast<uint32_t>(std::stoul(command.substr(11))); SaveCampaign(); }
+    else if (command.starts_with("contract-offer:"))
+    {
+        if (!NextDayz::OfferContract(campaign_, economy_, ContractSites(), command.substr(15)))
+            SPDLOG_WARN("[NextDayz] validation could not offer contract {}", command.substr(15));
+        SaveCampaign();
+    }
+    else if (command == "contract-reroll" && !campaign_.inField)
+    {
+        campaign_.board.clear();
+        campaign_.boardCycle = 0;
+        RefreshContractBoard();
+        SaveCampaign();
+    }
+    else if (command.starts_with("contract-accept:") || command.starts_with("contract-abandon:"))
+    {
+        // The first offered (accept) or accepted (abandon) contract of the given type.
+        const bool accept = command.starts_with("contract-accept:");
+        const std::string type = command.substr(command.find(':') + 1);
+        const auto& list = accept ? campaign_.board : campaign_.contracts;
+        const auto found = std::find_if(list.begin(), list.end(),
+            [&](const auto& contract) { return NextDayz::ContractTypeName(contract.type) == type; });
+        if (found != list.end())
+        {
+            const uint64_t id = found->id;
+            const std::string parcel = found->parcel;
+            NextDayz::FContractReport report;
+            const auto result = accept ? NextDayz::AcceptContract(campaign_, economy_, id)
+                                       : NextDayz::AbandonContract(campaign_, economy_, id, report);
+            if (result == NextDayz::EContractResult::Ok && !parcel.empty()) PurgeParcels({parcel});
+            campaignMessage_ = NextDayz::ContractResultMessage(result);
+            lastContractReport_ = report;
+            SaveCampaign();
+        }
+    }
+    else if ((command == "contract-fill" || command == "contract-handin") && !campaign_.inField)
+    {
+        const auto found = std::find_if(campaign_.board.begin(), campaign_.board.end(),
+            [](const auto& contract) { return contract.type == NextDayz::EContractType::Deliver; });
+        if (found != campaign_.board.end())
+        {
+            if (command == "contract-fill")
+                for (const auto& item : found->items) NextDayz::AddToStorage(campaign_, item.item, item.count);
+            else
+            {
+                NextDayz::FContractReport report;
+                campaignMessage_ = NextDayz::ContractResultMessage(NextDayz::HandInContract(campaign_, economy_, found->id, report));
+                lastContractReport_ = report;
+            }
+            SaveCampaign();
+        }
+    }
+    else if (command == "goto-target" && campaign_.inField)
+    {
+        // The next place the first contract on this map needs: an unvisited site, or its parcel.
+        for (const auto& contract : campaign_.contracts)
+        {
+            if (contract.mapId != ActiveMapId()) continue;
+            if (contract.type == NextDayz::EContractType::Fetch)
+            {
+                if (const auto at = loot_.FindItem(contract.parcel)) { TeleportPlayer(*at + glm::vec3(0.0f, 0.1f, 0.0f)); break; }
+                continue;
+            }
+            const auto& visited = campaign_.sortie.visitedPois;
+            const auto target = std::find_if(contract.targets.begin(), contract.targets.end(), [&](const auto& site)
+            { return std::find(visited.begin(), visited.end(), site) == visited.end(); });
+            if (target == contract.targets.end()) continue;
+            for (const auto& anchor : world_.anchors.All())
+                if (anchor.type == NextDayz::EWorldAnchorType::Poi && anchor.label == *target)
+                {
+                    TeleportPlayer(anchor.worldPos + glm::vec3(0.0f, 0.1f, 0.0f));
+                    break;
+                }
+            break;
+        }
+    }
+    else if (command.starts_with("take-item:"))
+    {
+        const std::string item = command.substr(10);
+        for (size_t index = 0; index < loot_.Entries().size(); ++index)
+        {
+            const auto& entry = loot_.Entries()[index];
+            if (entry.state != NextDayz::FLootEntry::EState::Available ||
+                std::none_of(entry.contents.begin(), entry.contents.end(), [&](const auto& stack) { return stack.itemId == item; }))
+                continue;
+            if (const auto handle = loot_.ReserveEntry(static_cast<int>(index))) loot_.Commit(*handle, inventory_, GetEngine());
+            break;
+        }
+        SaveCampaign();
+    }
+    else if (command.starts_with("page:")) { traderPage_ = std::stoi(command.substr(5)); traderPageForced_ = true; }
     else if (command == "call")
     { if (const auto* flare = inventory_.FindFirst("signal_flare")) FireSignal(flare->instanceId); }
     else if (command == "board") BoardHelicopter();

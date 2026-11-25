@@ -193,7 +193,8 @@ void NextDayzGameInstance::InitializeCabinCampaign()
         : "Prepare your equipment. The helicopter is ready when you are.";
     // World, clock and survivor coordinates stay in cabinCampaign_. Merely
     // opening the lobby must never replace them with the cabin's empty world.
-    if ((!exists && !fresh) || releasedTraining) SaveCampaign();
+    const bool boardChanged = !campaignSaveBlocked_ && RefreshContractBoard();
+    if ((!exists && !fresh) || releasedTraining || boardChanged) SaveCampaign();
 }
 
 void NextDayzGameInstance::TickCabin(float dt)

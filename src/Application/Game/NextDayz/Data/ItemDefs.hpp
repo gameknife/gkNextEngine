@@ -106,6 +106,10 @@ namespace NextDayz
     const FItemDef& ResolveItemDef(std::string_view id, std::string_view displayName, EItemKind fallbackKind);
     std::span<const FItemDef> AllItemDefs();
 
+    // Contract parcels (contract_*): planted for a fetch contract, never stored,
+    // sold or shown on the training ground.
+    inline bool IsContractItem(std::string_view id) { return id.starts_with("contract_"); }
+
     // True for anything that goes in a weapon slot (firearms and melee).
     inline bool IsWieldable(const FItemDef& definition)
     {

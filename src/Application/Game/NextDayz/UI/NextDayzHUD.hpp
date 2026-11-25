@@ -128,6 +128,8 @@ namespace NextDayz
         glm::vec3 playerPosition{0.0f};
         std::vector<FHudPoi> pois;
         std::optional<glm::vec3> cacheMarker;
+        // Contract targets (position, translated label); at most a few.
+        std::vector<std::pair<glm::vec3, std::string>> objectives;
         // Inventory screen and quickbar.
         std::vector<FHudNearbyLoot> nearby;
         std::array<std::string, 4> quickSlots;   // item ids bound to keys 4..7

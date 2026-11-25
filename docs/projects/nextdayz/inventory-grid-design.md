@@ -23,7 +23,7 @@
 - 角色预览与物品图标共用 2× SSAA：按输出宽高各两倍渲染，以每个输出像素的 2×2 样本计算颜色和几何覆盖率。输出使用非预乘 alpha，避免透明轮廓混入背景或产生黑边，不依赖时域历史。图标仍按每格 64 像素缓存，取景裁切区按该尺寸的两倍生成。
 - 磁盘缓存写在 `FileHelper::GetWritableFilePath("cache/item-icons/…")` 指向的应用用户目录；`.thumb` 保存带校验的 RGBA16F 像素，不在 `assets/` 生成图片或模型文件。
 - 缓存键包含渲染版本、尺寸、几何和材质内容；模型或材质随场景重新加载时会重新校验。缺失、损坏的缓存自动重建，缓存不可写时继续使用内存中的图标。
-- `gnb validate --script assets/agentscripts/nextdayz-inventory-icons.agentscript.json` 检查全部 101 种目录物品和旋转拖放。`game.inventoryIconsRendered` 与 `game.inventoryIconCacheHits` 可区分首次渲染和磁盘缓存命中。
+- `gnb validate --script assets/agentscripts/nextdayz-inventory-icons.agentscript.json` 检查全部 104 种目录物品（含 3 种合同包裹）和旋转拖放。`game.inventoryIconsRendered` 与 `game.inventoryIconCacheHits` 可区分首次渲染和磁盘缓存命中。
 
 ## 堆叠上限
 

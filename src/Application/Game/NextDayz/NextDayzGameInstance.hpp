@@ -35,6 +35,7 @@
 #include "Gameplay/Rig/RigInstance.h"
 #include "Application/Game/NextDayz/World/Campaign.hpp"
 #include "Application/Game/NextDayz/Data/EconomyDefs.hpp"
+#include "Application/Game/NextDayz/World/Contracts.hpp"
 #include "Application/Game/NextDayz/World/ExpeditionMaps.hpp"
 #include "Application/Game/NextDayz/World/RescueHelicopter.hpp"
 #include "Application/Game/NextDayz/Net/ClientSession.hpp"
@@ -173,6 +174,21 @@ private:
     const std::vector<NextDayz::FLandingPoint>& LandingPoints(const NextDayz::FExpeditionMap& map);
     // Applies safehouse edits, saves, and rolls everything back when the save fails.
     void ApplySafehouseRequests(std::vector<std::function<void()>>& requests);
+    // Contracts (economy design §5).
+    const NextDayz::FPoiIndex& ContractSites();
+    const std::vector<NextDayz::FPoi>* MapSites(const std::string& mapId);
+    // Refreshes the board when a new cycle started; true when it changed.
+    bool RefreshContractBoard();
+    void DrawContracts();
+    void TrackContractSites(float dt);
+    void PlantContractParcels();
+    // Removes parcels whose contract ended from the pack, the loaded world and every saved world.
+    void PurgeParcels(const std::vector<std::string>& parcels);
+    NextDayz::L10n::FText ContractReportText(const NextDayz::FContractReport& report) const;
+    std::string ContractTitle(const NextDayz::FContract& contract) const;
+    // Field objective for the HUD, empty when no field contract applies on this map.
+    std::string ContractObjective() const;
+    std::vector<std::pair<glm::vec3, std::string>> ContractMarkers() const;
     void LoadWorldAtlas();
     void TickMapAuthoring();
     enum class ESafehouseReturn
@@ -391,6 +407,12 @@ private:
     std::unordered_map<std::string, std::vector<NextDayz::FLandingPoint>> landingPoints_;
     // Distance from the last paid landing to the point that was bought; -1 when random.
     float lastInsertionError_ = -1.0f;
+    NextDayz::FPoiIndex contractSites_;
+    bool contractSitesLoaded_ = false;
+    float contractSiteClock_ = 0.0f;
+    NextDayz::FContractReport lastContractReport_;
+    int traderPage_ = 0;            // 0 contracts, 1 trader & services
+    bool traderPageForced_ = false; // validation selects the page once
     NextDayz::RescueHelicopter rescueHelicopter_;
     std::filesystem::path campaignPath_;
     std::string campaignMap_;

@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 #include "Application/Game/NextDayz/World/Campaign.hpp"
 #include "Application/Game/NextDayz/World/ExpeditionMaps.hpp"
+#include "Application/Game/NextDayz/World/PoiIndex.hpp"
 #include "Application/Game/NextDayz/Data/ItemDefs.hpp"
 #include "Engine/Assets/Core/Node.hpp"
 #include "Engine/Assets/Data/Material.hpp"
@@ -433,6 +434,52 @@ TEST_CASE("NextDayz campaigns deployed into the training ground return to the sa
     CHECK(field.campaign.inField);
 }
 
+TEST_CASE("NextDayz published contract sites match the map's site anchors", "[NextDayz][Landscape][Contracts]")
+{
+    // Contracts read sites from the published generation record without loading
+    // the map (economy design §6.2); the evaluated scene must agree with it.
+    std::vector<NextDayz::FExpeditionMap> maps;
+    std::string error;
+    REQUIRE(NextDayz::LoadExpeditionMaps("assets/configs/nextdayz_maps.json", maps, error));
+    for (const auto& map : maps)
+    {
+        if (!map.published || map.training) continue;
+        INFO(map.id);
+        std::vector<NextDayz::FPoi> sites;
+        REQUIRE(NextDayz::LoadPoiIndex(NextDayz::GenerationRecordPath(map), sites, error));
+        Assets::EnvironmentSetting environment;
+        std::vector<std::shared_ptr<Assets::Node>> nodes;
+        std::vector<Assets::Model> models;
+        std::vector<Assets::FMaterial> materials;
+        std::vector<Assets::LightObject> lights;
+        std::vector<Assets::AnimationTrack> tracks;
+        std::vector<Assets::Skeleton> skeletons;
+        REQUIRE(Assets::FScadLoader::LoadScadScene(map.scene, environment, nodes, models, materials, lights, tracks, skeletons));
+        auto parameter = [](const std::string& metadata, std::string_view name)
+        {
+            const auto start = metadata.find(std::string(name) + "=");
+            if (start == std::string::npos) return std::string();
+            const auto value = start + name.size() + 1;
+            return metadata.substr(value, metadata.find(';', value) - value);
+        };
+        std::map<std::string, std::pair<glm::vec3, std::string>> anchors;
+        for (const auto& node : nodes) node->RecalcTransform(true);
+        for (const auto& node : nodes)
+            if (node->GetName() == "nd_poi")
+                anchors[parameter(node->GetMetadata(), "name")] =
+                    {glm::vec3(node->WorldTransform()[3]), parameter(node->GetMetadata(), "kind")};
+        CHECK(anchors.size() == sites.size());
+        for (const auto& site : sites)
+        {
+            INFO(site.name);
+            const auto anchor = anchors.find(site.name);
+            REQUIRE(anchor != anchors.end());
+            CHECK(glm::distance(glm::vec2(anchor->second.first.x, anchor->second.first.z), site.center) < 2.0f);
+            CHECK(anchor->second.second == site.kind);
+        }
+    }
+}
+
 TEST_CASE("NextDayz training ground displays every item and scores the range", "[NextDayz][Landscape][Training]")
 {
     Assets::EnvironmentSetting environment;
@@ -502,7 +549,8 @@ TEST_CASE("NextDayz training ground displays every item and scores the range", "
     for (const NextDayz::FItemDef& item : NextDayz::AllItemDefs())
     {
         INFO("missing from the training ground displays: " << item.id);
-        CHECK(displayed.contains(std::string(item.id)));
+        // Contract parcels only exist while their contract does.
+        CHECK(displayed.contains(std::string(item.id)) != NextDayz::IsContractItem(item.id));
     }
     CHECK(sites == 12);
     CHECK(buildings == 21);

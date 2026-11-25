@@ -4,6 +4,7 @@
 #include "Application/Game/NextDayz/Inventory/LootSystem.hpp"
 #include "Application/Game/NextDayz/Player/SurvivalSystem.hpp"
 #include "Application/Game/NextDayz/World/TimeSystem.hpp"
+#include "Application/Game/NextDayz/Data/EconomyDefs.hpp"
 
 namespace NextDayz
 {
@@ -27,7 +28,6 @@ namespace NextDayz
         float autosaveSeconds = 10.0f;
     };
 
-    struct FEconomyDefs;
 
     struct FFlightState
     {
@@ -46,6 +46,42 @@ namespace NextDayz
         std::string insertionMap;     // paid landing: region id, empty = random landing
         int insertionPoint = -1;      // index into the region's landing points
         uint64_t insertionPaid = 0;   // refunded when the request is cancelled
+        // Save v7: contracts.
+        std::vector<std::string> visitedPois;   // sites entered this sortie (names), in order
+        uint64_t contractGold = 0;              // contract rewards since the last sortie ended
+        uint32_t contractsCompleted = 0;
+    };
+
+    enum class EContractState : uint8_t
+    {
+        Offered,     // on the board
+        Accepted,    // a field contract the survivor is working on
+    };
+
+    struct FContractItem
+    {
+        std::string item;
+        int count = 1;
+    };
+
+    // One contract on the board or accepted (economy design §5). Completed,
+    // expired and abandoned contracts leave the campaign; their gold and
+    // reputation are what remains.
+    struct FContract
+    {
+        uint64_t id = 0;
+        std::string templateId;
+        EContractType type = EContractType::Deliver;
+        uint32_t tier = 1;
+        std::string mapId;                  // recon / fetch
+        std::vector<std::string> targets;   // site names on mapId
+        std::vector<FContractItem> items;   // deliver
+        std::string parcel;                 // fetch: the contract_* item planted at targets[0]
+        uint64_t reward = 0;
+        std::string itemReward;
+        uint64_t offeredAt = 0;             // finished sorties when offered / accepted
+        uint64_t acceptedAt = 0;
+        EContractState state = EContractState::Offered;
     };
 
     // One finished sortie, for the field report and economy tuning (§8).
@@ -83,6 +119,13 @@ namespace NextDayz
         uint64_t traderCycle = 0;                 // cycle the stock belongs to; 0 = never stocked
         FSortieState sortie;
         std::vector<FSortieRecord> history;       // most recent last
+        // Save v7: the contract board.
+        uint64_t boardRng = 0;                    // SplitMix64 state of board rolls
+        uint64_t boardCycle = 0;                  // cycle the board was last refreshed in; 0 = never
+        uint64_t contractSerial = 0;              // last contract id handed out
+        std::vector<FContract> board;             // offered
+        std::vector<FContract> contracts;         // accepted
+        uint64_t contractsCompleted = 0;          // lifetime
 
         bool Store(Inventory& inventory, FItemInstanceId id, int count = -1);
         bool Take(Inventory& inventory, FItemInstanceId id, int count, bool wear);

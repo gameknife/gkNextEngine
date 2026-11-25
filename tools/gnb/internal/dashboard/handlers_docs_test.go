@@ -15,17 +15,16 @@ func setupDocsRepo(t *testing.T) *Server {
 	t.Helper()
 	dir := t.TempDir()
 	for path, body := range map[string]string{
-		"docs/zeta.md":                         "# Zeta\n\n根目录末尾文档。\n",
-		"docs/alpha.md":                        "---\ntitle: \"Alpha 标题\"\ncategory: guide\nstatus: 现行\nowner: NextTest\n---\n\n# Alpha\n\n第一篇文档。\n",
-		"docs/architecture/overview.md":        "# Overview\n\n架构文档。\n",
-		"docs/projects/zeta.md":                "# Project Zeta\n\n项目末尾文档。\n",
-		"docs/projects/guide.md":               "# Guide\n\n项目文档。\n",
-		"docs/projects/brotato-3d/index.md":    "# Brotato\n\n子目录文档。\n",
-		"docs/gallery/ignore.avif":             "not-markdown",
-		"docs/projects/ignore.txt":             "ignore me",
-		"src/example.hpp":                      "#pragma once\n\nstruct Example\n{\n    int value;\n};\n",
-		"assets/binary.dat":                    "binary\x00data",
-		".spec/TODO.md":                        "# TODO\n\n## Milestone: 测试  <!-- status: active -->\n\n### 下一步\n\n(暂无)\n\n### 待规划\n\n(暂无)\n\n### 最近完成\n\n(暂无)\n",
+		"docs/zeta.md":                      "# Zeta\n\n根目录末尾文档。\n",
+		"docs/alpha.md":                     "---\ntitle: \"Alpha 标题\"\ncategory: guide\nstatus: 现行\nowner: NextTest\n---\n\n# Alpha\n\n第一篇文档。\n",
+		"docs/architecture/overview.md":     "# Overview\n\n架构文档。\n",
+		"docs/projects/zeta.md":             "# Project Zeta\n\n项目末尾文档。\n",
+		"docs/projects/guide.md":            "# Guide\n\n项目文档。\n",
+		"docs/projects/brotato-3d/index.md": "# Brotato\n\n子目录文档。\n",
+		"docs/gallery/ignore.avif":          "not-markdown",
+		"docs/projects/ignore.txt":          "ignore me",
+		"src/example.hpp":                   "#pragma once\n\nstruct Example\n{\n    int value;\n};\n",
+		"assets/binary.dat":                 "binary\x00data",
 	} {
 		full := filepath.Join(dir, filepath.FromSlash(path))
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
@@ -418,4 +417,3 @@ func TestHandleIndexDirectDocsTab(t *testing.T) {
 		t.Fatalf("handleIndex with tab=docs should render meta bar:\n%s", body)
 	}
 }
-

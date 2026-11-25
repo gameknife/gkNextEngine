@@ -142,7 +142,6 @@ func main() {
 	root.AddCommand(newSmokeCommand(ctx))
 	root.AddCommand(newCleanCommand(ctx))
 	root.AddCommand(newInstallCommand(ctx))
-	root.AddCommand(newTodoCommand(ctx))
 	root.AddCommand(newDashboardCommand(ctx))
 	root.AddCommand(newLocCommand(ctx))
 	root.AddCommand(newTyposCommand(ctx))

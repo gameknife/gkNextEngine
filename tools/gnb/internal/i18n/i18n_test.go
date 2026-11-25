@@ -51,10 +51,10 @@ func TestTranslateFallbackAndFormat(t *testing.T) {
 	if got := Translate(LangZh, "nav.settings"); got != "设置" {
 		t.Fatalf("zh nav.settings = %q", got)
 	}
-	if got := Translate(LangEn, "todo.recent_count", 3); got != "3 items" {
+	if got := Translate(LangEn, "validation.steps", 3); got != "3 steps" {
 		t.Fatalf("format en = %q", got)
 	}
-	if got := Translate(LangZh, "todo.recent_count", 3); got != "3 条" {
+	if got := Translate(LangZh, "validation.steps", 3); got != "3 步" {
 		t.Fatalf("format zh = %q", got)
 	}
 	if got := Translate(LangEn, "does.not.exist"); got != "does.not.exist" {

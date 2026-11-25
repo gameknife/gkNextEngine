@@ -438,7 +438,7 @@ tools/gnb/                   # Project CLI (Go) — see "gnb" section below
 ## gnb Dashboard
 
 `gnb dashboard` 默认启动 Wails 原生窗口（Windows/macOS）；普通 htmx 请求由 Wails AssetServer 直接处理，Build/Run/Test 和 Chat 的流式响应走随机 loopback 端口。`--browser` 可显式使用系统浏览器，`--no-open` 只启动 server。**Linux 不构建 Wails 桌面窗口**（无 libgtk/webkit 依赖，CGO 关闭）：`gnb`/`gnb dashboard` 直接回退到系统浏览器模式，`gnb dashboard --no-open` 为纯 CLI 模式（用 `curl 127.0.0.1:7777` 交互）。提供 tabs：
-- **TODO**：可视化 `.spec/TODO.md` 的工作流操作（增删改、move、spec 创建、标 done/blocked）
+- **Docs**（默认页）：浏览、搜索、编辑 `docs/` 下的 Markdown
 - **Build / Run / Test**：触发 cmake build、运行 target、Catch2 测试，SSE 实时流日志
 - **Git**：分支管理、stash、commits、本地改动 stage/unstage、LLM 生成 commit message
 - **Chat**：通过统一 AI provider/profile router 对话（LocalLlama 可按需启动），支持流式与多会话归档
@@ -469,43 +469,17 @@ commit-msg prompt 内容包含：模式（staged / working tree）、文件清�
 
 引擎层 `NextAI::FAIService` 通过 AI bridge 复用 gnb 的 provider/profile；选择 LocalLlama 时共享同一个 llama-server，无需独立模型进程。NextAI 只提供 Chat、Structured Output、stream、session/cancel/usage 等轻量能力；SCAD、MagicaLego、StudioSim、AirportSim 的 prompt、领域校验、一次修复和 deterministic fallback 由各产品拥有。Dashboard 默认走普通 Chat，仅显式 `Tool Call Smoke` 使用固定内存 fixture；不得向普通请求附加 repo/Git/Shell/Scene 工具。`gnb llm serve --model <id>` 切模型后由 gnb 路由新请求，无需重启应用。
 
-## Spec Workflow
+## 工作流
 
-**完整规范见 [.spec/README.md](.spec/README.md)**。下面是 AGENT 必须遵守的核心规则，规范与本节不一致以 README 为准。
+工作由对话驱动：用户在对话里提出的要求就是授权，仓库里没有单独的任务队列。
 
-文件位置：
-- 任务列表：`.spec/TODO.md`
-- 任务详细规格（可选，仅复杂任务）：`.spec/specs/<id>.md`
-- 完成报告（一任务一文件）：`.spec/journal/<id>.md`
-- 卡住提问（一任务一文件）：`.spec/blockers/<id>.md`
-- 归档：`.spec/ARCHIVE.md`
-
-执行规则：
-
-1. 用户触发"启动交互式工作流"时，先读取 `.spec/TODO.md` 了解当前里程碑、任务列表和"最近完成"数量
-2. 主循环通过 `gnb todo next --wait --timeout 590s --json` 获取任务：
-   - 若"下一步"段已有 `[ ]` 任务，命令会立即返回第一个任务
-   - 若当前没有任务，命令会等待 `.spec/TODO.md` 修改；590 秒内出现任务就立即返回
-   - 若等待 590 秒仍没有任务，命令返回 `found: false` 并退出；AGENT 必须立即再次调用同一命令继续等待，不要自己 sleep、不要输出总结、不要结束 turn
-3. 若命令返回 `milestone_status: "done"`，退出工作流
-4. 若命令返回 `found: true`：若 `.spec/specs/<id>.md` 存在，先读它再执行
-5. 执行任务
-6. 完成后：
-   - 在 TODO.md 把该任务的 `[ ]` 改为 `[x]`
-   - 行末追加 ` → journal/<id>.md (YYYY-MM-DD)`
-   - 写 `.spec/journal/<id>.md`（frontmatter + 做了什么 + 改动文件 + 风险/遗留）
-7. 回到步骤 2，继续下一个 `[ ]` 任务
-8. **唯一退出条件**：里程碑状态被改为 `done`。除此之外（包括"下一步"段为空、所有任务已完成但里程碑未 done、命令 590 秒无任务返回），都必须继续调用步骤 2 的命令轮询
-
-特殊情况：
-- 任务歧义无法判断时：写 `.spec/blockers/<id>.md`，任务状态改 `[!]`，**跳过该任务继续做下一个**，不要瞎猜
-- 启动工作流时若"最近完成"段超过 10 条：在首次回复中提醒用户运行 `gnb todo archive`，但不要自己归档
-- 用户在工作流期间修改 TODO.md：下一轮重扫时会发现
-
-边界：
-- AGENT **可改**：TODO.md 中任务的状态字符、行末 journal 链接；`journal/`、`blockers/` 下的文件
-- AGENT **不可改**：TODO.md 中任务标题/ID/优先级/类型/所属段落；`specs/` 下的文件；`ARCHIVE.md`；"待规划"段任何
-
-任务
-- 不要建立自动化任务（hooks、scheduled tasks 等）
-- 不要调用其他 agent 处理任务
+- **小改动**：直接做，按上文 "Verification After Changes" 验证，然后报告。
+- **跨多次提交的大工作**：
+  1. 先写或更新 design 文档，记录仍然成立的边界、契约和决策。
+  2. 需要分步执行时写 plan（`docs/plans/` 或 `docs/projects/<项目>/`）：每项有编号、完成标准，以及合入前要跑的构建、测试和验证脚本。plan 只写还没做完的部分。
+  3. 一步一个提交。提交信息带上任务编号（例如 `nextdayz: ... (W8-3)`），并写明跑过哪些检查。
+  4. 每完成一步就更新 plan；全部完成后，把仍有价值的结论并入 design 或 guide，再删除 plan。
+- **有歧义时**问用户，不要猜。
+- **历史**只看 Git（提交信息和 diff），不另写过程日志。
+- 不要建立自动化任务（hooks、scheduled tasks 等）。
+- 不要调用其他 agent 处理任务。

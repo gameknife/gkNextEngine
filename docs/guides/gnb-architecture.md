@@ -20,8 +20,7 @@ last_updated: 2026-09-12
 | `config`, `platform`, `cmakerun`, `runner` | 仓库配置、平台路径、CMake 和进程运行 |
 | `vcpkg`, `fetcher`, `paks`, `packager` | 依赖、可选资产与发布包 |
 | `android`, `ios` | 移动平台入口 |
-| `spec` | `.spec` TODO/archive/journal 解析与更新 |
-| `dashboard` | TODO、Build/Run/Test、验证中心、Git、Chat、LOC 等本地 UI 与 streaming jobs |
+| `dashboard` | Docs、Build/Run/Test、验证中心、Git、Chat、LOC 等本地 UI 与 streaming jobs |
 | `validate` | `.agentscript.json` 编排、断言和报告 |
 | `validationstore` | 独立持久化验证运行、脚本快照、日志/截图索引和人工审阅 |
 | `remoteplay` | `gnb remote` 参数与访问 URL |

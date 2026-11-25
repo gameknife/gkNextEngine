@@ -207,7 +207,6 @@ func setupLocRepo(t *testing.T) *Server {
 		"src/Engine/Runtime/Reflection/Meta.cpp":         "int c = 3;\n",
 		"src/Application/Game/Flappy/main.cpp":           "int game = 1;\n",
 		"src/ThirdParty/lib/foo.cpp":                     "int third = 1;\n",
-		".spec/TODO.md":                                  "# TODO\n\n## Milestone: 测试  <!-- status: active -->\n\n### 下一步\n\n(暂无)\n\n### 待规划\n\n(暂无)\n\n### 最近完成\n\n(暂无)\n",
 	} {
 		full := filepath.Join(dir, filepath.FromSlash(path))
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {

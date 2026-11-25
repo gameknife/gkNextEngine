@@ -9,15 +9,15 @@ import (
 func TestProviderSelectorIsOnlyRenderedInChatTab(t *testing.T) {
 	s := setupDocsRepo(t)
 
-	todoReq := httptest.NewRequest("GET", "/tab/todo", nil)
-	todoReq.SetPathValue("kind", "todo")
-	todoRec := httptest.NewRecorder()
-	s.handleTab(todoRec, todoReq)
-	if todoRec.Code != 200 {
-		t.Fatalf("todo status = %d: %s", todoRec.Code, todoRec.Body.String())
+	docsReq := httptest.NewRequest("GET", "/tab/docs", nil)
+	docsReq.SetPathValue("kind", "docs")
+	docsRec := httptest.NewRecorder()
+	s.handleTab(docsRec, docsReq)
+	if docsRec.Code != 200 {
+		t.Fatalf("docs status = %d: %s", docsRec.Code, docsRec.Body.String())
 	}
-	if strings.Contains(todoRec.Body.String(), `id="chat-provider"`) {
-		t.Fatal("TODO tab unexpectedly contains the chat provider selector")
+	if strings.Contains(docsRec.Body.String(), `id="chat-provider"`) {
+		t.Fatal("docs tab unexpectedly contains the chat provider selector")
 	}
 
 	chatReq := httptest.NewRequest("GET", "/tab/chat", nil)

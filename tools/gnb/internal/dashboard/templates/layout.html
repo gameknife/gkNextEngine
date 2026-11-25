@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>gnb dashboard — {{.Milestone}}</title>
+<title>gnb dashboard — {{.RepoName}}</title>
 <script>
   window.GNB_LANG = {{printf "%q" (Lang)}};
   window.GNB_I18N = {{I18nJSON}};
@@ -177,25 +177,6 @@
   .brand .logo svg { width: 15px; height: 15px; }
   .brand .name { font-size: 13.5px; font-weight: 650; letter-spacing: 0.2px; }
   .brand .chevron { color: var(--fg-dim); display: inline-flex; }
-  .header-tab {
-    display: flex; align-items: center; gap: 7px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    font-size: 12px;
-    color: var(--fg-mute);
-  }
-  .header-tab .pill {
-    padding: 2.5px 9px;
-    border-radius: 999px;
-    font-size: 10.5px;
-    font-weight: 600;
-    background: var(--green-soft);
-    color: var(--green);
-    border: 1px solid rgba(34, 197, 94, 0.3);
-    text-transform: lowercase;
-  }
-  .header-tab .pill.done { background: rgba(107, 115, 132, 0.12); color: var(--fg-mute); border-color: var(--border); }
   .header-workspace {
     color: var(--fg-dim);
     font-size: 11.5px;
@@ -511,14 +492,6 @@
   }
 
   /* Base column & grid structures */
-  .tab-todo {
-    display: grid;
-    grid-template-columns: 280px minmax(0, 1fr) minmax(0, 1.1fr);
-    gap: 0;
-    padding: 0;
-    height: 100%;
-    overflow: hidden;
-  }
   .tab-jobs {
     display: grid;
     grid-template-columns: 290px minmax(0, 1fr);
@@ -1861,7 +1834,7 @@
     font-size: 11.5px;
   }
 
-  /* ----- TODO column: sections ----- */
+  /* ----- Hint banner ----- */
   .archive-hint {
     background: rgba(234, 179, 8, 0.08);
     color: var(--yellow);
@@ -1877,50 +1850,7 @@
     font-size: 11.5px;
   }
 
-  /* ----- Task item ----- */
-  .task-list { display: flex; flex-direction: column; gap: 1px; }
-  .task {
-    display: flex; align-items: center; gap: 12px;
-    height: 36px;
-    min-height: 36px;
-    padding: 0 10px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
-    position: relative;
-  }
-  .task:hover { background: var(--bg-card-hover); border-color: var(--border-strong); }
-  .task.selected {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 1px var(--accent-ring);
-    background: var(--bg-card-hover);
-  }
-  .task .dot {
-    flex: 0 0 auto;
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    background: var(--fg-dim);
-  }
-  .task.pending .dot { background: var(--green); box-shadow: 0 0 8px rgba(34, 197, 94, 0.5); }
-  .task.doing   .dot { background: var(--yellow); box-shadow: 0 0 8px rgba(234, 179, 8, 0.5); }
-  .task.done    .dot { background: var(--fg-dim); box-shadow: none; }
-  .task.blocked .dot { background: var(--red); box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); }
-  .task .backlog-dot { background: var(--accent); box-shadow: 0 0 8px rgba(59, 130, 246, 0.5); }
 
-  .task .body { flex: 1; min-width: 0; overflow: hidden; }
-  .task .head {
-    display: flex; align-items: center; gap: 8px;
-    flex-wrap: nowrap;
-    min-width: 0;
-    overflow: hidden;
-  }
-  .task .tid {
-    color: var(--fg-mute);
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-  }
   .tag {
     display: inline-block;
     padding: 1px 7px;
@@ -1942,57 +1872,7 @@
   .tag.type-REFACTOR { color: #f59e0b; border-color: rgba(245, 158, 11, 0.3); background: rgba(245, 158, 11, 0.08); }
   .tag.type-DOC      { color: #38bdf8; border-color: rgba(56, 189, 248, 0.3); background: rgba(56, 189, 248, 0.08); }
 
-  .task .title {
-    color: var(--fg);
-    font-size: 13.5px;
-    font-weight: 500;
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .task.done .title { color: var(--fg-mute); }
 
-  .task .menu-btn {
-    width: 28px; height: 28px;
-    border-radius: 6px;
-    background: transparent;
-    border: 0;
-    color: var(--fg-dim);
-    display: inline-flex; align-items: center; justify-content: center;
-    cursor: pointer;
-    visibility: hidden;
-  }
-  .task:hover .menu-btn { visibility: visible; }
-  .task .menu-btn:hover { background: var(--bg-input); color: var(--fg); }
-  .task .menu { position: relative; }
-  .task .menu-dropdown {
-    position: absolute;
-    right: 0; top: 32px;
-    background: var(--bg-card);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
-    padding: 4px;
-    display: none;
-    min-width: 110px;
-    z-index: 10;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  }
-  .task .menu.open .menu-dropdown { display: block; }
-  .menu-dropdown button {
-    display: block; width: 100%;
-    text-align: left;
-    background: transparent;
-    border: 0;
-    color: var(--fg);
-    padding: 6px 10px;
-    border-radius: 4px;
-    font-size: 12.5px;
-    cursor: pointer;
-  }
-  .menu-dropdown button:hover { background: var(--bg-card-hover); }
-  .menu-dropdown button.danger { color: var(--red); }
 
   .empty-row {
     color: var(--fg-dim);
@@ -2004,25 +1884,6 @@
     border-radius: var(--radius-md);
   }
 
-  /* ----- Journal feed ----- */
-  .journal-list { display: flex; flex-direction: column; }
-  .journal-item {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 12px 4px;
-    border-bottom: 1px solid var(--border);
-    cursor: pointer;
-  }
-  .journal-item:last-child { border-bottom: 0; }
-  .journal-item:hover { background: var(--bg-card-hover); }
-  .journal-item .left { min-width: 0; }
-  .journal-item .meta-line {
-    display: flex; gap: 10px;
-    color: var(--fg-mute);
-    font-size: 11px;
-    font-family: var(--font-mono);
-  }
-  .journal-item .title { color: var(--fg); font-size: 13px; margin-top: 4px; }
-  .journal-item .chev { color: var(--fg-dim); }
 
   /* ----- Detail panel ----- */
   .detail-empty {
@@ -2223,11 +2084,6 @@
   }
   [data-md] th { background: var(--bg-card); color: var(--fg); font-weight: 600; }
 
-  /* ----- Inline edit form (task row) ----- */
-  .task-edit { padding: 14px; background: var(--bg-card); border: 1px solid var(--accent); box-shadow: 0 0 0 1px var(--accent-ring); border-radius: var(--radius-md); }
-  .task-edit .row { display: flex; gap: 8px; margin-top: 8px; }
-  .task-edit .row .select { flex: 1; }
-  .task-edit .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
   .btn-secondary {
     background: var(--bg-card-hover);
     color: var(--fg);
@@ -2306,27 +2162,8 @@
     height: 14px;
   }
 
-  /* Drag-and-drop for tasks in 下一步 / 待规划. */
-  .task[draggable="true"] { cursor: grab; }
-  .task[draggable="true"]:active { cursor: grabbing; }
-  .task.dragging { opacity: 0.45; }
-  .task.drop-before { box-shadow: 0 -2px 0 0 var(--accent) inset, 0 -2px 0 0 var(--accent); }
-  .task.drop-after  { box-shadow: 0 2px 0 0 var(--accent) inset, 0 2px 0 0 var(--accent); }
-  .task-list-droppable.drop-target {
-    background: rgba(99, 102, 241, 0.06);
-    border-radius: var(--radius-md);
-    outline: 1px dashed rgba(99, 102, 241, 0.4);
-    outline-offset: 2px;
-  }
-  .empty-row.drop-target { color: var(--accent); border: 1px dashed var(--accent); border-radius: var(--radius-md); }
 
-  /* Spec creation form on the detail panel. */
-  .spec-create .file-card-head .hint {
-    margin-left: 8px;
-    color: var(--muted);
-    font-size: 11.5px;
-    font-weight: 400;
-  }
+  /* Inline markdown edit form (docs tab). */
   .spec-form { padding: 8px 12px 12px 12px; }
   .spec-form textarea {
     width: 100%;
@@ -2356,7 +2193,6 @@
 
   /* ----- Unified Workspace Flat Layout (All Tabs) ----- */
   #tab-content > .tab-pane,
-  #tab-content .tab-todo,
   #tab-content .tab-jobs,
   #tab-content .tab-build-run,
   #tab-content .tab-chat,
@@ -2381,7 +2217,6 @@
   }
 
   /* All sidebars / column 1 in multi-column layouts */
-  .tab-todo > aside,
   .tab-jobs > aside,
   .tab-build-run > aside,
   .chat-layout > aside,
@@ -2400,7 +2235,6 @@
   }
 
   /* All middle columns in 3-column layouts */
-  .tab-todo > section:first-of-type,
   .tab-git .git-commits-col,
   .validation-list-col,
   .docs-center,
@@ -2414,7 +2248,6 @@
   }
 
   /* All main/detail content areas */
-  .tab-todo > :last-child,
   .tab-jobs > :last-child,
   .tab-build-run > :last-child,
   .chat-layout > :last-child,
@@ -2457,8 +2290,6 @@
   #tab-content .loc-col { gap: 0; }
   /* Unified selection treatment: neutral raised row, rounded aesthetic. */
   #tab-content .target-item,
-  #tab-content .task,
-  #tab-content .journal-item,
   #tab-content .branch-row,
   #tab-content .chat-session-item,
   #tab-content .docs-file-item,
@@ -2470,8 +2301,6 @@
     transition: background 0.14s ease, color 0.14s ease;
   }
   #tab-content .target-item,
-  #tab-content .task,
-  #tab-content .journal-item,
   #tab-content .branch-row,
   #tab-content .chat-session-item,
   #tab-content .docs-file-item,
@@ -2479,7 +2308,6 @@
     margin: 2px 0;
   }
   #tab-content .target-item.selected,
-  #tab-content .task.selected,
   #tab-content .branch-row.current,
   #tab-content .chat-session-item.active,
   #tab-content .docs-file-item.active,
@@ -2494,7 +2322,6 @@
     color: #f2f3f4;
   }
   #tab-content .target-item.selected:hover,
-  #tab-content .task.selected:hover,
   #tab-content .branch-row.current:hover,
   #tab-content .chat-session-item.active:hover,
   #tab-content .docs-file-item.active:hover,
@@ -2575,8 +2402,6 @@
   .tab-item,
   .card-title,
   #tab-content .target-item .name,
-  #tab-content .task .title,
-  #tab-content .journal-item .title,
   #tab-content .branch-row .name,
   #tab-content .chat-session-title,
   #tab-content .chat-head .title,
@@ -2594,7 +2419,6 @@
   #tab-content .breadcrumb,
   #tab-content .docs-updated,
   #tab-content .target-item .tag-mini,
-  #tab-content .task .tid,
   #tab-content .info-row .k,
   .header-meta,
   .header-workspace,
@@ -2650,15 +2474,7 @@
     </span>
   </div>
 
-  <div class="header-tab">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <rect x="3" y="4" width="18" height="16" rx="2"/>
-      <path d="M3 10h18M8 4v4M16 4v4"/>
-    </svg>
-    <span>{{T "header.workflow"}}</span>
-    <span class="pill {{.Status}}">{{.Status}}</span>
-  </div>
-  <div class="header-workspace">{{T "header.workspace"}} <strong>{{.Milestone}}</strong></div>
+  <div class="header-workspace">{{T "header.workspace"}} <strong>{{.RepoName}}</strong></div>
 
   <div class="header-meta">
     <div class="item">
@@ -2692,10 +2508,6 @@
 <main>
 
   <nav class="tab-strip">
-    <button class="tab-item {{if eq .ActiveTab "todo"}}active{{end}}" type="button" data-tab="todo">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-      <span>{{T "nav.todo"}}</span>
-    </button>
     <button class="tab-item {{if eq .ActiveTab "docs"}}active{{end}}" type="button" data-tab="docs">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg>
       <span>{{T "nav.docs"}}</span>
@@ -2745,9 +2557,7 @@
   <div id="tab-content">
     <div id="tab-loading-bar" class="tab-loading-bar"></div>
     <div class="tab-pane active" data-tab-pane="{{.ActiveTab}}">
-    {{if eq .ActiveTab "docs"}}
-      {{template "tab_docs" .}}
-    {{else if eq .ActiveTab "build"}}
+    {{if eq .ActiveTab "build"}}
       {{template "tab_build" .}}
     {{else if eq .ActiveTab "remote"}}
       {{template "tab_remote" .}}
@@ -2768,7 +2578,7 @@
     {{else if eq .ActiveTab "settings"}}
       {{template "tab_settings" .}}
     {{else}}
-      {{template "tab_todo" .}}
+      {{template "tab_docs" .}}
     {{end}}
     </div>
   </div>
@@ -3583,15 +3393,6 @@
     input.focus();
     input.select();
   });
-  // Highlight the active task row when a detail request fires (skip the row's
-  // own action buttons/inline-edit triggers, which set hx-target to #todo-panel).
-  document.body.addEventListener('htmx:configRequest', (e) => {
-    const el = e.detail.elt;
-    if (el && el.classList && el.classList.contains('task')) {
-      document.querySelectorAll('.task.selected').forEach(t => t.classList.remove('selected'));
-      el.classList.add('selected');
-    }
-  });
   let validationStepsScrollTop = 0;
   let validationStepsRefreshPending = false;
   document.body.addEventListener('htmx:beforeRequest', (e) => {
@@ -3612,12 +3413,6 @@
     const root = currentSwapRoot(e.detail.target);
     initAllLogPanels(root);
     initPaneComponents(root, getTabKind());
-    const sel = document.querySelector('[data-selected-id]')?.dataset?.selectedId;
-    if (sel) {
-      document.querySelectorAll('.task').forEach(t => {
-        if (t.dataset.id === sel) t.classList.add('selected');
-      });
-    }
   });
   // Initial pass for any server-rendered markdown on first load.
   document.addEventListener('DOMContentLoaded', () => {
@@ -5025,101 +4820,6 @@
     if (activePane) initPaneComponents(activePane, activePane.dataset.tabPane);
   });
 
-  // When a delete reply comes back the server sends HX-Trigger: clear-detail
-  // so the right-hand detail panel doesn't keep rendering a now-gone task.
-  document.body.addEventListener('clear-detail', () => {
-    const panel = document.getElementById('detail-panel');
-    if (panel) panel.innerHTML = '<div class="card detail-empty">' + t('todo.empty_detail') + '</div>';
-    document.querySelectorAll('.task.selected').forEach(t => t.classList.remove('selected'));
-  });
-
-  // ----- Task drag-and-drop (下一步 / 待规划) -------------------------
-  // Native HTML5 D&D. The dragged task ID is captured on dragstart, and the
-  // drop handler computes `to` (target section) / `before` / `after` (anchor)
-  // from where the pointer landed, then POSTs to /task/{id}/move via htmx
-  // so the panel re-renders with the freshly parsed TODO.md.
-  let dragTaskId = null;
-  let dragSourceSection = null;
-  function clearDropHints() {
-    document.querySelectorAll('.task.drop-before,.task.drop-after').forEach(el => {
-      el.classList.remove('drop-before', 'drop-after');
-    });
-    document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
-  }
-  document.body.addEventListener('dragstart', (e) => {
-    const task = e.target.closest('.task[draggable="true"]');
-    if (!task) return;
-    dragTaskId = task.dataset.id;
-    dragSourceSection = task.dataset.section || null;
-    task.classList.add('dragging');
-    if (e.dataTransfer) {
-      e.dataTransfer.effectAllowed = 'move';
-      // Firefox requires setData to actually fire drag events.
-      try { e.dataTransfer.setData('text/plain', dragTaskId); } catch (_) {}
-    }
-  });
-  document.body.addEventListener('dragend', () => {
-    document.querySelectorAll('.task.dragging').forEach(t => t.classList.remove('dragging'));
-    clearDropHints();
-    dragTaskId = null;
-    dragSourceSection = null;
-  });
-  document.body.addEventListener('dragover', (e) => {
-    if (!dragTaskId) return;
-    const list = e.target.closest('.task-list-droppable, .empty-row.task-list-droppable');
-    const task = e.target.closest('.task[data-section]');
-    if (!list && !task) return;
-    e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-    clearDropHints();
-    if (task && task.dataset.id !== dragTaskId) {
-      const rect = task.getBoundingClientRect();
-      if (e.clientY < rect.top + rect.height / 2) {
-        task.classList.add('drop-before');
-      } else {
-        task.classList.add('drop-after');
-      }
-    } else if (list) {
-      list.classList.add('drop-target');
-    }
-  });
-  document.body.addEventListener('dragleave', (e) => {
-    // Only clear hints when leaving the whole drop region; relatedTarget is
-    // null when the pointer exits the window, and not contained when crossing
-    // between sibling rows the browser already cleared via dragover.
-    if (!e.relatedTarget) clearDropHints();
-  });
-  document.body.addEventListener('drop', (e) => {
-    if (!dragTaskId) return;
-    const task = e.target.closest('.task[data-section]');
-    const list = e.target.closest('.task-list-droppable, .empty-row.task-list-droppable');
-    if (!task && !list) return;
-    e.preventDefault();
-    let toSection = '', before = '', after = '';
-    if (task && task.dataset.id !== dragTaskId) {
-      const rect = task.getBoundingClientRect();
-      if (e.clientY < rect.top + rect.height / 2) before = task.dataset.id;
-      else after = task.dataset.id;
-    } else if (list) {
-      toSection = list.dataset.section || '';
-    } else {
-      clearDropHints();
-      return;
-    }
-    const id = dragTaskId;
-    clearDropHints();
-    dragTaskId = null;
-    dragSourceSection = null;
-    const values = {};
-    if (toSection) values.to = toSection;
-    if (before) values.before = before;
-    if (after) values.after = after;
-    htmx.ajax('POST', '/task/' + id + '/move', {
-      target: '#todo-panel',
-      swap: 'innerHTML',
-      values: values,
-    });
-  });
 </script>
 
 </body>

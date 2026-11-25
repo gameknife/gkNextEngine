@@ -9,7 +9,7 @@ last_updated: 2026-07-17
 
 # NextAI 产品化边界
 
-NextAI 是轻量 LLM 接入模块，不是通用 Agent SDK。2026-07-15 的重构已删除 Editor 场景 Agent、通用 Agent Loop/Tool Registry、repo/Git/Shell 工具与 Dashboard coding-agent 路线；不要根据已归档的 `#00017` 至 `#00023` 阶段记录恢复它们。
+NextAI 是轻量 LLM 接入模块，不是通用 Agent SDK。2026-07-15 的重构已删除 Editor 场景 Agent、通用 Agent Loop/Tool Registry、repo/Git/Shell 工具与 Dashboard coding-agent 路线；不要根据 Git 历史中的旧阶段记录恢复它们。
 
 ## 当前职责
 

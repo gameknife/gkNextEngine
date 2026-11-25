@@ -71,7 +71,6 @@ GNB_LANG=en ./gnb.sh doctor
 
 ```bash
 ./gnb.sh dashboard
-./gnb.sh todo list
 ./gnb.sh loc
 ./gnb.sh graph
 ./gnb.sh paks list

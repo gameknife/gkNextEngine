@@ -17,7 +17,7 @@ import (
 )
 
 func TestValidationTabRendersRunsAndFailureEvidence(t *testing.T) {
-	s := setupTODORepo(t)
+	s := newTestServer(t)
 	s.validation = validationstore.NewAt(filepath.Join(s.opts.RepoRoot, "validation_runs"))
 	run, err := s.validation.Create(validationstore.Record{
 		Name: "smoke", Kind: "validate", Target: "gkNextRenderer", Status: validationstore.StatusFailed,
@@ -46,7 +46,7 @@ func TestValidationTabRendersRunsAndFailureEvidence(t *testing.T) {
 }
 
 func TestValidationReviewHandlerLeavesRunStatusUntouched(t *testing.T) {
-	s := setupTODORepo(t)
+	s := newTestServer(t)
 	s.validation = validationstore.NewAt(filepath.Join(s.opts.RepoRoot, "validation_runs"))
 	run, err := s.validation.Create(validationstore.Record{Name: "shot", Kind: "shot", Status: validationstore.StatusPassed}, nil)
 	if err != nil {
@@ -77,7 +77,7 @@ func TestValidationTemplatesParseWithValidationTab(t *testing.T) {
 }
 
 func TestBuildValidationScriptsDiscoversRunnableAndUnbuiltScripts(t *testing.T) {
-	s := setupTODORepo(t)
+	s := newTestServer(t)
 	s.opts.Preset = "test"
 	scriptRoot := filepath.Join(s.opts.RepoRoot, "assets", "agentscripts")
 	if err := os.MkdirAll(scriptRoot, 0o755); err != nil {
@@ -127,7 +127,7 @@ func TestBuildValidationScriptsDiscoversRunnableAndUnbuiltScripts(t *testing.T) 
 }
 
 func TestValidationRunScriptHandlerStartsGNB(t *testing.T) {
-	s := setupTODORepo(t)
+	s := newTestServer(t)
 	s.opts.Preset = "test"
 	s.opts.GNBPath = "/usr/bin/true"
 	scriptRoot := filepath.Join(s.opts.RepoRoot, "assets", "agentscripts")
@@ -163,7 +163,7 @@ func TestValidationRunScriptHandlerStartsGNB(t *testing.T) {
 }
 
 func TestValidationStepsHandlerStopsPollingAfterRunFinishes(t *testing.T) {
-	s := setupTODORepo(t)
+	s := newTestServer(t)
 	s.validation = validationstore.NewAt(filepath.Join(s.opts.RepoRoot, "validation_runs"))
 	run, err := s.validation.Create(validationstore.Record{
 		Name: "running", Kind: "validate", Target: "gkNextRenderer", Status: validationstore.StatusRunning,

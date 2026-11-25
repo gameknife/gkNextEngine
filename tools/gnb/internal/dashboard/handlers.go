@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -15,15 +16,12 @@ import (
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/loc"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/platform"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/remoteplay"
-	"github.com/gameknife/gknextrenderer/tools/gnb/internal/spec"
 )
 
 func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.handleIndex)
 	mux.HandleFunc("GET /remote/client", s.handleRemoteClient)
-	mux.HandleFunc("GET /todo-panel", s.handleTodoPanel)
-	mux.HandleFunc("POST /todo/cleanup", s.handleTodoCleanup)
 	mux.HandleFunc("POST /docs/save", s.handleDocsSave)
 	mux.HandleFunc("GET /docs/source", s.handleDocsSource)
 	mux.HandleFunc("GET /graph/data", s.handleGraphData)
@@ -33,17 +31,6 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /validation/run-script", s.handleValidationRunScript)
 	mux.HandleFunc("POST /validation/{id}/review", s.handleValidationReview)
 	mux.HandleFunc("POST /validation/{id}/rerun", s.handleValidationRerun)
-	mux.HandleFunc("GET /task/{id}", s.handleTaskDetail)
-	mux.HandleFunc("POST /task/add", s.handleTaskAdd)
-	mux.HandleFunc("POST /task/{id}/done", s.handleTaskDone)
-	mux.HandleFunc("POST /task/{id}/block", s.handleTaskBlock)
-	mux.HandleFunc("GET /task/{id}/edit", s.handleTaskEditForm)
-	mux.HandleFunc("POST /task/{id}/edit", s.handleTaskEdit)
-	mux.HandleFunc("POST /task/{id}/move", s.handleTaskMove)
-	mux.HandleFunc("GET /task/{id}/spec/edit", s.handleTaskSpecEditForm)
-	mux.HandleFunc("POST /task/{id}/spec", s.handleTaskCreateSpec)
-	mux.HandleFunc("POST /task/{id}/spec/save", s.handleTaskSpecSave)
-	mux.HandleFunc("POST /task/{id}/delete", s.handleTaskDelete)
 	mux.HandleFunc("GET /tab/{kind}", s.handleTab)
 	mux.HandleFunc("GET /settings/lang", s.handleSetLang)
 	mux.HandleFunc("POST /settings/lang", s.handleSetLang)
@@ -88,24 +75,14 @@ func logRequests(next http.Handler) http.Handler {
 
 // ----- view models ----------------------------------------------------
 
-type sectionVM struct {
-	Kind    spec.SectionKind
-	Heading string
-	Tasks   []spec.Task
-}
-
 type indexVM struct {
 	RepoRoot     string
+	RepoName     string
 	StreamBase   string
-	Milestone    string
-	Status       string
-	Sections     []sectionVM
-	Journals     []journalSummary
 	Version      string
 	Preset       string
 	OS           string
-	RecentSize   int
-	ActiveTab    string // "todo" | "docs" | "build" | "remote" | "test" | "git" | "chat" | "loc" | "paks" | "graph" | "validation" | "settings"
+	ActiveTab    string // "docs" | "build" | "remote" | "test" | "git" | "chat" | "loc" | "paks" | "graph" | "validation" | "settings"
 	BuildVM      buildRunVM
 	RemoteVM     remoteVM
 	TestVM       testVM
@@ -289,65 +266,12 @@ const (
 	maxChatMaxTokens     = 32768
 )
 
-type journalSummary struct {
-	ID      int
-	Title   string
-	Date    string
-	Type    string
-	Section string
-}
-
-type taskDetailVM struct {
-	Task        spec.Task
-	SectionName string
-	SpecBody    string
-	JournalBody string
-	BlockerBody string
-	HasSpec     bool
-	HasJournal  bool
-	HasBlocker  bool
-	EditingSpec bool
-}
-
-const recentDisplayLimit = 10
-
-func (s *Server) buildIndex() (indexVM, error) {
-	doc, err := spec.Parse(spec.TODOPath(s.opts.RepoRoot))
-	if err != nil {
-		return indexVM{}, err
-	}
-	vm := indexVM{
-		RepoRoot:   s.opts.RepoRoot,
-		StreamBase: s.streamBaseURL,
-		Milestone:  doc.Milestone,
-		Status:     doc.MilestoneStatus,
-		Version:    s.opts.Version,
-		Preset:     s.opts.Preset,
-		OS:         runtime.GOOS + "/" + runtime.GOARCH,
-		ActiveTab:  "todo",
-	}
-	for _, kind := range []spec.SectionKind{spec.SectionNext, spec.SectionBacklog, spec.SectionRecent} {
-		tasks := doc.SectionTasks(kind)
-		if kind == spec.SectionRecent && len(tasks) > recentDisplayLimit {
-			tasks = append([]spec.Task(nil), tasks[len(tasks)-recentDisplayLimit:]...)
-		}
-		vm.Sections = append(vm.Sections, sectionVM{
-			Kind:    kind,
-			Heading: kind.Heading(),
-			Tasks:   tasks,
-		})
-	}
-	vm.RecentSize = len(doc.SectionTasks(spec.SectionRecent))
-	vm.Journals = collectJournals(s.opts.RepoRoot, doc, recentDisplayLimit)
-	return vm, nil
-}
-
 // buildHeader returns a minimal indexVM with just the header fields populated.
-// Tab content handlers use this as a base so each tab can be rendered without
-// re-parsing TODO.md when not needed.
+// Tab content handlers use it as the base view model and fill in their own tab.
 func (s *Server) buildHeader(activeTab string) indexVM {
 	return indexVM{
 		RepoRoot:   s.opts.RepoRoot,
+		RepoName:   filepath.Base(s.opts.RepoRoot),
 		StreamBase: s.streamBaseURL,
 		Version:    s.opts.Version,
 		Preset:     s.opts.Preset,
@@ -697,48 +621,11 @@ func dateOnly(value time.Time) time.Time {
 	return time.Date(year, month, day, 0, 0, 0, 0, value.Location())
 }
 
-func sectionName(s spec.SectionKind) string {
-	switch s {
-	case spec.SectionNext:
-		return "下一步"
-	case spec.SectionBacklog:
-		return "待规划"
-	case spec.SectionRecent:
-		return "最近完成"
-	}
-	return "?"
-}
-
-// collectJournals walks the parsed tasks and pulls a summary entry for each
-// task whose Arrow points to journal/<id>.md, capped at limit.
-func collectJournals(repoRoot string, doc *spec.Document, limit int) []journalSummary {
-	var out []journalSummary
-	for i := len(doc.Tasks) - 1; i >= 0 && len(out) < limit; i-- {
-		t := doc.Tasks[i]
-		if !strings.HasPrefix(t.Arrow, "journal/") {
-			continue
-		}
-		out = append(out, journalSummary{
-			ID:      t.ID,
-			Title:   t.Title,
-			Date:    t.Paren,
-			Type:    t.Type,
-			Section: sectionName(t.Section),
-		})
-	}
-	return out
-}
-
 // ----- handlers -------------------------------------------------------
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	tab := r.URL.Query().Get("tab")
 	switch tab {
-	case "docs":
-		vm := s.buildHeader("docs")
-		vm.DocsVM = s.buildDocsVM(r.URL.Query().Get("file"), r.URL.Query().Get("edit") == "1", "", "")
-		s.render(w, r, "layout.html", vm)
-		return
 	case "build", "run":
 		vm := s.buildHeader("build")
 		vm.BuildVM = s.buildBuildRunVM()
@@ -789,11 +676,9 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, "layout.html", vm)
 		return
 	}
-	vm, err := s.buildIndex()
-	if err != nil {
-		httpError(w, err)
-		return
-	}
+	// Docs is the landing tab (also for unknown or retired tabs such as the old "todo").
+	vm := s.buildHeader("docs")
+	vm.DocsVM = s.buildDocsVM(r.URL.Query().Get("file"), r.URL.Query().Get("edit") == "1", "", "")
 	s.render(w, r, "layout.html", vm)
 }
 
@@ -880,13 +765,6 @@ func httpError(w http.ResponseWriter, err error) {
 func (s *Server) handleTab(w http.ResponseWriter, r *http.Request) {
 	kind := r.PathValue("kind")
 	switch kind {
-	case "todo":
-		vm, err := s.buildIndex()
-		if err != nil {
-			httpError(w, err)
-			return
-		}
-		s.render(w, r, "tab_todo", vm)
 	case "build":
 		vm := s.buildHeader("build")
 		vm.BuildVM = s.buildBuildRunVM()

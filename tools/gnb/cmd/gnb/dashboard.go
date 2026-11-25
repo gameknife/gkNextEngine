@@ -56,9 +56,8 @@ func newDashboardCommand(ctx appContext) *cobra.Command {
 		Use:   "dashboard",
 		Short: tr("cli.dashboard.short"),
 		Long: "Launch a Wails desktop window backed by the local dashboard server.\n" +
-			"It visualizes .spec/TODO.md, task journals, blocker reports, and persisted gnb validation runs.\n" +
-			"Supports adding tasks, marking done/blocked, reviewing validation screenshots, and rerunning terminal validations.\n" +
-			"The dashboard reads and writes the same files as `gnb todo`; validation execution does not require the dashboard to be open.\n" +
+			"It browses docs, drives build/run/test, git and chat, and shows persisted gnb validation runs.\n" +
+			"Validation screenshots can be reviewed and terminal validations rerun; running a validation does not require the dashboard to be open.\n" +
 			"Use --browser for the legacy external-browser UI or --no-open for server-only mode.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDashboard(ctx, opts)

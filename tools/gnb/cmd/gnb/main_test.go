@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/config"
 )
@@ -180,164 +179,11 @@ func TestBuildRemoteAccessURLSSpecificBindUsesSingleHost(t *testing.T) {
 	}
 }
 
-func TestTodoAddWithSpecTextCreatesLinkedSpec(t *testing.T) {
-	dir := t.TempDir()
-	specDir := filepath.Join(dir, ".spec")
-	if err := os.MkdirAll(specDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	todo := `# TODO
-
-## Milestone: 测试  <!-- status: active -->
-
-### 下一步
-
-(暂无)
-
-### 待规划
-
-(暂无)
-
-### 最近完成
-
-(暂无)
-`
-	if err := os.WriteFile(filepath.Join(specDir, "TODO.md"), []byte(todo), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	cmd := newTodoAddCommand(appContext{repoRoot: dir})
-	cmd.SetArgs([]string{"-t", "feat", "测试任务", "--spec-text", "## 背景\n\n详细背景"})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("todo add: %v", err)
-	}
-
-	todoAfter, err := os.ReadFile(filepath.Join(specDir, "TODO.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(todoAfter), "- [ ] `#00001` [FEAT] 测试任务 → specs/00001.md") {
-		t.Fatalf("TODO missing linked spec:\n%s", todoAfter)
-	}
-	specBody, err := os.ReadFile(filepath.Join(specDir, "specs", "00001.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(specBody), "详细背景") {
-		t.Fatalf("spec body missing detail:\n%s", specBody)
-	}
-}
-
-func TestTodoNextWaitReturnsExistingTaskImmediately(t *testing.T) {
-	dir := t.TempDir()
-	writeTestTODO(t, dir, `- [ ] `+"`#00048`"+` [IDEA] 等待命令`)
-
-	start := time.Now()
-	out, err := runTodoNext(appContext{repoRoot: dir}, todoNextOptions{
-		wait:    true,
-		timeout: time.Second,
-		poll:    10 * time.Millisecond,
-	})
-	if err != nil {
-		t.Fatalf("runTodoNext: %v", err)
-	}
-	if !out.Found || out.ID != 48 {
-		t.Fatalf("out = %+v, want found #00048", out)
-	}
-	if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
-		t.Fatalf("runTodoNext waited %s despite existing task", elapsed)
-	}
-}
-
-func TestTodoNextWaitReturnsWhenTodoChanges(t *testing.T) {
-	dir := t.TempDir()
-	writeTestTODO(t, dir, "(暂无)")
-
-	start := time.Now()
-	writeDone := make(chan error, 1)
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-		writeDone <- writeTestTODOFile(dir, `- [ ] `+"`#00049`"+` [BUG] 新任务`)
-	}()
-
-	out, err := runTodoNext(appContext{repoRoot: dir}, todoNextOptions{
-		wait:    true,
-		timeout: 2 * time.Second,
-		poll:    time.Second,
-	})
-	if err != nil {
-		t.Fatalf("runTodoNext: %v", err)
-	}
-	if err := <-writeDone; err != nil {
-		t.Fatalf("async TODO write: %v", err)
-	}
-	if !out.Found || out.ID != 49 {
-		t.Fatalf("out = %+v, want found #00049", out)
-	}
-	if out.WaitedMillis <= 0 {
-		t.Fatalf("WaitedMillis = %d, want > 0", out.WaitedMillis)
-	}
-	if elapsed := time.Since(start); elapsed >= 700*time.Millisecond {
-		t.Fatalf("runTodoNext took %s; file notification did not beat 1s polling fallback", elapsed)
-	}
-}
-
-func TestTodoNextWaitTimesOutWithoutTask(t *testing.T) {
-	dir := t.TempDir()
-	writeTestTODO(t, dir, "(暂无)")
-
-	out, err := runTodoNext(appContext{repoRoot: dir}, todoNextOptions{
-		wait:    true,
-		timeout: 30 * time.Millisecond,
-		poll:    10 * time.Millisecond,
-	})
-	if err != nil {
-		t.Fatalf("runTodoNext: %v", err)
-	}
-	if out.Found {
-		t.Fatalf("out = %+v, want no task", out)
-	}
-	if !out.TimedOut {
-		t.Fatalf("TimedOut = false, want true; out = %+v", out)
-	}
-}
-
 func TestDashboardRejectsBrowserAndNoOpenTogether(t *testing.T) {
 	err := runDashboard(appContext{}, dashboardCmdOpts{Browser: true, NoOpen: true})
 	if err == nil || !strings.Contains(err.Error(), "cannot be used together") {
 		t.Fatalf("runDashboard error = %v, want conflicting flags error", err)
 	}
-}
-
-func writeTestTODO(t *testing.T, repoRoot string, nextSection string) {
-	t.Helper()
-	if err := writeTestTODOFile(repoRoot, nextSection); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func writeTestTODOFile(repoRoot string, nextSection string) error {
-	specDir := filepath.Join(repoRoot, ".spec")
-	if err := os.MkdirAll(specDir, 0755); err != nil {
-		return err
-	}
-	todo := `# TODO
-
-## Milestone: 测试  <!-- status: active -->
-
-### 下一步
-
-` + nextSection + `
-
-### 待规划
-
-(暂无)
-
-### 最近完成
-
-(暂无)
-`
-	return os.WriteFile(filepath.Join(specDir, "TODO.md"), []byte(todo), 0644)
 }
 
 func TestDSArgsHideServerAndPointClientsAtIt(t *testing.T) {

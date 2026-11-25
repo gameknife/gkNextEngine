@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -137,15 +136,6 @@ func TestHTTPServerFlushesJobStreamBeforeCompletion(t *testing.T) {
 
 func TestServerStartServesDashboardAndStopsWithContext(t *testing.T) {
 	repoRoot := t.TempDir()
-	specDir := filepath.Join(repoRoot, ".spec")
-	if err := os.MkdirAll(specDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	todo := "# TODO\n\n## Milestone: Test  <!-- status: active -->\n\n" +
-		"### 下一步\n\n(暂无)\n\n### 待规划\n\n(暂无)\n\n### 最近完成\n\n(暂无)\n"
-	if err := os.WriteFile(filepath.Join(specDir, "TODO.md"), []byte(todo), 0o644); err != nil {
-		t.Fatal(err)
-	}
 
 	srv, err := New(Options{RepoRoot: repoRoot, Port: 0, Version: "test", Preset: "windows"})
 	if err != nil {
@@ -172,9 +162,9 @@ func TestServerStartServesDashboardAndStopsWithContext(t *testing.T) {
 		cancel()
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
-	if !strings.Contains(string(body), "Test") {
+	if !strings.Contains(string(body), `data-tab-pane="docs"`) {
 		cancel()
-		t.Fatalf("dashboard body does not contain milestone:\n%s", body)
+		t.Fatalf("dashboard did not land on the docs tab:\n%s", body)
 	}
 
 	cancel()

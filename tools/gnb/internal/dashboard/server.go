@@ -1,8 +1,7 @@
-// Package dashboard serves a local web UI that visualizes and operates on the
-// .spec/ interactive workflow files (TODO.md, journal/, blockers/, ARCHIVE.md).
+// Package dashboard serves the local gnb web UI: docs browsing, build/run/test
+// jobs, remote play, validation runs, git, chat, LOC, paks and the target graph.
 //
-// The server is read-mostly: navigation and rendering happens server-side with
-// htmx-driven partial swaps. Mutations call into the spec package directly.
+// Navigation and rendering happen server-side with htmx-driven partial swaps.
 package dashboard
 
 import (
@@ -23,7 +22,6 @@ import (
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/config"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/gitops"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/i18n"
-	"github.com/gameknife/gknextrenderer/tools/gnb/internal/spec"
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/validationstore"
 )
 
@@ -234,17 +232,6 @@ func langFuncs(lang i18n.Lang) template.FuncMap {
 		"Lang":     func() string { return string(lang) },
 		"HTMLLang": func() string { return lang.HTML() },
 		"I18nJSON": func() template.JS { return i18n.JSON(lang) },
-		"emptyHint": func(k spec.SectionKind) string {
-			switch k {
-			case spec.SectionNext:
-				return i18n.Translate(lang, "todo.empty.next")
-			case spec.SectionBacklog:
-				return i18n.Translate(lang, "todo.empty.backlog")
-			case spec.SectionRecent:
-				return i18n.Translate(lang, "todo.empty.recent")
-			}
-			return i18n.Translate(lang, "todo.empty.next")
-		},
 		"dirtySummary": func(files []gitops.DirtyFile) string {
 			return dirtySummaryLang(lang, files)
 		},
@@ -272,32 +259,6 @@ func (s *Server) resolveLang(r *http.Request) i18n.Lang {
 // templateFuncs exposes the small set of helpers the templates need.
 func templateFuncs() template.FuncMap {
 	funcs := template.FuncMap{
-		"statusIcon": func(s string) string {
-			switch s {
-			case " ":
-				return "○"
-			case "/":
-				return "◐"
-			case "x":
-				return "●"
-			case "!":
-				return "⛔"
-			}
-			return "?"
-		},
-		"statusClass": func(s string) string {
-			switch s {
-			case " ":
-				return "pending"
-			case "/":
-				return "doing"
-			case "x":
-				return "done"
-			case "!":
-				return "blocked"
-			}
-			return ""
-		},
 		"trim": strings.TrimSpace,
 		"shortHash": func(s string) string {
 			if len(s) > 8 {
@@ -324,39 +285,6 @@ func templateFuncs() template.FuncMap {
 			}
 			return "U"
 		},
-		"sectionTint": func(k spec.SectionKind) template.CSS {
-			switch k {
-			case spec.SectionNext:
-				return template.CSS("rgba(34, 197, 94, 0.14)")
-			case spec.SectionBacklog:
-				return template.CSS("rgba(59, 130, 246, 0.14)")
-			case spec.SectionRecent:
-				return template.CSS("rgba(107, 115, 132, 0.18)")
-			}
-			return template.CSS("rgba(59, 130, 246, 0.12)")
-		},
-		"sectionColor": func(k spec.SectionKind) template.CSS {
-			switch k {
-			case spec.SectionNext:
-				return template.CSS("#22c55e")
-			case spec.SectionBacklog:
-				return template.CSS("#3b82f6")
-			case spec.SectionRecent:
-				return template.CSS("#9aa3b2")
-			}
-			return template.CSS("#3b82f6")
-		},
-		"sectionIcon": func(k spec.SectionKind) string {
-			switch k {
-			case spec.SectionNext:
-				return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>`
-			case spec.SectionBacklog:
-				return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`
-			case spec.SectionRecent:
-				return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="20 6 9 17 4 12"/></svg>`
-			}
-			return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>`
-		},
 		"jobLines": func(s JobSnapshot) template.HTML {
 			// Pre-render the existing buffer for the initial page load; SSE
 			// then appends new lines on top of this.
@@ -378,17 +306,6 @@ func templateFuncs() template.FuncMap {
 				end = time.Now()
 			}
 			return formatElapsedDuration(end.Sub(s.StartedAt))
-		},
-		"sectionSlug": func(k spec.SectionKind) string {
-			switch k {
-			case spec.SectionNext:
-				return "next"
-			case spec.SectionBacklog:
-				return "backlog"
-			case spec.SectionRecent:
-				return "recent"
-			}
-			return ""
 		},
 		"dirtyCodeClass": func(code string) string {
 			switch code {

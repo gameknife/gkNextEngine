@@ -6,7 +6,19 @@ foreach(gkModule IN LISTS GK_MODULE_NAMES)
     endif()
 endforeach()
 
+if(TARGET TextureCodecs)
+    find_package(WebP CONFIG REQUIRED)
+    target_link_libraries(TextureCodecs PRIVATE KTX::ktx WebP::webp SDL3::SDL3)
+    set_source_files_properties(
+        ${GK_SOURCE_ROOT}/Modules/TextureCodecs/StbImageImpl.cpp
+        PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+    )
+endif()
+
 if(TARGET NextUI)
+    if(TARGET TextureCodecs)
+        target_link_libraries(NextUI PRIVATE TextureCodecs)
+    endif()
     if(IOS OR (WIN32 AND WITH_STREAMLINE))
         get_target_property(imguiInterfaces imgui::imgui INTERFACE_LINK_LIBRARIES)
         if(imguiInterfaces)
@@ -48,6 +60,9 @@ if(TARGET NextNet)
 endif()
 
 if(TARGET NextCapture)
+    if(TARGET TextureCodecs)
+        target_link_libraries(NextCapture PRIVATE TextureCodecs)
+    endif()
     target_link_libraries(NextCapture PRIVATE WebP::webp WebP::libwebpmux)
     if(WITH_AVIF)
         target_compile_definitions(NextCapture PRIVATE WITH_AVIF=1 AVIF_CODEC_AOM=SYSTEM)
@@ -62,6 +77,9 @@ endif()
 
 if(TARGET DevTools AND TARGET NextUI)
     target_link_libraries(DevTools PRIVATE NextUI)
+endif()
+if(TARGET DevTools AND NOT IOS AND NOT ANDROID)
+    target_link_libraries(DevTools PRIVATE cpptrace::cpptrace)
 endif()
 
 if(TARGET NextRemote AND TARGET NextUI)
@@ -97,6 +115,10 @@ if(TARGET LiveCoding AND GK_ENABLE_CPP_LIVE_CODING)
 endif()
 
 if(TARGET GltfLoader)
+    target_link_libraries(GltfLoader PRIVATE draco::draco)
+    if(TARGET TextureCodecs)
+        target_link_libraries(GltfLoader PRIVATE TextureCodecs)
+    endif()
     set_source_files_properties(
         ${GK_SOURCE_ROOT}/Modules/GltfLoader/FSceneLoader.cpp
         PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
@@ -104,6 +126,9 @@ if(TARGET GltfLoader)
 endif()
 
 if(TARGET SceneExport)
+    if(TARGET TextureCodecs)
+        target_link_libraries(SceneExport PRIVATE TextureCodecs)
+    endif()
     set_source_files_properties(
         ${GK_SOURCE_ROOT}/Modules/SceneExport/FSceneSaver.cpp
         PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
@@ -208,6 +233,9 @@ endif()
 if(TARGET NextRmlUi)
     find_package(RmlUi CONFIG REQUIRED)
     target_link_libraries(NextRmlUi PRIVATE RmlUi::RmlUi NextUI)
+    if(TARGET TextureCodecs)
+        target_link_libraries(NextRmlUi PRIVATE TextureCodecs)
+    endif()
 endif()
 
 if(TARGET NextStreamline AND WITH_STREAMLINE)

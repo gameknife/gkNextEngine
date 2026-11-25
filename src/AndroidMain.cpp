@@ -2,6 +2,9 @@
 #include "Engine/Options.hpp"
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/Platform/PlatformCommon.hpp"
+#if GK_MODULE_TEXTURECODECS
+#include "Modules/TextureCodecs/TextureCodecsModule.hpp"
+#endif
 // Android compiles every module into the application library, so a header is always there to
 // include. Which modules the application actually asked for is still a per-application choice, and
 // GK_MODULE_* is how gk_add_application states it -- exactly as in DesktopMain.
@@ -139,6 +142,9 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 
     // Init
     NextRenderer::PlatformInit();
+#if GK_MODULE_TEXTURECODECS
+    Modules::TextureCodecs::Install();
+#endif
         
     // Start the application.
     // Create the DevTools provider first: its constructor attaches the console

@@ -126,7 +126,11 @@ function(gk_apply_target_defaults target)
     endif()
 
     if(MSVC)
-        target_compile_options(${target} PRIVATE /utf-8 /WX /wd4200 /Zf)
+        target_compile_options(${target} PRIVATE
+            /utf-8 /WX /wd4200 /Zf
+            $<$<NOT:$<CONFIG:Debug>>:/Gw>
+            $<$<NOT:$<CONFIG:Debug>>:/Zc:inline>
+        )
         # Ninja already schedules one compiler process per source file. /MP adds
         # no parallelism there and conflicts with PCH generation (/Yc).
         if(NOT CMAKE_GENERATOR MATCHES "Ninja")
@@ -341,7 +345,7 @@ function(gk_link_engine_feature_dependencies target)
         target_compile_definitions(${target} PUBLIC WITH_RENDERDOC=0 GK_RENDERDOC_ANDROID=0)
     endif()
 
-    target_link_libraries(${target} PRIVATE ozz KTX::ktx)
+    target_link_libraries(${target} PRIVATE ozz)
 
     if(WITH_AVIF)
         target_compile_definitions(${target} PUBLIC WITH_AVIF=1 AVIF_CODEC_AOM=SYSTEM)
@@ -383,6 +387,7 @@ function(gk_configure_android_runtime target)
         draco::draco
         WebP::webp
         WebP::libwebpmux
+        KTX::ktx
         RmlUi::RmlUi
         Jolt::Jolt
         ${Vulkan_LIBRARIES}

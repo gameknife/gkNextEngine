@@ -3,6 +3,9 @@
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/Platform/PlatformCommon.hpp"
 #include "Engine/Utilities/FileHelper.hpp"
+#if GK_MODULE_TEXTURECODECS
+#include "Modules/TextureCodecs/TextureCodecsModule.hpp"
+#endif
 #if GK_MODULE_GLTFLOADER
 #include "Modules/GltfLoader/GltfModule.hpp"
 #endif
@@ -214,6 +217,9 @@ static SDL_AppResult InitializeApplication(int argc, char *argv[])
 
     // Init
     NextRenderer::PlatformInit();
+#if GK_MODULE_TEXTURECODECS
+    Modules::TextureCodecs::Install();
+#endif
         
     // Start the application.
     // Create the DevTools provider first: its constructor attaches the console

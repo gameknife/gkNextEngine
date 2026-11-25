@@ -12,6 +12,15 @@ string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "static" SDL_STATIC)
 string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "dynamic" SDL_SHARED)
 string(COMPARE EQUAL "${VCPKG_CRT_LINKAGE}" "static" FORCE_STATIC_VCRT)
 
+if(SDL_STATIC)
+    # Static builds have no use for the dynamic API jump table, and leaving it enabled
+    # forces the linker to retain every SDL subsystem entry point even under /OPT:REF.
+    vcpkg_replace_string("${SOURCE_PATH}/src/dynapi/SDL_dynapi.h"
+        "#define SDL_DYNAMIC_API 1"
+        "#define SDL_DYNAMIC_API 0"
+    )
+endif()
+
 vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
     FEATURES
         alsa     SDL_ALSA
@@ -58,6 +67,14 @@ vcpkg_cmake_configure(
         -DSDL_X11_XSCRNSAVER=OFF
         -DSDL_RENDER=OFF
         -DSDL_GPU=OFF
+        -DSDL_AUDIO=OFF
+        -DSDL_CAMERA=OFF
+        -DSDL_HAPTIC=OFF
+        -DSDL_SENSOR=OFF
+        -DSDL_TRAY=OFF
+        -DSDL_POWER=OFF
+        -DSDL_OPENGL=OFF
+        -DSDL_OPENGLES=OFF
         -DSDL_INSTALL_CMAKEDIR_ROOT=share/${PORT}
         -DSDL_REVISION=vcpkg
         -DCMAKE_DISABLE_FIND_PACKAGE_LibUSB=1

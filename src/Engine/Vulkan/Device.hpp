@@ -54,7 +54,8 @@ namespace Vulkan
         // Buffer masks the usage bit and returns a null address when this is false, so a buffer
         // built for the normal path stays creatable -- it just cannot be addressed.
         bool SupportsBufferDeviceAddress() const { return bufferDeviceAddressEnabled_; }
-        MemoryStatsSnapshot CaptureMemoryStats(bool includeDetails = false) const;
+        MemoryStatsSnapshot CaptureMemoryStats() const;
+        std::string BuildMemoryStatsJson() const;
 
         void WaitIdle() const;
 

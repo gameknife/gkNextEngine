@@ -5,6 +5,8 @@
 #include "Engine/Assets/Data/Material.hpp"
 #include "Engine/Assets/Loaders/FProcModel.hpp"
 #include "Engine/Assets/Loaders/LoaderRegistry.hpp"
+#include "Engine/Assets/Loaders/ProceduralTexture.hpp"
+#include "Engine/Assets/Loaders/TextureGraph.hpp"
 #include "Engine/Options.hpp"
 #include "Engine/Runtime/Engine.hpp"
 #include "Engine/Runtime/Scene/SceneBuilder.hpp"
@@ -13,6 +15,56 @@
 namespace
 {
     constexpr std::string_view minimalSceneName = "CornellBox.proc";
+
+    Assets::FTexExpr TexNum(double value)
+    {
+        return Assets::FTexExpr{.kind = Assets::FTexExpr::EKind::Number, .number = value};
+    }
+
+    Assets::FTexExpr TexStr(std::string text)
+    {
+        return Assets::FTexExpr{.kind = Assets::FTexExpr::EKind::String, .text = std::move(text)};
+    }
+
+    Assets::FTexExpr TexList(std::initializer_list<Assets::FTexExpr> items)
+    {
+        return Assets::FTexExpr{.kind = Assets::FTexExpr::EKind::List, .items = items};
+    }
+
+    Assets::Material BuildProceduralBoxMaterial()
+    {
+        const Assets::FTexExpr checker = TexList({TexStr("checker"), TexNum(4), TexNum(4)});
+        const Assets::FTexExpr lightTile = TexList({TexStr("palette"), TexNum(0),
+                                                    TexList({TexNum(0.76), TexNum(0.74), TexNum(0.70)})});
+        const Assets::FTexExpr darkTile = TexList({TexStr("palette"), TexNum(1),
+                                                   TexList({TexNum(0.26), TexNum(0.32), TexNum(0.40)})});
+        const Assets::FTexExpr color = TexList({TexStr("mix"), lightTile, darkTile, checker});
+        const Assets::FTexExpr joints = TexList({TexStr("course"), TexNum(4), TexNum(4), TexNum(0.5),
+                                                 TexNum(1), TexStr("edge")});
+        const Assets::FTexExpr root = TexList({TexStr("surface"), color, joints,
+                                               TexNum(0.85), TexNum(0.0), TexNum(6.0), TexNum(1)});
+
+        std::string compileError;
+        auto graph = Assets::FTextureGraph::Compile(root, compileError);
+        if (!graph)
+        {
+            return Assets::Material::Lambertian(glm::vec3(0.73f));
+        }
+
+        Assets::FProceduralTexture procTex{
+            .pattern = "minimal_tiles",
+            .graph = std::move(graph),
+            .scale = 1.0f,
+            .seed = 7,
+            .relief = 1.0f,
+        };
+        const Assets::FProceduralTextureIds maps = Assets::ProceduralTexture::AcquireMaps(procTex);
+        Assets::Material mat = Assets::Material::Lambertian(glm::vec3(1.0f), maps.albedo);
+        mat.MRATextureId = maps.mra;
+        mat.NormalTextureId = maps.normal;
+        mat.NormalTextureScale = 1.0f;
+        return mat;
+    }
 
     void BuildMinimalScene(Assets::EnvironmentSetting& environment,
                            std::vector<std::shared_ptr<Assets::Node>>& nodes,
@@ -54,7 +106,7 @@ namespace
         const glm::vec3 spherePosition(1.30f, 1.01f, 0.80f);
         const glm::vec3 boxPosition(-1.30f, 0.0f, -0.80f);
 
-        materials.push_back({Assets::Material::Lambertian(glm::vec3(0.73f)), "cbox_white"});
+        materials.push_back({BuildProceduralBoxMaterial(), "cbox_proc_tiles"});
         materials.push_back({Assets::Material::Mixture(glm::vec3(0.73f), 0.01f), "cball_white"});
         models.push_back(Assets::FProcModel::CreateBox(glm::vec3(-0.80f, 0.0f, -0.80f),
                                                        glm::vec3(0.80f, 1.60f, 0.80f)));

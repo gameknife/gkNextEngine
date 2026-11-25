@@ -1,16 +1,22 @@
 #include "Engine/Utilities/Exception.hpp"
-#if !ANDROID && !IOS
-#include <cpptrace/cpptrace.hpp>
-#endif
-
-#undef APIENTRY
 
 namespace NextStackWalk
 {
+    namespace
+    {
+        StackWalkFn GStackWalkHandler = nullptr;
+    }
+
+    void SetStackWalkHandler(StackWalkFn handler)
+    {
+        GStackWalkHandler = handler;
+    }
+
     void PrintStack()
     {
-#if !ANDROID && !IOS
-        cpptrace::generate_trace().print();
-#endif
+        if (GStackWalkHandler != nullptr)
+        {
+            GStackWalkHandler();
+        }
     }
 }

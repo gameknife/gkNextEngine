@@ -41,10 +41,6 @@ namespace Assets
     // Projects an equirectangular HDR texture into the engine's 3-band SH basis.
     SphericalHarmonics ProjectHdrToSh(const float* hdrPixels, int width, int height);
 
-    // Cache-first load: disk cache, else stbi decode + prefilter + SH project,
-    // then writes the cache. Empty payload (Width==0) on failure.
-    FHDRTexturePayload LoadHDRTexturePayload(const std::string& textureName, const uint8_t* data, size_t byteLength);
-
     std::unique_ptr<TextureImage> CreateHDRTextureImage(
         Vulkan::CommandPool& commandPool, const FHDRTexturePayload& payload,
         GlobalTexturePool::EHDRTextureResidency residency);

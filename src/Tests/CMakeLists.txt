@@ -208,6 +208,7 @@ target_link_libraries(gkNextUnitTests PRIVATE
     fmt::fmt
 )
 set(unitTestRuntimeModules
+    TextureCodecs
     SceneContent
     NextValidation
     NextUI

@@ -99,7 +99,8 @@ namespace Vulkan
         void Unmap(VmaAllocationHandle allocation) const;
         void SetAllocationName(VmaAllocationHandle allocation, const char* name) const;
 
-        MemoryStatsSnapshot CaptureStats(bool includeDetails = false) const;
+        MemoryStatsSnapshot CaptureStats() const;
+        std::string BuildStatsJsonString() const;
 
     private:
 

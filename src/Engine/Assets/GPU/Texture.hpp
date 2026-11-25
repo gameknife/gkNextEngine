@@ -38,6 +38,35 @@ namespace Assets
         bool Srgb = false;
         bool Hdr = false;
     };
+
+    struct FHDRTexturePayload;
+
+    struct FDecodedLdrTexture
+    {
+        std::vector<uint8_t> Pixels;
+        int Width = 0;
+        int Height = 0;
+        uint32_t MipLevels = 1;
+        VkFormat Format = VK_FORMAT_UNDEFINED;
+    };
+
+    class ITextureDecodeProvider
+    {
+    public:
+        virtual ~ITextureDecodeProvider() = default;
+
+        virtual bool DecodeLdrTexture(const std::string& texname,
+                                      const std::string& mime,
+                                      const uint8_t* data,
+                                      size_t byteLength,
+                                      bool srgb,
+                                      bool supportsBCTextures,
+                                      FDecodedLdrTexture& outDecoded) = 0;
+
+        virtual FHDRTexturePayload LoadHdrTexture(const std::string& texname,
+                                                  const uint8_t* data,
+                                                  size_t byteLength) = 0;
+    };
     
     // How many descriptors the bindless arrays declare. The full profile mirrors the slot registry
     // in assets/shaders/common/BindlessTexture.slang; a device that cannot back arrays that large
@@ -160,6 +189,9 @@ namespace Assets
         uint32_t RequestNewTextureMemAsync(const std::string& texname, const std::string& mime, bool hdr,
                                            const unsigned char* data, size_t bytelength, bool srgb,
                                            ETextureLifetime lifetime = ETextureLifetime::ETL_Transient);
+        uint32_t RequestNewRawTextureAsync(const std::string& texname, uint32_t width, uint32_t height,
+                                           bool srgb, const unsigned char* rgbaPixels, size_t bytelength,
+                                           ETextureLifetime lifetime = ETextureLifetime::ETL_Transient);
         
         uint32_t TotalTextures() const {return static_cast<uint32_t>(textureImages_.size());}
         // A worker finishing decode/upload is insufficient: the graphics layout transition and
@@ -172,6 +204,9 @@ namespace Assets
         void TickHDRTextureResidency(uint32_t activeTextureIdx, bool hasSky, uint32_t frameIndex, bool streamingEnabled);
         
         static GlobalTexturePool* GetInstance() {return instance_;}
+        static void SetDecodeProvider(ITextureDecodeProvider* provider);
+        static ITextureDecodeProvider* GetDecodeProvider();
+        static bool HasDecodeProvider();
         static uint32_t LoadTexture(const std::string& texname, const std::string& mime, const unsigned char* data,
                                     size_t bytelength, bool srgb);
         static uint32_t LoadTexture(const std::string& filename, bool srgb);

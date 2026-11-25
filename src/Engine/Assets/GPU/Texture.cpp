@@ -1,5 +1,4 @@
 #include "Engine/Assets/GPU/Texture.hpp"
-#include "Engine/Utilities/StbImage.hpp"
 #include "Engine/Utilities/Exception.hpp"
 #include "Engine/Common/CoreMinimal.hpp"
 
@@ -11,15 +10,6 @@
 #include "Engine/Vulkan/Device.hpp"
 #include "Engine/Vulkan/GpuResources.hpp"
 #include "Engine/Vulkan/DescriptorSystem.hpp"
-#include "ThirdParty/lzav/lzav.h"
-
-#include <limits>
-#include <system_error>
-#include <webp/decode.h>
-
-#include <ktx.h>
-
-#define M_NEXT_PI 3.14159265358979323846f
 
 namespace
 {
@@ -28,6 +18,8 @@ namespace
     constexpr uint32_t kShadowMapBinding = 2;
     constexpr uint32_t kVolumeSampleTextureBinding = 3;
     constexpr uint32_t kVolumeStorageTextureBinding = 4;
+
+    Assets::ITextureDecodeProvider* GTextureDecodeProvider = nullptr;
 
     bool IsVolumeImage(const Vulkan::ImageView& view)
     {
@@ -70,7 +62,22 @@ namespace Assets
         uint8_t hdrResidency;
         std::array<char, 256> outputInfo;
     };
-    
+
+    void GlobalTexturePool::SetDecodeProvider(ITextureDecodeProvider* provider)
+    {
+        GTextureDecodeProvider = provider;
+    }
+
+    ITextureDecodeProvider* GlobalTexturePool::GetDecodeProvider()
+    {
+        return GTextureDecodeProvider;
+    }
+
+    bool GlobalTexturePool::HasDecodeProvider()
+    {
+        return GTextureDecodeProvider != nullptr;
+    }
+
     uint32_t GlobalTexturePool::LoadTexture(const std::string& filename, bool srgb)
     {
         return LoadTexture(filename, srgb, ETextureLifetime::ETL_Transient);
@@ -78,6 +85,12 @@ namespace Assets
 
     uint32_t GlobalTexturePool::LoadTexture(const std::string& filename, bool srgb, ETextureLifetime lifetime)
     {
+        if (!HasDecodeProvider())
+        {
+            return GetInstance()->RequestNewTextureMemAsync(
+                filename, "image/png", false, nullptr, 0, srgb, lifetime);
+        }
+
         auto& pakSystem = Utilities::Package::FPackageFileSystem::GetInstance();
         if (!Utilities::FileHelper::IsAssetAvailable(filename))
         {
@@ -108,6 +121,12 @@ namespace Assets
 
     uint32_t GlobalTexturePool::LoadHDRTexture(const std::string& filename)
     {
+        if (!HasDecodeProvider())
+        {
+            return GetInstance()->RequestNewTextureMemAsync(
+                filename, "image/hdr", true, nullptr, 0, false, ETextureLifetime::ETL_Persistent);
+        }
+
         auto& pakSystem = Utilities::Package::FPackageFileSystem::GetInstance();
         if (!Utilities::FileHelper::IsAssetAvailable(filename))
         {
@@ -141,7 +160,7 @@ namespace Assets
     TextureImage* GlobalTexturePool::GetTextureImageByName(const std::string& name)
     {
         uint32_t id = GetTextureIndexByName(name);
-        if (id != -1)
+        if (id != static_cast<uint32_t>(-1))
         {
             return GetInstance()->textureImages_[id].get();
         }
@@ -154,7 +173,7 @@ namespace Assets
         {
             return GetInstance()->textureNameMap_[name].GlobalIdx_;
         }
-        return -1;
+        return static_cast<uint32_t>(-1);
     }
 
     const FTextureCpuSource* GlobalTexturePool::GetTextureCpuSource(uint32_t idx)
@@ -190,14 +209,6 @@ namespace Assets
             SPDLOG_INFO("Texture uploads will run on the main thread because no dedicated transfer queue is available or validation mode is active");
         }
 
-        // Sized from the profile rather than the raw device maximum: the arrays are allocated at
-        // their full declared count, so declaring 65535 would burn ~4 MB of descriptor pool for
-        // slots nothing can address. moltenVK also reports an unusable
-        // limits.maxPerStageDescriptorSamplers, which is why this is not derived from the device.
-        //
-        // A zero-count array is dropped rather than declared: VkDescriptorPoolSize::descriptorCount
-        // must be greater than zero, and a pass that needs the binding should fail loudly at
-        // pipeline creation instead of silently binding into an array that does not exist.
         std::vector<Vulkan::DescriptorBinding> descriptorBindings;
         const auto addBinding = [&descriptorBindings](uint32_t binding, uint32_t count, VkDescriptorType type)
         {
@@ -218,7 +229,6 @@ namespace Assets
                     supportsBCTextures_ ? "supported" : "unsupported (transcoding to RGBA)");
         descriptorSetManager_.reset(new Vulkan::DescriptorSetManager(device, descriptorBindings, 1, true));
 
-        // for hdr to bind
         hdrSphericalHarmonics_.resize(100);
 
         GlobalTexturePool::instance_ = this;
@@ -231,8 +241,6 @@ namespace Assets
         defaultWhiteTexture_.reset();
         textureImages_.clear();
         descriptorSetManager_.reset();
-        // Loaders reach the pool through GetInstance(); a torn-down engine (tests, tools that
-        // restart the renderer) must not leave them a dangling pointer.
         if (instance_ == this)
         {
             instance_ = nullptr;
@@ -244,9 +252,6 @@ namespace Assets
         BindSampleTexture(textureIdx, textureImage.ImageView(), textureImage.Sampler());
     }
 
-    // Writing a descriptor past the end of its binding is undefined behaviour, not a clamped write:
-    // it corrupts whatever the driver has after the array. Every array here is sized by the active
-    // profile, so this is the last line of defence for all of them.
     bool GlobalTexturePool::CanBindSlot(const uint32_t slot, const uint32_t declaredCount,
                                         const EBindingArray array) const
     {
@@ -369,10 +374,6 @@ namespace Assets
         else
         {
             textureIdx = static_cast<uint32_t>(textureImages_.size());
-            // Past this point the texture index would address the explicitly-bound region
-            // (thumbnails, view outputs, volumes) and silently overwrite those descriptors -- or,
-            // under a constrained profile, run off the end of the sampled array entirely. The
-            // ceiling therefore comes from the same profile that sized the array.
             if (profile_.bindsSceneTextures && textureIdx >= profile_.sceneTextureCapacity)
             {
                 Throw(std::runtime_error(fmt::format(
@@ -396,7 +397,6 @@ namespace Assets
             return;
         }
 
-        // Descriptor sets may still be referenced by in-flight UI command buffers.
         device_.WaitIdle();
 
         textureImages_[textureIdx].reset();
@@ -418,18 +418,17 @@ namespace Assets
         {
             return textureNameMap_.at(textureName).GlobalIdx_;
         }
-        return -1;
+        return static_cast<uint32_t>(-1);
     }
 
-    uint32_t GlobalTexturePool::RequestNewTextureMemAsync(const std::string& texname, const std::string& mime, bool hdr,
-                                                          const unsigned char* data, size_t bytelength, bool srgb,
+    uint32_t GlobalTexturePool::RequestNewRawTextureAsync(const std::string& texname, uint32_t width, uint32_t height,
+                                                          bool srgb, const unsigned char* rgbaPixels, size_t bytelength,
                                                           ETextureLifetime lifetime)
     {
         uint32_t newTextureIdx = 0;
         if (textureNameMap_.find(texname) != textureNameMap_.end())
         {
-            // Rebind textures that have transitioned to TextureUnLoaded.
-            if(textureNameMap_[texname].Status_ == ETextureStatus::ETS_Unloaded)
+            if (textureNameMap_[texname].Status_ == ETextureStatus::ETS_Unloaded)
             {
                 textureNameMap_[texname].Status_ = ETextureStatus::ETS_Loaded;
                 textureNameMap_[texname].Lifetime_ = lifetime;
@@ -438,16 +437,11 @@ namespace Assets
             else
             {
                 textureNameMap_[texname].Lifetime_ = lifetime;
-                // Return immediately if the texture is already loaded.
                 return textureNameMap_[texname].GlobalIdx_;
             }
         }
         else
         {
-            // Same ceiling as RegisterTexture: this is the path every scene texture actually takes,
-            // so without the check here the ceiling was never enforced for scene content at all.
-            // A profile that does not sample scene textures has no ceiling to enforce -- its
-            // indices stay meaningful for materials and the bind is skipped instead.
             const auto candidateIdx = static_cast<uint32_t>(textureImages_.size());
             if (profile_.bindsSceneTextures && candidateIdx >= profile_.sceneTextureCapacity)
             {
@@ -459,13 +453,105 @@ namespace Assets
 
             textureImages_.emplace_back(nullptr);
             newTextureIdx = candidateIdx;
-            textureNameMap_[texname] = { newTextureIdx, ETextureStatus::ETS_Loaded, lifetime };
+            textureNameMap_[texname] = {newTextureIdx, ETextureStatus::ETS_Loaded, lifetime};
         }
 
-        // load parse bind texture into newTextureIdx with transfer queue
+        auto ownedPixels = std::make_shared<std::vector<uint8_t>>();
+        if (rgbaPixels != nullptr && bytelength > 0)
+        {
+            ownedPixels->assign(rgbaPixels, rgbaPixels + bytelength);
+        }
+
+        auto rawUploadTask = [this, texname, width, height, srgb, newTextureIdx, ownedPixels](Tasks::ResTask& task)
+        {
+            TextureTaskContext taskContext{};
+            const auto timer = std::chrono::high_resolution_clock::now();
+
+            static constexpr std::array<uint8_t, 4> kPlaceholderPixel = {255, 255, 255, 255};
+            const bool valid = !ownedPixels->empty() && width > 0 && height > 0;
+            const uint32_t w = valid ? width : 1u;
+            const uint32_t h = valid ? height : 1u;
+            const uint8_t* ptr = valid ? ownedPixels->data() : kPlaceholderPixel.data();
+            const uint32_t sz = valid ? static_cast<uint32_t>(ownedPixels->size())
+                                      : static_cast<uint32_t>(kPlaceholderPixel.size());
+            const VkFormat format = srgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
+
+            textureImages_[newTextureIdx] = std::make_unique<TextureImage>(commandPool_, w, h, 1, format, ptr, sz);
+            textureImages_[newTextureIdx]->SetDebugName(fmt::format("Texture {}", texname));
+            BindTexture(newTextureIdx, *textureImages_[newTextureIdx]);
+
+            taskContext.textureId = static_cast<int32_t>(newTextureIdx);
+            taskContext.needFlushHDRSH = false;
+            taskContext.elapsed = std::chrono::duration<float, std::chrono::seconds::period>(
+                std::chrono::high_resolution_clock::now() - timer).count();
+            const std::string info = fmt::format("uploaded {} ({} x {} x 1) in {:.2f}ms",
+                                                 texname, w, h, taskContext.elapsed * 1000.f);
+            std::copy(info.begin(), info.begin() + std::min(info.size(), taskContext.outputInfo.size() - 1),
+                      taskContext.outputInfo.data());
+            task.SetContext(taskContext);
+        };
+
+        auto rawCompleteTask = [this](Tasks::ResTask& task)
+        {
+            TextureTaskContext taskContext{};
+            task.GetContext(taskContext);
+            textureImages_[taskContext.textureId]->MainThreadPostLoading(mainThreadCommandPool_);
+            SPDLOG_INFO("{}", taskContext.outputInfo.data());
+            pendingTextureLoads_.fetch_sub(1, std::memory_order_release);
+        };
+
+        pendingTextureLoads_.fetch_add(1, std::memory_order_relaxed);
+        if (textureWorkerUploadEnabled_)
+        {
+            Tasks::TaskCoordinator::GetInstance()->AddTask(
+                std::move(rawUploadTask), std::move(rawCompleteTask), 0, "Raw texture upload");
+        }
+        else
+        {
+            Tasks::TaskCoordinator::GetInstance()->AddMainThreadTask(
+                std::move(rawUploadTask), std::move(rawCompleteTask), 0, "Raw texture upload");
+        }
+
+        return newTextureIdx;
+    }
+
+    uint32_t GlobalTexturePool::RequestNewTextureMemAsync(const std::string& texname, const std::string& mime, bool hdr,
+                                                          const unsigned char* data, size_t bytelength, bool srgb,
+                                                          ETextureLifetime lifetime)
+    {
+        uint32_t newTextureIdx = 0;
+        if (textureNameMap_.find(texname) != textureNameMap_.end())
+        {
+            if (textureNameMap_[texname].Status_ == ETextureStatus::ETS_Unloaded)
+            {
+                textureNameMap_[texname].Status_ = ETextureStatus::ETS_Loaded;
+                textureNameMap_[texname].Lifetime_ = lifetime;
+                newTextureIdx = textureNameMap_[texname].GlobalIdx_;
+            }
+            else
+            {
+                textureNameMap_[texname].Lifetime_ = lifetime;
+                return textureNameMap_[texname].GlobalIdx_;
+            }
+        }
+        else
+        {
+            const auto candidateIdx = static_cast<uint32_t>(textureImages_.size());
+            if (profile_.bindsSceneTextures && candidateIdx >= profile_.sceneTextureCapacity)
+            {
+                Throw(std::runtime_error(fmt::format(
+                    "scene texture capacity exhausted ({} registered, limit {}) while requesting '{}'. "
+                    "Raise Bindless::RES_SCENE_TEXTURE_CAPACITY in assets/shaders/common/BindlessTexture.slang.",
+                    candidateIdx, profile_.sceneTextureCapacity, texname)));
+            }
+
+            textureImages_.emplace_back(nullptr);
+            newTextureIdx = candidateIdx;
+            textureNameMap_[texname] = {newTextureIdx, ETextureStatus::ETS_Loaded, lifetime};
+        }
 
         uint8_t* copiedData = nullptr;
-        if (bytelength > 0)
+        if (bytelength > 0 && data != nullptr)
         {
             copiedData = new uint8_t[bytelength];
             memcpy(copiedData, data, bytelength);
@@ -484,6 +570,7 @@ namespace Assets
         {
             cpuSource.Bytes.assign(copiedData, copiedData + bytelength);
         }
+
         const bool streamHDRAtLoad = hdr && hdrStreamingPolicy_ && hdrStreamingPolicy_();
         const EHDRTextureResidency initialHDRResidency =
             streamHDRAtLoad ? EHDRTextureResidency::LowestMip : EHDRTextureResidency::FullMip;
@@ -503,100 +590,42 @@ namespace Assets
             residency.DemandFrames = 0;
             residency.LastTouchedFrame = 0;
         }
+
         auto textureLoadTask =
             [this, hdr, srgb, texname, mime, copiedData, bytelength, newTextureIdx, initialHDRResidency](Tasks::ResTask& task)
             {
                 TextureTaskContext taskContext{};
                 const auto timer = std::chrono::high_resolution_clock::now();
 
-                // Load the texture in normal host memory.
-                int width = 32;
-                int height = 32;
-                int channels = 4;
-                uint8_t* stbdata = nullptr;
-                uint8_t* pixels = nullptr;
-                uint32_t size = 0;
+                int width = 1;
+                int height = 1;
                 uint32_t miplevel = 1;
                 VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
                 bool textureCreated = false;
-                ktxTexture2* kTexture = nullptr;
-                ktx_error_code_e result;
-                bool useWebPFree = false;
 
                 auto createHdrPlaceholderTexture = [&]()
                 {
-                    // Dim neutral grey rather than black: a missing environment map still
-                    // leaves the scene lit well enough to see what is going on.
                     static constexpr std::array<float, 4> kPlaceholderHdrPixel = {0.18f, 0.18f, 0.18f, 1.0f};
-
                     width = 1;
                     height = 1;
-                    channels = 4;
-                    size = static_cast<uint32_t>(kPlaceholderHdrPixel.size() * sizeof(float));
                     miplevel = 1;
                     format = VK_FORMAT_R32G32B32A32_SFLOAT;
-
                     hdrSphericalHarmonics_[newTextureIdx] = {};
                     textureImages_[newTextureIdx] = std::make_unique<TextureImage>(
                         commandPool_, width, height, miplevel, format,
-                        reinterpret_cast<const unsigned char*>(kPlaceholderHdrPixel.data()), size);
+                        reinterpret_cast<const unsigned char*>(kPlaceholderHdrPixel.data()),
+                        static_cast<uint32_t>(kPlaceholderHdrPixel.size() * sizeof(float)));
                     textureCreated = true;
                 };
 
-                // load from ktx inside glb
-                if (mime.find("image/ktx") != std::string::npos)
+                ITextureDecodeProvider* decoder = GetDecodeProvider();
+                if (hdr)
                 {
-                    auto loadKtxFromMemory = [&]() -> bool {
-                        result = ktxTexture2_CreateFromMemory(copiedData, bytelength, KTX_TEXTURE_CREATE_CHECK_GLTF_BASISU_BIT, &kTexture);
-                        if (KTX_SUCCESS != result) return false;
-                        result = ktxTexture2_TranscodeBasis(
-                            kTexture, supportsBCTextures_ ? KTX_TTF_BC7_RGBA : KTX_TTF_RGBA32, 0);
-                        if (KTX_SUCCESS != result) return false;
-                        pixels = ktxTexture_GetData(ktxTexture(kTexture));
-
-                        ktx_size_t offset;
-                        ktxTexture_GetImageOffset(ktxTexture(kTexture), 0, 0, 0, &offset);
-                        pixels += offset;
-                        size = static_cast<uint32_t>(ktxTexture_GetImageSize(ktxTexture(kTexture), 0));
-
-                        format = static_cast<VkFormat>(kTexture->vkFormat);
-                        width = kTexture->baseWidth;
-                        height = kTexture->baseHeight;
-                        miplevel = 1;
-                        return true;
-                    };
-                    
-                    if (!loadKtxFromMemory())
+                    if (decoder != nullptr)
                     {
-                        SPDLOG_ERROR("load texture {} failed.", texname);
-                    }
-                }
-                else if (mime.find("image/webp") != std::string::npos)
-                {
-                     stbdata = WebPDecodeRGBA(copiedData, bytelength, &width, &height);
-                     if (stbdata)
-                     {
-                         size = width * height * 4;
-                         pixels = stbdata;
-                         format = srgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
-                         miplevel = 1;
-                         useWebPFree = true;
-                     }
-                     else
-                     {
-                         SPDLOG_ERROR("Failed to decode WebP image: {}", texname);
-                     }
-                }
-                else
-                {
-                    std::hash<std::string> hasher;
-                    // load from texture files
-                    if (hdr)
-                    {
-                        const FHDRTexturePayload payload = LoadHDRTexturePayload(texname, copiedData, bytelength);
+                        const FHDRTexturePayload payload = decoder->LoadHdrTexture(texname, copiedData, bytelength);
                         width = payload.Width;
                         height = payload.Height;
-                        channels = 4;
                         miplevel = initialHDRResidency == EHDRTextureResidency::FullMip
                             ? std::max<uint32_t>(1, payload.MipLevels)
                             : 1;
@@ -605,104 +634,39 @@ namespace Assets
                         textureImages_[newTextureIdx] = CreateHDRTextureImage(commandPool_, payload, initialHDRResidency);
                         textureCreated = textureImages_[newTextureIdx] != nullptr;
                     }
-
-                    if (hdr && !textureCreated)
+                    if (!textureCreated)
                     {
-                        // LoadHDRTexturePayload already tried cache + stbi decode; both failed.
                         createHdrPlaceholderTexture();
                     }
-                    else if (!hdr)
-                    {
-                        // ldr texture, try cache fist
-                        // hash the texname
-                        std::string cacheFileName = Utilities::CookHelper::GetCookedFileName(fmt::format("{:016x}", hasher(texname)), "texktx");
-#if ANDROID
-                        // libktx's writer trips Android FORTIFY in appendLibId. The cache is optional,
-                        // so keep the in-memory compression path and avoid reading/writing KTX files.
-                        constexpr bool useKtxDiskCache = false;
-#else
-                        constexpr bool useKtxDiskCache = true;
-#endif
-                        if (!useKtxDiskCache || !std::filesystem::exists(cacheFileName))
-                        {
-                            // load from stbi and compress to ktx and cache
-                            stbdata = stbi_load_from_memory(copiedData, static_cast<uint32_t>(bytelength), &width, &height, &channels, STBI_rgb_alpha);
-                            format = srgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
-                            size = width * height * 4 * sizeof(uint8_t);
-
-                            ktxTextureCreateInfo createInfo = {
-                                0,
-                                static_cast<uint32_t>(format),
-                                0,
-                                static_cast<uint32_t>(width),
-                                static_cast<uint32_t>(height),
-                                1, 2, 1, 1, 1,KTX_FALSE,KTX_FALSE
-                            };
-
-                            result = ktxTexture2_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &kTexture);
-                            if (result != KTX_SUCCESS) Throw(std::runtime_error("failed to create ktx2 image "));
-
-                            std::memcpy(ktxTexture_GetData(ktxTexture(kTexture)), stbdata, size);
-
-                            ktxBasisParams params = {};
-                            params.structSize = sizeof(params);
-                            params.uastc = KTX_TRUE;
-                            params.compressionLevel = 2;
-                            params.qualityLevel = 128;
-                            params.threadCount = 12;
-                            result = ktxTexture2_CompressBasisEx(kTexture, &params);
-                            if (KTX_SUCCESS != result) Throw(std::runtime_error("failed to compress ktx2 image "));
-                            // save to cache
-                            if (useKtxDiskCache)
-                            {
-                                result = ktxTexture_WriteToNamedFile(ktxTexture(kTexture), cacheFileName.c_str());
-                                if (result != KTX_SUCCESS)
-                                {
-                                    SPDLOG_WARN("Failed to cache KTX2 texture '{}': {}", texname, static_cast<int>(result));
-                                }
-                            }
-                        }
-                        else
-                        {
-                            result = ktxTexture2_CreateFromNamedFile(cacheFileName.c_str(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &kTexture);
-                            if (result != KTX_SUCCESS) Throw(std::runtime_error("failed to load ktx2 image "));
-                        }
-
-                        // next
-                        result = ktxTexture2_TranscodeBasis(
-                            kTexture, supportsBCTextures_ ? KTX_TTF_BC7_RGBA : KTX_TTF_RGBA32, 0);
-                        if (result != KTX_SUCCESS) Throw(std::runtime_error("failed to transcode ktx2 image "));
-
-                        pixels = ktxTexture_GetData(ktxTexture(kTexture));
-                        ktx_size_t offset;
-                        ktxTexture_GetImageOffset(ktxTexture(kTexture), 0, 0, 0, &offset);
-                        pixels += offset;
-                        size = static_cast<uint32_t>(ktxTexture_GetImageSize(ktxTexture(kTexture), 0));
-
-                        format = supportsBCTextures_
-                            ? (srgb ? VK_FORMAT_BC7_SRGB_BLOCK : VK_FORMAT_BC7_UNORM_BLOCK)
-                            : (srgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM);
-                        width = kTexture->baseWidth;
-                        height = kTexture->baseHeight;
-                        miplevel = 1;
-                    }
                 }
-
-                // create texture image
-                if (!hdr)
+                else
                 {
-                    if (pixels == nullptr || size == 0)
+                    FDecodedLdrTexture decoded{};
+                    if (decoder != nullptr && copiedData != nullptr && bytelength > 0 &&
+                        decoder->DecodeLdrTexture(texname, mime, copiedData, bytelength, srgb, supportsBCTextures_, decoded) &&
+                        !decoded.Pixels.empty() && decoded.Width > 0 && decoded.Height > 0)
+                    {
+                        width = decoded.Width;
+                        height = decoded.Height;
+                        miplevel = std::max<uint32_t>(1, decoded.MipLevels);
+                        format = decoded.Format;
+                        textureImages_[newTextureIdx] = std::make_unique<TextureImage>(
+                            commandPool_, width, height, miplevel, format,
+                            decoded.Pixels.data(), static_cast<uint32_t>(decoded.Pixels.size()));
+                        textureCreated = true;
+                    }
+                    else
                     {
                         static constexpr std::array<uint8_t, 4> kPlaceholderPixel = {255, 255, 255, 255};
                         width = 1;
                         height = 1;
                         miplevel = 1;
                         format = srgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
-                        pixels = const_cast<uint8_t*>(kPlaceholderPixel.data());
-                        size = static_cast<uint32_t>(kPlaceholderPixel.size());
+                        textureImages_[newTextureIdx] = std::make_unique<TextureImage>(
+                            commandPool_, width, height, miplevel, format,
+                            kPlaceholderPixel.data(), static_cast<uint32_t>(kPlaceholderPixel.size()));
+                        textureCreated = true;
                     }
-                    textureImages_[newTextureIdx] = std::make_unique<TextureImage>(commandPool_, width, height, miplevel, format, pixels, size);
-                    textureCreated = true;
                 }
 
                 if (!textureCreated)
@@ -713,17 +677,7 @@ namespace Assets
                 textureImages_[newTextureIdx]->SetDebugName(fmt::format("Texture {}", texname));
                 BindTexture(newTextureIdx, *(textureImages_[newTextureIdx]));
 
-                // clean up
-                if (stbdata)
-                {
-                    if (useWebPFree) WebPFree(stbdata);
-                    else stbi_image_free(stbdata);
-                }
-                
-                if (kTexture) ktxTexture_Destroy(ktxTexture(kTexture));
-                
-                // transfer
-                taskContext.textureId = newTextureIdx;
+                taskContext.textureId = static_cast<int32_t>(newTextureIdx);
                 taskContext.needFlushHDRSH = hdr;
                 taskContext.hdrResidency = static_cast<uint8_t>(initialHDRResidency);
                 taskContext.elapsed = std::chrono::duration<float, std::chrono::seconds::period>(
@@ -733,7 +687,8 @@ namespace Assets
                                   HDRResidencyName(initialHDRResidency), taskContext.elapsed * 1000.f)
                     : fmt::format("loaded {} ({} x {} x {}) in {:.2f}ms", texname, width, height, miplevel,
                                   taskContext.elapsed * 1000.f);
-                std::copy(info.begin(), info.end(), taskContext.outputInfo.data());
+                std::copy(info.begin(), info.begin() + std::min(info.size(), taskContext.outputInfo.size() - 1),
+                          taskContext.outputInfo.data());
                 task.SetContext(taskContext);
             };
 
@@ -780,6 +735,11 @@ namespace Assets
     void GlobalTexturePool::TickHDRTextureResidency(
         uint32_t activeTextureIdx, bool hasSky, uint32_t frameIndex, bool streamingEnabled)
     {
+        if (!HasDecodeProvider())
+        {
+            return;
+        }
+
         if (!streamingEnabled)
         {
             for (uint32_t textureIdx = 0; textureIdx < hdrTextureResidency_.size(); ++textureIdx)
@@ -828,7 +788,9 @@ namespace Assets
 
     void GlobalTexturePool::QueueHDRTextureResidency(uint32_t textureIdx, EHDRTextureResidency targetResidency)
     {
-        if (textureIdx >= hdrTextureResidency_.size()
+        ITextureDecodeProvider* decoder = GetDecodeProvider();
+        if (decoder == nullptr
+            || textureIdx >= hdrTextureResidency_.size()
             || textureIdx >= textureImages_.size()
             || !hdrTextureResidency_[textureIdx].IsHDR)
         {
@@ -852,18 +814,16 @@ namespace Assets
         }
 
         auto textureResidencyTask =
-            [this, textureIdx, textureName, targetResidency, sourceData](Tasks::ResTask& task)
+            [this, decoder, textureIdx, textureName, targetResidency, sourceData](Tasks::ResTask& task)
             {
-                TextureTaskContext taskContext {};
+                TextureTaskContext taskContext{};
                 const auto timer = std::chrono::high_resolution_clock::now();
 
                 const uint8_t* data = sourceData->empty() ? nullptr : sourceData->data();
-                const FHDRTexturePayload payload = LoadHDRTexturePayload(textureName, data, sourceData->size());
+                const FHDRTexturePayload payload = decoder->LoadHdrTexture(textureName, data, sourceData->size());
                 auto textureImage = CreateHDRTextureImage(commandPool_, payload, targetResidency);
                 if (!textureImage)
                 {
-                    // The source went missing between load and streaming; keep whatever
-                    // image is currently bound instead of unbinding the slot.
                     SPDLOG_WARN("HDR texture '{}' could not be re-created for residency change; keeping current image.",
                                 textureName);
                     if (textureIdx < hdrTextureResidency_.size())
@@ -886,13 +846,14 @@ namespace Assets
                 const std::string info = fmt::format(
                     "[HDRTextureResidency] {} -> {} in {:.2f}ms",
                     textureName, HDRResidencyName(targetResidency), taskContext.elapsed * 1000.f);
-                std::copy(info.begin(), info.end(), taskContext.outputInfo.data());
+                std::copy(info.begin(), info.begin() + std::min(info.size(), taskContext.outputInfo.size() - 1),
+                          taskContext.outputInfo.data());
                 task.SetContext(taskContext);
             };
 
         auto textureResidencyCompleteTask = [this](Tasks::ResTask& task)
             {
-                TextureTaskContext taskContext {};
+                TextureTaskContext taskContext{};
                 task.GetContext(taskContext);
                 const uint32_t textureIdx = static_cast<uint32_t>(taskContext.textureId);
                 if (textureIdx < textureImages_.size() && textureImages_[textureIdx])
@@ -938,9 +899,8 @@ namespace Assets
 
     void GlobalTexturePool::FreeTransientTextures()
     {
-        // make sure the binded image not in use
         device_.WaitIdle();
-        
+
         for (auto& textureGroup : textureNameMap_)
         {
             if (textureGroup.second.Lifetime_ == ETextureLifetime::ETL_Persistent)

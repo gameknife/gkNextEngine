@@ -8,10 +8,11 @@ Application 显式链接；核心层 `src/Engine` 不得反向依赖本目录。
 Android 平台模块源直接并入单一 SHARED target；`NextTui` 仅桌面 + `GK_WITH_TUI`，
 `NextDotNet` 需要 CMake 找到 .NET 工具链（`GK_DOTNET_ENABLED`），移动端不构建。
 
-当前模块（最多 24 个；部分受平台/工具链开关控制）：
+当前模块（最多 25 个；部分受平台/工具链开关控制）：
 
 | 模块 | 职责 |
 |---|---|
+| TextureCodecs | 外部纹理解码与缓存（KTX2/BasisU、WebP、stb_image、HDR 预滤波与 `.texhdr` 缓存） |
 | GltfLoader | glTF/GLB 场景与动画加载（`FSceneLoader`） |
 | LDrawLoader | LDraw 乐高模型加载（MagicaLego / BrickPlayer） |
 | ScadLoader | OpenSCAD DSL 解析/求值/CSG（Manifold）与 ScadRig 骨骼 |

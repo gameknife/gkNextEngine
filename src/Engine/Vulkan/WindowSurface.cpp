@@ -3,7 +3,6 @@
 #include "Engine/Vulkan/VulkanInterposer.hpp"
 #include "Engine/Vulkan/VulkanLoaderBypass.hpp"
 #include "Engine/Utilities/Exception.hpp"
-#include "Engine/Utilities/StbImage.hpp"
 #include "Engine/Common/CoreMinimal.hpp"
 #include "Engine/Options.hpp"
 #include "Engine/Utilities/FileHelper.hpp"
@@ -13,8 +12,6 @@
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
-#include <nlohmann/json.hpp>
-#include <SDL3/SDL_surface.h>
 #include <SDL3/SDL_video.h>
 
 namespace Vulkan
@@ -23,237 +20,7 @@ namespace Vulkan
 namespace
 {
     bool sdlVulkanLibraryLoaded = false;
-
-    SDL_Window* startupSplashWindow = nullptr;
-    uint32_t startupSplashStage = 0;
-
-    void BlendStartupLightPixel(SDL_Surface* surface, int x, int y, float coverage) {
-        Uint8 red = 0, green = 0, blue = 0, alpha = 0;
-        if (coverage <= 0 || !SDL_ReadSurfacePixel(surface, x, y, &red, &green, &blue, &alpha)) return;
-        auto blend = [coverage](Uint8 channel) { return static_cast<Uint8>(std::lround(channel + (255 - channel) * coverage)); };
-        SDL_WriteSurfacePixel(surface, x, y, blend(red), blend(green), blend(blue), alpha);
-    }
-
-    void DrawStartupLight(SDL_Surface* surface, int centerX, int centerY, int radius, bool filled) {
-        constexpr int grid = 4, samples = grid * grid;
-        const float outer = radius + .5f, inner = radius - 2.5f, outer2 = outer * outer, inner2 = inner * inner;
-        for (int y = -radius - 1; y <= radius + 1; ++y) for (int x = -radius - 1; x <= radius + 1; ++x) {
-            int covered = 0;
-            for (int i = 0; i < samples; ++i) {
-                const float sampleX = x + (i % grid + .5f) / grid, sampleY = y + (i / grid + .5f) / grid;
-                const float distance2 = sampleX * sampleX + sampleY * sampleY;
-                covered += distance2 <= outer2 && (filled || distance2 >= inner2);
-            }
-            BlendStartupLightPixel(surface, centerX + x, centerY + y, static_cast<float>(covered) / samples);
-        }
-    }
-
-    void DrawStartupLights(SDL_Surface* surface, uint32_t completedStages) {
-        constexpr int count = 3, radius = 8, gap = 18;
-        const int width = count * radius * 2 + (count - 1) * gap, firstX = (surface->w - width) / 2 + radius, centerY = surface->h - 42;
-        const SDL_Rect lightArea{firstX - radius - 1, centerY - radius - 1, width + 2, radius * 2 + 2};
-        SDL_FillSurfaceRect(surface, &lightArea, SDL_MapSurfaceRGB(surface, 19, 22, 29));
-        for (int i = 0; i < count; ++i) DrawStartupLight(surface, firstX + i * (radius * 2 + gap), centerY, radius, i < completedStages);
-    }
-
-    void DestroyStartupSplash()
-    {
-        if (startupSplashWindow != nullptr)
-        {
-            SDL_DestroyWindow(startupSplashWindow);
-            startupSplashWindow = nullptr;
-        }
-        startupSplashStage = 0;
-    }
-
-    std::filesystem::path ResolveApplicationIconPath(const std::string& explicitIconPath)
-    {
-        if (!explicitIconPath.empty())
-        {
-            const std::filesystem::path explicitPath = Utilities::FileHelper::GetRuntimeFilePath(explicitIconPath);
-            if (std::filesystem::exists(explicitPath))
-            {
-                return explicitPath;
-            }
-        }
-
-#ifdef GK_APP_ICON_NAME
-        {
-            const std::filesystem::path configuredPath = Utilities::FileHelper::GetRuntimeFilePath(
-                std::string("assets/icons/") + GK_APP_ICON_NAME + ".png");
-            if (std::filesystem::exists(configuredPath))
-            {
-                return configuredPath;
-            }
-        }
-#endif
-
-        const std::string appIdentity = NextRenderer::GetApplicationIdentity();
-        if (!appIdentity.empty())
-        {
-            const std::filesystem::path appIconPath = Utilities::FileHelper::GetRuntimeFilePath(
-                "assets/icons/" + appIdentity + ".png");
-            if (std::filesystem::exists(appIconPath))
-            {
-                return appIconPath;
-            }
-
-            const std::filesystem::path manifestPath = Utilities::FileHelper::GetRuntimeFilePath(
-                "assets/icons/manifest.json");
-            if (std::filesystem::exists(manifestPath))
-            {
-                try
-                {
-                    std::ifstream manifestFile(manifestPath);
-                    if (manifestFile.is_open())
-                    {
-                        nlohmann::json manifestJson;
-                        manifestFile >> manifestJson;
-                        if (manifestJson.contains("icons") && manifestJson["icons"].is_array())
-                        {
-                            for (const auto& item : manifestJson["icons"])
-                            {
-                                if (item.value("target", "") == appIdentity)
-                                {
-                                    const std::string fileStr = item.value("file", "");
-                                    if (!fileStr.empty())
-                                    {
-                                        const std::filesystem::path resolved =
-                                            Utilities::FileHelper::GetRuntimeFilePath("assets/icons/" + fileStr);
-                                        if (std::filesystem::exists(resolved))
-                                        {
-                                            return resolved;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                catch (...)
-                {
-                }
-            }
-        }
-
-        const std::filesystem::path fallbackEnginePath = Utilities::FileHelper::GetRuntimeFilePath(
-            "assets/icons/gkNextEngine.png");
-        if (std::filesystem::exists(fallbackEnginePath))
-        {
-            return fallbackEnginePath;
-        }
-
-        const std::filesystem::path fallbackRendererPath = Utilities::FileHelper::GetRuntimeFilePath(
-            "assets/icons/gkNextRenderer.png");
-        if (std::filesystem::exists(fallbackRendererPath))
-        {
-            return fallbackRendererPath;
-        }
-
-        return Utilities::FileHelper::GetRuntimeFilePath("assets/brand/gknext_logo_icon_200.png");
-    }
-
-    void ApplyWindowIcon(SDL_Window* window, const std::string& explicitIconPath)
-    {
-        if (window == nullptr)
-        {
-            return;
-        }
-
-        const std::filesystem::path iconPath = ResolveApplicationIconPath(explicitIconPath);
-        if (!std::filesystem::exists(iconPath))
-        {
-            return;
-        }
-
-        int iconWidth = 0;
-        int iconHeight = 0;
-        if (stbi_uc* pixels = stbi_load(iconPath.string().c_str(), &iconWidth, &iconHeight, nullptr, STBI_rgb_alpha);
-            pixels != nullptr)
-        {
-            if (SDL_Surface* surface = SDL_CreateSurfaceFrom(
-                    iconWidth, iconHeight, SDL_PIXELFORMAT_RGBA32, pixels, iconWidth * 4);
-                surface != nullptr)
-            {
-                if (!SDL_SetWindowIcon(window, surface))
-                {
-                    SPDLOG_WARN("Failed to set window icon: {}", SDL_GetError());
-                }
-                else
-                {
-                    SPDLOG_INFO("Set window icon for {} from {}",
-                                NextRenderer::GetApplicationIdentity(), iconPath.string());
-                }
-                SDL_DestroySurface(surface);
-            }
-            stbi_image_free(pixels);
-        }
-    }
-
-    void CreateStartupSplash()
-    {
-#if ANDROID || IOS
-        return;
-#else
-        constexpr int splashWidth = 480;
-        constexpr int splashHeight = 270;
-        const SDL_WindowFlags flags = SDL_WINDOW_HIDDEN |
-                                      SDL_WINDOW_BORDERLESS |
-                                      SDL_WINDOW_ALWAYS_ON_TOP |
-                                      SDL_WINDOW_UTILITY |
-                                      SDL_WINDOW_NOT_FOCUSABLE;
-
-        startupSplashWindow = SDL_CreateWindow("gkNext", splashWidth, splashHeight, flags);
-        if (startupSplashWindow == nullptr)
-        {
-            SPDLOG_WARN("Failed to create startup splash window: {}", SDL_GetError());
-            return;
-        }
-
-        SDL_SetWindowPosition(startupSplashWindow, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
-        SDL_Surface* windowSurface = SDL_GetWindowSurface(startupSplashWindow);
-        if (windowSurface == nullptr)
-        {
-            SPDLOG_WARN("Failed to create startup splash surface: {}", SDL_GetError());
-            SDL_ShowWindow(startupSplashWindow);
-            return;
-        }
-
-        SDL_FillSurfaceRect(windowSurface, nullptr, SDL_MapSurfaceRGB(windowSurface, 19, 22, 29));
-
-        const std::filesystem::path logoPath = ResolveApplicationIconPath("");
-        int logoWidth = 0;
-        int logoHeight = 0;
-        if (stbi_uc* pixels = stbi_load(logoPath.string().c_str(), &logoWidth, &logoHeight, nullptr,
-                                        STBI_rgb_alpha);
-            pixels != nullptr)
-        {
-            SDL_Surface* surface = SDL_CreateSurfaceFrom(
-                logoWidth, logoHeight, SDL_PIXELFORMAT_RGBA32, pixels, logoWidth * 4);
-            if (surface != nullptr)
-            {
-                SDL_SetSurfaceBlendMode(surface, SDL_BLENDMODE_BLEND);
-                const int iconSize = static_cast<int>(std::min(windowSurface->w, windowSurface->h) * 0.42f);
-                const SDL_Rect destination{
-                    (windowSurface->w - iconSize) / 2,
-                    (windowSurface->h - iconSize) / 2,
-                    iconSize,
-                    iconSize};
-                SDL_BlitSurfaceScaled(surface, nullptr, windowSurface, &destination, SDL_SCALEMODE_LINEAR);
-                SDL_DestroySurface(surface);
-            }
-            stbi_image_free(pixels);
-        }
-
-        DrawStartupLights(windowSurface, startupSplashStage);
-
-        // Upload once before showing. The splash is intentionally static; it only needs to bridge
-        // the synchronous Vulkan/Streamline startup until the real window presents its first frame.
-        SDL_ShowWindow(startupSplashWindow);
-        SDL_UpdateWindowSurface(startupSplashWindow);
-
-#endif
-    }
+    Window::FBrandingHooks windowBrandingHooks{};
 
 #if WIN32
     std::filesystem::path FindIcdManifest(const std::string& vulkanDriver)
@@ -635,7 +402,10 @@ Window::Window(const WindowConfig& config) :
         Throw(std::runtime_error("failed to init SDL Window."));
     }
 
-    ApplyWindowIcon(window_, config.IconPath);
+    if (windowBrandingHooks.ApplyWindowIcon != nullptr)
+    {
+        windowBrandingHooks.ApplyWindowIcon(window_, config.IconPath);
+    }
 
 #if IOS
     {
@@ -966,9 +736,9 @@ void Window::InitSDL(bool systemDpiScaling, const std::string& vulkanDriver,
                 std::chrono::duration<float, std::milli>(
                     std::chrono::steady_clock::now() - sdlInitStart).count());
 
-    if (showStartupSplash)
+    if (showStartupSplash && windowBrandingHooks.CreateStartupSplash != nullptr)
     {
-        CreateStartupSplash();
+        windowBrandingHooks.CreateStartupSplash();
     }
 
     ConfigureVulkanDriver(vulkanDriver);
@@ -1014,25 +784,23 @@ void Window::InitSDL(bool systemDpiScaling, const std::string& vulkanDriver,
 
 void Window::AdvanceStartupSplashStage()
 {
-    if (startupSplashWindow == nullptr || startupSplashStage >= 3)
+    if (windowBrandingHooks.AdvanceStartupSplashStage != nullptr)
     {
-        return;
+        windowBrandingHooks.AdvanceStartupSplashStage();
     }
-
-    SDL_Surface* windowSurface = SDL_GetWindowSurface(startupSplashWindow);
-    if (windowSurface == nullptr)
-    {
-        return;
-    }
-
-    ++startupSplashStage;
-    DrawStartupLights(windowSurface, startupSplashStage);
-    SDL_UpdateWindowSurface(startupSplashWindow);
 }
 
 void Window::CloseStartupSplash()
 {
-    DestroyStartupSplash();
+    if (windowBrandingHooks.CloseStartupSplash != nullptr)
+    {
+        windowBrandingHooks.CloseStartupSplash();
+    }
+}
+
+void Window::SetBrandingHooks(const FBrandingHooks& hooks)
+{
+    windowBrandingHooks = hooks;
 }
 
 void Window::TerminateSDL()

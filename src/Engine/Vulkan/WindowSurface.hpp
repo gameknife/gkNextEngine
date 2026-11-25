@@ -103,6 +103,15 @@ public:
     void ConfigureCustomTitleBarDrag(bool enabled, int titleBarHeight, int leftReservedWidth, int rightReservedWidth);
 
     // Static methods
+    struct FBrandingHooks
+    {
+        void (*ApplyWindowIcon)(Next_Window* window, const std::string& explicitIconPath) = nullptr;
+        void (*CreateStartupSplash)() = nullptr;
+        void (*AdvanceStartupSplashStage)() = nullptr;
+        void (*CloseStartupSplash)() = nullptr;
+    };
+    static void SetBrandingHooks(const FBrandingHooks& hooks);
+
     static void InitSDL(bool systemDpiScaling, const std::string& vulkanDriver,
                         bool headlessSurface = false, bool showStartupSplash = false);
     static void AdvanceStartupSplashStage();

@@ -429,9 +429,14 @@ void Device::RecordPipelineCreated(const char* label) const
                  label != nullptr ? label : "unnamed");
 }
 
-MemoryStatsSnapshot Device::CaptureMemoryStats(bool includeDetails) const
+MemoryStatsSnapshot Device::CaptureMemoryStats() const
 {
-    return memoryAllocator_->CaptureStats(includeDetails);
+    return memoryAllocator_->CaptureStats();
+}
+
+std::string Device::BuildMemoryStatsJson() const
+{
+    return memoryAllocator_->BuildStatsJsonString();
 }
 
 void Device::WaitIdle() const

@@ -1,6 +1,7 @@
 #include "TestCommon.hpp"
 
 #include "Modules/GltfLoader/GltfModule.hpp"
+#include "Modules/TextureCodecs/TextureCodecsModule.hpp"
 #include "Modules/DevTools/DevToolsDebugUiProvider.hpp"
 #include "Modules/NextPhysics/NextPhysicsModule.hpp"
 #include "Modules/NextValidation/NextValidationModule.hpp"
@@ -19,7 +20,8 @@ std::unique_ptr<NextGameInstanceBase> CreateGameInstance(Vulkan::WindowConfig& c
 
 EngineTestFixture::EngineTestFixture()
 {
-    // Scene formats are module-provided; tests need glTF for their fixtures.
+    // Scene formats and external texture codecs are module-provided; tests need them for fixtures.
+    Modules::TextureCodecs::Install();
     Modules::Gltf::Register();
 
     // Mock arguments

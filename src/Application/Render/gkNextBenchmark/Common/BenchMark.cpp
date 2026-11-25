@@ -279,7 +279,7 @@ void BenchMarker::Report(Vulkan::VulkanBaseRenderer* renderer, const std::string
     const double trisActual = SafeAverage(trisActualTotal_, gpuDrivenSampleCount_);
     const double trisTotal = SafeAverage(trisTotal_, gpuDrivenSampleCount_);
     const Runtime::Config::UserSettings& userSettings = NextEngine::GetInstance()->GetUserSettings();
-    const Vulkan::MemoryStatsSnapshot memoryStats = renderer->Device().CaptureMemoryStats(false);
+    const Vulkan::MemoryStatsSnapshot memoryStats = renderer->Device().CaptureMemoryStats();
     const double vramMiB = DeviceLocalVramMiB(memoryStats);
     const std::string resolution = fmt::format("{}x{}", GOption->Width, GOption->Height);
     const std::string rendererName = Vulkan::GetRendererName(renderer->CurrentLogicRendererType());

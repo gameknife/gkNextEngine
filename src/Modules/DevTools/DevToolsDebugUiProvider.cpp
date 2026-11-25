@@ -5,6 +5,10 @@
 #include "Engine/Rendering/ExternalPassRegistry.hpp"
 #include "Engine/Runtime/Config/CVarSystem.hpp"
 #include "Engine/Runtime/Engine.hpp"
+#include "Engine/Utilities/Exception.hpp"
+#if !ANDROID && !IOS
+#include <cpptrace/cpptrace.hpp>
+#endif
 #include "Modules/DevTools/AuxDrawPass.hpp"
 #include "Modules/DevTools/AuxDrawSystem.hpp"
 #include "Modules/DevTools/CVarEditorPanel.hpp"
@@ -19,10 +23,18 @@ namespace DevTools
     namespace
     {
         bool uiCatalogOpen = false;
+
+        void PrintDevToolsStack()
+        {
+#if !ANDROID && !IOS
+            cpptrace::generate_trace().print();
+#endif
+        }
     }
 
     void Install(NextEngine& engine)
     {
+        NextStackWalk::SetStackWalkHandler(&PrintDevToolsStack);
         engine.SetDebugDraw(std::make_shared<FAuxDrawSystem>());
         engine.SetDebugUiProvider(&DefaultDebugUiProvider());
         FUiDevPanels::Get().RegisterCVars(engine.GetCVarSystem());

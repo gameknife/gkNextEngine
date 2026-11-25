@@ -32,7 +32,6 @@ if(ENABLE_UNITY_BUILD)
 
     set_source_files_properties(
         ${GK_SOURCE_ROOT}/Engine/Vulkan/Allocator.cpp
-        ${GK_SOURCE_ROOT}/Engine/Utilities/StbImage.cpp
         ${GK_SOURCE_ROOT}/Engine/Assets/Acceleration/CpuBvh.cpp
         PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
     )
@@ -44,24 +43,16 @@ else()
     set_source_files_properties(${src_files_thirdparty} PROPERTIES COMPILE_OPTIONS -w)
 endif()
 
-find_package(WebP CONFIG REQUIRED)
 target_link_libraries(gkNextEngine PRIVATE
     SDL3::SDL3
     xxHash::xxhash
     meshoptimizer::meshoptimizer
     fmt::fmt
     glm::glm
-    draco::draco
-    WebP::webp
-    WebP::libwebpmux
     GPUOpen::VulkanMemoryAllocator
     ${extra_libs}
 )
 target_link_libraries(gkNextEngine PUBLIC spdlog::spdlog)
-
-if(NOT IOS)
-    target_link_libraries(gkNextEngine PRIVATE CURL::libcurl)
-endif()
 
 if(IOS)
     target_link_libraries(gkNextEngine PRIVATE ${MOLTENVK_LIBRARY})
@@ -72,10 +63,6 @@ elseif(WIN32 AND WITH_STREAMLINE)
     )
 else()
     target_link_libraries(gkNextEngine PRIVATE ${Vulkan_LIBRARIES})
-endif()
-
-if(NOT IOS)
-    target_link_libraries(gkNextEngine PRIVATE cpptrace::cpptrace)
 endif()
 
 if(WITH_STREAMLINE)

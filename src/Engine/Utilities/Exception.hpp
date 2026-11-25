@@ -5,6 +5,8 @@
 
 namespace NextStackWalk
 {
+    using StackWalkFn = void (*)();
+    void SetStackWalkHandler(StackWalkFn handler);
     void PrintStack();
 }
 

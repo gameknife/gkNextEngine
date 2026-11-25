@@ -1524,7 +1524,7 @@ void NextEngine::OnRendererDeviceSet()
     // Environment maps exist to be sampled; a profile that binds no scene textures would upload
     // eleven of them for nothing. The scene itself is still built and committed below either way,
     // so nothing downstream has to special-case a missing renderer scene.
-    if (renderer_->BindlessProfile().bindsSceneTextures)
+    if (renderer_->BindlessProfile().bindsSceneTextures && Assets::GlobalTexturePool::HasDecodeProvider())
     {
         // global textures
         // texture id 0: dynamic hdri sky

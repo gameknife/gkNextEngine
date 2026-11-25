@@ -5,7 +5,6 @@
 #include "Engine/Assets/GPU/Texture.hpp"
 #include "Engine/Assets/GPU/TextureImage.hpp"
 
-#include <stb_image_write.h>
 #include <xxhash.h>
 
 #include <mutex>
@@ -35,25 +34,10 @@ namespace Assets
             return ids;
         }
 
-        std::vector<uint8_t> EncodePng(const std::vector<uint8_t>& pixels, uint32_t size)
-        {
-            std::vector<uint8_t> png;
-            stbi_write_png_to_func(
-                [](void* context, void* data, int bytes)
-                {
-                    auto* out = static_cast<std::vector<uint8_t>*>(context);
-                    const auto* begin = static_cast<const uint8_t*>(data);
-                    out->insert(out->end(), begin, begin + bytes);
-                },
-                &png, static_cast<int>(size), static_cast<int>(size), 4, pixels.data(), static_cast<int>(size * 4));
-            return png;
-        }
-
         // Registers one bake, or finds it. sRGB for colour only: the normal and
-        // MRA maps hold linear data. The name carries a hash of the pixels:
-        // the off-thread upload path keeps a compressed copy on disk keyed by
-        // name, so a bake that changes with the code (not with its parameters)
-        // must change its name too, or a stale cached image would come back.
+        // MRA maps hold linear data. The name carries a hash of the pixels so a
+        // bake that changes with the code (not with its parameters) changes its
+        // pool key too.
         int32_t Register(GlobalTexturePool& pool, const std::string& baseName, const std::vector<uint8_t>& pixels,
                          uint32_t size, bool srgb)
         {
@@ -74,9 +58,7 @@ namespace Assets
             }
             else
             {
-                // Off the main thread the regular decode/upload worker path takes it.
-                const std::vector<uint8_t> png = EncodePng(pixels, size);
-                index = pool.RequestNewTextureMemAsync(name, "image/png", false, png.data(), png.size(), srgb,
+                index = pool.RequestNewRawTextureAsync(name, size, size, srgb, pixels.data(), pixels.size(),
                                                        ETextureLifetime::ETL_Persistent);
             }
             return index == static_cast<uint32_t>(-1) ? -1 : static_cast<int32_t>(index);

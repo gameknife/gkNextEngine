@@ -16,6 +16,7 @@ gk_add_application(gkNextMotionBenchmark MINIMAL_LINK
         ${gkNextBenchmarkCommonSources}
         ${GK_APPLICATION_COMMON_SOURCES}
     MODULES
+        TextureCodecs
         SceneContent
         NextValidation
         NextUI
@@ -24,3 +25,6 @@ gk_add_application(gkNextMotionBenchmark MINIMAL_LINK
         NextTemporalUpscaler
     INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
+if(NOT IOS)
+    target_link_libraries(gkNextMotionBenchmark PRIVATE CURL::libcurl)
+endif()

@@ -1,5 +1,6 @@
 {
   "name": "softmesh-lod-asteroid",
+  "tags": ["smoke"],
   "target": "gkNextRenderer",
   "scene": "AsteroidBelt.proc",
   "defaults": {

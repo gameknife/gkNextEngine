@@ -41,7 +41,7 @@ type LintOptions struct {
 
 var (
 	topLevelFields = fieldSet("name", "target", "scene", "args", "defaults", "viewport", "steps", "waitReady",
-		"comment", "description")
+		"tags", "comment", "description")
 	defaultsFields = fieldSet("waitFrames", "stepTimeoutMs")
 	viewportFields = fieldSet("width", "height")
 	commonFields   = fieldSet("type", "comment", "description", "timeoutMs", "fatal")
@@ -117,6 +117,17 @@ func Lint(data []byte, o LintOptions) []Issue {
 	if v, ok := raw["waitReady"]; ok {
 		if _, isBool := v.(bool); !isBool {
 			errorf(-1, "waitReady must be true or false")
+		}
+	}
+	if v, ok := raw["tags"]; ok {
+		tags, isList := v.([]any)
+		if !isList {
+			errorf(-1, "tags must be an array of strings")
+		}
+		for _, tag := range tags {
+			if s, isString := tag.(string); !isString || strings.TrimSpace(s) == "" || strings.ContainsAny(s, " \t") {
+				errorf(-1, "tags must be non-empty strings without spaces, got %v", tag)
+			}
 		}
 	}
 
@@ -214,23 +225,10 @@ type FileLint struct {
 // LintPaths lints every *.agentscript.json named by paths. A directory contributes
 // the scripts directly inside it (fixtures in subdirectories are not scripts).
 func LintPaths(paths []string, repoRoot string) ([]FileLint, error) {
-	var files []string
-	for _, path := range paths {
-		info, err := os.Stat(path)
-		if err != nil {
-			return nil, err
-		}
-		if !info.IsDir() {
-			files = append(files, path)
-			continue
-		}
-		matches, err := filepath.Glob(filepath.Join(path, "*.agentscript.json"))
-		if err != nil {
-			return nil, err
-		}
-		files = append(files, matches...)
+	files, err := expandScriptPaths(paths)
+	if err != nil {
+		return nil, err
 	}
-	sort.Strings(files)
 	results := make([]FileLint, 0, len(files))
 	for _, file := range files {
 		data, err := os.ReadFile(file)

@@ -80,6 +80,20 @@ gnb 先占用一个随机 `127.0.0.1` 端口并生成一次性随机 token，再
 
 `screenshot` 步骤可选 `"accumulateFrames": N`。大于零时 Engine 暂时进入显式 offline progressive rendering，累计 N 帧后保存，并恢复此前 progressive 状态；这适合用两个独立进程做随机估计器的收敛/偏差对照。普通截图省略该字段，保持单帧当前样本语义。
 
+## 批量运行与 CI
+
+`gnb validate --all` 按标签（`--tag`）和程序（`--target`）选出一组脚本，逐个调用同一个单脚本 runner，
+最后汇总成表和 `batch.json`（[`batch.go`](../../tools/gnb/internal/validate/batch.go)）。没有新的执行路径：
+批量只是循环，每次运行的检查、证据目录和报告都和单独跑一样。
+
+CI 的 Linux 任务装 Lavapipe 跑 `--tag smoke`。引擎在 Linux 上没有 X11/Wayland 时，验证模式自动改用
+`VK_EXT_headless_surface` 并关闭硬件光追（`Engine.cpp` 启动段），所以 smoke 组覆盖的是软件渲染路径。
+
+这套运行要能无人值守：目标启动失败时 `DesktopMain` 在验证/隐藏窗口/专用服务器模式下不弹模态框；
+`AgentControlServer` 的请求等待在服务器停止时放弃，否则主线程不再 `Pump` 时 `Stop()` 会卡在 join 上、进程永远
+不退出；gnb 从目标启动起就等待其退出（[`process.go`](../../tools/gnb/internal/validate/process.go)），
+启动失败在一两秒内报出，并带上引擎的报错行。
+
 ## 约束
 
 - 控制端点必须保持 loopback + 一次性 token；它不是远程管理 API。

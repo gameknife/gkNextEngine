@@ -173,7 +173,13 @@ gnb validate --script assets/agentscripts/smoke.agentscript.json --target gkNext
 gnb validate --script <path> --watch   # 观看模式：给人看的回放（见下）
 gnb validate --script <path> --build   # 先增量构建目标再跑（目标程序比 shader 产物旧时 gnb 会警告）
 gnb validate --lint                    # 只检查脚本、不启动任何程序；写完或改完脚本先跑这一条
+gnb validate --all --tag smoke         # 批量跑一组脚本，最后一张汇总表（约 1 分钟）
+gnb validate --all --target NextDayz --build   # 某个程序的全部脚本；--list 只列出不运行
 ```
+
+带 `"tags": ["smoke"]` 的脚本是快速健康检查：改了引擎或渲染之后先跑这一组。CI 在没有 GPU 的 Linux
+上用 Lavapipe 跑同一组（headless、关闭硬件光追、`--timeout-scale 10`），所以 smoke 脚本不能依赖硬件
+光追或外部升采样器。新脚本要加进 smoke，先在本机用 `-- --forcenort` 跑通。
 
 **默认在后台跑**（隐藏窗口、不封顶帧率、不抢焦点）。用户说想看着跑、想看看效果时用 `--watch`，并先告诉
 用户会弹出窗口、跑完窗口会一直开着、要由用户自己关掉：窗口按显示器刷新率运行，每个动作后停顿一下

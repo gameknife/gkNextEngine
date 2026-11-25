@@ -729,8 +729,12 @@ func newValidateCommand(ctx appContext) *cobra.Command {
 	var build bool
 	var watch bool
 	var pace time.Duration
+	var all bool
+	var list bool
+	var tags []string
+	var timeoutScale float64
 	cmd := &cobra.Command{
-		Use:   "validate --script <path> [--target <name>] [--scene <path>] | validate --lint [paths...]",
+		Use:   "validate --script <path> [--target <name>] [--scene <path>] | validate --all [--tag T] [paths...] | validate --lint [paths...]",
 		Short: tr("cli.validate.short"),
 		Long: "Run an agent script against a target and write a JSON report.\n\n" +
 			"The script is checked before anything is launched: unknown fields, unknown step types and\n" +
@@ -740,11 +744,32 @@ func newValidateCommand(ctx appContext) *cobra.Command {
 			"--watch runs it for a person to follow: visible window at display rate, a caption per step,\n" +
 			"a pause after each action (--pace), a cursor that glides to its target, keyboard and mouse\n" +
 			"input ignored, and the window left open at the end until you close it.\n\n" +
-			"--lint only checks scripts (default: assets/agentscripts) and launches nothing.",
+			"--all runs every script under the given paths (default: assets/agentscripts) one after another,\n" +
+			"filtered by --tag (all must match) and --target, and prints one summary; a failing script does\n" +
+			"not stop the batch. Arguments after -- go to every target. --list shows the selection only.\n\n" +
+			"--lint only checks scripts (default: assets/agentscripts) and launches nothing.\n\n" +
+			"Examples:\n" +
+			"  gnb validate --all --tag smoke\n" +
+			"  gnb validate --all --target NextDayz --build\n" +
+			"  gnb validate --all --tag smoke --timeout-scale 6   # software Vulkan (Lavapipe)",
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if lint {
 				return runValidateLint(ctx, args)
+			}
+			if all || list {
+				if watch {
+					return fmt.Errorf("--watch runs one script; drop --all")
+				}
+				paths, engineArgs := args, []string(nil)
+				if dash := cmd.ArgsLenAtDash(); dash >= 0 {
+					paths, engineArgs = args[:dash], args[dash:]
+				}
+				return runValidateBatch(ctx, cmd, validateBatchRequest{
+					paths: paths, engineArgs: engineArgs, tags: tags, target: target, list: list, build: build,
+					report: report, verbose: verbose, syncValidation: syncValidation, timeoutScale: timeoutScale,
+					reason: reason,
+				})
 			}
 			if script == "" {
 				return fmt.Errorf("--script is required")
@@ -790,7 +815,7 @@ func newValidateCommand(ctx appContext) *cobra.Command {
 			}
 			opts := validatepkg.Options{RepoRoot: ctx.repoRoot, Preset: ctx.preset, Target: target, Scene: scene,
 				Script: scriptPath, Report: reportPath, Width: width, Height: height, Visible: visible, SyncValidation: syncValidation, Reason: reason, RerunOf: rerunOf, Args: args, Verbose: verbose,
-				Watch: watch, Pace: pace}
+				Watch: watch, Pace: pace, TimeoutScale: timeoutScale}
 			result, err := validatepkg.RunWithResult(cmd.Context(), opts)
 			if result.RunID != "" {
 				console.Info("validation run: " + result.RunID)
@@ -815,7 +840,87 @@ func newValidateCommand(ctx appContext) *cobra.Command {
 	cmd.Flags().BoolVar(&build, "build", false, "build the target (incrementally) before running")
 	cmd.Flags().BoolVar(&watch, "watch", false, "run it for a person to watch: paced, captioned, window kept open")
 	cmd.Flags().DurationVar(&pace, "pace", 0, "watch mode: pause after each action (default 700ms)")
+	cmd.Flags().BoolVar(&all, "all", false, "run every selected script (positional args: files or directories)")
+	cmd.Flags().BoolVar(&list, "list", false, "with --all: list the selected scripts without running them")
+	cmd.Flags().StringSliceVar(&tags, "tag", nil, "with --all: only scripts carrying this tag (repeatable; all must match)")
+	cmd.Flags().Float64Var(&timeoutScale, "timeout-scale", 1, "multiply step and scene-ready timeouts (software Vulkan is slow)")
 	return cmd
+}
+
+type validateBatchRequest struct {
+	paths, engineArgs, tags []string
+	target, report, reason  string
+	list, build, verbose    bool
+	syncValidation          bool
+	timeoutScale            float64
+}
+
+func runValidateBatch(ctx appContext, cmd *cobra.Command, req validateBatchRequest) error {
+	paths := req.paths
+	if len(paths) == 0 {
+		paths = []string{filepath.Join(ctx.repoRoot, "assets", "agentscripts")}
+	}
+	for i, path := range paths {
+		if !filepath.IsAbs(path) {
+			paths[i] = filepath.Join(ctx.repoRoot, path)
+		}
+	}
+	scripts, err := validatepkg.SelectScripts(paths, req.tags, req.target)
+	if err != nil {
+		return err
+	}
+	if len(scripts) == 0 {
+		return fmt.Errorf("no scripts match (tags %v, target %q)", req.tags, req.target)
+	}
+	if req.list {
+		for _, script := range scripts {
+			rel, relErr := filepath.Rel(ctx.repoRoot, script.Path)
+			if relErr != nil {
+				rel = script.Path
+			}
+			fmt.Printf("  %-40s %-18s %s\n", script.Name, script.Target, filepath.ToSlash(rel))
+		}
+		console.Info("%d scripts", len(scripts))
+		return nil
+	}
+	if req.build {
+		targets := validatepkg.BatchTargets(scripts)
+		b := newBuildCommand(ctx)
+		if err := b.RunE(b, targets); err != nil {
+			return err
+		}
+	}
+	outDir := filepath.Dir(platform.BinDir(ctx.repoRoot, ctx.preset))
+	reason := req.reason
+	if reason == "" {
+		reason = "batch"
+		if len(req.tags) > 0 {
+			reason = "batch: " + strings.Join(req.tags, ",")
+		}
+	}
+	result := validatepkg.RunBatch(cmd.Context(), validatepkg.BatchOptions{
+		Paths: paths, Tags: req.tags, Target: req.target, ReportDir: filepath.Join(outDir, "agent_reports"),
+		Base: validatepkg.Options{RepoRoot: ctx.repoRoot, Preset: ctx.preset, Args: req.engineArgs, Verbose: req.verbose,
+			SyncValidation: req.syncValidation, TimeoutScale: req.timeoutScale, Reason: reason},
+	}, scripts)
+	validatepkg.PrintBatchSummary(result)
+	reportPath := req.report
+	if reportPath == "" {
+		reportPath = filepath.Join(outDir, "agent_reports", "batch.json")
+	} else if !filepath.IsAbs(reportPath) {
+		reportPath = filepath.Join(outDir, reportPath)
+	}
+	if err := validatepkg.WriteBatchReport(reportPath, result); err != nil {
+		return err
+	}
+	console.Info("batch report: " + reportPath)
+	if cmd.Context().Err() != nil {
+		return cmd.Context().Err()
+	}
+	if result.Failed > 0 {
+		return fmt.Errorf("%d of %d scripts failed", result.Failed, len(result.Entries))
+	}
+	return nil
 }
 
 // buildValidationTarget runs `gnb build <target>` so a validation never runs a

@@ -1,5 +1,6 @@
 {
   "name": "compatibility-renderer-smoke",
+  "tags": ["smoke"],
   "target": "gkNextRenderer",
   "scene": "assets/models/playground.glb",
   "args": ["--force-compatibility-renderer"],

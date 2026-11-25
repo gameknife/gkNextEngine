@@ -1,5 +1,6 @@
 {
   "name": "compatibility-lod-asteroid",
+  "tags": ["smoke"],
   "target": "gkNextRenderer",
   "scene": "AsteroidBelt.proc",
   "args": [

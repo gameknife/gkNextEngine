@@ -1,5 +1,6 @@
 {
   "name": "atmosphere",
+  "tags": ["smoke"],
   "target": "gkNextRenderer",
   "scene": "TimeOfDayObservatory.proc",
   "defaults": {

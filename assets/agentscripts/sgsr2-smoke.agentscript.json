@@ -1,5 +1,6 @@
 {
   "name": "sgsr2-smoke",
+  "tags": ["smoke"],
   "target": "gkNextRenderer",
   "scene": "assets/models/playground.glb",
   "defaults": {

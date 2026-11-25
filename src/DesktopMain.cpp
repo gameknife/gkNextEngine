@@ -117,6 +117,12 @@ namespace
         }
         message += "\n\nPlease report this at:\nhttps://github.com/gameknife/gkNextRenderer/issues";
 
+        // Unattended runs (agent validation, hidden windows, dedicated servers) have nobody to
+        // dismiss a modal box: it would block the process and pop up on the desktop.
+        if (GOption != nullptr && (GOption->AgentValidation || GOption->HiddenWindow || GOption->Dedicated))
+        {
+            return;
+        }
         const std::string title = NextRenderer::GetApplicationIdentity() + " failed to start";
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, title.c_str(), message.c_str(), nullptr);
     }

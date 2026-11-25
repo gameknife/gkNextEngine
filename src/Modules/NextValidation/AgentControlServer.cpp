@@ -79,7 +79,21 @@ namespace Runtime::Agent
                     {
                         auto future = request->promise.get_future();
                         { std::lock_guard lock(mutex); requests.push_back(request); }
-                        response = future.get(); response["id"] = request->frame.value("id", "");
+                        // Wait for the main thread to answer, but give up once the server stops:
+                        // after a startup failure nothing pumps again, and Stop() must still be
+                        // able to join this thread or the process never exits.
+                        while (future.wait_for(std::chrono::milliseconds(50)) != std::future_status::ready && running)
+                        {
+                        }
+                        if (future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
+                        {
+                            response = future.get();
+                        }
+                        else
+                        {
+                            response = {{"error", "engine stopped before answering"}};
+                        }
+                        response["id"] = request->frame.value("id", "");
                     }
                     const std::string encoded = response.dump() + "\n";
                     send(client, encoded.data(), static_cast<int>(encoded.size()), 0);

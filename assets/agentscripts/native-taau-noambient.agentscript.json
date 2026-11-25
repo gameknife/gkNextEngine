@@ -1,5 +1,6 @@
 {
   "name": "native-taau-noambient",
+  "tags": ["smoke"],
   "target": "gkNextRenderer",
   "scene": "assets/models/playground.glb",
   "defaults": {

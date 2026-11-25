@@ -1,5 +1,6 @@
 {
   "name": "renderer-shoot",
+  "tags": ["smoke"],
   "target": "gkNextRenderer",
   "scene": "assets/models/playground.glb",
   "viewport": {
@@ -54,7 +55,8 @@
       "type": "assert",
       "query": "scene.nodeCount",
       "op": "ge",
-      "value": 102
+      "value": 97,
+      "comment": "playground.glb has 95 nodes; each SPACE launches one physics cube"
     },
     {
       "type": "quit"

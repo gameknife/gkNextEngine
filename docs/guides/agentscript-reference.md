@@ -58,6 +58,7 @@ gnb validate --lint path/to/x.agentscript.json
 | `defaults.stepTimeoutMs` | int | 8000 | 每步超时；省略或 ≤0 时是 8000，**不是无限** |
 | `viewport.width/height` | int | 引擎默认 | 窗口尺寸，也是 `norm` 坐标的换算基准；`--width/--height` 覆盖 |
 | `waitReady` | bool | `true` | 第一步之前先等 `scene.ready` 再预热 3 帧（最长 300 秒）。只有测启动或加载过程本身的脚本才设成 `false` |
+| `tags` | string[] | 空 | 批量运行的分组，见"批量运行"。`smoke` = 快速健康检查，CI 在 Lavapipe 上跑 |
 | `steps` | array | — | 见下 |
 
 每个步骤都可以带 `comment`（或 `description`，两者都在时 `description` 优先）做说明，会写进验证记录，
@@ -215,6 +216,34 @@ Windows 上显示缩放不是 100% 时两者不同（125% 下 1280×720 的窗�
 { "type": "assert", "query": "cvar.r.atmosphere.enable", "op": "eq", "value": true }
 ```
 
+## 批量运行（`--all`）
+
+```bash
+gnb validate --all --tag smoke                       # 一组脚本，逐个跑，最后一张汇总表
+gnb validate --all --target NextDayz --build         # 某个程序的全部脚本，先增量构建
+gnb validate --all --tag smoke --list                # 只列出会跑哪些
+gnb validate --all path/a.agentscript.json path/b.agentscript.json -- --forcenort   # -- 之后的参数传给每个目标
+```
+
+- 选择：位置参数是脚本文件或目录（默认 `assets/agentscripts`，不含子目录）；`--tag` 可重复，
+  脚本要带齐所有给出的标签；`--target` 只留指定程序的脚本。
+- 一个脚本失败不会中断批次。没构建的目标标为 SKIP（不算失败）；加 `--build` 会先把用到的目标全部增量构建。
+- 汇总表每行一个脚本：PASS/FAIL/SKIP、通过步数、耗时、第一个失败原因，失败的附证据目录。
+  汇总同时写进 `out/build/<preset>/agent_reports/batch.json`（`--report` 可改路径），每个脚本的报告照常写。
+- 有失败时退出码非零，CI 直接据此判定。
+- `--timeout-scale N` 把所有步骤超时和场景就绪等待乘以 N。软件 Vulkan（Lavapipe）比 GPU 慢一到两个
+  数量级，CI 用 10。
+
+### smoke 组与 CI
+
+`"tags": ["smoke"]` 的脚本是改完引擎或渲染后先跑的那一组（本机约 1 分钟）。CI（`desktop.yml` 的
+Linux 任务）在没有 GPU 和显示器的 runner 上用 Lavapipe 跑同一组：引擎自动改用 `VK_EXT_headless_surface`
+并关闭硬件光追，失败时把 `agent_reports/` 和 `validation_runs/` 作为构建产物上传。所以 smoke 脚本：
+
+- 不能依赖硬件光追（PathTracing）或外部升采样器（DLSS/FSR，验证模式下本来就关闭）；
+- 加进 smoke 之前先在本机用 `gnb validate --all <脚本> -- --forcenort` 跑通（关闭硬件光追，和 CI 的渲染路径一致）；
+- 要尽量快：smoke 是每个 PR 都跑的。
+
 ## 观看模式（`--watch`）
 
 `gnb validate --script <path> --watch` 是给人看的回放，脚本不用改：
@@ -236,6 +265,8 @@ Windows 上显示缩放不是 100% 时两者不同（125% 下 1280×720 的窗�
   `--verbose`。
 - **失败截图在出错的那一刻截**（`failure_<步号>`），不会等后面的步骤（通常是退出）把画面换掉。
 - **目标进程崩溃或退出时立即停下**，报"目标进程在第 N 步意外退出"并附退出码，不再把剩下每一步都报成连接错误。
+  启动阶段就失败（缺 Vulkan 扩展、找不到资源）时报 `target exited during startup`，并带上引擎的那一行报错。
+  验证模式下启动失败不会弹出错误对话框，也不会卡住不退出。
 - **程序比 shader 产物旧时会警告**：shader 编译在所有目标共用的目录里，构建别的目标后，这个目标可能
   和新 shader 不匹配（8 月的程序配 11 月的 shader 会直接丢设备）。加 `--build` 先增量构建目标再跑。
 - report 在 `out/build/<preset>/agent_reports/<name>.json`，每步都有 `passed` 和失败时的 `message`。

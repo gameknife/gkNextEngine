@@ -97,3 +97,34 @@ jobs:
           }
           & "$bin/NextDayzCoreRules"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      # Agent smoke scripts on software Vulkan. The runner has no GPU and no
+      # display, so the engine renders through Lavapipe with VK_EXT_headless_surface
+      # and hardware ray tracing off. Scripts opt in with "tags": ["smoke"].
+      - name: Install Lavapipe
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install --yes mesa-vulkan-drivers vulkan-tools
+          lavapipe_icd="$(find /usr/share/vulkan/icd.d -maxdepth 1 -type f -name 'lvp_icd*.json' -print -quit)"
+          test -n "$lavapipe_icd"
+          export VK_ICD_FILENAMES="$lavapipe_icd" VK_DRIVER_FILES="$lavapipe_icd"
+          if ! vulkaninfo > /tmp/vulkaninfo.txt || ! grep --fixed-strings --quiet VK_EXT_headless_surface /tmp/vulkaninfo.txt; then
+            sudo add-apt-repository --yes ppa:kisak/kisak-mesa
+            sudo apt-get update
+            sudo apt-get install --only-upgrade --yes mesa-vulkan-drivers libgbm1 libgl1-mesa-dri
+            vulkaninfo > /tmp/vulkaninfo.txt
+            grep --fixed-strings --quiet VK_EXT_headless_surface /tmp/vulkaninfo.txt
+          fi
+          echo "VK_ICD_FILENAMES=$lavapipe_icd" >> "$GITHUB_ENV"
+          echo "VK_DRIVER_FILES=$lavapipe_icd" >> "$GITHUB_ENV"
+      - name: Agent smoke (Lavapipe)
+        if: runner.os == 'Linux'
+        run: ./gnb.sh validate --all --tag smoke --build --timeout-scale 10
+      - name: Upload agent smoke evidence
+        if: failure() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-smoke-evidence
+          path: |
+            out/build/linux/agent_reports/
+            out/build/linux/validation_runs/
+          retention-days: 7

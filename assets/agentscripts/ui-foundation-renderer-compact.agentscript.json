@@ -1,5 +1,6 @@
 {
   "name": "ui-foundation-renderer-compact",
+  "tags": ["smoke"],
   "target": "gkNextRenderer",
   "scene": "assets/models/playground.glb",
   "viewport": { "width": 800, "height": 600 },

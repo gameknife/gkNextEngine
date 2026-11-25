@@ -1,5 +1,6 @@
 {
   "name": "checkerboard-rendering-smoke",
+  "tags": ["smoke"],
   "target": "gkNextRenderer",
   "scene": "assets/models/playground.glb",
   "defaults": {

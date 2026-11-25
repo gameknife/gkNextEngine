@@ -1,5 +1,6 @@
 {
   "name": "native-taau-motion",
+  "tags": ["smoke"],
   "target": "gkNextRenderer",
   "scene": "assets/models/playground.glb",
   "defaults": {

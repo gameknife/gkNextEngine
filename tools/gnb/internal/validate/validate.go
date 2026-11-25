@@ -45,6 +45,12 @@ type Options struct {
 	// end (and on failure) until the person closes it.
 	Watch bool
 	Pace  time.Duration
+	// TimeoutScale multiplies every step timeout and the scene-ready wait. Software
+	// Vulkan (Lavapipe in CI) runs one to two orders of magnitude slower than a GPU.
+	TimeoutScale float64
+	// Batch suppresses per-run chatter (the launch command line) when many
+	// scripts run back to back; the batch prints its own summary.
+	Batch bool
 }
 
 // defaultWatchPace is how long watch mode lingers after each action.
@@ -61,7 +67,9 @@ type Script struct {
 	// warm-up frames before the first step. Set it to false for scripts that test
 	// startup or loading itself.
 	WaitReady *bool
-	Steps     []map[string]any
+	// Tags select scripts for batch runs (`gnb validate --all --tag smoke`).
+	Tags  []string
+	Steps []map[string]any
 }
 type Report struct {
 	Name        string           `json:"name"`
@@ -81,6 +89,10 @@ type Result struct {
 	EvidenceDir string
 	ReportPath  string
 	Screenshot  string
+	// Step outcome, for batch summaries. StepsRun counts steps that executed.
+	StepsTotal, StepsRun, StepsFailed int
+	// Failure is the first failed step's message, or the run-level error.
+	Failure string
 }
 type client struct {
 	conn  net.Conn
@@ -370,7 +382,9 @@ func run(ctx context.Context, o Options, s Script, scriptData []byte, loadErr er
 			displayArgs[i] = "--agent-control-token=<redacted>"
 		}
 	}
-	console.CommandLine(exe + " " + strings.Join(displayArgs, " "))
+	if !o.Batch {
+		console.CommandLine(exe + " " + strings.Join(displayArgs, " "))
+	}
 	cmd := exec.CommandContext(ctx, exe, args...)
 	cmd.Dir = filepath.Dir(exe)
 	cmd.Env = append(os.Environ(), o.Env...)
@@ -424,23 +438,26 @@ func run(ctx context.Context, o Options, s Script, scriptData []byte, loadErr er
 		defer stopHeartbeat()
 		go heartbeat(heartbeatCtx, store, record.RunID)
 	}
-	processWaited := false
-	defer func() {
-		if !processWaited && cmd.Process != nil {
-			_ = cmd.Process.Kill()
+	// Wait on the process from the start, so an early exit (a startup failure) is
+	// noticed at once instead of after the connect timeout.
+	proc := newProcessWaiter(cmd)
+	defer func() { _ = proc.kill() }()
+	// startupFailure explains a target that died before the run could begin.
+	startupFailure := func(cause error) error {
+		if !proc.exited() {
+			return cause
 		}
-		if !processWaited {
-			_ = cmd.Wait()
+		msg := fmt.Sprintf("target exited during startup (%v)", proc.err)
+		if tail := engineErrorTail(filepath.Join(result.EvidenceDir, "runner.log"), 1); recording && len(tail) > 0 {
+			msg += ": " + strings.TrimSpace(tail[0])
 		}
-	}()
+		return errors.New(msg)
+	}
 	var conn net.Conn
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		conn, err = net.DialTimeout("tcp", endpoint, 200*time.Millisecond)
-		if err == nil {
-			break
-		}
-		if cmd.ProcessState != nil && cmd.ProcessState.Exited() {
+		if err == nil || proc.exited() {
 			break
 		}
 		select {
@@ -451,22 +468,33 @@ func run(ctx context.Context, o Options, s Script, scriptData []byte, loadErr er
 		}
 	}
 	if err != nil {
-		err = fmt.Errorf("connect engine control %s: %w", endpoint, err)
+		err = startupFailure(fmt.Errorf("connect engine control %s: %w", endpoint, err))
 		if errorsIsContext(ctx) {
-			finish(validationstore.StatusCanceled, "canceled", ctx.Err(), processExitCode(cmd))
+			finish(validationstore.StatusCanceled, "canceled", ctx.Err(), proc.exitCode())
 		} else {
-			finish(validationstore.StatusFailed, "connect", err, processExitCode(cmd))
+			finish(validationstore.StatusFailed, "connect", err, proc.exitCode())
 		}
+		result.Failure = err.Error()
 		return result, err
 	}
 	c := &client{conn: conn, rw: bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn)), token: token}
 	defer conn.Close()
 	if _, err = c.call("handshake", map[string]any{}); err != nil {
-		if errorsIsContext(ctx) {
-			finish(validationstore.StatusCanceled, "canceled", ctx.Err(), processExitCode(cmd))
-		} else {
-			finish(validationstore.StatusFailed, "connect", err, processExitCode(cmd))
+		if errors.Is(err, errControlLost) {
+			// The engine closes the control socket early in its shutdown; the process
+			// itself can take a few seconds more. Let it finish so its reason is logged.
+			select {
+			case <-proc.done:
+			case <-time.After(10 * time.Second):
+			}
 		}
+		err = startupFailure(err)
+		if errorsIsContext(ctx) {
+			finish(validationstore.StatusCanceled, "canceled", ctx.Err(), proc.exitCode())
+		} else {
+			finish(validationstore.StatusFailed, "connect", err, proc.exitCode())
+		}
+		result.Failure = err.Error()
 		return result, err
 	}
 	c.readWindowSize()
@@ -653,23 +681,28 @@ func run(ctx context.Context, o Options, s Script, scriptData []byte, loadErr er
 		_, _ = c.call("quit", map[string]any{"exitCode": 0})
 	}
 	rep.FinishedAt = time.Now().Format(time.RFC3339)
+	result.StepsTotal, result.StepsRun = len(s.Steps), len(rep.Steps)
+	for _, entry := range rep.Steps {
+		if entry["passed"] == true {
+			continue
+		}
+		result.StepsFailed++
+		if result.Failure == "" {
+			result.Failure = fmt.Sprintf("#%v %v: %v", entry["idx"], entry["type"], entry["message"])
+		}
+	}
+	if rep.Error != "" {
+		result.Failure = rep.Error
+	}
 	if !rep.Passed {
 		err = fmt.Errorf("agent validation failed")
 		if rep.Error != "" {
 			err = fmt.Errorf("agent validation failed: %s", rep.Error)
 		}
-		if cmd.Process != nil && !processWaited {
-			if o.Watch && !c.dead {
-				_ = waitForProcessExit(ctx, cmd, exitTimeout)
-				processWaited = true
-			} else {
-				_ = cmd.Process.Kill()
-				exitErr := cmd.Wait()
-				processWaited = true
-				if exitErr != nil && c.dead && !quitSent {
-					err = fmt.Errorf("%w (target %v)", err, exitErr)
-				}
-			}
+		if o.Watch && !c.dead {
+			_ = proc.wait(ctx, exitTimeout)
+		} else if exitErr := proc.kill(); exitErr != nil && c.dead && !quitSent {
+			err = fmt.Errorf("%w (target %v)", err, exitErr)
 		}
 		if !summaryPrinted {
 			printRunSummary(kind, rep, len(s.Steps), result.EvidenceDir)
@@ -678,15 +711,15 @@ func run(ctx context.Context, o Options, s Script, scriptData []byte, loadErr er
 		if o.Report != "" {
 			rep.Passed = false
 			if reportErr := writeReport(o.Report, rep); reportErr != nil {
-				finish(validationstore.StatusFailed, "artifact", reportErr, processExitCode(cmd))
+				finish(validationstore.StatusFailed, "artifact", reportErr, proc.exitCode())
 				return result, reportErr
 			}
 			result.ReportPath = o.Report
 		}
 		if errorsIsContext(ctx) {
-			finish(validationstore.StatusCanceled, "canceled", ctx.Err(), processExitCode(cmd))
+			finish(validationstore.StatusCanceled, "canceled", ctx.Err(), proc.exitCode())
 		} else {
-			finish(validationstore.StatusFailed, "step", err, processExitCode(cmd))
+			finish(validationstore.StatusFailed, "step", err, proc.exitCode())
 		}
 		return result, err
 	}
@@ -695,8 +728,7 @@ func run(ctx context.Context, o Options, s Script, scriptData []byte, loadErr er
 	// close request. Waiting here lets the application finish that tick and exit
 	// with its requested code instead of being unconditionally SIGKILLed by the
 	// cleanup defer above.
-	err = waitForProcessExit(ctx, cmd, exitTimeout)
-	processWaited = true
+	err = proc.wait(ctx, exitTimeout)
 	if err != nil {
 		err = fmt.Errorf("agent process exit: %w", err)
 		rep.Passed = false
@@ -705,9 +737,9 @@ func run(ctx context.Context, o Options, s Script, scriptData []byte, loadErr er
 			result.ReportPath = o.Report
 		}
 		if errorsIsContext(ctx) {
-			finish(validationstore.StatusCanceled, "canceled", ctx.Err(), processExitCode(cmd))
+			finish(validationstore.StatusCanceled, "canceled", ctx.Err(), proc.exitCode())
 		} else {
-			finish(validationstore.StatusFailed, "exit", err, processExitCode(cmd))
+			finish(validationstore.StatusFailed, "exit", err, proc.exitCode())
 		}
 		return result, err
 	}
@@ -722,14 +754,14 @@ func run(ctx context.Context, o Options, s Script, scriptData []byte, loadErr er
 				_ = writeReport(o.Report, rep)
 				result.ReportPath = o.Report
 			}
-			finish(validationstore.StatusFailed, "artifact", err, processExitCode(cmd))
+			finish(validationstore.StatusFailed, "artifact", err, proc.exitCode())
 			return result, err
 		}
 	}
 	copyScreenshotCompatibility(cmd.Dir, compatibilityCopies)
 	if o.Report != "" {
 		if err = writeReport(o.Report, rep); err != nil {
-			finish(validationstore.StatusFailed, "artifact", err, processExitCode(cmd))
+			finish(validationstore.StatusFailed, "artifact", err, proc.exitCode())
 			return result, err
 		}
 		result.ReportPath = o.Report
@@ -740,29 +772,10 @@ func run(ctx context.Context, o Options, s Script, scriptData []byte, loadErr er
 	if !summaryPrinted {
 		printRunSummary(kind, rep, len(s.Steps), result.EvidenceDir)
 	}
-	finish(validationstore.StatusPassed, "complete", nil, processExitCode(cmd))
+	finish(validationstore.StatusPassed, "complete", nil, proc.exitCode())
 	return result, nil
 }
 
-func waitForProcessExit(ctx context.Context, cmd *exec.Cmd, timeout time.Duration) error {
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
-
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case err := <-done:
-		return err
-	case <-ctx.Done():
-		_ = cmd.Process.Kill()
-		<-done
-		return ctx.Err()
-	case <-timer.C:
-		_ = cmd.Process.Kill()
-		<-done
-		return fmt.Errorf("timed out after %s waiting for the agent process to exit", timeout)
-	}
-}
 
 func (c *client) call(method string, params any) (any, error) {
 	if c.dead {
@@ -804,6 +817,9 @@ func execute(ctx context.Context, c *client, st map[string]any, s Script, o Opti
 	typ := str(st, "type", "")
 	e := map[string]any{"type": typ, "passed": true}
 	timeout := duration(st, s)
+	if o.TimeoutScale > 1 {
+		timeout = time.Duration(float64(timeout) * o.TimeoutScale)
+	}
 	switch typ {
 	case "wait-frames":
 		var start, lastFrame float64
@@ -1033,13 +1049,6 @@ func writeFailureReport(path, name string, cause error) {
 	})
 }
 
-func processExitCode(cmd *exec.Cmd) *int {
-	if cmd == nil || cmd.ProcessState == nil || !cmd.ProcessState.Exited() {
-		return nil
-	}
-	code := cmd.ProcessState.ExitCode()
-	return &code
-}
 
 type screenshotCopy struct {
 	source    string

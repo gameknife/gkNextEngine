@@ -54,6 +54,7 @@ set(unitTestSources
     Test_NextTotalwarProductization.cpp
     Test_NextDayzProductization.cpp
     Test_NextDayzCampaign.cpp
+    Test_NextDayzEconomy.cpp
     Test_NextDayzWorldMaps.cpp
     Test_GnbAIClient.cpp
     Test_ScadPromptContext.cpp
@@ -138,6 +139,8 @@ set(unitTestSources
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Player/PlayerActionController.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/World/LootDirector.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/World/Campaign.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/World/Economy.cpp
+    ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Data/EconomyDefs.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/World/CampaignPersistence.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/World/ExpeditionMaps.cpp
     ${GK_SOURCE_ROOT}/Application/Game/NextDayz/Combat/NoiseSystem.cpp

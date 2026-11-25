@@ -1,5 +1,6 @@
 #include "Engine/Common/CoreMinimal.hpp"
 #include "NextDayzGameInstance.hpp"
+#include "Application/Game/NextDayz/World/Economy.hpp"
 #include "Application/Game/NextDayz/UI/Localization.hpp"
 #include "Application/Game/NextDayz/UI/InventoryPreview.hpp"
 #include "Application/Game/NextDayz/UI/ItemIconCache.hpp"
@@ -3480,6 +3481,36 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     reg.Add("safeSpawns", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(world_.anchors.Count(NextDayz::EWorldAnchorType::PlayerSafe)); });
     reg.Add("campaignInField", [this]() -> Runtime::Agent::FAgentQueryValue { return campaign_.inField; });
     reg.Add("campaignGold", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.gold); });
+    // Safehouse economy (economy design §8).
+    reg.Add("reputation", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.reputation); });
+    reg.Add("reputationTier", [this]() -> Runtime::Agent::FAgentQueryValue
+    { return int64_t(NextDayz::ReputationTier(campaign_.reputation, economy_)); });
+    reg.Add("traderShelves", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(economy_.trader.size()); });
+    // Packs left across all shelves this cycle; traderStockFull is a fully restocked trader.
+    reg.Add("traderStock", [this]() -> Runtime::Agent::FAgentQueryValue
+    {
+        int64_t packs = 0;
+        for (const auto& entry : economy_.trader) packs += NextDayz::TraderRemaining(campaign_, entry);
+        return packs;
+    });
+    reg.Add("traderStockFull", [this]() -> Runtime::Agent::FAgentQueryValue
+    {
+        int64_t packs = 0;
+        for (const auto& entry : economy_.trader) packs += entry.stock;
+        return packs;
+    });
+    reg.Add("insertionMap", [this]() -> Runtime::Agent::FAgentQueryValue { return campaign_.sortie.insertionMap; });
+    reg.Add("insertionError", [this]() -> Runtime::Agent::FAgentQueryValue { return double(lastInsertionError_); });
+    reg.Add("sortieSpent", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.sortie.spent); });
+    reg.Add("sortieHistory", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.history.size()); });
+    reg.Add("lastSortieOutcome", [this]() -> Runtime::Agent::FAgentQueryValue
+    { return campaign_.history.empty() ? std::string() : campaign_.history.back().outcome; });
+    reg.Add("lastSortieValue", [this]() -> Runtime::Agent::FAgentQueryValue
+    { return int64_t(campaign_.history.empty() ? 0 : campaign_.history.back().extractedValue); });
+    reg.Add("lastSortieSpent", [this]() -> Runtime::Agent::FAgentQueryValue
+    { return int64_t(campaign_.history.empty() ? 0 : campaign_.history.back().spentBefore); });
+    reg.Add("lastSortieNet", [this]() -> Runtime::Agent::FAgentQueryValue
+    { return campaign_.history.empty() ? int64_t(0) : NextDayz::SortieNet(campaign_.history.back()); });
     reg.Add("campaignStorage", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.storage.size()); });
     reg.Add("campaignSorties", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.sorties); });
     reg.Add("campaignExtractions", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.extractions); });

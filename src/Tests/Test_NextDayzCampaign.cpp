@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 #include "Application/Game/NextDayz/World/Campaign.hpp"
+#include "Application/Game/NextDayz/World/Economy.hpp"
 #include <nlohmann/json.hpp>
 
 using namespace NextDayz;
@@ -56,7 +57,7 @@ TEST_CASE("NextDayz mounted parts survive storage world piles and legacy save mi
 
     nlohmann::json document;
     { std::ifstream stream(path); stream >> document; }
-    REQUIRE(document.at("version") == 5);
+    REQUIRE(document.at("version") == 6);
     document["version"] = 3;
     auto& state = document["state"];
     for (auto& container : state["inventory"]["containers"])
@@ -112,7 +113,7 @@ TEST_CASE("NextDayz inventory snapshot restores worn containers and rejects inva
 TEST_CASE("NextDayz safehouse transfers preserve magazines and selling is one-way", "[NextDayz][Campaign]")
 {
     FCampaign campaign;
-    FExtractionConfig config;
+    FEconomyDefs config;
     Inventory carried;
     FItemInstanceId gun = 0;
     REQUIRE(carried.TryAdd("ak", "AK", EItemKind::Weapon, 1, &gun));
@@ -130,7 +131,7 @@ TEST_CASE("NextDayz safehouse transfers preserve magazines and selling is one-wa
     REQUIRE(campaign.storage.empty());
     campaign.StoreAll(carried);
     const auto id = campaign.storage.front().instanceId;
-    config.sellPrices["ak"] = 120;
+    config.sell["ak"] = 120;
     REQUIRE_FALSE(campaign.Sell(id, 2, config));
     REQUIRE(campaign.Sell(id, 1, config));
     REQUIRE(campaign.gold == 120);

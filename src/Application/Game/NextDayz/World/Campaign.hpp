@@ -25,8 +25,9 @@ namespace NextDayz
         float callRadius = 7.0f;
         float doorRadius = 2.5f;
         float autosaveSeconds = 10.0f;
-        std::unordered_map<std::string, int> sellPrices;
     };
+
+    struct FEconomyDefs;
 
     struct FFlightState
     {
@@ -35,6 +36,32 @@ namespace NextDayz
         glm::vec3 pad{};
         float remaining = 0.0f;
         bool boarded = false;
+    };
+
+    // The sortie being prepared in the safehouse or played in the field. Reset
+    // when the sortie ends (FinishSortie).
+    struct FSortieState
+    {
+        uint64_t spent = 0;           // gold spent in the safehouse for this sortie
+        std::string insertionMap;     // paid landing: region id, empty = random landing
+        int insertionPoint = -1;      // index into the region's landing points
+        uint64_t insertionPaid = 0;   // refunded when the request is cancelled
+    };
+
+    // One finished sortie, for the field report and economy tuning (§8).
+    struct FSortieRecord
+    {
+        uint64_t sortieId = 0;
+        std::string mapId;
+        std::string outcome;          // extracted | died | debug
+        double seconds = 0.0;
+        std::string deathCause;
+        uint64_t extractedValue = 0;  // carried home, priced at the sell table
+        uint64_t spentBefore = 0;     // trader purchases and fees before deploying
+        uint64_t contractGold = 0;
+        uint32_t contractsCompleted = 0;
+        uint32_t reputationAfter = 0;
+        std::vector<std::string> visitedPois;
     };
 
     struct FCampaign
@@ -50,11 +77,17 @@ namespace NextDayz
         std::string lastMapId;
         std::string lastOutcome;
         uint64_t sortieId = 0;
+        // Save v6: the safehouse economy.
+        uint32_t reputation = 0;
+        std::map<std::string, int> traderStock;   // packs left this cycle
+        uint64_t traderCycle = 0;                 // cycle the stock belongs to; 0 = never stocked
+        FSortieState sortie;
+        std::vector<FSortieRecord> history;       // most recent last
 
         bool Store(Inventory& inventory, FItemInstanceId id, int count = -1);
         bool Take(Inventory& inventory, FItemInstanceId id, int count, bool wear);
         void StoreAll(Inventory& inventory);
-        bool Sell(FItemInstanceId id, int count, const FExtractionConfig& config);
+        bool Sell(FItemInstanceId id, int count, const FEconomyDefs& economy);
         bool Call(Inventory& inventory, FItemInstanceId flareId, std::string pointId,
                   const glm::vec3& pad, const glm::vec3& player, const FExtractionConfig& config);
         bool Board(const glm::vec3& player, const FExtractionConfig& config);
@@ -97,7 +130,6 @@ namespace NextDayz
         uint32_t mapVersion = 1;
     };
 
-    int SellPrice(std::string_view itemId, const FExtractionConfig& config);
     const char* FlightPhaseName(EFlightPhase phase);
     bool LoadExtractionConfig(const std::filesystem::path& path, FExtractionConfig& config, std::string& error);
     bool WriteCampaignSave(const std::filesystem::path& path, const FCampaignSave& save, std::string& error);

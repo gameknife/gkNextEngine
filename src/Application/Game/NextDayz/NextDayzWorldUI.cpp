@@ -132,7 +132,7 @@ void NextDayzGameInstance::DrawWorldOperations()
     if (ImGui::Button(deployLabel, ImVec2(-1, 48))) Deploy();
     ImGui::EndDisabled();
     ImGui::PopStyleColor(2);
-    if (destination && ImGui::Button(NextDayz::L10n::Label("RANDOM ASSIGNMENT"), ImVec2(-1, 30))) deployMapChoice_.clear();
+    if (destination && ImGui::Button(NextDayz::L10n::Label("RANDOM ASSIGNMENT"), ImVec2(-1, 30))) SetDeployChoice({});
     if (ImGui::Button(NextDayz::L10n::Label("PREPARE LOADOUT"), ImVec2(-1, 30))) safehouseTab_ = 1;
     ImGui::Spacing();
     if (authoringMode_ || GOption->AgentValidation)
@@ -174,8 +174,10 @@ bool NextDayzGameInstance::DrawWorldAtlas(const std::vector<const NextDayz::FExp
     ImGui::TextUnformatted(NextDayz::L10n::Tr("GLOBAL OPERATIONS"));
     ImGui::SameLine();
     ImGui::TextDisabled("%s", NextDayz::L10n::Tr("  /  KNOWN DEPLOYMENT ZONES"));
+    // The offline campaign adds the paid landing selector under the description.
+    const float footer = netMode_ == ENetMode::Offline && CampaignEnabled() && !authoringMode_ ? 205.0f : 150.0f;
     const ImVec2 mapSize(std::max(180.0f, ImGui::GetContentRegionAvail().x),
-                        std::max(150.0f, ImGui::GetContentRegionAvail().y - 150.0f));
+                        std::max(150.0f, ImGui::GetContentRegionAvail().y - footer));
     const ImVec2 origin = ImGui::GetCursorScreenPos();
     const ImVec2 end(origin.x + mapSize.x, origin.y + mapSize.y);
     ImGui::InvisibleButton("vector_world_atlas", mapSize, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
@@ -275,6 +277,8 @@ bool NextDayzGameInstance::DrawWorldAtlas(const std::vector<const NextDayz::FExp
         if (map.training) ImGui::TextDisabled("%s   /   %s", NextDayz::L10n::Tr("NO FIXED LOCATION"), NextDayz::L10n::Tr(map.terrain));
         else ImGui::TextDisabled("%.4f N, %.4f E   /   %s", map.latitude, map.longitude, NextDayz::L10n::Tr(map.terrain));
         ImGui::TextWrapped("%s", NextDayz::L10n::Tr(map.description));
+        if (netMode_ == ENetMode::Offline && CampaignEnabled() && !authoringMode_ && NextDayz::IsDispatchable(map, false))
+            DrawPaidLanding(map);
     }
     ImGui::TextDisabled("%s", NextDayz::L10n::Tr("Made with Natural Earth."));
     ImGui::EndChild();

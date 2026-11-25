@@ -34,6 +34,7 @@
 #include "Application/Game/NextDayz/UI/NextDayzHUD.hpp"
 #include "Gameplay/Rig/RigInstance.h"
 #include "Application/Game/NextDayz/World/Campaign.hpp"
+#include "Application/Game/NextDayz/Data/EconomyDefs.hpp"
 #include "Application/Game/NextDayz/World/ExpeditionMaps.hpp"
 #include "Application/Game/NextDayz/World/RescueHelicopter.hpp"
 #include "Application/Game/NextDayz/Net/ClientSession.hpp"
@@ -163,6 +164,15 @@ private:
     // The offline destination the next DEPLOY flies to; nullptr = random assignment.
     const NextDayz::FExpeditionMap* ChosenDeployMap() const;
     void BrowseWorldMap(const NextDayz::FExpeditionMap& map);
+    // Changing the destination away from a paid landing refunds it.
+    void SetDeployChoice(std::string mapId);
+    // Safehouse economy (docs/projects/nextdayz/nextdayz-economy-contracts-design.md).
+    void LoadEconomy();
+    void DrawTrader();
+    void DrawPaidLanding(const NextDayz::FExpeditionMap& map);
+    const std::vector<NextDayz::FLandingPoint>& LandingPoints(const NextDayz::FExpeditionMap& map);
+    // Applies safehouse edits, saves, and rolls everything back when the save fails.
+    void ApplySafehouseRequests(std::vector<std::function<void()>>& requests);
     void LoadWorldAtlas();
     void TickMapAuthoring();
     enum class ESafehouseReturn
@@ -377,6 +387,10 @@ private:
     NextDayz::FConfig config_{};
     NextDayz::FCampaign campaign_;
     NextDayz::FExtractionConfig extractionConfig_;
+    NextDayz::FEconomyDefs economy_;
+    std::unordered_map<std::string, std::vector<NextDayz::FLandingPoint>> landingPoints_;
+    // Distance from the last paid landing to the point that was bought; -1 when random.
+    float lastInsertionError_ = -1.0f;
     NextDayz::RescueHelicopter rescueHelicopter_;
     std::filesystem::path campaignPath_;
     std::string campaignMap_;
@@ -396,7 +410,7 @@ private:
     std::vector<std::filesystem::path> authoringWatchFiles_;
     std::chrono::steady_clock::time_point authoringNextPoll_{};
     std::string validationDeployMap_;
-    int safehouseTab_ = -1; // -1 cabin, 0 world map, 1 storage
+    int safehouseTab_ = -1; // -1 cabin, 0 world map, 1 storage, 2 trader
     int selectedWorldMap_ = 0;
     std::string deployMapChoice_;   // offline campaign destination id; empty = random assignment
     float atlasZoom_ = 1.0f;

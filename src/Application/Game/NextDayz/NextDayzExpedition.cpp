@@ -1,6 +1,7 @@
 #include "Engine/Common/CoreMinimal.hpp"
 #include "Application/Game/NextDayz/UI/Localization.hpp"
 #include "NextDayzGameInstance.hpp"
+#include "Application/Game/NextDayz/World/Economy.hpp"
 
 #include <imgui.h>
 #include <SDL3/SDL_keycode.h>
@@ -26,11 +27,24 @@ std::string NextDayzGameInstance::ActiveMapId() const
     return map ? map->id : campaignMap_;
 }
 
+void NextDayzGameInstance::LoadEconomy()
+{
+    std::string error;
+    if (!NextDayz::LoadEconomyDefs(Utilities::FileHelper::ResolvePlatformFilePath(
+            "assets/configs/nextdayz_economy.json"), economy_, error))
+    {
+        // Without a valid table nothing sells and the trader stays closed.
+        economy_ = {};
+        SPDLOG_ERROR("[NextDayz] economy table: {}", error);
+    }
+}
+
 void NextDayzGameInstance::InitializeCampaign()
 {
     if (!CampaignEnabled()) return;
     if (cabinScene_) { InitializeCabinCampaign(); return; }
     switchingCampaignContext_ = false;
+    LoadEconomy();
     std::string error;
     if (!NextDayz::LoadExtractionConfig(Utilities::FileHelper::ResolvePlatformFilePath(
         "assets/configs/nextdayz_extraction.json"), extractionConfig_, error))
@@ -423,7 +437,16 @@ const NextDayz::FExpeditionMap* NextDayzGameInstance::ChosenDeployMap() const
 void NextDayzGameInstance::BrowseWorldMap(const NextDayz::FExpeditionMap& map)
 {
     // Browsing a region in the offline campaign picks it as the next destination.
-    if (!authoringMode_ && NextDayz::IsDispatchable(map, false)) deployMapChoice_ = map.id;
+    if (!authoringMode_ && NextDayz::IsDispatchable(map, false)) SetDeployChoice(map.id);
+}
+
+void NextDayzGameInstance::SetDeployChoice(std::string mapId)
+{
+    deployMapChoice_ = std::move(mapId);
+    if (campaign_.inField || campaign_.sortie.insertionMap.empty() || campaign_.sortie.insertionMap == deployMapChoice_)
+        return;
+    std::vector<std::function<void()>> refund{[this]() { NextDayz::CancelInsertion(campaign_); }};
+    ApplySafehouseRequests(refund);
 }
 
 void NextDayzGameInstance::RequestExpeditionMap(const NextDayz::FExpeditionMap& map, bool deploy)
@@ -474,7 +497,29 @@ void NextDayzGameInstance::CompleteDeployment()
 {
     const auto spawns = world_.anchors.Find(NextDayz::EWorldAnchorType::PlayerSafe);
     if (spawns.empty()) { campaignMessage_ = "This map has no safe deployment points"; return; }
+    // The draw always happens so a paid landing leaves the RNG sequence unchanged.
     const auto* spawn = world_.anchors.Resolve(spawns[sessionRng_.Range(static_cast<uint32_t>(spawns.size()))]);
+    lastInsertionError_ = -1.0f;
+    if (const auto paid = NextDayz::TakeInsertion(campaign_, ActiveMapId()))
+    {
+        const auto* map = NextDayz::FindExpeditionMap(expeditionMaps_, ActiveMapId());
+        static const std::vector<NextDayz::FLandingPoint> none;
+        const auto& points = map ? LandingPoints(*map) : none;
+        if (*paid < static_cast<int>(points.size()))
+        {
+            const glm::vec2 target = points[*paid].position;
+            float best = std::numeric_limits<float>::max();
+            for (const auto handle : spawns)
+                if (const auto* candidate = world_.anchors.Resolve(handle))
+                    if (const float distance = glm::distance(glm::vec2(candidate->worldPos.x, candidate->worldPos.z), target);
+                        distance < best)
+                    {
+                        best = distance;
+                        spawn = candidate;
+                    }
+            lastInsertionError_ = best;
+        }
+    }
     const glm::vec3 position = spawn->worldPos + glm::vec3(0.0f, 0.1f, 0.0f);
     player_.Destroy();
     player_.Create(GetEngine().GetPhysicsEngine(), position, config_);
@@ -506,6 +551,12 @@ void NextDayzGameInstance::ReturnToSafehouse(ESafehouseReturn reason)
 {
     const bool died = reason == ESafehouseReturn::Death;
     if (!campaign_.inField && died) return;
+    NextDayz::FSortieRecord record;
+    record.sortieId = campaign_.sortieId;
+    record.mapId = ActiveMapId();
+    record.outcome = died ? "died" : reason == ESafehouseReturn::Debug ? "debug" : "extracted";
+    record.seconds = survivalSeconds_;
+    if (died) record.deathCause = survival_.Snapshot().lastDamageSource;
     if (died)
     {
         weapons_.CopyMagazinesTo(inventory_);
@@ -525,12 +576,14 @@ void NextDayzGameInstance::ReturnToSafehouse(ESafehouseReturn reason)
     else
     {
         weapons_.CopyMagazinesTo(inventory_);
+        record.extractedValue = NextDayz::SellValue(inventory_.Instances(), economy_);
         campaign_.StoreAll(inventory_);
         campaignMessage_ = reason == ESafehouseReturn::Debug
             ? "Debug return. Carried gear stored; extraction count unchanged."
             : "Extraction successful. Everything you carried is now in your safehouse.";
     }
     campaign_.inField = false;
+    NextDayz::FinishSortie(campaign_, economy_, std::move(record));
     if (reason == ESafehouseReturn::Debug) debugger_.SetVisible(false);
     campaign_.lastOutcome = died ? "MISSING / GEAR LEFT IN FIELD"
         : reason == ESafehouseReturn::Debug ? "DEBUG RETURN / GEAR STORED" : "EXTRACTED";
@@ -689,7 +742,7 @@ bool NextDayzGameInstance::DrawSafehouse()
         return true;
     }
     if (safehouseTab_ < 0) return true;
-    BeginCabinPanel(safehouseTab_ == 0 ? "WORLD / OPERATIONS" : "STORAGE / LOADOUT");
+    BeginCabinPanel(safehouseTab_ == 0 ? "WORLD / OPERATIONS" : safehouseTab_ == 2 ? "TRADER / SERVICES" : "STORAGE / LOADOUT");
     if (campaign_.inField)
     {
         ImGui::TextWrapped("%s", NextDayz::L10n::Tr("Your expedition is saved. Continue when ready."));
@@ -700,6 +753,12 @@ bool NextDayzGameInstance::DrawSafehouse()
     if (safehouseTab_ == 0)
     {
         DrawWorldOperations();
+        ImGui::End();
+        return true;
+    }
+    if (safehouseTab_ == 2)
+    {
+        DrawTrader();
         ImGui::End();
         return true;
     }
@@ -739,14 +798,16 @@ bool NextDayzGameInstance::DrawSafehouse()
                 { if (!campaign_.Take(inventory_,id,count,false)) campaignMessage_ = "Not enough loadout space."; });
                 ImGui::SameLine();
             }
-            const int price = NextDayz::SellPrice(item.defId, extractionConfig_);
+            const uint64_t price = NextDayz::UnitSellValue(item, economy_);
+            ImGui::BeginDisabled(price == 0);
             if (ImGui::SmallButton(NextDayz::L10n::Format("Sell 1 (+{} gold)",price).c_str())) requests.emplace_back([this,id]()
-            { campaign_.Sell(id,1,extractionConfig_); });
+            { campaign_.Sell(id,1,economy_); });
+            ImGui::EndDisabled();
             if (count > 1)
             {
                 ImGui::SameLine();
-                if (ImGui::SmallButton(NextDayz::L10n::Label("Sell stack"))) requests.emplace_back([this,id,count]()
-                { campaign_.Sell(id,count,extractionConfig_); });
+                if (price > 0 && ImGui::SmallButton(NextDayz::L10n::Label("Sell stack"))) requests.emplace_back([this,id,count]()
+                { campaign_.Sell(id,count,economy_); });
             }
             ImGui::Separator();
             ImGui::PopID();
@@ -788,19 +849,34 @@ bool NextDayzGameInstance::DrawSafehouse()
         ImGui::EndTable();
     }
     ImGui::End();
-    if (!requests.empty())
-    {
-        weapons_.CopyMagazinesTo(inventory_);
-        const auto oldCampaign = campaign_;
-        const auto oldInventory = inventory_;
-        for (auto& request : requests) request();
-        for (int slot = 0; slot < NextDayz::kWeaponSlotCount; ++slot)
-            if (weapons_.SlotInstance(slot) && !inventory_.FindInstance(weapons_.SlotInstance(slot))) weapons_.Unequip(slot);
-        SyncClothingVisuals();
-        if (!campaign_.inField && !SaveCampaign())
-        { campaign_ = oldCampaign; inventory_ = oldInventory; }
-    }
+    ApplySafehouseRequests(requests);
     return true;
+}
+
+void NextDayzGameInstance::ApplySafehouseRequests(std::vector<std::function<void()>>& requests)
+{
+    if (requests.empty()) return;
+    weapons_.CopyMagazinesTo(inventory_);
+    const auto oldCampaign = campaign_;
+    const auto oldInventory = inventory_;
+    for (auto& request : requests) request();
+    requests.clear();
+    for (int slot = 0; slot < NextDayz::kWeaponSlotCount; ++slot)
+        if (weapons_.SlotInstance(slot) && !inventory_.FindInstance(weapons_.SlotInstance(slot))) weapons_.Unequip(slot);
+    SyncClothingVisuals();
+    if (!campaign_.inField && !SaveCampaign())
+    { campaign_ = oldCampaign; inventory_ = oldInventory; }
+}
+
+const std::vector<NextDayz::FLandingPoint>& NextDayzGameInstance::LandingPoints(const NextDayz::FExpeditionMap& map)
+{
+    if (const auto found = landingPoints_.find(map.id); found != landingPoints_.end()) return found->second;
+    std::vector<NextDayz::FLandingPoint> points;
+    std::string error;
+    const auto path = NextDayz::GenerationRecordPath(map).generic_string();
+    if (!map.training && !NextDayz::LoadLandingPoints(Utilities::FileHelper::ResolvePlatformFilePath(path.c_str()), points, error))
+        SPDLOG_WARN("[NextDayz] no landing points for {}: {}", map.id, error);
+    return landingPoints_.emplace(map.id, std::move(points)).first->second;
 }
 
 void NextDayzGameInstance::ConfigureCampaignCVars(NextCVar::FCVarSystem& cvars)
@@ -873,7 +949,32 @@ void NextDayzGameInstance::CampaignValidationCommand()
     else if (command == "take-first" && !campaign_.storage.empty())
     { campaign_.Take(inventory_,campaign_.storage.front().instanceId,1,false); SaveCampaign(); }
     else if (command == "sell-first" && !campaign_.storage.empty())
-    { campaign_.Sell(campaign_.storage.front().instanceId,1,extractionConfig_); SaveCampaign(); }
+    { campaign_.Sell(campaign_.storage.front().instanceId,1,economy_); SaveCampaign(); }
+    else if (command == "sell-all" && !campaign_.inField)
+    {
+        while (!campaign_.storage.empty() &&
+               campaign_.Sell(campaign_.storage.front().instanceId, campaign_.storage.front().count, economy_)) {}
+        SaveCampaign();
+    }
+    else if (command.starts_with("buy:"))
+    {
+        campaignMessage_ = NextDayz::TradeResultMessage(NextDayz::Buy(campaign_, economy_, command.substr(4)));
+        SaveCampaign();
+    }
+    else if (command.starts_with("insert:"))
+    {
+        // Pays for a landing point on the deployment map (validation map or chosen destination).
+        const auto* map = NextDayz::FindExpeditionMap(expeditionMaps_,
+            validationDeployMap_.empty() ? deployMapChoice_ : validationDeployMap_);
+        const int point = std::stoi(command.substr(7));
+        if (map && point >= 0 && point < static_cast<int>(LandingPoints(*map).size()))
+        {
+            if (deployMapChoice_ != map->id) SetDeployChoice(map->id);
+            campaignMessage_ = NextDayz::TradeResultMessage(NextDayz::PayInsertion(campaign_, economy_, map->id, point));
+            SaveCampaign();
+        }
+    }
+    else if (command == "insert-cancel") { NextDayz::CancelInsertion(campaign_); SaveCampaign(); }
     else if (command == "call")
     { if (const auto* flare = inventory_.FindFirst("signal_flare")) FireSignal(flare->instanceId); }
     else if (command == "board") BoardHelicopter();

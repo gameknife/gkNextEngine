@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine/Common/CoreMinimal.hpp"
+#include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 
 namespace NextDayz
@@ -35,6 +36,20 @@ namespace NextDayz
     {
         return !map.training && (map.published || authoring);
     }
+
+    // A safe deployment point of a region, read from the published generation
+    // record so the safehouse can offer it without loading the map. Positions are
+    // game coordinates (x, z): SCAD (x, y) maps to (x, -y), as the anchor scan does.
+    struct FLandingPoint
+    {
+        glm::vec2 position{};
+        std::string nearSite;      // name of the closest site
+        float siteDistance = 0.0f;
+    };
+
+    // `generation` is <published scene dir>/generation.json.
+    bool LoadLandingPoints(const std::filesystem::path& generation, std::vector<FLandingPoint>& points, std::string& error);
+    std::filesystem::path GenerationRecordPath(const FExpeditionMap& map);
 
     bool LoadExpeditionMaps(const std::filesystem::path& path, std::vector<FExpeditionMap>& maps, std::string& error);
     const FExpeditionMap* FindExpeditionMap(const std::vector<FExpeditionMap>& maps, std::string_view idOrScene);

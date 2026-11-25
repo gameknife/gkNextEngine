@@ -89,8 +89,12 @@ namespace NextDayz
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FSavedLootEntry, id, source, position, yaw, contents, state, slot)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FLootWorldState, seconds, directorRng, rollRng, pileSerial, entries)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FFlightState, phase, pointId, pad, remaining, boarded)
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FSortieState, spent, insertionMap, insertionPoint, insertionPaid)
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FSortieRecord, sortieId, mapId, outcome, seconds, deathCause, extractedValue,
+                                     spentBefore, contractGold, contractsCompleted, reputationAfter, visitedPois)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FCampaign, inField, gold, sorties, extractions, nextStorageId, storage, flight,
-                                     mapSorties, lastMapId, lastOutcome, sortieId)
+                                     mapSorties, lastMapId, lastOutcome, sortieId, reputation, traderStock, traderCycle,
+                                     sortie, history)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FSurvivalSnapshot, health, hunger, hydration, bleedingWounds, cold,
                                      painkillerSeconds, lifeState, damageSequence, woundSequence, lastDamageSource)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(TimeSystem::FState, minutes, nextWeatherChange, weatherRng, weather, blend)
@@ -206,6 +210,15 @@ namespace NextDayz
                 mapSnapshot.time = state.time;
                 if (!Valid(mapSnapshot)) return false;
             }
+            const auto& campaign = saved.campaign;
+            for (const auto& [item, packs] : campaign.traderStock)
+                if (!FindItemDef(item) || packs < 0 || packs > 100) return false;
+            const auto& sortie = campaign.sortie;
+            if (campaign.history.size() > 50 || sortie.insertionPoint < -1 ||
+                sortie.insertionMap.empty() != (sortie.insertionPoint < 0) ||
+                (sortie.insertionMap.empty() && sortie.insertionPaid != 0) || sortie.insertionPaid > sortie.spent) return false;
+            for (const auto& record : campaign.history)
+                if (!std::isfinite(record.seconds) || record.seconds < 0) return false;
             uint64_t counted = 0;
             for (const auto& [id, count] : saved.campaign.mapSorties)
             {
@@ -223,7 +236,7 @@ namespace NextDayz
                 std::ifstream stream(path, std::ios::binary);
                 auto document = nlohmann::json::parse(stream);
                 const int version = document.at("version").get<int>();
-                if (version < 1 || version > 5) throw std::runtime_error("Unsupported save version");
+                if (version < 1 || version > 6) throw std::runtime_error("Unsupported save version");
                 if (version == 1)
                 {
                     auto& state = document.at("state");
@@ -244,6 +257,16 @@ namespace NextDayz
                     state["previousSlot"] = -1;
                 }
                 if (version < 5) UpgradeLegacyContainers(document.at("state"));
+                if (version < 6)
+                {
+                    // The safehouse economy starts empty: full shelves on first visit, no history.
+                    auto& campaign = document.at("state").at("campaign");
+                    campaign["reputation"] = 0;
+                    campaign["traderStock"] = nlohmann::json::object();
+                    campaign["traderCycle"] = 0;
+                    campaign["sortie"] = FSortieState{};
+                    campaign["history"] = nlohmann::json::array();
+                }
                 auto candidate = document.at("state").get<FCampaignSave>();
                 if (version < 5)
                 {
@@ -299,7 +322,7 @@ namespace NextDayz
             {
                 std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
                 stream.exceptions(std::ios::failbit | std::ios::badbit);
-                stream << nlohmann::json{{"version", 5}, {"state", save}}.dump(2);
+                stream << nlohmann::json{{"version", 6}, {"state", save}}.dump(2);
                 stream.flush();
                 stream.close();
             }
@@ -335,13 +358,10 @@ namespace NextDayz
             candidate.callRadius = document.at("callRadius").get<float>();
             candidate.doorRadius = document.at("doorRadius").get<float>();
             candidate.autosaveSeconds = document.at("autosaveSeconds").get<float>();
-            candidate.sellPrices = document.at("sellPrices").get<std::unordered_map<std::string, int>>();
             for (const float value : {candidate.arrivalSeconds, candidate.landingSeconds, candidate.boardingSeconds,
                  candidate.departureSeconds, candidate.callRadius, candidate.doorRadius, candidate.autosaveSeconds})
                 if (!std::isfinite(value) || value < 0.1f || value > 3600.0f)
                     throw std::runtime_error("Extraction tuning out of range");
-            for (const auto& [id, value] : candidate.sellPrices)
-                if (!FindItemDef(id) || value <= 0 || value > 1000000) throw std::runtime_error("Invalid sell price");
             config = std::move(candidate);
             return true;
         }

@@ -101,7 +101,7 @@
   [PVE 生存循环](projects/nextdayz/nextdayz-productization-design.md) ·
   [网格背包与物品尺寸](projects/nextdayz/inventory-grid-design.md) ·
   [持久世界与直升机撤离](projects/nextdayz/nextdayz-extraction-design.md) ·
-  [局外经济与合同任务](projects/nextdayz/nextdayz-economy-contracts-design.md)（提议，决策已定，未实施） ·
+  [局外经济与合同任务](projects/nextdayz/nextdayz-economy-contracts-design.md)（实施中：E1 价目表与商人已完成） ·
   [世界派遣与地理关卡](projects/nextdayz/nextdayz-world-map-design.md) ·
   [游戏内调试器](projects/nextdayz/nextdayz-debugger.md) ·
   [启动模式与多人联机](projects/nextdayz/nextdayz-multiplayer-design.md) ·

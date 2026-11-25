@@ -1,7 +1,7 @@
 ---
 title: "NextDayz 局外经济与合同任务"
 category: project
-status: 提议（未实施；决策已于 2026-11-25 确认，待录入 .spec/TODO.md）
+status: 实施中（E1 价目表与商人已于 2026-11-25 完成；E2～E5 未开始）
 owner: NextDayz
 created: 2026-11-25
 last_updated: 2026-11-25
@@ -272,9 +272,11 @@ stateDiagram-v2
 `Economy`、`Contracts`、`PoiIndex` 都不依赖引擎（只用 `FCampaign`、`Inventory`、物品表），和 `ItemLedger` 一样
 能直接进 `gkNextUnitTests`，以后也可以并入 `NextDayzCore`。
 
-### 6.4 存档 v6
+### 6.4 存档 v6 / v7
 
-`FCampaign` 新增字段，v5 → v6 迁移全部取默认值：
+E1 落地的 v6 只含 E1 用到的字段：`reputation`、`traderStock`、`traderCycle`、`sortie { spent, insertionMap,
+insertionPoint, insertionPaid }`、`history`。合同板、已接合同、包裹与仓库档位随 E2 / E3 进入 v7，迁移同样全部取
+默认值（仓库档位按 §4.3 给足）。完整字段：
 
 ```text
 reputation          uint32
@@ -379,6 +381,30 @@ contractGold, contractsCompleted, reputationAfter, visitedPois
 | **E3 信誉与仓库** | 信誉档位解锁货架（含信号枪）、合同档位、合同板容量；仓库限容、入库合并与扩容 | 单测：不跌档、解锁边界、信号枪每周期限购、入库合并、撤离超容不丢物品、超容禁止出击与购买、v6 迁移给足容量；agentscript 覆盖一次升档和一次“超容 → 出售 → 出击” |
 | **E4 Master 接入** | Master `State` v2、§7.2 接口、检查点 `visited`、DS 上报、桌面大厅与 Web 大厅的页签；golden 两端比对 | Go 测试与 golden 通过；`nextdayz-master-economy` 脚本：登录 → 出售 → 购买 → 接侦察 → 出击 → 到达 → 撤离 → 结算；Web e2e 加一个大厅交易场景；`gnb ds --bots 8 --minutes 3` 不退化 |
 | **E5 度量与调参** | 出击记录、战报、查询；固定种子批量跑局 + 真人试玩；按数据调 JSON | §8 的指标写回本文 §4.1，替换掉估算值 |
+
+### 10.1 E1 落地记录（2026-11-25）
+
+| 内容 | 实现 |
+| --- | --- |
+| 价目表 | `assets/configs/nextdayz_economy.json`：101 种物品的显式售价（原 `sellPrices` 覆盖价与按种类默认价原样保留，部分历史装备、配件和杂物按单项调整），`buyMarkup` 3，21 个货架条目，服务与信誉阈值。`nextdayz_extraction.json` 不再有 `sellPrices`。合同模板与 `board` 段随 E2 加入，解析器对未知键报错 |
+| C++ | `Data/EconomyDefs`（解析与校验）、`World/Economy`（售价、买价、补货周期、购买、合并入库、付费落点、出击记录）。两者不依赖引擎，已加入 `gkNextUnitTests` |
+| 周期 | 周期号 = 已结束出击数 + 1，由 `sorties` 与 `inField` 推出；`traderCycle` 记录库存所属周期，0 表示从未补货，所以新档和迁移档进机舱就是满货 |
+| 商人 | 机舱第三页签 “商人 / 服务”（`T` 键或机舱菜单按钮）：货架、档位锁、本周期剩余、购买；右侧是付费落点状态、仓库堆数和最近十条战报。购买直接进仓库，与同种无装弹无配件的堆合并 |
+| 精准落点 | 落点列表来自已发布场景旁的 `generation.json` 的 `spawns`（SCAD `(x, y)` → 游戏 `(x, -y)`），按最近据点命名，不需要加载地图。在世界页地图说明下方的下拉框里选，付费 40；同一地区改选免费，取消或改选其他目的地退款。部署时在 `PlayerSafe` 锚点里取离所选点最近的一个，随机数照常抽取以保持序列 |
+| 出击记录 | 每次撤离、死亡或调试返回追加一条 `FSortieRecord`（最多 50 条）：带出价值、出击前花费、结局、时长、死因 |
+| 联机 | 大厅的第三页签只显示“联机交易待 Master 经济上线”，Master 侧不变（E4） |
+| 打包 | NextDayz 包带上 `nextdayz_economy.json` 和每张地图的 `generation.json` |
+
+验证：
+
+- 单测 `[NextDayz][Economy]`：价目表覆盖全部物品、`buy ≥ 2 × sell`、拒绝不完整或可套利的表、买入再卖出必亏、
+  合并入库、补货只在出击结束时发生、档位锁与信号枪每周期 1 把、付费落点的扣款 / 改选 / 退款 / 消耗、
+  战报上限、v6 往返与 v5 迁移、洛克特 `generation.json` 的落点坐标。
+- `assets/agentscripts/nextdayz-economy.agentscript.json`：出售 SVD 与 AK（+320）→ 买急救包与 9x18（−155），
+  信号枪因档位被拒 → 预订洛克特第三个落点（−40）、取消退款、再预订 → 出击，落点与所购落点距离 0 m →
+  调试返回，战报记下花费 195、带回 5、净 −190，货架回满。
+
+已知限制：信誉在 E2 之前没有来源，所以 E1 里只有 0 档货架可买；落点名称用的是 `generation.json` 里的英文据点名。
 
 依赖关系：E1 → E2 → E3。E4 在 E2 完成后即可开始，与 E3 并行。E5 的记录结构随 E1 一起落地，调参放在最后。
 每期合入前都要通过现有的 NextDayz 桌面闸门（[Web 客户端开发计划 §3](nextdayz-web-client-plan.md#3-闸门)）。

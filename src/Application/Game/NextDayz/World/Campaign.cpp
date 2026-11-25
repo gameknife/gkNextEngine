@@ -1,5 +1,6 @@
 #include "Engine/Common/CoreMinimal.hpp"
 #include "Campaign.hpp"
+#include "Economy.hpp"
 
 #include <limits>
 
@@ -14,23 +15,6 @@ namespace NextDayz
         case EFlightPhase::Waiting: return "Waiting at helipad";
         case EFlightPhase::Departing: return "Taking off";
         default: return "Idle";
-        }
-    }
-
-    int SellPrice(std::string_view itemId, const FExtractionConfig& config)
-    {
-        const auto found = config.sellPrices.find(std::string(itemId));
-        if (found != config.sellPrices.end()) return found->second;
-        const auto* def = FindItemDef(itemId);
-        if (!def) return 0;
-        switch (def->kind)
-        {
-        case EItemKind::Weapon: return 100;
-        case EItemKind::Ammo: return 1;
-        case EItemKind::Clothing: return 20;
-        case EItemKind::Melee: return 15;
-        case EItemKind::Attachment: return 25;
-        default: return 5;
         }
     }
 
@@ -76,17 +60,16 @@ namespace NextDayz
         inventory.Clear();
     }
 
-    bool FCampaign::Sell(FItemInstanceId id, int count, const FExtractionConfig& config)
+    bool FCampaign::Sell(FItemInstanceId id, int count, const FEconomyDefs& economy)
     {
         if (inField) return false;
         const auto found = std::find_if(storage.begin(), storage.end(), [id](const auto& item)
         { return item.instanceId == id; });
         if (found == storage.end() || count <= 0 || count > found->count) return false;
-        int price = SellPrice(found->defId, config);
-        for (const auto type : found->attachments)
-            if (const auto* part = FindAttachmentDef(type)) price += SellPrice(part->id, config);
-        const uint64_t value = static_cast<uint64_t>(std::max(price, 0)) * static_cast<uint64_t>(count);
-        if (price <= 0 || value > std::numeric_limits<uint64_t>::max() - gold) return false;
+        const uint64_t price = UnitSellValue(*found, economy);
+        if (price == 0 || price > std::numeric_limits<uint64_t>::max() / static_cast<uint64_t>(count)) return false;
+        const uint64_t value = price * static_cast<uint64_t>(count);
+        if (value > std::numeric_limits<uint64_t>::max() - gold) return false;
         gold += value;
         found->count -= count;
         if (found->count == 0) storage.erase(found);

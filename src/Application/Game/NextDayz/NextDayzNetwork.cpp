@@ -2323,7 +2323,14 @@ bool NextDayzGameInstance::DrawLobby()
         : net.lobby == ELobby::Joining ? "Joining expedition..." : "Preparing your expedition...");
     DrawCabinMenu(status, ready && profile.playing.empty(), resume, net.wantDeploy);
     if (safehouseTab_ < 0) return true;
-    BeginCabinPanel(safehouseTab_ == 0 ? "WORLD / OPERATIONS" : "STORAGE / LOADOUT");
+    BeginCabinPanel(safehouseTab_ == 0 ? "WORLD / OPERATIONS" : safehouseTab_ == 2 ? "TRADER / SERVICES" : "STORAGE / LOADOUT");
+    if (safehouseTab_ == 2)
+    {
+        // The Master owns the online economy (design §7); until it trades, say so.
+        ImGui::TextWrapped("%s", Tr("Online trading opens when the Master economy goes live. Your account gold is kept."));
+        ImGui::End();
+        return true;
+    }
     if (safehouseTab_ == 0)
     {
         std::vector<const FExpeditionMap*> visible;

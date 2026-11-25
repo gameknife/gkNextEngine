@@ -320,6 +320,14 @@ func nextDayzAssets(repoRoot, buildRoot string, client bool) ([]string, error) {
 		if err := add(m.Scene); err != nil {
 			return nil, err
 		}
+		// The safehouse lists a region's paid landing points from the published
+		// generation record without loading the map.
+		generation := filepath.ToSlash(filepath.Join(filepath.Dir(m.Scene), "generation.json"))
+		if _, err := os.Stat(filepath.Join(repoRoot, filepath.FromSlash(generation))); err == nil {
+			if err := add(generation); err != nil {
+				return nil, err
+			}
+		}
 	}
 	if client {
 		for _, name := range []string{"assets/scad/scenes/nextdayz_helicopter_lobby.scad", "assets/configs/nextdayz/world_land.json", "assets/configs/nextdayz_servers.json"} {
@@ -366,6 +374,7 @@ func nextDayzAssets(repoRoot, buildRoot string, client bool) ([]string, error) {
 	}
 	for _, name := range []string{
 		"assets/configs/cvar_default.json", "assets/configs/nextdayz_maps.json", "assets/configs/nextdayz_extraction.json",
+		"assets/configs/nextdayz_economy.json",
 		"assets/fonts/Roboto-Regular.ttf", "assets/fonts/Roboto-BoldCondensed.ttf", "assets/fonts/DroidSansFallback.ttf",
 		"assets/fonts/fa-regular-400.ttf", "assets/fonts/fa-solid-900.ttf", "assets/fonts/fa-brands-400.ttf",
 	} {

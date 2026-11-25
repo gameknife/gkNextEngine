@@ -122,6 +122,7 @@ void NextDayzGameInstance::RequestCabin()
 
 void NextDayzGameInstance::InitializeCabinCampaign()
 {
+    LoadEconomy();
     std::string error;
     if (!NextDayz::LoadExtractionConfig(Utilities::FileHelper::ResolvePlatformFilePath(
             "assets/configs/nextdayz_extraction.json"), extractionConfig_, error))
@@ -221,6 +222,7 @@ void NextDayzGameInstance::DrawCabinMenu(const std::string& status, bool canDepl
         }
         if (ImGui::IsKeyPressed(ImGuiKey_M, false)) safehouseTab_ = safehouseTab_ == 0 ? -1 : 0;
         if (ImGui::IsKeyPressed(ImGuiKey_Tab, false)) safehouseTab_ = safehouseTab_ == 1 ? -1 : 1;
+        if (ImGui::IsKeyPressed(ImGuiKey_T, false)) safehouseTab_ = safehouseTab_ == 2 ? -1 : 2;
     }
     auto* background = ImGui::GetBackgroundDrawList();
     const ImVec2 bottom(origin.x + size.x, origin.y + size.y);
@@ -260,7 +262,7 @@ void NextDayzGameInstance::DrawCabinMenu(const std::string& status, bool canDepl
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.42f,0.34f,0.19f,1));
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.94f,0.94f,0.88f,1));
     ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImVec4(0.65f,0.70f,0.67f,1));
-    const float panelHeight[2] = {196.0f, 214.0f};
+    const float panelHeight[2] = {196.0f, 270.0f};
     float panelTop = origin.y + std::max(150.0f, size.y * 0.22f);
     for (int side = 0; side < 2; ++side)
     {
@@ -288,6 +290,7 @@ void NextDayzGameInstance::DrawCabinMenu(const std::string& status, bool canDepl
             if (ImGui::Button(Label("STORAGE / LOADOUT  [TAB]"), ImVec2(-1,56))) safehouseTab_ = safehouseTab_ == 1 ? -1 : 1;
             ImGui::TextWrapped("%s", Tr("Equipment changes appear on your survivor."));
             if (ImGui::Button(Label("ENTER TRAINING GROUND"), ImVec2(-1,36))) StartTraining();
+            if (ImGui::Button(Label("TRADER  [T]"), ImVec2(-1,36))) safehouseTab_ = safehouseTab_ == 2 ? -1 : 2;
         }
         ImGui::End();
     }
@@ -303,7 +306,7 @@ void NextDayzGameInstance::DrawCabinMenu(const std::string& status, bool canDepl
         const auto connection = (NetUsesMaster() ? netMasterCvar_ + "  |  " : "") + Localize(NetLobbyStatus(), Language());
         ImGui::TextWrapped("%s", connection.c_str());
     }
-    ImGui::TextColored(ImVec4(0.68f,0.74f,0.70f,1), "%s", Tr("M  World map     TAB  Storage     ESC  Settings / Back"));
+    ImGui::TextColored(ImVec4(0.68f,0.74f,0.70f,1), "%s", Tr("M  World map     TAB  Storage     T  Trader     ESC  Settings / Back"));
     ImGui::End();
 }
 

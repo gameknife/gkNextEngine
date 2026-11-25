@@ -3,10 +3,61 @@
 #include "Campaign.hpp"
 
 #include <cmath>
+#include <limits>
+#include <glm/geometric.hpp>
 #include <nlohmann/json.hpp>
 
 namespace NextDayz
 {
+    std::filesystem::path GenerationRecordPath(const FExpeditionMap& map)
+    {
+        return std::filesystem::path(map.scene).parent_path() / "generation.json";
+    }
+
+    bool LoadLandingPoints(const std::filesystem::path& generation, std::vector<FLandingPoint>& points, std::string& error)
+    {
+        try
+        {
+            std::ifstream stream(generation, std::ios::binary);
+            if (!stream) throw std::runtime_error("cannot open " + generation.string());
+            const auto document = nlohmann::json::parse(stream);
+            const auto toGame = [](const nlohmann::json& at)
+            {
+                if (!at.is_array() || at.size() < 2) throw std::runtime_error("invalid position");
+                const glm::vec2 position(at[0].get<float>(), -at[1].get<float>());
+                if (!std::isfinite(position.x) || !std::isfinite(position.y)) throw std::runtime_error("non-finite position");
+                return position;
+            };
+            std::vector<std::pair<std::string, glm::vec2>> sites;
+            if (document.contains("sites"))
+                for (const auto& site : document.at("sites"))
+                    sites.emplace_back(site.at("name").get<std::string>(), toGame(site.at("at")));
+            std::vector<FLandingPoint> result;
+            for (const auto& spawn : document.at("spawns"))
+            {
+                FLandingPoint point;
+                point.position = toGame(spawn);
+                point.siteDistance = std::numeric_limits<float>::max();
+                for (const auto& [name, at] : sites)
+                    if (const float distance = glm::distance(at, point.position); distance < point.siteDistance)
+                    {
+                        point.siteDistance = distance;
+                        point.nearSite = name;
+                    }
+                if (sites.empty()) point.siteDistance = 0.0f;
+                result.push_back(std::move(point));
+            }
+            points = std::move(result);
+            error.clear();
+            return true;
+        }
+        catch (const std::exception& ex)
+        {
+            error = ex.what();
+            return false;
+        }
+    }
+
     bool UpgradeExpeditionCampaign(FCampaignSave& saved, const FExpeditionMap& map,
                                    const FMapWorldSave& freshWorld, const glm::vec3& safePosition)
     {

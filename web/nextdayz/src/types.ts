@@ -19,7 +19,48 @@ export interface MapEntry {
     training: boolean;
 }
 
+export interface EconomyContract {
+    id: number;
+    title: string;
+    issuer: string;
+    type: "deliver" | "recon" | "fetch";
+    tier: number;
+    map: string;
+    targets: string[];
+    items: { id: string; name: string; count: number }[];
+    reward: number;
+    reputation: number;
+    itemReward: string;
+    sortiesLeft: number;
+    canHandIn: boolean;
+    online: boolean;
+}
+
+// The Master's safehouse economy for this account (dzmaster economy.go View).
+export interface Economy {
+    available: boolean;
+    reputation: number;
+    tier: number;
+    nextTier: number;
+    board: EconomyContract[];
+    contracts: EconomyContract[];
+    maxActive: number;
+    slots: number;
+    trader: { item: string; name: string; tier: number; pack: number; price: number; left: number; locked: boolean }[];
+    sellValues: number[];
+    used: number;
+    capacity: number;
+    over: boolean;
+    nextCapacity: number;
+    nextPrice: number;
+    lastCompleted: number;
+    lastGold: number;
+    lastReputation: number;
+}
+
 export interface Profile {
+    revision: number;
+    economy: Economy;
     name: string;
     gold: number;
     storage: Item[];

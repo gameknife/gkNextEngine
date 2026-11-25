@@ -1,0 +1,1989 @@
+{
+ "attachmentItems": [
+  "",
+  "optic_red_dot",
+  "optic_holographic",
+  "optic_4x",
+  "grip_vertical",
+  "mag_quick",
+  "mag_extended",
+  "muzzle_suppressor",
+  "tactical_flashlight"
+ ],
+ "boards": [
+  {
+   "board": [
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 1,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 101,
+     "targets": [
+      "North green village"
+     ],
+     "template": "recon_settlement",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 2,
+     "itemReward": "",
+     "items": [
+      [
+       "food_can",
+       6
+      ],
+      [
+       "water_bottle",
+       1
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 76,
+     "targets": [],
+     "template": "field_rations",
+     "tier": 1,
+     "type": "deliver"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 3,
+     "itemReward": "",
+     "items": [
+      [
+       "bandage",
+       5
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 60,
+     "targets": [],
+     "template": "med_dressings",
+     "tier": 1,
+     "type": "deliver"
+    }
+   ],
+   "reputation": 0,
+   "seed": 1
+  },
+  {
+   "board": [
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 1,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 101,
+     "targets": [
+      "North green village"
+     ],
+     "template": "recon_settlement",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 2,
+     "itemReward": "",
+     "items": [
+      [
+       "food_can",
+       6
+      ],
+      [
+       "water_bottle",
+       1
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 76,
+     "targets": [],
+     "template": "field_rations",
+     "tier": 1,
+     "type": "deliver"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 3,
+     "itemReward": "",
+     "items": [
+      [
+       "bandage",
+       5
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 60,
+     "targets": [],
+     "template": "med_dressings",
+     "tier": 1,
+     "type": "deliver"
+    }
+   ],
+   "reputation": 3,
+   "seed": 1
+  },
+  {
+   "board": [
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 1,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "contract_parcel",
+     "reward": 314,
+     "targets": [
+      "Collective farm"
+     ],
+     "template": "fetch_consignment",
+     "tier": 2,
+     "type": "fetch"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 2,
+     "itemReward": "",
+     "items": [
+      [
+       "food_can",
+       6
+      ],
+      [
+       "water_bottle",
+       1
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 76,
+     "targets": [],
+     "template": "field_rations",
+     "tier": 1,
+     "type": "deliver"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 3,
+     "itemReward": "",
+     "items": [
+      [
+       "battery",
+       2
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 36,
+     "targets": [],
+     "template": "relay_batteries",
+     "tier": 1,
+     "type": "deliver"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 4,
+     "itemReward": "",
+     "items": [
+      [
+       "ammo_545",
+       40
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 104,
+     "targets": [],
+     "template": "rifle_rounds",
+     "tier": 2,
+     "type": "deliver"
+    }
+   ],
+   "reputation": 8,
+   "seed": 1
+  },
+  {
+   "board": [
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 1,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 101,
+     "targets": [
+      "North green village"
+     ],
+     "template": "recon_settlement",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 2,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 122,
+     "targets": [
+      "Porcelain works"
+     ],
+     "template": "recon_works",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 3,
+     "itemReward": "",
+     "items": [
+      [
+       "battery",
+       2
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 36,
+     "targets": [],
+     "template": "relay_batteries",
+     "tier": 1,
+     "type": "deliver"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 4,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "contract_parcel",
+     "reward": 257,
+     "targets": [
+      "North green village"
+     ],
+     "template": "fetch_consignment",
+     "tier": 2,
+     "type": "fetch"
+    }
+   ],
+   "reputation": 15,
+   "seed": 1
+  },
+  {
+   "board": [
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 1,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 111,
+     "targets": [
+      "Health centre"
+     ],
+     "template": "recon_works",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 2,
+     "itemReward": "",
+     "items": [
+      [
+       "bandage",
+       6
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 68,
+     "targets": [],
+     "template": "med_dressings",
+     "tier": 1,
+     "type": "deliver"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 3,
+     "itemReward": "",
+     "items": [
+      [
+       "battery",
+       4
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 52,
+     "targets": [],
+     "template": "relay_batteries",
+     "tier": 1,
+     "type": "deliver"
+    }
+   ],
+   "reputation": 0,
+   "seed": 2
+  },
+  {
+   "board": [
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 1,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 111,
+     "targets": [
+      "Health centre"
+     ],
+     "template": "recon_works",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 2,
+     "itemReward": "",
+     "items": [
+      [
+       "bandage",
+       6
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 68,
+     "targets": [],
+     "template": "med_dressings",
+     "tier": 1,
+     "type": "deliver"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 3,
+     "itemReward": "",
+     "items": [
+      [
+       "battery",
+       4
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 52,
+     "targets": [],
+     "template": "relay_batteries",
+     "tier": 1,
+     "type": "deliver"
+    }
+   ],
+   "reputation": 3,
+   "seed": 2
+  },
+  {
+   "board": [
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 1,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 111,
+     "targets": [
+      "Health centre"
+     ],
+     "template": "recon_works",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 2,
+     "itemReward": "",
+     "items": [
+      [
+       "bandage",
+       6
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 68,
+     "targets": [],
+     "template": "med_dressings",
+     "tier": 1,
+     "type": "deliver"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 3,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 123,
+     "targets": [
+      "Weekend cottages"
+     ],
+     "template": "recon_settlement",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 4,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "contract_parcel",
+     "reward": 317,
+     "targets": [
+      "Weekend cottages"
+     ],
+     "template": "fetch_consignment",
+     "tier": 2,
+     "type": "fetch"
+    }
+   ],
+   "reputation": 8,
+   "seed": 2
+  },
+  {
+   "board": [
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 1,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 111,
+     "targets": [
+      "Health centre"
+     ],
+     "template": "recon_works",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 2,
+     "itemReward": "",
+     "items": [
+      [
+       "ammo_545",
+       55
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 128,
+     "targets": [],
+     "template": "rifle_rounds",
+     "tier": 2,
+     "type": "deliver"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 3,
+     "itemReward": "",
+     "items": [
+      [
+       "medkit",
+       2
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 120,
+     "targets": [],
+     "template": "med_kits",
+     "tier": 2,
+     "type": "deliver"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 4,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "contract_documents",
+     "reward": 255,
+     "targets": [
+      "Old town square"
+     ],
+     "template": "fetch_records",
+     "tier": 2,
+     "type": "fetch"
+    }
+   ],
+   "reputation": 15,
+   "seed": 2
+  },
+  {
+   "board": [
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 1,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 145,
+     "targets": [
+      "Health centre"
+     ],
+     "template": "recon_works",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 2,
+     "itemReward": "",
+     "items": [
+      [
+       "food_can",
+       6
+      ],
+      [
+       "water_bottle",
+       1
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 76,
+     "targets": [],
+     "template": "field_rations",
+     "tier": 1,
+     "type": "deliver"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 3,
+     "itemReward": "",
+     "items": [
+      [
+       "bandage",
+       3
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 44,
+     "targets": [],
+     "template": "med_dressings",
+     "tier": 1,
+     "type": "deliver"
+    }
+   ],
+   "reputation": 0,
+   "seed": 3
+  },
+  {
+   "board": [
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 1,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 145,
+     "targets": [
+      "Health centre"
+     ],
+     "template": "recon_works",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 2,
+     "itemReward": "",
+     "items": [
+      [
+       "food_can",
+       6
+      ],
+      [
+       "water_bottle",
+       1
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 76,
+     "targets": [],
+     "template": "field_rations",
+     "tier": 1,
+     "type": "deliver"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 3,
+     "itemReward": "",
+     "items": [
+      [
+       "bandage",
+       3
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 44,
+     "targets": [],
+     "template": "med_dressings",
+     "tier": 1,
+     "type": "deliver"
+    }
+   ],
+   "reputation": 3,
+   "seed": 3
+  },
+  {
+   "board": [
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 1,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 145,
+     "targets": [
+      "Health centre"
+     ],
+     "template": "recon_works",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 2,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "contract_parcel",
+     "reward": 308,
+     "targets": [
+      "Weekend cottages"
+     ],
+     "template": "fetch_consignment",
+     "tier": 2,
+     "type": "fetch"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 3,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "contract_documents",
+     "reward": 306,
+     "targets": [
+      "Old town square"
+     ],
+     "template": "fetch_records",
+     "tier": 2,
+     "type": "fetch"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 4,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 226,
+     "targets": [
+      "Bridge roadblock",
+      "North green village"
+     ],
+     "template": "recon_sweep",
+     "tier": 2,
+     "type": "recon"
+    }
+   ],
+   "reputation": 8,
+   "seed": 3
+  },
+  {
+   "board": [
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 1,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 145,
+     "targets": [
+      "Health centre"
+     ],
+     "template": "recon_works",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 2,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "contract_documents",
+     "reward": 308,
+     "targets": [
+      "Old town square"
+     ],
+     "template": "fetch_records",
+     "tier": 2,
+     "type": "fetch"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 3,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 129,
+     "targets": [
+      "North green village"
+     ],
+     "template": "recon_settlement",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 4,
+     "itemReward": "",
+     "items": [
+      [
+       "vest_6b3",
+       1
+      ],
+      [
+       "helmet_ssh68",
+       1
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 192,
+     "targets": [],
+     "template": "collector_armour",
+     "tier": 3,
+     "type": "deliver"
+    }
+   ],
+   "reputation": 15,
+   "seed": 3
+  },
+  {
+   "board": [
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 1,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 130,
+     "targets": [
+      "Lower town street"
+     ],
+     "template": "recon_settlement",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 2,
+     "itemReward": "",
+     "items": [
+      [
+       "food_can",
+       5
+      ],
+      [
+       "water_bottle",
+       1
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 68,
+     "targets": [],
+     "template": "field_rations",
+     "tier": 1,
+     "type": "deliver"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 3,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 144,
+     "targets": [
+      "Health centre"
+     ],
+     "template": "recon_works",
+     "tier": 1,
+     "type": "recon"
+    }
+   ],
+   "reputation": 0,
+   "seed": 42
+  },
+  {
+   "board": [
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 1,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 130,
+     "targets": [
+      "Lower town street"
+     ],
+     "template": "recon_settlement",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 2,
+     "itemReward": "",
+     "items": [
+      [
+       "food_can",
+       5
+      ],
+      [
+       "water_bottle",
+       1
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 68,
+     "targets": [],
+     "template": "field_rations",
+     "tier": 1,
+     "type": "deliver"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 3,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 144,
+     "targets": [
+      "Health centre"
+     ],
+     "template": "recon_works",
+     "tier": 1,
+     "type": "recon"
+    }
+   ],
+   "reputation": 3,
+   "seed": 42
+  },
+  {
+   "board": [
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 1,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "contract_parcel",
+     "reward": 284,
+     "targets": [
+      "Porcelain works"
+     ],
+     "template": "fetch_consignment",
+     "tier": 2,
+     "type": "fetch"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 2,
+     "itemReward": "",
+     "items": [
+      [
+       "ammo_545",
+       51
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 122,
+     "targets": [],
+     "template": "rifle_rounds",
+     "tier": 2,
+     "type": "deliver"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 3,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 252,
+     "targets": [
+      "Weekend cottages",
+      "North green village"
+     ],
+     "template": "recon_sweep",
+     "tier": 2,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 4,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 123,
+     "targets": [
+      "Field farmstead"
+     ],
+     "template": "recon_settlement",
+     "tier": 1,
+     "type": "recon"
+    }
+   ],
+   "reputation": 8,
+   "seed": 42
+  },
+  {
+   "board": [
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 1,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 344,
+     "targets": [
+      "Forest radio post"
+     ],
+     "template": "recon_garrison",
+     "tier": 3,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 2,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "contract_parcel",
+     "reward": 312,
+     "targets": [
+      "North green village"
+     ],
+     "template": "fetch_consignment",
+     "tier": 2,
+     "type": "fetch"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 3,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "contract_documents",
+     "reward": 270,
+     "targets": [
+      "Old town square"
+     ],
+     "template": "fetch_records",
+     "tier": 2,
+     "type": "fetch"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 4,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 136,
+     "targets": [
+      "Lower town street"
+     ],
+     "template": "recon_settlement",
+     "tier": 1,
+     "type": "recon"
+    }
+   ],
+   "reputation": 15,
+   "seed": 42
+  },
+  {
+   "board": [
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 1,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 135,
+     "targets": [
+      "Collective farm"
+     ],
+     "template": "recon_works",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 2,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 128,
+     "targets": [
+      "Old town square"
+     ],
+     "template": "recon_settlement",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 3,
+     "itemReward": "",
+     "items": [
+      [
+       "bandage",
+       4
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 52,
+     "targets": [],
+     "template": "med_dressings",
+     "tier": 1,
+     "type": "deliver"
+    }
+   ],
+   "reputation": 0,
+   "seed": 1337
+  },
+  {
+   "board": [
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 1,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 135,
+     "targets": [
+      "Collective farm"
+     ],
+     "template": "recon_works",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 2,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 128,
+     "targets": [
+      "Old town square"
+     ],
+     "template": "recon_settlement",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 3,
+     "itemReward": "",
+     "items": [
+      [
+       "bandage",
+       4
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 52,
+     "targets": [],
+     "template": "med_dressings",
+     "tier": 1,
+     "type": "deliver"
+    }
+   ],
+   "reputation": 3,
+   "seed": 1337
+  },
+  {
+   "board": [
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 1,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 227,
+     "targets": [
+      "Weekend cottages",
+      "Lower town street"
+     ],
+     "template": "recon_sweep",
+     "tier": 2,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 2,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 134,
+     "targets": [
+      "Lower town street"
+     ],
+     "template": "recon_settlement",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 3,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "contract_documents",
+     "reward": 304,
+     "targets": [
+      "Health centre"
+     ],
+     "template": "fetch_records",
+     "tier": 2,
+     "type": "fetch"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 4,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "contract_parcel",
+     "reward": 296,
+     "targets": [
+      "Spa villas"
+     ],
+     "template": "fetch_consignment",
+     "tier": 2,
+     "type": "fetch"
+    }
+   ],
+   "reputation": 8,
+   "seed": 1337
+  },
+  {
+   "board": [
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 1,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "contract_documents",
+     "reward": 300,
+     "targets": [
+      "Health centre"
+     ],
+     "template": "fetch_records",
+     "tier": 2,
+     "type": "fetch"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 2,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 138,
+     "targets": [
+      "Health centre"
+     ],
+     "template": "recon_works",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 3,
+     "itemReward": "",
+     "items": [],
+     "map": "cz_loket_riverbend",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 104,
+     "targets": [
+      "SE suburb"
+     ],
+     "template": "recon_settlement",
+     "tier": 1,
+     "type": "recon"
+    },
+    {
+     "accepted": false,
+     "acceptedAt": 0,
+     "id": 4,
+     "itemReward": "",
+     "items": [
+      [
+       "bandage",
+       5
+      ]
+     ],
+     "map": "",
+     "offeredAt": 0,
+     "parcel": "",
+     "reward": 60,
+     "targets": [],
+     "template": "med_dressings",
+     "tier": 1,
+     "type": "deliver"
+    }
+   ],
+   "reputation": 15,
+   "seed": 1337
+  }
+ ],
+ "scenario": {
+  "seed": 24301,
+  "steps": [
+   {
+    "board": [
+     {
+      "accepted": false,
+      "acceptedAt": 0,
+      "id": 1,
+      "itemReward": "",
+      "items": [],
+      "map": "cz_loket_riverbend",
+      "offeredAt": 0,
+      "parcel": "",
+      "reward": 114,
+      "targets": [
+       "West farmstead"
+      ],
+      "template": "recon_settlement",
+      "tier": 1,
+      "type": "recon"
+     },
+     {
+      "accepted": false,
+      "acceptedAt": 0,
+      "id": 2,
+      "itemReward": "",
+      "items": [
+       [
+        "bandage",
+        6
+       ]
+      ],
+      "map": "",
+      "offeredAt": 0,
+      "parcel": "",
+      "reward": 68,
+      "targets": [],
+      "template": "med_dressings",
+      "tier": 1,
+      "type": "deliver"
+     },
+     {
+      "accepted": false,
+      "acceptedAt": 0,
+      "id": 3,
+      "itemReward": "",
+      "items": [
+       [
+        "battery",
+        4
+       ]
+      ],
+      "map": "",
+      "offeredAt": 0,
+      "parcel": "",
+      "reward": 52,
+      "targets": [],
+      "template": "relay_batteries",
+      "tier": 1,
+      "type": "deliver"
+     }
+    ],
+    "contracts": [],
+    "contractsCompleted": 0,
+    "gold": 0,
+    "reputation": 0,
+    "step": "refresh"
+   },
+   {
+    "board": [
+     {
+      "accepted": false,
+      "acceptedAt": 0,
+      "id": 2,
+      "itemReward": "",
+      "items": [
+       [
+        "bandage",
+        6
+       ]
+      ],
+      "map": "",
+      "offeredAt": 0,
+      "parcel": "",
+      "reward": 68,
+      "targets": [],
+      "template": "med_dressings",
+      "tier": 1,
+      "type": "deliver"
+     },
+     {
+      "accepted": false,
+      "acceptedAt": 0,
+      "id": 3,
+      "itemReward": "",
+      "items": [
+       [
+        "battery",
+        4
+       ]
+      ],
+      "map": "",
+      "offeredAt": 0,
+      "parcel": "",
+      "reward": 52,
+      "targets": [],
+      "template": "relay_batteries",
+      "tier": 1,
+      "type": "deliver"
+     }
+    ],
+    "contracts": [
+     {
+      "accepted": true,
+      "acceptedAt": 0,
+      "id": 1,
+      "itemReward": "",
+      "items": [],
+      "map": "cz_loket_riverbend",
+      "offeredAt": 0,
+      "parcel": "",
+      "reward": 114,
+      "targets": [
+       "West farmstead"
+      ],
+      "template": "recon_settlement",
+      "tier": 1,
+      "type": "recon"
+     }
+    ],
+    "contractsCompleted": 0,
+    "gold": 0,
+    "reputation": 0,
+    "step": "accept-recon"
+   },
+   {
+    "board": [
+     {
+      "accepted": false,
+      "acceptedAt": 0,
+      "id": 3,
+      "itemReward": "",
+      "items": [
+       [
+        "battery",
+        4
+       ]
+      ],
+      "map": "",
+      "offeredAt": 0,
+      "parcel": "",
+      "reward": 52,
+      "targets": [],
+      "template": "relay_batteries",
+      "tier": 1,
+      "type": "deliver"
+     }
+    ],
+    "contracts": [
+     {
+      "accepted": true,
+      "acceptedAt": 0,
+      "id": 1,
+      "itemReward": "",
+      "items": [],
+      "map": "cz_loket_riverbend",
+      "offeredAt": 0,
+      "parcel": "",
+      "reward": 114,
+      "targets": [
+       "West farmstead"
+      ],
+      "template": "recon_settlement",
+      "tier": 1,
+      "type": "recon"
+     }
+    ],
+    "contractsCompleted": 1,
+    "gold": 68,
+    "reputation": 1,
+    "step": "handin"
+   },
+   {
+    "board": [
+     {
+      "accepted": false,
+      "acceptedAt": 0,
+      "id": 3,
+      "itemReward": "",
+      "items": [
+       [
+        "battery",
+        4
+       ]
+      ],
+      "map": "",
+      "offeredAt": 0,
+      "parcel": "",
+      "reward": 52,
+      "targets": [],
+      "template": "relay_batteries",
+      "tier": 1,
+      "type": "deliver"
+     },
+     {
+      "accepted": false,
+      "acceptedAt": 0,
+      "id": 4,
+      "itemReward": "",
+      "items": [],
+      "map": "cz_loket_riverbend",
+      "offeredAt": 1,
+      "parcel": "",
+      "reward": 111,
+      "targets": [
+       "Weekend cottages"
+      ],
+      "template": "recon_settlement",
+      "tier": 1,
+      "type": "recon"
+     },
+     {
+      "accepted": false,
+      "acceptedAt": 0,
+      "id": 5,
+      "itemReward": "",
+      "items": [],
+      "map": "cz_loket_riverbend",
+      "offeredAt": 1,
+      "parcel": "",
+      "reward": 124,
+      "targets": [
+       "Collective farm"
+      ],
+      "template": "recon_works",
+      "tier": 1,
+      "type": "recon"
+     }
+    ],
+    "contracts": [],
+    "contractsCompleted": 2,
+    "gold": 182,
+    "reputation": 2,
+    "step": "extract-visited"
+   },
+   {
+    "board": [
+     {
+      "accepted": false,
+      "acceptedAt": 0,
+      "id": 3,
+      "itemReward": "",
+      "items": [
+       [
+        "battery",
+        4
+       ]
+      ],
+      "map": "",
+      "offeredAt": 0,
+      "parcel": "",
+      "reward": 52,
+      "targets": [],
+      "template": "relay_batteries",
+      "tier": 1,
+      "type": "deliver"
+     },
+     {
+      "accepted": false,
+      "acceptedAt": 0,
+      "id": 5,
+      "itemReward": "",
+      "items": [],
+      "map": "cz_loket_riverbend",
+      "offeredAt": 1,
+      "parcel": "",
+      "reward": 124,
+      "targets": [
+       "Collective farm"
+      ],
+      "template": "recon_works",
+      "tier": 1,
+      "type": "recon"
+     }
+    ],
+    "contracts": [
+     {
+      "accepted": true,
+      "acceptedAt": 1,
+      "id": 4,
+      "itemReward": "",
+      "items": [],
+      "map": "cz_loket_riverbend",
+      "offeredAt": 1,
+      "parcel": "",
+      "reward": 111,
+      "targets": [
+       "Weekend cottages"
+      ],
+      "template": "recon_settlement",
+      "tier": 1,
+      "type": "recon"
+     }
+    ],
+    "contractsCompleted": 2,
+    "gold": 182,
+    "reputation": 2,
+    "step": "accept-recon"
+   },
+   {
+    "board": [
+     {
+      "accepted": false,
+      "acceptedAt": 0,
+      "id": 5,
+      "itemReward": "",
+      "items": [],
+      "map": "cz_loket_riverbend",
+      "offeredAt": 1,
+      "parcel": "",
+      "reward": 124,
+      "targets": [
+       "Collective farm"
+      ],
+      "template": "recon_works",
+      "tier": 1,
+      "type": "recon"
+     },
+     {
+      "accepted": false,
+      "acceptedAt": 0,
+      "id": 6,
+      "itemReward": "",
+      "items": [
+       [
+        "food_can",
+        6
+       ],
+       [
+        "water_bottle",
+        1
+       ]
+      ],
+      "map": "",
+      "offeredAt": 2,
+      "parcel": "",
+      "reward": 76,
+      "targets": [],
+      "template": "field_rations",
+      "tier": 1,
+      "type": "deliver"
+     },
+     {
+      "accepted": false,
+      "acceptedAt": 0,
+      "id": 7,
+      "itemReward": "",
+      "items": [
+       [
+        "bandage",
+        3
+       ]
+      ],
+      "map": "",
+      "offeredAt": 2,
+      "parcel": "",
+      "reward": 44,
+      "targets": [],
+      "template": "med_dressings",
+      "tier": 1,
+      "type": "deliver"
+     }
+    ],
+    "contracts": [
+     {
+      "accepted": true,
+      "acceptedAt": 1,
+      "id": 4,
+      "itemReward": "",
+      "items": [],
+      "map": "cz_loket_riverbend",
+      "offeredAt": 1,
+      "parcel": "",
+      "reward": 111,
+      "targets": [
+       "Weekend cottages"
+      ],
+      "template": "recon_settlement",
+      "tier": 1,
+      "type": "recon"
+     }
+    ],
+    "contractsCompleted": 2,
+    "gold": 182,
+    "reputation": 2,
+    "step": "extract"
+   },
+   {
+    "board": [
+     {
+      "accepted": false,
+      "acceptedAt": 0,
+      "id": 6,
+      "itemReward": "",
+      "items": [
+       [
+        "food_can",
+        6
+       ],
+       [
+        "water_bottle",
+        1
+       ]
+      ],
+      "map": "",
+      "offeredAt": 2,
+      "parcel": "",
+      "reward": 76,
+      "targets": [],
+      "template": "field_rations",
+      "tier": 1,
+      "type": "deliver"
+     },
+     {
+      "accepted": false,
+      "acceptedAt": 0,
+      "id": 7,
+      "itemReward": "",
+      "items": [
+       [
+        "bandage",
+        3
+       ]
+      ],
+      "map": "",
+      "offeredAt": 2,
+      "parcel": "",
+      "reward": 44,
+      "targets": [],
+      "template": "med_dressings",
+      "tier": 1,
+      "type": "deliver"
+     },
+     {
+      "accepted": false,
+      "acceptedAt": 0,
+      "id": 8,
+      "itemReward": "",
+      "items": [],
+      "map": "cz_loket_riverbend",
+      "offeredAt": 3,
+      "parcel": "",
+      "reward": 126,
+      "targets": [
+       "Health centre"
+      ],
+      "template": "recon_works",
+      "tier": 1,
+      "type": "recon"
+     }
+    ],
+    "contracts": [
+     {
+      "accepted": true,
+      "acceptedAt": 1,
+      "id": 4,
+      "itemReward": "",
+      "items": [],
+      "map": "cz_loket_riverbend",
+      "offeredAt": 1,
+      "parcel": "",
+      "reward": 111,
+      "targets": [
+       "Weekend cottages"
+      ],
+      "template": "recon_settlement",
+      "tier": 1,
+      "type": "recon"
+     }
+    ],
+    "contractsCompleted": 2,
+    "gold": 182,
+    "reputation": 2,
+    "step": "extract"
+   },
+   {
+    "board": [
+     {
+      "accepted": false,
+      "acceptedAt": 0,
+      "id": 8,
+      "itemReward": "",
+      "items": [],
+      "map": "cz_loket_riverbend",
+      "offeredAt": 3,
+      "parcel": "",
+      "reward": 126,
+      "targets": [
+       "Health centre"
+      ],
+      "template": "recon_works",
+      "tier": 1,
+      "type": "recon"
+     },
+     {
+      "accepted": false,
+      "acceptedAt": 0,
+      "id": 9,
+      "itemReward": "",
+      "items": [],
+      "map": "cz_loket_riverbend",
+      "offeredAt": 4,
+      "parcel": "",
+      "reward": 129,
+      "targets": [
+       "Field farmstead"
+      ],
+      "template": "recon_settlement",
+      "tier": 1,
+      "type": "recon"
+     },
+     {
+      "accepted": false,
+      "acceptedAt": 0,
+      "id": 10,
+      "itemReward": "",
+      "items": [
+       [
+        "battery",
+        4
+       ]
+      ],
+      "map": "",
+      "offeredAt": 4,
+      "parcel": "",
+      "reward": 52,
+      "targets": [],
+      "template": "relay_batteries",
+      "tier": 1,
+      "type": "deliver"
+     }
+    ],
+    "contracts": [],
+    "contractsCompleted": 2,
+    "gold": 182,
+    "reputation": 1,
+    "step": "extract"
+   }
+  ]
+ }
+}

@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 
 	"github.com/gameknife/gknextrenderer/tools/gnb/internal/dzmaster"
 )
@@ -33,9 +34,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	// The registry lives at <asset root>/assets/configs/; the price table and map records sit beside it.
+	economy, err := dzmaster.LoadEconomy(filepath.Dir(filepath.Dir(filepath.Dir(*mapsPath))), maps)
+	if err != nil {
+		log.Fatal(err)
+	}
 	m, err := dzmaster.New(dzmaster.Config{Listen: *listen, PublicHost: *publicHost, DataDir: *data, Exe: *exe,
 		Maps: maps, PortBase: *portBase, MaxPlayers: *maxPlayers, IdleSeconds: *idle, Pvp: *pvp,
-		Launch: dzmaster.ExecLauncher(*exe)})
+		Launch: dzmaster.ExecLauncher(*exe), Economy: economy})
 	if err != nil {
 		log.Fatal(err)
 	}

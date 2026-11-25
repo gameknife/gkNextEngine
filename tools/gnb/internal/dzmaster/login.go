@@ -88,6 +88,9 @@ func (m *Master) handleLogin(w http.ResponseWriter, r *http.Request) {
 				a = &Account{ID: st.NextID, Name: name, Token: randomHex(16)}
 				st.NextID++
 				st.Accounts[a.ID] = a
+				if m.cfg.Economy != nil {
+					m.cfg.Economy.RefreshBoard(a)
+				}
 				m.cfg.Logf("account %d %q created", a.ID, name)
 			}
 			if a.PasswordHash == "" && account.PasswordHash != "" {

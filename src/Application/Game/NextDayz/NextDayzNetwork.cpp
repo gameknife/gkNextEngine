@@ -102,6 +102,7 @@ struct NextDayzGameInstance::FNetSession : Net::FClientSession
         // A Master survivor: who they are there, and their sortie.
         uint64_t playerId = 0;
         uint64_t sortie = 0;
+        std::vector<std::string> visited;   // sites this sortie has entered, reported in every checkpoint
         bool redeeming = false;
         glm::vec3 spawnFeet{};
         // Holding an extraction point.
@@ -207,6 +208,7 @@ struct NextDayzGameInstance::FNetSession : Net::FClientSession
     bool worldLoaded = false;
     float heartbeatTimer = 0.0f;
     float checkpointTimer = 0.0f;
+    float siteTimer = 0.0f;
     uint64_t checkpointSeq = 0;
     bool stopping = false;
     float stopSeconds = 0.0f;
@@ -242,6 +244,7 @@ struct NextDayzGameInstance::FNetSession : Net::FClientSession
         c.yaw = client.state.presentation.aimYawRadians;
         c.survivalJson = SurvivalToJson(client.survival.Snapshot());
         if (outcome != Master::EOutcome::Dead) c.inventory = InventoryAsStacks(client.inventory);
+        c.visited = client.visited;
         outcomes.push_back(std::move(c));
     }
 
@@ -328,6 +331,55 @@ void NextDayzGameInstance::ConfigureNetCVars(NextCVar::FCVarSystem& cvars)
         "Client: log in as nextdayz.net.name and deploy at once, bringing all storage (automation)");
     cvars.RegisterString("nextdayz.net.autoMap", "", &netAutoMapCvar_, ECVarFlags::None,
         "Client: map id for autoDeploy (empty: the Master picks)");
+    cvars.RegisterString("nextdayz.validation.netEconomy", "", &validationNetEconomy_, ECVarFlags::None,
+        "Agent-only (Master client): sell:<item> | buy:<item> | accept-recon | deploy | goto-recon", [this]()
+        {
+            const std::string command = std::exchange(validationNetEconomy_, "");
+            if (!GOption->AgentValidation || !net_ || !net_->master) return;
+            const auto& profile = net_->profile;
+            if (command.starts_with("sell:"))
+            {
+                const std::string item = command.substr(5);
+                for (size_t index = 0; index < profile.storage.size(); ++index)
+                    if (profile.storage[index].itemId == item)
+                    {
+                        NetEconomyCall("/api/sell", Master::SellRequest(static_cast<int>(index), item, profile.storage[index].count));
+                        break;
+                    }
+            }
+            else if (command.starts_with("buy:")) NetEconomyCall("/api/buy", Master::BuyRequest(command.substr(4)));
+            else if (command == "accept-recon")
+            {
+                for (const auto& contract : profile.economy.board)
+                    if (contract.type == "recon")
+                    {
+                        NetEconomyCall("/api/contracts/accept", Master::ContractRequest(contract.id));
+                        break;
+                    }
+            }
+            else if (command == "deploy") net_->wantDeploy = true;
+            else if (command == "goto-recon" && net_->survivorId != 0 && !profile.economy.contracts.empty() &&
+                     !profile.economy.contracts.front().targets.empty())
+            {
+                // Walk-in for the test: put the survivor on the first site and tell the server.
+                const std::string& target = profile.economy.contracts.front().targets.front();
+                for (const auto& anchor : world_.anchors.All())
+                {
+                    if (anchor.type != EWorldAnchorType::Poi || anchor.label != target) continue;
+                    TeleportPlayer(anchor.worldPos);
+                    Net::FPlayerState stance;
+                    stance.presence = LocalSurvivor();
+                    stance.presence.id = net_->survivorId;
+                    stance.presence.feet = anchor.worldPos;
+                    stance.presence.eye = anchor.worldPos + glm::vec3(0.0f, 1.6f, 0.0f);
+                    stance.presentation = LocalPresentation();
+                    FNetWriter state;
+                    Net::Write(state, stance);
+                    net_->host.Send(net_->host.ServerPeer(), state.Bytes(), EDelivery::Reliable);
+                    break;
+                }
+            }
+        });
     cvars.RegisterInt("nextdayz.validation.netExtract", 0, &validationNetExtract_, ECVarFlags::None,
         "Agent-only (Master client): go to the nearest extraction point and start holding it", [this]()
         {
@@ -1626,6 +1678,14 @@ void NextDayzGameInstance::RegisterNetQueries(Runtime::Agent::FAgentQueryRegistr
     });
     reg.Add("netStorageStacks", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->profile.storage.size() : 0); });
     reg.Add("netExtractions", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->profile.extractions : 0); });
+    reg.Add("netGold", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->profile.gold : 0); });
+    reg.Add("netEconomy", [this]() -> FAgentQueryValue { return net_ && net_->profile.economy.available; });
+    reg.Add("netReputation", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->profile.economy.reputation : 0); });
+    reg.Add("netBoardSize", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->profile.economy.board.size() : 0); });
+    reg.Add("netContractsActive", [this]() -> FAgentQueryValue { return int64_t(net_ ? net_->profile.economy.contracts.size() : 0); });
+    reg.Add("netContractsCompleted", [this]() -> FAgentQueryValue
+    { return int64_t(net_ ? net_->profile.economy.contractsCompleted : 0); });
+    reg.Add("netLobbyMessage", [this]() -> FAgentQueryValue { return net_ ? net_->lobbyMessage : std::string(); });
     reg.Add("netInventoryItems", [this]() -> FAgentQueryValue { return int64_t(inventory_.Instances().size()); });
     reg.Add("netBandages", [this]() -> FAgentQueryValue { return int64_t(inventory_.CountOf("bandage")); });
     reg.Add("netLife", [this]() -> FAgentQueryValue { return int64_t(netLife_); });
@@ -1739,6 +1799,7 @@ void NextDayzGameInstance::NetAdmitSurvivor(uint32_t peer, const NextNet::FHttpR
     client.survivorId = net.nextSurvivorId++;
     client.playerId = redeem.playerId;
     client.sortie = redeem.sortie;
+    client.visited = redeem.character.visited;
     client.name = redeem.name;
 
     // Where: a fresh survivor at a random safe point, a returning one where they left.
@@ -1816,6 +1877,7 @@ void NextDayzGameInstance::NetSendCheckpoint()
         c.yaw = client.state.presentation.aimYawRadians;
         c.survivalJson = SurvivalToJson(client.survival.Snapshot());
         c.inventory = InventoryAsStacks(client.inventory);
+        c.visited = client.visited;
         characters.push_back(std::move(c));
     }
     // The world and every survivor on it, in one commit.
@@ -1962,6 +2024,22 @@ void NextDayzGameInstance::TickServerMaster(float dt)
         net.host.Send(peer, farewell.Bytes(), EDelivery::Reliable);
         net.host.Disconnect(peer);
         SPDLOG_INFO("[NextDayz][net] survivor {} '{}' extracted", client.survivorId, client.name);
+    }
+
+    // Recon contracts settle on the Master from the sites each survivor entered (economy design §7.3).
+    net.siteTimer += dt;
+    if (net.siteTimer >= 0.5f)
+    {
+        net.siteTimer = 0.0f;
+        if (const auto* sites = MapSites(ActiveMapId()))
+            for (auto& [peer, client] : net.clients)
+            {
+                if (client.playerId == 0 || client.life != FNetSession::FClient::ELife::Alive || !client.hasState) continue;
+                const glm::vec3 feet = client.state.presence.feet;
+                for (const auto* site : NextDayz::PoisAt(*sites, glm::vec2(feet.x, feet.z)))
+                    if (std::find(client.visited.begin(), client.visited.end(), site->name) == client.visited.end())
+                        client.visited.push_back(site->name);
+            }
     }
 
     net.checkpointTimer += dt;
@@ -2297,6 +2375,22 @@ void NextDayzGameInstance::TickLobby(float dt)
     }
 }
 
+void NextDayzGameInstance::NetEconomyCall(const char* path, std::string body)
+{
+    // The Master decides; a refusal comes back as the lobby message, and either way
+    // the lobby shows the account as the Master now has it.
+    if (!net_ || !net_->master || net_->token.empty()) return;
+    FNetSession& net = *net_;
+    net.master->Post(path, std::move(body), [this, session = &net](const NextNet::FHttpResult& result)
+    {
+        if (net_.get() != session) return;
+        net_->lobbyMessage = result.Ok() ? std::string() : result.error;
+        net_->refreshProfile = true;
+        net_->profileRetrySeconds = 0.0f;
+        net_->profileAttempts = 0;
+    }, net.token, 3);
+}
+
 bool NextDayzGameInstance::DrawLobby()
 {
     if (!NetInLobby()) return false;
@@ -2324,10 +2418,152 @@ bool NextDayzGameInstance::DrawLobby()
     DrawCabinMenu(status, ready && profile.playing.empty(), resume, net.wantDeploy);
     if (safehouseTab_ < 0) return true;
     BeginCabinPanel(safehouseTab_ == 0 ? "WORLD / OPERATIONS" : safehouseTab_ == 2 ? "TRADER / SERVICES" : "STORAGE / LOADOUT");
+    const auto economyCall = [this](const char* path, std::string body) { NetEconomyCall(path, std::move(body)); };
+    const auto& economy = profile.economy;
     if (safehouseTab_ == 2)
     {
-        // The Master owns the online economy (design §7); until it trades, say so.
-        ImGui::TextWrapped("%s", Tr("Online trading opens when the Master economy goes live. Your account gold is kept."));
+        if (!ready || !economy.available)
+        {
+            ImGui::TextWrapped("%s", Tr(!ready ? "Log in to prepare your next expedition."
+                : "This Master runs without the safehouse economy. Your account gold is kept."));
+            ImGui::End();
+            return true;
+        }
+        const auto itemName = [](std::string_view item)
+        {
+            const FItemDef* def = FindItemDef(item);
+            return def ? std::string(def->displayName) : std::string(item);
+        };
+        ImGui::TextColored(ImVec4(0.89f,0.71f,0.40f,1), "%s", Format("Gold: {}", profile.gold).c_str());
+        ImGui::SameLine(0, 30);
+        ImGui::TextUnformatted(Format("Reputation: {}  (tier {})", economy.reputation, economy.tier).c_str());
+        if (economy.nextTier > 0)
+        {
+            ImGui::SameLine(0, 30);
+            ImGui::TextDisabled("%s", Format("Next tier at {}", economy.nextTier).c_str());
+        }
+        ImGui::SameLine(0, 30);
+        const auto used = Format("WAREHOUSE  {} / {} stacks", economy.used, economy.capacity);
+        if (economy.over) ImGui::TextColored(ImVec4(0.92f,0.52f,0.40f,1), "%s", used.c_str());
+        else ImGui::TextUnformatted(used.c_str());
+        if (economy.nextCapacity > 0)
+        {
+            ImGui::SameLine();
+            ImGui::BeginDisabled(profile.gold < static_cast<int64_t>(economy.nextPrice));
+            if (ImGui::SmallButton(Format("Expand to {} stacks ({} gold)", economy.nextCapacity, economy.nextPrice).c_str()))
+                economyCall("/api/warehouse/upgrade", "{}");
+            ImGui::EndDisabled();
+        }
+        if (economy.lastCompleted > 0)
+            ImGui::TextColored(ImVec4(0.62f,0.82f,0.55f,1), "%s", Format("Last report: contracts completed: {} (+{} gold, reputation {:+}).",
+                economy.lastCompleted, economy.lastGold, economy.lastReputation).c_str());
+        ImGui::TextDisabled("%s", Tr("Shelves and the contract board renew after every expedition, whether you extract or not."));
+        ImGui::Separator();
+        const bool inField = profile.character.has_value();
+        if (ImGui::BeginTabBar("online_economy"))
+        {
+            if (ImGui::BeginTabItem(Label("CONTRACTS")))
+            {
+                const auto card = [&](const Master::FEconomyContract& contract, bool accepted)
+                {
+                    ImGui::PushID(static_cast<int>(contract.id));
+                    const char* issuer = contract.issuer == "medical" ? "MEDICAL STATION" : contract.issuer == "quartermaster"
+                        ? "QUARTERMASTER" : contract.issuer == "collector" ? "COLLECTOR" : "RADIO STATION";
+                    ImGui::TextDisabled("%s  /  %s", Tr(issuer), Format("Tier {}", contract.tier).c_str());
+                    ImGui::TextColored(ImVec4(0.89f,0.71f,0.40f,1), "%s", Tr(contract.title));
+                    for (const auto& [item, count] : contract.items)
+                        ImGui::TextUnformatted(Format("Deliver {} x{}", itemName(item), count).c_str());
+                    if (!contract.targets.empty())
+                    {
+                        const auto* map = FindExpeditionMap(expeditionMaps_, contract.map);
+                        std::string targets;
+                        for (const auto& target : contract.targets) targets += (targets.empty() ? "" : ", ") + target;
+                        ImGui::TextWrapped("%s", Format("Visit {} ({}), then extract.", targets, map ? map->name : contract.map).c_str());
+                    }
+                    ImGui::TextUnformatted(Format("Reward: {} gold, +{} reputation", contract.reward, contract.reputation).c_str());
+                    ImGui::TextDisabled("%s", accepted ? Format("Expires after {} more expeditions", contract.sortiesLeft).c_str()
+                                                       : Format("Leaves the board after {} more expeditions", contract.sortiesLeft).c_str());
+                    const std::string body = Master::ContractRequest(contract.id);
+                    if (accepted)
+                    {
+                        ImGui::BeginDisabled(inField);
+                        if (ImGui::SmallButton(Label("Abandon"))) economyCall("/api/contracts/abandon", body);
+                        ImGui::EndDisabled();
+                    }
+                    else if (contract.type == "deliver")
+                    {
+                        ImGui::BeginDisabled(!contract.canHandIn);
+                        if (ImGui::SmallButton(Label("Hand in"))) economyCall("/api/contracts/handin", body);
+                        ImGui::EndDisabled();
+                    }
+                    else if (!contract.online) ImGui::TextDisabled("%s", Tr("Offline campaign only for now."));
+                    else
+                    {
+                        ImGui::BeginDisabled(inField || static_cast<int>(economy.contracts.size()) >= economy.maxActive);
+                        if (ImGui::SmallButton(Label("Accept"))) economyCall("/api/contracts/accept", body);
+                        ImGui::EndDisabled();
+                    }
+                    ImGui::Separator();
+                    ImGui::PopID();
+                };
+                if (ImGui::BeginTable("online_contracts", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable))
+                {
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted(Format("CONTRACT BOARD  ({} / {})", economy.board.size(), economy.slots).c_str());
+                    ImGui::BeginChild("online_board", ImVec2(0, -4));
+                    for (const auto& contract : economy.board) card(contract, false);
+                    ImGui::EndChild();
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted(Format("ACTIVE CONTRACTS  ({} / {})", economy.contracts.size(), economy.maxActive).c_str());
+                    ImGui::BeginChild("online_active", ImVec2(0, -4));
+                    if (economy.contracts.empty()) ImGui::TextDisabled("%s", Tr("Accept a recon or fetch contract from the board."));
+                    for (const auto& contract : economy.contracts) card(contract, true);
+                    ImGui::EndChild();
+                    ImGui::EndTable();
+                }
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem(Label("TRADER & SERVICES")))
+            {
+                if (ImGui::BeginTable("online_shelves", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersInnerH,
+                                      ImVec2(0, std::max(120.0f, ImGui::GetContentRegionAvail().y - 12))))
+                {
+                    ImGui::TableSetupColumn(Tr("Item"));
+                    ImGui::TableSetupColumn(Tr("Pack"), ImGuiTableColumnFlags_WidthFixed, 60);
+                    ImGui::TableSetupColumn(Tr("Price"), ImGuiTableColumnFlags_WidthFixed, 80);
+                    ImGui::TableSetupColumn(Tr("Left"), ImGuiTableColumnFlags_WidthFixed, 50);
+                    ImGui::TableSetupColumn("##buy", ImGuiTableColumnFlags_WidthFixed, 130);
+                    ImGui::TableHeadersRow();
+                    for (const auto& shelf : economy.trader)
+                    {
+                        ImGui::PushID(shelf.item.c_str());
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        const std::string name(Tr(itemName(shelf.item)));
+                        if (shelf.locked) ImGui::TextDisabled("%s", name.c_str());
+                        else ImGui::TextUnformatted(name.c_str());
+                        ImGui::TableNextColumn();
+                        ImGui::Text("x%d", shelf.pack);
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%llu", static_cast<unsigned long long>(shelf.price));
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%d", shelf.left);
+                        ImGui::TableNextColumn();
+                        if (shelf.locked) ImGui::TextDisabled("%s", Format("Tier {}", shelf.tier).c_str());
+                        else
+                        {
+                            ImGui::BeginDisabled(shelf.left <= 0 || economy.over || profile.gold < static_cast<int64_t>(shelf.price));
+                            if (ImGui::SmallButton(Label("Buy"))) economyCall("/api/buy", Master::BuyRequest(shelf.item));
+                            ImGui::EndDisabled();
+                        }
+                        ImGui::PopID();
+                    }
+                    ImGui::EndTable();
+                }
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
+        }
         ImGui::End();
         return true;
     }
@@ -2384,12 +2620,25 @@ bool NextDayzGameInstance::DrawLobby()
     {
         ImGui::TextUnformatted(Tr("Storage - choose what to take:"));
         ImGui::TextDisabled("%s", Tr("Equipment changes appear on your survivor."));
-        if (ImGui::BeginTable("storage", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersInnerH,
+        const bool selling = economy.available;
+        if (selling)
+        {
+            const auto used = Format("WAREHOUSE  {} / {} stacks", economy.used, economy.capacity);
+            if (economy.over)
+            {
+                ImGui::TextColored(ImVec4(0.92f,0.52f,0.40f,1), "%s", used.c_str());
+                ImGui::TextColored(ImVec4(0.92f,0.52f,0.40f,1), "%s",
+                    Tr("Over capacity: you cannot deploy, buy or store until you sell, hand in or carry items."));
+            }
+            else ImGui::TextUnformatted(used.c_str());
+        }
+        if (ImGui::BeginTable("storage", selling ? 4 : 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersInnerH,
                               ImVec2(0, std::max(100.0f, ImGui::GetContentRegionAvail().y - 45))))
         {
             ImGui::TableSetupColumn(Tr("Item"));
             ImGui::TableSetupColumn(Tr("Held"), ImGuiTableColumnFlags_WidthFixed, 70);
             ImGui::TableSetupColumn(Tr("Take"), ImGuiTableColumnFlags_WidthFixed, 180);
+            if (selling) ImGui::TableSetupColumn("##sell", ImGuiTableColumnFlags_WidthFixed, 230);
             ImGui::TableHeadersRow();
             for (size_t index = 0; index < profile.storage.size() && index < net.bring.size(); ++index)
             {
@@ -2404,6 +2653,21 @@ bool NextDayzGameInstance::DrawLobby()
                 ImGui::PushID(static_cast<int>(index));
                 ImGui::SetNextItemWidth(-1);
                 if (ImGui::SliderInt("##take", &net.bring[index], 0, stack.count)) net.previewDirty = true;
+                if (selling)
+                {
+                    ImGui::TableNextColumn();
+                    const uint64_t price = index < economy.sellValues.size() ? economy.sellValues[index] : 0;
+                    ImGui::BeginDisabled(price == 0);
+                    if (ImGui::SmallButton(Format("Sell 1 (+{} gold)", price).c_str()))
+                        economyCall("/api/sell", Master::SellRequest(static_cast<int>(index), stack.itemId, 1));
+                    if (stack.count > 1)
+                    {
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton(Label("Sell stack")))
+                            economyCall("/api/sell", Master::SellRequest(static_cast<int>(index), stack.itemId, stack.count));
+                    }
+                    ImGui::EndDisabled();
+                }
                 ImGui::PopID();
             }
             ImGui::EndTable();
@@ -2462,6 +2726,7 @@ bool NextDayzGameInstance::NetRequestExtract() { return false; }
 void NextDayzGameInstance::NetAfterSceneLoaded() {}
 void NextDayzGameInstance::TickLobby(float) {}
 void NextDayzGameInstance::TickServerMaster(float) {}
+void NextDayzGameInstance::NetEconomyCall(const char*, std::string) {}
 void NextDayzGameInstance::NetSendCheckpoint() {}
 void NextDayzGameInstance::NetAdmitSurvivor(uint32_t, const NextNet::FHttpResult&) {}
 void NextDayzGameInstance::ApplyLinkSimulation() {}

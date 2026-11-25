@@ -1,7 +1,7 @@
 ---
 title: "NextDayz 局外经济与合同任务"
 category: project
-status: 实施中（E1 价目表与商人、E2 单机合同、E3 信誉与仓库已于 2026-11-25 完成；E4、E5 未开始）
+status: 实施中（E1～E4 已于 2026-11-25 完成：单机经济、合同、信誉与仓库、Master 联机；E5 度量与调参未开始）
 owner: NextDayz
 created: 2026-11-25
 last_updated: 2026-11-25
@@ -468,6 +468,41 @@ contractGold, contractsCompleted, reputationAfter, visitedPois
 - `nextdayz-extraction` 的一处断言从 2 堆改为 1 堆：两罐豆子现在合并成一堆。
 - 修复了一个 E3 引入、被 `nextdayz-contracts` 抓到的问题：`AddToStorage` 一度整体替换战役对象，使调用方持有的
   合同引用失效；现在它只改仓库，失败时恢复仓库。
+
+### 10.4 E4 落地记录（2026-11-25）
+
+| 内容 | 实现 |
+| --- | --- |
+| Go 规则 | `tools/gnb/internal/dzmaster/economy.go`：读同一份 `nextdayz_economy.json` 和各已发布地图的 `generation.json`（`LoadEconomy`），逐位移植 SplitMix64、合同板生成、接取 / 放弃 / 交付、结算、过期、扣分不跌档、商人补货与购买、出售估价（含配件，`AttachmentItems` 对应 `EWeaponAttachment`）、仓库容量与扩建 |
+| 两端一致 | `tools/nextdayz/economy_golden.json` 由 C++ 测试 `[NextDayz][Contracts][Golden]` 生成（`NEXTDAYZ_UPDATE_GOLDEN=1`），内容是 5 个种子 × 4 个信誉值的合同板，以及一段 8 步场景（接侦察、交付、带着到访记录撤离结算、再接一个直到过期）。C++ 与 Go `TestEconomyGolden` 都和它逐项比对；配件映射也在其中 |
+| Master `State` v2 | `Account` 新增信誉、商人库存与周期、合同板随机数与周期、合同序号、合同板、已接合同、完成数、仓库档位与下限、上次结算；`Character.Visited`。v1 → v2 时把现有堆数记为仓库下限，Master 启动时对所有账号 `ResolveWarehouse` 并刷新合同板；新账号创建时即生成合同板 |
+| 接口 | `POST /api/sell {index, item, count}`、`/api/buy {item}`、`/api/contracts/accept|abandon|handin {contractId}`、`/api/warehouse/upgrade`。被拒时返回 409 和原因，状态不变。`/api/profile` 新增 `economy`：信誉与档位、合同板与已接合同（带标题、发布者、剩余次数、能否交付）、商人货架（价格、剩余、是否锁定）、每个仓库堆的单价、仓库用量 / 容量 / 下一档、上次结算 |
+| 检查点 | DS 每 0.5 秒按该图的据点记下每名幸存者到过的据点（从 Master 恢复的 `visited` 续写），每次检查点和结局都带 `visited`。`extracted`：先按 `visited` 结算侦察合同，再入库；`dead` 不结算；两者都推进周期（过期、刷新合同板，商人按周期懒补货）。`/api/deploy` 在取出携带物品后检查仓库容量 |
+| 桌面大厅 | 联机的“商人 / 服务”页签与单机同构：合同（合同板 / 进行中）与商人页，金币、信誉、仓库容量和扩建、上次结算；仓库页每堆加“出售 1 / 出售整组”。所有动作只发请求，结果以 Master 返回的资料为准 |
+| Web 大厅 | 内核新增 `economy` 命令（sell / buy / accept / abandon / handin / upgrade），回复后刷新资料；`read("profile")` 带上 `economy`（物品名已填好）和 `revision`。大厅页面新增合同板、进行中的合同、商人和仓库状态，仓库行加出售按钮 |
+| 验证钩子 | 联机客户端 `nextdayz.validation.netEconomy`（`sell:<物品>`、`buy:<物品>`、`accept-recon`、`deploy`、`goto-recon`）；查询 `game.netGold`、`netEconomy`、`netReputation`、`netBoardSize`、`netContractsActive`、`netContractsCompleted`、`netLobbyMessage` |
+
+与计划的差异：
+
+- 联机的接取和放弃只能在两次出击之间进行（与单机一致）；出售、购买、交付和扩建在幸存者还在野外时也可用，
+  因为仓库属于账号。计划里“野外也能接、对下一局生效”没有做，以免两端规则分叉。
+- 取件合同照常出现在联机合同板上（两端合同板必须一致），但标为“目前只能在单机战役中进行”，Master 拒绝接取（§7.4）。
+- 新增了计划外的 `/api/warehouse/upgrade`，因为联机同样受仓库容量限制。
+- Master 的入库合并不封顶（Go 没有物品表，沿用已有的 `AddToStorage`），单机合并到 `maxStack`；两边各自按自己的堆数
+  计容量，golden 不比较仓库堆数。
+- 出击记录（§8）仍只在单机，联机留给 E5。
+
+验证：
+
+- Go：`go test ./internal/dzmaster ./internal/packager ./cmd/gnb` 通过，新增 golden 比对、商人 / 仓库 / 出售、HTTP 接口与
+  检查点结算（接侦察 → 部署 → DS 上报到访 → 撤离 → 信誉与金币到账，野外放弃被拒）、v1 存档迁移。
+- C++：`[NextDayz]` 单测 129 个全过（含 golden）。
+- `assets/agentscripts/nextdayz-master-economy.agentscript.json`（需先 `gnb master serve --cheats --data <空目录>`）：
+  新幸存者首局带回初始物资 → 接侦察 → 部署洛克特 → 到达据点 → 撤离，Master 日志 `completed [recon_works] (+125 gold)`，
+  信誉 1 → 卖掉绷带、买瓶装水，金币 120。两张大厅截图人工检查过。
+- Web：`gnb web build`（含 `tsc`、原生协议与回放金标）、`gnb web test` 通过，新增内核交易用例（交付、出售、被拒的购买都
+  转发给 Master 并刷新资料）。浏览器 e2e 没有新增交易场景（`gnb web test --e2e` 需要能跑 DS 的环境，见 Web 计划 W8-3）。
+- `gnb ds --bots 8 --minutes 3`：`RESULT ok online=8/8 refusals=0 disconnects=0`，tick 平均 1.8 ms。
 
 依赖关系：E1 → E2 → E3。E4 在 E2 完成后即可开始，与 E3 并行。E5 的记录结构随 E1 一起落地，调参放在最后。
 每期合入前都要通过现有的 NextDayz 桌面闸门（[Web 客户端开发计划 §3](nextdayz-web-client-plan.md#3-闸门)）。

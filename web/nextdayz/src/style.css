@@ -29,6 +29,16 @@ button.quiet { color: #e7ebd9; background: #242b20; border-color: #4c5641; font-
 .loadout > section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 22px; }
 #storage .row { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; align-items: center; gap: 11px; border-top: 1px solid var(--line); padding: 9px 0; }
 .row img { width: 54px; height: 46px; object-fit: contain; }
+.economy { margin-top: 20px; }
+.economy-grid { display: grid; grid-template-columns: minmax(280px, 1.15fr) minmax(280px, .85fr); gap: 20px; }
+.economy-grid > section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px 22px; }
+.contract { border-top: 1px solid var(--line); padding: 9px 0; }
+.contract strong { display: block; }
+.contract small, .shelf small { display: block; opacity: .75; }
+.contract button, .shelf button, #storage .row button, #economy-status button { margin-top: 6px; min-height: 32px; }
+.shelf { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; border-top: 1px solid var(--line); padding: 7px 0; }
+.shelf.locked { opacity: .55; }
+#economy-status.over { color: #eb8566; }
 .row input { width: 64px; min-height: 38px; }
 .row span { font-weight: 600; }
 .row small { display: block; }
@@ -50,7 +60,7 @@ progress { width: 100%; height: 13px; accent-color: var(--accent); margin-top: 1
 #menu, #controls { position: absolute; bottom: 16px; left: 18px; right: 18px; }
 #menu { display: flex; gap: 8px; flex-wrap: wrap; }
 #controls { width: max-content; max-width: calc(100% - 36px); padding: 6px 10px; border-radius: 4px; color: #eff0e4; background: #171d16dc; font-size: 12px; }
-@media (max-width: 650px) { .loadout { grid-template-columns: 1fr; } .heading .quiet { font-size: 13px; } #login { padding: 22px; } }
+@media (max-width: 650px) { .loadout, .economy-grid { grid-template-columns: 1fr; } .heading .quiet { font-size: 13px; } #login { padding: 22px; } }
 
 #pack { position: absolute; left: 18px; bottom: 68px; width: min(460px, calc(100% - 36px)); max-height: 55%; overflow: auto; background: #171d16f2; border: 1px solid #515c47; border-radius: 6px; padding: 14px 16px; }
 #pack .heading { align-items: center; margin-bottom: 10px; }

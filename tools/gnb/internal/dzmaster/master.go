@@ -86,6 +86,8 @@ type Config struct {
 	WebRoot         string
 	RequirePassword bool
 	TrustLocalProxy bool
+	// The safehouse economy (LoadEconomy). Nil: no trading, contracts or warehouse limit.
+	Economy *Economy
 }
 
 const (
@@ -199,6 +201,18 @@ func New(cfg Config) (*Master, error) {
 	if err != nil {
 		return nil, err
 	}
+	if cfg.Economy != nil {
+		// Migrated accounts get their warehouse level; boards fill for anyone between sorties.
+		if err := store.Update(func(st *State) error {
+			for _, a := range st.Accounts {
+				cfg.Economy.ResolveWarehouse(a)
+				cfg.Economy.RefreshBoard(a)
+			}
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+	}
 	return &Master{cfg: cfg, store: store, servers: map[string]*Server{}, leases: map[uint64]string{},
 		tickets: map[string]*ticket{}, rtcJobs: map[string]*rtcJob{}, nextDS: 1,
 		web: web, loginFailures: make(map[string]loginFailures)}, nil
@@ -223,6 +237,12 @@ func (m *Master) Handler() http.Handler {
 	mux.HandleFunc("/api/login", m.handleLogin)
 	mux.HandleFunc("/api/profile", m.handleProfile)
 	mux.HandleFunc("/api/deploy", m.handleDeploy)
+	mux.HandleFunc("/api/sell", m.handleEconomy)
+	mux.HandleFunc("/api/buy", m.handleEconomy)
+	mux.HandleFunc("/api/contracts/accept", m.handleEconomy)
+	mux.HandleFunc("/api/contracts/abandon", m.handleEconomy)
+	mux.HandleFunc("/api/contracts/handin", m.handleEconomy)
+	mux.HandleFunc("/api/warehouse/upgrade", m.handleEconomy)
 	mux.HandleFunc("/api/rtc/offer", m.handleRtcOffer)
 	mux.HandleFunc("/ds/signal", m.handleDsSignal)
 	mux.HandleFunc("/ds/register", m.handleRegister)
@@ -301,11 +321,89 @@ func (m *Master) handleProfile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	m.mu.Unlock()
-	reply(w, map[string]any{
-		"playerId": a.ID, "name": a.Name, "gold": a.Gold, "storage": nonNil(a.Storage),
-		"character": a.Character, "sorties": a.Sorties, "extractions": a.Extractions, "deaths": a.Deaths,
-		"lastOutcome": a.LastOutcome, "maps": m.cfg.Maps, "playing": playing,
+	profile := map[string]any{}
+	m.store.View(func(st *State) {
+		acct := st.Accounts[a.ID]
+		if acct == nil {
+			return
+		}
+		profile = map[string]any{
+			"playerId": acct.ID, "name": acct.Name, "gold": acct.Gold, "storage": nonNil(acct.Storage),
+			"character": acct.Character, "sorties": acct.Sorties, "extractions": acct.Extractions, "deaths": acct.Deaths,
+			"lastOutcome": acct.LastOutcome, "maps": m.cfg.Maps, "playing": playing,
+		}
+		if m.cfg.Economy != nil {
+			economy := m.cfg.Economy.View(acct)
+			if acct.LastReport != nil {
+				economy["lastReport"] = acct.LastReport
+			}
+			profile["economy"] = economy
+		}
 	})
+	reply(w, profile)
+}
+
+// handleEconomy serves the trading and contract calls (design §7.2). The Master
+// owns every rule; a refused call changes nothing and says why.
+func (m *Master) handleEconomy(w http.ResponseWriter, r *http.Request) {
+	a := m.account(r)
+	if a == nil {
+		httpError(w, http.StatusUnauthorized, "log in first")
+		return
+	}
+	e := m.cfg.Economy
+	if e == nil {
+		httpError(w, http.StatusServiceUnavailable, "this Master runs without the safehouse economy")
+		return
+	}
+	var req struct {
+		Index      int    `json:"index"`
+		Item       string `json:"item"`
+		Count      int    `json:"count"`
+		ContractID uint64 `json:"contractId"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	var message string
+	var report *ContractReport
+	err := m.store.Update(func(st *State) error {
+		acct := st.Accounts[a.ID]
+		if acct == nil {
+			return errNoContract
+		}
+		switch r.URL.Path {
+		case "/api/sell":
+			value, err := e.Sell(acct, req.Index, req.Item, req.Count)
+			message = fmt.Sprintf("sold for %d gold", value)
+			return err
+		case "/api/buy":
+			message = "purchased"
+			return e.Buy(acct, req.Item)
+		case "/api/warehouse/upgrade":
+			message = "warehouse expanded"
+			return e.UpgradeWarehouse(acct)
+		case "/api/contracts/accept":
+			message = "contract accepted"
+			return e.Accept(acct, req.ContractID)
+		}
+		report = &ContractReport{}
+		var err error
+		if r.URL.Path == "/api/contracts/handin" {
+			err = e.HandIn(acct, req.ContractID, report)
+		} else {
+			err = e.Abandon(acct, req.ContractID, report)
+		}
+		if err == nil {
+			acct.LastReport = report
+		}
+		return err
+	})
+	if err != nil {
+		httpError(w, http.StatusConflict, err.Error())
+		return
+	}
+	reply(w, map[string]any{"ok": true, "message": message, "report": report})
 }
 
 func (m *Master) handleDeploy(w http.ResponseWriter, r *http.Request) {
@@ -349,6 +447,11 @@ func (m *Master) handleDeploy(w http.ResponseWriter, r *http.Request) {
 			remaining, taken, err := TakeFromStorage(acct.Storage, req.Bring)
 			if err != nil {
 				return err
+			}
+			// Gear that goes out on this sortie no longer counts against the warehouse.
+			if e := m.cfg.Economy; e != nil && uint32(len(remaining)) > e.WarehouseCapacity(acct) {
+				return fmt.Errorf("storage over capacity (%d / %d stacks): sell, hand in or carry items, or expand the warehouse",
+					len(remaining), e.WarehouseCapacity(acct))
 			}
 			acct.Storage = remaining
 			acct.Character = &Character{Map: mapInfo.ID, Inventory: nonNil(taken), Sortie: st.NextSortie, Fresh: true}
@@ -645,6 +748,7 @@ type checkpointCharacter struct {
 	Yaw       float64         `json:"yaw"`
 	Survival  json.RawMessage `json:"survival"`
 	Inventory []Stack         `json:"inventory"`
+	Visited   []string        `json:"visited"` // every site this sortie has entered so far
 }
 
 // handleCheckpoint commits a DS's world and every survivor on it in one write:
@@ -694,16 +798,30 @@ func (m *Master) handleCheckpoint(w http.ResponseWriter, r *http.Request) {
 				acct.Character.Yaw = c.Yaw
 				acct.Character.Survival = c.Survival
 				acct.Character.Inventory = nonNil(c.Inventory)
+				acct.Character.Visited = c.Visited
 				acct.Character.Fresh = false
 				if c.Outcome == outcomeLeft {
 					released = append(released, c.PlayerID)
 				}
 			case outcomeDead:
+				// Death never fails a contract; the sortie still ends a trader and board cycle.
+				if e := m.cfg.Economy; e != nil {
+					report := e.EndSortie(acct, false, nil, mapID)
+					acct.LastReport = &report
+				}
 				acct.Character = nil
 				acct.Deaths++
 				acct.LastOutcome = "died on " + mapID
 				released = append(released, c.PlayerID)
 			case outcomeExtracted:
+				// Settle before anything expires, as offline: recon on the sites this sortie entered.
+				if e := m.cfg.Economy; e != nil {
+					report := e.EndSortie(acct, true, c.Visited, mapID)
+					acct.LastReport = &report
+					if len(report.Completed) > 0 {
+						m.cfg.Logf("survivor %d %q completed %v (+%d gold)", acct.ID, acct.Name, report.Completed, report.Gold)
+					}
+				}
 				acct.Storage = AddToStorage(acct.Storage, c.Inventory)
 				acct.Character = nil
 				acct.Extractions++

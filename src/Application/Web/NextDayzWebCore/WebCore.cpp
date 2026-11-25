@@ -45,6 +45,42 @@ namespace
                 {"nutrition", item ? item->hungerDelta : 0.f}, {"area", item ? item->size.Area() : 1}};
     }
 
+    std::string_view ItemName(std::string_view id)
+    {
+        const auto* item = FindItemDef(id);
+        return item ? item->displayName : id;
+    }
+
+    // The Master's economy view with item names filled in (desktop lobby: NextDayzNetwork.cpp).
+    Json DescribeEconomy(const Master::FEconomy& economy)
+    {
+        const auto contracts = [](const std::vector<Master::FEconomyContract>& list)
+        {
+            Json out = Json::array();
+            for (const auto& c : list)
+            {
+                Json items = Json::array();
+                for (const auto& [item, count] : c.items) items.push_back({{"id", item}, {"name", ItemName(item)}, {"count", count}});
+                out.push_back({{"id", c.id}, {"title", c.title}, {"issuer", c.issuer}, {"type", c.type}, {"tier", c.tier},
+                               {"map", c.map}, {"targets", c.targets}, {"items", items}, {"reward", c.reward},
+                               {"reputation", c.reputation}, {"itemReward", c.itemReward.empty() ? "" : ItemName(c.itemReward)},
+                               {"sortiesLeft", c.sortiesLeft}, {"canHandIn", c.canHandIn}, {"online", c.online}});
+            }
+            return out;
+        };
+        Json trader = Json::array();
+        for (const auto& shelf : economy.trader)
+            trader.push_back({{"item", shelf.item}, {"name", ItemName(shelf.item)}, {"tier", shelf.tier}, {"pack", shelf.pack},
+                              {"price", shelf.price}, {"left", shelf.left}, {"locked", shelf.locked}});
+        return {{"available", economy.available}, {"reputation", economy.reputation}, {"tier", economy.tier},
+                {"nextTier", economy.nextTier}, {"board", contracts(economy.board)}, {"contracts", contracts(economy.contracts)},
+                {"maxActive", economy.maxActive}, {"slots", economy.slots}, {"trader", trader},
+                {"sellValues", economy.sellValues}, {"used", economy.used}, {"capacity", economy.capacity},
+                {"over", economy.over}, {"nextCapacity", economy.nextCapacity}, {"nextPrice", economy.nextPrice},
+                {"lastCompleted", economy.lastCompleted}, {"lastGold", economy.lastGold},
+                {"lastReputation", economy.lastReputation}};
+    }
+
     Json DescribeStacks(const std::vector<FLootStack>& stacks)
     {
         Json out = Json::array();
@@ -215,6 +251,23 @@ namespace
             }
             else if (action == "http") Reply(command);
             else if (action == "profile" && !session_.token.empty() && !session_.connected) RequestProfile();
+            else if (action == "economy" && session_.lobby == FClientSession::ELobby::Profile)
+            {
+                // Trading and contracts: the Master decides, the reply refreshes the profile.
+                static const std::map<std::string, std::string, std::less<>> paths = {
+                    {"sell", "sell"}, {"buy", "buy"}, {"accept", "contracts/accept"}, {"abandon", "contracts/abandon"},
+                    {"handin", "contracts/handin"}, {"upgrade", "warehouse/upgrade"}};
+                const auto path = paths.find(command.at("op").get<std::string>());
+                if (path == paths.end()) throw std::runtime_error("Unknown economy request");
+                std::string body = "{}";
+                if (path->first == "sell")
+                    body = Master::SellRequest(command.at("index").get<int>(), command.at("item").get<std::string>(),
+                                               command.at("count").get<int>());
+                else if (path->first == "buy") body = Master::BuyRequest(command.at("item").get<std::string>());
+                else if (path->first != "upgrade") body = Master::ContractRequest(command.at("contractId").get<uint64_t>());
+                message_.clear();
+                Http(path->second, std::move(body));
+            }
             else if (action == "deploy" && session_.lobby == FClientSession::ELobby::Profile)
             {
                 map_ = command.value("map", std::string{});
@@ -562,7 +615,8 @@ namespace
             return Json{{"name", profile.name}, {"gold", profile.gold}, {"storage", DescribeStacks(profile.storage)},
                         {"maps", maps}, {"character", character}, {"sorties", profile.sorties},
                         {"extractions", profile.extractions}, {"deaths", profile.deaths},
-                        {"playing", profile.playing}, {"lastOutcome", profile.lastOutcome}}.dump();
+                        {"playing", profile.playing}, {"lastOutcome", profile.lastOutcome},
+                        {"economy", DescribeEconomy(profile.economy)}, {"revision", profileRevision_}}.dump();
         }
 
         std::string Loot() const
@@ -906,7 +960,13 @@ namespace
             const bool ok = status >= 200 && status < 300;
 
             if (request == "login" && ok && session_.AcceptLogin(body)) RequestProfile();
-            else if (request == "profile" && ok && session_.AcceptProfile(body)) {}
+            else if (request == "profile" && ok && session_.AcceptProfile(body)) ++profileRevision_;
+            else if (economyRequests.contains(request) && session_.lobby == FClientSession::ELobby::Profile)
+            {
+                // Refused or not, show the account as the Master now has it.
+                if (!ok) message_ = command.value("error", std::string("The Master could not complete the request"));
+                Http("profile", "{}");
+            }
             else if (request == "deploy" && ok && session_.AcceptDeploy(body))
             {
                 if (session_.lobby == FClientSession::ELobby::Deploying) retrySeconds_ = 1.f;
@@ -1252,6 +1312,9 @@ namespace
         std::optional<glm::vec3> target_;
         float yaw_ = 0.f;
         float retrySeconds_ = 0.f;
+        uint64_t profileRevision_ = 0;
+        static inline const std::set<std::string, std::less<>> economyRequests = {
+            "sell", "buy", "contracts/accept", "contracts/abandon", "contracts/handin", "warehouse/upgrade"};
         uint32_t drops_ = 0, pvpSent_ = 0;
         bool mapReady_ = false, spawned_ = false, alive_ = false;
     };

@@ -8,7 +8,7 @@ import { compass, drawFieldMap } from "./fieldMap";
 import { Pack } from "./pack";
 import { renderOptions } from "./optionsPanel";
 import { keyName, matches, saveSettings, settings, tr, useTranslations, type Binding } from "./settings";
-import type { Clock, Frame, Loot, Manifest, Profile, XYZ } from "./types";
+import type { Clock, Economy, EconomyContract, Frame, Loot, Manifest, Profile, XYZ } from "./types";
 
 function element<T extends HTMLElement>(id: string): T {
     const found = document.getElementById(id);
@@ -96,6 +96,100 @@ function updateBring() {
     element("bring-count").textContent = total ? tr("Bringing {} items", total) : "";
 }
 
+// Trading and contracts are the Master's calls; the core refreshes the profile after each.
+let economyPending = false;
+function economy(op: string, fields: Record<string, unknown> = {}) {
+    economyPending = true;
+    command({ type: "economy", op, ...fields });
+}
+
+function button(label: string, disabled: boolean, onClick: () => void) {
+    const node = document.createElement("button");
+    node.type = "button";
+    node.className = "quiet";
+    node.textContent = label;
+    node.disabled = disabled;
+    node.addEventListener("click", onClick);
+    return node;
+}
+
+function issuerName(issuer: string) {
+    return tr(issuer === "medical" ? "MEDICAL STATION" : issuer === "quartermaster" ? "QUARTERMASTER"
+        : issuer === "collector" ? "COLLECTOR" : "RADIO STATION");
+}
+
+function showEconomy(data: Economy) {
+    const section = element("economy");
+    section.hidden = !data.available;
+    if (!data.available) return;
+    const inField = Boolean(profile.character);
+    const status = element("economy-status");
+    status.classList.toggle("over", data.over);
+    status.replaceChildren(`${tr("Gold: {}", profile.gold)} · ${tr("Reputation: {}  (tier {})", data.reputation, data.tier)} · `
+        + tr("WAREHOUSE  {} / {} stacks", data.used, data.capacity));
+    if (data.nextCapacity)
+        status.append(" ", button(tr("Expand to {} stacks ({} gold)", data.nextCapacity, data.nextPrice),
+            profile.gold < data.nextPrice, () => economy("upgrade")));
+    if (data.lastCompleted) {
+        const report = document.createElement("small");
+        // `{:+}` is the desktop's signed number; tr fills only `{}`.
+        report.textContent = tr("Last report: contracts completed: {} (+{} gold, reputation {:+}).", data.lastCompleted, data.lastGold)
+            .replace("{:+}", `${data.lastReputation >= 0 ? "+" : ""}${data.lastReputation}`);
+        status.append(report);
+    }
+    const card = (contract: EconomyContract, accepted: boolean) => {
+        const entry = document.createElement("div");
+        entry.className = "contract";
+        const issuer = document.createElement("small");
+        issuer.textContent = `${issuerName(contract.issuer)} / ${tr("Tier {}", contract.tier)}`;
+        const title = document.createElement("strong");
+        title.textContent = tr(contract.title);
+        entry.append(issuer, title);
+        for (const item of contract.items) {
+            const line = document.createElement("small");
+            line.textContent = tr("Deliver {} x{}", itemName(item.name), item.count);
+            entry.append(line);
+        }
+        if (contract.targets.length) {
+            const line = document.createElement("small");
+            line.textContent = tr("Visit {} ({}), then extract.", contract.targets.join(", "), contract.map);
+            entry.append(line);
+        }
+        const reward = document.createElement("small");
+        reward.textContent = tr("Reward: {} gold, +{} reputation", contract.reward, contract.reputation);
+        const left = document.createElement("small");
+        left.textContent = accepted ? tr("Expires after {} more expeditions", contract.sortiesLeft)
+            : tr("Leaves the board after {} more expeditions", contract.sortiesLeft);
+        entry.append(reward, left);
+        if (accepted) entry.append(button(tr("Abandon"), inField, () => economy("abandon", { contractId: contract.id })));
+        else if (contract.type === "deliver")
+            entry.append(button(tr("Hand in"), !contract.canHandIn, () => economy("handin", { contractId: contract.id })));
+        else if (!contract.online) {
+            const note = document.createElement("small");
+            note.textContent = tr("Offline campaign only for now.");
+            entry.append(note);
+        } else entry.append(button(tr("Accept"), inField || data.contracts.length >= data.maxActive,
+            () => economy("accept", { contractId: contract.id })));
+        return entry;
+    };
+    element("board-title").textContent = tr("CONTRACT BOARD  ({} / {})", data.board.length, data.slots);
+    element("contract-board").replaceChildren(...data.board.map(contract => card(contract, false)));
+    element("active-title").textContent = tr("ACTIVE CONTRACTS  ({} / {})", data.contracts.length, data.maxActive);
+    element("contract-active").replaceChildren(...data.contracts.map(contract => card(contract, true)));
+    element("trader").replaceChildren(...data.trader.map(shelf => {
+        const row = document.createElement("div");
+        row.className = shelf.locked ? "shelf locked" : "shelf";
+        const label = document.createElement("span");
+        label.textContent = `${itemName(shelf.name)} x${shelf.pack}`;
+        const detail = document.createElement("small");
+        detail.textContent = `${shelf.price} · ${tr("Left")} ${shelf.left}`;
+        label.append(detail);
+        row.append(label, shelf.locked ? document.createTextNode(tr("Tier {}", shelf.tier))
+            : button(tr("Buy"), shelf.left <= 0 || data.over || profile.gold < shelf.price, () => economy("buy", { item: shelf.item })));
+        return row;
+    }));
+}
+
 function showProfile(data: Profile) {
     profile = data;
     element("profile-name").textContent = profile.name;
@@ -137,6 +231,9 @@ function showProfile(data: Profile) {
         input.addEventListener("change", updateBring);
         bring.push(input);
         row.append(icon, label, input);
+        const value = profile.economy.available ? profile.economy.sellValues[profile.storage.indexOf(item)] ?? 0 : 0;
+        if (value) label.append(button(tr("Sell 1 (+{} gold)", value), false,
+            () => economy("sell", { index: profile.storage.indexOf(item), item: item.id, count: 1 })));
         storage.append(row);
     }
     maps.replaceChildren();
@@ -166,6 +263,7 @@ function showProfile(data: Profile) {
         : profile.character ? tr("Resume with your current equipment")
             : tr("Choose what to bring from storage");
     updateBring();
+    showEconomy(profile.economy);
 }
 
 async function prepare(scene: string) {
@@ -486,6 +584,13 @@ function refresh(timestamp: number) {
         showMap(false);
         showPack(false);
         viewShown = false;
+    }
+    if (phase === "profile" && economyPending) {
+        const refreshed = client.read("profile");
+        if (refreshed.revision !== profile.revision) {
+            economyPending = false;
+            showProfile(refreshed);
+        }
     }
     if (phase === "profile" && profile.playing) {
         const refreshedProfile = client.read("profile");

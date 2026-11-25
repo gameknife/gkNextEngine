@@ -3,6 +3,7 @@
 #include "Application/Game/NextDayz/World/Contracts.hpp"
 #include "Application/Game/NextDayz/World/Economy.hpp"
 #include "Application/Game/NextDayz/World/ExpeditionMaps.hpp"
+#include "Application/Game/NextDayz/Weapons/AttachmentDefs.hpp"
 #include <nlohmann/json.hpp>
 
 using namespace NextDayz;
@@ -428,4 +429,114 @@ TEST_CASE("NextDayz reputation tiers open contract tiers and board slots", "[Nex
         CHECK(AllowedContractTier(campaign, Defs()) == contractTier);
         CHECK(BoardSlots(campaign, Defs()) == slots);
     }
+}
+
+// ---------------------------------------------------------------- golden shared with the Go Master
+
+namespace
+{
+    nlohmann::json Canon(const FContract& contract)
+    {
+        nlohmann::json items = nlohmann::json::array();
+        for (const auto& item : contract.items) items.push_back({item.item, item.count});
+        return {{"id", contract.id}, {"template", contract.templateId}, {"type", ContractTypeName(contract.type)},
+                {"tier", contract.tier}, {"map", contract.mapId}, {"targets", contract.targets}, {"items", items},
+                {"parcel", contract.parcel}, {"reward", contract.reward}, {"itemReward", contract.itemReward},
+                {"offeredAt", contract.offeredAt}, {"acceptedAt", contract.acceptedAt},
+                {"accepted", contract.state == EContractState::Accepted}};
+    }
+
+    nlohmann::json Snapshot(const std::string& step, const FCampaign& campaign)
+    {
+        nlohmann::json board = nlohmann::json::array(), accepted = nlohmann::json::array();
+        for (const auto& contract : campaign.board) board.push_back(Canon(contract));
+        for (const auto& contract : campaign.contracts) accepted.push_back(Canon(contract));
+        return {{"step", step}, {"gold", campaign.gold}, {"reputation", campaign.reputation},
+                {"contractsCompleted", campaign.contractsCompleted}, {"board", board}, {"contracts", accepted}};
+    }
+
+    // The scenario both implementations replay (tools/gnb/internal/dzmaster/economy_test.go).
+    nlohmann::json BuildGolden()
+    {
+        nlohmann::json golden;
+        nlohmann::json attachments = nlohmann::json::array();
+        for (uint8_t type = 0; type < static_cast<uint8_t>(EWeaponAttachment::Count); ++type)
+        {
+            const auto* part = FindAttachmentDef(static_cast<EWeaponAttachment>(type));
+            attachments.push_back(part ? std::string(part->id) : std::string());
+        }
+        golden["attachmentItems"] = attachments;
+        golden["boards"] = nlohmann::json::array();
+        for (const uint64_t seed : {1ull, 2ull, 3ull, 42ull, 1337ull})
+            for (const uint32_t reputation : {0u, 3u, 8u, 15u})
+            {
+                const auto campaign = Fresh(seed, reputation);
+                golden["boards"].push_back({{"seed", seed}, {"reputation", reputation},
+                                            {"board", Snapshot("refresh", campaign).at("board")}});
+            }
+
+        FCampaign campaign;
+        campaign.boardRng = 0x5EED;
+        nlohmann::json steps = nlohmann::json::array();
+        RefreshBoard(campaign, Defs(), Sites());
+        steps.push_back(Snapshot("refresh", campaign));
+        const auto acceptRecon = [&]()
+        {
+            if (const auto* recon = FirstOfType(campaign.board, EContractType::Recon))
+                AcceptContract(campaign, Defs(), recon->id);
+            steps.push_back(Snapshot("accept-recon", campaign));
+        };
+        const auto extract = [&](bool visit)
+        {
+            Deploy(campaign);
+            std::string mapId;
+            if (!campaign.contracts.empty())
+            {
+                mapId = campaign.contracts.front().mapId;
+                if (visit) campaign.sortie.visitedPois = campaign.contracts.front().targets;
+            }
+            Inventory carried;
+            End(campaign, carried, true, mapId);
+            steps.push_back(Snapshot(visit ? "extract-visited" : "extract", campaign));
+        };
+        acceptRecon();
+        if (const auto* deliver = FirstOfType(campaign.board, EContractType::Deliver))
+        {
+            const uint64_t id = deliver->id;
+            for (const auto& item : deliver->items) AddToStorage(campaign, item.item, item.count);
+            FContractReport report;
+            HandInContract(campaign, Defs(), id, report);
+        }
+        steps.push_back(Snapshot("handin", campaign));
+        extract(true);
+        acceptRecon();
+        extract(false);
+        extract(false);
+        extract(false);
+        golden["scenario"] = {{"seed", 0x5EED}, {"steps", steps}};
+        return golden;
+    }
+}
+
+TEST_CASE("NextDayz economy golden pins the rules the Go Master ports", "[NextDayz][Contracts][Golden]")
+{
+    // Regenerate after a deliberate rule change: NEXTDAYZ_UPDATE_GOLDEN=1, then run the Go test too.
+    const auto path = sourceRoot / "tools/nextdayz/economy_golden.json";
+    const auto golden = BuildGolden();
+    if (const char* update = std::getenv("NEXTDAYZ_UPDATE_GOLDEN"); update && std::string_view(update) == "1")
+    {
+        std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+        stream << golden.dump(1) << "\n";
+    }
+    std::ifstream stream(path, std::ios::binary);
+    REQUIRE(stream);
+    const auto committed = nlohmann::json::parse(stream);
+    CHECK(committed == golden);
+    // The scenario exercises what it claims to.
+    const auto& steps = golden.at("scenario").at("steps");
+    REQUIRE(steps.size() == 8);
+    CHECK(steps[2].at("contractsCompleted") == 1);   // hand-in
+    CHECK(steps[3].at("contractsCompleted") == 2);   // recon settled on extraction
+    CHECK(steps[6].at("contracts").size() == 1);
+    CHECK(steps[7].at("contracts").empty());          // the second recon expired
 }

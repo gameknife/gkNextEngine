@@ -165,6 +165,10 @@ func newMaster(ctx appContext, opts masterOptions) (*dzmaster.Master, error) {
 	if err != nil {
 		return nil, err
 	}
+	economy, err := dzmaster.LoadEconomy(assetRoot, maps)
+	if err != nil {
+		return nil, fmt.Errorf("NextDayz economy: %w", err)
+	}
 	if opts.DataDir == "" {
 		opts.DataDir = filepath.Join(filepath.Dir(binDir), "master")
 		if opts.RuntimeRoot != "" {
@@ -190,7 +194,7 @@ func newMaster(ctx appContext, opts masterOptions) (*dzmaster.Master, error) {
 		Listen: opts.Listen, PublicHost: publicHost, DataDir: opts.DataDir, Exe: exe, Maps: maps,
 		PortBase: opts.PortBase, RtcPortBase: opts.RtcPortBase, MaxPlayers: opts.MaxPlayers, MaxServers: opts.MaxServers, IdleSeconds: opts.IdleSeconds, Pvp: opts.Pvp,
 		WebRoot: opts.WebRoot, RequirePassword: opts.RequirePassword, TrustLocalProxy: opts.TrustLocalProxy,
-		DSArgs: dsArgs, Launch: dzmaster.ExecLauncher(exe),
+		DSArgs: dsArgs, Launch: dzmaster.ExecLauncher(exe), Economy: economy,
 		Logf: func(format string, args ...any) { console.Info("[master] "+format, args...) },
 	})
 }

@@ -1,0 +1,241 @@
+{
+  "name": "nextdayz-master-economy",
+  "description": "Needs a fresh Master on 127.0.0.1:7780 (gnb master serve --cheats --data <empty dir>). A new survivor auto-deploys and extracts with its starting kit, accepts a recon contract, deploys, reaches the site and extracts: the Master settles the contract from the sites the DS reported. Then it sells its bandages and buys water.",
+  "target": "NextDayz",
+  "args": [
+    "--disable-streamline",
+    "--cvar",
+    "nextdayz.net.mode client",
+    "--cvar",
+    "nextdayz.net.master http://127.0.0.1:7780",
+    "--cvar",
+    "nextdayz.net.name econ-pilot",
+    "--cvar",
+    "nextdayz.net.autoDeploy true"
+  ],
+  "defaults": {
+    "waitFrames": 2,
+    "stepTimeoutMs": 300000
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "game.sceneReady",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.netLobby",
+      "op": "eq",
+      "value": "playing",
+      "timeoutMs": 300000
+    },
+    {
+      "type": "wait-ms",
+      "ms": 1500
+    },
+    {
+      "type": "log",
+      "message": "First sortie: bring the starting kit home"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.netExtract",
+      "set": 1
+    },
+    {
+      "type": "wait-until",
+      "query": "game.netLobby",
+      "op": "eq",
+      "value": "profile",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.netExtractions",
+      "op": "eq",
+      "value": 1,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "assert",
+      "query": "game.netEconomy",
+      "op": "eq",
+      "value": true
+    },
+    {
+      "type": "assert",
+      "query": "game.netBoardSize",
+      "op": "eq",
+      "value": 3
+    },
+    {
+      "type": "assert",
+      "query": "game.netGold",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "log",
+      "message": "Contract: accept a recon, deploy, reach the site, extract"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.netEconomy",
+      "set": "accept-recon"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.netContractsActive",
+      "op": "eq",
+      "value": 1,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "key",
+      "code": "T",
+      "action": "press"
+    },
+    {
+      "type": "wait-frames",
+      "n": 30
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_master_economy_lobby",
+      "ui": true
+    },
+    {
+      "type": "key",
+      "code": "Escape",
+      "action": "press"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.netEconomy",
+      "set": "deploy"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.netLobby",
+      "op": "eq",
+      "value": "playing",
+      "timeoutMs": 300000
+    },
+    {
+      "type": "wait-ms",
+      "ms": 1500
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.netEconomy",
+      "set": "goto-recon"
+    },
+    {
+      "type": "wait-ms",
+      "ms": 2500
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.netExtract",
+      "set": 2
+    },
+    {
+      "type": "wait-until",
+      "query": "game.netLobby",
+      "op": "eq",
+      "value": "profile",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "wait-until",
+      "query": "game.netContractsCompleted",
+      "op": "eq",
+      "value": 1,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "assert",
+      "query": "game.netContractsActive",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "type": "assert",
+      "query": "game.netReputation",
+      "op": "eq",
+      "value": 1
+    },
+    {
+      "type": "assert",
+      "query": "game.netGold",
+      "op": "ge",
+      "value": 100
+    },
+    {
+      "type": "assert",
+      "query": "game.netStorageStacks",
+      "op": "eq",
+      "value": 2
+    },
+    {
+      "type": "log",
+      "message": "Trade: sell the bandages, buy a water bottle"
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.netEconomy",
+      "set": "sell:bandage"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.netStorageStacks",
+      "op": "eq",
+      "value": 1,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "cvar",
+      "name": "nextdayz.validation.netEconomy",
+      "set": "buy:water_bottle"
+    },
+    {
+      "type": "wait-until",
+      "query": "game.netStorageStacks",
+      "op": "eq",
+      "value": 2,
+      "timeoutMs": 20000
+    },
+    {
+      "type": "assert",
+      "query": "game.netLobbyMessage",
+      "op": "eq",
+      "value": ""
+    },
+    {
+      "type": "assert",
+      "query": "game.netGold",
+      "op": "ge",
+      "value": 95
+    },
+    {
+      "type": "key",
+      "code": "T",
+      "action": "press"
+    },
+    {
+      "type": "wait-frames",
+      "n": 30
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/nextdayz_master_economy_settled",
+      "ui": true
+    },
+    {
+      "type": "quit"
+    }
+  ]
+}

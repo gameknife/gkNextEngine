@@ -50,6 +50,57 @@ test("the WASM client authenticates, loads storage, and asks again while the DS 
     }
 });
 
+test("the WASM client relays trading and contracts to the Master and shows its economy", async () => {
+    const calls = [];
+    const economy = {
+        reputation: 2, tier: 0, nextTier: 3, maxActive: 2, slots: 3, contractsCompleted: 1,
+        board: [{ id: 7, template: "med_dressings", title: "Field dressings", issuer: "medical", type: "deliver", tier: 1,
+            items: [{ item: "bandage", count: 3 }], reward: 44, reputation: 1, sortiesLeft: 2, canHandIn: true, online: true }],
+        contracts: [], trader: [{ item: "medkit", tier: 0, pack: 1, price: 75, left: 2, locked: false }],
+        sellValues: [5], warehouse: { used: 1, capacity: 40, over: false, nextCapacity: 60, nextPrice: 300 },
+    };
+    const master = {
+        login: { playerId: 3, token: "trade-token" },
+        profile: { playerId: 3, name: "Trader", gold: 90, storage: [{ id: "bandage", count: 3 }], maps: [], economy },
+    };
+    const client = new Client(await createModule(), {
+        async fetchMaster(request, body, token) {
+            calls.push({ request, body: JSON.parse(body), token });
+            if (request === "buy") return Response.json({ error: "not enough gold" }, { status: 409 });
+            return Response.json(master[request] ?? { ok: true });
+        },
+        loadMap() { return new Promise(() => {}); },
+        signal() { throw Error("no signaling in the lobby"); },
+    });
+    const settle = async () => { for (let i = 0; i < 20; ++i) await new Promise(resolve => setImmediate(resolve)); };
+    try {
+        client.command({ type: "login", name: "Trader" });
+        await settle();
+        const profile = client.read("profile");
+        assert.equal(profile.economy.available, true);
+        assert.equal(profile.economy.board[0].items[0].name, "Bandage");
+        assert.equal(profile.economy.trader[0].name, "First Aid Kit");
+        assert.equal(profile.economy.capacity, 40);
+        const revision = profile.revision;
+        client.command({ type: "economy", op: "handin", contractId: 7 });
+        await settle();
+        client.command({ type: "economy", op: "sell", index: 0, item: "bandage", count: 2 });
+        await settle();
+        client.command({ type: "economy", op: "buy", item: "medkit" });
+        await settle();
+        assert.deepEqual(calls.slice(2).map(call => [call.request, call.body]), [
+            ["contracts/handin", { contractId: 7 }], ["profile", {}],
+            ["sell", { index: 0, item: "bandage", count: 2 }], ["profile", {}],
+            ["buy", { item: "medkit" }], ["profile", {}],
+        ]);
+        assert.equal(client.read().phase, "profile");
+        assert.equal(client.read("profile").revision, revision + 3);
+        assert.match(client.read().message, /not enough gold/);
+    } finally {
+        client.destroy();
+    }
+});
+
 test("only the review kernel knows the review shortcuts", async () => {
     const core = new URL("../../../out/web/nextdayz/core/", import.meta.url);
     const [release, review] = await Promise.all([readFile(new URL("ndcore.wasm", core)), readFile(new URL("ndcore-review.wasm", core))]);

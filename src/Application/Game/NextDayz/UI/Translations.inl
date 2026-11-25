@@ -1518,7 +1518,6 @@ ND_TEXT("Near {} ({:.0f} m)", "{}附近（{:.0f} 米）")
 ND_TEXT("Random landing (free)", "随机落点（免费）")
 ND_TEXT("LANDING  /  choosing a point costs {} gold, refunded if you cancel", "落点  /  指定落点花费 {} 黄金，取消可退款")
 ND_TEXT("Landing point booked. Fly there with DEPLOY.", "落点已预订。点击出击即可飞往该处。")
-ND_TEXT("Online trading opens when the Master economy goes live. Your account gold is kept.", "联机交易将在 Master 经济上线后开放。你的账号黄金会保留。")
 // Contracts: board, parcels, field objectives.
 ND_TEXT("Sealed Parcel", "密封包裹")
 ND_TEXT("Medical Records", "病历档案")
@@ -1589,3 +1588,8 @@ ND_TEXT("Over capacity: you cannot deploy, buy or store until you sell, hand in 
 ND_TEXT("Your storage is full. Sell, hand in or carry items, or expand the warehouse.", "仓库已满。请出售、交付或带上物品，或扩建仓库。")
 ND_TEXT(" Reputation tier {} reached: new shelves and contracts are open.", " 信誉达到第 {} 档：解锁了新的货架和合同。")
 ND_TEXT("The warehouse is fully expanded.", "仓库已扩建到最大。")
+// Online economy (Master).
+ND_TEXT("This Master runs without the safehouse economy. Your account gold is kept.", "这台 Master 没有开启安全屋经济。你的账号黄金会保留。")
+ND_TEXT("Last report: contracts completed: {} (+{} gold, reputation {:+}).", "上次结算：完成合同 {} 个（+{} 黄金，信誉 {:+}）。")
+ND_TEXT("Offline campaign only for now.", "目前只能在单机战役中进行。")
+ND_TEXT("Deliver {} x{}", "交付{} x{}")

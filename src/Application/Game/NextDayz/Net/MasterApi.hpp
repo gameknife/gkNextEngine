@@ -32,6 +32,61 @@ namespace NextDayz::Master
         std::vector<FLootStack> inventory;
         uint64_t sortie = 0;
         bool fresh = true;
+        std::vector<std::string> visited;    // sites this sortie has entered (recon contracts)
+    };
+
+    // The "economy" section of a profile (dzmaster economy.go View): everything
+    // the lobby shows, already priced by the Master. Clients add no rules.
+    struct FEconomyContract
+    {
+        uint64_t id = 0;
+        std::string templateId;
+        std::string title;                   // English; the translation key
+        std::string issuer;
+        std::string type;                    // deliver | recon | fetch
+        uint32_t tier = 1;
+        std::string map;
+        std::vector<std::string> targets;
+        std::vector<std::pair<std::string, int>> items;
+        uint64_t reward = 0;
+        uint32_t reputation = 0;
+        std::string itemReward;
+        uint64_t sortiesLeft = 0;
+        bool canHandIn = false;
+        bool online = true;                  // false: offline-only (fetch)
+    };
+
+    struct FEconomyShelf
+    {
+        std::string item;
+        uint32_t tier = 0;
+        int pack = 1;
+        uint64_t price = 0;
+        int left = 0;
+        bool locked = false;
+    };
+
+    struct FEconomy
+    {
+        bool available = false;              // the Master runs the economy
+        uint32_t reputation = 0;
+        uint32_t tier = 0;
+        uint32_t nextTier = 0;               // reputation for the next tier; 0 at the top
+        std::vector<FEconomyContract> board;
+        std::vector<FEconomyContract> contracts;
+        int maxActive = 0;
+        uint32_t slots = 0;
+        uint64_t contractsCompleted = 0;
+        std::vector<FEconomyShelf> trader;
+        std::vector<uint64_t> sellValues;    // per storage stack: one unit's price
+        uint32_t used = 0;
+        uint32_t capacity = 0;
+        bool over = false;
+        uint32_t nextCapacity = 0;           // 0: fully expanded
+        uint64_t nextPrice = 0;
+        size_t lastCompleted = 0;            // the last settlement the Master reported
+        uint64_t lastGold = 0;
+        int64_t lastReputation = 0;
     };
 
     struct FProfile
@@ -47,6 +102,7 @@ namespace NextDayz::Master
         std::string lastOutcome;
         std::string playing;                 // the server holding this survivor, if any
         std::vector<FMap> maps;
+        FEconomy economy;
     };
 
     struct FDeploy
@@ -100,6 +156,7 @@ namespace NextDayz::Master
         float yaw = 0.0f;
         std::string survivalJson;
         std::vector<FLootStack> inventory;
+        std::vector<std::string> visited;
     };
 
     // --- requests ---
@@ -110,6 +167,10 @@ namespace NextDayz::Master
                                  bool ready);
     std::string DsRequest(std::string_view dsId, std::string_view key);
     std::string RedeemRequest(std::string_view dsId, std::string_view key, std::string_view ticket);
+    // Economy calls (POST /api/sell, /api/buy, /api/contracts/<accept|abandon|handin>, /api/warehouse/upgrade).
+    std::string SellRequest(int index, std::string_view item, int count);
+    std::string BuyRequest(std::string_view item);
+    std::string ContractRequest(uint64_t contractId);
     std::string CheckpointRequest(std::string_view dsId, std::string_view key, uint64_t seq,
                                   std::string_view worldJson, const std::vector<FCheckpointCharacter>& characters);
 

@@ -44,6 +44,9 @@ type Character struct {
 	Inventory []Stack         `json:"inventory"`
 	Sortie    uint64          `json:"sortie"`
 	Fresh     bool            `json:"fresh"` // never reached a DS yet: spawn at a safe point
+	// Sites this sortie has entered (names from the map's generation record), as
+	// the DS last checkpointed them; recon contracts settle on these.
+	Visited []string `json:"visited,omitempty"`
 }
 
 type Account struct {
@@ -58,7 +61,26 @@ type Account struct {
 	Extractions  uint64     `json:"extractions"`
 	Deaths       uint64     `json:"deaths"`
 	LastOutcome  string     `json:"lastOutcome,omitempty"`
+	// State v2: the safehouse economy (economy.go), the same fields as the
+	// offline campaign's FCampaign.
+	Reputation         uint32          `json:"reputation"`
+	TraderStock        map[string]int  `json:"traderStock,omitempty"`
+	TraderCycle        uint64          `json:"traderCycle"`
+	BoardRng           uint64          `json:"boardRng"`
+	BoardCycle         uint64          `json:"boardCycle"`
+	ContractSerial     uint64          `json:"contractSerial"`
+	Board              []Contract      `json:"board,omitempty"`
+	Contracts          []Contract      `json:"contracts,omitempty"`
+	ContractsCompleted uint64          `json:"contractsCompleted"`
+	WarehouseLevel     uint32          `json:"warehouseLevel"`
+	WarehouseFloor     uint32          `json:"warehouseFloor"`
+	LastReport         *ContractReport `json:"lastReport,omitempty"`
 }
+
+// StateVersion is the current master.json layout. v1 -> v2 added the economy:
+// every field defaults to zero, and an account's existing stack count becomes
+// its warehouse floor so nobody is blocked from deploying by the upgrade.
+const StateVersion = 2
 
 // World is a map's persistent state as its DS last committed it (opaque JSON).
 type World struct {
@@ -83,7 +105,7 @@ type Store struct {
 }
 
 func OpenStore(path string) (*Store, error) {
-	s := &Store{path: path, state: State{Version: 1, NextID: 1, NextSortie: 1,
+	s := &Store{path: path, state: State{Version: StateVersion, NextID: 1, NextSortie: 1,
 		Accounts: map[uint64]*Account{}, Worlds: map[string]*World{}}}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
@@ -108,6 +130,15 @@ func OpenStore(path string) (*Store, error) {
 	if s.state.Worlds == nil {
 		s.state.Worlds = map[string]*World{}
 	}
+	if s.state.Version > StateVersion {
+		return nil, fmt.Errorf("master store %s is version %d; this Master reads up to %d", path, s.state.Version, StateVersion)
+	}
+	if s.state.Version < 2 {
+		for _, a := range s.state.Accounts {
+			a.WarehouseFloor = uint32(len(a.Storage))
+		}
+	}
+	s.state.Version = StateVersion
 	return s, nil
 }
 

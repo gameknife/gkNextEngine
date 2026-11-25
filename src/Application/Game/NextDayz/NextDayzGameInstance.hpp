@@ -435,6 +435,8 @@ private:
     std::vector<std::filesystem::path> authoringWatchFiles_;
     std::chrono::steady_clock::time_point authoringNextPoll_{};
     std::string validationDeployMap_;
+    std::string validationNetEconomy_;
+    void NetEconomyCall(const char* path, std::string body);
     int safehouseTab_ = -1; // -1 cabin, 0 world map, 1 storage, 2 trader
     int selectedWorldMap_ = 0;
     std::string deployMapChoice_;   // offline campaign destination id; empty = random assignment

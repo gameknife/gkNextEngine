@@ -393,6 +393,14 @@ void NextDayzGameInstance::Deploy()
         return;
     }
     if (campaign_.inField) return;
+    if (!authoringMode_ && NextDayz::CanDeploy(campaign_, economy_) != NextDayz::ETradeResult::Ok)
+    {
+        // Extraction never destroys gear; an over-full warehouse is sorted before the next sortie.
+        campaignMessage_ = NextDayz::L10n::Message(
+            "Storage over capacity ({} / {} stacks). Sell, hand in or carry items, or expand the warehouse, before deploying.",
+            campaign_.storage.size(), NextDayz::WarehouseCapacity(campaign_, economy_));
+        return;
+    }
     std::vector<const NextDayz::FExpeditionMap*> available;
     for (const auto& map : expeditionMaps_)
         if (NextDayz::IsDispatchable(map, authoringMode_)) available.push_back(&map);
@@ -560,6 +568,7 @@ void NextDayzGameInstance::ReturnToSafehouse(ESafehouseReturn reason)
     record.seconds = survivalSeconds_;
     if (died) record.deathCause = survival_.Snapshot().lastDamageSource;
     NextDayz::FContractReport contractReport;
+    const uint32_t tierBefore = NextDayz::ReputationTier(campaign_.reputation, economy_);
     if (died)
     {
         weapons_.CopyMagazinesTo(inventory_);
@@ -599,7 +608,10 @@ void NextDayzGameInstance::ReturnToSafehouse(ESafehouseReturn reason)
         : reason == ESafehouseReturn::Debug ? "DEBUG RETURN / GEAR STORED" : "EXTRACTED";
     if (const auto* map = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_))
         campaignMessage_ += NextDayz::L10n::Message(" Assignment region: {} / {}", map->name, map->region);
-    campaignMessage_ += ContractReportText(contractReport);
+    campaignMessage_ += ContractReportText(contractReport) + TierUpText(tierBefore);
+    if (NextDayz::WarehouseOver(campaign_, economy_))
+        campaignMessage_ += NextDayz::L10n::Message(" Storage is over capacity ({} / {} stacks): sort it before the next sortie.",
+            campaign_.storage.size(), NextDayz::WarehouseCapacity(campaign_, economy_));
     campaign_.flight = {};
     actions_.Reset();
     weapons_.ResetRuntime();
@@ -776,8 +788,28 @@ bool NextDayzGameInstance::DrawSafehouse()
     }
     std::vector<std::function<void()>> requests;
     ImGui::Spacing();
-    if (ImGui::Button(NextDayz::L10n::Label("STORE ALL CARRIED GEAR"))) requests.emplace_back([this]()
-    { campaign_.StoreAll(inventory_); weapons_.ResetRuntime(); });
+    const auto storeResult = [this](NextDayz::ETradeResult result)
+    { if (result != NextDayz::ETradeResult::Ok) campaignMessage_ = NextDayz::TradeResultMessage(result); };
+    {
+        const uint32_t capacity = NextDayz::WarehouseCapacity(campaign_, economy_);
+        const bool over = NextDayz::WarehouseOver(campaign_, economy_);
+        const auto used = NextDayz::L10n::Format("WAREHOUSE  {} / {} stacks", campaign_.storage.size(), capacity);
+        if (over) ImGui::TextColored(ImVec4(0.92f,0.52f,0.40f,1), "%s", used.c_str());
+        else ImGui::TextUnformatted(used.c_str());
+        if (const auto* step = NextDayz::NextWarehouseStep(campaign_, economy_))
+        {
+            ImGui::SameLine();
+            ImGui::BeginDisabled(campaign_.gold < step->price);
+            if (ImGui::SmallButton(NextDayz::L10n::Format("Expand to {} stacks ({} gold)", step->capacity, step->price).c_str()))
+                requests.emplace_back([this, storeResult]() { storeResult(NextDayz::UpgradeWarehouse(campaign_, economy_)); });
+            ImGui::EndDisabled();
+        }
+        if (over)
+            ImGui::TextColored(ImVec4(0.92f,0.52f,0.40f,1), "%s",
+                NextDayz::L10n::Tr("Over capacity: you cannot deploy, buy or store until you sell, hand in or carry items."));
+    }
+    if (ImGui::Button(NextDayz::L10n::Label("STORE ALL CARRIED GEAR"))) requests.emplace_back([this, storeResult]()
+    { storeResult(NextDayz::StoreCarried(campaign_, economy_, inventory_, 0)); weapons_.ResetRuntime(); });
     ImGui::SameLine();
     if (ImGui::Button(inventory_.Instances().empty() ? NextDayz::L10n::Tr("DEPLOY EMPTY-HANDED") : NextDayz::L10n::Tr("DEPLOY WITH LOADOUT")))
         requests.emplace_back([this]() { Deploy(); });
@@ -836,7 +868,11 @@ bool NextDayzGameInstance::DrawSafehouse()
                 item.count, inventory_.IsWorn(item.instanceId) ? NextDayz::L10n::Tr(" [worn]") : "");
             const auto id = item.instanceId;
             if (ImGui::SmallButton(NextDayz::L10n::Label("Store"))) requests.emplace_back([this,id]()
-            { if (!campaign_.Store(inventory_,id)) campaignMessage_ = "Store its contents first, or use STORE ALL."; });
+            {
+                const auto result = NextDayz::StoreCarried(campaign_, economy_, inventory_, id);
+                if (result == NextDayz::ETradeResult::StorageFull) campaignMessage_ = NextDayz::TradeResultMessage(result);
+                else if (result != NextDayz::ETradeResult::Ok) campaignMessage_ = "Store its contents first, or use STORE ALL.";
+            });
             if (def && def->kind == NextDayz::EItemKind::Clothing && !inventory_.IsWorn(id))
             {
                 ImGui::SameLine();
@@ -958,7 +994,33 @@ void NextDayzGameInstance::CampaignValidationCommand()
         if (!NextDayz::ReadCampaignSave(campaignPath_,saved,error) || !RestoreCampaign(saved))
         { saveError_ = error; campaignSaveBlocked_ = true; }
     }
-    else if (command == "store-all" && !campaign_.inField) { campaign_.StoreAll(inventory_); SaveCampaign(); }
+    else if (command == "store-all" && !campaign_.inField)
+    {
+        const auto result = NextDayz::StoreCarried(campaign_, economy_, inventory_, 0);
+        if (result != NextDayz::ETradeResult::Ok) campaignMessage_ = NextDayz::TradeResultMessage(result);
+        SaveCampaign();
+    }
+    else if (command.starts_with("gold:")) { campaign_.gold = std::stoull(command.substr(5)); SaveCampaign(); }
+    else if (command.starts_with("fill-storage:") && !campaign_.inField)
+    {
+        // Adds stacks that cannot merge (one garment each, cycling through clothing) past any capacity.
+        int stacks = std::stoi(command.substr(13));
+        for (size_t index = 0; stacks > 0; ++index)
+        {
+            const auto& item = NextDayz::AllItemDefs()[index % NextDayz::AllItemDefs().size()];
+            if (item.kind != NextDayz::EItemKind::Clothing || item.maxStack != 1) continue;
+            NextDayz::FItemInstance stack;
+            stack.defId = std::string(item.id);
+            campaign_.Put(std::move(stack));
+            --stacks;
+        }
+        SaveCampaign();
+    }
+    else if (command == "warehouse-upgrade")
+    {
+        campaignMessage_ = NextDayz::TradeResultMessage(NextDayz::UpgradeWarehouse(campaign_, economy_));
+        SaveCampaign();
+    }
     else if (command == "take-first" && !campaign_.storage.empty())
     { campaign_.Take(inventory_,campaign_.storage.front().instanceId,1,false); SaveCampaign(); }
     else if (command == "sell-first" && !campaign_.storage.empty())

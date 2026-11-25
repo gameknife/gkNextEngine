@@ -18,16 +18,39 @@ namespace NextDayz
         }
     }
 
+    bool FCampaign::Put(FItemInstance item)
+    {
+        const auto* def = FindItemDef(item.defId);
+        if (!def || item.count <= 0) return false;
+        item.containerId = 0;
+        item.placement = {};
+        // Plain units (no rounds loaded, no parts) top up stacks of the same item,
+        // as the Master's AddToStorage does; the stack count is what the warehouse holds.
+        const bool plain = item.loadedAmmo == 0 && item.attachments == FWeaponAttachments{};
+        if (plain)
+            for (auto& stack : storage)
+            {
+                if (item.count == 0) return true;
+                if (stack.defId != item.defId || stack.loadedAmmo != 0 || stack.attachments != FWeaponAttachments{} ||
+                    stack.count >= def->maxStack) continue;
+                const int moved = std::min(item.count, def->maxStack - stack.count);
+                stack.count += moved;
+                item.count -= moved;
+            }
+        if (item.count == 0) return true;
+        if (nextStorageId == std::numeric_limits<uint64_t>::max()) return false;
+        item.instanceId = nextStorageId++;
+        storage.push_back(std::move(item));
+        return true;
+    }
+
     bool FCampaign::Store(Inventory& inventory, FItemInstanceId id, int count)
     {
         if (inField || nextStorageId == std::numeric_limits<uint64_t>::max()) return false;
         if (const auto* item = inventory.FindInstance(id); !item || IsContractItem(item->defId)) return false;
         auto removed = inventory.TryRemove(id, count);
         if (!removed) return false;
-        removed->instanceId = nextStorageId++;
-        removed->containerId = 0;
-        storage.push_back(*removed);
-        return true;
+        return Put(std::move(*removed));
     }
 
     bool FCampaign::Take(Inventory& inventory, FItemInstanceId id, int count, bool wear)
@@ -56,9 +79,7 @@ namespace NextDayz
         {
             // Contract parcels are settled before this; one left over has no contract.
             if (IsContractItem(item.defId)) continue;
-            item.instanceId = nextStorageId++;
-            item.containerId = 0;
-            storage.push_back(std::move(item));
+            Put(std::move(item));
         }
         inventory.Clear();
     }

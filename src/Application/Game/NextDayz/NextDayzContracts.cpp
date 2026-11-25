@@ -66,14 +66,24 @@ const std::vector<NextDayz::FPoi>* NextDayzGameInstance::MapSites(const std::str
     return found == sites.end() ? nullptr : &found->second;
 }
 
+NextDayz::L10n::FText NextDayzGameInstance::TierUpText(uint32_t tierBefore) const
+{
+    const uint32_t tier = NextDayz::ReputationTier(campaign_.reputation, economy_);
+    if (tier <= tierBefore) return {};
+    return NextDayz::L10n::Message(" Reputation tier {} reached: new shelves and contracts are open.", tier);
+}
+
 bool NextDayzGameInstance::RefreshContractBoard()
 {
-    if (!CampaignEnabled() || campaign_.inField) return false;
+    if (!CampaignEnabled()) return false;
+    const auto floor = campaign_.warehouseFloor;
+    NextDayz::ResolveWarehouse(campaign_, economy_);
+    if (campaign_.inField) return floor != campaign_.warehouseFloor;
     if (campaign_.boardRng == 0 && campaign_.boardCycle == 0)
         campaign_.boardRng = sessionRng_.State() ^ 0x636F6E7472616374ULL;   // derived from the campaign's seed
     const uint64_t before = campaign_.boardCycle;
     NextDayz::RefreshBoard(campaign_, economy_, ContractSites());
-    return campaign_.boardCycle != before;
+    return campaign_.boardCycle != before || floor != campaign_.warehouseFloor;
 }
 
 void NextDayzGameInstance::TrackContractSites(float dt)
@@ -214,12 +224,14 @@ void NextDayzGameInstance::DrawContracts()
 {
     using namespace NextDayz::L10n;
     std::vector<std::function<void()>> requests;
-    const auto runReport = [this](const NextDayz::FContractReport& report, NextDayz::EContractResult result)
+    const uint32_t tierBefore = NextDayz::ReputationTier(campaign_.reputation, economy_);
+    const auto runReport = [this, tierBefore](const NextDayz::FContractReport& report, NextDayz::EContractResult result)
     {
         lastContractReport_ = report;
         PurgeParcels(report.purgeParcels);
-        campaignMessage_ = result == NextDayz::EContractResult::Ok ? FText("Contract updated.") + ContractReportText(report)
-                                                                   : FText(NextDayz::ContractResultMessage(result));
+        campaignMessage_ = result == NextDayz::EContractResult::Ok
+            ? FText("Contract updated.") + ContractReportText(report) + TierUpText(tierBefore)
+            : FText(NextDayz::ContractResultMessage(result));
     };
     const auto drawCard = [&](const NextDayz::FContract& contract)
     {

@@ -99,7 +99,7 @@ namespace NextDayz
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FCampaign, inField, gold, sorties, extractions, nextStorageId, storage, flight,
                                      mapSorties, lastMapId, lastOutcome, sortieId, reputation, traderStock, traderCycle,
                                      sortie, history, boardRng, boardCycle, contractSerial, board, contracts,
-                                     contractsCompleted)
+                                     contractsCompleted, warehouseLevel, warehouseFloor)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FSurvivalSnapshot, health, hunger, hydration, bleedingWounds, cold,
                                      painkillerSeconds, lifeState, damageSequence, woundSequence, lastDamageSource)
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(TimeSystem::FState, minutes, nextWeatherChange, weatherRng, weather, blend)
@@ -244,6 +244,7 @@ namespace NextDayz
                 }
             for (const auto& item : campaign.storage)
                 if (IsContractItem(item.defId)) return false;
+            if (campaign.warehouseLevel > 64) return false;
             uint64_t counted = 0;
             for (const auto& [id, count] : saved.campaign.mapSorties)
             {
@@ -261,7 +262,7 @@ namespace NextDayz
                 std::ifstream stream(path, std::ios::binary);
                 auto document = nlohmann::json::parse(stream);
                 const int version = document.at("version").get<int>();
-                if (version < 1 || version > 7) throw std::runtime_error("Unsupported save version");
+                if (version < 1 || version > 8) throw std::runtime_error("Unsupported save version");
                 if (version == 1)
                 {
                     auto& state = document.at("state");
@@ -306,6 +307,15 @@ namespace NextDayz
                     for (const auto* key : {"boardRng", "boardCycle", "contractSerial", "contractsCompleted"}) campaign[key] = 0;
                     campaign["board"] = nlohmann::json::array();
                     campaign["contracts"] = nlohmann::json::array();
+                }
+                if (version < 8)
+                {
+                    // The warehouse gets a capacity: the save's current stack count is kept as
+                    // a floor, which ResolveWarehouse turns into the lowest level that holds it,
+                    // so no existing survivor is blocked from deploying by the upgrade.
+                    auto& campaign = document.at("state").at("campaign");
+                    campaign["warehouseLevel"] = 0;
+                    campaign["warehouseFloor"] = campaign.at("storage").size();
                 }
                 auto candidate = document.at("state").get<FCampaignSave>();
                 if (version < 5)
@@ -362,7 +372,7 @@ namespace NextDayz
             {
                 std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
                 stream.exceptions(std::ios::failbit | std::ios::badbit);
-                stream << nlohmann::json{{"version", 7}, {"state", save}}.dump(2);
+                stream << nlohmann::json{{"version", 8}, {"state", save}}.dump(2);
                 stream.flush();
                 stream.close();
             }

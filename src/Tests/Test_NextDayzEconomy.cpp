@@ -1,6 +1,7 @@
 #include "Engine/Common/CoreMinimal.hpp"
 #include <catch2/catch_test_macros.hpp>
 #include "Application/Game/NextDayz/World/Economy.hpp"
+#include "Application/Game/NextDayz/World/Contracts.hpp"
 #include "Application/Game/NextDayz/World/ExpeditionMaps.hpp"
 #include <nlohmann/json.hpp>
 
@@ -278,7 +279,7 @@ TEST_CASE("NextDayz save v6 keeps the economy and migrates v5 saves with default
 
     nlohmann::json document;
     { std::ifstream stream(path); stream >> document; }
-    REQUIRE(document.at("version") == 7);
+    REQUIRE(document.at("version") == 8);
     document["version"] = 5;
     auto& campaign = document["state"]["campaign"];
     for (const auto* key : {"reputation", "traderStock", "traderCycle", "sortie", "history"}) campaign.erase(key);
@@ -311,4 +312,172 @@ TEST_CASE("NextDayz landing points come from the published generation record", "
         CHECK(point.siteDistance > 0.0f);
     }
     CHECK_FALSE(LoadLandingPoints(sourceRoot / "assets/configs/does-not-exist.json", points, error));
+}
+
+namespace
+{
+    // `stacks` single garments that cannot merge with each other.
+    void FillStorage(FCampaign& campaign, int stacks)
+    {
+        for (int index = 0; stacks > 0; ++index)
+        {
+            const auto& item = AllItemDefs()[static_cast<size_t>(index) % AllItemDefs().size()];
+            if (item.kind != EItemKind::Clothing || item.maxStack != 1) continue;
+            FItemInstance stack;
+            stack.defId = std::string(item.id);
+            REQUIRE(campaign.Put(std::move(stack)));
+            --stacks;
+        }
+    }
+}
+
+TEST_CASE("NextDayz storage merges plain stacks and keeps loaded weapons apart", "[NextDayz][Economy][Warehouse]")
+{
+    FCampaign campaign;
+    Inventory carried;
+    REQUIRE(carried.TryAdd("food_can", "Food", EItemKind::Consumable, 2));
+    REQUIRE(carried.TryAdd("ammo_9mm", "Ammo", EItemKind::Ammo, 20));
+    FItemInstanceId gun = 0;
+    REQUIRE(carried.TryAdd("pistol", "Makarov", EItemKind::Weapon, 1, &gun));
+    REQUIRE(carried.SetLoadedAmmo(gun, 8));
+    campaign.StoreAll(carried);
+    REQUIRE(carried.TryAdd("food_can", "Food", EItemKind::Consumable, 1));
+    REQUIRE(carried.TryAdd("ammo_9mm", "Ammo", EItemKind::Ammo, 10));
+    REQUIRE(carried.TryAdd("pistol", "Makarov", EItemKind::Weapon, 1));
+    campaign.StoreAll(carried);
+    CHECK(StoredCount(campaign, "food_can") == 3);
+    CHECK(StoredCount(campaign, "ammo_9mm") == 30);
+    // Food 3 in one stack, 9x18 as 24 + 6, the loaded pistol and the empty pistol.
+    CHECK(campaign.storage.size() == 5);
+    CHECK(std::count_if(campaign.storage.begin(), campaign.storage.end(),
+                        [](const auto& stack) { return stack.defId == "pistol" && stack.loadedAmmo == 8; }) == 1);
+}
+
+TEST_CASE("NextDayz warehouse capacity blocks deploying buying and storing but never loses gear", "[NextDayz][Economy][Warehouse]")
+{
+    const auto defs = ShippedDefs();
+    FCampaign campaign;
+    campaign.gold = 10000;
+    CHECK(WarehouseCapacity(campaign, defs) == 40);
+    FillStorage(campaign, 39);
+    REQUIRE(Buy(campaign, defs, "medkit") == ETradeResult::Ok);
+    CHECK(campaign.storage.size() == 40);
+    CHECK(CanDeploy(campaign, defs) == ETradeResult::Ok);
+    CHECK(Buy(campaign, defs, "pistol") == ETradeResult::StorageFull);   // would open stack 41
+    CHECK(campaign.storage.size() == 40);
+
+    Inventory carried;
+    FItemInstanceId helmet = 0;
+    REQUIRE(carried.TryAdd("helmet", "Helmet", EItemKind::Clothing, 1, &helmet));
+    CHECK(StoreCarried(campaign, defs, carried, helmet) == ETradeResult::StorageFull);
+    CHECK(carried.CountOf("helmet") == 1);
+    CHECK(StoreCarried(campaign, defs, carried, 0) == ETradeResult::StorageFull);
+    CHECK(carried.CountOf("helmet") == 1);
+
+    // Extraction stores everything regardless of capacity.
+    REQUIRE(carried.TryAdd("svd", "SVD", EItemKind::Weapon, 1));
+    campaign.StoreAll(carried);
+    CHECK(campaign.storage.size() == 42);
+    CHECK(WarehouseOver(campaign, defs));
+    CHECK(CanDeploy(campaign, defs) == ETradeResult::StorageFull);
+    CHECK(Buy(campaign, defs, "water_bottle") == ETradeResult::StorageFull);
+    // Selling brings it back within capacity.
+    REQUIRE(campaign.Sell(campaign.storage.back().instanceId, 1, defs));
+    REQUIRE(campaign.Sell(campaign.storage.back().instanceId, 1, defs));
+    CHECK(campaign.storage.size() == 40);
+    CHECK(CanDeploy(campaign, defs) == ETradeResult::Ok);
+}
+
+TEST_CASE("NextDayz warehouse expands through its paid levels", "[NextDayz][Economy][Warehouse]")
+{
+    const auto defs = ShippedDefs();
+    FCampaign campaign;
+    campaign.gold = 299;
+    CHECK(UpgradeWarehouse(campaign, defs) == ETradeResult::NotEnoughGold);
+    campaign.gold = 300 + 800 + 2000;
+    REQUIRE(UpgradeWarehouse(campaign, defs) == ETradeResult::Ok);
+    CHECK(WarehouseCapacity(campaign, defs) == 60);
+    CHECK(campaign.sortie.spent == 300);
+    REQUIRE(NextWarehouseStep(campaign, defs));
+    CHECK(NextWarehouseStep(campaign, defs)->capacity == 90);
+    REQUIRE(UpgradeWarehouse(campaign, defs) == ETradeResult::Ok);
+    REQUIRE(UpgradeWarehouse(campaign, defs) == ETradeResult::Ok);
+    CHECK(WarehouseCapacity(campaign, defs) == 130);
+    CHECK(campaign.gold == 0);
+    CHECK(NextWarehouseStep(campaign, defs) == nullptr);
+    CHECK(UpgradeWarehouse(campaign, defs) == ETradeResult::Invalid);
+    campaign.inField = true;
+    campaign.warehouseLevel = 0;
+    CHECK(UpgradeWarehouse(campaign, defs) == ETradeResult::InField);
+}
+
+TEST_CASE("NextDayz save v8 gives migrated warehouses enough room", "[NextDayz][Economy][Warehouse][Campaign]")
+{
+    const auto path = std::filesystem::temp_directory_path() /
+        fmt::format("nextdayz-warehouse-{}.json", std::chrono::steady_clock::now().time_since_epoch().count());
+    struct Cleanup
+    {
+        std::filesystem::path path;
+        ~Cleanup() { std::error_code ec; for (const auto* suffix : {"", ".bak", ".tmp"}) std::filesystem::remove(path.string() + suffix, ec); }
+    } cleanup{path};
+    const auto defs = ShippedDefs();
+    const auto migrate = [&](int stacks)
+    {
+        FCampaignSave saved;
+        saved.map = "warehouse-test";
+        saved.inventory = Inventory{}.Capture();
+        FillStorage(saved.campaign, stacks);
+        std::string error;
+        REQUIRE(WriteCampaignSave(path, saved, error));
+        nlohmann::json document;
+        { std::ifstream stream(path); stream >> document; }
+        REQUIRE(document.at("version") == 8);
+        document["version"] = 7;
+        document["state"]["campaign"].erase("warehouseLevel");
+        document["state"]["campaign"].erase("warehouseFloor");
+        { std::ofstream stream(path, std::ios::trunc); stream << document; }
+        FCampaignSave read;
+        REQUIRE(ReadCampaignSave(path, read, error));
+        CHECK(read.campaign.warehouseFloor == static_cast<uint32_t>(stacks));
+        ResolveWarehouse(read.campaign, defs);
+        CHECK_FALSE(WarehouseOver(read.campaign, defs));
+        return read.campaign;
+    };
+    const auto small = migrate(12);
+    CHECK(small.warehouseLevel == 0);
+    CHECK(small.warehouseFloor == 0);
+    const auto mid = migrate(70);
+    CHECK(mid.warehouseLevel == 2);
+    CHECK(mid.warehouseFloor == 0);
+    CHECK(WarehouseCapacity(mid, defs) == 90);
+    const auto huge = migrate(150);
+    CHECK(huge.warehouseLevel == 3);
+    CHECK(WarehouseCapacity(huge, defs) == 150);
+    // Resolving again changes nothing.
+    auto again = huge;
+    ResolveWarehouse(again, defs);
+    CHECK(again.warehouseLevel == huge.warehouseLevel);
+    CHECK(again.warehouseFloor == huge.warehouseFloor);
+}
+
+TEST_CASE("NextDayz reputation tiers unlock shelves at their thresholds", "[NextDayz][Economy][Reputation]")
+{
+    const auto defs = ShippedDefs();
+    REQUIRE(defs.reputationTiers == std::vector<uint32_t>{0, 3, 8, 15});
+    FCampaign campaign;
+    campaign.gold = 10000;
+    const auto* rounds = FindTraderEntry(defs, "ammo_545");
+    REQUIRE(rounds);
+    REQUIRE(rounds->tier == 1);
+    campaign.reputation = 2;
+    CHECK(ReputationTier(campaign.reputation, defs) == 0);
+    CHECK(CanBuy(campaign, defs, *rounds) == ETradeResult::Locked);
+    campaign.reputation = 3;
+    CHECK(ReputationTier(campaign.reputation, defs) == 1);
+    CHECK(CanBuy(campaign, defs, *rounds) == ETradeResult::Ok);
+    CHECK(ReputationTier(7, defs) == 1);
+    CHECK(ReputationTier(8, defs) == 2);
+    CHECK(ReputationTier(14, defs) == 2);
+    CHECK(ReputationTier(15, defs) == 3);
+    CHECK(ReputationTier(1000, defs) == 3);
 }

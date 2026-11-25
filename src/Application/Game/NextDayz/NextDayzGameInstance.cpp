@@ -3512,6 +3512,11 @@ void NextDayzGameInstance::RegisterAgentQueries(Runtime::Agent::FAgentQueryRegis
     { return int64_t(campaign_.history.empty() ? 0 : campaign_.history.back().extractedValue); });
     reg.Add("lastSortieSpent", [this]() -> Runtime::Agent::FAgentQueryValue
     { return int64_t(campaign_.history.empty() ? 0 : campaign_.history.back().spentBefore); });
+    // Warehouse (economy design §4.3).
+    reg.Add("warehouseCapacity", [this]() -> Runtime::Agent::FAgentQueryValue
+    { return int64_t(NextDayz::WarehouseCapacity(campaign_, economy_)); });
+    reg.Add("warehouseLevel", [this]() -> Runtime::Agent::FAgentQueryValue { return int64_t(campaign_.warehouseLevel); });
+    reg.Add("warehouseOver", [this]() -> Runtime::Agent::FAgentQueryValue { return NextDayz::WarehouseOver(campaign_, economy_); });
     // Contracts (economy design §5, §8).
     reg.Add("contractBoard", [this]() -> Runtime::Agent::FAgentQueryValue
     {

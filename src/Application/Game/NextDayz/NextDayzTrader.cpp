@@ -127,7 +127,19 @@ void NextDayzGameInstance::DrawTrader()
         }
         ImGui::Spacing();
         ImGui::TextDisabled("%s", Tr("WAREHOUSE"));
-        ImGui::Text(Tr("STORAGE (%zu stacks)"), campaign_.storage.size());
+        const bool over = NextDayz::WarehouseOver(campaign_, economy_);
+        const auto used = Format("WAREHOUSE  {} / {} stacks", campaign_.storage.size(), NextDayz::WarehouseCapacity(campaign_, economy_));
+        if (over) ImGui::TextColored(traderWarning, "%s", used.c_str());
+        else ImGui::TextUnformatted(used.c_str());
+        if (const auto* step = NextDayz::NextWarehouseStep(campaign_, economy_))
+        {
+            ImGui::BeginDisabled(campaign_.gold < step->price);
+            if (ImGui::SmallButton(Format("Expand to {} stacks ({} gold)", step->capacity, step->price).c_str()))
+                requests.emplace_back([this]()
+                { campaignMessage_ = NextDayz::TradeResultMessage(NextDayz::UpgradeWarehouse(campaign_, economy_)); });
+            ImGui::EndDisabled();
+        }
+        else ImGui::TextDisabled("%s", Tr("The warehouse is fully expanded."));
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::TextDisabled("%s", Tr("FIELD REPORTS"));

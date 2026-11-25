@@ -8,11 +8,6 @@ namespace NextDayz
 {
     namespace
     {
-        bool Plain(const FItemInstance& item)
-        {
-            return item.loadedAmmo == 0 && item.attachments == FWeaponAttachments{};
-        }
-
         bool AddGold(uint64_t& gold, uint64_t amount)
         {
             if (amount > std::numeric_limits<uint64_t>::max() - gold) return false;
@@ -83,6 +78,7 @@ namespace NextDayz
     {
         if (campaign.inField) return ETradeResult::InField;
         if (entry.tier > ReputationTier(campaign.reputation, defs)) return ETradeResult::Locked;
+        if (WarehouseOver(campaign, defs)) return ETradeResult::StorageFull;
         if (TraderRemaining(campaign, entry) <= 0) return ETradeResult::SoldOut;
         const uint64_t price = entry.buy * static_cast<uint64_t>(entry.pack);
         if (campaign.gold < price) return ETradeResult::NotEnoughGold;
@@ -99,6 +95,8 @@ namespace NextDayz
         RefreshTrader(next, defs);
         const uint64_t price = entry->buy * static_cast<uint64_t>(entry->pack);
         if (!AddToStorage(next, entry->item, entry->pack)) return ETradeResult::Invalid;
+        if (next.storage.size() > campaign.storage.size() && next.storage.size() > WarehouseCapacity(next, defs))
+            return ETradeResult::StorageFull;
         next.gold -= price;
         next.sortie.spent += price;
         --next.traderStock[entry->item];
@@ -116,6 +114,7 @@ namespace NextDayz
         case ETradeResult::Locked: return "Your reputation is too low for this shelf.";
         case ETradeResult::SoldOut: return "Sold out. The trader restocks after your next expedition.";
         case ETradeResult::NotEnoughGold: return "Not enough gold.";
+        case ETradeResult::StorageFull: return "Your storage is full. Sell, hand in or carry items, or expand the warehouse.";
         default: return "That deal is not possible.";
         }
     }
@@ -124,29 +123,96 @@ namespace NextDayz
     {
         const auto* def = FindItemDef(defId);
         if (!def || count <= 0) return false;
+        // Only storage changes, so references into the rest of the campaign (its
+        // contracts, say) stay valid; a failure puts storage back as it was.
         auto storage = campaign.storage;
-        uint64_t nextId = campaign.nextStorageId;
-        for (auto& stack : storage)
-        {
-            if (count == 0) break;
-            if (stack.defId != defId || !Plain(stack) || stack.count >= def->maxStack) continue;
-            const int moved = std::min(count, def->maxStack - stack.count);
-            stack.count += moved;
-            count -= moved;
-        }
+        const uint64_t nextId = campaign.nextStorageId;
         while (count > 0)
         {
-            if (nextId == std::numeric_limits<uint64_t>::max()) return false;
-            FItemInstance stack;
-            stack.instanceId = nextId++;
-            stack.defId = std::string(defId);
-            stack.count = std::min(count, def->maxStack);
-            count -= stack.count;
-            storage.push_back(std::move(stack));
+            FItemInstance units;
+            units.defId = std::string(defId);
+            units.count = std::min(count, def->maxStack);
+            count -= units.count;
+            if (!campaign.Put(std::move(units)))
+            {
+                campaign.storage = std::move(storage);
+                campaign.nextStorageId = nextId;
+                return false;
+            }
         }
-        campaign.storage = std::move(storage);
-        campaign.nextStorageId = nextId;
         return true;
+    }
+
+    uint32_t WarehouseLevels(const FEconomyDefs& defs)
+    {
+        return static_cast<uint32_t>(defs.warehouseSteps.size());
+    }
+
+    uint32_t WarehouseLevelCapacity(const FEconomyDefs& defs, uint32_t level)
+    {
+        if (level == 0 || defs.warehouseSteps.empty()) return defs.warehouseBase;
+        return defs.warehouseSteps[std::min<size_t>(level, defs.warehouseSteps.size()) - 1].capacity;
+    }
+
+    uint32_t WarehouseCapacity(const FCampaign& campaign, const FEconomyDefs& defs)
+    {
+        return std::max(WarehouseLevelCapacity(defs, campaign.warehouseLevel), campaign.warehouseFloor);
+    }
+
+    bool WarehouseOver(const FCampaign& campaign, const FEconomyDefs& defs)
+    {
+        return campaign.storage.size() > WarehouseCapacity(campaign, defs);
+    }
+
+    const FWarehouseStep* NextWarehouseStep(const FCampaign& campaign, const FEconomyDefs& defs)
+    {
+        return campaign.warehouseLevel < defs.warehouseSteps.size() ? &defs.warehouseSteps[campaign.warehouseLevel] : nullptr;
+    }
+
+    ETradeResult UpgradeWarehouse(FCampaign& campaign, const FEconomyDefs& defs)
+    {
+        if (campaign.inField) return ETradeResult::InField;
+        const auto* step = NextWarehouseStep(campaign, defs);
+        if (!step) return ETradeResult::Invalid;
+        if (campaign.gold < step->price) return ETradeResult::NotEnoughGold;
+        campaign.gold -= step->price;
+        campaign.sortie.spent += step->price;
+        ++campaign.warehouseLevel;
+        if (campaign.warehouseFloor <= WarehouseLevelCapacity(defs, campaign.warehouseLevel)) campaign.warehouseFloor = 0;
+        return ETradeResult::Ok;
+    }
+
+    void ResolveWarehouse(FCampaign& campaign, const FEconomyDefs& defs)
+    {
+        // A migrated save carries its stack count as a floor; turn it into the lowest
+        // level that holds it, keeping the floor only beyond the top level.
+        if (campaign.warehouseFloor == 0 || defs.warehouseSteps.empty()) return;
+        campaign.warehouseLevel = std::min(campaign.warehouseLevel, WarehouseLevels(defs));
+        while (campaign.warehouseLevel < WarehouseLevels(defs) &&
+               WarehouseLevelCapacity(defs, campaign.warehouseLevel) < campaign.warehouseFloor)
+            ++campaign.warehouseLevel;
+        if (WarehouseLevelCapacity(defs, campaign.warehouseLevel) >= campaign.warehouseFloor) campaign.warehouseFloor = 0;
+    }
+
+    ETradeResult CanDeploy(const FCampaign& campaign, const FEconomyDefs& defs)
+    {
+        return WarehouseOver(campaign, defs) ? ETradeResult::StorageFull : ETradeResult::Ok;
+    }
+
+    ETradeResult StoreCarried(FCampaign& campaign, const FEconomyDefs& defs, Inventory& carried, FItemInstanceId id, int count)
+    {
+        if (campaign.inField) return ETradeResult::InField;
+        auto next = campaign;
+        auto inventory = carried;
+        const bool all = id == 0;
+        if (all) next.StoreAll(inventory);
+        else if (!next.Store(inventory, id, count)) return ETradeResult::Invalid;
+        // Storing by hand may not push the warehouse over (or further over) capacity.
+        if (next.storage.size() > campaign.storage.size() && next.storage.size() > WarehouseCapacity(next, defs))
+            return ETradeResult::StorageFull;
+        campaign = std::move(next);
+        carried = std::move(inventory);
+        return ETradeResult::Ok;
     }
 
     ETradeResult PayInsertion(FCampaign& campaign, const FEconomyDefs& defs, std::string mapId, int point)

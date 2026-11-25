@@ -401,7 +401,7 @@ TEST_CASE("NextDayz save v7 keeps the contract board and migrates v6 saves", "[N
 
     nlohmann::json document;
     { std::ifstream stream(path); stream >> document; }
-    REQUIRE(document.at("version") == 7);
+    REQUIRE(document.at("version") == 8);
     document["version"] = 6;
     auto& campaign = document["state"]["campaign"];
     for (const auto* key : {"boardRng", "boardCycle", "contractSerial", "board", "contracts", "contractsCompleted"}) campaign.erase(key);
@@ -415,4 +415,17 @@ TEST_CASE("NextDayz save v7 keeps the contract board and migrates v6 saves", "[N
     // The first refresh after the upgrade fills the board.
     RefreshBoard(read.campaign, Defs(), Sites());
     CHECK(read.campaign.board.size() == BoardSlots(read.campaign, Defs()));
+}
+
+TEST_CASE("NextDayz reputation tiers open contract tiers and board slots", "[NextDayz][Contracts][Reputation]")
+{
+    FCampaign campaign;
+    for (const auto& [reputation, contractTier, slots] : {std::tuple{0u, 1u, 3u}, std::tuple{7u, 1u, 3u},
+                                                          std::tuple{8u, 2u, 4u}, std::tuple{15u, 3u, 4u}})
+    {
+        CAPTURE(reputation);
+        campaign.reputation = reputation;
+        CHECK(AllowedContractTier(campaign, Defs()) == contractTier);
+        CHECK(BoardSlots(campaign, Defs()) == slots);
+    }
 }

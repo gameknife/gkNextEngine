@@ -126,7 +126,13 @@ namespace NextDayz
         std::vector<FContract> board;             // offered
         std::vector<FContract> contracts;         // accepted
         uint64_t contractsCompleted = 0;          // lifetime
+        // Save v8: the warehouse (economy design §4.3). Capacity in stacks is the
+        // level's (0 = base) or warehouseFloor, whichever is larger.
+        uint32_t warehouseLevel = 0;
+        uint32_t warehouseFloor = 0;              // a migrated save's stack count, kept until a level holds it
 
+        // Moves an item into storage, merging plain units into existing stacks.
+        bool Put(FItemInstance item);
         bool Store(Inventory& inventory, FItemInstanceId id, int count = -1);
         bool Take(Inventory& inventory, FItemInstanceId id, int count, bool wear);
         void StoreAll(Inventory& inventory);

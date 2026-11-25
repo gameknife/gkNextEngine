@@ -177,7 +177,8 @@ private:
     // Contracts (economy design §5).
     const NextDayz::FPoiIndex& ContractSites();
     const std::vector<NextDayz::FPoi>* MapSites(const std::string& mapId);
-    // Refreshes the board when a new cycle started; true when it changed.
+    // Refreshes the board when a new cycle started (and settles a migrated
+    // warehouse's capacity); true when the campaign changed.
     bool RefreshContractBoard();
     void DrawContracts();
     void TrackContractSites(float dt);
@@ -185,6 +186,8 @@ private:
     // Removes parcels whose contract ended from the pack, the loaded world and every saved world.
     void PurgeParcels(const std::vector<std::string>& parcels);
     NextDayz::L10n::FText ContractReportText(const NextDayz::FContractReport& report) const;
+    // " Reputation tier N reached ..." when the reputation tier rose above `tierBefore`.
+    NextDayz::L10n::FText TierUpText(uint32_t tierBefore) const;
     std::string ContractTitle(const NextDayz::FContract& contract) const;
     // Field objective for the HUD, empty when no field contract applies on this map.
     std::string ContractObjective() const;

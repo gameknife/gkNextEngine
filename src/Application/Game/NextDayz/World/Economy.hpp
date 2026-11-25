@@ -18,6 +18,7 @@ namespace NextDayz
         Locked,         // needs a higher reputation tier
         SoldOut,        // this cycle's stock is gone
         NotEnoughGold,
+        StorageFull,    // the warehouse is (or would go) over capacity
         Invalid,        // unknown landing point, overflow, ...
     };
 
@@ -44,6 +45,23 @@ namespace NextDayz
     // Adds plain units to storage, topping up plain stacks of the same item
     // (no rounds loaded, no parts) before opening new ones.
     bool AddToStorage(FCampaign& campaign, std::string_view defId, int count);
+
+    // Warehouse (design §4.3). Capacity counts stacks. Extraction and contract
+    // rewards always store, even over capacity; nothing is ever destroyed. Over
+    // capacity the survivor cannot deploy, buy, or store by hand until selling,
+    // handing in or carrying brings the count back down.
+    uint32_t WarehouseLevels(const FEconomyDefs& defs);
+    uint32_t WarehouseLevelCapacity(const FEconomyDefs& defs, uint32_t level);
+    uint32_t WarehouseCapacity(const FCampaign& campaign, const FEconomyDefs& defs);
+    bool WarehouseOver(const FCampaign& campaign, const FEconomyDefs& defs);
+    const FWarehouseStep* NextWarehouseStep(const FCampaign& campaign, const FEconomyDefs& defs);
+    ETradeResult UpgradeWarehouse(FCampaign& campaign, const FEconomyDefs& defs);
+    // Migrated saves: the lowest level holding warehouseFloor stacks.
+    void ResolveWarehouse(FCampaign& campaign, const FEconomyDefs& defs);
+    ETradeResult CanDeploy(const FCampaign& campaign, const FEconomyDefs& defs);
+    // Stores one carried item (id) or everything carried (id 0) by hand,
+    // refusing when that would push storage over capacity.
+    ETradeResult StoreCarried(FCampaign& campaign, const FEconomyDefs& defs, Inventory& carried, FItemInstanceId id, int count = -1);
 
     // Paid landing: choosing a point charges the fee once; changing it while still
     // in the safehouse is free and cancelling refunds it.

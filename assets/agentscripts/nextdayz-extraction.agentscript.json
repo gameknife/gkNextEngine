@@ -43,7 +43,7 @@
     { "type": "cvar", "name": "nextdayz.validation.campaignCommand", "set": "flight:9" },
     { "type": "assert", "query": "game.campaignInField", "op": "eq", "value": false },
     { "type": "assert", "query": "game.campaignExtractions", "op": "eq", "value": 1 },
-    { "type": "assert", "query": "game.campaignStorage", "op": "eq", "value": 2 },
+    { "type": "assert", "query": "game.campaignStorage", "op": "eq", "value": 1 },
     { "type": "cvar", "name": "nextdayz.validation.campaignCommand", "set": "sell-first" },
     { "type": "assert", "query": "game.campaignGold", "op": "eq", "value": 5 },
     { "type": "cvar", "name": "nextdayz.validation.campaignCommand", "set": "reload" },

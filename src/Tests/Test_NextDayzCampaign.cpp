@@ -57,7 +57,7 @@ TEST_CASE("NextDayz mounted parts survive storage world piles and legacy save mi
 
     nlohmann::json document;
     { std::ifstream stream(path); stream >> document; }
-    REQUIRE(document.at("version") == 7);
+    REQUIRE(document.at("version") == 8);
     document["version"] = 3;
     auto& state = document["state"];
     for (auto& container : state["inventory"]["containers"])

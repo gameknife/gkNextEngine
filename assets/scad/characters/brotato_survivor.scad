@@ -93,7 +93,7 @@ ZIP    = [0.78, 0.76, 0.70];
 module part_pelvis()
 {
     color(PANTS) ndb_shell_seat();
-    color(BELT) ndb_band(ndb_trouser_seat(), 0.070, 0.112, 0.008, m = 12, n = 8);
+    color(BELT) ndb_seat_band(0.070, 0.112, 0.008);
     color(ZIP) translate([0, -0.124, 0.092]) cube([0.046, 0.012, 0.034], center = true);
 }
 
@@ -102,7 +102,7 @@ module part_torso()
     color(ROLECOLOR) ndb_shell_coat();
     // Zip, a darker hem and collar so the jacket reads from above.
     color(ZIP) translate([0, -0.141, 0.260]) cube([0.012, 0.008, 0.440], center = true);
-    color(PANTS_D) ndb_band(ndb_coat(), -0.020, 0.030, 0.006, m = 12, n = 10);
+    color(PANTS_D) ndb_coat_band(-0.020, 0.030, 0.006);
     color(PANTS_D) translate([0, 0.004, 0.500]) rf_box([0.230, 0.180, 0.034], 0.012);
     // Road-trip pack with a bedroll: the strongest read from the top-down camera.
     color(PACK) translate([0, 0.205, 0.250]) rf_box([0.290, 0.150, 0.360], 0.030);

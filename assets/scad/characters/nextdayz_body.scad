@@ -305,7 +305,8 @@ function ndb_coat() = [
     [0.105, 0.370, 0.260, 0, 0],          // waist
     [0.245, 0.425, 0.280, 0, 0],          // chest
     [0.455, 0.425, 0.280, 0, 0],
-    [0.497, 0.340, 0.226, 0, 0.004]];     // shoulder chamfer to the collar plateau
+    [0.479, 0.404, 0.266, 0, 0.002],      // the shoulder rolls over instead of folding
+    [0.497, 0.340, 0.226, 0, 0.004]];     // down to the collar plateau
 
 function ndb_sleeve_upper() = [
     [-0.340, 0.104, 0.112, 0, 0.004],     // elbow, rounded under
@@ -347,33 +348,54 @@ function ndb_trouser_calf() = [
     [0.000, 0.158, 0.168, 0, -0.004],     // knee
     [0.050, 0.110, 0.118, 0, -0.006]];
 
+// Cross-sections: the coat keeps flat-ish front and back panels for its
+// pockets and zips but rounds its corners; sleeves and trouser legs are round
+// tubes with enough sides to shade smooth. Bands and details that wrap a shell
+// pass the same m / n (ndb_coat_m() ...) so they follow it.
+function ndb_coat_m() = 16;
+function ndb_coat_n() = 7;
+function ndb_tube_m() = 14;
+function ndb_tube_n() = 3;
+// Front (-Y) surface depth of a shell section w x d at x, for details that
+// sit on the cloth away from the centre line.
+function ndb_face_y(w, d, x, n) = d / 2 * pow(max(0, 1 - pow(abs(x) / (w / 2), n)), 1 / n);
+
 // grow > 0 gives a second layer over the shell (quilting, a liner, a band).
-module ndb_shell_coat(grow = 0) { rf_loft(rf_grow(ndb_coat(), grow), m = 12, n = 10); }
-module ndb_shell_seat(grow = 0) { rf_loft(rf_grow(ndb_trouser_seat(), grow), m = 12, n = 8); }
+module ndb_shell_coat(grow = 0) { rf_loft(rf_grow(ndb_coat(), grow), m = ndb_coat_m(), n = ndb_coat_n()); }
+module ndb_shell_seat(grow = 0) { rf_loft(rf_grow(ndb_trouser_seat(), grow), m = 16, n = 8); }
 module ndb_shell_sleeve(forearm = false, grow = 0)
 {
-    rf_loft(rf_grow(forearm ? ndb_sleeve_fore() : ndb_sleeve_upper(), grow), m = 8, n = 4);
+    rf_loft(rf_grow(forearm ? ndb_sleeve_fore() : ndb_sleeve_upper(), grow), m = ndb_tube_m(), n = ndb_tube_n());
 }
 module ndb_shell_leg(calf = false, grow = 0)
 {
-    rf_loft(rf_grow(calf ? ndb_trouser_calf() : ndb_trouser_thigh(), grow), m = 8, n = 4);
+    rf_loft(rf_grow(calf ? ndb_trouser_calf() : ndb_trouser_thigh(), grow), m = ndb_tube_m(), n = ndb_tube_n());
 }
 // A band around a shell between two heights: cuff, quilt chamber, reflective tape.
-module ndb_band(rings, z0, z1, grow, m = 8, n = 4) { rf_loft(rf_span(rf_grow(rings, grow), z0, z1), m = m, n = n); }
+module ndb_band(rings, z0, z1, grow, m = 14, n = 3) { rf_loft(rf_span(rf_grow(rings, grow), z0, z1), m = m, n = n); }
+module ndb_coat_band(z0, z1, grow) ndb_band(ndb_coat(), z0, z1, grow, m = ndb_coat_m(), n = ndb_coat_n());
+module ndb_seat_band(z0, z1, grow) ndb_band(ndb_trouser_seat(), z0, z1, grow, m = 16, n = 8);
+// Trouser hem stacked over the boot collar: two soft folds above the cuff.
+module ndb_hem_stack(grow = 0)
+{
+    ndb_band(ndb_trouser_calf(), -0.427, -0.404, 0.010 + grow);
+    ndb_band(ndb_trouser_calf(), -0.394, -0.370, 0.006 + grow);
+}
 
 // Laced boot. Pivot = ankle on the sole plane (z >= 0), toe toward -Y. The
 // upper is one form from the heel counter to a rounded toe box; `shaft` is the
 // height of the collar. Geometry only: call inside the leather / rubber colour.
 module ndb_boot_upper(shaft = 0.205)
 {
-    hull()
+    // The crease shades the chamfered toe and heel round.
+    gk_crease(55) hull()
     {
         translate([0, 0.038, 0.085]) rf_box([0.150, 0.100, 0.120], 0.020);
         translate([0, -0.075, 0.075]) rf_box([0.166, 0.130, 0.100], 0.022);
         translate([0, -0.178, 0.058]) rf_box([0.150, 0.090, 0.066], 0.024);
     }
     rf_loft([[0.110, 0.146, 0.166, 0, 0.008], [shaft - 0.012, 0.158, 0.172, 0, 0.004],
-             [shaft, 0.150, 0.164, 0, 0.004]], m = 8, n = 4);
+             [shaft, 0.150, 0.164, 0, 0.004]], m = 14, n = 3);
 }
 module ndb_boot_sole()
 {

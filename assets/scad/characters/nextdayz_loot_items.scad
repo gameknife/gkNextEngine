@@ -51,20 +51,20 @@ module ndc_loot_head(style)
 }
 module ndc_loot_coat(style)
 {
-    color(ndc_coat(style)) translate([0, 0, 0.04]) ndc_box([0.32, 0.29, 0.08]);
-    color(ndc_coat(style) * 0.8) translate([0.10, 0, 0.075]) ndc_box([0.105, 0.27, 0.04]);
-    color(ndc_zip()) translate([-0.02, 0, 0.083]) cube([0.01, 0.26, 0.008], center = true);
+    ndc_finish(ndc_coat(style), ndc_coat_finish(style)) translate([0, 0, 0.04]) ndc_box([0.32, 0.29, 0.08]);
+    ndc_finish(ndc_coat(style) * 0.8, ndc_coat_finish(style)) translate([0.10, 0, 0.075]) ndc_box([0.105, 0.27, 0.04]);
+    ndc_metal(ndc_zip()) translate([-0.02, 0, 0.083]) cube([0.01, 0.26, 0.008], center = true);
     if (style == 1 || style == 3)
-        color(ndc_coat(style)) translate([0, 0.10, 0.10]) ndc_box([0.20, 0.12, 0.06]);
+        ndc_finish(ndc_coat(style), ndc_coat_finish(style)) translate([0, 0.10, 0.10]) ndc_box([0.20, 0.12, 0.06]);
     if (style == 2)
         for (y = [-0.10, -0.04, 0.02, 0.08])
-            color(ndc_coat(style) * 1.08) translate([0, y, 0.085]) ndc_box([0.30, 0.045, 0.025], 0.006);
+            ndc_finish(ndc_coat(style) * 1.08, ndc_coat_finish(style)) translate([0, y, 0.085]) ndc_box([0.30, 0.045, 0.025], 0.006);
     if (style == 4)
         for (x = [-0.10, 0.065])
-            color(ndc_coat(style) * 1.2) translate([x, 0.05, 0.092]) ndc_box([0.08, 0.08, 0.02], 0.004);
+            ndc_finish(ndc_coat(style) * 1.2, ndc_coat_finish(style)) translate([x, 0.05, 0.092]) ndc_box([0.08, 0.08, 0.02], 0.004);
     if (style == 5)
         for (y = [-0.08, 0.07])
-            color(ndc_reflect()) translate([0, y, 0.098]) cube([0.30, 0.025, 0.008], center = true);
+            ndc_tape() translate([0, y, 0.098]) cube([0.30, 0.025, 0.008], center = true);
 }
 module ndc_loot_vest(style)
 {
@@ -72,17 +72,21 @@ module ndc_loot_vest(style)
     base = style == 1 ? 0.163 : style == 5 ? 0.16525 : 0.151;
     translate([0, -0.23, base]) rotate([-90, 0, 0]) scale([0.75, 0.75, 0.75]) ndc_vest(style);
 }
+module ndc_loot_strap(style)
+{
+    if (style == 4) ndc_tape() children(); else ndc_webbing() children();
+}
 module ndc_loot_pants(style)
 {
     for (s = [-1, 1])
-        color(ndc_pants(style)) translate([s * 0.07, 0, 0.04]) ndc_box([0.135, 0.32, 0.08]);
-    color(ndc_web()) translate([0, 0.12, 0.085]) ndc_box([0.28, 0.04, 0.025], 0.004);
+        ndc_finish(ndc_pants(style), ndc_pants_finish(style)) translate([s * 0.07, 0, 0.04]) ndc_box([0.135, 0.32, 0.08]);
+    ndc_webbing() translate([0, 0.12, 0.085]) ndc_box([0.28, 0.04, 0.025], 0.004);
     if (style == 1 || style == 3)
         for (s = [-1, 1])
-            color(ndc_pants(style) * 0.8) translate([s * 0.10, 0, 0.09]) ndc_box([0.065, 0.12, 0.025], 0.004);
+            ndc_finish(ndc_pants(style) * 0.8, ndc_pants_finish(style)) translate([s * 0.10, 0, 0.09]) ndc_box([0.065, 0.12, 0.025], 0.004);
     if (style == 4 || style == 5)
         for (s = [-1, 1])
-            color(style == 4 ? ndc_reflect() : ndc_web()) translate([s * 0.07, -0.10, 0.085])
+            ndc_loot_strap(style) translate([s * 0.07, -0.10, 0.085])
                 cube([0.12, 0.025, 0.01], center = true);
 }
 module ndc_loot_pack(style)

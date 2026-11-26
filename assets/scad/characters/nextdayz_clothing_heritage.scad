@@ -12,9 +12,10 @@
 //
 // 一件衣服 = 剪裁（cut：口袋、领子、加固片的几何）× 面料（fabric：颜色 + 质感）。
 // 材质分层（PBR）：
-//   * 布料一律是漫反射（roughness = 1, metalness = 0 → Lambertian）。粗糙度 < 1 会给布料叠一层
+//   * 布料一律是漫反射（roughness = 1, metalness = 0 → 无镜面）。粗糙度 < 1 会给布料叠一层
 //     电介质高光，看起来像塑料。布料的质感靠 gk_texture()：斜纹 twill / 帆布 canvas 织纹，
-//     迷彩是印在斜纹上的过程纹理（woodland / digital / desert / flora / rain）。
+//     迷彩是印在斜纹上的过程纹理（woodland / digital / desert / flora / rain）；再加 sheen：
+//     正面保持哑光，轮廓处泛起织物的绒光。
 //   * 只有皮革、橡胶、漆面、塑料扣、金属件带高光，各自用不同的粗糙度 / 金属度。
 // 每个部件不超过 16 种材质（颜色 × 粗糙度 × 金属度 × 纹理各算一种）。本文件不 use 其他服装文件；
 // 外套 / 袖 / 裤的外壳来自 nextdayz_body.scad 的 ndb_shell_*（与原盒子同一包络的放样形体）。
@@ -24,14 +25,15 @@ use <nextdayz_body.scad>
 
 // ---------------- 材质 ----------------
 // 布料：漫反射；weave 非空时叠一层织纹（最终颜色 = c × 织纹明暗）
+function ndh_sheen() = 0.32;
 module ndh_cloth(c, weave = "", s = 0.12)
 {
-    if (weave == "") gk_material(c, roughness = 1, metalness = 0) children();
-    else gk_material(c, roughness = 1, metalness = 0) gk_texture(weave, scale = s) children();
+    if (weave == "") gk_material(c, roughness = 1, metalness = 0, sheen = ndh_sheen()) children();
+    else gk_material(c, roughness = 1, metalness = 0, sheen = ndh_sheen()) gk_texture(weave, scale = s) children();
 }
 // 迷彩印花：白底材质 × 印花（tint < 1 用于压暗口袋盖等叠层）
 module ndh_print(pattern, s, tint = 1, seed = 0)
-    gk_material([tint, tint, tint], roughness = 1, metalness = 0) gk_texture(pattern, scale = s, seed = seed) children();
+    gk_material([tint, tint, tint], roughness = 1, metalness = 0, sheen = ndh_sheen()) gk_texture(pattern, scale = s, seed = seed) children();
 module ndh_leather(c, r = 0.55, grain = true)
 {
     if (grain) gk_material(c, roughness = r, metalness = 0) gk_texture("grain", scale = 0.08) children();
@@ -73,23 +75,13 @@ module ndh_fabric(fabric, shade = 1)
 function ndh_button(fabric) = fabric == "dbdu" ? [0.30, 0.24, 0.16] : fabric == "strichtarn" ? [0.18, 0.19, 0.15]
                             : fabric == "afganka" ? [0.22, 0.18, 0.10] : [0.12, 0.13, 0.10];
 
-// 与 nextdayz_clothing.scad 的 ndc_box 同形：倒角盒
-module ndh_box(size, bevel = 0.012)
-{
-    hull()
-    {
-        cube([size[0] - 2 * bevel, size[1], size[2] - 2 * bevel], center = true);
-        cube([size[0], size[1] - 2 * bevel, size[2] - 2 * bevel], center = true);
-        cube([size[0] - 2 * bevel, size[1] - 2 * bevel, size[2]], center = true);
-    }
-}
-// 只倒竖棱的环带（条纹、袖口、腰带）
+// 与 nextdayz_clothing.scad 的 ndc_box 同形：圆角盒（外包尺寸与原倒角盒相同，棱上能接住一线光）
+module ndh_box(size, bevel = 0.012) gk_round_box(size, r = bevel * 1.6, segs = 2);
+// 只倒竖棱的环带。绕着外套 / 袖 / 裤腿 / 臀部的环带用 nextdayz_body.scad 的
+// ndb_coat_band / ndb_band / ndb_seat_band：它们跟着放样外壳的截面走，盒子的四角会戳出圆壳。
 module ndh_band(w, d, h, bevel = 0.012)
     hull() { cube([w - 2 * bevel, d, h], center = true); cube([w, d - 2 * bevel, h], center = true); }
 
-// 外套躯干外壳（与 ndc_coat_torso 同一包络）在高度 z 处的宽 / 深
-function ndh_tw(z) = z < 0.105 ? 0.37 : z > 0.245 ? 0.425 : 0.37 + (z - 0.105) / 0.14 * 0.055;
-function ndh_td(z) = z < 0.105 ? 0.26 : z > 0.245 ? 0.28 : 0.26 + (z - 0.105) / 0.14 * 0.02;
 
 module ndh_coat_shell(fabric)
 {
@@ -295,15 +287,9 @@ module ndh_coat_torso(cut, fabric)
     if (cut == "telnyashka")
     {
         // 贴身衫：比外套薄一圈，蓝白横条纹（针织，漫反射）+ 圆领
-        ndh_cloth(ndh_tel_white()) hull()
-        {
-            translate([0, 0, 0.04]) ndh_box([0.355, 0.245, 0.13]);
-            translate([0, 0, 0.37]) ndh_box([0.405, 0.262, 0.25]);
-        }
+        ndh_cloth(ndh_tel_white()) ndb_shell_coat(grow = -0.016);
         ndh_cloth(ndh_tel_blue()) for (z = [0.000 : 0.036 : 0.47])
-            let(w = z < 0.105 ? 0.355 : z > 0.245 ? 0.405 : 0.355 + (z - 0.105) / 0.14 * 0.05,
-                d = z < 0.105 ? 0.245 : z > 0.245 ? 0.262 : 0.245 + (z - 0.105) / 0.14 * 0.017)
-                translate([0, 0, z]) ndh_band(w + 0.003, d + 0.003, 0.016);
+            ndb_coat_band(z - 0.008, z + 0.008, -0.0135);
         ndh_cloth(ndh_tel_blue()) translate([0, 0.012, 0.497]) difference()
         {
             ndh_band(0.20, 0.17, 0.012, 0.03);
@@ -321,7 +307,7 @@ module ndh_coat_torso(cut, fabric)
                 ndh_patch_pocket(fabric, s * 0.105, 0.34, 0.115, 0.115, s * 12);
                 ndh_patch_pocket(fabric, s * 0.115, 0.09, 0.110, 0.120, s * -16, false);
             }
-            ndh_fabric(fabric, 0.85) translate([0, 0, 0.170]) ndh_band(ndh_tw(0.17) + 0.006, ndh_td(0.17) + 0.006, 0.014);
+            ndh_fabric(fabric, 0.85) ndb_coat_band(0.163, 0.177, 0.004);
         }
         if (cut == "bdu")
         {
@@ -367,7 +353,7 @@ module ndh_coat_torso(cut, fabric)
             ndh_fabric("gorka_patch")
             {
                 for (s = [-1, 1]) translate([s * 0.120, 0, 0.455]) ndh_box([0.17, 0.288, 0.085], 0.010);
-                translate([0, 0, 0.030]) ndh_band(0.378, 0.268, 0.040);
+                ndb_coat_band(0.010, 0.050, 0.004);
                 for (s = [-1, 1]) translate([s * 0.105, -0.144, 0.30]) ndh_box([0.075, 0.012, 0.130], 0.004);
             }
             ndh_metal([0.12, 0.12, 0.12]) for (s = [-1, 1]) translate([s * 0.105, -0.151, 0.36]) cube([0.006, 0.004, 0.010], center = true);
@@ -389,34 +375,36 @@ module ndh_sleeve(cut, fabric, forearm = false)
     d = depth - 0.012;
     if (cut == "telnyashka")
     {
-        ndh_cloth(ndh_tel_white()) translate([0, 0, -len / 2]) ndh_box([w, d, len + 0.018]);
+        rings = forearm ? ndb_sleeve_fore() : ndb_sleeve_upper();
+        ndh_cloth(ndh_tel_white()) ndb_shell_sleeve(forearm, grow = -0.012);
         ndh_cloth(ndh_tel_blue()) for (z = [-0.020 : -0.036 : -len + 0.01])
-            translate([0, 0, z]) ndh_band(w + 0.003, d + 0.003, 0.016);
-        if (forearm) ndh_cloth(ndh_tel_white()) translate([0, 0, -len + 0.016]) ndh_box([w + 0.004, d + 0.004, 0.030], 0.006);
+            ndb_band(rings, z - 0.008, z + 0.008, -0.0095);
+        if (forearm) ndh_cloth(ndh_tel_white()) ndb_band(rings, -len + 0.001, -len + 0.031, -0.008);
     }
     else
     {
+        rings = forearm ? ndb_sleeve_fore() : ndb_sleeve_upper();
         ndh_fabric(fabric) ndb_shell_sleeve(forearm);
         if (cut == "gorka")
         {
             ndh_fabric("gorka_patch")
             {
-                if (!forearm) translate([0, 0, -0.040]) ndh_box([width + 0.008, depth + 0.008, 0.070], 0.010);
-                if (!forearm) translate([0, 0, -0.270]) ndh_box([width + 0.008, depth + 0.008, 0.075], 0.010);
-                if (forearm) translate([0, 0, -0.050]) ndh_box([width + 0.008, depth + 0.008, 0.090], 0.010);
+                if (!forearm) ndb_band(rings, -0.075, -0.005, 0.004);
+                if (!forearm) ndb_band(rings, -0.3075, -0.2325, 0.004);
+                if (forearm) ndb_band(rings, -0.095, -0.005, 0.004);
             }
-            if (forearm) ndh_fabric(fabric, 0.75) translate([0, 0, -len + 0.020]) ndh_box([width - 0.004, depth - 0.004, 0.036], 0.008);
+            if (forearm) ndh_fabric(fabric, 0.75) ndb_band(rings, -len + 0.002, -len + 0.038, -0.002);
         }
         else
         {
             // 袖口（带扣襻）
             if (forearm)
             {
-                ndh_fabric(fabric, 0.85) translate([0, 0, -len + 0.022]) ndh_box([width + 0.004, depth + 0.004, 0.036], 0.006);
+                ndh_fabric(fabric, 0.85) ndb_band(rings, -len + 0.004, -len + 0.040, 0.002);
                 ndh_plastic(ndh_button(fabric)) translate([0.03, -depth / 2 - 0.004, -len + 0.022]) rotate([90, 0, 0]) cylinder(h = 0.004, r = 0.006, center = true);
             }
             // BDU：肘部双层加固；EMR：上臂带魔术贴臂章区的袖袋；阿富汗卡：上臂小袖袋
-            if (cut == "bdu" && forearm) ndh_fabric(fabric, 0.92) translate([0, 0, -0.045]) ndh_box([width + 0.006, depth + 0.006, 0.085], 0.010);
+            if (cut == "bdu" && forearm) ndh_fabric(fabric, 0.92) ndb_band(rings, -0.0875, -0.0025, 0.003);
             if (cut == "emr" && !forearm)
             {
                 ndh_fabric(fabric, 0.88) translate([width / 2 + 0.004, 0, -0.140]) ndh_box([0.012, 0.100, 0.120], 0.004);
@@ -518,7 +506,7 @@ module ndh_pelvis(cut, fabric)
     if (cut == "afganka")
     {
         // 苏军士兵皮腰带 + 黄铜星徽扣
-        ndh_leather([0.33, 0.20, 0.10], 0.5) translate([0, 0, 0.08]) ndh_band(0.387, 0.257, 0.040);
+        ndh_leather([0.33, 0.20, 0.10], 0.5) ndb_seat_band(0.060, 0.100, 0.006);
         ndh_brass() translate([0, -0.131, 0.08]) cube([0.060, 0.008, 0.046], center = true);
         ndh_enamel([0.55, 0.40, 0.16]) translate([0, -0.1355, 0.08]) rotate([90, 0, 0])
             linear_extrude(height = 0.002, center = true)
@@ -526,24 +514,24 @@ module ndh_pelvis(cut, fabric)
     }
     else if (cut == "nva")
     {
-        ndh_leather([0.06, 0.055, 0.05], 0.4) translate([0, 0, 0.08]) ndh_band(0.387, 0.257, 0.040);
+        ndh_leather([0.06, 0.055, 0.05], 0.4) ndb_seat_band(0.060, 0.100, 0.006);
         ndh_metal([0.55, 0.56, 0.57], 0.35) translate([0, -0.131, 0.08]) cube([0.052, 0.007, 0.042], center = true);
     }
     else if (cut == "bdu")
     {
         // 黑色尼龙腰带（织带，漫反射）+ 黄铜开口扣
-        ndh_cloth([0.07, 0.07, 0.065], "twill", 0.05) translate([0, 0, 0.08]) ndh_band(0.385, 0.255, 0.034);
+        ndh_cloth([0.07, 0.07, 0.065], "twill", 0.05) ndb_seat_band(0.063, 0.097, 0.005);
         ndh_brass() translate([0, -0.130, 0.08]) cube([0.040, 0.006, 0.036], center = true);
     }
     else if (cut == "emr")
     {
-        ndh_leather([0.06, 0.055, 0.05], 0.5) translate([0, 0, 0.08]) ndh_band(0.385, 0.255, 0.034);
+        ndh_leather([0.06, 0.055, 0.05], 0.5) ndb_seat_band(0.063, 0.097, 0.005);
         ndh_metal([0.10, 0.10, 0.10], 0.45) translate([0, -0.130, 0.08]) cube([0.046, 0.006, 0.036], center = true);
     }
     else
     {
         // 戈尔卡：松紧腰 + 臀部加固片 + 背带扣
-        ndh_fabric(fabric, 0.85) translate([0, 0, 0.085]) ndh_band(0.383, 0.253, 0.030);
+        ndh_fabric(fabric, 0.85) ndb_seat_band(0.070, 0.100, 0.004);
         ndh_fabric("gorka_patch") translate([0, 0.124, -0.035]) ndh_box([0.30, 0.008, 0.14], 0.006);
         ndh_metal([0.15, 0.15, 0.14], 0.45) for (s = [-1, 1], y = [-1, 1]) translate([s * 0.09, y * 0.128, 0.09]) cube([0.020, 0.006, 0.014], center = true);
     }
@@ -576,18 +564,17 @@ module ndh_leg(cut, fabric, calf = false)
     {
         // 裤腿（到靴筒顶）+ 靴筒
         ndh_fabric(fabric) ndb_band(ndb_trouser_calf(), -top, 0.050, 0);
-        ndh_boot_leather(style) translate([0, 0, (shaft - len) / 2])
-            ndh_box([width + 0.006, depth + 0.006, len + shaft + 0.004], 0.010);
+        ndh_boot_leather(style) ndb_band(ndb_trouser_calf(), -len - 0.002, shaft + 0.002, 0.003);
         if (style == "laced" || style == "laced_brown" || style == "desert")
         {
             // 裤口塞进 / 扎在靴口上的一圈 + 鞋带格
-            ndh_fabric(fabric, 0.8) translate([0, 0, shaft + 0.012]) ndh_box([width + 0.010, depth + 0.010, 0.026], 0.006);
+            ndh_fabric(fabric, 0.8) ndb_band(ndb_trouser_calf(), shaft - 0.001, shaft + 0.025, 0.005);
             for (z = [shaft - 0.025 : -0.022 : -len + 0.02])
                 ndh_cloth([0.05, 0.045, 0.04]) translate([0, -depth / 2 - 0.005, z]) cube([0.050, 0.004, 0.006], center = true);
         }
         else
             ndh_leather(ndh_shade(ndh_boot_c(style), 1.3), ndh_boot_r(style), false)
-                translate([0, 0, shaft - 0.010]) ndh_box([width + 0.012, depth + 0.012, 0.022], 0.006);
+                ndb_band(ndb_trouser_calf(), shaft - 0.021, shaft + 0.001, 0.006);
         if (cut == "gorka") ndh_fabric("gorka_patch") translate([0, -depth / 2 - 0.004, -0.050]) ndh_box([0.150, 0.012, 0.090], 0.006);
     }
 }

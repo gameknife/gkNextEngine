@@ -1,7 +1,7 @@
 ---
 title: "NextDayz 皮克斯感 Low-Poly 视觉升级实施计划"
 category: plan
-status: 进行中（P0–P2、V3-1 已完成，V3-2 起待实施）
+status: 进行中（P0–P2、V3-1、V3-2 已完成，V3-3 起待实施）
 owner: NextDayz
 created: 2026-11-26
 last_updated: 2026-11-26
@@ -25,7 +25,7 @@ last_updated: 2026-11-26
 | P0 视觉标杆切片 | `V0-1` | 已完成 | 40m×40m 全要素 Lookdev 微缩样板间与 4 机位基准图 |
 | P1 SCAD 与着色底座 | `V1-1` ～ `V1-3` | 已完成 | 圆角/扫掠/法线原语、SSS/Sheen/Foliage 着色、烘焙顶点 AO 与宏尺度打散 |
 | P2 电影光影与大厅 | `V2-1` ～ `V2-2` | 已完成 | 透光窗户点亮室内、户外冷暖色调调校、直升机机舱大厅电影级重塑 |
-| P3 角色与武器 2.0 | `V3-1` ～ `V3-4` | 进行中（V3-1 已完成） | 幸存者五官眼神光与 SSS 皮肤、圆角绒光服装、感染者放样重写、武器捕光边 |
+| P3 角色与武器 2.0 | `V3-1` ～ `V3-4` | 进行中（V3-1、V3-2 已完成） | 幸存者五官眼神光与 SSS 皮肤、圆角绒光服装、感染者放样重写、武器捕光边 |
 | P4 植被与草海 2.0 | `V4-1` ～ `V4-3` | 未开始 | 蓬松透光地域树种、柔弧融合且随地域变色的运行时草地、画意过程纹理 |
 | P5 建筑套件与地图 | `V5-1` ～ `V5-3` | 未开始 | 波希米亚/稀树草原/冷战/训练场建筑套件升级，三张地图重导出与回归验收 |
 
@@ -131,6 +131,8 @@ last_updated: 2026-11-26
   - `gnb.bat validate --script assets/agentscripts/nextdayz-lobby-look.agentscript.json` 与 `nextdayz-ads-transition.agentscript.json` 截图验收面部亲和力与手部握持。
 
 ### `V3-2` 重塑基础与史实服装库（`nextdayz_clothing*.scad` 2.0）
+- **状态**：已完成。外套壳 16 边 / 指数 7 并加了圆肩环，袖与裤腿 14 边 / 指数 3，臀部 16 边；基础款裤腿靴口两道堆叠褶。基础款 98 处裸 `color()` 全部换成按款式的材质（`ndc_finish`：织物 sheen、防雨布与尼龙微光泽、金属拉链扣件、塑料、反光条），史实款布料加 sheen；`ndc_box` / `ndh_box` 换成 `gk_round_box`，文件 `$fn` 8 → 12。原先绕外壳一圈的盒子（腰带、袖口、海魂衫条纹、靴筒、绑腿、反光带、羽绒绗缝）全部改成跟随外壳截面的环带。
+- **注意**：lookdev 的展示架原先把身体部件与衣服一起画，裤腿变圆后白短裤从里面戳出来；游戏里被衣物盖住的身体部件本来就隐藏，lookdev 已改成同样只画头和手。`PlayerRigVisual.cpp` 的包络间隙不需要改。
 - **范围**：`assets/scad/characters/{nextdayz_body.scad,nextdayz_clothing.scad,nextdayz_clothing_heritage.scad,nextdayz_loot_items.scad}`、`src/Application/Game/NextDayz/Player/PlayerRigVisual.cpp`（必要时微调包络间隙）。
 - **内容**：
   1. 将 `ndb_shell_coat / sleeve / leg / seat` 升级为富有曲线张力的阔肩收腰下摆、圆滑袖裤（`m = 14`）与靴口堆叠轮廓；

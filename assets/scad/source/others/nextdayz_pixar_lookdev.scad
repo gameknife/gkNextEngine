@@ -42,7 +42,8 @@ module lk_at(p, a = 0) translate([p[0], p[1], lk_z(p[0], p[1])]) rotate([0, 0, a
 
 // ================= 幸存者展示架：rig 的绑定骨架 + 持枪 ready 姿态 =================
 // 骨架、握点、持枪架与 nextdayz_survivor.scad 一致；双臂用同一个 rh_upper_pose 解 IK 到枪上，
-// 所以展示的就是游戏里的 weapon_ready 上半身。服装直接调用衣柜的 bone_<item>__<bone> 部件。
+// 所以展示的就是游戏里的 weapon_ready 上半身。服装直接调用衣柜的 bone_<item>__<bone> 部件；
+// 和游戏一样，被衣物盖住的身体部件不画（只留头和手）。
 
 SV_SKEL = rh_skeleton([
     ["pelvis_z", 0.94], ["hip", [0.105, 0, -0.08]], ["thigh", 0.44], ["calf", 0.42],
@@ -67,12 +68,10 @@ module lk_sv_arm(side)
     l = side > 0;
     translate([0.235 * side, 0, 0.48]) rotate(SV_POSE[l ? 6 : 9])
     {
-        if (l) { ndb_part_upperarm(); bone_jacket__upperarm_l(); }
-        else { mirror([1, 0, 0]) ndb_part_upperarm(); bone_jacket__upperarm_r(); }
+        if (l) bone_jacket__upperarm_l(); else bone_jacket__upperarm_r();
         translate([0, 0, -0.31]) rotate(SV_POSE[l ? 7 : 10])
         {
-            if (l) { ndb_part_forearm(); bone_jacket__forearm_l(); }
-            else { mirror([1, 0, 0]) ndb_part_forearm(); bone_jacket__forearm_r(); }
+            if (l) bone_jacket__forearm_l(); else bone_jacket__forearm_r();
             translate([0, 0, -0.29]) rotate(SV_POSE[l ? 8 : 11])
                 if (l) ndb_part_hand(); else mirror([1, 0, 0]) ndb_part_hand();
         }
@@ -84,15 +83,12 @@ module lk_sv_leg(side)
     l = side > 0;
     translate([0.105 * side, 0, -0.08])
     {
-        if (l) { ndb_part_thigh(); bone_cargo_pants__thigh_l(); }
-        else { mirror([1, 0, 0]) ndb_part_thigh(); bone_cargo_pants__thigh_r(); }
+        if (l) bone_cargo_pants__thigh_l(); else bone_cargo_pants__thigh_r();
         translate([0, 0, -0.44])
         {
-            if (l) { ndb_part_calf(); bone_cargo_pants__calf_l(); }
-            else { mirror([1, 0, 0]) ndb_part_calf(); bone_cargo_pants__calf_r(); }
+            if (l) bone_cargo_pants__calf_l(); else bone_cargo_pants__calf_r();
             translate([0, 0, -0.42])
-                if (l) { ndb_part_foot(); bone_cargo_pants__foot_l(); }
-                else { mirror([1, 0, 0]) ndb_part_foot(); bone_cargo_pants__foot_r(); }
+                if (l) bone_cargo_pants__foot_l(); else bone_cargo_pants__foot_r();
         }
     }
 }
@@ -102,13 +98,11 @@ module lk_survivor()
     $fn = 8;
     gk_flatten() translate([0, 0, 0.94])
     {
-        ndb_part_pelvis();
         bone_cargo_pants__pelvis();
         lk_sv_leg(1);
         lk_sv_leg(-1);
         translate([0, 0, 0.02]) rotate(SV_POSE[0])
         {
-            ndb_part_torso();
             bone_jacket__torso();
             bone_vest_military__torso();
             bone_backpack_military__torso();

@@ -2253,3 +2253,86 @@ TEST_CASE("Scene and rig meshes carry baked occlusion and macro variation", "[Un
         CHECK(Assets::TangentWPayload(v.Tangent.w) == 0u);
 }
 } // namespace ScadSculptTest
+
+TEST_CASE("Special variables passed as call arguments reach builtin primitives", "[Unit][Scad]")
+{
+    // Per-call `$fn` must tessellate exactly like the same value set in scope.
+    auto same = [](const std::string& perCall, const std::string& scoped)
+    {
+        const size_t a = TotalTriangles(EvalProgram(perCall));
+        const size_t b = TotalTriangles(EvalProgram(scoped));
+        CHECK(a > 0);
+        CHECK(a == b);
+        return a;
+    };
+    const size_t cyl8 = same("cylinder(r = 1, h = 1, $fn = 8);\n", "$fn = 8;\ncylinder(r = 1, h = 1);\n");
+    CHECK(cyl8 == 8 * 2 + 8 * 2); // 8 side quads + two fan-triangulated octagon caps
+    CHECK(cyl8 != TotalTriangles(EvalProgram("cylinder(r = 1, h = 1);\n")));
+
+    same("sphere(r = 1, $fn = 6);\n", "$fn = 6;\nsphere(r = 1);\n");
+    same("linear_extrude(height = 1) circle(r = 1, $fn = 7);\n", "$fn = 7;\nlinear_extrude(height = 1) circle(r = 1);\n");
+    same("rotate_extrude($fn = 9) translate([2, 0]) square([1, 1]);\n",
+         "$fn = 9;\nrotate_extrude() translate([2, 0]) square([1, 1]);\n");
+    same("cylinder(r = 1, h = 1, $fa = 30, $fs = 0.01);\n", "$fa = 30;\n$fs = 0.01;\ncylinder(r = 1, h = 1);\n");
+
+    // A transform's special variables apply to its whole subtree.
+    same("translate([1, 0, 0], $fn = 5) { cylinder(r = 1, h = 1); sphere(r = 1); }\n",
+         "$fn = 5;\ntranslate([1, 0, 0]) { cylinder(r = 1, h = 1); sphere(r = 1); }\n");
+
+    // The value is the call's own: it does not leak to the next statement.
+    same("cylinder(r = 1, h = 1, $fn = 8);\ncylinder(r = 1, h = 1);\n",
+         "cylinder(r = 1, h = 1, $fn = 8);\n$fn = 0;\ncylinder(r = 1, h = 1);\n");
+    const size_t defaultCyl = TotalTriangles(EvalProgram("cylinder(r = 1, h = 1);\n"));
+    CHECK(TotalTriangles(EvalProgram("cylinder(r = 1, h = 1, $fn = 8);\ncylinder(r = 1, h = 1);\n")) ==
+          cyl8 + defaultCyl);
+
+    // It is evaluated in the caller's scope.
+    same("n = 4;\ncylinder(r = 1, h = 1, $fn = n * 2);\n", "$fn = 8;\ncylinder(r = 1, h = 1);\n");
+}
+
+TEST_CASE("Special variables passed to user modules use dynamic scope", "[Unit][Scad]")
+{
+    const size_t cyl8 = TotalTriangles(EvalProgram("cylinder(r = 1, h = 1, $fn = 8);\n"));
+    const size_t cyl5 = TotalTriangles(EvalProgram("cylinder(r = 1, h = 1, $fn = 5);\n"));
+    REQUIRE(cyl8 != cyl5);
+
+    // Visible to the module body, through nested modules.
+    CHECK(TotalTriangles(EvalProgram("module part() cylinder(r = 1, h = 1);\n"
+                                     "module kit() part();\n"
+                                     "kit($fn = 8);\n")) == cyl8);
+
+    // Visible to the caller's children evaluated through children().
+    CHECK(TotalTriangles(EvalProgram("module wrap() translate([1, 0, 0]) children();\n"
+                                     "wrap($fn = 8) cylinder(r = 1, h = 1);\n")) == cyl8);
+
+    // An assignment in the body, or a value passed further down, wins.
+    CHECK(TotalTriangles(EvalProgram("module part() { $fn = 5; cylinder(r = 1, h = 1); }\n"
+                                     "part($fn = 8);\n")) == cyl5);
+    CHECK(TotalTriangles(EvalProgram("module part() cylinder(r = 1, h = 1, $fn = 5);\n"
+                                     "part($fn = 8);\n")) == cyl5);
+
+    // Parameter defaults see the call's special variables; ordinary params still bind.
+    CHECK(TotalTriangles(EvalProgram("module part(n = $fn) cylinder(r = 1, h = 1, $fn = n);\n"
+                                     "part($fn = 8);\n")) == cyl8);
+    CHECK(TotalTriangles(EvalProgram("module part(r = 1) cylinder(r = r, h = 1);\n"
+                                     "part(r = 1, $fn = 8);\n")) == cyl8);
+
+    // Does not leak past the call.
+    const size_t defaultCyl = TotalTriangles(EvalProgram("cylinder(r = 1, h = 1);\n"));
+    CHECK(TotalTriangles(EvalProgram("module part() cylinder(r = 1, h = 1);\n"
+                                     "part($fn = 8);\npart();\n")) == cyl8 + defaultCyl);
+
+    // 2D modules under an extrusion.
+    CHECK(TotalTriangles(EvalProgram("module disc() circle(r = 1);\n"
+                                     "linear_extrude(height = 1) disc($fn = 8);\n")) ==
+          TotalTriangles(EvalProgram("$fn = 8;\nlinear_extrude(height = 1) circle(r = 1);\n")));
+    CHECK(TotalTriangles(EvalProgram("module disc() circle(r = 1);\n"
+                                     "linear_extrude(height = 1) disc($fn = 8);\n")) !=
+          TotalTriangles(EvalProgram("module disc() circle(r = 1);\n"
+                                     "linear_extrude(height = 1) disc();\n")));
+
+    // Functions see them too.
+    CHECK(TotalTriangles(EvalProgram("function segs() = $fn;\n"
+                                     "n = segs($fn = 8);\n"
+                                     "cylinder(r = 1, h = 1, $fn = n);\n")) == cyl8);
+}

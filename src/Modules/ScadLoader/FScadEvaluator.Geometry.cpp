@@ -573,10 +573,6 @@ namespace Assets::Scad::EvalDetail
         DefinitionFrameGuard definitionFrame(*this);
         RegisterLocalDefinitions(children);
 
-        const double fn = ctx_.GetNumber("$fn", 0.0);
-        const double fa = ctx_.GetNumber("$fa", 12.0);
-        const double fs = ctx_.GetNumber("$fs", 2.0);
-
         for (const StmtPtr& sp : children)
         {
             if (!sp)
@@ -591,6 +587,8 @@ namespace Assets::Scad::EvalDetail
             const Stmt& c = *sp;
             if (c.modifiers.find('*') != std::string::npos)
                 continue;
+            std::optional<ContextFrameGuard> specialFrame;
+            BindCallSpecialVariables(c, specialFrame);
 
             if (c.name == "translate")
             {
@@ -629,7 +627,8 @@ namespace Assets::Scad::EvalDetail
             else if (c.name == "circle")
             {
                 const double r = ResolveRadius(c, "r", "d", 1.0);
-                const int frag = ScadGeometry::Fragments(r, fn, fa, fs);
+                const int frag = ScadGeometry::Fragments(r, ctx_.GetNumber("$fn", 0.0), ctx_.GetNumber("$fa", 12.0),
+                                                         ctx_.GetNumber("$fs", 2.0));
                 std::vector<glm::dvec2> poly;
                 poly.reserve(frag);
                 for (int i = 0; i < frag; ++i)

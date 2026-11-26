@@ -750,13 +750,68 @@ namespace Assets::Scad
                 return found != functions_.end() ? found->second : nullptr;
             }
 
+            // Special variables passed as call arguments (`cylinder(r = 1, $fn = 8)`,
+            // `my_kit_part($fn = 12)`, `translate(v, $fn = 6) ...`) apply to that call
+            // and everything it instantiates, as in OpenSCAD: they are evaluated in the
+            // caller's scope and bound in a frame of their own around the call, so the
+            // primitive reads them through ctx_ and a user module's body and children
+            // see them by dynamic scope. Constructs whose named arguments are variable
+            // bindings or diagnostics keep their own handling.
+            static bool BindsCallSpecialVariables(const Stmt& inst)
+            {
+                const std::string& name = inst.name;
+                if (name == "for" || name == "intersection_for" || name == "let" || name == "echo" ||
+                    name == "assert")
+                    return false;
+                for (const CallArg& a : inst.args)
+                {
+                    if (!a.name.empty() && a.name[0] == '$')
+                        return true;
+                }
+                return false;
+            }
+
+            struct ContextFrameGuard
+            {
+                explicit ContextFrameGuard(Context& ctx) : context(ctx) { context.Push(); }
+                ~ContextFrameGuard() { context.Pop(); }
+                ContextFrameGuard(const ContextFrameGuard&) = delete;
+                ContextFrameGuard& operator=(const ContextFrameGuard&) = delete;
+                Context& context;
+            };
+
             GeomList EvalInstance(const Stmt& inst, const glm::dmat4& xform, glm::dvec4 color, bool hasColor)
             {
                 if (inst.modifiers.find('*') != std::string::npos)
                 {
                     return {}; // disabled subtree
                 }
+                std::optional<ContextFrameGuard> specialFrame;
+                BindCallSpecialVariables(inst, specialFrame);
+                return EvalInstanceCall(inst, xform, color, hasColor);
+            }
 
+            // Opens the call's special-variable frame in `frame` when it has any;
+            // the frame closes when `frame` goes out of scope.
+            void BindCallSpecialVariables(const Stmt& inst, std::optional<ContextFrameGuard>& frame)
+            {
+                if (!BindsCallSpecialVariables(inst))
+                    return;
+                std::vector<std::pair<const std::string*, Value>> special;
+                for (const CallArg& a : inst.args)
+                {
+                    if (!a.name.empty() && a.name[0] == '$')
+                        special.emplace_back(&a.name, EvalExpr(a.value));
+                }
+                frame.emplace(ctx_);
+                for (const auto& [name, value] : special)
+                {
+                    ctx_.Set(*name, value);
+                }
+            }
+
+            GeomList EvalInstanceCall(const Stmt& inst, const glm::dmat4& xform, glm::dvec4 color, bool hasColor)
+            {
                 const std::string& name = inst.name;
 
                 if (name == "translate")
@@ -1428,6 +1483,13 @@ namespace Assets::Scad
                         positional.push_back(EvalExpr(a.value));
                     else
                         named[a.name] = EvalExpr(a.value);
+                }
+                // An undeclared special variable (`f(x, $fn = 8)`) still reaches the
+                // callee by dynamic scope; bound first so parameter defaults see it.
+                for (const auto& [name, value] : named)
+                {
+                    if (name[0] == '$')
+                        ctx_.Set(name, value);
                 }
 
                 size_t posIdx = 0;

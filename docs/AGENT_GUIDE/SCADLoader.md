@@ -127,7 +127,7 @@ rotate → scale` 顺序最多各出现一次，终点是 kit 表里能解析到
   函数体靠它给共享子式命名（`kit_geo_city` 的轮廓外扩、`kit_road` 的单位向量）；
   没有它只能把每个共享项内联展开，既难读又重复求值。绑定不外泄，且 `let` 覆盖的是
   **整个**后续表达式（`let (a = 1) a + 2` 得 3）。列表推导里的 `let` 语义不变（拼接元素）。
-- **语言**：`module`/`function` 定义（含局部 helper 与后向引用）与默认参/关键字参、`children()`/`children(i)`/`$children`、list comprehension(`for`/`if`/`let`/`each`)、`echo`/`assert`/`str`、`$fn`/`$fa`/`$fs`
+- **语言**：`module`/`function` 定义（含局部 helper 与后向引用）与默认参/关键字参、`children()`/`children(i)`/`$children`、list comprehension(`for`/`if`/`let`/`each`)、`echo`/`assert`/`str`、`$fn`/`$fa`/`$fs`（作用域赋值或按调用传参）
 - **内置函数**：`max min abs floor ceil round sqrt pow exp ln log sign sin cos tan asin acos atan atan2 len norm concat str`（三角函数为角度制）
 - **引擎扩展（`gk_` 前缀，非 OpenSCAD 标准）**：`gk_terrain(TERR)` 低模高度场地形 module +
   `gk_terrain_height(TERR,x,y)` / `gk_terrain_info(TERR,x,y)` 纯函数（`FScadTerrain.{h,cpp}`）。
@@ -214,8 +214,11 @@ ScadRig 部件和 Web 关卡都用 `ScadComputeShadedNormals`：不同阈值的�
 平滑法线在低模轮廓处会背向相机（三角形朝向相机，插值法线却朝外），过去这些像素被当成背面
 着色成黑边。主表面重建（`common/GeneralFunc.slang` 的 `get_material_data`，所有渲染器共用）
 现在把这种法线掰回可见一侧，与浮雕法线的处理一致。
-**注意**：求值器不读作为调用参数传入的特殊变量——`cylinder(r = 1, $fn = 8)` 里的 `$fn`
-被忽略，用的是作用域里的 `$fn`（文件或 module 内写 `$fn = 8;`）。
+作为调用参数传入的特殊变量与 OpenSCAD 一致：`cylinder(r = 1, $fn = 8)`、`kit_part($fn = 12)`、
+`translate(v, $fn = 6) { ... }` 里的 `$fn`/`$fa`/`$fs`（以及任何 `$` 变量）在调用方作用域求值，
+只对这一次调用及其整棵子树生效（user module 的函数体、嵌套 module、`children()` 都按动态作用域看到它；
+module 体内再赋值或往下再传则覆盖），不会泄漏到下一条语句。`for`/`let`/`echo`/`assert` 的具名参数仍是
+它们自己的绑定。
 
 ### 烘焙顶点遮蔽与宏尺度打散
 

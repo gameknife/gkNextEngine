@@ -1,7 +1,7 @@
 ---
 title: "NextDayz 皮克斯感 Low-Poly 视觉升级实施计划"
 category: plan
-status: 进行中（P0–P2、V3-1、V3-2 已完成，V3-3 起待实施）
+status: 进行中（P0–P2、V3-1 ～ V3-3 已完成，V3-4 起待实施）
 owner: NextDayz
 created: 2026-11-26
 last_updated: 2026-11-26
@@ -25,7 +25,7 @@ last_updated: 2026-11-26
 | P0 视觉标杆切片 | `V0-1` | 已完成 | 40m×40m 全要素 Lookdev 微缩样板间与 4 机位基准图 |
 | P1 SCAD 与着色底座 | `V1-1` ～ `V1-3` | 已完成 | 圆角/扫掠/法线原语、SSS/Sheen/Foliage 着色、烘焙顶点 AO 与宏尺度打散 |
 | P2 电影光影与大厅 | `V2-1` ～ `V2-2` | 已完成 | 透光窗户点亮室内、户外冷暖色调调校、直升机机舱大厅电影级重塑 |
-| P3 角色与武器 2.0 | `V3-1` ～ `V3-4` | 进行中（V3-1、V3-2 已完成） | 幸存者五官眼神光与 SSS 皮肤、圆角绒光服装、感染者放样重写、武器捕光边 |
+| P3 角色与武器 2.0 | `V3-1` ～ `V3-4` | 进行中（V3-1 ～ V3-3 已完成） | 幸存者五官眼神光与 SSS 皮肤、圆角绒光服装、感染者放样重写、武器捕光边 |
 | P4 植被与草海 2.0 | `V4-1` ～ `V4-3` | 未开始 | 蓬松透光地域树种、柔弧融合且随地域变色的运行时草地、画意过程纹理 |
 | P5 建筑套件与地图 | `V5-1` ～ `V5-3` | 未开始 | 波希米亚/稀树草原/冷战/训练场建筑套件升级，三张地图重导出与回归验收 |
 
@@ -142,6 +142,7 @@ last_updated: 2026-11-26
   - `gnb.bat validate --script assets/agentscripts/nextdayz-clothing-variety.agentscript.json`（193 步全服装穿戴切换）、`nextdayz-heritage-kit.agentscript.json`、`nextdayz-inventory-icons.agentscript.json` 全部通过并抽查截图无穿模。
 
 ### `V3-3` 放样化重写感染者（`nextdayz_infected.scad` 2.0）
+- **状态**：已完成。全部裸 `cube()` 换成 `rig_forms` 放样（瘦削的四肢、前倾驼背且左肩偏高的躯干、凹颊头骨、楔形下颌）、`gk_sweep` 钩爪与断鼻、圆角鞋；材质：病态冷肤 `subsurface = 0.25`、伤口与血迹湿润高光、`ROLECOLOR` 衬衫带 sheen（运行时染色照常）。骨架枢轴与全部动作生成代码未动。三角形约 700 → 2788，单测阈值 1500 → 3000。lookdev 新增 `infected` 近景机位。
 - **范围**：`assets/scad/characters/nextdayz_infected.scad`。
 - **内容**：保持骨架枢轴与全部动作生成代码不变，用 `rig_forms` + `gk_round_box` + `gk_material`（病态冷肤色微 SSS、织物 `sheen`、`ROLECOLOR` 染色破损衬衫）彻底替换全身裸 `cube()`，强化不对称佝偻剪影、肋骨伤痕与利爪手型。
 - **完成与闸门**：

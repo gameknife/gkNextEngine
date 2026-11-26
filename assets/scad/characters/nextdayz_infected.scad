@@ -21,6 +21,7 @@
 // ============================================================================
 
 use <../lib/rig_humanoid.scad>
+use <../lib/rig_forms.scad>
 
 $fn = 8;
 
@@ -53,127 +54,203 @@ SKEL = rh_skeleton([
     ["forearm", 0.30]
 ]);
 
+// --- Materials -----------------------------------------------------------------
+// Cold, waxy skin keeps a little wrapped light; wounds and sockets are wet
+// (glossy), the shirt and trousers are cloth with a sheen. Colours are the
+// palette above, so a scene that re-declares it (the lookdev) gets the same.
+
+module inf_skin(c) { gk_material(c, roughness = 0.62, subsurface = 0.25) children(); }
+module inf_cloth(c, sheen = 0.3) { gk_material(c, roughness = 1, sheen = sheen) children(); }
+module inf_wet(c, r = 0.3) { gk_material(c, roughness = r) children(); }
+// A stain or wound pressed onto a surface facing -Y: a flattened lens.
+module inf_decal(size, t = 0.006) scale([size[0] / 2, t, size[1] / 2]) sphere(r = 1, $fn = 6);
+
+// Lofted limbs: thin and bony under baggy cloth. Rings are rig_forms rings
+// [z, w, d, x, y]; eight sides under gk_crease(50) shade round.
+module inf_loft(rings, m = 8, n = 2.6) gk_crease(50) rf_loft(rings, m = m, n = n);
+
+function inf_sleeve() = [[-0.330, 0.086, 0.090, 0, 0], [-0.300, 0.108, 0.112, 0, 0], [-0.150, 0.114, 0.118, 0, 0],
+                         [-0.030, 0.128, 0.132, 0.004, 0], [0.040, 0.112, 0.116, 0, 0], [0.072, 0.060, 0.064, 0, 0]];
+function inf_forearm() = [[-0.310, 0.054, 0.044, 0, 0], [-0.270, 0.060, 0.050, 0, 0], [-0.170, 0.074, 0.068, 0, 0],
+                          [-0.070, 0.084, 0.082, 0, -0.002], [0.000, 0.080, 0.084, 0, 0], [0.036, 0.058, 0.062, 0, 0]];
+function inf_thigh() = [[-0.452, 0.110, 0.118, 0, -0.004], [-0.412, 0.142, 0.150, 0, -0.004], [-0.250, 0.150, 0.160, 0, 0],
+                        [-0.060, 0.166, 0.176, 0.004, 0], [0.030, 0.156, 0.166, 0.004, 0.004], [0.070, 0.100, 0.110, 0, 0.004]];
+function inf_calf() = [[-0.422, 0.118, 0.128, 0, 0.004], [-0.300, 0.128, 0.138, 0, 0.006], [-0.120, 0.140, 0.152, 0, 0.008],
+                       [0.000, 0.140, 0.150, 0, 0], [0.050, 0.100, 0.108, 0, -0.004]];
+
 // --- Parts -------------------------------------------------------------------
 
 module part_pelvis()
 {
-    color(PANTS) cube([0.34, 0.21, 0.22], center = true);
-    color(BELT) translate([0, 0, 0.08]) cube([0.355, 0.225, 0.04], center = true);
+    inf_cloth(PANTS, 0.25)
+        inf_loft([[-0.112, 0.170, 0.150, 0, 0.004], [-0.070, 0.306, 0.190, 0, 0.004], [0.000, 0.340, 0.210, 0, 0],
+                  [0.080, 0.330, 0.205, 0, 0], [0.110, 0.312, 0.198, 0, 0]], m = 10, n = 3);
+    gk_material(BELT, roughness = 0.6) inf_loft([[0.062, 0.348, 0.218, 0, 0], [0.098, 0.340, 0.214, 0, 0]], m = 10, n = 3);
     // Shirt tail hanging out in tatters.
-    color(ROLECOLOR) translate([0.08, -0.108, 0.02]) cube([0.13, 0.02, 0.11], center = true);
-    color(ROLECOLOR) translate([-0.10, 0.108, 0.03]) cube([0.10, 0.02, 0.08], center = true);
+    inf_cloth(ROLECOLOR, 0.35)
+    {
+        translate([0.09, -0.104, -0.005]) rotate([-5, 8, 0]) cube([0.060, 0.010, 0.080], center = true);
+        translate([-0.10, 0.104, 0.000]) rotate([5, -12, 0]) cube([0.080, 0.010, 0.080], center = true);
+    }
 }
 
+// The trunk leans its weight forward and to one side: the chest sits ahead of
+// the waist, the back rounds into a hunch and the left shoulder rides higher.
 module part_torso()
 {
-    color(ROLECOLOR) translate([0, 0, 0.24]) cube([0.38, 0.22, 0.48], center = true);
+    inf_cloth(ROLECOLOR, 0.35)
+    {
+        inf_loft([[-0.040, 0.300, 0.190, 0, 0.000], [0.060, 0.306, 0.192, 0, 0.000], [0.200, 0.326, 0.200, 0.006, -0.004],
+                  [0.330, 0.370, 0.220, 0.010, -0.004], [0.430, 0.404, 0.214, 0.012, 0.016],
+                  [0.490, 0.300, 0.172, 0.014, 0.030], [0.530, 0.150, 0.130, 0.004, 0.020]], m = 10, n = 3);
+        // Ragged hem.
+        for (f = [[-0.14, -5], [-0.05, 9], [0.13, -14]])
+            translate([f[0], -0.090, -0.058]) rotate([-6, f[1], 0]) cube([0.055, 0.010, 0.060], center = true);
+    }
     // Shirt torn open over a wound in the left flank, ribs showing.
-    color(SKIN) translate([0.075, -0.112, 0.22]) cube([0.14, 0.012, 0.19], center = true);
-    color(WOUND) translate([0.085, -0.119, 0.20]) cube([0.09, 0.01, 0.11], center = true);
-    color(BONE) for (z = [0.17, 0.205, 0.24]) translate([0.085, -0.126, z]) cube([0.075, 0.006, 0.012], center = true);
-    // Ragged hem, blood down the front and across the back.
-    color(ROLECOLOR) for (x = [-0.14, -0.05, 0.13]) translate([x, -0.10, -0.03]) cube([0.07, 0.02, 0.06], center = true);
-    color(GORE) translate([-0.10, -0.112, 0.37]) cube([0.11, 0.008, 0.07], center = true);
-    color(GORE) translate([-0.07, -0.112, 0.30]) cube([0.04, 0.008, 0.10], center = true);
-    color(GORE) translate([-0.05, 0.112, 0.16]) cube([0.15, 0.008, 0.13], center = true);
-    color(SKIN) translate([0, -0.02, 0.495]) cube([0.15, 0.12, 0.04], center = true);
+    inf_skin(SKIN) translate([0.078, -0.094, 0.215]) inf_decal([0.14, 0.19], 0.014);
+    inf_wet(WOUND) translate([0.084, -0.100, 0.205]) inf_decal([0.085, 0.11], 0.010);
+    inf_wet(BONE, 0.5) for (z = [0.170, 0.205, 0.240])
+        gk_sweep([[0.050, -0.106, z + 0.004], [0.084, -0.112, z], [0.118, -0.103, z - 0.008]], 0.0055, fn = 4, $gk_detail = 0.5);
+    // Blood down the front and across the back.
+    inf_wet(GORE, 0.35)
+    {
+        translate([-0.10, -0.101, 0.370]) inf_decal([0.11, 0.07]);
+        translate([-0.07, -0.101, 0.300]) inf_decal([0.04, 0.10]);
+        translate([-0.05, 0.100, 0.170]) rotate([0, 0, 180]) inf_decal([0.15, 0.13]);
+    }
+    inf_skin(SKIN) inf_loft([[0.470, 0.130, 0.118, 0, 0.010], [0.552, 0.110, 0.104, 0, 0.004]]);
 }
 
 module part_head()
 {
-    color(SKIN) translate([0, -0.01, -0.03]) cube([0.11, 0.11, 0.10], center = true);
-    color(SKIN) translate([0, -0.005, 0.155]) cube([0.20, 0.22, 0.19], center = true);
-    color(SKIN_D) translate([0, 0.035, 0.035]) cube([0.16, 0.13, 0.07], center = true);
-    // Heavy brow over sunken sockets, a broken nose, the upper teeth bared.
-    color(SKIN_D) translate([0, -0.118, 0.178]) cube([0.18, 0.02, 0.03], center = true);
-    color(SOCKET) for (x = [-0.045, 0.045]) translate([x, -0.117, 0.147]) cube([0.05, 0.012, 0.036], center = true);
-    color(SKIN) translate([0.006, -0.126, 0.115]) cube([0.035, 0.03, 0.05], center = true);
-    color(BONE) translate([0, -0.112, 0.068]) cube([0.11, 0.014, 0.018], center = true);
+    inf_skin(SKIN)
+    {
+        inf_loft([[-0.080, 0.100, 0.100, 0, -0.008], [0.070, 0.098, 0.100, 0, 0.000]]);
+        // Gaunt skull: the cheeks fall in under high cheekbones.
+        inf_loft([[0.055, 0.140, 0.200, 0, -0.012], [0.095, 0.150, 0.210, 0, -0.008], [0.125, 0.178, 0.216, 0, -0.006],
+                  [0.165, 0.200, 0.224, 0, -0.004], [0.215, 0.200, 0.218, 0, 0.000], [0.252, 0.150, 0.172, 0, 0.004],
+                  [0.270, 0.070, 0.090, 0, 0.004]], m = 10, n = 2.6);
+        // A broken nose, set crooked.
+        gk_sweep([[0.002, -0.104, 0.152], [0.008, -0.122, 0.128], [0.012, -0.128, 0.112]], [0.008, 0.011, 0.010], fn = 6, $gk_detail = 0.6);
+        // A gaunt ear.
+        for (s = [-1, 1]) translate([s * 0.100, 0.012, 0.150]) scale([0.3, 0.6, 1]) sphere(r = 0.032, $fn = 6);
+    }
+    // Heavy brow over sunken, milky eyes.
+    inf_skin(SKIN_D) gk_sweep([[-0.090, -0.088, 0.172], [-0.045, -0.106, 0.177], [0, -0.109, 0.173],
+                               [0.045, -0.106, 0.178], [0.090, -0.088, 0.173]], [0.006, 0.010, 0.008, 0.010, 0.006], fn = 6, $gk_detail = 0.6);
+    // Dark wet sockets, each with a dull clouded eye sunk at the back.
+    inf_wet(SOCKET, 0.4) for (x = [-0.045, 0.045]) translate([x, -0.106, 0.149]) inf_decal([0.046, 0.034], 0.007);
+    gk_material([0.44, 0.46, 0.40], roughness = 0.2) for (x = [-0.045, 0.045]) translate([x * 0.94, -0.1105, 0.146]) sphere(r = 0.0052, $fn = 6);
+    // Upper teeth bared.
+    inf_wet(BONE, 0.45) translate([0, -0.113, 0.068]) cube([0.10, 0.012, 0.018], center = true);
     // Thinning hair with a torn bald patch, a gash down the right cheek.
-    color(HAIR) translate([0.03, 0.01, 0.255]) cube([0.15, 0.20, 0.03], center = true);
-    color(HAIR) translate([0, 0.104, 0.17]) cube([0.19, 0.03, 0.14], center = true);
-    color(WOUND) translate([-0.07, -0.02, 0.252]) cube([0.06, 0.08, 0.012], center = true);
-    color(GORE) translate([-0.101, -0.03, 0.12]) cube([0.006, 0.07, 0.08], center = true);
+    inf_cloth(HAIR, 0.2)
+    {
+        translate([0.032, 0.012, 0.236]) rotate([-12, 8, 0])
+            rf_loft([[-0.012, 0.150, 0.200, 0, 0], [0.020, 0.140, 0.190, 0, 0], [0.034, 0.080, 0.120, 0, 0]], m = 8, n = 2.4);
+        translate([0, 0.098, 0.170]) rotate([-12, 0, 0]) gk_round_box([0.170, 0.030, 0.120], r = 0.014, segs = 1);
+    }
+    inf_wet(WOUND) translate([-0.070, -0.020, 0.262]) rotate([90, 0, 0]) inf_decal([0.060, 0.080], 0.008);
+    inf_wet(GORE, 0.35) translate([-0.094, -0.040, 0.120]) rotate([0, 0, -70]) inf_decal([0.070, 0.080], 0.006);
 }
 
 module part_jaw()
 {
-    color(SKIN) translate([0, -0.08, -0.02]) cube([0.15, 0.12, 0.045], center = true);
-    color(BONE) translate([0, -0.13, 0.007]) cube([0.10, 0.012, 0.016], center = true);
-    color(GORE) translate([0, -0.141, -0.02]) cube([0.07, 0.01, 0.03], center = true);
+    inf_skin(SKIN) translate([0, -0.078, 0])
+        inf_loft([[-0.044, 0.090, 0.080, 0, -0.010], [-0.026, 0.132, 0.112, 0, -0.002], [0.002, 0.142, 0.120, 0, 0.004]],
+                 m = 10, n = 2.4);
+    inf_wet(BONE, 0.45) translate([0, -0.128, 0.007]) cube([0.096, 0.010, 0.016], center = true);
+    inf_wet(GORE, 0.3) translate([0, -0.136, -0.022]) inf_decal([0.060, 0.030], 0.006);
 }
 
 module part_upperarm_l()
 {
-    color(ROLECOLOR) translate([0, 0, -0.15]) cube([0.12, 0.13, 0.30], center = true);
+    inf_cloth(ROLECOLOR, 0.35) inf_loft(inf_sleeve());
 }
 
 // Right sleeve ripped off at the elbow.
 module part_upperarm_r()
 {
-    color(ROLECOLOR) translate([0, 0, -0.08]) cube([0.125, 0.135, 0.16], center = true);
-    color(SKIN) translate([0, 0, -0.235]) cube([0.10, 0.11, 0.17], center = true);
-    color(WOUND) translate([-0.051, -0.01, -0.22]) cube([0.006, 0.06, 0.07], center = true);
+    inf_cloth(ROLECOLOR, 0.35)
+    {
+        inf_loft(rf_span(inf_sleeve(), -0.165, 0.072));
+        for (f = [[0.030, -10], [-0.035, 14]])
+            translate([f[0], -0.040, -0.180]) rotate([f[1], 0, 0]) cube([0.040, 0.010, 0.050], center = true);
+    }
+    inf_skin(SKIN) inf_loft([[-0.330, 0.070, 0.075, 0, 0], [-0.300, 0.084, 0.088, 0, 0], [-0.180, 0.080, 0.085, 0, 0],
+                             [-0.120, 0.086, 0.090, 0, 0]]);
+    inf_wet(WOUND) translate([-0.043, -0.010, -0.220]) rotate([0, 0, -90]) inf_decal([0.060, 0.070]);
 }
 
 module part_forearm_l()
 {
-    color(SKIN) translate([0, 0, -0.15]) cube([0.095, 0.10, 0.30], center = true);
-    color(ROLECOLOR) translate([0, 0, -0.03]) cube([0.105, 0.11, 0.06], center = true);
+    inf_skin(SKIN) inf_loft(inf_forearm());
+    inf_cloth(ROLECOLOR, 0.35) inf_loft(rf_grow(rf_span(inf_forearm(), -0.060, 0.036), 0.016));
 }
 
 // The bite that turned them.
 module part_forearm_r()
 {
-    color(SKIN) translate([0, 0, -0.15]) cube([0.09, 0.095, 0.30], center = true);
-    color(WOUND) translate([0, -0.049, -0.12]) cube([0.06, 0.006, 0.08], center = true);
-    color(BONE) translate([0, -0.053, -0.12]) cube([0.04, 0.004, 0.012], center = true);
+    inf_skin(SKIN) inf_loft(inf_forearm());
+    inf_wet(WOUND) translate([0, -0.038, -0.120]) inf_decal([0.050, 0.075], 0.008);
+    inf_wet(BONE, 0.5) translate([0, -0.044, -0.120]) cube([0.034, 0.004, 0.010], center = true);
 }
 
-// Splayed, clawed fingers.
+// Splayed fingers hooked into claws.
 module part_hand()
 {
-    color(SKIN_D) translate([0, 0, -0.045]) cube([0.09, 0.05, 0.09], center = true);
-    color(SKIN_D) for (x = [-0.03, -0.01, 0.01, 0.03])
-        translate([x, -0.012, -0.12]) rotate([-25, 0, 0]) cube([0.016, 0.022, 0.08], center = true);
-    color(SKIN_D) translate([0.048, -0.02, -0.07]) rotate([0, 30, 0]) cube([0.018, 0.022, 0.06], center = true);
+    inf_skin(SKIN_D)
+    {
+        inf_loft([[-0.092, 0.082, 0.032, 0, -0.004], [-0.050, 0.090, 0.040, 0, 0], [-0.004, 0.064, 0.048, 0, 0.004]], n = 3);
+        for (f = [[-0.032, -8], [-0.011, -3], [0.011, 3], [0.032, 9]])
+            gk_sweep([[f[0], -0.002, -0.084], [f[0] + sin(f[1]) * 0.05, -0.020, -0.132],
+                      [f[0] + sin(f[1]) * 0.07, -0.052, -0.160]], [0.0085, 0.0065, 0.0022], fn = 4, $gk_detail = 0.4);
+        gk_sweep([[0.040, -0.008, -0.040], [0.058, -0.030, -0.074], [0.054, -0.052, -0.098]], [0.010, 0.007, 0.0025],
+                 fn = 4, $gk_detail = 0.4);
+    }
 }
 
 module part_thigh()
 {
-    color(PANTS) translate([0, 0, -0.215]) cube([0.16, 0.17, 0.43], center = true);
+    inf_cloth(PANTS, 0.25) inf_loft(inf_thigh());
 }
 
 module part_thigh_r()
 {
     part_thigh();
-    color(GORE) translate([-0.081, -0.02, -0.25]) cube([0.006, 0.08, 0.12], center = true);
+    inf_wet(GORE, 0.35) translate([-0.076, -0.020, -0.250]) rotate([0, 0, 90]) inf_decal([0.080, 0.120]);
 }
 
 module part_calf_l()
 {
-    color(PANTS) translate([0, 0, -0.21]) cube([0.14, 0.15, 0.42], center = true);
+    inf_cloth(PANTS, 0.25) inf_loft(inf_calf());
 }
 
 // Trouser leg shredded below the knee.
 module part_calf_r()
 {
-    color(PANTS) translate([0, 0, -0.10]) cube([0.145, 0.155, 0.20], center = true);
-    color(PANTS) for (x = [-0.04, 0.03]) translate([x, -0.07, -0.22]) cube([0.05, 0.02, 0.06], center = true);
-    color(SKIN) translate([0, 0, -0.31]) cube([0.10, 0.11, 0.22], center = true);
+    inf_cloth(PANTS, 0.25)
+    {
+        inf_loft(rf_span(inf_calf(), -0.200, 0.050));
+        for (f = [[-0.04, -12], [0.03, 10]])
+            translate([f[0], -0.064, -0.225]) rotate([f[1], 0, 0]) cube([0.050, 0.014, 0.060], center = true);
+    }
+    inf_skin(SKIN) inf_loft([[-0.425, 0.068, 0.074, 0, 0.004], [-0.330, 0.078, 0.084, 0, 0.006],
+                             [-0.200, 0.098, 0.108, 0, 0.010], [-0.150, 0.096, 0.104, 0, 0.006]]);
 }
 
 module part_shoe()
 {
-    color(SHOE) translate([0, -0.065, 0.06]) cube([0.15, 0.29, 0.10], center = true);
-    color(SOLE) translate([0, -0.065, 0.006]) cube([0.155, 0.295, 0.012], center = true);
+    gk_material(SHOE, roughness = 0.6) translate([0, -0.065, 0.062]) gk_round_box([0.150, 0.290, 0.100], r = 0.035, segs = 2);
+    gk_material(SOLE, roughness = 0.85) translate([0, -0.065, 0.008]) cube([0.155, 0.295, 0.016], center = true);
 }
 
 module part_bare_foot()
 {
-    color(SKIN_D) translate([0, -0.06, 0.045]) cube([0.11, 0.27, 0.09], center = true);
-    color(SKIN) translate([0, 0.0, 0.10]) cube([0.09, 0.10, 0.10], center = true);
-    color(GORE) translate([0, -0.18, 0.02]) cube([0.10, 0.04, 0.03], center = true);
+    inf_skin(SKIN_D) translate([0, -0.060, 0.042]) gk_round_box([0.110, 0.270, 0.084], r = 0.030, segs = 2);
+    inf_skin(SKIN) inf_loft([[0.050, 0.084, 0.092, 0, 0], [0.150, 0.072, 0.080, 0, 0]]);
+    inf_wet(GORE, 0.35) translate([0, -0.180, 0.024]) cube([0.100, 0.040, 0.030], center = true);
 }
 
 // --- Bones -------------------------------------------------------------------

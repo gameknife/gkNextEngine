@@ -1027,7 +1027,9 @@ TEST_CASE("NextDayz infected gaits plant the feet and actions stay on the ground
         triangles += model.NumberOfIndices() / 3;
     }
     INFO("NextDayz infected triangles: " << triangles);
-    CHECK(triangles < 1500);
+    // Infected 2.0 (V3-3): lofted gaunt limbs, swept claws, wound and blood decals,
+    // about 2800 where the cube body was well under 1500.
+    CHECK(triangles < 3000);
 }
 
 // kit_char 组装角色：use <../lib/kit_char.scad> 闭包 + 库函数 clip 的完整链路。

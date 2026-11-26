@@ -103,6 +103,8 @@
   [持久世界与直升机撤离](projects/nextdayz/nextdayz-extraction-design.md) ·
   [局外经济与合同任务](projects/nextdayz/nextdayz-economy-contracts-design.md)（实施中：E1～E4 已完成，E5 度量与调参未开始） ·
   [世界派遣与地理关卡](projects/nextdayz/nextdayz-world-map-design.md) ·
+  [皮克斯感 Low-Poly 视觉升级设计](projects/nextdayz/nextdayz-visual-upgrade-design.md) ·
+  [视觉升级实施计划](projects/nextdayz/nextdayz-visual-upgrade-plan.md) ·
   [游戏内调试器](projects/nextdayz/nextdayz-debugger.md) ·
   [启动模式与多人联机](projects/nextdayz/nextdayz-multiplayer-design.md) ·
   [Web 客户端架构设计](projects/nextdayz/nextdayz-web-client-design.md)（已实施，文中“现状”标出差距） ·
@@ -124,6 +126,7 @@
 
 ## 剩余计划
 
+- [NextDayz 皮克斯感 Low-Poly 视觉升级](projects/nextdayz/nextdayz-visual-upgrade-plan.md)（待实施；`V0-1` 微缩样板间 → `V1` SCAD 圆角/扫掠与 SSS/Sheen/Foliage 底座 → `V2–V5` 光影、角色、植被与地域建筑重塑）
 - [大地图 GI 覆盖：Voxel / AmbientCube clipmap](plans/ambientcube-clipmap-plan.md)（阶段 1–4 已实施：
   5 级贴合场景布局、probe 发布规则、DDA 多级行走、环形寻址、brick 粒度管线、近场跟随滚动、级间过渡、pong
   增量同步、几何变化局部重体素化、按显存降级数、内存 brick 缓存；brick 缓存落盘待定）

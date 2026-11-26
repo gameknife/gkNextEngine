@@ -146,8 +146,10 @@ namespace NextDayz
         // Low sun burns orange; bad weather drains the colour out of everything.
         const float noon = std::sin(glm::pi<float>() * std::clamp((hour - 6.0f) / 12.0f, 0.0f, 1.0f));
         const float warm = 1.0f - std::clamp(noon * 2.2f, 0.0f, 1.0f);
-        env.sunColor = glm::mix(glm::vec3(1.0f, 0.97f, 0.92f), glm::vec3(1.0f, 0.62f, 0.38f), warm);
-        env.skyColor = glm::mix(glm::vec3(0.92f, 0.95f, 1.0f), glm::vec3(0.80f, 0.82f, 0.84f), gloom);
+        // Colour script: warm-gold sun against a clear ultramarine sky, so lit faces
+        // read warm and shadows read cool (rather than grey) on a clear day.
+        env.sunColor = glm::mix(config_.DaySunColor, glm::vec3(1.0f, 0.62f, 0.38f), warm);
+        env.skyColor = glm::mix(config_.DaySkyColor, glm::vec3(0.80f, 0.82f, 0.84f), gloom);
 
         // Height fog. Mist settles at dawn; dense fog obscures distant silhouettes.
         float density = glm::mix(config_.ClearFogDensity, config_.OvercastFogDensity, gloom);

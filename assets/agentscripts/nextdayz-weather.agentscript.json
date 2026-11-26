@@ -14,13 +14,13 @@
     { "type": "cvar", "name": "nextdayz.validation.lookYaw", "set": 85 },
     { "type": "cvar", "name": "nextdayz.validation.lookPitch", "set": 5 },
     { "type": "wait-until", "query": "game.weatherBlend", "op": "le", "value": 0 },
-    { "type": "assert", "query": "game.sunIntensity", "op": "gt", "value": 470 },
+    { "type": "assert", "query": "game.sunIntensity", "op": "gt", "value": 420 },
     { "type": "screenshot", "out": "screenshots/weather_clear" },
 
     { "type": "log", "message": "Clear to overcast: light and haze change gradually" },
     { "type": "cvar", "name": "nextdayz.debug.weather", "set": 1 },
     { "type": "assert", "query": "game.weatherBlend", "op": "lt", "value": 0.15 },
-    { "type": "assert", "query": "game.sunIntensity", "op": "gt", "value": 400 },
+    { "type": "assert", "query": "game.sunIntensity", "op": "gt", "value": 360 },
     { "type": "wait-until", "query": "game.weatherBlend", "op": "gt", "value": 0.3 },
     { "type": "assert", "query": "game.sunIntensity", "op": "gt", "value": 20 },
     { "type": "assert", "query": "game.sunIntensity", "op": "lt", "value": 300 },
@@ -64,7 +64,7 @@
     { "type": "assert", "query": "game.sunIntensity", "op": "lt", "value": 50 },
     { "type": "cvar", "name": "nextdayz.debug.timeScale", "set": 8 },
     { "type": "wait-until", "query": "game.weatherBlend", "op": "le", "value": 0 },
-    { "type": "assert", "query": "game.sunIntensity", "op": "gt", "value": 470 },
+    { "type": "assert", "query": "game.sunIntensity", "op": "gt", "value": 420 },
 
     { "type": "log", "message": "Direct clear to fog and fog to clear also preserve the current atmosphere" },
     { "type": "cvar", "name": "nextdayz.debug.timeScale", "set": 1 },
@@ -86,7 +86,7 @@
     { "type": "assert", "query": "game.weatherBlend", "op": "gt", "value": 0.1 },
     { "type": "assert", "query": "game.weatherBlend", "op": "lt", "value": 0.3 },
     { "type": "wait-until", "query": "game.weatherBlend", "op": "le", "value": 0 },
-    { "type": "assert", "query": "game.sunIntensity", "op": "gt", "value": 470 },
+    { "type": "assert", "query": "game.sunIntensity", "op": "gt", "value": 420 },
     { "type": "assert", "query": "game.fogDensity", "op": "lt", "value": 0.004 },
     { "type": "screenshot", "out": "screenshots/weather_clear_restored" },
     { "type": "quit" }

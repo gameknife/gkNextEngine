@@ -287,7 +287,10 @@ void NextDayzGameInstance::ConfigureCVars(NextCVar::FCVarSystem& cvars)
     cvars.SetDefaultFromString("r.upscaler.type", "2", &error);
     cvars.SetDefaultFromString("r.upscaler.qualityMode", "0", &error);
     cvars.SetDefaultFromString("r.exposure.auto", "true", &error);
-    cvars.SetDefaultFromString("r.exposure.maxEV", "3", &error);
+    // Interiors lit only through windows and doors sit ~5 stops under the street;
+    // the old +3 cap left them black. +5.5 lets the eye adapt indoors without
+    // lifting a windowless cellar into noise.
+    cvars.SetDefaultFromString("r.exposure.maxEV", "5.5", &error);
     // Expedition maps are ~1 km across: fit the voxel / ambient-cube cascades to the map so the
     // coarsest one covers all of it. Five cascades cost ~270 MB of arena, which mobile cannot
     // spare, so there the engine default (fixed anchor, 3 cascades) stays.

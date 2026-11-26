@@ -119,7 +119,7 @@ module cw_m_oilpaint(c) { gk_material(c, roughness = 0.42) children(); }   // �
 module cw_m_matte(c)    { gk_material(c, roughness = 0.7) children(); }    // 哑光漆 / 塑料：招牌、外壳
 module cw_m_ceramic(c)  { gk_material(c, roughness = 0.14) children(); }   // 釉面砖、搪瓷、卫生陶瓷
 module cw_m_plastic(c)  { gk_material(c, roughness = 0.5) children(); }
-module cw_m_glass()     { gk_material([0.06, 0.075, 0.08], roughness = 0.04) children(); }
+module cw_m_glass()     { gk_material([0.06, 0.075, 0.08], roughness = 0.04, shadow = false) children(); }
 module cw_m_shard()     { gk_material([0.22, 0.27, 0.26], roughness = 0.03) children(); }   // 地上的碎玻璃
 module cw_m_water()     { gk_material([0.03, 0.035, 0.03], roughness = 0.02) children(); }
 module cw_m_oil()       { gk_material([0.025, 0.025, 0.025], roughness = 0.08, metalness = 0.3) children(); }

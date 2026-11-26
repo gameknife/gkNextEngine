@@ -46,6 +46,10 @@ namespace Assets::Scad
         FProceduralTextureRef texture;
         // gk_material(..., ior, subsurface, sheen) / gk_foliage(...): see Material::Surface.
         FSurfaceStyle style;
+        // gk_material(..., shadow = false): window glass. Still drawn and collided
+        // with, but it casts no shadow and is left out of the ray-traced scene and
+        // the GI bake, so sun and sky reach the room behind it.
+        bool castShadows = true;
     };
 
     // Folds a gk_texture() print and a surface style into a color/surface bucket
@@ -63,6 +67,10 @@ namespace Assets::Scad
         if (material.texture)
         {
             mix(material.texture->Hash() ^ (static_cast<uint64_t>(material.texture->scale * 4096.0f) << 1u));
+        }
+        if (!material.castShadows)
+        {
+            mix(0x6A55C0DE5EE7B100ULL);
         }
         if (!material.style.IsDefault())
         {

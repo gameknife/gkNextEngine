@@ -53,7 +53,7 @@ module sv_m_enamel(c) { gk_material(c, roughness=0.45) children(); }            
 module sv_m_mabati(c=[0.30,0.31,0.32], rust=0.3) { gk_material([1,1,1], roughness=1, metalness=0.3) gk_texture(tex_corrugated(24, 0.02+rust*0.18), palette=[c,[0.19,0.09,0.045]], scale=1.6) children(); }
 module sv_m_iron(c=[0.17,0.16,0.15]) { gk_material([1,1,1], roughness=0.85, metalness=0.8) gk_texture("rust", palette=[c,[0.20,0.075,0.03],[0.08,0.035,0.02]], scale=0.9) children(); }
 module sv_m_plastic(c) { gk_material(c, roughness=0.5) children(); }                                    // water tanks, jerrycans
-module sv_m_glass() { gk_material([0.06,0.075,0.075], roughness=0.04) children(); }
+module sv_m_glass() { gk_material([0.06,0.075,0.075], roughness=0.04, shadow=false) children(); }
 module sv_mat(m,c) {
     if(m=="mud") sv_m_mud(c) children(); else if(m=="iron") sv_m_mabati(c,0.35) children();
     else if(m=="stone") sv_m_stone(c) children(); else if(m=="canvas") sv_m_canvas(c) children();

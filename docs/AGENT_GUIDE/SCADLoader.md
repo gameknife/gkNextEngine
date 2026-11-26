@@ -159,6 +159,11 @@ ScadRig 部件（`FRigPart::sectionStyles` → `SceneBuilder::AddRigSectionMater
 | `subsurface`（0..1） | Mixture `Reserved2` | 漫反射余弦换成能量守恒的包裹 `saturate((N·L + w)/(1 + w)²)`，`w = 0.45·subsurface`；包裹多出来的光（明暗交界带）带暖红色，再乘反照率。皮肤 0.5 左右，蜡与温润木件更低。 |
 | `sheen`（0..1） | Mixture `Reserved3` | 掠射角织物绒光 `sheen·0.25/π·mix(1, base, 0.5)·(1−N·V)⁴·saturate(N·L + 0.3)`，正面保持哑光、轮廓泛光。外套、裤装、背包 0.3~0.5。 |
 
+**透光窗玻璃**：`gk_material(..., shadow = false)` 的几何进独立的 `<节点名>__glass` 子节点：照常绘制、
+照常碰撞（射线拾取、物理），但不投阴影（不进太阳阴影射线的 TLAS mask，也不进 CSM）、不进光追场景
+（`SetRayTraceVisible(false)`，GI 与天光射线穿过它）、不参与 GI 烘焙。室外看它仍是深色高光的反射板，
+太阳和天光则能穿过窗洞照进屋里。NextDayz 的四个地域 kit 的 `*_m_glass()` 都用它。
+
 `gk_foliage(c, transmission = 0.65, thickness = 0.10) { ... }` 生成 `Material::Foliage`（Lambertian +
 `Reserved2/3`），走引擎给运行时草地做的主表面背光透射：逆光时叶面被太阳透亮。它只作用于主表面
 直接光；透射阴影射线穿过的距离由 `thickness` 限定（≤ 0.35 m），整团闭合的大树冠背面会挡住它，

@@ -382,13 +382,21 @@ namespace Assets
                 // Draped overlays (terrain road ribbons) likewise: they float a
                 // few centimetres over the ground mesh, so they must neither
                 // collide nor answer ground raycasts.
+                // Window glass (gk_material(..., shadow = false)) likewise: it is
+                // drawn and collided with, but casts no shadow and stays out of the
+                // ray-traced scene and the GI bake, so daylight reaches the room.
                 std::vector<Scad::SceneMeshBucket> solidBuckets;
                 std::vector<Scad::SceneMeshBucket> waterBuckets;
                 std::vector<Scad::SceneMeshBucket> decalBuckets;
+                std::vector<Scad::SceneMeshBucket> glassBuckets;
                 solidBuckets.reserve(sceneNode.meshes.size());
                 for (const Scad::SceneMeshBucket& bucket : sceneNode.meshes)
                 {
-                    (bucket.terrainWater ? waterBuckets : bucket.terrainDecal ? decalBuckets : solidBuckets).push_back(bucket);
+                    (bucket.terrainWater ? waterBuckets
+                     : bucket.terrainDecal ? decalBuckets
+                     : !bucket.material.castShadows ? glassBuckets
+                                                    : solidBuckets)
+                        .push_back(bucket);
                 }
 
                 constexpr size_t kMaxMaterialsPerNode = 16;
@@ -456,6 +464,38 @@ namespace Assets
                         models,
                         materials,
                         cache);
+                }
+
+                for (size_t start = 0; start < glassBuckets.size(); start += kMaxMaterialsPerNode)
+                {
+                    auto glassNode = Node::CreateNode(
+                        fmt::format("{}__glass", sceneNode.name),
+                        glm::vec3(0.0f),
+                        glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
+                        glm::vec3(1.0f),
+                        static_cast<uint32_t>(nodes.size()));
+                    glassNode->SetParent(node);
+                    nodes.push_back(glassNode);
+                    if (AttachSceneMeshesToNode(
+                            fmt::format("{}__glass", sceneNode.name),
+                            glassBuckets,
+                            start,
+                            kMaxMaterialsPerNode,
+                            scale,
+                            smoothAngleDegrees,
+                            collisionEnabled,
+                            glassNode,
+                            models,
+                            materials,
+                            cache))
+                    {
+                        if (auto render = glassNode->GetComponent<Runtime::RenderComponent>())
+                        {
+                            render->SetCastShadows(false);
+                            render->SetRayTraceVisible(false);
+                            render->SetReceiveGI(false);
+                        }
+                    }
                 }
 
                 if (!waterBuckets.empty())

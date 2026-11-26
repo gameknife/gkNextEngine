@@ -70,7 +70,7 @@ module bh_m_iron(c=[0.17,0.16,0.15]) { gk_material([1,1,1], roughness=0.85, meta
 module bh_m_zinc(c=[0.33,0.34,0.34]) { gk_material(c, roughness=0.36, metalness=0.85) children(); } // gutters, tin domes
 module bh_m_copper(c) { gk_material(c, roughness=0.46, metalness=0.3) children(); }               // verdigris copper
 module bh_m_gilt() { gk_material([0.60,0.45,0.19], roughness=0.24, metalness=1) children(); }      // crosses, clock hands
-module bh_m_glass() { gk_material([0.06,0.075,0.075], roughness=0.04) children(); }               // window glass
+module bh_m_glass() { gk_material([0.06,0.075,0.075], roughness=0.04, shadow=false) children(); }               // window glass
 module bh_m_shard() { gk_material([0.22,0.27,0.25], roughness=0.03) children(); }                 // broken glass underfoot
 module bh_m_water() { gk_material([0.03,0.035,0.03], roughness=0.02) children(); }                // standing rainwater
 module bh_m_oil() { gk_material([0.025,0.025,0.025], roughness=0.08, metalness=0.3) children(); }  // oil slicks

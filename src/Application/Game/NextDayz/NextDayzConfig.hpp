@@ -372,8 +372,12 @@ namespace NextDayz
     {
         double StartHour = 8.0;         // 08:00 first frame -> daytime
         double TimeScale = 1.0;         // 1 real second = 1 game minute (24 real-min day)
-        float DaySunIntensity = 480.0f;
-        float DaySkyIntensity = 120.0f;
+        // Pale walls blew out at noon with 480 against 120: a little less sun and a
+        // little more sky keeps highlights below white and lifts the shadows.
+        float DaySunIntensity = 430.0f;
+        float DaySkyIntensity = 135.0f;
+        glm::vec3 DaySunColor{1.0f, 0.94f, 0.84f}; // warm gold, at noon
+        glm::vec3 DaySkyColor{0.86f, 0.92f, 1.05f}; // cool, clear sky tint for shadows
         float DaySkyLuminanceScale = 4.0f; // procedural sky and GI, independent of HDR intensity
         float NightSkyFraction = 0.08f; // sky never goes fully black
         float OvercastFactor = 0.55f;   // sun multiplier while overcast

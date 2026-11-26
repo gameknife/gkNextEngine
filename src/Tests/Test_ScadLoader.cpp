@@ -2104,6 +2104,53 @@ TEST_CASE("ScadRig sections carry the surface style into their materials", "[Uni
     CHECK(leaf == 1);
 }
 
+TEST_CASE("gk_material shadow = false splits window glass into a light-passing node", "[Unit][Scad]")
+{
+    ScopedDir dir;
+    const std::filesystem::path mainPath = dir.Write(
+        "window.scad", "module window() {\n"
+                       "    color([0.5, 0.4, 0.3]) cube([1, 0.2, 1]);\n"
+                       "    gk_material([0.06, 0.075, 0.075], roughness = 0.04, shadow = false)\n"
+                       "        translate([0.1, 0.05, 0.1]) cube([0.8, 0.02, 0.8]);\n"
+                       "}\n"
+                       "window();\n");
+    Assets::EnvironmentSetting environment;
+    std::vector<std::shared_ptr<Assets::Node>> nodes;
+    std::vector<Assets::Model> models;
+    std::vector<Assets::FMaterial> materials;
+    std::vector<Assets::LightObject> lights;
+    std::vector<Assets::AnimationTrack> tracks;
+    std::vector<Assets::Skeleton> skeletons;
+    REQUIRE(Assets::FScadLoader::LoadScadScene(mainPath.string(), environment, nodes, models, materials, lights,
+                                               tracks, skeletons));
+
+    std::shared_ptr<Assets::Node> frame;
+    std::shared_ptr<Assets::Node> glass;
+    for (const auto& node : nodes)
+    {
+        if (node->GetName() == "window")
+            frame = node;
+        if (node->GetName() == "window__glass")
+            glass = node;
+    }
+    REQUIRE(frame);
+    REQUIRE(glass);
+    CHECK(glass->GetParent() == frame.get());
+
+    const auto frameRender = frame->GetComponent<Runtime::RenderComponent>();
+    const auto glassRender = glass->GetComponent<Runtime::RenderComponent>();
+    REQUIRE(frameRender);
+    REQUIRE(glassRender);
+    CHECK(frameRender->GetCastShadows());
+    CHECK(frameRender->GetRayTraceVisible());
+    // Drawn and collided with, but sun, sky and GI pass through it.
+    CHECK(glassRender->GetVisible());
+    CHECK(glassRender->GetRayCastVisible());
+    CHECK_FALSE(glassRender->GetCastShadows());
+    CHECK_FALSE(glassRender->GetRayTraceVisible());
+    CHECK_FALSE(glassRender->GetReceiveGI());
+}
+
 // ---------------------------------------------------------------------------
 // Baked vertex occlusion and macro variation (V1-3).
 // ---------------------------------------------------------------------------

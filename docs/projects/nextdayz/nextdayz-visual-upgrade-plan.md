@@ -1,7 +1,7 @@
 ---
 title: "NextDayz 皮克斯感 Low-Poly 视觉升级实施计划"
 category: plan
-status: 进行中（P0、P1 已完成，P2 起待实施）
+status: 进行中（P0、P1、V2-1 已完成，V2-2 起待实施）
 owner: NextDayz
 created: 2026-11-26
 last_updated: 2026-11-26
@@ -24,7 +24,7 @@ last_updated: 2026-11-26
 | :--- | :--- | :--- | :--- |
 | P0 视觉标杆切片 | `V0-1` | 已完成 | 40m×40m 全要素 Lookdev 微缩样板间与 4 机位基准图 |
 | P1 SCAD 与着色底座 | `V1-1` ～ `V1-3` | 已完成 | 圆角/扫掠/法线原语、SSS/Sheen/Foliage 着色、烘焙顶点 AO 与宏尺度打散 |
-| P2 电影光影与大厅 | `V2-1` ～ `V2-2` | 未开始 | 透光窗户点亮室内、户外冷暖色调调校、直升机机舱大厅电影级重塑 |
+| P2 电影光影与大厅 | `V2-1` ～ `V2-2` | 进行中（V2-1 已完成） | 透光窗户点亮室内、户外冷暖色调调校、直升机机舱大厅电影级重塑 |
 | P3 角色与武器 2.0 | `V3-1` ～ `V3-4` | 未开始 | 幸存者五官眼神光与 SSS 皮肤、圆角绒光服装、感染者放样重写、武器捕光边 |
 | P4 植被与草海 2.0 | `V4-1` ～ `V4-3` | 未开始 | 蓬松透光地域树种、柔弧融合且随地域变色的运行时草地、画意过程纹理 |
 | P5 建筑套件与地图 | `V5-1` ～ `V5-3` | 未开始 | 波希米亚/稀树草原/冷战/训练场建筑套件升级，三张地图重导出与回归验收 |
@@ -93,6 +93,8 @@ last_updated: 2026-11-26
 ## P2：电影级光影、透光窗户与机舱大厅重塑
 
 ### `V2-1` 实现透光窗户玻璃与昼夜冷暖色彩脚本调校
+- **状态**：已完成。`gk_material(..., shadow = false)` → `__glass` 子节点（不投影、不进 TLAS、不进 GI 烘焙），四个地域 kit 的玻璃都已切换；`TimeSystem` 晴天太阳 430（原 480）、天光 135（原 120），正午太阳色暖金 `[1, 0.94, 0.84]`、天光冷蓝 `[0.86, 0.92, 1.05]`（`FTimeConfig::DaySunColor/DaySkyColor`）；自动曝光上限 `r.exposure.maxEV` 3 → 5.5。`nextdayz-weather` 的晴天阈值随之改为 420/360。
+- **结论**：Loket 宫殿室内从全黑变为可辨认（地砖、柜子），但它本身是无窗大厅，仍偏暗偏噪；农舍等多数建筑的窗本来就是破洞，室内暗主要来自曝光上限而不是玻璃。院落立面高光不再死白，阴影略偏冷。
 - **范围**：`src/Modules/ScadLoader/{FScadEvaluator.*,FScadLoader.cpp}`、`assets/scad/lib/kit_{bohemia,coldwar,savanna,training}.scad`（玻璃材质包装）、`src/Application/Game/NextDayz/{NextDayzConfig.hpp,World/TimeSystem.cpp}`。
 - **内容**：
   1. 实现 `gk_material(..., shadow = false)`（拆入 `__glass` 子节点，关闭阴影投射与 GI 遮挡但保留主视线高光反射），应用到各 kit 窗户玻璃；

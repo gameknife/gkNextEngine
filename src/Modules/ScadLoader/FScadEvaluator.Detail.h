@@ -878,6 +878,8 @@ namespace Assets::Scad
                             static_cast<float>(std::clamp(Arg(inst, "subsurface", -1).AsNumber(0.0), 0.0, 1.0));
                         material.style.sheen =
                             static_cast<float>(std::clamp(Arg(inst, "sheen", -1).AsNumber(0.0), 0.0, 1.0));
+                        const Value shadow = Arg(inst, "shadow", -1);
+                        material.castShadows = shadow.type == Value::Type::Undef || shadow.IsTruthy();
                         // A surface change keeps an enclosing gk_texture() print.
                         if (!materialPropertiesStack_.empty())
                         {

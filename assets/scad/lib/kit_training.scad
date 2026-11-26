@@ -59,7 +59,7 @@ module tg_m_iron(c=tg_steel()) { gk_material([1,1,1], roughness=0.85, metalness=
 module tg_m_tin(c) { gk_material([1,1,1], roughness=0.62, metalness=0.7) gk_texture(tex_corrugated(24,0.08), palette=[c,[0.22,0.09,0.04]], scale=1.6) children(); }  // green tin roofs
 module tg_m_corr(c=[0.24,0.27,0.20]) { gk_material([1,1,1], roughness=0.66, metalness=0.75) gk_texture(tex_corrugated(30,0.09), palette=[c,[0.22,0.09,0.04]], scale=1.8, seed=4) children(); } // olive Nissen huts
 module tg_m_zinc(c=[0.33,0.34,0.34]) { gk_material(c, roughness=0.36, metalness=0.85) children(); }
-module tg_m_glass() { gk_material([0.06,0.075,0.075], roughness=0.04) children(); }
+module tg_m_glass() { gk_material([0.06,0.075,0.075], roughness=0.04, shadow=false) children(); }
 module tg_m_rubber() { gk_material([0.05,0.05,0.05], roughness=0.85) children(); }
 module tg_m_target_steel() { gk_material([0.42,0.40,0.36], roughness=0.6, metalness=0.2) children(); } // white-washed plates
 

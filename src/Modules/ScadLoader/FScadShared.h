@@ -78,6 +78,19 @@ namespace Assets::Scad
     // Per-corner smoothed normals for a triangle soup (see FScadLoader).
     std::vector<glm::vec3> ScadComputeSmoothNormals(const std::vector<glm::vec3>& pos, float angleThresholdDeg);
 
+    // Normals for a mesh bucket whose triangles may carry gk_crease /
+    // gk_puff_normals spans. pos is the bucket's soup already converted with
+    // ScadToWorldPos(p, scale) (engine space, +Y up); spans index its triangles
+    // and keep their puff centre in SCAD space. Triangles of different crease
+    // angles smooth separately; authored normals (SCAD space, one per corner,
+    // zero = none; gk_round_box / gk_sweep know their exact surface) replace
+    // the smoothed ones; puff then bends each span's normals toward its
+    // centre. With no spans and no authored normals this is
+    // ScadComputeSmoothNormals(pos, defaultAngle).
+    std::vector<glm::vec3> ScadComputeShadedNormals(const std::vector<glm::vec3>& pos, float defaultAngleDeg,
+                                                    const std::vector<ScadNormalSpan>& spans,
+                                                    const std::vector<glm::dvec3>& authored, double scale);
+
     // ------------------------------------------------------------------
     struct SceneNode;
     std::string SerializeScadNodeMetadata(const SceneNode& sceneNode);

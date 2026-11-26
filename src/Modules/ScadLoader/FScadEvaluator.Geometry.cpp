@@ -53,7 +53,8 @@ namespace Assets::Scad::EvalDetail
         }
     }
 
-    GeomList Evaluator::MakeGeom(TriSoup&& objSpace, const glm::dmat4& xform, const glm::dvec4& color, bool hasColor)
+    GeomList Evaluator::MakeGeom(TriSoup&& objSpace, const glm::dmat4& xform, const glm::dvec4& color, bool hasColor,
+                                 const TriSoup* objNormals)
     {
         if (objSpace.empty())
             return {};
@@ -70,6 +71,10 @@ namespace Assets::Scad::EvalDetail
         }
         cs.groupName = CurrentGroupLabel();
         cs.groupInstanceId = CurrentGroupInstanceId();
+        if (!creaseStack_.empty())
+        {
+            cs.shading.smoothAngleDegrees = creaseStack_.back();
+        }
         cs.soup.reserve(objSpace.size());
         const bool flipWinding = glm::determinant(glm::dmat3(xform)) < 0.0;
         for (size_t i = 0; i + 2 < objSpace.size(); i += 3)
@@ -87,6 +92,25 @@ namespace Assets::Scad::EvalDetail
             {
                 cs.soup.push_back(b);
                 cs.soup.push_back(c);
+            }
+        }
+        if (objNormals && objNormals->size() == objSpace.size())
+        {
+            // Normals follow the inverse transpose, so they stay perpendicular
+            // under non-uniform scale and keep pointing out through a mirror.
+            const glm::dmat3 normalMatrix = glm::transpose(glm::inverse(glm::dmat3(xform)));
+            const auto carry = [&normalMatrix](const glm::dvec3& n)
+            {
+                const glm::dvec3 m = normalMatrix * n;
+                const double length = glm::length(m);
+                return length > 1e-12 ? m / length : glm::dvec3(0.0);
+            };
+            cs.normals.reserve(objNormals->size());
+            for (size_t i = 0; i + 2 < objNormals->size(); i += 3)
+            {
+                cs.normals.push_back(carry((*objNormals)[i + 0]));
+                cs.normals.push_back(carry((*objNormals)[i + (flipWinding ? 2 : 1)]));
+                cs.normals.push_back(carry((*objNormals)[i + (flipWinding ? 1 : 2)]));
             }
         }
         GeomList out;
@@ -168,6 +192,133 @@ namespace Assets::Scad::EvalDetail
         }
 
         return MakeGeom(std::move(soup), xform, color, hasColor);
+    }
+
+    GeomList Evaluator::EvalSculpt(const Stmt& inst, const glm::dmat4& xform, const glm::dvec4& color, bool hasColor)
+    {
+        const double detail = std::clamp(ctx_.GetNumber("$gk_detail", 1.0), 0.05, 4.0);
+        TriSoup soup;
+        TriSoup normals;
+        if (inst.name == "gk_round_box")
+        {
+            // gk_round_box(size, r = 0.02, segs = 3, power = 2, center = true)
+            const Value sizeVal = Arg(inst, "size", 0);
+            glm::dvec3 size(1.0);
+            if (sizeVal.IsNumber())
+                size = glm::dvec3(sizeVal.num);
+            else
+                sizeVal.AsVec3(size);
+            const double r = Arg(inst, "r", 1).AsNumber(0.02);
+            const double segs = Arg(inst, "segs", 2).AsNumber(3.0);
+            const double power = Arg(inst, "power", 3).AsNumber(2.0);
+            const Value centerVal = Arg(inst, "center", 4);
+            const bool center = centerVal.type == Value::Type::Undef || centerVal.IsTruthy();
+            if (size.x <= 0.0 || size.y <= 0.0 || size.z <= 0.0)
+            {
+                Warn("gk_round_box", "gk_round_box(): size must be positive on every axis");
+                return {};
+            }
+            const int arcSegments = std::max(1, static_cast<int>(std::lround(segs * detail)));
+            ScadGeometry::BuildRoundBox(size, r, arcSegments, power, center, soup, &normals);
+        }
+        else
+        {
+            // gk_sweep(points, radii, fn = 12, cap = "round", twist = 0)
+            std::vector<glm::dvec3> points;
+            const Value pointsVal = Arg(inst, "points", 0);
+            if (pointsVal.IsVec())
+            {
+                for (const Value& p : pointsVal.vec)
+                {
+                    glm::dvec3 v(0.0);
+                    if (p.AsVec3(v))
+                        points.push_back(v);
+                }
+            }
+            if (points.size() < 2)
+            {
+                Warn("gk_sweep", "gk_sweep(): needs at least two 3D points");
+                return {};
+            }
+            std::vector<double> radii;
+            const Value radiiVal = Arg(inst, "radii", 1);
+            if (radiiVal.IsVec())
+            {
+                for (const Value& v : radiiVal.vec)
+                    radii.push_back(v.AsNumber(0.05));
+                if (radii.size() != points.size())
+                {
+                    Warn("gk_sweep", "gk_sweep(): radii must be a number or one radius per point");
+                    radii.resize(points.size(), radii.empty() ? 0.05 : radii.back());
+                }
+            }
+            else
+            {
+                radii.assign(points.size(), radiiVal.AsNumber(0.05));
+            }
+            const int sides = std::max(3, static_cast<int>(std::lround(Arg(inst, "fn", 2).AsNumber(12.0) * detail)));
+            const Value capVal = Arg(inst, "cap", 3);
+            const std::string cap = capVal.type == Value::Type::Str ? capVal.str : std::string("round");
+            ScadGeometry::SweepCap capKind = ScadGeometry::SweepCap::Round;
+            if (cap == "none")
+                capKind = ScadGeometry::SweepCap::None;
+            else if (cap == "flat")
+                capKind = ScadGeometry::SweepCap::Flat;
+            else if (cap != "round")
+                Warn("gk_sweep", "gk_sweep(): cap must be \"none\", \"flat\" or \"round\"");
+            const double twist = Arg(inst, "twist", 4).AsNumber(0.0);
+            ScadGeometry::BuildSweep(points, radii, sides, capKind, twist, detail, soup, &normals);
+        }
+        return MakeGeom(std::move(soup), xform, color, hasColor, &normals);
+    }
+
+    GeomList Evaluator::EvalPuffNormals(const Stmt& inst, const glm::dmat4& xform, const glm::dvec4& color,
+                                        bool hasColor)
+    {
+        // gk_puff_normals(strength = 0.65, upBias = 0.25) { ... }: the subtree is
+        // one soft volume (a crown of overlapping spheres, a shrub). Its normals
+        // bend toward the direction from the subtree's bounding-box centre, which
+        // erases the dark seams where the parts interpenetrate. The subtree is
+        // flattened: the centre only means something for geometry that stays
+        // together in one node.
+        const double strength = std::clamp(Arg(inst, "strength", 0).AsNumber(0.65), 0.0, 1.0);
+        const double upBias = std::clamp(Arg(inst, "upBias", 1).AsNumber(0.25), -2.0, 2.0);
+        SuppressSceneNodeGuard suppressGuard(*this);
+        GeomList geom = EvalScope(inst.children, xform, color, hasColor);
+
+        glm::dvec3 lo(std::numeric_limits<double>::max());
+        glm::dvec3 hi(std::numeric_limits<double>::lowest());
+        for (const ColoredSoup& cs : geom)
+        {
+            for (const glm::dvec3& p : cs.soup)
+            {
+                lo = glm::min(lo, p);
+                hi = glm::max(hi, p);
+            }
+        }
+        if (lo.x > hi.x)
+        {
+            return geom;
+        }
+        const glm::dvec3 extent = hi - lo;
+        const double radius = 0.5 * std::max(extent.x, std::max(extent.y, extent.z));
+        if (radius <= 0.0 || strength <= 0.0)
+        {
+            return geom;
+        }
+        for (ColoredSoup& cs : geom)
+        {
+            if (cs.shading.puff)
+            {
+                continue; // an inner gk_puff_normals keeps its own blob
+            }
+            cs.shading.puff = true;
+            cs.shading.puffCenter = 0.5 * (lo + hi);
+            cs.shading.puffRadius = radius;
+            cs.shading.puffStrength = static_cast<float>(strength);
+            cs.shading.puffUpBias = static_cast<float>(upBias);
+        }
+        return geom;
     }
 
     std::shared_ptr<const FTerrainData> Evaluator::TerrainFromValue(const Value& value, const char* where)

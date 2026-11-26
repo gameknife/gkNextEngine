@@ -66,6 +66,8 @@ namespace Assets::Scad
         std::string groupName;
         std::vector<glm::dvec3> tris; // triangle soup (3N), SCAD world space (Z-up)
         bool faceted = false; // skip vertex-normal smoothing (terrain)
+        std::vector<ScadNormalSpan> normalSpans; // gk_crease / gk_puff_normals runs
+        std::vector<glm::dvec3> normals; // authored normals parallel to tris (empty = none, zero = compute)
     };
 
     struct BucketKey
@@ -102,6 +104,14 @@ namespace Assets::Scad
         std::string materialName;
         std::vector<glm::dvec3> tris; // triangle soup (3N), local to the owning scene node
         bool faceted = false; // skip vertex-normal smoothing (terrain)
+        // Triangle runs with their own normal shaping (gk_crease / gk_puff_normals);
+        // positions in the spans are in the same space as tris. Compute normals
+        // with ScadComputeShadedNormals (FScadShared.h).
+        std::vector<ScadNormalSpan> normalSpans;
+        // Authored normals parallel to tris, same space (gk_round_box / gk_sweep
+        // know their exact surface). Empty when nothing in the bucket authored
+        // any; a zero entry means "compute this corner".
+        std::vector<glm::dvec3> normals;
         bool terrainDecal = false; // draped overlay (road ribbons): own node, no collision / raycast
         bool terrainWater = false; // translucent terrain water surface (split to a
                                    // dedicated node, no raycast visibility)

@@ -147,7 +147,7 @@ namespace NextDayzScadLevel
         using GroupKey = std::tuple<int, int, size_t>;
 
         std::vector<Geometry> geometry;
-        std::map<std::tuple<uint64_t, size_t, float, bool>, size_t> geometryByShape;
+        std::map<std::tuple<uint64_t, size_t, float, bool, uint64_t>, size_t> geometryByShape;
         std::map<SurfaceKey, size_t> surfaceByKey;
         std::map<GroupKey, RenderGroup> groups;
         std::map<uint64_t, int> printByHash;
@@ -192,13 +192,27 @@ namespace NextDayzScadLevel
         size_t Mesh(const SceneMeshBucket& mesh, const std::vector<glm::vec3>& positions, float smoothAngle)
         {
             const float scale = mesh.material.texture ? mesh.material.texture->scale : 0.0f;
+            // gk_crease / gk_puff_normals spans change the normals, not the positions.
+            std::vector<double> spanFields;
+            for (const ScadNormalSpan& span : mesh.normalSpans)
+            {
+                const ScadShading& s = span.shading;
+                spanFields.insert(spanFields.end(), {double(span.firstTri), double(span.triCount),
+                    double(s.smoothAngleDegrees), s.puff ? 1.0 : 0.0, s.puffCenter.x, s.puffCenter.y, s.puffCenter.z,
+                    s.puffRadius, double(s.puffStrength), double(s.puffUpBias)});
+            }
+            for (const glm::dvec3& n : mesh.normals)
+            {
+                spanFields.insert(spanFields.end(), {n.x, n.y, n.z});
+            }
+            const uint64_t shading = spanFields.empty() ? 0 : XXH64(spanFields.data(), spanFields.size() * sizeof(double), 0);
             const auto key = std::tuple{XXH64(positions.data(), positions.size() * sizeof(glm::vec3), 0),
-                positions.size(), scale, mesh.faceted};
+                positions.size(), scale, mesh.faceted, shading};
             const auto [entry, inserted] = geometryByShape.try_emplace(key, geometry.size());
             if (inserted)
             {
                 auto& asset = geometry.emplace_back();
-                const auto normals = ScadComputeSmoothNormals(positions, mesh.faceted ? 0.f : smoothAngle);
+                const auto normals = ScadComputeShadedNormals(positions, mesh.faceted ? 0.f : smoothAngle, mesh.normalSpans, mesh.normals, 1.0);
                 std::vector<glm::vec2> uv(positions.size(), glm::vec2(0.f));
                 std::vector<glm::vec4> tangents(positions.size(), glm::vec4(1.f, 0.f, 0.f, 1.f));
                 if (mesh.material.texture)

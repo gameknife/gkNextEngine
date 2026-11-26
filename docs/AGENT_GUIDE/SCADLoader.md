@@ -149,6 +149,47 @@ rotate → scale` 顺序最多各出现一次，终点是 kit 表里能解析到
 材料——皮革（0.45~0.65）、哑光漆（0.7~0.75）、塑料扣（0.45）、清漆木（0.4）、油浸木（0.6~0.65）、
 橡胶（0.85）、金属件（metalness 0.9~1）。同一件装备里按部件分层，比整件一个粗糙度更有质感。
 
+### 雕塑原语与法线控制
+
+引擎原生生成网格，不走 Manifold，也不靠 `hull()` 拼。对照台：
+`gnb shot --scene assets/scad/source/others/gk_sculpt_demo.scad`。
+
+- **`gk_round_box(size, r = 0.02, segs = 3, power = 2, center = true)`**：圆角盒。每 1/4 圆弧
+  `segs` 段；每个面拥有自己的平面部分和两侧 45° 以内的圆弧，所以六个面在接缝上共用完全相同的
+  顶点（水密，平滑法线跨缝连续）。`segs >= 3` 时相邻面夹角 ≤ 30°，在默认 35° 阈值下整块圆角
+  连续受光；`segs = 1` 是单段切角，保留折痕。`r` 钳到 `0.49 * min(size)`，`r = 0` 退化为 `cube`；
+  `power > 2` 把角收成超椭球（越大越方）。`center` 缺省为 true（与 `cube` 相反）。
+- **`gk_sweep(points, radii, fn = 12, cap = "round", twist = 0)`**：沿 ≥ 2 个 3D 点的弦长参数化
+  Catmull-Rom 曲线扫掠圆截面；`radii` 是一个数或每点一个半径（线性插值）。截面沿平行传输
+  （最小扭转）标架推进，拐点不会像 Frenet 标架那样翻转 180°。`cap`：`"none"` 开口 /
+  `"flat"` 平盖 / `"round"` 半球盖；`twist` 为全长累计旋转角（度）。用于弯曲树干、枝杈、
+  管线、织带。
+- **`$gk_detail`**（默认 1）：两个原语的细节倍率——`segs`、`fn` 与扫掠的弯折采样都乘它。
+  给弱设备烘焙时在文件顶层写 `$gk_detail = 0.5;`。
+- **`gk_crease(angle) { ... }`**：子树里生成的全部几何（包括嵌套 module 自己的节点）改用
+  `angle` 度作为法线平滑阈值；`0` 为纯硬面。`$fn = 8` 的柱/球相邻面 45°，默认 35° 下是硬棱
+  八棱柱，`gk_crease(50)` 才读成圆的。穿过 `difference` / `hull` / `intersection` 时结果沿用
+  第一个子件的设置。
+- **`gk_puff_normals(strength = 0.65, upBias = 0.25) { ... }`**：把子树当成一团体积（多球拼的
+  树冠、灌木）：法线按 `normalize(mix(N, normalize(P - C + up * upBias * R), strength))`
+  弯向包围盒中心 `C` 的放射方向（`R` 为包围盒最长边的一半），消掉球与球穿插处的黑缝。
+  它会像 `gk_flatten` 一样压平子树（中心只对留在同一节点的几何有意义）；内层的
+  `gk_puff_normals` 保留自己那一团。
+
+实现：几何带 `ScadShading`，进桶时记成 `SceneMeshBucket::normalSpans`（按三角形区段，
+所以一个 `gk_flatten` 的整片树林可以每棵树各自一团）。`gk_round_box` / `gk_sweep` 还**自带
+精确法线**（`SceneMeshBucket::normals`，与 tris 平行，零向量 = 由加载器算）：按位置邻接估出的
+顶点法线在圆角拐角处会偏 6–12°，渲染出一道凹痕；精确法线随变换走逆转置，镜像下仍朝外。
+经过 `difference` / `hull` / `intersection` 的结果是新几何，回落到估算法线。场景加载器、
+ScadRig 部件和 Web 关卡都用 `ScadComputeShadedNormals`：不同阈值的三角形分组各自平滑，
+精确法线覆盖估算值，最后做 puff 弯折（弯过头、背向自身三角形的法线会被拉回正面一侧）。
+
+平滑法线在低模轮廓处会背向相机（三角形朝向相机，插值法线却朝外），过去这些像素被当成背面
+着色成黑边。主表面重建（`common/GeneralFunc.slang` 的 `get_material_data`，所有渲染器共用）
+现在把这种法线掰回可见一侧，与浮雕法线的处理一致。
+**注意**：求值器不读作为调用参数传入的特殊变量——`cylinder(r = 1, $fn = 8)` 里的 `$fn`
+被忽略，用的是作用域里的 `$fn`（文件或 module 内写 `$fn = 8;`）。
+
 ### `gk_texture`：过程纹理印花
 
 `gk_texture(name | graph, palette = [[r,g,b], ...], scale = 0.5, seed = 0, relief = 1) children();`

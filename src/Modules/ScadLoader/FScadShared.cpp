@@ -16,6 +16,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <mutex>
 #include <unordered_set>
 
@@ -177,6 +178,7 @@ namespace Assets::Scad
 
         struct ScadPosKey
         {
+            // Built with MakePosKey: -0 and +0 compare equal but hash apart.
             float x, y, z;
             bool operator==(const ScadPosKey& o) const { return x == o.x && y == o.y && z == o.z; }
         };
@@ -198,6 +200,11 @@ namespace Assets::Scad
                 return h;
             }
         };
+
+        ScadPosKey MakePosKey(const glm::vec3& p)
+        {
+            return ScadPosKey{p.x + 0.0f, p.y + 0.0f, p.z + 0.0f};
+        }
     } // namespace
 
     fs::path ResolveScadLoosePath(const fs::path& path)
@@ -468,7 +475,7 @@ namespace Assets::Scad
         adjacency.reserve(pos.size());
         for (size_t i = 0; i < pos.size(); ++i)
         {
-            adjacency[ScadPosKey{pos[i].x, pos[i].y, pos[i].z}].push_back(static_cast<uint32_t>(i / 3));
+            adjacency[MakePosKey(pos[i])].push_back(static_cast<uint32_t>(i / 3));
         }
 
         const float cosThreshold = std::cos(angleThresholdDeg * 3.14159265358979323846f / 180.0f);
@@ -478,7 +485,7 @@ namespace Assets::Scad
             const uint32_t face = static_cast<uint32_t>(i / 3);
             const glm::vec3 fn = unit[face];
             glm::vec3 acc(0.0f);
-            for (uint32_t other : adjacency[ScadPosKey{pos[i].x, pos[i].y, pos[i].z}])
+            for (uint32_t other : adjacency[MakePosKey(pos[i])])
             {
                 if (glm::dot(unit[other], fn) >= cosThreshold)
                 {
@@ -487,6 +494,140 @@ namespace Assets::Scad
             }
             const float len = glm::length(acc);
             out[i] = (len > 1e-12f) ? acc / len : fn;
+        }
+        return out;
+    }
+
+    std::vector<glm::vec3> ScadComputeShadedNormals(const std::vector<glm::vec3>& pos, float defaultAngleDeg,
+                                                    const std::vector<ScadNormalSpan>& spans,
+                                                    const std::vector<glm::dvec3>& authored, double scale)
+    {
+        const bool hasAuthored = authored.size() == pos.size();
+        if (spans.empty() && !hasAuthored)
+        {
+            return ScadComputeSmoothNormals(pos, defaultAngleDeg);
+        }
+
+        const size_t triCount = pos.size() / 3;
+        const auto spanRange = [triCount](const ScadNormalSpan& span)
+        {
+            const size_t begin = std::min<size_t>(span.firstTri, triCount);
+            return std::pair<size_t, size_t>(begin, std::min<size_t>(begin + span.triCount, triCount));
+        };
+
+        // Each triangle smooths with its own threshold. Triangles of different
+        // thresholds never share a normal: a gk_crease subtree is its own piece.
+        std::vector<float> triAngle(triCount, defaultAngleDeg);
+        for (const ScadNormalSpan& span : spans)
+        {
+            const float angle =
+                span.shading.smoothAngleDegrees >= 0.0f ? span.shading.smoothAngleDegrees : defaultAngleDeg;
+            const auto [begin, end] = spanRange(span);
+            std::fill(triAngle.begin() + static_cast<std::ptrdiff_t>(begin),
+                      triAngle.begin() + static_cast<std::ptrdiff_t>(end), angle);
+        }
+
+        std::map<float, std::vector<uint32_t>> groups;
+        for (size_t t = 0; t < triCount; ++t)
+        {
+            groups[triAngle[t]].push_back(static_cast<uint32_t>(t));
+        }
+
+        std::vector<glm::vec3> out;
+        if (groups.size() == 1)
+        {
+            out = ScadComputeSmoothNormals(pos, groups.begin()->first);
+        }
+        else
+        {
+            out.assign(pos.size(), glm::vec3(0.0f, 1.0f, 0.0f));
+            std::vector<glm::vec3> subset;
+            for (const auto& [angle, tris] : groups)
+            {
+                subset.clear();
+                subset.reserve(tris.size() * 3);
+                for (uint32_t t : tris)
+                {
+                    subset.insert(subset.end(), {pos[t * 3 + 0], pos[t * 3 + 1], pos[t * 3 + 2]});
+                }
+                const std::vector<glm::vec3> normals = ScadComputeSmoothNormals(subset, angle);
+                for (size_t k = 0; k < tris.size(); ++k)
+                {
+                    for (size_t corner = 0; corner < 3; ++corner)
+                    {
+                        out[tris[k] * 3 + corner] = normals[k * 3 + corner];
+                    }
+                }
+            }
+        }
+
+        // Sculpt primitives know their surface: an authored normal replaces the
+        // estimate from the neighbouring facets. SCAD (x, y, z) -> engine (x, z, -y).
+        if (hasAuthored)
+        {
+            for (size_t i = 0; i < pos.size(); ++i)
+            {
+                const glm::dvec3& n = authored[i];
+                const double length = glm::length(n);
+                if (length > 1e-12)
+                {
+                    out[i] = glm::vec3(static_cast<float>(n.x / length), static_cast<float>(n.z / length),
+                                       static_cast<float>(-n.y / length));
+                }
+            }
+        }
+
+        // gk_puff_normals: n' = normalize(mix(n, normalize(P - C + up * bias * R), strength)).
+        for (const ScadNormalSpan& span : spans)
+        {
+            const ScadShading& shading = span.shading;
+            if (!shading.puff || shading.puffStrength <= 0.0f)
+            {
+                continue;
+            }
+            const glm::vec3 center = ScadToWorldPos(shading.puffCenter, scale);
+            const float radius = static_cast<float>(shading.puffRadius * scale);
+            const glm::vec3 lift(0.0f, shading.puffUpBias * radius, 0.0f);
+            const float strength = std::clamp(shading.puffStrength, 0.0f, 1.0f);
+            const auto [begin, end] = spanRange(span);
+            for (size_t i = begin * 3; i < end * 3; ++i)
+            {
+                const glm::vec3 radial = pos[i] - center + lift;
+                const float radialLength = glm::length(radial);
+                if (radialLength <= 1e-8f)
+                {
+                    continue;
+                }
+                const glm::vec3 bent = glm::mix(out[i], radial / radialLength, strength);
+                const float bentLength = glm::length(bent);
+                if (bentLength <= 1e-8f)
+                {
+                    continue;
+                }
+                out[i] = bent / bentLength;
+
+                // A lobe face turned inward (toward the blob centre) would get a
+                // normal facing away from its own triangle and shade black. Keep
+                // the bent normal at least kMinFacing into the triangle's side.
+                constexpr float kMinFacing = 0.25f;
+                const size_t t = i / 3 * 3;
+                const glm::vec3 cross = glm::cross(pos[t + 1] - pos[t], pos[t + 2] - pos[t]);
+                const float crossLength = glm::length(cross);
+                if (crossLength <= 1e-12f)
+                {
+                    continue;
+                }
+                const glm::vec3 face = cross / crossLength;
+                const float facing = glm::dot(out[i], face);
+                if (facing < kMinFacing)
+                {
+                    const glm::vec3 tangent = out[i] - face * facing;
+                    const float tangentLength = glm::length(tangent);
+                    out[i] = tangentLength > 1e-6f ? tangent / tangentLength * std::sqrt(1.0f - kMinFacing * kMinFacing) +
+                                                         face * kMinFacing
+                                                   : face;
+                }
+            }
         }
         return out;
     }

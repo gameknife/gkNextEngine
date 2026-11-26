@@ -3,21 +3,27 @@
 #include "Engine/Assets/Core/Model.hpp"
 #include "Engine/Assets/Core/Node.hpp"
 #include "Engine/Assets/Data/Material.hpp"
+#include "Engine/Assets/Data/RigAsset.hpp"
 #include "Engine/Runtime/Components/RenderComponent.hpp"
 #include "Engine/Utilities/FileHelper.hpp"
 #include "Modules/ScadLoader/FScadCsg.h"
 #include "Modules/ScadLoader/FScadEvaluator.h"
+#include "Modules/ScadLoader/FScadGeometry.h"
 #include "Modules/ScadLoader/FScadLexer.h"
 #include "Modules/ScadLoader/FScadLoader.h"
 #include "Modules/ScadLoader/FScadParser.h"
+#include "Modules/ScadLoader/FScadRig.h"
 #include "Modules/ScadLoader/FScadShared.h"
 #include "Modules/ScadLoader/FScadText.h"
 
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <map>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 
 using namespace Assets::Scad;
@@ -1392,3 +1398,550 @@ TEST_CASE("Astro mechanisms expose movable ab_part_ nodes", "[Unit][Scad][Astro]
     }
     CHECK(checkpoints == 2);
 }
+
+// ---------------------------------------------------------------------------
+// Sculpt primitives and normal shaping (NextDayz visual upgrade V1-1):
+// gk_round_box, gk_sweep, gk_crease, gk_puff_normals, $gk_detail.
+// ---------------------------------------------------------------------------
+
+namespace ScadSculptTest
+{
+    SceneEvalResult EvalScene(const std::string& src)
+    {
+        std::vector<Token> tokens;
+        std::string err;
+        REQUIRE(ScadLexer::Tokenize(src, tokens, err));
+        Scope scope;
+        REQUIRE(ScadParser::Parse(tokens, scope, err));
+
+        std::unordered_map<std::string, StmtPtr> modules;
+        std::unordered_map<std::string, StmtPtr> functions;
+        Scope top;
+        for (const StmtPtr& s : scope)
+        {
+            if (s->kind == StmtKind::ModuleDef)
+                modules[s->name] = s;
+            else if (s->kind == StmtKind::FunctionDef)
+                functions[s->name] = s;
+            else
+                top.push_back(s);
+        }
+        Assets::ScadLoadOptions options;
+        options.parallelTopLevel = false;
+        SceneEvalResult result;
+        std::string evalErr;
+        REQUIRE(ScadEvaluator::EvaluateScene(top, modules, functions, options, result, evalErr));
+        return result;
+    }
+
+    // Every mesh bucket in the scene, depth first.
+    void CollectBuckets(const SceneNode& node, std::vector<const SceneMeshBucket*>& out)
+    {
+        for (const SceneMeshBucket& mesh : node.meshes)
+            out.push_back(&mesh);
+        for (const SceneNode& child : node.children)
+            CollectBuckets(child, out);
+    }
+
+    std::vector<const SceneMeshBucket*> Buckets(const SceneEvalResult& result)
+    {
+        std::vector<const SceneMeshBucket*> out;
+        for (const SceneNode& root : result.roots)
+            CollectBuckets(root, out);
+        return out;
+    }
+
+    size_t CountNodes(const SceneNode& node)
+    {
+        size_t count = 1;
+        for (const SceneNode& child : node.children)
+            count += CountNodes(child);
+        return count;
+    }
+
+    using Key = std::tuple<double, double, double>;
+    Key KeyOf(const glm::dvec3& p) { return {p.x, p.y, p.z}; }
+
+    // Directed-edge census of a triangle soup with exact (bitwise) vertex
+    // identity: a closed, consistently wound surface has every directed edge
+    // exactly once and its reverse exactly once.
+    struct EdgeCensus
+    {
+        size_t unmatched = 0; // edges whose reverse is missing (holes)
+        size_t repeated = 0;  // directed edges used twice (bad winding / non-manifold)
+        size_t degenerate = 0;
+    };
+
+    EdgeCensus CensusOf(const TriSoup& soup)
+    {
+        std::map<std::pair<Key, Key>, int> edges;
+        EdgeCensus census;
+        for (size_t t = 0; t + 2 < soup.size(); t += 3)
+        {
+            const glm::dvec3 cross = glm::cross(soup[t + 1] - soup[t], soup[t + 2] - soup[t]);
+            if (glm::length(cross) < 1e-14)
+                ++census.degenerate;
+            for (int e = 0; e < 3; ++e)
+                ++edges[{KeyOf(soup[t + e]), KeyOf(soup[t + (e + 1) % 3])}];
+        }
+        for (const auto& [edge, count] : edges)
+        {
+            if (count > 1)
+                ++census.repeated;
+            if (edges.find({edge.second, edge.first}) == edges.end())
+                ++census.unmatched;
+        }
+        return census;
+    }
+
+    // Signed volume (divergence theorem): positive for outward winding.
+    double SignedVolume(const TriSoup& soup)
+    {
+        double volume = 0.0;
+        for (size_t t = 0; t + 2 < soup.size(); t += 3)
+            volume += glm::dot(soup[t], glm::cross(soup[t + 1], soup[t + 2])) / 6.0;
+        return volume;
+    }
+
+    std::vector<glm::vec3> ToEngine(const TriSoup& soup)
+    {
+        std::vector<glm::vec3> out;
+        out.reserve(soup.size());
+        for (const glm::dvec3& p : soup)
+            out.push_back(ScadToWorldPos(p, 1.0));
+        return out;
+    }
+
+    // Largest angle (degrees) between normals that share a position: 0 means
+    // the surface shades smooth everywhere, no hard edge.
+    float MaxNormalSplit(const std::vector<glm::vec3>& pos, const std::vector<glm::vec3>& normals)
+    {
+        std::map<std::tuple<float, float, float>, std::vector<glm::vec3>> byPosition;
+        for (size_t i = 0; i < pos.size(); ++i)
+            byPosition[{pos[i].x, pos[i].y, pos[i].z}].push_back(normals[i]);
+        float worst = 0.0f;
+        for (const auto& [position, list] : byPosition)
+            for (const glm::vec3& n : list)
+                worst = std::max(worst, glm::degrees(std::acos(std::clamp(glm::dot(n, list.front()), -1.0f, 1.0f))));
+        return worst;
+    }
+
+TEST_CASE("gk_round_box is a closed, outward-wound box with exact seams", "[Unit][Scad]")
+{
+    for (int segs : {1, 2, 3, 5})
+    {
+        INFO("segs " << segs);
+        TriSoup soup;
+        ScadGeometry::BuildRoundBox(glm::dvec3(2.0, 1.0, 0.6), 0.1, segs, 2.0, true, soup);
+        const EdgeCensus census = CensusOf(soup);
+        CHECK(census.unmatched == 0);
+        CHECK(census.repeated == 0);
+        CHECK(census.degenerate == 0);
+
+        glm::dvec3 lo(1e9), hi(-1e9);
+        for (const glm::dvec3& p : soup)
+        {
+            lo = glm::min(lo, p);
+            hi = glm::max(hi, p);
+        }
+        CHECK(lo.x == Catch::Approx(-1.0));
+        CHECK(hi.z == Catch::Approx(0.3));
+        // Box volume minus what the rounding shaves off, never more than the box.
+        const double volume = SignedVolume(soup);
+        CHECK(volume > 0.0);
+        CHECK(volume < 2.0 * 1.0 * 0.6);
+        CHECK(volume > 2.0 * 1.0 * 0.6 * 0.95);
+    }
+}
+
+TEST_CASE("gk_round_box with three arc segments shades smooth at the default threshold", "[Unit][Scad]")
+{
+    TriSoup soup;
+    ScadGeometry::BuildRoundBox(glm::dvec3(1.0), 0.2, 3, 2.0, true, soup);
+    const std::vector<glm::vec3> pos = ToEngine(soup);
+    // 30 deg steps stay under the 35 deg default: no hard edge anywhere,
+    // including the 45 deg seams where two faces meet (float noise only).
+    CHECK(MaxNormalSplit(pos, ScadComputeSmoothNormals(pos, 35.0f)) < 0.1f);
+    // A single segment is a chamfer: it keeps creases.
+    TriSoup chamfer;
+    ScadGeometry::BuildRoundBox(glm::dvec3(1.0), 0.2, 1, 2.0, true, chamfer);
+    const std::vector<glm::vec3> chamferPos = ToEngine(chamfer);
+    CHECK(MaxNormalSplit(chamferPos, ScadComputeSmoothNormals(chamferPos, 35.0f)) > 20.0f);
+}
+
+TEST_CASE("gk_round_box clamps its radius and degrades to a cube", "[Unit][Scad]")
+{
+    TriSoup cube;
+    ScadGeometry::BuildRoundBox(glm::dvec3(1.0, 2.0, 3.0), 0.0, 3, 2.0, false, cube);
+    CHECK(cube.size() == 36);
+
+    TriSoup clamped;
+    ScadGeometry::BuildRoundBox(glm::dvec3(1.0, 2.0, 3.0), 5.0, 3, 2.0, false, clamped);
+    CHECK(CensusOf(clamped).unmatched == 0);
+    CHECK(CensusOf(clamped).degenerate == 0);
+    for (const glm::dvec3& p : clamped)
+    {
+        CHECK(p.x >= -1e-9);
+        CHECK(p.x <= 1.0 + 1e-9);
+    }
+
+    // Non-positive size is an authoring error: warned and skipped.
+    const SceneEvalResult result = EvalScene("gk_round_box([1, 0, 1]);\n");
+    CHECK(result.warningCount == 1);
+    CHECK(result.triangleCount == 0);
+}
+
+TEST_CASE("$gk_detail scales the sculpt primitives", "[Unit][Scad]")
+{
+    const SceneEvalResult full = EvalScene("gk_round_box([1, 1, 1], r = 0.2, segs = 4);\n");
+    const SceneEvalResult half = EvalScene("$gk_detail = 0.5;\ngk_round_box([1, 1, 1], r = 0.2, segs = 4);\n");
+    CHECK(full.warningCount == 0);
+    CHECK(half.triangleCount > 0);
+    CHECK(half.triangleCount < full.triangleCount);
+
+    const SceneEvalResult tube = EvalScene("gk_sweep([[0,0,0],[0,0,1]], 0.1, fn = 16);\n");
+    const SceneEvalResult thin = EvalScene("$gk_detail = 0.5;\ngk_sweep([[0,0,0],[0,0,1]], 0.1, fn = 16);\n");
+    CHECK(thin.triangleCount < tube.triangleCount);
+}
+
+TEST_CASE("gk_sweep builds closed tubes with flat and round caps", "[Unit][Scad]")
+{
+    const std::vector<glm::dvec3> points = {{0, 0, 0}, {0.2, 0, 1}, {0.6, 0.3, 1.8}, {1.4, 0.3, 2.2}};
+    const std::vector<double> radii = {0.25, 0.18, 0.12, 0.05};
+    for (ScadGeometry::SweepCap cap : {ScadGeometry::SweepCap::Flat, ScadGeometry::SweepCap::Round})
+    {
+        TriSoup soup;
+        ScadGeometry::BuildSweep(points, radii, 12, cap, 0.0, 1.0, soup);
+        REQUIRE_FALSE(soup.empty());
+        const EdgeCensus census = CensusOf(soup);
+        CHECK(census.unmatched == 0);
+        CHECK(census.repeated == 0);
+        CHECK(census.degenerate == 0);
+        CHECK(SignedVolume(soup) > 0.0);
+    }
+
+    TriSoup open;
+    ScadGeometry::BuildSweep(points, radii, 12, ScadGeometry::SweepCap::None, 0.0, 1.0, open);
+    CHECK(CensusOf(open).unmatched == 24); // the two end rings are open
+}
+
+TEST_CASE("gk_sweep frames do not flip through an inflection", "[Unit][Scad]")
+{
+    // A planar S-curve: a Frenet frame turns 180 deg at the inflection and
+    // twists the tube through itself. With a parallel-transport frame every
+    // side face points away from the centreline.
+    std::vector<glm::dvec3> points;
+    for (int i = 0; i <= 12; ++i)
+        points.emplace_back(i * 0.5, std::sin(i * 0.5), 0.0);
+    const double radius = 0.12;
+    TriSoup soup;
+    ScadGeometry::BuildSweep(points, std::vector<double>(points.size(), radius), 12, ScadGeometry::SweepCap::None, 0.0,
+                             1.0, soup);
+    REQUIRE_FALSE(soup.empty());
+
+    std::vector<glm::dvec3> curve;
+    for (int i = 0; i <= 6000; ++i)
+    {
+        const double x = i * 0.001;
+        curve.emplace_back(x, std::sin(x), 0.0);
+    }
+    size_t inward = 0;
+    for (size_t t = 0; t + 2 < soup.size(); t += 3)
+    {
+        const glm::dvec3 centroid = (soup[t] + soup[t + 1] + soup[t + 2]) / 3.0;
+        const glm::dvec3 normal = glm::cross(soup[t + 1] - soup[t], soup[t + 2] - soup[t]);
+        glm::dvec3 nearest = curve.front();
+        for (const glm::dvec3& c : curve)
+            if (glm::length(c - centroid) < glm::length(nearest - centroid))
+                nearest = c;
+        if (glm::dot(normal, centroid - nearest) <= 0.0)
+            ++inward;
+    }
+    CHECK(inward == 0);
+    for (const glm::dvec3& p : soup)
+        CHECK(std::abs(p.z) <= radius + 1e-9);
+}
+
+TEST_CASE("gk_sweep warns on bad input", "[Unit][Scad]")
+{
+    CHECK(EvalScene("gk_sweep([[0,0,0]], 0.1);\n").warningCount == 1);
+    CHECK(EvalScene("gk_sweep([[0,0,0],[0,0,1]], [0.1, 0.2, 0.3]);\n").warningCount == 1);
+    CHECK(EvalScene("gk_sweep([[0,0,0],[0,0,1]], 0.1, cap = \"square\");\n").warningCount == 1);
+}
+
+TEST_CASE("gk_crease reaches geometry in nested module nodes", "[Unit][Scad]")
+{
+    // $fn by assignment: the evaluator does not read special variables passed
+    // as call arguments (cylinder(..., $fn = 8)).
+    const SceneEvalResult result = EvalScene("$fn = 8;\n"
+                                             "module limb() cylinder(r = 0.1, h = 0.4);\n"
+                                             "gk_crease(60) limb();\n"
+                                             "translate([1, 0, 0]) limb();\n");
+    CHECK(result.warningCount == 0);
+    const auto buckets = Buckets(result);
+    REQUIRE(buckets.size() == 2);
+
+    size_t creased = 0;
+    for (const SceneMeshBucket* bucket : buckets)
+    {
+        const std::vector<glm::vec3> pos = ToEngine(bucket->tris);
+        const std::vector<glm::vec3> normals = ScadComputeShadedNormals(pos, 35.0f, bucket->normalSpans, bucket->normals, 1.0);
+        if (bucket->normalSpans.empty())
+        {
+            // 45 deg between the sides of an octagon: hard at the default 35.
+            CHECK(MaxNormalSplit(pos, normals) > 40.0f);
+            continue;
+        }
+        ++creased;
+        REQUIRE(bucket->normalSpans.size() == 1);
+        CHECK(bucket->normalSpans[0].shading.smoothAngleDegrees == Catch::Approx(60.0f));
+        CHECK(bucket->normalSpans[0].triCount == bucket->tris.size() / 3);
+        // At 60 the sides blend; only the 90 deg cap rims stay hard.
+        size_t sideSplits = 0;
+        for (size_t i = 0; i < pos.size(); ++i)
+        {
+            const glm::vec3 face = glm::normalize(
+                glm::cross(pos[i / 3 * 3 + 1] - pos[i / 3 * 3], pos[i / 3 * 3 + 2] - pos[i / 3 * 3]));
+            if (std::abs(face.y) < 0.5f && glm::dot(face, normals[i]) > 0.9999f)
+                ++sideSplits;
+        }
+        CHECK(sideSplits == 0);
+    }
+    CHECK(creased == 1);
+}
+
+TEST_CASE("gk_crease survives CSG and zero means hard facets", "[Unit][Scad]")
+{
+    const SceneEvalResult result =
+        EvalScene("gk_crease(0) hull() { sphere(r = 0.5, $fn = 16); translate([1, 0, 0]) sphere(r = 0.5, $fn = 16); }\n");
+    const auto buckets = Buckets(result);
+    REQUIRE(buckets.size() == 1);
+    REQUIRE(buckets[0]->normalSpans.size() == 1);
+    CHECK(buckets[0]->normalSpans[0].shading.smoothAngleDegrees == 0.0f);
+}
+
+TEST_CASE("gk_puff_normals bends a blob's normals toward its centre", "[Unit][Scad]")
+{
+    const SceneEvalResult result = EvalScene("module lobe() sphere(r = 1, $fn = 12);\n"
+                                             "gk_puff_normals(strength = 1, upBias = 0) {\n"
+                                             "    color([0.2, 0.4, 0.1]) lobe();\n"
+                                             "    color([0.3, 0.5, 0.1]) translate([1.2, 0, 0]) lobe();\n"
+                                             "}\n");
+    CHECK(result.warningCount == 0);
+    // The blob is one piece: no nested node per lobe.
+    size_t nodes = 0;
+    for (const SceneNode& root : result.roots)
+        nodes += CountNodes(root);
+    CHECK(nodes == 1);
+
+    const auto buckets = Buckets(result);
+    REQUIRE(buckets.size() == 2);
+    // The centre is the middle of both lobes' bounding box.
+    glm::dvec3 lo(1e9), hi(-1e9);
+    for (const SceneMeshBucket* bucket : buckets)
+        for (const glm::dvec3& p : bucket->tris)
+        {
+            lo = glm::min(lo, p);
+            hi = glm::max(hi, p);
+        }
+    const glm::vec3 centre = ScadToWorldPos(0.5 * (lo + hi), 1.0);
+    for (const SceneMeshBucket* bucket : buckets)
+    {
+        REQUIRE(bucket->normalSpans.size() == 1);
+        const ScadShading& shading = bucket->normalSpans[0].shading;
+        CHECK(shading.puff);
+        CHECK(shading.puffCenter.x == Catch::Approx(0.5 * (lo.x + hi.x)));
+        CHECK(shading.puffCenter.z == Catch::Approx(0.5 * (lo.z + hi.z)));
+        // Half the longest bounding-box side: (1.2 + 2 * ~0.97) / 2.
+        CHECK(shading.puffRadius > 1.4);
+        CHECK(shading.puffRadius < 1.7);
+
+        const std::vector<glm::vec3> pos = ToEngine(bucket->tris);
+        const std::vector<glm::vec3> normals = ScadComputeShadedNormals(pos, 35.0f, bucket->normalSpans, bucket->normals, 1.0);
+        size_t radialCorners = 0;
+        size_t clampedCorners = 0;
+        for (size_t i = 0; i < pos.size(); ++i)
+        {
+            const size_t t = i / 3 * 3;
+            const glm::vec3 face = glm::normalize(glm::cross(pos[t + 1] - pos[t], pos[t + 2] - pos[t]));
+            const glm::vec3 radial = glm::normalize(pos[i] - centre);
+            if (glm::dot(radial, face) >= 0.26f)
+            {
+                // Strength 1: the normal is the direction from the blob centre.
+                CHECK(glm::dot(normals[i], radial) == Catch::Approx(1.0f).margin(1e-4f));
+                ++radialCorners;
+            }
+            else
+            {
+                // Faces turned toward the centre (where the lobes overlap) keep
+                // their normal on their own side instead of shading black.
+                CHECK(glm::dot(normals[i], face) >= 0.25f - 1e-4f);
+                ++clampedCorners;
+            }
+        }
+        CHECK(radialCorners > clampedCorners);
+    }
+}
+
+TEST_CASE("ScadRig keeps gk_crease and gk_puff_normals in bone parts", "[Unit][ScadRig]")
+{
+    const SceneEvalResult result =
+        EvalScene("$fn = 8;\n"
+                  "module bone_root() { translate([0, 0, 1]) bone_arm(); }\n"
+                  "module bone_arm() {\n"
+                  "    gk_crease(60) cylinder(r = 0.05, h = 0.3);\n"
+                  "    translate([0.5, 0, 0]) gk_puff_normals(strength = 1, upBias = 0) sphere(r = 0.1);\n"
+                  "}\n"
+                  "bone_root();\n");
+    Assets::FRigAsset asset;
+    std::string err;
+    REQUIRE(Assets::FScadRigLoader::BuildRig(result, Assets::ScadRigLoadOptions{}, asset, err));
+
+    const Assets::FRigPart* arm = nullptr;
+    for (const Assets::FRigPart& part : asset.parts)
+        if (part.bone >= 0 && asset.bones[static_cast<size_t>(part.bone)].name == "bone_arm")
+            arm = &part;
+    REQUIRE(arm != nullptr);
+    const std::vector<Assets::Vertex>& vertices = asset.partModels[static_cast<size_t>(arm->modelIndex)].CPUVertices();
+    REQUIRE_FALSE(vertices.empty());
+
+    // The puff centre is the sphere's bounding-box centre, in bone space.
+    glm::vec3 lo(1e9f), hi(-1e9f);
+    for (const Assets::Vertex& v : vertices)
+        if (v.Position.x > 0.3f)
+        {
+            lo = glm::min(lo, v.Position);
+            hi = glm::max(hi, v.Position);
+        }
+    const glm::vec3 centre = 0.5f * (lo + hi);
+    CHECK(centre.x == Catch::Approx(0.5f).margin(1e-3f));
+    size_t puffed = 0;
+    size_t smoothSides = 0;
+    for (const Assets::Vertex& v : vertices)
+    {
+        if (v.Position.x > 0.3f)
+        {
+            const glm::vec3 radial = glm::normalize(v.Position - centre);
+            CHECK(glm::dot(v.Normal, radial) == Catch::Approx(1.0f).margin(1e-4f));
+            ++puffed;
+        }
+        else if (std::abs(v.Normal.y) < 0.5f)
+        {
+            // Octagon sides at 60: corners blend the two faces they join, so a
+            // normal never lines up with one of the eight face directions.
+            const float angle = glm::degrees(std::atan2(v.Normal.z, v.Normal.x));
+            const float offFace = std::abs(std::remainder(angle - 22.5f, 45.0f));
+            CHECK(offFace > 5.0f);
+            ++smoothSides;
+        }
+    }
+    CHECK(puffed > 0);
+    CHECK(smoothSides > 0);
+}
+
+TEST_CASE("gk_round_box authors its exact surface normals", "[Unit][Scad]")
+{
+    const glm::dvec3 size(1.2, 0.8, 0.6);
+    const double r = 0.15;
+    TriSoup soup;
+    TriSoup normals;
+    ScadGeometry::BuildRoundBox(size, r, 3, 2.0, true, soup, &normals);
+    REQUIRE(normals.size() == soup.size());
+    // On a rounded box the normal at a point is the direction from the nearest
+    // point of the inner (shrunk) box.
+    const glm::dvec3 inner = size * 0.5 - glm::dvec3(r);
+    for (size_t i = 0; i < soup.size(); ++i)
+    {
+        const glm::dvec3 expected = glm::normalize(soup[i] - glm::clamp(soup[i], -inner, inner));
+        CHECK(glm::dot(normals[i], expected) == Catch::Approx(1.0).margin(1e-9));
+    }
+
+    // Superellipsoid corners still point outward.
+    TriSoup squarish;
+    TriSoup squarishNormals;
+    ScadGeometry::BuildRoundBox(size, r, 4, 4.0, true, squarish, &squarishNormals);
+    REQUIRE(squarishNormals.size() == squarish.size());
+    for (size_t i = 0; i < squarish.size(); ++i)
+    {
+        CHECK(glm::dot(squarishNormals[i], squarish[i] - glm::clamp(squarish[i], -inner, inner)) > 0.0);
+    }
+}
+
+TEST_CASE("Authored normals survive transforms and mixed buckets", "[Unit][Scad]")
+{
+    const SceneEvalResult result =
+        EvalScene("color([0.5, 0.4, 0.3]) {\n"
+                  "    cube(0.5);\n"
+                  "    translate([2, 0, 0]) mirror([1, 0, 0]) scale([2, 1, 0.5]) gk_round_box([1, 1, 1], r = 0.2);\n"
+                  "}\n");
+    const auto buckets = Buckets(result);
+    REQUIRE(buckets.size() == 1);
+    const SceneMeshBucket& bucket = *buckets[0];
+    REQUIRE(bucket.normals.size() == bucket.tris.size());
+    // The cube came first and authored nothing: its corners are "compute".
+    for (size_t i = 0; i < 36; ++i)
+        CHECK(glm::length(bucket.normals[i]) == 0.0);
+    // The mirrored, squashed box: unit normals, outward from its centre (2, 0, 0).
+    for (size_t i = 36; i < bucket.tris.size(); ++i)
+    {
+        CHECK(glm::length(bucket.normals[i]) == Catch::Approx(1.0));
+        CHECK(glm::dot(bucket.normals[i], bucket.tris[i] - glm::dvec3(2.0, 0.0, 0.0)) > 0.0);
+    }
+
+    // The loader uses them as they are (SCAD -> engine axes) and computes the rest.
+    const std::vector<glm::vec3> pos = ToEngine(bucket.tris);
+    const std::vector<glm::vec3> shaded = ScadComputeShadedNormals(pos, 35.0f, bucket.normalSpans, bucket.normals, 1.0);
+    for (size_t i = 36; i < pos.size(); ++i)
+    {
+        const glm::dvec3& n = bucket.normals[i];
+        CHECK(glm::dot(shaded[i], glm::vec3(float(n.x), float(n.z), float(-n.y))) == Catch::Approx(1.0f).margin(1e-5f));
+    }
+    const std::vector<glm::vec3> cubeOnly(pos.begin(), pos.begin() + 36);
+    const std::vector<glm::vec3> cubeNormals = ScadComputeSmoothNormals(cubeOnly, 35.0f);
+    for (size_t i = 0; i < 36; ++i)
+        CHECK(shaded[i] == cubeNormals[i]);
+}
+
+TEST_CASE("gk_sweep authors tube, taper and cap normals", "[Unit][Scad]")
+{
+    TriSoup soup;
+    TriSoup normals;
+    ScadGeometry::BuildSweep({{0, 0, 0}, {0, 0, 2}}, {0.2, 0.2}, 12, ScadGeometry::SweepCap::Flat, 0.0, 1.0, soup,
+                             &normals);
+    REQUIRE(normals.size() == soup.size());
+    size_t side = 0;
+    size_t caps = 0;
+    for (size_t t = 0; t + 2 < soup.size(); t += 3)
+    {
+        const bool cap = soup[t].z == soup[t + 1].z && soup[t].z == soup[t + 2].z;
+        for (size_t c = 0; c < 3; ++c)
+        {
+            const glm::dvec3& n = normals[t + c];
+            if (cap)
+            {
+                CHECK(std::abs(n.z) == Catch::Approx(1.0));
+                ++caps;
+            }
+            else
+            {
+                // A straight cylinder: radial, horizontal normals.
+                CHECK(n.z == Catch::Approx(0.0).margin(1e-12));
+                const glm::dvec3 radial = glm::normalize(glm::dvec3(soup[t + c].x, soup[t + c].y, 0.0));
+                CHECK(glm::dot(n, radial) == Catch::Approx(1.0));
+                ++side;
+            }
+        }
+    }
+    CHECK(side > 0);
+    CHECK(caps > 0);
+
+    // A cone-like taper leans the side normals toward the thin end (+z here).
+    TriSoup cone;
+    TriSoup coneNormals;
+    ScadGeometry::BuildSweep({{0, 0, 0}, {0, 0, 1}}, {0.4, 0.1}, 12, ScadGeometry::SweepCap::None, 0.0, 1.0, cone,
+                             &coneNormals);
+    const double lean = std::atan(0.3); // dr/ds = -0.3
+    for (const glm::dvec3& n : coneNormals)
+        CHECK(n.z == Catch::Approx(std::sin(lean)).margin(1e-9));
+}
+} // namespace ScadSculptTest

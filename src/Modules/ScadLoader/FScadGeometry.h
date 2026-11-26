@@ -47,5 +47,32 @@ namespace Assets::Scad
                                        double angleDeg,
                                        int segments,
                                        TriSoup& out);
+
+        // gk_round_box: a closed box whose edges and corners are rounded with
+        // `arcSegments` steps per quarter arc. Each face owns its flat part and
+        // the arcs up to 45 deg on its side, so all six faces share exact seam
+        // vertices (watertight, and smooth normals meet across the seams).
+        // r is clamped to 0.49 * min(size); power != 2 squares the corners
+        // into a superellipsoid (larger = squarer). outNormals, when given,
+        // receives the exact surface normal of every corner, parallel to out.
+        static void BuildRoundBox(const glm::dvec3& size, double r, int arcSegments, double power, bool center,
+                                  TriSoup& out, TriSoup* outNormals = nullptr);
+
+        enum class SweepCap
+        {
+            None,
+            Flat,
+            Round
+        };
+
+        // gk_sweep: a tube through `points` (chordal Catmull-Rom), radius
+        // interpolated from `radii` (one per point). Rings ride a parallel
+        // transport (rotation-minimising) frame, so the tube never flips at
+        // an inflection; `twistDeg` turns the rings progressively along it.
+        // detail scales the number of samples per bend. outNormals, when given,
+        // receives exact normals (taper-aware sides, sphere caps, flat caps).
+        static void BuildSweep(const std::vector<glm::dvec3>& points, const std::vector<double>& radii, int sides,
+                               SweepCap cap, double twistDeg, double detail, TriSoup& out,
+                               TriSoup* outNormals = nullptr);
     };
 } // namespace Assets::Scad

@@ -5,6 +5,7 @@
 #include "Modules/ScadLoader/FScadShared.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <map>
 #include <unordered_set>
@@ -48,6 +49,8 @@ namespace Assets
             glm::vec2 surface{1.0f, 0.0f}; // (roughness, metalness)
             FProceduralTextureRef texture; // gk_texture() print, UVs projected in the bone-local frame
             std::vector<glm::dvec3> tris; // SCAD space, baked into bone-pivot-local frame
+            std::vector<Scad::ScadNormalSpan> normalSpans; // gk_crease / gk_puff_normals, same frame as tris
+            std::vector<glm::dvec3> normals; // authored normals parallel to tris (empty = none)
         };
 
         class RigBuilder
@@ -131,12 +134,45 @@ namespace Assets
                     bucket.surface = glm::vec2(std::clamp(mesh.material.roughness, 0.0f, 1.0f),
                                                std::clamp(mesh.material.metalness, 0.0f, 1.0f));
                     bucket.texture = mesh.material.texture;
+                    const size_t firstTri = bucket.tris.size() / 3;
                     bucket.tris.reserve(bucket.tris.size() + mesh.tris.size());
-                    const bool flipWinding = glm::determinant(glm::dmat3(accum)) < 0.0;
+                    const double determinant = glm::determinant(glm::dmat3(accum));
+                    const bool flipWinding = determinant < 0.0;
+                    for (const Scad::ScadNormalSpan& span : mesh.normalSpans)
+                    {
+                        // Re-based onto this bucket and baked into the bone frame like the tris.
+                        Scad::ScadShading shading = span.shading;
+                        shading.puffCenter = glm::dvec3(accum * glm::dvec4(shading.puffCenter, 1.0));
+                        shading.puffRadius *= std::cbrt(std::abs(determinant));
+                        Scad::AppendNormalSpan(bucket.normalSpans, firstTri + span.firstTri, span.triCount, shading);
+                    }
                     const auto transform = [&accum](const glm::dvec3& point)
                     {
                         return glm::dvec3(accum * glm::dvec4(point, 1.0));
                     };
+                    if (!mesh.normals.empty() || !bucket.normals.empty())
+                    {
+                        // Authored normals ride along: inverse transpose, same winding swap.
+                        std::vector<glm::dvec3> carried;
+                        if (mesh.normals.size() == mesh.tris.size())
+                        {
+                            const glm::dmat3 normalMatrix = glm::transpose(glm::inverse(glm::dmat3(accum)));
+                            const auto carry = [&normalMatrix](const glm::dvec3& n)
+                            {
+                                const glm::dvec3 m = normalMatrix * n;
+                                const double length = glm::length(m);
+                                return length > 1e-12 ? m / length : glm::dvec3(0.0);
+                            };
+                            carried.reserve(mesh.normals.size());
+                            for (size_t i = 0; i + 2 < mesh.normals.size(); i += 3)
+                            {
+                                carried.push_back(carry(mesh.normals[i]));
+                                carried.push_back(carry(mesh.normals[i + (flipWinding ? 2 : 1)]));
+                                carried.push_back(carry(mesh.normals[i + (flipWinding ? 1 : 2)]));
+                            }
+                        }
+                        Scad::AppendAuthoredNormals(bucket.normals, bucket.tris.size(), mesh.tris.size(), carried);
+                    }
                     for (size_t i = 0; i + 2 < mesh.tris.size(); i += 3)
                     {
                         bucket.tris.push_back(transform(mesh.tris[i]));
@@ -241,7 +277,8 @@ namespace Assets
                             localPos[i] = Scad::ScadToWorldPos(bucket.tris[i], Scale());
                         }
                         const std::vector<glm::vec3> normals =
-                            Scad::ScadComputeSmoothNormals(localPos, options_.smoothAngleDegrees);
+                            Scad::ScadComputeShadedNormals(localPos, options_.smoothAngleDegrees,
+                                                           bucket.normalSpans, bucket.normals, Scale());
                         // Bone-local projection: a print on a sleeve stays put as the arm swings.
                         std::vector<glm::vec2> uvs(localPos.size(), glm::vec2(0.0f));
                         std::vector<glm::vec4> tangents(localPos.size(), glm::vec4(1, 0, 0, 1));

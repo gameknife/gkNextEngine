@@ -241,7 +241,8 @@ namespace Assets
                 // Terrain buckets stay faceted: smoothing would wash the low-poly
                 // facets on gentle slopes into a soft gradient.
                 const float bucketSmoothAngle = bucket.faceted ? 0.0f : smoothAngleDegrees;
-                const std::vector<glm::vec3> normals = Scad::ScadComputeSmoothNormals(localPos, bucketSmoothAngle);
+                const std::vector<glm::vec3> normals =
+                    Scad::ScadComputeShadedNormals(localPos, bucketSmoothAngle, bucket.normalSpans, bucket.normals, scale);
                 // gk_texture(): UVs come from the node-local SCAD positions (Z up), so
                 // the print keeps its size and stays on the object as it moves.
                 std::vector<glm::vec2> uvs(localPos.size(), glm::vec2(0.0f));

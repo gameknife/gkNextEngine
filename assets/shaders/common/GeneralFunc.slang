@@ -87,6 +87,18 @@ namespace Common
 
         result.Position = mad(float3(barycentrics.x), positions[0], mad(float3(barycentrics.y), positions[1], barycentrics.z * positions[2]));
         result.Normal = normalize(mad(float3(barycentrics.x), normals[0], mad(float3(barycentrics.y), normals[1], barycentrics.z * normals[2])));
+        // Smooth vertex normals overhang a low-poly silhouette: a triangle that
+        // faces the camera can interpolate a normal that faces away from it, and
+        // that pixel then shades as a back face (a black rim along the outline).
+        // Keep the shading normal on the visible side, as relief normals are.
+        if (dot(cross(edges[0], edges[1]), ray_direction) < 0.0f)
+        {
+            const float lean = -dot(result.Normal, ray_direction);
+            if (lean < 0.05f)
+            {
+                result.Normal = normalize(result.Normal - ray_direction * (0.05f - lean));
+            }
+        }
         result.Tangent.xyz = normalize(mad(float3(barycentrics.x), tangents[0], mad(float3(barycentrics.y), tangents[1], barycentrics.z * tangents[2])));
         result.TexCoord = mad(float2(barycentrics.x), tex_coords[0], mad(float2(barycentrics.y), tex_coords[1], barycentrics.z * tex_coords[2]));
         result.LocalNormal =  mad(float3(barycentrics.x), localNormals[0], mad(float3(barycentrics.y), localNormals[1], barycentrics.z * localNormals[2]));

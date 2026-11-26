@@ -53,6 +53,71 @@ namespace Assets
         inline constexpr double kDeg2Rad = kPi / 180.0;
 
         // ------------------------------------------------------------------
+        // Normal shaping a subtree asks for (gk_crease / gk_puff_normals).
+        // Geometry carries it from the evaluator to whoever computes vertex
+        // normals; the default value means "loader default, no puff".
+        // ------------------------------------------------------------------
+        struct ScadShading
+        {
+            // Smoothing threshold for this geometry; < 0 keeps the loader's
+            // default (ScadLoadOptions::smoothAngleDegrees), 0 is flat shading.
+            float smoothAngleDegrees = -1.0f;
+            // gk_puff_normals: bend normals toward the direction from the
+            // blob's centre, so a cluster of spheres shades as one volume.
+            bool puff = false;
+            glm::dvec3 puffCenter = glm::dvec3(0.0); // same space as the tris it applies to
+            double puffRadius = 0.0;
+            float puffStrength = 0.0f;
+            float puffUpBias = 0.0f;
+
+            bool IsDefault() const { return smoothAngleDegrees < 0.0f && !puff; }
+        };
+
+        // A run of triangles in a mesh bucket that does not use the default
+        // shading. Buckets merge geometry by material only, so one bucket can
+        // hold several spans (a flattened forest: one puff per crown).
+        struct ScadNormalSpan
+        {
+            uint32_t firstTri = 0;
+            uint32_t triCount = 0;
+            ScadShading shading;
+        };
+
+        inline void AppendNormalSpan(std::vector<ScadNormalSpan>& spans, size_t firstTri, size_t triCount,
+                                     const ScadShading& shading)
+        {
+            if (triCount == 0 || shading.IsDefault())
+            {
+                return;
+            }
+            spans.push_back({static_cast<uint32_t>(firstTri), static_cast<uint32_t>(triCount), shading});
+        }
+
+        // Appends `normals` (or, when they are not one per corner, `count` zero
+        // "compute this corner" entries) to a bucket's authored-normal channel,
+        // which runs parallel to its tris; channelTarget is the tris size before
+        // this append. A bucket that never receives an authored normal keeps an
+        // empty channel.
+        inline void AppendAuthoredNormals(std::vector<glm::dvec3>& channel, size_t channelTarget, size_t count,
+                                          const std::vector<glm::dvec3>& normals)
+        {
+            const bool authored = count > 0 && normals.size() == count;
+            if (!authored && channel.empty())
+            {
+                return;
+            }
+            channel.resize(channelTarget, glm::dvec3(0.0)); // back-fill earlier geometry
+            if (authored)
+            {
+                channel.insert(channel.end(), normals.begin(), normals.end());
+            }
+            else
+            {
+                channel.resize(channelTarget + count, glm::dvec3(0.0));
+            }
+        }
+
+        // ------------------------------------------------------------------
         // Value: the runtime variant used during evaluation.
         // ------------------------------------------------------------------
         struct Value

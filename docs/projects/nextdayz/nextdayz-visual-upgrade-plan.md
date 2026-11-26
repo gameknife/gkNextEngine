@@ -1,7 +1,7 @@
 ---
 title: "NextDayz 皮克斯感 Low-Poly 视觉升级实施计划"
 category: plan
-status: 进行中（V0-1 已完成，V1–V5 待实施）
+status: 进行中（V0-1、V1-1 已完成，V1-2 起待实施）
 owner: NextDayz
 created: 2026-11-26
 last_updated: 2026-11-26
@@ -23,7 +23,7 @@ last_updated: 2026-11-26
 | 阶段 | 任务编号 | 状态 | 核心产出 |
 | :--- | :--- | :--- | :--- |
 | P0 视觉标杆切片 | `V0-1` | 已完成 | 40m×40m 全要素 Lookdev 微缩样板间与 4 机位基准图 |
-| P1 SCAD 与着色底座 | `V1-1` ～ `V1-3` | 未开始 | 圆角/扫掠/法线原语、SSS/Sheen/Foliage 着色、烘焙顶点 AO 与宏尺度打散 |
+| P1 SCAD 与着色底座 | `V1-1` ～ `V1-3` | 进行中（V1-1 已完成） | 圆角/扫掠/法线原语、SSS/Sheen/Foliage 着色、烘焙顶点 AO 与宏尺度打散 |
 | P2 电影光影与大厅 | `V2-1` ～ `V2-2` | 未开始 | 透光窗户点亮室内、户外冷暖色调调校、直升机机舱大厅电影级重塑 |
 | P3 角色与武器 2.0 | `V3-1` ～ `V3-4` | 未开始 | 幸存者五官眼神光与 SSS 皮肤、圆角绒光服装、感染者放样重写、武器捕光边 |
 | P4 植被与草海 2.0 | `V4-1` ～ `V4-3` | 未开始 | 蓬松透光地域树种、柔弧融合且随地域变色的运行时草地、画意过程纹理 |
@@ -47,6 +47,12 @@ last_updated: 2026-11-26
 ## P1：SCAD 雕塑几何与皮克斯触感着色底座
 
 ### `V1-1` 实现 `ScadLoader` 雕塑几何与法线控制原语
+- **状态**：已完成。语言面与实现契约已并入 `docs/AGENT_GUIDE/SCADLoader.md`「雕塑原语与法线控制」；对照台 `assets/scad/source/others/gk_sculpt_demo.scad`；单测在 `src/Tests/Test_ScadLoader.cpp` 的 `ScadSculptTest` 段（`[Scad]` / `[ScadRig]`）。
+- **超出原计划、一并完成的修正**：
+  1. `gk_round_box` / `gk_sweep` 自带精确法线（按位置估算的法线在圆角拐角处偏 6–12°，截图上是凹痕）；
+  2. `cylinder` / `sphere` 的接缝顶点改为精确复用（`sin(2π) ≠ 0` 让接缝两侧顶点差最后一位，平滑法线在每根圆柱、每个球上留一道硬线，球的南极是一个暗点），法线平滑的位置哈希把 `-0` 与 `+0` 归一；
+  3. 主表面重建（`GeneralFunc.slang`）把背向相机的插值法线掰回可见一侧，消除平滑/蓬松法线在低模轮廓上的黑边。
+- **遗留给后续步骤**：求值器不读作为调用参数传入的特殊变量（`cylinder(r = 1, $fn = 8)` 的 `$fn` 被忽略，只认作用域里的 `$fn = 8;`）。kit 里大量这样写；修正会改变全库网格细分，单独评估后再做。
 - **范围**：`src/Modules/ScadLoader/{FScadGeometry.*,FScadEvaluator.Detail.h,FScadEvaluator.Geometry.cpp,FScadLoader.cpp,FScadRig.cpp,FScadShared.*}`、`src/Tests/Test_Scad*.cpp`。
 - **内容**：
   1. 实现内置变量 `$gk_detail = 1.0`；

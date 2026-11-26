@@ -45,7 +45,11 @@ namespace Assets::Scad
             std::string materialName;
             std::string groupName;
             uint64_t groupInstanceId = 0;
+            ScadShading shading; // gk_crease / gk_puff_normals
             TriSoup soup;
+            // Authored per-corner normals parallel to soup (empty = computed by
+            // the loader). Only sculpt primitives author them; CSG results drop them.
+            TriSoup normals;
         };
         using GeomList = std::vector<ColoredSoup>;
 
@@ -393,6 +397,7 @@ namespace Assets::Scad
             std::vector<GroupFrame> moduleCallStack_;
             std::vector<std::string> materialNameStack_;
             std::vector<ScadMaterialProperties> materialPropertiesStack_;
+            std::vector<float> creaseStack_; // gk_crease() thresholds, innermost last
             std::string topLevelFallbackLabel_;
             uint64_t topLevelFallbackInstanceId_ = 0;
             uint64_t nextGroupInstanceId_ = 1;
@@ -471,6 +476,10 @@ namespace Assets::Scad
                 ctx_.Set("$fa", Value::MakeNumber(12.0));
                 ctx_.Set("$fs", Value::MakeNumber(2.0));
                 ctx_.Set("$t", Value::MakeNumber(0.0));
+                // Detail scale for the sculpt primitives (gk_round_box arc
+                // segments, gk_sweep sides/steps). A baker targeting a weak
+                // device sets it lower, e.g. $gk_detail = 0.5.
+                ctx_.Set("$gk_detail", Value::MakeNumber(1.0));
                 ctx_.Set("PI", Value::MakeNumber(kPi));
             }
 
@@ -498,6 +507,8 @@ namespace Assets::Scad
                     bucket.material = cs.material;
                     bucket.groupName = groupName;
                     bucket.faceted = bucket.faceted || cs.faceted;
+                    AppendNormalSpan(bucket.normalSpans, bucket.tris.size() / 3, cs.soup.size() / 3, cs.shading);
+                    AppendAuthoredNormals(bucket.normals, bucket.tris.size(), cs.soup.size(), cs.normals);
                     bucket.tris.insert(bucket.tris.end(), cs.soup.begin(), cs.soup.end());
                     AddTriangleCount(cs.soup.size() / 3);
                 }
@@ -591,6 +602,8 @@ namespace Assets::Scad
                     bucket.faceted = bucket.faceted || cs.faceted;
                     bucket.terrainWater = bucket.terrainWater || cs.terrainWater;
                     bucket.terrainDecal = bucket.terrainDecal || cs.terrainDecal;
+                    AppendNormalSpan(bucket.normalSpans, bucket.tris.size() / 3, cs.soup.size() / 3, cs.shading);
+                    AppendAuthoredNormals(bucket.normals, bucket.tris.size(), cs.soup.size(), cs.normals);
                     bucket.tris.insert(bucket.tris.end(), cs.soup.begin(), cs.soup.end());
                     AddTriangleCount(cs.soup.size() / 3);
                 }
@@ -869,6 +882,26 @@ namespace Assets::Scad
                     materialPropertiesStack_.pop_back();
                     return result;
                 }
+                if (name == "gk_crease")
+                {
+                    // gk_crease(angle) { ... }: vertex-normal smoothing threshold
+                    // for everything generated below, including nested module
+                    // nodes. 0 = hard facets; larger = softer (a $fn = 8 limb has
+                    // 45 deg between sides, so it needs > 45 to read round).
+                    const double angle = std::clamp(Arg(inst, "angle", 0).AsNumber(35.0), 0.0, 180.0);
+                    creaseStack_.push_back(static_cast<float>(angle));
+                    GeomList result = EvalScope(inst.children, xform, color, hasColor);
+                    creaseStack_.pop_back();
+                    return result;
+                }
+                if (name == "gk_puff_normals")
+                {
+                    return EvalPuffNormals(inst, xform, color, hasColor);
+                }
+                if (name == "gk_round_box" || name == "gk_sweep")
+                {
+                    return EvalSculpt(inst, xform, color, hasColor);
+                }
                 if (name == "union" || name == "group" || name == "render")
                 {
                     return EvalScope(inst.children, xform, color, hasColor);
@@ -1000,6 +1033,7 @@ namespace Assets::Scad
                 bool posHas = hasColor;
                 ScadMaterialProperties posMaterial;
                 std::string posMaterialName;
+                ScadShading posShading;
                 std::string posGroupName = CurrentGroupLabel();
                 uint64_t posGroupInstanceId = CurrentGroupInstanceId();
                 bool gotColor = false;
@@ -1026,6 +1060,7 @@ namespace Assets::Scad
                                 posHas = cs.hasColor;
                                 posMaterial = cs.material;
                                 posMaterialName = cs.materialName;
+                                posShading = cs.shading;
                                 posGroupName = cs.groupName.empty() ? posGroupName : cs.groupName;
                                 posGroupInstanceId = cs.groupInstanceId == 0 ? posGroupInstanceId : cs.groupInstanceId;
                                 gotColor = true;
@@ -1060,6 +1095,7 @@ namespace Assets::Scad
                 result.hasColor = posHas;
                 result.material = posMaterial;
                 result.materialName = posMaterialName;
+                result.shading = posShading;
                 result.groupName = posGroupName;
                 result.groupInstanceId = posGroupInstanceId;
                 result.soup = std::move(r);
@@ -1078,6 +1114,7 @@ namespace Assets::Scad
                 bool firstHas = hasColor;
                 ScadMaterialProperties firstMaterial;
                 std::string firstMaterialName;
+                ScadShading firstShading;
                 std::string firstGroupName = CurrentGroupLabel();
                 uint64_t firstGroupInstanceId = CurrentGroupInstanceId();
                 bool gotColor = false;
@@ -1102,6 +1139,7 @@ namespace Assets::Scad
                             firstHas = cs.hasColor;
                             firstMaterial = cs.material;
                             firstMaterialName = cs.materialName;
+                            firstShading = cs.shading;
                             firstGroupName = cs.groupName.empty() ? firstGroupName : cs.groupName;
                             firstGroupInstanceId = cs.groupInstanceId == 0 ? firstGroupInstanceId : cs.groupInstanceId;
                             gotColor = true;
@@ -1126,6 +1164,7 @@ namespace Assets::Scad
                 result.hasColor = firstHas;
                 result.material = firstMaterial;
                 result.materialName = firstMaterialName;
+                result.shading = firstShading;
                 result.groupName = firstGroupName;
                 result.groupInstanceId = firstGroupInstanceId;
                 result.soup = std::move(r);
@@ -1142,6 +1181,7 @@ namespace Assets::Scad
                 bool firstHas = hasColor;
                 ScadMaterialProperties firstMaterial;
                 std::string firstMaterialName;
+                ScadShading firstShading;
                 std::string firstGroupName = CurrentGroupLabel();
                 uint64_t firstGroupInstanceId = CurrentGroupInstanceId();
                 bool gotColor = false;
@@ -1153,6 +1193,7 @@ namespace Assets::Scad
                         firstHas = cs.hasColor;
                         firstMaterial = cs.material;
                         firstMaterialName = cs.materialName;
+                        firstShading = cs.shading;
                         firstGroupName = cs.groupName.empty() ? firstGroupName : cs.groupName;
                         firstGroupInstanceId = cs.groupInstanceId == 0 ? firstGroupInstanceId : cs.groupInstanceId;
                         gotColor = true;
@@ -1172,6 +1213,7 @@ namespace Assets::Scad
                 result.hasColor = firstHas;
                 result.material = firstMaterial;
                 result.materialName = firstMaterialName;
+                result.shading = firstShading;
                 result.groupName = firstGroupName;
                 result.groupInstanceId = firstGroupInstanceId;
                 result.soup = std::move(r);
@@ -1362,9 +1404,19 @@ namespace Assets::Scad
             // --------------------------------------------------------------
             // Primitive geometry
             // --------------------------------------------------------------
-            GeomList MakeGeom(TriSoup&& objSpace, const glm::dmat4& xform, const glm::dvec4& color, bool hasColor);
+            // objNormals (optional, parallel to objSpace) are authored normals,
+            // carried through xform by its inverse transpose.
+            GeomList MakeGeom(TriSoup&& objSpace, const glm::dmat4& xform, const glm::dvec4& color, bool hasColor,
+                              const TriSoup* objNormals = nullptr);
 
             GeomList EvalPrimitive(const Stmt& inst, const glm::dmat4& xform, const glm::dvec4& color, bool hasColor);
+
+            // gk_round_box / gk_sweep: native sculpt primitives (FScadGeometry).
+            GeomList EvalSculpt(const Stmt& inst, const glm::dmat4& xform, const glm::dvec4& color, bool hasColor);
+
+            // gk_puff_normals(strength, upBias) { ... }
+            GeomList EvalPuffNormals(const Stmt& inst, const glm::dmat4& xform, const glm::dvec4& color,
+                                     bool hasColor);
 
             // --------------------------------------------------------------
             // gk_terrain (native low-poly heightfield; FScadTerrain backend)

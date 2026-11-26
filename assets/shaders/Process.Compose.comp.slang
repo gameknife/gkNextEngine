@@ -32,25 +32,6 @@ bool HasObjectFlag(uint objectId, uint flag)
     return ((objectId & OBJECT_ID_FLAG_VALID) != 0) && ((objectId & flag) != 0);
 }
 
-float3 LoadComposedRadiance(int2 pixel, bool progressiveRender)
-{
-    const UniformBufferObject camera = Bindless.GetGpuscene().Camera[0];
-    if (progressiveRender)
-    {
-        return Bindless.GetViewStorageTexture<float4>(
-            Bindless.RT_PROGRESSIVE_SCENE_COLOR)[pixel].rgb;
-    }
-
-    const float3 diffuse = Bindless.GetViewStorageTexture<float4>(
-        Bindless.RT_SINGLE_DIFFUSE)[pixel].rgb;
-    const float3 specular = Bindless.GetViewStorageTexture<float4>(
-        Bindless.RT_SINGLE_SPECULAR)[pixel].rgb;
-    const float3 albedo = Bindless.GetViewStorageTexture<float4>(
-        Bindless.RT_ALBEDO)[pixel].rgb;
-    return camera.DebugDraw_Lighting
-        ? diffuse * float3(0.5, 0.5, 0.5) + specular
-        : diffuse * albedo + specular;
-}
 
 // Monte Carlo firefly suppression, in the demodulated domain and before the temporal upscaler can
 // lock the outlier into history or spread it with a negative-lobe kernel. Diffuse has albedo
@@ -99,8 +80,19 @@ float FireflyScale(RWTexture2D<float4> signal, RWTexture2D<uint> objectIds, int2
     return centerLuma > ceiling ? ceiling / max(centerLuma, 1.0e-8f) : 1.0f;
 }
 
-float3 LoadClampedRadiance(int2 pixel, int2 viewportMin, int2 viewportMax, float fireflySigma,
-                           float exposure)
+// The two lighting terms of the realtime sample, diffuse already modulated by albedo.
+struct FComposeTerms
+{
+    float3 Diffuse;
+    float3 Specular;
+    // A lit, non-emissive surface: the only pixels whose lighting is a noisy estimate.
+    bool NoisySurface;
+    float Roughness;
+};
+
+// fireflySigma <= 0 reads the planes untouched.
+FComposeTerms LoadComposeTerms(int2 pixel, int2 viewportMin, int2 viewportMax, float fireflySigma,
+                               float exposure)
 {
     const UniformBufferObject camera = Bindless.GetGpuscene().Camera[0];
     const uint viewBase = Bindless.GetGpuscene().CustomData0;
@@ -112,27 +104,45 @@ float3 LoadClampedRadiance(int2 pixel, int2 viewportMin, int2 viewportMax, float
     float3 specular = specularPlane[pixel].rgb;
     const float3 albedo = Bindless.GetViewStorageTexture<float4>(Bindless.RT_ALBEDO)[pixel].rgb;
 
+    FComposeTerms terms;
     // Background, degenerate samples and emitters carry no noisy lighting.
-    const uint objectId = objectIds[pixel];
     const uint2 bsdf = Surface.LoadBsdf(viewBase, pixel);
-    if (Surface.IsValid(Surface.LoadDepth(viewBase, pixel)) && bsdf.x != Surface.kInvalidMaterialId &&
-        !Surface.HasFlag(Surface.UnpackFlags(bsdf.y), Surface.kFlagEmissive))
+    terms.NoisySurface = Surface.IsValid(Surface.LoadDepth(viewBase, pixel)) &&
+        bsdf.x != Surface.kInvalidMaterialId &&
+        !Surface.HasFlag(Surface.UnpackFlags(bsdf.y), Surface.kFlagEmissive);
+    terms.Roughness = terms.NoisySurface ? Surface.LoadGeometry(viewBase, pixel).Roughness : 1.0f;
+    if (terms.NoisySurface && fireflySigma > 0.0f)
     {
-        const uint identity = Surface.ObjectIdentity(objectId);
+        const uint identity = Surface.ObjectIdentity(objectIds[pixel]);
         // 5% of display white, in raw radiance units.
         const float lumaFloor = 0.05f / exposure;
         diffuse *= FireflyScale(diffusePlane, objectIds, pixel, viewportMin, viewportMax, identity,
                                 Luminance(diffuse), fireflySigma, lumaFloor);
         // A sharp mirror legitimately shows a pinpoint sun or light; only glossy lobes are clamped.
-        if (Surface.LoadGeometry(viewBase, pixel).Roughness > 0.15f)
+        if (terms.Roughness > 0.15f)
         {
             specular *= FireflyScale(specularPlane, objectIds, pixel, viewportMin, viewportMax,
                                      identity, Luminance(specular), fireflySigma, lumaFloor);
         }
     }
-    return camera.DebugDraw_Lighting
-        ? diffuse * float3(0.5, 0.5, 0.5) + specular
-        : diffuse * albedo + specular;
+    terms.Diffuse = camera.DebugDraw_Lighting ? diffuse * float3(0.5, 0.5, 0.5) : diffuse * albedo;
+    terms.Specular = specular;
+    return terms;
+}
+
+// Reactivity for upscalers that take a mask (FSR's reactive input). 0 everywhere diffuse lighting
+// dominates, so the upscaler may lock history as hard as it likes; a sharp, specular-dominated
+// pixel gets a moderate value because its reflection moves with the view, not with the surface
+// motion vector, and would otherwise trail.
+float ComputeReactivity(FComposeTerms terms)
+{
+    if (!terms.NoisySurface || terms.Roughness >= 0.25f)
+    {
+        return 0.0f;
+    }
+    const float specularLuma = Luminance(terms.Specular);
+    const float share = specularLuma / max(specularLuma + Luminance(terms.Diffuse), 1.0e-4f);
+    return smoothstep(0.4f, 0.9f, share) * lerp(0.55f, 0.25f, terms.Roughness / 0.25f);
 }
 
 float ComputeEdgeStrengthTwoSided(RWTexture2D<uint> objectImage, int2 pixel, uint flag)
@@ -169,9 +179,11 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     // Sparse checkerboard lighting: the parity Core Shading did not write is left untouched all the
     // way to Native TAAU, which reconstructs it from history instead of from a neighbour copy.
+    let reactiveMask = Bindless.GetViewStorageTexture<float>(Bindless.RT_UPSCALER_REACTIVE);
     if (Scheduler.ShouldSkipPixel(dispatchThreadId.xy, camera.CheckerboardSparseLighting, true,
                                   camera.TotalFrames))
     {
+        reactiveMask[int2(dispatchThreadId.xy) + int2(camera.ViewportRect.xy)] = 0.0f;
         return;
     }
 
@@ -184,16 +196,21 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     const float exposure = max(camera.PaperWhiteNit / 40000.0, 1.0e-6);
     const float fireflySigma = asfloat(Bindless.GetGpuscene().CustomData2);
     float3 radiance;
-    if (!progressiveRender && fireflySigma > 0.0)
+    float reactive = 0.0;
+    if (progressiveRender)
+    {
+        radiance = Bindless.GetViewStorageTexture<float4>(
+            Bindless.RT_PROGRESSIVE_SCENE_COLOR)[pixel].rgb;
+    }
+    else
     {
         const int2 viewportMin = int2(camera.ViewportRect.xy);
         const int2 viewportMax = min(viewportMin + int2(camera.ViewportRect.zw) - int2(1, 1),
                                      int2(outputSize) - int2(1, 1));
-        radiance = LoadClampedRadiance(pixel, viewportMin, viewportMax, fireflySigma, exposure);
-    }
-    else
-    {
-        radiance = LoadComposedRadiance(pixel, progressiveRender);
+        const FComposeTerms terms =
+            LoadComposeTerms(pixel, viewportMin, viewportMax, fireflySigma, exposure);
+        radiance = terms.Diffuse + terms.Specular;
+        reactive = ComputeReactivity(terms);
     }
     float3 total = max(radiance, 0.0) * exposure;
 
@@ -235,5 +252,9 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         total = lerp(total, float3(80, 220, 120) * exposure, hoveredEdge);
     }
 
+    // Editor outlines are drawn into the colour without motion of their own; keep them from
+    // smearing when the selection changes or the outlined object moves.
+    const float outline = max(max(dangerEdge, lockedEdge), max(selectedEdge, hoveredEdge));
+    reactiveMask[pixel] = max(reactive, outline * 0.85);
     sceneColor[pixel] = float4(total, 1.0);
 }

@@ -51,9 +51,11 @@ namespace Vulkan::PipelineCommon
     {
         SCOPED_GPU_TIMER("disocclusion filter");
         const auto& userSettings = baseRenderer.FrameSettings().userSettings;
-        // At least two passes: the last one writes RT_SINGLE_DIFFUSE in place, which is only
+        // At least two passes: the last one writes the signal plane in place, which is only
         // race-free when its taps come from a ping-pong plane (see the shader header).
-        const uint32_t passCount = std::clamp(userSettings.DisocclusionFilterPasses, 2u, 5u);
+        const uint32_t diffusePassCount = std::clamp(userSettings.DisocclusionFilterPasses, 2u, 5u);
+        // A glossy lobe tolerates far less spatial reach than diffuse: radius 1, 2, 4 at most.
+        const uint32_t specularPassCount = std::min(diffusePassCount, 3u);
         const uint32_t fullFrames = std::min(userSettings.DisocclusionFilterFrames, 0xFFFFu);
         const VkExtent2D extent = baseRenderer.ActiveViewRenderExtent();
         const Assets::GPUScene gpuScene =
@@ -62,25 +64,39 @@ namespace Vulkan::PipelineCommon
         constexpr auto compute = ERenderStage::Compute;
         constexpr auto shaderRead = EResourceAccess::ShaderRead;
         constexpr auto shaderReadWrite = EResourceAccess::ShaderRead | EResourceAccess::ShaderWrite;
-        for (uint32_t pass = 0; pass < passCount; ++pass)
+        const auto runChannel = [&](const bool specular, const uint32_t passCount)
         {
-            // Every pass both reads and writes the ping-pong planes and RT_SINGLE_DIFFUSE, so the
-            // tracker places a full write->read barrier between consecutive passes.
-            baseRenderer.TransitionActiveViewImages(commandBuffer, {
-                {Assets::Bindless::RT_SINGLE_DIFFUSE, compute, shaderReadWrite},
-                {Assets::Bindless::RT_DISOCCLUSION_PING, compute, shaderReadWrite},
-                {Assets::Bindless::RT_DISOCCLUSION_PONG, compute, shaderReadWrite},
-                {Assets::Bindless::RT_HISTORY_AGE, compute, shaderRead},
-                {Assets::Bindless::RT_PREV_DEPTHBUFFER, compute, shaderRead},
-                {Assets::Bindless::RT_NORMAL, compute, shaderRead},
-                {Assets::Bindless::RT_OBJECTID_0, compute, shaderRead},
-                {Assets::Bindless::RT_BSDF_DATA, compute, shaderRead},
-            }, "disocclusion filter");
-            const uint32_t params = pass | (passCount << 8u) | (fullFrames << 16u);
-            disocclusionFilterPipeline_->BindPipeline(
-                commandBuffer, gpuScene, baseRenderer.ActiveViewBankBase(), params, 0u);
-            vkCmdDispatch(commandBuffer, Utilities::Math::GetSafeDispatchCount(extent.width, 8),
-                          Utilities::Math::GetSafeDispatchCount(extent.height, 8), 1);
+            const uint32_t signal = specular
+                ? Assets::Bindless::RT_SINGLE_SPECULAR
+                : Assets::Bindless::RT_SINGLE_DIFFUSE;
+            for (uint32_t pass = 0; pass < passCount; ++pass)
+            {
+                // Every pass both reads and writes the ping-pong planes and the signal plane, so
+                // the tracker places a full write->read barrier between consecutive passes.
+                baseRenderer.TransitionActiveViewImages(commandBuffer, {
+                    {signal, compute, shaderReadWrite},
+                    {Assets::Bindless::RT_DISOCCLUSION_PING, compute, shaderReadWrite},
+                    {Assets::Bindless::RT_DISOCCLUSION_PONG, compute, shaderReadWrite},
+                    {Assets::Bindless::RT_HISTORY_AGE, compute, shaderRead},
+                    {Assets::Bindless::RT_PREV_DEPTHBUFFER, compute, shaderRead},
+                    {Assets::Bindless::RT_NORMAL, compute, shaderRead},
+                    {Assets::Bindless::RT_OBJECTID_0, compute, shaderRead},
+                    {Assets::Bindless::RT_BSDF_DATA, compute, shaderRead},
+                    {Assets::Bindless::RT_ALBEDO, compute, shaderRead},
+                    {Assets::Bindless::RT_SPECULAR_HITDIST, compute, shaderRead},
+                }, specular ? "disocclusion filter (specular)" : "disocclusion filter");
+                const uint32_t params = pass | (passCount << 8u) | (fullFrames << 16u);
+                disocclusionFilterPipeline_->BindPipeline(
+                    commandBuffer, gpuScene, baseRenderer.ActiveViewBankBase(), params,
+                    specular ? 1u : 0u);
+                vkCmdDispatch(commandBuffer, Utilities::Math::GetSafeDispatchCount(extent.width, 8),
+                              Utilities::Math::GetSafeDispatchCount(extent.height, 8), 1);
+            }
+        };
+        runChannel(false, diffusePassCount);
+        if (userSettings.DisocclusionFilterSpecular)
+        {
+            runChannel(true, specularPassCount);
         }
     }
 
@@ -138,6 +154,7 @@ namespace Vulkan::PipelineCommon
                     {Assets::Bindless::RT_OBJECTID_0, ERenderStage::Compute, EResourceAccess::ShaderRead},
                     {Assets::Bindless::RT_OBJECTID_1, ERenderStage::Compute, EResourceAccess::ShaderRead},
                     {Assets::Bindless::RT_SCENE_COLOR, ERenderStage::Compute, EResourceAccess::ShaderWrite},
+                    {Assets::Bindless::RT_UPSCALER_REACTIVE, ERenderStage::Compute, EResourceAccess::ShaderWrite},
                 }, "sample compose");
             }
             else
@@ -152,6 +169,7 @@ namespace Vulkan::PipelineCommon
                     {Assets::Bindless::RT_NORMAL, ERenderStage::Compute, EResourceAccess::ShaderRead},
                     {Assets::Bindless::RT_BSDF_DATA, ERenderStage::Compute, EResourceAccess::ShaderRead},
                     {Assets::Bindless::RT_SCENE_COLOR, ERenderStage::Compute, EResourceAccess::ShaderWrite},
+                    {Assets::Bindless::RT_UPSCALER_REACTIVE, ERenderStage::Compute, EResourceAccess::ShaderWrite},
                 }, "sample compose");
             }
 

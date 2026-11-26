@@ -117,6 +117,8 @@ namespace NextCVar
         GK_CVAR_INT_CB("r.upscaler.type", settings, UpscalerType, 4, ECVarFlags::Archive, "Upscaler type (0=None,1=DLSS,2=DLSS Ray Reconstruction,3=FidelityFX FSR,4=Native TAAU,5=SGSR2)", std::bind(ApplyUpscalerIfPossible, engine));
         GK_CVAR_FLOAT_RANGE("r.taau.historyWeight", settings, NativeTAAUHistoryWeight, 0.97f, ECVarFlags::Archive, "Native TAAU stable-history blend weight", 0.5, 0.98);
         GK_CVAR_FLOAT_RANGE("r.taau.sharpness", settings, NativeTAAUSharpness, 0.25f, ECVarFlags::Archive, "Native TAAU display-resolution adaptive sharpening", 0.0, 1.0);
+        GK_CVAR_FLOAT_RANGE("r.fsr.shadingChangeScale", settings, FsrShadingChangeScale, 0.40f, ECVarFlags::Archive, "FidelityFX FSR 3.1 shading-change sensitivity (SDK default 1.0; lower keeps Monte Carlo noise from shrinking the history clip box)", 0.0, 2.0);
+        GK_CVAR_FLOAT_RANGE("r.fsr.velocityFactor", settings, FsrVelocityFactor, 0.35f, ECVarFlags::Archive, "FidelityFX FSR 3.1 velocity factor (SDK default 1.0; lower keeps more history under slow camera motion)", 0.0, 1.0);
         GK_CVAR_BOOL("r.upscaler.postFilter", settings, TemporalUpscalerPostFilter, false, ECVarFlags::Archive, "Apply display-resolution bilateral noise and firefly suppression after supported temporal upscalers");
         GK_CVAR_UINT_RANGE("r.upscaler.postFilterPasses", settings, TemporalUpscalerPostFilterPasses, 3, ECVarFlags::Archive, "Temporal upscaler post-filter a-trous pass count", 1, 4);
         GK_CVAR_FLOAT_RANGE("r.upscaler.postFilterStrength", settings, TemporalUpscalerPostFilterStrength, 0.65f, ECVarFlags::Archive, "Temporal upscaler post-filter blend strength", 0.0, 1.0);
@@ -128,6 +130,9 @@ namespace NextCVar
                      "History age (frames) at which the disocclusion filter has faded out completely");
         GK_CVAR_UINT("r.disocclusionFilter.passes", settings, DisocclusionFilterPasses, 5, ECVarFlags::Archive,
                      "A-trous passes for a just-disoccluded pixel (2-5; radius doubles per pass)");
+        GK_CVAR_BOOL("r.disocclusionFilter.specular", settings, DisocclusionFilterSpecular, true, ECVarFlags::Archive,
+                     "Also filter glossy specular (roughness > 0.15, at most 3 passes) where the upscaler has no history yet");
+        GK_CVAR_BOOL("r.sampling.sobol", settings, SobolSampling, true, ECVarFlags::Archive, "Draw the path tracer's first bounce and its light sample from a per-pixel Owen-scrambled Sobol sequence instead of white noise");
         GK_CVAR_BOOL("r.compose.fireflyClamp", settings, ComposeFireflyClamp, true, ECVarFlags::Archive, "Reject isolated render-resolution fireflies before temporal upscaling (disabled for progressive reference rendering)");
         GK_CVAR_BOOL_CB("r.frameGeneration", settings, FrameGeneration, false, ECVarFlags::Archive, "Enable frame generation for the selected upscaler type", std::bind(RequestSwapChainIfPossible, engine));
         GK_CVAR_UINT_CB("r.frameGeneration.multiplier", settings, FrameGenerationMultiplier, 2, ECVarFlags::Archive, "Frame generation multiplier (2-4 when supported)", std::bind(RequestSwapChainIfPossible, engine));

@@ -240,6 +240,9 @@ namespace Vulkan
 {
     namespace
     {
+        // Process.TemporalPostFilter push constants after the zero-bind view header.
+        constexpr uint32_t kTemporalPostFilterPushConstantSize = 68;
+
         struct RendererDescriptor
         {
             ERendererType type;
@@ -1448,6 +1451,9 @@ namespace Vulkan
         CREATE_STORAGE_IMAGE(RT_SCENE_COLOR, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT );
         CREATE_STORAGE_IMAGE(RT_PREV_DEPTHBUFFER, VK_FORMAT_R32_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT );
         CREATE_STORAGE_IMAGE(RT_DEPTH_HISTORY_PREV, VK_FORMAT_R32_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT );
+        // Sampled by FidelityFX as its reactive mask. R16_SFLOAT rather than R8_UNORM: storage
+        // support for the 16-bit float format is already relied on by the hit-distance planes.
+        CREATE_STORAGE_IMAGE(RT_UPSCALER_REACTIVE, VK_FORMAT_R16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT );
         CREATE_STORAGE_IMAGE(RT_DISOCCLUSION_PING, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT);
         CREATE_STORAGE_IMAGE(RT_DISOCCLUSION_PONG, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT);
         CREATE_STORAGE_IMAGE(RT_SINGLE_SPECULAR, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
@@ -1626,7 +1632,8 @@ namespace Vulkan
         if (temporalPostFilterActive)
         {
             overlay_.temporalPostFilterPipeline.reset(new PipelineCommon::ZeroBindCustomPushConstantPipeline(
-                SwapChain(), "assets/shaders/Process.TemporalPostFilter.comp.slang.spv", 64));
+                SwapChain(), "assets/shaders/Process.TemporalPostFilter.comp.slang.spv",
+                kTemporalPostFilterPushConstantSize));
         }
         overlay_.toneMappingPipeline.reset(new PipelineCommon::ZeroBindCustomPushConstantPipeline(
             SwapChain(), "assets/shaders/Process.TonemapAfterUpscaler.comp.slang.spv", 64));
@@ -2910,8 +2917,10 @@ namespace Vulkan
             float jitterY;
             float compressionScale;
             uint32_t useAlbedoGuide;
+            // RT_HISTORY_AGE frames over which the strength fades to a quarter; 0 = not modulated.
+            uint32_t historyAgeFrames;
         };
-        static_assert(sizeof(FPushConstants) == 64);
+        static_assert(sizeof(FPushConstants) == kTemporalPostFilterPushConstantSize);
 
         const float guideJitterX = inputs.ubo != nullptr ? inputs.ubo->Jitter.x : 0.0f;
         const float guideJitterY = inputs.ubo != nullptr ? inputs.ubo->Jitter.y : 0.0f;
@@ -2922,8 +2931,13 @@ namespace Vulkan
         // Not every renderer contract writes RT_ALBEDO. SoftwareModernNoAmbient declares only
         // Color/Depth/Motion/ObjectId/Normal, so guiding on that image would weight the kernel by
         // whatever another renderer last left there.
-        const bool useAlbedoGuide = HasAny(
-            GetRendererContract(logicRenderers_.current).outputs, ERenderOutput::Albedo);
+        const FRendererContract& contract = GetRendererContract(logicRenderers_.current);
+        const bool useAlbedoGuide = HasAny(contract.outputs, ERenderOutput::Albedo);
+        // RT_HISTORY_AGE is only maintained where the primary view keeps object-id history.
+        const bool hasHistoryAge = HasAny(contract.history, EHistoryChannel::ObjectId) &&
+            PrimaryView().CopyObjectIdHistory();
+        const uint32_t historyAgeFrames =
+            hasHistoryAge ? std::clamp(settings.DisocclusionFilterFrames, 1u, 0xFFFFu) : 0u;
 
         RenderImage* sourceImage = temporalPostFilter_.pingImage.get();
         uint32_t sourceIndex = Assets::Bindless::RT_TEMPORAL_POST_PING;
@@ -3015,6 +3029,7 @@ namespace Vulkan
                 guideJitterY,
                 compressionScale,
                 useAlbedoGuide ? 1u : 0u,
+                historyAgeFrames,
             };
             overlay_.temporalPostFilterPipeline->BindPipeline(commandBuffer, &pushConstants);
             vkCmdDispatch(commandBuffer,
@@ -3215,6 +3230,9 @@ namespace Vulkan
             {Assets::Bindless::RT_NORMAL,
              PipelineCommon::ERenderStage::Compute,
              PipelineCommon::EResourceAccess::ShaderRead},
+            {Assets::Bindless::RT_UPSCALER_REACTIVE,
+             PipelineCommon::ERenderStage::Compute,
+             PipelineCommon::EResourceAccess::ShaderRead},
         }, "resolve primary view source");
 
         bool resolvedByUpscaler = false;
@@ -3257,6 +3275,12 @@ namespace Vulkan
             }
             if (typeInfo.requiresStorageOutput)
             {
+                // FidelityFX binds depth as a sampled image and has no resource state for the depth
+                // read-only layouts, so it gets SHADER_READ_ONLY_OPTIMAL; the in-engine upscalers
+                // sample it in DEPTH_STENCIL_READ_ONLY_OPTIMAL.
+                const VkImageLayout depthReadLayout = typeInfo.leavesInputsShaderRead
+                    ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                    : VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
                 VkImageSubresourceRange depthRange{VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};
                 ImageMemoryBarrier::Insert(
                     commandBuffer,
@@ -3265,8 +3289,8 @@ namespace Vulkan
                     VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
                     VK_ACCESS_SHADER_READ_BIT,
                     VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                    VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
-                inputs.depth.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+                    depthReadLayout);
+                inputs.depth.layout = depthReadLayout;
             }
             resolvedByUpscaler = upscaler_->Evaluate(inputs);
             if (resolvedByUpscaler)
@@ -3278,32 +3302,10 @@ namespace Vulkan
             }
             if (typeInfo.leavesInputsShaderRead && resolvedByUpscaler)
             {
-                // FidelityFX registers external inputs only for this dispatch (the same
-                // lifetime semantics as Streamline's eOnlyValidNow tags), but its Vulkan
-                // backend leaves sampled inputs in SHADER_READ_ONLY_OPTIMAL. Restore the
-                // engine-owned layouts before the resources are reused on the next frame.
-                constexpr VkImageSubresourceRange colorRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-                ImageMemoryBarrier::Insert(
-                    commandBuffer,
-                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                    inputs.scalingInputColor.image,
-                    colorRange,
-                    VK_ACCESS_SHADER_READ_BIT,
-                    VK_ACCESS_SHADER_READ_BIT,
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    VK_IMAGE_LAYOUT_GENERAL);
-                ImageMemoryBarrier::Insert(
-                    commandBuffer,
-                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                    inputs.motionVectors.image,
-                    colorRange,
-                    VK_ACCESS_SHADER_READ_BIT,
-                    VK_ACCESS_SHADER_READ_BIT,
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    VK_IMAGE_LAYOUT_GENERAL);
-
+                // FidelityFX registers external inputs only for this dispatch (the same lifetime
+                // semantics as Streamline's eOnlyValidNow tags) and returns each one to the layout
+                // it was declared in: the GENERAL colour inputs come back GENERAL, depth stays in
+                // SHADER_READ_ONLY_OPTIMAL and goes back to being an attachment here.
                 VkImageSubresourceRange depthRange{VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};
                 ImageMemoryBarrier::Insert(
                     commandBuffer,
@@ -3739,6 +3741,8 @@ namespace Vulkan
             std::max(NextEngine::GetInstance()->GetDeltaSeconds() * 1000.0, 0.001));
         inputs.nativeTemporalHistoryWeight = settings.NativeTAAUHistoryWeight;
         inputs.nativeTemporalSharpness = settings.NativeTAAUSharpness;
+        inputs.fsrShadingChangeScale = settings.FsrShadingChangeScale;
+        inputs.fsrVelocityFactor = settings.FsrVelocityFactor;
         inputs.renderExtent = swapChain.RenderExtent();
         inputs.outputExtent = swapChain.OutputExtent();
         inputs.outputOffset = swapChain.OutputOffset();
@@ -3775,6 +3779,16 @@ namespace Vulkan
             swapChain.OutputExtent(),
             swapchainLayout);
         inputs.hudlessColor = inputs.scalingOutputColor;
+        // Process.Compose writes the reactive mask; only the renderers whose output is the
+        // diffuse/specular sample pair run it (SoftwareModernNoAmbient and VoxelTracing do not).
+        if (HasAll(GetRendererContract(logicRenderers_.current).outputs,
+                   ERenderOutput::Diffuse | ERenderOutput::Specular))
+        {
+            inputs.reactiveMask = MakeRenderImageResource(
+                GetViewStorageImage(Assets::Bindless::RT_UPSCALER_REACTIVE),
+                VK_IMAGE_LAYOUT_GENERAL,
+                VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+        }
 
         inputs.albedo = MakeRenderImageResource(
             GetViewStorageImage(Assets::Bindless::RT_ALBEDO),

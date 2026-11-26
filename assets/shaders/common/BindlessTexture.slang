@@ -133,6 +133,9 @@ namespace Bindless
     // Previous frame's RT_PREV_DEPTHBUFFER, copied alongside RT_OBJECTID_1 at the end of the view,
     // so the history-age reprojection can reject an instance occluding itself.
     public static const int RT_DEPTH_HISTORY_PREV = 21;
+    // Reactivity hint Process.Compose writes for upscalers that take one (FSR's reactive mask):
+    // 0 lets the upscaler lock history, larger values make it trust the current frame.
+    public static const int RT_UPSCALER_REACTIVE = 22;
 
     public static const int RT_VISIBILITY_INSTANCE_DRAW = 23;
     public static const int RT_VISIBILITY_TRIANGLE_DRAW = 24;

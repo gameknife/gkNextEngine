@@ -92,6 +92,17 @@ namespace FidelityFXWrapper
             return ffxApiGetResourceVK(reinterpret_cast<void*>(image.image), description, state);
         }
 
+        // The FidelityFX Vulkan backend takes the state an external resource is registered with as
+        // its *current* layout: it transitions the resource to whatever each pass needs and, when the
+        // dispatch unregisters it, back to that state. Declaring a GENERAL image as a read state
+        // therefore binds it with SHADER_READ_ONLY_OPTIMAL while it is really GENERAL.
+        uint32_t StateForLayout(VkImageLayout layout)
+        {
+            return layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                ? FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ
+                : FFX_API_RESOURCE_STATE_UNORDERED_ACCESS;
+        }
+
         bool FeatureChainContains(const void* featureChain, VkStructureType sType)
         {
             for (const auto* node = static_cast<const VkBaseInStructure*>(featureChain);
@@ -489,6 +500,37 @@ namespace FidelityFXWrapper
             }
 
             ffx::Context& UpscaleContext() { return upscaleContext_; }
+
+            // FSR 3.1 key/value overrides. They live in the context's constants, so they are only
+            // re-sent when a value changes or the context was recreated.
+            void ConfigureUpscaleTuning(float shadingChangeScale, float velocityFactor)
+            {
+                if (upscaleContext_ == nullptr)
+                {
+                    return;
+                }
+                if (upscaleContext_ == tunedContext_ && shadingChangeScale == tunedShadingChangeScale_ &&
+                    velocityFactor == tunedVelocityFactor_)
+                {
+                    return;
+                }
+                // The SDK reads the float through the pointer during the call.
+                const auto configure = [&](uint64_t key, float* value)
+                {
+                    ffx::ConfigureDescUpscaleKeyValue config{};
+                    config.key = key;
+                    config.ptr = value;
+                    if (ffx::Configure(upscaleContext_, config) != ffx::ReturnCode::Ok)
+                    {
+                        SPDLOG_WARN("FidelityFX FSR configure key {} failed", key);
+                    }
+                };
+                configure(FFX_API_CONFIGURE_UPSCALE_KEY_FSHADINGCHANGESCALE, &shadingChangeScale);
+                configure(FFX_API_CONFIGURE_UPSCALE_KEY_FVELOCITYFACTOR, &velocityFactor);
+                tunedContext_ = upscaleContext_;
+                tunedShadingChangeScale_ = shadingChangeScale;
+                tunedVelocityFactor_ = velocityFactor;
+            }
             ffx::Context& FrameGenerationContext() { return frameGenerationContext_; }
 
             uint32_t QueryJitterPhaseCount(VkExtent2D renderExtent, VkExtent2D outputExtent)
@@ -578,6 +620,7 @@ namespace FidelityFXWrapper
                 }
                 jitterPhaseCount_ = 0;
                 upscaleHdrColorInput_ = false;
+                tunedContext_ = nullptr;
             }
 
             void DestroyFrameGenerationContext()
@@ -602,6 +645,10 @@ namespace FidelityFXWrapper
 
             ffx::Context swapchainContext_ = nullptr;
             ffx::Context upscaleContext_ = nullptr;
+            // Context the FSR tuning overrides were last sent to (a new context starts at SDK defaults).
+            ffx::Context tunedContext_ = nullptr;
+            float tunedShadingChangeScale_ = 1.0f;
+            float tunedVelocityFactor_ = 1.0f;
             ffx::Context frameGenerationContext_ = nullptr;
             ffxQueryDescSwapchainReplacementFunctionsVK replacementFunctions_{};
             VkSwapchainKHR activeProxySwapchain_ = VK_NULL_HANDLE;
@@ -828,9 +875,14 @@ namespace FidelityFXWrapper
 
                 ffx::DispatchDescUpscale dispatch{};
                 dispatch.commandList = inputs.commandBuffer;
-                dispatch.color = ToFfxResource(inputs.scalingInputColor, FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
-                dispatch.depth = ToFfxResource(inputs.depth, FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
-                dispatch.motionVectors = ToFfxResource(inputs.motionVectors, FFX_API_RESOURCE_STATE_PIXEL_COMPUTE_READ);
+                // Each input is declared in the layout it is really in; the backend returns it there.
+                // The host hands depth over in SHADER_READ_ONLY_OPTIMAL (no FFX state maps to the
+                // depth read-only layouts) and the colour inputs in GENERAL.
+                dispatch.color = ToFfxResource(inputs.scalingInputColor, StateForLayout(inputs.scalingInputColor.layout));
+                dispatch.depth = ToFfxResource(inputs.depth, StateForLayout(inputs.depth.layout));
+                dispatch.motionVectors = ToFfxResource(inputs.motionVectors, StateForLayout(inputs.motionVectors.layout));
+                // Engine-authored reactivity: glossy reflections and editor outlines (Process.Compose).
+                dispatch.reactive = ToFfxResource(inputs.reactiveMask, StateForLayout(inputs.reactiveMask.layout));
                 dispatch.output = ToFfxResource(inputs.scalingOutputColor, FFX_API_RESOURCE_STATE_UNORDERED_ACCESS);
                 dispatch.jitterOffset = {inputs.ubo->Jitter.x, inputs.ubo->Jitter.y};
                 dispatch.motionVectorScale = {1.0f, 1.0f};
@@ -851,6 +903,8 @@ namespace FidelityFXWrapper
                     : (inputs.hdrOutput
                         ? FFX_UPSCALE_FLAG_NON_LINEAR_COLOR_PQ
                         : FFX_UPSCALE_FLAG_NON_LINEAR_COLOR_SRGB);
+
+                Context().ConfigureUpscaleTuning(inputs.fsrShadingChangeScale, inputs.fsrVelocityFactor);
 
                 const ffx::ReturnCode result = ffx::Dispatch(Context().UpscaleContext(), dispatch);
                 if (result != ffx::ReturnCode::Ok)

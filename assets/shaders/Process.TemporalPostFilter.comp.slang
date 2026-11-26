@@ -27,6 +27,9 @@ struct PushConsts
     float CompressionScale;
     // Not every renderer contract writes RT_ALBEDO; SoftwareModernNoAmbient does not.
     uint UseAlbedoGuide;
+    // Frames of RT_HISTORY_AGE over which the filter fades from full strength to a quarter. 0 when
+    // the renderer keeps no history age: the strength is then not modulated.
+    uint HistoryAgeFrames;
 };
 
 [[vk::push_constant]]
@@ -213,8 +216,20 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         }
     }
 
+    // Where the upscaler has converged the residual is small and the filter mostly costs detail;
+    // where it has just lost history (RT_HISTORY_AGE near 0) the filter is the only denoiser. The
+    // age comes from the geometry, so FSR, SGSR2 and Native TAAU share this without any upscaler
+    // reporting its own confidence.
+    float strength = saturate(pushConsts.Strength);
+    if (pushConsts.HistoryAgeFrames != 0u)
+    {
+        const int ageIndex = Bindless.ViewRT(pushConsts._ViewHdr_CustomData0, Bindless.RT_HISTORY_AGE);
+        const uint age = Bindless.GetStorageTexture<uint>(ageIndex)[centerGuidePixel];
+        const float ageFactor = saturate(1.0f - float(age) / float(pushConsts.HistoryAgeFrames));
+        strength *= lerp(0.25f, 1.0f, ageFactor);
+    }
     const float3 filtered = accumulated / max(accumulatedWeight, 1e-5f);
-    float3 result = lerp(center, filtered, saturate(pushConsts.Strength));
+    float3 result = lerp(center, filtered, strength);
     if (pushConsts.FinalPass != 0)
     {
         result = DecompressHdr(result);

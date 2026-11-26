@@ -19,8 +19,16 @@ import Shader.SurfaceBuffer;
 // view therefore costs only the age read per pixel.
 //
 // No history of any kind is read or kept here: the filter only ever mixes current-frame samples.
-// The signal is diffuse lighting with albedo divided out (compose multiplies albedo back in), so
-// texture detail is never blurred; specular is left alone.
+// The diffuse signal is lighting with albedo divided out (compose multiplies albedo back in), so
+// texture detail is never blurred.
+//
+// The host runs the filter a second time over RT_SINGLE_SPECULAR (GPUScene.CustomData2 bit 0),
+// with rules for a lobe that is narrower and view dependent: only glossy surfaces (roughness above
+// kSpecularMinRoughness; a sharp mirror is left exactly as traced), strength ramping in with
+// roughness, at most three passes, a normal stop that tightens as the lobe narrows, a roughness
+// stop, an albedo stop (specular is not demodulated, so a metal's texture lives in it), and a
+// narrower kernel where the reflected surface is in contact (short specular hit distance), so a
+// crisp reflection at the foot of an object is not smeared.
 //
 // Edge stops: same instance, the tap lies on the centre's tangent plane, normals agree, and
 // luminance differs by less than a few local noise deviations (SVGF-style: the variance is
@@ -34,6 +42,7 @@ import Shader.SurfaceBuffer;
 // so it never races with itself. That is also why the host runs at least two passes.
 //
 // GPUScene.CustomData1: bits 0-7 pass index, 8-15 pass count, 16-31 FullFrames.
+// GPUScene.CustomData2: bit 0 = filter RT_SINGLE_SPECULAR instead of RT_SINGLE_DIFFUSE.
 
 static const float kKernel[3] = { 0.25f, 0.5f, 0.25f };
 
@@ -43,6 +52,13 @@ static const float kNormalPower = 32.0f;
 static const float kPlaneSlope = 0.1f;
 // Luminance stop in units of the local noise standard deviation (SVGF uses 4).
 static const float kLuminanceSigma = 4.0f;
+
+// Specular channel: below this roughness the lobe is mirror-like and is never filtered.
+static const float kSpecularMinRoughness = 0.15f;
+// Roughness difference (perceptual) at which the specular roughness stop falls to 1/e.
+static const float kSpecularRoughnessSigma = 0.12f;
+// Reflected-ray length (metres) below which a reflection counts as a contact reflection.
+static const float kSpecularContactDistance = 0.5f;
 
 float Luminance(float3 color)
 {
@@ -61,11 +77,12 @@ struct FFilterPixel
     uint Identity;
     float3 Position;
     float3 Normal;
+    float Roughness;
 };
 
 // Whether a pixel takes part in the filter, and how strongly. Must give the same answer for a pixel
 // whether it is asked as a centre or as a tap: it decides which plane holds that pixel's value.
-bool IsFilterTarget(uint viewBase, int2 pixel, uint fullFrames, out float strength)
+bool IsFilterTarget(uint viewBase, int2 pixel, uint fullFrames, bool specular, out float strength)
 {
     const uint age = Surface.LoadHistoryAge(viewBase, pixel);
     strength = saturate(1.0f - float(age) / float(max(fullFrames, 1u)));
@@ -76,18 +93,32 @@ bool IsFilterTarget(uint viewBase, int2 pixel, uint fullFrames, out float streng
     // Emitters store absolute radiance in the diffuse plane (with a white demodulation guide), and
     // degenerate / debug samples carry no material: neither is noisy lighting.
     const uint2 bsdf = Surface.LoadBsdf(viewBase, pixel);
-    return bsdf.x != Surface.kInvalidMaterialId &&
-        !Surface.HasFlag(Surface.UnpackFlags(bsdf.y), Surface.kFlagEmissive);
+    if (bsdf.x == Surface.kInvalidMaterialId ||
+        Surface.HasFlag(Surface.UnpackFlags(bsdf.y), Surface.kFlagEmissive))
+    {
+        return false;
+    }
+    if (specular)
+    {
+        const float roughness = Surface.LoadGeometry(viewBase, pixel).Roughness;
+        if (roughness <= kSpecularMinRoughness)
+        {
+            return false;
+        }
+        strength *= smoothstep(kSpecularMinRoughness, 0.45f, roughness);
+    }
+    return strength > 0.0f;
 }
 
-FFilterPixel LoadFilterPixel(uint viewBase, int2 pixel, uint2 size, uint fullFrames,
+FFilterPixel LoadFilterPixel(uint viewBase, int2 pixel, uint2 size, uint fullFrames, bool specular,
                              in UniformBufferObject camera)
 {
     FFilterPixel result;
     result.Identity = 0u;
     result.Position = float3(0, 0, 0);
     result.Normal = float3(0, 0, 1);
-    result.Active = IsFilterTarget(viewBase, pixel, fullFrames, result.Strength);
+    result.Roughness = 0.0f;
+    result.Active = IsFilterTarget(viewBase, pixel, fullFrames, specular, result.Strength);
     if (!result.Active)
     {
         return result;
@@ -99,6 +130,7 @@ FFilterPixel LoadFilterPixel(uint viewBase, int2 pixel, uint2 size, uint fullFra
         camera.ProjectionInverse, camera.ModelViewInverse, pixel, size, geometry.Depth);
     const float normalLength = length(geometry.Normal);
     result.Normal = normalLength > 1e-4f ? geometry.Normal / normalLength : float3(0, 0, 1);
+    result.Roughness = geometry.Roughness;
     return result;
 }
 
@@ -147,6 +179,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     const uint pass = params & 0xFFu;
     const uint passCount = (params >> 8u) & 0xFFu;
     const uint fullFrames = params >> 16u;
+    const bool specular = (Bindless.GetGpuscene().CustomData2 & 1u) != 0u;
 
     const uint2 size = Surface.Dimensions(viewBase);
     const int2 pixel = int2(dispatchThreadId.xy);
@@ -155,13 +188,14 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    const FFilterPixel center = LoadFilterPixel(viewBase, pixel, size, fullFrames, camera);
+    const FFilterPixel center = LoadFilterPixel(viewBase, pixel, size, fullFrames, specular, camera);
     if (!center.Active)
     {
         return;
     }
 
-    let original = Bindless.GetViewStorageTexture<float4>(Bindless.RT_SINGLE_DIFFUSE);
+    let original = Bindless.GetViewStorageTexture<float4>(
+        specular ? Bindless.RT_SINGLE_SPECULAR : Bindless.RT_SINGLE_DIFFUSE);
     let ping = Bindless.GetViewStorageTexture<float4>(Bindless.RT_DISOCCLUSION_PING);
     let pong = Bindless.GetViewStorageTexture<float4>(Bindless.RT_DISOCCLUSION_PONG);
     const bool lastPass = pass + 1u >= passCount;
@@ -179,14 +213,32 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
         previous = (pass & 1u) == 1u ? ping[pixel] : pong[pixel];
     }
 
+    // Specular-only edge stops; neutral on the diffuse channel.
+    float normalPower = kNormalPower;
+    float contact = 1.0f;
+    float3 centerAlbedo = float3(0, 0, 0);
+    if (specular)
+    {
+        normalPower = lerp(128.0f, 24.0f, saturate((center.Roughness - kSpecularMinRoughness) / 0.65f));
+        // The stored hit distance includes the primary ray.
+        const float3 cameraPosition = mul(camera.ModelViewInverse, float4(0, 0, 0, 1)).xyz;
+        const float reflectedLength =
+            Bindless.GetViewStorageTexture<float>(Bindless.RT_SPECULAR_HITDIST)[pixel] -
+            length(center.Position - cameraPosition);
+        contact = saturate(reflectedLength / kSpecularContactDistance);
+        centerAlbedo = Surface.LoadAlbedo(viewBase, pixel).rgb;
+    }
+
     float4 filtered = previous;
     if (pass < PassesFor(center.Strength, passCount))
     {
         const int step = 1 << int(pass);
         const float centerLuminance = Luminance(previous.rgb);
         // Luminance stop scaled by the local noise level (SVGF): noise-sized differences pass,
-        // real lighting edges such as shadow boundaries stop the filter.
-        const float luminanceScale = kLuminanceSigma * sqrt(max(previous.a, 0.0f)) + 1.0e-3f;
+        // real lighting edges such as shadow boundaries stop the filter. A contact reflection
+        // tightens it further.
+        const float luminanceScale = (kLuminanceSigma * sqrt(max(previous.a, 0.0f)) + 1.0e-3f) *
+            lerp(0.35f, 1.0f, contact);
         float3 sum = previous.rgb * kKernel[1] * kKernel[1];
         float varianceSum = previous.a * Square(kKernel[1] * kKernel[1]);
         float weightSum = kKernel[1] * kKernel[1];
@@ -220,12 +272,21 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                 const float planeWeight =
                     exp(-planeDistance / (kPlaneSlope * length(offset) + 1.0e-4f));
 
-                const float3 tapNormal = Surface.LoadGeometry(viewBase, tap).Normal;
+                const Surface.FSurfaceGeometry tapGeometry = Surface.LoadGeometry(viewBase, tap);
+                const float3 tapNormal = tapGeometry.Normal;
                 const float normalWeight = pow(
                     saturate(dot(center.Normal, tapNormal * rsqrt(max(dot(tapNormal, tapNormal), 1e-8f)))),
-                    kNormalPower);
+                    normalPower);
 
-                const float geometryWeight = kernel * planeWeight * normalWeight;
+                float geometryWeight = kernel * planeWeight * normalWeight;
+                if (specular)
+                {
+                    const float3 albedoDelta = Surface.LoadAlbedo(viewBase, tap).rgb - centerAlbedo;
+                    geometryWeight *=
+                        exp(-abs(tapGeometry.Roughness - center.Roughness) / kSpecularRoughnessSigma) *
+                        exp2(-8.0f * dot(albedoDelta, albedoDelta)) *
+                        lerp(0.25f, 1.0f, contact);
+                }
                 if (geometryWeight <= 1.0e-5f)
                 {
                     continue;
@@ -235,7 +296,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                 // in A, and its variance is taken to be the centre's.
                 float tapStrength;
                 float4 tapValue;
-                if (pass == 0u || !IsFilterTarget(viewBase, tap, fullFrames, tapStrength))
+                if (pass == 0u || !IsFilterTarget(viewBase, tap, fullFrames, specular, tapStrength))
                 {
                     tapValue = float4(original[tap].rgb, previous.a);
                 }

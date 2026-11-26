@@ -94,6 +94,7 @@ Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D 
     ubo.ExitAfterFirst = config_.userSettings.ExitAfterFirst;
     ubo.SuperResolution = GOption->ReferenceMode ? 2 : renderer_->EffectiveSuperResolutionMode();
     ubo.LowHistorySampleScale = std::clamp(config_.userSettings.LowHistorySampleScale, 1u, 16u);
+    ubo.SobolSampling = config_.userSettings.SobolSampling ? 1u : 0u;
     ubo.RayReconstruction = renderer_->IsRayReconstructionActive();
     ubo.CheckerboardSparseLighting = renderer_->IsSparseCheckerboardLightingActive();
 

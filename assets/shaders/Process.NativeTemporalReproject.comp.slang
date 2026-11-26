@@ -429,13 +429,14 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     clipMaximum = max(clipMaximum, currentYCoCg);
     const float3 historyYCoCg = RgbToYCoCg(history.rgb);
     const float3 clippedHistoryYCoCg = clamp(historyYCoCg, clipMinimum, clipMaximum);
-    const float3 clippedHistory = max(YCoCgToRgb(clippedHistoryYCoCg), 0.0);
 
     // Distinguish real changes from Monte-Carlo noise using temporal moments. Reactivity only
-    // becomes authoritative after the lock has had time to learn the local variance.
+    // becomes authoritative after the lock has had time to learn the local variance. The dead zone
+    // is wide on purpose: at 1-2 spp a 2.5 sigma excursion happens every few frames per pixel, and
+    // each one used to cut the history blend and re-seed the boiling it was meant to suppress.
     const float currentLuminance = Luminance(currentRgb);
     const float innovation = abs(currentLuminance - previousMoments.x);
-    const float unexpectedChange = max(innovation - temporalSigma * 2.5, 0.0) /
+    const float unexpectedChange = max(innovation - temporalSigma * 3.25, 0.0) /
         max(max(currentLuminance, abs(previousMoments.x)) + temporalSigma, 0.05);
     // Measure how far outside the clip box history sat, in units of the box itself. Normalising
     // by luminance instead makes a narrower box read as higher reactivity for the same actual
@@ -444,10 +445,26 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     const float clipBoxHalfWidth = max((clipMaximum.x - clipMinimum.x) * 0.5, 1.0e-4);
     const float clipDistance = saturate(
         abs(historyYCoCg.x - clippedHistoryYCoCg.x) / clipBoxHalfWidth);
-    const float reactive = saturate(unexpectedChange * 1.25 + clipDistance * 0.75) * learnedLock;
+    // The clip box of a noisy neighbourhood moves every frame on its own; there, history sitting
+    // outside it says more about this frame's samples than about the history.
+    const float clipReactivity = lerp(0.75, 0.35, saturate(noiseRatio * 2.0));
+    const float reactive =
+        saturate(unexpectedChange * 1.25 + clipDistance * clipReactivity) * learnedLock;
     const float outputMotionLength = length(
         motion * (float2(constants.outputSize) / float2(constants.renderSize)));
     const float motionStability = exp2(-outputMotionLength * 0.012);
+
+    // A converged, static, unsurprising pixel keeps part of its unclipped history. The eight
+    // neighbours that define the box are fresh 1-2 spp samples, so the box drifts every frame and
+    // a hard clamp drags settled history along with it: that drift is the steady-state boiling.
+    // Any sign of a real change (motion, a disocclusion, an unexpected luminance jump) drops back
+    // to the hard clip, which is what keeps ghosting in check.
+    const float softRetain = invalidHistory ? 0.0 : 0.5 *
+        saturate((learnedLock - 0.5) * 2.0) *
+        saturate(1.0 - unexpectedChange * 4.0) *
+        saturate(1.0 - outputMotionLength);
+    const float3 clippedHistory = max(
+        YCoCgToRgb(lerp(clippedHistoryYCoCg, historyYCoCg, softRetain)), 0.0);
 
     const float confidence = invalidHistory ? 0.0 : min(history.a + 0.12, 1.0);
     const float historyBlend = invalidHistory ? 0.0 : min(

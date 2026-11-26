@@ -26,17 +26,23 @@ struct UserSettings final
     int32_t UpscalerType = 4;
     float NativeTAAUHistoryWeight = 0.97f;
     float NativeTAAUSharpness = 0.25f;
+    float FsrShadingChangeScale = 0.40f;
+    float FsrVelocityFactor = 0.35f;
     bool TemporalUpscalerPostFilter = false;
     uint32_t TemporalUpscalerPostFilterPasses = 3;
     float TemporalUpscalerPostFilterStrength = 0.65f;
     float TemporalUpscalerPostFilterLumaSigma = 0.10f;
     float TemporalUpscalerFireflySigma = 2.5f;
     bool ComposeFireflyClamp = true;
+    // Owen-scrambled Sobol (instead of PCG) for the path tracer's first bounce.
+    bool SobolSampling = true;
     // Process.DisocclusionFilter: spatial filter on pixels whose upscaler history is younger than
     // DisocclusionFilterFrames (RT_HISTORY_AGE). Off = the pass does not run at all.
     bool DisocclusionFilter = true;
     uint32_t DisocclusionFilterFrames = 20;
     uint32_t DisocclusionFilterPasses = 5;
+    // Also filter RT_SINGLE_SPECULAR on glossy (roughness > 0.15) surfaces.
+    bool DisocclusionFilterSpecular = true;
     bool FrameGeneration = false;
     uint32_t FrameGenerationMultiplier = 2;
     uint32_t FrameGenerationFrameLimitFps = 0;

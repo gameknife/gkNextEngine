@@ -223,20 +223,147 @@ public uint4 InitRandomSeed(uint val0, uint val1, uint frame_num)
     return uint4(val0, val1, frame_num, 0);
 }
 
+// --- Low-discrepancy sample window --------------------------------------------------------------
+//
+// While a window is open (SobolBegin .. SobolEnd), the first draws of RandomFloat* come from a
+// low-discrepancy sequence instead of the PCG stream; past the window's dimension budget, and
+// whenever no window is open, they come from PCG exactly as before. The renderer opens a window
+// around the low-dimensional, high-weight part of each path (the first bounce and its light
+// sample), so none of the sampling code has to thread a sampler through its interfaces.
+//
+// A pixel's sample index walks a shuffled, Owen-scrambled 2D Sobol sequence (Burley 2020), so its
+// samples stratify over frames instead of clumping like white noise, and the temporal upscaler's
+// history converges faster. Each pixel rotates the sequence by its own random Cranley-Patterson
+// offset, which keeps neighbouring pixels independent. A structured spatial offset (8x8 Bayer rank
+// through R2, i.e. screen-space "blue noise") was measured to *raise* both flicker and error behind
+// every non-RR upscaler: the clip boxes and history locks read the pattern as signal.
+//
+// Draws are served in pairs: a 2D request always takes one whole Sobol pair, so the two coordinates
+// of a direction or a disk sample are jointly stratified. Every coordinate is uniformly distributed
+// for any pixel and index, so the estimator stays unbiased. The state is per invocation (static).
+static uint gSobolIndex = 0u;
+static uint gSobolDimension = 0u;
+static uint gSobolDimensionEnd = 0u;
+static uint2 gSobolPixel = uint2(0u, 0u);
+
+uint SobolHash(uint x)
+{
+    x ^= x >> 16u;
+    x *= 0x7feb352du;
+    x ^= x >> 15u;
+    x *= 0x846ca68bu;
+    x ^= x >> 16u;
+    return x;
+}
+
+uint LaineKarrasPermutation(uint x, uint seed)
+{
+    x += seed;
+    x ^= x * 0x6c50b47cu;
+    x ^= x * 0xb82f1e52u;
+    x ^= x * 0xc7afe638u;
+    x ^= x * 0x8d22f6e6u;
+    return x;
+}
+
+// Owen scrambling of a 32-bit fixed-point value in base 2.
+uint NestedUniformScramble(uint x, uint seed)
+{
+    return reversebits(LaineKarrasPermutation(reversebits(x), seed));
+}
+
+// Second Sobol dimension; the first is reversebits(index).
+uint SobolSecondDimension(uint index)
+{
+    uint result = 0u;
+    uint direction = 1u << 31u;
+    for (; index != 0u; index >>= 1u, direction ^= direction >> 1u)
+    {
+        if ((index & 1u) != 0u)
+        {
+            result ^= direction;
+        }
+    }
+    return result;
+}
+
+float2 SobolPair(uint pairIndex)
+{
+    const uint seed = SobolHash(pairIndex * 0x9e3779b9u + 0x85ebca6bu);
+    // Each pair gets its own shuffle and scramble, so pairs decorrelate.
+    const uint shuffled = NestedUniformScramble(gSobolIndex, SobolHash(seed ^ 0x68bc21ebu));
+    const uint sx = NestedUniformScramble(reversebits(shuffled), SobolHash(seed ^ 0x02e5be93u));
+    const uint sy = NestedUniformScramble(SobolSecondDimension(shuffled), SobolHash(seed ^ 0x967a889bu));
+    const float2 sobol = float2(sx >> 8u, sy >> 8u) * (1.0f / 16777216.0f);
+
+    const uint pixelHash = SobolHash(gSobolPixel.x * 0x8da6b343u ^ gSobolPixel.y * 0xd8163841u ^ seed);
+    const float2 rotation = float2(pixelHash & 0xFFFFu, pixelHash >> 16u) * (1.0f / 65536.0f);
+    return frac(sobol + rotation);
+}
+
+// Opens a window serving dimensions [firstDimension, firstDimension + dimensionCount) for sample
+// `index` of `pixel`. Distinct windows of one invocation should use disjoint dimension ranges.
+public void SobolBegin(uint2 pixel, uint index, uint firstDimension, uint dimensionCount)
+{
+    gSobolPixel = pixel;
+    gSobolIndex = index;
+    gSobolDimension = firstDimension;
+    gSobolDimensionEnd = firstDimension + dimensionCount;
+}
+
+public void SobolEnd()
+{
+    gSobolDimensionEnd = 0u;
+}
+
+bool SobolAvailable(uint count)
+{
+    return gSobolDimension + count <= gSobolDimensionEnd;
+}
+
+float SobolNext1()
+{
+    const uint dimension = gSobolDimension++;
+    const float2 pair = SobolPair(dimension >> 1u);
+    return (dimension & 1u) == 0u ? pair.x : pair.y;
+}
+
+float2 SobolNext2()
+{
+    // Keep 2D requests on whole pairs.
+    gSobolDimension = (gSobolDimension + 1u) & ~1u;
+    const float2 pair = SobolPair(gSobolDimension >> 1u);
+    gSobolDimension += 2u;
+    return pair;
+}
+
 public float RandomFloat(inout uint4 v)
 {
+    if (SobolAvailable(1u))
+    {
+        return SobolNext1();
+    }
     pcg4d(v);
     return uint_to_float(v.x);
 }
 
 public float2 RandomFloat2(inout uint4 v)
 {
+    if (SobolAvailable(2u + (gSobolDimension & 1u)))
+    {
+        return SobolNext2();
+    }
     pcg4d(v);
     return uint_to_float(v.xy);
 }
 
 public float3 RandomFloat3(inout uint4 v)
 {
+    if (SobolAvailable(3u + (gSobolDimension & 1u)))
+    {
+        const float2 xy = SobolNext2();
+        return float3(xy, SobolNext1());
+    }
     pcg4d(v);
     return uint_to_float(v.xyz);
 }

@@ -11,6 +11,11 @@ truth (`<phase>_ref`, 256 accumulated frames). For every phase this prints
 
     python tools/upscaler_flicker_rmse.py <validation run dir or its screenshots dir>
     python tools/upscaler_flicker_rmse.py <run dir> --baseline <older run dir>
+    python tools/upscaler_flicker_rmse.py <run dir> --baseline <dir> --reference-run <dir>
+
+Each run's own `_ref` shot is itself a 256-frame estimate, and a change to the sampler changes its
+residual noise too. --reference-run scores every run against the references of one run, so a
+comparison measures the frames rather than the references.
 
 Requires numpy and Pillow.
 """
@@ -51,16 +56,18 @@ def find_shots(directory: pathlib.Path) -> dict:
     return phases
 
 
-def score(directory: pathlib.Path) -> dict:
+def score(directory: pathlib.Path, reference_dir: pathlib.Path = None) -> dict:
     result = {}
+    references = find_shots(reference_dir) if reference_dir else {}
     for name, shots in sorted(find_shots(directory).items()):
         frames = [load(shots["s"][i]) for i in sorted(shots["s"])]
         if len(frames) < 2:
             continue
         flicker = float(np.mean([rmse(frames[i], frames[i + 1]) for i in range(len(frames) - 1)]))
         reference = None
-        if shots["ref"] is not None:
-            ref = load(shots["ref"])
+        ref_path = references.get(name, {}).get("ref") if reference_dir else shots["ref"]
+        if ref_path is not None:
+            ref = load(ref_path)
             reference = float(np.mean([rmse(frame, ref) for frame in frames]))
         result[name] = {"flicker": flicker, "ref": reference}
     return result
@@ -70,13 +77,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("run", type=pathlib.Path)
     parser.add_argument("--baseline", type=pathlib.Path)
+    parser.add_argument("--reference-run", type=pathlib.Path)
     args = parser.parse_args()
 
-    current = score(args.run)
+    current = score(args.run, args.reference_run)
     if not current:
         print(f"no upscaler-flicker shots under {args.run}", file=sys.stderr)
         return 1
-    baseline = score(args.baseline) if args.baseline else {}
+    baseline = score(args.baseline, args.reference_run) if args.baseline else {}
 
     def fmt(value):
         return "     -" if value is None else f"{value:.4f}"

@@ -35,6 +35,14 @@ static const uint kSecondaryDirectPlainSun = 0u;       // naive PT 50% random su
 static const uint kSecondaryDirectTerminateIfLit = 1u; // terminate once the path sees direct light (cache = indirect)
 static const uint kSecondaryDirectNone = 2u;           // no secondary direct (already fed to the cache)
 
+// Sobol windows (Camera.SobolSampling, ConstFunc.slang). The path window covers the
+// draws from the start of a sample to the end of its first bounce: lobe, metal tint, direction,
+// fuzzy-trace jitter and the light sample at the first hit. Past the budget draws fall back to PCG.
+static const uint kSobolPathDimension = 0u;
+static const uint kSobolPathDimensionCount = 12u;
+static const uint kSobolPrimaryDirectDimension = 32u;
+static const uint kSobolPrimaryDirectDimensionCount = 8u;
+
 public struct FPathTracingRenderer{
     public float ExitProbability = 0.5;
     public bool ExitAfterFirst = false;
@@ -387,7 +395,10 @@ public struct FPathTracingRenderer{
             ? 1.0f
             : clamp(metalness / max(specProb, 1e-7f), 0.0f, 1.0f);
 
-        const bool chanceMetal = chanceGGX && (RandomFloat(randomSeed) < metalTintProb);
+        // Drawn unconditionally so every lobe consumes the same dimensions: under the Sobol
+        // window that keeps the direction on the same stratified pair from frame to frame.
+        const float rndMetal = RandomFloat(randomSeed);
+        const bool chanceMetal = chanceGGX && (rndMetal < metalTintProb);
         const bool chanceReflect = chanceGGX && !chanceMetal;
 
         const float3 traceNext = chanceGGX ? reflect(rayDir, outwardNormal) : outwardNormal;
@@ -550,11 +561,19 @@ public struct FPathTracingRenderer{
 
         const int sample = max(1, Camera.NumberOfSamples / SampleDownscale * sampleMultiplier);
         const bool wantsDirect = cache.WantsDirectLighting();
+        const bool sobolSampling = Camera.SobolSampling;
 
         for (int i = 0; i < sample; i++)
         {
             float4 RayColor = float4(1, 1, 1, 1);
             cache.BeginPath();
+            // The first bounce (lobe, direction, its light sample) draws from the Sobol window;
+            // deeper bounces carry little weight per sample and stay on PCG.
+            if (sobolSampling)
+            {
+                SobolBegin(uint2(pixel_), Camera.TotalFrames * uint(sample) + uint(i),
+                               kSobolPathDimension, kSobolPathDimensionCount);
+            }
 
             float4 eye = mul(Camera.ModelViewInverse, float4(0, 0, 0, 1));
             float3 ray_dir = normalize(hitPrimaryVertex_.Position - eye.xyz);
@@ -574,6 +593,10 @@ public struct FPathTracingRenderer{
 
             for (uint b = 0; b < maxBounces && pathContinue; ++b)
             {
+                if (b == 1u)
+                {
+                    SobolEnd();
+                }
                 const float3 rayColorBefore = RayColor.rgb;
                 const bool suppressDiffuseEmitter = (b == 0) || wantsDirect;
                 const bool suppressSpecularEmitter = (b == 0);
@@ -682,6 +705,8 @@ public struct FPathTracingRenderer{
                 }
             }
 
+            SobolEnd();
+
             if (hitMetal)
             {
                 RayColor *= primaryAlbedo_;
@@ -712,12 +737,19 @@ public struct FPathTracingRenderer{
                                           primaryRoughness_, primaryMetalness_)
             : BuildBSDFContext(hitPrimaryVertex_, primaryMaterial, primaryRayDir_);
         FDirectLighting directLighting = FDirectLighting();
+        // Primary direct lighting runs once per pixel and frame: its own dimension range.
+        if (sobolSampling)
+        {
+            SobolBegin(uint2(pixel_), Camera.TotalFrames, kSobolPrimaryDirectDimension,
+                           kSobolPrimaryDirectDimensionCount);
+        }
         directIllum.DirectIlluminatePrimary(RandomSeed_, pixel_, primaryContext, directLighting);
         FinalColor.rgb += max(directLighting.DiffuseDemodulated, float3(0, 0, 0));
         FinalReflection.rgb += max(directLighting.SpecularRadiance, float3(0, 0, 0));
         FinalReflection.rgb += max(EvaluateGlossyDirect(tracer, primaryContext,
                                                         hitPrimaryVertex_, HitNormalOffset,
                                                         RandomSeed_), float3(0, 0, 0));
+        SobolEnd();
 
         if (WriteOutputs)
         {

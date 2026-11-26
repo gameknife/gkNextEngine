@@ -298,6 +298,10 @@ namespace Rendering::Upscaler
         float frameTimeDeltaMilliseconds = 16.6667f;
         float nativeTemporalHistoryWeight = 0.97f;
         float nativeTemporalSharpness = 0.25f;
+        // FidelityFX FSR 3.1 overrides (fShadingChangeScale, fVelocityFactor). The SDK defaults
+        // are 1.0; lower values stop 1-2 spp Monte Carlo noise from reading as shading change.
+        float fsrShadingChangeScale = 1.0f;
+        float fsrVelocityFactor = 1.0f;
         VkExtent2D renderExtent{};
         VkExtent2D outputExtent{};
         VkOffset2D outputOffset{};
@@ -314,6 +318,8 @@ namespace Rendering::Upscaler
         FImageResource scalingOutputColor;
         FImageResource hudlessColor;
         FImageResource uiColorAndAlpha;
+        // Optional per-pixel reactivity (Process.Compose, RT_UPSCALER_REACTIVE), render resolution.
+        FImageResource reactiveMask;
 
         FImageResource albedo;
         FImageResource specularAlbedo;

@@ -241,7 +241,9 @@ public struct ALIGN_16 UniformBufferObject
     // segment throughput, so weighting throughput scales bounce order n by this^(n-1) and
     // leaves once-bounced direct light alone. 1 = physical.
     public float MultiBounceIntensity;
-    public float AmbientCubeOffsetPadding2;
+    // r.sampling.sobol: the path tracer's first bounce draws from the Owen-scrambled Sobol window in
+    // ConstFunc.slang instead of PCG white noise. Occupies a former padding slot.
+    public bool SobolSampling;
 
     public float3 AmbientCubeOffset;
     public float AmbientCubeOffsetPadding3;

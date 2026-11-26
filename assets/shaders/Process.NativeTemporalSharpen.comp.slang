@@ -59,7 +59,11 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     const int2 position = int2(pixel);
-    const float3 center = LoadResolved(position);
+    // The reproject pass stores its history confidence in alpha: 0 on a disocclusion, climbing by
+    // ~0.12 a frame. Sharpening a pixel that has not converged only amplifies its noise.
+    const float4 centerSample = resolvedColor.Load(position);
+    const float3 center = centerSample.rgb;
+    const float confidence = saturate(centerSample.a);
     const float3 north = LoadResolved(position + int2(0, -1));
     const float3 south = LoadResolved(position + int2(0, 1));
     const float3 west = LoadResolved(position + int2(-1, 0));
@@ -73,8 +77,8 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     // near-saturated pixel up by a hair therefore lands as a large HDR overshoot, so fade the
     // strength out as the centre approaches the singular end of the curve.
     const float decompressionHeadroom = saturate(1.0 - Luminance(center));
-    const float adaptiveStrength =
-        constants.sharpness * saturate(1.0 - contrast * 0.65) * decompressionHeadroom;
+    const float adaptiveStrength = constants.sharpness * saturate(1.0 - contrast * 0.65) *
+        decompressionHeadroom * smoothstep(0.35, 0.95, confidence);
     const float3 sharpened = clamp(
         center + (center - blur) * adaptiveStrength,
         localMinimum,

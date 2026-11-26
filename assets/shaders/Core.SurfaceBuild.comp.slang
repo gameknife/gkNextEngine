@@ -59,14 +59,18 @@ void main(uint3 DTid : SV_DispatchThreadID)
     NodeProxy* nodes = Bindless.GetGpuscene().Nodes;
     ModelData* models = Bindless.GetGpuscene().Offsets;
 
+    surface.TerminatorOffset = 0.0f;
+
     const uint2 vBuffer = Visibility.Load(pixel, viewBase);
     Vertex hitVertex;
+    float terminatorOffset = 0.0f;
     // A stale or numerically degenerate visibility sample must not feed invalid attributes into the
     // surface. Treat it as an uncovered sample - the same rejection semantics the inline decoders
     // have always had, kept here so it exists in exactly one place.
     if (!Visibility.IsValid(vBuffer) ||
         !Common.get_material_data(
-            vBuffer, origin.xyz, primaryRayDir, nodes, models, vertices, indices, hitVertex))
+            vBuffer, origin.xyz, primaryRayDir, nodes, models, vertices, indices, hitVertex,
+            terminatorOffset))
     {
         Surface.Store(viewBase, pixel, surface, writeSpecularAlbedo);
         Surface.StoreHistoryAge(viewBase, pixel, Surface.kHistoryAgeMax);
@@ -120,6 +124,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
     surface.MaterialId = hitVertex.MaterialIndex;
     surface.Metalness = metalness;
     surface.Flags = Common.MakeSurfaceFlags(material);
+    surface.TerminatorOffset = terminatorOffset;
 
     // An emitter has no meaningful specular albedo; the tracing renderers zero it explicitly.
     if (material.MaterialModel == MaterialDiffuseLight)

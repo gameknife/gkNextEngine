@@ -257,7 +257,7 @@ public void RestirPrimaryGather(inout uint4 randomSeed, int2 pixel, FBSDFContext
         else
         {
             const float3 shadowOrigin =
-                tracer.GetAreaLightShadowOrigin(context.Position, context.Normal,
+                tracer.GetAreaLightShadowOrigin(BSDFShadowOrigin(context), context.Normal,
                                                 lightPosition, EPS2);
             const float3 visibilityTarget = Common.GetLightVisibilityTarget(
                 reservoir.LightIndex, shadowOrigin, lightPosition);

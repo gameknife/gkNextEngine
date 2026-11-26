@@ -27,7 +27,7 @@ namespace Vulkan::PipelineCommon
         {Assets::Bindless::RT_ALBEDO, VK_FORMAT_R16G16B16A16_SFLOAT, "base color"},
         {Assets::Bindless::RT_OBJECTID_0, VK_FORMAT_R32_UINT, "encoded object id"},
         {Assets::Bindless::RT_MOTIONVECTOR, VK_FORMAT_R32G32_SFLOAT, "render-pixel motion"},
-        {Assets::Bindless::RT_BSDF_DATA, VK_FORMAT_R32G32_UINT, "x material id, y f16 metalness | flags"},
+        {Assets::Bindless::RT_BSDF_DATA, VK_FORMAT_R32G32_UINT, "x material id, y f16 metalness | flags | terminator offset"},
         {Assets::Bindless::RT_HISTORY_AGE, VK_FORMAT_R16_UINT, "frames of valid reprojected history"},
     }};
 
@@ -41,7 +41,8 @@ namespace Vulkan::PipelineCommon
     // RT_BSDF_DATA.x for background / degenerate samples; must equal Surface.kInvalidMaterialId.
     inline constexpr uint32_t kSurfaceInvalidMaterialId = 0xFFFFFFFFu;
 
-    // Feature flags in the high 16 bits of RT_BSDF_DATA.y; must equal the Surface.kFlag* set.
+    // Feature flags in bits 16-23 of RT_BSDF_DATA.y (bits 24-31 hold the quantised shadow-terminator
+    // offset); must equal the Surface.kFlag* set.
     inline constexpr uint32_t kSurfaceFlagEmissive = 1u << 0u;
     inline constexpr uint32_t kSurfaceFlagMetallic = 1u << 1u;
     inline constexpr uint32_t kSurfaceFlagDielectric = 1u << 2u;

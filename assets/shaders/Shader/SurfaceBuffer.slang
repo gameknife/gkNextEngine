@@ -22,9 +22,9 @@ namespace Surface
     // into GPUScene materials, so it can never collide with this.
     public static const uint kInvalidMaterialId = 0xFFFFFFFFu;
 
-    // Feature flags, packed into the high 16 bits of RT_BSDF_DATA.y. Material *identity* stays in
-    // the material id; these describe the shading *strategy*, which is what a scheduler buckets on.
-    // Keep this set minimal - it is not a place to mirror the material system.
+    // Feature flags, packed into bits 16-23 of RT_BSDF_DATA.y. Material *identity* stays in the
+    // material id; these describe the shading *strategy*, which is what a scheduler buckets on.
+    // Keep this set minimal - it is not a place to mirror the material system: there are 8 bits.
     public static const uint kFlagEmissive = 1u << 0u;
     public static const uint kFlagMetallic = 1u << 1u;
     public static const uint kFlagDielectric = 1u << 2u;
@@ -70,6 +70,7 @@ namespace Surface
         public uint MaterialId;       // resolved GPUScene material index, kInvalidMaterialId = none
         public float Metalness;       // effective metalness, MRA and material-model override applied
         public uint Flags;            // kFlag* bitset
+        public float TerminatorOffset; // shadow-ray lift along Normal (see EncodeTerminatorOffset)
     };
 
     // Geometry-only view, for screen-space marching (occlusion, contact shadows, SS tracing).
@@ -90,13 +91,17 @@ namespace Surface
         public uint MaterialId;
         public float Metalness;
         public uint Flags;
+        public float TerminatorOffset;
     };
 
     // --- BSDF word packing --------------------------------------------------------------------
 
-    public uint PackBsdfWord(float metalness, uint flags)
+    // RT_BSDF_DATA.y: bits 0-15 f16 effective metalness, bits 16-23 kFlag* bitset, bits 24-31 the
+    // quantised shadow-terminator offset.
+    public uint PackBsdfWord(float metalness, uint flags, float terminatorOffset)
     {
-        return (uint(f32tof16(saturate(metalness))) & 0xFFFFu) | ((flags & 0xFFFFu) << 16u);
+        return (uint(f32tof16(saturate(metalness))) & 0xFFFFu) | ((flags & 0xFFu) << 16u) |
+               (EncodeTerminatorOffset(terminatorOffset) << 24u);
     }
 
     public float UnpackMetalness(uint bsdfWord)
@@ -106,7 +111,47 @@ namespace Surface
 
     public uint UnpackFlags(uint bsdfWord)
     {
-        return (bsdfWord >> 16u) & 0xFFFFu;
+        return (bsdfWord >> 16u) & 0xFFu;
+    }
+
+    // --- Shadow-terminator offset ---------------------------------------------------------------
+    // A smooth-shaded low-poly surface is lit by its interpolated normal but occluded by its flat
+    // triangles, so a shadow ray leaving the flat facet is caught by the neighbouring facets while
+    // the shading normal still faces the light: a stair-stepped terminator. The primary surface
+    // reconstruction computes how far the smooth surface the normals describe sits above the
+    // facet (Hanika 2021, "Hacking the shadow terminator"; Common.get_material_data) and the
+    // primary-hit shadow rays start that far along the shading normal. Zero on flat geometry, on
+    // concave regions and on back faces, so only convex smooth-shaded surfaces move.
+    //
+    // 8 bits, logarithmic: code 0 is "no offset", codes 1..255 span 2^-14 m (0.06 mm) to 2 m with
+    // a 4% step - the offset is a sagitta, so it scales with the triangle, not with the scene.
+    static const float kTerminatorOffsetLog2Min = -14.0f;
+    static const float kTerminatorOffsetLog2Max = 1.0f;
+
+    public uint EncodeTerminatorOffset(float offset)
+    {
+        if (!(offset >= exp2(kTerminatorOffsetLog2Min)))
+        {
+            return 0u;
+        }
+        const float t = (log2(offset) - kTerminatorOffsetLog2Min) /
+                        (kTerminatorOffsetLog2Max - kTerminatorOffsetLog2Min);
+        return uint(clamp(round(t * 254.0f), 0.0f, 254.0f)) + 1u;
+    }
+
+    public float DecodeTerminatorOffset(uint code)
+    {
+        if (code == 0u)
+        {
+            return 0.0f;
+        }
+        return exp2(lerp(kTerminatorOffsetLog2Min, kTerminatorOffsetLog2Max,
+                         float(code - 1u) / 254.0f));
+    }
+
+    public float UnpackTerminatorOffset(uint bsdfWord)
+    {
+        return DecodeTerminatorOffset(bsdfWord >> 24u);
     }
 
     public bool HasFlag(uint flags, uint flag)
@@ -218,7 +263,8 @@ namespace Surface
         AlbedoPlane(viewBase)[pixel] = s.Albedo;
         ObjectIdPlane(viewBase)[pixel] = s.ObjectId;
         MotionPlane(viewBase)[pixel] = float4(s.Motion, 0.0f, 0.0f);
-        BsdfPlane(viewBase)[pixel] = uint2(s.MaterialId, PackBsdfWord(s.Metalness, s.Flags));
+        BsdfPlane(viewBase)[pixel] =
+            uint2(s.MaterialId, PackBsdfWord(s.Metalness, s.Flags, s.TerminatorOffset));
         if (writeSpecularAlbedo)
         {
             SpecularAlbedoPlane(viewBase)[pixel] = s.SpecularAlbedo;
@@ -242,6 +288,7 @@ namespace Surface
         s.MaterialId = bsdf.x;
         s.Metalness = UnpackMetalness(bsdf.y);
         s.Flags = UnpackFlags(bsdf.y);
+        s.TerminatorOffset = UnpackTerminatorOffset(bsdf.y);
         return s;
     }
 
@@ -258,6 +305,7 @@ namespace Surface
         s.MaterialId = bsdf.x;
         s.Metalness = UnpackMetalness(bsdf.y);
         s.Flags = UnpackFlags(bsdf.y);
+        s.TerminatorOffset = UnpackTerminatorOffset(bsdf.y);
         return s;
     }
 

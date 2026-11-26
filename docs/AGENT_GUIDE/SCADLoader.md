@@ -167,8 +167,14 @@ ScadRig 部件（`FRigPart::sectionStyles` → `SceneBuilder::AddRigSectionMater
 着色器侧（`common/BSDF.slang`）：`BSDFWrappedDiffuseCosine` / `BSDFSheen` 两个辅助函数被所有直接光
 入口共用——追踪类渲染器的太阳与灯光 NEE（`Lighting.slang`，含 ReSTIR 目标函数）和 NoAmbient；
 subsurface 与 sheen 为 0 时它们退化为原来的 `saturate(N·L)` 与 0。只修饰直接光的漫反射项，采样的
-BSDF、pdf 与次级射线不变。已知限制：包裹光会让低模平滑表面的"阴影明暗交界线锯齿"（太阳阴影
-射线从平面三角形出发，被相邻面挡住）更显眼，修正要在主表面重建里做明暗交界线偏移。
+BSDF、pdf 与次级射线不变。
+
+平滑低模表面的明暗交界线：太阳阴影射线若从平面三角形出发，会被相邻面挡住，在插值法线仍朝光的
+地方切出台阶状的阴影边（包裹光下更显眼）。主表面重建（`get_material_data`）按 Hanika 2021
+"Hacking the shadow terminator" 算出顶点法线所描述的光滑曲面高出该三角形多少（平面、凹处、背面为 0），
+以 8 bit 对数量化存进 `RT_BSDF_DATA.y` 的高 8 位（`Shader/SurfaceBuffer.slang`）；主命中的太阳与
+灯光阴影射线（含 ReSTIR 的可见性校验）和 CSM 查询都从沿着色法线抬高后的点出发。代价是约一个
+三角形弓高（几毫米到几厘米）以内的接触阴影会变淡。
 
 ### 雕塑原语与法线控制
 

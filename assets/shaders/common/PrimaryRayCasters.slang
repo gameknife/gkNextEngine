@@ -78,7 +78,8 @@ public struct FVisibilityBufferRayCaster : IPrimaryRayCaster
         }
 
         if (!Common.get_material_data(
-                vBuffer, origin.xyz, rayDir, nodes, models, vertices, indices, outVertex))
+                vBuffer, origin.xyz, rayDir, nodes, models, vertices, indices, outVertex,
+                outSurface.TerminatorOffset))
         {
             return false;
         }
@@ -137,6 +138,7 @@ public struct FSurfacePrimaryRayCaster : IPrimaryRayCaster
         outSurface.Roughness = surface.Roughness;
         outSurface.Metalness = surface.Metalness;
         outSurface.MotionPixels = surface.Motion;
+        outSurface.TerminatorOffset = surface.TerminatorOffset;
         return true;
     }
 }

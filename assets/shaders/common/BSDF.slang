@@ -32,7 +32,17 @@ public struct FBSDFContext
     // Zero for every other model, so their direct lighting is unchanged.
     public float Subsurface;
     public float Sheen;
+    // Primary hit only: how far its sun / light shadow rays start along Normal so that they leave
+    // the smooth surface the shading normals describe rather than the flat triangle
+    // (Shader/SurfaceBuffer.slang, shadow-terminator offset). Zero on every other vertex.
+    public float TerminatorOffset;
 };
+
+// Origin of the shadow rays (and the CSM receiver point) for this shading point.
+public float3 BSDFShadowOrigin(FBSDFContext context)
+{
+    return context.Position + context.Normal * context.TerminatorOffset;
+}
 
 public struct FBSDFEval
 {
@@ -220,6 +230,7 @@ public FBSDFContext BuildBSDFContext(Vertex vertex, Material material, float3 in
     context.MaterialModel = material.MaterialModel;
     context.Subsurface = MaterialSubsurface(material);
     context.Sheen = MaterialSheen(material);
+    context.TerminatorOffset = 0.0f;
 
     if (material.DiffuseTextureId >= 0)
     {
@@ -270,6 +281,7 @@ public FBSDFContext BuildBSDFContextFromSurface(
     context.MaterialModel = material.MaterialModel;
     context.Subsurface = MaterialSubsurface(material);
     context.Sheen = MaterialSheen(material);
+    context.TerminatorOffset = 0.0f;
     return context;
 }
 

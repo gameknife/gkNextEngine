@@ -12,7 +12,8 @@ namespace Common
         in ModelData* Models,
         in GPUVertex* Vertices,
         in uint* PrimAddress,
-        out Vertex result)
+        out Vertex result,
+        out float terminatorOffset)
     {
         // Fetch the triangle selected by the visibility pass, then reconstruct the
         // perspective-correct attributes at the same camera sample.
@@ -20,6 +21,7 @@ namespace Common
         ModelData model = Models[proxy.modelId];
 
         result = {};
+        terminatorOffset = 0.0f;
         float3 positions[3], normals[3], tangents[3], localNormals[3];
         float4 localTangents[3];
         float2 tex_coords[3];
@@ -105,6 +107,26 @@ namespace Common
             {
                 result.Normal = normalize(result.Normal - ray_direction * (0.05f - lean));
             }
+        }
+
+        // Shadow-terminator offset (Hanika 2021, "Hacking the shadow terminator"). Project the hit
+        // onto each vertex's tangent plane wherever it lies below that plane and blend the three
+        // projections barycentrically: the result is the point the smooth surface the vertex
+        // normals describe would put above the flat facet. Flat facets (equal normals) and
+        // concave corners (hit above every tangent plane) get nothing. Only the distance along
+        // the shading normal is kept; Shader/SurfaceBuffer.slang carries it to the shadow rays.
+        // A back-facing hit (the normal faces along the view ray) is a two-sided interior, whose
+        // shadow rays leave from the other side: no offset there.
+        if (dot(result.Normal, ray_direction) < 0.0f)
+        {
+            float3 lift = float3(0.0f);
+            [unroll]
+            for (int i = 0; i != 3; ++i)
+            {
+                const float3 n = normals[i] * rsqrt(max(dot(normals[i], normals[i]), 1.0e-20f));
+                lift -= barycentrics[i] * min(dot(result.Position - positions[i], n), 0.0f) * n;
+            }
+            terminatorOffset = max(dot(lift, result.Normal), 0.0f);
         }
         result.Tangent.xyz = normalize(mad(float3(barycentrics.x), tangents[0], mad(float3(barycentrics.y), tangents[1], barycentrics.z * tangents[2])));
         result.TexCoord = mad(float2(barycentrics.x), tex_coords[0], mad(float2(barycentrics.y), tex_coords[1], barycentrics.z * tex_coords[2]));

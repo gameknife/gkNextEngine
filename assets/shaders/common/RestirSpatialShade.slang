@@ -105,6 +105,8 @@ public void RestirSpatialShade(uint3 dispatchThreadId, IRayTracer tracer)
     context.FrontFace = true;
     context.Subsurface = MaterialSubsurface(material);
     context.Sheen = MaterialSheen(material);
+    // Same shadow origin the gather verified its initial candidate from.
+    context.TerminatorOffset = Surface.UnpackTerminatorOffset(packedBsdf.y);
 
     uint4 randomSeed = InitRandomSeed(
         dispatchThreadId.x, dispatchThreadId.y, camera.TotalFrames + 7777u);
@@ -124,7 +126,8 @@ public void RestirSpatialShade(uint3 dispatchThreadId, IRayTracer tracer)
         else
         {
             const float3 shadowOrigin = tracer.GetAreaLightShadowOrigin(
-                context.Position, context.Normal, centerLightPosition, reconstructionOffset);
+                BSDFShadowOrigin(context), context.Normal, centerLightPosition,
+                reconstructionOffset);
             const float3 visibilityTarget = Common.GetLightVisibilityTarget(
                 center.LightIndex, shadowOrigin, centerLightPosition);
             if (tracer.TraceAreaLightSegment(shadowOrigin, visibilityTarget, EPS,
@@ -215,7 +218,7 @@ public void RestirSpatialShade(uint3 dispatchThreadId, IRayTracer tracer)
                 combined.LightIndex == center.LightIndex &&
                 all(combined.LightUV == center.LightUV);
             const float3 shadowOrigin = tracer.GetAreaLightShadowOrigin(
-                context.Position, context.Normal, lightPosition, reconstructionOffset);
+                BSDFShadowOrigin(context), context.Normal, lightPosition, reconstructionOffset);
             const float3 visibilityTarget = Common.GetLightVisibilityTarget(
                 combined.LightIndex, shadowOrigin, lightPosition);
             if (!alreadyVerified &&

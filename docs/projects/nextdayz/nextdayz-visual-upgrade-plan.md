@@ -66,7 +66,7 @@ last_updated: 2026-11-26
 
 ### `V1-2` 扩展 `gk_material`（`subsurface` / `sheen` / `ior`）与 `gk_foliage`
 - **状态**：已完成。契约见 `docs/AGENT_GUIDE/SCADLoader.md`「触感参数」；映射集中在 `Assets::Material::Surface`（场景节点与 ScadRig 部件共用）；着色辅助函数在 `common/BSDF.slang`，接入追踪类渲染器的太阳/灯光 NEE（含 ReSTIR）与 NoAmbient；对照台 `assets/scad/source/others/gk_material_demo.scad`。`shadow = false` 透光玻璃按计划留在 V2-1。
-- **遗留**：低模平滑表面的阴影明暗交界线锯齿（太阳阴影射线从平面三角形出发被相邻面挡住）在包裹光下更显眼；需要在主表面重建里做 Hanika 式明暗交界线偏移并经表面缓冲传给阴影射线，单独做。
+- **后续已修**：低模平滑表面的阴影明暗交界线锯齿——主表面重建做 Hanika 式明暗交界线偏移，经表面缓冲传给主命中的阴影射线与 CSM 查询；契约见 `docs/AGENT_GUIDE/SCADLoader.md`。
 - **范围**：`src/Engine/Assets/Data/Material.hpp`、`src/Modules/ScadLoader/{FScadEvaluator.*,FScadLoader.cpp,FScadRig.cpp}`、`src/Engine/Runtime/Scene/SceneBuilder.*`、`assets/shaders/common/{BSDF.slang,Lighting.slang,SwModernShading.slang,SwTracingShading.slang,NoAmbientShading.slang,PathTracingLiteShading.slang}`。
 - **内容**：
   1. 严守 `sizeof(Assets::Material) == 64`，按设计 §3.2 接入 `gk_foliage(c, transmission, thickness)` 及 `gk_material` 的 `ior`、`subsurface`、`sheen` 参数（同时支持普通场景 Node 与 `ScadRig` 部件材质）；

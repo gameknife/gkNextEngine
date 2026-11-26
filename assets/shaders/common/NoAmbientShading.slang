@@ -126,6 +126,8 @@ struct FNoAmbientShadingInput
     // Surface path GTAO runs before shading, so the caller supplies it here and Process.GTAOCompose
     // no longer upsamples. The legacy path has no AO available yet and passes 1.
     float SkyOcclusion;
+    // Shadow-terminator lift along Normal for the sun shadow lookup (Shader/SurfaceBuffer.slang).
+    float TerminatorOffset;
 };
 
 struct FNoAmbientShadingOutput
@@ -381,7 +383,8 @@ FNoAmbientShadingOutput ShadeNoAmbientStandard(FNoAmbientShadingInput surface, i
         const float cosL = dot(L, N);
         float NoL = max(cosL, 0.0f);
         float viewDist = -mul(Camera.ModelView, float4(surface.Position, 1.0f)).z;
-        float shadow = Common.SampleSunShadowCSM(surface.Position, N, viewDist);
+        float shadow = Common.SampleSunShadowCSM(
+            surface.Position + N * surface.TerminatorOffset, N, viewDist);
         float3 sunRadiance = Camera.SunColor.rgb * (NoL * shadow);
 
         direct += kD * albedo * Camera.SunColor.rgb * BSDFWrappedDiffuseCosine(cosL, subsurface) *

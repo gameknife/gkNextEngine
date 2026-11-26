@@ -37,6 +37,7 @@ void main(uint3 Gid : SV_GroupID, uint3 GTid : SV_GroupThreadID)
     shadingInput.Metalness = s.Metalness;
     shadingInput.Albedo = s.Albedo;
     shadingInput.MaterialId = s.MaterialId;
+    shadingInput.TerminatorOffset = s.TerminatorOffset;
     // GTAO is upsampled and applied here, not at compose time. The nine-tap bilateral is more
     // expensive inside an already register-heavy shading kernel, but this kernel only runs on the
     // pixels the shading rate actually claims, while compose runs on every pixel.

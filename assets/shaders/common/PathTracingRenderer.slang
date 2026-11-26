@@ -736,6 +736,9 @@ public struct FPathTracingRenderer{
                                           primaryRayDir_, primaryMaterial, primaryAlbedo_.rgb,
                                           primaryRoughness_, primaryMetalness_)
             : BuildBSDFContext(hitPrimaryVertex_, primaryMaterial, primaryRayDir_);
+        // Primary direct lighting is the one place the shadow-terminator offset applies: it is
+        // where a smooth low-poly terminator is seen at full resolution.
+        primaryContext.TerminatorOffset = primaryTerminatorOffset_;
         FDirectLighting directLighting = FDirectLighting();
         // Primary direct lighting runs once per pixel and frame: its own dimension range.
         if (sobolSampling)
@@ -774,6 +777,7 @@ public struct FPathTracingRenderer{
         // rate. This pass then writes lighting only, which is what lets the checkerboard resolve
         // stop neighbour-copying geometry.
         hasPrimarySurface_ = surfaceSample.Valid;
+        primaryTerminatorOffset_ = surfaceSample.TerminatorOffset;
         const bool writeSurface = WriteOutputs && !hasPrimarySurface_;
 
         if (!hit)
@@ -857,7 +861,8 @@ public struct FPathTracingRenderer{
                 // y = f16 effective metalness | shading-strategy flags (Shader/SurfaceBuffer.slang).
                 OutBSDFData.Store(pixel_, uint2(hitPrimaryVertex_.MaterialIndex,
                                                Surface.PackBsdfWord(outputContext.Metalness,
-                                                                    Common.MakeSurfaceFlags(material))));
+                                                                    Common.MakeSurfaceFlags(material),
+                                                                    primaryTerminatorOffset_)));
                 // This pass resolves its own surface, so it also owns the history age (the same
                 // reprojection Core.SurfaceBuild runs). The age is kept in renderer state: the
                 // sample count below must not read back what this invocation just wrote.
@@ -975,6 +980,7 @@ public struct FPathTracingRenderer{
         primaryRayDir_ = float3(0, 1, 0);
         primaryRayLength_ = 0;
         primarySurfaceOffset_ = 0.0f;
+        primaryTerminatorOffset_ = 0.0f;
         primaryPixelOffset_ = float2(0, 0);
         primaryMotionPixels_ = float2(0, 0);
         primaryAlbedo_ = float4(0, 0, 0, 0);
@@ -1008,6 +1014,8 @@ public struct FPathTracingRenderer{
     float primaryRayLength_;
     // How far PrimaryHit pulled the primary vertex back toward the eye off the drawn surface.
     float primarySurfaceOffset_;
+    // Shadow-terminator lift of the primary hit along its shading normal (FBSDFContext.TerminatorOffset).
+    float primaryTerminatorOffset_;
     float2 primaryPixelOffset_;
     float2 primaryMotionPixels_;
     float4 primaryAlbedo_;

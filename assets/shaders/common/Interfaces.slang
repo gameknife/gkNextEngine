@@ -32,6 +32,9 @@ public struct FPrimarySurfaceSample
     public float Roughness;       // perceptual, MRA already applied
     public float Metalness;       // effective, MRA and material-model override already applied
     public float2 MotionPixels;   // render-pixel motion, for the ReSTIR primary gate
+    // Shadow-terminator lift along the shading normal (Shader/SurfaceBuffer.slang). Filled by every
+    // caster that reconstructs a triangle hit, independently of Valid.
+    public float TerminatorOffset;
 
     public __init()
     {
@@ -40,6 +43,7 @@ public struct FPrimarySurfaceSample
         Roughness = 0.0f;
         Metalness = 0.0f;
         MotionPixels = float2(0, 0);
+        TerminatorOffset = 0.0f;
     }
 };
 

@@ -488,7 +488,7 @@ public struct FShadowMapDirectIlluminator : IDirectIlluminator
         if (Camera.HasSun)
         {
             float viewDist = -mul(Camera.ModelView, float4(context.Position, 1.0f)).z;
-            shadow = Common.SampleSunShadowCSM(context.Position, context.Normal, viewDist);
+            shadow = Common.SampleSunShadowCSM(BSDFShadowOrigin(context), context.Normal, viewDist);
         }
         // Preserve SoftwareModern's existing Lambert-only contract.
         directLighting.DiffuseDemodulated = Camera.SunColor.rgb * d * shadow;
@@ -516,7 +516,7 @@ public struct FRayOcclusionSunShadow : ISunShadowPolicy
     FHardwareRayTracer tracer;
     public float SunShadow(FBSDFContext context, float3 sunSampleDirection)
     {
-        return tracer.TraceOcclusion(context.Position, sunSampleDirection) ? 0.0f : 1.0f;
+        return tracer.TraceOcclusion(BSDFShadowOrigin(context), sunSampleDirection) ? 0.0f : 1.0f;
     }
 }
 
@@ -526,7 +526,7 @@ public struct FCsmSunShadow : ISunShadowPolicy
     {
         UniformBufferObject camera = Bindless.GetGpuscene().Camera[0];
         const float viewDistance = -mul(camera.ModelView, float4(context.Position, 1.0f)).z;
-        return Common.SampleSunShadowCSM(context.Position, context.Normal, viewDistance);
+        return Common.SampleSunShadowCSM(BSDFShadowOrigin(context), context.Normal, viewDistance);
     }
 }
 
@@ -617,8 +617,8 @@ public struct FTracingDirectIlluminator<TTracer : IRayTracer, TSun : ISunShadowP
             return;
         }
 
-        const float3 shadowOrigin =
-            tracer.GetAreaLightShadowOrigin(context.Position, context.Normal, lightPosition, EPS2);
+        const float3 shadowOrigin = tracer.GetAreaLightShadowOrigin(
+            BSDFShadowOrigin(context), context.Normal, lightPosition, EPS2);
         const float3 visibilityTarget =
             Common.GetLightVisibilityTarget(lightIndex, shadowOrigin, lightPosition);
         if (!tracer.TraceAreaLightSegment(shadowOrigin, visibilityTarget, EPS, lightIndex))
@@ -651,6 +651,7 @@ public struct FTracingDirectIlluminator<TTracer : IRayTracer, TSun : ISunShadowP
                 FBSDFContext shadowContext = context;
                 shadowContext.Position = origin;
                 shadowContext.Normal = -context.Normal;
+                shadowContext.TerminatorOffset = 0.0f;
                 const float visibility = sunShadow.SunShadow(shadowContext, L);
                 directLighting.DiffuseDemodulated += camera.SunColor.rgb * (weight * visibility * M_1_PI);
             }
@@ -724,7 +725,7 @@ public struct FTracingDirectIlluminator<TTracer : IRayTracer, TSun : ISunShadowP
             }
 
             const float3 shadowOrigin = tracer.GetAreaLightShadowOrigin(
-                context.Position, context.Normal, lightPosition, EPS2);
+                BSDFShadowOrigin(context), context.Normal, lightPosition, EPS2);
             if (tracer.TraceAreaLightSegment(shadowOrigin, lightPosition, EPS, lightIndex))
             {
                 continue;

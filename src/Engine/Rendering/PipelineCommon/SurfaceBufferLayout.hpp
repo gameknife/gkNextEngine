@@ -18,8 +18,9 @@ namespace Vulkan::PipelineCommon
         const char* semantic;
     };
 
-    // Everything Core.SurfaceBuild writes. RT_HISTORY_AGE is derived from the motion vector and
-    // the previous frame's RT_OBJECTID_1 / RT_HISTORY_AGE_PREV, which Build only reads.
+    // Everything Core.SurfaceBuild writes. RT_HISTORY_AGE is derived by reprojecting the hit through
+    // last frame's jittered view projection against the previous frame's RT_OBJECTID_1 /
+    // RT_DEPTH_HISTORY_PREV / RT_HISTORY_AGE_PREV, which Build only reads.
     inline constexpr std::array<FSurfacePlaneDesc, 7> kPrimarySurfacePlanes = {{
         {Assets::Bindless::RT_PREV_DEPTHBUFFER, VK_FORMAT_R32_SFLOAT, "NDC depth"},
         {Assets::Bindless::RT_NORMAL, VK_FORMAT_R16G16B16A16_SFLOAT, "xyz world normal, w roughness"},

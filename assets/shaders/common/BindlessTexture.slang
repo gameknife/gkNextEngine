@@ -130,6 +130,9 @@ namespace Bindless
     // Ping-pong planes of Process.DisocclusionFilter (render resolution, current frame only).
     public static const int RT_DISOCCLUSION_PING = 19;
     public static const int RT_DISOCCLUSION_PONG = 20;
+    // Previous frame's RT_PREV_DEPTHBUFFER, copied alongside RT_OBJECTID_1 at the end of the view,
+    // so the history-age reprojection can reject an instance occluding itself.
+    public static const int RT_DEPTH_HISTORY_PREV = 21;
 
     public static const int RT_VISIBILITY_INSTANCE_DRAW = 23;
     public static const int RT_VISIBILITY_TRIANGLE_DRAW = 24;

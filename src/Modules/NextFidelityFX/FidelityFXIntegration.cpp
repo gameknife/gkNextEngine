@@ -378,7 +378,11 @@ namespace FidelityFXWrapper
                 }
             }
 
-            bool EnsureUpscaleContext(VkExtent2D renderExtent, VkExtent2D outputExtent, bool hdrOutput)
+            // hdrColorInput describes the *input colour*, not the display: FFX_UPSCALE_ENABLE_HIGH_DYNAMIC_RANGE
+            // selects FFX_FSR3UPSCALER_OPTION_HDR_COLOR_INPUT, which wraps accumulation in a Karis
+            // Tonemap/InverseTonemap. The engine always feeds linear HDR scene radiance, so leaving it off
+            // on an SDR display made FSR resolve unbounded HDR samples with Lanczos negative lobes.
+            bool EnsureUpscaleContext(VkExtent2D renderExtent, VkExtent2D outputExtent, bool hdrColorInput)
             {
                 if (!deviceReady_ || renderExtent.width == 0 || renderExtent.height == 0 ||
                     outputExtent.width == 0 || outputExtent.height == 0)
@@ -387,7 +391,7 @@ namespace FidelityFXWrapper
                 }
                 if (upscaleContext_ != nullptr && renderExtent.width <= upscaleMaxRenderExtent_.width &&
                     renderExtent.height <= upscaleMaxRenderExtent_.height && outputExtent.width == upscaleOutputExtent_.width &&
-                    outputExtent.height == upscaleOutputExtent_.height && hdrOutput == upscaleHdrOutput_)
+                    outputExtent.height == upscaleOutputExtent_.height && hdrColorInput == upscaleHdrColorInput_)
                 {
                     return true;
                 }
@@ -396,9 +400,12 @@ namespace FidelityFXWrapper
                 ffx::CreateContextDescUpscale create{};
                 create.maxRenderSize = {renderExtent.width, renderExtent.height};
                 create.maxUpscaleSize = {outputExtent.width, outputExtent.height};
-                create.flags = FFX_UPSCALE_ENABLE_NON_LINEAR_COLORSPACE |
-                    FFX_UPSCALE_ENABLE_DEPTH_INVERTED;
-                if (hdrOutput)
+                // Auto exposure only sets the working point of FSR's internal tonemap and luma locks: the
+                // colour is multiplied by Exposure() on load and divided back on output, so the engine's own
+                // AutoExposurePass after the upscaler still sees the same brightness.
+                create.flags = FFX_UPSCALE_ENABLE_DEPTH_INVERTED |
+                    FFX_UPSCALE_ENABLE_AUTO_EXPOSURE;
+                if (hdrColorInput)
                 {
                     create.flags |= FFX_UPSCALE_ENABLE_HIGH_DYNAMIC_RANGE;
                 }
@@ -408,9 +415,9 @@ namespace FidelityFXWrapper
                 backend.vkDevice = deviceInfo_.device;
                 backend.vkPhysicalDevice = deviceInfo_.physicalDevice;
                 backend.vkDeviceProcAddr = vkGetDeviceProcAddr;
-                SPDLOG_INFO("Creating FidelityFX upscale context: {}x{} -> {}x{}, HDR={}",
+                SPDLOG_INFO("Creating FidelityFX upscale context: {}x{} -> {}x{}, HDR colour input={}",
                             renderExtent.width, renderExtent.height,
-                            outputExtent.width, outputExtent.height, hdrOutput);
+                            outputExtent.width, outputExtent.height, hdrColorInput);
                 const ffx::ReturnCode result = ffx::CreateContext(upscaleContext_, nullptr, create, backend);
                 if (result != ffx::ReturnCode::Ok)
                 {
@@ -422,7 +429,7 @@ namespace FidelityFXWrapper
 
                 upscaleMaxRenderExtent_ = renderExtent;
                 upscaleOutputExtent_ = outputExtent;
-                upscaleHdrOutput_ = hdrOutput;
+                upscaleHdrColorInput_ = hdrColorInput;
                 return true;
             }
 
@@ -484,9 +491,11 @@ namespace FidelityFXWrapper
             ffx::Context& UpscaleContext() { return upscaleContext_; }
             ffx::Context& FrameGenerationContext() { return frameGenerationContext_; }
 
-            uint32_t QueryJitterPhaseCount(VkExtent2D renderExtent, VkExtent2D outputExtent, bool hdrOutput)
+            uint32_t QueryJitterPhaseCount(VkExtent2D renderExtent, VkExtent2D outputExtent)
             {
-                if (!EnsureUpscaleContext(renderExtent, outputExtent, hdrOutput))
+                // The engine's scaling input is always linear HDR; create the context the way Evaluate will
+                // use it so the first dispatch does not tear it down again.
+                if (!EnsureUpscaleContext(renderExtent, outputExtent, true))
                 {
                     return 0;
                 }
@@ -568,7 +577,7 @@ namespace FidelityFXWrapper
                     upscaleContext_ = nullptr;
                 }
                 jitterPhaseCount_ = 0;
-                upscaleHdrOutput_ = false;
+                upscaleHdrColorInput_ = false;
             }
 
             void DestroyFrameGenerationContext()
@@ -599,7 +608,7 @@ namespace FidelityFXWrapper
             bool loggedProxyPresent_ = false;
             VkExtent2D upscaleMaxRenderExtent_{};
             VkExtent2D upscaleOutputExtent_{};
-            bool upscaleHdrOutput_ = false;
+            bool upscaleHdrColorInput_ = false;
             VkExtent2D frameGenerationExtent_{};
             VkFormat frameGenerationFormat_ = VK_FORMAT_UNDEFINED;
             bool frameGenerationHdrOutput_ = false;
@@ -763,7 +772,7 @@ namespace FidelityFXWrapper
 
             Rendering::Upscaler::FOptimalRenderSettings GetOptimalRenderSettings(
                 uint32_t superResolutionMode, VkExtent2D outputExtent, bool upscalerEnabled,
-                bool hdrOutput, Rendering::Upscaler::EUpscalerType) override
+                bool, Rendering::Upscaler::EUpscalerType) override
             {
                 Rendering::Upscaler::FOptimalRenderSettings result{};
                 const auto& modeInfo = Rendering::Upscaler::GetUpscaleModeInfo(superResolutionMode);
@@ -789,7 +798,7 @@ namespace FidelityFXWrapper
                 result.minRenderExtent = result.renderExtent;
                 result.maxRenderExtent = result.renderExtent;
                 result.fromStreamline = false;
-                jitterPhaseCount_ = Context().QueryJitterPhaseCount(result.renderExtent, outputExtent, hdrOutput);
+                jitterPhaseCount_ = Context().QueryJitterPhaseCount(result.renderExtent, outputExtent);
                 return result;
             }
 
@@ -811,7 +820,8 @@ namespace FidelityFXWrapper
                     inputs.commandBuffer == VK_NULL_HANDLE || inputs.ubo == nullptr ||
                     !inputs.scalingInputColor.IsValid() || !inputs.scalingOutputColor.IsValid() ||
                     !inputs.depth.IsValid() || !inputs.motionVectors.IsValid() ||
-                    !Context().EnsureUpscaleContext(inputs.renderExtent, inputs.outputExtent, inputs.hdrOutput))
+                    !Context().EnsureUpscaleContext(inputs.renderExtent, inputs.outputExtent,
+                                                    inputs.inputColorIsLinear || inputs.hdrOutput))
                 {
                     return false;
                 }

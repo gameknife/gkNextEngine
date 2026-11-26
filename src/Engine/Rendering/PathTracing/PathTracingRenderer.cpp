@@ -320,6 +320,7 @@ namespace Vulkan::PathTracing
                 {Assets::Bindless::RT_HISTORY_AGE, PipelineCommon::ERenderStage::Compute,
                  PipelineCommon::EResourceAccess::ShaderRead | PipelineCommon::EResourceAccess::ShaderWrite},
                 {Assets::Bindless::RT_HISTORY_AGE_PREV, PipelineCommon::ERenderStage::Compute, PipelineCommon::EResourceAccess::ShaderRead},
+                {Assets::Bindless::RT_DEPTH_HISTORY_PREV, PipelineCommon::ERenderStage::Compute, PipelineCommon::EResourceAccess::ShaderRead},
                 {Assets::Bindless::RT_OBJECTID_1, PipelineCommon::ERenderStage::Compute, PipelineCommon::EResourceAccess::ShaderRead},
             }, "path tracing shading");
             // ReSTIR reservoirs are primary-view state; non-primary views skip ReSTIR shader-side

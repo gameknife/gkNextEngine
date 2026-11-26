@@ -148,21 +148,28 @@ namespace Vulkan::PipelineCommon
                     {Assets::Bindless::RT_ALBEDO, ERenderStage::Compute, EResourceAccess::ShaderRead},
                     {Assets::Bindless::RT_OBJECTID_0, ERenderStage::Compute, EResourceAccess::ShaderRead},
                     {Assets::Bindless::RT_OBJECTID_1, ERenderStage::Compute, EResourceAccess::ShaderRead},
+                    {Assets::Bindless::RT_PREV_DEPTHBUFFER, ERenderStage::Compute, EResourceAccess::ShaderRead},
+                    {Assets::Bindless::RT_NORMAL, ERenderStage::Compute, EResourceAccess::ShaderRead},
+                    {Assets::Bindless::RT_BSDF_DATA, ERenderStage::Compute, EResourceAccess::ShaderRead},
                     {Assets::Bindless::RT_SCENE_COLOR, ERenderStage::Compute, EResourceAccess::ShaderWrite},
                 }, "sample compose");
             }
 
+            // Firefly suppression only where a temporal upscaler accumulates the raw sample:
+            // reference accumulation must stay unbiased, Ray Reconstruction denoises the raw planes
+            // itself, and sparse checkerboard lighting leaves half the neighbours unwritten.
+            const auto& userSettings = baseRenderer.FrameSettings().userSettings;
+            const bool fireflyClamp = !settings.progressiveRender &&
+                !baseRenderer.FrameSettings().offlineProgressivePathTracing &&
+                !baseRenderer.IsRayReconstructionActive() &&
+                !baseRenderer.IsSparseCheckerboardLightingActive() &&
+                userSettings.ComposeFireflyClamp;
             composePipeline_->BindPipeline(
                 commandBuffer,
                 baseRenderer.GetScene().FetchGPUScene(imageIndex, baseRenderer.ActiveViewBankBase()),
                 baseRenderer.ActiveViewBankBase(),
                 settings.progressiveRender ? 1u : 0u,
-                !settings.progressiveRender &&
-                        !baseRenderer.FrameSettings().offlineProgressivePathTracing &&
-                        baseRenderer.FrameSettings().userSettings.ComposeFireflyClamp
-                    ? std::bit_cast<uint32_t>(
-                          baseRenderer.FrameSettings().userSettings.TemporalUpscalerFireflySigma)
-                    : 0u);
+                fireflyClamp ? std::bit_cast<uint32_t>(userSettings.TemporalUpscalerFireflySigma) : 0u);
             vkCmdDispatch(commandBuffer, Utilities::Math::GetSafeDispatchCount(extent.width, 8),
                           Utilities::Math::GetSafeDispatchCount(extent.height, 8), 1);
         }

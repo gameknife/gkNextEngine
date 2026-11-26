@@ -44,7 +44,9 @@ void ShadeSwTracingPixel(int2 pixel)
     }
 
     FNullRadianceCache cache;
-    renderer.Render(tracer, dIlluminator, cache, 1);
+    // Freshly disoccluded pixels get more samples (RT_HISTORY_AGE, from Core.SurfaceBuild).
+    const int sampleMultiplier = Common.DisocclusionSampleMultiplier(renderer.GetPrimaryHistoryAge());
+    renderer.Render(tracer, dIlluminator, cache, sampleMultiplier);
     END_SHADERCLOCK(pixel)
 }
 

@@ -45,6 +45,7 @@ namespace Vulkan::PipelineCommon
             {Assets::Bindless::RT_HISTORY_AGE, compute, shaderWrite},
             {Assets::Bindless::RT_OBJECTID_1, compute, shaderRead},
             {Assets::Bindless::RT_HISTORY_AGE_PREV, compute, shaderRead},
+            {Assets::Bindless::RT_DEPTH_HISTORY_PREV, compute, shaderRead},
         }, "primary surface build");
         if (writeSpecularAlbedo)
         {

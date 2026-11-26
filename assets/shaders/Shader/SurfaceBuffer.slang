@@ -197,6 +197,12 @@ namespace Surface
         return Bindless.GetStorageTexture<uint>(Bindless.ViewRT(viewBase, Bindless.RT_OBJECTID_1));
     }
 
+    RWTexture2D<float> DepthHistoryPrevPlane(uint viewBase)
+    {
+        return Bindless.GetStorageTexture<float>(
+            Bindless.ViewRT(viewBase, Bindless.RT_DEPTH_HISTORY_PREV));
+    }
+
     public uint2 Dimensions(uint viewBase)
     {
         return Bindless.GetStorageTextureDimensions<float>(
@@ -310,17 +316,57 @@ namespace Surface
     // after a disocclusion, +1 per frame while the surface under it keeps reprojecting onto
     // itself, saturating at kHistoryAgeMax. It is geometry-only bookkeeping (like RT_OBJECTID_1),
     // never color. Whoever writes the surface (Core.SurfaceBuild, or the PathTracing primary hit,
-    // which resolves its own surface) reads the previous frame's age and object id and writes the
-    // current age to a separate plane; the end-of-view history copy then moves it into
-    // RT_HISTORY_AGE_PREV.
+    // which resolves its own surface) reads the previous frame's age, object id and depth and writes
+    // the current age to a separate plane; the end-of-view history copy then moves age, object id
+    // and depth into RT_HISTORY_AGE_PREV / RT_OBJECTID_1 / RT_DEPTH_HISTORY_PREV.
 
-    // motionPixels is this pixel's render-pixel motion (previous - current).
-    public uint ReprojectHistoryAge(uint viewBase, int2 pixel, uint2 size, uint objectId,
-                                    float2 motionPixels)
+    // Linear view distance of an NDC depth. Only the depth row of the projection matters, and the
+    // jitter lives in the x/y rows, so the current frame's inverse also linearizes last frame's
+    // depth for any camera whose near/far did not change between the two frames.
+    float LinearViewDepth(float4x4 projectionInverse, float ndcDepth)
     {
+        const float4 view = mul(projectionInverse, float4(0.0f, 0.0f, ndcDepth, 1.0f));
+        return abs(view.z / (abs(view.w) > 1e-8f ? view.w : 1e-8f));
+    }
+
+    // Reprojects the surface point under this pixel into last frame's raster and inherits its age.
+    //
+    // worldPosition is the primary hit (traced through the jittered pixel centre) and prevTransform
+    // the instance's NodeProxy.combinedPrevTS. Projecting through Camera.PrevViewProjection - last
+    // frame's *jittered* matrix - lands on exactly the sub-pixel position last frame's planes were
+    // rasterized at, so a static view no longer reads across a silhouette every time the jitter
+    // phase changes (the unjittered motion vector is off by the jitter delta, up to a pixel).
+    //
+    // The object id test alone cannot see an instance occluding itself (terrain, a building, a
+    // single-mesh character), so every tap's previous depth must also match the depth this point
+    // had last frame. The tolerance grows with the depth slope across a pixel at grazing angles;
+    // cosView is |dot(normal, viewDir)|.
+    public uint ReprojectHistoryAge(uint viewBase, int2 pixel, uint2 size, uint objectId,
+                                    float4x4 prevViewProjection, float4x4 projectionInverse,
+                                    float4x4 prevTransform, float3 worldPosition, float cosView)
+    {
+        const float4 prevWorld = mul(prevTransform, float4(worldPosition, 1.0f));
+        const float4 prevClip = mul(prevViewProjection, prevWorld);
+        if (prevClip.w <= 1e-6f)
+        {
+            return 0u;
+        }
+        const float3 prevNdc = prevClip.xyz / prevClip.w;
+        const float expectedLinearDepth = LinearViewDepth(projectionInverse, prevNdc.z);
+
+        // Depth slope: one pixel spans pixelAngle * depth at normal incidence, divided by cosView
+        // at an angle. The taps sit within ~1.5 px of the reprojected point.
+        const float4 v0 = mul(projectionInverse, float4(0.0f, 0.0f, prevNdc.z, 1.0f));
+        const float4 v1 = mul(projectionInverse, float4(0.0f, 2.0f / float(size.y), prevNdc.z, 1.0f));
+        const float pixelAngle = abs(v1.y / v1.z - v0.y / v0.z);
+        const float clampedCos = max(cosView, 0.03f);
+        const float tanView = sqrt(saturate(1.0f - clampedCos * clampedCos)) / clampedCos;
+        const float depthTolerance =
+            expectedLinearDepth * (0.03f + 1.5f * pixelAngle * tanView) + 0.02f;
+
         // Bilinear footprint of the previous-frame position, in texel-centre space. Only taps that
         // actually carry weight are tested, so a static camera does not read across silhouettes.
-        const float2 prevPosition = float2(pixel) + motionPixels;
+        const float2 prevPosition = (prevNdc.xy * 0.5f + 0.5f) * float2(size) - 0.5f;
         const int2 base = int2(floor(prevPosition));
         const float2 f = prevPosition - float2(base);
         const float4 weights = float4(
@@ -346,6 +392,12 @@ namespace Surface
             {
                 continue;
             }
+            const float tapDepth = DepthHistoryPrevPlane(viewBase)[tap];
+            if (!IsValid(tapDepth) ||
+                abs(LinearViewDepth(projectionInverse, tapDepth) - expectedLinearDepth) > depthTolerance)
+            {
+                continue;
+            }
             matchedWeight += weights[i];
             // The age is inherited from the nearest matching tap, not the footprint minimum. A
             // minimum is a min-filter applied once per frame: under any sub-pixel motion the zero
@@ -358,7 +410,7 @@ namespace Surface
                 nearestAge = HistoryAgePrevPlane(viewBase)[tap];
             }
         }
-        // Most of the footprint must have been this same instance last frame; anything less is a
+        // Most of the footprint must have been this same surface last frame; anything less is a
         // disocclusion (or the surface came from off-screen). A cleared history matches nothing.
         return matchedWeight >= 0.5f && nearestAge < kHistoryAgeInvalid
             ? min(nearestAge + 1u, kHistoryAgeMax)

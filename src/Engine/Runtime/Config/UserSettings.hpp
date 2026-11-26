@@ -26,7 +26,7 @@ struct UserSettings final
     int32_t UpscalerType = 4;
     float NativeTAAUHistoryWeight = 0.97f;
     float NativeTAAUSharpness = 0.25f;
-    bool TemporalUpscalerPostFilter = true;
+    bool TemporalUpscalerPostFilter = false;
     uint32_t TemporalUpscalerPostFilterPasses = 3;
     float TemporalUpscalerPostFilterStrength = 0.65f;
     float TemporalUpscalerPostFilterLumaSigma = 0.10f;

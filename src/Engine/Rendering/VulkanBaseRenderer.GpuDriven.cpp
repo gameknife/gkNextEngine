@@ -801,9 +801,9 @@ commandBuffer, gpuScene, 0, indirectDrawBatchCount, maxSceneTriangles);
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &range);
     }
 
-    // Copies this frame's object ids and history age into their previous-frame slots. The two
-    // travel together: Core.SurfaceBuild reprojects the age through the object ids, so one without
-    // the other would pair an age with the wrong surface.
+    // Copies this frame's object ids, depth and history age into their previous-frame slots. They
+    // travel together: Core.SurfaceBuild reprojects the age through the object ids and depth, so one
+    // without the others would pair an age with the wrong surface.
     void VulkanBaseRenderer::CopyObjectIdHistory(VkCommandBuffer commandBuffer)
     {
         SCOPED_GPU_TIMER("objectid copy");
@@ -817,6 +817,10 @@ commandBuffer, gpuScene, 0, indirectDrawBatchCount, maxSceneTriangles);
             {Assets::Bindless::RT_HISTORY_AGE, ERenderStage::Transfer,
              EResourceAccess::TransferRead, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL},
             {Assets::Bindless::RT_HISTORY_AGE_PREV, ERenderStage::Transfer,
+             EResourceAccess::TransferWrite, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
+            {Assets::Bindless::RT_PREV_DEPTHBUFFER, ERenderStage::Transfer,
+             EResourceAccess::TransferRead, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL},
+            {Assets::Bindless::RT_DEPTH_HISTORY_PREV, ERenderStage::Transfer,
              EResourceAccess::TransferWrite, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
         }, "object id history copy");
 
@@ -836,6 +840,7 @@ commandBuffer, gpuScene, 0, indirectDrawBatchCount, maxSceneTriangles);
         };
         copyPlane(Assets::Bindless::RT_OBJECTID_0, Assets::Bindless::RT_OBJECTID_1);
         copyPlane(Assets::Bindless::RT_HISTORY_AGE, Assets::Bindless::RT_HISTORY_AGE_PREV);
+        copyPlane(Assets::Bindless::RT_PREV_DEPTHBUFFER, Assets::Bindless::RT_DEPTH_HISTORY_PREV);
 
         constexpr auto shaderReadWrite = EResourceAccess::ShaderRead | EResourceAccess::ShaderWrite;
         TransitionActiveViewImages(commandBuffer, {
@@ -843,6 +848,8 @@ commandBuffer, gpuScene, 0, indirectDrawBatchCount, maxSceneTriangles);
             {Assets::Bindless::RT_OBJECTID_1, ERenderStage::Compute, shaderReadWrite},
             {Assets::Bindless::RT_HISTORY_AGE, ERenderStage::Compute, shaderReadWrite},
             {Assets::Bindless::RT_HISTORY_AGE_PREV, ERenderStage::Compute, shaderReadWrite},
+            {Assets::Bindless::RT_PREV_DEPTHBUFFER, ERenderStage::Compute, shaderReadWrite},
+            {Assets::Bindless::RT_DEPTH_HISTORY_PREV, ERenderStage::Compute, shaderReadWrite},
         }, "object id history ready");
     }
 }

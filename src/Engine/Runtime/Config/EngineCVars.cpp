@@ -121,7 +121,7 @@ namespace NextCVar
         GK_CVAR_UINT_RANGE("r.upscaler.postFilterPasses", settings, TemporalUpscalerPostFilterPasses, 3, ECVarFlags::Archive, "Temporal upscaler post-filter a-trous pass count", 1, 4);
         GK_CVAR_FLOAT_RANGE("r.upscaler.postFilterStrength", settings, TemporalUpscalerPostFilterStrength, 0.65f, ECVarFlags::Archive, "Temporal upscaler post-filter blend strength", 0.0, 1.0);
         GK_CVAR_FLOAT_RANGE("r.upscaler.postFilterLumaSigma", settings, TemporalUpscalerPostFilterLumaSigma, 0.10f, ECVarFlags::Archive, "Temporal upscaler post-filter compressed-domain color/luminance edge threshold", 0.01, 0.5);
-        GK_CVAR_FLOAT_RANGE("r.upscaler.fireflySigma", settings, TemporalUpscalerFireflySigma, 0.5f, ECVarFlags::Archive, "Temporal upscaler and compose isolated highlight rejection threshold in neighborhood standard deviations", 0.1, 8.0);
+        GK_CVAR_FLOAT_RANGE("r.upscaler.fireflySigma", settings, TemporalUpscalerFireflySigma, 2.5f, ECVarFlags::Archive, "Temporal upscaler and compose isolated highlight rejection threshold in neighborhood standard deviations", 0.1, 8.0);
         GK_CVAR_BOOL("r.disocclusionFilter", settings, DisocclusionFilter, true, ECVarFlags::Archive,
                      "Spatially filter diffuse lighting where the temporal upscaler has no history yet (not under Ray Reconstruction)");
         GK_CVAR_UINT("r.disocclusionFilter.frames", settings, DisocclusionFilterFrames, 20, ECVarFlags::Archive,

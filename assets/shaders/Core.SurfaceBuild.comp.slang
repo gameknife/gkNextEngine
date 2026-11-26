@@ -128,8 +128,11 @@ void main(uint3 DTid : SV_DispatchThreadID)
     }
 
     Surface.Store(viewBase, pixel, surface, writeSpecularAlbedo);
-    // Reads RT_OBJECTID_1 / RT_HISTORY_AGE_PREV and writes RT_HISTORY_AGE: three distinct planes,
-    // so neighbouring threads never observe a half-written age.
+    // Reads RT_OBJECTID_1 / RT_HISTORY_AGE_PREV / RT_DEPTH_HISTORY_PREV and writes RT_HISTORY_AGE:
+    // distinct planes, so neighbouring threads never observe a half-written age.
     Surface.StoreHistoryAge(viewBase, pixel,
-        Surface.ReprojectHistoryAge(viewBase, pixel, size, surface.ObjectId, surface.Motion));
+        Surface.ReprojectHistoryAge(viewBase, pixel, size, surface.ObjectId,
+                                    Camera.PrevViewProjection, Camera.ProjectionInverse,
+                                    hitNode.combinedPrevTS, hitVertex.Position,
+                                    abs(dot(hitVertex.Normal, primaryRayDir))));
 }

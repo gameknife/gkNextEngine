@@ -1,0 +1,318 @@
+{
+  "name": "upscaler-flicker",
+  "description": "Steady-state temporal noise of the non-RR upscalers: a frozen playground.glb at 2 spp, 8 consecutive frames per renderer/upscaler pair plus a 256-frame progressive reference. Score with tools/upscaler_flicker_rmse.py.",
+  "target": "gkNextRenderer",
+  "scene": "assets/models/playground.glb",
+  "defaults": {
+    "waitFrames": 1,
+    "stepTimeoutMs": 60000
+  },
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "steps": [
+    {
+      "type": "wait-until",
+      "query": "engine.status",
+      "op": "eq",
+      "value": "Running",
+      "timeoutMs": 20000
+    },
+    {
+      "type": "wait-until",
+      "query": "scene.ready",
+      "op": "eq",
+      "value": true,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "cvar",
+      "name": "sys.tickAnimation",
+      "set": false,
+      "comment": "a frozen scene: every frame-to-frame change is temporal noise"
+    },
+    {
+      "type": "cvar",
+      "name": "r.checkerboardRendering",
+      "set": false
+    },
+    {
+      "type": "cvar",
+      "name": "r.exposure.auto",
+      "set": false,
+      "comment": "auto exposure drifts between shots and between the stream and the progressive reference"
+    },
+    {
+      "type": "cvar",
+      "name": "r.samples",
+      "set": 2,
+      "comment": "the realtime default; low spp is where steady-state boiling shows"
+    },
+    {
+      "type": "cvar",
+      "name": "r.upscaler.qualityMode",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "r.upscaler.postFilter",
+      "set": false
+    },
+    {
+      "type": "log",
+      "message": "phase pt_taau: renderer 0, upscaler 4"
+    },
+    {
+      "type": "cvar",
+      "name": "r.rendererType",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "r.upscaler.type",
+      "set": 4
+    },
+    {
+      "type": "wait-frames",
+      "n": 96,
+      "comment": "let the upscaler history converge on the static view"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_taau_s0"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_taau_s1"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_taau_s2"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_taau_s3"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_taau_s4"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_taau_s5"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_taau_s6"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_taau_s7"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_taau_ref",
+      "accumulateFrames": 256,
+      "comment": "progressive ground truth; the bias reference"
+    },
+    {
+      "type": "log",
+      "message": "phase pt_sgsr2: renderer 0, upscaler 5"
+    },
+    {
+      "type": "cvar",
+      "name": "r.rendererType",
+      "set": 0
+    },
+    {
+      "type": "cvar",
+      "name": "r.upscaler.type",
+      "set": 5
+    },
+    {
+      "type": "wait-frames",
+      "n": 96,
+      "comment": "let the upscaler history converge on the static view"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_sgsr2_s0"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_sgsr2_s1"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_sgsr2_s2"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_sgsr2_s3"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_sgsr2_s4"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_sgsr2_s5"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_sgsr2_s6"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_sgsr2_s7"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/pt_sgsr2_ref",
+      "accumulateFrames": 256,
+      "comment": "progressive ground truth; the bias reference"
+    },
+    {
+      "type": "log",
+      "message": "phase swmodern_taau: renderer 2, upscaler 4"
+    },
+    {
+      "type": "cvar",
+      "name": "r.rendererType",
+      "set": 2
+    },
+    {
+      "type": "cvar",
+      "name": "r.upscaler.type",
+      "set": 4
+    },
+    {
+      "type": "wait-frames",
+      "n": 96,
+      "comment": "let the upscaler history converge on the static view"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/swmodern_taau_s0"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/swmodern_taau_s1"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/swmodern_taau_s2"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/swmodern_taau_s3"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/swmodern_taau_s4"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/swmodern_taau_s5"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/swmodern_taau_s6"
+    },
+    {
+      "type": "wait-frames",
+      "n": 1
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/swmodern_taau_s7"
+    },
+    {
+      "type": "screenshot",
+      "out": "screenshots/swmodern_taau_ref",
+      "accumulateFrames": 256,
+      "comment": "progressive ground truth; the bias reference"
+    }
+  ]
+}

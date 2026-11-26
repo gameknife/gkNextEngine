@@ -796,7 +796,8 @@ public struct FPathTracingRenderer{
         }
         else
         {
-            float4 clipPos = mul(Camera.ViewProjectionUnJit, float4(hitPrimaryVertex_.Position, 1.0));
+            // Jittered, like Core.SurfaceBuild: every depth reconstruction inverts with Camera.ProjectionInverse.
+            float4 clipPos = mul(Camera.ViewProjection, float4(hitPrimaryVertex_.Position, 1.0));
             float ndcDepth = clipPos.z / clipPos.w;
             float2 motion = Common.CalculateMotionVector(Camera, hitPrimaryNode_, hitPrimaryVertex_);
             primaryMotionPixels_ = motion * size_;
@@ -830,7 +831,10 @@ public struct FPathTracingRenderer{
                 // sample count below must not read back what this invocation just wrote.
                 const uint viewBase = Bindless.GetGpuscene().CustomData0;
                 primaryHistoryAge_ = Surface.ReprojectHistoryAge(
-                    viewBase, pixel_, size_, objectId, primaryMotionPixels_);
+                    viewBase, pixel_, size_, objectId,
+                    Camera.PrevViewProjection, Camera.ProjectionInverse,
+                    hitPrimaryNode_.combinedPrevTS, hitPrimaryVertex_.Position,
+                    abs(dot(hitPrimaryVertex_.Normal, primaryRayDir_)));
                 Surface.StoreHistoryAge(viewBase, pixel_, primaryHistoryAge_);
             }
         }

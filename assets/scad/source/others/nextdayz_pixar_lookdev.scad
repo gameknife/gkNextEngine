@@ -7,6 +7,7 @@
 // 机位（gnb shot 截第一个 gk_camera；改 FOCUS 切换默认机位）：
 //   "diorama"  45° 微缩全景          "portrait" 幸存者半身肖像
 //   "street"   街景（农舍 + 树 + 路） "interior" 农舍室内朝门窗
+//   "face"     幸存者面部特写（五官、眼神光、皮肤）
 // gnb shot --scene assets/scad/source/others/nextdayz_pixar_lookdev.scad --frames 60
 use <../../lib/gk_camera.scad>
 use <../../lib/rig_humanoid.scad>
@@ -236,8 +237,9 @@ module cam_for(name)
 {
     if (name == "diorama")  gk_camera_lookat([-19, -27, 16], lk_p([0, -1.5], 1.0), "diorama", 42);
     if (name == "portrait") gk_camera_lookat(lk_p([-3.1, -11.7], 1.62), lk_p([-2.25, -9.45], 1.38), "portrait", 34);
+    if (name == "face")     gk_camera_lookat(lk_p([-2.47, -10.05], 1.70), lk_p([-2.24, -9.50], 1.645), "face", 26);
     if (name == "street")   gk_camera_lookat(lk_p([-14.5, -14.0], 1.70), lk_p([4, 5], 3.2), "street", 55);
     if (name == "interior") gk_camera_lookat(lk_p([HOUSE[0] + 1.2, HOUSE[1] + 2.6], 1.72), lk_p([HOUSE[0] - 0.8, HOUSE[1] - HOUSE_D / 2], 1.35), "interior", 72);
 }
 cam_for(FOCUS);
-for (n = ["diorama", "portrait", "street", "interior"]) if (n != FOCUS) cam_for(n);
+for (n = ["diorama", "portrait", "face", "street", "interior"]) if (n != FOCUS) cam_for(n);

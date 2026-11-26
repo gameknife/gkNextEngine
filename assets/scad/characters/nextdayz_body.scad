@@ -24,16 +24,28 @@ function ndb_skin() = [0.72, 0.52, 0.38];
 function ndb_skin_shade() = [0.60, 0.42, 0.31];
 function ndb_lip() = [0.50, 0.30, 0.25];
 function ndb_hair() = [0.075, 0.055, 0.04];
-function ndb_eye() = [0.035, 0.035, 0.03];
+function ndb_sclera() = [0.86, 0.82, 0.76];
+function ndb_iris() = [0.25, 0.15, 0.08];
+function ndb_pupil() = [0.02, 0.018, 0.016];
 function ndb_shorts() = [0.85, 0.85, 0.82];
 function ndb_shorts_band() = [0.65, 0.65, 0.63];
 
-// Sides and superellipse exponent per form: limbs are crisp octagons, the
-// trunk and head take a few more sides so their planes turn more gently.
-function ndb_limb_m() = 8;
+// Sides and superellipse exponent per form. Twelve sides keep every turn
+// under the loader's 35 degree crease, so limbs shade round instead of as
+// octagon facets; the trunk and the skull take a few more.
+function ndb_limb_m() = 12;
 function ndb_limb_n() = 2.6;
-function ndb_trunk_m() = 12;
+function ndb_trunk_m() = 14;
 function ndb_trunk_n() = 3.2;
+
+// Skin is soft: wrapped light warms the terminator (subsurface), a broad dim
+// highlight keeps it from reading as clay. Shorts are cotton with a sheen.
+module ndb_skin_mat() { gk_material(ndb_skin(), roughness = 0.55, subsurface = 0.5) children(); }
+module ndb_cotton(c) { gk_material(c, roughness = 1, sheen = 0.3) children(); }
+// Block for hands and feet. Its chamfers turn 45 degrees, so under the
+// gk_crease(55) the hands are wrapped in they shade round at a fraction of
+// the triangles a rounded box costs.
+module ndb_soft(size, r) rf_box(size, r);
 
 // ---- sections ---------------------------------------------------------------
 
@@ -111,122 +123,169 @@ module ndb_trunk(rings) { rf_loft(rings, m = ndb_trunk_m(), n = ndb_trunk_n()); 
 
 module ndb_part_torso()
 {
-    color(ndb_skin()) ndb_trunk(ndb_torso());
+    ndb_skin_mat() ndb_trunk(ndb_torso());
 }
 
 module ndb_part_pelvis()
 {
     // The only permanent garment. Clothing hides covered body render parts,
     // never their bones, so removing trousers restores these white shorts.
-    color(ndb_shorts()) ndb_trunk(ndb_pelvis());
-    color(ndb_shorts_band()) ndb_trunk(rf_span(rf_grow(ndb_pelvis(), 0.008), 0.075, 0.112));
+    ndb_cotton(ndb_shorts()) ndb_trunk(ndb_pelvis());
+    ndb_cotton(ndb_shorts_band()) ndb_trunk(rf_span(rf_grow(ndb_pelvis(), 0.008), 0.075, 0.112));
 }
+
+// Eye centre (left side; the right mirrors it). The eyeball sits a few
+// millimetres proud of the face under a heavy upper lid and the brow, so it
+// reads as a white with an iris instead of a slit.
+function ndb_eye_at() = [0.040, -0.087, 0.139];
+
+// A dome facing -Y: radius r across its flat back, height t. Seen from the
+// front its outline is a clean circle, where two intersecting balls leave a
+// jagged one, and only the visible front half is built.
+module ndb_lens(r, t, m = 16)
+    rotate([90, 0, 0])
+        rf_loft([[0, 2 * r, 2 * r], [t * 0.55, 1.68 * r, 1.68 * r], [t * 0.88, 0.95 * r, 0.95 * r],
+                 [t, 0.2 * r, 0.2 * r]], m = m, n = 2, phase = 0);
+
+// One eye, three layers: a warm white ball, a glossy iris lens on its front
+// and a pupil lens on that. Iris and pupil are the cornea: the key light
+// leaves its catch light there.
+module ndb_eye()
+{
+    gk_material(ndb_sclera(), roughness = 0.3) sphere(r = 0.0165, $fn = 14);
+    gk_material(ndb_iris(), roughness = 0.12) translate([0, -0.0150, 0]) ndb_lens(0.0090, 0.0036);
+    gk_material(ndb_pupil(), roughness = 0.05) translate([0, -0.0183, 0]) ndb_lens(0.0042, 0.0016, 12);
+}
+
+// Upper lid: the top of a slightly larger ball, cut by a plane that drops
+// toward the front so it shades the top of the iris.
+function ndb_lid_tilt() = 8;
+function ndb_lid_cut() = 0.0088;
+function ndb_lid_r() = 0.0178;
+module ndb_lid()
+{
+    intersection()
+    {
+        sphere(r = ndb_lid_r(), $fn = 14);
+        rotate([ndb_lid_tilt(), 0, 0]) translate([0, 0, ndb_lid_cut() + 0.02]) cube([0.045, 0.045, 0.04], center = true);
+    }
+}
+// The lash line along the front of the lid edge: it draws the eye.
+function ndb_lash_points() =
+    let(a = ndb_lid_tilt(), d = ndb_lid_cut(), rho = sqrt(ndb_lid_r() * ndb_lid_r() - d * d) * 1.02,
+        n = [0, -sin(a), cos(a)], v = [0, cos(a), sin(a)])
+    [for (t = [205 : 26 : 335]) n * d + [rho * cos(t), 0, 0] + v * (rho * sin(t))];
+module ndb_lashes() gk_sweep(ndb_lash_points(), [0.0010, 0.0016, 0.0018, 0.0016, 0.0010, 0.0008], fn = 4, cap = "flat", $gk_detail = 0.5);
 
 module ndb_part_head()
 {
-    color(ndb_skin())
+    gk_crease(55)
     {
-        // The neck belongs to the head, so hiding the torso under a coat keeps it.
-        rf_loft(ndb_neck(), m = 8, n = 2.2);
-        rf_loft(ndb_skull(), m = 10, n = 2.8);
-        // Brow ridge: the eyes sit in its shadow.
-        hull()
+        ndb_skin_mat()
         {
-            translate([0, -0.100, 0.158]) rf_box([0.134, 0.020, 0.016], 0.006);
-            translate([0, -0.096, 0.176]) rf_box([0.120, 0.014, 0.010], 0.004);
+            // The neck belongs to the head, so hiding the torso under a coat keeps it.
+            rf_loft(ndb_neck(), m = 12, n = 2.2);
+            rf_loft(ndb_skull(), m = 16, n = 2.8);
+            // Soft brow ridge: the eyes sit in its shadow.
+            // Its ends sink into the temples instead of capping off as knobs.
+            gk_sweep([[-0.070, -0.074, 0.157], [-0.034, -0.094, 0.163], [0, -0.097, 0.161],
+                      [0.034, -0.094, 0.163], [0.070, -0.074, 0.157]],
+                     [0.0040, 0.0075, 0.0075, 0.0075, 0.0040], fn = 10, $gk_detail = 0.6);
+            // Nose: bridge to a rounded tip, with the wings of the nostrils.
+            gk_sweep([[0, -0.094, 0.150], [0, -0.111, 0.123], [0, -0.121, 0.104]],
+                     [0.0075, 0.0105, 0.0150], fn = 10);
+            for (s = [-1, 1]) translate([s * 0.0130, -0.109, 0.098]) sphere(r = 0.0078, $fn = 8);
+            // No separate cheek pads: the skull's cheekbone ring carries them, and a
+            // pad glued on leaves a seam the smooth shading cannot hide.
+            // Ears: soft shells set back on the skull.
+            for (s = [-1, 1])
+                translate([s * 0.093, 0.012, 0.122]) rotate([0, 0, s * -12]) scale([0.36, 0.70, 1])
+                    sphere(r = 0.031, $fn = 10);
+            for (s = [-1, 1]) translate([s * ndb_eye_at()[0], ndb_eye_at()[1], ndb_eye_at()[2]]) ndb_lid();
         }
-        // Nose: bridge to tip.
-        hull()
+        for (s = [-1, 1]) translate([s * ndb_eye_at()[0], ndb_eye_at()[1], ndb_eye_at()[2]]) ndb_eye();
+        gk_material(ndb_hair(), roughness = 0.6)
+            for (s = [-1, 1]) translate([s * ndb_eye_at()[0], ndb_eye_at()[1], ndb_eye_at()[2]]) ndb_lashes();
+        // A small, slightly upturned mouth.
+        gk_material(ndb_lip(), roughness = 0.45, subsurface = 0.4)
+            gk_sweep([[-0.021, -0.0975, 0.0665], [0, -0.1010, 0.0630], [0.021, -0.0975, 0.0665]],
+                     [0.0028, 0.0034, 0.0028], fn = 6, $gk_detail = 0.6);
+        // Short crop, tilted so the hairline clears the forehead and reaches the nape;
+        // the sides fade down in front of the ears. Brows arch over the eyes.
+        gk_material(ndb_hair(), roughness = 0.8, sheen = 0.25)
         {
-            translate([0, -0.102, 0.150]) cube([0.018, 0.012, 0.010], center = true);
-            translate([0, -0.126, 0.104]) rf_box([0.034, 0.024, 0.024], 0.008);
+            translate([0, 0.012, 0.206]) rotate([-22, 0, 0])
+                rf_loft([[-0.036, 0.192, 0.224, 0, 0.004], [0.006, 0.196, 0.230, 0, 0.004],
+                         [0.036, 0.176, 0.208, 0, 0.004], [0.050, 0.110, 0.140, 0, 0.004]], m = 16, n = 2.8);
+            for (s = [-1, 1])
+                hull()
+                {
+                    translate([s * 0.089, -0.020, 0.176]) ndb_soft([0.012, 0.050, 0.030], 0.005);
+                    translate([s * 0.088, -0.034, 0.132]) ndb_soft([0.008, 0.022, 0.030], 0.003);
+                }
+            for (s = [-1, 1])
+                gk_sweep([[s * 0.019, -0.1005, 0.1655], [s * 0.040, -0.1005, 0.1705], [s * 0.060, -0.0915, 0.1665]],
+                         [0.0034, 0.0042, 0.0028], fn = 6);
         }
-        // Cheekbones give the face planes to catch light.
-        for (s = [-1, 1])
-            hull()
-            {
-                translate([s * 0.058, -0.086, 0.118]) rf_box([0.040, 0.020, 0.024], 0.008);
-                translate([s * 0.046, -0.080, 0.074]) rf_box([0.030, 0.016, 0.020], 0.006);
-            }
-        for (s = [-1, 1])
-            translate([s * 0.095, 0.016, 0.122]) rf_box([0.018, 0.036, 0.056], 0.007);
-    }
-    color(ndb_lip()) translate([0, -0.1015, 0.064]) cube([0.044, 0.008, 0.006], center = true);
-    // Eyes are small and dark under the brow; no whites at this scale.
-    for (s = [-1, 1])
-        color(ndb_eye()) translate([s * 0.042, -0.1035, 0.140]) cube([0.024, 0.008, 0.009], center = true);
-    // Short crop, tilted so the hairline clears the forehead and reaches the nape;
-    // the sides fade down in front of the ears.
-    color(ndb_hair())
-    {
-        translate([0, 0.012, 0.206]) rotate([-22, 0, 0])
-            rf_loft([[-0.036, 0.192, 0.224, 0, 0.004], [0.006, 0.196, 0.230, 0, 0.004],
-                     [0.036, 0.176, 0.208, 0, 0.004], [0.050, 0.110, 0.140, 0, 0.004]], m = 10, n = 2.8);
-        for (s = [-1, 1])
-            hull()
-            {
-                translate([s * 0.089, -0.020, 0.176]) rf_box([0.012, 0.050, 0.030], 0.004);
-                translate([s * 0.088, -0.034, 0.132]) rf_box([0.008, 0.022, 0.030], 0.003);
-            }
     }
 }
 
-module ndb_part_upperarm() { color(ndb_skin()) ndb_limb(ndb_upperarm()); }
-module ndb_part_forearm() { color(ndb_skin()) ndb_limb(ndb_forearm()); }
+module ndb_part_upperarm() { gk_crease(55) ndb_skin_mat() ndb_limb(ndb_upperarm()); }
+module ndb_part_forearm() { gk_crease(55) ndb_skin_mat() ndb_limb(ndb_forearm()); }
 
 module ndb_part_hand()
 {
-    color(ndb_skin())
+    gk_crease(55) ndb_skin_mat()
     {
         // Wrist into the back of the hand.
         hull()
         {
-            translate([0, 0.004, -0.010]) rf_box([0.064, 0.046, 0.020], 0.007);
-            translate([0, 0.004, -0.074]) rf_box([0.096, 0.040, 0.030], 0.009);
+            translate([0, 0.004, -0.010]) ndb_soft([0.064, 0.046, 0.020], 0.010);
+            translate([0, 0.004, -0.074]) ndb_soft([0.096, 0.040, 0.030], 0.013);
         }
         // Fingers, loosely curled toward the palm in two knuckles.
         hull()
         {
-            translate([0, 0.002, -0.088]) rf_box([0.094, 0.034, 0.020], 0.008);
-            translate([0, -0.030, -0.128]) rf_box([0.090, 0.032, 0.026], 0.009);
+            translate([0, 0.002, -0.088]) ndb_soft([0.094, 0.034, 0.020], 0.011);
+            translate([0, -0.030, -0.128]) ndb_soft([0.090, 0.032, 0.026], 0.013);
         }
         hull()
         {
-            translate([0, -0.032, -0.129]) rf_box([0.090, 0.032, 0.024], 0.009);
-            translate([0, -0.062, -0.106]) rf_box([0.086, 0.024, 0.028], 0.008);
+            translate([0, -0.032, -0.129]) ndb_soft([0.090, 0.032, 0.024], 0.013);
+            translate([0, -0.062, -0.106]) ndb_soft([0.086, 0.024, 0.028], 0.011);
         }
         // Thumb on the outside, pointing along the fingers.
         hull()
         {
-            translate([0.042, -0.004, -0.038]) rf_box([0.032, 0.034, 0.032], 0.009);
-            translate([0.054, -0.036, -0.082]) rf_box([0.026, 0.026, 0.032], 0.008);
+            translate([0.042, -0.004, -0.038]) ndb_soft([0.032, 0.034, 0.032], 0.013);
+            translate([0.054, -0.036, -0.082]) ndb_soft([0.026, 0.026, 0.032], 0.011);
         }
     }
 }
 
 module ndb_part_thigh()
 {
-    color(ndb_skin()) ndb_limb(ndb_thigh());
-    color(ndb_shorts()) ndb_limb(rf_span(rf_grow(ndb_thigh(), 0.014), -0.135, 0.030));
+    gk_crease(55) ndb_skin_mat() ndb_limb(ndb_thigh());
+    ndb_cotton(ndb_shorts()) ndb_limb(rf_span(rf_grow(ndb_thigh(), 0.014), -0.135, 0.030));
 }
 
-module ndb_part_calf() { color(ndb_skin()) ndb_limb(ndb_calf()); }
+module ndb_part_calf() { gk_crease(55) ndb_skin_mat() ndb_limb(ndb_calf()); }
 
 module ndb_part_foot()
 {
     // Pivot = ankle on the sole plane; nothing goes below z = 0.
-    color(ndb_skin())
+    gk_crease(55) ndb_skin_mat()
     {
         hull()
         {
-            translate([0, 0.035, 0.030]) rf_box([0.074, 0.090, 0.060], 0.014);
-            translate([0, 0.006, 0.086]) rf_box([0.066, 0.076, 0.030], 0.012);
+            translate([0, 0.035, 0.030]) ndb_soft([0.074, 0.090, 0.060], 0.020);
+            translate([0, 0.006, 0.086]) ndb_soft([0.066, 0.076, 0.030], 0.017);
         }
         hull()
         {
-            translate([0, 0.000, 0.070]) rf_box([0.066, 0.070, 0.040], 0.012);
-            translate([0, -0.090, 0.030]) rf_box([0.088, 0.090, 0.050], 0.012);
-            translate([0.004, -0.180, 0.018]) rf_box([0.094, 0.060, 0.034], 0.010);
+            translate([0, 0.000, 0.070]) ndb_soft([0.066, 0.070, 0.040], 0.017);
+            translate([0, -0.090, 0.030]) ndb_soft([0.088, 0.090, 0.050], 0.017);
+            translate([0.004, -0.180, 0.018]) ndb_soft([0.094, 0.060, 0.034], 0.014);
         }
     }
 }

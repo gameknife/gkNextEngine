@@ -19,12 +19,13 @@
 
 SKIN = [0.72, 0.52, 0.38];
 NAIL = [0.80, 0.62, 0.52];
+// Skin matches nextdayz_body.scad (ndb_skin_mat): wrapped, softly glossy.
 
 WRIST_GRIP = [-0.012, -0.030, -0.070];
 WRIST_SUPPORT = [0.012, -0.062, -0.050];
 
 function E(p) = [p[0], -p[2], p[1]];
-module ball(p, r) translate(E(p)) sphere(r = r, $fn = 12);
+module ball(p, r) translate(E(p)) sphere(r = r, $fn = 14);
 module seg(a, b, ra, rb) hull() { ball(a, ra); ball(b, rb); }
 // A finger as capsules through its joints, tapering from r0 to r1.
 module finger(points, r0, r1)
@@ -36,7 +37,7 @@ module finger(points, r0, r1)
 
 module fps_hand_grip()
 {
-    color(SKIN)
+    gk_crease(60) gk_material(SKIN, roughness = 0.55, subsurface = 0.5)
     {
         // Back of the hand and palm: from the wrist round the backstrap to
         // the knuckle line on the right-front of the grip.
@@ -62,12 +63,12 @@ module fps_hand_grip()
         finger([[-0.016, 0.016, -0.030], [-0.004, 0.032, -0.012], [0.012, 0.035, 0.006], [0.020, 0.030, 0.024]],
                0.0105, 0.0088);
     }
-    color(NAIL) ball([0.021, 0.034, 0.028], 0.0055);
+    gk_material(NAIL, roughness = 0.35, subsurface = 0.3) ball([0.021, 0.034, 0.028], 0.0055);
 }
 
 module fps_hand_support()
 {
-    color(SKIN)
+    gk_crease(60) gk_material(SKIN, roughness = 0.55, subsurface = 0.5)
     {
         // Palm cupped under the handguard, heel back toward the wrist.
         hull()

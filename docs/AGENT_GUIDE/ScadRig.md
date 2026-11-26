@@ -86,7 +86,11 @@ NextDayz 是完整用例：
 
 - `characters/nextdayz_body.scad` 是幸存者的**身体形体**（`ndb_` 前缀）：躯干 / 骨盆 / 四肢的截面表
   （`ndb_torso()` 等函数）、带下颌-颧骨-眉弓-鼻梁的头、松握拳的手、赤脚。`nextdayz_survivor.scad`
-  的 `part_*` 只是转调它们，骨架与全部 clip 不变。
+  的 `part_*` 只是转调它们，骨架与全部 clip 不变。四肢 12 边、躯干 14 边、头骨 16 边，整个头在
+  `gk_crease(55)` 里，皮肤是 `ndb_skin_mat()`（`subsurface = 0.5`、粗糙度 0.55）。
+- 眼睛三层：暖白眼白球 + 光泽虹膜 + 瞳孔（`ndb_eye()`），虹膜和瞳孔是只建前半的穹顶（`ndb_lens`），
+  正面轮廓是干净的圆——两个球相交的交线是锯齿；上眼睑是被前倾平面切开的稍大球，沿切口一条睫毛线
+  （`ndb_lashes()`）。面部特写：`nextdayz_pixar_lookdev.scad` 的 `FOCUS = "face"` 机位。
 - 同一个文件还提供**服装外壳** `ndb_shell_coat / sleeve / leg / seat` 和靴子 `ndb_boot_*`。衣柜原先的
   分层包络（外套厚 .28、袖 .158×.168、裤腿 .19×.205…）是按盒子定的，口袋、拉链、织带全都贴在
   那些面上；外壳**在细节所在的高度保持同一包络**，只在盒子没有形状的地方做文章——收腰、斜肩到
@@ -96,7 +100,8 @@ NextDayz 是完整用例：
   （无外套时背心深度会缩到 0.78）；头要装得进原有帽盔（宽 ≤ .22、顶 ≤ .25）。
 - 手的局部坐标约定：手指沿 −Z 并朝 −Y 卷曲（掌心朝 −Y，武器 socket 与 IK 握点都在那一侧），
   拇指在外侧。
-- 预算：裸体 15 个部件合计约 2900 三角形（`Test_ScadRig.cpp` 守着 < 3200）。
+- 预算：裸体 15 个部件合计约 4900 三角形，一半在头上（`Test_ScadRig.cpp` 守着 < 5200）。圆球很贵：
+  脸上的小件用低 `$fn`、扫掠用 `$gk_detail` 调用参数降采样，手脚用切角块 + `gk_crease` 而不是圆角盒的 hull。
 - 快速看效果：`gnb validate --script assets/agentscripts/nextdayz-lobby-look.agentscript.json`
   （进机舱大厅、穿一套衣服、截一张图，约 7 秒）。只改了 `.scad` 时先 `gnb build NextDayz` 同步资产。
 

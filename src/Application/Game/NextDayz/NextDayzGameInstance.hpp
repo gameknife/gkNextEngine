@@ -141,11 +141,15 @@ private:
     float cabinAperture_ = 0.0f;
     float cabinFocal_ = 0.0f;
     // SCAD space (metres, Z-up): "x y z  nx ny nz  size  r g b  intensity; ..."
-    // A warm dome lamp over the survivor (key) and dusk through the port door window (fill).
-    std::string cabinLights_ = "0.55 -0.25 2.14  -0.45 0.05 -1  0.26  1.0 0.24 0.12  1200;"
-                               "-1.64 -0.72 1.35  1 0 0  0.62  0.25 0.55 0.70  16";
+    // Portrait lighting around the low warm sun (cabinEnv_, the key through the open
+    // starboard door): a soft warm-neutral dome lamp as overhead fill, cool dusk through
+    // the port door window as the rim on the far side of the face, and a small neutral
+    // card just behind the camera for a catchlight in the eyes.
+    std::string cabinLights_ = "0.55 -0.25 2.14  -0.2 0.05 -1  0.36  1.0 0.80 0.60  220;"
+                               "-1.64 -0.72 1.35  1 0 0  0.62  0.55 0.72 1.0  55;"
+                               "1.35 -1.62 1.08  -0.59 0.79 0.12  0.18  0.95 0.97 1.0  40";
     // "skyIntensity skyR skyG skyB  sunIntensity sunR sunG sunB  sunRotation sunElevation"
-    std::string cabinEnv_ = "16 0.45 0.72 0.95  0 1 0.83 0.63  0.37 0.28";
+    std::string cabinEnv_ = "24 0.55 0.75 1.0  16 1.0 0.74 0.50  0.37 0.30";
 
     // One simulation frame (OnTick wraps it with the debugger's freeze/step/timers).
     void SimulateFrame(float dt);

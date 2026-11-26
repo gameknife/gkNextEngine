@@ -10,7 +10,8 @@ $fn = 10;
 // the survivor's left, looking across the cabin so he sits three-quarter in the
 // right of the frame while the closed port door and its window fill the left,
 // behind the menu. The set is dressed for this angle; the starboard door behind
-// the camera stays open and lets the sky in as fill.
+// the camera stays open and lets the low warm sun in as the key light
+// (NextDayzGameInstance::cabinEnv_), with the port window as a cool rim.
 gk_camera_lookat([1.20, -1.50, 1.00], [-0.42, -0.28, 0.84], "Cabin", 40);
 
 function cab_skin() = [0.150, 0.180, 0.175];     // painted airframe
@@ -21,6 +22,10 @@ function cab_dark() = [0.050, 0.060, 0.060];
 function cab_stencil() = [0.630, 0.480, 0.190];
 
 module cab_paint(c = cab_skin(), r = 0.72, m = 0.35) { gk_material(c, roughness = r, metalness = m) children(); }
+// Soft goods: matte, fabric sheen along the silhouette, no specular film.
+module cab_fabric(c, sheen = 0.4) { gk_material(c, roughness = 1, sheen = sheen) children(); }
+// Rounded edges catch a line of light where the old chamfers went flat.
+module cab_box(size, bevel = 0.012) gk_round_box(size, r = bevel * 1.5, segs = 3);
 
 module cabin_shell(collision = "none")
 {
@@ -34,9 +39,9 @@ module cabin_shell(collision = "none")
             translate([0, -0.45, 2.29]) cube([3.3, 3.4, 0.10], center = true);
         }
         // Quilted panels on the bulkhead, one behind each seat.
-        color(cab_pad())
+        cab_fabric(cab_pad(), 0.35)
             for (x = [-1.1, -0.55, 0, 0.55, 1.1], z = [0.72, 1.28, 1.84])
-                translate([x, 0.786, z]) rf_box([0.50, 0.045, 0.52], 0.016);
+                translate([x, 0.786, z]) gk_round_box([0.50, 0.045, 0.52], r = 0.022, segs = 3);
         cab_paint(cab_frame(), 0.7, 0.55)
         {
             // Deck tie-down rails and overhead frames.
@@ -86,8 +91,8 @@ module cabin_port_wall(collision = "none")
                 translate([-1.545, y, 1.14]) cube([0.06, 0.07, 2.26], center = true);
             translate([-1.53, -0.70, 2.19]) cube([0.07, 1.60, 0.06], center = true);
             for (z = [0.18, 0.56, 0.90])
-                translate([-1.548, -0.70, z]) rf_box([0.022, 1.22, 0.07], 0.008);
-            translate([-1.548, -0.70, 1.86]) rf_box([0.022, 1.22, 0.07], 0.008);
+                translate([-1.548, -0.70, z]) cab_box([0.022, 1.22, 0.07], 0.008);
+            translate([-1.548, -0.70, 1.86]) cab_box([0.022, 1.22, 0.07], 0.008);
             // Window gasket.
             for (z = [1.025, 1.675]) translate([-1.548, -0.72, z]) cube([0.03, 0.76, 0.035], center = true);
             for (y = [-1.075, -0.365]) translate([-1.548, y, 1.35]) cube([0.03, 0.035, 0.66], center = true);
@@ -101,25 +106,22 @@ module cabin_port_wall(collision = "none")
             for (z = [0.10 : 0.16 : 2.12], y = [-1.33, -0.07])
                 translate([-1.552, y, z]) rotate([0, 90, 0]) cylinder(h = 0.012, r = 0.011, center = true, $fn = 6);
         // Door handle and its guard.
-        cab_paint([0.62, 0.20, 0.10], 0.5, 0.2) translate([-1.525, -0.18, 1.02]) rf_box([0.03, 0.05, 0.16], 0.008);
-        cab_paint(cab_dark(), 0.6, 0.6) translate([-1.54, -0.18, 1.02]) rf_box([0.02, 0.10, 0.24], 0.008);
+        cab_paint([0.62, 0.20, 0.10], 0.5, 0.2) translate([-1.525, -0.18, 1.02]) cab_box([0.03, 0.05, 0.16], 0.008);
+        cab_paint(cab_dark(), 0.6, 0.6) translate([-1.54, -0.18, 1.02]) cab_box([0.02, 0.10, 0.24], 0.008);
         // Stencil band across the door.
         color(cab_stencil()) translate([-1.552, -0.70, 0.74]) cube([0.006, 1.22, 0.035], center = true);
         // Soundproofing between the stringers aft of the door.
-        color(cab_pad())
+        cab_fabric(cab_pad(), 0.35)
             for (z = [0.90, 1.49])
-                translate([-1.562, 0.42, z]) rf_box([0.03, 0.70, 0.48], 0.012);
+                translate([-1.562, 0.42, z]) gk_round_box([0.03, 0.70, 0.48], r = 0.014, segs = 3);
         // Fire extinguisher in its bracket, intercom box with a coiled lead.
         cab_paint([0.55, 0.09, 0.06], 0.45, 0.1)
-        {
-            translate([-1.47, 0.62, 0.52]) cylinder(h = 0.34, r = 0.055, $fn = 10);
-            translate([-1.47, 0.62, 0.86]) sphere(r = 0.055, $fn = 10);
-        }
+            translate([-1.47, 0.62, 0]) gk_sweep([[0, 0, 0.52], [0, 0, 0.86]], 0.055, fn = 20, cap = "round");
         cab_paint(cab_dark(), 0.5, 0.7)
         {
             translate([-1.47, 0.62, 0.90]) cylinder(h = 0.07, r = 0.016, $fn = 8);
             translate([-1.50, 0.62, 0.66]) cube([0.06, 0.13, 0.03], center = true);
-            translate([-1.52, 0.25, 1.50]) rf_box([0.07, 0.16, 0.22], 0.012);
+            translate([-1.52, 0.25, 1.50]) cab_box([0.07, 0.16, 0.22], 0.012);
         }
         cab_paint([0.42, 0.44, 0.40], 0.6, 0.3)
         {
@@ -136,15 +138,15 @@ module cabin_seats(collision = "none")
         for (x = [-0.89, 0, 0.89])
         {
             // Canvas sling seat and back on a tube frame.
-            color(cab_canvas())
+            cab_fabric(cab_canvas(), 0.45)
             {
-                translate([x, 0.26, 0.435]) rf_box([0.66, 0.54, 0.07], 0.022);
-                translate([x, 0.60, 0.86]) rotate([8, 0, 0]) rf_box([0.66, 0.07, 0.72], 0.022);
+                translate([x, 0.26, 0.435]) gk_round_box([0.66, 0.54, 0.07], r = 0.03, segs = 3);
+                translate([x, 0.60, 0.86]) rotate([8, 0, 0]) gk_round_box([0.66, 0.07, 0.72], r = 0.03, segs = 3);
             }
-            color(cab_canvas() * 0.8)
+            cab_fabric(cab_canvas() * 0.8, 0.3)
                 for (z = [0.66, 0.90, 1.14])
                     translate([x, 0.555, z + 0.01]) rotate([8, 0, 0]) cube([0.60, 0.012, 0.02], center = true);
-            cab_paint([0.30, 0.32, 0.31], 0.45, 0.85)
+            cab_paint([0.30, 0.32, 0.31], 0.45, 0.85) gk_crease(60)
                 for (s = [-1, 1])
                 {
                     translate([x + s * 0.335, 0.26, 0.43]) rotate([90, 0, 0]) cylinder(h = 0.58, r = 0.016, center = true, $fn = 8);
@@ -156,13 +158,13 @@ module cabin_seats(collision = "none")
             color(cab_dark())
                 for (s = [-1, 1])
                     translate([x + s * 0.30, 0.42, 0.33]) rotate([0, s * 6, 0]) cube([0.04, 0.012, 0.26], center = true);
-            cab_paint([0.5, 0.52, 0.5], 0.4, 0.9) translate([x - 0.30, 0.42, 0.19]) rf_box([0.05, 0.02, 0.045], 0.006);
+            cab_paint([0.5, 0.52, 0.5], 0.4, 0.9) translate([x - 0.30, 0.42, 0.19]) cab_box([0.05, 0.02, 0.045], 0.006);
         }
         // Overhead: cable tray, a conduit run and the dome lamp housing above the seats.
         cab_paint(cab_dark(), 0.6, 0.5)
         {
             translate([-0.55, -0.45, 2.215]) cube([0.16, 3.2, 0.03], center = true);
-            translate([0.55, -0.25, 2.19]) rf_box([0.36, 0.36, 0.06], 0.02);
+            translate([0.55, -0.25, 2.19]) cab_box([0.36, 0.36, 0.06], 0.02);
         }
         cab_paint([0.32, 0.34, 0.33], 0.5, 0.8)
             for (x = [0.62, 0.69])
@@ -170,21 +172,21 @@ module cabin_seats(collision = "none")
         cab_paint([0.55, 0.16, 0.08], 0.5, 0.3)
             translate([-0.55, -0.45, 2.19]) rotate([90, 0, 0]) cylinder(h = 3.2, r = 0.012, center = true, $fn = 6);
         // First-aid pouch on the bulkhead and a secured radio case on the port seat.
-        color([0.24, 0.30, 0.24]) translate([1.20, 0.65, 1.50]) rf_box([0.32, 0.17, 0.38], 0.03);
+        cab_fabric([0.24, 0.30, 0.24], 0.4) translate([1.20, 0.65, 1.50]) cab_box([0.32, 0.17, 0.38], 0.03);
         color([0.72, 0.68, 0.56])
         {
             translate([1.20, 0.556, 1.50]) cube([0.18, 0.012, 0.05], center = true);
             translate([1.20, 0.554, 1.50]) cube([0.05, 0.012, 0.18], center = true);
         }
-        cab_paint([0.105, 0.135, 0.125], 0.6, 0.3) translate([-0.90, 0.26, 0.63]) rf_box([0.42, 0.34, 0.32], 0.02);
+        cab_paint([0.105, 0.135, 0.125], 0.6, 0.3) translate([-0.90, 0.26, 0.63]) cab_box([0.42, 0.34, 0.32], 0.02);
         cab_paint([0.30, 0.34, 0.31], 0.5, 0.7)
         {
-            translate([-0.90, 0.26, 0.805]) rf_box([0.26, 0.06, 0.03], 0.01);
-            for (s = [-1, 1]) translate([-0.90 + s * 0.15, 0.085, 0.66]) rf_box([0.05, 0.016, 0.07], 0.005);
+            translate([-0.90, 0.26, 0.805]) cab_box([0.26, 0.06, 0.03], 0.01);
+            for (s = [-1, 1]) translate([-0.90 + s * 0.15, 0.085, 0.66]) cab_box([0.05, 0.016, 0.07], 0.005);
         }
         color(cab_stencil()) translate([-0.90, 0.088, 0.56]) cube([0.16, 0.006, 0.03], center = true);
         // A cargo strap across the bulkhead between the port seats.
-        color(cab_dark()) translate([-0.45, 0.755, 1.52]) cube([1.6, 0.012, 0.045], center = true);
+        cab_fabric(cab_dark(), 0.3) translate([-0.45, 0.755, 1.52]) cube([1.6, 0.012, 0.045], center = true);
     }
 }
 

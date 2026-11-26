@@ -35,7 +35,7 @@ last_updated: 2026-11-10
 
 ### 机舱大厅与按需加载
 
-`NextDayzLobby.cpp` 与 `assets/scad/scenes/nextdayz_helicopter_lobby.scad` 提供单机和 Master 客户端共用的大厅。机舱只实例化角色、服装和装备展示，不加载地理地图、草地、感染者、物资目录、第一人称手臂或导航。角色的 `cabin_seated` 循环沿用游戏中的骨架与穿戴节点；仓库调整会同步更新展示。机位是场景里名为 `Cabin` 的 `gk_camera` 标记（构图跟布景写在同一个 `.scad` 里），顶灯与舷窗补光是 `nextdayz.cabin.lights`、天空是 `nextdayz.cabin.env` 两个 cvar（SCAD 坐标，场景加载时生效），调氛围不需要重编。联网备装预览复用服务器的库存装配规则。
+`NextDayzLobby.cpp` 与 `assets/scad/scenes/nextdayz_helicopter_lobby.scad` 提供单机和 Master 客户端共用的大厅。机舱只实例化角色、服装和装备展示，不加载地理地图、草地、感染者、物资目录、第一人称手臂或导航。角色的 `cabin_seated` 循环沿用游戏中的骨架与穿戴节点；仓库调整会同步更新展示。机位是场景里名为 `Cabin` 的 `gk_camera` 标记（构图跟布景写在同一个 `.scad` 里），布光是肖像式的：主光是从右侧敞开舱门斜射进来的低角度暖阳（`nextdayz.cabin.env` 的太阳），舱顶暖白软灯补光、左舷窗外的冷蓝灯打远侧轮廓、机位后方一块小中性灯给眼神光（`nextdayz.cabin.lights`，SCAD 坐标，场景加载时生效），调氛围不需要重编。自动曝光会补偿整体亮度，调的是主光与补光的比例：太阳太强时脸会冲白。联网备装预览复用服务器的库存装配规则。
 
 部署才加载完整地图，撤离／死亡返回时卸载地图并切回机舱。Master 客户端先完成地图加载，再建立 UDP 连接和领取角色，避免网格／物理提交期间主线程无法处理网络心跳而断线。单机大厅保留独立的出征快照：在大厅保存、换装、入库都不会用空机舱覆盖地图物资、世界时钟或出征位置。地图制作模式仍直接加载其草稿；既有直接进入地图的 agent fixtures 保持原入口。
 

@@ -1,7 +1,7 @@
 ---
 title: "NextDayz 皮克斯感 Low-Poly 视觉升级实施计划"
 category: plan
-status: 进行中（P0、P1、V2-1 已完成，V2-2 起待实施）
+status: 进行中（P0–P2 已完成，P3 起待实施）
 owner: NextDayz
 created: 2026-11-26
 last_updated: 2026-11-26
@@ -24,7 +24,7 @@ last_updated: 2026-11-26
 | :--- | :--- | :--- | :--- |
 | P0 视觉标杆切片 | `V0-1` | 已完成 | 40m×40m 全要素 Lookdev 微缩样板间与 4 机位基准图 |
 | P1 SCAD 与着色底座 | `V1-1` ～ `V1-3` | 已完成 | 圆角/扫掠/法线原语、SSS/Sheen/Foliage 着色、烘焙顶点 AO 与宏尺度打散 |
-| P2 电影光影与大厅 | `V2-1` ～ `V2-2` | 进行中（V2-1 已完成） | 透光窗户点亮室内、户外冷暖色调调校、直升机机舱大厅电影级重塑 |
+| P2 电影光影与大厅 | `V2-1` ～ `V2-2` | 已完成 | 透光窗户点亮室内、户外冷暖色调调校、直升机机舱大厅电影级重塑 |
 | P3 角色与武器 2.0 | `V3-1` ～ `V3-4` | 未开始 | 幸存者五官眼神光与 SSS 皮肤、圆角绒光服装、感染者放样重写、武器捕光边 |
 | P4 植被与草海 2.0 | `V4-1` ～ `V4-3` | 未开始 | 蓬松透光地域树种、柔弧融合且随地域变色的运行时草地、画意过程纹理 |
 | P5 建筑套件与地图 | `V5-1` ～ `V5-3` | 未开始 | 波希米亚/稀树草原/冷战/训练场建筑套件升级，三张地图重导出与回归验收 |
@@ -104,6 +104,8 @@ last_updated: 2026-11-26
   - `gnb.bat validate --script assets/agentscripts/nextdayz-loket-entrance.agentscript.json` 与 `nextdayz-weather.agentscript.json` 通过；检查生成的 `loket-palace-interior` 与 `loket-castle-courtyard` 截图，确认室内告别死黑、立面高光柔和不刺眼。
 
 ### `V2-2` 重塑直升机机舱大厅（几何圆角化 + 电影三点布光）
+- **状态**：已完成。布景里全部倒角盒换成 `gk_round_box`，隔音软包、座椅帆布、急救包、货带用 `sheen` 织物材质，灭火器用 `gk_sweep`，座椅管架 `gk_crease(60)`；舷窗不加玻璃（加了会挡住窗外的亮面，菜单后面就只剩一块暗板）。布光默认值见 `NextDayzGameInstance.hpp` 的 `cabinLights_` / `cabinEnv_`：太阳 16（暖金，经右舷敞门）为主光，顶灯 220 暖白补光，左舷窗 55 冷蓝轮廓，机位后 40 中性眼神光，天空 24。
+- **注意**：V2-1 把自动曝光上限放宽到 +5.5 EV 后，暗机舱会被整体提亮，所以这里靠主补光比例而不是绝对亮度控制脸部不冲白。
 - **范围**：`assets/scad/scenes/nextdayz_helicopter_lobby.scad`、`src/Application/Game/NextDayz/NextDayzLobby.cpp`（默认 `cabinLights_` / `cabinEnv_`）。
 - **内容**：
   1. 将机舱隔音软包、座椅帆布与管架、舱门框、灭火器与电台箱全面升级为 `gk_round_box` / `gk_sweep` 圆角构件与 `sheen` 帆布材质；

@@ -1,7 +1,7 @@
 ---
 title: "NextDayz 皮克斯感 Low-Poly 视觉升级实施计划"
 category: plan
-status: 进行中（V0-1、V1-1 已完成，V1-2 起待实施）
+status: 进行中（V0-1、V1-1、V1-2 已完成，V1-3 起待实施）
 owner: NextDayz
 created: 2026-11-26
 last_updated: 2026-11-26
@@ -23,7 +23,7 @@ last_updated: 2026-11-26
 | 阶段 | 任务编号 | 状态 | 核心产出 |
 | :--- | :--- | :--- | :--- |
 | P0 视觉标杆切片 | `V0-1` | 已完成 | 40m×40m 全要素 Lookdev 微缩样板间与 4 机位基准图 |
-| P1 SCAD 与着色底座 | `V1-1` ～ `V1-3` | 进行中（V1-1 已完成） | 圆角/扫掠/法线原语、SSS/Sheen/Foliage 着色、烘焙顶点 AO 与宏尺度打散 |
+| P1 SCAD 与着色底座 | `V1-1` ～ `V1-3` | 进行中（V1-1、V1-2 已完成） | 圆角/扫掠/法线原语、SSS/Sheen/Foliage 着色、烘焙顶点 AO 与宏尺度打散 |
 | P2 电影光影与大厅 | `V2-1` ～ `V2-2` | 未开始 | 透光窗户点亮室内、户外冷暖色调调校、直升机机舱大厅电影级重塑 |
 | P3 角色与武器 2.0 | `V3-1` ～ `V3-4` | 未开始 | 幸存者五官眼神光与 SSS 皮肤、圆角绒光服装、感染者放样重写、武器捕光边 |
 | P4 植被与草海 2.0 | `V4-1` ～ `V4-3` | 未开始 | 蓬松透光地域树种、柔弧融合且随地域变色的运行时草地、画意过程纹理 |
@@ -65,6 +65,8 @@ last_updated: 2026-11-26
   - 在样板间局部替换测试块，`gnb.bat shot` 验证圆角高光连续无黑面。
 
 ### `V1-2` 扩展 `gk_material`（`subsurface` / `sheen` / `ior`）与 `gk_foliage`
+- **状态**：已完成。契约见 `docs/AGENT_GUIDE/SCADLoader.md`「触感参数」；映射集中在 `Assets::Material::Surface`（场景节点与 ScadRig 部件共用）；着色辅助函数在 `common/BSDF.slang`，接入追踪类渲染器的太阳/灯光 NEE（含 ReSTIR）与 NoAmbient；对照台 `assets/scad/source/others/gk_material_demo.scad`。`shadow = false` 透光玻璃按计划留在 V2-1。
+- **遗留**：低模平滑表面的阴影明暗交界线锯齿（太阳阴影射线从平面三角形出发被相邻面挡住）在包裹光下更显眼；需要在主表面重建里做 Hanika 式明暗交界线偏移并经表面缓冲传给阴影射线，单独做。
 - **范围**：`src/Engine/Assets/Data/Material.hpp`、`src/Modules/ScadLoader/{FScadEvaluator.*,FScadLoader.cpp,FScadRig.cpp}`、`src/Engine/Runtime/Scene/SceneBuilder.*`、`assets/shaders/common/{BSDF.slang,Lighting.slang,SwModernShading.slang,SwTracingShading.slang,NoAmbientShading.slang,PathTracingLiteShading.slang}`。
 - **内容**：
   1. 严守 `sizeof(Assets::Material) == 64`，按设计 §3.2 接入 `gk_foliage(c, transmission, thickness)` 及 `gk_material` 的 `ior`、`subsurface`、`sheen` 参数（同时支持普通场景 Node 与 `ScadRig` 部件材质）；

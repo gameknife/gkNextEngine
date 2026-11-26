@@ -16,6 +16,7 @@
 // Triangles are in native SCAD world space (Z-up); the loader converts to Y-up.
 // ============================================================================
 
+#include <cmath>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -25,6 +26,7 @@
 
 #include <glm/glm.hpp>
 
+#include "Engine/Assets/Data/Material.hpp"
 #include "Engine/Assets/Loaders/ProceduralTexture.hpp"
 #include "Modules/ScadLoader/FScadTypes.h"
 
@@ -42,21 +44,34 @@ namespace Assets::Scad
         // gk_texture() print for this geometry (null = plain color). Shared, so
         // copying properties through CSG and buckets stays cheap.
         FProceduralTextureRef texture;
+        // gk_material(..., ior, subsurface, sheen) / gk_foliage(...): see Material::Surface.
+        FSurfaceStyle style;
     };
 
-    // Folds a gk_texture() print into a color/surface bucket key: geometry with
-    // the same color but a different print must land in its own material slot.
-    inline uint64_t MixTextureIntoKey(uint64_t key, const ScadMaterialProperties& material)
+    // Folds a gk_texture() print and a surface style into a color/surface bucket
+    // key: geometry with the same color but a different print or style must land
+    // in its own material slot.
+    inline uint64_t MixSurfaceIntoKey(uint64_t key, const ScadMaterialProperties& material)
     {
-        if (!material.texture)
+        const auto mix = [&key](uint64_t h)
         {
-            return key;
+            h ^= h >> 33u;
+            h *= 0xff51afd7ed558ccdULL;
+            h ^= h >> 33u;
+            key ^= (h | 1ULL);
+        };
+        if (material.texture)
+        {
+            mix(material.texture->Hash() ^ (static_cast<uint64_t>(material.texture->scale * 4096.0f) << 1u));
         }
-        uint64_t h = material.texture->Hash() ^ (static_cast<uint64_t>(material.texture->scale * 4096.0f) << 1u);
-        h ^= h >> 33u;
-        h *= 0xff51afd7ed558ccdULL;
-        h ^= h >> 33u;
-        return key ^ (h | 1ULL);
+        if (!material.style.IsDefault())
+        {
+            const FSurfaceStyle& s = material.style;
+            const auto q = [](float v) { return static_cast<uint64_t>(std::lround((v + 2.0f) * 1000.0f)) & 0xFFFFu; };
+            mix(0x5157A11E00000000ULL ^ (q(s.ior) << 48u) ^ (q(s.subsurface) << 32u) ^ (q(s.sheen) << 16u) ^
+                q(s.foliageTransmission) ^ (q(s.foliageThickness) << 8u));
+        }
+        return key;
     }
 
     struct ColorBucket

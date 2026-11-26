@@ -103,6 +103,8 @@ public void RestirSpatialShade(uint3 dispatchThreadId, IRayTracer tracer)
     context.EtaInside = max(material.RefractionIndex2, 1.0001f);
     context.MaterialModel = material.MaterialModel;
     context.FrontFace = true;
+    context.Subsurface = MaterialSubsurface(material);
+    context.Sheen = MaterialSheen(material);
 
     uint4 randomSeed = InitRandomSeed(
         dispatchThreadId.x, dispatchThreadId.y, camera.TotalFrames + 7777u);

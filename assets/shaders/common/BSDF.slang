@@ -28,6 +28,10 @@ public struct FBSDFContext
     public float EtaInside;
     public uint MaterialModel;
     public bool FrontFace;
+    // Mixture diffuse shaping (Material::Surface): subsurface wrap and fabric sheen, [0,1].
+    // Zero for every other model, so their direct lighting is unchanged.
+    public float Subsurface;
+    public float Sheen;
 };
 
 public struct FBSDFEval
@@ -67,6 +71,61 @@ public float3 BSDFDielectricF0(float eta)
     const float e = max(eta, 1.0001f);
     const float f = (e - 1.0f) / (e + 1.0f);
     return float3(f * f);
+}
+
+// ---------------------------------------------------------------------------
+// Mixture diffuse shaping, shared by every direct-light site (tracing sun and lights,
+// NoAmbient). Lightweight analytic modifiers of the diffuse term only: the sampled
+// BSDF, its pdfs and secondary rays are untouched.
+// ---------------------------------------------------------------------------
+
+public float MaterialSubsurface(Material material)
+{
+    return material.MaterialModel == MaterialMixture ? saturate(material.Reserved2) : 0.0f;
+}
+
+public float MaterialSheen(Material material)
+{
+    return material.MaterialModel == MaterialMixture ? saturate(material.Reserved3) : 0.0f;
+}
+
+// Light that wraps past the terminator has crossed flesh or wax: warm and red-shifted.
+// The diffuse result is albedo-demodulated, so this tint multiplies the surface color.
+public static const float3 BSDF_SUBSURFACE_TINT = float3(1.0f, 0.42f, 0.30f);
+
+// Replaces saturate(N.L) in a diffuse term. Energy-conserving wrap,
+// saturate((N.L + w) / (1 + w)^2) with w = 0.45 * subsurface, whose extra light near and
+// past the terminator carries BSDF_SUBSURFACE_TINT. Exactly saturate(N.L) at zero.
+public float3 BSDFWrappedDiffuseCosine(float cosL, float subsurface)
+{
+    const float lit = saturate(cosL);
+    if (subsurface <= 0.0f)
+    {
+        return float3(lit);
+    }
+    const float w = 0.45f * subsurface;
+    const float wrapped = saturate((cosL + w) / ((1.0f + w) * (1.0f + w)));
+    const float band = max(wrapped - lit, 0.0f);
+    return float3(wrapped) - band * (float3(1.0f) - BSDF_SUBSURFACE_TINT);
+}
+
+// Lowest N.L that still receives wrapped diffuse light.
+public float BSDFWrapLimit(float subsurface)
+{
+    return -0.45f * subsurface;
+}
+
+// Fabric micro-fibre sheen: radiance per unit incident radiance, added on top of the
+// diffuse term. Matte face-on, a soft glow along the silhouette.
+public float3 BSDFSheen(float cosL, float NoV, float sheen, float3 baseColor)
+{
+    if (sheen <= 0.0f)
+    {
+        return float3(0.0f);
+    }
+    const float m = 1.0f - saturate(NoV);
+    const float rim = (m * m) * (m * m);
+    return sheen * 0.25f * M_1_PI * lerp(float3(1.0f), baseColor, 0.5f) * rim * saturate(cosL + 0.3f);
 }
 
 public float3 BSDFFresnelSchlick(float cosTheta, float3 f0)
@@ -159,6 +218,8 @@ public FBSDFContext BuildBSDFContext(Vertex vertex, Material material, float3 in
         : material.RefractionIndex;
     context.EtaInside = max(surfaceIor, 1.0001f);
     context.MaterialModel = material.MaterialModel;
+    context.Subsurface = MaterialSubsurface(material);
+    context.Sheen = MaterialSheen(material);
 
     if (material.DiffuseTextureId >= 0)
     {
@@ -207,7 +268,17 @@ public FBSDFContext BuildBSDFContextFromSurface(
         : material.RefractionIndex;
     context.EtaInside = max(surfaceIor, 1.0001f);
     context.MaterialModel = material.MaterialModel;
+    context.Subsurface = MaterialSubsurface(material);
+    context.Sheen = MaterialSheen(material);
     return context;
+}
+
+// Albedo-demodulated diffuse weight of a Mixture, for directions past the terminator
+// where EvaluateSurfaceBSDF has nothing (only reached with subsurface wrap).
+public float3 BSDFWrapDiffuseWeight(FBSDFContext context)
+{
+    const float3 f0 = BSDFDielectricF0(context.EtaInside / context.EtaOutside);
+    return (1.0f - f0) * (1.0f - context.Metalness) * M_1_PI;
 }
 
 public float3 BSDFMaterialF0(FBSDFContext context)

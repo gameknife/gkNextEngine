@@ -53,17 +53,12 @@ namespace Assets
             const FProceduralTextureIds maps =
                 properties.texture ? ProceduralTexture::AcquireMaps(*properties.texture)
                                    : FProceduralTextureIds{};
-            if (roughness >= 0.999f && metalness <= 0.001f)
-            {
-                Material material = Material::Lambertian(rgb, maps.albedo);
-                material.NormalTextureId = maps.normal;
-                return material;
-            }
-
-            Material material = Material::Mixture(rgb, roughness, maps.albedo);
-            material.Metalness = metalness;
-            material.MRATextureId = maps.mra;
+            Material material = Material::Surface(rgb, roughness, metalness, properties.style, maps.albedo);
             material.NormalTextureId = maps.normal;
+            if (material.MaterialModel != Material::Enum::Lambertian)
+            {
+                material.MRATextureId = maps.mra;
+            }
             return material;
         }
 
@@ -178,7 +173,7 @@ namespace Assets
         {
             const float effectiveRoughness =
                 color.a < 0.99f && !properties.explicitParameters ? 0.0f : properties.roughness;
-            const uint64_t colorKey = Scad::MixTextureIntoKey(
+            const uint64_t colorKey = Scad::MixSurfaceIntoKey(
                 (static_cast<uint64_t>(QuantizeMaterialColor(color)) << 32u) |
                 (static_cast<uint64_t>(std::clamp(effectiveRoughness, 0.0f, 1.0f) * 65535.0f + 0.5f) << 16u) |
                 static_cast<uint64_t>(std::clamp(properties.metalness, 0.0f, 1.0f) * 65535.0f + 0.5f),

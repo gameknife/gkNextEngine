@@ -149,6 +149,27 @@ rotate → scale` 顺序最多各出现一次，终点是 kit 表里能解析到
 材料——皮革（0.45~0.65）、哑光漆（0.7~0.75）、塑料扣（0.45）、清漆木（0.4）、油浸木（0.6~0.65）、
 橡胶（0.85）、金属件（metalness 0.9~1）。同一件装备里按部件分层，比整件一个粗糙度更有质感。
 
+**触感参数（只认关键字参数）**：`gk_material(c, roughness, metalness, ior = 自动, subsurface = 0, sheen = 0)`。
+三者都不写时与以前逐字节一致。映射集中在 `Assets::Material::Surface`（`Material.hpp`），场景节点与
+ScadRig 部件（`FRigPart::sectionStyles` → `SceneBuilder::AddRigSectionMaterial`）共用：
+
+| 参数 | GPU 字段 | 效果 |
+| :--- | :--- | :--- |
+| `ior`（1..2） | Mixture `RefractionIndex` / `RefractionIndex2` | 非金属 F0 = ((ior−1)/(ior+1))²。抹灰/陶土/风化木 1.18~1.25 只有约 1% 的温润微光泽。不写时：roughness < 1 为 1.45；roughness = 1 但带了 subsurface/sheen 时为 **1.0（无镜面）**，所以布料写 `sheen` 不会裹上塑料膜。 |
+| `subsurface`（0..1） | Mixture `Reserved2` | 漫反射余弦换成能量守恒的包裹 `saturate((N·L + w)/(1 + w)²)`，`w = 0.45·subsurface`；包裹多出来的光（明暗交界带）带暖红色，再乘反照率。皮肤 0.5 左右，蜡与温润木件更低。 |
+| `sheen`（0..1） | Mixture `Reserved3` | 掠射角织物绒光 `sheen·0.25/π·mix(1, base, 0.5)·(1−N·V)⁴·saturate(N·L + 0.3)`，正面保持哑光、轮廓泛光。外套、裤装、背包 0.3~0.5。 |
+
+`gk_foliage(c, transmission = 0.65, thickness = 0.10) { ... }` 生成 `Material::Foliage`（Lambertian +
+`Reserved2/3`），走引擎给运行时草地做的主表面背光透射：逆光时叶面被太阳透亮。它只作用于主表面
+直接光；透射阴影射线穿过的距离由 `thickness` 限定（≤ 0.35 m），整团闭合的大树冠背面会挡住它，
+效果偏弱，留到树冠重做时调。外层的 `gk_texture` 印花保留。
+
+着色器侧（`common/BSDF.slang`）：`BSDFWrappedDiffuseCosine` / `BSDFSheen` 两个辅助函数被所有直接光
+入口共用——追踪类渲染器的太阳与灯光 NEE（`Lighting.slang`，含 ReSTIR 目标函数）和 NoAmbient；
+subsurface 与 sheen 为 0 时它们退化为原来的 `saturate(N·L)` 与 0。只修饰直接光的漫反射项，采样的
+BSDF、pdf 与次级射线不变。已知限制：包裹光会让低模平滑表面的"阴影明暗交界线锯齿"（太阳阴影
+射线从平面三角形出发，被相邻面挡住）更显眼，修正要在主表面重建里做明暗交界线偏移。
+
 ### 雕塑原语与法线控制
 
 引擎原生生成网格，不走 Manifold，也不靠 `hull()` 拼。对照台：

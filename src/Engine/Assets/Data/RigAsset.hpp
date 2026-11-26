@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "Engine/Assets/Core/Model.hpp"
+#include "Engine/Assets/Data/Material.hpp"
 #include "Engine/Assets/Data/RigDefinition.hpp"
 #include "Engine/Assets/Loaders/ProceduralTexture.hpp"
 #include "Engine/Utilities/Glm.hpp"
@@ -37,11 +38,18 @@ namespace Assets
         // gk_texture() print per section (null = untextured); the part's vertices
         // carry box-projected UVs for it. Materials multiply color by the bake.
         std::vector<std::shared_ptr<const FProceduralTexture>> sectionTextures;
+        // Surface style per section (subsurface / sheen / IOR / foliage); empty = all default.
+        std::vector<FSurfaceStyle> sectionStyles;
 
         // (roughness, metalness) of a section; parts built without surfaces stay Lambertian.
         glm::vec2 SectionSurface(size_t section) const
         {
             return section < sectionSurfaces.size() ? sectionSurfaces[section] : glm::vec2(1.0f, 0.0f);
+        }
+
+        FSurfaceStyle SectionStyle(size_t section) const
+        {
+            return section < sectionStyles.size() ? sectionStyles[section] : FSurfaceStyle{};
         }
     };
 

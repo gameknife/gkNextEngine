@@ -72,7 +72,7 @@ namespace Assets::Scad
             };
             const float effectiveRoughness =
                 c.a < 0.99f && !material.explicitParameters ? 0.0f : material.roughness;
-            return MixTextureIntoKey((static_cast<uint64_t>(QuantizeColor(c)) << 32u) |
+            return MixSurfaceIntoKey((static_cast<uint64_t>(QuantizeColor(c)) << 32u) |
                                      (q(effectiveRoughness) << 16u) |
                                      q(material.metalness),
                                      material);
@@ -811,6 +811,17 @@ namespace Assets::Scad
                             Arg(inst, "roughness", 1).AsNumber(1.0), 0.0, 1.0));
                         material.metalness = static_cast<float>(std::clamp(
                             Arg(inst, "metalness", 2).AsNumber(0.0), 0.0, 1.0));
+                        // Named only: surface character on top of roughness/metalness
+                        // (Material::Surface). Absent = the historical mapping.
+                        const Value ior = Arg(inst, "ior", -1);
+                        if (ior.IsNumber())
+                        {
+                            material.style.ior = static_cast<float>(std::clamp(ior.num, 1.0, 2.0));
+                        }
+                        material.style.subsurface =
+                            static_cast<float>(std::clamp(Arg(inst, "subsurface", -1).AsNumber(0.0), 0.0, 1.0));
+                        material.style.sheen =
+                            static_cast<float>(std::clamp(Arg(inst, "sheen", -1).AsNumber(0.0), 0.0, 1.0));
                         // A surface change keeps an enclosing gk_texture() print.
                         if (!materialPropertiesStack_.empty())
                         {
@@ -824,6 +835,34 @@ namespace Assets::Scad
                         return result;
                     }
                     return EvalScope(inst.children, xform, color, hasColor);
+                }
+                if (name == "gk_foliage")
+                {
+                    // gk_foliage(c, transmission = 0.65, thickness = 0.10) { ... }: a
+                    // matte leaf surface that also lets the sun through from behind
+                    // (Material::Foliage, the runtime grass path), for crowns, shrubs
+                    // and hedges. Keeps an enclosing gk_texture() print.
+                    glm::dvec4 c = color;
+                    if (!ResolveMaterialColor(inst, c))
+                    {
+                        return EvalScope(inst.children, xform, color, hasColor);
+                    }
+                    ScadMaterialProperties material;
+                    material.explicitParameters = true;
+                    if (!materialPropertiesStack_.empty())
+                    {
+                        material.texture = materialPropertiesStack_.back().texture;
+                    }
+                    material.style.foliageTransmission = static_cast<float>(
+                        std::clamp(Arg(inst, "transmission", 1).AsNumber(0.65), 0.01, 1.0));
+                    material.style.foliageThickness = static_cast<float>(
+                        std::clamp(Arg(inst, "thickness", 2).AsNumber(0.10), 0.0, 0.3));
+                    materialNameStack_.push_back(ResolveColorName(inst));
+                    materialPropertiesStack_.push_back(material);
+                    GeomList result = EvalScope(inst.children, xform, c, true);
+                    materialPropertiesStack_.pop_back();
+                    materialNameStack_.pop_back();
+                    return result;
                 }
                 if (name == "gk_texture")
                 {

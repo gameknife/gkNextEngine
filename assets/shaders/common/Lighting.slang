@@ -198,20 +198,24 @@ namespace Common
             return false;
         }
         const float3 wi = toLight * rsqrt(distanceSquared);
-        const float surfaceCosine = max(dot(context.Normal, wi), 0.0f);
-        if (surfaceCosine <= 0.0f)
+        const float cosL = dot(context.Normal, wi);
+        const float surfaceCosine = max(cosL, 0.0f);
+        // Subsurface wrap lets a Mixture take diffuse light a little past its terminator.
+        if (cosL <= BSDFWrapLimit(context.Subsurface))
         {
             return false;
         }
 
         FBSDFEval bsdf = EvaluateSurfaceBSDF(context, wi);
-        float geometryAndPdf;
+        // Light geometry and pdf without the surface cosine: diffuse takes the wrapped
+        // cosine, specular the true one.
+        float lightGeometry;
         float specularMis = 1.0f;
         if (light.lightType == LightTypePoint)
         {
             // DiffuseLight RGB is radiant intensity for a point record. A point is a
             // delta-direction proposal, so a finite-density BSDF proposal cannot overlap it.
-            geometryAndPdf = surfaceCosine / (distanceSquared * lightPdf);
+            lightGeometry = 1.0f / (distanceSquared * lightPdf);
         }
         else
         {
@@ -225,17 +229,20 @@ namespace Common
                 (lightPdf / sampleMeasure) * distanceSquared / lightCosine;
             specularMis = MIS(
                 lightPdfOmega, EvaluateGlossyProposalPdf(context, wi));
-            geometryAndPdf = surfaceCosine * lightCosine * sampleMeasure /
-                             (distanceSquared * lightPdf);
+            lightGeometry = lightCosine * sampleMeasure / (distanceSquared * lightPdf);
         }
-        direct.DiffuseDemodulated = lightMaterial.Diffuse.rgb *
-                                     bsdf.DiffuseDemodulated * geometryAndPdf;
+        const float3 diffuseWeight = surfaceCosine > 0.0f ? bsdf.DiffuseDemodulated
+                                                          : BSDFWrapDiffuseWeight(context);
+        direct.DiffuseDemodulated = lightMaterial.Diffuse.rgb * diffuseWeight *
+                                     BSDFWrappedDiffuseCosine(cosL, context.Subsurface) * lightGeometry;
         // Exact/near-delta reflection is handled by a direction sample in the renderer.
         if (context.PerceptualRoughness > BSDF_DELTA_ROUGHNESS)
         {
             direct.SpecularRadiance = lightMaterial.Diffuse.rgb * bsdf.Specular *
-                                      geometryAndPdf * specularMis;
+                                      (surfaceCosine * lightGeometry) * specularMis;
         }
+        direct.SpecularRadiance += lightMaterial.Diffuse.rgb * lightGeometry *
+            BSDFSheen(cosL, dot(context.Normal, context.Wo), context.Sheen, context.BaseColor);
         return any(direct.DiffuseDemodulated > float3(0, 0, 0)) ||
                any(direct.SpecularRadiance > float3(0, 0, 0));
     }
@@ -306,14 +313,21 @@ namespace Common
             return;
         }
         FBSDFEval bsdf = EvaluateSurfaceBSDF(context, wi);
-        const float NoL = max(dot(context.Normal, wi), 0.0f);
-        direct.DiffuseDemodulated += sunColor * bsdf.DiffuseDemodulated * NoL * visibility;
+        const float cosL = dot(context.Normal, wi);
+        const float NoL = max(cosL, 0.0f);
+        const float3 diffuseWeight = NoL > 0.0f || context.Subsurface <= 0.0f
+            ? bsdf.DiffuseDemodulated
+            : BSDFWrapDiffuseWeight(context);
+        direct.DiffuseDemodulated += sunColor * diffuseWeight *
+                                     BSDFWrappedDiffuseCosine(cosL, context.Subsurface) * visibility;
         if (context.PerceptualRoughness > BSDF_DELTA_ROUGHNESS)
         {
             const float specularMis = MIS(
                 SunSamplePdf(), EvaluateGlossyProposalPdf(context, wi));
             direct.SpecularRadiance += sunColor * bsdf.Specular * NoL * visibility * specularMis;
         }
+        direct.SpecularRadiance += sunColor * visibility *
+            BSDFSheen(cosL, dot(context.Normal, context.Wo), context.Sheen, context.BaseColor);
     }
 
     public float3 EvaluateAnalyticSunDisk(float3 rayDirection)
@@ -468,7 +482,7 @@ public struct FShadowMapDirectIlluminator : IDirectIlluminator
     {
         UniformBufferObject Camera = Bindless.GetGpuscene().Camera[0];
         const float3 lightVector = Camera.SunDirection.xyz;
-        const float3 d = max(dot(lightVector, context.Normal), 0.0) * M_1_PI;
+        const float3 d = BSDFWrappedDiffuseCosine(dot(lightVector, context.Normal), context.Subsurface) * M_1_PI;
 
         float shadow = 0.0f;
         if (Camera.HasSun)

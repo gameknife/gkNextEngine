@@ -5,6 +5,7 @@
 #include "Engine/Assets/Data/Material.hpp"
 #include "Engine/Assets/Data/RigAsset.hpp"
 #include "Engine/Runtime/Components/RenderComponent.hpp"
+#include "Engine/Runtime/Scene/SceneBuilder.hpp"
 #include "Engine/Utilities/FileHelper.hpp"
 #include "Modules/ScadLoader/FScadCsg.h"
 #include "Modules/ScadLoader/FScadEvaluator.h"
@@ -1943,5 +1944,163 @@ TEST_CASE("gk_sweep authors tube, taper and cap normals", "[Unit][Scad]")
     const double lean = std::atan(0.3); // dr/ds = -0.3
     for (const glm::dvec3& n : coneNormals)
         CHECK(n.z == Catch::Approx(std::sin(lean)).margin(1e-9));
+}
+
+// ---------------------------------------------------------------------------
+// Tactile materials (V1-2): gk_material ior / subsurface / sheen, gk_foliage.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("Material::Surface keeps the historical mapping without a style", "[Unit][Scad]")
+{
+    using Assets::Material;
+    const Material matte = Material::Surface(glm::vec3(0.5f), 1.0f, 0.0f);
+    CHECK(matte.MaterialModel == Material::Enum::Lambertian);
+    CHECK_FALSE(matte.IsFoliage());
+    const Material glossy = Material::Surface(glm::vec3(0.5f), 0.4f, 0.2f);
+    CHECK(glossy.MaterialModel == Material::Enum::Mixture);
+    CHECK(glossy.RefractionIndex == Catch::Approx(1.45f));
+    CHECK(glossy.Reserved2 == 0.0f);
+    CHECK(glossy.Reserved3 == 0.0f);
+    static_assert(sizeof(Material) == 64, "GPU material layout must not grow");
+}
+
+TEST_CASE("gk_material subsurface, sheen and ior become Mixture parameters", "[Unit][Scad]")
+{
+    ScopedDir dir;
+    const std::filesystem::path mainPath = dir.Write(
+        "tactile.scad",
+        "gk_material([0.8, 0.6, 0.5], roughness = 0.78, ior = 1.26, subsurface = 0.55) cube(1);\n"
+        "translate([2, 0, 0]) gk_material([0.3, 0.3, 0.5], sheen = 0.45) cube(1);\n"
+        "translate([4, 0, 0]) gk_material([0.3, 0.3, 0.5]) cube(1);\n"
+        "translate([6, 0, 0]) gk_material([0.6, 0.5, 0.4], ior = 1.2) cube(1);\n");
+
+    Assets::EnvironmentSetting environment;
+    std::vector<std::shared_ptr<Assets::Node>> nodes;
+    std::vector<Assets::Model> models;
+    std::vector<Assets::FMaterial> materials;
+    std::vector<Assets::LightObject> lights;
+    std::vector<Assets::AnimationTrack> tracks;
+    std::vector<Assets::Skeleton> skeletons;
+    REQUIRE(Assets::FScadLoader::LoadScadScene(mainPath.string(), environment, nodes, models, materials, lights,
+                                               tracks, skeletons));
+    // Same colour, different style: the fabric and the plain cube never share a slot.
+    REQUIRE(materials.size() == 4);
+
+    const auto find = [&](float r) -> const Assets::Material*
+    {
+        for (const Assets::FMaterial& m : materials)
+            if (std::abs(m.gpuMaterial_.Diffuse.r - r) < 1e-3f)
+                return &m.gpuMaterial_;
+        return nullptr;
+    };
+    const Assets::Material* skin = find(0.8f);
+    REQUIRE(skin);
+    CHECK(skin->MaterialModel == Assets::Material::Enum::Mixture);
+    CHECK(skin->RefractionIndex == Catch::Approx(1.26f));
+    CHECK(skin->Reserved2 == Catch::Approx(0.55f));
+    CHECK(skin->Reserved3 == 0.0f);
+
+    int fabric = 0;
+    int plain = 0;
+    for (const Assets::FMaterial& m : materials)
+    {
+        const Assets::Material& g = m.gpuMaterial_;
+        if (std::abs(g.Diffuse.r - 0.3f) > 1e-3f)
+            continue;
+        if (g.Reserved3 > 0.0f)
+        {
+            // Roughness 1 with a style: a Mixture whose IOR 1.0 leaves no specular film.
+            ++fabric;
+            CHECK(g.MaterialModel == Assets::Material::Enum::Mixture);
+            CHECK(g.Reserved3 == Catch::Approx(0.45f));
+            CHECK(g.RefractionIndex == Catch::Approx(1.0f));
+        }
+        else
+        {
+            ++plain;
+            CHECK(g.MaterialModel == Assets::Material::Enum::Lambertian);
+        }
+    }
+    CHECK(fabric == 1);
+    CHECK(plain == 1);
+
+    const Assets::Material* clay = find(0.6f);
+    REQUIRE(clay);
+    CHECK(clay->MaterialModel == Assets::Material::Enum::Mixture);
+    CHECK(clay->RefractionIndex == Catch::Approx(1.2f));
+    CHECK(clay->Reserved2 == 0.0f);
+}
+
+TEST_CASE("gk_foliage makes a transmissive Lambertian leaf", "[Unit][Scad]")
+{
+    ScopedDir dir;
+    const std::filesystem::path mainPath =
+        dir.Write("leaf.scad", "gk_foliage([0.2, 0.35, 0.12], transmission = 0.7, thickness = 0.05) sphere(1);\n"
+                               "translate([3, 0, 0]) color([0.2, 0.35, 0.12]) sphere(1);\n");
+    Assets::EnvironmentSetting environment;
+    std::vector<std::shared_ptr<Assets::Node>> nodes;
+    std::vector<Assets::Model> models;
+    std::vector<Assets::FMaterial> materials;
+    std::vector<Assets::LightObject> lights;
+    std::vector<Assets::AnimationTrack> tracks;
+    std::vector<Assets::Skeleton> skeletons;
+    REQUIRE(Assets::FScadLoader::LoadScadScene(mainPath.string(), environment, nodes, models, materials, lights,
+                                               tracks, skeletons));
+    REQUIRE(materials.size() == 2);
+    int leaves = 0;
+    for (const Assets::FMaterial& m : materials)
+    {
+        CHECK(m.gpuMaterial_.MaterialModel == Assets::Material::Enum::Lambertian);
+        if (m.gpuMaterial_.IsFoliage())
+        {
+            ++leaves;
+            CHECK(m.gpuMaterial_.Reserved2 == Catch::Approx(0.7f));
+            CHECK(m.gpuMaterial_.Reserved3 == Catch::Approx(0.05f));
+        }
+    }
+    CHECK(leaves == 1);
+}
+
+TEST_CASE("ScadRig sections carry the surface style into their materials", "[Unit][ScadRig]")
+{
+    const SceneEvalResult result =
+        EvalScene("module bone_root() {\n"
+                  "    gk_material([0.8, 0.6, 0.5], roughness = 0.78, subsurface = 0.55) cube(0.1);\n"
+                  "    gk_material([0.8, 0.6, 0.5], roughness = 0.78) translate([0, 0, 0.3]) cube(0.1);\n"
+                  "    gk_foliage([0.2, 0.4, 0.1]) translate([0, 0, 0.6]) cube(0.1);\n"
+                  "}\n"
+                  "bone_root();\n");
+    Assets::FRigAsset asset;
+    std::string err;
+    REQUIRE(Assets::FScadRigLoader::BuildRig(result, Assets::ScadRigLoadOptions{}, asset, err));
+    REQUIRE(asset.parts.size() == 1);
+    const Assets::FRigPart& part = asset.parts[0];
+    REQUIRE(part.sectionStyles.size() == 3);
+
+    std::vector<Assets::FMaterial> materials;
+    int skin = 0;
+    int plain = 0;
+    int leaf = 0;
+    for (size_t section = 0; section < part.sectionStyles.size(); ++section)
+    {
+        const Assets::Material& m =
+            materials[Assets::SceneBuilder::AddRigSectionMaterial(materials, part, section)].gpuMaterial_;
+        if (m.IsFoliage())
+            ++leaf;
+        else if (m.Reserved2 > 0.0f)
+        {
+            ++skin;
+            CHECK(m.MaterialModel == Assets::Material::Enum::Mixture);
+            CHECK(m.Reserved2 == Catch::Approx(0.55f));
+        }
+        else
+        {
+            ++plain;
+            CHECK(m.RefractionIndex == Catch::Approx(1.45f));
+        }
+    }
+    CHECK(skin == 1);
+    CHECK(plain == 1);
+    CHECK(leaf == 1);
 }
 } // namespace ScadSculptTest

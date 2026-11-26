@@ -2,6 +2,7 @@
 
 #include "Engine/Assets/AssetsFwd.hpp"
 #include "Engine/Common/CoreMinimal.hpp"
+#include "Engine/Assets/Data/Material.hpp"
 
 #include <glm/ext/quaternion_float.hpp>
 #include <glm/vec3.hpp>
@@ -15,12 +16,14 @@ namespace Assets
 namespace Assets::SceneBuilder
 {
     uint32_t AddLambertianMaterial(std::vector<Assets::FMaterial>& materials, const glm::vec3& color);
-    // Lambertian when fully rough and dielectric, otherwise a metal/rough Mixture:
-    // the same mapping the SCAD scene loader gives gk_material(). A diffuse
-    // texture (gk_texture() print) multiplies the color.
+    // Material::Surface: Lambertian when fully rough and dielectric, otherwise a metal/rough
+    // Mixture, with an optional surface style (subsurface / sheen / IOR / foliage) -- the same
+    // mapping the SCAD scene loader gives gk_material() and gk_foliage(). A diffuse texture
+    // (gk_texture() print) multiplies the color.
     uint32_t AddSurfaceMaterial(std::vector<Assets::FMaterial>& materials, const glm::vec3& color, float roughness,
-                                float metalness, int32_t diffuseTextureId = -1);
-    // One section of a rig part: its baked color, its gk_material surface and its gk_texture print.
+                                float metalness, int32_t diffuseTextureId = -1,
+                                const Assets::FSurfaceStyle& style = {});
+    // One section of a rig part: its baked color, its gk_material surface and style, its gk_texture print.
     uint32_t AddRigSectionMaterial(std::vector<Assets::FMaterial>& materials, const Assets::FRigPart& part,
                                    size_t section);
     uint32_t AddDiffuseLightMaterial(std::vector<Assets::FMaterial>& materials, const glm::vec3& color, float intensity = 1.0f);

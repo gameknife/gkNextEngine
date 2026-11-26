@@ -97,7 +97,11 @@ float2 AreaLightShadowUV(uint2 pixel, uint frame, bool temporalDither)
 
 float3 MaterialF0(Material material, float3 albedo, float metalness)
 {
-    float3 dielectricF0 = material.MaterialModel == MaterialDielectric
+    // A Mixture keeps the historical 0.04 unless its IOR was authored (gk_material ior):
+    // matching IOR 1.45 exactly would shift every existing glossy surface slightly.
+    const bool authoredIor = material.MaterialModel == MaterialMixture &&
+                             abs(material.RefractionIndex - 1.45f) > 1e-3f;
+    float3 dielectricF0 = material.MaterialModel == MaterialDielectric || authoredIor
         ? DielectricF0(max(material.RefractionIndex, 1.0f))
         : float3(0.04f);
     return lerp(dielectricF0, albedo, metalness);
@@ -172,6 +176,8 @@ FNoAmbientShadingOutput ShadeNoAmbientStandard(FNoAmbientShadingInput surface, i
     const float3 albedo = Camera.DebugDraw_Lighting ? float3(1.0f, 1.0f, 1.0f) : surface.Albedo.rgb;
     const float3 f0 = MaterialF0(material, albedo, metalness);
     const float NoV = max(dot(N, V), 0.001f);
+    const float subsurface = MaterialSubsurface(material);
+    const float sheen = MaterialSheen(material);
     const float3 kS = FresnelSchlickRoughness(NoV, f0, roughness);
     float3 kD = (1.0f - kS) * (1.0f - metalness);
     if (material.MaterialModel == MaterialDielectric)
@@ -312,9 +318,11 @@ FNoAmbientShadingOutput ShadeNoAmbientStandard(FNoAmbientShadingInput surface, i
                     continue;
                 }
 
-                const float NoL = max(dot(N, L), 0.0f);
+                const float cosL = dot(N, L);
+                const float NoL = max(cosL, 0.0f);
+                const float3 wrapped = BSDFWrappedDiffuseCosine(cosL, subsurface);
                 const float transmission = Common.FoliageDirectWeight(material, N, L);
-                const float contribution = LightContribution(incident, NoL + transmission);
+                const float contribution = LightContribution(incident, max(NoL, wrapped.x) + transmission);
                 if (contribution < 1e-4f)
                 {
                     continue;
@@ -323,7 +331,10 @@ FNoAmbientShadingOutput ShadeNoAmbientStandard(FNoAmbientShadingInput surface, i
                 const float3 radiance =
                     incident * (NoL * lightVisibility / float(lightSampleCount));
 
-                direct += kD * albedo * radiance * M_1_PI;
+                direct += kD * albedo * incident * wrapped *
+                          (lightVisibility * M_1_PI / float(lightSampleCount));
+                specularColor.rgb += incident * BSDFSheen(cosL, NoV, sheen, albedo) *
+                                     (lightVisibility / float(lightSampleCount));
                 direct += kD * albedo * incident *
                           (transmission * foliageVisibility * M_1_PI / float(lightSampleCount));
                 if (lightSampleCount == 1u && NoL > 0.0f)
@@ -367,12 +378,15 @@ FNoAmbientShadingOutput ShadeNoAmbientStandard(FNoAmbientShadingInput surface, i
     if (Camera.HasSun)
     {
         float3 L = normalize(Camera.SunDirection.xyz);
-        float NoL = max(dot(L, N), 0.0f);
+        const float cosL = dot(L, N);
+        float NoL = max(cosL, 0.0f);
         float viewDist = -mul(Camera.ModelView, float4(surface.Position, 1.0f)).z;
         float shadow = Common.SampleSunShadowCSM(surface.Position, N, viewDist);
         float3 sunRadiance = Camera.SunColor.rgb * (NoL * shadow);
 
-        direct += kD * albedo * sunRadiance * M_1_PI;
+        direct += kD * albedo * Camera.SunColor.rgb * BSDFWrappedDiffuseCosine(cosL, subsurface) *
+                  (shadow * M_1_PI);
+        specularColor.rgb += Camera.SunColor.rgb * BSDFSheen(cosL, NoV, sheen, albedo) * shadow;
         specularColor.rgb += SpecularBRDF(N, V, L, NoV, NoL, roughness, f0) * sunRadiance;
         const float transmission = Common.FoliageDirectWeight(material, N, L);
         if (transmission > 0.0f)

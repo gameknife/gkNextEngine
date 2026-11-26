@@ -37,7 +37,7 @@ namespace Assets
             {
                 return static_cast<uint64_t>(std::clamp(v, 0.0f, 1.0f) * 65535.0f + 0.5f);
             };
-            return Scad::MixTextureIntoKey(
+            return Scad::MixSurfaceIntoKey(
                 (static_cast<uint64_t>(RigQuantizeColor(color)) << 32) | (q(material.roughness) << 16) |
                     q(material.metalness),
                 material);
@@ -48,6 +48,7 @@ namespace Assets
             glm::vec4 color{0.78f, 0.78f, 0.78f, 1.0f};
             glm::vec2 surface{1.0f, 0.0f}; // (roughness, metalness)
             FProceduralTextureRef texture; // gk_texture() print, UVs projected in the bone-local frame
+            FSurfaceStyle style; // gk_material subsurface / sheen / ior, gk_foliage
             std::vector<glm::dvec3> tris; // SCAD space, baked into bone-pivot-local frame
             std::vector<Scad::ScadNormalSpan> normalSpans; // gk_crease / gk_puff_normals, same frame as tris
             std::vector<glm::dvec3> normals; // authored normals parallel to tris (empty = none)
@@ -134,6 +135,7 @@ namespace Assets
                     bucket.surface = glm::vec2(std::clamp(mesh.material.roughness, 0.0f, 1.0f),
                                                std::clamp(mesh.material.metalness, 0.0f, 1.0f));
                     bucket.texture = mesh.material.texture;
+                    bucket.style = mesh.material.style;
                     const size_t firstTri = bucket.tris.size() / 3;
                     bucket.tris.reserve(bucket.tris.size() + mesh.tris.size());
                     const double determinant = glm::determinant(glm::dmat3(accum));
@@ -302,6 +304,7 @@ namespace Assets
                         part.sectionColors.push_back(bucket.color);
                         part.sectionSurfaces.push_back(bucket.surface);
                         part.sectionTextures.push_back(bucket.texture);
+                        part.sectionStyles.push_back(bucket.style);
                         part.sectionTintable.push_back(RigQuantizeColor(bucket.color) == tintKey);
                         ++sectionIndex;
                     }

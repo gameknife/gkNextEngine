@@ -29,21 +29,10 @@ namespace Assets::SceneBuilder
     }
 
     uint32_t AddSurfaceMaterial(std::vector<Assets::FMaterial>& materials, const glm::vec3& color, float roughness,
-                                float metalness, int32_t diffuseTextureId)
+                                float metalness, int32_t diffuseTextureId, const Assets::FSurfaceStyle& style)
     {
         const glm::vec3 rgb = glm::clamp(color, glm::vec3(0.0f), glm::vec3(1.0f));
-        roughness = glm::clamp(roughness, 0.0f, 1.0f);
-        metalness = glm::clamp(metalness, 0.0f, 1.0f);
-        if (roughness >= 0.999f && metalness <= 0.001f)
-        {
-            materials.push_back({Assets::Material::Lambertian(rgb, diffuseTextureId)});
-        }
-        else
-        {
-            Assets::Material material = Assets::Material::Mixture(rgb, roughness, diffuseTextureId);
-            material.Metalness = metalness;
-            materials.push_back({material});
-        }
+        materials.push_back({Assets::Material::Surface(rgb, roughness, metalness, style, diffuseTextureId)});
         return static_cast<uint32_t>(materials.size() - 1);
     }
 
@@ -58,7 +47,8 @@ namespace Assets::SceneBuilder
         {
             maps = Assets::ProceduralTexture::AcquireMaps(*part.sectionTextures[section]);
         }
-        const uint32_t index = AddSurfaceMaterial(materials, color, surface.x, surface.y, maps.albedo);
+        const uint32_t index =
+            AddSurfaceMaterial(materials, color, surface.x, surface.y, maps.albedo, part.SectionStyle(section));
         // The print's relief lights every surface; its roughness/metalness
         // factors only mean something to a specular (non-Lambertian) one.
         Assets::Material& material = materials[index].gpuMaterial_;

@@ -1,7 +1,7 @@
 ---
 title: "NextDayz 皮克斯感 Low-Poly 视觉升级实施计划"
 category: plan
-status: 未开始（V0–V5 待实施）
+status: 进行中（V0-1 已完成，V1–V5 待实施）
 owner: NextDayz
 created: 2026-11-26
 last_updated: 2026-11-26
@@ -22,7 +22,7 @@ last_updated: 2026-11-26
 
 | 阶段 | 任务编号 | 状态 | 核心产出 |
 | :--- | :--- | :--- | :--- |
-| P0 视觉标杆切片 | `V0-1` | 未开始 | 40m×40m 全要素 Lookdev 微缩样板间与 4 机位基准图 |
+| P0 视觉标杆切片 | `V0-1` | 已完成 | 40m×40m 全要素 Lookdev 微缩样板间与 4 机位基准图 |
 | P1 SCAD 与着色底座 | `V1-1` ～ `V1-3` | 未开始 | 圆角/扫掠/法线原语、SSS/Sheen/Foliage 着色、烘焙顶点 AO 与宏尺度打散 |
 | P2 电影光影与大厅 | `V2-1` ～ `V2-2` | 未开始 | 透光窗户点亮室内、户外冷暖色调调校、直升机机舱大厅电影级重塑 |
 | P3 角色与武器 2.0 | `V3-1` ～ `V3-4` | 未开始 | 幸存者五官眼神光与 SSS 皮肤、圆角绒光服装、感染者放样重写、武器捕光边 |
@@ -34,6 +34,8 @@ last_updated: 2026-11-26
 ## P0：建立视觉标杆微缩样板间（Vertical Slice）
 
 ### `V0-1` 搭建 `nextdayz_pixar_lookdev.scad` 评测基准场
+- **状态**：已完成。场景在 `assets/scad/source/others/nextdayz_pixar_lookdev.scad`；幸存者展示架用 rig 骨架 + `rh_upper_pose` 解出的 weapon_ready 双臂 IK，服装直接调用衣柜 `bone_<item>__<bone>` 部件；感染者用 reach 第 0 帧腕点解 IK。4 个机位 0 SCAD warning、51k 三角面。截其它机位：复制一份到同目录并改 `FOCUS`。
+- **Before 基准结论**：室内机位几乎全黑（V2-1 透光窗户的直接依据）；树冠为硬棱多面球/圆锥；角色倒角盒与八棱柱肢体折痕明显。
 - **范围**：新建 `assets/scad/source/others/nextdayz_pixar_lookdev.scad`（只引用现有库，不改 C++）。
 - **内容**：在 `40m × 40m` 场地上同框布置：1 名穿戴外套/背心/背包/持枪的幸存者静态展示架、1 只感染者、1 栋带室内的波希米亚农舍（`nd_bh_building`）、2 棵代表性树木（阔叶椴树 + 云杉）、一段碎石土路、弃车、木箱物资与武器陈列台；用 `gk_camera_lookat` 埋入 4 个固定机位：`portrait`（角色半身肖像）、`street`（街景建筑与树）、`interior`（室内门窗朝向）、`diorama`（45° 微缩全景）。
 - **完成与闸门**：

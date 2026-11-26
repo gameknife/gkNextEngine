@@ -14,10 +14,22 @@ temporal-upscaler post-filter when `r.upscaler.postFilter` is enabled:
    motion-vector reprojection, depth disocclusion rejection, YCoCg variance/neighborhood
    clipping, luminance reactivity, and confidence-based temporal locking.
 2. `Process.NativeTemporalSharpen`: a conservative, edge-adaptive five-tap sharpen over the
-   completed temporal image.
+   completed temporal image. Its strength fades with the history confidence the reproject pass
+   stores in alpha (`smoothstep(0.35, 0.95, confidence)`), so a freshly disoccluded or
+   unconverged pixel is never sharpened.
 3. The renderer's shared bindless `Process.TemporalPostFilter` pass, also used after FidelityFX FSR.
    Its first pass rejects isolated fireflies from neighbor-only luminance statistics, and later
-   passes apply normal/albedo-guided B3-spline a-trous filtering with expanding support.
+   passes apply normal/albedo-guided B3-spline a-trous filtering with expanding support. Its
+   strength is scaled by `RT_HISTORY_AGE` (full at age 0, a quarter once the age reaches
+   `r.disocclusionFilter.frames`) on renderers that keep object-id history.
+
+Steady-state boiling at 1-2 spp comes from the 3x3 clip box: its eight neighbours are fresh
+samples, so the box drifts every frame and a hard clamp drags converged history along. The
+reproject pass therefore (a) only counts a luminance change as unexpected beyond 3.25 temporal
+sigma, (b) weights the clip distance less in the reactivity of noisy pixels
+(`lerp(0.75, 0.35, noiseRatio)`), and (c) lets a locked, static pixel without an unexpected
+change keep up to half of its unclipped history. Any motion, disocclusion or real luminance jump
+falls back to the hard clip, which is what bounds ghosting; `native-taau-motion` covers it.
 
 Color history uses ping-pong `R16G16B16A16_SFLOAT` images, depth history uses ping-pong
 `R32_SFLOAT` images, and luminance moments use ping-pong `R16G16_SFLOAT` images. These provider
@@ -70,7 +82,7 @@ gnb validate --script assets/agentscripts/checkerboard-rendering-smoke.agentscri
 gnb validate --script assets/agentscripts/checkerboard-renderers-smoke.agentscript.json
 ```
 
-The first implementation derives reactivity from color change because the renderer contract has
-no explicit reactive/transparency mask. Thin alpha-tested or highly emissive animated content is
-therefore the main area for future quality work; adding optional reactive and composition masks
-to `FFrameInputs` is the intended extension point.
+Native TAAU derives reactivity from colour change. `FFrameInputs::reactiveMask`
+(`RT_UPSCALER_REACTIVE`, written by `Process.Compose`) exists and is consumed by FSR; Native TAAU
+and SGSR2 do not read it yet. Steady-state noise is measured with
+`assets/agentscripts/upscaler-flicker.agentscript.json` and `tools/upscaler_flicker_rmse.py`.

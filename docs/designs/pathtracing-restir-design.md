@@ -93,7 +93,7 @@ spatial gate 除 ObjectId/normal/depth 外还要求 material index 相同，避�
 
 1. **初始候选**（默认 8）：现有 CDF 选灯（`Scene::UpdateLights` 预计算 reserved1/2）+ 灯面均匀 uv，流式 RIS，权重 w = p̂ / (lightPdf/area)。无效候选计入 M（等价零权重流入）。
 2. **初始可见性**：对初始 RIS 胜者打 1 根 shadow ray，遮挡则 W=0 但保留 M（visibility reuse，防止复用扩散漏光）。
-3. **时域合并**：motion vector 重投影读上一帧 final reservoir；屏外 / ObjectId 不一致 / `MOTIONMOMENT != 0` 时拒绝。当前像素重算 p̂ 后按 W-form 合并（候选权重 = p̂·W·M）；prev.M 钳到 `r.restir.mClamp`（默认 160）。当前像素的 instanceId/motion **由 renderer 状态传参**，不读本 dispatch 刚写的纹理（§9-②）。这只是 reservoir 复用，不读取或生成颜色 history。
+3. **时域合并**：motion vector 重投影读上一帧 final reservoir；屏外 / ObjectId 不一致时拒绝（不再按运动计数门控）。当前像素重算 p̂ 后按 W-form 合并（候选权重 = p̂·W·M）；prev.M 钳到 `r.restir.mClamp`（默认 160）。当前像素的 instanceId/motion **由 renderer 状态传参**，不读本 dispatch 刚写的纹理（§9-②）。这只是 reservoir 复用，不读取或生成颜色 history。
 4. **空间合并**（pass 2，默认 5 邻居 / 半径 16px golden-angle 螺旋）：几何测试 = 同 ObjectId +
    同 material index + 法线点积 > 0.9 + view 深度相对差 < 10%；邻居样本用 center 的完整 diffuse
    BSDF context 重算 p̂ 后 W-form 合并；**邻居 M 钳到 4×初始候选数**。
@@ -142,7 +142,7 @@ Debug 视图由 pass 2 从本地合并状态渲染（race-free）；颜色用 0�
 ## 9. 修改护栏（实施中验证过的失败模式）
 
 1. **Slang 裸声明 struct 不保证应用字段默认初始化器**。新增字段必须给显式 `__init`，且所有入口声明点显式赋值——未初始化的 `RestirPrimary` 曾把 SharcUpdate pass 送进空指针路径（device lost，且 GPU 相关：一块卡上垃圾恰为 0 不崩）。
-2. **同一 invocation 内 storage image 写后读不可见**。当前像素的 primary 数据（instanceId/motion）从 renderer 状态传参；只有前置 pass 写的纹理（ObjectId1/MotionMoment/G-buffer）可读。
+2. **同一 invocation 内 storage image 写后读不可见**。当前像素的 primary 数据（instanceId/motion）从 renderer 状态传参；只有前置 pass 写的纹理（ObjectId1/HistoryAge/G-buffer）可读。
 3. **竞态关键的逐帧状态严禁放 host-visible buffer**（host 覆写与 in-flight GPU 帧竞争），必须走录进 command buffer 的 push constant。
 4. **空间复用结果不得回写时域历史**（§4）。
 5. p̂ / ReSTIR shading 共用 `Common.EvaluateLightDiffuseSample`；经典 NEE 与它共享

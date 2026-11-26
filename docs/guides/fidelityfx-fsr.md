@@ -4,7 +4,7 @@ category: guide
 status: 现行
 owner: NextFidelityFX
 created: 2026-07-21
-last_updated: 2026-07-21
+last_updated: 2026-11-26
 ---
 
 # AMD FidelityFX FSR 3.1 / Frame Generation 指南
@@ -41,12 +41,19 @@ Windows 桌面会同时安装可用的 `NextStreamline` 和 `NextFidelityFX` pro
 
 - `r.upscaler.type 3`：provider 可用时选择 FSR 3.1 temporal upscale；不可用时使用 native
   rendering，不再提供内建 spatial FSR fallback。
+- `r.fsr.shadingChangeScale 0..2`（默认 `0.40`，SDK 默认 1.0）：FSR 3.1 把帧间亮度跳变当作
+  shading change 的灵敏度。1–2 spp 的 Monte Carlo 噪声在 1.0 下会把 clip box 从 3 倍压到 1 倍、
+  削掉 lock，表现为稳态沸腾。
+- `r.fsr.velocityFactor 0..1`（默认 `0.35`，SDK 默认 1.0）：运动对历史上限的压缩程度；1.0 下
+  轻微运镜就把累积上限压到 0.15。
 - `r.upscaler.postFilter 1`：在支持该后处理的 temporal upscaler evaluate 后启用
-  display-resolution a-trous cleanup；默认开启，与 Native TAAU、SGSR2 共用同一 bindless pass。
+  display-resolution a-trous cleanup；默认关闭，与 Native TAAU、SGSR2 共用同一 bindless pass，
+  强度随 `RT_HISTORY_AGE` 调制。
 - `r.upscaler.postFilterPasses 1..4`：a-trous pass 数，步长依次为 1、2、4、8，默认 `3`。
 - `r.upscaler.postFilterStrength 0..1`：滤波结果混合强度，默认 `0.65`。
 - `r.upscaler.postFilterLumaSigma 0.01..0.5`：颜色/亮度边缘阈值，越小越保边，默认 `0.10`。
-- `r.upscaler.fireflySigma 1..8`：孤立高亮相对邻域标准差的拒绝阈值，越小抑制越强，默认 `2.5`。
+- `r.upscaler.fireflySigma 0.1..8`：孤立高亮相对邻域标准差的拒绝阈值，越小抑制越强，默认 `2.5`；
+  同时用于 post filter 和 compose 前的解调域 firefly 抑制（`r.compose.fireflyClamp`）。
 - `r.frameGeneration 1`：为当前选择的 upscaler type 启用 Frame Generation。
 - `r.upscaler.qualityMode 0..5`：Quality、Balanced、Performance、Ultra Performance、Native
   AA、Auto。
@@ -68,9 +75,33 @@ vector。启用 post filter 时，FSR 先写每个 swapchain image 对应的 dis
 image；后续与 Native TAAU 共用的 bindless pass 对孤立高亮做邻域方差裁剪，再以当前帧
 albedo/normal 作为稳定边缘引导，
 执行 B3-spline a-trous 滤波并写入 swapchain。关闭
-post filter 时 FSR 仍直接写 swapchain storage image。输入 `RT_SCENE_COLOR` 已按目标显示空间编码，
-集成按 SDR sRGB 或 HDR10 PQ 设置 non-linear color flags。projection jitter phase count 来自
-SDK query，camera cut、scene/extent 切换通过 `reset` 清空 history。
+post filter 时 FSR 仍直接写 tone mapping 输入。输入 `RT_SCENE_COLOR` 是 pre-exposed 线性 HDR
+（`inputColorIsLinear`），dispatch flags 为 0，`preExposure` 与 Compose 一致取
+`PaperWhiteNit / 40000`。projection jitter phase count 来自 SDK query，camera cut、scene/extent
+切换通过 `reset` 清空 history。
+
+Context 创建标志：
+
+- `FFX_UPSCALE_ENABLE_HIGH_DYNAMIC_RANGE` 描述的是**输入颜色**而不是显示器：它选择
+  `FFX_FSR3UPSCALER_OPTION_HDR_COLOR_INPUT`，让累积包在 Karis Tonemap/InverseTonemap 里。输入恒为
+  线性 HDR，因此 SDR 显示器上也必须设置；漏设时 FSR 用带负瓣的 Lanczos 直接混合未压缩的 HDR
+  噪点，高亮处振铃、亮噪拖尾。`QueryJitterPhaseCount` 按同样的标志创建 context，避免首帧重建。
+- `FFX_UPSCALE_ENABLE_AUTO_EXPOSURE`：只决定 FSR 内部 tonemap 与 luma lock 的工作点（读入时乘
+  `Exposure()`、输出时除回），不改变之后 `Process.TonemapAfterUpscaler` 看到的亮度。
+- 不设 `FFX_UPSCALE_ENABLE_NON_LINEAR_COLORSPACE`：provider 不映射它。
+
+`dispatch.reactive` 绑定 Compose 写的 `RT_UPSCALER_REACTIVE`（只在输出 diffuse/specular 的
+renderer 上有效）：低粗糙度、specular 主导的像素与编辑器 outline 写正值，其余为 0。
+`fShadingChangeScale` / `fVelocityFactor` 通过 `ConfigureDescUpscaleKeyValue` 设置，值存进 context
+常量，只在变化或 context 重建后重发。
+
+外部资源的 layout 契约：FidelityFX Vulkan backend 把注册时声明的 state 当作资源**当前**的
+layout，按需转换，dispatch 结束注销时再转回声明的 state。因此 GENERAL 的 scene color、motion
+vector、reactive mask 声明为 `UNORDERED_ACCESS`（按 `FImageResource::layout` 推导），depth 由
+宿主先转成 `SHADER_READ_ONLY_OPTIMAL` 再交出（FFX 没有对应 depth read-only layout 的 state），
+dispatch 后由宿主转回 attachment。声明成读 state 而实际是 GENERAL，会让 descriptor 以错误的
+layout 绑定（sync validation 报 `VUID-vkCmdDispatch-imageLayout-00344`）。Frame Generation 的
+prepare 仍按旧方式声明，未做同样的核对。
 
 全引擎 `RT_MOTIONVECTOR` 契约为 render-pixel 单位，因此 FSR 和 Streamline 都使用 1:1
 motion-vector scale。depth 使用普通（非 reversed、有限 far plane）语义。

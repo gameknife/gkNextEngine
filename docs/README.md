@@ -40,7 +40,7 @@
 - [渲染运行时架构与契约](designs/rendering-runtime-architecture.md)
 - [双平面 Visibility Buffer](designs/massive-visibility-buffer-design.md)
 - [Visibility Surface、G-buffer 与 Shading Scheduler](designs/visibility-surface-gbuffer-shading-scheduler.md)
-- [直接样本后处理与 Upscaler 输入链](designs/direct-sample-post-chain.md)
+- [直接样本后处理与 Upscaler 输入链](designs/direct-sample-post-chain.md)（含历史年龄、disocclusion filter、首跳 Sobol 采样与升采样器噪声度量）
 - [Tracing Direct Lighting 与 ReSTIR DI](designs/pathtracing-restir-design.md)
 - [SoftwareModernNoAmbient 与 GTAO](designs/software-modern-noambient-rendering.md)
 - [SoftwareModern / SoftwareTracing 性能分析与优化方案](designs/software-modern-performance-analysis.md)（代码审计完成；优化待实施）
@@ -127,9 +127,6 @@
 - [大地图 GI 覆盖：Voxel / AmbientCube clipmap](plans/ambientcube-clipmap-plan.md)（阶段 1–4 已实施：
   5 级贴合场景布局、probe 发布规则、DDA 多级行走、环形寻址、brick 粒度管线、近场跟随滚动、级间过渡、pong
   增量同步、几何变化局部重体素化、按显存降级数、内存 brick 缓存；brick 缓存落盘待定）
-- [升采样器 disocclusion 噪点治理](plans/upscaler-disocclusion-noise-plan.md)（待实施；运动物体移开后非 RR
-  升采样器的噪点：删除 DLSS 无效运动矢量掩码、`RT_MOTIONMOMENT` 改为重投影历史年龄、按年龄驱动的空间滤波；
-  P3 开工前需确认一处设计护栏变更）
 - [NextRaiden MVP](projects/nextraiden/nextraiden-mvp-plan.md)（实施中；P0–P2 已完成，P3/P4 待做）
 - [验证中心 MVP](plans/validation-center-mvp-plan.md)（待实施；CLI 自动留档、Dashboard 查看问题与可见重跑）
 - [iOS NativeAOT C# 真机支持](plans/ios-nativeaot-plan.md)（P0–P2 已完成；待真机验收）

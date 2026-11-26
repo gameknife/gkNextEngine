@@ -95,12 +95,16 @@ barycentric → `NodeProxy.matId[]` 材质解析 → 纹理采样。现在这套
 | `RT_ALBEDO` | RGBA16F | base color（diffuse 纹理已乘入） | 见下文「RT_ALBEDO 的双重身份」 |
 | `RT_OBJECTID_0` | R32_UINT | `Common.EncodeObjectId`（含 selected/hovered/locked/danger） | 背景写 0 |
 | `RT_MOTIONVECTOR` | RG32F | render-pixel 单位 motion；背景写 sky motion | 不变 |
-| `RT_MOTIONMOMENT` | R16_UINT | motion 突变计数 | `Common.CalculateMotionVector` 的副作用，随 motion 归 Build |
+| `RT_HISTORY_AGE` | R16_UINT | 连续可重投影的帧数（0 = 刚 disocclusion，饱和 255） | 读 `RT_OBJECTID_1` / `RT_DEPTH_HISTORY_PREV` / `RT_HISTORY_AGE_PREV`，判据见 [直接样本后处理](direct-sample-post-chain.md#历史年龄rt_history_age) |
 | `RT_BSDF_DATA` | RG32_UINT | x=resolved material ID（背景/退化=`kInvalidMaterialId`），y=`f16 metalness \| 16bit flags` | 见下文 |
 | `RT_SPECULAR_ALBEDO` | RGBA16F | specular albedo（metallic 用 base color） | 仅在消费者需要时写（tracing 系），退出 resolve |
 
 不写 world position：由 depth + `Camera.ProjectionInverse` 重建
 （`Surface.ReconstructPosition`）。
+
+上一帧平面 `RT_OBJECTID_1`、`RT_HISTORY_AGE_PREV`（slot 11）、`RT_DEPTH_HISTORY_PREV`（slot 21，
+R32F）由 view 结束时的 `CopyObjectIdHistory` 从当前帧平面一起拷贝，Build 只读。主 PathTracing
+不跑 Build，在自己的 primary hit 里写同样的 depth（jittered）与 age。
 
 Feature flags：`EMISSIVE`、`METALLIC`、`DIELECTRIC`、`HAS_MRA`、`HAS_NORMALMAP`。
 Material ID 负责身份，flags 负责策略，二者不合并成「每材质一条 shader」的接口。所有写入方

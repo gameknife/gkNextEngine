@@ -2542,16 +2542,18 @@ module cw_veh_tank_car(seed = 0)
 // ---- 材质 ----
 // 发蓝 / 磷化钢带 gk_texture("worn")：涂层磨穿处露出更亮、更光滑的钢（印花自带颜色与金属度/粗糙度系数，
 // 所以 gk_material 用白色）；木件用 "woodgrain"：顺 +u 的年轮、清漆填平的早材更光滑。
-module cw_m_blued()  { gk_material([1, 1, 1], roughness = 0.32, metalness = 0.85) gk_texture("worn", palette = [[0.17, 0.175, 0.19], [0.50, 0.50, 0.52]], scale = 0.12) children(); } // 发蓝钢：枪管、枪机座
-module cw_m_park()   { gk_material([1, 1, 1], roughness = 0.55, metalness = 0.6) gk_texture("worn", palette = [[0.21, 0.21, 0.20], [0.48, 0.48, 0.48]], scale = 0.12, seed = 1) children(); }   // 磷化哑光钢：冲压机匣
+// 发蓝 / 磷化钢的底色比真实略亮、粗糙度略高：低反照率的高金属度表面在背光一侧只剩环境反射，会读成死黑。
+module cw_m_blued()  { gk_material([1, 1, 1], roughness = 0.36, metalness = 0.8) gk_texture("worn", palette = [[0.22, 0.226, 0.245], [0.52, 0.52, 0.54]], scale = 0.12) children(); } // 发蓝钢：枪管、枪机座
+module cw_m_park()   { gk_material([1, 1, 1], roughness = 0.52, metalness = 0.55) gk_texture("worn", palette = [[0.255, 0.255, 0.245], [0.50, 0.50, 0.50]], scale = 0.12, seed = 1) children(); }   // 磷化哑光钢：冲压机匣
 module cw_m_bright() { gk_material([0.64, 0.64, 0.65], roughness = 0.2, metalness = 1.0) children(); }     // 磨亮钢：枪机、刃口
 module cw_m_silver() { gk_material([0.55, 0.55, 0.54], roughness = 0.28, metalness = 0.95) children(); }   // 白钢 / 镀镍机匣
 module cw_m_etch()   { gk_material([0.34, 0.34, 0.33], roughness = 0.6, metalness = 0.9) children(); }     // 雕花面（压暗）
 module cw_m_hole()   { gk_material([0.025, 0.025, 0.028], roughness = 0.75, metalness = 0.2) children(); } // 孔洞 / 内腔
 module cw_m_anod()   { gk_material([0.05, 0.052, 0.056], roughness = 0.42, metalness = 0.5) children(); }  // 黑色阳极氧化：瞄具
-module cw_m_wood(c)  { gk_material(c, roughness = 0.36, metalness = 0) gk_texture("woodgrain", scale = 0.25) children(); } // 清漆木
+// 清漆木与胶木带一点 subsurface：明暗交界处透出温润的暖色，像光进了漆层底下。
+module cw_m_wood(c)  { gk_material(c, roughness = 0.36, metalness = 0, subsurface = 0.25) gk_texture("woodgrain", scale = 0.25) children(); } // 清漆木
 module cw_m_check(c) { gk_material(c, roughness = 0.85, metalness = 0) children(); }                         // 握把网纹
-module cw_m_bake(c)  { gk_material(c, roughness = 0.3, metalness = 0) children(); }                          // 胶木：AK-74 弹匣、握片
+module cw_m_bake(c)  { gk_material(c, roughness = 0.3, metalness = 0, subsurface = 0.15) children(); }       // 胶木：AK-74 弹匣、握片
 module cw_m_rubber(c = [0.035, 0.035, 0.035]) { gk_material(c, roughness = 0.9, metalness = 0) children(); }
 module cw_m_leather(c) { gk_material(c, roughness = 0.7, metalness = 0) children(); }
 module cw_m_brass()  { gk_material([0.80, 0.60, 0.30], roughness = 0.26, metalness = 1.0) children(); }
@@ -2582,14 +2584,9 @@ module cw_lathe(pts, z, x = 0, fn = 24)
     $fn = fn;
     translate([x, 0, z]) rotate([90, 0, 0]) rotate_extrude() polygon(pts);
 }
-// 倒角盒（三向内缩盒的 hull），s = [宽 X, 长 f, 高 z]
-module cw_cbox(s, c = 0.003)
-    hull()
-    {
-        cube([s[0], max(s[1] - 2 * c, 0.0004), max(s[2] - 2 * c, 0.0004)], center = true);
-        cube([max(s[0] - 2 * c, 0.0004), s[1], max(s[2] - 2 * c, 0.0004)], center = true);
-        cube([max(s[0] - 2 * c, 0.0004), max(s[1] - 2 * c, 0.0004), s[2]], center = true);
-    }
+// 圆角盒，s = [宽 X, 长 f, 高 z]，c = 原倒角尺寸。外包尺寸与原倒角盒相同（枪口、瞄准线坐标不变），
+// 圆角自带精确法线，机匣、护木、弹匣、瞄具外壳的棱边能接住一线高光，而不是一条平切面。
+module cw_cbox(s, c = 0.003) gk_round_box(s, r = c * 1.6, segs = 2);
 module cw_blk(f, z, s, x = 0, c = 0.003) cw_wf(f, z, x) cw_cbox(s, c);
 // 侧视轮廓向内斜接偏移 c（凸 / 近凸多边形），给木托、护木做倒角用
 function cw_vsum(v, i = 0) = i >= len(v) ? 0 : v[i] + cw_vsum(v, i + 1);

@@ -1,7 +1,7 @@
 ---
 title: "NextDayz 皮克斯感 Low-Poly 视觉升级实施计划"
 category: plan
-status: 进行中（P0–P2、V3-1 ～ V3-3 已完成，V3-4 起待实施）
+status: 进行中（P0–P3 已完成，P4 起待实施）
 owner: NextDayz
 created: 2026-11-26
 last_updated: 2026-11-26
@@ -25,7 +25,7 @@ last_updated: 2026-11-26
 | P0 视觉标杆切片 | `V0-1` | 已完成 | 40m×40m 全要素 Lookdev 微缩样板间与 4 机位基准图 |
 | P1 SCAD 与着色底座 | `V1-1` ～ `V1-3` | 已完成 | 圆角/扫掠/法线原语、SSS/Sheen/Foliage 着色、烘焙顶点 AO 与宏尺度打散 |
 | P2 电影光影与大厅 | `V2-1` ～ `V2-2` | 已完成 | 透光窗户点亮室内、户外冷暖色调调校、直升机机舱大厅电影级重塑 |
-| P3 角色与武器 2.0 | `V3-1` ～ `V3-4` | 进行中（V3-1 ～ V3-3 已完成） | 幸存者五官眼神光与 SSS 皮肤、圆角绒光服装、感染者放样重写、武器捕光边 |
+| P3 角色与武器 2.0 | `V3-1` ～ `V3-4` | 已完成 | 幸存者五官眼神光与 SSS 皮肤、圆角绒光服装、感染者放样重写、武器捕光边 |
 | P4 植被与草海 2.0 | `V4-1` ～ `V4-3` | 未开始 | 蓬松透光地域树种、柔弧融合且随地域变色的运行时草地、画意过程纹理 |
 | P5 建筑套件与地图 | `V5-1` ～ `V5-3` | 未开始 | 波希米亚/稀树草原/冷战/训练场建筑套件升级，三张地图重导出与回归验收 |
 
@@ -151,6 +151,7 @@ last_updated: 2026-11-26
   - `gnb.bat validate --script assets/agentscripts/nextdayz-zombie-combat.agentscript.json` 通过并检查截图。
 
 ### `V3-4` 武器与配件圆角捕光打磨
+- **状态**：已完成。武器专用的 `cw_cbox` / `cw_blk`（`kit_coldwar.scad`，`kit_nd_arsenal.scad` 与 `nextdayz_attachments.scad` 共用）改成同外包尺寸的 `gk_round_box`，机匣、弹匣、瞄具座、配件的棱边都接光；发蓝钢底色 0.17 → 0.22、粗糙度 0.32 → 0.36，磷化钢 0.21 → 0.255，黑色聚合物 0.065 → 0.085，背光不再死黑；清漆木 / 桦木 / 胡桃木 `subsurface` 0.2~0.25、胶木 0.15。几何坐标未动，ADS 瞄准线全部对准靶心。`published/vN` 快照里的 kit 副本不改。
 - **范围**：`assets/scad/lib/{kit_nd_arsenal.scad,kit_coldwar.scad}`（武器段）、`assets/scad/characters/nextdayz_attachments.scad`。
 - **内容**：将机匣、护木、弹匣、瞄具外壳的关键硬棱升级为 `gk_round_box` 捕光圆边，微调发蓝/磷化钢的粗糙度与基础明度（防止背光死黑），强化胡桃木/层压木护木的温润清漆层次，严守 `WeaponDefs.hpp` 的枪口/瞄准线坐标与 16 材质槽上限。
 - **完成与闸门**：

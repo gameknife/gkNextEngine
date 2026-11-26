@@ -55,6 +55,8 @@ namespace Vulkan
                 ubo.SunCascadeViewProjection[i] = cascades.viewProjection[i];
             }
             ubo.CascadeSplits = cascades.splits;
+            ubo.CascadeTexelWorldSize = cascades.texelWorldSize;
+            ubo.CascadeDepthRange = cascades.depthRange;
         }
 
         void FillSceneLighting(Assets::UniformBufferObject& ubo, Assets::Scene& scene)

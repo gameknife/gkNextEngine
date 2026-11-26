@@ -95,6 +95,10 @@ struct UserSettings final
     // so raising this changes nothing. It is a knob for content that is not represented yet -- high
     // poly assets shadowed at close range, where a cascade would otherwise hold LOD0.
     float LodShadowThresholdScale = 1.0f;
+    // Sun CSM: view distance the four cascades cover, and the logarithmic share of the split
+    // spacing. Higher lambda pulls cascade 0 closer to the camera and sharpens near shadows.
+    float SunShadowDistance = Assets::defaultSunShadowDistance;
+    float SunShadowSplitLambda = Assets::defaultSunShadowSplitLambda;
     // Hardware ray tracing traces each instance at the level the main view picked for it, so a
     // primary hit from the visibility buffer lies exactly on the traced surface. Off pins every
     // TLAS instance to LOD0 (the reference for what traced LOD costs or saves).

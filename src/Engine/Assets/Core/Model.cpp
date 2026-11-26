@@ -48,14 +48,18 @@ namespace Assets
         const glm::mat4& cameraViewProj,
         float cameraNear,
         float cameraFar,
-        float shadowFar) const
+        float shadowFar,
+        float splitLambda) const
     {
         constexpr int CASCADE_COUNT = 4;
-        constexpr float SPLIT_LAMBDA = 0.75f;   // Bias toward logarithmic splits.
-        constexpr float SHADOW_MAP_RESOLUTION = 1024.0f;
+        constexpr float SHADOW_MAP_RESOLUTION = static_cast<float>(SUN_SHADOW_RESOLUTION);
+        // Extra distance the light camera backs off beyond the cascade sphere, so casters between
+        // the sun and the slice (a roof above the camera) still land in the depth range.
+        constexpr float REAR_OCCLUDER_MARGIN = 50.0f;
 
         const float n = std::max(cameraNear, 1e-3f);
         const float f = std::max(std::min(shadowFar, cameraFar), n * 2.0f);
+        const float lambda = std::clamp(splitLambda, 0.0f, 1.0f);
 
         float splits[CASCADE_COUNT + 1];
         splits[0] = n;
@@ -64,7 +68,7 @@ namespace Assets
             const float p = float(i) / float(CASCADE_COUNT);
             const float logS = n * std::pow(f / n, p);
             const float uniS = n + (f - n) * p;
-            splits[i] = SPLIT_LAMBDA * logS + (1.0f - SPLIT_LAMBDA) * uniS;
+            splits[i] = lambda * logS + (1.0f - lambda) * uniS;
         }
 
         const glm::vec3 sunDir = SunDirection();
@@ -111,7 +115,7 @@ namespace Assets
             radius = std::ceil(radius * 16.0f) / 16.0f;
 
             const glm::vec3 lightUp = std::abs(lightDir.y) > 0.99f ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
-            const float backOff = radius + 50.0f;       // Move the light camera back to include rear occluders.
+            const float backOff = radius + REAR_OCCLUDER_MARGIN;
             const glm::vec3 lightPos = center - lightDir * backOff;
             glm::mat4 lightView = glm::lookAt(lightPos, center, lightUp);
 
@@ -127,6 +131,8 @@ namespace Assets
 
             result.viewProjection[c] = lightProj * lightView;
             result.splits[c] = zFar;
+            result.texelWorldSize[c] = worldUnitsPerTexel;
+            result.depthRange[c] = 2.0f * backOff;
         }
 
         return result;

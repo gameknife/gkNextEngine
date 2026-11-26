@@ -94,6 +94,14 @@ namespace NextCVar
                             ECVarFlags::Archive,
                             "Multiplier on r.lod.baseThreshold for sun shadow cascades (1 = same as the main view)",
                             0.0, 64.0);
+        GK_CVAR_FLOAT_RANGE("r.shadow.distance", settings, SunShadowDistance, Assets::defaultSunShadowDistance,
+                            ECVarFlags::Archive,
+                            "View distance in meters covered by the four sun shadow cascades",
+                            1.0, 100000.0);
+        GK_CVAR_FLOAT_RANGE("r.shadow.splitLambda", settings, SunShadowSplitLambda, Assets::defaultSunShadowSplitLambda,
+                            ECVarFlags::Archive,
+                            "Sun cascade split spacing: 1 = logarithmic (sharpest near camera), 0 = uniform",
+                            0.0, 1.0);
         GK_CVAR_BOOL("r.lod.rayTracing", settings, RayTracingLod, true, ECVarFlags::Archive,
                      "Hardware ray tracing uses the LOD the main view picked per instance (0 = always trace LOD0)");
         GK_CVAR_UINT_RANGE("r.lod.rayTracingBias", settings, RayTracingLodBias, 0, ECVarFlags::Archive,

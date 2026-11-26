@@ -171,6 +171,9 @@ if(GK_DOTNET_ENABLED)
     list(APPEND unitTestSources Test_ReflectionManifest.cpp)
 endif()
 
+# Appended last so the unity batches of the files above stay as they are.
+list(APPEND unitTestSources Test_SunCascades.cpp)
+
 find_package(Catch2 3 REQUIRED)
 add_executable(gkNextUnitTests ${unitTestSources})
 

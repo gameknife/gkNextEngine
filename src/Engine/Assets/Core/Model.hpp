@@ -85,7 +85,15 @@ namespace Assets
     {
         std::array<glm::mat4, 4> viewProjection{};
         glm::vec4 splits{};   // view-space positive distance at the far edge of each cascade
+        glm::vec4 texelWorldSize{}; // world units covered by one shadow-map texel, per cascade
+        glm::vec4 depthRange{};     // world-space depth mapped onto [0,1], per cascade
     };
+
+    // Default sun shadow distance and the practical split weight between logarithmic (1) and
+    // uniform (0) cascade spacing. With a 0.1m near plane the logarithmic term is tiny, so even a
+    // small uniform share decides where cascade 0 ends: 0.75 put it at 25m (8cm texels at 1024).
+    inline constexpr float defaultSunShadowDistance = 400.0f;
+    inline constexpr float defaultSunShadowSplitLambda = 0.95f;
 
     enum class EBackgroundMode : uint32_t
     {
@@ -159,11 +167,13 @@ namespace Assets
 
         // GPU CSM: split the main-camera frustum into four ranges and compute a light view-projection for each.
         // cameraViewProj must be the unjittered main-camera view * projection; shadowFar controls cascade depth.
+        // splitLambda blends logarithmic (1) and uniform (0) split spacing.
         CascadeShadowSetup ComputeSunCascades(
             const glm::mat4& cameraViewProj,
             float cameraNear,
             float cameraFar,
-            float shadowFar = 100.0f) const;
+            float shadowFar = 100.0f,
+            float splitLambda = defaultSunShadowSplitLambda) const;
         
         float ControlSpeed;
         bool GammaCorrection;

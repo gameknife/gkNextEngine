@@ -104,7 +104,9 @@ namespace Vulkan::Shadow
                 .SetShaders(vertShader, fragShader)
                 .SetFixedViewport({0, 0}, extent)
                 .SetDepth(true, true, VK_COMPARE_OP_LESS)
-                .SetDepthBias(1.25f, 1.75f)
+                // Slope-only rasteriser bias: one texel of caster slope. Receiver-side normal offset
+                // and depth bias (Lighting.slang SampleSunShadowCSM) carry the rest in world units.
+                .SetDepthBias(1.25f, 1.0f)
                 .SetColorAttachmentCount(0)
                 .Build(pipelineLayout_->Handle(), renderPass_, "create shadow graphics pipeline");
         }

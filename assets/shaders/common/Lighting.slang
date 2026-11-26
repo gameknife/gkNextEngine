@@ -362,7 +362,21 @@ namespace Common
         return frac(float(seed & 0x00FFFFFFu) / 16777216.0f + float(frame) * 0.6180339887f);
     }
 
-    // 8-tap Vogel disk + slope-scaled bias，对 4 个 CSM cascade 都通用。
+    // Filter radius of the CSM disk kernel in world units, clamped to [1, 2] texels of the
+    // selected cascade. A fixed texel radius would blur 4x wider in world space each cascade out
+    // and, on the old 8cm cascade-0 texels, wider than a character's arm.
+    static const float SUN_SHADOW_FILTER_WORLD_RADIUS = 0.03f;
+    static const float SUN_SHADOW_FILTER_MIN_TEXELS = 1.0f;
+    static const float SUN_SHADOW_FILTER_MAX_TEXELS = 2.0f;
+    // Receiver offsets, in texels of the selected cascade: the normal offset grows as the surface
+    // turns away from the sun, the depth bias covers the filter footprint on a sloped receiver.
+    static const float SUN_SHADOW_NORMAL_OFFSET_TEXELS = 1.0f;
+    static const float SUN_SHADOW_DEPTH_BIAS_TEXELS = 0.5f;
+    static const float SUN_SHADOW_MAX_SLOPE = 4.0f;
+
+    // 8-tap Vogel disk，对 4 个 CSM cascade 都通用。normal offset、depth bias 与 filter 半径
+    // 都以所选 cascade 的 texel 世界尺寸表示，因此在世界空间里各 cascade 一致，不随 cascade
+    // 的覆盖范围和深度范围放大。
     // 返回 [0,1]，1 = 完全无遮蔽，0 = 完全阴影。
     // 时域超分激活（PrimaryRayJitter）时 disk kernel 逐帧随机旋转：单帧是有颗粒感的
     // 随机采样，upscaler 的时域累积把多帧旋转 kernel 平均成均匀圆盘，得到比固定 3x3 PCF
@@ -372,7 +386,22 @@ namespace Common
         UniformBufferObject Camera = Bindless.GetGpuscene().Camera[0];
         uint c = Common.SelectSunCascade(viewDist, Camera.CascadeSplits);
 
-        float4 lightPos = mul(Camera.SunCascadeViewProjection[c], float4(worldPos, 1.0));
+        const float texelWorld = max(Camera.CascadeTexelWorldSize[c], 1e-5f);
+        const float depthRange = max(Camera.CascadeDepthRange[c], 1e-3f);
+
+        const float3 N = normalize(normal);
+        const float NoL = saturate(dot(N, Camera.SunDirection.xyz));
+        const float sinTheta = sqrt(saturate(1.0f - NoL * NoL));
+        const float tanTheta = min(sinTheta / max(NoL, 1e-3f), SUN_SHADOW_MAX_SLOPE);
+
+        const float filterTexels = clamp(SUN_SHADOW_FILTER_WORLD_RADIUS / texelWorld,
+                                         SUN_SHADOW_FILTER_MIN_TEXELS, SUN_SHADOW_FILTER_MAX_TEXELS);
+
+        // Normal offset moves the lookup off the receiver's own depth texels; its size follows the
+        // texel so cascade 0 keeps contact shadows instead of inheriting a far cascade's offset.
+        const float3 offsetPos = worldPos + N * (SUN_SHADOW_NORMAL_OFFSET_TEXELS * texelWorld * sinTheta);
+
+        float4 lightPos = mul(Camera.SunCascadeViewProjection[c], float4(offsetPos, 1.0));
         float3 projCoords = lightPos.xyz / lightPos.w;
         float2 uv = projCoords.xy * 0.5 + 0.5;
 
@@ -382,8 +411,10 @@ namespace Common
         if (projCoords.z < 0.0f || projCoords.z > 1.0f)
             return 1.0f;
 
-        float NoL = max(dot(normalize(normal), Camera.SunDirection.xyz), 0.0f);
-        float bias = max(0.0008f * (1.0f - NoL), 0.0001f);
+        // World-space bias converted into this cascade's [0,1] depth: half a texel plus the depth
+        // the receiver plane drops across the filter radius.
+        const float biasWorld = texelWorld * (SUN_SHADOW_DEPTH_BIAS_TEXELS + filterTexels * tanTheta * 0.5f);
+        const float bias = biasWorld / depthRange;
 
         Sampler2D shadowMap = Bindless.GetShadowMap(int(c));
         uint2 texSize;
@@ -399,11 +430,10 @@ namespace Common
         for (uint tap = 0u; tap < 8u; ++tap)
         {
             // Vogel disk：golden-angle 螺旋均匀覆盖圆盘，旋转副本在时域平均下收敛到
-            // 整个均匀圆盘。半径 2 texel，比 3x3 方形核（角点 ~1.4 texel）略宽以获得
-            // 更软的半影。
+            // 整个均匀圆盘。
             const float radius = sqrt((float(tap) + 0.5f) * 0.125f);
             const float theta = float(tap) * 2.39996323f + rotation * M_TWO_PI;
-            float2 offset = (2.0f * radius) * texelSize * float2(cos(theta), sin(theta));
+            float2 offset = (filterTexels * radius) * texelSize * float2(cos(theta), sin(theta));
             float closestDepth = shadowMap.SampleLevel(uv + offset, 0).r;
             shadow += (projCoords.z - bias) > closestDepth ? 0.0f : 1.0f;
         }

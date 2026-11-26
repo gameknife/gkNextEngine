@@ -304,6 +304,13 @@ public struct ALIGN_16 UniformBufferObject
     // enough geometry for its silhouette, so this is normally the larger of the two -- a larger
     // threshold means a proxy has to project bigger before it earns full detail.
     public float LodShadowThreshold;
+
+    // Per sun cascade: world-space width of one shadow-map texel, and the world-space depth the
+    // cascade's orthographic projection maps onto [0,1]. Shadow sampling expresses its normal offset,
+    // depth bias and filter radius in world units through these, so the same settings hold for every
+    // cascade instead of growing with the cascade's footprint and depth range.
+    public float4 CascadeTexelWorldSize;
+    public float4 CascadeDepthRange;
 };
 
 // reserved2's low bits are outline state; the upper UNORM16 stores 1 - main opacity.

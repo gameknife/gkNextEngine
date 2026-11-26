@@ -148,7 +148,8 @@ Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D 
     const bool hasSun = scene_->GetEnvSettings().HasSun && scene_->GetEnvSettings().SunIntensity > 0;
     {
         const auto cascades = scene_->GetEnvSettings().ComputeSunCascades(
-            ubo.ViewProjectionUnJit, renderCam.NearPlane, renderCam.FarPlane, 400.f);
+            ubo.ViewProjectionUnJit, renderCam.NearPlane, renderCam.FarPlane,
+            config_.userSettings.SunShadowDistance, config_.userSettings.SunShadowSplitLambda);
         const uint32_t frameIndex = static_cast<uint32_t>(std::max(renderer_->FrameCount(), 0));
         bool cameraChanged = viewState.previousUniformBuffer.TotalFrames == 0;
         for (uint32_t column = 0; column < 4 && !cameraChanged; ++column)
@@ -163,8 +164,13 @@ Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D 
                 }
             }
         }
+        // Splits depend only on near/far and the r.shadow.* settings, so a change here with a still
+        // camera means the cascade layout itself moved and every cached cascade is stale.
+        const bool splitsChanged = viewState.cachedSunCascadesValid &&
+                                   viewState.cachedSunCascades.splits != cascades.splits;
         const bool forceRefresh = !viewState.cachedSunCascadesValid ||
                                   cameraChanged ||
+                                  splitsChanged ||
                                   (bool)viewState.previousUniformBuffer.HasSun != hasSun ||
                                   viewState.previousUniformBuffer.SunDirection != sunDirection;
 
@@ -199,6 +205,8 @@ Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D 
                 {
                     viewState.cachedSunCascades.viewProjection[cascade] = cascades.viewProjection[cascade];
                     viewState.cachedSunCascades.splits[cascade] = cascades.splits[cascade];
+                    viewState.cachedSunCascades.texelWorldSize[cascade] = cascades.texelWorldSize[cascade];
+                    viewState.cachedSunCascades.depthRange[cascade] = cascades.depthRange[cascade];
                 }
             }
 
@@ -213,6 +221,8 @@ Assets::UniformBufferObject NextEngine::GetUniformBufferObject(const VkOffset2D 
             ubo.SunCascadeViewProjection[i] = viewState.cachedSunCascades.viewProjection[i];
         }
         ubo.CascadeSplits = viewState.cachedSunCascades.splits;
+        ubo.CascadeTexelWorldSize = viewState.cachedSunCascades.texelWorldSize;
+        ubo.CascadeDepthRange = viewState.cachedSunCascades.depthRange;
     }
 
     // Camera Stuff

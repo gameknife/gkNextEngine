@@ -386,8 +386,8 @@ tools/gnb/                   # Project CLI (Go) — see "gnb" section below
 
 **Rendering / Shadows:**
 - Six registered renderer types: PathTracing (HW RT + SHARC), PathTracingLite (HW RT without SHARC/ReSTIR), SoftwareTracing (SW DDA on ambient cubes), SoftwareModern (rasterizer + software GI), VoxelTracing, and SoftwareModernNoAmbient (deferred Lambert+IBL+CSM without AmbientCube).
-- GPU CSM: 4 cascades, D32_SFLOAT per-cascade images bound bindless (slots 0..3); cascade selection + 3x3 PCF lives in `Common.SampleSunShadowCSM` (PathTracingRenderer.slang).
-- `ShadowMapPass` (Engine/Rendering/Shadow) renders the cascades; UBO carries `SunCascadeViewProjection[4]` + `CascadeSplits`.
+- GPU CSM: 4 cascades, D32_SFLOAT per-cascade images bound bindless (slots 0..3); cascade selection + 8-tap disk PCF lives in `Common.SampleSunShadowCSM` (`common/Lighting.slang`), with normal offset, depth bias and filter radius in world units via each cascade's texel size.
+- `ShadowMapPass` (Engine/Rendering/Shadow) renders the cascades; UBO carries `SunCascadeViewProjection[4]` + `CascadeSplits` + `CascadeTexelWorldSize` / `CascadeDepthRange`. Split layout: `r.shadow.distance` (400m) and `r.shadow.splitLambda` (0.95 → cascade 0 ends ~6m, ~2cm texels).
 
 **Resource Management:**
 - Vulkan objects use RAII (destroyed in destructors)

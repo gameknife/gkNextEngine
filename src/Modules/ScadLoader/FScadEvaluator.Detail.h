@@ -398,6 +398,7 @@ namespace Assets::Scad
             std::vector<std::string> materialNameStack_;
             std::vector<ScadMaterialProperties> materialPropertiesStack_;
             std::vector<float> creaseStack_; // gk_crease() thresholds, innermost last
+            std::vector<glm::vec2> aoStack_;  // gk_ao() (strength, ground), innermost last
             std::string topLevelFallbackLabel_;
             uint64_t topLevelFallbackInstanceId_ = 0;
             uint64_t nextGroupInstanceId_ = 1;
@@ -931,6 +932,18 @@ namespace Assets::Scad
                     creaseStack_.push_back(static_cast<float>(angle));
                     GeomList result = EvalScope(inst.children, xform, color, hasColor);
                     creaseStack_.pop_back();
+                    return result;
+                }
+                if (name == "gk_ao")
+                {
+                    // gk_ao(strength = 1, ground = 0.35) { ... }: baked vertex occlusion
+                    // for everything below (ScadComputeVertexOcclusion). strength scales
+                    // the cavity darkening, ground the wall-foot darkening; 0 turns one off.
+                    const double strength = std::clamp(Arg(inst, "strength", 0).AsNumber(1.0), 0.0, 2.0);
+                    const double ground = std::clamp(Arg(inst, "ground", 1).AsNumber(0.35), 0.0, 1.0);
+                    aoStack_.push_back(glm::vec2(static_cast<float>(strength), static_cast<float>(ground)));
+                    GeomList result = EvalScope(inst.children, xform, color, hasColor);
+                    aoStack_.pop_back();
                     return result;
                 }
                 if (name == "gk_puff_normals")

@@ -632,6 +632,104 @@ namespace Assets::Scad
         return out;
     }
 
+    std::vector<float> ScadComputeVertexOcclusion(const std::vector<glm::vec3>& pos,
+                                                  const std::vector<glm::vec3>& normals,
+                                                  const std::vector<ScadNormalSpan>& spans, float defaultStrength,
+                                                  float defaultGround, double scale)
+    {
+        constexpr float kCavityDarkening = 0.40f;   // full cavity at strength 1
+        constexpr float kGroundFadeMetres = 0.60f;  // wall-foot darkening fades out by this height
+        constexpr float kLargeEdgeMetres = 1.50f;   // cavity fades on triangles larger than this
+        // Assets::kVertexMaxOcclusion (Vertex.hpp, not included: this file also builds for the web).
+        constexpr float kMaxOcclusion = 0.45f;
+        const float minimum = 1.0f - kMaxOcclusion;
+        const size_t triCount = pos.size() / 3;
+        std::vector<float> out(pos.size(), 1.0f);
+
+        std::vector<float> triStrength(triCount, defaultStrength);
+        std::vector<float> triGround(triCount, defaultGround);
+        for (const ScadNormalSpan& span : spans)
+        {
+            const size_t begin = std::min<size_t>(span.firstTri, triCount);
+            const size_t end = std::min<size_t>(begin + span.triCount, triCount);
+            for (size_t t = begin; t < end; ++t)
+            {
+                if (span.shading.aoStrength >= 0.0f) triStrength[t] = span.shading.aoStrength;
+                if (span.shading.aoGround >= 0.0f) triGround[t] = span.shading.aoGround;
+            }
+        }
+        const bool anyStrength = std::any_of(triStrength.begin(), triStrength.end(), [](float v) { return v > 0.0f; });
+        const bool anyGround = std::any_of(triGround.begin(), triGround.end(), [](float v) { return v > 0.0f; });
+        if (!anyStrength && !anyGround)
+        {
+            return out;
+        }
+
+        std::unordered_map<ScadPosKey, std::vector<uint32_t>, ScadPosKeyHash> adjacency;
+        if (anyStrength)
+        {
+            adjacency.reserve(pos.size());
+            for (size_t i = 0; i < pos.size(); ++i)
+            {
+                adjacency[MakePosKey(pos[i])].push_back(static_cast<uint32_t>(i));
+            }
+        }
+
+        const float metres = static_cast<float>(scale > 0.0 ? scale : 1.0);
+        const auto smoothstep = [](float e0, float e1, float x)
+        {
+            const float t = std::clamp((x - e0) / (e1 - e0), 0.0f, 1.0f);
+            return t * t * (3.0f - 2.0f * t);
+        };
+        for (size_t i = 0; i < pos.size(); ++i)
+        {
+            const size_t t = i / 3;
+            const glm::vec3& n = normals[i];
+            float darkening = 0.0f;
+            if (triStrength[t] > 0.0f)
+            {
+                float rise = 0.0f;
+                float length = 0.0f;
+                int count = 0;
+                for (uint32_t corner : adjacency[MakePosKey(pos[i])])
+                {
+                    const size_t base = corner / 3 * 3;
+                    for (size_t k = base; k < base + 3; ++k)
+                    {
+                        if (k == corner)
+                        {
+                            continue;
+                        }
+                        const glm::vec3 d = pos[k] - pos[i];
+                        const float len = glm::length(d);
+                        if (len <= 1e-6f * metres)
+                        {
+                            continue;
+                        }
+                        rise += std::max(glm::dot(n, d) / len, 0.0f);
+                        length += len;
+                        ++count;
+                    }
+                }
+                if (count > 0)
+                {
+                    const float concavity = rise / static_cast<float>(count);
+                    const float meanEdge = length / static_cast<float>(count) / metres;
+                    const float sizeFade = std::clamp(kLargeEdgeMetres / std::max(meanEdge, 1e-4f), 0.0f, 1.0f);
+                    darkening += triStrength[t] * kCavityDarkening * smoothstep(0.05f, 0.6f, concavity) * sizeFade;
+                }
+            }
+            if (triGround[t] > 0.0f)
+            {
+                const float height = std::max(pos[i].y / metres, 0.0f);
+                const float wall = 1.0f - std::min(std::abs(n.y), 1.0f);
+                darkening += triGround[t] * (1.0f - smoothstep(0.0f, kGroundFadeMetres, height)) * wall;
+            }
+            out[i] = std::clamp(1.0f - darkening, minimum, 1.0f);
+        }
+        return out;
+    }
+
     // ------------------------------------------------------------------
     // Node metadata (see FScadShared.h). The serialized form is produced by
     // FScadLoader; these readers are what gameplay uses on the other side.

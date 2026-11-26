@@ -2,7 +2,10 @@
 
 #include "Engine/Utilities/Glm.hpp"
 #include "Engine/Vulkan/DebugUtilities.hpp"
+#include <algorithm>
 #include <array>
+#include <cmath>
+#include <cstdint>
 
 namespace Assets
 {
@@ -27,6 +30,37 @@ namespace Assets
     
     inline uint16_t packUint8(uint16_t a, uint16_t b) {
         return a << 8 | b;
+    }
+
+    // ------------------------------------------------------------------------
+    // Vertex shading payload. Tangent.w keeps the handedness in its sign and
+    // carries 6 bits in its magnitude, w = sign * (1 + payload / 64):
+    //   bit 0     macro variation (world-space low-frequency albedo breakup)
+    //   bits 1..5 baked occlusion level 0..31 -> darkening 0..kVertexMaxOcclusion
+    // Every loader that writes w = +-1 gets payload 0 (no occlusion, no
+    // variation). On the GPU the payload sits in bits 2..7 of the high byte of
+    // GPUVertex::tangentw (UnpackVertex in common/ConstFunc.slang).
+    // ------------------------------------------------------------------------
+    inline constexpr float kVertexMaxOcclusion = 0.45f;
+
+    inline uint32_t TangentWPayload(float w)
+    {
+        const float code = (std::abs(w) - 1.0f) * 64.0f;
+        return static_cast<uint32_t>(std::clamp(static_cast<int>(std::lround(code)), 0, 63));
+    }
+
+    // ambientOcclusion in [1 - kVertexMaxOcclusion, 1]: 1 = unoccluded.
+    inline float EncodeTangentW(float handedness, float ambientOcclusion, bool macroVariation)
+    {
+        const float darkening = std::clamp(1.0f - ambientOcclusion, 0.0f, kVertexMaxOcclusion);
+        const uint32_t level = static_cast<uint32_t>(std::lround(darkening / kVertexMaxOcclusion * 31.0f));
+        const uint32_t payload = (level << 1u) | (macroVariation ? 1u : 0u);
+        return (handedness < 0.0f ? -1.0f : 1.0f) * (1.0f + static_cast<float>(payload) / 64.0f);
+    }
+
+    inline float TangentWOcclusion(float w)
+    {
+        return 1.0f - static_cast<float>(TangentWPayload(w) >> 1u) / 31.0f * kVertexMaxOcclusion;
     }
     
     struct GPUVertex final
@@ -94,7 +128,10 @@ namespace Assets
         vertex.tangenty = glm::detail::toFloat16(cpuVertex.Tangent.y);
         vertex.tangentz = glm::detail::toFloat16(cpuVertex.Tangent.z);
 
-        vertex.tangentw = packUint8(cpuVertex.Tangent.w > 0 ? 2 : 0, static_cast<uint16_t>(cpuVertex.MaterialIndex));
+        // High byte: bit 1 handedness, bits 2..7 shading payload; low byte: material slot.
+        const uint16_t high = static_cast<uint16_t>((cpuVertex.Tangent.w > 0 ? 2u : 0u) |
+                                                    (TangentWPayload(cpuVertex.Tangent.w) << 2u));
+        vertex.tangentw = packUint8(high, static_cast<uint16_t>(cpuVertex.MaterialIndex & 0xFFu));
         return vertex;
     }
 

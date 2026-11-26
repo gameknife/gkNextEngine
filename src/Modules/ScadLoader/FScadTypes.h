@@ -69,8 +69,15 @@ namespace Assets
             double puffRadius = 0.0;
             float puffStrength = 0.0f;
             float puffUpBias = 0.0f;
+            // gk_ao: baked vertex occlusion strength (cavity) and wall-foot darkening;
+            // < 0 keeps the loader default.
+            float aoStrength = -1.0f;
+            float aoGround = -1.0f;
 
-            bool IsDefault() const { return smoothAngleDegrees < 0.0f && !puff; }
+            bool IsDefault() const
+            {
+                return smoothAngleDegrees < 0.0f && !puff && aoStrength < 0.0f && aoGround < 0.0f;
+            }
         };
 
         // A run of triangles in a mesh bucket that does not use the default

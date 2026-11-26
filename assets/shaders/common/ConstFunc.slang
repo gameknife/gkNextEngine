@@ -450,6 +450,8 @@ public float3 ggxSampling(inout uint4 RandomSeed, float roughness, float3 normal
     return to_world(wm_, tangent, bitangent, normal);
 }
 
+public static const float VERTEX_MAX_OCCLUSION = 0.45f; // Assets::kVertexMaxOcclusion
+
 public Vertex UnpackVertex(in GPUVertex Vert)
 {
     Vertex v;
@@ -458,8 +460,14 @@ public Vertex UnpackVertex(in GPUVertex Vert)
     v.Tangent = Vert.Tangent;
     v.TexCoord = float2(Vert.Position_Tx.w, Vert.Normal_Ty.w);
     uint16_t TangentWMatIdx = asuint16(Vert.Tangent.w);
-    v.Tangent.w = (TangentWMatIdx >> 8) & 0xFF;
+    // High byte: bit 1 handedness, bits 2..7 the shading payload (Vertex.hpp):
+    // payload bit 0 macro variation, bits 1..5 occlusion level 0..31.
+    const uint high = (uint(TangentWMatIdx) >> 8) & 0xFFu;
+    v.Tangent.w = float(high & 0x3u);
     v.MaterialIndex = TangentWMatIdx & 0xFF;
+    const uint payload = high >> 2;
+    v.Occlusion = float(payload >> 1) * (VERTEX_MAX_OCCLUSION / 31.0f);
+    v.ShadingFlags = payload & 1u;
 
     return v;
 }

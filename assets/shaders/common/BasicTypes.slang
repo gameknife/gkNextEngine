@@ -605,6 +605,10 @@ public struct ALIGN_16 Vertex
   public uint MaterialIndex;
   public float3 LocalNormal;
   public float4 LocalTangent;
+  // Vertex shading payload (Vertex.hpp): baked occlusion as a darkening amount (0 = none,
+  // so a zero-initialised Vertex is unoccluded) and flags (bit 0: macro albedo variation).
+  public float Occlusion;
+  public uint ShadingFlags;
 };
 
 public struct ALIGN_16 GPUVertex

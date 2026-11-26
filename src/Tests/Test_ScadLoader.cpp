@@ -2103,4 +2103,153 @@ TEST_CASE("ScadRig sections carry the surface style into their materials", "[Uni
     CHECK(plain == 1);
     CHECK(leaf == 1);
 }
+
+// ---------------------------------------------------------------------------
+// Baked vertex occlusion and macro variation (V1-3).
+// ---------------------------------------------------------------------------
+
+TEST_CASE("Vertex shading payload round-trips through Tangent.w and GPUVertex", "[Unit][Scad]")
+{
+    for (float handedness : {1.0f, -1.0f})
+    {
+        for (float ao : {1.0f, 0.8f, 0.55f})
+        {
+            for (bool macro : {false, true})
+            {
+                const float w = Assets::EncodeTangentW(handedness, ao, macro);
+                CHECK((w < 0.0f) == (handedness < 0.0f));
+                CHECK(Assets::TangentWOcclusion(w) == Catch::Approx(ao).margin(0.01f));
+                CHECK(((Assets::TangentWPayload(w) & 1u) != 0u) == macro);
+
+                Assets::Vertex vertex{};
+                vertex.Tangent = glm::vec4(1, 0, 0, w);
+                vertex.MaterialIndex = 7;
+                const Assets::GPUVertex packed = Assets::MakeVertex(vertex);
+                const uint32_t high = packed.tangentw >> 8u;
+                CHECK((packed.tangentw & 0xFFu) == 7u);
+                CHECK((high & 0x3u) == (handedness > 0.0f ? 2u : 0u));
+                CHECK((high >> 2u) == Assets::TangentWPayload(w));
+            }
+        }
+    }
+    // Loaders that write plain +-1 carry no payload.
+    CHECK(Assets::TangentWPayload(1.0f) == 0u);
+    CHECK(Assets::TangentWPayload(-1.0f) == 0u);
+    CHECK(Assets::TangentWPayload(0.0f) == 0u);
+}
+
+TEST_CASE("Vertex occlusion darkens inside corners and wall feet only", "[Unit][Scad]")
+{
+    // An L of a 1 m floor and a 1 m wall sharing an edge (engine space, +Y up).
+    const std::vector<glm::vec3> pos = {
+        // floor, normal +Y
+        {0, 0, 0}, {1, 0, 1}, {1, 0, 0},
+        {0, 0, 0}, {0, 0, 1}, {1, 0, 1},
+        // wall at x = 0, normal +X
+        {0, 0, 0}, {0, 1, 0}, {0, 1, 1},
+        {0, 0, 0}, {0, 1, 1}, {0, 0, 1},
+    };
+    std::vector<glm::vec3> normals(pos.size());
+    for (size_t i = 0; i < 6; ++i)
+        normals[i] = glm::vec3(0, 1, 0);
+    for (size_t i = 6; i < 12; ++i)
+        normals[i] = glm::vec3(1, 0, 0);
+
+    const std::vector<float> cavityOnly = ScadComputeVertexOcclusion(pos, normals, {}, 1.0f, 0.0f, 1.0);
+    // The shared edge (x = 0, y = 0) is an inside corner: both faces darken there.
+    CHECK(cavityOnly[0] < 0.9f);
+    CHECK(cavityOnly[6] < 0.9f);
+    // The open far edge of the floor and the wall top stay open.
+    CHECK(cavityOnly[2] == Catch::Approx(1.0f));
+    CHECK(cavityOnly[7] == Catch::Approx(1.0f));
+    for (float ao : cavityOnly)
+        CHECK(ao >= 0.55f - 1e-6f);
+
+    const std::vector<float> groundOnly = ScadComputeVertexOcclusion(pos, normals, {}, 0.0f, 0.35f, 1.0);
+    // Wall foot darkens, wall top does not; the floor (horizontal) never does.
+    CHECK(groundOnly[6] == Catch::Approx(0.65f));
+    CHECK(groundOnly[7] == Catch::Approx(1.0f));
+    for (size_t i = 0; i < 6; ++i)
+        CHECK(groundOnly[i] == Catch::Approx(1.0f));
+
+    // A closed box has only outside corners.
+    TriSoup box;
+    ScadGeometry::BuildCube(glm::dvec3(1.0), false, box);
+    const std::vector<glm::vec3> boxPos = ToEngine(box);
+    const std::vector<float> boxAo =
+        ScadComputeVertexOcclusion(boxPos, ScadComputeSmoothNormals(boxPos, 35.0f), {}, 1.0f, 0.0f, 1.0);
+    for (float ao : boxAo)
+        CHECK(ao == Catch::Approx(1.0f));
+
+    // gk_ao(0, 0) turns both terms off for its subtree.
+    ScadNormalSpan off;
+    off.firstTri = 0;
+    off.triCount = 4;
+    off.shading.aoStrength = 0.0f;
+    off.shading.aoGround = 0.0f;
+    for (float ao : ScadComputeVertexOcclusion(pos, normals, {off}, 1.0f, 0.35f, 1.0))
+        CHECK(ao == Catch::Approx(1.0f));
+}
+
+TEST_CASE("Scene and rig meshes carry baked occlusion and macro variation", "[Unit][Scad]")
+{
+    ScopedDir dir;
+    const std::filesystem::path mainPath =
+        dir.Write("ao.scad", "module crate() cube([1, 1, 1]);\n"
+                             "module printed() gk_texture(\"plaster\") cube([1, 1, 1]);\n"
+                             "module quiet() gk_ao(0, 0) cube([1, 1, 1]);\n"
+                             "crate();\n"
+                             "translate([3, 0, 0]) printed();\n"
+                             "translate([6, 0, 0]) quiet();\n");
+    Assets::EnvironmentSetting environment;
+    std::vector<std::shared_ptr<Assets::Node>> nodes;
+    std::vector<Assets::Model> models;
+    std::vector<Assets::FMaterial> materials;
+    std::vector<Assets::LightObject> lights;
+    std::vector<Assets::AnimationTrack> tracks;
+    std::vector<Assets::Skeleton> skeletons;
+    REQUIRE(Assets::FScadLoader::LoadScadScene(mainPath.string(), environment, nodes, models, materials, lights,
+                                               tracks, skeletons));
+
+    const auto modelOf = [&](const std::string& name) -> const Assets::Model*
+    {
+        for (const auto& node : nodes)
+            if (node->GetName() == name)
+                if (auto render = node->GetComponent<Runtime::RenderComponent>())
+                    return &models[render->GetModelId()];
+        return nullptr;
+    };
+    const Assets::Model* crate = modelOf("crate");
+    const Assets::Model* printed = modelOf("printed");
+    const Assets::Model* quiet = modelOf("quiet");
+    REQUIRE(crate);
+    REQUIRE(printed);
+    REQUIRE(quiet);
+
+    // Wall feet of the plain crate darken, its top does not; no macro variation without a print.
+    bool footDarkened = false;
+    for (const Assets::Vertex& v : crate->CPUVertices())
+    {
+        const float ao = Assets::TangentWOcclusion(v.Tangent.w);
+        if (v.Position.y < 0.01f && std::abs(v.Normal.y) < 0.1f)
+            footDarkened = footDarkened || ao < 0.8f;
+        if (v.Position.y > 0.99f)
+            CHECK(ao == Catch::Approx(1.0f));
+        CHECK((Assets::TangentWPayload(v.Tangent.w) & 1u) == 0u);
+    }
+    CHECK(footDarkened);
+    for (const Assets::Vertex& v : printed->CPUVertices())
+        CHECK((Assets::TangentWPayload(v.Tangent.w) & 1u) == 1u);
+    for (const Assets::Vertex& v : quiet->CPUVertices())
+        CHECK(Assets::TangentWPayload(v.Tangent.w) == 0u);
+
+    // Rig parts: a bone frame's z = 0 is not the ground.
+    const SceneEvalResult rig = EvalScene("module bone_root() cube([0.2, 0.2, 0.2]);\nbone_root();\n");
+    Assets::FRigAsset asset;
+    std::string err;
+    REQUIRE(Assets::FScadRigLoader::BuildRig(rig, Assets::ScadRigLoadOptions{}, asset, err));
+    REQUIRE(asset.parts.size() == 1);
+    for (const Assets::Vertex& v : asset.partModels[static_cast<size_t>(asset.parts[0].modelIndex)].CPUVertices())
+        CHECK(Assets::TangentWPayload(v.Tangent.w) == 0u);
+}
 } // namespace ScadSculptTest

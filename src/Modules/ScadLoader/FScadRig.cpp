@@ -290,6 +290,14 @@ namespace Assets
                             ProceduralTexture::BoxProjectTangents(
                                 bucket.tris, glm::mat3(Scad::ScadToWorldBasis(1.0)), normals, tangents);
                         }
+                        // Cavity occlusion only: a bone frame's z = 0 is no ground, and a
+                        // character's print should not drift with the world.
+                        const std::vector<float> occlusion =
+                            Scad::ScadComputeVertexOcclusion(localPos, normals, bucket.normalSpans, 1.0f, 0.0f, Scale());
+                        for (size_t i = 0; i < tangents.size(); ++i)
+                        {
+                            tangents[i].w = EncodeTangentW(tangents[i].w, occlusion[i], false);
+                        }
 
                         const uint32_t vertexOffset = static_cast<uint32_t>(vertices.size());
                         vertices.reserve(vertices.size() + localPos.size());

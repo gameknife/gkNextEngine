@@ -23,7 +23,9 @@ namespace Common
         float3 positions[3], normals[3], tangents[3], localNormals[3];
         float4 localTangents[3];
         float2 tex_coords[3];
+        float occlusions[3];
         uint matid = 0;
+        uint shadingFlags = 0;
 
         uint primitive_index = vBuffer.y; // triangle index in model, so has to add by modelinfo
 
@@ -48,7 +50,12 @@ namespace Common
             localNormals[i] = v.Normal;
             localTangents[i] = v.Tangent;
             tex_coords[i] = v.TexCoord;
-            if(i == 0) matid = v.MaterialIndex;
+            occlusions[i] = v.Occlusion;
+            if(i == 0)
+            {
+                matid = v.MaterialIndex;
+                shadingFlags = v.ShadingFlags;
+            }
         }
 
         float3 barycentrics;
@@ -104,6 +111,8 @@ namespace Common
         result.LocalNormal =  mad(float3(barycentrics.x), localNormals[0], mad(float3(barycentrics.y), localNormals[1], barycentrics.z * localNormals[2]));
         result.LocalTangent = mad(float4(barycentrics.x), localTangents[0], mad(float4(barycentrics.y), localTangents[1], barycentrics.z * localTangents[2]));
         result.MaterialIndex = matid;
+        result.Occlusion = dot(barycentrics, float3(occlusions[0], occlusions[1], occlusions[2]));
+        result.ShadingFlags = shadingFlags;
 
         return true;
     }

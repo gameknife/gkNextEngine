@@ -1,7 +1,7 @@
 ---
 title: "NextDayz 皮克斯感 Low-Poly 视觉升级实施计划"
 category: plan
-status: 进行中（V0-1、V1-1、V1-2 已完成，V1-3 起待实施）
+status: 进行中（P0、P1 已完成，P2 起待实施）
 owner: NextDayz
 created: 2026-11-26
 last_updated: 2026-11-26
@@ -23,7 +23,7 @@ last_updated: 2026-11-26
 | 阶段 | 任务编号 | 状态 | 核心产出 |
 | :--- | :--- | :--- | :--- |
 | P0 视觉标杆切片 | `V0-1` | 已完成 | 40m×40m 全要素 Lookdev 微缩样板间与 4 机位基准图 |
-| P1 SCAD 与着色底座 | `V1-1` ～ `V1-3` | 进行中（V1-1、V1-2 已完成） | 圆角/扫掠/法线原语、SSS/Sheen/Foliage 着色、烘焙顶点 AO 与宏尺度打散 |
+| P1 SCAD 与着色底座 | `V1-1` ～ `V1-3` | 已完成 | 圆角/扫掠/法线原语、SSS/Sheen/Foliage 着色、烘焙顶点 AO 与宏尺度打散 |
 | P2 电影光影与大厅 | `V2-1` ～ `V2-2` | 未开始 | 透光窗户点亮室内、户外冷暖色调调校、直升机机舱大厅电影级重塑 |
 | P3 角色与武器 2.0 | `V3-1` ～ `V3-4` | 未开始 | 幸存者五官眼神光与 SSS 皮肤、圆角绒光服装、感染者放样重写、武器捕光边 |
 | P4 植被与草海 2.0 | `V4-1` ～ `V4-3` | 未开始 | 蓬松透光地域树种、柔弧融合且随地域变色的运行时草地、画意过程纹理 |
@@ -78,6 +78,7 @@ last_updated: 2026-11-26
   - 样板间验证皮肤暖色明暗交界线、布料轮廓绒光与树冠逆光透射生效。
 
 ### `V1-3` 实现烘焙顶点腔体/接地 AO 与世界坐标低频打散
+- **状态**：已完成。契约见 `docs/AGENT_GUIDE/SCADLoader.md`「烘焙顶点遮蔽与宏尺度打散」。与原计划的差别：payload 经 CPU `Vertex::Tangent.w` 的幅值传到 `GPUVertex::tangentw` 高字节 bit 2..7（1 位打散标记 + 5 位遮蔽等级 32 级），不动 `Vertex` 布局与 `MaterialIndex`；接地项只作用于竖直面，避免整块地板变暗；腔体项对大三角形衰减。glTF 导出改为只写切线手性 ±1。
 - **范围**：`src/Engine/Assets/Data/Vertex.hpp`、`src/Modules/ScadLoader/{FScadShared.*,FScadLoader.cpp,FScadRig.cpp}`、`assets/shaders/common/{BasicTypes.slang,SceneSampling.slang,BSDF.slang}`。
 - **内容**：
   1. 在 `GPUVertex::tangentw` 空闲高 6 位编码逐顶点遮蔽（`0` = 无遮蔽默认 `1.0`，保证非 SCAD 模型零影响），在 `ScadLoader` 增加快速腔体凹陷度 + 局部接地暗角计算及 `gk_ao(strength, ground)` 控制；

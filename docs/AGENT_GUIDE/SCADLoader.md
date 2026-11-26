@@ -211,6 +211,26 @@ ScadRig 部件和 Web 关卡都用 `ScadComputeShadedNormals`：不同阈值的�
 **注意**：求值器不读作为调用参数传入的特殊变量——`cylinder(r = 1, $fn = 8)` 里的 `$fn`
 被忽略，用的是作用域里的 `$fn`（文件或 module 内写 `$fn = 8;`）。
 
+### 烘焙顶点遮蔽与宏尺度打散
+
+加载器给每个 SCAD 网格顶点烘一个遮蔽值，并给带印花的静态表面打一个"宏尺度打散"标记，
+都放在 `Vertex::Tangent.w` 的幅值里（`w = ±(1 + payload/64)`，符号仍是切线手性；GPU 上是
+`GPUVertex::tangentw` 高字节的 bit 2..7，见 `Vertex.hpp` 的 `EncodeTangentW` 与着色器
+`UnpackVertex`）。其它加载器写 ±1，payload 为 0，glTF / LDraw 外观不变。
+
+- **遮蔽**（`ScadComputeVertexOcclusion`，暗化上限 `kVertexMaxOcclusion = 0.45`）：
+  - 腔体：邻接顶点高出该顶点切平面（内角、褶皱、口袋缝）就变暗；三角形越大衰减越多，
+    免得一个顶点值抹满一整面大墙。
+  - 接地：竖直面朝本地高度 0 渐暗（0.6 m 内淡出），即建筑、道具在自己坐标系里的"墙根"；
+    地板、屋顶这类水平面不受影响。ScadRig 部件只有腔体项（骨骼坐标的 z = 0 不是地面）。
+  - `gk_ao(strength = 1, ground = 0.35) { ... }` 按子树调整，`0` 关闭对应一项；地形、道路贴花、
+    水面不烘。
+- **宏尺度打散**：带 `gk_texture` 的场景网格（含地形印花）在着色器里按世界坐标 xz 叠两层
+  低频噪声（约 13 m 与 37 m，明度 ±6%、冷暖 ±3%），打掉印花在长墙、长路上 2–3 m 一次的
+  重复感。角色部件不打（印花不该随世界位置漂移）。
+- 两者都在主表面重建里作用到反照率（`SceneSampling.ApplyVertexShading`，遮蔽处略偏冷），
+  所以对所有走主表面缓冲的渲染器生效；次级弹射命中点不读它。
+
 ### `gk_texture`：过程纹理印花
 
 `gk_texture(name | graph, palette = [[r,g,b], ...], scale = 0.5, seed = 0, relief = 1) children();`

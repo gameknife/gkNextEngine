@@ -447,7 +447,8 @@ namespace
             tangents.push_back(vertex.Tangent.x);
             tangents.push_back(vertex.Tangent.y);
             tangents.push_back(vertex.Tangent.z);
-            tangents.push_back(vertex.Tangent.w);
+            // glTF wants +-1; the magnitude carries the engine-only shading payload (Vertex.hpp).
+            tangents.push_back(vertex.Tangent.w < 0.0f ? -1.0f : 1.0f);
             minPos = glm::min(minPos, vertex.Position);
             maxPos = glm::max(maxPos, vertex.Position);
         }

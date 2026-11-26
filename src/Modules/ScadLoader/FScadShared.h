@@ -91,6 +91,20 @@ namespace Assets::Scad
                                                     const std::vector<ScadNormalSpan>& spans,
                                                     const std::vector<glm::dvec3>& authored, double scale);
 
+    // Baked ambient occlusion per corner, in [1 - Assets::kVertexMaxOcclusion, 1]
+    // (1 = open), for Assets::EncodeTangentW. pos / normals as for the normals
+    // above (engine space, +Y up, `scale` units per metre).
+    //  - cavity: neighbours rising above a corner's tangent plane (an inside
+    //    corner, a fold, a pocket seam) darken it; big triangles are attenuated,
+    //    since a vertex value would smear across the whole face;
+    //  - ground: walls darken toward local height 0 (the foot of a building or
+    //    prop in its own frame); floors and roofs are left alone.
+    // gk_ao spans override the defaults per triangle; 0 disables a term.
+    std::vector<float> ScadComputeVertexOcclusion(const std::vector<glm::vec3>& pos,
+                                                  const std::vector<glm::vec3>& normals,
+                                                  const std::vector<ScadNormalSpan>& spans, float defaultStrength,
+                                                  float defaultGround, double scale);
+
     // ------------------------------------------------------------------
     struct SceneNode;
     std::string SerializeScadNodeMetadata(const SceneNode& sceneNode);

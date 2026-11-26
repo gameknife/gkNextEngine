@@ -35,6 +35,10 @@ namespace Assets
 {
     namespace
     {
+        // Loader defaults for baked vertex occlusion (gk_ao overrides per subtree).
+        constexpr float kScadDefaultOcclusion = 1.0f;
+        constexpr float kScadDefaultGround = 0.35f;
+
         Material ScadMaterialFromColor(const glm::vec4& color, const Scad::ScadMaterialProperties& properties)
         {
             const glm::vec3 rgb(color.r, color.g, color.b);
@@ -247,6 +251,22 @@ namespace Assets
                     ProceduralTexture::BoxProjectUVs(bucket.tris, bucket.material.texture->scale, uvs);
                     ProceduralTexture::BoxProjectTangents(
                         bucket.tris, glm::mat3(Scad::ScadToWorldBasis(1.0)), normals, tangents);
+                }
+                // Vertex shading payload (Vertex.hpp): baked occlusion on solid geometry,
+                // and world-space macro variation wherever a print would otherwise repeat.
+                // Terrain keeps its flat facets and overlays stay untouched.
+                const bool bakeOcclusion = !bucket.faceted && !bucket.terrainDecal && !bucket.terrainWater;
+                const bool macroVariation = bucket.material.texture != nullptr && !bucket.terrainWater;
+                if (bakeOcclusion || macroVariation)
+                {
+                    const std::vector<float> occlusion =
+                        bakeOcclusion ? Scad::ScadComputeVertexOcclusion(localPos, normals, bucket.normalSpans,
+                                                                         kScadDefaultOcclusion, kScadDefaultGround, scale)
+                                      : std::vector<float>(localPos.size(), 1.0f);
+                    for (size_t i = 0; i < tangents.size(); ++i)
+                    {
+                        tangents[i].w = EncodeTangentW(tangents[i].w, occlusion[i], macroVariation);
+                    }
                 }
 
                 const uint32_t vertexOffset = static_cast<uint32_t>(vertices.size());

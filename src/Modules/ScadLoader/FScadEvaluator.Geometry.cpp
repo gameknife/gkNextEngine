@@ -75,6 +75,11 @@ namespace Assets::Scad::EvalDetail
         {
             cs.shading.smoothAngleDegrees = creaseStack_.back();
         }
+        if (!aoStack_.empty())
+        {
+            cs.shading.aoStrength = aoStack_.back().x;
+            cs.shading.aoGround = aoStack_.back().y;
+        }
         cs.soup.reserve(objSpace.size());
         const bool flipWinding = glm::determinant(glm::dmat3(xform)) < 0.0;
         for (size_t i = 0; i + 2 < objSpace.size(); i += 3)

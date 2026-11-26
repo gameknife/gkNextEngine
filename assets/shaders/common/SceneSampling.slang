@@ -125,6 +125,46 @@ namespace Common
         return normal;
     }
 
+    // Smooth value noise in [-1, 1] for the macro albedo variation.
+    float MacroHash(float2 cell)
+    {
+        return frac(sin(dot(cell, float2(127.1f, 311.7f))) * 43758.5453f);
+    }
+
+    float MacroNoise(float2 p)
+    {
+        const float2 i = floor(p);
+        const float2 f = frac(p);
+        const float2 u = f * f * (3.0f - 2.0f * f);
+        const float a = MacroHash(i);
+        const float b = MacroHash(i + float2(1, 0));
+        const float c = MacroHash(i + float2(0, 1));
+        const float d = MacroHash(i + float2(1, 1));
+        return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y) * 2.0f - 1.0f;
+    }
+
+    // Baked vertex shading (Vertex.hpp payload), applied to the primary albedo:
+    //  - occlusion: soft cavity / wall-foot darkening, a little cooler as it deepens so it
+    //    reads as shade rather than dirt;
+    //  - macro variation: two world-space octaves (~13 m and ~37 m) of +-6% value and +-3%
+    //    warm/cool, which breaks the 2-3 m repeat of a print over a long wall or road.
+    public float3 ApplyVertexShading(in Vertex vertex, float3 albedo)
+    {
+        if (vertex.Occlusion > 0.0f)
+        {
+            const float depth = saturate(vertex.Occlusion / VERTEX_MAX_OCCLUSION);
+            albedo *= (1.0f - vertex.Occlusion) * lerp(float3(1.0f), float3(0.93f, 0.97f, 1.05f), depth);
+        }
+        if ((vertex.ShadingFlags & 1u) != 0u)
+        {
+            const float2 p = vertex.Position.xz;
+            const float value = 0.6f * MacroNoise(p / 13.0f) + 0.4f * MacroNoise(p / 37.0f + 17.3f);
+            const float warmth = MacroNoise(p / 23.0f + 41.7f);
+            albedo *= (1.0f + 0.06f * value) * float3(1.0f + 0.03f * warmth, 1.0f, 1.0f - 0.03f * warmth);
+        }
+        return saturate(albedo);
+    }
+
     public void FetchGBuffer(inout Vertex inVertex, in Material inMaterial, in NodeProxy proxy, float3 rayDir, out float4 outAlbedo, out float4 outNormal)
     {
         outAlbedo = inMaterial.Diffuse;
@@ -133,6 +173,10 @@ namespace Common
         {
             float4 tex = Bindless.GetSampleTexture(inMaterial.DiffuseTextureId).SampleLevel(inVertex.TexCoord, 0);
             outAlbedo *= tex;
+        }
+        if (inMaterial.MaterialModel != MaterialDiffuseLight)
+        {
+            outAlbedo.rgb = ApplyVertexShading(inVertex, outAlbedo.rgb);
         }
         float roughness = inMaterial.Fuzziness;
         if (inMaterial.MRATextureId >= 0)

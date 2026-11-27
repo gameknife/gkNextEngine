@@ -275,7 +275,9 @@ module 体内再赋值或往下再传则覆盖），不会泄漏到下一条语�
   `rain`（东德雨点纹）、`canvas` / `twill`（帆布 / 斜纹织纹）、`grain`（皮革粒面）；地表：`meadow`
   （草甸斑块）、`dirt`（土面与碎屑）、`gravel`（碎石）、`asphalt`（沥青：补丁与裂缝）、`rock`（岩层与
   裂隙）；建筑：`plaster`（抹灰：污斑、雨痕、局部剥落露出砖色）、`brick`（顺砖错缝）、`tiles`
-  （陶瓦行与苔）、`planks`（竖板与节疤）、`stone`（乱石砌与地衣）、`concrete`（模板线与水渍）；
+  （陶瓦行与苔）、`planks`（竖板与节疤）、`stone`（乱石砌与地衣）、`concrete`（模板线与水渍）、
+  `mudplaster`（稀树草原泥 / 牛粪抹墙：手抹弧形抹痕、新补泥片、浅干裂）。砖、瓦、石、板每块带一点
+  冷暖色相差（`_tint`，只改色相不改明暗）；地表与抹灰的高频碎坑压得很低，质感是大块柔和的明暗；
   旧金属与木：`chipped`（漆面剥落露钢）、`rust`（钢面锈斑、锈皮与流痕）、`worn`（发蓝 / 磷化涂层
   磨穿处露出亮钢）、`woodgrain`（顺 +u 的连续年轮木纹，枪托、家具）；以及 `corrugated`（锈瓦楞铁）、
   `flagstone`（不规则石板）、`bark`（树皮）、`brickwall`（参数化砖墙）、`tigerstripe` / `splinter`（迷彩）。

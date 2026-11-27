@@ -1,7 +1,7 @@
 ---
 title: "NextDayz 皮克斯感 Low-Poly 视觉升级实施计划"
 category: plan
-status: 进行中（P0–P3、V4-1、V4-2 已完成，V4-3 待实施）
+status: 进行中（P0–P4 已完成，P5 待实施）
 owner: NextDayz
 created: 2026-11-26
 last_updated: 2026-11-26
@@ -26,7 +26,7 @@ last_updated: 2026-11-26
 | P1 SCAD 与着色底座 | `V1-1` ～ `V1-3` | 已完成 | 圆角/扫掠/法线原语、SSS/Sheen/Foliage 着色、烘焙顶点 AO 与宏尺度打散 |
 | P2 电影光影与大厅 | `V2-1` ～ `V2-2` | 已完成 | 透光窗户点亮室内、户外冷暖色调调校、直升机机舱大厅电影级重塑 |
 | P3 角色与武器 2.0 | `V3-1` ～ `V3-4` | 已完成 | 幸存者五官眼神光与 SSS 皮肤、圆角绒光服装、感染者放样重写、武器捕光边 |
-| P4 植被与草海 2.0 | `V4-1` ～ `V4-3` | 未开始 | 蓬松透光地域树种、柔弧融合且随地域变色的运行时草地、画意过程纹理 |
+| P4 植被与草海 2.0 | `V4-1` ～ `V4-3` | 已完成 | 蓬松透光地域树种、柔弧融合且随地域变色的运行时草地、画意过程纹理 |
 | P5 建筑套件与地图 | `V5-1` ～ `V5-3` | 未开始 | 波希米亚/稀树草原/冷战/训练场建筑套件升级，三张地图重导出与回归验收 |
 
 ---
@@ -183,6 +183,7 @@ last_updated: 2026-11-26
   - `gnb.bat validate --script assets/agentscripts/nextdayz-grass.agentscript.json` 与 `nextdayz-grass-lighting.agentscript.json` 通过，且 `nextdayz-talek-bridge` 截图确认稀树草原草色与金色地表和谐统一。
 
 ### `V4-3` 画意化重构 `gk_texgraph.scad` 建筑与地表印花
+- **状态**：已完成。`tex_dirt` 土块对比 0.86/1.06 → 0.94/1.03、起伏以大块层次为主（tilt 9 → 6）；`tex_asphalt` 骨料斑点与裂缝对比减半（tilt 5 → 4）；`tex_plaster` 剥落处碎点对比减半、起伏变平（tilt 7 → 5）；三者 blur 1 → 2。`tex_brick` / `tex_tiles` / `tex_stone` / `tex_planks` 每块加一个冷暖色相（新工具 `_tint`），灰缝与瓦缝不再那么黑、边缘更软。新增 `tex_mudplaster`，`kit_savanna` 的 `sv_m_mud` 改用它；`gk_texture_patterns.scad` 第二排末尾加了它的面板。低对比守卫单测把 `mudplaster` 列进去。
 - **范围**：`assets/scad/lib/gk_texgraph.scad`、`assets/scad/source/others/gk_texture_patterns.scad`。
 - **内容**：降低 `tex_plaster`、`tex_dirt`、`tex_asphalt` 的高频碎坑对比与法线倾角；提升 `tex_tiles`、`tex_brick`、`tex_stone`、`tex_planks` 的逐块手绘暖冷微色差与柔和边缘；为稀树草原泥墙补充专属柔和泥抹印花 `tex_mudplaster`。
 - **完成与闸门**：

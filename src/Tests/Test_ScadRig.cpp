@@ -1235,7 +1235,7 @@ TEST_CASE("Ground and building prints stay a low-contrast modulation", "[Unit][P
     // the facet shading keeps carrying the low-poly form.
     constexpr uint32_t size = 128;
     for (const char* pattern : {"meadow", "dirt", "gravel", "asphalt", "rock", "plaster", "brick", "tiles",
-                                "planks", "stone", "concrete"})
+                                "planks", "stone", "concrete", "mudplaster"})
     {
         INFO(pattern);
         FProceduralTexture texture = PrintNamed(pattern);

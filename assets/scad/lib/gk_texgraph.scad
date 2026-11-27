@@ -93,6 +93,9 @@ function _lt(f, edge) = tx_step(tx_invert(f), 1 - edge);          // f < edge
 function _gt(f, edge) = tx_step(f, edge);                         // f >= edge
 function _sh(base, amount, f) = tx_add(base, tx_mul(f, amount));  // base + amount * f
 function _clamp01(f) = tx_min(tx_max(f, 0), 1);
+// 逐块手绘冷暖：f 是每块一个随机值（0..1），偏暖（带一点黄）到偏冷（带一点蓝），均值约为 1，
+// 只改色相不改明暗，所以砖、瓦、石、板像一块块分别上过色，而不是一张灰度噪声。
+function _tint(f) = tx_mix([1.05, 1.0, 0.93], [0.955, 0.985, 1.045], f);
 // 迷彩印在斜纹布上：一层很淡的织纹明暗与起伏。
 function _printed(c) = tx_mul(c, _sh(0.92, 0.08, tx_weave(64, true)));
 function _cloth(c) = tx_surface(_printed(c), height = tx_weave(64, true), tilt = 8, blur = 0);
@@ -195,13 +198,14 @@ function tex_meadow() =
     tx_surface(tx_mul(tx_select(dry, tx_palette(1, [1.0, 0.93, 0.72]), tx_palette(0, [1, 1, 1])), tx_min(shade, 1)),
                height = tx_add(tx_mul(mottle, 0.4), tx_mul(tx_posterize(tuft, 3), 0.6)), tilt = 8, blur = 2);
 
+// 画意化：大块柔和的明暗层为主，土块只留一点颗粒（对比与起伏都压低，不再满地小坑）。
 function tex_dirt() =
-    let(layer = tx_posterize(tx_fbm(6, 6, 4, 103), 3),
+    let(layer = tx_posterize(tx_fbm(6, 6, 4, 103), 4),
         dist = tx_cells(40, 105, "dist"),
-        clod = tx_select(_lt(dist, 0.22), tx_select(_gt(tx_cells(40, 105, "rand"), 0.5), 0.86, 1.06), 1))
+        clod = tx_select(_lt(dist, 0.20), tx_select(_gt(tx_cells(40, 105, "rand"), 0.5), 0.94, 1.03), 1))
     tx_surface(tx_mul(tx_palette(0, [1, 1, 1]), tx_min(tx_mul(_sh(0.84, 0.18, layer), clod), 1)),
-               height = tx_add(tx_mul(layer, 0.45), tx_mul(tx_max(tx_sub(1, tx_mul(dist, dist, 1.6)), 0), 0.55)),
-               tilt = 9, blur = 1);
+               height = tx_add(tx_mul(layer, 0.65), tx_mul(tx_max(tx_sub(1, tx_mul(dist, dist, 1.6)), 0), 0.25)),
+               tilt = 6, blur = 2);
 
 // 岩石：横向岩层（侧面投影 v 沿 +Z）是台阶状的，加裂隙。
 function tex_rock() =
@@ -224,11 +228,11 @@ function tex_asphalt() =
         speck = tx_hash(256, 256, 125),
         crack = _gt(tx_band(tx_fbm(5, 5, 3, 127), 0.5, 0.006), 0.0001),
         shade = tx_mul(_sh(0.92, 0.08, swell),
-                       tx_select(_gt(speck, 0.90), 0.88, tx_select(_lt(speck, 0.04), 1.08, 1)),
-                       tx_select(patched, 0.84, 1), tx_select(crack, 0.70, 1)))
+                       tx_select(_gt(speck, 0.90), 0.94, tx_select(_lt(speck, 0.04), 1.04, 1)),
+                       tx_select(patched, 0.86, 1), tx_select(crack, 0.80, 1)))
     tx_surface(tx_mul(tx_palette(0, [1, 1, 1]), tx_min(shade, 1)),
-               height = tx_select(crack, 0.1, tx_add(tx_select(patched, 0.75, 0.5), tx_mul(swell, 0.1))),
-               rough = tx_select(patched, 0.9, 1), tilt = 5, blur = 1);
+               height = tx_select(crack, 0.25, tx_add(tx_select(patched, 0.7, 0.5), tx_mul(swell, 0.1))),
+               rough = tx_select(patched, 0.9, 1), tilt = 4, blur = 2);
 
 // ---- 建筑（乘在本色上）----
 // 石灰抹灰：柔和污斑、竖向雨痕、局部剥落露出砖色（palette[1]），剥落处凹下、边缘翘起。
@@ -239,18 +243,19 @@ function tex_plaster() =
         blotch = tx_posterize(tx_fbm(3, 3, 3, 133), 3),
         streak = _gt(tx_fbm(14, 2, 3, 135), 0.62),
         chip = tx_hash(42, 85, 137))
-    tx_surface(tx_select(peel, tx_mul(tx_palette(1, [0.90, 0.68, 0.56]), _sh(0.90, 0.10, chip)),
+    tx_surface(tx_select(peel, tx_mul(tx_palette(1, [0.90, 0.68, 0.56]), _sh(0.95, 0.05, chip)),
                tx_select(rim, tx_palette(0, [1, 1, 1]),
-                         tx_mul(tx_palette(0, [1, 1, 1]), _sh(0.90, 0.10, blotch), tx_select(streak, 0.92, 1)))),
-               height = tx_select(peel, _sh(0.2, 0.1, chip), tx_select(rim, 0.95, _sh(0.75, 0.1, blotch))),
-               tilt = 7, blur = 1);
+                         tx_mul(tx_palette(0, [1, 1, 1]), _sh(0.90, 0.10, blotch), tx_select(streak, 0.94, 1)))),
+               height = tx_select(peel, 0.3, tx_select(rim, 0.85, _sh(0.72, 0.08, blotch))),
+               tilt = 5, blur = 2);
 
 // 顺砖错缝：砖面凸出、灰缝下凹，每块一个色调。
 function tex_brick() =
     let(tone = tx_course(16, 5, 0.5, 143, "rand"),
         joint = tx_max(_lt(tx_course(16, 5, 0.5, 143, "fu"), 0.06), _lt(tx_course(16, 5, 0.5, 143, "fv"), 0.16)))
-    tx_surface(tx_mul(tx_palette(0, [1, 1, 1]), tx_select(joint, 0.62, _sh(0.80, 0.20, tx_posterize(tone, 4)))),
-               height = tx_select(joint, 0.1, _sh(0.8, 0.2, tone)), tilt = 14, blur = 1);
+    tx_surface(tx_mul(tx_palette(0, [1, 1, 1]), tx_select(joint, 0.68, tx_mul(_sh(0.80, 0.20, tx_posterize(tone, 4)),
+                                                                             _tint(tx_course(16, 5, 0.5, 147, "rand"))))),
+               height = tx_select(joint, 0.15, _sh(0.8, 0.2, tone)), tilt = 12, blur = 2);
 
 // 参数化砖墙：行列、灰缝宽（单元高为 1）可调。
 function tex_brickwall(rows = 16, columns = 5, joint = 0.07) =
@@ -264,11 +269,12 @@ function tex_tiles() =
     let(fv = tx_course(10, 14, 0.5, 143, "fv"),
         side = _lt(tx_course(10, 14, 0.5, 143, "fu"), 0.05),
         grown = tx_top(tx_fbm(4, 4, 4, 141), 0.12),
-        shade = tx_mul(tx_select(side, 0.58, _sh(0.80, 0.20, tx_posterize(tx_course(10, 14, 0.5, 143, "rand"), 3))),
-                       tx_select(_lt(fv, 0.18), 0.74, 1)))
+        shade = tx_mul(tx_select(side, 0.64, tx_mul(_sh(0.80, 0.20, tx_posterize(tx_course(10, 14, 0.5, 143, "rand"), 3)),
+                                                    _tint(tx_course(10, 14, 0.5, 149, "rand")))),
+                       tx_select(_lt(fv, 0.18), 0.78, 1)))
     tx_surface(tx_mul(tx_palette(0, [1, 1, 1]), shade, tx_select(grown, tx_palette(1, [0.74, 0.90, 0.62]), 1)),
                height = tx_select(side, 0.35, tx_sub(1, tx_mul(fv, 0.75))),
-               rough = tx_select(grown, 1, 0.8), tilt = 12, blur = 1);
+               rough = tx_select(grown, 1, 0.8), tilt = 11, blur = 2);
 
 // 乱石砌：随机错缝、石面鼓起（缝处为 0），石面比缝隙光滑，地衣（palette[1]）。
 function tex_stone() =
@@ -276,10 +282,11 @@ function tex_stone() =
         joint = tx_max(_lt(tx_course(8, 4, -1, 143, "fu"), 0.07), _lt(tx_course(8, 4, -1, 143, "fv"), 0.09)),
         grown = tx_top(tx_fbm(4, 4, 4, 141), 0.06),
         cushion = tx_pow(_clamp01(tx_mul(tx_sub(tx_course(8, 4, -1, 143, "edge"), 0.08), 1 / 0.22)), 0.5))
-    tx_surface(tx_mul(tx_palette(0, [1, 1, 1]), tx_select(joint, 0.58, _sh(0.80, 0.20, tx_posterize(tone, 3))),
+    tx_surface(tx_mul(tx_palette(0, [1, 1, 1]), tx_select(joint, 0.64, tx_mul(_sh(0.80, 0.20, tx_posterize(tone, 3)),
+                                                                             _tint(tx_course(8, 4, -1, 149, "rand")))),
                       tx_select(grown, tx_palette(1, [0.90, 0.95, 0.76]), 1)),
                height = tx_select(joint, 0.1, _sh(0.1, 0.9, tx_mul(cushion, _sh(0.85, 0.15, tone)))),
-               rough = tx_select(tx_max(joint, grown), 1, _sh(0.95, -0.2, cushion)), tilt = 13, blur = 2);
+               rough = tx_select(tx_max(joint, grown), 1, _sh(0.95, -0.2, cushion)), tilt = 12, blur = 2);
 
 // 竖板：每块一个色调、深色板缝、顺板纹理、节疤，板面微微下凹。
 function tex_planks() =
@@ -290,10 +297,23 @@ function tex_planks() =
         knot = tx_mul(_lt(tx_cells(6, 155, "dist"), 0.06), _gt(tx_cells(6, 155, "rand"), 0.6)),
         across = tx_mul(tx_sub(fu, 0.535), 1 / 0.465))
     tx_surface(tx_mul(tx_palette(0, [1, 1, 1]),
-                      tx_select(gap, 0.55, tx_mul(_sh(0.80, 0.18, tone), tx_select(streak, 0.93, 1), tx_select(knot, 0.75, 1)))),
+                      tx_select(gap, 0.62, tx_mul(_sh(0.80, 0.18, tone), _tint(tx_offset(tx_hash(8, 1, 157), 1 / 16, 0)),
+                                                  tx_select(streak, 0.94, 1), tx_select(knot, 0.78, 1)))),
                height = tx_select(gap, 0.05, tx_sub(_sh(0.8, 0.1, tone),
                                                      tx_add(tx_mul(across, across, 0.25), tx_mul(streak, 0.06), tx_mul(knot, 0.2)))),
-               tilt = 10, blur = 1);
+               tilt = 9, blur = 2);
+
+// 泥抹墙（稀树草原的泥 / 牛粪抹灰）：手抹出来的大块柔和弧形抹痕、偶尔一片新补的泥（palette[1]）、
+// 几道很浅的干裂；没有抹灰的剥落和砖色，起伏低而圆。
+function tex_mudplaster() =
+    let(swirl = tx_warp(tx_fbm(3, 3, 3, 181), tx_fbm(2, 2, 2, 183), tx_fbm(2, 2, 2, 185), 0.25),
+        wipe = tx_warp(tx_band(tx_fract(tx_mul(tx_add(tx_u(), tx_mul(tx_v(), 0.6)), 3)), 0.5, 0.35),
+                       tx_fbm(4, 4, 2, 187), tx_fbm(4, 4, 2, 189), 0.18),
+        fresh = tx_top(tx_fbm(4, 4, 3, 191), 0.10),
+        crack = _lt(tx_cells(9, 193, "edge"), 0.02),
+        shade = tx_mul(_sh(0.86, 0.14, tx_posterize(swirl, 5)), _sh(0.95, 0.05, wipe), tx_select(crack, 0.88, 1)))
+    tx_surface(tx_mul(tx_select(fresh, tx_palette(1, [0.92, 0.84, 0.72]), tx_palette(0, [1, 1, 1])), tx_min(shade, 1)),
+               height = tx_select(crack, 0.35, tx_add(tx_mul(swirl, 0.6), tx_mul(wipe, 0.25))), tilt = 5, blur = 2);
 
 // 现浇混凝土：斑驳、模板线、流痕、气孔。
 function tex_concrete() =

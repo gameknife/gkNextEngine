@@ -39,7 +39,7 @@ function sv_dark() = [0.06,0.06,0.05];
 // The plaster print's second colour is its spalling; kept close to the wash
 // so a wall reads as patched render, not as a spotted hide.
 module sv_m_block(c) { gk_material(c, roughness=1) gk_texture("plaster", palette=[[1,1,1],[0.80,0.74,0.68]], scale=3.2, relief=0.35) children(); }      // rendered blockwork
-module sv_m_mud(c) { gk_material(c, roughness=1) gk_texture("plaster", palette=[[1,1,1],[0.78,0.72,0.66]], scale=1.6, seed=3, relief=0.5) children(); } // mud / dung plaster
+module sv_m_mud(c) { gk_material(c, roughness=1) gk_texture("mudplaster", palette=[[1,1,1],[0.86,0.78,0.68]], scale=1.6, seed=3) children(); } // hand-smeared mud / dung plaster
 module sv_m_stone(c) { gk_material(c, roughness=1) gk_texture("stone", scale=2.2) children(); }
 module sv_m_concrete(c) { gk_material(c, roughness=1) gk_texture("concrete", scale=3.0) children(); }
 module sv_m_thatch(c) { gk_material(c, roughness=1) gk_texture("bark", scale=1.3) children(); }         // grass thatch courses

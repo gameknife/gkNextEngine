@@ -214,7 +214,11 @@ namespace Runtime
         const float bend = float(std::min(pose, poseCount - 1)) / float(poseCount - 1) * grassMaxBend;
         const auto triangle = [&](glm::vec3 a, glm::vec3 b, glm::vec3 c, uint32_t material)
         {
-            const glm::vec3 normal = glm::normalize(glm::cross(b - a, c - a));
+            // Faceted blade normals scatter light and dark specks across a field
+            // up close; leaning them toward the ground normal makes it read as a
+            // soft carpet while the silhouette keeps the blades.
+            const glm::vec3 face = glm::normalize(glm::cross(b - a, c - a));
+            const glm::vec3 normal = glm::normalize(glm::mix(face, glm::vec3(0.0f, 1.0f, 0.0f), normalBlend));
             const glm::vec3 tangent = glm::normalize(b - a);
             for (const glm::vec3 point : {a, b, c})
             {
@@ -232,10 +236,12 @@ namespace Runtime
             const float heading = GrassRandom(blade, 4) * glm::two_pi<float>();
             const glm::vec3 widthAxis(std::cos(heading), 0.0f, std::sin(heading));
             const glm::vec3 depthAxis(-std::sin(heading), 0.0f, std::cos(heading));
-            const glm::vec3 naturalLean = glm::vec3(std::sin(angle), 0.0f, std::cos(angle)) * 0.13f;
+            // A soft arc rather than a straight spike: each blade curls outward.
+            const glm::vec3 naturalLean = glm::vec3(std::sin(angle), 0.0f, std::cos(angle)) * 0.21f;
             const glm::vec3 lean = naturalLean + glm::vec3(bend, 0, 0);
-            const float width = (0.045f + GrassRandom(blade, 5) * 0.035f) * (1.0f + float(lod) * 0.55f);
-            const float depth = (0.03f + GrassRandom(blade, 6) * 0.025f) * (1.0f + float(lod) * 0.3f);
+            // A flattened leaf section: broad across, thin through.
+            const float width = (0.060f + GrassRandom(blade, 5) * 0.040f) * (1.0f + float(lod) * 0.55f);
+            const float depth = (0.016f + GrassRandom(blade, 6) * 0.012f) * (1.0f + float(lod) * 0.3f);
             const auto center = [&](float t)
             {
                 return root + glm::vec3(0.0f, height * t * (1.0f - bend * t * 0.18f), 0.0f) +
@@ -249,7 +255,7 @@ namespace Runtime
                 const glm::vec3 section = widthAxis * (std::cos(angleAround) * width) +
                                           depthAxis * (std::sin(angleAround) * depth);
                 base[corner] = root + section;
-                middle[corner] = center(0.55f) + section * 0.65f;
+                middle[corner] = center(0.55f) + section * 0.82f; // stays broad, then tapers to the tip
             }
             const uint32_t material = (blade % 2) * 2;
             // Closed, flat-shaded triangular stalk: 6 lower faces + 3 tip faces + root cap.
@@ -277,6 +283,22 @@ namespace Runtime
         return model;
     }
 
+    std::array<glm::vec3, 3> FTerrainGrassSystem::PaletteColors(std::string_view palette)
+    {
+        // Grass / GrassDark / DryGrass blades, a little darker than the painted
+        // ground under them so the field reads as depth, not as a second colour.
+        if (palette == "continental") // warm Central European meadow
+            return {glm::vec3(0.215f, 0.285f, 0.155f), {0.155f, 0.215f, 0.125f}, {0.35f, 0.32f, 0.20f}};
+        if (palette == "savanna") // golden red-oat grass over the bleached plain
+            return {glm::vec3(0.33f, 0.29f, 0.145f), {0.17f, 0.21f, 0.105f}, {0.37f, 0.32f, 0.19f}};
+        if (palette == "arid")
+            return {glm::vec3(0.40f, 0.37f, 0.21f), {0.33f, 0.31f, 0.18f}, {0.45f, 0.40f, 0.24f}};
+        if (palette == "alpine")
+            return {glm::vec3(0.22f, 0.30f, 0.17f), {0.17f, 0.25f, 0.14f}, {0.33f, 0.32f, 0.22f}};
+        // temperate and anything else: muted olive / grey-green / dry khaki.
+        return {glm::vec3(0.23f, 0.275f, 0.185f), {0.155f, 0.205f, 0.145f}, {0.34f, 0.31f, 0.235f}};
+    }
+
     void FTerrainGrassSystem::Prepare(std::span<const std::shared_ptr<Assets::Node>> nodes,
                                       std::vector<Assets::Model>& models, std::vector<Assets::FMaterial>& materials)
     {
@@ -292,9 +314,17 @@ namespace Runtime
                 models.push_back(CreatePose(pose, lod));
             }
         }
-        // Muted olive / grey-green / dry khaki, with similar luminance to the old palette.
-        const std::array<glm::vec3, 3> colors = {
-            glm::vec3(0.23f, 0.275f, 0.185f), {0.155f, 0.205f, 0.145f}, {0.34f, 0.31f, 0.235f}};
+        std::string palette;
+        for (const auto& node : nodes)
+        {
+            const auto terrain = node ? node->template GetComponent<TerrainComponent>() : nullptr;
+            if (terrain && terrain->HasData() && !terrain->GetGridData()->palette.empty())
+            {
+                palette = terrain->GetGridData()->palette;
+                break;
+            }
+        }
+        const std::array<glm::vec3, 3> colors = PaletteColors(palette);
         for (uint32_t biome = 0; biome < colors.size(); ++biome)
         {
             for (uint32_t slot = 0; slot < 4; ++slot)

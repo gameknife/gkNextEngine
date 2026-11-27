@@ -140,6 +140,38 @@ TEST_CASE("Low-poly grass blades are closed solids with outward faces", "[Unit][
     }
 }
 
+TEST_CASE("Grass blades are soft arcs whose normals lean toward the ground", "[Unit][TerrainGrass]")
+{
+    using Grass = Runtime::FTerrainGrassSystem;
+    for (uint32_t lod = 0; lod < Grass::lodCount; ++lod)
+    {
+        const auto model = Grass::CreatePose(0, lod);
+        float minUp = 1.0f;
+        for (const auto& vertex : model.CPUVertices())
+        {
+            if (vertex.Position.y > 0.0f) minUp = std::min(minUp, vertex.Normal.y);
+        }
+        INFO("lod " << lod << " lowest side-face normal y " << minUp);
+        // A vertical side face blended 0.55 toward up still points mostly sideways
+        // but never below the horizon; facets no longer flip light to dark.
+        CHECK(minUp > 0.4f);
+    }
+}
+
+TEST_CASE("Grass colours follow the terrain look palette", "[Unit][TerrainGrass]")
+{
+    using Grass = Runtime::FTerrainGrassSystem;
+    const auto temperate = Grass::PaletteColors("temperate");
+    const auto savanna = Grass::PaletteColors("savanna");
+    const auto continental = Grass::PaletteColors("continental");
+    CHECK(Grass::PaletteColors("") == temperate);
+    CHECK(Grass::PaletteColors("no-such-palette") == temperate);
+    // Savanna grass is golden (red over green), the Central European meadow green.
+    CHECK(savanna[0].r > savanna[0].g);
+    CHECK(continental[0].g > continental[0].r);
+    CHECK(savanna[0] != continental[0]);
+}
+
 TEST_CASE("Grass asset staging survives the engine's unload-after-prepare lifecycle", "[Unit][TerrainGrass]")
 {
     Runtime::FTerrainGrassSystem grass;

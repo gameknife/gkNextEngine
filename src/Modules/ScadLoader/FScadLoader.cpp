@@ -578,6 +578,7 @@ namespace Assets
                 grid->biome = src.cellBiome;
                 grid->flags = src.cellFlags;
                 grid->waterLevel = src.cellWater;
+                grid->palette = src.spec.palette;
                 grid->localToWorld = nodeWorld * scadToEngine * terrain.xform;
                 grid->worldToLocal = glm::inverse(grid->localToWorld);
 

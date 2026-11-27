@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -42,6 +43,10 @@ namespace Runtime
 
             glm::dmat4 localToWorld{1.0};
             glm::dmat4 worldToLocal{1.0};
+
+            // The look palette the ground was painted with ("temperate",
+            // "continental", "savanna", ...); runtime grass matches its colours.
+            std::string palette;
         };
 
         static constexpr uint8_t kFlagWater = 1u << 0;

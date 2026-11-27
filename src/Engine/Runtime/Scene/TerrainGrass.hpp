@@ -3,6 +3,7 @@
 #include <array>
 #include <map>
 #include <span>
+#include <string_view>
 #include <glm/gtc/quaternion.hpp>
 
 namespace Assets
@@ -111,6 +112,12 @@ namespace Runtime
         static float Coverage(float distance, float radius, uint32_t lod);
         static uint32_t SelectPose(float bend, uint32_t previous);
         static Assets::Model CreatePose(uint32_t pose, uint32_t lod = 0);
+        // Blade colours for the Grass / GrassDark / DryGrass biomes of a terrain
+        // look palette, tuned to sit on that palette's painted ground.
+        static std::array<glm::vec3, 3> PaletteColors(std::string_view palette);
+        // How far blade normals lean toward the patch's up axis (= the ground
+        // normal once placed): the field shades as one soft carpet.
+        static constexpr float normalBlend = 0.55f;
         static glm::vec3 Contact(const FGrassPlacement& placement, const FGrassSweep& sweep);
         static void StepResponse(FGrassResponse& response, glm::vec3 target, float dt, float recoverySeconds);
 

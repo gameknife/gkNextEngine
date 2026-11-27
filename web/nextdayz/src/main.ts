@@ -785,13 +785,13 @@ function updateField() {
     const food = Math.max(0, Math.min(100, Math.ceil(body.hunger)));
     const water = Math.max(0, Math.min(100, Math.ceil(body.hydration)));
     element("vital-hp-bar").style.width = `${hp}%`;
-    element("vital-hp-val").textContent = String(hp);
+    element("vital-hp-val").textContent = `${hp}%`;
     element("vital-hp-row").classList.toggle("low", hp < 28);
     element("vital-food-bar").style.width = `${food}%`;
-    element("vital-food-val").textContent = String(food);
+    element("vital-food-val").textContent = `${food}%`;
     element("vital-food-row").classList.toggle("low", food < 22);
     element("vital-water-bar").style.width = `${water}%`;
-    element("vital-water-val").textContent = String(water);
+    element("vital-water-val").textContent = `${water}%`;
     element("vital-water-row").classList.toggle("low", water < 22);
 
     const conds = element("conditions-hud");

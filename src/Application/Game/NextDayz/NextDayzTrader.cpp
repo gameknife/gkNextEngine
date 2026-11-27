@@ -39,22 +39,24 @@ void NextDayzGameInstance::DrawTrader()
 
     // Top sub-tabs + reputation strip
     if (traderPageForced_) traderPageForced_ = false;
-    if (SegmentedButton(Label("CONTRACTS"), traderPage_ == 0, ImVec2(150.0f, 32.0f))) traderPage_ = 0;
-    ImGui::SameLine(0.0f, 6.0f);
-    if (SegmentedButton(Label("TRADER & SERVICES"), traderPage_ == 1, ImVec2(170.0f, 32.0f))) traderPage_ = 1;
-    ImGui::SameLine(0.0f, 24.0f);
+    if (SegmentedButton(Label("CONTRACTS"), traderPage_ == 0, ImVec2(S(165.0f), S(36.0f)))) traderPage_ = 0;
+    ImGui::SameLine(0.0f, S(8.0f));
+    if (SegmentedButton(Label("TRADER & SERVICES"), traderPage_ == 1, ImVec2(S(190.0f), S(36.0f)))) traderPage_ = 1;
+    ImGui::SameLine(0.0f, S(26.0f));
+    ImGui::PushFont(BoldFont(), S(18.0f));
     ImGui::TextColored(ColorVec4(Colors::AccentAmber), "%s", Format("Gold: {}", campaign_.gold).c_str());
-    ImGui::SameLine(0.0f, 20.0f);
+    ImGui::PopFont();
+    ImGui::SameLine(0.0f, S(22.0f));
     ImGui::TextUnformatted(Format("Reputation: {}  (tier {})", campaign_.reputation, tier).c_str());
     if (tier + 1 < economy_.reputationTiers.size())
     {
-        ImGui::SameLine(0.0f, 14.0f);
+        ImGui::SameLine(0.0f, S(14.0f));
         const uint32_t prev = tier < economy_.reputationTiers.size() ? economy_.reputationTiers[tier] : 0;
         const uint32_t next = economy_.reputationTiers[tier + 1];
         const float frac = next > prev ? std::clamp(static_cast<float>(campaign_.reputation - prev) / static_cast<float>(next - prev), 0.0f, 1.0f) : 1.0f;
         const ImVec2 bp = ImGui::GetCursorScreenPos();
-        DrawTacticalBar(ImGui::GetWindowDrawList(), ImVec2(bp.x, bp.y + 6.0f), ImVec2(bp.x + 110.0f, bp.y + 13.0f), frac, Colors::AccentAmber);
-        ImGui::Dummy(ImVec2(116.0f, 18.0f));
+        DrawTacticalBar(ImGui::GetWindowDrawList(), ImVec2(bp.x, bp.y + S(6.0f)), ImVec2(bp.x + S(128.0f), bp.y + S(16.0f)), frac, Colors::AccentAmber);
+        ImGui::Dummy(ImVec2(S(134.0f), S(20.0f)));
         ImGui::SameLine();
         ImGui::TextDisabled("%s", Format("Next tier at {}", next).c_str());
     }
@@ -76,7 +78,7 @@ void NextDayzGameInstance::DrawTrader()
         DrawSectionHeader(Tr("Field supplies"), fmt::format("{}", economy_.trader.size()).c_str(), Colors::AccentAmber);
         if (economy_.trader.empty()) ImGui::TextColored(ColorVec4(Colors::AccentRose), "%s", Tr("The trader is closed: the price table failed to load."));
 
-        ImGui::BeginChild("shelves_grid", ImVec2(0.0f, -8.0f));
+        ImGui::BeginChild("shelves_grid", ImVec2(0.0f, -S(8.0f)));
         constexpr int kCols = 3;
         if (ImGui::BeginTable("shelves_cards", kCols, ImGuiTableFlags_SizingStretchSame))
         {
@@ -92,32 +94,36 @@ void NextDayzGameInstance::DrawTrader()
                 ImGui::PushID(entry.item.c_str());
                 const ImVec2 p = ImGui::GetCursorScreenPos();
                 const float w = ImGui::GetContentRegionAvail().x;
-                const float h = 84.0f;
+                const float h = S(98.0f);
                 DrawFieldCard(ImGui::GetWindowDrawList(), p, ImVec2(p.x + w, p.y + h),
                               locked ? Colors::BorderMuted : (def ? ItemKindColor(def->kind) : Colors::AccentAmber));
-                ImGui::SetCursorScreenPos(ImVec2(p.x + 12.0f, p.y + 8.0f));
+                ImGui::SetCursorScreenPos(ImVec2(p.x + S(14.0f), p.y + S(10.0f)));
                 const std::string name = fmt::format("{}  x{}", DisplayName(entry.item), entry.pack);
+                ImGui::PushFont(BoldFont(), S(17.0f));
                 ImGui::TextColored(ColorVec4(locked ? Colors::TextMuted : Colors::TextPrimary), "%s", name.c_str());
-                ImGui::SetCursorScreenPos(ImVec2(p.x + 12.0f, p.y + 28.0f));
+                ImGui::PopFont();
+                ImGui::SetCursorScreenPos(ImVec2(p.x + S(14.0f), p.y + S(34.0f)));
                 if (locked)
                     ImGui::TextDisabled("%s", Format("Tier {}", entry.tier).c_str());
                 else
                     ImGui::TextColored(ColorVec4(Colors::TextSecondary), "%s: %d", Tr("Left"), left);
 
-                ImGui::SetCursorScreenPos(ImVec2(p.x + 12.0f, p.y + 52.0f));
+                ImGui::SetCursorScreenPos(ImVec2(p.x + S(14.0f), p.y + S(62.0f)));
+                ImGui::PushFont(BoldFont(), S(20.0f));
                 ImGui::TextColored(ColorVec4(Colors::AccentAmber), "%llu", static_cast<unsigned long long>(totalCost));
-                ImGui::SetCursorScreenPos(ImVec2(p.x + w - 76.0f, p.y + 48.0f));
+                ImGui::PopFont();
+                ImGui::SetCursorScreenPos(ImVec2(p.x + w - S(84.0f), p.y + S(58.0f)));
                 if (!locked)
                 {
                     ImGui::BeginDisabled(result != NextDayz::ETradeResult::Ok);
                     const std::string item = entry.item;
-                    if (GhostButton(Label("Buy"), ImVec2(66.0f, 26.0f))) requests.emplace_back([this, item]()
+                    if (GhostButton(Label("Buy"), ImVec2(S(74.0f), S(30.0f)))) requests.emplace_back([this, item]()
                     { campaignMessage_ = NextDayz::TradeResultMessage(NextDayz::Buy(campaign_, economy_, item)); });
                     ImGui::EndDisabled();
                     if (result != NextDayz::ETradeResult::Ok && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
                         ImGui::SetTooltip("%s", Tr(NextDayz::TradeResultMessage(result)));
                 }
-                ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + h + 8.0f));
+                ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + h + S(10.0f)));
                 ImGui::Dummy(ImVec2(w, 0.0f));
                 ImGui::PopID();
             }
@@ -139,7 +145,7 @@ void NextDayzGameInstance::DrawTrader()
             const std::string where = sortie.insertionPoint < static_cast<int>(points.size())
                 ? points[sortie.insertionPoint].nearSite : std::string("?");
             ImGui::TextColored(ColorVec4(Colors::AccentAmber), "%s", Format("{}: near {}", map ? map->name : sortie.insertionMap, where).c_str());
-            if (GhostButton(Label("Cancel landing (refund)"), ImVec2(0.0f, 28.0f)))
+            if (GhostButton(Label("Cancel landing (refund)"), ImVec2(0.0f, S(32.0f))))
                 requests.emplace_back([this]() { NextDayz::CancelInsertion(campaign_); });
         }
         ImGui::Spacing();
@@ -150,7 +156,7 @@ void NextDayzGameInstance::DrawTrader()
         if (const auto* step = NextDayz::NextWarehouseStep(campaign_, economy_))
         {
             ImGui::BeginDisabled(campaign_.gold < step->price);
-            if (GhostButton(Format("Expand to {} stacks ({} gold)", step->capacity, step->price).c_str(), ImVec2(0.0f, 28.0f)))
+            if (GhostButton(Format("Expand to {} stacks ({} gold)", step->capacity, step->price).c_str(), ImVec2(0.0f, S(32.0f))))
                 requests.emplace_back([this]()
                 { campaignMessage_ = NextDayz::TradeResultMessage(NextDayz::UpgradeWarehouse(campaign_, economy_)); });
             ImGui::EndDisabled();
@@ -168,16 +174,17 @@ void NextDayzGameInstance::DrawTrader()
             const bool died = record.outcome == "died";
             const ImVec2 p = ImGui::GetCursorScreenPos();
             const float w = ImGui::GetContentRegionAvail().x;
-            DrawFieldCard(ImGui::GetWindowDrawList(), p, ImVec2(p.x + w, p.y + 44.0f),
+            const float h = S(54.0f);
+            DrawFieldCard(ImGui::GetWindowDrawList(), p, ImVec2(p.x + w, p.y + h),
                           died ? Colors::AccentRose : Colors::AccentEmerald);
-            ImGui::SetCursorScreenPos(ImVec2(p.x + 10.0f, p.y + 5.0f));
+            ImGui::SetCursorScreenPos(ImVec2(p.x + S(12.0f), p.y + S(6.0f)));
             ImGui::TextUnformatted(Format("#{}  {}", record.sortieId, map ? map->name : record.mapId).c_str());
             ImGui::SameLine();
             ImGui::TextColored(ColorVec4(died ? Colors::AccentRose : Colors::AccentEmerald), "%s", Tr(OutcomeLabel(record.outcome)));
-            ImGui::SetCursorScreenPos(ImVec2(p.x + 10.0f, p.y + 23.0f));
+            ImGui::SetCursorScreenPos(ImVec2(p.x + S(12.0f), p.y + S(28.0f)));
             ImGui::TextDisabled("%s", Format("Brought home {}  /  contracts {}  /  spent {}  /  net {:+}", record.extractedValue,
                                              record.contractGold, record.spentBefore, net).c_str());
-            ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + 50.0f));
+            ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + h + S(8.0f)));
             ImGui::Dummy(ImVec2(0.0f, 0.0f));
         }
         ImGui::EndTable();

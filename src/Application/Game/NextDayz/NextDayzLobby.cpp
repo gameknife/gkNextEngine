@@ -218,8 +218,8 @@ void NextDayzGameInstance::DrawCabinMenu(const std::string& status, bool canDepl
     const ImVec2 origin = viewport->WorkPos;
     const ImVec2 size = viewport->WorkSize;
     const ImVec2 bottom(origin.x + size.x, origin.y + size.y);
-    const float margin = std::clamp(size.x * 0.028f, 20.0f, 44.0f);
-    constexpr float navH = 56.0f;
+    const float margin = std::clamp(size.x * 0.028f, S(22.0f), S(46.0f));
+    const float navH = S(66.0f);
     const ImGuiWindowFlags bareFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar;
 
@@ -236,82 +236,104 @@ void NextDayzGameInstance::DrawCabinMenu(const std::string& status, bool canDepl
     }
 
     auto* bg = ImGui::GetBackgroundDrawList();
-    // Top subtle gradient bar + bottom legibility vignette; keep center/right 3D survivor open.
-    bg->AddRectFilledMultiColor(origin, ImVec2(bottom.x, origin.y + 110.0f),
-        IM_COL32(10, 12, 11, 228), IM_COL32(10, 12, 11, 228), IM_COL32(10, 12, 11, 0), IM_COL32(10, 12, 11, 0));
-    bg->AddRectFilledMultiColor(ImVec2(origin.x, bottom.y - 190.0f), bottom,
-        IM_COL32(10, 12, 11, 0), IM_COL32(10, 12, 11, 0), IM_COL32(10, 12, 11, 232), IM_COL32(10, 12, 11, 232));
-    bg->AddLine(ImVec2(origin.x, origin.y + navH), ImVec2(bottom.x, origin.y + navH), Colors::BorderMuted, 1.0f);
+    // Top soft gradient bar + bottom legibility vignette; keep center/right 3D survivor unobstructed.
+    bg->AddRectFilledMultiColor(origin, ImVec2(bottom.x, origin.y + S(128.0f)),
+        IM_COL32(10, 12, 11, 232), IM_COL32(10, 12, 11, 232), IM_COL32(10, 12, 11, 0), IM_COL32(10, 12, 11, 0));
+    bg->AddRectFilledMultiColor(ImVec2(origin.x, bottom.y - S(220.0f)), bottom,
+        IM_COL32(10, 12, 11, 0), IM_COL32(10, 12, 11, 0), IM_COL32(10, 12, 11, 236), IM_COL32(10, 12, 11, 236));
+    bg->AddLine(ImVec2(origin.x, origin.y + navH), ImVec2(bottom.x, origin.y + navH), Colors::BorderMuted, 1.2f);
 
     FFieldStyleScope style;
 
-    // ---- 1. UNIFIED TOP NAVIGATION BAR (56px) ----
+    // ---- 1. UNIFIED TOP NAVIGATION BAR (Mockup 01 & 04) ----
     ImGui::SetNextWindowPos(origin);
     ImGui::SetNextWindowSize(ImVec2(size.x, navH + 4.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGui::Begin("##cabin_topbar", nullptr, bareFlags);
     {
         auto* draw = ImGui::GetWindowDrawList();
-        // Brand wordmark on far left: amber vertical bar + NEXTDAYZ
+        // Brand wordmark on far left: thick rounded amber bar + bold condensed NEXTDAYZ
         const float logoX = origin.x + margin;
-        draw->AddRectFilled(ImVec2(logoX, origin.y + 14.0f), ImVec2(logoX + 4.0f, origin.y + 42.0f), Colors::AccentAmber);
-        ImFont* brandFont = inventoryTitleFont_ ? inventoryTitleFont_ : ImGui::GetFont();
-        const float brandSize = inventoryTitleFont_ ? 26.0f : 22.0f;
+        const float barW = S(5.5f);
+        const float barH = S(34.0f);
+        draw->AddRectFilled(ImVec2(logoX, origin.y + (navH - barH) * 0.5f),
+                            ImVec2(logoX + barW, origin.y + (navH + barH) * 0.5f),
+                            Colors::AccentAmber, S(2.0f));
+        ImFont* brandFont = NumeralFont();
+        const float brandSize = S(33.0f);
         const ImVec2 nextSz = brandFont->CalcTextSizeA(brandSize, FLT_MAX, 0.0f, "NEXT");
+        const ImVec2 dayzSz = brandFont->CalcTextSizeA(brandSize, FLT_MAX, 0.0f, "DAYZ");
         const float brandY = origin.y + (navH - nextSz.y) * 0.5f;
-        draw->AddText(brandFont, brandSize, ImVec2(logoX + 12.0f, brandY), Colors::TextPrimary, "NEXT");
-        draw->AddText(brandFont, brandSize, ImVec2(logoX + 12.0f + nextSz.x, brandY), Colors::AccentAmber, "DAYZ");
+        draw->AddText(brandFont, brandSize, ImVec2(logoX + barW + S(12.0f), brandY), Colors::TextPrimary, "NEXT");
+        draw->AddText(brandFont, brandSize, ImVec2(logoX + barW + S(12.0f) + nextSz.x, brandY), Colors::AccentAmber, "DAYZ");
 
         // 4 Primary Game Channel Tabs
-        ImGui::SetCursorScreenPos(ImVec2(logoX + 168.0f, origin.y));
+        const float tabsX = logoX + barW + S(12.0f) + nextSz.x + dayzSz.x + S(38.0f);
+        ImGui::SetCursorScreenPos(ImVec2(tabsX, origin.y));
         if (NavTabButton(Tr("Cabin"), nullptr, safehouseTab_ == -1, navH)) safehouseTab_ = -1;
-        ImGui::SameLine(0.0f, 4.0f);
+        ImGui::SameLine(0.0f, S(4.0f));
         if (NavTabButton(Tr("Operations"), "M", safehouseTab_ == 0, navH)) safehouseTab_ = safehouseTab_ == 0 ? -1 : 0;
-        ImGui::SameLine(0.0f, 4.0f);
+        ImGui::SameLine(0.0f, S(4.0f));
         if (NavTabButton(Tr("Loadout"), "TAB", safehouseTab_ == 1, navH)) safehouseTab_ = safehouseTab_ == 1 ? -1 : 1;
-        ImGui::SameLine(0.0f, 4.0f);
+        ImGui::SameLine(0.0f, S(4.0f));
         if (NavTabButton(Tr("Quartermaster"), "T", safehouseTab_ == 2, navH)) safehouseTab_ = safehouseTab_ == 2 ? -1 : 2;
 
-        // Right cluster: Callsign + Gold + Tier + Mode Pill + Settings
-        const float settingsW = 92.0f;
-        const float modeW = 178.0f;
+        // Right cluster: Gold coin + bold value + Tier chip + Mode Pill + Crisp Gear Settings button
+        const float pillH = S(38.0f);
+        const float pillY = origin.y + (navH - pillH) * 0.5f;
+        const float settingsW = pillH;
+        const float modeW = S(168.0f);
         const float rightEnd = bottom.x - margin;
         const float settingsX = rightEnd - settingsW;
-        const float modeX = settingsX - 10.0f - modeW;
+        const float modeX = settingsX - S(10.0f) - modeW;
 
-        ImGui::SetCursorScreenPos(ImVec2(modeX, origin.y + 11.0f));
-        const std::string modeBtnLabel = std::string(Tr(SessionModeLabel())) + "##mode_pill";
-        if (GhostButton(modeBtnLabel.c_str(), ImVec2(modeW, 34.0f), sessionMenuOpen_)) OpenSessionMenu();
+        ImGui::SetCursorScreenPos(ImVec2(modeX, pillY));
+        const std::string modeBtnLabel = std::string("   ") + Tr(SessionModeLabel()) + "##mode_pill";
+        if (GhostButton(modeBtnLabel.c_str(), ImVec2(modeW, pillH), sessionMenuOpen_)) OpenSessionMenu();
         // Green status dot inside mode pill
-        draw->AddCircleFilled(ImVec2(modeX + 10.0f, origin.y + 28.0f), 3.2f,
-                              (netMode_ == ENetMode::Offline || NetLoggedIn()) ? Colors::AccentEmerald : Colors::AccentAmber, 12);
+        draw->AddCircleFilled(ImVec2(modeX + S(14.0f), pillY + pillH * 0.5f), S(4.0f),
+                              (netMode_ == ENetMode::Offline || NetLoggedIn()) ? Colors::AccentEmerald : Colors::AccentAmber, 14);
 
-        ImGui::SetCursorScreenPos(ImVec2(settingsX, origin.y + 11.0f));
-        if (GhostButton(Label("SETTINGS"), ImVec2(settingsW, 34.0f), settingsOpen_)) OpenSettings();
+        // Flat-stylized gear button for Settings (matches Mockup 01 & 04)
+        ImGui::SetCursorScreenPos(ImVec2(settingsX, pillY));
+        if (GhostButton("##settings_gear", ImVec2(settingsW, pillH), settingsOpen_)) OpenSettings();
+        DrawVitalIcon(draw, ImVec2(settingsX + settingsW * 0.5f, pillY + pillH * 0.5f), S(20.0f),
+                      EVitalIcon::Gear, settingsOpen_ ? Colors::AccentAmber : Colors::TextSecondary);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", Tr("SETTINGS"));
 
         // Compact resource summary to the left of the mode pill
+        ImFont* boldFont = BoldFont();
+        const float statSz = S(18.0f);
         if (CampaignEnabled())
         {
             const uint32_t tier = NextDayz::ReputationTier(campaign_.reputation, economy_);
             const std::string tierStr = fmt::format("T{}", tier);
-            const std::string goldStr = fmt::format("{} {}", Tr("Gold"), campaign_.gold);
-            const ImVec2 tSz = ImGui::CalcTextSize(tierStr.c_str());
-            const ImVec2 gSz = ImGui::CalcTextSize(goldStr.c_str());
-            const float badgeX = modeX - 18.0f - (tSz.x + 14.0f);
-            const float textY = origin.y + (navH - gSz.y) * 0.5f;
+            const std::string goldStr = fmt::format("{}", campaign_.gold);
+            const ImVec2 tSz = boldFont->CalcTextSizeA(S(16.0f), FLT_MAX, 0.0f, tierStr.c_str());
+            const ImVec2 gSz = boldFont->CalcTextSizeA(statSz, FLT_MAX, 0.0f, goldStr.c_str());
+            const float tierW = tSz.x + S(16.0f);
+            const float tierH = S(28.0f);
+            const float badgeX = modeX - S(16.0f) - tierW;
+            const float badgeY = origin.y + (navH - tierH) * 0.5f;
 
-            draw->AddRectFilled(ImVec2(badgeX, origin.y + 16.0f), ImVec2(badgeX + tSz.x + 14.0f, origin.y + 40.0f),
-                                IM_COL32(111, 166, 107, 42), 2.0f);
-            draw->AddRect(ImVec2(badgeX, origin.y + 16.0f), ImVec2(badgeX + tSz.x + 14.0f, origin.y + 40.0f),
-                          IM_COL32(111, 166, 107, 120), 2.0f);
-            draw->AddText(ImVec2(badgeX + 7.0f, textY), Colors::AccentEmerald, tierStr.c_str());
-            draw->AddText(ImVec2(badgeX - 14.0f - gSz.x, textY), Colors::AccentAmber, goldStr.c_str());
+            draw->AddRectFilled(ImVec2(badgeX, badgeY), ImVec2(badgeX + tierW, badgeY + tierH),
+                                IM_COL32(116, 179, 110, 48), S(5.0f));
+            draw->AddRect(ImVec2(badgeX, badgeY), ImVec2(badgeX + tierW, badgeY + tierH),
+                          IM_COL32(116, 179, 110, 140), S(5.0f), 0, 1.3f);
+            draw->AddText(boldFont, S(16.0f), ImVec2(badgeX + S(8.0f), badgeY + (tierH - tSz.y) * 0.5f),
+                          Colors::AccentEmerald, tierStr.c_str());
+
+            const float goldX = badgeX - S(16.0f) - gSz.x;
+            const float goldY = origin.y + (navH - gSz.y) * 0.5f;
+            draw->AddText(boldFont, statSz, ImVec2(goldX, goldY), Colors::AccentAmber, goldStr.c_str());
+            DrawVitalIcon(draw, ImVec2(goldX - S(14.0f), origin.y + navH * 0.5f), S(15.0f),
+                          EVitalIcon::Coin, Colors::AccentAmber);
         }
         else if (NetLoggedIn())
         {
             const std::string acct = NetAccountName();
-            const ImVec2 aSz = ImGui::CalcTextSize(acct.c_str());
-            draw->AddText(ImVec2(modeX - 18.0f - aSz.x, origin.y + (navH - aSz.y) * 0.5f),
+            const ImVec2 aSz = boldFont->CalcTextSizeA(statSz, FLT_MAX, 0.0f, acct.c_str());
+            draw->AddText(boldFont, statSz, ImVec2(modeX - S(18.0f) - aSz.x, origin.y + (navH - aSz.y) * 0.5f),
                           Colors::TextPrimary, acct.c_str());
         }
     }
@@ -321,27 +343,34 @@ void NextDayzGameInstance::DrawCabinMenu(const std::string& status, bool canDepl
     // When a sub-tab is open, the top nav stays live and BeginCabinPanel owns the body below.
     if (safehouseTab_ >= 0) return;
 
-    // ---- 2. CABIN HOME: BOTTOM-LEFT ASSIGNMENT BRIEFING CARD ----
-    const float cardW = std::clamp(size.x * 0.25f, 300.0f, 380.0f);
-    const float cardH = 196.0f;
-    const ImVec2 cardPos(origin.x + margin, bottom.y - margin - cardH);
+    // ---- 2. CABIN HOME: BOTTOM-LEFT ASSIGNMENT BRIEFING CARD (Mockup 01) ----
+    const float cardW = std::clamp(size.x * 0.28f, S(350.0f), S(460.0f));
+    const float mainCardH = S(170.0f);
+    const float stripH = S(48.0f);
+    const float stripGap = S(10.0f);
+    const float totalCardH = mainCardH + stripGap + stripH;
+    const ImVec2 cardPos(origin.x + margin, bottom.y - margin - totalCardH);
     ImGui::SetNextWindowPos(cardPos);
-    ImGui::SetNextWindowSize(ImVec2(cardW, cardH));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 14.0f));
+    ImGui::SetNextWindowSize(ImVec2(cardW, totalCardH));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(20.0f), S(16.0f)));
     ImGui::Begin("##cabin_briefing", nullptr, bareFlags);
     {
         auto* draw = ImGui::GetWindowDrawList();
         const ImVec2 p = ImGui::GetWindowPos();
-        const ImVec2 q(p.x + cardW, p.y + 138.0f);
+        const ImVec2 q(p.x + cardW, p.y + mainCardH);
         DrawFieldCard(draw, p, q, Colors::AccentAmber);
 
+        ImGui::PushFont(BoldFont(), S(14.5f));
         ImGui::TextColored(ColorVec4(Colors::AccentAmber), "%s", Tr("ACTIVE ASSIGNMENT"));
+        ImGui::PopFont();
+
         const auto* dest = CampaignEnabled() ? ChosenDeployMap() : nullptr;
         const std::string destName = dest ? std::string(Tr(dest->name))
             : (CampaignEnabled() ? std::string(Tr("RANDOM ASSIGNMENT")) : std::string(Tr(SessionModeLabel())));
-        ImGui::PushFont(inventoryTitleFont_ ? inventoryTitleFont_ : ImGui::GetFont());
+        ImGui::PushFont(HeadingFont(), S(31.0f));
         ImGui::TextUnformatted(destName.c_str());
         ImGui::PopFont();
+
         if (dest)
         {
             ImGui::TextColored(ColorVec4(Colors::TextSecondary), "%s  ·  %.0fm", Tr(dest->region), dest->sizeM);
@@ -351,40 +380,49 @@ void NextDayzGameInstance::DrawCabinMenu(const std::string& status, bool canDepl
             const auto firstLine = status.substr(0, status.find('\n'));
             ImGui::TextColored(ColorVec4(Colors::TextSecondary), "%s", firstLine.c_str());
         }
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-        ImGui::TextColored(ColorVec4(Colors::TextSecondary), "%s",
-                           Format("Carried: {} items", inventory_.Instances().size()).c_str());
 
-        // Secondary compact contracts / message strip below the main card
-        const ImVec2 p2(p.x, q.y + 8.0f);
-        const ImVec2 q2(p.x + cardW, p.y + cardH);
-        DrawFieldCard(draw, p2, q2, Colors::AccentEmerald);
-        ImGui::SetCursorScreenPos(ImVec2(p2.x + 14.0f, p2.y + 12.0f));
-        if (CampaignEnabled() && !campaign_.contracts.empty())
-        {
-            ImGui::TextColored(ColorVec4(Colors::TextHighlight), "%s",
-                               Format("Active contracts: {}", campaign_.contracts.size()).c_str());
-        }
-        else
-        {
-            std::string note = status;
-            if (const size_t nl = note.find('\n'); nl != std::string::npos) note = note.substr(nl + 1);
-            if (note.empty()) note = Tr("Equipment changes appear on your survivor.");
-            ImGui::TextColored(ColorVec4(Colors::TextSecondary), "%s", note.c_str());
-        }
+        const float sepY = q.y - S(42.0f);
+        draw->AddLine(ImVec2(p.x + S(18.0f), sepY), ImVec2(q.x - S(18.0f), sepY), Colors::BorderMuted, 1.0f);
+        ImGui::SetCursorScreenPos(ImVec2(p.x + S(20.0f), sepY + S(10.0f)));
+        ImGui::PushFont(BoldFont(), S(16.5f));
+        ImGui::TextColored(ColorVec4(Colors::TextPrimary), "%s",
+                           Format("Carried: {} items", inventory_.Instances().size()).c_str());
+        ImGui::PopFont();
+
+        // Secondary rounded contracts / message pill below the main card
+        const ImVec2 p2(p.x, q.y + stripGap);
+        const ImVec2 q2(p.x + cardW, p.y + totalCardH);
+        DrawFieldCard(draw, p2, q2, 0);
+        const float dotY = (p2.y + q2.y) * 0.5f;
+        const bool hasContracts = CampaignEnabled() && !campaign_.contracts.empty();
+        draw->AddCircleFilled(ImVec2(p2.x + S(18.0f), dotY), S(4.5f),
+                              hasContracts ? Colors::AccentAmber : Colors::AccentEmerald, 12);
+        const std::string noteText = hasContracts
+            ? Format("Active contracts: {}", campaign_.contracts.size())
+            : [&]()
+            {
+                std::string note = status;
+                if (const size_t nl = note.find('\n'); nl != std::string::npos) note = note.substr(nl + 1);
+                return note.empty() ? std::string(Tr("Equipment changes appear on your survivor.")) : note;
+            }();
+        ImFont* boldFont = BoldFont();
+        const float noteSz = S(16.0f);
+        const ImVec2 nSz = boldFont->CalcTextSizeA(noteSz, FLT_MAX, 0.0f, noteText.c_str());
+        draw->AddText(boldFont, noteSz, ImVec2(p2.x + S(32.0f), dotY - nSz.y * 0.5f),
+                      hasContracts ? Colors::TextHighlight : Colors::TextSecondary, noteText.c_str());
     }
     ImGui::End();
     ImGui::PopStyleVar();
 
-    // ---- 3. CABIN HOME: BOTTOM-RIGHT HERO DEPLOY ACTION ZONE ----
-    const float ctaW = std::clamp(size.x * 0.22f, 270.0f, 340.0f);
-    const float ctaH = 136.0f;
+    // ---- 3. CABIN HOME: BOTTOM-RIGHT HERO DEPLOY ACTION ZONE (Mockup 01) ----
+    const float ctaW = std::clamp(size.x * 0.24f, S(310.0f), S(400.0f));
+    const float ctaBtnH = S(62.0f);
+    const float subBtnH = S(42.0f);
+    const float ctaH = S(28.0f) + ctaBtnH + S(10.0f) + subBtnH + S(12.0f);
     ImGui::SetNextWindowPos(ImVec2(bottom.x - margin - ctaW, bottom.y - margin - ctaH));
     ImGui::SetNextWindowSize(ImVec2(ctaW, ctaH));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 8.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(S(10.0f), S(10.0f)));
     ImGui::Begin("##cabin_deploy_cta", nullptr, bareFlags);
     {
         const std::string subHint = CampaignEnabled()
@@ -392,18 +430,22 @@ void NextDayzGameInstance::DrawCabinMenu(const std::string& status, bool canDepl
                                                      : Format("Landing: {}", campaign_.sortie.insertionMap))
             : Localize(NetLobbyStatus(), Language());
         {
+            ImFont* boldFont = BoldFont();
+            const float hintSz = S(16.5f);
+            const ImVec2 hSz = boldFont->CalcTextSizeA(hintSz, FLT_MAX, 0.0f, subHint.c_str());
             const ImVec2 tp = ImGui::GetCursorScreenPos();
-            DrawTextShadow(ImGui::GetWindowDrawList(), tp, Colors::TextPrimary, subHint.c_str());
-            ImGui::Dummy(ImVec2(ctaW, ImGui::GetTextLineHeight() + 2.0f));
+            DrawTextShadow(ImGui::GetWindowDrawList(), boldFont, hintSz,
+                           ImVec2(tp.x + std::max(0.0f, ctaW - hSz.x), tp.y), Colors::TextPrimary, subHint.c_str(), 1.6f);
+            ImGui::Dummy(ImVec2(ctaW, hSz.y + S(4.0f)));
         }
 
-        if (PrimaryButton(Label(resume ? "CONTINUE EXPEDITION" : "DEPLOY"), ImVec2(-1.0f, 52.0f), canDeploy))
+        if (PrimaryButton(Label(resume ? "CONTINUE EXPEDITION" : "DEPLOY"), ImVec2(-1.0f, ctaBtnH), canDeploy, true))
             deploy = true;
 
-        const float halfW = (ctaW - 8.0f) * 0.5f;
-        if (GhostButton(Label("Loadout"), ImVec2(halfW, 36.0f))) safehouseTab_ = 1;
+        const float halfW = (ctaW - S(10.0f)) * 0.5f;
+        if (GhostButton(Label("Loadout"), ImVec2(halfW, subBtnH))) safehouseTab_ = 1;
         ImGui::SameLine();
-        if (GhostButton(Label("Training"), ImVec2(halfW, 36.0f))) StartTraining();
+        if (GhostButton(Label("Training"), ImVec2(halfW, subBtnH))) StartTraining();
     }
     ImGui::End();
     ImGui::PopStyleVar(2);
@@ -415,33 +457,37 @@ void NextDayzGameInstance::BeginCabinPanel(const char* title)
     const auto* viewport = ImGui::GetMainViewport();
     const ImVec2 origin = viewport->WorkPos;
     const ImVec2 size = viewport->WorkSize;
-    const float margin = std::clamp(size.x * 0.028f, 18.0f, 44.0f);
-    constexpr float topOffset = 66.0f;
+    const float margin = std::clamp(size.x * 0.028f, S(20.0f), S(46.0f));
+    const float navH = S(66.0f);
+    const float topOffset = navH + S(12.0f);
 
     ImGui::GetBackgroundDrawList()->AddRectFilled(
-        ImVec2(origin.x, origin.y + 56.0f), ImVec2(origin.x + size.x, origin.y + size.y), Colors::BgScrim);
+        ImVec2(origin.x, origin.y + navH), ImVec2(origin.x + size.x, origin.y + size.y), Colors::BgScrim);
 
     ImGui::SetNextWindowPos(ImVec2(origin.x + margin, origin.y + topOffset));
-    ImGui::SetNextWindowSize(ImVec2(size.x - 2.0f * margin, std::max(260.0f, size.y - topOffset - 18.0f)));
+    ImGui::SetNextWindowSize(ImVec2(size.x - 2.0f * margin, std::max(S(300.0f), size.y - topOffset - S(20.0f))));
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ColorVec4(Colors::SurfacePanel));
-    ImGui::PushStyleColor(ImGuiCol_Border, ColorVec4(Colors::BorderMuted));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20.0f, 16.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 2.0f);
+    ImGui::PushStyleColor(ImGuiCol_Border, ColorVec4(Colors::BorderTactical));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(22.0f), S(18.0f)));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, S(8.0f));
     ImGui::Begin("##cabin_panel", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoSavedSettings);
 
     auto* draw = ImGui::GetWindowDrawList();
     const ImVec2 p = ImGui::GetCursorScreenPos();
     const float w = ImGui::GetContentRegionAvail().x;
-    draw->AddRectFilled(p, ImVec2(p.x + 3.0f, p.y + 26.0f), Colors::AccentAmber);
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 12.0f);
-    ImGui::PushFont(inventoryTitleFont_ ? inventoryTitleFont_ : ImGui::GetFont());
+    draw->AddRectFilled(p, ImVec2(p.x + S(5.0f), p.y + S(32.0f)), Colors::AccentAmber, S(2.0f));
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + S(14.0f));
+    ImGui::PushFont(HeadingFont(), S(30.0f));
     ImGui::TextUnformatted(NextDayz::L10n::Tr(title));
     ImGui::PopFont();
-    ImGui::SameLine(std::max(220.0f, w - 140.0f));
-    if (NextDayz::UIWidgets::GhostButton(NextDayz::L10n::Label("Back to cabin"), ImVec2(138.0f, 30.0f)))
+    const float backW = S(148.0f);
+    ImGui::SameLine(std::max(S(240.0f), w - backW));
+    if (NextDayz::UIWidgets::GhostButton(NextDayz::L10n::Label("Back to cabin"), ImVec2(backW, S(36.0f))))
         safehouseTab_ = -1;
+    ImGui::Spacing();
     ImGui::Separator();
+    ImGui::Spacing();
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(2);
 }
@@ -462,18 +508,20 @@ void NextDayzGameInstance::DrawDebriefOverlay()
 
     FFieldStyleScope style;
     ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(std::min(560.0f, size.x - 40.0f), 0.0f), ImGuiCond_Always);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28.0f, 24.0f));
+    ImGui::SetNextWindowSize(ImVec2(std::min(S(620.0f), size.x - S(40.0f)), 0.0f), ImGuiCond_Always);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(30.0f), S(26.0f)));
     ImGui::Begin("##nd_debrief", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings);
 
     const ImVec2 pMin = ImGui::GetWindowPos();
     const ImVec2 pMax(pMin.x + ImGui::GetWindowSize().x, pMin.y + ImGui::GetWindowSize().y);
     const ImU32 accent = debrief_.extracted ? Colors::AccentEmerald : Colors::AccentRose;
-    ImGui::GetWindowDrawList()->AddRectFilled(pMin, ImVec2(pMax.x, pMin.y + 3.0f), accent);
+    ImGui::GetWindowDrawList()->AddRectFilled(pMin, ImVec2(pMax.x, pMin.y + S(4.0f)), accent, S(8.0f), ImDrawFlags_RoundCornersTop);
 
+    ImGui::PushFont(BoldFont(), S(15.0f));
     ImGui::TextColored(ColorVec4(accent), "%s", Tr(debrief_.extracted ? "EXTRACTION COMPLETE" : "KILLED IN ACTION"));
-    ImGui::PushFont(inventoryTitleFont_ ? inventoryTitleFont_ : ImGui::GetFont());
+    ImGui::PopFont();
+    ImGui::PushFont(HeadingFont(), S(34.0f));
     ImGui::TextUnformatted(debrief_.mapName.empty() ? Tr("SAFEHOUSE") : debrief_.mapName.c_str());
     ImGui::PopFont();
     ImGui::TextColored(ColorVec4(Colors::TextSecondary), "%s",
@@ -488,10 +536,11 @@ void NextDayzGameInstance::DrawDebriefOverlay()
             ImGui::TableNextColumn();
             const ImVec2 p = ImGui::GetCursorScreenPos();
             const float w = ImGui::GetContentRegionAvail().x;
-            DrawFieldCard(ImGui::GetWindowDrawList(), p, ImVec2(p.x + w, p.y + 56.0f), col);
-            ImGui::GetWindowDrawList()->AddText(ImVec2(p.x + 12.0f, p.y + 8.0f), Colors::TextMuted, label);
-            ImGui::GetWindowDrawList()->AddText(ImVec2(p.x + 12.0f, p.y + 28.0f), Colors::TextPrimary, value.c_str());
-            ImGui::Dummy(ImVec2(w, 56.0f));
+            const float h = S(68.0f);
+            DrawFieldCard(ImGui::GetWindowDrawList(), p, ImVec2(p.x + w, p.y + h), col);
+            ImGui::GetWindowDrawList()->AddText(BoldFont(), S(14.0f), ImVec2(p.x + S(14.0f), p.y + S(10.0f)), Colors::TextSecondary, label);
+            ImGui::GetWindowDrawList()->AddText(HeadingFont(), S(24.0f), ImVec2(p.x + S(14.0f), p.y + S(32.0f)), Colors::TextPrimary, value.c_str());
+            ImGui::Dummy(ImVec2(w, h));
         };
         char timeBuf[32];
         std::snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d",
@@ -511,15 +560,16 @@ void NextDayzGameInstance::DrawDebriefOverlay()
         ImGui::Spacing();
         const ImVec2 p = ImGui::GetCursorScreenPos();
         const float w = ImGui::GetContentRegionAvail().x;
-        DrawFieldCard(ImGui::GetWindowDrawList(), p, ImVec2(p.x + w, p.y + 44.0f), Colors::AccentEmerald);
+        const float h = S(50.0f);
+        DrawFieldCard(ImGui::GetWindowDrawList(), p, ImVec2(p.x + w, p.y + h), Colors::AccentEmerald);
         const std::string line = Format("Last report: contracts completed: {} (+{} gold, reputation {:+}).",
             debrief_.contractsCompleted, debrief_.contractGold, debrief_.contractReputation);
-        ImGui::GetWindowDrawList()->AddText(ImVec2(p.x + 14.0f, p.y + 13.0f), Colors::TextHighlight, line.c_str());
-        ImGui::Dummy(ImVec2(w, 44.0f));
+        ImGui::GetWindowDrawList()->AddText(BoldFont(), S(16.0f), ImVec2(p.x + S(16.0f), p.y + S(15.0f)), Colors::TextHighlight, line.c_str());
+        ImGui::Dummy(ImVec2(w, h));
     }
 
     ImGui::Spacing();
-    if (PrimaryButton(Label("Return to safehouse"), ImVec2(-1.0f, 44.0f)) ||
+    if (PrimaryButton(Label("Return to safehouse"), ImVec2(-1.0f, S(48.0f)), true, false) ||
         ImGui::IsKeyPressed(ImGuiKey_Escape, false))
     {
         debrief_.open = false;

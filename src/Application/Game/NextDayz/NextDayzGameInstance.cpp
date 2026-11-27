@@ -1,6 +1,7 @@
 #include "Engine/Common/CoreMinimal.hpp"
 #include "NextDayzGameInstance.hpp"
 #include "Application/Game/NextDayz/World/Economy.hpp"
+#include "Application/Game/NextDayz/UI/HUDTheme.hpp"
 #include "Application/Game/NextDayz/UI/Localization.hpp"
 #include "Application/Game/NextDayz/UI/InventoryPreview.hpp"
 #include "Application/Game/NextDayz/UI/ItemIconCache.hpp"
@@ -20,6 +21,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <imgui.h>
+#include <imgui_freetype.h>
 #include <spdlog/spdlog.h>
 
 #include "Engine/Assets/Core/Model.hpp"
@@ -107,8 +109,51 @@ NextDayzGameInstance::NextDayzGameInstance(Vulkan::WindowConfig& config, Runtime
 void NextDayzGameInstance::OnInitUI()
 {
     NextGameInstanceBase::OnInitUI();
-    const float density = ImGui::GetIO().FontDefault->Sources[0]->RasterizerDensity;
-    constexpr float titleSize = 28.0f;
+    ImGuiIO& io = ImGui::GetIO();
+    const float uiScale = GetEngine().GetUiHost() ? GetEngine().GetUiHost()->GetUiScale() : 1.0f;
+    // Supersample rasterization (like ScadLibrary) with LightHinting for crisp edges at 1080p+.
+    const float density = std::max(uiScale, 1.35f);
+    io.Fonts->FontLoaderFlags = ImGuiFreeTypeLoaderFlags_LightHinting;
+
+    // 1. Crisp 19px Body Font (replaces 16px default; full CJK + FontAwesome merged)
+    ImFont* bodyFont = NextUI::LoadDefaultUiFont("assets/fonts/Roboto-Regular.ttf", 19.0f, density, true);
+
+    // Build a compact CJK glyph range covering SimplifiedCommon + every localized NextDayz string.
+    static ImVector<ImWchar> boldChineseRanges;
+    if (boldChineseRanges.empty())
+    {
+        ImFontGlyphRangesBuilder builder;
+        builder.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
+#define ND_TEXT(en, zh) builder.AddText(zh);
+#include "Application/Game/NextDayz/UI/Translations.inl"
+#undef ND_TEXT
+        builder.BuildRanges(&boldChineseRanges);
+    }
+
+    // 2. Bold Condensed + Bold CJK UI Font (21px) for nav tabs, buttons, card titles, badges & numerals
+    constexpr float boldSize = 21.0f;
+    ImFont* boldFont = NextUI::LoadFont(NextUI::FFontRequest{
+        .filePath = "assets/fonts/Roboto-BoldCondensed.ttf",
+        .pixelSize = boldSize,
+        .rasterizerDensity = density,
+    });
+    if (boldFont)
+    {
+        NextUI::MergeFontAwesomeIcons(boldSize, density);
+        ImFontConfig cjkBold;
+        cjkBold.MergeMode = true;
+        cjkBold.FontLoaderFlags = ImGuiFreeTypeLoaderFlags_Bold | ImGuiFreeTypeLoaderFlags_LightHinting;
+        NextUI::LoadFont(NextUI::FFontRequest{
+            .filePath = "assets/fonts/DroidSansFallback.ttf",
+            .pixelSize = boldSize,
+            .glyphRanges = boldChineseRanges.Data,
+            .fontConfig = &cjkBold,
+            .rasterizerDensity = density,
+        });
+    }
+
+    // 3. Bold Heading Font (32px) for destination titles, panel titles & Hero CTA
+    constexpr float titleSize = 32.0f;
     inventoryTitleFont_ = NextUI::LoadFont(NextUI::FFontRequest{
         .filePath = "assets/fonts/Roboto-BoldCondensed.ttf",
         .pixelSize = titleSize,
@@ -116,22 +161,30 @@ void NextDayzGameInstance::OnInitUI()
     });
     if (inventoryTitleFont_)
     {
-        // Pair the condensed Title face with full Chinese glyphs so all localized headings render crisply.
-        ImFontConfig fallback;
-        fallback.MergeMode = true;
+        ImFontConfig cjkHeading;
+        cjkHeading.MergeMode = true;
+        cjkHeading.FontLoaderFlags = ImGuiFreeTypeLoaderFlags_Bold | ImGuiFreeTypeLoaderFlags_LightHinting;
         NextUI::LoadFont(NextUI::FFontRequest{
             .filePath = "assets/fonts/DroidSansFallback.ttf",
             .pixelSize = titleSize,
-            .includeChineseFull = true,
-            .fontConfig = &fallback,
+            .glyphRanges = boldChineseRanges.Data,
+            .fontConfig = &cjkHeading,
             .rasterizerDensity = density,
         });
     }
+
+    // 4. Hero Bold Condensed Numeral & Wordmark Font (62px, Latin/digits only)
     ammoFont_ = NextUI::LoadFont(NextUI::FFontRequest{
         .filePath = "assets/fonts/Roboto-BoldCondensed.ttf",
-        .pixelSize = 38.0f,
+        .pixelSize = 62.0f,
         .rasterizerDensity = density,
     });
+
+    auto& fonts = NextDayz::UITheme::Fonts();
+    fonts.body = bodyFont ? bodyFont : io.FontDefault;
+    fonts.bold = boldFont ? boldFont : fonts.body;
+    fonts.heading = inventoryTitleFont_ ? inventoryTitleFont_ : fonts.bold;
+    fonts.numeral = ammoFont_ ? ammoFont_ : fonts.heading;
 }
 
 void NextDayzGameInstance::OnInit()

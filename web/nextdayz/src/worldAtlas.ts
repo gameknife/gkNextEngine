@@ -129,9 +129,9 @@ export class WorldAtlas {
         }
 
         // Vector continents (same Natural Earth dataset as Desktop)
-        ctx.fillStyle = "#22302c";
-        ctx.strokeStyle = "#3f5951";
-        ctx.lineWidth = 0.9;
+        ctx.fillStyle = "#263833";
+        ctx.strokeStyle = "#4a695f";
+        ctx.lineWidth = 1.15;
         for (const poly of polygons) {
             if (poly.length < 3) continue;
             ctx.beginPath();
@@ -145,45 +145,63 @@ export class WorldAtlas {
             ctx.stroke();
         }
 
-        // Map markers
-        ctx.font = '600 12px "Bahnschrift", system-ui, sans-serif';
+        // Map markers (multi-ring glowing tactical reticle + rounded callout card matching Desktop & Mockup 04)
+        ctx.font = '700 15px "NextDayz Condensed", "PingFang SC", "Microsoft YaHei", sans-serif';
         for (const loc of this.locations) {
             if (loc.training) continue;
             const [x, y] = this.project(loc.lon, loc.lat, w, h);
             const active = loc.id === this.selectedId;
             if (active) {
-                ctx.strokeStyle = "rgba(217, 155, 56, 0.55)";
-                ctx.lineWidth = 1.4;
-                ctx.beginPath(); ctx.arc(x, y, 16, 0, Math.PI * 2); ctx.stroke();
+                ctx.fillStyle = "rgba(224, 162, 57, 0.16)";
+                ctx.beginPath(); ctx.arc(x, y, 26, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = "rgba(224, 162, 57, 0.72)";
+                ctx.lineWidth = 1.8;
+                ctx.beginPath(); ctx.arc(x, y, 22, 0, Math.PI * 2); ctx.stroke();
+                ctx.strokeStyle = "rgba(240, 182, 84, 0.92)";
+                ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.arc(x, y, 13, 0, Math.PI * 2); ctx.stroke();
                 ctx.beginPath();
-                ctx.moveTo(x - 24, y); ctx.lineTo(x - 9, y);
-                ctx.moveTo(x + 9, y); ctx.lineTo(x + 24, y);
+                ctx.moveTo(x - 30, y); ctx.lineTo(x - 9, y);
+                ctx.moveTo(x + 9, y); ctx.lineTo(x + 30, y);
+                ctx.moveTo(x, y - 30); ctx.lineTo(x, y - 9);
+                ctx.moveTo(x, y + 9); ctx.lineTo(x, y + 30);
                 ctx.stroke();
             }
-            ctx.fillStyle = active ? "#d99b38" : loc.available ? "#eceae0" : "#676d63";
-            ctx.beginPath(); ctx.arc(x, y, active ? 5.5 : 4.2, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = "#0d1414";
-            ctx.lineWidth = 2;
+            ctx.fillStyle = active ? "#e0a239" : loc.available ? "#f2efe6" : "#888f82";
+            ctx.beginPath(); ctx.arc(x, y, active ? 6.5 : 5, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = "#0d1616";
+            ctx.lineWidth = 2.4;
             ctx.stroke();
 
-            // Callout tag
+            // Rounded callout tag with leader line
             const tw = ctx.measureText(loc.name).width;
-            const bx = x > w - tw - 48 ? x - tw - 32 : x + 18;
-            const by = y - 14;
-            ctx.fillStyle = "rgba(14, 17, 15, 0.92)";
-            ctx.strokeStyle = active ? "#d99b38" : "rgba(228, 224, 208, 0.22)";
-            ctx.lineWidth = 1;
-            ctx.fillRect(bx, by, tw + 16, 24);
-            ctx.strokeRect(bx, by, tw + 16, 24);
-            ctx.fillStyle = active ? "#ebb152" : "#eceae0";
-            ctx.fillText(loc.name, bx + 8, by + 16);
+            const boxW = tw + 24;
+            const boxH = 34;
+            const bx = x > w - boxW - 54 ? x - boxW - 28 : x + 28;
+            const by = y - boxH * 0.5;
+            ctx.strokeStyle = active ? "#e0a239" : "rgba(184, 189, 176, 0.6)";
+            ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(bx < x ? bx + boxW : bx, y);
+            ctx.stroke();
+
+            ctx.fillStyle = "rgba(18, 23, 20, 0.94)";
+            ctx.strokeStyle = active ? "#e0a239" : "rgba(232, 226, 208, 0.34)";
+            ctx.lineWidth = active ? 1.6 : 1.2;
+            ctx.beginPath();
+            ctx.roundRect(bx, by, boxW, boxH, 6);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = active ? "#f0b654" : "#f2efe6";
+            ctx.fillText(loc.name, bx + 12, by + 22);
         }
 
         // Footer atlas label
-        ctx.fillStyle = "rgba(159, 164, 152, 0.65)";
-        ctx.font = "11px ui-monospace, monospace";
-        ctx.fillText(tr("FIELD ATLAS  /  WGS84"), 16, 24);
-        ctx.fillText(tr("WHEEL: ZOOM   /   RIGHT DRAG: PAN   /   DOUBLE CLICK: RESET"), 16, h - 14);
+        ctx.fillStyle = "rgba(184, 189, 176, 0.72)";
+        ctx.font = '600 12px "NextDayz Condensed", ui-monospace, monospace';
+        ctx.fillText(tr("FIELD ATLAS  /  WGS84"), 18, 26);
+        ctx.fillText(tr("WHEEL: ZOOM   /   RIGHT DRAG: PAN   /   DOUBLE CLICK: RESET"), 18, h - 16);
         ctx.restore();
     }
 }

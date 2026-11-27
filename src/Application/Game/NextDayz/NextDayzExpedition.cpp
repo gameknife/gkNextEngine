@@ -819,27 +819,31 @@ bool NextDayzGameInstance::DrawSafehouse()
         const uint32_t capacity = NextDayz::WarehouseCapacity(campaign_, economy_);
         const bool over = NextDayz::WarehouseOver(campaign_, economy_);
         const auto used = NextDayz::L10n::Format("WAREHOUSE  {} / {} stacks", campaign_.storage.size(), capacity);
+        ImGui::PushFont(BoldFont(), S(17.0f));
         ImGui::TextColored(ColorVec4(over ? Colors::AccentRose : Colors::TextPrimary), "%s", used.c_str());
-        ImGui::SameLine(0.0f, 16.0f);
+        ImGui::PopFont();
+        ImGui::SameLine(0.0f, S(16.0f));
         const ImVec2 barPos = ImGui::GetCursorScreenPos();
         const float frac = capacity > 0 ? std::clamp(static_cast<float>(campaign_.storage.size()) / static_cast<float>(capacity), 0.0f, 1.0f) : 0.0f;
-        DrawTacticalBar(ImGui::GetWindowDrawList(), ImVec2(barPos.x, barPos.y + 5.0f), ImVec2(barPos.x + 150.0f, barPos.y + 13.0f),
+        DrawTacticalBar(ImGui::GetWindowDrawList(), ImVec2(barPos.x, barPos.y + S(4.0f)), ImVec2(barPos.x + S(165.0f), barPos.y + S(16.0f)),
                         frac, over ? Colors::AccentRose : Colors::AccentEmerald);
-        ImGui::Dummy(ImVec2(156.0f, 18.0f));
+        ImGui::Dummy(ImVec2(S(172.0f), S(20.0f)));
         if (const auto* step = NextDayz::NextWarehouseStep(campaign_, economy_))
         {
             ImGui::SameLine();
             ImGui::BeginDisabled(campaign_.gold < step->price);
-            if (GhostButton(NextDayz::L10n::Format("Expand to {} stacks ({} gold)", step->capacity, step->price).c_str(), ImVec2(0.0f, 28.0f)))
+            if (GhostButton(NextDayz::L10n::Format("Expand to {} stacks ({} gold)", step->capacity, step->price).c_str(), ImVec2(0.0f, S(34.0f))))
                 requests.emplace_back([this, storeResult]() { storeResult(NextDayz::UpgradeWarehouse(campaign_, economy_)); });
             ImGui::EndDisabled();
         }
-        ImGui::SameLine(std::max(540.0f, ImGui::GetContentRegionAvail().x - 360.0f));
-        if (GhostButton(NextDayz::L10n::Label("STORE ALL CARRIED GEAR"), ImVec2(170.0f, 32.0f)))
+        const float storeW = S(186.0f);
+        const float deployW = S(196.0f);
+        ImGui::SameLine(std::max(S(560.0f), ImGui::GetContentRegionAvail().x - storeW - deployW - S(10.0f)));
+        if (GhostButton(NextDayz::L10n::Label("STORE ALL CARRIED GEAR"), ImVec2(storeW, S(36.0f))))
             requests.emplace_back([this, storeResult]()
             { storeResult(NextDayz::StoreCarried(campaign_, economy_, inventory_, 0)); weapons_.ResetRuntime(); });
         ImGui::SameLine();
-        if (PrimaryButton(inventory_.Instances().empty() ? NextDayz::L10n::Tr("DEPLOY EMPTY-HANDED") : NextDayz::L10n::Tr("DEPLOY WITH LOADOUT"), ImVec2(180.0f, 32.0f)))
+        if (PrimaryButton(inventory_.Instances().empty() ? NextDayz::L10n::Tr("DEPLOY EMPTY-HANDED") : NextDayz::L10n::Tr("DEPLOY WITH LOADOUT"), ImVec2(deployW, S(36.0f))))
             requests.emplace_back([this]() { Deploy(); });
         if (over)
             ImGui::TextColored(ColorVec4(Colors::AccentRose), "%s",
@@ -851,8 +855,8 @@ bool NextDayzGameInstance::DrawSafehouse()
         const char* filterLabels[] = {"All", "Weapons", "Ammo", "Gear", "Supplies"};
         for (int f = 0; f < 5; ++f)
         {
-            if (f) ImGui::SameLine(0.0f, 6.0f);
-            if (SegmentedButton(NextDayz::L10n::Label(filterLabels[f]), stashCategoryFilter_ == f, ImVec2(82.0f, 26.0f)))
+            if (f) ImGui::SameLine(0.0f, S(8.0f));
+            if (SegmentedButton(NextDayz::L10n::Label(filterLabels[f]), stashCategoryFilter_ == f, ImVec2(S(96.0f), S(32.0f))))
                 stashCategoryFilter_ = f;
         }
     }
@@ -864,7 +868,7 @@ bool NextDayzGameInstance::DrawSafehouse()
         ImGui::TableNextColumn();
         DrawSectionHeader(NextDayz::L10n::Tr("Safehouse warehouse"),
                           fmt::format("{}", campaign_.storage.size()).c_str(), Colors::AccentAmber);
-        ImGui::BeginChild("storage", ImVec2(0, -8));
+        ImGui::BeginChild("storage", ImVec2(0, -S(8.0f)));
         auto matchesFilter = [this](const NextDayz::FItemDef* def)
         {
             if (stashCategoryFilter_ == 0 || !def) return true;
@@ -880,42 +884,44 @@ bool NextDayzGameInstance::DrawSafehouse()
             ImGui::PushID(static_cast<int>(item.instanceId));
             const ImVec2 p = ImGui::GetCursorScreenPos();
             const float cardW = ImGui::GetContentRegionAvail().x;
-            const float cardH = 68.0f;
+            const float cardH = S(80.0f);
             DrawFieldCard(ImGui::GetWindowDrawList(), p, ImVec2(p.x + cardW, p.y + cardH),
                           def ? ItemKindColor(def->kind) : Colors::BorderTactical);
-            ImGui::SetCursorScreenPos(ImVec2(p.x + 12.0f, p.y + 8.0f));
+            ImGui::SetCursorScreenPos(ImVec2(p.x + S(14.0f), p.y + S(10.0f)));
+            ImGui::PushFont(BoldFont(), S(17.5f));
             ImGui::Text("%s  x%d", def ? std::string(NextDayz::L10n::Tr(def->displayName)).c_str() : item.defId.c_str(), item.count);
+            ImGui::PopFont();
             if (item.loadedAmmo) { ImGui::SameLine(); ImGui::TextColored(ColorVec4(Colors::AccentCyan), NextDayz::L10n::Tr("(%d loaded)"), item.loadedAmmo); }
-            ImGui::SetCursorScreenPos(ImVec2(p.x + 12.0f, p.y + 34.0f));
+            ImGui::SetCursorScreenPos(ImVec2(p.x + S(14.0f), p.y + S(40.0f)));
             const auto id = item.instanceId;
-            if (GhostButton(NextDayz::L10n::Label("Take 1"), ImVec2(0.0f, 26.0f))) requests.emplace_back([this,id]()
+            if (GhostButton(NextDayz::L10n::Label("Take 1"), ImVec2(0.0f, S(30.0f)))) requests.emplace_back([this,id]()
             { if (!campaign_.Take(inventory_,id,1,false)) campaignMessage_ = "Not enough loadout space. Wear a larger pack first."; });
-            ImGui::SameLine(0.0f, 6.0f);
+            ImGui::SameLine(0.0f, S(6.0f));
             if (def && def->kind == NextDayz::EItemKind::Clothing)
             {
-                if (GhostButton(NextDayz::L10n::Label("Wear"), ImVec2(0.0f, 26.0f))) requests.emplace_back([this,id]()
+                if (GhostButton(NextDayz::L10n::Label("Wear"), ImVec2(0.0f, S(30.0f)))) requests.emplace_back([this,id]()
                 { if (!campaign_.Take(inventory_,id,1,true)) campaignMessage_ = "Cannot wear it; make room for the replaced clothing."; });
-                ImGui::SameLine(0.0f, 6.0f);
+                ImGui::SameLine(0.0f, S(6.0f));
             }
             const int count = item.count;
             if (count > 1)
             {
-                if (GhostButton(NextDayz::L10n::Label("Take stack"), ImVec2(0.0f, 26.0f))) requests.emplace_back([this,id,count]()
+                if (GhostButton(NextDayz::L10n::Label("Take stack"), ImVec2(0.0f, S(30.0f)))) requests.emplace_back([this,id,count]()
                 { if (!campaign_.Take(inventory_,id,count,false)) campaignMessage_ = "Not enough loadout space."; });
-                ImGui::SameLine(0.0f, 6.0f);
+                ImGui::SameLine(0.0f, S(6.0f));
             }
             const uint64_t price = NextDayz::UnitSellValue(item, economy_);
             ImGui::BeginDisabled(price == 0);
-            if (GhostButton(NextDayz::L10n::Format("Sell 1 (+{} gold)",price).c_str(), ImVec2(0.0f, 26.0f))) requests.emplace_back([this,id]()
+            if (GhostButton(NextDayz::L10n::Format("Sell 1 (+{} gold)",price).c_str(), ImVec2(0.0f, S(30.0f)))) requests.emplace_back([this,id]()
             { campaign_.Sell(id,1,economy_); });
             ImGui::EndDisabled();
             if (count > 1 && price > 0)
             {
-                ImGui::SameLine(0.0f, 6.0f);
-                if (GhostButton(NextDayz::L10n::Label("Sell stack"), ImVec2(0.0f, 26.0f))) requests.emplace_back([this,id,count]()
+                ImGui::SameLine(0.0f, S(6.0f));
+                if (GhostButton(NextDayz::L10n::Label("Sell stack"), ImVec2(0.0f, S(30.0f)))) requests.emplace_back([this,id,count]()
                 { campaign_.Sell(id,count,economy_); });
             }
-            ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + cardH + 6.0f));
+            ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + cardH + S(8.0f)));
             ImGui::Dummy(ImVec2(0.0f, 0.0f));
             ImGui::PopID();
         }
@@ -923,11 +929,11 @@ bool NextDayzGameInstance::DrawSafehouse()
         ImGui::TableNextColumn();
         DrawSectionHeader(NextDayz::L10n::Tr("Carried loadout"),
                           fmt::format("{} / {}", inventory_.UsedCapacity(), inventory_.TotalCapacity()).c_str(), Colors::AccentEmerald);
-        ImGui::BeginChild("loadout", ImVec2(0,-8));
+        ImGui::BeginChild("loadout", ImVec2(0,-S(8.0f)));
         if (inventory_.Instances().empty())
         {
             ImGui::Spacing();
-            ImGui::TextColored(ColorVec4(Colors::TextMuted), "%s", NextDayz::L10n::Tr("Nothing selected. Pick items from storage or deploy empty-handed."));
+            ImGui::TextColored(ColorVec4(Colors::TextSecondary), "%s", NextDayz::L10n::Tr("Nothing selected. Pick items from storage or deploy empty-handed."));
         }
         for (const auto& item : inventory_.Instances())
         {
@@ -935,15 +941,17 @@ bool NextDayzGameInstance::DrawSafehouse()
             ImGui::PushID(static_cast<int>(item.instanceId));
             const ImVec2 p = ImGui::GetCursorScreenPos();
             const float cardW = ImGui::GetContentRegionAvail().x;
-            const float cardH = 66.0f;
+            const float cardH = S(78.0f);
             DrawFieldCard(ImGui::GetWindowDrawList(), p, ImVec2(p.x + cardW, p.y + cardH),
                           def ? ItemKindColor(def->kind) : Colors::BorderTactical);
-            ImGui::SetCursorScreenPos(ImVec2(p.x + 12.0f, p.y + 8.0f));
+            ImGui::SetCursorScreenPos(ImVec2(p.x + S(14.0f), p.y + S(10.0f)));
+            ImGui::PushFont(BoldFont(), S(17.5f));
             ImGui::Text("%s  x%d%s", def ? std::string(NextDayz::L10n::Tr(def->displayName)).c_str() : item.defId.c_str(),
                 item.count, inventory_.IsWorn(item.instanceId) ? NextDayz::L10n::Tr(" [worn]") : "");
-            ImGui::SetCursorScreenPos(ImVec2(p.x + 12.0f, p.y + 33.0f));
+            ImGui::PopFont();
+            ImGui::SetCursorScreenPos(ImVec2(p.x + S(14.0f), p.y + S(39.0f)));
             const auto id = item.instanceId;
-            if (GhostButton(NextDayz::L10n::Label("Store"), ImVec2(0.0f, 25.0f))) requests.emplace_back([this,id]()
+            if (GhostButton(NextDayz::L10n::Label("Store"), ImVec2(0.0f, S(30.0f)))) requests.emplace_back([this,id]()
             {
                 const auto result = NextDayz::StoreCarried(campaign_, economy_, inventory_, id);
                 if (result == NextDayz::ETradeResult::StorageFull) campaignMessage_ = NextDayz::TradeResultMessage(result);
@@ -951,22 +959,22 @@ bool NextDayzGameInstance::DrawSafehouse()
             });
             if (def && def->kind == NextDayz::EItemKind::Clothing && !inventory_.IsWorn(id))
             {
-                ImGui::SameLine(0.0f, 6.0f);
-                if (GhostButton(NextDayz::L10n::Label("Wear"), ImVec2(0.0f, 25.0f))) requests.emplace_back([this,id]() { WearItem(id); });
+                ImGui::SameLine(0.0f, S(6.0f));
+                if (GhostButton(NextDayz::L10n::Label("Wear"), ImVec2(0.0f, S(30.0f)))) requests.emplace_back([this,id]() { WearItem(id); });
             }
             if (def && NextDayz::IsWieldable(*def))
             {
-                ImGui::SameLine(0.0f, 6.0f);
-                if (GhostButton(NextDayz::L10n::Label("Hold (1)"), ImVec2(0.0f, 25.0f))) requests.emplace_back([this,id]() { EquipWeaponInstance(id,0); });
-                ImGui::SameLine(0.0f, 6.0f);
-                if (GhostButton(NextDayz::L10n::Label("Hold (2)"), ImVec2(0.0f, 25.0f))) requests.emplace_back([this,id]() { EquipWeaponInstance(id,1); });
+                ImGui::SameLine(0.0f, S(6.0f));
+                if (GhostButton(NextDayz::L10n::Label("Hold (1)"), ImVec2(0.0f, S(30.0f)))) requests.emplace_back([this,id]() { EquipWeaponInstance(id,0); });
+                ImGui::SameLine(0.0f, S(6.0f));
+                if (GhostButton(NextDayz::L10n::Label("Hold (2)"), ImVec2(0.0f, S(30.0f)))) requests.emplace_back([this,id]() { EquipWeaponInstance(id,1); });
                 if (NextDayz::WeaponSystem::CanEquipInSlot(NextDayz::kSidearmSlot, def->weaponDefId))
                 {
-                    ImGui::SameLine(0.0f, 6.0f);
-                    if (GhostButton(NextDayz::L10n::Label("Hold (3)"), ImVec2(0.0f, 25.0f))) requests.emplace_back([this,id]() { EquipWeaponInstance(id,2); });
+                    ImGui::SameLine(0.0f, S(6.0f));
+                    if (GhostButton(NextDayz::L10n::Label("Hold (3)"), ImVec2(0.0f, S(30.0f)))) requests.emplace_back([this,id]() { EquipWeaponInstance(id,2); });
                 }
             }
-            ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + cardH + 6.0f));
+            ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + cardH + S(8.0f)));
             ImGui::Dummy(ImVec2(0.0f, 0.0f));
             ImGui::PopID();
         }

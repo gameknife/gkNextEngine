@@ -17,27 +17,37 @@ namespace NextDayz::UIWidgets
         Weak,
         Lantern,
         Armor,
+        Compass,
+        Map,
+        Opener,
+        Gear,
+        Coin,
     };
 
     // Renders a crisp physical keyboard badge (e.g. "[E]", "[TAB]") and returns consumed width.
-    float DrawKeyBadge(ImDrawList* draw, const ImVec2& pos, const char* keyText, float height = 22.0f);
+    float DrawKeyBadge(ImDrawList* draw, const ImVec2& pos, const char* keyText, float height = 24.0f);
 
     // Renders a smooth radial action progress circle around center (e.g. bandaging / eating / extracting).
     void DrawRadialProgress(ImDrawList* draw, const ImVec2& center, float radius, float thickness,
                             float progress01, ImU32 arcColor = UITheme::Colors::AccentAmber,
-                            ImU32 trackColor = IM_COL32(14, 17, 15, 200));
+                            ImU32 trackColor = IM_COL32(14, 17, 15, 210));
 
-    // Renders a crisp flat tactical progress bar.
+    // Renders a crisp flat-stylized rounded progress bar with subtle top highlight.
     void DrawTacticalBar(ImDrawList* draw, const ImVec2& pMin, const ImVec2& pMax, float fraction,
-                         ImU32 fillColor, ImU32 emptyColor = IM_COL32(12, 15, 13, 190),
-                         bool pulse = false);
+                         ImU32 fillColor, ImU32 emptyColor = IM_COL32(15, 19, 17, 215),
+                         bool pulse = false, float rounding = 4.0f);
+
+    // Renders a chunky flat-stylized inline vital bar (icon + label + % overlaid inside the bar).
+    void DrawInlineVitalBar(ImDrawList* draw, const ImVec2& pMin, const ImVec2& pMax,
+                            EVitalIcon icon, const char* label, float value01,
+                            ImU32 fillColor, const char* valStr = nullptr, bool pulse = false);
 
     // Renders a recessed or occupied item slot frame.
     void DrawSlotFrame(ImDrawList* draw, const ImVec2& min, const ImVec2& max,
                        bool occupied, bool hovered, bool validDropTarget, bool invalidDropTarget,
-                       float rounding = 2.0f);
+                       float rounding = 6.0f);
 
-    // Renders a crisp vector icon (avoids missing emoji glyphs in ImGui fonts).
+    // Renders a plump flat-stylized vector icon (avoids missing emoji glyphs in ImGui fonts).
     void DrawVitalIcon(ImDrawList* draw, const ImVec2& center, float size, EVitalIcon icon, ImU32 color);
 
     // Renders an affliction / status pill with an optional vector icon.
@@ -55,23 +65,23 @@ namespace NextDayz::UIWidgets
                            const char* title = nullptr, const char* badge = nullptr,
                            bool cornerTicks = false);
 
-    // Renders a card surface with hairline border and optional 3px left accent stripe.
+    // Renders a flat-stylized rounded card surface with soft shadow and optional left accent stripe.
     void DrawFieldCard(ImDrawList* draw, const ImVec2& min, const ImVec2& max,
                        ImU32 leftAccent = 0, bool selected = false, bool hovered = false);
 
-    // Renders a slim section header bar with 3px vertical accent tick and optional right badge.
+    // Renders a bold section header bar with rounded vertical accent tick and optional right badge.
     void DrawSectionHeader(const char* title, const char* rightBadge = nullptr,
                            ImU32 accentColor = UITheme::Colors::AccentAmber);
 
     // Renders crisp drop-shadowed text for frameless HUD elements.
     void DrawTextShadow(ImDrawList* draw, ImFont* font, float fontSize, const ImVec2& pos,
-                        ImU32 color, const char* text, float shadowOffset = 1.2f);
+                        ImU32 color, const char* text, float shadowOffset = 1.6f);
     void DrawTextShadow(ImDrawList* draw, const ImVec2& pos, ImU32 color, const char* text);
 
     // Interactive Tactical Field buttons (primary amber CTA, ghost tactical button, top nav tab, segmented tab).
-    bool PrimaryButton(const char* label, const ImVec2& size = ImVec2(0.0f, 40.0f), bool enabled = true);
-    bool GhostButton(const char* label, const ImVec2& size = ImVec2(0.0f, 34.0f), bool active = false, bool danger = false);
-    bool NavTabButton(const char* label, const char* keyHint, bool active, float height = 56.0f);
+    bool PrimaryButton(const char* label, const ImVec2& size = ImVec2(0.0f, 44.0f), bool enabled = true, bool hero = false);
+    bool GhostButton(const char* label, const ImVec2& size = ImVec2(0.0f, 38.0f), bool active = false, bool danger = false);
+    bool NavTabButton(const char* label, const char* keyHint, bool active, float height = 64.0f);
     bool SegmentedButton(const char* label, bool active, const ImVec2& size);
 
     // Renders a hazard discard / drop zone with angled red warning stripes.
@@ -87,6 +97,6 @@ namespace NextDayz::UIWidgets
     void DrawECGLine(ImDrawList* draw, const ImVec2& pos, const ImVec2& size,
                      float bpm, ImU32 color = UITheme::Colors::AccentRose);
 
-    // Renders an icon-style line silhouette for an empty equipment slot.
+    // Renders a plump flat-stylized silhouette for an empty equipment or weapon slot.
     void DrawSlotSilhouette(ImDrawList* draw, const ImVec2& min, const ImVec2& max, const char* slotType);
 }

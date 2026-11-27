@@ -7,70 +7,143 @@
 
 namespace NextDayz::UITheme
 {
-    // ---- Color Palette (Modern Tact-Minimalist) ----
+    // ---- Unified Palette: Tactical Field Minimalism ----
+    // Shared with assets/configs/nextdayz/ui_theme.json and web/nextdayz/src/style.css.
     namespace Colors
     {
-        // Surfaces & Panels
-        inline constexpr ImU32 SurfaceBg          = IM_COL32(11, 14, 20, 246);    // Deep tactical charcoal/black
-        inline constexpr ImU32 SurfacePanel       = IM_COL32(15, 20, 28, 235);    // Elevated tactical chassis panel
-        inline constexpr ImU32 SurfaceHeader      = IM_COL32(22, 29, 40, 245);    // Tactical sub-header
-        inline constexpr ImU32 SurfaceCard        = IM_COL32(18, 24, 34, 220);    // Inner card surface
-        inline constexpr ImU32 BorderMuted        = IM_COL32(40, 50, 68, 140);    // Subtle 1px tactical border
-        inline constexpr ImU32 BorderTactical     = IM_COL32(52, 66, 88, 200);    // Crisp tactical border
-        inline constexpr ImU32 BorderFocused      = IM_COL32(100, 116, 139, 200);  // Focused border
-        inline constexpr ImU32 BorderHighlight    = IM_COL32(245, 158, 11, 240);   // Amber glow border
-        inline constexpr ImU32 CornerTick         = IM_COL32(245, 158, 11, 220);   // Corner reticle accent
+        // Surfaces & Panels (warm olive-charcoal, zero cold sci-fi blue)
+        inline constexpr ImU32 BgScrim            = IM_COL32(10, 12, 11, 196);
+        inline constexpr ImU32 SurfaceBg          = IM_COL32(17, 20, 18, 238);
+        inline constexpr ImU32 SurfacePanel       = IM_COL32(18, 22, 20, 240);
+        inline constexpr ImU32 SurfaceHeader      = IM_COL32(22, 26, 23, 246);
+        inline constexpr ImU32 SurfaceCard        = IM_COL32(28, 33, 30, 235);
+        inline constexpr ImU32 SurfaceCardHover   = IM_COL32(37, 44, 40, 245);
+        inline constexpr ImU32 SurfaceInset       = IM_COL32(14, 17, 15, 228);
+
+        inline constexpr ImU32 BorderMuted        = IM_COL32(228, 224, 208, 30);
+        inline constexpr ImU32 BorderTactical     = IM_COL32(228, 224, 208, 68);
+        inline constexpr ImU32 BorderFocused      = IM_COL32(228, 224, 208, 118);
+        inline constexpr ImU32 BorderHighlight    = IM_COL32(217, 155, 56, 242);
+        inline constexpr ImU32 CornerTick         = IM_COL32(217, 155, 56, 210);
 
         // Slots & Grid
-        inline constexpr ImU32 SlotEmptyBg        = IM_COL32(16, 21, 29, 180);    // Dark slot depression
-        inline constexpr ImU32 SlotEmptyBorder    = IM_COL32(36, 46, 62, 130);    // Guide border
-        inline constexpr ImU32 SlotOccupiedBg     = IM_COL32(24, 32, 44, 230);    // Occupied item background
-        inline constexpr ImU32 SlotOccupiedBorder = IM_COL32(58, 72, 94, 200);    // Occupied border
-        inline constexpr ImU32 SlotHoverBorder    = IM_COL32(245, 158, 11, 240);   // Amber hover
-        inline constexpr ImU32 SlotValidDropBg    = IM_COL32(16, 185, 129, 65);   // Emerald tint
-        inline constexpr ImU32 SlotValidDropBorder= IM_COL32(16, 185, 129, 240);  // Emerald border
-        inline constexpr ImU32 SlotInvalidDropBg  = IM_COL32(244, 63, 94, 65);    // Rose tint
-        inline constexpr ImU32 SlotInvalidDropBorder = IM_COL32(244, 63, 94, 240);// Rose border
-        inline constexpr ImU32 GridCrossDot       = IM_COL32(55, 70, 92, 90);     // Subtle reticle dot at slot centers
+        inline constexpr ImU32 SlotEmptyBg        = IM_COL32(14, 17, 15, 205);
+        inline constexpr ImU32 SlotEmptyBorder    = IM_COL32(228, 224, 208, 24);
+        inline constexpr ImU32 SlotOccupiedBg     = IM_COL32(28, 33, 30, 236);
+        inline constexpr ImU32 SlotOccupiedBorder = IM_COL32(228, 224, 208, 60);
+        inline constexpr ImU32 SlotHoverBorder    = IM_COL32(217, 155, 56, 242);
+        inline constexpr ImU32 SlotValidDropBg    = IM_COL32(111, 166, 107, 68);
+        inline constexpr ImU32 SlotValidDropBorder= IM_COL32(111, 166, 107, 240);
+        inline constexpr ImU32 SlotInvalidDropBg  = IM_COL32(214, 69, 69, 68);
+        inline constexpr ImU32 SlotInvalidDropBorder = IM_COL32(214, 69, 69, 240);
+        inline constexpr ImU32 GridCrossDot       = IM_COL32(228, 224, 208, 42);
 
-        // Accents & Signals
-        inline constexpr ImU32 AccentAmber        = IM_COL32(245, 158, 11, 255);  // Amber gold
-        inline constexpr ImU32 AccentCyan         = IM_COL32(56, 189, 248, 255);  // Hydration / Water blue
-        inline constexpr ImU32 AccentEmerald      = IM_COL32(16, 185, 129, 255);  // Healing / Positive green
-        inline constexpr ImU32 AccentRose         = IM_COL32(244, 63, 94, 255);   // Danger / Bleeding red
-        inline constexpr ImU32 AccentIceBlue      = IM_COL32(147, 197, 253, 255); // Freezing cold
-        inline constexpr ImU32 AccentOrange       = IM_COL32(249, 115, 22, 255);  // Tactical weapon orange
-        inline constexpr ImU32 AccentViolet       = IM_COL32(168, 85, 247, 255);  // Tactical gear purple
+        // Accents & Signals (muted military industrial paint)
+        inline constexpr ImU32 AccentAmber        = IM_COL32(217, 155, 56, 255);  // Signal amber gold
+        inline constexpr ImU32 AccentAmberHover   = IM_COL32(235, 177, 82, 255);  // Lit amber
+        inline constexpr ImU32 AccentCyan         = IM_COL32(92, 168, 201, 255);  // Steel water / optic
+        inline constexpr ImU32 AccentEmerald      = IM_COL32(111, 166, 107, 255); // Field olive green
+        inline constexpr ImU32 AccentRose         = IM_COL32(214, 69, 69, 255);   // Signal crimson danger
+        inline constexpr ImU32 AccentIceBlue      = IM_COL32(158, 206, 227, 255); // Cold / frost
+        inline constexpr ImU32 AccentOrange       = IM_COL32(217, 119, 54, 255);  // Weapon terracotta
+        inline constexpr ImU32 AccentBrass        = IM_COL32(200, 168, 66, 255);  // Cartridge brass
+        inline constexpr ImU32 AccentViolet       = IM_COL32(139, 123, 181, 255); // Muted gear plum-slate
+
+        // World Atlas
+        inline constexpr ImU32 AtlasOcean         = IM_COL32(13, 20, 20, 255);
+        inline constexpr ImU32 AtlasLand          = IM_COL32(34, 48, 44, 255);
+        inline constexpr ImU32 AtlasCoast         = IM_COL32(63, 89, 81, 255);
+        inline constexpr ImU32 AtlasGrid          = IM_COL32(120, 152, 140, 38);
 
         // Hazard Stripes (for discard zone)
-        inline constexpr ImU32 HazardYellow       = IM_COL32(234, 179, 8, 160);
-        inline constexpr ImU32 HazardDark         = IM_COL32(20, 24, 30, 220);
+        inline constexpr ImU32 HazardYellow       = IM_COL32(214, 69, 69, 130);
+        inline constexpr ImU32 HazardDark         = IM_COL32(14, 17, 15, 225);
 
-        // Typography
-        inline constexpr ImU32 TextPrimary        = IM_COL32(243, 244, 246, 255); // Crisp off-white
-        inline constexpr ImU32 TextSecondary      = IM_COL32(161, 161, 170, 230); // Cool silver
-        inline constexpr ImU32 TextMuted          = IM_COL32(107, 114, 128, 180); // Subdued charcoal
-        inline constexpr ImU32 TextHighlight      = IM_COL32(251, 191, 36, 255);  // Golden highlight
+        // Typography (warm paper off-white)
+        inline constexpr ImU32 TextPrimary        = IM_COL32(236, 234, 224, 255);
+        inline constexpr ImU32 TextSecondary      = IM_COL32(159, 164, 152, 242);
+        inline constexpr ImU32 TextMuted          = IM_COL32(103, 109, 99, 220);
+        inline constexpr ImU32 TextHighlight      = IM_COL32(235, 177, 82, 255);
+        inline constexpr ImU32 TextOnAccent       = IM_COL32(20, 18, 12, 255);
 
         // Key Badges
-        inline constexpr ImU32 KeyCapBg           = IM_COL32(38, 44, 54, 255);    // Tactical keycap
-        inline constexpr ImU32 KeyCapBorder       = IM_COL32(80, 90, 105, 230);   // Keycap top/side bevel
-        inline constexpr ImU32 KeyCapShadow       = IM_COL32(10, 12, 16, 220);    // Keycap bottom shadow
+        inline constexpr ImU32 KeyCapBg           = IM_COL32(35, 40, 37, 255);
+        inline constexpr ImU32 KeyCapBorder       = IM_COL32(228, 224, 208, 78);
+        inline constexpr ImU32 KeyCapShadow       = IM_COL32(8, 10, 9, 235);
     }
 
-    // Category accent bar color for items
+    inline ImVec4 ColorVec4(ImU32 col)
+    {
+        return ImGui::ColorConvertU32ToFloat4(col);
+    }
+
+    // Scoped style helper so ImGui controls inside lobby, world map, trader and settings
+    // inherit the exact Tactical Field Minimalism palette instead of default grey chrome.
+    struct FFieldStyleScope
+    {
+        FFieldStyleScope()
+        {
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 2.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 2.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 2.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 2.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_TabRounding, 2.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarRounding, 2.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, 2.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ColorVec4(Colors::SurfaceBg));
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+            ImGui::PushStyleColor(ImGuiCol_PopupBg, ColorVec4(Colors::SurfacePanel));
+            ImGui::PushStyleColor(ImGuiCol_Border, ColorVec4(Colors::BorderMuted));
+            ImGui::PushStyleColor(ImGuiCol_Separator, ColorVec4(Colors::BorderMuted));
+            ImGui::PushStyleColor(ImGuiCol_Text, ColorVec4(Colors::TextPrimary));
+            ImGui::PushStyleColor(ImGuiCol_TextDisabled, ColorVec4(Colors::TextMuted));
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, ColorVec4(Colors::SurfaceInset));
+            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ColorVec4(Colors::SurfaceCard));
+            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ColorVec4(Colors::SurfaceCardHover));
+            ImGui::PushStyleColor(ImGuiCol_Button, ColorVec4(Colors::SurfaceCard));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ColorVec4(Colors::SurfaceCardHover));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ColorVec4(Colors::AccentAmber));
+            ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32(33, 39, 34, 240));
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ColorVec4(Colors::SurfaceCardHover));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32(217, 155, 56, 70));
+            ImGui::PushStyleColor(ImGuiCol_CheckMark, ColorVec4(Colors::AccentAmber));
+            ImGui::PushStyleColor(ImGuiCol_SliderGrab, ColorVec4(Colors::AccentAmber));
+            ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ColorVec4(Colors::AccentAmberHover));
+            ImGui::PushStyleColor(ImGuiCol_Tab, ColorVec4(Colors::SurfaceInset));
+            ImGui::PushStyleColor(ImGuiCol_TabHovered, ColorVec4(Colors::SurfaceCardHover));
+            ImGui::PushStyleColor(ImGuiCol_TabSelected, ColorVec4(Colors::SurfaceCard));
+            ImGui::PushStyleColor(ImGuiCol_ScrollbarBg, IM_COL32(10, 12, 11, 100));
+            ImGui::PushStyleColor(ImGuiCol_ScrollbarGrab, IM_COL32(228, 224, 208, 45));
+            ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabHovered, IM_COL32(217, 155, 56, 150));
+            ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabActive, ColorVec4(Colors::AccentAmber));
+        }
+
+        ~FFieldStyleScope()
+        {
+            ImGui::PopStyleColor(26);
+            ImGui::PopStyleVar(9);
+        }
+
+        FFieldStyleScope(const FFieldStyleScope&) = delete;
+        FFieldStyleScope& operator=(const FFieldStyleScope&) = delete;
+    };
+
+    // Category accent bar color for items (matches ui_theme.json)
     inline ImU32 ItemKindColor(EItemKind kind)
     {
         switch (kind)
         {
-        case EItemKind::Weapon:     return IM_COL32(249, 115, 22, 240);  // Tactical Orange
-        case EItemKind::Melee:      return IM_COL32(234, 88, 12, 240);   // Burnt Orange
-        case EItemKind::Ammo:       return IM_COL32(234, 179, 8, 240);   // Brass Yellow
-        case EItemKind::Attachment: return IM_COL32(56, 189, 248, 240);
-        case EItemKind::Clothing:   return IM_COL32(168, 85, 247, 240);  // Tactical Purple/Blue
-        case EItemKind::Consumable: return IM_COL32(34, 197, 94, 240);   // Emerald Green
+        case EItemKind::Weapon:     return Colors::AccentOrange;
+        case EItemKind::Melee:      return IM_COL32(196, 98, 42, 245);
+        case EItemKind::Ammo:       return Colors::AccentBrass;
+        case EItemKind::Attachment: return Colors::AccentCyan;
+        case EItemKind::Clothing:   return Colors::AccentViolet;
+        case EItemKind::Consumable: return Colors::AccentEmerald;
         case EItemKind::Misc:
-        default:                    return IM_COL32(148, 163, 184, 220); // Tactical Slate
+        default:                    return IM_COL32(143, 150, 138, 225);
         }
     }
 

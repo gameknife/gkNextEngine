@@ -1,4 +1,6 @@
 #include "Engine/Common/CoreMinimal.hpp"
+#include "Application/Game/NextDayz/UI/HUDTheme.hpp"
+#include "Application/Game/NextDayz/UI/HUDWidgets.hpp"
 #include "Application/Game/NextDayz/UI/Localization.hpp"
 #include "NextDayzGameInstance.hpp"
 #include "Application/Game/NextDayz/World/Economy.hpp"
@@ -597,6 +599,21 @@ void NextDayzGameInstance::ReturnToSafehouse(ESafehouseReturn reason)
             ? "Debug return. Carried gear stored; extraction count unchanged."
             : "Extraction successful. Everything you carried is now in your safehouse.";
     }
+    if (!GOption->AgentValidation && reason != ESafehouseReturn::Debug)
+    {
+        const auto* map = NextDayz::FindExpeditionMap(expeditionMaps_, campaignMap_);
+        debrief_ = {};
+        debrief_.open = true;
+        debrief_.extracted = !died;
+        debrief_.mapName = map ? std::string(NextDayz::L10n::Tr(map->name)) : ActiveMapId();
+        debrief_.deathCause = record.deathCause;
+        debrief_.survivalSeconds = record.seconds;
+        debrief_.kills = world_.zombies.KillCount();
+        debrief_.extractedValue = record.extractedValue;
+        debrief_.contractGold = contractReport.gold;
+        debrief_.contractReputation = contractReport.reputation;
+        debrief_.contractsCompleted = static_cast<int>(contractReport.completed.size());
+    }
     campaign_.inField = false;
     NextDayz::ExpireContracts(campaign_, economy_, contractReport);
     NextDayz::FinishSortie(campaign_, economy_, std::move(record));
@@ -765,12 +782,17 @@ bool NextDayzGameInstance::DrawSafehouse()
         ImGui::End();
         return true;
     }
-    if (safehouseTab_ < 0) return true;
+    if (safehouseTab_ < 0)
+    {
+        DrawDebriefOverlay();
+        return true;
+    }
+    NextDayz::UITheme::FFieldStyleScope fieldStyle;
     BeginCabinPanel(safehouseTab_ == 0 ? "WORLD / OPERATIONS" : safehouseTab_ == 2 ? "TRADER / SERVICES" : "STORAGE / LOADOUT");
     if (campaign_.inField)
     {
         ImGui::TextWrapped("%s", NextDayz::L10n::Tr("Your expedition is saved. Continue when ready."));
-        if (ImGui::Button(NextDayz::L10n::Label("CONTINUE EXPEDITION"))) Deploy();
+        if (NextDayz::UIWidgets::PrimaryButton(NextDayz::L10n::Label("CONTINUE EXPEDITION"), ImVec2(240.0f, 42.0f))) Deploy();
         ImGui::End();
         return true;
     }
@@ -786,88 +808,142 @@ bool NextDayzGameInstance::DrawSafehouse()
         ImGui::End();
         return true;
     }
+    using namespace NextDayz::UITheme;
+    using namespace NextDayz::UIWidgets;
     std::vector<std::function<void()>> requests;
-    ImGui::Spacing();
     const auto storeResult = [this](NextDayz::ETradeResult result)
     { if (result != NextDayz::ETradeResult::Ok) campaignMessage_ = NextDayz::TradeResultMessage(result); };
+
+    // Top workbench summary bar: warehouse capacity bar + upgrade + bulk actions
     {
         const uint32_t capacity = NextDayz::WarehouseCapacity(campaign_, economy_);
         const bool over = NextDayz::WarehouseOver(campaign_, economy_);
         const auto used = NextDayz::L10n::Format("WAREHOUSE  {} / {} stacks", campaign_.storage.size(), capacity);
-        if (over) ImGui::TextColored(ImVec4(0.92f,0.52f,0.40f,1), "%s", used.c_str());
-        else ImGui::TextUnformatted(used.c_str());
+        ImGui::TextColored(ColorVec4(over ? Colors::AccentRose : Colors::TextPrimary), "%s", used.c_str());
+        ImGui::SameLine(0.0f, 16.0f);
+        const ImVec2 barPos = ImGui::GetCursorScreenPos();
+        const float frac = capacity > 0 ? std::clamp(static_cast<float>(campaign_.storage.size()) / static_cast<float>(capacity), 0.0f, 1.0f) : 0.0f;
+        DrawTacticalBar(ImGui::GetWindowDrawList(), ImVec2(barPos.x, barPos.y + 5.0f), ImVec2(barPos.x + 150.0f, barPos.y + 13.0f),
+                        frac, over ? Colors::AccentRose : Colors::AccentEmerald);
+        ImGui::Dummy(ImVec2(156.0f, 18.0f));
         if (const auto* step = NextDayz::NextWarehouseStep(campaign_, economy_))
         {
             ImGui::SameLine();
             ImGui::BeginDisabled(campaign_.gold < step->price);
-            if (ImGui::SmallButton(NextDayz::L10n::Format("Expand to {} stacks ({} gold)", step->capacity, step->price).c_str()))
+            if (GhostButton(NextDayz::L10n::Format("Expand to {} stacks ({} gold)", step->capacity, step->price).c_str(), ImVec2(0.0f, 28.0f)))
                 requests.emplace_back([this, storeResult]() { storeResult(NextDayz::UpgradeWarehouse(campaign_, economy_)); });
             ImGui::EndDisabled();
         }
+        ImGui::SameLine(std::max(540.0f, ImGui::GetContentRegionAvail().x - 360.0f));
+        if (GhostButton(NextDayz::L10n::Label("STORE ALL CARRIED GEAR"), ImVec2(170.0f, 32.0f)))
+            requests.emplace_back([this, storeResult]()
+            { storeResult(NextDayz::StoreCarried(campaign_, economy_, inventory_, 0)); weapons_.ResetRuntime(); });
+        ImGui::SameLine();
+        if (PrimaryButton(inventory_.Instances().empty() ? NextDayz::L10n::Tr("DEPLOY EMPTY-HANDED") : NextDayz::L10n::Tr("DEPLOY WITH LOADOUT"), ImVec2(180.0f, 32.0f)))
+            requests.emplace_back([this]() { Deploy(); });
         if (over)
-            ImGui::TextColored(ImVec4(0.92f,0.52f,0.40f,1), "%s",
+            ImGui::TextColored(ColorVec4(Colors::AccentRose), "%s",
                 NextDayz::L10n::Tr("Over capacity: you cannot deploy, buy or store until you sell, hand in or carry items."));
     }
-    if (ImGui::Button(NextDayz::L10n::Label("STORE ALL CARRIED GEAR"))) requests.emplace_back([this, storeResult]()
-    { storeResult(NextDayz::StoreCarried(campaign_, economy_, inventory_, 0)); weapons_.ResetRuntime(); });
-    ImGui::SameLine();
-    if (ImGui::Button(inventory_.Instances().empty() ? NextDayz::L10n::Tr("DEPLOY EMPTY-HANDED") : NextDayz::L10n::Tr("DEPLOY WITH LOADOUT")))
-        requests.emplace_back([this]() { Deploy(); });
-    ImGui::Separator();
-    if (ImGui::BeginTable("storage_loadout", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable))
+    ImGui::Spacing();
+    // Category filters
     {
+        const char* filterLabels[] = {"All", "Weapons", "Ammo", "Gear", "Supplies"};
+        for (int f = 0; f < 5; ++f)
+        {
+            if (f) ImGui::SameLine(0.0f, 6.0f);
+            if (SegmentedButton(NextDayz::L10n::Label(filterLabels[f]), stashCategoryFilter_ == f, ImVec2(82.0f, 26.0f)))
+                stashCategoryFilter_ = f;
+        }
+    }
+    ImGui::Spacing();
+    if (ImGui::BeginTable("storage_loadout", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp))
+    {
+        ImGui::TableSetupColumn("storage_col", ImGuiTableColumnFlags_WidthStretch, 0.58f);
+        ImGui::TableSetupColumn("loadout_col", ImGuiTableColumnFlags_WidthStretch, 0.42f);
         ImGui::TableNextColumn();
-        ImGui::Text(NextDayz::L10n::Tr("STORAGE (%zu stacks)"), campaign_.storage.size());
-        ImGui::BeginChild("storage", ImVec2(0, -12));
+        DrawSectionHeader(NextDayz::L10n::Tr("Safehouse warehouse"),
+                          fmt::format("{}", campaign_.storage.size()).c_str(), Colors::AccentAmber);
+        ImGui::BeginChild("storage", ImVec2(0, -8));
+        auto matchesFilter = [this](const NextDayz::FItemDef* def)
+        {
+            if (stashCategoryFilter_ == 0 || !def) return true;
+            if (stashCategoryFilter_ == 1) return def->kind == NextDayz::EItemKind::Weapon || def->kind == NextDayz::EItemKind::Melee || def->kind == NextDayz::EItemKind::Attachment;
+            if (stashCategoryFilter_ == 2) return def->kind == NextDayz::EItemKind::Ammo;
+            if (stashCategoryFilter_ == 3) return def->kind == NextDayz::EItemKind::Clothing;
+            return def->kind == NextDayz::EItemKind::Consumable || def->kind == NextDayz::EItemKind::Misc;
+        };
         for (const auto& item : campaign_.storage)
         {
             const auto* def = NextDayz::FindItemDef(item.defId);
+            if (!matchesFilter(def)) continue;
             ImGui::PushID(static_cast<int>(item.instanceId));
-            ImGui::Text("%s x%d", def ? std::string(NextDayz::L10n::Tr(def->displayName)).c_str() : item.defId.c_str(), item.count);
-            if (item.loadedAmmo) { ImGui::SameLine(); ImGui::TextDisabled(NextDayz::L10n::Tr("(%d loaded)"), item.loadedAmmo); }
+            const ImVec2 p = ImGui::GetCursorScreenPos();
+            const float cardW = ImGui::GetContentRegionAvail().x;
+            const float cardH = 68.0f;
+            DrawFieldCard(ImGui::GetWindowDrawList(), p, ImVec2(p.x + cardW, p.y + cardH),
+                          def ? ItemKindColor(def->kind) : Colors::BorderTactical);
+            ImGui::SetCursorScreenPos(ImVec2(p.x + 12.0f, p.y + 8.0f));
+            ImGui::Text("%s  x%d", def ? std::string(NextDayz::L10n::Tr(def->displayName)).c_str() : item.defId.c_str(), item.count);
+            if (item.loadedAmmo) { ImGui::SameLine(); ImGui::TextColored(ColorVec4(Colors::AccentCyan), NextDayz::L10n::Tr("(%d loaded)"), item.loadedAmmo); }
+            ImGui::SetCursorScreenPos(ImVec2(p.x + 12.0f, p.y + 34.0f));
             const auto id = item.instanceId;
-            if (ImGui::SmallButton(NextDayz::L10n::Label("Take 1"))) requests.emplace_back([this,id]()
+            if (GhostButton(NextDayz::L10n::Label("Take 1"), ImVec2(0.0f, 26.0f))) requests.emplace_back([this,id]()
             { if (!campaign_.Take(inventory_,id,1,false)) campaignMessage_ = "Not enough loadout space. Wear a larger pack first."; });
-            ImGui::SameLine();
+            ImGui::SameLine(0.0f, 6.0f);
             if (def && def->kind == NextDayz::EItemKind::Clothing)
             {
-                if (ImGui::SmallButton(NextDayz::L10n::Label("Wear"))) requests.emplace_back([this,id]()
+                if (GhostButton(NextDayz::L10n::Label("Wear"), ImVec2(0.0f, 26.0f))) requests.emplace_back([this,id]()
                 { if (!campaign_.Take(inventory_,id,1,true)) campaignMessage_ = "Cannot wear it; make room for the replaced clothing."; });
-                ImGui::SameLine();
+                ImGui::SameLine(0.0f, 6.0f);
             }
             const int count = item.count;
             if (count > 1)
             {
-                if (ImGui::SmallButton(NextDayz::L10n::Label("Take stack"))) requests.emplace_back([this,id,count]()
+                if (GhostButton(NextDayz::L10n::Label("Take stack"), ImVec2(0.0f, 26.0f))) requests.emplace_back([this,id,count]()
                 { if (!campaign_.Take(inventory_,id,count,false)) campaignMessage_ = "Not enough loadout space."; });
-                ImGui::SameLine();
+                ImGui::SameLine(0.0f, 6.0f);
             }
             const uint64_t price = NextDayz::UnitSellValue(item, economy_);
             ImGui::BeginDisabled(price == 0);
-            if (ImGui::SmallButton(NextDayz::L10n::Format("Sell 1 (+{} gold)",price).c_str())) requests.emplace_back([this,id]()
+            if (GhostButton(NextDayz::L10n::Format("Sell 1 (+{} gold)",price).c_str(), ImVec2(0.0f, 26.0f))) requests.emplace_back([this,id]()
             { campaign_.Sell(id,1,economy_); });
             ImGui::EndDisabled();
-            if (count > 1)
+            if (count > 1 && price > 0)
             {
-                ImGui::SameLine();
-                if (price > 0 && ImGui::SmallButton(NextDayz::L10n::Label("Sell stack"))) requests.emplace_back([this,id,count]()
+                ImGui::SameLine(0.0f, 6.0f);
+                if (GhostButton(NextDayz::L10n::Label("Sell stack"), ImVec2(0.0f, 26.0f))) requests.emplace_back([this,id,count]()
                 { campaign_.Sell(id,count,economy_); });
             }
-            ImGui::Separator();
+            ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + cardH + 6.0f));
+            ImGui::Dummy(ImVec2(0.0f, 0.0f));
             ImGui::PopID();
         }
         ImGui::EndChild();
         ImGui::TableNextColumn();
-        ImGui::Text(NextDayz::L10n::Tr("LOADOUT   Space: %d / %d"), inventory_.UsedCapacity(), inventory_.TotalCapacity());
-        ImGui::BeginChild("loadout", ImVec2(0,-12));
+        DrawSectionHeader(NextDayz::L10n::Tr("Carried loadout"),
+                          fmt::format("{} / {}", inventory_.UsedCapacity(), inventory_.TotalCapacity()).c_str(), Colors::AccentEmerald);
+        ImGui::BeginChild("loadout", ImVec2(0,-8));
+        if (inventory_.Instances().empty())
+        {
+            ImGui::Spacing();
+            ImGui::TextColored(ColorVec4(Colors::TextMuted), "%s", NextDayz::L10n::Tr("Nothing selected. Pick items from storage or deploy empty-handed."));
+        }
         for (const auto& item : inventory_.Instances())
         {
             const auto* def = NextDayz::FindItemDef(item.defId);
             ImGui::PushID(static_cast<int>(item.instanceId));
-            ImGui::Text("%s x%d%s", def ? std::string(NextDayz::L10n::Tr(def->displayName)).c_str() : item.defId.c_str(),
+            const ImVec2 p = ImGui::GetCursorScreenPos();
+            const float cardW = ImGui::GetContentRegionAvail().x;
+            const float cardH = 66.0f;
+            DrawFieldCard(ImGui::GetWindowDrawList(), p, ImVec2(p.x + cardW, p.y + cardH),
+                          def ? ItemKindColor(def->kind) : Colors::BorderTactical);
+            ImGui::SetCursorScreenPos(ImVec2(p.x + 12.0f, p.y + 8.0f));
+            ImGui::Text("%s  x%d%s", def ? std::string(NextDayz::L10n::Tr(def->displayName)).c_str() : item.defId.c_str(),
                 item.count, inventory_.IsWorn(item.instanceId) ? NextDayz::L10n::Tr(" [worn]") : "");
+            ImGui::SetCursorScreenPos(ImVec2(p.x + 12.0f, p.y + 33.0f));
             const auto id = item.instanceId;
-            if (ImGui::SmallButton(NextDayz::L10n::Label("Store"))) requests.emplace_back([this,id]()
+            if (GhostButton(NextDayz::L10n::Label("Store"), ImVec2(0.0f, 25.0f))) requests.emplace_back([this,id]()
             {
                 const auto result = NextDayz::StoreCarried(campaign_, economy_, inventory_, id);
                 if (result == NextDayz::ETradeResult::StorageFull) campaignMessage_ = NextDayz::TradeResultMessage(result);
@@ -875,22 +951,23 @@ bool NextDayzGameInstance::DrawSafehouse()
             });
             if (def && def->kind == NextDayz::EItemKind::Clothing && !inventory_.IsWorn(id))
             {
-                ImGui::SameLine();
-                if (ImGui::SmallButton(NextDayz::L10n::Label("Wear"))) requests.emplace_back([this,id]() { WearItem(id); });
+                ImGui::SameLine(0.0f, 6.0f);
+                if (GhostButton(NextDayz::L10n::Label("Wear"), ImVec2(0.0f, 25.0f))) requests.emplace_back([this,id]() { WearItem(id); });
             }
             if (def && NextDayz::IsWieldable(*def))
             {
-                ImGui::SameLine();
-                if (ImGui::SmallButton(NextDayz::L10n::Label("Hold (1)"))) requests.emplace_back([this,id]() { EquipWeaponInstance(id,0); });
-                ImGui::SameLine();
-                if (ImGui::SmallButton(NextDayz::L10n::Label("Hold (2)"))) requests.emplace_back([this,id]() { EquipWeaponInstance(id,1); });
+                ImGui::SameLine(0.0f, 6.0f);
+                if (GhostButton(NextDayz::L10n::Label("Hold (1)"), ImVec2(0.0f, 25.0f))) requests.emplace_back([this,id]() { EquipWeaponInstance(id,0); });
+                ImGui::SameLine(0.0f, 6.0f);
+                if (GhostButton(NextDayz::L10n::Label("Hold (2)"), ImVec2(0.0f, 25.0f))) requests.emplace_back([this,id]() { EquipWeaponInstance(id,1); });
                 if (NextDayz::WeaponSystem::CanEquipInSlot(NextDayz::kSidearmSlot, def->weaponDefId))
                 {
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton(NextDayz::L10n::Label("Hold (3)"))) requests.emplace_back([this,id]() { EquipWeaponInstance(id,2); });
+                    ImGui::SameLine(0.0f, 6.0f);
+                    if (GhostButton(NextDayz::L10n::Label("Hold (3)"), ImVec2(0.0f, 25.0f))) requests.emplace_back([this,id]() { EquipWeaponInstance(id,2); });
                 }
             }
-            ImGui::Separator();
+            ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + cardH + 6.0f));
+            ImGui::Dummy(ImVec2(0.0f, 0.0f));
             ImGui::PopID();
         }
         ImGui::EndChild();

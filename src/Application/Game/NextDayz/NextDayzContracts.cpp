@@ -1,4 +1,6 @@
 #include "Engine/Common/CoreMinimal.hpp"
+#include "Application/Game/NextDayz/UI/HUDTheme.hpp"
+#include "Application/Game/NextDayz/UI/HUDWidgets.hpp"
 #include "Application/Game/NextDayz/UI/Localization.hpp"
 #include "Application/Game/NextDayz/World/Contracts.hpp"
 #include "Application/Game/NextDayz/World/Economy.hpp"
@@ -223,6 +225,8 @@ std::vector<std::pair<glm::vec3, std::string>> NextDayzGameInstance::ContractMar
 void NextDayzGameInstance::DrawContracts()
 {
     using namespace NextDayz::L10n;
+    using namespace NextDayz::UITheme;
+    using namespace NextDayz::UIWidgets;
     std::vector<std::function<void()>> requests;
     const uint32_t tierBefore = NextDayz::ReputationTier(campaign_.reputation, economy_);
     const auto runReport = [this, tierBefore](const NextDayz::FContractReport& report, NextDayz::EContractResult result)
@@ -236,15 +240,24 @@ void NextDayzGameInstance::DrawContracts()
     const auto drawCard = [&](const NextDayz::FContract& contract)
     {
         const auto* entry = NextDayz::FindContractTemplate(economy_, contract.templateId);
+        const bool deliverable = contract.type == NextDayz::EContractType::Deliver && NextDayz::CanHandIn(campaign_, contract);
+        const ImU32 accent = (contract.state == NextDayz::EContractState::Accepted || deliverable)
+            ? Colors::AccentEmerald : Colors::AccentAmber;
         ImGui::PushID(static_cast<int>(contract.id));
-        ImGui::TextDisabled("%s  /  %s", Tr(IssuerName(entry ? entry->issuer : "")), Format("Tier {}", contract.tier).c_str());
-        ImGui::TextColored(contractAmber, "%s", ContractTitle(contract).c_str());
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 2.0f);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ColorVec4(Colors::SurfaceCard));
+        ImGui::BeginChild("##contract_card", ImVec2(0.0f, 0.0f), ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_Borders);
+        const ImVec2 pMin = ImGui::GetWindowPos();
+        ImGui::GetWindowDrawList()->AddRectFilled(pMin, ImVec2(pMin.x + 3.0f, pMin.y + ImGui::GetWindowSize().y), accent);
+        ImGui::Indent(6.0f);
+        ImGui::TextColored(ColorVec4(Colors::TextMuted), "%s  ·  %s", Tr(IssuerName(entry ? entry->issuer : "")), Format("Tier {}", contract.tier).c_str());
+        ImGui::TextColored(ColorVec4(Colors::TextPrimary), "%s", ContractTitle(contract).c_str());
         if (contract.type == NextDayz::EContractType::Deliver)
         {
             for (const auto& item : contract.items)
             {
                 const int stored = NextDayz::StoredCount(campaign_, item.item);
-                ImGui::TextColored(stored >= item.count ? contractGreen : contractRed, "%s",
+                ImGui::TextColored(ColorVec4(stored >= item.count ? Colors::AccentEmerald : Colors::AccentRose), "%s",
                     Format("Deliver {} x{}  ({} in storage)", ItemName(item.item), item.count, stored).c_str());
             }
         }
@@ -264,20 +277,21 @@ void NextDayzGameInstance::DrawContracts()
         }
         const uint32_t gain = contract.tier >= 1 && contract.tier <= economy_.reputationGain.size()
             ? economy_.reputationGain[contract.tier - 1] : 0;
-        ImGui::TextUnformatted(Format("Reward: {} gold, +{} reputation", contract.reward, gain).c_str());
+        ImGui::TextColored(ColorVec4(Colors::TextHighlight), "%s", Format("Reward: {} gold, +{} reputation", contract.reward, gain).c_str());
         if (!contract.itemReward.empty())
         {
             ImGui::SameLine();
-            ImGui::TextUnformatted(Format("+ {}", ItemName(contract.itemReward)).c_str());
+            ImGui::TextColored(ColorVec4(Colors::AccentEmerald), "%s", Format("+ {}", ItemName(contract.itemReward)).c_str());
         }
         const int left = NextDayz::SortiesLeft(campaign_, economy_, contract);
         ImGui::TextDisabled("%s", contract.state == NextDayz::EContractState::Accepted
             ? Format("Expires after {} more expeditions", left).c_str()
             : Format("Leaves the board after {} more expeditions", left).c_str());
+        ImGui::Spacing();
         const uint64_t id = contract.id;
         if (contract.state == NextDayz::EContractState::Accepted)
         {
-            if (ImGui::SmallButton(Label("Abandon"))) requests.emplace_back([this, id, runReport]()
+            if (GhostButton(Label("Abandon"), ImVec2(0.0f, 26.0f), false, true)) requests.emplace_back([this, id, runReport]()
             {
                 NextDayz::FContractReport report;
                 runReport(report, NextDayz::AbandonContract(campaign_, economy_, id, report));
@@ -287,50 +301,50 @@ void NextDayzGameInstance::DrawContracts()
         }
         else if (contract.type == NextDayz::EContractType::Deliver)
         {
-            ImGui::BeginDisabled(!NextDayz::CanHandIn(campaign_, contract));
-            if (ImGui::SmallButton(Label("Hand in"))) requests.emplace_back([this, id, runReport]()
+            if (PrimaryButton(Label("Hand in"), ImVec2(110.0f, 28.0f), deliverable)) requests.emplace_back([this, id, runReport]()
             {
                 NextDayz::FContractReport report;
                 runReport(report, NextDayz::HandInContract(campaign_, economy_, id, report));
             });
-            ImGui::EndDisabled();
         }
         else
         {
             const bool full = campaign_.contracts.size() >= economy_.board.maxActive;
-            ImGui::BeginDisabled(full);
-            if (ImGui::SmallButton(Label("Accept"))) requests.emplace_back([this, id]()
+            if (GhostButton(Label("Accept"), ImVec2(110.0f, 28.0f)) && !full) requests.emplace_back([this, id]()
             {
                 const auto result = NextDayz::AcceptContract(campaign_, economy_, id);
-                // Old copies of the parcel from an earlier contract must not count for this one.
                 if (const auto* accepted = NextDayz::FindContract(campaign_, id); accepted && !accepted->parcel.empty())
                     PurgeParcels({accepted->parcel});
                 campaignMessage_ = result == NextDayz::EContractResult::Ok ? FText("Contract accepted. Deploy to its region.")
                                                                            : FText(NextDayz::ContractResultMessage(result));
             });
-            ImGui::EndDisabled();
             if (full)
             {
                 ImGui::SameLine();
                 ImGui::TextDisabled("%s", Format("At most {} field contracts at once", economy_.board.maxActive).c_str());
             }
         }
-        ImGui::Separator();
+        ImGui::Unindent(6.0f);
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+        ImGui::PopStyleVar();
+        ImGui::Spacing();
         ImGui::PopID();
     };
 
-    if (ImGui::BeginTable("contracts_layout", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable))
+    if (ImGui::BeginTable("contracts_layout", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp))
     {
+        ImGui::TableSetupColumn("board_col", ImGuiTableColumnFlags_WidthStretch, 0.56f);
+        ImGui::TableSetupColumn("active_col", ImGuiTableColumnFlags_WidthStretch, 0.44f);
         ImGui::TableNextColumn();
-        ImGui::TextUnformatted(Format("CONTRACT BOARD  ({} / {})", campaign_.board.size(),
-                                      NextDayz::BoardSlots(campaign_, economy_)).c_str());
+        DrawSectionHeader(Tr("Contract board"), fmt::format("{} / {}", campaign_.board.size(), NextDayz::BoardSlots(campaign_, economy_)).c_str(), Colors::AccentAmber);
         ImGui::TextDisabled("%s", Tr("Deliveries are handed in from storage. Field contracts pay when you extract."));
         ImGui::BeginChild("board", ImVec2(0, -4));
         if (campaign_.board.empty()) ImGui::TextDisabled("%s", Tr("No offers. New contracts arrive after your next expedition."));
         for (const auto& contract : campaign_.board) drawCard(contract);
         ImGui::EndChild();
         ImGui::TableNextColumn();
-        ImGui::TextUnformatted(Format("ACTIVE CONTRACTS  ({} / {})", campaign_.contracts.size(), economy_.board.maxActive).c_str());
+        DrawSectionHeader(Tr("Active contracts"), fmt::format("{} / {}", campaign_.contracts.size(), economy_.board.maxActive).c_str(), Colors::AccentEmerald);
         ImGui::TextDisabled("%s", Tr("Dying does not fail a contract. It stays open until it expires."));
         ImGui::BeginChild("active", ImVec2(0, -4));
         if (campaign_.contracts.empty()) ImGui::TextDisabled("%s", Tr("Accept a recon or fetch contract from the board."));

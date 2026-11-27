@@ -5,9 +5,11 @@ import { installCollision } from "../shared/collision.mjs";
 import { Actors, loadActors, type ActorAssets } from "./actors";
 import { FieldAudio } from "./audio";
 import { compass, drawFieldMap } from "./fieldMap";
+import { LobbyScene } from "./lobbyScene";
 import { Pack } from "./pack";
 import { renderOptions } from "./optionsPanel";
 import { keyName, matches, saveSettings, settings, tr, useTranslations, type Binding } from "./settings";
+import { WorldAtlas, mapLocationMeta } from "./worldAtlas";
 import type { Clock, Economy, EconomyContract, Frame, Loot, Manifest, Profile, XYZ } from "./types";
 
 function element<T extends HTMLElement>(id: string): T {
@@ -32,6 +34,7 @@ const progress = element<HTMLProgressElement>("progress");
 const lobby = element("lobby");
 const field = element("field");
 const menu = element("menu");
+const reviewBar = element("review-bar");
 const notice = element("notice");
 const controls = element("controls");
 const fieldHint = element("field-hint");
@@ -43,23 +46,32 @@ const range = element("range");
 const pen = element("pen");
 const mapPanel = element("map-panel");
 const mapCanvas = element<HTMLCanvasElement>("map-canvas");
+const atlasCanvas = element<HTMLCanvasElement>("atlas-canvas");
+const diagnosticsBar = element("diagnostics-bar");
 const settingsDialog = element<HTMLDialogElement>("settings-dialog");
 const deathPanel = element("death-panel");
 const hitMarker = element("hit-marker");
 const reviewEnabled = import.meta.env.DEV && import.meta.env.VITE_ND_REVIEW === "1";
 const trainingScad = import.meta.env.DEV && import.meta.env.VITE_ND_SCAD_TRAINING === "1";
 const deployButton = element<HTMLButtonElement>("deploy");
+const opsDeployButton = element<HTMLButtonElement>("ops-deploy");
+const loadoutDeployButton = element<HTMLButtonElement>("loadout-deploy");
+
 let client: Client;
 let frame: Frame;
 let assets: Manifest;
 let actorAssets: ActorAssets;
+let lobbyScene: LobbyScene | undefined;
+let worldAtlas: WorldAtlas | undefined;
 let loaded: Level | undefined;
-// Why the last in-browser SCAD evaluation gave way to the baked map (review only).
 let scadFallback: string | undefined;
 let world: World | undefined;
 let app: unknown;
 let phase = "";
 let profile: Profile;
+let activeChannel: "cabin" | "ops" | "loadout" | "trade" = "cabin";
+let activeTradeTab: "contracts" | "trader" = "contracts";
+let stashFilter = "all";
 let refreshAt = 0;
 let profileRefreshAt = 0;
 let latestFrame = 0;
@@ -71,11 +83,38 @@ let inventoryPanel: Pack;
 let audio: FieldAudio;
 let mapImage: HTMLImageElement | undefined;
 let groundAt = 0;
+
 const hotkey = (binding: Binding) => keyName(settings.keys[binding]);
 const itemName = (source: string) => tr(source);
-// Map names come from the map registry, which carries the Chinese name beside the English one.
 const mapTitle = (map: { name: string; localName?: string }) => settings.language === "en" ? map.name : map.localName || map.name;
 const bring: HTMLInputElement[] = [];
+
+function classifyItem(id: string): "weapon" | "ammo" | "gear" | "supply" {
+    if (id.startsWith("ammo_")) return "ammo";
+    if (/(^|_)(ak|svd|mosin|shotgun|makarov|knife|crowbar|axe|bizon|stechkin|svt|toz|flare|optic|scope|grip|mag|suppressor|sight|flashlight)/.test(id))
+        return "weapon";
+    if (/(helmet|hat|cap|beanie|jacket|hoodie|vest|armor|rig|pants|jeans|trousers|pack|bag|rucksack|anorak|shell|telnyashka)/.test(id))
+        return "gear";
+    return "supply";
+}
+
+function setChannel(next: "cabin" | "ops" | "loadout" | "trade") {
+    activeChannel = next;
+    profilePanel.dataset.tab = next;
+    for (const tab of profilePanel.querySelectorAll<HTMLButtonElement>("[data-nav]"))
+        tab.classList.toggle("active", tab.dataset.nav === next);
+    for (const panel of profilePanel.querySelectorAll<HTMLElement>("[data-panel]"))
+        panel.hidden = panel.dataset.panel !== next;
+    if (next === "ops") worldAtlas?.draw();
+}
+
+function setTradeTab(next: "contracts" | "trader") {
+    activeTradeTab = next;
+    for (const btn of profilePanel.querySelectorAll<HTMLButtonElement>("[data-trade-tab]"))
+        btn.classList.toggle("active", btn.dataset.tradeTab === next);
+    for (const view of profilePanel.querySelectorAll<HTMLElement>("[data-trade-view]"))
+        view.hidden = view.dataset.tradeView !== next;
+}
 
 function state(message: string) {
     const translated = itemName(message);
@@ -85,28 +124,118 @@ function state(message: string) {
     local.textContent = translated;
 }
 
-function updateBring() {
+function syncCarryPreview() {
+    const preview = element("carry-preview");
+    preview.replaceChildren();
+    const carriedIds: string[] = [];
     let total = 0;
-    for (const input of bring) {
+
+    if (profile?.character) {
+        for (const item of profile.character.storage ?? []) carriedIds.push(item.id);
+    }
+    for (let i = 0; i < bring.length; ++i) {
+        const input = bring[i];
         if (input.disabled) continue;
         const count = Math.max(0, Math.min(Number(input.max), Math.floor(Number(input.value) || 0)));
         input.value = String(count);
         total += count;
+        if (count > 0 && profile?.storage[i]) {
+            const item = profile.storage[i];
+            carriedIds.push(item.id);
+            const row = document.createElement("div");
+            row.className = "carry-row";
+            const name = document.createElement("span");
+            name.textContent = itemName(item.name);
+            const qty = document.createElement("b");
+            qty.textContent = `×${count}`;
+            row.append(name, qty);
+            preview.append(row);
+        }
     }
+    if (!preview.childElementCount) {
+        const empty = document.createElement("p");
+        empty.className = "muted";
+        empty.textContent = tr("Nothing selected. Pick items from storage or deploy empty-handed.");
+        preview.append(empty);
+    }
+    const label = total ? tr("Bringing {} items", total) : tr("Empty-handed sortie");
     element("bring-count").textContent = total ? tr("Bringing {} items", total) : "";
+    element("bring-summary").textContent = label;
+    element("carry-pane-count").textContent = label;
+    lobbyScene?.setLoadout(carriedIds);
 }
 
-// Trading and contracts are the Master's calls; the core refreshes the profile after each.
+function updateBring() {
+    syncCarryPreview();
+}
+
+function syncSelectedMapDossier() {
+    if (!profile) return;
+    const chosen = maps.querySelector<HTMLInputElement>('input[name="map"]:checked')?.value ?? "";
+    const selectedMap = profile.maps.find(m => m.id === chosen) ?? profile.maps[0];
+    const opsList = element("ops-map-list");
+    for (const card of opsList.querySelectorAll<HTMLButtonElement>("[data-map-id]"))
+        card.classList.toggle("active", card.dataset.mapId === chosen);
+
+    if (selectedMap) {
+        const entry = assets.maps[selectedMap.id];
+        const meta = mapLocationMeta(selectedMap.id);
+        element("dossier-region").textContent = meta ? meta.region : selectedMap.training ? tr("Training") : tr("World Atlas");
+        element("dossier-name").textContent = entry ? mapTitle(entry.map) : selectedMap.name;
+        element("dossier-meta").textContent = meta
+            ? `${meta.lat.toFixed(3)}°, ${meta.lon.toFixed(3)}° · 1000 × 1000 m`
+            : tr("Training");
+        element("dossier-desc").textContent = entry
+            ? (selectedMap.training ? tr("Training is practice only. Your survivor is back in the safehouse with the gear they carried.")
+                : tr("Search. Survive. Bring it home."))
+            : tr("Web assets pending");
+    }
+
+    const atlasLocs = profile.maps.map(m => {
+        const entry = assets.maps[m.id];
+        const meta = mapLocationMeta(m.id);
+        return {
+            id: m.id,
+            name: entry ? mapTitle(entry.map) : m.name,
+            region: meta?.region ?? "",
+            lat: meta?.lat ?? 0,
+            lon: meta?.lon ?? 0,
+            training: m.training || !meta,
+            available: Boolean(entry && entry.map.scene === m.scene && (!profile.character || profile.character.map === m.id)),
+        };
+    });
+    worldAtlas?.update(atlasLocs, chosen);
+}
+
+function selectMapById(mapId: string) {
+    const radio = maps.querySelector<HTMLInputElement>(`input[name="map"][value="${CSS.escape(mapId)}"]`);
+    if (radio && !radio.disabled) {
+        radio.checked = true;
+        syncSelectedMapDossier();
+    }
+}
+
+function triggerDeploy() {
+    const chosen = maps.querySelector<HTMLInputElement>('input[name="map"]:checked');
+    if (!chosen) return;
+    updateBring();
+    command({
+        type: "deploy",
+        map: chosen.value,
+        bring: bring.flatMap((input, index) => !input.disabled && Number(input.value) > 0 ? [{ index, count: Number(input.value) }] : []),
+    });
+}
+
 let economyPending = false;
 function economy(op: string, fields: Record<string, unknown> = {}) {
     economyPending = true;
     command({ type: "economy", op, ...fields });
 }
 
-function button(label: string, disabled: boolean, onClick: () => void) {
+function button(label: string, disabled: boolean, onClick: () => void, primary = false) {
     const node = document.createElement("button");
     node.type = "button";
-    node.className = "quiet";
+    node.className = primary ? "primary-cta" : "quiet";
     node.textContent = label;
     node.disabled = disabled;
     node.addEventListener("click", onClick);
@@ -121,6 +250,18 @@ function issuerName(issuer: string) {
 function showEconomy(data: Economy) {
     const section = element("economy");
     section.hidden = !data.available;
+    const tierChip = element("profile-tier");
+    tierChip.hidden = !data.available;
+    if (data.available) tierChip.textContent = `T${data.tier}`;
+
+    const contractsPill = element("cabin-contracts-pill");
+    contractsPill.hidden = !data.available;
+    if (data.available) {
+        element("cabin-contracts-text").textContent = data.contracts.length
+            ? tr("Active contracts: {}", data.contracts.length)
+            : tr("CONTRACT BOARD  ({} / {})", data.board.length, data.slots);
+    }
+
     if (!data.available) return;
     const inField = Boolean(profile.character);
     const status = element("economy-status");
@@ -132,16 +273,17 @@ function showEconomy(data: Economy) {
             profile.gold < data.nextPrice, () => economy("upgrade")));
     if (data.lastCompleted) {
         const report = document.createElement("small");
-        // `{:+}` is the desktop's signed number; tr fills only `{}`.
         report.textContent = tr("Last report: contracts completed: {} (+{} gold, reputation {:+}).", data.lastCompleted, data.lastGold)
             .replace("{:+}", `${data.lastReputation >= 0 ? "+" : ""}${data.lastReputation}`);
         status.append(report);
     }
+    element("stash-capacity").textContent = tr("WAREHOUSE  {} / {} stacks", data.used, data.capacity);
+
     const card = (contract: EconomyContract, accepted: boolean) => {
         const entry = document.createElement("div");
-        entry.className = "contract";
+        entry.className = "contract" + ((accepted || contract.canHandIn) ? " ready" : "");
         const issuer = document.createElement("small");
-        issuer.textContent = `${issuerName(contract.issuer)} / ${tr("Tier {}", contract.tier)}`;
+        issuer.textContent = `${issuerName(contract.issuer)} · ${tr("Tier {}", contract.tier)}`;
         const title = document.createElement("strong");
         title.textContent = tr(contract.title);
         entry.append(issuer, title);
@@ -163,7 +305,7 @@ function showEconomy(data: Economy) {
         entry.append(reward, left);
         if (accepted) entry.append(button(tr("Abandon"), inField, () => economy("abandon", { contractId: contract.id })));
         else if (contract.type === "deliver")
-            entry.append(button(tr("Hand in"), !contract.canHandIn, () => economy("handin", { contractId: contract.id })));
+            entry.append(button(tr("Hand in"), !contract.canHandIn, () => economy("handin", { contractId: contract.id }), contract.canHandIn));
         else if (!contract.online) {
             const note = document.createElement("small");
             note.textContent = tr("Offline campaign only for now.");
@@ -179,33 +321,71 @@ function showEconomy(data: Economy) {
     element("trader").replaceChildren(...data.trader.map(shelf => {
         const row = document.createElement("div");
         row.className = shelf.locked ? "shelf locked" : "shelf";
-        const label = document.createElement("span");
-        label.textContent = `${itemName(shelf.name)} x${shelf.pack}`;
+        const top = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = `${itemName(shelf.name)} ×${shelf.pack}`;
         const detail = document.createElement("small");
-        detail.textContent = `${shelf.price} · ${tr("Left")} ${shelf.left}`;
-        label.append(detail);
-        row.append(label, shelf.locked ? document.createTextNode(tr("Tier {}", shelf.tier))
+        detail.textContent = shelf.locked ? tr("Tier {}", shelf.tier) : `${tr("Left")} ${shelf.left}`;
+        top.append(title, detail);
+
+        const foot = document.createElement("div");
+        foot.className = "shelf-foot";
+        const price = document.createElement("span");
+        price.className = "shelf-price";
+        price.textContent = String(shelf.price);
+        foot.append(price, shelf.locked ? document.createTextNode("")
             : button(tr("Buy"), shelf.left <= 0 || data.over || profile.gold < shelf.price, () => economy("buy", { item: shelf.item })));
+        row.append(top, foot);
         return row;
+    }));
+}
+
+function renderStashFilters() {
+    const bar = element("stash-filters");
+    const defs: [string, string][] = [
+        ["all", "All"], ["weapon", "Weapons"], ["ammo", "Ammo"], ["gear", "Gear"], ["supply", "Supplies"],
+    ];
+    bar.replaceChildren(...defs.map(([id, label]) => {
+        const pill = document.createElement("button");
+        pill.type = "button";
+        pill.className = "filter-pill" + (stashFilter === id ? " active" : "");
+        pill.textContent = tr(label);
+        pill.addEventListener("click", () => {
+            stashFilter = id;
+            renderStashFilters();
+            for (const row of storage.querySelectorAll<HTMLElement>(".row"))
+                row.hidden = stashFilter !== "all" && row.dataset.kind !== stashFilter;
+        });
+        return pill;
     }));
 }
 
 function showProfile(data: Profile) {
     profile = data;
     element("profile-name").textContent = profile.name;
+    element("profile-gold").textContent = tr("Gold: {}", profile.gold);
     element("profile-activity").textContent = tr("Sorties {} · Extractions {} · Deaths {}", profile.sorties, profile.extractions, profile.deaths);
     storage.replaceChildren();
     bring.length = 0;
+    renderStashFilters();
     const catalog = assets.shared?.files ?? {};
+
     if (!profile.storage.length) {
         const empty = document.createElement("p");
+        empty.className = "muted";
         empty.textContent = tr("Storage is empty");
         storage.append(empty);
     }
-    for (const item of profile.storage) {
+
+    profile.storage.forEach((item, index) => {
+        const kind = classifyItem(item.id);
         const row = document.createElement("div");
         row.className = "row";
+        row.dataset.kind = kind;
+        row.hidden = stashFilter !== "all" && kind !== stashFilter;
+
         const icon = document.createElement("div");
+        icon.className = "icon-box";
         const file = catalog[`icons/${item.id}.webp`];
         if (file) {
             const image = document.createElement("img");
@@ -214,13 +394,29 @@ function showProfile(data: Profile) {
             image.loading = "lazy";
             icon.append(image);
         }
+
         const label = document.createElement("div");
+        label.className = "item-meta";
         const name = document.createElement("span");
         name.textContent = itemName(item.name);
         const count = document.createElement("small");
         count.textContent = tr("Stored {}", item.count);
         label.append(name, count);
         if (item.description) label.title = itemName(item.description);
+
+        const controlsRow = document.createElement("div");
+        controlsRow.className = "row-controls";
+
+        const value = profile.economy.available ? profile.economy.sellValues[index] ?? 0 : 0;
+        if (value) {
+            controlsRow.append(button(tr("Sell 1 (+{} gold)", value), false,
+                () => economy("sell", { index, item: item.id, count: 1 })));
+        } else {
+            controlsRow.append(document.createElement("span"));
+        }
+
+        const stepper = document.createElement("div");
+        stepper.className = "stepper";
         const input = document.createElement("input");
         input.type = "number";
         input.min = "0";
@@ -229,41 +425,76 @@ function showProfile(data: Profile) {
         input.disabled = Boolean(profile.character);
         input.setAttribute("aria-label", tr("Quantity to bring for {}", itemName(item.name)));
         input.addEventListener("change", updateBring);
+
+        const dec = button("-", input.disabled, () => {
+            input.value = String(Math.max(0, (Number(input.value) || 0) - 1));
+            updateBring();
+        });
+        const inc = button("+", input.disabled, () => {
+            input.value = String(Math.min(item.count, (Number(input.value) || 0) + 1));
+            updateBring();
+        });
+        stepper.append(dec, input, inc);
+        controlsRow.append(stepper);
         bring.push(input);
-        row.append(icon, label, input);
-        const value = profile.economy.available ? profile.economy.sellValues[profile.storage.indexOf(item)] ?? 0 : 0;
-        if (value) label.append(button(tr("Sell 1 (+{} gold)", value), false,
-            () => economy("sell", { index: profile.storage.indexOf(item), item: item.id, count: 1 })));
+        row.append(icon, label, controlsRow);
         storage.append(row);
-    }
+    });
+
     maps.replaceChildren();
+    const opsList = element("ops-map-list");
+    opsList.replaceChildren();
     let selected = false;
     for (const map of profile.maps) {
         const entry = assets.maps[map.id];
+        const disabled = !entry || entry.map.scene !== map.scene || (!!profile.character && profile.character.map !== map.id);
+        const isChecked: boolean = !disabled && !selected;
+        selected = selected || isChecked;
+
         const label = document.createElement("label");
         const radio = document.createElement("input");
         radio.type = "radio";
         radio.name = "map";
         radio.value = map.id;
-        radio.disabled = !entry || entry.map.scene !== map.scene || (!!profile.character && profile.character.map !== map.id);
-        radio.checked = !radio.disabled && !selected;
-        selected ||= radio.checked;
+        radio.disabled = disabled;
+        radio.checked = isChecked;
+        radio.addEventListener("change", syncSelectedMapDossier);
         const title = document.createElement("span");
         title.textContent = entry ? mapTitle(entry.map) : map.name;
         const subtitle = document.createElement("small");
-        subtitle.textContent = entry ? `${map.name} · v${entry.map.mapVersion}` : tr("Web assets pending");
+        const meta = mapLocationMeta(map.id);
+        subtitle.textContent = entry ? (meta ? meta.region : tr("Training")) : tr("Web assets pending");
         title.append(subtitle);
         label.append(radio, title);
         maps.append(label);
+
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = "ops-map-card" + (isChecked ? " active" : "");
+        card.dataset.mapId = map.id;
+        card.disabled = disabled;
+        const cTitle = document.createElement("strong");
+        cTitle.textContent = entry ? mapTitle(entry.map) : map.name;
+        const cSub = document.createElement("small");
+        cSub.textContent = entry ? (meta ? meta.region : tr("Training")) : tr("Web assets pending");
+        card.append(cTitle, cSub);
+        card.addEventListener("click", () => selectMapById(map.id));
+        opsList.append(card);
     }
-    deployButton.disabled = !selected || Boolean(profile.playing);
-    deployButton.textContent = profile.character ? tr("Resume expedition") : tr("Deploy");
+
+    const canDeploy = selected && !profile.playing;
+    const deployLabel = profile.character ? tr("Resume expedition") : tr("Deploy");
+    for (const btn of [deployButton, opsDeployButton, loadoutDeployButton]) {
+        btn.disabled = !canDeploy;
+        btn.textContent = deployLabel;
+    }
     element("carry-hint").textContent = profile.playing
         ? tr("The map server is saving your survivor")
         : profile.character ? tr("Resume with your current equipment")
             : tr("Choose what to bring from storage");
     updateBring();
     showEconomy(profile.economy);
+    syncSelectedMapDossier();
 }
 
 async function prepare(scene: string) {
@@ -285,7 +516,6 @@ async function prepare(scene: string) {
                     element("loading-detail").textContent = tr("Generating terrain, materials and collision");
                 });
             } catch (error) {
-                // Evaluating in the browser is a trial (design D2); the baked map is always published.
                 scadFallback = error instanceof Error ? error.message : String(error);
                 console.warn(`SCAD evaluation failed, loading the baked map: ${scadFallback}`);
                 element("loading-detail").textContent = tr("SCAD evaluation failed. Loading the baked map");
@@ -298,7 +528,6 @@ async function prepare(scene: string) {
         });
         (world ??= new World(element("viewport"), actorAssets, locked => {
             menu.hidden = locked;
-            controls.hidden = !locked;
             aimPoint.hidden = !locked;
             if (locked) {
                 pack.hidden = true;
@@ -343,7 +572,6 @@ function session() {
 login.addEventListener("submit", event => {
     event.preventDefault();
     if (!account.value.trim()) return;
-    // The Master's rule (and desktop's): 1-32 bytes of UTF-8, so a Chinese character counts three.
     if (new TextEncoder().encode(account.value.trim()).length > 32) {
         state(tr("Enter a survivor name of 1-32 bytes."));
         return;
@@ -352,23 +580,46 @@ login.addEventListener("submit", event => {
     command({ type: server.value === "direct" ? "direct" : "login", name: account.value.trim(), password: password.value });
     password.value = "";
 });
+
 server.addEventListener("change", () => {
     const showPassword = server.value === "master";
     password.hidden = element("password-label").hidden = !showPassword;
     password.required = showPassword && passwordRequired;
-    loginButton.textContent = server.value === "direct" ? tr("Join map server") : tr("Enter lobby");
+    loginButton.textContent = server.value === "direct" ? tr("Join map server") : tr("Enter safehouse");
 });
+
 element("logout").addEventListener("click", () => {
     state("");
+    setChannel("cabin");
     session();
 });
-deployButton.addEventListener("click", () => {
-    const chosen = maps.querySelector<HTMLInputElement>('input[name="map"]:checked');
-    if (!chosen) return;
+
+deployButton.addEventListener("click", triggerDeploy);
+opsDeployButton.addEventListener("click", triggerDeploy);
+loadoutDeployButton.addEventListener("click", triggerDeploy);
+
+element("clear-bring").addEventListener("click", () => {
+    for (const input of bring) if (!input.disabled) input.value = "0";
     updateBring();
-    command({ type: "deploy", map: chosen.value,
-        bring: bring.flatMap((input, index) => !input.disabled && Number(input.value) > 0 ? [{ index, count: Number(input.value) }] : []) });
 });
+element("bring-all").addEventListener("click", () => {
+    for (const input of bring) if (!input.disabled) input.value = input.max;
+    updateBring();
+});
+
+for (const navBtn of profilePanel.querySelectorAll<HTMLButtonElement>("[data-nav]")) {
+    navBtn.addEventListener("click", () => {
+        const target = navBtn.dataset.nav as "cabin" | "ops" | "loadout" | "trade";
+        setChannel(target === activeChannel && target !== "cabin" ? "cabin" : target);
+    });
+}
+for (const jumpBtn of profilePanel.querySelectorAll<HTMLButtonElement>("[data-jump]")) {
+    jumpBtn.addEventListener("click", () => setChannel(jumpBtn.dataset.jump as "cabin" | "ops" | "loadout" | "trade"));
+}
+for (const tradeBtn of profilePanel.querySelectorAll<HTMLButtonElement>("[data-trade-tab]")) {
+    tradeBtn.addEventListener("click", () => setTradeTab(tradeBtn.dataset.tradeTab as "contracts" | "trader"));
+}
+
 element("capture").addEventListener("click", () => {
     void audio?.unlock().catch(() => {});
     void world?.lock();
@@ -382,6 +633,15 @@ element("quality").addEventListener("change", event => {
     saveSettings();
 });
 element("leave").addEventListener("click", () => command({ type: "leave" }));
+
+function openSettings() {
+    world?.release();
+    settingsDialog.showModal();
+    renderOptions(element("settings-content"), applySettings);
+}
+element("settings-button").addEventListener("click", openSettings);
+element("entry-settings-button").addEventListener("click", openSettings);
+element("pause-settings-button").addEventListener("click", openSettings);
 
 function showPack(show: boolean) {
     pack.hidden = !show;
@@ -404,9 +664,10 @@ function showMap(show: boolean) {
 
 function localize() {
     saveSettings();
-    element("network-label").textContent = phase === "playing" ? tr("Connected · WebRTC") :
-        phase === "profile" ? tr("Signed into Master") : tr("NextDayz online");
-    // Static text in index.html carries its English key in data-i18n / data-i18n-label.
+    const netText = phase === "playing" ? tr("Connected · WebRTC")
+        : phase === "profile" ? tr("Signed into Master") : tr("NextDayz online");
+    element("network-label").textContent = netText;
+    element("login-network").textContent = netText;
     document.title = tr("NextDayz · Multiplayer lobby");
     for (const node of document.querySelectorAll<HTMLElement>("[data-i18n]")) node.textContent = tr(node.dataset.i18n ?? "");
     for (const node of document.querySelectorAll<HTMLElement>("[data-i18n-label]"))
@@ -428,19 +689,28 @@ function applySettings() {
     if (client) refresh(performance.now());
 }
 
-element("settings-button").addEventListener("click", () => {
-    world?.release();
-    settingsDialog.showModal();
-    renderOptions(element("settings-content"), applySettings);
-});
 element("pack-button").addEventListener("click", () => showPack(pack.hidden));
 element("close-pack").addEventListener("click", () => showPack(false));
 element("map-button").addEventListener("click", () => showMap(mapPanel.hidden));
 element("close-map").addEventListener("click", () => showMap(false));
 element("respawn").addEventListener("click", () => command({ type: "leave" }));
+
 window.addEventListener("keydown", event => {
-    if (!viewShown || event.repeat || settingsDialog.open || event.ctrlKey || event.metaKey) return;
-    if (event.code === "Escape" && !world?.locked) {
+    if (event.repeat || settingsDialog.open || event.ctrlKey || event.metaKey) return;
+    const typing = document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLSelectElement;
+    if (!viewShown) {
+        if (phase === "profile" && !typing) {
+            if (event.code === "Escape") setChannel("cabin");
+            else if (event.code === "KeyM") { event.preventDefault(); setChannel(activeChannel === "ops" ? "cabin" : "ops"); }
+            else if (event.code === "Tab") { event.preventDefault(); setChannel(activeChannel === "loadout" ? "cabin" : "loadout"); }
+            else if (event.code === "KeyT") { event.preventDefault(); setChannel(activeChannel === "trade" ? "cabin" : "trade"); }
+        }
+        return;
+    }
+    if (event.code === "F3") {
+        event.preventDefault();
+        diagnosticsBar.hidden = !diagnosticsBar.hidden;
+    } else if (event.code === "Escape" && !world?.locked) {
         showPack(false);
         showMap(false);
     } else if (matches("inventory", event.code) && (world?.locked || !pack.hidden)) {
@@ -469,7 +739,6 @@ course.addEventListener("click", () => {
         world?.setView("survivor", frame);
     }
 });
-
 range.addEventListener("click", () => {
     if (reviewEnabled) {
         showPack(false);
@@ -499,16 +768,63 @@ function updateField() {
     m.textContent = `${c.label} ${c.heading}°`;
     e.textContent = c.right;
     direction.replaceChildren(w, m, e);
+
     const { combat, body } = frame;
     element("weapon-name").textContent = itemName(combat.weapon) || tr("Unarmed");
     element("ammo").textContent = combat.capacity ? `${combat.magazine} / ${combat.reserve}` : "";
     const action = ["", "Reloading", "Switching", "Melee"][combat.action];
     element("weapon-action").textContent = action ? `${tr(action)} ${Math.round(combat.progress * 100)}%` : "";
+
+    const activeSlot = frame.pose?.activeSlot ?? 0;
+    for (let s = 0; s < 3; ++s) {
+        element(`slot-dot-${s}`).classList.toggle("active", Boolean(combat.weapon) && activeSlot === s);
+    }
+
+    // Frameless visual vitals bars + conditional pills
+    const hp = Math.max(0, Math.min(100, Math.ceil(body.health)));
+    const food = Math.max(0, Math.min(100, Math.ceil(body.hunger)));
+    const water = Math.max(0, Math.min(100, Math.ceil(body.hydration)));
+    element("vital-hp-bar").style.width = `${hp}%`;
+    element("vital-hp-val").textContent = String(hp);
+    element("vital-hp-row").classList.toggle("low", hp < 28);
+    element("vital-food-bar").style.width = `${food}%`;
+    element("vital-food-val").textContent = String(food);
+    element("vital-food-row").classList.toggle("low", food < 22);
+    element("vital-water-bar").style.width = `${water}%`;
+    element("vital-water-val").textContent = String(water);
+    element("vital-water-row").classList.toggle("low", water < 22);
+
+    const conds = element("conditions-hud");
+    const pills: HTMLElement[] = [];
+    if (body.bleeding) {
+        const pill = document.createElement("span");
+        pill.className = "cond-pill";
+        pill.textContent = tr("Bleeding {}", body.bleeding);
+        pills.push(pill);
+    }
+    if (body.cold > .55) {
+        const pill = document.createElement("span");
+        pill.className = "cond-pill cold";
+        pill.textContent = tr("Cold");
+        pills.push(pill);
+    }
+    if (body.healing && !body.bleeding) {
+        const pill = document.createElement("span");
+        pill.className = "cond-pill heal";
+        pill.textContent = tr("HEALING");
+        pills.push(pill);
+    }
+    conds.replaceChildren(...pills);
+
     hitMarker.hidden = !combat.hitMarker;
     hitMarker.classList.toggle("head", combat.headshot);
     hitMarker.classList.toggle("kill", combat.kill);
     element("damage-hud").style.opacity = String(combat.hurt * .9);
-    element("pvp-status").textContent = frame.pvp ? tr("Friendly fire on") : tr("Friendly fire off");
+
+    const pvpEl = element("pvp-status");
+    pvpEl.hidden = !frame.pvp;
+    pvpEl.textContent = tr("Friendly fire");
+
     deathPanel.hidden = frame.alive;
     if (!frame.alive) {
         world?.release();
@@ -528,7 +844,11 @@ function refresh(timestamp: number) {
         login.hidden = phase !== "login";
         profilePanel.hidden = phase !== "profile";
         loading.hidden = !["waiting", "deploying", "joining"].includes(phase);
-        if (phase === "profile") showProfile(client.read("profile"));
+        lobbyScene?.setActive(!playing);
+        if (phase === "profile") {
+            setChannel("cabin");
+            showProfile(client.read("profile"));
+        }
         if (phase === "waiting" || phase === "deploying") {
             element("loading-title").textContent = phase === "deploying" ? tr("Deploying") : profile ? tr("Contacting Master") : tr("Signing in");
             element("loading-detail").textContent = phase === "deploying" ? tr("Waiting for map server") : tr("Syncing survivor profile");
@@ -538,23 +858,30 @@ function refresh(timestamp: number) {
             element("loading-title").textContent = tr("Joining map server");
             element("loading-detail").textContent = tr("Connecting WebRTC");
         }
-        element("network-label").textContent = playing ? tr("Connected · WebRTC")
+        const netText = playing ? tr("Connected · WebRTC")
             : phase === "profile" ? tr("Signed into Master") : tr("NextDayz online");
+        element("network-label").textContent = netText;
+        element("login-network").textContent = netText;
     }
     if (playing && world && loaded) {
         if (!viewShown) {
             world.enter(frame);
             groundAt = 0;
             viewShown = true;
+            reviewBar.hidden = !import.meta.env.DEV;
         }
         const bundle = Object.values(assets.maps).find(entry => entry.map.scene === frame.scene);
-        element("map-name").textContent = bundle ? `${mapTitle(bundle.map)} · v${bundle.map.mapVersion}` : frame.scene;
+        const title = bundle ? mapTitle(bundle.map) : frame.scene;
+        element("map-name").textContent = bundle ? `${title} · v${bundle.map.mapVersion}` : frame.scene;
+        element("pause-map-title").textContent = title;
         course.hidden = range.hidden = pen.hidden = !reviewEnabled || bundle?.map.id !== "training_ground" || !frame.alive;
+
         const { health, hunger, hydration, bleeding, cold } = frame.body;
         const conditions = [bleeding ? tr("Bleeding {}", bleeding) : "",
             cold > .55 ? tr("Cold") : ""].filter(Boolean);
         element("vitals").textContent = tr("HP {} · Food {} · Water {}", Math.ceil(health), Math.ceil(hunger), Math.ceil(hydration)) +
             (conditions.length ? " · " + conditions.join(" · ") : "");
+
         nearby = frame.alive ? client.read("nearby") : null;
         const verb = hotkey("interact");
         const hint = frame.extractSeconds > 0 ? tr("Extracting · {} s", frame.extractSeconds.toFixed(1))
@@ -616,7 +943,6 @@ async function init() {
         passwordRequired = release.passwordRequired;
         server.hidden = element("server-label").hidden = true;
     }
-    // The review shortcuts exist only in the review build of the kernel.
     const coreUrl = reviewEnabled ? "/ndcore/ndcore-review.mjs" : "/ndcore/ndcore.mjs";
     const [config, core] = await Promise.all([manifest(), import(/* @vite-ignore */ coreUrl)]);
     assets = config;
@@ -629,6 +955,13 @@ async function init() {
     ]);
     useTranslations(table);
     inventoryPanel = new Pack(items, shared, command, itemName);
+    worldAtlas = new WorldAtlas(atlasCanvas, selectMapById);
+    try {
+        lobbyScene = new LobbyScene(element("lobby-stage"), actorAssets);
+        lobbyScene.setActive(true);
+    } catch {
+        // Fallback smoothly to CSS ambient cabin gradient if WebGL context is unavailable.
+    }
     localize();
     session();
     if (client.protocol !== assets.protocol) throw Error(tr("The Web maps and the kernel use different protocol versions. Bake again."));
@@ -659,8 +992,6 @@ async function init() {
     document.addEventListener("visibilitychange", visibilityChanged);
     visibilityChanged();
 
-    // Time the client itself spends per frame (kernel tick, frame read, scene submission),
-    // for the review hook: rAF intervals alone are capped at the display's rate.
     const work: number[] = [];
     const animate = (timestamp: number) => {
         if (document.hidden) {
@@ -685,7 +1016,6 @@ async function init() {
         if (reviewEnabled) Object.assign(window, {
             nextdayzReviewPlace: place,
             nextdayzReviewCrowd: (count: number) => command({ type: "reviewCrowd", count }),
-            // The level's anchor table, to hold an in-browser SCAD evaluation against the bake.
             nextdayzReviewAnchors: () => loaded?.anchors,
         });
         Object.assign(window, {

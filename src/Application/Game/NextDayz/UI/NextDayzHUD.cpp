@@ -103,7 +103,8 @@ namespace NextDayz::NextDayzHUD
             return NextUI::TruncateWithEllipsis(text, width);
         }
 
-        bool DrawItemIcon(const FHudContext& context, std::string_view id, ImVec2 min, ImVec2 max, bool rotated = false)
+        bool DrawItemIcon(const FHudContext& context, std::string_view id, ImVec2 min, ImVec2 max, bool rotated = false,
+                          ImDrawList* drawList = nullptr)
         {
             const auto* def = FindItemDef(id);
             const uint64_t texture = context.itemIcon ? context.itemIcon(id) : 0;
@@ -114,7 +115,8 @@ namespace NextDayz::NextDayzHUD
             const ImVec2 center((min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f);
             const ImVec2 a(center.x - width * scale * 0.5f, center.y - height * scale * 0.5f);
             const ImVec2 b(center.x + width * scale * 0.5f, center.y + height * scale * 0.5f);
-            ImGui::GetWindowDrawList()->AddImageQuad(static_cast<ImTextureID>(texture), a, ImVec2(b.x, a.y), b,
+            ImDrawList* target = drawList ? drawList : ImGui::GetWindowDrawList();
+            target->AddImageQuad(static_cast<ImTextureID>(texture), a, ImVec2(b.x, a.y), b,
                 ImVec2(a.x, b.y), rotated ? ImVec2(0, 1) : ImVec2(0, 0), rotated ? ImVec2(0, 0) : ImVec2(1, 0),
                 rotated ? ImVec2(1, 0) : ImVec2(1, 1), rotated ? ImVec2(1, 1) : ImVec2(0, 1));
             return true;
@@ -484,31 +486,40 @@ namespace NextDayz::NextDayzHUD
         }
 
         // ====================================================================
-        // CLOCK, COMPASS & OBJECTIVE
+        // CLOCK, COMPASS & OBJECTIVE (Frameless Tactical Field Minimalism)
         // ====================================================================
         void DrawClock(const FHudContext& context)
         {
             const ImGuiViewport* vp = ImGui::GetMainViewport();
-            ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x - 20.0f, vp->Pos.y + 20.0f), ImGuiCond_Always,
-                                    ImVec2(1.0f, 0.0f));
-            ImGui::SetNextWindowBgAlpha(0.65f);
-            ImGui::PushStyleColor(ImGuiCol_WindowBg, UITheme::Colors::SurfaceBg);
-            ImGui::PushStyleColor(ImGuiCol_Border, UITheme::Colors::BorderMuted);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 4.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 6.0f));
-
-            ImGui::Begin("##nd_clock", nullptr,
-                         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoMove |
-                             ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoNav);
-            ImGui::TextColored(ImVec4(0.95f, 0.95f, 0.95f, 1.0f), "%02d:%02d", context.hour, context.minute);
-            ImGui::SameLine();
+            ImDrawList* draw = ImGui::GetForegroundDrawList();
             const bool clear = !context.overcast;
-            ImGui::TextColored(clear ? ImVec4(1.0f, 0.82f, 0.3f, 1.0f) : ImVec4(0.65f, 0.72f, 0.8f, 1.0f), "• %s",
-                               context.weather.empty() ? (clear ? NextDayz::L10n::Tr("Clear") : NextDayz::L10n::Tr("Overcast")) : context.weather.c_str());
-            ImGui::End();
+            const std::string weatherStr = context.weather.empty()
+                ? std::string(clear ? NextDayz::L10n::Tr("Clear") : NextDayz::L10n::Tr("Overcast"))
+                : context.weather;
+            char timeBuf[16];
+            std::snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", context.hour, context.minute);
 
-            ImGui::PopStyleVar(2);
-            ImGui::PopStyleColor(2);
+            const ImVec2 timeSize = ImGui::CalcTextSize(timeBuf);
+            const ImVec2 weatherSize = ImGui::CalcTextSize(weatherStr.c_str());
+            const float right = vp->Pos.x + vp->Size.x - 24.0f;
+            const float top = vp->Pos.y + 18.0f;
+
+            UIWidgets::DrawTextShadow(draw, ImVec2(right - weatherSize.x, top),
+                                      clear ? UITheme::Colors::AccentAmber : UITheme::Colors::TextSecondary,
+                                      weatherStr.c_str());
+            UIWidgets::DrawTextShadow(draw, ImVec2(right - weatherSize.x - timeSize.x - 10.0f, top),
+                                      UITheme::Colors::TextPrimary, timeBuf);
+
+            if (context.pvp)
+            {
+                const char* pvpLabel = NextDayz::L10n::Tr("Friendly fire");
+                const ImVec2 pSize = ImGui::CalcTextSize(pvpLabel);
+                const ImVec2 pMin(right - pSize.x - 14.0f, top + timeSize.y + 8.0f);
+                const ImVec2 pMax(right, pMin.y + pSize.y + 6.0f);
+                draw->AddRectFilled(pMin, pMax, IM_COL32(214, 69, 69, 55), 2.0f);
+                draw->AddRect(pMin, pMax, IM_COL32(214, 69, 69, 175), 2.0f, 0, 1.0f);
+                draw->AddText(ImVec2(pMin.x + 7.0f, pMin.y + 3.0f), IM_COL32(246, 170, 170, 255), pvpLabel);
+            }
         }
 
         void DrawObjective(const FHudContext& context)
@@ -518,25 +529,31 @@ namespace NextDayz::NextDayzHUD
                 return;
             }
             const ImGuiViewport* viewport = ImGui::GetMainViewport();
+            ImDrawList* draw = ImGui::GetForegroundDrawList();
             const float top = context.hasCompass ? 56.0f : 20.0f;
-            ImGui::SetNextWindowPos(ImVec2(viewport->GetCenter().x, viewport->Pos.y + top), ImGuiCond_Always,
-                                    ImVec2(0.5f, 0.0f));
-            ImGui::SetNextWindowBgAlpha(0.70f);
-            ImGui::PushStyleColor(ImGuiCol_WindowBg, UITheme::Colors::SurfaceBg);
-            ImGui::PushStyleColor(ImGuiCol_Border, UITheme::Colors::BorderMuted);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 4.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f, 5.0f));
+            const char* tag = NextDayz::L10n::Tr("GOAL");
+            const ImVec2 tagSize = ImGui::CalcTextSize(tag);
+            const ImVec2 textSize = ImGui::CalcTextSize(context.objective.c_str());
+            const float contentW = tagSize.x + 16.0f + textSize.x;
+            const float stripH = std::max(tagSize.y, textSize.y) + 8.0f;
+            const float cx = viewport->GetCenter().x;
+            const float y0 = viewport->Pos.y + top;
+            const float y1 = y0 + stripH;
+            const float halfW = contentW * 0.5f + 26.0f;
 
-            ImGui::Begin("##nd_objective", nullptr,
-                         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoMove |
-                         ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoNav);
-            ImGui::TextColored(ImVec4(0.96f, 0.62f, 0.04f, 1.0f), "%s", NextDayz::L10n::Tr("GOAL"));
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.92f, 0.92f, 0.92f, 1.0f), "%s", context.objective.c_str());
-            ImGui::End();
+            // Soft horizontal fade band (no boxy window border)
+            const ImU32 dark = IM_COL32(12, 15, 13, 155);
+            const ImU32 clear = IM_COL32(12, 15, 13, 0);
+            draw->AddRectFilledMultiColor(ImVec2(cx - halfW - 24.0f, y0), ImVec2(cx - halfW + 18.0f, y1), clear, dark, dark, clear);
+            draw->AddRectFilled(ImVec2(cx - halfW + 18.0f, y0), ImVec2(cx + halfW - 18.0f, y1), dark);
+            draw->AddRectFilledMultiColor(ImVec2(cx + halfW - 18.0f, y0), ImVec2(cx + halfW + 24.0f, y1), dark, clear, clear, dark);
 
-            ImGui::PopStyleVar(2);
-            ImGui::PopStyleColor(2);
+            const float startX = cx - contentW * 0.5f;
+            draw->AddRectFilled(ImVec2(startX - 4.0f, y0 + 3.0f), ImVec2(startX + tagSize.x + 6.0f, y1 - 3.0f),
+                                UITheme::Colors::AccentAmber, 2.0f);
+            draw->AddText(ImVec2(startX + 1.0f, y0 + 4.0f), UITheme::Colors::TextOnAccent, tag);
+            UIWidgets::DrawTextShadow(draw, ImVec2(startX + tagSize.x + 14.0f, y0 + 4.0f),
+                                      UITheme::Colors::TextPrimary, context.objective.c_str());
         }
 
         void DrawCompass(const FHudContext& context)
@@ -547,40 +564,44 @@ namespace NextDayz::NextDayzHUD
             }
             const ImGuiViewport* viewport = ImGui::GetMainViewport();
             ImDrawList* draw = ImGui::GetForegroundDrawList();
-            const float width = std::min(520.0f, viewport->Size.x * 0.42f);
-            const ImVec2 center(viewport->GetCenter().x, viewport->Pos.y + 28.0f);
+            const float width = std::min(460.0f, viewport->Size.x * 0.38f);
+            const ImVec2 center(viewport->GetCenter().x, viewport->Pos.y + 24.0f);
             const float pxPerDegree = width / 120.0f;
 
-            // Background tactical plate
-            draw->AddRectFilled(ImVec2(center.x - width / 2 - 10, center.y - 16),
-                                ImVec2(center.x + width / 2 + 10, center.y + 16),
-                                UITheme::Colors::SurfaceBg, 4.0f);
-            draw->AddRect(ImVec2(center.x - width / 2 - 10, center.y - 16),
-                          ImVec2(center.x + width / 2 + 10, center.y + 16),
-                          UITheme::Colors::BorderMuted, 4.0f);
+            // Frameless translucent gradient tape
+            const float left = center.x - width * 0.5f;
+            const float right = center.x + width * 0.5f;
+            const float fadeW = width * 0.22f;
+            const ImU32 tapeDark = IM_COL32(12, 15, 13, 155);
+            const ImU32 tapeClear = IM_COL32(12, 15, 13, 0);
+            draw->AddRectFilledMultiColor(ImVec2(left - 16.0f, center.y - 13.0f), ImVec2(left + fadeW, center.y + 13.0f),
+                                          tapeClear, tapeDark, tapeDark, tapeClear);
+            draw->AddRectFilled(ImVec2(left + fadeW, center.y - 13.0f), ImVec2(right - fadeW, center.y + 13.0f), tapeDark);
+            draw->AddRectFilledMultiColor(ImVec2(right - fadeW, center.y - 13.0f), ImVec2(right + 16.0f, center.y + 13.0f),
+                                          tapeDark, tapeClear, tapeClear, tapeDark);
 
             const float heading = BearingDegrees(context.yawRadians);
             for (int tick = 0; tick < 360; tick += 15)
             {
                 float delta = static_cast<float>(tick) - heading;
                 delta = std::remainder(delta, 360.0f);
-                if (std::abs(delta) > 60.0f)
-                {
-                    continue;
-                }
+                if (std::abs(delta) > 60.0f) continue;
+
                 const float x = center.x + delta * pxPerDegree;
-                const float fade = 1.0f - std::abs(delta) / 60.0f;
-                const ImU32 color = IM_COL32(230, 228, 214, static_cast<int>(220.0f * fade));
-                const char* label = tick == 0 ? NextDayz::L10n::Tr("N") : tick == 90 ? NextDayz::L10n::Tr("E") : tick == 180 ? NextDayz::L10n::Tr("S") : tick == 270 ? NextDayz::L10n::Tr("W") : nullptr;
+                const float fade = std::pow(1.0f - std::abs(delta) / 60.0f, 0.75f);
+                const ImU32 color = IM_COL32(236, 234, 224, static_cast<int>(230.0f * fade));
+                const char* label = tick == 0 ? NextDayz::L10n::Tr("N") : tick == 90 ? NextDayz::L10n::Tr("E")
+                    : tick == 180 ? NextDayz::L10n::Tr("S") : tick == 270 ? NextDayz::L10n::Tr("W") : nullptr;
                 if (label)
                 {
-                    draw->AddText(ImVec2(x - 4.0f, center.y - 9.0f),
-                                  tick == 0 ? IM_COL32(255, 110, 90, static_cast<int>(255.0f * fade)) : color, label);
+                    const ImVec2 lSize = ImGui::CalcTextSize(label);
+                    const ImU32 col = tick == 0 ? IM_COL32(214, 69, 69, static_cast<int>(255.0f * fade)) : color;
+                    UIWidgets::DrawTextShadow(draw, ImVec2(x - lSize.x * 0.5f, center.y - lSize.y * 0.5f), col, label);
                 }
                 else
                 {
-                    draw->AddLine(ImVec2(x, center.y - (tick % 45 == 0 ? 8.0f : 4.0f)),
-                                  ImVec2(x, center.y + 4.0f), color, 1.5f);
+                    const float h = (tick % 45 == 0) ? 6.0f : 3.5f;
+                    draw->AddLine(ImVec2(x, center.y - h), ImVec2(x, center.y + h * 0.5f), color, 1.3f);
                 }
             }
             for (const auto& [position, label] : context.objectives)
@@ -589,11 +610,14 @@ namespace NextDayz::NextDayzHUD
                 const float bearing = glm::degrees(std::atan2(delta3.x, -delta3.z));
                 const float delta = std::clamp(std::remainder(bearing - heading, 360.0f), -60.0f, 60.0f);
                 const float x = center.x + delta * pxPerDegree;
-                draw->AddTriangleFilled(ImVec2(x - 6, center.y + 16), ImVec2(x + 6, center.y + 16), ImVec2(x, center.y + 8),
-                                        IM_COL32(240, 180, 60, 240));
-                char text[128];
+                const ImVec2 d(x, center.y + 12.0f);
+                draw->AddQuadFilled(ImVec2(d.x, d.y - 4.0f), ImVec2(d.x + 4.0f, d.y),
+                                    ImVec2(d.x, d.y + 4.0f), ImVec2(d.x - 4.0f, d.y), UITheme::Colors::AccentAmber);
+                char text[64];
                 std::snprintf(text, sizeof(text), "%.0fm", glm::length(glm::vec2(delta3.x, delta3.z)));
-                draw->AddText(ImVec2(x - 14.0f, center.y + 17.0f), IM_COL32(245, 200, 110, 230), text);
+                const ImVec2 tSize = ImGui::CalcTextSize(text);
+                UIWidgets::DrawTextShadow(draw, ImVec2(x - tSize.x * 0.5f, center.y + 17.0f),
+                                          UITheme::Colors::TextHighlight, text);
             }
             if (context.cacheMarker)
             {
@@ -601,18 +625,19 @@ namespace NextDayz::NextDayzHUD
                 const float bearing = glm::degrees(std::atan2(delta3.x, -delta3.z));
                 const float delta = std::clamp(std::remainder(bearing - heading, 360.0f), -60.0f, 60.0f);
                 const float x = center.x + delta * pxPerDegree;
-                draw->AddTriangleFilled(ImVec2(x - 6, center.y + 16), ImVec2(x + 6, center.y + 16), ImVec2(x, center.y + 8),
-                                        IM_COL32(255, 70, 50, 240));
-                char text[128];
+                const ImVec2 d(x, center.y + 12.0f);
+                draw->AddQuadFilled(ImVec2(d.x, d.y - 4.0f), ImVec2(d.x + 4.0f, d.y),
+                                    ImVec2(d.x, d.y + 4.0f), ImVec2(d.x - 4.0f, d.y), UITheme::Colors::AccentRose);
+                char text[64];
                 std::snprintf(text, sizeof(text), "%.0fm", glm::length(glm::vec2(delta3.x, delta3.z)));
-                draw->AddText(ImVec2(x - 14.0f, center.y + 17.0f), IM_COL32(255, 120, 100, 230), text);
+                const ImVec2 tSize = ImGui::CalcTextSize(text);
+                UIWidgets::DrawTextShadow(draw, ImVec2(x - tSize.x * 0.5f, center.y + 17.0f),
+                                          UITheme::Colors::AccentRose, text);
             }
-            // Center needle
-            draw->AddLine(ImVec2(center.x, center.y - 16), ImVec2(center.x, center.y - 9),
-                          UITheme::Colors::AccentAmber, 2.0f);
-            char degrees[16];
-            std::snprintf(degrees, sizeof(degrees), "%03.0f", heading);
-            draw->AddText(ImVec2(center.x - 11.0f, center.y + 18.0f), UITheme::Colors::TextSecondary, degrees);
+            // Center amber needle
+            draw->AddTriangleFilled(ImVec2(center.x - 4.5f, center.y - 15.0f),
+                                    ImVec2(center.x + 4.5f, center.y - 15.0f),
+                                    ImVec2(center.x, center.y - 9.0f), UITheme::Colors::AccentAmber);
         }
 
         // ====================================================================
@@ -731,175 +756,182 @@ namespace NextDayz::NextDayzHUD
         }
 
         // ====================================================================
-        // SURVIVAL VITALS (HEALTH, HUNGER, HYDRATION & DEBUFFS)
+        // SURVIVAL VITALS (Frameless Minimalist Bars + Vector Icons)
         // ====================================================================
         void DrawSurvival(const FHudContext& context)
         {
             const ImGuiViewport* vp = ImGui::GetMainViewport();
             ImDrawList* draw = ImGui::GetForegroundDrawList();
 
-            const float panelW = 230.0f;
-            const float panelH = 92.0f;
-            const ImVec2 panelPos(vp->Pos.x + 20.0f, vp->Pos.y + vp->Size.y - panelH - 20.0f);
+            const float baseX = vp->Pos.x + 24.0f;
+            const float barW = 148.0f;
+            const float rowStep = 22.0f;
+            const float topY = vp->Pos.y + vp->Size.y - rowStep * 3.0f - 18.0f;
 
-            // Tactical surface plate
-            draw->AddRectFilled(panelPos, ImVec2(panelPos.x + panelW, panelPos.y + panelH),
-                                UITheme::Colors::SurfaceBg, 4.0f);
-            draw->AddRect(panelPos, ImVec2(panelPos.x + panelW, panelPos.y + panelH),
-                          UITheme::Colors::BorderMuted, 4.0f);
-
-            const auto renderBar = [&](const char* label, float value, float yOffset, ImU32 color, bool pulse = false)
+            const auto renderRow = [&](UIWidgets::EVitalIcon icon, float value, float y, ImU32 color, bool pulse)
             {
-                const ImVec2 textPos(panelPos.x + 12.0f, panelPos.y + yOffset);
-                draw->AddText(textPos, UITheme::Colors::TextSecondary, label);
+                const float midY = y + 7.0f;
+                UIWidgets::DrawVitalIcon(draw, ImVec2(baseX + 7.0f, midY), 12.0f, icon, color);
 
-                const ImVec2 barMin(panelPos.x + 68.0f, panelPos.y + yOffset + 2.0f);
-                const ImVec2 barMax(panelPos.x + panelW - 14.0f, barMin.y + 10.0f);
-                UIWidgets::DrawTacticalBar(draw, barMin, barMax, value / 100.0f, color,
-                                           IM_COL32(24, 30, 40, 200), pulse);
+                const ImVec2 bMin(baseX + 22.0f, midY - 3.0f);
+                const ImVec2 bMax(bMin.x + barW, midY + 3.0f);
+                UIWidgets::DrawTacticalBar(draw, bMin, bMax, value / 100.0f, color, IM_COL32(10, 12, 11, 180), pulse);
+
+                char pct[16];
+                std::snprintf(pct, sizeof(pct), "%d", static_cast<int>(std::ceil(std::clamp(value, 0.0f, 100.0f))));
+                UIWidgets::DrawTextShadow(draw, ImVec2(bMax.x + 8.0f, y),
+                                          pulse ? color : UITheme::Colors::TextPrimary, pct);
             };
 
             const FSurvivalSnapshot& s = context.survival;
-            const bool lowHealth = s.health < 25.0f;
-            renderBar(NextDayz::L10n::Tr("HEALTH"), s.health, 12.0f, UITheme::Colors::AccentRose, lowHealth);
-            renderBar(NextDayz::L10n::Tr("HUNGER"), s.hunger, 38.0f, UITheme::Colors::AccentAmber, s.hunger < 20.0f);
-            renderBar(NextDayz::L10n::Tr("THIRST"), s.hydration, 64.0f, UITheme::Colors::AccentCyan, s.hydration < 20.0f);
+            const bool lowHealth = s.health < 28.0f;
+            const ImU32 hpCol = lowHealth ? UITheme::Colors::AccentRose : UITheme::Colors::TextPrimary;
+            renderRow(UIWidgets::EVitalIcon::Health, s.health, topY, hpCol, lowHealth);
+            renderRow(UIWidgets::EVitalIcon::Hunger, s.hunger, topY + rowStep, UITheme::Colors::AccentAmber, s.hunger < 22.0f);
+            renderRow(UIWidgets::EVitalIcon::Hydration, s.hydration, topY + rowStep * 2.0f, UITheme::Colors::AccentCyan, s.hydration < 22.0f);
 
-            // Status badges floating above vitals panel
-            float badgeY = panelPos.y - 28.0f;
-            const float badgeX = panelPos.x;
-
+            // Condition pills only appear when triggered (clean vector icons, no emoji boxes)
+            float pillY = topY - 30.0f;
             if (s.bleedingWounds > 0)
             {
                 char text[128];
                 std::snprintf(text, sizeof(text), NextDayz::L10n::Tr("BLEEDING x%d  [H]"), s.bleedingWounds);
-                const ImVec2 size = UIWidgets::DrawStatusBadge(draw, ImVec2(badgeX, badgeY), "🩸", text,
-                                                               UITheme::Colors::SlotInvalidDropBg,
-                                                               UITheme::Colors::AccentRose,
-                                                               UITheme::Colors::TextPrimary);
-                badgeY -= size.y + 6.0f;
+                const ImVec2 sz = UIWidgets::DrawStatusPill(draw, ImVec2(baseX, pillY), UIWidgets::EVitalIcon::Bleeding, text,
+                                                            IM_COL32(165, 36, 36, 220), UITheme::Colors::AccentRose,
+                                                            UITheme::Colors::TextPrimary, true);
+                pillY -= sz.y + 6.0f;
             }
-
             if (s.cold > 0.25f)
             {
                 const char* coldText = s.cold > 0.55f ? NextDayz::L10n::Tr("FREEZING") : NextDayz::L10n::Tr("COLD");
-                const ImVec2 size = UIWidgets::DrawStatusBadge(draw, ImVec2(badgeX, badgeY), "❄️", coldText,
-                                                               IM_COL32(30, 58, 90, 200),
-                                                               UITheme::Colors::AccentIceBlue,
-                                                               UITheme::Colors::AccentIceBlue);
-                badgeY -= size.y + 6.0f;
+                const ImVec2 sz = UIWidgets::DrawStatusPill(draw, ImVec2(baseX, pillY), UIWidgets::EVitalIcon::Cold, coldText,
+                                                            IM_COL32(28, 56, 74, 215), UITheme::Colors::AccentCyan,
+                                                            UITheme::Colors::AccentIceBlue, s.cold > 0.55f);
+                pillY -= sz.y + 6.0f;
             }
-
             if (s.healing && s.bleedingWounds == 0)
             {
                 const char* healText = s.painkillerSeconds > 0.0f ? NextDayz::L10n::Tr("PAINKILLERS") : NextDayz::L10n::Tr("HEALING");
-                const ImVec2 size = UIWidgets::DrawStatusBadge(draw, ImVec2(badgeX, badgeY), "💊", healText,
-                                                               UITheme::Colors::SlotValidDropBg,
-                                                               UITheme::Colors::AccentEmerald,
-                                                               UITheme::Colors::AccentEmerald);
-                badgeY -= size.y + 6.0f;
+                const ImVec2 sz = UIWidgets::DrawStatusPill(draw, ImVec2(baseX, pillY), UIWidgets::EVitalIcon::Healing, healText,
+                                                            IM_COL32(26, 56, 34, 215), UITheme::Colors::AccentEmerald,
+                                                            UITheme::Colors::AccentEmerald);
+                pillY -= sz.y + 6.0f;
             }
-
             if (context.weak)
             {
-                const ImVec2 size = UIWidgets::DrawStatusBadge(draw, ImVec2(badgeX, badgeY), "⚡", NextDayz::L10n::Tr("WEAK - NO SPRINT"),
-                                                               IM_COL32(70, 55, 20, 200),
-                                                               UITheme::Colors::AccentAmber,
-                                                               UITheme::Colors::AccentAmber);
-                badgeY -= size.y + 6.0f;
+                const ImVec2 sz = UIWidgets::DrawStatusPill(draw, ImVec2(baseX, pillY), UIWidgets::EVitalIcon::Weak,
+                                                            NextDayz::L10n::Tr("WEAK - NO SPRINT"),
+                                                            IM_COL32(70, 50, 18, 215), UITheme::Colors::AccentAmber,
+                                                            UITheme::Colors::AccentAmber);
+                pillY -= sz.y + 6.0f;
             }
-
             if (context.lanternLit)
             {
                 char lanternText[128];
                 std::snprintf(lanternText, sizeof(lanternText), NextDayz::L10n::Tr("LANTERN %.0fm"), context.lanternMinutes);
-                UIWidgets::DrawStatusBadge(draw, ImVec2(badgeX, badgeY), "💡", lanternText,
-                                           IM_COL32(60, 50, 25, 200),
-                                           UITheme::Colors::AccentAmber,
-                                           UITheme::Colors::TextPrimary);
+                UIWidgets::DrawStatusPill(draw, ImVec2(baseX, pillY), UIWidgets::EVitalIcon::Lantern, lanternText,
+                                          IM_COL32(55, 44, 18, 210), UITheme::Colors::AccentAmber,
+                                          UITheme::Colors::TextPrimary);
             }
         }
 
         // ====================================================================
-        // WEAPON READOUT & BOTTOM QUICKBAR
+        // WEAPON READOUT & BOTTOM QUICKBAR (Frameless Condensed Typography)
         // ====================================================================
         void DrawWeaponReadout(const FHudContext& context)
         {
             const ImGuiViewport* vp = ImGui::GetMainViewport();
             ImDrawList* draw = ImGui::GetForegroundDrawList();
+            const float right = vp->Pos.x + vp->Size.x - 26.0f;
+            const float bottom = vp->Pos.y + vp->Size.y - 22.0f;
 
-            const float cardW = 200.0f;
-            const float cardH = 68.0f;
-            const ImVec2 cardPos(vp->Pos.x + vp->Size.x - cardW - 20.0f, vp->Pos.y + vp->Size.y - cardH - 20.0f);
-
-            draw->AddRectFilled(cardPos, ImVec2(cardPos.x + cardW, cardPos.y + cardH),
-                                UITheme::Colors::SurfaceBg, 4.0f);
-            draw->AddRect(cardPos, ImVec2(cardPos.x + cardW, cardPos.y + cardH),
-                          UITheme::Colors::BorderMuted, 4.0f);
+            // 3 micro weapon slot indicator dashes along bottom-right
+            const float dashY = bottom - 4.0f;
+            const float dashGap = 5.0f;
+            const float dashW[3] = {30.0f, 22.0f, 16.0f};
+            float dx = right;
+            for (int s = 2; s >= 0; --s)
+            {
+                dx -= dashW[s];
+                const bool hasSlot = context.weapons && context.weapons->SlotInstance(s) != 0;
+                const bool active = context.hasWeapon && context.activeSlot == s;
+                const ImU32 col = active ? UITheme::Colors::AccentAmber
+                                : hasSlot ? IM_COL32(236, 234, 224, 95)
+                                          : IM_COL32(236, 234, 224, 34);
+                draw->AddRectFilled(ImVec2(dx, dashY), ImVec2(dx + dashW[s], dashY + 3.5f), col, 1.0f);
+                dx -= dashGap;
+            }
 
             if (!context.hasWeapon)
             {
-                draw->AddText(ImVec2(cardPos.x + 14.0f, cardPos.y + 14.0f), UITheme::Colors::TextMuted, NextDayz::L10n::Tr("UNARMED"));
-                draw->AddText(ImVec2(cardPos.x + 14.0f, cardPos.y + 36.0f), UITheme::Colors::TextMuted,
-                              context.firstPerson ? NextDayz::L10n::Tr("[FPS]") : NextDayz::L10n::Tr("[TPS]"));
+                const char* unarmed = NextDayz::L10n::Tr("UNARMED");
+                const ImVec2 uSize = ImGui::CalcTextSize(unarmed);
+                UIWidgets::DrawTextShadow(draw, ImVec2(right - uSize.x, dashY - uSize.y - 8.0f),
+                                          UITheme::Colors::TextMuted, unarmed);
                 return;
             }
 
-            // Weapon Title
-            draw->AddText(ImVec2(cardPos.x + 14.0f, cardPos.y + 10.0f), UITheme::Colors::TextPrimary,
-                          context.weaponName.c_str());
-
+            const float readoutBottom = dashY - 10.0f;
             if (context.reloading)
             {
-                draw->AddText(ImVec2(cardPos.x + 14.0f, cardPos.y + 32.0f), UITheme::Colors::AccentAmber, NextDayz::L10n::Tr("RELOADING..."));
-                const ImVec2 barMin(cardPos.x + 14.0f, cardPos.y + 52.0f);
-                const ImVec2 barMax(cardPos.x + cardW - 14.0f, barMin.y + 4.0f);
+                const char* rel = NextDayz::L10n::Tr("RELOADING...");
+                const ImVec2 rSize = ImGui::CalcTextSize(rel);
+                const float barW = 128.0f;
                 const float t = static_cast<float>(ImGui::GetTime());
-                const float wave = 0.5f + 0.5f * std::sin(t * 8.0f);
-                UIWidgets::DrawTacticalBar(draw, barMin, barMax, wave, UITheme::Colors::AccentAmber);
+                const float wave = 0.5f + 0.5f * std::sin(t * 7.5f);
+                UIWidgets::DrawTacticalBar(draw, ImVec2(right - barW, readoutBottom - 5.0f),
+                                           ImVec2(right, readoutBottom), wave, UITheme::Colors::AccentAmber);
+                UIWidgets::DrawTextShadow(draw, ImVec2(right - rSize.x, readoutBottom - rSize.y - 9.0f),
+                                          UITheme::Colors::AccentAmber, rel);
+                const ImVec2 wSize = ImGui::CalcTextSize(context.weaponName.c_str());
+                UIWidgets::DrawTextShadow(draw, ImVec2(right - wSize.x, readoutBottom - rSize.y - wSize.y - 14.0f),
+                                          UITheme::Colors::TextSecondary, context.weaponName.c_str());
+                return;
             }
-            else if (context.melee)
+            if (context.melee)
             {
-                draw->AddText(ImVec2(cardPos.x + 14.0f, cardPos.y + 30.0f), UITheme::Colors::TextSecondary,
-                              context.swinging ? NextDayz::L10n::Tr("STRIKING...") : context.aiming ? NextDayz::L10n::Tr("GUARD READY") : NextDayz::L10n::Tr("RMB  READY"));
-                draw->AddText(ImVec2(cardPos.x + 14.0f, cardPos.y + 47.0f), UITheme::Colors::TextMuted, NextDayz::L10n::Tr("LMB  STRIKE"));
-            }
-            else
-            {
-                // Ammo readout: Large magazine count, small reserve
-                char magText[16];
-                std::snprintf(magText, sizeof(magText), "%d", context.ammoInMag);
-                char reserveText[16];
-                std::snprintf(reserveText, sizeof(reserveText), "/ %d", context.ammoReserve);
-
-                const ImU32 magColor = context.ammoInMag == 0 ? UITheme::Colors::AccentRose : UITheme::Colors::TextPrimary;
-                draw->AddText(ImVec2(cardPos.x + 14.0f, cardPos.y + 30.0f), magColor, magText);
-
-                const ImVec2 magSize = ImGui::CalcTextSize(magText);
-                draw->AddText(ImVec2(cardPos.x + 16.0f + magSize.x, cardPos.y + 33.0f),
-                              UITheme::Colors::TextSecondary, reserveText);
+                const char* state = context.swinging ? NextDayz::L10n::Tr("STRIKING...")
+                    : context.aiming ? NextDayz::L10n::Tr("GUARD READY") : NextDayz::L10n::Tr("LMB  STRIKE");
+                const ImVec2 sSize = ImGui::CalcTextSize(state);
+                UIWidgets::DrawTextShadow(draw, ImVec2(right - sSize.x, readoutBottom - sSize.y),
+                                          UITheme::Colors::TextSecondary, state);
+                const ImVec2 wSize = ImGui::CalcTextSize(context.weaponName.c_str());
+                UIWidgets::DrawTextShadow(draw, ImVec2(right - wSize.x, readoutBottom - sSize.y - wSize.y - 4.0f),
+                                          UITheme::Colors::TextPrimary, context.weaponName.c_str());
+                return;
             }
 
-            // Slot badge on right
-            char slotText[128];
-            std::snprintf(slotText, sizeof(slotText), NextDayz::L10n::Tr("SLOT %d  %s"), context.activeSlot + 1,
-                          context.firstPerson ? NextDayz::L10n::Tr("FPS") : NextDayz::L10n::Tr("TPS"));
-            const ImVec2 slotSize = ImGui::CalcTextSize(slotText);
-            draw->AddText(ImVec2(cardPos.x + cardW - slotSize.x - 12.0f, cardPos.y + 42.0f),
-                          UITheme::Colors::TextMuted, slotText);
+            // Large condensed magazine readout + muted reserve
+            char magText[16];
+            std::snprintf(magText, sizeof(magText), "%d", context.ammoInMag);
+            char reserveText[16];
+            std::snprintf(reserveText, sizeof(reserveText), "/ %d", context.ammoReserve);
+
+            ImFont* bigFont = context.ammoFont ? context.ammoFont : (context.titleFont ? context.titleFont : ImGui::GetFont());
+            const float bigSize = context.ammoFont ? 38.0f : 32.0f;
+            const ImVec2 magSize = bigFont->CalcTextSizeA(bigSize, FLT_MAX, 0.0f, magText);
+            const ImVec2 resSize = ImGui::CalcTextSize(reserveText);
+
+            const ImU32 magColor = context.ammoInMag == 0 ? UITheme::Colors::AccentRose : UITheme::Colors::TextPrimary;
+            UIWidgets::DrawTextShadow(draw, ImVec2(right - resSize.x, readoutBottom - resSize.y - 4.0f),
+                                      UITheme::Colors::TextSecondary, reserveText);
+            UIWidgets::DrawTextShadow(draw, bigFont, bigSize,
+                                      ImVec2(right - resSize.x - magSize.x - 6.0f, readoutBottom - magSize.y + 3.0f),
+                                      magColor, magText, 1.8f);
+
+            const ImVec2 wSize = ImGui::CalcTextSize(context.weaponName.c_str());
+            UIWidgets::DrawTextShadow(draw, ImVec2(right - wSize.x, readoutBottom - magSize.y - wSize.y - 2.0f),
+                                      UITheme::Colors::TextSecondary, context.weaponName.c_str());
         }
 
         void DrawQuickbar(const FHudContext& context)
         {
-            if (context.inventory == nullptr)
-            {
-                return;
-            }
+            if (context.inventory == nullptr) return;
             const ImGuiViewport* vp = ImGui::GetMainViewport();
             ImDrawList* draw = ImGui::GetForegroundDrawList();
 
-            const float size = 52.0f;
-            const float gap = 8.0f;
+            const float size = 48.0f;
+            const float gap = 6.0f;
             const float total = 4.0f * size + 3.0f * gap;
             const ImVec2 origin(vp->GetCenter().x - total * 0.5f, vp->Pos.y + vp->Size.y - size - 20.0f);
 
@@ -911,26 +943,26 @@ namespace NextDayz::NextDayzHUD
                 const int count = itemId.empty() ? 0 : context.inventory->CountOf(itemId);
                 const bool occupied = !itemId.empty();
 
-                UIWidgets::DrawSlotFrame(draw, a, b, occupied, false, false, false, 4.0f);
+                draw->AddRectFilled(a, b, occupied ? IM_COL32(17, 20, 18, 192) : IM_COL32(14, 17, 15, 108), 2.0f);
+                draw->AddRect(a, b, occupied ? IM_COL32(228, 224, 208, 62) : IM_COL32(228, 224, 208, 28), 2.0f, 0, 1.0f);
 
-                // Slot Key badge (4..7)
                 char key[4];
                 std::snprintf(key, sizeof(key), "%d", slot + 4);
-                draw->AddText(ImVec2(a.x + 5.0f, a.y + 3.0f), UITheme::Colors::TextMuted, key);
+                draw->AddText(ImVec2(a.x + 4.0f, a.y + 2.0f), UITheme::Colors::TextMuted, key);
 
                 if (occupied)
                 {
-                    const std::string name = FitText(ItemName(itemId), size - 10.0f);
-                    draw->AddText(ImVec2(a.x + 5.0f, a.y + 18.0f),
-                                  count > 0 ? UITheme::Colors::TextPrimary : UITheme::Colors::TextMuted,
-                                  name.c_str());
-
+                    if (!DrawItemIcon(context, itemId, ImVec2(a.x + 6.0f, a.y + 8.0f), ImVec2(b.x - 6.0f, b.y - 10.0f), false, draw))
+                    {
+                        const std::string name = FitText(ItemName(itemId), size - 8.0f);
+                        draw->AddText(ImVec2(a.x + 4.0f, a.y + 17.0f),
+                                      count > 0 ? UITheme::Colors::TextPrimary : UITheme::Colors::TextMuted, name.c_str());
+                    }
                     char amount[16];
                     std::snprintf(amount, sizeof(amount), "x%d", count);
                     const ImVec2 amtSize = ImGui::CalcTextSize(amount);
-                    draw->AddText(ImVec2(b.x - amtSize.x - 4.0f, b.y - amtSize.y - 2.0f),
-                                  count > 0 ? UITheme::Colors::AccentAmber : UITheme::Colors::TextMuted,
-                                  amount);
+                    UIWidgets::DrawTextShadow(draw, ImVec2(b.x - amtSize.x - 3.0f, b.y - amtSize.y - 1.0f),
+                                              count > 0 ? UITheme::Colors::AccentAmber : UITheme::Colors::TextMuted, amount);
                 }
             }
         }
@@ -982,28 +1014,30 @@ namespace NextDayz::NextDayzHUD
                 return;
             }
             const ImGuiViewport* vp = ImGui::GetMainViewport();
-            const float side = std::min(vp->Size.x, vp->Size.y) * 0.82f;
+            ImGui::GetBackgroundDrawList()->AddRectFilled(vp->Pos, ImVec2(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y),
+                                                          UITheme::Colors::BgScrim);
+            const float side = std::min(vp->Size.x, vp->Size.y) * 0.80f;
             ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-            ImGui::SetNextWindowSize(ImVec2(side, side + 40.0f), ImGuiCond_Always);
-            ImGui::SetNextWindowBgAlpha(0.96f);
-            ImGui::PushStyleColor(ImGuiCol_WindowBg, UITheme::Colors::SurfaceBg);
-            ImGui::PushStyleColor(ImGuiCol_Border, UITheme::Colors::BorderMuted);
+            ImGui::SetNextWindowSize(ImVec2(side + 24.0f, side + 82.0f), ImGuiCond_Always);
+            UITheme::FFieldStyleScope style;
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f, 12.0f));
 
-            ImGui::Begin(NextDayz::L10n::Label("Riverland Tactical Map##nd_map"), nullptr,
-                         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                             ImGuiWindowFlags_NoSavedSettings);
+            ImGui::Begin("##nd_map", nullptr,
+                         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
+            UIWidgets::DrawSectionHeader(NextDayz::L10n::Tr("Riverland Tactical Map"), "[M]", UITheme::Colors::AccentAmber);
             if (!context.hasMap)
             {
+                ImGui::Spacing();
                 ImGui::TextWrapped("%s", NextDayz::L10n::Tr("You have no map. Look for one in shops, police stations and military sites."));
                 ImGui::End();
-                ImGui::PopStyleColor(2);
+                ImGui::PopStyleVar();
                 return;
             }
             ImDrawList* draw = ImGui::GetWindowDrawList();
             const ImVec2 origin = ImGui::GetCursorScreenPos();
-            const float mapSide = side - 20.0f;
+            const float mapSide = side - 4.0f;
             const ImVec2 end(origin.x + mapSide, origin.y + mapSide);
-            draw->AddRectFilled(origin, end, IM_COL32(196, 188, 158, 255));
+            draw->AddRectFilled(origin, end, IM_COL32(196, 188, 158, 255), 2.0f);
 
             const auto toScreen = [&](float x, float z)
             {
@@ -1061,7 +1095,7 @@ namespace NextDayz::NextDayzHUD
             ImGui::Dummy(ImVec2(mapSide, mapSide));
             ImGui::TextDisabled("%s", NextDayz::L10n::Tr("M close  |  grid 100 m  |  north up"));
             ImGui::End();
-            ImGui::PopStyleColor(2);
+            ImGui::PopStyleVar();
         }
 
         // ====================================================================
@@ -1823,14 +1857,12 @@ namespace NextDayz::NextDayzHUD
         void DrawVitalsMonitor(const FHudContext& context, const ImVec2& pos, const ImVec2& size)
         {
             ImDrawList* draw = ImGui::GetWindowDrawList();
-            draw->AddText(pos, UITheme::Colors::TextPrimary, L10n::Tr("VITALS"));
+            draw->AddText(pos, UITheme::Colors::TextSecondary, L10n::Tr("VITALS"));
             const ImU32 healthCol = context.survival.health > 50.0f ? UITheme::Colors::AccentEmerald :
                                     context.survival.health > 25.0f ? UITheme::Colors::AccentAmber : UITheme::Colors::AccentRose;
-            UIWidgets::DrawECGLine(draw, ImVec2(pos.x, pos.y + 24.0f), ImVec2(size.x, 22.0f),
-                                   context.survival.health < 30.0f ? 110.0f : 72.0f, healthCol);
 
-            const float rowY = pos.y + 58.0f;
-            const float rowStep = std::clamp((size.y - 110.0f) / 5.0f, 36.0f, 60.0f);
+            const float rowY = pos.y + 26.0f;
+            const float rowStep = std::clamp((size.y - 78.0f) / 5.0f, 34.0f, 54.0f);
             char hpText[32];
             std::snprintf(hpText, sizeof(hpText), "%.0f%%", context.survival.health);
             UIWidgets::DrawVitalsGauge(draw, ImVec2(pos.x, rowY), size.x, L10n::Tr("HEALTH"),
@@ -1851,28 +1883,27 @@ namespace NextDayz::NextDayzHUD
             const float warm01 = std::clamp(1.0f - context.survival.cold, 0.0f, 1.0f);
             UIWidgets::DrawVitalsGauge(draw, ImVec2(pos.x, rowY + rowStep * 3.0f), size.x,
                                        L10n::Tr("TEMP"), warm01,
-                                       context.survival.cold > 0.5f ? UITheme::Colors::AccentIceBlue : IM_COL32(45, 212, 191, 255),
+                                       context.survival.cold > 0.5f ? UITheme::Colors::AccentIceBlue : UITheme::Colors::AccentEmerald,
                                        L10n::Tr(context.survival.cold > 0.5f ? "COLD" : "WARM"));
 
             char armorText[32];
             std::snprintf(armorText, sizeof(armorText), "%.0f%%", context.armor * 100.0f);
             UIWidgets::DrawVitalsGauge(draw, ImVec2(pos.x, rowY + rowStep * 4.0f), size.x,
                                        L10n::Tr("ARMOR"), context.armor,
-                                       IM_COL32(129, 140, 248, 255), armorText);
+                                       UITheme::Colors::AccentViolet, armorText);
 
-            // Separate status rows keep simultaneous bleeding and healing clear of the gauges.
             float statusY = rowY + rowStep * 5.0f;
             if (context.survival.bleedingWounds > 0)
             {
                 const auto label = L10n::Format("BLEEDING x{}", context.survival.bleedingWounds);
-                const ImVec2 badge = UIWidgets::DrawStatusBadge(draw, ImVec2(pos.x, statusY), "!",
-                    label.c_str(), IM_COL32(60, 10, 15, 230), UITheme::Colors::AccentRose, UITheme::Colors::AccentRose);
+                const ImVec2 badge = UIWidgets::DrawStatusPill(draw, ImVec2(pos.x, statusY), UIWidgets::EVitalIcon::Bleeding,
+                    label.c_str(), IM_COL32(72, 20, 20, 230), UITheme::Colors::AccentRose, UITheme::Colors::AccentRose);
                 statusY += badge.y + 4.0f;
             }
             if (context.survival.healing)
             {
-                UIWidgets::DrawStatusBadge(draw, ImVec2(pos.x, statusY), "+", L10n::Tr("RECOVERING"),
-                    IM_COL32(10, 50, 30, 230), UITheme::Colors::AccentEmerald, UITheme::Colors::AccentEmerald);
+                UIWidgets::DrawStatusPill(draw, ImVec2(pos.x, statusY), UIWidgets::EVitalIcon::Healing, L10n::Tr("RECOVERING"),
+                    IM_COL32(20, 48, 28, 230), UITheme::Colors::AccentEmerald, UITheme::Colors::AccentEmerald);
             }
         }
 
@@ -2214,11 +2245,10 @@ namespace NextDayz::NextDayzHUD
 
             ImGui::SetNextWindowPos(vp->Pos, ImGuiCond_Always);
             ImGui::SetNextWindowSize(vp->Size, ImGuiCond_Always);
-            ImGui::SetNextWindowBgAlpha(1.0f);
-            ImGui::PushStyleColor(ImGuiCol_WindowBg, UITheme::Colors::SurfaceBg);
-            ImGui::PushStyleColor(ImGuiCol_Border, UITheme::Colors::BorderMuted);
+            UITheme::FFieldStyleScope style;
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, IM_COL32(10, 12, 11, 224));
             ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 14.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20.0f, 14.0f));
 
             ImGui::Begin("##nd_inv_window", nullptr,
                          ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
@@ -2395,11 +2425,11 @@ namespace NextDayz::NextDayzHUD
 
             ImGui::End();
             ImGui::PopStyleVar(2);
-            ImGui::PopStyleColor(2);
+            ImGui::PopStyleColor(1);
         }
 
         // ====================================================================
-        // SESSION OVERLAY (PAUSE & DEATH SCREEN)
+        // SESSION OVERLAY (UNIFIED PAUSE & KIA DEBRIEF)
         // ====================================================================
         void DrawSessionOverlay(const FHudContext& context)
         {
@@ -2409,70 +2439,116 @@ namespace NextDayz::NextDayzHUD
                 return;
             }
             const ImGuiViewport* viewport = ImGui::GetMainViewport();
-            if (context.survival.lifeState == EPlayerLifeState::Dead)
-            {
-                ImGui::GetBackgroundDrawList()->AddRectFilled(viewport->Pos,
-                    ImVec2(viewport->Pos.x + viewport->Size.x, viewport->Pos.y + viewport->Size.y),
-                    IM_COL32(20, 0, 0, 160));
-            }
+            const bool dead = context.survival.lifeState == EPlayerLifeState::Dead;
+            ImGui::GetBackgroundDrawList()->AddRectFilled(
+                viewport->Pos, ImVec2(viewport->Pos.x + viewport->Size.x, viewport->Pos.y + viewport->Size.y),
+                dead ? IM_COL32(24, 8, 8, 212) : IM_COL32(10, 12, 11, 198));
+
+            UITheme::FFieldStyleScope style;
             ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-            ImGui::SetNextWindowSize(ImVec2(std::min(760.0f, viewport->WorkSize.x - 40.0f), 0.0f), ImGuiCond_Always);
-            ImGui::SetNextWindowBgAlpha(0.95f);
-            ImGui::PushStyleColor(ImGuiCol_WindowBg, UITheme::Colors::SurfaceBg);
-            ImGui::PushStyleColor(ImGuiCol_Border, UITheme::Colors::BorderMuted);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 16.0f));
+            ImGui::SetNextWindowSize(ImVec2(std::min(dead ? 560.0f : 720.0f, viewport->WorkSize.x - 40.0f), 0.0f), ImGuiCond_Always);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(26.0f, 24.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(12.0f, 10.0f));
 
             ImGui::Begin("##nd_session", nullptr,
-                         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize);
-            if (context.survival.lifeState == EPlayerLifeState::Dead)
+                         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize |
+                             ImGuiWindowFlags_NoSavedSettings);
+
+            const ImVec2 winMin = ImGui::GetWindowPos();
+            const ImVec2 winMax(winMin.x + ImGui::GetWindowSize().x, winMin.y + ImGui::GetWindowSize().y);
+            ImGui::GetWindowDrawList()->AddRectFilled(
+                winMin, ImVec2(winMax.x, winMin.y + 3.0f),
+                dead ? UITheme::Colors::AccentRose : UITheme::Colors::AccentAmber);
+
+            if (dead)
             {
-                ImGui::SetWindowFontScale(1.5f);
-                ImGui::TextColored(ImVec4(0.95f, 0.2f, 0.15f, 1.0f), "%s", NextDayz::L10n::Tr("YOU ARE DEAD"));
-                ImGui::SetWindowFontScale(1.0f);
-                ImGui::Separator();
-                ImGui::Text(NextDayz::L10n::Tr("Cause:       %s"), context.survival.lastDamageSource.empty()
-                    ? NextDayz::L10n::Tr("Unknown") : NextDayz::L10n::Tr(context.survival.lastDamageSource));
-                ImGui::Text(NextDayz::L10n::Tr("Survived:    %02d:%02d"), static_cast<int>(context.survivalSeconds) / 60,
-                            static_cast<int>(context.survivalSeconds) % 60);
-                ImGui::Text(NextDayz::L10n::Tr("Infected:    %d Killed"), context.kills);
+                ImGui::TextColored(UITheme::ColorVec4(UITheme::Colors::AccentRose), "%s", NextDayz::L10n::Tr("KILLED IN ACTION"));
+                ImGui::PushFont(context.titleFont ? context.titleFont : ImGui::GetFont());
+                ImGui::TextUnformatted(NextDayz::L10n::Tr("YOU ARE DEAD"));
+                ImGui::PopFont();
                 ImGui::Spacing();
-                if (context.restartSession && ImGui::Button(NextDayz::L10n::Label("WAKE UP AGAIN"), ImVec2(-1.0f, 38.0f)))
+
+                if (ImGui::BeginTable("##kia_stats", 3, ImGuiTableFlags_SizingStretchSame))
                 {
-                    context.restartSession();
+                    const auto statCard = [](const char* label, const std::string& val, ImU32 accent)
+                    {
+                        ImGui::TableNextColumn();
+                        const ImVec2 p = ImGui::GetCursorScreenPos();
+                        const float w = ImGui::GetContentRegionAvail().x;
+                        const ImVec2 q(p.x + w, p.y + 56.0f);
+                        UIWidgets::DrawFieldCard(ImGui::GetWindowDrawList(), p, q, accent);
+                        ImGui::GetWindowDrawList()->AddText(ImVec2(p.x + 12.0f, p.y + 8.0f), UITheme::Colors::TextMuted, label);
+                        ImGui::GetWindowDrawList()->AddText(ImVec2(p.x + 12.0f, p.y + 28.0f), UITheme::Colors::TextPrimary, val.c_str());
+                        ImGui::Dummy(ImVec2(w, 56.0f));
+                    };
+                    const std::string cause = context.survival.lastDamageSource.empty()
+                        ? std::string(NextDayz::L10n::Tr("Unknown"))
+                        : std::string(NextDayz::L10n::Tr(context.survival.lastDamageSource));
+                    char timeStr[32];
+                    std::snprintf(timeStr, sizeof(timeStr), "%02d:%02d",
+                                  static_cast<int>(context.survivalSeconds) / 60,
+                                  static_cast<int>(context.survivalSeconds) % 60);
+                    statCard(NextDayz::L10n::Tr("Cause of death"), cause, UITheme::Colors::AccentRose);
+                    statCard(NextDayz::L10n::Tr("Survival time"), timeStr, UITheme::Colors::AccentAmber);
+                    statCard(NextDayz::L10n::Tr("Infected eliminated"), std::to_string(context.kills), UITheme::Colors::TextSecondary);
+                    ImGui::EndTable();
                 }
+
+                ImGui::Spacing();
+                ImGui::TextColored(UITheme::ColorVec4(UITheme::Colors::TextSecondary), "%s",
+                                   NextDayz::L10n::Tr("Your carried gear remains where you fell. Storage and gold are safe."));
+                ImGui::Spacing();
+                if (context.restartSession && UIWidgets::PrimaryButton(NextDayz::L10n::Label("WAKE UP AGAIN"), ImVec2(-1.0f, 42.0f)))
+                    context.restartSession();
+                if (context.returnToLobby && UIWidgets::PrimaryButton(NextDayz::L10n::Label("RETURN TO LOBBY"), ImVec2(-1.0f, 40.0f)))
+                    context.returnToLobby();
+                if (context.openSettings && UIWidgets::GhostButton(NextDayz::L10n::Label("SETTINGS"), ImVec2(-1.0f, 36.0f)))
+                    context.openSettings();
             }
             else
             {
-                ImGui::SetWindowFontScale(1.25f);
-                ImGui::TextUnformatted(NextDayz::L10n::Tr("GAME PAUSED"));
-                ImGui::SetWindowFontScale(1.0f);
-                ImGui::TextDisabled("%s", NextDayz::L10n::Tr("Press Esc to resume"));
-                ImGui::Separator();
-                ImGui::TextWrapped("%s", NextDayz::L10n::Tr("WASD move  Shift sprint  Ctrl walk  C crouch  Space jump/vault"));
-                ImGui::TextWrapped("%s", NextDayz::L10n::Tr("LMB fire/swing  RMB tap ADS / hold aim  R reload  1/2/3/Q weapons  E take  F fill bottle"));
-                ImGui::TextWrapped("%s", NextDayz::L10n::Tr("Tab inventory  4-7 quickbar  H bandage  M map  L lantern  V view  Alt free look"));
-                ImGui::Spacing();
-                if (context.resumeSession && ImGui::Button(NextDayz::L10n::Label("RESUME GAME"), ImVec2(-1.0f, 38.0f)))
-                    context.resumeSession();
-                if (context.openSettings && ImGui::Button(NextDayz::L10n::Label("SETTINGS"), ImVec2(-1.0f, 38.0f)))
-                    context.openSettings();
-                const float halfWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
-                if (context.restartSession && ImGui::Button(NextDayz::L10n::Label("RESTART RUN"), ImVec2(halfWidth, 36.0f)))
+                if (ImGui::BeginTable("##pause_cols", 2, ImGuiTableFlags_SizingStretchProp))
                 {
-                    context.restartSession();
+                    ImGui::TableSetupColumn("actions", ImGuiTableColumnFlags_WidthStretch, 0.44f);
+                    ImGui::TableSetupColumn("controls", ImGuiTableColumnFlags_WidthStretch, 0.56f);
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+
+                    ImGui::TextColored(UITheme::ColorVec4(UITheme::Colors::AccentAmber), "%s", NextDayz::L10n::Tr("Pause"));
+                    ImGui::PushFont(context.titleFont ? context.titleFont : ImGui::GetFont());
+                    ImGui::TextUnformatted(NextDayz::L10n::Tr("GAME PAUSED"));
+                    ImGui::PopFont();
+                    ImGui::TextDisabled("%s", NextDayz::L10n::Tr("Press Esc to resume"));
+                    ImGui::Spacing();
+
+                    if (context.resumeSession && UIWidgets::PrimaryButton(NextDayz::L10n::Label("RESUME GAME"), ImVec2(-1.0f, 40.0f)))
+                        context.resumeSession();
+                    if (context.openSettings && UIWidgets::GhostButton(NextDayz::L10n::Label("SETTINGS"), ImVec2(-1.0f, 36.0f)))
+                        context.openSettings();
+                    if (context.restartSession && UIWidgets::GhostButton(NextDayz::L10n::Label("RESTART RUN"), ImVec2(-1.0f, 36.0f)))
+                        context.restartSession();
+                    if (context.returnToLobby && UIWidgets::GhostButton(NextDayz::L10n::Label("RETURN TO LOBBY"), ImVec2(-1.0f, 36.0f), false, true))
+                        context.returnToLobby();
+
+                    ImGui::TableNextColumn();
+                    UIWidgets::DrawSectionHeader(NextDayz::L10n::Tr("Controls"), nullptr, UITheme::Colors::AccentAmber);
+                    const auto keyRow = [](const char* keys, const char* desc)
+                    {
+                        ImGui::TextColored(UITheme::ColorVec4(UITheme::Colors::AccentAmber), "%s", keys);
+                        ImGui::SameLine(145.0f);
+                        ImGui::TextColored(UITheme::ColorVec4(UITheme::Colors::TextSecondary), "%s", NextDayz::L10n::Tr(desc));
+                    };
+                    keyRow("WASD / Shift / C", "Move / Sprint / Crouch");
+                    keyRow("LMB / RMB / R", "Fire / Aim / Reload");
+                    keyRow("E / F / B", "Interact / Fill / Extract");
+                    keyRow("TAB / M / H", "Inventory / Map / Bandage");
+                    keyRow("1 2 3 / 4-7", "Weapons / Quickbar");
+                    keyRow("V / Alt", "View / Free look");
+                    ImGui::EndTable();
                 }
-                if (context.restartSession) ImGui::SameLine();
-                if (context.returnToLobby && ImGui::Button(NextDayz::L10n::Label("RETURN TO LOBBY"), ImVec2(-1,36)))
-                    context.returnToLobby();
             }
-            if (context.survival.lifeState == EPlayerLifeState::Dead && context.openSettings &&
-                ImGui::Button(NextDayz::L10n::Label("SETTINGS"), ImVec2(-1.0f, 38.0f))) context.openSettings();
-            if (context.survival.lifeState == EPlayerLifeState::Dead && context.returnToLobby &&
-                ImGui::Button(NextDayz::L10n::Label("RETURN TO LOBBY"), ImVec2(-1.0f, 36.0f))) context.returnToLobby();
             ImGui::End();
             ImGui::PopStyleVar(2);
-            ImGui::PopStyleColor(2);
         }
     }
 
@@ -2506,12 +2582,13 @@ namespace NextDayz::NextDayzHUD
         if (!context.sessionLabel.empty())
         {
             const auto* viewport = ImGui::GetMainViewport();
-            ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + 20, viewport->WorkPos.y + 20));
-            ImGui::SetNextWindowBgAlpha(0.8f);
-            ImGui::Begin("##nd_session_mode", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
-                ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize);
-            ImGui::TextUnformatted(context.sessionLabel.c_str());
-            ImGui::End();
+            ImDrawList* draw = ImGui::GetForegroundDrawList();
+            const ImVec2 sz = ImGui::CalcTextSize(context.sessionLabel.c_str());
+            const ImVec2 a(viewport->WorkPos.x + 20.0f, viewport->WorkPos.y + 18.0f);
+            const ImVec2 b(a.x + sz.x + 18.0f, a.y + sz.y + 8.0f);
+            draw->AddRectFilled(a, b, IM_COL32(14, 17, 15, 175), 2.0f);
+            draw->AddRectFilled(a, ImVec2(a.x + 3.0f, b.y), UITheme::Colors::AccentAmber);
+            draw->AddText(ImVec2(a.x + 10.0f, a.y + 4.0f), UITheme::Colors::TextSecondary, context.sessionLabel.c_str());
         }
         if (context.showInventory)
         {

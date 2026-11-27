@@ -115,6 +115,24 @@ private:
     bool invertMouseY_ = false;
 
     ImFont* inventoryTitleFont_ = nullptr;
+    ImFont* ammoFont_ = nullptr;
+
+    struct FDebriefOverlay
+    {
+        bool open = false;
+        bool extracted = false;
+        std::string mapName;
+        std::string deathCause;
+        double survivalSeconds = 0.0;
+        int kills = 0;
+        uint64_t extractedValue = 0;
+        uint64_t contractGold = 0;
+        int contractReputation = 0;
+        int contractsCompleted = 0;
+    };
+    FDebriefOverlay debrief_;
+    int stashCategoryFilter_ = 0; // 0 All, 1 Weapons, 2 Ammo, 3 Gear, 4 Supplies
+    void DrawDebriefOverlay();
 
     static constexpr const char* cabinScenePath = "assets/scad/scenes/nextdayz_helicopter_lobby.scad";
     void LoadFieldAssets();
@@ -317,6 +335,7 @@ private:
     void PumpRetiredNetworkSessions();
     bool NetworkAvailable() const;
     bool NetLoggedIn() const;
+    bool NetPvpActive() const;
     std::string NetAccountName() const;
     std::string NetLobbyStatus() const;
     void LoginToMaster(const std::string& url, const std::string& name, std::string_view password);

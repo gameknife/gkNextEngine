@@ -3,6 +3,8 @@
 
 #include <imgui.h>
 
+#include "Application/Game/NextDayz/UI/HUDTheme.hpp"
+#include "Application/Game/NextDayz/UI/HUDWidgets.hpp"
 #include "Engine/Options.hpp"
 #include "Engine/Rendering/RendererChoices.hpp"
 #include "Engine/Rendering/Upscaler/UpscalerTypes.hpp"
@@ -36,6 +38,8 @@ void NextDayzGameInstance::OpenSettings()
 void NextDayzGameInstance::DrawSettings()
 {
     using namespace NextDayz::L10n;
+    using namespace NextDayz::UITheme;
+    using namespace NextDayz::UIWidgets;
     using namespace Rendering::Upscaler;
     if (!settingsOpen_) return;
 
@@ -46,27 +50,26 @@ void NextDayzGameInstance::DrawSettings()
     ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(std::min(720.0f, viewport->WorkSize.x - 24.0f),
                                   std::min(550.0f, viewport->WorkSize.y - 24.0f)));
+    FFieldStyleScope style;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(24, 20));
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10, 8));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(12, 12));
-    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.035f, 0.065f, 0.075f, 0.98f));
     if (ImGui::BeginPopupModal(popupId, nullptr, ImGuiWindowFlags_NoDecoration |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings))
     {
+        const ImVec2 pMin = ImGui::GetWindowPos();
+        ImGui::GetWindowDrawList()->AddRectFilled(pMin, ImVec2(pMin.x + ImGui::GetWindowSize().x, pMin.y + 3.0f), Colors::AccentAmber);
         const bool childPopupOpen = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
-        ImGui::SetWindowFontScale(1.4f);
+        ImGui::PushFont(inventoryTitleFont_ ? inventoryTitleFont_ : ImGui::GetFont());
         ImGui::TextUnformatted(Tr("SETTINGS"));
-        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopFont();
         ImGui::Separator();
         const char* tabs[] = {"Graphics", "Audio & Controls", "Language"};
         const float tabWidth = (ImGui::GetContentRegionAvail().x - 24.0f) / 3.0f;
         for (int tab = 0; tab < 3; ++tab)
         {
             if (tab) ImGui::SameLine();
-            ImGui::PushStyleColor(ImGuiCol_Button, settingsTab_ == tab
-                ? ImVec4(0.40f, 0.31f, 0.17f, 1) : ImVec4(0.10f, 0.16f, 0.18f, 1));
-            if (ImGui::Button(Label(tabs[tab]), ImVec2(tabWidth, 38))) settingsTab_ = tab;
-            ImGui::PopStyleColor();
+            if (SegmentedButton(Label(tabs[tab]), settingsTab_ == tab, ImVec2(tabWidth, 38))) settingsTab_ = tab;
         }
 
         auto& engine = GetEngine();
@@ -193,7 +196,7 @@ void NextDayzGameInstance::DrawSettings()
         ImGui::TextWrapped("%s", Tr(settingsSaveFailed_
             ? "Could not save settings. Try again."
             : "Changes apply immediately and are saved when you close this panel."));
-        if (ImGui::Button(Label("BACK  [ESC]"), ImVec2(-1, 38)) ||
+        if (PrimaryButton(Label("Save & close"), ImVec2(-1, 40)) ||
             (!openedThisFrame && !childPopupOpen && ImGui::IsKeyPressed(ImGuiKey_Escape, false) &&
              !ImGui::IsAnyItemActive()))
         {
@@ -210,6 +213,5 @@ void NextDayzGameInstance::DrawSettings()
         }
         ImGui::EndPopup();
     }
-    ImGui::PopStyleColor();
     ImGui::PopStyleVar(3);
 }

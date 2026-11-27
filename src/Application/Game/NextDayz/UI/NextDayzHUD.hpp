@@ -56,6 +56,8 @@ namespace NextDayz
     struct FHudContext
     {
         ImFont* titleFont = nullptr;
+        ImFont* ammoFont = nullptr;
+        bool pvp = false;
         bool aiming = false;
         bool freeLooking = false;
         bool firstPerson = true;

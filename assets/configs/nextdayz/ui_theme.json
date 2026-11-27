@@ -1,0 +1,43 @@
+{
+  "name": "NextDayz Tactical Field Minimalism",
+  "version": 1,
+  "colors": {
+    "bgScrim": "rgba(10, 12, 11, 0.76)",
+    "surfaceBase": "rgba(17, 20, 18, 0.92)",
+    "surfacePanel": "rgba(18, 22, 20, 0.94)",
+    "surfaceHeader": "rgba(22, 26, 23, 0.96)",
+    "surfaceCard": "#1c211e",
+    "surfaceCardHover": "#252c28",
+    "surfaceInset": "#0e110f",
+    "borderSubtle": "rgba(228, 224, 208, 0.12)",
+    "borderStrong": "rgba(228, 224, 208, 0.28)",
+    "borderHighlight": "#d99b38",
+    "textPrimary": "#eceae0",
+    "textSecondary": "#9fa498",
+    "textMuted": "#676d63",
+    "textOnAccent": "#14120c",
+    "accentAmber": "#d99b38",
+    "accentAmberHover": "#ebb152",
+    "accentOlive": "#6fa66b",
+    "statusDanger": "#d64545",
+    "statusWater": "#5ca8c9",
+    "statusIce": "#9ecee3",
+    "kindWeapon": "#d97736",
+    "kindMelee": "#c4622a",
+    "kindAmmo": "#c8a842",
+    "kindAttachment": "#5ca8c9",
+    "kindGear": "#8b7bb5",
+    "kindSupply": "#6fa66b",
+    "kindMisc": "#8f968a",
+    "atlasOcean": "#0d1414",
+    "atlasLand": "#22302c",
+    "atlasCoast": "#3f5951",
+    "atlasGrid": "rgba(120, 152, 140, 0.14)"
+  },
+  "metrics": {
+    "radiusSm": 2,
+    "radiusMd": 3,
+    "topNavHeight": 56,
+    "accentBarWidth": 3
+  }
+}

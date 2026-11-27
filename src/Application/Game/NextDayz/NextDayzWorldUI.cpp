@@ -1,4 +1,6 @@
 #include "Engine/Common/CoreMinimal.hpp"
+#include "Application/Game/NextDayz/UI/HUDTheme.hpp"
+#include "Application/Game/NextDayz/UI/HUDWidgets.hpp"
 #include "Application/Game/NextDayz/UI/Localization.hpp"
 #include "NextDayzGameInstance.hpp"
 
@@ -9,13 +11,13 @@
 
 namespace
 {
-    constexpr ImU32 ocean = IM_COL32(13, 23, 26, 255);
-    constexpr ImU32 land = IM_COL32(42, 62, 60, 255);
-    constexpr ImU32 coast = IM_COL32(79, 108, 97, 255);
-    constexpr ImU32 grid = IM_COL32(49, 72, 70, 110);
-    constexpr ImU32 ink = IM_COL32(219, 229, 211, 255);
-    constexpr ImU32 muted = IM_COL32(128, 155, 146, 255);
-    constexpr ImU32 amber = IM_COL32(227, 181, 101, 255);
+    constexpr ImU32 ocean = NextDayz::UITheme::Colors::AtlasOcean;
+    constexpr ImU32 land  = NextDayz::UITheme::Colors::AtlasLand;
+    constexpr ImU32 coast = NextDayz::UITheme::Colors::AtlasCoast;
+    constexpr ImU32 grid  = NextDayz::UITheme::Colors::AtlasGrid;
+    constexpr ImU32 ink   = NextDayz::UITheme::Colors::TextPrimary;
+    constexpr ImU32 muted = NextDayz::UITheme::Colors::TextSecondary;
+    constexpr ImU32 amber = NextDayz::UITheme::Colors::AccentAmber;
 
     void Label(ImDrawList* draw, ImVec2 position, const char* text, ImU32 color = ink, float scale = 1.0f)
     {
@@ -64,49 +66,61 @@ void NextDayzGameInstance::DrawWorldOperations()
     const float availableHeight = ImGui::GetContentRegionAvail().y;
     const float sidebarWidth = std::clamp(availableWidth * 0.25f, 245.0f, 340.0f);
 
+    using namespace NextDayz::UITheme;
+    using namespace NextDayz::UIWidgets;
+    FFieldStyleScope style;
+
     ImGui::BeginChild("operation_brief", ImVec2(sidebarWidth, availableHeight), false);
-    ImGui::Spacing();
-    ImGui::TextColored(ImVec4(0.89f,0.71f,0.40f,1), "%s", NextDayz::L10n::Tr("MERCENARY FIELD OFFICE"));
-    ImGui::Spacing();
-    ImGui::TextWrapped("%s", NextDayz::L10n::Tr("Search. Survive. Bring it home."));
+    DrawSectionHeader(NextDayz::L10n::Tr("DEPLOYMENT ZONES"), nullptr, Colors::AccentAmber);
     const size_t regions = static_cast<size_t>(std::count_if(visible.begin(), visible.end(),
         [](const auto* map) { return !map->training; }));
-    ImGui::TextDisabled(NextDayz::L10n::Tr("%zu regions / 1 shared safehouse"), regions);
+    ImGui::TextColored(ColorVec4(Colors::TextSecondary), NextDayz::L10n::Tr("%zu regions / 1 shared safehouse"), regions);
     ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::TextDisabled("%s", NextDayz::L10n::Tr("FIELD RECORDS"));
     for (size_t index = 0; index < visible.size(); ++index)
     {
         const auto& map = *visible[index];
         const auto count = campaign_.mapSorties.find(map.id);
         const uint64_t sorties = count == campaign_.mapSorties.end() ? 0 : count->second;
-        ImGui::PushID(static_cast<int>(index));
-        ImGui::Spacing();
         const auto contracts = std::count_if(campaign_.contracts.begin(), campaign_.contracts.end(),
             [&](const auto& contract) { return contract.mapId == map.id; });
-        const auto title = map.training
-            ? NextDayz::L10n::Format("{}\n{}  |  practice, never assigned", map.name, map.region)
-            : contracts > 0
-            ? NextDayz::L10n::Format("{}\n{}  |  {} deployments  |  {} contracts", map.name, map.region, sorties, contracts)
-            : NextDayz::L10n::Format("{}\n{}  |  {} deployments", map.name, map.region, sorties);
+        const bool selected = selectedWorldMap_ == static_cast<int>(index);
         const bool destination = !authoringMode_ && ChosenDeployMap() == &map;
-        if (destination) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.89f,0.71f,0.40f,1));
-        if (ImGui::Selectable(title.c_str(), selectedWorldMap_ == static_cast<int>(index), 0, ImVec2(0, 62)))
+
+        ImGui::PushID(static_cast<int>(index));
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const float w = ImGui::GetContentRegionAvail().x;
+        const float h = 68.0f;
+        const bool clicked = ImGui::InvisibleButton("##zone_card", ImVec2(w, h));
+        const bool hovered = ImGui::IsItemHovered();
+        DrawFieldCard(ImGui::GetWindowDrawList(), p, ImVec2(p.x + w, p.y + h),
+                      (selected || destination) ? Colors::AccentAmber : 0, selected || destination, hovered);
+        auto* draw = ImGui::GetWindowDrawList();
+        draw->AddText(ImVec2(p.x + 12.0f, p.y + 8.0f),
+                      (selected || destination) ? Colors::TextHighlight : Colors::TextPrimary,
+                      NextDayz::L10n::Tr(map.name));
+        draw->AddText(ImVec2(p.x + 12.0f, p.y + 28.0f), Colors::TextSecondary, NextDayz::L10n::Tr(map.region));
+        const std::string meta = map.training
+            ? std::string(NextDayz::L10n::Tr("Training"))
+            : NextDayz::L10n::Format("{} {}  ·  {} {}", NextDayz::L10n::Tr("Sorties"), sorties,
+                                     NextDayz::L10n::Tr("CONTRACTS"), contracts);
+        draw->AddText(ImVec2(p.x + 12.0f, p.y + 46.0f), Colors::TextMuted, meta.c_str());
+
+        if (clicked)
         {
             selectedWorldMap_ = static_cast<int>(index);
             BrowseWorldMap(map);
         }
-        if (destination) ImGui::PopStyleColor();
         ImGui::PopID();
+        ImGui::Spacing();
     }
-    ImGui::Spacing();
     ImGui::Separator();
+    ImGui::Spacing();
     if (!campaign_.lastMapId.empty())
     {
         ImGui::TextDisabled("%s", NextDayz::L10n::Tr("LAST ASSIGNMENT"));
         if (const auto* last = NextDayz::FindExpeditionMap(expeditionMaps_, campaign_.lastMapId))
             ImGui::TextWrapped("%s", NextDayz::L10n::Tr(last->name));
-        ImGui::TextColored(ImVec4(0.7f,0.78f,0.64f,1), "%s", NextDayz::L10n::Tr(campaign_.lastOutcome));
+        ImGui::TextColored(ColorVec4(Colors::AccentEmerald), "%s", NextDayz::L10n::Tr(campaign_.lastOutcome));
         ImGui::Spacing();
     }
     const auto* destination = ChosenDeployMap();
@@ -115,35 +129,28 @@ void NextDayzGameInstance::DrawWorldOperations()
         ImGui::TextDisabled("%s", NextDayz::L10n::Tr("DEPLOYMENT DESTINATION"));
         if (destination)
         {
-            ImGui::TextColored(ImVec4(0.89f,0.71f,0.40f,1), "%s", NextDayz::L10n::Tr(destination->name));
-            ImGui::TextDisabled("%s", NextDayz::L10n::Tr(destination->region));
+            ImGui::TextColored(ColorVec4(Colors::AccentAmber), "%s", NextDayz::L10n::Tr(destination->name));
         }
         else
         {
-            ImGui::TextColored(ImVec4(0.89f,0.71f,0.40f,1), "%s", NextDayz::L10n::Tr("RANDOM ASSIGNMENT"));
-            ImGui::TextWrapped("%s", NextDayz::L10n::Tr("Destination revealed on departure. Pick a region in the list or on the map to fly there instead."));
+            ImGui::TextColored(ColorVec4(Colors::AccentAmber), "%s", NextDayz::L10n::Tr("RANDOM ASSIGNMENT"));
         }
     }
     ImGui::Spacing();
-    ImGui::Text(NextDayz::L10n::Tr("Carried gear: %zu stacks"), inventory_.Instances().size());
-    ImGui::Text(NextDayz::L10n::Tr("Free space: %d"), inventory_.TotalCapacity() - inventory_.UsedCapacity());
+    ImGui::TextColored(ColorVec4(Colors::TextSecondary), NextDayz::L10n::Tr("Carried gear: %zu stacks"), inventory_.Instances().size());
+    ImGui::TextColored(ColorVec4(Colors::TextSecondary), NextDayz::L10n::Tr("Free space: %d"), inventory_.TotalCapacity() - inventory_.UsedCapacity());
     ImGui::Spacing();
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.46f,0.33f,0.16f,1));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.60f,0.44f,0.23f,1));
-    ImGui::BeginDisabled(visible.empty() || pendingCampaign_.has_value());
     const char* deployLabel = authoringMode_ ? NextDayz::L10n::Tr("PLAYTEST CURRENT MAP")
         : destination ? NextDayz::L10n::Tr("DEPLOY TO DESTINATION") : NextDayz::L10n::Tr("ACCEPT & DEPLOY");
-    if (ImGui::Button(deployLabel, ImVec2(-1, 48))) Deploy();
-    ImGui::EndDisabled();
-    ImGui::PopStyleColor(2);
-    if (destination && ImGui::Button(NextDayz::L10n::Label("RANDOM ASSIGNMENT"), ImVec2(-1, 30))) SetDeployChoice({});
-    if (ImGui::Button(NextDayz::L10n::Label("PREPARE LOADOUT"), ImVec2(-1, 30))) safehouseTab_ = 1;
+    if (PrimaryButton(deployLabel, ImVec2(-1, 46), !visible.empty() && !pendingCampaign_.has_value())) Deploy();
+    if (destination && GhostButton(NextDayz::L10n::Label("RANDOM ASSIGNMENT"), ImVec2(-1, 32))) SetDeployChoice({});
+    if (GhostButton(NextDayz::L10n::Label("PREPARE LOADOUT"), ImVec2(-1, 32))) safehouseTab_ = 1;
     ImGui::Spacing();
     if (authoringMode_ || GOption->AgentValidation)
     {
         ImGui::TextDisabled("%s", authoringMode_ ? NextDayz::L10n::Tr("DRAFT PLAYTEST") : NextDayz::L10n::Tr("TEMPORARY MAP TEST"));
         ImGui::BeginDisabled(visible.empty() || pendingCampaign_.has_value() || campaignSaveBlocked_);
-        if (ImGui::Button(authoringMode_ ? NextDayz::L10n::Tr("PLAYTEST BROWSED MAP") : NextDayz::L10n::Tr("ENTER SELECTED MAP (TEST)"), ImVec2(-1, 36)))
+        if (GhostButton(authoringMode_ ? NextDayz::L10n::Tr("PLAYTEST BROWSED MAP") : NextDayz::L10n::Tr("ENTER SELECTED MAP (TEST)"), ImVec2(-1, 34)))
         {
             const auto& selected = *visible[selectedWorldMap_];
             const auto& scene = authoringMode_ ? selected.draftScene : selected.scene;
@@ -153,14 +160,12 @@ void NextDayzGameInstance::DrawWorldOperations()
         ImGui::EndDisabled();
         if (!visible.empty()) ImGui::TextWrapped(NextDayz::L10n::Tr("Selected: %s"), NextDayz::L10n::Tr(visible[selectedWorldMap_]->name));
     }
-    // Practice range: every weapon, magazine, garment, food and tool on display.
     const auto training = std::find_if(visible.begin(), visible.end(), [](const auto* map) { return map->training; });
     if (training != visible.end() && !authoringMode_)
     {
         ImGui::Spacing();
         ImGui::BeginDisabled(pendingCampaign_.has_value() || campaignSaveBlocked_);
-        // Practice is its own offline session: it never carries or changes the campaign.
-        if (ImGui::Button(NextDayz::L10n::Tr("ENTER TRAINING GROUND"), ImVec2(-1, 32))) StartTraining();
+        if (GhostButton(NextDayz::L10n::Tr("ENTER TRAINING GROUND"), ImVec2(-1, 32))) StartTraining();
         ImGui::EndDisabled();
     }
     ImGui::EndChild();

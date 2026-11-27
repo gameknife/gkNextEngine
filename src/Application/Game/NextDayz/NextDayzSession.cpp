@@ -3,6 +3,8 @@
 
 #include <imgui.h>
 
+#include "Application/Game/NextDayz/UI/HUDTheme.hpp"
+#include "Application/Game/NextDayz/UI/HUDWidgets.hpp"
 #include "Engine/Options.hpp"
 #include "Engine/Runtime/Config/CVarSystem.hpp"
 #include "Engine/Runtime/Engine.hpp"
@@ -11,7 +13,9 @@
 
 void NextDayzGameInstance::ConfigureSessionCVars(NextCVar::FCVarSystem& cvars)
 {
-    cvars.RegisterBool("nextdayz.ui.sessionMenu", !GOption->AgentValidation && GOption->SceneName.empty(),
+    // Boot directly into the 3D Helicopter Cabin; players switch mode/server from the top bar.
+    // Automated tests may still pass `--cvar nextdayz.ui.sessionMenu true`.
+    cvars.RegisterBool("nextdayz.ui.sessionMenu", false,
         &sessionMenuOpen_, NextCVar::ECVarFlags::None, "Open the play mode and Master server menu");
     cvars.RegisterString("nextdayz.settings.survivorName", "", &preferredSurvivorName_, NextCVar::ECVarFlags::Archive,
         "Last survivor name used to log in (tokens are never stored)");
@@ -150,6 +154,8 @@ void NextDayzGameInstance::ReturnToSessionLobby()
 void NextDayzGameInstance::DrawSessionMenu()
 {
     using namespace NextDayz::L10n;
+    using namespace NextDayz::UITheme;
+    using namespace NextDayz::UIWidgets;
     if (!sessionMenuOpen_ || settingsOpen_ || netMode_ == ENetMode::Server) return;
     constexpr const char* popup = "##nextdayz_session_menu";
     const bool opening = !ImGui::IsPopupOpen(popup);
@@ -157,36 +163,37 @@ void NextDayzGameInstance::DrawSessionMenu()
     const auto* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(std::min(760.0f, viewport->WorkSize.x - 24), std::min(650.0f, viewport->WorkSize.y - 24)));
+    FFieldStyleScope style;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(24,20));
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10,8));
-    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.035f,0.065f,0.075f,0.98f));
     if (ImGui::BeginPopupModal(popup, nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings))
     {
-        ImGui::SetWindowFontScale(1.4f);
+        const ImVec2 pMin = ImGui::GetWindowPos();
+        ImGui::GetWindowDrawList()->AddRectFilled(pMin, ImVec2(pMin.x + ImGui::GetWindowSize().x, pMin.y + 3.0f), Colors::AccentAmber);
+        ImGui::PushFont(inventoryTitleFont_ ? inventoryTitleFont_ : ImGui::GetFont());
         ImGui::TextUnformatted(Tr("PLAY MODE / SERVERS"));
-        ImGui::SetWindowFontScale(1.0f);
-        ImGui::TextColored(ImVec4(0.88f,0.74f,0.46f,1), "%s", Tr(SessionModeLabel()));
+        ImGui::PopFont();
+        ImGui::TextColored(ColorVec4(Colors::AccentAmber), "%s", Tr(SessionModeLabel()));
         const auto account = NetAccountName();
-        ImGui::TextWrapped("%s", NetLoggedIn() ? Format("Logged in: {}", account).c_str() : Tr("Not logged in. Offline play is available."));
+        ImGui::TextColored(ColorVec4(Colors::TextSecondary), "%s", NetLoggedIn() ? Format("Logged in: {}", account).c_str() : Tr("Not logged in. Offline play is available."));
         ImGui::Separator();
         const char* tabs[] = {"Offline", "Master servers", "Direct connection"};
         const float width = (ImGui::GetContentRegionAvail().x - 16) / 3;
         for (int index = 0; index < 3; ++index)
         {
             if (index) ImGui::SameLine();
-            ImGui::PushStyleColor(ImGuiCol_Button, sessionMenuTab_ == index ? ImVec4(0.40f,0.31f,0.17f,1) : ImVec4(0.10f,0.16f,0.18f,1));
-            if (ImGui::Button(Label(tabs[index]), ImVec2(width,36))) sessionMenuTab_ = index;
-            ImGui::PopStyleColor();
+            if (SegmentedButton(Label(tabs[index]), sessionMenuTab_ == index, ImVec2(width, 36))) sessionMenuTab_ = index;
         }
         ImGui::BeginChild("session_content", ImVec2(0,-90));
         ImGui::BeginDisabled(switchingCampaignContext_ || !sceneReady_ || !loadingMapPath_.empty());
         if (sessionMenuTab_ == 0)
         {
+            ImGui::Spacing();
             ImGui::TextWrapped("%s", Tr("Practice offline with every weapon and item. Training never changes your campaign or online storage."));
-            if (ImGui::Button(Label("ENTER TRAINING GROUND"), ImVec2(-1,48))) StartTraining();
+            if (PrimaryButton(Label("ENTER TRAINING GROUND"), ImVec2(-1,48))) StartTraining();
             ImGui::Spacing();
             ImGui::TextWrapped("%s", Tr("Continue the local campaign with its own survivor, safehouse and save."));
-            if (ImGui::Button(Label("SINGLE-PLAYER CAMPAIGN"), ImVec2(-1,44))) StartOfflineLobby();
+            if (GhostButton(Label("SINGLE-PLAYER CAMPAIGN"), ImVec2(-1,44))) StartOfflineLobby();
         }
         else
         {
@@ -214,7 +221,7 @@ void NextDayzGameInstance::DrawSessionMenu()
                 ImGui::SetNextItemWidth(-150);
                 ImGui::InputText("##master_name", masterNameInput_.data(), masterNameInput_.size());
                 ImGui::SameLine();
-                if (ImGui::Button(Label("SAVE SERVER"), ImVec2(140,0)))
+                if (GhostButton(Label("SAVE SERVER"), ImVec2(140, 0)))
                 {
                     std::string url;
                     if (!NextDayz::NormalizeMasterUrl(masterUrlInput_.data(), url)) sessionMenuMessage_ = "Enter a Master address, for example http://127.0.0.1:7780.";
@@ -257,7 +264,8 @@ void NextDayzGameInstance::DrawSessionMenu()
                 ImGui::SetNextItemWidth(-1);
                 ImGui::InputText("##master_password", masterPasswordInput_.data(), masterPasswordInput_.size(), ImGuiInputTextFlags_Password);
             }
-            if (ImGui::Button(Label(sessionMenuTab_ == 1 ? "LOG IN TO MASTER" : "CONNECT TO SERVER"), ImVec2(-1,40)))
+            ImGui::Spacing();
+            if (PrimaryButton(Label(sessionMenuTab_ == 1 ? "LOG IN TO MASTER" : "CONNECT TO SERVER"), ImVec2(-1,42)))
             {
                 if (sessionMenuTab_ == 1)
                 {
@@ -272,12 +280,11 @@ void NextDayzGameInstance::DrawSessionMenu()
         ImGui::EndDisabled();
         ImGui::EndChild();
         ImGui::Separator();
-        ImGui::TextWrapped("%s", sessionMenuMessage_.empty() ? Tr("You can change modes from the lobby at any time.") : sessionMenuMessage_.c_str());
-        if (ImGui::Button(Label("BACK  [ESC]"), ImVec2(-1,36)) || (!opening && ImGui::IsKeyPressed(ImGuiKey_Escape, false) && !ImGui::IsAnyItemActive()))
+        ImGui::TextColored(ColorVec4(Colors::TextSecondary), "%s", sessionMenuMessage_.empty() ? Tr("You can change modes from the lobby at any time.") : sessionMenuMessage_.c_str());
+        if (GhostButton(Label("BACK  [ESC]"), ImVec2(-1,36)) || (!opening && ImGui::IsKeyPressed(ImGuiKey_Escape, false) && !ImGui::IsAnyItemActive()))
             sessionMenuOpen_ = false;
         if (!sessionMenuOpen_) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
-    ImGui::PopStyleColor();
     ImGui::PopStyleVar(2);
 }

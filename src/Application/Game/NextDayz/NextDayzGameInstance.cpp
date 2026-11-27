@@ -116,17 +116,22 @@ void NextDayzGameInstance::OnInitUI()
     });
     if (inventoryTitleFont_)
     {
-        // Pair the Title face with the localized heading's Chinese glyphs.
+        // Pair the condensed Title face with full Chinese glyphs so all localized headings render crisply.
         ImFontConfig fallback;
         fallback.MergeMode = true;
         NextUI::LoadFont(NextUI::FFontRequest{
             .filePath = "assets/fonts/DroidSansFallback.ttf",
             .pixelSize = titleSize,
-            .extraGlyphsUtf8 = NextDayz::L10n::Translate("Inventory", NextDayz::L10n::ELanguage::Chinese).data(),
+            .includeChineseFull = true,
             .fontConfig = &fallback,
             .rasterizerDensity = density,
         });
     }
+    ammoFont_ = NextUI::LoadFont(NextUI::FFontRequest{
+        .filePath = "assets/fonts/Roboto-BoldCondensed.ttf",
+        .pixelSize = 38.0f,
+        .rasterizerDensity = density,
+    });
 }
 
 void NextDayzGameInstance::OnInit()
@@ -1526,6 +1531,8 @@ bool NextDayzGameInstance::OnRenderUI()
 
     NextDayz::FHudContext ctx;
     ctx.titleFont = inventoryTitleFont_;
+    ctx.ammoFont = ammoFont_;
+    ctx.pvp = NetPvpActive();
     ctx.freeLooking = player_.IsFreeLooking();
     ctx.aiming = player_.IsAiming();
     ctx.firstPerson = player_.IsFirstPerson();
@@ -1660,7 +1667,7 @@ bool NextDayzGameInstance::OnRenderUI()
     ctx.survival = survival_.Snapshot();
     ctx.paused = paused_;
     ctx.settingsOpen = settingsOpen_;
-    ctx.sessionLabel = NextDayz::L10n::Tr(SessionModeLabel());
+    ctx.sessionLabel = trainingSession_ ? NextDayz::L10n::Tr(SessionModeLabel()) : "";
     ctx.openSettings = [this]() { OpenSettings(); };
     ctx.resumeSession = [this]() { paused_ = false; SetMouseCaptured(true); };
     ctx.survivalSeconds = survivalSeconds_;
@@ -1681,15 +1688,15 @@ bool NextDayzGameInstance::OnRenderUI()
     {
         hudRequests.emplace_back([this]() { ReturnToSessionLobby(); });
     };
+    ctx.itemIcon = [this](std::string_view id) -> uint64_t
+    {
+        auto& icons = NextDayz::GetItemIconCache(GetEngine().GetRenderer());
+        const uint32_t slot = icons.Request(id, loot_.VisualForItem(id));
+        return slot != std::numeric_limits<uint32_t>::max()
+            ? NextUI::ToImTextureId(GetEngine().GetUiHost()->ResolveRawSlotId(slot)) : static_cast<ImTextureID>(0);
+    };
     if (showInventory_)
     {
-        ctx.itemIcon = [this](std::string_view id) -> uint64_t
-        {
-            auto& icons = NextDayz::GetItemIconCache(GetEngine().GetRenderer());
-            const uint32_t slot = icons.Request(id, loot_.VisualForItem(id));
-            return slot != std::numeric_limits<uint32_t>::max()
-                ? NextUI::ToImTextureId(GetEngine().GetUiHost()->ResolveRawSlotId(slot)) : static_cast<ImTextureID>(0);
-        };
         ctx.characterPreview = [this](glm::vec2 size, float yaw, float distance) -> uint64_t
         {
             auto& preview = NextDayz::GetInventoryPreview(GetEngine().GetRenderer());

@@ -11,12 +11,12 @@ export function drawFieldMap(canvas: HTMLCanvasElement, level: Level, frame: Fra
     const centerZ = (min[2] + max[2]) / 2;
     const scale = (height - 34) / Math.max(max[0] - min[0], max[2] - min[2]);
     const point = ([x, , z]: XYZ) => [width / 2 + (x - centerX) * scale, height / 2 + (z - centerZ) * scale];
-    ctx.fillStyle = "#192217";
+    ctx.fillStyle = "#121714";
     ctx.fillRect(0, 0, width, height);
     if (backdrop?.complete && backdrop.naturalWidth) {
         ctx.drawImage(backdrop, (width - height + 34) / 2, 17, height - 34, height - 34);
     }
-    ctx.strokeStyle = "#66745e65";
+    ctx.strokeStyle = "rgba(228, 224, 208, 0.16)";
     ctx.lineWidth = 1;
     for (let value = Math.ceil(min[0] / 100) * 100; value < max[0]; value += 100) {
         const [x] = point([value, 0, 0]);
@@ -46,9 +46,9 @@ export function drawFieldMap(canvas: HTMLCanvasElement, level: Level, frame: Fra
         ctx.fillText(label, x + 8, y - 6);
     };
     for (const anchor of level.anchors) {
-        if (anchor.type === "poi") marker(anchor.position, "#e7ddaa", anchor.label);
-        if (anchor.type === "well") marker(anchor.position, "#7bd4dc", anchor.label || tr("Water"));
-        if (anchor.type === "extraction") marker(anchor.position, "#bade8e", anchor.label || tr("Extraction"), 6);
+        if (anchor.type === "poi") marker(anchor.position, "#d99b38", anchor.label);
+        if (anchor.type === "well") marker(anchor.position, "#5ca8c9", anchor.label || tr("Water"));
+        if (anchor.type === "extraction") marker(anchor.position, "#6fa66b", anchor.label || tr("Extraction"), 6);
     }
     const [px, py] = point(frame.feet);
     ctx.save();
@@ -60,11 +60,11 @@ export function drawFieldMap(canvas: HTMLCanvasElement, level: Level, frame: Fra
     ctx.lineTo(0, 5);
     ctx.lineTo(-6, 8);
     ctx.closePath();
-    ctx.fillStyle = "#d8f4ff";
+    ctx.fillStyle = "#eceae0";
     ctx.stroke();
     ctx.fill();
     ctx.restore();
-    ctx.fillStyle = "#e4ebd8";
+    ctx.fillStyle = "#eceae0";
     ctx.fillText(tr("N ↑"), 20, 29);
     ctx.fillRect(18, height - 28, 100 * scale, 2);
     ctx.fillText("100 m", 18, height - 34);

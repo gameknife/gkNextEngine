@@ -14,6 +14,8 @@
 #include "Engine/Runtime/Interface/AgentQueries.hpp"
 #include "Engine/Runtime/Config/CVarSystem.hpp"
 
+#include "Application/Game/NextDayz/UI/HUDTheme.hpp"
+#include "Application/Game/NextDayz/UI/HUDWidgets.hpp"
 #include <imgui.h>
 
 #if GK_MODULE_NEXTNET
@@ -598,6 +600,7 @@ void NextDayzGameInstance::ShutdownNetwork()
 }
 
 bool NextDayzGameInstance::NetworkAvailable() const { return true; }
+bool NextDayzGameInstance::NetPvpActive() const { return netMode_ == ENetMode::Client && net_ && net_->pvp; }
 bool NextDayzGameInstance::NetLoggedIn() const
 {
     return net_ && net_->master && !net_->token.empty() && net_->lobby != FNetSession::ELobby::Login;
@@ -1707,6 +1710,10 @@ void NextDayzGameInstance::DrawNetStatus()
         return;
     }
     DrawNetPanel();
+    if (netMode_ != ENetMode::Server && !netStatsCvar_ && !debugger_.Visible())
+    {
+        return;
+    }
     std::string text;
     if (netMode_ == ENetMode::Server)
     {
@@ -2417,6 +2424,7 @@ bool NextDayzGameInstance::DrawLobby()
         : net.lobby == ELobby::Joining ? "Joining expedition..." : "Preparing your expedition...");
     DrawCabinMenu(status, ready && profile.playing.empty(), resume, net.wantDeploy);
     if (safehouseTab_ < 0) return true;
+    NextDayz::UITheme::FFieldStyleScope fieldStyle;
     BeginCabinPanel(safehouseTab_ == 0 ? "WORLD / OPERATIONS" : safehouseTab_ == 2 ? "TRADER / SERVICES" : "STORAGE / LOADOUT");
     const auto economyCall = [this](const char* path, std::string body) { NetEconomyCall(path, std::move(body)); };
     const auto& economy = profile.economy;
@@ -2691,6 +2699,7 @@ void NextDayzGameInstance::StartNetwork()
 void NextDayzGameInstance::ShutdownNetwork() {}
 bool NextDayzGameInstance::NetworkAvailable() const { return false; }
 bool NextDayzGameInstance::NetLoggedIn() const { return false; }
+bool NextDayzGameInstance::NetPvpActive() const { return false; }
 std::string NextDayzGameInstance::NetAccountName() const { return {}; }
 std::string NextDayzGameInstance::NetLobbyStatus() const { return {}; }
 void NextDayzGameInstance::RetireNetworkSession() { net_.reset(); }

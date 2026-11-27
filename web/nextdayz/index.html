@@ -4,70 +4,193 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="nextdayz-build" content="NEXTDAYZ_RELEASE_BUILD">
-    <meta name="theme-color" content="#151a15">
+    <meta name="theme-color" content="#0c0f0d">
     <link rel="icon" href="data:,">
     <title>NextDayz · 联机大厅</title>
     <link rel="stylesheet" href="/src/style.css">
     <script type="module" src="/src/main.ts"></script>
 </head>
 <body>
-    <header class="bar">
-        <a class="logo" href="./" aria-label="NextDayz">NEXT<span>DAYZ</span></a>
-        <div class="bar-tools"><span id="network-label" data-i18n="Initializing the kernel">正在初始化内核</span><button id="settings-button" class="quiet" type="button" data-i18n="Settings">设置</button></div>
-    </header>
     <main id="lobby">
+        <div id="lobby-stage" aria-hidden="true"></div>
+        <div class="lobby-vignette" aria-hidden="true"></div>
+
+        <!-- 01. Full-Viewport Tactical Entry / Login -->
         <form id="login">
-            <h1 id="lobby-title" data-i18n="Multiplayer lobby">联机大厅</h1>
-            <label id="name-label" for="name" data-i18n="Survivor name">幸存者名称</label>
-            <input id="name" name="name" required maxlength="32" autocomplete="nickname" autofocus>
-            <label id="password-label" for="password" data-i18n="Account password" hidden>账号口令</label>
-            <input id="password" name="password" type="password" maxlength="72" autocomplete="current-password" hidden>
-            <label id="server-label" for="server" data-i18n="Server">服务器</label>
-            <select id="server">
-                <option value="master" data-i18n="Current server">当前服务器</option>
-                <option value="direct" data-i18n="Development direct connection">开发直连</option>
-            </select>
-            <button type="submit" id="login-button" disabled>进入大厅</button>
+            <div class="entry-brand">
+                <span class="entry-kicker" data-i18n="EXPEDITION SURVIVAL">远征生存撤离</span>
+                <h1 class="brand-wordmark">NEXT<span>DAYZ</span></h1>
+                <p class="entry-tagline" data-i18n="Search. Survive. Bring it home.">搜索物资，活着回来。</p>
+            </div>
+            <div class="entry-card">
+                <h2 id="lobby-title" class="sr-only" data-i18n="Multiplayer lobby">联机大厅</h2>
+                <label id="name-label" for="name" data-i18n="Survivor name">幸存者名称</label>
+                <input id="name" name="name" required maxlength="32" autocomplete="nickname" autofocus>
+                <label id="password-label" for="password" data-i18n="Account password" hidden>账号口令</label>
+                <input id="password" name="password" type="password" maxlength="72" autocomplete="current-password" hidden>
+                <label id="server-label" for="server" data-i18n="Server">服务器</label>
+                <select id="server">
+                    <option value="master" data-i18n="Current server">当前服务器</option>
+                    <option value="direct" data-i18n="Development direct connection">开发直连</option>
+                </select>
+                <button type="submit" id="login-button" class="primary-cta" disabled data-i18n="Enter safehouse">进入安全屋</button>
+                <div class="entry-foot">
+                    <span class="status-pill"><i class="dot"></i><span id="login-network" data-i18n="Initializing the kernel">正在初始化内核</span></span>
+                    <button id="entry-settings-button" class="text-link" type="button" data-i18n="Settings">设置</button>
+                </div>
+            </div>
         </form>
 
-        <section id="profile" hidden>
-            <div class="heading">
-                <div>
-                    <h1 id="profile-name"></h1>
-                    <p id="profile-activity"></p>
+        <!-- 02-05. Unified Safehouse Lobby (Top Nav + Fullscreen 3D Cabin + Channel Overlays) -->
+        <section id="profile" data-tab="cabin" hidden>
+            <header class="game-topnav">
+                <div class="topnav-left">
+                    <a class="logo" href="./" aria-label="NextDayz"><i class="brand-bar"></i>NEXT<span>DAYZ</span></a>
+                    <nav class="topnav-channels" aria-label="Safehouse channels">
+                        <button type="button" class="nav-tab active" data-nav="cabin"><span data-i18n="Cabin">机舱</span></button>
+                        <button type="button" class="nav-tab" data-nav="ops"><span data-i18n="Operations">行动</span><kbd>M</kbd></button>
+                        <button type="button" class="nav-tab" data-nav="loadout"><span data-i18n="Loadout">整备</span><kbd>TAB</kbd></button>
+                        <button type="button" class="nav-tab" data-nav="trade"><span data-i18n="Quartermaster">军需</span><kbd>T</kbd></button>
+                    </nav>
                 </div>
-                <button id="logout" class="quiet" type="button" data-i18n="Switch survivor">切换幸存者</button>
-            </div>
-            <div class="loadout">
-                <section>
-                    <h2><span id="storage-title" data-i18n="Storage">仓库</span> <small id="bring-count"></small></h2>
-                    <div id="storage"></div>
-                </section>
-                <section>
-                    <h2 id="deploy-title" data-i18n="Deployment map">出击地图</h2>
-                    <div id="maps" role="radiogroup" aria-label="出击地图" data-i18n-label="Deployment map"></div>
+                <div class="topnav-right">
+                    <div class="agent-strip">
+                        <strong id="profile-name"></strong>
+                        <span id="profile-gold" class="gold-chip"></span>
+                        <span id="profile-tier" class="tier-chip" hidden></span>
+                    </div>
+                    <span class="server-pill"><i class="dot"></i><span id="network-label" data-i18n="Initializing the kernel">正在初始化内核</span></span>
+                    <button id="logout" class="quiet compact" type="button" data-i18n="Switch survivor">切换幸存者</button>
+                    <button id="settings-button" class="quiet compact" type="button" data-i18n="Settings">设置</button>
+                </div>
+            </header>
+
+            <!-- Cabin Home Floating HUD (Leaves 3D Survivor Hero Clear) -->
+            <div class="cabin-home">
+                <div class="cabin-briefing">
+                    <div class="briefing-card">
+                        <div class="briefing-head">
+                            <span class="kicker" data-i18n="ACTIVE ASSIGNMENT">当前任务</span>
+                            <small id="profile-activity"></small>
+                        </div>
+                        <h2 id="deploy-title" class="sr-only" data-i18n="Deployment map">出击地图</h2>
+                        <div id="maps" role="radiogroup" aria-label="出击地图" data-i18n-label="Deployment map"></div>
+                        <div class="briefing-foot">
+                            <span id="bring-summary"></span>
+                            <button type="button" class="text-link" data-jump="loadout" data-i18n="Loadout">整备</button>
+                        </div>
+                    </div>
+                    <button type="button" id="cabin-contracts-pill" class="contracts-pill" data-jump="trade" hidden>
+                        <i class="amber-dot"></i>
+                        <span id="cabin-contracts-text"></span>
+                        <kbd>T</kbd>
+                    </button>
+                </div>
+
+                <div class="cabin-deploy-zone">
                     <p id="carry-hint"></p>
-                    <button id="deploy" type="button">出击</button>
-                </section>
+                    <button id="deploy" class="primary-cta hero-deploy" type="button" data-i18n="Deploy">出击</button>
+                    <div class="cabin-sub-actions">
+                        <button type="button" class="quiet" data-jump="loadout" data-i18n="Loadout">整备</button>
+                        <button type="button" class="quiet" data-jump="ops" data-i18n="World map">世界地图</button>
+                    </div>
+                </div>
             </div>
-            <section id="economy" class="economy" hidden>
-                <p id="economy-status"></p>
-                <div class="economy-grid">
-                    <section>
-                        <h2 id="board-title" data-i18n="CONTRACTS">合同</h2>
-                        <div id="contract-board"></div>
-                        <h2 id="active-title"></h2>
-                        <div id="contract-active"></div>
+
+            <!-- Operations / World Atlas Drawer -->
+            <div class="channel-overlay" data-panel="ops" hidden>
+                <div class="channel-header">
+                    <h2><i class="accent-tick"></i><span data-i18n="World Atlas">全球战区图</span></h2>
+                    <button type="button" class="quiet compact" data-jump="cabin" data-i18n="Back to cabin">返回机舱</button>
+                </div>
+                <div class="ops-layout">
+                    <aside class="ops-sidebar">
+                        <div class="section-label" data-i18n="DEPLOYMENT ZONES">可用战区</div>
+                        <div id="ops-map-list" class="ops-map-list"></div>
+                        <button type="button" class="quiet" data-jump="loadout" data-i18n="Loadout">整备</button>
+                    </aside>
+                    <div class="ops-atlas-wrap">
+                        <canvas id="atlas-canvas" aria-label="全球战区图" data-i18n-label="World Atlas"></canvas>
+                    </div>
+                    <aside class="ops-dossier">
+                        <span id="dossier-region" class="kicker"></span>
+                        <h3 id="dossier-name"></h3>
+                        <p id="dossier-meta" class="muted"></p>
+                        <p id="dossier-desc" class="dossier-desc"></p>
+                        <div class="dossier-actions">
+                            <button id="ops-deploy" class="primary-cta" type="button" data-i18n="Deploy">出击</button>
+                            <button type="button" class="quiet" data-jump="cabin" data-i18n="Back to cabin">返回机舱</button>
+                        </div>
+                    </aside>
+                </div>
+            </div>
+
+            <!-- Loadout / Stash Workbench Drawer -->
+            <div class="channel-overlay" data-panel="loadout" hidden>
+                <div class="channel-header">
+                    <h2><i class="accent-tick"></i><span id="storage-title" data-i18n="Safehouse warehouse">安全屋仓库</span> <small id="bring-count"></small></h2>
+                    <div class="header-actions">
+                        <button id="clear-bring" class="quiet compact" type="button" data-i18n="Clear loadout">清空携行</button>
+                        <button id="bring-all" class="quiet compact" type="button" data-i18n="Bring all">全部带出</button>
+                        <button type="button" class="quiet compact" data-jump="cabin" data-i18n="Back to cabin">返回机舱</button>
+                    </div>
+                </div>
+                <div class="loadout-workbench">
+                    <section class="stash-pane">
+                        <div class="pane-head">
+                            <span id="stash-capacity"></span>
+                            <div id="stash-filters" class="filter-bar"></div>
+                        </div>
+                        <div id="storage" class="stash-grid"></div>
                     </section>
-                    <section>
-                        <h2 data-i18n="TRADER">商人</h2>
-                        <div id="trader"></div>
+                    <section class="carry-pane">
+                        <div class="pane-head">
+                            <span data-i18n="Carried loadout">本次出击携行</span>
+                            <small id="carry-pane-count"></small>
+                        </div>
+                        <div id="carry-preview" class="carry-list"></div>
+                        <div class="carry-foot">
+                            <button id="loadout-deploy" class="primary-cta" type="button" data-i18n="Deploy">出击</button>
+                        </div>
                     </section>
                 </div>
-            </section>
+            </div>
+
+            <!-- Quartermaster: Contracts & Trader Drawer -->
+            <div class="channel-overlay" data-panel="trade" hidden>
+                <div class="channel-header">
+                    <h2><i class="accent-tick"></i><span data-i18n="Quartermaster">军需</span></h2>
+                    <div class="header-actions">
+                        <div class="segmented-bar">
+                            <button type="button" class="seg-btn active" data-trade-tab="contracts" data-i18n="CONTRACTS">合同</button>
+                            <button type="button" class="seg-btn" data-trade-tab="trader" data-i18n="TRADER">商人</button>
+                        </div>
+                        <button type="button" class="quiet compact" data-jump="cabin" data-i18n="Back to cabin">返回机舱</button>
+                    </div>
+                </div>
+                <section id="economy" class="economy" hidden>
+                    <div id="economy-status" class="economy-bar"></div>
+                    <div class="economy-grid" data-trade-view="contracts">
+                        <section class="eco-col">
+                            <h3 id="board-title" data-i18n="CONTRACTS">合同</h3>
+                            <div id="contract-board" class="card-stack"></div>
+                        </section>
+                        <section class="eco-col">
+                            <h3 id="active-title"></h3>
+                            <div id="contract-active" class="card-stack"></div>
+                        </section>
+                    </div>
+                    <div class="trader-view" data-trade-view="trader" hidden>
+                        <h3 data-i18n="Field supplies">军需补给货架</h3>
+                        <div id="trader" class="trader-grid"></div>
+                    </div>
+                </section>
+            </div>
         </section>
 
+        <!-- 06. Tactical Deployment Briefing Loading Screen -->
         <section class="loading" id="loading" hidden>
+            <span class="kicker" data-i18n="EXPEDITION SURVIVAL">远征生存撤离</span>
             <h1 id="loading-title">正在派遣</h1>
             <p id="loading-detail"></p>
             <progress id="progress" aria-label="地图下载进度" data-i18n-label="Map download progress"></progress>
@@ -76,59 +199,138 @@
         <p id="notice" role="status"></p>
     </main>
 
+    <!-- 07-11. Full-Viewport In-Game Field (100dvh, Zero Header Bar) -->
     <main id="field" hidden>
         <div id="viewport"></div>
-        <aside class="field-card">
-            <strong id="map-name"></strong>
+
+        <!-- Top-Center: Frameless Translucent Compass Tape -->
+        <div id="compass" aria-label="罗盘" data-i18n-label="Compass"></div>
+
+        <!-- Top-Right: Frameless Time & Weather + Conditional PVP Badge -->
+        <aside class="hud-topright">
             <span id="world-clock"></span>
+            <span id="pvp-status" class="pvp-pill" hidden></span>
+        </aside>
+
+        <!-- Bottom-Left: Frameless Minimalist Survival Vitals -->
+        <aside id="vitals-hud" class="hud-vitals" aria-live="off">
+            <div id="conditions-hud" class="hud-conditions"></div>
+            <div class="vital-row" id="vital-hp-row">
+                <svg viewBox="0 0 16 16" class="vital-icon"><path d="M6.5 2h3v4.5H14v3H9.5V14h-3V9.5H2v-3h4.5z" fill="currentColor"/></svg>
+                <div class="vital-track"><div id="vital-hp-bar" class="vital-fill hp"></div></div>
+                <span id="vital-hp-val" class="vital-num">100</span>
+            </div>
+            <div class="vital-row" id="vital-food-row">
+                <svg viewBox="0 0 16 16" class="vital-icon"><path d="M8 2l5 5H3l5-5zM4 9h8v4H4V9z" fill="currentColor"/></svg>
+                <div class="vital-track"><div id="vital-food-bar" class="vital-fill food"></div></div>
+                <span id="vital-food-val" class="vital-num">100</span>
+            </div>
+            <div class="vital-row" id="vital-water-row">
+                <svg viewBox="0 0 16 16" class="vital-icon"><path d="M8 1.5C8 1.5 3 7.2 3 10.5a5 5 0 0 0 10 0C13 7.2 8 1.5 8 1.5z" fill="currentColor"/></svg>
+                <div class="vital-track"><div id="vital-water-bar" class="vital-fill water"></div></div>
+                <span id="vital-water-val" class="vital-num">100</span>
+            </div>
+        </aside>
+
+        <!-- Bottom-Right: Frameless Condensed Weapon & Ammo Readout -->
+        <aside id="weapon-hud" aria-live="off">
+            <span id="weapon-name"></span>
+            <strong id="ammo"></strong>
+            <span id="weapon-action"></span>
+            <div class="weapon-slots" aria-hidden="true"><i id="slot-dot-0"></i><i id="slot-dot-1"></i><i id="slot-dot-2"></i></div>
+        </aside>
+
+        <!-- Hidden-by-default F3 Diagnostics Strip (Never Clutters Player HUD) -->
+        <aside id="diagnostics-bar" class="field-card" hidden>
+            <strong id="map-name"></strong>
             <span id="identity"></span>
             <span id="vitals"></span>
             <span id="sync"></span>
-            <span id="pvp-status"></span>
         </aside>
-        <div id="compass" aria-label="罗盘" data-i18n-label="Compass"></div>
-        <aside id="weapon-hud" aria-live="off"><span id="weapon-name"></span><strong id="ammo"></strong><span id="weapon-action"></span></aside>
+
         <div id="damage-hud" aria-hidden="true"></div>
         <div id="hit-marker" aria-hidden="true" hidden>×</div>
+        <div id="aim-point" aria-hidden="true" hidden></div>
+        <p id="field-hint" aria-live="polite" hidden></p>
+
+        <!-- Unified Centered Tactical Pause Menu (Shown on ESC / Unlock) -->
         <section id="menu" aria-label="视角菜单" data-i18n-label="View menu">
-            <button id="capture" type="button" data-i18n="Take control">进入操控</button>
-            <button id="pack-button" class="quiet" type="button" data-i18n="Inventory">背包</button>
-            <button id="map-button" class="quiet" type="button" data-i18n="Map">地图</button>
-            <button id="course" class="quiet" type="button" data-i18n="Go to obstacle course" hidden>前往障碍场</button>
-            <button id="range" class="quiet" type="button" data-i18n="Go to firing range" hidden>前往靶场</button>
-            <button id="pen" class="quiet" type="button" data-i18n="Go to infected pen" hidden>前往感染者围栏</button>
-            <button id="spawn" class="quiet" type="button" data-i18n="Survivor view">幸存者视角</button>
-            <button id="overview" class="quiet" type="button" data-i18n="Map overview">俯瞰地图</button>
-            <button id="detail" class="quiet" type="button" data-i18n="Central area">核心区</button>
-            <select id="quality" aria-label="画质" data-i18n-label="Graphics">
-                <option value="low" data-i18n="Low">低</option>
-                <option value="balanced" data-i18n="Balanced">均衡</option>
-                <option value="shadows" data-i18n="Cascaded shadows">级联阴影</option>
-            </select>
-            <button id="leave" class="quiet" type="button" data-i18n="Return to lobby">返回大厅</button>
+            <div class="pause-modal">
+                <div class="pause-actions">
+                    <span class="kicker" data-i18n="Pause">暂停</span>
+                    <h2 id="pause-map-title" data-i18n="GAME PAUSED">游戏已暂停</h2>
+                    <button id="capture" class="primary-cta" type="button" data-i18n="Take control">进入操控</button>
+                    <button id="pack-button" class="quiet" type="button" data-i18n="Inventory">背包</button>
+                    <button id="map-button" class="quiet" type="button" data-i18n="Map">地图</button>
+                    <button id="pause-settings-button" class="quiet" type="button" data-i18n="Settings">设置</button>
+                    <button id="leave" class="quiet danger" type="button" data-i18n="Return to lobby">返回大厅</button>
+                </div>
+                <div class="pause-controls">
+                    <div class="section-label" data-i18n="Controls">操控速查</div>
+                    <p id="controls"></p>
+                    <div class="pause-key-list">
+                        <div><kbd>WASD</kbd><span data-i18n="Move / Sprint / Crouch">移动 / 冲刺 / 蹲伏</span></div>
+                        <div><kbd>LMB / RMB / R</kbd><span data-i18n="Fire / Aim / Reload">开火 / 瞄准 / 换弹</span></div>
+                        <div><kbd>E / G</kbd><span data-i18n="Interact / Fill / Extract">交互拾取 / 灌水 / 撤离</span></div>
+                        <div><kbd>TAB / M</kbd><span data-i18n="Inventory / Map / Bandage">背包 / 地图 / 止血</span></div>
+                        <div><kbd>1 2 3 / Q</kbd><span data-i18n="Weapons / Quickbar">武器栏 / 快捷栏</span></div>
+                        <div><kbd>V / Alt</kbd><span data-i18n="View / Free look">切换视角 / 自由环视</span></div>
+                    </div>
+                </div>
+            </div>
+            <!-- Dev / Review tools: hidden in production builds -->
+            <div id="review-bar" class="review-bar" hidden>
+                <button id="course" class="quiet compact" type="button" data-i18n="Go to obstacle course" hidden>前往障碍场</button>
+                <button id="range" class="quiet compact" type="button" data-i18n="Go to firing range" hidden>前往靶场</button>
+                <button id="pen" class="quiet compact" type="button" data-i18n="Go to infected pen" hidden>前往感染者围栏</button>
+                <button id="spawn" class="quiet compact" type="button" data-i18n="Survivor view">幸存者视角</button>
+                <button id="overview" class="quiet compact" type="button" data-i18n="Map overview">俯瞰地图</button>
+                <button id="detail" class="quiet compact" type="button" data-i18n="Central area">核心区</button>
+                <select id="quality" aria-label="画质" data-i18n-label="Graphics">
+                    <option value="low" data-i18n="Low">低</option>
+                    <option value="balanced" data-i18n="Balanced">均衡</option>
+                    <option value="shadows" data-i18n="Cascaded shadows">级联阴影</option>
+                </select>
+            </div>
         </section>
+
+        <!-- Unified 3-Column Grid Inventory -->
         <section id="pack" aria-label="背包" data-i18n-label="Inventory" hidden>
-            <div class="heading"><strong id="pack-title" data-i18n="Inventory">背包</strong><button id="close-pack" class="quiet" type="button" data-i18n="Close">关闭</button></div>
+            <div class="heading">
+                <strong><i class="accent-tick"></i><span id="pack-title" data-i18n="Inventory">背包</span></strong>
+                <button id="close-pack" class="quiet compact" type="button" data-i18n="Close">关闭</button>
+            </div>
             <p id="pack-notice" role="status" hidden></p>
             <div id="items"></div>
         </section>
+
+        <!-- Unified Tactical Field Map -->
         <section id="map-panel" hidden>
-            <div class="heading"><strong id="map-title" data-i18n="Field map">行动地图</strong><button id="close-map" class="quiet" type="button" data-i18n="Close">关闭</button></div>
+            <div class="heading">
+                <strong><i class="accent-tick"></i><span id="map-title" data-i18n="Field map">行动地图</span></strong>
+                <button id="close-map" class="quiet compact" type="button" data-i18n="Close">关闭</button>
+            </div>
             <canvas id="map-canvas" width="760" height="660" aria-label="行动地图" data-i18n-label="Field map"></canvas>
             <p id="map-legend" data-i18n="Light blue: you · Green: extraction · Blue: water"></p>
         </section>
+
+        <!-- Unified KIA Death Debrief -->
         <section id="death-panel" hidden>
+            <span class="kicker danger" data-i18n="KILLED IN ACTION">行动阵亡</span>
             <h2 id="death-title" data-i18n="Survivor died">幸存者已死亡</h2>
             <p id="death-detail"></p>
-            <button id="respawn" type="button" data-i18n="Return and deploy again">返回大厅并重新出击</button>
+            <p class="death-note" data-i18n="Your carried gear remains where you fell. Storage and gold are safe.">随身装备遗留在阵亡点，安全屋仓库与黄金不受影响。</p>
+            <button id="respawn" class="primary-cta" type="button" data-i18n="Return and deploy again">返回大厅并重新出击</button>
         </section>
-        <p id="field-hint" aria-live="polite" hidden></p>
-        <div id="aim-point" aria-hidden="true" hidden></div>
-        <p id="controls" hidden>WASD 移动 · X 慢走 · Shift 冲刺 · C 蹲伏 · 空格 跳跃 / 翻越 · V 切换视角 · Alt 自由观察 · E 拾取 · Tab 装备 · Esc 菜单</p>
     </main>
+
+    <!-- Unified Tactical Field Settings Dialog -->
     <dialog id="settings-dialog">
         <form method="dialog">
-            <div class="heading"><h2 id="settings-title" data-i18n="Settings">设置</h2><button id="close-settings" class="quiet" data-i18n="Close">关闭</button></div>
+            <div class="heading">
+                <h2><i class="accent-tick"></i><span id="settings-title" data-i18n="Settings">设置</span></h2>
+                <button id="close-settings" class="quiet compact" data-i18n="Close">关闭</button>
+            </div>
         </form>
         <div id="settings-content"></div>
     </dialog>

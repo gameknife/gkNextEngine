@@ -1,7 +1,7 @@
 ---
 title: "NextDayz 皮克斯感 Low-Poly 视觉升级实施计划"
 category: plan
-status: 进行中（P0–P3 已完成，P4 起待实施）
+status: 进行中（P0–P3、V4-1 已完成，V4-2 起待实施）
 owner: NextDayz
 created: 2026-11-26
 last_updated: 2026-11-26
@@ -163,6 +163,8 @@ last_updated: 2026-11-26
 ## P4：自然生态、运行时草海与画意纹理 2.0
 
 ### `V4-1` 重塑各地域树木与灌木（蓬松透光树冠 + 扫掠树干）
+- **状态**：已完成。新增 `assets/scad/lib/gk_flora.scad`（树干 / 枝 / 阔叶树冠 / 灌丛 / 针叶层盘），`kit_bohemia`（云杉、枯云杉、欧洲赤松、山毛榉/橡树、椴树、果树、桤木、截头柳、白桦、树篱）、`kit_savanna`（伞刺槐、黄热树、无花果、沙漠枣、巴豆灌丛、哨刺、枯树、棕榈）、`kit_coldwar`（云杉、白桦、枯树、灌木）、`kit_hokkaido`（虾夷云杉、榆、橡）改用它；`kit_training` 没有自己的植物。蕨类、杂草、草丛、剑麻、香蕉、玉米、大戟这些小件没动。单棵树 170～930 三角形。`gnb scad catalog` 0 warning，树木 `zMin` 约 -0.1 m（根颈埋入地面）。
+- **注意**：`gk_puff_normals` 必须配 `gk_crease(70)`，否则低段数球的棱面仍然看得见。已发布地图（`published/vN/lib`）里是 kit 快照，要到 P5 重导出才会换上新树。
 - **范围**：`assets/scad/lib/kit_{bohemia,savanna,coldwar,hokkaido,training}.scad` 的 `*_nature_*` 模块。
 - **内容**：用 `gk_sweep` 制作根部抓地外扩、自然弯曲分枝的树干；树冠改用多层级超椭球团块组合，套用 `gk_puff_normals` + `gk_foliage` 透光与“底冷深 → 顶暖亮”色阶，彻底消除多面球穿插黑缝与纸片圆锥感。
 - **完成与闸门**：

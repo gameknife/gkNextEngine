@@ -167,7 +167,15 @@ ScadRig 部件（`FRigPart::sectionStyles` → `SceneBuilder::AddRigSectionMater
 `gk_foliage(c, transmission = 0.65, thickness = 0.10) { ... }` 生成 `Material::Foliage`（Lambertian +
 `Reserved2/3`），走引擎给运行时草地做的主表面背光透射：逆光时叶面被太阳透亮。它只作用于主表面
 直接光；透射阴影射线穿过的距离由 `thickness` 限定（≤ 0.35 m），整团闭合的大树冠背面会挡住它，
-效果偏弱，留到树冠重做时调。外层的 `gk_texture` 印花保留。
+所以透光主要出现在树冠边缘和薄团块上。外层的 `gk_texture` 印花保留。
+
+树木灌木的共用积木在 `assets/scad/lib/gk_flora.scad`（`gf_` 前缀），各地域 kit 的 `*_nature_*`
+都用它：`gf_trunk` / `gf_limb` / `gf_limbs` 是 `gk_sweep` 树干与枝（根部外扩、略弯、根颈埋进地面
+0.1 m）；`gf_crown` 是"核心椭球 + 上表面团块"的阔叶树冠，`gf_shrub` 是贴地灌丛，`gf_conifer`
+是边缘下垂的层叠枝盘（`gf_tier`，不是纸片圆锥）。三者都包在 `gk_crease(70) gk_puff_normals(...)`
+里——先把每个团块的 45° 棱面法线抹平再按体积外弯，否则棱面还在；叶子是 `gk_foliage`，颜色按团块
+高度走三档色阶（`gf_ramp`：底部偏暗偏冷、顶部偏亮偏暖），一棵树最多三种叶材质。树皮 `gf_bark`
+带 `bark` 印花。
 
 着色器侧（`common/BSDF.slang`）：`BSDFWrappedDiffuseCosine` / `BSDFSheen` 两个辅助函数被所有直接光
 入口共用——追踪类渲染器的太阳与灯光 NEE（`Lighting.slang`，含 ReSTIR 目标函数）和 NoAmbient；

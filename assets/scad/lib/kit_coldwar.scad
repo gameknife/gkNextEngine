@@ -20,6 +20,7 @@
 // 足印 L×D、门洞位置与净高不变，nextdayz_coldwar.scad 的家具与 loot 点据此布置。
 
 use <gk_texgraph.scad>
+use <gk_flora.scad>
 
 // ================= 配色（低饱和铁幕灰绿；PT 强日光下会整体提亮，故基色偏深、全部 < 0.5） =================
 function cw_ASPH()    = [0.25, 0.25, 0.26];   // 沥青路面
@@ -1346,17 +1347,9 @@ module cw_bldg_ruin(seed = 0, L = 8, D = 6)
 // 云杉（东欧针叶林主树）：窄高多层下垂锥 + 树皮干
 module cw_nature_pine(s = 1.0, seed = 0)
 {
-    c1 = cw_rnd(seed, 2) == 0 ? cw_PINED() : cw_PINEC();
-    c2 = cw_rnd(seed, 2) == 0 ? cw_PINEC() : cw_PINED();
-    tw = cw_rndr(seed + 3, -6, 6);
+    c = cw_rnd(seed, 2) == 0 ? cw_PINED() : cw_PINEC();
     scale([s, s, s]) rotate([0, 0, cw_rnd(seed, 360)])
-    {
-        cw_m_bark(cw_TRUNKC()) cylinder(h = 6.4, r1 = 0.2, r2 = 0.05, $fn = 7);
-        for (k = [0 : 5]) let(z = 0.9 + k * 0.95, r = 1.55 - k * 0.24)
-            cw_m_leaf(k % 2 == 0 ? c1 : c2) translate([0, 0, z]) rotate([cw_rndr(seed + k, -3, 3), 0, k * 23 + tw])
-                cylinder(h = 1.35, r1 = r, r2 = r * 0.25, $fn = 8);
-        cw_m_leaf(c2) translate([0, 0, 6.2]) cylinder(h = 0.9, r1 = 0.28, r2 = 0.02, $fn = 6);
-    }
+        gf_conifer(seed, 7.1, 1.6, c, cw_TRUNKC(), tiers = 7, crownBase = 0.13, droop = 0.36, rTrunk = 0.2);
 }
 
 // 白桦：白干黑斑 + 疏朗浅色团冠
@@ -1364,13 +1357,12 @@ module cw_nature_birch(s = 1.0, seed = 0)
 {
     scale([s, s, s])
     {
-        cw_m_bark(cw_BIRCHW()) cylinder(h = 3.8, r1 = 0.16, r2 = 0.08, $fn = 7);
+        gf_bark(cw_BIRCHW(), 1.6) gf_trunk(3.9, 0.16, 0.07, bend = [cw_rndr(seed, -0.25, 0.25), cw_rndr(seed + 1, -0.25, 0.25)], flare = 1.3, fn = 7);
         color(cw_mul(cw_DARKC(), 1.4)) for (i = [0 : 6])
             rotate([0, 0, cw_rnd(seed + i, 360)]) translate([0.12 - i * 0.008, 0, 0.4 + i * 0.5]) cw_boxc([0.06, 0.12, 0.06]);
-        cw_m_bark(cw_BIRCHW()) for (a = [0, 130, 250]) rotate([0, 0, a + cw_rnd(seed, 60)]) translate([0, 0, 2.6]) rotate([0, 32, 0]) cylinder(h = 1.2, r1 = 0.06, r2 = 0.02, $fn = 5);
-        cw_m_leaf(cw_rnd(seed, 2) == 0 ? [0.34, 0.41, 0.20] : cw_LEAFC()) translate([0, 0, 3.7]) scale([1, 1, 1.25]) sphere(r = 1.1, $fn = 8);
-        cw_m_leaf(cw_LEAFC()) translate([0.55, 0.3, 4.2]) sphere(r = 0.7, $fn = 7);
-        cw_m_leaf([0.37, 0.44, 0.22]) translate([-0.5, -0.25, 4.4]) sphere(r = 0.6, $fn = 7);
+        gf_bark(cw_BIRCHW(), 1.6) gf_limbs(seed, 3, 2.5, 0.9, 3.7, 0.06);
+        gf_crown(seed, [0.05, 0, 3.95], 1.1, cw_rnd(seed, 2) == 0 ? [0.34, 0.41, 0.20] : cw_LEAFC(), squash = 1.15, n = 6,
+                 spread = 0.75, transmission = 0.65, fn = 9);
     }
 }
 
@@ -1379,14 +1371,10 @@ module cw_nature_tree_dead(s = 1.0, seed = 0)
 {
     scale([s, s, s])
     {
-        cw_m_bark([0.25, 0.22, 0.18]) cylinder(h = 3.0, r1 = 0.24, r2 = 0.12, $fn = 7);
-        cw_m_bark([0.25, 0.22, 0.18])
-        {
-            translate([0, 0, 2.6]) rotate([0, 35, cw_rnd(seed, 180)]) cylinder(h = 1.5, r1 = 0.10, r2 = 0.03, $fn = 5);
-            translate([0, 0, 2.2]) rotate([0, -42, cw_rnd(seed + 3, 180)]) cylinder(h = 1.2, r1 = 0.09, r2 = 0.03, $fn = 5);
-            translate([0, 0, 1.5]) rotate([0, 55, cw_rnd(seed + 7, 180)]) cylinder(h = 0.9, r1 = 0.07, r2 = 0.02, $fn = 5);
-            translate([0, 0, 2.95]) rotate([0, 12, cw_rnd(seed + 9, 180)]) cylinder(h = 0.9, r1 = 0.08, r2 = 0.02, $fn = 5);
-        }
+        gf_bark([0.25, 0.22, 0.18]) gf_trunk(3.0, 0.24, 0.12, bend = [cw_rndr(seed, -0.2, 0.2), cw_rndr(seed + 5, -0.2, 0.2)], fn = 7);
+        gf_bark([0.25, 0.22, 0.18]) for (b = [[2.6, 35, 1.5, 0.10, 0], [2.2, -42, 1.2, 0.09, 3], [1.5, 55, 0.9, 0.07, 7], [2.95, 12, 0.9, 0.08, 9]])
+            let(a = cw_rnd(seed + b[4], 180), t = b[1])
+                gf_limb([0, 0, b[0]], [b[2] * sin(t) * cos(a), b[2] * sin(t) * sin(a), b[0] + b[2] * cos(t)], b[3], 0.025, 0.1, 5);
         color([0.40, 0.36, 0.30]) translate([0, 0, 2.95]) cylinder(h = 0.03, r = 0.1, $fn = 6);   // 折断的白茬
     }
 }
@@ -1396,9 +1384,7 @@ module cw_nature_bush(s = 1.0, seed = 0)
 {
     scale([s, s, s])
     {
-        cw_m_leaf(cw_rnd(seed, 2) == 0 ? cw_LEAFD() : cw_PINEC()) translate([0, 0, 0.42]) sphere(r = 0.55, $fn = 7);
-        cw_m_leaf(cw_LEAFC()) translate([0.4, 0.15, 0.36]) sphere(r = 0.38, $fn = 7);
-        cw_m_leaf(cw_LEAFD()) translate([-0.35, -0.2, 0.34]) sphere(r = 0.34, $fn = 7);
+        gf_shrub(seed, 0.62, cw_rnd(seed, 2) == 0 ? cw_LEAFD() : cw_LEAFC(), n = 4, spread = 0.55, squash = 0.85);
         cw_m_bark(cw_TRUNKC()) for (a = [0, 140, 260]) rotate([0, 0, a]) translate([0.5, 0, 0]) rotate([0, -20, 0]) cylinder(h = 0.4, r = 0.02, $fn = 4);
     }
 }

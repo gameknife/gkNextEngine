@@ -10,6 +10,7 @@
 // yellow fever trees and fig galleries along the river, red murram underfoot.
 
 use <gk_texgraph.scad>
+use <gk_flora.scad>
 
 // ================= PRNG / palette =================
 function sv_sq(x) = (x*x + x*409 + 53) % 65521;
@@ -639,11 +640,11 @@ module sv_nature_acacia(seed=0,h=8)
     lean=sv_rf(seed,-6,6); tc=[0.24,0.20,0.16];
     rotate([lean,sv_rf(seed+1,-5,5),0])
     {
-        color(tc) cylinder(h=h*0.5,r1=h*0.035,r2=h*0.024,$fn=6);
-        for(i=[0:4]) let(a=i*72+sv_rnd(seed+i,30)) color(tc) translate([0,0,h*0.45]) rotate([0,52+sv_rnd(seed+i*3,12),a]) cylinder(h=h*0.62,r1=h*0.02,r2=h*0.006,$fn=4);
-        for(i=[0:6]) let(a=i*51+sv_rnd(seed+i,30),d=i==0 ? 0 : h*sv_rf(seed+i*7,0.3,0.55))
-            color(i%2==0 ? [0.14,0.19,0.08] : [0.17,0.21,0.09]) translate([d*cos(a),d*sin(a),h*sv_rf(seed+i*11,0.86,0.94)])
-                scale([1,1,0.11]) sphere(r=h*sv_rf(seed+i*13,0.26,0.38),$fn=8);
+        gf_bark(tc,0.7) gf_trunk(h*0.5,h*0.035,h*0.024,flare=1.4,fn=6);
+        gf_bark(tc,0.7) for(i=[0:4]) let(a=i*72+sv_rnd(seed+i,30),l=h*0.62,t=52+sv_rnd(seed+i*3,12))
+            gf_limb([0,0,h*0.45],[l*sin(t)*cos(a),l*sin(t)*sin(a),h*0.45+l*cos(t)],h*0.02,h*0.006,0.06,4);
+        // The umbrella: a broad, thin table of foliage, light leaking through it.
+        gf_crown(seed,[0,0,h*0.9],h*0.36,[0.155,0.20,0.085],squash=0.17,n=7,spread=1.0,transmission=0.7,thickness=0.1,fn=10);
     }
 }
 
@@ -652,30 +653,26 @@ module sv_nature_acacia(seed=0,h=8)
 module sv_nature_fever(seed=0,h=14)
 {
     tc=[0.30,0.32,0.14];
-    color(tc) cylinder(h=h*0.62,r1=h*0.026,r2=h*0.016,$fn=6);
-    for(i=[0:3]) let(a=i*90+sv_rnd(seed+i,40)) color(tc) translate([0,0,h*(0.5+i*0.05)]) rotate([0,38+sv_rnd(seed+i*3,14),a]) cylinder(h=h*0.36,r1=h*0.013,r2=h*0.004,$fn=4);
-    for(i=[0:6]) let(a=i*51+sv_rnd(seed+i,30),d=i==0 ? 0 : h*sv_rf(seed+i*7,0.12,0.26))
-        color(i%2==0 ? [0.16,0.21,0.08] : [0.19,0.23,0.09]) translate([d*cos(a),d*sin(a),h*sv_rf(seed+i*11,0.66,0.94)])
-            scale([1,1,0.3]) sphere(r=h*sv_rf(seed+i*13,0.12,0.19),$fn=7);
+    gf_bark(tc,1.8) gf_trunk(h*0.62,h*0.026,h*0.016,bend=[sv_rf(seed,-0.5,0.5),sv_rf(seed+2,-0.5,0.5)],fn=6);
+    gf_bark(tc,1.8) gf_limbs(seed,4,h*0.5,h*0.24,h*0.78,h*0.013,4);
+    gf_crown(seed,[0,0,h*0.82],h*0.22,[0.175,0.22,0.085],squash=0.38,n=7,spread=0.95,transmission=0.7,thickness=0.1,fn=9);
 }
 
 // Sycamore fig / riverine giant: buttressed trunk, a huge dark dome.
 module sv_nature_fig(seed=0,h=17)
 {
     tc=[0.23,0.20,0.16];
-    color(tc) { cylinder(h=h*0.36,r1=h*0.07,r2=h*0.04,$fn=7); for(i=[0:4]) rotate([0,0,i*72+sv_rnd(seed+i,20)]) translate([h*0.045,0,0]) cylinder(h=h*0.2,r1=h*0.03,r2=0.02,$fn=4);
-        for(i=[0:3]) translate([0,0,h*0.32]) rotate([0,36+sv_rnd(seed+i,14),i*90+sv_rnd(seed+i*3,40)]) cylinder(h=h*0.34,r1=h*0.026,r2=h*0.008,$fn=5); }
-    for(i=[0:6]) let(a=i*51+sv_rnd(seed+i,30),d=i==0 ? 0 : h*sv_rf(seed+i*7,0.17,0.3))
-        color(i%2==0 ? [0.08,0.14,0.06] : [0.10,0.17,0.07]) translate([d*cos(a),d*sin(a),h*sv_rf(seed+i*11,0.56,0.78)])
-            scale([1,1,0.72]) sphere(r=h*sv_rf(seed+i*13,0.2,0.27),$fn=8);
+    gf_bark(tc,0.9) { gf_trunk(h*0.38,h*0.07,h*0.04,flare=1.8,fn=8);
+        for(i=[0:4]) let(a=i*72+sv_rnd(seed+i,20)) gf_limb([h*0.1*cos(a),h*0.1*sin(a),h*0.025],[h*0.02*cos(a),h*0.02*sin(a),h*0.2],h*0.03,0.02,0.05,4);
+        gf_limbs(seed,4,h*0.32,h*0.28,h*0.62,h*0.026); }
+    gf_crown(seed,[0,0,h*0.68],h*0.33,[0.09,0.155,0.065],squash=0.72,n=8,spread=0.72,fn=10);
 }
 
 // Desert date (Balanites): the lone round-crowned tree of the open Mara.
 module sv_nature_balanites(seed=0,h=7)
 {
-    color([0.27,0.24,0.20]) cylinder(h=h*0.5,r1=h*0.04,r2=h*0.028,$fn=6);
-    color([0.12,0.17,0.08]) translate([0,0,h*0.72]) scale([1,1,0.72]) sphere(r=h*0.34,$fn=9);
-    for(i=[0:3]) let(a=i*90+sv_rnd(seed+i,40)) color([0.14,0.19,0.09]) translate([h*0.2*cos(a),h*0.2*sin(a),h*sv_rf(seed+i,0.62,0.8)]) scale([1,1,0.7]) sphere(r=h*0.2,$fn=7);
+    gf_bark([0.27,0.24,0.20]) gf_trunk(h*0.52,h*0.04,h*0.028,fn=6);
+    gf_crown(seed,[0,0,h*0.74],h*0.34,[0.13,0.18,0.085],squash=0.72,n=6,spread=0.66,fn=9);
 }
 
 // Candelabra euphorbia: a trunk carrying a bowl of upright succulent arms.
@@ -689,16 +686,17 @@ module sv_nature_euphorbia(seed=0,h=7)
 // Croton / orange-leaf thicket: the grey-green scrub of ridges and luggas.
 module sv_nature_croton(seed=0,r=2.4)
 {
-    for(i=[0:4]) color(i%2==0 ? [0.14,0.18,0.11] : [0.18,0.20,0.12])
-        translate([sv_rf(seed+i*3,-r*0.6,r*0.6),sv_rf(seed+i*5,-r*0.5,r*0.5),r*0.45]) scale([1,1,0.85]) sphere(r=r*sv_rf(seed+i*7,0.36,0.56),$fn=7);
-    color([0.24,0.21,0.17]) for(i=[0:2]) rotate([sv_rf(seed+i,-25,25),sv_rf(seed+i*3,-25,25),0]) cylinder(h=r*0.9,r1=0.05,r2=0.02,$fn=4);
+    gf_bark([0.24,0.21,0.17]) for(i=[0:2]) rotate([sv_rf(seed+i,-25,25),sv_rf(seed+i*3,-25,25),0]) cylinder(h=r*0.9,r1=0.05,r2=0.02,$fn=4);
+    gf_shrub(seed,r*0.6,[0.16,0.19,0.115],n=5,spread=0.7,squash=0.85,transmission=0.45);
 }
 
 // Whistling thorn: knee-to-head-high thorn bush with swollen galls.
 module sv_nature_thornbush(seed=0)
 {
-    color([0.27,0.24,0.19]) for(i=[0:5]) rotate([sv_rf(seed+i,18,48),0,i*60+sv_rnd(seed+i,30)]) { cylinder(h=sv_rf(seed+i*3,1.1,1.9),r1=0.03,r2=0.008,$fn=3); translate([0,0,0.8]) sphere(r=0.045,$fn=4); }
-    color([0.17,0.21,0.10]) for(i=[0:2]) translate([sv_rf(seed+i*5,-0.5,0.5),sv_rf(seed+i*7,-0.5,0.5),sv_rf(seed+i,1.0,1.4)]) scale([1,1,0.35]) sphere(r=0.55,$fn=6);
+    gf_bark([0.27,0.24,0.19]) for(i=[0:5]) rotate([sv_rf(seed+i,18,48),0,i*60+sv_rnd(seed+i,30)]) { cylinder(h=sv_rf(seed+i*3,1.1,1.9),r1=0.03,r2=0.008,$fn=3); translate([0,0,0.8]) sphere(r=0.045,$fn=4); }
+    gk_crease(70) gk_puff_normals(strength=0.6,upBias=0.3)
+        for(i=[0:2]) gf_leaf(gf_ramp([0.17,0.21,0.10],0.3+i*0.3),0.55,0.1)
+            translate([sv_rf(seed+i*5,-0.5,0.5),sv_rf(seed+i*7,-0.5,0.5),sv_rf(seed+i,1.0,1.4)]) scale([1,1,0.35]) sphere(r=0.55,$fn=7);
 }
 
 // Red oat grass tussock: tall, golden, seeding.
@@ -738,10 +736,11 @@ module sv_nature_maize(seed=0)
 // Tree pushed over or ring-barked by elephants: a grey skeleton.
 module sv_nature_dead(seed=0,h=7)
 {
-    color([0.34,0.31,0.28]) rotate([sv_rnd(seed,3)==0 ? 62 : sv_rf(seed,-8,8),0,sv_rnd(seed,360)])
+    gf_bark([0.34,0.31,0.28],1.2) rotate([sv_rnd(seed,3)==0 ? 62 : sv_rf(seed,-8,8),0,sv_rnd(seed,360)])
     {
-        cylinder(h=h*0.6,r1=h*0.035,r2=h*0.02,$fn=5);
-        for(i=[0:3]) translate([0,0,h*(0.4+i*0.06)]) rotate([0,44+sv_rnd(seed+i,20),i*90+sv_rnd(seed+i*3,40)]) cylinder(h=h*0.4,r1=h*0.016,r2=0.01,$fn=4);
+        gf_trunk(h*0.6,h*0.035,h*0.02,flare=1.3,fn=6);
+        for(i=[0:3]) let(z=h*(0.4+i*0.06),a=i*90+sv_rnd(seed+i*3,40),t=44+sv_rnd(seed+i,20),l=h*0.4)
+            gf_limb([0,0,z],[l*sin(t)*cos(a),l*sin(t)*sin(a),z+l*cos(t)],h*0.016,0.01,0.08,4);
     }
 }
 
@@ -750,7 +749,8 @@ module sv_nature_palm(seed=0,h=9)
 {
     rotate([sv_rf(seed,-9,9),sv_rf(seed+1,-9,9),0])
     {
-        color([0.26,0.22,0.17]) cylinder(h=h,r1=0.22,r2=0.16,$fn=6);
-        for(i=[0:8]) color(i%2==0 ? [0.12,0.19,0.08] : [0.15,0.22,0.09]) translate([0,0,h]) rotate([0,48+(i%3)*22,i*40+sv_rnd(seed+i,20)]) translate([0,0,1.5]) scale([0.42,0.05,3.2]) sphere(r=0.5,$fn=6);
+        gf_bark([0.26,0.22,0.17],0.5) gf_trunk(h,0.22,0.16,bend=[sv_rf(seed+2,-0.6,0.6),sv_rf(seed+3,-0.6,0.6)],flare=1.3,fn=7);
+        translate([sv_rf(seed+2,-0.6,0.6),sv_rf(seed+3,-0.6,0.6),0])
+            for(i=[0:8]) gf_leaf(gf_ramp([0.135,0.205,0.085],i%3==0 ? 0 : 0.5+0.5*(i%2)),0.65,0.06) translate([0,0,h]) rotate([0,48+(i%3)*22,i*40+sv_rnd(seed+i,20)]) translate([0,0,1.5]) scale([0.42,0.05,3.2]) sphere(r=0.5,$fn=6);
     }
 }

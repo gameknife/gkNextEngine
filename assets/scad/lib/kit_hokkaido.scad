@@ -2,6 +2,7 @@
 // front=-y. Otaru timber-framed stone stores, boarded houses, metal roofs,
 // narrow shops and Meiji shipping offices. Openings are actual wall voids.
 use <kit_coldwar.scad>
+use <gk_flora.scad>
 
 function hk_sq(x) = (x*x+x*433+71)%65521;
 function hk_rnd(s,n) = hk_sq(hk_sq(((s%65521)+65521)%65521)+43)%n;
@@ -194,22 +195,22 @@ module hk_nature_birch(seed=0) cw_nature_birch(s=hk_rf(seed,1.4,1.8),seed=seed);
 module hk_nature_spruce(seed=0)
 {
     H=hk_rf(seed,11,16);
-    color([0.19,0.15,0.10]) cylinder(h=H*0.9,r1=0.23,r2=0.07,$fn=7);
-    color([0.10,0.20,0.13]) for(i=[0:5]) translate([0,0,H*(0.16+i*0.12)])
-        cylinder(h=H*0.34,r1=H*(0.20-i*0.022),r2=0.06,$fn=8);
+    gf_conifer(seed,H,H*0.2,[0.10,0.20,0.13],[0.19,0.15,0.10],tiers=6,crownBase=0.16,droop=0.32,rTrunk=0.23);
 }
+
 module hk_nature_elm(seed=0)
 {
     H=hk_rf(seed,9,13);
-    color([0.21,0.17,0.12]) cylinder(h=H*0.72,r1=0.26,r2=0.10,$fn=7);
-    color([0.21,0.30,0.13]) for(i=[0:4]) let(a=i*137+hk_rnd(seed,90))
-        translate([cos(a)*H*0.16,sin(a)*H*0.16,H*(0.65+0.06*(i%3))]) scale([1.15,1,0.9]) sphere(r=H*0.24,$fn=9);
+    gf_bark([0.21,0.17,0.12]) gf_trunk(H*0.72,0.26,0.10,bend=[hk_rf(seed+3,-0.4,0.4),hk_rf(seed+5,-0.4,0.4)]);
+    gf_bark([0.21,0.17,0.12]) gf_limbs(seed,4,H*0.5,H*0.2,H*0.7,0.1);
+    gf_crown(seed,[0,0,H*0.72],H*0.3,[0.21,0.30,0.13],squash=0.82,n=7,fn=10);
 }
+
 module hk_nature_shrub(seed=0) scale([1.1,1,0.85]) cw_nature_bush(seed=seed);
 module hk_nature_alder(seed=0) scale([0.65,0.7,0.7]) hk_nature_elm(seed);
 module hk_nature_oak(seed=0)
 {
-    color([0.20,0.16,0.11]) cylinder(h=6.5,r1=0.35,r2=0.17,$fn=8);
-    color([0.22,0.28,0.10]) for(i=[0:5]) let(a=i*137+hk_rnd(seed,80))
-        translate([cos(a)*2.3,sin(a)*2.3,7.5+(i%3)*1.1]) scale([1.2,1,0.8]) sphere(r=3.1,$fn=9);
+    gf_bark([0.20,0.16,0.11],0.7) gf_trunk(6.5,0.35,0.17,flare=1.7,fn=8);
+    gf_bark([0.20,0.16,0.11],0.7) gf_limbs(seed,5,5.2,2.8,8.4,0.14);
+    gf_crown(seed,[0,0,8.6],4.0,[0.22,0.28,0.10],squash=0.7,n=8,spread=0.8,fn=10);
 }

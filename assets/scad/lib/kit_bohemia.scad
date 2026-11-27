@@ -6,6 +6,8 @@
 // turned to the street, walled farmyards with arched gates, pastel burgher
 // fronts, onion-domed towers, JZD cowsheds and weekend chaty.
 
+use <gk_flora.scad>
+
 // ================= PRNG / palette (zero-arg functions only) =================
 function bh_sq(x) = (x*x + x*409 + 53) % 65521;
 function bh_rnd(s,n) = bh_sq(bh_sq(((s % 65521)+65521)%65521)+17) % n;
@@ -1314,25 +1316,22 @@ module bh_prop_chimney(seed=0,h=34)
 }
 
 // ================= Flora (single meshes; scale outside for variety) =================
+// Built from gk_flora.scad: swept trunks with a root collar, crowns as one
+// puffed, light-transmitting volume on a cool-underside / warm-top ramp.
+
 // Norway spruce: tall, narrow, drooping tiers, blue-black green.
 module bh_nature_spruce(seed=0,h=20)
-{
-    n=7; cb=h*0.22;
-    color([0.24,0.18,0.13]) cylinder(h=h*0.95,r1=h*0.017,r2=0.04,$fn=5);
-    for(i=[0:n-1]) let(f=i/n,r=h*0.13*(1-f*0.88)+0.25,z=cb+(h-cb)*f)
-        color(i%2==0 ? [0.09,0.16,0.11] : [0.11,0.19,0.12]) translate([0,0,z-0.2]) rotate([0,0,i*29+bh_rnd(seed+i,30)])
-            cylinder(h=(h-cb)/n*1.75,r1=r,r2=r*0.28,$fn=7);
-}
+    gf_conifer(seed,h,h*0.14,[0.10,0.175,0.115],[0.24,0.18,0.13],tiers=7,crownBase=0.2,droop=0.38);
 
 // Bark-beetle spruce (kůrovec): red-stage crown or grey bare snag.
 module bh_nature_spruce_dead(seed=0,h=18)
 {
     red=bh_rnd(seed,2)==0;
-    color([0.33,0.30,0.27]) cylinder(h=h,r1=h*0.017,r2=0.03,$fn=6);
+    gf_bark([0.33,0.30,0.27]) gf_trunk(h,h*0.017,0.03,flare=1.3,fn=6);
     for(i=[0:8]) let(z=h*0.28+i*h*0.075,r=h*0.11*(1-i/10))
     {
-        color([0.29,0.26,0.23]) for(a=[0:120:240]) rotate([0,0,a+i*41]) translate([0,0,z]) rotate([0,104,0]) cylinder(h=r,r1=0.05,r2=0.01,$fn=4);
-        if(red && i<7) color([0.30,0.19,0.12]) translate([0,0,z-0.4]) rotate([0,0,i*29]) cylinder(h=1.3,r1=r*0.9,r2=r*0.3,$fn=6);
+        gf_bark([0.29,0.26,0.23]) for(a=[0:120:240]) rotate([0,0,a+i*41]) translate([0,0,z]) rotate([0,104,0]) cylinder(h=r,r1=0.05,r2=0.01,$fn=4);
+        if(red && i<7) gf_leaf([0.30,0.19,0.12],0.3) translate([0,0,z-0.4]) rotate([0,0,i*29]) gf_tier(r*0.9,1.3,0.3,7);
     }
 }
 
@@ -1342,9 +1341,9 @@ module bh_nature_pine(seed=0,h=18)
     lean=bh_rf(seed,-5,5);
     rotate([lean,bh_rf(seed+1,-4,4),0])
     {
-        color([0.38,0.22,0.13]) cylinder(h=h*0.86,r1=h*0.02,r2=h*0.008,$fn=6);
-        for(i=[0:4]) color(i%2==0 ? [0.14,0.22,0.12] : [0.17,0.25,0.13])
-            translate([bh_rf(seed+i*3,-1.8,1.8),bh_rf(seed+i*5,-1.8,1.8),h*(0.72+i*0.05)]) scale([1,1,0.45]) sphere(r=h*0.11,$fn=7);
+        gf_bark([0.38,0.22,0.13],0.6) gf_trunk(h*0.86,h*0.02,h*0.008,bend=[bh_rf(seed+2,-0.6,0.6),bh_rf(seed+3,-0.6,0.6)],fn=6);
+        gf_bark([0.30,0.20,0.13]) gf_limbs(seed,4,h*0.6,h*0.13,h*0.76,h*0.008);
+        gf_crown(seed,[0,0,h*0.8],h*0.15,[0.155,0.235,0.125],squash=0.42,n=6,spread=0.95,fn=9);
     }
 }
 
@@ -1352,29 +1351,26 @@ module bh_nature_pine(seed=0,h=18)
 module bh_nature_broadleaf(seed=0,h=16,oak=false)
 {
     tc=oak ? [0.26,0.22,0.17] : [0.36,0.35,0.32];
-    color(tc) cylinder(h=h*0.45,r1=h*0.032,r2=h*0.022,$fn=7);
-    for(i=[0:3]) color(tc) translate([0,0,h*0.38]) rotate([0,32+bh_rnd(seed+i,15),i*90+bh_rnd(seed+i*3,40)]) cylinder(h=h*0.28,r1=h*0.018,r2=h*0.006,$fn=5);
-    for(i=[0:5]) let(a=i*60+bh_rnd(seed+i,30),d=i==0 ? 0 : h*bh_rf(seed+i*7,0.14,0.24))
-        color(oak ? [0.14+0.02*(i%2),0.21,0.09] : [0.17+0.03*(i%2),0.26,0.11])
-            translate([d*cos(a),d*sin(a),h*bh_rf(seed+i*11,0.62,0.8)]) scale([1,1,0.8]) sphere(r=h*bh_rf(seed+i*13,0.16,0.22),$fn=8);
+    gf_bark(tc,oak ? 0.7 : 1.4) gf_trunk(h*0.5,h*0.032,h*0.02,bend=[bh_rf(seed,-0.4,0.4),bh_rf(seed+1,-0.4,0.4)]);
+    gf_bark(tc) gf_limbs(seed,4,h*0.38,h*0.2,h*0.62,h*0.016);
+    gf_crown(seed,[0,0,h*0.7],h*0.27,oak ? [0.15,0.21,0.09] : [0.185,0.26,0.11],squash=0.8,n=8);
 }
 
 // Small-leaved linden (lípa): dense dome, the village-green and chapel tree.
 module bh_nature_linden(seed=0,h=17)
 {
-    color([0.27,0.23,0.18]) cylinder(h=h*0.4,r1=h*0.04,r2=h*0.03,$fn=7);
-    color([0.17,0.26,0.10]) translate([0,0,h*0.62]) scale([1,1,1.15]) sphere(r=h*0.27,$fn=10);
-    for(i=[0:4]) let(a=i*72+bh_rnd(seed+i,30)) color([0.19,0.29,0.11])
-        translate([h*0.16*cos(a),h*0.16*sin(a),h*bh_rf(seed+i,0.5,0.78)]) sphere(r=h*0.16,$fn=8);
+    gf_bark([0.27,0.23,0.18]) gf_trunk(h*0.44,h*0.04,h*0.028,flare=1.7);
+    gf_bark([0.27,0.23,0.18]) gf_limbs(seed,5,h*0.36,h*0.17,h*0.58,h*0.018);
+    gf_crown(seed,[0,0,h*0.64],h*0.30,[0.18,0.275,0.105],squash=1.0,n=8,spread=0.68);
 }
 
 // Old fruit tree (apple/plum/cherry): short gnarled trunk, low wide crown.
 module bh_nature_fruit(seed=0,h=5.5)
 {
     dead=bh_rnd(seed,6)==0;
-    color([0.25,0.20,0.15]) { cylinder(h=h*0.3,r1=0.16,r2=0.11,$fn=6); for(i=[0:3]) translate([0,0,h*0.27]) rotate([0,40+bh_rnd(seed+i,20),i*90+bh_rnd(seed+i*5,30)]) cylinder(h=h*0.4,r1=0.08,r2=0.02,$fn=4); }
-    if(!dead) for(i=[0:4]) let(a=i*72+bh_rnd(seed+i*3,40)) color([0.19+0.02*(i%2),0.27,0.11])
-        translate([h*0.2*cos(a),h*0.2*sin(a),h*bh_rf(seed+i*7,0.55,0.75)]) scale([1,1,0.75]) sphere(r=h*bh_rf(seed+i,0.2,0.26),$fn=7);
+    gf_bark([0.25,0.20,0.15]) { gf_trunk(h*0.32,0.16,0.10,bend=[bh_rf(seed,-0.25,0.25),bh_rf(seed+1,-0.25,0.25)],fn=6);
+        gf_limbs(seed,4,h*0.27,h*0.3,h*(dead ? 0.7 : 0.58),0.075); }
+    if(!dead) gf_crown(seed,[0,0,h*0.66],h*0.30,[0.20,0.27,0.11],squash=0.72,n=6,spread=0.8,fn=9);
 }
 
 // Riparian alder: two or three stems, narrow dark oval crowns.
@@ -1383,34 +1379,34 @@ module bh_nature_alder(seed=0,h=13)
     for(i=[0:1+bh_rnd(seed,2)]) let(x=bh_rf(seed+i*3,-0.7,0.7),y=bh_rf(seed+i*5,-0.7,0.7),hh=h*bh_rf(seed+i,0.8,1))
         translate([x,y,0]) rotate([bh_rf(seed+i,-6,6),bh_rf(seed+i*7,-6,6),0])
         {
-            color([0.25,0.23,0.20]) cylinder(h=hh*0.75,r1=0.18,r2=0.06,$fn=6);
-            color([0.15,0.23,0.11]) translate([0,0,hh*0.62]) scale([0.8,0.8,1.6]) sphere(r=hh*0.17,$fn=8);
+            gf_bark([0.25,0.23,0.20]) gf_trunk(hh*0.78,0.18,0.06,fn=6);
+            gf_crown(seed+i*7,[0,0,hh*0.66],hh*0.15,[0.15,0.23,0.11],squash=1.6,n=5,spread=0.6,fn=9);
         }
 }
 
 // Pollarded willow (hlavatá vrba): squat trunk, knobbed head, upright rods.
 module bh_nature_willow(seed=0,h=7)
 {
-    color([0.28,0.25,0.21]) { cylinder(h=2.3,r1=0.42,r2=0.36,$fn=7); translate([0,0,2.3]) scale([1,1,0.6]) sphere(r=0.55,$fn=7); }
-    for(i=[0:7]) let(a=i*45+bh_rnd(seed+i,30)) color([0.31,0.36,0.22])
-        translate([0.3*cos(a),0.3*sin(a),2.4]) rotate([0,10+bh_rnd(seed+i,15),a]) { cylinder(h=h-2.6,r1=0.06,r2=0.01,$fn=4); translate([0,0,(h-2.6)*0.6]) scale([0.5,0.5,1.4]) sphere(r=0.75,$fn=6); }
+    gf_bark([0.28,0.25,0.21]) { gf_trunk(2.3,0.42,0.36,flare=1.25,fn=7); translate([0,0,2.3]) scale([1,1,0.6]) sphere(r=0.55,$fn=8); }
+    gf_bark([0.31,0.33,0.22],1.6) for(i=[0:7]) let(a=i*45+bh_rnd(seed+i,30),t=10+bh_rnd(seed+i,15))
+        gf_limb([0.3*cos(a),0.3*sin(a),2.4],[0.3*cos(a)+(h-2.6)*sin(t)*cos(a),0.3*sin(a)+(h-2.6)*sin(t)*sin(a),2.4+(h-2.6)*cos(t)],0.06,0.015,0.05,4);
+    gk_crease(70) gk_puff_normals(strength=0.6,upBias=0.3)
+        for(i=[0:7]) let(a=i*45+bh_rnd(seed+i,30),t=10+bh_rnd(seed+i,15),l=(h-2.6)*0.62)
+            gf_leaf(gf_ramp([0.30,0.36,0.21],0.3+0.1*(i%5)),0.6,0.12)
+                translate([0.3*cos(a)+l*sin(t)*cos(a),0.3*sin(a)+l*sin(t)*sin(a),2.4+l*cos(t)]) scale([0.5,0.5,1.4]) sphere(r=0.75,$fn=7);
 }
 
 // Silver birch: slender white trunk, light open crown.
 module bh_nature_birch(seed=0,h=14)
 {
-    color([0.45,0.44,0.41]) cylinder(h=h*0.8,r1=h*0.016,r2=h*0.006,$fn=6);
+    gf_bark([0.45,0.44,0.41],2.0) gf_trunk(h*0.8,h*0.016,h*0.006,bend=[bh_rf(seed,-0.5,0.5),bh_rf(seed+1,-0.5,0.5)],flare=1.3,fn=6);
     color(bh_dark()) for(i=[0:5]) translate([0,0,h*(0.08+i*0.11)]) rotate([0,0,i*67]) translate([h*0.012,0,0]) bh_box([0.1,0.1,0.12]);
-    for(i=[0:4]) let(a=i*72+bh_rnd(seed+i,40)) color([0.22+0.02*(i%2),0.30,0.12])
-        translate([h*0.08*cos(a),h*0.08*sin(a),h*bh_rf(seed+i*3,0.55,0.86)]) scale([0.8,0.8,1.3]) sphere(r=h*0.11,$fn=7);
+    gf_crown(seed,[0,0,h*0.72],h*0.15,[0.23,0.31,0.12],squash=1.3,n=6,spread=0.8,transmission=0.65,fn=9);
 }
 
 // Hedgerow shrub (blackthorn / hawthorn / elder).
 module bh_nature_hedge(seed=0,r=2.2)
-{
-    for(i=[0:4]) color(i%2==0 ? [0.15,0.22,0.10] : [0.19,0.26,0.12])
-        translate([bh_rf(seed+i*3,-r*0.6,r*0.6),bh_rf(seed+i*5,-r*0.5,r*0.5),r*0.38]) scale([1,1,0.75]) sphere(r=r*bh_rf(seed+i*7,0.35,0.55),$fn=7);
-}
+    gf_shrub(seed,r*0.55,[0.165,0.235,0.105],n=5,spread=0.75,squash=0.78);
 
 // Low forest-floor undergrowth: fern / raspberry clump.
 module bh_nature_fern(seed=0)
